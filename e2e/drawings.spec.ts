@@ -30,7 +30,7 @@ test.describe('Drawings overlay @critical', () => {
 
   test('draws a trend line and persists it across reload', async ({ page }) => {
     await loadMockBars(page);
-    await selectDrawingTool(page, 'Lines', 'Trend line');
+    await selectDrawingTool(page, 'lines', 'Trend line');
 
     const before = await drawingShapeCount(page);
     // Two placement clicks with a move between (draft preview path).
@@ -42,10 +42,13 @@ test.describe('Drawings overlay @critical', () => {
       .poll(() => drawingShapeCount(page), { timeout: 10_000 })
       .toBeGreaterThan(before);
 
-    // Persisted drawings rehydrate on boot.
+    // Persisted drawings rehydrate on boot. Autoload is off in this spec, so the
+    // reload restores bars only after a manual Load — the drawing layer renders
+    // against the chart host, so bars must exist before shapes reappear.
     await page.reload();
     await expect(page.getByTestId('axis-topbar')).toBeVisible();
     await expect(page.locator('[data-axis-chart-host]')).toBeVisible();
+    await page.getByTestId('axis-btn-load').click();
     await expect
       .poll(() => drawingShapeCount(page), { timeout: 15_000 })
       .toBeGreaterThan(0);
@@ -54,7 +57,7 @@ test.describe('Drawings overlay @critical', () => {
   test('switching tools updates the active tool indicator', async ({ page }) => {
     await loadMockBars(page);
     // Each selection asserts the Layers active-tool mirror internally.
-    await selectDrawingTool(page, 'Lines', 'Trend line');
-    await selectDrawingTool(page, 'Fibonacci', 'Fib retracement');
+    await selectDrawingTool(page, 'lines', 'Trend line');
+    await selectDrawingTool(page, 'fib', 'Fib retracement');
   });
 });

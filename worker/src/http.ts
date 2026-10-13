@@ -214,6 +214,176 @@ export async function readCappedJson(
   }
 }
 
+/* ------------------------------------------------------------------------- *
+ * Upstream fetch (market + on-chain proxies)
+ *
+ * Workerd implements only `redirect: "follow"` and `redirect: "manual"`.
+ * `redirect: "error"` throws a TypeError at the edge, so every proxied call
+ * returned 502 `UPSTREAM_NETWORK` in production while the whole Bun test suite
+ * stayed green (undici does support "error"). Refuse redirects with `manual` +
+ * an explicit 3xx check so the A10 intent survives on every runtime.
+ * ------------------------------------------------------------------------- */
+
+/** Why an upstream call failed. Safe to hand back to a client. */
+export type UpstreamReason = 'network' | 'timeout' | 'redirect';
+
+export interface UpstreamResult {
+  status: number;
+  text: string;
+  contentType: string;
+}
+
+/** Client-safe text per reason — never leak raw runtime/undici messages. */
+const REASON_TEXT: Record<UpstreamReason, string> = {
+  network: 'upstream unreachable',
+  timeout: 'upstream timed out',
+  redirect: 'upstream redirect refused',
+};
+
+/** Error thrown by {@link fetchUpstreamJson}; `reason` is the only safe field. */
+export class UpstreamError extends Error {
+  readonly reason: UpstreamReason;
+  constructor(reason: UpstreamReason) {
+    super(REASON_TEXT[reason]);
+    this.name = 'UpstreamError';
+    this.reason = reason;
+  }
+}
+
+/** Reduce any thrown value to a client-safe phrase (A23 — no error-text leak). */
+export function upstreamReason(err: unknown): UpstreamReason {
+  if (err instanceof UpstreamError) return err.reason;
+  const name = err instanceof Error ? err.name : '';
+  if (name === 'AbortError' || name === 'TimeoutError') return 'timeout';
+  return 'network';
+}
+
+/** `{ reason }` suffix callers append to a provider label. */
+export function upstreamDetail(err: unknown): string {
+  return REASON_TEXT[upstreamReason(err)];
+}
+
+/** `manual` + explicit 3xx rejection — the only redirect mode workerd accepts. */
+function assertNoRedirect(res: Response): void {
+  // workerd surfaces the real 3xx under `manual`; a browser-style runtime hides it
+  // behind `opaqueredirect`. Cover both so no runtime can slip a redirect through.
+  const type = res.type as string;
+  if (type === 'opaqueredirect' || (res.status >= 300 && res.status < 400)) {
+    throw new UpstreamError('redirect');
+  }
+}
+
+export interface UpstreamFetchOptions {
+  /** Abort the whole call (headers + body) after this many ms. */
+  timeoutMs: number;
+  /** Extra request headers (e.g. `X-MBX-APIKEY`). */
+  headers?: Record<string, string>;
+  /**
+   * Discard the body once headers arrive. For reachability probes only —
+   * DefiLlama's cheapest path is still ~9 MB, which must never be buffered just
+   * to answer "is this peer up?".
+   */
+  headOnly?: boolean;
+}
+
+/** Read `res`, then release the connection instead of buffering a huge body. */
+async function drain(res: Response, headOnly: boolean | undefined): Promise<string> {
+  if (!headOnly) return res.text();
+  try {
+    await res.body?.cancel();
+  } catch {
+    /* already consumed or closed */
+  }
+  return '';
+}
+
+/**
+ * GET a fixed allowlisted upstream URL and buffer its body.
+ *
+ * Never follows redirects (A10), caps the time to headers *and* body
+ * (A10 — a stalled sender must not pin the isolate), and throws
+ * {@link UpstreamError} rather than leaking runtime text.
+ */
+export async function fetchUpstreamJson(
+  url: string,
+  opts: UpstreamFetchOptions,
+): Promise<UpstreamResult> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs);
+  try {
+    const res = await fetch(url, {
+      method: 'GET',
+      signal: ctrl.signal,
+      redirect: 'manual',
+      headers: { Accept: 'application/json', ...(opts.headers || {}) },
+    });
+    assertNoRedirect(res);
+    // Body read stays inside the abort window (A10).
+    const text = await drain(res, opts.headOnly);
+    return {
+      status: res.status,
+      text,
+      contentType: res.headers.get('Content-Type') || 'application/json',
+    };
+  } catch (err) {
+    throw err instanceof UpstreamError ? err : new UpstreamError(upstreamReason(err));
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/* ------------------------------------------------------------------------- *
+ * Upstream reachability (health plane)
+ * ------------------------------------------------------------------------- */
+
+/** Last-known reachability per upstream host, for `/health` deep checks. */
+interface Reachability {
+  ok: boolean;
+  at: number;
+  detail: string;
+}
+
+const reachability = new Map<string, Reachability>();
+
+/** @internal test helper — drop cached reachability between cases. */
+export function _resetUpstreamHealthForTests(): void {
+  reachability.clear();
+}
+
+/** Snapshot of cached reachability, newest state per host. */
+export function upstreamHealth(): Record<string, { ok: boolean; checkedAt: number; detail: string }> {
+  const out: Record<string, { ok: boolean; checkedAt: number; detail: string }> = {};
+  for (const [host, r] of reachability) out[host] = { ok: r.ok, checkedAt: r.at, detail: r.detail };
+  return out;
+}
+
+/**
+ * Probe one upstream host with a short timeout and cache the verdict.
+ *
+ * Health must not report `market` / `onchain` as up purely because the route is
+ * registered — a green flag while every proxy call 502s is the failure mode this
+ * replaces. Results are cached so `/health` stays cheap and self-limiting.
+ */
+export async function probeUpstream(
+  host: string,
+  url: string,
+  timeoutMs = 4_000,
+): Promise<Reachability> {
+  try {
+    // `headOnly` — a reachability check must not buffer a 9 MB protocol list.
+    const res = await fetchUpstreamJson(url, { timeoutMs, headOnly: true });
+    // 4xx still proves the peer answered; only a network/timeout failure is "down".
+    const ok = res.status < 500;
+    const r: Reachability = { ok, at: Date.now(), detail: ok ? 'ok' : `HTTP ${res.status}` };
+    reachability.set(host, r);
+    return r;
+  } catch (err) {
+    const r: Reachability = { ok: false, at: Date.now(), detail: REASON_TEXT[upstreamReason(err)] };
+    reachability.set(host, r);
+    return r;
+  }
+}
+
 /** Binding presence flags for the shared `/health` body. */
 export interface HealthFlags {
   db: boolean;
@@ -221,24 +391,39 @@ export interface HealthFlags {
   mcpBridge: boolean;
 }
 
+/** Deep-probe opt-in for `/health?deep=1` — upstream egress costs a fetch. */
+export type DeepHealth = { deep: true; report: Record<string, { ok: boolean; detail: string }> };
+
 /**
  * Single shared `/health` body builder (A22) — the entry `fetch` and the MCP
  * `axis_request` proxy must not drift apart.
+ *
+ * `market` / `onchain` stay route-registration flags unless a deep probe ran;
+ * `upstream` then carries the live verdict so a dead proxy can never read green.
  */
-export function buildHealthBody(flags: HealthFlags): unknown {
+export function buildHealthBody(flags: HealthFlags, deep?: DeepHealth): unknown {
+  const features: Record<string, boolean> = {
+    scripts: true,
+    d1: flags.db,
+    keys: flags.keys,
+    onchain: true,
+    market: true,
+    mcp: true,
+    mcpBridge: flags.mcpBridge,
+  };
+  const upstreams = deep ? Object.entries(deep.report) : [];
+  const degraded = upstreams.some(([, r]) => !r.ok);
+  if (deep && upstreams.length > 0) {
+    // Only downgrade on a host that was actually probed and failed.
+    features.onchain = deep.report['defillama']?.ok !== false && deep.report['geckoterminal']?.ok !== false;
+    features.market = deep.report['binance']?.ok !== false && deep.report['mexc']?.ok !== false;
+  }
   return {
-    status: 'healthy',
+    status: degraded ? 'degraded' : 'healthy',
     service: 'worker-axis',
     version: WORKER_VERSION,
     timestamp: Date.now(),
-    features: {
-      scripts: true,
-      d1: flags.db,
-      keys: flags.keys,
-      onchain: true,
-      market: true,
-      mcp: true,
-      mcpBridge: flags.mcpBridge,
-    },
+    features,
+    ...(deep ? { upstream: deep.report } : {}),
   };
 }

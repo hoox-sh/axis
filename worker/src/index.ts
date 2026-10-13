@@ -71,10 +71,31 @@ import {
   jsonResponse,
   methodNotAllowed,
   preflight,
+  probeUpstream,
+  type DeepHealth,
 } from './http';
 import { allowRate } from './rate-limit';
 
 export { SessionDO, McpBridgeDO };
+
+/** Cheapest path that proves each egress peer answers — one small GET each. */
+const UPSTREAM_PROBES: ReadonlyArray<readonly [host: string, url: string]> = [
+  ['binance', 'https://data-api.binance.vision/api/v3/ping'],
+  ['mexc', 'https://api.mexc.com/api/v3/ping'],
+  ['defillama', 'https://api.llama.fi/protocols?limit=1'],
+  ['geckoterminal', 'https://api.geckoterminal.com/api/v2/networks?page=1'],
+];
+
+/** `/health?deep=1` — live egress verdicts for the market + on-chain planes. */
+async function deepUpstreamHealth(): Promise<DeepHealth> {
+  const settled = await Promise.all(
+    UPSTREAM_PROBES.map(async ([host, url]) => {
+      const r = await probeUpstream(host, url);
+      return [host, { ok: r.ok, detail: r.detail }] as const;
+    }),
+  );
+  return { deep: true, report: Object.fromEntries(settled) };
+}
 
 /** Worker bindings and wrangler `[vars]` consumed by handlers. All optional for local stubs. */
 export interface Env {
@@ -425,12 +446,19 @@ export default {
 
       switch (url.pathname) {
         case '/':
-        case '/health':
-          return apiJson(
-            buildHealthBody({ db: !!env.DB, keys: !!env.API_KEYS, mcpBridge: !!env.MCP_BRIDGE }),
-            200,
-            origin,
+        case '/health': {
+          // `?deep=1` pays for one real egress probe per upstream so a dead proxy
+          // plane can never report `market`/`onchain: true` again.
+          const deep = url.searchParams.get('deep') === '1' ? await deepUpstreamHealth() : undefined;
+          const body = buildHealthBody(
+            { db: !!env.DB, keys: !!env.API_KEYS, mcpBridge: !!env.MCP_BRIDGE },
+            deep,
           );
+          // Stays 200 on a degraded upstream: the Worker is up, an egress peer is
+          // not. Flapping the status here would break uptime probes for a
+          // third-party outage.
+          return apiJson(body, 200, origin);
+        }
         case '/api/run':
           return req.method !== 'POST'
             ? methodNotAllowed('POST', { origin, cors: CORS_HEADERS })

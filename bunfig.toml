@@ -22,3 +22,9 @@ pathIgnorePatterns = [
   "test-results/**",
   "packages/**",
 ]
+# Pin solid-js to its development build for the whole run. `jsxDEV` only exists in
+# dist/dev.js (the `browser` + `development` export condition); Bun's test
+# resolver otherwise picks dist/solid.js and every test reaching a `.tsx` fails
+# with "Export named 'jsxDEV' not found". Root-level `conditions` does not affect
+# Bun 1.4.3's runtime resolver — hence the preload plugin.
+preload = ["./tests/helpers/mock-solid.ts"]

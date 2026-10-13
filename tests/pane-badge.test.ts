@@ -146,7 +146,7 @@ describe('mountPaneBadge', () => {
     }
   });
 
-  it('renders settings / source / eye / re-run / remove for scripts on the pane', () => {
+  it('renders settings / source / eye / tables / re-run / remove for scripts on the pane', () => {
     const id = addIndicator('RSI', 'plot(close)', 'indicator', { plot: { color: '#fff' } });
     const { host, restore, findName, hasTestId } = makeHost();
     try {
@@ -155,6 +155,7 @@ describe('mountPaneBadge', () => {
       expect(hasTestId(`axis-pane-settings-${id}`)).toBe(true);
       expect(hasTestId(`axis-pane-source-${id}`)).toBe(true);
       expect(hasTestId(`axis-pane-eye-${id}`)).toBe(true);
+      expect(hasTestId(`axis-pane-tables-${id}`)).toBe(true);
       expect(hasTestId(`axis-pane-rerun-${id}`)).toBe(true);
       expect(hasTestId(`axis-pane-remove-${id}`)).toBe(true);
       const btns = host.querySelectorAll('.axis-pane-badge-btn');
@@ -162,6 +163,7 @@ describe('mountPaneBadge', () => {
         `axis-pane-settings-${id}`,
         `axis-pane-source-${id}`,
         `axis-pane-eye-${id}`,
+        `axis-pane-tables-${id}`,
         `axis-pane-rerun-${id}`,
         `axis-pane-remove-${id}`,
       ]);

@@ -37,7 +37,13 @@
  */
 
 import type { Env } from './index';
-import { READ_CORS, jsonResponse } from './http';
+import {
+  READ_CORS,
+  fetchUpstreamJson,
+  jsonResponse,
+  upstreamDetail,
+  type UpstreamResult,
+} from './http';
 import { createProxyRouter } from './proxy-router';
 
 const LLAMA_UPSTREAM = 'https://api.llama.fi';
@@ -118,27 +124,11 @@ function putCached(key: string, entry: CacheEntry): void {
   memCache.set(key, entry);
 }
 
-async function fetchUpstream(url: string): Promise<{ status: number; text: string; contentType: string }> {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), UPSTREAM_TIMEOUT_MS);
-  try {
-    const res = await fetch(url, {
-      method: 'GET',
-      signal: ctrl.signal,
-      // Never follow a cross-origin redirect with the caller's implied trust (A10).
-      redirect: 'error',
-      headers: {
-        Accept: 'application/json',
-        'User-Agent': 'axis-worker-onchain/1.0',
-      },
-    });
-    // Body read stays inside the abort window — a stalled sender must not pin
-    // the isolate after headers resolve (A10).
-    const text = await res.text();
-    return { status: res.status, text, contentType: res.headers.get('Content-Type') || 'application/json' };
-  } finally {
-    clearTimeout(t);
-  }
+async function fetchUpstream(url: string): Promise<UpstreamResult> {
+  return fetchUpstreamJson(url, {
+    timeoutMs: UPSTREAM_TIMEOUT_MS,
+    headers: { 'User-Agent': 'axis-worker-onchain/1.0' },
+  });
 }
 
 /**
@@ -201,7 +191,8 @@ async function proxyJson(
           contentType: up.contentType,
         };
       } catch (err) {
-        return { kind: 'network-error', message: err instanceof Error ? err.message : String(err) };
+        // Client-safe phrase only — raw runtime text never leaves the isolate.
+        return { kind: 'network-error', message: upstreamDetail(err) };
       }
     })();
     inflight.set(cacheKey, pending);

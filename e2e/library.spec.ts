@@ -18,8 +18,13 @@ test.describe('Script library @critical', () => {
     await page.goto('/');
     await openStudio(page, 'plugins');
     await page.getByRole('tab', { name: 'Script Library' }).click();
-    await expect(page.getByText(/Storage backend/i)).toBeVisible();
-    await expect(page.getByRole('button', { name: /Save to library|Save & commit/i })).toBeVisible();
+    // The library opens on Builtin (read-only catalogue). The storage picker and
+    // save form live in the Personal tab — asserting without switching tabs
+    // tests nothing.
+    await page.getByRole('tab', { name: /^Personal/ }).click();
+    await expect(page.getByTestId('axis-library-storage')).toBeVisible();
+    await expect(page.getByTestId('axis-library-save')).toBeVisible();
+    await expect(page.getByTestId('axis-library-save')).toHaveText(/Save to library|Save & commit/i);
     await page.getByRole('button', { name: 'Done' }).click();
   });
 

@@ -43,7 +43,13 @@
  */
 
 import type { Env } from './index';
-import { MARKET_CORS, jsonResponse } from './http';
+import {
+  MARKET_CORS,
+  fetchUpstreamJson,
+  jsonResponse,
+  upstreamDetail,
+  type UpstreamResult,
+} from './http';
 import { createProxyRouter } from './proxy-router';
 
 /** Prefer vision data API (public market data), then classic spot API. */
@@ -123,23 +129,8 @@ function putCached(key: string, entry: CacheEntry): void {
   }
 }
 
-async function fetchUpstream(url: string): Promise<{ status: number; text: string; contentType: string }> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), UPSTREAM_TIMEOUT_MS);
-  try {
-    const res = await fetch(url, {
-      method: 'GET',
-      signal: ctrl.signal,
-      // Never follow a cross-origin redirect with the caller's implied trust (A10).
-      redirect: 'error',
-      headers: { Accept: 'application/json' },
-    });
-    // Body read stays inside the abort window (A10).
-    const text = await res.text();
-    return { status: res.status, text, contentType: res.headers.get('Content-Type') || 'application/json' };
-  } finally {
-    clearTimeout(timer);
-  }
+async function fetchUpstream(url: string): Promise<UpstreamResult> {
+  return fetchUpstreamJson(url, { timeoutMs: UPSTREAM_TIMEOUT_MS });
 }
 
 function bytesToHex(buf: ArrayBuffer): string {
@@ -165,29 +156,12 @@ async function hmacSha256Hex(secret: string, message: string): Promise<string> {
   return bytesToHex(sig);
 }
 
-async function fetchSignedBinance(
-  url: string,
-  apiKey: string,
-): Promise<{ status: number; text: string; contentType: string }> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), UPSTREAM_TIMEOUT_MS);
-  try {
-    const res = await fetch(url, {
-      method: 'GET',
-      signal: ctrl.signal,
-      // Never follow a cross-origin redirect with the caller's implied trust (A10).
-      redirect: 'error',
-      headers: {
-        Accept: 'application/json',
-        'X-MBX-APIKEY': apiKey,
-      },
-    });
-    // Body read stays inside the abort window (A10).
-    const text = await res.text();
-    return { status: res.status, text, contentType: res.headers.get('Content-Type') || 'application/json' };
-  } finally {
-    clearTimeout(timer);
-  }
+async function fetchSignedBinance(url: string, apiKey: string): Promise<UpstreamResult> {
+  // `url` carries an HMAC signature — never log it, never echo its error text.
+  return fetchUpstreamJson(url, {
+    timeoutMs: UPSTREAM_TIMEOUT_MS,
+    headers: { 'X-MBX-APIKEY': apiKey },
+  });
 }
 
 /** Coalesce concurrent identical public fetches (A5) — one flight per cache key. */
@@ -245,7 +219,8 @@ async function proxyPublicPath(
           },
         });
       } catch (err) {
-        lastErr = err instanceof Error ? err.message : String(err);
+        // Client-safe phrase only — raw runtime text never leaves the isolate.
+        lastErr = upstreamDetail(err);
       }
     }
 
@@ -479,12 +454,11 @@ async function signedKlines(req: Request, url: URL, origin: string): Promise<Res
       },
     });
   } catch (err) {
-    const lastErr = err instanceof Error ? err.message : 'unreachable';
     return json(
       {
         status: 'error',
         code: 'UPSTREAM_NETWORK',
-        message: `Binance signed upstream unreachable: ${lastErr}`,
+        message: `Binance signed upstream unreachable: ${upstreamDetail(err)}`,
       },
       502,
       origin,

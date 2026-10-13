@@ -13,7 +13,7 @@
  * Run: `bun run test:e2e:smoke`
  */
 import { test, expect } from '@playwright/test';
-import { stubAppNetwork } from './charts';
+import { stubAppNetwork, seedManualLoad } from './charts';
 import { openDockedEditor, openStudio } from './studio';
 
 test.describe('AXIS smoke @smoke', () => {
@@ -36,6 +36,9 @@ test.describe('AXIS smoke @smoke', () => {
   });
 
   test('loads mock-walk bars and runs mocked engine', async ({ page }) => {
+    // Autoload defaults on and hides the manual Load button; opt out so this
+    // test actually exercises the click path.
+    await seedManualLoad(page);
     await page.goto('/');
     await page.getByTestId('axis-select-source').selectOption('mock-walk');
     // The load button must exist — a silent skip here would mask a regression

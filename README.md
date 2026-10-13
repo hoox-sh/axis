@@ -52,7 +52,11 @@ Part of the **[HOOX](https://hoox.sh)** open trading stack:
 
 **PYNE Agent plugin** (optional): Manager → Plugins → Install → **PYNE Agent**, or URL  
 `https://pyne-agent-worker.cryptolinx.workers.dev/plugin/axis-pine-agent.js`  
-(standalone Workers AI — no HOOX mesh required). Docs: [PYNE Agent](./docs/enduser/guides/pyne-agent.mdx).
+(standalone Workers AI — no HOOX mesh required). That `workers.dev` host is a
+reference deployment, not project infrastructure: deploy your own from
+[hoox-sh/pyne-agent-worker](https://github.com/hoox-sh/pyne-agent-worker) and point
+the Install field at your origin, so the plugin's lifetime is not tied to a
+third-party subdomain. Docs: [PYNE Agent](./docs/enduser/guides/pyne-agent.mdx).
 
 ```bash
 # Typical local trio
@@ -442,7 +446,7 @@ Everything under [github.com/hoox-sh](https://github.com/hoox-sh) — one open t
 | **pyne-worker** | Python Cloudflare® Worker — edge `POST /run`, cron, R2, alerts | [hoox-sh/pyne-worker](https://github.com/hoox-sh/pyne-worker) |
 | **pyne-agent-worker** | Workers AI Pine agent — RAG + validate loop | [hoox-sh/pyne-agent-worker](https://github.com/hoox-sh/pyne-agent-worker) |
 | **pyne-lsp** | Language server `pyne-lsp` (in the PYNE tree) | [hoox-sh/pyne](https://github.com/hoox-sh/pyne) · [docs](https://hoox.sh/pyne/docs/lsp) |
-| **pyne-vscode** | VS Code / Open VSX extension (in the PYNE tree) | [vscode-extension](https://github.com/hoox-sh/pyne/tree/main/vscode-extension) · [Marketplace](https://marketplace.visualstudio.com/items?itemName=hoox-sh.pyne) |
+| **pyne-vscode** | VS Code / Open VSX extension (in the PYNE tree) | [vscode-extension](https://github.com/hoox-sh/pyne/tree/main/vscode-extension) |
 
 **AXIS satellites**
 
@@ -464,13 +468,6 @@ Everything under [github.com/hoox-sh](https://github.com/hoox-sh) — one open t
 | **analytics-worker** | Analytics Engine fan-in — trades, signals, latency | [hoox-sh/analytics-worker](https://github.com/hoox-sh/analytics-worker) |
 | **report-worker** | Browser Rendering PDFs → R2, cron delivery | [hoox-sh/report-worker](https://github.com/hoox-sh/report-worker) |
 | **dashboard** | Next.js ops console (in the HOOX tree) | [hoox-sh/hoox](https://github.com/hoox-sh/hoox) |
-| **pine-worker** | Pine evaluator → trade events (private) | [hoox-sh/pine-worker](https://github.com/hoox-sh/pine-worker) |
-
-**Web**
-
-| Project | Role | Repository |
-|---------|------|------------|
-| **hoox-landing-page** | Marketing site source for [hoox.sh](https://hoox.sh) | [hoox-sh/hoox-landing-page](https://github.com/hoox-sh/hoox-landing-page) |
 
 ## Ethos
 

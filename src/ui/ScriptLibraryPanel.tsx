@@ -766,6 +766,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
               value={backend()}
               onChange={(e) => promptStorageChange(getActiveStorageId(), e.currentTarget.value)}
               title="Where user Pine scripts are stored"
+              data-testid="axis-library-storage"
             >
               <For each={storages()}>
                 {(s) => (

@@ -7,6 +7,37 @@
 
 import { expect, type Page } from '@playwright/test';
 
+/** App-state localStorage key (see `src/store/index.ts` `STORAGE_KEY`). */
+const AXIS_STORE_KEY = 'pynescript.axis.v1';
+
+/**
+ * Seed app state before boot so specs can drive a specific path.
+ *
+ * `autoload` defaults to `true`, which *hides* the manual Load button — a spec
+ * that wants to click Load must opt out, or the button assertion fails for a
+ * reason that has nothing to do with topbar wiring.
+ *
+ * Seeds only when the key is **absent** and merges into any existing payload.
+ * `addInitScript` re-runs on every navigation, so an unconditional
+ * `setItem` would reset the app to its seeded state on reload and wipe state
+ * the test just created (drawings, scripts, layout).
+ */
+export async function seedAxisStore(page: Page, patch: Record<string, unknown>): Promise<void> {
+  await page.addInitScript(
+    ([key, data]) => {
+      const existing = window.localStorage.getItem(key as string);
+      const merged = existing ? { ...(JSON.parse(existing) as object), ...(data as object) } : data;
+      window.localStorage.setItem(key as string, JSON.stringify(merged));
+    },
+    [AXIS_STORE_KEY, patch] as const,
+  );
+}
+
+/** Disable autoload so the manual `axis-btn-load` button is rendered. */
+export async function seedManualLoad(page: Page): Promise<void> {
+  await seedAxisStore(page, { autoload: false });
+}
+
 /**
  * Engine `/run` API paths only.
  *
@@ -54,6 +85,8 @@ export async function stubAppNetwork(
 
 /** Boot on `/` and load mock-walk bars so the chart has a drawable series. */
 export async function loadMockBars(page: Page): Promise<void> {
+  // Autoload hides the manual Load button; opt out before boot.
+  await seedManualLoad(page);
   await page.goto('/');
   await expect(page.getByTestId('axis-topbar')).toBeVisible();
   await page.getByTestId('axis-select-source').selectOption('mock-walk');
@@ -67,16 +100,25 @@ export async function loadMockBars(page: Page): Promise<void> {
 /** Open a toolbar group flyout and pick a tool; asserts the active indicator. */
 export async function selectDrawingTool(
   page: Page,
-  groupLabel: string,
+  groupId: string,
   toolLabel: string,
 ): Promise<void> {
   const toolbar = page.getByTestId('axis-drawing-toolbar');
   await expect(toolbar).toBeVisible();
-  const group = toolbar.getByRole('button', { name: groupLabel });
-  await group.click();
+
+  // Groups render as a wrapper (`data-drawing-group`) holding the primary tool
+  // button plus a caret that opens the flyout. The wrapper carries the
+  // `is-active` state, and the primary button's accessible name is the *tool*
+  // ("Trend line"), not the group label — so target the group id and open the
+  // flyout through its caret. Ids come from TOOL_GROUPS in
+  // `src/chart/drawings/tool-catalog.ts`.
+  const group = toolbar.locator(`[data-drawing-group="${groupId}"]`);
+  await expect(group).toBeVisible();
+  await group.locator('[aria-label^="More"]').click();
   await page.getByRole('menuitemradio', { name: toolLabel }).click();
-  // Group stays pressed while its tool is active.
-  await expect(group).toHaveAttribute('aria-pressed', 'true');
+
+  // Wrapper stays active while one of its tools is selected.
+  await expect(group).toHaveClass(/is-active/);
   // Layers panel mirrors the active tool name.
   await page.getByTestId('axis-btn-layers').click();
   await expect(page.getByTestId('axis-layers-active-tool')).toContainText(toolLabel);
