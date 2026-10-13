@@ -7,7 +7,7 @@ tags: [code, e2e]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:05:44Z
+  at: 2026-10-13T02:17:40Z
 sources:
   - id: tree
     resource: "e2e"
@@ -18,7 +18,7 @@ okf_lock: generated
 
 # Files
 
-* `charts.ts` — clickChart, drawingShapeCount, isEngineRunUrl, loadMockBars, selectDrawingTool, stubAppNetwork
+* `charts.ts` — clickChart, drawingShapeCount, isEngineRunUrl, loadMockBars, seedAxisStore, seedManualLoad, selectDrawingTool, stubAppNetwork
 * `colors.spec.ts`
 * `critical.spec.ts`
 * `drawings.spec.ts`
