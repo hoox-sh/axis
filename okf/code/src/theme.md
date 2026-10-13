@@ -7,7 +7,7 @@ tags: [code, theme]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-13T14:57:07Z
+  at: 2026-10-13T20:26:36Z
 sources:
   - id: tree
     resource: "src/theme"
@@ -20,7 +20,7 @@ okf_lock: generated
 
 * `apply.ts` — applyThemeToChart, applyThemeToDocument, applyThemeToPriceSeries, buildAreaSeriesOptions, buildBarSeriesOptions, buildBaselineSeriesOptions, buildCandleSeriesOptions, buildChartOptionsFromTokens, buildChromeCssVars, buildLineSeriesOptions, pineHostColors, tokensToVoidLike
 * `catalog.ts` — THEME_GROUPS, THEME_TOKEN_DEFS, TOKEN_ALIASES, canonicalTokenKey, catalogDefaults, getTokenDef, pineColorMap, tokensForGroup
-* `community-presets.ts` — COMMUNITY_PRESETS, PRESET_AYU_DARK, PRESET_AYU_LIGHT, PRESET_AYU_MIRAGE, PRESET_CATPPUCCIN_FRAPPE, PRESET_CATPPUCCIN_LATTE, PRESET_CATPPUCCIN_MACCHIATO, PRESET_CATPPUCCIN_MOCHA, PRESET_DRACULA, PRESET_EVERFOREST_DARK, PRESET_GRUVBOX_DARK, PRESET_GRUVBOX_LIGHT
+* `community-presets.ts` — COMMUNITY_PRESETS, PRESET_AURA, PRESET_AYU_DARK, PRESET_AYU_LIGHT, PRESET_AYU_MIRAGE, PRESET_CATPPUCCIN_FRAPPE, PRESET_CATPPUCCIN_LATTE, PRESET_CATPPUCCIN_MACCHIATO, PRESET_CATPPUCCIN_MOCHA, PRESET_COBALT2, PRESET_CURSOR, PRESET_DRACULA
 * `index.ts` — ApplyChartThemeOpts, ApplySeriesThemeOpts, BarColorTheme, COMMUNITY_PRESETS, ChartThemeState, EmbeddedBarTheme, MAX_BAR_THEMES, MAX_SAVED_THEMES, PRESET_CLASSIC, PRESET_DUSK, PRESET_GRAPHITE, PRESET_MONO
 * `library.ts` — MAX_BAR_THEMES, MAX_SAVED_THEMES, attachBarTheme, barTokenKeys, barTokensEqual, barTokensFromState, captureCustomTheme, clampThemeName, coerceBarTokenBag, detachBarThemeRef, fillBarTokens, hydrateBarColorTheme
 * `manager.ts` — ThemeListener, ThemeManager, getThemeManager, pineColorMap, resetThemeManagerForTests
