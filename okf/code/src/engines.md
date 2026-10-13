@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/engines"
-description: "src/engines contains catalog.ts, data-sessions.ts, engine-ws.ts, and 2 more files."
+description: "src/engines contains catalog.ts, data-sessions.ts, engine-ws.ts, and 3 more files."
 resource: "src/engines"
 tags: [code, engines]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-13T19:44:07Z
+  at: 2026-10-13T20:14:11Z
 sources:
   - id: tree
     resource: "src/engines"
@@ -18,11 +18,12 @@ okf_lock: generated
 
 # Files
 
-* `catalog.ts` — BUILTIN_ENGINES, DEFAULT_ENGINE_CAPABILITIES, DEFAULT_PYNE_WORKER_ENDPOINT, LOCAL_PYODIDE_INDEX, LOCAL_PYODIDE_VERSION, _resetEngineRegistrationFlag, _resetPyodideEngineState, callPyodideRunScript, capabilitiesFromHealth, confirmEngineApiKeyTarget, ensureEnginesRegistered, formatPyodideBridgeError
+* `catalog.ts` — BUILTIN_ENGINES, DEFAULT_ENGINE_CAPABILITIES, DEFAULT_PYNE_WORKER_ENDPOINT, LOCAL_PYODIDE_INDEX, LOCAL_PYODIDE_VERSION, _resetEngineRegistrationFlag, _resetPyodideEngineState, _setCachedEngineCapabilitiesForTests, callPyodideRunScript, capabilitiesFromHealth, confirmEngineApiKeyTarget, ensureEnginesRegistered
 * `data-sessions.ts` — CanonicalSeriesKey, DATA_PROVIDE_CHUNK, DataSeriesKey, DataSeriesStatus, DataSessionCreateInput, DataSessionCreateResult, DataSessionHandle, DataSessionMiss, DataSessionRunResult, EnsureDataSessionOptions, RunDataSessionOptions, _resetDataSessionMemo
 * `engine-ws.ts` — EngineWsResult, EngineWsRunRequest, _resetEngineWsClients, endpointToRunWsUrl, getEngineWsClient, probeEngineWs
 * `json-sanitize.ts` — parseEngineJson, sanitizeNonFiniteJson
 * `live-sessions.ts` — LiveSessionHit, LiveSessionKeyFields, LiveSessionModeFields, LiveSessionTickOpts, LiveSessionVia, SESSION_GROWTH_SLACK, SESSION_RETRY_COOLDOWN_MS, _liveSessionStateForTests, _resetLiveSessionsForTests, noteRunMode, releaseLiveSessions, runModeAllowsSessions
+* `ownership.ts` — isEngineOwnedLive
 
 # Depends on
 
@@ -35,10 +36,12 @@ okf_lock: generated
 # Used by
 
 * [src](/code/src.md)
+* [src/data](/code/src/data.md)
 * [src/indicators](/code/src/indicators.md)
 * [src/mcp](/code/src/mcp.md)
 * [src/optimize](/code/src/optimize.md)
 * [src/plugins](/code/src/plugins.md)
+* [src/streams](/code/src/streams.md)
 * [src/ui](/code/src/ui.md)
 * [src/ui/architecture](/code/src/ui/architecture.md)
 * [src/ui/plugins](/code/src/ui/plugins.md)

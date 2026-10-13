@@ -1328,6 +1328,10 @@ export const pyneWorkerEngine: EnginePlugin = {
 /**
  * Resolve an engine's capabilities with a safe fallback.
  * Capability hydration must never throw or block the UI loop.
+ *
+ * The last resolved value is cached so synchronous callers (live-bar write
+ * gates) can read it without a fetch; it is only a hint — an unresolved
+ * cache means "not engine-owned", never the reverse.
  */
 export async function getEngineCapabilities(id?: string): Promise<EngineCapabilities> {
   const fallback = (): EngineCapabilities => ({
@@ -1340,10 +1344,27 @@ export async function getEngineCapabilities(id?: string): Promise<EngineCapabili
   const engine = selectedId ? getEngine(selectedId) : undefined;
   if (!engine || typeof engine.getCapabilities !== 'function') return fallback();
   try {
-    return await engine.getCapabilities();
+    const caps = await engine.getCapabilities();
+    cachedEngineCapabilities = caps;
+    return caps;
   } catch {
     return fallback();
   }
+}
+
+let cachedEngineCapabilities: EngineCapabilities | null = null;
+
+/** Synchronous read of the last resolved capabilities (default when unknown). */
+export function getCachedEngineCapabilities(): EngineCapabilities {
+  return cachedEngineCapabilities ?? {
+    ...DEFAULT_ENGINE_CAPABILITIES,
+    liveModes: [...DEFAULT_ENGINE_CAPABILITIES.liveModes],
+  };
+}
+
+/** @internal test helper */
+export function _setCachedEngineCapabilitiesForTests(caps: EngineCapabilities | null): void {
+  cachedEngineCapabilities = caps;
 }
 
 export const BUILTIN_ENGINES: EnginePlugin[] = [

@@ -71,6 +71,7 @@ import {
   type StreamPlugin,
 } from './catalog';
 import { noteDataManagerLiveBar } from '../data/expand-cache';
+import { isEngineOwnedLive } from '../engines/ownership';
 import { sanitizeBar } from '../data/parse-bars';
 import { pluginKey } from '../plugins/types';
 import { classifyTransport } from '../ui/telemetry';
@@ -309,8 +310,10 @@ export function startLive(
         // evaluate against the stream symbol, dropping stale-stream bars.
         noteLiveBarForAlerts(bar, { symbol: sym, interval: iv });
 
-        // Data Manager: grow the underlying bars-cache dataset with live ticks
-        noteDataManagerLiveBar(bar);
+        // Data Manager: grow the underlying bars-cache dataset with live ticks.
+        // Skipped in engine-owned live mode — the engine's store owns the series,
+        // so local persistence would fight the feed the chart renders from.
+        if (!isEngineOwnedLive()) noteDataManagerLiveBar(bar);
 
         const timeAdvanced = lastSeenBarTime > 0 && bar.time > lastSeenBarTime;
         lastSeenBarTime = Math.max(lastSeenBarTime, bar.time);

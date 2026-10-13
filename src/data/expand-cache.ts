@@ -35,6 +35,7 @@ import { store } from '../store';
 import { normalizeHistoricalBars, sanitizeBar } from './parse-bars';
 import { normalizeLoadSymbol } from './symbol-exchange';
 import { getDataset, putDatasetBars } from './dataset-store';
+import { isEngineOwnedLive } from '../engines/ownership';
 import { intervalToSec } from './bars-gaps';
 import {
   DATA_MANAGER_SOURCE_ID,
@@ -136,6 +137,13 @@ export async function expandCachedSeriesToNow(
   }
 
   if (!canExpandFromSource(srcId)) {
+    return { bars, added: 0, expanded: false };
+  }
+
+  // Engine-owned live mode: the engine's feed is the source of truth. A local
+  // expand would fetch from the venue and persist into the dataset store,
+  // competing with the series the engine already owns — so serve cache only.
+  if (isEngineOwnedLive()) {
     return { bars, added: 0, expanded: false };
   }
 
@@ -282,6 +290,8 @@ export async function expandCachedSeriesToNow(
  * Debounced so open-bar updates do not rewrite the full series every frame.
  */
 export function noteDataManagerLiveBar(bar: Bar): void {
+  // Engine-owned live mode: the engine's store persists the series, not us.
+  if (isEngineOwnedLive()) return;
   const clean = sanitizeBar(bar);
   if (!clean) return;
   // Only when chart source is Data Manager (or selection is active with that source)

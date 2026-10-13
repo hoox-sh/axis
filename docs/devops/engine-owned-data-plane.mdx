@@ -160,8 +160,10 @@ streaming multiplex and `expand-cache` writes are suppressed for that instrument
 3. **AXIS client + broker** (`src/engines/data-sessions.ts`), with unit tests.
 4. **Server-owned routing**: `serverEngine` takes a `dataSession` option when
    `every-tick` is active and the engine reports `data_session`.
-5. **No-persist in server-owned mode**: DSM and `expand-cache` respect the
-   owner mode (`src/streams/multiplex.ts`, `src/data/expand-cache.ts`).
+5. **No-persist in server-owned mode** (done): `isEngineOwnedLive()` in
+   `src/engines/ownership.ts` gates both write paths — the multiplex's
+   `noteDataManagerLiveBar` and `expand-cache`'s fetch/merge. Fail-open:
+   while capabilities resolve, persistence works as before.
 6. **Pyodide in a Web Worker** + coalescing scheduler for live runs.
 7. **E2E**: every-tick on Pro without local bars; cache miss uploads the local
    dataset; switching to a bar-close engine falls back cleanly.
