@@ -410,6 +410,12 @@ export interface RunOptions {
    * override changes every bar, not just the tip.
    */
   liveTick?: boolean;
+  /**
+   * Live-session owner (indicator id / editor run key). `runAndApply` sets it
+   * for chart-series ticks so remote engines keep one session per script
+   * instance instead of one per symbol/interval.
+   */
+  liveSessionOwner?: string;
 }
 
 type PyneLogLine = { level?: string; message?: string; [k: string]: unknown };
@@ -691,7 +697,12 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
       // flag for private bar windows, so by the time it arrives here it always
       // means the live chart series (never an HPO holdout / walk-forward).
       // Isolate studies keep the full path.
-      ...(opts.liveTick === true && !isolate ? { liveTick: true } : {}),
+      ...(opts.liveTick === true && !isolate
+        ? {
+            liveTick: true,
+            ...(opts.liveSessionOwner ? { liveSessionOwner: opts.liveSessionOwner } : {}),
+          }
+        : {}),
     });
 
     const ms =
@@ -966,7 +977,9 @@ async function runAndApplyInner(
     strategyProps,
     claimEpoch: false,
     epoch,
-    ...(chartTick ? {} : { liveTick: false }),
+    ...(chartTick
+      ? { liveSessionOwner: opts.liveSessionOwner ?? indicatorId ?? EDITOR_RUN_KEY }
+      : { liveTick: false }),
   });
   const result = normalizeRunExtras(raw);
 

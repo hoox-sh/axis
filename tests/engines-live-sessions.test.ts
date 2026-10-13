@@ -217,6 +217,35 @@ describe('live-sessions', () => {
     expect(appendBody.bars[0]!.time).toBe(ninth);
   });
 
+  it('rebases when a closed bar is rewritten at a stable count', async () => {
+    const deleted: string[] = [];
+    const backend = installBackend({ onDelete: (id) => void deleted.push(id) });
+    restore = backend.restore;
+    await tryLiveSessionTick(opts(pineBars(8)));
+    // Same count, same tip time — but bar 3 was revised in place (gap fill).
+    const revised = pineBars(8);
+    revised[3] = { ...revised[3]!, close: 12345, high: 12345 };
+    const hit = await tryLiveSessionTick(opts(revised));
+    expect(hit?.via).toBe('session-create');
+    expect(hit?.sessionId).toBe('s2');
+    expect(deleted).toContain('s1');
+  });
+
+  it('rebases when older bars are prepended', async () => {
+    const deleted: string[] = [];
+    const backend = installBackend({ onDelete: (id) => void deleted.push(id) });
+    restore = backend.restore;
+    const bars = pineBars(8);
+    await tryLiveSessionTick(opts(bars));
+    // One older bar appears before the session's first bar (window grew back).
+    const older = { ...bars[0]!, time: bars[0]!.time - 86_400_000 };
+    const grown = [older, ...bars];
+    const hit = await tryLiveSessionTick(opts(grown));
+    expect(hit?.via).toBe('session-create');
+    expect(hit?.sessionId).toBe('s2');
+    expect(deleted).toContain('s1');
+  });
+
   it('recreates after a history reload (tip not found)', async () => {
     const deleted: string[] = [];
     const backend = installBackend({ onDelete: (id) => void deleted.push(id) });
@@ -268,13 +297,35 @@ describe('live-sessions', () => {
     expect(backend.calls.length).toBe(callsAfterFirst);
   });
 
-  it('releases the previous script session when the script changes', async () => {
+  it('releases the previous instance session when its script changes', async () => {
     const deleted: string[] = [];
     const backend = installBackend({ onDelete: (id) => void deleted.push(id) });
     restore = backend.restore;
-    await tryLiveSessionTick(opts(pineBars(8), SCRIPT));
-    await tryLiveSessionTick(opts(pineBars(8), 'indicator("other")\nplot(open)'));
+    // Same instance (ownerId) running a new revision → the old session is
+    // released so it does not linger until the idle TTL.
+    await tryLiveSessionTick({ ...opts(pineBars(8), SCRIPT), ownerId: 'ind-1' });
+    await tryLiveSessionTick({
+      ...opts(pineBars(8), 'indicator("other")\nplot(open)'),
+      ownerId: 'ind-1',
+    });
     expect(deleted).toContain('s1');
+  });
+
+  it('keeps one session per instance so sibling indicators do not evict', async () => {
+    const deleted: string[] = [];
+    const backend = installBackend({ onDelete: (id) => void deleted.push(id) });
+    restore = backend.restore;
+    const bars = pineBars(8);
+    const a = { ...opts(bars, SCRIPT), ownerId: 'ind-a' };
+    const b = { ...opts(bars, 'indicator("b")\nplot(open)'), ownerId: 'ind-b' };
+    expect((await tryLiveSessionTick(a))?.via).toBe('session-create');
+    expect((await tryLiveSessionTick(b))?.via).toBe('session-create');
+    // Second pass over each sibling reuses its own session (no /session, no
+    // DELETE) — this is what makes multi-indicator charts O(delta).
+    expect((await tryLiveSessionTick(a))?.via).toBe('session-cached');
+    expect((await tryLiveSessionTick(b))?.via).toBe('session-cached');
+    expect(deleted).toEqual([]);
+    expect(backend.calls.filter((c) => c.path === '/session').length).toBe(2);
   });
 
   it('rebases a session that outgrew the chart window', async () => {

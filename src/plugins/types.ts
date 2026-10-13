@@ -294,6 +294,12 @@ export interface EngineOpts {
    * is overridden, and never changes evaluation semantics on fallback.
    */
   liveTick?: boolean;
+  /**
+   * Script instance identity for live-session ownership (applied indicator id
+   * / editor run key). Keeps sibling indicators on one symbol from releasing
+   * each other's server-side sessions. Only meaningful with {@link liveTick}.
+   */
+  liveSessionOwner?: string;
 }
 
 /**

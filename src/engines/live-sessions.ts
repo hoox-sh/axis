@@ -44,6 +44,12 @@
  *   then `append` the strictly newer tail;
  * - anything else (history reload, rewind, gap) → release + recreate.
  *
+ * A resumable session also cannot follow an in-place rewrite of closed history
+ * (gap fill, venue revision, prepended bars) even when the count and tip are
+ * unchanged, so a fingerprint of the closed bars (`bars[0..count-2]`, the
+ * forming tip excluded) is compared before any tick/append is trusted; a
+ * mismatch rebases over the current window.
+ *
  * Sessions that outgrow the chart window by {@link SESSION_GROWTH_SLACK}
  * are rebased (release + recreate) so a long live stream cannot grow
  * server memory and tick envelopes without bound.
@@ -82,6 +88,12 @@ export interface LiveSessionTickOpts {
   profiler?: boolean;
   symbol: string;
   interval: string;
+  /**
+   * Identifies the chart script *instance* (applied indicator id / editor run
+   * key). Sessions are released when a new revision takes over the same
+   * instance — not when a sibling indicator on the same symbol/interval runs.
+   */
+  ownerId?: string;
   signal?: AbortSignal;
 }
 
@@ -104,10 +116,21 @@ interface SessionState {
   lastBar: string;
   /** Last full envelope (reused when nothing changed). */
   lastPayload: unknown;
+  /**
+   * Fingerprint of the *closed* bars the session holds (`bars[0..count-2]`,
+   * i.e. everything except the forming tip). Detects an in-place rewrite of
+   * history that a resumable session cannot follow.
+   */
+  closedHash: number;
 }
 
 const sessions = new Map<string, SessionState>();
-/** endpoint|symbol|interval → session key (releases the previous script's session). */
+/**
+ * Chart slot + script instance → session key. Keyed by `ownerId` (the applied
+ * indicator id or editor run key) so sibling indicators sharing one
+ * symbol/interval do NOT evict each other; a new revision of the same
+ * instance still releases the previous session.
+ */
 const owners = new Map<string, { key: string; id: string }>();
 /** Endpoints probed without session routes (old backends, edge, proxies). */
 const unsupported = new Set<string>();
@@ -140,11 +163,47 @@ function sessionKey(opts: LiveSessionTickOpts): string {
 }
 
 function ownerKey(opts: LiveSessionTickOpts): string {
-  return `${opts.endpoint}|${opts.symbol}|${opts.interval}`;
+  // Scope to the script instance so multiple indicators on one chart do not
+  // release each other's sessions. Anonymous callers (no ownerId) scope to the
+  // script source instead: distinct scripts stay independent, and a changed
+  // script is a new scope whose predecessor expires on the idle TTL.
+  const scope = opts.ownerId || opts.script;
+  return `${opts.endpoint}|${opts.symbol}|${opts.interval}|${scope}`;
 }
 
 function barSnapshot(b: Bar): string {
   return `${b.time}|${b.open}|${b.high}|${b.low}|${b.close}|${(b as { volume?: unknown }).volume ?? ''}`;
+}
+
+/** Reused 8-byte view to fold float64 fields into the window hash. */
+const HASH_VIEW = new DataView(new ArrayBuffer(8));
+
+function hashNum(h: number, v: unknown): number {
+  const x = Number(v);
+  HASH_VIEW.setFloat64(0, Number.isFinite(x) ? x : Number.NaN, true);
+  h = Math.imul(h ^ HASH_VIEW.getUint32(0, true), 0x01000193);
+  h = Math.imul(h ^ HASH_VIEW.getUint32(4, true), 0x01000193);
+  return h >>> 0;
+}
+
+/**
+ * FNV-1a fingerprint of `bars[0..endInclusive]` (inclusive; `-1` hashes
+ * nothing). Numeric fields are folded directly — no per-bar string allocation.
+ * Callers exclude the forming tip, which legitimately changes every tick.
+ */
+function hashBars(bars: Bar[], endInclusive: number): number {
+  let h = 0x811c9dc5;
+  const lim = Math.min(endInclusive, bars.length - 1);
+  for (let i = 0; i <= lim; i++) {
+    const b = bars[i]!;
+    h = hashNum(h, b.time);
+    h = hashNum(h, b.open);
+    h = hashNum(h, b.high);
+    h = hashNum(h, b.low);
+    h = hashNum(h, b.close);
+    h = hashNum(h, (b as { volume?: unknown }).volume);
+  }
+  return h >>> 0;
 }
 
 function headersFor(apiKey?: string): Record<string, string> {
@@ -264,6 +323,8 @@ async function createSession(
     lastTime: last.time,
     lastBar: barSnapshot(last),
     lastPayload: res.payload,
+    // Closed history only — the forming tip is excluded on purpose.
+    closedHash: hashBars(opts.pineBars, opts.pineBars.length - 2),
   });
   return { payload: res.payload, via: 'session-create', sessionId };
 }
@@ -357,6 +418,12 @@ async function tryLiveSessionTickInner(
 
   // Same tip — re-tick only when its OHLCV actually moved.
   if (n === st.count && last.time === st.lastTime) {
+    // Stable count and tip, but a closed bar may have been rewritten in place
+    // (gap fill, venue revision): the session would keep stale values.
+    if (hashBars(bars, n - 2) !== st.closedHash) {
+      dropSession(key, opts.endpoint);
+      return createSession(opts, key);
+    }
     if (barSnapshot(last) === st.lastBar) {
       return { payload: st.lastPayload, via: 'session-cached', sessionId: st.id };
     }
@@ -391,6 +458,13 @@ async function tryLiveSessionTickInner(
     dropSession(key, opts.endpoint);
     return createSession(opts, key);
   }
+  // Bars before the previously-forming base were rewritten, or older bars were
+  // prepended: the session's series no longer matches the chart — restart over
+  // the current window instead of appending a divergent tail.
+  if (hashBars(bars, idx - 1) !== st.closedHash) {
+    dropSession(key, opts.endpoint);
+    return createSession(opts, key);
+  }
   const base = bars[idx]!;
   const tail = bars.slice(idx + 1);
   if (!tail.length) {
@@ -408,6 +482,7 @@ async function tryLiveSessionTickInner(
     st.count = payloadCount(payload, n);
     st.lastBar = barSnapshot(last);
     st.lastPayload = payload;
+    st.closedHash = hashBars(bars, n - 2);
     return { payload, via: 'session-tick', sessionId: st.id };
   }
   // Tick-then-append: finalize the base with its current (closed) values
@@ -444,6 +519,8 @@ async function tryLiveSessionTickInner(
   st.lastTime = last.time;
   st.lastBar = barSnapshot(last);
   st.lastPayload = appended;
+  // The appended tail is now closed history; fingerprint it for the next tick.
+  st.closedHash = hashBars(bars, n - 2);
   return { payload: appended, via: 'session-append', sessionId: st.id };
 }
 

@@ -270,7 +270,7 @@ export const serverEngine: EnginePlugin = {
       return false;
     }
   },
-  async run({ script, bars, config, inputs, libraries, signal, liveTick }) {
+  async run({ script, bars, config, inputs, libraries, signal, liveTick, liveSessionOwner }) {
     // Prefer store.endpoint (Settings) over plugin config so a stale
     // pluginsConfig.endpoint cannot pin an old backend after Save.
     // Explicit config.endpoint still wins when set (e.g. pyne-worker engine).
@@ -373,6 +373,7 @@ export const serverEngine: EnginePlugin = {
           ...(inputOverrides ? { inputs: inputOverrides } : {}),
           ...(profilerOn ? { profiler: true } : {}),
           ...(libraries?.length ? { libraries } : {}),
+          ...(liveSessionOwner ? { ownerId: liveSessionOwner } : {}),
           symbol:
             typeof store.symbol === 'string' && store.symbol ? store.symbol : 'CHART',
           interval:
