@@ -7,7 +7,7 @@ tags: [devops, doc, docs, engine-owned-data-plane]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-13T20:14:11Z
+  at: 2026-10-13T21:59:54Z
 sources:
   - id: tree
     resource: "docs/devops/engine-owned-data-plane.mdx"
@@ -41,3 +41,6 @@ Repo path `docs/devops/engine-owned-data-plane.mdx`.
 
 * [src/data](/code/src/data.md)
 * [src/engines](/code/src/engines.md)
+* [src/workers](/code/src/workers.md)
+* [tests](/code/tests.md)
+* [tests/integration](/code/tests/integration.md)

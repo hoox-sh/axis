@@ -166,6 +166,8 @@ streaming multiplex and `expand-cache` writes are suppressed for that instrument
    `src/engines/ownership.ts` gates both write paths — the multiplex's
    `noteDataManagerLiveBar` and `expand-cache`'s fetch/merge. Fail-open:
    while capabilities resolve, persistence works as before.
-6. **Pyodide in a Web Worker** + coalescing scheduler for live runs.
-7. **E2E**: every-tick on Pro without local bars; cache miss uploads the local
-   dataset; switching to a bar-close engine falls back cleanly.
+6. **Pyodide in a Web Worker** (done): `src/workers/pyodide.*` runs evaluation off the main thread; cancel terminates and respawns the worker. Live-run coalescing is provided by the existing run-epoch + debounce mechanism (newest-wins; stale completions get `meta.superseded` and never touch the chart) — covered by `tests/runner-hardening.test.ts`, so no separate scheduler is needed.
+7. **E2E**: the data-session path is covered cross-repo
+   (`tests/integration/pyne-data-session.e2e.test.ts` against the real PYNE
+   `/data/*` store). A full UI-level e2e (every-tick on Pro without local bars,
+   cache-miss upload, bar-close fallback) still needs a browser run.
