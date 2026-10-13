@@ -63,6 +63,33 @@ import { store, setTelemetryPlane, setTelemetryState, setStatus, appendLog } fro
 import { registry } from '../plugins/registry';
 import { scriptHasPineAlertCalls } from '../alerts/pine';
 import { parseEngineJson } from './json-sanitize';
+import {
+  callPyodideRunScript,
+  formatPyodideBridgeError,
+  installPynescriptRuntime,
+  pyodideRuntimeAcceptsInputs,
+  type PyodideLike,
+} from '../workers/pyodide-runtime';
+import {
+  ABORTED,
+  PyodideAbortedError,
+  PyodideWorkerError,
+  isPyodideWorkerLoaded,
+  loadPyodideWorker,
+  pyodideWorkerAvailable,
+  raceAbort,
+  runPyodideWorker,
+  terminatePyodideWorker,
+  type PyodideWorkerRuntime,
+} from '../workers/pyodide-client';
+
+// Bridge helpers now live in workers/pyodide-runtime (the worker bundles them);
+// re-exported so existing importers keep working.
+export {
+  callPyodideRunScript,
+  formatPyodideBridgeError,
+  pyodideRuntimeAcceptsInputs,
+} from '../workers/pyodide-runtime';
 
 /**
  * PYNE compile currently emits `alert()` / `alertcondition()` as empty
@@ -111,28 +138,6 @@ async function rememberResolvedRunMode(
     noteRunMode(fields, reported);
   } catch {
     /* memo is best-effort */
-  }
-}
-
-/** Ensure a URL is a real zip/wheel, not SPA HTML fallback (micropip BadZipFile). */
-async function assertZipAsset(url: string, label: string): Promise<void> {
-  const res = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(30_000) });
-  if (!res.ok) {
-    throw new Error(`${label} missing: HTTP ${res.status} at ${url}`);
-  }
-  const ct = (res.headers.get('content-type') || '').toLowerCase();
-  if (ct.includes('text/html')) {
-    throw new Error(
-      `${label} returned HTML (SPA fallback) at ${url} — deploy public/vendor and public/pyodide into dist/`,
-    );
-  }
-  const buf = new Uint8Array(await res.arrayBuffer());
-  // ZIP local file header magic: PK\x03\x04
-  if (buf.length < 4 || buf[0] !== 0x50 || buf[1] !== 0x4b) {
-    const head = new TextDecoder().decode(buf.slice(0, 32));
-    throw new Error(
-      `${label} is not a zip/wheel at ${url} (got ${buf.length} bytes, starts with ${JSON.stringify(head)})`,
-    );
   }
 }
 
@@ -784,133 +789,6 @@ export const serverEngine: EnginePlugin = {
 };
 
 /**
- * Narrow Pyodide surface used by the browser engine.
- * micropip 0.6: `install(req, keep_going=False, deps=True, …)` — third arg is deps.
- */
-type PyodideLike = {
-  loadPackage: (name: string) => Promise<void>;
-  pyimport: (name: string) => {
-    install: (
-      url: string,
-      keepGoing?: boolean,
-      deps?: boolean,
-    ) => Promise<void>;
-  };
-  runPythonAsync: (code: string) => Promise<void>;
-  runPython: (code: string) => unknown;
-  globals: {
-    set: (key: string, value: unknown) => void;
-    /** PyProxy dict delete — optional so narrow test doubles still type-check. */
-    delete?: (key: string) => void;
-  };
-};
-
-/**
- * Format a Pyodide bridge failure with the full Python traceback.
- * `err.message` alone is truncated (`…`) by Pyodide's eval_code wrapper —
- * prefer `stack`, which carries the complete `Traceback (most recent call …)`.
- * When the stack is too long, trim the *middle* — the head keeps the
- * `eval_code` frame context and the tail keeps the final Python exception
- * line (`NameError: …`), which is the part that matters.
- */
-
-/** Long-traceback budget: keep the head and the tail, drop the middle frames. */
-const TRACEBACK_KEEP_MAX = 6000;
-const TRACEBACK_KEEP_HEAD = 2000;
-const TRACEBACK_KEEP_TAIL = TRACEBACK_KEEP_MAX - TRACEBACK_KEEP_HEAD;
-
-export function formatPyodideBridgeError(err: unknown): string {
-  if (err instanceof Error) {
-    const stack = typeof err.stack === 'string' ? err.stack.trim() : '';
-    const full = stack || err.message;
-    if (full.length <= TRACEBACK_KEEP_MAX) return full;
-    const head = full.slice(0, TRACEBACK_KEEP_HEAD).replace(/\s+$/, '');
-    const tail = full.slice(-TRACEBACK_KEEP_TAIL).replace(/^\s+/, '');
-    return `${head} … [${full.length - TRACEBACK_KEEP_MAX} chars trimmed] …\n${tail}`;
-  }
-  return String(err);
-}
-
-/**
- * Invoke the in-browser `run_script` bridge without interpolating raw JSON
- * into Python source. Direct interpolation emits JSON literals (`null`,
- * `true`, `false`) that are `NameError`s in Python — any bar with a null
- * field (gap, NaN→null) crashed eval_code before Pine ever ran, surfacing
- * only as a truncated `_pyodide/_base.py` traceback. Passing JSON strings
- * via `globals` + `json.loads` keeps parsing on the JSON side.
- */
-export function callPyodideRunScript(
-  py: PyodideLike,
-  script: string,
-  bars: unknown,
-  mode: string,
-  libraries: unknown,
-  /**
-   * Pine input overrides. Passed as a 5th positional argument only when the
-   * loaded runtime accepts it — see {@link pyodideRuntimeAcceptsInputs}.
-   */
-  inputs?: Record<string, unknown>,
-): string {
-  const globalsKeys = [
-    '_axis_script_json',
-    '_axis_bars_json',
-    '_axis_mode_json',
-    '_axis_libs_json',
-  ];
-  py.globals.set('_axis_script_json', JSON.stringify(script));
-  py.globals.set('_axis_bars_json', JSON.stringify(bars ?? []));
-  py.globals.set('_axis_mode_json', JSON.stringify(mode));
-  py.globals.set('_axis_libs_json', JSON.stringify(libraries ?? []));
-  let call =
-    'run_script(__import__("json").loads(_axis_script_json), ' +
-    '__import__("json").loads(_axis_bars_json), ' +
-    '__import__("json").loads(_axis_mode_json), ' +
-    '__import__("json").loads(_axis_libs_json)';
-  if (inputs !== undefined) {
-    py.globals.set('_axis_inputs_json', JSON.stringify(inputs));
-    globalsKeys.push('_axis_inputs_json');
-    call += ', __import__("json").loads(_axis_inputs_json)';
-  }
-  call += ')';
-  try {
-    return String(py.runPython(call));
-  } finally {
-    // Bars JSON can be megabytes; do not keep it alive in the Python globals
-    // between runs (the next run overwrites it anyway).
-    for (const key of globalsKeys) {
-      try {
-        py.globals.delete?.(key);
-      } catch {
-        /* best-effort cleanup */
-      }
-    }
-  }
-}
-
-const runtimeInputsSupport = new WeakMap<object, boolean>();
-
-/**
- * True when the loaded `run_script` accepts an `inputs` parameter.
- * Probed once per Pyodide instance via `inspect` so the JS side can forward
- * Script Settings as soon as the runtime supports them, without a JS release.
- */
-export function pyodideRuntimeAcceptsInputs(py: PyodideLike): boolean {
-  const cached = runtimeInputsSupport.get(py);
-  if (cached !== undefined) return cached;
-  let ok = false;
-  try {
-    ok =
-      py.runPython(
-        "'inputs' in __import__('inspect').signature(run_script).parameters",
-      ) === true;
-  } catch {
-    ok = false;
-  }
-  runtimeInputsSupport.set(py, ok);
-  return ok;
-}
-
-/**
  * Normalize engine `overlay` flags. Runtimes may send bool or 0/1.
  * `undefined` means “not specified” (runner applies defaults).
  */
@@ -971,7 +849,9 @@ function pyodidePluginConfig(): Record<string, unknown> {
  * Safe to call on idle; no-op outside the browser.
  */
 export function prefetchPyodideAssets(indexUrl?: string): void {
-  if (typeof document === 'undefined') return;
+  // Best-effort warm-up: a DOM without <head> (partial test doubles) must not
+  // fail the load that follows.
+  if (typeof document === 'undefined' || !document.head) return;
   const base = resolvePyodideIndexUrl(indexUrl);
   const files = [
     'pyodide.js',
@@ -1023,7 +903,8 @@ export function preloadPyodide(): Promise<unknown> {
   prefetchPyodideAssets();
   const reportHud = () => pyodideIsActiveEngine();
 
-  if (!pyodideEngine._pyodide && reportHud()) {
+  // Worker-loaded runtimes leave `_pyodide` null; don't re-announce a cold load.
+  if (!pyodideEngine._pyodide && !isPyodideWorkerLoaded() && reportHud()) {
     setTelemetryPlane('engine', {
       id: 'pyodide',
       name: 'Client-Side (Pyodide)',
@@ -1081,22 +962,45 @@ const PYODIDE_LOAD_COOLDOWN_MS = 30_000;
 /** Warn once per session that Pyodide ignored a requested field. */
 let warnedUnsupportedFields = false;
 
+/** Cancelled run, in the same envelope as a failed one (`error: 'Aborted'`). */
+function pyodideAbortedResult(ms: number): RunResult {
+  return {
+    status: 'error',
+    plots: [],
+    series: {},
+    events: [],
+    drawings: [],
+    error: 'Aborted',
+    meta: { ms, transport: 'local' },
+  };
+}
+
+function isWorkerRuntime(rt: PyodideLike | PyodideWorkerRuntime): rt is PyodideWorkerRuntime {
+  return 'kind' in rt && rt.kind === 'worker';
+}
+
 /** @internal test helper — clear cached instance, in-flight load and failure state. */
 export function _resetPyodideEngineState(): void {
   pyodideEngine._pyodide = null;
   pyodideEngine._partial = null;
   pyodideEngine._loadPromise = null;
   pyodideEngine._failure = null;
+  terminatePyodideWorker(new Error('Pyodide engine state reset'));
   warnedUnsupportedFields = false;
 }
 
 export const pyodideEngine: EnginePlugin & {
+  /** In-thread runtime (fallback path only). Stays null while the worker owns the runtime. */
   _pyodide: PyodideLike | null;
   _loadPromise: Promise<PyodideLike> | null;
   /** Instance whose `loadPyodide()` succeeded but later setup failed — reused on retry. */
   _partial: PyodideLike | null;
   _failure: { at: number; message: string } | null;
-  _ensure: () => Promise<PyodideLike>;
+  /**
+   * Resolves to the in-thread runtime, or to a {@link PyodideWorkerRuntime}
+   * marker when the evaluator lives in the Pyodide worker.
+   */
+  _ensure: () => Promise<PyodideLike | PyodideWorkerRuntime>;
 } = {
   id: 'pyodide',
   name: 'Client-Side (Pyodide)',
@@ -1147,8 +1051,25 @@ export const pyodideEngine: EnginePlugin & {
     }
     const cfg = resolveConfig(this.configSchema, pyodidePluginConfig());
     const indexUrl = resolvePyodideIndexUrl(String(cfg.indexUrl || LOCAL_PYODIDE_INDEX));
+    const origin = typeof location !== 'undefined' ? location.origin : '';
+    if (pyodideWorkerAvailable()) {
+      // Worker path: the client owns the load promise (shared by concurrent
+      // callers) and respawns after a crash, so nothing is memoised in
+      // `_loadPromise` here — a stale resolved promise would wedge the engine.
+      prefetchPyodideAssets(indexUrl);
+      try {
+        const info = await loadPyodideWorker({ indexUrl, origin });
+        this._failure = null;
+        return { kind: 'worker', acceptsInputs: info.acceptsInputs };
+      } catch (err: unknown) {
+        this._failure = {
+          at: Date.now(),
+          message: err instanceof Error ? err.message : String(err),
+        };
+        throw err;
+      }
+    }
     this._loadPromise = (async () => {
-      const origin = typeof location !== 'undefined' ? location.origin : '';
       prefetchPyodideAssets(indexUrl);
 
       if (typeof window !== 'undefined' && typeof window.loadPyodide !== 'function') {
@@ -1161,43 +1082,8 @@ export const pyodideEngine: EnginePlugin & {
       // is kept and reused on retry instead of leaking a second wasm heap.
       const py = this._partial ?? (await window.loadPyodide({ indexURL: indexUrl }));
       this._partial = py;
-      // micropip + packaging served from same self-hosted index
-      await py.loadPackage('micropip');
-      const micropip = py.pyimport('micropip');
-
-      // Local wheels under /vendor (public/ → dist). Validate before micropip
-      // so SPA HTML fallbacks surface as clear errors instead of BadZipFile.
-      //
-      // deps=false: the pynescript METADATA requires click/requests/tqdm (CLI/API),
-      // which are not needed for in-browser evaluate and are NOT vendored under
-      // /pyodide/v0.29.5/ — micropip would 404 them on the self-hosted index.
-      // Second positional arg alone is keep_going, not deps (micropip 0.6).
-      const wheelUrl = `${origin}/vendor/pynescript-0.6.9-py3-none-any.whl`;
-      const antlrUrl = `${origin}/vendor/antlr4_python3_runtime-4.13.2-py3-none-any.whl`;
-      await assertZipAsset(wheelUrl, 'pynescript wheel');
-      await assertZipAsset(antlrUrl, 'antlr4 wheel');
-      try {
-        // antlr first so pynescript import can resolve
-        await micropip.install(antlrUrl, false, false);
-        await micropip.install(wheelUrl, false, false);
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : String(e);
-        throw new Error(`Failed to install browser wheels from ${origin}/vendor: ${msg}`);
-      }
-
-      const runtimeUrl = `${origin}/pyodide/pynescript_runtime.py`;
-      const runtimeResp = await fetch(runtimeUrl);
-      if (!runtimeResp.ok) {
-        throw new Error(`Failed to load pynescript_runtime.py: HTTP ${runtimeResp.status} (${runtimeUrl})`);
-      }
-      const runtimeCt = runtimeResp.headers.get('content-type') || '';
-      const runtimePy = await runtimeResp.text();
-      if (runtimeCt.includes('text/html') || runtimePy.trimStart().startsWith('<!')) {
-        throw new Error(
-          `pynescript_runtime.py returned HTML instead of Python — is ${runtimeUrl} deployed under dist/pyodide/?`,
-        );
-      }
-      await py.runPythonAsync(runtimePy);
+      // micropip + wheels + runtime — shared with the worker (pyodide-runtime).
+      await installPynescriptRuntime(py, origin);
       this._pyodide = py;
       this._partial = null;
       this._failure = null;
@@ -1214,51 +1100,29 @@ export const pyodideEngine: EnginePlugin & {
   },
   async run({ script, bars, config, libraries, inputs, signal }) {
     const t0 = performance.now();
-    // The in-browser evaluator runs synchronously on the main thread, so a
-    // cancel can only be honoured before evaluation starts (see deferred B4).
-    if (signal?.aborted) {
-      return {
-        status: 'error',
-        plots: [],
-        series: {},
-        events: [],
-        drawings: [],
-        error: 'Aborted',
-        meta: { ms: 0, transport: 'local' },
-      };
-    }
+    // Cancel before any work: nothing has started yet.
+    if (signal?.aborted) return pyodideAbortedResult(0);
     try {
-      const py = await this._ensure();
-      if (signal?.aborted) {
-        return {
-          status: 'error',
-          plots: [],
-          series: {},
-          events: [],
-          drawings: [],
-          error: 'Aborted',
-          meta: { ms: performance.now() - t0, transport: 'local' },
-        };
+      // A cancel during a cold load returns at once. The load itself keeps
+      // running (preload and the next run share it).
+      const runtime = await raceAbort(this._ensure(), signal);
+      if (runtime === ABORTED || signal?.aborted) {
+        return pyodideAbortedResult(performance.now() - t0);
       }
       const cfg = resolveConfig(this.configSchema, {
         ...pyodidePluginConfig(),
         ...(config || {}),
       });
       const mode = String((cfg as { mode?: string }).mode || 'auto');
-      // Optional: load numpy for compile/object-mode (no-op if already present)
-      if (mode === 'compile' || mode === 'auto') {
-        try {
-          await py.loadPackage?.('numpy');
-        } catch {
-          /* interpret fallback handles missing numpy */
-        }
-      }
       // Forward Script Settings when the loaded runtime accepts them. Anything
       // we cannot honour is reported in meta.unsupported — never dropped silently.
       const inputBag =
         inputs && typeof inputs === 'object' && Object.keys(inputs).length ? inputs : undefined;
       const unsupported: string[] = [];
-      const forwardInputs = inputBag !== undefined && pyodideRuntimeAcceptsInputs(py);
+      const acceptsInputs = isWorkerRuntime(runtime)
+        ? runtime.acceptsInputs
+        : pyodideRuntimeAcceptsInputs(runtime);
+      const forwardInputs = inputBag !== undefined && acceptsInputs;
       if (inputBag !== undefined && !forwardInputs) unsupported.push('inputs');
       if (cfg.profiler === true) unsupported.push('profiler');
       if (unsupported.length && !warnedUnsupportedFields) {
@@ -1270,14 +1134,39 @@ export const pyodideEngine: EnginePlugin & {
           { toast: false },
         );
       }
-      const resultJson = callPyodideRunScript(
-        py,
-        script,
-        barsForPine(bars),
-        mode,
-        libraries || [],
-        forwardInputs ? inputBag : undefined,
-      );
+      let resultJson: string;
+      if (isWorkerRuntime(runtime)) {
+        // Off the main thread: numpy load + run_script happen in the worker.
+        // A cancel terminates the worker and rejects with PyodideAbortedError.
+        resultJson = await runPyodideWorker(
+          {
+            script,
+            bars: barsForPine(bars),
+            mode,
+            libraries: libraries || [],
+            ...(forwardInputs ? { inputs: inputBag } : {}),
+          },
+          signal,
+        );
+      } else {
+        // In-thread fallback (no Worker available). Cannot be interrupted once started.
+        // Optional: load numpy for compile/object-mode (no-op if already present)
+        if (mode === 'compile' || mode === 'auto') {
+          try {
+            await runtime.loadPackage?.('numpy');
+          } catch {
+            /* interpret fallback handles missing numpy */
+          }
+        }
+        resultJson = callPyodideRunScript(
+          runtime,
+          script,
+          barsForPine(bars),
+          mode,
+          libraries || [],
+          forwardInputs ? inputBag : undefined,
+        );
+      }
       const result = JSON.parse(resultJson) as RunResult & {
         overlay?: unknown;
         script_name?: string;
@@ -1299,7 +1188,11 @@ export const pyodideEngine: EnginePlugin & {
         },
       };
     } catch (err: unknown) {
-      const msg = formatPyodideBridgeError(err);
+      if (err instanceof PyodideAbortedError) {
+        return pyodideAbortedResult(performance.now() - t0);
+      }
+      // Worker errors arrive pre-formatted (same formatPyodideBridgeError output).
+      const msg = err instanceof PyodideWorkerError ? err.message : formatPyodideBridgeError(err);
       return {
         status: 'error',
         plots: [],

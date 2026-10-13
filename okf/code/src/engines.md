@@ -7,7 +7,7 @@ tags: [code, engines]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-13T17:41:29Z
+  at: 2026-10-13T19:44:07Z
 sources:
   - id: tree
     resource: "src/engines"
@@ -24,16 +24,13 @@ okf_lock: generated
 * `json-sanitize.ts` — parseEngineJson, sanitizeNonFiniteJson
 * `live-sessions.ts` — LiveSessionHit, LiveSessionKeyFields, LiveSessionModeFields, LiveSessionTickOpts, LiveSessionVia, SESSION_GROWTH_SLACK, SESSION_RETRY_COOLDOWN_MS, _liveSessionStateForTests, _resetLiveSessionsForTests, noteRunMode, releaseLiveSessions, runModeAllowsSessions
 
-# Packages
-
-`micropip`
-
 # Depends on
 
 * [src/alerts](/code/src/alerts.md)
 * [src/data](/code/src/data.md)
 * [src/plugins](/code/src/plugins.md)
 * [src/store](/code/src/store.md)
+* [src/workers](/code/src/workers.md)
 
 # Used by
 

@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "tests"
-description: "tests contains alerts-engine.test.ts, alerts-form.test.ts, alerts-format.test.ts, and 262 more files."
+description: "tests contains alerts-engine.test.ts, alerts-form.test.ts, alerts-format.test.ts, and 263 more files."
 resource: "tests"
 tags: [code, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-13T17:41:29Z
+  at: 2026-10-13T19:44:07Z
 sources:
   - id: tree
     resource: "tests"
@@ -204,6 +204,7 @@ okf_lock: generated
 * `pynescript-interpret-ta.py` — load_runtime, main
 * `pynescript-runtime.test.ts`
 * `pyodide-bridge.test.ts`
+* `pyodide-worker.test.ts`
 * `reconnect-ws.test.ts`
 * `register-sw.test.ts`
 * `registry-storage.test.ts`

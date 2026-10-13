@@ -61,6 +61,11 @@ export default defineConfig({
     },
   },
   envPrefix: ['VITE_', 'TAURI_ENV_'],
+  // The Pyodide worker is a module worker (`new Worker(…, { type: 'module' })`),
+  // so its bundle must be an ES module chunk — Vite's default IIFE output is not.
+  worker: {
+    format: 'es',
+  },
   server: {
     port: 3000,
     // Tauri expects a fixed port; fail if 3000 is taken.
