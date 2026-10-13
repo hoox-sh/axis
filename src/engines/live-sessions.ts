@@ -36,6 +36,13 @@
  *   ticking first would duplicate the bar (stale confirmed + new appended).
  * - `DELETE {endpoint}/session/{id}` — release (else the 15-min idle TTL).
  *
+ * Live sessions always evaluate in `interpret` (compile has no resumable
+ * evaluator state), so the fast path may only follow a full run the backend
+ * itself resolved to `interpret`: {@link noteRunMode} remembers the mode
+ * reported for each (endpoint + script + mode sent + profiler) run key, and
+ * {@link runModeAllowsSessions} gates the fast path on it. An `auto` script the
+ * backend compiled must not silently switch to interpreted values on a tick.
+ *
  * Continuity is tracked per session key (endpoint + script + inputs +
  * libraries + symbol + interval) against Pine-ms bar times:
  * - same count + same last time → `tick` (skipped entirely when the last
@@ -54,10 +61,20 @@
  * are rebased (release + recreate) so a long live stream cannot grow
  * server memory and tick envelopes without bound.
  *
+ * A response that arrives but cannot be used (error envelope with a 2xx status,
+ * mismatched `session_id`, unexpected bar count) is a miss too — never a
+ * silently empty result. Unusable responses are remembered per session key for
+ * {@link SESSION_RETRY_COOLDOWN_MS} so a backend that answers but cannot serve
+ * sessions costs a full re-evaluation occasionally instead of on every tick.
+ *
  * Any failure (unknown route on old backends, `NO_SESSION`, `SESSIONS_FULL`,
  * transport error) resolves to `null` — the caller falls back to a full
  * `engine.run`. Endpoints without session routes are remembered so the
  * fallback costs one probe per endpoint, not one per tick.
+ *
+ * The closed-history fingerprint is re-read on every tick, so continuity costs
+ * O(window) client-side by construction ({@link hashBars}); the O(delta) claim
+ * covers the server-side evaluation and the envelope, not this guard.
  *
  * @module engines/live-sessions
  */
@@ -76,18 +93,34 @@ const SESSION_CREATE_BUDGET_MS = 90_000;
 const SESSION_OP_BUDGET_MS = 30_000;
 /** Cooldown after `SESSIONS_FULL` before trying to create again. */
 const SESSIONS_FULL_COOLDOWN_MS = 60_000;
+/**
+ * Cooldown for a session key whose last attempt was answered but unusable
+ * (error envelope, wrong session id, unexpected count, no session id). Bounds
+ * the cost of a backend that cannot serve sessions to a full re-evaluation
+ * every {@link SESSION_RETRY_COOLDOWN_MS} instead of two per tick.
+ */
+export const SESSION_RETRY_COOLDOWN_MS = 30_000;
+/** Cap on remembered session keys (failure memos) — churn must not grow it. */
+const KEY_MEMO_MAX = 200;
+/** Cap on remembered (endpoint + script + mode + profiler) run modes. */
+const RUN_MODE_MEMO_MAX = 200;
 
-export interface LiveSessionTickOpts {
+/** Fields that identify a session key (everything but the bars themselves). */
+export interface LiveSessionKeyFields {
   endpoint: string;
-  apiKey?: string;
   script: string;
-  /** Chart-window bars with Pine-ms times (i.e. `barsForPine` output). */
-  pineBars: Bar[];
+  /** Engine-facing inputs. Must be scalar-only — see the caller's guard. */
   inputs?: Record<string, unknown>;
   libraries?: EngineLibrarySource[];
-  profiler?: boolean;
   symbol: string;
   interval: string;
+}
+
+export interface LiveSessionTickOpts extends LiveSessionKeyFields {
+  apiKey?: string;
+  /** Chart-window bars with Pine-ms times (i.e. `barsForPine` output). */
+  pineBars: Bar[];
+  profiler?: boolean;
   /**
    * Identifies the chart script *instance* (applied indicator id / editor run
    * key). Sessions are released when a new revision takes over the same
@@ -108,6 +141,8 @@ export interface LiveSessionHit {
 
 interface SessionState {
   id: string;
+  /** API key the session was created with (releases must authenticate too). */
+  apiKey?: string;
   /** Bar count the session holds. */
   count: number;
   /** Last bar time (Pine ms) the session holds. */
@@ -136,6 +171,64 @@ const owners = new Map<string, { key: string; id: string }>();
 const unsupported = new Set<string>();
 /** endpoint → timestamp of last `SESSIONS_FULL` (create cooldown). */
 const fullCooldown = new Map<string, number>();
+/** session key → timestamp until which the fast path is skipped after a miss. */
+const keyCooldown = new Map<string, number>();
+/** (endpoint + script + mode + profiler) run key → last backend-reported mode. */
+const runModes = new Map<string, string>();
+
+/** Fields that identify the *full run* whose mode decides session eligibility. */
+export interface LiveSessionModeFields {
+  endpoint: string;
+  script: string;
+  /** Mode sent to the backend for that run (`interpret` | `compile` | `auto`). */
+  mode?: string;
+  profiler?: boolean;
+}
+
+function runModeKey(f: LiveSessionModeFields): string {
+  return JSON.stringify([f.endpoint, f.script, f.mode ?? '', f.profiler === true]);
+}
+
+/**
+ * Remember the evaluation mode the backend reported for a full run.
+ *
+ * Sessions always evaluate in `interpret`, while `auto` may resolve to
+ * `compile` server-side. Recording the backend's own answer (instead of
+ * trusting the configured mode) lets `auto` deployments use sessions whenever
+ * the series on the chart really came from interpret — and never switches a
+ * compiled series to interpreted values. Keyed by the mode *sent* as well, so a
+ * mode switch cannot inherit the previous mode's answer.
+ */
+export function noteRunMode(fields: LiveSessionModeFields, mode: unknown): void {
+  if (!fields?.endpoint || typeof mode !== 'string' || !mode) return;
+  const key = runModeKey(fields);
+  runModes.delete(key);
+  runModes.set(key, mode);
+  while (runModes.size > RUN_MODE_MEMO_MAX) {
+    const oldest = runModes.keys().next().value;
+    if (oldest === undefined) break;
+    runModes.delete(oldest);
+  }
+}
+
+/** True when the last full run for this script resolved to `interpret`. */
+export function runModeAllowsSessions(fields: LiveSessionModeFields): boolean {
+  if (!fields?.endpoint || !fields.script) return false;
+  return runModes.get(runModeKey(fields)) === 'interpret';
+}
+
+function markSessionFailure(key: string): void {
+  keyCooldown.set(key, Date.now() + SESSION_RETRY_COOLDOWN_MS);
+  while (keyCooldown.size > KEY_MEMO_MAX) {
+    const oldest = keyCooldown.keys().next().value;
+    if (oldest === undefined) break;
+    keyCooldown.delete(oldest);
+  }
+}
+
+function clearSessionFailure(key: string): void {
+  keyCooldown.delete(key);
+}
 
 function canonicalize(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalize);
@@ -149,7 +242,7 @@ function canonicalize(value: unknown): unknown {
   return value;
 }
 
-function sessionKey(opts: LiveSessionTickOpts): string {
+function sessionKey(opts: LiveSessionKeyFields): string {
   return JSON.stringify(
     canonicalize({
       endpoint: opts.endpoint,
@@ -218,10 +311,24 @@ function headersFor(apiKey?: string): Record<string, string> {
 
 function withBudget(signal: AbortSignal | undefined, ms: number): AbortSignal {
   const timer = AbortSignal.timeout(ms);
-  if (signal && typeof AbortSignal.any === 'function') {
+  if (!signal) return timer;
+  if (typeof AbortSignal.any === 'function') {
     return AbortSignal.any([timer, signal]);
   }
-  return signal || timer;
+  // No AbortSignal.any: combine by hand so the budget is never dropped when a
+  // caller signal exists.
+  if (signal.aborted || timer.aborted) return timer.aborted ? timer : signal;
+  const ctrl = new AbortController();
+  const abort = (from: AbortSignal) => {
+    try {
+      ctrl.abort(from.reason as unknown);
+    } catch {
+      ctrl.abort();
+    }
+  };
+  signal.addEventListener('abort', () => abort(signal), { once: true });
+  timer.addEventListener('abort', () => abort(timer), { once: true });
+  return ctrl.signal;
 }
 
 async function postJson(
@@ -246,11 +353,13 @@ async function postJson(
   return { ok: res.ok, status: res.status, payload };
 }
 
-function releaseSession(endpoint: string, id: string): void {
-  // Best-effort — TTL reaps whatever this misses.
+function releaseSession(endpoint: string, id: string, apiKey?: string): void {
+  // Best-effort — TTL reaps whatever this misses. Authenticated backends
+  // reject an anonymous DELETE, so the same headers as create/tick are sent.
   try {
     void fetch(`${endpoint}/session/${encodeURIComponent(id)}`, {
       method: 'DELETE',
+      headers: headersFor(apiKey),
       keepalive: true,
     }).catch(() => {
       /* ignore */
@@ -264,7 +373,7 @@ function dropSession(key: string, endpoint: string): void {
   const st = sessions.get(key);
   if (st) {
     sessions.delete(key);
-    releaseSession(endpoint, st.id);
+    releaseSession(endpoint, st.id, st.apiKey);
   }
 }
 
@@ -294,23 +403,37 @@ async function createSession(
   } catch {
     return null;
   }
-  if (!res.ok || !res.payload || typeof res.payload !== 'object') {
-    const code = (res.payload as { code?: unknown } | null)?.code;
+  const record =
+    res.payload && typeof res.payload === 'object' && !Array.isArray(res.payload)
+      ? (res.payload as Record<string, unknown>)
+      : null;
+  if (!res.ok || !record || record.status === 'error') {
+    const code = record?.code;
     if (res.status === 404 || res.status === 405 || res.status === 501) {
       // Old backend / edge / proxy without session routes — remember it.
       unsupported.add(opts.endpoint);
     } else if (res.status === 503 || code === 'SESSIONS_FULL') {
       fullCooldown.set(opts.endpoint, now);
+    } else {
+      // Answered but unusable (transport-level 5xx/4xx that is not a missing
+      // route, or a 2xx error envelope) — do not re-pay a full create on every
+      // tick just to fall back to a full run anyway.
+      markSessionFailure(key);
     }
     return null;
   }
-  const record = res.payload as Record<string, unknown>;
   const sessionId = typeof record.session_id === 'string' ? record.session_id : null;
+  if (!sessionId) {
+    // A create we cannot address leaks a server-side session and would run the
+    // full window again next tick — treat as a failure and back off.
+    markSessionFailure(key);
+    return null;
+  }
   const count =
     typeof record.count === 'number' && Number.isFinite(record.count)
       ? Math.floor(record.count)
       : opts.pineBars.length;
-  if (!sessionId) return null;
+  clearSessionFailure(key);
   // A different script took over this chart slot — release its session.
   const owner = ownerKey(opts);
   const prev = owners.get(owner);
@@ -319,6 +442,7 @@ async function createSession(
   const last = opts.pineBars[opts.pineBars.length - 1]!;
   sessions.set(key, {
     id: sessionId,
+    apiKey: opts.apiKey,
     count,
     lastTime: last.time,
     lastBar: barSnapshot(last),
@@ -329,11 +453,40 @@ async function createSession(
   return { payload: res.payload, via: 'session-create', sessionId };
 }
 
+/**
+ * Outcome of a `/tick` or `/append` call.
+ *
+ * `invalid` = the server answered but the body cannot be used as this
+ * session's result (transport status, error envelope, wrong session id), which
+ * must never be rendered as a successful empty run. `miss` = no answer
+ * (transport error/timeout) — transient, so it does not cool the key down.
+ */
+type SessionOpOutcome =
+  | { kind: 'ok'; payload: unknown }
+  | { kind: 'gone' }
+  | { kind: 'invalid' }
+  | { kind: 'miss' };
+
+/** True when `payload` can be treated as `sessionId`'s evaluation result. */
+function isSessionResult(
+  payload: unknown,
+  sessionId: string,
+): payload is Record<string, unknown> {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
+  const rec = payload as Record<string, unknown>;
+  // `/run`-shaped envelopes report failures as `{ status: 'error' }`, sometimes
+  // with a 2xx status — an error body is not a result.
+  if (rec.status === 'error') return false;
+  // When the server echoes its session id, it must be the one we asked for.
+  if (typeof rec.session_id === 'string' && rec.session_id !== sessionId) return false;
+  return true;
+}
+
 async function tickSession(
   opts: LiveSessionTickOpts,
   st: SessionState,
   bar: Bar,
-): Promise<unknown | null> {
+): Promise<SessionOpOutcome> {
   let res: { ok: boolean; status: number; payload: unknown };
   try {
     res = await postJson(
@@ -342,19 +495,24 @@ async function tickSession(
       { apiKey: opts.apiKey, signal: opts.signal, budgetMs: SESSION_OP_BUDGET_MS },
     );
   } catch {
-    return null;
+    return { kind: 'miss' };
   }
-  if (!res.ok || !res.payload || typeof res.payload !== 'object') {
-    return (res.payload as { code?: unknown } | null)?.code === 'NO_SESSION' ? 'gone' : null;
+  if (!res.ok || !isSessionResult(res.payload, st.id)) {
+    if ((res.payload as { code?: unknown } | null)?.code === 'NO_SESSION') {
+      return { kind: 'gone' };
+    }
+    // The server answered (transport errors threw above) but the body cannot be
+    // used — never render it as a successful run.
+    return { kind: 'invalid' };
   }
-  return res.payload;
+  return { kind: 'ok', payload: res.payload };
 }
 
 async function appendSession(
   opts: LiveSessionTickOpts,
   st: SessionState,
   bars: Bar[],
-): Promise<unknown | null> {
+): Promise<SessionOpOutcome> {
   let res: { ok: boolean; status: number; payload: unknown };
   try {
     res = await postJson(
@@ -363,12 +521,23 @@ async function appendSession(
       { apiKey: opts.apiKey, signal: opts.signal, budgetMs: SESSION_OP_BUDGET_MS },
     );
   } catch {
-    return null;
+    return { kind: 'miss' };
   }
-  if (!res.ok || !res.payload || typeof res.payload !== 'object') {
-    return (res.payload as { code?: unknown } | null)?.code === 'NO_SESSION' ? 'gone' : null;
+  if (!res.ok || !isSessionResult(res.payload, st.id)) {
+    if ((res.payload as { code?: unknown } | null)?.code === 'NO_SESSION') {
+      return { kind: 'gone' };
+    }
+    // The server answered (transport errors threw above) but the body cannot be
+    // used — never render it as a successful run.
+    return { kind: 'invalid' };
   }
-  return res.payload;
+  return { kind: 'ok', payload: res.payload };
+}
+
+/** Drop a session after a failed op and remember unusable answers. */
+function sessionOpFailed(key: string, endpoint: string, outcome: SessionOpOutcome): void {
+  dropSession(key, endpoint);
+  if (outcome.kind === 'invalid') markSessionFailure(key);
 }
 
 function payloadCount(payload: unknown, fallback: number): number {
@@ -404,6 +573,10 @@ async function tryLiveSessionTickInner(
   const key = sessionKey(opts);
   const n = bars.length;
   const last = bars[n - 1]!;
+  // A recent unusable answer for this key: skip the fast path (one full run
+  // beats re-paying a full window create before every tick).
+  const cooledUntil = keyCooldown.get(key);
+  if (cooledUntil && cooledUntil > Date.now()) return null;
   let st = sessions.get(key);
 
   if (!st) return createSession(opts, key);
@@ -427,21 +600,21 @@ async function tryLiveSessionTickInner(
     if (barSnapshot(last) === st.lastBar) {
       return { payload: st.lastPayload, via: 'session-cached', sessionId: st.id };
     }
-    const payload = await tickSession(opts, st, last);
-    if (payload === 'gone' || payload == null) {
-      dropSession(key, opts.endpoint);
-      if (payload === 'gone') return createSession(opts, key);
-      return null;
+    const tick = await tickSession(opts, st, last);
+    if (tick.kind !== 'ok') {
+      sessionOpFailed(key, opts.endpoint, tick);
+      return tick.kind === 'gone' ? createSession(opts, key) : null;
     }
-    const count = payloadCount(payload, n);
+    const count = payloadCount(tick.payload, n);
     if (count !== n) {
       // Server disagrees about the series shape — do not trust the session.
       dropSession(key, opts.endpoint);
+      markSessionFailure(key);
       return null;
     }
     st.lastBar = barSnapshot(last);
-    st.lastPayload = payload;
-    return { payload, via: 'session-tick', sessionId: st.id };
+    st.lastPayload = tick.payload;
+    return { payload: tick.payload, via: 'session-tick', sessionId: st.id };
   }
 
   // Series advanced (or shrank) — locate the session tip in the fresh bars.
@@ -472,56 +645,55 @@ async function tryLiveSessionTickInner(
     if (barSnapshot(last) === st.lastBar) {
       return { payload: st.lastPayload, via: 'session-cached', sessionId: st.id };
     }
-    const payload = await tickSession(opts, st, last);
-    if (payload === 'gone' || payload == null) {
+    const tick = await tickSession(opts, st, last);
+    if (tick.kind !== 'ok') {
+      sessionOpFailed(key, opts.endpoint, tick);
+      return tick.kind === 'gone' ? createSession(opts, key) : null;
+    }
+    const count = payloadCount(tick.payload, n);
+    if (count !== n) {
+      // Only a session holding exactly `n` bars can carry the fingerprint below.
       dropSession(key, opts.endpoint);
-      if (payload === 'gone') return createSession(opts, key);
+      markSessionFailure(key);
       return null;
     }
     st.lastTime = last.time;
-    st.count = payloadCount(payload, n);
+    st.count = count;
     st.lastBar = barSnapshot(last);
-    st.lastPayload = payload;
+    st.lastPayload = tick.payload;
     st.closedHash = hashBars(bars, n - 2);
-    return { payload, via: 'session-tick', sessionId: st.id };
+    return { payload: tick.payload, via: 'session-tick', sessionId: st.id };
   }
   // Tick-then-append: finalize the base with its current (closed) values
   // BEFORE appending, or append would confirm the stale forming values and
   // duplicate the bar.
   if (barSnapshot(base) !== st.lastBar) {
     const ticked = await tickSession(opts, st, base);
-    if (ticked === 'gone') {
-      dropSession(key, opts.endpoint);
-      return createSession(opts, key);
-    }
-    if (ticked == null) {
-      dropSession(key, opts.endpoint);
-      return null;
+    if (ticked.kind !== 'ok') {
+      sessionOpFailed(key, opts.endpoint, ticked);
+      return ticked.kind === 'gone' ? createSession(opts, key) : null;
     }
     st.lastBar = barSnapshot(base);
-    st.lastPayload = ticked;
+    st.lastPayload = ticked.payload;
   }
   const appended = await appendSession(opts, st, tail);
-  if (appended === 'gone') {
-    dropSession(key, opts.endpoint);
-    return createSession(opts, key);
+  if (appended.kind !== 'ok') {
+    sessionOpFailed(key, opts.endpoint, appended);
+    return appended.kind === 'gone' ? createSession(opts, key) : null;
   }
-  if (appended == null) {
-    dropSession(key, opts.endpoint);
-    return null;
-  }
-  const count = payloadCount(appended, st.count + tail.length);
+  const count = payloadCount(appended.payload, st.count + tail.length);
   if (count !== st.count + tail.length) {
     dropSession(key, opts.endpoint);
+    markSessionFailure(key);
     return null;
   }
   st.count = count;
   st.lastTime = last.time;
   st.lastBar = barSnapshot(last);
-  st.lastPayload = appended;
+  st.lastPayload = appended.payload;
   // The appended tail is now closed history; fingerprint it for the next tick.
   st.closedHash = hashBars(bars, n - 2);
-  return { payload: appended, via: 'session-append', sessionId: st.id };
+  return { payload: appended.payload, via: 'session-append', sessionId: st.id };
 }
 
 /** Release every cached session (best-effort DELETE) and clear the cache. */
@@ -529,13 +701,15 @@ export function releaseLiveSessions(): void {
   try {
     for (const [key, st] of sessions) {
       const endpoint = keyEndpoint(key);
-      if (endpoint) releaseSession(endpoint, st.id);
+      if (endpoint) releaseSession(endpoint, st.id, st.apiKey);
     }
   } catch {
     /* ignore */
   }
   sessions.clear();
   owners.clear();
+  keyCooldown.clear();
+  runModes.clear();
 }
 
 function keyEndpoint(key: string): string | null {
@@ -553,6 +727,8 @@ export function _resetLiveSessionsForTests(): void {
   owners.clear();
   unsupported.clear();
   fullCooldown.clear();
+  keyCooldown.clear();
+  runModes.clear();
 }
 
 /** @internal test helper — inspect cached session state */
@@ -563,16 +739,6 @@ export function _liveSessionStateForTests(key: {
   libraries?: EngineLibrarySource[];
   symbol: string;
   interval: string;
-  pineBars: Bar[];
 }): SessionState | null {
-  return (
-    sessions.get(
-      sessionKey({
-        ...key,
-        apiKey: undefined,
-        profiler: undefined,
-        signal: undefined,
-      }),
-    ) ?? null
-  );
+  return sessions.get(sessionKey(key)) ?? null;
 }

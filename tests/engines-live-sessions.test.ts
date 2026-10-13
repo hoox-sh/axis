@@ -14,6 +14,8 @@ import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
 import { mockFetch, jsonResponse } from './helpers/mock-fetch';
 import {
   tryLiveSessionTick,
+  noteRunMode,
+  runModeAllowsSessions,
   _resetLiveSessionsForTests,
   type LiveSessionTickOpts,
 } from '../src/engines/live-sessions';
@@ -75,6 +77,7 @@ interface Call {
   method: string;
   path: string;
   body: unknown;
+  headers: Record<string, string> | null;
 }
 
 function installBackend(handlers: {
@@ -98,7 +101,12 @@ function installBackend(handlers: {
     } catch {
       body = null;
     }
-    calls.push({ method, path, body });
+    const rawHeaders = init?.headers as unknown;
+    const headers =
+      rawHeaders && typeof rawHeaders === 'object' && !(rawHeaders instanceof Headers)
+        ? (rawHeaders as Record<string, string>)
+        : null;
+    calls.push({ method, path, body, headers });
     if (method === 'POST' && path === '/session') {
       if (handlers.createStatus && handlers.createStatus !== 200) {
         return jsonResponse(
@@ -326,6 +334,73 @@ describe('live-sessions', () => {
     expect((await tryLiveSessionTick(b))?.via).toBe('session-cached');
     expect(deleted).toEqual([]);
     expect(backend.calls.filter((c) => c.path === '/session').length).toBe(2);
+  });
+
+  it('treats an error body as a miss, never an empty result', async () => {
+    let ticks = 0;
+    const deleted: string[] = [];
+    const backend = installBackend({
+      onDelete: (id) => void deleted.push(id),
+      onTick: () => {
+        ticks += 1;
+        // `/run`-shaped failures arrive as `status: 'error'`, sometimes with 200.
+        return jsonResponse({ status: 'error', message: 'boom' });
+      },
+    });
+    restore = backend.restore;
+    const bars = pineBars(8);
+    await tryLiveSessionTick(opts(bars));
+    const moved = bars.map((b) => ({ ...b }));
+    moved[moved.length - 1] = { ...moved[moved.length - 1]!, close: 4242 };
+    expect(await tryLiveSessionTick(opts(moved))).toBeNull();
+    expect(ticks).toBe(1);
+    expect(deleted).toContain('s1');
+    // An unusable answer cools the key down: no create + full eval next tick.
+    const callsAfter = backend.calls.length;
+    expect(await tryLiveSessionTick(opts(moved))).toBeNull();
+    expect(backend.calls.length).toBe(callsAfter);
+  });
+
+  it('releases sessions with the API key so an authenticated DELETE lands', async () => {
+    const deleted: string[] = [];
+    const backend = installBackend({ onDelete: (id) => void deleted.push(id) });
+    restore = backend.restore;
+    await tryLiveSessionTick({ ...opts(pineBars(8)), apiKey: 'pn_test' });
+    // Closed bar rewritten in place → rebase (release + recreate).
+    const revised = pineBars(8);
+    revised[2] = { ...revised[2]!, close: 777, high: 777 };
+    expect((await tryLiveSessionTick({ ...opts(revised), apiKey: 'pn_test' }))?.via).toBe(
+      'session-create',
+    );
+    expect(deleted).toContain('s1');
+    const del = backend.calls.find((c) => c.method === 'DELETE')!;
+    expect(del.headers?.['X-API-Key']).toBe('pn_test');
+    expect(del.headers?.Authorization).toBe('Bearer pn_test');
+  });
+
+  it('cools the key down when the server disagrees about the series shape', async () => {
+    const backend = installBackend({ onTick: (id) => envelope(id, 999) });
+    restore = backend.restore;
+    const bars = pineBars(8);
+    await tryLiveSessionTick(opts(bars));
+    const moved = bars.map((b) => ({ ...b }));
+    moved[moved.length - 1] = { ...moved[moved.length - 1]!, close: 4242 };
+    expect(await tryLiveSessionTick(opts(moved))).toBeNull();
+    // Unusable shape → the next tick must not re-pay a full-window create.
+    const callsAfter = backend.calls.length;
+    expect(await tryLiveSessionTick(opts(moved))).toBeNull();
+    expect(backend.calls.length).toBe(callsAfter);
+  });
+
+  it('only allows sessions after a run the backend resolved to interpret', () => {
+    const fields = { endpoint: ENDPOINT, script: SCRIPT, mode: 'auto' };
+    expect(runModeAllowsSessions(fields)).toBe(false);
+    noteRunMode(fields, 'compile');
+    expect(runModeAllowsSessions(fields)).toBe(false);
+    noteRunMode(fields, 'interpret');
+    expect(runModeAllowsSessions(fields)).toBe(true);
+    // The mode *sent* is part of the key — a mode switch cannot inherit it.
+    expect(runModeAllowsSessions({ ...fields, mode: 'interpret' })).toBe(false);
   });
 
   it('rebases a session that outgrew the chart window', async () => {

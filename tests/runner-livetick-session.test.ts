@@ -71,6 +71,9 @@ beforeEach(() => {
   setStore('bars', SAMPLE_BARS.map((b) => ({ ...b })));
   setStore('endpoint', ENDPOINT);
   setStore('pluginsConfig', { 'engine:server': { mode: 'interpret', preferWs: false } });
+  // The profiler forces interpret upstream — a leaked `true` from another file
+  // would silently change the resolved mode this suite asserts on.
+  setStore('profilerEnabled', false);
   setStore('scripts', []);
   setStore('resultsPanel', { open: false, height: 220 });
   setStore('resultsFocusId', null);
@@ -107,6 +110,8 @@ beforeEach(() => {
         plots: [],
         events: [],
         series: {},
+        // What a Pro API reports after `auto` resolves to the interpreter.
+        mode: 'interpret',
         meta: { script_name: 'sess' },
       });
     }
@@ -164,6 +169,43 @@ describe('runAndApply liveTick session routing', () => {
       openResults: false,
       liveTick: true,
       bars: slice,
+    });
+    expect(r.status).toBe('success');
+    expect(calls.some((c) => c.includes('/session'))).toBe(false);
+    expect(calls.some((c) => c.startsWith('POST /run'))).toBe(true);
+  });
+
+  it('engages sessions in `auto` mode once a full run resolved to interpret', async () => {
+    setStore('pluginsConfig', { 'engine:server': { mode: 'auto', preferWs: false } });
+    // No backend-resolved mode yet — a tick must not assume interpret.
+    const first = await runAndApply(SCRIPT, undefined, {
+      silent: true,
+      openResults: false,
+      liveTick: true,
+    });
+    expect(first.status).toBe('success');
+    expect(calls).toEqual(['POST /run?mode=auto']);
+    expect(first.meta.sessionVia).toBeUndefined();
+
+    // The `/run` envelope reported interpret → the next tick is O(delta).
+    const second = await runAndApply(SCRIPT, undefined, {
+      silent: true,
+      openResults: false,
+      liveTick: true,
+    });
+    expect(second.status).toBe('success');
+    expect(second.meta.sessionVia).toBe('session-create');
+    expect(calls).toEqual(['POST /run?mode=auto', 'POST /session']);
+  });
+
+  it('keeps scripts with live input.source series on /run', async () => {
+    // A session freezes its inputs at create, so expanded plot-source arrays
+    // (which change every tick) must not be ticked against a stale copy.
+    const r = await runAndApply(SCRIPT, undefined, {
+      silent: true,
+      openResults: false,
+      liveTick: true,
+      inputs: { src: [1, 2, 3] },
     });
     expect(r.status).toBe('success');
     expect(calls.some((c) => c.includes('/session'))).toBe(false);

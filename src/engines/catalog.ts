@@ -57,6 +57,7 @@ export const DEFAULT_PYNE_WORKER_ENDPOINT =
   'https://pyne-worker.cryptolinx.workers.dev';
 
 import type { EnginePlugin, PlotSample, RunResult } from '../plugins/types';
+import type { LiveSessionModeFields } from './live-sessions';
 import { barsForPine } from '../data/parse-bars';
 import { store, setTelemetryPlane, setTelemetryState, setStatus, appendLog } from '../store';
 import { registry } from '../plugins/registry';
@@ -91,6 +92,26 @@ function resolveConfig(
     if (v !== undefined) out[k] = v;
   }
   return out;
+}
+
+/**
+ * Remember the mode the backend reported for a full run.
+ *
+ * The live-session fast path only engages when the series on the chart came
+ * from `interpret` (sessions always evaluate in interpret), so `auto` runs need
+ * the backend's own answer — `/session` must not silently reinterpret a series
+ * that was compiled. Best-effort: a missing memo only costs a full run.
+ */
+async function rememberResolvedRunMode(
+  fields: LiveSessionModeFields,
+  reported: unknown,
+): Promise<void> {
+  try {
+    const { noteRunMode } = await import('./live-sessions');
+    noteRunMode(fields, reported);
+  } catch {
+    /* memo is best-effort */
+  }
 }
 
 /** Ensure a URL is a real zip/wheel, not SPA HTML fallback (micropip BadZipFile). */
@@ -270,7 +291,16 @@ export const serverEngine: EnginePlugin = {
       return false;
     }
   },
-  async run({ script, bars, config, inputs, libraries, signal, liveTick, liveSessionOwner }) {
+  async run({
+    script,
+    bars,
+    config,
+    inputs,
+    libraries,
+    signal,
+    liveTick,
+    liveSessionOwner,
+  }) {
     // Prefer store.endpoint (Settings) over plugin config so a stale
     // pluginsConfig.endpoint cannot pin an old backend after Save.
     // Explicit config.endpoint still wins when set (e.g. pyne-worker engine).
@@ -306,6 +336,15 @@ export const serverEngine: EnginePlugin = {
       inputs && typeof inputs === 'object' && Object.keys(inputs).length
         ? inputs
         : undefined;
+    // A resumable session freezes its inputs at create — `/tick` and `/append`
+    // carry bars only. `resolveInputSourceValues` inlines `input.source` refs as
+    // live series arrays that change every tick, so a session created over them
+    // would evaluate stale inputs (and key-churn if the arrays were part of the
+    // session key). Those scripts stay on the full run; everyone else is
+    // scalar-only and safe to tick.
+    const hasLiveInputValues = Object.values(inputOverrides || {}).some(
+      (v) => v !== null && typeof v === 'object',
+    );
     // Chart bars are unix seconds. Pine `time` / hour() / session clocks are ms.
     const pineBars = barsForPine(bars);
 
@@ -359,39 +398,54 @@ export const serverEngine: EnginePlugin = {
     };
 
     // ── Live-session fast path (Pro API 0.6.9+): O(delta) tick/append ──
-    // Interpret only — compile has no resumable evaluator state. REST-only
-    // (WS has no session routes). Any miss falls through to the full run
-    // below, so old backends, edge, and proxies behave exactly as before.
-    if (liveTick === true && mode === 'interpret' && pineBars.length > 0) {
+    // Interpret only — compile has no resumable evaluator state, and a session
+    // always evaluates in interpret. So the tick may only follow a full run the
+    // backend itself resolved to interpret: an explicit `interpret` config
+    // qualifies outright, `auto` does when the last full run for this script
+    // reported interpret (recorded below). Never silently switch a compiled
+    // series to interpreted values. REST-only (WS has no session routes); any
+    // miss falls through to the full run, so old backends, edge, and proxies
+    // behave exactly as before.
+    const sessionSymbol =
+      typeof store.symbol === 'string' && store.symbol ? store.symbol : 'CHART';
+    const sessionInterval =
+      typeof store.interval === 'string' && store.interval ? store.interval : '1d';
+    const modeFields = { endpoint, script, mode, profiler: profilerOn };
+    if (
+      liveTick === true &&
+      mode !== 'compile' &&
+      pineBars.length > 0 &&
+      !hasLiveInputValues
+    ) {
       try {
-        const { tryLiveSessionTick } = await import('./live-sessions');
-        const hit = await tryLiveSessionTick({
-          endpoint,
-          apiKey,
-          script,
-          pineBars,
-          ...(inputOverrides ? { inputs: inputOverrides } : {}),
-          ...(profilerOn ? { profiler: true } : {}),
-          ...(libraries?.length ? { libraries } : {}),
-          ...(liveSessionOwner ? { ownerId: liveSessionOwner } : {}),
-          symbol:
-            typeof store.symbol === 'string' && store.symbol ? store.symbol : 'CHART',
-          interval:
-            typeof store.interval === 'string' && store.interval ? store.interval : '1d',
-          signal: signal || undefined,
-        });
-        if (hit && hit.payload && typeof hit.payload === 'object') {
-          const mapped = mapRestPayload(hit.payload);
-          return {
-            ...mapped,
-            meta: {
-              ...mapped.meta,
-              sessionVia: hit.via,
-              session_id: (hit.payload as { session_id?: unknown }).session_id as
-                | string
-                | undefined,
-            },
-          } satisfies RunResult;
+        const { tryLiveSessionTick, runModeAllowsSessions } = await import('./live-sessions');
+        if (mode === 'interpret' || runModeAllowsSessions(modeFields)) {
+          const hit = await tryLiveSessionTick({
+            endpoint,
+            apiKey,
+            script,
+            pineBars,
+            ...(inputOverrides ? { inputs: inputOverrides } : {}),
+            ...(profilerOn ? { profiler: true } : {}),
+            ...(libraries?.length ? { libraries } : {}),
+            ...(liveSessionOwner ? { ownerId: liveSessionOwner } : {}),
+            symbol: sessionSymbol,
+            interval: sessionInterval,
+            signal: signal || undefined,
+          });
+          if (hit && hit.payload && typeof hit.payload === 'object') {
+            const mapped = mapRestPayload(hit.payload);
+            return {
+              ...mapped,
+              meta: {
+                ...mapped.meta,
+                sessionVia: hit.via,
+                session_id: (hit.payload as { session_id?: unknown }).session_id as
+                  | string
+                  | undefined,
+              },
+            } satisfies RunResult;
+          }
         }
       } catch {
         /* fall through to the full WS/REST run */
@@ -454,6 +508,7 @@ export const serverEngine: EnginePlugin = {
             ?.script_type;
           const wsAlerts = (wsResult as { alerts?: unknown }).alerts;
           const wsAlertConds = (wsResult as { alert_conditions?: unknown }).alert_conditions;
+          await rememberResolvedRunMode(modeFields, wsResult.mode || mode);
           return {
             status: 'success',
             plots: (wsResult.plots as (number | null)[]) || [],
@@ -612,6 +667,7 @@ export const serverEngine: EnginePlugin = {
         } satisfies RunResult;
       }
       // Prefer engine meta; do not force true — runner resolves indicator/strategy defaults.
+      await rememberResolvedRunMode(modeFields, payload.mode ?? payload.meta?.mode ?? mode);
       return mapRestPayload(payload);
     } catch (err: unknown) {
       const name = err instanceof Error ? err.name : '';
