@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/engines"
-description: "src/engines contains catalog.ts, engine-ws.ts, json-sanitize.ts, and 1 more file."
+description: "src/engines contains catalog.ts, data-sessions.ts, engine-ws.ts, and 2 more files."
 resource: "src/engines"
 tags: [code, engines]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-13T14:48:46Z
+  at: 2026-10-13T17:41:29Z
 sources:
   - id: tree
     resource: "src/engines"
@@ -18,7 +18,8 @@ okf_lock: generated
 
 # Files
 
-* `catalog.ts` — BUILTIN_ENGINES, DEFAULT_PYNE_WORKER_ENDPOINT, LOCAL_PYODIDE_INDEX, LOCAL_PYODIDE_VERSION, _resetEngineRegistrationFlag, _resetPyodideEngineState, callPyodideRunScript, confirmEngineApiKeyTarget, ensureEnginesRegistered, formatPyodideBridgeError, getEngine, isLoopbackOrigin
+* `catalog.ts` — BUILTIN_ENGINES, DEFAULT_ENGINE_CAPABILITIES, DEFAULT_PYNE_WORKER_ENDPOINT, LOCAL_PYODIDE_INDEX, LOCAL_PYODIDE_VERSION, _resetEngineRegistrationFlag, _resetPyodideEngineState, callPyodideRunScript, capabilitiesFromHealth, confirmEngineApiKeyTarget, ensureEnginesRegistered, formatPyodideBridgeError
+* `data-sessions.ts` — CanonicalSeriesKey, DATA_PROVIDE_CHUNK, DataSeriesKey, DataSeriesStatus, DataSessionCreateInput, DataSessionCreateResult, DataSessionHandle, DataSessionMiss, DataSessionRunResult, EnsureDataSessionOptions, RunDataSessionOptions, _resetDataSessionMemo
 * `engine-ws.ts` — EngineWsResult, EngineWsRunRequest, _resetEngineWsClients, endpointToRunWsUrl, getEngineWsClient, probeEngineWs
 * `json-sanitize.ts` — parseEngineJson, sanitizeNonFiniteJson
 * `live-sessions.ts` — LiveSessionHit, LiveSessionKeyFields, LiveSessionModeFields, LiveSessionTickOpts, LiveSessionVia, SESSION_GROWTH_SLACK, SESSION_RETRY_COOLDOWN_MS, _liveSessionStateForTests, _resetLiveSessionsForTests, noteRunMode, releaseLiveSessions, runModeAllowsSessions
@@ -37,6 +38,7 @@ okf_lock: generated
 # Used by
 
 * [src](/code/src.md)
+* [src/indicators](/code/src/indicators.md)
 * [src/mcp](/code/src/mcp.md)
 * [src/optimize](/code/src/optimize.md)
 * [src/plugins](/code/src/plugins.md)

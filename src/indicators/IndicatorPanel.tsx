@@ -27,7 +27,7 @@
  * @module indicators/IndicatorPanel
  */
 
-import { type Component, For, Show, createMemo, createSignal } from 'solid-js';
+import { type Component, For, Show, createMemo, createSignal, createResource, createEffect } from 'solid-js';
 import { store, isPanelOpen, setStore, persist, setStatus } from '../store';
 import { IndicatorCard } from './IndicatorCard';
 import { FloatableShell } from '../ui/panels/FloatableShell';
@@ -39,11 +39,11 @@ import {
 } from './builtins';
 import {
   activeChartContext,
-  cycleLiveRerunOn,
   engineFamily,
   engineFamilyLabel,
   liveRerunTitle,
 } from './script-meta';
+import { getEngineCapabilities } from '../engines/catalog';
 
 /** Compact composition chip for the panel header. */
 const CompChip: Component<{
@@ -97,6 +97,18 @@ export const IndicatorPanel: Component = () => {
     }),
   );
 
+  const [liveCaps] = createResource(
+    () => String(store.activePlugins?.engine || store.engine || ''),
+    async (id) => getEngineCapabilities(id || undefined),
+  );
+
+  // Clamp only after the engine has answered; while loading, keep the user's policy.
+  createEffect(() => {
+    const caps = liveCaps();
+    if (!caps || caps.liveModes.includes(store.live.rerunOn)) return;
+    setStore('live', 'rerunOn', 'bar-close');
+  });
+
   const liveChip = createMemo(() => {
     if (!store.live.active) {
       return {
@@ -121,7 +133,9 @@ export const IndicatorPanel: Component = () => {
   });
 
   const cycleRerun = () => {
-    const next = cycleLiveRerunOn(store.live.rerunOn);
+    const allowed = liveCaps()?.liveModes ?? ['bar-close'];
+    const idx = allowed.indexOf(store.live.rerunOn);
+    const next = allowed[(idx + 1) % allowed.length] ?? 'bar-close';
     setStore('live', 'rerunOn', next);
     persist();
     setStatus(

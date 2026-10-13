@@ -1,0 +1,167 @@
+---
+title: Engine-owned data plane (PYNE Pro every tick)
+description: Migration plan and wire contract for PYNE Pro owning OHLCV data in every-tick live mode, with AXIS as cache-miss broker.
+---
+
+# Engine-owned data plane
+
+## Goal
+
+Today AXIS is the data owner: the browser loads bars, stores datasets locally,
+and sends the bars with every `run`. The target shifts ownership of market data
+to the engine when the engine can own it (PYNE Pro):
+
+- **Bar-close / other engines** keep the current bars-in path.
+- **PYNE Pro + every tick**: AXIS sends only the script, inputs, and market
+  identity (`exchange`, `market`, `symbol`, `interval`, `history_bars`). PYNE
+  Pro's persistent store and CCXT feed own the bars. Pro's feed drives both the
+  chart and the calculation, so candles and indicators stay aligned.
+- **Cache misses** are brokered by AXIS: if the local Data Manager has a
+  matching dataset it is uploaded to Pro (auto-upload, decided); otherwise Pro
+  fetches from the exchange itself.
+- **No local persistence** of streamed bars in this mode. The Data Manager keeps
+  metadata only; in-memory chart buffers may still render.
+
+## Decisions
+
+| # | Decision |
+|---|----------|
+| D1 | Pro's feed supplies both chart bars and script execution in server-owned mode. |
+| D2 | On a Pro cache miss, AXIS automatically uploads the matching local Data Manager dataset (if any), else asks Pro to fetch. |
+| D3 | Capabilities come from the endpoint's `/health` `features`, never from the engine id. Missing features ⇒ bar-close only. |
+| D4 | Pyodide moves to a dedicated Web Worker; live runs coalesce (newest-wins, one in flight). |
+
+## Engine capabilities (`GET /health` → `features`)
+
+PYNE Pro reports these snake_case keys (matches existing `features.*` keys):
+
+```json
+"features": {
+  "live_modes": ["every-tick", "bar-close"],
+  "data_session": true,
+  "data_exchanges": ["binance", "bybit", "okx"]
+}
+```
+
+- `live_modes` absent ⇒ `["bar-close"]`.
+- `data_session` absent or false ⇒ `ownsData = false`, no every-tick.
+- `data_exchanges` optional, informational.
+
+pyne-worker and Pyodide report no such keys and are bar-close only.
+
+## Data store (PYNE Pro)
+
+Persistent OHLCV store, SQLite under `PYNE_DATA_DIR` (default `data/`).
+
+Series key (canonical):
+
+| Field | Canonical form |
+|-------|----------------|
+| `exchange` | lowercase CCXT id (`binance`) |
+| `market` | `spot` (default), `swap`, `future` |
+| `symbol` | uppercase, pair form when available (`BTC/USDT`) |
+| `interval` | AXIS interval code (`1m`, `5m`, `1h`, `1d`, …) |
+
+Rows: `time` (unix seconds, primary key with the series key), `open`, `high`,
+`low`, `close`, `volume`. Upsert by `time` (later write wins for the forming
+bar).
+
+## Endpoints (PYNE Pro)
+
+All responses use the existing `{status, code?, message?}` error shape. Auth
+follows the existing API-key middleware.
+
+### `GET /data/series`
+
+Query: `exchange`, `market?`, `symbol`, `interval`.
+
+```json
+{ "status": "success", "key": "binance|spot|BTC/USDT|1h",
+  "count": 5000, "oldest": 1700000000, "newest": 1760000000,
+  "updated_at": 1760000100 }
+```
+
+Count `0` (and null bounds) when the series is unknown.
+
+### `POST /data/series/provide`
+
+Body: series key fields + `bars: [{time, open, high, low, close, volume}]` +
+`source` (e.g. `"axis-local"`). Max 5,000 bars per request; AXIS chunks.
+
+Response: `{status, key, added, updated, count, newest}`.
+
+### `POST /data/series/fetch`
+
+Body: series key fields + `history_bars` (default 5000, max 100000). Pro walks
+back through CCXT `fetch_ohlcv` pages and persists the result.
+
+Response: `{status, key, fetched, count, oldest, newest}`. Upstream failure ⇒
+`502` with `code: "UPSTREAM"`.
+
+### `GET /data/series/bars`
+
+Query: series key fields + `limit` (default 10000, max 100000). Returns the
+newest window for chart paint in server-owned mode. AXIS holds the result in
+memory only and never writes it to IndexedDB or localStorage.
+
+```json
+{ "status": "success", "key": "...", "count": 500, "bars": [ ... ] }
+```
+
+### `POST /data/session`
+
+Body: series key fields + `history_bars` + `script` + optional `inputs`,
+`libraries`, `profiler`, `symbol` (display name).
+
+- **Hit** (`count >= history_bars`): `200`, the same envelope as
+  `POST /session` plus `session_id`, `cache: "hit"`, and
+  `data: {key, count, newest}`. The session is bound to the series key.
+- **Miss**: `409`, `{status: "miss", code: "DATA_MISS", key, have, need}`.
+  AXIS then runs `provide` (if it holds local bars) or `fetch`, and retries.
+
+### `POST /data/session/{id}/tick`
+
+Body: `{exchange, symbol}` only (AXIS sends identity, never bars). Must match
+the session's bound key, else `409 SESSION_KEY_MISMATCH`.
+
+Pro fetches candles since the stored `newest` (with a small overlap), persists
+closed bars, re-ticks the forming bar via `update_last_bar`, and appends closed
+bars via `append_bars`.
+
+Response: the session envelope plus `appended` (count of newly closed bars),
+`forming` (bool), `unchanged` (bool, true when nothing new arrived).
+
+Upstream failure: `502 UPSTREAM`; the session is kept.
+
+### `DELETE /session/{id}`
+
+Existing release route. Unchanged.
+
+## AXIS broker
+
+`src/engines/data-sessions.ts` (client + broker):
+
+1. `createDataSession()` → on `hit` return the session id.
+2. On `miss`: look up the local Data Manager dataset for
+   `(sourceId = exchange, symbol, interval)` via `getDataset` from
+   `src/data/dataset-store.ts`.
+   - Local bars exist ⇒ `provideDataSeries()` (chunked, last `history_bars`) ⇒ retry create.
+   - No local bars ⇒ `fetchDataSeries()` ⇒ retry create.
+   - At most two retries, then surface the error.
+3. `tickDataSession()` sends `{exchange, symbol}` only.
+
+Chart paint in server-owned mode uses `getDataSeriesBars()` into memory. The
+streaming multiplex and `expand-cache` writes are suppressed for that instrument.
+
+## Migration steps
+
+1. **Capabilities** (done in round one, keys aligned to this contract in round two).
+2. **PYNE store + routes + health features** (`/home/jango/Git/pynescript`).
+3. **AXIS client + broker** (`src/engines/data-sessions.ts`), with unit tests.
+4. **Server-owned routing**: `serverEngine` takes a `dataSession` option when
+   `every-tick` is active and the engine reports `data_session`.
+5. **No-persist in server-owned mode**: DSM and `expand-cache` respect the
+   owner mode (`src/streams/multiplex.ts`, `src/data/expand-cache.ts`).
+6. **Pyodide in a Web Worker** + coalescing scheduler for live runs.
+7. **E2E**: every-tick on Pro without local bars; cache miss uploads the local
+   dataset; switching to a bar-close engine falls back cleanly.

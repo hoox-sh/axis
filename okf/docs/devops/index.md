@@ -8,6 +8,7 @@
 * [Cloudflare® deployment](cloudflare.md) - Pages + Worker for AXIS: Pages axis.hoox.sh (project axis), Worker worker.axis.hoox.sh, CLI deploy, bindings, security checklist.
 * [CORS and origins](cors-and-origins.md) - Worker pickOrigin: local-dev, product hosts, project-scoped Pages previews, ALLOWEDORIGIN list, Flask constraints.
 * [Desktop (Tauri)](desktop.md) - Run and package AXIS as a native desktop app with Tauri 2.
+* [Engine-owned data plane (PYNE Pro every tick)](engine-owned-data-plane.md) - Migration plan and wire contract for PYNE Pro owning OHLCV data in every-tick live mode, with AXIS as cache-miss broker.
 * [AXIS Hardening + Performance Audit](harden-perf-audit-2026-08-11.md) - Scope: Specialist findings across security, hardening, reliability, and performance (Worker, client, desktop).
 * [DevOps](index.md) - Build, serve, Cloudflare®, VPS demo, CORS, and CI for the AXIS PWA and Worker.
 * [Local development](local-dev.md) - Day-to-day AXIS loop: Vite, Flask, Worker wrangler, endpoints, and plugin examples.

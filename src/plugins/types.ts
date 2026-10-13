@@ -300,6 +300,38 @@ export interface EngineOpts {
    * each other's server-side sessions. Only meaningful with {@link liveTick}.
    */
   liveSessionOwner?: string;
+  /**
+   * Engine-owned series (PYNE Pro every-tick). When set, the engine owns the
+   * OHLCV feed for this identity and AXIS sends no bars. Honoured only by engines
+   * whose capabilities report `dataSession`; the runner decides when to pass it.
+   */
+  dataSession?: EngineDataSessionRequest;
+}
+
+/** Identity of an engine-owned series (see `docs/devops/engine-owned-data-plane.mdx`). */
+export interface EngineDataSessionRequest {
+  exchange: string;
+  market?: string;
+  symbol: string;
+  interval: string;
+  /** Bars the session needs (chart + indicator warm-up window). */
+  historyBars: number;
+}
+
+export type EngineLiveMode = 'every-tick' | 'bar-close';
+
+export interface EngineCapabilities {
+  /** Live re-run modes this engine can feed (subset of EngineLiveMode). */
+  liveModes: EngineLiveMode[];
+  /** Whether the engine can be the OHLCV data owner (Pro only). */
+  ownsData: boolean;
+  /** Server-reported supported exchanges (Pro only, optional). */
+  dataExchanges?: string[];
+  /**
+   * Whether the engine has an engine-owned data-session endpoint. Defaults to
+   * `ownsData` when omitted.
+   */
+  dataSession?: boolean;
 }
 
 /**
@@ -310,6 +342,11 @@ export interface EnginePlugin extends PluginBase {
   kind: 'engine';
   isReady(): Promise<boolean>;
   run(opts: EngineOpts): Promise<RunResult>;
+  /**
+   * Engine capability descriptor used to hydrate UI options (live re-run etc.).
+   * Optional for legacy engines; defaults to `{ liveModes: ['bar-close'], ownsData: false }`.
+   */
+  getCapabilities?(): EngineCapabilities | Promise<EngineCapabilities>;
 }
 
 /**

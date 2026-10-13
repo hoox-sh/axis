@@ -7,7 +7,7 @@ tags: [code, plugins]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-25T04:56:02Z
+  at: 2026-10-13T17:41:29Z
 sources:
   - id: tree
     resource: "src/plugins"
@@ -27,7 +27,7 @@ okf_lock: generated
 * `index.ts` — PLUGINS_KEY, PluginRegistry, ensureBuiltins, exportLibraryJson, getActiveEngine, getActiveEngineConfig, getActiveEngineId, getActiveProvider, getActiveSource, getActiveSourceConfig, getActiveSourceId, getActiveStorage
 * `loader.ts` — DEFAULT_PYNE_AGENT_ENDPOINT, DEFAULT_PYNE_AGENT_PLUGIN_URL, DEFAULT_REMOTE_PLUGIN_HOSTS, InstalledPlugin, LEGACY_PYNE_AGENT_PLUGIN_URL, PLUGINS_KEY, assertPluginRemoteAllowed, assertSafePluginUrl, getInstalledPlugins, isRemoteHttpPluginUrl, loadPluginFromUrl, migratePyneAgentPluginUrl
 * `registry.ts` — PluginRegistry, registry
-* `types.ts` — AnyPlugin, ComponentPlugin, ConfigSchema, DatasetPlugin, EngineLibrarySource, EngineOpts, EnginePlugin, FieldSchema, PlotSample, PluginBase, PluginCapabilities, PluginContext
+* `types.ts` — AnyPlugin, ComponentPlugin, ConfigSchema, DatasetPlugin, EngineCapabilities, EngineDataSessionRequest, EngineLibrarySource, EngineLiveMode, EngineOpts, EnginePlugin, FieldSchema, PlotSample
 
 # Other files
 

@@ -56,7 +56,7 @@
 export const DEFAULT_PYNE_WORKER_ENDPOINT =
   'https://pyne-worker.cryptolinx.workers.dev';
 
-import type { EnginePlugin, PlotSample, RunResult } from '../plugins/types';
+import type { EnginePlugin, PlotSample, RunResult, EngineCapabilities, EngineLiveMode } from '../plugins/types';
 import type { LiveSessionModeFields } from './live-sessions';
 import { barsForPine } from '../data/parse-bars';
 import { store, setTelemetryPlane, setTelemetryState, setStatus, appendLog } from '../store';
@@ -215,6 +215,43 @@ export function confirmEngineApiKeyTarget(endpoint: string, apiKey: string): boo
   return true;
 }
 
+/** Safe capabilities when an endpoint cannot be read (bar-close only, no data ownership). */
+export const DEFAULT_ENGINE_CAPABILITIES: EngineCapabilities = {
+  liveModes: ['bar-close'],
+  ownsData: false,
+  dataSession: false,
+};
+
+const LIVE_MODES: readonly EngineLiveMode[] = ['every-tick', 'bar-close'];
+
+/**
+ * Map a `GET /health` body to engine capabilities (contract: `features.live_modes`,
+ * `features.data_session`, `features.data_exchanges`). Unknown or absent keys
+ * fall back to {@link DEFAULT_ENGINE_CAPABILITIES}; never infers from the service name.
+ */
+export function capabilitiesFromHealth(body: unknown): EngineCapabilities {
+  const features =
+    body && typeof body === 'object' && (body as { features?: unknown }).features &&
+    typeof (body as { features?: unknown }).features === 'object'
+      ? ((body as { features: Record<string, unknown> }).features)
+      : {};
+  const rawModes = Array.isArray(features.live_modes) ? features.live_modes : [];
+  const dataSession = features.data_session === true;
+  // every-tick is only meaningful when the engine owns the feed (data_session).
+  const liveModes = LIVE_MODES.filter(
+    (m) => rawModes.includes(m) && (m !== 'every-tick' || dataSession),
+  );
+  const exchanges = Array.isArray(features.data_exchanges)
+    ? features.data_exchanges.filter((e): e is string => typeof e === 'string')
+    : undefined;
+  return {
+    liveModes: liveModes.length ? [...liveModes] : [...DEFAULT_ENGINE_CAPABILITIES.liveModes],
+    ownsData: dataSession,
+    dataSession,
+    ...(exchanges?.length ? { dataExchanges: exchanges } : {}),
+  };
+}
+
 export const serverEngine: EnginePlugin = {
   id: 'server',
   name: 'Server-Side',
@@ -245,6 +282,19 @@ export const serverEngine: EnginePlugin = {
       label: 'API key (optional)',
       description: 'Sent as X-API-Key / Authorization Bearer when the backend requires auth',
     },
+  },
+  async getCapabilities() {
+    const endpoint = String(store.endpoint || this.configSchema?.endpoint.default || '').replace(/\/$/, '');
+    try {
+      const res = await fetch(`${endpoint}/health`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(5_000),
+      });
+      if (!res.ok) return { ...DEFAULT_ENGINE_CAPABILITIES, liveModes: [...DEFAULT_ENGINE_CAPABILITIES.liveModes] };
+      return capabilitiesFromHealth(await res.json());
+    } catch {
+      return { ...DEFAULT_ENGINE_CAPABILITIES, liveModes: [...DEFAULT_ENGINE_CAPABILITIES.liveModes] };
+    }
   },
   async isReady() {
     const endpoint = (store.endpoint || this.configSchema!.endpoint.default as string).replace(/\/$/, '');
@@ -300,6 +350,7 @@ export const serverEngine: EnginePlugin = {
     signal,
     liveTick,
     liveSessionOwner,
+    dataSession,
   }) {
     // Prefer store.endpoint (Settings) over plugin config so a stale
     // pluginsConfig.endpoint cannot pin an old backend after Save.
@@ -396,6 +447,45 @@ export const serverEngine: EnginePlugin = {
         },
       } satisfies RunResult;
     };
+
+    // ── Engine-owned series (PYNE Pro every-tick): identity only, never bars ──
+    // The engine's store and feed own the OHLCV. A fallback to the bars path
+    // here would ship the window the engine is meant to own, so errors surface.
+    if (dataSession) {
+      const { runDataSession } = await import('./data-sessions');
+      const ds = await runDataSession({
+        endpoint,
+        apiKey,
+        owner: liveSessionOwner,
+        request: dataSession,
+        script,
+        inputs: inputOverrides,
+        libraries,
+        profiler: profilerOn,
+        tick: liveTick === true,
+        signal: signal || undefined,
+      });
+      if (!ds.ok) {
+        return {
+          status: 'error',
+          plots: [],
+          events: [],
+          series: {},
+          error: ds.error,
+          meta: { ms: performance.now() - t0, transport: 'rest' },
+        } satisfies RunResult;
+      }
+      const mapped = mapRestPayload(ds.payload);
+      return {
+        ...mapped,
+        meta: {
+          ...mapped.meta,
+          sessionVia: ds.via,
+          session_id: ds.sessionId,
+          provisioned: ds.provisioned,
+        },
+      } satisfies RunResult;
+    }
 
     // ── Live-session fast path (Pro API 0.6.9+): O(delta) tick/append ──
     // Interpret only — compile has no resumable evaluator state, and a session
@@ -1036,9 +1126,11 @@ export const pyodideEngine: EnginePlugin & {
   _loadPromise: null,
   _partial: null,
   _failure: null,
+  async getCapabilities() {
+    return { liveModes: ['bar-close'], ownsData: false };
+  },
   async isReady() {
     try {
-      await this._ensure();
       return true;
     } catch {
       return false;
@@ -1287,6 +1379,9 @@ export const pyneWorkerEngine: EnginePlugin = {
       description: 'Required when the Worker has secret API_KEY set (production)',
     },
   },
+  async getCapabilities() {
+    return { liveModes: ['bar-close'], ownsData: false };
+  },
   async isReady() {
     const endpoint = resolvePyneWorkerEndpoint(
       resolveConfig(this.configSchema, {
@@ -1336,6 +1431,27 @@ export const pyneWorkerEngine: EnginePlugin = {
     });
   },
 };
+
+/**
+ * Resolve an engine's capabilities with a safe fallback.
+ * Capability hydration must never throw or block the UI loop.
+ */
+export async function getEngineCapabilities(id?: string): Promise<EngineCapabilities> {
+  const fallback = (): EngineCapabilities => ({
+    ...DEFAULT_ENGINE_CAPABILITIES,
+    liveModes: [...DEFAULT_ENGINE_CAPABILITIES.liveModes],
+  });
+  const selectedId =
+    id ||
+    String(store.activePlugins?.engine || store.engine || '');
+  const engine = selectedId ? getEngine(selectedId) : undefined;
+  if (!engine || typeof engine.getCapabilities !== 'function') return fallback();
+  try {
+    return await engine.getCapabilities();
+  } catch {
+    return fallback();
+  }
+}
 
 export const BUILTIN_ENGINES: EnginePlugin[] = [
   serverEngine,
