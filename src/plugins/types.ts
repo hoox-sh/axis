@@ -287,6 +287,13 @@ export interface EngineOpts {
    */
   libraries?: EngineLibrarySource[];
   signal?: AbortSignal;
+  /**
+   * Genuine live tick (only the newest bar moved). Remote engines with live
+   * evaluation sessions (PYNE Pro API 0.6.9+ `POST /session…`) may answer
+   * O(delta) instead of re-evaluating the whole window. Ignored when `bars`
+   * is overridden, and never changes evaluation semantics on fallback.
+   */
+  liveTick?: boolean;
 }
 
 /**

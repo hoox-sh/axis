@@ -15,6 +15,10 @@ _Generated/updated: 2026-10-11 · 529 commits · describe-tag: `v2.22.0`_
 
 ## [Unreleased]
 
+### Added
+
+- **Live ticks evaluate O(delta) via PYNE live sessions (Pro API 0.6.9+).** The `server` engine keeps a resumable session per script (`POST /session`, `/tick`, `/append` in `src/engines/live-sessions.ts`): forming-bar re-ticks are O(1), new closed bars append O(delta) — measured 1,087 ms → 0.13 ms on 20k bars upstream. Sessions are interpret-only, keyed by endpoint + script + inputs + libraries + symbol + interval, with tick-then-append ordering (append alone would confirm stale forming values and duplicate the bar), no-change-tip envelope reuse, rebase once the session outgrows the chart window by 2,000 bars, and silent fallback to the full WS/REST run on any miss (old backends, edge, proxies, `NO_SESSION`, `SESSIONS_FULL` are remembered per endpoint). Wired through `EngineOpts.liveTick` (`src/plugins/types.ts`) from `runScript` (`src/indicators/runner.ts`); the live multiplex already marks genuine ticks. Session path is tagged `meta.sessionVia` (`session-create|tick|append|cached`).
+
 ### Fixed
 
 - **Reload no longer strands the chart at one venue page (1000 bars).** `loadSymbolData` passed Settings → Historical bars as a single `fetchHistorical` limit, but venues cap one response (Binance/Bybit/MEXC 1000, Kraken 720, OKX 300), so Reload painted the first page and stopped. The venue path now walks back page-by-page (`endTime` cursor, stall/empty/abort guards, 12-page sync budget) up to Historical bars, seeds the full window into the dataset store, and subscribes the progressive repaint *before* the DSM background job runs — the chart keeps growing as backfill slices land instead of freezing at the first page.

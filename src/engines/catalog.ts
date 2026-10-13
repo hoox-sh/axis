@@ -270,7 +270,7 @@ export const serverEngine: EnginePlugin = {
       return false;
     }
   },
-  async run({ script, bars, config, inputs, libraries, signal }) {
+  async run({ script, bars, config, inputs, libraries, signal, liveTick }) {
     // Prefer store.endpoint (Settings) over plugin config so a stale
     // pluginsConfig.endpoint cannot pin an old backend after Save.
     // Explicit config.endpoint still wins when set (e.g. pyne-worker engine).
@@ -308,6 +308,94 @@ export const serverEngine: EnginePlugin = {
         : undefined;
     // Chart bars are unix seconds. Pine `time` / hour() / session clocks are ms.
     const pineBars = barsForPine(bars);
+
+    // Prefer engine meta; do not force true — runner resolves indicator/strategy defaults.
+    // Shared by the REST fallback and the live-session fast path (same envelope shape).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const mapRestPayload = (payload: any): RunResult => {
+      // Prefer engine meta; do not force true — runner resolves indicator/strategy defaults.
+      const restOverlay = normalizeOverlayFlag(payload.overlay ?? payload.meta?.overlay);
+      const restName =
+        payload.script_name || payload.meta?.script_name || 'plot';
+      const restProfile = (payload.profile ?? payload.meta?.profile) as
+        | Record<string, unknown>
+        | undefined;
+      const restLogs = (payload.logs ?? payload.meta?.logs) as RunResult['logs'] | undefined;
+      const restScriptType =
+        payload.script_type ||
+        payload.meta?.script_type ||
+        (typeof restName === 'string' && /strategy/i.test(String(payload.meta?.kind || ''))
+          ? 'strategy'
+          : undefined);
+      return {
+        status: 'success',
+        plots: (payload.plots as (number | null)[]) || [],
+        series: (payload.series as Record<string, PlotSample[]>) || {},
+        events: (payload.events as RunResult['events']) || [],
+        drawings: (payload.drawings as RunResult['drawings']) || [],
+        inputs: payload.inputs,
+        ...(restProfile ? { profile: restProfile } : {}),
+        ...(Array.isArray(restLogs) ? { logs: restLogs } : {}),
+        meta: {
+          ...(payload.meta || {}),
+          ms: performance.now() - t0,
+          transport: 'rest' as const,
+          mode: payload.mode as string | undefined,
+          script_id: payload.script_id as string | undefined,
+          run_id: payload.run_id as string | undefined,
+          ...(restOverlay !== undefined ? { overlay: restOverlay } : {}),
+          script_name: restName as string,
+          ...(restScriptType ? { script_type: restScriptType } : {}),
+          plot_meta: payload.plot_meta || payload.meta?.plot_meta || {},
+          inputs: payload.inputs,
+          ...(Array.isArray(payload.alerts) ? { alerts: payload.alerts } : {}),
+          ...(Array.isArray(payload.alert_conditions)
+            ? { alert_conditions: payload.alert_conditions }
+            : {}),
+          ...(restProfile ? { profile: restProfile } : {}),
+          ...(Array.isArray(restLogs) ? { logs: restLogs } : {}),
+        },
+      } satisfies RunResult;
+    };
+
+    // ── Live-session fast path (Pro API 0.6.9+): O(delta) tick/append ──
+    // Interpret only — compile has no resumable evaluator state. REST-only
+    // (WS has no session routes). Any miss falls through to the full run
+    // below, so old backends, edge, and proxies behave exactly as before.
+    if (liveTick === true && mode === 'interpret' && pineBars.length > 0) {
+      try {
+        const { tryLiveSessionTick } = await import('./live-sessions');
+        const hit = await tryLiveSessionTick({
+          endpoint,
+          apiKey,
+          script,
+          pineBars,
+          ...(inputOverrides ? { inputs: inputOverrides } : {}),
+          ...(profilerOn ? { profiler: true } : {}),
+          ...(libraries?.length ? { libraries } : {}),
+          symbol:
+            typeof store.symbol === 'string' && store.symbol ? store.symbol : 'CHART',
+          interval:
+            typeof store.interval === 'string' && store.interval ? store.interval : '1d',
+          signal: signal || undefined,
+        });
+        if (hit && hit.payload && typeof hit.payload === 'object') {
+          const mapped = mapRestPayload(hit.payload);
+          return {
+            ...mapped,
+            meta: {
+              ...mapped.meta,
+              sessionVia: hit.via,
+              session_id: (hit.payload as { session_id?: unknown }).session_id as
+                | string
+                | undefined,
+            },
+          } satisfies RunResult;
+        }
+      } catch {
+        /* fall through to the full WS/REST run */
+      }
+    }
 
     // ── WSS-first path (short budget so REST still has time) ──────
     // Gunicorn default workers do NOT speak WebSocket — connect can hang then
@@ -523,48 +611,7 @@ export const serverEngine: EnginePlugin = {
         } satisfies RunResult;
       }
       // Prefer engine meta; do not force true — runner resolves indicator/strategy defaults.
-      const restOverlay = normalizeOverlayFlag(payload.overlay ?? payload.meta?.overlay);
-      const restName =
-        payload.script_name || payload.meta?.script_name || 'plot';
-      const restProfile = (payload.profile ?? payload.meta?.profile) as
-        | Record<string, unknown>
-        | undefined;
-      const restLogs = (payload.logs ?? payload.meta?.logs) as RunResult['logs'] | undefined;
-      const restScriptType =
-        payload.script_type ||
-        payload.meta?.script_type ||
-        (typeof restName === 'string' && /strategy/i.test(String(payload.meta?.kind || ''))
-          ? 'strategy'
-          : undefined);
-      return {
-        status: 'success',
-        plots: (payload.plots as (number | null)[]) || [],
-        series: (payload.series as Record<string, PlotSample[]>) || {},
-        events: (payload.events as RunResult['events']) || [],
-        drawings: (payload.drawings as RunResult['drawings']) || [],
-        inputs: payload.inputs,
-        ...(restProfile ? { profile: restProfile } : {}),
-        ...(Array.isArray(restLogs) ? { logs: restLogs } : {}),
-        meta: {
-          ...(payload.meta || {}),
-          ms: performance.now() - t0,
-          transport: 'rest' as const,
-          mode: payload.mode as string | undefined,
-          script_id: payload.script_id as string | undefined,
-          run_id: payload.run_id as string | undefined,
-          ...(restOverlay !== undefined ? { overlay: restOverlay } : {}),
-          script_name: restName as string,
-          ...(restScriptType ? { script_type: restScriptType } : {}),
-          plot_meta: payload.plot_meta || payload.meta?.plot_meta || {},
-          inputs: payload.inputs,
-          ...(Array.isArray(payload.alerts) ? { alerts: payload.alerts } : {}),
-          ...(Array.isArray(payload.alert_conditions)
-            ? { alert_conditions: payload.alert_conditions }
-            : {}),
-          ...(restProfile ? { profile: restProfile } : {}),
-          ...(Array.isArray(restLogs) ? { logs: restLogs } : {}),
-        },
-      } satisfies RunResult;
+      return mapRestPayload(payload);
     } catch (err: unknown) {
       const name = err instanceof Error ? err.name : '';
       const raw = err instanceof Error ? err.message : String(err);

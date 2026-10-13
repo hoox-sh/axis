@@ -686,6 +686,10 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
       // Honour caller abort (HPO cancel). Interactive runs still omit a parent
       // timer so WS→REST fallback is not killed mid-flight.
       signal: isolate ? opts.signal : undefined,
+      // Genuine live tick over chart bars: remote engines with live sessions
+      // (PYNE 0.6.9+) may answer O(delta). Never set for bar-window overrides
+      // (HPO holdout / walk-forward), which are private slices, not the series.
+      ...(opts.liveTick === true && !opts.bars ? { liveTick: true } : {}),
     });
 
     const ms =

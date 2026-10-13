@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/engines"
-description: "src/engines contains catalog.ts, engine-ws.ts, json-sanitize.ts."
+description: "src/engines contains catalog.ts, engine-ws.ts, json-sanitize.ts, and 1 more file."
 resource: "src/engines"
 tags: [code, engines]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-10T20:32:38Z
+  at: 2026-10-13T08:34:58Z
 sources:
   - id: tree
     resource: "src/engines"
@@ -21,6 +21,7 @@ okf_lock: generated
 * `catalog.ts` — BUILTIN_ENGINES, DEFAULT_PYNE_WORKER_ENDPOINT, LOCAL_PYODIDE_INDEX, LOCAL_PYODIDE_VERSION, _resetEngineRegistrationFlag, _resetPyodideEngineState, callPyodideRunScript, confirmEngineApiKeyTarget, ensureEnginesRegistered, formatPyodideBridgeError, getEngine, isLoopbackOrigin
 * `engine-ws.ts` — EngineWsResult, EngineWsRunRequest, _resetEngineWsClients, endpointToRunWsUrl, getEngineWsClient, probeEngineWs
 * `json-sanitize.ts` — parseEngineJson, sanitizeNonFiniteJson
+* `live-sessions.ts` — LiveSessionHit, LiveSessionTickOpts, LiveSessionVia, SESSION_GROWTH_SLACK, _liveSessionStateForTests, _resetLiveSessionsForTests, releaseLiveSessions, tryLiveSessionTick
 
 # Packages
 

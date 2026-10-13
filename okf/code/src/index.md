@@ -7,7 +7,7 @@
 * [src/data](data.md) - Background Data Source Manager — multi-page OHLCV backfill to a past date.
 * [src/desktop](desktop.md) - AXIS desktop (Tauri) shell helpers.
 * [src/editor](editor.md) - Root component for the standalone editor window (?view=editor).
-* [src/engines](engines.md) - src/engines contains catalog.ts, engine-ws.ts, json-sanitize.ts.
+* [src/engines](engines.md) - src/engines contains catalog.ts, engine-ws.ts, json-sanitize.ts, and 1 more file.
 * [src/indicators](indicators.md) - src/indicators contains IndicatorCard.tsx, IndicatorPanel.tsx, detach.ts, and 6 more files.
 * [src/mcp](mcp.md) - AXIS in-app MCP host — capabilities, snapshot, Worker bridge.
 * [src/onchain](onchain.md) - Public entry for the AXIS on-chain data plane (Phase 1–3 light).
