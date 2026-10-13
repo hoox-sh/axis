@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "tests/integration"
-description: "tests/integration contains library-service.test.ts, live-rerun.test.ts, load-symbol.test.ts, and 4 more files."
+description: "tests/integration contains library-service.test.ts, live-rerun.test.ts, load-symbol.test.ts, and 5 more files."
 resource: "tests/integration"
 tags: [code, integration, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:05:44Z
+  at: 2026-10-13T19:44:07Z
 sources:
   - id: tree
     resource: "tests/integration"
@@ -24,6 +24,7 @@ okf_lock: generated
 * `onchain-source-register.test.ts`
 * `persist.test.ts`
 * `plugin-install.test.ts`
+* `pyne-data-session.e2e.test.ts`
 * `run-pipeline.test.ts`
 
 # Packages

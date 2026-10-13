@@ -7,7 +7,7 @@ tags: [code, scripts]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-05T05:34:29Z
+  at: 2026-10-13T19:44:07Z
 sources:
   - id: tree
     resource: "scripts"
@@ -38,4 +38,5 @@ okf_lock: generated
 
 # Nested
 
+* [scripts/e2e](/code/scripts/e2e.md)
 * [scripts/okf](/code/scripts/okf.md)
