@@ -25,7 +25,12 @@ import { setStore } from '../../src/store';
 import type { Bar } from '../../src/store/types';
 
 const URL_ = process.env.AXIS_PYNE_E2E_URL ?? '';
+const API_KEY = process.env.AXIS_PYNE_E2E_API_KEY ?? '';
 const e2e = URL_ ? describe : describe.skip;
+
+if (URL_ && !API_KEY) {
+  throw new Error('AXIS_PYNE_E2E_URL is set but AXIS_PYNE_E2E_API_KEY is missing — mint one with scripts/e2e/pyne-fake-feed.py');
+}
 
 const SCRIPT = '//@version=6\nindicator("e2e", overlay=true)\nplot(close)\n';
 const HOUR = 3600;
@@ -63,7 +68,7 @@ e2e('AXIS ↔ PYNE Pro engine-owned data sessions', () => {
     const key = { exchange: 'binance', symbol: PAIR_FETCH, interval: '1h' };
     const h = await ensureDataSession({
       endpoint: URL_,
-      apiKey: '',
+      apiKey: API_KEY,
       key,
       historyBars: 40,
       script: SCRIPT,
@@ -71,7 +76,7 @@ e2e('AXIS ↔ PYNE Pro engine-owned data sessions', () => {
     });
     expect(h.provisioned).toBe('fetch');
     expect(h.sessionId).toBeTruthy();
-    const st = await getDataSeriesStatus(URL_, '', key);
+    const st = await getDataSeriesStatus(URL_, API_KEY, key);
     expect(st.count).toBeGreaterThanOrEqual(40);
   });
 
@@ -79,7 +84,7 @@ e2e('AXIS ↔ PYNE Pro engine-owned data sessions', () => {
     const key = { exchange: 'binance', symbol: PAIR_LOCAL, interval: '1h' };
     const h = await ensureDataSession({
       endpoint: URL_,
-      apiKey: '',
+      apiKey: API_KEY,
       key,
       historyBars: 20,
       script: SCRIPT,
@@ -87,7 +92,7 @@ e2e('AXIS ↔ PYNE Pro engine-owned data sessions', () => {
     });
     expect(h.provisioned).toBe('local');
     // Broker uploads only the newest history window, not the whole local dataset.
-    const st = await getDataSeriesStatus(URL_, '', key);
+    const st = await getDataSeriesStatus(URL_, API_KEY, key);
     expect(st.count).toBe(20);
   });
 
@@ -95,7 +100,7 @@ e2e('AXIS ↔ PYNE Pro engine-owned data sessions', () => {
     const key = { exchange: 'binance', symbol: PAIR_TICK, interval: '1h' };
     const first = await runDataSession({
       endpoint: URL_,
-      apiKey: '',
+      apiKey: API_KEY,
       owner: 'ind-e2e',
       request: { ...key, historyBars: 40 },
       script: SCRIPT,
@@ -104,7 +109,7 @@ e2e('AXIS ↔ PYNE Pro engine-owned data sessions', () => {
     expect(first.ok).toBe(true);
     const tick = await runDataSession({
       endpoint: URL_,
-      apiKey: '',
+      apiKey: API_KEY,
       owner: 'ind-e2e',
       request: { ...key, historyBars: 40 },
       script: SCRIPT,
@@ -113,7 +118,7 @@ e2e('AXIS ↔ PYNE Pro engine-owned data sessions', () => {
     });
     expect(tick).toMatchObject({ ok: true, via: 'data-session-tick' });
     if (first.ok) {
-      const direct = await tickDataSession(URL_, '', first.sessionId, { exchange: 'binance', symbol: PAIR_TICK });
+      const direct = await tickDataSession(URL_, API_KEY, first.sessionId, { exchange: 'binance', symbol: PAIR_TICK });
       expect(direct.ok).toBe(true);
     }
   });
@@ -122,7 +127,7 @@ e2e('AXIS ↔ PYNE Pro engine-owned data sessions', () => {
     const r = await serverEngine.run({
       script: SCRIPT,
       bars: [],
-      config: { endpoint: URL_, preferWs: false, mode: 'interpret' },
+      config: { endpoint: URL_, preferWs: false, mode: 'interpret', apiKey: API_KEY },
       dataSession: { exchange: 'binance', symbol: PAIR_LOCAL, interval: '1h', historyBars: 20 },
     });
     expect(r.status).toBe('success');
@@ -130,7 +135,7 @@ e2e('AXIS ↔ PYNE Pro engine-owned data sessions', () => {
   });
 
   it('reports an unknown session as gone so the broker can recreate it', async () => {
-    const r = await tickDataSession(URL_, '', 'ses-does-not-exist', { exchange: 'binance', symbol: 'BTC/USDT' });
+    const r = await tickDataSession(URL_, API_KEY, 'ses-does-not-exist', { exchange: 'binance', symbol: 'BTC/USDT' });
     expect(r).toMatchObject({ ok: false, gone: true });
   });
 });
