@@ -71,6 +71,7 @@ import {
   setSlotManager,
 } from './chart-registry';
 import { reportUiError } from '../ui/boot-errors';
+import { sanitizeSeriesDataForSetData } from './series-sanitize';
 import { resolvedPrefsForTool } from './drawings/tool-settings';
 import { getThemeManager } from '../theme';
 import {
@@ -102,71 +103,6 @@ function onLayerDrawingsChange(list: Drawing[]) {
     { includeUntagged: true },
   ) as Drawing[];
   setDrawings(merged);
-}
-
-/**
- * Boundary guard for chart-library `setData` payloads.
- *
- * Drops rows the library rejects or chokes on (non-finite time/values,
- * non-ascending times) before they reach `setData`, and reports what was
- * dropped so repeat offenders are visible in the log instead of surfacing
- * as a bare library assertion (`Value is null`) on every redraw.
- */
-export function sanitizeSeriesDataForSetData<T extends { time?: unknown }>(
-  data: readonly T[],
-  opts?: { requireOhlc?: boolean },
-): {
-  clean: T[];
-  dropped: number;
-  firstBadIndex: number;
-  firstBadReason: string;
-  nonIntegerTimes: number;
-} {
-  const clean: T[] = [];
-  let dropped = 0;
-  let firstBadIndex = -1;
-  let firstBadReason = '';
-  let nonIntegerTimes = 0;
-  let prevTime = Number.NEGATIVE_INFINITY;
-  for (let i = 0; i < data.length; i++) {
-    const row = data[i]!;
-    const t = (row as { time?: unknown }).time;
-    let reason = '';
-    if (typeof t !== 'number' || !Number.isFinite(t)) {
-      reason = `bad-time:${String(t)}`;
-    } else {
-      if (!Number.isInteger(t)) nonIntegerTimes++;
-      if (t <= prevTime) {
-        reason = `non-ascending-time:${t}<=${prevTime}`;
-      } else if (opts?.requireOhlc) {
-        const o = row as unknown as Record<string, unknown>;
-        if (
-          !Number.isFinite(o.open as number) ||
-          !Number.isFinite(o.high as number) ||
-          !Number.isFinite(o.low as number) ||
-          !Number.isFinite(o.close as number)
-        ) {
-          reason = 'bad-ohlc';
-        }
-      } else {
-        const v = (row as unknown as Record<string, unknown>).value;
-        if (v !== undefined && !Number.isFinite(v as number)) {
-          reason = 'bad-value';
-        }
-      }
-    }
-    if (reason) {
-      dropped++;
-      if (firstBadIndex < 0) {
-        firstBadIndex = i;
-        firstBadReason = reason;
-      }
-      continue;
-    }
-    prevTime = t as number;
-    clean.push(row);
-  }
-  return { clean, dropped, firstBadIndex, firstBadReason, nonIntegerTimes };
 }
 
 /**
@@ -778,10 +714,12 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
       // Legacy global stays in sync for non-holder callers (tests / older doubles).
       if (chartType !== 'heikinashi') resetHeikinAshiCache();
       const checked = sanitizeSeriesDataForSetData(data, { requireOhlc: isOhlcChartType(chartType) });
-      if (checked.dropped > 0) {
+      if (checked.dropped > 0 || checked.merged > 0 || checked.filled > 0) {
         reportUiError(
           new Error(
-            `dropped ${checked.dropped}/${data.length} rows at index ${checked.firstBadIndex} (${checked.firstBadReason}, nonIntegerTimes=${checked.nonIntegerTimes})`,
+            `repair dropped=${checked.dropped} merged=${checked.merged} filled=${checked.filled} ` +
+              `of ${data.length} rows (first=${checked.firstBadIndex}:${checked.firstBadReason || 'ok'}, ` +
+              `nonIntegerTimes=${checked.nonIntegerTimes})`,
           ),
           {
             source: 'chart',
@@ -867,10 +805,11 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
       const volColors = getThemeManager().getVolumeColors();
       const volData = mapBarsToVolumeData(bars, volColors);
       const volChecked = sanitizeSeriesDataForSetData(volData);
-      if (volChecked.dropped > 0) {
+      if (volChecked.dropped > 0 || volChecked.merged > 0 || volChecked.filled > 0) {
         reportUiError(
           new Error(
-            `dropped ${volChecked.dropped}/${volData.length} rows at index ${volChecked.firstBadIndex} (${volChecked.firstBadReason})`,
+            `repair dropped=${volChecked.dropped} merged=${volChecked.merged} filled=${volChecked.filled} ` +
+              `of ${volData.length} rows (first=${volChecked.firstBadIndex}:${volChecked.firstBadReason || 'ok'})`,
           ),
           {
             source: 'chart',

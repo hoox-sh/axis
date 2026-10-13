@@ -4,69 +4,126 @@
  */
 
 /**
- * Boundary guard for chart-library setData payloads: poisoned rows are
- * dropped + reported instead of throwing a bare library assertion on
- * every redraw.
+ * Boundary guard for chart-library setData payloads.
+ *
+ * LWC 5.2 asserts **asynchronously** during render (`Value is null` /
+ * `Value is undefined`) when a stored candle row is missing OHLC or two rows
+ * share an open time, so a `try/catch` around `setData` cannot contain it. The
+ * guard repairs the payload — dedupe last-wins, fill missing OHLC from a
+ * neighbour, coerce null values — and only drops what cannot be repaired.
  */
 
 import { describe, expect, it } from 'bun:test';
-import { sanitizeSeriesDataForSetData } from '../src/chart/manager-access.ts';
+import {
+  looksLikeOhlcData,
+  sanitizeSeriesDataForSetData,
+} from '../src/chart/series-sanitize.ts';
+
+const ohlc = (time: number, base = 1) => ({
+  time,
+  open: base,
+  high: base + 1,
+  low: base - 0.5,
+  close: base + 0.5,
+});
 
 describe('sanitizeSeriesDataForSetData', () => {
   it('passes clean OHLC data through untouched', () => {
-    const data = [
-      { time: 100, open: 1, high: 2, low: 0.5, close: 1.5 },
-      { time: 200, open: 1.5, high: 2.5, low: 1, close: 2 },
-    ];
+    const data = [ohlc(100), ohlc(200, 2)];
     const r = sanitizeSeriesDataForSetData(data, { requireOhlc: true });
     expect(r.clean).toEqual(data);
     expect(r.dropped).toBe(0);
+    expect(r.merged).toBe(0);
+    expect(r.filled).toBe(0);
     expect(r.nonIntegerTimes).toBe(0);
   });
 
-  it('drops non-finite times and NaN OHLC', () => {
-    const data = [
-      { time: 100, open: 1, high: 2, low: 0.5, close: 1.5 },
-      { time: NaN, open: 1, high: 2, low: 0.5, close: 1.5 },
-      { time: 200, open: 1, high: NaN, low: 1, close: 2 },
-      { time: 300, open: 2, high: 3, low: 1.5, close: 2.5 },
-    ];
-    const r = sanitizeSeriesDataForSetData(data, { requireOhlc: true });
+  it('drops non-finite times', () => {
+    const r = sanitizeSeriesDataForSetData(
+      [ohlc(100), { ...ohlc(0), time: NaN }, ohlc(300)],
+      { requireOhlc: true },
+    );
     expect(r.clean.map((d) => d.time)).toEqual([100, 300]);
-    expect(r.dropped).toBe(2);
+    expect(r.dropped).toBe(1);
     expect(r.firstBadIndex).toBe(1);
     expect(r.firstBadReason).toContain('bad-time');
   });
 
-  it('drops duplicate and out-of-order times', () => {
-    const row = (time: number) => ({ time, open: 1, high: 2, low: 0.5, close: 1 });
+  it('collapses duplicate times keeping the LAST write (merged, not dropped)', () => {
     const r = sanitizeSeriesDataForSetData(
-      [row(100), row(200), row(200), row(150), row(300)],
+      [ohlc(100), ohlc(200), ohlc(200, 9), ohlc(300)],
       { requireOhlc: true },
     );
     expect(r.clean.map((d) => d.time)).toEqual([100, 200, 300]);
-    expect(r.dropped).toBe(2);
-    expect(r.firstBadReason).toContain('non-ascending-time');
+    expect(r.merged).toBe(1);
+    expect(r.dropped).toBe(0);
+    // Last write wins — same rule as DatasetStore conflict resolution.
+    expect(r.clean[1]!.open).toBe(9);
   });
 
-  it('checks value field for non-OHLC payloads (volume)', () => {
+  it('re-sorts after a poisoned leading row so times stay ascending', () => {
+    const r = sanitizeSeriesDataForSetData(
+      [ohlc(300), ohlc(100), ohlc(200)],
+      { requireOhlc: true },
+    );
+    expect(r.clean.map((d) => d.time)).toEqual([100, 200, 300]);
+  });
+
+  it('fills null OHLC from the previous bar (LWC render-time null)', () => {
+    const data = [
+      ohlc(100, 5),
+      { time: 200, open: null, high: null, low: null, close: null },
+      ohlc(300, 7),
+    ];
+    const r = sanitizeSeriesDataForSetData(data, { requireOhlc: true });
+    expect(r.dropped).toBe(0);
+    expect(r.filled).toBe(1);
+    expect(r.clean[1]).toEqual({ time: 200, open: 5, high: 6, low: 4.5, close: 5.5 });
+  });
+
+  it('fills a missing field from the NEXT bar when it leads the series', () => {
+    const data = [
+      { time: 100, open: 1, high: 2, low: 0.5, close: null },
+      ohlc(200, 8),
+    ];
+    const r = sanitizeSeriesDataForSetData(data, { requireOhlc: true });
+    expect(r.filled).toBe(1);
+    expect(r.clean[0]).toEqual({ time: 100, open: 8, high: 9, low: 7.5, close: 8.5 });
+  });
+
+  it('drops all-null OHLC when no donor exists', () => {
+    const r = sanitizeSeriesDataForSetData(
+      [{ time: 100, open: null, high: null, low: null, close: null }],
+      { requireOhlc: true },
+    );
+    expect(r.clean).toEqual([]);
+    expect(r.dropped).toBe(1);
+  });
+
+  it('coerces null / NaN volume values to 0 but keeps real ones', () => {
     const data = [
       { time: 100, value: 10, color: 'a' },
-      { time: 200, value: NaN, color: 'a' },
-      { time: 300, value: 5, color: 'b' },
+      { time: 200, value: null, color: 'a' },
+      { time: 300, value: NaN, color: 'b' },
+      { time: 400, value: 5, color: 'b' },
     ];
     const r = sanitizeSeriesDataForSetData(data);
-    expect(r.clean.map((d) => d.time)).toEqual([100, 300]);
-    expect(r.dropped).toBe(1);
-    expect(r.firstBadReason).toBe('bad-value');
+    expect(r.clean.map((d) => d.value)).toEqual([10, 0, 0, 5]);
+    expect(r.dropped).toBe(0);
+    expect(r.filled).toBe(2);
+  });
+
+  it('leaves an omitted value alone (Pine na whitespace gap)', () => {
+    const r = sanitizeSeriesDataForSetData([
+      { time: 100, value: 10 },
+      { time: 200 },
+    ]);
+    expect(r.filled).toBe(0);
+    expect('value' in r.clean[1]!).toBe(false);
   });
 
   it('counts non-integer times for diagnostics without dropping', () => {
-    const data = [
-      { time: 100.5, open: 1, high: 2, low: 0.5, close: 1 },
-      { time: 200, open: 1, high: 2, low: 0.5, close: 1 },
-    ];
-    const r = sanitizeSeriesDataForSetData(data, { requireOhlc: true });
+    const r = sanitizeSeriesDataForSetData([ohlc(100.5), ohlc(200)], { requireOhlc: true });
     expect(r.nonIntegerTimes).toBe(1);
     expect(r.clean.length).toBe(2);
   });
@@ -76,5 +133,13 @@ describe('sanitizeSeriesDataForSetData', () => {
     expect(r.clean).toEqual([]);
     expect(r.dropped).toBe(0);
     expect(r.firstBadIndex).toBe(-1);
+  });
+});
+
+describe('looksLikeOhlcData', () => {
+  it('detects OHLC rows and ignores value rows', () => {
+    expect(looksLikeOhlcData([{ time: 1, open: 1, high: 2, low: 0.5, close: 1.5 }])).toBe(true);
+    expect(looksLikeOhlcData([{ time: 1, value: 10 }])).toBe(false);
+    expect(looksLikeOhlcData([])).toBe(false);
   });
 });

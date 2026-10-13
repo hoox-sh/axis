@@ -98,6 +98,10 @@ import type { ShapeMarkerSpec } from '../results/plot-visuals';
 import { mountPaneBadge, refreshPaneBadge, setPaneBadgeLabel } from './pane-badge';
 import { getVisibleBars, isReplayActive } from './bar-replay';
 import { reportUiError } from '../ui/boot-errors';
+import {
+  looksLikeOhlcData,
+  sanitizeSeriesDataForSetData,
+} from './series-sanitize';
 import { getThemeManager } from '../theme';
 
 /**
@@ -297,10 +301,32 @@ export function isFiniteOhlcBar(bar: {
 function safeSetData(series: ISeriesApi<any> | null | undefined, data: unknown): boolean {
   if (!series) return false;
   try {
-    series.setData(data as never);
+    series.setData(repairSeriesPayload(data) as never);
     return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Repair a payload before it reaches LWC (see {@link series-sanitize}).
+ *
+ * LWC 5.2 throws `Value is null` **asynchronously** during render when a stored
+ * candlestick row is missing OHLC, so a plain `try/catch` around `setData`
+ * cannot stop the uncaught window error. Non-array payloads and already-clean
+ * OHLC/value rows pass through functionally unchanged.
+ */
+function repairSeriesPayload(data: unknown): unknown {
+  if (!Array.isArray(data) || data.length === 0) return data;
+  try {
+    const requireOhlc = looksLikeOhlcData(data);
+    const checked = sanitizeSeriesDataForSetData(
+      data as Array<{ time?: unknown }>,
+      requireOhlc ? { requireOhlc: true } : undefined,
+    );
+    return checked.clean;
+  } catch {
+    return data;
   }
 }
 
