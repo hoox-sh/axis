@@ -424,6 +424,14 @@ export interface AppState {
    */
   historyBars: number;
   /**
+   * Rolling window: the most recent N bars handed to the engine on every run.
+   * The chart keeps the whole dataset — this caps only what is evaluated and
+   * shipped back. Distinct from `historyBars` (how much history to fetch) and
+   * from `DSM_MAX_BARS_PER_JOB` (how deep a backfill may grow the dataset).
+   * Persisted. Default {@link ROLLING_WINDOW_DEFAULT}.
+   */
+  rollingWindowBars: number;
+  /**
    * When true, market-field changes fetch OHLCV automatically; when false, user must Load.
    * Persisted. Default true.
    */

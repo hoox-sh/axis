@@ -502,6 +502,30 @@ export function clampHistoryBars(n: unknown): number {
   return Math.min(HISTORY_BARS_MAX, Math.max(HISTORY_BARS_MIN, Math.round(v)));
 }
 
+/**
+ * Rolling window (bars) — the most recent N bars handed to the engine.
+ *
+ * Distinct from {@link AppState.historyBars}, which is how much history to
+ * *fetch*. The DSM can grow a dataset far past `historyBars`
+ * (`DSM_MAX_BARS_PER_JOB` is 50k), and every one of those bars costs evaluate
+ * time, encode time, and a full-size response envelope on each run. The rolling
+ * window caps what the engine sees — the chart still holds the whole dataset.
+ *
+ * 0 means "no cap" (send everything).
+ */
+export const ROLLING_WINDOW_DEFAULT = 10_000;
+export const ROLLING_WINDOW_MIN = 200;
+export const ROLLING_WINDOW_MAX = 200_000;
+
+/** Clamp a rolling-window value. `0`/absent → the default; negative → default. */
+export function clampRollingWindowBars(n: unknown): number {
+  const v = typeof n === 'number' ? n : Number(n);
+  if (!Number.isFinite(v)) return ROLLING_WINDOW_DEFAULT;
+  const r = Math.round(v);
+  if (r <= 0) return ROLLING_WINDOW_DEFAULT;
+  return Math.min(ROLLING_WINDOW_MAX, Math.max(ROLLING_WINDOW_MIN, r));
+}
+
 /** Bounds for the durable watchlist drawer width (D8 — was lower-bounded only). */
 export const WATCHLIST_WIDTH_MIN = 200;
 export const WATCHLIST_WIDTH_MAX = 640;
@@ -591,6 +615,7 @@ export const DEFAULTS: AppState = {
   interval: '15m',
   exchange: 'binance',
   historyBars: HISTORY_BARS_DEFAULT,
+  rollingWindowBars: ROLLING_WINDOW_DEFAULT,
   autoload: true,
   datasetPersistence: 'local',
   source: 'binance-rest',
@@ -942,6 +967,9 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
       },
       historyBars: clampHistoryBars(
         bag.historyBars ?? (bag as { barLimit?: unknown }).barLimit ?? DEFAULTS.historyBars,
+      ),
+      rollingWindowBars: clampRollingWindowBars(
+        bag.rollingWindowBars ?? DEFAULTS.rollingWindowBars,
       ),
       autoload: typeof bag.autoload === 'boolean' ? bag.autoload : true,
       datasetPersistence: hydrateDatasetPersistence(bag.datasetPersistence),
@@ -1962,6 +1990,7 @@ function buildPersistPayload(opts?: { slim?: boolean }): Record<string, unknown>
     endpoint: s.endpoint,
     engine: s.engine,
     historyBars: s.historyBars,
+    rollingWindowBars: s.rollingWindowBars,
     autoload: s.autoload !== false,
     datasetPersistence: s.datasetPersistence,
     theme: s.theme,

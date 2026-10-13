@@ -17,6 +17,10 @@ import {
   setStatus,
   clampUiScale,
   clampHistoryBars,
+  clampRollingWindowBars,
+  ROLLING_WINDOW_DEFAULT,
+  ROLLING_WINDOW_MIN,
+  ROLLING_WINDOW_MAX,
   resetUiLayout,
   HISTORY_BARS_MIN,
   HISTORY_BARS_MAX,
@@ -252,6 +256,9 @@ export function SettingsPage(props: {
   const [historyBars, setHistoryBars] = createSignal(
     clampHistoryBars(store.historyBars ?? HISTORY_BARS_DEFAULT),
   );
+  const [rollingWindowBars, setRollingWindowBars] = createSignal(
+    clampRollingWindowBars(store.rollingWindowBars ?? ROLLING_WINDOW_DEFAULT),
+  );
   const [refreshSec, setRefreshSec] = createSignal(store.watchlist.refreshSec || 15);
   const [preferAfterLoad, setPreferAfterLoad] = createSignal(!!store.live.preferAfterLoad);
   const [rerunOn, setRerunOn] = createSignal<'every-tick' | 'bar-close'>(
@@ -329,6 +336,7 @@ export function SettingsPage(props: {
 
     setStore('interval', nextInterval);
     setStore('historyBars', nextHistoryBars);
+    setStore('rollingWindowBars', clampRollingWindowBars(rollingWindowBars()));
     setStore('watchlist', 'refreshSec', nextRefresh);
     setStore('live', 'preferAfterLoad', preferAfterLoad());
     setStore('live', 'rerunOn', rerunOn());
@@ -495,6 +503,23 @@ export function SettingsPage(props: {
                   value={historyBars()}
                   onInput={(v) => setHistoryBars(Number(v))}
                   onChange={(v) => setHistoryBars(clampHistoryBars(v))}
+                />
+              </StudioField>
+              <StudioField
+                label="Rolling window"
+                for="axis-rolling-window-bars"
+                hint={`Most recent bars handed to the engine on every run (${ROLLING_WINDOW_MIN}–${ROLLING_WINDOW_MAX}). Default ${ROLLING_WINDOW_DEFAULT}. The chart keeps the whole dataset — this caps only what is evaluated and returned. Lower it to cut run time and payload size on deep histories; raise it if a study needs more lookback than the window.`}
+              >
+                <StudioInput
+                  id="axis-rolling-window-bars"
+                  type="number"
+                  mono
+                  min={ROLLING_WINDOW_MIN}
+                  max={ROLLING_WINDOW_MAX}
+                  step={500}
+                  value={rollingWindowBars()}
+                  onInput={(v) => setRollingWindowBars(Number(v))}
+                  onChange={(v) => setRollingWindowBars(clampRollingWindowBars(v))}
                 />
               </StudioField>
               <StudioToggle

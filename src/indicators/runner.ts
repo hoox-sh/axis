@@ -154,6 +154,29 @@ function pickOverlayColor(
 }
 
 /**
+ * Cap the bars handed to the engine to the most recent N
+ * ({@link AppState.rollingWindowBars}).
+ *
+ * The chart keeps the entire dataset — this only bounds evaluate time, the
+ * encode payload, and the size of the response envelope. Plot apply is safe:
+ * overlay points are keyed by **time**, not by index into `store.bars`
+ * (`lineSeriesToOverlayData`), so a windowed run lands on its own axis and
+ * simply covers the recent range.
+ *
+ * Explicit `opts.bars` (HPO holdout / walk-forward) is windowed too — it is
+ * already a deliberate slice, so the cap is redundant there and skipping it
+ * would let a trial quietly exceed the user's budget.
+ */
+export function applyRollingWindow(
+  bars: import('../store/types').Bar[],
+): import('../store/types').Bar[] {
+  const limit = store.rollingWindowBars;
+  if (!Number.isFinite(limit) || limit <= 0) return bars;
+  if (bars.length <= limit) return bars;
+  return bars.slice(bars.length - limit);
+}
+
+/**
  * Bar times aligned with `store.bars` for plot apply.
  * Reuses the prior array when chartDataGen + length + last time are unchanged.
  *
@@ -656,7 +679,7 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
     }
     const rawResult = await engine.run({
       script: scriptForEngine,
-      bars,
+      bars: applyRollingWindow(bars),
       config,
       inputs,
       ...(engineLibraries?.length ? { libraries: engineLibraries } : {}),

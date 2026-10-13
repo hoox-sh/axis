@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/ui"
-description: "src/ui contains AboutModal.tsx, AlertsPanel.tsx, BarReplayControls.tsx, and 73 more files."
+description: "src/ui contains AboutModal.tsx, AlertsPanel.tsx, BarReplayControls.tsx, and 74 more files."
 resource: "src/ui"
 tags: [code, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-10T20:32:38Z
+  at: 2026-10-13T04:21:10Z
 sources:
   - id: tree
     resource: "src/ui"
@@ -69,6 +69,7 @@ okf_lock: generated
 * `VolumeProfileOverlay.tsx` — VolumeProfileOverlay
 * `Watchlist.tsx` — Watchlist
 * `WorkspaceSnapshotMenu.tsx` — WorkspaceSnapshotMenu, createLiveWorkspaceSetters
+* `bar-count.ts` — formatBarCount
 * `boot-errors.ts` — ReportUiErrorOpts, _resetReportThrottleForTests, formatErrorMessage, installBootErrorHandlers, reportUiError
 * `chart-settings-state.ts` — chartSettingsOpen, setChartSettingsOpen, toggleChartSettings
 * `clipboard.ts` — copyToClipboard

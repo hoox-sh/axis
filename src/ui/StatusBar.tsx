@@ -27,13 +27,49 @@
  * @module ui/StatusBar
  */
 
-import { type Component, Show, createMemo, untrack } from 'solid-js';
+import {
+  type Component,
+  Show,
+  createMemo,
+  createSignal,
+  onCleanup,
+  untrack,
+} from 'solid-js';
 import { store, isPanelOpen, setDataSourcePanelOpen } from '../store';
 import { Icons } from './icons';
 import type { RunResult } from '../indicators/runner';
 import { buildStrategyReport, formatMoney } from '../results/strategy';
 import { ConnectionHud } from './ConnectionHud';
 import { HooxLoader } from './HooxLoader';
+import { peekDataset, subscribeDatasets } from '../data/dataset-store';
+import { formatBarCount } from './bar-count';
+
+/**
+ * Bars in the active Data Source Manager dataset (memory mirror).
+ *
+ * The chart can hold far fewer bars than the dataset the DSM has grown via
+ * deep backfill (`DSM_MAX_BARS_PER_JOB` is 50k), so `{store.bars.length}`
+ * alone understates how much data actually exists. Falls back to the chart
+ * count whenever the mirror is cold, so the strip is never blank.
+ */
+function useDatasetBarCount(): () => number {
+  const [count, setCount] = createSignal(0);
+  const read = () => {
+    const mirrored = peekDataset(store.source, store.symbol, store.interval);
+    const next = mirrored?.length ?? 0;
+    setCount((prev) => (prev === next ? prev : next));
+  };
+  const off = subscribeDatasets(read);
+  // Store-driven changes (symbol / interval / source switch) also matter.
+  createMemo(() => {
+    store.source;
+    store.symbol;
+    store.interval;
+    read();
+  });
+  onCleanup(off);
+  return count;
+}
 
 const STATUS_COLORS: Record<string, string> = {
   ready: 'text-accent-2',
@@ -46,6 +82,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 /** Fixed footer chrome under the workspace (when Status pane is open). */
 export const StatusBar: Component = () => {
+  const datasetBars = useDatasetBarCount();
   const color = () => STATUS_COLORS[store.status] || 'text-text-dim';
 
   const strategySummary = createMemo(() => {
@@ -110,6 +147,11 @@ export const StatusBar: Component = () => {
           >
             {store.bars.length} bars
           </button>
+          <Show when={datasetBars() > 0 && datasetBars() !== store.bars.length}>
+            <span title="Bars in the Data Source Manager dataset (deeper than the chart holds)">
+              · dataset {formatBarCount(datasetBars())}
+            </span>
+          </Show>
           <span>· {store.scripts.length} scripts · {store.panes.length} panes</span>
         </span>
       </div>
