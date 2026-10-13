@@ -35,6 +35,15 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      # `test` runs `bun test tests/ worker/tests/` from the root, but the worker
+      # is a separate package with its own lockfile. Without this, worker tests
+      # that import worker-only deps (isomorphic-git in script-git.test.ts /
+      # artifacts-git.ts) die with "Cannot find package" — it works locally only
+      # because a developer happened to have run `cd worker && bun install`.
+      - name: Install worker dependencies
+        working-directory: worker
+        run: bun install --frozen-lockfile
+
       - name: Typecheck
         run: bun run typecheck
 
