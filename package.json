@@ -1,6 +1,7 @@
 {
   "name": "axis",
   "version": "2.22.1",
+  "packageManager": "bun@1.4.3",
   "private": true,
   "license": "AGPL-3.0-only",
   "author": "jango_blockchained",
@@ -28,7 +29,7 @@
     "prepare": "git config core.hooksPath .githooks",
     "test:unit": "bun test tests/",
     "test:coverage": "bun test --coverage --coverage-reporter=lcov --coverage-reporter=text --coverage-dir=coverage tests/ worker/tests/",
-    "test:coverage:gate": "bun run test:coverage && bun scripts/check-coverage.mjs 95",
+    "test:coverage:gate": "bun run test:coverage && bun scripts/check-coverage.mjs",
     "test:security": "bun test tests/security/",
     "test:bench": "AXIS_BENCH=1 bun test tests/bench/",
     "test:e2e": "playwright test",

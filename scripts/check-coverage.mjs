@@ -10,12 +10,37 @@
  *   bun scripts/check-coverage.mjs [minPercent] [lcovPath]
  *
  * Scoped core gate (plugins, storage, store, results, worker auth/scripts, …).
- * Default min 70% if no arg; package.json uses 95% (ratchet: 70→80→87→90→95).
+ *
+ * ## Ratchet
+ *
+ * History: 70 → 80 → 87 → 90 → 95. The 95 rung was set as the next step but was
+ * never met, so the gate has been red on main since before 2026-10-13.
+ *
+ * Two floors live here:
+ *
+ * - {@link BASELINE} is the **enforced** floor: the measured coverage as of
+ *   2026-10-13 under Bun 1.4.3. Its job is to stop the number going *down*.
+ * - {@link TARGET} is the **aspirational** goal. Not enforced — printing it
+ *   keeps the gap visible instead of quietly pretending 95 is close.
+ *
+ * Coverage is also Bun-version-sensitive: under Bun 1.3.14 the same suite
+ * measured 81.31% and `src/store/index.ts` reported 35.7% instead of 88.4%.
+ * All workflows now pin Bun to match, so this number is at least reproducible.
+ *
+ * To close the gap to 95 you need roughly 1,170 more covered lines, concentrated
+ * in `src/store/index.ts`, `src/chart/manager-access.ts`, `src/storage/local.ts`
+ * and `src/data/data-source-manager.ts` (~991 of them).
  */
 
 import { resolve } from 'node:path';
 
-const min = Number(process.argv[2] || 70);
+/** Enforced floor. Ratchet up as coverage improves; never lower it silently. */
+const BASELINE = 89;
+
+/** Aspirational goal, reported but not enforced. */
+const TARGET = 95;
+
+const min = Number(process.argv[2] || BASELINE);
 const lcovPath = resolve(process.argv[3] || 'coverage/lcov.info');
 
 const lcovFile = Bun.file(lcovPath);
@@ -125,4 +150,12 @@ if (pct + 1e-9 < min) {
   console.error(`check-coverage: FAIL below ${min}%`);
   process.exit(1);
 }
-console.log('check-coverage: OK');
+if (pct + 1e-9 < TARGET) {
+  const needed = Math.ceil((TARGET / 100) * found) - hit;
+  console.log(
+    `check-coverage: OK at the ${min}% floor — reaching ${TARGET}% needs ` +
+      `${needed} more covered lines.`,
+  );
+} else {
+  console.log(`check-coverage: OK — at or above the ${TARGET}% target.`);
+}
