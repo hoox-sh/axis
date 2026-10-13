@@ -200,10 +200,15 @@ describe('proxy error envelopes stay sanitized', () => {
 describe('probeUpstream', () => {
   it('records a reachable upstream', async () => {
     const original = globalThis.fetch;
-    globalThis.fetch = (async () => new Response('{}', { status: 200 })) as typeof fetch;
+    let method: string | undefined;
+    globalThis.fetch = (async (_input: unknown, init?: RequestInit) => {
+      method = init?.method;
+      return new Response('{}', { status: 200 });
+    }) as typeof fetch;
     try {
       const r = await probeUpstream('binance', 'https://example.test/ping');
       expect(r.ok).toBe(true);
+      expect(method).toBe('HEAD');
       expect(upstreamHealth()['binance']?.ok).toBe(true);
     } finally {
       globalThis.fetch = original;
@@ -226,8 +231,10 @@ describe('probeUpstream', () => {
 
   it('does not buffer the body (DefiLlama protocol lists are ~9 MB)', async () => {
     const original = globalThis.fetch;
+    let method: string | undefined;
     let cancelled = false;
-    globalThis.fetch = (async () => {
+    globalThis.fetch = (async (_input: unknown, init?: RequestInit) => {
+      method = init?.method;
       const stream = new ReadableStream({
         start(c) {
           c.enqueue(new TextEncoder().encode('x'.repeat(1024)));
@@ -241,8 +248,9 @@ describe('probeUpstream', () => {
     try {
       const out = await fetchUpstreamJson('https://example.test/protocols', {
         timeoutMs: 1000,
-        headOnly: true,
+        method: 'HEAD',
       });
+      expect(method).toBe('HEAD');
       expect(out.status).toBe(200);
       expect(out.text).toBe('');
       expect(cancelled).toBe(true);

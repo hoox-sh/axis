@@ -279,16 +279,15 @@ export interface UpstreamFetchOptions {
   /** Extra request headers (e.g. `X-MBX-APIKEY`). */
   headers?: Record<string, string>;
   /**
-   * Discard the body once headers arrive. For reachability probes only —
-   * DefiLlama's cheapest path is still ~9 MB, which must never be buffered just
-   * to answer "is this peer up?".
+   * Verbs to allow. Reachability probes use `HEAD` — DefiLlama's cheapest GET is
+   * still ~9 MB, which must never be fetched just to answer "is this peer up?".
    */
-  headOnly?: boolean;
+  method?: 'GET' | 'HEAD';
 }
 
-/** Read `res`, then release the connection instead of buffering a huge body. */
-async function drain(res: Response, headOnly: boolean | undefined): Promise<string> {
-  if (!headOnly) return res.text();
+/** Read `res`, or release the connection instead of buffering a huge body. */
+async function drain(res: Response, method: 'GET' | 'HEAD' | undefined): Promise<string> {
+  if (method !== 'HEAD') return res.text();
   try {
     await res.body?.cancel();
   } catch {
@@ -310,16 +309,17 @@ export async function fetchUpstreamJson(
 ): Promise<UpstreamResult> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs);
+  const method = opts.method ?? 'GET';
   try {
     const res = await fetch(url, {
-      method: 'GET',
+      method,
       signal: ctrl.signal,
       redirect: 'manual',
       headers: { Accept: 'application/json', ...(opts.headers || {}) },
     });
     assertNoRedirect(res);
     // Body read stays inside the abort window (A10).
-    const text = await drain(res, opts.headOnly);
+    const text = await drain(res, method);
     return {
       status: res.status,
       text,
@@ -370,8 +370,8 @@ export async function probeUpstream(
   timeoutMs = 4_000,
 ): Promise<Reachability> {
   try {
-    // `headOnly` — a reachability check must not buffer a 9 MB protocol list.
-    const res = await fetchUpstreamJson(url, { timeoutMs, headOnly: true });
+    // `HEAD` — a reachability check must not buffer a 9 MB protocol list.
+    const res = await fetchUpstreamJson(url, { timeoutMs, method: 'HEAD' });
     // 4xx still proves the peer answered; only a network/timeout failure is "down".
     const ok = res.status < 500;
     const r: Reachability = { ok, at: Date.now(), detail: ok ? 'ok' : `HTTP ${res.status}` };
