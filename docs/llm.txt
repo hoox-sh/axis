@@ -1,11 +1,11 @@
 AXIS CONSOLIDATED DOCUMENTATION — LLM CONTEXT PACK
-Generated: 2026-10-13
+Generated: 2026-10-14
 Source: ../axis/docs
 Public: https://hoox.sh/axis/docs
 Repository: https://github.com/hoox-sh/axis
 
 FILE: ../axis/docs/architecture/adrs.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -81,7 +81,7 @@ ADR-004: Built-in engines
 Context
 Researchers need server fidelity, an edge evaluator, and offline demos. A single transport cannot satisfy all three.
 Decision
-Ship three built-in engines (BUILTINENGINES in src/engines/catalog.ts). pyne-worker is builtIn: true. It is not a URL you paste onto the server engine.
+Ship three built-in engines (BUILTIN_ENGINES in src/engines/catalog.ts). pyne-worker is builtIn: true. It is not a URL you paste onto the server engine.
 | Id | Role |
 | --- | --- |
 | server | WebSocket /ws/run, then POST {endpoint}/run. Default endpoint http://localhost:5002 (Flask Pro API) or the AXIS Worker. |
@@ -140,7 +140,7 @@ ADR-009: Worker proxies first
 Context
 In-Worker Pyodide is attractive but heavy; production needed a path immediately.
 Decision
-Worker /api/run proxies to an external Python backend first (EXTERNALBACKEND). In-Worker runtime remains scaffolded/gated. Keys, usage metering, scripts API, and stream DO can ship independently of full edge evaluation.
+Worker /api/run proxies to an external Python backend first (EXTERNAL_BACKEND). In-Worker runtime remains scaffolded/gated. Keys, usage metering, scripts API, and stream DO can ship independently of full edge evaluation.
 Consequences
 AXIS server engine talks to Worker URL transparently.
 Operational dependency on Flask (or equivalent) until edge runtime matures.
@@ -170,7 +170,7 @@ ADR-012: CORS as deploy concern
 Context
 Browser AXIS on origin A calling Pro API on origin B fails without CORS. Hardcoding origins in AXIS is wrong.
 Decision
-CORS is a backend/deploy configuration (ALLOWEDORIGINS on Flask; Worker headers as deployed). AXIS documents required origins; ops sets explicit lists in production (avoid perpetual ` outside demos).
+CORS is a backend/deploy configuration (ALLOWED_ORIGINS on Flask; Worker headers as deployed). AXIS documents required origins; ops sets explicit lists in production (avoid perpetual ` outside demos).
 Consequences
 Localhost regex for dev.
 Troubleshooting centers on preflight, not engine code.
@@ -221,7 +221,7 @@ Ship a parallel on-chain data plane orthogonal to the OHLCV source/stream path:
 1. Plugin kind dataset on the unified registry (DatasetPlugin in src/plugins/types.ts):
 fetchDataset(opts) → OnchainDataset
 optional searchInstruments
-payload kinds: ohlcv | scalarseries | multiseries | events | table
+payload kinds: ohlcv | scalar_series | multi_series | events | table
 required provenance + finality (pending | safe | finalized | unknown)
 2. Parallel plane modules under src/onchain/ (types, cache, keys, adapters, catalog, manager, events, alerts bridge) — not a new Bar field and not Pine output.
 3. Worker allowlist proxy (worker/src/onchain.ts, routes under /api/onchain/…):
@@ -229,7 +229,7 @@ rewrite only known DefiLlama / GeckoTerminal paths
 validate network ids and pool addresses
 short-TTL isolate cache (X-Axis-Onchain-Cache)
 client default bases from store.endpoint (src/onchain/proxy.ts)
-4. Chart UX: attach as host-side overlays (left scale for scalars; separate series keys onchain); main market OHLCV stays on the right scale. Not wallet, not Pine plots.
+4. Chart UX: attach as host-side overlays (left scale for scalars; separate series keys onchain_); main market OHLCV stays on the right scale. Not wallet, not Pine plots.
 Alternatives considered
 | Alternative | Rejected because |
 | --- | --- |
@@ -251,8 +251,8 @@ Phases shipped
 | --- | --- | --- |
 | 1 — TVL | DefiLlama protocol TVL scalar history + search | defillama-tvl dataset, src/onchain/defillama.ts, llama proxy |
 | 2 — DEX | GeckoTerminal pool OHLCV + pool search | source geckoterminal-ohlcv, src/onchain/geckoterminal.ts, gecko proxy. Not a DatasetPlugin. |
-| 3 — Events | Derived day-over-day TVL spike/drop events (tvlspike / tvldrop) | src/onchain/events.ts → chart markers |
-| 4 — Alerts | Bridge events into alerts engine (onchaintvlspike / onchainevent) | src/onchain/alerts-bridge.ts, src/alerts/engine.ts |
+| 3 — Events | Derived day-over-day TVL spike/drop events (tvl_spike / tvl_drop) | src/onchain/events.ts → chart markers |
+| 4 — Alerts | Bridge events into alerts engine (onchain_tvl_spike / onchain_event) | src/onchain/alerts-bridge.ts, src/alerts/engine.ts |
 Pro-only DefiLlama surfaces (raises, unlocks via pro-api.llama.fi) remain out of the free Worker allowlist.
 Code map
 | Path | Role |
@@ -370,7 +370,7 @@ User tools and apply-pipeline bugs that do not wait on a PYNE export change.
 1. 1-point body-move — shiftDrawing only special-cased text / priceLabel. Shift any drawing with p1 (and points[] when present): note, flag, crossline, anchoredText, arrowMarkUp/Down.
 2. p3 / extra vertex handles — hitTestHandle / resizeDrawing only p1/p2. Add p3 (and remaining points[i] as p3 for the third anchor). Paint extra handles after registry paint.
 3. Linefill GC — garbageCollectScriptDrawings early-return ignored skip.linefill.
-4. Polyline / linefill overlay — copy forceoverlay and polyline fillcolor → bgcolor.
+4. Polyline / linefill overlay — copy force_overlay and polyline fill_color → bgcolor.
 5. Stale SVG — silent live re-run with drawings: [] must clear script drawings.
 6. Pane routing — bgcolor and fill() use the script pane when overlay=false (syncBgcolorBands(paneId), ensureScriptPaneLayer for fills). plotshape / plotchar / plotarrow attach to a series on that pane when possible; otherwise stay on price (LWC markers need a host series).
 P1 — User-tool settings (AXIS)
@@ -390,47 +390,47 @@ P2 — PYNE export (pynescript repo)
 AXIS cannot paint fields the engine never serializes.
 | Gap | Where | Needed on the wire |
 |---|---|---|
-| Table cell keys (row,col) vs (col,row) | drawing.py table.cell vs cellset | One index order |
-| Table style | exportforapi | halign, valign, width, tooltip, textsize, borders (AXIS already parses width / height / tooltip / mergedcells / forceoverlay when present; bottom panel uses them for proportional columns, hover tips, and merges) |
+| Table cell keys (row,col) vs (col,row) | drawing.py table.cell vs cell_set_ | One index order |
+| Table style | export_for_api | halign, valign, width, tooltip, text_size, borders (AXIS already parses width / height / tooltip / merged_cells / force_overlay when present; bottom panel uses them for proportional columns, hover tips, and merges) |
 | table.cell kwargs | ctor | width, halign, valign, size |
-| plotshape Y / location.absolute | coerceplotshape | keep numeric series (or {y, on} cells) |
-| plotbar / plotcandle | evaluator | open/high/low/close (or sibling titles in plotmeta) |
+| plotshape Y / location.absolute | _coerce_plot_shape | keep numeric series (or {y, on} cells) |
+| plotbar / plotcandle | evaluator | open/high/low/close (or sibling titles in plot_meta) |
 | fill() compile / untitled plots | host + evaluator | plot1/plot2 series keys + per-bar fill color column |
 | Positional plot(..., linewidth) | evaluator.py ~425 | Pine order: series, title, color, linewidth, style |
 | plotarrow | evaluator | colorup / colordown / minheight / maxheight |
-| offset, forceoverlay, histbase | packinterpretplotcolumns | remaining plotmeta fields (display is packed) |
-| Polyline | export | fillcolor, curved, forceoverlay |
-| Box / label extras | export | closed, extend, text, tooltip, border |
+| offset, force_overlay, histbase | _pack_interpret_plot_columns | remaining plot_meta fields (display is packed) |
+| Polyline | export | fill_color, curved, force_overlay |
+| Box / label extras | export | closed, extend, text_, tooltip, border |
 P3 — Remaining Pine paint
 Done this pass:
 Hide-drawings toggle includes script SVG + fill bands (all pane layers).
-Label yloc pad (8px off wick); label.styletextoutline as outlined text.
-First addIndicator re-owns plot fills / script drawings / plotshape (EDITORRUNKEY → script id).
-Histogram histbase from plotmeta (default 0). PYNE still needs to serialize it for live values.
-Pine display. (none / pane / datawindow / pricescale / statusline / all) on plot, hline, shapes, fill, bgcolor, barcolor.
+Label yloc pad (8px off wick); label.style_text_outline as outlined text.
+First addIndicator re-owns plot fills / script drawings / plotshape (EDITOR_RUN_KEY → script id).
+Histogram histbase from plot_meta (default 0). PYNE still needs to serialize it for live values.
+Pine display. (none / pane / data_window / price_scale / status_line / all) on plot, hline, shapes, fill, bgcolor, barcolor.
 Still open:
 location.top / bottom = pane edges, not bar (LWC markers only have above/below/in bar).
 Per-bar plot(..., color=expr), plotarrow length (colorup/colordown/minheight/maxheight wait on PYNE).
 Pine tables: bottom Tables panel (shipped)
 table. output paints in the chart HUD (PyneTableHud) by default. Per script, Move tables to bottom (chart ⋯ menu, pane badge ⋯, command palette) relocates that script's tables to ui/TablesPanel.tsx:
-One tab per script, stacked vertically in creation order regardless of position / forceoverlay.
+One tab per script, stacked vertically in creation order regardless of position / force_overlay.
 Proportional column widths from table.cell(width=…) (bottomPanelColumnFractions in chart/pine-tables.ts), tooltips + merged cells preserved, text selectable.
 Placement persists per script in store.pineTablesLocation; the HUD hides moved tables. Move back via Move tables to chart.
 Invariants
 User drawings ≠ Pine drawings. Do not share hit-testing or magnet with script SVG (pointer-events: none).
-overlay=false plots, fills, bgcolor, and shapes belong on ind* unless forceoverlay.
+overlay=false plots, fills, bgcolor, and shapes belong on ind_* unless force_overlay.
 barcolor() stays on price candles.
 Color sanitize: #rgb(a), #rrggbb(aa), rgb/rgba. Unknown → VOID indigo for user tools; Pine should keep engine hex (including #RRGGBBAA).
-GC caps match Pine: 50 default, 500 lines/labels/boxes, 100 polylines. Linefill cap is AXIS-only until PYNE emits maxlinesfillscount.
+GC caps match Pine: 50 default, 500 lines/labels/boxes, 100 polylines. Linefill cap is AXIS-only until PYNE emits max_lines_fills_count.
 Tests
 shiftDrawing / resizeDrawing for 1-pt and 3-pt kinds.
 Linefill GC overflow.
-Polyline forceoverlay + fillcolor.
+Polyline force_overlay + fill_color.
 Runner: bgcolor/fill target pane when overlay=false (unit with a fake manager if needed).
 PYNE: table cell key, fill meta, plotshape Y (in the pynescript repo).
 ---
 FILE: ../axis/docs/architecture/evaluation.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -455,9 +455,9 @@ Conceptual model
 Interface surface
 | Path | Implementation | Notes |
 | --- | --- | --- |
-| Engine server | src/engines/catalog.ts | Prefer WS ws(s)://{endpoint}/ws/run (preferWs default true), else POST {endpoint}/run?mode= with { script, data, mode, inputs?, profiler?, libraries? }. Modes interpret \| compile \| auto. Timeout scales with bar count (45–180s). Default endpoint http://localhost:5002. Strategy HPO uses POST {endpoint}/optimize. |
-| Engine pyodide | same file | Self-hosted Pyodide 0.29.5 (/pyodide/v0.29.5/, Python 3.13), wheels /vendor/pynescript-0.6.9-py3-none-any.whl + antlr4python3runtime-4.13.2, runtime /pyodide/pynescriptruntime.py. Numba is not in Wasm; compile / auto is object-mode. Cold load ~20–30s. |
-| AXIS Worker /api/run | worker/src/runtime.ts | PYODIDEINWORKER=enabled scaffold; else proxy EXTERNALBACKEND/run; else 503 NOBACKEND. Caps: 512 KiB script, 50k bars, 30 req/min/IP, 60s upstream. |
+| Engine server | src/engines/catalog.ts | Prefer WS ws(s)://{endpoint}/ws/run (preferWs default true), else POST {endpoint}/run?mode= with { script, data, mode, inputs?, profiler?, libraries? }. Modes interpret \| compile \| auto. Timeout scales with bar count (45–180s). Default endpoint http://localhost:5002. Strategy HPO uses POST {endpoint}/optimize. Live sessions (Pro API 0.6.9+, interpret only): genuine live ticks (EngineOpts.liveTick) go through src/engines/live-sessions.ts — POST /session, /tick (O(1)), /append (O(delta)) — with silent fallback to the full run on any miss. Only engaged for interpret runs: the configured mode must be interpret, or the backend must have reported interpret for the last full run of the same script (auto). Scripts whose inputs hold expanded input.source series stay on /run — a session freezes its inputs at create. |
+| Engine pyodide | same file | Self-hosted Pyodide 0.29.5 (/pyodide/v0.29.5/, Python 3.13), wheels /vendor/pynescript-0.6.9-py3-none-any.whl + antlr4_python3_runtime-4.13.2, runtime /pyodide/pynescript_runtime.py. Numba is not in Wasm; compile / auto is object-mode. Cold load ~20–30s. |
+| AXIS Worker /api/run | worker/src/runtime.ts | PYODIDE_IN_WORKER=enabled scaffold; else proxy EXTERNAL_BACKEND/run; else 503 NO_BACKEND. Caps: 512 KiB script, 50k bars, 30 req/min/IP, 60s upstream. |
 | Engine pyne-worker | src/engines/catalog.ts | Built-in (builtIn: true). POST /run to the HOOX edge worker. Default origin https://pyne-worker.cryptolinx.workers.dev. Distinct from engine server and from the AXIS Worker (worker-axis). |
 | PyneTS | — | TypeScript library. PYNE docs. Not referenced in AXIS source. |
 Payloads follow the PYNE evaluate contract. Defaults: Flask POST /run uses mode auto. See modes.
@@ -465,6 +465,7 @@ Internals
 | Path | Role |
 | --- | --- |
 | src/engines/catalog.ts | server, pyne-worker, pyodide |
+| src/engines/live-sessions.ts | O(delta) live sessions (/session, /tick, /append); interpret-only, silent fallback to /run |
 | src/workers/catalog.ts | Workers page catalog entries |
 | worker/src/runtime.ts | Edge /api/run |
 | public/pyodide/ | Wasm runtime + wheel |
@@ -475,6 +476,7 @@ Invariants & edge cases
 3. No none stream plugin in src/streams/catalog.ts. Pausing live data is stopLive(), not a plugin id.
 4. The vendored wheel is pynescript-0.6.9-py3-none-any.whl, built from the sister pyne repo with scripts/sync-pyne-wheel.sh. That script also prints a warning if the hard-coded path in src/engines/catalog.ts drifts from the wheel filename — update it when the version changes.
 5. CORS: Worker allows localhost, .hoox.sh, .pynescript.online, .axis.pages.dev (plus legacy .pynescript-axis.pages.dev) only.
+6. A live tick never changes evaluation semantics. Live sessions (src/engines/live-sessions.ts) always evaluate in interpret, so the O(delta) path engages only for a run the backend itself resolved to interpret (the client records the mode each full run reports), and a session freezes its inputs at create — scripts whose inputs hold expanded input.source series stay on POST /run. Any miss falls back to the full run, and a response that is not a /run-shaped result is a miss, never an empty success.
 Worked examples
 Local desk
 ``bash
@@ -487,23 +489,23 @@ Manager → engine server, Backend URL http://localhost:5002.
 Offline
 Switch engine to pyodide. First run downloads/caches the self-hosted runtime. Do not expect Numba.
 Edge proxy
-Deploy AXIS Worker with EXTERNALBACKEND pointing at Flask or pyne-worker. Engine stays server; endpoint is the Worker origin. Still no trade-worker hop unless that backend forwards events.
+Deploy AXIS Worker with EXTERNAL_BACKEND pointing at Flask or pyne-worker. Engine stays server; endpoint is the Worker origin. Still no trade-worker hop unless that backend forwards events.
 Pyodide in Worker (scaffold — not production yet)
 Goal: a fully-CF deployment (no Flask) with the Worker evaluating Pine itself.
 `toml
 worker/wrangler.toml
-PYODIDEINWORKER = "enabled" # default "disabled" — leave it there for now
+PYODIDE_IN_WORKER = "enabled" # default "disabled" — leave it there for now
 `
-Status: Pyodide boots per isolate, but the wheel install + runscript
+Status: Pyodide boots per isolate, but the wheel install + run_script
 bridge are stubbed, so every run returns an error envelope (HTTP 200) and
-does not fall through to EXTERNALBACKEND. Enabling the flag today
+does not fall through to EXTERNAL_BACKEND. Enabling the flag today
 breaks evaluation. Completion checklist (R2 wheel, BUNDLES binding,
 micropip install, bridge, fail-open semantics) lives in
-worker/RUNTIME.md. Production recommendation stays EXTERNALBACKEND.
+worker/RUNTIME.md. Production recommendation stays EXTERNAL_BACKEND.
 Failure modes
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| 503 NOBACKEND | Worker has no EXTERNALBACKEND and Pyodide-in-worker off | Set backend or use browser Pyodide |
+| 503 NO_BACKEND | Worker has no EXTERNAL_BACKEND and Pyodide-in-worker off | Set backend or use browser Pyodide |
 | 503 body { status: 'error', code: 'NO_BACKEND' } to API consumers | Same as above, machine shape | Do not retry — the backend is absent, not busy. Fix config, then resend. (PYNE Agent treats this as skipped-with-note after 1 attempt.) |
 | Compile "slow / different" in Pyodide | No Numba | Use Flask for numeric compile |
 | Expecting pynets in the PWA | Not wired | Import @hoox-sh/pynets` in your own app |
@@ -579,7 +581,7 @@ LEGACY.md` — pre-Solid shell boundary
 AXIS CLI — operator install / deploy
 ---
 FILE: ../axis/docs/architecture/overview.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -639,7 +641,7 @@ Built-in engines
 | --- | --- | --- |
 | server | WebSocket /ws/run, then POST /run | Flask Pro API or AXIS Worker |
 | pyne-worker | POST /run (optional WS) | HOOX pyne-worker. Built-in. Not a pasted Backend URL on server. |
-| pyodide | In-browser Python | Self-hosted Pyodide 0.29.5 + vendored wheel + pynescriptruntime.py |
+| pyodide | In-browser Python | Self-hosted Pyodide 0.29.5 + vendored wheel + pynescript_runtime.py |
 Timeout policy in runner scales with bar length (clamped). Live re-runs use shorter silent timeouts.
 Chart apply pipeline
 runAndApply:
@@ -679,7 +681,7 @@ State namespaces
 AXIS store
 ---
 FILE: ../axis/docs/architecture/state-namespaces.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -738,7 +740,7 @@ Read order:
 1. pynescript.axis.v1
 2. else pynescript.axis.v2
 On older-key hit: copy forward into pynescript.axis.v1.
-The pre-Solid vanilla state.js shell (removed in 2.21.0) used the same STORAGEKEY constant. It is gone; only the Solid store path remains.
+The pre-Solid vanilla state.js shell (removed in 2.21.0) used the same STORAGE_KEY constant. It is gone; only the Solid store path remains.
 pluginsConfig
 Map of configuration objects. Preferred keys:
 `text
@@ -805,7 +807,7 @@ AXIS store
 Script library
 ---
 FILE: ../axis/docs/architecture/topologies.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -828,7 +830,7 @@ Abstract
 | Topology | AXIS | Calc | Live | Library |
 | --- | --- | --- | --- | --- |
 | Dev desk | Vite :3000 | Flask :5002 | Binance WS direct | local |
-| Static demo | axispwaserver :8081 | Flask or remote | venue / mock | local |
+| Static demo | axis_pwa_server :8081 | Flask or remote | venue / mock | local |
 | Edge | CF Pages | Worker → Flask | DO fan-out optional | cloud |
 | Offline lab | any AXIS | Pyodide | mock-poll | local |
 | Dev desk + sidecar | Vite :3000 | Flask :5002 | Bun sidecar :5003 | local |
@@ -842,10 +844,10 @@ Notes: Vite may proxy /run; Settings endpoint can still point absolute at :5002.
 Topology B — Static PWA + Pro API
 `bash
 bun run build
-python3 axispwaserver.py
+python3 axis_pwa_server.py
 make run # separate process
 `
-VPS demo pattern: systemd units for axis-pwa and pynescript-api; ALLOWEDORIGINS includes AXIS origin.
+VPS demo pattern: systemd units for axis-pwa and pynescript-api; ALLOWED_ORIGINS includes AXIS origin.
 Topology C — Cloudflare AXIS at the edge
 Deploy sketch
 `bash
@@ -905,13 +907,13 @@ Failure modes by topology
 | --- | --- |
 | A | Flask not running; CORS localhost vs 127.0.0.1 mismatch |
 | B | Stale SW; missing dist pyodide assets |
-| C | Unbound KV/D1; wrong project name; EXTERNALBACKEND down |
+| C | Unbound KV/D1; wrong project name; EXTERNAL_BACKEND down |
 | D | First visit offline; SPA fallback for wheels |
 Internals
 | Path | Role |
 | --- | --- |
 | vite.config.ts | Dev/build |
-| axispwa_server.py | Static host |
+| axis_pwa_server.py | Static host |
 | worker/wrangler.toml | CF name + bindings |
 | packages/cli/ | AXIS CLI (setup / deploy / health) |
 | worker/README.md` | Edge ops |
@@ -922,7 +924,7 @@ Worker
 DevOps
 ---
 FILE: ../axis/docs/devops/build-and-serve.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -937,11 +939,11 @@ along with axis. If not, see .
 SPDX-License-Identifier: AGPL-3.0-only
 ---
 title: "Build and serve"
-description: "Vite production build, dist layout, axispwaserver.py SPA rules, and asset caching."
+description: "Vite production build, dist layout, axis_pwa_server.py SPA rules, and asset caching."
 ---
 Build and serve
 Abstract
-Production AXIS assets are a static site produced by Vite (bun run build → dist). Serve them with any static host, Cloudflare Pages, or the repo’s axispwaserver.py SPA-aware server.
+Production AXIS assets are a static site produced by Vite (bun run build → dist). Serve them with any static host, Cloudflare Pages, or the repo’s axis_pwa_server.py SPA-aware server.
 Critical requirement: real binary assets for Pyodide (.wasm, .whl, .zip) must not be rewritten to index.html.
 Conceptual model
 Interface surface
@@ -956,13 +958,13 @@ package.json scripts
 "test:e2e:smoke": "playwright test --grep @smoke",
 "test:all": "bun run test:coverage:gate && bun run test:security"
 `
-axispwaserver.py
+axis_pwa_server.py
 `bash
 bun run build
-python axispwaserver.py
+python axis_pwa_server.py
 HOST / PORT env; default 0.0.0.0:8081 → dist/
 `
-Behavior (axispwaserver.py):
+Behavior (axis_pwa_server.py):
 | Rule | Detail |
 | --- | --- |
 | Root | Serves dist/ |
@@ -979,12 +981,12 @@ Expected public assets
 | /plugins/.js | Example dynamic plugins |
 | /vendor/.whl | pynescript + antlr wheels |
 | /pyodide/v0.29.5/ | Self-hosted Pyodide |
-| /pyodide/pynescriptruntime.py | Browser run bridge |
+| /pyodide/pynescript_runtime.py | Browser run bridge |
 Internals
 | Path | Role |
 | --- | --- |
 | package.json | Build scripts |
-| axispwaserver.py | Threading HTTP SPA server |
+| axis_pwa_server.py | Threading HTTP SPA server |
 | src/engines/catalog.ts | Asset URL expectations |
 | LEGACY.md | Product path vs old shell |
 Makefile note
@@ -997,7 +999,7 @@ Worked example — static desk demo
 `bash
 bun install
 bun run build
-PORT=8081 python axispwaserver.py
+PORT=8081 python axis_pwa_server.py
 another terminal
 make run # Flask :5002
 `
@@ -1018,7 +1020,7 @@ Cloudflare
 Engines
 ---
 FILE: ../axis/docs/devops/ci-and-testing.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -1073,7 +1075,7 @@ axis-nightly.yml
 | --- | --- |
 | Playwright full | all e2e specs |
 | Security + coverage gate | test:coverage:gate + test:security |
-Schedule: 0 4 * UTC + workflowdispatch.
+Schedule: 0 4 * UTC + workflow_dispatch.
 Internals
 | Path | Role |
 | --- | --- |
@@ -1110,7 +1112,7 @@ Testing reference
 Local dev
 ---
 FILE: ../axis/docs/devops/cli.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -1158,7 +1160,7 @@ axis is the primary interface. These aliases exist for working inside the repo c
 | bun run axis:health | axis health |
 | make axis ARGS="doctor --remote" | same bin with args |
 | make axis-install · axis-doctor · axis-setup · axis-deploy · axis-health | fixed wrappers |
-MCP (agents): axis mcp --key pn… (stdio) · axis mcp config — see MCP server.
+MCP (agents): axis mcp --key pn_… (stdio) · axis mcp config — see MCP server.
 When using bun run axis setup -- --flag, keep the -- so Bun forwards flags to the CLI.
 Command surface
 | Command | Role |
@@ -1166,20 +1168,20 @@ Command surface
 | axis install | bun install root + worker/ + CLI |
 | axis doctor [--remote] | Toolchain, CF auth, optional live /health. Missing worker/wrangler.toml is a warning until axis setup (expected on a fresh clone). |
 | axis setup | Bootstrap: install → ensure toml → local D1 |
-| axis setup --prod | Production bootstrap: remote D1 schema + APIKEYS KV |
+| axis setup --prod | Production bootstrap: remote D1 schema + API_KEYS KV |
 | axis setup worker | Copy wrangler.toml.example → wrangler.toml if missing |
 | axis setup d1 --local\|--remote [--create] | Apply worker/schemas/scripts.sql (scripts + version history) |
-| axis setup kv [--usage] | Create and bind APIKEYS KV (required when D1 is on) |
+| axis setup kv [--usage] | Create and bind API_KEYS KV (required when D1 is on) |
 | axis setup oauth --github-client-id … | Set public OAuth App id in [vars] (or --secret) |
-| axis setup artifacts [--namespace axis-scripts] [--skip-check] | Bind SCRIPTARTIFACTS in wrangler.toml + verify namespace (git-native script storage, closed beta) |
-| axis keys create [--tier hobby] | Mint a pn… key via POST /api/keys (ADMINTOKEN) |
-| axis keys validate --key pn… | Validate a key against the Worker |
-| axis secret put\|list\|delete | Wrangler secrets (ADMINTOKEN, EXTERNALBACKEND, …) |
+| axis setup artifacts [--namespace axis-scripts] [--skip-check] | Bind SCRIPT_ARTIFACTS in wrangler.toml + verify namespace (git-native script storage, closed beta) |
+| axis keys create [--tier hobby] | Mint a pn_… key via POST /api/keys (ADMIN_TOKEN) |
+| axis keys validate --key pn_… | Validate a key against the Worker |
+| axis secret put\|list\|delete | Wrangler secrets (ADMIN_TOKEN, EXTERNAL_BACKEND, …) |
 | axis deploy / deploy worker | Apply remote D1 schema, then deploy Worker worker-axis |
 | axis deploy pages | Vite build + Pages project |
 | axis deploy all | Schema + Worker + Pages |
 | axis health [--oauth] [--scripts] [--url …] | Probe /health, optional OAuth start, optional /api/scripts |
-| axis mcp [--key pn…] | Stdio MCP proxy to Worker POST /mcp |
+| axis mcp [--key pn_…] | Stdio MCP proxy to Worker POST /mcp |
 | axis mcp config [--stdio] | Print MCP client JSON (remote URL or stdio spawn) |
 | axis whoami | Cloudflare account |
 | axis dev | Vite product UI |
@@ -1197,33 +1199,33 @@ Production checklist
 axis install
 axis doctor
 axis setup --prod --github-client-id Ov23li…
-axis secret put ADMINTOKEN # comments empty [vars] ADMINTOKEN, deploys, then sets secret
-axis secret put EXTERNALBACKEND
+axis secret put ADMIN_TOKEN # comments empty [vars] ADMIN_TOKEN, deploys, then sets secret
+axis secret put EXTERNAL_BACKEND
 axis deploy all
-axis keys create # --admin-token / AXISADMINTOKEN / prompt
+axis keys create # --admin-token / AXIS_ADMIN_TOKEN / prompt
 axis health --scripts --oauth
-axis mcp config --key pn… # MCP client snippet (see MCP server)
-Paste Worker URL + pn… into Settings → Script storage
+axis mcp config --key pn_… # MCP client snippet (see MCP server)
+Paste Worker URL + pn_… into Settings → Script storage
 `
 | Item | Guidance |
 | --- | --- |
-| GITHUBOAUTHCLIENTID | Public OAuth App id; Device Flow enabled on GitHub; env wins over body clientId |
-| GITLABOAUTHCLIENTID | Same for GitLab when using git storage |
-| ADMINTOKEN / EXTERNALBACKEND | Prefer axis secret put. An empty [vars] stub collides with secrets (Cloudflare 10053) |
-| APIKEYS KV | axis setup kv then axis deploy worker. D1 without KV fails closed (APIKEYSREQUIRED) |
-| ALLOWOPENKEYS | "0" in production |
-| REQUIRERUNAUTH | "1" to force Bearer on /api/run even without KV |
+| GITHUB_OAUTH_CLIENT_ID | Public OAuth App id; Device Flow enabled on GitHub; env wins over body clientId |
+| GITLAB_OAUTH_CLIENT_ID | Same for GitLab when using git storage |
+| ADMIN_TOKEN / EXTERNAL_BACKEND | Prefer axis secret put. An empty [vars] stub collides with secrets (Cloudflare 10053) |
+| API_KEYS KV | axis setup kv then axis deploy worker. D1 without KV fails closed (API_KEYS_REQUIRED) |
+| ALLOW_OPEN_KEYS | "0" in production |
+| REQUIRE_RUN_AUTH | "1" to force Bearer on /api/run even without KV |
 | Worker script | worker-axis (https://worker.axis.hoox.sh) |
 | Pages project | axis (https://axis.hoox.sh) |
 Env overrides
 | Variable | Role |
 | --- | --- |
-| AXISROOT | Force monorepo root |
-| AXISWORKERURL | Default health / deploy probe URL |
-| AXISADMINTOKEN | Admin token for axis keys create |
-| AXISAPIKEY | Default key for axis keys validate / axis mcp |
-| CLOUDFLAREAPITOKEN | Non-interactive Wrangler auth |
-| AXISCLISRC=1 | Load src/ instead of dist/ |
+| AXIS_ROOT | Force monorepo root |
+| AXIS_WORKER_URL | Default health / deploy probe URL |
+| AXIS_ADMIN_TOKEN | Admin token for axis keys create |
+| AXIS_API_KEY | Default key for axis keys validate / axis mcp |
+| CLOUDFLARE_API_TOKEN | Non-interactive Wrangler auth |
+| AXIS_CLI_SRC=1 | Load src/ instead of dist/ |
 Internals
 | Path | Role |
 | --- | --- |
@@ -1236,7 +1238,7 @@ Internals
 See also: Installation, MCP (agents), MCP server, Cloudflare deployment, Worker bindings, Worker auth, packages/cli/README.md.
 ---
 FILE: ../axis/docs/devops/cloudflare.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -1261,27 +1263,27 @@ Production AXIS on Cloudflare is a split deploy:
 | Pages | Static PWA (dist/) |
 | Worker | JSON API + WebSocket (worker/) |
 Pages: project axis, canonical https://axis.hoox.sh. Worker: script worker-axis at https://worker.axis.hoox.sh.
-Evaluation truth: Worker /api/run proxies to EXTERNALBACKEND unless the gated Pyodide path is fully implemented and enabled. You still need a Python host (VPS Flask, container, etc.) for real Pine Script fidelity today.
+Evaluation truth: Worker /api/run proxies to EXTERNAL_BACKEND unless the gated Pyodide path is fully implemented and enabled. You still need a Python host (VPS Flask, container, etc.) for real Pine Script fidelity today.
 Prefer the AXIS CLI for setup and deploy (axis deploy).
 Conceptual model
 Deploy procedure
 1. Provision bindings (once)
 See Worker bindings:
-KV APIKEYS, USAGE
+KV API_KEYS, USAGE
 D1 pynescript + schema
 Optional R2, Durable Objects
 2. Configure secrets / vars
 Production checklist:
 | Setting | Production guidance |
 | --- | --- |
-| EXTERNALBACKEND | Public HTTPS URL of Flask/PYNE API (axis secret put) |
-| ALLOWEDORIGIN | Extra exact origins (comma-separated); product hosts + *.axis.pages.dev are built-in — CORS |
-| ADMINTOKEN | Secret, strong |
-| APIKEYS KV | Bind in prod — D1 without KV fails closed (APIKEYSREQUIRED) |
-| ALLOWOPENKEYS | "0" or unset |
-| REQUIRERUNAUTH | "1" optional force Bearer on /api/run |
-| GITHUBOAUTHCLIENTID | Env preferred; never rely on body clientId alone |
-| PYODIDEINWORKER | "disabled" until wheel pipeline ready |
+| EXTERNAL_BACKEND | Public HTTPS URL of Flask/PYNE API (axis secret put) |
+| ALLOWED_ORIGIN | Extra exact origins (comma-separated); product hosts + *.axis.pages.dev are built-in — CORS |
+| ADMIN_TOKEN | Secret, strong |
+| API_KEYS KV | Bind in prod — D1 without KV fails closed (API_KEYS_REQUIRED) |
+| ALLOW_OPEN_KEYS | "0" or unset |
+| REQUIRE_RUN_AUTH | "1" optional force Bearer on /api/run |
+| GITHUB_OAUTH_CLIENT_ID | Env preferred; never rely on body clientId alone |
+| PYODIDE_IN_WORKER | "disabled" until wheel pipeline ready |
 3. Deploy Worker
 ``bash
 Preferred: AXIS CLI
@@ -1323,14 +1325,14 @@ service: worker-axis
 `
 Invariants & edge cases
 1. Pages ≠ Worker host — CORS required unless same-origin routing via custom domain routes.
-2. Localhost EXTERNALBACKEND is useless from the edge.
+2. Localhost EXTERNAL_BACKEND is useless from the edge.
 3. DO migrations apply on deploy when uncommented.
 4. Observability enabled in wrangler for log tails (wrangler tail).
 Failure modes
 | Issue | Fix |
 | --- | --- |
-| 503 NOBACKEND | Set reachable EXTERNALBACKEND |
-| CORS blocked | ALLOWEDORIGIN mismatch |
+| 503 NO_BACKEND | Set reachable EXTERNAL_BACKEND |
+| CORS blocked | ALLOWED_ORIGIN mismatch |
 | SPA HTML for wheels | Pages must serve /vendor and /pyodide` as static files |
 | Stream NO_DO | Enable SessionDO bindings |
 See also
@@ -1339,7 +1341,7 @@ CORS
 VPS demo (backend co-host)
 ---
 FILE: ../axis/docs/devops/cors-and-origins.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -1354,7 +1356,7 @@ along with axis. If not, see .
 SPDX-License-Identifier: AGPL-3.0-only
 ---
 title: "CORS and origins"
-description: "Worker pickOrigin: local-dev, product hosts, project-scoped Pages previews, ALLOWEDORIGIN list, Flask constraints."
+description: "Worker pickOrigin: local-dev, product hosts, project-scoped Pages previews, ALLOWED_ORIGIN list, Flask constraints."
 ---
 CORS and origins
 Abstract
@@ -1365,7 +1367,7 @@ Worker behavior
 Resolution order for Access-Control-Allow-Origin:
 1. Local-dev (always echoed)
 Any http:// or https:// origin on localhost or 127.0.0.1, optional port
-(e.g. Vite :3000, axispwaserver :8081, Playwright ephemeral ports).
+(e.g. Vite :3000, axis_pwa_server :8081, Playwright ephemeral ports).
 Not allowed (and not needed): http://0.0.0.0:… — browsers do not use 0.0.0.0 as a page origin; binding with HOST=0.0.0.0 only means “listen on all interfaces.”
 Localhost/127 allowlisting is safe for CORS: only pages actually served from those hosts present that Origin. A public site cannot forge Origin: http://localhost:3000 in a real browser.
 2. Product hosts (2.0.1+)
@@ -1375,8 +1377,8 @@ Exact product / HOOX / legacy PYNE hosts under:
 Examples: https://axis.hoox.sh (canonical Pages), https://hoox.sh, https://pynescript.online.
 3. Project-scoped Cloudflare Pages (not open .pages.dev)
 Canonical Pages is https://axis.hoox.sh (product host above). Preview hashes on .axis.pages.dev (and the apex axis.pages.dev) are also echoed. Legacy .pynescript-axis.pages.dev still matches. Arbitrary third-party Pages projects (evil.pages.dev, other apps) fall through to the allowlist fallback — they are not reflected.
-4. ALLOWEDORIGIN allowlist
-Comma-separated exact origins in env.ALLOWEDORIGIN (e.g. https://a.example,https://b.example). If the request Origin is listed, echo it; otherwise return the first entry (default https://pynescript.online).
+4. ALLOWED_ORIGIN allowlist
+Comma-separated exact origins in env.ALLOWED_ORIGIN (e.g. https://a.example,https://b.example). If the request Origin is listed, echo it; otherwise return the first entry (default https://pynescript.online).
 CORS headers applied:
 ``
 Access-Control-Allow-Origin:
@@ -1389,7 +1391,7 @@ OPTIONS → 204 preflight.
 Production implication
 For a custom domain already under product regex, no extra var is required. For one-off preview hosts outside the project, list them:
 `
-ALLOWEDORIGIN = "https://my-preview.example.com,https://axis.example.com"
+ALLOWED_ORIGIN = "https://my-preview.example.com,https://axis.example.com"
 `
 Flask / server engine
 The server engine posts from the browser to the configured endpoint. Flask Pro API must:
@@ -1397,7 +1399,7 @@ The server engine posts from the browser to the configured endpoint. Flask Pro A
 2. Reflect or allow the PWA origin.
 3. Accept Content-Type: application/json.
 Pyne always appends the same product Origin regex as Worker pickOrigin (including
-.axis.pages.dev) even when systemd ALLOWEDORIGINS is a short list.
+.axis.pages.dev) even when systemd ALLOWED_ORIGINS is a short list.
 GET /health (AXIS Settings probe) and POST /run are free CORS paths — they
 echo any Origin so a Pages preview can reach https://axis.hoox.sh without a
 per-preview allowlist entry.
@@ -1437,7 +1439,7 @@ Local dev
 Dynamic loader
 ---
 FILE: ../axis/docs/devops/desktop.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of AXIS.
 SPDX-License-Identifier: AGPL-3.0-only
 ---
@@ -1471,7 +1473,7 @@ Every push to main (and PRs that touch desktop/frontend paths) runs
 |---------|--------|
 | Push main | Matrix build: Linux, macOS arm64, macOS x64, Windows → workflow artifacts (14-day retention) |
 | Tag v / desktop-v | Same matrix + GitHub Release assets attached to the tag |
-| workflowdispatch | Manual re-run |
+| workflow_dispatch | Manual re-run |
 Artifacts are named axis-desktop-{linux\|macos-arm64\|macos-x64\|windows}-{sha}.
 Concurrency cancels superseded runs on the same ref so each push rebuilds cleanly.
 Prerequisites
@@ -1520,7 +1522,7 @@ The Tauri host builds a native app menu:
 Flow
 | Path | Role |
 |------|------|
-| src-tauri/src/lib.rs | Menu, openpinescripts command, dialog + disk read |
+| src-tauri/src/lib.rs | Menu, open_pine_scripts command, dialog + disk read |
 | src/desktop/ | isTauriShell, menu listen, open + About wiring |
 | src/storage/import-pyne-open.ts | Shared status/logs/editor open after import |
 | src/storage/import-pyne-files.ts | importPyneSources (text) + importPyneFiles (browser File) |
@@ -1529,6 +1531,130 @@ Accepted extensions match the PWA drop path: .pyne, .pine, .pinescript,
 Drag-and-drop of the same extensions still works in the desktop webview.
 Conceptual model
 ---
+FILE: ../axis/docs/devops/engine-owned-data-plane.mdx
+Engine-owned data plane
+Goal
+Today AXIS is the data owner: the browser loads bars, stores datasets locally,
+and sends the bars with every run. The target shifts ownership of market data
+to the engine when the engine can own it (PYNE Pro):
+Bar-close / other engines keep the current bars-in path.
+PYNE Pro + every tick: AXIS sends only the script, inputs, and market
+identity (exchange, market, symbol, interval, history_bars). PYNE
+Pro's persistent store and CCXT feed own the bars. Pro's feed drives both the
+chart and the calculation, so candles and indicators stay aligned.
+Cache misses are brokered by AXIS: if the local Data Manager has a
+matching dataset it is uploaded to Pro (auto-upload, decided); otherwise Pro
+fetches from the exchange itself.
+No local persistence of streamed bars in this mode. The Data Manager keeps
+metadata only; in-memory chart buffers may still render.
+Decisions
+| # | Decision |
+|---|----------|
+| D1 | Pro's feed supplies both chart bars and script execution in server-owned mode. |
+| D2 | On a Pro cache miss, AXIS automatically uploads the matching local Data Manager dataset (if any), else asks Pro to fetch. |
+| D3 | Capabilities come from the endpoint's /health features, never from the engine id. Missing features ⇒ bar-close only. |
+| D4 | Pyodide moves to a dedicated Web Worker; live runs coalesce (newest-wins, one in flight). |
+Engine capabilities (GET /health → features)
+PYNE Pro reports these snake_case keys (matches existing features. keys):
+``json
+"features": {
+"live_modes": ["every-tick", "bar-close"],
+"data_session": true,
+"data_exchanges": ["binance", "bybit", "okx"]
+}
+`
+live_modes absent ⇒ ["bar-close"].
+data_session absent or false ⇒ ownsData = false, no every-tick.
+data_exchanges optional, informational.
+pyne-worker and Pyodide report no such keys and are bar-close only.
+Data store (PYNE Pro)
+Persistent OHLCV store, SQLite under PYNE_DATA_DIR (default data/).
+Series key (canonical):
+| Field | Canonical form |
+|-------|----------------|
+| exchange | lowercase CCXT id (binance) |
+| market | spot (default), swap, future |
+| symbol | uppercase, pair form when available (BTC/USDT) |
+| interval | AXIS interval code (1m, 5m, 1h, 1d, …) |
+Rows: time (unix seconds, primary key with the series key), open, high,
+low, close, volume. Upsert by time (later write wins for the forming
+bar).
+Endpoints (PYNE Pro)
+All responses use the existing {status, code?, message?} error shape. Auth
+follows the existing API-key middleware.
+GET /data/series
+Query: exchange, market?, symbol, interval.
+`json
+{ "status": "success", "key": "binance|spot|BTC/USDT|1h",
+"count": 5000, "oldest": 1700000000, "newest": 1760000000,
+"updated_at": 1760000100 }
+`
+Count 0 (and null bounds) when the series is unknown.
+POST /data/series/provide
+Body: series key fields + bars: [{time, open, high, low, close, volume}] +
+source (e.g. "axis-local"). Max 5,000 bars per request; AXIS chunks.
+Response: {status, key, added, updated, count, newest}.
+POST /data/series/fetch
+Body: series key fields + history_bars (default 5000, max 100000). Pro walks
+back through CCXT fetch_ohlcv pages and persists the result.
+Response: {status, key, fetched, count, oldest, newest}. Upstream failure ⇒
+502 with code: "UPSTREAM".
+GET /data/series/bars
+Query: series key fields + limit (default 10000, max 100000). Returns the
+newest window for chart paint in server-owned mode. AXIS holds the result in
+memory only and never writes it to IndexedDB or localStorage.
+`json
+{ "status": "success", "key": "...", "count": 500, "bars": [ ... ] }
+`
+POST /data/session
+Body: series key fields + history_bars + script + optional inputs,
+libraries, profiler, symbol (display name).
+Hit (count >= history_bars): 200, the same envelope as
+POST /session plus session_id, cache: "hit", and
+data: {key, count, newest}. The session is bound to the series key.
+Miss: 409, {status: "miss", code: "DATA_MISS", key, have, need}.
+AXIS then runs provide (if it holds local bars) or fetch, and retries.
+POST /data/session/{id}/tick
+Body: {exchange, symbol} only (AXIS sends identity, never bars). Must match
+the session's bound key, else 409 SESSION_KEY_MISMATCH.
+Pro fetches candles since the stored newest (with a small overlap), persists
+closed bars, re-ticks the forming bar via update_last_bar, and appends closed
+bars via append_bars.
+Response: the session envelope plus appended (count of newly closed bars),
+forming (bool), unchanged (bool, true when nothing new arrived).
+Upstream failure: 502 UPSTREAM; the session is kept.
+DELETE /session/{id}
+Existing release route. Unchanged.
+AXIS broker
+src/engines/data-sessions.ts (client + broker):
+1. createDataSession() → on hit return the session id.
+2. On miss: look up the local Data Manager dataset for
+(sourceId = exchange, symbol, interval) via getDataset from
+src/data/dataset-store.ts.
+Local bars exist ⇒ provideDataSeries() (chunked, last history_bars) ⇒ retry create.
+No local bars ⇒ fetchDataSeries() ⇒ retry create.
+At most two retries, then surface the error.
+3. tickDataSession() sends {exchange, symbol} only.
+Chart paint in server-owned mode uses getDataSeriesBars() into memory. The
+streaming multiplex and expand-cache writes are suppressed for that instrument.
+Migration steps
+1. Capabilities (done in round one, keys aligned to this contract in round two).
+2. PYNE store + routes + health features (/home/jango/Git/pynescript).
+3. AXIS client + broker (src/engines/data-sessions.ts), with unit tests.
+4. Server-owned routing (done): serverEngine takes a dataSession option when
+every-tick is active and the engine reports data_session; the runner
+passes it with identity only, and the chart paints from
+GET /data/series/bars.
+5. No-persist in server-owned mode (done): isEngineOwnedLive() in
+src/engines/ownership.ts gates both write paths — the multiplex's
+noteDataManagerLiveBar and expand-cache's fetch/merge. Fail-open:
+while capabilities resolve, persistence works as before.
+6. Pyodide in a Web Worker (done): src/workers/pyodide. runs evaluation off the main thread; cancel terminates and respawns the worker. Live-run coalescing is provided by the existing run-epoch + debounce mechanism (newest-wins; stale completions get meta.superseded and never touch the chart) — covered by tests/runner-hardening.test.ts, so no separate scheduler is needed.
+7. E2E: the data-session path is covered cross-repo
+(tests/integration/pyne-data-session.e2e.test.ts against the real PYNE
+/data/*` store). A full UI-level e2e (every-tick on Pro without local bars,
+cache-miss upload, bar-close fallback) still needs a browser run.
+---
 FILE: ../axis/docs/devops/harden-perf-audit-2026-08-11.md
 AXIS Hardening + Performance Audit
 Date: 2026-08-11
@@ -1536,7 +1662,7 @@ Scope: Specialist findings across security, hardening, reliability, and performa
 Method: De-duplicate, drop false positives, rank by (severity × user impact × inverse effort). Spot-checked critical paths in-repo.
 ---
 Executive summary
-AXIS has a production-critical Worker auth gap: worker/wrangler.toml commits ALLOWOPENKEYS = "1" with D1 bound and APIKEYS KV commented out. In that configuration, requireApiKey accepts any non-empty Bearer, partitioning the script library by hash of attacker-chosen tokens with no minting/revocation. Even with open keys off, unbound KV still accepts any well-formed pn… shape key.
+AXIS has a production-critical Worker auth gap: worker/wrangler.toml commits ALLOW_OPEN_KEYS = "1" with D1 bound and API_KEYS KV commented out. In that configuration, requireApiKey accepts any non-empty Bearer, partitioning the script library by hash of attacker-chosen tokens with no minting/revocation. Even with open keys off, unbound KV still accepts any well-formed pn_… shape key.
 Alongside that, browser-callable Worker surfaces are overly open: *CORS echoes any https://.pages.dev Origin, POST /api/run is unauthenticated (and uncapped/untimeouted), the GitHub device-flow OAuth proxy can accept body clientId and return repo-scoped tokens with weak rate limits, and the client plugin loader can dynamically import arbitrary HTTPS URLs into the app origin.
 On the product path, the highest user-visible reliability/perf debt is OHLCV cache thrash (getCachedBars prefers IDB over warm memory; DSM re-validates/full-loads every page), multi-MB DefiLlama protocol payloads cached whole, engine WS dead-client thrash, Session DO shared-upstream teardown, and full-series normalize/JSON on every live re-run plus editor keystroke cost.
 Recommended posture: Ship a small security + bars-cache PR first (S effort, outsized risk/perf), then /api/run + OAuth hardening, then WS/DO and live-tip apply path.
@@ -1547,11 +1673,11 @@ Critical / High
 Critical
 | Area | File | Issue | Fix | Effort |
 |------|------|-------|-----|--------|
-| security | worker/wrangler.toml (+ worker/src/auth.ts) | Open keys + D1 without APIKEYS KV | Prod: unset/0 ALLOWOPENKEYS, bind KV, mint-only keys; refuse open+D1 deploys | S |
+| security | worker/wrangler.toml (+ worker/src/auth.ts) | Open keys + D1 without API_KEYS KV | Prod: unset/0 ALLOW_OPEN_KEYS, bind KV, mint-only keys; refuse open+D1 deploys | S |
 High — Security
 | Area | File | Issue | Fix | Effort |
 |------|------|-------|-----|--------|
-| security | worker/src/index.ts | PRODUCTORIGINRE allows any .pages.dev | Project-scoped Pages hosts or ALLOWEDORIGIN only | S |
+| security | worker/src/index.ts | PRODUCT_ORIGIN_RE allows any .pages.dev | Project-scoped Pages hosts or ALLOWED_ORIGIN only | S |
 | security | worker/src/runtime.ts | Unauthed /api/run; no rate/size; hung proxy | requireApiKey in prod; rate limits; body caps; AbortSignal.timeout | M |
 | security | worker/src/git-oauth.ts | Body clientId; repo scope token return; weak RL | Env-only client id; reduce scope; Origin + durable IP limits | M |
 | security | src/plugins/loader.ts | Arbitrary remote import() + restore + host.fetch | Default-deny remote in prod; allowlist + SRI; sandbox; confirm restore | L |
@@ -1596,7 +1722,7 @@ src/data/watchlist-tickers.ts: Coinbase REST ≤24 parallel calls for 12 symbols
 server.ts: ETag via full arrayBuffer() every GET (S) — de-duped from dual medium/low reports.
 Low
 src/storage/idb.ts: openDb missing onblocked / open timeout (S).
-src/ui/SystemLogs.tsx: Renders up to MAXLOGS (500) without virtualization (S).
+src/ui/SystemLogs.tsx: Renders up to MAX_LOGS (500) without virtualization (S).
 worker/src/scripts.ts: listD1 no LIMIT/cursor (S).
 High deferred from top-12 cut (still important)
 Pyodide main-thread freeze / ignored AbortSignal (src/engines/catalog.ts) — L effort, UX-critical when local engine selected.
@@ -1605,14 +1731,14 @@ SW unbounded runtime cache (public/sw.js) — quota risk over time.
 Recommended first PR (3–6 concrete file-level changes)
 Theme: “Fail closed on Worker identity + stop bars-cache self-DoS” — shippable in one review, low regression surface.
 1. worker/wrangler.toml
-Set ALLOWOPENKEYS = "0" (or remove).
-Document / uncomment APIKEYS KV binding with real id for prod.
+Set ALLOW_OPEN_KEYS = "0" (or remove).
+Document / uncomment API_KEYS KV binding with real id for prod.
 Keep open keys only in local/dev overlays, never in the committed prod-facing [vars].
 2. worker/src/auth.ts
-When env.DB (or script routes) are active and APIKEYS is unbound, do not accept open or shape-only keys.
-Prefer: require KV for any durable partition; reject with clear APIKEYSREQUIRED.
+When env.DB (or script routes) are active and API_KEYS is unbound, do not accept open or shape-only keys.
+Prefer: require KV for any durable partition; reject with clear API_KEYS_REQUIRED.
 3. worker/src/index.ts
-Replace open (?:[\w-]+\.)pages\.dev with project-scoped host(s) (e.g. .pynescript-axis.pages.dev) and/or rely on ALLOWEDORIGIN list.
+Replace open (?:[\w-]+\.)pages\.dev with project-scoped host(s) (e.g. .pynescript-axis.pages.dev) and/or rely on ALLOWED_ORIGIN list.
 Update worker/tests/cors-origin.test.ts accordingly.
 4. src/data/bars-cache.ts
 getCachedBars: if peekMemoryBars(key) is warm, return a slice immediately; on IDB hit, hydrate memory then return.
@@ -1626,7 +1752,7 @@ Out of first PR: OAuth redesign, plugin sandbox, DO session rewrite, tip-only en
 ---
 Out of scope notes
 Not invented: No issues beyond the specialist JSON; ranking and merge only.
-Deploy secrets / CF dashboard IDs: Binding real APIKEYS / USAGE KV ids is an ops step; code and wrangler.toml can enforce fail-closed but cannot invent production namespace IDs.
+Deploy secrets / CF dashboard IDs: Binding real API_KEYS / USAGE KV ids is an ops step; code and wrangler.toml can enforce fail-closed but cannot invent production namespace IDs.
 External services: Binance/Coinbase/DefiLlama availability and their own rate limits; we only fix AXIS relay/cache behavior.
 Pine language / pyne Pro API contract changes: Tip/delta run payloads may need pyne coordination if the engine API must change; client-side tip-only apply can proceed without that.
 TradingView / trademark APIs: Not implicated; do not introduce fictional host SDKs while fixing XSS/CSP.
@@ -1649,11 +1775,11 @@ Suggested follow-on PR sequence
 Ranking rubric (applied)
 1. Severity (critical > high > medium > low).
 2. User impact (data/account compromise, public compute cost, chart freezes, multi-MB downloads, every-keystroke jank).
-3. Effort (prefer S/M for topfixes when severity ties).
+3. Effort (prefer S/M for top_fixes when severity ties).
 4. Dependency (auth/CORS before metering; memory-first cache before DSM rewrite pays off fully).
 ---
 FILE: ../axis/docs/devops/index.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -1674,19 +1800,19 @@ DevOps
 Abstract
 AXIS DevOps spans five runnable surfaces:
 1. Vite + Solid PWA — product UI (bun run dev)
-2. Static server (axispwaserver.py or Vite preview) — production-like assets
+2. Static server (axis_pwa_server.py or Vite preview) — production-like assets
 3. Cloudflare Worker (worker/) — edge API / WS / OAuth / on-chain proxy
 4. Desktop (Tauri 2) — native shell around the same UI (bun run desktop:dev)
 5. AXIS CLI (packages/cli) — install, doctor, setup, secrets, deploy, health
 See Desktop (Tauri) and AXIS CLI for operator entry points.
-Python evaluation for desk workflows still often uses the Flask Pro API (make run on :5002). The Worker proxies there when EXTERNALBACKEND is set.
+Python evaluation for desk workflows still often uses the Flask Pro API (make run on :5002). The Worker proxies there when EXTERNAL_BACKEND is set.
 Conceptual model
 Topology cheat sheet
 | Mode | Command sketch | Ports |
 | --- | --- | --- |
 | Dev AXIS | bun run dev / bun run axis dev | Vite (often :3000) |
 | Dev + Flask | + make -C ../pyne run (checkout sometimes named pynescript) | :5002 |
-| Static dist | bun run build + python axispwaserver.py | :8081 |
+| Static dist | bun run build + python axis_pwa_server.py | :8081 |
 | Worker local | bun run axis dev worker / cd worker && bun run dev | :8787 |
 | CF Worker prod | axis deploy | HTTPS workers.dev / custom |
 | Operator | axis doctor · axis setup · axis health | — |
@@ -1716,7 +1842,7 @@ Testing reference
 AXIS hub
 ---
 FILE: ../axis/docs/devops/local-dev.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -1764,7 +1890,7 @@ Worker
 bun run axis dev worker # http://127.0.0.1:8787
 or: cd worker && bun run dev
 `
-Point cloud storage / Worker endpoint at http://127.0.0.1:8787. For /api/run proxy, set Worker EXTERNALBACKEND=http://127.0.0.1:5002 (works on local wrangler; not on Cloudflare edge).
+Point cloud storage / Worker endpoint at http://127.0.0.1:8787. For /api/run proxy, set Worker EXTERNAL_BACKEND=http://127.0.0.1:5002 (works on local wrangler; not on Cloudflare edge).
 AXIS CLI
 Preferred operator entry for install / doctor / setup / deploy — see AXIS CLI:
 `bash
@@ -1776,7 +1902,7 @@ bun run axis dev worker
 Makefile helpers
 | Target | Intent |
 | --- | --- |
-| python axispwaserver.py | Serve built dist/ on :8081 (not Vite) |
+| python axis_pwa_server.py | Serve built dist/ on :8081 (not Vite) |
 | make worker-dev | Wrangler dev |
 | make worker-install | Install worker deps |
 | bun run test:unit | Bun unit tests under tests/ |
@@ -1800,7 +1926,7 @@ Worked loop
 2. Terminal B: bun run dev.
 3. Open Vite URL; set engine Server-Side, endpoint http://127.0.0.1:5002.
 4. Load mock-walk if venues are blocked.
-5. Optional Terminal C: Worker with ALLOWOPENKEYS=1 for cloud library experiments.
+5. Optional Terminal C: Worker with ALLOW_OPEN_KEYS=1 for cloud library experiments.
 Load an example plugin
 With Vite or static server:
 `
@@ -1825,7 +1951,7 @@ Worker local
 Plugin examples
 ---
 FILE: ../axis/docs/devops/okf.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -1855,8 +1981,8 @@ bun run okf:query chart drawings
 bun run okf:context src/chart
 `
 A directory path resolves to that concept. A file path resolves to the deepest directory concept that contains it. Query terms match path segments and the file names listed on a concept, so ui does not match builtins, and drawings.ts finds the directory that contains it. AGENTS.md is gitignored and is not part of this bundle. The shared reading guide is okf/playbooks/read-this-first.md.
-OKFSKIP=1 skips the hook refresh. CI runs okf:check, so a commit that bypasses the hook still cannot merge a stale bundle.
-Generated concepts (okflock: generated) are replaced when their sources change. Curated playbooks (okflock: human) are kept. Put hand-written knowledge in okf/playbooks/ with that lock. The draft records exports, imports, and the first non-license comment. It does not call a model.
+OKF_SKIP=1 skips the hook refresh. CI runs okf:check, so a commit that bypasses the hook still cannot merge a stale bundle.
+Generated concepts (okf_lock: generated) are replaced when their sources change. Curated playbooks (okf_lock: human) are kept. Put hand-written knowledge in okf/playbooks/ with that lock. The draft records exports, imports, and the first non-license comment. It does not call a model.
 Layout
 | Path | Role |
 | --- | --- |
@@ -1867,8 +1993,61 @@ Layout
 | okf/playbooks/ | Curated reading guide and product map. |
 | scripts/okf/` | Compiler, linter, and query CLI. |
 ---
+FILE: ../axis/docs/devops/pyne-endpoints.mdx
+PYNE endpoint parity
+GET /health on the PYNE Pro API is the discovery surface: it lists endpoints,
+advertises optional routes under features., and reports Numba / IR-cache
+readiness under compile.. This page is the ledger of what AXIS actually uses,
+so a backend change can be reasoned about without grepping the client.
+The live-mode subset (features.live_modes, features.data_session) is consumed
+by capabilitiesFromHealth() in src/engines/catalog.ts; the rest of the payload
+is parsed by src/engines/health.ts and cached next to it
+(getCachedEngineHealth()), which is what the readiness badges and the optional
+runner surface read. Nothing is ever inferred from the service name.
+Used
+| Route | AXIS surface | Notes |
+| --- | --- | --- |
+| GET /, GET /health | Engine probe | Capabilities, readiness, route advertisement. |
+| POST /run | serverEngine.run | REST fallback; mode in the body. |
+| WS /ws/run | src/engines/engine-ws.ts | Preferred when /health reports websocket. |
+| POST /session, /tick, /append, DELETE | src/engines/live-sessions.ts | O(delta) live ticks; interpret only. |
+| GET /session/{id} | src/engines/live-sessions.ts | Idle reconciliation + telemetry (bars, idle_seconds, ttl_seconds). |
+| POST /data/session, /data/session/{id}/tick | src/engines/data-sessions.ts | Engine-owned series; identity only. |
+| GET /data/series, /data/series/bars | src/engines/data-sessions.ts | Status + newest window for the chart paint. |
+| POST /data/series/provide, /data/series/fetch | src/engines/data-sessions.ts | Cache-miss broker (local upload, then engine fetch). |
+| POST /run/batch | src/engines/batch.ts | ≥2 eligible reapplied indicators; 8-script cap. |
+| POST /compile/prewarm | src/engines/prewarm.ts, axis prewarm | Builtins and/or applied scripts. |
+| POST /optimize | src/optimize/client.ts | Falls back to the in-app random study. |
+| POST /lsp/completion, /hover, /diagnostics, /convert | src/editor/pyne-lsp-client.ts | /lsp/preevaluate is an alias of /diagnostics. |
+| GET /datafeed/ohlcv, /markets, /health | src/data/gateway.ts | Gateway mode pyne / auto. |
+| WS /datafeed/watch | src/streams/catalog.ts (ccxt-ws) | |
+| POST /preview/chart, /preview/indicator | src/engines/pro.ts | Pro tier; degrades to unavailable. |
+| POST /backtest/quick | src/engines/pro.ts | Pro tier; mock data when no OHLCV. |
+| GET /auth/usage | src/engines/pro.ts, axis usage | Requires a key. |
+| POST /auth/validate | axis keys validate --pyne | Check a key without consuming a call. |
+| POST /auth/create_key | axis keys create --pyne | Admin token only; never from the browser. |
+| POST /scripts | src/engines/runner.ts | Deploy the newest applied chart script as a hosted job; upsert by id. |
+| GET /cron/jobs, PUT /cron/jobs, POST /cron/run | src/engines/runner.ts | Only when features.script_runner; PYNE_RUNNER=1. |
+Deliberately unused
+| Route | Why not |
+| --- | --- |
+| GET /scripts, GET /scripts/{id}, DELETE /scripts/{id} | Job listing and lifecycle already flow through GET /cron/jobs (which carries the cron state AXIS renders); a separate read path would be a second source of truth. Deletion is left to the CLI/host rather than a destructive button in the charting UI. |
+| POST /run/batch with per-script inputs | The batch body has no per-script inputs, so scripts with resolved input. overrides stay on the single-run path. |
+| Compile-mode runs over sessions / data sessions | Sessions always evaluate in interpret; AXIS records the backend-reported mode and never silently switches a compiled series. |
+Readiness contract
+compile. is surfaced as warm / cold / unavailable / unknown
+(compileReadiness()), and it is cleared whenever the endpoint stops answering or
+a non-server engine is selected — a badge must never describe the wrong backend.
+features.script_runner gates the hosted-runner surface, and features.warm_compile
+is not read directly: AXIS sends mode: auto by default, so warm compile is used
+implicitly when the backend supports it.
+Related
+Engine-owned data plane — the /data/* contract in full.
+src/engines/health.ts — the typed /health parser.
+docs/architecture/evaluation.mdx — where each route sits in the evaluation map.
+---
 FILE: ../axis/docs/devops/vps-demo.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -1895,19 +2074,19 @@ Processes
 | Process | Command | Port |
 | --- | --- | --- |
 | Build (CI or once) | bun run build | — |
-| Static | PORT=8081 python axispwaserver.py | 8081 |
+| Static | PORT=8081 python axis_pwa_server.py | 8081 |
 | API | make run / python -m backend.app | 5002 |
 Same-origin proxy sketch (Caddy)
 ``caddy
 axis.example.com {
 handle /run {
-reverseproxy 127.0.0.1:5002
+reverse_proxy 127.0.0.1:5002
 }
 handle /optimize {
-reverseproxy 127.0.0.1:5002
+reverse_proxy 127.0.0.1:5002
 }
 handle {
-reverseproxy 127.0.0.1:8081
+reverse_proxy 127.0.0.1:8081
 }
 }
 `
@@ -1929,7 +2108,7 @@ Update deploy (from a machine that can SSH to the VPS):
 git push origin main
 2. On VPS (paths may vary — often /root/axis + rsync dist → PWA WorkingDirectory)
 Pro API (from pynescript checkout)
-./scripts/deployvps.sh
+./scripts/deploy_vps.sh
 or:
 ssh pynescript 'cd /root/pynescript && git pull --ff-only && systemctl restart pynescript-api'
 PWA: bun run build + wrangler pages deploy (axis.hoox.sh)
@@ -1957,7 +2136,7 @@ Internals
 | Concern | Notes |
 | --- | --- |
 | Pyodide offline | Ship full dist including vendor + pyodide |
-| Process supervisor | systemd units for flask + axispwaserver |
+| Process supervisor | systemd units for flask + axis_pwa_server |
 | Updates | Rebuild dist artifact; restart static only |
 | Secrets | Flask admin / pro keys separate from Worker |
 Worked example — systemd sketch
@@ -1966,7 +2145,7 @@ Worked example — systemd sketch
 [Service]
 WorkingDirectory=/opt/axis
 Environment=PORT=8081
-ExecStart=/usr/bin/python3 axispwaserver.py
+ExecStart=/usr/bin/python3 axis_pwa_server.py
 Restart=on-failure
 `
 Pair with an existing backend unit for Flask.
@@ -1974,7 +2153,7 @@ Invariants & edge cases
 1. CPU/RAM — Pyodide is browser-side; VPS load is Flask evaluate concurrency.
 2. Do not expose open admin tokens.
 3. Disk — dist + wheels are tens of MB.
-4. Hybrid: VPS Flask as EXTERNALBACKEND` for a CF Worker still works if VPS has a public URL.
+4. Hybrid: VPS Flask as EXTERNAL_BACKEND` for a CF Worker still works if VPS has a public URL.
 Failure modes
 | Issue | Fix |
 | --- | --- |
@@ -1987,7 +2166,7 @@ Cloudflare
 CORS
 ---
 FILE: ../axis/docs/enduser/getting-started/compose-recipes.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -2060,7 +2239,7 @@ make run # :5002
 bun run dev
 `
 Settings → Backend URL http://localhost:5002 → Test. Symbol like BTCUSDT, interval 1h / 1d.
-CORS: AXIS origin must be allowed by Flask ALLOWEDORIGINS.
+CORS: AXIS origin must be allowed by Flask ALLOWED_ORIGINS.
 Failure modes: rate limits; symbol not on venue; CORS; engine timeout on long history (AXIS scales timeout with bar count).
 ---
 Multi-venue / multi-source
@@ -2143,7 +2322,7 @@ Topologies
 ADR-001 pluggable registry
 ---
 FILE: ../axis/docs/enduser/getting-started/installation.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -2169,14 +2348,14 @@ Operator modes:
 | AXIS CLI (recommended ops) | bun run axis · make axis- | Install / doctor / setup / deploy / health |
 | Dev AXIS | bun run dev · axis dev | Day-to-day UI work |
 | Desktop shell | bun run desktop:dev | Tauri 2 native window |
-| Static PWA | dist/ + axispwaserver.py :8081 | Offline demo / VPS |
+| Static PWA | dist/ + axis_pwa_server.py :8081 | Offline demo / VPS |
 | AXIS at the edge | axis deploy worker (+ optional Pages) | Production data plane |
 Backend is optional when Engine = Client-Side (Pyodide) and sources/streams are mock or CSV.
 Prerequisites
 Bun ≥ 1.2 for package install, Vite, and the AXIS CLI
-Python 3.10+ if you use Flask Pro API (make run) or axispwaserver.py
+Python 3.10+ if you use Flask Pro API (make run) or axis_pwa_server.py
 Modern Chromium / Firefox / Safari (PWA install works best on Chromium)
-Optional: Cloudflare auth (CLOUDFLAREAPITOKEN or wrangler login) for Worker deploy
+Optional: Cloudflare auth (CLOUDFLARE_API_TOKEN or wrangler login) for Worker deploy
 Optional desktop: Rust + platform webview libs — Desktop (Tauri)
 CLI-first bootstrap (recommended)
 ``bash
@@ -2225,8 +2404,8 @@ In AXIS: open Workers Manager (topbar activity icon) or Settings → set Backend
 Deploy checklist (prod)
 `bash
 axis setup --github-client-id Ov23li… --remote-d1
-axis secret put ADMINTOKEN
-axis secret put EXTERNALBACKEND
+axis secret put ADMIN_TOKEN
+axis secret put EXTERNAL_BACKEND
 axis deploy
 axis health --oauth
 `
@@ -2234,7 +2413,7 @@ Production build (static)
 `bash
 axis install
 bun run build # → dist/
-python3 axispwaserver.py # serves dist/ on :8081
+python3 axis_pwa_server.py # serves dist/ on :8081
 `
 Confirm:
 App shell loads; chart requests history
@@ -2248,7 +2427,7 @@ Offline-first lab (no Flask)
 4. Storage → Local
 Disable network in DevTools; Run still executes. First Pyodide boot downloads/loads self-hosted runtime from the origin—allow that once while online, then go offline.
 CORS when using server engine
-Browser origin → Pro API must allow your AXIS origin. Flask uses ALLOWEDORIGINS. Localhost regex is typically included; for a VPS demo host, set an explicit origin list. Symptom of failure: POST /run blocked in Network tab (no Access-Control-Allow-Origin). Worker CORS: CORS and origins.
+Browser origin → Pro API must allow your AXIS origin. Flask uses ALLOWED_ORIGINS. Localhost regex is typically included; for a VPS demo host, set an explicit origin list. Symptom of failure: POST /run blocked in Network tab (no Access-Control-Allow-Origin). Worker CORS: CORS and origins.
 PWA install
 Manifest: void theme #0a0b10, name AXIS
 Service Worker: cache-first shell; network-first /api/; offline API returns structured failure so Pyodide path remains usable
@@ -2271,13 +2450,13 @@ Failure modes
 | Engine errors immediately | Endpoint down or wrong URL | Settings / Workers Manager → Probe |
 | Pyodide “BadZipFile” / HTML | SPA fallback instead of wheels | Ensure public/vendor and pyodide in dist/ |
 | SW stale UI | Aggressive cache | Unregister SW or hard reload |
-| APIKEYSREQUIRED on scripts | D1 without KV | Bind APIKEYS or local ALLOWOPENKEYS=1 — Auth |
+| API_KEYS_REQUIRED on scripts | D1 without KV | Bind API_KEYS or local ALLOW_OPEN_KEYS=1 — Auth |
 Internals (repo paths)
 | Path | Role |
 | --- | --- |
 | src/index.tsx, src/app.tsx | Solid entry |
 | vite.config.ts | Build |
-| axispwa_server.py | Static host |
+| axis_pwa_server.py | Static host |
 | public/manifest.webmanifest, SW | PWA |
 | worker/ | Cloudflare Worker data plane |
 | packages/cli/ | AXIS CLI (@hoox-sh/axis-cli) |
@@ -2291,7 +2470,7 @@ Desktop (Tauri)
 Worker
 ---
 FILE: ../axis/docs/enduser/getting-started/quick-start.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -2415,7 +2594,7 @@ Switching source auto-aligns default stream (e.g. mock-walk → mock-poll).
 Failure modes
 | Symptom | Action |
 | --- | --- |
-| CORS on /run | Fix ALLOWEDORIGINS / use Pyodide |
+| CORS on /run | Fix ALLOWED_ORIGINS / use Pyodide |
 | No trades in Strategy | Need entry+exit pair events; open strategy script |
 | Live no updates | Turn Live on and pick a stream (binance-ws or mock-poll`); check the network and the logs drawer |
 | Pyodide first run slow | Expected warm-up; assets self-hosted under origin |
@@ -2425,7 +2604,7 @@ Strategy and results
 Troubleshooting
 ---
 FILE: ../axis/docs/enduser/guides/alerts.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -2445,25 +2624,25 @@ description: "AXIS local alerts: price crosses, drawings, Pine conditions, on-ch
 Alerts
 Abstract
 AXIS ships a client-side alert book (src/alerts/) with an Alerts panel. Kinds cover price, percent change, drawing touch, indicator plot conditions, and on-chain TVL spikes. State persists in axis.alerts.v1. Delivery is local to the PWA: browser notifications, an optional HTTPS webhook, and an optional L2 webhook (richer JSON: channel: "l2", message, params snapshot).
-These alerts are not HOOX trade-worker orders. Pointing the L2 field at a PYNE/HOOX gateway is possible and dangerous — you are then inventing an execution path the PWA does not certify. Pine alert() and alertcondition() (and strategy alertmessage on fills) fire as pinealert rows when you arm them in the panel. Interpret runs export alerts / alertconditions; AXIS delivers only the last bar so a full backtest does not dump history. Plot-vs-threshold remains pinecondition.
+These alerts are not HOOX trade-worker orders. Pointing the L2 field at a PYNE/HOOX gateway is possible and dangerous — you are then inventing an execution path the PWA does not certify. Pine alert() and alertcondition() (and strategy alert_message on fills) fire as pine_alert rows when you arm them in the panel. Interpret runs export alerts / alert_conditions; AXIS delivers only the last bar so a full backtest does not dump history. Plot-vs-threshold remains pine_condition.
 Conceptual model
 Interface surface
 Kinds implemented in src/alerts/:
 | Kind | Fires when |
 | --- | --- |
-| pricecross | Price crosses a level |
-| priceabove / pricebelow | Price vs level |
-| pctchange | Bar-to-bar (or window) percent move |
-| drawingtouch | Price touches a user drawing’s levels (hline, fib, trend anchors) |
-| pinecondition | Applied indicator plot vs threshold (>, ` / < / cross vs a threshold.
+| price_cross | Price crosses a level |
+| price_above / price_below | Price vs level |
+| pct_change | Bar-to-bar (or window) percent move |
+| drawing_touch | Price touches a user drawing’s levels (hline, fib, trend anchors) |
+| pine_condition | Applied indicator plot vs threshold (>, ` / < / cross vs a threshold.
 5. For a drawing: place a horizontal line (or fib), pick it in the form, optionally set a tolerance.
 6. For Pine alert() / alertcondition(): run a strategy, open Alerts, kind pine alert, pick the script and alert() / alertcondition() / both. Optional title filter from the last run. In-browser compile records these in the compiled loop; the Flask/pyne-worker engine uses interpret for scripts that call them.
-On-chain: attach a TVL series, then add onchaintvlspike (default ~10% day-over-day in buildTvlSpikeEvents).
+On-chain: attach a TVL series, then add onchain_tvl_spike (default ~10% day-over-day in buildTvlSpikeEvents).
 Failure modes
 | Symptom | Cause | Fix |
 | --- | --- | --- |
 | No rows | Engine not running / no stream | Start live or replay bars |
-| Pine alert() never fires | No pinealert row armed; or remote compile without AXIS fallback | Arm pine alert; AXIS uses interpret on Flask/pyne-worker when the script calls alert() / alertcondition(). In-browser compile records them in the compiled loop. |
+| Pine alert() never fires | No pine_alert row armed; or remote compile without AXIS fallback | Arm pine alert; AXIS uses interpret on Flask/pyne-worker when the script calls alert() / alertcondition(). In-browser compile records them in the compiled loop. |
 | Pine kind never fires | Engine dropped alerts | Use Flask interpret; see PYNE alerts |
 | On-chain silent | Proxy HTML / CORS | Use Worker /api/onchain`, not the SPA origin |
 | Webhook posted a trade | You pointed it at HOOX | Use pyne-worker instead |
@@ -2549,7 +2728,7 @@ Script library
 Quick start
 ---
 FILE: ../axis/docs/enduser/guides/data-source-manager.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -2627,7 +2806,7 @@ bars-cache.ts is memory-first:
 | getCachedBars | Serve warm in-memory series immediately; cold miss hydrates from IndexedDB then fills memory |
 | getCachedBarCount | Count without cloning the full series when warm |
 | Range / window | sliceBarsForLoad + count helpers avoid full clones for progress UI |
-| Soft caps | BARSCACHEMAX (100k bars/series), BARSCACHEMAXSERIES (48 keys) |
+| Soft caps | BARS_CACHE_MAX (100k bars/series), BARS_CACHE_MAX_SERIES (48 keys) |
 DSM gap-fill progress uses getCachedBarCount instead of loading full series each tick.
 Limits & safety
 Max concurrent network jobs: 1 (queue the rest).
@@ -2640,7 +2819,7 @@ Quick start — one-shot Load
 UI shell — topbar panels
 ---
 FILE: ../axis/docs/enduser/guides/drawings.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -2680,7 +2859,7 @@ Tools
 | fib | fib | Two points; levels 0, 0.236, 0.382, 0.5, 0.618, 0.786, 1 |
 | measure | measure | Two points (delta readout) |
 | text | text | Anchor + label |
-Colors: default accent #939fff, up/down/measure variants in DRAWINGCOLORS.
+Colors: default accent #939fff, up/down/measure variants in DRAWING_COLORS.
 Style bar and per-tool settings
 The floating style bar (next to the rail) edits the selected drawing, or the defaults for the active tool when nothing is selected. Last-used extras are stored per tool (drawingPrefs.byKind).
 | Control | Where | Tools |
@@ -2712,7 +2891,7 @@ Annotate a level
 Fibonacci between swing points
 1. Select Fib.
 2. Click swing low → swing high (or reverse).
-3. Levels render from FIBLEVELS.
+3. Levels render from FIB_LEVELS.
 After Run with Pine lines/labels
 1. Run script that emits drawings.
 2. Layer clears previous script drawings, then applies new set.
@@ -2722,7 +2901,7 @@ Engine drawings[] map through pyne-drawings.ts before paint:
 | Engine surface | Chart behavior |
 | --- | --- |
 | line / box / label / polyline | SVG geometry on the script’s pane scale |
-| linefill / linefill | Filled quad between two line endpoints |
+| linefill / line_fill | Filled quad between two line endpoints |
 | force_overlay (line/box/label) | Paint on the price pane even when the script is overlay=false |
 | barcolor series | Not SVG — per-bar candle body/wick tint via plot-visuals |
 | table. | Chart overlay HUD by default, or the bottom Tables panel (see below) |
@@ -2965,7 +3144,7 @@ Compose recipes
 Plugins
 ---
 FILE: ../axis/docs/enduser/guides/mcp.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -2991,15 +3170,15 @@ Two planes:
 | --- | --- | --- |
 | Worker | No | Health, POST /api/run, cloud scripts, on-chain / market proxy |
 | App | Yes — this browser session | Chart, editor, indicators, alerts, watchlist, library, results, chrome |
-Auth is a Worker API key (pn…), the same Bearer used for cloud script storage. Secrets (exchange credentials, API keys) are redacted from snapshots.
+Auth is a Worker API key (pn_…), the same Bearer used for cloud script storage. Secrets (exchange credentials, API keys) are redacted from snapshots.
 Operator contract and tool schemas: MCP server.
 Conceptual model
 Connect this tab
-1. Mint a key: axis keys create (needs ADMINTOKEN).
-2. Studio → Settings → General → Worker (cloud + MCP) — paste Worker URL (https://worker.axis.hoox.sh or http://127.0.0.1:8787) and the pn… key. Data tab is exchange credentials only.
+1. Mint a key: axis keys create (needs ADMIN_TOKEN).
+2. Studio → Settings → General → Worker (cloud + MCP) — paste Worker URL (https://worker.axis.hoox.sh or http://127.0.0.1:8787) and the pn_… key. Data tab is exchange credentials only.
 3. Studio → Settings → General → MCP — leave Connect this tab to MCP on (default).
 4. Confirm the hint shows Bridge: open (or connecting). idle with “No Worker API key” means step 2 is missing.
-The PWA mints a short-lived one-time ticket over HTTP (Authorization: Bearer) then opens wss://…/api/mcp/bridge?ticket=… so the long-lived pn… key never appears in the WebSocket URL. The Worker partitions the session by a hash of the key — another user’s key cannot attach to your tab.
+The PWA mints a short-lived one-time ticket over HTTP (Authorization: Bearer) then opens wss://…/api/mcp/bridge?ticket=… so the long-lived pn_… key never appears in the WebSocket URL. The Worker partitions the session by a hash of the key — another user’s key cannot attach to your tab.
 Turn the toggle off if you do not want agents driving this browser.
 Status-bar indicator
 The status bar shows an MCP capsule with two dots:
@@ -3008,12 +3187,12 @@ red error/off, dim idle) plus how many PWA tabs the Worker sees on your
 key's session (MCP · 2 tabs). The count polls every 20 seconds while
 connected.
 Activity dot — lights up while an agent is actively driving this tab
-(any appinvoke received in the last few seconds). Hover for the last
+(any app_invoke received in the last few seconds). Hover for the last
 capability and when it ran.
 Click the capsule to open Settings → MCP.
 Note: MCP clients (Claude, Cursor, …) call POST /mcp statelessly, so there
 is no per-client presence — the capsule tracks bridge + tab attachment and
-live invoke activity, which is what app tools need.
+live invoke activity, which is what app_ tools need.
 MCP in System Logs
 Every bridge event lands in System Logs (topbar Logs) with source
 mcp: connects, disconnects, session tab-count changes, and one line per
@@ -3025,7 +3204,7 @@ on window focus, and when the bridge reconnects) — no manual reload hunting.
 Connect a client
 Print a snippet:
 ``bash
-axis mcp config --key pn…
+axis mcp config --key pn_…
 `
 Endpoint: https://worker.axis.hoox.sh/mcp (or your wrangler origin + /mcp).
 Remote HTTP (Inspector, Cursor, clients with URL + headers)
@@ -3034,7 +3213,7 @@ Remote HTTP (Inspector, Cursor, clients with URL + headers)
 "mcpServers": {
 "axis": {
 "url": "https://worker.axis.hoox.sh/mcp",
-"headers": { "Authorization": "Bearer pn…" }
+"headers": { "Authorization": "Bearer pn_…" }
 }
 }
 }
@@ -3043,24 +3222,24 @@ GET /mcp is public discovery (tool names only). Tool calls require Bearer.
 Stdio (axis mcp)
 For clients that only spawn a local process:
 `bash
-axis mcp --key pn…
-or AXISAPIKEY=pn… axis mcp
-axis mcp config --stdio --key pn…
+axis mcp --key pn_…
+or AXIS_API_KEY=pn_… axis mcp
+axis mcp config --stdio --key pn_…
 `
 The CLI forwards newline-delimited JSON-RPC from stdin to POST /mcp.
 What to ask an agent
 Worker-only (no tab):
-“Call axishealth and tell me if D1 and MCP are on.”
-“List my cloud scripts.” (axisscriptslist)
-“Run this Pine against these OHLCV rows.” (axisrun)
-Live tab (appsessionstatus → connected):
-“Load BTCUSDT 1h and tell me bar count and last close.” (chart.load then appget bars)
+“Call axis_health and tell me if D1 and MCP are on.”
+“List my cloud scripts.” (axis_scripts_list)
+“Run this Pine against these OHLCV rows.” (axis_run)
+Live tab (app_session_status → connected):
+“Load BTCUSDT 1h and tell me bar count and last close.” (chart.load then app_get bars)
 “Put this indicator in the editor and run it.” (editor.set + editor.run)
 “Open the alerts panel and list alerts.” (panels.set + alerts.list)
 “Screenshot the panes.” (chart.screenshot — PNG base64)
-Start with appcapabilities if the client has not cached the catalog.
+Start with app_capabilities if the client has not cached the catalog.
 Capabilities at a glance
-Pass these ids to appinvoke as capability, with a JSON payload.
+Pass these ids to app_invoke as capability, with a JSON payload.
 | Domain | Ids |
 | --- | --- |
 | App | app.snapshot, app.get, app.set, app.command, app.shortcut, app.event |
@@ -3076,7 +3255,7 @@ Pass these ids to appinvoke as capability, with a JSON payload.
 | Drawings | drawings.list / add / update / remove / clear / tool |
 | Settings | settings.get / set |
 | Status | status.get |
-appset paths (anything else is PATHDENIED): symbol, interval, source, engine, exchange, theme, chartType, uiScale, live.active, live.preferAfterLoad, editor.doc, editor.open, watchlist.open.
+app_set paths (anything else is PATH_DENIED): symbol, interval, source, engine, exchange, theme, chartType, uiScale, live.active, live.preferAfterLoad, editor.doc, editor.open, watchlist.open.
 Example payloads:
 `json
 { "capability": "chart.load", "payload": { "symbol": "ETHUSDT", "interval": "15m" } }
@@ -3085,7 +3264,7 @@ Example payloads:
 { "capability": "editor.set", "payload": { "doc": "//@version=6\nindicator(\"RSI\")\nplot(ta.rsi(close, 14))" } }
 `
 `json
-{ "capability": "alerts.create", "payload": { "name": "BTC 100k", "kind": "pricecross", "symbol": "BTCUSDT", "params": { "price": 100000 } } }
+{ "capability": "alerts.create", "payload": { "name": "BTC 100k", "kind": "price_cross", "symbol": "BTCUSDT", "params": { "price": 100000 } } }
 `
 `json
 { "capability": "drawings.add", "payload": { "kind": "trend", "points": [{ "time": 1700000000, "price": 67000 }, { "time": 1700003600, "price": 67600 }] } }
@@ -3095,23 +3274,23 @@ Example payloads:
 `
 Full argument tables: MCP server.
 Limits
-No tab → Worker tools still work; app returns SESSIONOFFLINE.
-MCPBRIDGE unbound → NOMCPBRIDGE (add the Durable Object in wrangler.toml and deploy).
-axisrequest is not an open proxy — only AXIS JSON APIs. Stream, OAuth device-flow, and /mcp recursion are blocked.
+No tab → Worker tools still work; app_ returns SESSION_OFFLINE.
+MCP_BRIDGE unbound → NO_MCP_BRIDGE (add the Durable Object in wrangler.toml and deploy).
+axis_request is not an open proxy — only AXIS JSON APIs. Stream, OAuth device-flow, and /mcp recursion are blocked.
 Agents must not invent Pine APIs (TV.set, pine.chart.setTheme, …). See AGENTS.md in the repo.
 MCP is not HOOX order routing. Alerts remain local (browser / webhook).
 Troubleshooting
 | Symptom | Check |
 | --- | --- |
-| 401 NOKEY / INVALIDKEY | Bearer on /mcp; mint with axis keys create |
-| 503 APIKEYSREQUIRED | D1 bound without APIKEYS KV — axis setup kv |
-| SESSIONOFFLINE | Tab open, MCP toggle on, same pn… as the client |
+| 401 NO_KEY / INVALID_KEY | Bearer on /mcp; mint with axis keys create |
+| 503 API_KEYS_REQUIRED | D1 bound without API_KEYS KV — axis setup kv |
+| SESSION_OFFLINE | Tab open, MCP toggle on, same pn_… as the client |
 | Bridge: idle / no API key | Settings → General → Worker (cloud + MCP) |
-| Bridge: error | Worker URL reachable; CORS; MCPBRIDGE deployed |
+| Bridge: error | Worker URL reachable; CORS; MCP_BRIDGE deployed |
 | App command unknown | Palette has not mounted yet — use chart. / editor. ids instead |
 In-page test (browser console on the AXIS origin):
 `js
-await window._AXISMCP__.invoke('chart.get')
+await window.__AXIS_MCP__.invoke('chart.get')
 ``
 See also
 MCP server — tools, resources, prompts, allowlist
@@ -3120,7 +3299,7 @@ Auth
 Manager and settings
 ---
 FILE: ../axis/docs/enduser/guides/on-chain.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -3146,7 +3325,7 @@ Abstract
 | On-Chain panel | Search protocols / pools, attach / hide / detach series |
 | DefiLlama TVL | Daily USD liquidity history for a protocol slug |
 | GeckoTerminal OHLCV | DEX pool candlesticks (minute / hour / day aggregates) |
-| TVL spike events | Day-over-day \|%\| threshold events from attached TVL (tvlspike / tvldrop) |
+| TVL spike events | Day-over-day \|%\| threshold events from attached TVL (tvl_spike / tvl_drop) |
 | Left price scale | Independent metric axis so main OHLCV keeps the right scale |
 | Provenance | Each series records provider + finality / snapshot notes |
 Open from the topbar Panels group (On-Chain), or command palette → toggle the On-Chain panel (panel id onchain).
@@ -3179,31 +3358,31 @@ Related palette actions (panel / hygiene):
 | onchain.clear.events | Clear event markers plane |
 | onchain.health | Probe Worker /api/onchain/health (Connection HUD) |
 Export format: one row per point — series,time,value — with time as unix seconds and value as USD TVL (or other scalar). Empty attachments still download a header-only file.
-Popular preset: empty DefiLlama protocol browse (highest TVL first), capped by the chart series limit (MAXONCHAINSERIES, currently 8). Already-attached slugs refresh in place rather than duplicating.
+Popular preset: empty DefiLlama protocol browse (highest TVL first), capped by the chart series limit (MAX_ONCHAIN_SERIES, currently 8). Already-attached slugs refresh in place rather than duplicating.
 Refresh: re-runs the DefiLlama protocol TVL fetch for each attachment so left-scale lines stay current after long sessions.
 DEX pools (GeckoTerminal)
 Phase 2 adds DEX pool OHLCV via GeckoTerminal public API (no API key). Use this when you want on-chain pool candles rather than protocol TVL:
 | Concept | Detail |
 | --- | --- |
-| Network | Gecko network id (eth, solana, base, arbitrum, polygonpos, …) |
+| Network | Gecko network id (eth, solana, base, arbitrum, polygon_pos, …) |
 | Pool address | EVM 0x + 40 hex, or Solana-style base58 |
 | Timeframe | minute / hour / day with aggregate (e.g. 1h → hour + aggregate 1) |
 | Currency | Default USD when proxied with query pass-through |
 | Page size | Max 1000 candles per request (limit); Gecko hard cap |
-| Walk-back | endTime → Gecko beforetimestamp (bars strictly before that unix second) |
+| Walk-back | endTime → Gecko before_timestamp (bars strictly before that unix second) |
 Client helpers live in src/onchain/geckoterminal.ts (fetchGeckoPoolOhlcv, searchGeckoPools, interval/network maps). Browsers should use the Worker gecko proxy (below) because public GeckoTerminal hosts often lack CORS for arbitrary origins.
 Deep history (Data Sources + GeckoTerminal DEX)
 Topbar Load fetches a single page (up to 1000 bars). For multi-page history down to a past date:
 1. Set the chart source to GeckoTerminal DEX (geckoterminal-ohlcv).
 2. Use a pool symbol such as eth:0x… (network + pool address).
 3. Open Data (Data Source Manager) → set symbol / source / timeframe / accumulate to.
-4. Start background backfill — AXIS walks older pages with endTime only (each page maps to beforetimestamp). The source does not multi-page inside one fetchHistorical call; DSM does it page-by-page.
+4. Start background backfill — AXIS walks older pages with endTime only (each page maps to before_timestamp). The source does not multi-page inside one fetchHistorical call; DSM does it page-by-page.
 See Data Source Manager for job phases and cache behavior.
 Events (TVL spikes)
 From an attached TVL scalar series, AXIS can derive day-over-day percent-change events:
 | Field | Behavior |
 | --- | --- |
-| Type | tvlspike (gain) or tvldrop (loss) |
+| Type | tvl_spike (gain) or tvl_drop (loss) |
 | Default threshold | 10% absolute day-over-day change |
 | Severity | warn below critical band; critical for large moves (default ~25% or 2.5× threshold) |
 | Payload | pctChange, prevValue, value, thresholds |
@@ -3214,7 +3393,7 @@ Scale and chart behavior
 | --- | --- |
 | Scale | On-chain TVL lines use the built-in left price scale (left) |
 | Main market | Primary OHLCV stays on the right scale |
-| Compare | Compare overlays may share the left scale; on-chain keys are onchain, not overlay |
+| Compare | Compare overlays may share the left scale; on-chain keys are onchain_, not overlay_ |
 | Units | TVL values are USD liquidity totals from DefiLlama; DEX OHLCV is pool quote (often USD) |
 Settings
 Settings → General → On-Chain is a short note only (no extra bindings):
@@ -3265,7 +3444,7 @@ Worker overview — /api/onchain/… route table
 CORS and origins — browser cross-origin constraints
 ---
 FILE: ../axis/docs/enduser/guides/pyne-agent.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of AXIS.
 SPDX-License-Identifier: AGPL-3.0-only
 ---
@@ -3280,7 +3459,7 @@ Pine Script and TradingView are trademarks of TradingView, Inc. Cloudflare is a 
 Prerequisites
 1. A deployed pyne-agent-worker origin (or local wrangler dev).
 2. AXIS open in the browser (dev or production PWA).
-Optional: API key if the worker has APIKEY set.
+Optional: API key if the worker has API_KEY set.
 Install the plugin
 1. Open Manager → Plugins → Install.
 2. Paste the same-origin module (avoids cross-origin module CORS):
@@ -3402,7 +3581,7 @@ Finish-cut tiles used on hoox.sh/axis: docs/images/landing/.
 | Open Graph | axis-og.png |
 ---
 FILE: ../axis/docs/enduser/guides/script-library.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -3474,7 +3653,7 @@ Git backend
 | Drafts local | No remote commit for draft buffer |
 | basePath | Default pine-library/ |
 | Providers | github, gitlab (+ self-hosted apiBaseUrl) |
-Token scopes: GitHub contents:write; GitLab api or writerepository.
+Token scopes: GitHub contents:write; GitLab api or write_repository.
 Published libraries (import emulator)
 library("Name") scripts can be published as versioned folders so other scripts can import owner/Name/1 as alias:
 ``
@@ -3526,7 +3705,7 @@ Compose recipes — git / edge
 State namespaces
 ---
 FILE: ../axis/docs/enduser/guides/strategy-and-results.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -3552,7 +3731,7 @@ status: success | error
 plots[] | series{}
 events[] — entries, exits, orders, custom
 drawings[] — Pine line/label/box objects
-meta{} — ms, overlay, scriptname, plotmeta, …
+meta{} — ms, overlay, script_name, plot_meta, …
 error?
 `
 AXIS stores this as store.lastRun (in-memory; not fully rehydrated from localStorage).
@@ -3618,7 +3797,7 @@ Failure modes
 | Symptom | Explanation |
 | --- | --- |
 | Events but 0 trades | Only entries, or unpaired ids |
-| Empty plots | Series all null / name filtered (_` prefix hidden) |
+| Empty plots | Series all null / name filtered (__` prefix hidden) |
 | Markers missing | Manager not mounted or events lack times |
 | Huge Raw JSON | Many events—export file rather than copy |
 See also
@@ -3627,7 +3806,7 @@ AXIS — results and strategy
 AXIS — indicators
 ---
 FILE: ../axis/docs/enduser/guides/troubleshooting.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -3664,7 +3843,7 @@ Data plane
 Calc plane — server engine
 | Symptom | Checks | Fix |
 | --- | --- | --- |
-| Failed fetch /run | Endpoint, CORS preflight | ALLOWEDORIGINS; Settings probe |
+| Failed fetch /run | Endpoint, CORS preflight | ALLOWED_ORIGINS; Settings probe |
 | HTTP 4xx/5xx | Response JSON message | Fix script; backend logs |
 | Timeout | Bar count × complexity | Shorter history; raise server resources |
 | Plots missing | status: success but empty series | Script has no plots; check Raw |
@@ -3697,7 +3876,7 @@ Chart / editor (recent surfaces)
 | Editor no lines / zero height | Dock height chain | Detach/reattach or toggle panel; editor should fill right strip |
 | Editor covers Indicators | Side-by-side dock | Both open on right → Indicators left of Editor; resize each panel |
 | Replay shows one candle only | Session start | Replay starts at last bar with full history; Play at end restarts from bar 0 |
-| No Debug chips / Pins | Toggles + log shape | Enable Debug / Pins; logs need line and/or barindex — Debugging |
+| No Debug chips / Pins | Toggles + log shape | Enable Debug / Pins; logs need line and/or bar_index — Debugging |
 | Completions thin | Builtins corpus | Re-sync pyne-builtins.json from PYNE; optional remote LSP |
 Shell / PWA
 | Symptom | Checks | Fix |
@@ -3710,9 +3889,9 @@ Shell / PWA
 MCP
 | Symptom | Checks | Fix |
 | --- | --- | --- |
-| 401 on /mcp | Bearer pn… | axis keys create; client Authorization header |
-| SESSIONOFFLINE | Tab open? Same key? | Settings → MCP on; Settings → General → Worker (cloud + MCP) has the key |
-| NOMCPBRIDGE | Worker health features.mcpBridge | Bind MCPBRIDGE in wrangler.toml and deploy |
+| 401 on /mcp | Bearer pn_… | axis keys create; client Authorization header |
+| SESSION_OFFLINE | Tab open? Same key? | Settings → MCP on; Settings → General → Worker (cloud + MCP) has the key |
+| NO_MCP_BRIDGE | Worker health features.mcpBridge | Bind MCP_BRIDGE in wrangler.toml and deploy |
 | Bridge idle | Cloud API key | Settings → General → Worker (cloud + MCP) |
 Guide: MCP (agents).
 Logging
@@ -3822,7 +4001,7 @@ Plugins — contracts and catalogs
 PYNE runtime — evaluation semantics
 ---
 FILE: ../axis/docs/enduser/reference/faq.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -3856,7 +4035,7 @@ Default endpoint points at a VPS—is that required?
 No. Change Settings → Backend URL to http://localhost:5002 or your Worker. Defaults may reference a public demo API host for convenience.
 Data & privacy
 Can an agent control AXIS?
-Yes. The Worker serves MCP at POST /mcp (Bearer pn…). Worker tools (axisrun, scripts, on-chain) do not need a tab. Chart/editor/panels need Settings → MCP connected. Guide: MCP (agents).
+Yes. The Worker serves MCP at POST /mcp (Bearer pn_…). Worker tools (axis_run, scripts, on-chain) do not need a tab. Chart/editor/panels need Settings → MCP connected. Guide: MCP (agents).
 Where do API keys live?
 In this browser’s localStorage state / pluginsConfig. They are sent as HTTP headers only to endpoints you configure (cloud storage, MCP bridge, etc.). They are not part of the Pine script body. Snapshots returned to MCP clients redact secret-like fields.
 Are OHLCV bars uploaded?
@@ -3878,7 +4057,7 @@ What is Debug vs Pins?
 | | Debug | Pins |
 | --- | --- | --- |
 | Shows | End-of-line chips in the editor | Markers on the chart + gutter |
-| Needs | Line reference in logs/errors | barindex and/or bar time |
+| Needs | Line reference in logs/errors | bar_index and/or bar time |
 | Toggle | Editor header Debug | Pins or Alt+P |
 Full workflow: Debugging.
 Multi-chart, Compare, Replay, Alerts?
@@ -3911,7 +4090,7 @@ Glossary
 Compose recipes
 ---
 FILE: ../axis/docs/enduser/reference/glossary.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -3984,7 +4163,7 @@ Editor & debug
 | Term | Definition |
 | --- | --- |
 | Debug | Inline end-of-line chips from last-run logs with line refs. |
-| Pins | Chart markers + gutter for logs with barindex/time. |
+| Pins | Chart markers + gutter for logs with bar_index/time. |
 | Problems | Clickable list of engine diagnostics for the last run. |
 | Ruler | 80-character column guide in the Pine editor. |
 | Symbols | Editor catalog of TV-editor-safe arrows, box drawing, and chart emoji. |
@@ -4281,7 +4460,7 @@ studio/plugins-catalog.png
 studio/plugins-install.png
 ---
 FILE: ../axis/docs/index.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -4350,7 +4529,7 @@ Infrastructure names (do not rename lightly)
 Demo topologies
 Dev: Vite :3000 + Flask :5002 (axis install then bun run dev)
 Desktop: bun run desktop:dev (Tauri 2)
-Static: bun run build + axispwa_server.py :8081
+Static: bun run build + axis_pwa_server.py :8081
 Worker: axis dev worker / wrangler on :8787
 Prod: axis deploy → Worker worker-axis (https://worker.axis.hoox.sh) + Pages https://axis.hoox.sh
 See topologies, AXIS CLI, and local dev.
@@ -4368,7 +4547,7 @@ ADRs
 PYNE runtime
 ---
 FILE: ../axis/docs/plugins/contracts.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -4481,7 +4660,7 @@ series?: Record;
 events: Array;
 drawings?: Array>;
 error?: string;
-meta?: { mode?; scriptid?; runid?; ms?; overlay?; scriptname?; [k: string]: unknown };
+meta?: { mode?; script_id?; run_id?; ms?; overlay?; script_name?; [k: string]: unknown };
 }
 interface EnginePlugin extends PluginBase {
 kind: 'engine';
@@ -4561,7 +4740,7 @@ Dynamic loader
 Plugin examples
 ---
 FILE: ../axis/docs/plugins/datasets.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -4580,7 +4759,7 @@ description: "Dataset plugins — fetchDataset contract. The only built-in is de
 ---
 Datasets
 Abstract
-A dataset plugin loads an alternate series through fetchDataset. The only built-in is defillama-tvl (BUILTINDATASETS in src/onchain/catalog.ts). GeckoTerminal pool candles are source geckoterminal-ohlcv, with the client in src/onchain/geckoterminal.ts and the Worker gecko proxy. They are not a dataset id. Derived TVL spike events come from src/onchain/events.ts. UI: On-Chain panel.
+A dataset plugin loads an alternate series through fetchDataset. The only built-in is defillama-tvl (BUILTIN_DATASETS in src/onchain/catalog.ts). GeckoTerminal pool candles are source geckoterminal-ohlcv, with the client in src/onchain/geckoterminal.ts and the Worker gecko proxy. They are not a dataset id. Derived TVL spike events come from src/onchain/events.ts. UI: On-Chain panel.
 Conceptual model
 Interface surface
 ``ts
@@ -4605,7 +4784,7 @@ DatasetFetchOpts
 OnchainDataset
 | Field | Notes |
 | --- | --- |
-| kind | ohlcv \| scalarseries \| multiseries \| events \| table |
+| kind | ohlcv \| scalar_series \| multi_series \| events \| table |
 | points / series / bars / events | payload shape depends on kind |
 | provenance | { provider, queryId?, url? } — required for UI honesty |
 | finality | pending \| safe \| finalized \| unknown |
@@ -4639,9 +4818,9 @@ GeckoTerminal
 | /networks/:net/pools/:addr/ohlcv/:tf | GET /api/onchain/gecko/networks/.../ohlcv/... | https://api.geckoterminal.com/api/v2/networks/.../ohlcv/... |
 | /search/pools | GET /api/onchain/gecko/search/pools | https://api.geckoterminal.com/api/v2/search/pools |
 Allowlisted query keys:
-OHLCV: aggregate, limit, currency, beforetimestamp
+OHLCV: aggregate, limit, currency, before_timestamp
 Search: query, network, page, include
-Address validation on the Worker: EVM 0x[a-fA-F0-9]{40} or Solana-style base58 ^[1-9A-HJ-NP-Za-km-z]{32,48}$. Network ids: ^[a-z0-9]+$.
+Address validation on the Worker: EVM 0x[a-fA-F0-9]{40} or Solana-style base58 ^[1-9A-HJ-NP-Za-km-z]{32,48}$. Network ids: ^[a-z0-9_]+$.
 Resolver: src/onchain/proxy.ts. Handler: worker/src/onchain.ts.
 Cache keys (IDB dataset cache):
 provider|chainId|protocol|address|metric|facet|resolution via instrumentCacheKey.
@@ -4652,7 +4831,7 @@ Sources — OHLCV (separate plane)
 Contracts — shared plugin base
 ---
 FILE: ../axis/docs/plugins/dynamic-loader.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -4685,7 +4864,7 @@ getInstalledPlugins(): InstalledPlugin[]
 restoreInstalledPlugins(): Promise
 normalizePluginUrl(url: string): string
 assertSafePluginUrl(href: string): void
-PLUGINSKEY // 'pynescript.axis.plugins.v1'
+PLUGINS_KEY // 'pynescript.axis.plugins.v1'
 `
 InstalledPlugin
 `ts
@@ -4744,7 +4923,7 @@ Invariants & edge cases
 4. No code signing — trust the URL owner.
 Worked example
 `bash
-After bun run build + axispwaserver.py
+After bun run build + axis_pwa_server.py
 Load:
 http://127.0.0.1:8081/plugins/example-coingecko-source.js
 `
@@ -4766,7 +4945,7 @@ Registry
 CORS and origins
 ---
 FILE: ../axis/docs/plugins/engines.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -4791,7 +4970,7 @@ An engine evaluates a script against bars and returns plots, series, events, and
 | server | Server-Side | External Flask Pro API or AXIS Worker /api/run proxy |
 | pyne-worker | pyne-worker (edge) | HOOX pyne-worker Cloudflare edge evaluator (POST /run) |
 | pyodide | Client-Side (Pyodide) | Browser WebAssembly via self-hosted Pyodide |
-AXIS Worker in-process Pyodide (PYODIDEINWORKER) remains a separate, feature-gated edge path — see Worker runtime.
+AXIS Worker in-process Pyodide (PYODIDE_IN_WORKER) remains a separate, feature-gated edge path — see Worker runtime.
 Conceptual model
 Interface surface
 ``ts
@@ -4808,7 +4987,7 @@ Config schema
 HTTP contract
 POST ${endpoint}/run?mode=…
 Body: { script, data: bars }
-Success JSON: plots, series?, events?, drawings?, meta?, mode, scriptid, runid
+Success JSON: plots, series?, events?, drawings?, meta?, mode, script_id, run_id
 Error: non-OK status or status: 'error' → mapped to RunResult with error
 WebSocket contract (preferred when available)
 URL: ws(s)://host/ws/run (derived from endpoint; requires flask-sock on the Pro API)
@@ -4818,7 +4997,7 @@ AXIS server engine tries WS first (preferWs, default true), then REST. Health GE
 meta.transport is "ws" or "rest" so the Connection HUD can show the path used.
 Readiness: GET ${endpoint}/ within 8s.
 Timeouts: adaptive min(180s, max(60s, 30s + bars×80ms)).
-Note on Worker path: the PWA’s server engine posts to /run on whatever endpoint you set. The AXIS data-plane Worker exposes POST /api/run. When pointing the PWA at that Worker, either put a reverse-proxy path rewrite in front, or set the endpoint so the engine path matches your deployment. Worker handleRun validates { script, data, mode? } and today prefers proxying to EXTERNALBACKEND (Flask). In-worker Pyodide only if PYODIDEINWORKER=enabled and the wheel pipeline works.
+Note on Worker path: the PWA’s server engine posts to /run on whatever endpoint you set. The AXIS data-plane Worker exposes POST /api/run. When pointing the PWA at that Worker, either put a reverse-proxy path rewrite in front, or set the endpoint so the engine path matches your deployment. Worker handleRun validates { script, data, mode? } and today prefers proxying to EXTERNAL_BACKEND (Flask). In-worker Pyodide only if PYODIDE_IN_WORKER=enabled and the wheel pipeline works.
 pyne-worker engine
 Dedicated HOOX pyne-worker edge host (not worker-axis).
 | Key | Default | Notes |
@@ -4826,7 +5005,7 @@ Dedicated HOOX pyne-worker edge host (not worker-axis).
 | endpoint | https://pyne-worker.cryptolinx.workers.dev | Production workers.dev |
 | mode | interpret | interpret \| compile \| auto (see /health features.modes) |
 | preferWs | false | Edge deploys are usually REST-only |
-| apiKey | '' | Sent as X-API-Key + Bearer when the Worker secret APIKEY is set |
+| apiKey | '' | Sent as X-API-Key + Bearer when the Worker secret API_KEY is set |
 Contract: same evaluate body as Flask (POST /run). Health: GET /health → { status: "ok", worker: "pyne-worker", … }.
 UI: Topbar engine list, Settings preset pyne-worker edge, Workers Manager → Use as calculation backend / Use pyne-worker engine.
 Browser CORS: the pyne-worker origin must allow the AXIS page Origin (or use a same-origin reverse proxy). Auth failures return HTTP 401 without a key.
@@ -4835,22 +5014,22 @@ Config
 | Key | Default |
 | --- | --- |
 | indexUrl | /pyodide/v0.29.5/ (self-hosted) |
-Boot pipeline (ensure)
+Boot pipeline (_ensure)
 1. Prefetch assets (prefetchPyodideAssets) — wasm, stdlib zip, micropip wheels.
 2. loadPyodide({ indexURL }).
 3. micropip.install same-origin /vendor/pynescript-0.6.9-py3-none-any.whl and the antlr4 4.13.2 wheel.
-4. Fetch /pyodide/pynescriptruntime.py and runPythonAsync it.
+4. Fetch /pyodide/pynescript_runtime.py and runPythonAsync it.
 Refreshing the pyne wheel (after pyne compiler/runtime changes):
 `bash
-from axis repo — builds sibling ../pyne (or PYNEROOT; dir sometimes still named pynescript) and vendors the wheel
+from axis repo — builds sibling ../pyne (or PYNE_ROOT; dir sometimes still named pynescript) and vendors the wheel
 ./scripts/sync-pyne-wheel.sh
 bun run build
 `
 Keep the hard-coded wheel filename in src/engines/catalog.ts / index.js in sync if the package version changes. The browser bridge is interpret-first; mode=compile/auto uses the wheel’s pynescript.compiler when NumPy loads (object-mode works without Numba; pure-numeric compile still needs server/Numba).
-5. run calls runscript(script, bars) in Python and JSON.parses the result.
+5. run calls run_script(script, bars) in Python and JSON.parses the result.
 Guards: assertZipAsset rejects HTML SPA fallbacks (classic deploy footgun when public/vendor is missing from dist/).
 Capabilities: { offline: true, needsNetwork: false } after assets are cached same-origin.
-Helpers: preloadPyodide(), LOCALPYODIDEVERSION = '0.29.5'.
+Helpers: preloadPyodide(), LOCAL_PYODIDE_VERSION = '0.29.5'.
 Internals
 | Path | Role |
 | --- | --- |
@@ -4859,7 +5038,7 @@ Internals
 | public/vendor/*.whl | Shipped wheels |
 | public/pyodide/ | Self-hosted Pyodide + runtime py |
 | worker/src/runtime.ts | Edge /api/run |
-| worker/RUNTIME.md | Gated in-worker Python (PYODIDEINWORKER, default disabled) |
+| worker/RUNTIME.md | Gated in-worker Python (PYODIDE_IN_WORKER, default disabled) |
 Invariants & edge cases
 1. AXIS never imports pynescript Python except through engines.
 2. Abort — pass signal from UI cancel; server engine respects it.
@@ -4881,7 +5060,7 @@ Failure modes
 | pynescript wheel returned HTML | SPA fallback; deploy vendor into dist; static server must not rewrite .whl |
 | loadPyodide not available | Missing pyodide.js / blocked script |
 | HTTP error from server | Flask down; wrong endpoint; CORS |
-| Worker 503 NOBACKEND | EXTERNAL_BACKEND` empty and Pyodide path disabled/failed |
+| Worker 503 NO_BACKEND | EXTERNAL_BACKEND` empty and Pyodide path disabled/failed |
 See also
 Evaluation map — Flask vs Pyodide vs Worker vs (not) PyneTS
 Worker runtime
@@ -4891,7 +5070,7 @@ PyneTS — TS library; AXIS does not import it
 AXIS and HOOX
 ---
 FILE: ../axis/docs/plugins/index.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -4968,7 +5147,7 @@ Failure modes
 | Empty source dropdown | ensureBuiltins() never ran at app entry |
 | Dynamic plugin vanishes after reload | URL 404 or CORS; check System Logs (plugins channel) |
 | Engine “not ready” | Flask/Worker down (server) or missing /vendor/.whl / /pyodide/ (pyodide) |
-| Cloud library 401 | Missing Bearer pn… key or unbound API_KEYS KV in production |
+| Cloud library 401 | Missing Bearer pn_… key or unbound API_KEYS KV in production |
 PYNE Agent (sister worker)
 Natural-language script authoring is not an engine — it is an optional component plugin backed by pyne-agent-worker (Cloudflare Workers AI). Install from:
 `text
@@ -4984,7 +5163,7 @@ Plugin examples
 Worker (cloud storage + stream relay)
 ---
 FILE: ../axis/docs/plugins/pyne-agent.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of AXIS.
 SPDX-License-Identifier: AGPL-3.0-only
 ---
@@ -5017,7 +5196,7 @@ https://pyne-agent-worker.cryptolinx.workers.dev/plugin/axis-pine-agent.js
 | Field | Meaning |
 | --- | --- |
 | endpoint | Agent Worker origin (no trailing slash) — not the AXIS page origin |
-| apiKey | Worker APIKEY (optional in open local mode) |
+| apiKey | Worker API_KEY (optional in open local mode) |
 | pineVersion | auto \| v5 \| v6 |
 | style | auto \| indicator \| strategy \| library |
 | persona | auto \| pine (coder) \| axis (app guide + operator — changes the app via MCP) \| trader (market analysis, risk, psychology). Set in Workers Manager → PYNE Agent. |
@@ -5028,7 +5207,7 @@ See also: Dynamic loader, Plugin examples, end-user guide PYNE Agent, Workers Ma
 Standalone vs HOOX
 | Mode | Config | Behavior |
 | --- | --- | --- |
-| Standalone (default) | No PYNESERVICE / PYNEWORKERURL on the worker | Chat + optional RAG; validation.skipped |
+| Standalone (default) | No PYNE_SERVICE / PYNE_WORKER_URL on the worker | Chat + optional RAG; validation.skipped |
 | HOOX-enhanced | Optional pyne-worker binding or URL | generate → POST /run → fix retries |
 AXIS users who only want natural-language script authoring never need to deploy pyne-worker.
 API surface (worker)
@@ -5047,7 +5226,7 @@ Failure modes
 | Symptom | Likely cause |
 | --- | --- |
 | Plugin load fails (kind: component) | CORS / mixed content on module URL; verify HTTPS and that AXIS is current (component URL load is supported) |
-| 401 on chat | Missing/wrong apiKey vs worker APIKEY |
+| 401 on chat | Missing/wrong apiKey vs worker API_KEY |
 | Empty RAG quality | KB not ingested; chat still works with model knowledge only |
 | validation.available: false` | Expected in standalone — not an error |
 See also
@@ -5057,7 +5236,7 @@ pyne-agent-worker README
 PYNE docs
 ---
 FILE: ../axis/docs/plugins/registry.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -5102,7 +5281,7 @@ Bulk
 | summary() | { sources, streams, engines, storages } lightweight summaries |
 | on(listener) | Subscribe to { type, kind, id }; returns unsubscribe |
 Order preservation
-Private arrays sourceOrder, streamOrder, engineOrder, storageOrder ensure UI dropdowns stay stable when plugins re-register (idempotent set without reordering).
+Private arrays _sourceOrder, _streamOrder, _engineOrder, _storageOrder ensure UI dropdowns stay stable when plugins re-register (idempotent set without reordering).
 Built-in protection
 `ts
 if (p.builtIn && !opts?.allowBuiltIn) return false;
@@ -5137,7 +5316,7 @@ getActiveEngineConfig() injects store.endpoint when the engine has an endpoint c
 Invariants & edge cases
 1. Re-register same id — overwrites the plugin object; does not duplicate order entry.
 2. Listener errors are swallowed — one bad subscriber cannot break registration.
-3. clear() does not reset bootstrap/catalog flags — tests use resetBootstrapFlag / _resetRegistrationFlag helpers.
+3. clear() does not reset bootstrap/catalog flags — tests use _resetBootstrapFlag / _resetRegistrationFlag helpers.
 4. Components — no order array; listComponents is Map iteration order.
 Worked examples
 Register a test source
@@ -5173,7 +5352,7 @@ Dynamic loader
 Plugins hub
 ---
 FILE: ../axis/docs/plugins/sources.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -5208,7 +5387,7 @@ Built-in catalog
 | mock-walk | Mock Walk | no | Offline random walk; optional Mulberry-like seed |
 | csv-upload | CSV / JSON Upload | no | Reads last upload from upload-store |
 | data-manager | Data Manager cache | cache, then venue | Local bars-cache, then gap-fill via the venue REST source |
-UI order is BUILTINSOURCES array order (Binance first).
+UI order is BUILTIN_SOURCES array order (Binance first).
 Interface surface
 Every source implements SourcePlugin (contracts):
 ``ts
@@ -5277,8 +5456,8 @@ name: 'Two Bars',
 kind: 'source',
 async fetchHistorical() {
 return [
-{ time: 1700000000, open: 1, high: 2, low: 0.5, close: 1.5, volume: 10 },
-{ time: 1700000060, open: 1.5, high: 2, low: 1, close: 1.2, volume: 12 },
+{ time: 1_700_000_000, open: 1, high: 2, low: 0.5, close: 1.5, volume: 10 },
+{ time: 1_700_000_060, open: 1.5, high: 2, low: 1, close: 1.2, volume: 12 },
 ];
 },
 };
@@ -5296,7 +5475,7 @@ Contracts
 Plugin examples (CoinGecko)
 ---
 FILE: ../axis/docs/plugins/storage.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -5331,11 +5510,11 @@ cloud (src/storage/cloud.ts)
 | Concern | Detail |
 | --- | --- |
 | Transport | fetch to Worker /api/scripts |
-| Auth | Authorization: Bearer (pn…) |
-| Config | endpoint (Worker URL — never the Pine engine host), apiKey (pn…). Set in Settings → Script storage or Script Library. |
+| Auth | Authorization: Bearer (pn_…) |
+| Config | endpoint (Worker URL — never the Pine engine host), apiKey (pn_…). Set in Settings → Script storage or Script Library. |
 | Concurrency | If-Match revision headers on write |
 | Partition | Worker hashes key → userId; rows scoped per user |
-| Git history | When the Worker binds SCRIPTARTIFACTS (axis setup artifacts), saves mirror as git commits and history serves real SHAs (backend: 'artifacts-git'); restore writes a version back as the new tip |
+| Git history | When the Worker binds SCRIPT_ARTIFACTS (axis setup artifacts), saves mirror as git commits and history serves real SHAs (backend: 'artifacts-git'); restore writes a version back as the new tip |
 git (src/storage/git.ts)
 | Concern | Detail |
 | --- | --- |
@@ -5343,7 +5522,7 @@ git (src/storage/git.ts)
 | Config | provider, token, owner, repo, branch, basePath (default pine-library), commit template |
 | Commit boundary | Explicit Save only — not every keystroke |
 | Drafts | saveDraft / loadDraft are no-ops; local dual-write handles drafts |
-| Version history | listVersions / readAtRevision — GitHub/GitLab commits for the script path; local IndexedDB/localStorage snapshots; Worker scriptversions |
+| Version history | listVersions / readAtRevision — GitHub/GitLab commits for the script path; local IndexedDB/localStorage snapshots; Worker script_versions |
 | Restore | restoreScriptVersion writes historical content as a new tip commit |
 | Capabilities | needsNetwork, needsAuth |
 Interface surface
@@ -5384,13 +5563,13 @@ Internals
 | worker/schemas/scripts.sql | D1 schema |
 D1 schema (cloud)
 `sql
-PRIMARY KEY (userid, id)
--- scripts + scriptdrafts tables
+PRIMARY KEY (user_id, id)
+-- scripts + script_drafts tables
 `
 Without D1, Worker keeps per-isolate in-memory maps (fine for wrangler dev).
 Invariants & edge cases
 1. Draft recovery — never rely solely on remote drafts; service always hits local.
-2. Git PAT scope — GitHub contents:write; GitLab api / writerepository.
+2. Git PAT scope — GitHub contents:write; GitLab api / write_repository.
 3. Revisions — local uses local-${timestamp}; cloud/git use remote revisions for conflict detection.
 4. Active default — getActiveStorageId() → local when unset.
 5. Engine switch is a copy — switching storage copies scripts onto the target and never removes them from the source.
@@ -5403,14 +5582,14 @@ const docs = await exportLibraryJson();
 await importLibraryJson(docs, { forceNewIds: true });
 `
 Point cloud at local Worker
-1. axis setup --prod then axis secret put ADMINTOKEN then axis deploy all then axis keys create
-2. axis keys create — paste the pn… key into Settings → Script storage
-3. Local demo: axis dev worker (:8787) + Settings Generate demo key when ALLOWOPENKEYS=1
+1. axis setup --prod then axis secret put ADMIN_TOKEN then axis deploy all then axis keys create
+2. axis keys create — paste the pn_… key into Settings → Script storage
+3. Local demo: axis dev worker (:8787) + Settings Generate demo key when ALLOW_OPEN_KEYS=1
 Failure modes
 | Error | Cause |
 | --- | --- |
 | Cloud storage requires an API key | Empty apiKey — set it in Settings → Script storage |
-| 401 NOKEY / INVALIDKEY | Auth path; see Worker auth |
+| 401 NO_KEY / INVALID_KEY | Auth path; see Worker auth |
 | 409 on write | If-Match` revision conflict |
 | Git 401/404 | Token, owner/repo, or basePath wrong |
 | Quota errors on localStorage | Large libraries should prefer IDB (automatic when available) |
@@ -5420,7 +5599,7 @@ Worker auth
 Contracts
 ---
 FILE: ../axis/docs/plugins/streams.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -5444,7 +5623,7 @@ Conceptual model
 Built-in catalog
 | id | Name | Offline | Upstream |
 | --- | --- | --- | --- |
-| binance-ws | Binance WebSocket | no | wss://stream.binance.com:9443/ws/{symbol}@kline{interval} |
+| binance-ws | Binance WebSocket | no | wss://stream.binance.com:9443/ws/{symbol}@kline_{interval} |
 | okx-ws | OKX WebSocket | no | wss://ws.okx.com:8443/ws/v5/business candle channels |
 | bybit-ws | Bybit WebSocket | no | Public linear/spot kline topics |
 | coinbase-ws | Coinbase WebSocket | no | Advanced Trade candles (venue OHLC, not ticker buckets) |
@@ -5452,7 +5631,7 @@ Built-in catalog
 | mexc-ws | MEXC WebSocket | no | JSON kline (wss://wbs.mexc.com/ws); 15s PING |
 | ccxt-ws | CCXT WS (Gateway) | no | Live klines through the datafeed gateway WebSocket |
 | mock-poll | Mock Poll | yes | 1s synthetic updates from lastBar |
-UI order: venues first, mock-poll last (BUILTINSTREAMS).
+UI order: venues first, mock-poll last (BUILTIN_STREAMS).
 Interface surface
 ``ts
 start(opts: StreamOpts): () => void
@@ -5508,7 +5687,7 @@ Failure modes
 | Symptom | Cause |
 | --- | --- |
 | Stream never opens | CORS N/A for WS; check firewall / venue geo blocks |
-| DO stream 503 NODO | SESSIONS` binding missing |
+| DO stream 503 NO_DO | SESSIONS` binding missing |
 | Silent no bars | Message shape mismatch (non-kline payloads) |
 See also
 Sources
@@ -5564,7 +5743,7 @@ Does Commercial include SaaS quota? No. Hosting seats/evaluate capacity are Pro 
 VAT? Merchant-of-record and EU VAT handling will be announced at launch. Refunds? 14-day EU digital-goods withdrawal terms will be published at launch.
 ---
 FILE: ../axis/docs/reference/feature-atlas.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -5652,7 +5831,7 @@ Worker
 | Router / CORS | worker/src/index.ts (pickOrigin) |
 | Shared HTTP / proxy / limits | worker/src/http.ts, proxy-router.ts, rate-limit.ts |
 | Client throttle | src/utils/throttle.ts |
-| Run (auth + rate limit) | worker/src/runtime.ts, pyodideruntime.ts |
+| Run (auth + rate limit) | worker/src/runtime.ts, pyodide_runtime.ts |
 | Auth / keys | worker/src/auth.ts, keys.ts |
 | Scripts | worker/src/scripts.ts, schemas/scripts.sql |
 | Git OAuth | worker/src/git-oauth.ts |
@@ -5666,7 +5845,7 @@ Build / ops
 | --- | --- |
 | Package scripts | root package.json (dev, build, test:, axis:, desktop:) |
 | AXIS CLI | packages/cli/ (@hoox-sh/axis-cli) |
-| Static server | axispwaserver.py |
+| Static server | axis_pwa_server.py |
 | Public assets | public/plugins, public/vendor, public/pyodide |
 | Makefile | axis / axis-, pages-deploy, docker- |
 | Desktop CI | .github/workflows/desktop.yml |
@@ -5709,7 +5888,7 @@ Worker
 Legacy shell
 ---
 FILE: ../axis/docs/reference/legacy-shell.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -5745,7 +5924,7 @@ What was removed
 | server.ts | Bun static server for old tree |
 | Root sw.js | Duplicate of public/sw.js |
 | tests/{registry,state,server}.test.ts | Tests of deleted files only |
-There is no frontend/ directory and no make run-frontend target. The product path is bun run dev. A static demo of dist/ is python axispwaserver.py (default port 8081) after bun run build.
+There is no frontend/ directory and no make run-frontend target. The product path is bun run dev. A static demo of dist/ is python axis_pwa_server.py (default port 8081) after bun run build.
 What is current
 | Path | Role |
 | --- | --- |
@@ -5755,7 +5934,7 @@ What is current
 | src/{sources,streams,engines}/catalog.ts | Builtin catalogs |
 | src/ui/* | Topbar, Settings, Results, Manager, … |
 | public/ + bun run build | Production PWA assets (public/sw.js is the only service worker) |
-| axispwa_server.py | Serve dist for demos |
+| axis_pwa_server.py | Serve dist for demos |
 Migration residue
 | Residue | Handling |
 | --- | --- |
@@ -5889,7 +6068,7 @@ Engagement is qualitative across forums and social posts; it is not a weighted g
 Plan-gated historical depth and deep-backtest order ceilings partially address older “more bars / more trades” asks; those are de-emphasized relative to portfolio, execution, order-flow, and tooling gaps.
 ---
 FILE: ../axis/docs/reference/plugin-examples.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -5912,7 +6091,7 @@ AXIS ships three loadable example plugins as ES modules under public/plugins/ (a
 Full narrative: src/plugins/README.md.
 Conceptual model
 Loading
-1. Serve the PWA (Vite dev, preview, or axispwaserver.py on dist).
+1. Serve the PWA (Vite dev, preview, or axis_pwa_server.py on dist).
 2. Open Manager → Plugins.
 3. Paste a same-origin URL, for example:
 ``
@@ -5926,7 +6105,7 @@ You may host modules on any origin that allows module CORS (same-origin is simpl
 Example catalog
 | File | id | kind | Purpose |
 | --- | --- | --- | --- |
-| example-coingecko-source.js | coingecko | source | Public CoinGecko marketchart → synthetic OHLC |
+| example-coingecko-source.js | coingecko | source | Public CoinGecko market_chart → synthetic OHLC |
 | example-tiny-pyne-engine.js | tiny-pyne | engine | In-browser JS DSL: sma/ema/rsi/plot/strategy |
 | example-cf-do-stream.js | cf-do | stream | WS to Worker /api/stream SessionDO |
 | External: pyne-agent-worker /plugin/axis-pine-agent.js | pyne-agent | component | NL → PYNE Agent chat (Cloudflare Workers AI); docs |
@@ -6028,7 +6207,7 @@ Contracts
 Worker durable objects
 ---
 FILE: ../axis/docs/reference/testing.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -6099,7 +6278,7 @@ Config (playwright.config.ts):
 testDir: ./e2e
 Chromium project
 webServer: bun run build && bun run preview -- --host 127.0.0.1 --port 4173
-baseURL: http://127.0.0.1:4173 (override AXISE2E_BASE)
+baseURL: http://127.0.0.1:4173 (override AXIS_E2E_BASE)
 Timeout 60s; CI retries 1
 Smoke mocks /run and Binance. Use data-testid attributes (axis-btn-load, axis-manager, …).
 Security suite
@@ -6129,7 +6308,7 @@ Plugin contracts
 Worker auth
 ---
 FILE: ../axis/docs/ui/charting.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -6162,7 +6341,7 @@ Abstract
 | volume-profile.ts | OHLCV volume-at-price overlay |
 | drawing-layer.ts + drawings/ | User + script drawings, templates, sync helpers |
 | price-precision.ts | Price-scale decimals (auto or 0–8) from symbol + bars |
-| results/plot-visuals.ts | Pine plot.style → LWC series kind (line, stepline, columns, area, …) |
+| results/plot-visuals.ts | Pine plot.style_ → LWC series kind (line, stepline, columns, area, …) |
 | crosshair-sync.ts | Cross-pane crosshair |
 | pyne-drawings.ts | Engine drawing objects → layer |
 | manager-access.ts | Process-wide manager/layer getters |
@@ -6199,19 +6378,19 @@ Price pane labels use chart/price-precision.ts:
 | 0–8 | Fixed display decimals + matching minMove |
 UI control cycles A → 0 → … → 8 → A on the price-pane scale chrome. Store field: priceScaleDecimals (persisted).
 Plot style parity
-Engine plot series honor Pine Script plot.style* via mapPlotStyleToSeriesKind (results/plot-visuals.ts → pane-manager series factory):
+Engine plot series honor Pine Script plot.style_* via mapPlotStyleToSeriesKind (results/plot-visuals.ts → pane-manager series factory):
 | Pine style (examples) | Chart series |
 | --- | --- |
-| plot.styleline / default | Line |
-| plot.stylestepline | Stepline (LWC WithSteps) |
-| plot.stylesteplinediamond | Stepline + vertex point markers |
-| plot.stylehistogram | Histogram (base 0) |
-| plot.stylecolumns | Columns → LWC Histogram (base 0; no column-width/gap API) |
-| plot.stylearea | Area |
-| plot.stylecircles | Circular point markers + faint hairline |
-| plot.stylecross | Larger point markers, connector hidden |
-| plot.stylelinebr / steplinebr / areabr | Broken line / stepline / area — na ends a segment (LWC would otherwise connect through whitespace) |
-LWC limits: Histogram series has no bar-width or gap option, so columns and histogram share the same bar geometry (both zero-based). Point markers are always circular — cross is approximated by discrete markers without a connector; steplinediamond uses stepline + vertex markers. Sparse plotshape styles map diamond/cross to square markers (optional + / ✕ glyphs when text is omitted).
+| plot.style_line / default | Line |
+| plot.style_stepline | Stepline (LWC WithSteps) |
+| plot.style_stepline_diamond | Stepline + vertex point markers |
+| plot.style_histogram | Histogram (base 0) |
+| plot.style_columns | Columns → LWC Histogram (base 0; no column-width/gap API) |
+| plot.style_area | Area |
+| plot.style_circles | Circular point markers + faint hairline |
+| plot.style_cross | Larger point markers, connector hidden |
+| plot.style_linebr / steplinebr / areabr | Broken line / stepline / area — na ends a segment (LWC would otherwise connect through whitespace) |
+LWC limits: Histogram series has no bar-width or gap option, so columns and histogram share the same bar geometry (both zero-based). Point markers are always circular — cross is approximated by discrete markers without a connector; stepline_diamond uses stepline + vertex markers. Sparse plotshape styles map diamond/cross to square markers (optional + / ✕ glyphs when text is omitted).
 fill(plot1, plot2, color=…) renders as SVG bands between the two series when both resolve on the same pane.
 Multi-chart layouts
 Modes: 1 / 2H / 2V / 4 (store.chartLayout)
@@ -6296,7 +6475,7 @@ Results and strategy
 End-user drawings
 ---
 FILE: ../axis/docs/ui/debugging.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -6325,7 +6504,7 @@ Abstract
 | Scriptlogs | store.lastRun → normalizePyneLogs | Editor header Scriptlogs |
 | Profiler | profilerEnabled + profile.lines | Editor header Profiler |
 | Debug chips | inlineDebugEnabled + last-run logs with line | Editor header Debug |
-| Pins | debugPinsEnabled + logs with barindex / time | Editor header Pins · Alt+P |
+| Pins | debugPinsEnabled + logs with bar_index / time | Editor header Pins · Alt+P |
 | System Logs | store.logs ring buffer | Status bar / logs strip |
 | Module | Role |
 | --- | --- |
@@ -6354,7 +6533,7 @@ Debug vs Pins
 | | Debug | Pins |
 | --- | --- | --- |
 | Question | What happened on this source line? | Which bar was that on the chart? |
-| Requires | Line ref (line 12:, structured line, …) | barindex and/or time / bartime |
+| Requires | Line ref (line 12:, structured line, …) | bar_index and/or time / bar_time |
 | UI | End-of-line chips + optional level gutter | Chart circle markers + editor gutter |
 | Click | Pin-able chips jump if bar info present | Chip / / Scriptlogs → chart jump + line flash |
 | Store | inlineDebugEnabled | debugPinsEnabled |
@@ -6421,7 +6600,7 @@ Charting — markers and jump
 UI shell
 ---
 FILE: ../axis/docs/ui/editor.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -6517,7 +6696,7 @@ Four information surfaces
 | Debug chips | After Run, Debug on | Last-run log. / errors on that source line |
 Hover + param checklist are writing-time docs — not a TradingView debug API. Pre-eval marks the buffer; chips still read last run. Details: Debugging.
 Diagnostics & Problems
-Pre-eval (as you type) — schedulePreeval waits the idle delay after the last keystroke (default PREEVALIDLEMS = 1000 ms; tab switch uses a shorter beat). Problems and underlines stay until the next idle check replaces them (optional Clear marks while typing hides them mid-keystroke). Local parse/lint (localPreevaluate) plus POST /lsp/diagnostics when engine=server and remote lint is on. Severity error disables Run when Block Run on errors is on (topbar, editor, Mod-Enter, command palette). Warnings and typos do not block.
+Pre-eval (as you type) — schedulePreeval waits the idle delay after the last keystroke (default PREEVAL_IDLE_MS = 1000 ms; tab switch uses a shorter beat). Problems and underlines stay until the next idle check replaces them (optional Clear marks while typing hides them mid-keystroke). Local parse/lint (localPreevaluate) plus POST /lsp/diagnostics when engine=server and remote lint is on. Severity error disables Run when Block Run on errors is on (topbar, editor, Mod-Enter, command palette). Warnings and typos do not block.
 Every lint / hover / complete / underline / chip option lives in Settings → Editor (command palette: Open Editor Settings*). Defaults match the previous hardcoded behavior.
 Local checks: unclosed ( / ` / { and strings, missing entry point, study() → indicator() / strategy(), bare security() → request.security, duplicate indicator() / strategy() / library(), unknown builtin members (strategy.etry, plt → “did you mean …?”). User functions and import aliases are not flagged.
 Merge: remote style-noise C001–C004 is dropped; remote syntax errors win the same span; local unknown-member marks still show when remote is down. Hover tooltips use the diagnostic message (including the suggestion).
@@ -6540,7 +6719,7 @@ Library load
 loadLibraryDoc(doc, name) on editorRef injects storage reads into the active tab.
 Internals
 editorRef pattern
-App holds { getDoc, setDoc?, loadLibraryDoc?, scrollToLine?, jumpToDiagnostic?, getCursor?, insertAtCursor? } populated by CM mount—avoids full-doc store writes every keystroke (doc also mirrored to EDITORDOCKEY).
+App holds { getDoc, setDoc?, loadLibraryDoc?, scrollToLine?, jumpToDiagnostic?, getCursor?, insertAtCursor? } populated by CM mount—avoids full-doc store writes every keystroke (doc also mirrored to EDITOR_DOC_KEY).
 Persistence
 | Key / field | Role |
 | --- | --- |
@@ -6560,7 +6739,7 @@ Failure modes
 | Detached but no window | Popup blocked; allow popups; reattach |
 | Lost text on crash | editor.doc localStorage; library Save / git push |
 | Blank CM (no lines) | Dock column height chain; editor must fill strip |
-| No chips/pins | Enable Debug/Pins; logs need line and/or barindex |
+| No chips/pins | Enable Debug/Pins; logs need line and/or bar_index |
 See also
 [Debugging — Debug vs Pins, Scriptlogs, Profiler
 UI shell — Topbar, docks, command palette
@@ -6630,7 +6809,7 @@ LEGACY.md — what is not the AXIS product path
 TESTING.md` — unit/e2e around UI modules
 ---
 FILE: ../axis/docs/ui/indicators.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -6672,22 +6851,22 @@ runAndApply options
 | indicatorId | optional | Update existing store indicator |
 Overlay routing
 ``text
-overlay = resolveOverlayFlag(meta.overlay, scripttype)
+overlay = resolveOverlayFlag(meta.overlay, script_type)
 // explicit false → sub-pane
 // explicit true → price
 // missing: indicator → sub-pane; strategy → price
 if overlay && seriesWouldHideOnPrice(plots, bars):
 overlay = false // RSI / scaled oscillators on BTC scale
-paneId = overlay ? 'price' : ind // one sub-pane per script
+paneId = overlay ? 'price' : ind_ // one sub-pane per script
 `
-Each non-overlay script gets its own sub-pane (ind), not a shared indicator host. Re-runs keep the script’s private pane; legacy shared indicator panes migrate on re-run. Removing a script clears only that owner’s series and destroys the sub-pane only when empty.
+Each non-overlay script gets its own sub-pane (ind_), not a shared indicator host. Re-runs keep the script’s private pane; legacy shared indicator panes migrate on re-run. Removing a script clears only that owner’s series and destroys the sub-pane only when empty.
 Persist + reopen
 Applied scripts (store.scripts with full code, paneId, colors, inputs, strategy props) are written to localStorage with the rest of durable UI state. On boot they hydrate via sanitizePersistedScripts. After each successful history paint (load-symbol, DSM cache apply), reapplyChartScripts silently re-runs every visible script in plot-dependency order so the chart matches the saved set without manual re-run.
 Detach path: detachIndicatorFromChart (Scripts panel, Layers, pane badges) — owner-scoped overlay clear, orphan pane sweep, no sibling wipe.
 Prefer indicator(..., overlay=false) and raw plot(rsi) for oscillators — not strategy(..., overlay=true) with rsi 0.01 on price.
 Series selection
-Prefer result.series entries whose keys do not start with / . Fallback: single plots[] array as one line named from scriptname.
-Colors: plotmeta[k].color or PLOTPALETTE[i]. Pine Script plot.style_ maps to LWC series kinds (line, stepline, histogram/columns, area, circles) — see Charting — plot style parity.
+Prefer result.series entries whose keys do not start with _ / __. Fallback: single plots[] array as one line named from script_name.
+Colors: plot_meta[k].color or PLOT_PALETTE[i]. Pine Script plot.style_ maps to LWC series kinds (line, stepline, histogram/columns, area, circles) — see Charting — plot style parity.
 Indicator panel & pane badges
 Side list of store.scripts (Indicator: id, name, code, paneId, visible, plots)
 Visibility toggles affect display; re-run is still engine-driven
@@ -6729,7 +6908,7 @@ Built-in scripts
 ADR-002 / ADR-004
 ---
 FILE: ../axis/docs/ui/results-and-strategy.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -6759,7 +6938,7 @@ Abstract
 | ui/StatusBar.tsx | Compact trade summary |
 Conceptual model
 Event normalization
-Engines may emit Pro API parity fields (kind, bartime, direction, ohlc) or legacy UI fields (type, time, dir, price). Normalizer:
+Engines may emit Pro API parity fields (kind, bar_time, direction, ohlc) or legacy UI fields (type, time, dir, price). Normalizer:
 Unifies time/price/dir/id
 Optionally fills price from bars when OHLC present/empty
 Can include order-like events for the Events tab
@@ -6807,7 +6986,7 @@ Indicators
 Charting
 ---
 FILE: ../axis/docs/ui/store.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -6833,7 +7012,7 @@ Abstract
 | persist | Debounced localStorage write |
 | setActivePlugin | Kinded selection + flat field mirrors |
 | appendLog / status helpers | Operator-visible telemetry |
-| STORAGEKEY | pynescript.axis.v1 |
+| STORAGE_KEY | pynescript.axis.v1 |
 | MCP | src/mcp/dispatch.ts reads/writes allowlisted store paths; snapshots redact secrets |
 Types: src/store/types.ts.
 Conceptual model
@@ -6923,7 +7102,7 @@ ADR-011
 UI shell
 ---
 FILE: ../axis/docs/ui/ui-shell.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -7055,7 +7234,7 @@ Live settings (Settings dialog)
 Logs
 System Logs strip
 appendLog(level, message, source)
-Cap MAXLOGS (500)
+Cap MAX_LOGS (500)
 Not persisted
 Boot messages, pyodide ready, live errors
 Scriptlogs & Profiler
@@ -7081,7 +7260,7 @@ Store
 Architecture overview
 ---
 FILE: ../axis/docs/worker/auth.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -7096,7 +7275,7 @@ along with axis. If not, see .
 SPDX-License-Identifier: AGPL-3.0-only
 ---
 title: "Worker auth"
-description: "API keys (pn…), fail-closed D1 without KV, admin token, Bearer, ALLOWOPENKEYS, and /api/run gating."
+description: "API keys (pn_…), fail-closed D1 without KV, admin token, Bearer, ALLOW_OPEN_KEYS, and /api/run gating."
 ---
 Worker auth
 Abstract
@@ -7116,43 +7295,43 @@ requireApiKey
 Returns either { ok: true, ctx } or { ok: false, status, code, message }.
 | Code | HTTP | When |
 | --- | --- | --- |
-| NOKEY | 401 | Empty Bearer / ?key= |
-| INVALIDKEY | 401 | Unknown in KV / malformed shape |
-| APIKEYSREQUIRED | 503 | Fail-closed: D1 (DB) bound without APIKEYS KV and ALLOWOPENKEYS off |
+| NO_KEY | 401 | Empty Bearer / ?key= |
+| INVALID_KEY | 401 | Unknown in KV / malformed shape |
+| API_KEYS_REQUIRED | 503 | Fail-closed: D1 (DB) bound without API_KEYS KV and ALLOW_OPEN_KEYS off |
 Fail-closed with durable storage (2.0.1+)
-When D1 is active but APIKEYS KV is not bound, inventable shape-only keys would partition real script data by attacker-chosen tokens with no mint/revoke path. In that configuration:
-1. Only explicit ALLOWOPENKEYS=1 accepts any non-empty Bearer (local demos).
-2. Otherwise respond 503 APIKEYSREQUIRED — bind APIKEYS and mint via /api/keys.
+When D1 is active but API_KEYS KV is not bound, inventable shape-only keys would partition real script data by attacker-chosen tokens with no mint/revoke path. In that configuration:
+1. Only explicit ALLOW_OPEN_KEYS=1 accepts any non-empty Bearer (local demos).
+2. Otherwise respond 503 API_KEYS_REQUIRED — bind API_KEYS and mint via /api/keys.
 MCP (POST /mcp)
-Same requireApiKey as /api/scripts. Discovery GET /mcp is public. App-plane tools additionally need a PWA WebSocket on /api/mcp/bridge: mint a 30s one-time ticket with GET /api/mcp/bridge?issue=ticket (Authorization: Bearer), then connect wss://…/api/mcp/bridge?ticket=…. WS upgrade rejects the long-lived ?key= (NOKEY). ?key= remains HTTP extractBearer only (curl on /mcp / /api/scripts). See MCP server.
+Same requireApiKey as /api/scripts. Discovery GET /mcp is public. App-plane tools additionally need a PWA WebSocket on /api/mcp/bridge: mint a 30s one-time ticket with GET /api/mcp/bridge?issue=ticket (Authorization: Bearer), then connect wss://…/api/mcp/bridge?ticket=…. WS upgrade rejects the long-lived ?key= (NO_KEY). ?key= remains HTTP extractBearer only (curl on /mcp / /api/scripts). See MCP server.
 /api/run auth gate
 From worker/src/runtime.ts:
 | Condition | Auth on POST /api/run |
 | --- | --- |
-| APIKEYS bound | Required |
-| REQUIRERUNAUTH=1 (or true / yes) | Required |
+| API_KEYS bound | Required |
+| REQUIRE_RUN_AUTH=1 (or true / yes) | Required |
 | Neither | Optional (Bearer still meters when present) |
 Always rate-limited (30/min) regardless of auth — see Runtime.
 Admin keys API (/api/keys)
 | Action | Auth | Behavior |
 | --- | --- | --- |
-| create (POST or ?action=create) | X-Admin-Token === env.ADMINTOKEN | Mint pn + 48 hex, store key:{key} in KV (1y TTL) with tier |
-| validate (GET or ?action=validate) | Bearer or ?key= | Tier + createdat if known |
+| create (POST or ?action=create) | X-Admin-Token === env.ADMIN_TOKEN | Mint pn_ + 48 hex, store key:{key} in KV (1y TTL) with tier |
+| validate (GET or ?action=validate) | Bearer or ?key= | Tier + created_at if known |
 Tiers: free \| hobby \| pro \| team \| enterprise.
-Without ADMINTOKEN set, create always fails (isAdmin false).
-Do not leave ADMINTOKEN = "" in [vars]. That empty assignment is still a Worker binding, and Cloudflare error 10053 rejects wrangler secret put ADMINTOKEN (Binding name already in use). axis secret put ADMINTOKEN comments the stub, deploys to drop it, then sets the secret.
+Without ADMIN_TOKEN set, create always fails (isAdmin false).
+Do not leave ADMIN_TOKEN = "" in [vars]. That empty assignment is still a Worker binding, and Cloudflare error 10053 rejects wrangler secret put ADMIN_TOKEN (Binding name already in use). axis secret put ADMIN_TOKEN comments the stub, deploys to drop it, then sets the secret.
 CLI:
 `bash
-axis setup kv # create + bind APIKEYS
-axis secret put ADMINTOKEN # comments empty [vars] stub if present
-axis keys create --tier hobby # prompts, or --admin-token / AXISADMINTOKEN
-axis keys validate --key pn…
+axis setup kv # create + bind API_KEYS
+axis secret put ADMIN_TOKEN # comments empty [vars] stub if present
+axis keys create --tier hobby # prompts, or --admin-token / AXIS_ADMIN_TOKEN
+axis keys validate --key pn_…
 `
-Without KV on validate: accepts well-formed pn[a-f0-9]{48} as hobby (dev).
-ALLOWOPENKEYS
+Without KV on validate: accepts well-formed pn_[a-f0-9]{48} as hobby (dev).
+ALLOW_OPEN_KEYS
 wrangler.toml defaults local demos to "1":
 accept any non-empty Bearer key for /api/scripts
-Never leave open in production. Prefer bound APIKEYS + real admin-minted keys.
+Never leave open in production. Prefer bound API_KEYS + real admin-minted keys.
 Internals
 | Path | Role |
 | --- | --- |
@@ -7160,10 +7339,10 @@ Internals
 | worker/src/keys.ts | Admin create / validate |
 | worker/src/runtime.ts | Run gate + rate limit + usage meter |
 | worker/src/scripts.ts | requireApiKey on library CRUD |
-| worker/src/git-oauth.ts | Env GITHUBOAUTHCLIENTID / GITLABOAUTHCLIENTID wins over body clientId |
+| worker/src/git-oauth.ts | Env GITHUB_OAUTH_CLIENT_ID / GITLAB_OAUTH_CLIENT_ID wins over body clientId |
 Key format
 `ts
-'pn' + 24 random bytes as hex // 48 hex chars
+'pn_' + 24 random bytes as hex // 48 hex chars
 `
 Invariants & edge cases
 1. Admin token is a shared secret — rotate via wrangler secrets in production, not committed vars.
@@ -7174,23 +7353,23 @@ Worked examples
 Create a key (admin)
 `bash
 curl -sS -X POST 'http://127.0.0.1:8787/api/keys?action=create' \
--H "X-Admin-Token: $ADMINTOKEN" \
+-H "X-Admin-Token: $ADMIN_TOKEN" \
 -H 'content-type: application/json' \
 -d '{"tier":"hobby"}'
 `
 Validate
 `bash
 curl -sS 'http://127.0.0.1:8787/api/keys?action=validate' \
--H "Authorization: Bearer pn…"
+-H "Authorization: Bearer pn_…"
 `
 Failure modes
 | Symptom | Cause |
 | --- | --- |
 | 403 create | Wrong/missing admin token |
 | 401 scripts | Open keys off + no KV + bad shape |
-| 503 APIKEYSREQUIRED | D1 without APIKEYS KV and open keys off — bind KV + mint keys |
-| 401 on /api/run | APIKEYS or REQUIRERUNAUTH set; missing Bearer |
-| OAuth start uses attacker client | Env client id not set — set GITHUBOAUTHCLIENT_ID (env always wins over body) |
+| 503 API_KEYS_REQUIRED | D1 without API_KEYS KV and open keys off — bind KV + mint keys |
+| 401 on /api/run | API_KEYS or REQUIRE_RUN_AUTH set; missing Bearer |
+| OAuth start uses attacker client | Env client id not set — set GITHUB_OAUTH_CLIENT_ID (env always wins over body) |
 | Cross-user leakage tests fail | Partition hash regression |
 See also
 Data plane
@@ -7200,7 +7379,7 @@ Security tests
 AXIS CLI — axis secret put · axis setup oauth`
 ---
 FILE: ../axis/docs/worker/bindings.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -7226,55 +7405,55 @@ Interface surface — Env
 From src/index.ts:
 ``ts
 interface Env {
-APIKEYS?: KVNamespace;
+API_KEYS?: KVNamespace;
 USAGE?: KVNamespace;
 DB?: D1Database;
 BUNDLES?: R2Bucket;
 SESSIONS?: DurableObjectNamespace;
-MCPBRIDGE?: DurableObjectNamespace;
-EXTERNALBACKEND?: string;
-ALLOWEDORIGIN?: string;
-ADMINTOKEN?: string;
-PYODIDEINWORKER?: string;
-ALLOWOPENKEYS?: string;
-REQUIRERUNAUTH?: string;
-GITHUBOAUTHCLIENTID?: string;
-GITLABOAUTHCLIENTID?: string;
+MCP_BRIDGE?: DurableObjectNamespace;
+EXTERNAL_BACKEND?: string;
+ALLOWED_ORIGIN?: string;
+ADMIN_TOKEN?: string;
+PYODIDE_IN_WORKER?: string;
+ALLOW_OPEN_KEYS?: string;
+REQUIRE_RUN_AUTH?: string;
+GITHUB_OAUTH_CLIENT_ID?: string;
+GITLAB_OAUTH_CLIENT_ID?: string;
 }
 `
 Vars ([vars])
 | Var | Default (repo) | Role |
 | --- | --- | --- |
-| EXTERNALBACKEND | "" | Flask (or other) base URL for /api/run proxy |
-| ALLOWEDORIGIN | https://pynescript.online | Extra CORS allowlist (comma-separated); product hosts built-in |
-| ADMINTOKEN | "" | Shared secret for key minting |
-| PYODIDEINWORKER | "disabled" | Gate in-worker Python |
-| ALLOWOPENKEYS | "1" | Local demos; set "0" in prod |
-| REQUIRERUNAUTH | unset | "1" forces Bearer on /api/run |
-| GITHUBOAUTHCLIENTID | unset | Preferred OAuth App id (wins over body) |
-| GITLABOAUTHCLIENTID | unset | Same for GitLab |
-Prefer secrets for ADMINTOKEN and production backends:
+| EXTERNAL_BACKEND | "" | Flask (or other) base URL for /api/run proxy |
+| ALLOWED_ORIGIN | https://pynescript.online | Extra CORS allowlist (comma-separated); product hosts built-in |
+| ADMIN_TOKEN | "" | Shared secret for key minting |
+| PYODIDE_IN_WORKER | "disabled" | Gate in-worker Python |
+| ALLOW_OPEN_KEYS | "1" | Local demos; set "0" in prod |
+| REQUIRE_RUN_AUTH | unset | "1" forces Bearer on /api/run |
+| GITHUB_OAUTH_CLIENT_ID | unset | Preferred OAuth App id (wins over body) |
+| GITLAB_OAUTH_CLIENT_ID | unset | Same for GitLab |
+Prefer secrets for ADMIN_TOKEN and production backends:
 `bash
 CLI-first
-axis secret put ADMINTOKEN
-axis secret put EXTERNALBACKEND
+axis secret put ADMIN_TOKEN
+axis secret put EXTERNAL_BACKEND
 or: wrangler secret put …
 `
-Prod invariant: if DB (D1) is bound, also bind APIKEYS KV — otherwise script routes fail closed with APIKEYSREQUIRED.
+Prod invariant: if DB (D1) is bound, also bind API_KEYS KV — otherwise script routes fail closed with API_KEYS_REQUIRED.
 Provision recipes
 KV
 `bash
-wrangler kv namespace create APIKEYS
+wrangler kv namespace create API_KEYS
 wrangler kv namespace create USAGE
-paste ids into wrangler.toml [[kvnamespaces]]
+paste ids into wrangler.toml [[kv_namespaces]]
 `
 D1
 `bash
 wrangler d1 create pynescript
-[[d1databases]] binding = "DB" (name MUST be DB)
+[[d1_databases]] binding = "DB" (name MUST be DB)
 wrangler d1 execute pynescript --remote --file=schemas/scripts.sql
 `
-Repo may already contain a databaseid for the project’s D1 — treat IDs as environment-specific when forking.
+Repo may already contain a database_id for the project’s D1 — treat IDs as environment-specific when forking.
 R2 (optional)
 `bash
 wrangler r2 bucket create indicator-bundles
@@ -7290,8 +7469,8 @@ Other wrangler settings
 | Setting | Value |
 | --- | --- |
 | main | src/index.ts |
-| compatibilitydate | 2024-11-01 |
-| compatibilityflags | nodejscompat |
+| compatibility_date | 2024-11-01 |
+| compatibility_flags | nodejs_compat |
 | [observability] | enabled = true |
 Static PWA assets are not served by this Worker in the documented split: Pages serves dist/ at https://axis.hoox.sh, Worker serves API/WS. Project name for Pages deploy is axis.
 Deploy commands
@@ -7307,7 +7486,7 @@ Makefile: make worker-deploy, make pages-deploy (note: some Makefile targets sti
 Invariants & edge cases
 1. Do not rename CF project without migrating all binding IDs, custom domains, and CI.
 2. Local wrangler auto-provisions mock KV/D1; production needs real IDs.
-3. EXTERNALBACKEND=localhost on CF cannot reach your laptop — use a public tunnel or co-located VPS.
+3. EXTERNAL_BACKEND=localhost on CF cannot reach your laptop — use a public tunnel or co-located VPS.
 4. Health reports which optional bindings are present.
 Failure modes
 | Deploy / runtime issue | Fix |
@@ -7315,14 +7494,14 @@ Failure modes
 | Deploy fails placeholder KV | Uncomment only after create, or leave commented |
 | Scripts empty | Apply SQL schema |
 | Stream 503 | Enable DO binding + migration |
-| CORS fails prod origin | Set ALLOWEDORIGIN` to exact Pages origin |
+| CORS fails prod origin | Set ALLOWED_ORIGIN` to exact Pages origin |
 See also
 Cloudflare DevOps
 Runtime
 CORS
 ---
 FILE: ../axis/docs/worker/data-plane.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -7341,22 +7520,22 @@ description: "Script library API: /api/scripts, D1 schema, drafts, revisions, an
 ---
 Worker data plane
 Abstract
-The Worker data plane for user scripts is worker/src/scripts.ts — REST under /api/scripts with Bearer auth (auth). Persistence prefers D1 (env.DB); without D1, per-isolate in-memory maps support local wrangler dev. With the optional SCRIPTARTIFACTS binding, every save additionally mirrors as a git commit to a per-key Artifacts repo — full history and git clone with no GitHub credentials (see below).
+The Worker data plane for user scripts is worker/src/scripts.ts — REST under /api/scripts with Bearer auth (auth). Persistence prefers D1 (env.DB); without D1, per-isolate in-memory maps support local wrangler dev. With the optional SCRIPT_ARTIFACTS binding, every save additionally mirrors as a git commit to a per-key Artifacts repo — full history and git clone with no GitHub credentials (see below).
 The PWA cloud storage plugin is the primary client.
 Conceptual model
 Git-native history (Cloudflare Artifacts, no GitHub creds)
-When SCRIPTARTIFACTS is bound (axis setup artifacts), every save/delete
+When SCRIPT_ARTIFACTS is bound (axis setup artifacts), every save/delete
 mirrors as a git commit to a per-key repo (axis-scripts-):
 scripts/.pine plus a meta sidecar. History endpoints serve from
-repo.log() with real SHAs and fall back to scriptversions when git is
+repo.log() with real SHAs and fall back to script_versions when git is
 empty or unbound; responses carry backend: 'artifacts-git' when served
 from git. Mirrors run via ctx.waitUntil and never fail the save; identical
 re-saves dedupe against HEAD (no clone+push, no history spam).
 Clone without any GitHub credential — the caller keeps using their AXIS API
 key while the Worker mints short-lived repo tokens:
 ``bash
-REMOTE=$(curl -s $WORKER/api/scripts/git -H "Authorization: Bearer $KEY" | jq -r .git.remote)
-TOKEN=$(curl -s -X POST $WORKER/api/scripts/git/token -H "Authorization: Bearer $KEY" \
+REMOTE=$(curl -s $WORKER/api/scripts/_git -H "Authorization: Bearer $KEY" | jq -r .git.remote)
+TOKEN=$(curl -s -X POST $WORKER/api/scripts/_git/token -H "Authorization: Bearer $KEY" \
 -H 'Content-Type: application/json' -d '{"scope":"read"}' | jq -r .git.token)
 git -c http.extraHeader="Authorization: Bearer $TOKEN" clone "$REMOTE" axis-scripts
 `
@@ -7367,7 +7546,7 @@ axis deploy worker
 `
 Artifacts is in closed beta: without access, axis setup artifacts fails the
 namespace check (re-run with --skip-check to keep the toml edit), and
-unbound Workers return 503 GITBACKENDUNAVAILABLE on /git routes while
+unbound Workers return 503 GIT_BACKEND_UNAVAILABLE on /_git routes while
 CRUD keeps working on D1/memory.
 Interface surface
 All routes require valid API key unless noted.
@@ -7378,42 +7557,42 @@ All routes require valid API key unless noted.
 | /api/scripts/:id | GET | Read full document |
 | /api/scripts/:id | PUT | Upsert; honors If-Match revision |
 | /api/scripts/:id | DELETE | Remove |
-| /api/scripts/draft | GET/PUT | Per-user draft buffer |
-| /api/scripts/:id/versions | GET | Version history, newest first (git log when Artifacts bound, else scriptversions) |
-| /api/scripts/:id/versions/:rev | GET | Full document at a revision (git SHA or rev…) |
+| /api/scripts/_draft | GET/PUT | Per-user draft buffer |
+| /api/scripts/:id/versions | GET | Version history, newest first (git log when Artifacts bound, else script_versions) |
+| /api/scripts/:id/versions/:rev | GET | Full document at a revision (git SHA or rev_…) |
 | /api/scripts/:id/restore | POST | Resurrect {revision} as the new tip (recreates deleted scripts) |
-| /api/scripts/git | GET | Artifacts clone remote for the caller (503 when unbound) |
-| /api/scripts/git/token | POST | Short-lived clone token (read/write, TTL 60s–24h) |
+| /api/scripts/_git | GET | Artifacts clone remote for the caller (503 when unbound) |
+| /api/scripts/_git/token | POST | Short-lived clone token (read/write, TTL 60s–24h) |
 Document fields
 | Field | Notes |
 | --- | --- |
 | id | Client or server assigned |
 | name, description, path | Meta |
 | content | Pine source |
-| revision | Opaque string (rev…) for concurrency |
-| createdat / updatedat | ms epochs (API may camelCase in JSON) |
+| revision | Opaque string (rev_…) for concurrency |
+| created_at / updated_at | ms epochs (API may camelCase in JSON) |
 Concurrency
 PUT with If-Match: rejects mismatched revisions (409 path covered in security tests). Fresh writes mint newRevision().
 Internals
 D1 schema (schemas/scripts.sql)
 `sql
 CREATE TABLE scripts (
-userid TEXT NOT NULL,
+user_id TEXT NOT NULL,
 id TEXT NOT NULL,
 name TEXT NOT NULL,
 description TEXT,
 path TEXT,
 content TEXT NOT NULL,
 revision TEXT NOT NULL,
-createdat INTEGER NOT NULL,
-updatedat INTEGER NOT NULL,
-PRIMARY KEY (userid, id)
+created_at INTEGER NOT NULL,
+updated_at INTEGER NOT NULL,
+PRIMARY KEY (user_id, id)
 );
-CREATE TABLE scriptdrafts (
-userid TEXT PRIMARY KEY,
+CREATE TABLE script_drafts (
+user_id TEXT PRIMARY KEY,
 content TEXT NOT NULL,
 name TEXT,
-updatedat INTEGER NOT NULL
+updated_at INTEGER NOT NULL
 );
 `
 Apply:
@@ -7423,7 +7602,7 @@ wrangler d1 execute pynescript --local --file=schemas/scripts.sql
 `
 Binding name in wrangler.toml must be DB (code uses env.DB). Database name can be pynescript.
 Partitioning
-userId = SHA-256(apikey).hex.slice(0, 32) — raw keys are not stored as D1 partition ids.
+userId = SHA-256(api_key).hex.slice(0, 32) — raw keys are not stored as D1 partition ids.
 Health feature flags
 `json
 {
@@ -7445,7 +7624,7 @@ Failure modes
 | 401 | Missing/invalid Bearer |
 | 404 | Unknown script id for user |
 | 409 | Revision conflict |
-| 503 GITBACKENDUNAVAILABLE | /git routes without the Artifacts binding (axis setup artifacts`) |
+| 503 GIT_BACKEND_UNAVAILABLE | /_git routes without the Artifacts binding (axis setup artifacts`) |
 | Empty list after deploy | Schema not applied / wrong DB id |
 See also
 Storage plugins
@@ -7453,7 +7632,7 @@ Auth
 Bindings
 ---
 FILE: ../axis/docs/worker/durable-objects.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -7481,7 +7660,7 @@ Client → Worker
 wss:///api/stream?session=&symbol=BTCUSDT&interval=1m
 `
 worker/src/index.ts:
-Requires env.SESSIONS binding; else 503 NODO.
+Requires env.SESSIONS binding; else 503 NO_DO.
 idFromName(session || 'default').
 Rewrites request to DO path /ws?… and returns upgrade response.
 DO HTTP surface
@@ -7503,25 +7682,25 @@ public/plugins/example-cf-do-stream.js maps kline fields to Bar and builds the W
 Internals
 | Topic | Detail |
 | --- | --- |
-| Upstream URL | wss://stream.binance.com:9443/ws/{symbol}@kline{interval} |
+| Upstream URL | wss://stream.binance.com:9443/ws/{symbol}@kline_{interval} |
 | Client lifecycle | acceptWebSocket; on last client close → closeUpstream |
 | Hibernation | Comment intent: hibernate when empty; implementation uses explicit close |
 | Fan-out | broadcast to all clients |
 wrangler binding (often commented until ready)
 `toml
-[[durableobjects.bindings]]
+[[durable_objects.bindings]]
 name = "SESSIONS"
-classname = "SessionDO"
+class_name = "SessionDO"
 [[migrations]]
 tag = "v1"
-newsqliteclasses = ["SessionDO"]
+new_sqlite_classes = ["SessionDO"]
 `
 SessionDO is re-exported from src/index.ts for the Workers runtime class registry.
 Invariants & edge cases
 1. Session key — example plugin uses symbol@interval as session name so like-minded tabs share one DO.
 2. No auth on stream today — treat as public relay of public market data; do not put secrets in query strings.
 3. Upstream hard-coded Binance — not a generic multiprovider DO yet.
-4. Binding optional in local — without SESSIONS, stream API fails closed with NODO.
+4. Binding optional in local — without SESSIONS, stream API fails closed with NO_DO.
 Failure modes
 | Symptom | Cause |
 | --- | --- |
@@ -7535,7 +7714,7 @@ Bindings
 Plugin examples
 ---
 FILE: ../axis/docs/worker/index.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -7555,8 +7734,8 @@ description: "Cloudflare Worker for AXIS: /api/run proxy, keys, scripts, usage, 
 Worker
 Abstract
 The AXIS Cloudflare Worker (worker/) is the edge data plane for the PWA: JSON APIs, optional script library (D1), API keys (KV), usage meters, on-chain proxy, and a WebSocket session relay (Durable Objects). It is not a full Pine Script interpreter in production today.
-Honest runtime fact: POST /api/run proxies to EXTERNALBACKEND (typically Flask) unless PYODIDEINWORKER=enabled and the in-worker path succeeds. That path is implemented and off by default (disabled in worker/wrangler.toml.example). It is not a planned feature. See Runtime and worker/RUNTIME.md.
-Security (2.0.1+): gated /api/run (auth when APIKEYS / REQUIRERUNAUTH), rate limits + body caps, fail-closed Worker auth when D1 is bound without APIKEYS KV, product-scoped CORS (not open .pages.dev), OAuth env client ids over body clientId. See Auth and CORS.
+Honest runtime fact: POST /api/run proxies to EXTERNAL_BACKEND (typically Flask) unless PYODIDE_IN_WORKER=enabled and the in-worker path succeeds. That path is implemented and off by default (disabled in worker/wrangler.toml.example). It is not a planned feature. See Runtime and worker/RUNTIME.md.
+Security (2.0.1+): gated /api/run (auth when API_KEYS / REQUIRE_RUN_AUTH), rate limits + body caps, fail-closed Worker auth when D1 is bound without API_KEYS KV, product-scoped CORS (not open .pages.dev), OAuth env client ids over body clientId. See Auth and CORS.
 Operator path: AXIS CLI — axis setup · axis deploy worker · axis health.
 Conceptual model
 Infrastructure names (frozen)
@@ -7589,12 +7768,12 @@ Allowlisted GET only (public, no API key). Other /api/onchain/ paths return 404.
 | /api/onchain/llama/protocol/:slug | https://api.llama.fi/protocol/:slug | ~2 min |
 | /api/onchain/gecko/networks/:network/pools/:address/ohlcv/:timeframe | https://api.geckoterminal.com/api/v2/networks/.../ohlcv/... | ~60 s |
 | /api/onchain/gecko/search/pools | https://api.geckoterminal.com/api/v2/search/pools | ~120 s |
-Gecko validation: network ^[a-z0-9]+$; address EVM 0x+40 hex or Solana-style base58 32–48; timeframe day \| hour \| minute.
-OHLCV query pass-through: aggregate, limit, currency, beforetimestamp. Search: query, network, page, include.
+Gecko validation: network ^[a-z0-9_]+$; address EVM 0x+40 hex or Solana-style base58 32–48; timeframe day \| hour \| minute.
+OHLCV query pass-through: aggregate, limit, currency, before_timestamp. Search: query, network, page, include.
 Responses may include X-Axis-Onchain-Cache: HIT|MISS. Product guide: On-Chain data.
 Entry: worker/src/index.ts.
 Shared HTTP plumbing (http.ts · proxy-router.ts · rate-limit.ts)
-Per-route CORS/JSON helpers were consolidated into worker/src/http.ts (read vs write method sets, base vs exchange vs MCP header sets, preflight / methodNotAllowed / proxyJson envelopes). The on-chain and market planes share the allowlisted ProxyRouter (worker/src/proxy-router.ts): prefix claim → preflight → non-GET 405 → literal health path → ordered route table → family NOTFOUND. Rate limiting is shared via worker/src/rate-limit.ts. Pinned by worker/tests/http.test.ts, proxy-router.test.ts, rate-limit.test.ts.
+Per-route CORS/JSON helpers were consolidated into worker/src/http.ts (read vs write method sets, base vs exchange vs MCP header sets, preflight / methodNotAllowed / proxyJson envelopes). The on-chain and market planes share the allowlisted ProxyRouter (worker/src/proxy-router.ts): prefix claim → preflight → non-GET 405 → literal health path → ordered route table → family NOT_FOUND. Rate limiting is shared via worker/src/rate-limit.ts. Pinned by worker/tests/http.test.ts, proxy-router.test.ts, rate-limit.test.ts.
 Local entrypoints
 ``bash
 cd worker
@@ -7605,13 +7784,13 @@ Makefile: make worker-dev, make worker-deploy.
 Implementation status
 | Feature | Status |
 | --- | --- |
-| /api/run → EXTERNALBACKEND | Works today |
+| /api/run → EXTERNAL_BACKEND | Works today |
 | Admin /api/keys | Works (KV or shape-check) |
 | Usage KV increment on run | Works when USAGE bound |
 | SessionDO + /api/stream | Implemented; binding often commented until provisioned |
-| POST /mcp + McpBridgeDO | Works today when MCPBRIDGE is bound |
+| POST /mcp + McpBridgeDO | Works today when MCP_BRIDGE is bound |
 | /api/scripts + D1 schema | Implemented; memory fallback without D1 |
-| Pyodide scaffold | pyodideruntime.ts + flag; wheel pipeline incomplete |
+| Pyodide scaffold | pyodide_runtime.ts + flag; wheel pipeline incomplete |
 | Response cache for /api/run | Deferred |
 Page map
 | Page | Topic |
@@ -7628,7 +7807,7 @@ Engines
 Worker README: worker/README.md`
 ---
 FILE: ../axis/docs/worker/mcp.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -7650,10 +7829,10 @@ Abstract
 AXIS exposes a Model Context Protocol server on the Cloudflare Worker so agents can request and respond across the data plane and a connected PWA.
 | Plane | Live tab? | Tools |
 | --- | --- | --- |
-| Worker | No | axishealth, axisrequest, axisrun, axisscripts, axiskeys, axisusage, axisonchain, axismarket |
-| App | Yes | appinvoke, appget, appset, appcapabilities, appsessionstatus |
+| Worker | No | axis_health, axis_request, axis_run, axis_scripts_, axis_keys_, axis_usage, axis_onchain, axis_market |
+| App | Yes | app_invoke, app_get, app_set, app_capabilities, app_session_status |
 Transport: Streamable HTTP JSON-RPC 2.0 on POST /mcp (JSON body in / JSON body out). Protocol versions accepted: 2025-03-26, 2025-06-18, 2024-11-05.
-Auth: same Bearer API key as /api/scripts (pn…). GET /mcp is public discovery. Production fail-closes when D1 is bound without APIKEYS KV. Rate limit: 60 RPC methods / minute / key (JSON-RPC batches charge per item, max 10; bodies above 1 MiB are rejected before parse).
+Auth: same Bearer API key as /api/scripts (pn_…). GET /mcp is public discovery. Production fail-closes when D1 is bound without API_KEYS KV. Rate limit: 60 RPC methods / minute / key (JSON-RPC batches charge per item, max 10; bodies above 1 MiB are rejected before parse).
 End-user connect steps: MCP (agents).
 Conceptual model
 Endpoints
@@ -7664,43 +7843,43 @@ Canonical host: https://worker.axis.hoox.sh.
 | /mcp | GET | public | Discovery JSON (server name, tool names) |
 | /mcp | DELETE | — | No-op 204 (stateless) |
 | /.well-known/oauth-protected-resource | GET | public | Bearer resource metadata |
-| /api/mcp/bridge | WS | ?ticket= (one-time, minted below) or Authorization header | PWA control plane → McpBridgeDO. Browser sockets cannot set Authorization; they never put the long-lived pn… key in the query string. |
+| /api/mcp/bridge | WS | ?ticket= (one-time, minted below) or Authorization header | PWA control plane → McpBridgeDO. Browser sockets cannot set Authorization; they never put the long-lived pn_… key in the query string. |
 | /api/mcp/bridge | GET | Bearer | No Upgrade header → DO /status: { status, connected } tab count (the app status bar polls this) |
 | /api/mcp/bridge?issue=ticket | GET | Bearer | Mint a single-use WS ticket ({ ticket, expiresIn }, 30s TTL) |
 Health JSON includes features.mcp: true and features.mcpBridge when the DO is bound.
 Bindings
-MCPBRIDGE Durable Object (classname = "McpBridgeDO", migration tag v1 newsqliteclasses). Declared in worker/wrangler.toml.example. App-plane tools return NOMCPBRIDGE until this is deployed. Cloudflare no longer creates KV-backed DO namespaces (newclasses).
+MCP_BRIDGE Durable Object (class_name = "McpBridgeDO", migration tag v1 new_sqlite_classes). Declared in worker/wrangler.toml.example. App-plane tools return NO_MCP_BRIDGE until this is deployed. Cloudflare no longer creates KV-backed DO namespaces (new_classes).
 Session name is the API-key partition (userId = first 32 hex chars of SHA-256 of the key). Optional suffix userId:label is allowed; foreign session ids are ignored.
 Worker tools
 | Tool | Role |
 | --- | --- |
-| axishealth | Same payload as GET /health |
-| axisrequest | Allowlisted Worker HTTP; returns { ok, status, body } |
-| axisrun | POST /api/run — script required; optional data, ticker, timeframe, inputs |
-| axisscriptslist | Cloud library metadata |
-| axisscriptsget | { id } full script |
-| axisscriptsput | Create/upsert { name, content, id?, description?, path?, revision? } |
-| axisscriptsdelete | { id } |
-| axiskeysvalidate | Current Bearer or { key } |
-| axiskeyscreate | { adminToken, tier? } — same as X-Admin-Token |
-| axisusage | Usage stub / KV counters |
-| axisonchain | { path, query? } suffix after /api/onchain |
-| axismarket | { path, query? } suffix after /api/market |
-| appsessionstatus | Connected PWA count for this key |
-axisrequest arguments: method (GET default), path (required, starts with /), optional query, body, headers (Authorization is injected from the MCP session).
-axisrequest allowlist
-Allowed: GET / /health; POST /api/run; GET|POST /api/keys; GET /api/usage; scripts CRUD (/api/scripts, /draft, /:id, versions); GET /api/onchain…; GET /api/market….
+| axis_health | Same payload as GET /health |
+| axis_request | Allowlisted Worker HTTP; returns { ok, status, body } |
+| axis_run | POST /api/run — script required; optional data, ticker, timeframe, inputs |
+| axis_scripts_list | Cloud library metadata |
+| axis_scripts_get | { id } full script |
+| axis_scripts_put | Create/upsert { name, content, id?, description?, path?, revision? } |
+| axis_scripts_delete | { id } |
+| axis_keys_validate | Current Bearer or { key } |
+| axis_keys_create | { adminToken, tier? } — same as X-Admin-Token |
+| axis_usage | Usage stub / KV counters |
+| axis_onchain | { path, query? } suffix after /api/onchain |
+| axis_market | { path, query? } suffix after /api/market |
+| app_session_status | Connected PWA count for this key |
+axis_request arguments: method (GET default), path (required, starts with /), optional query, body, headers (Authorization is injected from the MCP session).
+axis_request allowlist
+Allowed: GET / /health; POST /api/run; GET|POST /api/keys; GET /api/usage; scripts CRUD (/api/scripts, /_draft, /:id, versions); GET /api/onchain…; GET /api/market….
 Blocked: /mcp recursion, /api/stream, /api/git/oauth, path traversal, unknown methods.
 Resource axis://allowlist returns the live table.
 App tools
 | Tool | Role |
 | --- | --- |
-| appcapabilities | Capability catalog from the connected tab |
-| appinvoke | { capability, payload? } — wait for JSON result (default 20s) |
-| appget | Sanitized snapshot; optional dotted path |
-| appset | Allowlisted dotted path + value |
-No tab → SESSIONOFFLINE. Timeouts → TIMEOUT. Snapshots redact keys matching apiKey|secret|passphrase|token|password|authorization|cookie and summarize OHLCV unless includeBars: true.
-Capability ids (appinvoke)
+| app_capabilities | Capability catalog from the connected tab |
+| app_invoke | { capability, payload? } — wait for JSON result (default 20s) |
+| app_get | Sanitized snapshot; optional dotted path |
+| app_set | Allowlisted dotted path + value |
+No tab → SESSION_OFFLINE. Timeouts → TIMEOUT. Snapshots redact keys matching apiKey|secret|passphrase|token|password|authorization|cookie and summarize OHLCV unless includeBars: true.
+Capability ids (app_invoke)
 | Id | Payload | Mutates |
 | --- | --- | --- |
 | app.snapshot | { includeBars? } | no |
@@ -7759,61 +7938,61 @@ Capability ids (appinvoke)
 | settings.get | { key? } — sanitized settings, secrets never exposed | no |
 | settings.set | allowlisted patch (endpoint, engine, interval, historyBars, refreshSec, live., uiScale, autoload, label/strategy/telemetry prefs); interval/history changes reload | yes |
 | status.get | status bar + telemetry | no |
-appset paths: symbol, interval, source, engine, exchange, theme, chartType, uiScale, live.active, live.preferAfterLoad, editor.doc, editor.open, watchlist.open.
+app_set paths: symbol, interval, source, engine, exchange, theme, chartType, uiScale, live.active, live.preferAfterLoad, editor.doc, editor.open, watchlist.open.
 Resources and prompts
 | URI | Contents |
 | --- | --- |
 | axis://health | Health JSON |
 | axis://capabilities | Tool names + planes |
-| axis://allowlist | axisrequest paths |
+| axis://allowlist | axis_request paths |
 | axis://session | Bridge status for this key |
 Prompts (seed the agent; they still call tools):
 | Name | Args |
 | --- | --- |
-| runscript | script (required), symbol?, interval? |
-| debuglastrun | — |
-| analyzestrategy | — |
-| loadsymbol | symbol, interval? |
-| auditworkspace | — |
+| run_script | script (required), symbol?, interval? |
+| debug_last_run | — |
+| analyze_strategy | — |
+| load_symbol | symbol, interval? |
+| audit_workspace | — |
 Client config
 ``bash
-axis mcp config --key pn…
-axis mcp --key pn… # stdio proxy
+axis mcp config --key pn_…
+axis mcp --key pn_… # stdio proxy
 `
 `json
 {
 "mcpServers": {
 "axis": {
 "url": "https://worker.axis.hoox.sh/mcp",
-"headers": { "Authorization": "Bearer pn…" }
+"headers": { "Authorization": "Bearer pn_…" }
 }
 }
 }
 `
-Local wrangler: http://127.0.0.1:8787/mcp with ALLOWOPENKEYS=1 still requires a non-empty Bearer.
+Local wrangler: http://127.0.0.1:8787/mcp with ALLOW_OPEN_KEYS=1 still requires a non-empty Bearer.
 Errors
 | Code | Where | Meaning |
 | --- | --- | --- |
-| NOKEY / INVALIDKEY | HTTP 401 | Missing or unknown Bearer |
-| APIKEYSREQUIRED | HTTP 503 | D1 without KV |
+| NO_KEY / INVALID_KEY | HTTP 401 | Missing or unknown Bearer |
+| API_KEYS_REQUIRED | HTTP 503 | D1 without KV |
 | RATE | HTTP 429 | 60/min/key |
-| MCPALLOWLIST | tool | Path not allowed |
-| NOMCPBRIDGE | tool | DO unbound |
-| SESSIONOFFLINE | app tool | No PWA socket |
+| MCP_ALLOWLIST | tool | Path not allowed |
+| NO_MCP_BRIDGE | tool | DO unbound |
+| SESSION_OFFLINE | app tool | No PWA socket |
 | TIMEOUT | app tool | Tab did not reply in 20s |
-| UNKNOWNCAPABILITY / PATHDENIED | app | Bad id or set path |
+| UNKNOWN_CAPABILITY / PATH_DENIED | app | Bad id or set path |
 | -32601 | JSON-RPC | Unknown method |
 Implementation
 | Path | Role |
 | --- | --- |
 | worker/src/mcp/handler.ts | Streamable HTTP JSON-RPC |
 | worker/src/mcp/catalog.ts | Tools / resources / prompts |
-| worker/src/mcp/allowlist.ts | axisrequest gate |
+| worker/src/mcp/allowlist.ts | axis_request gate |
 | worker/src/mcp/proxy.ts | In-isolate dispatch to existing handlers |
 | worker/src/mcp/bridge.ts | McpBridgeDO |
 | src/mcp/ | PWA host, snapshot, dispatch, WS client |
 | packages/cli/src/commands/mcp.ts | axis mcp |
-In-page: window._AXISMCP__.invoke('chart.get'). Tests: worker/tests/mcp-handler.test.ts, tests/mcp-dispatch.test.ts, packages/cli/tests/mcp.test.ts.
+In-page: window.__AXIS_MCP__.invoke('chart.get'). Tests: worker/tests/mcp-handler.test.ts, tests/mcp-dispatch.test.ts, packages/cli/tests/mcp.test.ts.
 This is a stateless MCP handler (no deprecated McpAgent session DO). App state lives in the PWA + McpBridgeDO`, not in an MCP session id.
 See also
 MCP (agents)
@@ -7823,7 +8002,7 @@ Bindings
 AXIS CLI
 ---
 FILE: ../axis/docs/worker/runtime.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jangoblockchained)
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -7838,23 +8017,23 @@ along with axis. If not, see .
 SPDX-License-Identifier: AGPL-3.0-only
 ---
 title: "Worker runtime"
-description: "POST /api/run — auth gate, rate limits, size caps, EXTERNALBACKEND proxy, feature-gated in-worker Pyodide."
+description: "POST /api/run — auth gate, rate limits, size caps, EXTERNAL_BACKEND proxy, feature-gated in-worker Pyodide."
 ---
 Worker runtime
 Abstract
 worker/src/runtime.ts implements handleRun for POST /api/run. Execution preference is documented in-file:
-1. PYODIDEINWORKER=enabled → tryRunInWorker (pyodideruntime.ts)
-2. Else EXTERNALBACKEND set → HTTP proxy to ${EXTERNALBACKEND}/run
-3. Else 503 NOBACKEND with a pointer at env vars and worker/RUNTIME.md
+1. PYODIDE_IN_WORKER=enabled → tryRunInWorker (pyodide_runtime.ts)
+2. Else EXTERNAL_BACKEND set → HTTP proxy to ${EXTERNAL_BACKEND}/run
+3. Else 503 NO_BACKEND with a pointer at env vars and worker/RUNTIME.md
 Production reality: ships as a proxy to Flask (or another Python host). In-worker Pyodide is a scaffold, not a complete wheel-upload pipeline.
 Auth & abuse controls (2.0.1+)
 | Control | Behavior |
 | --- | --- |
-| Auth gate | When APIKEYS KV is bound or REQUIRERUNAUTH=1, requireApiKey is mandatory |
+| Auth gate | When API_KEYS KV is bound or REQUIRE_RUN_AUTH=1, requireApiKey is mandatory |
 | Rate limit | 30 requests / minute per IP (and per key when authenticated) |
 | Script cap | Max 512 KiB source chars |
 | Bars cap | Max 50 000 OHLCV rows per run |
-| Upstream timeout | 60s proxy abort to EXTERNALBACKEND |
+| Upstream timeout | 60s proxy abort to EXTERNAL_BACKEND |
 Optional Authorization: Bearer still increments USAGE KV when bound (usage:, 30-day TTL).
 Conceptual model
 Interface surface
@@ -7866,16 +8045,16 @@ data: Bar[]; // required non-empty OHLCV array
 mode?: 'interpret' | 'compile';
 }
 `
-Invalid bodies → 400 { status: 'error', code: 'BADREQUEST', message }.
+Invalid bodies → 400 { status: 'error', code: 'BAD_REQUEST', message }.
 Success / upstream
 Proxy returns upstream status and body verbatim (JSON content-type, CORS origin header). Flask Pro API is the usual upstream.
 Error codes (Worker-originated)
 | Code | HTTP | Meaning |
 | --- | --- | --- |
-| BADREQUEST | 400 | Validation / size caps |
-| NOKEY / INVALIDKEY | 401 | Auth required and missing/unknown key |
-| RATELIMIT | 429 | >30 runs/min for IP or key |
-| NOBACKEND | 503 | No external backend and Pyodide path off/failed path to proxy |
+| BAD_REQUEST | 400 | Validation / size caps |
+| NO_KEY / INVALID_KEY | 401 | Auth required and missing/unknown key |
+| RATE_LIMIT | 429 | >30 runs/min for IP or key |
+| NO_BACKEND | 503 | No external backend and Pyodide path off/failed path to proxy |
 | (Pyodide) | 200 body error | tryRunInWorker may return { status: 'error', error } JSON |
 Usage metering
 If Authorization: Bearer … and USAGE KV bound:
@@ -7889,14 +8068,14 @@ Internals
 | worker/src/http.ts | shared CORS / JSON / error-envelope helpers (single source; values pinned by worker/tests/http.test.ts) |
 | worker/src/proxy-router.ts | allowlisted route-table router for /api/onchain/ + /api/market/ (ordered; family fallbacks last — the allowlist is the security boundary) |
 | worker/src/rate-limit.ts | shared per-IP/per-key minute-window limiter (allowRate) |
-| worker/src/pyodideruntime.ts | gated boot + runscript stub path |
+| worker/src/pyodide_runtime.ts | gated boot + run_script stub path |
 | worker/RUNTIME.md | architecture plan for wheels / R2 / cold start |
-| worker/wrangler.toml [vars] | EXTERNALBACKEND, PYODIDEINWORKER, REQUIRERUNAUTH |
-pyodideruntime scaffold
+| worker/wrangler.toml [vars] | EXTERNAL_BACKEND, PYODIDE_IN_WORKER, REQUIRE_RUN_AUTH |
+pyodide_runtime scaffold
 When enabled:
 Lazy-loads Pyodide from jsDelivr v0.29.5 (dev fallback).
 Production intent: R2 wheels + module-level cache (RUNTIME.md).
-Calls runscript(script, bars) via runPythonAsync — requires runtime bootstrap that is not fully wired like the browser engine’s pynescriptruntime.py + micropip install.
+Calls run_script(script, bars) via runPythonAsync — requires runtime bootstrap that is not fully wired like the browser engine’s pynescript_runtime.py + micropip install.
 Do not enable in production without completing the wheel pipeline and load testing CPU/memory limits.
 Constraints (from RUNTIME.md)
 | Resource | Budget |
@@ -7905,18 +8084,18 @@ Constraints (from RUNTIME.md)
 | Memory | 128 MB; Pyodide ~30 MB + wheel ~5 MB |
 | Cold start | ~3s first Pyodide boot (plan) |
 Roll-out flag
-RUNTIME.md also mentions RUNTIMEMODE=in-worker as product language; code checks PYODIDEINWORKER === 'enabled'. Prefer the code flag when configuring.
+RUNTIME.md also mentions RUNTIME_MODE=in-worker as product language; code checks PYODIDE_IN_WORKER === 'enabled'. Prefer the code flag when configuring.
 Invariants & edge cases
 1. Body stream — request body is consumed once; proxy re-serializes the already-parsed object.
 2. CORS — run responses set Access-Control-Allow-Origin from pickOrigin (see CORS).
 3. PWA path mismatch — browser server engine posts to {endpoint}/run; Worker route is /api/run. Align via gateway rewrite or endpoint base path convention.
-4. No response caching yet — README lists cache for identical (script, datahash) as deferred.
+4. No response caching yet — README lists cache for identical (script, data_hash) as deferred.
 Worked examples
 Local proxy to Flask
 `toml
 wrangler.toml [vars]
-EXTERNALBACKEND = "http://127.0.0.1:5002"
-PYODIDEINWORKER = "disabled"
+EXTERNAL_BACKEND = "http://127.0.0.1:5002"
+PYODIDE_IN_WORKER = "disabled"
 `
 `bash
 curl -sS -X POST http://127.0.0.1:8787/api/run \
@@ -7924,13 +8103,13 @@ curl -sS -X POST http://127.0.0.1:8787/api/run \
 -d '{"script":"//@version=6\nindicator(\"t\")\nplot(close)","data":[{"time":1,"open":1,"high":1,"low":1,"close":1}]}'
 `
 Force 503 for missing backend
-Unset EXTERNALBACKEND, keep Pyodide disabled → expect NOBACKEND message referencing RUNTIME.md.
+Unset EXTERNAL_BACKEND, keep Pyodide disabled → expect NO_BACKEND message referencing RUNTIME.md.
 Failure modes
 | Symptom | Fix |
 | --- | --- |
-| 503 NOBACKEND | Set EXTERNALBACKEND or finish Pyodide path |
+| 503 NO_BACKEND | Set EXTERNAL_BACKEND or finish Pyodide path |
 | Proxy 502/connection refused | Flask not listening; wrong URL from Worker (use tunnel/public URL in CF, not localhost) |
-| Pyodide enabled but errors | Wheel missing; CDN blocked; incomplete runscript bootstrap |
+| Pyodide enabled but errors | Wheel missing; CDN blocked; incomplete run_script bootstrap |
 See also
 Bindings
 Engines

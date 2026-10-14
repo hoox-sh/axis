@@ -1,6 +1,6 @@
 # AXIS — llms.txt
 # https://llmstxt.org/ — machine-readable project map for LLMs
-# Generated 2026-10-13
+# Generated 2026-10-14
 
 # AXIS
 > Open charting PWA — own the axes, swap the engine
