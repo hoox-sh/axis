@@ -17,7 +17,7 @@ import {
   getCachedEngineHealth,
   probeEngineHealth,
 } from '../../engines/catalog';
-import { compileReadiness, type EngineHealth } from '../../engines/health';
+import { compileReadiness, healthAdvertises, advertisedRunMode, type EngineHealth } from '../../engines/health';
 import { prewarmEngine, prewarmAppliedScripts } from '../../engines/prewarm';
 import { EngineProPanel } from './EngineProPanel';
 import { probeEndpoint } from '../../indicators/runner';
@@ -88,7 +88,13 @@ export function RuntimePage(props: {
   const hydrate = (engineId: string) => {
     const cfg = readEnginePluginConfig(engineId);
     const schema = getEngine(engineId)?.configSchema;
-    const defaultMode = normalizeExecMode(schema?.mode?.default, 'interpret');
+    // Prefer the backend's advertised default when the user never saved one —
+    // a host configured for interpret should not open on `auto`.
+    const advertised = engineId === 'server' ? advertisedRunMode(getCachedEngineHealth()) : null;
+    const defaultMode = normalizeExecMode(
+      advertised ?? schema?.mode?.default,
+      'interpret',
+    );
     setExecMode(normalizeExecMode(cfg.mode, defaultMode));
     if (typeof cfg.preferWs === 'boolean') setPreferWs(cfg.preferWs);
     else setPreferWs(schema?.preferWs?.default !== false);
@@ -131,11 +137,32 @@ export function RuntimePage(props: {
     if (engine() !== 'server') return 'unknown' as const;
     const probed = probedHealth();
     if (probed) return compileReadiness(probed);
-    const saved = (store.endpoint || '').trim().replace(/\/$/, '');
-    if (saved && endpoint().trim().replace(/\/$/, '') === saved) {
+    // Compare against the endpoint the engine actually probes (store.endpoint,
+    // else the schema default) so a stock install still shows readiness.
+    const effective = String(
+      store.endpoint || getEngine('server')?.configSchema?.endpoint?.default || '',
+    )
+      .trim()
+      .replace(/\/$/, '');
+    if (effective && endpoint().trim().replace(/\/$/, '') === effective) {
       return compileReadiness(getCachedEngineHealth());
     }
     return 'unknown' as const;
+  });
+
+  /**
+   * Whether the endpoint advertises `POST /compile/prewarm`.
+   *
+   * Unknown (no health yet, or a draft endpoint) keeps the action enabled — the
+   * client falls back to a typed "older PYNE" message on 404. A host that
+   * answered without the route disables it up front.
+   */
+  const canPrewarm = createMemo(() => {
+    if (engine() !== 'server') return false;
+    const h = probedHealth() ?? getCachedEngineHealth();
+    if (!h) return true;
+    if (!h.endpoints.length) return true;
+    return healthAdvertises(h, 'POST /compile/prewarm');
   });
 
   const testEndpoint = async () => {
@@ -382,8 +409,12 @@ export function RuntimePage(props: {
                       <StudioButton
                         variant="ghost"
                         testId="axis-engine-prewarm"
-                        disabled={prewarming() || !endpoint().trim()}
-                        title="Warm Numba builtins / IR cache now so the first Run is fast"
+                        disabled={prewarming() || !endpoint().trim() || !canPrewarm()}
+                        title={
+                          canPrewarm()
+                            ? 'Warm Numba builtins / IR cache now so the first Run is fast'
+                            : 'This backend does not advertise /compile/prewarm'
+                        }
                         onClick={() => void prewarm()}
                       >
                         {prewarming() ? <HooxLoader size="xs" /> : <Icons.zap />}

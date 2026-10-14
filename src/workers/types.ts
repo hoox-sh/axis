@@ -23,7 +23,7 @@
  * @module workers/types
  */
 
-import type { CompileReadiness } from '../engines/health';
+import type { CompileReadiness, EngineCompileHealth } from '../engines/health';
 
 /** Stable catalog id for a known runtime / edge service. */
 export type WorkerId =
@@ -155,6 +155,8 @@ export interface WorkerProbeResult {
    * (`warm` / `cold` / `unavailable`), or `unknown` when not advertised.
    */
   readiness?: CompileReadiness;
+  /** Parsed `compile.*` detail (Numba / disk cache / IR entries), when present. */
+  compile?: EngineCompileHealth | null;
   /** Epoch ms of this probe. */
   checkedAt: number;
   /** Error message if down. */

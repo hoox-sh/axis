@@ -53,6 +53,38 @@ describe('probeWorker http-health', () => {
     expect(r.error).toBeNull();
   });
 
+  it('surfaces the PYNE compile section and readiness on the pyne-pro probe', async () => {
+    globalThis.fetch = mock(
+      async () =>
+        new Response(
+          JSON.stringify({
+            status: 'healthy',
+            service: 'pynescript-pro-api',
+            websocket: true,
+            features: { script_runner: true, free_tier_limits: true },
+            compile: {
+              has_numba: true,
+              builtins_warmed: true,
+              disk_cache_enabled: true,
+              ir_entries: 12,
+              default_mode: 'auto',
+              host_prewarmed: false,
+            },
+            endpoints: { 'POST /compile/prewarm': 'warm' },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+    ) as typeof fetch;
+
+    const r = await probeWorker('pyne-pro', { endpoint: DEFAULT_PYNE_PRO_BASE, timeoutMs: 2000 });
+    expect(r.status).toBe('healthy');
+    expect(r.readiness).toBe('warm');
+    expect(r.compile?.hasNumba).toBe(true);
+    expect(r.compile?.diskCacheEnabled).toBe(true);
+    expect(r.compile?.irEntries).toBe(12);
+    expect(r.features.script_runner).toBe(true);
+  });
+
   it('marks pyne-pro down on network error', async () => {
     globalThis.fetch = mock(async () => {
       throw new TypeError('Failed to fetch');

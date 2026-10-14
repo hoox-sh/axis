@@ -11,6 +11,7 @@ import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
 import { mockFetch, jsonResponse } from './helpers/mock-fetch';
 import {
   DEFAULT_ENGINE_HEALTH,
+  advertisedRunMode,
   compileReadiness,
   healthAdvertises,
   healthFromBody,
@@ -213,6 +214,26 @@ describe('compileReadiness', () => {
     expect(compileReadiness(withCompile(base))).toBe('cold');
     expect(compileReadiness(withCompile({ ...base, builtinsWarmed: true }))).toBe('warm');
     expect(compileReadiness(withCompile({ ...base, hostPrewarmed: true }))).toBe('warm');
+  });
+});
+
+describe('advertisedRunMode', () => {
+  it('prefers compile.default_mode, then features.default_run_mode', () => {
+    expect(advertisedRunMode(healthFromBody(PRO_HEALTH))).toBe('auto');
+    expect(
+      advertisedRunMode(healthFromBody({ features: { default_run_mode: 'interpret' } })),
+    ).toBe('interpret');
+    expect(
+      advertisedRunMode(
+        healthFromBody({ features: { default_run_mode: 'compile' }, compile: { default_mode: 'interpret' } }),
+      ),
+    ).toBe('interpret');
+  });
+
+  it('returns null for unknown or unsupported modes', () => {
+    expect(advertisedRunMode(null)).toBeNull();
+    expect(advertisedRunMode(DEFAULT_ENGINE_HEALTH)).toBeNull();
+    expect(advertisedRunMode(healthFromBody({ features: { default_run_mode: 'fast' } }))).toBeNull();
   });
 });
 

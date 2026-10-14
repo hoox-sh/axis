@@ -7,7 +7,7 @@ tags: [code, engines]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-14T01:22:38Z
+  at: 2026-10-14T01:48:54Z
 sources:
   - id: tree
     resource: "src/engines"
@@ -23,7 +23,7 @@ okf_lock: generated
 * `chart-data-session.ts` — _resetChartDataSessionForTests, ensureChartDataSession, releaseChartDataSession, tickChartDataSession
 * `data-sessions.ts` — CanonicalSeriesKey, DATA_PROVIDE_CHUNK, DataSeriesKey, DataSeriesStatus, DataSessionCreateInput, DataSessionCreateResult, DataSessionHandle, DataSessionMiss, DataSessionRunResult, EnsureDataSessionOptions, RunDataSessionOptions, _resetDataSessionMemo
 * `engine-ws.ts` — EngineWsResult, EngineWsRunRequest, _resetEngineWsClients, endpointToRunWsUrl, getEngineWsClient, probeEngineWs
-* `health.ts` — CompileReadiness, DEFAULT_ENGINE_HEALTH, EngineCompileHealth, EngineFeatureHealth, EngineHealth, compileReadiness, healthAdvertises, healthFromBody
+* `health.ts` — AdvertisedRunMode, CompileReadiness, DEFAULT_ENGINE_HEALTH, EngineCompileHealth, EngineFeatureHealth, EngineHealth, advertisedRunMode, compileReadiness, healthAdvertises, healthFromBody
 * `json-sanitize.ts` — parseEngineJson, sanitizeNonFiniteJson
 * `live-sessions.ts` — LiveSessionHit, LiveSessionKeyFields, LiveSessionModeFields, LiveSessionStatus, LiveSessionStatusResult, LiveSessionTickOpts, LiveSessionVia, SESSION_GROWTH_SLACK, SESSION_RETRY_COOLDOWN_MS, SESSION_STATUS_IDLE_RECONCILE_MS, SESSION_STATUS_MIN_INTERVAL_MS, _liveSessionStateForTests
 * `ownership.ts` — isEngineOwnedLive

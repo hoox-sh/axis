@@ -171,6 +171,23 @@ export function healthAdvertises(health: EngineHealth, route: string): boolean {
   return health.endpoints.includes(route);
 }
 
+/** A run mode the backend actually supports. */
+export type AdvertisedRunMode = 'interpret' | 'compile' | 'auto';
+
+/**
+ * The backend's own default run mode, when advertised.
+ *
+ * `compile.default_mode` is the runtime's configured default; `features.default_run_mode`
+ * is the same value surfaced as a feature. Used to seed the Runtime form's
+ * execution mode when the user has not saved one — never to override an
+ * explicit choice.
+ */
+export function advertisedRunMode(health: EngineHealth | null): AdvertisedRunMode | null {
+  const raw = health?.compile?.defaultMode ?? health?.features?.defaultRunMode ?? null;
+  const mode = String(raw || '').trim().toLowerCase();
+  return mode === 'interpret' || mode === 'compile' || mode === 'auto' ? mode : null;
+}
+
 /**
  * Human-readable compile readiness for the UI.
  *

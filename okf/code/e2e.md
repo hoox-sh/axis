@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "e2e"
-description: "e2e contains charts.ts, colors.spec.ts, critical.spec.ts, and 4 more files."
+description: "e2e contains charts.ts, colors.spec.ts, critical.spec.ts, and 5 more files."
 resource: "e2e"
 tags: [code, e2e]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-13T02:17:40Z
+  at: 2026-10-14T01:48:54Z
 sources:
   - id: tree
     resource: "e2e"
@@ -23,6 +23,7 @@ okf_lock: generated
 * `critical.spec.ts`
 * `drawings.spec.ts`
 * `library.spec.ts`
+* `pyne-parity.spec.ts`
 * `smoke.spec.ts`
 * `studio.ts` — StudioRailPage, openDockedEditor, openStudio
 

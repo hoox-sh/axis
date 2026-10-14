@@ -275,6 +275,21 @@ export function WorkersPage(props: {
    * returns a typed failure otherwise, so the button can stay visible and
    * explain why nothing happened.
    */
+  /**
+   * Whether the probed backend looks like it offers `POST /compile/prewarm`.
+   *
+   * A PYNE host always reports a `compile` section; a probe that answered with
+   * features but no `compile` block is treated as not offering the route, so the
+   * button is disabled instead of firing a guaranteed 404. An unprobed entry
+   * keeps it enabled (the client degrades gracefully).
+   */
+  const canPrewarmBackend = createMemo(() => {
+    const r = selectedResult();
+    if (!r) return true;
+    if (!r.features || !Object.keys(r.features).length) return true;
+    return r.compile != null;
+  });
+
   const prewarmBackend = async () => {
     const entry = selected();
     if (!entry) return;
@@ -580,6 +595,17 @@ export function WorkersPage(props: {
                             : r()?.readiness === 'cold'
                               ? 'cold — first compile pays Numba JIT (prewarm available)'
                               : 'unavailable — no Numba; compile runs in object mode'}
+                          {r()?.compile?.diskCacheEnabled
+                            ? ` · disk cache${r()?.compile?.irEntries != null ? ` (${r()?.compile?.irEntries} IR)` : ''}`
+                            : ' · no disk cache'}
+                        </StudioCode>
+                      </StudioField>
+                    </Show>
+                    <Show when={r()?.features?.free_tier_limits === true}>
+                      <StudioField label="Free-tier guards">
+                        <StudioCode>
+                          enabled — unauthenticated /run is rate/bounds limited; set an API key for
+                          full runs
                         </StudioCode>
                       </StudioField>
                     </Show>
@@ -596,8 +622,12 @@ export function WorkersPage(props: {
                         <StudioButton
                           variant="ghost"
                           testId="axis-worker-prewarm"
-                          disabled={!!busyAction()}
-                          title="Pay Numba JIT / IR-cache cost now so the next Run is fast"
+                          disabled={!!busyAction() || !canPrewarmBackend()}
+                          title={
+                            canPrewarmBackend()
+                              ? 'Pay Numba JIT / IR-cache cost now so the next Run is fast'
+                              : 'This backend does not advertise /compile/prewarm'
+                          }
                           onClick={() => void prewarmBackend()}
                         >
                           {busyAction() === 'prewarm' ? (

@@ -133,6 +133,8 @@ function baseResult(
     endpoint,
     features: partial.features ?? {},
     service: partial.service ?? null,
+    ...(partial.readiness !== undefined ? { readiness: partial.readiness } : {}),
+    ...(partial.compile !== undefined ? { compile: partial.compile } : {}),
     checkedAt: partial.checkedAt ?? Date.now(),
     error: partial.error ?? null,
     isActiveBackend:
@@ -373,7 +375,8 @@ async function probeHttpHealthPaths(
 
       // PYNE reports Numba / IR-cache readiness under `compile`; summarise it
       // for the detail pane without duplicating every raw field.
-      const readiness = compileReadiness(healthFromBody(body));
+      const engineHealth = healthFromBody(body);
+      const readiness = compileReadiness(engineHealth);
 
       let status: WorkerHealthStatus = 'healthy';
       const statusStr = String(body.status || '').toLowerCase();
@@ -404,6 +407,7 @@ async function probeHttpHealthPaths(
         features,
         service,
         readiness,
+        compile: engineHealth.compile,
         error: null,
       });
     } catch (e: unknown) {
