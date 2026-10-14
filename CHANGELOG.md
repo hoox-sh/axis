@@ -15,6 +15,10 @@ _Generated/updated: 2026-10-14 · 564 commits · describe-tag: `v2.23.1`_
 
 ## [Unreleased]
 
+### Fixed
+
+- **Cross-test store leakage that made CI order-dependent.** `setStore('pluginsConfig', {})` **merges** in a Solid store rather than replacing, so test files that set `engine:server.preferWs: false` left that key behind for every later file — `classifyTransport('engine', 'server')` then reported `rest` where the telemetry test expects `ws`, depending on run order. The leaking files (`tests/runner-engine-owned.test.ts`, the batch runner-seam test) now restore with `reconcile({})`, and `tests/telemetry.test.ts` asserts the default explicitly instead of inheriting it. The batch seam test also dropped an assertion on `store.lastRun`, which `setLastRun` only publishes when `resultsFocusId` is null — order-dependent for the same reason.
+
 ## [2.24.0] — 2026-10-14
 
 ### Added

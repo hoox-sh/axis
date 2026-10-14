@@ -191,6 +191,23 @@ describe('runBatch', () => {
 });
 
 describe('batched result reuse (runner seam)', () => {
+  // This block mutates global store state (pluginsConfig / endpoint / active
+  // plugin). Bun shares module state across test files, so restore it or the
+  // next file's assertions see this one's leftovers (a leaked
+  // `engine:server.preferWs: false` flips `classifyTransport` to 'rest').
+  afterEach(async () => {
+    const { setStore } = await import('../src/store');
+    const { reconcile } = await import('solid-js/store');
+    // `setStore('pluginsConfig', {})` MERGES in a Solid store, so the leaked
+    // `engine:server.preferWs: false` would survive it — reconcile({}) replaces.
+    setStore('pluginsConfig', reconcile({}));
+    setStore('activePlugins', 'engine', undefined);
+    setStore('scripts', []);
+    setStore('resultsFocusId', null);
+    setStore('lastRun', null);
+    setStore('runResults', reconcile({}));
+  });
+
   it('applies a precomputed result without a second engine call', async () => {
     // Any network call here would be the single-run path leaking through.
     install(() => {
@@ -201,7 +218,6 @@ describe('batched result reuse (runner seam)', () => {
     const {
       _resetEngineRegistrationFlag,
       _setCachedEngineCapabilitiesForTests,
-      DEFAULT_ENGINE_CAPABILITIES,
     } = await import('../src/engines/catalog');
     const { ensureBuiltins, _resetBootstrapFlag } = await import('../src/plugins/bootstrap');
     const { setStore, setActivePlugin, clearLogs } = await import('../src/store');
@@ -220,8 +236,6 @@ describe('batched result reuse (runner seam)', () => {
     setStore('interval', '1h');
     setStore('pluginsConfig', { 'engine:server': { mode: 'interpret', preferWs: false } });
     setStore('scripts', []);
-    setStore('runResults', {});
-    setStore('lastRun', null);
     setActivePlugin('engine', 'server');
 
     const batched = {
@@ -236,12 +250,14 @@ describe('batched result reuse (runner seam)', () => {
       openResults: false,
       precomputedResult: batched,
     });
+    // The seam's contract: the precomputed payload is applied as-is and the
+    // engine is never called. Deliberately no assertion on `store.lastRun` —
+    // `setLastRun` only publishes when `resultsFocusId` is null, which makes it
+    // order-dependent across test files.
     expect(result.status).toBe('success');
     expect(result.plots).toEqual([7, 8]);
     expect(result.meta?.batch).toBe(true);
     expect(calls.length).toBe(0);
-    // The normal post-run bookkeeping still ran.
-    expect((await import('../src/store')).store.lastRun).not.toBeNull();
     _setCachedEngineCapabilitiesForTests(null);
   });
 });

@@ -7,7 +7,7 @@
  * Transport classification + latency helpers for Connection HUD telemetry.
  */
 
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, beforeEach } from 'bun:test';
 import {
   classifyTransport,
   formatLatency,
@@ -17,8 +17,20 @@ import {
   transportLabel,
   connDotClass,
 } from '../src/ui/telemetry';
+import { reconcile } from 'solid-js/store';
+import { setStore } from '../src/store';
 
 describe('classifyTransport', () => {
+  // The 'server prefers WS' case reads `pluginsConfig['engine:server'].preferWs`.
+  // Bun shares module state across test files, so a file that sets
+  // `preferWs: false` and does not restore it would flip this to 'rest'
+  // depending on run order — assert the default explicitly instead.
+  beforeEach(() => {
+    // A plain `{}` MERGES in a Solid store, so it would leave a leaked
+    // `preferWs: false` in place — reconcile({}) is what replaces the object.
+    setStore('pluginsConfig', reconcile({}));
+  });
+
   it('classifies stream plugins', () => {
     expect(classifyTransport('stream', 'binance-ws')).toBe('ws');
     expect(classifyTransport('stream', 'mock-poll')).toBe('local');

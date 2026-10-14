@@ -23,6 +23,7 @@ import {
 import { _resetStorageRegistrationFlag } from '../src/storage/catalog';
 import { _resetDataSessionMemo } from '../src/engines/data-sessions';
 import { _resetChartDataSessionForTests } from '../src/engines/chart-data-session';
+import { reconcile } from 'solid-js/store';
 import { setStore, setActivePlugin, clearLogs } from '../src/store';
 import { runAndApply, _resetRunEpochForTests } from '../src/indicators/runner';
 import { SAMPLE_BARS } from './fixtures/bars';
@@ -114,6 +115,11 @@ afterEach(() => {
   restoreFetch?.();
   restoreFetch = null;
   _setCachedEngineCapabilitiesForTests(null);
+  // This file writes `engine:server.preferWs: false`; Bun shares module state
+  // across test files, so clear it or a later file's transport assertions see
+  // 'rest' where they expect 'ws'. A plain `{}` MERGES in a Solid store and
+  // leaves the key in place — reconcile({}) is what actually replaces it.
+  setStore('pluginsConfig', reconcile({}));
 });
 
 describe('runner engine-owned routing', () => {
