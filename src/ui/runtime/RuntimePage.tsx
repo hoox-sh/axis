@@ -10,8 +10,16 @@
  */
 
 import { For, Show, createEffect, createMemo, createSignal, untrack } from 'solid-js';
-import { store } from '../../store';
-import { listEngines, getEngine } from '../../engines/catalog';
+import { appendLog, store } from '../../store';
+import {
+  listEngines,
+  getEngine,
+  getCachedEngineHealth,
+  probeEngineHealth,
+} from '../../engines/catalog';
+import { compileReadiness, type EngineHealth } from '../../engines/health';
+import { prewarmEngine, prewarmAppliedScripts } from '../../engines/prewarm';
+import { EngineProPanel } from './EngineProPanel';
 import { probeEndpoint } from '../../indicators/runner';
 import { matchCatalogForEndpoint } from '../../workers';
 import { CapabilityBadges, engineOptionLabel } from '../plugin-badges';
@@ -35,7 +43,9 @@ import {
 import type { StudioHealth } from '../studio';
 import {
   EXEC_MODE_OPTIONS,
+  AUTO_PREWARM_FIELD,
   engineHasApiKey,
+  engineHasAutoPrewarm,
   engineHasExecMode,
   engineHasPreferWs,
   engineNeedsEndpoint,
@@ -58,6 +68,10 @@ export function RuntimePage(props: {
   const [probing, setProbing] = createSignal(false);
   const [probeOk, setProbeOk] = createSignal<boolean | null>(null);
   const [probeMsg, setProbeMsg] = createSignal('');
+  /** `/health` of the endpoint last probed in this form (draft, not saved). */
+  const [probedHealth, setProbedHealth] = createSignal<EngineHealth | null>(null);
+  const [prewarming, setPrewarming] = createSignal(false);
+  const [autoPrewarm, setAutoPrewarm] = createSignal(false);
 
   const engines = createMemo(() => listEngines());
   const selected = createMemo(() => getEngine(engine()) || engines()[0]);
@@ -79,6 +93,7 @@ export function RuntimePage(props: {
     if (typeof cfg.preferWs === 'boolean') setPreferWs(cfg.preferWs);
     else setPreferWs(schema?.preferWs?.default !== false);
     setApiKey(typeof cfg.apiKey === 'string' ? cfg.apiKey : String(schema?.apiKey?.default || ''));
+    setAutoPrewarm(cfg[AUTO_PREWARM_FIELD] === true);
     if (engineId === 'pyne-worker') {
       const def = String(
         schema?.endpoint?.default || 'https://pyne-worker.cryptolinx.workers.dev',
@@ -95,6 +110,7 @@ export function RuntimePage(props: {
       hydrate(store.engine);
       setProbeMsg('');
       setProbeOk(null);
+      setProbedHealth(null);
     });
   });
 
@@ -104,13 +120,74 @@ export function RuntimePage(props: {
     return 'idle';
   };
 
+  /**
+   * Compile readiness for the engine this form would save.
+   *
+   * Prefers the endpoint just probed here; falls back to the app-wide cache
+   * only while the form still points at the saved endpoint, so a draft edit
+   * never shows another backend's readiness.
+   */
+  const compileState = createMemo(() => {
+    if (engine() !== 'server') return 'unknown' as const;
+    const probed = probedHealth();
+    if (probed) return compileReadiness(probed);
+    const saved = (store.endpoint || '').trim().replace(/\/$/, '');
+    if (saved && endpoint().trim().replace(/\/$/, '') === saved) {
+      return compileReadiness(getCachedEngineHealth());
+    }
+    return 'unknown' as const;
+  });
+
   const testEndpoint = async () => {
+    const base = endpoint().trim();
     setProbing(true);
     setProbeMsg('Probing…');
-    const r = await probeEndpoint(endpoint().trim());
+    setProbedHealth(null);
+    const r = await probeEndpoint(base);
+    if (r.ok) {
+      // Reuse the probe's own round-trip: read readiness from the same /health.
+      const probe = await probeEngineHealth(base);
+      setProbedHealth(probe?.health ?? null);
+    }
     setProbing(false);
     setProbeOk(r.ok);
     setProbeMsg(r.ok ? r.message : r.message);
+  };
+
+  /**
+   * Pay Numba JIT / IR-cache cost now instead of on the first Run.
+   *
+   * Uses the form's draft endpoint + key (so it works before Save) and re-reads
+   * readiness afterwards so the badge reflects the warm state.
+   */
+  const prewarm = async () => {
+    const base = endpoint().trim();
+    if (!base) return;
+    setPrewarming(true);
+    setProbeMsg('');
+    try {
+      const r = await prewarmEngine({ endpoint: base, apiKey: apiKey().trim() });
+      if (!r.ok) {
+        const msg = r.error || 'Prewarm failed';
+        appendLog('error', `Prewarm · ${base} · ${msg}`, 'engine');
+        setProbeOk(false);
+        setProbeMsg(msg);
+        return;
+      }
+      const ms = r.prewarmMs != null ? ` in ${Math.round(r.prewarmMs)}ms` : '';
+      const failed = r.scriptsFailed ? ` · ${r.scriptsFailed} script(s) failed` : '';
+      appendLog('ok', `Compiler prewarmed${ms}${failed}`, 'engine');
+      const probe = await probeEngineHealth(base);
+      setProbedHealth(probe?.health ?? null);
+      setProbeOk(true);
+      setProbeMsg(
+        r.hasNumba
+          ? `Compiler warmed${ms}${failed}`
+          : `Prewarm ran, but this host has no Numba (object mode)`,
+      );
+    } finally {
+      setPrewarming(false);
+    }
   };
 
   const applyPreset = (ep: string, engineId: string, extra?: { mode?: EngineExecMode; ws?: boolean }) => {
@@ -124,13 +201,29 @@ export function RuntimePage(props: {
   };
 
   const save = () => {
+    const warm = autoPrewarm() && engineHasAutoPrewarm(engine());
     saveEngineConfig({
       engine: engine(),
       endpoint: endpoint().trim(),
       mode: execMode(),
       preferWs: preferWs(),
       apiKey: apiKey().trim(),
+      autoPrewarm: warm,
     });
+    if (warm) {
+      // Fire-and-forget: pay Numba JIT now so the first Run is fast. The client
+      // is memoised per source set and never throws, so this cannot spam or
+      // break the save; failures are Logs-only.
+      void prewarmAppliedScripts().then((r) => {
+        if (!r) return;
+        if (r.ok) {
+          const ms = r.prewarmMs != null ? ` in ${Math.round(r.prewarmMs)}ms` : '';
+          appendLog('ok', `Auto-prewarm · ${r.scriptsOk} script(s)${ms}`, 'engine');
+        } else {
+          appendLog('warn', `Auto-prewarm skipped · ${r.error}`, 'engine');
+        }
+      });
+    }
     props.onClose();
   };
 
@@ -227,6 +320,22 @@ export function RuntimePage(props: {
               />
             </Show>
 
+            <Show when={engineHasAutoPrewarm(engine())}>
+              <StudioToggle
+                id="axis-auto-prewarm"
+                testId="axis-auto-prewarm"
+                checked={autoPrewarm()}
+                onChange={setAutoPrewarm}
+                label="Warm compiler after save"
+                hint={
+                  <>
+                    Send the applied chart scripts to <code>POST /compile/prewarm</code> on Save so
+                    the next Run does not pay Numba JIT.
+                  </>
+                }
+              />
+            </Show>
+
             <Show when={hasApiKey()}>
               <StudioField
                 label="Engine API key"
@@ -269,6 +378,18 @@ export function RuntimePage(props: {
                       {probing() ? <HooxLoader size="xs" /> : <Icons.activity />}
                       Test
                     </StudioButton>
+                    <Show when={engine() === 'server'}>
+                      <StudioButton
+                        variant="ghost"
+                        testId="axis-engine-prewarm"
+                        disabled={prewarming() || !endpoint().trim()}
+                        title="Warm Numba builtins / IR cache now so the first Run is fast"
+                        onClick={() => void prewarm()}
+                      >
+                        {prewarming() ? <HooxLoader size="xs" /> : <Icons.zap />}
+                        Warm compiler
+                      </StudioButton>
+                    </Show>
                   </div>
                 </StudioField>
                 <div class="ax-chip-row">
@@ -308,8 +429,24 @@ export function RuntimePage(props: {
                 <Show when={probeMsg()}>
                   <StudioCode>{probeOk() ? `✓ ${probeMsg()}` : `✗ ${probeMsg()}`}</StudioCode>
                 </Show>
+                <Show when={compileState() !== 'unknown'}>
+                  <StudioField
+                    label="Compile readiness"
+                    hint="From the backend's /health compile section. Prewarm pays Numba JIT before the first run."
+                  >
+                    <StudioCode>
+                      {compileState() === 'warm'
+                        ? 'warm — builtins / host already prewarmed'
+                        : compileState() === 'cold'
+                          ? 'cold — first compile pays Numba JIT'
+                          : 'unavailable — no Numba; compile runs in object mode'}
+                    </StudioCode>
+                  </StudioField>
+                </Show>
               </StudioSection>
             </Show>
+
+            <EngineProPanel engine={engine()} />
 
             <StudioSection title="Related" lead="Inventory lives next door — not as tabs on this page.">
               <div class="ax-grid ax-grid--2">

@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/engines"
-description: "src/engines contains catalog.ts, chart-data-session.ts, data-sessions.ts, and 4 more files."
+description: "src/engines contains batch.ts, catalog.ts, chart-data-session.ts, and 9 more files."
 resource: "src/engines"
 tags: [code, engines]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-13T20:51:45Z
+  at: 2026-10-14T01:22:38Z
 sources:
   - id: tree
     resource: "src/engines"
@@ -18,18 +18,24 @@ okf_lock: generated
 
 # Files
 
-* `catalog.ts` — BUILTIN_ENGINES, DEFAULT_ENGINE_CAPABILITIES, DEFAULT_PYNE_WORKER_ENDPOINT, LOCAL_PYODIDE_INDEX, LOCAL_PYODIDE_VERSION, _resetEngineRegistrationFlag, _resetPyodideEngineState, _setCachedEngineCapabilitiesForTests, callPyodideRunScript, capabilitiesFromHealth, confirmEngineApiKeyTarget, ensureEnginesRegistered
+* `batch.ts` — BatchEntry, BatchRunOptions, BatchRunOutcome, BatchRunResult, BatchScript, RUN_BATCH_MAX_SCRIPTS, runBatch
+* `catalog.ts` — BUILTIN_ENGINES, DEFAULT_ENGINE_CAPABILITIES, DEFAULT_PYNE_WORKER_ENDPOINT, EngineHealthProbe, LOCAL_PYODIDE_INDEX, LOCAL_PYODIDE_VERSION, _resetEngineRegistrationFlag, _resetPyodideEngineState, _setCachedEngineCapabilitiesForTests, _setCachedEngineHealthForTests, callPyodideRunScript, capabilitiesFromHealth
 * `chart-data-session.ts` — _resetChartDataSessionForTests, ensureChartDataSession, releaseChartDataSession, tickChartDataSession
 * `data-sessions.ts` — CanonicalSeriesKey, DATA_PROVIDE_CHUNK, DataSeriesKey, DataSeriesStatus, DataSessionCreateInput, DataSessionCreateResult, DataSessionHandle, DataSessionMiss, DataSessionRunResult, EnsureDataSessionOptions, RunDataSessionOptions, _resetDataSessionMemo
 * `engine-ws.ts` — EngineWsResult, EngineWsRunRequest, _resetEngineWsClients, endpointToRunWsUrl, getEngineWsClient, probeEngineWs
+* `health.ts` — CompileReadiness, DEFAULT_ENGINE_HEALTH, EngineCompileHealth, EngineFeatureHealth, EngineHealth, compileReadiness, healthAdvertises, healthFromBody
 * `json-sanitize.ts` — parseEngineJson, sanitizeNonFiniteJson
-* `live-sessions.ts` — LiveSessionHit, LiveSessionKeyFields, LiveSessionModeFields, LiveSessionTickOpts, LiveSessionVia, SESSION_GROWTH_SLACK, SESSION_RETRY_COOLDOWN_MS, _liveSessionStateForTests, _resetLiveSessionsForTests, noteRunMode, releaseLiveSessions, runModeAllowsSessions
+* `live-sessions.ts` — LiveSessionHit, LiveSessionKeyFields, LiveSessionModeFields, LiveSessionStatus, LiveSessionStatusResult, LiveSessionTickOpts, LiveSessionVia, SESSION_GROWTH_SLACK, SESSION_RETRY_COOLDOWN_MS, SESSION_STATUS_IDLE_RECONCILE_MS, SESSION_STATUS_MIN_INTERVAL_MS, _liveSessionStateForTests
 * `ownership.ts` — isEngineOwnedLive
+* `prewarm.ts` — MAX_PREWARM_SCRIPTS, PrewarmOptions, PrewarmResult, _resetPrewarmMemoForTests, collectAppliedScriptSources, prewarmAppliedScripts, prewarmEngine
+* `pro.ts` — BacktestSummary, PREVIEW_MAX_BARS, PreviewOptions, PreviewResult, ProCallOptions, QuickBacktestResult, UsageResult, fetchUsage, renderChartPreview, renderIndicatorPreview, runQuickBacktest
+* `runner.ts` — DeployHostedScriptInput, HostedJob, HostedJobCronState, HostedScript, RunnerCallOptions, RunnerResult, deployHostedScript, listHostedJobs, runHostedJobNow, runnerAvailable, setHostedJobEnabled
 
 # Depends on
 
 * [src/alerts](/code/src/alerts.md)
 * [src/data](/code/src/data.md)
+* [src/indicators](/code/src/indicators.md)
 * [src/plugins](/code/src/plugins.md)
 * [src/store](/code/src/store.md)
 * [src/workers](/code/src/workers.md)

@@ -74,6 +74,7 @@ import { noteDataManagerLiveBar } from '../data/expand-cache';
 import { isEngineOwnedLive } from '../engines/ownership';
 import { tickChartDataSession, releaseChartDataSession } from '../engines/chart-data-session';
 import { getDataSeriesBars } from '../engines/data-sessions';
+import { refreshLiveSessionTelemetry } from '../engines/live-sessions';
 import { getActiveEngineConfig } from '../plugins/active';
 import { exchangeForSource } from '../data/symbol-exchange';
 import { sanitizeBar } from '../data/parse-bars';
@@ -376,6 +377,17 @@ export function startLive(
       const proBars = await getDataSeriesBars(endpoint, apiKey, key, limit);
       if (isCurrent() && proBars.length) {
         setDataToChart(proBars, { fit: false, clearMarkers: false });
+      }
+      // Introspection only: the engine's own session bookkeeping (bars / idle /
+      // TTL). Throttled inside the client, so this cannot add a request per tick.
+      const session = await refreshLiveSessionTelemetry();
+      if (isCurrent() && session) {
+        setTelemetryPlane('stream', {
+          detail:
+            `${sym} ${iv} · session ${session.bars ?? '?'} bars` +
+            (session.idleSeconds != null ? ` · idle ${Math.round(session.idleSeconds)}s` : '') +
+            (session.ttlSeconds != null ? ` · ttl ${Math.round(session.ttlSeconds)}s` : ''),
+        });
       }
     };
     enginePaintChain = enginePaintChain.then(run, run);

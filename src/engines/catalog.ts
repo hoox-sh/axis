@@ -63,6 +63,7 @@ import { store, setTelemetryPlane, setTelemetryState, setStatus, appendLog } fro
 import { registry } from '../plugins/registry';
 import { scriptHasPineAlertCalls } from '../alerts/pine';
 import { parseEngineJson } from './json-sanitize';
+import { healthFromBody, type EngineHealth } from './health';
 import {
   callPyodideRunScript,
   formatPyodideBridgeError,
@@ -99,7 +100,7 @@ export {
  * builtins so AXIS `pine_alert` rows can fire. In-browser Pyodide compile
  * records alerts itself (see `pynescript_runtime._patch_compiler_alerts`).
  */
-function resolveServerRunMode(mode: string, script: string, profilerOn: boolean): string {
+export function resolveServerRunMode(mode: string, script: string, profilerOn: boolean): string {
   if (profilerOn) return 'interpret';
   if ((mode === 'compile' || mode === 'auto') && scriptHasPineAlertCalls(script)) {
     return 'interpret';
@@ -290,16 +291,16 @@ export const serverEngine: EnginePlugin = {
   },
   async getCapabilities() {
     const endpoint = String(store.endpoint || this.configSchema?.endpoint.default || '').replace(/\/$/, '');
-    try {
-      const res = await fetch(`${endpoint}/health`, {
-        method: 'GET',
-        signal: AbortSignal.timeout(5_000),
-      });
-      if (!res.ok) return { ...DEFAULT_ENGINE_CAPABILITIES, liveModes: [...DEFAULT_ENGINE_CAPABILITIES.liveModes] };
-      return capabilitiesFromHealth(await res.json());
-    } catch {
+    const probe = await probeEngineHealth(endpoint);
+    if (!probe) {
+      // Readiness must not outlive the endpoint that reported it.
+      cachedEngineHealth = null;
       return { ...DEFAULT_ENGINE_CAPABILITIES, liveModes: [...DEFAULT_ENGINE_CAPABILITIES.liveModes] };
     }
+    // Same fetch, two views: live-mode caps for the runner, readiness/route
+    // metadata for the UI (prewarm, runner, preview gating).
+    cachedEngineHealth = probe.health;
+    return probe.capabilities;
   },
   async isReady() {
     const endpoint = (store.endpoint || this.configSchema!.endpoint.default as string).replace(/\/$/, '');
@@ -1346,6 +1347,9 @@ export async function getEngineCapabilities(id?: string): Promise<EngineCapabili
   try {
     const caps = await engine.getCapabilities();
     cachedEngineCapabilities = caps;
+    // Only the `server` engine probes PYNE /health; a stale readiness badge
+    // from the previous engine would misreport the newly selected one.
+    if (engine.id !== 'server') cachedEngineHealth = null;
     return caps;
   } catch {
     return fallback();
@@ -1353,6 +1357,7 @@ export async function getEngineCapabilities(id?: string): Promise<EngineCapabili
 }
 
 let cachedEngineCapabilities: EngineCapabilities | null = null;
+let cachedEngineHealth: EngineHealth | null = null;
 
 /** Synchronous read of the last resolved capabilities (default when unknown). */
 export function getCachedEngineCapabilities(): EngineCapabilities {
@@ -1362,9 +1367,57 @@ export function getCachedEngineCapabilities(): EngineCapabilities {
   };
 }
 
+/**
+ * Last `/health`-derived readiness for the selected engine, or null when the
+ * engine is not a PYNE server engine / the endpoint never answered. Read this
+ * from UI badges and optional-surface gates; never infer support from it.
+ */
+export function getCachedEngineHealth(): EngineHealth | null {
+  return cachedEngineHealth;
+}
+
 /** @internal test helper */
 export function _setCachedEngineCapabilitiesForTests(caps: EngineCapabilities | null): void {
   cachedEngineCapabilities = caps;
+}
+
+/** @internal test helper */
+export function _setCachedEngineHealthForTests(health: EngineHealth | null): void {
+  cachedEngineHealth = health;
+}
+
+/** Both views of one `GET /health` body. */
+export interface EngineHealthProbe {
+  health: EngineHealth;
+  capabilities: EngineCapabilities;
+}
+
+/**
+ * Probe an explicit endpoint's `/health` and return both views.
+ *
+ * Deliberately side-effect free: the Runtime form uses it to inspect a draft
+ * endpoint before Save, so it must not overwrite the caches that describe the
+ * *selected* engine. Returns null when the endpoint is empty, unreachable, or
+ * answers with something other than a JSON object.
+ */
+export async function probeEngineHealth(
+  endpoint: string,
+  timeoutMs = 5_000,
+): Promise<EngineHealthProbe | null> {
+  const base = String(endpoint || '').replace(/\/$/, '');
+  if (!base) return null;
+  try {
+    const res = await fetch(`${base}/health`, {
+      method: 'GET',
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!res.ok) return null;
+    const body: unknown = await res.json();
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
+    return { health: healthFromBody(body), capabilities: capabilitiesFromHealth(body) };
+  } catch {
+    return null;
+  }
 }
 
 export const BUILTIN_ENGINES: EnginePlugin[] = [

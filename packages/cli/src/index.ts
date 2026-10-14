@@ -18,6 +18,8 @@ import { registerSetup } from "./commands/setup.js";
 import { registerDeploy } from "./commands/deploy.js";
 import { registerSecrets } from "./commands/secrets.js";
 import { registerHealth } from "./commands/health.js";
+import { registerPrewarm } from "./commands/prewarm.js";
+import { registerUsage } from "./commands/usage.js";
 import { registerKeys } from "./commands/keys.js";
 import { registerDev } from "./commands/dev.js";
 import { registerWhoami } from "./commands/whoami.js";
@@ -80,6 +82,8 @@ ${theme.dim("Docs:")} https://hoox.sh/axis/docs
   registerDeploy(program);
   registerSecrets(program);
   registerHealth(program);
+  registerPrewarm(program);
+  registerUsage(program);
   registerKeys(program);
   registerDev(program);
   registerWhoami(program);

@@ -1,0 +1,66 @@
+---
+title: "PYNE endpoint parity"
+description: "Which PYNE Pro API routes AXIS consumes, which it deliberately does not, and how each surface is gated."
+---
+
+# PYNE endpoint parity
+
+`GET /health` on the PYNE Pro API is the discovery surface: it lists `endpoints`,
+advertises optional routes under `features.*`, and reports Numba / IR-cache
+readiness under `compile.*`. This page is the ledger of what AXIS actually uses,
+so a backend change can be reasoned about without grepping the client.
+
+The live-mode subset (`features.live_modes`, `features.data_session`) is consumed
+by `capabilitiesFromHealth()` in `src/engines/catalog.ts`; the rest of the payload
+is parsed by `src/engines/health.ts` and cached next to it
+(`getCachedEngineHealth()`), which is what the readiness badges and the optional
+runner surface read. Nothing is ever inferred from the service name.
+
+## Used
+
+| Route | AXIS surface | Notes |
+| --- | --- | --- |
+| `GET /`, `GET /health` | Engine probe | Capabilities, readiness, route advertisement. |
+| `POST /run` | `serverEngine.run` | REST fallback; `mode` in the body. |
+| `WS /ws/run` | `src/engines/engine-ws.ts` | Preferred when `/health` reports `websocket`. |
+| `POST /session`, `/tick`, `/append`, `DELETE` | `src/engines/live-sessions.ts` | O(delta) live ticks; interpret only. |
+| `GET /session/{id}` | `src/engines/live-sessions.ts` | Idle reconciliation + telemetry (`bars`, `idle_seconds`, `ttl_seconds`). |
+| `POST /data/session`, `/data/session/{id}/tick` | `src/engines/data-sessions.ts` | Engine-owned series; identity only. |
+| `GET /data/series`, `/data/series/bars` | `src/engines/data-sessions.ts` | Status + newest window for the chart paint. |
+| `POST /data/series/provide`, `/data/series/fetch` | `src/engines/data-sessions.ts` | Cache-miss broker (local upload, then engine fetch). |
+| `POST /run/batch` | `src/engines/batch.ts` | ≥2 eligible reapplied indicators; 8-script cap. |
+| `POST /compile/prewarm` | `src/engines/prewarm.ts`, `axis prewarm` | Builtins and/or applied scripts. |
+| `POST /optimize` | `src/optimize/client.ts` | Falls back to the in-app random study. |
+| `POST /lsp/completion`, `/hover`, `/diagnostics`, `/convert` | `src/editor/pyne-lsp-client.ts` | `/lsp/preevaluate` is an alias of `/diagnostics`. |
+| `GET /datafeed/ohlcv`, `/markets`, `/health` | `src/data/gateway.ts` | Gateway mode `pyne` / `auto`. |
+| `WS /datafeed/watch` | `src/streams/catalog.ts` (`ccxt-ws`) | |
+| `POST /preview/chart`, `/preview/indicator` | `src/engines/pro.ts` | Pro tier; degrades to `unavailable`. |
+| `POST /backtest/quick` | `src/engines/pro.ts` | Pro tier; mock data when no OHLCV. |
+| `GET /auth/usage` | `src/engines/pro.ts`, `axis usage` | Requires a key. |
+| `POST /auth/validate` | `axis keys validate --pyne` | Check a key without consuming a call. |
+| `POST /auth/create_key` | `axis keys create --pyne` | Admin token only; never from the browser. |
+| `POST /scripts` | `src/engines/runner.ts` | Deploy the newest applied chart script as a hosted job; upsert by id. |
+| `GET /cron/jobs`, `PUT /cron/jobs`, `POST /cron/run` | `src/engines/runner.ts` | Only when `features.script_runner`; `PYNE_RUNNER=1`. |
+
+## Deliberately unused
+
+| Route | Why not |
+| --- | --- |
+| `GET /scripts`, `GET /scripts/{id}`, `DELETE /scripts/{id}` | Job listing and lifecycle already flow through `GET /cron/jobs` (which carries the cron state AXIS renders); a separate read path would be a second source of truth. Deletion is left to the CLI/host rather than a destructive button in the charting UI. |
+| `POST /run/batch` with per-script inputs | The batch body has no per-script `inputs`, so scripts with resolved `input.*` overrides stay on the single-run path. |
+| Compile-mode runs over sessions / data sessions | Sessions always evaluate in interpret; AXIS records the backend-reported mode and never silently switches a compiled series. |
+
+## Readiness contract
+
+`compile.*` is surfaced as `warm` / `cold` / `unavailable` / `unknown`
+(`compileReadiness()`), and it is cleared whenever the endpoint stops answering or
+a non-server engine is selected — a badge must never describe the wrong backend.
+`features.script_runner` gates the hosted-runner surface, and `features.warm_compile`
+is not read directly: AXIS sends `mode: auto` by default, so warm compile is used
+implicitly when the backend supports it.
+
+## Related
+
+- [Engine-owned data plane](/devops/engine-owned-data-plane) — the `/data/*` contract in full.
+- `src/engines/health.ts` — the typed `/health` parser.
+- `docs/architecture/evaluation.mdx` — where each route sits in the evaluation map.

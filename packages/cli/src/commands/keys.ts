@@ -16,6 +16,8 @@ import {
   validateWorkerApiKey,
 } from "../services/health.js";
 import { promptSecret } from "../utils/prompt.js";
+import { mintPyneKey, validatePyneKey } from "../services/pyne-auth.js";
+import { defaultPyneUrl } from "../services/prewarm.js";
 import {
   CLIError,
   ExitCode,
@@ -76,8 +78,12 @@ async function resolveAdminToken(
 
 export async function runKeysCreate(
   opts: GlobalOpts,
-  flags: { url?: string; adminToken?: string; tier?: string }
+  flags: { url?: string; adminToken?: string; tier?: string; pyne?: boolean }
 ): Promise<void> {
+  if (flags.pyne) {
+    await runPyneKeysCreate(opts, flags);
+    return;
+  }
   printHeader("AXIS keys create", opts.quiet);
   const base = flags.url || defaultWorkerUrl();
   // The admin token is a Bearer-equivalent secret — never cleartext off-host.
@@ -135,10 +141,65 @@ export async function runKeysCreate(
   printInfo(`Worker URL: ${base}`, opts.quiet);
 }
 
+/**
+ * `axis keys create --pyne` — mint on the calculation host.
+ *
+ * The PYNE admin token is read from `--admin-token` / `AXIS_ADMIN_TOKEN` only:
+ * it is a different secret from the Worker's, and the host's `ADMIN_TOKEN` env
+ * is what it is compared against.
+ */
+async function runPyneKeysCreate(
+  opts: GlobalOpts,
+  flags: { url?: string; adminToken?: string; tier?: string }
+): Promise<void> {
+  const base = (flags.url || defaultPyneUrl()).replace(/\/$/, "");
+  printHeader("AXIS keys create (PYNE)", opts.quiet);
+  assertHttpsForSecret(base, "axis keys create --pyne");
+  const token = String(
+    flags.adminToken || process.env.AXIS_ADMIN_TOKEN || ""
+  ).trim();
+  if (!token) {
+    throw new CLIError(
+      "ADMIN_TOKEN required to mint PYNE keys",
+      ExitCode.UNAUTHENTICATED,
+      "Pass --admin-token or set AXIS_ADMIN_TOKEN (the PYNE host's ADMIN_TOKEN)"
+    );
+  }
+  const tier = (flags.tier || "hobby").toLowerCase();
+  const minted = await mintPyneKey(base, token, tier);
+  if (!minted.ok || !minted.apiKey) {
+    throw new CLIError(
+      minted.error || "PYNE key mint failed",
+      minted.status === 403 ? ExitCode.UNAUTHENTICATED : ExitCode.ERROR,
+      minted.status === 403
+        ? "Set ADMIN_TOKEN on the PYNE host, then retry"
+        : "Check axis prewarm / axis health against this endpoint"
+    );
+  }
+  if (opts.json) {
+    printJson({
+      ok: true,
+      api_key: minted.apiKey,
+      key_id: minted.keyId,
+      tier: minted.tier,
+      pyne: base,
+    });
+    return;
+  }
+  printOk(`Minted ${minted.tier || tier} PYNE key`, opts.quiet);
+  printWarn("This value is shown once. Store it; the backend never returns it again.", opts.quiet);
+  process.stdout.write(`${minted.apiKey}\n`);
+  printInfo(`Use it as the engine API key for ${base}`, opts.quiet);
+}
+
 export async function runKeysValidate(
   opts: GlobalOpts,
-  flags: { url?: string; key?: string }
+  flags: { url?: string; key?: string; pyne?: boolean }
 ): Promise<void> {
+  if (flags.pyne) {
+    await runPyneKeysValidate(opts, flags);
+    return;
+  }
   printHeader("AXIS keys validate", opts.quiet);
   const key = String(flags.key || process.env.AXIS_API_KEY || "").trim();
   if (!key) {
@@ -165,6 +226,48 @@ export async function runKeysValidate(
   if (opts.json) printJson({ ok: true, tier: result.tier, worker: base });
 }
 
+/** `axis keys validate --pyne` — check a key against the calculation host. */
+async function runPyneKeysValidate(
+  opts: GlobalOpts,
+  flags: { url?: string; key?: string }
+): Promise<void> {
+  const base = (flags.url || defaultPyneUrl()).replace(/\/$/, "");
+  const key = String(flags.key || process.env.AXIS_PYNE_API_KEY || "").trim();
+  printHeader("AXIS keys validate (PYNE)", opts.quiet);
+  if (!key) {
+    throw new CLIError(
+      "API key required",
+      ExitCode.INVALID_USAGE,
+      "Pass --key pn_…  or  AXIS_PYNE_API_KEY"
+    );
+  }
+  assertHttpsForSecret(base, "axis keys validate --pyne");
+  const result = await validatePyneKey(base, key);
+  if (!result.ok) {
+    throw new CLIError(
+      result.error || "invalid key",
+      result.status === 401 ? ExitCode.UNAUTHENTICATED : ExitCode.ERROR,
+      result.status === 401 ? "Mint a key with axis keys create --pyne" : undefined
+    );
+  }
+  printOk(
+    `Key valid${result.tier ? ` · tier=${result.tier}` : ""}` +
+      (result.active === false ? " · inactive" : "") +
+      (result.rateLimited ? " · rate-limited" : ""),
+    opts.quiet
+  );
+  if (opts.json) {
+    printJson({
+      ok: true,
+      key_id: result.keyId,
+      tier: result.tier,
+      active: result.active,
+      rate_limited: result.rateLimited,
+      pyne: base,
+    });
+  }
+}
+
 export function registerKeys(program: Command): void {
   const keys = program
     .command("keys")
@@ -176,17 +279,20 @@ export function registerKeys(program: Command): void {
     .option("--url <url>", "Worker base URL", defaultWorkerUrl())
     .option("--admin-token <token>", "Admin token (else AXIS_ADMIN_TOKEN / wrangler.toml)")
     .option("--tier <tier>", "free | hobby | pro | team | enterprise", "hobby")
+    .option("--pyne", "Mint on the PYNE host instead (POST /auth/create_key)")
     .action(async function (this: Command) {
       const o = this.optsWithGlobals() as GlobalOpts & {
         url?: string;
         adminToken?: string;
         tier?: string;
+        pyne?: boolean;
       };
       await wrapAction((g) =>
         runKeysCreate(g, {
           url: o.url,
           adminToken: o.adminToken,
           tier: o.tier,
+          pyne: o.pyne,
         })
       ).call(this);
     });
@@ -196,13 +302,15 @@ export function registerKeys(program: Command): void {
     .description("Validate a pn_… key against GET /api/keys")
     .option("--url <url>", "Worker base URL", defaultWorkerUrl())
     .option("--key <key>", "API key (else AXIS_API_KEY)")
+    .option("--pyne", "Validate on the PYNE host instead (POST /auth/validate)")
     .action(async function (this: Command) {
       const o = this.optsWithGlobals() as GlobalOpts & {
         url?: string;
         key?: string;
+        pyne?: boolean;
       };
       await wrapAction((g) =>
-        runKeysValidate(g, { url: o.url, key: o.key })
+        runKeysValidate(g, { url: o.url, key: o.key, pyne: o.pyne })
       ).call(this);
     });
 }

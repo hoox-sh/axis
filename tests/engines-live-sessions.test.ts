@@ -16,7 +16,10 @@ import {
   tryLiveSessionTick,
   noteRunMode,
   runModeAllowsSessions,
+  getSessionStatus,
+  refreshLiveSessionTelemetry,
   _resetLiveSessionsForTests,
+  _liveSessionStateForTests,
   type LiveSessionTickOpts,
 } from '../src/engines/live-sessions';
 import type { Bar } from '../src/store/types';
@@ -426,5 +429,279 @@ describe('live-sessions', () => {
     const rebased = bars.slice(bars.length - 8);
     const hit = await tryLiveSessionTick(opts(rebased));
     expect(hit?.via).toBe('session-create');
+  });
+});
+
+describe('getSessionStatus', () => {
+  let restore: (() => void) | null = null;
+
+  afterEach(() => {
+    restore?.();
+    restore = null;
+  });
+
+  it('parses the PYNE status blob', async () => {
+    restore = mockFetch(() =>
+      jsonResponse({
+        status: 'success',
+        session_id: 's7',
+        bars: 123,
+        idle_seconds: 1.25,
+        ttl_seconds: 900,
+      }),
+    );
+    const r = await getSessionStatus(ENDPOINT, undefined, 's7');
+    expect(r.kind).toBe('ok');
+    if (r.kind !== 'ok') return;
+    expect(r.status).toEqual({
+      sessionId: 's7',
+      bars: 123,
+      idleSeconds: 1.25,
+      ttlSeconds: 900,
+    });
+  });
+
+  it('reports gone on 404 and on a NO_SESSION envelope', async () => {
+    restore = mockFetch(() => jsonResponse({ status: 'error', code: 'NO_SESSION' }, 404));
+    expect((await getSessionStatus(ENDPOINT, undefined, 's1')).kind).toBe('gone');
+    restore();
+    restore = mockFetch(() =>
+      jsonResponse({ status: 'error', code: 'NO_SESSION', message: 'gone' }),
+    );
+    expect((await getSessionStatus(ENDPOINT, undefined, 's1')).kind).toBe('gone');
+  });
+
+  it('reports unknown for transport failures and non-JSON bodies', async () => {
+    restore = mockFetch(() => jsonResponse({ status: 'error' }, 500));
+    expect((await getSessionStatus(ENDPOINT, undefined, 's1')).kind).toBe('unknown');
+    restore();
+    restore = mockFetch(() => new Response('<html>nginx</html>', { status: 200 }));
+    expect((await getSessionStatus(ENDPOINT, undefined, 's1')).kind).toBe('unknown');
+    restore();
+    restore = mockFetch(() => {
+      throw new Error('offline');
+    });
+    expect((await getSessionStatus(ENDPOINT, undefined, 's1')).kind).toBe('unknown');
+  });
+
+  it('is a no-op without an endpoint or session id', async () => {
+    restore = mockFetch(() => {
+      throw new Error('fetch must not be called');
+    });
+    expect((await getSessionStatus('', undefined, 's1')).kind).toBe('unknown');
+    expect((await getSessionStatus(ENDPOINT, undefined, '')).kind).toBe('unknown');
+  });
+});
+
+describe('idle session reconciliation', () => {
+  let restore: (() => void) | null = null;
+
+  beforeEach(() => {
+    _resetLiveSessionsForTests();
+  });
+
+  afterEach(() => {
+    restore?.();
+    restore = null;
+    _resetLiveSessionsForTests();
+  });
+
+  const keyFields = { endpoint: ENDPOINT, script: SCRIPT, symbol: SYMBOL, interval: INTERVAL };
+
+  /** Force the session past the idle threshold so the next call reconciles. */
+  function makeIdle(): void {
+    const st = _liveSessionStateForTests(keyFields);
+    expect(st).not.toBeNull();
+    if (!st) return;
+    st.lastUsedAt = 0;
+    st.lastReconciledAt = 0;
+  }
+
+  it('does not reconcile a freshly used session', async () => {
+    const backend = installBackend({});
+    restore = backend.restore;
+    const bars = pineBars(6);
+    await tryLiveSessionTick(opts(bars));
+    const before = backend.calls.filter((c) => c.method === 'GET').length;
+    await tryLiveSessionTick(opts(bars));
+    const after = backend.calls.filter((c) => c.method === 'GET').length;
+    expect(after).toBe(before);
+  });
+
+  it('recreates a session the engine has reclaimed', async () => {
+    const backend = installBackend({});
+    restore = backend.restore;
+    const bars = pineBars(6);
+    await tryLiveSessionTick(opts(bars));
+    makeIdle();
+    // The engine no longer holds it.
+    restore();
+    restore = mockFetch(async (input, init) => {
+      const path = String(input).slice(ENDPOINT.length);
+      const method = String(init?.method || 'GET').toUpperCase();
+      backend.calls.push({ method, path, body: null, headers: null });
+      if (method === 'GET') return jsonResponse({ status: 'error', code: 'NO_SESSION' }, 404);
+      if (method === 'POST' && path === '/session') {
+        return jsonResponse(envelope('recreated', bars.length));
+      }
+      return jsonResponse({ status: 'error' }, 404);
+    });
+    const hit = await tryLiveSessionTick(opts(bars));
+    expect(hit?.via).toBe('session-create');
+    expect(hit?.sessionId).toBe('recreated');
+  });
+
+  it('recreates when the engine reports a different bar count', async () => {
+    const backend = installBackend({});
+    restore = backend.restore;
+    const bars = pineBars(6);
+    await tryLiveSessionTick(opts(bars));
+    makeIdle();
+    restore();
+    restore = mockFetch(async (input, init) => {
+      const path = String(input).slice(ENDPOINT.length);
+      const method = String(init?.method || 'GET').toUpperCase();
+      backend.calls.push({ method, path, body: null, headers: null });
+      if (method === 'GET') {
+        return jsonResponse({
+          status: 'success',
+          session_id: 's1',
+          bars: 999,
+          idle_seconds: 1,
+          ttl_seconds: 900,
+        });
+      }
+      if (method === 'POST' && path === '/session') {
+        return jsonResponse(envelope('rebased', bars.length));
+      }
+      return jsonResponse({ status: 'error' }, 404);
+    });
+    const hit = await tryLiveSessionTick(opts(bars));
+    expect(hit?.via).toBe('session-create');
+    expect(hit?.sessionId).toBe('rebased');
+  });
+
+  it('keeps ticking when the engine agrees about the session', async () => {
+    const backend = installBackend({});
+    restore = backend.restore;
+    const bars = pineBars(6);
+    await tryLiveSessionTick(opts(bars));
+    makeIdle();
+    // Move the forming tip so the tick path runs (not the cached shortcut).
+    const moved = bars.map((b) => ({ ...b }));
+    moved[moved.length - 1] = { ...moved[moved.length - 1]!, close: 777 };
+    const orig = backend.restore;
+    restore = mockFetch(async (input, init) => {
+      const path = String(input).slice(ENDPOINT.length);
+      const method = String(init?.method || 'GET').toUpperCase();
+      if (method === 'GET') {
+        return jsonResponse({
+          status: 'success',
+          session_id: 's1',
+          bars: 6,
+          idle_seconds: 21,
+          ttl_seconds: 900,
+        });
+      }
+      return jsonResponse(envelope('s1', 6));
+    });
+    const hit = await tryLiveSessionTick(opts(moved));
+    expect(hit?.via).toBe('session-tick');
+    orig();
+  });
+});
+
+describe('refreshLiveSessionTelemetry', () => {
+  let restore: (() => void) | null = null;
+  let gets = 0;
+
+  beforeEach(() => {
+    _resetLiveSessionsForTests();
+    gets = 0;
+  });
+
+  afterEach(() => {
+    restore?.();
+    restore = null;
+    _resetLiveSessionsForTests();
+  });
+
+  const keyFields = { endpoint: ENDPOINT, script: SCRIPT, symbol: SYMBOL, interval: INTERVAL };
+
+  function installStatusBackend(status: Record<string, unknown> | null, code = 200) {
+    restore = mockFetch((input, init) => {
+      const method = String(init?.method || 'GET').toUpperCase();
+      if (method === 'GET') {
+        gets++;
+        return status
+          ? jsonResponse(status, code)
+          : jsonResponse({ status: 'error', code: 'NO_SESSION' }, 404);
+      }
+      const path = String(input).slice(ENDPOINT.length);
+      if (method === 'POST' && path === '/session') {
+        return jsonResponse(envelope('s1', pineBars(6).length));
+      }
+      return jsonResponse(envelope('s1', pineBars(6).length));
+    });
+  }
+
+  it('returns null when no session is cached', async () => {
+    installStatusBackend({ status: 'success', session_id: 's1', bars: 6 });
+    expect(await refreshLiveSessionTelemetry()).toBeNull();
+    expect(gets).toBe(0);
+  });
+
+  it('fetches once, then reuses the cached status inside the throttle window', async () => {
+    installStatusBackend({
+      status: 'success',
+      session_id: 's1',
+      bars: 6,
+      idle_seconds: 2,
+      ttl_seconds: 900,
+    });
+    await tryLiveSessionTick(opts(pineBars(6)));
+    const st = _liveSessionStateForTests(keyFields);
+    expect(st).not.toBeNull();
+    if (!st) return;
+    st.lastReconciledAt = 0;
+    const first = await refreshLiveSessionTelemetry();
+    expect(first?.bars).toBe(6);
+    expect(gets).toBe(1);
+    const second = await refreshLiveSessionTelemetry();
+    expect(second?.bars).toBe(6);
+    expect(gets).toBe(1);
+  });
+
+  it('keeps the last known status when the engine cannot answer', async () => {
+    // First a healthy status…
+    installStatusBackend({
+      status: 'success',
+      session_id: 's1',
+      bars: 6,
+      idle_seconds: 2,
+      ttl_seconds: 900,
+    });
+    await tryLiveSessionTick(opts(pineBars(6)));
+    const st = _liveSessionStateForTests(keyFields);
+    expect(st).not.toBeNull();
+    if (!st) return;
+    st.lastReconciledAt = 0;
+    expect((await refreshLiveSessionTelemetry())?.bars).toBe(6);
+    // …then the endpoint breaks: the stale value is better than nothing.
+    restore?.();
+    restore = mockFetch(() => jsonResponse({ status: 'error' }, 500));
+    st.lastReconciledAt = 0;
+    expect((await refreshLiveSessionTelemetry())?.bars).toBe(6);
+    expect(gets).toBe(1);
+  });
+
+  it('drops a session the engine has reclaimed', async () => {
+    installStatusBackend(null);
+    await tryLiveSessionTick(opts(pineBars(6)));
+    const st = _liveSessionStateForTests(keyFields);
+    if (!st) return;
+    st.lastReconciledAt = 0;
+    expect(await refreshLiveSessionTelemetry()).toBeNull();
+    expect(_liveSessionStateForTests(keyFields)).toBeNull();
   });
 });

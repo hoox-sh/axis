@@ -29,7 +29,9 @@
 
 import { store } from '../store';
 import type { Indicator } from '../store/types';
+import type { BatchRunResult } from '../engines/batch';
 import { orderIndicatorsByPlotDeps } from '../results/plot-sources';
+import { applyStrategyPropsToSource } from '../results/strategy-props';
 import { detectScriptKind } from './script-meta';
 
 export type ReapplyChartScriptsOpts = {
@@ -60,6 +62,83 @@ export function listReapplicableScripts(ids?: string[]): Indicator[] {
 }
 
 /**
+ * One `POST /run/batch` for every eligible script on the current bars.
+ *
+ * Eligible = the backend can express them in one request: no resolved `input.*`
+ * overrides (the batch body has no per-script inputs) and a single shared
+ * evaluation mode. Engine-owned live mode and non-server engines are excluded
+ * outright — they have no bars-in REST route to batch over.
+ *
+ * @returns id → result for the scripts the backend answered successfully, or
+ *   null when batching does not apply / the route is missing. Per-script
+ *   failures are simply absent from the map, so the caller falls back for them.
+ */
+async function runBatchReapply(
+  scripts: Indicator[],
+  still: () => boolean,
+): Promise<Map<string, BatchRunResult> | null> {
+  if (scripts.length < 2) return null;
+  if (scripts.some((s) => s.inputValues && Object.keys(s.inputValues).length > 0)) {
+    return null;
+  }
+  if (!still()) return null;
+  const bars = store.bars;
+  if (!Array.isArray(bars) || !bars.length) return null;
+
+  try {
+    const [{ runBatch, RUN_BATCH_MAX_SCRIPTS }, active, { isEngineOwnedLive }, catalog] =
+      await Promise.all([
+        import('../engines/batch'),
+        import('../plugins/active'),
+        import('../engines/ownership'),
+        import('../engines/catalog'),
+      ]);
+    if (isEngineOwnedLive()) return null;
+    if (active.getActiveEngine().id !== 'server') return null;
+
+    const cfg = active.getActiveEngineConfig() || {};
+    const endpoint = String(cfg.endpoint || store.endpoint || '')
+      .trim()
+      .replace(/\/$/, '');
+    if (!endpoint) return null;
+    const apiKey = String(cfg.apiKey || '').trim();
+    if (!catalog.confirmEngineApiKeyTarget(endpoint, apiKey)) return null;
+
+    // One mode must hold for every script: `resolveServerRunMode` downgrades to
+    // interpret for profiler / Pine-alert scripts, and a mixed bag would need
+    // per-script modes the batch body cannot express.
+    const profiler = !!store.profilerEnabled;
+    const modeRaw = String(cfg.mode || 'auto');
+    const modes = new Set(scripts.map((s) => catalog.resolveServerRunMode(modeRaw, s.code, profiler)));
+    if (modes.size !== 1) return null;
+    const mode = [...modes][0]!;
+
+    const slice = scripts.slice(0, RUN_BATCH_MAX_SCRIPTS);
+    const outcome = await runBatch({
+      endpoint,
+      apiKey,
+      mode,
+      bars,
+      symbol: store.symbol,
+      profiler,
+      scripts: slice.map((s) => ({
+        id: s.id,
+        script: applyStrategyPropsToSource(s.code, s.strategyProps ?? {}),
+      })),
+    });
+    if (!outcome || outcome.error) return null;
+    const map = new Map<string, BatchRunResult>();
+    for (const entry of outcome.entries) {
+      if (entry.ok && entry.result) map.set(entry.id, entry.result);
+    }
+    return map;
+  } catch {
+    // Batch is an optimization — any failure falls back to per-script runs.
+    return null;
+  }
+}
+
+/**
  * Silently re-run all (or selected) visible chart scripts on current bars.
  * Safe to call after {@link setDataToChart} with fit/clear — restores overlays.
  *
@@ -76,6 +155,10 @@ export async function reapplyChartScripts(
   if (!scripts.length) return 0;
 
   const { runAndApply } = await import('./runner');
+  // One shared round-trip when the backend supports it; the apply path below is
+  // identical either way (a batched result is passed through as
+  // `precomputedResult`, so panes / overlays / alerts behave the same).
+  const batched = await runBatchReapply(scripts, still);
   let ok = 0;
   for (const ind of scripts) {
     if (!still()) break;
@@ -85,6 +168,7 @@ export async function reapplyChartScripts(
         openResults: false,
         inputs: ind.inputValues,
         strategyProps: ind.strategyProps,
+        ...(batched?.has(ind.id) ? { precomputedResult: batched.get(ind.id) } : {}),
       });
       if (result && result.status !== 'error') ok += 1;
       else if (result?.status === 'error' && opts?.logErrors !== false) {

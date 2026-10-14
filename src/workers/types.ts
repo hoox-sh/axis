@@ -23,6 +23,8 @@
  * @module workers/types
  */
 
+import type { CompileReadiness } from '../engines/health';
+
 /** Stable catalog id for a known runtime / edge service. */
 export type WorkerId =
   | 'pyne-pro'
@@ -148,6 +150,11 @@ export interface WorkerProbeResult {
   features: Record<string, boolean | string | number | null>;
   /** Raw service name from health JSON. */
   service: string | null;
+  /**
+   * Compile readiness from the `compile` section of a PYNE `/health` body
+   * (`warm` / `cold` / `unavailable`), or `unknown` when not advertised.
+   */
+  readiness?: CompileReadiness;
   /** Epoch ms of this probe. */
   checkedAt: number;
   /** Error message if down. */

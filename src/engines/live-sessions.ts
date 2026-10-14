@@ -91,6 +91,15 @@ const SESSION_LOOKUP_DEPTH = 512;
 const SESSION_CREATE_BUDGET_MS = 90_000;
 /** Tick/append budget (server-side work is sub-millisecond). */
 const SESSION_OP_BUDGET_MS = 30_000;
+
+/** Status probes are small; a slow answer is not worth waiting for. */
+const SESSION_STATUS_BUDGET_MS = 5_000;
+
+/** Minimum gap between `GET /session/{id}` reconciliations for one session. */
+export const SESSION_STATUS_MIN_INTERVAL_MS = 5_000;
+
+/** Only reconcile a session that has been idle at least this long. */
+export const SESSION_STATUS_IDLE_RECONCILE_MS = 20_000;
 /** Cooldown after `SESSIONS_FULL` before trying to create again. */
 const SESSIONS_FULL_COOLDOWN_MS = 60_000;
 /**
@@ -157,6 +166,12 @@ interface SessionState {
    * history that a resumable session cannot follow.
    */
   closedHash: number;
+  /** Last time this session was created / ticked / appended (ms epoch). */
+  lastUsedAt: number;
+  /** Last time `GET /session/{id}` was consulted (ms epoch). */
+  lastReconciledAt: number;
+  /** Last engine-reported status (introspection / telemetry only). */
+  lastStatus: LiveSessionStatus | null;
 }
 
 const sessions = new Map<string, SessionState>();
@@ -377,6 +392,157 @@ function dropSession(key: string, endpoint: string): void {
   }
 }
 
+/** Engine-side view of a live session (`GET /session/{id}`). */
+export interface LiveSessionStatus {
+  sessionId: string;
+  /** Bars the engine holds, when reported. */
+  bars: number | null;
+  /** Seconds since the engine last touched the session. */
+  idleSeconds: number | null;
+  /** Idle TTL before the engine reclaims the session. */
+  ttlSeconds: number | null;
+}
+
+export type LiveSessionStatusResult =
+  | { kind: 'ok'; status: LiveSessionStatus }
+  | { kind: 'gone' }
+  | { kind: 'unknown' };
+
+/**
+ * `GET /session/{id}` — status blob the backend exposes for introspection.
+ *
+ * Never throws. `gone` means the engine has reclaimed the session (idle TTL,
+ * restart, another process); `unknown` means the probe could not be answered
+ * (older backend, transport failure) and callers must keep their local state.
+ */
+export async function getSessionStatus(
+  endpoint: string,
+  apiKey: string | undefined,
+  sessionId: string,
+  signal?: AbortSignal,
+): Promise<LiveSessionStatusResult> {
+  if (!endpoint || !sessionId) return { kind: 'unknown' };
+  try {
+    const res = await fetch(`${endpoint}/session/${encodeURIComponent(sessionId)}`, {
+      method: 'GET',
+      headers: headersFor(apiKey),
+      signal: withBudget(signal, SESSION_STATUS_BUDGET_MS),
+    });
+    if (res.status === 404) return { kind: 'gone' };
+    if (!res.ok) return { kind: 'unknown' };
+    const text = await res.text();
+    let record: Record<string, unknown> | null = null;
+    try {
+      const parsed: unknown = text.trim() ? parseEngineJson(text) : null;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        record = parsed as Record<string, unknown>;
+      }
+    } catch {
+      return { kind: 'unknown' };
+    }
+    if (!record) return { kind: 'unknown' };
+    if (record.status === 'error') {
+      return record.code === 'NO_SESSION' ? { kind: 'gone' } : { kind: 'unknown' };
+    }
+    const asNum = (v: unknown): number | null =>
+      typeof v === 'number' && Number.isFinite(v) ? v : null;
+    return {
+      kind: 'ok',
+      status: {
+        sessionId: typeof record.session_id === 'string' ? record.session_id : sessionId,
+        bars: asNum(record.bars),
+        idleSeconds: asNum(record.idle_seconds),
+        ttlSeconds: asNum(record.ttl_seconds),
+      },
+    };
+  } catch {
+    return { kind: 'unknown' };
+  }
+}
+
+/**
+ * Reconcile the cached session against the engine before trusting it.
+ *
+ * Throttled twice over: only after the session has been idle for
+ * {@link SESSION_STATUS_IDLE_RECONCILE_MS} and only once per
+ * {@link SESSION_STATUS_MIN_INTERVAL_MS}. A session the engine no longer holds
+ * — or one whose bar count drifted — is dropped locally so the caller
+ * recreates it. Any other answer leaves local state alone: this is an
+ * optimization, never a correctness gate (a tick still detects `gone`).
+ */
+async function maybeReconcileSession(
+  opts: LiveSessionTickOpts,
+  key: string,
+  st: SessionState,
+): Promise<'recreate' | 'ok' | 'unknown'> {
+  const now = Date.now();
+  if (now - st.lastReconciledAt < SESSION_STATUS_MIN_INTERVAL_MS) return 'unknown';
+  if (now - st.lastUsedAt < SESSION_STATUS_IDLE_RECONCILE_MS) return 'unknown';
+  st.lastReconciledAt = now;
+  const res = await getSessionStatus(opts.endpoint, opts.apiKey, st.id, opts.signal);
+  if (res.kind === 'gone') {
+    // Known dead: drop the local entry without paying a DELETE for a 404.
+    sessions.delete(key);
+    return 'recreate';
+  }
+  if (res.kind !== 'ok') return 'unknown';
+  if (res.status.bars != null && res.status.bars !== st.count) {
+    // The engine's series drifted from what we recorded — rebase over the
+    // chart window instead of ticking a session we cannot describe.
+    dropSession(key, opts.endpoint);
+    return 'recreate';
+  }
+  st.lastStatus = res.status;
+  return 'ok';
+}
+
+/**
+ * Engine-side status for telemetry.
+ *
+ * Reuses a status fetched within {@link SESSION_STATUS_MIN_INTERVAL_MS} — the
+ * caller may call this on every paint without adding a request per tick — and
+ * otherwise asks the engine once. Returns null when there is no session for the
+ * owner (or any session at all) and never throws.
+ *
+ * @param ownerId applied indicator id / editor run key; omit for the session
+ *   that was used most recently.
+ */
+export async function refreshLiveSessionTelemetry(
+  ownerId?: string,
+  signal?: AbortSignal,
+): Promise<LiveSessionStatus | null> {
+  let key: string | undefined;
+  if (ownerId) {
+    key = owners.get(ownerId)?.key;
+  } else {
+    let newest = -1;
+    for (const [k, st] of sessions) {
+      if (st.lastUsedAt > newest) {
+        newest = st.lastUsedAt;
+        key = k;
+      }
+    }
+  }
+  if (!key) return null;
+  const st = sessions.get(key);
+  if (!st) return null;
+  const now = Date.now();
+  if (now - st.lastReconciledAt < SESSION_STATUS_MIN_INTERVAL_MS) return st.lastStatus;
+  st.lastReconciledAt = now;
+  const endpoint = keyEndpoint(key);
+  if (!endpoint) return st.lastStatus;
+  const res = await getSessionStatus(endpoint, st.apiKey, st.id, signal);
+  if (res.kind === 'ok') {
+    st.lastStatus = res.status;
+    return res.status;
+  }
+  if (res.kind === 'gone') {
+    sessions.delete(key);
+    return null;
+  }
+  return st.lastStatus;
+}
+
 async function createSession(
   opts: LiveSessionTickOpts,
   key: string,
@@ -440,6 +606,7 @@ async function createSession(
   if (prev && prev.key !== key) dropSession(prev.key, opts.endpoint);
   owners.set(owner, { key, id: sessionId });
   const last = opts.pineBars[opts.pineBars.length - 1]!;
+  const created = Date.now();
   sessions.set(key, {
     id: sessionId,
     apiKey: opts.apiKey,
@@ -449,6 +616,9 @@ async function createSession(
     lastPayload: res.payload,
     // Closed history only — the forming tip is excluded on purpose.
     closedHash: hashBars(opts.pineBars, opts.pineBars.length - 2),
+    lastUsedAt: created,
+    lastReconciledAt: created,
+    lastStatus: null,
   });
   return { payload: res.payload, via: 'session-create', sessionId };
 }
@@ -589,6 +759,14 @@ async function tryLiveSessionTickInner(
     return createSession(opts, key);
   }
 
+  // Idle session: ask the engine whether it still holds it before paying a
+  // tick/append. A reclaimed session would 404 anyway — this just avoids the
+  // wasted round-trip and keeps the local bar count honest.
+  if ((await maybeReconcileSession(opts, key, st)) === 'recreate') {
+    st = undefined;
+    return createSession(opts, key);
+  }
+
   // Same tip — re-tick only when its OHLCV actually moved.
   if (n === st.count && last.time === st.lastTime) {
     // Stable count and tip, but a closed bar may have been rewritten in place
@@ -614,6 +792,7 @@ async function tryLiveSessionTickInner(
     }
     st.lastBar = barSnapshot(last);
     st.lastPayload = tick.payload;
+    st.lastUsedAt = Date.now();
     return { payload: tick.payload, via: 'session-tick', sessionId: st.id };
   }
 
@@ -662,6 +841,7 @@ async function tryLiveSessionTickInner(
     st.lastBar = barSnapshot(last);
     st.lastPayload = tick.payload;
     st.closedHash = hashBars(bars, n - 2);
+    st.lastUsedAt = Date.now();
     return { payload: tick.payload, via: 'session-tick', sessionId: st.id };
   }
   // Tick-then-append: finalize the base with its current (closed) values
@@ -693,6 +873,7 @@ async function tryLiveSessionTickInner(
   st.lastPayload = appended.payload;
   // The appended tail is now closed history; fingerprint it for the next tick.
   st.closedHash = hashBars(bars, n - 2);
+  st.lastUsedAt = Date.now();
   return { payload: appended.payload, via: 'session-append', sessionId: st.id };
 }
 

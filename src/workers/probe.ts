@@ -27,6 +27,7 @@
 
 import { store } from '../store';
 import { getEngine, LOCAL_PYODIDE_INDEX, resolvePyodideIndexUrl } from '../engines/catalog';
+import { compileReadiness, healthFromBody } from '../engines/health';
 import { linkedAbortBudget } from '../utils/fetch-timeout';
 import {
   endpointsMatch,
@@ -370,6 +371,10 @@ async function probeHttpHealthPaths(
       if (typeof body.status === 'string') features.status = body.status;
       if (typeof body.version === 'string') features.version = body.version;
 
+      // PYNE reports Numba / IR-cache readiness under `compile`; summarise it
+      // for the detail pane without duplicating every raw field.
+      const readiness = compileReadiness(healthFromBody(body));
+
       let status: WorkerHealthStatus = 'healthy';
       const statusStr = String(body.status || '').toLowerCase();
       if (statusStr && statusStr !== 'healthy' && statusStr !== 'ok') {
@@ -398,6 +403,7 @@ async function probeHttpHealthPaths(
         endpoint,
         features,
         service,
+        readiness,
         error: null,
       });
     } catch (e: unknown) {

@@ -71,6 +71,19 @@ export function engineHasApiKey(engineId: string): boolean {
   return getEngine(engineId)?.configSchema?.apiKey?.type === 'string';
 }
 
+/**
+ * Whether the engine can warm its compiler over HTTP (`POST /compile/prewarm`).
+ *
+ * Only the `server` engine targets a PYNE host that exposes the route; the edge
+ * worker and Pyodide have no Numba pass to warm.
+ */
+export function engineHasAutoPrewarm(engineId: string): boolean {
+  return engineId === 'server';
+}
+
+/** Plugin-config key holding the auto-prewarm opt-in. */
+export const AUTO_PREWARM_FIELD = 'autoPrewarm';
+
 export function execModeOptionsFor(engineId: string) {
   const opts = getEngine(engineId)?.configSchema?.mode?.options;
   if (!opts?.length) return EXEC_MODE_OPTIONS;
@@ -84,6 +97,8 @@ export type SaveEngineConfigInput = {
   mode?: EngineExecMode;
   preferWs?: boolean;
   apiKey?: string;
+  /** Warm applied scripts after save (`server` engine only). */
+  autoPrewarm?: boolean;
   /** Status-bar suffix; default describes the engine write. */
   statusMessage?: string;
 };
@@ -98,11 +113,12 @@ export function saveEngineConfig(input: SaveEngineConfigInput): void {
   const writeExecMode = engineHasExecMode(engine) && input.mode !== undefined;
   const writePreferWs = engineHasPreferWs(engine) && input.preferWs !== undefined;
   const writeApiKey = engineHasApiKey(engine) && input.apiKey !== undefined;
+  const writeAutoPrewarm = engineHasAutoPrewarm(engine) && input.autoPrewarm !== undefined;
 
   if (writeEndpoint) setStore('endpoint', String(input.endpoint || '').trim());
   setActivePlugin('engine', engine);
 
-  if (writeEndpoint || writeExecMode || writePreferWs || writeApiKey) {
+  if (writeEndpoint || writeExecMode || writePreferWs || writeApiKey || writeAutoPrewarm) {
     const key = pluginKey('engine', engine);
     const prev = readEnginePluginConfig(engine);
     const nextCfg: Record<string, unknown> = { ...prev };
@@ -110,6 +126,7 @@ export function saveEngineConfig(input: SaveEngineConfigInput): void {
     if (writeExecMode) nextCfg.mode = input.mode;
     if (writePreferWs) nextCfg.preferWs = input.preferWs;
     if (writeApiKey) nextCfg.apiKey = String(input.apiKey || '').trim();
+    if (writeAutoPrewarm) nextCfg[AUTO_PREWARM_FIELD] = !!input.autoPrewarm;
     setStore('pluginsConfig', key, reconcile(nextCfg));
   }
 

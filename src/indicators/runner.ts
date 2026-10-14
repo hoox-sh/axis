@@ -418,6 +418,15 @@ export interface RunOptions {
    * instance instead of one per symbol/interval.
    */
   liveSessionOwner?: string;
+  /**
+   * Result already produced by the engine for this script.
+   *
+   * Set by callers that evaluated several scripts in one `POST /run/batch`
+   * round-trip (`src/engines/batch.ts`): the normal apply path (panes,
+   * overlays, drawings, alerts, lastRun) runs unchanged, only the evaluation is
+   * skipped. Never set for isolate / HPO / walk-forward runs.
+   */
+  precomputedResult?: RunResult;
 }
 
 type PyneLogLine = { level?: string; message?: string; [k: string]: unknown };
@@ -989,17 +998,19 @@ async function runAndApplyInner(
   // so comparing references down there misfires on every turbulent tick.
   const chartTick = opts.liveTick === true && !(Array.isArray(opts.bars) && opts.bars.length);
   // Pass epoch so nested runScript can skip status/telemetry if superseded mid-flight
-  const raw = await runScript(script, {
-    ...opts,
-    bars,
-    inputs,
-    strategyProps,
-    claimEpoch: false,
-    epoch,
-    ...(chartTick
-      ? { liveSessionOwner: opts.liveSessionOwner ?? indicatorId ?? EDITOR_RUN_KEY }
-      : { liveTick: false }),
-  });
+  const raw = opts.precomputedResult
+    ? opts.precomputedResult
+    : await runScript(script, {
+        ...opts,
+        bars,
+        inputs,
+        strategyProps,
+        claimEpoch: false,
+        epoch,
+        ...(chartTick
+          ? { liveSessionOwner: opts.liveSessionOwner ?? indicatorId ?? EDITOR_RUN_KEY }
+          : { liveTick: false }),
+      });
   const result = normalizeRunExtras(raw);
 
   // Stale completion — never clobber newer lastRun / chart

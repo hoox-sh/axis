@@ -7,7 +7,7 @@ tags: [code, runtime, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:05:44Z
+  at: 2026-10-14T00:33:46Z
 sources:
   - id: tree
     resource: "src/ui/runtime"
@@ -18,8 +18,9 @@ okf_lock: generated
 
 # Files
 
+* `EngineProPanel.tsx` — EngineProPanel
 * `RuntimePage.tsx` — RuntimePage
-* `engine-config.ts` — EXEC_MODE_OPTIONS, EngineExecMode, SaveEngineConfigInput, engineHasApiKey, engineHasExecMode, engineHasPreferWs, engineNeedsEndpoint, execModeOptionsFor, normalizeExecMode, readEnginePluginConfig, saveEngineConfig
+* `engine-config.ts` — AUTO_PREWARM_FIELD, EXEC_MODE_OPTIONS, EngineExecMode, SaveEngineConfigInput, engineHasApiKey, engineHasAutoPrewarm, engineHasExecMode, engineHasPreferWs, engineNeedsEndpoint, execModeOptionsFor, normalizeExecMode, readEnginePluginConfig
 
 # Packages
 

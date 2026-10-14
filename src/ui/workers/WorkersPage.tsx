@@ -18,6 +18,15 @@ import { pluginKey } from '../../plugins/types';
 import { writePluginField } from '../plugin-config';
 import { AGENT_API_KEY_SLOT, getAgentApiKey, putSecret } from '../../storage/vault';
 import { preloadPyodide } from '../../engines/catalog';
+import { prewarmEngine } from '../../engines/prewarm';
+import {
+  deployHostedScript,
+  listHostedJobs,
+  runHostedJobNow,
+  runnerAvailable,
+  setHostedJobEnabled,
+  type HostedJob,
+} from '../../engines/runner';
 import { copyToClipboard } from '../clipboard';
 import { Icons } from '../icons';
 import { HooxLoader } from '../HooxLoader';
@@ -117,6 +126,9 @@ export function WorkersPage(props: {
   const [actionErr, setActionErr] = createSignal('');
   const [copied, setCopied] = createSignal('');
   const [showOptional, setShowOptional] = createSignal(true);
+  const [jobs, setJobs] = createSignal<HostedJob[]>([]);
+  const [jobsBusy, setJobsBusy] = createSignal(false);
+  const [jobsErr, setJobsErr] = createSignal('');
 
   const catalog = createMemo(() => {
     const all = listWorkerCatalog();
@@ -256,6 +268,42 @@ export function WorkersPage(props: {
     }
   };
 
+  /**
+   * Warm the selected backend's Numba builtins / IR cache.
+   *
+   * Only meaningful for a PYNE host that advertises the route; the client
+   * returns a typed failure otherwise, so the button can stay visible and
+   * explain why nothing happened.
+   */
+  const prewarmBackend = async () => {
+    const entry = selected();
+    if (!entry) return;
+    const endpoint = String(selectedResult()?.endpoint || entry.defaultEndpoint || '')
+      .trim()
+      .replace(/\/$/, '');
+    if (!endpoint) return;
+    setBusyAction('prewarm');
+    setActionErr('');
+    setActionMsg('');
+    try {
+      const r = await prewarmEngine({ endpoint });
+      if (!r.ok) {
+        setActionErr(r.error || 'Prewarm failed');
+        return;
+      }
+      const ms = r.prewarmMs != null ? ` in ${Math.round(r.prewarmMs)}ms` : '';
+      const scripts = r.scriptsOk ? ` · ${r.scriptsOk} script(s) cached` : '';
+      const failed = r.scriptsFailed ? ` · ${r.scriptsFailed} failed` : '';
+      setActionMsg(`Compiler warmed${ms}${scripts}${failed}`);
+      setStatus('ready', r.hasNumba ? 'Compiler prewarmed' : 'Prewarm ran without Numba');
+      await refreshOne(entry.id);
+    } catch (e: unknown) {
+      setActionErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusyAction('');
+    }
+  };
+
   const usePyodide = async () => {
     setBusyAction('pyodide');
     setActionErr('');
@@ -299,6 +347,92 @@ export function WorkersPage(props: {
       setActionErr(e instanceof Error ? e.message : String(e));
     } finally {
       setBusyAction('');
+    }
+  };
+
+  /**
+   * Hosted runner (`PYNE_RUNNER=1`): list / toggle / tick the backend's own
+   * cron jobs. Writes need the host's ADMIN_TOKEN when one is configured — AXIS
+   * never stores that secret, so a 403 is surfaced as guidance instead.
+   */
+  const loadJobs = async () => {
+    setJobsBusy(true);
+    setJobsErr('');
+    try {
+      const r = await listHostedJobs();
+      if (!r.ok) {
+        setJobsErr(r.error || 'Runner unavailable');
+        setJobs([]);
+        return;
+      }
+      setJobs(r.data || []);
+    } finally {
+      setJobsBusy(false);
+    }
+  };
+
+  const toggleJob = async (job: HostedJob) => {
+    setJobsBusy(true);
+    setJobsErr('');
+    try {
+      const r = await setHostedJobEnabled(job.id, !job.enabled);
+      if (!r.ok) {
+        setJobsErr(r.error || 'Update failed');
+        return;
+      }
+      await loadJobs();
+    } finally {
+      setJobsBusy(false);
+    }
+  };
+
+  const runJob = async (job: HostedJob) => {
+    setJobsBusy(true);
+    setJobsErr('');
+    try {
+      const r = await runHostedJobNow(job.id, { force: true });
+      if (!r.ok) {
+        setJobsErr(r.error || 'Run failed');
+        return;
+      }
+      setActionMsg(`Runner ticked ${job.id}`);
+      await loadJobs();
+    } finally {
+      setJobsBusy(false);
+    }
+  };
+
+  /**
+   * Deploy the newest applied chart script as a hosted job, reusing its id so a
+   * redeploy is an upsert. The host still owns scheduling; this only registers
+   * the job.
+   */
+  const deployActiveScript = async () => {
+    const scripts = (store.scripts || []).filter((s) => s?.visible && String(s.code || '').trim());
+    const script = scripts.length ? scripts[scripts.length - 1] : undefined;
+    if (!script) {
+      setJobsErr('Apply a script to the chart first');
+      return;
+    }
+    setJobsBusy(true);
+    setJobsErr('');
+    try {
+      const r = await deployHostedScript({
+        id: script.id,
+        script: script.code,
+        name: script.name || script.id,
+        symbol: store.symbol || undefined,
+        timeframe: store.interval || undefined,
+        enabled: true,
+      });
+      if (!r.ok) {
+        setJobsErr(r.error || 'Deploy failed');
+        return;
+      }
+      setActionMsg(`Deployed ${script.name || script.id} to the runner`);
+      await loadJobs();
+    } finally {
+      setJobsBusy(false);
     }
   };
 
@@ -435,6 +569,20 @@ export function WorkersPage(props: {
                     <StudioField label="Probe">
                       <StudioCode>{r()?.detail || 'Not probed yet'}</StudioCode>
                     </StudioField>
+                    <Show when={r()?.readiness && r()?.readiness !== 'unknown'}>
+                      <StudioField
+                        label="Compile"
+                        hint="Numba / IR-cache readiness reported by the backend /health."
+                      >
+                        <StudioCode>
+                          {r()?.readiness === 'warm'
+                            ? 'warm — builtins / host already prewarmed'
+                            : r()?.readiness === 'cold'
+                              ? 'cold — first compile pays Numba JIT (prewarm available)'
+                              : 'unavailable — no Numba; compile runs in object mode'}
+                        </StudioCode>
+                      </StudioField>
+                    </Show>
                     <div class="ax-inline">
                       <StudioButton
                         variant="ghost"
@@ -444,6 +592,22 @@ export function WorkersPage(props: {
                         {probing() ? <HooxLoader size="xs" /> : <Icons.refresh />}
                         Re-probe
                       </StudioButton>
+                      <Show when={w().id === 'pyne-pro' && r()?.status === 'healthy'}>
+                        <StudioButton
+                          variant="ghost"
+                          testId="axis-worker-prewarm"
+                          disabled={!!busyAction()}
+                          title="Pay Numba JIT / IR-cache cost now so the next Run is fast"
+                          onClick={() => void prewarmBackend()}
+                        >
+                          {busyAction() === 'prewarm' ? (
+                            <HooxLoader size="xs" />
+                          ) : (
+                            <Icons.zap />
+                          )}
+                          Warm compiler
+                        </StudioButton>
+                      </Show>
                       <Show when={w().defaultEndpoint}>
                         <StudioButton
                           variant="ghost"
@@ -468,6 +632,68 @@ export function WorkersPage(props: {
                           )}
                         </For>
                       </StudioList>
+                    </StudioSection>
+                  </Show>
+
+                  <Show when={w().id === 'pyne-pro' && runnerAvailable()}>
+                    <StudioSection
+                      title="Hosted runner"
+                      lead="Backend cron jobs (PYNE_RUNNER=1). Toggling or ticking needs the host's ADMIN_TOKEN when one is set."
+                    >
+                      <div class="ax-inline">
+                        <StudioButton
+                          variant="ghost"
+                          testId="axis-runner-load"
+                          disabled={jobsBusy()}
+                          onClick={() => void loadJobs()}
+                        >
+                          {jobsBusy() ? <HooxLoader size="xs" /> : <Icons.refresh />}
+                          Load jobs
+                        </StudioButton>
+                        <StudioButton
+                          variant="ghost"
+                          testId="axis-runner-deploy"
+                          disabled={jobsBusy()}
+                          title="Register the newest applied chart script as a hosted job"
+                          onClick={() => void deployActiveScript()}
+                        >
+                          <Icons.upload />
+                          Deploy active script
+                        </StudioButton>
+                      </div>
+                      <Show when={jobsErr()}>
+                        <StudioCode>{jobsErr()}</StudioCode>
+                      </Show>
+                      <Show when={jobs().length}>
+                        <StudioList class="ax-list--dense">
+                          <For each={jobs()}>
+                            {(job) => (
+                              <StudioRow>
+                                <span>
+                                  {job.name || job.id} · {job.symbol || '—'} {job.timeframe || ''}
+                                </span>
+                                <span class="ax-inline">
+                                  <StudioToggle
+                                    id={`axis-runner-enabled-${job.id}`}
+                                    checked={job.enabled !== false}
+                                    onChange={() => void toggleJob(job)}
+                                    label=""
+                                  />
+                                  <StudioButton
+                                    variant="ghost"
+                                    disabled={jobsBusy()}
+                                    title="Tick this script now"
+                                    onClick={() => void runJob(job)}
+                                  >
+                                    <Icons.play />
+                                    Run now
+                                  </StudioButton>
+                                </span>
+                              </StudioRow>
+                            )}
+                          </For>
+                        </StudioList>
+                      </Show>
                     </StudioSection>
                   </Show>
 

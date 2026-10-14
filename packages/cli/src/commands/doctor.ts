@@ -269,7 +269,9 @@ export async function collectDoctorChecks(options: {
     ok: Boolean(pyneFound),
     required: false,
     label: "Sister PYNE repo",
-    detail: pyneFound ?? "optional local engine at ../pyne (checkout sometimes named pynescript)",
+    detail: pyneFound
+      ? `${pyneFound} · axis prewarm to warm Numba before the first run`
+      : "optional local engine at ../pyne (checkout sometimes named pynescript)",
   });
 
   return checks;

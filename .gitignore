@@ -72,6 +72,9 @@ venv/
 docs/images/.tmp-video/
 docs/images/.tmp-gif/
 
+# Agent task-tracking store (task-management skill, local only)
+.tmp/
+
 # Local-only agent notes (kept locally, not on GitHub)
 .grok/
 AGENTS.md
