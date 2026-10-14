@@ -9,11 +9,13 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-10-11 · 529 commits · describe-tag: `v2.22.0`_
+_Generated/updated: 2026-10-14 · 564 commits · describe-tag: `v2.23.1`_
 
 ---
 
 ## [Unreleased]
+
+## [2.24.0] — 2026-10-14
 
 ### Added
 
@@ -1463,12 +1465,26 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-10 (48 commits)
+### 2026-10 (83 commits)
 
 #### Features
 
+- `7684ff8d` (2026-10-14) — feat(engine): PYNE endpoint parity — health, prewarm, batch, sessions, Pro, runner
+- `dc5402b4` (2026-10-13) — feat(engine): wire every-tick Pro mode through runner, chart, and live ticks
+- `4091d4cf` (2026-10-13) — feat(theme): sync community presets to OpenCode palettes
+- `1f5b299e` (2026-10-13) — feat(engine): skip local OHLCV persistence in engine-owned live mode
+- `d6a1f701` (2026-10-13) — feat(engine): engine-owned data sessions and capability-driven live modes
+- `49e1f7be` (2026-10-13) — feat(theme): vendor 24 community chart presets (hoox-themes)
+- `db0ec11e` (2026-10-13) — feat(engine): O(delta) live ticks via PYNE live sessions
+- `160df5c3` (2026-10-13) — feat(data): dataset depth vs chart window split, reload page walk, interactive status bar
+- `6a2ec9e5` (2026-10-13) — feat(data): rolling window for engine input, and dataset size in the status strip
+- `16ec9fc4` (2026-10-12) — feat(cli): axis setup artifacts for git-native script storage
+- `dc2f1eb1` (2026-10-12) — feat(worker): git-native script storage on Cloudflare Artifacts
+- `1bd573b4` (2026-10-12) — feat(storybook): button design explorations, shapes, microfeedback
 - `8b587834` (2026-10-10) — feat(release): AXIS v2.22.0 — chart settings panel, review fix batch, hardening
 - `18d589fc` (2026-10-09) — feat(edge): live tenant verify + usage flush
 - `cc1e1b34` (2026-10-09) — feat(entitlements): tenant scope types + bearer classification (no enforcement)
@@ -1490,6 +1506,18 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `de198e3b` (2026-10-14) — fix(workers): carry compile readiness through the probe result; use the rest of /health
+- `f4925103` (2026-10-13) — fix(engine): harden O(delta) live sessions and engage them under auto
+- `8384ab86` (2026-10-13) — fix(engine): one live session per script instance, rebase on rewritten history
+- `91000a9c` (2026-10-13) — fix(chart): repair setData payloads — LWC asserts at render, not at setData
+- `aa39ca1f` (2026-10-13) — fix(engine): session eligibility recorded up front, not via live array identity
+- `81ccb8ad` (2026-10-13) — fix(engine): forward liveTick for chart-bars runs so sessions engage
+- `083d3749` (2026-10-13) — fix(ci): pin Bun, and enforce the coverage gate at its measured floor
+- `1d2036a1` (2026-10-13) — fix(ci): install worker dependencies before the root test run
+- `7a12cabe` (2026-10-13) — fix(health): probe upstreams with HEAD, not GET
+- `c4ccfce9` (2026-10-13) — fix(worker): repair dead market + on-chain proxies and get CI green
+- `8b1b07cc` (2026-10-11) — fix(chart): sanitize setData payloads, per-series failure contexts
+- `e6e32fd0` (2026-10-11) — fix(chart): fib circles/arcs X/Y radii, fills relocation, n-point drag
 - `75f580b5` (2026-10-09) — fix(edge): run waitUntil ctx, hashed rate keys, scope fail-closed
 - `2f892a42` (2026-10-06) — fix(ui): seamless ticker loop and calmer price band
 - `2969fef5` (2026-10-05) — fix(tests): isolate cloud-config and cache keys across suites
@@ -1506,6 +1534,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Performance
 
+- `0d0ffd1c` (2026-10-13) — perf(engine): run Pyodide in a dedicated Web Worker
 - `5ed34ef1` (2026-10-05) — perf(scripts): prefer Bun-native file, hash, spawn and image APIs
 
 #### Refactors
@@ -1515,14 +1544,27 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Documentation
 
+- `c8895052` (2026-10-13) — docs(engine): mark migration steps done; note coalescing is the epoch mechanism
+- `c6770b50` (2026-10-13) — docs: apply Cloudflare® / TradingView® / Pine Script™ brand marks across docs
+- `b3610844` (2026-10-13) — docs: use Cloudflare® brand marks in worker + cli docs
 - `9503fe6f` (2026-10-09) — docs: commercial licence upcoming, prices removed
 - `5fe7f2e7` (2026-10-08) — docs: review against last 20 commits, fix repo identity and voice
 - `cbb5bff0` (2026-10-05) — docs(readme): fix CLI release tag, add datafeed sidecar and recent highlights
 - `24422117` (2026-10-05) — docs(changelog): record CI test-isolation fixes
 - `c7959187` (2026-10-05) — docs(changelog): Unreleased entry for Bun-native session
 
+#### Tests
+
+- `e5453220` (2026-10-13) — test(datasession): mint an API key in the e2e harness
+- `c5100b3f` (2026-10-13) — test(datasession): cross-repo e2e against the PYNE /data store
+- `3c7ed9f4` (2026-10-13) — test(data): cover job validation and retention in the Data Source Manager
+
 #### Chores
 
+- `4092018e` (2026-10-13) — chore(brand): remove email-signatures
+- `c906248e` (2026-10-13) — chore(pyne-wheel): vendor PYNE 0.6.9 for the in-browser Pyodide engine
+- `85eab77e` (2026-10-13) — chore(release): AXIS v2.23.0 — proxy repair, rolling window, CI green
+- `bf010b3d` (2026-10-13) — chore(okf): refresh the stale knowledge bundle
 - `e520a138` (2026-10-08) — chore(deps): pyodide 0.29.5 + pynescript wheel 0.6.8
 - `1709f092` (2026-10-07) — chore(release): 2.21.0
 - `670fe2dd` (2026-10-06) — chore(dev): add storybook scaffolding
