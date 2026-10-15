@@ -99,6 +99,7 @@ import { mountPaneBadge, refreshPaneBadge, setPaneBadgeLabel } from './pane-badg
 import { getVisibleBars, isReplayActive } from './bar-replay';
 import { reportUiError } from '../ui/boot-errors';
 import {
+  clampPointsToPaintedRange,
   looksLikeOhlcData,
   sanitizeSeriesDataForSetData,
 } from './series-sanitize';
@@ -417,9 +418,13 @@ function applyOverlayLineDataSmart(
   metaMap: Map<string, SeriesApplyMeta>,
   forceFull = false,
 ): void {
+  // Pin to the painted candle range first: points from a stale window would
+  // otherwise extend the shared time scale past the candles and LWC throws
+  // `Value is null` on every paint until the windows converge again.
+  const points = clampPointsToPaintedRange(data);
   const prev = metaMap.get(metaKey);
   if (!forceFull && prev && prev.len > 0) {
-    const peek = peekOverlayLineTip(data, prev.len);
+    const peek = peekOverlayLineTip(points, prev.len);
     if (peek && peek.lastTime === prev.lastTime) {
       if (Object.is(prev.lastVal, peek.lastVal) || prev.lastVal === peek.lastVal) {
         return;
@@ -434,7 +439,7 @@ function applyOverlayLineDataSmart(
       }
     }
   }
-  applySeriesDataSmart(series, toLwcLineData(data), metaKey, metaMap, forceFull);
+  applySeriesDataSmart(series, toLwcLineData(points), metaKey, metaMap, forceFull);
 }
 
 /** removeSeries that never throws; caller still deletes map keys. */
@@ -1652,7 +1657,9 @@ export class PaneManager {
    * ({@link ui/StrategyReport}). Prefer {@link hideEquityPane} to clear leftovers.
    */
   setEquityCurve(points: { time: number; value: number }[]) {
-    const mapped = points
+    // Pin to the painted candle range like every other co-painted payload.
+    const inRange = clampPointsToPaintedRange(points);
+    const mapped = inRange
       .filter((p) => Number.isFinite(p.time) && Number.isFinite(p.value))
       .map((p) => ({ time: p.time as UTCTimestamp, value: p.value }));
     if (!mapped.length) {
@@ -2958,7 +2965,10 @@ export class PaneManager {
       const kindKey = `${paneId}:${key}`;
       const seriesKind: 'plotbar' | 'plotcandle' =
         spec.kind === 'plotcandle' ? 'plotcandle' : 'plotbar';
-      const mapped = spec.data
+      // Pin to the painted candle range (see applyOverlayLineDataSmart): a
+      // stale overlay window must not extend the shared time scale.
+      const inRange = clampPointsToPaintedRange(spec.data);
+      const mapped = inRange
         .filter(
           (d) =>
             Number.isFinite(d.time) &&

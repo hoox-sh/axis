@@ -13,9 +13,12 @@
  * neighbour, coerce null values — and only drops what cannot be repaired.
  */
 
-import { describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it } from 'bun:test';
 import {
+  clampPointsToPaintedRange,
   looksLikeOhlcData,
+  notePaintedCandleRange,
+  resetPaintedCandleRangeForTests,
   sanitizeSeriesDataForSetData,
 } from '../src/chart/series-sanitize.ts';
 
@@ -141,5 +144,49 @@ describe('looksLikeOhlcData', () => {
     expect(looksLikeOhlcData([{ time: 1, open: 1, high: 2, low: 0.5, close: 1.5 }])).toBe(true);
     expect(looksLikeOhlcData([{ time: 1, value: 10 }])).toBe(false);
     expect(looksLikeOhlcData([])).toBe(false);
+  });
+});
+
+describe('clampPointsToPaintedRange', () => {
+  afterEach(() => {
+    // Module state is shared across test files in one bun process.
+    resetPaintedCandleRangeForTests();
+  });
+
+  const pt = (time: number, value = 1) => ({ time, value });
+
+  it('is a no-op until the first candle paint', () => {
+    const pts = [pt(1), pt(2), pt(3)];
+    expect(clampPointsToPaintedRange(pts)).toEqual(pts);
+  });
+
+  it('keeps in-range points including whitespace rows', () => {
+    notePaintedCandleRange(100, 300);
+    const pts = [{ time: 100 }, pt(200), { time: 300, value: undefined as unknown as number }];
+    expect(clampPointsToPaintedRange(pts)).toEqual(pts);
+  });
+
+  it('drops points outside the painted candle range on both ends', () => {
+    notePaintedCandleRange(100, 300);
+    const pts = [pt(50), pt(100), pt(200), pt(300), pt(350)];
+    expect(clampPointsToPaintedRange(pts)).toEqual([pt(100), pt(200), pt(300)]);
+  });
+
+  it('drops rows with non-finite times', () => {
+    notePaintedCandleRange(100, 300);
+    const pts = [pt(200), { time: NaN, value: 1 }, { time: 'x' as unknown as number, value: 1 }];
+    expect(clampPointsToPaintedRange(pts)).toEqual([pt(200)]);
+  });
+
+  it('ignores degenerate ranges', () => {
+    notePaintedCandleRange(Number.NaN, 300);
+    expect(clampPointsToPaintedRange([pt(1)])).toEqual([pt(1)]);
+    notePaintedCandleRange(300, 100);
+    expect(clampPointsToPaintedRange([pt(200)])).toEqual([pt(200)]);
+  });
+
+  it('handles empty input', () => {
+    notePaintedCandleRange(100, 300);
+    expect(clampPointsToPaintedRange([])).toEqual([]);
   });
 });

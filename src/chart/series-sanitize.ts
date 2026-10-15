@@ -72,6 +72,55 @@ export function looksLikeOhlcData(data: readonly unknown[]): boolean {
   return false;
 }
 
+/**
+ * Time range of the last successfully painted candle series (module-local).
+ *
+ * Every overlay / equity / volume payload shares the chart's single time
+ * scale with the candles. When a payload carries times outside the candle
+ * range — a stale overlay window after the candles repainted with a slid
+ * engine window is the classic case — LWC's renderer asks the candle PlotList
+ * for an index it does not hold and throws `Value is null` on every paint.
+ * Clamping co-painted payloads to this range keeps the shared scale covered.
+ */
+let paintedCandleRange: { first: number; last: number } | null = null;
+
+/** Record a successful candle paint (call after `setData` returns). */
+export function notePaintedCandleRange(first: number, last: number): void {
+  if (Number.isFinite(first) && Number.isFinite(last) && last >= first) {
+    paintedCandleRange = { first, last };
+  }
+}
+
+/** Test helper — forget the painted range so clamping is a no-op again. */
+export function resetPaintedCandleRangeForTests(): void {
+  paintedCandleRange = null;
+}
+
+/**
+ * Drop points outside the last painted candle range (both ends).
+ *
+ * No-op until the first candle paint, and a no-op for payloads already
+ * inside the range. Order-preserving; whitespace `{ time }` rows are kept
+ * when their time is in range. Points outside the candle range cannot render
+ * against this chart anyway — they only extend the shared time scale past
+ * the candles, which is what trips LWC's `Value is null` assertion.
+ */
+export function clampPointsToPaintedRange<T extends { time?: unknown }>(
+  points: readonly T[],
+): T[] {
+  const range = paintedCandleRange;
+  if (!range || points.length === 0) return [...points];
+  const { first, last } = range;
+  const out: T[] = [];
+  for (const p of points) {
+    const t = p == null ? undefined : (p as { time?: unknown }).time;
+    if (typeof t !== 'number' || !Number.isFinite(t)) continue;
+    if (t < first || t > last) continue;
+    out.push(p);
+  }
+  return out;
+}
+
 /** Nearest row with finite OHLC (previous bar first, then next). */
 function findOhlcDonor(
   rows: readonly unknown[],

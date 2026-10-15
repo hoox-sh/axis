@@ -71,7 +71,7 @@ import {
   setSlotManager,
 } from './chart-registry';
 import { reportUiError } from '../ui/boot-errors';
-import { sanitizeSeriesDataForSetData } from './series-sanitize';
+import { notePaintedCandleRange, sanitizeSeriesDataForSetData } from './series-sanitize';
 import { resolvedPrefsForTool } from './drawings/tool-settings';
 import { getThemeManager } from '../theme';
 import {
@@ -730,10 +730,30 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
       }
       try {
         pricePane.series['candle'].setData(checked.clean as never);
+        const times = checked.clean as Array<{ time?: unknown }>;
+        const firstT = times.length ? times[0]?.time : undefined;
+        const lastT = times.length ? times[times.length - 1]?.time : undefined;
+        if (typeof firstT === 'number' && typeof lastT === 'number') {
+          // Co-painted overlays / equity clamp to this range so a stale window
+          // can never extend the shared time scale past the candles (LWC
+          // `Value is null` on every paint until the ranges converge again).
+          notePaintedCandleRange(firstT, lastT);
+        }
       } catch (err: unknown) {
         const inner = err instanceof Error ? err.message : String(err);
+        let seriesType = '?';
+        try {
+          seriesType = String(pricePane.series['candle']?.seriesType?.() || '?');
+        } catch {
+          /* ignore */
+        }
+        const firstT = (data[0] as { time?: unknown } | undefined)?.time;
+        const lastT = (data[data.length - 1] as { time?: unknown } | undefined)?.time;
         throw new Error(
-          `candle setData failed: ${inner} (rows=${checked.clean.length}, dropped=${checked.dropped})`,
+          `candle setData failed: ${inner} (rows=${checked.clean.length}, dataLen=${data.length}, ` +
+            `dropped=${checked.dropped}, filled=${checked.filled}, merged=${checked.merged}, ` +
+            `nonInt=${checked.nonIntegerTimes}, firstBad=${checked.firstBadIndex}:${checked.firstBadReason || 'ok'}, ` +
+            `chartType=${chartType}, seriesType=${seriesType}, range=${String(firstT)}..${String(lastT)})`,
           { cause: err },
         );
       }

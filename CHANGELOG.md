@@ -9,9 +9,15 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-10-15 · 571 commits · describe-tag: `v2.24.2`_
+_Generated/updated: 2026-10-15 · 572 commits · describe-tag: `v2.24.3`_
 
 ---
+
+## [2.24.4] — 2026-10-15
+
+### Fixed
+
+- **Co-painted series can no longer extend the shared time scale past the candles.** When the candle window and an overlay/equity window diverged (a stale engine-owned window vs live venue ticks is the classic case — e.g. an 18-minute-lagged host series against real-time bars), the overhanging points extended the shared time scale past the candle PlotList and LWC's renderer threw `Value is null` on every paint. Overlay lines, plotbar/plotcandle overlays and the equity curve are now clamped to the last successfully painted candle range (tracked in `chart/series-sanitize`, a no-op until the first candle paint and for already-aligned payloads). The candle `setData` failure envelope now reports chartType, series type, fill/merge/non-integer counts, payload length and time range so any recurrence is instantly attributable. Covered by the `clampPointsToPaintedRange` cases in `tests/chart-series-sanitize.test.ts`.
 
 ## [2.24.3] — 2026-10-15
 
@@ -1488,9 +1494,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-10 (90 commits)
+### 2026-10 (91 commits)
 
 #### Features
 
@@ -1527,6 +1535,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `58a4459a` (2026-10-15) — fix(engine): persist Pro API engine key across reloads
 - `1b28d5e4` (2026-10-15) — fix(engine): unblock engine-owned data plane and honor free-tier caps
 - `cfa7daed` (2026-10-15) — fix(engine): live-mode regressions — frozen overlays and reset re-run setting
 - `de198e3b` (2026-10-14) — fix(workers): carry compile readiness through the probe result; use the rest of /health
