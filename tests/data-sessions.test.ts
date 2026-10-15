@@ -21,6 +21,7 @@ import {
   ensureDataSession,
   runDataSession,
   _resetDataSessionMemo,
+  _resetDataSessionCooldownForTests,
   DATA_PROVIDE_CHUNK,
 } from '../src/engines/data-sessions';
 import {
@@ -28,6 +29,10 @@ import {
   serverEngine,
   DEFAULT_ENGINE_CAPABILITIES,
 } from '../src/engines/catalog';
+import { putDatasetBars, _resetDatasetStoreForTests } from '../src/data/dataset-store';
+import { _resetDatasetSinksForTests } from '../src/data/dataset-sinks';
+import { _resetBarsCacheForTests } from '../src/data/bars-cache';
+import { setStore } from '../src/store';
 import type { Bar } from '../src/store/types';
 
 const ENDPOINT = 'http://pro.test';
@@ -80,6 +85,7 @@ function bodyBars(c: Call): Array<Record<string, unknown>> {
 
 beforeEach(() => {
   _resetDataSessionMemo();
+  _resetDataSessionCooldownForTests();
 });
 
 afterEach(() => {
@@ -265,6 +271,39 @@ describe('ensureDataSession broker', () => {
     expect(rec.calls.filter((c) => c.path === '/data/session').length).toBe(3);
     expect(rec.calls.filter((c) => c.path === '/data/series/fetch').length).toBe(1);
   });
+
+  it('finds the local dataset under the source plugin id, not the bare venue', async () => {
+    // Regression: datasets are keyed `binance-rest|…`, but the broker used to
+    // ask for `binance|…` — it never matched, skipped the local upload and went
+    // straight to the engine fetch (which needs ccxt on the host).
+    _resetDatasetStoreForTests();
+    _resetDatasetSinksForTests();
+    await _resetBarsCacheForTests();
+    await putDatasetBars('binance-rest', 'BTCUSDT', '1h', [bar(1), bar(2), bar(3)]);
+    setStore('source', 'binance-rest');
+    let creates = 0;
+    const rec = recorder((c) => {
+      if (c.path === '/data/session') {
+        creates++;
+        return creates === 1
+          ? jsonResponse({ status: 'miss', code: 'DATA_MISS', key: 'k', have: 0, need: 3 }, 409)
+          : jsonResponse({ status: 'success', session_id: 's-local' });
+      }
+      return jsonResponse({ status: 'success', added: 3, updated: 0, count: 3 });
+    });
+    restore = rec.restore;
+    // No `localBars` seam: exercises the default Data Manager lookup.
+    const h = await ensureDataSession({
+      endpoint: ENDPOINT,
+      apiKey: '',
+      key: { exchange: 'binance', symbol: 'BTCUSDT', interval: '1h' },
+      historyBars: 3,
+      script: 's',
+    });
+    expect(h).toMatchObject({ sessionId: 's-local', provisioned: 'local' });
+    expect(rec.calls.some((c) => c.path === '/data/series/provide')).toBe(true);
+    expect(rec.calls.some((c) => c.path === '/data/series/fetch')).toBe(false);
+  });
 });
 
 describe('runDataSession memo', () => {
@@ -322,6 +361,51 @@ describe('runDataSession memo', () => {
     await runDataSession({ endpoint: ENDPOINT, apiKey: '', owner: 'ind1', request: req, script: 'v2', tick: true });
     await new Promise((r) => setTimeout(r, 0));
     expect(rec.calls.some((c) => c.method === 'DELETE' && c.path === '/session/s1')).toBe(true);
+  });
+
+  it('backs off provisioning failures on live ticks (no per-tick retry storm)', async () => {
+    const rec = recorder((c) => {
+      if (c.path === '/data/session') {
+        return jsonResponse({ status: 'miss', code: 'DATA_MISS', key: 'k', have: 0, need: 3 }, 409);
+      }
+      // Host without an exchange feed: fetch cannot fill the store.
+      return jsonResponse({ status: 'error', code: 'DATA_FETCH_FAILED', message: 'ccxt missing' }, 500);
+    });
+    restore = rec.restore;
+    const first = await runDataSession({
+      endpoint: ENDPOINT,
+      apiKey: '',
+      owner: 'ind1',
+      request: req,
+      script: 's',
+      tick: true,
+    });
+    expect(first.ok).toBe(false);
+    const afterFirst = rec.calls.length;
+    // Every request of the failed provisioning chain was paid once…
+    expect(afterFirst).toBeGreaterThan(1);
+    const second = await runDataSession({
+      endpoint: ENDPOINT,
+      apiKey: '',
+      owner: 'ind1',
+      request: req,
+      script: 's',
+      tick: true,
+    });
+    expect(second.ok).toBe(false);
+    expect(second.ok === false && second.error).toContain('retrying in');
+    // …and the next live tick fails fast without touching the network.
+    expect(rec.calls.length).toBe(afterFirst);
+    // An interactive (non-tick) run still retries immediately.
+    const interactive = await runDataSession({
+      endpoint: ENDPOINT,
+      apiKey: '',
+      owner: 'ind1',
+      request: req,
+      script: 's',
+    });
+    expect(interactive.ok).toBe(false);
+    expect(rec.calls.length).toBeGreaterThan(afterFirst);
   });
 });
 

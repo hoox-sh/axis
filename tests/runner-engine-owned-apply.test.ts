@@ -217,4 +217,54 @@ describe('engine-owned series apply', () => {
     expect(line.data[0]!.value).toBe(1);
     expect(line.data[line.data.length - 1]!.value).toBe(bars.length);
   });
+
+  it('tail-aligns a free-tier clamped series (meta.windowBars) to the chart window', async () => {
+    const bars = SAMPLE_BARS;
+    restoreFetch = mockFetch(async (input, init) => {
+      const url = new URL(String(input));
+      const method = String(init?.method || 'GET').toUpperCase();
+      if (method === 'POST' && url.pathname.startsWith('/run')) {
+        return jsonResponse({
+          status: 'success',
+          plots: [],
+          series: { plot0: [11, 12, 13] },
+          plot_meta: { plot0: {} },
+          events: [],
+          overlay: true,
+          script_name: 'eo',
+          mode: 'interpret',
+          meta: { windowBars: 3 },
+        });
+      }
+      return jsonResponse({ status: 'error', code: 'NOT_FOUND' }, 404);
+    });
+    _setCachedEngineCapabilitiesForTests({
+      ...DEFAULT_ENGINE_CAPABILITIES,
+      liveModes: ['bar-close'],
+      ownsData: false,
+      dataSession: false,
+    });
+    setManager({
+      getPane: (id: string) =>
+        id === 'price'
+          ? { id: 'price', type: 'price', chart: {}, series: {}, priceLines: {} }
+          : undefined,
+      syncOverlayLines: (paneId: string, lines: CapturedApply['lines']) => {
+        captured.push({ paneId, lines });
+      },
+      syncBgcolorBands: () => {},
+    } as never);
+
+    const r = await runAndApply(SCRIPT, undefined, { silent: true, openResults: false });
+    expect(r.status).toBe('success');
+    const line = captured[captured.length - 1]!.lines[0]!;
+    // The clamped series covers the newest 3 bars; the two older chart bars
+    // become `na` whitespace instead of shifting every value early.
+    expect(line.data).toHaveLength(bars.length);
+    expect(line.data[0]!.value).toBeUndefined();
+    expect(line.data[1]!.value).toBeUndefined();
+    expect(line.data[2]!.value).toBe(11);
+    expect(line.data[bars.length - 1]!.value).toBe(13);
+    expect(line.data[bars.length - 1]!.time).toBe(bars[bars.length - 1]!.time);
+  });
 });

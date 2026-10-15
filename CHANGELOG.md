@@ -15,6 +15,12 @@ _Generated/updated: 2026-10-15 · 568 commits · describe-tag: `v2.24.0`_
 
 ## [Unreleased]
 
+### Fixed
+
+- **Engine-owned live mode now finds the local Data Manager dataset.** The data-session broker looked up local bars under the canonical venue (`binance|BTCUSDT|1m`), but the Data Manager keys datasets by the **source plugin id** (`binance-rest|BTCUSDT|1m`), so the lookup never matched: the broker skipped the local upload and went straight to `POST /data/series/fetch`, which on a host without ccxt fails (`ccxt_missing`) — every tick paid create → fetch → create and the run stayed in error (observed 190+ failed `/data/series/fetch` calls in one session). `defaultLocalBars` now resolves candidate keys (active Data Manager selection → provider session source → active source → `${venue}-rest` → bare venue, each matched by `exchangeForSource`) and uploads the newest window via `/data/series/provide`, which needs no exchange feed on the host. Regression: `tests/data-sessions.test.ts` stores a dataset under `binance-rest` and asserts the broker provides it instead of fetching.
+- **A failing data-plane provisioning no longer retries on every live tick.** The three-round-trip broker chain (create → provide/fetch → create) was re-paid on each tick while the run was already failing. Live ticks (`tick: true`) now back off per session slot for `DATA_SESSION_RETRY_COOLDOWN_MS` (60 s) after a provisioning failure; interactive runs still retry immediately, and a success clears the memo.
+- **Free-tier bar caps are handled instead of failing every run.** A PYNE host with `FREE_TIER_LIMITS` refuses windows over `FREE_MAX_BARS` (default 5000) with `413 TOO_MANY_BARS`; with the default Rolling window of 10,000 every bars-in run (reapply, bar-close live ticks) failed. The REST client now reads `max_bars` from the 413 body and retries once with the newest `max_bars` bars, tagging the result `meta.windowBars`; the apply path tail-aligns such series to the chart window (older bars become `na` whitespace) instead of shifting every value early, and an interactive run logs `Engine bar cap: evaluated newest N bars (free tier)`.
+
 ## [2.24.1] — 2026-10-15
 
 ### Fixed

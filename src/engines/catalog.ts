@@ -704,6 +704,37 @@ export const serverEngine: EnginePlugin = {
         body: JSON.stringify(restBody),
         signal: restSignal,
       });
+      // Free-tier bar cap (PYNE `FREE_MAX_BARS`, e.g. 5000): the host refuses
+      // the whole window with 413 + `max_bars`. Retry once with the newest
+      // `max_bars` bars and mark the result, so the apply path can tail-align
+      // the series to the chart window instead of failing every run.
+      let clampedBars = 0;
+      if (res.status === 413) {
+        const peek = await res.clone().text();
+        let maxBars = 0;
+        try {
+          const body = parseEngineJson(peek);
+          if (body && typeof body === 'object' && !Array.isArray(body)) {
+            const n = Number((body as { max_bars?: unknown }).max_bars);
+            if (Number.isFinite(n) && n > 0) maxBars = Math.floor(n);
+          }
+        } catch {
+          /* message-only body */
+        }
+        if (!maxBars) {
+          const m = peek.match(/free-tier limit \((\d+)\s*bars\)/i);
+          if (m) maxBars = Number(m[1]);
+        }
+        if (maxBars > 0 && maxBars < pineBars.length) {
+          clampedBars = maxBars;
+          res = await fetch(`${endpoint}/run?mode=${encodeURIComponent(restMode)}`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ ...restBody, data: pineBars.slice(-maxBars) }),
+            signal: restSignal,
+          });
+        }
+      }
       // Older Pro APIs reject unknown `libraries` — retry without them.
       if (!res.ok && libraries?.length) {
         const peek = await res.clone().text();
@@ -712,7 +743,9 @@ export const serverEngine: EnginePlugin = {
           res = await fetch(`${endpoint}/run?mode=${encodeURIComponent(restMode)}`, {
             method: 'POST',
             headers,
-            body: JSON.stringify(legacy),
+            body: JSON.stringify(
+              clampedBars > 0 ? { ...legacy, data: pineBars.slice(-clampedBars) } : legacy,
+            ),
             signal: restSignal,
           });
         }
@@ -764,7 +797,13 @@ export const serverEngine: EnginePlugin = {
       }
       // Prefer engine meta; do not force true — runner resolves indicator/strategy defaults.
       await rememberResolvedRunMode(modeFields, payload.mode ?? payload.meta?.mode ?? mode);
-      return mapRestPayload(payload);
+      const mapped = mapRestPayload(payload);
+      if (clampedBars > 0) {
+        // The engine evaluated only the newest `clampedBars`; the apply path
+        // tail-aligns series to the chart window when this is set.
+        mapped.meta = { ...mapped.meta, windowBars: clampedBars };
+      }
+      return mapped;
     } catch (err: unknown) {
       const name = err instanceof Error ? err.name : '';
       const raw = err instanceof Error ? err.message : String(err);

@@ -354,11 +354,66 @@ export interface EnsureDataSessionOptions extends DataSessionCreateInput {
   localBars?: () => Promise<readonly Bar[]>;
 }
 
+/**
+ * Data Manager dataset source ids that can hold this engine series, best first.
+ *
+ * Datasets are keyed by the **source plugin id** (`binance-rest|BTCUSDT|1m`),
+ * not by the canonical venue (`binance|BTCUSDT|1m`) — a bare
+ * `getDataset(exchange, …)` never matches, so the broker skipped the local
+ * upload and fell through to the engine fetch (which needs ccxt on the host).
+ * The Data Manager selection is preferred when it names the same venue; the
+ * active source / provider session follow; the bare exchange stays last for
+ * datasets written by older clients.
+ */
+async function localDatasetSourceIds(key: DataSeriesKey): Promise<string[]> {
+  const c = canonicalSeriesKey(key);
+  const ids: string[] = [];
+  const push = (id: unknown): void => {
+    const s = String(id || '').trim();
+    if (s && s !== 'data-manager' && !ids.includes(s)) ids.push(s);
+  };
+  try {
+    const { exchangeForSource } = await import('../data/symbol-exchange');
+    const matchesVenue = (sourceId: string): boolean => {
+      const venue = String(exchangeForSource(sourceId) || '').toLowerCase();
+      return !!venue && venue !== 'generic' && venue === c.exchange;
+    };
+    try {
+      const { getDataManagerSelection } = await import('../data/data-manager-source');
+      const sel = getDataManagerSelection();
+      if (sel?.sourceId && matchesVenue(sel.sourceId)) push(sel.sourceId);
+    } catch {
+      /* selection optional */
+    }
+    try {
+      const { store } = await import('../store');
+      if (matchesVenue(String(store.provider?.sourceId || ''))) push(store.provider?.sourceId);
+      if (matchesVenue(String(store.source || ''))) push(store.source);
+    } catch {
+      /* store optional in tests */
+    }
+    if (matchesVenue(`${c.exchange}-rest`)) push(`${c.exchange}-rest`);
+  } catch {
+    /* symbol-exchange optional */
+  }
+  // Legacy direct key (older writers stored under the bare exchange).
+  push(c.exchange);
+  return ids;
+}
+
 async function defaultLocalBars(key: DataSeriesKey): Promise<readonly Bar[]> {
   const c = canonicalSeriesKey(key);
   const { getDataset } = await import('../data/dataset-store');
-  // Data Manager sources are keyed by the venue id; the symbol keeps its local spelling.
-  return getDataset(c.exchange, key.symbol, c.interval);
+  const candidates = await localDatasetSourceIds(key);
+  for (const sourceId of candidates) {
+    try {
+      const bars = await getDataset(sourceId, key.symbol, c.interval);
+      if (bars.length) return bars;
+    } catch {
+      /* try the next candidate key */
+    }
+  }
+  return [];
 }
 
 /**
@@ -426,6 +481,32 @@ const dataSessionMemo = new Map<string, DataSessionMemo>();
 /** @internal test helper */
 export function _resetDataSessionMemo(): void {
   dataSessionMemo.clear();
+}
+
+/**
+ * Cooldown for a slot whose provisioning keeps failing (no local dataset and a
+ * host that cannot fetch its own candles). `ensureDataSession` costs up to
+ * three round-trips per attempt; a live tick would otherwise pay the whole
+ * chain on every tick while the run is already failing — the observed
+ * hundreds-of-requests loop. Only live ticks back off; an interactive run
+ * always retries so a fixed dataset / host is picked up immediately.
+ */
+export const DATA_SESSION_RETRY_COOLDOWN_MS = 60_000;
+const provisionCooldown = new Map<string, { until: number; error: string }>();
+
+/** @internal test helper */
+export function _resetDataSessionCooldownForTests(): void {
+  provisionCooldown.clear();
+}
+
+function cooledProvisioning(memoKey: string): { error: string } | null {
+  const memo = provisionCooldown.get(memoKey);
+  if (!memo) return null;
+  if (memo.until <= Date.now()) {
+    provisionCooldown.delete(memoKey);
+    return null;
+  }
+  return { error: memo.error };
 }
 
 /** Best-effort `DELETE /session/{id}`; a failed release only costs idle-TTL lingering. */
@@ -508,6 +589,11 @@ export async function runDataSession(o: RunDataSessionOptions): Promise<DataSess
     if (!t.gone) return { ok: false, error: t.error };
   }
 
+  if (!prev && o.tick) {
+    const cooled = cooledProvisioning(memoKey);
+    if (cooled) return { ok: false, error: cooled.error };
+  }
+
   if (prev) {
     dataSessionMemo.delete(memoKey);
     void releaseDataSession(o.endpoint, o.apiKey, prev.sessionId);
@@ -527,6 +613,7 @@ export async function runDataSession(o: RunDataSessionOptions): Promise<DataSess
       signal: o.signal,
       localBars: o.localBars,
     });
+    provisionCooldown.delete(memoKey);
     dataSessionMemo.set(memoKey, { sessionId: handle.sessionId, fingerprint });
     return {
       ok: true,
@@ -536,6 +623,13 @@ export async function runDataSession(o: RunDataSessionOptions): Promise<DataSess
       provisioned: handle.provisioned,
     };
   } catch (err: unknown) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    const error = err instanceof Error ? err.message : String(err);
+    if (o.tick) {
+      provisionCooldown.set(memoKey, {
+        until: Date.now() + DATA_SESSION_RETRY_COOLDOWN_MS,
+        error: `${error} — retrying in ${Math.round(DATA_SESSION_RETRY_COOLDOWN_MS / 1000)}s`,
+      });
+    }
+    return { ok: false, error };
   }
 }

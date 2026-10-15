@@ -7,7 +7,7 @@ tags: [code, engines]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-14T01:48:54Z
+  at: 2026-10-15T17:23:44Z
 sources:
   - id: tree
     resource: "src/engines"
@@ -21,7 +21,7 @@ okf_lock: generated
 * `batch.ts` — BatchEntry, BatchRunOptions, BatchRunOutcome, BatchRunResult, BatchScript, RUN_BATCH_MAX_SCRIPTS, runBatch
 * `catalog.ts` — BUILTIN_ENGINES, DEFAULT_ENGINE_CAPABILITIES, DEFAULT_PYNE_WORKER_ENDPOINT, EngineHealthProbe, LOCAL_PYODIDE_INDEX, LOCAL_PYODIDE_VERSION, _resetEngineRegistrationFlag, _resetPyodideEngineState, _setCachedEngineCapabilitiesForTests, _setCachedEngineHealthForTests, callPyodideRunScript, capabilitiesFromHealth
 * `chart-data-session.ts` — _resetChartDataSessionForTests, ensureChartDataSession, releaseChartDataSession, tickChartDataSession
-* `data-sessions.ts` — CanonicalSeriesKey, DATA_PROVIDE_CHUNK, DataSeriesKey, DataSeriesStatus, DataSessionCreateInput, DataSessionCreateResult, DataSessionHandle, DataSessionMiss, DataSessionRunResult, EnsureDataSessionOptions, RunDataSessionOptions, _resetDataSessionMemo
+* `data-sessions.ts` — CanonicalSeriesKey, DATA_PROVIDE_CHUNK, DATA_SESSION_RETRY_COOLDOWN_MS, DataSeriesKey, DataSeriesStatus, DataSessionCreateInput, DataSessionCreateResult, DataSessionHandle, DataSessionMiss, DataSessionRunResult, EnsureDataSessionOptions, RunDataSessionOptions
 * `engine-ws.ts` — EngineWsResult, EngineWsRunRequest, _resetEngineWsClients, endpointToRunWsUrl, getEngineWsClient, probeEngineWs
 * `health.ts` — AdvertisedRunMode, CompileReadiness, DEFAULT_ENGINE_HEALTH, EngineCompileHealth, EngineFeatureHealth, EngineHealth, advertisedRunMode, compileReadiness, healthAdvertises, healthFromBody
 * `json-sanitize.ts` — parseEngineJson, sanitizeNonFiniteJson

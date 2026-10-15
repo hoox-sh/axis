@@ -1127,15 +1127,29 @@ async function runAndApplyInner(
   // Engine-owned data sessions (`meta.sessionVia` = data-session-*) evaluate the
   // engine's own series, which slides independently of the local chart window:
   // the session appends bars while `store.bars` keeps the newest Rolling window.
-  // The response series can therefore be longer (or, below the cap, shorter)
-  // than the time axis. Every zip in the apply path is index-based, so pin each
-  // series tail to the newest bar or values land `slack` bars early.
+  // A free-tier host that caps bars (`meta.windowBars`, set by the 413 clamp)
+  // also answers with a shorter series than the chart axis. Every zip in the
+  // apply path is index-based, so pin each series tail to the newest bar or
+  // values land `slack` bars early.
   const engineOwnedSeries = String(result.meta?.sessionVia || '').startsWith('data-session');
   const chartWindowBars = ohlcvTimes.length;
-  const seriesMap = engineOwnedSeries
+  const engineWindowBars = Number(result.meta?.windowBars);
+  const engineClampedTail =
+    Number.isFinite(engineWindowBars) &&
+    engineWindowBars > 0 &&
+    engineWindowBars !== chartWindowBars;
+  const tailAligned = engineOwnedSeries || engineClampedTail;
+  const seriesMap = tailAligned
     ? tailAlignSeriesMap(result.series || {}, chartWindowBars)
     : result.series || {};
   const split = splitSeriesByKind(seriesMap, plotMeta);
+  if (engineClampedTail && !silent) {
+    appendLog(
+      'info',
+      `Engine bar cap: evaluated newest ${Math.round(engineWindowBars)} bars (free tier)`,
+      'run',
+    );
+  }
 
   // Line-like series only — bgcolor/plotshape handled below
   const seriesEntries = split.lines.map((e) => [e.key, e.values] as const);
@@ -1382,7 +1396,7 @@ async function runAndApplyInner(
     // Skip all-null pads (modern engines still send plots: [null, …]).
     if (!split.bgcolors.length && !split.shapes.length && !split.ohlc.length) {
       const data = toLineData(
-        engineOwnedSeries ? tailAlignSeriesToWindow(result.plots, chartWindowBars) : result.plots,
+        tailAligned ? tailAlignSeriesToWindow(result.plots, chartWindowBars) : result.plots,
       );
       if (lineDataHasSample(data)) {
         const userColor =

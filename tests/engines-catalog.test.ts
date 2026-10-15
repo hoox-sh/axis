@@ -223,6 +223,46 @@ describe('engines catalog', () => {
     expect(metaAlerts?.[0]?.message).toBe('up');
   });
 
+  it('server retries a free-tier 413 with the newest max_bars and marks windowBars', async () => {
+    const seen: number[] = [];
+    let calls = 0;
+    restoreFetch = mockFetch(async (_input, init) => {
+      calls++;
+      const body = JSON.parse(String(init?.body || '{}')) as { data?: unknown[] };
+      seen.push(Array.isArray(body.data) ? body.data.length : 0);
+      if (calls === 1) {
+        return jsonResponse(
+          {
+            status: 'error',
+            code: 'TOO_MANY_BARS',
+            message:
+              'OHLCV exceeds free-tier limit (3 bars). Reduce data length or use an authenticated endpoint.',
+            max_bars: 3,
+            got_bars: SAMPLE_BARS.length,
+          },
+          413,
+        );
+      }
+      return jsonResponse({
+        status: 'success',
+        plots: [1, 2, 3],
+        series: { a: [1, 2, 3] },
+        events: [],
+        mode: 'interpret',
+        meta: {},
+      });
+    });
+    const r = await serverEngine.run({
+      script: 'plot(close)',
+      bars: SAMPLE_BARS,
+      config: { endpoint: 'http://engine.test:5002', mode: 'interpret', preferWs: false },
+    });
+    expect(r.status).toBe('success');
+    // First the full window, then the clamped retry with the newest 3 bars.
+    expect(seen).toEqual([SAMPLE_BARS.length, 3]);
+    expect(r.meta?.windowBars).toBe(3);
+  });
+
   it('server run error status', async () => {
     restoreFetch = mockFetch(async () =>
       jsonResponse({ status: 'error', message: 'bad pine' }, 400),
