@@ -49,6 +49,7 @@
 import type { Bar } from '../store/types';
 import {
   appendBar,
+  setBarsQuiet,
   setLive,
   store,
   setStore,
@@ -72,6 +73,7 @@ import {
 } from './catalog';
 import { noteDataManagerLiveBar } from '../data/expand-cache';
 import { isEngineOwnedLive } from '../engines/ownership';
+import { liveRerunModeForEngine } from '../engines/catalog';
 import { tickChartDataSession, releaseChartDataSession } from '../engines/chart-data-session';
 import { getDataSeriesBars } from '../engines/data-sessions';
 import { refreshLiveSessionTelemetry } from '../engines/live-sessions';
@@ -334,9 +336,11 @@ export function startLive(
 
         const timeAdvanced = lastSeenBarTime > 0 && bar.time > lastSeenBarTime;
         lastSeenBarTime = Math.max(lastSeenBarTime, bar.time);
-        // Heavy histories: throttle every-tick → bar-close to avoid full engine re-encode
+        // Heavy histories: throttle every-tick → bar-close to avoid full engine re-encode.
+        // An engine that advertises bar close only also falls back here — the
+        // stored preference itself is never rewritten.
         const mode = effectiveLiveRerunMode(
-          store.live.rerunOn,
+          liveRerunModeForEngine(store.live.rerunOn),
           store.bars?.length ?? 0,
         );
         if (mode === 'every-tick' || bar.closed || timeAdvanced) {
@@ -376,6 +380,13 @@ export function startLive(
       if (!t.ok || !isCurrent()) return;
       const proBars = await getDataSeriesBars(endpoint, apiKey, key, limit);
       if (isCurrent() && proBars.length) {
+        // The engine's store is the source of truth, but the runner builds the
+        // overlay time axis from `store.bars` (`getOhlcvTimesForApply`) — without
+        // this sync the axis stays frozen at the load window, so indicator and
+        // strategy series never gain the new bars the engine evaluated. Memory
+        // only (no dataset write, no persist), and quiet so ChartHost does not
+        // re-fit the viewport; the paint below is this frame's chart update.
+        setBarsQuiet(proBars);
         setDataToChart(proBars, { fit: false, clearMarkers: false });
       }
       // Introspection only: the engine's own session bookkeeping (bars / idle /

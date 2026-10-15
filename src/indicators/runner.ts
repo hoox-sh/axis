@@ -179,6 +179,36 @@ export function applyRollingWindow(
 }
 
 /**
+ * Tail-align one series array to the chart window length (`ohlcvTimes.length`).
+ *
+ * Engine-owned data sessions (`meta.sessionVia` = `data-session-*`) evaluate the
+ * engine's own store, which slides independently of `store.bars`: the session
+ * appends bars while the local window keeps the newest Rolling-window slice, so
+ * the response series can be longer than the chart axis. Every apply-path zip is
+ * index-based (`lineSeriesToOverlayData`, markers, barcolors, fills), so the
+ * tail must be pinned to the newest bar; a longer series is trimmed, a shorter
+ * one head-padded with `null` (Pine `na` whitespace).
+ */
+export function tailAlignSeriesToWindow(values: unknown, len: number): unknown[] {
+  const arr = Array.isArray(values) ? values : [];
+  if (len <= 0 || arr.length === 0 || arr.length === len) return arr;
+  if (arr.length > len) return arr.slice(arr.length - len);
+  return [...new Array(len - arr.length).fill(null), ...arr];
+}
+
+/** Tail-align every series in a `result.series` map (see {@link tailAlignSeriesToWindow}). */
+function tailAlignSeriesMap(
+  series: Record<string, unknown[] | (number | null)[]>,
+  len: number,
+): Record<string, unknown[] | (number | null)[]> {
+  const out: Record<string, unknown[] | (number | null)[]> = {};
+  for (const [key, arr] of Object.entries(series)) {
+    out[key] = tailAlignSeriesToWindow(arr, len);
+  }
+  return out;
+}
+
+/**
  * Bar times aligned with `store.bars` for plot apply.
  * Reuses the prior array when chartDataGen + length + last time are unchanged.
  *
@@ -1094,7 +1124,17 @@ async function runAndApplyInner(
     ...(((result as { plot_meta?: Record<string, PlotMetaEntry> }).plot_meta) || {}),
     ...((result.meta?.plot_meta || {}) as Record<string, PlotMetaEntry>),
   };
-  const seriesMap = result.series || {};
+  // Engine-owned data sessions (`meta.sessionVia` = data-session-*) evaluate the
+  // engine's own series, which slides independently of the local chart window:
+  // the session appends bars while `store.bars` keeps the newest Rolling window.
+  // The response series can therefore be longer (or, below the cap, shorter)
+  // than the time axis. Every zip in the apply path is index-based, so pin each
+  // series tail to the newest bar or values land `slack` bars early.
+  const engineOwnedSeries = String(result.meta?.sessionVia || '').startsWith('data-session');
+  const chartWindowBars = ohlcvTimes.length;
+  const seriesMap = engineOwnedSeries
+    ? tailAlignSeriesMap(result.series || {}, chartWindowBars)
+    : result.series || {};
   const split = splitSeriesByKind(seriesMap, plotMeta);
 
   // Line-like series only — bgcolor/plotshape handled below
@@ -1341,7 +1381,9 @@ async function runAndApplyInner(
     // Legacy single-array plots only when no named line series and no specialized kinds.
     // Skip all-null pads (modern engines still send plots: [null, …]).
     if (!split.bgcolors.length && !split.shapes.length && !split.ohlc.length) {
-      const data = toLineData(result.plots);
+      const data = toLineData(
+        engineOwnedSeries ? tailAlignSeriesToWindow(result.plots, chartWindowBars) : result.plots,
+      );
       if (lineDataHasSample(data)) {
         const userColor =
           userPlotColors[scriptName]?.color ||
@@ -1484,7 +1526,7 @@ async function runAndApplyInner(
       }
 
       // fill(plot1, plot2, color=…) → SVG band on the script pane (price when overlay)
-      const fillBands = resolvePlotFillBands(result.series || {}, plotMeta).filter((f) =>
+      const fillBands = resolvePlotFillBands(seriesMap, plotMeta).filter((f) =>
         plotDisplayHas(plotMeta[f.name]?.display, PLOT_DISPLAY.pane),
       );
       try {

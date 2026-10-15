@@ -45,6 +45,14 @@ Keep these apart; most paint bugs come from mixing them up. They are owned by
   a windowed run can land on its own axis. Series arrays and the time axis handed
   to the mapper must still be the same length: an engine series longer than the
   chart window maps index-for-index and shifts every value by the difference.
+* Engine-owned live mode (every-tick PYNE Pro, `data_session` caps) makes that
+  divergence structural: the venue stream is only a trigger, each flush paints
+  the engine's newest window, and the per-script data session appends while the
+  local Rolling window slides. So the paint must advance `store.bars`
+  (`setBarsQuiet` — memory only) and the runner must **tail-align** the
+  `data-session-*` series to the chart window before any zip
+  (`tailAlignSeriesToWindow`). Skip either half and indicators freeze on the
+  load window ("stays as on the first print") even though candles keep moving.
 * A private bar window (HPO holdout, walk-forward) must never take the live path:
   no session fast path, no tip-only apply. The runner records chart-vs-private
   window *once, up front* because `store.bars` can be replaced between capture and

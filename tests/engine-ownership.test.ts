@@ -14,6 +14,7 @@ import {
   _setCachedEngineCapabilitiesForTests,
   _resetEngineRegistrationFlag,
   DEFAULT_ENGINE_CAPABILITIES,
+  liveRerunModeForEngine,
 } from '../src/engines/catalog';
 import type { EngineCapabilities } from '../src/plugins/types';
 import {
@@ -74,6 +75,39 @@ describe('isEngineOwnedLive', () => {
     setStore('live', 'rerunOn', 'every-tick');
     _setCachedEngineCapabilitiesForTests({ ...PRO_CAPS, dataSession: false, ownsData: false });
     expect(isEngineOwnedLive()).toBe(false);
+  });
+});
+
+describe('liveRerunModeForEngine', () => {
+  beforeEach(() => {
+    _setCachedEngineCapabilitiesForTests(null);
+  });
+
+  afterEach(() => {
+    _setCachedEngineCapabilitiesForTests(null);
+  });
+
+  it('keeps the stored every-tick while capabilities are unknown', () => {
+    // A probe that never answered (or failed) is not "bar close only" — the
+    // preference must survive so it is not silently reset on reload.
+    expect(liveRerunModeForEngine('every-tick')).toBe('every-tick');
+    expect(liveRerunModeForEngine(undefined)).toBe('every-tick');
+  });
+
+  it('falls back to bar close only when the engine answered without every-tick', () => {
+    _setCachedEngineCapabilitiesForTests({
+      ...DEFAULT_ENGINE_CAPABILITIES,
+      liveModes: ['bar-close'],
+    });
+    expect(liveRerunModeForEngine('every-tick')).toBe('bar-close');
+
+    _setCachedEngineCapabilitiesForTests(PRO_CAPS);
+    expect(liveRerunModeForEngine('every-tick')).toBe('every-tick');
+  });
+
+  it('never upgrades a stored bar-close', () => {
+    _setCachedEngineCapabilitiesForTests(PRO_CAPS);
+    expect(liveRerunModeForEngine('bar-close')).toBe('bar-close');
   });
 });
 

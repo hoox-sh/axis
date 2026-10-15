@@ -27,7 +27,7 @@
  * @module indicators/IndicatorPanel
  */
 
-import { type Component, For, Show, createMemo, createSignal, createResource, createEffect } from 'solid-js';
+import { type Component, For, Show, createMemo, createSignal, createResource } from 'solid-js';
 import { store, isPanelOpen, setStore, persist, setStatus } from '../store';
 import { IndicatorCard } from './IndicatorCard';
 import { FloatableShell } from '../ui/panels/FloatableShell';
@@ -102,26 +102,35 @@ export const IndicatorPanel: Component = () => {
     async (id) => getEngineCapabilities(id || undefined),
   );
 
-  // Clamp only after the engine has answered; while loading, keep the user's policy.
-  createEffect(() => {
+  /**
+   * Effective cadence for the chip. The stored preference is never rewritten —
+   * an engine that cannot do every-tick falls back to bar close at run time
+   * (`liveRerunModeForEngine`) and the chip says so; silently downgrading the
+   * saved setting reads as "my setting does not save".
+   */
+  const effectiveRerunOn = createMemo<'every-tick' | 'bar-close'>(() => {
+    const stored: 'every-tick' | 'bar-close' =
+      store.live.rerunOn === 'bar-close' ? 'bar-close' : 'every-tick';
     const caps = liveCaps();
-    if (!caps || caps.liveModes.includes(store.live.rerunOn)) return;
-    setStore('live', 'rerunOn', 'bar-close');
+    if (stored !== 'every-tick' || !caps) return stored;
+    return caps.liveModes.includes('every-tick') ? 'every-tick' : 'bar-close';
   });
 
   const liveChip = createMemo(() => {
+    const eff = effectiveRerunOn();
+    const engineLimited = eff !== store.live.rerunOn;
+    const limitHint = engineLimited ? ' · engine advertises bar close only' : '';
     if (!store.live.active) {
       return {
-        label:
-          store.live.rerunOn === 'bar-close' ? 'Off · close' : 'Off · tick',
-        title: liveRerunTitle(false, store.live.rerunOn, true),
+        label: eff === 'bar-close' ? 'Off · close' : 'Off · tick',
+        title: liveRerunTitle(false, eff, true) + limitHint,
         active: false,
       };
     }
-    if (store.live.rerunOn === 'bar-close') {
+    if (eff === 'bar-close') {
       return {
-        label: 'Bar close',
-        title: liveRerunTitle(true, 'bar-close', true),
+        label: engineLimited ? 'Bar close · engine' : 'Bar close',
+        title: liveRerunTitle(true, 'bar-close', true) + limitHint,
         active: true,
       };
     }
