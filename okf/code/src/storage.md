@@ -7,7 +7,7 @@ tags: [code, storage]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-10T20:32:38Z
+  at: 2026-10-15T18:09:30Z
 sources:
   - id: tree
     resource: "src/storage"
@@ -33,7 +33,7 @@ okf_lock: generated
 * `library-publish.ts` — LibraryImportSpec, PUBLISHED_CACHE_KEY, PUBLISHED_INDEX_VERSION, PublishedIndex, PublishedLibrary, buildPublishedRecord, contentSha, defaultPublishNamespace, emptyPublishedIndex, formatImportSnippet, latestPublished, nextPublishedVersion
 * `local.ts` — LOCAL_STORAGE_VERSION, MAX_RESULTS_PER_SCRIPT, MAX_VERSIONS_PER_SCRIPT, _clearLocalLibraryForTests, _getMemResultsForTests, _resetLocalMigrationFlag, localStoragePlugin
 * `service.ts` — CopyScriptFailure, CopyScriptsResult, ResultMeta, StoredRunResult, _resetDraftSerializerForTests, _resetPendingStorageChangeForTests, cancelPendingStorageChange, copyScriptsBetweenStorages, exportLibraryJson, getActiveStoragePlugin, getPendingStorageChange, getStorageStatus
-* `vault.ts` — AGENT_API_KEY_SLOT, AGENT_KEY_BAGS, CLOUD_API_KEY_SLOT, CLOUD_KEY_BAGS, GIT_TOKEN_BAGS, GIT_TOKEN_SLOT, VAULT_SESSION_PREFIX, _clearSecretMemoryForTests, captureSecretsFromBags, forgetSecret, getAgentApiKey, getCloudApiKey
+* `vault.ts` — AGENT_API_KEY_SLOT, AGENT_KEY_BAGS, CLOUD_API_KEY_SLOT, CLOUD_KEY_BAGS, ENGINE_SERVER_API_KEY_SLOT, ENGINE_SERVER_KEY_BAGS, ENGINE_WORKER_API_KEY_SLOT, ENGINE_WORKER_KEY_BAGS, GIT_TOKEN_BAGS, GIT_TOKEN_SLOT, VAULT_SESSION_PREFIX, _clearSecretMemoryForTests
 * `workspace-snapshot.ts` — BuildWorkspaceSnapshotOptions, EDITOR_PREFS_KEYS, EditorPrefsKey, EditorPrefsSnapshot, PanelChromeSnapshot, ScriptSnapshotMeta, WORKSPACE_SNAPSHOT_KIND, WORKSPACE_SNAPSHOT_VERSION, WorkspaceSnapshot, WorkspaceSnapshotApplyFields, WorkspaceSnapshotParseError, WorkspaceSnapshotSetters
 
 # Packages
@@ -67,6 +67,7 @@ okf_lock: generated
 * [src/ui/architecture](/code/src/ui/architecture.md)
 * [src/ui/library](/code/src/ui/library.md)
 * [src/ui/plugins](/code/src/ui/plugins.md)
+* [src/ui/runtime](/code/src/ui/runtime.md)
 * [src/ui/settings](/code/src/ui/settings.md)
 * [src/ui/workers](/code/src/ui/workers.md)
 * [tests](/code/tests.md)

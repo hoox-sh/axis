@@ -144,6 +144,15 @@ export const CLOUD_API_KEY_SLOT = 'cloud.apiKey';
 export const GIT_TOKEN_SLOT = 'git.token';
 /** On-device agent component key. */
 export const AGENT_API_KEY_SLOT = 'agent.apiKey';
+/** Pro API key for the `server` engine (`pyn_…`). */
+export const ENGINE_SERVER_API_KEY_SLOT = 'engine.server.apiKey';
+/** API key for the `pyne-worker` engine. */
+export const ENGINE_WORKER_API_KEY_SLOT = 'engine.pyne-worker.apiKey';
+
+/** Bag locations for the `server` engine key. */
+export const ENGINE_SERVER_KEY_BAGS = ['engine:server', 'server'];
+/** Bag locations for the `pyne-worker` engine key. */
+export const ENGINE_WORKER_KEY_BAGS = ['engine:pyne-worker', 'pyne-worker'];
 
 /**
  * Secret-bearing `pluginsConfig` bag/key pairs, as `[bagKey, secretKey][]`.
@@ -164,6 +173,16 @@ const KNOWN_SECRET_PATHS: Array<{ bags: string[]; key: string; slot: string }> =
     bags: ['component:pyne-agent', 'pyne-agent'],
     key: 'apiKey',
     slot: AGENT_API_KEY_SLOT,
+  },
+  {
+    bags: ENGINE_SERVER_KEY_BAGS,
+    key: 'apiKey',
+    slot: ENGINE_SERVER_API_KEY_SLOT,
+  },
+  {
+    bags: ENGINE_WORKER_KEY_BAGS,
+    key: 'apiKey',
+    slot: ENGINE_WORKER_API_KEY_SLOT,
   },
 ];
 
@@ -259,12 +278,7 @@ export function getAgentApiKey(pluginsConfig: unknown): string {
 export function captureSecretsFromBags(pluginsConfig: unknown): string[] {
   const captured: string[] = [];
   try {
-    const paths: Array<{ bags: string[]; key: string; slot: string }> = [
-      { bags: CLOUD_KEY_BAGS, key: 'apiKey', slot: CLOUD_API_KEY_SLOT },
-      { bags: GIT_TOKEN_BAGS, key: 'token', slot: GIT_TOKEN_SLOT },
-      { bags: AGENT_KEY_BAGS, key: 'apiKey', slot: AGENT_API_KEY_SLOT },
-    ];
-    for (const { bags, key, slot } of paths) {
+    for (const { bags, key, slot } of KNOWN_SECRET_PATHS) {
       for (const bagKey of bags) {
         const bag = bagOf(pluginsConfig, bagKey);
         const raw = bag?.[key];
@@ -299,6 +313,49 @@ export function getGitToken(pluginsConfig: unknown): string {
     GIT_TOKEN_BAGS,
     'token',
   );
+}
+
+/**
+ * Engine API key for `engineId`: session vault first, `pluginsConfig` bag
+ * fallback. The durable payload strips every `apiKey`, so without the vault an
+ * engine key vanished on every reload (the Pro API then answered 401 on
+ * `/data/*` and key-gated runs). Unknown engines keep the plain bag read.
+ */
+export function getEngineApiKey(pluginsConfig: unknown, engineId: string): string {
+  const id = String(engineId || '').trim();
+  if (id === 'server') {
+    return getVaultSecretWithLegacyFallback(
+      ENGINE_SERVER_API_KEY_SLOT,
+      pluginsConfig,
+      ENGINE_SERVER_KEY_BAGS,
+      'apiKey',
+    );
+  }
+  if (id === 'pyne-worker') {
+    return getVaultSecretWithLegacyFallback(
+      ENGINE_WORKER_API_KEY_SLOT,
+      pluginsConfig,
+      ENGINE_WORKER_KEY_BAGS,
+      'apiKey',
+    );
+  }
+  const bag = bagOf(pluginsConfig, id) || bagOf(pluginsConfig, `engine:${id}`);
+  const raw = bag?.apiKey;
+  return typeof raw === 'string' ? raw.trim() : '';
+}
+
+/** Mirror an engine key into (or out of) the session vault. */
+export function setEngineApiKey(engineId: string, value: string): void {
+  const slot =
+    engineId === 'server'
+      ? ENGINE_SERVER_API_KEY_SLOT
+      : engineId === 'pyne-worker'
+        ? ENGINE_WORKER_API_KEY_SLOT
+        : '';
+  if (!slot) return;
+  const trimmed = String(value || '').trim();
+  if (trimmed) putSecret(slot, trimmed);
+  else forgetSecret(slot);
 }
 
 function isSecretKey(key: string): boolean {

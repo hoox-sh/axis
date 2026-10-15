@@ -15,6 +15,7 @@ import { reconcile } from 'solid-js/store';
 import { store, setStore, flushPersist, setStatus, setActivePlugin } from '../../store';
 import { getEngine } from '../../engines/catalog';
 import { pluginKey } from '../../plugins/types';
+import { getEngineApiKey, setEngineApiKey } from '../../storage/vault';
 
 export type EngineExecMode = 'interpret' | 'compile' | 'auto';
 
@@ -47,7 +48,18 @@ export function normalizeExecMode(
 
 export function readEnginePluginConfig(engineId: string): Record<string, unknown> {
   const pc = store.pluginsConfig || {};
-  return (pc[pluginKey('engine', engineId)] || pc[engineId] || {}) as Record<string, unknown>;
+  const cfg = (pc[pluginKey('engine', engineId)] || pc[engineId] || {}) as Record<string, unknown>;
+  // The durable payload strips `apiKey` — merge the session vault so direct
+  // readers never see an empty key after a reload.
+  try {
+    const vaultKey = getEngineApiKey(store.pluginsConfig, engineId);
+    if (vaultKey && String(cfg.apiKey || '').trim() !== vaultKey) {
+      return { ...cfg, apiKey: vaultKey };
+    }
+  } catch {
+    /* vault read must never break config reads */
+  }
+  return cfg;
 }
 
 export function engineNeedsEndpoint(engineId: string): boolean {
@@ -129,6 +141,10 @@ export function saveEngineConfig(input: SaveEngineConfigInput): void {
     if (writeAutoPrewarm) nextCfg[AUTO_PREWARM_FIELD] = !!input.autoPrewarm;
     setStore('pluginsConfig', key, reconcile(nextCfg));
   }
+
+  // Mirror the key into the session vault (survives reloads in this tab; the
+  // durable payload never carries it).
+  if (writeApiKey) setEngineApiKey(engine, String(input.apiKey || ''));
 
   flushPersist();
   const modePart = writeExecMode ? ` · mode=${input.mode}` : '';

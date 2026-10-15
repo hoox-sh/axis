@@ -456,6 +456,27 @@ export async function ensureDataSession(opts: EnsureDataSessionOptions): Promise
       return { sessionId: second.sessionId, payload: second.payload, provisioned };
     }
     if (!('miss' in second)) throw new Error(second.error);
+    // The engine still reports short — but it now holds exactly what we just
+    // uploaded. Ask for that count instead of the original window so a smaller
+    // local dataset still yields a session (the apply path tail-aligns the
+    // shorter series); never fall through to the exchange fetch for data the
+    // host may not be able to download (no ccxt on the host).
+    const have = Math.max(0, Math.floor(second.miss.have));
+    if (have > 0 && have < input.historyBars) {
+      const clamped = await createDataSession(
+        opts.endpoint,
+        opts.apiKey,
+        { ...input, historyBars: have },
+        opts.signal,
+      );
+      if (clamped.ok) {
+        return { sessionId: clamped.sessionId, payload: clamped.payload, provisioned };
+      }
+      if (!('miss' in clamped)) throw new Error(clamped.error);
+      throw new Error(
+        `data session still short after local upload: ${clamped.miss.key} have ${clamped.miss.have} / need ${clamped.miss.need}`,
+      );
+    }
   }
 
   await fetchDataSeries(opts.endpoint, opts.apiKey, opts.key, opts.historyBars, opts.signal);

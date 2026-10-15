@@ -19,6 +19,11 @@ import {
   PREVIEW_MAX_BARS,
 } from '../src/engines/pro';
 import { setActivePlugin, setStore } from '../src/store';
+import {
+  forgetSecret,
+  ENGINE_SERVER_API_KEY_SLOT,
+  ENGINE_WORKER_API_KEY_SLOT,
+} from '../src/storage/vault';
 
 const ENDPOINT = 'http://pro.test:5002';
 
@@ -50,6 +55,10 @@ const closes = Array.from({ length: 20 }, (_, i) => 100 + i);
 
 beforeEach(() => {
   calls = [];
+  // The engine key now lives in the session vault (survives bag resets by
+  // design) — clear it so key-absent tests observe an empty vault.
+  forgetSecret(ENGINE_SERVER_API_KEY_SLOT);
+  forgetSecret(ENGINE_WORKER_API_KEY_SLOT);
   setStore('endpoint', ENDPOINT);
   setStore('pluginsConfig', { 'engine:server': { mode: 'auto' } });
   setActivePlugin('engine', 'server');

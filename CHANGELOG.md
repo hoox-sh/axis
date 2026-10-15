@@ -9,11 +9,16 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-10-15 · 570 commits · describe-tag: `v2.24.1`_
+_Generated/updated: 2026-10-15 · 571 commits · describe-tag: `v2.24.2`_
 
 ---
 
-## [Unreleased]
+## [2.24.3] — 2026-10-15
+
+### Fixed
+
+- **The Pro API engine key now survives a reload.** `sanitizePluginsConfigForPersist` strips every `apiKey` from the durable `localStorage` payload, but the session vault never captured the `server` / `pyne-worker` engine keys — so after every reload the key field was empty and every key-gated call (`/data/*`, authenticated `/run`, `/auth/usage`) answered 401 until the key was re-entered. The engine keys now live in the vault like the cloud key (`engine.server.apiKey` / `engine.pyne-worker.apiKey` slots, captured from `engine:server` / `engine:pyne-worker` bags on every persist, migrated from pre-vault blobs on boot): `getActiveEngineConfig()`, `readEnginePluginConfig()` and the Runtime form hydrate resolve vault-first, and saving mirrors the key back into the vault. Covered by the `engine key vault` cases in `tests/wsd-vault.test.ts` (capture → strip → resolve round-trip) plus a vault-isolation reset in `tests/engine-pro.test.ts`.
+- **A short local dataset no longer falls through to an exchange fetch the host may not support.** When the engine reported `DATA_MISS` after a local `/data/series/provide` upload, the broker unconditionally called `/data/series/fetch` — which fails with `ccxt_missing` on hosts without ccxt. The broker now retries the session create clamped to the uploaded bar count (the apply path tail-aligns the shorter series) and never fetches for data the host cannot download. Covered by the clamp cases in `tests/data-sessions.test.ts`.
 
 ## [2.24.2] — 2026-10-15
 
@@ -1483,13 +1488,9 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
----
-
----
-
 ## Full history (recursive)
 
-### 2026-10 (89 commits)
+### 2026-10 (90 commits)
 
 #### Features
 
@@ -1584,6 +1585,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Chores
 
+- `13d89fdd` (2026-10-15) — chore(release): AXIS v2.24.2 — engine data-plane fixes
 - `6bb1c521` (2026-10-15) — chore(release): AXIS v2.24.1 — engine live-mode fixes
 - `7f16933c` (2026-10-14) — chore(docs): regenerate llm packs with the fixed identifier minifier
 - `ec0ec5c4` (2026-10-14) — chore(release): AXIS v2.24.0 — PYNE endpoint parity

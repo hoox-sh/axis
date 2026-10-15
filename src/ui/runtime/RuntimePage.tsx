@@ -55,6 +55,7 @@ import {
   saveEngineConfig,
   type EngineExecMode,
 } from './engine-config';
+import { getEngineApiKey } from '../../storage/vault';
 
 export function RuntimePage(props: {
   onNavigate: (id: StudioPageId) => void;
@@ -98,7 +99,11 @@ export function RuntimePage(props: {
     setExecMode(normalizeExecMode(cfg.mode, defaultMode));
     if (typeof cfg.preferWs === 'boolean') setPreferWs(cfg.preferWs);
     else setPreferWs(schema?.preferWs?.default !== false);
-    setApiKey(typeof cfg.apiKey === 'string' ? cfg.apiKey : String(schema?.apiKey?.default || ''));
+    // The durable payload strips `apiKey` — read the session vault so the field
+    // is not empty after a reload (and Save does not wipe the stored key).
+    const bagKey = typeof cfg.apiKey === 'string' ? cfg.apiKey.trim() : '';
+    const vaultKey = getEngineApiKey(store.pluginsConfig, engineId);
+    setApiKey(bagKey || vaultKey || String(schema?.apiKey?.default || ''));
     setAutoPrewarm(cfg[AUTO_PREWARM_FIELD] === true);
     if (engineId === 'pyne-worker') {
       const def = String(

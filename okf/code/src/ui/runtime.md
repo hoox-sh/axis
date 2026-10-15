@@ -7,7 +7,7 @@ tags: [code, runtime, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-14T00:33:46Z
+  at: 2026-10-15T18:09:30Z
 sources:
   - id: tree
     resource: "src/ui/runtime"
@@ -31,6 +31,7 @@ okf_lock: generated
 * [src/engines](/code/src/engines.md)
 * [src/indicators](/code/src/indicators.md)
 * [src/plugins](/code/src/plugins.md)
+* [src/storage](/code/src/storage.md)
 * [src/store](/code/src/store.md)
 * [src/ui](/code/src/ui.md)
 * [src/ui/studio](/code/src/ui/studio.md)

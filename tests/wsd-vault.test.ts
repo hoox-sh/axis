@@ -21,8 +21,12 @@ import {
   getCloudApiKey,
   getGitToken,
   getAgentApiKey,
+  getEngineApiKey,
+  setEngineApiKey,
   CLOUD_API_KEY_SLOT,
   GIT_TOKEN_SLOT,
+  ENGINE_SERVER_API_KEY_SLOT,
+  ENGINE_WORKER_API_KEY_SLOT,
 } from '../src/storage/vault';
 import {
   resolveCloudConfig,
@@ -31,7 +35,8 @@ import {
   isSecureCloudEndpoint,
   requireSecureCloudEndpoint,
 } from '../src/storage/cloud-config';
-import { setStore } from '../src/store';
+import { setStore, setActivePlugin } from '../src/store';
+import { getActiveEngineConfig } from '../src/plugins/active';
 
 beforeEach(() => {
   forgetSecret(CLOUD_API_KEY_SLOT);
@@ -96,6 +101,52 @@ describe('session vault', () => {
     expect(clean.bag).not.toHaveProperty('apiKey');
     expect(clean.bag).not.toHaveProperty('token');
     expect(clean.bag).not.toHaveProperty('password');
+  });
+});
+
+describe('engine key vault', () => {
+  beforeEach(() => {
+    forgetSecret(ENGINE_SERVER_API_KEY_SLOT);
+    forgetSecret(ENGINE_WORKER_API_KEY_SLOT);
+  });
+
+  it('captures the engine key so it survives a reload with the key stripped', () => {
+    const bag = {
+      'engine:server': { endpoint: 'https://pynescript.online', apiKey: 'pyn_live_key' },
+    };
+    const captured = captureSecretsFromBags(bag);
+    expect(captured).toContain(ENGINE_SERVER_API_KEY_SLOT);
+    // Reload simulation: the durable payload strips `apiKey`, so the fresh bag
+    // has none — the vault must serve it back.
+    const afterReload = { 'engine:server': { endpoint: 'https://pynescript.online' } };
+    expect(getEngineApiKey(afterReload, 'server')).toBe('pyn_live_key');
+  });
+
+  it('setEngineApiKey mirrors into the vault and clears it', () => {
+    setEngineApiKey('server', 'pyn_roundtrip');
+    expect(getSecret(ENGINE_SERVER_API_KEY_SLOT)).toBe('pyn_roundtrip');
+    expect(getEngineApiKey({}, 'server')).toBe('pyn_roundtrip');
+    setEngineApiKey('server', '');
+    expect(getSecret(ENGINE_SERVER_API_KEY_SLOT)).toBe('');
+    expect(getEngineApiKey({}, 'server')).toBe('');
+  });
+
+  it('keeps the legacy bag read for unknown engines', () => {
+    expect(getEngineApiKey({ 'engine:custom': { apiKey: 'custom_key' } }, 'custom')).toBe(
+      'custom_key',
+    );
+    expect(getEngineApiKey({}, 'custom')).toBe('');
+  });
+
+  it('getActiveEngineConfig resolves the key from the vault after the bag is stripped', () => {
+    setStore('pluginsConfig', 'engine:server', { endpoint: 'https://pynescript.online' });
+    setStore('endpoint', 'https://pynescript.online');
+    setActivePlugin('engine', 'server');
+    putSecret(ENGINE_SERVER_API_KEY_SLOT, 'pyn_after_reload');
+    const cfg = getActiveEngineConfig();
+    expect(cfg.apiKey).toBe('pyn_after_reload');
+    expect(cfg.endpoint).toBe('https://pynescript.online');
+    forgetSecret(ENGINE_SERVER_API_KEY_SLOT);
   });
 });
 

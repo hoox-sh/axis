@@ -34,6 +34,7 @@ import { store } from '../store';
 import { registry } from './registry';
 import { ensureBuiltins } from './bootstrap';
 import { pluginKey, type EnginePlugin, type SourcePlugin, type StoragePlugin, type StreamPlugin } from './types';
+import { getEngineApiKey } from '../storage/vault';
 import {
   buildProviderSession,
   type ProviderSession,
@@ -142,13 +143,21 @@ export function getActiveEngineConfig(): Record<string, unknown> {
     (base.mode == null || base.mode === '') && schemaMode != null
       ? { ...base, mode: schemaMode }
       : base;
+  // The durable payload strips every `apiKey`, so read the key through the
+  // session vault — otherwise a reload drops it and every key-gated call
+  // (`/data/*`, authenticated `/run`) answers 401.
+  const vaultKey = getEngineApiKey(store.pluginsConfig, id);
+  const withKey =
+    vaultKey && String(withMode.apiKey || '').trim() !== vaultKey
+      ? { ...withMode, apiKey: vaultKey }
+      : withMode;
 
   // pyne-worker: prefer pluginsConfig / a matching store.endpoint / production default
   // so a leftover Flask localhost URL does not override the edge host.
   if (id === 'pyne-worker') {
     try {
       // Lazy import path avoided — resolve inline to keep active.ts light
-      const fromCfg = String(withMode.endpoint || '').trim();
+      const fromCfg = String(withKey.endpoint || '').trim();
       const fromStore = String(store.endpoint || '').trim();
       const looksPw = (s: string) => /pyne-worker|pine-worker/i.test(s);
       const endpoint = (
@@ -156,10 +165,10 @@ export function getActiveEngineConfig(): Record<string, unknown> {
         (looksPw(fromStore) ? fromStore : '') ||
         'https://pyne-worker.cryptolinx.workers.dev'
       ).replace(/\/$/, '');
-      return { ...withMode, endpoint };
+      return { ...withKey, endpoint };
     } catch {
       return {
-        ...withMode,
+        ...withKey,
         endpoint: 'https://pyne-worker.cryptolinx.workers.dev',
       };
     }
@@ -168,7 +177,7 @@ export function getActiveEngineConfig(): Record<string, unknown> {
   // store.endpoint is the Settings field of record — must win over a stale
   // pluginsConfig.endpoint left over from older saves / presets.
   if (store.endpoint && (engine?.configSchema?.endpoint || id === 'server')) {
-    return { ...withMode, endpoint: store.endpoint };
+    return { ...withKey, endpoint: store.endpoint };
   }
-  return withMode;
+  return withKey;
 }

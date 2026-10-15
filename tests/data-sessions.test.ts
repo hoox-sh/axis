@@ -257,7 +257,7 @@ describe('ensureDataSession broker', () => {
     expect(fetchCall.body).toMatchObject({ exchange: 'binance', history_bars: 3 });
   });
 
-  it('fetches after a too-short local upload and does not loop forever', async () => {
+  it('does not fetch when a local upload left the engine short (no ccxt needed)', async () => {
     const rec = recorder((c) => {
       if (c.path === '/data/session') {
         return jsonResponse({ status: 'miss', code: 'DATA_MISS', key: 'k', have: 1, need: 3 }, 409);
@@ -267,9 +267,38 @@ describe('ensureDataSession broker', () => {
     restore = rec.restore;
     await expect(
       ensureDataSession({ endpoint: ENDPOINT, apiKey: '', ...REQ, script: 's', localBars: local([bar(1)]) }),
-    ).rejects.toThrow(/still short after fetch/);
+    ).rejects.toThrow(/still short after local upload/);
     expect(rec.calls.filter((c) => c.path === '/data/session').length).toBe(3);
-    expect(rec.calls.filter((c) => c.path === '/data/series/fetch').length).toBe(1);
+    // The exchange fetch is never attempted for data the host may not download.
+    expect(rec.calls.filter((c) => c.path === '/data/series/fetch').length).toBe(0);
+  });
+
+  it('clamps the session window to the uploaded count when the engine reports short', async () => {
+    const requested: number[] = [];
+    const rec = recorder((c) => {
+      if (c.path === '/data/session') {
+        const body = c.body as { history_bars?: number } | null;
+        requested.push(Number(body?.history_bars || 0));
+        // First two creates ask for 5; the third asks for what was uploaded (2).
+        if (requested.length <= 2) {
+          return jsonResponse({ status: 'miss', code: 'DATA_MISS', key: 'k', have: 2, need: 5 }, 409);
+        }
+        return jsonResponse({ status: 'success', session_id: 's-clamped' });
+      }
+      return jsonResponse({ status: 'success', added: 2, updated: 0, count: 2 });
+    });
+    restore = rec.restore;
+    const h = await ensureDataSession({
+      endpoint: ENDPOINT,
+      apiKey: '',
+      key: { exchange: 'binance', symbol: 'BTCUSDT', interval: '1h' },
+      historyBars: 5,
+      script: 's',
+      localBars: local([bar(1), bar(2)]),
+    });
+    expect(h).toMatchObject({ sessionId: 's-clamped', provisioned: 'local' });
+    expect(requested).toEqual([5, 5, 2]);
+    expect(rec.calls.some((c) => c.path === '/data/series/fetch')).toBe(false);
   });
 
   it('finds the local dataset under the source plugin id, not the bare venue', async () => {
