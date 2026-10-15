@@ -9,11 +9,13 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-10-15 · 568 commits · describe-tag: `v2.24.0`_
+_Generated/updated: 2026-10-15 · 570 commits · describe-tag: `v2.24.1`_
 
 ---
 
 ## [Unreleased]
+
+## [2.24.2] — 2026-10-15
 
 ### Fixed
 
@@ -1483,9 +1485,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-10 (87 commits)
+### 2026-10 (89 commits)
 
 #### Features
 
@@ -1522,6 +1526,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `1b28d5e4` (2026-10-15) — fix(engine): unblock engine-owned data plane and honor free-tier caps
 - `cfa7daed` (2026-10-15) — fix(engine): live-mode regressions — frozen overlays and reset re-run setting
 - `de198e3b` (2026-10-14) — fix(workers): carry compile readiness through the probe result; use the rest of /health
 - `f4925103` (2026-10-13) — fix(engine): harden O(delta) live sessions and engage them under auto
@@ -1579,6 +1584,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Chores
 
+- `6bb1c521` (2026-10-15) — chore(release): AXIS v2.24.1 — engine live-mode fixes
 - `7f16933c` (2026-10-14) — chore(docs): regenerate llm packs with the fixed identifier minifier
 - `ec0ec5c4` (2026-10-14) — chore(release): AXIS v2.24.0 — PYNE endpoint parity
 - `4092018e` (2026-10-13) — chore(brand): remove email-signatures
