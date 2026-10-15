@@ -9,11 +9,13 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-10-14 · 564 commits · describe-tag: `v2.23.1`_
+_Generated/updated: 2026-10-15 · 568 commits · describe-tag: `v2.24.0`_
 
 ---
 
 ## [Unreleased]
+
+## [2.24.1] — 2026-10-15
 
 ### Fixed
 
@@ -1473,9 +1475,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-10 (83 commits)
+### 2026-10 (87 commits)
 
 #### Features
 
@@ -1512,6 +1516,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `cfa7daed` (2026-10-15) — fix(engine): live-mode regressions — frozen overlays and reset re-run setting
 - `de198e3b` (2026-10-14) — fix(workers): carry compile readiness through the probe result; use the rest of /health
 - `f4925103` (2026-10-13) — fix(engine): harden O(delta) live sessions and engage them under auto
 - `8384ab86` (2026-10-13) — fix(engine): one live session per script instance, rebase on rewritten history
@@ -1561,12 +1566,15 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Tests
 
+- `03dc1405` (2026-10-14) — test: stop cross-file store leakage from making CI order-dependent
 - `e5453220` (2026-10-13) — test(datasession): mint an API key in the e2e harness
 - `c5100b3f` (2026-10-13) — test(datasession): cross-repo e2e against the PYNE /data store
 - `3c7ed9f4` (2026-10-13) — test(data): cover job validation and retention in the Data Source Manager
 
 #### Chores
 
+- `7f16933c` (2026-10-14) — chore(docs): regenerate llm packs with the fixed identifier minifier
+- `ec0ec5c4` (2026-10-14) — chore(release): AXIS v2.24.0 — PYNE endpoint parity
 - `4092018e` (2026-10-13) — chore(brand): remove email-signatures
 - `c906248e` (2026-10-13) — chore(pyne-wheel): vendor PYNE 0.6.9 for the in-browser Pyodide engine
 - `85eab77e` (2026-10-13) — chore(release): AXIS v2.23.0 — proxy repair, rolling window, CI green
