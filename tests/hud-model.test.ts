@@ -167,4 +167,10 @@ describe('feedStatusTone / feedStatusLabel (F-18)', () => {
     expect(feedStatusLabel('live')).toBe('live');
     expect(feedStatusLabel('error', { message: 'boom' })).toBe('error · boom');
   });
+
+  it('names the degraded cause when a message is present (F-28)', () => {
+    expect(feedStatusLabel('degraded', { message: 'unverified close', updatedAt: 1000, now: 46000 })).toBe(
+      'degraded · unverified close',
+    );
+  });
 });

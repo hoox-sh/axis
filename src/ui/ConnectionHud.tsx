@@ -36,6 +36,7 @@
 
 import {
   type Component,
+  For,
   Show,
   createEffect,
   createMemo,
@@ -44,6 +45,7 @@ import {
   onMount,
 } from 'solid-js';
 import { store, setStore, persist, setActivePlugin, setDataSourcePanelOpen } from '../store';
+import type { FeedSubscription } from '../store/types';
 import { useNow } from './clock';
 import type { PlaneTelemetry } from '../store/types';
 import { formatLatency, formatTickAge } from './telemetry';
@@ -85,6 +87,17 @@ function useHudSnapshot(): () => HudSnapshot {
 
 // ── Sticky info panel ─────────────────────────────────────────────────
 
+/** Fixed-position dialog placement anchored to a chip (shared by the info panel and the compose menu). */
+function dialogPos(anchor: HTMLElement | null | undefined, width: number) {
+  if (!anchor || typeof anchor.getBoundingClientRect !== 'function') {
+    return { left: 8, bottom: 32 };
+  }
+  const r = anchor.getBoundingClientRect();
+  const left = Math.max(8, Math.min(r.left, window.innerWidth - width - 8));
+  const bottom = Math.max(8, window.innerHeight - r.top + 6);
+  return { left, bottom };
+}
+
 function HudInfoPanel(props: {
   chip: HudChipId;
   snap: HudSnapshot;
@@ -93,18 +106,11 @@ function HudInfoPanel(props: {
   onTogglePin: () => void;
   /** Anchor element for fixed placement (avoids status-bar overflow clip). */
   anchor: HTMLElement | null | undefined;
+  /** Chip-specific live rows (status, progress, tier) — the only per-chip facts here. */
+  meta?: string[];
 }) {
   const help = () => hudChipHelp(props.chip, props.snap);
-  const pos = createMemo(() => {
-    const el = props.anchor;
-    if (!el || typeof el.getBoundingClientRect !== 'function') {
-      return { left: 8, bottom: 32 };
-    }
-    const r = el.getBoundingClientRect();
-    const left = Math.max(8, Math.min(r.left, window.innerWidth - 328));
-    const bottom = Math.max(8, window.innerHeight - r.top + 6);
-    return { left, bottom };
-  });
+  const pos = createMemo(() => dialogPos(props.anchor, 328));
   return (
     <div
       class="axis-hud-info fixed z-[300] w-[min(320px,calc(100vw-24px))] text-left"
@@ -147,16 +153,18 @@ function HudInfoPanel(props: {
         {help().body}
       </p>
       <div class="mt-2 pt-1.5 border-t border-border-soft grid grid-cols-2 gap-x-2 gap-y-0.5 text-[10px] font-mono text-text-faint">
-        <span>ENG {props.snap.eng}</span>
-        <span>RUN {props.snap.run}</span>
-        <span>MODE {props.snap.mode}</span>
-        <span>PATH {props.snap.showPath ? props.snap.path : '—'}</span>
-        <span class="col-span-2 truncate" title={props.snap.endpoint}>
-          ep {props.snap.endpoint}
-        </span>
-        <span class="col-span-2 truncate" title={props.snap.product}>
-          {props.snap.product}
-        </span>
+        <For each={props.meta ?? []}>
+          {(m) => (
+            <span class="col-span-2 truncate" title={m}>
+              {m}
+            </span>
+          )}
+        </For>
+        <Show when={props.snap.endpoint}>
+          <span class="col-span-2 truncate" title={props.snap.endpoint}>
+            ep {props.snap.endpoint}
+          </span>
+        </Show>
         <Show when={props.snap.error}>
           <span class="col-span-2 text-red truncate">{props.snap.error}</span>
         </Show>
@@ -217,19 +225,38 @@ function useStickyInfo() {
 
 // ── Chips ─────────────────────────────────────────────────────────────
 
+/**
+ * Single shell for every HUD chip: dot + label + value, hover/click/keyboard
+ * open the same sticky info panel. Visual variants travel through class props
+ * (`shellClass`, `labelClass`, `valueClass`, `dotClass`) so TickPulse and the
+ * Live control share this instead of re-implementing the wiring. Truncated
+ * values get their full text via `title`.
+ */
 function ChipShell(props: {
   id: HudChipId;
   label: string;
   value: string;
   state?: 'idle' | 'ok' | 'warn' | 'err' | 'load';
-  monoValue?: boolean;
+  /** Extra classes on the outer capsule (e.g. live-button tones). */
+  shellClass?: string;
+  /** Extra classes on the label span (e.g. `is-word` for non-acronyms). */
+  labelClass?: string;
+  /** Extra classes on the value span (e.g. tick direction color). */
+  valueClass?: string;
+  /** Explicit dot classes; when omitted the dot follows `state`. */
+  dotClass?: string;
+  /** Full text for truncated values (native tooltip). */
+  title?: string;
   sticky: ReturnType<typeof useStickyInfo>;
   snap: () => HudSnapshot;
   extra?: string;
   testId?: string;
+  /** Chip-specific live rows for the info panel footer. */
+  meta?: string[];
 }) {
   let anchor: HTMLSpanElement | undefined;
   const dot = () => {
+    if (props.dotClass !== undefined) return props.dotClass;
     switch (props.state) {
       case 'ok':
         return 'is-ok';
@@ -262,13 +289,14 @@ function ChipShell(props: {
       ref={(el) => {
         anchor = el;
       }}
-      class={`axis-status-capsule relative ${
+      class={`axis-status-capsule relative ${props.shellClass ?? ''} ${
         active() ? 'is-active' : ''
       }`}
       data-testid={props.testId || `axis-hud-${props.id}`}
       data-hud-chip={props.id}
       role="button"
       tabIndex={0}
+      title={props.title}
       onMouseEnter={() => props.sticky.open(props.id)}
       onMouseLeave={() => props.sticky.scheduleClose()}
       onClick={activate}
@@ -277,14 +305,16 @@ function ChipShell(props: {
       }}
     >
       <span class={`axis-live-dot ${dot()}`} aria-hidden="true" />
-      <span class="axis-status-capsule-code">{props.label}</span>
-      <span
-        class={`axis-status-capsule-val ${
-          props.state === 'load' ? 'text-orange' : ''
-        }`}
-      >
-        {props.value}
-      </span>
+      <span class={`axis-status-capsule-code ${props.labelClass ?? ''}`}>{props.label}</span>
+      <Show when={props.value !== ''}>
+        <span
+          class={`axis-status-capsule-val ${
+            props.state === 'load' ? 'text-orange' : ''
+          } ${props.valueClass ?? ''}`}
+        >
+          {props.value}
+        </span>
+      </Show>
       <Show when={props.extra}>
         <span class="text-[10px] font-mono text-text-faint tabular-nums flex-shrink-0">
           {props.extra}
@@ -301,6 +331,7 @@ function ChipShell(props: {
             snap={props.snap()}
             pinned={props.sticky.pinned()}
             anchor={anchor}
+            meta={props.meta}
             onClose={() => props.sticky.close()}
             onTogglePin={() => props.sticky.togglePin()}
           />
@@ -366,29 +397,40 @@ function FeedChip(props: {
     }
     return f;
   };
+  /** Map feed tone onto chip state (single evaluation, no nested ternaries). */
+  const chipState = (status: FeedSubscription['status']): 'idle' | 'ok' | 'err' | 'load' => {
+    const tone = feedStatusTone(status);
+    if (tone === 'live') return 'ok';
+    if (tone === 'err') return 'err';
+    if (tone === 'idle') return 'idle';
+    return 'load';
+  };
+  const labelOf = (f: NonNullable<ReturnType<typeof effective>>) =>
+    feedStatusLabel(f.status, {
+      have: f.have,
+      need: f.need,
+      message: f.message,
+      updatedAt: f.updatedAt,
+    });
+  /** Live rows for the info panel: status, progress, verification tier. */
+  const metaOf = (f: NonNullable<ReturnType<typeof effective>>) => {
+    const rows = [`status ${f.status}`];
+    if (f.have !== undefined || f.need !== undefined) {
+      rows.push(`progress ${f.have ?? '?'} / ${f.need ?? '?'}`);
+    }
+    rows.push(`verified ${f.verified ?? '—'}`);
+    return rows;
+  };
   return (
     <Show when={effective()}>
       {(f) => (
         <ChipShell
           id="feed"
           label="feed"
-          value={feedStatusLabel(f().status, {
-            have: f().have,
-            need: f().need,
-            message: f().message,
-            updatedAt: f().updatedAt,
-          })}
-          state={
-            feedStatusTone(f().status) === 'live'
-              ? 'ok'
-              : feedStatusTone(f().status) === 'err'
-                ? 'err'
-                : feedStatusTone(f().status) === 'degraded'
-                  ? 'load'
-                  : feedStatusTone(f().status) === 'idle'
-                    ? 'idle'
-                    : 'load'
-          }
+          value={labelOf(f())}
+          title={labelOf(f())}
+          state={chipState(f().status)}
+          meta={metaOf(f())}
           sticky={props.sticky}
           snap={props.snap}
           testId="axis-hud-feed"
@@ -417,7 +459,6 @@ function TickPulse(props: {
   sticky: ReturnType<typeof useStickyInfo>;
   snap: () => HudSnapshot;
 }) {
-  let anchor: HTMLSpanElement | undefined;
   const tick = () => store.telemetry?.lastTick;
   const now = useNow();
   const fresh = () => {
@@ -438,68 +479,25 @@ function TickPulse(props: {
       maximumFractionDigits: 2,
     });
   };
-  const active = () => props.sticky.openChip() === 'tick';
-
-  /** Open/pin the sticky info — shared by pointer click and keyboard. */
-  const activate = (e: MouseEvent | KeyboardEvent) => {
-    e.stopPropagation();
-    props.sticky.open('tick');
-    if (!props.sticky.pinned()) props.sticky.togglePin();
+  const ageTitle = () => {
+    const t = tick();
+    return t ? `${priceText()} · ${formatTickAge(t.at, now())}` : undefined;
   };
-
   return (
-    // biome-ignore lint/a11y/useSemanticElements: chip hosts the info panel's pin/close buttons; a real <button> would nest buttons (invalid HTML)
-    <span
-      ref={(el) => {
-        anchor = el;
-      }}
-      class={`axis-status-capsule relative font-mono ${
-        active() ? 'is-active' : ''
+    <ChipShell
+      id="tick"
+      label="Last"
+      labelClass="is-word"
+      value={priceText()}
+      valueClass={`tabular-nums text-right max-w-[7ch] flex-shrink-0 overflow-hidden text-ellipsis ${dirColor()}`}
+      dotClass={`${store.live.active && store.stream.status === 'connected' ? 'is-ok' : ''} ${
+        fresh() ? 'axis-live-dot--pulse' : ''
       }`}
-      data-testid="axis-tick-indicator"
-      data-hud-chip="tick"
-      role="button"
-      tabIndex={0}
-      onMouseEnter={() => props.sticky.open('tick')}
-      onMouseLeave={() => props.sticky.scheduleClose()}
-      onClick={activate}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') activate(e);
-      }}
-    >
-      <span
-        class={`axis-live-dot ${
-          store.live.active && store.stream.status === 'connected' ? 'is-ok' : ''
-        } ${fresh() ? 'axis-live-dot--pulse' : ''}`}
-        aria-hidden="true"
-      />
-      <span class="axis-status-capsule-code is-word">Last</span>
-      <span
-        class={`tabular-nums text-right max-w-[7ch] flex-shrink-0 overflow-hidden text-ellipsis ${dirColor()}`}
-        title={(() => {
-          const t = tick();
-          return t ? `${priceText()} · ${formatTickAge(t.at, now())}` : undefined;
-        })()}
-      >
-        {priceText()}
-      </span>
-      <Show when={active()}>
-        {/* biome-ignore lint/a11y/noStaticElementInteractions: hover bridge keeps the info panel open while the pointer moves onto it; pointer-only affordance */}
-        <div
-          onMouseEnter={() => props.sticky.clearLeave()}
-          onMouseLeave={() => props.sticky.scheduleClose()}
-        >
-          <HudInfoPanel
-            chip="tick"
-            snap={props.snap()}
-            pinned={props.sticky.pinned()}
-            anchor={anchor}
-            onClose={() => props.sticky.close()}
-            onTogglePin={() => props.sticky.togglePin()}
-          />
-        </div>
-      </Show>
-    </span>
+      title={ageTitle()}
+      sticky={props.sticky}
+      snap={props.snap}
+      testId="axis-tick-indicator"
+    />
   );
 }
 
@@ -507,7 +505,6 @@ function LiveBadge(props: {
   sticky: ReturnType<typeof useStickyInfo>;
   snap: () => HudSnapshot;
 }) {
-  let anchor: HTMLSpanElement | undefined;
   const st = () => store.stream.status;
   const tone = () => liveBadgeTone({ liveActive: store.live.active, streamStatus: st() });
   const label = () => liveBadgeWord(tone());
@@ -525,55 +522,19 @@ function LiveBadge(props: {
     if (t === 'offline') return 'is-offline';
     return 'is-idle';
   };
-  const active = () => props.sticky.openChip() === 'live';
-
-  /** Open/pin the sticky info — shared by pointer click and keyboard. */
-  const activate = (e: MouseEvent | KeyboardEvent) => {
-    e.stopPropagation();
-    props.sticky.open('live');
-    if (!props.sticky.pinned()) props.sticky.togglePin();
-  };
-
   return (
-    // biome-ignore lint/a11y/useSemanticElements: chip hosts the info panel's pin/close buttons; a real <button> would nest buttons (invalid HTML)
-    <span
-      ref={(el) => {
-        anchor = el;
-      }}
-      class={`axis-live-btn axis-status-capsule relative ${cls()} ${
-        active() ? 'is-active' : ''
-      }`}
-      data-hud-chip="live"
-      data-testid="axis-hud-live"
-      role="button"
-      tabIndex={0}
+    <ChipShell
+      id="live"
+      label={label()}
+      labelClass="is-word axis-live-btn-word"
+      value=""
+      shellClass={`axis-live-btn ${cls()}`}
+      dotClass=""
       title={tip()}
-      onMouseEnter={() => props.sticky.open('live')}
-      onMouseLeave={() => props.sticky.scheduleClose()}
-      onClick={activate}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') activate(e);
-      }}
-    >
-      <span class="axis-live-dot" aria-hidden="true" />
-      {label()}
-      <Show when={active()}>
-        {/* biome-ignore lint/a11y/noStaticElementInteractions: hover bridge keeps the info panel open while the pointer moves onto it; pointer-only affordance */}
-        <div
-          onMouseEnter={() => props.sticky.clearLeave()}
-          onMouseLeave={() => props.sticky.scheduleClose()}
-        >
-          <HudInfoPanel
-            chip="live"
-            snap={props.snap()}
-            pinned={props.sticky.pinned()}
-            anchor={anchor}
-            onClose={() => props.sticky.close()}
-            onTogglePin={() => props.sticky.togglePin()}
-          />
-        </div>
-      </Show>
-    </span>
+      sticky={props.sticky}
+      snap={props.snap}
+      testId="axis-hud-live"
+    />
   );
 }
 
@@ -633,12 +594,7 @@ function ComposeChip(props: { snap: () => HudSnapshot }) {
   const [pos, setPos] = createSignal({ left: 8, bottom: 36 });
 
   const place = () => {
-    const r = btn?.getBoundingClientRect();
-    if (!r) return;
-    setPos({
-      left: Math.max(8, Math.min(r.left, window.innerWidth - 260)),
-      bottom: Math.max(8, window.innerHeight - r.top + 6),
-    });
+    setPos(dialogPos(btn, 252));
   };
 
   const close = () => setOpen(false);

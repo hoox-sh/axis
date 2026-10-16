@@ -270,9 +270,10 @@ export function feedStatusTone(status: SubscriptionStatus): 'live' | 'load' | 'd
 }
 
 /**
- * Short label for a feed subscription. Degraded appends staleness
- * ("degraded · 45s stale"); loading states show progress when known
- * ("loading 2k/10k").
+ * Short label for a feed subscription. Degraded names the cause when known
+ * (`degraded · unverified close`), else its staleness (`degraded · 45s
+ * stale`); loading states show progress when known (`loading 2k/10k`).
+ * Long labels ellipsize in the chip — callers put the full text in `title`.
  */
 export function feedStatusLabel(
   status: SubscriptionStatus,
@@ -281,6 +282,7 @@ export function feedStatusLabel(
   if (status === 'live') return 'live';
   if (status === 'error') return `error${opts?.message ? ` · ${opts.message}` : ''}`;
   if (status === 'degraded') {
+    if (opts?.message) return `degraded · ${opts.message}`;
     const at = opts?.updatedAt ?? 0;
     const now = opts?.now ?? Date.now();
     const ageS = Math.max(0, Math.round((now - at) / 1000));

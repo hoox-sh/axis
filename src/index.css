@@ -778,7 +778,6 @@ button.sc-btn:focus-visible {
 .axis-live-btn:hover {
   background: var(--color-bg-hover);
   color: var(--color-text);
-  border-color: var(--color-border-soft);
 }
 .axis-live-btn:focus-visible {
   border-color: var(--color-accent);
@@ -804,8 +803,6 @@ button.sc-btn:focus-visible {
 .axis-live-btn.is-live,
 .axis-live-btn.is-live[aria-pressed="true"] {
   color: var(--color-text);
-  background: transparent;
-  border-color: transparent;
   font-weight: 500;
 }
 .axis-live-btn.is-live .axis-live-dot {
@@ -815,8 +812,6 @@ button.sc-btn:focus-visible {
 .axis-live-btn.is-reconnect,
 .axis-live-btn.is-reconnect[aria-pressed="true"] {
   color: var(--color-orange);
-  background: transparent;
-  border-color: transparent;
   font-weight: 500;
 }
 .axis-live-btn.is-reconnect .axis-live-dot {
@@ -830,9 +825,11 @@ button.sc-btn:focus-visible {
 .axis-live-btn.is-offline,
 .axis-live-btn.is-offline[aria-pressed="true"] {
   color: var(--color-text-faint);
-  background: transparent;
-  border-color: transparent;
   font-weight: 500;
+}
+/* Live word inside the shared chip shell: inherit the tone color above. */
+.axis-live-btn-word {
+  color: inherit;
 }
 
 @keyframes axis-live-pulse {
@@ -1375,7 +1372,9 @@ button.sc-btn:focus-visible {
   box-shadow: inset 0 0 0 1px var(--color-accent);
 }
 .axis-status-capsule.is-active {
-  border-color: var(--color-accent);
+  /* Inset ring: zero footprint change (border-color swaps alter the visible
+     footprint next to borderless siblings). */
+  box-shadow: inset 0 0 0 1px var(--color-accent);
 }
 .axis-status-capsule-code.is-word {
   text-transform: none;
