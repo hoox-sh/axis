@@ -19,7 +19,10 @@
 
 /**
  * HOOX geometric brand mark (from hoox-landing-page).
- * Pure SVG + CSS — no GSAP dependency. Optional mount flicker for loaders.
+ * Pure SVG + CSS — no GSAP dependency. Three flicker modes: continuous
+ * (`animate`, loaders), one-shot on mount (`introFlicker`) and one-shot on
+ * hover (`hoverFlicker`, default when not animating) — the last two replay the
+ * landing `logo-flicker` stagger.
  * Sizes: xs / m / l presets or raw px via `HooxLogoSize`.
  */
 
@@ -85,6 +88,8 @@ export type HooxLogoProps = {
   size?: HooxLogoSize;
   /** Continuous CRT path flicker (loader mode). */
   animate?: boolean;
+  /** One-shot staggered flicker when the mark mounts (intro). Ignored while `animate`. */
+  introFlicker?: boolean;
   /** One-shot hover flicker out→in (brand mark). Default true when not animating. */
   hoverFlicker?: boolean;
   class?: string;
@@ -174,6 +179,7 @@ export const HooxLogo: Component<HooxLogoProps> = (props) => {
   const [local, rest] = splitProps(props, [
     'size',
     'animate',
+    'introFlicker',
     'hoverFlicker',
     'class',
     'title',
@@ -186,17 +192,24 @@ export const HooxLogo: Component<HooxLogoProps> = (props) => {
   const px = () => resolveLogoSize(local.size ?? 'm');
   const hoverOn = () => local.hoverFlicker ?? !local.animate;
 
-  const onEnter = () => {
-    if (!hoverOn() || !svgEl || flickering || local.animate) return;
+  const flicker = (): Promise<void> => {
+    if (!svgEl || flickering || local.animate) return Promise.resolve();
     flickering = true;
     hoverTimers = [];
-    void runHoverFlicker(svgEl, hoverTimers).finally(() => {
+    return runHoverFlicker(svgEl, hoverTimers).finally(() => {
       flickering = false;
     });
   };
 
+  const onEnter = () => {
+    if (!hoverOn()) return;
+    void flicker();
+  };
+
   onMount(() => {
-    // ensure clean styles
+    // Intro: flicker once when the mark appears (then hover-only), unless the
+    // continuous loader animation owns the mark.
+    if (local.introFlicker) void flicker();
   });
   onCleanup(() => {
     flickering = false;

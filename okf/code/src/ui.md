@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/ui"
-description: "src/ui contains AboutModal.tsx, AlertsPanel.tsx, BarReplayControls.tsx, and 74 more files."
+description: "src/ui contains AboutModal.tsx, AlertsPanel.tsx, BarReplayControls.tsx, and 77 more files."
 resource: "src/ui"
 tags: [code, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-13T04:21:10Z
+  at: 2026-10-16T16:41:08Z
 sources:
   - id: tree
     resource: "src/ui"
@@ -39,6 +39,7 @@ okf_lock: generated
 * `HooxLogo.tsx` — HooxLogo, HooxLogoPaths, HooxLogoProps, HooxLogoSize, resolveLogoSize
 * `HpoPanel.tsx` — HpoPanel
 * `LayerPanel.tsx` — LayerPanel
+* `MaintenancePage.tsx` — MaintenancePage
 * `McpConnectCta.tsx` — McpConnectCta, mcpNeedsConnect
 * `McpHud.tsx` — MCP_ACTIVITY_WINDOW_MS, McpHud
 * `OnChainPanel.tsx` — OnChainPanel
@@ -52,6 +53,8 @@ okf_lock: generated
 * `ScriptLibraryPanel.tsx` — LibraryPanel, ScriptLibraryPanel, ScriptLibraryPanelProps
 * `ScriptRunSelect.tsx` — ScriptRunSelect, ScriptRunSelectProps
 * `ScriptSettingsModal.tsx` — ScriptSettingsModal
+* `SideRays.tsx` — SideRays, SideRaysProps
+* `SloganTypewriter.tsx` — SloganTypewriter, SloganTypewriterProps
 * `StatusBar.tsx` — StatusBar
 * `StorageChangeDialog.tsx` — StorageChangeDialogProps, StorageChangeMode
 * `StorageChangePrompt.tsx` — StorageChangePrompt

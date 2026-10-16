@@ -7,7 +7,7 @@ tags: [build-and-serve, devops, doc, docs]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:02:55Z
+  at: 2026-10-16T16:41:08Z
 sources:
   - id: tree
     resource: "docs/devops/build-and-serve.mdx"
@@ -30,6 +30,7 @@ Repo path `docs/devops/build-and-serve.mdx`.
   * Expected public assets
 * Internals
   * Makefile note
+  * Build-time flags (Vite)
 * Worked example — static desk demo
 * Invariants & edge cases
 * Failure modes
@@ -39,4 +40,5 @@ Repo path `docs/devops/build-and-serve.mdx`.
 
 * [scripts](/code/scripts.md)
 * [src/engines](/code/src/engines.md)
+* [src/ui](/code/src/ui.md)
 * [tests](/code/tests.md)

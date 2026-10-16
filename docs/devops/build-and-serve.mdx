@@ -108,6 +108,15 @@ bun run build
 wrangler pages deploy dist --project-name=axis
 ```
 
+### Build-time flags (Vite)
+
+| Env var | Effect |
+| --- | --- |
+| `VITE_APP_VERSION` | Stamps the reported version (CI/Docker); falls back to the repo `VERSION` file |
+| `VITE_MAINTENANCE_MODE` | `1` / `true` / `yes` → the build boots only the maintenance page (`src/ui/MaintenancePage.tsx`: dark screen, flickering HOOX mark, major-release teaser) instead of the chart workspace / editor popout |
+
+Both are inlined by Vite at build time — set them in `.env` (local/CI overrides) or export them in the build environment, then rebuild. Existing process env vars outrank `.env` files, which is how e2e forces the maintenance gate off (`playwright.config.ts` → `webServer.env`). The flag is documented in `.env.example`.
+
 ## Worked example — static desk demo
 
 ```bash

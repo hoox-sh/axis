@@ -7,7 +7,7 @@ tags: [code]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-07T04:35:08Z
+  at: 2026-10-16T16:41:08Z
 sources:
   - id: tree
     resource: "src"
@@ -20,6 +20,7 @@ okf_lock: generated
 
 * `app.tsx` — App
 * `index.tsx`
+* `maintenance.ts` — isMaintenanceMode
 * `version.ts` — APP_VERSION, BAKED_APP_VERSION, appVersion
 * `vite-env.d.ts`
 

@@ -20,12 +20,15 @@
 /**
  * Vite / PWA entry — mounts Solid into `#app`.
  *
- * Routes by URL via `isEditorView()`:
+ * Routes by flag/URL (`isMaintenanceMode()` first, then `isEditorView()`):
+ * - Maintenance build (`VITE_MAINTENANCE_MODE`) → {@link MaintenancePage} —
+ *   the only surface; neither the workspace nor editor chunks load
  * - Editor popout → {@link EditorApp} (detached Pine editor)
  * - Default → {@link App} (full chart workspace)
  *
- * App and EditorApp are dynamic imports so the chart PWA critical path does
- * not statically pull CodeMirror / editor chrome (and vice versa).
+ * App, EditorApp and MaintenancePage are dynamic imports so the chart PWA
+ * critical path does not statically pull CodeMirror / editor chrome (and
+ * vice versa); MaintenancePage only loads when the flag is on.
  *
  * Global styles: `./index.css` (Tailwind + void theme tokens).
  *
@@ -46,6 +49,7 @@ import {
 } from './update/update-manager';
 import { errorFallback } from './ui/ErrorFallback';
 import { installBootErrorHandlers, reportUiError } from './ui/boot-errors';
+import { isMaintenanceMode } from './maintenance';
 import './index.css';
 
 // Catch async boot failures (plugin restore, dynamic imports, etc.)
@@ -89,7 +93,8 @@ listenForPwaInstallPrompt();
 
 const root = document.getElementById('app');
 if (root) {
-  const isEditor = isEditorView();
+  const maintenance = isMaintenanceMode();
+  const isEditor = !maintenance && isEditorView();
   const fallback = errorFallback({
     variant: 'page',
     source: isEditor ? 'editor-root' : 'root',
@@ -104,6 +109,18 @@ if (root) {
 
   void (async () => {
     try {
+      if (maintenance) {
+        const { MaintenancePage } = await import('./ui/MaintenancePage');
+        render(
+          () => (
+            <ErrorBoundary fallback={fallback}>
+              <MaintenancePage />
+            </ErrorBoundary>
+          ),
+          root,
+        );
+        return;
+      }
       if (isEditor) {
         const { EditorApp } = await import('./editor/EditorApp');
         render(
@@ -128,7 +145,11 @@ if (root) {
     } catch (err: unknown) {
       reportUiError(err, {
         source: isEditor ? 'editor' : 'boot',
-        context: isEditor ? 'Editor shell import failed' : 'App shell import failed',
+        context: maintenance
+          ? 'Maintenance shell import failed'
+          : isEditor
+            ? 'Editor shell import failed'
+            : 'App shell import failed',
         status: true,
       });
       // Import failed before ErrorBoundary could mount — show the same page fallback.

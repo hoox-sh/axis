@@ -34,6 +34,10 @@ export default defineConfig({
   webServer: {
     command: process.env.AXIS_E2E_CMD || 'bun run build && bun run preview -- --host 127.0.0.1 --port 4173',
     url: process.env.AXIS_E2E_BASE || 'http://127.0.0.1:4173',
+    // Always test the real app: a local `.env` may have the maintenance gate
+    // on (VITE_MAINTENANCE_MODE), and process env outranks `.env` files in
+    // Vite — so force the flag off for the e2e build + preview.
+    env: { VITE_MAINTENANCE_MODE: '0' },
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,
   },
