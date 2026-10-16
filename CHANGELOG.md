@@ -23,6 +23,7 @@ _Generated/updated: 2026-10-15 · 572 commits · describe-tag: `v2.24.3`_
 - **Session series join the chart by bar time, not index.** `alignSeriesToTimes` covers `data-session-*` and `session-*` hits via `meta.engineTimes` / live-session `barTimes`; index tail-align stays as fallback for time-less payloads.
 - **New indicators no longer re-upload the full window.** Series provisioning is memoized per endpoint+series (max coverage wins) with in-flight dedup; reapply and live reruns run bounded-concurrent on a shared epoch honoring plot-dependency levels.
 - **Engine-owned live paints are tip-aware and ordered.** `paintEngineOwned` diffs bars (noop/tip/append/full), paints tip-only when possible, and reruns wait for the paint chain to settle; `runBatch` handles free-tier 413 with `windowBars` meta like single runs.
+- **Engine-owned live throttle actually throttles.** `lastEngineTickAt` was set inside the async paint step, so every quick venue tick saw the initial value and chained a new `/tick` + `/data/series/bars` round-trip (~3s each) back to back — starving indicator re-runs (they await the paint chain) and leaving the chart lagging 20–30s. The tick time is now recorded synchronously before the step is chained, so ticks within `ENGINE_OWNED_TICK_MIN_MS` (10s) skip the engine and paint the venue tip locally instead.
 
 ---
 

@@ -520,8 +520,12 @@ export function startLive(
       }
       return;
     }
+    // Record the tick time synchronously so subsequent ticks within the
+    // minimum gap are coalesced instead of each chaining a new engine round
+    // trip. (Setting it inside `run()` below is too late: the throttle check
+    // runs before `run()` executes, so every quick tick sees the stale value.)
+    lastEngineTickAt = Date.now();
     const run = async (): Promise<{ painted: string; shouldRerun: boolean }> => {
-      lastEngineTickAt = Date.now();
       try {
         const t = await tickChartDataSession(endpoint, apiKey, key);
         if (!t.ok || !isCurrent()) return { painted: 'failed', shouldRerun: false };
