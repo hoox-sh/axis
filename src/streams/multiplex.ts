@@ -152,6 +152,16 @@ export type EngineOwnedPaintDiff =
  */
 export const ENGINE_OWNED_APPEND_CAP = 16;
 
+/**
+ * Minimum gap between engine round trips in engine-owned mode. The venue WS
+ * fires every second or so on liquid symbols, but an engine tick costs ~3s
+ * server-side (CCXT catch-up + full-envelope serialize) plus a bar re-read —
+ * ticking per flush keeps a ~4s serialized cycle back to back with no idle
+ * (the observed lag). The chart stays live between ticks by painting the
+ * venue tip locally; the engine reconciles on the next tick via the diff.
+ */
+export const ENGINE_OWNED_TICK_MIN_MS = 10_000;
+
 function sameEngineOhlc(a: Bar, b: Bar): boolean {
   return (
     a.open === b.open &&
@@ -371,6 +381,8 @@ export function startLive(
 
   const lastBar = store.bars.length ? store.bars[store.bars.length - 1] : null;
   let lastSeenBarTime = lastBar?.time ?? 0;
+  /** Last time an engine-owned round trip started (throttle, see ENGINE_OWNED_TICK_MIN_MS). */
+  let lastEngineTickAt = 0;
 
   /** True only while this startLive session is still the active epoch. */
   const isCurrent = () => liveEpoch === epoch && store.live.active;
@@ -483,10 +495,85 @@ export function startLive(
     // Venue `closed` flags for bar-close rerun gating (engine bars carry no
     // `closed` marker of their own).
     const venueClosed = triggerBars.some((b) => b.closed);
+    const newestTriggerTime = triggerBars.length
+      ? Math.max(...triggerBars.map((b) => (Number.isFinite(b.time) ? b.time : -1)))
+      : -1;
+    // Throttle: the engine tick alone costs ~3s server-side, so ticking per
+    // venue flush never idles. Within the same forming bar and inside the
+    // minimum gap, paint the venue tip locally and skip the round trip — the
+    // next engine tick reconciles via the diff. A newer slot, a closed bar,
+    // or an empty store always goes to the engine immediately.
+    if (
+      store.bars.length > 0 &&
+      newestTriggerTime > 0 &&
+      newestTriggerTime <= lastSeenBarTime &&
+      !venueClosed &&
+      Date.now() - lastEngineTickAt < ENGINE_OWNED_TICK_MIN_MS
+    ) {
+      const tip = triggerBars[triggerBars.length - 1]!;
+      try {
+        appendBar(tip);
+        const manager = getManager();
+        if (manager) manager.appendBar(tip);
+      } catch {
+        /* venue tip paint is best-effort */
+      }
+      return;
+    }
     const run = async (): Promise<{ painted: string; shouldRerun: boolean }> => {
+      lastEngineTickAt = Date.now();
       try {
         const t = await tickChartDataSession(endpoint, apiKey, key);
         if (!t.ok || !isCurrent()) return { painted: 'failed', shouldRerun: false };
+        // Engine reports nothing changed and we already hold a window: skip
+        // the bar re-read entirely (it costs 0.5–1.5s for 10k bars).
+        if (t.unchanged === true && store.bars.length > 0) {
+          return { painted: 'noop', shouldRerun: false };
+        }
+        // A few appended bars: re-read only the tail and merge locally instead
+        // of downloading the full window. Falls through to the full read when
+        // the tail does not overlap the chart (history rewrite / resync).
+        if (
+          t.appended != null &&
+          t.appended >= 0 &&
+          t.appended <= ENGINE_OWNED_APPEND_CAP &&
+          store.bars.length > 0
+        ) {
+          try {
+            const tail = await getDataSeriesBars(endpoint, apiKey, key, t.appended + 3);
+            if (isCurrent() && tail.length) {
+              const curTip = store.bars[store.bars.length - 1]!;
+              const at = tail.findIndex((b) => b.time === curTip.time);
+              if (at >= 0) {
+                const manager = getManager();
+                if (at < tail.length - 1 || !sameEngineOhlc(curTip, tail[at]!)) {
+                  appendBar(tail[at]!);
+                  if (manager) manager.appendBar(tail[at]!);
+                }
+                for (let i = at + 1; i < tail.length; i++) {
+                  if (!isCurrent()) break;
+                  appendBar(tail[i]!);
+                  if (manager) manager.appendBar(tail[i]!);
+                }
+                const tip = tail[tail.length - 1]!;
+                const prevLastSeen = lastSeenBarTime;
+                lastSeenBarTime = Math.max(lastSeenBarTime, tip.time);
+                if (!isCurrent()) return { painted: 'append', shouldRerun: false };
+                const mode = effectiveLiveRerunMode(
+                  liveRerunModeForEngine(store.live.rerunOn),
+                  store.bars?.length ?? 0,
+                );
+                const timeAdvanced = tip.time > prevLastSeen;
+                return {
+                  painted: 'append',
+                  shouldRerun: mode === 'every-tick' ? true : timeAdvanced || venueClosed,
+                };
+              }
+            }
+          } catch {
+            /* tail merge failed — fall through to the full read */
+          }
+        }
         const proBars = await getDataSeriesBars(endpoint, apiKey, key, limit);
         if (!isCurrent() || !proBars.length) {
           return { painted: 'noop', shouldRerun: false };

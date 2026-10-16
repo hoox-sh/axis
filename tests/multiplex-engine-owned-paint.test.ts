@@ -170,6 +170,60 @@ describe('engine-owned live paint', () => {
     expect(tip.close).toBe(engineBars[engineBars.length - 1]!.close);
   });
 
+  it('skips the bar re-read when the engine tick reports unchanged', async () => {
+    const last = SAMPLE_BARS[SAMPLE_BARS.length - 1]!;
+    let barsGets = 0;
+    restoreFetch = mockFetch(async (input, init) => {
+      const url = new URL(String(input));
+      const method = String(init?.method || 'GET').toUpperCase();
+      if (method === 'POST' && url.pathname === '/data/session') {
+        return jsonResponse({ status: 'success', session_id: 'chart1', cache: 'hit' });
+      }
+      if (method === 'POST' && url.pathname === '/data/session/chart1/tick') {
+        return jsonResponse({
+          status: 'success',
+          session_id: 'chart1',
+          appended: 0,
+          forming: true,
+          unchanged: true,
+        });
+      }
+      if (method === 'GET' && url.pathname === '/data/series/bars') {
+        barsGets += 1;
+        return jsonResponse({ status: 'success', bars: SAMPLE_BARS });
+      }
+      return jsonResponse({ status: 'error', code: 'NOT_FOUND' }, 404);
+    });
+
+    registerDynamicStream({
+      id: 'eo-stream',
+      name: 'EO stream',
+      kind: 'stream',
+      start({ onBar, onStatus }) {
+        onStatus({ state: 'open' });
+        const t = setTimeout(
+          () =>
+            onBar({
+              time: last.time,
+              open: last.open,
+              high: last.high,
+              low: last.low,
+              close: last.close + 0.5,
+              volume: last.volume,
+            }),
+          10,
+        );
+        return () => clearTimeout(t);
+      },
+    });
+
+    startLive('eo-stream', 'BTCUSDT', '1h');
+    // Let the tick round trip settle (tick ~instant in mocks, then no GET).
+    await new Promise((r) => setTimeout(r, 300));
+    expect(store.bars.length).toBe(SAMPLE_BARS.length);
+    expect(barsGets).toBe(0);
+  });
+
   it('updates only the forming tip in place (no full setData per tick)', async () => {
     const last = SAMPLE_BARS[SAMPLE_BARS.length - 1]!;
     const revisedClose = last.close + 7;

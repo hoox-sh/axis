@@ -109,19 +109,45 @@ export async function ensureChartDataSession(
 /**
  * Advance the engine's store for the chart series. On an expired session the
  * session is dropped so the next call recreates it; the caller may retry once.
+ *
+ * The tick outcome flags come straight from the engine (`appended` / `forming`
+ * / `unchanged` / `stale`): callers use them to skip the bar re-read when the
+ * engine reports nothing changed, or to re-read only the tail when a few bars
+ * were appended — a full-window `GET /data/series/bars` per venue tick is what
+ * made engine-owned live mode laggy (full 10k download + 3s tick, back to back).
  */
 export async function tickChartDataSession(
   endpoint: string,
   apiKey: string,
   key: DataSeriesKey,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{
+  ok: boolean;
+  error?: string;
+  appended?: number;
+  forming?: boolean;
+  unchanged?: boolean;
+  stale?: boolean;
+}> {
   const sessionId = await ensureChartDataSession(endpoint, apiKey, key);
   if (!sessionId) return { ok: false, error: 'chart data session unavailable' };
   const t = await tickDataSession(endpoint, apiKey, sessionId, {
     exchange: key.exchange,
     symbol: key.symbol,
   });
-  if (t.ok) return { ok: true };
+  if (t.ok) {
+    const p = t.payload as Record<string, unknown>;
+    const num = (v: unknown): number | undefined =>
+      typeof v === 'number' && Number.isFinite(v) ? Math.max(0, Math.floor(v)) : undefined;
+    const bool = (v: unknown): boolean | undefined =>
+      typeof v === 'boolean' ? v : undefined;
+    return {
+      ok: true,
+      appended: num(p.appended),
+      forming: bool(p.forming),
+      unchanged: bool(p.unchanged),
+      stale: bool(p.stale),
+    };
+  }
   if (t.gone && current?.sessionId === sessionId) {
     current = null;
   }
