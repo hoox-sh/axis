@@ -4,7 +4,12 @@
  */
 
 /**
- * Heavy-history live re-run throttle: every-tick → bar-close at 10k+ bars.
+ * Heavy-history live re-run mode: no bar-count downgrade.
+ *
+ * Delta ticks + tip-only apply made per-tick re-runs cheap, so
+ * `effectiveLiveRerunMode` passes the mode through at any bar count
+ * (F-20: the stream path has no throttle). Engine-capability fallback
+ * (bar-close-only backends) lives in `liveRerunModeForEngine`, not here.
  */
 
 import { describe, expect, it } from 'bun:test';
@@ -26,12 +31,12 @@ describe('effectiveLiveRerunMode', () => {
     expect(effectiveLiveRerunMode(undefined, 0)).toBe('every-tick');
   });
 
-  it('throttles every-tick to bar-close at heavy threshold', () => {
+  it('keeps every-tick at any bar count (no heavy downgrade)', () => {
     expect(effectiveLiveRerunMode('every-tick', HEAVY_LIVE_RERUN_BARS)).toBe(
-      'bar-close',
+      'every-tick',
     );
     expect(
       effectiveLiveRerunMode('every-tick', HEAVY_LIVE_RERUN_BARS + 1),
-    ).toBe('bar-close');
+    ).toBe('every-tick');
   });
 });

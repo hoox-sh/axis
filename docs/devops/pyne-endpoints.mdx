@@ -10,8 +10,10 @@ advertises optional routes under `features.*`, and reports Numba / IR-cache
 readiness under `compile.*`. This page is the ledger of what AXIS actually uses,
 so a backend change can be reasoned about without grepping the client.
 
-The live-mode subset (`features.live_modes`, `features.data_session`) is consumed
-by `capabilitiesFromHealth()` in `src/engines/catalog.ts`; the rest of the payload
+The live-mode subset (`features.live_modes`, `features.data_session`,
+`features.live_stream`) is consumed by `capabilitiesFromHealth()` in
+`src/engines/catalog.ts` (stream profile) and `profileForCapabilities()` in
+`src/engine/policy.ts`; the rest of the payload
 is parsed by `src/engines/health.ts` and cached next to it
 (`getCachedEngineHealth()`), which is what the readiness badges and the optional
 runner surface read. Nothing is ever inferred from the service name.
@@ -23,9 +25,11 @@ runner surface read. Nothing is ever inferred from the service name.
 | `GET /`, `GET /health` | Engine probe | Capabilities, readiness, route advertisement. |
 | `POST /run` | `serverEngine.run` | REST fallback; `mode` in the body. |
 | `WS /ws/run` | `src/engines/engine-ws.ts` | Preferred when `/health` reports `websocket`. |
+| `WS /ws/live` | `src/engine/live-wire.ts` + `src/streams/stream-live.ts` | Engine-owned subscriptions (`subscribe → status → full → delta → close`, `resume`/`repair`); requires `features.live_stream`. |
 | `POST /session`, `/tick`, `/append`, `DELETE` | `src/engines/live-sessions.ts` | O(delta) live ticks; interpret only. |
 | `GET /session/{id}` | `src/engines/live-sessions.ts` | Idle reconciliation + telemetry (`bars`, `idle_seconds`, `ttl_seconds`). |
-| `POST /data/session`, `/data/session/{id}/tick` | `src/engines/data-sessions.ts` | Engine-owned series; identity only. |
+| `POST /data/session`, `/data/session/{id}/tick` | `src/engines/data-sessions.ts` | Engine-owned series; identity only. Calculator profile (old backends). |
+| `GET /session/{id}/tail?since_count=` | REST degraded fallback | Same `{status, count, closed_upto, tail}` shapes as the WS; polling semantics. |
 | `GET /data/series`, `/data/series/bars` | `src/engines/data-sessions.ts` | Status + newest window for the chart paint. |
 | `POST /data/series/provide`, `/data/series/fetch` | `src/engines/data-sessions.ts` | Cache-miss broker (local upload, then engine fetch). |
 | `POST /run/batch` | `src/engines/batch.ts` | ≥2 eligible reapplied indicators; 8-script cap. |

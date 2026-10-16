@@ -39,13 +39,18 @@ PYNE Pro reports these snake_case keys (matches existing `features.*` keys):
 "features": {
   "live_modes": ["every-tick", "bar-close"],
   "data_session": true,
-  "data_exchanges": ["binance", "bybit", "okx"]
+  "data_exchanges": ["binance", "bybit", "okx"],
+  "live_stream": true
 }
 ```
 
 - `live_modes` absent ⇒ `["bar-close"]`.
 - `data_session` absent or false ⇒ `ownsData = false`, no every-tick.
 - `data_exchanges` optional, informational.
+- `live_stream` (strictly opt-in) ⇒ the engine serves the push subscription
+  plane (`WS /ws/live`: `subscribe → status → full → delta → close`, per-subscription
+  `seq`, `closed_upto` watermark). Absent ⇒ calculator profile: the legacy
+  REST poll paths below stay in service for old backends.
 
 pyne-worker and Pyodide report no such keys and are bar-close only.
 
@@ -137,7 +142,7 @@ Upstream failure: `502 UPSTREAM`; the session is kept.
 
 Existing release route. Unchanged.
 
-## AXIS broker
+## AXIS broker (calculator profile — engines without `live_stream`)
 
 `src/engines/data-sessions.ts` (client + broker):
 
@@ -152,6 +157,24 @@ Existing release route. Unchanged.
 
 Chart paint in server-owned mode uses `getDataSeriesBars()` into memory. The
 streaming multiplex and `expand-cache` writes are suppressed for that instrument.
+
+## Stream plane (engines with `live_stream`)
+
+`src/engine/` + `src/streams/stream-live.ts`, specified in
+`.opencode/plans/final/plan.mdx`:
+
+- One WS per engine (`WS /ws/live`, `WS /api/ws/live` via the Worker proxy);
+  N subscriptions multiplexed.
+- `subscribe` ensures history server-side (autonomous fetch to the last closed
+  bar), then `status(datafeed-ready)` → `status(calculating)` → one `full`
+  snapshot → `status(live)`; per-tick `delta` + `close` frames with monotonic
+  `seq` and the `closed_upto` watermark.
+- The client applies snapshots/deltas through the existing apply pipeline
+  (`precomputedResult`, tip-only on ticks), re-verifies closed bars against the
+  venue, and repairs from the exchange on mismatch.
+- Any stream failure falls back to the legacy paths above; a 60s cooldown
+  keeps a flapping backend from stalling live. Opt out per tab via
+  `axis.engine.stream.disabled`.
 
 ## Migration steps
 

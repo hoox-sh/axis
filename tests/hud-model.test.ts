@@ -11,6 +11,8 @@
 import { describe, expect, it } from 'bun:test';
 import {
   deriveHud,
+  feedStatusLabel,
+  feedStatusTone,
   isLocalEndpoint,
   isWorkerEndpoint,
   composeCaption,
@@ -146,5 +148,23 @@ describe('deriveHud', () => {
       detail: 'cold load ~20–30s',
     });
     expect(h.loading).toBe(true);
+  });
+});
+
+describe('feedStatusTone / feedStatusLabel (F-18)', () => {
+  it('maps subscription states to chip tones', () => {
+    expect(feedStatusTone('live')).toBe('live');
+    expect(feedStatusTone('degraded')).toBe('degraded');
+    expect(feedStatusTone('error')).toBe('err');
+    expect(feedStatusTone('idle')).toBe('idle');
+    expect(feedStatusTone('datafeed-loading')).toBe('load');
+    expect(feedStatusTone('calculating')).toBe('load');
+  });
+
+  it('labels degraded with staleness and loading with progress', () => {
+    expect(feedStatusLabel('degraded', { updatedAt: 1000, now: 46000 })).toBe('degraded · 45s stale');
+    expect(feedStatusLabel('datafeed-loading', { have: 2000, need: 10000 })).toBe('loading 2000/10000');
+    expect(feedStatusLabel('live')).toBe('live');
+    expect(feedStatusLabel('error', { message: 'boom' })).toBe('error · boom');
   });
 });

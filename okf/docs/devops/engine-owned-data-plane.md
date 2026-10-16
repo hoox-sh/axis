@@ -7,7 +7,7 @@ tags: [devops, doc, docs, engine-owned-data-plane]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-13T21:59:54Z
+  at: 2026-10-16T18:28:57Z
 sources:
   - id: tree
     resource: "docs/devops/engine-owned-data-plane.mdx"
@@ -34,13 +34,16 @@ Repo path `docs/devops/engine-owned-data-plane.mdx`.
   * POST /data/session
   * POST /data/session/{id}/tick
   * DELETE /session/{id}
-* AXIS broker
+* AXIS broker (calculator profile — engines without livestream)
+* Stream plane (engines with livestream)
 * Migration steps
 
 # Mentions
 
+* [src](/code/src.md)
 * [src/data](/code/src/data.md)
 * [src/engines](/code/src/engines.md)
+* [src/streams](/code/src/streams.md)
 * [src/workers](/code/src/workers.md)
 * [tests](/code/tests.md)
 * [tests/integration](/code/tests/integration.md)

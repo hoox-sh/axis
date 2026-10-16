@@ -118,7 +118,13 @@ import {
   type NormalizedRunResult,
 } from './run-helpers';
 import { resolveScriptDisplayName } from './run-target';
-import { detectScriptKind } from './script-meta';
+import { buildOverlayPayloads, type OverlayLine, type OverlayOhlc } from './apply-overlays';
+import { applyChartMutations } from './apply-mutations';
+import { applyStrategyMarkers } from './apply-strategy';
+import { appliedScriptStillOnChart, applyDrawings } from './apply-drawings';
+import { updateIndicatorStore } from './apply-store';
+import { resolveRunContext, alignApplySeries } from './apply-context';
+import { ensureApplyPane } from './apply-pane';import { detectScriptKind } from './script-meta';
 import { notifyPineAlertsFromRun } from '../alerts/pine-bridge';
 
 /** Engine result with `series` always present (empty object if missing). */
@@ -140,19 +146,6 @@ let ohlcvTimesCache: {
 /** @internal test helper */
 export function _resetOhlcvTimesCacheForTests(): void {
   ohlcvTimesCache = null;
-}
-
-/**
- * Overlay color precedence: panel override → resolved script color →
- * palette fallback. Pine forms (`color.red`, `color.new(…)`) resolve to
- * CSS; unresolvable/empty values fall through (never persist raw tokens).
- */
-function pickOverlayColor(
-  userColor: unknown,
-  metaColor: unknown,
-  fallback: string | undefined,
-): string | undefined {
-  return resolvePineColor(userColor) ?? resolvePineColor(metaColor) ?? fallback;
 }
 
 /**
@@ -198,7 +191,7 @@ export function tailAlignSeriesToWindow(values: unknown, len: number): unknown[]
 }
 
 /** Tail-align every series in a `result.series` map (see {@link tailAlignSeriesToWindow}). */
-function tailAlignSeriesMap(
+export function tailAlignSeriesMap(
   series: Record<string, unknown[] | (number | null)[]>,
   len: number,
 ): Record<string, unknown[] | (number | null)[]> {
@@ -321,7 +314,7 @@ export function alignSeriesToTimes(
 }
 
 /** Join every series in a `result.series` map by bar time (see {@link alignSeriesToTimes}). */
-function alignSeriesMapToTimes(
+export function alignSeriesMapToTimes(
   series: Record<string, unknown[] | (number | null)[]>,
   resultTimes: readonly unknown[],
   chartTimes: readonly number[],
@@ -460,7 +453,7 @@ function flushDeferredLiveRerun(): void {
 }
 
 /** Non-empty plain bag, else undefined (empty `{}` is "not provided"). */
-function nonemptyBag(
+export function nonemptyBag(
   v?: Record<string, unknown> | null,
 ): Record<string, unknown> | undefined {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return undefined;
@@ -679,18 +672,11 @@ function normalizeRunExtras(result: RunResult): RunResult {
 }
 
 /** Stamp the Pine source so editor last-run marks drop after the buffer changes. */
-function withAxisSource(result: RunResult, script: string): RunResult {
+export function withAxisSource(result: RunResult, script: string): RunResult {
   return {
     ...result,
     meta: { ...result.meta, axisSource: script },
   };
-}
-
-/** Applied script is still present and visible (hide/detach mid-flight). */
-function appliedScriptStillOnChart(indicatorId?: string): boolean {
-  if (!indicatorId) return true;
-  const applied = store.scripts.find((s) => s.id === indicatorId);
-  return !!(applied && applied.visible !== false);
 }
 
 /**
@@ -1136,27 +1122,7 @@ async function runAndApplyInner(
   silent: boolean,
   openResults: boolean,
 ): Promise<RunResult> {
-  // Prefer explicit opts.inputs / strategyProps; else per-indicator saved; else editor.
-  // Empty `{}` is "not provided" — never wipe saved Script Settings.
-  const ind = indicatorId ? store.scripts.find((s) => s.id === indicatorId) : undefined;
-  const inputs = resolveInputPrecedence(opts.inputs, ind?.inputValues, undefined, false);
-  // Explicit bag for this script only — never fall through to editorStrategyProps
-  const strategyProps =
-    resolveStrategyPrecedence(
-      opts.strategyProps,
-      ind?.strategyProps,
-      !opts.skipEditorDraft ? store.editorStrategyProps : undefined,
-      { allowEditorDraft: !indicatorId },
-    ) ?? {};
-  // Capture the exact bars the engine will evaluate so the resulting series
-  // align 1:1 with the time axis we build below. A live tick or an HPO
-  // holdout slice must not desync series from bars (see getOhlcvTimesForApply).
-  const bars = Array.isArray(opts.bars) && opts.bars.length ? opts.bars : store.bars || [];
-  // A live tick is only a chart-series tick when the caller did NOT override
-  // the window. Record that here: by the time `runScript` runs, `store.bars`
-  // may already be a different array (DSM progressive slices, live appends),
-  // so comparing references down there misfires on every turbulent tick.
-  const chartTick = opts.liveTick === true && !(Array.isArray(opts.bars) && opts.bars.length);
+  const { inputs, strategyProps, bars, chartTick } = resolveRunContext(script, indicatorId, opts);
   // Pass epoch so nested runScript can skip status/telemetry if superseded mid-flight
   const raw = opts.precomputedResult
     ? opts.precomputedResult
@@ -1238,217 +1204,30 @@ async function runAndApplyInner(
     : undefined;
   // Always prefer Pine indicator()/strategy()/library() title over engine meta
   // (engine often sends "plot") or a stale file-based existing name.
-  const scriptName = resolveScriptDisplayName(
-    script,
-    result.meta?.script_name != null ? String(result.meta.script_name) : null,
-    existing?.name,
-  );
-  const scriptType = String(
-    (result.meta as { script_type?: string } | undefined)?.script_type ||
-      (result.meta as { kind?: string } | undefined)?.kind ||
-      '',
-  ).toLowerCase();
-
-  const ohlcvTimes = getOhlcvTimesForApply(bars);
-  const plotMeta = {
-    ...(((result as { plot_meta?: Record<string, PlotMetaEntry> }).plot_meta) || {}),
-    ...((result.meta?.plot_meta || {}) as Record<string, PlotMetaEntry>),
-  };
-  // Session-backed runs (`meta.sessionVia` containing `session`: engine-owned
-  // `data-session-*` series and live-evaluation `session-*` hits) evaluate a bar
-  // window that slides independently of the local chart window: the engine
-  // appends bars while `store.bars` keeps its own slice, so the response series
-  // can be longer, shorter, or offset from the chart axis — including a session
-  // that outgrew the window inside SESSION_GROWTH_SLACK. A free-tier host that
-  // caps bars (`meta.windowBars`, set by the 413 clamp) also answers with a
-  // shorter series than the chart axis. Join each series to the chart by bar
-  // time when the engine shipped its axis (`meta.engineTimes`); otherwise pin
-  // the series tail to the newest bar (index fallback) so values never land
-  // `slack` bars early. Equal-length series pass through untouched either way.
-  const sessionVia = String(result.meta?.sessionVia || '');
-  const sessionAligned = sessionVia.includes('session');
-  const chartWindowBars = ohlcvTimes.length;
-  const engineWindowBars = Number(result.meta?.windowBars);
-  const engineClampedTail =
-    Number.isFinite(engineWindowBars) &&
-    engineWindowBars > 0 &&
-    engineWindowBars !== chartWindowBars;
-  const needsAlign = sessionAligned || engineClampedTail;
-  const resultTimes = needsAlign ? extractEngineResultTimes(result) : null;
-  const seriesMap = !needsAlign
-    ? result.series || {}
-    : resultTimes
-      ? alignSeriesMapToTimes(result.series || {}, resultTimes, ohlcvTimes)
-      : tailAlignSeriesMap(result.series || {}, chartWindowBars);
-  const split = splitSeriesByKind(seriesMap, plotMeta);
-  if (engineClampedTail && !sessionAligned && !silent) {
-    appendLog(
-      'info',
-      `Engine bar cap: evaluated newest ${Math.round(engineWindowBars)} bars (free tier)`,
-      'run',
-    );
-  }
-
+  const {
+    ohlcvTimes,
+    plotMeta,
+    seriesMap,
+    split,
+    scriptName,
+    scriptType,
+    overlay,
+    needsAlign,
+    resultTimes,
+    chartWindowBars,
+  } = alignApplySeries(script, result, bars, { silent, existingName: existing?.name });
   // Line-like series only — bgcolor/plotshape handled below
   const seriesEntries = split.lines.map((e) => [e.key, e.values] as const);
 
-  // Pine: indicator defaults overlay=false; strategy defaults overlay=true.
-  // Explicit false must never be coerced to true.
-  const overlayFlag = result.meta?.overlay as unknown;
-  const overlayExplicitTrue =
-    overlayFlag === true || overlayFlag === 1 || overlayFlag === 'true';
-  let overlay = resolveOverlayFlag(overlayFlag, scriptType);
-
-  // Oscillator-scale plots (RSI, MACD, …) on the price pane are effectively
-  // invisible (values ~0–100 vs BTC price). Auto-demote to a sub-pane UNLESS
-  // the script explicitly asked for overlay=true (respect the author's intent).
-  if (overlay && !overlayExplicitTrue && seriesWouldHideOnPrice(seriesEntries, bars)) {
-    overlay = false;
-    if (!silent) {
-      appendLog(
-        'info',
-        'Plot scale ≪ price — showing in sub-pane (declare overlay=false for oscillators)',
-        'plot',
-      );
-    }
-  }
-
-  let paneId = 'price';
-  /** Previous sub-pane when migrating off the legacy shared `indicator` pane. */
-  let previousSubPane: string | null = null;
-  if (!overlay) {
-    // One sub-pane per non-overlay script (not a single shared `indicator` pane).
-    // Re-runs keep the script’s existing private pane; first run / legacy shared
-    // pane gets a stable `ind_<scriptId>` host so RSI + MACD stack as separate panes.
-    const reserved = new Set(['price', 'volume']);
-    const legacyShared = 'indicator';
-    if (
-      existing?.paneId &&
-      !reserved.has(existing.paneId) &&
-      existing.paneId !== legacyShared
-    ) {
-      paneId = existing.paneId;
-    } else {
-      const key = indicatorId || newEntityId();
-      paneId = `ind_${String(key).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 56)}`;
-      if (existing?.paneId === legacyShared) previousSubPane = legacyShared;
-    }
-    try {
-      if (!manager.getPane(paneId)) {
-        addPane('indicator', scriptName, { id: paneId, height: 140 });
-        manager.createPane(paneId, 'indicator', scriptName, 140);
-        manager.syncTimeScales();
-      } else {
-        try {
-          manager.setVisible?.(paneId, true);
-          manager.setLabel(paneId, scriptName);
-        } catch {
-          /* ignore */
-        }
-      }
-      // Migrating off legacy shared pane — drop this script’s series there
-      if (previousSubPane && previousSubPane !== paneId) {
-        try {
-          const owner = indicatorId ?? EDITOR_RUN_KEY;
-          if (typeof manager.removeOverlaysForOwner === 'function') {
-            manager.removeOverlaysForOwner(previousSubPane, owner);
-          }
-        } catch {
-          /* ignore */
-        }
-        // Destroy legacy shared pane when no scripts still reference it
-        if (
-          !store.scripts.some(
-            (s) => s.paneId === previousSubPane && s.id !== indicatorId,
-          )
-        ) {
-          try {
-            manager.destroyPane(previousSubPane);
-          } catch {
-            /* ignore */
-          }
-          if (store.panes.some((p) => p.id === previousSubPane)) {
-            try {
-              removePane(previousSubPane);
-            } catch {
-              /* ignore */
-            }
-          }
-        }
-      }
-      // Drop orphan store panes left empty without a manager pane / script.
-      // Never treat the pane we just created for this run as an orphan (script
-      // may not be in store.scripts until after apply).
-      for (const p of [...store.panes]) {
-        if (
-          p.type === 'indicator' &&
-          p.id !== paneId &&
-          !manager.getPane(p.id) &&
-          !store.scripts.some((s) => s.paneId === p.id)
-        ) {
-          try {
-            removePane(p.id);
-          } catch {
-            /* ignore */
-          }
-        }
-      }
-      // Also destroy orphan manager panes that have no scripts
-      for (const mp of manager.getAllPanes()) {
-        if (
-          mp.type === 'indicator' &&
-          mp.id !== paneId &&
-          !store.scripts.some((s) => s.paneId === mp.id)
-        ) {
-          try {
-            manager.destroyPane(mp.id);
-            if (store.panes.some((p) => p.id === mp.id)) removePane(mp.id);
-          } catch {
-            /* ignore */
-          }
-        }
-      }
-    } catch (e: unknown) {
-      // Chart disposed / host unmounted mid-apply — fall back to price if present
-      reportUiError(e, {
-        source: 'run',
-        context: 'Indicator pane setup failed',
-        status: false,
-      });
-      paneId = manager.getPane('price') ? 'price' : paneId;
-    }
-  } else if (existing?.paneId && existing.paneId !== 'price' && existing.paneId !== 'volume') {
-    // Was a sub-pane script, now true overlay — clear stale series on old pane
-    try {
-      const owner = indicatorId ?? EDITOR_RUN_KEY;
-      if (typeof manager.removeOverlaysForOwner === 'function') {
-        manager.removeOverlaysForOwner(existing.paneId, owner);
-      } else {
-        manager.removeOverlays(existing.paneId);
-      }
-      // Destroy empty private sub-pane
-      if (
-        !store.scripts.some(
-          (s) => s.paneId === existing.paneId && s.id !== indicatorId,
-        )
-      ) {
-        try {
-          manager.destroyPane(existing.paneId);
-        } catch {
-          /* ignore */
-        }
-        if (store.panes.some((p) => p.id === existing.paneId)) {
-          try {
-            removePane(existing.paneId);
-          } catch {
-            /* ignore */
-          }
-        }
-      }
-    } catch {
-      /* ignore */
-    }
-  }
+  const paneId = ensureApplyPane({
+    overlay,
+    existing,
+    indicatorId,
+    scriptName,
+    manager,
+    storePanes: store.panes,
+    storeScripts: store.scripts,
+  });
 
   /**
    * Map engine series → LWC points. Keep **one point per OHLCV bar**.
@@ -1462,141 +1241,29 @@ async function runAndApplyInner(
 
   // Stable overlay sync: update-in-place when keys match (no remove→blank→add flash)
   // value is optional — omit for LWC whitespace (Pine `na` / warmup)
-  const overlayLines: Array<{
-    name: string;
-    data: { time: number; value?: number }[];
-    color?: string;
-    linewidth?: number;
-    kind?: 'plot' | 'hline';
-    price?: number;
-    linestyle?: string;
-    style?: string | null;
-    histbase?: number;
-    display?: string | number | null;
-  }> = [];
-  // Prefer named `series` + `meta.plot_meta` (PYNE modern). Top-level `plots[]`
-  // is often an all-null pad of bar length — never let that block named lines.
   // User color overrides from Scripts panel (persisted on the script card)
   const userPlotColors = existing?.plots || {};
-
-  if (seriesEntries.length > 0) {
-    let colorIdx = 0;
-    for (const [k, arr] of seriesEntries) {
-      // Large multi-plot payloads: bail early if a newer run won
-      if (!isRunEpochCurrent(epoch)) {
-        return {
-          ...result,
-          meta: { ...result.meta, superseded: true },
-        };
-      }
-      const meta = plotMeta[k] || {};
-      const kindRaw = String(meta?.kind || 'plot');
-      const isHline = kindRaw === 'hline';
-      const data = toLineData(arr);
-      // hline may still apply with price-only meta even if series is sparse
-      let price: number | undefined =
-        meta?.price != null && Number.isFinite(Number(meta.price))
-          ? Number(meta.price)
-          : undefined;
-      if (price == null && isHline && data.length) {
-        const first = data.find((d) => d.value != null && Number.isFinite(d.value));
-        if (first?.value != null) price = first.value;
-      }
-      // Need at least one real sample (or hline price); pure-whitespace series skip
-      if (!lineDataHasSample(data) && !(isHline && price != null)) continue;
-      // display.data_window / display.none: keep series for Data Window, skip pane
-      if (!plotDisplayHas(meta?.display, PLOT_DISPLAY.pane)) continue;
-      // Prefer panel color override → Pine plot color → palette
-      const color = pickOverlayColor(
-        userPlotColors[k]?.color,
-        meta?.color,
-        PLOT_PALETTE[colorIdx % PLOT_PALETTE.length],
-      );
-      colorIdx += 1;
-      overlayLines.push({
-        name: k,
-        data,
-        color,
-        linewidth: meta?.linewidth != null ? Number(meta.linewidth) : undefined,
-        kind: isHline ? 'hline' : 'plot',
-        price,
-        linestyle: meta?.linestyle ? String(meta.linestyle) : undefined,
-        style: meta?.style != null ? String(meta.style) : null,
-        histbase:
-          meta?.histbase != null && Number.isFinite(Number(meta.histbase))
-            ? Number(meta.histbase)
-            : undefined,
-        display: meta?.display ?? null,
-      });
-    }
-  } else if (Array.isArray(result.plots) && result.plots.length) {
-    // Legacy single-array plots only when no named line series and no specialized kinds.
-    // Skip all-null pads (modern engines still send plots: [null, …]).
-    if (!split.bgcolors.length && !split.shapes.length && !split.ohlc.length) {
-      const data = toLineData(
-        !needsAlign
-          ? result.plots
-          : resultTimes
-            ? alignSeriesToTimes(result.plots, resultTimes, ohlcvTimes)
-            : tailAlignSeriesToWindow(result.plots, chartWindowBars),
-      );
-      if (lineDataHasSample(data)) {
-        const userColor =
-          userPlotColors[scriptName]?.color ||
-          Object.values(userPlotColors)[0]?.color;
-        overlayLines.push({
-          name: scriptName,
-          data,
-          color:
-            resolvePineColor(userColor) ?? PLOT_PALETTE[0],
-        });
-      }
-    }
+  const overlayBuilt = buildOverlayPayloads({
+    epoch,
+    silent,
+    result,
+    seriesEntries,
+    split,
+    plotMeta,
+    ohlcvTimes,
+    needsAlign,
+    resultTimes,
+    chartWindowBars,
+    seriesMap,
+    userPlotColors,
+    scriptName,
+  });
+  if ('superseded' in overlayBuilt && overlayBuilt.superseded) {
+    return {
+      ...result,
+      meta: { ...result.meta, superseded: true },
+    };
   }
-
-  // plotbar / plotcandle → LWC Bar / Candlestick overlays
-  const overlayOhlc: Array<{
-    name: string;
-    kind: 'plotbar' | 'plotcandle';
-    data: Array<{
-      time: number;
-      open: number;
-      high: number;
-      low: number;
-      close: number;
-      color?: string;
-    }>;
-    color?: string;
-  }> = [];
-  {
-    let ohlcColorIdx = overlayLines.length;
-    for (const { key, values, meta } of split.ohlc) {
-      if (!isRunEpochCurrent(epoch)) {
-        return {
-          ...result,
-          meta: { ...result.meta, superseded: true },
-        };
-      }
-      if (!plotDisplayHas(meta?.display, PLOT_DISPLAY.pane)) continue;
-      const data = ohlcSeriesToBarData(ohlcvTimes, values, seriesMap, meta);
-      if (!data.length) continue;
-      const color = pickOverlayColor(
-        userPlotColors[key]?.color,
-        meta?.color,
-        PLOT_PALETTE[ohlcColorIdx % PLOT_PALETTE.length],
-      );
-      ohlcColorIdx += 1;
-      const kind: 'plotbar' | 'plotcandle' =
-        String(meta?.kind || '').toLowerCase() === 'plotcandle' ? 'plotcandle' : 'plotbar';
-      overlayOhlc.push({ name: key, kind, data, color });
-    }
-  }
-
-  // Empty bars / zero-length plots: still sync empty overlays so stale lines clear
-  if (!ohlcvTimes.length && !silent) {
-    appendLog('warn', 'Run finished with no bars — chart overlays cleared', 'plot');
-  }
-
   // Stale after building large overlay payloads — skip LWC mutations
   if (!isRunEpochCurrent(epoch)) {
     return {
@@ -1604,6 +1271,10 @@ async function runAndApplyInner(
       meta: { ...result.meta, superseded: true },
     };
   }
+  const { overlayLines, overlayOhlc } = overlayBuilt as {
+    overlayLines: OverlayLine[];
+    overlayOhlc: OverlayOhlc[];
+  };
 
   // Hide / detach after the engine returned: do not resurrect plots.
   if (indicatorId && !appliedScriptStillOnChart(indicatorId)) {
@@ -1640,264 +1311,21 @@ async function runAndApplyInner(
       // Force a full redraw unless this is a genuine live tick: an input/script
       // recompute changes every bar, so the tip-only smart-apply must not skip
       // the history (see pane-manager applyOverlayLineDataSmart).
-      const overlayOwner = {
-        ownerId: indicatorId ?? EDITOR_RUN_KEY,
+      applyChartMutations({
+        manager,
+        paneId,
+        overlay,
+        overlayLines,
+        overlayOhlc,
+        split,
+        plotMeta,
+        seriesMap,
+        ohlcvTimes,
+        silent,
+        indicatorId,
         forceFull: opts.liveTick !== true,
-      };
-      manager.syncOverlayLines(paneId, overlayLines, overlayOwner);
-      // plotbar / plotcandle OHLC overlays (empty list clears this owner’s OHLC)
-      if (typeof manager.syncOverlayOhlc === 'function') {
-        manager.syncOverlayOhlc(paneId, overlayOhlc, overlayOwner);
-      }
-      if (overlayOhlc.length && !silent) {
-        appendLog(
-          'ok',
-          `plot OHLC: ${overlayOhlc.map((o) => `${o.name}(${o.kind})`).join(', ')}`,
-          'plot',
-        );
-      }
-      // Refresh corner badges (name + settings / eye / re-run / remove)
-      try {
-        manager.refreshBadges?.(paneId);
-        if (paneId !== 'price') manager.refreshBadges?.('price');
-      } catch {
-        /* badges optional */
-      }
-
-      // bgcolor → histogram underlay on the script pane (price when overlay)
-      const bgBands = split.bgcolors
-        .filter(({ meta }) => plotDisplayHas(meta.display, PLOT_DISPLAY.pane))
-        .map(({ key, values, meta }) => ({
-          name: key,
-          title: meta.title || key,
-          data: bgcolorSeriesToHistogramData(ohlcvTimes, values, meta.color),
-        }))
-        .filter((b) => b.data.length > 0);
-      manager.syncBgcolorBands(bgBands, {
-        ...overlayOwner,
-        paneId: overlay ? 'price' : paneId,
       });
-      if (bgBands.length && !silent) {
-        appendLog('ok', `bgcolor: ${bgBands.length} band series`, 'plot');
-      }
-
-      // fill(plot1, plot2, color=…) → SVG band on the script pane (price when overlay)
-      const fillBands = resolvePlotFillBands(seriesMap, plotMeta).filter((f) =>
-        plotDisplayHas(plotMeta[f.name]?.display, PLOT_DISPLAY.pane),
-      );
-      try {
-        const priceLayer = getActiveDrawingLayer();
-        const paneLayer =
-          !overlay && paneId !== 'price' ? ensureScriptPaneLayer(paneId) : undefined;
-        const layer = paneLayer ?? priceLayer;
-        // The non-target layer may still hold this owner's fills from a prior
-        // overlay toggle — clear it so fills don't duplicate / stay stale.
-        const other = paneLayer ? priceLayer : undefined;
-        if (other && other !== layer) {
-          try {
-            other.clearPlotFills?.(indicatorId ?? EDITOR_RUN_KEY);
-          } catch {
-            /* optional */
-          }
-        }
-        if (layer?.setPlotFills) {
-          if (fillBands.length) {
-            const times: number[] = new Array(ohlcvTimes.length);
-            let tn = 0;
-            for (let i = 0; i < ohlcvTimes.length; i++) {
-              const t = ohlcvTimes[i];
-              const n = typeof t === 'number' ? t : Number(t);
-              if (!Number.isFinite(n)) continue;
-              times[tn++] = n > 1e12 ? Math.floor(n / 1000) : Math.floor(n);
-            }
-            times.length = tn;
-            layer.setPlotFills(
-              fillBands.map((f) => ({
-                name: f.name,
-                times,
-                upper: f.upper,
-                lower: f.lower,
-                colors: f.colors,
-                color: f.color,
-              })),
-              indicatorId ?? EDITOR_RUN_KEY,
-            );
-            if (!silent) {
-              appendLog(
-                'ok',
-                `fill: ${fillBands.map((f) => `${f.name}(${f.plot1}↔${f.plot2})`).join(', ')}`,
-                'plot',
-              );
-            }
-          } else {
-            layer.clearPlotFills?.(indicatorId ?? EDITOR_RUN_KEY);
-          }
-        }
-      } catch {
-        /* drawing layer optional in tests */
-      }
-
-      // plotshape / plotchar → markers (owner-scoped so multi-script runs keep others)
-      const shapeMarkers = split.shapes
-        .filter(({ meta }) => plotDisplayHas(meta.display, PLOT_DISPLAY.pane))
-        .flatMap(({ key, values, meta }) =>
-          shapeSeriesToMarkers(ohlcvTimes, values, meta, { idPrefix: key }),
-        );
-      const shapeOwner = indicatorId ?? EDITOR_RUN_KEY;
-      if (shapeMarkers.length || split.shapes.length) {
-        manager.setShapeMarkers(
-          shapeMarkers,
-          shapeOwner,
-          overlay ? 'price' : paneId,
-        );
-      }
-      if (shapeMarkers.length && !silent) {
-        appendLog('ok', `plotshape: ${shapeMarkers.length} marker(s)`, 'plot');
-      }
-
-      // barcolor() → tint price candles (LWC per-bar color fields).
-      // Last script with barcolor wins; runs without barcolor do not clear
-      // (history reload / clearChartScriptState clears via clearBarColors).
-      try {
-        if (split.barcolors?.length) {
-          const paneBarcolors = split.barcolors.filter(({ meta }) =>
-            plotDisplayHas(meta?.display, PLOT_DISPLAY.pane),
-          );
-          const colorMap = barcolorSeriesToMap(ohlcvTimes, paneBarcolors);
-          const n = manager.applyBarColors?.(colorMap, indicatorId ?? EDITOR_RUN_KEY) ?? 0;
-          if (n > 0 && !silent) {
-            appendLog('ok', `barcolor: ${n} bar(s) tinted`, 'plot');
-          }
-        }
-      } catch {
-        /* barcolor optional on older managers */
-      }
-
-      // Non-overlay scripts must not leave series on the price pane
-      // (legacy unowned + this owner’s keys from a prior overlay=true run)
-      if (!overlay && paneId !== 'price') {
-        const owner = indicatorId ?? EDITOR_RUN_KEY;
-        try {
-          manager.removeOverlaysForOwner?.('price', owner);
-          // Also drop legacy unowned keys for these plot names
-          const pricePane = manager.getPane('price');
-          if (pricePane) {
-            for (const line of overlayLines) {
-              const key = `overlay_${line.name}`;
-              if (pricePane.series[key]) {
-                try {
-                  pricePane.chart.removeSeries(pricePane.series[key]);
-                } catch {
-                  /* ignore */
-                }
-                delete pricePane.series[key];
-              }
-            }
-            for (const o of overlayOhlc) {
-              const key = `overlay_ohlc_${o.name}`;
-              if (pricePane.series[key]) {
-                try {
-                  pricePane.chart.removeSeries(pricePane.series[key]);
-                } catch {
-                  /* ignore */
-                }
-                delete pricePane.series[key];
-              }
-            }
-          }
-        } catch {
-          /* manager optional */
-        }
-      }
-
-      // Strategy: trade markers on price pane + report stats.
-      // Equity curve is rendered in Results → Strategy only (no main-chart equity pane).
-      const events = result.events || [];
-      const isStrategy =
-        scriptType === 'strategy' ||
-        events.some((e) => {
-          const k = String(
-            (e as { kind?: string; type?: string }).kind ||
-              (e as { type?: string }).type ||
-              '',
-          ).toLowerCase();
-          return (
-            k.includes('entry') ||
-            k.includes('exit') ||
-            k.includes('close') ||
-            k === 'order'
-          );
-        });
-      // Hide any leftover main-chart equity pane from older sessions / builds
-      try {
-        manager.hideEquityPane?.();
-      } catch {
-        /* equity pane optional */
-      }
-      if (events.length) {
-        const fillMode = store.strategyUi?.slippageNextOpen ? 'next_open' : 'close';
-        const normalized = normalizeStrategyEvents(events, {
-          bars: store.bars || [],
-          includeOrders: false,
-          fillMode,
-        });
-        const markers = eventsToMarkers(normalized, {
-          invertLabels: !!store.strategyUi?.invertTradeLabels,
-          exactOnCandle: store.strategyUi?.exactOnCandle !== false,
-        });
-        // Owner-scoped so removing this strategy clears its long/short labels
-        // without relying on a global wipe (and without wiping sibling markers).
-        manager.setTradeMarkers(markers, indicatorId ?? EDITOR_RUN_KEY);
-
-        const report = buildStrategyReport(events, store.bars || [], { fillMode });
-        if (report.trades.length) {
-          if (!silent) {
-            const net = Number.isFinite(report.stats.totalPnl) ? report.stats.totalPnl : 0;
-            const wr = Number.isFinite(report.stats.winRate) ? report.stats.winRate : 0;
-            appendLog(
-              'ok',
-              `Strategy: ${report.stats.trades} trades · net ${net >= 0 ? '+' : ''}${net.toFixed(2)} · win ${wr.toFixed(0)}% · ${markers.length} markers`,
-              'strategy',
-            );
-            // Surface the Strategy tester tab when this run produced closed trades
-            try {
-              setStore('resultsPanel', 'open', true);
-              if (typeof window !== 'undefined') {
-                window.dispatchEvent(
-                  new CustomEvent('axis-results-tab', { detail: { tab: 'strategy' } }),
-                );
-              }
-            } catch {
-              /* optional UI hook */
-            }
-          }
-        } else if (!silent) {
-          if (markers.length || isStrategy) {
-            appendLog(
-              'ok',
-              `Strategy events: ${events.length} raw · ${normalized.length} fills · ${markers.length} markers` +
-                (report.trades.length === 0
-                  ? ' · no closed trades yet (need entry+exit pair)'
-                  : ''),
-              'strategy',
-            );
-          }
-        }
-      } else if (!silent) {
-        // Interactive run with no strategy events — clear trade markers.
-        // Silent live re-runs of pure indicators must NOT wipe another script's
-        // strategy markers (multi-indicator live thrash).
-        if (isStrategy) {
-          appendLog(
-            'warn',
-            'Strategy run returned 0 events — broker never filled (check entry conditions / bars)',
-            'strategy',
-          );
-        }
-        // Clear only this script’s trade markers (indicators must not wipe a
-        // sibling strategy’s long/short labels on interactive re-run).
-        manager.setTradeMarkers([], indicatorId ?? EDITOR_RUN_KEY);
-      }
+      applyStrategyMarkers({ manager, result, scriptType, silent, indicatorId });
 
       // Debug pins from logs (bar_index/time) — independent of trade/shape lists
       applyDebugPinsToChart();
@@ -1913,282 +1341,33 @@ async function runAndApplyInner(
     else if (store.status !== 'error') setStatus('error', `Chart apply failed: ${msg}`);
   }
 
-  // Pine drawings: atomic replace (no clear→empty→set flash).
-  // GC trims each type to indicator()/strategy() max_*_count (default 50).
-  // Skip when superseded so a stale run cannot wipe fresher drawings.
-  if (isRunEpochCurrent(epoch) && appliedScriptStillOnChart(indicatorId)) {
-    try {
-      const drawings = Array.isArray((result as RunResult & { drawings?: unknown[] }).drawings)
-        ? (result as RunResult & { drawings?: unknown[] }).drawings
-        : undefined;
-      const priceLayer = getActiveDrawingLayer() ?? getDrawingLayer();
-      if (drawings?.length) {
-        const limits = resolveDrawingLimits(
-          script,
-          (result.meta as Record<string, unknown> | undefined) ?? null,
-        );
-        const barSample = bars.length ? Number(bars[bars.length - 1]!.time) : null;
-        const normalized = normalizeScriptDrawings(drawings, barSample);
-        const kept = garbageCollectScriptDrawings(normalized, limits);
-        // Non-overlay scripts: force_overlay → price pane; rest → indicator pane Y
-        let keptCount = 0;
-        if (!overlay && paneId !== 'price') {
-          const onPrice = kept.filter((d) => d.forceOverlay);
-          const onPane = kept.filter((d) => !d.forceOverlay);
-          keptCount = priceLayer?.setScriptDrawings(onPrice, limits, indicatorId ?? EDITOR_RUN_KEY) ?? 0;
-          const paneLayer = ensureScriptPaneLayer(paneId);
-          if (paneLayer) {
-            keptCount += paneLayer.setScriptDrawings(onPane, limits, indicatorId ?? EDITOR_RUN_KEY);
-          } else if (onPane.length) {
-            // Fall back to price if sub-pane layer unavailable
-            keptCount = priceLayer?.setScriptDrawings(kept, limits, indicatorId ?? EDITOR_RUN_KEY) ?? 0;
-          }
-        } else {
-          keptCount = priceLayer?.setScriptDrawings(kept, limits, indicatorId ?? EDITOR_RUN_KEY) ?? 0;
-        }
-        if (!silent) {
-          const dropped = normalized.length - kept.length;
-          if (!priceLayer && kept.length) {
-            appendLog(
-              'warn',
-              `Pine drawings: engine returned ${drawings.length} object(s) but no drawing layer is mounted (load bars first)`,
-              'drawings',
-            );
-          } else if (normalized.length === 0) {
-            const sample = drawings[0] as Record<string, unknown> | undefined;
-            const keys = sample && typeof sample === 'object' ? Object.keys(sample).slice(0, 12).join(',') : '';
-            appendLog(
-              'warn',
-              `Pine drawings: ${drawings.length} raw object(s) dropped by normalize (need type/kind + coords; sample keys: ${keys || '—'})`,
-              'drawings',
-            );
-          } else {
-            const paneNote =
-              !overlay && paneId !== 'price'
-                ? ` · pane=${paneId}`
-                : '';
-            appendLog(
-              'ok',
-              dropped > 0
-                ? `Pine drawings: ${kept.length} object(s) (${dropped} GC'd by max_*_count)${paneNote}`
-                : `Pine drawings: ${keptCount || kept.length} object(s)${paneNote}`,
-              'drawings',
-            );
-          }
-        }
-      } else if (!silent || Array.isArray(drawings)) {
-        // Empty `drawings: []` on a successful run must clear even on silent
-        // live re-runs. Error runs return before this block, so a failed tick
-        // keeps the last good gallery. Omit-the-field (`undefined`) still
-        // skips clear when silent.
-        priceLayer?.clearScriptDrawings(indicatorId ?? EDITOR_RUN_KEY);
-        if (!overlay && paneId !== 'price') {
-          try {
-            ensureScriptPaneLayer(paneId)?.clearScriptDrawings(indicatorId ?? EDITOR_RUN_KEY);
-          } catch {
-            /* optional */
-          }
-        }
-      }
-    } catch {
-      /* drawing layer optional in tests */
-    }
-  }
-
-  // Final epoch gate before store mutations (indicator list / series cache)
-  if (!isRunEpochCurrent(epoch)) {
+  applyDrawings({ epoch, indicatorId, result, script, bars, overlay, paneId, silent });
+  if (
+    !updateIndicatorStore({
+      epoch,
+      result,
+      silent,
+      indicatorId,
+      opts,
+      script,
+      paneId,
+      overlay,
+      existing,
+      overlayLines,
+      overlayOhlc,
+      split,
+      ohlcvTimes,
+      seriesMap,
+      plotMeta,
+      seriesEntries,
+      scriptName,
+      bars,
+    })
+  ) {
     return {
       ...result,
       meta: { ...result.meta, superseded: true },
     };
-  }
-
-  // Capture engine-exported inputs into lastRun meta for Script Settings
-  const engineInputs =
-    (result as { inputs?: unknown }).inputs ??
-    result.meta?.inputs;
-  if (engineInputs && result.meta) {
-    result.meta = { ...result.meta, inputs: engineInputs };
-  }
-
-  // Cache line plots for cross-indicator input.source (exclude hline-only noise)
-  const seriesForCache: Record<string, PlotSample[]> = {};
-  const titlesForCache: Record<string, string> = {};
-  for (const [k, arr] of seriesEntries) {
-    seriesForCache[k] = (Array.isArray(arr) ? arr : []) as (number | null)[];
-    const meta = plotMeta[k];
-    const title = meta?.title != null ? String(meta.title) : k;
-    titlesForCache[k] = title;
-  }
-
-  try {
-    if (indicatorId === undefined) {
-      const plots: Record<string, { color: string }> = {};
-      let colorIdx = 0;
-      if (seriesEntries.length) {
-        for (const [k] of seriesEntries) {
-          const meta = plotMeta[k];
-          plots[k] = {
-            // Persist resolved CSS only — raw Pine tokens are invalid in
-            // the card swatch and would shadow later runs as overrides.
-            color:
-              resolvePineColor(meta?.color) ??
-              PLOT_PALETTE[colorIdx % PLOT_PALETTE.length],
-          };
-          colorIdx += 1;
-        }
-      } else {
-        plots[scriptName] = { color: PLOT_PALETTE[0] };
-      }
-      // Prefer original opts/editor overrides (plot refs), not engine-expanded arrays
-      const savedInputs =
-        nonemptyBag(opts.inputs) ??
-        (opts.skipEditorDraft ? undefined : nonemptyBag(store.editorInputValues));
-      const savedStrategyProps =
-        nonemptyBag(opts.strategyProps) ??
-        (opts.skipEditorDraft
-          ? undefined
-          : nonemptyBag(store.editorStrategyProps));
-      const newId = addIndicator(
-        scriptName,
-        script,
-        paneId,
-        plots,
-        savedInputs && Object.keys(savedInputs).length ? savedInputs : undefined,
-        savedStrategyProps && Object.keys(savedStrategyProps).length
-          ? savedStrategyProps
-          : undefined,
-      );
-      // Run cache was under EDITOR_RUN_KEY — migrate so tables/results follow
-      // the real script id and delete clears them with the card.
-      try {
-        setLastRun(withAxisSource(result, script), {
-          scriptId: newId,
-          focus: !silent,
-          persistence: silent || opts.liveTick ? 'skip' : 'auto',
-        });
-        setLastRun(null, { scriptId: EDITOR_RUN_KEY });
-      } catch {
-        /* store optional */
-      }
-      // Chart series were applied under EDITOR_RUN_KEY — re-own under the real
-      // script id so the next reapply/live run does not stack a second copy
-      // (identical last-value labels: "last" + "current" on the right scale).
-      // Also re-own strategy trade markers so remove(id) clears long/short labels.
-      try {
-        const mgr = getManager();
-        if (mgr?.getPane?.(paneId) && isRunEpochCurrent(epoch)) {
-          mgr.removeOverlaysForOwner?.(paneId, EDITOR_RUN_KEY);
-          mgr.syncOverlayLines?.(paneId, overlayLines, { ownerId: newId });
-          if (typeof mgr.syncOverlayOhlc === 'function') {
-            mgr.syncOverlayOhlc(paneId, overlayOhlc, { ownerId: newId });
-          }
-          if (typeof mgr.syncBgcolorBands === 'function') {
-            const bgBands = split.bgcolors
-              .map(({ key, values, meta }) => ({
-                name: key,
-                data: bgcolorSeriesToHistogramData(ohlcvTimes, values, meta.color),
-              }))
-              .filter((b) => b.data.length > 0);
-            mgr.syncBgcolorBands(bgBands, { ownerId: newId });
-          }
-          // Trade markers / plotshape / Pine SVG were set under EDITOR_RUN_KEY
-          try {
-            mgr.reownShapeMarkers?.(EDITOR_RUN_KEY, newId);
-          } catch {
-            /* shape markers optional */
-          }
-          try {
-            const priceLayer = getDrawingLayer() ?? getActiveDrawingLayer();
-            priceLayer?.reownScriptDrawings?.(EDITOR_RUN_KEY, newId);
-            priceLayer?.reownPlotFills?.(EDITOR_RUN_KEY, newId);
-            if (!overlay && paneId !== 'price') {
-              const paneLayer = ensureScriptPaneLayer(paneId);
-              paneLayer?.reownScriptDrawings?.(EDITOR_RUN_KEY, newId);
-              paneLayer?.reownPlotFills?.(EDITOR_RUN_KEY, newId);
-            }
-          } catch {
-            /* drawing layer optional */
-          }
-          try {
-            mgr.clearTradeMarkers?.(EDITOR_RUN_KEY);
-            const ev = result.events || [];
-            if (ev.length && typeof mgr.setTradeMarkers === 'function') {
-              const fillMode = store.strategyUi?.slippageNextOpen ? 'next_open' : 'close';
-              const normalized = normalizeStrategyEvents(ev, {
-                bars: store.bars || [],
-                includeOrders: false,
-                fillMode,
-              });
-              const markers = eventsToMarkers(normalized, {
-                invertLabels: !!store.strategyUi?.invertTradeLabels,
-                exactOnCandle: store.strategyUi?.exactOnCandle !== false,
-              });
-              mgr.setTradeMarkers(markers, newId);
-            }
-          } catch {
-            /* markers optional */
-          }
-        }
-      } catch {
-        /* chart may be disposed */
-      }
-      if (Object.keys(seriesForCache).length) {
-        setIndicatorSeries(newId, {
-          name: scriptName,
-          series: seriesForCache,
-          titles: titlesForCache,
-        });
-      }
-    } else {
-      // Re-run replace: refresh source / name / pane. Explicit panel picks
-      // (custom) survive; auto-persisted colors refresh from the fresh run
-      // so script color edits take effect instead of sticking forever.
-      const plots: Record<string, { color: string; custom?: boolean }> = {
-        ...(existing?.plots || {}),
-      };
-      let colorIdx = 0;
-      if (seriesEntries.length) {
-        for (const [k] of seriesEntries) {
-          if (plots[k]?.custom) continue;
-          const meta = plotMeta[k];
-          plots[k] = {
-            color:
-              resolvePineColor(meta?.color) ??
-              PLOT_PALETTE[colorIdx % PLOT_PALETTE.length],
-          };
-          colorIdx += 1;
-        }
-      }
-      const savedInputs = nonemptyBag(opts.inputs) ?? existing?.inputValues;
-      const savedStrategyProps =
-        nonemptyBag(opts.strategyProps) ?? existing?.strategyProps;
-      updateIndicator(indicatorId, {
-        name: scriptName,
-        code: script,
-        paneId,
-        plots,
-        ...(savedInputs && Object.keys(savedInputs).length
-          ? { inputValues: savedInputs }
-          : {}),
-        ...(savedStrategyProps && Object.keys(savedStrategyProps).length
-          ? { strategyProps: savedStrategyProps }
-          : {}),
-      });
-      if (Object.keys(seriesForCache).length) {
-        setIndicatorSeries(indicatorId, {
-          name: scriptName,
-          series: seriesForCache,
-          titles: titlesForCache,
-        });
-      }
-    }
-  } catch (e: unknown) {
-    reportUiError(e, {
-      source: 'run',
-      context: 'Indicator store update failed',
-      status: false,
-    });
   }
 
   return result;

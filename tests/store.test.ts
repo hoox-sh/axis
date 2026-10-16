@@ -105,7 +105,7 @@ import {
   isAutoloadEnabled,
 } from '../src/store';
 import { defaultChartThemeState } from '../src/theme';
-import { SAMPLE_BARS, makeBars } from './fixtures/bars';
+import { SAMPLE_BARS, makeBars, sampleBars } from './fixtures/bars';
 import { getSlotBars, setSlotBars } from '../src/chart/chart-registry';
 
 function resetStoreBasics() {
@@ -375,7 +375,7 @@ describe('debugPinsEnabled', () => {
 describe('telemetry', () => {
   it('loadBars bumps chartDataGen without changing on appendBar', () => {
     const g0 = store.chartDataGen;
-    loadBars(SAMPLE_BARS, 'ETHUSDT', '1h', 'binance');
+    loadBars(sampleBars(), 'ETHUSDT', '1h', 'binance');
     expect(store.chartDataGen).toBe(g0 + 1);
     const g1 = store.chartDataGen;
     appendBar({ time: 9_999_999, open: 1, high: 1, low: 1, close: 1 });
@@ -395,14 +395,14 @@ describe('telemetry', () => {
 
 describe('bars and indicators', () => {
   it('loadBars sets symbol/interval/exchange', () => {
-    loadBars(SAMPLE_BARS, 'ETHUSDT', '1h', 'binance');
+    loadBars(sampleBars(), 'ETHUSDT', '1h', 'binance');
     expect(store.bars).toHaveLength(SAMPLE_BARS.length);
     expect(store.symbol).toBe('ETHUSDT');
     expect(store.interval).toBe('1h');
   });
 
   it('appendBar updates same time then appends new', () => {
-    loadBars(SAMPLE_BARS, 'BTCUSDT', '1d', 'binance');
+    loadBars(sampleBars(), 'BTCUSDT', '1d', 'binance');
     const last = store.bars[store.bars.length - 1];
     appendBar({ ...last, close: 999 });
     expect(store.bars[store.bars.length - 1].close).toBe(999);

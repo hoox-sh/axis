@@ -33,4 +33,16 @@ export function makeBars(n = 10, startTime = 1_700_000_000, step = 86_400): Bar[
   return out;
 }
 
-export const SAMPLE_BARS = makeBars(5);
+export const SAMPLE_BARS: readonly Bar[] = Object.freeze(
+  makeBars(5).map((b) => Object.freeze({ ...b }) as Bar),
+) as readonly Bar[];
+
+/**
+ * Fresh mutable copy of {@link SAMPLE_BARS} for tests that load/append it
+ * into the store. `loadBars` aliases the caller's array and `appendBar`
+ * mutates in place, so sharing the singleton across tests pollutes every
+ * suite that runs after the first writer — always clone.
+ */
+export function sampleBars(n = 5, startTime = 1_700_000_000, step = 86_400): Bar[] {
+  return makeBars(n, startTime, step);
+}

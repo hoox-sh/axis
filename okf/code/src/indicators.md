@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/indicators"
-description: "src/indicators contains IndicatorCard.tsx, IndicatorPanel.tsx, detach.ts, and 6 more files."
+description: "src/indicators contains IndicatorCard.tsx, IndicatorPanel.tsx, apply-context.ts, and 13 more files."
 resource: "src/indicators"
 tags: [code, indicators]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-16T18:28:43Z
+  at: 2026-10-16T18:28:57Z
 sources:
   - id: tree
     resource: "src/indicators"
@@ -20,11 +20,18 @@ okf_lock: generated
 
 * `IndicatorCard.tsx` — IndicatorCard
 * `IndicatorPanel.tsx` — IndicatorPanel
+* `apply-context.ts` — AlignedApplySeries, ResolvedRunContext, alignApplySeries, resolveRunContext
+* `apply-drawings.ts` — DrawingsApplyContext, appliedScriptStillOnChart, applyDrawings
+* `apply-mutations.ts` — ChartMutationContext, applyChartMutations
+* `apply-overlays.ts` — OverlayBuildContext, OverlayBuildOutcome, OverlayLine, OverlayOhlc, buildOverlayPayloads, pickOverlayColor
+* `apply-pane.ts` — PaneSetupContext, ensureApplyPane
+* `apply-store.ts` — StoreUpdateContext, updateIndicatorStore
+* `apply-strategy.ts` — StrategyApplyContext, applyStrategyMarkers
 * `detach.ts` — detachIndicatorFromChart
 * `reapply.ts` — REAPPLY_MAX_CONCURRENT, ReapplyChartScriptsOpts, _resetBatchRouteMemoForTests, listReapplicableScripts, reapplyChartScripts
 * `run-helpers.ts` — NormalizedRunResult, _resetRunEpochForTests, beginRunEpoch, claimRunStatus, coercePlotSample, coerceSeriesSample, currentRunEpoch, formatRunError, getRunStatusEpoch, isInteractiveRunInFlight, isRunEpochCurrent, lineDataHasSample
 * `run-target.ts` — EditorRunMode, countChartScriptsForEditor, editorHasChartInstance, extractScriptTitle, findChartScriptForEditor, normalizeScriptSource, pickPreferredScript, resolveScriptDisplayName, runFromEditor
-* `runner.ts` — NormalizedRunResult, RunOptions, RunResult, StrategyPropsPrecedenceOpts, _resetOhlcvTimesCacheForTests, _resetRunEpochForTests, alignSeriesToTimes, applyRollingWindow, beginRunEpoch, claimRunStatus, coercePlotSample, currentRunEpoch
+* `runner.ts` — NormalizedRunResult, RunOptions, RunResult, StrategyPropsPrecedenceOpts, _resetOhlcvTimesCacheForTests, _resetRunEpochForTests, alignSeriesMapToTimes, alignSeriesToTimes, applyRollingWindow, beginRunEpoch, claimRunStatus, coercePlotSample
 * `script-meta.ts` — EngineFamily, LastRunStatus, LiveRerunOn, ScriptKind, activeChartContext, cycleLiveRerunOn, detectDeclaredOverlay, detectPineVersion, detectScriptKind, engineFamily, engineFamilyLabel, formatScriptUpdatedAt
 * `visibility.ts` — clearScriptChartOverlays, setScriptChartVisible, toggleScriptChartVisible
 

@@ -17,6 +17,24 @@ _Generated/updated: 2026-10-15 · 572 commits · describe-tag: `v2.24.3`_
 
 ### Added
 
+- **Engine-owned data plane (stream profile, `WS /ws/live`).** Each engine that
+  can hold a feed owns its datafeed with the exchange as source of truth: the
+  client subscribes with script + meta, receives status
+  (`datafeed-loading → calculating → live`), one full snapshot, then deltas
+  with per-subscription `seq` and the `closed_upto` watermark, and re-verifies
+  closed bars against the venue. New `src/engine/` client (frames, WS client,
+  delta applier, bar-close verifier, router, apply bridge, live-wire),
+  `src/streams/stream-live.ts` glue, HUD feed chip + indicator stream badges,
+  and the `features.live_stream` capability gate (strict opt-in, fail-open to
+  the calculator profile). Legacy `serverEngine` path frozen for engines
+  without `live_stream` (pyodide, pyne-worker, offline, HPO).
+- **`runAndApplyInner` decomposed into apply stages (F-25).** The ~1180-line
+  function is now a ~250-line orchestrator over `src/indicators/apply-context`
+  (run context + series alignment), `apply-pane` (pane setup), `apply-overlays`
+  (line/OHLC payload building), `apply-mutations` (chart mutations),
+  `apply-strategy` (trade markers + report), `apply-drawings` (Pine drawings),
+  and `apply-store` (indicator store update). No behavior change — full suite
+  green.
 - **Maintenance mode (`VITE_MAINTENANCE_MODE`) — a full maintenance page instead of the app.** Setting the flag in `.env` (or the build environment) makes `index.tsx` mount only the new `ui/MaintenancePage`: dark void background, a dimmed overlay, the landing `texture-cross` hairline grid (0.8px accent lines on a 10px pitch at 25% opacity), and a `ui/SideRays` light fan painted above the content (`mix-blend-screen`) so the beam grazes the mark and copy — the spotlight is the only light. The HOOX mark is anchored dead-center of the viewport and flickers once on load plus again on hover (the landing `logo-flicker` stagger, via a new opt-in `HooxLogo` `introFlicker` prop reusing the existing one-shot hover stagger — no continuous loader animation; phosphor glow ring included), and no dust motes are drawn; a "Planned maintenance — will be back soon" status line, an upcoming-major-release (AXIS v3) teaser label, and the hoox.sh/axis slogans typed character-by-character by the new `ui/SloganTypewriter` (see below) sit below that center anchor, and the site link is pinned to the bottom edge. The chart workspace and editor popout never import, so no engine or panel can half-work while a deployment is down; the check lives in the new `src/maintenance.ts` (unit-tested in `tests/maintenance-mode.test.ts`) and the page stays a lazy chunk. Reduced motion is honored by the existing app-wide `prefers-reduced-motion` block (SideRays renders a static frame). Vite inlines the value at build time, so flipping the flag always needs a rebuild; e2e forces it off via `playwright.config.ts` (`webServer.env` — process env outranks `.env` files), documented in `.env.example` and `docs/devops/build-and-serve.mdx`.
 - **`ui/SideRays` — SolidJS port of the React Bits `SideRays` light-fan background.** The WebGL2 shader + RAF loop are unchanged; the React wrapper was adapted to Solid (`useRef`/`useState` → bindings + `createSignal`, `useEffect` → `createEffect`/`on`/`onCleanup`, `className` → `class`) and the upstream `.side-rays*` CSS is inlined as Tailwind equivalents. Renders a configurable fan of light rays (two color layers, origin/anchor, density, dust, mouse-leaning); honors `prefers-reduced-motion`, pauses off-screen and on hidden tabs, and degrades to an empty container when WebGL2 is unavailable. Used by the maintenance page (indigo fan, `origin="top-right"`).
 - **`ui/SloganTypewriter` — SolidJS port of the hoox landing `TypewriterTagline`.** Cycles phrases with the landing rhythm (type 65ms/char → hold 2s → delete 35ms/char), sizes the box from an invisible longest-phrase probe so the typing origin never slides in a centred layout, keeps the whole line `aria-hidden` (the maintenance page root is an `aria-live` region — per-character mutations would otherwise be announced by screen readers), and renders the first phrase statically under `prefers-reduced-motion` (`motion-safe` cursor). Used by the maintenance page for the AXIS slogans: the hoox.sh/axis hero headline ("Own the axes. Swap the engine.") plus the three footer phrases.

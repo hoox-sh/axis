@@ -1,7 +1,7 @@
 ---
 type: "Playbook"
 title: "Live evaluation sessions"
-description: "When the O(delta) session path may run, what continuity requires, which responses are not results, and how failures are memoised."
+description: "When the O(delta) session path may run (calculator profile), what continuity requires, which responses are not results, and how failures are memoised. For the stream profile see the engine-stream playbook."
 tags: [axis, playbook, okf, engines, live]
 status: stable
 okf_lock: human
@@ -24,6 +24,13 @@ sources:
 ---
 
 # What this is
+
+> **Calculator profile only.** This playbook describes the REST session path
+> (`src/engines/live-sessions.ts`, `src/engines/data-sessions.ts`) used by
+> engines **without** `features.live_stream`. Stream-profile engines tick
+> server-side and push deltas over `WS /ws/live` — see
+> [engine stream](/playbooks/engine-stream.md). The tick-then-append and delta
+> merge invariants below hold on both paths (server-side on stream).
 
 The `server` engine may evaluate a genuine live tick through a PYNE live session
 (`POST /session`, `/session/{id}/tick`, `/session/{id}/append`, `DELETE
