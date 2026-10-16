@@ -4,11 +4,11 @@
  */
 
 /**
- * Engine-owned apply alignment: a data-session result evaluates the engine's
- * own series, which slides independently of the local chart window. Every
- * apply-path zip is index-based, so the series tail must be pinned to the
- * newest chart bar or each value lands `slack` bars early — the "indicator
- * stays as on the first print" freeze.
+ * Engine-owned apply alignment: a session-backed result evaluates a bar window
+ * that slides independently of the local chart window. Series are joined to
+ * the chart by bar time (`alignSeriesToTimes` over the engine axis) so values
+ * land on the correct bars even when the engine ran ahead or its session
+ * outgrew the window; time-less payloads keep the index tail-align fallback.
  */
 
 import './setup';
@@ -32,6 +32,9 @@ import {
   runAndApply,
   _resetRunEpochForTests,
   tailAlignSeriesToWindow,
+  alignSeriesToTimes,
+  extractEngineResultTimes,
+  type RunResult,
 } from '../src/indicators/runner';
 import { setManager, setDrawingLayer } from '../src/chart/manager-access';
 import { SAMPLE_BARS } from './fixtures/bars';
@@ -109,6 +112,75 @@ describe('tailAlignSeriesToWindow', () => {
     expect(tailAlignSeriesToWindow(undefined, 3)).toEqual([]);
     expect(tailAlignSeriesToWindow([], 3)).toEqual([]);
     expect(tailAlignSeriesToWindow([1], 0)).toEqual([1]);
+  });
+});
+
+describe('alignSeriesToTimes', () => {
+  const T = (i: number) => 1_700_000_000 + i * 86_400;
+
+  it('joins values to chart bars by time, dropping engine bars outside the window', () => {
+    // Engine ran ahead: two newer bars the chart does not have yet.
+    const out = alignSeriesToTimes(
+      [1, 2, 3, 4, 5, 6, 7],
+      [T(0), T(1), T(2), T(3), T(4), T(5), T(6)],
+      [T(0), T(1), T(2), T(3), T(4)],
+    );
+    expect(out).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it('nulls chart bars the engine never evaluated (trailing gap)', () => {
+    const out = alignSeriesToTimes([1, 2, 3], [T(0), T(1), T(2)], [T(0), T(1), T(2), T(3), T(4)]);
+    expect(out).toEqual([1, 2, 3, null, null]);
+  });
+
+  it('normalizes Pine-ms engine times to chart seconds', () => {
+    const out = alignSeriesToTimes(
+      [1, 2, 3],
+      [T(0) * 1000, T(1) * 1000, T(2) * 1000],
+      [T(0), T(1), T(2)],
+    );
+    expect(out).toEqual([1, 2, 3]);
+  });
+
+  it('last wins on duplicate engine stamps', () => {
+    expect(alignSeriesToTimes([1, 2], [T(0), T(0)], [T(0)])).toEqual([2]);
+  });
+
+  it('falls back to tail-align without a usable engine axis', () => {
+    expect(alignSeriesToTimes([1, 2, 3, 4, 5], null, [T(0), T(1), T(2)])).toEqual([3, 4, 5]);
+    expect(alignSeriesToTimes([1, 2], undefined, [T(0), T(1), T(2), T(3)])).toEqual([
+      null,
+      null,
+      1,
+      2,
+    ]);
+    // An axis that does not describe this series 1:1 cannot be joined either.
+    expect(alignSeriesToTimes([1, 2, 3, 4], [T(0), T(1)], [T(0), T(1), T(2)])).toEqual([2, 3, 4]);
+  });
+
+  it('keeps equal-length aligned series on their own bars', () => {
+    expect(alignSeriesToTimes([1, 2, 3], [T(0), T(1), T(2)], [T(0), T(1), T(2)])).toEqual([1, 2, 3]);
+  });
+});
+
+describe('extractEngineResultTimes', () => {
+  it('prefers meta.engineTimes and accepts loose fields', () => {
+    expect(extractEngineResultTimes({ meta: { engineTimes: [10, 20] } })).toEqual([10, 20]);
+    expect(extractEngineResultTimes({ meta: { bar_times: [10, 20] } })).toEqual([10, 20]);
+    expect(extractEngineResultTimes({ times: [10, 20] })).toEqual([10, 20]);
+    expect(extractEngineResultTimes({ meta: { bars: [{ time: 10 }, { time: 20 }] } })).toEqual([
+      10, 20,
+    ]);
+    expect(extractEngineResultTimes({ bars: [[10], [20]] })).toEqual([10, 20]);
+  });
+
+  it('normalizes ms and drops junk', () => {
+    expect(
+      extractEngineResultTimes({ meta: { engineTimes: [1_700_000_000_000, 'oops', null] } }),
+    ).toEqual([1_700_000_000]);
+    expect(extractEngineResultTimes({ meta: {} })).toBeNull();
+    expect(extractEngineResultTimes(null)).toBeNull();
+    expect(extractEngineResultTimes({ meta: { engineTimes: ['na', null] } })).toBeNull();
   });
 });
 
@@ -266,5 +338,111 @@ describe('engine-owned series apply', () => {
     expect(line.data[2]!.value).toBe(11);
     expect(line.data[bars.length - 1]!.value).toBe(13);
     expect(line.data[bars.length - 1]!.time).toBe(bars[bars.length - 1]!.time);
+  });
+
+  it('joins a longer engine-owned series by bar time when the engine ran ahead', async () => {
+    const bars = SAMPLE_BARS;
+    const t = (i: number) => bars[0]!.time + i * 86_400;
+    // The engine feed is two bars ahead of the chart: its series is longer
+    // AND newer, so index tail-align would pin future values onto stale bars.
+    const engineTimes = [0, 1, 2, 3, 4, 5, 6].map(t);
+    const engineSeries = [1, 2, 3, 4, 5, 6, 7];
+    restoreFetch = mockFetch(async (input, init) => {
+      const url = new URL(String(input));
+      const method = String(init?.method || 'GET').toUpperCase();
+      if (method === 'POST' && url.pathname === '/data/session') {
+        return jsonResponse({
+          status: 'success',
+          session_id: 'eo-ahead',
+          cache: 'hit',
+          plots: [],
+          series: { plot0: engineSeries },
+          plot_meta: { plot0: {} },
+          events: [],
+          drawings: [],
+          alerts: [],
+          inputs: [],
+          mode: 'interpret',
+          overlay: true,
+          script_name: 'eo',
+          count: engineSeries.length,
+          times: engineTimes,
+          meta: {},
+        });
+      }
+      return jsonResponse({ status: 'error', code: 'NOT_FOUND' }, 404);
+    });
+
+    setManager({
+      getPane: (id: string) =>
+        id === 'price'
+          ? { id: 'price', type: 'price', chart: {}, series: {}, priceLines: {} }
+          : undefined,
+      syncOverlayLines: (paneId: string, lines: CapturedApply['lines']) => {
+        captured.push({ paneId, lines });
+      },
+      syncBgcolorBands: () => {},
+    } as never);
+
+    const r = await runAndApply(SCRIPT, undefined, { silent: true, openResults: false });
+    expect(r.status).toBe('success');
+    // The top-level payload axis reaches the apply path via meta.engineTimes.
+    expect(r.meta?.engineTimes).toEqual(engineTimes);
+
+    const line = captured[captured.length - 1]!.lines[0]!;
+    expect(line.data).toHaveLength(bars.length);
+    // Time join: every chart bar carries its own engine value; the two future
+    // engine bars are dropped instead of shifting the window (tail-align would
+    // show [3, 4, 5, 6, 7] with future values on stale bars).
+    expect(line.data.map((d) => d.value)).toEqual([1, 2, 3, 4, 5]);
+    const tip = line.data[line.data.length - 1]!;
+    expect(tip.time).toBe(bars[bars.length - 1]!.time);
+    expect(tip.value).toBe(5);
+  });
+
+  it('tail-aligns a longer session-tick series grown inside the slack window', async () => {
+    const bars = SAMPLE_BARS;
+    setManager({
+      getPane: (id: string) =>
+        id === 'price'
+          ? { id: 'price', type: 'price', chart: {}, series: {}, priceLines: {} }
+          : undefined,
+      syncOverlayLines: (paneId: string, lines: CapturedApply['lines']) => {
+        captured.push({ paneId, lines });
+      },
+      syncBgcolorBands: () => {},
+    } as never);
+
+    // A live session that outgrew the chart window (growth inside
+    // SESSION_GROWTH_SLACK) without shipping a bar-time axis: the index
+    // fallback still pins the newest engine value to the newest chart bar.
+    const precomputed: RunResult = {
+      status: 'success',
+      plots: [],
+      series: { plot0: [1, 2, 3, 4, 5, 6, 7] },
+      events: [],
+      meta: {
+        sessionVia: 'session-tick',
+        session_id: 's9',
+        overlay: true,
+        script_name: 'eo',
+        plot_meta: { plot0: {} },
+      },
+    };
+    const r = await runAndApply(SCRIPT, undefined, {
+      silent: true,
+      openResults: false,
+      precomputedResult: precomputed,
+    });
+    expect(r.status).toBe('success');
+
+    const line = captured[captured.length - 1]!.lines[0]!;
+    expect(line.data).toHaveLength(bars.length);
+    // session-* hits used to skip alignment entirely: the longer series
+    // head-aligned as [1, 2, 3, 4, 5]. The tail fallback keeps the newest values.
+    expect(line.data.map((d) => d.value)).toEqual([3, 4, 5, 6, 7]);
+    const tip = line.data[line.data.length - 1]!;
+    expect(tip.time).toBe(bars[bars.length - 1]!.time);
+    expect(tip.value).toBe(7);
   });
 });

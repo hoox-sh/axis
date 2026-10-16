@@ -31,6 +31,7 @@
 
 import type { Bar } from '../store/types';
 import type { EngineDataSessionRequest } from '../plugins/types';
+import { normalizeHistoricalBars } from '../data/parse-bars';
 
 /** Max bars per `POST /data/series/provide` request (contract). */
 export const DATA_PROVIDE_CHUNK = 5_000;
@@ -238,7 +239,15 @@ export async function fetchDataSeries(
   return { fetched: num(r.body.fetched) ?? 0, count: num(r.body.count) ?? 0 };
 }
 
-/** `GET /data/series/bars` — newest window for chart paint (caller keeps it in memory only). */
+/** `GET /data/series/bars` — newest window for chart paint (caller keeps it in memory only).
+ *
+ * Engine bars go through the same normalization as venue bars
+ * ({@link normalizeHistoricalBars}: ms→seconds via `toUnixSeconds`, `sanitizeBar`
+ * repair/drop of null-NaN OHLC, dedupe by time with last-wins, sort ascending).
+ * Always returns chart-safe `Bar[]` in unix seconds — never ms times or
+ * unsorted data — so `setBarsQuiet` / `setDataToChart` cannot hit the LWC
+ * `Value is null` path on engine-owned paints.
+ */
 export async function getDataSeriesBars(
   endpoint: string,
   apiKey: string,
@@ -255,10 +264,7 @@ export async function getDataSeriesBars(
   );
   if (!r.ok) throw new Error(errorMessage(r, 'series bars failed'));
   const raw = Array.isArray(r.body.bars) ? r.body.bars : [];
-  return raw.filter(
-    (b): b is Bar =>
-      !!b && typeof b === 'object' && Number.isFinite((b as Bar).time),
-  );
+  return normalizeHistoricalBars(raw);
 }
 
 export interface DataSessionCreateInput {
@@ -420,24 +426,29 @@ async function defaultLocalBars(key: DataSeriesKey): Promise<readonly Bar[]> {
  * Create a data session, brokering cache misses:
  *
  * 1. create → hit returns immediately;
- * 2. miss + local Data Manager bars → upload the newest `historyBars` (provide) → retry;
- * 3. still short → ask the engine to fetch `historyBars` from its exchange → retry;
+ * 2. miss + shared series provisioning (one local upload or engine fetch per
+ *    `(endpoint, series)`, awaited by concurrent owners) → retry;
+ * 3. still short after a local upload → clamp the window to what the engine
+ *    holds and retry once (the apply path tail-aligns the shorter series);
  * 4. still missing → throw (no endless loop).
  *
  * Only identity and script leave the browser; bars travel only in step 2, and
  * only when the Data Manager already holds them.
  */
 export async function ensureDataSession(opts: EnsureDataSessionOptions): Promise<DataSessionHandle> {
+  const need = Math.max(1, Math.floor(opts.historyBars));
   const input: DataSessionCreateInput = {
     key: opts.key,
-    historyBars: opts.historyBars,
+    historyBars: need,
     script: opts.script,
     inputs: opts.inputs,
     libraries: opts.libraries,
     profiler: opts.profiler,
     symbol: opts.symbol,
   };
-  const attempt = () => createDataSession(opts.endpoint, opts.apiKey, input, opts.signal);
+  const memoKey = seriesProvisionMemoKey(opts.endpoint, opts.key);
+  const attempt = (historyBars: number = need) =>
+    createDataSession(opts.endpoint, opts.apiKey, { ...input, historyBars }, opts.signal);
 
   const first = await attempt();
   if (first.ok) {
@@ -445,49 +456,64 @@ export async function ensureDataSession(opts: EnsureDataSessionOptions): Promise
   }
   if (!('miss' in first)) throw new Error(first.error);
 
-  let provisioned: DataSessionHandle['provisioned'] = 'none';
-  const local = await (opts.localBars ?? (() => defaultLocalBars(opts.key)))();
-  if (local.length) {
-    const tail = local.slice(-Math.max(1, Math.floor(opts.historyBars)));
-    await provideDataSeries(opts.endpoint, opts.apiKey, opts.key, tail, 'axis-local', opts.signal);
-    provisioned = 'local';
-    const second = await attempt();
-    if (second.ok) {
-      return { sessionId: second.sessionId, payload: second.payload, provisioned };
+  // Series memo fast path: a sibling owner (or the chart session) already
+  // filled this window, so the miss may be stale — a concurrent provision that
+  // landed between our create and now, or a restarted engine view. One cheap
+  // create retries before paying for another full multi-chunk upload. The
+  // retry is the correctness check — the engine stays the source of truth and
+  // the memo is only a skip-upload hint, so a genuinely short engine simply
+  // misses again and falls through to provisioning below.
+  const memo = seriesProvisionMemo.get(memoKey);
+  if (memo && memo.historyBars >= need) {
+    const retry = await attempt();
+    if (retry.ok) {
+      return { sessionId: retry.sessionId, payload: retry.payload, provisioned: memo.via };
     }
-    if (!('miss' in second)) throw new Error(second.error);
-    // The engine still reports short — but it now holds exactly what we just
-    // uploaded. Ask for that count instead of the original window so a smaller
-    // local dataset still yields a session (the apply path tail-aligns the
-    // shorter series); never fall through to the exchange fetch for data the
-    // host may not be able to download (no ccxt on the host).
-    const have = Math.max(0, Math.floor(second.miss.have));
-    if (have > 0 && have < input.historyBars) {
-      const clamped = await createDataSession(
-        opts.endpoint,
-        opts.apiKey,
-        { ...input, historyBars: have },
-        opts.signal,
-      );
-      if (clamped.ok) {
-        return { sessionId: clamped.sessionId, payload: clamped.payload, provisioned };
-      }
-      if (!('miss' in clamped)) throw new Error(clamped.error);
-      throw new Error(
-        `data session still short after local upload: ${clamped.miss.key} have ${clamped.miss.have} / need ${clamped.miss.need}`,
-      );
-    }
+    if (!('miss' in retry)) throw new Error(retry.error);
   }
 
-  await fetchDataSeries(opts.endpoint, opts.apiKey, opts.key, opts.historyBars, opts.signal);
-  provisioned = 'fetch';
-  const third = await attempt();
-  if (third.ok) {
-    return { sessionId: third.sessionId, payload: third.payload, provisioned };
+  // Shared provisioning: concurrent owners converge on one fill (local upload
+  // or engine fetch) for the same series instead of each uploading the full
+  // window. Per-script sessions stay separate — only this step is shared.
+  const via = await sharedProvisionSeries(opts, need, memoKey);
+  const second = await attempt();
+  if (second.ok) {
+    return { sessionId: second.sessionId, payload: second.payload, provisioned: via };
   }
-  if (!('miss' in third)) throw new Error(third.error);
+  if (!('miss' in second)) throw new Error(second.error);
+  // The engine still reports short — but it now holds exactly what was just
+  // uploaded. Ask for that count instead of the original window so a smaller
+  // local dataset still yields a session (the apply path tail-aligns the
+  // shorter series); never fall through to the exchange fetch for data the
+  // host may not be able to download (no ccxt on the host).
+  const have = Math.max(0, Math.floor(second.miss.have));
+  if (via === 'local' && have > 0 && have < need) {
+    const clamped = await attempt(have);
+    if (clamped.ok) {
+      return { sessionId: clamped.sessionId, payload: clamped.payload, provisioned: via };
+    }
+    if (!('miss' in clamped)) throw new Error(clamped.error);
+    throw new Error(
+      `data session still short after local upload: ${clamped.miss.key} have ${clamped.miss.have} / need ${clamped.miss.need}`,
+    );
+  }
+  if (via === 'local') {
+    // The upload landed but the engine still cannot satisfy the window
+    // (nothing stuck, or a shape the create does not accept) — fall back to
+    // the engine fetch exactly as the unshared path did, then retry once.
+    await fetchDataSeries(opts.endpoint, opts.apiKey, opts.key, need, opts.signal);
+    noteSeriesProvisioned(memoKey, need, 'fetch');
+    const third = await attempt();
+    if (third.ok) {
+      return { sessionId: third.sessionId, payload: third.payload, provisioned: 'fetch' };
+    }
+    if (!('miss' in third)) throw new Error(third.error);
+    throw new Error(
+      `data session still short after fetch: ${third.miss.key} have ${third.miss.have} / need ${third.miss.need}`,
+    );
+  }
   throw new Error(
-    `data session still short after fetch: ${third.miss.key} have ${third.miss.have} / need ${third.miss.need}`,
+    `data session still short after fetch: ${second.miss.key} have ${second.miss.have} / need ${second.miss.need}`,
   );
 }
 
@@ -499,9 +525,104 @@ interface DataSessionMemo {
 
 const dataSessionMemo = new Map<string, DataSessionMemo>();
 
+/**
+ * Series-level provisioning memo: one entry per (endpoint, series), shared
+ * across owners. The owner memo above (endpoint|owner|series + script
+ * fingerprint) keeps per-script sessions for evaluation isolation — but the
+ * *provisioning* step that fills the engine's series is identical for every
+ * sibling indicator on the same chart, so without this every new indicator
+ * re-uploaded the full window (`DATA_PROVIDE_CHUNK × N` requests).
+ *
+ * Correctness: the entry records the largest window this client is known to
+ * have filled. Reuse is verified, never trusted — a covered miss still
+ * retries the create first, and the engine (source of truth) must answer hit
+ * before any upload is skipped. Coverage only ever grows (`take max`); a
+ * larger window re-provisions and widens it. The endpoint is part of the key
+ * so provisioning never leaks across engines.
+ */
+interface SeriesProvision {
+  /** Largest window this client is known to have filled on the engine. */
+  historyBars: number;
+  /** How the recorded window was filled. */
+  via: 'local' | 'fetch';
+  /** Wall clock of the recording (introspection only). */
+  at: number;
+}
+
+const seriesProvisionMemo = new Map<string, SeriesProvision>();
+/**
+ * In-flight fills shared across owners. Concurrent indicator adds / reruns
+ * stampede `ensureDataSession` together; the first caller uploads (or fetches)
+ * while the rest await the same promise instead of each paying a full upload.
+ */
+const seriesProvisionInflight = new Map<string, Promise<'local' | 'fetch'>>();
+
+function seriesProvisionMemoKey(endpoint: string, key: DataSeriesKey): string {
+  return `${endpoint.replace(/\/$/, '')}|${seriesKeyString(key)}`;
+}
+
+function noteSeriesProvisioned(memoKey: string, historyBars: number, via: 'local' | 'fetch'): void {
+  const need = Math.max(1, Math.floor(historyBars));
+  const prev = seriesProvisionMemo.get(memoKey);
+  if (prev && prev.historyBars >= need) return;
+  seriesProvisionMemo.set(memoKey, { historyBars: need, via, at: Date.now() });
+}
+
+/**
+ * Fill the engine's series once per (endpoint, series): upload the newest
+ * local window when the Data Manager holds it, else ask the engine to fetch
+ * from its exchange feed. Concurrent owners share the in-flight fill.
+ */
+function sharedProvisionSeries(
+  opts: EnsureDataSessionOptions,
+  need: number,
+  memoKey: string,
+): Promise<'local' | 'fetch'> {
+  const inflight = seriesProvisionInflight.get(memoKey);
+  if (inflight) return inflight;
+  const task = (async (): Promise<'local' | 'fetch'> => {
+    const local = await (opts.localBars ?? (() => defaultLocalBars(opts.key)))();
+    if (local.length) {
+      const tail = local.slice(-need);
+      await provideDataSeries(opts.endpoint, opts.apiKey, opts.key, tail, 'axis-local', opts.signal);
+      noteSeriesProvisioned(memoKey, need, 'local');
+      return 'local';
+    }
+    await fetchDataSeries(opts.endpoint, opts.apiKey, opts.key, need, opts.signal);
+    noteSeriesProvisioned(memoKey, need, 'fetch');
+    return 'fetch';
+  })();
+  seriesProvisionInflight.set(memoKey, task);
+  const release = (): void => {
+    if (seriesProvisionInflight.get(memoKey) === task) seriesProvisionInflight.delete(memoKey);
+  };
+  // Handled (not floating): the derived promise always resolves; dwelling
+  // requesters observe the original task's outcome.
+  task.then(release, release);
+  return task;
+}
+
 /** @internal test helper */
 export function _resetDataSessionMemo(): void {
   dataSessionMemo.clear();
+  // Provisioning shares fate with sessions in tests: a stale series entry
+  // would let a later case skip the upload path it means to exercise.
+  seriesProvisionMemo.clear();
+  seriesProvisionInflight.clear();
+}
+
+/** @internal test helper — drop only the series provisioning memo. */
+export function _resetSeriesProvisionMemoForTests(): void {
+  seriesProvisionMemo.clear();
+  seriesProvisionInflight.clear();
+}
+
+/** @internal test helper — recorded coverage for (endpoint, series). */
+export function _getSeriesProvisionForTests(
+  endpoint: string,
+  key: DataSeriesKey,
+): SeriesProvision | null {
+  return seriesProvisionMemo.get(seriesProvisionMemoKey(endpoint, key)) ?? null;
 }
 
 /**

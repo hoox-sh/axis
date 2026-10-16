@@ -73,7 +73,7 @@ export function looksLikeOhlcData(data: readonly unknown[]): boolean {
 }
 
 /**
- * Time range of the last successfully painted candle series (module-local).
+ * Time range of the last successfully painted candle series.
  *
  * Every overlay / equity / volume payload shares the chart's single time
  * scale with the candles. When a payload carries times outside the candle
@@ -81,14 +81,46 @@ export function looksLikeOhlcData(data: readonly unknown[]): boolean {
  * engine window is the classic case — LWC's renderer asks the candle PlotList
  * for an index it does not hold and throws `Value is null` on every paint.
  * Clamping co-painted payloads to this range keeps the shared scale covered.
+ *
+ * Scoping: the range is stored **per chart** — either passed explicitly to
+ * {@link clampPointsToPaintedRange} (preferred; `PaneManager` owns its own
+ * range so layout slot B can never inherit slot A's window) or, for legacy
+ * callers without a manager, in the module-global below. The global is a
+ * fallback only; new code must thread the per-chart range through.
  */
-let paintedCandleRange: { first: number; last: number } | null = null;
+export interface PaintedCandleRange {
+  first: number;
+  last: number;
+}
+
+/**
+ * Legacy module-global fallback for callers without a chart instance.
+ * Multi-chart unsafe by construction — prefer the per-chart range owned by
+ * `PaneManager` (`notePaintedCandleRange` / `extendPaintedCandleRange`).
+ */
+let paintedCandleRange: PaintedCandleRange | null = null;
 
 /** Record a successful candle paint (call after `setData` returns). */
 export function notePaintedCandleRange(first: number, last: number): void {
   if (Number.isFinite(first) && Number.isFinite(last) && last >= first) {
     paintedCandleRange = { first, last };
   }
+}
+
+/**
+ * Grow a painted range to cover a live appended bar without a full repaint.
+ * Pure — returns the (possibly new) range; never creates one from `null` so
+ * live ticks cannot arm the clamp before the first full paint.
+ */
+export function extendPaintedRange(
+  range: PaintedCandleRange | null,
+  time: unknown,
+): PaintedCandleRange | null {
+  if (typeof time !== 'number' || !Number.isFinite(time)) return range;
+  if (!range) return null;
+  if (time < range.first) return { first: time, last: range.last };
+  if (time > range.last) return { first: range.first, last: time };
+  return range;
 }
 
 /** Test helper — forget the painted range so clamping is a no-op again. */
@@ -99,18 +131,22 @@ export function resetPaintedCandleRangeForTests(): void {
 /**
  * Drop points outside the last painted candle range (both ends).
  *
- * No-op until the first candle paint, and a no-op for payloads already
- * inside the range. Order-preserving; whitespace `{ time }` rows are kept
- * when their time is in range. Points outside the candle range cannot render
- * against this chart anyway — they only extend the shared time scale past
- * the candles, which is what trips LWC's `Value is null` assertion.
+ * @param range - This chart's painted range. `undefined` falls back to the
+ *   legacy module-global (legacy callers); explicit `null` means "no range
+ *   recorded for this chart" and is always a no-op — even when another chart
+ *   has painted. No-op as well for payloads already inside the range.
+ *   Order-preserving; whitespace `{ time }` rows are kept when their time is
+ *   in range. Points outside the candle range cannot render against this chart
+ *   anyway — they only extend the shared time scale past the candles, which is
+ *   what trips LWC's `Value is null` assertion.
  */
 export function clampPointsToPaintedRange<T extends { time?: unknown }>(
   points: readonly T[],
+  range?: PaintedCandleRange | null,
 ): T[] {
-  const range = paintedCandleRange;
-  if (!range || points.length === 0) return [...points];
-  const { first, last } = range;
+  const active = range === undefined ? paintedCandleRange : range;
+  if (!active || points.length === 0) return [...points];
+  const { first, last } = active;
   const out: T[] = [];
   for (const p of points) {
     const t = p == null ? undefined : (p as { time?: unknown }).time;

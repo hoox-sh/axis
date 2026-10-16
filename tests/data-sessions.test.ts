@@ -21,6 +21,8 @@ import {
   ensureDataSession,
   runDataSession,
   _resetDataSessionMemo,
+  _resetSeriesProvisionMemoForTests,
+  _getSeriesProvisionForTests,
   _resetDataSessionCooldownForTests,
   DATA_PROVIDE_CHUNK,
 } from '../src/engines/data-sessions';
@@ -85,6 +87,7 @@ function bodyBars(c: Call): Array<Record<string, unknown>> {
 
 beforeEach(() => {
   _resetDataSessionMemo();
+  _resetSeriesProvisionMemoForTests();
   _resetDataSessionCooldownForTests();
 });
 
@@ -435,6 +438,223 @@ describe('runDataSession memo', () => {
     });
     expect(interactive.ok).toBe(false);
     expect(rec.calls.length).toBeGreaterThan(afterFirst);
+  });
+});
+
+describe('series provisioning memo (shared across owners)', () => {
+  const local = (bars: Bar[]) => async () => bars;
+  const bars5 = [bar(1), bar(2), bar(3), bar(4), bar(5)];
+
+  /** Variant of `recorder` that also captures the request host (endpoint isolation). */
+  function hostRecorder(
+    respond: (call: Call & { host: string }, host: string) => Response | Promise<Response>,
+  ): { calls: (Call & { host: string })[]; restore: () => void } {
+    const calls: (Call & { host: string })[] = [];
+    const restore = mockFetch(async (input, init) => {
+      const url = new URL(String(input));
+      const call: Call & { host: string } = {
+        method: init?.method ?? 'GET',
+        path: `${url.pathname}${url.search}`,
+        body: typeof init?.body === 'string' ? (JSON.parse(init.body) as Record<string, unknown>) : null,
+        host: url.host,
+      };
+      calls.push(call);
+      return respond(call, url.host);
+    });
+    return { calls, restore };
+  }
+
+  it('shares one upload across concurrent owners (sessions stay separate)', async () => {
+    const provided = new Set<string>();
+    let sessions = 0;
+    const rec = hostRecorder((c, host) => {
+      if (c.path === '/data/session') {
+        if (!provided.has(host)) {
+          return jsonResponse({ status: 'miss', code: 'DATA_MISS', key: 'k', have: 0, need: 3 }, 409);
+        }
+        sessions += 1;
+        return jsonResponse({ status: 'success', session_id: `s${sessions}` });
+      }
+      if (c.path === '/data/series/provide') {
+        provided.add(host);
+        return jsonResponse({ status: 'success', added: 3, updated: 0, count: 3 });
+      }
+      return jsonResponse({ status: 'error' }, 500);
+    });
+    restore = rec.restore;
+    const base = { endpoint: ENDPOINT, apiKey: '', key: KEY, historyBars: 3 };
+    const [a, b] = await Promise.all([
+      ensureDataSession({ ...base, script: 'script-a', localBars: local(bars5) }),
+      ensureDataSession({ ...base, script: 'script-b', localBars: local(bars5) }),
+    ]);
+    // Evaluation isolation: each script instance keeps its own session…
+    expect(a.sessionId).not.toBe(b.sessionId);
+    expect(a.provisioned).toBe('local');
+    expect(b.provisioned).toBe('local');
+    // …but the identical window is uploaded exactly once.
+    expect(rec.calls.filter((c) => c.path === '/data/series/provide')).toHaveLength(1);
+    expect(_getSeriesProvisionForTests(ENDPOINT, KEY)).toMatchObject({ historyBars: 3, via: 'local' });
+  });
+
+  it('reuses provisioning for a later owner without re-uploading', async () => {
+    let creates = 0;
+    let provides = 0;
+    let staleMissOnce = false;
+    const rec = recorder((c) => {
+      if (c.path === '/data/session') {
+        creates += 1;
+        if (creates === 1 || staleMissOnce) {
+          staleMissOnce = false;
+          return jsonResponse({ status: 'miss', code: 'DATA_MISS', key: 'k', have: 0, need: 3 }, 409);
+        }
+        return jsonResponse({ status: 'success', session_id: `s${creates}` });
+      }
+      provides += 1;
+      return jsonResponse({ status: 'success', added: 3, updated: 0, count: 3 });
+    });
+    restore = rec.restore;
+    const first = await ensureDataSession({
+      endpoint: ENDPOINT,
+      apiKey: '',
+      key: KEY,
+      historyBars: 3,
+      script: 'a',
+      localBars: local(bars5),
+    });
+    expect(first.provisioned).toBe('local');
+    expect(provides).toBe(1);
+    // A stale miss despite recorded coverage (restarted engine view): the
+    // memo retries the create, which hits — no second upload.
+    staleMissOnce = true;
+    const second = await ensureDataSession({
+      endpoint: ENDPOINT,
+      apiKey: '',
+      key: KEY,
+      historyBars: 3,
+      script: 'b',
+      localBars: local(bars5),
+    });
+    expect(second.provisioned).toBe('local');
+    expect(provides).toBe(1);
+    expect(creates).toBe(4);
+  });
+
+  it('re-provisions (taking max) when a later owner needs a larger window', async () => {
+    const providedSizes: number[] = [];
+    const rec = recorder((c) => {
+      if (c.path === '/data/session') {
+        const need = Number((c.body as { history_bars?: number } | null)?.history_bars || 0);
+        const have = providedSizes.length ? providedSizes[providedSizes.length - 1]! : 0;
+        if (have >= need) return jsonResponse({ status: 'success', session_id: `s${need}` });
+        return jsonResponse({ status: 'miss', code: 'DATA_MISS', key: 'k', have, need }, 409);
+      }
+      const n = bodyBars(c).length;
+      providedSizes.push(n);
+      return jsonResponse({ status: 'success', added: n, updated: 0, count: n });
+    });
+    restore = rec.restore;
+    const six = [...bars5, bar(6)];
+    const first = await ensureDataSession({
+      endpoint: ENDPOINT,
+      apiKey: '',
+      key: KEY,
+      historyBars: 3,
+      script: 'a',
+      localBars: local(six),
+    });
+    expect(first.provisioned).toBe('local');
+    const second = await ensureDataSession({
+      endpoint: ENDPOINT,
+      apiKey: '',
+      key: KEY,
+      historyBars: 5,
+      script: 'b',
+      localBars: local(six),
+    });
+    expect(second.provisioned).toBe('local');
+    // The 3-bar tail first, then the wider 5-bar window: coverage takes max.
+    expect(providedSizes).toEqual([3, 5]);
+    expect(_getSeriesProvisionForTests(ENDPOINT, KEY)).toMatchObject({ historyBars: 5, via: 'local' });
+  });
+
+  it('does not leak provisioning across endpoints', async () => {
+    const providedHosts: string[] = [];
+    const missed = new Set<string>();
+    const rec = hostRecorder((c, host) => {
+      if (c.path === '/data/session') {
+        if (!missed.has(host)) {
+          missed.add(host);
+          return jsonResponse({ status: 'miss', code: 'DATA_MISS', key: 'k', have: 0, need: 3 }, 409);
+        }
+        return jsonResponse({ status: 'success', session_id: `s-${host}` });
+      }
+      providedHosts.push(host);
+      return jsonResponse({ status: 'success', added: 3, updated: 0, count: 3 });
+    });
+    restore = rec.restore;
+    const other = 'http://pro-other.test';
+    await ensureDataSession({
+      endpoint: ENDPOINT,
+      apiKey: '',
+      key: KEY,
+      historyBars: 3,
+      script: 'a',
+      localBars: local(bars5),
+    });
+    expect(_getSeriesProvisionForTests(ENDPOINT, KEY)).toMatchObject({ historyBars: 3 });
+    expect(_getSeriesProvisionForTests(other, KEY)).toBeNull();
+    await ensureDataSession({
+      endpoint: other,
+      apiKey: '',
+      key: KEY,
+      historyBars: 3,
+      script: 'a',
+      localBars: local(bars5),
+    });
+    expect(providedHosts).toEqual(['pro.test', 'pro-other.test']);
+  });
+
+  it('runDataSession: a new script instance reuses the uploaded series', async () => {
+    let creates = 0;
+    let provides = 0;
+    const rec = recorder((c) => {
+      if (c.method === 'DELETE') return jsonResponse({ status: 'success' });
+      if (c.path === '/data/session') {
+        creates += 1;
+        if (creates === 1) {
+          return jsonResponse({ status: 'miss', code: 'DATA_MISS', key: 'k', have: 0, need: 3 }, 409);
+        }
+        return jsonResponse({ status: 'success', session_id: `s${creates}` });
+      }
+      if (c.path === '/data/series/provide') {
+        provides += 1;
+        return jsonResponse({ status: 'success', added: 3, updated: 0, count: 3 });
+      }
+      return jsonResponse({ status: 'error' }, 500);
+    });
+    restore = rec.restore;
+    const req = { ...KEY, historyBars: 3 };
+    const a = await runDataSession({
+      endpoint: ENDPOINT,
+      apiKey: '',
+      owner: 'ind1',
+      request: req,
+      script: 'script-a',
+      localBars: local(bars5),
+    });
+    const b = await runDataSession({
+      endpoint: ENDPOINT,
+      apiKey: '',
+      owner: 'ind2',
+      request: req,
+      script: 'script-b',
+      localBars: local(bars5),
+    });
+    expect(a).toMatchObject({ ok: true });
+    expect(b).toMatchObject({ ok: true });
+    // Adding indicator N+1 reuses the already-uploaded engine series.
+    expect(provides).toBe(1);
+    expect(creates).toBe(3);
   });
 });
 

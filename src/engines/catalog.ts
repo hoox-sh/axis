@@ -228,6 +228,41 @@ export const DEFAULT_ENGINE_CAPABILITIES: EngineCapabilities = {
   dataSession: false,
 };
 
+/**
+ * Raw engine bar-time axis when the backend ships one alongside `series`
+ * (top-level `times` / `bar_times` / `barTimes`, or a `bars` time column).
+ * Returned un-normalized (unix seconds or Pine-ms); the indicator runner
+ * normalizes to chart seconds when it joins session series by time
+ * (`extractEngineResultTimes`). Undefined when the payload carries no axis —
+ * session hits then fall back to the evaluated window's own times.
+ */
+function payloadEngineTimes(payload: unknown): unknown[] | undefined {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return undefined;
+  }
+  const rec = payload as Record<string, unknown>;
+  for (const key of ['times', 'bar_times', 'barTimes'] as const) {
+    const v = rec[key];
+    if (Array.isArray(v) && v.length) return v as unknown[];
+  }
+  const bars = rec.bars;
+  if (Array.isArray(bars) && bars.length) {
+    const times: unknown[] = [];
+    for (const b of bars) {
+      if (Array.isArray(b)) {
+        if (b.length) times.push(b[0]);
+        continue;
+      }
+      if (b && typeof b === 'object') {
+        const row = b as Record<string, unknown>;
+        times.push(row.time ?? row.t ?? row.timestamp);
+      }
+    }
+    if (times.length) return times;
+  }
+  return undefined;
+}
+
 const LIVE_MODES: readonly EngineLiveMode[] = ['every-tick', 'bar-close'];
 
 /**
@@ -404,6 +439,11 @@ export const serverEngine: EnginePlugin = {
     );
     // Chart bars are unix seconds. Pine `time` / hour() / session clocks are ms.
     const pineBars = barsForPine(bars);
+    // Key for the resolved-run-mode memo. Defined before the data-session
+    // branch so engine-owned runs record it too — the live-session fast path
+    // gates on this memo, and a data-session evaluation is still a full run
+    // whose backend-resolved mode reflects reality.
+    const modeFields = { endpoint, script, mode, profiler: profilerOn };
 
     // Prefer engine meta; do not force true — runner resolves indicator/strategy defaults.
     // Shared by the REST fallback and the live-session fast path (same envelope shape).
@@ -413,6 +453,9 @@ export const serverEngine: EnginePlugin = {
       const restOverlay = normalizeOverlayFlag(payload.overlay ?? payload.meta?.overlay);
       const restName =
         payload.script_name || payload.meta?.script_name || 'plot';
+      // Bar-time axis for the apply path: session series are joined to the
+      // chart by time, not index tail-align (see `alignSeriesToTimes`).
+      const restTimes = payloadEngineTimes(payload);
       const restProfile = (payload.profile ?? payload.meta?.profile) as
         | Record<string, unknown>
         | undefined;
@@ -441,6 +484,8 @@ export const serverEngine: EnginePlugin = {
           run_id: payload.run_id as string | undefined,
           ...(restOverlay !== undefined ? { overlay: restOverlay } : {}),
           script_name: restName as string,
+          // Engine bar-time axis when the backend shipped one (apply joins by time).
+          ...(restTimes ? { engineTimes: restTimes } : {}),
           ...(restScriptType ? { script_type: restScriptType } : {}),
           plot_meta: payload.plot_meta || payload.meta?.plot_meta || {},
           inputs: payload.inputs,
@@ -482,6 +527,20 @@ export const serverEngine: EnginePlugin = {
         } satisfies RunResult;
       }
       const mapped = mapRestPayload(ds.payload);
+      // Data-session runs are full evaluations (engine-owned series), so they
+      // record the resolved mode like the bars-in REST/WS paths. Sessions
+      // always evaluate in interpret (no resumable compile state); older
+      // `/data/session` payloads carry no `mode`, so the fallback is
+      // interpret — never the requested mode, which would misreport an `auto`
+      // run the backend never resolved. Observable via `runModeAllowsSessions`.
+      const dsPayload = ds.payload as {
+        mode?: unknown;
+        meta?: { mode?: unknown };
+      };
+      await rememberResolvedRunMode(
+        modeFields,
+        dsPayload.mode ?? dsPayload.meta?.mode ?? 'interpret',
+      );
       return {
         ...mapped,
         meta: {
@@ -506,7 +565,6 @@ export const serverEngine: EnginePlugin = {
       typeof store.symbol === 'string' && store.symbol ? store.symbol : 'CHART';
     const sessionInterval =
       typeof store.interval === 'string' && store.interval ? store.interval : '1d';
-    const modeFields = { endpoint, script, mode, profiler: profilerOn };
     if (
       liveTick === true &&
       mode !== 'compile' &&
@@ -531,6 +589,13 @@ export const serverEngine: EnginePlugin = {
           });
           if (hit && hit.payload && typeof hit.payload === 'object') {
             const mapped = mapRestPayload(hit.payload);
+            // Bar-time axis for the apply path: prefer the engine's own axis
+            // when the envelope ships one, else the session's evaluated window
+            // (the continuity guards only return in-window hits). Session
+            // series are joined to the chart by time, not index tail-align.
+            const hitTimes =
+              payloadEngineTimes(hit.payload) ??
+              (hit.barTimes?.length ? hit.barTimes : undefined);
             return {
               ...mapped,
               meta: {
@@ -539,6 +604,7 @@ export const serverEngine: EnginePlugin = {
                 session_id: (hit.payload as { session_id?: unknown }).session_id as
                   | string
                   | undefined,
+                ...(hitTimes ? { engineTimes: hitTimes } : {}),
               },
             } satisfies RunResult;
           }
@@ -683,11 +749,17 @@ export const serverEngine: EnginePlugin = {
       }
       const elapsed = performance.now() - t0;
       const restBudget = Math.max(45_000, timeoutMs - elapsed);
-      const restTimeout = AbortSignal.timeout(restBudget);
-      const restSignal =
-        signal && typeof AbortSignal.any === 'function'
-          ? AbortSignal.any([restTimeout, signal])
-          : restTimeout;
+      // Fresh timeout per attempt: the 413 clamp and the legacy-`libraries`
+      // retries must not reuse `restSignal` — it already spent the first
+      // attempt's latency and could be near expiry when the retry starts.
+      // A fresh parent cancel after each attempt begins is still honoured.
+      const makeRestSignal = (): AbortSignal => {
+        const budget = AbortSignal.timeout(restBudget);
+        return signal && typeof AbortSignal.any === 'function'
+          ? AbortSignal.any([budget, signal])
+          : budget;
+      };
+      const restSignal = makeRestSignal();
       // mode must be in the JSON body — Pro API validates body only (query is legacy).
       const restMode = mode;
       const restBody = {
@@ -731,7 +803,7 @@ export const serverEngine: EnginePlugin = {
             method: 'POST',
             headers,
             body: JSON.stringify({ ...restBody, data: pineBars.slice(-maxBars) }),
-            signal: restSignal,
+            signal: makeRestSignal(),
           });
         }
       }
@@ -746,7 +818,7 @@ export const serverEngine: EnginePlugin = {
             body: JSON.stringify(
               clampedBars > 0 ? { ...legacy, data: pineBars.slice(-clampedBars) } : legacy,
             ),
-            signal: restSignal,
+            signal: makeRestSignal(),
           });
         }
       }

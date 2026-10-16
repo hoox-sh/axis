@@ -13,6 +13,18 @@ _Generated/updated: 2026-10-15 · 572 commits · describe-tag: `v2.24.3`_
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Engine-owned bars are normalized before chart paint.** `getDataSeriesBars` now runs the venue pipeline (`normalizeHistoricalBars`: ms→s, sanitize, dedupe last-wins, sort) so engine paints cannot hit the LWC `Value is null` path on ms times or unsorted data.
+- **Candle-range clamp is per-chart instead of global.** The painted range lives on the `PaneManager` instance, extends on live appends, and is a no-op without a recorded paint — slots no longer clamp each other and newest tips are not dropped.
+- **Session series join the chart by bar time, not index.** `alignSeriesToTimes` covers `data-session-*` and `session-*` hits via `meta.engineTimes` / live-session `barTimes`; index tail-align stays as fallback for time-less payloads.
+- **New indicators no longer re-upload the full window.** Series provisioning is memoized per endpoint+series (max coverage wins) with in-flight dedup; reapply and live reruns run bounded-concurrent on a shared epoch honoring plot-dependency levels.
+- **Engine-owned live paints are tip-aware and ordered.** `paintEngineOwned` diffs bars (noop/tip/append/full), paints tip-only when possible, and reruns wait for the paint chain to settle; `runBatch` handles free-tier 413 with `windowBars` meta like single runs.
+
+---
+
 ## [2.24.4] — 2026-10-15
 
 ### Fixed

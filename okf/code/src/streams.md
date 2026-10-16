@@ -7,7 +7,7 @@ tags: [code, streams]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-13T20:14:11Z
+  at: 2026-10-16T09:23:41Z
 sources:
   - id: tree
     resource: "src/streams"
@@ -19,7 +19,7 @@ okf_lock: generated
 # Files
 
 * `catalog.ts` — BUILTIN_STREAMS, StreamPlugin, _resetStreamRegistrationFlag, binanceStream, bybitStream, ccxtWsStream, coinbaseStream, defaultStreamForSource, ensureStreamsRegistered, foldVenueCandle, getStream, krakenStream
-* `multiplex.ts` — HEAVY_LIVE_RERUN_BARS, StopLiveOpts, StopLiveReason, StreamPlugin, _getLiveEpochForTests, _getPendingLiveBarCountForTests, _getRerunAttemptCountForTests, _resetMultiplexForTests, defaultStreamForSource, effectiveLiveRerunMode, getAvailableStreams, listStreams
+* `multiplex.ts` — ENGINE_OWNED_APPEND_CAP, EngineOwnedPaintDiff, HEAVY_LIVE_RERUN_BARS, LIVE_RERUN_MAX_CONCURRENT, StopLiveOpts, StopLiveReason, StreamPlugin, _awaitEnginePaintForTests, _getLiveEpochForTests, _getPendingLiveBarCountForTests, _getRerunAttemptCountForTests, _resetMultiplexForTests
 * `reconnect-ws.ts` — RECONNECT_DEFAULTS, ReconnectableWsOpts, WsStatus, nextBackoffMs, openReconnectableWs
 * `ws-venues.ts` — VENUE_WS_HOSTS, VenueId, VenueWsConfig, buildVenueWs
 

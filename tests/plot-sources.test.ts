@@ -12,6 +12,8 @@ import {
   listPlotSourceOptions,
   resolveInputSourceValues,
   orderIndicatorsByPlotDeps,
+  groupIndicatorsByPlotDepLevel,
+  mapWithConcurrencyLimit,
   sourceOptionsWithPlots,
 } from '../src/results/plot-sources.ts';
 import { DEFAULT_SOURCE_OPTIONS } from '../src/results/script-inputs.ts';
@@ -77,5 +79,38 @@ describe('plot source refs', () => {
     // Insert reverse order
     const ordered = orderIndicatorsByPlotDeps([c, b, a]);
     expect(ordered.map((i) => i.id)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('groups producers before consumers, independents together', () => {
+    const a = { id: 'a', inputValues: { Source: 'close' } };
+    const solo = { id: 'solo', inputValues: { Length: 14 } };
+    const b = {
+      id: 'b',
+      inputValues: { Source: formatPlotSourceId('a', 'sma') },
+    };
+    const c = {
+      id: 'c',
+      inputValues: { Source: formatPlotSourceId('b', 'out') },
+    };
+    const levels = groupIndicatorsByPlotDepLevel([c, solo, b, a]);
+    // Level 0: producer + independent (input order preserved); then chain.
+    expect(levels.map((l) => l.map((i) => i.id))).toEqual([['solo', 'a'], ['b'], ['c']]);
+  });
+
+  it('levels an empty or single script without edges', () => {
+    expect(groupIndicatorsByPlotDepLevel([])).toEqual([]);
+    const one = { id: 'one' };
+    expect(groupIndicatorsByPlotDepLevel([one]).map((l) => l.map((i) => i.id))).toEqual([['one']]);
+  });
+
+  it('maps chunks concurrently in order', async () => {
+    const seen: number[] = [];
+    const out = await mapWithConcurrencyLimit([1, 2, 3, 4, 5], 2, async (n) => {
+      seen.push(n);
+      return n * 10;
+    });
+    expect(out).toEqual([10, 20, 30, 40, 50]);
+    // Chunked (1,2) then (3,4) then (5): order preserved.
+    expect(seen).toEqual([1, 2, 3, 4, 5]);
   });
 });

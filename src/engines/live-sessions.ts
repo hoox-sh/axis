@@ -83,7 +83,14 @@ import { parseEngineJson } from './json-sanitize';
 import type { EngineLibrarySource } from '../plugins/types';
 import type { Bar } from '../store/types';
 
-/** Bars past the chart window a session may grow before it is rebased. */
+/**
+ * Bars past the chart window a session may grow before it is rebased.
+ *
+ * Growth inside the slack still reaches the chart through session hits whose
+ * series is longer than the window — the indicator runner joins those series
+ * to the chart by bar time (`alignSeriesToTimes` over `LiveSessionHit.barTimes`),
+ * so the slack only bounds server memory / envelope size, never alignment.
+ */
 export const SESSION_GROWTH_SLACK = 2000;
 /** How far back to search for the session's last time in fresh bars. */
 const SESSION_LOOKUP_DEPTH = 512;
@@ -146,6 +153,19 @@ export interface LiveSessionHit {
   payload: unknown;
   via: LiveSessionVia;
   sessionId: string;
+  /**
+   * Bar times (Pine ms, i.e. `barsForPine` output) the returned envelope was
+   * evaluated over. The continuity guards only return hits whose session bars
+   * match the current chart window, so this is the window's own axis — the
+   * indicator runner joins session series to the chart by these times instead
+   * of index tail-align (which shifts when the session outgrew the window
+   * inside {@link SESSION_GROWTH_SLACK}).
+   */
+  barTimes?: number[];
+}
+
+function evaluatedBarTimes(bars: Bar[]): number[] {
+  return bars.map((b) => b.time);
 }
 
 interface SessionState {
@@ -620,7 +640,7 @@ async function createSession(
     lastReconciledAt: created,
     lastStatus: null,
   });
-  return { payload: res.payload, via: 'session-create', sessionId };
+  return { payload: res.payload, via: 'session-create', sessionId, barTimes: evaluatedBarTimes(opts.pineBars) };
 }
 
 /**
@@ -776,7 +796,7 @@ async function tryLiveSessionTickInner(
       return createSession(opts, key);
     }
     if (barSnapshot(last) === st.lastBar) {
-      return { payload: st.lastPayload, via: 'session-cached', sessionId: st.id };
+      return { payload: st.lastPayload, via: 'session-cached', sessionId: st.id, barTimes: evaluatedBarTimes(bars) };
     }
     const tick = await tickSession(opts, st, last);
     if (tick.kind !== 'ok') {
@@ -793,7 +813,7 @@ async function tryLiveSessionTickInner(
     st.lastBar = barSnapshot(last);
     st.lastPayload = tick.payload;
     st.lastUsedAt = Date.now();
-    return { payload: tick.payload, via: 'session-tick', sessionId: st.id };
+    return { payload: tick.payload, via: 'session-tick', sessionId: st.id, barTimes: evaluatedBarTimes(bars) };
   }
 
   // Series advanced (or shrank) — locate the session tip in the fresh bars.
@@ -822,7 +842,7 @@ async function tryLiveSessionTickInner(
   if (!tail.length) {
     // Count differs but no newer bars (duplicate stamps) — re-tick the tip.
     if (barSnapshot(last) === st.lastBar) {
-      return { payload: st.lastPayload, via: 'session-cached', sessionId: st.id };
+      return { payload: st.lastPayload, via: 'session-cached', sessionId: st.id, barTimes: evaluatedBarTimes(bars) };
     }
     const tick = await tickSession(opts, st, last);
     if (tick.kind !== 'ok') {
@@ -842,7 +862,7 @@ async function tryLiveSessionTickInner(
     st.lastPayload = tick.payload;
     st.closedHash = hashBars(bars, n - 2);
     st.lastUsedAt = Date.now();
-    return { payload: tick.payload, via: 'session-tick', sessionId: st.id };
+    return { payload: tick.payload, via: 'session-tick', sessionId: st.id, barTimes: evaluatedBarTimes(bars) };
   }
   // Tick-then-append: finalize the base with its current (closed) values
   // BEFORE appending, or append would confirm the stale forming values and
@@ -874,7 +894,7 @@ async function tryLiveSessionTickInner(
   // The appended tail is now closed history; fingerprint it for the next tick.
   st.closedHash = hashBars(bars, n - 2);
   st.lastUsedAt = Date.now();
-  return { payload: appended.payload, via: 'session-append', sessionId: st.id };
+  return { payload: appended.payload, via: 'session-append', sessionId: st.id, barTimes: evaluatedBarTimes(bars) };
 }
 
 /** Release every cached session (best-effort DELETE) and clear the cache. */

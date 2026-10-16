@@ -7,7 +7,7 @@ tags: [code, results]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-25T05:15:59Z
+  at: 2026-10-16T09:23:41Z
 sources:
   - id: tree
     resource: "src/results"
@@ -23,7 +23,7 @@ okf_lock: generated
 * `events.ts` — EventsToMarkersOptions, NormalizeOptions, StrategyFillMode, TradeMarker, alignTimeToBars, applyStrategyFills, buildEquityCurve, eventsToMarkers, formatTradeQty, isNoFillCloseEvent, normalizeStrategyEvent, normalizeStrategyEvents
 * `inline-debug.ts` — InlineDebugAnnotation, InlineDebugLevel, collapseAnnotationsByLine, collectInlineDebugAnnotations, filterPinableAnnotations, isPinableAnnotation, parseSourceLine
 * `pine-color.ts` — resolvePineColor
-* `plot-sources.ts` — IndicatorSeriesCache, PLOT_SOURCE_PREFIX, PlotSourceOption, formatPlotSourceId, isPlotSourceRef, listPlotSourceOptions, listStorePlotSourceOptions, orderIndicatorsByPlotDeps, parsePlotSourceId, resolveInputSourceValues, sourceOptionsWithPlots
+* `plot-sources.ts` — IndicatorSeriesCache, PLOT_SOURCE_PREFIX, PlotSourceOption, formatPlotSourceId, groupIndicatorsByPlotDepLevel, isPlotSourceRef, listPlotSourceOptions, listStorePlotSourceOptions, mapWithConcurrencyLimit, orderIndicatorsByPlotDeps, parsePlotSourceId, resolveInputSourceValues
 * `plot-visuals.ts` — BgcolorBandSpec, LineOverlaySpec, OhlcBarPoint, OhlcOverlaySpec, PLOT_DISPLAY, PlotFillBandSpec, PlotKind, PlotMetaEntry, PlotSeriesKind, SeriesMap, ShapeMarkerSpec, barcolorSeriesToMap
 * `positions.ts` — BuildPositionViewsOptions, PositionCloseFill, PositionFill, PositionView, StreamEventView, buildPositionViews
 * `profiler.ts` — ProfileLineStat, RunProfile, normalizeRunProfile, profileLineMap

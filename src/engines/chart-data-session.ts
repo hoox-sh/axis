@@ -30,6 +30,11 @@
  * per-indicator sessions the runner ticks. Both are bound to the same engine
  * series, so the engine's store is the single source of truth.
  *
+ * Bars for this session are re-read via `getDataSeriesBars`, which normalizes
+ * engine rows through the same venue pipeline (`normalizeHistoricalBars`:
+ * ms→seconds, `sanitizeBar`, dedupe last-wins, sort ascending) before they
+ * reach `setBarsQuiet` / `setDataToChart`.
+ *
  * @module engines/chart-data-session
  */
 

@@ -61,9 +61,9 @@ import {
 } from '../store';
 import { getManager, setDataToChart } from '../chart/manager-access';
 import { isReplayActive, stopReplaySession } from '../chart/bar-replay';
-import { isInteractiveRunInFlight, runAndApply } from '../indicators/runner';
+import { isInteractiveRunInFlight, runAndApply, beginRunEpoch } from '../indicators/runner';
 import { isStudyActive } from '../optimize/guard';
-import { orderIndicatorsByPlotDeps } from '../results/plot-sources';
+import { groupIndicatorsByPlotDepLevel, mapWithConcurrencyLimit } from '../results/plot-sources';
 import { detectScriptKind } from '../indicators/script-meta';
 import {
   getStream,
@@ -125,8 +125,86 @@ let rerunInFlight = false;
 /**
  * Serializes engine-owned chart paints (tick the engine's store, then re-read
  * its bars) so concurrent flushes never advance the store out of order.
+ * Indicator re-runs must wait for this chain to settle before evaluating —
+ * see the await gate in {@link scheduleRerun} and the post-paint scheduling in
+ * `paintEngineOwned` — or they read the stale pre-paint window and immediately
+ * re-run again next tick.
  */
 let enginePaintChain: Promise<unknown> = Promise.resolve();
+
+/**
+ * How freshly painted engine bars differ from `store.bars`.
+ * - `noop`: identical window — skip paint and re-run entirely.
+ * - `tip`: same window, only the forming bar moved — O(1) tip update.
+ * - `append`: same prefix plus a few new bars — per-bar `appendBar`.
+ * - `full`: window reshaped (history rewrite / depth change) — full repaint.
+ */
+export type EngineOwnedPaintDiff =
+  | { kind: 'noop' }
+  | { kind: 'tip' }
+  | { kind: 'append'; newBars: Bar[]; reviseTip: boolean }
+  | { kind: 'full' };
+
+/**
+ * New-bar cap for the incremental paint path. A larger catch-up (deep engine
+ * window vs a short venue-painted store) repaints once via `setData` instead
+ * of thousands of `series.update` calls.
+ */
+export const ENGINE_OWNED_APPEND_CAP = 16;
+
+function sameEngineOhlc(a: Bar, b: Bar): boolean {
+  return (
+    a.open === b.open &&
+    a.high === b.high &&
+    a.low === b.low &&
+    a.close === b.close &&
+    (a.volume ?? 0) === (b.volume ?? 0)
+  );
+}
+
+/**
+ * Diff freshly painted engine bars against the chart's current window so
+ * open-bar ticks take the O(1) tip path instead of a full `setData` repaint
+ * on every venue tick. Pure (no store/chart access) — unit-tested directly.
+ *
+ * Engine bars are normalized upstream (sorted ascending, deduped by time), so
+ * time comparison is positional: any slot mismatch means the engine rewrote
+ * history and the chart needs the full repaint.
+ */
+export function diffEngineOwnedBars(
+  cur: readonly Bar[],
+  next: readonly Bar[],
+): EngineOwnedPaintDiff {
+  if (!next.length) return { kind: 'noop' };
+  if (!cur.length) return { kind: 'full' };
+  if (next.length < cur.length) return { kind: 'full' };
+  if (next.length === cur.length) {
+    for (let i = 0; i < cur.length; i++) {
+      if (cur[i]!.time !== next[i]!.time) return { kind: 'full' };
+    }
+    // Times align — the only expected delta is the forming tip. Earlier bars
+    // could theoretically be revised under identical times, but the engine
+    // only advances its store per tick, so a tip match implies no visible
+    // change (a full O(N) value scan per tick is not worth it).
+    const tipCur = cur[cur.length - 1]!;
+    const tipNext = next[next.length - 1]!;
+    return sameEngineOhlc(tipCur, tipNext) ? { kind: 'noop' } : { kind: 'tip' };
+  }
+  const extra = next.length - cur.length;
+  if (extra <= ENGINE_OWNED_APPEND_CAP) {
+    for (let i = 0; i < cur.length; i++) {
+      if (cur[i]!.time !== next[i]!.time) return { kind: 'full' };
+    }
+    const prevTip = cur[cur.length - 1]!;
+    const overlapNext = next[cur.length - 1]!;
+    return {
+      kind: 'append',
+      newBars: next.slice(cur.length),
+      reviseTip: !sameEngineOhlc(prevTip, overlapNext),
+    };
+  }
+  return { kind: 'full' };
+}
 /** Test-only: increments each time a debounced live re-run is attempted. */
 let rerunAttemptCount = 0;
 /**
@@ -154,6 +232,17 @@ export function _getRerunAttemptCountForTests(): number {
 /** @internal Test helper — current live session epoch. */
 export function _getLiveEpochForTests(): number {
   return liveEpoch;
+}
+
+/**
+ * @internal Test helper — resolves when all queued engine-owned paints have
+ * settled. Never rejects (a failed paint still settles the chain).
+ */
+export function _awaitEnginePaintForTests(): Promise<void> {
+  return enginePaintChain.then(
+    () => {},
+    () => {},
+  );
 }
 
 /** @internal Test helper — queued live bars awaiting flush. */
@@ -187,6 +276,9 @@ function cancelPendingLiveBarFlush(): void {
 export function _resetMultiplexForTests(): void {
   liveEpoch += 1;
   cancelPendingLiveBarFlush();
+  // Drop the serialized paint chain so a prior case's in-flight paint cannot
+  // settle into (or delay) the next case's re-runs.
+  enginePaintChain = Promise.resolve();
   if (currentStop) {
     try {
       currentStop();
@@ -202,6 +294,12 @@ export function _resetMultiplexForTests(): void {
   rerunInFlight = false;
   rerunAttemptCount = 0;
 }
+
+/**
+ * Bound for concurrent scripts inside one live re-run level: enough to hide
+ * per-script round-trip latency, small enough not to burst the engine.
+ */
+export const LIVE_RERUN_MAX_CONCURRENT = 5;
 
 /** Registered stream plugins (built-in + dynamic). */
 export function getAvailableStreams(): StreamPlugin[] {
@@ -359,6 +457,13 @@ export function startLive(
    * tick of the chart's engine session (advancing the engine's store), then the
    * engine's bars are re-read and painted. Indicator reruns tick their own
    * per-script engine sessions against the same store.
+   *
+   * Paints serialize on `enginePaintChain`, and indicator re-runs are scheduled
+   * only once the paint settles (see below + the await gate in
+   * {@link scheduleRerun}) so the runner evaluates the freshly painted window
+   * instead of the stale pre-paint one. Unchanged windows (`noop`) skip both
+   * the paint and the re-run; forming-bar ticks take the O(1) tip path instead
+   * of a full `setData` repaint per venue tick.
    */
   const paintEngineOwned = (triggerBars: Bar[]) => {
     for (const b of triggerBars) {
@@ -375,34 +480,107 @@ export function startLive(
       Number.isFinite(store.rollingWindowBars) && store.rollingWindowBars > 0
         ? store.rollingWindowBars
         : 2000;
-    const run = async (): Promise<void> => {
-      const t = await tickChartDataSession(endpoint, apiKey, key);
-      if (!t.ok || !isCurrent()) return;
-      const proBars = await getDataSeriesBars(endpoint, apiKey, key, limit);
-      if (isCurrent() && proBars.length) {
-        // The engine's store is the source of truth, but the runner builds the
-        // overlay time axis from `store.bars` (`getOhlcvTimesForApply`) — without
-        // this sync the axis stays frozen at the load window, so indicator and
-        // strategy series never gain the new bars the engine evaluated. Memory
-        // only (no dataset write, no persist), and quiet so ChartHost does not
-        // re-fit the viewport; the paint below is this frame's chart update.
-        setBarsQuiet(proBars);
-        setDataToChart(proBars, { fit: false, clearMarkers: false });
-      }
-      // Introspection only: the engine's own session bookkeeping (bars / idle /
-      // TTL). Throttled inside the client, so this cannot add a request per tick.
-      const session = await refreshLiveSessionTelemetry();
-      if (isCurrent() && session) {
-        setTelemetryPlane('stream', {
-          detail:
-            `${sym} ${iv} · session ${session.bars ?? '?'} bars` +
-            (session.idleSeconds != null ? ` · idle ${Math.round(session.idleSeconds)}s` : '') +
-            (session.ttlSeconds != null ? ` · ttl ${Math.round(session.ttlSeconds)}s` : ''),
-        });
+    // Venue `closed` flags for bar-close rerun gating (engine bars carry no
+    // `closed` marker of their own).
+    const venueClosed = triggerBars.some((b) => b.closed);
+    const run = async (): Promise<{ painted: string; shouldRerun: boolean }> => {
+      try {
+        const t = await tickChartDataSession(endpoint, apiKey, key);
+        if (!t.ok || !isCurrent()) return { painted: 'failed', shouldRerun: false };
+        const proBars = await getDataSeriesBars(endpoint, apiKey, key, limit);
+        if (!isCurrent() || !proBars.length) {
+          return { painted: 'noop', shouldRerun: false };
+        }
+        const prevLastSeen = lastSeenBarTime;
+        const diff = diffEngineOwnedBars(store.bars, proBars);
+        if (diff.kind === 'noop') {
+          return { painted: 'noop', shouldRerun: false };
+        }
+        const manager = getManager();
+        if (diff.kind === 'tip') {
+          // Forming bar moved, window unchanged: update the tip in place
+          // (store path-set, no array clone) + O(1) `series.update`. The full
+          // `setBarsQuiet` + `setDataToChart` repaint is unnecessary here.
+          const tip = proBars[proBars.length - 1]!;
+          appendBar(tip);
+          if (manager) manager.appendBar(tip);
+          lastSeenBarTime = Math.max(lastSeenBarTime, tip.time);
+        } else if (diff.kind === 'append') {
+          // Same prefix plus a few new bars: revise the former tip first
+          // (it may have closed with final values), then extend per bar.
+          const curLen = store.bars.length;
+          if (diff.reviseTip && curLen > 0) {
+            const revised = proBars[curLen - 1]!;
+            appendBar(revised);
+            if (manager) manager.appendBar(revised);
+          }
+          for (const nb of diff.newBars) {
+            if (!isCurrent()) break;
+            // Store first (`PaneManager.appendBar` reads it for HA mapping),
+            // then the O(1) chart update.
+            appendBar(nb);
+            if (manager) manager.appendBar(nb);
+          }
+          const tip = proBars[proBars.length - 1]!;
+          lastSeenBarTime = Math.max(lastSeenBarTime, tip.time);
+        } else {
+          // The engine's store is the source of truth, but the runner builds the
+          // overlay time axis from `store.bars` (`getOhlcvTimesForApply`) — without
+          // this sync the axis stays frozen at the load window, so indicator and
+          // strategy series never gain the new bars the engine evaluated. Memory
+          // only (no dataset write, no persist), and quiet so ChartHost does not
+          // re-fit the viewport; the paint below is this frame's chart update.
+          setBarsQuiet(proBars);
+          setDataToChart(proBars, { fit: false, clearMarkers: false });
+          const tip = proBars[proBars.length - 1]!;
+          lastSeenBarTime = Math.max(lastSeenBarTime, tip.time);
+        }
+        // Introspection only: the engine's own session bookkeeping (bars / idle /
+        // TTL). Throttled inside the client, so this cannot add a request per tick.
+        const session = await refreshLiveSessionTelemetry();
+        if (isCurrent() && session) {
+          setTelemetryPlane('stream', {
+            detail:
+              `${sym} ${iv} · session ${session.bars ?? '?'} bars` +
+              (session.idleSeconds != null ? ` · idle ${Math.round(session.idleSeconds)}s` : '') +
+              (session.ttlSeconds != null ? ` · ttl ${Math.round(session.ttlSeconds)}s` : ''),
+          });
+        }
+        if (!isCurrent()) return { painted: diff.kind, shouldRerun: false };
+        // Heavy histories throttle every-tick → bar-close; an engine that
+        // advertises bar close only also falls back here — the stored
+        // preference itself is never rewritten.
+        const mode = effectiveLiveRerunMode(
+          liveRerunModeForEngine(store.live.rerunOn),
+          store.bars?.length ?? 0,
+        );
+        const tipTime = proBars[proBars.length - 1]!.time;
+        const timeAdvanced = tipTime > prevLastSeen;
+        const shouldRerun =
+          mode === 'every-tick' ? true : timeAdvanced || venueClosed;
+        return { painted: diff.kind, shouldRerun };
+      } catch {
+        // Tick / bars fetch failed — keep the last good series; no new data
+        // means no re-run (evaluating stale bars would just dirty `needsRerun`
+        // and re-run again next tick).
+        return { painted: 'failed', shouldRerun: false };
       }
     };
-    enginePaintChain = enginePaintChain.then(run, run);
-    if (isCurrent()) scheduleRerun();
+    const paint = enginePaintChain.then(run, run);
+    enginePaintChain = paint;
+    if (isCurrent()) {
+      // Schedule the re-run only once this paint settles so it evaluates the
+      // freshly painted bars. `scheduleRerun` coalesces bursts via its
+      // debounce + `needsRerun` gate, and re-checks the chain at fire time.
+      void paint.then(
+        (outcome) => {
+          if (isCurrent() && outcome?.shouldRerun) scheduleRerun();
+        },
+        () => {
+          /* run() never rejects; belt-and-braces */
+        },
+      );
+    }
   };
 
   /** Schedule a queue flush: rAF while visible, timer fallback while hidden. */
@@ -675,26 +853,64 @@ function scheduleRerun() {
       if (!store.live.needsRerun) setStore('live', 'needsRerun', true);
       return;
     }
+    // Engine-owned live: an engine paint may still be in flight — the paint
+    // chain (two engine round-trips) routinely resolves slower than this
+    // debounce. Wait for it so the cycle evaluates the freshly painted
+    // window instead of the stale pre-paint one (which left `needsRerun`
+    // dirty and re-ran again next tick). Only paints already queued are
+    // awaited — later ticks queue new links without starving this cycle.
+    if (isEngineOwnedLive()) {
+      try {
+        await enginePaintChain;
+      } catch {
+        /* failed paint still leaves the last good bars for evaluation */
+      }
+      if (liveEpoch !== epochAtSchedule || !store.live.active) return;
+      if (isInteractiveRunInFlight() || isStudyActive()) {
+        if (!store.live.needsRerun) setStore('live', 'needsRerun', true);
+        return;
+      }
+      if (rerunInFlight) {
+        if (!store.live.needsRerun) setStore('live', 'needsRerun', true);
+        return;
+      }
+    }
     rerunInFlight = true;
     rerunAttemptCount += 1;
     setStore('live', 'needsRerun', false);
     try {
-      // Producers of plot sources before consumers (cross-indicator input.source)
-      const ordered = orderIndicatorsByPlotDeps(
-        store.scripts.filter(isLiveRerunScript),
-      );
-      for (const ind of ordered) {
+      // One shared epoch for the cycle so concurrent members do not
+      // supersede each other's chart apply (a newer interactive Run still
+      // supersedes the whole cycle, as before). Producers of plot sources
+      // run in earlier levels; independent scripts inside a level run
+      // together, bounded.
+      const batch = beginRunEpoch();
+      const levels = groupIndicatorsByPlotDepLevel(store.scripts.filter(isLiveRerunScript));
+      for (const level of levels) {
         if (liveEpoch !== epochAtSchedule || !store.live.active) break;
         if (isInteractiveRunInFlight() || isStudyActive()) {
           if (!store.live.needsRerun) setStore('live', 'needsRerun', true);
           break;
         }
-        await runAndApply(ind.code, ind.id, {
-          silent: true,
-          openResults: false,
-          inputs: ind.inputValues,
-          strategyProps: ind.strategyProps,
-          liveTick: true,
+        await mapWithConcurrencyLimit(level, LIVE_RERUN_MAX_CONCURRENT, async (ind) => {
+          if (liveEpoch !== epochAtSchedule || !store.live.active) return;
+          if (isInteractiveRunInFlight() || isStudyActive()) {
+            if (!store.live.needsRerun) setStore('live', 'needsRerun', true);
+            return;
+          }
+          try {
+            await runAndApply(ind.code, ind.id, {
+              silent: true,
+              openResults: false,
+              inputs: ind.inputValues,
+              strategyProps: ind.strategyProps,
+              liveTick: true,
+              epoch: batch,
+            });
+          } catch {
+            // runAndApply never rejects (last-resort fence); belt-and-braces
+            // so one script cannot fail the whole live cycle.
+          }
         });
       }
     } finally {

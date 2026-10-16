@@ -7,7 +7,7 @@ tags: [code, indicators]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-14T00:33:46Z
+  at: 2026-10-16T09:23:41Z
 sources:
   - id: tree
     resource: "src/indicators"
@@ -21,10 +21,10 @@ okf_lock: generated
 * `IndicatorCard.tsx` — IndicatorCard
 * `IndicatorPanel.tsx` — IndicatorPanel
 * `detach.ts` — detachIndicatorFromChart
-* `reapply.ts` — ReapplyChartScriptsOpts, listReapplicableScripts, reapplyChartScripts
+* `reapply.ts` — REAPPLY_MAX_CONCURRENT, ReapplyChartScriptsOpts, _resetBatchRouteMemoForTests, listReapplicableScripts, reapplyChartScripts
 * `run-helpers.ts` — NormalizedRunResult, _resetRunEpochForTests, beginRunEpoch, claimRunStatus, coercePlotSample, coerceSeriesSample, currentRunEpoch, formatRunError, getRunStatusEpoch, isInteractiveRunInFlight, isRunEpochCurrent, lineDataHasSample
 * `run-target.ts` — EditorRunMode, countChartScriptsForEditor, editorHasChartInstance, extractScriptTitle, findChartScriptForEditor, normalizeScriptSource, pickPreferredScript, resolveScriptDisplayName, runFromEditor
-* `runner.ts` — NormalizedRunResult, RunOptions, RunResult, StrategyPropsPrecedenceOpts, _resetOhlcvTimesCacheForTests, _resetRunEpochForTests, applyRollingWindow, beginRunEpoch, claimRunStatus, coercePlotSample, currentRunEpoch, formatRunError
+* `runner.ts` — NormalizedRunResult, RunOptions, RunResult, StrategyPropsPrecedenceOpts, _resetOhlcvTimesCacheForTests, _resetRunEpochForTests, alignSeriesToTimes, applyRollingWindow, beginRunEpoch, claimRunStatus, coercePlotSample, currentRunEpoch
 * `script-meta.ts` — EngineFamily, LastRunStatus, LiveRerunOn, ScriptKind, activeChartContext, cycleLiveRerunOn, detectDeclaredOverlay, detectPineVersion, detectScriptKind, engineFamily, engineFamilyLabel, formatScriptUpdatedAt
 * `visibility.ts` — clearScriptChartOverlays, setScriptChartVisible, toggleScriptChartVisible
 

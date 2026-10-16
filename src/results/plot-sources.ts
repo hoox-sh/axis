@@ -159,6 +159,75 @@ export function resolveInputSourceValues(
 }
 
 /**
+ * Group indicators into dependency levels so producers of plot sources run
+ * before consumers while independent scripts in the same level can run
+ * together. Level 0 holds scripts with no plot-source deps on the group;
+ * each higher level depends only on strictly lower levels, so levels run in
+ * ascending order (sequentially) with bounded concurrency *within* a level.
+ * Original order is preserved inside a level. Cycles fall back to level 0
+ * for the cyclic members (same spirit as {@link orderIndicatorsByPlotDeps}).
+ */
+export function groupIndicatorsByPlotDepLevel<
+  T extends { id: string; inputValues?: Record<string, unknown> },
+>(indicators: T[]): T[][] {
+  if (!indicators.length) return [];
+  if (indicators.length === 1) return [indicators.slice()];
+  const byId = new Map(indicators.map((i) => [i.id, i]));
+  const depth = new Map<string, number>();
+  const visit = (id: string, stack: Set<string>): number => {
+    const cached = depth.get(id);
+    if (cached !== undefined) return cached;
+    const ind = byId.get(id);
+    if (!ind || stack.has(id)) return 0;
+    stack.add(id);
+    let d = 0;
+    const vals = ind.inputValues || {};
+    for (const v of Object.values(vals)) {
+      const ref = parsePlotSourceId(v);
+      if (!ref || ref.indicatorId === id || !byId.has(ref.indicatorId)) continue;
+      d = Math.max(d, visit(ref.indicatorId, stack) + 1);
+    }
+    stack.delete(id);
+    depth.set(id, d);
+    return d;
+  };
+  for (const ind of indicators) visit(ind.id, new Set());
+  const levels = new Map<number, T[]>();
+  for (const ind of indicators) {
+    const d = depth.get(ind.id) ?? 0;
+    const list = levels.get(d);
+    if (list) list.push(ind);
+    else levels.set(d, [ind]);
+  }
+  return [...levels.keys()]
+    .sort((a, b) => a - b)
+    .map((k) => levels.get(k)!);
+}
+
+/**
+ * Map `items` through `fn` in bounded-concurrency chunks (order-preserving).
+ * A middle ground between serial `for await` (N round-trips of latency) and
+ * unbounded `Promise.all` (N sockets at once): each chunk of `limit` runs
+ * together, chunks run sequentially. `fn` should not reject — wrap fallible
+ * work inside it, because a rejection aborts the remaining chunks (already
+ * resolved chunk results are still returned by the caller).
+ */
+export async function mapWithConcurrencyLimit<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const n = Math.max(1, Math.floor(limit) || 1);
+  const out: R[] = new Array(items.length);
+  for (let i = 0; i < items.length; i += n) {
+    const chunk = items.slice(i, i + n);
+    const results = await Promise.all(chunk.map((item, j) => fn(item, i + j)));
+    for (let j = 0; j < results.length; j++) out[i + j] = results[j]!;
+  }
+  return out;
+}
+
+/**
  * Order indicators so producers of plot sources run before consumers.
  * Falls back to original order when no edges / cycles.
  */

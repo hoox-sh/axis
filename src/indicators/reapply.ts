@@ -30,9 +30,29 @@
 import { store } from '../store';
 import type { Indicator } from '../store/types';
 import type { BatchRunResult } from '../engines/batch';
-import { orderIndicatorsByPlotDeps } from '../results/plot-sources';
+import {
+  groupIndicatorsByPlotDepLevel,
+  mapWithConcurrencyLimit,
+  orderIndicatorsByPlotDeps,
+} from '../results/plot-sources';
 import { applyStrategyPropsToSource } from '../results/strategy-props';
 import { detectScriptKind } from './script-meta';
+
+/** Bounded fan-out for the per-script fallback runs (not the batch route). */
+export const REAPPLY_MAX_CONCURRENT = 5;
+
+/**
+ * Endpoints whose backend answered without a batch route. A missing route
+ * never appears spontaneously, so once seen it is skipped for the rest of the
+ * session — otherwise every reapply would pay a doomed batch round-trip on
+ * top of the N single runs it falls back to anyway.
+ */
+const batchRouteMissing = new Set<string>();
+
+/** @internal test helper */
+export function _resetBatchRouteMemoForTests(): void {
+  batchRouteMissing.clear();
+}
 
 export type ReapplyChartScriptsOpts = {
   /**
@@ -62,31 +82,37 @@ export function listReapplicableScripts(ids?: string[]): Indicator[] {
 }
 
 /**
- * One `POST /run/batch` for every eligible script on the current bars.
+ * Shared-bars batch runs for the reapply set.
  *
- * Eligible = the backend can express them in one request: no resolved `input.*`
- * overrides (the batch body has no per-script inputs) and a single shared
- * evaluation mode. Engine-owned live mode and non-server engines are excluded
- * outright — they have no bars-in REST route to batch over.
+ * Batchable = no resolved `input.*` overrides (the batch body has no
+ * per-script inputs) — those scripts stay on singles, the eligible subset is
+ * still batched instead of bailing the whole attempt. One evaluation mode per
+ * request: scripts group by `resolveServerRunMode` (a mixed bag batches per
+ * mode) and oversized groups split into backend-sized chunks fired together.
+ *
+ * Engine-owned live mode and non-server engines are excluded outright — they
+ * have no bars-in REST route to batch over (engine-owned evaluation ticks
+ * per-script sessions over the engine's own store; see `engines/batch.ts`).
  *
  * @returns id → result for the scripts the backend answered successfully, or
- *   null when batching does not apply / the route is missing. Per-script
- *   failures are simply absent from the map, so the caller falls back for them.
+ *   null when batching does not apply / the route is missing. Per-script and
+ *   per-chunk failures are simply absent from the map, so the caller falls
+ *   back for them.
  */
 async function runBatchReapply(
   scripts: Indicator[],
   still: () => boolean,
 ): Promise<Map<string, BatchRunResult> | null> {
   if (scripts.length < 2) return null;
-  if (scripts.some((s) => s.inputValues && Object.keys(s.inputValues).length > 0)) {
-    return null;
-  }
+  // Only scripts without resolved input overrides can share one request.
+  const batchable = scripts.filter((s) => !s.inputValues || Object.keys(s.inputValues).length === 0);
+  if (batchable.length < 2) return null;
   if (!still()) return null;
   const bars = store.bars;
   if (!Array.isArray(bars) || !bars.length) return null;
 
   try {
-    const [{ runBatch, RUN_BATCH_MAX_SCRIPTS }, active, { isEngineOwnedLive }, catalog] =
+    const [{ runBatch, RUN_BATCH_MAX_SCRIPTS, splitBatchScripts }, active, { isEngineOwnedLive }, catalog] =
       await Promise.all([
         import('../engines/batch'),
         import('../plugins/active'),
@@ -101,37 +127,71 @@ async function runBatchReapply(
       .trim()
       .replace(/\/$/, '');
     if (!endpoint) return null;
+    // Known-missing route: skip the doomed round-trip, go straight to singles.
+    if (batchRouteMissing.has(endpoint)) return null;
     const apiKey = String(cfg.apiKey || '').trim();
     if (!catalog.confirmEngineApiKeyTarget(endpoint, apiKey)) return null;
 
-    // One mode must hold for every script: `resolveServerRunMode` downgrades to
-    // interpret for profiler / Pine-alert scripts, and a mixed bag would need
-    // per-script modes the batch body cannot express.
+    // One mode must hold per request: `resolveServerRunMode` downgrades to
+    // interpret for profiler / Pine-alert scripts. Mixed bags batch per mode
+    // instead of skipping batching entirely.
     const profiler = !!store.profilerEnabled;
     const modeRaw = String(cfg.mode || 'auto');
-    const modes = new Set(scripts.map((s) => catalog.resolveServerRunMode(modeRaw, s.code, profiler)));
-    if (modes.size !== 1) return null;
-    const mode = [...modes][0]!;
-
-    const slice = scripts.slice(0, RUN_BATCH_MAX_SCRIPTS);
-    const outcome = await runBatch({
-      endpoint,
-      apiKey,
-      mode,
-      bars,
-      symbol: store.symbol,
-      profiler,
-      scripts: slice.map((s) => ({
-        id: s.id,
-        script: applyStrategyPropsToSource(s.code, s.strategyProps ?? {}),
-      })),
-    });
-    if (!outcome || outcome.error) return null;
-    const map = new Map<string, BatchRunResult>();
-    for (const entry of outcome.entries) {
-      if (entry.ok && entry.result) map.set(entry.id, entry.result);
+    const byMode = new Map<string, Indicator[]>();
+    for (const s of batchable) {
+      const mode = catalog.resolveServerRunMode(modeRaw, s.code, profiler);
+      const list = byMode.get(mode);
+      if (list) list.push(s);
+      else byMode.set(mode, [s]);
     }
-    return map;
+    // A lone script costs the same batched as single — leave it to singles.
+    const chunks: { mode: string; scripts: Indicator[] }[] = [];
+    for (const [mode, group] of byMode) {
+      if (group.length < 2) continue;
+      for (const slice of splitBatchScripts(group, RUN_BATCH_MAX_SCRIPTS)) {
+        chunks.push({ mode, scripts: slice });
+      }
+    }
+    if (!chunks.length || !still()) return null;
+
+    // Chunks fan out together; a failed chunk only costs its own request —
+    // its scripts fall back to singles below, never batch+N-singles twice
+    // for the same script.
+    const settled = await Promise.all(
+      chunks.map((chunk) =>
+        runBatch({
+          endpoint,
+          apiKey,
+          mode: chunk.mode,
+          bars,
+          symbol: store.symbol,
+          profiler,
+          scripts: chunk.scripts.map((s) => ({
+            id: s.id,
+            script: applyStrategyPropsToSource(s.code, s.strategyProps ?? {}),
+          })),
+        }).catch(() => ({
+          entries: [],
+          allOk: false,
+          dataSource: null,
+          error: 'batch request failed',
+        })),
+      ),
+    );
+    const map = new Map<string, BatchRunResult>();
+    for (const outcome of settled) {
+      // Null with valid input means the route is missing — remember it so the
+      // next reapply skips straight to singles.
+      if (!outcome) {
+        batchRouteMissing.add(endpoint);
+        continue;
+      }
+      if (outcome.error) continue;
+      for (const entry of outcome.entries) {
+        if (entry.ok && entry.result) map.set(entry.id, entry.result);
+      }
+    }
+    return map.size ? map : null;
   } catch {
     // Batch is an optimization — any failure falls back to per-script runs.
     return null;
@@ -141,6 +201,10 @@ async function runBatchReapply(
 /**
  * Silently re-run all (or selected) visible chart scripts on current bars.
  * Safe to call after {@link setDataToChart} with fit/clear — restores overlays.
+ *
+ * Independent scripts evaluate concurrently (bounded); producers of plot
+ * sources still complete before their consumers. One shared run epoch covers
+ * the whole pass so members do not supersede each other.
  *
  * @returns number of scripts that completed without throw
  */
@@ -154,45 +218,49 @@ export async function reapplyChartScripts(
   const scripts = listReapplicableScripts(opts?.ids);
   if (!scripts.length) return 0;
 
-  const { runAndApply } = await import('./runner');
+  const { runAndApply, beginRunEpoch } = await import('./runner');
   // One shared round-trip when the backend supports it; the apply path below is
   // identical either way (a batched result is passed through as
   // `precomputedResult`, so panes / overlays / alerts behave the same).
   const batched = await runBatchReapply(scripts, still);
-  let ok = 0;
-  for (const ind of scripts) {
-    if (!still()) break;
+  // One shared epoch for the pass: members run concurrently without
+  // invalidating each other's chart apply (a newer interactive Run still
+  // supersedes the whole pass, as before).
+  const epoch = beginRunEpoch();
+  const warn = (ind: Indicator, detail: unknown): void => {
+    if (opts?.logErrors === false) return;
+    try {
+      console.warn(`[axis] reapply script ${ind.name || ind.id}:`, detail);
+    } catch {
+      /* ignore */
+    }
+  };
+  const runOne = async (ind: Indicator): Promise<boolean> => {
+    if (!still()) return false;
     try {
       const result = await runAndApply(ind.code, ind.id, {
         silent: true,
         openResults: false,
         inputs: ind.inputValues,
         strategyProps: ind.strategyProps,
+        epoch,
         ...(batched?.has(ind.id) ? { precomputedResult: batched.get(ind.id) } : {}),
       });
-      if (result && result.status !== 'error') ok += 1;
-      else if (result?.status === 'error' && opts?.logErrors !== false) {
-        try {
-          console.warn(
-            `[axis] reapply script ${ind.name || ind.id}:`,
-            result.error || 'error',
-          );
-        } catch {
-          /* ignore */
-        }
-      }
+      if (result && result.status !== 'error') return true;
+      if (result?.status === 'error') warn(ind, result.error || 'error');
+      return false;
     } catch (err: unknown) {
-      if (opts?.logErrors !== false) {
-        try {
-          console.warn(
-            `[axis] reapply script ${ind.name || ind.id} failed:`,
-            err instanceof Error ? err.message : err,
-          );
-        } catch {
-          /* ignore */
-        }
-      }
+      warn(ind, err instanceof Error ? err.message : err);
+      return false;
     }
+  };
+  let ok = 0;
+  // Producers of plot sources (cross-indicator input.source) run in earlier
+  // levels; independent scripts inside a level run together, bounded.
+  for (const level of groupIndicatorsByPlotDepLevel(scripts)) {
+    if (!still()) break;
+    const done = await mapWithConcurrencyLimit(level, REAPPLY_MAX_CONCURRENT, runOne);
+    for (const d of done) if (d) ok += 1;
   }
   return ok;
 }

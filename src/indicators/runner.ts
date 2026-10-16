@@ -181,11 +181,12 @@ export function applyRollingWindow(
 /**
  * Tail-align one series array to the chart window length (`ohlcvTimes.length`).
  *
- * Engine-owned data sessions (`meta.sessionVia` = `data-session-*`) evaluate the
- * engine's own store, which slides independently of `store.bars`: the session
- * appends bars while the local window keeps the newest Rolling-window slice, so
- * the response series can be longer than the chart axis. Every apply-path zip is
- * index-based (`lineSeriesToOverlayData`, markers, barcolors, fills), so the
+ * Session-backed runs (`meta.sessionVia` containing `session`: engine-owned
+ * `data-session-*` series and live-evaluation `session-*` hits) evaluate a bar
+ * window that slides independently of `store.bars`, so the response series can
+ * be longer, shorter, or offset from the chart axis. Every apply-path zip is
+ * index-based (`lineSeriesToOverlayData`, markers, barcolors, fills), so — when
+ * no engine bar-time axis is available for {@link alignSeriesToTimes} — the
  * tail must be pinned to the newest bar; a longer series is trimmed, a shorter
  * one head-padded with `null` (Pine `na` whitespace).
  */
@@ -204,6 +205,130 @@ function tailAlignSeriesMap(
   const out: Record<string, unknown[] | (number | null)[]> = {};
   for (const [key, arr] of Object.entries(series)) {
     out[key] = tailAlignSeriesToWindow(arr, len);
+  }
+  return out;
+}
+
+/**
+ * Coerce one bar/plot time to LWC unix seconds.
+ * Pine-ms (>1e12) → floor(ms/1000); non-finite → null.
+ */
+function normalizeEngineTime(t: unknown): number | null {
+  if (t == null) return null;
+  if (typeof t === 'boolean') return null;
+  const n = typeof t === 'number' ? t : Number(t);
+  if (!Number.isFinite(n)) return null;
+  return n > 1e12 ? Math.floor(n / 1000) : Math.floor(n);
+}
+
+/** Normalize a candidate time list to unix seconds, or null when unusable. */
+function normalizeTimeList(v: unknown): number[] | null {
+  if (!Array.isArray(v) || !v.length) return null;
+  const out: number[] = [];
+  for (const t of v) {
+    const n = normalizeEngineTime(t);
+    if (n != null) out.push(n);
+  }
+  return out.length ? out : null;
+}
+
+/** Bar times from a `bars`-shaped payload field (objects or `[t, …]` tuples). */
+function timesFromBars(v: unknown): number[] | null {
+  if (!Array.isArray(v) || !v.length) return null;
+  const raw: unknown[] = [];
+  for (const b of v) {
+    if (Array.isArray(b)) {
+      if (b.length) raw.push(b[0]);
+      continue;
+    }
+    if (b && typeof b === 'object') {
+      const rec = b as Record<string, unknown>;
+      raw.push(rec.time ?? rec.t ?? rec.timestamp);
+    }
+  }
+  return normalizeTimeList(raw);
+}
+
+/**
+ * Engine bar-time axis for a run result, when the backend shipped one.
+ *
+ * Checks `meta.engineTimes` first (stamped by the engine client from the
+ * payload's `times` / `bar_times` / `bars` fields or from the live-session's
+ * evaluated window), then loose top-level / `meta` fields. Times may be unix
+ * seconds or Pine-ms — both normalize to chart seconds. Null when the result
+ * carries no usable axis (index tail-align remains the fallback).
+ */
+export function extractEngineResultTimes(result: unknown): number[] | null {
+  if (!result || typeof result !== 'object') return null;
+  const rec = result as Record<string, unknown>;
+  const meta =
+    rec.meta && typeof rec.meta === 'object' && !Array.isArray(rec.meta)
+      ? (rec.meta as Record<string, unknown>)
+      : null;
+  const lists: unknown[] = [
+    meta?.engineTimes,
+    meta?.times,
+    meta?.bar_times,
+    meta?.barTimes,
+    rec.times,
+    rec.bar_times,
+    rec.barTimes,
+  ];
+  for (const c of lists) {
+    const norm = normalizeTimeList(c);
+    if (norm) return norm;
+  }
+  for (const c of [meta?.bars, rec.bars]) {
+    const fromBars = timesFromBars(c);
+    if (fromBars) return fromBars;
+  }
+  return null;
+}
+
+/**
+ * Join one series array onto the chart window by **bar time**.
+ *
+ * Builds a `resultTime → value` map (duplicate stamps: last wins) and emits
+ * one entry per chart time; chart bars the engine never evaluated become
+ * `null` (Pine `na` whitespace) and engine values for bars outside the chart
+ * window are dropped. Unlike pure index tail-align this stays correct when the
+ * engine series is longer AND newer than the chart (a newer engine tip must
+ * not be pinned onto an older chart bar).
+ *
+ * Falls back to {@link tailAlignSeriesToWindow} when there is no usable engine
+ * axis, or when the axis does not describe this series 1:1 (length mismatch) —
+ * the index fallback is the only option left for time-less payloads.
+ */
+export function alignSeriesToTimes(
+  values: unknown,
+  resultTimes: readonly unknown[] | null | undefined,
+  chartTimes: readonly number[],
+): unknown[] {
+  const len = chartTimes.length;
+  const arr = Array.isArray(values) ? values : [];
+  const rt = normalizeTimeList(resultTimes);
+  if (!rt || rt.length !== arr.length) {
+    return tailAlignSeriesToWindow(arr, len);
+  }
+  const byTime = new Map<number, unknown>();
+  for (let i = 0; i < rt.length; i++) byTime.set(rt[i] as number, arr[i]);
+  const out: unknown[] = new Array(len);
+  for (let i = 0; i < len; i++) {
+    const t = normalizeEngineTime(chartTimes[i]);
+    out[i] = t != null && byTime.has(t) ? byTime.get(t) : null;
+  }
+  return out;
+}
+
+/** Join every series in a `result.series` map by bar time (see {@link alignSeriesToTimes}). */
+function alignSeriesMapToTimes(
+  series: Record<string, unknown[] | (number | null)[]>,
+  resultTimes: readonly unknown[],
+  chartTimes: readonly number[],
+): Record<string, unknown[] | (number | null)[]> {
+  const out: Record<string, unknown[] | (number | null)[]> = {};
+  for (const [key, arr] of Object.entries(series)) {
+    out[key] = alignSeriesToTimes(arr, resultTimes, chartTimes);
   }
   return out;
 }
@@ -420,6 +545,11 @@ export interface RunOptions {
   /**
    * Existing run epoch from {@link runAndApply}. When set, skip claiming a
    * new epoch and use this for supersession checks (status / telemetry).
+   * `runAndApply` honors it too: pass one shared epoch for a concurrent
+   * silent batch (reapply / live reruns) so members do not supersede each
+   * other — each call would otherwise claim its own epoch and all but the
+   * last would skip chart apply. An interactive Run that starts mid-batch
+   * still claims a newer epoch and supersedes the whole batch, as before.
    */
   epoch?: number;
   /**
@@ -952,7 +1082,7 @@ export async function runAndApply(
     }
   }
 
-  const epoch = beginRunEpoch();
+  const epoch = opts.epoch ?? beginRunEpoch();
 
   try {
     const result = await runAndApplyInner(
@@ -1124,26 +1254,34 @@ async function runAndApplyInner(
     ...(((result as { plot_meta?: Record<string, PlotMetaEntry> }).plot_meta) || {}),
     ...((result.meta?.plot_meta || {}) as Record<string, PlotMetaEntry>),
   };
-  // Engine-owned data sessions (`meta.sessionVia` = data-session-*) evaluate the
-  // engine's own series, which slides independently of the local chart window:
-  // the session appends bars while `store.bars` keeps the newest Rolling window.
-  // A free-tier host that caps bars (`meta.windowBars`, set by the 413 clamp)
-  // also answers with a shorter series than the chart axis. Every zip in the
-  // apply path is index-based, so pin each series tail to the newest bar or
-  // values land `slack` bars early.
-  const engineOwnedSeries = String(result.meta?.sessionVia || '').startsWith('data-session');
+  // Session-backed runs (`meta.sessionVia` containing `session`: engine-owned
+  // `data-session-*` series and live-evaluation `session-*` hits) evaluate a bar
+  // window that slides independently of the local chart window: the engine
+  // appends bars while `store.bars` keeps its own slice, so the response series
+  // can be longer, shorter, or offset from the chart axis — including a session
+  // that outgrew the window inside SESSION_GROWTH_SLACK. A free-tier host that
+  // caps bars (`meta.windowBars`, set by the 413 clamp) also answers with a
+  // shorter series than the chart axis. Join each series to the chart by bar
+  // time when the engine shipped its axis (`meta.engineTimes`); otherwise pin
+  // the series tail to the newest bar (index fallback) so values never land
+  // `slack` bars early. Equal-length series pass through untouched either way.
+  const sessionVia = String(result.meta?.sessionVia || '');
+  const sessionAligned = sessionVia.includes('session');
   const chartWindowBars = ohlcvTimes.length;
   const engineWindowBars = Number(result.meta?.windowBars);
   const engineClampedTail =
     Number.isFinite(engineWindowBars) &&
     engineWindowBars > 0 &&
     engineWindowBars !== chartWindowBars;
-  const tailAligned = engineOwnedSeries || engineClampedTail;
-  const seriesMap = tailAligned
-    ? tailAlignSeriesMap(result.series || {}, chartWindowBars)
-    : result.series || {};
+  const needsAlign = sessionAligned || engineClampedTail;
+  const resultTimes = needsAlign ? extractEngineResultTimes(result) : null;
+  const seriesMap = !needsAlign
+    ? result.series || {}
+    : resultTimes
+      ? alignSeriesMapToTimes(result.series || {}, resultTimes, ohlcvTimes)
+      : tailAlignSeriesMap(result.series || {}, chartWindowBars);
   const split = splitSeriesByKind(seriesMap, plotMeta);
-  if (engineClampedTail && !silent) {
+  if (engineClampedTail && !sessionAligned && !silent) {
     appendLog(
       'info',
       `Engine bar cap: evaluated newest ${Math.round(engineWindowBars)} bars (free tier)`,
@@ -1396,7 +1534,11 @@ async function runAndApplyInner(
     // Skip all-null pads (modern engines still send plots: [null, …]).
     if (!split.bgcolors.length && !split.shapes.length && !split.ohlc.length) {
       const data = toLineData(
-        tailAligned ? tailAlignSeriesToWindow(result.plots, chartWindowBars) : result.plots,
+        !needsAlign
+          ? result.plots
+          : resultTimes
+            ? alignSeriesToTimes(result.plots, resultTimes, ohlcvTimes)
+            : tailAlignSeriesToWindow(result.plots, chartWindowBars),
       );
       if (lineDataHasSample(data)) {
         const userColor =

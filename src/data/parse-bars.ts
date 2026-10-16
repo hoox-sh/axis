@@ -87,6 +87,9 @@ function toUnixSeconds(raw: unknown): number | null {
   return normalizeBarTime(raw);
 }
 
+/** Public alias: coerce any timestamp to unix seconds (ms→s, ISO→s). */
+export { toUnixSeconds };
+
 /**
  * Pine `time` is unix milliseconds. Chart bars store unix seconds.
  * Values already in ms (>= 1e11) pass through.

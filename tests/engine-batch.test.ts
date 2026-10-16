@@ -10,7 +10,7 @@
 import './setup';
 import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
 import { mockFetch, jsonResponse } from './helpers/mock-fetch';
-import { runBatch, RUN_BATCH_MAX_SCRIPTS } from '../src/engines/batch';
+import { runBatch, RUN_BATCH_MAX_SCRIPTS, splitBatchScripts } from '../src/engines/batch';
 import { SAMPLE_BARS } from './fixtures/bars';
 
 const ENDPOINT = 'http://batch.test:5002';
@@ -158,6 +158,41 @@ describe('runBatch', () => {
     expect(outcome?.error).toBe('TOO_MANY_SCRIPTS');
   });
 
+  it('retries once with the newest max_bars slice after a 413 bar cap', async () => {
+    let attempts = 0;
+    install((call) => {
+      attempts += 1;
+      if (attempts === 1) {
+        // Full window refused: free-tier cap of 2 bars.
+        expect((call.body!.data as unknown[]).length).toBe(SAMPLE_BARS.length);
+        return jsonResponse(
+          { status: 'error', message: 'free-tier limit (2 bars)', max_bars: 2 },
+          413,
+        );
+      }
+      return jsonResponse({
+        status: 'success',
+        results: [successEntry('ind-a'), successEntry('ind-b')],
+        count: 2,
+        ok: 2,
+        data_source: 'chart',
+      });
+    });
+    const outcome = await runBatch({ endpoint: ENDPOINT, scripts: twoScripts, bars: SAMPLE_BARS });
+    expect(attempts).toBe(2);
+    expect(calls.length).toBe(2);
+    // Retry ships only the newest `max_bars` bars.
+    expect((calls[1]!.body!.data as unknown[]).length).toBe(2);
+    expect(outcome?.allOk).toBe(true);
+    expect(outcome?.error).toBeNull();
+    for (const entry of outcome!.entries) {
+      expect(entry.ok).toBe(true);
+      // Runner tail-aligns / time-joins the shorter series via this stamp.
+      expect(entry.result!.meta?.windowBars).toBe(2);
+      expect(entry.result!.meta?.batch).toBe(true);
+    }
+  });
+
   it('refuses to batch more scripts than the backend allows', async () => {
     install(() => jsonResponse({ status: 'success', results: [] }));
     const many = Array.from({ length: RUN_BATCH_MAX_SCRIPTS + 1 }, (_, i) => ({
@@ -166,6 +201,20 @@ describe('runBatch', () => {
     }));
     expect(await runBatch({ endpoint: ENDPOINT, scripts: many, bars: SAMPLE_BARS })).toBeNull();
     expect(calls.length).toBe(0);
+  });
+
+  it('splits oversized script sets into backend-sized chunks', () => {
+    expect(splitBatchScripts([])).toEqual([]);
+    const ten = Array.from({ length: 10 }, (_, i) => `s${i}`);
+    const chunks = splitBatchScripts(ten, 8);
+    expect(chunks.map((c) => c.length)).toEqual([8, 2]);
+    expect(chunks.flat()).toEqual(ten);
+    // Default cap is the backend limit.
+    const over = Array.from({ length: RUN_BATCH_MAX_SCRIPTS + 1 }, (_, i) => i);
+    expect(splitBatchScripts(over).map((c) => c.length)).toEqual([
+      RUN_BATCH_MAX_SCRIPTS,
+      1,
+    ]);
   });
 
   it('is a no-op without bars, endpoint, or scripts', async () => {

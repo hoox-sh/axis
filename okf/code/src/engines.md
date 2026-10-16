@@ -7,7 +7,7 @@ tags: [code, engines]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-15T17:23:44Z
+  at: 2026-10-16T09:23:41Z
 sources:
   - id: tree
     resource: "src/engines"
@@ -18,7 +18,7 @@ okf_lock: generated
 
 # Files
 
-* `batch.ts` — BatchEntry, BatchRunOptions, BatchRunOutcome, BatchRunResult, BatchScript, RUN_BATCH_MAX_SCRIPTS, runBatch
+* `batch.ts` — BatchEntry, BatchRunOptions, BatchRunOutcome, BatchRunResult, BatchScript, RUN_BATCH_MAX_SCRIPTS, runBatch, splitBatchScripts
 * `catalog.ts` — BUILTIN_ENGINES, DEFAULT_ENGINE_CAPABILITIES, DEFAULT_PYNE_WORKER_ENDPOINT, EngineHealthProbe, LOCAL_PYODIDE_INDEX, LOCAL_PYODIDE_VERSION, _resetEngineRegistrationFlag, _resetPyodideEngineState, _setCachedEngineCapabilitiesForTests, _setCachedEngineHealthForTests, callPyodideRunScript, capabilitiesFromHealth
 * `chart-data-session.ts` — _resetChartDataSessionForTests, ensureChartDataSession, releaseChartDataSession, tickChartDataSession
 * `data-sessions.ts` — CanonicalSeriesKey, DATA_PROVIDE_CHUNK, DATA_SESSION_RETRY_COOLDOWN_MS, DataSeriesKey, DataSeriesStatus, DataSessionCreateInput, DataSessionCreateResult, DataSessionHandle, DataSessionMiss, DataSessionRunResult, EnsureDataSessionOptions, RunDataSessionOptions

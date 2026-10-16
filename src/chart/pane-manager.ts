@@ -100,8 +100,10 @@ import { getVisibleBars, isReplayActive } from './bar-replay';
 import { reportUiError } from '../ui/boot-errors';
 import {
   clampPointsToPaintedRange,
+  extendPaintedRange,
   looksLikeOhlcData,
   sanitizeSeriesDataForSetData,
+  type PaintedCandleRange,
 } from './series-sanitize';
 import { getThemeManager } from '../theme';
 
@@ -410,6 +412,10 @@ function applySeriesDataSmart(
  *
  * `forceFull` bypasses the tip-only fast path so a recomputed series (input
  * override / edited source) repaints every bar, not just the last point.
+ *
+ * @param range - Owning chart's painted candle range (`null` = not painted
+ *   yet → clamp is a no-op). `undefined` falls back to the legacy
+ *   module-global range.
  */
 function applyOverlayLineDataSmart(
   series: ISeriesApi<any>,
@@ -417,11 +423,12 @@ function applyOverlayLineDataSmart(
   metaKey: string,
   metaMap: Map<string, SeriesApplyMeta>,
   forceFull = false,
+  range?: PaintedCandleRange | null,
 ): void {
   // Pin to the painted candle range first: points from a stale window would
   // otherwise extend the shared time scale past the candles and LWC throws
   // `Value is null` on every paint until the windows converge again.
-  const points = clampPointsToPaintedRange(data);
+  const points = clampPointsToPaintedRange(data, range);
   const prev = metaMap.get(metaKey);
   if (!forceFull && prev && prev.len > 0) {
     const peek = peekOverlayLineTip(points, prev.len);
@@ -596,6 +603,15 @@ export class PaneManager {
   private themeUnregs = new Map<string, () => void>();
   /** Per-chart Heikin-Ashi incremental state (multi-chart safe). */
   private haHolder: HaCacheHolder = createHaCacheHolder();
+  /**
+   * Last successfully painted candle range for THIS chart (multi-chart safe).
+   * Co-painted overlays / equity clamp to this window so a stale engine
+   * window can never extend the shared time scale past the candles (LWC
+   * `Value is null` on every paint). `null` until the first full paint —
+   * clamping is a no-op then. Recorded by `manager-access.setDataToChart`
+   * and extended by {@link appendBar} live ticks (ticks extend, never create).
+   */
+  private paintedCandleRange: PaintedCandleRange | null = null;
 
   constructor(container: HTMLElement, hostKey = '') {
     this.container = container;
@@ -733,6 +749,31 @@ export class PaneManager {
   /** Expose HA holder so full-history paint seeds this chart (not the global). */
   getHaHolder(): HaCacheHolder {
     return this.haHolder;
+  }
+
+  /**
+   * Record a successful full-history candle paint on this chart.
+   * Overwrites the previous window — slot B never inherits slot A's range.
+   */
+  notePaintedCandleRange(first: number, last: number): void {
+    if (Number.isFinite(first) && Number.isFinite(last) && last >= first) {
+      this.paintedCandleRange = { first, last };
+    }
+  }
+
+  /**
+   * Grow this chart's painted range to cover a live appended bar (no full
+   * repaint). No-op until the first full paint — ticks extend, never create —
+   * so the clamp stays a no-op on charts that never painted candles.
+   */
+  extendPaintedCandleRange(time: number): void {
+    const next = extendPaintedRange(this.paintedCandleRange, time);
+    if (next) this.paintedCandleRange = next;
+  }
+
+  /** This chart's painted candle range (`null` until the first paint). */
+  getPaintedCandleRange(): PaintedCandleRange | null {
+    return this.paintedCandleRange ? { ...this.paintedCandleRange } : null;
   }
 
   /** Drop markers plugin handle before removing the host series (chart type switch). */
@@ -1657,8 +1698,9 @@ export class PaneManager {
    * ({@link ui/StrategyReport}). Prefer {@link hideEquityPane} to clear leftovers.
    */
   setEquityCurve(points: { time: number; value: number }[]) {
-    // Pin to the painted candle range like every other co-painted payload.
-    const inRange = clampPointsToPaintedRange(points);
+    // Pin to THIS chart's painted candle range like every other co-painted
+    // payload (no-op until this chart's first candle paint).
+    const inRange = clampPointsToPaintedRange(points, this.paintedCandleRange);
     const mapped = inRange
       .filter((p) => Number.isFinite(p.time) && Number.isFinite(p.value))
       .map((p) => ({ time: p.time as UTCTimestamp, value: p.value }));
@@ -2340,6 +2382,11 @@ export class PaneManager {
         } catch {
           /* price line tint optional */
         }
+        // Live ticks extend this chart's painted window so the next overlay
+        // clamp keeps the newest tip instead of dropping it. Extend never
+        // creates the range — full paints do — so pre-paint ticks stay a
+        // clamp no-op.
+        this.extendPaintedCandleRange(bar.time);
       }
       const volPane = this.panes.get('volume');
       if (volPane?.series['volume']) {
@@ -2631,7 +2678,14 @@ export class PaneManager {
         // Tip-only path skips full toLwcLineData when length + lastTime match
         // (meta keyed per pane so same plot name on two panes never collides).
         const metaKey = this.overlayMetaKey(paneId, key);
-        applyOverlayLineDataSmart(seriesNow, line.data, metaKey, this.overlayDataMeta, forceFull);
+        applyOverlayLineDataSmart(
+          seriesNow,
+          line.data,
+          metaKey,
+          this.overlayDataMeta,
+          forceFull,
+          this.paintedCandleRange,
+        );
         try {
           const labels = this.plotLabelOptions(line);
           const opts: Record<string, unknown> = {
@@ -2711,6 +2765,7 @@ export class PaneManager {
             this.overlayMetaKey(paneId, key),
             this.overlayDataMeta,
             forceFull,
+            this.paintedCandleRange,
           );
           pane.series[key] = series;
           this.overlaySeriesKinds.set(kindKey, seriesKind);
@@ -2965,9 +3020,9 @@ export class PaneManager {
       const kindKey = `${paneId}:${key}`;
       const seriesKind: 'plotbar' | 'plotcandle' =
         spec.kind === 'plotcandle' ? 'plotcandle' : 'plotbar';
-      // Pin to the painted candle range (see applyOverlayLineDataSmart): a
-      // stale overlay window must not extend the shared time scale.
-      const inRange = clampPointsToPaintedRange(spec.data);
+      // Pin to THIS chart's painted candle range (see applyOverlayLineDataSmart):
+      // a stale overlay window must not extend the shared time scale.
+      const inRange = clampPointsToPaintedRange(spec.data, this.paintedCandleRange);
       const mapped = inRange
         .filter(
           (d) =>

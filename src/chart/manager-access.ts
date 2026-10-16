@@ -737,7 +737,18 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
           // Co-painted overlays / equity clamp to this range so a stale window
           // can never extend the shared time scale past the candles (LWC
           // `Value is null` on every paint until the ranges converge again).
-          notePaintedCandleRange(firstT, lastT);
+          // Per-chart scope: slot B never inherits slot A's window.
+          const perChartNote = (
+            mgr as unknown as {
+              notePaintedCandleRange?: (first: number, last: number) => void;
+            }
+          ).notePaintedCandleRange;
+          if (typeof perChartNote === 'function') {
+            perChartNote.call(mgr, firstT, lastT);
+          } else {
+            // Legacy test doubles without per-chart state — keep the global net.
+            notePaintedCandleRange(firstT, lastT);
+          }
         }
       } catch (err: unknown) {
         const inner = err instanceof Error ? err.message : String(err);

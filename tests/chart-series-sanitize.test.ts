@@ -16,6 +16,7 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import {
   clampPointsToPaintedRange,
+  extendPaintedRange,
   looksLikeOhlcData,
   notePaintedCandleRange,
   resetPaintedCandleRangeForTests,
@@ -188,5 +189,70 @@ describe('clampPointsToPaintedRange', () => {
   it('handles empty input', () => {
     notePaintedCandleRange(100, 300);
     expect(clampPointsToPaintedRange([])).toEqual([]);
+  });
+
+  it('scopes clamping per chart: an explicit range wins over the global', () => {
+    // Slot A painted 100..300 (legacy global path); slot B owns 1000..1200.
+    notePaintedCandleRange(100, 300);
+    const slotB = { first: 1000, last: 1200 };
+    // Slot B keeps its own window — slot A's paint does not bleed across.
+    expect(clampPointsToPaintedRange([pt(50), pt(1100), pt(1300)], slotB)).toEqual([pt(1100)]);
+    // Slot A (legacy global callers) is unaffected by slot B's window.
+    expect(clampPointsToPaintedRange([pt(50), pt(200), pt(1100)])).toEqual([pt(200)]);
+  });
+
+  it('two charts with different windows do not interfere', () => {
+    const slotA = { first: 100, last: 300 };
+    const slotB = { first: 1000, last: 1200 };
+    const mixed = [pt(200), pt(1100)];
+    expect(clampPointsToPaintedRange(mixed, slotA)).toEqual([pt(200)]);
+    expect(clampPointsToPaintedRange(mixed, slotB)).toEqual([pt(1100)]);
+  });
+
+  it('explicit null is a no-op even when another chart painted', () => {
+    // A chart that never painted must not inherit another chart's window.
+    notePaintedCandleRange(100, 300);
+    const pts = [pt(1), pt(50), pt(500)];
+    expect(clampPointsToPaintedRange(pts, null)).toEqual(pts);
+  });
+});
+
+describe('extendPaintedRange', () => {
+  it('extends the last edge for newer live ticks (no full repaint)', () => {
+    expect(extendPaintedRange({ first: 100, last: 300 }, 350)).toEqual({
+      first: 100,
+      last: 350,
+    });
+  });
+
+  it('extends the first edge for older ticks', () => {
+    expect(extendPaintedRange({ first: 100, last: 300 }, 50)).toEqual({
+      first: 50,
+      last: 300,
+    });
+  });
+
+  it('keeps the range when the tick is already inside', () => {
+    const range = { first: 100, last: 300 };
+    expect(extendPaintedRange(range, 200)).toBe(range);
+  });
+
+  it('never creates a range — clamp stays a no-op before the first paint', () => {
+    expect(extendPaintedRange(null, 200)).toBeNull();
+  });
+
+  it('ignores non-finite times', () => {
+    const range = { first: 100, last: 300 };
+    expect(extendPaintedRange(range, Number.NaN)).toBe(range);
+    expect(extendPaintedRange(null, Number.NaN)).toBeNull();
+  });
+
+  it('appended bars extend the painted range without full repaint', () => {
+    // Full paint, then two live ticks: the newest tips stay clamp-visible.
+    let range = extendPaintedRange({ first: 100, last: 300 }, 350);
+    range = extendPaintedRange(range, 400);
+    expect(range).toEqual({ first: 100, last: 400 });
+    const tips = [{ time: 350 }, { time: 400 }, { time: 450 }];
+    expect(clampPointsToPaintedRange(tips, range).map((p) => p.time)).toEqual([350, 400]);
   });
 });
