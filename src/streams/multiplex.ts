@@ -95,16 +95,16 @@ export { listStreams, defaultStreamForSource };
  */
 export const HEAVY_LIVE_RERUN_BARS = HEAVY_BARS_THRESHOLD;
 
-/** Effective live re-run mode after heavy-history throttle. */
+/** Effective live re-run mode. Delta ticks (O(delta) server-side) plus
+ * tip-only chart apply make per-tick updates cheap regardless of history
+ * size, so the user's `rerunOn` preference is honored even on heavy
+ * histories. A `bar-close` stored choice still defers re-runs to bar close.
+ */
 export function effectiveLiveRerunMode(
   mode: 'every-tick' | 'bar-close' | undefined,
-  barCount: number,
+  _barCount?: number,
 ): 'every-tick' | 'bar-close' {
-  if (mode === 'bar-close') return 'bar-close';
-  if (Number.isFinite(barCount) && barCount >= HEAVY_LIVE_RERUN_BARS) {
-    return 'bar-close';
-  }
-  return 'every-tick';
+  return mode ?? 'every-tick';
 }
 
 /** How the live session ended (affects telemetry wipe). */
@@ -498,6 +498,12 @@ export function startLive(
     const newestTriggerTime = triggerBars.length
       ? Math.max(...triggerBars.map((b) => (Number.isFinite(b.time) ? b.time : -1)))
       : -1;
+    // Effective re-run mode. Delta ticks make per-tick updates cheap even on
+    // heavy histories, so every-tick is honored regardless of bar count.
+    const rerunMode = effectiveLiveRerunMode(
+      liveRerunModeForEngine(store.live.rerunOn),
+      store.bars?.length ?? 0,
+    );
     // Throttle: the engine tick alone costs ~3s server-side, so ticking per
     // venue flush never idles. Within the same forming bar and inside the
     // minimum gap, paint the venue tip locally and skip the round trip — the
@@ -518,6 +524,9 @@ export function startLive(
       } catch {
         /* venue tip paint is best-effort */
       }
+      // With delta ticks the engine is not re-consulted on every venue tick,
+      // so indicators must still be re-run per tick when every-tick is on.
+      if (rerunMode === 'every-tick') scheduleRerun();
       return;
     }
     // Record the tick time synchronously so subsequent ticks within the
