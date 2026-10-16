@@ -238,6 +238,19 @@ export async function loadSymbolData(
             detail: `${engineBars.length} bars · ${label} (engine)`,
             error: null,
           });
+          setStatus('ready', `Loaded ${engineBars.length} bars · ${source.name} (engine)`, {
+            toast: false,
+            source: 'data',
+          });
+          announce(`Loaded ${engineBars.length} bars ${sym} ${iv}`);
+          if (stillCurrent()) {
+            try {
+              const { reapplyChartScripts } = await import('../indicators/reapply');
+              await reapplyChartScripts({ stillCurrent });
+            } catch {
+              /* re-run optional — user can re-run manually */
+            }
+          }
           if (restartLiveAfter && stillCurrent()) {
             const streamId = store.live.streamId || defaultStreamForSource(srcId);
             try {
