@@ -364,8 +364,119 @@ describe('runDataSession memo', () => {
     expect(a).toMatchObject({ ok: true, via: 'data-session-create' });
     expect(b).toMatchObject({ ok: true, via: 'data-session-tick', sessionId: 's1' });
     const tick = must(rec.calls, (c) => c.path.endsWith('/tick'));
-    expect(tick.body).toEqual({ exchange: 'binance', symbol: 'BTC/USDT' });
+    // Identity + delta opt-in; the unchanged tick reuses the create payload.
+    expect(tick.body).toEqual({ exchange: 'binance', symbol: 'BTC/USDT', delta: true });
     expect(rec.calls.filter((c) => c.path === '/data/session').length).toBe(1);
+  });
+
+  it('merges delta tails onto the cached full payload', async () => {
+    const full = {
+      status: 'success',
+      session_id: 's1',
+      count: 3,
+      plots: [1, 2, 3],
+      series: { a: [10, 20, 30] },
+      events: [],
+      mode: 'interpret',
+    };
+    let ticks = 0;
+    const rec = recorder((c) => {
+      if (c.method === 'DELETE') return jsonResponse({ status: 'success' });
+      if (c.path === '/data/session') return jsonResponse({ ...full });
+      if (c.path.endsWith('/tick')) {
+        ticks++;
+        return jsonResponse({
+          status: 'success',
+          session_id: 's1',
+          count: 4,
+          plots: [4],
+          series: { a: [40] },
+          events: [],
+          appended: 1,
+          forming: true,
+          unchanged: false,
+          delta: { base_index: 3, count: 4, tail_len: 1 },
+        });
+      }
+      return jsonResponse({ status: 'error' }, 500);
+    });
+    restore = rec.restore;
+    await runDataSession({ endpoint: ENDPOINT, apiKey: '', owner: 'ind1', request: req, script: 's' });
+    const r = await runDataSession({ endpoint: ENDPOINT, apiKey: '', owner: 'ind1', request: req, script: 's', tick: true });
+    expect(r).toMatchObject({ ok: true, via: 'data-session-tick' });
+    expect(ticks).toBe(1);
+    // One cell traveled; the applied payload is the full merged window.
+    expect(r.ok && (r.payload.plots as number[])).toEqual([1, 2, 3, 4]);
+    expect(r.ok && (r.payload.series as Record<string, number[]>).a).toEqual([10, 20, 30, 40]);
+    expect(r.ok && r.payload.count).toBe(4);
+    expect(r.ok && 'delta' in r.payload).toBe(false);
+  });
+
+  it('recreates when a delta cannot merge (rebased session)', async () => {
+    let creates = 0;
+    const rec = recorder((c) => {
+      if (c.method === 'DELETE') return jsonResponse({ status: 'success' });
+      if (c.path === '/data/session') {
+        creates++;
+        return jsonResponse({
+          status: 'success',
+          session_id: `s${creates}`,
+          count: 3,
+          plots: [1, 2, 3],
+          series: { a: [10, 20, 30] },
+          events: [],
+          mode: 'interpret',
+        });
+      }
+      // Shrunk count the cache cannot honor — never applied as-is.
+      return jsonResponse({
+        status: 'success',
+        session_id: 's1',
+        count: 2,
+        plots: [9, 8],
+        series: { a: [90, 80] },
+        events: [],
+        appended: 0,
+        delta: { base_index: 0, count: 2, tail_len: 2 },
+      });
+    });
+    restore = rec.restore;
+    await runDataSession({ endpoint: ENDPOINT, apiKey: '', owner: 'ind1', request: req, script: 's' });
+    const r = await runDataSession({ endpoint: ENDPOINT, apiKey: '', owner: 'ind1', request: req, script: 's', tick: true });
+    expect(r).toMatchObject({ ok: true, via: 'data-session-create', sessionId: 's2' });
+    expect(creates).toBe(2);
+  });
+
+  it('retries plain when the backend rejects the delta flag, then remembers', async () => {
+    const tickBodies: unknown[] = [];
+    const rec = recorder((c) => {
+      if (c.method === 'DELETE') return jsonResponse({ status: 'success' });
+      if (c.path === '/data/session') {
+        return jsonResponse({ status: 'success', session_id: 's1', count: 3, plots: [1, 2, 3], series: {}, events: [] });
+      }
+      if (c.path.endsWith('/tick')) {
+        tickBodies.push(c.body);
+        const body = c.body as { delta?: boolean } | null;
+        if (body?.delta === true) {
+          return jsonResponse({ status: 'error', code: 'UNKNOWN_FIELDS', message: 'unknown field: delta' }, 400);
+        }
+        return jsonResponse({ status: 'success', session_id: 's1', count: 3, plots: [1, 2, 3], series: {}, events: [] });
+      }
+      return jsonResponse({ status: 'error' }, 500);
+    });
+    restore = rec.restore;
+    await runDataSession({ endpoint: ENDPOINT, apiKey: '', owner: 'ind1', request: req, script: 's' });
+    const r1 = await runDataSession({ endpoint: ENDPOINT, apiKey: '', owner: 'ind1', request: req, script: 's', tick: true });
+    expect(r1).toMatchObject({ ok: true, via: 'data-session-tick' });
+    expect(tickBodies).toEqual([
+      { exchange: 'binance', symbol: 'BTC/USDT', delta: true },
+      { exchange: 'binance', symbol: 'BTC/USDT' },
+    ]);
+    // Remembered: the next tick goes plain immediately (one request).
+    tickBodies.length = 0;
+    const r2 = await runDataSession({ endpoint: ENDPOINT, apiKey: '', owner: 'ind1', request: req, script: 's', tick: true });
+    expect(r2).toMatchObject({ ok: true, via: 'data-session-tick' });
+    expect(tickBodies).toEqual([{ exchange: 'binance', symbol: 'BTC/USDT' }]);
   });
 
   it('keeps sibling indicators on separate sessions', async () => {

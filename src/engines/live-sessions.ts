@@ -80,6 +80,7 @@
  */
 
 import { parseEngineJson } from './json-sanitize';
+import { resolveSessionPayload } from './session-delta';
 import type { EngineLibrarySource } from '../plugins/types';
 import type { Bar } from '../store/types';
 
@@ -204,6 +205,11 @@ const sessions = new Map<string, SessionState>();
 const owners = new Map<string, { key: string; id: string }>();
 /** Endpoints probed without session routes (old backends, edge, proxies). */
 const unsupported = new Set<string>();
+/**
+ * Endpoints that rejected the `delta` flag (`UNKNOWN_FIELDS` — old backends,
+ * edge proxies). Ticks there go plain; the full envelope is adopted as usual.
+ */
+const noDeltaEndpoints = new Set<string>();
 /** endpoint → timestamp of last `SESSIONS_FULL` (create cooldown). */
 const fullCooldown = new Map<string, number>();
 /** session key → timestamp until which the fast path is skipped after a miss. */
@@ -386,6 +392,46 @@ async function postJson(
     payload = null;
   }
   return { ok: res.ok, status: res.status, payload };
+}
+
+/**
+ * POST a session tick/append, requesting a delta envelope first and retrying
+ * plain when the backend does not know the flag. Delta tails are ~cells, not
+ * 10k-bar series — the transfer that made live mode laggy.
+ */
+async function postSessionOp(
+  url: string,
+  body: Record<string, unknown>,
+  opts: { apiKey?: string; signal?: AbortSignal; budgetMs: number },
+  endpoint: string,
+): Promise<{ ok: boolean; status: number; payload: unknown }> {
+  if (!noDeltaEndpoints.has(endpoint)) {
+    const res = await postJson(url, { ...body, delta: true }, opts);
+    const code = (res.payload as { code?: unknown } | null)?.code;
+    if (res.ok || code !== 'UNKNOWN_FIELDS') return res;
+    noDeltaEndpoints.add(endpoint);
+  }
+  return postJson(url, body, opts);
+}
+
+/**
+ * Resolve a tick/append payload against the session's cached full result.
+ * Null when unmergeable — the caller must drop the session (next tick
+ * recreates it; the current one falls back to a full run), never apply
+ * partial data.
+ */
+function resolveHitPayload(
+  st: SessionState,
+  key: string,
+  endpoint: string,
+  raw: unknown,
+): Record<string, unknown> | null {
+  const merged = resolveSessionPayload(st.lastPayload, raw);
+  if (!merged) {
+    dropSession(key, endpoint);
+    markSessionFailure(key);
+  }
+  return merged;
 }
 
 function releaseSession(endpoint: string, id: string, apiKey?: string): void {
@@ -679,10 +725,11 @@ async function tickSession(
 ): Promise<SessionOpOutcome> {
   let res: { ok: boolean; status: number; payload: unknown };
   try {
-    res = await postJson(
+    res = await postSessionOp(
       `${opts.endpoint}/session/${encodeURIComponent(st.id)}/tick`,
-      { bar },
+      { bar: bar as unknown as Record<string, unknown> },
       { apiKey: opts.apiKey, signal: opts.signal, budgetMs: SESSION_OP_BUDGET_MS },
+      opts.endpoint,
     );
   } catch {
     return { kind: 'miss' };
@@ -705,10 +752,11 @@ async function appendSession(
 ): Promise<SessionOpOutcome> {
   let res: { ok: boolean; status: number; payload: unknown };
   try {
-    res = await postJson(
+    res = await postSessionOp(
       `${opts.endpoint}/session/${encodeURIComponent(st.id)}/append`,
-      { bars },
+      { bars: bars as unknown as Record<string, unknown> },
       { apiKey: opts.apiKey, signal: opts.signal, budgetMs: SESSION_OP_BUDGET_MS },
+      opts.endpoint,
     );
   } catch {
     return { kind: 'miss' };
@@ -803,7 +851,9 @@ async function tryLiveSessionTickInner(
       sessionOpFailed(key, opts.endpoint, tick);
       return tick.kind === 'gone' ? createSession(opts, key) : null;
     }
-    const count = payloadCount(tick.payload, n);
+    const mergedSame = resolveHitPayload(st, key, opts.endpoint, tick.payload);
+    if (!mergedSame) return null;
+    const count = payloadCount(mergedSame, n);
     if (count !== n) {
       // Server disagrees about the series shape — do not trust the session.
       dropSession(key, opts.endpoint);
@@ -811,9 +861,9 @@ async function tryLiveSessionTickInner(
       return null;
     }
     st.lastBar = barSnapshot(last);
-    st.lastPayload = tick.payload;
+    st.lastPayload = mergedSame;
     st.lastUsedAt = Date.now();
-    return { payload: tick.payload, via: 'session-tick', sessionId: st.id, barTimes: evaluatedBarTimes(bars) };
+    return { payload: mergedSame, via: 'session-tick', sessionId: st.id, barTimes: evaluatedBarTimes(bars) };
   }
 
   // Series advanced (or shrank) — locate the session tip in the fresh bars.
@@ -849,7 +899,9 @@ async function tryLiveSessionTickInner(
       sessionOpFailed(key, opts.endpoint, tick);
       return tick.kind === 'gone' ? createSession(opts, key) : null;
     }
-    const count = payloadCount(tick.payload, n);
+    const mergedDup = resolveHitPayload(st, key, opts.endpoint, tick.payload);
+    if (!mergedDup) return null;
+    const count = payloadCount(mergedDup, n);
     if (count !== n) {
       // Only a session holding exactly `n` bars can carry the fingerprint below.
       dropSession(key, opts.endpoint);
@@ -859,10 +911,10 @@ async function tryLiveSessionTickInner(
     st.lastTime = last.time;
     st.count = count;
     st.lastBar = barSnapshot(last);
-    st.lastPayload = tick.payload;
+    st.lastPayload = mergedDup;
     st.closedHash = hashBars(bars, n - 2);
     st.lastUsedAt = Date.now();
-    return { payload: tick.payload, via: 'session-tick', sessionId: st.id, barTimes: evaluatedBarTimes(bars) };
+    return { payload: mergedDup, via: 'session-tick', sessionId: st.id, barTimes: evaluatedBarTimes(bars) };
   }
   // Tick-then-append: finalize the base with its current (closed) values
   // BEFORE appending, or append would confirm the stale forming values and
@@ -873,15 +925,19 @@ async function tryLiveSessionTickInner(
       sessionOpFailed(key, opts.endpoint, ticked);
       return ticked.kind === 'gone' ? createSession(opts, key) : null;
     }
+    const mergedBase = resolveHitPayload(st, key, opts.endpoint, ticked.payload);
+    if (!mergedBase) return null;
     st.lastBar = barSnapshot(base);
-    st.lastPayload = ticked.payload;
+    st.lastPayload = mergedBase;
   }
   const appended = await appendSession(opts, st, tail);
   if (appended.kind !== 'ok') {
     sessionOpFailed(key, opts.endpoint, appended);
     return appended.kind === 'gone' ? createSession(opts, key) : null;
   }
-  const count = payloadCount(appended.payload, st.count + tail.length);
+  const mergedTail = resolveHitPayload(st, key, opts.endpoint, appended.payload);
+  if (!mergedTail) return null;
+  const count = payloadCount(mergedTail, st.count + tail.length);
   if (count !== st.count + tail.length) {
     dropSession(key, opts.endpoint);
     markSessionFailure(key);
@@ -890,11 +946,11 @@ async function tryLiveSessionTickInner(
   st.count = count;
   st.lastTime = last.time;
   st.lastBar = barSnapshot(last);
-  st.lastPayload = appended.payload;
+  st.lastPayload = mergedTail;
   // The appended tail is now closed history; fingerprint it for the next tick.
   st.closedHash = hashBars(bars, n - 2);
   st.lastUsedAt = Date.now();
-  return { payload: appended.payload, via: 'session-append', sessionId: st.id, barTimes: evaluatedBarTimes(bars) };
+  return { payload: mergedTail, via: 'session-append', sessionId: st.id, barTimes: evaluatedBarTimes(bars) };
 }
 
 /** Release every cached session (best-effort DELETE) and clear the cache. */
@@ -927,6 +983,7 @@ export function _resetLiveSessionsForTests(): void {
   sessions.clear();
   owners.clear();
   unsupported.clear();
+  noDeltaEndpoints.clear();
   fullCooldown.clear();
   keyCooldown.clear();
   runModes.clear();

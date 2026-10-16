@@ -17,6 +17,7 @@ _Generated/updated: 2026-10-15 · 572 commits · describe-tag: `v2.24.3`_
 
 ### Fixed
 
+- **Session ticks resolve delta envelopes against the cached full result.** Tick/append calls now send `delta: true` (new `engines/session-delta` merge: positional splice with count/key validation, minimal-unchanged reuse, null on any mismatch so the session recreates instead of applying partial data). Old backends that reject the flag are retried plain once per endpoint and remembered. Applies to engine-owned data sessions and bars-in live sessions; the chart session stays flag-free (its envelope is already tiny).
 - **Engine-owned bars are normalized before chart paint.** `getDataSeriesBars` now runs the venue pipeline (`normalizeHistoricalBars`: ms→s, sanitize, dedupe last-wins, sort) so engine paints cannot hit the LWC `Value is null` path on ms times or unsorted data.
 - **Candle-range clamp is per-chart instead of global.** The painted range lives on the `PaneManager` instance, extends on live appends, and is a no-op without a recorded paint — slots no longer clamp each other and newest tips are not dropped.
 - **Session series join the chart by bar time, not index.** `alignSeriesToTimes` covers `data-session-*` and `session-*` hits via `meta.engineTimes` / live-session `barTimes`; index tail-align stays as fallback for time-less payloads.

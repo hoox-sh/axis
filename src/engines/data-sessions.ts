@@ -32,6 +32,7 @@
 import type { Bar } from '../store/types';
 import type { EngineDataSessionRequest } from '../plugins/types';
 import { normalizeHistoricalBars } from '../data/parse-bars';
+import { resolveSessionPayload } from './session-delta';
 
 /** Max bars per `POST /data/series/provide` request (contract). */
 export const DATA_PROVIDE_CHUNK = 5_000;
@@ -315,9 +316,21 @@ export async function createDataSession(
 }
 
 /**
+ * Endpoints that rejected the `delta` flag (`UNKNOWN_FIELDS` — old backends).
+ * Ticks there go plain; the full envelope is adopted as usual. Cleared with
+ * the session memo (test helper below).
+ */
+const noDeltaEndpoints = new Set<string>();
+
+/**
  * `POST /data/session/{id}/tick` — identity only. The engine fetches its own
  * new candles; AXIS never sends bars. `gone` means the session expired and
  * must be recreated.
+ *
+ * With `opts.delta`, a delta envelope is requested first (tail cells instead
+ * of full 10k-bar series) and plain-retried when the backend does not know
+ * the flag. The chart tick passes no delta — its minimal script yields an
+ * already-tiny envelope, and it only reads the outcome flags.
  */
 export async function tickDataSession(
   endpoint: string,
@@ -325,28 +338,37 @@ export async function tickDataSession(
   sessionId: string,
   identity: { exchange: string; symbol: string },
   signal?: AbortSignal,
+  opts?: { delta?: boolean },
 ): Promise<{ ok: true; payload: Record<string, unknown> } | { ok: false; error: string; gone: boolean }> {
-  const r = await call(
-    endpoint,
-    `/data/session/${encodeURIComponent(sessionId)}/tick`,
-    {
-      method: 'POST',
-      body: {
-        exchange: String(identity.exchange || '').trim().toLowerCase(),
-        symbol: String(identity.symbol || '').trim().toUpperCase(),
-      },
-    },
-    apiKey,
-    signal,
-  );
-  if (!r.ok || r.body.status === 'error') {
-    return {
-      ok: false,
-      error: errorMessage(r, 'data session tick failed'),
-      gone: r.status === 404 || r.body.code === 'NO_SESSION',
-    };
+  const plain = {
+    exchange: String(identity.exchange || '').trim().toLowerCase(),
+    symbol: String(identity.symbol || '').trim().toUpperCase(),
+  };
+  const wantDelta = opts?.delta === true && !noDeltaEndpoints.has(endpoint);
+  const bodies = wantDelta ? [{ ...plain, delta: true }, plain] : [plain];
+  for (let i = 0; i < bodies.length; i++) {
+    const r = await call(
+      endpoint,
+      `/data/session/${encodeURIComponent(sessionId)}/tick`,
+      { method: 'POST', body: bodies[i] },
+      apiKey,
+      signal,
+    );
+    if (!r.ok || r.body.status === 'error') {
+      const code = (r.body as { code?: unknown }).code;
+      if (wantDelta && i === 0 && code === 'UNKNOWN_FIELDS') {
+        noDeltaEndpoints.add(endpoint);
+        continue;
+      }
+      return {
+        ok: false,
+        error: errorMessage(r, 'data session tick failed'),
+        gone: r.status === 404 || code === 'NO_SESSION',
+      };
+    }
+    return { ok: true, payload: r.body };
   }
-  return { ok: true, payload: r.body };
+  return { ok: false, error: 'data session tick failed', gone: false };
 }
 
 export interface EnsureDataSessionOptions extends DataSessionCreateInput {
@@ -521,6 +543,8 @@ export async function ensureDataSession(opts: EnsureDataSessionOptions): Promise
 interface DataSessionMemo {
   sessionId: string;
   fingerprint: string;
+  /** Last full payload (merged from deltas) for delta resolution. */
+  payload?: Record<string, unknown>;
 }
 
 const dataSessionMemo = new Map<string, DataSessionMemo>();
@@ -605,6 +629,7 @@ function sharedProvisionSeries(
 /** @internal test helper */
 export function _resetDataSessionMemo(): void {
   dataSessionMemo.clear();
+  noDeltaEndpoints.clear();
   // Provisioning shares fate with sessions in tests: a stale series entry
   // would let a later case skip the upload path it means to exercise.
   seriesProvisionMemo.clear();
@@ -718,17 +743,29 @@ export async function runDataSession(o: RunDataSessionOptions): Promise<DataSess
       prev.sessionId,
       { exchange: key.exchange, symbol: key.symbol },
       o.signal,
+      { delta: true },
     );
     if (t.ok) {
-      return {
-        ok: true,
-        payload: t.payload,
-        sessionId: prev.sessionId,
-        via: 'data-session-tick',
-        provisioned: 'none',
-      };
+      // Delta tails merge onto the cached full payload; an unmergeable update
+      // (rebased session, key drift) falls through and recreates below.
+      const resolved = resolveSessionPayload(prev.payload, t.payload);
+      if (resolved) {
+        dataSessionMemo.set(memoKey, {
+          sessionId: prev.sessionId,
+          fingerprint,
+          payload: resolved,
+        });
+        return {
+          ok: true,
+          payload: resolved,
+          sessionId: prev.sessionId,
+          via: 'data-session-tick',
+          provisioned: 'none',
+        };
+      }
+    } else if (!t.gone) {
+      return { ok: false, error: t.error };
     }
-    if (!t.gone) return { ok: false, error: t.error };
   }
 
   if (!prev && o.tick) {
@@ -756,7 +793,7 @@ export async function runDataSession(o: RunDataSessionOptions): Promise<DataSess
       localBars: o.localBars,
     });
     provisionCooldown.delete(memoKey);
-    dataSessionMemo.set(memoKey, { sessionId: handle.sessionId, fingerprint });
+    dataSessionMemo.set(memoKey, { sessionId: handle.sessionId, fingerprint, payload: handle.payload });
     return {
       ok: true,
       payload: handle.payload,

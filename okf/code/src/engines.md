@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/engines"
-description: "src/engines contains batch.ts, catalog.ts, chart-data-session.ts, and 9 more files."
+description: "src/engines contains batch.ts, catalog.ts, chart-data-session.ts, and 10 more files."
 resource: "src/engines"
 tags: [code, engines]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-16T09:23:41Z
+  at: 2026-10-16T10:28:36Z
 sources:
   - id: tree
     resource: "src/engines"
@@ -30,6 +30,7 @@ okf_lock: generated
 * `prewarm.ts` — MAX_PREWARM_SCRIPTS, PrewarmOptions, PrewarmResult, _resetPrewarmMemoForTests, collectAppliedScriptSources, prewarmAppliedScripts, prewarmEngine
 * `pro.ts` — BacktestSummary, PREVIEW_MAX_BARS, PreviewOptions, PreviewResult, ProCallOptions, QuickBacktestResult, UsageResult, fetchUsage, renderChartPreview, renderIndicatorPreview, runQuickBacktest
 * `runner.ts` — DeployHostedScriptInput, HostedJob, HostedJobCronState, HostedScript, RunnerCallOptions, RunnerResult, deployHostedScript, listHostedJobs, runHostedJobNow, runnerAvailable, setHostedJobEnabled
+* `session-delta.ts` — SessionDeltaInfo, readDeltaInfo, resolveSessionPayload
 
 # Depends on
 

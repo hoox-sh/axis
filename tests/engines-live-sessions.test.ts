@@ -201,6 +201,64 @@ describe('live-sessions', () => {
     expect(backend.calls.length).toBe(before);
   });
 
+  it('merges delta tick tails onto the cached full result', async () => {
+    const series = (n: number) => Array.from({ length: n }, (_, i) => 100 + i);
+    const backend = installBackend({
+      onCreate: () => envelope('s1', 8, { plots: series(8), series: { a: series(8) } }),
+      onTick: (_id, body) => {
+        if ((body as { delta?: boolean }).delta !== true) return undefined;
+        return envelope('s1', 8, {
+          plots: [108],
+          series: { a: [108] },
+          delta: { base_index: 7, count: 8, tail_len: 1 },
+        });
+      },
+    });
+    restore = backend.restore;
+    const bars = pineBars(8);
+    await tryLiveSessionTick(opts(bars));
+    const moved = bars.map((b) => ({ ...b }));
+    moved[moved.length - 1] = { ...moved[moved.length - 1]!, close: 999 };
+    const hit = await tryLiveSessionTick(opts(moved));
+    expect(hit?.via).toBe('session-tick');
+    // One cell traveled; the hit carries the merged full window.
+    const payload = hit?.payload as { plots: number[]; series: { a: number[] }; count: number };
+    expect(payload.count).toBe(8);
+    expect(payload.plots).toEqual([100, 101, 102, 103, 104, 105, 106, 108]);
+    expect(payload.series.a).toEqual([100, 101, 102, 103, 104, 105, 106, 108]);
+    const tickCall = backend.calls.find((c) => c.path.endsWith('/tick'))!;
+    expect((tickCall.body as { delta?: boolean }).delta).toBe(true);
+  });
+
+  it('retries plain when the backend rejects the delta flag', async () => {
+    const seen: unknown[] = [];
+    const backend = installBackend({
+      onTick: (_id, body) => {
+        seen.push((body as { delta?: boolean }).delta === true);
+        if ((body as { delta?: boolean }).delta === true) {
+          return new Response(
+            JSON.stringify({ status: 'error', code: 'UNKNOWN_FIELDS', message: 'nope' }),
+            { status: 400, headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+        return undefined;
+      },
+    });
+    restore = backend.restore;
+    const bars = pineBars(8);
+    await tryLiveSessionTick(opts(bars));
+    const moved = bars.map((b) => ({ ...b }));
+    moved[moved.length - 1] = { ...moved[moved.length - 1]!, close: 999 };
+    const hit = await tryLiveSessionTick(opts(moved));
+    expect(hit?.via).toBe('session-tick');
+    expect(seen).toEqual([true, false]);
+    // Remembered: the next new tip goes plain immediately.
+    const moved2 = moved.map((b) => ({ ...b }));
+    moved2[moved2.length - 1] = { ...moved2[moved2.length - 1]!, close: 1000 };
+    await tryLiveSessionTick(opts(moved2));
+    expect(seen).toEqual([true, false, false]);
+  });
+
   it('tick-then-appends when a bar closes (no duplication)', async () => {
     const backend = installBackend({});
     restore = backend.restore;
