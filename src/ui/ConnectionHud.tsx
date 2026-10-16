@@ -356,8 +356,18 @@ function FeedChip(props: {
       catalog: FALLBACK_MAJORS,
     });
   const feed = () => store.live.feeds[key()];
+  // Weak close verification demotes the chip until a stronger tier confirms
+  // (F-28): a `live` subscription with engine/none verification reads degraded.
+  const effective = () => {
+    const f = feed();
+    if (!f) return undefined;
+    if (f.status === 'live' && (f.verified === 'engine' || f.verified === 'none')) {
+      return { ...f, status: 'degraded' as const, message: 'unverified close' };
+    }
+    return f;
+  };
   return (
-    <Show when={feed()}>
+    <Show when={effective()}>
       {(f) => (
         <ChipShell
           id="feed"

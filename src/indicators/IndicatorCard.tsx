@@ -386,10 +386,10 @@ export const IndicatorCard: Component<Props> = (props) => {
         <Show when={streamStatus()}>
           {(s) => (
             <MetaBadge
-              title={`Stream: ${s().status}${s().message ? ` · ${s().message}` : ''}`}
+              title={`Stream: ${s().status}${s().message ? ` · ${s().message}` : ''}${s().verified ? ` · verified:${s().verified}` : ''}`}
               testId="axis-badge-stream"
               class={
-                s().status === 'live'
+                s().status === 'live' && s().verified !== 'engine' && s().verified !== 'none'
                   ? 'text-emerald-400/90 border-emerald-500/30'
                   : s().status === 'error'
                     ? 'text-red border-red/40'

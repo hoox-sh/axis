@@ -72,7 +72,7 @@ export interface WireHandlers {
   onStatus(subId: string, status: SubscriptionStatus, extra?: { message?: string; have?: number; need?: number }): void;
   onSeriesFull(bars: Bar[]): void;
   onSeriesDelta(bars: Bar[], append: boolean): void;
-  onCloseVerified(time: number, result: 'match' | 'mismatch' | 'unknown'): void;
+  onCloseVerified(time: number, result: 'match' | 'mismatch' | 'unknown', ohlcv?: Record<string, number>): void;
 }
 
 export interface EvalScriptInput {
@@ -239,7 +239,8 @@ export class StreamLiveWire {
       }
       if (frame.type === 'close' && frame.id) {
         const payload = (frame.payload as Record<string, unknown>) ?? {};
-        this.handlers.onCloseVerified(Number(payload.time ?? 0), 'unknown');
+        const ohlcv = payload.ohlcv as Record<string, number> | undefined;
+        this.handlers.onCloseVerified(Number(payload.time ?? 0), 'unknown', ohlcv);
       }
     } catch {
       /* routing must never break the socket */

@@ -106,14 +106,45 @@ function buildWire(): StreamLiveWire {
         setBarsQuiet(bars);
         setDataToChart(bars, { fit: false, clearMarkers: false });
       },
-      onCloseVerified: (time, result) => {
-        const v = verifiers.get(seriesSubId());
-        try {
-          v?.finish(result);
-        } catch {
-          /* no verification pending — informational only */
-        }
-        void time;
+      onCloseVerified: (time, _result, ohlcv) => {
+        void (async () => {
+          const key = chartSeriesKey();
+          const o = ohlcv ?? {};
+          const nums = {
+            open: Number(o.open),
+            high: Number(o.high),
+            low: Number(o.low),
+            close: Number(o.close),
+            volume: Number(o.volume),
+          };
+          if (![nums.open, nums.high, nums.low, nums.close, nums.volume].every(Number.isFinite)) {
+            setFeedStatus(key, 'degraded', { message: 'unverified close', verified: 'none' });
+            return;
+          }
+          try {
+            const out = await verifyClosedBar({
+              seriesKey: key,
+              symbol: store.symbol || '',
+              interval: store.interval || '',
+              time,
+              engineOhlcv: nums,
+            });
+            if (out.result === 'mismatch') {
+              setFeedStatus(key, 'degraded', {
+                message: 'close mismatch — repair requested',
+                verified: out.verified,
+              });
+              return;
+            }
+            if (out.verified === 'venue' || out.verified === 'proxy') {
+              setFeedStatus(key, 'live', { verified: out.verified });
+            } else {
+              setFeedStatus(key, 'degraded', { message: 'unverified close', verified: out.verified });
+            }
+          } catch {
+            setFeedStatus(key, 'degraded', { message: 'unverified close', verified: 'none' });
+          }
+        })();
       },
     },
     (script, indicatorId, full, via, bars) =>
@@ -230,6 +261,74 @@ export function streamVerifyClose(
     return 'unknown';
   }
   return result;
+}
+
+export type VerifyStrength = 'venue' | 'proxy' | 'engine' | 'none';
+
+export interface VerifyClosedBarInput {
+  /** Canonical series key (for status reporting). */
+  seriesKey: string;
+  /** Venue load-form symbol (e.g. BTCUSDT) for the kline lookup. */
+  symbol: string;
+  /** Venue interval (e.g. 1m). */
+  interval: string;
+  /** Closed bar time (unix seconds). */
+  time: number;
+  engineOhlcv: { open: number; high: number; low: number; close: number; volume: number };
+  signal?: AbortSignal;
+}
+
+export interface VerifyClosedBarOutcome {
+  result: 'match' | 'mismatch' | 'unknown';
+  verified: VerifyStrength;
+}
+
+type KlineFetcher = (opts: {
+  path: 'klines';
+  query?: string;
+  skipSigned?: boolean;
+  skipWorkerProxy?: boolean;
+  signal?: AbortSignal;
+}) => Promise<unknown>;
+
+/**
+ * Three-tier close verification (F-28): venue REST first, Worker proxy
+ * second, engine-copy (local replica) last. Returns which tier confirmed.
+ * Non-binance venues skip straight to proxy/engine (no direct helper yet).
+ */
+export async function verifyClosedBar(
+  input: VerifyClosedBarInput,
+  deps?: { fetchKlines?: KlineFetcher },
+): Promise<VerifyClosedBarOutcome> {
+  const query = `symbol=${encodeURIComponent(input.symbol)}&interval=${encodeURIComponent(input.interval)}&startTime=${input.time * 1000}&limit=1`;
+  const fetchKlines: KlineFetcher =
+    deps?.fetchKlines ??
+    ((opts) => import('../data/binance-http').then((m) => m.fetchBinanceJson(opts as never) as Promise<unknown>));
+  const readRow = (json: unknown): { open: number; high: number; low: number; close: number; volume: number } | null => {
+    const rows = Array.isArray(json) ? json : (json as { data?: unknown })?.data;
+    if (!Array.isArray(rows)) return null;
+    const row = rows.find((r) => Array.isArray(r) && Number(r[0]) === input.time * 1000) ?? rows[0];
+    if (!Array.isArray(row) || row.length < 6) return null;
+    const [ , o, h, l, c, v] = row.map(Number);
+    if (![o, h, l, c, v].every(Number.isFinite)) return null;
+    return { open: o, high: h, low: l, close: c, volume: v };
+  };
+  // Tier 1 — direct venue REST (no proxy involved).
+  try {
+    const row = readRow(await fetchKlines({ path: 'klines', query, skipSigned: true, skipWorkerProxy: true, signal: input.signal }));
+    if (row) return { result: compareClosedOhlcv(input.engineOhlcv, row), verified: 'venue' };
+  } catch {
+    /* fall through */
+  }
+  // Tier 2 — Worker market proxy.
+  try {
+    const row = readRow(await fetchKlines({ path: 'klines', query, skipSigned: true, signal: input.signal }));
+    if (row) return { result: compareClosedOhlcv(input.engineOhlcv, row), verified: 'proxy' };
+  } catch {
+    /* fall through */
+  }
+  // Tier 3 — engine copy (local replica cell). Weak: logged as such.
+  return { result: streamVerifyClose(input.time, input.engineOhlcv), verified: 'engine' };
 }
 
 /** Tear down the stream path (stopLive / symbol switch / restart). */

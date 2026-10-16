@@ -7,7 +7,7 @@ tags: [code, streams]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-16T18:28:43Z
+  at: 2026-10-16T19:09:44Z
 sources:
   - id: tree
     resource: "src/streams"
@@ -21,7 +21,7 @@ okf_lock: generated
 * `catalog.ts` — BUILTIN_STREAMS, StreamPlugin, _resetStreamRegistrationFlag, binanceStream, bybitStream, ccxtWsStream, coinbaseStream, defaultStreamForSource, ensureStreamsRegistered, foldVenueCandle, getStream, krakenStream
 * `multiplex.ts` — ENGINE_OWNED_APPEND_CAP, ENGINE_OWNED_TICK_MIN_MS, EngineOwnedPaintDiff, HEAVY_LIVE_RERUN_BARS, LIVE_RERUN_MAX_CONCURRENT, StopLiveOpts, StopLiveReason, StreamPlugin, _awaitEnginePaintForTests, _getLiveEpochForTests, _getPendingLiveBarCountForTests, _getRerunAttemptCountForTests
 * `reconnect-ws.ts` — RECONNECT_DEFAULTS, ReconnectableWsOpts, WsStatus, nextBackoffMs, openReconnectableWs
-* `stream-live.ts` — StreamFallbackError, streamEvalScript, streamRouteActive, streamSeriesTick, streamStop, streamVerifyClose
+* `stream-live.ts` — StreamFallbackError, VerifyClosedBarInput, VerifyClosedBarOutcome, VerifyStrength, streamEvalScript, streamRouteActive, streamSeriesTick, streamStop, streamVerifyClose, verifyClosedBar
 * `ws-venues.ts` — VENUE_WS_HOSTS, VenueId, VenueWsConfig, buildVenueWs
 
 # Depends on
@@ -53,5 +53,6 @@ okf_lock: generated
 * [src/ui/plugins](/code/src/ui/plugins.md)
 * [src/ui/settings](/code/src/ui/settings.md)
 * [tests](/code/tests.md)
+* [tests/engine](/code/tests/engine.md)
 * [tests/integration](/code/tests/integration.md)
 * [tests/security](/code/tests/security.md)

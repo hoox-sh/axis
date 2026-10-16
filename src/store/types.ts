@@ -319,6 +319,11 @@ export interface FeedSubscription {
   have?: number;
   need?: number;
   message?: string;
+  /**
+   * Close-verification strength (F-28): which tier confirmed the watermark.
+   * `engine`/`none` render as degraded-until-stronger in the HUD.
+   */
+  verified?: 'venue' | 'proxy' | 'engine' | 'none';
   /** Wall-clock ms of the last status transition. */
   updatedAt: number;
 }
@@ -327,6 +332,8 @@ export interface FeedSubscription {
 export interface ScriptRuntimeStatus {
   status: SubscriptionStatus;
   message?: string;
+  /** Close-verification strength (F-28); see {@link FeedSubscription}. */
+  verified?: 'venue' | 'proxy' | 'engine' | 'none';
   /** Wall-clock ms of the last status transition. */
   updatedAt: number;
 }

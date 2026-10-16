@@ -2860,7 +2860,7 @@ export function setPreEval(next: AppState['preEval']) {
 export function setFeedStatus(
   key: string,
   status: AppState['live']['feeds'][string]['status'],
-  extra?: { have?: number; need?: number; message?: string },
+  extra?: { have?: number; need?: number; message?: string; verified?: AppState['live']['feeds'][string]['verified'] },
 ) {
   setStore('live', 'feeds', key, {
     key,
@@ -2868,6 +2868,7 @@ export function setFeedStatus(
     ...(extra?.have !== undefined ? { have: extra.have } : {}),
     ...(extra?.need !== undefined ? { need: extra.need } : {}),
     ...(extra?.message !== undefined ? { message: extra.message } : {}),
+    ...(extra?.verified !== undefined ? { verified: extra.verified } : {}),
     updatedAt: Date.now(),
   });
 }
@@ -2889,10 +2890,12 @@ export function setScriptStatus(
   indicatorId: string,
   status: AppState['live']['scriptStatus'][string]['status'],
   message?: string,
+  verified?: AppState['live']['scriptStatus'][string]['verified'],
 ) {
   setStore('live', 'scriptStatus', indicatorId, {
     status,
     ...(message !== undefined ? { message } : {}),
+    ...(verified !== undefined ? { verified } : {}),
     updatedAt: Date.now(),
   });
 }
