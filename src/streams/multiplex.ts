@@ -422,6 +422,41 @@ export function startLive(
         if (prev && prev.time === b.time) ordered[ordered.length - 1] = b;
         else ordered.push(b);
       }
+      // Venue append shared by the legacy path and the stream-path fallback
+      // below. Defined before either branch: the stream branch returns early,
+      // so a fallback closure must never reach past it for initialization.
+      const appendVenueBars = (bars: Bar[]) => {
+        let shouldRerun = false;
+        for (const bar of bars) {
+        if (!isCurrent()) break;
+        appendBar(bar);
+        const manager = getManager();
+        if (manager) manager.appendBar(bar);
+        noteTick(bar.close, bar.time, sym);
+        // F2 (cross-workstream): pass the stream's own identity so alerts
+        // evaluate against the stream symbol, dropping stale-stream bars.
+        noteLiveBarForAlerts(bar, { symbol: sym, interval: iv });
+
+        // Data Manager: grow the underlying bars-cache dataset with live ticks.
+        // Skipped in engine-owned live mode — the engine's store owns the series,
+        // so local persistence would fight the feed the chart renders from.
+        if (!isEngineOwnedLive()) noteDataManagerLiveBar(bar);
+
+        const timeAdvanced = lastSeenBarTime > 0 && bar.time > lastSeenBarTime;
+        lastSeenBarTime = Math.max(lastSeenBarTime, bar.time);
+        // Heavy histories: throttle every-tick → bar-close to avoid full engine re-encode.
+        // An engine that advertises bar close only also falls back here — the
+        // stored preference itself is never rewritten.
+        const mode = effectiveLiveRerunMode(
+          liveRerunModeForEngine(store.live.rerunOn),
+          store.bars?.length ?? 0,
+        );
+          if (mode === 'every-tick' || bar.closed || timeAdvanced) {
+            shouldRerun = true;
+          }
+        }
+        if (shouldRerun && isCurrent()) scheduleRerun();
+      };
       // Stream path (F-19): the subscription owns the replica — venue bars
       // are never appended locally. The tick is async; on success a changed
       // window (or every-tick mode) schedules a re-run, on failure we run the
@@ -455,38 +490,6 @@ export function startLive(
         paintEngineOwned(ordered);
         return;
       }
-      const appendVenueBars = (bars: Bar[]) => {
-        let shouldRerun = false;
-        for (const bar of bars) {
-        if (!isCurrent()) break;
-        appendBar(bar);
-        const manager = getManager();
-        if (manager) manager.appendBar(bar);
-        noteTick(bar.close, bar.time, sym);
-        // F2 (cross-workstream): pass the stream's own identity so alerts
-        // evaluate against the stream symbol, dropping stale-stream bars.
-        noteLiveBarForAlerts(bar, { symbol: sym, interval: iv });
-
-        // Data Manager: grow the underlying bars-cache dataset with live ticks.
-        // Skipped in engine-owned live mode — the engine's store owns the series,
-        // so local persistence would fight the feed the chart renders from.
-        if (!isEngineOwnedLive()) noteDataManagerLiveBar(bar);
-
-        const timeAdvanced = lastSeenBarTime > 0 && bar.time > lastSeenBarTime;
-        lastSeenBarTime = Math.max(lastSeenBarTime, bar.time);
-        // Heavy histories: throttle every-tick → bar-close to avoid full engine re-encode.
-        // An engine that advertises bar close only also falls back here — the
-        // stored preference itself is never rewritten.
-        const mode = effectiveLiveRerunMode(
-          liveRerunModeForEngine(store.live.rerunOn),
-          store.bars?.length ?? 0,
-        );
-          if (mode === 'every-tick' || bar.closed || timeAdvanced) {
-            shouldRerun = true;
-          }
-        }
-        if (shouldRerun && isCurrent()) scheduleRerun();
-      };
       appendVenueBars(ordered);
     } catch {
       /* never let a single tick tear down the live session / UI */
