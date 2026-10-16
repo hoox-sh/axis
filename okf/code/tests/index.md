@@ -3,9 +3,10 @@
 # Concepts
 
 * [tests/bench](bench.md) - Optional firehose bench: 500k appendBar ticks on ~50k history.
+* [tests/engine](engine.md) - Calculator-profile parity (F-26): engines without livestream resolve to the bars-in path, with or without /health.
 * [tests/fixtures](fixtures.md) - Deterministic OHLCV fixtures for unit/integration tests (no network).
 * [tests/helpers](helpers.md) - tests/helpers contains mock-chart-host.ts, mock-fetch.ts, mock-lwc.ts, and 2 more files.
-* [tests/integration](integration.md) - tests/integration contains library-service.test.ts, live-rerun.test.ts, load-symbol.test.ts, and 5 more files.
+* [tests/integration](integration.md) - tests/integration contains engine-stream.e2e.test.ts, library-service.test.ts, live-rerun.test.ts, and 6 more files.
 * [tests/okf](okf.md) - tests/okf contains bundle.test.ts.
 * [tests/security](security.md) - Client security: untrusted plugin install, storage path isolation, no secret leakage.
 

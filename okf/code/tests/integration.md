@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "tests/integration"
-description: "tests/integration contains library-service.test.ts, live-rerun.test.ts, load-symbol.test.ts, and 5 more files."
+description: "tests/integration contains engine-stream.e2e.test.ts, library-service.test.ts, live-rerun.test.ts, and 6 more files."
 resource: "tests/integration"
 tags: [code, integration, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-13T19:44:07Z
+  at: 2026-10-16T18:28:43Z
 sources:
   - id: tree
     resource: "tests/integration"
@@ -18,6 +18,7 @@ okf_lock: generated
 
 # Files
 
+* `engine-stream.e2e.test.ts`
 * `library-service.test.ts`
 * `live-rerun.test.ts`
 * `load-symbol.test.ts`
@@ -34,6 +35,7 @@ okf_lock: generated
 # Depends on
 
 * [src/data](/code/src/data.md)
+* [src/engine](/code/src/engine.md)
 * [src/engines](/code/src/engines.md)
 * [src/indicators](/code/src/indicators.md)
 * [src/onchain](/code/src/onchain.md)

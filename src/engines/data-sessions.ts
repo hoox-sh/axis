@@ -20,6 +20,11 @@
 /**
  * Engine-owned data sessions (PYNE Pro, every-tick live mode).
  *
+ * CALCULATOR PROFILE ONLY (F-20): kept for engines without `live_stream`.
+ * Stream-profile engines ensure history server-side and push snapshots over
+ * `WS /ws/live` — they never call this broker. Do not extend this module;
+ * new behavior belongs in `src/engine/`.
+ *
  * The engine owns the OHLCV series for `(exchange, market, symbol, interval)`.
  * AXIS only sends identity and script; it never ships bars for a session. When
  * the engine reports a cache miss, this module brokers the fill: auto-upload the

@@ -226,6 +226,7 @@ export const DEFAULT_ENGINE_CAPABILITIES: EngineCapabilities = {
   liveModes: ['bar-close'],
   ownsData: false,
   dataSession: false,
+  liveStream: false,
 };
 
 /**
@@ -267,8 +268,9 @@ const LIVE_MODES: readonly EngineLiveMode[] = ['every-tick', 'bar-close'];
 
 /**
  * Map a `GET /health` body to engine capabilities (contract: `features.live_modes`,
- * `features.data_session`, `features.data_exchanges`). Unknown or absent keys
- * fall back to {@link DEFAULT_ENGINE_CAPABILITIES}; never infers from the service name.
+ * `features.data_session`, `features.data_exchanges`, `features.live_stream`).
+ * Unknown or absent keys fall back to {@link DEFAULT_ENGINE_CAPABILITIES};
+ * never infers from the service name. `live_stream` is strictly opt-in.
  */
 export function capabilitiesFromHealth(body: unknown): EngineCapabilities {
   const features =
@@ -289,6 +291,7 @@ export function capabilitiesFromHealth(body: unknown): EngineCapabilities {
     liveModes: liveModes.length ? [...liveModes] : [...DEFAULT_ENGINE_CAPABILITIES.liveModes],
     ownsData: dataSession,
     dataSession,
+    liveStream: features.live_stream === true,
     ...(exchanges?.length ? { dataExchanges: exchanges } : {}),
   };
 }

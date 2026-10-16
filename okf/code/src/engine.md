@@ -1,0 +1,48 @@
+---
+type: "Code Module"
+title: "src/engine"
+description: "Redesign2 engine module barrel."
+resource: "src/engine"
+tags: [code, engine]
+status: stable
+generated:
+  by: process:axis-okf/1
+  at: 2026-10-16T17:51:48Z
+sources:
+  - id: tree
+    resource: "src/engine"
+    title: "src/engine"
+    author: process:git
+okf_lock: generated
+---
+
+# Files
+
+* `apply-bridge.ts` — ApplyStreamInput, StreamFullPayload, StreamVia, applyStreamPayload, streamFullToPrecomputed
+* `bar-close-verify.ts` — ClosedOhlcv, Redesign2BarCloseVerifier, VerificationResult, VerifyRequest, compareClosedOhlcv, verifyRequestFor
+* `client-apply.ts` — ApplyState, DeltaApplierDelta, DeltaApplierFull, DeltaApplyOutcome, Redesign2ApplyStateManager, Redesign2DeltaApplier
+* `feature-flag.ts` — STREAM_ENGINE_FLAG_KEY, isStreamEngineDisabled, isStreamEngineEnabled, setStreamEngineEnabled
+* `frames.ts` — DeltaBlock, FrameBar, Redesign2AuthFrame, Redesign2AuthOkFrame, Redesign2CloseFrame, Redesign2DeltaFrame, Redesign2ErrorFrame, Redesign2Frame, Redesign2FullFrame, Redesign2PingFrame, Redesign2PongFrame, Redesign2RepairFrame
+* `index.ts`
+* `live-wire.ts` — EvalScriptInput, StreamFallbackError, StreamLiveWire, WireClient, WireFrame, WireHandlers
+* `market-identity.ts` — CatalogSymbol, MarketIdentity, currentSeriesKey, marketIdentityKey, pairFormSymbol, sameMarketIdentity
+* `policy.ts` — ClientVenueStreamMode, DATA_PLANE_DEFAULT_LEVERS, DEFAULT_DATA_PLANE_POLICY, DataPlanePolicy, EngineProfile, EngineProfileCaps, profileForCapabilities
+* `rest-fallback.ts` — Redesign2RestRequest, Redesign2TailEnvelope, Redesign2TailRequest, buildSessionTailUrl, requestRedesign2RestFrame, requestSessionTail
+* `router.ts` — RouteDecision, routeEngineRun
+* `session-broker.ts` — Redesign2Session, Redesign2SessionBroker
+* `session-multiplexer.ts` — Redesign2SessionHandler, Redesign2SessionMultiplexer
+* `ws-client.ts` — Redesign2WsAuth, Redesign2WsClient, Redesign2WsClientOptions, Redesign2WsFrame, Redesign2WsFrameType, endpointToRedesign2WsUrl
+
+# Depends on
+
+* [src/engines](/code/src/engines.md)
+* [src/indicators](/code/src/indicators.md)
+* [src/plugins](/code/src/plugins.md)
+* [src/store](/code/src/store.md)
+
+# Used by
+
+* [src/streams](/code/src/streams.md)
+* [src/ui](/code/src/ui.md)
+* [tests/engine](/code/tests/engine.md)
+* [tests/integration](/code/tests/integration.md)

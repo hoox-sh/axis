@@ -300,6 +300,37 @@ export interface PlaneTelemetry {
   error?: string | null;
 }
 
+/** Per-subscription lifecycle for the engine-owned data plane (final/plan.mdx §7). */
+export type SubscriptionStatus =
+  | 'idle'
+  | 'connecting'
+  | 'datafeed-loading'
+  | 'datafeed-ready'
+  | 'calculating'
+  | 'live'
+  | 'degraded'
+  | 'error';
+
+/** One engine-owned feed subscription, keyed by canonical series key. Ephemeral. */
+export interface FeedSubscription {
+  key: string;
+  status: SubscriptionStatus;
+  /** Bars held by the engine when `datafeed-loading` (progress `have/need`). */
+  have?: number;
+  need?: number;
+  message?: string;
+  /** Wall-clock ms of the last status transition. */
+  updatedAt: number;
+}
+
+/** Per-script runtime status by indicator id. Ephemeral. */
+export interface ScriptRuntimeStatus {
+  status: SubscriptionStatus;
+  message?: string;
+  /** Wall-clock ms of the last status transition. */
+  updatedAt: number;
+}
+
 /** Last live tick snapshot for HUD “tick age / direction”. */
 export interface TickTelemetry {
   /** Bar / trade time (Unix seconds when from kline). */
@@ -476,6 +507,18 @@ export interface AppState {
      * bar-close = only when venue marks candle closed (or bar time advances).
      */
     rerunOn: 'every-tick' | 'bar-close';
+    /**
+     * Engine-owned data plane subscriptions by canonical series key
+     * (`exchange|market|SYMBOL|interval`). Ephemeral — never persisted
+     * (the persist payload allowlists only streamId/preferAfterLoad/rerunOn)
+     * and always hydrates empty. See final/plan.mdx §7.
+     */
+    feeds: Record<string, FeedSubscription>;
+    /**
+     * Per-script runtime status by indicator id. Ephemeral — never persisted,
+     * always hydrates empty. Rendered by the HUD and indicator rows.
+     */
+    scriptStatus: Record<string, ScriptRuntimeStatus>;
   };
 
   theme: 'dark' | 'light';

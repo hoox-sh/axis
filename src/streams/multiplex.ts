@@ -74,6 +74,7 @@ import {
 import { noteDataManagerLiveBar } from '../data/expand-cache';
 import { isEngineOwnedLive } from '../engines/ownership';
 import { liveRerunModeForEngine } from '../engines/catalog';
+import { streamEvalScript, streamRouteActive, streamSeriesTick, streamStop, StreamFallbackError } from './stream-live';
 import { tickChartDataSession, releaseChartDataSession } from '../engines/chart-data-session';
 import { getDataSeriesBars } from '../engines/data-sessions';
 import { refreshLiveSessionTelemetry } from '../engines/live-sessions';
@@ -421,6 +422,32 @@ export function startLive(
         if (prev && prev.time === b.time) ordered[ordered.length - 1] = b;
         else ordered.push(b);
       }
+      // Stream path (F-19): the subscription owns the replica — venue bars
+      // are never appended locally. The tick is async; on success a changed
+      // window (or every-tick mode) schedules a re-run, on failure we run the
+      // legacy venue append below so the chart never stalls on an outage.
+      if (streamRouteActive()) {
+        streamSeriesTick().then(
+          (changed) => {
+            if (!isCurrent()) return;
+            if (
+              changed ||
+              effectiveLiveRerunMode(liveRerunModeForEngine(store.live.rerunOn), store.bars.length) ===
+                'every-tick'
+            ) {
+              scheduleRerun();
+            }
+          },
+          (e) => {
+            if (e instanceof StreamFallbackError) {
+              if (isCurrent()) appendVenueBars(ordered);
+              return;
+            }
+            throw e;
+          },
+        );
+        return;
+      }
       // Engine-owned live mode: the venue WS is only a trigger. Advance the
       // engine's store, paint the engine's bars (so candles and indicators
       // align), then rerun indicators — each ticks its own engine session.
@@ -428,8 +455,9 @@ export function startLive(
         paintEngineOwned(ordered);
         return;
       }
-      let shouldRerun = false;
-      for (const bar of ordered) {
+      const appendVenueBars = (bars: Bar[]) => {
+        let shouldRerun = false;
+        for (const bar of bars) {
         if (!isCurrent()) break;
         appendBar(bar);
         const manager = getManager();
@@ -453,11 +481,13 @@ export function startLive(
           liveRerunModeForEngine(store.live.rerunOn),
           store.bars?.length ?? 0,
         );
-        if (mode === 'every-tick' || bar.closed || timeAdvanced) {
-          shouldRerun = true;
+          if (mode === 'every-tick' || bar.closed || timeAdvanced) {
+            shouldRerun = true;
+          }
         }
-      }
-      if (shouldRerun && isCurrent()) scheduleRerun();
+        if (shouldRerun && isCurrent()) scheduleRerun();
+      };
+      appendVenueBars(ordered);
     } catch {
       /* never let a single tick tear down the live session / UI */
     }
@@ -896,6 +926,8 @@ export function stopLive(opts?: StopLiveOpts) {
   // chart's engine session so a symbol change / restart starts clean.
   enginePaintChain = Promise.resolve();
   releaseChartDataSession();
+  // Stream path: disconnect the subscription socket and clear statuses.
+  streamStop();
 }
 
 /**
@@ -999,6 +1031,22 @@ function scheduleRerun() {
             return;
           }
           try {
+            if (streamRouteActive()) {
+              try {
+                await streamEvalScript(ind);
+              } catch (e) {
+                if (!(e instanceof StreamFallbackError)) throw e;
+                await runAndApply(ind.code, ind.id, {
+                  silent: true,
+                  openResults: false,
+                  inputs: ind.inputValues,
+                  strategyProps: ind.strategyProps,
+                  liveTick: true,
+                  epoch: batch,
+                });
+              }
+              return;
+            }
             await runAndApply(ind.code, ind.id, {
               silent: true,
               openResults: false,

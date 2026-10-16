@@ -20,6 +20,10 @@
 /**
  * Chart-level engine-owned data session.
  *
+ * CALCULATOR PROFILE ONLY (F-20): kept for engines without `live_stream`.
+ * Stream-profile charts render from the `series` subscription snapshot +
+ * deltas. Do not extend this module; new behavior belongs in `src/engine/`.
+ *
  * In every-tick Pro mode the chart must render the engine's series, not the
  * raw venue stream, so candles and indicator calculations stay aligned (the
  * script evaluates the same bars the user sees). The venue WS remains only a

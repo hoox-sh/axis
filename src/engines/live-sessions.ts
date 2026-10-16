@@ -20,6 +20,11 @@
 /**
  * PYNE live evaluation sessions (Pro API 0.6.9+) — O(delta) live re-runs.
  *
+ * CALCULATOR PROFILE ONLY (F-20): kept for engines without `live_stream`.
+ * Stream-profile engines tick server-side and push deltas — they never call
+ * this client. Do not extend this module; new behavior belongs in
+ * `src/engine/`.
+ *
  * A session keeps the parsed script, its series, and its TA state alive
  * server-side, so a live tick re-evaluates one bar instead of the whole
  * rolling window (measured 1,087 ms → 0.13 ms on 20k bars). The session

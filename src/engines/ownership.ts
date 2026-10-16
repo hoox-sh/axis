@@ -20,6 +20,12 @@
 /**
  * Engine-owned live mode: who persists OHLCV.
  *
+ * CALCULATOR PROFILE ONLY (F-20): engines without `live_stream` keep this
+ * REST poll path (`POST /data/session` + `GET /data/series/bars` + paint
+ * diff). Stream-profile engines (`features.live_stream`) never consult this
+ * predicate — the WS subscription owns the replica. Do not extend this
+ * module; new behavior belongs in `src/engine/`.
+ *
  * In every-tick Pro mode the engine's store and feed own the bars for the
  * chart's `(exchange, symbol, interval)`. Local persistence must not compete
  * with that: streamed bars stay in memory (chart buffers) and are never

@@ -30,7 +30,7 @@
  * UI: `ConnectionHud.tsx`. No Solid dependency.
  */
 
-import type { ConnState, TransportClass } from '../store/types';
+import type { ConnState, SubscriptionStatus, TransportClass } from '../store/types';
 
 export type EngTopology = 'local' | 'remote';
 export type RunClass = 'browser' | 'server' | 'worker';
@@ -47,6 +47,7 @@ export type HudChipId =
   | 'src'
   | 'str'
   | 'sto'
+  | 'feed'
   | 'onc';
 
 export interface HudSnapshot {
@@ -256,6 +257,47 @@ export function liveBadgeTone(opts: {
   return 'offline';
 }
 
+/**
+ * Chip tone for an engine-owned feed subscription (F-18). `live` is green,
+ * `degraded`/`error` are amber/red, everything in-flight is neutral loading.
+ */
+export function feedStatusTone(status: SubscriptionStatus): 'live' | 'load' | 'degraded' | 'err' | 'idle' {
+  if (status === 'live') return 'live';
+  if (status === 'degraded') return 'degraded';
+  if (status === 'error') return 'err';
+  if (status === 'idle') return 'idle';
+  return 'load';
+}
+
+/**
+ * Short label for a feed subscription. Degraded appends staleness
+ * ("degraded · 45s stale"); loading states show progress when known
+ * ("loading 2k/10k").
+ */
+export function feedStatusLabel(
+  status: SubscriptionStatus,
+  opts?: { have?: number; need?: number; message?: string; updatedAt?: number; now?: number },
+): string {
+  if (status === 'live') return 'live';
+  if (status === 'error') return `error${opts?.message ? ` · ${opts.message}` : ''}`;
+  if (status === 'degraded') {
+    const at = opts?.updatedAt ?? 0;
+    const now = opts?.now ?? Date.now();
+    const ageS = Math.max(0, Math.round((now - at) / 1000));
+    return `degraded · ${ageS}s stale`;
+  }
+  if (status === 'datafeed-loading') {
+    if (opts?.have !== undefined && opts?.need !== undefined) {
+      return `loading ${opts.have}/${opts.need}`;
+    }
+    return 'loading';
+  }
+  if (status === 'datafeed-ready') return 'ready';
+  if (status === 'calculating') return 'calculating';
+  if (status === 'connecting') return 'connecting';
+  return 'idle';
+}
+
 /** Sticky-panel title/body copy for a chip given the current snapshot. */
 export function hudChipHelp(id: HudChipId, snap: HudSnapshot): { title: string; body: string } {
   switch (id) {
@@ -339,6 +381,14 @@ export function hudChipHelp(id: HudChipId, snap: HudSnapshot): { title: string; 
           '• GeckoTerminal DEX OHLCV via `/api/onchain/gecko`\n' +
           'Ephemeral — probed when the On-Chain panel opens or on first attach/search.\n' +
           'Uses the same engine endpoint base as pyne/Worker.',
+      };
+    case 'feed':
+      return {
+        title: 'FEED — engine-owned subscription',
+        body:
+          'Status of the engine-owned datafeed subscription for this chart series\n' +
+          '(`subscribe → status → full → delta → close`). Shown only while the\n' +
+          'stream engine path is active.',
       };
     default:
       return { title: id, body: '' };

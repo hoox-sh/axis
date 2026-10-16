@@ -7,6 +7,7 @@
 * [src/data](data.md) - Background Data Source Manager — multi-page OHLCV backfill to a past date.
 * [src/desktop](desktop.md) - AXIS desktop (Tauri) shell helpers.
 * [src/editor](editor.md) - Root component for the standalone editor window (?view=editor).
+* [src/engine](engine.md) - Redesign2 engine module barrel.
 * [src/engines](engines.md) - src/engines contains batch.ts, catalog.ts, chart-data-session.ts, and 10 more files.
 * [src/indicators](indicators.md) - src/indicators contains IndicatorCard.tsx, IndicatorPanel.tsx, detach.ts, and 6 more files.
 * [src/mcp](mcp.md) - AXIS in-app MCP host — capabilities, snapshot, Worker bridge.
@@ -19,7 +20,7 @@
 * [src/storage](storage.md) - src/storage contains catalog.ts, cloud-config.ts, cloud.ts, and 14 more files.
 * [src/store](store.md) - AXIS Solid store — createStore hydration, persistence, and mutation helpers.
 * [src/stories](stories.md) - Button designs showcase — three candidate app-button languages plus non-rectangular forms (pill / orb / cut / tab) and segmented groups.
-* [src/streams](streams.md) - src/streams contains catalog.ts, multiplex.ts, reconnect-ws.ts, and 1 more file.
+* [src/streams](streams.md) - src/streams contains catalog.ts, multiplex.ts, reconnect-ws.ts, and 2 more files.
 * [src/sw](sw.md) - Pure service-worker strategy helpers (unit-testable).
 * [src/theme](theme.md) - AXIS Theme Manager — public API.
 * [src/ui](ui.md) - src/ui contains AboutModal.tsx, AlertsPanel.tsx, BarReplayControls.tsx, and 77 more files.

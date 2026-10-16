@@ -641,6 +641,8 @@ export const DEFAULTS: AppState = {
     streamId: 'binance-ws',
     preferAfterLoad: true,
     rerunOn: 'every-tick',
+    feeds: {},
+    scriptStatus: {},
   },
   theme: 'dark',
   chartTheme: defaultChartThemeState(),
@@ -978,6 +980,9 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
         ...liveBag,
         // Never hydrate "live active" as running — user must re-enable
         active: false,
+        // Feed/script subscription status is ephemeral — always start empty.
+        feeds: {},
+        scriptStatus: {},
         preferAfterLoad:
           typeof liveBag?.preferAfterLoad === 'boolean'
             ? liveBag.preferAfterLoad
@@ -1804,7 +1809,7 @@ function seedStoreState(overlay: Partial<AppState> | null | undefined): AppState
   const base: AppState = {
     ...DEFAULTS,
     activePlugins: { ...DEFAULTS.activePlugins },
-    live: { ...DEFAULTS.live },
+    live: { ...DEFAULTS.live, feeds: {}, scriptStatus: {} },
     editor: { ...DEFAULTS.editor },
     watchlist: cloneWatchlistState(DEFAULTS.watchlist),
     indicatorPanel: { ...DEFAULTS.indicatorPanel },
@@ -2845,6 +2850,60 @@ export function setStatus(
  */
 export function setPreEval(next: AppState['preEval']) {
   setStore('preEval', next);
+}
+
+/**
+ * Set an engine-owned feed subscription status (F-07). Ephemeral — the persist
+ * payload allowlists only streamId/preferAfterLoad/rerunOn, so `feeds` never
+ * reaches storage. Keyed by canonical series key.
+ */
+export function setFeedStatus(
+  key: string,
+  status: AppState['live']['feeds'][string]['status'],
+  extra?: { have?: number; need?: number; message?: string },
+) {
+  setStore('live', 'feeds', key, {
+    key,
+    status,
+    ...(extra?.have !== undefined ? { have: extra.have } : {}),
+    ...(extra?.need !== undefined ? { need: extra.need } : {}),
+    ...(extra?.message !== undefined ? { message: extra.message } : {}),
+    updatedAt: Date.now(),
+  });
+}
+
+/** Drop a feed subscription entry (symbol switch, unsubscribe, release). */
+export function clearFeedStatus(key: string) {
+  if (!(key in store.live.feeds)) return;
+  const feeds = { ...store.live.feeds };
+  delete feeds[key];
+  // reconcile replaces keys (plain setStore merges nested objects)
+  setStore('live', 'feeds', reconcile(feeds));
+}
+
+/**
+ * Set a per-script runtime status by indicator id (F-07). Ephemeral — never
+ * persisted. Rendered by the HUD and indicator rows.
+ */
+export function setScriptStatus(
+  indicatorId: string,
+  status: AppState['live']['scriptStatus'][string]['status'],
+  message?: string,
+) {
+  setStore('live', 'scriptStatus', indicatorId, {
+    status,
+    ...(message !== undefined ? { message } : {}),
+    updatedAt: Date.now(),
+  });
+}
+
+/** Drop a per-script runtime status entry. */
+export function clearScriptStatus(indicatorId: string) {
+  if (!(indicatorId in store.live.scriptStatus)) return;
+  const scriptStatus = { ...store.live.scriptStatus };
+  delete scriptStatus[indicatorId];
+  // reconcile replaces keys (plain setStore merges nested objects)
+  setStore('live', 'scriptStatus', reconcile(scriptStatus));
 }
 
 /** True when pre-eval found errors and is not still pending. */

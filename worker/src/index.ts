@@ -59,6 +59,7 @@ import { handleScripts } from './scripts';
 import { handleGitOAuth } from './git-oauth';
 import { handleOnchain } from './onchain';
 import { handleMarket } from './market';
+import { handleLiveProxy } from './live-proxy';
 import { SessionDO } from './durable-objects/session';
 import { handleMcp, McpBridgeDO, parseBridgeTicket, formatBridgeTicket } from './mcp';
 import { requireApiKey } from './auth';
@@ -442,6 +443,13 @@ export default {
       if (url.pathname.startsWith('/api/market')) {
         const marketRes = await handleMarket(req, env, origin, url.pathname);
         if (marketRes) return marketRes;
+      }
+
+      // Engine-owned data plane proxy: /api/ws/live → EXTERNAL_BACKEND /ws/live
+      // (ticket or Bearer auth; transparent frame relay).
+      if (url.pathname === '/api/ws/live' || url.pathname.startsWith('/api/ws/live?')) {
+        const liveRes = await handleLiveProxy(req, env, origin, url.pathname);
+        if (liveRes) return liveRes;
       }
 
       switch (url.pathname) {

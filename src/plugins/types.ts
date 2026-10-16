@@ -332,6 +332,13 @@ export interface EngineCapabilities {
    * `ownsData` when omitted.
    */
   dataSession?: boolean;
+  /**
+   * Whether the engine serves the push subscription plane (`WS /ws/live` with
+   * `subscribe → status → full → delta → close`). Strictly opt-in: only
+   * `features.live_stream === true` on `/health` sets it — never inferred
+   * from `data_session`/`live_modes`. Absent/false ⇒ calculator profile.
+   */
+  liveStream?: boolean;
 }
 
 /**

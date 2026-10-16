@@ -125,6 +125,8 @@ export const IndicatorCard: Component<Props> = (props) => {
   const runStatus = createMemo(() =>
     lastRunStatus(store.runResults?.[props.indicator.id]),
   );
+  /** Engine-owned stream runtime status — present only on the stream path. */
+  const streamStatus = createMemo(() => store.live.scriptStatus?.[props.indicator.id]);
   const plotCount = createMemo(
     () => Object.keys(props.indicator.plots || {}).length,
   );
@@ -380,6 +382,26 @@ export const IndicatorCard: Component<Props> = (props) => {
             <Icons.circle size={8} />
           )}
         </MetaBadge>
+
+        <Show when={streamStatus()}>
+          {(s) => (
+            <MetaBadge
+              title={`Stream: ${s().status}${s().message ? ` · ${s().message}` : ''}`}
+              testId="axis-badge-stream"
+              class={
+                s().status === 'live'
+                  ? 'text-emerald-400/90 border-emerald-500/30'
+                  : s().status === 'error'
+                    ? 'text-red border-red/40'
+                    : s().status === 'degraded'
+                      ? 'text-amber-300/90 border-amber-500/30'
+                      : 'text-text-faint'
+              }
+            >
+              <Icons.zap size={11} />
+            </MetaBadge>
+          )}
+        </Show>
       </div>
 
       {/* Plot colors */}

@@ -50,6 +50,8 @@ import { formatLatency, formatTickAge } from './telemetry';
 import {
   composeCaption,
   deriveHud,
+  feedStatusLabel,
+  feedStatusTone,
   hudChipHelp,
   liveBadgeTone,
   liveBadgeWord,
@@ -59,6 +61,8 @@ import {
 } from './hud-model';
 import { defaultStreamForSource } from '../streams/catalog';
 import { getActiveEngineConfig } from '../plugins/active';
+import { currentSeriesKey } from '../engine/market-identity';
+import { FALLBACK_MAJORS } from '../data/symbol-catalog';
 
 function useHudSnapshot(): () => HudSnapshot {
   return createMemo(() => {
@@ -332,6 +336,55 @@ function PlaneChip(props: {
       snap={props.snap}
       testId={`axis-hud-${props.id}`}
     />
+  );
+}
+
+/**
+ * Engine-owned feed status chip (F-18). Renders only while a subscription
+ * exists for the current chart series — the default (no stream path) shows
+ * nothing, so existing HUD behavior is unchanged.
+ */
+function FeedChip(props: {
+  sticky: ReturnType<typeof useStickyInfo>;
+  snap: () => HudSnapshot;
+}) {
+  const key = () =>
+    currentSeriesKey({
+      exchange: store.exchange || 'binance',
+      symbol: store.symbol || '',
+      interval: store.interval || '',
+      catalog: FALLBACK_MAJORS,
+    });
+  const feed = () => store.live.feeds[key()];
+  return (
+    <Show when={feed()}>
+      {(f) => (
+        <ChipShell
+          id="feed"
+          label="feed"
+          value={feedStatusLabel(f().status, {
+            have: f().have,
+            need: f().need,
+            message: f().message,
+            updatedAt: f().updatedAt,
+          })}
+          state={
+            feedStatusTone(f().status) === 'live'
+              ? 'ok'
+              : feedStatusTone(f().status) === 'err'
+                ? 'err'
+                : feedStatusTone(f().status) === 'degraded'
+                  ? 'load'
+                  : feedStatusTone(f().status) === 'idle'
+                    ? 'idle'
+                    : 'load'
+          }
+          sticky={props.sticky}
+          snap={props.snap}
+          testId="axis-hud-feed"
+        />
+      )}
+    </Show>
   );
 }
 
@@ -835,6 +888,7 @@ export const ConnectionHud: Component = () => {
               <PlaneChip label="sto" plane={p()} id="sto" sticky={sticky} snap={snap} />
             )}
           </Show>
+          <FeedChip sticky={sticky} snap={snap} />
           <PairingWarn />
         </Show>
         <Show when={showOnchainPlane(tel()?.onchain, compact())}>
