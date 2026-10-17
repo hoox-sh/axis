@@ -42,6 +42,8 @@ import { StreamLiveWire, StreamFallbackError, type WireClient } from '../engine/
 import { Redesign2WsClient } from '../engine/ws-client';
 import { routeEngineRun } from '../engine/router';
 import { getCachedEngineCapabilities } from '../engines/catalog';
+import type { DataSeriesKey } from '../engines/data-sessions';
+import { driveEngineSeries } from '../engines/series-drive';
 import { engineWindowBehindChart, newestBarTime } from '../engines/series-freshness';
 import { engineSeriesStale, noteStaleEngineSeries } from '../engines/series-repair';
 import { getActiveEngineConfig } from '../plugins/active';
@@ -116,21 +118,70 @@ function engineSeriesPaintable(bars: Bar[], marketNow = 0): boolean {
     marketNow,
   });
   if (!reason) return true;
+  reportStaleEngine(reason, newestBarTime(bars) || null);
+  // Report/repair always; refuse only a paint that would back-date the chart.
+  return !engineWindowBehindChart(store.bars, bars, iv);
+}
+
+/** Canonical series key of the chart (engine `series` identity). */
+function chartSeriesKeyObject(): DataSeriesKey {
+  return {
+    exchange: chartExchange(),
+    market: 'spot',
+    symbol: String(store.symbol || ''),
+    interval: String(store.interval || '1m'),
+  };
+}
+
+/**
+ * Report a stale engine series and queue the background repair (throttled log
+ * + plane/feed telemetry + broker call — see `engines/series-repair.ts`).
+ */
+function reportStaleEngine(reason: string, engineNewest: number | null): void {
   noteStaleEngineSeries({
     exchange: chartExchange(),
     symbol: String(store.symbol || ''),
-    interval: iv,
-    engineNewest: newestBarTime(bars) || null,
+    interval: String(store.interval || '1m'),
+    engineNewest,
     reason,
     repair: {
       endpoint: String(getActiveEngineConfig()?.endpoint || store.endpoint || ''),
       apiKey: String(getActiveEngineConfig()?.apiKey || ''),
-      key: { exchange: chartExchange(), market: 'spot', symbol: String(store.symbol || ''), interval: iv },
+      key: chartSeriesKeyObject(),
       historyBars: engineHistoryBars(),
     },
   });
-  // Report/repair always; refuse only a paint that would back-date the chart.
-  return !engineWindowBehindChart(store.bars, bars, iv);
+}
+
+/**
+ * Drive the engine's series so the subscription has fresh bars to replicate.
+ *
+ * Fire-and-forget on purpose: the paint path stays bound to the venue flush,
+ * while the drive can cost a REST round trip plus the engine's own upstream
+ * fetch. The next flush reads the advanced snapshot, and a late/stale snapshot
+ * can never back-date the chart ({@link engineSeriesPaintable}). See
+ * `engines/series-drive.ts` for why the stream plane needs a drive at all.
+ */
+function driveSeriesFromVenue(marketNow: number): void {
+  const cfg = getActiveEngineConfig() || {};
+  const endpoint = String(cfg.endpoint || store.endpoint || '');
+  if (!endpoint) return;
+  void driveEngineSeries({
+    endpoint,
+    apiKey: String(cfg.apiKey || ''),
+    key: chartSeriesKeyObject(),
+    marketNow,
+  })
+    .then((outcome) => {
+      if (outcome !== 'stale') return;
+      // The engine took the tick but its own feed advanced nothing: report and
+      // repair through the broker (which also covers engines with no
+      // `data_session`, where the drive itself cannot run).
+      reportStaleEngine('engine feed stalled — series not advancing', newestBarTime(store.bars) || null);
+    })
+    .catch(() => {
+      /* best-effort drive; the staleness report + repair stays the backstop */
+    });
 }
 
 /**
@@ -278,6 +329,11 @@ export async function streamSeriesTick(marketNow = 0): Promise<boolean> {
   const subId = seriesSubId();
   try {
     const before = toBarTime(store.bars);
+    // Keep the engine's series moving before we read it: the subscription can
+    // only replicate what that series holds, and the engine's own advance has
+    // been observed stalled (see engines/series-drive.ts). Not awaited — the
+    // paint stays bound to this venue flush.
+    driveSeriesFromVenue(marketNow);
     const bars = await w.ensureSeries(subId, seriesMeta());
     if (!engineSeriesPaintable(bars, marketNow)) return false;
     const manager = getManager();

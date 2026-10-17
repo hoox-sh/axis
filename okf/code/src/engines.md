@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/engines"
-description: "src/engines contains batch.ts, catalog.ts, chart-data-session.ts, and 12 more files."
+description: "src/engines contains batch.ts, catalog.ts, chart-data-session.ts, and 13 more files."
 resource: "src/engines"
 tags: [code, engines]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-17T06:08:33Z
+  at: 2026-10-17T10:28:17Z
 sources:
   - id: tree
     resource: "src/engines"
@@ -30,6 +30,7 @@ okf_lock: generated
 * `prewarm.ts` — MAX_PREWARM_SCRIPTS, PrewarmOptions, PrewarmResult, _resetPrewarmMemoForTests, collectAppliedScriptSources, prewarmAppliedScripts, prewarmEngine
 * `pro.ts` — BacktestSummary, PREVIEW_MAX_BARS, PreviewOptions, PreviewResult, ProCallOptions, QuickBacktestResult, UsageResult, fetchUsage, renderChartPreview, renderIndicatorPreview, runQuickBacktest
 * `runner.ts` — DeployHostedScriptInput, HostedJob, HostedJobCronState, HostedScript, RunnerCallOptions, RunnerResult, deployHostedScript, listHostedJobs, runHostedJobNow, runnerAvailable, setHostedJobEnabled
+* `series-drive.ts` — SERIES_DRIVE_MIN_MS, SeriesDriveOptions, SeriesDriveResult, SeriesDriveTick, SeriesDriveTickFn, _resetSeriesDriveForTests, driveEngineSeries
 * `series-freshness.ts` — ENGINE_SERIES_STALE_STEPS, engineWindowBehindChart, newestBarTime, seriesBehind, seriesBehindNow, stepsBehind
 * `series-repair.ts` — ENGINE_STALE_LOG_MIN_MS, StaleEngineSeriesNotice, _resetEngineStaleNoticeForTests, engineSeriesStale, noteStaleEngineSeries
 * `session-delta.ts` — SessionDeltaInfo, readDeltaInfo, resolveSessionPayload

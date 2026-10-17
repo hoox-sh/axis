@@ -185,6 +185,22 @@ The freshness contract is therefore explicit:
   local-first (upload the local window when it reaches now, upsert-by-time keeps
   Pro's deeper history), else `fetch` from Pro's exchange feed. Cooldown-guarded
   (`SERIES_REPAIR_COOLDOWN_MS`, 60s per endpoint+series), never throws.
+- **Series drive** (`src/engines/series-drive.ts`): the calculator plane advances
+  its series with a REST chart-session tick per venue flush, but the stream plane
+  had no equivalent — its client frames are `subscribe` / `resume` / `repair` /
+  `ping`, so a subscription can only *replicate* the engine's series. A stalled
+  engine, whose own per-tick scheduler stopped advancing the series, therefore
+  left the chart pinned to the frozen tail until the verdict above fired: on 1m,
+  `newest` three bars back at every repair and one bar painted every ~3 minutes.
+  The stream plane now drives the same chart session the calculator plane uses
+  (`tickChartDataSession`) on each venue flush, throttled to
+  `SERIES_DRIVE_MIN_MS` (10s) with a **new venue bar always driving
+  immediately**. The drive is fire-and-forget — the paint stays bound to the
+  venue flush, and a late snapshot can never back-date the chart (paint guards
+  below) — and it is skipped without an endpoint. A `stale` tick envelope (the
+  engine accepted the request but its own feed advanced nothing) falls through to
+  the report + repair above, which also covers engines with no `data_session`,
+  where the drive itself cannot run. Covered by `tests/series-drive.test.ts`.
 - **Paint guards**: both engine-owned paint paths refuse to back-date the chart.
   `streams/multiplex.ts` (`paintEngineOwned`, calculator profile) and
   `streams/stream-live.ts` (stream profile snapshots/deltas) keep the fresher
@@ -225,6 +241,10 @@ The freshness contract is therefore explicit:
   bar), then `status(datafeed-ready)` → `status(calculating)` → one `full`
   snapshot → `status(live)`; per-tick `delta` + `close` frames with monotonic
   `seq` and the `closed_upto` watermark.
+- **Series drive.** The frames above are all client → server; there is no client
+  tick, so the pane ticks the chart's data session over REST on each venue flush
+  (`src/engines/series-drive.ts`, throttled) instead of waiting for the engine's
+  own scheduler or the staleness verdict. See § Series staleness.
 - The client applies snapshots/deltas through the existing apply pipeline
   (`precomputedResult`, tip-only on ticks), re-verifies closed bars against the
   venue, and repairs from the exchange on mismatch.
