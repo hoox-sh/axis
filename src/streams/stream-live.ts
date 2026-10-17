@@ -42,7 +42,7 @@ import { StreamLiveWire, StreamFallbackError, type WireClient } from '../engine/
 import { Redesign2WsClient } from '../engine/ws-client';
 import { routeEngineRun } from '../engine/router';
 import { getCachedEngineCapabilities } from '../engines/catalog';
-import { newestBarTime } from '../engines/series-freshness';
+import { engineWindowBehindChart, newestBarTime } from '../engines/series-freshness';
 import { engineSeriesStale, noteStaleEngineSeries } from '../engines/series-repair';
 import { getActiveEngineConfig } from '../plugins/active';
 import {
@@ -90,12 +90,15 @@ function engineHistoryBars(): number {
  * Stale-engine guard for a hand-off from the engine's series (stream plane).
  *
  * The chart is painted from the engine's series, so a snapshot that is *behind*
- * the chart tail (the Data Manager / venue path already has the newer bars) or
- * behind `marketNow` (the venue trigger clock the caller just flushed — the
- * engine's upstream stopped advancing) must not be painted: it would back-date
- * the chart and re-open the same stale window on every venue tick. Keep the
- * chart, report once, and repair the engine's series from AXIS' own dataset —
- * the next snapshot carries the healed window.
+ * the chart tail (the Data Manager / venue path already has the newer bars) must
+ * not be painted: it would back-date the chart and re-open the same stale window
+ * on every venue tick. Refuse the paint and report + repair the engine's series
+ * from AXIS' own dataset — the next snapshot carries the healed window.
+ *
+ * A snapshot that is only behind the venue `marketNow` (the forming bar the
+ * caller just flushed) is **reported and repaired but still painted**: it
+ * advances the chart (or is a no-op), and skipping it would pin the candles
+ * while every other series keeps moving — which is its own bug.
  *
  * `marketNow` is only supplied on venue-triggered ticks, so a session venue
  * (equities / FX holding its last close over a weekend) is never accused of
@@ -126,7 +129,8 @@ function engineSeriesPaintable(bars: Bar[], marketNow = 0): boolean {
       historyBars: engineHistoryBars(),
     },
   });
-  return false;
+  // Report/repair always; refuse only a paint that would back-date the chart.
+  return !engineWindowBehindChart(store.bars, bars, iv);
 }
 
 /**

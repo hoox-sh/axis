@@ -190,9 +190,22 @@ The freshness contract is therefore explicit:
   `streams/stream-live.ts` (stream profile snapshots/deltas) keep the fresher
   chart window, report once via `noteStaleEngineSeries` (throttled log +
   `engine` telemetry `degraded` + feed `degraded`), and repair in the background;
-  the next snapshot/tick paints the healed window. In the stream plane a delta
-  that does not continue the chart tail is dropped (the next full snapshot
+  the next snapshot/tick paints the healed window. A **behind-the-venue-clock**
+  verdict is a report/repair signal only — the snapshot is still painted when it
+  does not back-date the chart (it advances it, or is a no-op); refusing it would
+  pin the candles while every other series keeps moving. In the stream plane a
+  delta that does not continue the chart tail is dropped (the next full snapshot
   reconciles) instead of punching a hole.
+- **Moved-window prune** (`PaneManager.notePaintedCandleRange`): a cookie-cutter
+  risk of the repair above is that a *jump* in the candle window (200+ bars,
+  e.g. a four-day-frozen series repaired at load) orphans co-painted script
+  series — their rows now sit outside the candles. LWC's shared time scale is the
+  union of every series' rows, so those rows make the candlestick painter throw
+  `Value is null` on every render until the next overlay apply re-clamps them
+  (which can be skipped as a no-op). The paint therefore prunes `overlay_*` /
+  `bgcolor_*` / equity rows to the new range immediately, in the same task as the
+  candle `setData`, before LWC's next render. Compare / on-chain overlay series
+  are left alone — their windows are legitimately independent.
 - **Background catch-up** (`src/data/background-catchup.ts`): in engine-owned
   mode it skips the local `setBarsQuiet`/`setDataToChart` repaint (the next
   engine snapshot would just hand the stale window back) and pushes AXIS'

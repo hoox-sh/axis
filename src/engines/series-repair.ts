@@ -98,6 +98,10 @@ export interface StaleEngineSeriesNotice {
  *   venue kept trading. A `marketNow` of `0` means unknown and skips this test
  *   entirely, so session venues (equities / FX holding their last close) are
  *   never accused of being frozen; chart-tail staleness still applies.
+ *
+ * A **behind the market** verdict is a report-and-repair signal, not necessarily
+ * a reason to drop the paint: see the callers, which only refuse a paint that
+ * would back-date the chart ({@link engineWindowBehindChart}).
  */
 export function engineSeriesStale(input: {
   chartBars: readonly Bar[] | null | undefined;

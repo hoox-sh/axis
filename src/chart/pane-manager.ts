@@ -152,6 +152,16 @@ export type OverlayOhlcSpec = {
 /** Series key prefix for plotbar/plotcandle overlays (`overlay_ohlc_${name}`). */
 export const OVERLAY_OHLC_PREFIX = 'overlay_ohlc_';
 
+/**
+ * True for series whose rows are a **script payload** clamped to the painted
+ * candle range by the apply pipeline — the ones a slid candle window can
+ * orphan. Deliberately excludes `compare` / `compare_main_pct` /
+ * `onchain_events`, whose windows are independent of the main candles.
+ */
+function isScriptCoPaintedKey(key: string): boolean {
+  return key === 'equity' || key.startsWith('overlay_') || key.startsWith('bgcolor_');
+}
+
 /** Options for owner-scoped multi-script overlay apply (live re-runs). */
 export type OverlayOwnerOpts = {
   /**
@@ -778,19 +788,58 @@ export class PaneManager {
    * Record a successful full-history candle paint on this chart.
    * Overwrites the previous window — slot B never inherits slot A's range.
    *
-   * A *moved* window invalidates the smart-apply tip cache: series painted
-   * against the previous window can now sit outside it, so the next overlay
-   * apply must repaint fully (and get re-clamped) instead of appending a tip.
-   * The series themselves are not touched here — a `setData` during the
-   * in-flight candle paint would race it.
+   * A *moved* window (including the first paint, which moves it from unknown)
+   * invalidates the smart-apply tip cache — series painted against the previous
+   * window can now sit outside it — and prunes the co-painted **script** series
+   * right here, in the same task as the candle `setData` and before LWC's next
+   * render. The shared time scale is the union of every series' rows, so a row
+   * the candle series no longer holds makes LWC's candlestick painter throw
+   * `Value is null` on every render — and waiting for the next overlay apply to
+   * drop it is too late (applies can be no-ops, and a repair/load slides the
+   * window a long way).
    */
   notePaintedCandleRange(first: number, last: number): void {
     if (!Number.isFinite(first) || !Number.isFinite(last) || last < first) return;
     const prev = this.paintedCandleRange;
+    const moved = !prev || prev.first !== first || prev.last !== last;
     this.paintedCandleRange = { first, last };
-    if (prev && (prev.first !== first || prev.last !== last)) {
-      this.overlayDataMeta.clear();
+    if (!moved) return;
+    this.overlayDataMeta.clear();
+    this.pruneCoPaintedSeriesToPaintedRange();
+  }
+
+  /**
+   * Drop co-painted script-series rows outside this chart's painted candle
+   * range. Returns the number of series repainted.
+   *
+   * Only the script payloads the apply pipeline itself clamps are touched
+   * (`overlay_*`, `overlay_ohlc_*`, `bgcolor_*`, equity) — never the candles,
+   * the volume series (painted with the same bars), or overlays whose window is
+   * legitimately independent of the candles (compare / on-chain events).
+   */
+  pruneCoPaintedSeriesToPaintedRange(): number {
+    const range = this.paintedCandleRange;
+    if (!range) return 0;
+    let pruned = 0;
+    for (const pane of this.panes.values()) {
+      for (const key of Object.keys(pane.series)) {
+        if (!isScriptCoPaintedKey(key)) continue;
+        const series = pane.series[key];
+        if (!series || typeof series.data !== 'function') continue;
+        let rows: readonly { time?: unknown }[];
+        try {
+          rows = series.data() as readonly { time?: unknown }[];
+        } catch {
+          continue;
+        }
+        if (!Array.isArray(rows) || !rows.length) continue;
+        const kept = clampPointsToPaintedRange(rows, range);
+        if (kept.length === rows.length) continue;
+        if (!safeSetData(series, kept)) continue;
+        pruned += 1;
+      }
     }
+    return pruned;
   }
 
   /**

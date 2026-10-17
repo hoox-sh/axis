@@ -872,3 +872,108 @@ describe('PaneManager', () => {
     }
   });
 });
+
+describe('pruneCoPaintedSeriesToPaintedRange', () => {
+  let container: HTMLElement;
+  let pm: InstanceType<typeof PaneManager>;
+
+  beforeEach(() => {
+    container = document.createElement('div') as unknown as HTMLElement;
+    (container as { id: string }).id = 'chart-root';
+    document.body.appendChild(container as never);
+    pm = new PaneManager(container);
+  });
+
+  it('drops script rows outside a moved candle window and leaves other overlays alone', () => {
+    const price = pm.createPane('price', 'price', 'Price');
+    const candle = [{ time: 200 }, { time: 300 }];
+    let overlay = [
+      { time: 100, value: 1 },
+      { time: 200, value: 2 },
+      { time: 300, value: 3 },
+      { time: 400, value: 4 },
+    ];
+    let band = [
+      { time: 100, value: 9 },
+      { time: 200, value: 9 },
+    ];
+    let equity = [
+      { time: 300, value: 5 },
+      { time: 400, value: 6 },
+    ];
+    const applied: Array<{ key: string; data: unknown[] }> = [];
+    let compareSets = 0;
+    price.series['candle'] = { setData: () => {}, data: () => candle } as never;
+    price.series['overlay_s1__vwma'] = {
+      setData: (d: unknown[]) => {
+        applied.push({ key: 'overlay', data: d });
+        overlay = d;
+      },
+      data: () => overlay,
+    } as never;
+    price.series['bgcolor_s1__'] = {
+      setData: (d: unknown[]) => {
+        applied.push({ key: 'bgcolor', data: d });
+        band = d;
+      },
+      data: () => band,
+    } as never;
+    price.series['equity'] = {
+      setData: (d: unknown[]) => {
+        applied.push({ key: 'equity', data: d });
+        equity = d;
+      },
+      data: () => equity,
+    } as never;
+    // Compare overlays own an independent window and must never be pruned.
+    price.series['compare'] = {
+      setData: () => {
+        compareSets += 1;
+      },
+      data: () => [{ time: 50 }],
+    } as never;
+    // A series without data() is skipped rather than throwing.
+    price.series['overlay_plain'] = { setData: () => {} } as never;
+
+    // First paint establishes the window; every script row is inside it.
+    pm.notePaintedCandleRange(100, 400);
+    expect(applied).toHaveLength(0);
+    expect(compareSets).toBe(0);
+
+    // The window slides forward (repair / reload): rows past the candles must go.
+    pm.notePaintedCandleRange(200, 300);
+    expect(applied).toEqual([
+      {
+        key: 'overlay',
+        data: [
+          { time: 200, value: 2 },
+          { time: 300, value: 3 },
+        ],
+      },
+      { key: 'bgcolor', data: [{ time: 200, value: 9 }] },
+      { key: 'equity', data: [{ time: 300, value: 5 }] },
+    ]);
+    expect(compareSets).toBe(0);
+
+    // A repeated identical note is a no-op.
+    pm.notePaintedCandleRange(200, 300);
+    expect(applied).toHaveLength(3);
+  });
+
+  it('clamps when the recorded range is read back before any paint', () => {
+    const container2 = document.createElement('div') as unknown as HTMLElement;
+    const pm2 = new PaneManager(container2);
+    const price = pm2.createPane('price', 'price', 'Price');
+    let rows = [{ time: 1 }, { time: 99_999 }];
+    price.series['overlay_x'] = {
+      setData: (d: unknown[]) => {
+        rows = d;
+      },
+      data: () => rows,
+    } as never;
+    expect(pm2.getPaintedCandleRange()).toBeNull();
+    pm2.notePaintedCandleRange(10, 20);
+    expect(pm2.getPaintedCandleRange()).toEqual({ first: 10, last: 20 });
+    expect(rows).toEqual([]);
+  });
+});

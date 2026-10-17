@@ -77,7 +77,7 @@ import { liveRerunModeForEngine } from '../engines/catalog';
 import { streamEvalScript, streamRouteActive, streamSeriesTick, streamStop, StreamFallbackError } from './stream-live';
 import { tickChartDataSession, releaseChartDataSession } from '../engines/chart-data-session';
 import { getDataSeriesBars } from '../engines/data-sessions';
-import { newestBarTime } from '../engines/series-freshness';
+import { engineWindowBehindChart, newestBarTime } from '../engines/series-freshness';
 import { engineSeriesStale, noteStaleEngineSeries } from '../engines/series-repair';
 import { refreshLiveSessionTelemetry } from '../engines/live-sessions';
 import { getActiveEngineConfig } from '../plugins/active';
@@ -594,8 +594,9 @@ export function startLive(
         if (t.unchanged === true && store.bars.length > 0) {
           // "Unchanged" against a market that has moved on means the engine's
           // series is frozen (its upstream stopped advancing): painting nothing
-          // would keep the stale chart tail forever. Keep the chart, report the
-          // staleness once and repair the engine's series from AXIS' data.
+          // would keep the stale chart tail forever. Report the staleness and
+          // repair the engine's series from AXIS' data. The engine's window *is*
+          // the chart's here, so there is nothing newer to paint either way.
           const reason = engineSeriesStale({
             // The engine reported "no change", so its series is the chart's.
             chartBars: store.bars,
@@ -603,10 +604,7 @@ export function startLive(
             interval: iv,
             marketNow: newestTriggerTime,
           });
-          if (reason) {
-            reportStaleEngine(reason, newestBarTime(store.bars) || null);
-            return { painted: 'stale', shouldRerun: false };
-          }
+          if (reason) reportStaleEngine(reason, newestBarTime(store.bars) || null);
           return { painted: 'noop', shouldRerun: false };
         }
         // A few appended bars: re-read only the tail and merge locally instead
@@ -670,7 +668,13 @@ export function startLive(
         });
         if (staleReason) {
           reportStaleEngine(staleReason, newestBarTime(proBars) || null);
-          return { painted: 'stale', shouldRerun: false };
+          // Report + repair, but only refuse a paint that would back-date a
+          // fresher chart. A window that is merely behind the venue's forming
+          // bar still advances the chart, and skipping it would pin the candles
+          // while every other series keeps moving.
+          if (engineWindowBehindChart(store.bars, proBars, iv)) {
+            return { painted: 'stale', shouldRerun: false };
+          }
         }
         const prevLastSeen = lastSeenBarTime;
         const diff = diffEngineOwnedBars(store.bars, proBars);

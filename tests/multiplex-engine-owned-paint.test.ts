@@ -510,6 +510,97 @@ describe('engine-owned live paint', () => {
     expect(repaired).toBe(true);
   });
 
+  it('paints an engine window newer than the chart even when it lags the venue clock', async () => {
+    const last = SAMPLE_BARS[SAMPLE_BARS.length - 1]!;
+    // Two bars ahead of the chart, three behind the venue trigger. Refusing the
+    // paint (the old behavior for any behind-the-market verdict) would pin the
+    // candles at the chart tail while the engine had newer bars to give.
+    const engineBars: Bar[] = [
+      ...SAMPLE_BARS.map((b) => ({ ...b })),
+      {
+        time: last.time + 3600,
+        open: last.close,
+        high: last.close + 2,
+        low: last.close - 1,
+        close: last.close + 1,
+        volume: 4242,
+      },
+      {
+        time: last.time + 7200,
+        open: last.close + 1,
+        high: last.close + 3,
+        low: last.close,
+        close: last.close + 2,
+        volume: 4343,
+      },
+    ];
+    const calls: string[] = [];
+    restoreFetch = mockFetch(async (input, init) => {
+      const url = new URL(String(input));
+      const method = String(init?.method || 'GET').toUpperCase();
+      calls.push(`${method} ${url.pathname}`);
+      if (method === 'POST' && url.pathname === '/data/session') {
+        return jsonResponse({ status: 'success', session_id: 'chart1', cache: 'hit' });
+      }
+      if (method === 'POST' && url.pathname === '/data/session/chart1/tick') {
+        return jsonResponse({
+          status: 'success',
+          session_id: 'chart1',
+          // Beyond ENGINE_OWNED_APPEND_CAP: the paint takes the full re-read
+          // (and therefore the staleness check) instead of merging the tail.
+          appended: 40,
+          forming: true,
+        });
+      }
+      if (method === 'GET' && url.pathname === '/data/series/bars') {
+        return jsonResponse({ status: 'success', bars: engineBars });
+      }
+      if (method === 'GET' && url.pathname === '/data/series') {
+        return jsonResponse({ status: 'success', count: 40, newest: 1 });
+      }
+      if (method === 'POST' && url.pathname === '/data/series/provide') {
+        return jsonResponse({ status: 'success', added: 40, updated: 0, count: 40 });
+      }
+      if (method === 'POST' && url.pathname === '/data/series/fetch') {
+        return jsonResponse({ status: 'success', fetched: 40, count: 40 });
+      }
+      return jsonResponse({ status: 'error', code: 'NOT_FOUND' }, 404);
+    });
+
+    registerDynamicStream({
+      id: 'eo-lagging-stream',
+      name: 'EO lagging stream',
+      kind: 'stream',
+      start({ onBar, onStatus }) {
+        onStatus({ state: 'open' });
+        const t = setTimeout(
+          () =>
+            onBar({
+              time: last.time + 5 * 3600,
+              open: last.close,
+              high: last.close + 4,
+              low: last.close - 1,
+              close: last.close + 3,
+              volume: 4444,
+            }),
+          10,
+        );
+        return () => clearTimeout(t);
+      },
+    });
+
+    startLive('eo-lagging-stream', 'BTCUSDT', '1h');
+    const advanced = await waitFor(() => store.bars.length === engineBars.length, 4000);
+    expect(advanced).toBe(true);
+    expect(store.bars[store.bars.length - 1]!.time).toBe(last.time + 7200);
+    // Reported + repaired in the background all the same.
+    const repaired = await waitFor(
+      () => calls.includes('POST /data/series/provide') || calls.includes('POST /data/series/fetch'),
+      5000,
+    );
+    expect(repaired).toBe(true);
+  });
+
   it('detects a frozen engine when it reports unchanged against a moved venue clock', async () => {
     const last = SAMPLE_BARS[SAMPLE_BARS.length - 1]!;
     let barsGets = 0;
