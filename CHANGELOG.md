@@ -9,11 +9,13 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-10-15 · 572 commits · describe-tag: `v2.24.3`_
+_Generated/updated: 2026-10-17 · 587 commits · describe-tag: `v2.24.4`_
 
 ---
 
 ## [Unreleased]
+
+## [2.24.5] — 2026-10-17
 
 ### Added
 
@@ -1538,12 +1540,18 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-10 (91 commits)
+### 2026-10 (106 commits)
 
 #### Features
 
+- `5be393e1` (2026-10-16) — feat(engine): three-tier close verification with strength surfacing (F-28)
+- `490051fe` (2026-10-16) — feat(engine): engine-owned stream data plane (F-01–F-20)
+- `035d9659` (2026-10-16) — feat(maintenance): build-time maintenance mode page (VITE_MAINTENANCE_MODE)
+- `6427387c` (2026-10-16) — feat(engine): delta envelopes for session ticks with merge + fallback
 - `7684ff8d` (2026-10-14) — feat(engine): PYNE endpoint parity — health, prewarm, batch, sessions, Pro, runner
 - `dc5402b4` (2026-10-13) — feat(engine): wire every-tick Pro mode through runner, chart, and live ticks
 - `4091d4cf` (2026-10-13) — feat(theme): sync community presets to OpenCode palettes
@@ -1577,6 +1585,15 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `6008eb54` (2026-10-17) — fix(engine): authenticate the live socket and accept flat engine error frames
+- `ec33bdc0` (2026-10-17) — fix(chart): close the pre-paint hole in the co-painted candle-range clamp
+- `0b419b89` (2026-10-17) — fix(live): hoist appendVenueBars above stream-route early return (TDZ crash)
+- `4e342e91` (2026-10-16) — fix(engine): honor every-tick indicator re-runs on heavy histories
+- `454c1260` (2026-10-16) — fix(engine): engine-owned live throttle no longer fires every tick
+- `1e4c9848` (2026-10-16) — fix(engine): stop per-tick full-window tick+download in engine-owned live
+- `d77772ba` (2026-10-16) — fix(data): engine-owned load flips status to ready and reapplies scripts
+- `19f956b1` (2026-10-16) — fix(engine): end add-indicator lag, time-join session series, per-chart clamp
+- `73b44ae4` (2026-10-15) — fix(chart): clamp co-painted series to the candle time range
 - `58a4459a` (2026-10-15) — fix(engine): persist Pro API engine key across reloads
 - `1b28d5e4` (2026-10-15) — fix(engine): unblock engine-owned data plane and honor free-tier caps
 - `cfa7daed` (2026-10-15) — fix(engine): live-mode regressions — frozen overlays and reset re-run setting
@@ -1613,6 +1630,8 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Refactors
 
+- `d5b40875` (2026-10-17) — refactor(hud): unify chips on ChipShell, stable footprint, slimmer panels
+- `f0b7ff4e` (2026-10-16) — refactor(indicators): decompose runAndApplyInner into apply stages (F-25)
 - `b71179eb` (2026-10-07) — refactor: remove the pre-Solid static shell
 - `e3553e41` (2026-10-07) — refactor(worker): consolidate HTTP helpers and proxy routing
 
