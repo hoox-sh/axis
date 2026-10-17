@@ -480,15 +480,38 @@ export function startLive(
         if (shouldRerun && isCurrent()) scheduleRerun();
       };
       // Stream path (F-19): the subscription owns the replica — venue bars
-      // are never appended locally. The tick is async; on success a changed
-      // window (or every-tick mode) schedules a re-run, on failure we run the
-      // legacy venue append below so the chart never stalls on an outage.
+      // are never appended locally. `streamSeriesTick` paints the engine's
+      // snapshot (closed bars only), so the venue's forming bar would be
+      // dropped on every tick and the chart stays one bar behind. Re-apply the
+      // venue's latest bar after the engine snapshot so the last bar shows.
+      // The tick is async; on success a changed window / painted tip /
+      // every-tick mode schedules a re-run, on failure we run the legacy
+      // venue append below so the chart never stalls on an outage.
       if (streamRouteActive()) {
         streamSeriesTick(newestBarTime(ordered)).then(
           (changed) => {
             if (!isCurrent()) return;
+            // Re-apply the venue's latest bar so the forming (last) bar is
+            // visible. The engine snapshot holds closed bars only, so a venue
+            // bar newer than the engine's newest closed bar is appended; an
+            // identical last time is a harmless no-op via `appendBar`.
+            let paintedTip = false;
+            const tip = ordered[ordered.length - 1];
+            if (tip) {
+              const cur = store.bars;
+              const last = cur.length ? cur[cur.length - 1]!.time : 0;
+              if (!last || tip.time > last) {
+                appendBar(tip);
+                const manager = getManager();
+                if (manager) manager.appendBar(tip);
+                noteTick(tip.close, tip.time, sym);
+                noteLiveBarForAlerts(tip, { symbol: sym, interval: iv });
+                paintedTip = true;
+              }
+            }
             if (
               changed ||
+              paintedTip ||
               effectiveLiveRerunMode(liveRerunModeForEngine(store.live.rerunOn), store.bars.length) ===
                 'every-tick'
             ) {
