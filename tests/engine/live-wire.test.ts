@@ -11,21 +11,30 @@ import type { Bar } from '../../src/store/types';
 function makeHarness() {
   const sent: Array<{ kind: string; id: string }> = [];
   const statuses: Array<{ sub: string; status: string }> = [];
+  const unsubscribed: string[] = [];
+  const counters = { disconnects: 0 };
   const client: WireClient = {
     isOpen: true,
     onFrame: undefined,
     async connect() {},
-    disconnect() {},
+    disconnect() {
+      counters.disconnects += 1;
+    },
     subscribe(id, kind) {
       sent.push({ kind: `subscribe:${kind}`, id });
     },
     resumeSubscription() {},
-    unsubscribe() {},
+    unsubscribe(id) {
+      unsubscribed.push(id);
+    },
     awaitFrame() {
       return new Promise(() => {});
     },
     addReconnectHandler() {
       return () => {};
+    },
+    stats() {
+      return { open: true, openedOnce: true, reconnectAttempts: 3, stopped: false };
     },
   };
   const handlers: WireHandlers = {
@@ -44,7 +53,7 @@ function makeHarness() {
     }) as never,
   );
   const emit = (frame: WireFrame) => client.onFrame!(frame);
-  return { wire, sent, statuses, applied, emit };
+  return { wire, client, sent, statuses, applied, emit, unsubscribed, counters };
 }
 
 const BARS: Bar[] = [{ time: 100, open: 1, high: 1, low: 1, close: 1, volume: 1 }];
@@ -134,5 +143,72 @@ describe('redesign2 live-wire (F-19)', () => {
     await first;
     h.wire.routeFrame({ type: 'delta', id: 's-1', sessionId: 'ses', seq: 99, payload: { base_index: 0, count: 1, tail_len: 1 } });
     expect(h.statuses.map((s) => s.status)).toContain('degraded');
+  });
+});
+
+describe('live-wire diagnostics (MCP stream.get / stream.reset)', () => {
+  test('snapshotState lists subscriptions with seq — never frame payloads', async () => {
+    const h = makeHarness();
+    const p = h.wire.ensureSeries('series:binance|spot|BTCUSDT|1m', {});
+    await tick(); await tick();
+    h.emit({
+      type: 'full',
+      id: 'series:binance|spot|BTCUSDT|1m',
+      seq: 7,
+      payload: { count: 1, bars: BARS },
+    });
+    await p;
+
+    const state = h.wire.snapshotState();
+    expect(state.open).toBe(true);
+    expect(state.cooledDown).toBe(false);
+    expect(state.failures).toBe(0);
+    expect(state.stats).toMatchObject({ reconnectAttempts: 3, stopped: false });
+    expect(state.subs).toEqual([
+      { subId: 'series:binance|spot|BTCUSDT|1m', kind: 'series', seq: 7, merged: false },
+    ]);
+    const json = JSON.stringify(state);
+    expect(json).not.toContain('"bars"');
+    expect(json).not.toContain('close');
+  });
+
+  test('script subscriptions report kind script + merged applier', async () => {
+    const h = makeHarness();
+    const p = h.wire.evalScript({ subId: 's-1', script: 'x', meta: {}, bars: BARS });
+    await tick(); await tick();
+    h.emit({ type: 'full', id: 's-1', seq: 2, payload: { count: 1, plots: [[1]], series: {} } });
+    await p;
+    const state = h.wire.snapshotState();
+    expect(state.subs).toEqual([{ subId: 's-1', kind: 'script', seq: 2, merged: true }]);
+  });
+
+  test('reset unsubscribes every sub, disconnects once and clears state', async () => {
+    const h = makeHarness();
+    const p = h.wire.ensureSeries('series:binance|spot|BTCUSDT|1m', {});
+    await tick(); await tick();
+    h.emit({ type: 'full', id: 'series:binance|spot|BTCUSDT|1m', seq: 1, payload: { count: 1, bars: BARS } });
+    await p;
+
+    const out = h.wire.reset();
+    expect(out).toMatchObject({ unsubscribed: 1, wasOpen: true });
+    expect(h.unsubscribed).toEqual(['series:binance|spot|BTCUSDT|1m']);
+    expect(h.counters.disconnects).toBe(1);
+    const after = h.wire.snapshotState();
+    expect(after.subs).toEqual([]);
+    expect(after.failures).toBe(0);
+    expect(after.cooledDown).toBe(false);
+  });
+
+  test('reset clears a failure cooldown so the caller can start over', async () => {
+    const h = makeHarness();
+    const p = h.wire.ensureSeries('series-1', {});
+    await tick(); await tick();
+    h.emit({ type: 'error', id: 'series-1', payload: { code: 'x', message: 'boom' } });
+    await expect(p).rejects.toBeInstanceOf(StreamFallbackError);
+    expect(h.wire.cooledDown).toBe(true);
+
+    h.wire.reset();
+    expect(h.wire.cooledDown).toBe(false);
+    expect(h.wire.snapshotState().failures).toBe(0);
   });
 });

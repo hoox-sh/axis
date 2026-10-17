@@ -155,6 +155,19 @@ export class Redesign2WsClient {
   }
 
   /**
+   * Diagnostic counters for MCP `stream.get` — connection bookkeeping only,
+   * never the auth token (it travels as a frame, not in the URL).
+   */
+  stats(): { open: boolean; openedOnce: boolean; reconnectAttempts: number; stopped: boolean } {
+    return {
+      open: this.isOpen,
+      openedOnce: this.openedOnce,
+      reconnectAttempts: this.reconnectAttempts,
+      stopped: this.stopped,
+    };
+  }
+
+  /**
    * Detach and close a socket this client no longer owns, without letting its
    * late events reach the client (never throws).
    */

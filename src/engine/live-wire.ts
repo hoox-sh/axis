@@ -66,6 +66,8 @@ export interface WireClient {
   awaitFrame(id: string, timeoutMs?: number): Promise<WireFrame>;
   onFrame: ((frame: WireFrame) => void) | undefined;
   addReconnectHandler(fn: () => void): () => void;
+  /** Optional connection counters for diagnostics (MCP `stream.get`). */
+  stats?(): { open: boolean; openedOnce: boolean; reconnectAttempts: number; stopped: boolean };
 }
 
 export interface WireHandlers {
@@ -327,6 +329,70 @@ export class StreamLiveWire {
     } catch {
       /* already gone */
     }
+  }
+
+  /**
+   * Read-only diagnostic view of the wire for MCP `stream.get`: cooldown,
+   * socket counters and the live subscriptions (ids + last applied seq only —
+   * never frame payloads or the auth token).
+   */
+  snapshotState(): {
+    open: boolean;
+    cooledDown: boolean;
+    failures: number;
+    stats: ReturnType<NonNullable<WireClient['stats']>> | null;
+    subs: Array<{ subId: string; kind: 'series' | 'script'; seq: number; merged: boolean }>;
+  } {
+    const subs = [...this.appliedSeq.entries()]
+      .map(([subId, seq]) => ({
+        subId,
+        kind: subId.startsWith('series:') ? ('series' as const) : ('script' as const),
+        seq,
+        merged: this.appliers.has(subId),
+      }))
+      .sort((a, b) => a.subId.localeCompare(b.subId));
+    return {
+      open: this.client.isOpen,
+      cooledDown: this.cooledDown,
+      failures: this.failures,
+      stats: this.client.stats?.() ?? null,
+      subs,
+    };
+  }
+
+  /**
+   * Unsubscribe every subscription and drop the socket (MCP `stream.reset`).
+   *
+   * The client is terminal after `disconnect()` (`stopped = true`), so the
+   * caller must also discard this wire — `streams/stream-live` rebuilds a fresh
+   * one from the current engine config on the next tick, which is exactly the
+   * point: a key/endpoint change or a wedged reconnect loop gets a clean start.
+   * Never throws.
+   */
+  reset(): { unsubscribed: number; wasOpen: boolean; cooledDown: boolean } {
+    let unsubscribed = 0;
+    for (const subId of this.appliedSeq.keys()) {
+      try {
+        this.client.unsubscribe(subId);
+        unsubscribed += 1;
+      } catch {
+        /* socket may already be gone */
+      }
+    }
+    const wasOpen = this.client.isOpen;
+    const cooledDown = this.cooledDown;
+    this.appliers.clear();
+    this.appliedSeq.clear();
+    this.inbox.clear();
+    this.inboxWaiters.clear();
+    this.failures = 0;
+    this.coolUntil = 0;
+    try {
+      this.client.disconnect();
+    } catch {
+      /* ignore */
+    }
+    return { unsubscribed, wasOpen, cooledDown };
   }
 
   disconnect(): void {

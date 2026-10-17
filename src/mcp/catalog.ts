@@ -20,7 +20,9 @@ export const APP_CAPABILITIES: readonly CapabilitySpec[] = [
   { id: 'app.shortcut', domain: 'app', description: 'Fire a keyboard shortcut by id', mutates: true },
   { id: 'app.event', domain: 'app', description: 'Dispatch a window CustomEvent', mutates: true },
 
-  { id: 'chart.get', domain: 'chart', description: 'Symbol, interval, type, layout, bar summary', mutates: false },
+  { id: 'chart.get', domain: 'chart', description: 'Symbol, interval, type, layout + bar summary', mutates: false },
+  { id: 'chart.bars', domain: 'chart', description: 'Bounded OHLCV tail/head rows + missing-slot map', mutates: false },
+  { id: 'chart.lag', domain: 'chart', description: 'Lag ledger: chart vs venue clock vs engine series + verdict', mutates: false },
   { id: 'chart.set', domain: 'chart', description: 'Set symbol/interval/type/grid without loading', mutates: true },
   { id: 'chart.load', domain: 'chart', description: 'Load OHLCV for a symbol/interval/source', mutates: true },
   { id: 'chart.reload', domain: 'chart', description: 'Reload the current symbol', mutates: true },
@@ -83,6 +85,14 @@ export const APP_CAPABILITIES: readonly CapabilitySpec[] = [
 
   { id: 'settings.get', domain: 'settings', description: 'Sanitized app settings (no secrets)', mutates: false },
   { id: 'settings.set', domain: 'settings', description: 'Patch allowlisted app settings', mutates: true },
+
+  { id: 'engine.get', domain: 'engine', description: 'Engine plane: config, capabilities, route, health, session, telemetry', mutates: false },
+  { id: 'engine.series', domain: 'engine', description: "Engine-side series bounds (count/newest/updated) + staleness", mutates: false },
+  { id: 'engine.tick', domain: 'engine', description: 'Force one drive tick; returns before/after series bounds + envelope', mutates: true },
+  { id: 'engine.repair', domain: 'engine', description: "Force a stale-series repair (local upload or engine fetch)", mutates: true },
+
+  { id: 'stream.get', domain: 'stream', description: 'Live plane: route, engine socket, subscriptions, feed chips', mutates: false },
+  { id: 'stream.reset', domain: 'stream', description: 'Drop the engine socket + subscriptions (probes a re-subscribe)', mutates: true },
 
   { id: 'status.get', domain: 'status', description: 'Status bar + telemetry HUD', mutates: false },
 ];

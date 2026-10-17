@@ -86,6 +86,16 @@ import { getEngine } from '../engines/catalog';
 import { APP_CAPABILITIES, findCapability, SETTABLE_PATHS } from './catalog';
 import { runPaletteCommand, listPaletteCommandIds } from './commands';
 import { buildAppSnapshot, buildSettingsSnapshot, barSummary } from './snapshot';
+import {
+  chartBarsView,
+  chartLagView,
+  enginePlaneView,
+  engineRepairView,
+  engineSeriesView,
+  engineTickView,
+  streamPlaneView,
+  streamResetView,
+} from './live';
 import { getByPath, McpInvokeError } from './protocol';
 import { isSecureCloudEndpoint } from '../storage/cloud-config';
 import type { ChartGridMode } from '../chart/layout';
@@ -412,6 +422,10 @@ export async function invokeCapability(
       else fail('BAD_OP', `Unknown zoom op: ${op}`);
       return { ok: true, op };
     }
+    case 'chart.bars':
+      return chartBarsView(p);
+    case 'chart.lag':
+      return chartLagView(p);
 
     case 'editor.get':
       return { doc: editorDoc(), open: store.editor.open, mode: store.editor.mode };
@@ -874,6 +888,20 @@ export async function invokeCapability(
       setStatus('ready', `Settings saved · ${store.interval} · ${store.historyBars} bars (MCP)`);
       return { ok: true, updated, reloaded, bars };
     }
+
+    case 'engine.get':
+      return enginePlaneView();
+    case 'engine.series':
+      return engineSeriesView(p);
+    case 'engine.tick':
+      return engineTickView(p);
+    case 'engine.repair':
+      return engineRepairView(p);
+
+    case 'stream.get':
+      return streamPlaneView();
+    case 'stream.reset':
+      return streamResetView(p);
 
     case 'status.get':
       return {

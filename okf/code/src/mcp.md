@@ -7,7 +7,7 @@ tags: [code, mcp]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-10T20:32:38Z
+  at: 2026-10-17T12:28:29Z
 sources:
   - id: tree
     resource: "src/mcp"
@@ -24,6 +24,7 @@ okf_lock: generated
 * `dispatch.ts` — InvokeCapabilityOpts, McpHostHooks, invokeCapability, setMcpHostHooks
 * `host.ts` — AxisMcpApi, McpPrefs, loadMcpPrefs, requestMcpConnect, saveMcpPrefs, startMcpHost
 * `index.ts` — APP_CAPABILITIES, McpInvokeError, SETTABLE_PATHS, buildAppSnapshot, connectMcpBridge, disconnectMcpBridge, findCapability, invokeCapability, loadMcpPrefs, mcpBridgeState, onMcpBridge, requestMcpConnect
+* `live.ts` — chartBarsView, chartLagView, enginePlaneView, engineRepairView, engineSeriesView, engineTickView, streamPlaneView, streamResetView
 * `protocol.ts` — AppInvokeRequest, AppInvokeResponse, CapabilitySpec, McpInvokeError, getByPath, sessionIdFromApiKey
 * `snapshot.ts` — MCP_SNAPSHOT_BARS_MAX, barSummary, boundedBarRows, buildAppSnapshot, buildSettingsSnapshot
 
@@ -33,6 +34,7 @@ okf_lock: generated
 * [src/chart](/code/src/chart.md)
 * [src/chart/drawings](/code/src/chart/drawings.md)
 * [src/data](/code/src/data.md)
+* [src/engine](/code/src/engine.md)
 * [src/engines](/code/src/engines.md)
 * [src/indicators](/code/src/indicators.md)
 * [src/plugins](/code/src/plugins.md)

@@ -184,7 +184,7 @@ export const MCP_TOOLS: readonly McpToolDef[] = [
     name: 'app_capabilities',
     plane: 'app',
     description:
-      'List live-app capabilities (chart, editor, indicators, alerts, library, plugins, …) from a connected PWA session.',
+      'List live-app capabilities (chart, editor, indicators, alerts, library, plugins, engine/stream live plane, …) from a connected PWA session.',
     inputSchema: object({
       session: optStr('Bridge session id; default is SHA-256 prefix of the API key'),
     }),
@@ -193,7 +193,7 @@ export const MCP_TOOLS: readonly McpToolDef[] = [
     name: 'app_invoke',
     plane: 'app',
     description:
-      'Invoke a named PWA capability and wait for the JSON result. Covers nearly every AXIS surface: chart, editor, indicators, alerts, watchlist, library, results, panels, plugins, theme, drawings, workspace, logs, screenshots. See app_capabilities.',
+      'Invoke a named PWA capability and wait for the JSON result. Covers nearly every AXIS surface: chart (incl. bars/lag diagnostics), editor, indicators, alerts, watchlist, library, results, panels, plugins, theme, drawings, workspace, logs, screenshots, and the live plane (engine.get/series/tick/repair, stream.get/reset). See app_capabilities.',
     inputSchema: object(
       {
         capability: str('Capability id (e.g. chart.load, editor.set, alerts.create)'),

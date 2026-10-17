@@ -133,6 +133,8 @@ No tab → `SESSION_OFFLINE`. Timeouts → `TIMEOUT`. Snapshots redact keys matc
 | `chart.type` | `{ type }` | yes |
 | `chart.screenshot` | `{ scope?: price\|panes\|workspace, scale?: 1\|2 }` | no |
 | `chart.zoom` | `{ op: in\|out\|reset\|pan, delta?, bars? }` | yes |
+| `chart.bars` | `{ limit?, head?, gaps? }` — bounded tail/head rows + missing-slot map | no |
+| `chart.lag` | `{ engine? }` — lag ledger: chart vs venue clock vs engine series + verdict (engine read is in-tab, 6s budget) | no |
 | `editor.get` | — | no |
 | `editor.set` | `{ doc, open? }` | yes |
 | `editor.run` | `{ doc? }` | yes |
@@ -172,6 +174,12 @@ No tab → `SESSION_OFFLINE`. Timeouts → `TIMEOUT`. Snapshots redact keys matc
 | `drawings.tool` | `{ tool }` | yes |
 | `settings.get` | `{ key? }` — sanitized settings, secrets never exposed | no |
 | `settings.set` | allowlisted patch (`endpoint`, `engine`, `interval`, `historyBars`, `refreshSec`, `live.*`, `uiScale`, `autoload`, label/strategy/telemetry prefs); interval/history changes reload | yes |
+| `engine.get` | — engine plane: config (names only, key as `hasApiKey`), capabilities, route, health, chart session, telemetry | no |
+| `engine.series` | `{ exchange?, market?, symbol?, interval? }` — engine-side series bounds + staleness (chart default) | no |
+| `engine.tick` | `{ symbol?, interval?, marketNow?, historyBars? }` — force one drive tick; before/after bounds + envelope | yes |
+| `engine.repair` | `{ symbol?, interval?, historyBars? }` — force a stale-series repair (local upload or engine fetch) | yes |
+| `stream.get` | — live plane: route, engine socket, subscriptions, feed chips, telemetry | no |
+| `stream.reset` | `{ resubscribe? }` — drop the socket + subscriptions; probes one re-subscribe (default true) | yes |
 | `status.get` | status bar + telemetry | no |
 
 `app_set` paths: `symbol`, `interval`, `source`, `engine`, `exchange`, `theme`, `chartType`, `uiScale`, `live.active`, `live.preferAfterLoad`, `editor.doc`, `editor.open`, `watchlist.open`.

@@ -294,6 +294,49 @@ function getWire(): StreamLiveWire {
   return wire;
 }
 
+/**
+ * Diagnostic view of the engine socket for MCP `stream.get`.
+ *
+ * `null` when nothing has subscribed yet — the wire is built lazily on the
+ * first stream tick, so "no wire" is itself the answer to "why is there no
+ * subscription?".
+ */
+export function streamWireState(): ReturnType<StreamLiveWire['snapshotState']> | null {
+  if (!wire) return null;
+  try {
+    return wire.snapshotState();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Drop the engine socket and every subscription (MCP `stream.reset`).
+ *
+ * The wire singleton is discarded (not just disconnected): `Redesign2WsClient`
+ * is terminal after `disconnect()`, so the next stream tick rebuilds from the
+ * current engine config — recovering a changed API key/endpoint, a superseded
+ * socket, or a failure cooldown in one step. Never throws.
+ */
+export function resetStreamWire(): {
+  hadWire: boolean;
+  wasOpen: boolean;
+  unsubscribed: number;
+  cooledDown: boolean;
+} {
+  if (!wire) return { hadWire: false, wasOpen: false, unsubscribed: 0, cooledDown: false };
+  const target = wire;
+  wire = null;
+  let out = { hadWire: true, wasOpen: false, unsubscribed: 0, cooledDown: false };
+  try {
+    const r = target.reset();
+    out = { hadWire: true, wasOpen: r.wasOpen, unsubscribed: r.unsubscribed, cooledDown: r.cooledDown };
+  } catch {
+    /* reset must never break the caller */
+  }
+  return out;
+}
+
 /** True when the stream path owns this live tick (flag + live_stream caps). */
 export function streamRouteActive(): boolean {
   try {

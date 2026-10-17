@@ -144,6 +144,15 @@ Live tab (`app_session_status` → connected):
 - “Put this indicator in the editor and run it.” (`editor.set` + `editor.run`)
 - “Open the alerts panel and list alerts.” (`panels.set` + `alerts.list`)
 - “Screenshot the panes.” (`chart.screenshot` — PNG base64)
+- “My chart seems a bar behind — what's wrong?” (`chart.lag` — the verdict
+  compares the chart tail to the venue clock, the tick, and the engine series)
+- “Where are the holes in my bars?” (`chart.bars` — bounded tail/head rows +
+  a missing-slot map)
+- “Is the engine's series advancing, or is the socket wedged?”
+  (`stream.get` + `engine.series`)
+- “Tick the engine now / repair the stale series / reset the socket.”
+  (`engine.tick` · `engine.repair` · `stream.reset` — the last one drops the
+  socket and subscriptions so the next tick re-subscribes)
 
 Start with `app_capabilities` if the client has not cached the catalog.
 
@@ -154,7 +163,7 @@ Pass these ids to **`app_invoke`** as `capability`, with a JSON `payload`.
 | Domain | Ids |
 | --- | --- |
 | App | `app.snapshot`, `app.get`, `app.set`, `app.command`, `app.shortcut`, `app.event` |
-| Chart | `chart.get` / `set` / `load` / `reload` / `live` / `layout` / `theme` / `type` / `screenshot` / `zoom` |
+| Chart | `chart.get` / `set` / `load` / `reload` / `live` / `layout` / `theme` / `type` / `screenshot` / `zoom` / `bars` / `lag` |
 | Editor | `editor.get` / `set` / `run` / `diagnostics` |
 | Scripts | `indicators.list` / `add` / `remove` / `update` / `run` (remove detaches chart panes like the Layers panel; code edits need `run` after) |
 | Alerts | `alerts.list` / `create` / `update` / `remove` |
@@ -165,6 +174,8 @@ Pass these ids to **`app_invoke`** as `capability`, with a JSON `payload`.
 | Workspace | `workspace.export` / `import` |
 | Drawings | `drawings.list` / `add` / `update` / `remove` / `clear` / `tool` |
 | Settings | `settings.get` / `set` |
+| Engine | `engine.get` / `series` (read the engine's own series bounds + staleness) · `engine.tick` / `repair` (force a drive tick / stale-series repair) |
+| Stream | `stream.get` (route, engine socket, subscriptions, feed chips) · `stream.reset` (drop socket + subscriptions, probes a re-subscribe) |
 | Status | `status.get` |
 
 `app_set` paths (anything else is `PATH_DENIED`): `symbol`, `interval`, `source`, `engine`, `exchange`, `theme`, `chartType`, `uiScale`, `live.active`, `live.preferAfterLoad`, `editor.doc`, `editor.open`, `watchlist.open`.
@@ -189,6 +200,22 @@ Example payloads:
 
 ```json
 { "capability": "settings.set", "payload": { "settings": { "interval": "1h", "historyBars": 5000 } } }
+```
+
+```json
+{ "capability": "chart.lag", "payload": {} }
+```
+
+```json
+{ "capability": "chart.bars", "payload": { "limit": 20, "gaps": true } }
+```
+
+```json
+{ "capability": "engine.tick", "payload": {} }
+```
+
+```json
+{ "capability": "stream.reset", "payload": { "resubscribe": true } }
 ```
 
 Full argument tables: [MCP server](/axis/docs/worker/mcp).

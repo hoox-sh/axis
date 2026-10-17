@@ -166,6 +166,26 @@ export function releaseChartDataSession(): void {
   void releaseDataSession(endpoint, apiKey, sessionId);
 }
 
+/**
+ * Read-only view of the chart data session currently held (MCP `engine.get`).
+ *
+ * `null` when no session exists yet. The API key is deliberately omitted —
+ * callers only need to know *which* session the drive is ticking and against
+ * which endpoint/series.
+ */
+export function getChartSessionInfo(): {
+  sessionId: string;
+  endpoint: string;
+  key: DataSeriesKey;
+} | null {
+  if (!current) return null;
+  return {
+    sessionId: current.sessionId,
+    endpoint: current.endpoint,
+    key: { ...current.key },
+  };
+}
+
 /** @internal test helper */
 export function _resetChartDataSessionForTests(): void {
   current = null;
