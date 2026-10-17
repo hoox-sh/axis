@@ -157,6 +157,33 @@ export function clampPointsToPaintedRange<T extends { time?: unknown }>(
   return out;
 }
 
+/**
+ * Derive a clamp window from a series' own rows (first/last finite time).
+ *
+ * Used as the **pre-paint fallback**: an engine/indicator overlay can apply
+ * before the debounced history paint has recorded a range, and a `null` range
+ * makes {@link clampPointsToPaintedRange} a silent no-op — so a wider overlay
+ * window can extend the shared time scale past the candles, which is what trips
+ * LWC's `Value is null` assert on later paints. Reading the extent the candle
+ * series already holds closes that hole. Returns `null` when the rows carry no
+ * usable time, preserving the old no-op behaviour for an empty chart.
+ */
+export function rangeFromSeriesData(
+  rows: readonly { time?: unknown }[],
+): PaintedCandleRange | null {
+  let first = Number.POSITIVE_INFINITY;
+  let last = Number.NEGATIVE_INFINITY;
+  for (const row of rows) {
+    const t = row == null ? undefined : row.time;
+    if (typeof t !== 'number' || !Number.isFinite(t)) continue;
+    if (t < first) first = t;
+    if (t > last) last = t;
+  }
+  return Number.isFinite(first) && Number.isFinite(last) && last >= first
+    ? { first, last }
+    : null;
+}
+
 /** Nearest row with finite OHLC (previous bar first, then next). */
 function findOhlcDonor(
   rows: readonly unknown[],

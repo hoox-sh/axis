@@ -102,6 +102,7 @@ import {
   clampPointsToPaintedRange,
   extendPaintedRange,
   looksLikeOhlcData,
+  rangeFromSeriesData,
   sanitizeSeriesDataForSetData,
   type PaintedCandleRange,
 } from './series-sanitize';
@@ -752,12 +753,43 @@ export class PaneManager {
   }
 
   /**
+   * Clamp window for co-painted payloads on **this** chart.
+   *
+   * Prefers the recorded painted range. Before the first recorded paint the
+   * candle series may already hold data — an engine/indicator overlay can apply
+   * ahead of the debounced history paint — and a `null` window would make every
+   * clamp a no-op, letting a wider overlay extend the shared time scale past
+   * the candles (which trips LWC's `Value is null` on later paints). Fall back
+   * to the extent the candle series already holds; `null` only when there is
+   * nothing to clamp against (empty chart), preserving the old behaviour.
+   */
+  private clampRange(): PaintedCandleRange | null {
+    if (this.paintedCandleRange) return this.paintedCandleRange;
+    const candle = this.getPane('price')?.series['candle'];
+    if (!candle) return null;
+    try {
+      return rangeFromSeriesData(candle.data() as readonly { time?: unknown }[]);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Record a successful full-history candle paint on this chart.
    * Overwrites the previous window — slot B never inherits slot A's range.
+   *
+   * A *moved* window invalidates the smart-apply tip cache: series painted
+   * against the previous window can now sit outside it, so the next overlay
+   * apply must repaint fully (and get re-clamped) instead of appending a tip.
+   * The series themselves are not touched here — a `setData` during the
+   * in-flight candle paint would race it.
    */
   notePaintedCandleRange(first: number, last: number): void {
-    if (Number.isFinite(first) && Number.isFinite(last) && last >= first) {
-      this.paintedCandleRange = { first, last };
+    if (!Number.isFinite(first) || !Number.isFinite(last) || last < first) return;
+    const prev = this.paintedCandleRange;
+    this.paintedCandleRange = { first, last };
+    if (prev && (prev.first !== first || prev.last !== last)) {
+      this.overlayDataMeta.clear();
     }
   }
 
@@ -1699,8 +1731,9 @@ export class PaneManager {
    */
   setEquityCurve(points: { time: number; value: number }[]) {
     // Pin to THIS chart's painted candle range like every other co-painted
-    // payload (no-op until this chart's first candle paint).
-    const inRange = clampPointsToPaintedRange(points, this.paintedCandleRange);
+    // payload (falls back to the candle series' own extent before the first
+    // recorded paint, so the clamp is never a silent no-op).
+    const inRange = clampPointsToPaintedRange(points, this.clampRange());
     const mapped = inRange
       .filter((p) => Number.isFinite(p.time) && Number.isFinite(p.value))
       .map((p) => ({ time: p.time as UTCTimestamp, value: p.value }));
@@ -2684,7 +2717,7 @@ export class PaneManager {
           metaKey,
           this.overlayDataMeta,
           forceFull,
-          this.paintedCandleRange,
+          this.clampRange(),
         );
         try {
           const labels = this.plotLabelOptions(line);
@@ -2765,7 +2798,7 @@ export class PaneManager {
             this.overlayMetaKey(paneId, key),
             this.overlayDataMeta,
             forceFull,
-            this.paintedCandleRange,
+            this.clampRange(),
           );
           pane.series[key] = series;
           this.overlaySeriesKinds.set(kindKey, seriesKind);
@@ -3022,7 +3055,7 @@ export class PaneManager {
         spec.kind === 'plotcandle' ? 'plotcandle' : 'plotbar';
       // Pin to THIS chart's painted candle range (see applyOverlayLineDataSmart):
       // a stale overlay window must not extend the shared time scale.
-      const inRange = clampPointsToPaintedRange(spec.data, this.paintedCandleRange);
+      const inRange = clampPointsToPaintedRange(spec.data, this.clampRange());
       const mapped = inRange
         .filter(
           (d) =>

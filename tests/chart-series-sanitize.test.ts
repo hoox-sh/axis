@@ -19,6 +19,7 @@ import {
   extendPaintedRange,
   looksLikeOhlcData,
   notePaintedCandleRange,
+  rangeFromSeriesData,
   resetPaintedCandleRangeForTests,
   sanitizeSeriesDataForSetData,
 } from '../src/chart/series-sanitize.ts';
@@ -254,5 +255,49 @@ describe('extendPaintedRange', () => {
     expect(range).toEqual({ first: 100, last: 400 });
     const tips = [{ time: 350 }, { time: 400 }, { time: 450 }];
     expect(clampPointsToPaintedRange(tips, range).map((p) => p.time)).toEqual([350, 400]);
+  });
+});
+
+describe('rangeFromSeriesData', () => {
+  it('derives the window from a series extent', () => {
+    expect(rangeFromSeriesData([100, 200, 300].map(ohlc))).toEqual({ first: 100, last: 300 });
+  });
+
+  it('picks the min/max, not the ends, when rows are unordered', () => {
+    expect(rangeFromSeriesData([300, 100, 200].map(ohlc))).toEqual({ first: 100, last: 300 });
+  });
+
+  it('skips rows without a finite time', () => {
+    const rows = [
+      { time: 100 },
+      { time: Number.NaN },
+      { time: undefined },
+      null,
+      { time: 200 },
+    ] as { time?: unknown }[];
+    expect(rangeFromSeriesData(rows)).toEqual({ first: 100, last: 200 });
+  });
+
+  it('collapses a single row to a degenerate window', () => {
+    expect(rangeFromSeriesData([{ time: 500 }])).toEqual({ first: 500, last: 500 });
+  });
+
+  it('returns null when nothing is clampable (empty chart stays a no-op)', () => {
+    expect(rangeFromSeriesData([])).toBeNull();
+    expect(rangeFromSeriesData([{ time: Number.NaN }])).toBeNull();
+    expect(rangeFromSeriesData([{}])).toBeNull();
+  });
+
+  it('closes the pre-paint hole: an overlay paints before any range is recorded', () => {
+    // Regression guard for the `Value is null` boot crash: no notePaintedCandleRange
+    // has been called yet, so the per-chart range is null. Deriving the window from
+    // the candles that are already on the chart still clamps a wider overlay.
+    resetPaintedCandleRangeForTests();
+    const candleExtent = rangeFromSeriesData([100, 200, 300].map(ohlc));
+    const pt = (time: number, value = 1) => ({ time, value });
+    const overlay = [pt(50), pt(200), pt(9999)];
+    expect(clampPointsToPaintedRange(overlay, candleExtent)).toEqual([pt(200)]);
+    // With the old `null` window the clamp was a silent no-op.
+    expect(clampPointsToPaintedRange(overlay, null)).toEqual(overlay);
   });
 });
