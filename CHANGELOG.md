@@ -15,6 +15,16 @@ _Generated/updated: 2026-10-17 · 587 commits · describe-tag: `v2.24.4`_
 
 ## [Unreleased]
 
+### Changed
+
+- **The in-browser Pyodide engine now vendors the PYNE 0.6.12 wheel.** Rebuilt with `scripts/sync-pyne-wheel.sh` from the sister pyne repo (1.40 MB, verified byte-identical in `public/vendor/` and `vendor/`), so the browser engine runs the same release as the Pro API. The wheel-side payload since 0.6.9:
+  - **`chart.point.copy(pt)` keeps its argument.** `_call_prefers_array_method` returned True for any attribute receiver, so `chart.point.copy` was lowered to the collection-method path and emitted `array_copy_value(None)` before the `chart.point` branch could run — the point became `None`, `pt.price` read through `udt_get_field(None, …)` as NaN, and the strategy/plot silently plotted nothing. The `chart.point` namespace is now excluded from that path (`_is_chart_point_namespace`).
+  - **A numeric multi-return UDF is no longer forced into object mode.** `f(float a, float b) => [a + 1.0, b + 2.0]` is marked `func_returns_sequence` so a single-target `a = f()` keeps the tuple handle, but the same marker demoted the multi-unpack `[u, w] = f()` to object mode. Such functions are now recognised as numeric-tuple UDFs and the unpack indexes `__tup[i]` directly — the `isinstance(__tup, (tuple, list))` guard cannot be narrowed by Numba and alone failed the njit warm-up.
+  - **Interpret and compile agree on every titled `fill()`.** Interpret wrote the per-bar band colour into the `series` column while compile packs series into float64 arrays and therefore cannot emit a colour string, so the same script rendered differently per mode. The interpret fill column is now null too; the band is still described completely by `plot_meta` (`kind="fill"`, `plot1`/`plot2`, `color`).
+  - `pynescript.debug` / `pynescript.stats` (the 0.6.10 `PYNE_DEBUG` logging and the `GET /stats` counters) and the 0.6.11 `util/datafeed.py` CCXT Pro fan-in ship in the wheel but are inert in the browser, which receives bars as inputs rather than through the engine datafeed.
+
+  The hard-coded wheel URLs in `src/engines/catalog.ts` (prefetch warm list) and `src/workers/pyodide-runtime.ts` (`micropip.install`), the worker-test expectation, and the wheel references in `docs/architecture/evaluation.mdx`, `docs/plugins/engines.mdx`, and `docs/llm.txt` moved with the filename. `scripts/sync-pyne-wheel.sh` now warns against those three call sites instead of the long-deleted `src/engines/index.js`.
+
 ## [2.24.5] — 2026-10-17
 
 ### Added

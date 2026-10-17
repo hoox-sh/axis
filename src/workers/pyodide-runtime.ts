@@ -198,7 +198,7 @@ export async function installPynescriptRuntime(py: PyodideLike, origin: string):
   // which are not needed for in-browser evaluate and are NOT vendored under
   // /pyodide/v0.29.5/ — micropip would 404 them on the self-hosted index.
   // Second positional arg alone is keep_going, not deps (micropip 0.6).
-  const wheelUrl = `${origin}/vendor/pynescript-0.6.9-py3-none-any.whl`;
+  const wheelUrl = `${origin}/vendor/pynescript-0.6.12-py3-none-any.whl`;
   const antlrUrl = `${origin}/vendor/antlr4_python3_runtime-4.13.2-py3-none-any.whl`;
   await assertZipAsset(wheelUrl, 'pynescript wheel');
   await assertZipAsset(antlrUrl, 'antlr4 wheel');

@@ -9,8 +9,9 @@
 #   public/vendor/pynescript-<ver>-py3-none-any.whl  (Vite → dist/)
 #   vendor/pynescript-<ver>-py3-none-any.whl         (legacy layout)
 #
-# Hardcoded install paths in src/engines/catalog.ts and index.js must match
-# the wheel filename (currently pynescript-0.4.0-py3-none-any.whl).
+# Hardcoded wheel URLs in src/engines/catalog.ts (prefetch warm list),
+# src/workers/pyodide-runtime.ts (micropip.install), and
+# tests/pyodide-worker.test.ts must match the wheel filename printed below.
 #
 # Copyright (C) 2024-2026 jango_blockchained
 # SPDX-License-Identifier: AGPL-3.0-only
@@ -106,13 +107,12 @@ if [[ "${NB_SIZE}" -lt 10000 ]]; then
   echo "warning: numba_builtins.py looks truncated (<10k)" >&2
 fi
 
-# Remind if catalog still points at a different filename
-if ! grep -q "${BASE}" "${ROOT}/src/engines/catalog.ts" 2>/dev/null; then
-  echo "!! update hard-coded wheel path in src/engines/catalog.ts to ${BASE}" >&2
-fi
-if ! grep -q "${BASE}" "${ROOT}/src/engines/index.js" 2>/dev/null; then
-  echo "!! update hard-coded wheel path in src/engines/index.js to ${BASE}" >&2
-fi
+# Remind if a hard-coded call site still points at a different filename
+for target in src/engines/catalog.ts src/workers/pyodide-runtime.ts tests/pyodide-worker.test.ts; do
+  if ! grep -q "${BASE}" "${ROOT}/${target}" 2>/dev/null; then
+    echo "!! update hard-coded wheel path in ${target} to ${BASE}" >&2
+  fi
+done
 
 echo "==> vendored:"
 ls -la "${ROOT}/public/vendor/${BASE}" "${ROOT}/vendor/${BASE}"
