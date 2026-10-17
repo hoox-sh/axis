@@ -183,6 +183,14 @@ function sameEngineOhlc(a: Bar, b: Bar): boolean {
  * Engine bars are normalized upstream (sorted ascending, deduped by time), so
  * time comparison is positional: any slot mismatch means the engine rewrote
  * history and the chart needs the full repaint.
+ *
+ * One asymmetry is deliberate: the engine's store holds **closed bars only**,
+ * while engine-owned live mode also paints the venue's forming tip locally
+ * between engine ticks ({@link ENGINE_OWNED_TICK_MIN_MS}) — so the chart
+ * routinely carries trailing bars the next engine read does not have. An
+ * engine window that is exactly the chart's prefix therefore means "the engine
+ * only lacks the local trailing bars" (newer than anything it holds), never a
+ * reshape: see the `next.length < cur.length` branch.
  */
 export function diffEngineOwnedBars(
   cur: readonly Bar[],
@@ -190,7 +198,19 @@ export function diffEngineOwnedBars(
 ): EngineOwnedPaintDiff {
   if (!next.length) return { kind: 'noop' };
   if (!cur.length) return { kind: 'full' };
-  if (next.length < cur.length) return { kind: 'full' };
+  if (next.length < cur.length) {
+    // Prefix-aligned shortfall → keep the chart. Diffing this as a reshape
+    // dropped the venue's forming tip on *every* engine tick: the local tip
+    // painted at t=0..10s was gone by the t≈10s engine read (its store only
+    // holds closed bars), then re-appended by the next venue flush — a ~10s
+    // oscillation that also re-ran indicators on a window without the forming
+    // bar ("the chart is always one bar behind"). `noop` skips both: the
+    // prefix came from this engine, and the trailing local bars are newer.
+    for (let i = 0; i < next.length; i++) {
+      if (cur[i]!.time !== next[i]!.time) return { kind: 'full' };
+    }
+    return { kind: 'noop' };
+  }
   if (next.length === cur.length) {
     for (let i = 0; i < cur.length; i++) {
       if (cur[i]!.time !== next[i]!.time) return { kind: 'full' };

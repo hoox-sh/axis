@@ -290,6 +290,106 @@ describe('engine-owned live paint', () => {
     expect(store.bars).toBe(before);
   });
 
+  it('keeps the venue forming tip when the engine window retracts to closed bars', async () => {
+    // Regression: the engine's store holds *closed* bars only, while the local
+    // tip path paints the venue's forming bar between engine ticks. A re-read
+    // that comes back one bar shorter (prefix-aligned) used to diff as `full`
+    // and drop that tip on every engine round trip — the chart oscillated
+    // (tip → repaint → gone → venue re-append) every ~10s and indicators
+    // re-ran on a window without the forming bar.
+    const last = SAMPLE_BARS[SAMPLE_BARS.length - 1]!;
+    const fTime = last.time + 3600;
+    const forming: Bar = {
+      time: fTime,
+      open: last.close,
+      high: last.close + 4,
+      low: last.close - 4,
+      close: last.close + 2,
+      volume: 5,
+    };
+    // First read: the engine still carries the forming bar (chart + tip paint
+    // land). Later reads: its series retracts to closed bars only — the
+    // observed production behavior of an engine-backed series.
+    let engineBars: Bar[] = [...SAMPLE_BARS, forming];
+    let ticks = 0;
+
+    restoreFetch = mockFetch(async (input, init) => {
+      const url = new URL(String(input));
+      const method = String(init?.method || 'GET').toUpperCase();
+      if (method === 'POST' && url.pathname === '/data/session') {
+        return jsonResponse({ status: 'success', session_id: 'chart1', cache: 'hit' });
+      }
+      if (method === 'POST' && url.pathname === '/data/session/chart1/tick') {
+        ticks += 1;
+        return jsonResponse({
+          status: 'success',
+          session_id: 'chart1',
+          appended: 1,
+          forming: true,
+        });
+      }
+      if (method === 'GET' && url.pathname === '/data/series/bars') {
+        return jsonResponse({ status: 'success', bars: engineBars });
+      }
+      return jsonResponse({ status: 'error', code: 'NOT_FOUND' }, 404);
+    });
+
+    let push: ((bar: Bar) => void) | null = null;
+    registerDynamicStream({
+      id: 'eo-keeptip-stream',
+      name: 'EO keep-tip stream',
+      kind: 'stream',
+      start({ onBar, onStatus }) {
+        onStatus({ state: 'open' });
+        push = onBar;
+        onBar({
+          time: last.time,
+          open: last.open,
+          high: last.high,
+          low: last.low,
+          close: last.close,
+          volume: last.volume,
+        });
+        return () => {
+          push = null;
+        };
+      },
+    });
+
+    startLive('eo-keeptip-stream', 'BTCUSDT', '1h');
+    // Flush 1 ticks the engine; its window (incl. the forming bar) lands via
+    // the tail path — the chart now carries the venue tip locally.
+    const paintedForming = await waitFor(
+      () => store.bars[store.bars.length - 1]?.time === fTime,
+      4000,
+    );
+    expect(paintedForming).toBe(true);
+    expect(store.bars.length).toBe(SAMPLE_BARS.length + 1);
+
+    // The engine's series retracts to closed bars only, and a newer venue
+    // slot forces the next engine round trip (bypasses the 10s throttle).
+    engineBars = SAMPLE_BARS;
+    const before = store.bars;
+    push?.({
+      time: fTime + 3600,
+      open: last.close,
+      high: last.close + 1,
+      low: last.close - 1,
+      close: last.close + 0.5,
+      volume: 2,
+    });
+
+    const ticked = await waitFor(() => ticks >= 2, 4000);
+    expect(ticked).toBe(true);
+    await _awaitEnginePaintForTests();
+
+    // Prefix-aligned one-shorter read → noop: the local forming tip survives
+    // and the window is never replaced via `setBarsQuiet`.
+    expect(store.bars.length).toBe(SAMPLE_BARS.length + 1);
+    expect(store.bars[store.bars.length - 1]!.time).toBe(fTime);
+    expect(store.bars).toBe(before);
+  });
+
   it('skips paint and re-run when the engine window is unchanged', async () => {
     const last = SAMPLE_BARS[SAMPLE_BARS.length - 1]!;
     const engineBars: Bar[] = SAMPLE_BARS.map((b) => ({ ...b }));
@@ -708,8 +808,24 @@ describe('diffEngineOwnedBars', () => {
     expect(diffEngineOwnedBars(cur, next).kind).toBe('full');
   });
 
-  it('full when the window shrank', () => {
-    expect(diffEngineOwnedBars(makeWin(5), makeWin(3)).kind).toBe('full');
+  it('noop when a shorter window is exactly the chart minus its local tail', () => {
+    // The engine's store holds closed bars only; the chart also carries the
+    // venue's forming tip painted locally between engine ticks. An engine read
+    // that is exactly one (or a few) bars shorter with an aligned prefix must
+    // NOT drop that tip — the pre-fix `full` here made the chart oscillate
+    // (tip → repaint → gone → venue re-append) every engine tick.
+    expect(diffEngineOwnedBars(makeWin(5), makeWin(3)).kind).toBe('noop');
+    // Several accumulated local bars (frozen engine, venue kept painting):
+    // still prefix-aligned → keep the chart.
+    const cur = [...makeWin(3), b(1180, 300), b(1240, 301)];
+    expect(diffEngineOwnedBars(cur, makeWin(3)).kind).toBe('noop');
+  });
+
+  it('full when a shorter window is misaligned (rewrite / slide)', () => {
+    // Same depth shortfall, but the times do not line up positionally: the
+    // engine rewrote history or its window slid — a genuine reshape.
+    expect(diffEngineOwnedBars(makeWin(5, 1000), makeWin(3, 1060))).toEqual({ kind: 'full' });
+    expect(diffEngineOwnedBars(makeWin(5, 1000), makeWin(3, 1000 + 120))).toEqual({ kind: 'full' });
   });
 
   it('append for a few new bars with an aligned prefix', () => {
