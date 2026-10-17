@@ -20,8 +20,11 @@ import {
   tickDataSession,
   ensureDataSession,
   runDataSession,
+  seriesIsStale,
+  repairStaleEngineSeries,
   _resetDataSessionMemo,
   _resetSeriesProvisionMemoForTests,
+  _resetSeriesRepairCooldownForTests,
   _getSeriesProvisionForTests,
   _resetDataSessionCooldownForTests,
   DATA_PROVIDE_CHUNK,
@@ -44,6 +47,22 @@ const REQ = { key: KEY, historyBars: 3 };
 
 function bar(time: number): Bar {
   return { time, open: 1, high: 2, low: 0.5, close: 1.5, volume: 10 };
+}
+
+/** Step of the freshness-aware fixtures (1h — matches `KEY.interval`). */
+const HOUR = 3600;
+
+/**
+ * `count` bars ending at the current 1h slot.
+ *
+ * The provisioning gate treats a deep-but-frozen local tail as stale and tops
+ * it up from the engine's own feed (`/data/series/fetch`), so any fixture that
+ * means "a live local window" must end near now — ancient times would exercise
+ * the staleness path instead of the cache-miss/upload path under test.
+ */
+function freshBars(count: number): Bar[] {
+  const last = Math.floor(Date.now() / 1000 / HOUR) * HOUR;
+  return Array.from({ length: count }, (_, i) => bar(last - (count - 1 - i) * HOUR));
 }
 
 interface Call {
@@ -217,7 +236,7 @@ describe('ensureDataSession broker', () => {
   });
 
   it('uploads the newest local bars on a miss, then retries', async () => {
-    const localBars = [bar(1), bar(2), bar(3), bar(4), bar(5)];
+    const localBars = freshBars(5);
     let creates = 0;
     const rec = recorder((c) => {
       if (c.path === '/data/session') {
@@ -238,7 +257,8 @@ describe('ensureDataSession broker', () => {
     });
     expect(h).toMatchObject({ sessionId: 's2', provisioned: 'local' });
     const provide = must(rec.calls, (c) => c.path === '/data/series/provide');
-    expect(bodyBars(provide).map((b) => b.time)).toEqual([3, 4, 5]);
+    expect(bodyBars(provide).map((b) => b.time)).toEqual(localBars.slice(-3).map((b) => b.time));
+    // The fresh tail needs no engine-side catch-up.
     expect(rec.calls.some((c) => c.path === '/data/series/fetch')).toBe(false);
   });
 
@@ -260,6 +280,44 @@ describe('ensureDataSession broker', () => {
     expect(fetchCall.body).toMatchObject({ exchange: 'binance', history_bars: 3 });
   });
 
+  it('tops up a stale local window from the engine feed after the upload', async () => {
+    let creates = 0;
+    const rec = recorder((c) => {
+      if (c.path === '/data/session') {
+        creates++;
+        return creates === 1
+          ? jsonResponse({ status: 'miss', code: 'DATA_MISS', key: 'k', have: 0, need: 3 }, 409)
+          : jsonResponse({ status: 'success', session_id: 's-top' });
+      }
+      if (c.path === '/data/series/provide') {
+        return jsonResponse({ status: 'success', added: 3, updated: 0, count: 3 });
+      }
+      if (c.path === '/data/series/fetch') {
+        return jsonResponse({ status: 'success', fetched: 3, count: 6 });
+      }
+      return jsonResponse({ status: 'error' }, 500);
+    });
+    restore = rec.restore;
+    // Ancient local times: deep enough for `need`, but frozen days back. The
+    // broker uploads them and then asks the engine to catch up to now — a stale
+    // upload must never become the engine's frozen tail (engine-owned live
+    // paints the chart from that series).
+    const h = await ensureDataSession({
+      endpoint: ENDPOINT,
+      apiKey: '',
+      ...REQ,
+      script: 's',
+      localBars: local([bar(1), bar(2), bar(3)]),
+    });
+    expect(h).toMatchObject({ sessionId: 's-top', provisioned: 'local' });
+    expect(rec.calls.map((c) => c.path)).toEqual([
+      '/data/session',
+      '/data/series/provide',
+      '/data/series/fetch',
+      '/data/session',
+    ]);
+  });
+
   it('does not fetch when a local upload left the engine short (no ccxt needed)', async () => {
     const rec = recorder((c) => {
       if (c.path === '/data/session') {
@@ -269,7 +327,7 @@ describe('ensureDataSession broker', () => {
     });
     restore = rec.restore;
     await expect(
-      ensureDataSession({ endpoint: ENDPOINT, apiKey: '', ...REQ, script: 's', localBars: local([bar(1)]) }),
+      ensureDataSession({ endpoint: ENDPOINT, apiKey: '', ...REQ, script: 's', localBars: local([freshBars(1)[0]!]) }),
     ).rejects.toThrow(/still short after local upload/);
     expect(rec.calls.filter((c) => c.path === '/data/session').length).toBe(3);
     // The exchange fetch is never attempted for data the host may not download.
@@ -297,7 +355,7 @@ describe('ensureDataSession broker', () => {
       key: { exchange: 'binance', symbol: 'BTCUSDT', interval: '1h' },
       historyBars: 5,
       script: 's',
-      localBars: local([bar(1), bar(2)]),
+      localBars: local(freshBars(2)),
     });
     expect(h).toMatchObject({ sessionId: 's-clamped', provisioned: 'local' });
     expect(requested).toEqual([5, 5, 2]);
@@ -311,7 +369,7 @@ describe('ensureDataSession broker', () => {
     _resetDatasetStoreForTests();
     _resetDatasetSinksForTests();
     await _resetBarsCacheForTests();
-    await putDatasetBars('binance-rest', 'BTCUSDT', '1h', [bar(1), bar(2), bar(3)]);
+    await putDatasetBars('binance-rest', 'BTCUSDT', '1h', freshBars(3));
     setStore('source', 'binance-rest');
     let creates = 0;
     const rec = recorder((c) => {
@@ -554,7 +612,7 @@ describe('runDataSession memo', () => {
 
 describe('series provisioning memo (shared across owners)', () => {
   const local = (bars: Bar[]) => async () => bars;
-  const bars5 = [bar(1), bar(2), bar(3), bar(4), bar(5)];
+  const bars5 = freshBars(5);
 
   /** Variant of `recorder` that also captures the request host (endpoint isolation). */
   function hostRecorder(
@@ -664,7 +722,7 @@ describe('series provisioning memo (shared across owners)', () => {
       return jsonResponse({ status: 'success', added: n, updated: 0, count: n });
     });
     restore = rec.restore;
-    const six = [...bars5, bar(6)];
+    const six = [...bars5, bar(bars5[bars5.length - 1]!.time + HOUR)];
     const first = await ensureDataSession({
       endpoint: ENDPOINT,
       apiKey: '',
@@ -810,5 +868,141 @@ describe('serverEngine engine-owned run', () => {
     expect(r.status).toBe('error');
     expect(r.error).toMatch(/upstream down/);
     expect(rec.calls.every((c) => c.path.startsWith('/data/session') || c.path.startsWith('/data/series'))).toBe(true);
+  });
+});
+
+describe('seriesIsStale', () => {
+  const now = 1_800_000_000;
+
+  it('treats an unknown / non-positive bound as stale', () => {
+    expect(seriesIsStale(null, '1h', now)).toBe(true);
+    expect(seriesIsStale(undefined, '1h', now)).toBe(true);
+    expect(seriesIsStale(0, '1h', now)).toBe(true);
+    expect(seriesIsStale(Number.NaN, '1h', now)).toBe(true);
+  });
+
+  it('is fresh at the current slot and within the step tolerance', () => {
+    expect(seriesIsStale(now, '1h', now)).toBe(false);
+    expect(seriesIsStale(now - 3600, '1h', now)).toBe(false);
+    expect(seriesIsStale(now - 2 * 3600, '1h', now)).toBe(false);
+  });
+
+  it('is stale once the tail lags beyond the tolerance', () => {
+    expect(seriesIsStale(now - 3 * 3600, '1h', now)).toBe(true);
+    // The live symptom: a tail frozen four days back on a 1m series.
+    expect(seriesIsStale(now - 4 * 86_400, '1m', now)).toBe(true);
+  });
+});
+
+describe('repairStaleEngineSeries', () => {
+  const local = (bars: Bar[]) => async () => bars;
+  const nowSec = () => Math.floor(Date.now() / 1000);
+  /** `GET /data/series` — the advisory status read. */
+  const isStatus = (c: Call) => c.path.startsWith('/data/series?');
+
+  it('skips a series the engine already holds at now', async () => {
+    const rec = recorder((c) => {
+      if (isStatus(c)) return jsonResponse({ status: 'success', count: 100, newest: nowSec() - 60 });
+      return jsonResponse({ status: 'error' }, 500);
+    });
+    restore = rec.restore;
+    const r = await repairStaleEngineSeries({
+      endpoint: ENDPOINT,
+      apiKey: '',
+      key: KEY,
+      localBars: local(freshBars(5)),
+    });
+    expect(r).toEqual({ repaired: false, via: 'none', bars: 0 });
+    expect(rec.calls.filter((c) => !isStatus(c))).toHaveLength(0);
+  });
+
+  it('uploads the local tail when the engine series is behind and AXIS is fresh', async () => {
+    const localBars = freshBars(5);
+    const rec = recorder((c) => {
+      if (isStatus(c)) {
+        return jsonResponse({ status: 'success', count: 100, newest: nowSec() - 5 * 86_400 });
+      }
+      if (c.path === '/data/series/provide') {
+        return jsonResponse({ status: 'success', added: 5, updated: 0, count: 105 });
+      }
+      return jsonResponse({ status: 'error' }, 500);
+    });
+    restore = rec.restore;
+    const r = await repairStaleEngineSeries({
+      endpoint: ENDPOINT,
+      apiKey: '',
+      key: KEY,
+      localBars: local(localBars),
+    });
+    expect(r).toEqual({ repaired: true, via: 'local', bars: 5 });
+    const provide = must(rec.calls, (c) => c.path === '/data/series/provide');
+    expect(bodyBars(provide).map((b) => b.time)).toEqual(localBars.map((b) => b.time));
+    // A fresh upload needs no engine-side catch-up.
+    expect(rec.calls.some((c) => c.path === '/data/series/fetch')).toBe(false);
+  });
+
+  it('asks the engine to fetch when AXIS holds no fresh local window', async () => {
+    const rec = recorder((c) => {
+      if (isStatus(c)) return jsonResponse({ status: 'success', count: 100, newest: 1 });
+      if (c.path === '/data/series/fetch') {
+        return jsonResponse({ status: 'success', fetched: 10, count: 110 });
+      }
+      return jsonResponse({ status: 'error' }, 500);
+    });
+    restore = rec.restore;
+    const r = await repairStaleEngineSeries({
+      endpoint: ENDPOINT,
+      apiKey: '',
+      key: KEY,
+      localBars: local([bar(1), bar(2)]),
+    });
+    expect(r).toEqual({ repaired: true, via: 'fetch', bars: 0 });
+    expect(rec.calls.some((c) => c.path === '/data/series/provide')).toBe(false);
+  });
+
+  it('repairs a stale series at most once per cooldown window', async () => {
+    let statusReads = 0;
+    const rec = recorder((c) => {
+      if (isStatus(c)) {
+        statusReads += 1;
+        return jsonResponse({ status: 'success', count: 100, newest: 1 });
+      }
+      if (c.path === '/data/series/fetch') {
+        return jsonResponse({ status: 'success', fetched: 10, count: 110 });
+      }
+      return jsonResponse({ status: 'error' }, 500);
+    });
+    restore = rec.restore;
+    const opts = { endpoint: ENDPOINT, apiKey: '', key: KEY, localBars: local([bar(1)]) };
+    const first = await repairStaleEngineSeries(opts);
+    const second = await repairStaleEngineSeries(opts);
+    expect(first.repaired).toBe(true);
+    expect(second).toEqual({ repaired: false, via: 'none', bars: 0 });
+    // One status read + one fetch for the first attempt; the second is skipped
+    // before it even reads the engine status.
+    expect(statusReads).toBe(1);
+    expect(rec.calls.filter((c) => c.path === '/data/series/fetch')).toHaveLength(1);
+    // An explicit (user-driven) repair ignores the cooldown.
+    const forced = await repairStaleEngineSeries({ ...opts, force: true });
+    expect(forced.repaired).toBe(true);
+    expect(statusReads).toBe(2);
+  });
+
+  it('is cooldown-guarded per (endpoint, series)', async () => {
+    const other = 'http://pro-other.test';
+    const fetches: string[] = [];
+    const rec = recorder((c) => {
+      if (isStatus(c)) return jsonResponse({ status: 'success', count: 100, newest: 1 });
+      if (c.path === '/data/series/fetch') {
+        fetches.push(c.body?.symbol ? String(c.body.symbol) : '?');
+        return jsonResponse({ status: 'success', fetched: 1, count: 101 });
+      }
+      return jsonResponse({ status: 'error' }, 500);
+    });
+    restore = rec.restore;
+    const base = { apiKey: '', historyBars: 3, localBars: local([bar(1)]) };
+    await repairStaleEngineSeries({ ...base, endpoint: ENDPOINT, key: KEY });
+    await repairStaleEngineSeries({ ...base, endpoint: other, key: KEY });
+    expect(fetches).toHaveLength(2);
   });
 });

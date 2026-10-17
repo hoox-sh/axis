@@ -77,6 +77,8 @@ import { liveRerunModeForEngine } from '../engines/catalog';
 import { streamEvalScript, streamRouteActive, streamSeriesTick, streamStop, StreamFallbackError } from './stream-live';
 import { tickChartDataSession, releaseChartDataSession } from '../engines/chart-data-session';
 import { getDataSeriesBars } from '../engines/data-sessions';
+import { newestBarTime } from '../engines/series-freshness';
+import { engineSeriesStale, noteStaleEngineSeries } from '../engines/series-repair';
 import { refreshLiveSessionTelemetry } from '../engines/live-sessions';
 import { getActiveEngineConfig } from '../plugins/active';
 import { exchangeForSource } from '../data/symbol-exchange';
@@ -462,7 +464,7 @@ export function startLive(
       // window (or every-tick mode) schedules a re-run, on failure we run the
       // legacy venue append below so the chart never stalls on an outage.
       if (streamRouteActive()) {
-        streamSeriesTick().then(
+        streamSeriesTick(newestBarTime(ordered)).then(
           (changed) => {
             if (!isCurrent()) return;
             if (
@@ -531,6 +533,22 @@ export function startLive(
     const newestTriggerTime = triggerBars.length
       ? Math.max(...triggerBars.map((b) => (Number.isFinite(b.time) ? b.time : -1)))
       : -1;
+    /**
+     * Report a stale engine series on the chart's series and ask the broker to
+     * repair it in the background. Never blocks the paint: the chart keeps
+     * whatever it already holds until the next snapshot carries the healed
+     * window.
+     */
+    const reportStaleEngine = (reason: string, engineNewest: number | null): void => {
+      noteStaleEngineSeries({
+        exchange: exchangeForSource(store.source),
+        symbol: sym,
+        interval: iv,
+        engineNewest,
+        reason,
+        repair: { endpoint, apiKey, key, historyBars: limit },
+      });
+    };
     // Effective re-run mode. Delta ticks make per-tick updates cheap even on
     // heavy histories, so every-tick is honored regardless of bar count.
     const rerunMode = effectiveLiveRerunMode(
@@ -574,6 +592,21 @@ export function startLive(
         // Engine reports nothing changed and we already hold a window: skip
         // the bar re-read entirely (it costs 0.5–1.5s for 10k bars).
         if (t.unchanged === true && store.bars.length > 0) {
+          // "Unchanged" against a market that has moved on means the engine's
+          // series is frozen (its upstream stopped advancing): painting nothing
+          // would keep the stale chart tail forever. Keep the chart, report the
+          // staleness once and repair the engine's series from AXIS' data.
+          const reason = engineSeriesStale({
+            // The engine reported "no change", so its series is the chart's.
+            chartBars: store.bars,
+            engineBars: store.bars,
+            interval: iv,
+            marketNow: newestTriggerTime,
+          });
+          if (reason) {
+            reportStaleEngine(reason, newestBarTime(store.bars) || null);
+            return { painted: 'stale', shouldRerun: false };
+          }
           return { painted: 'noop', shouldRerun: false };
         }
         // A few appended bars: re-read only the tail and merge locally instead
@@ -623,6 +656,21 @@ export function startLive(
         const proBars = await getDataSeriesBars(endpoint, apiKey, key, limit);
         if (!isCurrent() || !proBars.length) {
           return { painted: 'noop', shouldRerun: false };
+        }
+        // Never back-date the chart from a frozen engine window: the engine's
+        // series can sit behind the chart the Data Manager / venue path already
+        // holds, or behind the venue trigger clock. Painting it would re-open
+        // the same stale window on every tick. Keep the chart, report once and
+        // repair the engine's series from AXIS' data.
+        const staleReason = engineSeriesStale({
+          chartBars: store.bars,
+          engineBars: proBars,
+          interval: iv,
+          marketNow: newestTriggerTime,
+        });
+        if (staleReason) {
+          reportStaleEngine(staleReason, newestBarTime(proBars) || null);
+          return { painted: 'stale', shouldRerun: false };
         }
         const prevLastSeen = lastSeenBarTime;
         const diff = diffEngineOwnedBars(store.bars, proBars);

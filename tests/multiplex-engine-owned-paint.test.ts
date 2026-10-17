@@ -433,6 +433,154 @@ describe('engine-owned live paint', () => {
     const ran = await waitFor(() => _getRerunAttemptCountForTests() >= 1, 4000);
     expect(ran).toBe(true);
   });
+
+  it('never back-dates the chart from an engine window behind the chart tail', async () => {
+    const last = SAMPLE_BARS[SAMPLE_BARS.length - 1]!;
+    // A frozen engine series: deep enough for the session, but days older than
+    // the chart window AXIS already holds.
+    const frozen = Array.from({ length: 40 }, (_, i) => ({
+      time: 1_600_000_000 + i * 3600,
+      open: 1,
+      high: 2,
+      low: 0.5,
+      close: 1.5,
+      volume: 10,
+    }));
+    const calls: string[] = [];
+    restoreFetch = mockFetch(async (input, init) => {
+      const url = new URL(String(input));
+      const method = String(init?.method || 'GET').toUpperCase();
+      calls.push(`${method} ${url.pathname}`);
+      if (method === 'POST' && url.pathname === '/data/session') {
+        return jsonResponse({ status: 'success', session_id: 'chart1', cache: 'hit' });
+      }
+      if (method === 'POST' && url.pathname === '/data/session/chart1/tick') {
+        return jsonResponse({ status: 'success', session_id: 'chart1', appended: 0, forming: true });
+      }
+      if (method === 'GET' && url.pathname === '/data/series/bars') {
+        return jsonResponse({ status: 'success', bars: frozen });
+      }
+      if (method === 'GET' && url.pathname === '/data/series') {
+        return jsonResponse({ status: 'success', count: 40, newest: 1_600_140_000 });
+      }
+      if (method === 'POST' && url.pathname === '/data/series/provide') {
+        return jsonResponse({ status: 'success', added: 40, updated: 0, count: 40 });
+      }
+      if (method === 'POST' && url.pathname === '/data/series/fetch') {
+        return jsonResponse({ status: 'success', fetched: 40, count: 40 });
+      }
+      return jsonResponse({ status: 'error', code: 'NOT_FOUND' }, 404);
+    });
+
+    registerDynamicStream({
+      id: 'eo-stale-window-stream',
+      name: 'EO stale window stream',
+      kind: 'stream',
+      start({ onBar, onStatus }) {
+        onStatus({ state: 'open' });
+        const t = setTimeout(
+          () =>
+            onBar({
+              time: last.time,
+              open: last.open,
+              high: last.high,
+              low: last.low,
+              close: last.close,
+              volume: last.volume,
+            }),
+          10,
+        );
+        return () => clearTimeout(t);
+      },
+    });
+
+    startLive('eo-stale-window-stream', 'BTCUSDT', '1h');
+    await new Promise((r) => setTimeout(r, 60));
+    await _awaitEnginePaintForTests();
+    // The chart keeps its fresher window — the frozen engine series is never
+    // painted (previously it re-opened the stale window on every tick).
+    expect(store.bars.length).toBe(SAMPLE_BARS.length);
+    expect(store.bars[store.bars.length - 1]!.time).toBe(last.time);
+    expect(store.live.needsRerun).toBe(false);
+    // …and the frozen series is repaired in the background.
+    const repaired = await waitFor(
+      () => calls.includes('POST /data/series/provide') || calls.includes('POST /data/series/fetch'),
+      2000,
+    );
+    expect(repaired).toBe(true);
+  });
+
+  it('detects a frozen engine when it reports unchanged against a moved venue clock', async () => {
+    const last = SAMPLE_BARS[SAMPLE_BARS.length - 1]!;
+    let barsGets = 0;
+    const calls: string[] = [];
+    restoreFetch = mockFetch(async (input, init) => {
+      const url = new URL(String(input));
+      const method = String(init?.method || 'GET').toUpperCase();
+      if (method === 'POST' && url.pathname === '/data/session') {
+        return jsonResponse({ status: 'success', session_id: 'chart1', cache: 'hit' });
+      }
+      if (method === 'POST' && url.pathname === '/data/session/chart1/tick') {
+        return jsonResponse({
+          status: 'success',
+          session_id: 'chart1',
+          appended: 0,
+          forming: true,
+          unchanged: true,
+        });
+      }
+      if (method === 'GET' && url.pathname === '/data/series/bars') {
+        barsGets += 1;
+        return jsonResponse({ status: 'success', bars: SAMPLE_BARS });
+      }
+      if (method === 'GET' && url.pathname === '/data/series') {
+        return jsonResponse({ status: 'success', count: 5, newest: 1 });
+      }
+      if (method === 'POST' && url.pathname === '/data/series/fetch') {
+        calls.push('fetch');
+        return jsonResponse({ status: 'success', fetched: 5, count: 10 });
+      }
+      if (method === 'POST' && url.pathname === '/data/series/provide') {
+        calls.push('provide');
+        return jsonResponse({ status: 'success', added: 5, updated: 0, count: 10 });
+      }
+      return jsonResponse({ status: 'error', code: 'NOT_FOUND' }, 404);
+    });
+
+    registerDynamicStream({
+      id: 'eo-frozen-stream',
+      name: 'EO frozen stream',
+      kind: 'stream',
+      start({ onBar, onStatus }) {
+        onStatus({ state: 'open' });
+        // A venue tick that has moved three bars past the frozen chart tail.
+        const t = setTimeout(
+          () =>
+            onBar({
+              time: last.time + 3 * 3600,
+              open: last.close,
+              high: last.close + 1,
+              low: last.close - 1,
+              close: last.close,
+              volume: last.volume,
+            }),
+          10,
+        );
+        return () => clearTimeout(t);
+      },
+    });
+
+    startLive('eo-frozen-stream', 'BTCUSDT', '1h');
+    await new Promise((r) => setTimeout(r, 60));
+    await _awaitEnginePaintForTests();
+    // "Unchanged" against a market that has moved on: no paint, no re-run, no
+    // pointless bar re-read — just the staleness notice + repair.
+    expect(store.bars.length).toBe(SAMPLE_BARS.length);
+    expect(barsGets).toBe(0);
+    expect(store.live.needsRerun).toBe(false);
+    const repaired = await waitFor(() => calls.length > 0, 2000);
+    expect(repaired).toBe(true);
+  });
 });
 
 describe('diffEngineOwnedBars', () => {

@@ -158,6 +158,49 @@ Existing release route. Unchanged.
 Chart paint in server-owned mode uses `getDataSeriesBars()` into memory. The
 streaming multiplex and `expand-cache` writes are suppressed for that instrument.
 
+## Series staleness (frozen engine series)
+
+`DATA_MISS` is a **count** check: `have < need`. A series that is deep enough but
+**frozen** — Pro's upstream feed stopped advancing, or a stale local window was
+uploaded before the Data Manager repaired it — never misses, and AXIS paints the
+chart from it in engine-owned mode. The chart then freezes at the stale tail on
+every tick with no error. Two days of that is the observed live symptom
+(`newest` four days back on a 1m series).
+
+The freshness contract is therefore explicit:
+
+- **Pure predicates** (`src/engines/series-freshness.ts`): a series is stale when
+  its newest bar lags the reference (chart tail, venue trigger clock, or `now`)
+  by more than `ENGINE_SERIES_STALE_STEPS` (2) whole interval steps. Unknown
+  bounds are never treated as behind by the *skip* predicates — a wrong skip
+  would trade visible staleness for hidden staleness.
+- **`GET /data/series` `newest`** is the engine's own series tail and the
+  authoritative freshness read (advisory: a failed status read still repairs).
+  `tick`'s `unchanged: true` is **not** proof of freshness — a frozen series
+  reports unchanged forever.
+- **Provisioning top-up** (`sharedProvisionSeries`): after an upload whose tail is
+  already stale, Pro is asked to `fetch` so a stale local window can never become
+  the engine's frozen tail.
+- **Repair** (`repairStaleEngineSeries`, `src/engines/data-sessions.ts`):
+  local-first (upload the local window when it reaches now, upsert-by-time keeps
+  Pro's deeper history), else `fetch` from Pro's exchange feed. Cooldown-guarded
+  (`SERIES_REPAIR_COOLDOWN_MS`, 60s per endpoint+series), never throws.
+- **Paint guards**: both engine-owned paint paths refuse to back-date the chart.
+  `streams/multiplex.ts` (`paintEngineOwned`, calculator profile) and
+  `streams/stream-live.ts` (stream profile snapshots/deltas) keep the fresher
+  chart window, report once via `noteStaleEngineSeries` (throttled log +
+  `engine` telemetry `degraded` + feed `degraded`), and repair in the background;
+  the next snapshot/tick paints the healed window. In the stream plane a delta
+  that does not continue the chart tail is dropped (the next full snapshot
+  reconciles) instead of punching a hole.
+- **Background catch-up** (`src/data/background-catchup.ts`): in engine-owned
+  mode it skips the local `setBarsQuiet`/`setDataToChart` repaint (the next
+  engine snapshot would just hand the stale window back) and pushes AXIS'
+  freshest window onto the engine's series instead. This covers the stream plane
+  too: an engine advertising both `data_session` and `live_stream` still owns the
+  series the subscription replicates, so the same repair-not-repaint rule
+  applies.
+
 ## Stream plane (engines with `live_stream`)
 
 `src/engine/` + `src/streams/stream-live.ts`, specified in

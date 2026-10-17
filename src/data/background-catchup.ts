@@ -202,37 +202,80 @@ export async function repairChartGapsAfterBackground(
       /* expand is best-effort — dataset repaint below still runs */
     }
 
-    // Repaint the chart from the (possibly expanded) dataset so missed slots
-    // appear. No viewport reset: user stays where they were.
+    // Engine-owned live mode: the engine's store owns the chart series (in the
+    // stream plane the subscription's replica *is* that store). Repainting from
+    // AXIS' local dataset would put the chart out of step with the engine (the
+    // overlay time axis is built from `store.bars`) and would not heal the frozen
+    // engine series: the next engine snapshot would simply hand back the stale
+    // window. Keep the chart and push AXIS' freshest window onto the engine's
+    // series instead — the next snapshot/tick paints the healed window.
+    let engineOwned = false;
     try {
-      const { getDataset } = await import('./dataset-store');
-      const series = await getDataset(expandSrc, expandSym, expandIv);
-      if (series.length) {
-        const { bars: repaired } = repairBars(series, expandIv);
-        if (repaired.length) {
-          setBarsQuiet(repaired);
-          try {
-            const { getManager, setDataToChart } = await import('../chart/manager-access');
-            const manager = getManager();
-            if (manager) {
-              // Bar replay paints only the scrubbed prefix; the store keeps
-              // full history so catch-up never reveals future bars mid-replay.
-              setDataToChart(isReplayActive() ? getVisibleBars(repaired) : repaired, {
-                fit: false,
-                clearScriptState: false,
-                clearMarkers: false,
-              });
-            }
-          } catch {
-            /* chart repaint is best-effort */
-          }
-        }
-      } else if (!expanded) {
-        // Dataset empty and nothing expanded — store.bars is all we have;
-        // still hand the window to the DSM engine below via ensureDatasetComplete.
-      }
+      const { isEngineOwnedLive } = await import('../engines/ownership');
+      engineOwned = isEngineOwnedLive();
     } catch {
-      /* repaint best-effort */
+      /* ownership check is best-effort */
+    }
+
+    if (engineOwned) {
+      try {
+        const { getActiveEngineConfig } = await import('../plugins/active');
+        const { noteStaleEngineSeries } = await import('../engines/series-repair');
+        const { exchangeForSource } = await import('./symbol-exchange');
+        const cfg = getActiveEngineConfig() || {};
+        noteStaleEngineSeries({
+          exchange: exchangeForSource(expandSrc),
+          symbol: expandSym,
+          interval: expandIv,
+          engineNewest: null,
+          reason: `frozen during background catch-up (${gap.missingBars} bars missing)`,
+          repair: {
+            endpoint: String(cfg.endpoint || ''),
+            apiKey: String(cfg.apiKey || ''),
+            key: {
+              exchange: exchangeForSource(expandSrc),
+              market: 'spot',
+              symbol: expandSym,
+              interval: expandIv,
+            },
+          },
+        });
+      } catch {
+        /* engine series repair is best-effort */
+      }
+    } else {
+      // Repaint the chart from the (possibly expanded) dataset so missed slots
+      // appear. No viewport reset: user stays where they were.
+      try {
+        const { getDataset } = await import('./dataset-store');
+        const series = await getDataset(expandSrc, expandSym, expandIv);
+        if (series.length) {
+          const { bars: repaired } = repairBars(series, expandIv);
+          if (repaired.length) {
+            setBarsQuiet(repaired);
+            try {
+              const { getManager, setDataToChart } = await import('../chart/manager-access');
+              const manager = getManager();
+              if (manager) {
+                // Bar replay paints only the scrubbed prefix; the store keeps
+                // full history so catch-up never reveals future bars mid-replay.
+                setDataToChart(isReplayActive() ? getVisibleBars(repaired) : repaired, {
+                  fit: false,
+                  clearScriptState: false,
+                  clearMarkers: false,
+                });
+              }
+            } catch {
+              /* chart repaint is best-effort */
+            }
+          }
+        } else if (!expanded) {
+          // Dataset empty and nothing expanded — store.bars is all we have;
+          // still hand the window to the DSM engine below via ensureDatasetComplete.
+        }
+      } catch {
+        /* repaint best-effort */
+      }
     }
 
     // Hand remaining holes to the DSM backfill engine (validate → sliced
@@ -247,10 +290,16 @@ export async function repairChartGapsAfterBackground(
     try {
       const detail =
         gap.missingBars > 0 ? `${gap.missingBars} bars` : `${gap.fillableGaps} gaps`;
-      setStatus('ready', `Caught up after background (${reason}) — ${detail}`, {
-        toast: false,
-        source: 'dsm',
-      });
+      setStatus(
+        'ready',
+        engineOwned
+          ? `Engine series refreshed after background (${reason}) — ${detail}`
+          : `Caught up after background (${reason}) — ${detail}`,
+        {
+          toast: false,
+          source: engineOwned ? 'engine' : 'dsm',
+        },
+      );
     } catch {
       /* status best-effort */
     }

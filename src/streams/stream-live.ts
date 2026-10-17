@@ -34,6 +34,7 @@
 
 import { getManager, setDataToChart } from '../chart/manager-access';
 import { FALLBACK_MAJORS } from '../data/symbol-catalog';
+import { intervalToSec } from '../data/bars-gaps';
 import { applyStreamPayload } from '../engine/apply-bridge';
 import { Redesign2BarCloseVerifier, compareClosedOhlcv } from '../engine/bar-close-verify';
 import { currentSeriesKey } from '../engine/market-identity';
@@ -41,6 +42,8 @@ import { StreamLiveWire, StreamFallbackError, type WireClient } from '../engine/
 import { Redesign2WsClient } from '../engine/ws-client';
 import { routeEngineRun } from '../engine/router';
 import { getCachedEngineCapabilities } from '../engines/catalog';
+import { newestBarTime } from '../engines/series-freshness';
+import { engineSeriesStale, noteStaleEngineSeries } from '../engines/series-repair';
 import { getActiveEngineConfig } from '../plugins/active';
 import {
   appendBar,
@@ -71,6 +74,75 @@ function toBarTime(bars: Bar[]): number {
   return bars.length ? bars[bars.length - 1]!.time : 0;
 }
 
+/** Exchange id (canonical) of the chart's current series. */
+function chartExchange(): string {
+  return String(store.exchange || 'binance').trim().toLowerCase() || 'binance';
+}
+
+/** Window the engine series is subscribed with (bars). */
+function engineHistoryBars(): number {
+  return Number.isFinite(store.rollingWindowBars) && store.rollingWindowBars > 0
+    ? store.rollingWindowBars
+    : 2000;
+}
+
+/**
+ * Stale-engine guard for a hand-off from the engine's series (stream plane).
+ *
+ * The chart is painted from the engine's series, so a snapshot that is *behind*
+ * the chart tail (the Data Manager / venue path already has the newer bars) or
+ * behind `marketNow` (the venue trigger clock the caller just flushed — the
+ * engine's upstream stopped advancing) must not be painted: it would back-date
+ * the chart and re-open the same stale window on every venue tick. Keep the
+ * chart, report once, and repair the engine's series from AXIS' own dataset —
+ * the next snapshot carries the healed window.
+ *
+ * `marketNow` is only supplied on venue-triggered ticks, so a session venue
+ * (equities / FX holding its last close over a weekend) is never accused of
+ * being frozen: the trigger clock simply does not advance there. Chart-tail
+ * staleness applies to every path.
+ *
+ * Returns `true` when the bars are safe to paint.
+ */
+function engineSeriesPaintable(bars: Bar[], marketNow = 0): boolean {
+  const iv = String(store.interval || '1m');
+  const reason = engineSeriesStale({
+    chartBars: store.bars,
+    engineBars: bars,
+    interval: iv,
+    marketNow,
+  });
+  if (!reason) return true;
+  noteStaleEngineSeries({
+    exchange: chartExchange(),
+    symbol: String(store.symbol || ''),
+    interval: iv,
+    engineNewest: newestBarTime(bars) || null,
+    reason,
+    repair: {
+      endpoint: String(getActiveEngineConfig()?.endpoint || store.endpoint || ''),
+      apiKey: String(getActiveEngineConfig()?.apiKey || ''),
+      key: { exchange: chartExchange(), market: 'spot', symbol: String(store.symbol || ''), interval: iv },
+      historyBars: engineHistoryBars(),
+    },
+  });
+  return false;
+}
+
+/**
+ * True when `bars` continues the chart tail (same slot or the very next) — safe
+ * to append per bar. A delta that jumps further would open a hole in the series;
+ * the per-tick `ensureSeries` full snapshot reconciles it instead.
+ */
+function continuesChartTail(bars: Bar[]): boolean {
+  const tail = toBarTime(store.bars);
+  const first = bars.length ? bars[0]!.time : 0;
+  if (!tail || !first) return false;
+  const step = intervalToSec(String(store.interval || '1m'));
+  const delta = first - tail;
+  return delta >= 0 && delta <= step;
+}
+
 let wire: StreamLiveWire | null = null;
 const verifiers = new Map<string, Redesign2BarCloseVerifier>();
 
@@ -95,12 +167,17 @@ function buildWire(): StreamLiveWire {
         }
       },
       onSeriesFull: (bars) => {
+        if (!engineSeriesPaintable(bars)) return;
         setBarsQuiet(bars);
         setDataToChart(bars, { fit: false, clearMarkers: false });
       },
       onSeriesDelta: (bars, append) => {
         if (!bars.length) return;
+        if (!engineSeriesPaintable(bars)) return;
         if (append && bars.length <= 4) {
+          // An append that does not continue the tail would punch a hole in the
+          // series — skip it and let the next full snapshot reconcile.
+          if (!continuesChartTail(bars)) return;
           const manager = getManager();
           for (const bar of bars) {
             appendBar(bar);
@@ -186,13 +263,19 @@ function seriesMeta(): Record<string, unknown> {
  * via `onSeriesFull`/`onSeriesDelta`), then report whether the caller should
  * re-run scripts. Never appends venue bars locally — the subscription owns
  * the replica.
+ *
+ * `marketNow` is the newest venue trigger time the caller just flushed: it is
+ * the venue's own clock, so a frozen engine (series stuck while the venue keeps
+ * trading) is detectable. Omit it on non-venue-driven calls (the guard then
+ * only refuses to back-date the chart).
  */
-export async function streamSeriesTick(): Promise<boolean> {
+export async function streamSeriesTick(marketNow = 0): Promise<boolean> {
   const w = getWire();
   const subId = seriesSubId();
   try {
     const before = toBarTime(store.bars);
     const bars = await w.ensureSeries(subId, seriesMeta());
+    if (!engineSeriesPaintable(bars, marketNow)) return false;
     const manager = getManager();
     setBarsQuiet(bars);
     if (manager) setDataToChart(bars, { fit: false, clearMarkers: false });

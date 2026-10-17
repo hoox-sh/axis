@@ -8,7 +8,7 @@
 * [src/desktop](desktop.md) - AXIS desktop (Tauri) shell helpers.
 * [src/editor](editor.md) - Root component for the standalone editor window (?view=editor).
 * [src/engine](engine.md) - Redesign2 engine module barrel.
-* [src/engines](engines.md) - src/engines contains batch.ts, catalog.ts, chart-data-session.ts, and 10 more files.
+* [src/engines](engines.md) - src/engines contains batch.ts, catalog.ts, chart-data-session.ts, and 12 more files.
 * [src/indicators](indicators.md) - src/indicators contains IndicatorCard.tsx, IndicatorPanel.tsx, apply-context.ts, and 13 more files.
 * [src/mcp](mcp.md) - AXIS in-app MCP host — capabilities, snapshot, Worker bridge.
 * [src/onchain](onchain.md) - Public entry for the AXIS on-chain data plane (Phase 1–3 light).

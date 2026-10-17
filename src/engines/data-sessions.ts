@@ -38,6 +38,7 @@ import type { Bar } from '../store/types';
 import type { EngineDataSessionRequest } from '../plugins/types';
 import { normalizeHistoricalBars } from '../data/parse-bars';
 import { resolveSessionPayload } from './session-delta';
+import { ENGINE_SERIES_STALE_STEPS, newestBarTime, seriesBehind } from './series-freshness';
 
 /** Max bars per `POST /data/series/provide` request (contract). */
 export const DATA_PROVIDE_CHUNK = 5_000;
@@ -110,6 +111,35 @@ function seriesQuery(k: DataSeriesKey): string {
 }
 
 const REQUEST_TIMEOUT_MS = 30_000;
+
+/**
+ * Minimum gap between automatic staleness repairs for one series (ms).
+ * A frozen series is repaired with at most one status read plus one upload (or
+ * engine fetch) per minute instead of one per venue tick.
+ */
+export const SERIES_REPAIR_COOLDOWN_MS = 60_000;
+
+/** Default window pushed/asked for by {@link repairStaleEngineSeries}. */
+const DEFAULT_REPAIR_BARS = 5_000;
+
+/**
+ * Pure staleness check for an engine series bound: is `newestSec` more than
+ * {@link ENGINE_SERIES_STALE_STEPS} interval steps behind `nowSec`?
+ *
+ * An unknown / non-positive bound counts as stale: the caller can only lose a
+ * cheap no-op upload, while assuming freshness would leave the series frozen
+ * forever (see {@link repairStaleEngineSeries}).
+ */
+export function seriesIsStale(
+  newestSec: number | null | undefined,
+  interval: string,
+  nowSec: number = Math.floor(Date.now() / 1000),
+): boolean {
+  const newest =
+    typeof newestSec === 'number' && Number.isFinite(newestSec) && newestSec > 0 ? newestSec : 0;
+  if (newest <= 0) return true;
+  return seriesBehind(newest, Math.floor(nowSec), interval, ENGINE_SERIES_STALE_STEPS);
+}
 
 function requestSignal(parent?: AbortSignal): AbortSignal {
   const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
@@ -586,6 +616,12 @@ const seriesProvisionMemo = new Map<string, SeriesProvision>();
  */
 const seriesProvisionInflight = new Map<string, Promise<'local' | 'fetch'>>();
 
+/**
+ * Wall clock of the last automatic staleness repair per (endpoint, series) —
+ * the cooldown that keeps a frozen engine from being re-checked every tick.
+ */
+const seriesRepairAt = new Map<string, number>();
+
 function seriesProvisionMemoKey(endpoint: string, key: DataSeriesKey): string {
   return `${endpoint.replace(/\/$/, '')}|${seriesKeyString(key)}`;
 }
@@ -615,6 +651,19 @@ function sharedProvisionSeries(
       const tail = local.slice(-need);
       await provideDataSeries(opts.endpoint, opts.apiKey, opts.key, tail, 'axis-local', opts.signal);
       noteSeriesProvisioned(memoKey, need, 'local');
+      // A local window that does not reach "now" (stale Data Manager cache for a
+      // symbol last visited days ago) must never become the engine's frozen
+      // series: engine ticks only append *newer* candles, so the stale tail
+      // sticks, and AXIS paints the chart from that series in engine-owned live
+      // mode. Top the tail up from the engine's own exchange feed — best-effort,
+      // a host without ccxt still keeps the (deep) local history.
+      if (seriesIsStale(newestBarTime(tail), opts.key.interval)) {
+        try {
+          await fetchDataSeries(opts.endpoint, opts.apiKey, opts.key, need, opts.signal);
+        } catch {
+          /* upstream fetch unavailable — repairStaleEngineSeries retries live */
+        }
+      }
       return 'local';
     }
     await fetchDataSeries(opts.endpoint, opts.apiKey, opts.key, need, opts.signal);
@@ -639,6 +688,7 @@ export function _resetDataSessionMemo(): void {
   // would let a later case skip the upload path it means to exercise.
   seriesProvisionMemo.clear();
   seriesProvisionInflight.clear();
+  seriesRepairAt.clear();
 }
 
 /** @internal test helper — drop only the series provisioning memo. */
@@ -647,12 +697,122 @@ export function _resetSeriesProvisionMemoForTests(): void {
   seriesProvisionInflight.clear();
 }
 
+/** @internal test helper — clear the per-series staleness-repair cooldown. */
+export function _resetSeriesRepairCooldownForTests(): void {
+  seriesRepairAt.clear();
+}
+
 /** @internal test helper — recorded coverage for (endpoint, series). */
 export function _getSeriesProvisionForTests(
   endpoint: string,
   key: DataSeriesKey,
 ): SeriesProvision | null {
   return seriesProvisionMemo.get(seriesProvisionMemoKey(endpoint, key)) ?? null;
+}
+
+/** Outcome of a {@link repairStaleEngineSeries} attempt. */
+export interface SeriesRepairResult {
+  /** True when fresh data reached the engine (upload or engine-side fetch). */
+  repaired: boolean;
+  /** Where the fresh bars came from. */
+  via: 'local' | 'fetch' | 'none';
+  /** Bars uploaded (0 for an engine-side fetch). */
+  bars: number;
+  /** Set when a repair was attempted and failed (best-effort path). */
+  error?: string;
+}
+
+/**
+ * Push the freshest data AXIS holds onto a **stale** engine series.
+ *
+ * Why: {@link ensureDataSession} only treats a **count** shortfall
+ * (`DATA_MISS`, `have < need`) as a miss, so a series that is deep enough but
+ * frozen — the engine's upstream stopped advancing, or a stale local window was
+ * uploaded before the Data Manager repaired it — stays stale forever. In
+ * engine-owned live mode AXIS paints the chart from that series, so the chart
+ * freezes at the stale tail without any error. This is the recovery path: it is
+ * called by the live paint handlers when they observe the engine's newest bar
+ * lurching behind the chart tail / the market.
+ *
+ * Local-first: when the local Data Manager window reaches "now", its newest
+ * `historyBars` are uploaded (upsert by time, so the engine keeps its deeper
+ * history). Otherwise the engine is asked to fetch from its exchange feed (which
+ * needs ccxt host-side — a failure is reported, never thrown).
+ *
+ * Cooldown-guarded ({@link SERIES_REPAIR_COOLDOWN_MS}) and best-effort: never
+ * throws, always resolves with the outcome.
+ */
+export async function repairStaleEngineSeries(opts: {
+  endpoint: string;
+  apiKey: string;
+  key: DataSeriesKey;
+  /** Window to push/ask for. Defaults to 5 000 bars. */
+  historyBars?: number;
+  /** Local Data Manager lookup (defaults to the dataset store for the key). */
+  localBars?: () => Promise<readonly Bar[]>;
+  /** "Now" in unix seconds — test seam. */
+  nowSec?: number;
+  /** Skip the cooldown (explicit user action / tests). */
+  force?: boolean;
+  signal?: AbortSignal;
+}): Promise<SeriesRepairResult> {
+  const need = Math.max(1, Math.floor(opts.historyBars ?? DEFAULT_REPAIR_BARS));
+  const memoKey = seriesProvisionMemoKey(opts.endpoint, opts.key);
+  const now = Math.floor(opts.nowSec ?? Date.now() / 1000);
+  if (!opts.force) {
+    const last = seriesRepairAt.get(memoKey) ?? 0;
+    if (Date.now() - last < SERIES_REPAIR_COOLDOWN_MS) {
+      return { repaired: false, via: 'none', bars: 0 };
+    }
+  }
+  seriesRepairAt.set(memoKey, Date.now());
+
+  // Someone else may have healed it already (second tab, the engine's own
+  // catch-up): one cheap status read avoids a pointless upload. Advisory only —
+  // a failed status read still repairs.
+  try {
+    const status = await getDataSeriesStatus(opts.endpoint, opts.apiKey, opts.key, opts.signal);
+    if (status.count > 0 && !seriesIsStale(status.newest, opts.key.interval, now)) {
+      return { repaired: false, via: 'none', bars: 0 };
+    }
+  } catch {
+    /* status is advisory */
+  }
+
+  let local: readonly Bar[] = [];
+  try {
+    local = await (opts.localBars ?? (() => defaultLocalBars(opts.key)))();
+  } catch {
+    local = [];
+  }
+  const tail = local.slice(-need);
+  if (tail.length && !seriesIsStale(newestBarTime(tail), opts.key.interval, now)) {
+    try {
+      await provideDataSeries(opts.endpoint, opts.apiKey, opts.key, tail, 'axis-local', opts.signal);
+      noteSeriesProvisioned(memoKey, need, 'local');
+      return { repaired: true, via: 'local', bars: tail.length };
+    } catch (err: unknown) {
+      return {
+        repaired: false,
+        via: 'local',
+        bars: 0,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
+
+  try {
+    await fetchDataSeries(opts.endpoint, opts.apiKey, opts.key, need, opts.signal);
+    noteSeriesProvisioned(memoKey, need, 'fetch');
+    return { repaired: true, via: 'fetch', bars: 0 };
+  } catch (err: unknown) {
+    return {
+      repaired: false,
+      via: 'fetch',
+      bars: 0,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
 }
 
 /**

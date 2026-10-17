@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "tests"
-description: "tests contains alerts-engine.test.ts, alerts-form.test.ts, alerts-format.test.ts, and 276 more files."
+description: "tests contains alerts-engine.test.ts, alerts-form.test.ts, alerts-format.test.ts, and 278 more files."
 resource: "tests"
 tags: [code, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-16T18:28:43Z
+  at: 2026-10-17T06:08:33Z
 sources:
   - id: tree
     resource: "tests"
@@ -236,6 +236,8 @@ okf_lock: generated
 * `script-meta.test.ts`
 * `scripts-sync-versions.test.ts`
 * `series-factory.test.ts`
+* `series-freshness.test.ts`
+* `series-repair.test.ts`
 * `session-delta.test.ts`
 * `settings-credentials.test.ts`
 * `setup.ts` — MemoryStorage, installAxisTestEnv, installDocumentStub, installMemoryLocalStorage, installWindowStub

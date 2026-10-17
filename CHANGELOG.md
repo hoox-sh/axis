@@ -25,6 +25,15 @@ _Generated/updated: 2026-10-17 · 587 commits · describe-tag: `v2.24.4`_
 
   The hard-coded wheel URLs in `src/engines/catalog.ts` (prefetch warm list) and `src/workers/pyodide-runtime.ts` (`micropip.install`), the worker-test expectation, and the wheel references in `docs/architecture/evaluation.mdx`, `docs/plugins/engines.mdx`, and `docs/llm.txt` moved with the filename. `scripts/sync-pyne-wheel.sh` now warns against those three call sites instead of the long-deleted `src/engines/index.js`.
 
+### Fixed
+
+- **A frozen engine series can no longer back-date the chart.** `DATA_MISS` is a *count* check (`have < need`), so a series that is deep enough but frozen — Pro's upstream feed stopped advancing, or a stale local window was uploaded before the Data Manager repaired it — never misses; AXIS paints the chart from that series in engine-owned live mode, so the chart sat on a days-old tail while the venue WebSocket and feeds looked connected (`newest` four days back on $DOGEUSDT 1m). Staleness is now an explicit contract:
+  - New pure predicates `src/engines/series-freshness.ts` — stale means the newest bar lags the comparison bound (chart tail, venue trigger clock, or now) by more than 2 whole interval steps; unknown bounds are never treated as behind by the *skip* predicates.
+  - `repairStaleEngineSeries()` in `src/engines/data-sessions.ts` — local-first repair (upload the local window when it reaches now; upsert-by-time keeps Pro's deeper history), else `fetch` from Pro's exchange feed; cooldown-guarded (60s per endpoint+series), never throws. Exposed as `POST /data/series` `newest` truth: `tick`'s `unchanged: true` is not proof of freshness.
+  - Both engine-owned paint paths refuse to back-date the chart — `src/streams/multiplex.ts` (`paintEngineOwned`, including the `unchanged` early return against a moved venue clock) and `src/streams/stream-live.ts` (snapshots, deltas, per-tick `ensureSeries`). A stream delta that does not continue the chart tail is dropped instead of punching a hole. They report once via `src/engines/series-repair.ts` (`noteStaleEngineSeries`: throttled log + `engine` telemetry `degraded` + feed `degraded`) and repair in the background; the next snapshot/tick paints the healed window.
+  - Provisioning tops up: `sharedProvisionSeries` asks Pro to `fetch` after an upload whose tail is already stale, so a stale local window can never become the engine's frozen tail.
+  - Background catch-up (`src/data/background-catchup.ts`) skips the local repaint in engine-owned mode (it would fight the store the overlay time axis is built from) and pushes AXIS' freshest window onto Pro's series instead. Documented in `docs/devops/engine-owned-data-plane.mdx` § Series staleness; covered by `tests/series-freshness.test.ts`, the `repairStaleEngineSeries`/`seriesIsStale` cases in `tests/data-sessions.test.ts`, and the two frozen-series paint cases in `tests/multiplex-engine-owned-paint.test.ts`.
+
 ## [2.24.5] — 2026-10-17
 
 ### Added
