@@ -77,7 +77,12 @@ const verifiers = new Map<string, Redesign2BarCloseVerifier>();
 function buildWire(): StreamLiveWire {
   const cfg = getActiveEngineConfig();
   const endpoint = String(cfg?.endpoint || store.endpoint || 'http://localhost:5002');
-  const client = new Redesign2WsClient({ endpoint }) as unknown as WireClient;
+  // The engine-owned plane authenticates over the socket, not the URL: the
+  // server answers UNAUTHORIZED (and AXIS then falls back to REST) unless the
+  // first frame is `auth`. Read the key the same way every key-gated REST call
+  // does, so a vault-restored key reaches the socket too.
+  const authToken = String(cfg?.apiKey || '').trim() || undefined;
+  const client = new Redesign2WsClient({ endpoint, authToken }) as unknown as WireClient;
   return new StreamLiveWire(
     client,
     {

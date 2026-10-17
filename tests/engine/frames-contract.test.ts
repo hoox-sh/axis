@@ -9,12 +9,14 @@ import {
   isAuthFrame,
   isCloseFrame,
   isDeltaFrame,
+  isErrorFrame,
   isFullFrame,
   isPingFrame,
   isRepairFrame,
   isResumeFrame,
   isSubscribeFrame,
   isUnsubscribeFrame,
+  normalizeRedesign2Frame,
   validateRedesign2Frame,
 } from '../../src/engine/frames';
 
@@ -94,5 +96,38 @@ describe('redesign2 frame contract (F-01)', () => {
     expect(validateRedesign2Frame({ type: 'subscribe', id: 's', payload: { kind: 'series', meta: META } })).toBe(true);
     expect(validateRedesign2Frame({ type: 'bogus' })).toBe(false);
     expect(validateRedesign2Frame(null)).toBe(false);
+  });
+
+  test('error frames are accepted in either envelope', () => {
+    // AXIS contract — body nested under payload.
+    const nested = { type: 'error', id: 's', payload: { code: 'UNAUTHORIZED', message: 'Authenticate first' } };
+    expect(isErrorFrame(nested)).toBe(true);
+    expect(validateRedesign2Frame(nested)).toBe(true);
+    // Engine `_err` — body flat. Must not be dropped as a malformed frame.
+    const flat = { type: 'error', code: 'UNAUTHORIZED', message: 'Authenticate first', retryable: false };
+    expect(isErrorFrame(flat)).toBe(true);
+    expect(validateRedesign2Frame(flat)).toBe(true);
+    expect(isErrorFrame({ type: 'error', code: 'X' })).toBe(false);
+  });
+
+  test('normalizeRedesign2Frame fills payload for the flat engine shape', () => {
+    const flat = { type: 'error', code: 'UNAUTHORIZED', message: 'Authenticate first', retryable: false };
+    expect(normalizeRedesign2Frame(flat)).toEqual({
+      type: 'error',
+      code: 'UNAUTHORIZED',
+      message: 'Authenticate first',
+      retryable: false,
+      payload: { code: 'UNAUTHORIZED', message: 'Authenticate first', retryable: false },
+    });
+  });
+
+  test('normalizeRedesign2Frame leaves nested errors and other frames untouched', () => {
+    const nested = { type: 'error', payload: { code: 'X', message: 'y' } };
+    expect(normalizeRedesign2Frame(nested)).toBe(nested);
+    const status = { type: 'status', payload: { code: 'live' } };
+    expect(normalizeRedesign2Frame(status)).toBe(status);
+    // Unrepairable flat frames pass through unchanged (validator then rejects).
+    const bad = { type: 'error', code: 'X' };
+    expect(normalizeRedesign2Frame(bad)).toBe(bad);
   });
 });

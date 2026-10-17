@@ -389,10 +389,13 @@ export function isVerifyResultFrame(value: unknown): value is Redesign2VerifyRes
 export function isErrorFrame(value: unknown): value is Redesign2ErrorFrame {
   if (!isRecord(value)) return false;
   if (value.type !== 'error') return false;
-  const payload = value.payload;
-  if (!isRecord(payload)) return false;
-  if (typeof payload.code !== 'string') return false;
-  if (typeof payload.message !== 'string') return false;
+  // The engine's `_err` helper replies `{type:"error", code, message}` with the
+  // body at the **top level**, while this contract (and every other engine
+  // frame) nests it under `payload`. Accept both so a genuine engine error is
+  // never discarded as a malformed frame.
+  const body = isRecord(value.payload) ? value.payload : value;
+  if (typeof body.code !== 'string') return false;
+  if (typeof body.message !== 'string') return false;
   return true;
 }
 
@@ -413,6 +416,28 @@ export function validateRedesign2Frame(value: unknown): boolean {
     isVerifyResultFrame(value) ||
     isErrorFrame(value)
   );
+}
+
+/**
+ * Fill an error frame's `payload` from the top-level body when the engine sent
+ * the flat shape.
+ *
+ * The engine replies to an unauthorised or malformed frame with
+ * `{type:"error", code, message, retryable}` (see `live_ws._err`), whereas the
+ * AXIS contract reads every frame body from `payload` — the wire client's
+ * `handleMessage` normalises here so downstream consumers (`live-wire` reads
+ * `payload.message` when reporting a failed subscribe) see one shape.
+ *
+ * Non-error frames and already-nested errors are returned untouched.
+ */
+export function normalizeRedesign2Frame<T>(value: T): T {
+  if (!isRecord(value) || value.type !== 'error') return value;
+  if (isRecord(value.payload)) return value;
+  const { code, message, retryable } = value;
+  if (typeof code !== 'string' || typeof message !== 'string') return value;
+  const payload: Record<string, unknown> = { code, message };
+  if (retryable !== undefined) payload.retryable = retryable;
+  return { ...value, payload } as T;
 }
 
 // ---------------------------------------------------------------------------

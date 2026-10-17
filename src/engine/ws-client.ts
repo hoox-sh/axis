@@ -35,7 +35,7 @@ import type {
   Redesign2SubscribeFrame,
   SeriesMeta,
 } from './frames';
-import { validateRedesign2Frame } from './frames';
+import { normalizeRedesign2Frame, validateRedesign2Frame } from './frames';
 
 export type Redesign2WsFrameType =
   | 'auth'
@@ -365,7 +365,7 @@ export class Redesign2WsClient {
       return;
     }
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
-    const frame = parsed as Redesign2WsFrame;
+    const frame = normalizeRedesign2Frame(parsed) as Redesign2WsFrame;
     if (!frame || typeof frame.type !== 'string') return;
     if (frame.type === 'pong') {
       if (this.pongTimer) {
