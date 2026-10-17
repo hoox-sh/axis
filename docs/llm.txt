@@ -1648,6 +1648,74 @@ At most two retries, then surface the error.
 3. tickDataSession() sends {exchange, symbol} only.
 Chart paint in server-owned mode uses getDataSeriesBars() into memory. The
 streaming multiplex and expand-cache writes are suppressed for that instrument.
+Series staleness (frozen engine series)
+DATA_MISS is a count check: have < need. A series that is deep enough but
+frozen — Pro's upstream feed stopped advancing, or a stale local window was
+uploaded before the Data Manager repaired it — never misses, and AXIS paints the
+chart from it in engine-owned mode. The chart then freezes at the stale tail on
+every tick with no error. Two days of that is the observed live symptom
+(newest four days back on a 1m series).
+The freshness contract is therefore explicit:
+Pure predicates (src/engines/series-freshness.ts): a series is stale when
+its newest bar lags the reference (chart tail, venue trigger clock, or now)
+by more than ENGINE_SERIES_STALE_STEPS (2) whole interval steps. Unknown
+bounds are never treated as behind by the skip predicates — a wrong skip
+would trade visible staleness for hidden staleness.
+GET /data/series newest is the engine's own series tail and the
+authoritative freshness read (advisory: a failed status read still repairs).
+tick's unchanged: true is not proof of freshness — a frozen series
+reports unchanged forever.
+Provisioning top-up (sharedProvisionSeries): after an upload whose tail is
+already stale, Pro is asked to fetch so a stale local window can never become
+the engine's frozen tail.
+Repair (repairStaleEngineSeries, src/engines/data-sessions.ts):
+local-first (upload the local window when it reaches now, upsert-by-time keeps
+Pro's deeper history), else fetch from Pro's exchange feed. Cooldown-guarded
+(SERIES_REPAIR_COOLDOWN_MS, 60s per endpoint+series), never throws.
+Series drive (src/engines/series-drive.ts): the calculator plane advances
+its series with a REST chart-session tick per venue flush, but the stream plane
+had no equivalent — its client frames are subscribe / resume / repair /
+ping, so a subscription can only replicate the engine's series. A stalled
+engine, whose own per-tick scheduler stopped advancing the series, therefore
+left the chart pinned to the frozen tail until the verdict above fired: on 1m,
+newest three bars back at every repair and one bar painted every ~3 minutes.
+The stream plane now drives the same chart session the calculator plane uses
+(tickChartDataSession) on each venue flush, throttled to
+SERIES_DRIVE_MIN_MS (10s) with a new venue bar always driving
+immediately. The drive is fire-and-forget — the paint stays bound to the
+venue flush, and a late snapshot can never back-date the chart (paint guards
+below) — and it is skipped without an endpoint. A stale tick envelope (the
+engine accepted the request but its own feed advanced nothing) falls through to
+the report + repair above, which also covers engines with no data_session,
+where the drive itself cannot run. Covered by tests/series-drive.test.ts.
+Paint guards: both engine-owned paint paths refuse to back-date the chart.
+streams/multiplex.ts (paintEngineOwned, calculator profile) and
+streams/stream-live.ts (stream profile snapshots/deltas) keep the fresher
+chart window, report once via noteStaleEngineSeries (throttled log +
+engine telemetry degraded + feed degraded), and repair in the background;
+the next snapshot/tick paints the healed window. A behind-the-venue-clock
+verdict is a report/repair signal only — the snapshot is still painted when it
+does not back-date the chart (it advances it, or is a no-op); refusing it would
+pin the candles while every other series keeps moving. In the stream plane a
+delta that does not continue the chart tail is dropped (the next full snapshot
+reconciles) instead of punching a hole.
+Moved-window prune (PaneManager.notePaintedCandleRange): a cookie-cutter
+risk of the repair above is that a jump in the candle window (200+ bars,
+e.g. a four-day-frozen series repaired at load) orphans co-painted script
+series — their rows now sit outside the candles. LWC's shared time scale is the
+union of every series' rows, so those rows make the candlestick painter throw
+Value is null on every render until the next overlay apply re-clamps them
+(which can be skipped as a no-op). The paint therefore prunes overlay_ /
+bgcolor_ / equity rows to the new range immediately, in the same task as the
+candle setData, before LWC's next render. Compare / on-chain overlay series
+are left alone — their windows are legitimately independent.
+Background catch-up (src/data/background-catchup.ts): in engine-owned
+mode it skips the local setBarsQuiet/setDataToChart repaint (the next
+engine snapshot would just hand the stale window back) and pushes AXIS'
+freshest window onto the engine's series instead. This covers the stream plane
+too: an engine advertising both data_session and live_stream still owns the
+series the subscription replicates, so the same repair-not-repaint rule
+applies.
 Stream plane (engines with live_stream)
 src/engine/ + src/streams/stream-live.ts, specified in
 .opencode/plans/final/plan.mdx:
@@ -1657,12 +1725,25 @@ subscribe ensures history server-side (autonomous fetch to the last closed
 bar), then status(datafeed-ready) → status(calculating) → one full
 snapshot → status(live); per-tick delta + close frames with monotonic
 seq and the closed_upto watermark.
+Series drive. The frames above are all client → server; there is no client
+tick, so the pane ticks the chart's data session over REST on each venue flush
+(src/engines/series-drive.ts, throttled) instead of waiting for the engine's
+own scheduler or the staleness verdict. See § Series staleness.
 The client applies snapshots/deltas through the existing apply pipeline
 (precomputedResult, tip-only on ticks), re-verifies closed bars against the
 venue, and repairs from the exchange on mismatch.
 Any stream failure falls back to the legacy paths above; a 60s cooldown
 keeps a flapping backend from stalling live. Opt out per tab via
 axis.engine.stream.disabled.
+Socket ownership. A connect attempt that is superseded (timed out /
+errored while a later attempt already replaced it) keeps no claim on the
+client: its late open/close/error and its frames are ignored, and a
+socket that opens after abandonment is closed instead of adopted
+(Redesign2WsClient, EngineWsClient). Browsers dispatch open/close as
+separate tasks, so without this a dead attempt's close nulled the live
+socket — the auth frame sent from the live onopen then threw
+WebSocket not open out of the handler (an uncaught window error) and the
+wire sat degraded · cooldown on the venue fallback path.
 Migration steps
 1. Capabilities (done in round one, keys aligned to this contract in round two).
 2. PYNE store + routes + health features (/home/jango/Git/pynescript).
@@ -3267,13 +3348,22 @@ Live tab (app_session_status → connected):
 “Put this indicator in the editor and run it.” (editor.set + editor.run)
 “Open the alerts panel and list alerts.” (panels.set + alerts.list)
 “Screenshot the panes.” (chart.screenshot — PNG base64)
+“My chart seems a bar behind — what's wrong?” (chart.lag — the verdict
+compares the chart tail to the venue clock, the tick, and the engine series)
+“Where are the holes in my bars?” (chart.bars — bounded tail/head rows +
+a missing-slot map)
+“Is the engine's series advancing, or is the socket wedged?”
+(stream.get + engine.series)
+“Tick the engine now / repair the stale series / reset the socket.”
+(engine.tick · engine.repair · stream.reset — the last one drops the
+socket and subscriptions so the next tick re-subscribes)
 Start with app_capabilities if the client has not cached the catalog.
 Capabilities at a glance
 Pass these ids to app_invoke as capability, with a JSON payload.
 | Domain | Ids |
 | --- | --- |
 | App | app.snapshot, app.get, app.set, app.command, app.shortcut, app.event |
-| Chart | chart.get / set / load / reload / live / layout / theme / type / screenshot / zoom |
+| Chart | chart.get / set / load / reload / live / layout / theme / type / screenshot / zoom / bars / lag |
 | Editor | editor.get / set / run / diagnostics |
 | Scripts | indicators.list / add / remove / update / run (remove detaches chart panes like the Layers panel; code edits need run after) |
 | Alerts | alerts.list / create / update / remove |
@@ -3284,6 +3374,8 @@ Pass these ids to app_invoke as capability, with a JSON payload.
 | Workspace | workspace.export / import |
 | Drawings | drawings.list / add / update / remove / clear / tool |
 | Settings | settings.get / set |
+| Engine | engine.get / series (read the engine's own series bounds + staleness) · engine.tick / repair (force a drive tick / stale-series repair) |
+| Stream | stream.get (route, engine socket, subscriptions, feed chips) · stream.reset (drop socket + subscriptions, probes a re-subscribe) |
 | Status | status.get |
 app_set paths (anything else is PATH_DENIED): symbol, interval, source, engine, exchange, theme, chartType, uiScale, live.active, live.preferAfterLoad, editor.doc, editor.open, watchlist.open.
 Example payloads:
@@ -3301,6 +3393,18 @@ Example payloads:
 `
 `json
 { "capability": "settings.set", "payload": { "settings": { "interval": "1h", "historyBars": 5000 } } }
+`
+`json
+{ "capability": "chart.lag", "payload": {} }
+`
+`json
+{ "capability": "chart.bars", "payload": { "limit": 20, "gaps": true } }
+`
+`json
+{ "capability": "engine.tick", "payload": {} }
+`
+`json
+{ "capability": "stream.reset", "payload": { "resubscribe": true } }
 `
 Full argument tables: MCP server.
 Limits
@@ -4508,8 +4612,13 @@ title: "AXIS Documentation"
 description: "Open charting PWA — orthogonal sources, streams, engines, and storage. Own the axes; swap the engine."
 ---
 AXIS Documentation
-AXIS is an installable charting PWA (v2.21.0, package.json / VERSION) that treats price, time, and calculation as separable axes. Release history is CHANGELOG.md. Sources load history. Streams advance the present. Engines evaluate Pine Script via PYNE. Storage keeps your script library. Compose any lawful combination without a proprietary charting host.
+AXIS is an installable charting PWA (v2.24.5, package.json / VERSION) that treats price, time, and calculation as separable axes. Release history is CHANGELOG.md (online changelog). Sources load history. Streams advance the present. Engines evaluate Pine Script via PYNE. Storage keeps your script library. Compose any lawful combination without a proprietary charting host.
 Pine Script and TradingView are trademarks of TradingView, Inc. Cloudflare is a registered trademark of Cloudflare, Inc. This project is independent and not affiliated with or endorsed by TradingView, Inc. or Cloudflare, Inc.
+What's new
+The current 2.24.5 build — full detail in the changelog:
+Agents can read and drive the live plane over MCP — eight new app_invoke capabilities: chart.lag (the "why is the chart a bar behind?" ledger with live / one-bar-behind / behind verdicts), chart.bars (bounded OHLCV windows plus a gap map and forming-bar flag), engine.get / engine.series / engine.tick / engine.repair, and stream.get / stream.reset. Every engine call reuses the active endpoint and key in-tab — the key never leaves the browser and is reported as hasApiKey only. See MCP (agents).
+Engine-owned live stops lagging — the venue's forming tip survives every engine repaint (no bar chopped off the tail), a frozen engine series is repaired instead of back-dating the chart, a superseded engine socket can no longer tear down the connection, and the stream plane now drives the engine's series itself (10s cadence, new venue bars immediately). See engine-owned data plane.
+The browser engine runs the PYNE 0.6.12 wheel — the same release as the Pro API, including the chart.point.copy argument fix, numeric multi-return UDFs, and interpret/compile fill() parity. See engine plugins.
 Abstract
 AXIS is a charting PWA, not a language rewrite. Language fidelity lives in PYNE. The PWA contributes:
 1. A unified plugin registry (source | stream | engine | storage | dataset | component)
@@ -7928,6 +8037,8 @@ Capability ids (app_invoke)
 | chart.type | { type } | yes |
 | chart.screenshot | { scope?: price\|panes\|workspace, scale?: 1\|2 } | no |
 | chart.zoom | { op: in\|out\|reset\|pan, delta?, bars? } | yes |
+| chart.bars | { limit?, head?, gaps? } — bounded tail/head rows + missing-slot map | no |
+| chart.lag | { engine? } — lag ledger: chart vs venue clock vs engine series + verdict (engine read is in-tab, 6s budget) | no |
 | editor.get | — | no |
 | editor.set | { doc, open? } | yes |
 | editor.run | { doc? } | yes |
@@ -7967,6 +8078,12 @@ Capability ids (app_invoke)
 | drawings.tool | { tool } | yes |
 | settings.get | { key? } — sanitized settings, secrets never exposed | no |
 | settings.set | allowlisted patch (endpoint, engine, interval, historyBars, refreshSec, live., uiScale, autoload, label/strategy/telemetry prefs); interval/history changes reload | yes |
+| engine.get | — engine plane: config (names only, key as hasApiKey), capabilities, route, health, chart session, telemetry | no |
+| engine.series | { exchange?, market?, symbol?, interval? } — engine-side series bounds + staleness (chart default) | no |
+| engine.tick | { symbol?, interval?, marketNow?, historyBars? } — force one drive tick; before/after bounds + envelope | yes |
+| engine.repair | { symbol?, interval?, historyBars? } — force a stale-series repair (local upload or engine fetch) | yes |
+| stream.get | — live plane: route, engine socket, subscriptions, feed chips, telemetry | no |
+| stream.reset | { resubscribe? } — drop the socket + subscriptions; probes one re-subscribe (default true) | yes |
 | status.get | status bar + telemetry | no |
 app_set paths: symbol, interval, source, engine, exchange, theme, chartType, uiScale, live.active, live.preferAfterLoad, editor.doc, editor.open, watchlist.open.
 Resources and prompts
