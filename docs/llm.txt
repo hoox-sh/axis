@@ -1,10 +1,10 @@
 AXIS CONSOLIDATED DOCUMENTATION — LLM CONTEXT PACK
-Generated: 2026-10-14
-Source: ../axis/docs
+Generated: 2026-10-17
+Source: github.com/hoox-sh/axis/docs
 Public: https://hoox.sh/axis/docs
 Repository: https://github.com/hoox-sh/axis
 
-FILE: ../axis/docs/architecture/adrs.mdx
+FILE: docs/architecture/adrs.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -356,7 +356,7 @@ Topologies
 Plugins contracts
 Datasets
 ---
-FILE: ../axis/docs/architecture/drawings-parity.mdx
+FILE: docs/architecture/drawings-parity.mdx
 Drawings and plot parity
 AXIS has two independent render paths:
 | Path | Source | Paint |
@@ -429,7 +429,7 @@ Polyline force_overlay + fill_color.
 Runner: bgcolor/fill target pane when overlay=false (unit with a fake manager if needed).
 PYNE: table cell key, fill meta, plotshape Y (in the pynescript repo).
 ---
-FILE: ../axis/docs/architecture/evaluation.mdx
+FILE: docs/architecture/evaluation.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -518,7 +518,7 @@ PyneTS
 HOOX pyne-worker
 AXIS and HOOX
 ---
-FILE: ../axis/docs/architecture/index.mdx
+FILE: docs/architecture/index.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -580,7 +580,7 @@ Root README.md — package-level map
 LEGACY.md` — pre-Solid shell boundary
 AXIS CLI — operator install / deploy
 ---
-FILE: ../axis/docs/architecture/overview.mdx
+FILE: docs/architecture/overview.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -680,7 +680,7 @@ Topologies
 State namespaces
 AXIS store
 ---
-FILE: ../axis/docs/architecture/state-namespaces.mdx
+FILE: docs/architecture/state-namespaces.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -806,7 +806,7 @@ ADR-011
 AXIS store
 Script library
 ---
-FILE: ../axis/docs/architecture/topologies.mdx
+FILE: docs/architecture/topologies.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -923,7 +923,7 @@ Installation
 Worker
 DevOps
 ---
-FILE: ../axis/docs/devops/build-and-serve.mdx
+FILE: docs/devops/build-and-serve.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -995,6 +995,12 @@ make pages-deploy may historically deploy the wrong tree — prefer:
 bun run build
 wrangler pages deploy dist --project-name=axis
 `
+Build-time flags (Vite)
+| Env var | Effect |
+| --- | --- |
+| VITE_APP_VERSION | Stamps the reported version (CI/Docker); falls back to the repo VERSION file |
+| VITE_MAINTENANCE_MODE | 1 / true / yes → the build boots only the maintenance page (src/ui/MaintenancePage.tsx: dark screen, flickering HOOX mark, major-release teaser) instead of the chart workspace / editor popout |
+Both are inlined by Vite at build time — set them in .env (local/CI overrides) or export them in the build environment, then rebuild. Existing process env vars outrank .env files, which is how e2e forces the maintenance gate off (playwright.config.ts → webServer.env). The flag is documented in .env.example.
 Worked example — static desk demo
 `bash
 bun install
@@ -1019,7 +1025,7 @@ Local dev
 Cloudflare
 Engines
 ---
-FILE: ../axis/docs/devops/ci-and-testing.mdx
+FILE: docs/devops/ci-and-testing.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -1111,7 +1117,7 @@ See also
 Testing reference
 Local dev
 ---
-FILE: ../axis/docs/devops/cli.mdx
+FILE: docs/devops/cli.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -1237,7 +1243,7 @@ Internals
 | Root Makefile axis / axis-` | Make wrappers |
 See also: Installation, MCP (agents), MCP server, Cloudflare deployment, Worker bindings, Worker auth, packages/cli/README.md.
 ---
-FILE: ../axis/docs/devops/cloudflare.mdx
+FILE: docs/devops/cloudflare.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -1340,7 +1346,7 @@ Worker
 CORS
 VPS demo (backend co-host)
 ---
-FILE: ../axis/docs/devops/cors-and-origins.mdx
+FILE: docs/devops/cors-and-origins.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -1438,7 +1444,7 @@ Worker bindings
 Local dev
 Dynamic loader
 ---
-FILE: ../axis/docs/devops/desktop.mdx
+FILE: docs/devops/desktop.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of AXIS.
 SPDX-License-Identifier: AGPL-3.0-only
@@ -1531,7 +1537,7 @@ Accepted extensions match the PWA drop path: .pyne, .pine, .pinescript,
 Drag-and-drop of the same extensions still works in the desktop webview.
 Conceptual model
 ---
-FILE: ../axis/docs/devops/engine-owned-data-plane.mdx
+FILE: docs/devops/engine-owned-data-plane.mdx
 Engine-owned data plane
 Goal
 Today AXIS is the data owner: the browser loads bars, stores datasets locally,
@@ -1560,12 +1566,17 @@ PYNE Pro reports these snake_case keys (matches existing features. keys):
 "features": {
 "live_modes": ["every-tick", "bar-close"],
 "data_session": true,
-"data_exchanges": ["binance", "bybit", "okx"]
+"data_exchanges": ["binance", "bybit", "okx"],
+"live_stream": true
 }
 `
 live_modes absent ⇒ ["bar-close"].
 data_session absent or false ⇒ ownsData = false, no every-tick.
 data_exchanges optional, informational.
+live_stream (strictly opt-in) ⇒ the engine serves the push subscription
+plane (WS /ws/live: subscribe → status → full → delta → close, per-subscription
+seq, closed_upto watermark). Absent ⇒ calculator profile: the legacy
+REST poll paths below stay in service for old backends.
 pyne-worker and Pyodide report no such keys and are bar-close only.
 Data store (PYNE Pro)
 Persistent OHLCV store, SQLite under PYNE_DATA_DIR (default data/).
@@ -1625,7 +1636,7 @@ forming (bool), unchanged (bool, true when nothing new arrived).
 Upstream failure: 502 UPSTREAM; the session is kept.
 DELETE /session/{id}
 Existing release route. Unchanged.
-AXIS broker
+AXIS broker (calculator profile — engines without live_stream)
 src/engines/data-sessions.ts (client + broker):
 1. createDataSession() → on hit return the session id.
 2. On miss: look up the local Data Manager dataset for
@@ -1637,6 +1648,21 @@ At most two retries, then surface the error.
 3. tickDataSession() sends {exchange, symbol} only.
 Chart paint in server-owned mode uses getDataSeriesBars() into memory. The
 streaming multiplex and expand-cache writes are suppressed for that instrument.
+Stream plane (engines with live_stream)
+src/engine/ + src/streams/stream-live.ts, specified in
+.opencode/plans/final/plan.mdx:
+One WS per engine (WS /ws/live, WS /api/ws/live via the Worker proxy);
+N subscriptions multiplexed.
+subscribe ensures history server-side (autonomous fetch to the last closed
+bar), then status(datafeed-ready) → status(calculating) → one full
+snapshot → status(live); per-tick delta + close frames with monotonic
+seq and the closed_upto watermark.
+The client applies snapshots/deltas through the existing apply pipeline
+(precomputedResult, tip-only on ticks), re-verifies closed bars against the
+venue, and repairs from the exchange on mismatch.
+Any stream failure falls back to the legacy paths above; a 60s cooldown
+keeps a flapping backend from stalling live. Opt out per tab via
+axis.engine.stream.disabled.
 Migration steps
 1. Capabilities (done in round one, keys aligned to this contract in round two).
 2. PYNE store + routes + health features (/home/jango/Git/pynescript).
@@ -1655,7 +1681,7 @@ while capabilities resolve, persistence works as before.
 /data/*` store). A full UI-level e2e (every-tick on Pro without local bars,
 cache-miss upload, bar-close fallback) still needs a browser run.
 ---
-FILE: ../axis/docs/devops/harden-perf-audit-2026-08-11.md
+FILE: docs/devops/harden-perf-audit-2026-08-11.md
 AXIS Hardening + Performance Audit
 Date: 2026-08-11
 Scope: Specialist findings across security, hardening, reliability, and performance (Worker, client, desktop).
@@ -1778,7 +1804,7 @@ Ranking rubric (applied)
 3. Effort (prefer S/M for top_fixes when severity ties).
 4. Dependency (auth/CORS before metering; memory-first cache before DSM rewrite pays off fully).
 ---
-FILE: ../axis/docs/devops/index.mdx
+FILE: docs/devops/index.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -1841,7 +1867,7 @@ Worker
 Testing reference
 AXIS hub
 ---
-FILE: ../axis/docs/devops/local-dev.mdx
+FILE: docs/devops/local-dev.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -1950,7 +1976,7 @@ Build and serve
 Worker local
 Plugin examples
 ---
-FILE: ../axis/docs/devops/okf.mdx
+FILE: docs/devops/okf.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -1993,14 +2019,16 @@ Layout
 | okf/playbooks/ | Curated reading guide and product map. |
 | scripts/okf/` | Compiler, linter, and query CLI. |
 ---
-FILE: ../axis/docs/devops/pyne-endpoints.mdx
+FILE: docs/devops/pyne-endpoints.mdx
 PYNE endpoint parity
 GET /health on the PYNE Pro API is the discovery surface: it lists endpoints,
 advertises optional routes under features., and reports Numba / IR-cache
 readiness under compile.. This page is the ledger of what AXIS actually uses,
 so a backend change can be reasoned about without grepping the client.
-The live-mode subset (features.live_modes, features.data_session) is consumed
-by capabilitiesFromHealth() in src/engines/catalog.ts; the rest of the payload
+The live-mode subset (features.live_modes, features.data_session,
+features.live_stream) is consumed by capabilitiesFromHealth() in
+src/engines/catalog.ts (stream profile) and profileForCapabilities() in
+src/engine/policy.ts; the rest of the payload
 is parsed by src/engines/health.ts and cached next to it
 (getCachedEngineHealth()), which is what the readiness badges and the optional
 runner surface read. Nothing is ever inferred from the service name.
@@ -2010,9 +2038,11 @@ Used
 | GET /, GET /health | Engine probe | Capabilities, readiness, route advertisement. |
 | POST /run | serverEngine.run | REST fallback; mode in the body. |
 | WS /ws/run | src/engines/engine-ws.ts | Preferred when /health reports websocket. |
+| WS /ws/live | src/engine/live-wire.ts + src/streams/stream-live.ts | Engine-owned subscriptions (subscribe → status → full → delta → close, resume/repair); requires features.live_stream. |
 | POST /session, /tick, /append, DELETE | src/engines/live-sessions.ts | O(delta) live ticks; interpret only. |
 | GET /session/{id} | src/engines/live-sessions.ts | Idle reconciliation + telemetry (bars, idle_seconds, ttl_seconds). |
-| POST /data/session, /data/session/{id}/tick | src/engines/data-sessions.ts | Engine-owned series; identity only. |
+| POST /data/session, /data/session/{id}/tick | src/engines/data-sessions.ts | Engine-owned series; identity only. Calculator profile (old backends). |
+| GET /session/{id}/tail?since_count= | REST degraded fallback | Same {status, count, closed_upto, tail} shapes as the WS; polling semantics. |
 | GET /data/series, /data/series/bars | src/engines/data-sessions.ts | Status + newest window for the chart paint. |
 | POST /data/series/provide, /data/series/fetch | src/engines/data-sessions.ts | Cache-miss broker (local upload, then engine fetch). |
 | POST /run/batch | src/engines/batch.ts | ≥2 eligible reapplied indicators; 8-script cap. |
@@ -2046,7 +2076,7 @@ Engine-owned data plane — the /data/* contract in full.
 src/engines/health.ts — the typed /health parser.
 docs/architecture/evaluation.mdx — where each route sits in the evaluation map.
 ---
-FILE: ../axis/docs/devops/vps-demo.mdx
+FILE: docs/devops/vps-demo.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -2165,7 +2195,7 @@ Build and serve
 Cloudflare
 CORS
 ---
-FILE: ../axis/docs/enduser/getting-started/compose-recipes.mdx
+FILE: docs/enduser/getting-started/compose-recipes.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -2321,7 +2351,7 @@ Manager and settings
 Topologies
 ADR-001 pluggable registry
 ---
-FILE: ../axis/docs/enduser/getting-started/installation.mdx
+FILE: docs/enduser/getting-started/installation.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -2469,7 +2499,7 @@ DevOps local dev
 Desktop (Tauri)
 Worker
 ---
-FILE: ../axis/docs/enduser/getting-started/quick-start.mdx
+FILE: docs/enduser/getting-started/quick-start.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -2603,7 +2633,7 @@ Compose recipes
 Strategy and results
 Troubleshooting
 ---
-FILE: ../axis/docs/enduser/guides/alerts.mdx
+FILE: docs/enduser/guides/alerts.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -2653,7 +2683,7 @@ Evaluation map
 PYNE alerts
 AXIS and HOOX
 ---
-FILE: ../axis/docs/enduser/guides/builtin-scripts.mdx
+FILE: docs/enduser/guides/builtin-scripts.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -2727,7 +2757,7 @@ Scripts (indicators & strategies)
 Script library
 Quick start
 ---
-FILE: ../axis/docs/enduser/guides/data-source-manager.mdx
+FILE: docs/enduser/guides/data-source-manager.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -2818,7 +2848,7 @@ Sources — built-in historical plugins
 Quick start — one-shot Load
 UI shell — topbar panels
 ---
-FILE: ../axis/docs/enduser/guides/drawings.mdx
+FILE: docs/enduser/guides/drawings.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -2935,7 +2965,7 @@ See also
 AXIS — charting
 Strategy and results
 ---
-FILE: ../axis/docs/enduser/guides/hyperparameter-optimisation.mdx
+FILE: docs/enduser/guides/hyperparameter-optimisation.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of AXIS.
 SPDX-License-Identifier: AGPL-3.0-only
@@ -2985,7 +3015,7 @@ Strategy and results
 pyne POST /optimize
 pyne CLI optimize
 ---
-FILE: ../axis/docs/enduser/guides/manager-and-settings.mdx
+FILE: docs/enduser/guides/manager-and-settings.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -3143,7 +3173,7 @@ Script library
 Compose recipes
 Plugins
 ---
-FILE: ../axis/docs/enduser/guides/mcp.mdx
+FILE: docs/enduser/guides/mcp.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -3298,7 +3328,7 @@ AXIS CLI
 Auth
 Manager and settings
 ---
-FILE: ../axis/docs/enduser/guides/on-chain.mdx
+FILE: docs/enduser/guides/on-chain.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -3443,7 +3473,7 @@ Sources — historical bar sources
 Worker overview — /api/onchain/… route table
 CORS and origins — browser cross-origin constraints
 ---
-FILE: ../axis/docs/enduser/guides/pyne-agent.mdx
+FILE: docs/enduser/guides/pyne-agent.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of AXIS.
 SPDX-License-Identifier: AGPL-3.0-only
@@ -3502,7 +3532,7 @@ Plugin deep dive
 Manager and settings
 Plugin examples
 ---
-FILE: ../axis/docs/enduser/guides/screenshots.mdx
+FILE: docs/enduser/guides/screenshots.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 SPDX-License-Identifier: AGPL-3.0-only
 ---
@@ -3580,7 +3610,7 @@ Finish-cut tiles used on hoox.sh/axis: docs/images/landing/.
 | Mobile | axis-mobile.png |
 | Open Graph | axis-og.png |
 ---
-FILE: ../axis/docs/enduser/guides/script-library.mdx
+FILE: docs/enduser/guides/script-library.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -3704,7 +3734,7 @@ Manager and settings
 Compose recipes — git / edge
 State namespaces
 ---
-FILE: ../axis/docs/enduser/guides/strategy-and-results.mdx
+FILE: docs/enduser/guides/strategy-and-results.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -3805,7 +3835,7 @@ Quick start
 AXIS — results and strategy
 AXIS — indicators
 ---
-FILE: ../axis/docs/enduser/guides/troubleshooting.mdx
+FILE: docs/enduser/guides/troubleshooting.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -3919,7 +3949,7 @@ DevOps
 Worker
 MCP (agents)
 ---
-FILE: ../axis/docs/enduser/index.mdx
+FILE: docs/enduser/index.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -4000,7 +4030,7 @@ AXIS and HOOX
 Plugins — contracts and catalogs
 PYNE runtime — evaluation semantics
 ---
-FILE: ../axis/docs/enduser/reference/faq.mdx
+FILE: docs/enduser/reference/faq.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -4089,7 +4119,7 @@ Troubleshooting
 Glossary
 Compose recipes
 ---
-FILE: ../axis/docs/enduser/reference/glossary.mdx
+FILE: docs/enduser/reference/glossary.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -4199,12 +4229,12 @@ FAQ
 State namespaces
 Architecture overview
 ---
-FILE: ../axis/docs/images/1920x1080/README.md
+FILE: docs/images/1920x1080/README.md
 1920×1080 series
 Viewport 1920×1080, deviceScaleFactor: 2 → PNG 3840×2160.
 This folder is a named copy of the docs-default stills in ../app, ../studio, and ../landing.
 ---
-FILE: ../axis/docs/images/1920x1080/app/MANIFEST.md
+FILE: docs/images/1920x1080/app/MANIFEST.md
 App stills
 Captured 2026-09-05 from https://axis.hoox.sh
 Viewport desktop 1920×1080 @2x (file 3840×2160px); mobile 390×844 @2x.
@@ -4242,7 +4272,7 @@ app/hpo.png
 app/run-rsi.png
 app/workspace-mobile.png
 ---
-FILE: ../axis/docs/images/1920x1080/landing/MANIFEST.md
+FILE: docs/images/1920x1080/landing/MANIFEST.md
 Landing crops
 Hero is a full workspace still (no fake browser chrome — landing CSS supplies the CRT frame).
 Tiles are locator crops. OG is a 1200×630 composite.
@@ -4251,7 +4281,7 @@ Viewport desktop 1920×1080 @2x (file 3840×2160px); mobile 390×844 @2x.
 Seed: BTCUSDT 1d Binance REST, void dark, SMA Cross / RSI v6.
 No secrets. Chart data is public CEX OHLCV.
 ---
-FILE: ../axis/docs/images/1920x1080/studio/MANIFEST.md
+FILE: docs/images/1920x1080/studio/MANIFEST.md
 Studio stills
 Captured 2026-09-05 from https://axis.hoox.sh
 Viewport desktop 1920×1080 @2x (file 3840×2160px); mobile 390×844 @2x.
@@ -4266,7 +4296,7 @@ studio/plugins.png
 studio/plugins-catalog.png
 studio/plugins-install.png
 ---
-FILE: ../axis/docs/images/2560x1440/README.md
+FILE: docs/images/2560x1440/README.md
 2560×1440 series
 Viewport 2560×1440, deviceScaleFactor: 2 → PNG 5120×2880.
 Same shot list as the 1080p series (app/, studio/, landing/). Recapture:
@@ -4275,7 +4305,7 @@ bun run capture:1440p
 bun scripts/capture-fix.ts --viewport=2560x1440 --dpr=2 --out=docs/images/2560x1440
 ``
 ---
-FILE: ../axis/docs/images/2560x1440/app/MANIFEST.md
+FILE: docs/images/2560x1440/app/MANIFEST.md
 App stills
 Captured 2026-09-05 from https://axis.hoox.sh
 Viewport desktop 2560×1440 @2x (file 5120×2880px); mobile 390×844 @2x.
@@ -4312,7 +4342,7 @@ app/results-equity.png
 app/hpo.png
 app/run-rsi.png
 ---
-FILE: ../axis/docs/images/2560x1440/cli/MANIFEST.md
+FILE: docs/images/2560x1440/cli/MANIFEST.md
 CLI stills
 Dark terminal render of AXIS CLI stdout. Not a live TTY recording.
 Captured 2026-09-05 from https://axis.hoox.sh
@@ -4320,7 +4350,7 @@ Viewport desktop 2560×1440 @2x (file 5120×2880px); mobile 390×844 @2x.
 Seed: BTCUSDT 1d Binance REST, void dark, SMA Cross / RSI v6.
 No secrets. Chart data is public CEX OHLCV.
 ---
-FILE: ../axis/docs/images/2560x1440/gifs/MANIFEST.md
+FILE: docs/images/2560x1440/gifs/MANIFEST.md
 GIFs
 Playwright WebM → ffmpeg palette GIF, 8 fps, 1280 wide, loop.
 Captured 2026-09-05 from https://axis.hoox.sh
@@ -4329,7 +4359,7 @@ Seed: BTCUSDT 1d Binance REST, void dark, SMA Cross / RSI v6.
 No secrets. Chart data is public CEX OHLCV.
 Files:
 ---
-FILE: ../axis/docs/images/2560x1440/landing/MANIFEST.md
+FILE: docs/images/2560x1440/landing/MANIFEST.md
 Landing crops
 Hero is a full workspace still (no fake browser chrome — landing CSS supplies the CRT frame).
 Tiles are locator crops. OG is a 1200×630 composite.
@@ -4338,7 +4368,7 @@ Viewport desktop 2560×1440 @2x (file 5120×2880px); mobile 390×844 @2x.
 Seed: BTCUSDT 1d Binance REST, void dark, SMA Cross / RSI v6.
 No secrets. Chart data is public CEX OHLCV.
 ---
-FILE: ../axis/docs/images/2560x1440/studio/MANIFEST.md
+FILE: docs/images/2560x1440/studio/MANIFEST.md
 Studio stills
 Captured 2026-09-05 from https://axis.hoox.sh
 Viewport desktop 2560×1440 @2x (file 5120×2880px); mobile 390×844 @2x.
@@ -4353,7 +4383,7 @@ studio/plugins.png
 studio/plugins-catalog.png
 studio/plugins-install.png
 ---
-FILE: ../axis/docs/images/README.md
+FILE: docs/images/README.md
 AXIS interface screenshots
 Captured 2026-09-05 from https://axis.hoox.sh (void dark, BTCUSDT 1d Binance REST). No secrets.
 Series
@@ -4380,7 +4410,7 @@ bun scripts/capture-fix.ts --viewport=2560x1440 --dpr=2 --out=docs/images/2560x1
 bun scripts/capture-screenshots.ts --gifs-only --skip-cli
 ``
 ---
-FILE: ../axis/docs/images/app/MANIFEST.md
+FILE: docs/images/app/MANIFEST.md
 App stills
 Captured 2026-09-05 from https://axis.hoox.sh
 Viewport desktop 1920×1080 @2x (file 3840×2160px); mobile 390×844 @2x.
@@ -4418,7 +4448,7 @@ app/hpo.png
 app/run-rsi.png
 app/workspace-mobile.png
 ---
-FILE: ../axis/docs/images/cli/MANIFEST.md
+FILE: docs/images/cli/MANIFEST.md
 CLI stills
 Dark terminal render of AXIS CLI stdout. Not a live TTY recording.
 Captured 2026-09-05 from https://axis.hoox.sh
@@ -4426,7 +4456,7 @@ Viewport desktop 1920×1080 @2x (file 3840×2160px); mobile 390×844 @2x.
 Seed: BTCUSDT 1d Binance REST, void dark, SMA Cross / RSI v6.
 No secrets. Chart data is public CEX OHLCV.
 ---
-FILE: ../axis/docs/images/gifs/MANIFEST.md
+FILE: docs/images/gifs/MANIFEST.md
 GIFs
 Playwright WebM → ffmpeg palette GIF, 8 fps, 1280 wide, loop.
 Captured 2026-09-05 from https://axis.hoox.sh
@@ -4435,7 +4465,7 @@ Seed: BTCUSDT 1d Binance REST, void dark, SMA Cross / RSI v6.
 No secrets. Chart data is public CEX OHLCV.
 Files:
 ---
-FILE: ../axis/docs/images/landing/MANIFEST.md
+FILE: docs/images/landing/MANIFEST.md
 Landing crops
 Hero is a full workspace still (no fake browser chrome — landing CSS supplies the CRT frame).
 Tiles are locator crops. OG is a 1200×630 composite.
@@ -4444,7 +4474,7 @@ Viewport desktop 1920×1080 @2x (file 3840×2160px); mobile 390×844 @2x.
 Seed: BTCUSDT 1d Binance REST, void dark, SMA Cross / RSI v6.
 No secrets. Chart data is public CEX OHLCV.
 ---
-FILE: ../axis/docs/images/studio/MANIFEST.md
+FILE: docs/images/studio/MANIFEST.md
 Studio stills
 Captured 2026-09-05 from https://axis.hoox.sh
 Viewport desktop 1920×1080 @2x (file 3840×2160px); mobile 390×844 @2x.
@@ -4459,7 +4489,7 @@ studio/plugins.png
 studio/plugins-catalog.png
 studio/plugins-install.png
 ---
-FILE: ../axis/docs/index.mdx
+FILE: docs/index.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -4546,7 +4576,7 @@ Plugin contracts
 ADRs
 PYNE runtime
 ---
-FILE: ../axis/docs/plugins/contracts.mdx
+FILE: docs/plugins/contracts.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -4739,7 +4769,7 @@ Registry
 Dynamic loader
 Plugin examples
 ---
-FILE: ../axis/docs/plugins/datasets.mdx
+FILE: docs/plugins/datasets.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -4830,7 +4860,7 @@ Worker overview — /api/onchain/…` route table
 Sources — OHLCV (separate plane)
 Contracts — shared plugin base
 ---
-FILE: ../axis/docs/plugins/dynamic-loader.mdx
+FILE: docs/plugins/dynamic-loader.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -4944,7 +4974,7 @@ PYNE Agent plugin
 Registry
 CORS and origins
 ---
-FILE: ../axis/docs/plugins/engines.mdx
+FILE: docs/plugins/engines.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -5069,7 +5099,7 @@ PYNE runtime
 PyneTS — TS library; AXIS does not import it
 AXIS and HOOX
 ---
-FILE: ../axis/docs/plugins/index.mdx
+FILE: docs/plugins/index.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -5162,7 +5192,7 @@ Dynamic loader
 Plugin examples
 Worker (cloud storage + stream relay)
 ---
-FILE: ../axis/docs/plugins/pyne-agent.mdx
+FILE: docs/plugins/pyne-agent.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of AXIS.
 SPDX-License-Identifier: AGPL-3.0-only
@@ -5235,7 +5265,7 @@ End-user: PYNE Agent
 pyne-agent-worker README
 PYNE docs
 ---
-FILE: ../axis/docs/plugins/registry.mdx
+FILE: docs/plugins/registry.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -5351,7 +5381,7 @@ Contracts
 Dynamic loader
 Plugins hub
 ---
-FILE: ../axis/docs/plugins/sources.mdx
+FILE: docs/plugins/sources.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -5474,7 +5504,7 @@ Streams
 Contracts
 Plugin examples (CoinGecko)
 ---
-FILE: ../axis/docs/plugins/storage.mdx
+FILE: docs/plugins/storage.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -5598,7 +5628,7 @@ Worker data plane
 Worker auth
 Contracts
 ---
-FILE: ../axis/docs/plugins/streams.mdx
+FILE: docs/plugins/streams.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -5694,7 +5724,7 @@ Sources
 Worker durable objects
 Plugin examples
 ---
-FILE: ../axis/docs/reference/commercial.mdx
+FILE: docs/reference/commercial.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of AXIS.
 AXIS is free software: you can redistribute it and/or modify
@@ -5742,7 +5772,7 @@ Is self-host free? Yes — AGPL-3.0-only, forever. Paid tracks are convenience (
 Does Commercial include SaaS quota? No. Hosting seats/evaluate capacity are Pro SaaS only.
 VAT? Merchant-of-record and EU VAT handling will be announced at launch. Refunds? 14-day EU digital-goods withdrawal terms will be published at launch.
 ---
-FILE: ../axis/docs/reference/feature-atlas.mdx
+FILE: docs/reference/feature-atlas.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -5887,7 +5917,7 @@ Plugins
 Worker
 Legacy shell
 ---
-FILE: ../axis/docs/reference/legacy-shell.mdx
+FILE: docs/reference/legacy-shell.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -5961,7 +5991,7 @@ Feature atlas
 Build and serve
 AXIS hub
 ---
-FILE: ../axis/docs/reference/open-capability-gaps.mdx
+FILE: docs/reference/open-capability-gaps.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -6067,7 +6097,7 @@ Synthesis date context: community and documentation signals through early–mid 
 Engagement is qualitative across forums and social posts; it is not a weighted global survey.
 Plan-gated historical depth and deep-backtest order ceilings partially address older “more bars / more trades” asks; those are de-emphasized relative to portfolio, execution, order-flow, and tooling gaps.
 ---
-FILE: ../axis/docs/reference/plugin-examples.mdx
+FILE: docs/reference/plugin-examples.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -6206,7 +6236,7 @@ Dynamic loader
 Contracts
 Worker durable objects
 ---
-FILE: ../axis/docs/reference/testing.mdx
+FILE: docs/reference/testing.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -6307,7 +6337,7 @@ CI and testing
 Plugin contracts
 Worker auth
 ---
-FILE: ../axis/docs/ui/charting.mdx
+FILE: docs/ui/charting.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -6474,7 +6504,7 @@ Indicators
 Results and strategy
 End-user drawings
 ---
-FILE: ../axis/docs/ui/debugging.mdx
+FILE: docs/ui/debugging.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -6599,7 +6629,7 @@ Editor
 Charting — markers and jump
 UI shell
 ---
-FILE: ../axis/docs/ui/editor.mdx
+FILE: docs/ui/editor.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -6746,7 +6776,7 @@ UI shell — Topbar, docks, command palette
 Indicators
 Script library
 ---
-FILE: ../axis/docs/ui/index.mdx
+FILE: docs/ui/index.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -6808,7 +6838,7 @@ See also
 LEGACY.md — what is not the AXIS product path
 TESTING.md` — unit/e2e around UI modules
 ---
-FILE: ../axis/docs/ui/indicators.mdx
+FILE: docs/ui/indicators.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -6907,7 +6937,7 @@ Results and strategy
 Built-in scripts
 ADR-002 / ADR-004
 ---
-FILE: ../axis/docs/ui/results-and-strategy.mdx
+FILE: docs/ui/results-and-strategy.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -6985,7 +7015,7 @@ See also
 Indicators
 Charting
 ---
-FILE: ../axis/docs/ui/store.mdx
+FILE: docs/ui/store.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -7101,7 +7131,7 @@ State namespaces
 ADR-011
 UI shell
 ---
-FILE: ../axis/docs/ui/ui-shell.mdx
+FILE: docs/ui/ui-shell.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -7259,7 +7289,7 @@ Manager and settings
 Store
 Architecture overview
 ---
-FILE: ../axis/docs/worker/auth.mdx
+FILE: docs/worker/auth.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -7378,7 +7408,7 @@ Runtime
 Security tests
 AXIS CLI — axis secret put · axis setup oauth`
 ---
-FILE: ../axis/docs/worker/bindings.mdx
+FILE: docs/worker/bindings.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -7500,7 +7530,7 @@ Cloudflare DevOps
 Runtime
 CORS
 ---
-FILE: ../axis/docs/worker/data-plane.mdx
+FILE: docs/worker/data-plane.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -7631,7 +7661,7 @@ Storage plugins
 Auth
 Bindings
 ---
-FILE: ../axis/docs/worker/durable-objects.mdx
+FILE: docs/worker/durable-objects.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -7713,7 +7743,7 @@ Streams
 Bindings
 Plugin examples
 ---
-FILE: ../axis/docs/worker/index.mdx
+FILE: docs/worker/index.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -7806,7 +7836,7 @@ Cloudflare deploy
 Engines
 Worker README: worker/README.md`
 ---
-FILE: ../axis/docs/worker/mcp.mdx
+FILE: docs/worker/mcp.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
@@ -8001,7 +8031,7 @@ Durable Objects
 Bindings
 AXIS CLI
 ---
-FILE: ../axis/docs/worker/runtime.mdx
+FILE: docs/worker/runtime.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
 axis is free software: you can redistribute it and/or modify
