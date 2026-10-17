@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
 import {
   Redesign2WsClient,
   endpointToRedesign2WsUrl,
@@ -18,5 +18,141 @@ describe('redesign2 websocket transport', () => {
     const client = new Redesign2WsClient({ endpoint: 'https://pynescript.online' });
     expect(client.urlValue).toBe('wss://pynescript.online/ws/live');
     expect(client.isOpen).toBe(false);
+  });
+});
+
+/**
+ * A socket whose lifecycle the test drives by hand. Browsers dispatch the
+ * `open` / `close` events as separate tasks, so a superseded attempt's events
+ * can land after a later attempt already owns the client.
+ */
+class ManualSocket {
+  static instances: ManualSocket[] = [];
+  onopen: (() => void) | null = null;
+  onclose: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  onmessage: ((ev: { data: string }) => void) | null = null;
+  readyState = 0;
+  sent: string[] = [];
+  closeCalls = 0;
+
+  constructor(public url: string) {
+    ManualSocket.instances.push(this);
+  }
+
+  send(data: string) {
+    this.sent.push(data);
+  }
+
+  close() {
+    this.closeCalls += 1;
+    this.readyState = 3;
+    // Deliberately no `onclose`: the close *event* lands later — that delay is
+    // the whole race, see `emitClose`.
+  }
+
+  open() {
+    this.readyState = 1;
+    this.onopen?.();
+  }
+
+  /** Deliver the close event (as the browser would, long after `close()`). */
+  emitClose() {
+    this.onclose?.();
+  }
+
+  push(frame: unknown) {
+    this.onmessage?.({ data: JSON.stringify(frame) });
+  }
+
+  static install(): () => void {
+    ManualSocket.instances = [];
+    const prev = globalThis.WebSocket;
+    (globalThis as unknown as { WebSocket: unknown }).WebSocket = ManualSocket;
+    return () => {
+      (globalThis as unknown as { WebSocket: unknown }).WebSocket = prev;
+      ManualSocket.instances = [];
+    };
+  }
+}
+
+async function until(fn: () => boolean, ms = 500): Promise<void> {
+  const deadline = Date.now() + ms;
+  while (Date.now() < deadline) {
+    if (fn()) return;
+    await new Promise((r) => setTimeout(r, 1));
+  }
+  throw new Error('timed out waiting for condition');
+}
+
+describe('redesign2 socket ownership', () => {
+  let restore: (() => void) | null = null;
+
+  afterEach(() => {
+    restore?.();
+    restore = null;
+  });
+
+  /**
+   * Connect attempt A, abandon it on connect timeout (the path that closes the
+   * socket and schedules a reconnect), and leave attempt B created but not yet
+   * open — i.e. the state where A's close event can still land.
+   */
+  async function abandonedAttempt() {
+    const client = new Redesign2WsClient({
+      endpoint: 'https://example.test',
+      authToken: 'tok',
+      connectTimeoutMs: 5,
+      initialReconnectDelayMs: 1,
+      maxReconnectDelayMs: 2,
+      heartbeatIntervalMs: 60_000,
+    });
+    const a = client.connect();
+    const wsA = ManualSocket.instances[0]!;
+    await expect(a).rejects.toThrow(/timeout/i);
+    await until(() => ManualSocket.instances.length === 2);
+    return { client, wsA, wsB: ManualSocket.instances[1]! };
+  }
+
+  test('a superseded socket close cannot tear down the live socket', async () => {
+    restore = ManualSocket.install();
+    const { client, wsA, wsB } = await abandonedAttempt();
+    // A's close event lands after B took over `this.ws`.
+    wsA.emitClose();
+    expect(client.isOpen).toBe(false);
+    // B opens: its auth frame must go out. This used to throw
+    // `WebSocket not open` out of the socket handler (an uncaught window error)
+    // and leave the client degraded with a live socket.
+    wsB.open();
+    expect(client.isOpen).toBe(true);
+    expect(wsB.sent.map((s) => (JSON.parse(s) as { type: string }).type)).toEqual(['auth']);
+    client.disconnect();
+  });
+
+  test('a socket that opens after its attempt was abandoned is closed, not adopted', async () => {
+    restore = ManualSocket.install();
+    const { client, wsA, wsB } = await abandonedAttempt();
+    wsA.open();
+    // The late socket is closed and detached, not left live with handlers that
+    // would later null the current connection out from under it.
+    expect(wsA.readyState).toBe(3);
+    expect(wsA.onclose).toBeNull();
+    expect(wsA.closeCalls).toBeGreaterThan(0);
+    expect(client.isOpen).toBe(false);
+    wsB.open();
+    expect(client.isOpen).toBe(true);
+    client.disconnect();
+  });
+
+  test('frames from a superseded socket never reach the router', async () => {
+    restore = ManualSocket.install();
+    const { client, wsA, wsB } = await abandonedAttempt();
+    const seen: unknown[] = [];
+    client.onFrame = (f) => seen.push(f);
+    wsB.open();
+    wsA.push({ type: 'status', id: 's1', payload: { code: 'live' } });
+    wsB.push({ type: 'status', id: 's1', payload: { code: 'live' } });
+    expect(seen).toHaveLength(1);
+    client.disconnect();
   });
 });

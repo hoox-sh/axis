@@ -154,6 +154,22 @@ export class Redesign2WsClient {
     return this.url;
   }
 
+  /**
+   * Detach and close a socket this client no longer owns, without letting its
+   * late events reach the client (never throws).
+   */
+  private closeQuietly(ws: WebSocket): void {
+    try {
+      ws.onopen = null;
+      ws.onerror = null;
+      ws.onclose = null;
+      ws.onmessage = null;
+      ws.close();
+    } catch {
+      /* already gone */
+    }
+  }
+
   async connect(): Promise<void> {
     if (this.stopped) throw new Error('Redesign2WsClient stopped');
     if (this.isOpen) return;
@@ -171,6 +187,18 @@ export class Redesign2WsClient {
       }
       this.ws = ws;
 
+      /**
+       * True while `ws` is still the client's live socket. A superseded socket
+       * — its attempt timed out or errored while a later attempt took over
+       * `this.ws` — must not touch client state: its late open / error / close
+       * and its frames all belong to a dead connection. Nulling `this.ws` from
+       * a stale close used to tear down the *live* socket, so the auth frame
+       * sent from the live socket's `onopen` threw `WebSocket not open` out of
+       * the handler (an uncaught window error) and the client sat degraded
+       * until some later reconnect happened to win the race.
+       */
+      const owns = (): boolean => this.ws === ws;
+
       const timer = setTimeout(() => {
         if (settled) return;
         settled = true;
@@ -179,14 +207,26 @@ export class Redesign2WsClient {
         } catch {
           /* ignore */
         }
-        this.ws = null;
+        if (owns()) this.ws = null;
         this.onStatus?.('error');
         reject(new Error('Redesign2 WebSocket connect timeout'));
         this.scheduleReconnect();
       }, this.options.connectTimeoutMs);
 
       ws.onopen = () => {
-        if (settled) return;
+        if (settled) {
+          // Opened after this attempt was abandoned: never adopt it, and never
+          // leak a live socket whose later events would hit the client.
+          if (!owns()) this.closeQuietly(ws);
+          return;
+        }
+        if (!owns()) {
+          settled = true;
+          clearTimeout(timer);
+          this.closeQuietly(ws);
+          reject(new Error('Redesign2 WebSocket superseded'));
+          return;
+        }
         settled = true;
         clearTimeout(timer);
         this.reconnectAttempts = 0;
@@ -217,6 +257,12 @@ export class Redesign2WsClient {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
+        if (!owns()) {
+          // A superseded socket failed: report this attempt, leave the live
+          // socket (and its reconnect bookkeeping) alone.
+          reject(new Error('Redesign2 WebSocket superseded'));
+          return;
+        }
         this.ws = null;
         this.onStatus?.('error');
         reject(new Error('Redesign2 WebSocket error'));
@@ -224,6 +270,10 @@ export class Redesign2WsClient {
       };
 
       ws.onclose = () => {
+        // Only the socket this client currently owns may close the client down:
+        // a superseded socket's late close must not null the live socket, stop
+        // its heartbeat, or drop its pending frames.
+        if (!owns()) return;
         this.stopHeartbeat();
         this.ws = null;
         this.dropPending(new Error('Redesign2 WebSocket closed'));
@@ -240,6 +290,9 @@ export class Redesign2WsClient {
       };
 
       ws.onmessage = (ev) => {
+        // Frames from a superseded socket are stale by definition — never let
+        // them reach the router (they would double-feed a subscription).
+        if (!owns()) return;
         this.handleMessage(ev?.data);
       };
     });
@@ -406,7 +459,14 @@ export class Redesign2WsClient {
     this.stopHeartbeat();
     this.heartbeatTimer = setInterval(() => {
       if (!this.isOpen) return;
-      this.send({ type: 'ping', ts: Date.now() });
+      try {
+        this.send({ type: 'ping', ts: Date.now() });
+      } catch {
+        // The socket closed between the check and the send: the close handler
+        // nulls it and reconnects, so there is nothing to do here. Never let
+        // it escape — a timer throw is an uncaught window error.
+        return;
+      }
       if (this.pongTimer) clearTimeout(this.pongTimer);
       this.pongTimer = setTimeout(() => {
         // No pong; close and reconnect.

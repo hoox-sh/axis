@@ -37,6 +37,8 @@ class FakeWS {
   static instances: FakeWS[] = [];
   static failConstruct = false;
   static failSend = false;
+  /** When true, `close()` sets `readyState` but defers the close event. */
+  static deferClose = false;
   onopen: (() => void) | null = null;
   onclose: (() => void) | null = null;
   onerror: (() => void) | null = null;
@@ -58,6 +60,13 @@ class FakeWS {
 
   close() {
     this.readyState = 3;
+    // Browsers dispatch the close *event* as a separate task; when
+    // `deferClose` is set the test delivers it itself via `emitClose()`.
+    if (!FakeWS.deferClose) this.onclose?.();
+  }
+
+  /** Deliver the close event (as the browser would, long after `close()`). */
+  emitClose() {
     this.onclose?.();
   }
 
@@ -87,6 +96,7 @@ describe('EngineWsClient', () => {
     FakeWS.instances = [];
     FakeWS.failConstruct = false;
     FakeWS.failSend = false;
+    FakeWS.deferClose = false;
     _resetEngineWsClients();
     (globalThis as unknown as { WebSocket: typeof FakeWS }).WebSocket = FakeWS as never;
   });
@@ -160,6 +170,47 @@ describe('EngineWsClient', () => {
     await Promise.resolve();
     FakeWS.instances[0]!.close();
     await expect(p).rejects.toThrow(/WebSocket closed/);
+  });
+
+  it('a superseded socket close cannot tear down the live connection', async () => {
+    // The connect-timeout path closes the socket and schedules nothing; the
+    // close *event* can arrive after a later attempt already reconnected.
+    FakeWS.deferClose = true;
+    const client = getEngineWsClient('http://localhost:5002');
+    const first = client.ensureConnected(10);
+    const wsA = FakeWS.instances[0]!;
+    await expect(first).rejects.toThrow(/timeout/i);
+    expect(client.isDead).toBe(true);
+
+    // Cool-down elapsed: the client reconnects on a fresh socket.
+    (client as unknown as { deadUntil: number }).deadUntil = Date.now() - 1;
+    const second = client.ensureConnected(20);
+    const wsB = FakeWS.instances[1]!;
+    wsB.open();
+    await second;
+    expect(client.isOpen).toBe(true);
+
+    // A's close lands late: it must not null B, reject B's pending runs, or
+    // mark the client dead.
+    wsA.emitClose();
+    expect(client.isOpen).toBe(true);
+    expect(client.isDead).toBe(false);
+
+    const p = client.run({ script: '//', data: [] }, 5_000);
+    await new Promise((r) => setTimeout(r, 5));
+    const req = JSON.parse(wsB.sent[0]!) as { type: string; id: string };
+    expect(req.type).toBe('run');
+    wsB.reply({
+      type: 'result',
+      id: req.id,
+      status: 'success',
+      plots: [1],
+      series: {},
+      events: [],
+    });
+    const result = await p;
+    expect(result.status).toBe('success');
+    expect(result.transport).toBe('ws');
   });
 
   it('resolves engine error frames as status error (not throw)', async () => {

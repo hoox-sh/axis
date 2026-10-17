@@ -176,6 +176,15 @@ class EngineWsClient {
       }
       this.ws = ws;
 
+      /**
+       * True while `ws` is still the client's live socket. A superseded socket
+       * — its attempt timed out or errored while a later attempt took over
+       * `this.ws` — must not touch the client: its late close used to null the
+       * live socket, reject every in-flight run on it, and mark the whole
+       * client dead so later runs skipped the WS transport entirely.
+       */
+      const owns = (): boolean => this.ws === ws;
+
       const timer = setTimeout(() => {
         if (settled) return;
         settled = true;
@@ -184,13 +193,26 @@ class EngineWsClient {
         } catch {
           /* ignore */
         }
-        this.ws = null;
-        this.markDead();
+        if (owns()) {
+          this.ws = null;
+          this.markDead();
+        }
         reject(new Error('WebSocket connect timeout'));
       }, timeoutMs);
 
       ws.onopen = () => {
-        if (settled) return;
+        if (settled) {
+          // Opened after this attempt was abandoned: never adopt or leak it.
+          if (!owns()) this.closeQuietly(ws);
+          return;
+        }
+        if (!owns()) {
+          settled = true;
+          clearTimeout(timer);
+          this.closeQuietly(ws);
+          reject(new Error('WebSocket superseded'));
+          return;
+        }
         settled = true;
         clearTimeout(timer);
         this.dead = false;
@@ -202,12 +224,19 @@ class EngineWsClient {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
+        if (!owns()) {
+          reject(new Error('WebSocket superseded'));
+          return;
+        }
         this.ws = null;
         this.markDead();
         reject(new Error('WebSocket error'));
       };
 
       ws.onclose = () => {
+        // Only the socket this client currently owns may close the client (and
+        // its in-flight runs) down.
+        if (!owns()) return;
         this.ws = null;
         // Reject all in-flight (premature or mid-run close)
         for (const [id, p] of this.pending) {
@@ -224,6 +253,7 @@ class EngineWsClient {
       };
 
       ws.onmessage = (ev) => {
+        if (!owns()) return;
         this.handleMessage(ev?.data);
       };
     });
@@ -400,6 +430,21 @@ class EngineWsClient {
           }
         }),
     );
+  }
+
+  /**
+   * Detach and close a socket this client no longer owns (never throws).
+   */
+  private closeQuietly(sock: WebSocket): void {
+    try {
+      sock.onopen = null;
+      sock.onerror = null;
+      sock.onclose = null;
+      sock.onmessage = null;
+      sock.close();
+    } catch {
+      /* already gone */
+    }
   }
 
   close() {

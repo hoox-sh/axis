@@ -231,6 +231,15 @@ The freshness contract is therefore explicit:
 - Any stream failure falls back to the legacy paths above; a 60s cooldown
   keeps a flapping backend from stalling live. Opt out per tab via
   `axis.engine.stream.disabled`.
+- **Socket ownership.** A connect attempt that is superseded (timed out /
+  errored while a later attempt already replaced it) keeps no claim on the
+  client: its late `open`/`close`/`error` and its frames are ignored, and a
+  socket that opens after abandonment is closed instead of adopted
+  (`Redesign2WsClient`, `EngineWsClient`). Browsers dispatch open/close as
+  separate tasks, so without this a dead attempt's `close` nulled the *live*
+  socket — the auth frame sent from the live `onopen` then threw
+  `WebSocket not open` out of the handler (an uncaught window error) and the
+  wire sat `degraded · cooldown` on the venue fallback path.
 
 ## Migration steps
 
