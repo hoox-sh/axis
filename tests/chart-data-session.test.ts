@@ -99,6 +99,28 @@ describe('ensureChartDataSession', () => {
     const id = await ensureChartDataSession(ENDPOINT, '', KEY);
     expect(id).toBeNull();
   });
+
+  it('binds pair-form when the chart key is compact load-form', async () => {
+    const rec = recorder((c) => {
+      if (c.path === '/data/session') {
+        return jsonResponse({ status: 'success', session_id: 'chart-bnb' });
+      }
+      return jsonResponse({ status: 'success' });
+    });
+    restore = rec.restore;
+    const id = await ensureChartDataSession(ENDPOINT, '', {
+      exchange: 'binance',
+      symbol: 'BNBUSDT',
+      interval: '1m',
+    });
+    expect(id).toBe('chart-bnb');
+    expect(rec.calls[0]?.body).toMatchObject({
+      exchange: 'binance',
+      market: 'spot',
+      symbol: 'BNB/USDT',
+      interval: '1m',
+    });
+  });
 });
 
 describe('tickChartDataSession', () => {
@@ -115,6 +137,24 @@ describe('tickChartDataSession', () => {
     expect(r.ok).toBe(true);
     const tick = rec.calls.find((c) => c.path.endsWith('/tick'));
     expect(tick?.body).toEqual({ exchange: 'binance', symbol: 'BTC/USDT' });
+  });
+
+  it('ticks compact load-form as the canonical pair-form', async () => {
+    const rec = recorder((c) => {
+      if (c.path === '/data/session') {
+        return jsonResponse({ status: 'success', session_id: 'chart-bnb' });
+      }
+      return jsonResponse({ status: 'success', session_id: 'chart-bnb', appended: 1 });
+    });
+    restore = rec.restore;
+    const r = await tickChartDataSession(ENDPOINT, '', {
+      exchange: 'binance',
+      symbol: 'BNBUSDT',
+      interval: '1m',
+    });
+    expect(r.ok).toBe(true);
+    const tick = rec.calls.find((c) => c.path.endsWith('/tick'));
+    expect(tick?.body).toEqual({ exchange: 'binance', symbol: 'BNB/USDT' });
   });
 
   it('drops an expired session so the next call recreates it', async () => {

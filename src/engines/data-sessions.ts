@@ -325,6 +325,7 @@ export async function createDataSession(
   input: DataSessionCreateInput,
   signal?: AbortSignal,
 ): Promise<DataSessionCreateResult> {
+  // PYNE persists `symbol` as the store row; a load-form ticker would split it from MCP/stream.
   const body = {
     ...canonicalSeriesKey(input.key),
     history_bars: Math.max(1, Math.floor(input.historyBars)),
@@ -332,7 +333,6 @@ export async function createDataSession(
     ...(input.inputs && Object.keys(input.inputs).length ? { inputs: input.inputs } : {}),
     ...(input.libraries?.length ? { libraries: input.libraries } : {}),
     ...(input.profiler ? { profiler: true } : {}),
-    ...(input.symbol ? { symbol: input.symbol } : {}),
   };
   const r = await call(endpoint, '/data/session', { method: 'POST', body }, apiKey, signal);
   if (r.status === 409 && r.body.code === 'DATA_MISS') {
@@ -379,7 +379,7 @@ export async function tickDataSession(
 ): Promise<{ ok: true; payload: Record<string, unknown> } | { ok: false; error: string; gone: boolean }> {
   const plain = {
     exchange: String(identity.exchange || '').trim().toLowerCase(),
-    symbol: String(identity.symbol || '').trim().toUpperCase(),
+    symbol: pairFormSymbol(String(identity.symbol || ''), FALLBACK_MAJORS),
   };
   const wantDelta = opts?.delta === true && !noDeltaEndpoints.has(endpoint);
   const bodies = wantDelta ? [{ ...plain, delta: true }, plain] : [plain];

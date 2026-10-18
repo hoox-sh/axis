@@ -157,14 +157,18 @@ export class StreamLiveWire {
   }
 
   private fail(reason: string, message?: string): never {
-    // Already in cooldown: throw without re-arming. Live ticks used to call
-    // fail('cooldown') on every flush, which reset coolUntil and latched
-    // forever (thousands of failures/s with the socket still open).
+    // Re-arming here latched forever: live ticks called fail() every flush.
     if (this.cooledDown) {
       throw new StreamFallbackError('cooldown', message ?? 'stream in failure cooldown');
     }
     this.failures += 1;
     this.coolUntil = Date.now() + FAILURE_COOLDOWN_MS;
+    // The client retries on close independently of coolUntil once it has opened.
+    try {
+      this.client.disconnect();
+    } catch {
+      /* already gone */
+    }
     throw new StreamFallbackError(reason, message);
   }
 

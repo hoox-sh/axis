@@ -15,13 +15,23 @@ function makeHarness() {
   const seriesFull: Bar[][] = [];
   const seriesDelta: Array<{ bars: Bar[]; append: boolean }> = [];
   const resumes: Array<{ id: string; count: number; lastTime: number; extra?: Record<string, unknown> }> = [];
-  const counters = { disconnects: 0 };
+  const counters = { disconnects: 0, connects: 0, reconnects: 0 };
+  let open = true;
+  let stopped = false;
   let reconnect: (() => void) | undefined;
   const client: WireClient = {
-    isOpen: true,
+    get isOpen() {
+      return open;
+    },
     onFrame: undefined,
-    async connect() {},
+    async connect() {
+      stopped = false;
+      counters.connects += 1;
+      open = true;
+    },
     disconnect() {
+      stopped = true;
+      open = false;
       counters.disconnects += 1;
     },
     subscribe(id, kind) {
@@ -43,7 +53,7 @@ function makeHarness() {
       };
     },
     stats() {
-      return { open: true, openedOnce: true, reconnectAttempts: 3, stopped: false };
+      return { open, openedOnce: true, reconnectAttempts: 3, stopped };
     },
   };
   const handlers: WireHandlers = {
@@ -75,6 +85,11 @@ function makeHarness() {
     seriesDelta,
     resumes,
     fireReconnect: () => reconnect?.(),
+    pumpReconnect: () => {
+      if (stopped) return;
+      counters.reconnects += 1;
+      void client.connect();
+    },
   };
 }
 
@@ -164,6 +179,62 @@ describe('redesign2 live-wire (F-19)', () => {
     await expect(h.wire.ensureSeries('series-3', {})).rejects.toMatchObject({ reason: 'cooldown' });
     expect(h.wire.snapshotState().failures).toBe(1);
     expect(h.wire.cooledDown).toBe(true);
+  });
+
+  test('fail() disconnects and stops reconnects during cooldown', async () => {
+    const h = makeHarness();
+    const p = h.wire.ensureSeries('series-1', {});
+    await tick(); await tick();
+    h.emit({ type: 'error', id: 'series-1', payload: { code: 'x', message: 'boom' } });
+    await expect(p).rejects.toBeInstanceOf(StreamFallbackError);
+    expect(h.counters.disconnects).toBe(1);
+    expect(h.client.isOpen).toBe(false);
+    expect(h.wire.snapshotState().stats).toMatchObject({ stopped: true, open: false });
+    const connects = h.counters.connects;
+    h.pumpReconnect();
+    expect(h.counters.reconnects).toBe(0);
+    expect(h.counters.connects).toBe(connects);
+    await expect(h.wire.ensureConnected()).rejects.toMatchObject({ reason: 'cooldown' });
+    expect(h.counters.connects).toBe(connects);
+    expect(h.counters.disconnects).toBe(1);
+  });
+
+  test('after cooldown a later ensureSeries can open again', async () => {
+    const h = makeHarness();
+    const p = h.wire.ensureSeries('series-1', {});
+    await tick(); await tick();
+    h.emit({ type: 'error', id: 'series-1', payload: { code: 'x', message: 'boom' } });
+    await expect(p).rejects.toBeInstanceOf(StreamFallbackError);
+    expect(h.wire.cooledDown).toBe(true);
+
+    const origNow = Date.now;
+    Date.now = () => origNow() + 120_000;
+    try {
+      expect(h.wire.cooledDown).toBe(false);
+      const p2 = h.wire.ensureSeries('series-2', {});
+      await tick(); await tick();
+      h.emit({ type: 'full', id: 'series-2', seq: 1, payload: { count: 1, bars: BARS } });
+      expect(await p2).toEqual(BARS);
+      expect(h.client.isOpen).toBe(true);
+      expect(h.wire.snapshotState().stats).toMatchObject({ stopped: false, open: true });
+    } finally {
+      Date.now = origNow;
+    }
+  });
+
+  test('a new wire can open after another wire failed', async () => {
+    const h = makeHarness();
+    const p = h.wire.ensureSeries('series-1', {});
+    await tick(); await tick();
+    h.emit({ type: 'error', id: 'series-1', payload: { code: 'x', message: 'boom' } });
+    await expect(p).rejects.toBeInstanceOf(StreamFallbackError);
+
+    const h2 = makeHarness();
+    const p2 = h2.wire.ensureSeries('series-1', {});
+    await tick(); await tick();
+    h2.emit({ type: 'full', id: 'series-1', seq: 1, payload: { count: 1, bars: BARS } });
+    expect(await p2).toEqual(BARS);
+    expect(h2.client.isOpen).toBe(true);
   });
 
   test('ensureSeries subscribes once and returns cached bars', async () => {

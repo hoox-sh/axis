@@ -184,7 +184,8 @@ export class Redesign2WsClient {
   }
 
   async connect(): Promise<void> {
-    if (this.stopped) throw new Error('Redesign2WsClient stopped');
+    // fail() disconnects for the cooldown window without discarding the wire.
+    this.stopped = false;
     if (this.isOpen) return;
     if (this.connectPromise) return this.connectPromise;
 
@@ -515,6 +516,8 @@ export class Redesign2WsClient {
     this.reconnectAttempts += 1;
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
+      // disconnect() can race a timer that already elapsed; connect() un-stops.
+      if (this.stopped) return;
       void this.connect().catch(() => {
         /* connect handles retry */
       });

@@ -201,6 +201,24 @@ describe('createDataSession', () => {
     const r = await createDataSession(ENDPOINT, '', { key: KEY, historyBars: 3, script: 's' });
     expect(r).toEqual({ ok: false, error: 'bad pine' });
   });
+
+  it('binds pair-form even when the key and input.symbol are compact load-form', async () => {
+    const rec = recorder(() => jsonResponse({ status: 'success', session_id: 'ses-bnb', cache: 'hit' }));
+    restore = rec.restore;
+    const r = await createDataSession(ENDPOINT, '', {
+      key: { exchange: 'binance', symbol: 'BNBUSDT', interval: '1m' },
+      historyBars: 3,
+      script: 's',
+      symbol: 'BNBUSDT',
+    });
+    expect(r.ok).toBe(true);
+    expect(rec.calls[0]?.body).toMatchObject({
+      exchange: 'binance',
+      market: 'spot',
+      symbol: 'BNB/USDT',
+      interval: '1m',
+    });
+  });
 });
 
 describe('tickDataSession', () => {
@@ -211,6 +229,14 @@ describe('tickDataSession', () => {
     expect(r.ok).toBe(true);
     expect(rec.calls[0]?.path).toBe('/data/session/ses1/tick');
     expect(rec.calls[0]?.body).toEqual({ exchange: 'binance', symbol: 'BTC/USDT' });
+  });
+
+  it('looks up compact load-form as the canonical pair-form', async () => {
+    const rec = recorder(() => jsonResponse({ status: 'success', session_id: 'ses1', appended: 0 }));
+    restore = rec.restore;
+    const r = await tickDataSession(ENDPOINT, '', 'ses1', { exchange: 'binance', symbol: 'BNBUSDT' });
+    expect(r.ok).toBe(true);
+    expect(rec.calls[0]?.body).toEqual({ exchange: 'binance', symbol: 'BNB/USDT' });
   });
 
   it('marks an expired session as gone', async () => {
@@ -467,6 +493,33 @@ describe('runDataSession memo', () => {
     // Identity + delta opt-in; the unchanged tick reuses the create payload.
     expect(tick.body).toEqual({ exchange: 'binance', symbol: 'BTC/USDT', delta: true });
     expect(rec.calls.filter((c) => c.path === '/data/session').length).toBe(1);
+  });
+
+  it('binds and ticks pair-form when the request symbol is compact load-form', async () => {
+    const rec = engine();
+    restore = rec.restore;
+    const compact = { exchange: 'binance', symbol: 'BNBUSDT', interval: '1m', historyBars: 3 };
+    const a = await runDataSession({
+      endpoint: ENDPOINT,
+      apiKey: '',
+      owner: 'ind1',
+      request: compact,
+      script: 's',
+    });
+    const b = await runDataSession({
+      endpoint: ENDPOINT,
+      apiKey: '',
+      owner: 'ind1',
+      request: compact,
+      script: 's',
+      tick: true,
+    });
+    expect(a).toMatchObject({ ok: true, via: 'data-session-create' });
+    expect(b).toMatchObject({ ok: true, via: 'data-session-tick' });
+    const create = must(rec.calls, (c) => c.path === '/data/session');
+    expect(create.body).toMatchObject({ exchange: 'binance', market: 'spot', symbol: 'BNB/USDT', interval: '1m' });
+    const tick = must(rec.calls, (c) => c.path.endsWith('/tick'));
+    expect(tick.body).toMatchObject({ exchange: 'binance', symbol: 'BNB/USDT' });
   });
 
   it('merges delta tails onto the cached full payload', async () => {

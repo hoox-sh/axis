@@ -155,4 +155,61 @@ describe('redesign2 socket ownership', () => {
     expect(seen).toHaveLength(1);
     client.disconnect();
   });
+
+  test('connect after disconnect can open again', async () => {
+    restore = ManualSocket.install();
+    const client = new Redesign2WsClient({ endpoint: 'https://example.test' });
+    const first = client.connect();
+    ManualSocket.instances[0]!.open();
+    await first;
+    client.disconnect();
+    expect(client.stats().stopped).toBe(true);
+    expect(client.isOpen).toBe(false);
+
+    const second = client.connect();
+    expect(client.stats().stopped).toBe(false);
+    const ws2 = ManualSocket.instances[1]!;
+    ws2.open();
+    await second;
+    expect(client.isOpen).toBe(true);
+    client.disconnect();
+  });
+
+  test('disconnect with a pending reconnect does not open a second socket', async () => {
+    restore = ManualSocket.install();
+    const delayMs = 20;
+    const client = new Redesign2WsClient({
+      endpoint: 'https://example.test',
+      initialReconnectDelayMs: delayMs,
+      maxReconnectDelayMs: delayMs,
+      heartbeatIntervalMs: 60_000,
+    });
+    const first = client.connect();
+    const ws1 = ManualSocket.instances[0]!;
+    ws1.open();
+    await first;
+
+    const origSetTimeout = globalThis.setTimeout;
+    let queued: (() => void) | null = null;
+    globalThis.setTimeout = ((fn: TimerHandler, ms?: number, ...args: unknown[]) => {
+      if (typeof fn === 'function' && ms === delayMs) {
+        queued = fn as () => void;
+        return origSetTimeout(() => {}, 1_000_000);
+      }
+      return origSetTimeout(fn as never, ms as never, ...args);
+    }) as typeof setTimeout;
+    try {
+      ws1.emitClose();
+      expect(queued).not.toBeNull();
+      expect(ManualSocket.instances.length).toBe(1);
+      client.disconnect();
+      queued!();
+      await new Promise((r) => setTimeout(r, 0));
+      expect(ManualSocket.instances.length).toBe(1);
+      expect(client.isOpen).toBe(false);
+      expect(client.stats().stopped).toBe(true);
+    } finally {
+      globalThis.setTimeout = origSetTimeout;
+    }
+  });
 });
