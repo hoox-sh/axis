@@ -161,6 +161,18 @@ describe('canonicalSeriesKey', () => {
     });
     expect(seriesKeyString({ ...KEY, market: 'Swap' })).toBe('binance|swap|BTC/USDT|1h');
   });
+
+  it('maps compact load-form majors to pair-form', () => {
+    expect(canonicalSeriesKey({ exchange: 'binance', symbol: 'BNBUSDT', interval: '1m' })).toEqual({
+      exchange: 'binance',
+      market: 'spot',
+      symbol: 'BNB/USDT',
+      interval: '1m',
+    });
+    expect(seriesKeyString({ exchange: 'Binance', symbol: 'btcusdt', interval: '1m' })).toBe(
+      'binance|spot|BTC/USDT|1m',
+    );
+  });
 });
 
 describe('createDataSession', () => {
@@ -393,6 +405,36 @@ describe('ensureDataSession broker', () => {
     expect(h).toMatchObject({ sessionId: 's-local', provisioned: 'local' });
     expect(rec.calls.some((c) => c.path === '/data/series/provide')).toBe(true);
     expect(rec.calls.some((c) => c.path === '/data/series/fetch')).toBe(false);
+  });
+
+  it('finds a load-form local dataset from a pair-form series key', async () => {
+    _resetDatasetStoreForTests();
+    _resetDatasetSinksForTests();
+    await _resetBarsCacheForTests();
+    await putDatasetBars('binance-rest', 'BNBUSDT', '1h', freshBars(3));
+    setStore('source', 'binance-rest');
+    let creates = 0;
+    const rec = recorder((c) => {
+      if (c.path === '/data/session') {
+        creates++;
+        return creates === 1
+          ? jsonResponse({ status: 'miss', code: 'DATA_MISS', key: 'k', have: 0, need: 3 }, 409)
+          : jsonResponse({ status: 'success', session_id: 's-pair' });
+      }
+      return jsonResponse({ status: 'success', added: 3, updated: 0, count: 3 });
+    });
+    restore = rec.restore;
+    const h = await ensureDataSession({
+      endpoint: ENDPOINT,
+      apiKey: '',
+      key: { exchange: 'binance', symbol: 'BNB/USDT', interval: '1h' },
+      historyBars: 3,
+      script: 's',
+    });
+    expect(h).toMatchObject({ sessionId: 's-pair', provisioned: 'local' });
+    expect(rec.calls.some((c) => c.path === '/data/series/provide')).toBe(true);
+    const provide = rec.calls.find((c) => c.path === '/data/series/provide');
+    expect(provide?.body).toMatchObject({ symbol: 'BNB/USDT' });
   });
 });
 

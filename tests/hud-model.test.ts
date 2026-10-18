@@ -172,5 +172,6 @@ describe('feedStatusTone / feedStatusLabel (F-18)', () => {
     expect(feedStatusLabel('degraded', { message: 'unverified close', updatedAt: 1000, now: 46000 })).toBe(
       'degraded · unverified close',
     );
+    expect(feedStatusLabel('degraded', { message: 'venue+REST' })).toBe('degraded · venue+REST');
   });
 });

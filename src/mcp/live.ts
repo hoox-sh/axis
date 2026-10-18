@@ -22,7 +22,7 @@
 
 import { FALLBACK_MAJORS } from '../data/symbol-catalog';
 import { intervalToSec } from '../data/bars-gaps';
-import { currentSeriesKey } from '../engine/market-identity';
+import { currentSeriesKey, pairFormSymbol } from '../engine/market-identity';
 import { routeEngineRun } from '../engine/router';
 import type { DataSeriesKey, DataSeriesStatus } from '../engines/data-sessions';
 import {
@@ -108,12 +108,12 @@ function requireEngineConnection(): EngineConnection {
 }
 
 /** Canonical series key of the chart — same identity `streams/stream-live`
- * subscribes/drives with (`exchange|market|SYMBOL|interval`, load-form symbol). */
+ * subscribes/drives with (`exchange|market|SYMBOL|interval`, pair-form). */
 function chartSeriesKeyObject(): DataSeriesKey {
   return {
     exchange: String(store.exchange || 'binance').trim().toLowerCase() || 'binance',
     market: 'spot',
-    symbol: String(store.symbol || ''),
+    symbol: pairFormSymbol(String(store.symbol || ''), FALLBACK_MAJORS),
     interval: String(store.interval || '1m'),
   };
 }
@@ -123,7 +123,7 @@ function keyFromPayload(p: Record<string, unknown>): DataSeriesKey {
   const key: DataSeriesKey = {
     exchange: String(p.exchange || store.exchange || 'binance').trim().toLowerCase() || 'binance',
     market: String(p.market || 'spot').trim().toLowerCase() || 'spot',
-    symbol: String(p.symbol || store.symbol || '').trim(),
+    symbol: pairFormSymbol(String(p.symbol || store.symbol || '').trim(), FALLBACK_MAJORS),
     interval: String(p.interval || store.interval || '1m').trim() || '1m',
   };
   if (!key.symbol) fail('NO_SYMBOL', 'symbol required (payload symbol, or load a chart)');

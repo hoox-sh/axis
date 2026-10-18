@@ -23,6 +23,7 @@ import {
   _resetDataSessionMemo,
   _resetSeriesRepairCooldownForTests,
 } from '../src/engines/data-sessions';
+import { _resetDatasetStoreForTests } from '../src/data/dataset-store';
 import { clearLogs, setStore, store } from '../src/store';
 import type { Bar } from '../src/store/types';
 
@@ -44,6 +45,7 @@ beforeEach(() => {
   _resetEngineStaleNoticeForTests();
   _resetSeriesRepairCooldownForTests();
   _resetDataSessionMemo();
+  _resetDatasetStoreForTests();
   clearLogs();
   setStore('source', 'binance-rest');
   setStore('symbol', 'BTCUSDT');

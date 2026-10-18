@@ -130,6 +130,58 @@ describe('redesign2 live-wire (F-19)', () => {
     await expect(h.wire.ensureSeries('series-2', {})).rejects.toMatchObject({ reason: 'cooldown' });
   });
 
+  test('cooldown throw does not increment failures or re-arm', async () => {
+    const h = makeHarness();
+    const p = h.wire.ensureSeries('series-1', {});
+    await tick(); await tick();
+    h.emit({ type: 'error', id: 'series-1', payload: { code: 'x', message: 'boom' } });
+    await expect(p).rejects.toBeInstanceOf(StreamFallbackError);
+    expect(h.wire.snapshotState().failures).toBe(1);
+    await expect(h.wire.ensureSeries('series-2', {})).rejects.toMatchObject({ reason: 'cooldown' });
+    expect(h.wire.snapshotState().failures).toBe(1);
+    await expect(h.wire.ensureSeries('series-3', {})).rejects.toMatchObject({ reason: 'cooldown' });
+    expect(h.wire.snapshotState().failures).toBe(1);
+    expect(h.wire.cooledDown).toBe(true);
+  });
+
+  test('ensureSeries subscribes once and returns cached bars', async () => {
+    const h = makeHarness();
+    const p = h.wire.ensureSeries('series-1', {});
+    await tick(); await tick();
+    h.emit({ type: 'full', id: 'series-1', seq: 1, payload: { count: 1, bars: BARS } });
+    expect(await p).toEqual(BARS);
+    expect(h.wire.isSubscribed('series-1')).toBe(true);
+    const again = await h.wire.ensureSeries('series-1', { symbol: 'ignored' });
+    expect(again).toEqual(BARS);
+    expect(h.sent.filter((s) => s.kind === 'subscribe:series').length).toBe(1);
+  });
+
+  test('concurrent ensureSeries join one in-flight snapshot', async () => {
+    const h = makeHarness();
+    const p1 = h.wire.ensureSeries('series-1', {});
+    const p2 = h.wire.ensureSeries('series-1', {});
+    await tick(); await tick();
+    h.emit({ type: 'full', id: 'series-1', seq: 1, payload: { count: 1, bars: BARS } });
+    expect(await p1).toEqual(BARS);
+    expect(await p2).toEqual(BARS);
+    expect(h.sent.filter((s) => s.kind === 'subscribe:series').length).toBe(1);
+  });
+
+  test('awaitFull ignores leftover delta and waits for full', async () => {
+    const h = makeHarness();
+    const p = h.wire.ensureSeries('series-1', {});
+    await tick(); await tick();
+    h.emit({ type: 'delta', id: 'series-1', seq: 2, payload: { bars: [] } });
+    h.emit({
+      type: 'full',
+      id: 'series-1',
+      seq: 3,
+      payload: { seriesKey: 'k', count: 1, closed_upto: 0, bars: BARS },
+    });
+    expect(await p).toEqual(BARS);
+    expect(h.wire.isSubscribed('series-1')).toBe(true);
+  });
+
   test('routeFrame applies remote deltas and degrades on rejection', async () => {
     const h = makeHarness();
     const first = h.wire.evalScript({ subId: 's-1', script: 'x', meta: {}, bars: BARS });

@@ -36,7 +36,9 @@
 
 import type { Bar } from '../store/types';
 import type { EngineDataSessionRequest } from '../plugins/types';
+import { FALLBACK_MAJORS } from '../data/symbol-catalog';
 import { normalizeHistoricalBars } from '../data/parse-bars';
+import { pairFormSymbol } from '../engine/market-identity';
 import { resolveSessionPayload } from './session-delta';
 import { ENGINE_SERIES_STALE_STEPS, newestBarTime, seriesBehind } from './series-freshness';
 
@@ -85,12 +87,12 @@ export type DataSessionCreateResult =
   | { ok: false; miss: DataSessionMiss }
   | { ok: false; error: string };
 
-/** Canonical series key used by the engine store (`exchange|market|symbol|interval`). */
+/** Canonical series key used by the engine store (`exchange|market|SYMBOL|interval`, pair-form). */
 export function canonicalSeriesKey(k: DataSeriesKey): CanonicalSeriesKey {
   return {
     exchange: String(k.exchange || '').trim().toLowerCase(),
     market: String(k.market || 'spot').trim().toLowerCase() || 'spot',
-    symbol: String(k.symbol || '').trim().toUpperCase(),
+    symbol: pairFormSymbol(String(k.symbol || ''), FALLBACK_MAJORS),
     interval: String(k.interval || '').trim(),
   };
 }
@@ -464,16 +466,35 @@ async function localDatasetSourceIds(key: DataSeriesKey): Promise<string[]> {
   return ids;
 }
 
+/**
+ * Data Manager datasets are keyed by AXIS load-form (`BTCUSDT`); the engine
+ * series is pair-form (`BTC/USDT`). Lookup tries both plus the compact form
+ * of a paired symbol so a pair-form drive still finds the local window.
+ */
+function localLookupSymbols(key: DataSeriesKey): string[] {
+  const raw = String(key.symbol || '').trim().toUpperCase();
+  const paired = pairFormSymbol(raw, FALLBACK_MAJORS);
+  const compact = paired.includes('/') ? paired.replaceAll('/', '') : paired;
+  const out: string[] = [];
+  for (const s of [raw, paired, compact]) {
+    if (s && !out.includes(s)) out.push(s);
+  }
+  return out;
+}
+
 async function defaultLocalBars(key: DataSeriesKey): Promise<readonly Bar[]> {
   const c = canonicalSeriesKey(key);
   const { getDataset } = await import('../data/dataset-store');
   const candidates = await localDatasetSourceIds(key);
+  const symbols = localLookupSymbols(key);
   for (const sourceId of candidates) {
-    try {
-      const bars = await getDataset(sourceId, key.symbol, c.interval);
-      if (bars.length) return bars;
-    } catch {
-      /* try the next candidate key */
+    for (const symbol of symbols) {
+      try {
+        const bars = await getDataset(sourceId, symbol, c.interval);
+        if (bars.length) return bars;
+      } catch {
+        /* try the next candidate key */
+      }
     }
   }
   return [];

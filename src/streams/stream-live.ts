@@ -37,7 +37,7 @@ import { FALLBACK_MAJORS } from '../data/symbol-catalog';
 import { intervalToSec } from '../data/bars-gaps';
 import { applyStreamPayload } from '../engine/apply-bridge';
 import { Redesign2BarCloseVerifier, compareClosedOhlcv } from '../engine/bar-close-verify';
-import { currentSeriesKey } from '../engine/market-identity';
+import { currentSeriesKey, pairFormSymbol } from '../engine/market-identity';
 import { StreamLiveWire, StreamFallbackError, type WireClient } from '../engine/live-wire';
 import { Redesign2WsClient } from '../engine/ws-client';
 import { routeEngineRun } from '../engine/router';
@@ -58,6 +58,10 @@ import {
 } from '../store';
 import type { Bar } from '../store/types';
 import type { Indicator } from '../store/types';
+
+function chartPairSymbol(): string {
+  return pairFormSymbol(String(store.symbol || ''), FALLBACK_MAJORS);
+}
 
 function chartSeriesKey(): string {
   return currentSeriesKey({
@@ -123,12 +127,12 @@ function engineSeriesPaintable(bars: Bar[], marketNow = 0): boolean {
   return !engineWindowBehindChart(store.bars, bars, iv);
 }
 
-/** Canonical series key of the chart (engine `series` identity). */
+/** Canonical series key of the chart (engine `series` identity, pair-form). */
 function chartSeriesKeyObject(): DataSeriesKey {
   return {
     exchange: chartExchange(),
     market: 'spot',
-    symbol: String(store.symbol || ''),
+    symbol: chartPairSymbol(),
     interval: String(store.interval || '1m'),
   };
 }
@@ -350,17 +354,16 @@ function seriesMeta(): Record<string, unknown> {
   return {
     exchange: (store.exchange || 'binance').toLowerCase(),
     market: 'spot',
-    symbol: store.symbol || '',
+    symbol: chartPairSymbol(),
     interval: store.interval || '',
     history_bars: store.rollingWindowBars || 10000,
   };
 }
 
 /**
- * Venue tick on the stream path: ensure the series subscription (paint arrives
- * via `onSeriesFull`/`onSeriesDelta`), then report whether the caller should
- * re-run scripts. Never appends venue bars locally — the subscription owns
- * the replica.
+ * Venue tick on the stream path: ensure the series subscription (first
+ * snapshot paints; later ticks are subscribe-once and leave the venue-painted
+ * forming tip alone), then report whether the caller should re-run scripts.
  *
  * `marketNow` is the newest venue trigger time the caller just flushed: it is
  * the venue's own clock, so a frozen engine (series stuck while the venue keeps
@@ -377,7 +380,12 @@ export async function streamSeriesTick(marketNow = 0): Promise<boolean> {
     // been observed stalled (see engines/series-drive.ts). Not awaited — the
     // paint stays bound to this venue flush.
     driveSeriesFromVenue(marketNow);
+    const alreadyLive = w.isSubscribed(subId);
     const bars = await w.ensureSeries(subId, seriesMeta());
+    if (alreadyLive) {
+      setFeedStatus(chartSeriesKey(), 'live');
+      return false;
+    }
     if (!engineSeriesPaintable(bars, marketNow)) return false;
     const manager = getManager();
     setBarsQuiet(bars);
@@ -386,7 +394,7 @@ export async function streamSeriesTick(marketNow = 0): Promise<boolean> {
     return toBarTime(bars) !== before;
   } catch (e) {
     if (e instanceof StreamFallbackError) {
-      setFeedStatus(chartSeriesKey(), 'degraded', { message: e.reason });
+      setFeedStatus(chartSeriesKey(), 'degraded', { message: 'venue+REST' });
       throw e;
     }
     throw new StreamFallbackError('series-tick', e instanceof Error ? e.message : String(e));
@@ -407,7 +415,7 @@ export async function streamEvalScript(ind: Indicator): Promise<void> {
     setScriptStatus(ind.id, 'live');
   } catch (e) {
     if (e instanceof StreamFallbackError) {
-      setScriptStatus(ind.id, 'degraded', e.reason);
+      setScriptStatus(ind.id, 'degraded', 'venue+REST');
       throw e;
     }
     setScriptStatus(ind.id, 'error', e instanceof Error ? e.message : String(e));

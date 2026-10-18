@@ -20,14 +20,16 @@
 /**
  * Stream live-wire (F-19): orchestrates the engine-owned subscription plane.
  *
- * - `ensureSeries` connects, subscribes the chart series, and resolves with
- *   the snapshot bars (the caller paints them).
+ * - `ensureSeries` connects and subscribes the chart series **once**, then
+ *   resolves with the snapshot bars (the caller paints them). Later calls
+ *   return the cached snapshot; concurrent callers join the in-flight wait.
  * - `evalScript` subscribes a script on first call (awaiting its snapshot)
  *   and applies the latest merged state on later calls — deltas land
  *   asynchronously through the frame router, never via re-evaluation.
  * - Every failure (connect, subscribe, snapshot, merge) throws a
  *   `StreamFallbackError` so the caller drops to the legacy path. A 60s
- *   cooldown after a failure keeps a flapping backend from stalling live.
+ *   cooldown after a failure keeps a flapping backend from stalling live;
+ *   throwing while already cooled down does not re-arm the timer.
  *
  * Transport + apply are injected (fakes in tests; real client/bridge in prod).
  *
@@ -112,10 +114,15 @@ export class StreamLiveWire {
   private coolUntil = 0;
   private readonly appliers = new Map<string, Redesign2DeltaApplier>();
   private readonly appliedSeq = new Map<string, number>();
+  /** Last series snapshot per sub, returned on subscribe-once. */
+  private readonly seriesBars = new Map<string, Bar[]>();
+  /** In-flight `ensureSeries` so concurrent ticks join one snapshot wait. */
+  private readonly seriesInflight = new Map<string, Promise<Bar[]>>();
   /** Inbox for frames that arrive before their waiter (one TCP segment can
    * carry status+full together). Drained by `awaitFull`. */
   private readonly inbox = new Map<string, WireFrame[]>();
-  private readonly inboxWaiters = new Map<string, () => void>();
+  /** Fan-out waiters — a second waiter must not steal the first. */
+  private readonly inboxWaiters = new Map<string, Array<() => void>>();
 
   constructor(
     private readonly client: WireClient,
@@ -134,6 +141,12 @@ export class StreamLiveWire {
   }
 
   private fail(reason: string, message?: string): never {
+    // Already in cooldown: throw without re-arming. Live ticks used to call
+    // fail('cooldown') on every flush, which reset coolUntil and latched
+    // forever (thousands of failures/s with the socket still open).
+    if (this.cooledDown) {
+      throw new StreamFallbackError('cooldown', message ?? 'stream in failure cooldown');
+    }
     this.failures += 1;
     this.coolUntil = Date.now() + FAILURE_COOLDOWN_MS;
     throw new StreamFallbackError(reason, message);
@@ -156,17 +169,36 @@ export class StreamLiveWire {
       const queue = this.inbox.get(frame.id) ?? [];
       queue.push(frame);
       this.inbox.set(frame.id, queue);
-      const notify = this.inboxWaiters.get(frame.id);
-      if (notify) {
-        this.inboxWaiters.delete(frame.id);
-        notify();
-      }
+      this.notifyInboxWaiters(frame.id);
     }
     this.routeFrame(frame);
   }
 
-  /** Subscribe the chart series; resolves with snapshot bars for paint. */
+  /** True once this series sub has a snapshot (subscribe-once). */
+  isSubscribed(subId: string): boolean {
+    return this.appliedSeq.has(subId);
+  }
+
+  /**
+   * Subscribe the chart series; resolves with snapshot bars for paint.
+   *
+   * First call waits for `full`. Later calls return the cached snapshot
+   * without a second `subscribe`. Concurrent callers join the in-flight wait
+   * instead of stealing `inboxWaiters`.
+   */
   async ensureSeries(subId: string, meta: Record<string, unknown>): Promise<Bar[]> {
+    const cached = this.seriesBars.get(subId);
+    if (this.appliedSeq.has(subId) && cached?.length) return cached;
+    const inflight = this.seriesInflight.get(subId);
+    if (inflight) return inflight;
+    const work = this.subscribeSeriesOnce(subId, meta).finally(() => {
+      this.seriesInflight.delete(subId);
+    });
+    this.seriesInflight.set(subId, work);
+    return work;
+  }
+
+  private async subscribeSeriesOnce(subId: string, meta: Record<string, unknown>): Promise<Bar[]> {
     await this.ensureConnected();
     this.handlers.onStatus(subId, 'connecting');
     try {
@@ -182,6 +214,7 @@ export class StreamLiveWire {
       const bars = toBars((full.payload as Record<string, unknown>)?.bars);
       if (!bars.length) this.fail('empty-snapshot', 'series snapshot held no bars');
       this.appliedSeq.set(subId, typeof full.seq === 'number' ? full.seq : 0);
+      this.seriesBars.set(subId, bars);
       this.handlers.onStatus(subId, 'live');
       return bars;
     } catch (e) {
@@ -257,34 +290,69 @@ export class StreamLiveWire {
     });
   }
 
+  private notifyInboxWaiters(subId: string): void {
+    const list = this.inboxWaiters.get(subId);
+    if (!list?.length) return;
+    this.inboxWaiters.delete(subId);
+    for (const fn of list) fn();
+  }
+
+  private addInboxWaiter(subId: string, fn: () => void): void {
+    const list = this.inboxWaiters.get(subId);
+    if (list) list.push(fn);
+    else this.inboxWaiters.set(subId, [fn]);
+  }
+
+  private removeInboxWaiter(subId: string, fn: () => void): void {
+    const list = this.inboxWaiters.get(subId);
+    if (!list) return;
+    const i = list.indexOf(fn);
+    if (i >= 0) list.splice(i, 1);
+    if (!list.length) this.inboxWaiters.delete(subId);
+  }
+
   /**
    * Wait for the snapshot (`full` or terminal `error`), draining the inbox
    * first so back-to-back status+full delivery never loses the snapshot.
-   * Preceding `status` frames route to the handlers.
+   * Preceding `status` frames route to the handlers. Leftover `delta` /
+   * `close` frames stay in the inbox — they are not a failed snapshot.
    */
   private async awaitFull(subId: string, timeoutMs: number): Promise<WireFrame> {
     const deadline = Date.now() + timeoutMs;
     for (;;) {
       const queue = this.inbox.get(subId) ?? [];
+      const leftover: WireFrame[] = [];
+      let found: WireFrame | undefined;
       while (queue.length) {
-        const frame = queue.shift()!;
+        const frame = queue.shift();
+        if (!frame) break;
         if (frame.type === 'status') {
           this.routeStatusFrame(frame);
           continue;
         }
-        return frame;
+        if (frame.type === 'full' || frame.type === 'error') {
+          found = frame;
+          leftover.push(...queue);
+          queue.length = 0;
+          break;
+        }
+        leftover.push(frame);
       }
+      this.inbox.set(subId, leftover);
+      if (found) return found;
       const remaining = deadline - Date.now();
       if (remaining <= 0) this.fail('snapshot-timeout', `no snapshot for ${subId}`);
       await new Promise<void>((resolve) => {
+        const onFrame = () => {
+          clearTimeout(timer);
+          this.removeInboxWaiter(subId, onFrame);
+          resolve();
+        };
         const timer = setTimeout(() => {
-          this.inboxWaiters.delete(subId);
+          this.removeInboxWaiter(subId, onFrame);
           resolve();
         }, remaining);
-        this.inboxWaiters.set(subId, () => {
-          clearTimeout(timer);
-          resolve();
-        });
+        this.addInboxWaiter(subId, onFrame);
       });
     }
   }
@@ -324,6 +392,8 @@ export class StreamLiveWire {
   release(subId: string): void {
     this.appliers.delete(subId);
     this.appliedSeq.delete(subId);
+    this.seriesBars.delete(subId);
+    this.seriesInflight.delete(subId);
     try {
       this.client.unsubscribe(subId);
     } catch {
@@ -383,6 +453,8 @@ export class StreamLiveWire {
     const cooledDown = this.cooledDown;
     this.appliers.clear();
     this.appliedSeq.clear();
+    this.seriesBars.clear();
+    this.seriesInflight.clear();
     this.inbox.clear();
     this.inboxWaiters.clear();
     this.failures = 0;
@@ -398,6 +470,8 @@ export class StreamLiveWire {
   disconnect(): void {
     this.appliers.clear();
     this.appliedSeq.clear();
+    this.seriesBars.clear();
+    this.seriesInflight.clear();
     try {
       this.client.disconnect();
     } catch {

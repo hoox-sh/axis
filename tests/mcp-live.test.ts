@@ -297,10 +297,10 @@ describe('engine.series', () => {
     expect(r.newest).toBe(1792003600);
     expect(r.stale).toBe(true);
     expect(r.matchesChart).toBe(true);
-    expect(r.requested).toBe('binance|spot|BTCUSDT|1m');
+    expect(r.requested).toBe('binance|spot|BTC/USDT|1m');
     expect(typeof r.lagBars).toBe('number');
     expect(seenUrl).toContain('/data/series?');
-    expect(seenUrl).toContain('symbol=BTCUSDT');
+    expect(seenUrl).toContain('symbol=BTC%2FUSDT');
     expect(seenUrl).toContain('interval=1m');
     expect(seenUrl).not.toContain('SECRET_SERIES_KEY');
     expect(seenAuth).toBe('Bearer SECRET_SERIES_KEY');
@@ -312,7 +312,7 @@ describe('engine.series', () => {
       json({ key: 'binance|spot|ETHUSDT|15m', count: 3, oldest: 1, newest: 2, updated_at: 2 })) as typeof fetch;
     const r = (await invokeCapability('engine.series', { symbol: 'ETHUSDT', interval: '15m' })) as CapResult;
     expect(r.matchesChart).toBe(false);
-    expect(r.requested).toBe('binance|spot|ETHUSDT|15m');
+    expect(r.requested).toBe('binance|spot|ETH/USDT|15m');
   });
 
   it('fails with ENGINE_UNREACHABLE when the engine errors', async () => {

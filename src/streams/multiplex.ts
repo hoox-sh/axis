@@ -58,6 +58,7 @@ import {
   noteTick,
   setTelemetryPlane,
   setTelemetryState,
+  setScriptStatus,
 } from '../store';
 import { getManager, setDataToChart } from '../chart/manager-access';
 import { isReplayActive, stopReplaySession } from '../chart/bar-replay';
@@ -479,50 +480,29 @@ export function startLive(
         }
         if (shouldRerun && isCurrent()) scheduleRerun();
       };
-      // Stream path (F-19): the subscription owns the replica — venue bars
-      // are never appended locally. `streamSeriesTick` paints the engine's
-      // snapshot (closed bars only), so the venue's forming bar would be
-      // dropped on every tick and the chart stays one bar behind. Re-apply the
-      // venue's latest bar after the engine snapshot so the last bar shows.
-      // The tick is async; on success a changed window / painted tip /
-      // every-tick mode schedules a re-run, on failure we run the legacy
-      // venue append below so the chart never stalls on an outage.
+      // Stream path (F-19): paint the venue first so LWC never waits on the
+      // engine. Same-slot forming updates go through appendBar (path-set).
+      // Engine work is fire-and-forget; a later snapshot may replace the
+      // window with closed bars, so re-apply the forming tip after it lands.
       if (streamRouteActive()) {
+        appendVenueBars(ordered);
         streamSeriesTick(newestBarTime(ordered)).then(
           (changed) => {
             if (!isCurrent()) return;
-            // Re-apply the venue's latest bar so the forming (last) bar is
-            // visible. The engine snapshot holds closed bars only, so a venue
-            // bar newer than the engine's newest closed bar is appended; an
-            // identical last time is a harmless no-op via `appendBar`.
-            let paintedTip = false;
             const tip = ordered[ordered.length - 1];
             if (tip) {
-              const cur = store.bars;
-              const last = cur.length ? cur[cur.length - 1]!.time : 0;
-              if (!last || tip.time > last) {
+              try {
                 appendBar(tip);
                 const manager = getManager();
                 if (manager) manager.appendBar(tip);
-                noteTick(tip.close, tip.time, sym);
-                noteLiveBarForAlerts(tip, { symbol: sym, interval: iv });
-                paintedTip = true;
+              } catch {
+                /* forming tip re-apply is best-effort */
               }
             }
-            if (
-              changed ||
-              paintedTip ||
-              effectiveLiveRerunMode(liveRerunModeForEngine(store.live.rerunOn), store.bars.length) ===
-                'every-tick'
-            ) {
-              scheduleRerun();
-            }
+            if (changed) scheduleRerun();
           },
           (e) => {
-            if (e instanceof StreamFallbackError) {
-              if (isCurrent()) appendVenueBars(ordered);
-              return;
-            }
+            if (e instanceof StreamFallbackError) return;
             throw e;
           },
         );
@@ -1142,6 +1122,9 @@ function scheduleRerun() {
                   liveTick: true,
                   epoch: batch,
                 });
+                // REST calculator ran; do not leave a sticky `cooldown` chip
+                // on a live EMA — the HUD names the fallback path instead.
+                setScriptStatus(ind.id, 'degraded', 'venue+REST');
               }
               return;
             }
