@@ -131,6 +131,11 @@ export class Redesign2WsClient {
   >();
   private readonly reconnectHandlers = new Set<() => void>();
   private openedOnce = false;
+  private authWaiter: {
+    resolve: () => void;
+    reject: (err: Error) => void;
+    timer: ReturnType<typeof setTimeout>;
+  } | null = null;
 
   constructor(options: Redesign2WsClientOptions) {
     this.options = {
@@ -246,16 +251,10 @@ export class Redesign2WsClient {
         this.reconnectAttempts = 0;
         this.onStatus?.('open');
         this.startHeartbeat();
-        if (this.options.authToken) {
-          this.send({
-            type: 'auth',
-            ts: Date.now(),
-            payload: { token: this.options.authToken },
-          });
-        }
         const first = !this.openedOnce;
         this.openedOnce = true;
-        if (!first) {
+        const fireResume = () => {
+          if (first) return;
           for (const fn of this.reconnectHandlers) {
             try {
               fn();
@@ -263,8 +262,28 @@ export class Redesign2WsClient {
               /* a failing resubscribe must not break the socket */
             }
           }
+        };
+        if (!this.options.authToken) {
+          fireResume();
+          resolve();
+          return;
         }
-        resolve();
+        // Subscribe before auth.ok is UNAUTHORIZED; hold connect() until the handshake.
+        this.send({
+          type: 'auth',
+          ts: Date.now(),
+          payload: { token: this.options.authToken },
+        });
+        this.authWaiter = {
+          resolve: () => {
+            fireResume();
+            resolve();
+          },
+          reject,
+          timer: setTimeout(() => {
+            this.clearAuthWaiter(new Error('Redesign2 auth timeout'));
+          }, this.options.connectTimeoutMs),
+        };
       };
 
       ws.onerror = () => {
@@ -411,6 +430,7 @@ export class Redesign2WsClient {
     this.stopped = true;
     this.clearReconnect();
     this.stopHeartbeat();
+    this.clearAuthWaiter(new Error('Redesign2WsClient stopped'));
     this.dropPending(new Error('Redesign2WsClient stopped'));
     if (this.ws) {
       try {
@@ -448,6 +468,17 @@ export class Redesign2WsClient {
         console.warn('[engine] skipping malformed frame', frame?.type);
       }
       return;
+    }
+    if (frame.type === 'auth.ok') {
+      this.clearAuthWaiter();
+    } else if (frame.type === 'error' && this.authWaiter) {
+      const rec = parsed as Record<string, unknown>;
+      const payload = rec.payload && typeof rec.payload === 'object' ? (rec.payload as Record<string, unknown>) : rec;
+      const code = String(payload.code ?? rec.code ?? '');
+      if (code === 'UNAUTHORIZED') {
+        this.clearAuthWaiter(new Error(String(payload.message ?? rec.message ?? 'UNAUTHORIZED')));
+        return;
+      }
     }
     if (frame.id) {
       const waiter = this.pending.get(frame.id);
@@ -522,6 +553,15 @@ export class Redesign2WsClient {
         /* connect handles retry */
       });
     }, delay);
+  }
+
+  private clearAuthWaiter(err?: Error): void {
+    const waiter = this.authWaiter;
+    if (!waiter) return;
+    this.authWaiter = null;
+    clearTimeout(waiter.timer);
+    if (err) waiter.reject(err);
+    else waiter.resolve();
   }
 
   private clearReconnect(): void {

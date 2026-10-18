@@ -7,7 +7,7 @@ tags: [code, streams]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-17T12:28:29Z
+  at: 2026-10-18T18:58:02Z
 sources:
   - id: tree
     resource: "src/streams"
@@ -21,7 +21,7 @@ okf_lock: generated
 * `catalog.ts` — BUILTIN_STREAMS, StreamPlugin, _resetStreamRegistrationFlag, binanceStream, bybitStream, ccxtWsStream, coinbaseStream, defaultStreamForSource, ensureStreamsRegistered, foldVenueCandle, getStream, krakenStream
 * `multiplex.ts` — ENGINE_OWNED_APPEND_CAP, ENGINE_OWNED_TICK_MIN_MS, EngineOwnedPaintDiff, HEAVY_LIVE_RERUN_BARS, LIVE_RERUN_MAX_CONCURRENT, StopLiveOpts, StopLiveReason, StreamPlugin, _awaitEnginePaintForTests, _getLiveEpochForTests, _getPendingLiveBarCountForTests, _getRerunAttemptCountForTests
 * `reconnect-ws.ts` — RECONNECT_DEFAULTS, ReconnectableWsOpts, WsStatus, nextBackoffMs, openReconnectableWs
-* `stream-live.ts` — StreamFallbackError, VerifyClosedBarInput, VerifyClosedBarOutcome, VerifyStrength, resetStreamWire, streamEvalScript, streamRouteActive, streamSeriesTick, streamStop, streamVerifyClose, streamWireState, verifyClosedBar
+* `stream-live.ts` — StreamFallbackError, VerifyClosedBarInput, VerifyClosedBarOutcome, VerifyStrength, resetStreamWire, streamEvalScript, streamRouteActive, streamSeriesTick, streamStop, streamVerifyClose, streamWireState, subscribeHistoryBars
 * `ws-venues.ts` — VENUE_WS_HOSTS, VenueId, VenueWsConfig, buildVenueWs
 
 # Depends on

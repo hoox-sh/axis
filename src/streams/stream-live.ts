@@ -91,6 +91,13 @@ function engineHistoryBars(): number {
     : 2000;
 }
 
+/** Subscribe for the painted window, not the full rolling target, so PYNE can snapshot immediately. */
+export function subscribeHistoryBars(have: number, rolling: number): number {
+  const want = Number.isFinite(rolling) && rolling > 0 ? rolling : 2000;
+  if (have >= 50) return Math.min(want, have);
+  return want;
+}
+
 /**
  * Stale-engine guard for a hand-off from the engine's series (stream plane).
  *
@@ -171,7 +178,15 @@ function continuesChartTail(bars: Bar[]): boolean {
 }
 
 let wire: StreamLiveWire | null = null;
+let wireCred = '';
 const verifiers = new Map<string, Redesign2BarCloseVerifier>();
+
+function wireFingerprint(): string {
+  const cfg = getActiveEngineConfig();
+  const endpoint = String(cfg?.endpoint || store.endpoint || '');
+  const authToken = String(cfg?.apiKey || '').trim();
+  return `${endpoint}\0${authToken}`;
+}
 
 function buildWire(): StreamLiveWire {
   const cfg = getActiveEngineConfig();
@@ -188,7 +203,11 @@ function buildWire(): StreamLiveWire {
       onStatus: (subId, status, extra) => {
         if (subId.startsWith('series:')) {
           const key = subId.slice('series:'.length);
-          setFeedStatus(key, status, extra);
+          const clearStale = status === 'connecting' || status === 'live' || status === 'datafeed-loading';
+          setFeedStatus(key, status, {
+            ...extra,
+            ...(clearStale && extra?.message === undefined ? { message: '' } : {}),
+          });
         } else {
           setScriptStatus(subId, status, extra?.message);
         }
@@ -262,7 +281,12 @@ function buildWire(): StreamLiveWire {
 }
 
 function getWire(): StreamLiveWire {
-  if (!wire) wire = buildWire();
+  const fp = wireFingerprint();
+  if (wire && fp !== wireCred) resetStreamWire();
+  if (!wire) {
+    wireCred = fp;
+    wire = buildWire();
+  }
   return wire;
 }
 
@@ -299,6 +323,7 @@ export function resetStreamWire(): {
   if (!wire) return { hadWire: false, wasOpen: false, unsubscribed: 0, cooledDown: false };
   const target = wire;
   wire = null;
+  wireCred = '';
   let out = { hadWire: true, wasOpen: false, unsubscribed: 0, cooledDown: false };
   try {
     const r = target.reset();
@@ -324,7 +349,7 @@ function seriesMeta(): Record<string, unknown> {
     market: 'spot',
     symbol: chartPairSymbol(),
     interval: store.interval || '',
-    history_bars: store.rollingWindowBars || 10000,
+    history_bars: subscribeHistoryBars(store.bars.length, engineHistoryBars()),
   };
 }
 
@@ -339,6 +364,8 @@ function seriesMeta(): Record<string, unknown> {
  * only refuses to back-date the chart).
  */
 export async function streamSeriesTick(marketNow = 0): Promise<boolean> {
+  const token = String(getActiveEngineConfig()?.apiKey || '').trim();
+  if (!token) throw new StreamFallbackError('no-auth', 'engine API key missing');
   const w = getWire();
   const subId = seriesSubId();
   try {
@@ -366,6 +393,8 @@ export async function streamSeriesTick(marketNow = 0): Promise<boolean> {
 
 /** Evaluate one script over the latest merged stream state (no re-run). */
 export async function streamEvalScript(ind: Indicator): Promise<void> {
+  const token = String(getActiveEngineConfig()?.apiKey || '').trim();
+  if (!token) throw new StreamFallbackError('no-auth', 'engine API key missing');
   const w = getWire();
   try {
     await w.evalScript({

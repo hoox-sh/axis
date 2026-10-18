@@ -137,6 +137,7 @@ describe('redesign2 live-wire (F-19)', () => {
     h.emit({ type: 'full', id: 'series-1', seq: 1, payload: { count: 0 } });
     await expect(p).rejects.toBeInstanceOf(StreamFallbackError);
     expect(h.wire.cooledDown).toBe(true);
+    expect(h.wire.snapshotState().lastFail?.reason).toBe('empty-snapshot');
   });
 
   test('evalScript subscribes once, then applies cached state', async () => {
@@ -308,6 +309,7 @@ describe('live-wire diagnostics (MCP stream.get / stream.reset)', () => {
     expect(state.open).toBe(true);
     expect(state.cooledDown).toBe(false);
     expect(state.failures).toBe(0);
+    expect(state.lastFail).toBeNull();
     expect(state.stats).toMatchObject({ reconnectAttempts: 3, stopped: false });
     expect(state.subs).toEqual([
       { subId: 'series:binance|spot|BTCUSDT|1m', kind: 'series', seq: 7, merged: true },

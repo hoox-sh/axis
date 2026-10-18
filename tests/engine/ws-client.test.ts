@@ -212,4 +212,29 @@ describe('redesign2 socket ownership', () => {
       globalThis.setTimeout = origSetTimeout;
     }
   });
+
+  test('connect with a token waits for auth.ok before resolving', async () => {
+    restore = ManualSocket.install();
+    const client = new Redesign2WsClient({
+      endpoint: 'https://example.test',
+      authToken: 'tok',
+      connectTimeoutMs: 200,
+      heartbeatIntervalMs: 60_000,
+    });
+    const opened = client.connect();
+    const ws = ManualSocket.instances[0]!;
+    ws.open();
+    let done = false;
+    void opened.then(() => {
+      done = true;
+    });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(done).toBe(false);
+    expect(ws.sent.map((s) => (JSON.parse(s) as { type: string }).type)).toEqual(['auth']);
+    ws.push({ type: 'auth.ok' });
+    await opened;
+    expect(done).toBe(true);
+    expect(client.isOpen).toBe(true);
+    client.disconnect();
+  });
 });

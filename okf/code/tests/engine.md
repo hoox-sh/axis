@@ -7,7 +7,7 @@ tags: [code, engine, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-16T19:09:44Z
+  at: 2026-10-18T18:58:02Z
 sources:
   - id: tree
     resource: "tests/engine"
@@ -33,6 +33,7 @@ okf_lock: generated
 * `rest-fallback.test.ts`
 * `session-broker.test.ts`
 * `session-multiplexer.test.ts`
+* `subscribe-history.test.ts`
 * `verify-strength.test.ts`
 * `ws-client.test.ts`
 * `ws-send.test.ts`

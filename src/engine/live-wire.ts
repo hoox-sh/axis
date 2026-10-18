@@ -89,6 +89,9 @@ export interface EvalScriptInput {
 }
 
 const FAILURE_COOLDOWN_MS = 60_000;
+const SNAPSHOT_WAIT_MS = 30_000;
+const LOADING_EXTEND_MS = 30_000;
+const LOADING_WAIT_CAP_MS = 120_000;
 
 function toBars(raw: unknown): Bar[] {
   if (!Array.isArray(raw)) return [];
@@ -124,6 +127,7 @@ function mergeTip(cur: Bar[], next: Bar[]): Bar[] {
 export class StreamLiveWire {
   private failures = 0;
   private coolUntil = 0;
+  private lastFail: { reason: string; message: string; at: number } | null = null;
   private readonly appliers = new Map<string, Redesign2DeltaApplier>();
   private readonly appliedSeq = new Map<string, number>();
   /** Last series snapshot per sub, returned on subscribe-once. */
@@ -163,6 +167,7 @@ export class StreamLiveWire {
     }
     this.failures += 1;
     this.coolUntil = Date.now() + FAILURE_COOLDOWN_MS;
+    this.lastFail = { reason, message: message ?? reason, at: Date.now() };
     // The client retries on close independently of coolUntil once it has opened.
     try {
       this.client.disconnect();
@@ -223,7 +228,7 @@ export class StreamLiveWire {
     this.handlers.onStatus(subId, 'connecting');
     try {
       this.client.subscribe(subId, 'series', meta);
-      const full = await this.awaitFull(subId, 30_000);
+      const full = await this.awaitFull(subId, SNAPSHOT_WAIT_MS);
       if (full.type === 'error') {
         this.handlers.onStatus(subId, 'error', { message: String((full.payload as Record<string, unknown>)?.message ?? 'subscribe failed') });
         this.fail('subscribe-error');
@@ -258,7 +263,7 @@ export class StreamLiveWire {
       this.handlers.onStatus(input.subId, 'connecting');
       try {
         this.client.subscribe(input.subId, 'script', input.meta, { script: input.script });
-        const full = await this.awaitFull(input.subId, 30_000);
+        const full = await this.awaitFull(input.subId, SNAPSHOT_WAIT_MS);
         if (full.type === 'error' || full.type !== 'full') {
           this.appliers.delete(input.subId);
           this.fail('script-subscribe-failed', `expected full, got ${full.type}`);
@@ -312,6 +317,8 @@ export class StreamLiveWire {
     const payload = (frame.payload as Record<string, unknown>) ?? {};
     this.handlers.onStatus(frame.id, String(payload.code ?? 'live') as SubscriptionStatus, {
       message: payload.message as string | undefined,
+      have: typeof payload.have === 'number' ? payload.have : undefined,
+      need: typeof payload.need === 'number' ? payload.need : undefined,
     });
   }
 
@@ -343,7 +350,8 @@ export class StreamLiveWire {
    * `close` frames stay in the inbox — they are not a failed snapshot.
    */
   private async awaitFull(subId: string, timeoutMs: number): Promise<WireFrame> {
-    const deadline = Date.now() + timeoutMs;
+    const started = Date.now();
+    let deadline = started + timeoutMs;
     for (;;) {
       const queue = this.inbox.get(subId) ?? [];
       const leftover: WireFrame[] = [];
@@ -353,6 +361,10 @@ export class StreamLiveWire {
         if (!frame) break;
         if (frame.type === 'status') {
           this.routeStatusFrame(frame);
+          const code = String((frame.payload as Record<string, unknown>)?.code ?? '');
+          if (code === 'datafeed-loading') {
+            deadline = Math.min(Date.now() + LOADING_EXTEND_MS, started + LOADING_WAIT_CAP_MS);
+          }
           continue;
         }
         if (frame.type === 'full' || frame.type === 'error') {
@@ -508,6 +520,7 @@ export class StreamLiveWire {
     open: boolean;
     cooledDown: boolean;
     failures: number;
+    lastFail: { reason: string; message: string; at: number } | null;
     stats: ReturnType<NonNullable<WireClient['stats']>> | null;
     subs: Array<{ subId: string; kind: 'series' | 'script'; seq: number; merged: boolean }>;
   } {
@@ -523,6 +536,7 @@ export class StreamLiveWire {
       open: this.client.isOpen,
       cooledDown: this.cooledDown,
       failures: this.failures,
+      lastFail: this.lastFail,
       stats: this.client.stats?.() ?? null,
       subs,
     };
