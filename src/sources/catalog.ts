@@ -63,6 +63,8 @@ import { sliceBarsForLoad } from '../data/bars-cache';
 import { expandCachedSeriesToNow } from '../data/expand-cache';
 import { getUploadedBars } from './upload-store';
 import { fetchBinanceJson } from '../data/binance-http';
+import { asProviderMarket } from '../data/provider';
+import { store } from '../store';
 import { fetchMexcJson } from '../data/mexc-http';
 import { mexcKlineInterval, mexcSpotSymbol } from '../data/venues/mexc';
 
@@ -437,6 +439,7 @@ export const binanceRest: SourcePlugin = {
     appendTimeParams(params, { startTime, endTime }, 'ms');
     try {
       const data = await fetchBinanceJson({
+        market: asProviderMarket(store.provider?.market),
         path: 'klines',
         query: params.toString(),
         baseUrl,
@@ -653,7 +656,10 @@ export const okxRest: SourcePlugin = {
   async fetchHistorical({ symbol, interval, config, endTime, signal }) {
     const cfg = resolveConfig(this.configSchema, config);
     const limit = Math.min(300, Number(cfg.limit) || 300);
-    const instId = dashPair(symbol, 'USDT');
+    const market = asProviderMarket(store.provider?.market);
+    const quote = market === 'inverse' ? 'USD' : 'USDT';
+    let instId = dashPair(symbol, quote);
+    if (market === 'linear' || market === 'inverse') instId = `${instId}-SWAP`;
     const params = new URLSearchParams({
       instId,
       bar: okxBar(interval),
@@ -695,8 +701,14 @@ export const bybitRest: SourcePlugin = {
     const cfg = resolveConfig(this.configSchema, config);
     const limit = Math.min(1000, Number(cfg.limit) || 500);
     const sym = symbol.toUpperCase().replace(/[-_/]/g, '');
+    const category =
+      asProviderMarket(store.provider?.market) === 'linear'
+        ? 'linear'
+        : asProviderMarket(store.provider?.market) === 'inverse'
+          ? 'inverse'
+          : 'spot';
     const params = new URLSearchParams({
-      category: 'spot',
+      category,
       symbol: sym,
       interval: bybitInterval(interval),
       limit: String(limit),

@@ -36,6 +36,7 @@
 
 import type { Bar } from '../store/types';
 import type { EngineDataSessionRequest } from '../plugins/types';
+import { pyneMarket } from '../data/provider';
 import { FALLBACK_MAJORS } from '../data/symbol-catalog';
 import { normalizeHistoricalBars } from '../data/parse-bars';
 import { pairFormSymbol } from '../engine/market-identity';
@@ -91,7 +92,7 @@ export type DataSessionCreateResult =
 export function canonicalSeriesKey(k: DataSeriesKey): CanonicalSeriesKey {
   return {
     exchange: String(k.exchange || '').trim().toLowerCase(),
-    market: String(k.market || 'spot').trim().toLowerCase() || 'spot',
+    market: pyneMarket(k.market),
     symbol: pairFormSymbol(String(k.symbol || ''), FALLBACK_MAJORS),
     interval: String(k.interval || '').trim(),
   };

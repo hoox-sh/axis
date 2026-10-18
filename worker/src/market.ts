@@ -536,8 +536,24 @@ const ROUTER = createProxyRouter({
       handle: ({ url, origin }) => {
         const parsed = parseKlinesQuery(url);
         if (!parsed.ok) return badRequest(origin, parsed.message);
-        const pathAndQuery = `/api/v3/klines?${parsed.params}`;
-        return proxyBinancePath(pathAndQuery, origin, KLINES_TTL_MS, `klines:${pathAndQuery}`);
+        const market = String(url.searchParams.get('market') || 'spot').toLowerCase();
+        const prefix =
+          market === 'linear' ? '/fapi/v1' : market === 'inverse' ? '/dapi/v1' : '/api/v3';
+        const upstreams =
+          market === 'linear'
+            ? (['https://fapi.binance.com'] as const)
+            : market === 'inverse'
+              ? (['https://dapi.binance.com'] as const)
+              : BINANCE_UPSTREAMS;
+        const pathAndQuery = `${prefix}/klines?${parsed.params}`;
+        return proxyPublicPath(
+          upstreams,
+          pathAndQuery,
+          origin,
+          KLINES_TTL_MS,
+          `klines:${market}:${pathAndQuery}`,
+          'Binance',
+        );
       },
     },
     {

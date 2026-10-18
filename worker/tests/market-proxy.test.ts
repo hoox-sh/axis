@@ -125,6 +125,30 @@ describe('handleMarket binance proxy', () => {
     }
   });
 
+  it('proxies USDT-M klines to fapi', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      expect(url.startsWith('https://fapi.binance.com/fapi/v1/klines?')).toBe(true);
+      expect(url).toContain('symbol=BTCUSDT');
+      return new Response(
+        JSON.stringify([[1_700_000_000_000, '1', '2', '0.5', '1.5', '10']]),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    }) as typeof fetch;
+    try {
+      const res = await handleMarket(
+        req('/api/market/binance/klines?symbol=BTCUSDT&interval=1m&limit=2&market=linear'),
+        env,
+        origin,
+        '/api/market/binance/klines',
+      );
+      expect(res!.status).toBe(200);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it('proxies ticker batch', async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (async (input: RequestInfo | URL) => {

@@ -21,6 +21,7 @@
  */
 
 import { FALLBACK_MAJORS } from '../data/symbol-catalog';
+import { pyneMarket } from '../data/provider';
 import { intervalToSec } from '../data/bars-gaps';
 import { currentSeriesKey, pairFormSymbol } from '../engine/market-identity';
 import { routeEngineRun } from '../engine/router';
@@ -112,7 +113,7 @@ function requireEngineConnection(): EngineConnection {
 function chartSeriesKeyObject(): DataSeriesKey {
   return {
     exchange: String(store.exchange || 'binance').trim().toLowerCase() || 'binance',
-    market: 'spot',
+    market: pyneMarket(store.provider?.market),
     symbol: pairFormSymbol(String(store.symbol || ''), FALLBACK_MAJORS),
     interval: String(store.interval || '1m'),
   };
@@ -122,7 +123,7 @@ function chartSeriesKeyObject(): DataSeriesKey {
 function keyFromPayload(p: Record<string, unknown>): DataSeriesKey {
   const key: DataSeriesKey = {
     exchange: String(p.exchange || store.exchange || 'binance').trim().toLowerCase() || 'binance',
-    market: String(p.market || 'spot').trim().toLowerCase() || 'spot',
+    market: pyneMarket(p.market || store.provider?.market),
     symbol: pairFormSymbol(String(p.symbol || store.symbol || '').trim(), FALLBACK_MAJORS),
     interval: String(p.interval || store.interval || '1m').trim() || '1m',
   };

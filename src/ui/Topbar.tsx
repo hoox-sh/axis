@@ -85,6 +85,12 @@ import {
   subscribeCredentials,
 } from '../data/credentials';
 import {
+  asProviderMarket,
+  MARKET_LABELS,
+  marketsForVenue,
+  type ProviderMarket,
+} from '../data/provider';
+import {
   applyVenueToken,
   listVenueOptions,
   parseVenueToken,
@@ -355,6 +361,32 @@ export const Topbar: Component<{
             </For>
           </optgroup>
         </TopbarField>
+
+        <Show when={marketsForVenue(store.provider?.venue || 'binance').length > 1}>
+          <TopbarField
+            label="Market"
+            variant="select"
+            class="min-w-[6.5em]"
+            testId="axis-select-market"
+            value={asProviderMarket(store.provider?.market)}
+            title="Spot or futures (USDT-M / COIN-M) for this venue"
+            onChange={(e) => {
+              const market = asProviderMarket(e.currentTarget.value);
+              const allowed = marketsForVenue(store.provider?.venue || 'binance');
+              const next: ProviderMarket = allowed.includes(market) ? market : 'spot';
+              setStore('provider', 'market', next);
+              persist();
+              const live = store.live?.active;
+              if (live) stopLive();
+              if (autoloadOn()) void loadHistorical({ force: true });
+              if (live) startLive();
+            }}
+          >
+            <For each={marketsForVenue(store.provider?.venue || 'binance')}>
+              {(m) => <option value={m}>{MARKET_LABELS[m]}</option>}
+            </For>
+          </TopbarField>
+        </Show>
 
         <Show when={sourceNeedsSymbol()}>
           <div data-testid="axis-symbol-control">

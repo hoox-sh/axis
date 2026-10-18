@@ -38,6 +38,7 @@ import { intervalToSec } from '../data/bars-gaps';
 import { applyStreamPayload } from '../engine/apply-bridge';
 import { Redesign2BarCloseVerifier, compareClosedOhlcv } from '../engine/bar-close-verify';
 import { currentSeriesKey, pairFormSymbol } from '../engine/market-identity';
+import { pyneMarket } from '../data/provider';
 import { StreamLiveWire, StreamFallbackError, type WireClient } from '../engine/live-wire';
 import { Redesign2WsClient } from '../engine/ws-client';
 import { routeEngineRun } from '../engine/router';
@@ -67,6 +68,7 @@ function chartSeriesKey(): string {
     exchange: store.exchange || 'binance',
     symbol: store.symbol || '',
     interval: store.interval || '',
+    market: pyneMarket(store.provider?.market),
     catalog: FALLBACK_MAJORS,
   });
 }
@@ -137,7 +139,7 @@ function engineSeriesPaintable(bars: Bar[], marketNow = 0): boolean {
 function chartSeriesKeyObject(): DataSeriesKey {
   return {
     exchange: chartExchange(),
-    market: 'spot',
+    market: pyneMarket(store.provider?.market),
     symbol: chartPairSymbol(),
     interval: String(store.interval || '1m'),
   };
@@ -346,7 +348,7 @@ export function streamRouteActive(): boolean {
 function seriesMeta(): Record<string, unknown> {
   return {
     exchange: (store.exchange || 'binance').toLowerCase(),
-    market: 'spot',
+    market: pyneMarket(store.provider?.market),
     symbol: chartPairSymbol(),
     interval: store.interval || '',
     history_bars: subscribeHistoryBars(store.bars.length, engineHistoryBars()),

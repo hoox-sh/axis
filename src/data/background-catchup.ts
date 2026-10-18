@@ -45,6 +45,7 @@
  */
 
 import type { Bar } from '../store/types';
+import { pyneMarket } from './provider';
 import { intervalToSec } from './bars-gaps';
 import { getVisibleBars, isReplayActive } from '../chart/bar-replay';
 import { repairBars, validateDataset, venueClassForSourceCaps } from './dataset-validate';
@@ -234,7 +235,7 @@ export async function repairChartGapsAfterBackground(
             apiKey: String(cfg.apiKey || ''),
             key: {
               exchange: exchangeForSource(expandSrc),
-              market: 'spot',
+              market: pyneMarket(store.provider?.market),
               symbol: expandSym,
               interval: expandIv,
             },

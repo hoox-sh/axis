@@ -48,6 +48,45 @@ export type ProviderVenue =
 
 export type ProviderAuthMode = 'public' | 'authenticated';
 export type ProviderMarket = 'spot' | 'linear' | 'inverse' | 'option';
+
+const MARKET_SET = new Set<ProviderMarket>(['spot', 'linear', 'inverse', 'option']);
+
+/** Normalize a market id; unknown values become spot. */
+export function asProviderMarket(raw: unknown): ProviderMarket {
+  const m = String(raw || '').trim().toLowerCase();
+  if (m === 'swap' || m === 'futures' || m === 'usdt-m' || m === 'usdm') return 'linear';
+  if (m === 'coin-m' || m === 'coinm' || m === 'delivery') return 'inverse';
+  return MARKET_SET.has(m as ProviderMarket) ? (m as ProviderMarket) : 'spot';
+}
+
+export const MARKET_LABELS: Record<ProviderMarket, string> = {
+  spot: 'Spot',
+  linear: 'USDT-M',
+  inverse: 'COIN-M',
+  option: 'Options',
+};
+
+/** PYNE / CCXT series-key market (`spot` | `swap` | `future`). */
+export function pyneMarket(raw: unknown): 'spot' | 'swap' | 'future' {
+  const m = asProviderMarket(raw);
+  if (m === 'linear') return 'swap';
+  if (m === 'inverse') return 'future';
+  return 'spot';
+}
+
+/** Markets the venue actually serves (selector hides when only spot). */
+export function marketsForVenue(venue: string): ProviderMarket[] {
+  switch (venue) {
+    case 'binance':
+    case 'okx':
+    case 'bybit':
+      return ['spot', 'linear', 'inverse'];
+    case 'mexc':
+      return ['spot', 'linear'];
+    default:
+      return ['spot'];
+  }
+}
 export type ProviderGateway = 'direct' | 'worker' | 'pyne' | 'sidecar';
 
 /**

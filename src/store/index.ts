@@ -82,6 +82,7 @@ import {
   defaultStreamForSource as pairStreamForSource,
   hydrateProviderSession,
   persistProviderSession,
+  marketsForVenue,
 } from '../data/provider';
 import { getDataManagerSelection } from '../data/data-manager-source';
 import {
@@ -1705,6 +1706,8 @@ function syncProviderSession(): void {
     market: prev?.market,
     ccxtExchange: ccxtExchange || undefined,
   });
+  const allowed = marketsForVenue(next.venue);
+  if (!allowed.includes(next.market)) next.market = 'spot';
   setStore('provider', next);
   if (ccxtExchange) {
     setStore('exchange', ccxtExchange);

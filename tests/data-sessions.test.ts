@@ -160,6 +160,8 @@ describe('canonicalSeriesKey', () => {
       interval: '1h',
     });
     expect(seriesKeyString({ ...KEY, market: 'Swap' })).toBe('binance|swap|BTC/USDT|1h');
+    expect(seriesKeyString({ ...KEY, market: 'linear' })).toBe('binance|swap|BTC/USDT|1h');
+    expect(seriesKeyString({ ...KEY, market: 'inverse' })).toBe('binance|future|BTC/USDT|1h');
   });
 
   it('maps compact load-form majors to pair-form', () => {

@@ -60,6 +60,8 @@ import { getDataManagerSelection } from '../data/data-manager-source';
 import { defaultStreamForSource as defaultStreamForSourceId } from '../data/provider';
 import { openReconnectableWs } from './reconnect-ws';
 import { binanceKlineWsUrls } from '../data/binance-http';
+import { asProviderMarket } from '../data/provider';
+import { store } from '../store';
 import { gatewayWs } from '../data/gateway';
 import { mexcSpotSymbol, mexcWsKlineInterval } from '../data/venues/mexc';
 
@@ -112,7 +114,11 @@ export const binanceStream: StreamPlugin = {
   configSchema: {},
   start({ symbol, interval, onBar, onStatus, onError }) {
     const wsInterval = INTERVAL_MAP[interval] || interval;
-    const urls = binanceKlineWsUrls(String(symbol || ''), wsInterval);
+    const urls = binanceKlineWsUrls(
+      String(symbol || ''),
+      wsInterval,
+      asProviderMarket(store.provider?.market),
+    );
     return openReconnectableWs({
       url: urls[0] || `wss://stream.binance.com:9443/ws/${String(symbol || '').toLowerCase()}@kline_${wsInterval}`,
       urls,
@@ -253,8 +259,11 @@ export const okxStream: StreamPlugin = {
   start({ symbol, interval, onBar, onStatus, onError }) {
     const instId = (() => {
       const s = symbol.toUpperCase().replace(/[-_/]/g, '');
-      if (s.endsWith('USDT')) return `${s.slice(0, -4)}-USDT`;
-      return `${s}-USDT`;
+      const market = asProviderMarket(store.provider?.market);
+      const quote = market === 'inverse' ? 'USD' : 'USDT';
+      const base = s.endsWith(quote) ? s.slice(0, -quote.length) : s.replace(/USDT$|USD$/, '');
+      const id = `${base}-${quote}`;
+      return market === 'spot' ? id : `${id}-SWAP`;
     })();
     const barMap: Record<string, string> = {
       '1m': 'candle1m',
@@ -330,7 +339,9 @@ export const bybitStream: StreamPlugin = {
     };
     const iv = ivMap[interval] || 'D';
     const topic = `kline.${iv}.${symbol.toUpperCase()}`;
-    const url = 'wss://stream.bybit.com/v5/public/spot';
+    const market = asProviderMarket(store.provider?.market);
+    const channel = market === 'linear' ? 'linear' : market === 'inverse' ? 'inverse' : 'spot';
+    const url = `wss://stream.bybit.com/v5/public/${channel}`;
     return openReconnectableWs({
       url,
       onStatus,

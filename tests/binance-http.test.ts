@@ -27,6 +27,11 @@ describe('binanceKlineWsUrls', () => {
     expect(urls.some((u) => u.includes(':443') || u.endsWith('/ws/btcusdt@kline_1d'))).toBe(true);
     expect(urls.some((u) => u.includes('data-stream.binance.vision'))).toBe(true);
   });
+
+  it('uses fstream for USDT-M and dstream for COIN-M', () => {
+    expect(binanceKlineWsUrls('BTCUSDT', '1m', 'linear')[0]).toContain('fstream.binance.com');
+    expect(binanceKlineWsUrls('BTCUSD_PERP', '1m', 'inverse')[0]).toContain('dstream.binance.com');
+  });
 });
 
 describe('binanceTickerWsUrls', () => {
@@ -54,6 +59,22 @@ describe('fetchBinanceJson', () => {
     });
     expect(Array.isArray(data)).toBe(true);
     expect(seen[0]).toContain(BINANCE_REST_HOSTS[0]);
+  });
+
+  it('hits fapi for linear klines', async () => {
+    const seen: string[] = [];
+    restoreFetch = mockFetch(async (input) => {
+      seen.push(String(input));
+      return jsonResponse([[1, '1', '2', '0.5', '1.5', '10']]);
+    });
+    await fetchBinanceJson({
+      path: 'klines',
+      query: 'symbol=BTCUSDT&interval=1m&limit=1',
+      market: 'linear',
+      skipWorkerProxy: true,
+      skipSigned: true,
+    });
+    expect(seen[0]).toContain('fapi.binance.com/fapi/v1/klines');
   });
 
   it('falls through hosts then fails without worker', async () => {

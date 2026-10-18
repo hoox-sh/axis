@@ -55,6 +55,12 @@ import {
   venueTokenFromState,
 } from '../../data/venue-picker';
 import { activeCcxtExchange } from '../../data/credentials';
+import {
+  asProviderMarket,
+  MARKET_LABELS,
+  marketsForVenue,
+  type ProviderMarket,
+} from '../../data/provider';
 import { DATA_MANAGER_SOURCE_ID } from '../../data/data-manager-source';
 import { startLive, stopLive, defaultStreamForSource } from '../../streams/multiplex';
 import { isReplayActive } from '../../chart/bar-replay';
@@ -288,6 +294,30 @@ export const MobileHeader: Component<MobileChromeProps> = (_props) => {
             </For>
           </optgroup>
         </select>
+        <Show when={marketsForVenue(store.provider?.venue || 'binance').length > 1}>
+          <select
+            class="axis-mvenue max-w-[4.5rem]"
+            data-testid="axis-mobile-market"
+            title="Spot or futures"
+            aria-label="Market"
+            value={asProviderMarket(store.provider?.market)}
+            onChange={(e) => {
+              const market = asProviderMarket(e.currentTarget.value);
+              const allowed = marketsForVenue(store.provider?.venue || 'binance');
+              const next: ProviderMarket = allowed.includes(market) ? market : 'spot';
+              setStore('provider', 'market', next);
+              persist();
+              const live = store.live?.active;
+              if (live) stopLive();
+              void loadSymbolData(store.symbol, store.interval, store.source);
+              if (live) startLive();
+            }}
+          >
+            <For each={marketsForVenue(store.provider?.venue || 'binance')}>
+              {(m) => <option value={m}>{MARKET_LABELS[m]}</option>}
+            </For>
+          </select>
+        </Show>
       </header>
       <SymbolModal
         open={symbolOpen()}

@@ -36,6 +36,7 @@ import {
   resolveMarketWorkerBase,
 } from './market-worker';
 import { fetchSignedJson, hasSignedCreds } from './signed-fetch';
+import { asProviderMarket, type ProviderMarket } from './provider';
 
 export { DEFAULT_MARKET_WORKER_BASE, resolveMarketWorkerBase };
 
@@ -45,11 +46,37 @@ export const BINANCE_REST_HOSTS = [
   'https://data-api.binance.vision',
 ] as const;
 
+export const BINANCE_LINEAR_REST_HOSTS = ['https://fapi.binance.com'] as const;
+export const BINANCE_INVERSE_REST_HOSTS = ['https://dapi.binance.com'] as const;
+
+function restHosts(market: ProviderMarket): readonly string[] {
+  if (market === 'linear') return BINANCE_LINEAR_REST_HOSTS;
+  if (market === 'inverse') return BINANCE_INVERSE_REST_HOSTS;
+  return BINANCE_REST_HOSTS;
+}
+
+function restPrefix(market: ProviderMarket): string {
+  if (market === 'linear') return '/fapi/v1/';
+  if (market === 'inverse') return '/dapi/v1/';
+  return '/api/v3/';
+}
+
 /** Live kline stream URL candidates (port 9443 is often firewalled). */
-export function binanceKlineWsUrls(symbol: string, interval: string): string[] {
+export function binanceKlineWsUrls(
+  symbol: string,
+  interval: string,
+  market: ProviderMarket | string = 'spot',
+): string[] {
   const s = String(symbol || '').toLowerCase();
   const iv = String(interval || '1d');
   const path = `/ws/${s}@kline_${iv}`;
+  const m = asProviderMarket(market);
+  if (m === 'linear') {
+    return [`wss://fstream.binance.com${path}`, `wss://fstream.binance.com:443${path}`];
+  }
+  if (m === 'inverse') {
+    return [`wss://dstream.binance.com${path}`, `wss://dstream.binance.com:443${path}`];
+  }
   return [
     `wss://stream.binance.com:9443${path}`,
     `wss://stream.binance.com:443${path}`,
@@ -93,22 +120,32 @@ export interface BinanceFetchOpts {
   skipWorkerProxy?: boolean;
   /** Skip vault HMAC (tests). Default false. */
   skipSigned?: boolean;
+  /** Spot (default), USDT-M linear, or COIN-M inverse. */
+  market?: ProviderMarket | string;
 }
 
-function joinUrl(base: string, path: BinanceRestPath, query?: string): string {
+function joinUrl(
+  base: string,
+  path: BinanceRestPath,
+  query?: string,
+  market: ProviderMarket = 'spot',
+): string {
   const b = base.replace(/\/+$/, '');
   const q = query ? (query.startsWith('?') ? query : `?${query}`) : '';
-  return `${b}/api/v3/${path}${q}`;
+  return `${b}${restPrefix(market)}${path}${q}`;
 }
 
 function workerProxyUrl(
   workerBase: string,
   path: BinanceRestPath,
   query?: string,
+  market: ProviderMarket = 'spot',
 ): string {
   const b = workerBase.replace(/\/+$/, '');
-  const q = query ? (query.startsWith('?') ? query : `?${query}`) : '';
-  return `${b}/api/market/binance/${path}${q}`;
+  const params = new URLSearchParams(query ? (query.startsWith('?') ? query.slice(1) : query) : '');
+  if (market !== 'spot') params.set('market', market);
+  const q = params.toString();
+  return `${b}/api/market/binance/${path}${q ? `?${q}` : ''}`;
 }
 
 function queryToRecord(query?: string): Record<string, string> {
@@ -129,7 +166,13 @@ function queryToRecord(query?: string): Record<string, string> {
 export async function fetchBinanceJson(
   opts: BinanceFetchOpts,
 ): Promise<unknown> {
-  if (!opts.skipSigned && opts.path === 'klines' && hasSignedCreds('binance')) {
+  const market = asProviderMarket(opts.market);
+  if (
+    market === 'spot' &&
+    !opts.skipSigned &&
+    opts.path === 'klines' &&
+    hasSignedCreds('binance')
+  ) {
     try {
       return await fetchSignedJson({
         venue: 'binance',
@@ -148,15 +191,15 @@ export async function fetchBinanceJson(
   }
 
   const bases: string[] = [];
-  const preferred = normalizeEndpointBase(opts.baseUrl);
+  const preferred = market === 'spot' ? normalizeEndpointBase(opts.baseUrl) : '';
   if (preferred) bases.push(preferred);
-  for (const h of BINANCE_REST_HOSTS) {
+  for (const h of restHosts(market)) {
     if (!bases.includes(h)) bases.push(h);
   }
 
   const errors: string[] = [];
   for (const base of bases) {
-    const url = joinUrl(base, opts.path, opts.query);
+    const url = joinUrl(base, opts.path, opts.query, market);
     try {
       const res = await fetch(url, {
         cache: 'no-store',
@@ -177,7 +220,7 @@ export async function fetchBinanceJson(
 
   if (!opts.skipWorkerProxy) {
     const worker = resolveMarketWorkerBase(opts.workerBase);
-    const url = workerProxyUrl(worker, opts.path, opts.query);
+    const url = workerProxyUrl(worker, opts.path, opts.query, market);
     try {
       const res = await fetch(url, {
         cache: 'no-store',
