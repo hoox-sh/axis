@@ -502,6 +502,19 @@ button.sc-btn:focus-visible {
 .axis-command-bar .axis-tb-group[data-tb-group="system"] {
   margin-left: auto;
 }
+.axis-command-trailing {
+  display: inline-flex;
+  align-items: center;
+  margin-left: auto;
+  flex-shrink: 0;
+  height: 28px;
+}
+.axis-command-trailing .axis-mcp-cta-chip,
+.axis-command-trailing [data-testid='axis-mcp-hud'] {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 11px;
+}
 
 /* Module-bar trailing: Logs/Status + session icons (theme…Studio) */
 .axis-module-trailing {

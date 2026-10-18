@@ -62,6 +62,7 @@ import {
   colorWithAlpha,
   PLOT_PALETTE,
   RIGHT_PRICE_SCALE_WIDTH,
+  SERIES_STACK_PRICE,
   VOID,
 } from './series-factory';
 import {
@@ -3302,8 +3303,7 @@ export class PaneManager {
     const candle = pane.series['candle'];
     if (candle) {
       try {
-        const order = candle.seriesOrder?.() ?? 1;
-        if (order < 1) candle.setSeriesOrder?.(1);
+        candle.setSeriesOrder?.(SERIES_STACK_PRICE);
       } catch {
         /* ignore */
       }

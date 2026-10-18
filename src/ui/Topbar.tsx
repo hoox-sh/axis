@@ -69,6 +69,7 @@ import { ChartLayoutMenu } from './ChartLayoutMenu';
 import { ExtraMenu } from './extras/ExtraMenu';
 import { PriceTicker } from './extras/PriceTicker';
 import { ScreenshotMenu } from './ScreenshotMenu';
+import { McpHud } from './McpHud';
 import { CompareSymbolControl } from './CompareSymbolControl';
 import { TopbarField } from './TopbarField';
 import { PluginConfigRow } from './PluginConfigRow';
@@ -764,6 +765,9 @@ export const Topbar: Component<{
           <ChartLayoutMenu />
         </div>
       </Show>
+      <div class="axis-command-trailing">
+        <McpHud />
+      </div>
       </div>
 
       {/* ── Module bar ──────────────────────────────────────── */}

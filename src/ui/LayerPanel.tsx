@@ -340,6 +340,30 @@ export const LayerPanel: Component = () => {
     <Show when={isPanelOpen('layers') || store.layerPanel.open}>
       <FloatableShell id="layers" testId="axis-layers">
         <div class="flex-1 overflow-y-auto min-h-0 text-[12px] flex flex-col gap-3">
+          <LayerSection title="Scripts" count={store.scripts.length}>
+            <Show
+              when={store.scripts.length > 0}
+              fallback={<LayerEmpty>No scripts on the chart</LayerEmpty>}
+            >
+              <ul class="flex flex-col gap-0.5 m-0 p-0 list-none" aria-label="Chart scripts">
+                <For each={store.scripts}>
+                  {(ind) => (
+                    <li>
+                      <LayerRow
+                        label={ind.name}
+                        sub={ind.paneId}
+                        visible={ind.visible}
+                        onToggle={() => onToggleIndicator(ind.id)}
+                        onSettings={() => openScriptSettings(ind.id)}
+                        onRemove={() => onRemoveIndicator(ind.id, ind.paneId)}
+                      />
+                    </li>
+                  )}
+                </For>
+              </ul>
+            </Show>
+          </LayerSection>
+
           <LayerSection title="Panes" count={store.panes.length}>
             <For each={[...store.panes].sort((a, b) => a.order - b.order)}>
               {(pane) => (
@@ -407,30 +431,6 @@ export const LayerPanel: Component = () => {
                 </Show>
               </Show>
             </div>
-          </LayerSection>
-
-          <LayerSection title="Scripts" count={store.scripts.length}>
-            <Show
-              when={store.scripts.length > 0}
-              fallback={<LayerEmpty>No scripts on the chart</LayerEmpty>}
-            >
-              <ul class="flex flex-col gap-0.5 m-0 p-0 list-none" aria-label="Chart scripts">
-                <For each={store.scripts}>
-                  {(ind) => (
-                    <li>
-                      <LayerRow
-                        label={ind.name}
-                        sub={ind.paneId}
-                        visible={ind.visible}
-                        onToggle={() => onToggleIndicator(ind.id)}
-                        onSettings={() => openScriptSettings(ind.id)}
-                        onRemove={() => onRemoveIndicator(ind.id, ind.paneId)}
-                      />
-                    </li>
-                  )}
-                </For>
-              </ul>
-            </Show>
           </LayerSection>
 
           <LayerSection title="Drawings" count={symbolDrawings().length}>

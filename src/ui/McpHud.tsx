@@ -10,7 +10,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * MCP bridge capsule for the status bar.
+ * MCP bridge capsule on the command bar trailing edge (very top row, above Studio).
  *
  * Two dots:
  * - **Session dot** — bridge socket state (green open, amber connecting,
@@ -88,7 +88,7 @@ function openSettings(): void {
   }
 }
 
-/** Status-bar MCP/session capsule with agent-activity dot. */
+/** Command-bar MCP/session capsule with agent-activity dot. */
 export const McpHud: Component = () => {
   const [s, setS] = createSignal<McpBridgeState>(mcpBridgeState());
   const now = useNow();

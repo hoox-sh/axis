@@ -65,6 +65,20 @@ import {
   type ThemeTokens,
 } from '../theme';
 
+/** LWC `setSeriesOrder`: bgcolor under price, overlay plots above candles. */
+export const SERIES_STACK_BGCOLOR = 0;
+export const SERIES_STACK_PRICE = 1;
+export const SERIES_STACK_OVERLAY = 2;
+
+export function setSeriesStackOrder(series: unknown, order: number): void {
+  try {
+    const s = series as { setSeriesOrder?: (n: number) => void };
+    s?.setSeriesOrder?.(order);
+  } catch {
+    /* mock / older LWC */
+  }
+}
+
 /**
  * AXIS **void** chart palette (brand tokens for Lightweight Charts).
  *
@@ -383,6 +397,7 @@ export function createCandleSeries(
       ? chart.addSeries(CandlestickSeries, opts, paneIndex)
       : chart.addSeries(CandlestickSeries, opts);
   alignRightScale(chart);
+  setSeriesStackOrder(series, SERIES_STACK_PRICE);
   return series;
 }
 
@@ -407,6 +422,7 @@ export function createHollowCandleSeries(
       ? chart.addSeries(CandlestickSeries, opts, paneIndex)
       : chart.addSeries(CandlestickSeries, opts);
   alignRightScale(chart);
+  setSeriesStackOrder(series, SERIES_STACK_PRICE);
   return series;
 }
 
@@ -422,6 +438,7 @@ export function createBarSeries(chart: IChartApi, paneIndex?: number): ISeriesAp
       ? chart.addSeries(BarSeries, opts, paneIndex)
       : chart.addSeries(BarSeries, opts);
   alignRightScale(chart);
+  setSeriesStackOrder(series, SERIES_STACK_PRICE);
   return series;
 }
 
@@ -439,6 +456,7 @@ export function createPriceLineSeries(chart: IChartApi, paneIndex?: number): ISe
       ? chart.addSeries(LineSeries, opts, paneIndex)
       : chart.addSeries(LineSeries, opts);
   alignRightScale(chart);
+  setSeriesStackOrder(series, SERIES_STACK_PRICE);
   return series;
 }
 
@@ -456,6 +474,7 @@ export function createPriceAreaSeries(chart: IChartApi, paneIndex?: number): ISe
       ? chart.addSeries(AreaSeries, opts, paneIndex)
       : chart.addSeries(AreaSeries, opts);
   alignRightScale(chart);
+  setSeriesStackOrder(series, SERIES_STACK_PRICE);
   return series;
 }
 
@@ -481,6 +500,7 @@ export function createPriceBaselineSeries(
       ? chart.addSeries(BaselineSeries, opts, paneIndex)
       : chart.addSeries(BaselineSeries, opts);
   alignRightScale(chart);
+  setSeriesStackOrder(series, SERIES_STACK_PRICE);
   return series;
 }
 
@@ -567,9 +587,7 @@ export function createBgcolorSeries(chart: IChartApi, paneIndex?: number): ISeri
   }
   // Paint behind candle / overlay series when API is available (LWC v5)
   try {
-    (series as ISeriesApi<'Histogram'> & { setSeriesOrder?: (n: number) => void }).setSeriesOrder?.(
-      0,
-    );
+    setSeriesStackOrder(series, SERIES_STACK_BGCOLOR);
   } catch {
     /* ignore */
   }
@@ -624,9 +642,12 @@ export function createLineSeries(
     crosshairMarkerBorderColor: bg,
     crosshairMarkerBackgroundColor: color,
   };
-  return paneIndex !== undefined
-    ? chart.addSeries(LineSeries, opts, paneIndex)
-    : chart.addSeries(LineSeries, opts);
+  const series =
+    paneIndex !== undefined
+      ? chart.addSeries(LineSeries, opts, paneIndex)
+      : chart.addSeries(LineSeries, opts);
+  setSeriesStackOrder(series, SERIES_STACK_OVERLAY);
+  return series;
 }
 
 /** Map Pine `plot.linestyle_*` string → LWC {@link LineStyle}. */
@@ -677,9 +698,12 @@ export function createPlotOverlaySeries(
       title: name,
       base,
     };
-    return paneIndex !== undefined
-      ? chart.addSeries(HistogramSeries, opts, paneIndex)
-      : chart.addSeries(HistogramSeries, opts);
+    const hist =
+      paneIndex !== undefined
+        ? chart.addSeries(HistogramSeries, opts, paneIndex)
+        : chart.addSeries(HistogramSeries, opts);
+    setSeriesStackOrder(hist, SERIES_STACK_OVERLAY);
+    return hist;
   }
   if (seriesKind === 'area') {
     const series = createAreaSeries(chart, name, color, paneIndex, lw);
@@ -759,9 +783,12 @@ export function createPlotBarOverlaySeries(
     lastValueVisible: true,
     title: name,
   };
-  return paneIndex !== undefined
-    ? chart.addSeries(BarSeries, opts, paneIndex)
-    : chart.addSeries(BarSeries, opts);
+  const series =
+    paneIndex !== undefined
+      ? chart.addSeries(BarSeries, opts, paneIndex)
+      : chart.addSeries(BarSeries, opts);
+  setSeriesStackOrder(series, SERIES_STACK_OVERLAY);
+  return series;
 }
 
 /**
@@ -788,9 +815,12 @@ export function createPlotCandleOverlaySeries(
     lastValueVisible: true,
     title: name,
   };
-  return paneIndex !== undefined
-    ? chart.addSeries(CandlestickSeries, opts, paneIndex)
-    : chart.addSeries(CandlestickSeries, opts);
+  const series =
+    paneIndex !== undefined
+      ? chart.addSeries(CandlestickSeries, opts, paneIndex)
+      : chart.addSeries(CandlestickSeries, opts);
+  setSeriesStackOrder(series, SERIES_STACK_OVERLAY);
+  return series;
 }
 
 /** Equity curve / plot.style_area — tinted fill from line color */
@@ -817,7 +847,10 @@ export function createAreaSeries(
     crosshairMarkerBorderColor: bg,
     crosshairMarkerBackgroundColor: color,
   };
-  return paneIndex !== undefined
-    ? chart.addSeries(AreaSeries, opts, paneIndex)
-    : chart.addSeries(AreaSeries, opts);
+  const series =
+    paneIndex !== undefined
+      ? chart.addSeries(AreaSeries, opts, paneIndex)
+      : chart.addSeries(AreaSeries, opts);
+  setSeriesStackOrder(series, SERIES_STACK_OVERLAY);
+  return series;
 }

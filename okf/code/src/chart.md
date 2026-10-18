@@ -7,7 +7,7 @@ tags: [chart, code]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-17T00:40:03Z
+  at: 2026-10-18T22:47:11Z
 sources:
   - id: tree
     resource: "src/chart"
@@ -49,7 +49,7 @@ okf_lock: generated
 * `price-precision.ts` — PRICE_SCALE_DECIMALS_MAX, PRICE_SCALE_DECIMALS_MIN, PriceFormatOpts, PriceScaleDecimalsMode, clampPriceDecimals, countSignificantDecimals, cyclePriceScaleDecimalsMode, decimalsFromMagnitude, detectDecimalsFromBars, detectDecimalsFromSymbol, formatPriceWithDecimals, normalizePriceScaleDecimalsMode
 * `pyne-drawings.ts` — DEFAULT_DRAWING_LIMITS, DrawingLimits, ScriptDrawing, YLOC_PAD_PX, alignDrawingTimeToBars, clampScriptDrawingTimes, clampTimeToLastBar, dedupeScriptLabelsAtSameTime, garbageCollectScriptDrawings, labelBubbleLayout, labelFontSizePx, normalizeExtend
 * `screenshot.ts` — DEFAULT_SCREENSHOT_OPTIONS, ScreenshotOptions, ScreenshotScale, ScreenshotScope, canvasToBlob, captureScreenshot, copyBlob, copyScreenshot, downloadBlob, downloadScreenshot, loadScreenshotOptions, saveScreenshotOptions
-* `series-factory.ts` — PLOT_PALETTE, RIGHT_PRICE_SCALE_WIDTH, TV, VOID, colorWithAlpha, createAreaSeries, createBarSeries, createBaseChart, createBgcolorSeries, createCandleSeries, createHollowCandleSeries, createLineSeries
+* `series-factory.ts` — PLOT_PALETTE, RIGHT_PRICE_SCALE_WIDTH, SERIES_STACK_BGCOLOR, SERIES_STACK_OVERLAY, SERIES_STACK_PRICE, TV, VOID, colorWithAlpha, createAreaSeries, createBarSeries, createBaseChart, createBgcolorSeries
 * `series-sanitize.ts` — PaintedCandleRange, SeriesSanitizeResult, clampPointsToPaintedRange, extendPaintedRange, looksLikeOhlcData, notePaintedCandleRange, rangeFromSeriesData, resetPaintedCandleRangeForTests, sanitizeSeriesDataForSetData
 * `volume-profile.ts` — DEFAULT_VALUE_AREA_PCT, DEFAULT_VP_ROWS, VolumeDistribution, VolumeProfileBin, VolumeProfileOptions, VolumeProfileResult, VpBar, computeVolumeProfile, expandValueArea, formatVpPrice, formatVpVolume, priceToBinIndex
 
