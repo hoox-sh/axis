@@ -64,6 +64,7 @@ export interface WireClient {
   readonly isOpen: boolean;
   subscribe(id: string, kind: 'series' | 'script', meta: Record<string, unknown>, opts?: Record<string, unknown>): void;
   resumeSubscription(id: string, count: number, lastTime: number, extra?: Record<string, unknown>): void;
+  requestRepair?(id: string, fromTime: number): void;
   unsubscribe(id: string): void;
   awaitFrame(id: string, timeoutMs?: number): Promise<WireFrame>;
   onFrame: ((frame: WireFrame) => void) | undefined;
@@ -109,6 +110,17 @@ function toBars(raw: unknown): Bar[] {
   return out;
 }
 
+function mergeTip(cur: Bar[], next: Bar[]): Bar[] {
+  if (!next.length) return cur;
+  const out = cur.slice();
+  for (const bar of next) {
+    const last = out[out.length - 1];
+    if (last && last.time === bar.time) out[out.length - 1] = bar;
+    else if (!last || bar.time > last.time) out.push(bar);
+  }
+  return out;
+}
+
 export class StreamLiveWire {
   private failures = 0;
   private coolUntil = 0;
@@ -118,6 +130,8 @@ export class StreamLiveWire {
   private readonly seriesBars = new Map<string, Bar[]>();
   /** In-flight `ensureSeries` so concurrent ticks join one snapshot wait. */
   private readonly seriesInflight = new Map<string, Promise<Bar[]>>();
+  /** Last script + bars so a push delta can apply without waiting on scheduleRerun. */
+  private readonly scriptCtx = new Map<string, { script: string; indicatorId?: string; bars: Bar[] }>();
   /** Inbox for frames that arrive before their waiter (one TCP segment can
    * carry status+full together). Drained by `awaitFull`. */
   private readonly inbox = new Map<string, WireFrame[]>();
@@ -134,7 +148,9 @@ export class StreamLiveWire {
       via: 'stream-full' | 'stream-delta',
       bars: Bar[],
     ) => Promise<RunResult>,
-  ) {}
+  ) {
+    this.client.addReconnectHandler(() => this.resumeAll());
+  }
 
   get cooledDown(): boolean {
     return Date.now() < this.coolUntil;
@@ -226,6 +242,11 @@ export class StreamLiveWire {
   /** Evaluate a script over the latest merged stream state (no re-run). */
   async evalScript(input: EvalScriptInput): Promise<RunResult> {
     await this.ensureConnected();
+    this.scriptCtx.set(input.subId, {
+      script: input.script,
+      indicatorId: input.indicatorId,
+      bars: input.bars,
+    });
     let applier = this.appliers.get(input.subId);
     if (!applier) {
       applier = new Redesign2DeltaApplier();
@@ -268,7 +289,7 @@ export class StreamLiveWire {
         this.routeStatusFrame(frame);
         return;
       }
-      if ((frame.type === 'full' || frame.type === 'delta') && frame.sessionId) {
+      if ((frame.type === 'full' || frame.type === 'delta') && (frame.sessionId || frame.id)) {
         void this.applyRemoteFrame(frame);
         return;
       }
@@ -357,12 +378,69 @@ export class StreamLiveWire {
     }
   }
 
+  private lastBarTime(bars: Bar[]): number {
+    if (!bars.length) return 0;
+    const t = bars[bars.length - 1]?.time;
+    return typeof t === 'number' && Number.isFinite(t) ? t : 0;
+  }
+
+  /** Re-issue resume for every live sub after the socket comes back. */
+  private resumeAll(): void {
+    for (const [subId, seq] of this.appliedSeq) {
+      const bars = this.seriesBars.get(subId) ?? this.scriptCtx.get(subId)?.bars ?? [];
+      try {
+        this.client.resumeSubscription(subId, bars.length, this.lastBarTime(bars), { seq });
+      } catch {
+        /* socket may still be coming up */
+      }
+    }
+  }
+
+  /** Ask the engine to repair a closed bar (close-mismatch / seq gap). */
+  repair(subId: string, fromTime: number): void {
+    try {
+      this.client.requestRepair?.(subId, fromTime);
+    } catch {
+      /* best-effort */
+    }
+  }
+
+  private applySeriesPush(subId: string, frame: WireFrame, payload: Record<string, unknown>): void {
+    const bars = toBars(payload.bars);
+    const seq = typeof frame.seq === 'number' ? frame.seq : 0;
+    if (frame.type === 'full') {
+      if (!bars.length) return;
+      this.seriesBars.set(subId, bars);
+      this.appliedSeq.set(subId, seq);
+      this.handlers.onSeriesFull(bars);
+    } else if (bars.length) {
+      this.appliedSeq.set(subId, seq);
+      this.handlers.onSeriesDelta(bars, true);
+      this.seriesBars.set(subId, mergeTip(this.seriesBars.get(subId) ?? [], bars));
+    } else if (typeof frame.seq === 'number') {
+      this.appliedSeq.set(subId, seq);
+    }
+    this.handlers.onStatus(subId, 'live');
+  }
+
+  private applyScriptPush(subId: string, cached: Record<string, unknown>, via: 'stream-full' | 'stream-delta'): void {
+    const ctx = this.scriptCtx.get(subId);
+    if (!ctx) return;
+    void this.apply(ctx.script, ctx.indicatorId, cached, via, ctx.bars);
+  }
+
   private async applyRemoteFrame(frame: WireFrame): Promise<void> {
     const subId = frame.id;
     if (!subId) return;
-    const applier = this.appliers.get(subId);
-    if (!applier) return;
     const payload = (frame.payload as Record<string, unknown>) ?? {};
+    const applier = this.appliers.get(subId);
+    if (!applier) {
+      if (payload.bars != null || subId.startsWith('series:')) {
+        this.applySeriesPush(subId, frame, payload);
+      }
+      return;
+    }
+    const wasLive = this.appliedSeq.has(subId);
     if (frame.type === 'full') {
       applier.applyFull({
         plots: payload.plots as Record<string, unknown[]> | undefined,
@@ -370,10 +448,12 @@ export class StreamLiveWire {
         count: Number(payload.count ?? 0),
         seq: typeof frame.seq === 'number' ? frame.seq : undefined,
       });
-      if (frame.sessionId && payload.bars) {
-        this.handlers.onSeriesDelta(toBars(payload.bars), true);
-      }
+      if (typeof frame.seq === 'number') this.appliedSeq.set(subId, frame.seq);
       this.handlers.onStatus(subId, 'live');
+      if (wasLive) {
+        const cached = applier.cached;
+        if (cached) this.applyScriptPush(subId, cached, 'stream-full');
+      }
       return;
     }
     const out = applier.applyDelta({
@@ -386,7 +466,20 @@ export class StreamLiveWire {
     });
     if (!out.ok) {
       this.handlers.onStatus(subId, 'degraded', { message: 'delta rejected — resubscribing' });
+      const ctx = this.scriptCtx.get(subId);
+      const bars = ctx?.bars ?? [];
+      try {
+        this.client.resumeSubscription(subId, bars.length, this.lastBarTime(bars), {
+          seq: this.appliedSeq.get(subId) ?? 0,
+        });
+      } catch {
+        /* resume is best-effort; HUD already shows degraded */
+      }
+      return;
     }
+    if (typeof frame.seq === 'number') this.appliedSeq.set(subId, frame.seq);
+    this.handlers.onStatus(subId, 'live');
+    if (!out.replayed) this.applyScriptPush(subId, out.full, 'stream-delta');
   }
 
   release(subId: string): void {
@@ -394,6 +487,7 @@ export class StreamLiveWire {
     this.appliedSeq.delete(subId);
     this.seriesBars.delete(subId);
     this.seriesInflight.delete(subId);
+    this.scriptCtx.delete(subId);
     try {
       this.client.unsubscribe(subId);
     } catch {
@@ -418,7 +512,7 @@ export class StreamLiveWire {
         subId,
         kind: subId.startsWith('series:') ? ('series' as const) : ('script' as const),
         seq,
-        merged: this.appliers.has(subId),
+        merged: this.appliers.has(subId) || this.seriesBars.has(subId),
       }))
       .sort((a, b) => a.subId.localeCompare(b.subId));
     return {
@@ -455,6 +549,7 @@ export class StreamLiveWire {
     this.appliedSeq.clear();
     this.seriesBars.clear();
     this.seriesInflight.clear();
+    this.scriptCtx.clear();
     this.inbox.clear();
     this.inboxWaiters.clear();
     this.failures = 0;
@@ -472,6 +567,7 @@ export class StreamLiveWire {
     this.appliedSeq.clear();
     this.seriesBars.clear();
     this.seriesInflight.clear();
+    this.scriptCtx.clear();
     try {
       this.client.disconnect();
     } catch {

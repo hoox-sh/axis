@@ -12,7 +12,11 @@ function makeHarness() {
   const sent: Array<{ kind: string; id: string }> = [];
   const statuses: Array<{ sub: string; status: string }> = [];
   const unsubscribed: string[] = [];
+  const seriesFull: Bar[][] = [];
+  const seriesDelta: Array<{ bars: Bar[]; append: boolean }> = [];
+  const resumes: Array<{ id: string; count: number; lastTime: number; extra?: Record<string, unknown> }> = [];
   const counters = { disconnects: 0 };
+  let reconnect: (() => void) | undefined;
   const client: WireClient = {
     isOpen: true,
     onFrame: undefined,
@@ -23,15 +27,20 @@ function makeHarness() {
     subscribe(id, kind) {
       sent.push({ kind: `subscribe:${kind}`, id });
     },
-    resumeSubscription() {},
+    resumeSubscription(id, count, lastTime, extra) {
+      resumes.push({ id, count, lastTime, extra });
+    },
     unsubscribe(id) {
       unsubscribed.push(id);
     },
     awaitFrame() {
       return new Promise(() => {});
     },
-    addReconnectHandler() {
-      return () => {};
+    addReconnectHandler(fn) {
+      reconnect = fn;
+      return () => {
+        reconnect = undefined;
+      };
     },
     stats() {
       return { open: true, openedOnce: true, reconnectAttempts: 3, stopped: false };
@@ -39,8 +48,8 @@ function makeHarness() {
   };
   const handlers: WireHandlers = {
     onStatus: (sub, status) => statuses.push({ sub, status }),
-    onSeriesFull: () => {},
-    onSeriesDelta: () => {},
+    onSeriesFull: (bars) => seriesFull.push(bars),
+    onSeriesDelta: (bars, append) => seriesDelta.push({ bars, append }),
     onCloseVerified: () => {},
   };
   const applied: Array<{ via: string }> = [];
@@ -53,7 +62,20 @@ function makeHarness() {
     }) as never,
   );
   const emit = (frame: WireFrame) => client.onFrame!(frame);
-  return { wire, client, sent, statuses, applied, emit, unsubscribed, counters };
+  return {
+    wire,
+    client,
+    sent,
+    statuses,
+    applied,
+    emit,
+    unsubscribed,
+    counters,
+    seriesFull,
+    seriesDelta,
+    resumes,
+    fireReconnect: () => reconnect?.(),
+  };
 }
 
 const BARS: Bar[] = [{ time: 100, open: 1, high: 1, low: 1, close: 1, volume: 1 }];
@@ -217,7 +239,7 @@ describe('live-wire diagnostics (MCP stream.get / stream.reset)', () => {
     expect(state.failures).toBe(0);
     expect(state.stats).toMatchObject({ reconnectAttempts: 3, stopped: false });
     expect(state.subs).toEqual([
-      { subId: 'series:binance|spot|BTCUSDT|1m', kind: 'series', seq: 7, merged: false },
+      { subId: 'series:binance|spot|BTCUSDT|1m', kind: 'series', seq: 7, merged: true },
     ]);
     const json = JSON.stringify(state);
     expect(json).not.toContain('"bars"');
@@ -262,5 +284,69 @@ describe('live-wire diagnostics (MCP stream.get / stream.reset)', () => {
     h.wire.reset();
     expect(h.wire.cooledDown).toBe(false);
     expect(h.wire.snapshotState().failures).toBe(0);
+  });
+});
+
+describe('live-wire P1 series + study push', () => {
+  test('series delta paints without an applier and advances seq', async () => {
+    const h = makeHarness();
+    const p = h.wire.ensureSeries('series:binance|spot|BTC/USDT|1m', {});
+    await tick(); await tick();
+    h.emit({
+      type: 'full',
+      id: 'series:binance|spot|BTC/USDT|1m',
+      sessionId: 'ses',
+      seq: 1,
+      payload: { count: 1, bars: BARS },
+    });
+    await p;
+    const tip: Bar = { time: 160, open: 2, high: 2, low: 2, close: 2, volume: 2 };
+    h.emit({
+      type: 'delta',
+      id: 'series:binance|spot|BTC/USDT|1m',
+      sessionId: 'ses',
+      seq: 2,
+      payload: { bars: [tip], base_index: 1, count: 2, tail_len: 1 },
+    });
+    expect(h.seriesDelta).toEqual([{ bars: [tip], append: true }]);
+    expect(h.wire.snapshotState().subs).toEqual([
+      { subId: 'series:binance|spot|BTC/USDT|1m', kind: 'series', seq: 2, merged: true },
+    ]);
+  });
+
+  test('script delta applies through the bridge without a re-subscribe', async () => {
+    const h = makeHarness();
+    const first = h.wire.evalScript({ subId: 's-1', script: 'indicator() {}', meta: {}, bars: BARS });
+    await tick(); await tick();
+    h.emit({
+      type: 'full',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 5,
+      payload: { count: 1, plots: [[1]], series: { a: [1] } },
+    });
+    await first;
+    expect(h.applied).toEqual([{ via: 'stream-full' }]);
+    h.emit({
+      type: 'delta',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 6,
+      payload: { base_index: 0, count: 1, tail_len: 1, plots: [[2]], series: { a: [2] } },
+    });
+    await tick();
+    expect(h.applied).toEqual([{ via: 'stream-full' }, { via: 'stream-delta' }]);
+    expect(h.sent.filter((s) => s.kind === 'subscribe:script').length).toBe(1);
+    expect(h.wire.snapshotState().subs[0]?.seq).toBe(6);
+  });
+
+  test('reconnect resumes every live subscription', async () => {
+    const h = makeHarness();
+    const p = h.wire.ensureSeries('series:k', {});
+    await tick(); await tick();
+    h.emit({ type: 'full', id: 'series:k', seq: 4, payload: { count: 1, bars: BARS } });
+    await p;
+    h.fireReconnect();
+    expect(h.resumes).toEqual([{ id: 'series:k', count: 1, lastTime: 100, extra: { seq: 4 } }]);
   });
 });

@@ -41,6 +41,7 @@ _Generated/updated: 2026-10-17 · 587 commits · describe-tag: `v2.24.4`_
 
 ### Fixed
 
+- **Live stream P1 (client) — series and study push.** Series `full`/`delta` frames now paint through `onSeriesFull`/`onSeriesDelta` (no applier required) and advance `appliedSeq`. Script deltas call the apply bridge immediately instead of waiting for `scheduleRerun`. A reconnect resumes every live sub; a close mismatch sends `repair`.
 - **Live stream P0 — stop the bleeding (client only).** Venue ticks no longer wait on the engine, the wire no longer re-subscribes or self-extends cooldown, series keys agree with PYNE, and REST fallback no longer looks like a dead EMA:
   - **Paint venue first.** `flushPendingBar` appends the venue bars (including same-slot forming updates) before kicking `streamSeriesTick`. Engine work is fire-and-forget; a later snapshot re-applies the forming tip instead of gating LWC.
   - **`ensureSeries` subscribe-once.** A live series returns the cached snapshot; concurrent ticks join the in-flight wait; `inboxWaiters` fan out instead of stealing. First snapshot still paints; later ticks leave the venue tip alone.

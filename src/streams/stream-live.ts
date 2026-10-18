@@ -275,6 +275,11 @@ function buildWire(): StreamLiveWire {
                 message: 'close mismatch — repair requested',
                 verified: out.verified,
               });
+              try {
+                getWire().repair(seriesSubId(), time);
+              } catch {
+                /* repair is best-effort */
+              }
               return;
             }
             if (out.verified === 'venue' || out.verified === 'proxy') {
