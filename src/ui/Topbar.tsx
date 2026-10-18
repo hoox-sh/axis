@@ -380,7 +380,10 @@ export const Topbar: Component<{
               const live = store.live?.active;
               if (live) stopLive();
               if (autoloadOn()) void loadHistorical({ force: true });
-              if (live) startLive();
+              if (live) {
+                const streamId = store.live.streamId || defaultStreamForSource(store.source);
+                startLive(streamId, store.symbol, store.interval);
+              }
             }}
           >
             <For each={marketsForVenue(store.provider?.venue || 'binance')}>

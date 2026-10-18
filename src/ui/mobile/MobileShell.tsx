@@ -310,7 +310,10 @@ export const MobileHeader: Component<MobileChromeProps> = (_props) => {
               const live = store.live?.active;
               if (live) stopLive();
               void loadSymbolData(store.symbol, store.interval, store.source);
-              if (live) startLive();
+              if (live) {
+                const streamId = store.live.streamId || defaultStreamForSource(store.source);
+                startLive(streamId, store.symbol, store.interval);
+              }
             }}
           >
             <For each={marketsForVenue(store.provider?.venue || 'binance')}>
