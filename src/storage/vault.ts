@@ -18,13 +18,16 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Session secret vault for storage bearer keys (cloud Worker API key, git
- * PAT, agent key).
+ * Durable secret vault for storage bearer keys (cloud Worker API key, git
+ * PAT, agent key, engine API keys).
  *
  * Secrets MUST NEVER appear in the durable `localStorage` app-state payload
- * (`buildPersistPayload` strips them). This vault keeps them in process
- * memory, mirrored to `sessionStorage` so a reload in the same tab keeps
- * working — a new tab / browser restart requires re-entry. Never `localStorage`.
+ * (`buildPersistPayload` strips them — that JSON is what workspace snapshots
+ * and error-share walk). This vault keeps them in process memory, mirrors
+ * them to `sessionStorage` for same-tab reloads, and to a dedicated
+ * `localStorage` key so a new tab, PWA update, or browser restart still has
+ * the Worker / engine keys. Exchange CEX keys stay in the RAM-only credentials
+ * vault.
  *
  * Boot migration: blobs written before stripping still carry plaintext keys
  * under `pluginsConfig`. {@link migratePlaintextSecrets} moves them here and
@@ -41,6 +44,8 @@
 
 /** Session-storage namespace (per-tab, cleared with the session). */
 export const VAULT_SESSION_PREFIX = 'axis.session-secret.';
+/** Dedicated durable bag — not the app-state `STORAGE_KEY` payload. */
+export const VAULT_LOCAL_KEY = 'axis.secret-vault.v1';
 
 const memory = new Map<string, string>();
 const listeners = new Set<() => void>();
@@ -82,6 +87,41 @@ function clearSession(key: string): void {
   }
 }
 
+function readLocalVault(): Record<string, string> {
+  try {
+    if (typeof localStorage === 'undefined' || localStorage == null) return {};
+    const raw = localStorage.getItem(VAULT_LOCAL_KEY);
+    if (!raw) return {};
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof k === 'string' && k && typeof v === 'string' && v.trim()) out[k] = v;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function writeLocalSlot(key: string, value: string | null): void {
+  try {
+    if (typeof localStorage === 'undefined' || localStorage == null) return;
+    const bag = readLocalVault();
+    if (value == null || !value.trim()) delete bag[key];
+    else bag[key] = value;
+    if (Object.keys(bag).length === 0) localStorage.removeItem(VAULT_LOCAL_KEY);
+    else localStorage.setItem(VAULT_LOCAL_KEY, JSON.stringify(bag));
+  } catch {
+    /* private mode / quota — memory + session still work for this page */
+  }
+}
+
+function readLocalSlot(key: string): string {
+  const v = readLocalVault()[key];
+  return typeof v === 'string' ? v : '';
+}
+
 /** Subscribe to vault changes (settings forms). Returns an unsubscribe. */
 export function subscribeSecrets(cb: () => void): () => void {
   listeners.add(cb);
@@ -90,7 +130,7 @@ export function subscribeSecrets(cb: () => void): () => void {
   };
 }
 
-/** Store a secret (memory + session mirror). Empty values clear the slot. */
+/** Store a secret (memory + session + durable local). Empty values clear the slot. */
 export function putSecret(key: string, value: string): void {
   const id = String(key || '').trim();
   if (!id) return;
@@ -101,10 +141,11 @@ export function putSecret(key: string, value: string): void {
   }
   memory.set(id, v);
   writeSession(id, v);
+  writeLocalSlot(id, v);
   notify();
 }
 
-/** Read a secret: memory first, then the same-tab session mirror. */
+/** Read a secret: memory, same-tab session, then durable local. */
 export function getSecret(key: string): string {
   const id = String(key || '').trim();
   if (!id) return '';
@@ -113,7 +154,14 @@ export function getSecret(key: string): string {
   const sess = readSession(id);
   if (sess) {
     memory.set(id, sess);
+    writeLocalSlot(id, sess);
     return sess;
+  }
+  const local = readLocalSlot(id);
+  if (local) {
+    memory.set(id, local);
+    writeSession(id, local);
+    return local;
   }
   return '';
 }
@@ -123,12 +171,13 @@ export function hasSecret(key: string): boolean {
   return getSecret(key) !== '';
 }
 
-/** Drop a secret from memory and the session mirror. */
+/** Drop a secret from memory, session, and durable local. */
 export function forgetSecret(key: string): void {
   const id = String(key || '').trim();
   if (!id) return;
   memory.delete(id);
   clearSession(id);
+  writeLocalSlot(id, null);
   notify();
 }
 
@@ -272,8 +321,8 @@ export function getAgentApiKey(pluginsConfig: unknown): string {
  * bags (written by legacy `src/ui` forms straight into the store) into the
  * session vault. Called on every durable persist before
  * {@link sanitizePluginsConfigForPersist} strips them from the JSON payload,
- * so a reload in the same tab keeps working without ever writing secrets to
- * `localStorage`. Returns the slots that were (re)captured.
+ * so a reload (including a new tab / PWA update) keeps working without
+ * writing secrets into the app-state JSON. Returns the slots that were (re)captured.
  */
 export function captureSecretsFromBags(pluginsConfig: unknown): string[] {
   const captured: string[] = [];
@@ -316,10 +365,9 @@ export function getGitToken(pluginsConfig: unknown): string {
 }
 
 /**
- * Engine API key for `engineId`: session vault first, `pluginsConfig` bag
- * fallback. The durable payload strips every `apiKey`, so without the vault an
- * engine key vanished on every reload (the Pro API then answered 401 on
- * `/data/*` and key-gated runs). Unknown engines keep the plain bag read.
+ * Engine API key for `engineId`: vault first, `pluginsConfig` bag fallback.
+ * The app-state payload strips every `apiKey`; the vault is the durable home.
+ * Unknown engines keep the plain bag read.
  */
 export function getEngineApiKey(pluginsConfig: unknown, engineId: string): string {
   const id = String(engineId || '').trim();

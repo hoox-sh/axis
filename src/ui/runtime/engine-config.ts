@@ -142,7 +142,7 @@ export function saveEngineConfig(input: SaveEngineConfigInput): void {
     setStore('pluginsConfig', key, reconcile(nextCfg));
   }
 
-  // Mirror the key into the session vault (survives reloads in this tab; the
+  // Mirror the key into the secret vault (durable local + session; the
   // durable payload never carries it).
   if (writeApiKey) setEngineApiKey(engine, String(input.apiKey || ''));
 

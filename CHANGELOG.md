@@ -15,6 +15,10 @@ _Generated/updated: 2026-10-18 · 603 commits · describe-tag: `v2.24.5`_
 
 ## [Unreleased]
 
+### Fixed
+
+- **Worker and engine API keys survive a new tab, PWA update, and browser restart.** The secret vault was memory + `sessionStorage` only, and persist stripped `apiKey` from the app-state JSON — so the first hard reload after that migration (or the 2.24.6 update) looked like the app deleted the keys. They now also live in a dedicated `localStorage` bag (`axis.secret-vault.v1`), still out of workspace snapshots and the main persist payload. Exchange CEX keys stay session-only.
+
 ## [2.24.6] — 2026-10-18
 
 ### Added

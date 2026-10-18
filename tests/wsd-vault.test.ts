@@ -23,6 +23,9 @@ import {
   getAgentApiKey,
   getEngineApiKey,
   setEngineApiKey,
+  _clearSecretMemoryForTests,
+  VAULT_SESSION_PREFIX,
+  VAULT_LOCAL_KEY,
   CLOUD_API_KEY_SLOT,
   GIT_TOKEN_SLOT,
   ENGINE_SERVER_API_KEY_SLOT,
@@ -58,6 +61,21 @@ describe('session vault', () => {
     putSecret('wsd.slot', 'x');
     putSecret('wsd.slot', '   ');
     expect(hasSecret('wsd.slot')).toBe(false);
+  });
+
+  it('survives a new tab: memory and session empty, durable local still serves', () => {
+    putSecret(CLOUD_API_KEY_SLOT, 'pn_keep_across_restart');
+    _clearSecretMemoryForTests();
+    try {
+      sessionStorage.removeItem(VAULT_SESSION_PREFIX + CLOUD_API_KEY_SLOT);
+    } catch {
+      /* ignore */
+    }
+    expect(getSecret(CLOUD_API_KEY_SLOT)).toBe('pn_keep_across_restart');
+    const bag = JSON.parse(String(localStorage.getItem(VAULT_LOCAL_KEY) || '{}')) as Record<string, string>;
+    expect(bag[CLOUD_API_KEY_SLOT]).toBe('pn_keep_across_restart');
+    forgetSecret(CLOUD_API_KEY_SLOT);
+    expect(localStorage.getItem(VAULT_LOCAL_KEY)).toBeNull();
   });
 
   it('migrates plaintext bags into the vault', () => {

@@ -103,7 +103,7 @@ export function resolveCloudConfig(config?: Record<string, unknown>): CloudConfi
 
 /**
  * Persist the Worker URL under `pluginsConfig['storage:cloud']` and keep the
- * Bearer key in the session vault only (never in the durable payload —
+ * Bearer key in the secret vault (never in the app-state JSON —
  * `buildPersistPayload` strips secret keys). The in-memory bag keeps a copy
  * for the running session so legacy `src/ui` forms keep working.
  */
