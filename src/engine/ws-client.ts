@@ -94,7 +94,7 @@ const DEFAULTS = {
  * Pinned contract (final/plan.mdx §6): `${origin}/ws/live`. Any path on the
  * configured endpoint is dropped — the live route lives at the origin root.
  */
-export function endpointToRedesign2WsUrl(endpoint: string): string {
+export function endpointToRedesign2WsUrl(endpoint: string, authToken?: string): string {
   const base = endpoint.replace(/\/$/, '');
   let u: URL;
   try {
@@ -103,8 +103,13 @@ export function endpointToRedesign2WsUrl(endpoint: string): string {
     u = new URL(`http://${base}`);
   }
   u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:';
-  const origin = `${u.protocol}//${u.host}`;
-  return `${origin}/ws/live`;
+  u.pathname = '/ws/live';
+  u.search = '';
+  u.hash = '';
+  const token = String(authToken || '').trim();
+  // Browser WS cannot set Authorization; the engine accepts ?api_key= on upgrade.
+  if (token) u.searchParams.set('api_key', token);
+  return u.toString();
 }
 
 export class Redesign2WsClient {
@@ -131,11 +136,6 @@ export class Redesign2WsClient {
   >();
   private readonly reconnectHandlers = new Set<() => void>();
   private openedOnce = false;
-  private authWaiter: {
-    resolve: () => void;
-    reject: (err: Error) => void;
-    timer: ReturnType<typeof setTimeout>;
-  } | null = null;
 
   constructor(options: Redesign2WsClientOptions) {
     this.options = {
@@ -148,7 +148,7 @@ export class Redesign2WsClient {
       heartbeatIntervalMs: options.heartbeatIntervalMs ?? DEFAULTS.heartbeatIntervalMs,
       pongTimeoutMs: options.pongTimeoutMs ?? DEFAULTS.pongTimeoutMs,
     };
-    this.url = endpointToRedesign2WsUrl(options.endpoint);
+    this.url = endpointToRedesign2WsUrl(options.endpoint, options.authToken);
   }
 
   get isOpen(): boolean {
@@ -263,27 +263,18 @@ export class Redesign2WsClient {
             }
           }
         };
-        if (!this.options.authToken) {
-          fireResume();
-          resolve();
-          return;
+        if (this.options.authToken) {
+          this.send({
+            type: 'auth',
+            ts: Date.now(),
+            payload: { token: this.options.authToken },
+          });
         }
-        // Subscribe before auth.ok is UNAUTHORIZED; hold connect() until the handshake.
-        this.send({
-          type: 'auth',
-          ts: Date.now(),
-          payload: { token: this.options.authToken },
-        });
-        this.authWaiter = {
-          resolve: () => {
-            fireResume();
-            resolve();
-          },
-          reject,
-          timer: setTimeout(() => {
-            this.clearAuthWaiter(new Error('Redesign2 auth timeout'));
-          }, this.options.connectTimeoutMs),
-        };
+        // Upgrade already carries ?api_key= (handshake). Do not block connect on
+        // auth.ok — production timed out here while the engine was still hashing
+        // the key, and subscribe never ran.
+        fireResume();
+        resolve();
       };
 
       ws.onerror = () => {
@@ -430,7 +421,6 @@ export class Redesign2WsClient {
     this.stopped = true;
     this.clearReconnect();
     this.stopHeartbeat();
-    this.clearAuthWaiter(new Error('Redesign2WsClient stopped'));
     this.dropPending(new Error('Redesign2WsClient stopped'));
     if (this.ws) {
       try {
@@ -468,17 +458,6 @@ export class Redesign2WsClient {
         console.warn('[engine] skipping malformed frame', frame?.type);
       }
       return;
-    }
-    if (frame.type === 'auth.ok') {
-      this.clearAuthWaiter();
-    } else if (frame.type === 'error' && this.authWaiter) {
-      const rec = parsed as Record<string, unknown>;
-      const payload = rec.payload && typeof rec.payload === 'object' ? (rec.payload as Record<string, unknown>) : rec;
-      const code = String(payload.code ?? rec.code ?? '');
-      if (code === 'UNAUTHORIZED') {
-        this.clearAuthWaiter(new Error(String(payload.message ?? rec.message ?? 'UNAUTHORIZED')));
-        return;
-      }
     }
     if (frame.id) {
       const waiter = this.pending.get(frame.id);
@@ -553,15 +532,6 @@ export class Redesign2WsClient {
         /* connect handles retry */
       });
     }, delay);
-  }
-
-  private clearAuthWaiter(err?: Error): void {
-    const waiter = this.authWaiter;
-    if (!waiter) return;
-    this.authWaiter = null;
-    clearTimeout(waiter.timer);
-    if (err) waiter.reject(err);
-    else waiter.resolve();
   }
 
   private clearReconnect(): void {

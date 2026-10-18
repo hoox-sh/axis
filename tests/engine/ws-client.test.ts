@@ -12,6 +12,9 @@ describe('redesign2 websocket transport', () => {
     expect(endpointToRedesign2WsUrl('http://127.0.0.1:5002')).toBe(
       'ws://127.0.0.1:5002/ws/live',
     );
+    expect(endpointToRedesign2WsUrl('https://pynescript.online', 'pn_secret')).toBe(
+      'wss://pynescript.online/ws/live?api_key=pn_secret',
+    );
   });
 
   test('constructs without opening a socket', () => {
@@ -213,7 +216,7 @@ describe('redesign2 socket ownership', () => {
     }
   });
 
-  test('connect with a token waits for auth.ok before resolving', async () => {
+  test('connect with a token puts api_key on the URL, sends auth, and resolves on open', async () => {
     restore = ManualSocket.install();
     const client = new Redesign2WsClient({
       endpoint: 'https://example.test',
@@ -221,19 +224,12 @@ describe('redesign2 socket ownership', () => {
       connectTimeoutMs: 200,
       heartbeatIntervalMs: 60_000,
     });
+    expect(client.urlValue).toContain('api_key=tok');
     const opened = client.connect();
     const ws = ManualSocket.instances[0]!;
     ws.open();
-    let done = false;
-    void opened.then(() => {
-      done = true;
-    });
-    await new Promise((r) => setTimeout(r, 10));
-    expect(done).toBe(false);
-    expect(ws.sent.map((s) => (JSON.parse(s) as { type: string }).type)).toEqual(['auth']);
-    ws.push({ type: 'auth.ok' });
     await opened;
-    expect(done).toBe(true);
+    expect(ws.sent.map((s) => (JSON.parse(s) as { type: string }).type)).toEqual(['auth']);
     expect(client.isOpen).toBe(true);
     client.disconnect();
   });
