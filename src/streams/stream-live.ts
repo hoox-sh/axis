@@ -43,7 +43,6 @@ import { Redesign2WsClient } from '../engine/ws-client';
 import { routeEngineRun } from '../engine/router';
 import { getCachedEngineCapabilities } from '../engines/catalog';
 import type { DataSeriesKey } from '../engines/data-sessions';
-import { driveEngineSeries } from '../engines/series-drive';
 import { engineWindowBehindChart, newestBarTime } from '../engines/series-freshness';
 import { engineSeriesStale, noteStaleEngineSeries } from '../engines/series-repair';
 import { getActiveEngineConfig } from '../plugins/active';
@@ -158,37 +157,6 @@ function reportStaleEngine(reason: string, engineNewest: number | null): void {
 }
 
 /**
- * Drive the engine's series so the subscription has fresh bars to replicate.
- *
- * Fire-and-forget on purpose: the paint path stays bound to the venue flush,
- * while the drive can cost a REST round trip plus the engine's own upstream
- * fetch. The next flush reads the advanced snapshot, and a late/stale snapshot
- * can never back-date the chart ({@link engineSeriesPaintable}). See
- * `engines/series-drive.ts` for why the stream plane needs a drive at all.
- */
-function driveSeriesFromVenue(marketNow: number): void {
-  const cfg = getActiveEngineConfig() || {};
-  const endpoint = String(cfg.endpoint || store.endpoint || '');
-  if (!endpoint) return;
-  void driveEngineSeries({
-    endpoint,
-    apiKey: String(cfg.apiKey || ''),
-    key: chartSeriesKeyObject(),
-    marketNow,
-  })
-    .then((outcome) => {
-      if (outcome !== 'stale') return;
-      // The engine took the tick but its own feed advanced nothing: report and
-      // repair through the broker (which also covers engines with no
-      // `data_session`, where the drive itself cannot run).
-      reportStaleEngine('engine feed stalled — series not advancing', newestBarTime(store.bars) || null);
-    })
-    .catch(() => {
-      /* best-effort drive; the staleness report + repair stays the backstop */
-    });
-}
-
-/**
  * True when `bars` continues the chart tail (same slot or the very next) — safe
  * to append per bar. A delta that jumps further would open a hole in the series;
  * the per-tick `ensureSeries` full snapshot reconciles it instead.
@@ -233,19 +201,14 @@ function buildWire(): StreamLiveWire {
       onSeriesDelta: (bars, append) => {
         if (!bars.length) return;
         if (!engineSeriesPaintable(bars)) return;
-        if (append && bars.length <= 4) {
-          // An append that does not continue the tail would punch a hole in the
-          // series — skip it and let the next full snapshot reconcile.
-          if (!continuesChartTail(bars)) return;
-          const manager = getManager();
-          for (const bar of bars) {
-            appendBar(bar);
-            if (manager) manager.appendBar(bar);
-          }
-          return;
+        // Ticks never rewrite the window (P3): only a snapshot/repair uses
+        // setData. Same-slot or next-slot tips path-set through appendBar.
+        if (!append || bars.length > 4 || !continuesChartTail(bars)) return;
+        const manager = getManager();
+        for (const bar of bars) {
+          appendBar(bar);
+          if (manager) manager.appendBar(bar);
         }
-        setBarsQuiet(bars);
-        setDataToChart(bars, { fit: false, clearMarkers: false });
       },
       onCloseVerified: (time, _result, ohlcv) => {
         void (async () => {
@@ -380,11 +343,6 @@ export async function streamSeriesTick(marketNow = 0): Promise<boolean> {
   const subId = seriesSubId();
   try {
     const before = toBarTime(store.bars);
-    // Keep the engine's series moving before we read it: the subscription can
-    // only replicate what that series holds, and the engine's own advance has
-    // been observed stalled (see engines/series-drive.ts). Not awaited — the
-    // paint stays bound to this venue flush.
-    driveSeriesFromVenue(marketNow);
     const alreadyLive = w.isSubscribed(subId);
     const bars = await w.ensureSeries(subId, seriesMeta());
     if (alreadyLive) {

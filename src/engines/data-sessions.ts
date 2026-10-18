@@ -400,7 +400,10 @@ export async function tickDataSession(
       return {
         ok: false,
         error: errorMessage(r, 'data session tick failed'),
-        gone: r.status === 404 || code === 'NO_SESSION',
+        gone:
+          r.status === 404 ||
+          code === 'NO_SESSION' ||
+          code === 'SESSION_KEY_MISMATCH',
       };
     }
     return { ok: true, payload: r.body };

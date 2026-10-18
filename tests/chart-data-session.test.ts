@@ -134,6 +134,27 @@ describe('tickChartDataSession', () => {
     expect(second.ok).toBe(false);
     expect(creates).toBe(2); // recreated after the 404
   });
+
+  it('drops a session bound to a different series key so the next tick recreates it', async () => {
+    let creates = 0;
+    const rec = recorder((c) => {
+      if (c.path === '/data/session' && !c.path.includes('/tick')) {
+        creates++;
+        return jsonResponse({ status: 'success', session_id: `chart${creates}` });
+      }
+      if (String(c.path).endsWith('/tick')) {
+        return jsonResponse({ status: 'error', code: 'SESSION_KEY_MISMATCH', message: 'key' }, 409);
+      }
+      return jsonResponse({ status: 'success' });
+    });
+    restore = rec.restore;
+
+    const first = await tickChartDataSession(ENDPOINT, '', KEY);
+    expect(first.ok).toBe(false);
+    const second = await tickChartDataSession(ENDPOINT, '', KEY);
+    expect(second.ok).toBe(false);
+    expect(creates).toBe(2);
+  });
 });
 
 describe('releaseChartDataSession', () => {
