@@ -9,11 +9,13 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-10-17 · 587 commits · describe-tag: `v2.24.4`_
+_Generated/updated: 2026-10-18 · 603 commits · describe-tag: `v2.24.5`_
 
 ---
 
 ## [Unreleased]
+
+## [2.24.6] — 2026-10-18
 
 ### Added
 
@@ -1598,12 +1600,15 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-10 (106 commits)
+### 2026-10 (122 commits)
 
 #### Features
 
+- `0984b889` (2026-10-17) — feat(mcp): live-plane capabilities — chart.lag/bars, engine.*, stream.*
 - `5be393e1` (2026-10-16) — feat(engine): three-tier close verification with strength surfacing (F-28)
 - `490051fe` (2026-10-16) — feat(engine): engine-owned stream data plane (F-01–F-20)
 - `035d9659` (2026-10-16) — feat(maintenance): build-time maintenance mode page (VITE_MAINTENANCE_MODE)
@@ -1641,6 +1646,17 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `950957d2` (2026-10-18) — fix(streams): wait for auth.ok and cap live subscribe history
+- `a89e66e9` (2026-10-18) — fix(streams): pair-form REST keys and pause live-wire reconnects
+- `51b290b1` (2026-10-18) — fix(streams): live P3 — no engine drive on venue ticks
+- `8b169927` (2026-10-18) — fix(streams): live P1 — series/study push apply and reconnect resume
+- `f3826c4b` (2026-10-18) — fix(streams): live P0 — venue-first paint, subscribe-once, pair-form keys
+- `fa885c34` (2026-10-17) — fix(streams): append venue forming bar after engine snapshot in stream mode
+- `846ab06d` (2026-10-17) — fix(streams): keep the venue's forming tip across engine-owned repaints
+- `020f2c12` (2026-10-17) — fix(engine): drive the engine's series from the stream plane
+- `158dd86a` (2026-10-17) — fix(engine): ignore a superseded engine socket's events and frames
+- `675364d4` (2026-10-17) — fix(chart): prune co-painted series on a moved window and paint new engine windows
+- `3bf910e1` (2026-10-17) — fix(engines): repair a stale engine series instead of back-dating the chart
 - `6008eb54` (2026-10-17) — fix(engine): authenticate the live socket and accept flat engine error frames
 - `ec33bdc0` (2026-10-17) — fix(chart): close the pre-paint hole in the co-painted candle-range clamp
 - `0b419b89` (2026-10-17) — fix(live): hoist appendVenueBars above stream-route early return (TDZ crash)
@@ -1693,6 +1709,8 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Documentation
 
+- `6f4dfedc` (2026-10-17) — docs: refresh landing index to 2.24.5 with a What's new section
+- `9719ad50` (2026-10-17) — docs: regenerate llm.txt + llms.txt from the pynescript pipeline
 - `c8895052` (2026-10-13) — docs(engine): mark migration steps done; note coalescing is the epoch mechanism
 - `c6770b50` (2026-10-13) — docs: apply Cloudflare® / TradingView® / Pine Script™ brand marks across docs
 - `b3610844` (2026-10-13) — docs: use Cloudflare® brand marks in worker + cli docs
@@ -1711,6 +1729,8 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Chores
 
+- `632aaca3` (2026-10-17) — chore(pyne-wheel): vendor PYNE 0.6.12 for the in-browser Pyodide engine
+- `d946a42e` (2026-10-17) — chore(release): AXIS 2.24.5
 - `13d89fdd` (2026-10-15) — chore(release): AXIS v2.24.2 — engine data-plane fixes
 - `6bb1c521` (2026-10-15) — chore(release): AXIS v2.24.1 — engine live-mode fixes
 - `7f16933c` (2026-10-14) — chore(docs): regenerate llm packs with the fixed identifier minifier
