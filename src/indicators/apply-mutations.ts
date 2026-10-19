@@ -203,7 +203,7 @@ export function applyChartMutations(ctx: ChartMutationContext): void {
   if (!ctx.overlay && ctx.paneId !== 'price') {
     const owner = ctx.indicatorId ?? EDITOR_RUN_KEY;
     try {
-      ctx.manager.removeOverlaysForOwner?.('price', owner);
+      ctx.manager.removeOverlaysForOwner?.('price', owner, { keepMarkers: true });
       // Also drop legacy unowned keys for these plot names
       const pricePane = ctx.manager.getPane('price');
       if (pricePane) {

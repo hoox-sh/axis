@@ -102,7 +102,16 @@ function barCloseAt(
   barIndex: number | undefined,
 ): number | undefined {
   if (!bars?.length) return undefined;
-  // Prefer bar_index (pyne always stamps it; more reliable than a broken bar_time)
+  // The **absolute time** identifies the bar. `bar_index` is relative to the
+  // window the engine evaluated, and the chart window slides (it drops its
+  // head on every new bar) — so an index can point at a different bar in the
+  // current series. An exact time match therefore wins over the index.
+  if (barTime != null && Number.isFinite(barTime) && barTime !== 0) {
+    const aligned = alignTimeToBars(barTime, bars);
+    const byTime = bars.find((b) => b.time === aligned);
+    if (byTime && Number.isFinite(byTime.close)) return byTime.close;
+  }
+  // No usable time — the index is the only anchor left.
   if (
     barIndex != null &&
     Number.isFinite(barIndex) &&
@@ -115,8 +124,6 @@ function barCloseAt(
   // bar_time 0 is a missing/placeholder — do not snap every event to the first bar
   if (barTime != null && Number.isFinite(barTime) && barTime !== 0) {
     const aligned = alignTimeToBars(barTime, bars);
-    const byTime = bars.find((b) => b.time === aligned);
-    if (byTime && Number.isFinite(byTime.close)) return byTime.close;
     // nearest bar within 2× median span
     let best: Bar | undefined;
     let bestD = Infinity;
@@ -301,12 +308,25 @@ export function normalizeStrategyEvents(
 }
 
 /**
- * Resolve signal bar index for an event (bar_index preferred, else time match).
+ * Resolve signal bar index for an event.
+ *
+ * The **absolute time** wins when it resolves to a bar in this series:
+ * `bar_index` is relative to the window the engine evaluated, and the chart
+ * window slides (it drops its head on every new bar), so an index can point
+ * at a different bar in the current series — every fill would land one bar
+ * early and the PnL would be computed from the wrong bars.
+ *
  * Nearest-bar fallback only when within 2× median bar span (avoids snapping
  * unrelated times onto bar 0 and wiping OHLC-derived prices).
  */
 export function signalBarIndex(ev: StrategyEvent, bars: Bar[]): number | null {
   if (!bars.length) return null;
+  const t = timeOfEvent(ev);
+  if (t != null && Number.isFinite(t) && t !== 0) {
+    const aligned = alignTimeToBars(t, bars);
+    const exact = bars.findIndex((b) => b.time === aligned);
+    if (exact >= 0) return exact;
+  }
   if (
     ev.bar_index != null &&
     Number.isFinite(ev.bar_index) &&
@@ -315,7 +335,6 @@ export function signalBarIndex(ev: StrategyEvent, bars: Bar[]): number | null {
   ) {
     return Math.trunc(ev.bar_index);
   }
-  const t = timeOfEvent(ev);
   if (t == null || !Number.isFinite(t)) return null;
   const aligned = alignTimeToBars(t, bars);
   const exact = bars.findIndex((b) => b.time === aligned);

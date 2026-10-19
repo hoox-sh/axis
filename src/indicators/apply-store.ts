@@ -50,6 +50,7 @@ import {
   type PlotMetaEntry,
 } from '../results/plot-visuals';
 import { PLOT_PALETTE } from '../chart/series-factory';
+import { plotDisplayHas, PLOT_DISPLAY } from '../results/plot-visuals';
 import { normalizeStrategyEvents, eventsToMarkers } from '../results/events';
 import { resolvePineColor } from '../results/pine-color';
 import type { RunOptions, RunResult } from './runner';
@@ -165,19 +166,27 @@ export function updateIndicatorStore(ctx: StoreUpdateContext): boolean {
       try {
         const mgr = getManager();
         if (mgr?.getPane?.(ctx.paneId) && isRunEpochCurrent(ctx.epoch)) {
-          mgr.removeOverlaysForOwner?.(ctx.paneId, EDITOR_RUN_KEY);
+          mgr.removeOverlaysForOwner?.(ctx.paneId, EDITOR_RUN_KEY, { keepMarkers: true });
           mgr.syncOverlayLines?.(ctx.paneId, ctx.overlayLines, { ownerId: newId });
           if (typeof mgr.syncOverlayOhlc === 'function') {
             mgr.syncOverlayOhlc(ctx.paneId, ctx.overlayOhlc, { ownerId: newId });
           }
           if (typeof mgr.syncBgcolorBands === 'function') {
             const bgBands = ctx.split.bgcolors
+              .filter(({ meta }) => plotDisplayHas(meta.display, PLOT_DISPLAY.pane))
               .map(({ key, values, meta }) => ({
                 name: key,
                 data: bgcolorSeriesToHistogramData(ctx.ohlcvTimes, values, meta.color),
               }))
               .filter((b) => b.data.length > 0);
-            mgr.syncBgcolorBands(bgBands, { ownerId: newId });
+            // The band belongs on the script's own pane (the price pane for an
+            // overlay script). Without the pane it landed on the price pane,
+            // where the removal loop (which only inspects the target pane)
+            // never removed it — a permanent duplicate band.
+            mgr.syncBgcolorBands(bgBands, {
+              ownerId: newId,
+              paneId: ctx.overlay ? 'price' : ctx.paneId,
+            });
           }
           // Trade markers / plotshape / Pine SVG were set under EDITOR_RUN_KEY
           try {

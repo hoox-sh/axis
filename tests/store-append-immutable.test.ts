@@ -136,9 +136,11 @@ describe('chart window helpers', () => {
     expect(sliceToChartWindow(series(2))).toHaveLength(2);
   });
 
-  it('treats a zero window as "no cap"', () => {
+  it('falls back to the default for a zero window', () => {
+    // The persisted setting clamps 0 to the default, so an unbounded chart
+    // window is never reachable from the UI.
     setStore('rollingWindowBars', 0);
-    expect(chartWindowLimit()).toBe(Number.POSITIVE_INFINITY);
+    expect(chartWindowLimit()).toBe(10_000);
   });
 
   it('falls back to the default for junk', () => {

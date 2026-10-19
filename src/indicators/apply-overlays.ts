@@ -160,6 +160,11 @@ export function buildOverlayPayloads(ctx: OverlayBuildContext): OverlayBuildOutc
         const first = data.find((d) => d.value != null && Number.isFinite(d.value));
         if (first?.value != null) price = first.value;
       }
+      // The palette index follows the **declaration order**, so a hidden or
+      // empty plot keeps its slot: skipping it shifted the colour of every
+      // later plot of the same script.
+      const paletteColor = PLOT_PALETTE[colorIdx % PLOT_PALETTE.length];
+      colorIdx += 1;
       // Need at least one real sample (or hline price); pure-whitespace series skip
       if (!lineDataHasSample(data) && !(isHline && price != null)) continue;
       // display.data_window / display.none: keep series for Data Window, skip pane
@@ -168,9 +173,8 @@ export function buildOverlayPayloads(ctx: OverlayBuildContext): OverlayBuildOutc
       const color = pickOverlayColor(
         userPlotColors[k]?.color,
         meta?.color,
-        PLOT_PALETTE[colorIdx % PLOT_PALETTE.length],
+        paletteColor,
       );
-      colorIdx += 1;
       overlayLines.push({
         name: k,
         data,

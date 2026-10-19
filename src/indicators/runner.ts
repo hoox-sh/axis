@@ -172,11 +172,16 @@ export function _resetOhlcvTimesCacheForTests(): void {
 export function applyRollingWindow(
   bars: import('../store/types').Bar[],
 ): import('../store/types').Bar[] {
-  // The engine window and the chart window are the same number
-  // (`chartWindowLimit`): the engine must evaluate exactly what the chart
-  // shows, or the two axes drift apart.
+  // `0` is the documented "no cap" escape hatch. The persisted setting is
+  // clamped (so it never reaches the store as 0), and a direct store write
+  // that lands on 0 must not silently disable the guard either — the engine
+  // simply gets everything, while the chart keeps its own bounded window.
+  const raw = Number(store.rollingWindowBars);
+  if (!Number.isFinite(raw) || raw <= 0) return bars;
+  // The cap is the **chart** window ({@link chartWindowLimit}): the engine
+  // evaluates exactly the bars the chart shows, so the two axes can never
+  // drift apart.
   const limit = chartWindowLimit();
-  if (!Number.isFinite(limit) || limit <= 0) return bars;
   if (bars.length <= limit) return bars;
   return bars.slice(bars.length - limit);
 }
@@ -1193,19 +1198,6 @@ async function runAndApplyInner(
   // Do not auto-open Scriptlogs aggressively; panel is user-toggled.
   if (result.status === 'error') return result;
 
-  try {
-    const last = bars.length ? bars[bars.length - 1] : undefined;
-    const lastClose = last && Number.isFinite(Number(last.close)) ? Number(last.close) : undefined;
-    notifyPineAlertsFromRun(result, {
-      indicatorId: indicatorId ?? EDITOR_RUN_KEY,
-      lastBarIndex: bars.length ? bars.length - 1 : undefined,
-      price: lastClose,
-      symbol: store.symbol,
-    });
-  } catch {
-    /* Pine alerts must not break chart apply */
-  }
-
   // Hide / detach after the engine returned: do not resurrect plots.
   if (indicatorId && !appliedScriptStillOnChart(indicatorId)) {
     try {
@@ -1218,6 +1210,21 @@ async function runAndApplyInner(
       ...result,
       meta: { ...result.meta, skipped: 'hidden' },
     };
+  }
+
+  // Pine alerts run **after** the visibility check: a script that was hidden
+  // mid-run must not evaluate and deliver its alerts.
+  try {
+    const last = bars.length ? bars[bars.length - 1] : undefined;
+    const lastClose = last && Number.isFinite(Number(last.close)) ? Number(last.close) : undefined;
+    notifyPineAlertsFromRun(result, {
+      indicatorId: indicatorId ?? EDITOR_RUN_KEY,
+      lastBarIndex: bars.length ? bars.length - 1 : undefined,
+      price: lastClose,
+      symbol: store.symbol,
+    });
+  } catch {
+    /* Pine alerts must not break chart apply */
   }
 
   const manager = getManager();
@@ -1357,7 +1364,7 @@ async function runAndApplyInner(
         indicatorId,
         forceFull: opts.liveTick !== true,
       });
-      applyStrategyMarkers({ manager, result, scriptType, silent, indicatorId });
+      applyStrategyMarkers({ manager, result, scriptType, silent, indicatorId, bars });
 
       // Debug pins from logs (bar_index/time) — independent of trade/shape lists
       applyDebugPinsToChart();

@@ -46,10 +46,18 @@ export interface LiveBarStreamCtx {
   interval?: string;
 }
 
-function lastBars(): EvaluateBar[] {
+/**
+ * The recent bars an alert condition is evaluated against.
+ *
+ * `pending` is the bar the live tick carries. The store append happens
+ * *after* the alert hook, so without it the context was one bar behind the
+ * price — a condition on `bar.open` / `bar.high` / `bar.low` saw the
+ * previous candle.
+ */
+function lastBars(pending?: { close?: number; open?: number; high?: number; low?: number; time?: number } | null): EvaluateBar[] {
   const bars = store.bars;
-  if (!Array.isArray(bars) || bars.length === 0) return [];
-  const slice = bars.length > LAST_BARS ? bars.slice(-LAST_BARS) : bars;
+  const list = Array.isArray(bars) ? bars : [];
+  const slice = list.length > LAST_BARS ? list.slice(-LAST_BARS) : list;
   const out: EvaluateBar[] = [];
   for (const b of slice) {
     if (!b) continue;
@@ -62,10 +70,36 @@ function lastBars(): EvaluateBar[] {
     if (typeof b.time === 'number' && Number.isFinite(b.time)) row.time = b.time;
     out.push(row);
   }
+  // Prepend the tick's own bar when it is newer than the store's tail.
+  if (pending) {
+    const close = Number(pending.close);
+    const open = Number(pending.open);
+    const high = Number(pending.high);
+    const low = Number(pending.low);
+    const time = Number(pending.time);
+    if (
+      Number.isFinite(close) &&
+      Number.isFinite(open) &&
+      Number.isFinite(high) &&
+      Number.isFinite(low)
+    ) {
+      const tailTime = out.length ? Number(out[out.length - 1]!.time) : Number.NaN;
+      if (!Number.isFinite(time) || !Number.isFinite(tailTime) || time > tailTime) {
+        const row: EvaluateBar = { open, high, low, close };
+        if (Number.isFinite(time)) row.time = time;
+        out.push(row);
+        if (out.length > LAST_BARS + 1) out.splice(0, out.length - (LAST_BARS + 1));
+      }
+    }
+  }
   return out;
 }
 
-function buildContext(price: number, stream?: LiveBarStreamCtx): EvaluateContext {
+function buildContext(
+  price: number,
+  stream?: LiveBarStreamCtx,
+  bar?: { close?: number; open?: number; high?: number; low?: number; time?: number } | null,
+): EvaluateContext {
   const symbol =
     (stream?.symbol && stream.symbol.trim() ? stream.symbol.trim() : store.symbol) ||
     'BTCUSDT';
@@ -74,7 +108,7 @@ function buildContext(price: number, stream?: LiveBarStreamCtx): EvaluateContext
     symbol,
     price,
     interval: stream?.interval || store.interval || undefined,
-    bars: lastBars(),
+    bars: lastBars(bar),
     time: Date.now(),
     drawingPricesById: drawingPricesById(drawings),
     plotSamples: plotSamplesFromCache(store.indicatorSeries),
@@ -102,24 +136,31 @@ export function liveBarMatchesChart(stream?: LiveBarStreamCtx): boolean {
  * Evaluate persisted alerts against a live last price.
  * @returns fired alerts (empty when nothing is armed)
  */
-export async function evaluateLiveAlerts(price: number, stream?: LiveBarStreamCtx): Promise<void> {
+export async function evaluateLiveAlerts(
+  price: number,
+  stream?: LiveBarStreamCtx,
+  bar?: { close?: number; open?: number; high?: number; low?: number; time?: number } | null,
+): Promise<void> {
   if (!Number.isFinite(price)) return;
   if (!liveBarMatchesChart(stream)) return;
   const alerts = loadAlerts();
   if (alerts.length === 0) return;
-  await evaluateAlerts(buildContext(price, stream));
+  await evaluateAlerts(buildContext(price, stream, bar));
 }
 
 /**
  * Fire-and-forget entry from the live multiplex. Never throws.
  */
 export function noteLiveBarForAlerts(
-  bar: { close?: number } | null | undefined,
+  bar:
+    | { close?: number; open?: number; high?: number; low?: number; time?: number }
+    | null
+    | undefined,
   stream?: LiveBarStreamCtx,
 ): void {
   const close = bar && typeof bar.close === 'number' ? bar.close : NaN;
   if (!Number.isFinite(close)) return;
-  void evaluateLiveAlerts(close, stream).catch(() => {
+  void evaluateLiveAlerts(close, stream, bar).catch(() => {
     /* delivery / storage must not break the live session */
   });
 }

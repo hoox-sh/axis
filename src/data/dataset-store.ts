@@ -169,30 +169,34 @@ export function setPersistenceMode(mode: PersistenceMode): void {
     );
   }
 
-  // Then the datasets that only the old sink holds.
-  void (async () => {
-    let listed: string[] = [];
-    try {
-      listed = (await from.list?.()) ?? [];
-    } catch {
-      listed = [];
-    }
-    for (const key of listed) {
-      if (memory.has(key)) continue; // already copied above
-      let bars: Bar[] | null = null;
+  // Then the datasets that only the old sink holds. The whole migration is
+  // tracked, so a delete that runs right after the switch waits for it (a
+  // late copy would otherwise resurrect the dataset).
+  trackCopy(
+    (async () => {
+      let listed: string[] = [];
       try {
-        bars = await from.get(key);
+        listed = (await from.list?.()) ?? [];
       } catch {
-        bars = null;
+        listed = [];
       }
-      if (!bars?.length) continue;
-      trackCopy(
-        sink.replace(key, bars).catch((err: unknown) => {
+      for (const key of listed) {
+        if (memory.has(key)) continue; // already copied above
+        let bars: Bar[] | null = null;
+        try {
+          bars = await from.get(key);
+        } catch {
+          bars = null;
+        }
+        if (!bars?.length) continue;
+        try {
+          await sink.replace(key, bars);
+        } catch (err: unknown) {
           console.warn(`[dataset-store] copy to ${mode} failed for ${key}`, err);
-        }),
-      );
-    }
-  })();
+        }
+      }
+    })(),
+  );
 }
 
 /** Current conflict-resolution policy for dataset merges. */

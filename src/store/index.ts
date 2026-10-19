@@ -3235,13 +3235,14 @@ if (typeof window !== 'undefined') {
  * path and the engine window all read this, so the chart can never hold a
  * different number of bars than the engine was asked to evaluate.
  *
- * `0` means "no cap" (send everything) — the documented escape hatch for a
- * direct store write; the persisted setting clamps `0` to the default.
+ * `0` falls back to the default: the persisted setting is clamped (so `0`
+ * never reaches the store from the UI), and an unbounded chart window would
+ * let a direct store write grow the series without limit. The engine's own
+ * "no cap" escape hatch lives in `applyRollingWindow`.
  */
 export function chartWindowLimit(): number {
   const raw = Number(store.rollingWindowBars);
-  if (!Number.isFinite(raw) || raw < 0) return ROLLING_WINDOW_DEFAULT;
-  if (raw === 0) return Number.POSITIVE_INFINITY;
+  if (!Number.isFinite(raw) || raw <= 0) return ROLLING_WINDOW_DEFAULT;
   return Math.max(1, Math.min(Math.round(raw), HISTORY_BARS_MAX));
 }
 

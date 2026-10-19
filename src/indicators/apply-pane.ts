@@ -37,6 +37,7 @@ import {
 import type { Indicator } from '../store/types';
 import type { PaneManager } from '../chart/pane-manager';
 import { reportUiError } from '../ui/boot-errors';
+import { clearScriptPaneLayer } from '../chart/manager-access';
 
 export interface PaneSetupContext {
   overlay: boolean;
@@ -88,7 +89,10 @@ export function ensureApplyPane(ctx: PaneSetupContext): string {
         try {
           const owner = ctx.indicatorId ?? EDITOR_RUN_KEY;
           if (typeof ctx.manager.removeOverlaysForOwner === 'function') {
-            ctx.manager.removeOverlaysForOwner(previousSubPane, owner);
+            // The script keeps its markers — they follow it to the new pane.
+            ctx.manager.removeOverlaysForOwner(previousSubPane, owner, {
+              keepMarkers: true,
+            });
           }
         } catch {
           /* ignore */
@@ -101,6 +105,7 @@ export function ensureApplyPane(ctx: PaneSetupContext): string {
         ) {
           try {
             ctx.manager.destroyPane(previousSubPane);
+            clearScriptPaneLayer(previousSubPane);
           } catch {
             /* ignore */
           }
@@ -139,6 +144,12 @@ export function ensureApplyPane(ctx: PaneSetupContext): string {
         ) {
           try {
             ctx.manager.destroyPane(mp.id);
+            // Release the pane's script DrawingLayer with it: the layer keeps
+            // its SVG overlay, DOM listeners and a reference to the removed
+            // series alive, and a recreated pane with the same id would get
+            // the stale layer back (drawings projected against a disposed
+            // scale).
+            clearScriptPaneLayer(mp.id);
             if (ctx.storePanes.some((p) => p.id === mp.id)) removePane(mp.id);
           } catch {
             /* ignore */
@@ -159,7 +170,10 @@ export function ensureApplyPane(ctx: PaneSetupContext): string {
     try {
       const owner = ctx.indicatorId ?? EDITOR_RUN_KEY;
       if (typeof ctx.manager.removeOverlaysForOwner === 'function') {
-        ctx.manager.removeOverlaysForOwner(existing.paneId, owner);
+        // The script keeps its markers — they follow it to the price pane.
+        ctx.manager.removeOverlaysForOwner(existing.paneId, owner, {
+          keepMarkers: true,
+        });
       } else {
         ctx.manager.removeOverlays(existing.paneId);
       }
@@ -171,6 +185,7 @@ export function ensureApplyPane(ctx: PaneSetupContext): string {
       ) {
         try {
           ctx.manager.destroyPane(existing.paneId);
+          clearScriptPaneLayer(existing.paneId);
         } catch {
           /* ignore */
         }

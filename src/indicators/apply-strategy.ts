@@ -30,6 +30,7 @@ import { appendLog, setStore, store, EDITOR_RUN_KEY } from '../store';
 import { normalizeStrategyEvents, eventsToMarkers } from '../results/events';
 import { buildStrategyReport } from '../results/strategy';
 import type { PaneManager } from '../chart/pane-manager';
+import type { Bar } from '../store/types';
 import type { RunResult } from './runner';
 
 export interface StrategyApplyContext {
@@ -38,12 +39,23 @@ export interface StrategyApplyContext {
   scriptType: string;
   silent: boolean;
   indicatorId: string | undefined;
+  /**
+   * The bars the engine evaluated.
+   *
+   * The strategy events carry a `bar_index` relative to that window, and the
+   * chart window slides (it drops its head on every new bar). Resolving the
+   * fills against the live `store.bars` would land every marker one bar
+   * early and compute the PnL from the wrong bars.
+   */
+  bars?: Bar[];
 }
 
 export function applyStrategyMarkers(ctx: StrategyApplyContext): void {
   // Strategy: trade markers on price pane + report stats.
   // Equity curve is rendered in Results → Strategy only (no main-chart equity pane).
   const events = ctx.result.events || [];
+  // The evaluated window, not the live store.
+  const bars = ctx.bars && ctx.bars.length ? ctx.bars : (store.bars || []);
   const isStrategy =
     ctx.scriptType === 'strategy' ||
     events.some((e) => {
@@ -68,7 +80,7 @@ export function applyStrategyMarkers(ctx: StrategyApplyContext): void {
   if (events.length) {
     const fillMode = store.strategyUi?.slippageNextOpen ? 'next_open' : 'close';
     const normalized = normalizeStrategyEvents(events, {
-      bars: store.bars || [],
+      bars,
       includeOrders: false,
       fillMode,
     });
@@ -80,7 +92,7 @@ export function applyStrategyMarkers(ctx: StrategyApplyContext): void {
     // without relying on a global wipe (and without wiping sibling markers).
     ctx.manager.setTradeMarkers(markers, ctx.indicatorId ?? EDITOR_RUN_KEY);
 
-    const report = buildStrategyReport(events, store.bars || [], { fillMode });
+    const report = buildStrategyReport(events, bars, { fillMode });
     if (report.trades.length) {
       if (!ctx.silent) {
         const net = Number.isFinite(report.stats.totalPnl) ? report.stats.totalPnl : 0;

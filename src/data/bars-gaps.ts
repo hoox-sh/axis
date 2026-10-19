@@ -102,11 +102,15 @@ export function expectedBarsInSpan(fromSec: number, toSec: number, interval: str
   const month = /^(\d+)M$/.exec(String(interval || '').trim());
   if (month) {
     const stepMonths = Math.max(1, parseInt(month[1]!, 10));
-    // Count the month starts in [from, to].
-    const startMonth = Date.UTC(new Date(from * 1000).getUTCFullYear(), new Date(from * 1000).getUTCMonth(), 1);
-    const endMonth = Date.UTC(new Date(to * 1000).getUTCFullYear(), new Date(to * 1000).getUTCMonth(), 1);
-    if (endMonth < startMonth) return 0;
-    const months = (endMonth - startMonth) / (30 * 86_400_000) + 1;
+    // Count the month starts in [from, to] — an exact calendar difference,
+    // not a 30-day approximation (a 31-day month would shift the count).
+    const fromDate = new Date(from * 1000);
+    const toDate = new Date(to * 1000);
+    const months =
+      (toDate.getUTCFullYear() - fromDate.getUTCFullYear()) * 12 +
+      (toDate.getUTCMonth() - fromDate.getUTCMonth()) +
+      1;
+    if (months <= 0) return 0;
     return Math.max(1, Math.floor((months + stepMonths - 1) / stepMonths));
   }
   const step = intervalToSec(interval);

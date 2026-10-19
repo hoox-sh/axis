@@ -1457,13 +1457,18 @@ export class PaneManager {
   ) {
     const owner = (ownerId && String(ownerId).trim()) || '__global__';
     const list = markers.map((m, i) => {
+      // The incoming id is plot-scoped (`<plotKey>_<index>`), so two scripts
+      // that plot a series with the same name produced the same id — the
+      // price-pane merge (keyed by id) then kept only one owner's markers and
+      // the rest vanished. Scope the id by the owner.
+      const incomingId = 'id' in m && m.id ? String(m.id) : '';
       const base: SeriesMarker<UTCTimestamp> = {
         time: m.time as UTCTimestamp,
         position: m.position,
         color: m.color,
         shape: m.shape,
         text: m.text,
-        id: ('id' in m && m.id) || `shape_${owner}_${m.time}_${i}`,
+        id: incomingId ? `${owner}__${incomingId}` : `shape_${owner}_${m.time}_${i}`,
       };
       const size = 'size' in m ? m.size : undefined;
       if (typeof size === 'number' && Number.isFinite(size) && size > 0) {
@@ -1632,6 +1637,14 @@ export class PaneManager {
       return row;
     });
     safeSetData(candle, data);
+    // The painted range moved with the repaint — the overlay clamp uses it, so
+    // a stale range would drop the newest overlay points (or keep rows that
+    // no longer have candles).
+    const first = Number((data[0] as { time?: number } | undefined)?.time);
+    const last = Number((data[data.length - 1] as { time?: number } | undefined)?.time);
+    if (Number.isFinite(first) && Number.isFinite(last)) {
+      this.notePaintedCandleRange(first, last);
+    }
     return tinted;
   }
 
@@ -1789,8 +1802,16 @@ export class PaneManager {
     try {
       const bars = store.bars;
       if (Array.isArray(bars) && bars.length) {
-        const idx = barIndexAtTimeBinary(bars, time);
-        if (idx >= 0) fallbackLogical = { from: idx - half, to: idx + half };
+        const first = Number(bars[0]!.time);
+        const last = Number(bars[bars.length - 1]!.time);
+        // Only centre on a bar when the time is **inside** the painted
+        // history. A click older than the data used to snap to bar 0 (the
+        // binary search clamps to the nearest) instead of falling back to the
+        // ±14-day window.
+        if (Number.isFinite(first) && Number.isFinite(last) && time >= first && time <= last) {
+          const idx = barIndexAtTimeBinary(bars, time);
+          if (idx >= 0) fallbackLogical = { from: idx - half, to: idx + half };
+        }
       }
     } catch {
       fallbackLogical = null;
@@ -2585,8 +2606,20 @@ export class PaneManager {
    * Remove only one script’s overlay series / price lines on a pane.
    * Used when multiple scripts share a pane (or after owner-scoped applies).
    * Prefer this over {@link removeOverlays} so siblings keep their plots.
+   *
+   * The script's shape / trade markers are cleared with the series — that is
+   * the "detach this script" semantic. Pass `keepMarkers: true` when the
+   * call is a *series* cleanup: the apply path calls this on the price pane
+   * right after it painted the script's markers, and clearing them there made
+   * `plotshape()` on every non-overlay script (RSI/MACD sub-panes) vanish in
+   * the same tick — and it broke the `__editor__` → script-id re-own (the
+   * markers were deleted before they could be re-homed).
    */
-  removeOverlaysForOwner(paneId: string, ownerId: string) {
+  removeOverlaysForOwner(
+    paneId: string,
+    ownerId: string,
+    opts?: { keepMarkers?: boolean },
+  ) {
     const pane = this.panes.get(paneId);
     if (!pane || !ownerId) return;
     const linePrefix = ownedOverlayPrefix(ownerId);
@@ -2619,6 +2652,7 @@ export class PaneManager {
       delete pane.priceLines[name];
       this.forgetLastValueTitle(paneId, name, 'priceLine');
     }
+    if (opts?.keepMarkers) return;
     try {
       this.clearShapeMarkers?.(ownerId);
     } catch {
@@ -3311,8 +3345,13 @@ export class PaneManager {
 
     for (const band of bands) {
       const key = makeBgcolorKey(band.name, ownerId);
-      // Drop non-finite times/values — LWC histogram rejects NaN
-      const mapped = band.data
+      // Drop non-finite times/values — LWC histogram rejects NaN.
+      // Clamp to the painted candle range: a band that reaches past the last
+      // painted candle extends the shared time scale into the future — during
+      // a bar replay the user could scroll into (and see the colours of) bars
+      // the replay has not reached.
+      const inRange = clampPointsToPaintedRange(band.data, this.clampRange());
+      const mapped = inRange
         .filter((d) => Number.isFinite(d.time) && Number.isFinite(d.value))
         .map((d) => ({
           time: d.time as UTCTimestamp,

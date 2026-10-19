@@ -7,7 +7,7 @@ tags: [code, data]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-19T23:09:19Z
+  at: 2026-10-19T23:38:00Z
 sources:
   - id: tree
     resource: "src/data"
@@ -85,6 +85,7 @@ okf_lock: generated
 * [src/ui/settings](/code/src/ui/settings.md)
 * [src/workers](/code/src/workers.md)
 * [tests](/code/tests.md)
+* [tests/bench](/code/tests/bench.md)
 * [tests/integration](/code/tests/integration.md)
 
 # Nested

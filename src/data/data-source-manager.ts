@@ -737,6 +737,11 @@ async function fetchWalkPage(
  * Walk-back from cursorEnd toward windowFrom until target reached, empty, or stalled.
  * Always advances using the **raw** page oldest (not cache oldest) so we keep
  * walking even when the cache already holds a far-past fragment.
+ *
+ * `followJobBounds` re-reads the job's target window on every page. A second
+ * `startBackfill` for the same series widens the job's window while the walk
+ * is running; without this the walk kept the bounds it was launched with and
+ * the widened range was never fetched by the walk itself.
  */
 async function walkBackRange(
   j: InternalJob,
@@ -746,6 +751,7 @@ async function walkBackRange(
   windowTo: number,
   startCursorEnd: number,
   maxPages: number,
+  opts?: { followJobBounds?: boolean },
 ): Promise<'ok' | 'cancelled' | 'paused' | 'error'> {
   let cursorEnd = startCursorEnd;
   let prevPageOldest: number | null = null;
@@ -757,10 +763,14 @@ async function walkBackRange(
     if (j.paused) return 'paused';
     if (j.barsFetched >= DSM_MAX_BARS_PER_JOB) return 'ok';
 
+    // A widened job window takes effect on the next page.
+    const from = opts?.followJobBounds ? Math.min(windowFrom, j.targetFromSec) : windowFrom;
+    const to = opts?.followJobBounds ? Math.max(windowTo, j.targetToSec) : windowTo;
+
     pages += 1;
     let result: { rawOldest: number; pageBars: Bar[] } | null;
     try {
-      result = await fetchWalkPage(j, source, pageLimit, cursorEnd, windowFrom, windowTo);
+      result = await fetchWalkPage(j, source, pageLimit, cursorEnd, from, to);
     } catch (err: unknown) {
       if (isAbortError(err) || j.abort.signal.aborted) return 'cancelled';
       j.retries += 1;
@@ -775,7 +785,7 @@ async function walkBackRange(
     const { rawOldest, pageBars } = result;
     if (!pageBars.length) {
       // Page entirely outside window — if raw is older than window, done for this range
-      if (rawOldest < windowFrom) return 'ok';
+      if (rawOldest < from) return 'ok';
       // otherwise try older cursor
       if (prevPageOldest != null && rawOldest >= prevPageOldest) return 'ok';
       prevPageOldest = rawOldest;
@@ -796,7 +806,7 @@ async function walkBackRange(
     prevPageOldest = rawOldest;
     cursorEnd = rawOldest - step;
 
-    if (rawOldest <= windowFrom) return 'ok';
+    if (rawOldest <= from) return 'ok';
 
     // Early exit when the full window is already dense (resume of complete cache).
     // Re-validating the whole window every page is O(pages×n) — re-check every
@@ -807,8 +817,8 @@ async function walkBackRange(
         const cached = await getDataset(j.sourceId, j.symbol, j.interval);
         const { report } = validateJobBars(cached, j, {
           persist: false,
-          fromSec: windowFrom,
-          toSec: windowTo,
+          fromSec: from,
+          toSec: to,
         });
         if (report.complete) return 'ok';
       } catch {
@@ -939,6 +949,9 @@ async function runJob(j: InternalJob): Promise<void> {
       j.phase = 'backfill';
       syncJob(j);
       // Always begin at the newest bound so trailing holes get filled first.
+      // The walk follows the job's window: a second `startBackfill` for the
+      // same series widens the range while this walk runs, and the widened
+      // range has to be fetched by the walk itself.
       const walk = await walkBackRange(
         j,
         source,
@@ -947,6 +960,7 @@ async function runJob(j: InternalJob): Promise<void> {
         j.targetToSec,
         j.targetToSec,
         DSM_MAX_PAGES,
+        { followJobBounds: true },
       );
       if (walk === 'cancelled') {
         setJobStatus(j, 'cancelled');

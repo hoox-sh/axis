@@ -16,6 +16,7 @@ import {
   subscribeDatasets,
   listMemoryDatasets,
   keyFor,
+  awaitPendingCopies,
   _resetDatasetStoreForTests,
 } from '../src/data/dataset-store';
 import { _resetDatasetSinksForTests } from '../src/data/dataset-sinks';
@@ -147,6 +148,22 @@ describe('dataset-store', () => {
     expect(res.bars).toHaveLength(0);
     expect(res.added).toBe(0);
     expect(peekDataset('binance-rest', 'BROKEN', '1d')).toBeNull();
+  });
+
+  it('migrates a dataset that only the old sink holds', async () => {
+    // A dataset that lived solely in the old sink (evicted from the mirror,
+    // or written before it was warmed) was invisible in the new mode: only
+    // the memory mirror was copied.
+    const { putCachedBars } = await import('../src/data/bars-cache');
+    await putCachedBars('binance-rest', 'SOLO', '1h', [bar(60, 1), bar(3600, 2)]);
+    // The dataset store never saw it — its mirror is cold.
+    expect(peekDataset('binance-rest', 'SOLO', '1h')).toBeNull();
+
+    setPersistenceMode('session');
+    await awaitPendingCopies();
+
+    const bars = await getDataset('binance-rest', 'SOLO', '1h');
+    expect(bars.map((b) => b.time)).toEqual([60, 3600]);
   });
 
   it('get falls back to the local sink when memory is cold', async () => {

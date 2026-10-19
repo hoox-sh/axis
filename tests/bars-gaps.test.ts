@@ -47,6 +47,10 @@ describe('bars-gaps', () => {
     const apr = Date.UTC(2026, 3, 1) / 1000;
     expect(expectedBarsInSpan(jan, apr, '1M')).toBe(4);
     expect(expectedBarsInSpan(jan, jan + 29 * 86_400, '1M')).toBe(1);
+    // A 31-day month must not shift the count.
+    expect(expectedBarsInSpan(Date.UTC(2026, 0, 1) / 1000, Date.UTC(2026, 1, 1) / 1000, '1M')).toBe(2);
+    // A 3-month step counts every third month start.
+    expect(expectedBarsInSpan(jan, Date.UTC(2026, 6, 1) / 1000, '3M')).toBe(3);
   });
 
   it('expectedBarsInSpan is inclusive of both ends', () => {

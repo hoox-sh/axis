@@ -473,7 +473,11 @@ export function resolvePlotFillBands(
     if (!edge1 || !edge2) continue;
     const a = edge1.values;
     const b = edge2.values;
-    const n = Math.max(a.length, b.length, values.length);
+    // The two edges are zipped positionally. When they have different lengths
+    // the shorter one became trailing `null`s — a half-drawn band (one edge
+    // present, the other missing) instead of a clean gap. The band is only
+    // valid where **both** edges exist.
+    const n = Math.min(a.length, b.length);
     const upper: (number | null)[] = [];
     const lower: (number | null)[] = [];
     const colors: (string | null)[] = [];
@@ -755,7 +759,14 @@ export function mapShapeStyle(
   return 'circle';
 }
 
-/** Map Pine location.* → LWC marker position. */
+/**
+ * Map Pine `location.*` → LWC marker position.
+ *
+ * Pine's default is `location.abovebar` — the style does **not** move the
+ * marker (`plotshape(series, style=shape.arrowup)` is drawn above the bar).
+ * Inferring the position from the arrow direction drew every up-arrow below
+ * the candle, which is not what the script asked for.
+ */
 export function mapShapeLocation(
   location?: string | null,
   style?: string | null,
@@ -764,10 +775,8 @@ export function mapShapeLocation(
   if (loc.includes('above') || loc === 'top') return 'aboveBar';
   if (loc.includes('below') || loc === 'bottom') return 'belowBar';
   if (loc.includes('absolute') || loc === 'middle' || loc === 'inbar') return 'inBar';
-  // Infer from style when location omitted
-  const shape = mapShapeStyle(style);
-  if (shape === 'arrowDown') return 'aboveBar';
-  if (shape === 'arrowUp') return 'belowBar';
+  // Pine's default location is `abovebar`, whatever the style is.
+  void style;
   return 'aboveBar';
 }
 
@@ -824,10 +833,21 @@ export function shapeSeriesToMarkers(
   const n = Math.min(times.length, valArr.length);
   const color = resolvePineColor(meta.color) ?? DEFAULT_SHAPE_COLOR;
   const kindNorm = normalizePlotKind(meta.kind);
+  // Pine renders the plot **title** as the marker text only for the label
+  // styles (`shape.labelup` and friends). For every other style the title is
+  // the plot's name — showing it on the candle is not what the script asked
+  // for.
+  const styleNorm = stripNs(String(meta.style || ''));
+  const isLabelStyle =
+    styleNorm.includes('labelup') ||
+    styleNorm.includes('labelledown') ||
+    styleNorm.includes('labeldown') ||
+    styleNorm.includes('labelupper') ||
+    styleNorm.includes('labelcenter');
   const text =
     (meta.text && String(meta.text)) ||
     (meta.char && String(meta.char)) ||
-    (meta.title && String(meta.title)) ||
+    (isLabelStyle && meta.title && String(meta.title)) ||
     defaultShapeMarkerGlyph(meta.style) ||
     '';
   const prefix = opts?.idPrefix || meta.title || 'shape';

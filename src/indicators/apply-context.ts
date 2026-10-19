@@ -144,6 +144,11 @@ export function alignApplySeries(
       break;
     }
   }
+  // The legacy `plots[]` fallback is zipped against the chart axis by index,
+  // so a length mismatch there mis-plots **every** value (no error, no cue).
+  if (!lengthMismatch && Array.isArray(result.plots) && result.plots.length) {
+    if (result.plots.length !== chartWindowBars) lengthMismatch = true;
+  }
   const needsAlignBase = sessionAligned || engineClampedTail || lengthMismatch;
   // A same-length series can still cover a **different** window: a session or
   // stream that slides independently of the chart. The index zip would then

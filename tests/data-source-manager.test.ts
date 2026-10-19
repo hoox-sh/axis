@@ -32,7 +32,7 @@ describe('data-source-manager', () => {
     await _resetBarsCacheForTests();
     _resetSourceRegistrationFlag();
     // Wipe dynamic test sources if any
-    for (const id of ['page-src', 'slow-src', 'grid-src']) {
+    for (const id of ['page-src', 'slow-src', 'grid-src', 'widen-src']) {
       try {
         registry.unregisterSource(id);
       } catch {
@@ -173,6 +173,59 @@ describe('data-source-manager', () => {
     for (let i = 1; i < cached.length; i++) {
       expect(cached[i]!.time - cached[i - 1]!.time).toBe(step);
     }
+  });
+
+  it('follows a widened job window while the walk is running', async () => {
+    // A second `startBackfill` for the same series widens the job's window
+    // while the walk is running. The widened range has to be fetched — the
+    // running walk now honours the new bound directly, and the gap-fill
+    // phase is the backstop for a range that was widened after the walk.
+    const pageSize = 5;
+    const step = 60;
+    const now = Math.floor(Date.now() / 1000);
+    const src: SourcePlugin = {
+      id: 'widen-src',
+      name: 'Widen Src',
+      kind: 'source',
+      builtIn: false,
+      async fetchHistorical({ endTime, limit }) {
+        // Slow enough that the widening lands mid-walk.
+        await new Promise((r) => setTimeout(r, 40));
+        const end =
+          typeof endTime === 'number' && endTime > 0
+            ? Math.floor(endTime)
+            : Math.floor(Date.now() / 1000);
+        const n = Math.min(pageSize, Number(limit) || pageSize);
+        const out: Bar[] = [];
+        for (let i = n - 1; i >= 0; i--) out.push(bar(end - i * step));
+        return out;
+      },
+    };
+    registry.registerSource(src);
+
+    const id = startBackfill({
+      sourceId: 'widen-src',
+      symbol: 'X',
+      interval: '1m',
+      targetFromSec: now - 10 * step,
+      targetToSec: now,
+    });
+    // Widen the same job while it walks.
+    const widened = startBackfill({
+      sourceId: 'widen-src',
+      symbol: 'X',
+      interval: '1m',
+      targetFromSec: now - 60 * step,
+      targetToSec: now,
+    });
+    expect(widened).toBe(id);
+
+    const job = await _waitForJob(id, 20_000);
+    expect(job!.status).toBe('complete');
+    const cached = await getCachedBars('widen-src', 'X', '1m');
+    expect(cached.length).toBeGreaterThan(1);
+    // The widened range was fetched: the oldest bar reaches the new bound.
+    expect(cached[0]!.time).toBeLessThanOrEqual(now - 55 * step);
   });
 
   it('does not complete with Pages:0 when cache only has old fragment to past date', async () => {
