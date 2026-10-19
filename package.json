@@ -28,7 +28,7 @@
     "lint:fix": "biome check --write --unsafe .",
     "prepare": "git config core.hooksPath .githooks",
     "test:unit": "bun test tests/",
-    "test:coverage": "bun test --coverage --coverage-reporter=lcov --coverage-reporter=text --coverage-dir=coverage tests/ worker/tests/",
+    "test:coverage": "bun test --max-concurrency=1 --coverage --coverage-reporter=lcov --coverage-reporter=text --coverage-dir=coverage tests/ worker/tests/",
     "test:coverage:gate": "bun run test:coverage && bun scripts/check-coverage.mjs",
     "test:security": "bun test tests/security/",
     "test:bench": "AXIS_BENCH=1 bun test tests/bench/",
