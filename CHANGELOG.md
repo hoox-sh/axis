@@ -9,11 +9,11 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-10-18 · 603 commits · describe-tag: `v2.24.5`_
+_Generated/updated: 2026-10-19 · 616 commits · describe-tag: `v2.24.6`_
 
 ---
 
-## [Unreleased]
+## [2.24.7] — 2026-10-19
 
 ### Added
 
@@ -23,6 +23,7 @@ _Generated/updated: 2026-10-18 · 603 commits · describe-tag: `v2.24.5`_
 
 ### Fixed
 
+- **Pyodide compile mode no longer crashes on `alert()` / `alertcondition()`.** The wheel hands the compiled `__alerts` back as an *empty float array*, and the runtime’s `or []` on it raised `ValueError: The truth value of an empty array is ambiguous` — the whole compile run failed in the browser (Pyodide has no Numba, so this path is the norm there). The runtime now normalizes the packed event containers without truthiness checks.
 - **A broken engine WebSocket no longer re-opens on every run.** An abnormal close (1002 protocol error, 1006, 1011) after the socket opened now marks the shared `/ws/run` client dead for the cool-down, so the next runs go straight to REST instead of re-connecting to an endpoint that accepts the handshake and then drops every frame. Normal closes (1000 / 1001) keep the client reusable.
 - **Interval switch no longer paints a stale cache tail plus the live candle.** Switching 5m → 1m used to show yesterday’s last cached bar, a hole, then the current price because live started before venue pages closed cache→now. The load path now fills that tail before `startLive`.
 - **Internal holes in the painted window are filled from the venue.** A 1m cache that already reached “now” still left a ~2h blank (133 bars); load now fetches those ranges before live starts.
@@ -1620,12 +1621,16 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-10 (122 commits)
+### 2026-10 (135 commits)
 
 #### Features
 
+- `10b88f78` (2026-10-19) — feat(ci): GitHub Release notes from CHANGELOG version section
+- `6efb6967` (2026-10-19) — feat(chart): topbar market select for spot vs USDT-M / COIN-M
 - `0984b889` (2026-10-17) — feat(mcp): live-plane capabilities — chart.lag/bars, engine.*, stream.*
 - `5be393e1` (2026-10-16) — feat(engine): three-tier close verification with strength surfacing (F-28)
 - `490051fe` (2026-10-16) — feat(engine): engine-owned stream data plane (F-01–F-20)
@@ -1664,6 +1669,16 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `c858620c` (2026-10-19) — fix(engine): mark /ws/run dead after an abnormal close
+- `4c6f398e` (2026-10-19) — fix(data): fill internal 1m holes; cap /ws/live snapshot to 500 bars
+- `c3bd51fa` (2026-10-19) — fix(data): fill stale cache→now before live on interval switch
+- `6cd2b88c` (2026-10-19) — fix(streams): keep /ws/live connectable after snapshot misses
+- `18198258` (2026-10-19) — fix(streams): keep /ws/live up when a script snapshot misses
+- `200e27f5` (2026-10-19) — fix(streams): 120s snapshot wait after datafeed-loading; tail-align fills
+- `1f20aad8` (2026-10-19) — fix(ui): pass streamId when restarting live after a market switch
+- `8387a36d` (2026-10-19) — fix(ui): MCP chip on the command bar; overlay plots above price
+- `c2dd8746` (2026-10-18) — fix(streams): handshake /ws/live with api_key instead of blocking on auth.ok
+- `5c713b67` (2026-10-18) — fix(storage): keep Worker and engine API keys across restarts
 - `950957d2` (2026-10-18) — fix(streams): wait for auth.ok and cap live subscribe history
 - `a89e66e9` (2026-10-18) — fix(streams): pair-form REST keys and pause live-wire reconnects
 - `51b290b1` (2026-10-18) — fix(streams): live P3 — no engine drive on venue ticks
@@ -1747,6 +1762,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Chores
 
+- `833f0d6f` (2026-10-18) — chore(release): AXIS v2.24.6 — live stream feed and MCP plane
 - `632aaca3` (2026-10-17) — chore(pyne-wheel): vendor PYNE 0.6.12 for the in-browser Pyodide engine
 - `d946a42e` (2026-10-17) — chore(release): AXIS 2.24.5
 - `13d89fdd` (2026-10-15) — chore(release): AXIS v2.24.2 — engine data-plane fixes
