@@ -106,7 +106,7 @@ import { exchangeForSource, normalizeLoadSymbol } from './symbol-exchange';
 import { isEngineOwnedLive } from '../engines/ownership';
 import { getDataSeriesBars } from '../engines/data-sessions';
 import { getActiveEngineConfig } from '../plugins/active';
-import { fillBarsTowardNow } from './expand-cache';
+import { fillBarsTowardNow, fillInternalGaps } from './expand-cache';
 export { exchangeForSource, normalizeLoadSymbol };
 
 /** Close cache/engine newest → now via venue before live appends the forming bar. */
@@ -119,8 +119,10 @@ async function closeTailToNow(
 ): Promise<Bar[]> {
   if (!bars.length) return bars;
   try {
-    const r = await fillBarsTowardNow(bars, srcId, sym, iv, { signal });
-    return r.bars.length ? r.bars : bars;
+    const tail = await fillBarsTowardNow(bars, srcId, sym, iv, { signal });
+    const filled = tail.bars.length ? tail.bars : bars;
+    const holes = await fillInternalGaps(filled, srcId, sym, iv, { signal });
+    return holes.bars.length ? holes.bars : filled;
   } catch {
     return bars;
   }

@@ -24,6 +24,8 @@ _Generated/updated: 2026-10-18 · 603 commits · describe-tag: `v2.24.5`_
 ### Fixed
 
 - **Interval switch no longer paints a stale cache tail plus the live candle.** Switching 5m → 1m used to show yesterday’s last cached bar, a hole, then the current price because live started before venue pages closed cache→now. The load path now fills that tail before `startLive`.
+- **Internal holes in the painted window are filled from the venue.** A 1m cache that already reached “now” still left a ~2h blank (133 bars); load now fetches those ranges before live starts.
+- **`/ws/live` subscribes a 500-bar tail instead of the full 5k window.** A 5000-bar 1m `full` timed out; the chart stays on the REST/DSM window and the socket can go live.
 - **Transient `/ws/live` errors no longer `disconnect()` the client.** Snapshot timeout, empty snapshot, and subscribe/connect errors still fall back to venue+REST and debounce subscribe, but `stopped` stays false so the socket can stay up or reconnect. Only `reset()` / `stopLive` stop the client.
 - **`/ws/live` snapshot wait is 120s, and a script miss no longer cools the series wire.** History ensure of a painted 5m window often exceeds 30s; a Keltner (script) snapshot-timeout used to `fail()` the whole socket so the HUD stayed `degraded · venue+REST`.
 - **Plot fills tail-align when the engine series is shorter than the chart.** Adding Keltner (or any `fill()`) on a 5000-bar cache plus DSM/forming bars no longer leaves the band 2–3 candles left of the last bars.

@@ -2,9 +2,10 @@ import { describe, expect, test } from 'bun:test';
 import { subscribeHistoryBars } from '../../src/streams/stream-live';
 
 describe('subscribeHistoryBars', () => {
-  test('caps to the painted window so a 10k rolling target does not block snapshot', () => {
-    expect(subscribeHistoryBars(5003, 10_000)).toBe(5003);
-    expect(subscribeHistoryBars(0, 10_000)).toBe(10_000);
-    expect(subscribeHistoryBars(20, 10_000)).toBe(10_000);
+  test('caps the live snapshot so a 5k painted window does not block /ws/live', () => {
+    expect(subscribeHistoryBars(5003, 10_000)).toBe(500);
+    expect(subscribeHistoryBars(0, 10_000)).toBe(500);
+    expect(subscribeHistoryBars(20, 10_000)).toBe(500);
+    expect(subscribeHistoryBars(200, 10_000)).toBe(200);
   });
 });

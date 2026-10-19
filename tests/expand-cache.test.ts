@@ -6,6 +6,7 @@ import {
   canExpandFromSource,
   expandCachedSeriesToNow,
   fillBarsTowardNow,
+  fillInternalGaps,
   noteDataManagerLiveBar,
 } from '../src/data/expand-cache';
 import {
@@ -51,6 +52,7 @@ describe('expand-cache', () => {
     try {
       registry.unregisterSource('expand-test-src');
       registry.unregisterSource('fill-tail-src');
+      registry.unregisterSource('fill-hole-src');
     } catch {
       /* ignore */
     }
@@ -97,6 +99,39 @@ describe('expand-cache', () => {
     const result = await fillBarsTowardNow(stale, 'fill-tail-src', 'BTCUSDT', '1m', { nowSec });
     expect(result.expanded).toBe(true);
     expect(result.bars[result.bars.length - 1]!.time).toBeGreaterThanOrEqual(nowSec - step);
+    const times = result.bars.map((b) => b.time);
+    for (let i = 1; i < times.length; i++) {
+      expect(times[i]! - times[i - 1]!).toBe(step);
+    }
+  });
+
+  it('fillInternalGaps closes a hole inside an otherwise current series', async () => {
+    const step = 60;
+    const t0 = 1_700_000_000;
+    const left = Array.from({ length: 5 }, (_, i) => bar(t0 + i * step));
+    const hole = 5;
+    const rightStart = t0 + (5 + hole) * step;
+    const right = Array.from({ length: 5 }, (_, i) => bar(rightStart + i * step));
+    const seed = [...left, ...right];
+    const src: SourcePlugin = {
+      id: 'fill-hole-src',
+      name: 'Fill Hole',
+      kind: 'source',
+      builtIn: false,
+      capabilities: { needsNetwork: true },
+      async fetchHistorical({ endTime, limit }) {
+        const end = Math.floor(Number(endTime) || 0);
+        const n = Math.min(Number(limit) || 20, 20);
+        const out: Bar[] = [];
+        for (let i = n - 1; i >= 0; i--) {
+          out.push(bar(end - i * step));
+        }
+        return out;
+      },
+    };
+    registry.registerSource(src);
+    const result = await fillInternalGaps(seed, 'fill-hole-src', 'BTCUSDT', '1m');
+    expect(result.expanded).toBe(true);
     const times = result.bars.map((b) => b.time);
     for (let i = 1; i < times.length; i++) {
       expect(times[i]! - times[i - 1]!).toBe(step);

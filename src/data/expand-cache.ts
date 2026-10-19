@@ -37,7 +37,7 @@ import { normalizeLoadSymbol } from './symbol-exchange';
 import { getDataset, putDatasetBars } from './dataset-store';
 import { mergeBars } from './bars-cache';
 import { isEngineOwnedLive } from '../engines/ownership';
-import { intervalToSec } from './bars-gaps';
+import { findBarGaps, intervalToSec } from './bars-gaps';
 import {
   DATA_MANAGER_SOURCE_ID,
   getDataManagerSelection,
@@ -205,6 +205,71 @@ export async function fillBarsTowardNow(
     clearTimeout(budgetTimer);
     if (opts?.signal) opts.signal.removeEventListener('abort', onCallerAbort);
   }
+}
+
+const MAX_INTERNAL_GAPS = 8;
+
+/**
+ * Fetch venue pages for holes inside `seed` (not just cache→now).
+ * One 1m hole of ~100 bars is a single REST page.
+ */
+export async function fillInternalGaps(
+  seed: readonly Bar[],
+  sourceId: string,
+  symbol: string,
+  interval: string,
+  opts?: { signal?: AbortSignal },
+): Promise<ExpandCacheResult> {
+  const srcId = String(sourceId || '').trim();
+  const sym = normalizeLoadSymbol(String(symbol || ''), srcId);
+  const iv = String(interval || '').trim();
+  let bars = Array.isArray(seed) ? seed.slice() : [];
+  if (bars.length < 2 || !canExpandFromSource(srcId)) {
+    return { bars, added: 0, expanded: false };
+  }
+  const first = bars[0]!.time;
+  const last = bars[bars.length - 1]!.time;
+  const gaps = findBarGaps(bars, first, last, iv).filter((g) => g.missingBars >= 2);
+  if (!gaps.length) return { bars, added: 0, expanded: false };
+
+  const { getSource, sourcePageLimit } = await loadSourceApi();
+  const source = getSource(srcId);
+  if (!source?.fetchHistorical) return { bars, added: 0, expanded: false };
+
+  const step = intervalToSec(iv);
+  const pageLimit = sourcePageLimit(srcId);
+  const before = bars.length;
+  let pages = 0;
+  for (const gap of gaps.slice(0, MAX_INTERNAL_GAPS)) {
+    if (opts?.signal?.aborted) break;
+    const limit = Math.min(pageLimit, gap.missingBars + 4);
+    try {
+      const raw = await source.fetchHistorical({
+        symbol: sym,
+        interval: iv,
+        endTime: gap.toSec + step,
+        limit,
+        signal: opts?.signal,
+        config: {
+          ...sourceConfig(srcId),
+          limit,
+          fallback: false,
+        },
+      });
+      const page = normalizeHistoricalBars(raw, { limit });
+      if (page.length) {
+        bars = mergeBars(bars, page);
+        pages += 1;
+      }
+    } catch {
+      /* next gap */
+    }
+  }
+  return {
+    bars,
+    added: Math.max(0, bars.length - before),
+    expanded: pages > 0,
+  };
 }
 
 /**

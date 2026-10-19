@@ -93,11 +93,14 @@ function engineHistoryBars(): number {
     : 2000;
 }
 
-/** Subscribe for the painted window, not the full rolling target, so PYNE can snapshot immediately. */
+/** PYNE `full` of a 5k 1m window times out; the chart is already painted from REST. */
+const LIVE_SNAPSHOT_BARS = 500;
+
+/** Subscribe for a short tail snapshot so `/ws/live` can connect; REST already painted the window. */
 export function subscribeHistoryBars(have: number, rolling: number): number {
   const want = Number.isFinite(rolling) && rolling > 0 ? rolling : 2000;
-  if (have >= 50) return Math.min(want, have);
-  return want;
+  if (have >= 50) return Math.min(LIVE_SNAPSHOT_BARS, have, want);
+  return Math.min(want, LIVE_SNAPSHOT_BARS);
 }
 
 /**
@@ -379,6 +382,11 @@ export async function streamSeriesTick(marketNow = 0): Promise<boolean> {
       return false;
     }
     if (!engineSeriesPaintable(bars, marketNow)) return false;
+    // Tail snapshot must not shrink a longer REST/DSM window.
+    if (store.bars.length > bars.length) {
+      setFeedStatus(chartSeriesKey(), 'live');
+      return false;
+    }
     const manager = getManager();
     setBarsQuiet(bars);
     if (manager) setDataToChart(bars, { fit: false, clearMarkers: false });
