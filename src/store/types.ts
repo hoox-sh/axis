@@ -726,6 +726,12 @@ export interface AppState {
       name: string;
       series: Record<string, PlotSample[]>;
       titles?: Record<string, string>;
+      /**
+       * Bar times the cached series was aligned to when it was written. The
+       * chart window slides, so a consumer re-joins by time instead of by
+       * index (an index zip would shift every value by the slide).
+       */
+      times?: number[];
     }
   >;
   /** In-memory system logs (not persisted) */

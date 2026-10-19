@@ -108,6 +108,10 @@ export function updateIndicatorStore(ctx: StoreUpdateContext): boolean {
     const title = meta?.title != null ? String(meta.title) : k;
     titlesForCache[k] = title;
   }
+  // The bar times the cached series is aligned to. A consumer re-joins by
+  // time: the chart window slides, so the cached series is one bar behind
+  // the window it was written for and an index zip would shift every value.
+  const timesForCache = ctx.ohlcvTimes.slice();
 
   try {
     if (ctx.indicatorId === undefined) {
@@ -234,6 +238,7 @@ export function updateIndicatorStore(ctx: StoreUpdateContext): boolean {
           name: ctx.scriptName,
           series: seriesForCache,
           titles: titlesForCache,
+          times: timesForCache,
         });
       }
     } else {
@@ -276,6 +281,7 @@ export function updateIndicatorStore(ctx: StoreUpdateContext): boolean {
           name: ctx.scriptName,
           series: seriesForCache,
           titles: titlesForCache,
+          times: timesForCache,
         });
       }
     }

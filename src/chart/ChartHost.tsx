@@ -573,8 +573,12 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
           clearCompareOverlay(mgr);
           return;
         }
+        // Bar replay paints only the scrubbed prefix — the compare overlay
+        // must not show the compared symbol's future (it would extend the
+        // shared time scale past the replayed candles).
+        const mainBars = isReplayActive() ? getVisibleBars(store.bars) : store.bars;
         applyCompareOverlay(mgr, {
-          mainBars: store.bars,
+          mainBars,
           compareBars,
           symbol: compareSym,
           mode,

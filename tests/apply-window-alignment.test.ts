@@ -18,6 +18,7 @@ import './setup';
 import { describe, expect, it, beforeAll, beforeEach } from 'bun:test';
 import { installLightweightChartsMock } from './helpers/mock-lwc';
 import { signalBarIndex, normalizeStrategyEvents } from '../src/results/events';
+import { resolveInputSourceValues, formatPlotSourceId } from '../src/results/plot-sources';
 import type { Bar } from '../src/store/types';
 
 beforeAll(() => {
@@ -76,6 +77,40 @@ describe('strategy events survive a window slide', () => {
       { bars: window, includeOrders: false, fillMode: 'close' },
     );
     expect(normalized[0]?.price).toBe(window[3]!.close);
+  });
+});
+
+describe('cross-indicator series survive a window slide', () => {
+  it('re-joins a cached series onto the chart axis by time', () => {
+    // The producer wrote its series for a window that started one bar
+    // earlier; the chart window has since slid. The index zip would put
+    // every value on the wrong bar.
+    const cachedTimes = [100, 200, 300];
+    const chartTimes = [200, 300, 400];
+    const cache = {
+      producer: {
+        name: 'Producer',
+        series: { sig: [1, 2, 3] },
+        times: cachedTimes,
+      },
+    };
+    const out = resolveInputSourceValues(
+      { src: formatPlotSourceId('producer', 'sig') },
+      cache,
+      chartTimes,
+    ) as Record<string, unknown[]>;
+    // bar 200 → 2, bar 300 → 3, bar 400 → not covered yet (na).
+    expect(out.src).toEqual([2, 3, null]);
+  });
+
+  it('falls back to the raw series when no times are cached', () => {
+    const cache = { producer: { name: 'Producer', series: { sig: [1, 2, 3] } } };
+    const out = resolveInputSourceValues(
+      { src: formatPlotSourceId('producer', 'sig') },
+      cache,
+      [200, 300, 400],
+    ) as Record<string, unknown[]>;
+    expect(out.src).toEqual([1, 2, 3]);
   });
 });
 

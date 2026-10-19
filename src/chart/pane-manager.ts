@@ -1111,7 +1111,7 @@ export class PaneManager {
     const pane = this.panes.get(id);
     if (!pane) return;
     for (const key of Object.keys(pane.series)) {
-      this.dropLineBreak(pane.series[key], key);
+      this.dropLineBreak(pane.series[key], id, key);
     }
     // Disconnect ResizeObserver to prevent memory leak
     if (pane.resizeObserver) {
@@ -2292,8 +2292,20 @@ export class PaneManager {
     return opts;
   }
 
-  private dropLineBreak(series: ISeriesApi<any> | null | undefined, key: string): void {
-    const prim = this.overlayLineBreaks.get(key);
+  /**
+   * Detach the line-break primitive of one series.
+   *
+   * The map is keyed by **pane + series key**: the same owner and plot name
+   * can exist on two panes, and a bare key made one pane steal (and later
+   * detach) the other's primitive.
+   */
+  private dropLineBreak(
+    series: ISeriesApi<any> | null | undefined,
+    paneId: string,
+    key: string,
+  ): void {
+    const mapKey = `${paneId}:${key}`;
+    const prim = this.overlayLineBreaks.get(mapKey);
     if (!prim) return;
     if (series) {
       try {
@@ -2302,7 +2314,7 @@ export class PaneManager {
         /* disposed / mock */
       }
     }
-    this.overlayLineBreaks.delete(key);
+    this.overlayLineBreaks.delete(mapKey);
   }
 
   /**
@@ -2311,22 +2323,24 @@ export class PaneManager {
    */
   private syncLineBreakPrimitive(
     series: ISeriesApi<any>,
+    paneId: string,
     key: string,
     line: OverlayLineSpec,
     seriesKind: PlotSeriesKind,
     breakStyle: boolean,
     forceFull = false,
   ): void {
+    const mapKey = `${paneId}:${key}`;
     if (!breakStyle || isHistogramSeriesKind(seriesKind)) {
-      this.dropLineBreak(series, key);
+      this.dropLineBreak(series, paneId, key);
       return;
     }
-    let prim = this.overlayLineBreaks.get(key);
+    let prim = this.overlayLineBreaks.get(mapKey);
     if (!prim) {
       prim = new LineBreakPrimitive();
       try {
         series.attachPrimitive(prim);
-        this.overlayLineBreaks.set(key, prim);
+        this.overlayLineBreaks.set(mapKey, prim);
       } catch {
         return;
       }
@@ -2583,7 +2597,7 @@ export class PaneManager {
       (k) => k.startsWith('overlay_') || k.startsWith('bgcolor_'),
     );
     for (const k of overlays) {
-      this.dropLineBreak(pane.series[k], k);
+      this.dropLineBreak(pane.series[k], paneId, k);
       safeRemoveSeries(pane.chart, pane.series[k]);
       delete pane.series[k];
       this.overlaySeriesKinds.delete(`${paneId}:${k}`);
@@ -2633,7 +2647,7 @@ export class PaneManager {
         k.startsWith(ohlcPrefix) ||
         k.startsWith(bgPrefix)
       ) {
-        this.dropLineBreak(pane.series[k], k);
+        this.dropLineBreak(pane.series[k], paneId, k);
         safeRemoveSeries(pane.chart, pane.series[k]);
         delete pane.series[k];
         this.overlaySeriesKinds.delete(`${paneId}:${k}`);
@@ -2721,7 +2735,7 @@ export class PaneManager {
         }
       }
       if (!drop) continue;
-      this.dropLineBreak(pane.series[k], k);
+      this.dropLineBreak(pane.series[k], paneId, k);
       safeRemoveSeries(pane.chart, pane.series[k]);
       delete pane.series[k];
       this.overlaySeriesKinds.delete(`${paneId}:${k}`);
@@ -2810,7 +2824,7 @@ export class PaneManager {
       if (!ownerPrefix && k.includes('__')) continue;
       // Keep overlay series if still wanted as plot or as hline fallback
       if (!wantSeries.has(k) && !wantPrice.has(k.slice('overlay_'.length))) {
-        this.dropLineBreak(pane.series[k], k);
+        this.dropLineBreak(pane.series[k], paneId, k);
         safeRemoveSeries(pane.chart, pane.series[k]);
         delete pane.series[k];
         this.overlaySeriesKinds.delete(`${paneId}:${k}`);
@@ -2842,7 +2856,7 @@ export class PaneManager {
       const lw = line.linewidth != null ? Math.max(1, Math.min(4, Math.round(line.linewidth))) : undefined;
       // Recreate when Pine style family changes (line ↔ histogram ↔ area, …)
       if (existing && prevKind != null && prevKind !== seriesKind) {
-        this.dropLineBreak(existing, key);
+        this.dropLineBreak(existing, paneId, key);
         safeRemoveSeries(pane.chart, existing);
         delete pane.series[key];
         this.overlaySeriesKinds.delete(kindKey);
@@ -2903,7 +2917,7 @@ export class PaneManager {
         } catch {
           /* ignore */
         }
-        this.syncLineBreakPrimitive(seriesNow, key, line, seriesKind, breakStyle, forceFull);
+        this.syncLineBreakPrimitive(seriesNow, paneId, key, line, seriesKind, breakStyle, forceFull);
       } else {
         try {
           const c = line.color || PLOT_PALETTE[colorIdx % PLOT_PALETTE.length];
@@ -2946,7 +2960,7 @@ export class PaneManager {
           );
           pane.series[key] = series;
           this.overlaySeriesKinds.set(kindKey, seriesKind);
-          this.syncLineBreakPrimitive(series, key, line, seriesKind, breakStyle, forceFull);
+          this.syncLineBreakPrimitive(series, paneId, key, line, seriesKind, breakStyle, forceFull);
         } catch {
           /* chart may be disposed mid-apply */
         }
@@ -2976,7 +2990,7 @@ export class PaneManager {
         // Drop any previous constant-line fallback series for this hline
         const fallbackKey = makeOverlayLineKey(line.name, ownerId);
         if (pane.series[fallbackKey]) {
-          this.dropLineBreak(pane.series[fallbackKey], fallbackKey);
+          this.dropLineBreak(pane.series[fallbackKey], paneId, fallbackKey);
           safeRemoveSeries(pane.chart, pane.series[fallbackKey]);
           delete pane.series[fallbackKey];
           this.deleteOverlayMeta(paneId, fallbackKey);

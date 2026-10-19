@@ -199,7 +199,11 @@ export function buildCompareSeriesData(
     cached.mainLast === mainBars[mainBars.length - 1]?.time &&
     cached.mainLastClose === mainBars[mainBars.length - 1]?.close &&
     cached.compareLast === compareBars[compareBars.length - 1]?.time &&
-    cached.compareLastClose === compareBars[compareBars.length - 1]?.close
+    cached.compareLastClose === compareBars[compareBars.length - 1]?.close &&
+    // A mid-history correction (a gap fill, a venue revision) leaves the
+    // endpoints unchanged, so the memo has to look inside the series.
+    cached.mainProbe === probeSeries(mainBars) &&
+    cached.compareProbe === probeSeries(compareBars)
   ) {
     return cached.result;
   }
@@ -226,9 +230,31 @@ export function buildCompareSeriesData(
     mainLastClose: mainBars[mainBars.length - 1]?.close,
     compareLast: compareBars[compareBars.length - 1]?.time,
     compareLastClose: compareBars[compareBars.length - 1]?.close,
+    mainProbe: probeSeries(mainBars),
+    compareProbe: probeSeries(compareBars),
     result,
   };
   return result;
+}
+
+/**
+ * Cheap content probe of a series (up to nine evenly spaced samples).
+ *
+ * The memo compares refs, lengths and endpoints — a correction in the middle
+ * of the series (a gap fill, a venue revision) keeps all of them, so the
+ * compare line kept stale values until the tail moved.
+ */
+function probeSeries(bars: ReadonlyArray<{ time: number; close: number }>): string {
+  const n = bars.length;
+  if (!n) return '';
+  const count = Math.min(9, n);
+  const parts: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const idx = count === 1 ? 0 : Math.round((i * (n - 1)) / (count - 1));
+    const b = bars[idx];
+    parts.push(b ? `${b.time}:${b.close}` : '');
+  }
+  return parts.join(';');
 }
 
 type CompareDataMemo = {
@@ -243,6 +269,9 @@ type CompareDataMemo = {
   mainLastClose: number | undefined;
   compareLast: number | undefined;
   compareLastClose: number | undefined;
+  /** Content probes — a mid-history correction keeps the endpoints. */
+  mainProbe: string;
+  compareProbe: string;
   result: { compare: LinePoint[]; mainPercent: LinePoint[] };
 };
 

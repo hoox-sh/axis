@@ -3422,12 +3422,15 @@ export function setIndicatorSeries(
     name: string;
     series: Record<string, PlotSample[]>;
     titles?: Record<string, string>;
+    /** Bar times the cached series is aligned to (see the cache type). */
+    times?: number[];
   },
 ) {
   setStore('indicatorSeries', id, {
     name: payload.name,
     series: payload.series,
     titles: payload.titles,
+    times: payload.times,
   });
 }
 

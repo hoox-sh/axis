@@ -79,12 +79,15 @@ export function applyDrawings(ctx: DrawingsApplyContext): void {
         if (!ctx.overlay && ctx.paneId !== 'price') {
           const onPrice = kept.filter((d) => d.forceOverlay);
           const onPane = kept.filter((d) => !d.forceOverlay);
-          keptCount = priceLayer?.setScriptDrawings(onPrice, limits, ctx.indicatorId ?? EDITOR_RUN_KEY) ?? 0;
           const paneLayer = ensureScriptPaneLayer(ctx.paneId);
           if (paneLayer) {
+            keptCount = priceLayer?.setScriptDrawings(onPrice, limits, ctx.indicatorId ?? EDITOR_RUN_KEY) ?? 0;
             keptCount += paneLayer.setScriptDrawings(onPane, limits, ctx.indicatorId ?? EDITOR_RUN_KEY);
-          } else if (onPane.length) {
-            // Fall back to price if sub-pane layer unavailable
+          } else {
+            // No sub-pane layer — everything goes to the price pane. One call:
+            // the layer replaces the owner's drawings, so a second call with a
+            // different list would drop the first one (and the count was
+            // overwritten rather than added).
             keptCount = priceLayer?.setScriptDrawings(kept, limits, ctx.indicatorId ?? EDITOR_RUN_KEY) ?? 0;
           }
         } else {

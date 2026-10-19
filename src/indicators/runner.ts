@@ -152,6 +152,21 @@ export function _resetOhlcvTimesCacheForTests(): void {
 }
 
 /**
+ * Bar times the engine will zip a cross-indicator input series against.
+ *
+ * The engine evaluates the chart window (or the run's own bars), so the
+ * cached series of a producer has to be re-joined onto that axis. The times
+ * come from the store — the same axis the overlay apply uses.
+ */
+function chartTimesForInputSources(): number[] {
+  const bars = store.bars;
+  const n = bars?.length ?? 0;
+  const out = new Array<number>(n);
+  for (let i = 0; i < n; i++) out[i] = Number(bars[i]?.time);
+  return out;
+}
+
+/**
  * Cap the bars handed to the engine to the most recent N
  * ({@link AppState.rollingWindowBars}).
  *
@@ -834,8 +849,14 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
       store.editorInputValues,
       !indicatorId && !opts.skipEditorDraft,
     );
-    // Expand plot:<indicatorId>:<plotKey> refs → full series arrays for the engine
-    const inputs = resolveInputSourceValues(rawInputs, store.indicatorSeries);
+    // Expand plot:<indicatorId>:<plotKey> refs → full series arrays for the engine.
+    // The chart axis is passed so a cached series (written for an older window)
+    // is re-joined by time instead of by index.
+    const inputs = resolveInputSourceValues(
+      rawInputs,
+      store.indicatorSeries,
+      chartTimesForInputSources(),
+    );
     // Strategy Properties: rewrite strategy() kwargs on a run-time copy only.
     // Explicit opts.strategyProps (including {}) wins — empty bag = no rewrite.
     // Isolate studies already bake props into source; never merge editor leftovers.

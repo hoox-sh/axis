@@ -42,6 +42,15 @@ export type IndicatorSeriesCache = Record<
     series: Record<string, PlotSample[]>;
     /** Optional display titles from plot_meta */
     titles?: Record<string, string>;
+    /**
+     * Bar times the cached series was aligned to when it was written.
+     *
+     * The chart window slides (it drops its head on every new bar), so a
+     * cached series is one bar behind the window it was written for. The
+     * times make the re-alignment by **time** possible instead of the index
+     * zip, which would shift every value.
+     */
+    times?: number[];
   }
 >;
 
@@ -128,10 +137,17 @@ export function sourceOptionsWithPlots(
 /**
  * Expand plot refs in an inputs map to full series arrays for the engine.
  * Built-in names (`close`, `hlc3`, …) pass through as strings.
+ *
+ * `chartTimes` is the bar axis the consumer's engine will zip the series
+ * against. A cached series carries the times it was written for; the chart
+ * window slides, so the cached series is one bar behind and has to be
+ * re-joined **by time** — an index zip would shift every value by the
+ * slide.
  */
 export function resolveInputSourceValues(
   inputs: Record<string, unknown> | undefined | null,
   cache: IndicatorSeriesCache | undefined | null,
+  chartTimes?: readonly number[] | null,
 ): Record<string, unknown> | undefined {
   if (!inputs || typeof inputs !== 'object' || Array.isArray(inputs)) {
     return undefined;
@@ -143,19 +159,56 @@ export function resolveInputSourceValues(
   for (const [k, v] of Object.entries(inputs)) {
     const ref = parsePlotSourceId(v);
     if (!ref) continue;
-    const series = cache?.[ref.indicatorId]?.series?.[ref.plotKey];
+    const entry = cache?.[ref.indicatorId];
+    const series = entry?.series?.[ref.plotKey];
     if (!series || !Array.isArray(series)) {
       // Leave ref as-is; engine cannot resolve it — better a soft miss than crash
       continue;
     }
     // Coerce non-finite samples so the engine never sees NaN/Infinity from a
     // stale cache entry (chart-side garbage must not poison the next run).
-    out[k] = series.map((sample) =>
+    const clean = series.map((sample) =>
       typeof sample === 'number' && Number.isFinite(sample) ? sample : null,
     );
+    // Re-join by time when both axes are known: the cached series was written
+    // for an older window (the chart slides), so the index positions moved.
+    const cachedTimes = entry?.times;
+    if (cachedTimes?.length && chartTimes?.length) {
+      out[k] = rejoinByTime(clean, cachedTimes, chartTimes);
+    } else {
+      out[k] = clean;
+    }
     changed = true;
   }
   return changed ? out : inputs;
+}
+
+/**
+ * Re-join a cached series onto the chart's bar axis by **time**.
+ *
+ * Values whose bar time is no longer in the window are dropped; bars the
+ * cached series does not cover yet become `null` (Pine `na`).
+ */
+function rejoinByTime(
+  values: (number | null)[],
+  cachedTimes: readonly number[],
+  chartTimes: readonly number[],
+): (number | null)[] {
+  const byTime = new Map<number, number | null>();
+  for (let i = 0; i < cachedTimes.length; i++) {
+    const t = cachedTimes[i];
+    if (typeof t !== 'number' || !Number.isFinite(t)) continue;
+    byTime.set(t, values[i] ?? null);
+  }
+  const out: (number | null)[] = [];
+  for (const t of chartTimes) {
+    if (typeof t !== 'number' || !Number.isFinite(t)) {
+      out.push(null);
+      continue;
+    }
+    out.push(byTime.has(t) ? (byTime.get(t) ?? null) : null);
+  }
+  return out;
 }
 
 /**

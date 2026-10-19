@@ -115,6 +115,30 @@ export interface AlignedApplySeries {
  * through untouched. A length mismatch (fresh `/run` vs a chart that grew
  * DSM/forming bars) always aligns so fills/lines/markers zip on the window.
  */
+/**
+ * Scripts already warned about a session run without an engine bar axis.
+ *
+ * A session/stream run whose engine ships no axis is tail-pinned onto the
+ * chart; the warning must not repeat on every live tick.
+ */
+const noEngineAxisWarned = new Set<string>();
+
+function warnOnceNoEngineAxis(scriptName: string): void {
+  const key = String(scriptName || 'script');
+  if (noEngineAxisWarned.has(key)) return;
+  noEngineAxisWarned.add(key);
+  appendLog(
+    'warn',
+    'Engine returned no bar axis for a session run — the series is pinned to the chart tail',
+    'run',
+  );
+}
+
+/** @internal test helper — clear the warn-once registry. */
+export function _resetNoEngineAxisWarnForTests(): void {
+  noEngineAxisWarned.clear();
+}
+
 export function alignApplySeries(
   script: string,
   result: RunResult,
@@ -167,6 +191,13 @@ export function alignApplySeries(
     : resultTimes
       ? alignSeriesMapToTimes(rawSeries, resultTimes, ohlcvTimes)
       : tailAlignSeriesMap(rawSeries, chartWindowBars);
+  // A session/stream run whose engine shipped **no** bar axis is tail-pinned
+  // onto the chart: the series is assumed to cover the chart's tail. That is
+  // only true when the session's window is the chart's window — say so
+  // instead of mis-plotting silently.
+  if (sessionAligned && !resultTimes) {
+    warnOnceNoEngineAxis(resolveScriptDisplayName(script, undefined));
+  }
   const split = splitSeriesByKind(seriesMap, plotMeta);
   if (engineClampedTail && !sessionAligned && !opts.silent) {
     appendLog(
