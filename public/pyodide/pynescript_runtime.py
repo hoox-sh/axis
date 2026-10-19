@@ -321,7 +321,9 @@ def _export_alerts(evaluator) -> tuple[list, list]:
         alerts = list(export_alerts_from_evaluator(inner) or [])
     except Exception:
         raw = getattr(inner, "get_triggered_alerts", None)
-        items = raw() if callable(raw) else getattr(inner, "_triggered_alerts", None) or []
+        items = (
+            raw() if callable(raw) else getattr(inner, "_triggered_alerts", None) or []
+        )
         for a in items or []:
             if hasattr(a, "to_dict"):
                 alerts.append(a.to_dict())
@@ -608,6 +610,36 @@ def _run_interpret(
     return out
 
 
+def _as_event_list(value) -> list:
+    """Normalize a packed event container (``__alerts`` / ``__events`` / …).
+
+    The compile packer may hand these over as a list, a numpy array (an
+    *empty* list becomes an empty float array) or a mapping. Truthiness on a
+    numpy array raises ``ValueError: The truth value of an empty array is
+    ambiguous``, so never test them with ``or`` / ``if value``.
+    """
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [item for item in value if isinstance(item, dict)]
+    if isinstance(value, tuple):
+        return [item for item in value if isinstance(item, dict)]
+    if isinstance(value, dict):
+        # A single event (has event fields) or a container of events.
+        if any(key in value for key in ("kind", "message", "bar_index", "source")):
+            return [value]
+        for key in ("alerts", "events", "items", "__alerts", "__events"):
+            inner = value.get(key)
+            if isinstance(inner, (list, tuple)):
+                return [item for item in inner if isinstance(item, dict)]
+        return []
+    # numpy array / other sequence
+    try:
+        return [item for item in list(value) if isinstance(item, dict)]
+    except TypeError:
+        return []
+
+
 def _json_safe_series(values) -> list:
     """NaN/Inf → None so browser JSON.parse never sees bare NaN."""
     if values is None:
@@ -864,9 +896,13 @@ def _run_compiled(script: str, bars: list[dict]) -> dict:
     events = []
     packed_alerts = []
     if isinstance(series_map, dict):
-        drawings = series_map.pop("__drawings", []) or []
-        events = series_map.pop("__events", []) or []
-        packed_alerts = series_map.pop("__alerts", []) or []
+        # The wheel may hand these over as a list, a numpy array (an *empty*
+        # list is coerced to an empty float array by the compile packer) or a
+        # mapping. Truthiness on a numpy array raises "The truth value of an
+        # empty array is ambiguous", so never use `or []` on them.
+        drawings = _as_event_list(series_map.pop("__drawings", None))
+        events = _as_event_list(series_map.pop("__events", None))
+        packed_alerts = _as_event_list(series_map.pop("__alerts", None))
         for k in ("__position_size", "__netprofit", "__equity"):
             series_map.pop(k, None)
 

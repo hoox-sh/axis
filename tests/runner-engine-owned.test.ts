@@ -136,9 +136,11 @@ describe('runner engine-owned routing', () => {
 
     const session = calls.find((c) => c.method === 'POST' && c.path === '/data/session');
     expect(session).toBeDefined();
+    // Identity is canonical for the engine store: pair-form symbol + market.
     expect(session!.body).toMatchObject({
       exchange: 'binance',
-      symbol: 'BTCUSDT',
+      market: 'spot',
+      symbol: 'BTC/USDT',
       interval: '1h',
     });
     expect(session!.body!.history_bars).toBeGreaterThan(0);
