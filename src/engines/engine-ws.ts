@@ -233,7 +233,7 @@ class EngineWsClient {
         reject(new Error('WebSocket error'));
       };
 
-      ws.onclose = () => {
+      ws.onclose = (ev?: CloseEvent) => {
         // Only the socket this client currently owns may close the client (and
         // its in-flight runs) down.
         if (!owns()) return;
@@ -244,6 +244,14 @@ class EngineWsClient {
           p.reject(new Error('WebSocket closed'));
           this.pending.delete(id);
         }
+        // An abnormal close (1002 protocol error, 1006 no close frame, 1011
+        // server error) means the endpoint's WS transport is broken — e.g. a
+        // backend whose worker double-upgrades the handshake. Mark the client
+        // dead so the next runs go straight to REST instead of re-opening a
+        // socket that cannot carry a frame. Normal closes (1000 / 1001) keep
+        // the client reusable.
+        const code = (ev as CloseEvent | undefined)?.code;
+        if (code == null || (code !== 1000 && code !== 1001)) this.markDead();
         if (!settled) {
           settled = true;
           clearTimeout(timer);

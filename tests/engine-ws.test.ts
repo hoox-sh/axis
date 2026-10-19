@@ -39,8 +39,10 @@ class FakeWS {
   static failSend = false;
   /** When true, `close()` sets `readyState` but defers the close event. */
   static deferClose = false;
+  /** Close code reported by the next close event (1000 = normal). */
+  static closeCode: number | undefined = 1000;
   onopen: (() => void) | null = null;
-  onclose: (() => void) | null = null;
+  onclose: ((ev: { code?: number }) => void) | null = null;
   onerror: (() => void) | null = null;
   onmessage: ((ev: { data: string }) => void) | null = null;
   readyState = 0;
@@ -62,12 +64,12 @@ class FakeWS {
     this.readyState = 3;
     // Browsers dispatch the close *event* as a separate task; when
     // `deferClose` is set the test delivers it itself via `emitClose()`.
-    if (!FakeWS.deferClose) this.onclose?.();
+    if (!FakeWS.deferClose) this.emitClose();
   }
 
   /** Deliver the close event (as the browser would, long after `close()`). */
-  emitClose() {
-    this.onclose?.();
+  emitClose(code: number | undefined = FakeWS.closeCode) {
+    this.onclose?.({ code });
   }
 
   open() {
@@ -97,6 +99,7 @@ describe('EngineWsClient', () => {
     FakeWS.failConstruct = false;
     FakeWS.failSend = false;
     FakeWS.deferClose = false;
+    FakeWS.closeCode = 1000;
     _resetEngineWsClients();
     (globalThis as unknown as { WebSocket: typeof FakeWS }).WebSocket = FakeWS as never;
   });
@@ -170,6 +173,42 @@ describe('EngineWsClient', () => {
     await Promise.resolve();
     FakeWS.instances[0]!.close();
     await expect(p).rejects.toThrow(/WebSocket closed/);
+  });
+
+  it('marks dead when the socket closes abnormally after open', async () => {
+    // A backend whose worker double-upgrades the handshake accepts the
+    // connection and then drops every frame (close 1002). The client must not
+    // re-open a broken socket on the next run — REST takes over.
+    FakeWS.closeCode = 1002;
+    const client = getEngineWsClient('http://localhost:5002');
+    const connecting = client.ensureConnected();
+    FakeWS.instances[0]!.open();
+    await connecting;
+
+    const p = client.run({ script: 'plot(1)', data: [] }, 5_000);
+    await Promise.resolve();
+    FakeWS.instances[0]!.close();
+    await expect(p).rejects.toThrow(/WebSocket closed/);
+    expect(client.isDead).toBe(true);
+    // Dead → the next run skips the socket entirely.
+    await expect(client.run({ script: 'plot(1)', data: [] }, 1_000)).rejects.toThrow(/dead/i);
+    expect(FakeWS.instances.length).toBe(1);
+  });
+
+  it('keeps the client usable after a normal close (1000)', async () => {
+    const client = getEngineWsClient('http://localhost:5002');
+    const connecting = client.ensureConnected();
+    FakeWS.instances[0]!.open();
+    await connecting;
+
+    FakeWS.instances[0]!.close();
+    expect(client.isDead).toBe(false);
+
+    // A later run re-connects on a fresh socket.
+    const second = client.ensureConnected();
+    FakeWS.instances[1]!.open();
+    await second;
+    expect(client.isOpen).toBe(true);
   });
 
   it('a superseded socket close cannot tear down the live connection', async () => {

@@ -23,6 +23,7 @@ _Generated/updated: 2026-10-18 · 603 commits · describe-tag: `v2.24.5`_
 
 ### Fixed
 
+- **A broken engine WebSocket no longer re-opens on every run.** An abnormal close (1002 protocol error, 1006, 1011) after the socket opened now marks the shared `/ws/run` client dead for the cool-down, so the next runs go straight to REST instead of re-connecting to an endpoint that accepts the handshake and then drops every frame. Normal closes (1000 / 1001) keep the client reusable.
 - **Interval switch no longer paints a stale cache tail plus the live candle.** Switching 5m → 1m used to show yesterday’s last cached bar, a hole, then the current price because live started before venue pages closed cache→now. The load path now fills that tail before `startLive`.
 - **Internal holes in the painted window are filled from the venue.** A 1m cache that already reached “now” still left a ~2h blank (133 bars); load now fetches those ranges before live starts.
 - **`/ws/live` subscribes a 500-bar tail instead of the full 5k window.** A 5000-bar 1m `full` timed out; the chart stays on the REST/DSM window and the socket can go live.
