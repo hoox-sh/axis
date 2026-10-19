@@ -3605,9 +3605,11 @@ export function appendBar(bar: Bar): BarAppendResult {
     // The paint layer must mirror this with a full setData (see `slid`).
     // `unwrap` avoids reading every element through the store proxy — a bar
     // object is wrapped in its own proxy, so slicing the proxy allocates one
-    // proxy per bar on every new candle.
+    // proxy per bar on every new candle. One copy, not two: the tail is
+    // pushed into the sliced array instead of spread into a new one.
     const raw = unwrap(b) as Bar[];
-    const next = [...raw.slice(n - (limit - 1)), bar];
+    const next = raw.slice(n - (limit - 1));
+    next.push(bar);
     setStore('bars', next);
     // Keep the multi-chart slot cache in step: it holds the *same* array
     // reference, so a replaced array would leave the slot on the old window

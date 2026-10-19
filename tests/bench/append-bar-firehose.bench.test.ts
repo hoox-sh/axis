@@ -44,13 +44,15 @@ describe.skipIf(!RUN)('appendBar firehose (AXIS_BENCH=1)', () => {
       preferAfterLoad: false,
       rerunOn: 'every-tick',
     });
+    // The chart holds the Rolling window, so the deep-history premise needs the
+    // window raised to the history size (the default 10k would trim it).
+    setStore('rollingWindowBars', BENCH_HISTORY_BARS);
   });
 
   it(`handles ${BENCH_TICK_COUNT.toLocaleString()} ticks on ~${BENCH_HISTORY_BARS.toLocaleString()} history under soft budget`, () => {
     const history = makeScaleBars(BENCH_HISTORY_BARS);
     loadBars(history, 'BTCUSDT', '1m', 'bench');
     expect(store.bars.length).toBe(BENCH_HISTORY_BARS);
-
     const tip = store.bars[store.bars.length - 1]!;
     let cur: Bar = {
       time: tip.time,
@@ -78,7 +80,9 @@ describe.skipIf(!RUN)('appendBar firehose (AXIS_BENCH=1)', () => {
 
     // eslint-disable-next-line no-console
     console.log(formatSample(sample));
-  });
+    // The window slides on every new bar, so the run copies the window once
+    // per bar — the opt-in bench needs more than Bun's 5s default timeout.
+  }, 180_000);
 });
 
 // Always-visible placeholder so `bun test tests/bench/` reports a passing suite when skipped.
