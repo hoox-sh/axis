@@ -31,6 +31,7 @@
 import type { Bar } from '../store/types';
 import { idbAvailable, idbReq, idbTxDone, openDb } from '../storage/idb';
 import { sanitizeBar } from './parse-bars';
+import { normalizeLoadSymbol } from './symbol-normalize';
 
 const DB_NAME = 'axis-bars-cache';
 const DB_VERSION = 1;
@@ -134,7 +135,10 @@ export function barsCacheKey(
   opts?: { market?: string; authMode?: string },
 ): string {
   const src = String(sourceId || '').trim();
-  const sym = String(symbol || '').trim().toUpperCase();
+  // DEX pool symbols keep their case: uppercasing a base58 / `0x…` address
+  // made two distinct pools share one cache key, so the store served the
+  // wrong series and merged one pool's bars into the other's.
+  const sym = normalizeLoadSymbol(symbol, src);
   const iv = String(interval || '').trim();
   const base = `${src}|${sym}|${iv}`;
   const market = String(opts?.market || '').trim();
@@ -591,7 +595,7 @@ export async function putCachedBars(
   incoming: Bar[],
 ): Promise<Bar[]> {
   const key = barsCacheKey(sourceId, symbol, interval);
-  const sym = String(symbol || '').trim().toUpperCase();
+  const sym = normalizeLoadSymbol(symbol, sourceId);
   const safeIncoming = Array.isArray(incoming) ? incoming : [];
 
   // Prefer warm memory reference (no clone) — mergeAndCap never mutates `existing`.
@@ -619,20 +623,107 @@ export async function putCachedBars(
   return bars;
 }
 
-/** Drop one series from cache. */
+/**
+ * Overwrite the stored series with exactly `bars` (atomic replace).
+ *
+ * A clear-then-write leaves a window in which the series does not exist at
+ * all: a tab crash, a navigation, or a concurrent write in that window
+ * destroys the dataset. The IndexedDB record is written with a single `put`,
+ * which overwrites in place.
+ *
+ * @returns the stored series
+ */
+export async function replaceCachedBars(
+  sourceId: string,
+  symbol: string,
+  interval: string,
+  bars: readonly Bar[],
+): Promise<Bar[]> {
+  const key = barsCacheKey(sourceId, symbol, interval);
+  const sym = String(symbol || '').trim().toUpperCase();
+  const series = Array.isArray(bars) ? bars.slice() : [];
+  const rec: BarsCacheRecord = {
+    key,
+    sourceId: String(sourceId || ''),
+    symbol: sym,
+    interval: String(interval || ''),
+    bars: series,
+    updatedAt: Date.now(),
+  };
+  memory.set(key, rec);
+  trimMemorySeries();
+  // A single `put` overwrites the record — no delete-then-write window.
+  scheduleIdbPut(rec);
+  return series;
+}
+
+/**
+ * True when a cache key belongs to the same series as `base`.
+ *
+ * Authenticated / non-spot series append `|market|authMode`, so a delete has
+ * to sweep the variants too — otherwise the metadata row survives the delete.
+ */
+function isSameSeriesKey(key: string, base: string): boolean {
+  return key === base || key.startsWith(`${base}|`);
+}
+
+/** Drop one series from cache (memory + IndexedDB, incl. market/auth variants). */
 export async function clearCachedBars(
   sourceId: string,
   symbol: string,
   interval: string,
 ): Promise<void> {
   const key = barsCacheKey(sourceId, symbol, interval);
-  memory.delete(key);
+  for (const k of Array.from(memory.keys())) {
+    if (isSameSeriesKey(k, key)) memory.delete(k);
+  }
+  if (!idbAvailable()) return;
+  try {
+    const db = await openBarsDb();
+    try {
+      // Read the sibling keys first (separate transaction — awaiting inside a
+      // readwrite tx can close it before the deletes are queued).
+      const variants: string[] = [];
+      try {
+        const readTx = db.transaction(STORE, 'readonly');
+        const all = (await idbReq(readTx.objectStore(STORE).getAllKeys())) as IDBValidKey[];
+        await idbTxDone(readTx);
+        for (const k of all || []) {
+          if (typeof k === 'string' && isSameSeriesKey(k, key) && k !== key) {
+            variants.push(k);
+          }
+        }
+      } catch {
+        /* getAllKeys unsupported — the exact key delete below is enough */
+      }
+      const tx = db.transaction(STORE, 'readwrite');
+      const store = tx.objectStore(STORE);
+      store.delete(key);
+      for (const k of variants) store.delete(k);
+      await idbTxDone(tx);
+    } finally {
+      db.close();
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Drop every cached series (memory + IndexedDB). */
+export async function clearAllCachedBars(): Promise<void> {
+  memory.clear();
+  pendingIdbPuts.clear();
+  if (idbFlushTimer != null) {
+    clearTimeout(idbFlushTimer);
+    idbFlushTimer = null;
+  }
+  sharedDbPromise = null;
   if (!idbAvailable()) return;
   try {
     const db = await openBarsDb();
     try {
       const tx = db.transaction(STORE, 'readwrite');
-      tx.objectStore(STORE).delete(key);
+      tx.objectStore(STORE).clear();
       await idbTxDone(tx);
     } finally {
       db.close();

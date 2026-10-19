@@ -119,32 +119,8 @@ export const StatusBar: Component = () => {
       try {
         setStore('rollingWindowBars', next);
         persist();
-        const { applyCachedToChart } = await import(
-          '../data/data-source-manager'
-        );
-        const ok = await applyCachedToChart(
-          store.source,
-          store.symbol,
-          store.interval,
-          { maxBars: next },
-        );
-        if (!ok && store.bars.length > next) {
-          // No dataset to slice from — trim the painted window in place.
-          const { loadBars } = await import('../store');
-          const { getManager, setDataToChart } = await import(
-            '../chart/manager-access'
-          );
-          const trimmed = store.bars.slice(store.bars.length - next);
-          loadBars(trimmed, store.symbol, store.interval, store.exchange);
-          const manager = getManager();
-          if (manager) {
-            try {
-              setDataToChart(trimmed, { fit: false });
-            } catch {
-              /* paint is best-effort */
-            }
-          }
-        }
+        const { applyChartWindow } = await import('../data/data-source-manager');
+        await applyChartWindow(next);
       } catch {
         /* edit apply is best-effort */
       }

@@ -4,6 +4,8 @@
 import { describe, it, expect } from 'bun:test';
 import {
   barsConflict,
+  isSortedUnique,
+  mergeSortedSeries,
   mergeWithConflictPolicy,
 } from '../src/data/merge-datasets';
 import type { Bar } from '../src/store/types';
@@ -60,6 +62,14 @@ describe('merge-datasets · mergeWithConflictPolicy', () => {
     expect(res.bars.find((b) => b.time === 120)!.close).toBe(250);
   });
 
+  it('a closed candle is never replaced by a forming bar', () => {
+    const closed: Bar = { ...bar(120, 200), closed: true };
+    const forming: Bar = { ...bar(120, 250), closed: false };
+    const res = mergeWithConflictPolicy([bar(60, 100), closed], [forming]);
+    expect(res.conflicts).toHaveLength(1);
+    expect(res.bars.find((b) => b.time === 120)!.close).toBe(200);
+  });
+
   it('agreement on overlap is not a conflict', () => {
     const res = mergeWithConflictPolicy(current, [bar(120, 200)]);
     expect(res.conflicts).toHaveLength(0);
@@ -79,5 +89,41 @@ describe('merge-datasets · mergeWithConflictPolicy', () => {
       tolerance: 0.01,
     });
     expect(res.conflicts).toHaveLength(0);
+  });
+});
+
+describe('merge-datasets · sorted fast path', () => {
+  it('detects a sorted, unique series', () => {
+    expect(isSortedUnique([bar(60, 1), bar(120, 2), bar(180, 3)])).toBe(true);
+    expect(isSortedUnique([])).toBe(true);
+    expect(isSortedUnique([bar(120, 1), bar(60, 2)])).toBe(false);
+    expect(isSortedUnique([bar(60, 1), bar(60, 2)])).toBe(false);
+  });
+
+  it('merges two sorted series in one pass', () => {
+    const res = mergeSortedSeries([bar(60, 1), bar(120, 2)], [bar(120, 9), bar(180, 3)]);
+    expect(res.bars.map((b) => b.time)).toEqual([60, 120, 180]);
+    expect(res.bars[1]!.close).toBe(9);
+    expect(res.added).toBe(1);
+    expect(res.conflicts).toHaveLength(1);
+  });
+
+  it('keeps a closed candle against an incoming forming bar', () => {
+    const closed: Bar = { ...bar(120, 200), closed: true };
+    const forming: Bar = { ...bar(120, 250), closed: false };
+    const res = mergeSortedSeries([bar(60, 100), closed], [forming]);
+    expect(res.bars.find((b) => b.time === 120)!.close).toBe(200);
+    expect(res.conflicts).toHaveLength(1);
+  });
+
+  it('matches the map-based merge on the same input', () => {
+    const a = [bar(60, 1), bar(120, 2), bar(240, 4)];
+    const b = [bar(120, 9), bar(180, 3), bar(240, 5)];
+    const fast = mergeSortedSeries(a, b);
+    const slow = mergeWithConflictPolicy(a, b);
+    expect(fast.bars.map((x) => [x.time, x.close])).toEqual(
+      slow.bars.map((x) => [x.time, x.close]),
+    );
+    expect(fast.added).toBe(slow.added);
   });
 });

@@ -36,7 +36,7 @@
 import { createStore, produce } from 'solid-js/store';
 import type { Bar } from '../store/types';
 import {
-  clampRollingWindowBars,
+  chartWindowLimit,
   HISTORY_BARS_MAX,
   loadBars,
   store,
@@ -53,7 +53,6 @@ import {
 import { normalizeHistoricalBars } from './parse-bars';
 import { exchangeForSource, normalizeLoadSymbol } from './symbol-exchange';
 import {
-  getCachedBarCount,
   sliceBarsForLoad,
   type BarLoadWindow,
 } from './bars-cache';
@@ -64,6 +63,7 @@ import {
 } from './dataset-store';
 import {
   intervalToSec,
+  mergeGaps,
   type BarGap,
 } from './bars-gaps';
 import {
@@ -71,7 +71,9 @@ import {
   validateDataset,
   venueClassForSourceCaps,
   type DatasetReport,
+  type VenueClass,
 } from './dataset-validate';
+import { isSortedUnique } from './merge-datasets';
 
 export type DataSourceJobStatus =
   | 'pending'
@@ -183,16 +185,36 @@ function jobVenueClass(sourceId: string) {
 function validateJobBars(
   bars: readonly Bar[],
   j: InternalJob,
+  opts?: { persist?: boolean; fromSec?: number; toSec?: number },
 ): { repaired: Bar[]; report: DatasetReport } {
-  const { bars: repaired, stats } = repairBars(bars, j.interval);
-  if (stats.removed || stats.deduped || stats.snapped || stats.reordered) {
+  // The dataset store repairs on **every** write (`putDatasetBars` /
+  // `replaceDataset` both run the repair before persisting), so the series
+  // that came back from the store is already repaired. Re-running the repair
+  // copied and re-sorted the whole dataset (50k bars) on every validation
+  // round — up to six times per job.
+  //
+  // The repair is only persisted when it was **non-destructive**: a repair
+  // that dropped rows means the source series was corrupt, and overwriting
+  // the dataset with the truncated copy would delete real venue bars.
+  const needsRepair = !isSortedUnique(bars as Bar[]);
+  const repair = needsRepair ? repairBars(bars, j.interval) : null;
+  const repaired = repair ? repair.bars : (bars as Bar[]);
+  const stats = repair?.stats;
+  const lossy = !!stats && (stats.removed > 0 || repaired.length < bars.length);
+  if (!lossy && stats?.snapped && opts?.persist !== false) {
     void replaceDataset(j.sourceId, j.symbol, j.interval, repaired).catch(() => {
       /* persist is best-effort */
     });
   }
-  const report = validateDataset(repaired, j.targetFromSec, j.targetToSec, j.interval, {
-    venueClass: jobVenueClass(j.sourceId),
-  });
+  const report = validateDataset(
+    repaired,
+    opts?.fromSec ?? j.targetFromSec,
+    opts?.toSec ?? j.targetToSec,
+    j.interval,
+    {
+      venueClass: jobVenueClass(j.sourceId),
+    },
+  );
   return { repaired, report };
 }
 
@@ -310,14 +332,25 @@ function pruneJobList(): void {
   );
 }
 
+/**
+ * Jobs the user dismissed (or that were pruned).
+ *
+ * A detached `runJob` keeps its `InternalJob` reference after the job left
+ * the list, so a late `syncJob` would re-insert it — the dismissed job
+ * reappears in the DSM panel. Membership in `internals` is the authority:
+ * a job that is no longer tracked is never published again.
+ */
+const dismissedJobs = new Set<string>();
+
 function syncJob(j: InternalJob): void {
+  if (dismissedJobs.has(j.id)) return;
   const pub = publicJob(j);
   setManagerState(
     'jobs',
     produce((list) => {
       const i = list.findIndex((x) => x.id === j.id);
       if (i >= 0) list[i] = pub;
-      else list.unshift(pub);
+      else if (internals.has(j.id)) list.unshift(pub);
     }),
   );
   if (isTerminalStatus(j.status)) pruneJobList();
@@ -522,7 +555,20 @@ export function pauseBackfill(jobId: string): void {
 /** Resume a paused job (new background runner). */
 export function resumeBackfill(jobId: string): void {
   const j = internals.get(jobId);
-  if (!j || j.status !== 'paused') return;
+  if (!j) return;
+  // The pause request may not have reached the runner yet — the status flips
+  // at the next page boundary. A resume in that window used to be dropped
+  // (the status was still `running`), so the job stayed paused until the
+  // user pressed resume again.
+  if (j.status === 'running' && j.paused) {
+    // The runner is still in flight: clear the flag and let it continue.
+    // Re-queueing here would run the job twice.
+    j.paused = false;
+    j.updatedAt = Date.now();
+    syncJob(j);
+    return;
+  }
+  if (j.status !== 'paused') return;
   j.paused = false;
   // Fresh controller so a prior cancel edge does not stick
   if (j.abort.signal.aborted) {
@@ -539,6 +585,9 @@ export function dismissJob(jobId: string): void {
   if (j && (j.status === 'running' || j.status === 'pending' || j.status === 'paused')) {
     cancelBackfill(jobId);
   }
+  // Mark it dismissed before dropping the handle: a detached runner still holds
+  // the job and would otherwise re-publish it on its next `syncJob`.
+  dismissedJobs.add(jobId);
   internals.delete(jobId);
   setManagerState(
     'jobs',
@@ -649,12 +698,15 @@ async function fetchWalkPage(
   if (!rawPage.length) return null;
 
   const rawOldest = rawPage[0]!.time;
+  // One step of slack, not a hardcoded day: a day is 1440 bars of noise on a
+  // 1m series and far too little on a monthly one.
+  const slack = intervalToSec(j.interval);
   const pageBars = rawPage.filter(
     (b) =>
       b &&
       Number.isFinite(b.time) &&
       b.time >= windowFrom &&
-      b.time <= windowTo + 86_400,
+      b.time <= windowTo + slack,
   );
   if (pageBars.length) {
     try {
@@ -698,6 +750,7 @@ async function walkBackRange(
   let cursorEnd = startCursorEnd;
   let prevPageOldest: number | null = null;
   let pages = 0;
+  const step = intervalToSec(j.interval);
 
   while (pages < maxPages) {
     if (j.abort.signal.aborted) return 'cancelled';
@@ -726,7 +779,13 @@ async function walkBackRange(
       // otherwise try older cursor
       if (prevPageOldest != null && rawOldest >= prevPageOldest) return 'ok';
       prevPageOldest = rawOldest;
-      cursorEnd = rawOldest - 1;
+      // One step of overlap, not one second. A venue answers "the newest bar
+      // with open time <= endTime"; `rawOldest - 1` is only safe for a venue
+      // whose bars sit on a grid that is exactly `step` apart from the one it
+      // just returned. The overlap re-fetches a single bar per page (the
+      // merge drops it) and keeps the walked series on one grid — a one
+      // second hole in the dataset is a phantom gap the job then chases.
+      cursorEnd = rawOldest - step;
       await yieldGap();
       continue;
     }
@@ -735,20 +794,21 @@ async function walkBackRange(
     if (rawOldest > cursorEnd) return 'ok';
 
     prevPageOldest = rawOldest;
-    cursorEnd = rawOldest - 1;
+    cursorEnd = rawOldest - step;
 
     if (rawOldest <= windowFrom) return 'ok';
 
     // Early exit when the full window is already dense (resume of complete cache).
     // Re-validating the whole window every page is O(pages×n) — re-check every
-    // 4th page (always the first) instead.
+    // 4th page (always the first) instead. The check never persists: it only
+    // asks "is the window already dense?".
     if (pages % 4 === 1) {
       try {
         const cached = await getDataset(j.sourceId, j.symbol, j.interval);
-        const { report } = validateJobBars(cached, {
-          ...j,
-          targetFromSec: windowFrom,
-          targetToSec: windowTo,
+        const { report } = validateJobBars(cached, j, {
+          persist: false,
+          fromSec: windowFrom,
+          toSec: windowTo,
         });
         if (report.complete) return 'ok';
       } catch {
@@ -771,14 +831,17 @@ async function fillGaps(
   j.updatedAt = Date.now();
   syncJob(j);
 
-  const step = intervalToSec(j.interval);
-  let filled = 0;
-
   for (const gap of gaps) {
     if (j.abort.signal.aborted) return 'cancelled';
     if (j.paused) return 'paused';
 
-    const before = await getCachedBarCount(j.sourceId, j.symbol, j.interval);
+    // Measure against the **dataset store** the job writes to. The bars-cache
+    // is a different store: in `session` persistence mode it is never written,
+    // so the count never moved and `gapsFilled` stayed 0 for every filled gap.
+    const before = await getDataset(j.sourceId, j.symbol, j.interval).then(
+      (bars) => bars.length,
+      () => 0,
+    );
     // Walk back inside the gap window (endTime only)
     const outcome = await walkBackRange(
       j,
@@ -791,14 +854,15 @@ async function fillGaps(
     );
     if (outcome !== 'ok') return outcome;
 
-    const after = await getCachedBarCount(j.sourceId, j.symbol, j.interval);
+    const after = await getDataset(j.sourceId, j.symbol, j.interval).then(
+      (bars) => bars.length,
+      () => 0,
+    );
     if (after > before) {
-      filled += 1;
       j.gapsFilled = (j.gapsFilled || 0) + 1;
       j.updatedAt = Date.now();
       syncJob(j);
     }
-    void step;
     await yieldGap();
   }
   return 'ok';
@@ -810,16 +874,23 @@ async function fillGaps(
  * - newest too old vs `to`
  * - oldest too new vs `from`
  * - any density gaps
+ *
+ * The venue calendar class matters: without it a `sessions` venue's weekend
+ * closure counts as a fillable gap and the job re-walks the whole range on
+ * every run even though the dataset is already complete.
  */
 function needsNetworkBackfill(
   cached: Bar[],
   fromSec: number,
   toSec: number,
   interval: string,
+  venueClass?: VenueClass,
 ): boolean {
   if (!cached.length) return true;
-  const { bars: repaired } = repairBars(cached, interval);
-  const report = validateDataset(repaired, fromSec, toSec, interval);
+  // `cached` comes from the dataset store, which repairs on every write — the
+  // series is already sorted, unique and sanitized. Re-running the repair
+  // here copied and re-sorted the whole dataset (50k bars) on every job.
+  const report = validateDataset(cached, fromSec, toSec, interval, { venueClass });
   if (!report.complete) return true;
   const step = intervalToSec(interval);
   if (report.newestSec == null || toSec - report.newestSec > step * 1.5) return true;
@@ -856,7 +927,15 @@ async function runJob(j: InternalJob): Promise<void> {
     // coverage is incomplete. Never start at cache.oldest − 1 only — that skips
     // the recent side when the cache holds an old one-page fragment (e.g. 1000
     // bars from 2020 with Pages:0 / Complete bug).
-    if (needsNetworkBackfill(cached, j.targetFromSec, j.targetToSec, j.interval)) {
+    if (
+      needsNetworkBackfill(
+        cached,
+        j.targetFromSec,
+        j.targetToSec,
+        j.interval,
+        jobVenueClass(j.sourceId),
+      )
+    ) {
       j.phase = 'backfill';
       syncJob(j);
       // Always begin at the newest bound so trailing holes get filled first.
@@ -956,8 +1035,10 @@ async function runJob(j: InternalJob): Promise<void> {
         break;
       }
 
-      // Prefer largest fillable gaps first (trailing hole is usually biggest)
-      const gaps = report.fillableGaps
+      // Prefer largest fillable gaps first (trailing hole is usually biggest).
+      // Adjacent gaps are merged first: one walk-back covers the union, so a
+      // fragmented hole costs one request instead of one per fragment.
+      const gaps = mergeGaps(report.fillableGaps, step)
         .slice()
         .sort((a, b) => b.missingBars - a.missingBars)
         .slice(0, 48);
@@ -975,6 +1056,13 @@ async function runJob(j: InternalJob): Promise<void> {
 
     // Final validation
     const finalCached = await getDataset(j.sourceId, j.symbol, j.interval);
+    // The user may have cancelled while the dataset was being read. Without
+    // this guard the final block flips the job back to `complete` and paints a
+    // chart the user just cancelled.
+    if (j.abort.signal.aborted) {
+      setJobStatus(j, 'cancelled');
+      return;
+    }
     const { report: finalReport } = validateJobBars(finalCached, j);
     j.gapsFound = finalReport.fillableGaps.length;
     j.datasetComplete = finalReport.complete;
@@ -1024,9 +1112,19 @@ async function runJob(j: InternalJob): Promise<void> {
 
 /** Cache-reader / unknown source: deliver stored bars, no network. */
 async function deliverCacheOnlyJob(j: InternalJob): Promise<void> {
+  // The user may have cancelled while the cache was being read — this job
+  // had no abort check at all and painted a chart the user just cancelled.
+  if (j.abort.signal.aborted) {
+    setJobStatus(j, 'cancelled');
+    return;
+  }
   try {
     if (j.sourceId === DATA_MANAGER_SOURCE_ID) {
       const resolved = await resolveDataManagerBars(j.symbol, j.interval);
+      if (j.abort.signal.aborted) {
+        setJobStatus(j, 'cancelled');
+        return;
+      }
       if (resolved?.bars.length) {
         j.barsFetched = resolved.bars.length;
         j.oldestSec = resolved.bars[0]!.time;
@@ -1046,6 +1144,10 @@ async function deliverCacheOnlyJob(j: InternalJob): Promise<void> {
     }
   } catch {
     /* cache read is best-effort */
+  }
+  if (j.abort.signal.aborted) {
+    setJobStatus(j, 'cancelled');
+    return;
   }
   j.phase = 'done';
   j.datasetComplete = j.barsFetched > 0;
@@ -1112,7 +1214,19 @@ async function applyCachedToChartInner(
   // (DSM panel / cached-datasets modal) bypass this guard.
   if (opts?.onlyIfCurrent) {
     const curSym = normalizeLoadSymbol(store.symbol, store.source);
-    if (sym !== curSym || iv !== store.interval || srcId !== store.source) {
+    // The chart may be showing the Data Manager source while the job runs
+    // against the underlying venue — compare against the *resolved* chart
+    // source, otherwise the guard never passes and the chart is never painted.
+    let chartSrc = store.source;
+    if (chartSrc === DATA_MANAGER_SOURCE_ID) {
+      try {
+        const { getDataManagerSelection } = await import('./data-manager-source');
+        chartSrc = getDataManagerSelection()?.sourceId || chartSrc;
+      } catch {
+        /* keep the raw chart source */
+      }
+    }
+    if (sym !== curSym || iv !== store.interval || srcId !== chartSrc) {
       return false;
     }
   }
@@ -1155,7 +1269,7 @@ async function applyCachedToChartInner(
       ? Math.floor(loadWin.maxBars)
       : null;
   const chartMax = Math.min(
-    explicit ?? Math.max(1, clampRollingWindowBars(store.rollingWindowBars)),
+    explicit ?? chartWindowLimit(),
     HISTORY_BARS_MAX,
   );
   const painted = bars.length > chartMax ? bars.slice(bars.length - chartMax) : bars;
@@ -1176,6 +1290,43 @@ async function applyCachedToChartInner(
     await reapplyChartScripts();
   } catch {
     /* re-run optional */
+  }
+  return true;
+}
+
+/**
+ * Re-slice the chart to a new Rolling window.
+ *
+ * The dataset keeps its full depth — only the painted window changes. The
+ * dataset is the source when it holds more bars than the chart (it usually
+ * does); otherwise the painted window is trimmed in place.
+ *
+ * Used by every UI that changes the window (status bar inline edit, Settings
+ * page) so the chart never keeps a window the user has already changed.
+ */
+export async function applyChartWindow(nextBars: number): Promise<boolean> {
+  const next = Math.floor(Number(nextBars));
+  if (!Number.isFinite(next) || next <= 0) return false;
+  const srcId = String(store.source || '');
+  const sym = String(store.symbol || '');
+  const iv = String(store.interval || '1d');
+  try {
+    const ok = await applyCachedToChart(srcId, sym, iv, { maxBars: next });
+    if (ok) return true;
+  } catch {
+    /* fall through to the in-place trim */
+  }
+  const bars = store.bars;
+  if (!bars?.length) return false;
+  const trimmed = bars.length > next ? bars.slice(bars.length - next) : bars;
+  loadBars(trimmed, sym, iv, store.exchange);
+  const manager = getManager();
+  if (manager) {
+    try {
+      setDataToChart(trimmed, { fit: false, clearScriptState: false, clearMarkers: false });
+    } catch {
+      /* paint is best-effort */
+    }
   }
   return true;
 }
@@ -1245,6 +1396,7 @@ export function _resetDataSourceManagerForTests(): void {
     }
   }
   internals.clear();
+  dismissedJobs.clear();
   waitQueue.length = 0;
   activeCount = 0;
   setManagerState('jobs', []);

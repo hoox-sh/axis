@@ -45,6 +45,7 @@ import {
   pastDateInputToSec,
 } from '../data/data-source-manager';
 import { DATA_MANAGER_SOURCE_ID } from '../data/data-manager-source';
+import { normalizeLoadSymbol } from '../data/symbol-exchange';
 import { Icons } from './icons';
 import { FloatableShell } from './panels/FloatableShell';
 import { CachedDatasetsModal } from './CachedDatasetsModal';
@@ -130,7 +131,10 @@ export const DataSourceManagerPanel: Component = () => {
       setFormError('Pick a UTC date in the past.');
       return;
     }
-    const sym = (symbol().trim() || store.symbol || '').toUpperCase();
+    // `normalizeLoadSymbol` keeps the case for DEX pool symbols (base58 /
+    // `network:0x…`); uppercasing here destroyed the pool address before the
+    // request was even built.
+    const sym = normalizeLoadSymbol(symbol().trim() || store.symbol || '', sourceId());
     if (!sym) {
       setFormError('Symbol required.');
       return;

@@ -78,7 +78,16 @@ export function detectTrailingGap(
 ): TrailingGap {
   const step = intervalToSec(interval);
   const list = Array.isArray(bars) ? bars : [];
-  const newestSec = list.length ? list[list.length - 1]!.time : null;
+  // The repair can drop or re-time the last row, so the "newest" bar has to
+  // be read from the **repaired** series — the raw tail may be a row that no
+  // longer exists.
+  let repaired: Bar[] = [];
+  try {
+    repaired = repairBars(list, interval).bars;
+  } catch {
+    repaired = list.slice();
+  }
+  const newestSec = repaired.length ? repaired[repaired.length - 1]!.time : null;
   if (newestSec == null || !Number.isFinite(newestSec)) {
     return { stale: false, newestSec: null, gapFromSec: null, missingBars: 0, fillableGaps: 0 };
   }
@@ -91,8 +100,7 @@ export function detectTrailingGap(
     const fromSec =
       typeof opts?.fromSec === 'number' && Number.isFinite(opts.fromSec)
         ? Math.floor(opts.fromSec)
-        : newestSec - Math.max(0, Math.min(list.length, 5000)) * step;
-    const { bars: repaired } = repairBars(list, interval);
+        : newestSec - Math.max(0, Math.min(repaired.length, 5000)) * step;
     const report = validateDataset(repaired, fromSec, now, interval, {
       venueClass: opts?.venueClass ?? '24/7',
     });
@@ -148,13 +156,30 @@ export async function repairChartGapsAfterBackground(
   if (repairInFlight) return false;
   const nowMs = Date.now();
   if (shouldThrottle(nowMs)) return false;
+  // Arm the gate **before** the first await. `window.focus` and
+  // `document.visibilitychange` fire together when the user tabs back into the
+  // window — with the gate armed late, both handlers passed the checks and ran
+  // two concurrent repairs (double network traffic, two DSM jobs).
+  repairInFlight = true;
+  lastRepairAt = nowMs;
+  try {
+    return await runBackgroundRepair(reason, nowMs);
+  } finally {
+    repairInFlight = false;
+  }
+}
+
+async function runBackgroundRepair(
+  reason: string,
+  nowMs: number,
+): Promise<boolean> {
   let storeMod: typeof import('../store') | null = null;
   try {
     storeMod = await import('../store');
   } catch {
     return false;
   }
-  const { store, setBarsQuiet, setStatus } = storeMod;
+  const { store, setBarsQuiet, setStatus, sliceToChartWindow } = storeMod;
   const bars = store.bars as Bar[];
   const sym = String(store.symbol || '').trim();
   const iv = String(store.interval || '1d');
@@ -172,8 +197,6 @@ export async function repairChartGapsAfterBackground(
   const gap = detectTrailingGap(bars, iv, Math.floor(nowMs / 1000), { venueClass });
   if (!gap.stale) return false;
 
-  repairInFlight = true;
-  lastRepairAt = nowMs;
   try {
     // Resolve the writable dataset key. Data Manager is a cache reader —
     // expand through the underlying venue selection when active.
@@ -253,14 +276,18 @@ export async function repairChartGapsAfterBackground(
         if (series.length) {
           const { bars: repaired } = repairBars(series, expandIv);
           if (repaired.length) {
-            setBarsQuiet(repaired);
+            // The chart holds the **rolling window**, not the whole dataset —
+            // a catch-up that repaints 50k bars would blow past the window
+            // the engine evaluates and desync the two axes.
+            const view = sliceToChartWindow(repaired);
+            setBarsQuiet(view);
             try {
               const { getManager, setDataToChart } = await import('../chart/manager-access');
               const manager = getManager();
               if (manager) {
                 // Bar replay paints only the scrubbed prefix; the store keeps
                 // full history so catch-up never reveals future bars mid-replay.
-                setDataToChart(isReplayActive() ? getVisibleBars(repaired) : repaired, {
+                setDataToChart(isReplayActive() ? getVisibleBars(view) : view, {
                   fit: false,
                   clearScriptState: false,
                   clearMarkers: false,
@@ -283,7 +310,7 @@ export async function repairChartGapsAfterBackground(
     // walk-back → progressive repaint). Fire-and-forget by design.
     try {
       const { ensureDatasetComplete } = await import('./dsm-orchestrator');
-      ensureDatasetComplete(expandSym, expandIv, expandSrc);
+      void ensureDatasetComplete(expandSym, expandIv, expandSrc);
     } catch {
       /* DSM queue best-effort */
     }
@@ -306,7 +333,7 @@ export async function repairChartGapsAfterBackground(
     }
     return true;
   } finally {
-    repairInFlight = false;
+    /* the in-flight gate is released by the caller */
   }
 }
 

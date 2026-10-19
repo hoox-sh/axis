@@ -89,6 +89,12 @@ export interface SeriesDriveOptions {
   minGapMs?: number;
   /** Tick transport override (tests). */
   tick?: SeriesDriveTickFn;
+  /**
+   * Series depth the engine session must hold. The chart's window is the
+   * default — a session provisioned for a smaller depth cannot serve the
+   * window the chart shows.
+   */
+  historyBars?: number;
 }
 
 const driveAt = new Map<string, number>();
@@ -134,7 +140,11 @@ export async function driveEngineSeries(opts: SeriesDriveOptions): Promise<Serie
   driveAt.set(memo, now);
   if (barAdvanced) drivenBar.set(memo, marketNow);
 
-  const tick = opts.tick ?? ((ep, apiKey, key) => tickChartDataSession(ep, apiKey, key));
+  const depth = Math.max(1, Math.floor(opts.historyBars ?? 0)) || undefined;
+  const tick =
+    opts.tick ??
+    ((ep: string, apiKey: string, key: DataSeriesKey) =>
+      tickChartDataSession(ep, apiKey, key, depth));
   try {
     const t = await tick(endpoint, String(opts.apiKey || ''), opts.key);
     if (!t.ok) return 'failed';

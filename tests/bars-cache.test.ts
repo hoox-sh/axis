@@ -33,6 +33,27 @@ describe('bars-cache', () => {
     expect(barsCacheKey('binance-rest', 'btcusdt', '1h')).toBe('binance-rest|BTCUSDT|1h');
   });
 
+  it('keeps the case of a DEX pool symbol in the key', () => {
+    // Uppercasing a base58 / `0x…` address made two distinct pools share one
+    // cache key — the store served the wrong series and merged one pool's
+    // bars into the other's.
+    expect(barsCacheKey('geckoterminal-ohlcv', 'solana:AbC123', '1h')).toBe(
+      'geckoterminal-ohlcv|solana:AbC123|1h',
+    );
+    expect(barsCacheKey('binance-rest', 'eth/usdt', '1h')).toBe(
+      'binance-rest|eth/usdt|1h',
+    );
+    // CEX tickers stay uppercase.
+    expect(barsCacheKey('binance-rest', 'btcusdt', '1h')).toBe('binance-rest|BTCUSDT|1h');
+  });
+
+  it('appends the provider lock for a non-spot / keyed series', () => {
+    expect(barsCacheKey('binance-rest', 'BTCUSDT', '1h')).toBe('binance-rest|BTCUSDT|1h');
+    expect(
+      barsCacheKey('binance-rest', 'BTCUSDT', '1h', { market: 'usdm', authMode: 'authenticated' }),
+    ).toBe('binance-rest|BTCUSDT|1h|usdm|authenticated');
+  });
+
   it('mergeBars prepends older sorted page without Map rebuild', () => {
     const base = [
       { time: 300, open: 1, high: 1, low: 1, close: 1 },

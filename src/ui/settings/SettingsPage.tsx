@@ -39,6 +39,7 @@ import {
   WATCHLIST_REFRESH_OPTIONS,
 } from '../../data/watchlist-tickers';
 import { loadSymbolData, reloadChart } from '../../data/load-symbol';
+import { flushDatasets } from '../../data/dataset-store';
 import { syncLiveToPreference } from '../../streams/multiplex';
 import { getManager } from '../../chart/manager-access';
 import { UI_SCALE_PRESETS, formatUiScalePct } from '../ui-scale';
@@ -302,6 +303,9 @@ export function SettingsPage(props: {
   const [cloudProbeTone, setCloudProbeTone] = createSignal<ProbeTone | ''>('');
   const [cloudProbing, setCloudProbing] = createSignal(false);
   const [reloading, setReloading] = createSignal(false);
+  const [flushingDatasets, setFlushingDatasets] = createSignal(false);
+  const [datasetFlushMsg, setDatasetFlushMsg] = createSignal('');
+  const [datasetFlushTone, setDatasetFlushTone] = createSignal<'ok' | 'err'>('ok');
   const storages = () => listStorages();
   const [tab, setTab] = createSignal<SettingsTabId>(
     isSettingsTabId(props.initialTab) ? props.initialTab : 'general',
@@ -329,14 +333,16 @@ export function SettingsPage(props: {
   const save = () => {
     const prevInterval = store.interval;
     const prevHistoryBars = clampHistoryBars(store.historyBars);
+    const prevRollingWindow = clampRollingWindowBars(store.rollingWindowBars);
     const nextInterval = chartInterval().trim() || prevInterval;
     const nextHistoryBars = clampHistoryBars(historyBars());
+    const nextRollingWindow = clampRollingWindowBars(rollingWindowBars());
     const nextRefresh = Math.min(120, Math.max(5, Math.round(Number(refreshSec()) || 15)));
     const nextUiScale = clampUiScale(uiScale());
 
     setStore('interval', nextInterval);
     setStore('historyBars', nextHistoryBars);
-    setStore('rollingWindowBars', clampRollingWindowBars(rollingWindowBars()));
+    setStore('rollingWindowBars', nextRollingWindow);
     setStore('watchlist', 'refreshSec', nextRefresh);
     setStore('live', 'preferAfterLoad', preferAfterLoad());
     setStore('live', 'rerunOn', rerunOn());
@@ -376,6 +382,19 @@ export function SettingsPage(props: {
       (nextInterval !== prevInterval || nextHistoryBars !== prevHistoryBars)
     ) {
       void loadSymbolData(store.symbol, nextInterval, store.source);
+    } else if (nextRollingWindow !== prevRollingWindow) {
+      // The Rolling window changed — re-slice the painted chart so it matches
+      // the new setting instead of keeping the old window until the next load.
+      void (async () => {
+        try {
+          const { applyChartWindow } = await import(
+            '../../data/data-source-manager'
+          );
+          await applyChartWindow(nextRollingWindow);
+        } catch {
+          /* re-slice is best-effort */
+        }
+      })();
     }
     props.onClose();
   };
@@ -392,6 +411,34 @@ export function SettingsPage(props: {
       await reloadChart();
     } finally {
       setReloading(false);
+    }
+  };
+
+  const onFlushDatasets = async () => {
+    if (flushingDatasets()) return;
+    const ok =
+      typeof window !== 'undefined'
+        ? window.confirm(
+            'Flush the dataset manager?\n\n' +
+              'Deletes every cached OHLCV dataset (bars + metadata) from memory, ' +
+              'the local IndexedDB cache, and the remote dataset stores (git / cloud).\n\n' +
+              'The chart keeps the bars it already shows until you reload the symbol.',
+          )
+        : true;
+    if (!ok) return;
+    setFlushingDatasets(true);
+    setDatasetFlushMsg('');
+    try {
+      const removed = await flushDatasets();
+      const msg = `Dataset manager flushed · ${removed} dataset${removed === 1 ? '' : 's'} removed.`;
+      setDatasetFlushTone('ok');
+      setDatasetFlushMsg(msg);
+      setStatus('ready', msg, { toast: true, source: 'settings' });
+    } catch (err: unknown) {
+      setDatasetFlushTone('err');
+      setDatasetFlushMsg(err instanceof Error ? err.message : String(err));
+    } finally {
+      setFlushingDatasets(false);
     }
   };
 
@@ -883,7 +930,37 @@ export function SettingsPage(props: {
               >
                 <PluginConfigRow layout="stacked" showAdvanced />
               </StudioSection>
-              <ExchangeCredentialsPanel />
+              <div class="ax-split-col">
+                <ExchangeCredentialsPanel />
+                <StudioSection
+                  title="Dataset manager"
+                  lead="Cached OHLCV datasets (bars + metadata). Flush deletes every dataset from memory, the local IndexedDB cache, and the remote dataset stores (git / cloud). Chart bars stay until the symbol is reloaded."
+                  testId="axis-settings-datasets"
+                >
+                  <div class="ax-toolbar">
+                    <StudioButton
+                      variant="danger"
+                      testId="axis-settings-flush-datasets"
+                      disabled={flushingDatasets()}
+                      onClick={() => void onFlushDatasets()}
+                    >
+                      <Icons.trash />
+                      {flushingDatasets() ? 'Flushing…' : 'Flush dataset manager'}
+                    </StudioButton>
+                  </div>
+                  <Show when={datasetFlushMsg()}>
+                    <p
+                      class={
+                        datasetFlushTone() === 'err' ? 'ax-error' : 'ax-hint ax-hint--accent'
+                      }
+                      role="status"
+                      data-testid="axis-settings-flush-datasets-msg"
+                    >
+                      {datasetFlushMsg()}
+                    </p>
+                  </Show>
+                </StudioSection>
+              </div>
             </div>
         </SettingsTabPanel>
 

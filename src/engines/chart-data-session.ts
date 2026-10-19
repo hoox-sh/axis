@@ -60,6 +60,8 @@ interface ChartSession {
   apiKey: string;
   key: DataSeriesKey;
   sessionId: string;
+  /** Series depth the session was provisioned with. */
+  historyBars: number;
 }
 
 let current: ChartSession | null = null;
@@ -77,6 +79,10 @@ function sameKey(a: DataSeriesKey, b: DataSeriesKey): boolean {
  * Return the live chart session id, creating it when absent or when the
  * endpoint/identity changed. Returns null when the engine cannot provide the
  * series (the caller keeps the venue-stream paint as a fallback).
+ *
+ * `historyBars` is part of the session identity: the engine's store is
+ * provisioned with that many bars, so a session created for a 5k window cannot
+ * serve a 10k chart — the read would return half the configured window.
  */
 export async function ensureChartDataSession(
   endpoint: string,
@@ -84,10 +90,12 @@ export async function ensureChartDataSession(
   key: DataSeriesKey,
   historyBars: number = DEFAULT_HISTORY_BARS,
 ): Promise<string | null> {
+  const depth = Math.max(1, Math.floor(historyBars));
   if (
     current &&
     current.endpoint === endpoint &&
     current.apiKey === apiKey &&
+    current.historyBars === depth &&
     sameKey(current.key, key)
   ) {
     return current.sessionId;
@@ -98,11 +106,11 @@ export async function ensureChartDataSession(
       endpoint,
       apiKey,
       key,
-      historyBars,
+      historyBars: depth,
       script: CHART_SCRIPT,
       symbol: key.symbol,
     });
-    current = { endpoint, apiKey, key, sessionId: handle.sessionId };
+    current = { endpoint, apiKey, key, sessionId: handle.sessionId, historyBars: depth };
     return handle.sessionId;
   } catch {
     current = null;
@@ -124,6 +132,7 @@ export async function tickChartDataSession(
   endpoint: string,
   apiKey: string,
   key: DataSeriesKey,
+  historyBars: number = DEFAULT_HISTORY_BARS,
 ): Promise<{
   ok: boolean;
   error?: string;
@@ -132,7 +141,7 @@ export async function tickChartDataSession(
   unchanged?: boolean;
   stale?: boolean;
 }> {
-  const sessionId = await ensureChartDataSession(endpoint, apiKey, key);
+  const sessionId = await ensureChartDataSession(endpoint, apiKey, key, historyBars);
   if (!sessionId) return { ok: false, error: 'chart data session unavailable' };
   const t = await tickDataSession(endpoint, apiKey, sessionId, {
     exchange: key.exchange,

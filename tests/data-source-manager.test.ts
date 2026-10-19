@@ -32,7 +32,7 @@ describe('data-source-manager', () => {
     await _resetBarsCacheForTests();
     _resetSourceRegistrationFlag();
     // Wipe dynamic test sources if any
-    for (const id of ['page-src', 'slow-src']) {
+    for (const id of ['page-src', 'slow-src', 'grid-src']) {
       try {
         registry.unregisterSource(id);
       } catch {
@@ -127,6 +127,52 @@ describe('data-source-manager', () => {
     expect(job!.oldestSec).not.toBeNull();
     // Within ~1.5 bars of target (gap threshold)
     expect(job!.oldestSec!).toBeLessThanOrEqual(now - 35 * step + 1.5 * step);
+  });
+
+  it('walks back on one grid — no one-second holes in the dataset', async () => {
+    // The walk advanced the cursor by one second. A venue that answers "the
+    // newest bar with open time <= endTime" then returned a bar one second
+    // off its own grid, and the dataset grew a one-second hole per page —
+    // a phantom gap the job chased on every round.
+    const pageSize = 10;
+    const step = 60;
+    const now = Math.floor(Date.now() / 1000);
+    let calls = 0;
+    const src: SourcePlugin = {
+      id: 'grid-src',
+      name: 'Grid Src',
+      kind: 'source',
+      builtIn: false,
+      async fetchHistorical({ endTime, limit }) {
+        calls++;
+        const end =
+          typeof endTime === 'number' && endTime > 0
+            ? Math.floor(endTime)
+            : Math.floor(Date.now() / 1000);
+        const n = Math.min(pageSize, Number(limit) || pageSize);
+        const out: Bar[] = [];
+        for (let i = n - 1; i >= 0; i--) out.push(bar(end - i * step));
+        return out;
+      },
+    };
+    registry.registerSource(src);
+
+    const id = startBackfill({
+      sourceId: 'grid-src',
+      symbol: 'X',
+      interval: '1m',
+      targetFromSec: now - 35 * step,
+      targetToSec: now,
+    });
+    const job = await _waitForJob(id, 15_000);
+    expect(job!.status).toBe('complete');
+    expect(calls).toBeGreaterThan(1);
+
+    const cached = await getCachedBars('grid-src', 'X', '1m');
+    expect(cached.length).toBeGreaterThan(1);
+    for (let i = 1; i < cached.length; i++) {
+      expect(cached[i]!.time - cached[i - 1]!.time).toBe(step);
+    }
   });
 
   it('does not complete with Pages:0 when cache only has old fragment to past date', async () => {

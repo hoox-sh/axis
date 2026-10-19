@@ -35,11 +35,13 @@
 
 import type { Bar } from '../store/types';
 import {
+  chartWindowLimit,
   clampHistoryBars,
-  clampRollingWindowBars,
   loadBars,
+  mergeLiveTail,
   setBarsQuiet,
   setStatus,
+  sliceToChartWindow,
   store,
 } from '../store';
 import { getManager, setDataToChart } from '../chart/manager-access';
@@ -126,13 +128,43 @@ export function stopProgressiveRepaint(): void {
 
 /** How many bars the chart holds (Settings → Rolling window, newest N). */
 export function chartDisplayCap(): number {
-  return Math.max(1, clampRollingWindowBars(store.rollingWindowBars));
+  return chartWindowLimit();
 }
 
 /** Slice a full dataset down to the newest chart window (no mutation). */
 export function sliceForChart(bars: Bar[]): Bar[] {
-  const cap = chartDisplayCap();
-  return bars.length > cap ? bars.slice(bars.length - cap) : bars;
+  return sliceToChartWindow(bars);
+}
+
+/**
+ * True when the chart currently holds the series a repaint targets.
+ *
+ * The live tail is only merged when the chart really shows that symbol and
+ * interval — otherwise a repaint for a background symbol would graft another
+ * market's bars onto the chart.
+ */
+function chartHoldsSeries(sym: string, iv: string): boolean {
+  if (String(store.interval || '') !== iv) return false;
+  const cur = String(store.symbol || '').trim().toUpperCase();
+  return !!cur && cur === sym.trim().toUpperCase();
+}
+
+/**
+ * The bars a dataset repaint should paint.
+ *
+ * The dataset store only learns about a live bar when the Data Manager source
+ * is active, so a plain dataset view can be **older** than the chart. Painting
+ * it would drop the forming candle — the "last bars unset" symptom. The
+ * chart's live tail (every bar newer than the dataset's newest) is therefore
+ * merged back in, and the result is capped to the chart window again.
+ */
+function repaintView(datasetBars: Bar[], sym: string, iv: string): Bar[] {
+  const view = sliceForChart(datasetBars);
+  if (!chartHoldsSeries(sym, iv)) return view;
+  const live = store.bars;
+  if (!live?.length) return view;
+  const merged = mergeLiveTail(view, live);
+  return merged.length > view.length ? sliceToChartWindow(merged) : merged;
 }
 
 /** Paint bars onto chart + store (full refresh semantics). */
@@ -172,9 +204,14 @@ function scheduleRepaint(sym: string, iv: string, srcId: string, gen: number): v
       }
       if (!bars.length || gen !== paintGen || activeKey !== keyFor(srcId, sym, iv)) return;
       // Chart shows the rolling window (newest N); the dataset keeps everything.
-      const view = sliceForChart(bars);
+      // The chart's live tail is merged back in so a forming candle is never
+      // dropped by a background repaint.
+      const view = repaintView(bars, s, interval);
       const n = view.length;
-      const sig = `${n}|${view[0]?.time ?? 0}|${view[n - 1]?.time ?? 0}|${view[n - 1]?.close ?? 0}`;
+      // Signature covers first / mid / last so a corrected bar in the middle
+      // of the window repaints too (a length+tip signature would miss it).
+      const mid = view[Math.floor(n / 2)];
+      const sig = `${n}|${view[0]?.time ?? 0}|${view[n - 1]?.time ?? 0}|${view[n - 1]?.close ?? 0}|${mid?.close ?? 0}`;
       if (sig === lastRepaintSig) {
         if (repaintPending) {
           repaintPending = false;
@@ -307,14 +344,16 @@ export function startProgressiveStream(
  * the background: sliced backfill job for fillable gaps (existing DSM job
  * engine). Legitimate closures (weekends / maintenance) are never chased.
  *
- * Fire-and-forget; safe to call after every cache-first paint.
+ * Safe to call after every cache-first paint. The returned promise resolves
+ * with the validation summary — including the backfill job id, which is only
+ * known once the validation finished.
  */
-export function ensureDatasetComplete(
+export async function ensureDatasetComplete(
   symbol: string,
   interval: string,
   sourceId: string,
   opts?: { stillCurrent?: () => boolean },
-): DatasetFirstResult {
+): Promise<DatasetFirstResult> {
   const sym = String(symbol || '').trim();
   const iv = String(interval || store.interval || '1d');
   const srcId = String(sourceId || store.source || '');
@@ -332,69 +371,66 @@ export function ensureDatasetComplete(
     gapsLegitimate: 0,
   };
 
-  void (async () => {
+  try {
+    let raw: Bar[] = [];
     try {
-      let raw: Bar[] = [];
-      try {
-        raw = await getDataset(srcId, sym, iv);
-      } catch {
-        raw = [];
-      }
-      if (!raw.length) {
-        // Empty cache — still hustle: start a walk-back so first pages land.
-        result.jobId = startBackfill({
-          sourceId: srcId,
-          symbol: sym,
-          interval: iv,
-          targetFromSec,
-          targetToSec,
-          applyWhenComplete: false,
-        });
-        return;
-      }
-      const { bars } = repairBars(raw, iv);
-      const report = validateDataset(bars, targetFromSec, targetToSec, iv, {
-        venueClass: venueClassForSourceCaps(getSource(srcId)?.capabilities),
-      });
-      result.gapsFillable = report.fillableGaps.length;
-      result.gapsLegitimate = report.legitimateGaps.length;
-
-      const newestStale =
-        report.newestSec == null || targetToSec - report.newestSec > step * 1.5;
-      const sparse =
-        report.expectedBars > 0 && report.barCount < report.expectedBars * 0.85;
-
-      if (report.fillableGaps.length || newestStale || sparse) {
-        // Sliced backfill: the job engine walks back page-by-page (auto-slices)
-        // and merges through the DatasetStore → progressive repaints.
-        result.jobId = startBackfill({
-          sourceId: srcId,
-          symbol: sym,
-          interval: iv,
-          targetFromSec,
-          targetToSec,
-          applyWhenComplete: false,
-        });
-        const missing = report.expectedBars - report.barCount;
-        // Chart is already painted — background completion must not claim "loading",
-        // nor clobber a newer load's status (error/success) when this job is stale.
-        if (opts?.stillCurrent && !opts.stillCurrent()) return;
-        setStatus(
-          'ready',
-          `DSM completing ${sym} ${iv} — ${missing > 0 ? `${missing} bars` : 'recent bars'} in background`,
-        );
-      } else {
-        if (opts?.stillCurrent && !opts.stillCurrent()) return;
-        setStatus('ready', `Dataset complete · ${report.barCount} bars · ${sym} ${iv}`, {
-          toast: true,
-          source: 'dsm',
-        });
-      }
-    } catch (err) {
-      console.warn('[dsm-orchestrator] ensureDatasetComplete failed', err);
+      raw = await getDataset(srcId, sym, iv);
+    } catch {
+      raw = [];
     }
-  })();
+    if (!raw.length) {
+      // Empty cache — still hustle: start a walk-back so first pages land.
+      result.jobId = startBackfill({
+        sourceId: srcId,
+        symbol: sym,
+        interval: iv,
+        targetFromSec,
+        targetToSec,
+        applyWhenComplete: false,
+      });
+      return result;
+    }
+    const { bars } = repairBars(raw, iv);
+    const report = validateDataset(bars, targetFromSec, targetToSec, iv, {
+      venueClass: venueClassForSourceCaps(getSource(srcId)?.capabilities),
+    });
+    result.gapsFillable = report.fillableGaps.length;
+    result.gapsLegitimate = report.legitimateGaps.length;
 
+    const newestStale =
+      report.newestSec == null || targetToSec - report.newestSec > step * 1.5;
+    const sparse =
+      report.expectedBars > 0 && report.barCount < report.expectedBars * 0.85;
+
+    if (report.fillableGaps.length || newestStale || sparse) {
+      // Sliced backfill: the job engine walks back page-by-page (auto-slices)
+      // and merges through the DatasetStore → progressive repaints.
+      result.jobId = startBackfill({
+        sourceId: srcId,
+        symbol: sym,
+        interval: iv,
+        targetFromSec,
+        targetToSec,
+        applyWhenComplete: false,
+      });
+      const missing = report.expectedBars - report.barCount;
+      // Chart is already painted — background completion must not claim "loading",
+      // nor clobber a newer load's status (error/success) when this job is stale.
+      if (opts?.stillCurrent && !opts.stillCurrent()) return result;
+      setStatus(
+        'ready',
+        `DSM completing ${sym} ${iv} — ${missing > 0 ? `${missing} bars` : 'recent bars'} in background`,
+      );
+    } else {
+      if (opts?.stillCurrent && !opts.stillCurrent()) return result;
+      setStatus('ready', `Dataset complete · ${report.barCount} bars · ${sym} ${iv}`, {
+        toast: true,
+        source: 'dsm',
+      });
+    }
+  } catch (err) {
+    console.warn('[dsm-orchestrator] ensureDatasetComplete failed', err);
+  }
   return result;
 }
 
@@ -428,4 +464,13 @@ export function _resetDsmOrchestratorForTests(): void {
   stopStreaming();
   // Advance (never zero): stale paint closures must not re-arm on reclaim.
   paintGen += 1;
+}
+
+/** @internal test helper — the bars a repaint would paint. */
+export function repaintViewForTests(
+  datasetBars: Bar[],
+  sym: string,
+  iv: string,
+): Bar[] {
+  return repaintView(datasetBars, sym, iv);
 }

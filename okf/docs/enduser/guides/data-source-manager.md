@@ -7,7 +7,7 @@ tags: [doc, docs, enduser, guides]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:02:55Z
+  at: 2026-10-19T23:09:19Z
 sources:
   - id: tree
     resource: "docs/enduser/guides/data-source-manager.mdx"
@@ -25,6 +25,7 @@ Repo path `docs/enduser/guides/data-source-manager.mdx`.
 * Abstract
 * Conceptual model
 * How to use
+  * Deleting datasets
 * Phases
 * Job fields (UI)
 * Relation to Topbar Load

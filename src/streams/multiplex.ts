@@ -21,9 +21,9 @@
  * **Live multiplex** — single active chart stream wired to store + chart + indicators.
  *
  * Owns at most one `StreamPlugin.start()` lifecycle. On each bar:
- * 1. {@link appendBar} into the Solid store
- * 2. {@link PaneManager.appendBar} for the price series
- * 3. Debounced silent {@link runAndApply} for visible scripts (every tick /
+ * 1. {@link appendLiveBar} — the store append + the matching chart paint
+ *    (the chart window slides its head when a new bar arrives)
+ * 2. Debounced silent {@link runAndApply} for visible scripts (every tick /
  *    closed bar / time advance, per `store.live.rerunOn`)
  *
  * Telemetry plane `stream` tracks connect/open/error; green status only after
@@ -48,7 +48,7 @@
 
 import type { Bar } from '../store/types';
 import {
-  appendBar,
+  chartWindowLimit,
   setBarsQuiet,
   setLive,
   store,
@@ -60,7 +60,8 @@ import {
   setTelemetryState,
   setScriptStatus,
 } from '../store';
-import { getManager, setDataToChart } from '../chart/manager-access';
+import { setDataToChart } from '../chart/manager-access';
+import { appendLiveBar } from '../chart/live-append';
 import { isReplayActive, stopReplaySession } from '../chart/bar-replay';
 import { isInteractiveRunInFlight, runAndApply, beginRunEpoch } from '../indicators/runner';
 import { isStudyActive } from '../optimize/guard';
@@ -452,9 +453,11 @@ export function startLive(
         let shouldRerun = false;
         for (const bar of bars) {
         if (!isCurrent()) break;
-        appendBar(bar);
-        const manager = getManager();
-        if (manager) manager.appendBar(bar);
+        // A rejected bar (stale, out of order, or a forming tick trying to
+        // reopen a closed candle) must not reach telemetry, alerts or the
+        // dataset — the store refused it for a reason.
+        const verdict = appendLiveBar(bar);
+        if (verdict === 'ignored') continue;
         noteTick(bar.close, bar.time, sym);
         // F2 (cross-workstream): pass the stream's own identity so alerts
         // evaluate against the stream symbol, dropping stale-stream bars.
@@ -492,9 +495,7 @@ export function startLive(
             const tip = ordered[ordered.length - 1];
             if (tip) {
               try {
-                appendBar(tip);
-                const manager = getManager();
-                if (manager) manager.appendBar(tip);
+                appendLiveBar(tip);
               } catch {
                 /* forming tip re-apply is best-effort */
               }
@@ -546,10 +547,7 @@ export function startLive(
     const apiKey = String(cfg.apiKey || '');
     if (!endpoint) return;
     const key = { exchange: exchangeForSource(store.source), symbol: sym, interval: iv };
-    const limit =
-      Number.isFinite(store.rollingWindowBars) && store.rollingWindowBars > 0
-        ? store.rollingWindowBars
-        : 2000;
+    const limit = chartWindowLimit();
     // Venue `closed` flags for bar-close rerun gating (engine bars carry no
     // `closed` marker of their own).
     const venueClosed = triggerBars.some((b) => b.closed);
@@ -592,9 +590,7 @@ export function startLive(
     ) {
       const tip = triggerBars[triggerBars.length - 1]!;
       try {
-        appendBar(tip);
-        const manager = getManager();
-        if (manager) manager.appendBar(tip);
+        appendLiveBar(tip);
       } catch {
         /* venue tip paint is best-effort */
       }
@@ -610,7 +606,7 @@ export function startLive(
     lastEngineTickAt = Date.now();
     const run = async (): Promise<{ painted: string; shouldRerun: boolean }> => {
       try {
-        const t = await tickChartDataSession(endpoint, apiKey, key);
+        const t = await tickChartDataSession(endpoint, apiKey, key, limit);
         if (!t.ok || !isCurrent()) return { painted: 'failed', shouldRerun: false };
         // Engine reports nothing changed and we already hold a window: skip
         // the bar re-read entirely (it costs 0.5–1.5s for 10k bars).
@@ -645,15 +641,12 @@ export function startLive(
               const curTip = store.bars[store.bars.length - 1]!;
               const at = tail.findIndex((b) => b.time === curTip.time);
               if (at >= 0) {
-                const manager = getManager();
                 if (at < tail.length - 1 || !sameEngineOhlc(curTip, tail[at]!)) {
-                  appendBar(tail[at]!);
-                  if (manager) manager.appendBar(tail[at]!);
+                  appendLiveBar(tail[at]!);
                 }
                 for (let i = at + 1; i < tail.length; i++) {
                   if (!isCurrent()) break;
-                  appendBar(tail[i]!);
-                  if (manager) manager.appendBar(tail[i]!);
+                  appendLiveBar(tail[i]!);
                 }
                 const tip = tail[tail.length - 1]!;
                 const prevLastSeen = lastSeenBarTime;
@@ -704,14 +697,12 @@ export function startLive(
         if (diff.kind === 'noop') {
           return { painted: 'noop', shouldRerun: false };
         }
-        const manager = getManager();
         if (diff.kind === 'tip') {
           // Forming bar moved, window unchanged: update the tip in place
           // (store path-set, no array clone) + O(1) `series.update`. The full
           // `setBarsQuiet` + `setDataToChart` repaint is unnecessary here.
           const tip = proBars[proBars.length - 1]!;
-          appendBar(tip);
-          if (manager) manager.appendBar(tip);
+          appendLiveBar(tip);
           lastSeenBarTime = Math.max(lastSeenBarTime, tip.time);
         } else if (diff.kind === 'append') {
           // Same prefix plus a few new bars: revise the former tip first
@@ -719,15 +710,13 @@ export function startLive(
           const curLen = store.bars.length;
           if (diff.reviseTip && curLen > 0) {
             const revised = proBars[curLen - 1]!;
-            appendBar(revised);
-            if (manager) manager.appendBar(revised);
+            appendLiveBar(revised);
           }
           for (const nb of diff.newBars) {
             if (!isCurrent()) break;
             // Store first (`PaneManager.appendBar` reads it for HA mapping),
             // then the O(1) chart update.
-            appendBar(nb);
-            if (manager) manager.appendBar(nb);
+            appendLiveBar(nb);
           }
           const tip = proBars[proBars.length - 1]!;
           lastSeenBarTime = Math.max(lastSeenBarTime, tip.time);

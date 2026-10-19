@@ -504,19 +504,22 @@ export function clampHistoryBars(n: unknown): number {
 }
 
 /**
- * Rolling window (bars) — the most recent N bars handed to the engine.
+ * Rolling window (bars) — how many bars the chart holds and the engine sees.
  *
  * Distinct from {@link AppState.historyBars}, which is how much history to
  * *fetch*. The DSM can grow a dataset far past `historyBars`
  * (`DSM_MAX_BARS_PER_JOB` is 50k), and every one of those bars costs evaluate
  * time, encode time, and a full-size response envelope on each run. The rolling
- * window caps what the engine sees — the chart still holds the whole dataset.
+ * window caps what the engine sees — and, since the chart and the engine share
+ * one window, what the chart paints.
  *
- * 0 means "no cap" (send everything).
+ * The ceiling is {@link HISTORY_BARS_MAX} so the setting and the hard safety
+ * rail are the same number: a window above the rail could never be painted,
+ * and the chart would silently collapse on the first live tick.
  */
 export const ROLLING_WINDOW_DEFAULT = 10_000;
 export const ROLLING_WINDOW_MIN = 200;
-export const ROLLING_WINDOW_MAX = 200_000;
+export const ROLLING_WINDOW_MAX = HISTORY_BARS_MAX;
 
 /** Clamp a rolling-window value. `0`/absent → the default; negative → default. */
 export function clampRollingWindowBars(n: unknown): number {
@@ -3209,6 +3212,76 @@ if (typeof window !== 'undefined') {
   }
 }
 
+/* ── Chart window ────────────────────────────────────────────────────────────
+ *
+ * AXIS tracks three different bar counts and mixing them up is the source of
+ * most paint bugs:
+ *
+ * | Count | Where | Meaning |
+ * | --- | --- | --- |
+ * | Dataset depth | `historyBars` | What the venues / DSM backfill into the dataset store. |
+ * | Chart window | `rollingWindowBars` | The newest N bars the chart paints. |
+ * | Engine window | `applyRollingWindow` | What is handed to the engine on every run. |
+ *
+ * The helpers below are the single authority for the chart window so every
+ * paint path (dataset repaint, venue load, background catch-up, live append)
+ * agrees on how many bars the chart holds.
+ */
+
+/**
+ * How many bars the chart may hold (Settings → Rolling window).
+ *
+ * The single authority for the chart window: the load paths, the live append
+ * path and the engine window all read this, so the chart can never hold a
+ * different number of bars than the engine was asked to evaluate.
+ *
+ * `0` means "no cap" (send everything) — the documented escape hatch for a
+ * direct store write; the persisted setting clamps `0` to the default.
+ */
+export function chartWindowLimit(): number {
+  const raw = Number(store.rollingWindowBars);
+  if (!Number.isFinite(raw) || raw < 0) return ROLLING_WINDOW_DEFAULT;
+  if (raw === 0) return Number.POSITIVE_INFINITY;
+  return Math.max(1, Math.min(Math.round(raw), HISTORY_BARS_MAX));
+}
+
+/**
+ * Newest `chartWindowLimit()` bars of a series (no mutation).
+ *
+ * The tail is kept and the head is dropped: the live bar must always survive,
+ * the oldest bar is the one that leaves the window.
+ */
+export function sliceToChartWindow(bars: readonly Bar[]): Bar[] {
+  const limit = chartWindowLimit();
+  if (!Array.isArray(bars)) return [];
+  // No copy when the series already fits — the caller owns the array anyway and
+  // copying a 10k-bar window on every paint is pure waste.
+  return bars.length > limit ? bars.slice(bars.length - limit) : (bars as Bar[]);
+}
+
+/**
+ * Merge the chart's live tail into a dataset view.
+ *
+ * The dataset store only learns about a live bar when the Data Manager source
+ * is active, so a dataset-driven repaint can otherwise paint a series that is
+ * *older* than the chart and silently drop the forming candle. The tail is
+ * every chart bar strictly newer than the dataset's newest bar — those are the
+ * forming / just-closed candles the chart owns until the dataset catches up.
+ */
+export function mergeLiveTail(base: readonly Bar[], live: readonly Bar[]): Bar[] {
+  if (!Array.isArray(base) || !base.length) return Array.isArray(live) ? live.slice() : [];
+  if (!Array.isArray(live) || !live.length) return base as Bar[];
+  const lastBase = base[base.length - 1]!;
+  const tail: Bar[] = [];
+  for (const bar of live) {
+    if (!bar || !Number.isFinite(bar.time)) continue;
+    if (bar.time > lastBase.time) tail.push(bar);
+  }
+  if (!tail.length) return base as Bar[];
+  tail.sort((a, b) => a.time - b.time);
+  return [...base, ...tail];
+}
+
 /**
  * Replace chart history (full load). Bumps `chartDataGen` so ChartHost rebinds series data.
  * Persists symbol/interval/exchange; bars themselves are not written to localStorage.
@@ -3216,19 +3289,26 @@ if (typeof window !== 'undefined') {
 /**
  * Update `store.bars` without bumping `chartDataGen` or persisting.
  * Used for DSM progressive slices so ChartHost does not re-fit the viewport.
+ *
+ * The chart window is enforced here, at the mutation boundary: no caller may
+ * push the chart past the Rolling window, however it got its bars.
  */
 export function setBarsQuiet(bars: Bar[]) {
+  const view = sliceToChartWindow(bars);
   batch(() => {
-    setStore('bars', bars);
+    setStore('bars', view);
     const slotId = getActiveSlotId() || store.chartLayout?.activeId;
-    if (slotId) setSlotBars(slotId, bars, false);
+    if (slotId) setSlotBars(slotId, view, false);
   });
 }
 
 export function loadBars(bars: Bar[], symbol: string, interval: string, exchange: string) {
+  // The chart window is enforced here, at the mutation boundary: no caller may
+  // push the chart past the Rolling window, however it got its bars.
+  const view = sliceToChartWindow(bars);
   // One reactive flush for Topbar + ChartHost + StatusBar (not 5 micro-updates)
   batch(() => {
-    setStore('bars', bars);
+    setStore('bars', view);
     setStore('chartDataGen', (g) => (typeof g === 'number' ? g + 1 : 1));
     setStore('symbol', symbol);
     setStore('interval', interval);
@@ -3236,7 +3316,7 @@ export function loadBars(bars: Bar[], symbol: string, interval: string, exchange
     // Mirror into active multi-chart slot + runtime bar cache
     const slotId = getActiveSlotId() || store.chartLayout?.activeId;
     if (slotId) {
-      setSlotBars(slotId, bars, true);
+      setSlotBars(slotId, view, true);
       const idx = store.chartLayout?.slots?.findIndex((s) => s.id === slotId) ?? -1;
       if (idx >= 0) {
         setStore('chartLayout', 'slots', idx, 'symbol', symbol);
@@ -3460,23 +3540,79 @@ export function reorderPanes(orderedIds: string[]) {
 }
 
 /**
+ * Outcome of a live bar append — tells the paint layer what to do.
+ *
+ * - `ignored` — the bar was stale, out of order, or tried to reopen a closed
+ *   candle. Nothing changed; the caller must not paint.
+ * - `updated` — the forming tip was replaced in place (same open time).
+ * - `appended` — a new bar was appended and the window still had room.
+ * - `slid` — a new bar was appended **and** the window head moved: the chart
+ *   series has to drop its oldest bar too, so the caller must do a full
+ *   `setData` instead of an incremental `series.update`.
+ */
+export type BarAppendResult = 'ignored' | 'updated' | 'appended' | 'slid';
+
+/**
  * Append or update the latest bar (live klines update the open bar in place).
  * Does not persist every tick — bars stay in memory only.
  *
+ * **Immutable history.** Everything behind the tip is a closed candle and is
+ * never rewritten: a late or out-of-order tick for an older bar is dropped
+ * instead of being appended behind the tip (which would put the series out of
+ * order and break every index-based zip downstream). The tip itself may only
+ * be replaced by a bar for the same open time, and a **closed** tip is never
+ * reopened by a forming tick.
+ *
  * **Hot path:** path-update the last index (no O(N) `slice()` clone) so Solid
- * and GC stay cheap on 10k–100k histories. Full array replace only when
- * capping or the series is empty.
+ * and GC stay cheap on 10k–100k histories. Full array replace only when the
+ * chart window slides (the head is dropped) or the series is empty.
  */
-export function appendBar(bar: Bar) {
+export function appendBar(bar: Bar): BarAppendResult {
+  if (!bar || !Number.isFinite(bar.time)) return 'ignored';
   const b = store.bars;
   const n = b.length;
-  if (n && b[n - 1]!.time === bar.time) {
-    // Same open bar — fine-grained path set (no full-array clone)
-    setStore('bars', n - 1, bar);
-  } else if (n >= HISTORY_BARS_MAX) {
-    setStore('bars', [...b.slice(n - (HISTORY_BARS_MAX - 1)), bar]);
-  } else if (n === 0) {
+  if (n) {
+    const tip = b[n - 1]!;
+    if (bar.time < tip.time) {
+      // Late tick for an already-closed candle — history is immutable.
+      return 'ignored';
+    }
+    if (bar.time === tip.time) {
+      // A closed tip stays closed: a stale forming tick must not reopen it.
+      if (tip.closed && bar.closed !== true) return 'ignored';
+      // Same open bar — fine-grained path set (no full-array clone).
+      // The payload is normalised first: Solid's store setter *merges* an
+      // object into the existing node, so a tick without a volume would keep
+      // the previous volume and draw a stale histogram.
+      setStore('bars', n - 1, normalizeBarPayload(bar));
+      if (store.live.lastBarTime !== bar.time) {
+        setStore('live', 'lastBarTime', bar.time);
+      }
+      // Dirtiness for live re-run scheduler — only set when not already true
+      if (!store.live.needsRerun) {
+        setStore('live', 'needsRerun', true);
+      }
+      return 'updated';
+    }
+  }
+
+  const limit = chartWindowLimit();
+  if (n === 0) {
     setStore('bars', [bar]);
+  } else if (n >= limit) {
+    // The chart window is at its cap: the head slides, the new bar is the tail.
+    // The paint layer must mirror this with a full setData (see `slid`).
+    // `unwrap` avoids reading every element through the store proxy — a bar
+    // object is wrapped in its own proxy, so slicing the proxy allocates one
+    // proxy per bar on every new candle.
+    const raw = unwrap(b) as Bar[];
+    const next = [...raw.slice(n - (limit - 1)), bar];
+    setStore('bars', next);
+    // Keep the multi-chart slot cache in step: it holds the *same* array
+    // reference, so a replaced array would leave the slot on the old window
+    // and switching back would roll the chart back by one bar.
+    const slotId = getActiveSlotId() || store.chartLayout?.activeId;
+    if (slotId) setSlotBars(slotId, next, false);
   } else {
     // Append by index — Solid extends the array without copying prior bars
     setStore('bars', n, bar);
@@ -3488,6 +3624,26 @@ export function appendBar(bar: Bar) {
   if (!store.live.needsRerun) {
     setStore('live', 'needsRerun', true);
   }
+  return n >= limit ? 'slid' : 'appended';
+}
+
+/**
+ * Complete bar payload for the in-place tip update.
+ *
+ * Solid's store setter merges an object into the existing node, so every
+ * field has to be present — otherwise the previous value survives (a tick
+ * without a volume would keep the old volume).
+ */
+function normalizeBarPayload(bar: Bar): Bar {
+  return {
+    time: bar.time,
+    open: bar.open,
+    high: bar.high,
+    low: bar.low,
+    close: bar.close,
+    volume: Number.isFinite(bar.volume as number) ? (bar.volume as number) : 0,
+    closed: bar.closed === true,
+  };
 }
 
 /** Enable/disable live streaming preference (stream start/stop is elsewhere). */

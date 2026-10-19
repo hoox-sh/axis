@@ -186,8 +186,14 @@ let manager: PaneManager | undefined;
 let drawingLayer: DrawingLayer | undefined;
 /** ThemeManager unregisters per chart slot (multi-chart safe). */
 const priceSeriesThemeUnregs = new Map<string, () => void>();
-/** Skip duplicate full-history setData (loadBars + ChartHost both paint). */
-let lastOhlcvPaintSig = '';
+/**
+ * Full-history paint dedup, **per chart slot**.
+ *
+ * A single module-level signature skipped the second slot's paint whenever
+ * the two slots happened to hold the same first/mid/last OHLCV — the slot
+ * stayed blank. Keyed by the slot id so each chart has its own dedup state.
+ */
+const lastOhlcvPaintSig = new Map<string, string>();
 
 function priceThemeKey(slotId?: string | null): string {
   return slotId || getActiveSlotId() || '__legacy__';
@@ -228,7 +234,7 @@ export function setManager(m: PaneManager | undefined, slotId?: string) {
       // touch a series whose chart was removed.
       clearPriceThemeUnreg(priceThemeKey(id));
     }
-    if (m !== manager) lastOhlcvPaintSig = '';
+    if (m !== manager) lastOhlcvPaintSig.delete(priceThemeKey(id));
     manager = m;
   }
 }
@@ -449,19 +455,27 @@ export type SetDataToChartOpts = {
 };
 
 /**
- * Fingerprint for full-history paint dedup. Samples first/mid/last OHLCV so
- * mid-history gap-fill corrections (same endpoints, changed middle) still
- * repaint instead of hitting the `skipSeries` fast path.
+ * Fingerprint for full-history paint dedup.
+ *
+ * Samples evenly spaced OHLCV rows so a mid-history gap-fill correction
+ * (same endpoints, changed middle) still repaints instead of hitting the
+ * `skipSeries` fast path. One middle row was not enough: a correction
+ * anywhere else in the window produced the same signature and the chart kept
+ * the stale candle.
  */
 export function ohlcvPaintSig(bars: Bar[], chartType: ChartType): string {
   const n = bars.length;
   if (!n) return `0|||${chartType}`;
-  const first = bars[0]!;
-  const mid = bars[Math.floor(n / 2)]!;
-  const last = bars[n - 1]!;
   const fmt = (b: Bar | undefined): string =>
     b ? `${b.time}|${b.open}|${b.high}|${b.low}|${b.close}|${b.volume ?? ''}` : '';
-  return `${n}|${fmt(first)}|${fmt(mid)}|${fmt(last)}|${chartType}`;
+  // Up to 9 probes: first, last and 7 evenly spaced interior rows.
+  const probes: string[] = [];
+  const count = Math.min(9, n);
+  for (let i = 0; i < count; i++) {
+    const idx = count === 1 ? 0 : Math.round((i * (n - 1)) / (count - 1));
+    probes.push(fmt(bars[idx]));
+  }
+  return `${n}|${probes.join(';')}|${chartType}`;
 }
 
 /**
@@ -655,8 +669,9 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
 
     const n = bars.length;
     const paintSig = ohlcvPaintSig(bars, chartType);
+    const sigKey = priceThemeKey();
     const skipSeries =
-      paintSig === lastOhlcvPaintSig && !clearScriptState && clearMarkers === false;
+      paintSig === lastOhlcvPaintSig.get(sigKey) && !clearScriptState && clearMarkers === false;
 
     // Tune LWC conflation for this history size before the heavy setData paint.
     // Apply to every pane — indicator charts used to keep default 0.5px min
@@ -699,7 +714,7 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
       }
       return;
     }
-    lastOhlcvPaintSig = paintSig;
+    lastOhlcvPaintSig.set(sigKey, paintSig);
 
     if (pricePane?.series['candle']) {
       // Full replace invalidates incremental HA live state (re-seeded by mapper

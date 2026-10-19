@@ -38,7 +38,7 @@ import { driveEngineSeries, type SeriesDriveTick } from '../engines/series-drive
 import { newestBarTime, stepsBehind } from '../engines/series-freshness';
 import { getActiveEngineConfig, getActiveEngineId } from '../plugins/active';
 import { resetStreamWire, streamRouteActive, streamSeriesTick, streamWireState } from '../streams/stream-live';
-import { store } from '../store';
+import { chartWindowLimit, store } from '../store';
 import type { Bar } from '../store/types';
 import { McpInvokeError } from './protocol';
 import { barSummary, boundedBarRows } from './snapshot';
@@ -503,8 +503,9 @@ export async function engineTickView(p: Record<string, unknown>): Promise<Record
     key,
     marketNow,
     minGapMs: 0,
+    historyBars: chartWindowLimit(),
     tick: async (endpoint, apiKey, k) => {
-      const t = await tickChartDataSession(endpoint, apiKey, k);
+      const t = await tickChartDataSession(endpoint, apiKey, k, chartWindowLimit());
       captured.tick = t;
       return t;
     },

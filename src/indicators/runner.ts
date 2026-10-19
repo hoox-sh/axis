@@ -67,6 +67,7 @@ import {
   setTelemetryPlane,
   setTelemetryState,
   newEntityId,
+  chartWindowLimit,
 } from '../store';
 import { resolveInputSourceValues } from '../results/plot-sources';
 import { applyStrategyPropsToSource } from '../results/strategy-props';
@@ -141,6 +142,8 @@ let ohlcvTimesCache: {
   gen: number;
   times: number[];
   barsRef?: unknown;
+  /** First bar time of the cached axis (the window head). */
+  firstT?: number;
 } | null = null;
 
 /** @internal test helper */
@@ -152,20 +155,27 @@ export function _resetOhlcvTimesCacheForTests(): void {
  * Cap the bars handed to the engine to the most recent N
  * ({@link AppState.rollingWindowBars}).
  *
- * The dataset keeps the full Historical bars depth — this only bounds evaluate time, the
- * encode payload, and the size of the response envelope. Plot apply is safe:
- * overlay points are keyed by **time**, not by index into `store.bars`
+ * The dataset keeps the full Historical bars depth — this only bounds evaluate
+ * time, the encode payload, and the size of the response envelope. Plot apply
+ * is safe: overlay points are keyed by **time**, not by index into `store.bars`
  * (`lineSeriesToOverlayData`), so a windowed run lands on its own axis and
  * simply covers the recent range.
  *
  * Explicit `opts.bars` (HPO holdout / walk-forward) is windowed too — it is
  * already a deliberate slice, so the cap is redundant there and skipping it
  * would let a trial quietly exceed the user's budget.
+ *
+ * The cap is the **chart** window ({@link chartWindowLimit}): the engine
+ * evaluates exactly the bars the chart shows, so the two axes can never drift
+ * apart.
  */
 export function applyRollingWindow(
   bars: import('../store/types').Bar[],
 ): import('../store/types').Bar[] {
-  const limit = store.rollingWindowBars;
+  // The engine window and the chart window are the same number
+  // (`chartWindowLimit`): the engine must evaluate exactly what the chart
+  // shows, or the two axes drift apart.
+  const limit = chartWindowLimit();
   if (!Number.isFinite(limit) || limit <= 0) return bars;
   if (bars.length <= limit) return bars;
   return bars.slice(bars.length - limit);
@@ -343,6 +353,7 @@ export function getOhlcvTimesForApply(
   const gen = typeof store.chartDataGen === 'number' ? store.chartDataGen : 0;
   const n = bars.length;
   const lastT = n ? Number(bars[n - 1]?.time) : Number.NaN;
+  const firstT = n ? Number(bars[0]?.time) : Number.NaN;
 
   // Override path: build directly, never cache (see doc above).
   if (isOverride) {
@@ -374,7 +385,28 @@ export function getOhlcvTimesForApply(
   ) {
     const next = ohlcvTimesCache.times.slice();
     next.push(lastT);
-    ohlcvTimesCache = { gen, times: next, barsRef: store.bars };
+    ohlcvTimesCache = { gen, times: next, barsRef: store.bars, firstT };
+    return next;
+  }
+
+  // Slide path: the chart window dropped its head bar and took a new tail
+  // bar. The length is unchanged, so the cache above does not match — but the
+  // axis only shifted by one, and rebuilding it would read every bar through
+  // the store proxy on every new candle. The head must have moved too, so a
+  // same-length *rewrite* (a different series) still takes the full rebuild.
+  if (
+    ohlcvTimesCache &&
+    ohlcvTimesCache.barsRef === store.bars &&
+    ohlcvTimesCache.gen === gen &&
+    ohlcvTimesCache.times.length === n &&
+    n > 1 &&
+    Number.isFinite(lastT) &&
+    ohlcvTimesCache.times[n - 1] !== lastT &&
+    ohlcvTimesCache.firstT !== firstT
+  ) {
+    const next = ohlcvTimesCache.times.slice(1);
+    next.push(lastT);
+    ohlcvTimesCache = { gen, times: next, barsRef: store.bars, firstT };
     return next;
   }
 
@@ -382,7 +414,7 @@ export function getOhlcvTimesForApply(
   for (let i = 0; i < n; i++) {
     times[i] = bars[i]?.time as number;
   }
-  ohlcvTimesCache = { gen, times, barsRef: store.bars };
+  ohlcvTimesCache = { gen, times, barsRef: store.bars, firstT };
   return times;
 }
 

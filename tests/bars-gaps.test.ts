@@ -27,6 +27,28 @@ describe('bars-gaps', () => {
     expect(intervalToSec('1M')).toBe(30 * 86_400);
   });
 
+  it('intervalToSec is case-insensitive for the fixed units', () => {
+    // `1H` used to fall through to the 1-day default — a 24x wrong step that
+    // turns every real bar into a "gap" and every gap into a bar.
+    expect(intervalToSec('1H')).toBe(3600);
+    expect(intervalToSec('1S')).toBe(1);
+    expect(intervalToSec('1W')).toBe(604_800);
+    expect(intervalToSec('1D')).toBe(86_400);
+    // `m` is minutes, `M` is months (the Pine / TradingView convention).
+    expect(intervalToSec('15m')).toBe(900);
+    expect(intervalToSec('15M')).toBe(15 * 30 * 86_400);
+  });
+
+  it('expectedBarsInSpan counts calendar months for a monthly interval', () => {
+    // A 30-day step made the expected count wrong for every window that is
+    // not a multiple of 30 days — the density floor then never held and the
+    // job could never report "complete".
+    const jan = Date.UTC(2026, 0, 1) / 1000;
+    const apr = Date.UTC(2026, 3, 1) / 1000;
+    expect(expectedBarsInSpan(jan, apr, '1M')).toBe(4);
+    expect(expectedBarsInSpan(jan, jan + 29 * 86_400, '1M')).toBe(1);
+  });
+
   it('expectedBarsInSpan is inclusive of both ends', () => {
     expect(expectedBarsInSpan(0, 90 * 86_400, '1d')).toBe(91);
     expect(expectedBarsInSpan(0, 90 * 86_400, '1m')).toBe(129_601);

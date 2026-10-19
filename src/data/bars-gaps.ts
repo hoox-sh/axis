@@ -51,15 +51,29 @@ export interface CoverageReport {
   complete: boolean;
 }
 
-/** AXIS interval string → bar step in seconds. */
+/**
+ * AXIS interval string → bar step in seconds.
+ *
+ * The unit letter is case-insensitive for the fixed-length units (`1H` is an
+ * hour, `1h` is an hour); `M` is the only case-sensitive one because `m`
+ * means *minute* and `M` means *month*. An unknown interval falls back to one
+ * day — a wrong step turns every real bar into a "gap" and vice versa, so the
+ * fallback is loud in the debug log rather than silent.
+ */
 export function intervalToSec(interval: string): number {
   const raw = String(interval || '').trim();
   // Monthly (`1M`) is calendar-ish; 30d is the gap-fill step.
   const month = /^(\d+)M$/.exec(raw);
   if (month) return Math.max(1, parseInt(month[1]!, 10) * 30 * 86_400);
-  const m = /^(\d+)([smhdw])$/.exec(raw);
-  if (!m) return 86_400;
+  const m = /^(\d+)([smhdw])$/i.exec(raw);
+  if (!m) {
+    if (raw) {
+      console.warn(`[bars-gaps] unknown interval "${raw}" — assuming 1d`);
+    }
+    return 86_400;
+  }
   const n = parseInt(m[1]!, 10);
+  const unit = m[2]!.toLowerCase();
   const mult: Record<string, number> = {
     s: 1,
     m: 60,
@@ -67,19 +81,34 @@ export function intervalToSec(interval: string): number {
     d: 86_400,
     w: 604_800,
   };
-  return Math.max(1, n * (mult[m[2]!] || 86_400));
+  return Math.max(1, n * (mult[unit] || 86_400));
 }
 
 /**
  * Dense bar count for `[fromSec, toSec]` at `interval`.
  * Inclusive of both ends: the same formula coverage validation uses.
  * Returns 0 when the window is empty or the timestamps are not finite.
+ *
+ * Monthly intervals are **calendar** months (28–31 days), not a fixed 30-day
+ * step: a 30-day step makes the expected count wrong for every window that
+ * is not a multiple of 30 days, and the density floor then never holds —
+ * the job could never report "complete" and re-walked the range every run.
  */
 export function expectedBarsInSpan(fromSec: number, toSec: number, interval: string): number {
   if (!Number.isFinite(fromSec) || !Number.isFinite(toSec)) return 0;
   const from = Math.floor(fromSec);
   const to = Math.floor(toSec);
   if (to < from) return 0;
+  const month = /^(\d+)M$/.exec(String(interval || '').trim());
+  if (month) {
+    const stepMonths = Math.max(1, parseInt(month[1]!, 10));
+    // Count the month starts in [from, to].
+    const startMonth = Date.UTC(new Date(from * 1000).getUTCFullYear(), new Date(from * 1000).getUTCMonth(), 1);
+    const endMonth = Date.UTC(new Date(to * 1000).getUTCFullYear(), new Date(to * 1000).getUTCMonth(), 1);
+    if (endMonth < startMonth) return 0;
+    const months = (endMonth - startMonth) / (30 * 86_400_000) + 1;
+    return Math.max(1, Math.floor((months + stepMonths - 1) / stepMonths));
+  }
   const step = intervalToSec(interval);
   return Math.floor((to - from) / step) + 1;
 }
@@ -94,35 +123,20 @@ export function alignDown(sec: number, stepSec: number): number {
 }
 
 /**
- * Find gaps in a sorted bar series within [fromSec, toSec].
+ * Find gaps in an already filtered + sorted series.
  *
- * Does **not** re-align to epoch grids (venues use their own open phases).
- * A gap is declared when consecutive open times differ by more than
- * `stepSec * gapFactor` (default 1.5 — allows minor jitter, not multi-bar holes).
- * Also reports leading / trailing holes if the series does not cover the ends.
+ * The hot path: the caller has the window slice once, so the gaps are derived
+ * from it without a second filter + sort (the DSM issues a coverage report
+ * per validation round, and a 50k-bar series sorted twice per report is pure
+ * waste).
  */
-export function findBarGaps(
-  bars: readonly Bar[],
-  fromSec: number,
-  toSec: number,
-  interval: string,
-  opts?: { gapFactor?: number },
+function findGapsInSorted(
+  inWin: readonly Bar[],
+  from: number,
+  to: number,
+  step: number,
+  threshold: number,
 ): BarGap[] {
-  const step = intervalToSec(interval);
-  const gapFactor = opts?.gapFactor ?? 1.5;
-  const threshold = step * gapFactor;
-  if (!Number.isFinite(fromSec) || !Number.isFinite(toSec)) return [];
-  const from = Math.floor(fromSec);
-  const to = Math.floor(toSec);
-  if (to < from) return [];
-
-  // Bars inside window, sorted unique (null/non-array → empty, no throw)
-  const list = Array.isArray(bars) ? bars : [];
-  const inWin = list
-    .filter((b) => b && Number.isFinite(b.time) && b.time >= from && b.time <= to)
-    .slice()
-    .sort((a, b) => a.time - b.time);
-
   const gaps: BarGap[] = [];
 
   if (!inWin.length) {
@@ -181,6 +195,39 @@ export function findBarGaps(
   return gaps;
 }
 
+/**
+ * Find gaps in a sorted bar series within [fromSec, toSec].
+ *
+ * Does **not** re-align to epoch grids (venues use their own open phases).
+ * A gap is declared when consecutive open times differ by more than
+ * `stepSec * gapFactor` (default 1.5 — allows minor jitter, not multi-bar holes).
+ * Also reports leading / trailing holes if the series does not cover the ends.
+ */
+export function findBarGaps(
+  bars: readonly Bar[],
+  fromSec: number,
+  toSec: number,
+  interval: string,
+  opts?: { gapFactor?: number },
+): BarGap[] {
+  const step = intervalToSec(interval);
+  const gapFactor = opts?.gapFactor ?? 1.5;
+  const threshold = step * gapFactor;
+  if (!Number.isFinite(fromSec) || !Number.isFinite(toSec)) return [];
+  const from = Math.floor(fromSec);
+  const to = Math.floor(toSec);
+  if (to < from) return [];
+
+  // Bars inside window, sorted unique (null/non-array → empty, no throw)
+  const list = Array.isArray(bars) ? bars : [];
+  const inWin = list
+    .filter((b) => b && Number.isFinite(b.time) && b.time >= from && b.time <= to)
+    .slice()
+    .sort((a, b) => a.time - b.time);
+
+  return findGapsInSorted(inWin, from, to, step, threshold);
+}
+
 /** Full coverage report for a series in a window. */
 export function validateBarCoverage(
   bars: readonly Bar[],
@@ -207,7 +254,10 @@ export function validateBarCoverage(
     .slice()
     .sort((a, b) => a.time - b.time);
 
-  const gaps = findBarGaps(list, from, to, interval, opts);
+  const step = intervalToSec(interval);
+  const threshold = step * (opts?.gapFactor ?? 1.5);
+  // The window slice is reused — the gap finder does not filter + sort again.
+  const gaps = findGapsInSorted(inWin, from, to, step, threshold);
   const expectedBars = expectedBarsInSpan(from, to, interval);
   // Density floor: gap finder can miss pathological cases; require ~85% of expected
   const denseEnough =

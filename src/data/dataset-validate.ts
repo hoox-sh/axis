@@ -80,6 +80,14 @@ export interface RepairResult {
  * would corrupt them. Snapping requires ≥3 bars and ≥60% phase agreement;
  * otherwise it is skipped (too little signal, snapping would be guesswork).
  *
+ * Snapping is **collision-safe**: a bar is only moved onto a grid point that
+ * is free. A bar whose neighbours are both occupied keeps its own timestamp
+ * instead of landing on a slot that already holds a bar — snapping into an
+ * occupied slot would silently *delete* a real venue bar (the dedupe below
+ * keeps one row per open time) and shift another bar's OHLCV onto the wrong
+ * candle. A dropped bar becomes a phantom gap the DSM then chases forever,
+ * because every re-fetch repeats the same snap.
+ *
  * Never throws; always returns a usable (possibly empty) series.
  */
 export function repairBars(
@@ -118,12 +126,15 @@ export function repairBars(
     }
   }
 
-  // 4. Dedupe by open time — first occurrence wins (newest merges pass later)
+  // 4. Dedupe by open time — the **last** write wins (same rule as
+  //    `normalizeHistoricalBars` and the dataset merge policy: the newest
+  //    observation of a stamp is the authoritative one).
   const out: Bar[] = [];
   const seen = new Set<number>();
   for (const bar of sorted) {
     if (seen.has(bar.time)) {
       stats.deduped += 1;
+      out[out.length - 1] = bar;
       continue;
     }
     seen.add(bar.time);
@@ -140,6 +151,12 @@ const PHASE_AGREEMENT = 0.6;
 
 /**
  * Snap individually misaligned bars to the series' dominant open-time phase.
+ *
+ * Only **free** grid points are used as targets. The bar's own slot (the
+ * grid point at or below its timestamp) is preferred over the next one so a
+ * half-hour-stamped bar keeps its identity instead of sliding forward into
+ * the following hour.
+ *
  * Returns the number of snapped bars. Mutates `bars` in place.
  */
 function snapToDominantPhase(bars: Bar[], step: number): number {
@@ -161,16 +178,43 @@ function snapToDominantPhase(bars: Bar[], step: number): number {
   }
   if (dominantPhase < 0 || dominantCount / bars.length < PHASE_AGREEMENT) return 0;
 
+  // Occupied timestamps — a snapped bar must never land on an existing bar.
+  const occupied = new Set<number>();
+  for (const bar of bars) occupied.add(bar.time);
+
   let snapped = 0;
   for (const bar of bars) {
     const phase = ((bar.time % step) + step) % step;
     if (phase === dominantPhase) continue;
-    // Nearest grid point carrying the dominant phase
-    const base = Math.round((bar.time - dominantPhase) / step) * step + dominantPhase;
-    if (base !== bar.time && Number.isFinite(base) && base >= 0) {
-      bar.time = base;
-      snapped += 1;
+    // The bar's own slot and the next one. `floor` keeps the bar's identity
+    // (a :30 stamp belongs to the hour it starts in), `ceil` is the fallback.
+    const lower = Math.floor((bar.time - dominantPhase) / step) * step + dominantPhase;
+    const upper = lower + step;
+    const dLower = bar.time - lower;
+    const dUpper = upper - bar.time;
+    const first = dLower <= dUpper ? lower : upper;
+    const second = first === lower ? upper : lower;
+
+    let target = -1;
+    for (const cand of [first, second]) {
+      if (cand === bar.time) continue;
+      // A bar must keep a positive timestamp: `sanitizeBar` drops a
+      // non-positive open time, so snapping onto the epoch would delete the
+      // bar on the next repair pass.
+      if (!Number.isFinite(cand) || cand <= 0) continue;
+      if (occupied.has(cand)) continue;
+      target = cand;
+      break;
     }
+    // Both neighbours are taken — keep the bar where it is. The hole it leaves
+    // is real (the venue really did not deliver that slot) and the gap
+    // classifier decides whether it is worth chasing.
+    if (target < 0) continue;
+
+    occupied.delete(bar.time);
+    occupied.add(target);
+    bar.time = target;
+    snapped += 1;
   }
   return snapped;
 }
@@ -190,14 +234,28 @@ export interface ClassifyOpts {
 }
 
 /**
- * True when every missing open time in the gap falls on a Saturday or Sunday
- * (UTC) — a legitimate closure for session venues at daily+ intervals.
+ * True when every missing open time in the gap falls on a weekend (UTC) — a
+ * legitimate closure for session venues at daily+ intervals.
+ *
+ * A session venue is closed from Friday's close until Monday's open, so a
+ * **missing Friday bar** belongs to that same closure: the venue never
+ * delivered it (holiday, early close). Excusing it keeps the DSM from
+ * chasing a bar the venue does not have — which otherwise burns every gap
+ * round and ends the job with "Partial: N gaps remain".
+ *
+ * Monday is *not* excused: a missing Monday bar means the session did not
+ * trade, which is either a holiday the calendar does not know or a real hole.
  */
 function isWeekendGap(gap: BarGap, stepSec: number): boolean {
   if (stepSec < 86_400) return false; // intraday sessions have weekday hours
-  for (let t = gap.fromSec; t <= gap.toSec; t += stepSec) {
-    const day = new Date(t * 1000).getUTCDay(); // 0=Sun, 6=Sat
-    if (day !== 0 && day !== 6) return false;
+  // The missing slots are one step apart, so the weekday set is fully
+  // determined by the two ends plus the count — no per-slot Date allocation
+  // (a five-year gap used to allocate 1800 Date objects per validation).
+  const days = Math.max(1, Math.floor((gap.toSec - gap.fromSec) / stepSec) + 1);
+  const startDay = new Date(gap.fromSec * 1000).getUTCDay();
+  for (let i = 0; i < days; i++) {
+    const day = (startDay + i) % 7; // 0=Sun, 5=Fri, 6=Sat
+    if (day !== 0 && day !== 5 && day !== 6) return false;
   }
   return true;
 }

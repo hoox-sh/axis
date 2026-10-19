@@ -36,14 +36,13 @@ import {
 import type { Bar } from '../store/types';
 import { setStore, persist, setActivePlugin, store } from '../store';
 import {
-  clearCachedBars,
   countBarsForLoad,
   getCachedBars,
   listCachedSeries,
   type BarLoadWindow,
   type BarsCacheMeta,
 } from '../data/bars-cache';
-import { listMemoryDatasets } from '../data/dataset-store';
+import { listMemoryDatasets, removeDatasetEverywhere } from '../data/dataset-store';
 import { buildCoverageMap, type CoverageSegment } from '../data/bars-gaps';
 import {
   applyCachedToChart,
@@ -456,8 +455,9 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
     setBusy(true);
     setError('');
     try {
-      await clearCachedBars(meta.sourceId, meta.symbol, meta.interval);
-      setMsg('Dataset removed from cache.');
+      // Full delete: bars + metadata, from every sink (session/local/git/worker).
+      await removeDatasetEverywhere(meta.sourceId, meta.symbol, meta.interval);
+      setMsg('Dataset deleted (bars + metadata).');
       setPendingDelete(false);
       announce(`Deleted ${meta.symbol} ${meta.interval} dataset`);
       await refresh();
@@ -896,7 +896,7 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
                   class="sc-btn sc-btn-ghost"
                   disabled={!selected() || busy()}
                   onClick={() => setPendingDelete(true)}
-                  title="Remove from local cache"
+                  title="Delete dataset (bars + metadata, all sinks)"
                 >
                   <Icons.trash />
                   <span>Delete</span>

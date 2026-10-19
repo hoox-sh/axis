@@ -7,7 +7,7 @@ tags: [code, data]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-19T18:42:31Z
+  at: 2026-10-19T23:09:19Z
 sources:
   - id: tree
     resource: "src/data"
@@ -19,28 +19,29 @@ okf_lock: generated
 # Files
 
 * `background-catchup.ts` — BACKGROUND_CATCHUP_THROTTLE_MS, TrailingGap, _resetBackgroundCatchupForTests, _resetBackgroundCatchupListenersForTests, _setBackgroundCatchupLastRepairForTests, detectTrailingGap, repairChartGapsAfterBackground, startBackgroundCatchup
-* `bars-cache.ts` — BARS_CACHE_MAX, BARS_CACHE_MAX_SERIES, BarLoadWindow, BarsCacheMeta, BarsCacheRecord, _resetBarsCacheForTests, barsCacheKey, clearCachedBars, countBarsForLoad, flushPendingIdbPuts, getCachedBarCount, getCachedBars
+* `bars-cache.ts` — BARS_CACHE_MAX, BARS_CACHE_MAX_SERIES, BarLoadWindow, BarsCacheMeta, BarsCacheRecord, _resetBarsCacheForTests, barsCacheKey, clearAllCachedBars, clearCachedBars, countBarsForLoad, flushPendingIdbPuts, getCachedBarCount
 * `bars-gaps.ts` — BarGap, CoverageReport, CoverageSegment, alignDown, buildCoverageMap, expectedBarsInSpan, findBarGaps, intervalToSec, mergeGaps, validateBarCoverage
 * `binance-http.ts` — BINANCE_INVERSE_REST_HOSTS, BINANCE_LINEAR_REST_HOSTS, BINANCE_REST_HOSTS, BinanceFetchOpts, BinanceRestPath, DEFAULT_MARKET_WORKER_BASE, binanceKlineWsUrls, binanceTickerWsUrls, fetchBinanceJson, resolveMarketWorkerBase
 * `ccxt-session.ts` — bindCcxtSession, unbindCcxtSession
 * `credentials.ts` — CREDENTIALS_MEMORY_ONLY, CredentialMeta, ExchangeCredential, activeCcxtExchange, activeCcxtGateway, ccxtCredentialId, clearCredentials, deleteCredential, getCcxtCredential, getCredential, getCredentialForVenue, hasCcxtCredential
 * `data-manager-source.ts` — DATA_MANAGER_SOURCE_ID, DataManagerSelection, ResolvedCacheSeries, clearDataManagerSelection, dataManagerCacheKey, dataManagerLabel, getDataManagerSelection, resolveDataManagerBars, setDataManagerSelection
-* `data-source-manager.ts` — DSM_MAX_BARS_PER_JOB, DSM_MAX_PAGES, DataSourceJob, DataSourceJobPhase, DataSourceJobStatus, StartBackfillOpts, _resetDataSourceManagerForTests, _waitForJob, applyCachedToChart, applyJobToChart, cancelBackfill, dataSourceManagerState
-* `dataset-sinks.ts` — DatasetSink, PERSISTENCE_MODES, PersistenceMode, SinkErrorListener, _resetDatasetSinksForTests, datasetKey, localSink, onSinkError, remoteSink, sessionSink, sinkForMode
-* `dataset-store.ts` — DatasetMeta, PutResult, _resetDatasetStoreForTests, getDataset, getMergePolicy, getPersistenceMode, keyFor, listMemoryDatasets, peekDataset, putDatasetBars, removeDataset, replaceDataset
+* `data-source-manager.ts` — DSM_MAX_BARS_PER_JOB, DSM_MAX_PAGES, DataSourceJob, DataSourceJobPhase, DataSourceJobStatus, StartBackfillOpts, _resetDataSourceManagerForTests, _waitForJob, applyCachedToChart, applyChartWindow, applyJobToChart, cancelBackfill
+* `dataset-sinks.ts` — DatasetSink, PERSISTENCE_MODES, PersistenceMode, SinkErrorListener, _resetDatasetSinksForTests, datasetKey, flushDatasetSinks, localSink, onSinkError, remoteSink, removeDatasetFromAllSinks, sessionSink
+* `dataset-store.ts` — DatasetMeta, PutResult, _resetDatasetStoreForTests, awaitPendingCopies, flushDatasets, getDataset, getMergePolicy, getPersistenceMode, keyFor, listMemoryDatasets, peekDataset, putDatasetBars
 * `dataset-validate.ts` — ClassifyOpts, DatasetReport, GapClassification, RepairResult, RepairStats, ValidateOpts, VenueClass, classifyGaps, findClassifiedGaps, repairBars, validateDataset, venueClassForSourceCaps
-* `dsm-orchestrator.ts` — DatasetFirstResult, _resetDsmOrchestratorForTests, announceDatasetPaint, chartDisplayCap, ensureDatasetComplete, paintDataset, seedDatasetFromBars, sliceForChart, startProgressiveStream, stopProgressiveRepaint
+* `dsm-orchestrator.ts` — DatasetFirstResult, _resetDsmOrchestratorForTests, announceDatasetPaint, chartDisplayCap, ensureDatasetComplete, paintDataset, repaintViewForTests, seedDatasetFromBars, sliceForChart, startProgressiveStream, stopProgressiveRepaint
 * `expand-cache.ts` — ExpandCacheResult, _flushDataManagerLiveBarForTests, canExpandFromSource, expandCachedSeriesToNow, fillBarsTowardNow, fillInternalGaps, noteDataManagerLiveBar
 * `gateway.ts` — DATAFEED_DEFAULT_PORT, GatewayMode, GatewaySessionBody, gatewayBase, gatewayDeleteSession, gatewayFetch, gatewayPutSession, gatewayWs, isRemotePageOrigin, probeSidecar
 * `load-symbol.ts` — _currentLoadGeneration, _resetLoadGeneration, exchangeForSource, loadSymbolData, normalizeLoadSymbol, reloadChart
 * `market-worker.ts` — DEFAULT_MARKET_WORKER_BASE, resolveMarketWorkerBase
-* `merge-datasets.ts` — BarConflict, DEFAULT_CONFLICT_TOLERANCE, MergePolicy, MergeResult, barsConflict, mergeWithConflictPolicy
+* `merge-datasets.ts` — BarConflict, CONFLICT_ABS_FLOOR, DEFAULT_CONFLICT_TOLERANCE, MergePolicy, MergeResult, barsConflict, isSortedUnique, mergeSortedSeries, mergeWithConflictPolicy
 * `mexc-http.ts` — DEFAULT_MARKET_WORKER_BASE, MEXC_REST_HOSTS, MexcFetchOpts, MexcRestPath, fetchMexcJson, resolveMarketWorkerBase
 * `parse-bars.ts` — barTimeToPineMs, barsForPine, normalizeBarTime, normalizeHistoricalBars, parseOhlcvFile, parseOhlcvText, sanitizeBar, toUnixSeconds
 * `provider.ts` — DEFAULT_PROVIDER, MARKET_LABELS, ProviderAuthMode, ProviderGateway, ProviderMarket, ProviderSession, ProviderVenue, asProviderMarket, buildProviderSession, defaultStreamForSource, formatProviderLabel, hydrateProviderSession
 * `signed-fetch.ts` — SignedFetchOpts, fetchSignedJson, hasSignedCreds
 * `symbol-catalog.ts` — FALLBACK_MAJORS, SymbolCatalogResult, SymbolEntry, SymbolVenue, compactPair, filterSymbols, listQuotes, loadSymbolCatalog, resolveSymbolVenue, venueLabel
 * `symbol-exchange.ts` — exchangeForSource, normalizeLoadSymbol
+* `symbol-normalize.ts` — normalizeLoadSymbol
 * `venue-picker.ts` — NATIVE_VENUE_SOURCES, OTHER_VENUE_SOURCES, PINNED_CCXT, VenueGroup, VenueOption, applyVenueToken, exchangeIdFromToken, isCcxtVenueToken, listVenueOptions, parseVenueToken, prettyCcxtLabel, venueTokenFromState
 * `watchlist-live.ts` — QuoteMuxHandle, QuoteMuxStatus, QuoteUpdate, StartWatchlistQuotesOpts, parseBinanceTickerMessage, startWatchlistQuotes
 * `watchlist-tickers.ts` — WATCHLIST_INTERVALS, WATCHLIST_REFRESH_OPTIONS, WatchTicker, coinbaseProduct, fetchWatchlistTickers, okxInst, sourceSupportsRestPoll, toUsdt
@@ -48,7 +49,7 @@ okf_lock: generated
 
 # Packages
 
-`solid-js/store`
+`empty dataset`, `solid-js/store`
 
 # Depends on
 

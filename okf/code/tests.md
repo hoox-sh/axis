@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "tests"
-description: "tests contains alerts-engine.test.ts, alerts-form.test.ts, alerts-format.test.ts, and 282 more files."
+description: "tests contains alerts-engine.test.ts, alerts-form.test.ts, alerts-format.test.ts, and 285 more files."
 resource: "tests"
 tags: [code, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-19T19:29:16Z
+  at: 2026-10-19T23:09:19Z
 sources:
   - id: tree
     resource: "tests"
@@ -90,6 +90,7 @@ okf_lock: generated
 * `drawings-trading-extra.test.ts`
 * `drawings-trend-place.test.ts`
 * `drawings.test.ts`
+* `dsm-orchestrator-repaint.test.ts`
 * `dsm-ui.test.ts`
 * `editor-bridge.test.ts`
 * `editor-chrome.test.ts`
@@ -143,6 +144,7 @@ okf_lock: generated
 * `library-publish.test.ts`
 * `library-ui.test.ts`
 * `line-break-primitive.test.ts`
+* `live-append.test.ts`
 * `logs-layout.test.ts`
 * `maintenance-mode.test.ts`
 * `manager-access.test.ts`
@@ -260,6 +262,7 @@ okf_lock: generated
 * `storage-local-versions.test.ts`
 * `storage-local.test.ts`
 * `storage-service-results.test.ts`
+* `store-append-immutable.test.ts`
 * `store-append-scale.test.ts`
 * `store.test.ts`
 * `strategy-extra.test.ts`

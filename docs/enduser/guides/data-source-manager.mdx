@@ -68,6 +68,17 @@ flowchart TB
 
 Pause / resume / cancel apply between pages. Multiple jobs queue with low concurrency (rate-limit friendly).
 
+### Deleting datasets
+
+**Delete** in the Dataset manager removes the dataset in full — bars *and*
+metadata — from every persistence sink (session / local / git / worker), so the
+row does not come back on the next refresh.
+
+To wipe every dataset at once, use **Settings → Data → Dataset manager →
+Flush dataset manager**. The flush clears the memory mirror, the local
+IndexedDB cache, and the remote dataset stores (git / cloud). Bars already
+painted on the chart stay until the symbol is reloaded.
+
 ## Phases
 
 | Phase | Behavior |
@@ -103,6 +114,8 @@ Use Load for desk-speed symbol switches; use the manager when you need years of 
 | --- | --- |
 | `src/data/data-source-manager.ts` | Job queue, walk-back, validate, gap-fill |
 | `src/data/bars-cache.ts` | Memory-first + IDB durable OHLCV cache |
+| `src/data/dataset-store.ts` | Dataset mirror + delete / flush entry points |
+| `src/data/dataset-sinks.ts` | Persistence sinks (session / local / git / worker) |
 | `src/data/bars-gaps.ts` | Gap detection / coverage report |
 | `src/ui/DataSourceManagerPanel.tsx` | Panel UI |
 | `src/ui/CachedDatasetsModal.tsx` | Dataset manager modal |

@@ -192,6 +192,12 @@ export async function fillBarsTowardNow(
       if (prevOldest != null && rawOldest >= prevOldest) break;
       if (rawOldest >= cursorEnd) break;
       prevOldest = rawOldest;
+      // One step of overlap, not one second: a venue answers "the newest bar
+      // with open time <= endTime", so `rawOldest - 1` is safe only for a
+      // venue whose bars sit exactly on the step grid. A venue with its own
+      // phase (daily bars at 08:00 UTC) would answer with a bar one second
+      // before its own grid point — a one-second hole in the dataset. The
+      // overlap costs one duplicated bar per page and the merge drops it.
       cursorEnd = rawOldest - step;
     }
 
@@ -229,7 +235,7 @@ export async function fillInternalGaps(
   }
   const first = bars[0]!.time;
   const last = bars[bars.length - 1]!.time;
-  const gaps = findBarGaps(bars, first, last, iv).filter((g) => g.missingBars >= 2);
+  const gaps = findBarGaps(bars, first, last, iv).filter((g) => g.missingBars >= 1);
   if (!gaps.length) return { bars, added: 0, expanded: false };
 
   const { getSource, sourcePageLimit } = await loadSourceApi();

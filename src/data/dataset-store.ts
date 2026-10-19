@@ -33,15 +33,21 @@
  */
 
 import type { Bar } from '../store/types';
+import { listCachedSeries } from './bars-cache';
 import {
   datasetKey,
+  flushDatasetSinks,
+  removeDatasetFromAllSinks,
   sinkForMode,
   type PersistenceMode,
   type DatasetSink,
 } from './dataset-sinks';
 import {
+  isSortedUnique,
+  mergeSortedSeries,
   mergeWithConflictPolicy,
   type MergePolicy,
+  type MergeResult,
 } from './merge-datasets';
 import { repairBars } from './dataset-validate';
 
@@ -56,6 +62,10 @@ export interface DatasetMeta {
   barCount: number;
   oldestSec: number | null;
   newestSec: number | null;
+  /** Provider lock of a non-spot series (empty = public spot). */
+  market?: string;
+  /** Auth mode of a keyed series (empty = public). */
+  authMode?: string;
 }
 
 export interface PutResult {
@@ -72,13 +82,24 @@ let persistenceMode: PersistenceMode = 'local';
 /** Active merge policy for dataset-vs-dataset conflicts. */
 let mergePolicy: MergePolicy = 'newest-wins';
 
-/** Memory mirror: key → sorted bars (fast paint, sink fallback on miss). */
+/**
+ * Memory mirror: key → sorted bars (fast paint, sink fallback on miss).
+ *
+ * Insertion-ordered `Map`, evicted **LRU**: `Map.set` on an existing key does
+ * not move it, so a plain FIFO would drop the hottest series (the one a
+ * backfill writes on every page) first. `remember` re-inserts on access.
+ */
 const memory = new Map<string, Bar[]>();
 
 function notify(key: string, bars: Bar[]): void {
+  if (!listeners.size) return;
+  // Hand out a copy: the array is the live memory mirror and the sink write
+  // uses the same reference — a listener that mutated it would corrupt both.
+  // One copy for all listeners, not one per listener.
+  const payload = bars.slice();
   for (const fn of listeners) {
     try {
-      fn(key, bars);
+      fn(key, payload);
     } catch {
       /* listener errors are swallowed */
     }
@@ -86,11 +107,14 @@ function notify(key: string, bars: Bar[]): void {
 }
 
 function remember(key: string, bars: Bar[]): void {
+  // Refresh recency: delete + re-insert moves the key to the end of the
+  // insertion order, so the eviction below drops the coldest series first.
+  if (memory.has(key)) memory.delete(key);
   memory.set(key, bars);
-  if (memory.size > MEMORY_MAX_SERIES) {
-    // Evict oldest inserted key (Map preserves insertion order)
+  while (memory.size > MEMORY_MAX_SERIES) {
     const oldest = memory.keys().next().value;
-    if (oldest != null && oldest !== key) memory.delete(oldest);
+    if (oldest == null || oldest === key) break;
+    memory.delete(oldest);
   }
 }
 
@@ -100,19 +124,75 @@ export function getPersistenceMode(): PersistenceMode {
 }
 
 /**
+ * In-flight persistence-mode copies.
+ *
+ * Switching the sink copies every mirrored series into the new backend in
+ * the background. A delete that runs while a copy is still writing can be
+ * overwritten by it (the dataset comes back from the dead). Deletes and
+ * flushes await this chain first so the sweep always wins.
+ */
+let pendingCopies: Promise<void> = Promise.resolve();
+
+function trackCopy(p: Promise<unknown>): void {
+  pendingCopies = pendingCopies.then(() => p).then(
+    () => undefined,
+    () => undefined,
+  );
+}
+
+/** Wait for every in-flight persistence-mode copy to settle. */
+export async function awaitPendingCopies(): Promise<void> {
+  await pendingCopies;
+}
+
+/**
  * Switch the durable sink. Memory mirror stays the read source; series are
  * copied into the new sink so a Settings switch cannot drop the active view.
+ *
+ * Every dataset the **old** sink knows about is migrated — not only the
+ * mirrored ones. A dataset that lived only in the old sink (evicted from the
+ * mirror, or written before it was warmed) was invisible in the new mode.
  */
 export function setPersistenceMode(mode: PersistenceMode): void {
   if (mode === persistenceMode) return;
+  const from = activeSink();
   persistenceMode = mode;
   const sink = activeSink();
+
+  // Mirror first (synchronous — the active view must not wait for a listing).
   for (const [key, bars] of memory) {
     if (!bars.length) continue;
-    void sink.replace(key, bars).catch((err: unknown) => {
-      console.warn(`[dataset-store] copy to ${mode} failed for ${key}`, err);
-    });
+    trackCopy(
+      sink.replace(key, bars).catch((err: unknown) => {
+        console.warn(`[dataset-store] copy to ${mode} failed for ${key}`, err);
+      }),
+    );
   }
+
+  // Then the datasets that only the old sink holds.
+  void (async () => {
+    let listed: string[] = [];
+    try {
+      listed = (await from.list?.()) ?? [];
+    } catch {
+      listed = [];
+    }
+    for (const key of listed) {
+      if (memory.has(key)) continue; // already copied above
+      let bars: Bar[] | null = null;
+      try {
+        bars = await from.get(key);
+      } catch {
+        bars = null;
+      }
+      if (!bars?.length) continue;
+      trackCopy(
+        sink.replace(key, bars).catch((err: unknown) => {
+          console.warn(`[dataset-store] copy to ${mode} failed for ${key}`, err);
+        }),
+      );
+    }
+  })();
 }
 
 /** Current conflict-resolution policy for dataset merges. */
@@ -130,9 +210,20 @@ export function subscribeDatasets(fn: ChangeListener): () => void {
   return () => listeners.delete(fn);
 }
 
-/** Canonical key for a dataset. */
-export function keyFor(sourceId: string, symbol: string, interval: string): string {
-  return datasetKey(sourceId, symbol, interval);
+/**
+ * Canonical key for a dataset.
+ *
+ * The provider lock (`market` / `authMode`) is optional: a source that serves
+ * more than one market (spot and futures, public and keyed) must pass it, or
+ * the two series would share one dataset.
+ */
+export function keyFor(
+  sourceId: string,
+  symbol: string,
+  interval: string,
+  opts?: { market?: string; authMode?: string },
+): string {
+  return datasetKey(sourceId, symbol, interval, opts);
 }
 
 /**
@@ -144,8 +235,13 @@ export function peekDataset(
   symbol: string,
   interval: string,
 ): Bar[] | null {
-  const mem = memory.get(keyFor(sourceId, symbol, interval));
-  return mem?.length ? mem : null;
+  const key = keyFor(sourceId, symbol, interval);
+  const mem = memory.get(key);
+  if (!mem?.length) return null;
+  // Refresh recency (LRU) without changing the array identity.
+  memory.delete(key);
+  memory.set(key, mem);
+  return mem;
 }
 
 function activeSink(): DatasetSink {
@@ -177,6 +273,32 @@ export async function getDataset(
 }
 
 /**
+ * Per-key write chains.
+ *
+ * A dataset write is a read-modify-write. When the memory mirror is cold the
+ * read goes to the sink and yields the event loop, so two concurrent writers
+ * (a DSM page write and the debounced live-bar write, two `seedDatasetFromBars`
+ * calls) can read the same base and the second write would drop the first's
+ * bars. Serialising the writes per key removes the window entirely.
+ */
+const writeChains = new Map<string, Promise<unknown>>();
+
+function enqueueWrite<T>(key: string, task: () => Promise<T>): Promise<T> {
+  const prev = writeChains.get(key) ?? Promise.resolve();
+  const next = prev.then(task, task);
+  const settled = next.then(
+    () => undefined,
+    () => undefined,
+  );
+  writeChains.set(key, settled);
+  // Drop the chain when it is the tail and has settled.
+  void settled.then(() => {
+    if (writeChains.get(key) === settled) writeChains.delete(key);
+  });
+  return next;
+}
+
+/**
  * Merge bars into a dataset (conflict-resolved) and persist to the sink.
  * Emits a change event with the merged series.
  */
@@ -188,17 +310,55 @@ export async function putDatasetBars(
   opts?: { policy?: MergePolicy },
 ): Promise<PutResult> {
   const key = keyFor(sourceId, symbol, interval);
+  return enqueueWrite(key, () => putDatasetBarsNow(key, sourceId, symbol, interval, bars, opts));
+}
+
+async function putDatasetBarsNow(
+  key: string,
+  sourceId: string,
+  symbol: string,
+  interval: string,
+  bars: readonly Bar[],
+  opts?: { policy?: MergePolicy },
+): Promise<PutResult> {
   const incoming = bars.filter((b) => b && Number.isFinite(b.time));
-  const current =
-    memory.get(key) ?? (await activeSink().get(key)) ?? [];
+  const mem = memory.get(key);
+  let current: Bar[];
+  if (mem?.length) {
+    current = mem;
+  } else {
+    let fromSink: Bar[] | null = null;
+    try {
+      fromSink = await activeSink().get(key);
+    } catch (err: unknown) {
+      // The sink could not be read. Merging into an *empty* base would replace
+      // the whole dataset with the incoming page and destroy it — refuse the
+      // write instead and keep whatever the mirror holds.
+      console.warn(`[dataset-store] sink read failed for ${key}; write skipped`, err);
+      return { bars: mem?.slice() ?? [], added: 0, conflicts: 0 };
+    }
+    current = fromSink ?? [];
+  }
   if (!incoming.length) {
     return { bars: current.slice(), added: 0, conflicts: 0 };
   }
 
-  const merged = mergeWithConflictPolicy(current, incoming, {
-    policy: opts?.policy ?? mergePolicy,
-  });
-  const { bars: repaired } = repairBars(merged.bars, interval);
+  const policy = opts?.policy ?? mergePolicy;
+  // The stored series is already repaired (sorted + unique) — every write
+  // path runs the repair before persisting. The page is repaired on its own
+  // and merged in one linear pass, instead of rebuilding a Map, re-sorting
+  // and re-sanitizing the whole series on every page of a backfill.
+  const page = repairBars(incoming, interval).bars;
+  let merged: MergeResult;
+  if (isSortedUnique(current) && isSortedUnique(page)) {
+    merged = mergeSortedSeries(current, page, { policy });
+  } else {
+    // A series that predates the repair (or arrived unsorted) — fall back to
+    // the full merge + repair.
+    const full = mergeWithConflictPolicy(current, page, { policy });
+    merged = { ...full, bars: repairBars(full.bars, interval).bars };
+  }
+  const repaired = merged.bars;
 
   remember(key, repaired);
   notify(key, repaired);
@@ -222,18 +382,20 @@ export async function replaceDataset(
   bars: readonly Bar[],
 ): Promise<Bar[]> {
   const key = keyFor(sourceId, symbol, interval);
-  const { bars: clean } = repairBars(
-    bars.filter((b) => b && Number.isFinite(b.time)),
-    interval,
-  );
-  remember(key, clean);
-  notify(key, clean);
-  try {
-    await activeSink().replace(key, clean);
-  } catch (err: unknown) {
-    console.warn(`[dataset-store] sink replace failed for ${key}`, err);
-  }
-  return clean.slice();
+  return enqueueWrite(key, async () => {
+    const { bars: clean } = repairBars(
+      bars.filter((b) => b && Number.isFinite(b.time)),
+      interval,
+    );
+    remember(key, clean);
+    notify(key, clean);
+    try {
+      await activeSink().replace(key, clean);
+    } catch (err: unknown) {
+      console.warn(`[dataset-store] sink replace failed for ${key}`, err);
+    }
+    return clean.slice();
+  });
 }
 
 /** Remove a dataset from memory + sink. */
@@ -243,27 +405,93 @@ export async function removeDataset(
   interval: string,
 ): Promise<void> {
   const key = keyFor(sourceId, symbol, interval);
-  memory.delete(key);
+  await enqueueWrite(key, async () => {
+    memory.delete(key);
+    try {
+      await activeSink().remove(key);
+    } catch (err: unknown) {
+      console.warn(`[dataset-store] sink remove failed for ${key}`, err);
+    }
+  });
+}
+
+/**
+ * Delete a dataset **in full** — bars *and* metadata, from every sink.
+ *
+ * The Dataset manager delete used to clear only the local bars cache, so the
+ * memory mirror kept the series and its metadata row survived the delete
+ * (it re-appeared in the list on the next refresh). This removes the dataset
+ * from the mirror and from every sink (session / local / git / worker), so
+ * nothing is left behind in any persistence mode.
+ */
+export async function removeDatasetEverywhere(
+  sourceId: string,
+  symbol: string,
+  interval: string,
+): Promise<void> {
+  const key = keyFor(sourceId, symbol, interval);
+  // Let any in-flight sink copy land first — otherwise it re-adds the bars
+  // right after the sweep and the dataset comes back from the dead.
+  await awaitPendingCopies();
+  // Run the sweep inside the write chain: a queued dataset write must not
+  // land after the delete and resurrect the series.
+  await enqueueWrite(key, async () => {
+    memory.delete(key);
+    await removeDatasetFromAllSinks(key);
+    // Empty series event — listeners (status bar, progressive repaint) drop
+    // the stale dataset count. The chart keeps the bars it already painted.
+    notify(key, []);
+  });
+}
+
+/**
+ * Flush the dataset manager — drop every dataset (bars + metadata) from the
+ * memory mirror and from every sink.
+ *
+ * @returns how many datasets were known (memory mirror + local cache).
+ */
+export async function flushDatasets(): Promise<number> {
+  await awaitPendingCopies();
+  const keys = new Set<string>();
+  for (const m of listMemoryDatasets()) keys.add(m.key);
   try {
-    await activeSink().remove(key);
+    for (const c of await listCachedSeries()) keys.add(c.key);
   } catch (err: unknown) {
-    console.warn(`[dataset-store] sink remove failed for ${key}`, err);
+    console.warn('[dataset-store] could not list cached datasets before flush', err);
   }
+
+  memory.clear();
+  for (const key of keys) {
+    try {
+      // Inside the write chain: a queued dataset write must not land after
+      // the sweep and resurrect the dataset.
+      await enqueueWrite(key, () => removeDatasetFromAllSinks(key));
+    } catch (err: unknown) {
+      console.warn(`[dataset-store] flush remove failed for ${key}`, err);
+    }
+  }
+  await flushDatasetSinks();
+  for (const key of keys) notify(key, []);
+  return keys.size;
 }
 
 /** List memory-mirrored datasets (cheap; sink listing stays in bars-cache UI). */
 export function listMemoryDatasets(): DatasetMeta[] {
   const out: DatasetMeta[] = [];
   for (const [key, bars] of memory) {
-    const [sourceId, symbol, interval] = key.split('|');
+    // A keyed / non-spot series appends `|market|authMode` — the lock is part
+    // of the dataset identity and must survive the split.
+    const parts = key.split('|');
     out.push({
       key,
-      sourceId: sourceId ?? '',
-      symbol: symbol ?? '',
-      interval: interval ?? '',
+      sourceId: parts[0] ?? '',
+      symbol: parts[1] ?? '',
+      interval: parts[2] ?? '',
       barCount: bars.length,
       oldestSec: bars.length ? bars[0]!.time : null,
       newestSec: bars.length ? bars[bars.length - 1]!.time : null,
+      market: parts[3] && parts[3] !== 'spot' ? parts[3] : undefined,
+      authMode: parts[4] && parts[4] !== 'public' ? parts[4] : undefined,
     });
   }
   return out;
@@ -275,4 +503,5 @@ export function _resetDatasetStoreForTests(): void {
   listeners.clear();
   persistenceMode = 'local';
   mergePolicy = 'newest-wins';
+  pendingCopies = Promise.resolve();
 }

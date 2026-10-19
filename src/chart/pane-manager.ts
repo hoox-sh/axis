@@ -163,6 +163,29 @@ function isScriptCoPaintedKey(key: string): boolean {
   return key === 'equity' || key.startsWith('overlay_') || key.startsWith('bgcolor_');
 }
 
+/**
+ * Pad a pruned script series back to one row per candle.
+ *
+ * The missing rows are Pine `na` whitespace (`{ time }`) at the candle times
+ * the series does not cover yet — the same encoding the apply pipeline uses
+ * for a gap. Without them a series that is one row short shifts the pane's
+ * logical range against the price pane by that many indices.
+ */
+function padToCandleCount<T extends { time?: unknown }>(
+  kept: readonly T[],
+  candleTimes: number[] | null,
+): T[] {
+  const out = [...kept];
+  if (!candleTimes || !candleTimes.length) return out;
+  if (out.length >= candleTimes.length) return out;
+  const lastT = out.length ? Number(out[out.length - 1]?.time) : Number.NEGATIVE_INFINITY;
+  for (const t of candleTimes) {
+    if (out.length >= candleTimes.length) break;
+    if (t > lastT) out.push({ time: t } as T);
+  }
+  return out;
+}
+
 /** Options for owner-scoped multi-script overlay apply (live re-runs). */
 export type OverlayOwnerOpts = {
   /**
@@ -817,10 +840,17 @@ export class PaneManager {
    * (`overlay_*`, `overlay_ohlc_*`, `bgcolor_*`, equity) — never the candles,
    * the volume series (painted with the same bars), or overlays whose window is
    * legitimately independent of the candles (compare / on-chain events).
+   *
+   * The pruned series are padded back to the candle row count: when the chart
+   * window slides, the candles move forward by one bar while the script
+   * series do not (the engine has not re-run yet), so the prune would leave
+   * them one row short — and a short series shifts the pane's logical range
+   * against the price pane by that many indices.
    */
   pruneCoPaintedSeriesToPaintedRange(): number {
     const range = this.paintedCandleRange;
     if (!range) return 0;
+    const candleTimes = this.paintedCandleTimes();
     let pruned = 0;
     for (const pane of this.panes.values()) {
       for (const key of Object.keys(pane.series)) {
@@ -835,12 +865,44 @@ export class PaneManager {
         }
         if (!Array.isArray(rows) || !rows.length) continue;
         const kept = clampPointsToPaintedRange(rows, range);
-        if (kept.length === rows.length) continue;
-        if (!safeSetData(series, kept)) continue;
+        // OHLC overlays cannot carry a whitespace row (their payload is
+        // filtered to finite OHLC) — they keep the pruned length.
+        const padded = key.startsWith(OVERLAY_OHLC_PREFIX)
+          ? kept
+          : padToCandleCount(kept, candleTimes);
+        if (padded.length === rows.length && padded.every((r, i) => r === rows[i])) continue;
+        if (!safeSetData(series, padded)) continue;
         pruned += 1;
       }
     }
     return pruned;
+  }
+
+  /**
+   * Times of the painted candle series — one per candle.
+   *
+   * The reference for the "one row per OHLCV bar" invariant the apply
+   * pipeline keeps for script series. `null` when the chart has not painted
+   * candles yet (no reference, no padding).
+   */
+  private paintedCandleTimes(): number[] | null {
+    const price = this.panes.get('price')?.series['candle'] as
+      | { data?: () => readonly { time?: unknown }[] }
+      | undefined;
+    if (!price || typeof price.data !== 'function') return null;
+    let rows: readonly { time?: unknown }[];
+    try {
+      rows = price.data();
+    } catch {
+      return null;
+    }
+    if (!Array.isArray(rows) || !rows.length) return null;
+    const times: number[] = [];
+    for (const r of rows) {
+      const t = r?.time;
+      if (typeof t === 'number' && Number.isFinite(t)) times.push(t);
+    }
+    return times.length ? times : null;
   }
 
   /**
@@ -2446,12 +2508,10 @@ export class PaneManager {
               if (Number.isFinite(o) && Number.isFinite(c)) dir = c >= o ? 'up' : 'down';
             }
           } else {
-            const dirBars =
-              storeBars?.length && storeBars[storeBars.length - 1]?.time === bar.time
-                ? storeBars
-                : storeBars?.length
-                  ? storeBars
-                  : [bar];
+            // Both branches used to be `storeBars` — the ternary was dead
+            // code. Keep it explicit: the store history (or the single tick
+            // when the store is empty) drives the direction.
+            const dirBars = storeBars?.length ? storeBars : [bar];
             dir = lastBarDirection(dirBars, chartType);
           }
           if (dir) {

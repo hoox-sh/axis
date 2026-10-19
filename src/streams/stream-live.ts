@@ -23,8 +23,8 @@
  * Owns one `StreamLiveWire` per tab, built lazily from the active engine
  * config. Handlers paint series snapshots/deltas through the same store/chart
  * helpers the legacy path uses (`setBarsQuiet` + `setDataToChart` for full
- * replaces, `appendBar` + `manager.appendBar` for tip appends) and report
- * subscription status into `store.live.feeds` / `scriptStatus`.
+ * replaces, `appendLiveBar` for tip appends) and report subscription status
+ * into `store.live.feeds` / `scriptStatus`.
  *
  * Every entry throws `StreamFallbackError` on failure so callers drop to the
  * legacy path; nothing here runs unless `routeEngineRun` says stream.
@@ -48,14 +48,15 @@ import { engineWindowBehindChart, newestBarTime } from '../engines/series-freshn
 import { engineSeriesStale, noteStaleEngineSeries } from '../engines/series-repair';
 import { getActiveEngineConfig } from '../plugins/active';
 import {
-  appendBar,
   clearFeedStatus,
   clearScriptStatus,
   setBarsQuiet,
   setFeedStatus,
   setScriptStatus,
+  sliceToChartWindow,
   store,
 } from '../store';
+import { appendLiveBar } from '../chart/live-append';
 import type { Bar } from '../store/types';
 import type { Indicator } from '../store/types';
 
@@ -219,19 +220,21 @@ function buildWire(): StreamLiveWire {
       },
       onSeriesFull: (bars) => {
         if (!engineSeriesPaintable(bars)) return;
-        setBarsQuiet(bars);
-        setDataToChart(bars, { fit: false, clearMarkers: false });
+        // The chart window is the single authority — an engine snapshot that
+        // carries more bars than the window is trimmed before it is painted.
+        const view = sliceToChartWindow(bars);
+        if (!view.length) return;
+        setBarsQuiet(view);
+        setDataToChart(view, { fit: false, clearMarkers: false });
       },
       onSeriesDelta: (bars, append) => {
         if (!bars.length) return;
         if (!engineSeriesPaintable(bars)) return;
         // Ticks never rewrite the window (P3): only a snapshot/repair uses
-        // setData. Same-slot or next-slot tips path-set through appendBar.
+        // setData. Same-slot or next-slot tips path-set through appendLiveBar.
         if (!append || bars.length > 4 || !continuesChartTail(bars)) return;
-        const manager = getManager();
         for (const bar of bars) {
-          appendBar(bar);
-          if (manager) manager.appendBar(bar);
+          appendLiveBar(bar);
         }
       },
       onCloseVerified: (time, _result, ohlcv) => {
@@ -388,8 +391,9 @@ export async function streamSeriesTick(marketNow = 0): Promise<boolean> {
       return false;
     }
     const manager = getManager();
-    setBarsQuiet(bars);
-    if (manager) setDataToChart(bars, { fit: false, clearMarkers: false });
+    const view = sliceToChartWindow(bars);
+    setBarsQuiet(view);
+    if (manager) setDataToChart(view, { fit: false, clearMarkers: false });
     setFeedStatus(chartSeriesKey(), 'live');
     return toBarTime(bars) !== before;
   } catch (e) {

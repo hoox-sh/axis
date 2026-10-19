@@ -941,6 +941,9 @@ describe('pruneCoPaintedSeriesToPaintedRange', () => {
     expect(compareSets).toBe(0);
 
     // The window slides forward (repair / reload): rows past the candles must go.
+    // The pruned series are padded back to one row per candle (Pine `na`
+    // whitespace) so a short series cannot shift the pane's logical range
+    // against the price pane.
     pm.notePaintedCandleRange(200, 300);
     expect(applied).toEqual([
       {
@@ -950,7 +953,7 @@ describe('pruneCoPaintedSeriesToPaintedRange', () => {
           { time: 300, value: 3 },
         ],
       },
-      { key: 'bgcolor', data: [{ time: 200, value: 9 }] },
+      { key: 'bgcolor', data: [{ time: 200, value: 9 }, { time: 300 }] },
       { key: 'equity', data: [{ time: 300, value: 5 }] },
     ]);
     expect(compareSets).toBe(0);

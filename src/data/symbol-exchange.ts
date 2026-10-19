@@ -28,6 +28,7 @@
  */
 
 import { store } from '../store';
+import { normalizeLoadSymbol } from './symbol-normalize';
 
 /**
  * Normalize a ticker for history fetch / dataset keys.
@@ -35,22 +36,11 @@ import { store } from '../store';
  * CEX tickers are uppercased. DEX pool symbols (`network:0x…`, `network/…`,
  * Solana base58, or any `sourceId === 'geckoterminal-ohlcv'`) keep mixed case
  * because addresses are case-sensitive on some chains.
+ *
+ * Re-exported from the leaf module so the cache key builder can use the same
+ * rule without an import cycle.
  */
-export function normalizeLoadSymbol(
-  symbol: string,
-  sourceId?: string | null,
-): string {
-  const rawSym = String(symbol || '').trim();
-  const srcId = String(sourceId || '');
-  if (
-    srcId === 'geckoterminal-ohlcv' ||
-    rawSym.includes(':') ||
-    rawSym.includes('/')
-  ) {
-    return rawSym;
-  }
-  return rawSym.toUpperCase();
-}
+export { normalizeLoadSymbol };
 
 /** Map a source plugin id to the chart exchange label. */
 export function exchangeForSource(sourceId: string): string {

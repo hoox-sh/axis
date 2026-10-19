@@ -105,7 +105,10 @@ describe('sanitizeSeriesDataForSetData', () => {
     expect(r.dropped).toBe(1);
   });
 
-  it('coerces null / NaN volume values to 0 but keeps real ones', () => {
+  it('coerces a null value to 0 but turns a non-finite value into whitespace', () => {
+    // `null` trips LWC's null assertion → 0. A non-finite number is a Pine
+    // `na` the engine could not serialize: it must stay a gap (an omitted
+    // value), not a numeric 0 — a zero draws a line at the axis.
     const data = [
       { time: 100, value: 10, color: 'a' },
       { time: 200, value: null, color: 'a' },
@@ -113,7 +116,8 @@ describe('sanitizeSeriesDataForSetData', () => {
       { time: 400, value: 5, color: 'b' },
     ];
     const r = sanitizeSeriesDataForSetData(data);
-    expect(r.clean.map((d) => d.value)).toEqual([10, 0, 0, 5]);
+    expect(r.clean.map((d) => d.value)).toEqual([10, 0, undefined, 5]);
+    expect('value' in r.clean[2]!).toBe(false);
     expect(r.dropped).toBe(0);
     expect(r.filled).toBe(2);
   });

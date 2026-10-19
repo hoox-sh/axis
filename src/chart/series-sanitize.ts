@@ -147,14 +147,23 @@ export function clampPointsToPaintedRange<T extends { time?: unknown }>(
   const active = range === undefined ? paintedCandleRange : range;
   if (!active || points.length === 0) return [...points];
   const { first, last } = active;
-  const out: T[] = [];
-  for (const p of points) {
+  // Copy-on-write: the common case is "nothing is out of range", and the
+  // payload is copied on every overlay apply — an unconditional clone costs
+  // one array allocation per plot per tick.
+  let out: T[] | null = null;
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i]!;
     const t = p == null ? undefined : (p as { time?: unknown }).time;
-    if (typeof t !== 'number' || !Number.isFinite(t)) continue;
-    if (t < first || t > last) continue;
-    out.push(p);
+    const keep = typeof t === 'number' && Number.isFinite(t) && t >= first && t <= last;
+    if (keep) {
+      out?.push(p);
+      continue;
+    }
+    if (!out) {
+      out = points.slice(0, i) as T[];
+    }
   }
-  return out;
+  return out ?? (points as T[]);
 }
 
 /**
@@ -269,10 +278,15 @@ export function sanitizeSeriesDataForSetData<T extends { time?: unknown }>(
       }
     } else {
       const r = row as unknown as Record<string, unknown>;
-      // `null` reaches LWC as-is and trips its null assertion. An omitted
-      // `value` is a deliberate Pine `na` whitespace gap — leave it.
-      if (r.value === null || (r.value !== undefined && !Number.isFinite(r.value as number))) {
+      // `null` reaches LWC as-is and trips its null assertion — coerce it to
+      // 0. A **non-finite number** is a Pine `na` the engine could not
+      // serialize: it must become whitespace (an omitted `value`), not a
+      // numeric 0 — a zero draws a line at the axis, a `na` is a gap.
+      if (r.value === null) {
         r.value = 0;
+        valueFixes++;
+      } else if (r.value !== undefined && !Number.isFinite(r.value as number)) {
+        delete r.value;
         valueFixes++;
       }
     }

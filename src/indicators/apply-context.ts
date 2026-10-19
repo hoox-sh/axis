@@ -144,8 +144,19 @@ export function alignApplySeries(
       break;
     }
   }
-  const needsAlign = sessionAligned || engineClampedTail || lengthMismatch;
-  const resultTimes = needsAlign ? extractEngineResultTimes(result) : null;
+  const needsAlignBase = sessionAligned || engineClampedTail || lengthMismatch;
+  // A same-length series can still cover a **different** window: a session or
+  // stream that slides independently of the chart. The index zip would then
+  // mis-plot every value, so the engine's own axis decides when the windows
+  // disagree. Only checked when the engine actually shipped an axis — the
+  // common bars-in run does not, and stays on the cheap index path.
+  const engineTimes = needsAlignBase ? null : extractEngineResultTimes(result);
+  const engineLast = engineTimes?.length ? engineTimes[engineTimes.length - 1]! : null;
+  const chartLast = ohlcvTimes.length ? ohlcvTimes[ohlcvTimes.length - 1]! : null;
+  const windowMismatch =
+    engineLast != null && chartLast != null && engineLast !== chartLast;
+  const needsAlign = needsAlignBase || windowMismatch;
+  const resultTimes = needsAlign ? (engineTimes ?? extractEngineResultTimes(result)) : null;
   const seriesMap = !needsAlign
     ? rawSeries
     : resultTimes

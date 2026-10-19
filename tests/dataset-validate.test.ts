@@ -10,10 +10,11 @@ import {
   venueClassForSourceCaps,
 } from '../src/data/dataset-validate';
 import type { BarGap } from '../src/data/bars-gaps';
+import { findBarGaps } from '../src/data/bars-gaps';
 import type { Bar } from '../src/store/types';
 
-function bar(t: number): Bar {
-  return { time: t, open: 1, high: 2, low: 0.5, close: 1.5, volume: 1 };
+function bar(t: number, close = 1.5): Bar {
+  return { time: t, open: 1, high: 2, low: 0.5, close, volume: 1 };
 }
 function badBar(t: number): Record<string, unknown> {
   return { time: t, open: NaN, high: 2, low: 0.5, close: 1.5 };
@@ -80,6 +81,68 @@ describe('dataset-validate · repairBars', () => {
     expect(res.bars[0]!.time).toBe(65);
     expect(res.stats.snapped).toBe(0);
   });
+
+  it('never drops a bar when the snap target is occupied', () => {
+    // A venue that stamps some bars half an hour late: the repair used to move
+    // the odd bar onto the NEXT hour, collide with the bar that already lived
+    // there, and the dedupe then deleted one of them — losing a real venue
+    // bar and shifting another one's OHLCV onto the wrong candle. The hole it
+    // left was reported as a fillable gap the DSM chased forever.
+    const step = 3_600;
+    const t0 = 1_788_000_000 - (1_788_000_000 % step);
+    const bars = Array.from({ length: 12 }, (_, i) => bar(t0 + i * step, 100 + i));
+    // Bar 5 arrives stamped 30 minutes late — in addition to the real one.
+    const drifted = bar(t0 + 5 * step + 1_800, 105);
+    const input = [...bars.slice(0, 5), drifted, ...bars.slice(5)];
+
+    const res = repairBars(input, '1h');
+    // No venue bar is lost and no OHLCV is shifted onto another candle.
+    expect(res.bars).toHaveLength(input.length);
+    expect(res.stats.deduped).toBe(0);
+    expect(res.bars.find((b) => b.time === t0 + 6 * step)!.close).toBe(106);
+    // The odd bar keeps its own timestamp — the series is still dense enough
+    // that no phantom gap is reported.
+    expect(res.bars.some((b) => b.time === t0 + 5 * step + 1_800)).toBe(true);
+    expect(findBarGaps(res.bars, t0, t0 + 11 * step, '1h')).toEqual([]);
+  });
+
+  it('snaps an off-phase bar into its own free slot', () => {
+    // The venue sent one bar per slot, but one of them carries the wrong
+    // stamp: the repair moves it back into its own hour, which is free.
+    const step = 3_600;
+    const t0 = 1_788_000_000 - (1_788_000_000 % step);
+    const bars = Array.from({ length: 12 }, (_, i) => bar(t0 + i * step, 100 + i));
+    bars[5] = bar(t0 + 5 * step + 1_800, 105);
+
+    const res = repairBars(bars, '1h');
+    expect(res.bars).toHaveLength(12);
+    expect(res.stats.snapped).toBe(1);
+    expect(res.bars.map((b) => b.time)).toEqual(bars.map((_, i) => t0 + i * step));
+    // The bar keeps its own OHLCV.
+    expect(res.bars[5]!.close).toBe(105);
+    expect(res.bars[6]!.close).toBe(106);
+  });
+
+  it('is idempotent — a second repair pass changes nothing', () => {
+    const step = 3_600;
+    const t0 = 1_788_000_000 - (1_788_000_000 % step);
+    const bars = Array.from({ length: 8 }, (_, i) => bar(t0 + i * step, 100 + i));
+    bars[3] = { ...bar(t0 + 3 * step + 1_800, 103) };
+    const once = repairBars(bars, '1h');
+    const twice = repairBars(once.bars, '1h');
+    expect(twice.bars.map((b) => b.time)).toEqual(once.bars.map((b) => b.time));
+    expect(twice.stats.snapped).toBe(0);
+    expect(twice.stats.deduped).toBe(0);
+  });
+
+  it('keeps the newest write when two rows share an open time', () => {
+    const a = { ...bar(60, 1) };
+    const b = { ...bar(60, 2) };
+    const res = repairBars([a, b], '1m');
+    expect(res.bars).toHaveLength(1);
+    expect(res.bars[0]!.close).toBe(2);
+    expect(res.stats.deduped).toBe(1);
+  });
 });
 
 describe('dataset-validate · classifyGaps', () => {
@@ -98,6 +161,23 @@ describe('dataset-validate · classifyGaps', () => {
     });
     expect(fillable).toHaveLength(0);
     expect(legitimate).toHaveLength(1);
+  });
+
+  it('session venues excuse a Friday closure (Fri → Mon)', () => {
+    // A session venue is closed from Friday's close to Monday's open, so a
+    // missing Friday bar belongs to that closure. Chasing it burned every gap
+    // round and ended the job with "Partial: N gaps remain".
+    const fri = Date.UTC(2026, 8, 4) / 1000; // 2026-09-04 is a Friday
+    const gap: BarGap = { fromSec: fri, toSec: SUN, missingBars: 3 };
+    const { fillable, legitimate } = classifyGaps([gap], '1d', { venueClass: 'sessions' });
+    expect(fillable).toHaveLength(0);
+    expect(legitimate).toHaveLength(1);
+  });
+
+  it('session venues still chase a missing Monday bar', () => {
+    const gap: BarGap = { fromSec: SAT, toSec: MON, missingBars: 3 };
+    const { fillable } = classifyGaps([gap], '1d', { venueClass: 'sessions' });
+    expect(fillable).toHaveLength(1);
   });
 
   it('session venues still chase weekday holes', () => {

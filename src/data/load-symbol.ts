@@ -37,8 +37,8 @@
  */
 
 import {
+  chartWindowLimit,
   clampHistoryBars,
-  clampRollingWindowBars,
   loadBars,
   setStatus,
   store,
@@ -238,10 +238,10 @@ export async function loadSymbolData(
     // paying a failed relative-URL fetch on every load.
     if (endpoint) {
       try {
-        const limit =
-          Number.isFinite(store.rollingWindowBars) && store.rollingWindowBars > 0
-            ? store.rollingWindowBars
-            : 2000;
+        // The engine read uses the same window the chart holds — one number
+        // for both, so the chart can never show more bars than the engine
+        // evaluated.
+        const limit = chartWindowLimit();
         const engineBars = await getDataSeriesBars(
           endpoint,
           apiKey,
@@ -311,6 +311,16 @@ export async function loadSymbolData(
       if (!stillCurrent()) return false;
       const filled = cached.length ? await closeTailToNow(cached, srcId, sym, iv, signal) : [];
       if (!stillCurrent()) return false;
+      if (filled.length && filled.length !== cached.length) {
+        // Persist the venue work: the closed tail / filled holes are real
+        // bars, and throwing them away means the next load fetches them again.
+        try {
+          const { putDatasetBars } = await import('./dataset-store');
+          await putDatasetBars(srcId, sym, iv, filled);
+        } catch {
+          /* persist is best-effort */
+        }
+      }
       const painted = await paintDataset(sym, iv, srcId, {
         stillCurrent,
         ...(filled.length ? { bars: filled } : {}),
@@ -328,7 +338,7 @@ export async function loadSymbolData(
         // Auto-complete: validate + sliced backfill + progressive repaints.
         // Guarded by stillCurrent — a stale background job must not overwrite
         // the status of a newer load (or a newer error).
-        ensureDatasetComplete(sym, iv, srcId, { stillCurrent });
+        void ensureDatasetComplete(sym, iv, srcId, { stillCurrent });
         if (stillCurrent()) {
           try {
             const { reapplyChartScripts } = await import('../indicators/reapply');
@@ -359,7 +369,7 @@ export async function loadSymbolData(
     // page-by-page until the target is covered — a single first page is what
     // left Reload stuck at 1000 bars.
     const target = clampHistoryBars(store.historyBars);
-    const chartCap = Math.max(1, clampRollingWindowBars(store.rollingWindowBars));
+    const chartCap = chartWindowLimit();
     const pageSize = Math.max(1, sourcePageLimit(srcId));
     const configs = store.pluginsConfig || {};
     const sourceCfg =
@@ -523,7 +533,7 @@ export async function loadSymbolData(
       seedDatasetFromBars(srcId, sym, iv, full);
       if (stillCurrent()) startProgressiveStream(sym, iv, srcId);
       // First pages are on the chart — DSM walks the rest in the background.
-      ensureDatasetComplete(sym, iv, srcId, { stillCurrent });
+      void ensureDatasetComplete(sym, iv, srcId, { stillCurrent });
     } catch {
       /* seeding / background complete is best-effort */
     }
@@ -578,8 +588,7 @@ export async function loadSymbolData(
       const { getDataset } = await import('./dataset-store');
       const cached = await getDataset(srcId, sym, iv);
       if (cached.length && stillCurrent()) {
-        const { clampRollingWindowBars: clampRolling } = await import('../store');
-        const cap = Math.max(1, clampRolling(store.rollingWindowBars));
+        const cap = chartWindowLimit();
         const view = cached.length > cap ? cached.slice(cached.length - cap) : cached;
         const exchange = exchangeForSource(srcId);
         loadBars(view, sym, iv, exchange);

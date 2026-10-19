@@ -8,6 +8,8 @@ import {
   putDatasetBars,
   replaceDataset,
   removeDataset,
+  removeDatasetEverywhere,
+  flushDatasets,
   setPersistenceMode,
   getPersistenceMode,
   setMergePolicy,
@@ -92,6 +94,61 @@ describe('dataset-store', () => {
     expect(bars).toHaveLength(0);
   });
 
+  it('a closed candle is never overwritten by a forming bar', async () => {
+    // The immutable candle: a closed bar is final. A stale REST page that
+    // still carries the partial (forming) values must not reopen it.
+    await putDatasetBars('binance-rest', 'BTCUSDT', '1d', [
+      { ...bar(60, 100), closed: true },
+    ]);
+    await putDatasetBars('binance-rest', 'BTCUSDT', '1d', [
+      { ...bar(60, 42), closed: false },
+    ]);
+    const bars = await getDataset('binance-rest', 'BTCUSDT', '1d');
+    expect(bars[0]!.close).toBe(100);
+  });
+
+  it('a closed restatement still wins over the closed bar', async () => {
+    await putDatasetBars('binance-rest', 'BTCUSDT', '1d', [
+      { ...bar(60, 100), closed: true },
+    ]);
+    await putDatasetBars('binance-rest', 'BTCUSDT', '1d', [
+      { ...bar(60, 101), closed: true },
+    ]);
+    const bars = await getDataset('binance-rest', 'BTCUSDT', '1d');
+    expect(bars[0]!.close).toBe(101);
+  });
+
+  it('keeps the newest bar of a duplicated open time', async () => {
+    await putDatasetBars('binance-rest', 'BTCUSDT', '1d', [bar(60, 1)]);
+    await putDatasetBars('binance-rest', 'BTCUSDT', '1d', [bar(60, 2)]);
+    const bars = await getDataset('binance-rest', 'BTCUSDT', '1d');
+    expect(bars).toHaveLength(1);
+    expect(bars[0]!.close).toBe(2);
+  });
+
+  it('serializes concurrent writes so no bar is lost', async () => {
+    // Two writers racing on a cold mirror used to read the same base and the
+    // second write dropped the first one's bars.
+    const { putCachedBars } = await import('../src/data/bars-cache');
+    await putCachedBars('binance-rest', 'RACE', '1h', [bar(60, 1)]);
+    await Promise.all([
+      putDatasetBars('binance-rest', 'RACE', '1h', [bar(3600, 2)]),
+      putDatasetBars('binance-rest', 'RACE', '1h', [bar(7200, 3)]),
+    ]);
+    const bars = await getDataset('binance-rest', 'RACE', '1h');
+    expect(bars.map((b) => b.time)).toEqual([60, 3600, 7200]);
+  });
+
+  it('does not write when the sink read fails (no truncation)', async () => {
+    // A failed sink read used to look like an empty dataset: the merge base
+    // was empty, so the last page replaced the whole series.
+    setPersistenceMode('git'); // no git plugin / PAT → the sink read throws
+    const res = await putDatasetBars('binance-rest', 'BROKEN', '1d', [bar(60, 1)]);
+    expect(res.bars).toHaveLength(0);
+    expect(res.added).toBe(0);
+    expect(peekDataset('binance-rest', 'BROKEN', '1d')).toBeNull();
+  });
+
   it('get falls back to the local sink when memory is cold', async () => {
     const { putCachedBars } = await import('../src/data/bars-cache');
     await putCachedBars('binance-rest', 'ETHUSDT', '1h', [bar(3600, 5)]);
@@ -146,5 +203,55 @@ describe('dataset-store', () => {
     expect((await getDataset('binance-rest', 'BTCUSDT', '1d')).length).toBe(2);
     setPersistenceMode('local');
     expect((await getDataset('binance-rest', 'BTCUSDT', '1d')).length).toBe(2);
+  });
+});
+
+describe('dataset-store · full delete + flush', () => {
+  it('removeDatasetEverywhere drops the bars and the metadata row', async () => {
+    await putDatasetBars('binance-rest', 'BTCUSDT', '1d', [bar(60, 1)]);
+    expect(listMemoryDatasets()).toHaveLength(1);
+
+    await removeDatasetEverywhere('binance-rest', 'BTCUSDT', '1d');
+
+    // Metadata (memory mirror) is gone — the manager list must not re-add it.
+    expect(listMemoryDatasets()).toHaveLength(0);
+    expect(await getDataset('binance-rest', 'BTCUSDT', '1d')).toHaveLength(0);
+    const { getCachedBars, listCachedSeries } = await import('../src/data/bars-cache');
+    expect(await getCachedBars('binance-rest', 'BTCUSDT', '1d')).toHaveLength(0);
+    expect(await listCachedSeries()).toHaveLength(0);
+  });
+
+  it('removeDatasetEverywhere clears every sink, not only the active one', async () => {
+    await putDatasetBars('binance-rest', 'BTCUSDT', '1d', [bar(60, 1)]);
+    // Local sink holds a copy while the active mode is git.
+    setPersistenceMode('git');
+    await removeDatasetEverywhere('binance-rest', 'BTCUSDT', '1d');
+    const { getCachedBars } = await import('../src/data/bars-cache');
+    expect(await getCachedBars('binance-rest', 'BTCUSDT', '1d')).toHaveLength(0);
+  });
+
+  it('flushDatasets wipes every dataset (bars + metadata) from all sinks', async () => {
+    await putDatasetBars('binance-rest', 'BTCUSDT', '1d', [bar(60, 1)]);
+    await putDatasetBars('binance-rest', 'ETHUSDT', '1h', [bar(3600, 2)]);
+    expect(listMemoryDatasets()).toHaveLength(2);
+
+    const removed = await flushDatasets();
+
+    expect(removed).toBe(2);
+    expect(listMemoryDatasets()).toHaveLength(0);
+    const { getCachedBars, listCachedSeries } = await import('../src/data/bars-cache');
+    expect(await listCachedSeries()).toHaveLength(0);
+    expect(await getCachedBars('binance-rest', 'BTCUSDT', '1d')).toHaveLength(0);
+    expect(await getCachedBars('binance-rest', 'ETHUSDT', '1h')).toHaveLength(0);
+  });
+
+  it('flushDatasets clears datasets that only live in the local cache', async () => {
+    const { putCachedBars, listCachedSeries } = await import('../src/data/bars-cache');
+    await putCachedBars('binance-rest', 'SOLUSDT', '1d', [bar(60, 1)]);
+    expect(await listCachedSeries()).toHaveLength(1);
+
+    await flushDatasets();
+
+    expect(await listCachedSeries()).toHaveLength(0);
   });
 });
