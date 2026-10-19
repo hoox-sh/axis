@@ -140,6 +140,30 @@ describe('redesign2 live-wire (F-19)', () => {
     expect(h.wire.snapshotState().lastFail?.reason).toBe('empty-snapshot');
   });
 
+  test('script subscribe error does not cool down the series wire', async () => {
+    const h = makeHarness();
+    const scriptP = h.wire.evalScript({
+      subId: 'id_keltner',
+      script: 'indicator() {}',
+      meta: {},
+      bars: BARS,
+    });
+    await tick();
+    await tick();
+    h.emit({ type: 'error', id: 'id_keltner', payload: { code: 'x', message: 'boom' } });
+    await expect(scriptP).rejects.toMatchObject({ reason: 'script-subscribe-failed' });
+    expect(h.wire.cooledDown).toBe(false);
+    expect(h.client.isOpen).toBe(true);
+
+    const seriesP = h.wire.ensureSeries('series-1', {});
+    await tick();
+    await tick();
+    h.emit({ type: 'full', id: 'series-1', seq: 1, payload: { count: 1, bars: BARS } });
+    expect(await seriesP).toEqual(BARS);
+    expect(h.wire.cooledDown).toBe(false);
+    expect(h.wire.isSubscribed('series-1')).toBe(true);
+  });
+
   test('evalScript subscribes once, then applies cached state', async () => {
     const h = makeHarness();
     const first = h.wire.evalScript({ subId: 's-1', script: 'indicator() {}', meta: {}, bars: BARS });

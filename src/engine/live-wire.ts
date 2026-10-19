@@ -89,7 +89,8 @@ export interface EvalScriptInput {
 }
 
 const FAILURE_COOLDOWN_MS = 60_000;
-const SNAPSHOT_WAIT_MS = 30_000;
+/** PYNE history ensure of a painted 5m window routinely exceeds 30s. */
+const SNAPSHOT_WAIT_MS = 120_000;
 const LOADING_WAIT_CAP_MS = 120_000;
 
 function toBars(raw: unknown): Bar[] {
@@ -262,10 +263,13 @@ export class StreamLiveWire {
       this.handlers.onStatus(input.subId, 'connecting');
       try {
         this.client.subscribe(input.subId, 'script', input.meta, { script: input.script });
-        const full = await this.awaitFull(input.subId, SNAPSHOT_WAIT_MS);
+        const full = await this.awaitFull(input.subId, SNAPSHOT_WAIT_MS, { fatal: false });
         if (full.type === 'error' || full.type !== 'full') {
           this.appliers.delete(input.subId);
-          this.fail('script-subscribe-failed', `expected full, got ${full.type}`);
+          throw new StreamFallbackError(
+            'script-subscribe-failed',
+            `expected full, got ${full.type}`,
+          );
         }
         const payload = full.payload as Record<string, unknown>;
         applier.applyFull({
@@ -349,10 +353,18 @@ export class StreamLiveWire {
    * status waits until {@link LOADING_WAIT_CAP_MS} from start — PYNE may
    * send one early loading frame then block on history ensure. Leftover
    * `delta` / `close` frames stay in the inbox — they are not a failed snapshot.
+   *
+   * `fatal: false` throws {@link StreamFallbackError} without cooling the
+   * wire — a script snapshot miss must not disconnect the series socket.
    */
-  private async awaitFull(subId: string, timeoutMs: number): Promise<WireFrame> {
+  private async awaitFull(
+    subId: string,
+    timeoutMs: number,
+    opts?: { fatal?: boolean },
+  ): Promise<WireFrame> {
     const started = Date.now();
     let deadline = started + timeoutMs;
+    const fatal = opts?.fatal !== false;
     for (;;) {
       const queue = this.inbox.get(subId) ?? [];
       const leftover: WireFrame[] = [];
@@ -364,7 +376,6 @@ export class StreamLiveWire {
           this.routeStatusFrame(frame);
           const code = String((frame.payload as Record<string, unknown>)?.code ?? '');
           if (code === 'datafeed-loading') {
-            // One early loading frame must not leave the wait at SNAPSHOT_WAIT_MS.
             deadline = started + LOADING_WAIT_CAP_MS;
           }
           continue;
@@ -380,7 +391,11 @@ export class StreamLiveWire {
       this.inbox.set(subId, leftover);
       if (found) return found;
       const remaining = deadline - Date.now();
-      if (remaining <= 0) this.fail('snapshot-timeout', `no snapshot for ${subId}`);
+      if (remaining <= 0) {
+        const message = `no snapshot for ${subId}`;
+        if (!fatal) throw new StreamFallbackError('snapshot-timeout', message);
+        this.fail('snapshot-timeout', message);
+      }
       await new Promise<void>((resolve) => {
         const onFrame = () => {
           clearTimeout(timer);
