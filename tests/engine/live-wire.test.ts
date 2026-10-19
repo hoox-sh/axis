@@ -90,6 +90,9 @@ function makeHarness() {
       counters.reconnects += 1;
       void client.connect();
     },
+    dropSocket: () => {
+      open = false;
+    },
   };
 }
 
@@ -138,6 +141,9 @@ describe('redesign2 live-wire (F-19)', () => {
     await expect(p).rejects.toBeInstanceOf(StreamFallbackError);
     expect(h.wire.cooledDown).toBe(true);
     expect(h.wire.snapshotState().lastFail?.reason).toBe('empty-snapshot');
+    expect(h.client.isOpen).toBe(true);
+    expect(h.counters.disconnects).toBe(0);
+    expect(h.wire.snapshotState().stats).toMatchObject({ stopped: false, open: true });
   });
 
   test('script subscribe error does not cool down the series wire', async () => {
@@ -206,22 +212,76 @@ describe('redesign2 live-wire (F-19)', () => {
     expect(h.wire.cooledDown).toBe(true);
   });
 
-  test('fail() disconnects and stops reconnects during cooldown', async () => {
+  test('fail() keeps the socket connectable during cooldown', async () => {
     const h = makeHarness();
     const p = h.wire.ensureSeries('series-1', {});
     await tick(); await tick();
     h.emit({ type: 'error', id: 'series-1', payload: { code: 'x', message: 'boom' } });
     await expect(p).rejects.toBeInstanceOf(StreamFallbackError);
-    expect(h.counters.disconnects).toBe(1);
-    expect(h.client.isOpen).toBe(false);
-    expect(h.wire.snapshotState().stats).toMatchObject({ stopped: true, open: false });
-    const connects = h.counters.connects;
+    expect(h.counters.disconnects).toBe(0);
+    expect(h.client.isOpen).toBe(true);
+    expect(h.wire.cooledDown).toBe(true);
+    expect(h.wire.snapshotState().stats).toMatchObject({ stopped: false, open: true });
     h.pumpReconnect();
-    expect(h.counters.reconnects).toBe(0);
-    expect(h.counters.connects).toBe(connects);
-    await expect(h.wire.ensureConnected()).rejects.toMatchObject({ reason: 'cooldown' });
-    expect(h.counters.connects).toBe(connects);
-    expect(h.counters.disconnects).toBe(1);
+    expect(h.counters.reconnects).toBe(1);
+    h.dropSocket();
+    const connects = h.counters.connects;
+    await h.wire.ensureConnected();
+    expect(h.client.isOpen).toBe(true);
+    expect(h.counters.connects).toBe(connects + 1);
+    expect(h.counters.disconnects).toBe(0);
+    await expect(h.wire.ensureSeries('series-2', {})).rejects.toMatchObject({ reason: 'cooldown' });
+    expect(h.sent.filter((s) => s.kind === 'subscribe:series').length).toBe(1);
+  });
+
+  test('series snapshot-timeout does not disconnect; later ensureSeries can subscribe on the same client', async () => {
+    const realSetTimeout = globalThis.setTimeout;
+    const origNow = Date.now;
+    const t0 = origNow();
+    let now = t0;
+    Date.now = () => now;
+    globalThis.setTimeout = ((fn: TimerHandler, ms?: number, ...args: unknown[]) => {
+      if (typeof ms === 'number' && ms > 1_000) {
+        now = t0 + 130_000;
+        return realSetTimeout(fn as () => void, 0);
+      }
+      return realSetTimeout(fn as () => void, ms as number, ...args);
+    }) as typeof setTimeout;
+    const h = makeHarness();
+    try {
+      const p = h.wire.ensureSeries('series:binance|spot|BTC/USDT|5m', {});
+      await expect(p).rejects.toMatchObject({ reason: 'snapshot-timeout' });
+      expect(h.counters.disconnects).toBe(0);
+      expect(h.client.isOpen).toBe(true);
+      expect(h.wire.snapshotState().stats).toMatchObject({ stopped: false, open: true });
+      expect(h.wire.isSubscribed('series:binance|spot|BTC/USDT|5m')).toBe(false);
+      expect(h.wire.snapshotState().lastFail?.reason).toBe('snapshot-timeout');
+    } finally {
+      Date.now = origNow;
+      globalThis.setTimeout = realSetTimeout;
+    }
+
+    expect(h.wire.cooledDown).toBe(true);
+    Date.now = () => origNow() + 200_000;
+    try {
+      expect(h.wire.cooledDown).toBe(false);
+      const p2 = h.wire.ensureSeries('series:binance|spot|BTC/USDT|5m', {});
+      await tick();
+      await tick();
+      h.emit({
+        type: 'full',
+        id: 'series:binance|spot|BTC/USDT|5m',
+        seq: 1,
+        payload: { count: 1, bars: BARS },
+      });
+      expect(await p2).toEqual(BARS);
+      expect(h.client.isOpen).toBe(true);
+      expect(h.counters.disconnects).toBe(0);
+      expect(h.wire.snapshotState().stats).toMatchObject({ stopped: false, open: true });
+      expect(h.sent.filter((s) => s.kind === 'subscribe:series').length).toBe(2);
+    } finally {
+      Date.now = origNow;
+    }
   });
 
   test('after cooldown a later ensureSeries can open again', async () => {
@@ -408,6 +468,8 @@ describe('live-wire diagnostics (MCP stream.get / stream.reset)', () => {
     h.wire.reset();
     expect(h.wire.cooledDown).toBe(false);
     expect(h.wire.snapshotState().failures).toBe(0);
+    expect(h.counters.disconnects).toBe(1);
+    expect(h.wire.snapshotState().stats).toMatchObject({ stopped: true, open: false });
   });
 });
 

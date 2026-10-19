@@ -28,8 +28,8 @@
  *   asynchronously through the frame router, never via re-evaluation.
  * - Every failure (connect, subscribe, snapshot, merge) throws a
  *   `StreamFallbackError` so the caller drops to the legacy path. A 60s
- *   cooldown after a failure keeps a flapping backend from stalling live;
- *   throwing while already cooled down does not re-arm the timer.
+ *   cooldown after a failure debounces subscribe retries without stopping
+ *   the socket; throwing while already cooled down does not re-arm the timer.
  *
  * Transport + apply are injected (fakes in tests; real client/bridge in prod).
  *
@@ -168,17 +168,11 @@ export class StreamLiveWire {
     this.failures += 1;
     this.coolUntil = Date.now() + FAILURE_COOLDOWN_MS;
     this.lastFail = { reason, message: message ?? reason, at: Date.now() };
-    // The client retries on close independently of coolUntil once it has opened.
-    try {
-      this.client.disconnect();
-    } catch {
-      /* already gone */
-    }
+    // Multiplex falls back to venue+REST; only reset()/disconnect() stop the client.
     throw new StreamFallbackError(reason, message);
   }
 
   async ensureConnected(): Promise<void> {
-    if (this.cooledDown) this.fail('cooldown', 'stream in failure cooldown');
     try {
       await this.client.connect();
     } catch (e) {
@@ -225,6 +219,7 @@ export class StreamLiveWire {
 
   private async subscribeSeriesOnce(subId: string, meta: Record<string, unknown>): Promise<Bar[]> {
     await this.ensureConnected();
+    if (this.cooledDown) this.fail('cooldown', 'stream in failure cooldown');
     this.handlers.onStatus(subId, 'connecting');
     try {
       this.client.subscribe(subId, 'series', meta);
@@ -258,6 +253,7 @@ export class StreamLiveWire {
     });
     let applier = this.appliers.get(input.subId);
     if (!applier) {
+      if (this.cooledDown) this.fail('cooldown', 'stream in failure cooldown');
       applier = new Redesign2DeltaApplier();
       this.appliers.set(input.subId, applier);
       this.handlers.onStatus(input.subId, 'connecting');

@@ -189,7 +189,7 @@ export class Redesign2WsClient {
   }
 
   async connect(): Promise<void> {
-    // fail() disconnects for the cooldown window without discarding the wire.
+    // Explicit stop sets stopped; a later connect() must still be able to open.
     this.stopped = false;
     if (this.isOpen) return;
     if (this.connectPromise) return this.connectPromise;
