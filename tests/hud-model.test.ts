@@ -11,6 +11,8 @@
 import { describe, expect, it } from 'bun:test';
 import {
   deriveHud,
+  feedChipMeta,
+  feedChipView,
   feedStatusLabel,
   feedStatusTone,
   isLocalEndpoint,
@@ -173,5 +175,73 @@ describe('feedStatusTone / feedStatusLabel (F-18)', () => {
       'degraded · unverified close',
     );
     expect(feedStatusLabel('degraded', { message: 'venue+REST' })).toBe('degraded · venue+REST');
+  });
+});
+
+describe('feedChipView — the chip says what the data path is', () => {
+  it('reads live when an independent tier confirmed the close', () => {
+    const v = feedChipView({ status: 'live', verified: 'venue', updatedAt: 1000, now: 2000 });
+    expect(v.value).toBe('live');
+    expect(v.tone).toBe('live');
+  });
+
+  it('keeps a live feed live when only the engine copy confirmed the close', () => {
+    // The old chip relabeled this `degraded`, so the chip disagreed with the
+    // engine plane (ws / open). The data flows — only the tier is weak.
+    const v = feedChipView({ status: 'live', verified: 'engine', updatedAt: 1000, now: 2000 });
+    expect(v.value).toBe('live·unverified');
+    expect(v.tone).toBe('degraded');
+    expect(v.title).toMatch(/engine copy/);
+  });
+
+  it('shows how long a feed that never came up has been stuck', () => {
+    const v = feedChipView({ status: 'connecting', updatedAt: 1000, now: 46000 });
+    expect(v.value).toBe('connecting · 45s');
+    expect(v.tone).toBe('load');
+    expect(v.title).toMatch(/venue \+ REST/);
+  });
+
+  it('does not add an age to a fresh connecting feed', () => {
+    const v = feedChipView({ status: 'connecting', updatedAt: 1000, now: 2000 });
+    expect(v.value).toBe('connecting');
+  });
+
+  it('keeps the degraded cause and the error text', () => {
+    expect(
+      feedChipView({ status: 'degraded', message: 'close mismatch', updatedAt: 1000, now: 2000 }).value,
+    ).toBe('degraded · close mismatch');
+    expect(feedChipView({ status: 'error', message: 'boom' }).value).toBe('error · boom');
+  });
+});
+
+describe('feedChipMeta — the opened panel lists the facts', () => {
+  it('includes state, freshness, tier, engine hop and series', () => {
+    const rows = feedChipMeta({
+      status: 'connecting',
+      verified: 'engine',
+      updatedAt: 1000,
+      now: 46000,
+      engineTransport: 'ws',
+      engineState: 'open',
+      engineLatencyMs: 1519,
+      engineDetail: 'auto · ws · 1519ms',
+      seriesKey: 'binance|spot|BTC/USDT|1m',
+    });
+    expect(rows).toContain('state connecting');
+    expect(rows).toContain('updated 45s ago');
+    expect(rows).toContain('verified engine copy · weak');
+    expect(rows).toContain('engine ws · open · 1519ms');
+    expect(rows).toContain('series binance|spot|BTC/USDT|1m');
+  });
+
+  it('omits the age for a live feed and names the strong tier', () => {
+    const rows = feedChipMeta({
+      status: 'live',
+      verified: 'venue',
+      updatedAt: 1000,
+      now: 46000,
+    });
+    expect(rows.some((r) => r.startsWith('updated'))).toBe(false);
+    expect(rows).toContain('verified venue · independent');
   });
 });

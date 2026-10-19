@@ -300,6 +300,128 @@ export function feedStatusLabel(
   return 'idle';
 }
 
+/** Close-verification tier → what it means for the bar that closed. */
+export function verifiedTierLabel(verified?: string | null): string {
+  switch (verified) {
+    case 'venue':
+      return 'venue · independent';
+    case 'proxy':
+      return 'worker proxy';
+    case 'engine':
+      return 'engine copy · weak';
+    case 'none':
+      return 'none';
+    default:
+      return '—';
+  }
+}
+
+/** True when the tier confirms the close on its own (venue / worker proxy). */
+export function verifiedIsStrong(verified?: string | null): boolean {
+  return verified === 'venue' || verified === 'proxy';
+}
+
+/** Feed chip view — value, tone and the full tooltip text. */
+export interface FeedChipView {
+  value: string;
+  tone: 'live' | 'load' | 'degraded' | 'err' | 'idle';
+  title: string;
+}
+
+/**
+ * Feed chip content: **what the data path is** and **how fresh it is**.
+ *
+ * A live feed says `live` — the weak close-verification tier no longer
+ * relabels it `degraded` (the data *is* flowing); it is flagged
+ * `live·unverified` instead, so the chip agrees with the engine plane.
+ * A feed that never came up keeps its state word plus the time it has been
+ * stuck (`connecting · 45s`) — the age is the useful part, the bare state
+ * word is the stale part.
+ */
+export function feedChipView(opts: {
+  status: SubscriptionStatus;
+  verified?: 'venue' | 'proxy' | 'engine' | 'none' | null;
+  have?: number;
+  need?: number;
+  message?: string;
+  updatedAt?: number;
+  now?: number;
+}): FeedChipView {
+  const { status } = opts;
+  const now = opts.now ?? Date.now();
+  const ageS = Math.max(0, Math.round((now - (opts.updatedAt ?? now)) / 1000));
+  const label = feedStatusLabel(status, {
+    have: opts.have,
+    need: opts.need,
+    message: opts.message,
+    updatedAt: opts.updatedAt,
+    now,
+  });
+  if (status === 'live') {
+    const strong = verifiedIsStrong(opts.verified);
+    return {
+      value: strong ? 'live' : 'live·unverified',
+      tone: strong ? 'live' : 'degraded',
+      title: strong
+        ? 'Engine feed live — closes confirmed by an independent tier'
+        : `Engine feed live — closes only confirmed by the ${verifiedTierLabel(opts.verified)}`,
+    };
+  }
+  if (status === 'degraded' || status === 'error') {
+    return {
+      value: label,
+      tone: status === 'error' ? 'err' : 'degraded',
+      title: `Engine feed ${status}${opts.message ? ` — ${opts.message}` : ''} (${ageS}s ago)`,
+    };
+  }
+  if (status === 'connecting' || status === 'calculating' || status === 'datafeed-loading') {
+    const stuck = ageS >= 5 ? ` · ${ageS}s` : '';
+    return {
+      value: `${label}${stuck}`,
+      tone: 'load',
+      title: `Engine feed ${label}${stuck ? ` — stuck for ${ageS}s` : ''} (chart falls back to venue + REST)`,
+    };
+  }
+  return { value: label, tone: 'idle', title: `Engine feed ${label}` };
+}
+
+/**
+ * Info-panel rows for the feed chip — the facts that explain the chip:
+ * state, freshness, verification tier, progress, the engine hop and the
+ * series identity.
+ */
+export function feedChipMeta(opts: {
+  status: SubscriptionStatus;
+  verified?: 'venue' | 'proxy' | 'engine' | 'none' | null;
+  have?: number;
+  need?: number;
+  message?: string;
+  updatedAt?: number;
+  now?: number;
+  engineTransport?: string | null;
+  engineState?: string | null;
+  engineLatencyMs?: number | null;
+  engineDetail?: string | null;
+  seriesKey?: string | null;
+}): string[] {
+  const now = opts.now ?? Date.now();
+  const ageS = Math.max(0, Math.round((now - (opts.updatedAt ?? now)) / 1000));
+  const rows: string[] = [`state ${opts.status}`];
+  if (opts.status !== 'live') rows.push(`updated ${ageS}s ago`);
+  rows.push(`verified ${verifiedTierLabel(opts.verified)}`);
+  if (opts.have !== undefined || opts.need !== undefined) {
+    rows.push(`progress ${opts.have ?? '?'} / ${opts.need ?? '?'}`);
+  }
+  if (opts.message) rows.push(`note ${opts.message}`);
+  if (opts.engineTransport || opts.engineState) {
+    const lat = opts.engineLatencyMs != null ? ` · ${Math.round(opts.engineLatencyMs)}ms` : '';
+    rows.push(`engine ${opts.engineTransport ?? '—'} · ${opts.engineState ?? '—'}${lat}`);
+  }
+  if (opts.engineDetail) rows.push(`engine ${opts.engineDetail}`);
+  if (opts.seriesKey) rows.push(`series ${opts.seriesKey}`);
+  return rows;
+}
+
 /** Sticky-panel title/body copy for a chip given the current snapshot. */
 export function hudChipHelp(id: HudChipId, snap: HudSnapshot): { title: string; body: string } {
   switch (id) {

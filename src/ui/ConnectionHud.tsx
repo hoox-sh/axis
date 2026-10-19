@@ -52,8 +52,8 @@ import { formatLatency, formatTickAge } from './telemetry';
 import {
   composeCaption,
   deriveHud,
-  feedStatusLabel,
-  feedStatusTone,
+  feedChipMeta,
+  feedChipView,
   hudChipHelp,
   liveBadgeTone,
   liveBadgeWord,
@@ -374,11 +374,18 @@ function PlaneChip(props: {
  * Engine-owned feed status chip (F-18). Renders only while a subscription
  * exists for the current chart series — the default (no stream path) shows
  * nothing, so existing HUD behavior is unchanged.
+ *
+ * The chip answers *where the data comes from* and *how fresh it is*: a live
+ * feed reads `live` (or `live·unverified` when only the engine's own copy
+ * confirmed the close), and a feed that never came up keeps its state word
+ * plus the time it has been stuck. The opened panel lists the facts behind
+ * it — state, freshness, verification tier, engine hop and series identity.
  */
 function FeedChip(props: {
   sticky: ReturnType<typeof useStickyInfo>;
   snap: () => HudSnapshot;
 }) {
+  const now = useNow();
   const key = () =>
     currentSeriesKey({
       exchange: store.exchange || 'binance',
@@ -387,57 +394,71 @@ function FeedChip(props: {
       catalog: FALLBACK_MAJORS,
     });
   const feed = () => store.live.feeds[key()];
-  // Weak close verification demotes the chip until a stronger tier confirms
-  // (F-28): a `live` subscription with engine/none verification reads degraded.
-  const effective = () => {
-    const f = feed();
-    if (!f) return undefined;
-    if (f.status === 'live' && (f.verified === 'engine' || f.verified === 'none')) {
-      return { ...f, status: 'degraded' as const, message: 'unverified close' };
-    }
-    return f;
-  };
-  /** Map feed tone onto chip state (single evaluation, no nested ternaries). */
-  const chipState = (status: FeedSubscription['status']): 'idle' | 'ok' | 'err' | 'load' => {
-    const tone = feedStatusTone(status);
-    if (tone === 'live') return 'ok';
-    if (tone === 'err') return 'err';
-    if (tone === 'idle') return 'idle';
-    return 'load';
-  };
-  const labelOf = (f: NonNullable<ReturnType<typeof effective>>) =>
-    feedStatusLabel(f.status, {
+  /** Live rows for the info panel: state, freshness, verification tier. */
+  const metaOf = (f: FeedSubscription) => {
+    const tel = store.telemetry?.engine;
+    return feedChipMeta({
+      status: f.status,
+      verified: f.verified,
       have: f.have,
       need: f.need,
       message: f.message,
       updatedAt: f.updatedAt,
+      now: now(),
+      engineTransport: tel?.transport,
+      engineState: tel?.state,
+      engineLatencyMs: tel?.latencyMs,
+      engineDetail: tel?.detail,
+      seriesKey: f.key || key(),
     });
-  /** Live rows for the info panel: status, progress, verification tier. */
-  const metaOf = (f: NonNullable<ReturnType<typeof effective>>) => {
-    const rows = [`status ${f.status}`];
-    if (f.have !== undefined || f.need !== undefined) {
-      rows.push(`progress ${f.have ?? '?'} / ${f.need ?? '?'}`);
-    }
-    rows.push(`verified ${f.verified ?? '—'}`);
-    return rows;
   };
   return (
-    <Show when={effective()}>
-      {(f) => (
-        <ChipShell
-          id="feed"
-          label="feed"
-          value={labelOf(f())}
-          title={labelOf(f())}
-          state={chipState(f().status)}
-          meta={metaOf(f())}
-          sticky={props.sticky}
-          snap={props.snap}
-          testId="axis-hud-feed"
-        />
-      )}
+    <Show when={feed()}>
+      {(f) => {
+        const view = () =>
+          feedChipView({
+            status: f().status,
+            verified: f().verified,
+            have: f().have,
+            need: f().need,
+            message: f().message,
+            updatedAt: f().updatedAt,
+            now: now(),
+          });
+        return (
+          <ChipShell
+            id="feed"
+            label="feed"
+            value={view().value}
+            title={view().title}
+            state={chipStateFor(view().tone)}
+            meta={metaOf(f())}
+            sticky={props.sticky}
+            snap={props.snap}
+            testId="axis-hud-feed"
+          />
+        );
+      }}
     </Show>
   );
+}
+
+/** Map a feed tone onto the chip shell state. */
+function chipStateFor(
+  tone: 'live' | 'load' | 'degraded' | 'err' | 'idle',
+): 'idle' | 'ok' | 'warn' | 'err' | 'load' {
+  switch (tone) {
+    case 'live':
+      return 'ok';
+    case 'err':
+      return 'err';
+    case 'load':
+      return 'load';
+    case 'degraded':
+      return 'warn';
+    default:
+      return 'idle';
+  }
 }
 
 /**

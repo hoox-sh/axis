@@ -71,6 +71,21 @@ describe('resolveSessionPayload', () => {
     expect((out!.series as Record<string, number[]>).a).toEqual([0, 10, 20, 30, 40, 60, 70]);
   });
 
+  it('splices the bar-time axis with the tail', () => {
+    // The engine ships the evaluated window's axis; a delta carries the
+    // tail's times. The merged payload must describe the *whole* window, or
+    // the apply path falls back to an index join (displaced plot).
+    const cached = { ...full(5), times: [10, 20, 30, 40, 50] };
+    const update = { ...delta(5, 7, [6, 7]), times: [60, 70] };
+    const out = resolveSessionPayload(cached, update)!;
+    expect(out!.times).toEqual([10, 20, 30, 40, 50, 60, 70]);
+  });
+
+  it('rejects a delta whose axis is missing on one side', () => {
+    const cached = { ...full(5), times: [10, 20, 30, 40, 50] };
+    expect(resolveSessionPayload(cached, delta(5, 7, [6, 7]))).toBeNull();
+  });
+
   it('replaces the revised tip on a retick-only delta', () => {
     const out = resolveSessionPayload(full(5), delta(4, 5, [50]))!;
     expect(out!.plots).toEqual([1, 2, 3, 4, 50]);

@@ -7,7 +7,7 @@ tags: [code, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-16T18:28:43Z
+  at: 2026-10-19T20:07:25Z
 sources:
   - id: tree
     resource: "src/ui"
@@ -86,7 +86,7 @@ okf_lock: generated
 * `error-share.ts` — AXIS_DIAGNOSTIC_VERSION, BuildDiagnosticOpts, ErrorDiagnosticPayload, ErrorShareOffer, _resetErrorShareThrottleForTests, acceptErrorShareOffer, buildErrorDiagnosticPayload, dismissErrorShareOffer, endpointHostOnly, exportErrorDiagnosticNow, isErrorShareEnabled, isSecretFieldName
 * `exchange-credentials-form.ts` — EMPTY_EXCHANGE_CREDENTIAL_FORM, EXCHANGE_CREDENTIAL_VENUES, EXCHANGE_CREDENTIAL_VENUE_LABELS, ExchangeCredentialFormState, ExchangeCredentialVenue, ccxtNeedsPassword, defaultExchangeCredentialVenue, exchangeVenueLabel, isExchangeCredentialVenue, normalizeCcxtExchangeId, venueNeedsPassphrase
 * `focus-trap.ts` — installFocusTrap, listFocusable
-* `hud-model.ts` — EngTopology, ExecMode, HudChipId, HudInput, HudSnapshot, PathClass, RunClass, composeCaption, deriveHud, feedStatusLabel, feedStatusTone, hudChipHelp
+* `hud-model.ts` — EngTopology, ExecMode, FeedChipView, HudChipId, HudInput, HudSnapshot, PathClass, RunClass, composeCaption, deriveHud, feedChipMeta, feedChipView
 * `icon-map.ts` — ICON_MAP, IconName, PANEL_ICON, findDuplicateIconGlyphs
 * `icons.tsx` — ICON_MAP, IconLabel, IconProps, Icons, PANEL_ICON, findDuplicateIconGlyphs
 * `plugin-badges-utils.ts` — CAP_META, CapKey, capabilityKeys, engineOptionLabel

@@ -292,6 +292,71 @@ describe('engine-owned series apply', () => {
     expect(tip.value).toBe(bars.length + 3);
   });
 
+  it('joins an engine-owned series by bar time when the engine ships its axis', async () => {
+    // The engine's stored series can have gaps, so an index join displaces the
+    // plot. With the engine's bar-time axis the values land on the bars they
+    // belong to — even when the engine ran ahead of the chart.
+    const bars = SAMPLE_BARS;
+    const step = 60;
+    // Engine window: two older bars, then the chart bars, then one newer bar
+    // (the engine's newest closed bar is ahead of the chart's forming bar).
+    const engineTimes = [
+      bars[0]!.time - 2 * step,
+      bars[0]!.time - step,
+      ...bars.map((b) => b.time),
+      bars[bars.length - 1]!.time + step,
+    ];
+    const engineSeries = engineTimes.map((_, i) => i + 1);
+    restoreFetch = mockFetch(async (input, init) => {
+      const url = new URL(String(input));
+      const method = String(init?.method || 'GET').toUpperCase();
+      if (method === 'POST' && url.pathname === '/data/session') {
+        return jsonResponse({
+          status: 'success',
+          session_id: 'eo-axis',
+          cache: 'hit',
+          plots: [],
+          series: { plot0: engineSeries },
+          plot_meta: { plot0: {} },
+          events: [],
+          drawings: [],
+          alerts: [],
+          inputs: [],
+          mode: 'interpret',
+          overlay: true,
+          script_name: 'eo',
+          count: engineSeries.length,
+          times: engineTimes,
+          meta: {},
+        });
+      }
+      return jsonResponse({ status: 'error', code: 'NOT_FOUND' }, 404);
+    });
+
+    setManager({
+      getPane: (id: string) =>
+        id === 'price'
+          ? { id: 'price', type: 'price', chart: {}, series: {}, priceLines: {} }
+          : undefined,
+      syncOverlayLines: (paneId: string, lines: CapturedApply['lines']) => {
+        captured.push({ paneId, lines });
+      },
+      syncBgcolorBands: () => {},
+    } as never);
+
+    const r = await runAndApply(SCRIPT, undefined, { silent: true, openResults: false });
+    expect(r.status).toBe('success');
+    const line = captured[captured.length - 1]!.lines[0]!;
+    expect(line.data).toHaveLength(bars.length);
+    // Chart bar 0 carries the engine value whose *time* matches — the third
+    // engine value (the two older engine bars are outside the chart window).
+    expect(line.data[0]!.time).toBe(bars[0]!.time);
+    expect(line.data[0]!.value).toBe(3);
+    const tip = line.data[line.data.length - 1]!;
+    expect(tip.time).toBe(bars[bars.length - 1]!.time);
+    expect(tip.value).toBe(bars.length + 2);
+  });
+
   it('keeps the 1:1 mapping for a bars-in run without a data session', async () => {
     const bars = SAMPLE_BARS;
     restoreFetch = mockFetch(async (input, init) => {

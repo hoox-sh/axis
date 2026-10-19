@@ -147,9 +147,37 @@ function mergeDelta(
     if (merged === null) return null;
     mergedSeries[k] = merged;
   }
+  // The bar-time axis travels with the tail — splice it the same way, or the
+  // merged payload would carry a tail-sized axis for a full window and the
+  // apply path would fall back to an index join (displaced plot).
+  const cachedTimes = timesOf(cached);
+  const upTimes = timesOf(update);
+  let mergedTimes: unknown[] | undefined;
+  if (cachedTimes !== null || upTimes !== null) {
+    if (cachedTimes === null || upTimes === null) return null;
+    const spliced = spliceColumn(cachedTimes, upTimes, delta);
+    if (spliced === null) return null;
+    mergedTimes = spliced;
+  }
   const { delta: _drop, ...rest } = update;
   void _drop;
-  return { ...rest, plots: mergedPlots, series: mergedSeries, count: delta.count };
+  return {
+    ...rest,
+    plots: mergedPlots,
+    series: mergedSeries,
+    count: delta.count,
+    ...(mergedTimes ? { times: mergedTimes } : {}),
+  };
+}
+
+/** Bar-time axis of a payload (top level `times` / `bar_times`), else null. */
+function timesOf(payload: unknown): unknown[] | null {
+  if (!isRecord(payload)) return null;
+  for (const key of ['times', 'bar_times'] as const) {
+    const v = payload[key];
+    if (Array.isArray(v) && v.length) return v;
+  }
+  return null;
 }
 
 /**
