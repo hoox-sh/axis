@@ -9,7 +9,7 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-10-19 · 616 commits · describe-tag: `v2.24.6`_
+_Generated/updated: 2026-10-19 · 621 commits · describe-tag: `v2.24.7`_
 
 ---
 
@@ -1624,9 +1624,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-10 (135 commits)
+### 2026-10 (140 commits)
 
 #### Features
 
@@ -1670,6 +1672,8 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `36bc73df` (2026-10-19) — fix(ci): serialize the coverage test run
+- `bcc64534` (2026-10-19) — fix(pyodide): compile mode no longer crashes on alert() / alertcondition()
 - `c858620c` (2026-10-19) — fix(engine): mark /ws/run dead after an abnormal close
 - `4c6f398e` (2026-10-19) — fix(data): fill internal 1m holes; cap /ws/live snapshot to 500 bars
 - `c3bd51fa` (2026-10-19) — fix(data): fill stale cache→now before live on interval switch
@@ -1743,6 +1747,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Documentation
 
+- `39a73dd6` (2026-10-19) — docs(changelog): note the CI serialization and live-plane coverage in 2.24.7
 - `6f4dfedc` (2026-10-17) — docs: refresh landing index to 2.24.5 with a What's new section
 - `9719ad50` (2026-10-17) — docs: regenerate llm.txt + llms.txt from the pynescript pipeline
 - `c8895052` (2026-10-13) — docs(engine): mark migration steps done; note coalescing is the epoch mechanism
@@ -1756,6 +1761,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Tests
 
+- `c719f49c` (2026-10-19) — test(streams): cover the engine-owned live plane end to end
 - `03dc1405` (2026-10-14) — test: stop cross-file store leakage from making CI order-dependent
 - `e5453220` (2026-10-13) — test(datasession): mint an API key in the e2e harness
 - `c5100b3f` (2026-10-13) — test(datasession): cross-repo e2e against the PYNE /data store
@@ -1763,6 +1769,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Chores
 
+- `0b851707` (2026-10-19) — chore(release): AXIS 2.24.7
 - `833f0d6f` (2026-10-18) — chore(release): AXIS v2.24.6 — live stream feed and MCP plane
 - `632aaca3` (2026-10-17) — chore(pyne-wheel): vendor PYNE 0.6.12 for the in-browser Pyodide engine
 - `d946a42e` (2026-10-17) — chore(release): AXIS 2.24.5
