@@ -11,6 +11,7 @@ minimal Unreleased stub.
 Usage:
   python3 scripts/generate-changelog.py
   python3 scripts/generate-changelog.py --out CHANGELOG.md
+  python3 scripts/generate-changelog.py --extract 2.24.6 --tag v2.24.6
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from __future__ import annotations
 import argparse
 import re
 import subprocess
+import sys
 from collections import defaultdict
 from datetime import date
 from pathlib import Path
@@ -57,6 +59,63 @@ TYPE_ORDER = [
 
 FULL_HISTORY_MARKER = "## Full history (recursive)"
 HOW_TO_MARKER = "## How to update"
+VERSION_HEADING_RE = re.compile(r"^## \[([^\]]+)\]")
+
+
+def normalize_version(raw: str) -> str:
+    """Strip workflow tag prefixes (``desktop-v*``, ``v*``) so headings match."""
+    s = str(raw or "").strip()
+    if s.lower().startswith("desktop-v"):
+        s = s[len("desktop-v") :]
+    return s.lstrip("vV")
+
+
+def extract_version_section(md: str, version: str) -> str | None:
+    """Keep-a-Changelog section for ``version`` (tag prefixes stripped)."""
+    ver = normalize_version(version)
+    if not ver or not md:
+        return None
+    lines = md.splitlines()
+    start: int | None = None
+    for i, line in enumerate(lines):
+        m = VERSION_HEADING_RE.match(line)
+        if not m:
+            continue
+        name = m.group(1).strip()
+        if name.lower() == "unreleased":
+            continue
+        if name.split()[0] == ver:
+            start = i
+            break
+    if start is None:
+        return None
+    end = len(lines)
+    for j in range(start + 1, len(lines)):
+        if VERSION_HEADING_RE.match(lines[j]):
+            end = j
+            break
+        if lines[j].startswith(FULL_HISTORY_MARKER) or lines[j].startswith(HOW_TO_MARKER):
+            end = j
+            break
+    body = "\n".join(lines[start:end]).strip()
+    return body or None
+
+
+def format_github_release_notes(section: str | None, tag: str, version: str) -> str:
+    """Section plus installer footer; missing section yields a warning body."""
+    label = tag.strip() or f"v{normalize_version(version)}"
+    footer = (
+        "Desktop installers (Tauri 2). CLI tarball, worker bundle, and checksums "
+        "attach from the Release workflow."
+    )
+    if section:
+        return f"{section}\n\n---\n\n{footer}\n"
+    return (
+        f"AXIS {label}\n\n"
+        f"No `## [{normalize_version(version)}]` section in CHANGELOG.md. "
+        "See the file in the repository.\n\n"
+        f"---\n\n{footer}\n"
+    )
 
 
 def git(*args: str) -> str:
@@ -139,8 +198,25 @@ def render_type_groups(
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--out", default="CHANGELOG.md")
+    ap.add_argument(
+        "--extract",
+        metavar="VERSION",
+        help="Print GitHub Release notes for this version (e.g. 2.24.6) and exit",
+    )
+    ap.add_argument("--tag", default="", help="Release tag label (default v<VERSION>)")
     args = ap.parse_args()
     out_path = Path(args.out)
+    if args.extract:
+        md = out_path.read_text() if out_path.exists() else ""
+        section = extract_version_section(md, args.extract)
+        tag = args.tag.strip() or f"v{normalize_version(args.extract)}"
+        sys.stdout.write(format_github_release_notes(section, tag, args.extract))
+        if not section:
+            print(
+                f"::warning::CHANGELOG.md has no section for {normalize_version(args.extract)}",
+                file=sys.stderr,
+            )
+        return
     existing = out_path.read_text() if out_path.exists() else None
     preamble = extract_preamble(existing)
 

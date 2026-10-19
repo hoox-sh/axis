@@ -371,9 +371,11 @@ jobs:
             sleep 20
           done
           # Not created by desktop.yml (skipped / failed) — create it so the
-          # artifacts still ship.
-          gh release create "$TAG" --title "AXIS $TAG" --generate-notes ||
-            gh release view "$TAG" >/dev/null
+          # artifacts still ship. Notes come from CHANGELOG.md, not git log.
+          python3 scripts/generate-changelog.py --extract "$TAG" --tag "$TAG" > /tmp/release-notes.md.tmp
+          mv /tmp/release-notes.md.tmp /tmp/release-notes.md
+          gh release create "$TAG" --title "AXIS $TAG" --notes-file /tmp/release-notes.md ||
+            gh release edit "$TAG" --title "AXIS $TAG" --notes-file /tmp/release-notes.md
 
       - name: Upload assets
         run: |

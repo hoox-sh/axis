@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "tests"
-description: "tests contains alerts-engine.test.ts, alerts-form.test.ts, alerts-format.test.ts, and 280 more files."
+description: "tests contains alerts-engine.test.ts, alerts-form.test.ts, alerts-format.test.ts, and 281 more files."
 resource: "tests"
 tags: [code, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-17T12:28:29Z
+  at: 2026-10-19T14:13:25Z
 sources:
   - id: tree
     resource: "tests"
@@ -33,6 +33,7 @@ okf_lock: generated
 * `binance-http.test.ts`
 * `boot-errors.test.ts`
 * `builtin-scripts.test.ts`
+* `changelog-extract.test.ts`
 * `chart-boot.test.ts`
 * `chart-context-menu.test.ts`
 * `chart-data-session.test.ts`
@@ -304,7 +305,7 @@ okf_lock: generated
 
 # Packages
 
-`@codemirror/language`, `@codemirror/state`, `@codemirror/view`, `bun:test`, `lightweight-charts`, `node:fs`, `node:path`, `node:url`, `solid-js`, `solid-js/store`
+`@codemirror/language`, `@codemirror/state`, `@codemirror/view`, `bun:test`, `lightweight-charts`, `node:child_process`, `node:fs`, `node:os`, `node:path`, `node:url`, `solid-js`, `solid-js/store`
 
 # Depends on
 

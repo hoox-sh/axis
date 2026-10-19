@@ -17,6 +17,7 @@ _Generated/updated: 2026-10-18 · 603 commits · describe-tag: `v2.24.5`_
 
 ### Added
 
+- **GitHub Release notes use the CHANGELOG version section** (`scripts/generate-changelog.py --extract`) instead of the generic “Desktop build of AXIS (Tauri 2)” stub.
 - **MCP connect / session chip sits on the command bar trailing edge** (very top row, above Studio). Overlay indicator plots stack above price candles (`setSeriesOrder`); Layers lists Scripts above Panes.
 - **Topbar Market after Venue.** Binance (and OKX / Bybit / MEXC) can switch Spot, USDT-M, and COIN-M. BTCUSDT on Binance was always spot (`api.binance.com` / `stream.binance.com`); USDT-M uses `fapi` / `fstream`, COIN-M uses `dapi` / `dstream`. Engine series keys send PYNE/CCXT names (`swap` / `future`).
 

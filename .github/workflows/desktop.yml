@@ -106,6 +106,27 @@ jobs:
           projectPath: .
           args: ${{ matrix.args }}
 
+      - name: Extract changelog notes
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        # windows-latest defaults to pwsh; these scripts are bash.
+        shell: bash
+        run: |
+          # Redirect truncates the dest before python runs; mv only on success.
+          python3 scripts/generate-changelog.py --extract "$GITHUB_REF_NAME" --tag "$GITHUB_REF_NAME" > release-notes.md.tmp
+          mv release-notes.md.tmp release-notes.md
+          wc -l release-notes.md
+
+      - name: Ensure GitHub Release with changelog
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          # Matrix jobs race on first create; edit is the idempotent fallback.
+          gh release create "$TAG" --title "AXIS $TAG" --notes-file release-notes.md || \
+            gh release edit "$TAG" --title "AXIS $TAG" --notes-file release-notes.md
+
       # Version tags: build + attach to GitHub Release
       - name: Build Tauri app and publish release
         if: ${{ startsWith(github.ref, 'refs/tags/') }}
@@ -117,14 +138,21 @@ jobs:
           projectPath: .
           tagName: ${{ github.ref_name }}
           releaseName: AXIS ${{ github.ref_name }}
-          releaseBody: |
-            Desktop build of AXIS (Tauri 2).
-
-            - Commit: ${{ github.sha }}
-            - Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           releaseDraft: false
           prerelease: ${{ contains(github.ref_name, '-') }}
           args: ${{ matrix.args }}
+
+      - name: Restore changelog on GitHub Release
+        # always(): tauri-action may overwrite notes even when it fails.
+        if: ${{ always() && startsWith(github.ref, 'refs/tags/') }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if [ -s release-notes.md ] && gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --notes-file release-notes.md
+          fi
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4

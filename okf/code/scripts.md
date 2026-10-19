@@ -7,7 +7,7 @@ tags: [code, scripts]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-13T19:44:07Z
+  at: 2026-10-19T14:13:25Z
 sources:
   - id: tree
     resource: "scripts"
@@ -22,7 +22,7 @@ okf_lock: generated
 * `capture-screenshots.ts`
 * `check-coverage.mjs`
 * `check-versions.mjs` — $
-* `generate-changelog.py` — classify, extract_preamble, git, load_commits, main, render_type_groups
+* `generate-changelog.py` — classify, extract_preamble, extract_version_section, format_github_release_notes, git, load_commits, main, normalize_version, render_type_groups
 * `rewrite_wheel_distinfo.py` — Entry, main, rewrite_wheel, want_dist_info
 * `sync-versions.mjs` — APP_VERSION, BAKED_APP_VERSION, WORKER_VERSION, appVersion
 
