@@ -9,9 +9,16 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-10-19 · 621 commits · describe-tag: `v2.24.7`_
+_Generated/updated: 2026-10-19 · 625 commits · describe-tag: `v2.24.7`_
 
 ---
+
+## [2.24.8] — 2026-10-19
+
+### Fixed
+
+- **The feed chip says what the data path is, not a stale state word.** A live engine feed read `degraded` whenever only the engine’s own copy confirmed the close, so the chip disagreed with the engine plane (`ws` / `open`) while the data was flowing. It now reads `live` and flags the weak tier as `live·unverified`; a feed that never came up keeps its state word plus the time it has been stuck (`connecting · 45s`). The opened panel lists the facts behind it — state, freshness, verification tier, progress, the engine hop and the series identity.
+- **The session delta merge keeps the engine’s bar-time axis.** A merged engine-owned payload described only the tail, so the apply path fell back to an index join — which displaces the plot whenever the engine’s stored series has gaps (a missed minute). The axis is spliced with the tail like the plot columns.
 
 ## [2.24.7] — 2026-10-19
 
@@ -1626,9 +1633,13 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
+---
+
 ## Full history (recursive)
 
-### 2026-10 (140 commits)
+### 2026-10 (144 commits)
 
 #### Features
 
@@ -1672,6 +1683,9 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `86cd2c1c` (2026-10-19) — fix(ui): the feed chip says what the data path is, not a stale state word
+- `a2a4efbd` (2026-10-19) — fix(test): pin the engine identity in the live-plane wire test
+- `6a94ca03` (2026-10-19) — fix(test): reset the painted-candle range before each clamp test
 - `36bc73df` (2026-10-19) — fix(ci): serialize the coverage test run
 - `bcc64534` (2026-10-19) — fix(pyodide): compile mode no longer crashes on alert() / alertcondition()
 - `c858620c` (2026-10-19) — fix(engine): mark /ws/run dead after an abnormal close
@@ -1747,6 +1761,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Documentation
 
+- `6d13a542` (2026-10-19) — docs(changelog): refresh the recursive history block
 - `39a73dd6` (2026-10-19) — docs(changelog): note the CI serialization and live-plane coverage in 2.24.7
 - `6f4dfedc` (2026-10-17) — docs: refresh landing index to 2.24.5 with a What's new section
 - `9719ad50` (2026-10-17) — docs: regenerate llm.txt + llms.txt from the pynescript pipeline
