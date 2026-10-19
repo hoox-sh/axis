@@ -152,6 +152,45 @@ describe('loadSymbolData', () => {
     expect(store.telemetry.source.state).toBe('open');
   });
 
+  it('fills a stale cache tail from the venue before starting live', async () => {
+    const step = 3600;
+    const nowSec = 1_800_000_000;
+    const stale: Bar[] = [
+      { time: nowSec - step * 20, open: 1, high: 1, low: 1, close: 1, volume: 1 },
+      { time: nowSec - step * 19, open: 1, high: 1, low: 1, close: 1, volume: 1 },
+      { time: nowSec - step * 18, open: 1, high: 1, low: 1, close: 1, volume: 1 },
+    ];
+    await putCachedBars('gap-src', 'BTCUSDT', '1h', stale);
+    let calls = 0;
+    registerDynamicSource(
+      dynSource('gap-src', async ({ endTime, limit }) => {
+        calls += 1;
+        const end = Math.floor(Number(endTime) || nowSec);
+        const n = Math.min(Number(limit) || 10, 10);
+        const out: Bar[] = [];
+        for (let i = n - 1; i >= 0; i--) {
+          const t = end - i * step;
+          out.push({ time: t, open: 2, high: 2, low: 2, close: 2, volume: 1 });
+        }
+        return out;
+      }),
+    );
+    const realNow = Date.now;
+    Date.now = () => nowSec * 1000;
+    try {
+      const ok = await loadSymbolData('BTCUSDT', '1h', 'gap-src');
+      expect(ok).toBe(true);
+      expect(calls).toBeGreaterThan(0);
+      expect(store.bars[store.bars.length - 1]!.time).toBeGreaterThanOrEqual(nowSec - step);
+      const times = store.bars.map((b) => b.time);
+      for (let i = 1; i < times.length; i++) {
+        expect(times[i]! - times[i - 1]!).toBe(step);
+      }
+    } finally {
+      Date.now = realNow;
+    }
+  });
+
   it('stale background DSM announcement does not overwrite a newer error', async () => {
     // Cache paint fires ensureDatasetComplete detached; a newer failing load
     // must keep its error status even after the stale job finishes.
@@ -285,6 +324,7 @@ describe('loadSymbolData', () => {
     const slowPromise = new Promise<Bar[]>((_, rej) => {
       rejectSlow = rej;
     });
+    void slowPromise.catch(() => {});
 
     registerDynamicSource(
       dynSource('race-fail-src', async ({ symbol }) => {

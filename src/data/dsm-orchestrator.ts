@@ -234,7 +234,7 @@ export async function paintDataset(
   symbol: string,
   interval: string,
   sourceId: string,
-  opts?: { stillCurrent?: () => boolean },
+  opts?: { stillCurrent?: () => boolean; bars?: Bar[] },
 ): Promise<Bar[] | null> {
   const sym = String(symbol || '').trim();
   const iv = String(interval || store.interval || '1d');
@@ -248,11 +248,13 @@ export async function paintDataset(
     if (changedKey === activeKey) scheduleRepaint(sym, iv, srcId, gen);
   });
 
-  let raw: Bar[] = [];
-  try {
-    raw = await getDataset(srcId, sym, iv);
-  } catch {
-    raw = [];
+  let raw: Bar[] = Array.isArray(opts?.bars) ? opts.bars.slice() : [];
+  if (!raw.length) {
+    try {
+      raw = await getDataset(srcId, sym, iv);
+    } catch {
+      raw = [];
+    }
   }
   if (gen !== paintGen) return null;
   if (opts?.stillCurrent && !opts.stillCurrent()) return null;

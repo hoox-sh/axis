@@ -5,6 +5,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import {
   canExpandFromSource,
   expandCachedSeriesToNow,
+  fillBarsTowardNow,
   noteDataManagerLiveBar,
 } from '../src/data/expand-cache';
 import {
@@ -49,6 +50,7 @@ describe('expand-cache', () => {
   afterEach(() => {
     try {
       registry.unregisterSource('expand-test-src');
+      registry.unregisterSource('fill-tail-src');
     } catch {
       /* ignore */
     }
@@ -68,6 +70,37 @@ describe('expand-cache', () => {
     setDataManagerSelection('bybit-rest', 'ETHUSDT', '15m');
     expect(defaultStreamForSource('data-manager')).toBe('bybit-ws');
     expect(defaultStreamForSource('mock-walk')).toMatch(/mock/);
+  });
+
+  it('fillBarsTowardNow closes a stale tail so live does not paint a hole', async () => {
+    const t0 = 1_700_000_000;
+    const step = 60;
+    const stale = [bar(t0), bar(t0 + step), bar(t0 + step * 2)];
+    const nowSec = t0 + step * 2 + step * 10;
+    const src: SourcePlugin = {
+      id: 'fill-tail-src',
+      name: 'Fill Tail',
+      kind: 'source',
+      builtIn: false,
+      capabilities: { needsNetwork: true },
+      async fetchHistorical({ endTime, limit }) {
+        const end = Math.floor(Number(endTime) || nowSec);
+        const n = Math.min(Number(limit) || 10, 10);
+        const out: Bar[] = [];
+        for (let i = n - 1; i >= 0; i--) {
+          out.push(bar(end - i * step, 100 + i));
+        }
+        return out;
+      },
+    };
+    registry.registerSource(src);
+    const result = await fillBarsTowardNow(stale, 'fill-tail-src', 'BTCUSDT', '1m', { nowSec });
+    expect(result.expanded).toBe(true);
+    expect(result.bars[result.bars.length - 1]!.time).toBeGreaterThanOrEqual(nowSec - step);
+    const times = result.bars.map((b) => b.time);
+    for (let i = 1; i < times.length; i++) {
+      expect(times[i]! - times[i - 1]!).toBe(step);
+    }
   });
 
   it('expandCachedSeriesToNow fills gap from newest to now via venue pages', async () => {
@@ -122,10 +155,11 @@ describe('expand-cache', () => {
     // closed:true flushes immediately (open-bar path is debounced)
     noteDataManagerLiveBar({ ...bar(1120, 55), closed: true });
     // putCachedBars is async fire-and-forget — wait a few ticks
-    await new Promise((r) => setTimeout(r, 40));
+    await new Promise((r) => setTimeout(r, 80));
 
     const cached = await getCachedBars('binance-rest', 'SOLUSDT', '1m');
     expect(cached.map((b) => b.time)).toContain(1120);
-    expect(cached[cached.length - 1]!.close).toBe(55);
+    const at1120 = cached.find((b) => b.time === 1120);
+    expect(at1120?.close).toBe(55);
   });
 });

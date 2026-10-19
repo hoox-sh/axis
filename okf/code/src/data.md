@@ -7,7 +7,7 @@ tags: [code, data]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-18T22:21:13Z
+  at: 2026-10-19T17:49:34Z
 sources:
   - id: tree
     resource: "src/data"
@@ -30,7 +30,7 @@ okf_lock: generated
 * `dataset-store.ts` — DatasetMeta, PutResult, _resetDatasetStoreForTests, getDataset, getMergePolicy, getPersistenceMode, keyFor, listMemoryDatasets, peekDataset, putDatasetBars, removeDataset, replaceDataset
 * `dataset-validate.ts` — ClassifyOpts, DatasetReport, GapClassification, RepairResult, RepairStats, ValidateOpts, VenueClass, classifyGaps, findClassifiedGaps, repairBars, validateDataset, venueClassForSourceCaps
 * `dsm-orchestrator.ts` — DatasetFirstResult, _resetDsmOrchestratorForTests, announceDatasetPaint, chartDisplayCap, ensureDatasetComplete, paintDataset, seedDatasetFromBars, sliceForChart, startProgressiveStream, stopProgressiveRepaint
-* `expand-cache.ts` — ExpandCacheResult, _flushDataManagerLiveBarForTests, canExpandFromSource, expandCachedSeriesToNow, noteDataManagerLiveBar
+* `expand-cache.ts` — ExpandCacheResult, _flushDataManagerLiveBarForTests, canExpandFromSource, expandCachedSeriesToNow, fillBarsTowardNow, noteDataManagerLiveBar
 * `gateway.ts` — DATAFEED_DEFAULT_PORT, GatewayMode, GatewaySessionBody, gatewayBase, gatewayDeleteSession, gatewayFetch, gatewayPutSession, gatewayWs, isRemotePageOrigin, probeSidecar
 * `load-symbol.ts` — _currentLoadGeneration, _resetLoadGeneration, exchangeForSource, loadSymbolData, normalizeLoadSymbol, reloadChart
 * `market-worker.ts` — DEFAULT_MARKET_WORKER_BASE, resolveMarketWorkerBase

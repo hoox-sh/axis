@@ -53,6 +53,7 @@ import { defaultStreamForSource } from '../streams/catalog';
 import { pluginKey } from '../plugins/types';
 import { normalizeHistoricalBars } from './parse-bars';
 import { announce, announceError } from '../ui/sr-announce';
+import type { Bar } from '../store/types';
 
 /**
  * Monotonic generation for in-flight history loads.
@@ -105,7 +106,25 @@ import { exchangeForSource, normalizeLoadSymbol } from './symbol-exchange';
 import { isEngineOwnedLive } from '../engines/ownership';
 import { getDataSeriesBars } from '../engines/data-sessions';
 import { getActiveEngineConfig } from '../plugins/active';
+import { fillBarsTowardNow } from './expand-cache';
 export { exchangeForSource, normalizeLoadSymbol };
+
+/** Close cache/engine newest → now via venue before live appends the forming bar. */
+async function closeTailToNow(
+  bars: Bar[],
+  srcId: string,
+  sym: string,
+  iv: string,
+  signal?: AbortSignal,
+): Promise<Bar[]> {
+  if (!bars.length) return bars;
+  try {
+    const r = await fillBarsTowardNow(bars, srcId, sym, iv, { signal });
+    return r.bars.length ? r.bars : bars;
+  } catch {
+    return bars;
+  }
+}
 
 /**
  * Fetch OHLCV via the given historical source and push into chart + store.
@@ -230,19 +249,21 @@ export async function loadSymbolData(
         );
         if (!stillCurrent()) return false;
         if (engineBars.length) {
-          loadBars(engineBars, sym, iv, exchangeForSource(srcId));
+          const bars = await closeTailToNow(engineBars, srcId, sym, iv, signal);
+          if (!stillCurrent()) return false;
+          loadBars(bars, sym, iv, exchangeForSource(srcId));
           const manager = getManager();
-          if (manager) setDataToChart(engineBars, { fit: true });
+          if (manager) setDataToChart(bars, { fit: true });
           setTelemetryState('source', 'open', {
             latencyMs: performance.now() - t0,
-            detail: `${engineBars.length} bars · ${label} (engine)`,
+            detail: `${bars.length} bars · ${label} (engine)`,
             error: null,
           });
-          setStatus('ready', `Loaded ${engineBars.length} bars · ${source.name} (engine)`, {
+          setStatus('ready', `Loaded ${bars.length} bars · ${source.name} (engine)`, {
             toast: false,
             source: 'data',
           });
-          announce(`Loaded ${engineBars.length} bars ${sym} ${iv}`);
+          announce(`Loaded ${bars.length} bars ${sym} ${iv}`);
           if (stillCurrent()) {
             try {
               const { reapplyChartScripts } = await import('../indicators/reapply');
@@ -278,16 +299,30 @@ export async function loadSymbolData(
       const { paintDataset, ensureDatasetComplete, announceDatasetPaint } = await import(
         './dsm-orchestrator'
       );
-      const painted = await paintDataset(sym, iv, srcId, { stillCurrent });
+      const { getDataset } = await import('./dataset-store');
+      let cached: Bar[] = [];
+      try {
+        cached = await getDataset(srcId, sym, iv);
+      } catch {
+        cached = [];
+      }
+      if (!stillCurrent()) return false;
+      const filled = cached.length ? await closeTailToNow(cached, srcId, sym, iv, signal) : [];
+      if (!stillCurrent()) return false;
+      const painted = await paintDataset(sym, iv, srcId, {
+        stillCurrent,
+        ...(filled.length ? { bars: filled } : {}),
+      });
       if (painted?.length) {
         if (!stillCurrent()) return false;
+        const bars = painted;
         const ms = performance.now() - t0;
         setTelemetryState('source', 'open', {
           latencyMs: ms,
-          detail: `${painted.length} bars · ${label} (dataset)`,
+          detail: `${bars.length} bars · ${label} (dataset)`,
           error: null,
         });
-        announceDatasetPaint(painted, sym, iv);
+        announceDatasetPaint(bars, sym, iv);
         // Auto-complete: validate + sliced backfill + progressive repaints.
         // Guarded by stillCurrent — a stale background job must not overwrite
         // the status of a newer load (or a newer error).

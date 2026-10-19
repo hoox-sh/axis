@@ -35,6 +35,7 @@ import { store } from '../store';
 import { normalizeHistoricalBars, sanitizeBar } from './parse-bars';
 import { normalizeLoadSymbol } from './symbol-exchange';
 import { getDataset, putDatasetBars } from './dataset-store';
+import { mergeBars } from './bars-cache';
 import { isEngineOwnedLive } from '../engines/ownership';
 import { intervalToSec } from './bars-gaps';
 import {
@@ -106,6 +107,104 @@ export function canExpandFromSource(sourceId: string): boolean {
   if (!id || OFFLINE_SOURCES.has(id)) return false;
   if (id === 'mock-walk') return true;
   return true;
+}
+
+/**
+ * Walk venue pages from now back until they overlap `seed`'s newest bar.
+ *
+ * In-memory only — used on interval switch so live does not append “now”
+ * onto a stale cache (yesterday + gap + current).
+ */
+export async function fillBarsTowardNow(
+  seed: readonly Bar[],
+  sourceId: string,
+  symbol: string,
+  interval: string,
+  opts?: { signal?: AbortSignal; nowSec?: number; budgetMs?: number },
+): Promise<ExpandCacheResult> {
+  const srcId = String(sourceId || '').trim();
+  const sym = normalizeLoadSymbol(String(symbol || ''), srcId);
+  const iv = String(interval || '').trim();
+  let bars = Array.isArray(seed) ? seed.slice() : [];
+  if (!bars.length || !canExpandFromSource(srcId)) {
+    return { bars, added: 0, expanded: false };
+  }
+
+  const { getSource, sourcePageLimit } = await loadSourceApi();
+  const source = getSource(srcId);
+  if (!source?.fetchHistorical) {
+    return { bars, added: 0, expanded: false };
+  }
+
+  const budgetMs =
+    typeof opts?.budgetMs === 'number' && opts.budgetMs > 0
+      ? opts.budgetMs
+      : DEFAULT_EXPAND_BUDGET_MS;
+  const ac = new AbortController();
+  const onCallerAbort = () => ac.abort();
+  if (opts?.signal) {
+    if (opts.signal.aborted) ac.abort();
+    else opts.signal.addEventListener('abort', onCallerAbort, { once: true });
+  }
+  const budgetTimer = setTimeout(() => ac.abort(), budgetMs);
+  const signal = ac.signal;
+  const before = bars.length;
+
+  try {
+    const step = intervalToSec(iv);
+    const nowSec =
+      typeof opts?.nowSec === 'number' && Number.isFinite(opts.nowSec)
+        ? Math.floor(opts.nowSec)
+        : Math.floor(Date.now() / 1000);
+    const newest = bars[bars.length - 1]!.time;
+    const pageLimit = sourcePageLimit(srcId);
+    let cursorEnd = nowSec;
+    let pages = 0;
+    let prevOldest: number | null = null;
+    let lastError: string | undefined;
+
+    while (pages < MAX_EXPAND_PAGES) {
+      if (signal.aborted) break;
+      pages += 1;
+      let page: Bar[];
+      try {
+        const raw = await source.fetchHistorical({
+          symbol: sym,
+          interval: iv,
+          endTime: cursorEnd,
+          limit: pageLimit,
+          signal,
+          config: {
+            ...sourceConfig(srcId),
+            limit: pageLimit,
+            fallback: false,
+          },
+        });
+        page = normalizeHistoricalBars(raw, { limit: pageLimit });
+      } catch (err: unknown) {
+        lastError = errMessage(err);
+        break;
+      }
+      if (!page.length) break;
+      const rawOldest = page[0]!.time;
+      bars = mergeBars(bars, page);
+      if (rawOldest <= newest + step) break;
+      if (prevOldest != null && rawOldest >= prevOldest) break;
+      if (rawOldest >= cursorEnd) break;
+      prevOldest = rawOldest;
+      cursorEnd = rawOldest - step;
+    }
+
+    return {
+      bars,
+      added: Math.max(0, bars.length - before),
+      expanded: pages > 0,
+      error: lastError,
+    };
+  } finally {
+    clearTimeout(budgetTimer);
+    if (opts?.signal) opts.signal.removeEventListener('abort', onCallerAbort);
+  }
 }
 
 /**
