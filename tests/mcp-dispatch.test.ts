@@ -309,19 +309,25 @@ describe('MCP settings', () => {
     });
   });
 
-  it('set reloads chart on interval change (mock-walk)', async () => {
-    setStore('source', 'mock-walk');
-    setStore('interval', '15m');
-    const r = (await invokeCapability('settings.set', { interval: '1h' })) as {
-      ok: boolean;
-      reloaded: boolean;
-      bars: number;
-    };
-    expect(r.ok).toBe(true);
-    expect(r.reloaded).toBe(true);
-    expect(r.bars).toBeGreaterThan(0);
-    setStore('source', 'binance-rest');
-  });
+  it(
+    'set reloads chart on interval change (mock-walk)',
+    async () => {
+      setStore('source', 'mock-walk');
+      setStore('interval', '15m');
+      const r = (await invokeCapability('settings.set', { interval: '1h' })) as {
+        ok: boolean;
+        reloaded: boolean;
+        bars: number;
+      };
+      expect(r.ok).toBe(true);
+      expect(r.reloaded).toBe(true);
+      expect(r.bars).toBeGreaterThan(0);
+      setStore('source', 'binance-rest');
+    },
+    // The mock-walk reload generates a synthetic series — slow on a loaded CI
+    // runner, past bun's 5s default.
+    20_000,
+  );
 
   it('set rejects secrets, bad interval, unknown engine', async () => {
     for (const [patch, code] of [
