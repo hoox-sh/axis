@@ -13,7 +13,7 @@
  * neighbour, coerce null values — and only drops what cannot be repaired.
  */
 
-import { afterEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import {
   clampPointsToPaintedRange,
   extendPaintedRange,
@@ -150,6 +150,13 @@ describe('looksLikeOhlcData', () => {
 });
 
 describe('clampPointsToPaintedRange', () => {
+  beforeEach(() => {
+    // The painted range is a module global shared by every test file in the
+    // process: reset it *before* each test too, so a file that painted a
+    // range earlier cannot arm the clamp for the next one.
+    resetPaintedCandleRangeForTests();
+  });
+
   afterEach(() => {
     // Module state is shared across test files in one bun process.
     resetPaintedCandleRangeForTests();
