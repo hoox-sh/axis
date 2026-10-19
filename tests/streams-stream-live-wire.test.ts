@@ -80,6 +80,7 @@ const { subscribeHistoryBars, streamVerifyClose, streamWireState, resetStreamWir
   await import('../src/streams/stream-live');
 const { setStore, store } = await import('../src/store');
 const { reconcile } = await import('solid-js/store');
+const { setEngineApiKey } = await import('../src/storage/vault');
 
 function bar(time: number, close = 1.5) {
   return { time, open: 1, high: 2, low: 0.5, close, volume: 10 } as never;
@@ -100,6 +101,10 @@ async function until(fn: () => boolean, ms = 2_000): Promise<void> {
 
 beforeEach(() => {
   restoreSocket = ManualSocket.install();
+  // The store is shared across test files in one process: pin the engine id
+  // (the API key lives in that engine's config bag) and the chart identity.
+  setStore('activePlugins', reconcile({ ...(store.activePlugins ?? {}), engine: 'server' }) as never);
+  setStore('engine', 'server');
   setStore('symbol', 'BTCUSDT');
   setStore('interval', '1m');
   setStore('exchange', 'binance');
@@ -108,6 +113,9 @@ beforeEach(() => {
   setStore('pluginsConfig', reconcile({
     'engine:server': { endpoint: 'http://engine.test', apiKey: 'key-1' },
   }) as never);
+  // The engine key is read from the secret vault first — put it there too so
+  // the test does not depend on the legacy config bag.
+  setEngineApiKey('server', 'key-1');
   resetStreamWire();
 });
 
