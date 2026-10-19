@@ -36,6 +36,8 @@ import {
   extractEngineResultTimes,
   type RunResult,
 } from '../src/indicators/runner';
+import { alignApplySeries } from '../src/indicators/apply-context';
+import { resolvePlotFillBands } from '../src/results/plot-visuals';
 import { setManager, setDrawingLayer } from '../src/chart/manager-access';
 import { SAMPLE_BARS } from './fixtures/bars';
 
@@ -112,6 +114,52 @@ describe('tailAlignSeriesToWindow', () => {
     expect(tailAlignSeriesToWindow(undefined, 3)).toEqual([]);
     expect(tailAlignSeriesToWindow([], 3)).toEqual([]);
     expect(tailAlignSeriesToWindow([1], 0)).toEqual([1]);
+  });
+});
+
+describe('alignApplySeries length mismatch', () => {
+  it('pins a 5000-sample /run onto a 5003-bar chart so fill tail is the last bar', () => {
+    const T = (i: number) => 1_700_000_000 + i * 300;
+    const bars = Array.from({ length: 5003 }, (_, i) => ({
+      time: T(i),
+      open: 1,
+      high: 1,
+      low: 1,
+      close: 1,
+      volume: 1,
+    }));
+    const upper = Array.from({ length: 5000 }, (_, i) => 100 + i);
+    const lower = Array.from({ length: 5000 }, (_, i) => 90 + i);
+    const result = {
+      status: 'success',
+      series: {
+        Upper: upper,
+        Lower: lower,
+        fill: Array(5000).fill(null),
+      },
+      meta: {
+        overlay: true,
+        plot_meta: {
+          Upper: { kind: 'plot', title: 'Upper' },
+          Lower: { kind: 'plot', title: 'Lower' },
+          fill: { kind: 'fill', title: 'fill', plot1: 'Upper', plot2: 'Lower' },
+        },
+      },
+    } as unknown as RunResult;
+    const aligned = alignApplySeries('indicator("KC", overlay=true)\nplot(close)', result, bars, {
+      silent: true,
+    });
+    expect(aligned.needsAlign).toBe(true);
+    expect(aligned.chartWindowBars).toBe(5003);
+    expect(aligned.seriesMap.Upper).toHaveLength(5003);
+    expect(aligned.seriesMap.Upper?.slice(0, 3)).toEqual([null, null, null]);
+    expect(aligned.seriesMap.Upper?.[5002]).toBe(upper[4999]);
+    expect(aligned.seriesMap.Lower?.[5002]).toBe(lower[4999]);
+    const bands = resolvePlotFillBands(aligned.seriesMap, aligned.plotMeta);
+    expect(bands).toHaveLength(1);
+    expect(bands[0]!.upper).toHaveLength(5003);
+    expect(bands[0]!.upper[5002]).toBe(upper[4999]);
+    expect(bands[0]!.lower[5002]).toBe(lower[4999]);
   });
 });
 

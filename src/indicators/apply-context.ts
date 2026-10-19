@@ -112,7 +112,8 @@ export interface AlignedApplySeries {
  * (`stream-full` / `stream-delta`) evaluate a window that slides independently
  * of the local chart window, so join by bar time when the engine shipped its
  * axis; otherwise pin the tail (index fallback). Equal-length series pass
- * through untouched.
+ * through untouched. A length mismatch (fresh `/run` vs a chart that grew
+ * DSM/forming bars) always aligns so fills/lines/markers zip on the window.
  */
 export function alignApplySeries(
   script: string,
@@ -135,13 +136,21 @@ export function alignApplySeries(
     Number.isFinite(engineWindowBars) &&
     engineWindowBars > 0 &&
     engineWindowBars !== chartWindowBars;
-  const needsAlign = sessionAligned || engineClampedTail;
+  const rawSeries = (result.series || {}) as Record<string, unknown[] | (number | null)[]>;
+  let lengthMismatch = false;
+  for (const arr of Object.values(rawSeries)) {
+    if (Array.isArray(arr) && arr.length > 0 && arr.length !== chartWindowBars) {
+      lengthMismatch = true;
+      break;
+    }
+  }
+  const needsAlign = sessionAligned || engineClampedTail || lengthMismatch;
   const resultTimes = needsAlign ? extractEngineResultTimes(result) : null;
   const seriesMap = !needsAlign
-    ? ((result.series || {}) as Record<string, unknown[] | (number | null)[]>)
+    ? rawSeries
     : resultTimes
-      ? alignSeriesMapToTimes(result.series || {}, resultTimes, ohlcvTimes)
-      : tailAlignSeriesMap(result.series || {}, chartWindowBars);
+      ? alignSeriesMapToTimes(rawSeries, resultTimes, ohlcvTimes)
+      : tailAlignSeriesMap(rawSeries, chartWindowBars);
   const split = splitSeriesByKind(seriesMap, plotMeta);
   if (engineClampedTail && !sessionAligned && !opts.silent) {
     appendLog(

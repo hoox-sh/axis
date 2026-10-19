@@ -43,6 +43,7 @@ import {
 } from '../results/plot-visuals';
 import type { OverlayLine, OverlayOhlc } from './apply-overlays';
 import type { splitSeriesByKind } from '../results/plot-visuals';
+import { tailAlignSeriesToWindow } from './runner';
 
 export interface ChartMutationContext {
   manager: PaneManager;
@@ -131,13 +132,17 @@ export function applyChartMutations(ctx: ChartMutationContext): void {
           times[tn++] = n > 1e12 ? Math.floor(n / 1000) : Math.floor(n);
         }
         times.length = tn;
+        const axisLen = times.length;
         layer.setPlotFills(
           fillBands.map((f) => ({
             name: f.name,
             times,
-            upper: f.upper,
-            lower: f.lower,
-            colors: f.colors,
+            // Index zip: pin the tail so a shorter series still covers the last bars.
+            upper: tailAlignSeriesToWindow(f.upper, axisLen) as (number | null)[],
+            lower: tailAlignSeriesToWindow(f.lower, axisLen) as (number | null)[],
+            colors: f.colors
+              ? (tailAlignSeriesToWindow(f.colors, axisLen) as (string | null)[])
+              : f.colors,
             color: f.color,
           })),
           ctx.indicatorId ?? EDITOR_RUN_KEY,

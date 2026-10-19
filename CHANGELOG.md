@@ -23,6 +23,8 @@ _Generated/updated: 2026-10-18 · 603 commits · describe-tag: `v2.24.5`_
 
 ### Fixed
 
+- **`/ws/live` snapshot wait uses the 120s cap after `datafeed-loading`.** An early loading frame used to leave the deadline at 30s while PYNE was still fetching history, so the wire cooled down and the HUD stayed `degraded · venue+REST`.
+- **Plot fills tail-align when the engine series is shorter than the chart.** Adding Keltner (or any `fill()`) on a 5000-bar cache plus DSM/forming bars no longer leaves the band 2–3 candles left of the last bars.
 - **Worker and engine API keys survive a new tab, PWA update, and browser restart.** The secret vault was memory + `sessionStorage` only, and persist stripped `apiKey` from the app-state JSON — so the first hard reload after that migration (or the 2.24.6 update) looked like the app deleted the keys. They now also live in a dedicated `localStorage` bag (`axis.secret-vault.v1`), still out of workspace snapshots and the main persist payload. Exchange CEX keys stay session-only.
 - **`/ws/live` no longer dies on `Redesign2 auth timeout`.** Browser sockets cannot send `Authorization`, so the client now puts `api_key` on the upgrade URL (the engine already accepts that handshake) and does not block `connect()` on `auth.ok`. The auth frame is still sent. A close rejects any leftover auth waiter.
 

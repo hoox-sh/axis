@@ -90,7 +90,6 @@ export interface EvalScriptInput {
 
 const FAILURE_COOLDOWN_MS = 60_000;
 const SNAPSHOT_WAIT_MS = 30_000;
-const LOADING_EXTEND_MS = 30_000;
 const LOADING_WAIT_CAP_MS = 120_000;
 
 function toBars(raw: unknown): Bar[] {
@@ -346,8 +345,10 @@ export class StreamLiveWire {
   /**
    * Wait for the snapshot (`full` or terminal `error`), draining the inbox
    * first so back-to-back status+full delivery never loses the snapshot.
-   * Preceding `status` frames route to the handlers. Leftover `delta` /
-   * `close` frames stay in the inbox — they are not a failed snapshot.
+   * Preceding `status` frames route to the handlers. A `datafeed-loading`
+   * status waits until {@link LOADING_WAIT_CAP_MS} from start — PYNE may
+   * send one early loading frame then block on history ensure. Leftover
+   * `delta` / `close` frames stay in the inbox — they are not a failed snapshot.
    */
   private async awaitFull(subId: string, timeoutMs: number): Promise<WireFrame> {
     const started = Date.now();
@@ -363,7 +364,8 @@ export class StreamLiveWire {
           this.routeStatusFrame(frame);
           const code = String((frame.payload as Record<string, unknown>)?.code ?? '');
           if (code === 'datafeed-loading') {
-            deadline = Math.min(Date.now() + LOADING_EXTEND_MS, started + LOADING_WAIT_CAP_MS);
+            // One early loading frame must not leave the wait at SNAPSHOT_WAIT_MS.
+            deadline = started + LOADING_WAIT_CAP_MS;
           }
           continue;
         }

@@ -261,6 +261,33 @@ describe('redesign2 live-wire (F-19)', () => {
     expect(h.sent.filter((s) => s.kind === 'subscribe:series').length).toBe(1);
   });
 
+  test('datafeed-loading extends the snapshot wait to the 120s cap', async () => {
+    const delays: number[] = [];
+    const realSetTimeout = globalThis.setTimeout;
+    globalThis.setTimeout = ((fn: TimerHandler, ms?: number, ...args: unknown[]) => {
+      if (typeof ms === 'number' && ms > 1_000) delays.push(ms);
+      return realSetTimeout(fn as () => void, ms as number, ...args);
+    }) as typeof setTimeout;
+    try {
+      const h = makeHarness();
+      const p = h.wire.ensureSeries('series-1', {});
+      await tick();
+      await tick();
+      h.emit({ type: 'status', id: 'series-1', payload: { code: 'datafeed-loading' } });
+      await tick();
+      expect(delays.some((d) => d >= 100_000)).toBe(true);
+      h.emit({
+        type: 'full',
+        id: 'series-1',
+        seq: 1,
+        payload: { count: 1, bars: BARS },
+      });
+      expect(await p).toEqual(BARS);
+    } finally {
+      globalThis.setTimeout = realSetTimeout;
+    }
+  });
+
   test('awaitFull ignores leftover delta and waits for full', async () => {
     const h = makeHarness();
     const p = h.wire.ensureSeries('series-1', {});
