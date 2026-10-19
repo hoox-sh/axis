@@ -94,7 +94,9 @@ def extract_version_section(md: str, version: str) -> str | None:
         if VERSION_HEADING_RE.match(lines[j]):
             end = j
             break
-        if lines[j].startswith(FULL_HISTORY_MARKER) or lines[j].startswith(HOW_TO_MARKER):
+        if lines[j].startswith(FULL_HISTORY_MARKER) or lines[j].startswith(
+            HOW_TO_MARKER
+        ):
             end = j
             break
     body = "\n".join(lines[start:end]).strip()
@@ -207,17 +209,22 @@ def main() -> None:
     args = ap.parse_args()
     out_path = Path(args.out)
     if args.extract:
-        md = out_path.read_text() if out_path.exists() else ""
+        # UTF-8 explicitly: the Windows runner's default codepage (cp1252)
+        # cannot decode the changelog's typographic quotes/em-dashes.
+        md = out_path.read_text(encoding="utf-8") if out_path.exists() else ""
         section = extract_version_section(md, args.extract)
         tag = args.tag.strip() or f"v{normalize_version(args.extract)}"
-        sys.stdout.write(format_github_release_notes(section, tag, args.extract))
+        notes = format_github_release_notes(section, tag, args.extract)
+        # Write bytes: stdout's locale encoding would choke on the same chars.
+        sys.stdout.buffer.write(notes.encode("utf-8"))
+        sys.stdout.buffer.flush()
         if not section:
             print(
                 f"::warning::CHANGELOG.md has no section for {normalize_version(args.extract)}",
                 file=sys.stderr,
             )
         return
-    existing = out_path.read_text() if out_path.exists() else None
+    existing = out_path.read_text(encoding="utf-8") if out_path.exists() else None
     preamble = extract_preamble(existing)
 
     rows = load_commits()
@@ -284,7 +291,9 @@ def main() -> None:
     lines.append("")
     lines.append(HOW_TO_MARKER)
     lines.append("")
-    lines.append("1. Edit **[Unreleased]** (or the new version section) by hand for the story.")
+    lines.append(
+        "1. Edit **[Unreleased]** (or the new version section) by hand for the story."
+    )
     lines.append("2. Regenerate the recursive history block:")
     lines.append("")
     lines.append("```bash")
@@ -295,7 +304,7 @@ def main() -> None:
     lines.append("   (see `AGENTS.md` § Changelog & releases).")
     lines.append("")
 
-    out_path.write_text("\n".join(lines) + "\n")
+    out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"Wrote {out_path} ({len(rows)} commits, {len(by_month)} months)")
 
 

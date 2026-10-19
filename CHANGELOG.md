@@ -9,7 +9,7 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-10-19 · 625 commits · describe-tag: `v2.24.7`_
+_Generated/updated: 2026-10-19 · 626 commits · describe-tag: `v2.24.8`_
 
 ---
 
@@ -17,6 +17,7 @@ _Generated/updated: 2026-10-19 · 625 commits · describe-tag: `v2.24.7`_
 
 ### Fixed
 
+- **The desktop release pipeline works again.** The changelog extraction read the file with the Windows default codepage (cp1252) and died on the typographic quotes in the release notes, and the matrix jobs raced on creating the GitHub Release (`HTTP 422 — Release.tag_name already exists`) — the tag shipped without its installers.
 - **The feed chip says what the data path is, not a stale state word.** A live engine feed read `degraded` whenever only the engine’s own copy confirmed the close, so the chip disagreed with the engine plane (`ws` / `open`) while the data was flowing. It now reads `live` and flags the weak tier as `live·unverified`; a feed that never came up keeps its state word plus the time it has been stuck (`connecting · 45s`). The opened panel lists the facts behind it — state, freshness, verification tier, progress, the engine hop and the series identity.
 - **The session delta merge keeps the engine’s bar-time axis.** A merged engine-owned payload described only the tail, so the apply path fell back to an index join — which displaces the plot whenever the engine’s stored series has gaps (a missed minute). The axis is spliced with the tail like the plot columns.
 
@@ -1637,9 +1638,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-10 (144 commits)
+### 2026-10 (145 commits)
 
 #### Features
 
@@ -1784,6 +1787,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Chores
 
+- `2aed84f1` (2026-10-19) — chore(release): AXIS 2.24.8
 - `0b851707` (2026-10-19) — chore(release): AXIS 2.24.7
 - `833f0d6f` (2026-10-18) — chore(release): AXIS v2.24.6 — live stream feed and MCP plane
 - `632aaca3` (2026-10-17) — chore(pyne-wheel): vendor PYNE 0.6.12 for the in-browser Pyodide engine

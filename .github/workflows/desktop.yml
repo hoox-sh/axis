@@ -112,7 +112,9 @@ jobs:
         shell: bash
         run: |
           # Redirect truncates the dest before python runs; mv only on success.
-          python3 scripts/generate-changelog.py --extract "$GITHUB_REF_NAME" --tag "$GITHUB_REF_NAME" > release-notes.md.tmp
+          # PYTHONUTF8=1: the changelog carries typographic quotes/em-dashes that
+          # the Windows default codepage (cp1252) cannot decode.
+          PYTHONUTF8=1 python3 scripts/generate-changelog.py --extract "$GITHUB_REF_NAME" --tag "$GITHUB_REF_NAME" > release-notes.md.tmp
           mv release-notes.md.tmp release-notes.md
           wc -l release-notes.md
 
@@ -123,9 +125,19 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${GITHUB_REF_NAME}"
-          # Matrix jobs race on first create; edit is the idempotent fallback.
-          gh release create "$TAG" --title "AXIS $TAG" --notes-file release-notes.md || \
-            gh release edit "$TAG" --title "AXIS $TAG" --notes-file release-notes.md
+          # Matrix jobs race on first create ("Release.tag_name already exists");
+          # edit is the idempotent fallback, and a concurrent create can race
+          # the edit too — retry a few times before giving up.
+          ok=0
+          for _ in 1 2 3 4 5; do
+            if gh release create "$TAG" --title "AXIS $TAG" --notes-file release-notes.md 2>/dev/null || \
+               gh release edit "$TAG" --title "AXIS $TAG" --notes-file release-notes.md 2>/dev/null; then
+              ok=1
+              break
+            fi
+            sleep 5
+          done
+          test "$ok" = "1"
 
       # Version tags: build + attach to GitHub Release
       - name: Build Tauri app and publish release
@@ -150,8 +162,11 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${GITHUB_REF_NAME}"
+          # Best-effort: a sibling matrix job may be editing the same release
+          # (HTTP 422 "Release.tag_name already exists") — never fail the job
+          # over the restore.
           if [ -s release-notes.md ] && gh release view "$TAG" >/dev/null 2>&1; then
-            gh release edit "$TAG" --notes-file release-notes.md
+            gh release edit "$TAG" --notes-file release-notes.md || true
           fi
 
       - name: Upload build artifacts
