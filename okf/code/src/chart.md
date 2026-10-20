@@ -7,7 +7,7 @@ tags: [chart, code]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-19T23:09:19Z
+  at: 2026-10-20T01:53:18Z
 sources:
   - id: tree
     resource: "src/chart"
@@ -26,7 +26,7 @@ okf_lock: generated
 * `PyneTableHud.tsx` — PyneTableHud
 * `bar-replay.ts` — REPLAY_SPEEDS, REPLAY_TICK_MS, ReplayState, createReplay, formatReplaySpeedLabel, getReplayBarsLength, getReplayState, getVisibleBars, idleReplay, isAtEnd, isAtStart, isReplayActive
 * `chart-registry.ts` — ChartSlotRuntime, disposeSlotChart, getActiveDrawingLayer, getActiveManager, getActiveSlotId, getSlotBars, getSlotChartDataGen, getSlotDrawingLayer, getSlotManager, getSlotRuntime, removeSlotRuntime, setActiveDrawingLayer
-* `chart-type.ts` — CHART_TYPES, ChartType, ChartTypeInfo, DEFAULT_CHART_TYPE, HaCache, HaCacheHolder, OhlcDatum, PriceSeriesDatum, ValueDatum, chartTypeInfo, createHaCacheHolder, isOhlcChartType
+* `chart-type.ts` — CHART_TYPES, ChartType, ChartTypeInfo, DEFAULT_CHART_TYPE, HaCache, HaCacheHolder, OhlcDatum, PriceSeriesDatum, ValueDatum, chartTypeInfo, createHaCacheHolder, isFinitePriceBar
 * `compare-overlay.ts` — AlignedPair, ApplyCompareOpts, COMPARE_COLOR, COMPARE_MAIN_PCT_COLOR, COMPARE_MAIN_PCT_KEY, COMPARE_PRICE_SCALE_ID, COMPARE_SERIES_KEY, CompareMode, LinePoint, TimedClose, alignAbsolute, alignByTime
 * `context-actions.ts` — CHART_SCALE_EVENT, ChartMenuEnv, dispatchChartMenu, scrollChartToLatest
 * `context-menu.ts` — ChartHit, ChartMenuContext, ChartMenuKind, ChartMenuScript, ChartRegion, PaneHitBox, buildChartMenu, chartMenuLabel, classifyChartPointer, pointerPrice
@@ -51,7 +51,7 @@ okf_lock: generated
 * `pyne-drawings.ts` — DEFAULT_DRAWING_LIMITS, DrawingLimits, ScriptDrawing, YLOC_PAD_PX, alignDrawingTimeToBars, clampScriptDrawingTimes, clampTimeToLastBar, dedupeScriptLabelsAtSameTime, garbageCollectScriptDrawings, labelBubbleLayout, labelFontSizePx, normalizeExtend
 * `screenshot.ts` — DEFAULT_SCREENSHOT_OPTIONS, ScreenshotOptions, ScreenshotScale, ScreenshotScope, canvasToBlob, captureScreenshot, copyBlob, copyScreenshot, downloadBlob, downloadScreenshot, loadScreenshotOptions, saveScreenshotOptions
 * `series-factory.ts` — PLOT_PALETTE, RIGHT_PRICE_SCALE_WIDTH, SERIES_STACK_BGCOLOR, SERIES_STACK_OVERLAY, SERIES_STACK_PRICE, TV, VOID, colorWithAlpha, createAreaSeries, createBarSeries, createBaseChart, createBgcolorSeries
-* `series-sanitize.ts` — PaintedCandleRange, SeriesSanitizeResult, clampPointsToPaintedRange, extendPaintedRange, looksLikeOhlcData, notePaintedCandleRange, rangeFromSeriesData, resetPaintedCandleRangeForTests, sanitizeSeriesDataForSetData
+* `series-sanitize.ts` — PaintedCandleRange, SeriesSanitizeResult, clampPointsToPaintedRange, extendPaintedRange, looksLikeOhlcData, notePaintedCandleRange, projectToCandleAxis, rangeFromSeriesData, resetPaintedCandleRangeForTests, sanitizeSeriesDataForSetData
 * `volume-profile.ts` — DEFAULT_VALUE_AREA_PCT, DEFAULT_VP_ROWS, VolumeDistribution, VolumeProfileBin, VolumeProfileOptions, VolumeProfileResult, VpBar, computeVolumeProfile, expandValueArea, formatVpPrice, formatVpVolume, priceToBinIndex
 
 # Packages

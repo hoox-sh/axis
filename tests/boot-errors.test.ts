@@ -79,6 +79,26 @@ describe('boot-errors', () => {
     expect(store.logs.some((l) => /reflow/i.test(l.message))).toBe(true);
   });
 
+  it('reportUiError appends the stack when asked', () => {
+    // "Value is null" from the chart renderer names no series — the stack
+    // frames are the only clue about who threw.
+    const err = new Error('Value is null');
+    err.stack = 'Error: Value is null\n    at drawCandles (vendor.js:1:2)\n    at render (app.js:3:4)';
+    reportUiError(err, { source: 'boot', context: 'Uncaught error', stack: true });
+    const line = store.logs.find((l) => l.source === 'boot');
+    expect(line?.message).toContain('Value is null');
+    expect(line?.message).toContain('drawCandles');
+    expect(line?.message).toContain('render');
+  });
+
+  it('reportUiError leaves the line untouched without the stack flag', () => {
+    const err = new Error('Value is null');
+    err.stack = 'Error: Value is null\n    at drawCandles (vendor.js:1:2)';
+    reportUiError(err, { source: 'chart', context: 'Uncaught error' });
+    const line = store.logs.find((l) => l.source === 'chart');
+    expect(line?.message).not.toContain('drawCandles');
+  });
+
   it('installBootErrorHandlers surfaces unhandledrejection', () => {
     const listeners = new Map<string, Set<EventListener>>();
     const prev = (globalThis as { window?: unknown }).window;

@@ -980,3 +980,53 @@ describe('pruneCoPaintedSeriesToPaintedRange', () => {
     expect(rows).toEqual([]);
   });
 });
+
+describe('auditTimeParity', () => {
+  let container: HTMLElement;
+  let pm: InstanceType<typeof PaneManager>;
+
+  beforeEach(() => {
+    container = document.createElement('div') as unknown as HTMLElement;
+    (container as { id: string }).id = 'chart-root';
+    document.body.appendChild(container as never);
+    pm = new PaneManager(container);
+  });
+
+  it('names the series that holds a bar the candles do not have', () => {
+    // The library's shared time scale is the union of every series' rows:
+    // an overlay row at a bar the candles dropped makes the candlestick
+    // renderer fail with `Value is null` and no other clue.
+    const price = pm.createPane('price', 'price', 'Price');
+    price.series['candle'] = {
+      setData: () => {},
+      data: () => [{ time: 100 }, { time: 300 }],
+    } as never;
+    price.series['overlay_s1__vwma'] = {
+      setData: () => {},
+      data: () => [{ time: 100 }, { time: 200 }, { time: 300 }],
+    } as never;
+
+    pm.notePaintedCandleRange(100, 300, [100, 300]);
+
+    const issues = pm.auditTimeParity();
+    expect(issues.length).toBe(1);
+    expect(issues[0]).toContain('overlay_s1__vwma');
+    expect(issues[0]).toContain('200');
+  });
+
+  it('is silent when every series sits on the candle axis', () => {
+    const price = pm.createPane('price', 'price', 'Price');
+    price.series['candle'] = {
+      setData: () => {},
+      data: () => [{ time: 100 }, { time: 300 }],
+    } as never;
+    price.series['overlay_s1__vwma'] = {
+      setData: () => {},
+      data: () => [{ time: 100 }, { time: 300 }],
+    } as never;
+
+    pm.notePaintedCandleRange(100, 300, [100, 300]);
+
+    expect(pm.auditTimeParity()).toEqual([]);
+  });
+});

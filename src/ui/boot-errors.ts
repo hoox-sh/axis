@@ -55,6 +55,28 @@ export function formatErrorMessage(err: unknown, maxLen = 240): string {
 /** Dedupe window per `${source}|${line}` so live ticks cannot flood the log. */
 const reportThrottle = createThrottle(2000);
 
+/**
+ * The first frames of an error's stack, flattened to one line.
+ *
+ * An uncaught library assertion (`Value is null` from the chart renderer)
+ * carries no context in its message: without the stack the log cannot say
+ * *which* series threw. Three frames are enough to name the caller.
+ */
+export function formatErrorStack(err: unknown, frames = 3): string {
+  if (!(err instanceof Error)) return '';
+  const raw = typeof err.stack === 'string' ? err.stack : '';
+  if (!raw) return '';
+  const lines = raw
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.startsWith('at '));
+  if (!lines.length) return '';
+  return lines
+    .slice(0, Math.max(1, frames))
+    .map((l) => l.replace(/^at\s+/, ''))
+    .join(' ← ');
+}
+
 export type ReportUiErrorOpts = {
   /** Log source tag (default `system`). */
   source?: string;
@@ -64,6 +86,8 @@ export type ReportUiErrorOpts = {
   throttleMs?: number;
   /** Prefix for log/status message. */
   context?: string;
+  /** Append the error's stack frames to the log line (default false). */
+  stack?: boolean;
 };
 
 /**
@@ -73,20 +97,22 @@ export type ReportUiErrorOpts = {
 export function reportUiError(err: unknown, opts: ReportUiErrorOpts = {}): void {
   const msg = formatErrorMessage(err);
   const context = opts.context?.trim() || '';
+  const stack = opts.stack ? formatErrorStack(err) : '';
   const line = context ? `${context}: ${msg}` : msg;
+  const logLine = stack ? `${line} @ ${stack}` : line;
   const source = opts.source || 'system';
   const throttleMs = opts.throttleMs ?? 2000;
-  if (!reportThrottle.allow(`${source}|${line}`, throttleMs)) {
+  if (!reportThrottle.allow(`${source}|${logLine}`, throttleMs)) {
     if (typeof console !== 'undefined' && console.error) {
-      console.error(`[axis] ${line}`, err);
+      console.error(`[axis] ${logLine}`, err);
     }
     return;
   }
 
   if (typeof console !== 'undefined' && console.error) {
-    console.error(`[axis] ${line}`, err);
+    console.error(`[axis] ${logLine}`, err);
   }
-  appendLog('error', line, source);
+  appendLog('error', logLine, source);
   if (opts.status !== false) {
     setStatus('error', line.length > 140 ? `${line.slice(0, 137)}…` : line);
   }
@@ -134,6 +160,9 @@ export function installBootErrorHandlers(): () => void {
       context: 'Uncaught error',
       status: true,
       throttleMs: 1500,
+      // The message alone ("Value is null") says nothing about *which* series
+      // threw — the stack names the caller.
+      stack: true,
     });
   };
 
@@ -143,6 +172,7 @@ export function installBootErrorHandlers(): () => void {
       context: 'Unhandled rejection',
       status: true,
       throttleMs: 1500,
+      stack: true,
     });
   };
 

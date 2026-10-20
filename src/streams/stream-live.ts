@@ -150,6 +150,37 @@ function chartSeriesKeyObject(): DataSeriesKey {
 }
 
 /**
+ * Merge an engine series snapshot into the chart's window.
+ *
+ * The engine's live series is a **short tail** — the WS path subscribes with
+ * ~500 bars (`LIVE_SNAPSHOT_BARS`). Painting it as a *replace* threw the
+ * chart's own window away: a freshly loaded 20k-bar dataset was replaced by
+ * the engine's 500-bar tail, gaps and all, and the chart showed a series the
+ * user had just deleted.
+ *
+ * The snapshot now only contributes what the chart is missing:
+ *
+ * - the chart's own rows win on a conflict (the venue tick is fresher than the
+ *   engine's last read for the forming bar),
+ * - the engine's rows fill the chart's **holes** (a slot the venue never
+ *   delivered) and extend the tail when the engine is ahead,
+ * - the result is capped to the chart window.
+ */
+export function mergeEngineSnapshot(chartBars: Bar[], snapshot: Bar[]): Bar[] {
+  if (!snapshot.length) return chartBars;
+  if (!chartBars.length) return sliceToChartWindow(snapshot);
+  const byTime = new Map<number, Bar>();
+  for (const b of chartBars) {
+    if (b && Number.isFinite(b.time)) byTime.set(b.time, b);
+  }
+  for (const b of snapshot) {
+    if (b && Number.isFinite(b.time) && !byTime.has(b.time)) byTime.set(b.time, b);
+  }
+  const merged = [...byTime.values()].sort((a, b) => a.time - b.time);
+  return sliceToChartWindow(merged);
+}
+
+/**
  * Report a stale engine series and queue the background repair (throttled log
  * + plane/feed telemetry + broker call — see `engines/series-repair.ts`).
  */
@@ -222,7 +253,10 @@ function buildWire(): StreamLiveWire {
         if (!engineSeriesPaintable(bars)) return;
         // The chart window is the single authority — an engine snapshot that
         // carries more bars than the window is trimmed before it is painted.
-        const view = sliceToChartWindow(bars);
+        // The snapshot is **merged**, not applied as a replace: it is a short
+        // tail, and a replace threw the chart's own (freshly loaded) window
+        // away.
+        const view = mergeEngineSnapshot(store.bars, bars);
         if (!view.length) return;
         setBarsQuiet(view);
         setDataToChart(view, { fit: false, clearMarkers: false });
@@ -385,13 +419,12 @@ export async function streamSeriesTick(marketNow = 0): Promise<boolean> {
       return false;
     }
     if (!engineSeriesPaintable(bars, marketNow)) return false;
-    // Tail snapshot must not shrink a longer REST/DSM window.
-    if (store.bars.length > bars.length) {
-      setFeedStatus(chartSeriesKey(), 'live');
-      return false;
-    }
+    // The tail snapshot is merged into the chart's window — it must not
+    // shrink a longer REST/DSM window (that replace threw the freshly loaded
+    // dataset away).
     const manager = getManager();
-    const view = sliceToChartWindow(bars);
+    const view = mergeEngineSnapshot(store.bars, bars);
+    if (!view.length) return false;
     setBarsQuiet(view);
     if (manager) setDataToChart(view, { fit: false, clearMarkers: false });
     setFeedStatus(chartSeriesKey(), 'live');

@@ -752,14 +752,28 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
           // Co-painted overlays / equity clamp to this range so a stale window
           // can never extend the shared time scale past the candles (LWC
           // `Value is null` on every paint until the ranges converge again).
+          // The **times** matter too: the candles can miss a slot (a venue
+          // hole), and a co-painted row at that slot is a time the candles do
+          // not hold — the shared time scale is the union of every series'
+          // rows, so the candlestick painter would throw `Value is null` on
+          // every render.
           // Per-chart scope: slot B never inherits slot A's window.
+          const candleTimes: number[] = [];
+          for (const row of times) {
+            const t = Number(row?.time);
+            if (Number.isFinite(t)) candleTimes.push(t);
+          }
           const perChartNote = (
             mgr as unknown as {
-              notePaintedCandleRange?: (first: number, last: number) => void;
+              notePaintedCandleRange?: (
+                first: number,
+                last: number,
+                times?: readonly number[],
+              ) => void;
             }
           ).notePaintedCandleRange;
           if (typeof perChartNote === 'function') {
-            perChartNote.call(mgr, firstT, lastT);
+            perChartNote.call(mgr, firstT, lastT, candleTimes);
           } else {
             // Legacy test doubles without per-chart state — keep the global net.
             notePaintedCandleRange(firstT, lastT);

@@ -143,6 +143,7 @@ export function resetPaintedCandleRangeForTests(): void {
 export function clampPointsToPaintedRange<T extends { time?: unknown }>(
   points: readonly T[],
   range?: PaintedCandleRange | null,
+  allowedTimes?: ReadonlySet<number> | null,
 ): T[] {
   const active = range === undefined ? paintedCandleRange : range;
   if (!active || points.length === 0) return [...points];
@@ -154,8 +155,14 @@ export function clampPointsToPaintedRange<T extends { time?: unknown }>(
   for (let i = 0; i < points.length; i++) {
     const p = points[i]!;
     const t = p == null ? undefined : (p as { time?: unknown }).time;
-    const keep = typeof t === 'number' && Number.isFinite(t) && t >= first && t <= last;
-    if (keep) {
+    const inRange = typeof t === 'number' && Number.isFinite(t) && t >= first && t <= last;
+    // The candle series can have **holes** (a missing slot the venue never
+    // delivered). A co-painted row at such a slot is a time the candles do
+    // not hold: the shared time scale is the union of every series' rows, so
+    // the candlestick painter throws `Value is null` on every render. The
+    // allowed-time set drops exactly those rows.
+    const allowed = !allowedTimes || (typeof t === 'number' && allowedTimes.has(t));
+    if (inRange && allowed) {
       out?.push(p);
       continue;
     }
@@ -164,6 +171,60 @@ export function clampPointsToPaintedRange<T extends { time?: unknown }>(
     }
   }
   return out ?? (points as T[]);
+}
+
+/**
+ * Project co-painted rows onto the candle axis.
+ *
+ * The library's shared time scale is the union of every series' rows, and
+ * every renderer asks **its own** series for the bar at the rendered index.
+ * A co-painted series must therefore carry exactly the candles' times:
+ *
+ * - a row at a time the candles do not have (a venue hole the candles
+ *   dropped, a stale window) extends the shared time scale past the
+ *   candles → the candlestick painter cannot find that bar and throws
+ *   `Value is null`,
+ * - a candle time the series does not have leaves the series' own renderer
+ *   without a bar at that index.
+ *
+ * The projection keeps the script's value where the row's time is a candle
+ * time and emits a whitespace row (Pine `na`) for every candle time the
+ * script had no value for. Rows outside the axis are dropped.
+ *
+ * `candleTimes` `null` → the rows pass through unchanged (no axis yet).
+ */
+export function projectToCandleAxis<T extends { time?: unknown }>(
+  rows: readonly T[],
+  candleTimes: readonly number[] | null | undefined,
+  blank: (time: number) => T,
+): T[] {
+  if (!candleTimes || !candleTimes.length) return rows as T[];
+  // Fast path: the rows already sit on the axis, in order — the common case
+  // after a time-join. No copy, no map (this runs per plot per apply).
+  if (rows.length === candleTimes.length) {
+    let onAxis = true;
+    for (let i = 0; i < rows.length; i++) {
+      const t = Number(rows[i] == null ? undefined : rows[i].time);
+      if (!Number.isFinite(t) || t !== candleTimes[i]) {
+        onAxis = false;
+        break;
+      }
+    }
+    if (onAxis) return rows as T[];
+  }
+  const byTime = new Map<number, T>();
+  for (const r of rows) {
+    const t = Number(r == null ? undefined : r.time);
+    if (!Number.isFinite(t)) continue;
+    if (!byTime.has(t)) byTime.set(t, r);
+  }
+  const out: T[] = new Array(candleTimes.length);
+  for (let i = 0; i < candleTimes.length; i++) {
+    const t = candleTimes[i]!;
+    const hit = byTime.get(t);
+    out[i] = hit ?? blank(t);
+  }
+  return out;
 }
 
 /**

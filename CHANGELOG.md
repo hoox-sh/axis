@@ -15,8 +15,17 @@ _Generated/updated: 2026-10-20 · 635 commits · describe-tag: `v2.25.0`_
 
 ## [Unreleased]
 
+### Added
+
+- **An uncaught error now carries its stack.** "Uncaught error: Value is null" named no series and no frame; the first three stack frames are appended to the log line, so the next occurrence is attributable.
+- **The chart audits its own time axis.** After every apply, the co-painted series and the volume are checked against the candle axis; a series that holds a bar the candles do not have is named in the log (`time axis drift: price/overlay_x: 1 row(s) outside the candle axis …`).
+
 ### Fixed
 
+- **The engine's live snapshot no longer replaces the chart's window.** The engine's live series is a short tail (the socket subscribes with ~500 bars), and the chart painted that tail as a **replace**: a freshly loaded 20 000-bar dataset was thrown away and the chart showed the engine's stale 500-bar window — with the engine's holes in it. The snapshot is now **merged** into the chart's window: it fills the holes the chart has, extends the tail when the engine is ahead, and never shortens the chart's own history.
+- **The volume series carries exactly the bars the candles carry.** The volume skipped a bar only when its open/close were not finite, while the candle series rejects a bar whose high/low are not finite too — so the volume could hold a bar time the candles did not have. The library's shared time scale is the union of every series' rows, and each renderer asks its own series for the bar at the rendered index: a volume row at a bar the candles dropped makes the candlestick renderer fail with `Value is null` and no other clue. Both series now use the same rule.
+- **A live tick lands on the same bar in the candle and the volume series.** The candle took its time from the mapped bar while the volume took the tick's own time, so a rejected tick could leave the two series one bar apart.
+- **The co-painted series land on the candle axis.** The script series were clamped to the candles' *range*, so a row at a bar time the candles do not hold (a venue hole, a stale window) survived and extended the shared time scale past the candles — the render then failed with `Value is null` on every paint. The clamp now drops the rows the candles do not have, and the overlay lines are projected onto the candle axis (one row per candle, a Pine `na` whitespace row where the script had no value).
 - **The new chart-window tests no longer leak state into the suite.** The test files that exercise the Rolling window left a small window in the shared store, so a later test file that loaded bars got them sliced — order-dependent failures on CI (and a coverage-gate drop). The store is now restored after each file.
 - **A dataset repaint no longer paints over a chart that moved on.** The progressive repaint of a completed backfill ran on a timer: if the chart had switched to another symbol in the meantime, the repaint put the old series on the chart (and the store's bars with it). The repaint is now dropped when the chart no longer shows that series.
 - **Three test files no longer leak state into the suite.** The dataset store, the provider session and the worker's proxy rate-limit buckets are module singletons: a dataset cached by one test file made the next file's backfill find the range already complete (and skip the walk), a venue left behind made the next file label its chart with the wrong exchange, and the worker's per-IP rate-limit bucket made a later worker test answer 429 instead of 404. The state is now reset per file.

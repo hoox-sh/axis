@@ -234,4 +234,34 @@ export function applyChartMutations(ctx: ChartMutationContext): void {
       /* ctx.manager optional */
     }
   }
+
+  auditChartTimeParity(ctx.manager);
+}
+
+/**
+ * Report series whose bar times diverge from the candle axis.
+ *
+ * The library's shared time scale is the union of every series' rows, so a
+ * co-painted series that holds a bar the candles do not have makes the
+ * renderer fail with `Value is null` — with no clue about which series did
+ * it. The audit names it. Throttled per issue so a persistent divergence
+ * cannot flood the log.
+ */
+const parityReported = new Map<string, number>();
+
+function auditChartTimeParity(manager: PaneManager): void {
+  let issues: string[] = [];
+  try {
+    issues = manager.auditTimeParity?.() ?? [];
+  } catch {
+    return;
+  }
+  if (!issues.length) return;
+  const now = Date.now();
+  for (const issue of issues) {
+    const last = parityReported.get(issue) ?? 0;
+    if (now - last < 30_000) continue;
+    parityReported.set(issue, now);
+    appendLog('warn', `time axis drift: ${issue}`, 'chart');
+  }
 }

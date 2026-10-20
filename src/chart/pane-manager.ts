@@ -101,6 +101,7 @@ import { getVisibleBars, isReplayActive } from './bar-replay';
 import { reportUiError } from '../ui/boot-errors';
 import {
   clampPointsToPaintedRange,
+  projectToCandleAxis,
   extendPaintedRange,
   looksLikeOhlcData,
   rangeFromSeriesData,
@@ -459,11 +460,18 @@ function applyOverlayLineDataSmart(
   metaMap: Map<string, SeriesApplyMeta>,
   forceFull = false,
   range?: PaintedCandleRange | null,
+  allowedTimes?: ReadonlySet<number> | null,
+  candleTimes?: readonly number[] | null,
 ): void {
   // Pin to the painted candle range first: points from a stale window would
   // otherwise extend the shared time scale past the candles and LWC throws
   // `Value is null` on every paint until the windows converge again.
-  const points = clampPointsToPaintedRange(data, range);
+  const clamped = clampPointsToPaintedRange(data, range, allowedTimes);
+  // Then land exactly on the candle axis: one row per candle, a whitespace
+  // row where the script had no value. A row the candles do not have (a
+  // venue hole) or a candle the series skipped both leave a renderer without
+  // a bar at that index — LWC throws `Value is null` and names no series.
+  const points = projectToCandleAxis(clamped, candleTimes, (time) => ({ time }));
   const prev = metaMap.get(metaKey);
   if (!forceFull && prev && prev.len > 0) {
     const peek = peekOverlayLineTip(points, prev.len);
@@ -647,6 +655,10 @@ export class PaneManager {
    * and extended by {@link appendBar} live ticks (ticks extend, never create).
    */
   private paintedCandleRange: PaintedCandleRange | null = null;
+  /** Bar times the candle series holds (holes excluded) — see candleTimeSet. */
+  private paintedCandleTimeSet: Set<number> | null = null;
+  /** The candle axis (one time per candle), cached at paint time. */
+  private paintedCandleTimesList: number[] | null = null;
 
   constructor(container: HTMLElement, hostKey = '') {
     this.container = container;
@@ -822,14 +834,46 @@ export class PaneManager {
    * drop it is too late (applies can be no-ops, and a repair/load slides the
    * window a long way).
    */
-  notePaintedCandleRange(first: number, last: number): void {
+  notePaintedCandleRange(first: number, last: number, times?: readonly number[]): void {
     if (!Number.isFinite(first) || !Number.isFinite(last) || last < first) return;
     const prev = this.paintedCandleRange;
     const moved = !prev || prev.first !== first || prev.last !== last;
     this.paintedCandleRange = { first, last };
+    if (times?.length) {
+      const set = new Set<number>();
+      const list: number[] = [];
+      for (const t of times) {
+        if (!Number.isFinite(t)) continue;
+        set.add(t);
+        list.push(t);
+      }
+      this.paintedCandleTimeSet = set.size ? set : null;
+      this.paintedCandleTimesList = list.length ? list : null;
+    }
     if (!moved) return;
     this.overlayDataMeta.clear();
     this.pruneCoPaintedSeriesToPaintedRange();
+  }
+
+  /**
+   * The bar times the candle series actually holds (holes excluded).
+   *
+   * The candles can miss a slot (a venue hole). A co-painted row at that
+   * slot is a time the candles do not hold, and the shared time scale is the
+   * union of every series' rows — so the candlestick painter throws
+   * `Value is null` on every render. The set is what lets the clamp drop
+   * exactly those rows.
+   *
+   * The set is **recorded at paint time** (the sanitized rows the library
+   * actually accepted), not read back from the series: reading it back costs
+   * an O(n) copy per overlay apply, and the live append path already keeps it
+   * in step with the series.
+   *
+   * `null` when unknown (no candle paint yet) — the clamp then falls back to
+   * the time range alone.
+   */
+  private candleTimeSet(): ReadonlySet<number> | null {
+    return this.paintedCandleTimeSet;
   }
 
   /**
@@ -851,6 +895,7 @@ export class PaneManager {
     const range = this.paintedCandleRange;
     if (!range) return 0;
     const candleTimes = this.paintedCandleTimes();
+    const allowed = this.candleTimeSet();
     let pruned = 0;
     for (const pane of this.panes.values()) {
       for (const key of Object.keys(pane.series)) {
@@ -864,7 +909,7 @@ export class PaneManager {
           continue;
         }
         if (!Array.isArray(rows) || !rows.length) continue;
-        const kept = clampPointsToPaintedRange(rows, range);
+        const kept = clampPointsToPaintedRange(rows, range, allowed);
         // OHLC overlays cannot carry a whitespace row (their payload is
         // filtered to finite OHLC) — they keep the pruned length.
         const padded = key.startsWith(OVERLAY_OHLC_PREFIX)
@@ -884,8 +929,13 @@ export class PaneManager {
    * The reference for the "one row per OHLCV bar" invariant the apply
    * pipeline keeps for script series. `null` when the chart has not painted
    * candles yet (no reference, no padding).
+   *
+   * The axis is **cached** at paint time: reading it back from the series is
+   * an O(n) copy, and the apply pipeline asks for it on every plot of every
+   * live tick.
    */
   private paintedCandleTimes(): number[] | null {
+    if (this.paintedCandleTimesList) return this.paintedCandleTimesList;
     const price = this.panes.get('price')?.series['candle'] as
       | { data?: () => readonly { time?: unknown }[] }
       | undefined;
@@ -903,6 +953,57 @@ export class PaneManager {
       if (typeof t === 'number' && Number.isFinite(t)) times.push(t);
     }
     return times.length ? times : null;
+  }
+
+  /**
+   * Audit the painted series against the candle axis.
+   *
+   * The library's shared time scale is the union of every series' rows, and
+   * the renderer asks **its own** series for the bar at the rendered index:
+   * a series that holds a time the candles do not have (a hole the candles
+   * dropped, a stale window) makes the render fail with `Value is null` and
+   * no other clue. The audit names the offending series so the failure is
+   * attributable instead of a mystery.
+   *
+   * Only the *extra* direction is an invariant: a co-painted series may
+   * legitimately hold fewer rows than the candles (a pruned OHLC overlay, a
+   * strategy equity), but it must never hold a bar time the candles lack.
+   */
+  auditTimeParity(): string[] {
+    const candles = this.paintedCandleTimeSet;
+    if (!candles || !candles.size) return [];
+    const issues: string[] = [];
+    for (const [paneId, pane] of this.panes) {
+      for (const key of Object.keys(pane.series)) {
+        if (key === 'candle') continue;
+        if (!isScriptCoPaintedKey(key) && key !== 'volume') continue;
+        const series = pane.series[key];
+        if (!series || typeof series.data !== 'function') continue;
+        let rows: readonly { time?: unknown }[];
+        try {
+          rows = series.data() as readonly { time?: unknown }[];
+        } catch {
+          continue;
+        }
+        if (!Array.isArray(rows) || !rows.length) {
+          issues.push(`${paneId}/${key}: empty series`);
+          continue;
+        }
+        const extra: number[] = [];
+        for (const r of rows) {
+          const t = Number(r?.time);
+          if (!Number.isFinite(t)) continue;
+          if (!candles.has(t)) extra.push(t);
+        }
+        if (extra.length) {
+          issues.push(
+            `${paneId}/${key}: ${extra.length} row(s) outside the candle axis ` +
+              `(first=${extra[0]}, rows=${rows.length}, candles=${candles.size})`,
+          );
+        }
+      }
+    }
+    return issues;
   }
 
   /**
@@ -1643,7 +1744,12 @@ export class PaneManager {
     const first = Number((data[0] as { time?: number } | undefined)?.time);
     const last = Number((data[data.length - 1] as { time?: number } | undefined)?.time);
     if (Number.isFinite(first) && Number.isFinite(last)) {
-      this.notePaintedCandleRange(first, last);
+      const times: number[] = [];
+      for (const row of data) {
+        const t = Number((row as { time?: number }).time);
+        if (Number.isFinite(t)) times.push(t);
+      }
+      this.notePaintedCandleRange(first, last, times);
     }
     return tinted;
   }
@@ -2509,6 +2615,13 @@ export class PaneManager {
 
       const pricePane = this.panes.get('price');
       const chartType = normalizeChartType(store.chartType ?? this.priceChartType);
+      // The candle and the volume series must carry the **same** bar times:
+      // the library's shared time scale is the union of every series' rows,
+      // and each renderer asks its own series for the bar at the rendered
+      // index. A volume row at a time the candles do not have (a bar the
+      // candles rejected for a null high/low) makes the candlestick renderer
+      // throw `Value is null` on every render.
+      let paintedTime: number | null = null;
       if (pricePane?.series['candle']) {
         // Non-HA: O(1) from the single tick. HA: use this chart's holder +
         // store history (mapBarUpdate is O(1) after full paint seeded into
@@ -2526,10 +2639,21 @@ export class PaneManager {
                 Number.isFinite((point as { close: number }).close)
               : Number.isFinite((point as { value: number }).value);
           if (ohlcOk) {
-            safeUpdate(pricePane.series['candle'], {
+            const applied = safeUpdate(pricePane.series['candle'], {
               ...point,
               time: point.time as UTCTimestamp,
             });
+            // The candle series now holds this bar's time — the co-painted
+            // clamp must know it, or a row at this time would be dropped as
+            // "not a candle time" and the shared time scale would grow a
+            // slot the candles do not have (LWC `Value is null`).
+            const t = Number(point?.time);
+            if (applied && Number.isFinite(t)) {
+              if (!this.paintedCandleTimeSet) this.paintedCandleTimeSet = new Set();
+              this.paintedCandleTimeSet.add(t);
+              this.paintedCandleTimesList?.push(t);
+              paintedTime = t;
+            }
           }
         }
         // Tint last-price line to bar direction (O(1): HA reuses the point
@@ -2573,11 +2697,17 @@ export class PaneManager {
           bar.volume != null && Number.isFinite(bar.volume) && bar.volume >= 0
             ? bar.volume
             : 0;
-        safeUpdate(volPane.series['volume'], {
-          time: bar.time as UTCTimestamp,
-          value: vol,
-          color: bar.close >= bar.open ? volColors.up : volColors.down,
-        });
+        // The volume row lands on the **candles'** bar time — never on a bar
+        // the candles do not have (see the union note above). With no candle
+        // series the volume stands alone and may use the tick's own time.
+        const volTime = paintedTime ?? (pricePane?.series['candle'] ? null : bar.time);
+        if (volTime != null && Number.isFinite(volTime)) {
+          safeUpdate(volPane.series['volume'], {
+            time: volTime as UTCTimestamp,
+            value: vol,
+            color: bar.close >= bar.open ? volColors.up : volColors.down,
+          });
+        }
       }
     } catch (err: unknown) {
       // Live ticks must not tear down the Solid tree or flood the status bar
@@ -2876,6 +3006,8 @@ export class PaneManager {
           this.overlayDataMeta,
           forceFull,
           this.clampRange(),
+          this.candleTimeSet(),
+          this.paintedCandleTimes(),
         );
         try {
           const labels = this.plotLabelOptions(line);
@@ -2957,6 +3089,8 @@ export class PaneManager {
             this.overlayDataMeta,
             forceFull,
             this.clampRange(),
+            this.candleTimeSet(),
+            this.paintedCandleTimes(),
           );
           pane.series[key] = series;
           this.overlaySeriesKinds.set(kindKey, seriesKind);
@@ -3213,7 +3347,7 @@ export class PaneManager {
         spec.kind === 'plotcandle' ? 'plotcandle' : 'plotbar';
       // Pin to THIS chart's painted candle range (see applyOverlayLineDataSmart):
       // a stale overlay window must not extend the shared time scale.
-      const inRange = clampPointsToPaintedRange(spec.data, this.clampRange());
+      const inRange = clampPointsToPaintedRange(spec.data, this.clampRange(), this.candleTimeSet());
       const mapped = inRange
         .filter(
           (d) =>
@@ -3364,7 +3498,7 @@ export class PaneManager {
       // painted candle extends the shared time scale into the future — during
       // a bar replay the user could scroll into (and see the colours of) bars
       // the replay has not reached.
-      const inRange = clampPointsToPaintedRange(band.data, this.clampRange());
+      const inRange = clampPointsToPaintedRange(band.data, this.clampRange(), this.candleTimeSet());
       const mapped = inRange
         .filter((d) => Number.isFinite(d.time) && Number.isFinite(d.value))
         .map((d) => ({

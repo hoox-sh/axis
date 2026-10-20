@@ -263,7 +263,14 @@ export type ValueDatum = {
 export type PriceSeriesDatum = OhlcDatum | ValueDatum;
 
 /** True when a bar is safe for LWC candlestick / line `setData`. */
-function isFinitePriceBar(b: Bar): boolean {
+/**
+ * A bar is paintable as a price row only when **every** price field is
+ * finite. The volume series must use the same rule (see
+ * {@link mapBarsToVolumeData}) — the library's shared time scale is the union
+ * of every series' rows, so a volume row at a bar the candles dropped is a
+ * time the candlestick renderer cannot find, and it throws `Value is null`.
+ */
+export function isFinitePriceBar(b: Bar): boolean {
   return (
     Number.isFinite(b.time) &&
     Number.isFinite(b.open) &&

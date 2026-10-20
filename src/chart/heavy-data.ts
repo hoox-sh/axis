@@ -21,6 +21,7 @@
  */
 
 import type { Bar } from '../store/types';
+import { isFinitePriceBar } from './chart-type';
 
 /** Histories at/above this size enable LWC conflation precompute after paint. */
 export const HEAVY_BARS_THRESHOLD = 10_000;
@@ -176,7 +177,17 @@ export function heavyTimeScaleOptions(barCount: number): {
   };
 }
 
-/** Volume histogram points — single pass, skips non-finite time/OHLC rows. */
+/**
+ * Volume histogram points — single pass, skips non-finite time/OHLC rows.
+ *
+ * The skip rule is the **same** as the candle series' (`isFinitePriceBar`):
+ * the library's shared time scale is the union of every series' rows, and
+ * each renderer asks its own series for the bar at the rendered index. A
+ * volume row at a bar the candles dropped (a null high/low the candles
+ * reject) is a time the candlestick renderer cannot find — it throws
+ * `Value is null` on every render. The two series must therefore carry
+ * exactly the same times.
+ */
 export function mapBarsToVolumeData(
   bars: readonly Bar[],
   colors: { up: string; down: string },
@@ -184,13 +195,7 @@ export function mapBarsToVolumeData(
   const out: Array<{ time: number; value: number; color: string }> = [];
   for (let i = 0; i < bars.length; i++) {
     const b = bars[i]!;
-    if (
-      !Number.isFinite(b.time) ||
-      !Number.isFinite(b.open) ||
-      !Number.isFinite(b.close)
-    ) {
-      continue;
-    }
+    if (!isFinitePriceBar(b)) continue;
     const vol =
       b.volume != null && Number.isFinite(b.volume) && b.volume >= 0 ? b.volume : 0;
     out.push({

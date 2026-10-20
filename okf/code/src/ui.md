@@ -7,7 +7,7 @@ tags: [code, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-19T20:07:25Z
+  at: 2026-10-20T01:53:18Z
 sources:
   - id: tree
     resource: "src/ui"
@@ -73,7 +73,7 @@ okf_lock: generated
 * `Watchlist.tsx` — Watchlist
 * `WorkspaceSnapshotMenu.tsx` — WorkspaceSnapshotMenu, createLiveWorkspaceSetters
 * `bar-count.ts` — formatBarCount
-* `boot-errors.ts` — ReportUiErrorOpts, _resetReportThrottleForTests, formatErrorMessage, installBootErrorHandlers, reportUiError
+* `boot-errors.ts` — ReportUiErrorOpts, _resetReportThrottleForTests, formatErrorMessage, formatErrorStack, installBootErrorHandlers, reportUiError
 * `chart-settings-state.ts` — chartSettingsOpen, setChartSettingsOpen, toggleChartSettings
 * `clipboard.ts` — copyToClipboard
 * `clock.ts` — useNow
