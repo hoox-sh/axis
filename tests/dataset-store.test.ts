@@ -224,6 +224,16 @@ describe('dataset-store', () => {
 });
 
 describe('dataset-store · full delete + flush', () => {
+  it('a write queued before a reset does not repopulate the mirror', async () => {
+    // The suite resets the singletons between files; a write that was still
+    // queued when the reset ran used to land in the next file's mirror — a
+    // dataset the next file never created.
+    const pending = putDatasetBars('binance-rest', 'LATEUSDT', '1d', [bar(60, 1)]);
+    _resetDatasetStoreForTests();
+    await pending.catch(() => undefined);
+    expect(listMemoryDatasets()).toHaveLength(0);
+  });
+
   it('removeDatasetEverywhere drops the bars and the metadata row', async () => {
     await putDatasetBars('binance-rest', 'BTCUSDT', '1d', [bar(60, 1)]);
     expect(listMemoryDatasets()).toHaveLength(1);

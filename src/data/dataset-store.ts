@@ -160,8 +160,10 @@ export function setPersistenceMode(mode: PersistenceMode): void {
   const sink = activeSink();
 
   // Mirror first (synchronous — the active view must not wait for a listing).
+  const gen = generation;
   for (const [key, bars] of memory) {
     if (!bars.length) continue;
+    if (gen !== generation) break; // the store was reset mid-migration
     trackCopy(
       sink.replace(key, bars).catch((err: unknown) => {
         console.warn(`[dataset-store] copy to ${mode} failed for ${key}`, err);
@@ -181,6 +183,7 @@ export function setPersistenceMode(mode: PersistenceMode): void {
         listed = [];
       }
       for (const key of listed) {
+        if (gen !== generation) break; // the store was reset mid-migration
         if (memory.has(key)) continue; // already copied above
         let bars: Bar[] | null = null;
         try {
@@ -287,9 +290,25 @@ export async function getDataset(
  */
 const writeChains = new Map<string, Promise<unknown>>();
 
+/**
+ * Generation of the store's state.
+ *
+ * A write that was **queued** before a reset must not repopulate the mirror
+ * (or the sink) afterwards: the test suite resets the singletons between
+ * files, and a late write from the previous file landed in the next file's
+ * mirror — a dataset the next file never created, which then failed its
+ * "the mirror is empty" assertions.
+ */
+let generation = 0;
+
 function enqueueWrite<T>(key: string, task: () => Promise<T>): Promise<T> {
   const prev = writeChains.get(key) ?? Promise.resolve();
-  const next = prev.then(task, task);
+  const gen = generation;
+  // A stale write (the store was reset while it waited) is dropped: it must
+  // not resurrect the state the reset just cleared.
+  const run = (): Promise<T> =>
+    gen === generation ? task() : Promise.resolve(undefined as unknown as T);
+  const next = prev.then(run, run);
   const settled = next.then(
     () => undefined,
     () => undefined,
@@ -503,6 +522,9 @@ export function listMemoryDatasets(): DatasetMeta[] {
 
 /** @internal test helper — reset memory, mode, policy, listeners. */
 export function _resetDatasetStoreForTests(): void {
+  // Bump the generation first: a write that is still queued must not
+  // repopulate the mirror (or the sink) after the reset.
+  generation += 1;
   memory.clear();
   listeners.clear();
   persistenceMode = 'local';
