@@ -4,6 +4,7 @@
 import { describe, it, expect, beforeEach } from 'bun:test';
 import {
   remoteSink,
+  flushDatasetSinks,
   onSinkError,
   _resetDatasetSinksForTests,
 } from '../src/data/dataset-sinks';
@@ -62,6 +63,37 @@ describe('dataset-sinks · remote', () => {
     } finally {
       onSinkError(null);
       unregisterDynamicStorage('cloud');
+    }
+  });
+
+  it('flush ignores a remote dataset document that is already gone', async () => {
+    const errors: Array<{ mode: string; key: string }> = [];
+    onSinkError((mode, key) => errors.push({ mode, key }));
+    registerDynamicStorage({
+      id: 'git',
+      name: 'fake git',
+      kind: 'storage',
+      async list() {
+        return [{ id: 'datasets/binance-rest__BTCUSDT__1d', tags: ['dataset'] }];
+      },
+      async read() {
+        return null;
+      },
+      async write() {
+        return { id: 'x' };
+      },
+      async remove() {
+        const err = new Error('script datasets/x not found') as Error & { status?: number };
+        err.status = 404;
+        throw err;
+      },
+    } as never);
+    try {
+      await flushDatasetSinks();
+      expect(errors).toEqual([]);
+    } finally {
+      onSinkError(null);
+      unregisterDynamicStorage('git');
     }
   });
 });

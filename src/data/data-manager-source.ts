@@ -30,11 +30,13 @@ import type { Bar } from '../store/types';
 import {
   barsCacheKey,
   listCachedSeries,
+  lockFromBarsKey,
   sliceBarsForLoad,
   type BarLoadWindow,
   type BarsCacheMeta,
 } from './bars-cache';
 import { getDataset } from './dataset-store';
+import { providerDatasetLock } from './provider';
 import { repairBars } from './dataset-validate';
 
 /** Source plugin id registered in the sources catalog. */
@@ -44,6 +46,8 @@ export interface DataManagerSelection extends BarLoadWindow {
   sourceId: string;
   symbol: string;
   interval: string;
+  market?: string;
+  authMode?: string;
 }
 
 let selection: DataManagerSelection | null = null;
@@ -63,8 +67,10 @@ export function setDataManagerSelection(
   symbol: string,
   interval: string,
   window?: BarLoadWindow | null,
+  lock?: { market?: string; authMode?: string },
 ): void {
   const win = normalizeWindow(window);
+  const normalized = lock !== undefined ? providerDatasetLock(lock) : null;
   selection = {
     sourceId: String(sourceId || '').trim(),
     symbol: String(symbol || '').trim().toUpperCase(),
@@ -72,6 +78,8 @@ export function setDataManagerSelection(
     fromSec: win.fromSec,
     toSec: win.toSec,
     maxBars: win.maxBars,
+    market: normalized?.market,
+    authMode: normalized?.authMode,
   };
 }
 
@@ -121,7 +129,12 @@ export async function resolveDataManagerBars(
   if (selection?.sourceId) {
     const sSym = selection.symbol || sym;
     const sIv = selection.interval || iv;
-    const raw = await getDataset(selection.sourceId, sSym, sIv);
+    const raw = await getDataset(
+      selection.sourceId,
+      sSym,
+      sIv,
+      providerDatasetLock({ market: selection.market, authMode: selection.authMode }),
+    );
     if (raw.length) {
       const { bars: repaired } = repairBars(raw, sIv);
       const bars = sliceBarsForLoad(repaired, windowFromSelection(selection));
@@ -135,7 +148,13 @@ export async function resolveDataManagerBars(
     }
   }
 
-  const all = await listCachedSeries();
+  let all: Awaited<ReturnType<typeof listCachedSeries>> = [];
+  try {
+    all = await listCachedSeries();
+  } catch (err: unknown) {
+    console.warn('[data-manager] could not list cached series', err);
+    return null;
+  }
   if (!all.length) return null;
 
   const bySymIv = all
@@ -150,7 +169,12 @@ export async function resolveDataManagerBars(
 
   if (!pick) return null;
 
-  const raw = await getDataset(pick.sourceId, pick.symbol, pick.interval);
+  const raw = await getDataset(
+    pick.sourceId,
+    pick.symbol,
+    pick.interval,
+    providerDatasetLock(lockFromBarsKey(pick.key)),
+  );
   if (!raw.length) return null;
   const { bars: repaired } = repairBars(raw, pick.interval);
 
@@ -165,6 +189,7 @@ export async function resolveDataManagerBars(
     pick.symbol,
     pick.interval,
     sameKey ? windowFromSelection(selection) : null,
+    lockFromBarsKey(pick.key),
   );
 
   const bars = sliceBarsForLoad(repaired, windowFromSelection(selection));

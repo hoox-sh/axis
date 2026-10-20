@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
+import { beforeEach } from 'bun:test';
+
 /**
  * Shared AXIS Bun test environment.
  *
@@ -230,3 +232,14 @@ export function installAxisTestEnv() {
 
 // Auto-install when this module is loaded
 installAxisTestEnv();
+
+// The dataset store is a process-wide singleton. Drain in-flight writes, then
+// reset, before every test in a file that imports this setup — a write that
+// lands after the reset shows up as a dataset the next test never created.
+beforeEach(async () => {
+  const { _drainDatasetWritesForTests, _resetDatasetStoreForTests } = await import(
+    '../src/data/dataset-store'
+  );
+  await _drainDatasetWritesForTests();
+  _resetDatasetStoreForTests();
+});

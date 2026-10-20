@@ -50,6 +50,7 @@ import { getActiveEngineConfig } from '../plugins/active';
 import {
   clearFeedStatus,
   clearScriptStatus,
+  chartWindowLimit,
   setBarsQuiet,
   setFeedStatus,
   setScriptStatus,
@@ -143,28 +144,15 @@ function engineSeriesPaintable(bars: Bar[], marketNow = 0): boolean {
 function chartSeriesKeyObject(): DataSeriesKey {
   return {
     exchange: chartExchange(),
-    market: pyneMarket(store.provider?.market),
+    market: store.provider?.market || 'spot',
     symbol: chartPairSymbol(),
     interval: String(store.interval || '1m'),
   };
 }
 
 /**
- * Merge an engine series snapshot into the chart's window.
- *
- * The engine's live series is a **short tail** — the WS path subscribes with
- * ~500 bars (`LIVE_SNAPSHOT_BARS`). Painting it as a *replace* threw the
- * chart's own window away: a freshly loaded 20k-bar dataset was replaced by
- * the engine's 500-bar tail, gaps and all, and the chart showed a series the
- * user had just deleted.
- *
- * The snapshot now only contributes what the chart is missing:
- *
- * - the chart's own rows win on a conflict (the venue tick is fresher than the
- *   engine's last read for the forming bar),
- * - the engine's rows fill the chart's **holes** (a slot the venue never
- *   delivered) and extend the tail when the engine is ahead,
- * - the result is capped to the chart window.
+ * Merge an engine snapshot into the chart window.
+ * Chart rows win; the engine tail only fills holes and extends.
  */
 export function mergeEngineSnapshot(chartBars: Bar[], snapshot: Bar[]): Bar[] {
   if (!snapshot.length) return chartBars;
@@ -412,15 +400,13 @@ function scriptMeta(): Record<string, unknown> {
 }
 
 /**
- * How many bars a script subscription must cover: the chart's own depth,
- * capped by the rolling window.
+ * Bars a script subscription must cover: the chart window, not the short
+ * prefix painted before the dataset fills.
  */
 export function scriptHistoryBars(): number {
-  const want = engineHistoryBars();
+  const want = chartWindowLimit();
   const have = store.bars.length;
-  if (!Number.isFinite(want) || want <= 0) return Math.max(1, have);
-  if (!have) return want;
-  return Math.max(1, Math.min(have, want));
+  return Math.max(1, want, have);
 }
 
 /**

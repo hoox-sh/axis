@@ -33,7 +33,7 @@
  */
 
 import type { Bar } from '../store/types';
-import { listCachedSeries } from './bars-cache';
+import { clearAllCachedBars, listCachedSeries } from './bars-cache';
 import {
   datasetKey,
   flushDatasetSinks,
@@ -241,8 +241,9 @@ export function peekDataset(
   sourceId: string,
   symbol: string,
   interval: string,
+  opts?: { market?: string; authMode?: string },
 ): Bar[] | null {
-  const key = keyFor(sourceId, symbol, interval);
+  const key = keyFor(sourceId, symbol, interval, opts);
   const mem = memory.get(key);
   if (!mem?.length) return null;
   // Refresh recency (LRU) without changing the array identity.
@@ -263,9 +264,10 @@ export async function getDataset(
   sourceId: string,
   symbol: string,
   interval: string,
+  opts?: { market?: string; authMode?: string },
 ): Promise<Bar[]> {
-  const key = keyFor(sourceId, symbol, interval);
-  const mem = peekDataset(sourceId, symbol, interval);
+  const key = keyFor(sourceId, symbol, interval, opts);
+  const mem = peekDataset(sourceId, symbol, interval, opts);
   if (mem?.length) return mem.slice();
   try {
     const bars = await activeSink().get(key);
@@ -330,20 +332,25 @@ export async function putDatasetBars(
   symbol: string,
   interval: string,
   bars: readonly Bar[],
-  opts?: { policy?: MergePolicy },
+  opts?: { policy?: MergePolicy; market?: string; authMode?: string },
 ): Promise<PutResult> {
-  const key = keyFor(sourceId, symbol, interval);
+  const key = keyFor(sourceId, symbol, interval, opts);
   return enqueueWrite(key, () => putDatasetBarsNow(key, sourceId, symbol, interval, bars, opts));
+}
+
+function writeAborted(): PutResult {
+  return { bars: [], added: 0, conflicts: 0 };
 }
 
 async function putDatasetBarsNow(
   key: string,
-  sourceId: string,
-  symbol: string,
+  _sourceId: string,
+  _symbol: string,
   interval: string,
   bars: readonly Bar[],
-  opts?: { policy?: MergePolicy },
+  opts?: { policy?: MergePolicy; market?: string; authMode?: string },
 ): Promise<PutResult> {
+  const gen = generation;
   const incoming = bars.filter((b) => b && Number.isFinite(b.time));
   const mem = memory.get(key);
   let current: Bar[];
@@ -360,8 +367,10 @@ async function putDatasetBarsNow(
       console.warn(`[dataset-store] sink read failed for ${key}; write skipped`, err);
       return { bars: mem?.slice() ?? [], added: 0, conflicts: 0 };
     }
+    if (gen !== generation) return writeAborted();
     current = fromSink ?? [];
   }
+  if (gen !== generation) return writeAborted();
   if (!incoming.length) {
     return { bars: current.slice(), added: 0, conflicts: 0 };
   }
@@ -383,13 +392,27 @@ async function putDatasetBarsNow(
   }
   const repaired = merged.bars;
 
+  if (gen !== generation) return writeAborted();
   remember(key, repaired);
   notify(key, repaired);
+  if (gen !== generation) {
+    memory.delete(key);
+    return writeAborted();
+  }
 
   try {
     await activeSink().put(key, repaired);
   } catch (err: unknown) {
     console.warn(`[dataset-store] sink put failed for ${key}`, err);
+  }
+  if (gen !== generation) {
+    memory.delete(key);
+    try {
+      await activeSink().remove(key);
+    } catch (err: unknown) {
+      console.warn(`[dataset-store] stale put cleanup failed for ${key}`, err);
+    }
+    return writeAborted();
   }
   return { bars: repaired, added: merged.added, conflicts: merged.conflicts.length };
 }
@@ -403,19 +426,35 @@ export async function replaceDataset(
   symbol: string,
   interval: string,
   bars: readonly Bar[],
+  opts?: { market?: string; authMode?: string },
 ): Promise<Bar[]> {
-  const key = keyFor(sourceId, symbol, interval);
+  const key = keyFor(sourceId, symbol, interval, opts);
   return enqueueWrite(key, async () => {
+    const gen = generation;
     const { bars: clean } = repairBars(
       bars.filter((b) => b && Number.isFinite(b.time)),
       interval,
     );
+    if (gen !== generation) return [];
     remember(key, clean);
     notify(key, clean);
+    if (gen !== generation) {
+      memory.delete(key);
+      return [];
+    }
     try {
       await activeSink().replace(key, clean);
     } catch (err: unknown) {
       console.warn(`[dataset-store] sink replace failed for ${key}`, err);
+    }
+    if (gen !== generation) {
+      memory.delete(key);
+      try {
+        await activeSink().remove(key);
+      } catch (err: unknown) {
+        console.warn(`[dataset-store] stale replace cleanup failed for ${key}`, err);
+      }
+      return [];
     }
     return clean.slice();
   });
@@ -426,8 +465,9 @@ export async function removeDataset(
   sourceId: string,
   symbol: string,
   interval: string,
+  opts?: { market?: string; authMode?: string },
 ): Promise<void> {
-  const key = keyFor(sourceId, symbol, interval);
+  const key = keyFor(sourceId, symbol, interval, opts);
   await enqueueWrite(key, async () => {
     memory.delete(key);
     try {
@@ -451,8 +491,9 @@ export async function removeDatasetEverywhere(
   sourceId: string,
   symbol: string,
   interval: string,
+  opts?: { market?: string; authMode?: string },
 ): Promise<void> {
-  const key = keyFor(sourceId, symbol, interval);
+  const key = keyFor(sourceId, symbol, interval, opts);
   // Let any in-flight sink copy land first — otherwise it re-adds the bars
   // right after the sweep and the dataset comes back from the dead.
   await awaitPendingCopies();
@@ -483,17 +524,29 @@ export async function flushDatasets(): Promise<number> {
     console.warn('[dataset-store] could not list cached datasets before flush', err);
   }
 
+  // Drop writes that were already queued or inside a sink read. A page that
+  // starts while the loop runs captures this generation and is dropped by the
+  // bumps below, before it can remember or write the series back.
+  generation += 1;
   memory.clear();
   for (const key of keys) {
     try {
-      // Inside the write chain: a queued dataset write must not land after
-      // the sweep and resurrect the dataset.
       await enqueueWrite(key, () => removeDatasetFromAllSinks(key));
     } catch (err: unknown) {
       console.warn(`[dataset-store] flush remove failed for ${key}`, err);
     }
   }
+  // A page that ran during the removes captured the pre-loop generation.
+  // Bump and drop the mirror before the sink flush, and again after it,
+  // so that page cannot remain as the series the flush just deleted.
+  generation += 1;
+  memory.clear();
   await flushDatasetSinks();
+  // Remote deletes run after the local cache wipe. A page that starts in
+  // that gap still holds this generation, so drop it and the debounce it armed.
+  generation += 1;
+  memory.clear();
+  await clearAllCachedBars();
   for (const key of keys) notify(key, []);
   return keys.size;
 }

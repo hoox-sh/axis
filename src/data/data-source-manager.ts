@@ -74,6 +74,7 @@ import {
   type VenueClass,
 } from './dataset-validate';
 import { isSortedUnique } from './merge-datasets';
+import { providerDatasetLock } from './provider';
 
 export type DataSourceJobStatus =
   | 'pending'
@@ -134,6 +135,13 @@ interface InternalJob extends DataSourceJob {
   paused: boolean;
   /** Venue page retries exhausted — skip further network, deliver cache. */
   venueDead: boolean;
+  /** AXIS provider lock captured when the job was created. */
+  market: string;
+  authMode: string;
+}
+
+function jobLock(j: { market?: string; authMode?: string }): { market: string; authMode: string } {
+  return providerDatasetLock({ market: j.market, authMode: j.authMode });
 }
 
 const MAX_CONCURRENT = 1;
@@ -202,7 +210,7 @@ function validateJobBars(
   const stats = repair?.stats;
   const lossy = !!stats && (stats.removed > 0 || repaired.length < bars.length);
   if (!lossy && stats?.snapped && opts?.persist !== false) {
-    void replaceDataset(j.sourceId, j.symbol, j.interval, repaired).catch(() => {
+    void replaceDataset(j.sourceId, j.symbol, j.interval, repaired, jobLock(j)).catch(() => {
       /* persist is best-effort */
     });
   }
@@ -370,6 +378,7 @@ function makeJob(
   targetFromSec: number,
   targetToSec: number,
   applyWhenComplete: boolean,
+  lock: { market: string; authMode: string },
 ): InternalJob {
   return {
     id: jobId(),
@@ -395,6 +404,8 @@ function makeJob(
     abort: new AbortController(),
     paused: false,
     venueDead: false,
+    market: lock.market,
+    authMode: lock.authMode,
   };
 }
 
@@ -412,6 +423,7 @@ function enqueueJob(internal: InternalJob): string {
  * that still delivers whatever is already cached.
  */
 export function startBackfill(opts: StartBackfillOpts = {}): string {
+  let lock = providerDatasetLock(store.provider);
   try {
     let sourceId = String(opts.sourceId || store.source || 'binance-rest');
     // DEX pool symbols (network:0x… / base58) are case-sensitive — reuse the
@@ -446,6 +458,9 @@ export function startBackfill(opts: StartBackfillOpts = {}): string {
           sourceId = sel.sourceId;
           if (!String(opts.symbol ?? '').trim()) symbol = sel.symbol || symbol;
           if (!opts.interval) interval = sel.interval || interval;
+          if (sel.market || sel.authMode) {
+            lock = providerDatasetLock({ market: sel.market, authMode: sel.authMode });
+          }
         }
       } catch {
         /* selection lookup is best-effort */
@@ -469,6 +484,7 @@ export function startBackfill(opts: StartBackfillOpts = {}): string {
         targetFromSec,
         targetToSec,
         !!opts.applyWhenComplete,
+        lock,
       );
       settled.phase = 'done';
       internals.set(settled.id, settled);
@@ -481,6 +497,8 @@ export function startBackfill(opts: StartBackfillOpts = {}): string {
         existing.sourceId === sourceId &&
         existing.symbol === symbol &&
         existing.interval === interval &&
+        existing.market === lock.market &&
+        existing.authMode === lock.authMode &&
         (existing.status === 'running' ||
           existing.status === 'pending' ||
           existing.status === 'paused')
@@ -502,6 +520,7 @@ export function startBackfill(opts: StartBackfillOpts = {}): string {
         targetFromSec,
         targetToSec,
         !!opts.applyWhenComplete,
+        lock,
       ),
     );
   } catch (err: unknown) {
@@ -515,6 +534,7 @@ export function startBackfill(opts: StartBackfillOpts = {}): string {
       nowSec() - DEFAULT_LOOKBACK_SEC,
       nowSec(),
       !!opts.applyWhenComplete,
+      lock,
     );
     settled.phase = 'done';
     internals.set(settled.id, settled);
@@ -615,7 +635,7 @@ function pumpQueue(): void {
 
 async function refreshJobFromCache(j: InternalJob): Promise<Bar[]> {
   try {
-    const cached = await getDataset(j.sourceId, j.symbol, j.interval);
+    const cached = await getDataset(j.sourceId, j.symbol, j.interval, jobLock(j));
     if (cached.length) {
       j.barsFetched = countBarsInWindow(cached, j.targetFromSec, j.targetToSec);
       j.oldestSec = cached[0]!.time;
@@ -680,7 +700,6 @@ async function fetchWalkPage(
       if (attempt < MAX_PAGE_RETRIES) {
         const aborted = await yieldGapOrAbort(j, pageRetryDelayMs(attempt));
         if (aborted) throw new DOMException('Aborted', 'AbortError');
-        continue;
       }
     }
   }
@@ -710,7 +729,7 @@ async function fetchWalkPage(
   );
   if (pageBars.length) {
     try {
-      const merged = await putDatasetBars(j.sourceId, j.symbol, j.interval, pageBars);
+      const merged = await putDatasetBars(j.sourceId, j.symbol, j.interval, pageBars, jobLock(j));
       if (merged.bars.length) {
         j.barsFetched = countBarsInWindow(merged.bars, j.targetFromSec, j.targetToSec);
         j.oldestSec = merged.bars[0]!.time;
@@ -814,7 +833,7 @@ async function walkBackRange(
     // asks "is the window already dense?".
     if (pages % 4 === 1) {
       try {
-        const cached = await getDataset(j.sourceId, j.symbol, j.interval);
+        const cached = await getDataset(j.sourceId, j.symbol, j.interval, jobLock(j));
         const { report } = validateJobBars(cached, j, {
           persist: false,
           fromSec: from,
@@ -848,7 +867,7 @@ async function fillGaps(
     // Measure against the **dataset store** the job writes to. The bars-cache
     // is a different store: in `session` persistence mode it is never written,
     // so the count never moved and `gapsFilled` stayed 0 for every filled gap.
-    const before = await getDataset(j.sourceId, j.symbol, j.interval).then(
+    const before = await getDataset(j.sourceId, j.symbol, j.interval, jobLock(j)).then(
       (bars) => bars.length,
       () => 0,
     );
@@ -864,7 +883,7 @@ async function fillGaps(
     );
     if (outcome !== 'ok') return outcome;
 
-    const after = await getDataset(j.sourceId, j.symbol, j.interval).then(
+    const after = await getDataset(j.sourceId, j.symbol, j.interval, jobLock(j)).then(
       (bars) => bars.length,
       () => 0,
     );
@@ -1001,7 +1020,7 @@ async function runJob(j: InternalJob): Promise<void> {
       j.phase = 'validate';
       syncJob(j);
 
-      cached = await getDataset(j.sourceId, j.symbol, j.interval);
+      cached = await getDataset(j.sourceId, j.symbol, j.interval, jobLock(j));
       const { report } = validateJobBars(cached, j);
       j.gapsFound = report.fillableGaps.length;
       j.datasetComplete = report.complete;
@@ -1069,7 +1088,7 @@ async function runJob(j: InternalJob): Promise<void> {
     }
 
     // Final validation
-    const finalCached = await getDataset(j.sourceId, j.symbol, j.interval);
+    const finalCached = await getDataset(j.sourceId, j.symbol, j.interval, jobLock(j));
     // The user may have cancelled while the dataset was being read. Without
     // this guard the final block flips the job back to `complete` and paints a
     // chart the user just cancelled.
@@ -1186,7 +1205,10 @@ export async function applyJobToChart(
   const j = internals.get(jobId);
   const meta = j || managerState.jobs.find((x) => x.id === jobId);
   if (!meta) return false;
-  return applyCachedToChart(meta.sourceId, meta.symbol, meta.interval, window, opts);
+  return applyCachedToChart(meta.sourceId, meta.symbol, meta.interval, window, {
+    ...opts,
+    ...(j ? { market: j.market, authMode: j.authMode } : {}),
+  });
 }
 
 /**
@@ -1202,7 +1224,7 @@ export async function applyCachedToChart(
   symbol: string,
   interval: string,
   window?: BarLoadWindow | null,
-  opts?: { onlyIfCurrent?: boolean },
+  opts?: { onlyIfCurrent?: boolean; market?: string; authMode?: string },
 ): Promise<boolean> {
   try {
     return await applyCachedToChartInner(sourceId, symbol, interval, window, opts);
@@ -1217,11 +1239,15 @@ async function applyCachedToChartInner(
   symbol: string,
   interval: string,
   window?: BarLoadWindow | null,
-  opts?: { onlyIfCurrent?: boolean },
+  opts?: { onlyIfCurrent?: boolean; market?: string; authMode?: string },
 ): Promise<boolean> {
   const srcId = String(sourceId || store.source || '');
   const sym = normalizeLoadSymbol(symbol, srcId);
   const iv = String(interval || store.interval || '1d');
+  const lock =
+    opts && (opts.market != null || opts.authMode != null)
+      ? providerDatasetLock({ market: opts.market, authMode: opts.authMode })
+      : providerDatasetLock(store.provider);
 
   // Background auto-apply ("apply when complete") must not paint over a newer
   // symbol/interval/source the user has since loaded. Explicit UI applies
@@ -1240,7 +1266,14 @@ async function applyCachedToChartInner(
         /* keep the raw chart source */
       }
     }
-    if (sym !== curSym || iv !== store.interval || srcId !== chartSrc) {
+    const chartLock = providerDatasetLock(store.provider);
+    if (
+      sym !== curSym ||
+      iv !== store.interval ||
+      srcId !== chartSrc ||
+      lock.market !== chartLock.market ||
+      lock.authMode !== chartLock.authMode
+    ) {
       return false;
     }
   }
@@ -1248,14 +1281,14 @@ async function applyCachedToChartInner(
   // Expand dataset toward now (venue REST) before painting
   try {
     const { expandCachedSeriesToNow } = await import('./expand-cache');
-    await expandCachedSeriesToNow(srcId, sym, iv);
+    await expandCachedSeriesToNow(srcId, sym, iv, lock);
   } catch (err) {
     console.warn('[applyCachedToChart] expand to now failed', err);
   }
 
   let bars: Bar[];
   try {
-    bars = await getDataset(srcId, sym, iv);
+    bars = await getDataset(srcId, sym, iv, lock);
   } catch {
     bars = [];
   }

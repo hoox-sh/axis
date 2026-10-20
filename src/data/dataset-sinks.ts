@@ -41,8 +41,10 @@ import {
   clearCachedBars,
   getCachedBars,
   listCachedSeries,
+  lockFromBarsKey,
   putCachedBars,
   replaceCachedBars,
+  type BarsKeyLock,
 } from './bars-cache';
 
 export type PersistenceMode = 'session' | 'local' | 'git' | 'worker';
@@ -154,11 +156,11 @@ function mergeSorted(existing: readonly Bar[], incoming: readonly Bar[]): Bar[] 
 export const localSink: DatasetSink = {
   mode: 'local',
   async get(key) {
-    const [sourceId, symbol, interval] = splitKey(key);
+    const [sourceId, symbol, interval, lock] = cacheArgs(key);
     if (!sourceId) return null;
     // A failed read must not look like an empty dataset — the caller merges
     // into whatever it gets back, so "absent" and "broken" have to differ.
-    const bars = await getCachedBars(sourceId, symbol, interval);
+    const bars = await getCachedBars(sourceId, symbol, interval, lock);
     return bars.length ? bars : null;
   },
   async list() {
@@ -170,24 +172,30 @@ export const localSink: DatasetSink = {
     }
   },
   async put(key, bars) {
-    const [sourceId, symbol, interval] = splitKey(key);
+    const [sourceId, symbol, interval, lock] = cacheArgs(key);
     if (!sourceId) return 0;
-    const merged = await putCachedBars(sourceId, symbol, interval, bars as Bar[]);
+    const merged = await putCachedBars(sourceId, symbol, interval, bars as Bar[], lock);
     return merged.length;
   },
   async replace(key, bars) {
-    const [sourceId, symbol, interval] = splitKey(key);
+    const [sourceId, symbol, interval, lock] = cacheArgs(key);
     if (!sourceId) return;
     // Atomic overwrite (single record put) — a clear-then-write leaves a
     // window where the series does not exist at all.
-    await replaceCachedBars(sourceId, symbol, interval, bars as Bar[]);
+    await replaceCachedBars(sourceId, symbol, interval, bars as Bar[], lock);
   },
   async remove(key) {
-    const [sourceId, symbol, interval] = splitKey(key);
+    const [sourceId, symbol, interval, lock] = cacheArgs(key);
     if (!sourceId) return;
-    await clearCachedBars(sourceId, symbol, interval);
+    await clearCachedBars(sourceId, symbol, interval, lock);
   },
 };
+
+/** Full key → cache args. The lock is not stripped back to a spot key. */
+function cacheArgs(key: string): [string, string, string, BarsKeyLock] {
+  const parts = String(key || '').split('|');
+  return [parts[0] ?? '', parts[1] ?? '', parts[2] ?? '', lockFromBarsKey(key)];
+}
 
 function splitKey(key: string): [string, string, string] {
   const parts = String(key || '').split('|');
@@ -460,6 +468,7 @@ async function flushRemoteDatasetDocs(mode: 'git' | 'worker'): Promise<void> {
       try {
         await plugin.remove?.(id, {});
       } catch (err: unknown) {
+        if (isMissingRemote(err)) continue;
         reportSinkError(mode, id, err);
       }
     }

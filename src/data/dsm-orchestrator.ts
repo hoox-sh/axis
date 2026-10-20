@@ -62,8 +62,13 @@ import {
 import { intervalToSec } from './bars-gaps';
 import { startBackfill } from './data-source-manager';
 import { exchangeForSource } from './symbol-exchange';
+import { providerDatasetLock } from './provider';
 import { getSource } from '../sources/catalog';
 import { announce } from '../ui/sr-announce';
+
+function chartLock(): { market: string; authMode: string } {
+  return providerDatasetLock(store.provider);
+}
 
 /** Throttle window for progressive repaints (ms). */
 const REPAINT_THROTTLE_MS = 750;
@@ -149,22 +154,13 @@ function chartHoldsSeries(sym: string, iv: string): boolean {
   return !!cur && cur === sym.trim().toUpperCase();
 }
 
-/**
- * The bars a dataset repaint should paint.
- *
- * The dataset store only learns about a live bar when the Data Manager source
- * is active, so a plain dataset view can be **older** than the chart. Painting
- * it would drop the forming candle — the "last bars unset" symptom. The
- * chart's live tail (every bar newer than the dataset's newest) is therefore
- * merged back in, and the result is capped to the chart window again.
- */
+/** Dataset view merged with chart bars, capped to the chart window. */
 function repaintView(datasetBars: Bar[], sym: string, iv: string): Bar[] {
   const view = sliceForChart(datasetBars);
   if (!chartHoldsSeries(sym, iv)) return view;
   const live = store.bars;
   if (!live?.length) return view;
-  const merged = mergeLiveTail(view, live);
-  return merged.length > view.length ? sliceToChartWindow(merged) : merged;
+  return sliceToChartWindow(mergeLiveTail(view, live));
 }
 
 /** Paint bars onto chart + store (full refresh semantics). */
@@ -187,7 +183,7 @@ function scheduleRepaint(sym: string, iv: string, srcId: string, gen: number): v
     repaintPending = true;
     return;
   }
-  const peeked = peekDataset(srcId, sym, iv);
+  const peeked = peekDataset(srcId, sym, iv, chartLock());
   const delay = repaintThrottleMs(peeked?.length ?? 0);
   repaintTimer = setTimeout(() => {
     repaintTimer = null;
@@ -198,11 +194,12 @@ function scheduleRepaint(sym: string, iv: string, srcId: string, gen: number): v
       const s = symFromKey ?? sym;
       const interval = ivFromKey ?? iv;
       // Memory is already repaired on put — skip copy + second repair on 45k bars.
-      let bars = peekDataset(sid, s, interval);
+      const lock = chartLock();
+      let bars = peekDataset(sid, s, interval, lock);
       if (!bars?.length) {
-        bars = await getDataset(sid, s, interval);
+        bars = await getDataset(sid, s, interval, lock);
       }
-      if (!bars.length || gen !== paintGen || activeKey !== keyFor(srcId, sym, iv)) return;
+      if (!bars.length || gen !== paintGen || activeKey !== keyFor(srcId, sym, iv, lock)) return;
       // The chart may have moved on to another symbol while the dataset was
       // being completed. Painting then would put a **different** series on the
       // chart (the store's bars and the painted candles), so the repaint is
@@ -281,7 +278,8 @@ export async function paintDataset(
   const sym = String(symbol || '').trim();
   const iv = String(interval || store.interval || '1d');
   const srcId = String(sourceId || store.source || '');
-  const key = keyFor(srcId, sym, iv);
+  const lock = chartLock();
+  const key = keyFor(srcId, sym, iv, lock);
   const gen = ++paintGen;
 
   stopStreaming();
@@ -293,7 +291,7 @@ export async function paintDataset(
   let raw: Bar[] = Array.isArray(opts?.bars) ? opts.bars.slice() : [];
   if (!raw.length) {
     try {
-      raw = await getDataset(srcId, sym, iv);
+      raw = await getDataset(srcId, sym, iv, lock);
     } catch {
       raw = [];
     }
@@ -327,7 +325,7 @@ export function startProgressiveStream(
   const sym = String(symbol || '').trim();
   const iv = String(interval || store.interval || '1d');
   const srcId = String(sourceId || store.source || '');
-  const key = keyFor(srcId, sym, iv);
+  const key = keyFor(srcId, sym, iv, chartLock());
   const gen = ++paintGen;
 
   stopStreaming();
@@ -379,7 +377,7 @@ export async function ensureDatasetComplete(
   try {
     let raw: Bar[] = [];
     try {
-      raw = await getDataset(srcId, sym, iv);
+      raw = await getDataset(srcId, sym, iv, chartLock());
     } catch {
       raw = [];
     }
@@ -450,7 +448,7 @@ export function seedDatasetFromBars(
   bars: readonly Bar[],
 ): void {
   if (!bars?.length) return;
-  void putDatasetBars(sourceId, symbol, interval, bars).catch((err) => {
+  void putDatasetBars(sourceId, symbol, interval, bars, chartLock()).catch((err) => {
     console.warn('[dsm-orchestrator] seedDatasetFromBars failed', err);
   });
 }

@@ -3261,26 +3261,30 @@ export function sliceToChartWindow(bars: readonly Bar[]): Bar[] {
 }
 
 /**
- * Merge the chart's live tail into a dataset view.
+ * Merge chart bars into a dataset view by time.
  *
- * The dataset store only learns about a live bar when the Data Manager source
- * is active, so a dataset-driven repaint can otherwise paint a series that is
- * *older* than the chart and silently drop the forming candle. The tail is
- * every chart bar strictly newer than the dataset's newest bar — those are the
- * forming / just-closed candles the chart owns until the dataset catches up.
+ * A chart bar the dataset is missing stays. At the same timestamp a closed
+ * dataset bar beats a forming chart bar; otherwise the chart bar wins.
  */
 export function mergeLiveTail(base: readonly Bar[], live: readonly Bar[]): Bar[] {
   if (!Array.isArray(base) || !base.length) return Array.isArray(live) ? live.slice() : [];
   if (!Array.isArray(live) || !live.length) return base as Bar[];
-  const lastBase = base[base.length - 1]!;
-  const tail: Bar[] = [];
+  const byTime = new Map<number, Bar>();
+  for (const bar of base) {
+    if (bar && Number.isFinite(bar.time)) byTime.set(bar.time, bar);
+  }
   for (const bar of live) {
     if (!bar || !Number.isFinite(bar.time)) continue;
-    if (bar.time > lastBase.time) tail.push(bar);
+    const dataset = byTime.get(bar.time);
+    if (!dataset) {
+      byTime.set(bar.time, bar);
+      continue;
+    }
+    const datasetClosed = dataset.closed === true;
+    const chartForming = bar.closed !== true;
+    if (!(datasetClosed && chartForming)) byTime.set(bar.time, bar);
   }
-  if (!tail.length) return base as Bar[];
-  tail.sort((a, b) => a.time - b.time);
-  return [...base, ...tail];
+  return [...byTime.values()].sort((a, b) => a.time - b.time);
 }
 
 /**

@@ -23,8 +23,7 @@
 import { FALLBACK_MAJORS } from '../data/symbol-catalog';
 import { pyneMarket } from '../data/provider';
 import { intervalToSec } from '../data/bars-gaps';
-import { flushEngineSeries } from '../data/engine-flush';
-import { flushDatasets } from '../data/dataset-store';
+import { flushLocalAndEngine } from '../data/engine-flush';
 import { currentSeriesKey, pairFormSymbol } from '../engine/market-identity';
 import { routeEngineRun } from '../engine/router';
 import type { DataSeriesKey, DataSeriesStatus } from '../engines/data-sessions';
@@ -569,8 +568,9 @@ export async function engineRepairView(p: Record<string, unknown>): Promise<Reco
  */
 export async function engineFlushView(p: Record<string, unknown>): Promise<Record<string, unknown>> {
   const started = Date.now();
-  const local = await flushDatasets();
-  const engine = await flushEngineSeries();
+  const flushed = await flushLocalAndEngine();
+  const local = flushed.local;
+  const engine = flushed.engine;
   return {
     local: { removed: local },
     engine: {

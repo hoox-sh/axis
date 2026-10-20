@@ -167,35 +167,16 @@ function chartTimesForInputSources(): number[] {
 }
 
 /**
- * Cap the bars handed to the engine to the most recent N
- * ({@link AppState.rollingWindowBars}).
+ * Cap the bars handed to the engine at the chart window.
  *
- * The dataset keeps the full Historical bars depth — this only bounds evaluate
- * time, the encode payload, and the size of the response envelope. Plot apply
- * is safe: overlay points are keyed by **time**, not by index into `store.bars`
- * (`lineSeriesToOverlayData`), so a windowed run lands on its own axis and
- * simply covers the recent range.
- *
- * Explicit `opts.bars` (HPO holdout / walk-forward) is windowed too — it is
- * already a deliberate slice, so the cap is redundant there and skipping it
- * would let a trial quietly exceed the user's budget.
- *
- * The cap is the **chart** window ({@link chartWindowLimit}): the engine
- * evaluates exactly the bars the chart shows, so the two axes can never drift
- * apart.
+ * `rollingWindowBars <= 0` is the no-cap hatch: the engine receives the whole
+ * series while the chart stays bounded, so that branch does not lock the axes.
  */
 export function applyRollingWindow(
   bars: import('../store/types').Bar[],
 ): import('../store/types').Bar[] {
-  // `0` is the documented "no cap" escape hatch. The persisted setting is
-  // clamped (so it never reaches the store as 0), and a direct store write
-  // that lands on 0 must not silently disable the guard either — the engine
-  // simply gets everything, while the chart keeps its own bounded window.
   const raw = Number(store.rollingWindowBars);
   if (!Number.isFinite(raw) || raw <= 0) return bars;
-  // The cap is the **chart** window ({@link chartWindowLimit}): the engine
-  // evaluates exactly the bars the chart shows, so the two axes can never
-  // drift apart.
   const limit = chartWindowLimit();
   if (bars.length <= limit) return bars;
   return bars.slice(bars.length - limit);

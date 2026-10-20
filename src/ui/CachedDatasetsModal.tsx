@@ -39,6 +39,7 @@ import {
   countBarsForLoad,
   getCachedBars,
   listCachedSeries,
+  lockFromBarsKey,
   type BarLoadWindow,
   type BarsCacheMeta,
 } from '../data/bars-cache';
@@ -282,7 +283,12 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
     setLoading(true);
     setError('');
     try {
-      const list = await listCachedSeries();
+      let list: Awaited<ReturnType<typeof listCachedSeries>> = [];
+      try {
+        list = await listCachedSeries();
+      } catch (err: unknown) {
+        console.warn('[cached-datasets] could not list IndexedDB series', err);
+      }
       const byKey = new Map(list.map((r) => [r.key, r] as const));
       for (const m of listMemoryDatasets()) {
         if (byKey.has(m.key)) continue;
@@ -295,6 +301,8 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
           oldestSec: m.oldestSec,
           newestSec: m.newestSec,
           updatedAt: Date.now(),
+          market: m.market,
+          authMode: m.authMode,
         });
       }
       const merged = [...byKey.values()];
@@ -332,7 +340,12 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
     let cancelled = false;
     void (async () => {
       try {
-        const b = await getCachedBars(meta.sourceId, meta.symbol, meta.interval);
+        const b = await getCachedBars(
+          meta.sourceId,
+          meta.symbol,
+          meta.interval,
+          lockFromBarsKey(meta.key),
+        );
         if (!cancelled) setBars(b);
       } catch {
         if (!cancelled) setBars([]);
@@ -409,14 +422,21 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
         return;
       }
 
-      setDataManagerSelection(meta.sourceId, meta.symbol, meta.interval, win);
+      setDataManagerSelection(
+        meta.sourceId,
+        meta.symbol,
+        meta.interval,
+        win,
+        lockFromBarsKey(meta.key),
+      );
       setActivePlugin('source', DATA_MANAGER_SOURCE_ID);
       const streamId = defaultStreamForSource(DATA_MANAGER_SOURCE_ID);
       setActivePlugin('stream', streamId);
       setStore('symbol', meta.symbol);
       setStore('interval', meta.interval);
       persist();
-      const ok = await applyCachedToChart(meta.sourceId, meta.symbol, meta.interval, win);
+      const rowLock = lockFromBarsKey(meta.key);
+      const ok = await applyCachedToChart(meta.sourceId, meta.symbol, meta.interval, win, rowLock);
       if (!ok) {
         setError('Could not load bars onto the chart.');
         return;
@@ -430,7 +450,12 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
           /* live optional */
         }
       }
-      const after = await getCachedBars(meta.sourceId, meta.symbol, meta.interval);
+      const after = await getCachedBars(
+        meta.sourceId,
+        meta.symbol,
+        meta.interval,
+        lockFromBarsKey(meta.key),
+      );
       const parts = [
         `Loaded ${meta.symbol} ${meta.interval}`,
         `${after.length.toLocaleString()} bars in dataset`,
@@ -456,7 +481,12 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
     setError('');
     try {
       // Full delete: bars + metadata, from every sink (session/local/git/worker).
-      await removeDatasetEverywhere(meta.sourceId, meta.symbol, meta.interval);
+      await removeDatasetEverywhere(
+        meta.sourceId,
+        meta.symbol,
+        meta.interval,
+        lockFromBarsKey(meta.key),
+      );
       setMsg('Dataset deleted (bars + metadata).');
       setPendingDelete(false);
       announce(`Deleted ${meta.symbol} ${meta.interval} dataset`);

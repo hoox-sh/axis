@@ -39,8 +39,7 @@ import {
   WATCHLIST_REFRESH_OPTIONS,
 } from '../../data/watchlist-tickers';
 import { loadSymbolData, reloadChart } from '../../data/load-symbol';
-import { flushDatasets } from '../../data/dataset-store';
-import { flushEngineSeries } from '../../data/engine-flush';
+import { flushLocalAndEngine } from '../../data/engine-flush';
 import { syncLiveToPreference } from '../../streams/multiplex';
 import { getManager } from '../../chart/manager-access';
 import { UI_SCALE_PRESETS, formatUiScalePct } from '../ui-scale';
@@ -431,10 +430,9 @@ export function SettingsPage(props: {
     setFlushingDatasets(true);
     setDatasetFlushMsg('');
     try {
-      const removed = await flushDatasets();
-      // The engine keeps its own copy of the venue data — drop it too, or the
-      // live path keeps mirroring the old (stale, holed) window.
-      const engine = await flushEngineSeries();
+      const flushed = await flushLocalAndEngine();
+      const removed = flushed.local;
+      const engine = flushed.engine;
       const engineNote = engine.failed.length
         ? ` · engine: ${engine.keys.length} series flushed, ${engine.failed.length} could not be dropped`
         : ` · engine: ${engine.keys.length} series flushed`;

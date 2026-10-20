@@ -47,6 +47,7 @@ import {
 } from '../store';
 import { getManager, setDataToChart } from '../chart/manager-access';
 import { getSource, sourcePageLimit } from '../sources/catalog';
+import { providerDatasetLock } from './provider';
 import { getUploadedFileName } from '../sources/upload-store';
 import { classifyTransport } from '../ui/telemetry';
 import { defaultStreamForSource } from '../streams/catalog';
@@ -54,6 +55,13 @@ import { pluginKey } from '../plugins/types';
 import { normalizeHistoricalBars } from './parse-bars';
 import { announce, announceError } from '../ui/sr-announce';
 import type { Bar } from '../store/types';
+import { exchangeForSource, normalizeLoadSymbol } from './symbol-exchange';
+import { isEngineOwnedLive } from '../engines/ownership';
+import { getDataSeriesBars } from '../engines/data-sessions';
+import { getActiveEngineConfig } from '../plugins/active';
+import { fillBarsTowardNow, fillInternalGaps } from './expand-cache';
+
+export { exchangeForSource, normalizeLoadSymbol };
 
 /**
  * Monotonic generation for in-flight history loads.
@@ -101,13 +109,9 @@ function loadErrorSentence(msg: string): string {
   return line.slice(0, 140) || 'The venue did not return candles.';
 }
 
-// Shared leaf helpers (also used by DSM modules without importing this file).
-import { exchangeForSource, normalizeLoadSymbol } from './symbol-exchange';
-import { isEngineOwnedLive } from '../engines/ownership';
-import { getDataSeriesBars } from '../engines/data-sessions';
-import { getActiveEngineConfig } from '../plugins/active';
-import { fillBarsTowardNow, fillInternalGaps } from './expand-cache';
-export { exchangeForSource, normalizeLoadSymbol };
+function chartLock(): { market: string; authMode: string } {
+  return providerDatasetLock(store.provider);
+}
 
 /** Close cache/engine newest → now via venue before live appends the forming bar. */
 async function closeTailToNow(
@@ -304,7 +308,7 @@ export async function loadSymbolData(
       const { getDataset } = await import('./dataset-store');
       let cached: Bar[] = [];
       try {
-        cached = await getDataset(srcId, sym, iv);
+        cached = await getDataset(srcId, sym, iv, chartLock());
       } catch {
         cached = [];
       }
@@ -316,7 +320,7 @@ export async function loadSymbolData(
         // bars, and throwing them away means the next load fetches them again.
         try {
           const { putDatasetBars } = await import('./dataset-store');
-          await putDatasetBars(srcId, sym, iv, filled);
+          await putDatasetBars(srcId, sym, iv, filled, chartLock());
         } catch {
           /* persist is best-effort */
         }
@@ -586,7 +590,7 @@ export async function loadSymbolData(
     // rolling window; the full cache stays in the dataset store.
     try {
       const { getDataset } = await import('./dataset-store');
-      const cached = await getDataset(srcId, sym, iv);
+      const cached = await getDataset(srcId, sym, iv, chartLock());
       if (cached.length && stillCurrent()) {
         const cap = chartWindowLimit();
         const view = cached.length > cap ? cached.slice(cached.length - cap) : cached;

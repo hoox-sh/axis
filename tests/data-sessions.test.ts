@@ -34,7 +34,11 @@ import {
   serverEngine,
   DEFAULT_ENGINE_CAPABILITIES,
 } from '../src/engines/catalog';
-import { putDatasetBars, _resetDatasetStoreForTests } from '../src/data/dataset-store';
+import {
+  putDatasetBars,
+  _drainDatasetWritesForTests,
+  _resetDatasetStoreForTests,
+} from '../src/data/dataset-store';
 import { _resetDatasetSinksForTests } from '../src/data/dataset-sinks';
 import { _resetBarsCacheForTests } from '../src/data/bars-cache';
 import { setStore } from '../src/store';
@@ -406,6 +410,7 @@ describe('ensureDataSession broker', () => {
     // Regression: datasets are keyed `binance-rest|…`, but the broker used to
     // ask for `binance|…` — it never matched, skipped the local upload and went
     // straight to the engine fetch (which needs ccxt on the host).
+    await _drainDatasetWritesForTests();
     _resetDatasetStoreForTests();
     _resetDatasetSinksForTests();
     await _resetBarsCacheForTests();
@@ -436,6 +441,7 @@ describe('ensureDataSession broker', () => {
   });
 
   it('finds a load-form local dataset from a pair-form series key', async () => {
+    await _drainDatasetWritesForTests();
     _resetDatasetStoreForTests();
     _resetDatasetSinksForTests();
     await _resetBarsCacheForTests();

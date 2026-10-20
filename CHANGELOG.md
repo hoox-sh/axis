@@ -13,6 +13,19 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **The engine flush names every local dataset before it clears anything.** The purge list was built after the memory mirror had been wiped, so IndexedDB-only series (the mirror keeps 48) were never deleted on the engine, and the result still said they had been. Settings and `engine.flush` now capture memory and IndexedDB keys first, delete those engine series, then wipe the local stores. A list that cannot be read is reported as a failure instead of a clean delete.
+- **A page that starts during a flush cannot put the series back.** The generation check ran only when a write was queued, and a bars-cache put that had already copied its batch could commit after the clear. The flush bumps that generation and clears the mirror after the removes, after the remote deletes, and after the cache wipe. A write that loses the race deletes its key, and a batch copied out before the clear is dropped.
+- **Spot and another market no longer share one dataset.** Reads and writes never passed the provider lock, so linear and inverse bars merged into the public spot series while the engine key used a different market. Non-spot and keyed series now append `|market|authMode`. The engine wire still maps `linear` to `swap` and `inverse` to `future` at that boundary only.
+- **A Data Manager job follows the dataset that was loaded.** Backfill and apply-when-complete used the chart's current market, so a linear row grew the spot series and could paint onto a chart that had since switched market. The job keeps the selection's lock, and a completed job does not paint when that lock is no longer the chart's.
+- **An IndexedDB read failure no longer looks like an empty dataset.** `getCachedBars` returned `[]` on a failed read, and the next page merge replaced the series. A failed read now throws and the write is refused. A genuine miss, and a browser with no IndexedDB, still look empty.
+- **Replacing a dataset keeps a DEX pool address's case.** The replace path uppercased the stored symbol while the write path did not, so list and delete rebuilt a different key for an address that contains `:` or `/`.
+- **A dataset repaint no longer drops chart bars the dataset is missing.** The merge kept only bars strictly newer than the dataset tip, so a same-time forming candle jumped backward and an interior hole-fill was punched back out. Equal times keep a closed dataset bar over a forming chart bar, and otherwise keep the chart bar.
+- **A script subscription grows with the chart window.** `history_bars` was sent only on the first subscribe, which usually ran against the short first paint, so the indicator stayed blank on the rest of the window. The depth is part of the subscription identity and is the chart window even when the store is still shorter. A script resubscribe does not cool the series socket.
+
 ## [2.25.3] — 2026-10-20
 
 ### Fixed

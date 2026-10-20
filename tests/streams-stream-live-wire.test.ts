@@ -109,6 +109,7 @@ beforeEach(() => {
   setStore('interval', '1m');
   setStore('exchange', 'binance');
   setStore('bars', [bar(1000)]);
+  setStore('rollingWindowBars', 10_000);
   setStore('endpoint', 'http://engine.test');
   setStore('pluginsConfig', reconcile({
     'engine:server': { endpoint: 'http://engine.test', apiKey: 'key-1' },
@@ -338,9 +339,9 @@ describe('the engine socket wire', () => {
         | { inputs?: Record<string, unknown>; meta?: { history_bars?: number } }
         | undefined;
       expect(payload?.inputs).toEqual({ length: 20 });
-      // The script is painted over the chart's whole window — the short live
-      // snapshot depth would blank everything but the last 500 bars.
-      expect(payload?.meta?.history_bars).toBe(3);
+      // Three painted bars must not freeze the script at that prefix — the
+      // subscription covers the chart window the dataset will fill.
+      expect(payload?.meta?.history_bars).toBe(10_000);
       const scriptSub = String(frame?.id ?? '');
       ManualSocket.instances[0]!.push({
         type: 'full',
@@ -418,6 +419,84 @@ describe('the engine socket wire', () => {
       payload: { seriesKey: scriptSub2, count: 1, closed_upto: 1, plots: { plot_0: [2.5] } },
     });
     await second;
+  });
+
+  it('re-subscribes when the chart window grows, and not when the depth is unchanged', async () => {
+    setStore('rollingWindowBars', 3);
+    setStore('bars', [bar(1000), bar(2000), bar(3000)]);
+    const first = streamEvalScript({
+      id: 'ind-depth',
+      code: 'plot(close)',
+      inputValues: { length: 20 },
+    } as never);
+    await until(() => ManualSocket.instances.length > 0);
+    ManualSocket.instances[0]!.open();
+    await until(() =>
+      ManualSocket.instances[0]?.frames().some(
+        (f) =>
+          f.type === 'subscribe' &&
+          (f.payload as { kind?: string } | undefined)?.kind === 'script',
+      ),
+    );
+    const firstFrame = ManualSocket.instances[0]!.frames().find(
+      (f) =>
+        f.type === 'subscribe' &&
+        (f.payload as { kind?: string } | undefined)?.kind === 'script',
+    );
+    expect(
+      (firstFrame?.payload as { meta?: { history_bars?: number } } | undefined)?.meta?.history_bars,
+    ).toBe(3);
+    const scriptSub = String(firstFrame?.id ?? '');
+    ManualSocket.instances[0]!.push({
+      type: 'full',
+      id: scriptSub,
+      sessionId: 's-depth',
+      seq: 1,
+      payload: { seriesKey: scriptSub, count: 1, closed_upto: 1, plots: { plot_0: [1.5] } },
+    });
+    await first;
+
+    setStore('rollingWindowBars', 50);
+    const second = streamEvalScript({
+      id: 'ind-depth',
+      code: 'plot(close)',
+      inputValues: { length: 20 },
+    } as never);
+    await until(() =>
+      ManualSocket.instances[0]!.frames().filter(
+        (f) =>
+          f.type === 'subscribe' &&
+          (f.payload as { kind?: string } | undefined)?.kind === 'script',
+      ).length >= 2,
+    );
+    const subs = ManualSocket.instances[0]!.frames().filter(
+      (f) =>
+        f.type === 'subscribe' &&
+        (f.payload as { kind?: string } | undefined)?.kind === 'script',
+    );
+    expect(
+      (subs[subs.length - 1]?.payload as { meta?: { history_bars?: number } } | undefined)?.meta
+        ?.history_bars,
+    ).toBe(50);
+    const scriptSub2 = String(subs[subs.length - 1]!.id);
+    ManualSocket.instances[0]!.push({
+      type: 'full',
+      id: scriptSub2,
+      sessionId: 's-depth-2',
+      seq: 1,
+      payload: { seriesKey: scriptSub2, count: 1, closed_upto: 1, plots: { plot_0: [2] } },
+    });
+    await second;
+
+    const before = ManualSocket.instances[0]!.frames().length;
+    const third = streamEvalScript({
+      id: 'ind-depth',
+      code: 'plot(close)',
+      inputValues: { length: 20 },
+    } as never);
+    await third;
+    const added = ManualSocket.instances[0]!.frames().slice(before);
+    expect(added.some((f) => f.type === 'subscribe' || f.type === 'unsubscribe')).toBe(false);
   });
 });
 

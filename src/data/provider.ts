@@ -55,8 +55,23 @@ const MARKET_SET = new Set<ProviderMarket>(['spot', 'linear', 'inverse', 'option
 export function asProviderMarket(raw: unknown): ProviderMarket {
   const m = String(raw || '').trim().toLowerCase();
   if (m === 'swap' || m === 'futures' || m === 'usdt-m' || m === 'usdm') return 'linear';
-  if (m === 'coin-m' || m === 'coinm' || m === 'delivery') return 'inverse';
+  // `future` is the PYNE wire name for inverse. Missing / unknown stays spot.
+  if (m === 'future' || m === 'coin-m' || m === 'coinm' || m === 'delivery') return 'inverse';
   return MARKET_SET.has(m as ProviderMarket) ? (m as ProviderMarket) : 'spot';
+}
+
+/**
+ * Dataset-key lock for a provider. Missing market is spot — the only default.
+ * Spot + public then keeps the legacy 3-part key ({@link barsCacheKey}).
+ */
+export function providerDatasetLock(
+  provider?: { market?: unknown; authMode?: unknown } | null,
+): { market: string; authMode: string } {
+  const auth = String(provider?.authMode ?? '').trim().toLowerCase();
+  return {
+    market: asProviderMarket(provider?.market),
+    authMode: auth === 'authenticated' ? 'authenticated' : 'public',
+  };
 }
 
 export const MARKET_LABELS: Record<ProviderMarket, string> = {

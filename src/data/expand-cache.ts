@@ -35,6 +35,7 @@ import { store } from '../store';
 import { normalizeHistoricalBars, sanitizeBar } from './parse-bars';
 import { normalizeLoadSymbol } from './symbol-exchange';
 import { getDataset, putDatasetBars } from './dataset-store';
+import { providerDatasetLock } from './provider';
 import { mergeBars } from './bars-cache';
 import { isEngineOwnedLive } from '../engines/ownership';
 import { findBarGaps, intervalToSec } from './bars-gaps';
@@ -52,8 +53,16 @@ const DEFAULT_EXPAND_BUDGET_MS = 25_000;
 /** Debounce live cache writes so open-bar ticks do not thrash IDB every frame. */
 const LIVE_CACHE_DEBOUNCE_MS = 750;
 
+interface PendingLiveBar {
+  bar: Bar;
+  sourceId: string;
+  symbol: string;
+  interval: string;
+  lock: { market: string; authMode: string };
+}
+
 const liveWriteTimers = new Map<string, ReturnType<typeof setTimeout>>();
-const livePendingBars = new Map<string, Bar>();
+const livePendingBars = new Map<string, PendingLiveBar>();
 
 /** Sources that cannot fill a network gap. */
 const OFFLINE_SOURCES = new Set([
@@ -288,17 +297,27 @@ export async function expandCachedSeriesToNow(
   sourceId: string,
   symbol: string,
   interval: string,
-  opts?: { signal?: AbortSignal; nowSec?: number; budgetMs?: number },
+  opts?: {
+    signal?: AbortSignal;
+    nowSec?: number;
+    budgetMs?: number;
+    market?: string;
+    authMode?: string;
+  },
 ): Promise<ExpandCacheResult> {
   const srcId = String(sourceId || '').trim();
   // Dataset keys uppercase internally (barsCacheKey); the venue request must
   // keep DEX pool case (Solana base58) — same rule as the load path.
   const sym = normalizeLoadSymbol(String(symbol || ''), srcId);
   const iv = String(interval || '').trim();
+  const lock = providerDatasetLock({
+    market: opts?.market ?? store.provider?.market,
+    authMode: opts?.authMode ?? store.provider?.authMode,
+  });
 
   let bars: Bar[] = [];
   try {
-    bars = await getDataset(srcId, sym, iv);
+    bars = await getDataset(srcId, sym, iv, lock);
   } catch {
     bars = [];
   }
@@ -372,7 +391,7 @@ export async function expandCachedSeriesToNow(
         const page = normalizeHistoricalBars(raw, { limit: pageLimit });
         if (page.length) {
           const before = bars.length;
-          bars = (await putDatasetBars(srcId, sym, iv, page)).bars;
+          bars = (await putDatasetBars(srcId, sym, iv, page, lock)).bars;
           return {
             bars,
             added: Math.max(0, bars.length - before),
@@ -422,7 +441,7 @@ export async function expandCachedSeriesToNow(
       // Keep bars that advance or refresh the series (overlap on newest is fine)
       const incoming = page.filter((b) => b.time >= newest);
       if (incoming.length) {
-        bars = (await putDatasetBars(srcId, sym, iv, incoming)).bars;
+        bars = (await putDatasetBars(srcId, sym, iv, incoming, lock)).bars;
       }
 
       // Overlapped into existing cache — done
@@ -437,7 +456,7 @@ export async function expandCachedSeriesToNow(
     }
 
     try {
-      bars = await getDataset(srcId, sym, iv);
+      bars = await getDataset(srcId, sym, iv, lock);
     } catch {
       /* keep last bars */
     }
@@ -472,8 +491,18 @@ export function noteDataManagerLiveBar(bar: Bar): void {
   if (!sel?.sourceId || !sel.symbol || !sel.interval) return;
   if (!canExpandFromSource(sel.sourceId) && sel.sourceId === 'csv-upload') return;
 
-  const key = `${sel.sourceId}|${sel.symbol}|${sel.interval}`;
-  livePendingBars.set(key, clean);
+  const lock = sel.market
+    ? providerDatasetLock({ market: sel.market, authMode: sel.authMode })
+    : providerDatasetLock(store.provider);
+  const key = `${sel.sourceId}|${sel.symbol}|${sel.interval}|${lock.market}|${lock.authMode}`;
+  // The lock is captured with the bar. A later selection must not retarget this tick.
+  livePendingBars.set(key, {
+    bar: clean,
+    sourceId: sel.sourceId,
+    symbol: sel.symbol,
+    interval: sel.interval,
+    lock,
+  });
 
   // Closed bars flush promptly; open-bar ticks coalesce under the debounce window
   const delay = clean.closed ? 0 : LIVE_CACHE_DEBOUNCE_MS;
@@ -489,7 +518,13 @@ export function noteDataManagerLiveBar(bar: Bar): void {
     const pending = livePendingBars.get(key);
     livePendingBars.delete(key);
     if (!pending) return;
-    void putDatasetBars(sel.sourceId, sel.symbol, sel.interval, [pending]).catch(() => {
+    void putDatasetBars(
+      pending.sourceId,
+      pending.symbol,
+      pending.interval,
+      [pending.bar],
+      pending.lock,
+    ).catch(() => {
       /* cache write best-effort */
     });
   }, delay);

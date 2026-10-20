@@ -10,6 +10,7 @@ import {
   getCachedBarCount,
   getCachedRange,
   putCachedBars,
+  replaceCachedBars,
   clearCachedBars,
   listCachedSeries,
   getCachedRecord,
@@ -100,6 +101,17 @@ describe('bars-cache', () => {
     expect(junk[1]!.close).toBe(20);
 
     expect(mergeAndCap(existing, null as never)).toHaveLength(2);
+  });
+
+  it('replaceCachedBars keeps a mixed-case address in the stored symbol', async () => {
+    const symbol = 'solana:AbC123/pool';
+    await replaceCachedBars('geckoterminal-ohlcv', symbol, '1h', [bar(100)]);
+    const row = (await listCachedSeries()).find((r) => r.interval === '1h' && r.sourceId === 'geckoterminal-ohlcv');
+    expect(row?.symbol).toBe(symbol);
+    expect(row?.key).toBe(barsCacheKey('geckoterminal-ohlcv', symbol, '1h'));
+    expect(await getCachedBars('geckoterminal-ohlcv', row!.symbol, '1h')).toHaveLength(1);
+    await clearCachedBars('geckoterminal-ohlcv', row!.symbol, '1h');
+    expect(await getCachedBars('geckoterminal-ohlcv', symbol, '1h')).toEqual([]);
   });
 
   it('put/get/clear round-trip in memory', async () => {

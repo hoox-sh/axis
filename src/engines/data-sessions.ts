@@ -36,7 +36,7 @@
 
 import type { Bar } from '../store/types';
 import type { EngineDataSessionRequest } from '../plugins/types';
-import { pyneMarket } from '../data/provider';
+import { providerDatasetLock, pyneMarket } from '../data/provider';
 import { FALLBACK_MAJORS } from '../data/symbol-catalog';
 import { normalizeHistoricalBars } from '../data/parse-bars';
 import { pairFormSymbol } from '../engine/market-identity';
@@ -515,12 +515,21 @@ function localLookupSymbols(key: DataSeriesKey): string[] {
 async function defaultLocalBars(key: DataSeriesKey): Promise<readonly Bar[]> {
   const c = canonicalSeriesKey(key);
   const { getDataset } = await import('../data/dataset-store');
+  let authMode: unknown;
+  try {
+    const { store } = await import('../store');
+    authMode = store.provider?.authMode;
+  } catch {
+    /* store optional in tests */
+  }
+  // `c.market` is the PYNE wire name; the dataset key uses the AXIS market.
+  const lock = providerDatasetLock({ market: c.market, authMode });
   const candidates = await localDatasetSourceIds(key);
   const symbols = localLookupSymbols(key);
   for (const sourceId of candidates) {
     for (const symbol of symbols) {
       try {
-        const bars = await getDataset(sourceId, symbol, c.interval);
+        const bars = await getDataset(sourceId, symbol, c.interval, lock);
         if (bars.length) return bars;
       } catch {
         /* try the next candidate key */

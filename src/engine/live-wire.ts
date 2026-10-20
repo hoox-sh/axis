@@ -101,6 +101,11 @@ const FAILURE_COOLDOWN_MS = 60_000;
 const SNAPSHOT_WAIT_MS = 120_000;
 const LOADING_WAIT_CAP_MS = 120_000;
 
+function historyBarsOf(meta: Record<string, unknown> | undefined): number {
+  const n = Number(meta?.history_bars);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
 /**
  * Stable signature of a script's input values.
  *
@@ -165,6 +170,8 @@ export class StreamLiveWire {
   private readonly scriptCtx = new Map<string, { script: string; indicatorId?: string; bars: Bar[] }>();
   /** Input signature of each script subscription (a change forces a re-subscribe). */
   private readonly scriptInputSig = new Map<string, string>();
+  /** `history_bars` the script subscription was created with. */
+  private readonly scriptDepth = new Map<string, number>();
   /** Inbox for frames that arrive before their waiter (one TCP segment can
    * carry status+full together). Drained by `awaitFull`. */
   private readonly inbox = new Map<string, WireFrame[]>();
@@ -284,11 +291,19 @@ export class StreamLiveWire {
     // the values it was subscribed with, so the cached state (and every delta
     // merged into it) would keep the old ones.
     const sig = inputSignature(input.inputs);
+    const depth = historyBarsOf(input.meta);
     const prevSig = this.scriptInputSig.get(input.subId);
+    const prevDepth = this.scriptDepth.get(input.subId);
     let applier = this.appliers.get(input.subId);
-    if (applier && prevSig !== undefined && prevSig !== sig) {
+    const identityChanged =
+      !!applier &&
+      ((prevSig !== undefined && prevSig !== sig) ||
+        (prevDepth !== undefined && prevDepth !== depth));
+    if (identityChanged) {
       this.appliers.delete(input.subId);
       this.appliedSeq.delete(input.subId);
+      this.scriptInputSig.delete(input.subId);
+      this.scriptDepth.delete(input.subId);
       applier = undefined;
       try {
         this.client.unsubscribe(input.subId);
@@ -297,10 +312,14 @@ export class StreamLiveWire {
       }
     }
     if (!applier) {
-      if (this.cooledDown) this.fail('cooldown', 'stream in failure cooldown');
+      // A script subscribe must not cool down or fail() the series socket.
+      if (this.cooledDown) {
+        throw new StreamFallbackError('cooldown', 'stream in failure cooldown');
+      }
       applier = new Redesign2DeltaApplier();
       this.appliers.set(input.subId, applier);
       this.scriptInputSig.set(input.subId, sig);
+      this.scriptDepth.set(input.subId, depth);
       this.handlers.onStatus(input.subId, 'connecting');
       try {
         this.client.subscribe(input.subId, 'script', input.meta, {
@@ -310,6 +329,8 @@ export class StreamLiveWire {
         const full = await this.awaitFull(input.subId, SNAPSHOT_WAIT_MS, { fatal: false });
         if (full.type === 'error' || full.type !== 'full') {
           this.appliers.delete(input.subId);
+          this.scriptInputSig.delete(input.subId);
+          this.scriptDepth.delete(input.subId);
           throw new StreamFallbackError(
             'script-subscribe-failed',
             `expected full, got ${full.type}`,
@@ -326,15 +347,24 @@ export class StreamLiveWire {
         this.handlers.onStatus(input.subId, 'live');
       } catch (e) {
         this.appliers.delete(input.subId);
+        this.scriptInputSig.delete(input.subId);
+        this.scriptDepth.delete(input.subId);
         if (e instanceof StreamFallbackError) throw e;
-        this.fail('script-failed', e instanceof Error ? e.message : String(e));
+        throw new StreamFallbackError(
+          'script-failed',
+          e instanceof Error ? e.message : String(e),
+        );
       }
       const cached = applier.cached;
-      if (!cached) this.fail('no-state', 'script snapshot produced no state');
+      if (!cached) {
+        throw new StreamFallbackError('no-state', 'script snapshot produced no state');
+      }
       return this.apply(input.script, input.indicatorId, cached, 'stream-full', input.bars);
     }
     const cached = applier.cached;
-    if (!cached) this.fail('no-state', 'script has no merged state yet');
+    if (!cached) {
+      throw new StreamFallbackError('no-state', 'script has no merged state yet');
+    }
     return this.apply(input.script, input.indicatorId, cached, 'stream-delta', input.bars);
   }
 
@@ -566,6 +596,7 @@ export class StreamLiveWire {
     this.seriesInflight.delete(subId);
     this.scriptCtx.delete(subId);
     this.scriptInputSig.delete(subId);
+    this.scriptDepth.delete(subId);
     try {
       this.client.unsubscribe(subId);
     } catch {
@@ -630,6 +661,8 @@ export class StreamLiveWire {
     this.seriesBars.clear();
     this.seriesInflight.clear();
     this.scriptCtx.clear();
+    this.scriptInputSig.clear();
+    this.scriptDepth.clear();
     this.inbox.clear();
     this.inboxWaiters.clear();
     this.failures = 0;
@@ -648,6 +681,8 @@ export class StreamLiveWire {
     this.seriesBars.clear();
     this.seriesInflight.clear();
     this.scriptCtx.clear();
+    this.scriptInputSig.clear();
+    this.scriptDepth.clear();
     try {
       this.client.disconnect();
     } catch {

@@ -127,12 +127,33 @@ export function countBarsForLoad(bars: Bar[], window?: BarLoadWindow | null): nu
   return n;
 }
 
+/** Provider lock carried on a non-spot or keyed series. */
+export interface BarsKeyLock {
+  market?: string;
+  authMode?: string;
+}
+
+/**
+ * Lock suffix stored on a cache key, if any.
+ * A legacy `source|symbol|interval` key has no lock (public spot).
+ */
+export function lockFromBarsKey(key: string): BarsKeyLock {
+  const parts = String(key || '').split('|');
+  const market = parts[3] ?? '';
+  const authMode = parts[4] ?? '';
+  if (!market && !authMode) return {};
+  return {
+    ...(market ? { market } : {}),
+    ...(authMode ? { authMode } : {}),
+  };
+}
+
 /** Build cache key from source / symbol / interval (+ optional provider lock). */
 export function barsCacheKey(
   sourceId: string,
   symbol: string,
   interval: string,
-  opts?: { market?: string; authMode?: string },
+  opts?: BarsKeyLock,
 ): string {
   const src = String(sourceId || '').trim();
   // DEX pool symbols keep their case: uppercasing a base58 / `0x…` address
@@ -307,6 +328,14 @@ const pendingIdbPuts = new Map<string, BarsCacheRecord>();
 let idbFlushTimer: ReturnType<typeof setTimeout> | null = null;
 /** Shared DB handle reused across a flush batch (closed after flush). */
 let sharedDbPromise: Promise<IDBDatabase> | null = null;
+/**
+ * Bumped at the start of a full clear. A batch copied before that bump must
+ * not `put` once the clear has started — that transaction would be ordered
+ * behind the clear and commit last.
+ */
+let clearEpoch = 0;
+/** In-flight batched puts, including a batch still awaiting `open`. */
+let flushTail: Promise<void> = Promise.resolve();
 
 async function openSharedBarsDb(): Promise<IDBDatabase> {
   if (!sharedDbPromise) {
@@ -328,39 +357,51 @@ function scheduleIdbPut(rec: BarsCacheRecord): void {
   }, 120);
 }
 
+/**
+ * Write one copied batch. Drops it when a clear starts while the open is in
+ * flight, so `store.put` cannot queue behind that clear.
+ */
+async function commitIdbBatch(batch: readonly BarsCacheRecord[], epoch: number): Promise<void> {
+  let db: IDBDatabase | null = null;
+  try {
+    db = await openSharedBarsDb();
+    if (epoch !== clearEpoch) return;
+    const tx = db.transaction(STORE, 'readwrite');
+    const store = tx.objectStore(STORE);
+    for (const rec of batch) store.put(rec);
+    await idbTxDone(tx);
+  } catch (err) {
+    console.warn('[bars-cache] batched IDB put failed; kept in memory only', err);
+  } finally {
+    if (db) {
+      try {
+        db.close();
+      } catch {
+        /* ignore */
+      }
+    }
+    sharedDbPromise = null;
+  }
+}
+
 /** Flush all pending IDB puts in one connection (best-effort). */
-export async function flushPendingIdbPuts(): Promise<void> {
+export function flushPendingIdbPuts(): Promise<void> {
   if (idbFlushTimer != null) {
     clearTimeout(idbFlushTimer);
     idbFlushTimer = null;
   }
   if (!pendingIdbPuts.size || !idbAvailable()) {
     pendingIdbPuts.clear();
-    return;
+    return Promise.resolve();
   }
+  const epoch = clearEpoch;
   const batch = Array.from(pendingIdbPuts.values());
   pendingIdbPuts.clear();
-  try {
-    const db = await openSharedBarsDb();
-    try {
-      const tx = db.transaction(STORE, 'readwrite');
-      const store = tx.objectStore(STORE);
-      for (const rec of batch) {
-        store.put(rec);
-      }
-      await idbTxDone(tx);
-    } finally {
-      try {
-        db.close();
-      } catch {
-        /* ignore */
-      }
-      sharedDbPromise = null;
-    }
-  } catch (err) {
-    console.warn('[bars-cache] batched IDB put failed; kept in memory only', err);
-    sharedDbPromise = null;
-  }
+  const job = commitIdbBatch(batch, epoch);
+  // Chain before the first await so a clear that starts in this gap waits
+  // for this batch, including one still blocked on the database open.
+  flushTail = flushTail.then(() => job, () => job);
+  return job;
 }
 
 // Flush pending IDB puts when the tab is killed mid-debounce (DSM backfill)
@@ -427,11 +468,13 @@ export async function getCachedBars(
   sourceId: string,
   symbol: string,
   interval: string,
+  opts?: BarsKeyLock,
 ): Promise<Bar[]> {
-  const key = barsCacheKey(sourceId, symbol, interval);
+  const key = barsCacheKey(sourceId, symbol, interval, opts);
   const warm = peekMemoryBars(key);
   if (warm) return warm.slice();
 
+  // No IndexedDB (tests / SSR) — absence is a real miss, not a failed read.
   if (!idbAvailable()) {
     return [];
   }
@@ -447,8 +490,11 @@ export async function getCachedBars(
     } finally {
       db.close();
     }
-  } catch {
-    return peekMemoryBars(key)?.slice() ?? [];
+  } catch (err) {
+    const after = peekMemoryBars(key);
+    if (after) return after.slice();
+    // A failed read is not an empty series — callers must not merge into it.
+    throw err;
   }
 }
 
@@ -459,11 +505,12 @@ export async function getCachedBarCount(
   sourceId: string,
   symbol: string,
   interval: string,
+  opts?: BarsKeyLock,
 ): Promise<number> {
-  const key = barsCacheKey(sourceId, symbol, interval);
+  const key = barsCacheKey(sourceId, symbol, interval, opts);
   const warm = peekMemoryBars(key);
   if (warm) return warm.length;
-  const bars = await getCachedBars(sourceId, symbol, interval);
+  const bars = await getCachedBars(sourceId, symbol, interval, opts);
   return bars.length;
 }
 
@@ -472,8 +519,9 @@ export async function getCachedRange(
   sourceId: string,
   symbol: string,
   interval: string,
+  opts?: BarsKeyLock,
 ): Promise<{ count: number; oldestSec: number | null; newestSec: number | null } | null> {
-  const key = barsCacheKey(sourceId, symbol, interval);
+  const key = barsCacheKey(sourceId, symbol, interval, opts);
   const warm = peekMemoryBars(key);
   if (warm?.length) {
     return {
@@ -482,7 +530,7 @@ export async function getCachedRange(
       newestSec: warm[warm.length - 1]!.time,
     };
   }
-  const bars = await getCachedBars(sourceId, symbol, interval);
+  const bars = await getCachedBars(sourceId, symbol, interval, opts);
   if (!bars.length) return null;
   return {
     count: bars.length,
@@ -501,10 +549,14 @@ export interface BarsCacheMeta {
   oldestSec: number | null;
   newestSec: number | null;
   updatedAt: number;
+  /** Set when the series is not public spot. */
+  market?: string;
+  authMode?: string;
 }
 
 function metaFromRecord(rec: BarsCacheRecord): BarsCacheMeta {
   const bars = rec.bars || [];
+  const lock = lockFromBarsKey(rec.key);
   return {
     key: rec.key,
     sourceId: rec.sourceId,
@@ -514,6 +566,8 @@ function metaFromRecord(rec: BarsCacheRecord): BarsCacheMeta {
     oldestSec: bars.length ? bars[0]!.time : null,
     newestSec: bars.length ? bars[bars.length - 1]!.time : null,
     updatedAt: rec.updatedAt || 0,
+    market: lock.market,
+    authMode: lock.authMode,
   };
 }
 
@@ -546,8 +600,10 @@ export async function listCachedSeries(): Promise<BarsCacheMeta[]> {
       } finally {
         db.close();
       }
-    } catch {
-      /* memory-only */
+    } catch (err) {
+      // A failed list is not an empty catalog. Callers that flush must not
+      // treat the memory mirror as every series IndexedDB holds.
+      throw err;
     }
   }
 
@@ -559,8 +615,9 @@ export async function getCachedRecord(
   sourceId: string,
   symbol: string,
   interval: string,
+  opts?: BarsKeyLock,
 ): Promise<BarsCacheRecord | null> {
-  const key = barsCacheKey(sourceId, symbol, interval);
+  const key = barsCacheKey(sourceId, symbol, interval, opts);
   const mem = memory.get(key);
   if (mem?.bars?.length) {
     return { ...mem, bars: mem.bars.slice() };
@@ -593,8 +650,9 @@ export async function putCachedBars(
   symbol: string,
   interval: string,
   incoming: Bar[],
+  opts?: BarsKeyLock,
 ): Promise<Bar[]> {
-  const key = barsCacheKey(sourceId, symbol, interval);
+  const key = barsCacheKey(sourceId, symbol, interval, opts);
   const sym = normalizeLoadSymbol(symbol, sourceId);
   const safeIncoming = Array.isArray(incoming) ? incoming : [];
 
@@ -602,7 +660,7 @@ export async function putCachedBars(
   // Falls back to IDB/memory clone only when this key is cold.
   let existing = peekMemoryBars(key);
   if (!existing) {
-    existing = await getCachedBars(sourceId, symbol, interval);
+    existing = await getCachedBars(sourceId, symbol, interval, opts);
   }
 
   const bars = mergeAndCap(existing, safeIncoming);
@@ -638,9 +696,11 @@ export async function replaceCachedBars(
   symbol: string,
   interval: string,
   bars: readonly Bar[],
+  opts?: BarsKeyLock,
 ): Promise<Bar[]> {
-  const key = barsCacheKey(sourceId, symbol, interval);
-  const sym = String(symbol || '').trim().toUpperCase();
+  const key = barsCacheKey(sourceId, symbol, interval, opts);
+  // Same symbol the key was built with — list/delete rebuild that key from meta.symbol.
+  const sym = normalizeLoadSymbol(symbol, sourceId);
   const series = Array.isArray(bars) ? bars.slice() : [];
   const rec: BarsCacheRecord = {
     key,
@@ -657,49 +717,56 @@ export async function replaceCachedBars(
   return series;
 }
 
-/**
- * True when a cache key belongs to the same series as `base`.
- *
- * Authenticated / non-spot series append `|market|authMode`, so a delete has
- * to sweep the variants too — otherwise the metadata row survives the delete.
- */
-function isSameSeriesKey(key: string, base: string): boolean {
-  return key === base || key.startsWith(`${base}|`);
-}
-
-/** Drop one series from cache (memory + IndexedDB, incl. market/auth variants). */
+/** Drop one series from cache (memory + IndexedDB). The lock is part of the key. */
 export async function clearCachedBars(
   sourceId: string,
   symbol: string,
   interval: string,
+  opts?: BarsKeyLock,
 ): Promise<void> {
-  const key = barsCacheKey(sourceId, symbol, interval);
-  for (const k of Array.from(memory.keys())) {
-    if (isSameSeriesKey(k, key)) memory.delete(k);
+  const key = barsCacheKey(sourceId, symbol, interval, opts);
+  memory.delete(key);
+  pendingIdbPuts.delete(key);
+  if (!idbAvailable()) return;
+  try {
+    const db = await openBarsDb();
+    try {
+      const tx = db.transaction(STORE, 'readwrite');
+      tx.objectStore(STORE).delete(key);
+      await idbTxDone(tx);
+    } finally {
+      db.close();
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Drop memory, the debounce, and any batch already copied out, then clear
+ * IndexedDB. The IDB `clear` runs only after in-flight puts settle, and those
+ * puts drop themselves when `clearEpoch` has moved, so none commit after it.
+ */
+async function clearPersistedBars(): Promise<void> {
+  clearEpoch += 1;
+  memory.clear();
+  pendingIdbPuts.clear();
+  if (idbFlushTimer != null) {
+    clearTimeout(idbFlushTimer);
+    idbFlushTimer = null;
+  }
+  sharedDbPromise = null;
+  try {
+    await flushTail;
+  } catch {
+    /* the clear still has to win when a batched put fails */
   }
   if (!idbAvailable()) return;
   try {
     const db = await openBarsDb();
     try {
-      // Read the sibling keys first (separate transaction — awaiting inside a
-      // readwrite tx can close it before the deletes are queued).
-      const variants: string[] = [];
-      try {
-        const readTx = db.transaction(STORE, 'readonly');
-        const all = (await idbReq(readTx.objectStore(STORE).getAllKeys())) as IDBValidKey[];
-        await idbTxDone(readTx);
-        for (const k of all || []) {
-          if (typeof k === 'string' && isSameSeriesKey(k, key) && k !== key) {
-            variants.push(k);
-          }
-        }
-      } catch {
-        /* getAllKeys unsupported — the exact key delete below is enough */
-      }
       const tx = db.transaction(STORE, 'readwrite');
-      const store = tx.objectStore(STORE);
-      store.delete(key);
-      for (const k of variants) store.delete(k);
+      tx.objectStore(STORE).clear();
       await idbTxDone(tx);
     } finally {
       db.close();
@@ -711,48 +778,10 @@ export async function clearCachedBars(
 
 /** Drop every cached series (memory + IndexedDB). */
 export async function clearAllCachedBars(): Promise<void> {
-  memory.clear();
-  pendingIdbPuts.clear();
-  if (idbFlushTimer != null) {
-    clearTimeout(idbFlushTimer);
-    idbFlushTimer = null;
-  }
-  sharedDbPromise = null;
-  if (!idbAvailable()) return;
-  try {
-    const db = await openBarsDb();
-    try {
-      const tx = db.transaction(STORE, 'readwrite');
-      tx.objectStore(STORE).clear();
-      await idbTxDone(tx);
-    } finally {
-      db.close();
-    }
-  } catch {
-    /* ignore */
-  }
+  await clearPersistedBars();
 }
 
 /** @internal test helper — wipe memory map (and best-effort IDB). */
 export async function _resetBarsCacheForTests(): Promise<void> {
-  memory.clear();
-  pendingIdbPuts.clear();
-  if (idbFlushTimer != null) {
-    clearTimeout(idbFlushTimer);
-    idbFlushTimer = null;
-  }
-  sharedDbPromise = null;
-  if (!idbAvailable()) return;
-  try {
-    const db = await openBarsDb();
-    try {
-      const tx = db.transaction(STORE, 'readwrite');
-      tx.objectStore(STORE).clear();
-      await idbTxDone(tx);
-    } finally {
-      db.close();
-    }
-  } catch {
-    /* ignore */
-  }
+  await clearPersistedBars();
 }

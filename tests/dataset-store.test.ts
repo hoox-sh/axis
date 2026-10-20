@@ -20,7 +20,7 @@ import {
   _resetDatasetStoreForTests,
   _drainDatasetWritesForTests,
 } from '../src/data/dataset-store';
-import { _resetDatasetSinksForTests } from '../src/data/dataset-sinks';
+import { _resetDatasetSinksForTests, sessionSink } from '../src/data/dataset-sinks';
 import { _resetBarsCacheForTests } from '../src/data/bars-cache';
 import type { Bar } from '../src/store/types';
 
@@ -292,5 +292,76 @@ describe('dataset-store · full delete + flush', () => {
     await flushDatasets();
 
     expect(await listCachedSeries()).toHaveLength(0);
+  });
+
+  it('spot and linear do not share a dataset, and the local sink keeps the lock', async () => {
+    await putDatasetBars('binance-rest', 'BTCUSDT', '1h', [bar(60, 1)], { market: 'spot' });
+    await putDatasetBars('binance-rest', 'BTCUSDT', '1h', [bar(60, 9)], {
+      market: 'linear',
+      authMode: 'public',
+    });
+    const spot = await getDataset('binance-rest', 'BTCUSDT', '1h', { market: 'spot' });
+    const linear = await getDataset('binance-rest', 'BTCUSDT', '1h', { market: 'linear' });
+    expect(spot.map((b) => b.close)).toEqual([1]);
+    expect(linear.map((b) => b.close)).toEqual([9]);
+    expect(keyFor('binance-rest', 'BTCUSDT', '1h', { market: 'linear', authMode: 'public' })).toBe(
+      'binance-rest|BTCUSDT|1h|linear|public',
+    );
+    const { getCachedBars } = await import('../src/data/bars-cache');
+    const cached = await getCachedBars('binance-rest', 'BTCUSDT', '1h', {
+      market: 'linear',
+      authMode: 'public',
+    });
+    expect(cached.map((b) => b.close)).toEqual([9]);
+    expect(await getCachedBars('binance-rest', 'BTCUSDT', '1h')).toHaveLength(1);
+    expect((await getCachedBars('binance-rest', 'BTCUSDT', '1h'))[0]!.close).toBe(1);
+  });
+
+  it('a write that races a flush does not resurrect the series', async () => {
+    await putDatasetBars('binance-rest', 'RACEFLUSH', '1h', [bar(60, 1)]);
+    const write = putDatasetBars('binance-rest', 'RACEFLUSH', '1h', [bar(120, 2)]);
+    const flushed = flushDatasets();
+    await write;
+    await flushed;
+    expect(peekDataset('binance-rest', 'RACEFLUSH', '1h')).toBeNull();
+    expect(await getDataset('binance-rest', 'RACEFLUSH', '1h')).toHaveLength(0);
+  });
+
+  it('a page that starts during the flush remove does not resurrect the series', async () => {
+    await putDatasetBars('binance-rest', 'AAAUSDT', '1h', [bar(60, 1)]);
+    await putDatasetBars('binance-rest', 'BBBUSDT', '1h', [bar(60, 2)]);
+    const orig = sessionSink.remove.bind(sessionSink);
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let markStarted: () => void = () => {};
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    let first = true;
+    sessionSink.remove = async (key) => {
+      if (first) {
+        first = false;
+        markStarted();
+        await gate;
+      }
+      return orig(key);
+    };
+    try {
+      const flushing = flushDatasets();
+      await started;
+      const write = putDatasetBars('binance-rest', 'BBBUSDT', '1h', [bar(120, 9)]);
+      release();
+      await write;
+      await flushing;
+      expect(peekDataset('binance-rest', 'AAAUSDT', '1h')).toBeNull();
+      expect(peekDataset('binance-rest', 'BBBUSDT', '1h')).toBeNull();
+      const { getCachedBars } = await import('../src/data/bars-cache');
+      expect(await getCachedBars('binance-rest', 'AAAUSDT', '1h')).toHaveLength(0);
+      expect(await getCachedBars('binance-rest', 'BBBUSDT', '1h')).toHaveLength(0);
+    } finally {
+      sessionSink.remove = orig;
+    }
   });
 });

@@ -45,7 +45,6 @@
  */
 
 import type { Bar } from '../store/types';
-import { pyneMarket } from './provider';
 import { intervalToSec } from './bars-gaps';
 import { getVisibleBars, isReplayActive } from '../chart/bar-replay';
 import { repairBars, validateDataset, venueClassForSourceCaps } from './dataset-validate';
@@ -203,6 +202,7 @@ async function runBackgroundRepair(
     let expandSrc = srcId;
     let expandSym = sym;
     let expandIv = iv;
+    let expandLock: { market?: string; authMode?: string } | null = null;
     if (srcId === 'data-manager') {
       try {
         const { getDataManagerSelection } = await import('./data-manager-source');
@@ -211,6 +211,7 @@ async function runBackgroundRepair(
           expandSrc = sel.sourceId;
           expandSym = sel.symbol;
           expandIv = sel.interval;
+          expandLock = { market: sel.market, authMode: sel.authMode };
         }
       } catch {
         /* fall back to store key */
@@ -258,7 +259,7 @@ async function runBackgroundRepair(
             apiKey: String(cfg.apiKey || ''),
             key: {
               exchange: exchangeForSource(expandSrc),
-              market: pyneMarket(store.provider?.market),
+              market: store.provider?.market || 'spot',
               symbol: expandSym,
               interval: expandIv,
             },
@@ -272,7 +273,13 @@ async function runBackgroundRepair(
       // appear. No viewport reset: user stays where they were.
       try {
         const { getDataset } = await import('./dataset-store');
-        const series = await getDataset(expandSrc, expandSym, expandIv);
+        const { providerDatasetLock } = await import('./provider');
+        const series = await getDataset(
+          expandSrc,
+          expandSym,
+          expandIv,
+          providerDatasetLock(expandLock ?? store.provider),
+        );
         if (series.length) {
           const { bars: repaired } = repairBars(series, expandIv);
           if (repaired.length) {

@@ -17,7 +17,10 @@ import {
   dataSourceManagerState,
 } from '../src/data/data-source-manager';
 import { _resetBarsCacheForTests, getCachedBars } from '../src/data/bars-cache';
-import { _resetDatasetStoreForTests } from '../src/data/dataset-store';
+import {
+  _drainDatasetWritesForTests,
+  _resetDatasetStoreForTests,
+} from '../src/data/dataset-store';
 import { registry } from '../src/plugins/registry';
 import type { SourcePlugin } from '../src/plugins/types';
 import type { Bar } from '../src/store/types';
@@ -34,6 +37,7 @@ describe('data-source-manager', () => {
     // The dataset store is a module singleton: a dataset cached by an earlier
     // test file would make the job find the range already complete and skip
     // the walk (the test then sees no request at all).
+    await _drainDatasetWritesForTests();
     _resetDatasetStoreForTests();
     _resetSourceRegistrationFlag();
     // Wipe dynamic test sources if any
@@ -47,8 +51,9 @@ describe('data-source-manager', () => {
     ensureSourcesRegistered();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     _resetDataSourceManagerForTests();
+    await _drainDatasetWritesForTests();
     _resetDatasetStoreForTests();
   });
 
@@ -603,6 +608,7 @@ describe('data-source-manager', () => {
       interval: store.interval,
       source: store.source,
       bars: store.bars,
+      provider: store.provider,
     };
     try {
       const seed = [1000, 1060, 1120].map((t) => bar(t));
@@ -629,11 +635,60 @@ describe('data-source-manager', () => {
       const forced = await applyCachedToChart('mock-walk', 'AAA', '1d');
       expect(forced).toBe(true);
       expect(store.bars.length).toBeGreaterThan(0);
+
+      setStore('bars', []);
+      setStore('provider', { ...store.provider, market: 'spot', authMode: 'public' });
+      const otherMarket = await applyCachedToChart('mock-walk', 'BBB', '1d', null, {
+        onlyIfCurrent: true,
+        market: 'linear',
+        authMode: 'public',
+      });
+      expect(otherMarket).toBe(false);
+      expect(store.bars).toHaveLength(0);
     } finally {
       setStore('symbol', prev.symbol);
       setStore('interval', prev.interval);
       setStore('source', prev.source);
       setStore('bars', prev.bars);
+      setStore('provider', prev.provider);
+    }
+  });
+
+  it('a Data Manager backfill uses the selection lock, not the chart market', async () => {
+    const { setDataManagerSelection, clearDataManagerSelection } = await import(
+      '../src/data/data-manager-source'
+    );
+    const { getDataset } = await import('../src/data/dataset-store');
+    const { setStore, store } = await import('../src/store');
+    const prevProvider = store.provider;
+    const prevSource = store.source;
+    setStore('provider', { ...store.provider, market: 'spot', authMode: 'public' });
+    setStore('source', 'data-manager');
+    setDataManagerSelection('mock-walk', 'LINUSDT', '1d', null, {
+      market: 'linear',
+      authMode: 'public',
+    });
+    try {
+      const now = Math.floor(Date.now() / 1000);
+      const id = startBackfill({
+        sourceId: 'data-manager',
+        symbol: 'LINUSDT',
+        interval: '1d',
+        targetFromSec: now - 3 * 86_400,
+        targetToSec: now,
+      });
+      const job = await _waitForJob(id, 15_000);
+      expect(job?.status).toBe('complete');
+      const linear = await getDataset('mock-walk', 'LINUSDT', '1d', {
+        market: 'linear',
+        authMode: 'public',
+      });
+      expect(linear.length).toBeGreaterThan(0);
+      expect(await getDataset('mock-walk', 'LINUSDT', '1d')).toHaveLength(0);
+    } finally {
+      clearDataManagerSelection();
+      setStore('provider', prevProvider);
+      setStore('source', prevSource);
     }
   });
 });

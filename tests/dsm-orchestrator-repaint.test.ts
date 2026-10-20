@@ -78,6 +78,35 @@ describe('dsm-orchestrator · repaint view keeps the live tail', () => {
     expect(view.map((b) => b.time)).toEqual([60, 120]);
   });
 
+  it('keeps a chart bar the dataset is missing inside the window', () => {
+    setStore('bars', [bar(60), bar(120, 7), bar(180)]);
+    const view = repaintViewForTests([bar(60), bar(180)], 'BTCUSDT', '1m');
+    expect(view.map((b) => b.time)).toEqual([60, 120, 180]);
+    expect(view.find((b) => b.time === 120)?.close).toBe(7);
+  });
+
+  it('a closed dataset bar at the tip beats a forming chart tick', () => {
+    setStore('bars', [bar(60), { ...bar(120, 5), closed: false }]);
+    const view = repaintViewForTests(
+      [bar(60), { ...bar(120, 9), closed: true }],
+      'BTCUSDT',
+      '1m',
+    );
+    expect(view.map((b) => b.time)).toEqual([60, 120]);
+    expect(view[1]!.close).toBe(9);
+    expect(view[1]!.closed).toBe(true);
+  });
+
+  it('keeps the chart bar when the same-time dataset bar is not closed', () => {
+    setStore('bars', [bar(60), { ...bar(120, 5), closed: false }]);
+    const view = repaintViewForTests(
+      [bar(60), { ...bar(120, 9), closed: false }],
+      'BTCUSDT',
+      '1m',
+    );
+    expect(view[1]!.close).toBe(5);
+  });
+
   it('keeps the window cap when the live tail is merged in', () => {
     setStore('rollingWindowBars', 3);
     setStore('bars', [bar(60), bar(120), bar(180), bar(240)]);

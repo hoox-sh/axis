@@ -8,6 +8,7 @@ import {
   fillBarsTowardNow,
   fillInternalGaps,
   noteDataManagerLiveBar,
+  _flushDataManagerLiveBarForTests,
 } from '../src/data/expand-cache';
 import {
   putCachedBars,
@@ -196,5 +197,32 @@ describe('expand-cache', () => {
     expect(cached.map((b) => b.time)).toContain(1120);
     const at1120 = cached.find((b) => b.time === 1120);
     expect(at1120?.close).toBe(55);
+  });
+
+  it('keeps a second market off the first market debounce', async () => {
+    setActivePlugin('source', DATA_MANAGER_SOURCE_ID);
+    setStore('source', DATA_MANAGER_SOURCE_ID);
+    setDataManagerSelection('binance-rest', 'SOLUSDT', '1m', null, {
+      market: 'spot',
+      authMode: 'public',
+    });
+    noteDataManagerLiveBar(bar(1120, 1));
+    setDataManagerSelection('binance-rest', 'SOLUSDT', '1m', null, {
+      market: 'linear',
+      authMode: 'public',
+    });
+    noteDataManagerLiveBar({ ...bar(1120, 9), closed: true });
+    await new Promise((r) => setTimeout(r, 40));
+    try {
+      const linear = await getCachedBars('binance-rest', 'SOLUSDT', '1m', {
+        market: 'linear',
+        authMode: 'public',
+      });
+      expect(linear.find((b) => b.time === 1120)?.close).toBe(9);
+      const spot = await getCachedBars('binance-rest', 'SOLUSDT', '1m');
+      expect(spot.find((b) => b.time === 1120)).toBeUndefined();
+    } finally {
+      _flushDataManagerLiveBarForTests();
+    }
   });
 });

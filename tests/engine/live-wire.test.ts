@@ -170,6 +170,51 @@ describe('redesign2 live-wire (F-19)', () => {
     expect(h.wire.isSubscribed('series-1')).toBe(true);
   });
 
+  test('evalScript re-subscribes when history_bars grows and does not cool the wire', async () => {
+    const h = makeHarness();
+    const first = h.wire.evalScript({
+      subId: 's-1',
+      script: 'indicator() {}',
+      meta: { history_bars: 3 },
+      bars: BARS,
+    });
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: 's-1',
+      seq: 1,
+      payload: { count: 1, plots: [[1]], series: { a: [1] } },
+    });
+    await first;
+    const second = h.wire.evalScript({
+      subId: 's-1',
+      script: 'indicator() {}',
+      meta: { history_bars: 50 },
+      bars: BARS,
+    });
+    await tick();
+    await tick();
+    expect(h.unsubscribed).toEqual(['s-1']);
+    h.emit({
+      type: 'full',
+      id: 's-1',
+      seq: 2,
+      payload: { count: 1, plots: [[2]], series: { a: [2] } },
+    });
+    await second;
+    expect(h.sent.filter((s) => s.kind === 'subscribe:script')).toHaveLength(2);
+    expect(h.wire.cooledDown).toBe(false);
+    await h.wire.evalScript({
+      subId: 's-1',
+      script: 'indicator() {}',
+      meta: { history_bars: 50 },
+      bars: BARS,
+    });
+    expect(h.sent.filter((s) => s.kind === 'subscribe:script')).toHaveLength(2);
+    expect(h.wire.cooledDown).toBe(false);
+  });
+
   test('evalScript subscribes once, then applies cached state', async () => {
     const h = makeHarness();
     const first = h.wire.evalScript({ subId: 's-1', script: 'indicator() {}', meta: {}, bars: BARS });

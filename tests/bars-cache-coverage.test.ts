@@ -53,6 +53,9 @@ interface FakeReq {
 const fakeBacking = new Map<string, Record<string, unknown>>();
 let failOpen = false;
 let failTx = false;
+/** When set, the next `indexedDB.open` waits on this promise (one open only). */
+let deferNextOpen: Promise<void> | null = null;
+let noteOpenDeferred: (() => void) | null = null;
 
 function fireReq(req: FakeReq, ok: boolean): void {
   queueMicrotask(() => {
@@ -142,18 +145,26 @@ function installFakeIndexedDb(): void {
         onupgradeneeded: null,
       };
       queueMicrotask(() => {
-        if (failOpen) {
-          req.error = new Error('open fail');
-          req.onerror?.({ target: req });
-          return;
-        }
-        req.result = fakeDb();
-        try {
-          req.onupgradeneeded?.({ target: req, oldVersion: 0 });
-        } catch {
-          /* upgrade callback errors surface via onerror below */
-        }
-        req.onsuccess?.({ target: req });
+        void (async () => {
+          const gate = deferNextOpen;
+          if (gate) {
+            deferNextOpen = null;
+            noteOpenDeferred?.();
+            await gate;
+          }
+          if (failOpen) {
+            req.error = new Error('open fail');
+            req.onerror?.({ target: req });
+            return;
+          }
+          req.result = fakeDb();
+          try {
+            req.onupgradeneeded?.({ target: req, oldVersion: 0 });
+          } catch {
+            /* upgrade callback errors surface via onerror below */
+          }
+          req.onsuccess?.({ target: req });
+        })();
       });
       return req;
     },
@@ -196,6 +207,8 @@ describe('bars-cache coverage', () => {
   beforeEach(async () => {
     failOpen = false;
     failTx = false;
+    deferNextOpen = null;
+    noteOpenDeferred = null;
     installFakeIndexedDb();
     fakeBacking.clear();
     await _resetBarsCacheForTests();
@@ -391,13 +404,13 @@ describe('bars-cache coverage', () => {
     failOpen = true;
     // Warm memory still served despite IDB outage.
     expect((await getCachedBars('fb-src', 'LLL', '1h')).map((b) => b.time)).toEqual([8]);
-    // Cold miss with IDB down → empty, null record/range.
-    expect(await getCachedBars('fb-src', 'ZZZ', '1h')).toEqual([]);
+    // Cold read with IDB down is a failure, not an empty series.
+    await expect(getCachedBars('fb-src', 'ZZZ', '1h')).rejects.toThrow();
     expect(await getCachedRecord('fb-src', 'ZZZ', '1h')).toBeNull();
-    expect(await getCachedRange('fb-src', 'ZZZ', '1h')).toBeNull();
-    expect(await listCachedSeries()).toHaveLength(1);
+    await expect(getCachedRange('fb-src', 'ZZZ', '1h')).rejects.toThrow();
+    await expect(listCachedSeries()).rejects.toThrow();
     await clearCachedBars('fb-src', 'LLL', '1h'); // IDB delete ignored, memory cleared
-    expect(await getCachedBars('fb-src', 'LLL', '1h')).toEqual([]);
+    await expect(getCachedBars('fb-src', 'LLL', '1h')).rejects.toThrow();
     failOpen = false;
   });
 
@@ -407,10 +420,167 @@ describe('bars-cache coverage', () => {
     failTx = true;
     await flushPendingIdbPuts(); // no pending → early return, still fine
     expect((await getCachedBars('tx-src', 'MMM', '1h')).map((b) => b.time)).toEqual([3]);
-    // Cold read with failing tx → empty fallback.
-    expect(await getCachedBars('tx-src', 'QQQ', '1h')).toEqual([]);
-    expect((await listCachedSeries()).find((r) => r.symbol === 'MMM')).toBeDefined();
+    // Cold read with a failing transaction throws — it is not an empty series.
+    await expect(getCachedBars('tx-src', 'QQQ', '1h')).rejects.toThrow();
+    await expect(listCachedSeries()).rejects.toThrow();
     expect(await getCachedRecord('tx-src', 'QQQ', '1h')).toBeNull();
     failTx = false;
+  });
+
+  it('a page started during the remote flush does not resurrect the series', async () => {
+    const { flushDatasets, peekDataset, putDatasetBars, _resetDatasetStoreForTests } =
+      await import('../src/data/dataset-store');
+    const { _resetDatasetSinksForTests } = await import('../src/data/dataset-sinks');
+    const { registerDynamicStorage } = await import('../src/storage/catalog');
+    const { gitStoragePlugin } = await import('../src/storage/git');
+    const { registry } = await import('../src/plugins/registry');
+    _resetDatasetStoreForTests();
+    _resetDatasetSinksForTests();
+    await putDatasetBars('binance-rest', 'GAPUSDT', '1h', [bar(60, 1)]);
+    await flushPendingIdbPuts();
+
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let markStarted: () => void = () => {};
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    registerDynamicStorage({
+      id: 'git',
+      name: 'flush gate',
+      kind: 'storage',
+      builtIn: false,
+      async list() {
+        return [{ id: 'datasets/binance-rest__GAPUSDT__1h', tags: ['dataset'] }];
+      },
+      async read() {
+        return null;
+      },
+      async write() {
+        return { id: 'datasets/binance-rest__GAPUSDT__1h' };
+      },
+      async remove() {
+        markStarted();
+        await gate;
+      },
+    } as never);
+    try {
+      const flushing = flushDatasets();
+      await started;
+      const write = putDatasetBars('binance-rest', 'GAPUSDT', '1h', [bar(120, 9)]);
+      release();
+      await write;
+      await flushing;
+      expect(peekDataset('binance-rest', 'GAPUSDT', '1h')).toBeNull();
+      await flushPendingIdbPuts();
+      expect(fakeBacking.size).toBe(0);
+      expect(await getCachedBars('binance-rest', 'GAPUSDT', '1h')).toEqual([]);
+    } finally {
+      release();
+      registry.registerStorage(gitStoragePlugin);
+      _resetDatasetStoreForTests();
+      _resetDatasetSinksForTests();
+    }
+  });
+
+  it('a batch copied out before the final clear does not land after flushDatasets', async () => {
+    const { flushDatasets, peekDataset, putDatasetBars, _resetDatasetStoreForTests } =
+      await import('../src/data/dataset-store');
+    const { _resetDatasetSinksForTests } = await import('../src/data/dataset-sinks');
+    const { registerDynamicStorage } = await import('../src/storage/catalog');
+    const { gitStoragePlugin } = await import('../src/storage/git');
+    const { registry } = await import('../src/plugins/registry');
+    _resetDatasetStoreForTests();
+    _resetDatasetSinksForTests();
+    await putDatasetBars('binance-rest', 'LATEUSDT', '1h', [bar(60, 1)]);
+    await flushPendingIdbPuts();
+
+    let releaseGit: () => void = () => {};
+    const gitGate = new Promise<void>((resolve) => {
+      releaseGit = resolve;
+    });
+    let markStarted: () => void = () => {};
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    // The per-key sweep calls git `remove` before the local cache wipe. The
+    // document delete inside `flushRemoteDatasetDocs` is the later call, after
+    // that wipe and before the final bars-cache clear.
+    let gitRemoves = 0;
+    registerDynamicStorage({
+      id: 'git',
+      name: 'flush gate',
+      kind: 'storage',
+      builtIn: false,
+      async list() {
+        return [{ id: 'datasets/binance-rest__LATEUSDT__1h', tags: ['dataset'] }];
+      },
+      async read() {
+        return null;
+      },
+      async write() {
+        return { id: 'datasets/binance-rest__LATEUSDT__1h' };
+      },
+      async remove() {
+        gitRemoves += 1;
+        if (gitRemoves === 1) return;
+        markStarted();
+        await gitGate;
+      },
+    } as never);
+
+    let releaseOpen: () => void = () => {};
+    try {
+      const flushing = flushDatasets();
+      await started;
+      // Local wipe has finished. This write arms the debounce during the
+      // remote delete; flushing it now copies the batch and waits on open.
+      const write = putDatasetBars('binance-rest', 'LATEUSDT', '1h', [bar(120, 9)]);
+      await write;
+      let markDeferred: () => void = () => {};
+      const deferred = new Promise<void>((resolve) => {
+        markDeferred = resolve;
+      });
+      noteOpenDeferred = markDeferred;
+      deferNextOpen = new Promise<void>((resolve) => {
+        releaseOpen = resolve;
+      });
+      const batchFlush = flushPendingIdbPuts();
+      await deferred;
+      releaseGit();
+      // The held open stays blocked while the final clear runs. Releasing
+      // sooner lets this batch put before the clear and hides the race.
+      await new Promise((r) => setTimeout(r, 20));
+      releaseOpen();
+      await batchFlush;
+      await flushing;
+      expect(peekDataset('binance-rest', 'LATEUSDT', '1h')).toBeNull();
+      expect(fakeBacking.size).toBe(0);
+      expect(await getCachedBars('binance-rest', 'LATEUSDT', '1h')).toEqual([]);
+    } finally {
+      releaseOpen();
+      releaseGit();
+      deferNextOpen = null;
+      noteOpenDeferred = null;
+      registry.registerStorage(gitStoragePlugin);
+      _resetDatasetStoreForTests();
+      _resetDatasetSinksForTests();
+    }
+  });
+
+  it('a failed IndexedDB list is not reported as a clean engine delete', async () => {
+    await putCachedBars('idb-list', 'ZZZ', '1h', [bar(1)]);
+    failOpen = true;
+    try {
+      const { flushLocalAndEngine } = await import('../src/data/engine-flush');
+      const out = await flushLocalAndEngine();
+      const missed = out.engine.failed.find((f) => f.key === '*');
+      expect(missed?.message).toContain('not deleted');
+      expect(out.engine.keys.some((k) => k.includes('ZZZ'))).toBe(false);
+    } finally {
+      failOpen = false;
+    }
   });
 });

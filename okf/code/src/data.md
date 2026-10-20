@@ -7,7 +7,7 @@ tags: [code, data]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-20T12:33:03Z
+  at: 2026-10-20T17:21:53Z
 sources:
   - id: tree
     resource: "src/data"
@@ -19,7 +19,7 @@ okf_lock: generated
 # Files
 
 * `background-catchup.ts` — BACKGROUND_CATCHUP_THROTTLE_MS, TrailingGap, _resetBackgroundCatchupForTests, _resetBackgroundCatchupListenersForTests, _setBackgroundCatchupLastRepairForTests, detectTrailingGap, repairChartGapsAfterBackground, startBackgroundCatchup
-* `bars-cache.ts` — BARS_CACHE_MAX, BARS_CACHE_MAX_SERIES, BarLoadWindow, BarsCacheMeta, BarsCacheRecord, _resetBarsCacheForTests, barsCacheKey, clearAllCachedBars, clearCachedBars, countBarsForLoad, flushPendingIdbPuts, getCachedBarCount
+* `bars-cache.ts` — BARS_CACHE_MAX, BARS_CACHE_MAX_SERIES, BarLoadWindow, BarsCacheMeta, BarsCacheRecord, BarsKeyLock, _resetBarsCacheForTests, barsCacheKey, clearAllCachedBars, clearCachedBars, countBarsForLoad, flushPendingIdbPuts
 * `bars-gaps.ts` — BarGap, CoverageReport, CoverageSegment, alignDown, buildCoverageMap, expectedBarsInSpan, findBarGaps, intervalToSec, mergeGaps, validateBarCoverage
 * `binance-http.ts` — BINANCE_INVERSE_REST_HOSTS, BINANCE_LINEAR_REST_HOSTS, BINANCE_REST_HOSTS, BinanceFetchOpts, BinanceRestPath, DEFAULT_MARKET_WORKER_BASE, binanceKlineWsUrls, binanceTickerWsUrls, fetchBinanceJson, resolveMarketWorkerBase
 * `ccxt-session.ts` — bindCcxtSession, unbindCcxtSession
@@ -30,7 +30,7 @@ okf_lock: generated
 * `dataset-store.ts` — DatasetMeta, PutResult, _drainDatasetWritesForTests, _resetDatasetStoreForTests, awaitPendingCopies, flushDatasets, getDataset, getMergePolicy, getPersistenceMode, keyFor, listMemoryDatasets, peekDataset
 * `dataset-validate.ts` — ClassifyOpts, DatasetReport, GapClassification, RepairResult, RepairStats, ValidateOpts, VenueClass, classifyGaps, findClassifiedGaps, repairBars, validateDataset, venueClassForSourceCaps
 * `dsm-orchestrator.ts` — DatasetFirstResult, _resetDsmOrchestratorForTests, announceDatasetPaint, chartDisplayCap, ensureDatasetComplete, paintDataset, repaintViewForTests, seedDatasetFromBars, sliceForChart, startProgressiveStream, stopProgressiveRepaint
-* `engine-flush.ts` — EngineFlushResult, flushEngineSeries, knownEngineSeriesKeys
+* `engine-flush.ts` — EngineFlushResult, collectEngineSeriesKeys, flushEngineSeries, flushLocalAndEngine, knownEngineSeriesKeys
 * `expand-cache.ts` — ExpandCacheResult, _flushDataManagerLiveBarForTests, canExpandFromSource, expandCachedSeriesToNow, fillBarsTowardNow, fillInternalGaps, noteDataManagerLiveBar
 * `gateway.ts` — DATAFEED_DEFAULT_PORT, GatewayMode, GatewaySessionBody, gatewayBase, gatewayDeleteSession, gatewayFetch, gatewayPutSession, gatewayWs, isRemotePageOrigin, probeSidecar
 * `load-symbol.ts` — _currentLoadGeneration, _resetLoadGeneration, exchangeForSource, loadSymbolData, normalizeLoadSymbol, reloadChart
@@ -56,7 +56,6 @@ okf_lock: generated
 
 * [src/chart](/code/src/chart.md)
 * [src/data/venues](/code/src/data/venues.md)
-* [src/engine](/code/src/engine.md)
 * [src/engines](/code/src/engines.md)
 * [src/indicators](/code/src/indicators.md)
 * [src/plugins](/code/src/plugins.md)

@@ -55,6 +55,7 @@ import { ConnectionHud } from './ConnectionHud';
 import { HooxLoader } from './HooxLoader';
 import { CachedDatasetsModal } from './CachedDatasetsModal';
 import { peekDataset, subscribeDatasets } from '../data/dataset-store';
+import { providerDatasetLock } from '../data/provider';
 import { formatBarCount } from './bar-count';
 
 /**
@@ -69,7 +70,12 @@ import { formatBarCount } from './bar-count';
 function useDatasetBarCount(): () => number {
   const [count, setCount] = createSignal(0);
   const read = () => {
-    const mirrored = peekDataset(store.source, store.symbol, store.interval);
+    const mirrored = peekDataset(
+      store.source,
+      store.symbol,
+      store.interval,
+      providerDatasetLock(store.provider),
+    );
     const next = mirrored?.length ?? 0;
     setCount((prev) => (prev === next ? prev : next));
   };
@@ -79,6 +85,8 @@ function useDatasetBarCount(): () => number {
     store.source;
     store.symbol;
     store.interval;
+    store.provider?.market;
+    store.provider?.authMode;
     read();
   });
   onCleanup(off);
