@@ -7,7 +7,7 @@
  * Error diagnostic transfer: payload shape, opt-in gating, endpoint host only.
  */
 
-import { describe, expect, it, beforeEach } from 'bun:test';
+import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
 import {
   buildErrorDiagnosticPayload,
   endpointHostOnly,
@@ -77,6 +77,10 @@ describe('endpointHostOnly', () => {
 });
 
 describe('buildErrorDiagnosticPayload', () => {
+  // The provider session is a module singleton: leaving a venue behind (here
+  // `okx`) makes `exchangeForSource` label a later test's chart with it.
+  const providerBefore = { ...(store.provider || {}) };
+
   beforeEach(() => {
     setStore('symbol', 'BTCUSDT');
     setStore('interval', '1h');
@@ -139,6 +143,10 @@ describe('buildErrorDiagnosticPayload', () => {
     expect(engineCfg?.apiKey).toBeUndefined();
     expect(p.session.provider?.venue).toBe('okx');
     expect(p.session.provider?.credentialId).toBe('venue:okx');
+  });
+
+  afterEach(() => {
+    setStore('provider', providerBefore as never);
   });
 });
 

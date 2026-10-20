@@ -24,14 +24,22 @@
  * security boundary, so its contents are asserted here.
  */
 
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, beforeEach } from 'bun:test';
 import { createProxyRouter, proxyJson, type ProxyRoute } from '../src/proxy-router';
 import { READ_CORS } from '../src/http';
 import { handleOnchain, onchainAllowlist } from '../src/onchain';
 import { handleMarket, marketAllowlist } from '../src/market';
+import { _resetRateLimitsForTests } from '../src/rate-limit';
 
 const ORIGIN = 'https://axis.hoox.sh';
 const req = (method: string, url: string) => new Request(url, { method });
+
+// The on-chain / market planes rate-limit per client IP and the buckets live
+// in module memory: without a reset the requests of an earlier worker test
+// file count against this one and the plane answers 429 instead of 404.
+beforeEach(() => {
+  _resetRateLimitsForTests();
+});
 
 function okRoute(path: string): ProxyRoute {
   return { path, handle: ({ origin }) => proxyJson(READ_CORS)({ hit: path }, origin) };

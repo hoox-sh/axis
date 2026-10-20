@@ -17,6 +17,7 @@ import {
   dataSourceManagerState,
 } from '../src/data/data-source-manager';
 import { _resetBarsCacheForTests, getCachedBars } from '../src/data/bars-cache';
+import { _resetDatasetStoreForTests } from '../src/data/dataset-store';
 import { registry } from '../src/plugins/registry';
 import type { SourcePlugin } from '../src/plugins/types';
 import type { Bar } from '../src/store/types';
@@ -30,6 +31,10 @@ describe('data-source-manager', () => {
   beforeEach(async () => {
     _resetDataSourceManagerForTests();
     await _resetBarsCacheForTests();
+    // The dataset store is a module singleton: a dataset cached by an earlier
+    // test file would make the job find the range already complete and skip
+    // the walk (the test then sees no request at all).
+    _resetDatasetStoreForTests();
     _resetSourceRegistrationFlag();
     // Wipe dynamic test sources if any
     for (const id of ['page-src', 'slow-src', 'grid-src', 'widen-src']) {
@@ -44,6 +49,7 @@ describe('data-source-manager', () => {
 
   afterEach(() => {
     _resetDataSourceManagerForTests();
+    _resetDatasetStoreForTests();
   });
 
   it('parses past date input as UTC midnight', () => {
