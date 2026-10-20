@@ -9,11 +9,11 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-10-19 · 626 commits · describe-tag: `v2.24.8`_
+_Generated/updated: 2026-10-20 · 632 commits · describe-tag: `v2.24.8`_
 
 ---
 
-## [Unreleased]
+## [2.25.0] — 2026-10-20
 
 ### Added
 
@@ -1705,9 +1705,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-10 (145 commits)
+### 2026-10 (151 commits)
 
 #### Features
 
@@ -1751,6 +1753,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `2fb50d41` (2026-10-20) — fix(chart): re-join cross-indicator series by time, and close the apply gaps
+- `e08cf3c8` (2026-10-20) — fix(chart): keep the apply path aligned with the sliding chart window
+- `54d52efe` (2026-10-20) — fix(data): harden the dataset manager, the chart window and the live bar path
+- `4fb146c1` (2026-10-19) — fix(test): give the mock-walk reload test room on a loaded runner
+- `ce6c8a67` (2026-10-19) — fix(ci): the desktop release pipeline must not fail on the changelog
 - `86cd2c1c` (2026-10-19) — fix(ui): the feed chip says what the data path is, not a stale state word
 - `a2a4efbd` (2026-10-19) — fix(test): pin the engine identity in the live-plane wire test
 - `6a94ca03` (2026-10-19) — fix(test): reset the painted-candle range before each clamp test
@@ -1817,6 +1824,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Performance
 
+- `0d7cfb1e` (2026-10-20) — perf(store): copy the sliding window once, and keep the benches honest
 - `0d0ffd1c` (2026-10-13) — perf(engine): run Pyodide in a dedicated Web Worker
 - `5ed34ef1` (2026-10-05) — perf(scripts): prefer Bun-native file, hash, spawn and image APIs
 
