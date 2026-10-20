@@ -13,6 +13,13 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ---
 
+## [2.25.3] — 2026-10-20
+
+### Fixed
+
+- **A remote dataset document that is already gone is no longer reported as a failure.** The dataset flush deletes the remote dataset documents; removing one that was never pushed (or was pushed before the sink existed) answered "not found", and the flush reported it as a write failure. Removing a document that is already gone is the state the caller wanted, so it is silent now.
+- **The reconnect test no longer counts another suite's sockets.** The reconnect suite counted every socket the shared WebSocket mock had seen, so a reconnect timer another test file left behind could land in it and make the suite count one socket too many (a CI-only flake). The suite now counts only the sockets its own client opened, and waits for the reconnect instead of guessing the delay.
+
 ## [2.25.2] — 2026-10-20
 
 ### Added

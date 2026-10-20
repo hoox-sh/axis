@@ -76,6 +76,7 @@ class FakeWS {
 
 describe('openReconnectableWs', () => {
   const prevWS = globalThis.WebSocket;
+  const WS_URL = 'wss://example.test/ws';
 
   beforeEach(() => {
     FakeWS.instances = [];
@@ -87,6 +88,24 @@ describe('openReconnectableWs', () => {
     globalThis.WebSocket = prevWS;
   });
 
+  /**
+   * Only the sockets this test's own client opened. Another test file can
+   * leave a reconnecting socket behind; when its pending timer fires while
+   * this file runs, the socket lands in the shared array and would skew the
+   * counts. The URL is the discriminator.
+   */
+  const ownSockets = (url: string = WS_URL): FakeWS[] =>
+    FakeWS.instances.filter((s) => s.url === url);
+
+  /** Wait until the client has opened at least `n` of its own sockets. */
+  const waitForSockets = async (n: number, timeoutMs = 2_000): Promise<void> => {
+    const deadline = Date.now() + timeoutMs;
+    while (ownSockets().length < n && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 2));
+    }
+    expect(ownSockets().length).toBeGreaterThanOrEqual(n);
+  };
+
   it('opens and delivers messages', () => {
     const statuses: string[] = [];
     const bars: string[] = [];
@@ -96,10 +115,10 @@ describe('openReconnectableWs', () => {
       onError: () => {},
       onMessage: (e) => bars.push(String(e.data)),
     });
-    expect(FakeWS.instances.length).toBe(1);
-    FakeWS.instances[0]!.open();
+    expect(ownSockets().length).toBe(1);
+    ownSockets()[0]!.open();
     expect(statuses).toContain('open');
-    FakeWS.instances[0]!.emitMessage('hello');
+    ownSockets()[0]!.emitMessage('hello');
     expect(bars).toEqual(['hello']);
     stop();
     expect(statuses.at(-1)).toBe('closed');
@@ -116,11 +135,10 @@ describe('openReconnectableWs', () => {
       onError: () => {},
       onMessage: () => {},
     });
-    FakeWS.instances[0]!.open();
-    FakeWS.instances[0]!.drop(); // unexpected — not stopped
+    ownSockets()[0]!.open();
+    ownSockets()[0]!.drop(); // unexpected — not stopped
     expect(statuses).toContain('reconnecting');
-    await new Promise((r) => setTimeout(r, 30));
-    expect(FakeWS.instances.length).toBeGreaterThanOrEqual(2);
+    await waitForSockets(2);
     stop();
   });
 
@@ -135,14 +153,14 @@ describe('openReconnectableWs', () => {
       onError: () => {},
       onMessage: () => {},
     });
-    FakeWS.instances[0]!.open();
-    FakeWS.instances[0]!.drop();
+    ownSockets()[0]!.open();
+    ownSockets()[0]!.drop();
     expect(statuses).toContain('reconnecting');
-    const countWhileReconnecting = FakeWS.instances.length;
+    const countWhileReconnecting = ownSockets().length;
     stop();
     expect(statuses.at(-1)).toBe('closed');
     await new Promise((r) => setTimeout(r, 120));
-    expect(FakeWS.instances.length).toBe(countWhileReconnecting);
+    expect(ownSockets().length).toBe(countWhileReconnecting);
   });
 
   it('double stop is idempotent', () => {
@@ -153,7 +171,7 @@ describe('openReconnectableWs', () => {
       onError: () => {},
       onMessage: () => {},
     });
-    FakeWS.instances[0]!.open();
+    ownSockets()[0]!.open();
     stop();
     stop();
     stop();
@@ -173,22 +191,19 @@ describe('openReconnectableWs', () => {
       onMessage: () => {},
     });
     // Fail first connect without ever opening
-    FakeWS.instances[0]!.drop();
-    await new Promise((r) => setTimeout(r, 15));
-    // second attempt socket
-    const last = FakeWS.instances[FakeWS.instances.length - 1]!;
-    last.drop();
-    await new Promise((r) => setTimeout(r, 15));
+    ownSockets()[0]!.drop();
+    await waitForSockets(2); // second attempt socket
+    ownSockets()[1]!.drop();
+    await waitForSockets(3);
     // third failure → exhaust (attempt 3 > max 2)
-    const last2 = FakeWS.instances[FakeWS.instances.length - 1]!;
-    last2.drop();
-    await new Promise((r) => setTimeout(r, 15));
-    expect(errors.length).toBeGreaterThanOrEqual(1);
+    ownSockets()[2]!.drop();
+    expect(errors.length).toBe(1);
     expect(errors[0]).toMatch(/failed to connect|exhausted/i);
     expect(statuses).toContain('closed');
-    const after = FakeWS.instances.length;
-    await new Promise((r) => setTimeout(r, 40));
-    expect(FakeWS.instances.length).toBe(after); // no more reconnects
+    const after = ownSockets().length;
+    expect(after).toBe(3);
+    await new Promise((r) => setTimeout(r, 60));
+    expect(ownSockets().length).toBe(after); // no more reconnects
   });
 
   it('calls onError when construct fails', () => {

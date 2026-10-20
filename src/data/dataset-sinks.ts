@@ -72,6 +72,22 @@ function reportSinkError(mode: PersistenceMode, key: string, err: unknown): void
   console.warn(`[dataset-sinks] ${mode} write failed for ${key}`, err);
 }
 
+/**
+ * The remote document is already gone.
+ *
+ * A flush deletes the remote dataset documents; the local dataset manager can
+ * still hold a dataset that was never pushed (or was pushed before the sink
+ * existed). Removing such a document answers "not found" — that is the state
+ * the caller wanted, not a failure.
+ */
+function isMissingRemote(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const e = err as { status?: unknown; code?: unknown; message?: unknown };
+  if (e.status === 404) return true;
+  if (String(e.code ?? '').toUpperCase() === 'NOT_FOUND') return true;
+  return /not found/i.test(String(e.message ?? ''));
+}
+
 /** A dataset persistence backend. Keys are `sourceId|symbol|interval`. */
 export interface DatasetSink {
   readonly mode: PersistenceMode;
@@ -335,7 +351,9 @@ export function remoteSink(mode: 'git' | 'worker'): DatasetSink {
         const plugin = await storagePlugin(mode);
         await plugin?.remove?.(datasetDocId(key), {});
       } catch (err: unknown) {
-        reportSinkError(mode, key, err);
+        // Already gone (the flush removed it, or it was never pushed) — the
+        // wanted state, not a failure.
+        if (!isMissingRemote(err)) reportSinkError(mode, key, err);
       }
     },
     async list() {
