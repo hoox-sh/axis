@@ -16,7 +16,7 @@
  */
 
 import './setup';
-import { describe, expect, it, beforeEach } from 'bun:test';
+import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
 import { setStore, store } from '../src/store';
 import {
   _resetDsmOrchestratorForTests,
@@ -31,13 +31,22 @@ function bar(t: number, close = 100): Bar {
   return { time: t, open: close, high: close + 1, low: close - 1, close, volume: 1 };
 }
 
+const DEFAULT_WINDOW = 10_000;
+
 beforeEach(() => {
   _resetDsmOrchestratorForTests();
   _resetDatasetStoreForTests();
   setStore('bars', []);
   setStore('symbol', 'BTCUSDT');
   setStore('interval', '1m');
-  setStore('rollingWindowBars', 10_000);
+  setStore('rollingWindowBars', DEFAULT_WINDOW);
+});
+
+// The store is shared across the test files in one process: a leaked rolling
+// window (or symbol) would change the bars of every later test.
+afterEach(() => {
+  setStore('bars', []);
+  setStore('rollingWindowBars', DEFAULT_WINDOW);
 });
 
 describe('dsm-orchestrator · chart window', () => {

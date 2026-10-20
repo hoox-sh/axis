@@ -71,6 +71,17 @@ describe('detectTrailingGap', () => {
     expect(gap.stale).toBe(false);
     expect(gap.newestSec).toBeNull();
   });
+
+  it('reads the newest bar from the repaired series', () => {
+    // The repair can drop or re-time the last row, so the raw tail may be a
+    // row that no longer exists — the staleness has to be judged on the
+    // repaired series.
+    const now = 1_700_000_000;
+    const bars = [bar(now - 780), bar(now - 720), bar(now - 660)];
+    const gap = detectTrailingGap(bars, '1m', now);
+    expect(gap.newestSec).toBe(now - 660);
+    expect(gap.stale).toBe(true);
+  });
 });
 
 describe('repairChartGapsAfterBackground guards', () => {
@@ -78,6 +89,30 @@ describe('repairChartGapsAfterBackground guards', () => {
     _setBackgroundCatchupLastRepairForTests(Date.now());
     const ok = await repairChartGapsAfterBackground('visible');
     expect(ok).toBe(false);
+  });
+
+  it('skips without work when the chart has no series', async () => {
+    const { setStore } = await import('../src/store');
+    setStore('bars', []);
+    const ok = await repairChartGapsAfterBackground('visible');
+    expect(ok).toBe(false);
+  });
+
+  it('runs one repair at a time (the gate is armed before the first await)', async () => {
+    // `focus` and `visibilitychange` fire together when the user tabs back:
+    // with the gate armed late, both handlers ran a repair.
+    const { setStore } = await import('../src/store');
+    const now = 1_700_000_000;
+    setStore('bars', [bar(now - 3600)]);
+    setStore('symbol', 'BTCUSDT');
+    setStore('interval', '1m');
+    setStore('source', 'mock-walk');
+    const [a, b] = await Promise.all([
+      repairChartGapsAfterBackground('visible'),
+      repairChartGapsAfterBackground('visible'),
+    ]);
+    // At most one of them did the work.
+    expect([a, b].filter(Boolean).length).toBeLessThanOrEqual(1);
   });
 
   it('startBackgroundCatchup is idempotent and stoppable', () => {

@@ -9,9 +9,15 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-10-20 · 632 commits · describe-tag: `v2.24.8`_
+_Generated/updated: 2026-10-20 · 633 commits · describe-tag: `v2.25.0`_
 
 ---
+
+## [Unreleased]
+
+### Fixed
+
+- **The new chart-window tests no longer leak state into the suite.** The test files that exercise the Rolling window left a small window in the shared store, so a later test file that loaded bars got them sliced — order-dependent failures on CI (and a coverage-gate drop). The store is now restored after each file.
 
 ## [2.25.0] — 2026-10-20
 
@@ -1707,9 +1713,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-10 (151 commits)
+### 2026-10 (152 commits)
 
 #### Features
 
@@ -1860,6 +1868,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Chores
 
+- `069bd8d9` (2026-10-20) — chore(release): AXIS 2.25.0
 - `2aed84f1` (2026-10-19) — chore(release): AXIS 2.24.8
 - `0b851707` (2026-10-19) — chore(release): AXIS 2.24.7
 - `833f0d6f` (2026-10-18) — chore(release): AXIS v2.24.6 — live stream feed and MCP plane

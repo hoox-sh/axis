@@ -28,11 +28,13 @@ let appended: Bar[] = [];
 let setDataCalls: unknown[][] = [];
 let manager: unknown;
 
+const DEFAULT_WINDOW = 10_000;
+
 beforeEach(() => {
   appended = [];
   setDataCalls = [];
   setStore('bars', []);
-  setStore('rollingWindowBars', 10_000);
+  setStore('rollingWindowBars', DEFAULT_WINDOW);
   manager = {
     appendBar: (b: Bar) => appended.push(b),
     getPane: () => undefined,
@@ -41,8 +43,12 @@ beforeEach(() => {
   setManager(manager as never);
 });
 
+// The store is shared across the test files in one process: a leaked rolling
+// window would slice the bars of every later test.
 afterEach(() => {
   setManager(undefined);
+  setStore('bars', []);
+  setStore('rollingWindowBars', DEFAULT_WINDOW);
 });
 
 describe('appendLiveBar', () => {

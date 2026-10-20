@@ -22,7 +22,7 @@
  */
 
 import './setup';
-import { describe, expect, it, beforeEach } from 'bun:test';
+import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
 import {
   appendBar,
   chartWindowLimit,
@@ -40,14 +40,31 @@ function series(n: number, start = 1_700_000_000, step = 60): Bar[] {
   return Array.from({ length: n }, (_, i) => bar(start + i * step, 100 + i));
 }
 
+const DEFAULT_WINDOW = 10_000;
+
 beforeEach(() => {
   setStore('bars', []);
-  setStore('rollingWindowBars', 10_000);
+  setStore('rollingWindowBars', DEFAULT_WINDOW);
   setStore('live', {
     active: true,
     needsRerun: false,
     lastBarTime: 0,
     streamId: 'mock',
+    preferAfterLoad: false,
+    rerunOn: 'every-tick',
+  });
+});
+
+// The store is shared across the test files in one process: a leaked rolling
+// window (or bar series) would slice the bars of every later test.
+afterEach(() => {
+  setStore('bars', []);
+  setStore('rollingWindowBars', DEFAULT_WINDOW);
+  setStore('live', {
+    active: false,
+    needsRerun: false,
+    lastBarTime: 0,
+    streamId: '',
     preferAfterLoad: false,
     rerunOn: 'every-tick',
   });
