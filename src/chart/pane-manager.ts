@@ -646,6 +646,10 @@ export class PaneManager {
   private themeUnregs = new Map<string, () => void>();
   /** Per-chart Heikin-Ashi incremental state (multi-chart safe). */
   private haHolder: HaCacheHolder = createHaCacheHolder();
+  /** True while a pointer is down on a pane (scroll / axis zoom). */
+  private ranging = false;
+  /** Last wheel-zoom time. A load must not fitContent over that gesture. */
+  private userRangedAt = 0;
   /**
    * Last successfully painted candle range for THIS chart (multi-chart safe).
    * Co-painted overlays / equity clamp to this window so a stale engine
@@ -1182,6 +1186,19 @@ export class PaneManager {
       this.resizeRaf.schedule(() => this.flushPendingPaneResizes());
     });
     ro.observe(div);
+    // A history replace that fits while this gesture is active collapses the
+    // candle viewport. The series stays blank until the next bar update.
+    const onRangePointerDown = () => {
+      this.ranging = true;
+    };
+    const onRangePointerUp = () => {
+      this.ranging = false;
+      this.noteUserRange();
+    };
+    div.addEventListener('pointerdown', onRangePointerDown);
+    div.addEventListener('pointerup', onRangePointerUp);
+    div.addEventListener('pointercancel', onRangePointerUp);
+    div.addEventListener('wheel', this.noteUserRange, { passive: true });
 
     const pane: ManagedPane = {
       id,
@@ -2596,15 +2613,111 @@ export class PaneManager {
     return ok;
   }
 
+  /** Wheel or drag just moved the time scale. Programmatic fits must not count. */
+  private noteUserRange = (): void => {
+    this.userRangedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  };
+
+  /** True while the user is scrolling or zooming, or just did. */
+  private userIsRanging(): boolean {
+    if (this.ranging) return true;
+    if (this.userRangedAt <= 0) return false;
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    return now - this.userRangedAt < 800;
+  }
+
+  /**
+   * Drop co-painted rows the next candle `setData` will not contain.
+   *
+   * `setData` renders immediately. Volume or an indicator that still holds a
+   * time the new candles do not have makes that render throw `Value is null`,
+   * and the price series stays blank until the next bar updates both.
+   * Keep only times that are in the new payload and already on the candles.
+   */
+  prepareCoPaintedForCandleTimes(nextTimes: ReadonlySet<number>): void {
+    const current = this.candleTimeSet();
+    for (const pane of this.panes.values()) {
+      for (const key of Object.keys(pane.series)) {
+        if (key === 'candle') continue;
+        if (key !== 'volume' && !isScriptCoPaintedKey(key)) continue;
+        const series = pane.series[key];
+        if (!series || typeof series.data !== 'function' || typeof series.setData !== 'function') {
+          continue;
+        }
+        let rows: readonly { time?: unknown }[];
+        try {
+          rows = series.data() as readonly { time?: unknown }[];
+        } catch {
+          continue;
+        }
+        if (!rows?.length) continue;
+        const kept = !current
+          ? []
+          : rows.filter((row) => {
+              const t = Number(row?.time);
+              return Number.isFinite(t) && nextTimes.has(t) && current.has(t);
+            });
+        if (kept.length === rows.length) continue;
+        try {
+          series.setData(kept as never);
+        } catch {
+          /* a series that cannot shrink is removed by the candle paint's clamp */
+        }
+      }
+    }
+  }
+
+  /**
+   * If the viewport does not overlap the candles, put the latest bars back
+   * on screen. A zoom that started on the pre-load series can land entirely
+   * in the whitespace after the replace.
+   */
+  repairVisibleRange(): void {
+    const price = this.panes.get('price');
+    const candle = price?.series['candle'];
+    if (!price || !candle || typeof candle.data !== 'function') return;
+    let n = 0;
+    try {
+      n = (candle.data() as unknown[]).length;
+    } catch {
+      return;
+    }
+    if (n <= 0) return;
+    let range: { from: number; to: number } | null = null;
+    try {
+      range = price.chart.timeScale().getVisibleLogicalRange();
+    } catch {
+      range = null;
+    }
+    const overlaps =
+      !!range &&
+      Number.isFinite(range.from) &&
+      Number.isFinite(range.to) &&
+      range.to > range.from &&
+      range.to >= 0 &&
+      range.from <= n - 1;
+    if (overlaps) return;
+    const span = Math.min(n, 150);
+    try {
+      price.chart.timeScale().setVisibleLogicalRange({ from: n - span, to: n + 5 });
+    } catch {
+      /* mock time scales may not implement the setter */
+    }
+    this.alignTimeRangesFromPrice();
+  }
+
   /**
    * After a full history replace (symbol / interval load): resize panes, re-enable
    * auto-scale, fit time range, keep current log mode.
+   * A zoom or scroll already in progress keeps its range — fitting over that
+   * gesture is what blanks the candles until the next bar.
    */
   afterDataReload() {
     const run = () => {
       this.resizeAll();
       this.applyPriceScaleOptions({ autoScale: true });
-      this.fitContent();
+      if (this.userIsRanging()) this.repairVisibleRange();
+      else this.fitContent();
       this.alignTimeRangesFromPrice();
     };
     // One layout pass first (sync) so paint is visible immediately

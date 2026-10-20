@@ -1033,6 +1033,74 @@ describe('live candle axis', () => {
   });
 });
 
+describe('load paint while the user is zooming', () => {
+  let container: HTMLElement;
+  let pm: InstanceType<typeof PaneManager>;
+
+  beforeEach(() => {
+    container = document.createElement('div') as unknown as HTMLElement;
+    (container as { id: string }).id = 'chart-root';
+    document.body.appendChild(container as never);
+    pm = new PaneManager(container);
+  });
+
+  it('drops co-painted times the next candles will not have', () => {
+    const price = pm.createPane('price', 'price', 'Price');
+    const volume = pm.createPane('volume', 'volume', 'Volume', 80);
+    let overlay = [
+      { time: 1, value: 1 },
+      { time: 99, value: 9 },
+    ];
+    let vol = [
+      { time: 1, value: 1 },
+      { time: 2, value: 2 },
+      { time: 50, value: 5 },
+    ];
+    price.series['candle'] = { data: () => [{ time: 1 }, { time: 2 }], setData: () => {} } as never;
+    price.series['overlay_s1__vwma'] = {
+      data: () => overlay,
+      setData: (d: { time: number; value: number }[]) => {
+        overlay = d;
+      },
+    } as never;
+    volume.series['volume'] = {
+      data: () => vol,
+      setData: (d: { time: number; value: number }[]) => {
+        vol = d;
+      },
+    } as never;
+    pm.notePaintedCandleRange(1, 2, [1, 2]);
+    pm.prepareCoPaintedForCandleTimes(new Set([2, 3]));
+    // 99 and 50 are not in the next candles. 1 is already on the candles but
+    // the next payload drops it. 2 is in both, so it stays.
+    expect(overlay.map((row) => row.time)).toEqual([2]);
+    expect(vol.map((row) => row.time)).toEqual([2]);
+  });
+
+  it('does not fit the time scale while a zoom gesture is down', () => {
+    const price = pm.createPane('price', 'price', 'Price');
+    let fits = 0;
+    const ts = {
+      fitContent: () => {
+        fits += 1;
+      },
+      getVisibleLogicalRange: () => ({ from: 0, to: 10 }),
+      setVisibleLogicalRange: () => {},
+      subscribeVisibleLogicalRangeChange: () => {},
+      unsubscribeVisibleLogicalRangeChange: () => {},
+    };
+    (price.chart as { timeScale: () => typeof ts }).timeScale = () => ts;
+    pm.afterDataReload();
+    expect(fits).toBeGreaterThan(0);
+    const div = document.getElementById(pm.paneDomId('price'));
+    div?.dispatchEvent(new Event('pointerdown'));
+    fits = 0;
+    pm.afterDataReload();
+    expect(fits).toBe(0);
+    div?.dispatchEvent(new Event('pointerup'));
+  });
+});
+
 describe('auditTimeParity', () => {
   let container: HTMLElement;
   let pm: InstanceType<typeof PaneManager>;

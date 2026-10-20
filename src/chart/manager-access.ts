@@ -744,6 +744,17 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
         );
       }
       try {
+        const nextCandleTimes = new Set<number>();
+        for (const row of checked.clean as Array<{ time?: unknown }>) {
+          const t = Number(row?.time);
+          if (Number.isFinite(t)) nextCandleTimes.add(t);
+        }
+        const prepare = (
+          mgr as unknown as {
+            prepareCoPaintedForCandleTimes?: (times: ReadonlySet<number>) => void;
+          }
+        ).prepareCoPaintedForCandleTimes;
+        if (typeof prepare === 'function') prepare.call(mgr, nextCandleTimes);
         pricePane.series['candle'].setData(checked.clean as never);
         const times = checked.clean as Array<{ time?: unknown }>;
         const firstT = times.length ? times[0]?.time : undefined;
