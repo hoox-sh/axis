@@ -91,6 +91,7 @@ import {
   chartLagView,
   enginePlaneView,
   engineRepairView,
+  engineFlushView,
   engineSeriesView,
   engineTickView,
   streamPlaneView,
@@ -897,6 +898,8 @@ export async function invokeCapability(
       return engineTickView(p);
     case 'engine.repair':
       return engineRepairView(p);
+    case 'engine.flush':
+      return engineFlushView(p);
 
     case 'stream.get':
       return streamPlaneView();

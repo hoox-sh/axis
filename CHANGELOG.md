@@ -15,6 +15,10 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ## [2.25.2] — 2026-10-20
 
+### Added
+
+- **The dataset flush reaches the engine.** AXIS caches the venue's OHLCV twice: in the local dataset store and in the **engine's** series store (the shared venue cache behind `GET /data/series`). Flushing only the local side left the engine serving the old — stale, holed — window, and the live path mirrors the engine's copy. Settings → Data → "Flush dataset manager" now also drops the engine's series for every key AXIS knows about (per key — the engine's store is shared), and the MCP exposes it as `engine.flush`.
+
 ### Fixed
 
 - **A dataset write that was queued before a reset no longer repopulates the store.** The suite resets the shared singletons between files, and a write that was still queued when the reset ran landed in the next file's mirror — a dataset the next file never created, which then failed its "the mirror is empty" assertion (order-dependent, CI-only). A queued write now carries the store's generation and is dropped when the store was reset underneath it.

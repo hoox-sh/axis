@@ -23,6 +23,8 @@
 import { FALLBACK_MAJORS } from '../data/symbol-catalog';
 import { pyneMarket } from '../data/provider';
 import { intervalToSec } from '../data/bars-gaps';
+import { flushEngineSeries } from '../data/engine-flush';
+import { flushDatasets } from '../data/dataset-store';
 import { currentSeriesKey, pairFormSymbol } from '../engine/market-identity';
 import { routeEngineRun } from '../engine/router';
 import type { DataSeriesKey, DataSeriesStatus } from '../engines/data-sessions';
@@ -552,6 +554,31 @@ export async function engineRepairView(p: Record<string, unknown>): Promise<Reco
     before: seriesView(before, interval, chartLast, now),
     after: seriesView(after, interval, chartLast, now),
     advancedBars: before && after ? (after.newest ?? 0) - (before.newest ?? 0) : null,
+  };
+}
+
+/**
+ * `engine.flush` — wipe the datasets on **both** sides: AXIS's local dataset
+ * store (memory mirror + IndexedDB + the remote sinks) and the engine's own
+ * copy of the venue data (`DELETE /data/series` per key). Flushing only the
+ * local side leaves the engine serving the old — stale, holed — window, and
+ * the chart mirrors the engine's copy in the live path.
+ *
+ * The local flush always runs; the engine purge is best effort and reports
+ * what it could not drop.
+ */
+export async function engineFlushView(p: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const started = Date.now();
+  const local = await flushDatasets();
+  const engine = await flushEngineSeries();
+  return {
+    local: { removed: local },
+    engine: {
+      keys: engine.keys,
+      removed: engine.removed,
+      failed: engine.failed,
+    },
+    ms: Date.now() - started,
   };
 }
 

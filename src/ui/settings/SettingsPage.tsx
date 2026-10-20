@@ -40,6 +40,7 @@ import {
 } from '../../data/watchlist-tickers';
 import { loadSymbolData, reloadChart } from '../../data/load-symbol';
 import { flushDatasets } from '../../data/dataset-store';
+import { flushEngineSeries } from '../../data/engine-flush';
 import { syncLiveToPreference } from '../../streams/multiplex';
 import { getManager } from '../../chart/manager-access';
 import { UI_SCALE_PRESETS, formatUiScalePct } from '../ui-scale';
@@ -421,7 +422,8 @@ export function SettingsPage(props: {
         ? window.confirm(
             'Flush the dataset manager?\n\n' +
               'Deletes every cached OHLCV dataset (bars + metadata) from memory, ' +
-              'the local IndexedDB cache, and the remote dataset stores (git / cloud).\n\n' +
+              'the local IndexedDB cache, and the remote dataset stores (git / cloud) — ' +
+              'and the engine\'s own copy of the venue data (per series).\n\n' +
               'The chart keeps the bars it already shows until you reload the symbol.',
           )
         : true;
@@ -430,8 +432,16 @@ export function SettingsPage(props: {
     setDatasetFlushMsg('');
     try {
       const removed = await flushDatasets();
-      const msg = `Dataset manager flushed · ${removed} dataset${removed === 1 ? '' : 's'} removed.`;
-      setDatasetFlushTone('ok');
+      // The engine keeps its own copy of the venue data — drop it too, or the
+      // live path keeps mirroring the old (stale, holed) window.
+      const engine = await flushEngineSeries();
+      const engineNote = engine.failed.length
+        ? ` · engine: ${engine.keys.length} series flushed, ${engine.failed.length} could not be dropped`
+        : ` · engine: ${engine.keys.length} series flushed`;
+      const msg =
+        `Dataset manager flushed · ${removed} dataset${removed === 1 ? '' : 's'} removed` +
+        `${engineNote}.`;
+      setDatasetFlushTone(engine.failed.length ? 'err' : 'ok');
       setDatasetFlushMsg(msg);
       setStatus('ready', msg, { toast: true, source: 'settings' });
     } catch (err: unknown) {

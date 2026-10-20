@@ -90,6 +90,7 @@ export const APP_CAPABILITIES: readonly CapabilitySpec[] = [
   { id: 'engine.series', domain: 'engine', description: "Engine-side series bounds (count/newest/updated) + staleness", mutates: false },
   { id: 'engine.tick', domain: 'engine', description: 'Force one drive tick; returns before/after series bounds + envelope', mutates: true },
   { id: 'engine.repair', domain: 'engine', description: "Force a stale-series repair (local upload or engine fetch)", mutates: true },
+  { id: 'engine.flush', domain: 'engine', description: "Flush the datasets (local store + the engine's own series copy)", mutates: true },
 
   { id: 'stream.get', domain: 'stream', description: 'Live plane: route, engine socket, subscriptions, feed chips', mutates: false },
   { id: 'stream.reset', domain: 'stream', description: 'Drop the engine socket + subscriptions (probes a re-subscribe)', mutates: true },

@@ -278,8 +278,34 @@ export async function fetchDataSeries(
   return { fetched: num(r.body.fetched) ?? 0, count: num(r.body.count) ?? 0 };
 }
 
-/** `GET /data/series/bars` — newest window for chart paint (caller keeps it in memory only).
+/**
+ * `DELETE /data/series` — drop the engine's stored series for one key.
  *
+ * The engine keeps its own copy of the venue's OHLCV (a shared cache). A
+ * dataset flush that only clears AXIS leaves that copy behind: the engine
+ * keeps serving the old (holed, stale) window, and the chart mirrors it.
+ *
+ * Per key — the engine's store is shared, so a purge never touches another
+ * series.
+ */
+export async function deleteDataSeries(
+  endpoint: string,
+  apiKey: string,
+  key: DataSeriesKey,
+  signal?: AbortSignal,
+): Promise<{ removed: number }> {
+  const r = await call(
+    endpoint,
+    `/data/series?${seriesQuery(key)}`,
+    { method: 'DELETE' },
+    apiKey,
+    signal,
+  );
+  if (!r.ok) throw new Error(errorMessage(r, 'series delete failed'));
+  return { removed: num(r.body.removed) ?? 0 };
+}
+
+/** `GET /data/series/bars` — newest window for chart paint (caller keeps it in memory only).
  * Engine bars go through the same normalization as venue bars
  * ({@link normalizeHistoricalBars}: ms→seconds via `toUnixSeconds`, `sanitizeBar`
  * repair/drop of null-NaN OHLC, dedupe by time with last-wins, sort ascending).

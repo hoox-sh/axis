@@ -7,7 +7,7 @@ tags: [code, data]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-20T11:35:58Z
+  at: 2026-10-20T12:33:03Z
 sources:
   - id: tree
     resource: "src/data"
@@ -30,6 +30,7 @@ okf_lock: generated
 * `dataset-store.ts` — DatasetMeta, PutResult, _drainDatasetWritesForTests, _resetDatasetStoreForTests, awaitPendingCopies, flushDatasets, getDataset, getMergePolicy, getPersistenceMode, keyFor, listMemoryDatasets, peekDataset
 * `dataset-validate.ts` — ClassifyOpts, DatasetReport, GapClassification, RepairResult, RepairStats, ValidateOpts, VenueClass, classifyGaps, findClassifiedGaps, repairBars, validateDataset, venueClassForSourceCaps
 * `dsm-orchestrator.ts` — DatasetFirstResult, _resetDsmOrchestratorForTests, announceDatasetPaint, chartDisplayCap, ensureDatasetComplete, paintDataset, repaintViewForTests, seedDatasetFromBars, sliceForChart, startProgressiveStream, stopProgressiveRepaint
+* `engine-flush.ts` — EngineFlushResult, flushEngineSeries, knownEngineSeriesKeys
 * `expand-cache.ts` — ExpandCacheResult, _flushDataManagerLiveBarForTests, canExpandFromSource, expandCachedSeriesToNow, fillBarsTowardNow, fillInternalGaps, noteDataManagerLiveBar
 * `gateway.ts` — DATAFEED_DEFAULT_PORT, GatewayMode, GatewaySessionBody, gatewayBase, gatewayDeleteSession, gatewayFetch, gatewayPutSession, gatewayWs, isRemotePageOrigin, probeSidecar
 * `load-symbol.ts` — _currentLoadGeneration, _resetLoadGeneration, exchangeForSource, loadSymbolData, normalizeLoadSymbol, reloadChart
@@ -55,6 +56,7 @@ okf_lock: generated
 
 * [src/chart](/code/src/chart.md)
 * [src/data/venues](/code/src/data/venues.md)
+* [src/engine](/code/src/engine.md)
 * [src/engines](/code/src/engines.md)
 * [src/indicators](/code/src/indicators.md)
 * [src/plugins](/code/src/plugins.md)
