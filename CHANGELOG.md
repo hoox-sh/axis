@@ -13,7 +13,7 @@ _Generated/updated: 2026-10-20 · 637 commits · describe-tag: `v2.25.0`_
 
 ---
 
-## [2.25.1] — 2026-10-20
+## [Unreleased]
 
 ### Added
 
@@ -22,6 +22,8 @@ _Generated/updated: 2026-10-20 · 637 commits · describe-tag: `v2.25.0`_
 
 ### Fixed
 
+- **A live script subscription now covers the chart's whole window.** The socket subscribed the script with the *series* depth — the short live snapshot (500 bars), which is right for the chart's own OHLCV (the chart is painted from REST) but wrong for a script: the engine's script state was 500 bars deep, so every live apply repainted the indicator over the last 500 bars only, blanked the rest of the window and collapsed the script's band fill with it. The script subscription now asks for the chart's own depth (capped by the Rolling window).
+- **A script's input values now reach the engine.** The live socket subscribed the script **without its inputs**, so the engine evaluated it with the Pine defaults: changing an input (a Keltner channel length, an EMA period) repainted the chart with the new values and the next live tick overwrote them with the old ones — the change looked like it did nothing. The values now travel with the subscribe frame, and a changed value re-subscribes (the engine keys its session on the inputs).
 - **The engine's live snapshot no longer replaces the chart's window.** The engine's live series is a short tail (the socket subscribes with ~500 bars), and the chart painted that tail as a **replace**: a freshly loaded 20 000-bar dataset was thrown away and the chart showed the engine's stale 500-bar window — with the engine's holes in it. The snapshot is now **merged** into the chart's window: it fills the holes the chart has, extends the tail when the engine is ahead, and never shortens the chart's own history.
 - **The volume series carries exactly the bars the candles carry.** The volume skipped a bar only when its open/close were not finite, while the candle series rejects a bar whose high/low are not finite too — so the volume could hold a bar time the candles did not have. The library's shared time scale is the union of every series' rows, and each renderer asks its own series for the bar at the rendered index: a volume row at a bar the candles dropped makes the candlestick renderer fail with `Value is null` and no other clue. Both series now use the same rule.
 - **A live tick lands on the same bar in the candle and the volume series.** The candle took its time from the mapped bar while the volume took the tick's own time, so a rejected tick could leave the two series one bar apart.

@@ -86,12 +86,39 @@ export interface EvalScriptInput {
   indicatorId?: string;
   meta: Record<string, unknown>;
   bars: Bar[];
+  /**
+   * The script's input values (Pine `input.*`).
+   *
+   * The engine evaluates the subscribed script with **these** values — the
+   * defaults otherwise. Without them a user's input change is a no-op on the
+   * chart: the live subscription keeps the values it was created with.
+   */
+  inputs?: Record<string, unknown>;
 }
 
 const FAILURE_COOLDOWN_MS = 60_000;
 /** PYNE history ensure of a painted 5m window routinely exceeds 30s. */
 const SNAPSHOT_WAIT_MS = 120_000;
 const LOADING_WAIT_CAP_MS = 120_000;
+
+/**
+ * Stable signature of a script's input values.
+ *
+ * Only used to notice a **change** (the subscription must be re-created);
+ * the values themselves travel with the subscribe frame.
+ */
+function inputSignature(inputs: Record<string, unknown> | undefined): string {
+  if (!inputs) return '';
+  try {
+    return JSON.stringify(
+      Object.keys(inputs)
+        .sort()
+        .map((k) => [k, inputs[k]]),
+    );
+  } catch {
+    return '';
+  }
+}
 
 function toBars(raw: unknown): Bar[] {
   if (!Array.isArray(raw)) return [];
@@ -136,6 +163,8 @@ export class StreamLiveWire {
   private readonly seriesInflight = new Map<string, Promise<Bar[]>>();
   /** Last script + bars so a push delta can apply without waiting on scheduleRerun. */
   private readonly scriptCtx = new Map<string, { script: string; indicatorId?: string; bars: Bar[] }>();
+  /** Input signature of each script subscription (a change forces a re-subscribe). */
+  private readonly scriptInputSig = new Map<string, string>();
   /** Inbox for frames that arrive before their waiter (one TCP segment can
    * carry status+full together). Drained by `awaitFull`. */
   private readonly inbox = new Map<string, WireFrame[]>();
@@ -251,14 +280,33 @@ export class StreamLiveWire {
       indicatorId: input.indicatorId,
       bars: input.bars,
     });
+    // A changed input must re-subscribe: the engine evaluates the script with
+    // the values it was subscribed with, so the cached state (and every delta
+    // merged into it) would keep the old ones.
+    const sig = inputSignature(input.inputs);
+    const prevSig = this.scriptInputSig.get(input.subId);
     let applier = this.appliers.get(input.subId);
+    if (applier && prevSig !== undefined && prevSig !== sig) {
+      this.appliers.delete(input.subId);
+      this.appliedSeq.delete(input.subId);
+      applier = undefined;
+      try {
+        this.client.unsubscribe(input.subId);
+      } catch {
+        /* best-effort: the engine drops the old subscription anyway */
+      }
+    }
     if (!applier) {
       if (this.cooledDown) this.fail('cooldown', 'stream in failure cooldown');
       applier = new Redesign2DeltaApplier();
       this.appliers.set(input.subId, applier);
+      this.scriptInputSig.set(input.subId, sig);
       this.handlers.onStatus(input.subId, 'connecting');
       try {
-        this.client.subscribe(input.subId, 'script', input.meta, { script: input.script });
+        this.client.subscribe(input.subId, 'script', input.meta, {
+          script: input.script,
+          ...(input.inputs ? { inputs: input.inputs } : {}),
+        });
         const full = await this.awaitFull(input.subId, SNAPSHOT_WAIT_MS, { fatal: false });
         if (full.type === 'error' || full.type !== 'full') {
           this.appliers.delete(input.subId);
@@ -517,6 +565,7 @@ export class StreamLiveWire {
     this.seriesBars.delete(subId);
     this.seriesInflight.delete(subId);
     this.scriptCtx.delete(subId);
+    this.scriptInputSig.delete(subId);
     try {
       this.client.unsubscribe(subId);
     } catch {

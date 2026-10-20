@@ -308,6 +308,117 @@ describe('the engine socket wire', () => {
     });
     await evalPromise;
   });
+
+  it('subscribes a script with its input values and the chart depth', async () => {
+    // The engine evaluates the subscribed script with the values it was
+    // subscribed with: without them the script's defaults are used and an
+    // input change never reaches the chart.
+    setStore('bars', [bar(1000), bar(2000), bar(3000)]);
+    try {
+      const evalPromise = streamEvalScript({
+        id: 'ind-inputs',
+        code: 'plot(close)',
+        inputValues: { length: 20 },
+      } as never);
+      await until(() => ManualSocket.instances.length > 0);
+      ManualSocket.instances[0]!.open();
+      await until(() =>
+        ManualSocket.instances[0]?.frames().some(
+          (f) =>
+            f.type === 'subscribe' &&
+            (f.payload as { kind?: string } | undefined)?.kind === 'script',
+        ),
+      );
+      const frame = ManualSocket.instances[0]!.frames().find(
+        (f) =>
+          f.type === 'subscribe' &&
+          (f.payload as { kind?: string } | undefined)?.kind === 'script',
+      );
+      const payload = frame?.payload as
+        | { inputs?: Record<string, unknown>; meta?: { history_bars?: number } }
+        | undefined;
+      expect(payload?.inputs).toEqual({ length: 20 });
+      // The script is painted over the chart's whole window — the short live
+      // snapshot depth would blank everything but the last 500 bars.
+      expect(payload?.meta?.history_bars).toBe(3);
+      const scriptSub = String(frame?.id ?? '');
+      ManualSocket.instances[0]!.push({
+        type: 'full',
+        id: scriptSub,
+        sessionId: 's3',
+        seq: 1,
+        payload: { seriesKey: scriptSub, count: 1, closed_upto: 1, plots: { plot_0: [1.5] } },
+      });
+      await evalPromise;
+    } finally {
+      setStore('bars', []);
+    }
+  });
+
+  it('re-subscribes when the script inputs change', async () => {
+    const first = streamEvalScript({
+      id: 'ind-inputs-2',
+      code: 'plot(close)',
+      inputValues: { length: 20 },
+    } as never);
+    await until(() => ManualSocket.instances.length > 0);
+    ManualSocket.instances[0]!.open();
+    await until(() =>
+      ManualSocket.instances[0]?.frames().some(
+        (f) =>
+          f.type === 'subscribe' &&
+          (f.payload as { kind?: string } | undefined)?.kind === 'script',
+      ),
+    );
+    const scriptSub = String(
+      ManualSocket.instances[0]!.frames().find(
+        (f) =>
+          f.type === 'subscribe' &&
+          (f.payload as { kind?: string } | undefined)?.kind === 'script',
+      )?.id ?? '',
+    );
+    ManualSocket.instances[0]!.push({
+      type: 'full',
+      id: scriptSub,
+      sessionId: 's4',
+      seq: 1,
+      payload: { seriesKey: scriptSub, count: 1, closed_upto: 1, plots: { plot_0: [1.5] } },
+    });
+    await first;
+
+    const second = streamEvalScript({
+      id: 'ind-inputs-2',
+      code: 'plot(close)',
+      inputValues: { length: 50 },
+    } as never);
+    await until(() =>
+      ManualSocket.instances[0]!.frames().some(
+        (f) =>
+          f.type === 'subscribe' &&
+          (f.payload as { kind?: string } | undefined)?.kind === 'script' &&
+          (f.payload as { inputs?: Record<string, unknown> } | undefined)?.inputs?.length ===
+            50,
+      ),
+    );
+    const subs = ManualSocket.instances[0]!.frames().filter(
+      (f) =>
+        f.type === 'subscribe' &&
+        (f.payload as { kind?: string } | undefined)?.kind === 'script',
+    );
+    expect(subs.length).toBeGreaterThanOrEqual(2);
+    expect(
+      ManualSocket.instances[0]!.frames().some((f) => f.type === 'unsubscribe'),
+    ).toBe(true);
+    const scriptSub2 = String(subs[subs.length - 1]!.id);
+    ManualSocket.instances[0]!.push({
+      type: 'full',
+      id: scriptSub2,
+      sessionId: 's5',
+      seq: 1,
+      payload: { seriesKey: scriptSub2, count: 1, closed_upto: 1, plots: { plot_0: [2.5] } },
+    });
+    await second;
+  });
 });
 
 describe('stream wire helpers', () => {

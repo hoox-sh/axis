@@ -396,6 +396,34 @@ function seriesMeta(): Record<string, unknown> {
 }
 
 /**
+ * Subscription meta for a **script** subscription.
+ *
+ * The script's plot values are painted over the chart's **whole** window, so
+ * the engine's script state has to cover it. The short live-snapshot depth
+ * (`LIVE_SNAPSHOT_BARS`) is only right for the chart's own OHLCV series —
+ * the chart is painted from REST — while a script painted from a 500-bar
+ * state covers only the last 500 bars: the rest of the window goes blank and
+ * the script's band fill collapses with it.
+ */
+function scriptMeta(): Record<string, unknown> {
+  const meta = seriesMeta();
+  meta.history_bars = scriptHistoryBars();
+  return meta;
+}
+
+/**
+ * How many bars a script subscription must cover: the chart's own depth,
+ * capped by the rolling window.
+ */
+export function scriptHistoryBars(): number {
+  const want = engineHistoryBars();
+  const have = store.bars.length;
+  if (!Number.isFinite(want) || want <= 0) return Math.max(1, have);
+  if (!have) return want;
+  return Math.max(1, Math.min(have, want));
+}
+
+/**
  * Venue tick on the stream path: ensure the series subscription (first
  * snapshot paints; later ticks are subscribe-once and leave the venue-painted
  * forming tip alone), then report whether the caller should re-run scripts.
@@ -448,8 +476,11 @@ export async function streamEvalScript(ind: Indicator): Promise<void> {
       subId: ind.id,
       script: ind.code,
       indicatorId: ind.id,
-      meta: seriesMeta(),
+      meta: scriptMeta(),
       bars: store.bars,
+      // The engine evaluates the subscribed script with these values — the
+      // script's defaults otherwise, which makes an input change a no-op.
+      inputs: (ind.inputValues ?? undefined) as Record<string, unknown> | undefined,
     });
     setScriptStatus(ind.id, 'live');
   } catch (e) {
