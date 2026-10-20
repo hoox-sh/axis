@@ -9,11 +9,18 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-10-20 · 637 commits · describe-tag: `v2.25.0`_
+_Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ---
 
-## [Unreleased]
+## [2.25.2] — 2026-10-20
+
+### Fixed
+
+- **A live script subscription now covers the chart's whole window.** The socket subscribed the script with the *series* depth — the short live snapshot (500 bars), which is right for the chart's own OHLCV (the chart is painted from REST) but wrong for a script: the engine's script state was 500 bars deep, so every live apply repainted the indicator over the last 500 bars only, blanked the rest of the window and collapsed the script's band fill with it. The script subscription now asks for the chart's own depth (capped by the Rolling window).
+- **A script's input values now reach the engine.** The live socket subscribed the script **without its inputs**, so the engine evaluated it with the Pine defaults: changing an input (a Keltner channel length, an EMA period) repainted the chart with the new values and the next live tick overwrote them with the old ones — the change looked like it did nothing. The values now travel with the subscribe frame, and a changed value re-subscribes (the engine keys its session on the inputs).
+
+## [2.25.1] — 2026-10-20
 
 ### Added
 
@@ -22,8 +29,6 @@ _Generated/updated: 2026-10-20 · 637 commits · describe-tag: `v2.25.0`_
 
 ### Fixed
 
-- **A live script subscription now covers the chart's whole window.** The socket subscribed the script with the *series* depth — the short live snapshot (500 bars), which is right for the chart's own OHLCV (the chart is painted from REST) but wrong for a script: the engine's script state was 500 bars deep, so every live apply repainted the indicator over the last 500 bars only, blanked the rest of the window and collapsed the script's band fill with it. The script subscription now asks for the chart's own depth (capped by the Rolling window).
-- **A script's input values now reach the engine.** The live socket subscribed the script **without its inputs**, so the engine evaluated it with the Pine defaults: changing an input (a Keltner channel length, an EMA period) repainted the chart with the new values and the next live tick overwrote them with the old ones — the change looked like it did nothing. The values now travel with the subscribe frame, and a changed value re-subscribes (the engine keys its session on the inputs).
 - **The engine's live snapshot no longer replaces the chart's window.** The engine's live series is a short tail (the socket subscribes with ~500 bars), and the chart painted that tail as a **replace**: a freshly loaded 20 000-bar dataset was thrown away and the chart showed the engine's stale 500-bar window — with the engine's holes in it. The snapshot is now **merged** into the chart's window: it fills the holes the chart has, extends the tail when the engine is ahead, and never shortens the chart's own history.
 - **The volume series carries exactly the bars the candles carry.** The volume skipped a bar only when its open/close were not finite, while the candle series rejects a bar whose high/low are not finite too — so the volume could hold a bar time the candles did not have. The library's shared time scale is the union of every series' rows, and each renderer asks its own series for the bar at the rendered index: a volume row at a bar the candles dropped makes the candlestick renderer fail with `Value is null` and no other clue. Both series now use the same rule.
 - **A live tick lands on the same bar in the candle and the volume series.** The candle took its time from the mapped bar while the volume took the tick's own time, so a rejected tick could leave the two series one bar apart.
@@ -1734,9 +1739,13 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
+---
+
 ## Full history (recursive)
 
-### 2026-10 (156 commits)
+### 2026-10 (158 commits)
 
 #### Features
 
@@ -1780,6 +1789,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `453258f9` (2026-10-20) — fix(stream): subscribe scripts with the chart window and their inputs
 - `cf66630c` (2026-10-20) — fix(chart): keep every painted series on the candle axis
 - `7fe4de9e` (2026-10-20) — fix(test): reset the shared singletons the suite leaks between files
 - `a6592d2a` (2026-10-20) — fix(data): drop a dataset repaint that would paint over a moved-on chart
@@ -1891,6 +1901,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Chores
 
+- `119c77b7` (2026-10-20) — chore(release): AXIS v2.25.1
 - `069bd8d9` (2026-10-20) — chore(release): AXIS 2.25.0
 - `2aed84f1` (2026-10-19) — chore(release): AXIS 2.24.8
 - `0b851707` (2026-10-19) — chore(release): AXIS 2.24.7
