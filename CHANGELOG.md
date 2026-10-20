@@ -9,11 +9,11 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-10-20 · 635 commits · describe-tag: `v2.25.0`_
+_Generated/updated: 2026-10-20 · 637 commits · describe-tag: `v2.25.0`_
 
 ---
 
-## [Unreleased]
+## [2.25.1] — 2026-10-20
 
 ### Added
 
@@ -1730,9 +1730,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-10 (154 commits)
+### 2026-10 (156 commits)
 
 #### Features
 
@@ -1776,6 +1778,8 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `cf66630c` (2026-10-20) — fix(chart): keep every painted series on the candle axis
+- `7fe4de9e` (2026-10-20) — fix(test): reset the shared singletons the suite leaks between files
 - `a6592d2a` (2026-10-20) — fix(data): drop a dataset repaint that would paint over a moved-on chart
 - `366bb039` (2026-10-20) — fix(test): restore the shared store after the chart-window test files
 - `2fb50d41` (2026-10-20) — fix(chart): re-join cross-indicator series by time, and close the apply gaps
