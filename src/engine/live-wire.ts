@@ -158,10 +158,42 @@ function mergeTip(cur: Bar[], next: Bar[]): Bar[] {
 }
 
 /**
+ * How many bars the script columns actually contain.
+ *
+ * The frame's `count` is the history the subscribe asked for. A shared
+ * session can already be longer, and every later delta is numbered from
+ * that longer series. Storing the shorter count rejects those deltas, so
+ * the channel stays on the load snapshot and the next candle leaves it
+ * one bar off.
+ */
+function scriptColumnCount(payload: Record<string, unknown>): number | null {
+  const series = payload.series;
+  if (series && typeof series === 'object' && !Array.isArray(series)) {
+    let n = 0;
+    for (const value of Object.values(series as Record<string, unknown>)) {
+      if (Array.isArray(value) && value.length > n) n = value.length;
+    }
+    if (n > 0) return n;
+  }
+  const plots = payload.plots;
+  if (Array.isArray(plots) && plots.length > 0) {
+    if (Array.isArray(plots[0])) {
+      let n = 0;
+      for (const column of plots) {
+        if (Array.isArray(column) && column.length > n) n = column.length;
+      }
+      if (n > 0) return n;
+    } else {
+      return plots.length;
+    }
+  }
+  return null;
+}
+
+/**
  * Snapshot fields the applier must keep so later deltas can splice the time axis.
  * A bar-time list that is not one stamp per plot is dropped: the next delta
- * would fail the positional splice and the script would stay on this snapshot
- * (Donchian correct up to the load, then a single point out to the last bar).
+ * would fail the positional splice and the script would stay on this snapshot.
  */
 function scriptFullForApplier(
   payload: Record<string, unknown>,
@@ -173,7 +205,9 @@ function scriptFullForApplier(
   seq?: number;
   bar_times?: number[];
 } {
-  const count = Number(payload.count ?? 0);
+  const columns = scriptColumnCount(payload);
+  const declared = Number(payload.count ?? 0);
+  const count = columns && columns > 0 ? columns : declared;
   const raw = readTimeList(payload.bar_times) ?? readTimeList(payload.times);
   const times = raw && raw.length === count ? raw : null;
   return {

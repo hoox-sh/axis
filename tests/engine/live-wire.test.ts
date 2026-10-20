@@ -571,6 +571,54 @@ describe('live-wire P1 series + study push', () => {
     expect(h.wire.snapshotState().subs[0]?.seq).toBe(6);
   });
 
+  test('a snapshot counted shorter than its plots still accepts the session delta', async () => {
+    const h = makeHarness();
+    const bars = [100, 160, 220, 280].map((time) => ({
+      time,
+      open: 1,
+      high: 1,
+      low: 1,
+      close: 1,
+      volume: 1,
+    }));
+    const first = h.wire.evalScript({ subId: 's-1', script: 'indicator() {}', meta: {}, bars });
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 1,
+      payload: {
+        // Subscribe asked for 2 bars. The shared session already has 4,
+        // and the next candle's delta is numbered from 4.
+        count: 2,
+        plots: [1, 2, 3, 4],
+        series: { upper: [1, 2, 3, 4], lower: [0, 0, 0, 0] },
+        bar_times: [100, 160, 220, 280],
+      },
+    });
+    await first;
+    h.resumes.length = 0;
+    h.emit({
+      type: 'delta',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 2,
+      payload: {
+        base_index: 4,
+        count: 5,
+        tail_len: 1,
+        plots: [5],
+        series: { upper: [5], lower: [0] },
+      },
+    });
+    await tick();
+    expect(h.applied.map((a) => a.via)).toEqual(['stream-full', 'stream-delta']);
+    expect(h.resumes).toEqual([]);
+    expect(h.statuses.some((s) => s.status === 'degraded')).toBe(false);
+  });
+
   test('a snapshot whose bar times do not match the plots still accepts the next delta', async () => {
     const h = makeHarness();
     const first = h.wire.evalScript({ subId: 's-1', script: 'indicator() {}', meta: {}, bars: BARS });
