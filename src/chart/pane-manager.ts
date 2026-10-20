@@ -1007,6 +1007,32 @@ export class PaneManager {
   }
 
   /**
+   * Record one live candle time on the cached axis.
+   *
+   * A forming tick is the same open time as the bar already on the axis.
+   * Pushing it again gives the indicator projection one row per tick, so the
+   * next candle repaints the script series onto a longer index than the
+   * candles and the pane shifts.
+   */
+  private noteLiveCandleTime(t: number): void {
+    if (!Number.isFinite(t)) return;
+    if (!this.paintedCandleTimeSet) this.paintedCandleTimeSet = new Set();
+    const list = this.paintedCandleTimesList;
+    if (!list) {
+      this.paintedCandleTimeSet.add(t);
+      return;
+    }
+    let end = list.length;
+    while (end > 1 && list[end - 1] === list[end - 2]) end -= 1;
+    if (end !== list.length) list.length = end;
+    const last = list.length ? list[list.length - 1] : undefined;
+    if (last === t) return;
+    if (last != null && t < last) return;
+    list.push(t);
+    this.paintedCandleTimeSet.add(t);
+  }
+
+  /**
    * Grow this chart's painted range to cover a live appended bar (no full
    * repaint). No-op until the first full paint — ticks extend, never create —
    * so the clamp stays a no-op on charts that never painted candles.
@@ -2649,9 +2675,7 @@ export class PaneManager {
             // slot the candles do not have (LWC `Value is null`).
             const t = Number(point?.time);
             if (applied && Number.isFinite(t)) {
-              if (!this.paintedCandleTimeSet) this.paintedCandleTimeSet = new Set();
-              this.paintedCandleTimeSet.add(t);
-              this.paintedCandleTimesList?.push(t);
+              this.noteLiveCandleTime(t);
               paintedTime = t;
             }
           }

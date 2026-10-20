@@ -25,6 +25,7 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 - **Replacing a dataset keeps a DEX pool address's case.** The replace path uppercased the stored symbol while the write path did not, so list and delete rebuilt a different key for an address that contains `:` or `/`.
 - **A dataset repaint no longer drops chart bars the dataset is missing.** The merge kept only bars strictly newer than the dataset tip, so a same-time forming candle jumped backward and an interior hole-fill was punched back out. Equal times keep a closed dataset bar over a forming chart bar, and otherwise keep the chart bar.
 - **A script subscription grows with the chart window.** `history_bars` was sent only on the first subscribe, which usually ran against the short first paint, so the indicator stayed blank on the rest of the window. The depth is part of the subscription identity and is the chart window even when the store is still shorter. A script resubscribe does not cool the series socket.
+- **A new candle no longer shifts the indicators.** Every forming tick pushed the open bar's time onto the candle axis again, so the script series was one row per tick instead of one row per candle. The next candle repainted that series onto a longer index than the price pane, and the plots jumped. A forming tick now keeps the time it already recorded, and a new candle extends the axis by one bar.
 
 ## [2.25.3] — 2026-10-20
 

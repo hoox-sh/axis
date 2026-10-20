@@ -981,6 +981,58 @@ describe('pruneCoPaintedSeriesToPaintedRange', () => {
   });
 });
 
+describe('live candle axis', () => {
+  let container: HTMLElement;
+  let pm: InstanceType<typeof PaneManager>;
+
+  beforeEach(() => {
+    container = document.createElement('div') as unknown as HTMLElement;
+    (container as { id: string }).id = 'chart-root';
+    document.body.appendChild(container as never);
+    pm = new PaneManager(container);
+    const price = pm.createPane('price', 'price', 'Price');
+    price.series['candle'] = { update: () => {}, setData: () => {}, data: () => [] } as never;
+    setStore('chartType', 'candles');
+  });
+
+  function axis(): number[] | null {
+    return (pm as unknown as { paintedCandleTimesList: number[] | null }).paintedCandleTimesList;
+  }
+
+  function bar(time: number): {
+    time: number;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume: number;
+  } {
+    return { time, open: 1, high: 2, low: 0.5, close: 1.5, volume: 1 };
+  }
+
+  it('does not grow the indicator axis on forming ticks, and extends it once on a new candle', () => {
+    pm.notePaintedCandleRange(100, 220, [100, 160, 220]);
+    // Several updates of the open candle used to push 220 again on every tick.
+    pm.appendBar(bar(220));
+    pm.appendBar({ ...bar(220), close: 1.6 });
+    pm.appendBar({ ...bar(220), close: 1.7 });
+    expect(axis()).toEqual([100, 160, 220]);
+    // The new candle is one more bar, not one more copy of the bar that just closed.
+    pm.appendBar(bar(280));
+    expect(axis()).toEqual([100, 160, 220, 280]);
+    pm.appendBar({ ...bar(280), close: 1.8 });
+    expect(axis()).toEqual([100, 160, 220, 280]);
+  });
+
+  it('collapses a tail of duplicate times when the next candle arrives', () => {
+    const internal = pm as unknown as { paintedCandleTimesList: number[] | null };
+    pm.notePaintedCandleRange(100, 220, [100, 160, 220]);
+    internal.paintedCandleTimesList = [100, 160, 220, 220, 220];
+    pm.appendBar(bar(280));
+    expect(axis()).toEqual([100, 160, 220, 280]);
+  });
+});
+
 describe('auditTimeParity', () => {
   let container: HTMLElement;
   let pm: InstanceType<typeof PaneManager>;
