@@ -62,4 +62,40 @@ describe('redesign2 apply bridge (F-16)', () => {
     const pre = call.opts.precomputedResult as { meta?: { sessionVia?: string } };
     expect(pre.meta?.sessionVia).toBe('stream-delta');
   });
+
+  test('carries the last run input descriptors into the stream payload', async () => {
+    // The socket payload carries the values, not the run's metadata. Without
+    // the descriptors a live apply empties the script's input list (the
+    // Results panel and the Script Settings modal read them from the run).
+    const { setStore, store } = await import('../../src/store');
+    setStore('runResults', 'ind-2', {
+      status: 'success',
+      plots: [],
+      series: {},
+      events: [],
+      meta: { inputs: [{ title: 'EMA Length', value: 50 }] },
+    } as never);
+    try {
+      const seen: Array<{ opts: Record<string, unknown> }> = [];
+      await applyStreamPayload(
+        {
+          script: 'indicator("x")',
+          indicatorId: 'ind-2',
+          full: { series: { a: [1] }, bar_times: [100], count: 1 },
+          via: 'stream-delta',
+          bars: [{ time: 100, open: 1, high: 1, low: 1, close: 1, volume: 1 }],
+        },
+        {
+          runAndApply: (async (_script, _id, opts) => {
+            seen.push({ opts });
+            return { status: 'success', plots: [], series: {}, events: [], meta: {} };
+          }) as never,
+        },
+      );
+      const pre = seen[0]!.opts.precomputedResult as { meta?: { inputs?: unknown[] } };
+      expect(pre.meta?.inputs).toEqual([{ title: 'EMA Length', value: 50 }]);
+    } finally {
+      setStore('runResults', 'ind-2', null as never);
+    }
+  });
 });

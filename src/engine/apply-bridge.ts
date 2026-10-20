@@ -34,6 +34,7 @@
 
 import type { RunResult } from '../plugins/types';
 import type { Bar } from '../store/types';
+import { store } from '../store';
 
 export type StreamVia = 'stream-full' | 'stream-delta';
 
@@ -96,6 +97,14 @@ export async function applyStreamPayload(
   deps?: { runAndApply?: RunAndApplyFn },
 ): Promise<RunResult> {
   const precomputedResult = streamFullToPrecomputed(input.full, input.via);
+  // The socket payload carries the values, not the run's metadata. Keep the
+  // input descriptors of the script's last full run: the Results panel and
+  // the Script Settings modal read them from the run (the socket payload has
+  // none, so a live apply would empty the script's input list).
+  const prevInputs = previousRunInputs(input.indicatorId);
+  if (prevInputs && !precomputedResult.meta?.inputs) {
+    precomputedResult.meta = { ...(precomputedResult.meta ?? {}), inputs: prevInputs };
+  }
   const run =
     deps?.runAndApply ??
     (await import('../indicators/runner')).runAndApply as unknown as RunAndApplyFn;
@@ -106,4 +115,19 @@ export async function applyStreamPayload(
     openResults: false,
     liveTick: true,
   });
+}
+
+/** Input descriptors of a script's last stored run (empty when unknown). */
+function previousRunInputs(indicatorId: string | undefined): unknown[] | undefined {
+  if (!indicatorId) return undefined;
+  try {
+    const results = (store.runResults ?? {}) as Record<
+      string,
+      { meta?: { inputs?: unknown[] } } | undefined
+    >;
+    const inputs = results[indicatorId]?.meta?.inputs;
+    return Array.isArray(inputs) ? inputs : undefined;
+  } catch {
+    return undefined;
+  }
 }
