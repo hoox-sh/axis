@@ -7,7 +7,7 @@ tags: [code, data]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-19T23:38:00Z
+  at: 2026-10-20T11:35:58Z
 sources:
   - id: tree
     resource: "src/data"
@@ -27,7 +27,7 @@ okf_lock: generated
 * `data-manager-source.ts` — DATA_MANAGER_SOURCE_ID, DataManagerSelection, ResolvedCacheSeries, clearDataManagerSelection, dataManagerCacheKey, dataManagerLabel, getDataManagerSelection, resolveDataManagerBars, setDataManagerSelection
 * `data-source-manager.ts` — DSM_MAX_BARS_PER_JOB, DSM_MAX_PAGES, DataSourceJob, DataSourceJobPhase, DataSourceJobStatus, StartBackfillOpts, _resetDataSourceManagerForTests, _waitForJob, applyCachedToChart, applyChartWindow, applyJobToChart, cancelBackfill
 * `dataset-sinks.ts` — DatasetSink, PERSISTENCE_MODES, PersistenceMode, SinkErrorListener, _resetDatasetSinksForTests, datasetKey, flushDatasetSinks, localSink, onSinkError, remoteSink, removeDatasetFromAllSinks, sessionSink
-* `dataset-store.ts` — DatasetMeta, PutResult, _resetDatasetStoreForTests, awaitPendingCopies, flushDatasets, getDataset, getMergePolicy, getPersistenceMode, keyFor, listMemoryDatasets, peekDataset, putDatasetBars
+* `dataset-store.ts` — DatasetMeta, PutResult, _drainDatasetWritesForTests, _resetDatasetStoreForTests, awaitPendingCopies, flushDatasets, getDataset, getMergePolicy, getPersistenceMode, keyFor, listMemoryDatasets, peekDataset
 * `dataset-validate.ts` — ClassifyOpts, DatasetReport, GapClassification, RepairResult, RepairStats, ValidateOpts, VenueClass, classifyGaps, findClassifiedGaps, repairBars, validateDataset, venueClassForSourceCaps
 * `dsm-orchestrator.ts` — DatasetFirstResult, _resetDsmOrchestratorForTests, announceDatasetPaint, chartDisplayCap, ensureDatasetComplete, paintDataset, repaintViewForTests, seedDatasetFromBars, sliceForChart, startProgressiveStream, stopProgressiveRepaint
 * `expand-cache.ts` — ExpandCacheResult, _flushDataManagerLiveBarForTests, canExpandFromSource, expandCachedSeriesToNow, fillBarsTowardNow, fillInternalGaps, noteDataManagerLiveBar

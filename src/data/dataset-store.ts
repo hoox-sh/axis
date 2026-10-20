@@ -531,3 +531,24 @@ export function _resetDatasetStoreForTests(): void {
   mergePolicy = 'newest-wins';
   pendingCopies = Promise.resolve();
 }
+
+/**
+ * Wait for every in-flight dataset write to settle.
+ *
+ * The suite resets the shared singletons between files; a write that was
+ * still queued (or still running) when the reset happened landed in the next
+ * file's mirror — a dataset the next file never created, which then failed
+ * its "the mirror is empty" assertions. Draining first makes the reset
+ * authoritative.
+ *
+ * @internal test helper
+ */
+export async function _drainDatasetWritesForTests(): Promise<void> {
+  // A settling write can queue another one (a chained page write), so drain
+  // until the chains are empty.
+  for (let i = 0; i < 8; i++) {
+    const chains = [...writeChains.values()];
+    if (!chains.length) return;
+    await Promise.allSettled(chains);
+  }
+}
