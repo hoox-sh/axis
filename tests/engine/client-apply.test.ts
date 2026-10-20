@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import { Redesign2ApplyStateManager, Redesign2DeltaApplier } from '../../src/engine/client-apply';
+import {
+  Redesign2ApplyStateManager,
+  Redesign2DeltaApplier,
+  scriptDeltaTimeTail,
+} from '../../src/engine/client-apply';
+import { alignSeriesToTimes } from '../../src/indicators/runner';
 
 describe('redesign2 client apply', () => {
   test('full result applies once, then deltas', () => {
@@ -16,6 +21,29 @@ describe('redesign2 client apply', () => {
   test('delta before full throws', () => {
     const mgr = new Redesign2ApplyStateManager();
     expect(() => mgr.markDeltaApplied()).toThrow();
+  });
+});
+
+describe('script delta time axis', () => {
+  test('a forming tick keeps the closed bar times and an append takes the new candle', () => {
+    const cached = [60, 120, 180];
+    expect(
+      scriptDeltaTimeTail(cached, { base_index: 2, count: 3, tail_len: 1 }, []),
+    ).toEqual([180]);
+    // The chart has already slid to the new candle. The closed stamps stay put.
+    expect(
+      scriptDeltaTimeTail(cached, { base_index: 3, count: 4, tail_len: 1 }, [120, 180, 240]),
+    ).toEqual([240]);
+  });
+
+  test('joining by those times does not move a closed %B onto the next candle', () => {
+    const values = [0.1, 0.2, 0.8];
+    const times = [60, 120, 180];
+    const nextTime = scriptDeltaTimeTail(times, { base_index: 3, count: 4, tail_len: 1 }, [240])!;
+    const mergedValues = [...values, 0.4];
+    const mergedTimes = [...times, ...nextTime];
+    const chart = [120, 180, 240];
+    expect(alignSeriesToTimes(mergedValues, mergedTimes, chart)).toEqual([0.2, 0.8, 0.4]);
   });
 });
 

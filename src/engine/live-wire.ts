@@ -37,8 +37,9 @@
  */
 
 import type { RunResult } from '../plugins/types';
+import { store } from '../store';
 import type { Bar } from '../store/types';
-import { Redesign2DeltaApplier } from './client-apply';
+import { readTimeList, scriptDeltaTimeTail, Redesign2DeltaApplier } from './client-apply';
 import type { SubscriptionStatus } from '../store/types';
 
 export class StreamFallbackError extends Error {
@@ -154,6 +155,27 @@ function mergeTip(cur: Bar[], next: Bar[]): Bar[] {
     else if (!last || bar.time > last.time) out.push(bar);
   }
   return out;
+}
+
+/** Snapshot fields the applier must keep so later deltas can splice the time axis. */
+function scriptFullForApplier(
+  payload: Record<string, unknown>,
+  seq: unknown,
+): {
+  plots?: Record<string, unknown[]>;
+  series?: Record<string, unknown[]>;
+  count: number;
+  seq?: number;
+  bar_times?: number[];
+} {
+  const times = readTimeList(payload.bar_times) ?? readTimeList(payload.times);
+  return {
+    plots: payload.plots as Record<string, unknown[]> | undefined,
+    series: payload.series as Record<string, unknown[]> | undefined,
+    count: Number(payload.count ?? 0),
+    ...(typeof seq === 'number' ? { seq } : {}),
+    ...(times ? { bar_times: times } : {}),
+  };
 }
 
 export class StreamLiveWire {
@@ -337,12 +359,7 @@ export class StreamLiveWire {
           );
         }
         const payload = full.payload as Record<string, unknown>;
-        applier.applyFull({
-          plots: payload.plots as Record<string, unknown[]> | undefined,
-          series: payload.series as Record<string, unknown[]> | undefined,
-          count: Number(payload.count ?? 0),
-          seq: typeof full.seq === 'number' ? full.seq : undefined,
-        });
+        applier.applyFull(scriptFullForApplier(payload, full.seq));
         this.appliedSeq.set(input.subId, typeof full.seq === 'number' ? full.seq : 0);
         this.handlers.onStatus(input.subId, 'live');
       } catch (e) {
@@ -359,13 +376,25 @@ export class StreamLiveWire {
       if (!cached) {
         throw new StreamFallbackError('no-state', 'script snapshot produced no state');
       }
-      return this.apply(input.script, input.indicatorId, cached, 'stream-full', input.bars);
+      return this.apply(
+        input.script,
+        input.indicatorId,
+        cached,
+        'stream-full',
+        this.barsForScript(input.bars),
+      );
     }
     const cached = applier.cached;
     if (!cached) {
       throw new StreamFallbackError('no-state', 'script has no merged state yet');
     }
-    return this.apply(input.script, input.indicatorId, cached, 'stream-delta', input.bars);
+    return this.apply(
+      input.script,
+      input.indicatorId,
+      cached,
+      'stream-delta',
+      this.barsForScript(input.bars),
+    );
   }
 
   /** Route an inbound frame to appliers + handlers. Never throws. */
@@ -533,7 +562,32 @@ export class StreamLiveWire {
   private applyScriptPush(subId: string, cached: Record<string, unknown>, via: 'stream-full' | 'stream-delta'): void {
     const ctx = this.scriptCtx.get(subId);
     if (!ctx) return;
-    void this.apply(ctx.script, ctx.indicatorId, cached, via, ctx.bars);
+    // The subscription captured the window at subscribe time. A new candle
+    // replaces that array when the chart slides, so the paint has to use the
+    // window on screen or the closed %B lands on the next bar.
+    const bars = this.barsForScript(ctx.bars);
+    if (bars !== ctx.bars) this.scriptCtx.set(subId, { ...ctx, bars });
+    void this.apply(ctx.script, ctx.indicatorId, cached, via, bars);
+  }
+
+  /** Chart window when the store has one; the caller's bars in tests and before the first paint. */
+  private barsForScript(fallback: readonly Bar[]): Bar[] {
+    const live = store.bars;
+    if (Array.isArray(live) && live.length) return live as Bar[];
+    return fallback as Bar[];
+  }
+
+  /** Bar times the script can be joined to: the series feed plus the painted chart. */
+  private knownBarTimes(): number[] {
+    const out: number[] = [];
+    for (const bars of this.seriesBars.values()) {
+      for (const bar of bars) if (Number.isFinite(bar?.time)) out.push(bar.time);
+    }
+    const live = store.bars;
+    if (Array.isArray(live)) {
+      for (const bar of live) if (bar && Number.isFinite(bar.time)) out.push(bar.time);
+    }
+    return out;
   }
 
   private async applyRemoteFrame(frame: WireFrame): Promise<void> {
@@ -549,12 +603,7 @@ export class StreamLiveWire {
     }
     const wasLive = this.appliedSeq.has(subId);
     if (frame.type === 'full') {
-      applier.applyFull({
-        plots: payload.plots as Record<string, unknown[]> | undefined,
-        series: payload.series as Record<string, unknown[]> | undefined,
-        count: Number(payload.count ?? 0),
-        seq: typeof frame.seq === 'number' ? frame.seq : undefined,
-      });
+      applier.applyFull(scriptFullForApplier(payload, frame.seq));
       if (typeof frame.seq === 'number') this.appliedSeq.set(subId, frame.seq);
       this.handlers.onStatus(subId, 'live');
       if (wasLive) {
@@ -563,13 +612,23 @@ export class StreamLiveWire {
       }
       return;
     }
+    const baseIndex = Number(payload.base_index ?? -1);
+    const count = Number(payload.count ?? -1);
+    const tailLen = Number(payload.tail_len ?? -1);
+    const explicitTimes = readTimeList(payload.times) ?? readTimeList(payload.bar_times);
+    const cachedTimes = readTimeList(applier.cached?.bar_times ?? applier.cached?.times);
+    const times =
+      explicitTimes && explicitTimes.length === tailLen
+        ? explicitTimes
+        : scriptDeltaTimeTail(cachedTimes, { base_index: baseIndex, count, tail_len: tailLen }, this.knownBarTimes());
     const out = applier.applyDelta({
       seq: typeof frame.seq === 'number' ? frame.seq : -1,
-      base_index: Number(payload.base_index ?? -1),
-      count: Number(payload.count ?? -1),
-      tail_len: Number(payload.tail_len ?? -1),
+      base_index: baseIndex,
+      count,
+      tail_len: tailLen,
       plots: payload.plots as Record<string, unknown[]> | undefined,
       series: payload.series as Record<string, unknown[]> | undefined,
+      ...(times ? { times } : {}),
     });
     if (!out.ok) {
       this.handlers.onStatus(subId, 'degraded', { message: 'delta rejected — resubscribing' });

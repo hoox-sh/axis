@@ -83,6 +83,67 @@ export interface DeltaApplierDelta {
   [key: string]: unknown;
 }
 
+/**
+ * Time axis for one script delta tail.
+ *
+ * The live socket sends `bar_times` on the snapshot and only the new plot
+ * values on a delta. Without an axis the apply path zips those values onto
+ * the chart by index, and a candle that slides the window moves every closed
+ * %B onto the next bar. The tail returned here is what the positional splice
+ * (`cached[:base_index] + tail`) expects: the bars the delta replaces, then
+ * one stamp per bar the delta appends.
+ */
+export function scriptDeltaTimeTail(
+  cachedTimes: readonly number[] | null,
+  delta: { base_index: number; count: number; tail_len: number },
+  knownTimes: readonly number[],
+): number[] | null {
+  if (!cachedTimes?.length) return null;
+  const { base_index, count, tail_len } = delta;
+  if (tail_len <= 0 || count < tail_len || base_index < 0) return null;
+  const growth = count - cachedTimes.length;
+  if (growth < 0) return null;
+  const overlap = tail_len - growth;
+  if (overlap < 0 || base_index !== cachedTimes.length - overlap) return null;
+  const kept = cachedTimes.slice(base_index, base_index + overlap);
+  if (kept.length !== overlap) return null;
+  if (growth === 0) return kept;
+  const last = cachedTimes[cachedTimes.length - 1]!;
+  const newer = [...new Set(knownTimes.filter((t) => Number.isFinite(t) && t > last))].sort(
+    (a, b) => a - b,
+  );
+  const step =
+    cachedTimes.length >= 2
+      ? cachedTimes[cachedTimes.length - 1]! - cachedTimes[cachedTimes.length - 2]!
+      : 0;
+  const added: number[] = [];
+  let cursor = last;
+  for (let i = 0; i < growth; i++) {
+    const known = newer.find((t) => t > cursor);
+    if (known != null) {
+      added.push(known);
+      cursor = known;
+      continue;
+    }
+    if (!(step > 0)) return null;
+    cursor += step;
+    added.push(cursor);
+  }
+  return [...kept, ...added];
+}
+
+/** Finite unix-second list, or null when the field is missing or unusable. */
+export function readTimeList(value: unknown): number[] | null {
+  if (!Array.isArray(value) || value.length === 0) return null;
+  const out: number[] = [];
+  for (const item of value) {
+    const n = typeof item === 'number' ? item : Number(item);
+    if (!Number.isFinite(n)) return null;
+    out.push(n);
+  }
+  return out;
+}
+
 export type DeltaApplyOutcome =
   | { ok: true; full: Record<string, unknown>; replayed: boolean }
   | { ok: false; reason: 'needs-full' | 'delta-before-full' };
