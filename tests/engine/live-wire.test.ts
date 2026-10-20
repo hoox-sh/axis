@@ -571,6 +571,40 @@ describe('live-wire P1 series + study push', () => {
     expect(h.wire.snapshotState().subs[0]?.seq).toBe(6);
   });
 
+  test('a snapshot whose bar times do not match the plots still accepts the next delta', async () => {
+    const h = makeHarness();
+    const first = h.wire.evalScript({ subId: 's-1', script: 'indicator() {}', meta: {}, bars: BARS });
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 1,
+      payload: {
+        count: 1,
+        plots: [[1]],
+        series: { upper: [1] },
+        // Engine series is longer than the script window. Keeping these
+        // stamps used to reject every delta and freeze Donchian at this bar.
+        bar_times: [100, 160],
+      },
+    });
+    await first;
+    h.resumes.length = 0;
+    h.emit({
+      type: 'delta',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 2,
+      payload: { base_index: 0, count: 1, tail_len: 1, plots: [[2]], series: { upper: [2] } },
+    });
+    await tick();
+    expect(h.applied.map((a) => a.via)).toEqual(['stream-full', 'stream-delta']);
+    expect(h.resumes).toEqual([]);
+    expect(h.statuses.some((s) => s.status === 'degraded')).toBe(false);
+  });
+
   test('reconnect resumes every live subscription', async () => {
     const h = makeHarness();
     const p = h.wire.ensureSeries('series:k', {});

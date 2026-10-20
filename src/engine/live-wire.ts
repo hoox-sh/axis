@@ -157,7 +157,12 @@ function mergeTip(cur: Bar[], next: Bar[]): Bar[] {
   return out;
 }
 
-/** Snapshot fields the applier must keep so later deltas can splice the time axis. */
+/**
+ * Snapshot fields the applier must keep so later deltas can splice the time axis.
+ * A bar-time list that is not one stamp per plot is dropped: the next delta
+ * would fail the positional splice and the script would stay on this snapshot
+ * (Donchian correct up to the load, then a single point out to the last bar).
+ */
 function scriptFullForApplier(
   payload: Record<string, unknown>,
   seq: unknown,
@@ -168,14 +173,22 @@ function scriptFullForApplier(
   seq?: number;
   bar_times?: number[];
 } {
-  const times = readTimeList(payload.bar_times) ?? readTimeList(payload.times);
+  const count = Number(payload.count ?? 0);
+  const raw = readTimeList(payload.bar_times) ?? readTimeList(payload.times);
+  const times = raw && raw.length === count ? raw : null;
   return {
     plots: payload.plots as Record<string, unknown[]> | undefined,
     series: payload.series as Record<string, unknown[]> | undefined,
-    count: Number(payload.count ?? 0),
+    count,
     ...(typeof seq === 'number' ? { seq } : {}),
     ...(times ? { bar_times: times } : {}),
   };
+}
+
+/** Same payload without a time axis, so a value delta can merge after an axis splice failed. */
+function withoutTimeAxis(full: Record<string, unknown>): Record<string, unknown> {
+  const { bar_times: _barTimes, times: _times, ...rest } = full;
+  return rest;
 }
 
 export class StreamLiveWire {
@@ -621,7 +634,7 @@ export class StreamLiveWire {
       explicitTimes && explicitTimes.length === tailLen
         ? explicitTimes
         : scriptDeltaTimeTail(cachedTimes, { base_index: baseIndex, count, tail_len: tailLen }, this.knownBarTimes());
-    const out = applier.applyDelta({
+    const delta = {
       seq: typeof frame.seq === 'number' ? frame.seq : -1,
       base_index: baseIndex,
       count,
@@ -629,7 +642,24 @@ export class StreamLiveWire {
       plots: payload.plots as Record<string, unknown[]> | undefined,
       series: payload.series as Record<string, unknown[]> | undefined,
       ...(times ? { times } : {}),
-    });
+    };
+    let out = applier.applyDelta(delta);
+    // An axis that does not match the plots rejects every later delta and
+    // leaves the script drawn on the snapshot from load. Drop the axis and
+    // apply the values; a later full snapshot brings a matching axis back.
+    if (!out.ok && out.reason === 'needs-full') {
+      const cached = applier.cached;
+      if (cached && (cached.bar_times != null || cached.times != null)) {
+        applier.applyFull(withoutTimeAxis(cached) as {
+          plots?: Record<string, unknown[]>;
+          series?: Record<string, unknown[]>;
+          count: number;
+          seq?: number;
+        });
+        const { times: _drop, ...valuesOnly } = delta;
+        out = applier.applyDelta(valuesOnly);
+      }
+    }
     if (!out.ok) {
       this.handlers.onStatus(subId, 'degraded', { message: 'delta rejected — resubscribing' });
       const ctx = this.scriptCtx.get(subId);
