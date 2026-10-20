@@ -9,7 +9,7 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-10-20 · 633 commits · describe-tag: `v2.25.0`_
+_Generated/updated: 2026-10-20 · 634 commits · describe-tag: `v2.25.0`_
 
 ---
 
@@ -18,6 +18,7 @@ _Generated/updated: 2026-10-20 · 633 commits · describe-tag: `v2.25.0`_
 ### Fixed
 
 - **The new chart-window tests no longer leak state into the suite.** The test files that exercise the Rolling window left a small window in the shared store, so a later test file that loaded bars got them sliced — order-dependent failures on CI (and a coverage-gate drop). The store is now restored after each file.
+- **A dataset repaint no longer paints over a chart that moved on.** The progressive repaint of a completed backfill ran on a timer: if the chart had switched to another symbol in the meantime, the repaint put the old series on the chart (and the store's bars with it). The repaint is now dropped when the chart no longer shows that series.
 
 ## [2.25.0] — 2026-10-20
 
@@ -1715,9 +1716,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-10 (152 commits)
+### 2026-10 (153 commits)
 
 #### Features
 
@@ -1761,6 +1764,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `366bb039` (2026-10-20) — fix(test): restore the shared store after the chart-window test files
 - `2fb50d41` (2026-10-20) — fix(chart): re-join cross-indicator series by time, and close the apply gaps
 - `e08cf3c8` (2026-10-20) — fix(chart): keep the apply path aligned with the sliding chart window
 - `54d52efe` (2026-10-20) — fix(data): harden the dataset manager, the chart window and the live bar path

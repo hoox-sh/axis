@@ -203,6 +203,11 @@ function scheduleRepaint(sym: string, iv: string, srcId: string, gen: number): v
         bars = await getDataset(sid, s, interval);
       }
       if (!bars.length || gen !== paintGen || activeKey !== keyFor(srcId, sym, iv)) return;
+      // The chart may have moved on to another symbol while the dataset was
+      // being completed. Painting then would put a **different** series on the
+      // chart (the store's bars and the painted candles), so the repaint is
+      // dropped instead.
+      if (!chartHoldsSeries(s, interval)) return;
       // Chart shows the rolling window (newest N); the dataset keeps everything.
       // The chart's live tail is merged back in so a forming candle is never
       // dropped by a background repaint.
