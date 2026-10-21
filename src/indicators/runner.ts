@@ -213,24 +213,12 @@ export function tailAlignSeriesMap(
   return out;
 }
 
-/**
- * Coerce one bar/plot time to LWC unix seconds.
- * Pine-ms (>1e12) → floor(ms/1000); non-finite → null.
- */
-function normalizeEngineTime(t: unknown): number | null {
-  if (t == null) return null;
-  if (typeof t === 'boolean') return null;
-  const n = typeof t === 'number' ? t : Number(t);
-  if (!Number.isFinite(n)) return null;
-  return n > 1e12 ? Math.floor(n / 1000) : Math.floor(n);
-}
-
 /** Normalize a candidate time list to unix seconds, or null when unusable. */
 function normalizeTimeList(v: unknown): number[] | null {
   if (!Array.isArray(v) || !v.length) return null;
   const out: number[] = [];
   for (const t of v) {
-    const n = normalizeEngineTime(t);
+    const n = normalizeBarTime(t);
     if (n != null) out.push(n);
   }
   return out.length ? out : null;
@@ -318,7 +306,7 @@ export function alignSeriesToTimes(
   for (let i = 0; i < rt.length; i++) byTime.set(rt[i] as number, arr[i]);
   const out: unknown[] = new Array(len);
   for (let i = 0; i < len; i++) {
-    const t = normalizeEngineTime(chartTimes[i]);
+    const t = normalizeBarTime(chartTimes[i]);
     out[i] = t != null && byTime.has(t) ? byTime.get(t) : null;
   }
   return out;
@@ -429,7 +417,6 @@ export {
   isInteractiveRunInFlight,
   isRunEpochCurrent,
   lineDataHasSample,
-  normalizeBarTime,
   normalizeEngineResult,
   normalizeSeriesMap,
   ownsRunStatus,
@@ -437,6 +424,7 @@ export {
   seriesValuesToLineData,
   _resetRunEpochForTests,
 } from './run-helpers';
+import { normalizeBarTime } from '../data/parse-bars';
 
 /**
  * End interactive Run status for this epoch: ready/error when still current,

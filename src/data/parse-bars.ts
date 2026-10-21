@@ -53,23 +53,31 @@ import type { Bar } from '../store/types';
 const MAX_UNIX_SECONDS = 4_102_444_800;
 
 /**
- * Coerce a raw timestamp to unix **seconds**.
- * Accepts seconds, milliseconds (&gt;1e12), and drops non-finite / non-positive.
+ * Coerce a bar/plot time to unix **seconds**.
+ *
+ * Accepts unix seconds, milliseconds (>1e12), a numeric string, or an ISO
+ * date string. Microsecond leftovers fold once more. Non-finite, boolean,
+ * non-positive and out-of-range values are rejected: the chart has no bar
+ * before the epoch or past ~year 2100.
+ *
+ * This is the **single** time normalizer - venue bars, engine plot times and
+ * chart times all go through it, so a time one plane accepts cannot be
+ * rejected by another.
  */
 export function normalizeBarTime(raw: unknown): number | null {
-  if (raw == null || raw === '') return null;
+  if (raw == null || raw === '' || typeof raw === 'boolean') return null;
   let n: number;
   if (typeof raw === 'number') {
     n = raw;
   } else {
     const s = String(raw).trim();
     if (!s) return null;
-    if (/^\d+(\.\d+)?$/.test(s)) n = parseFloat(s);
-    else {
+    if (/^\d+(\.\d+)?$/.test(s)) {
+      n = parseFloat(s);
+    } else {
+      // ISO date string - Date.parse is always ms.
       const ms = Date.parse(s);
       if (Number.isNaN(ms)) return null;
-      n = ms; // Date.parse is ms → fold into ms branch below
-      // treat as ms always from Date.parse
       const t = Math.floor(ms / 1000);
       return t > 0 && t <= MAX_UNIX_SECONDS ? t : null;
     }

@@ -45,6 +45,7 @@
 import type { Bar } from '../store/types';
 import { errMessage, isAbortError } from '../utils/errors';
 import { fetchWithTimeout } from '../utils/fetch-timeout';
+import { normalizeBarTime as toUnixSeconds } from '../data/parse-bars';
 
 export const GECKOTERMINAL_PROVIDER_ID = 'geckoterminal';
 export const GECKOTERMINAL_DEFAULT_BASE =
@@ -206,19 +207,6 @@ export function mapAxisIntervalToGecko(interval: string): GeckoIntervalMap {
       return { timeframe: 'hour', aggregate: 1 };
     }
   }
-}
-
-/**
- * Normalize a timestamp to unix **seconds**.
- * GeckoTerminal OHLCV may return seconds or milliseconds.
- */
-function toUnixSeconds(ts: unknown): number | null {
-  const n = Number(ts);
-  if (!Number.isFinite(n) || n <= 0) return null;
-  // Heuristic: values > ~year 2001 in ms
-  if (n > 1e12) return Math.floor(n / 1000);
-  if (n > 1e11) return Math.floor(n / 1000);
-  return Math.floor(n);
 }
 
 function resolveBaseUrl(baseUrl?: string): string {

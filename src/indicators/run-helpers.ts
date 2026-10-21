@@ -29,6 +29,7 @@
 
 import type { RunResult as EngineRunResult } from '../plugins/types';
 import { isAbortLike, isTimeoutLike } from '../utils/errors';
+import { normalizeBarTime } from '../data/parse-bars';
 
 /** Engine result with `series` / `plots` / `events` always present. */
 export type NormalizedRunResult = EngineRunResult & {
@@ -88,14 +89,11 @@ export function coerceSeriesSample(v: unknown): number | string | null {
 
 /**
  * Normalize a bar/plot time to LWC UTCTimestamp seconds.
- * Milliseconds (>1e12) → floor(ms/1000). Non-finite → null.
+ *
+ * Re-exported from the shared normalizer so the engine, the venue parser and
+ * the chart agree on what a usable time is.
  */
-export function normalizeBarTime(t: unknown): number | null {
-  if (t == null) return null;
-  const n = typeof t === 'number' ? t : Number(t);
-  if (!Number.isFinite(n)) return null;
-  return n > 1e12 ? Math.floor(n / 1000) : Math.floor(n);
-}
+export { normalizeBarTime };
 
 /**
  * Map OHLCV times + parallel series values → line points.

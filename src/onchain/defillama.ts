@@ -30,6 +30,7 @@ import { normalizeProtocolSlug } from './adapters';
 import type { OnchainDataset, TimePoint } from './types';
 import { errMessage, isAbortError } from '../utils/errors';
 import { fetchWithTimeout } from '../utils/fetch-timeout';
+import { normalizeBarTime as toUnixSeconds } from '../data/parse-bars';
 
 export const DEFILLAMA_PROVIDER_ID = 'defillama';
 export const DEFILLAMA_DEFAULT_BASE = 'https://api.llama.fi';
@@ -53,19 +54,6 @@ let protocolsCache: ProtocolsCache | null = null;
 
 function nowSec(): number {
   return Math.floor(Date.now() / 1000);
-}
-
-/**
- * Normalize a TVL history entry date to unix **seconds**.
- * DefiLlama typically uses seconds; also accept milliseconds.
- */
-function toUnixSeconds(date: unknown): number | null {
-  const n = Number(date);
-  if (!Number.isFinite(n) || n <= 0) return null;
-  // Heuristic: values > year 2100 in seconds (~4e9) are likely ms
-  if (n > 1e12) return Math.floor(n / 1000);
-  if (n > 1e11) return Math.floor(n / 1000); // borderline ms
-  return Math.floor(n);
 }
 
 /**
