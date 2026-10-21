@@ -55,6 +55,12 @@ const [coarsePointer, setCoarsePointer] = createSignal(
 );
 
 // Keep signals in sync (module scope — one listener set for the app lifetime).
+//
+// These listeners are **app-lifetime by design**, not a leak: the module is
+// imported once and the signals it feeds live for the whole session. There is
+// no owner to clean them up with, and a resize listener that only exists
+// while a component is mounted would stop tracking the viewport.
+//
 // Guarded defensively: test stubs may provide a window without event APIs —
 // degrade to static defaults instead of throwing at import time.
 if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {

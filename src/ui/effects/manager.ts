@@ -183,6 +183,13 @@ function hydrate(): void {
   setTunes(reconcile(sanitizeTunes(parsed, listEffects())));
 }
 
+/**
+ * Bind the reduced-motion media query.
+ *
+ * The listener is **app-lifetime by design** — the media query is read for the
+ * whole session, and `reducedBound` makes the bind idempotent, so a repeated
+ * call never stacks a second listener.
+ */
 function bindReducedMotion(): void {
   if (reducedBound) return;
   reducedBound = true;

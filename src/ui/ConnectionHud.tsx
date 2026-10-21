@@ -44,6 +44,7 @@ import {
   onCleanup,
   onMount,
 } from 'solid-js';
+import { useEventListener } from './use-event-listener';
 import { store, setStore, persist, setActivePlugin, setDataSourcePanelOpen } from '../store';
 import type { FeedSubscription } from '../store/types';
 import { useNow } from './clock';
@@ -209,15 +210,8 @@ function useStickyInfo() {
     setPinned((p) => !p);
   };
 
-  onMount(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close();
-    };
-    window.addEventListener('keydown', onKey);
-    onCleanup(() => {
-      window.removeEventListener('keydown', onKey);
-      clearLeave();
-    });
+  useEventListener<KeyboardEvent>(window, 'keydown', (e) => {
+    if (e.key === 'Escape') close();
   });
 
   return { openChip, pinned, open, scheduleClose, close, togglePin, clearLeave };

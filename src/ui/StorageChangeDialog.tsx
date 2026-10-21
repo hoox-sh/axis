@@ -44,9 +44,9 @@ import {
   createSignal,
   createEffect,
   onCleanup,
-  onMount,
   type Component,
 } from 'solid-js';
+import { useEventListener } from './use-event-listener';
 import { Icons } from './icons';
 import { installFocusTrap } from './focus-trap';
 import { copyScriptsBetweenStorages } from '../storage/service';
@@ -140,21 +140,17 @@ const StorageChangeDialog: Component<StorageChangeDialogProps> = (props) => {
   });
 
   /** Install keydown listener and focus trap on every open. */
-  onMount(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (!props.open) return;
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        // Escape mid-migration = abort the copy and surface partial state.
-        if (phase() === 'migrating') {
-          abort().aborted = true;
-          return;
-        }
-        handleCancel();
+  useEventListener<KeyboardEvent>(window, 'keydown', (e) => {
+    if (!props.open) return;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      // Escape mid-migration = abort the copy and surface partial state.
+      if (phase() === 'migrating') {
+        abort().aborted = true;
+        return;
       }
-    };
-    window.addEventListener('keydown', onKey);
-    onCleanup(() => window.removeEventListener('keydown', onKey));
+      handleCancel();
+    }
   });
 
   /** Close on backdrop click (no change to storage). */

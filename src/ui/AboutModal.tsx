@@ -24,7 +24,8 @@
  * @module ui/AboutModal
  */
 
-import { type Component, Show, createSignal, onCleanup, onMount } from 'solid-js';
+import { type Component, Show, createSignal, onCleanup } from 'solid-js';
+import { useEventListener } from './use-event-listener';
 import { installFocusTrap } from './focus-trap';
 import { Icons } from './icons';
 import { HooxLogo } from './HooxLogo';
@@ -65,16 +66,12 @@ export function isAboutModalOpen(): boolean {
 export const AboutModal: Component = () => {
   const close = () => setAboutOpen(false);
 
-  onMount(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (!aboutOpen()) return;
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        close();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    onCleanup(() => window.removeEventListener('keydown', onKey));
+  useEventListener<KeyboardEvent>(window, 'keydown', (e) => {
+    if (!aboutOpen()) return;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      close();
+    }
   });
 
   const onBackdrop = (e: MouseEvent) => {

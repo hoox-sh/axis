@@ -176,6 +176,9 @@ export function installBootErrorHandlers(): () => void {
     });
   };
 
+  // The error listeners are app-lifetime by design — the disposer below
+  // removes them (tests / HMR), and `installed` keeps the install a no-op
+  // after the first call.
   window.addEventListener('error', onError);
   window.addEventListener('unhandledrejection', onRejection);
   installed = true;

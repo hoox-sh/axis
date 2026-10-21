@@ -23,6 +23,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 - **Engines declare what they are instead of being guessed from their id.** Seventy-one places branched on the engine id string — `id === 'server'`, `id.includes('pyne-worker')` — to decide how the engine behaves: which credential slot it uses, whether the remote LSP is reachable, which transport the HUD reports, whether the run can be re-applied. An engine now declares a **family** (`server` / `pyodide` / `worker` / `dynamic`), and the behaviour branches on that. The id stays the user-facing name and the selection key, and the credential vault still resolves a family *exactly*, so an unknown engine id is never routed to the shared server or worker slot by accident.
 
+- **One event-listener primitive instead of the same four lines everywhere.** Dozens of components repeated `onMount(() => target.addEventListener(...))` / `onCleanup(() => target.removeEventListener(...))` — the same shape, easy to get subtly wrong (a `capture` flag on one side only, a listener that outlives its component). `attachEventListener` attaches and returns the disposer, so the two halves cannot drift apart, and `useEventListener` wires it to the component lifetime.
+
 ### Changed
 
 - **The Worker answers every route with the same error envelope.** The entry `fetch` opened its `try`/`catch` *after* the MCP, MCP-bridge and stream paths, so an exception in any of them escaped the Worker as an unhandled rejection instead of a `500`. The dispatch now runs inside one `try`, and a shared `handleError` helper logs the failure server-side and returns the canonical `{ status: 'error', code: 'INTERNAL' }` envelope. The error text is still never reflected to the caller.
