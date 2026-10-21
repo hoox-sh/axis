@@ -3,8 +3,65 @@
   "lsp": true,
   "formatter": {
     "prettier": {
-      "command": ["bunx", "prettier", "--write"],
-      "extensions": [".ts", ".tsx", ".js", ".mjs", ".json", ".md", ".mdx", ".css"]
+      "command": ["bunx", "prettier", "--write", "$FILE"],
+      "extensions": [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".json", ".jsonc", ".css"]
+    },
+    "biome": { "disabled": true },
+    "rustfmt": { "disabled": true },
+    "ruff": { "disabled": true },
+    "uv": { "disabled": true }
+  },
+  "watcher": {
+    "ignore": [
+      "node_modules/**",
+      "dist/**",
+      "coverage/**",
+      ".wrangler/**",
+      "src-tauri/target/**",
+      "public/pyodide/**",
+      "vendor/**",
+      ".worktrees/**",
+      ".opencode/**",
+      "okf/**"
+    ]
+  },
+  "instructions": ["okf/index.md", "okf/playbooks/read-this-first.md"],
+  "permissions": [
+    { "action": "edit", "resource": "*.env", "effect": "ask" },
+    { "action": "edit", "resource": "*.env.*", "effect": "ask" },
+    { "action": "edit", "resource": "*.env.example", "effect": "allow" },
+    { "action": "edit", "resource": "*.pem", "effect": "deny" },
+    { "action": "shell", "resource": "git push *", "effect": "ask" },
+    { "action": "shell", "resource": "git tag *", "effect": "ask" },
+    { "action": "shell", "resource": "rm -rf *", "effect": "ask" },
+    { "action": "shell", "resource": "axis deploy *", "effect": "ask" },
+    { "action": "shell", "resource": "make pages-deploy*", "effect": "ask" },
+    { "action": "shell", "resource": "make worker-deploy*", "effect": "ask" },
+    { "action": "shell", "resource": "make docker-push*", "effect": "ask" }
+  ],
+  "experimental": {
+    "todo": true
+  },
+  "commands": {
+    "commit": {
+      "description": "Stage intentional paths and create a conventional commit (no push, no tag)",
+      "template": "Create a commit for the current work in the AXIS repo.\n\nRules:\n1. Review first with `git status`, `git diff`, `git log -5 --oneline`.\n2. Stage only intentional paths. Never stage `.env`, secrets, `dist/`, `node_modules/`, `src-tauri/target/`, coverage, or `.axis-*.png` debug shots.\n3. Use a conventional subject `type(scope): summary` plus a 1-2 sentence body saying why the change matters.\n4. Append user-visible changes under `## [Unreleased]` in `CHANGELOG.md`.\n5. Do NOT push, tag, or deploy.\n\nExtra instructions: $ARGUMENTS"
+    },
+    "verify": {
+      "description": "Run the AXIS verification suite: tests, typecheck, lint, build",
+      "template": "Verify the AXIS repo.\n\nRun these in order and report pass/fail for each step:\n1. `bun run test`\n2. `bun run typecheck:all`\n3. `bun run lint`\n4. `bun run build`\n\nFix only what a failing step reports, then re-run that step. Do not commit, tag, push, or deploy.\n\nExtra instructions: $ARGUMENTS"
+    },
+    "release": {
+      "description": "Run the AXIS release checklist: changelog, version bump, tag, publish",
+      "template": "Prepare an AXIS release.\n\nFollow the release checklist:\n1. Move the `## [Unreleased]` bullets in `CHANGELOG.md` into a new `## [X.Y.Z] — YYYY-MM-DD` section, then run `python3 scripts/generate-changelog.py`.\n2. Bump the `VERSION` file, then run `bun run sync:versions` and verify with `bun run check:versions`.\n3. Run `bun run test` and `bun run build`.\n4. Commit the changelog and version bump.\n5. Tag with `git tag -a vX.Y.Z -m \"AXIS vX.Y.Z\"`, then push `main` and the tag.\n6. Publish with `axis deploy all`, then run `axis health`.\n\nStop and report before any push, tag, or deploy step. Extra instructions: $ARGUMENTS"
+    }
+  },
+  "agents": {
+    "axis-reviewer": {
+      "description": "Read-only review of AXIS changes: correctness, security, tests, Pine parity",
+      "mode": "subagent",
+      "system": "You review changes in the AXIS repo (SolidJS + Vite PWA, Cloudflare Worker, Tauri desktop, Pine Script via PYNE).\n\nFocus on:\n- correctness and regressions in `src/**`\n- security: secrets, worker endpoints, the `/api/onchain` allowlist, D1/KV bindings, MCP surface\n- missing or weak tests under `tests/`\n- Pine Script naming parity with `src/editor/data/pyne-builtins.json` (never invent `TV.*` / `TradingView.*` APIs)\n\nRules: never edit files, never commit, never push. Read the OKF bundle (`okf/index.md`) instead of scanning the whole tree. Report findings as a short list with `file:line` and a concrete fix.",
+      "permissions": [{ "action": "edit", "resource": "*", "effect": "deny" }]
     }
   },
   "mcp": {

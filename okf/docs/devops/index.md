@@ -13,5 +13,6 @@
 * [DevOps](index.md) - Build, serve, Cloudflare®, VPS demo, CORS, and CI for the AXIS PWA and Worker.
 * [Local development](local-dev.md) - Day-to-day AXIS loop: Vite, Flask, Worker wrangler, endpoints, and plugin examples.
 * [OKF bundle](okf.md) - Compiled Open Knowledge Format cache of the AXIS repo, refreshed on every commit.
+* [OpenCode](opencode.md) - Project configuration for OpenCode: formatter, LSP servers, permissions, slash commands, and the OKF instructions.
 * [PYNE endpoint parity](pyne-endpoints.md) - Which PYNE Pro API routes AXIS consumes, which it deliberately does not, and how each surface is gated.
 * [VPS demo topology](vps-demo.md) - Single-box demo: static AXIS dist + Flask Pro API (+ optional reverse proxy) without Cloudflare®.

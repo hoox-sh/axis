@@ -166,6 +166,7 @@
               "devops/vps-demo",
               "devops/cors-and-origins",
               "devops/ci-and-testing",
+              "devops/opencode",
               "devops/okf"
             ]
           }

@@ -1,0 +1,167 @@
+# Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
+#
+# This file is part of axis.
+#
+# axis is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# axis is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with axis.  If not, see <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
+---
+title: "OpenCode"
+description: "Project configuration for OpenCode: formatter, LSP servers, permissions, slash commands, and the OKF instructions."
+---
+
+# OpenCode
+
+`opencode.json` in the repo root configures [OpenCode](https://opencode.ai) for
+this project. It is strict JSON (no comments) so editors and validators stay
+happy.
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": true,
+  "formatter": {
+    "prettier": {
+      "command": ["bunx", "prettier", "--write", "$FILE"],
+      "extensions": [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".json", ".jsonc", ".css"]
+    },
+    "biome": { "disabled": true },
+    "rustfmt": { "disabled": true },
+    "ruff": { "disabled": true },
+    "uv": { "disabled": true }
+  }
+}
+```
+
+## Formatter
+
+OpenCode formats a file after `write`, `edit`, or `patch` changes it. Two rules
+matter here:
+
+* The command **must** end with `$FILE`. OpenCode replaces it with the absolute
+  path of the file it just wrote. Without it the formatter receives no input and
+  silently does nothing.
+* The first formatter that matches the file extension and exits `0` wins.
+
+The formatter is scoped to the extensions this repo treats as Prettier-managed.
+Markdown, MDX, YAML, and Rust are deliberately excluded:
+
+| Excluded | Why |
+| --- | --- |
+| `.md`, `.mdx` | Prettier rewrites the `#`-block license header of every doc into a heading. |
+| `.yml`, `.yaml` | Prettier flips the quoting style of `docker-compose.yml` and the Worker config. |
+| `.rs` | `src-tauri/src/*.rs` is not rustfmt-clean — the repo uses a 2-space Rust style. |
+| Biome | Biome is the linter here (`bun run lint` runs `biome check`); `biome.json` sets `formatter.enabled: false`, so its formatter always exits non-zero. |
+| `ruff`, `uv` | The Python helpers (`brand/*.py`, `pyodide/*.py`) have no formatter configuration. |
+
+Prettier is resolved from the repo's own `node_modules` through `bunx`, so the
+version always matches `package.json`.
+
+<Callout type="warning">
+  The repo is not Prettier-clean yet — a large share of `src/**/*.{ts,tsx}`
+  and `docs/**` still differs from `.prettierrc`. The first edit to an
+  unformatted file therefore reformats the whole file. Run
+  `bunx prettier --write "src/**/*.{ts,tsx}"` once if you want that noise out
+  of the way in a single sweep.
+</Callout>
+
+## Language servers
+
+`"lsp": true` enables every built-in language server; each one still checks
+whether it can run in this project. In this repo that means:
+
+| Server | Needs | Active here |
+| --- | --- | --- |
+| `typescript` | `typescript` in `node_modules` (resolves `typescript/lib/tsserver.js`) | yes |
+| `biome` | `biome.json` + `@biomejs/biome` | yes |
+| `rust` | `Cargo.toml` (`src-tauri/`) + `rust-analyzer` on `PATH` | yes |
+| `eslint`, `oxlint` | the matching npm package | no |
+| `deno`, `vue`, `svelte`, `astro` | their own project marker or binary | no |
+| `pyright`, `bash`, `yaml-ls`, `dockerfile` | binary on `PATH` — OpenCode downloads it from npm on first use | no, until used |
+
+To pin or extend a server, use the object form:
+
+```json
+{
+  "lsp": {
+    "pyright": { "disabled": true },
+    "typescript": {
+      "command": ["typescript-language-server", "--stdio"],
+      "extensions": [".ts", ".tsx"]
+    }
+  }
+}
+```
+
+Set `OPENCODE_DISABLE_LSP_DOWNLOAD=1` to stop OpenCode from fetching missing
+servers from npm.
+
+<Callout type="info">
+  In OpenCode v2 the agent talks to language servers through the `lsp` tool
+  (hover, go-to-definition, find-references, document symbols). That tool is
+  still experimental and is only registered when the runtime flag is set:
+
+  ```bash
+  OPENCODE_EXPERIMENTAL_LSP_TOOL=1 opencode
+  ```
+
+  There is no config key for it. OpenCode logs the servers it actually started
+  when the first LSP request runs — check
+  `~/.local/share/opencode/log/opencode.log` for `enabled LSP servers`.
+</Callout>
+
+## Watcher
+
+The file watcher skips the heavy build directories, so edits do not trigger
+churn on generated output:
+
+`node_modules/`, `dist/`, `coverage/`, `.wrangler/`, `src-tauri/target/`,
+`public/pyodide/`, `vendor/`, `.worktrees/`, `.opencode/`, `okf/`.
+
+## Permissions
+
+The last matching rule wins. The project rules sit on top of the defaults:
+
+* `*.env` and `*.env.*` ask before an edit; `*.env.example` stays writable.
+* `*.pem` is denied.
+* `git push`, `git tag`, `rm -rf`, `axis deploy`, `make pages-deploy`,
+  `make worker-deploy`, and `make docker-push` ask first — the release
+  checklist in `AGENTS.md` assumes a human confirms those steps.
+
+## Slash commands
+
+| Command | What it does |
+| --- | --- |
+| `/commit` | Reviews `git status` / `git diff` / `git log`, stages intentional paths only, writes a conventional commit, updates `CHANGELOG.md`. Never pushes or tags. |
+| `/verify` | Runs `bun run test`, `bun run typecheck:all`, `bun run lint`, `bun run build` and reports pass/fail per step. |
+| `/release` | Walks the release checklist: changelog → version bump → tag → publish. Stops before any push, tag, or deploy. |
+
+## Subagent
+
+`axis-reviewer` is a read-only reviewer (`edit` denied) focused on
+correctness, security, missing tests, and Pine Script naming parity with
+`src/editor/data/pyne-builtins.json`.
+
+## Instructions
+
+`okf/index.md` and `okf/playbooks/read-this-first.md` are loaded as project
+instructions, so a session starts with the repo map instead of a full tree
+scan. Use `bun run okf:query <terms>` to search the bundle.
+
+## MCP
+
+The `mcp.axis` block is unchanged: it starts the local CLI as an MCP stdio
+server against `https://worker.axis.hoox.sh/mcp` and forwards `AXIS_API_KEY`
+from the environment. See [MCP](/enduser/guides/mcp) for the end-user side.
