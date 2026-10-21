@@ -253,7 +253,9 @@ export function updateIndicatorStore(ctx: StoreUpdateContext): boolean {
         for (const [k] of ctx.seriesEntries) {
           if (plots[k]?.custom) continue;
           const meta = ctx.plotMeta[k];
+          // Preserve existing width/visible for non-custom plots
           plots[k] = {
+            ...plots[k],
             color:
               resolvePineColor(meta?.color) ??
               PLOT_PALETTE[colorIdx % PLOT_PALETTE.length],
