@@ -19,10 +19,12 @@ import {
   type AppInvokeRequest,
   type AppInvokeResponse,
 } from './protocol';
-import { errorBody, plainJson } from '../http';
+import { errorBody, plainJson, readCappedText } from '../http';
 
 /** One-time WS tickets expire quickly so logs/HAR never hold the long-lived key. */
 export const BRIDGE_TICKET_TTL_MS = 30_000;
+/** Cap for an `app_invoke` payload forwarded to the PWA tab. */
+const BRIDGE_MAX_BODY_BYTES = 1_048_576;
 const TICKET_KEY_PREFIX = 'tkt:';
 
 export function parseBridgeTicket(ticket: string): { userId: string; nonce: string } | null {
@@ -140,9 +142,13 @@ export class McpBridgeDO {
           503,
         );
       }
+      const capped = await readCappedText(req, BRIDGE_MAX_BODY_BYTES);
+      if (!capped.ok) {
+        return json({ ok: false, error: { code: 'BODY_TOO_LARGE', message: 'invoke body too large' } }, 413);
+      }
       let body: unknown;
       try {
-        body = await req.json();
+        body = JSON.parse(capped.text);
       } catch {
         return json({ ok: false, error: { code: 'BAD_JSON', message: 'invalid JSON' } }, 400);
       }

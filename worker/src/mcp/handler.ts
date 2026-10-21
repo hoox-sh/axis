@@ -25,7 +25,7 @@ import {
   type JsonRpcResponse,
 } from './protocol';
 import { isNotification, parseJsonText, rpcError, rpcResult } from './jsonrpc';
-import { MCP_CORS, errorBody, errorResponse } from '../http';
+import { MCP_CORS, errorBody, errorResponse, readCappedText } from '../http';
 import { _resetRateLimitsForTests, allowRate } from '../rate-limit';
 import {
   callTool,
@@ -217,25 +217,14 @@ export async function handleMcp(
     });
   }
 
-  const cl = req.headers.get('content-length');
-  if (cl) {
-    const n = Number(cl);
-    if (Number.isFinite(n) && n > MCP_MAX_BODY_BYTES) {
-      return errorResponse('PAYLOAD_TOO_LARGE', 'MCP body too large', {
-        status: 413,
-        headers: jsonHeaders(origin),
-      });
-    }
-  }
-  const buf = await req.arrayBuffer();
-  if (buf.byteLength > MCP_MAX_BODY_BYTES) {
+  const capped = await readCappedText(req, MCP_MAX_BODY_BYTES);
+  if (!capped.ok) {
     return errorResponse('PAYLOAD_TOO_LARGE', 'MCP body too large', {
       status: 413,
       headers: jsonHeaders(origin),
     });
   }
-  const text = new TextDecoder().decode(buf);
-  const parsed = parseJsonText(text);
+  const parsed = parseJsonText(capped.text);
   if (!parsed.ok) {
     return new Response(JSON.stringify(parsed.response), {
       status: 200,

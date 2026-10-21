@@ -89,6 +89,47 @@ async function upgrade(bridge: McpBridgeDO, nonce: string): Promise<Response> {
   );
 }
 
+describe('McpBridgeDO invoke body cap', () => {
+  it('rejects an over-cap invoke body with 413', async () => {
+    const state = new FakeState();
+    const neu = new FakeWs();
+    neu.serializeAttachment({ role: 'app', t: 1 });
+    state.sockets = [neu];
+    const bridge = dob(state);
+
+    const res = await bridge.fetch(
+      new Request('http://do/invoke', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: 'x'.repeat(2 * 1024 * 1024),
+      }),
+    );
+    expect(res.status).toBe(413);
+    const body = (await res.json()) as { ok: boolean; error: { code: string } };
+    expect(body.ok).toBe(false);
+    expect(body.error.code).toBe('BODY_TOO_LARGE');
+    expect(neu.sent).toHaveLength(0);
+  });
+
+  it('still answers 400 for an unparseable invoke body', async () => {
+    const state = new FakeState();
+    const app = new FakeWs();
+    app.serializeAttachment({ role: 'app', t: 1 });
+    state.sockets = [app];
+    const bridge = dob(state);
+    const res = await bridge.fetch(
+      new Request('http://do/invoke', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: 'not json',
+      }),
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe('BAD_JSON');
+  });
+});
+
 describe('bridge ticket format', () => {
   it('round-trips userId.nonce and rejects junk', () => {
     const userId = 'a'.repeat(32);

@@ -33,8 +33,7 @@
  */
 
 import type { Env } from './index';
-import { ORIGIN_ONLY, errorResponse, jsonResponse } from './http';
-import { clientIp } from './http';
+import { ORIGIN_ONLY, clientIp, errorResponse, jsonResponse, readCappedJson } from './http';
 import { extractBearer } from './auth';
 import { allowRate } from './rate-limit';
 
@@ -54,6 +53,9 @@ function timingSafeEqual(a: string, b: string): boolean {
     for (let i = 0; i < ea.length; i++) diff |= (ea[i] ?? 0) ^ (eb[i] ?? 0);
     return diff === 0;
 }
+
+/** Cap for the key-create body (a tier and nothing else). */
+const KEYS_MAX_BODY_BYTES = 4 * 1024;
 
 /** Per-IP gate on admin-gated create attempts (A16) — same 403 either way. */
 function adminAttemptAllowed(req: Request): boolean {
@@ -85,7 +87,15 @@ export async function handleKeys(req: Request, env: Env, origin: string): Promis
         if (!adminAttemptAllowed(req) || !isAdmin(req, env)) {
             return errorResponse('FORBIDDEN', 'admin token required', { status: 403, origin, cors: ORIGIN_ONLY });
         }
-        const body = await req.json().catch(() => ({} as Record<string, unknown>));
+        const capped = await readCappedJson(req, KEYS_MAX_BODY_BYTES);
+        if (!capped.ok) {
+            return errorResponse('PAYLOAD_TOO_LARGE', 'request body too large', {
+                status: 413,
+                origin,
+                cors: ORIGIN_ONLY,
+            });
+        }
+        const body = (capped.value ?? {}) as Record<string, unknown>;
         const tier = String((body as { tier?: unknown })?.tier ?? 'hobby') as KeyRecord['tier'];
         if (!['free', 'hobby', 'pro', 'team', 'enterprise'].includes(tier)) {
             return errorResponse('INVALID_TIER', 'unknown tier', { status: 400, origin, cors: ORIGIN_ONLY });

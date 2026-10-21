@@ -56,16 +56,25 @@ function forgeSignal(): RequestInit {
     : {};
 }
 
-import { clientIp, errorBody, scopedJson } from './http';
+import { clientIp, errorBody, readCappedJson, scopedJson } from './http';
 import { allowRate } from './rate-limit';
 
-async function readJsonBody(req: Request): Promise<Record<string, unknown>> {
-  try {
-    const raw = await req.json();
-    return raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
-  } catch {
-    return {};
-  }
+/** Cap for a device-flow body (a client id and a device code). */
+const OAUTH_MAX_BODY_BYTES = 64 * 1024;
+
+/**
+ * Read the device-flow body with a fail-closed byte cap.
+ *
+ * An over-cap body is a 413, not a silent `{}` — a truncated request must not
+ * look like a request that carried no client id.
+ */
+async function readJsonBody(
+  req: Request,
+): Promise<{ ok: true; value: Record<string, unknown> } | { ok: false }> {
+  const capped = await readCappedJson(req, OAUTH_MAX_BODY_BYTES);
+  if (!capped.ok) return { ok: false };
+  const raw = capped.value;
+  return { ok: true, value: raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {} };
 }
 
 /**
@@ -254,7 +263,11 @@ export async function handleGitOAuth(
     return json(errorBody('RATE_LIMIT', 'Too many OAuth poll requests'), 429, origin);
   }
 
-  const body = await readJsonBody(req);
+  const parsed = await readJsonBody(req);
+  if (!parsed.ok) {
+    return json(errorBody('PAYLOAD_TOO_LARGE', 'request body too large'), 413, origin);
+  }
+  const body = parsed.value;
   const providerRaw = String(body.provider || 'github').toLowerCase();
   const provider: GitOAuthProvider = providerRaw === 'gitlab' ? 'gitlab' : 'github';
   const clientId = resolveClientId(provider, body, env);

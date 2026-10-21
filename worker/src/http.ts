@@ -259,17 +259,15 @@ export function clientIp(req: Request): string {
 }
 
 /**
- * Read a JSON body with a fail-closed byte cap.
+ * Read a request body with a fail-closed byte cap.
  *
  * Checks `Content-Length` before touching the stream, then caps the buffered
  * read — bodies are never fully parsed before the size check (A9).
- * Parse failures resolve to `{ ok: true, value: null }` so callers keep their
- * existing empty-body handling; over-cap resolves to `{ ok: false }` (413).
  */
-export async function readCappedJson(
+async function readCappedBody(
   req: Request,
   maxBytes: number,
-): Promise<{ ok: true; value: unknown } | { ok: false }> {
+): Promise<{ ok: true; buf: ArrayBuffer } | { ok: false }> {
   const cl = req.headers.get('content-length');
   if (cl !== null && cl !== '') {
     const n = Number(cl);
@@ -279,15 +277,46 @@ export async function readCappedJson(
   try {
     buf = await req.arrayBuffer();
   } catch {
-    return { ok: true, value: null };
+    return { ok: true, buf: new ArrayBuffer(0) };
   }
   if (buf.byteLength > maxBytes) return { ok: false };
-  if (buf.byteLength === 0) return { ok: true, value: null };
+  return { ok: true, buf };
+}
+
+/**
+ * Read a JSON body with a fail-closed byte cap.
+ *
+ * Parse failures resolve to `{ ok: true, value: null }` so callers keep their
+ * existing empty-body handling; over-cap resolves to `{ ok: false }` (413).
+ */
+export async function readCappedJson(
+  req: Request,
+  maxBytes: number,
+): Promise<{ ok: true; value: unknown } | { ok: false }> {
+  const body = await readCappedBody(req, maxBytes);
+  if (!body.ok) return { ok: false };
+  if (body.buf.byteLength === 0) return { ok: true, value: null };
   try {
-    return { ok: true, value: JSON.parse(new TextDecoder().decode(buf)) };
+    return { ok: true, value: JSON.parse(new TextDecoder().decode(body.buf)) };
   } catch {
     return { ok: true, value: null };
   }
+}
+
+/**
+ * Read a request body as text with the same fail-closed byte cap.
+ *
+ * For callers that apply their own parse policy — the MCP plane answers a
+ * malformed body with a JSON-RPC error, not an HTTP error, so it must see the
+ * raw text rather than a `null` value.
+ */
+export async function readCappedText(
+  req: Request,
+  maxBytes: number,
+): Promise<{ ok: true; text: string } | { ok: false }> {
+  const body = await readCappedBody(req, maxBytes);
+  if (!body.ok) return { ok: false };
+  return { ok: true, text: new TextDecoder().decode(body.buf) };
 }
 
 /* ------------------------------------------------------------------------- *
