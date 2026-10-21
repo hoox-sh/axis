@@ -178,9 +178,9 @@ export function buildOverlayPayloads(ctx: OverlayBuildContext): OverlayBuildOutc
         meta?.color,
         paletteColor,
       );
-      // Prefer panel width override → Pine plot linewidth → default (2)
+      // Prefer panel width override → Pine plot linewidth → default (1)
       const userWidth = userPlotColors[k]?.width;
-      const linewidth = userWidth != null ? userWidth : (meta?.linewidth != null ? Number(meta.linewidth) : undefined);
+      const linewidth = userWidth != null ? userWidth : (meta?.linewidth != null ? Number(meta.linewidth) : 1);
       overlayLines.push({
         name: k,
         data,

@@ -467,7 +467,7 @@ export const IndicatorCard: Component<Props> = (props) => {
                     >
                       <Icons.minus size={9} />
                     </button>
-                    <span class="font-mono w-5 text-center text-text">{plotWidth === 2 && plot.width == null ? 'auto' : String(plotWidth)}</span>
+                    <span class="font-mono w-5 text-center text-text">{plot.width == null ? '1' : String(plotWidth)}</span>
                     <button
                       type="button"
                       class="inline-flex items-center justify-center w-5 h-5 text-text-faint hover:text-accent border border-border rounded-[var(--radius-chip)] hover:bg-bg"

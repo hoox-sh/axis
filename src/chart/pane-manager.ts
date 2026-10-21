@@ -2498,7 +2498,7 @@ export class PaneManager {
       line.data,
       {
         color: line.color || VOID.indigo,
-        lineWidth: line.linewidth != null ? Math.max(1, Math.min(4, Math.round(line.linewidth))) : 2,
+        lineWidth: line.linewidth != null ? Math.max(1, Math.min(4, Math.round(line.linewidth))) : 1,
         lineStyle: normalizeLineStyleToken(line.linestyle),
         stepped: seriesKind === 'stepline',
         area: seriesKind === 'area',
