@@ -27,8 +27,9 @@
  */
 
 import { resolveGitConfig, type GitConfig } from './git-config';
-import * as gh from './git-github';
-import * as gl from './git-gitlab';
+import { githubForge } from './git-github';
+import { gitlabForge } from './git-gitlab';
+import type { GitForge } from './git-forge';
 import {
   PUBLISHED_CACHE_KEY,
   buildPublishedRecord,
@@ -107,11 +108,17 @@ function gitReady(cfg: GitConfig): boolean {
   return !!(cfg.projectId || (cfg.owner && cfg.repo));
 }
 
+function forgeFor(cfg: GitConfig): GitForge {
+  return cfg.provider === 'gitlab' ? gitlabForge : githubForge;
+}
+
 async function gitGetFile(
   cfg: GitConfig,
   path: string,
 ): Promise<{ content: string } | null> {
-  return cfg.provider === 'gitlab' ? gl.gitlabGetFile(cfg, path) : gh.githubGetFile(cfg, path);
+  const forge = forgeFor(cfg);
+  const file = await forge.getFile(cfg, path);
+  return file ? { content: file.content } : null;
 }
 
 async function gitPutFile(
@@ -120,13 +127,9 @@ async function gitPutFile(
   content: string,
   message: string,
 ): Promise<void> {
-  if (cfg.provider === 'gitlab') {
-    const existing = await gl.gitlabGetFile(cfg, path);
-    await gl.gitlabPutFile(cfg, path, content, message, !!existing);
-    return;
-  }
-  const existing = await gh.githubGetFile(cfg, path);
-  await gh.githubPutFile(cfg, path, content, message, existing?.sha);
+  const forge = forgeFor(cfg);
+  const existing = await forge.getFile(cfg, path);
+  await forge.putFile(cfg, path, content, message, forge.fileToken(existing));
 }
 
 async function readRemoteIndex(cfg: GitConfig): Promise<PublishedIndex> {

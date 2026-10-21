@@ -34,11 +34,21 @@ import type {
   SyncResult,
 } from '../plugins/types';
 import { metaFromScriptContent } from '../indicators/script-meta';
-import { resolveGitConfig, resolveScriptRepoPath } from './git-config';
-import * as gh from './git-github';
-import * as gl from './git-gitlab';
+import {
+  resolveGitConfig,
+  resolveScriptRepoPath,
+  type GitConfig,
+} from './git-config';
+import { githubForge } from './git-github';
+import { gitlabForge } from './git-gitlab';
+import { forgeList, forgeRead, forgeRemove, forgeWrite, type GitForge } from './git-forge';
 
 /** Storage plugin `id: git` with configSchema for Provider Manager / Settings. */
+/** The provider half of the git backend for this config. */
+function forgeFor(cfg: GitConfig): GitForge {
+  return cfg.provider === 'gitlab' ? gitlabForge : githubForge;
+}
+
 export const gitStoragePlugin: StoragePlugin = {
   id: 'git',
   name: 'Git (GitHub / GitLab)',
@@ -91,7 +101,7 @@ export const gitStoragePlugin: StoragePlugin = {
 
   async list(opts) {
     const cfg = resolveGitConfig(opts?.config);
-    const metas = cfg.provider === 'gitlab' ? await gl.gitlabList(cfg) : await gh.githubList(cfg);
+    const metas = await forgeList(cfg, forgeFor(cfg));
     const prefix = opts?.prefix;
     if (!prefix) return metas;
     return metas.filter(
@@ -101,19 +111,18 @@ export const gitStoragePlugin: StoragePlugin = {
 
   async read(id, config) {
     const cfg = resolveGitConfig(config);
-    return cfg.provider === 'gitlab' ? gl.gitlabRead(cfg, id) : gh.githubRead(cfg, id);
+    return forgeRead(cfg, forgeFor(cfg), id);
   },
 
   async write(doc, config) {
     const cfg = resolveGitConfig(config);
     // Explicit Save only — this is the commit boundary
-    return cfg.provider === 'gitlab' ? gl.gitlabWrite(cfg, doc) : gh.githubWrite(cfg, doc);
+    return forgeWrite(cfg, forgeFor(cfg), doc);
   },
 
   async remove(id, config) {
     const cfg = resolveGitConfig(config);
-    if (cfg.provider === 'gitlab') await gl.gitlabRemove(cfg, id);
-    else await gh.githubRemove(cfg, id);
+    await forgeRemove(cfg, forgeFor(cfg), id);
   },
 
   // Drafts intentionally not pushed to git — local dual-write handles crash recovery
@@ -128,8 +137,7 @@ export const gitStoragePlugin: StoragePlugin = {
   async sync(_direction, config): Promise<SyncResult> {
     try {
       const cfg = resolveGitConfig(config);
-      const list =
-        cfg.provider === 'gitlab' ? await gl.gitlabList(cfg) : await gh.githubList(cfg);
+      const list = await forgeList(cfg, forgeFor(cfg));
       return {
         ok: true,
         message: `Pulled ${list.length} script(s) from ${cfg.provider}`,
@@ -142,8 +150,7 @@ export const gitStoragePlugin: StoragePlugin = {
 
   async getStatus(config): Promise<StorageStatus> {
     const cfg = resolveGitConfig(config);
-    const st =
-      cfg.provider === 'gitlab' ? await gl.gitlabStatus(cfg) : await gh.githubStatus(cfg);
+    const st = await forgeFor(cfg).status(cfg);
     return {
       connected: st.connected,
       remote: st.remote,
@@ -156,9 +163,7 @@ export const gitStoragePlugin: StoragePlugin = {
   async listVersions(id, opts): Promise<ScriptVersion[]> {
     const cfg = resolveGitConfig(opts?.config);
     const path = await resolveScriptPathForId(cfg, id);
-    return cfg.provider === 'gitlab'
-      ? gl.gitlabListFileCommits(cfg, path, { limit: opts?.limit })
-      : gh.githubListFileCommits(cfg, path, { limit: opts?.limit });
+    return forgeFor(cfg).listFileCommits(cfg, path, { limit: opts?.limit });
   },
 
   async readAtRevision(id, rev, config): Promise<ScriptDocument> {
@@ -169,10 +174,7 @@ export const gitStoragePlugin: StoragePlugin = {
       indexPath: meta?.path,
       docPath: meta?.path,
     });
-    const file =
-      cfg.provider === 'gitlab'
-        ? await gl.gitlabGetFileAtRef(cfg, path, rev)
-        : await gh.githubGetFileAtRef(cfg, path, rev);
+    const file = await forgeFor(cfg).getFileAtRef(cfg, path, rev);
     if (!file) {
       throw new Error(`Script not found at revision ${rev.slice(0, 7)}: ${id}`);
     }
@@ -203,7 +205,7 @@ async function findScriptMeta(
   id: string,
 ): Promise<ScriptMeta | undefined> {
   const list =
-    cfg.provider === 'gitlab' ? await gl.gitlabList(cfg) : await gh.githubList(cfg);
+    await forgeList(cfg, forgeFor(cfg));
   return list.find((s) => s.id === id);
 }
 

@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/storage"
-description: "src/storage contains catalog.ts, cloud-config.ts, cloud.ts, and 14 more files."
+description: "src/storage contains catalog.ts, cloud-config.ts, cloud.ts, and 15 more files."
 resource: "src/storage"
 tags: [code, storage]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-18T19:08:30Z
+  at: 2026-10-21T18:49:56Z
 sources:
   - id: tree
     resource: "src/storage"
@@ -22,8 +22,9 @@ okf_lock: generated
 * `cloud-config.ts` — CloudConfig, coerceWorkerEndpoint, defaultCloudEndpoint, generateDemoApiKey, isLocalhostEndpoint, isSecureCloudEndpoint, requireSecureCloudEndpoint, resolveCloudConfig, writeStoredCloudConfig
 * `cloud.ts` — CloudConfig, cloudStoragePlugin, defaultCloudEndpoint, generateDemoApiKey, probeCloudStorage, resolveCloudConfig, writeStoredCloudConfig
 * `git-config.ts` — DEFAULT_GIT_CONFIG, GitConfig, GitIndexCorruptError, GitProvider, assertGitConfig, assertSafeRepoPath, formatCommitMessage, indexPath, libraryDir, normalizeRepoPath, resolveGitConfig, resolveScriptRepoPath
-* `git-github.ts` — IndexFile, githubDeleteFile, githubGetFile, githubGetFileAtRef, githubList, githubListFileCommits, githubPutFile, githubRead, githubReadIndex, githubRemove, githubStatus, githubWrite
-* `git-gitlab.ts` — gitlabDeleteFile, gitlabGetFile, gitlabGetFileAtRef, gitlabList, gitlabListFileCommits, gitlabPutFile, gitlabRead, gitlabReadIndex, gitlabRemove, gitlabStatus, gitlabWrite, gitlabWriteIndex
+* `git-forge.ts` — GitForge, GitToken, IndexFile, forgeList, forgeRead, forgeRemove, forgeWrite, upsertIndexEntry
+* `git-github.ts` — IndexFile, githubDeleteFile, githubForge, githubGetFile, githubGetFileAtRef, githubList, githubListFileCommits, githubPutFile, githubRead, githubReadIndex, githubRemove, githubStatus
+* `git-gitlab.ts` — gitlabDeleteFile, gitlabForge, gitlabGetFile, gitlabGetFileAtRef, gitlabList, gitlabListFileCommits, gitlabPutFile, gitlabRead, gitlabReadIndex, gitlabRemove, gitlabStatus, gitlabWrite
 * `git-oauth.ts` — DevicePollResult, DeviceStartResult, GitUserInfo, defaultVerificationUri, fetchGitUser, isOAuthProxyBase, manualTokenCreateUrl, pollDeviceFlow, resolveOAuthProxyBase, sanitizeVerificationUri, startDeviceFlow, waitForDeviceToken
 * `git.ts` — ScriptDocument, ScriptMeta, ScriptVersion, gitStoragePlugin
 * `idb.ts` — idbAvailable, idbReq, idbTxDone, openDb

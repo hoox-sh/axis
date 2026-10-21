@@ -17,7 +17,7 @@
 * [src/pwa](pwa.md) - src/pwa contains close-guard.ts, install-prompt.ts, register-sw.ts.
 * [src/results](results.md) - src/results contains dataview.ts, debug-pins.ts, events.ts, and 10 more files.
 * [src/sources](sources.md) - src/sources contains catalog.ts, upload-store.ts.
-* [src/storage](storage.md) - src/storage contains catalog.ts, cloud-config.ts, cloud.ts, and 14 more files.
+* [src/storage](storage.md) - src/storage contains catalog.ts, cloud-config.ts, cloud.ts, and 15 more files.
 * [src/store](store.md) - AXIS Solid store — createStore hydration, persistence, and mutation helpers.
 * [src/stories](stories.md) - Button designs showcase — three candidate app-button languages plus non-rectangular forms (pill / orb / cut / tab) and segmented groups.
 * [src/streams](streams.md) - src/streams contains catalog.ts, multiplex.ts, reconnect-ws.ts, and 2 more files.

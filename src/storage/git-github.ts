@@ -38,13 +38,18 @@ import {
   scriptPath,
 } from './git-config';
 
-/** On-disk library index committed alongside script files. */
-export interface IndexFile {
-  version: 1;
-  scripts: ScriptMeta[];
-}
+import {
+  forgeList,
+  forgeRead,
+  forgeRemove,
+  forgeWrite,
+  type GitForge,
+  type GitToken,
+  type IndexFile,
+} from './git-forge';
 
-const INDEX_WRITE_RETRIES = 3;
+/** @deprecated Re-exported from {@link module:storage/git-forge}. */
+export type { IndexFile };
 
 async function gh(
   cfg: GitConfig,
@@ -294,151 +299,60 @@ export async function githubWriteIndex(
  * Merge `apply` into a freshly read index and commit, retrying on 409.
  * Throws a structured error if all retries fail after a script file was written.
  */
-async function githubUpsertIndexEntry(
-  cfg: GitConfig,
-  apply: (index: IndexFile) => void,
-  message: string,
-  context: { scriptCommitted: boolean; scriptPath?: string },
-): Promise<void> {
-  let lastErr: unknown;
-  for (let attempt = 0; attempt < INDEX_WRITE_RETRIES; attempt++) {
-    try {
-      const { index, sha } = await githubReadIndex(cfg, { forWrite: true });
-      apply(index);
-      await githubWriteIndex(cfg, index, sha, message);
-      return;
-    } catch (e: unknown) {
-      lastErr = e;
-      const status = (e as { status?: number }).status;
-      if (status === 409 && attempt < INDEX_WRITE_RETRIES - 1) continue;
-      break;
-    }
-  }
-  const base = lastErr instanceof Error ? lastErr.message : String(lastErr);
-  if (context.scriptCommitted) {
-    throw new Error(
-      `${base} — script file was committed` +
-        (context.scriptPath ? ` (${context.scriptPath})` : '') +
-        ' but index update failed; retry Save or fix library/index.json',
-    );
-  }
-  throw lastErr instanceof Error ? lastErr : new Error(base);
-}
+/**
+ * The GitHub half of the git storage backend.
+ *
+ * Only the parts that genuinely differ from GitLab live here: the URL shape,
+ * the auth header, base64 content encoding and the blob-sha update token.
+ */
+export const githubForge: GitForge = {
+  label: 'GitHub',
+  getFile: (cfg, filePath, ref) => githubGetFile(cfg, filePath, ref),
+  getFileAtRef: async (cfg, filePath, ref) => {
+    const file = await githubGetFileAtRef(cfg, filePath, ref);
+    // The provider names the blob id differently; the forge uses one shape.
+    return file ? { content: file.content, sha: file.blobSha } : null;
+  },
+  listFileCommits: (cfg, filePath, opts) => githubListFileCommits(cfg, filePath, opts),
+  fileToken: (file) => file?.sha ?? null,
+  putFile: async (cfg, filePath, content, message, token) => {
+    const sha = typeof token === 'string' && token ? token : undefined;
+    const r = await githubPutFile(cfg, filePath, content, message, sha);
+    return { revision: r.sha || r.commitSha };
+  },
+  deleteFile: async (cfg, filePath, message, token) => {
+    await githubDeleteFile(cfg, filePath, message, typeof token === 'string' ? token : '');
+  },
+  readIndex: async (cfg, opts) => {
+    const { index, sha } = await githubReadIndex(cfg, opts);
+    return { index, token: sha };
+  },
+  writeIndex: async (cfg, index, token, message) => {
+    await githubWriteIndex(cfg, index, (token as string | null) ?? null, message);
+  },
+  // GitHub answers 409 when the blob moved under us.
+  isIndexConflict: (status) => status === 409,
+  status: (cfg) => githubStatus(cfg),
+};
 
 /** List scripts from the index, newest `updatedAt` first. */
 export async function githubList(cfg: GitConfig): Promise<ScriptMeta[]> {
-  const { index } = await githubReadIndex(cfg);
-  return [...index.scripts].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  return forgeList(cfg, githubForge);
 }
 
 /** Read a script file + merge metadata from the index. */
 export async function githubRead(cfg: GitConfig, id: string): Promise<ScriptDocument> {
-  const { index } = await githubReadIndex(cfg);
-  const meta = index.scripts.find((s) => s.id === id);
-  const path = resolveScriptRepoPath(cfg, {
-    id,
-    docPath: meta?.path,
-    indexPath: meta?.path,
-  });
-  const file = await githubGetFile(cfg, path);
-  if (!file) throw new Error(`Script not found in repo: ${id}`);
-  const derived = metaFromScriptContent(file.content, {
-    scriptKind: meta?.scriptKind,
-    pineVersion: meta?.pineVersion,
-  });
-  return {
-    id,
-    name: meta?.name || id,
-    description: meta?.description,
-    path,
-    content: file.content,
-    updatedAt: meta?.updatedAt || Date.now(),
-    createdAt: meta?.createdAt,
-    revision: file.sha,
-    tags: meta?.tags,
-    scriptKind: derived.scriptKind,
-    pineVersion: derived.pineVersion,
-  };
+  return forgeRead(cfg, githubForge, id);
 }
 
 /** Write script body and upsert index entry (two commits; index retried on 409). */
 export async function githubWrite(cfg: GitConfig, doc: ScriptDocument): Promise<ScriptMeta> {
-  const now = Date.now();
-  // Resolve path against current index so re-saves keep legacy .pine paths
-  const { index: preIndex } = await githubReadIndex(cfg, { forWrite: true });
-  const prevMeta = preIndex.scripts.find((s) => s.id === doc.id);
-  const path = resolveScriptRepoPath(cfg, {
-    id: doc.id,
-    docPath: doc.path,
-    indexPath: prevMeta?.path,
-  });
-  assertSafeRepoPath(cfg, path);
-
-  const existing = await githubGetFile(cfg, path);
-  const msg = formatCommitMessage(cfg.commitMessageTemplate, doc.name);
-  const put = await githubPutFile(cfg, path, doc.content, msg, existing?.sha);
-
-  const derived = metaFromScriptContent(doc.content, {
-    scriptKind: doc.scriptKind ?? prevMeta?.scriptKind,
-    pineVersion: doc.pineVersion ?? prevMeta?.pineVersion,
-  });
-  let meta: ScriptMeta = {
-    id: doc.id,
-    name: doc.name,
-    description: doc.description,
-    path,
-    updatedAt: now,
-    createdAt: prevMeta?.createdAt || doc.createdAt || now,
-    revision: put.sha || put.commitSha,
-    tags: doc.tags,
-    scriptKind: derived.scriptKind,
-    pineVersion: derived.pineVersion,
-  };
-
-  await githubUpsertIndexEntry(
-    cfg,
-    (index) => {
-      const prev = index.scripts.find((s) => s.id === doc.id);
-      meta = {
-        ...meta,
-        createdAt: prev?.createdAt || meta.createdAt,
-      };
-      index.scripts = index.scripts.filter((s) => s.id !== doc.id);
-      index.scripts.push(meta);
-    },
-    formatCommitMessage(cfg.commitMessageTemplate, `index ${doc.name}`),
-    { scriptCommitted: true, scriptPath: path },
-  );
-  return meta;
+  return forgeWrite(cfg, githubForge, doc);
 }
 
 /** Delete script file (if present) and drop index entry. */
 export async function githubRemove(cfg: GitConfig, id: string): Promise<void> {
-  const { index } = await githubReadIndex(cfg, { forWrite: true });
-  const meta = index.scripts.find((s) => s.id === id);
-  const path = resolveScriptRepoPath(cfg, {
-    id,
-    indexPath: meta?.path,
-  });
-  const file = await githubGetFile(cfg, path);
-  let deleted = false;
-  if (file) {
-    await githubDeleteFile(
-      cfg,
-      path,
-      formatCommitMessage(cfg.commitMessageTemplate, `delete ${meta?.name || id}`),
-      file.sha,
-    );
-    deleted = true;
-  }
-  await githubUpsertIndexEntry(
-    cfg,
-    (idx) => {
-      idx.scripts = idx.scripts.filter((s) => s.id !== id);
-    },
-    formatCommitMessage(cfg.commitMessageTemplate, `index remove ${id}`),
-    { scriptCommitted: deleted, scriptPath: path },
-  );
+  await forgeRemove(cfg, githubForge, id);
 }
 
 /** Probe repo access; returns connected=false with error message on failure. */

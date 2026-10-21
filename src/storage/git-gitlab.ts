@@ -38,9 +38,14 @@ import {
   resolveScriptRepoPath,
   scriptPath,
 } from './git-config';
-import type { IndexFile } from './git-github';
-
-const INDEX_WRITE_RETRIES = 3;
+import {
+  forgeList,
+  forgeRead,
+  forgeRemove,
+  forgeWrite,
+  type GitForge,
+  type IndexFile,
+} from './git-forge';
 
 function projectRef(cfg: GitConfig): string {
   // Prefer raw group/project; encode once. If already %-encoded, decode first.
@@ -279,44 +284,49 @@ export async function gitlabWriteIndex(
   await gitlabPutFile(cfg, indexPath(cfg), JSON.stringify(index, null, 2) + '\n', message, exists);
 }
 
-async function gitlabUpsertIndexEntry(
-  cfg: GitConfig,
-  apply: (index: IndexFile) => void,
-  message: string,
-  context: { scriptCommitted: boolean; scriptPath?: string },
-): Promise<void> {
-  let lastErr: unknown;
-  for (let attempt = 0; attempt < INDEX_WRITE_RETRIES; attempt++) {
-    try {
-      const { index, exists } = await gitlabReadIndex(cfg, { forWrite: true });
-      apply(index);
-      await gitlabWriteIndex(cfg, index, exists, message);
-      return;
-    } catch (e: unknown) {
-      lastErr = e;
-      const status = (e as { status?: number }).status;
-      // GitLab may return 400/409 on race; retry re-read
-      if ((status === 400 || status === 409 || status === 422) && attempt < INDEX_WRITE_RETRIES - 1) {
-        continue;
-      }
-      break;
-    }
-  }
-  const base = lastErr instanceof Error ? lastErr.message : String(lastErr);
-  if (context.scriptCommitted) {
-    throw new Error(
-      `${base} — script file was committed` +
-        (context.scriptPath ? ` (${context.scriptPath})` : '') +
-        ' but index update failed; retry Save or fix library/index.json',
-    );
-  }
-  throw lastErr instanceof Error ? lastErr : new Error(base);
-}
+/**
+ * The GitLab half of the git storage backend.
+ *
+ * Only the parts that genuinely differ from GitHub live here: the URL shape,
+ * the auth header, plain-text content encoding and the exists/not-exists
+ * update token.
+ */
+export const gitlabForge: GitForge = {
+  label: 'GitLab',
+  getFile: async (cfg, filePath, ref) => {
+    const file = await gitlabGetFile(cfg, filePath, ref);
+    // The provider names the blob id differently; the forge uses one shape.
+    return file ? { content: file.content, sha: file.blobId } : null;
+  },
+  getFileAtRef: async (cfg, filePath, ref) => {
+    const file = await gitlabGetFileAtRef(cfg, filePath, ref);
+    // The provider names the blob id differently; the forge uses one shape.
+    return file ? { content: file.content, sha: file.blobId } : null;
+  },
+  listFileCommits: (cfg, filePath, opts) => gitlabListFileCommits(cfg, filePath, opts),
+  fileToken: (file) => file !== null,
+  putFile: async (cfg, filePath, content, message, token) => {
+    const r = await gitlabPutFile(cfg, filePath, content, message, token === true);
+    return { revision: r.commitId || `gl-${Date.now()}` };
+  },
+  deleteFile: async (cfg, filePath, message) => {
+    await gitlabDeleteFile(cfg, filePath, message);
+  },
+  readIndex: async (cfg, opts) => {
+    const { index, exists } = await gitlabReadIndex(cfg, opts);
+    return { index, token: exists };
+  },
+  writeIndex: async (cfg, index, token, message) => {
+    await gitlabWriteIndex(cfg, index, token === true, message);
+  },
+  // GitLab may answer 400/409/422 on a race; retry re-read.
+  isIndexConflict: (status) => status === 400 || status === 409 || status === 422,
+  status: (cfg) => gitlabStatus(cfg),
+};
 
 /** List scripts from the index, newest first. */
 export async function gitlabList(cfg: GitConfig): Promise<ScriptMeta[]> {
-  const { index } = await gitlabReadIndex(cfg);
-  return [...index.scripts].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  return forgeList(cfg, gitlabForge);
 }
 
 /** Read a script file + merge metadata from the index. */
@@ -350,80 +360,12 @@ export async function gitlabRead(cfg: GitConfig, id: string): Promise<ScriptDocu
 
 /** Write script body and upsert index entry. */
 export async function gitlabWrite(cfg: GitConfig, doc: ScriptDocument): Promise<ScriptMeta> {
-  const now = Date.now();
-  const { index: preIndex } = await gitlabReadIndex(cfg, { forWrite: true });
-  const prevMeta = preIndex.scripts.find((s) => s.id === doc.id);
-  const path = resolveScriptRepoPath(cfg, {
-    id: doc.id,
-    docPath: doc.path,
-    indexPath: prevMeta?.path,
-  });
-  assertSafeRepoPath(cfg, path);
-
-  const existing = await gitlabGetFile(cfg, path);
-  const msg = formatCommitMessage(cfg.commitMessageTemplate, doc.name);
-  const put = await gitlabPutFile(cfg, path, doc.content, msg, !!existing);
-
-  const derived = metaFromScriptContent(doc.content, {
-    scriptKind: doc.scriptKind ?? prevMeta?.scriptKind,
-    pineVersion: doc.pineVersion ?? prevMeta?.pineVersion,
-  });
-  let meta: ScriptMeta = {
-    id: doc.id,
-    name: doc.name,
-    description: doc.description,
-    path,
-    updatedAt: now,
-    createdAt: prevMeta?.createdAt || doc.createdAt || now,
-    revision: put.commitId || `gl-${now}`,
-    tags: doc.tags,
-    scriptKind: derived.scriptKind,
-    pineVersion: derived.pineVersion,
-  };
-
-  await gitlabUpsertIndexEntry(
-    cfg,
-    (index) => {
-      const prev = index.scripts.find((s) => s.id === doc.id);
-      meta = {
-        ...meta,
-        createdAt: prev?.createdAt || meta.createdAt,
-      };
-      index.scripts = index.scripts.filter((s) => s.id !== doc.id);
-      index.scripts.push(meta);
-    },
-    formatCommitMessage(cfg.commitMessageTemplate, `index ${doc.name}`),
-    { scriptCommitted: true, scriptPath: path },
-  );
-  return meta;
+  return forgeWrite(cfg, gitlabForge, doc);
 }
 
 /** Delete script file (if present) and drop index entry. */
 export async function gitlabRemove(cfg: GitConfig, id: string): Promise<void> {
-  const { index } = await gitlabReadIndex(cfg, { forWrite: true });
-  const meta = index.scripts.find((s) => s.id === id);
-  const path = resolveScriptRepoPath(cfg, {
-    id,
-    indexPath: meta?.path,
-  });
-  const file = await gitlabGetFile(cfg, path);
-  let deleted = false;
-  if (file) {
-    await gitlabDeleteFile(
-      cfg,
-      path,
-      formatCommitMessage(cfg.commitMessageTemplate, `delete ${meta?.name || id}`),
-    );
-    deleted = true;
-  }
-  await gitlabUpsertIndexEntry(
-    cfg,
-    (idx) => {
-      idx.scripts = idx.scripts.filter((s) => s.id !== id);
-    },
-    formatCommitMessage(cfg.commitMessageTemplate, `index remove ${id}`),
-    { scriptCommitted: deleted, scriptPath: path },
-  );
+  await forgeRemove(cfg, gitlabForge, id);
 }
 
 /** Probe project access; returns connected=false with error on failure. */
