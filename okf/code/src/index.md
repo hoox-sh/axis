@@ -3,6 +3,7 @@
 # Concepts
 
 * [src/alerts](alerts.md) - AXIS alerts engine — public API.
+* [src/api](api.md) - The shared HTTP client primitives.
 * [src/chart](chart.md) - Solid chart host — mounts PaneManager for one layout slot.
 * [src/data](data.md) - Background Data Source Manager — multi-page OHLCV backfill to a past date.
 * [src/desktop](desktop.md) - AXIS desktop (Tauri) shell helpers.

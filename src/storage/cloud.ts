@@ -36,6 +36,7 @@ import type {
 import { metaFromScriptContent } from '../indicators/script-meta';
 import { defaultCloudEndpoint, resolveCloudConfig } from './cloud-config';
 import { requireSecureCloudEndpoint } from './cloud-config';
+import { HttpError, readJsonBody } from '../api/client';
 
 export type { CloudConfig } from './cloud-config';
 export {
@@ -71,13 +72,14 @@ async function api(
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
     signal: AbortSignal.timeout(30_000),
   });
-  const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  const json = await readJsonBody(res);
   if (!res.ok) {
-    const msg = String(json.message || json.error || `HTTP ${res.status}`);
-    const err = new Error(msg) as Error & { status?: number; code?: string };
-    err.status = res.status;
-    err.code = String(json.code || '');
-    throw err;
+    // The status travels on the error, so a caller can branch on it instead
+    // of parsing the message.
+    throw new HttpError(res.status, String(json.message || json.error || `HTTP ${res.status}`), {
+      code: String(json.code || ''),
+      body: json,
+    });
   }
   return { status: res.status, json };
 }
