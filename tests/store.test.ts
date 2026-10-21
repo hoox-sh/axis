@@ -43,6 +43,8 @@ import {
   removeIndicator,
   toggleIndicator,
   setIndicatorColor,
+  setIndicatorPlotWidth,
+  setIndicatorPlotVisible,
   setIndicatorSeries,
   addPane,
   removePane,
@@ -430,6 +432,43 @@ describe('bars and indicators', () => {
     expect(store.scripts.find((s) => s.id === id)?.plots.RSI.custom).toBe(true);
     removeIndicator(id);
     expect(store.scripts.some((s) => s.id === id)).toBe(false);
+  });
+
+  it('setIndicatorPlotWidth clamps 1-4 and updates plot', () => {
+    const id = addIndicator('EMA', 'plot(close)', 'price', { EMA: { color: '#f00', custom: true } });
+    setIndicatorPlotWidth(id, 'EMA', 3);
+    expect(store.scripts.find((s) => s.id === id)?.plots.EMA.width).toBe(3);
+    // Clamp above 4
+    setIndicatorPlotWidth(id, 'EMA', 10);
+    expect(store.scripts.find((s) => s.id === id)?.plots.EMA.width).toBe(4);
+    // Clamp below 1
+    setIndicatorPlotWidth(id, 'EMA', 0);
+    expect(store.scripts.find((s) => s.id === id)?.plots.EMA.width).toBe(1);
+    // Non-integer rounds
+    setIndicatorPlotWidth(id, 'EMA', 2.7);
+    expect(store.scripts.find((s) => s.id === id)?.plots.EMA.width).toBe(3);
+    // Preserves existing color and custom flag
+    const plot = store.scripts.find((s) => s.id === id)?.plots.EMA;
+    expect(plot?.color).toBe('#f00');
+    expect(plot?.custom).toBe(true);
+    removeIndicator(id);
+  });
+
+  it('setIndicatorPlotVisible toggles plot visibility', () => {
+    const id = addIndicator('MACD', 'plot(close)', 'price', { MACD: { color: '#0f0', width: 2, custom: true } });
+    // Default visible
+    expect(store.scripts.find((s) => s.id === id)?.plots.MACD.visible).toBeUndefined();
+    // Hide
+    setIndicatorPlotVisible(id, 'MACD', false);
+    expect(store.scripts.find((s) => s.id === id)?.plots.MACD.visible).toBe(false);
+    // Show
+    setIndicatorPlotVisible(id, 'MACD', true);
+    expect(store.scripts.find((s) => s.id === id)?.plots.MACD.visible).toBe(true);
+    // Preserves existing color and width
+    const plot = store.scripts.find((s) => s.id === id)?.plots.MACD;
+    expect(plot?.color).toBe('#0f0');
+    expect(plot?.width).toBe(2);
+    removeIndicator(id);
   });
 });
 
