@@ -44,6 +44,7 @@ import { Redesign2WsClient } from '../engine/ws-client';
 import { routeEngineRun } from '../engine/router';
 import { getCachedEngineCapabilities } from '../engines/catalog';
 import type { DataSeriesKey } from '../engines/data-sessions';
+import { driveEngineSeries } from '../engines/series-drive';
 import { engineWindowBehindChart, newestBarTime } from '../engines/series-freshness';
 import { engineSeriesStale, noteStaleEngineSeries } from '../engines/series-repair';
 import { getActiveEngineConfig } from '../plugins/active';
@@ -407,6 +408,56 @@ export function scriptHistoryBars(): number {
   const want = chartWindowLimit();
   const have = store.bars.length;
   return Math.max(1, want, have);
+}
+
+/**
+ * Drive the engine's own series forward on the stream path.
+ *
+ * The stream plane **replicates** the engine's series: the wire carries
+ * `subscribe` / `resume` / `repair` / `ping` and has no client-side tick, so
+ * the engine's own per-tick scheduler is the only thing that can move the
+ * series the chart and every script session read.
+ *
+ * When that scheduler stalls — observed live on a 1m series, the engine's
+ * `newest` frozen three bars behind the venue for minutes — the script
+ * sessions that evaluate over that series freeze with it. The chart keeps
+ * advancing (it is painted from the venue), but the indicators keep the values
+ * of the frozen window, and the apply path tail-aligns them onto the chart's
+ * tail: the indicators end up **displaced by the freeze gap**, growing with
+ * every new bar, and the newest bars carry no indicator value at all.
+ *
+ * `series-drive` is the missing drive — a throttled chart-session tick that
+ * asks the engine to fetch and append its own bars. It stays engine-owned
+ * (the engine still owns the series and its upstream) and the staleness
+ * report + repair broker stays the backstop for engines that cannot be
+ * driven.
+ *
+ * @param marketNow newest venue trigger bar time (unix sec) the caller flushed.
+ */
+export async function streamDriveSeries(marketNow = 0): Promise<void> {
+  const cfg = getActiveEngineConfig() || {};
+  const endpoint = String(cfg.endpoint || '').trim();
+  const apiKey = String(cfg.apiKey || '').trim();
+  if (!endpoint || !apiKey) return;
+  const key: DataSeriesKey = {
+    exchange: chartExchange(),
+    market: pyneMarket(store.provider?.market),
+    symbol: chartPairSymbol(),
+    interval: store.interval || '',
+  };
+  try {
+    await driveEngineSeries({
+      endpoint,
+      apiKey,
+      key,
+      marketNow,
+      // Same depth the engine-owned path uses, so the drive reuses the
+      // existing chart data session instead of re-provisioning it.
+      historyBars: chartWindowLimit(),
+    });
+  } catch {
+    /* the drive is best-effort — the staleness broker is the backstop */
+  }
 }
 
 /**

@@ -496,8 +496,13 @@ export async function invokeCapability(
       return { ok: true, id, ...(visible !== undefined ? { visible } : {}) };
     }
     case 'indicators.run': {
-      await reapplyChartScripts();
-      return { ok: true, count: store.scripts.filter((s) => s.visible).length };
+      const reapplied = await reapplyChartScripts();
+      return {
+        ok: true,
+        count: store.scripts.filter((s) => s.visible).length,
+        /** Scripts that actually re-ran (0 = the bar window had not changed). */
+        reapplied,
+      };
     }
 
     case 'alerts.list':

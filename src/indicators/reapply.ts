@@ -44,14 +44,35 @@ export const REAPPLY_MAX_CONCURRENT = 5;
 /** Guard against concurrent reapply passes — only one at a time. */
 let reapplyInProgress = false;
 
-/** Bars length at the last completed reapply — skips redundant passes when
- *  multiple call sites fire during one load with the same bar window. */
-let lastReapplyBarsLen = -1;
+/**
+ * Identity of the bar window at the last completed reapply.
+ *
+ * The dedupe exists so that several call sites firing during one load (with
+ * the same bars) do not each flash the chart through intermediate states.
+ * It used to compare the bar **length** only — but the rolling window slides
+ * with a constant length, so every later reapply looked "unchanged" and was
+ * silently skipped: the UI re-run button and the MCP `indicators.run`
+ * capability became no-ops and the indicators kept a stale window while the
+ * candles advanced (displaced against the chart's tail).
+ *
+ * The window **identity** is its head (oldest bar time) plus its length: the
+ * head advances exactly when the window slides, so a moved window is a real
+ * change and a repeated call on the same window is still a no-op.
+ */
+let lastReapplyWindow = '';
+
+/** Window identity of the current bar window (`''` when there is no window). */
+function barWindowIdentity(): string {
+  const bars = store.bars;
+  if (!Array.isArray(bars) || !bars.length) return '';
+  const head = bars[0]?.time;
+  return `${bars.length}:${Number.isFinite(head) ? head : ''}`;
+}
 
 /** @internal test helper */
 export function _resetReapplyGuardForTests(): void {
   reapplyInProgress = false;
-  lastReapplyBarsLen = -1;
+  lastReapplyWindow = '';
 }
 
 /**
@@ -237,10 +258,14 @@ export async function reapplyChartScripts(
     const scripts = listReapplicableScripts(opts?.ids);
     if (!scripts.length) return 0;
 
-    // Skip redundant reapply when the bar window hasn't changed since the
+    // Skip a redundant reapply when the bar window has not changed since the
     // last pass — multiple call sites can fire sequentially during one load
     // with the same bars, each flashing the chart through intermediate states.
-    if (store.bars.length === lastReapplyBarsLen) return 0;
+    // The window *identity* is compared (not just its length): a rolling
+    // window slides with a constant length, so a length-only check skipped
+    // every reapply after the first and left the indicators stale.
+    const windowId = barWindowIdentity();
+    if (windowId && windowId === lastReapplyWindow) return 0;
 
     const { runAndApply, beginRunEpoch } = await import('./runner');
     // One shared round-trip when the backend supports it; the apply path below is
@@ -286,7 +311,7 @@ export async function reapplyChartScripts(
       const done = await mapWithConcurrencyLimit(level, REAPPLY_MAX_CONCURRENT, runOne);
       for (const d of done) if (d) ok += 1;
     }
-    lastReapplyBarsLen = store.bars.length;
+    lastReapplyWindow = barWindowIdentity();
     return ok;
   } finally {
     reapplyInProgress = false;

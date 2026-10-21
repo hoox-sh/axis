@@ -76,7 +76,7 @@ import {
 import { noteDataManagerLiveBar } from '../data/expand-cache';
 import { isEngineOwnedLive } from '../engines/ownership';
 import { liveRerunModeForEngine } from '../engines/catalog';
-import { streamEvalScript, streamRouteActive, streamSeriesTick, streamStop, StreamFallbackError } from './stream-live';
+import { streamEvalScript, streamRouteActive, streamSeriesTick, streamDriveSeries, streamStop, StreamFallbackError } from './stream-live';
 import { tickChartDataSession, releaseChartDataSession } from '../engines/chart-data-session';
 import { getDataSeriesBars } from '../engines/data-sessions';
 import { engineWindowBehindChart, newestBarTime } from '../engines/series-freshness';
@@ -134,6 +134,17 @@ let rerunInFlight = false;
  * re-run again next tick.
  */
 let enginePaintChain: Promise<unknown> = Promise.resolve();
+
+/**
+ * In-flight engine-series drive on the stream path.
+ *
+ * The stream plane replicates the engine's series, so the engine's own store
+ * has to keep moving with the venue — otherwise the script sessions that
+ * evaluate over it freeze and their values get tail-aligned onto the chart's
+ * tail (displaced by the freeze gap). The re-run awaits this promise so the
+ * indicators are evaluated against the freshly driven series.
+ */
+let pendingSeriesDrive: Promise<void> | null = null;
 
 /**
  * How freshly painted engine bars differ from `store.bars`.
@@ -484,6 +495,15 @@ export function startLive(
       // window with closed bars, so re-apply the forming tip after it lands.
       if (streamRouteActive()) {
         appendVenueBars(ordered);
+        // The stream plane paints the engine's series replica, so the engine's
+        // own store must keep moving with the venue. Nothing else drives it
+        // here: the engine-owned branch below (which ticks the chart data
+        // session) is unreachable once the stream route is active.
+        const drive = streamDriveSeries(newestBarTime(ordered));
+        pendingSeriesDrive = drive;
+        void drive.finally(() => {
+          if (pendingSeriesDrive === drive) pendingSeriesDrive = null;
+        });
         streamSeriesTick(newestBarTime(ordered)).then(
           (changed) => {
             if (!isCurrent()) return;
@@ -1055,6 +1075,22 @@ function scheduleRerun() {
         if (!store.live.needsRerun) setStore('live', 'needsRerun', true);
         return;
       }
+      if (rerunInFlight) {
+        if (!store.live.needsRerun) setStore('live', 'needsRerun', true);
+        return;
+      }
+    }
+    // Stream path: the engine's series replica is advanced by a drive that
+    // runs alongside the venue paint. Wait for it so the scripts evaluate
+    // against the freshly driven series — evaluating against a frozen one is
+    // what left the indicators displaced from the candles.
+    if (pendingSeriesDrive) {
+      try {
+        await pendingSeriesDrive;
+      } catch {
+        /* a failed drive still leaves the last good series for evaluation */
+      }
+      if (liveEpoch !== epochAtSchedule || !store.live.active) return;
       if (rerunInFlight) {
         if (!store.live.needsRerun) setStore('live', 'needsRerun', true);
         return;
