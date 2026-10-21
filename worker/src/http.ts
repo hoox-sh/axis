@@ -240,6 +240,11 @@ export function methodNotAllowed(allowed: string, opts: JsonOptions = {}): Respo
   });
 }
 
+/** 404 envelope for an unknown path — shared by both dispatch planes. */
+export function notFoundResponse(pathname: string, opts: JsonOptions = {}): Response {
+  return errorResponse('NOT_FOUND', `Endpoint ${pathname} not found`, { status: 404, ...opts });
+}
+
 /** Preflight / bare CORS 204. */
 export function preflight(
   cors: (origin: string) => Record<string, string>,

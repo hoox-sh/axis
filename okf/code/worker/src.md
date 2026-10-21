@@ -7,7 +7,7 @@ tags: [code, worker]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-21T19:24:41Z
+  at: 2026-10-21T21:03:40Z
 sources:
   - id: tree
     resource: "worker/src"
@@ -32,6 +32,7 @@ okf_lock: generated
 * `proxy-router.ts` — NotFoundBody, ProxyContext, ProxyHandler, ProxyRoute, ProxyRouter, ProxyRouterOptions, createProxyRouter, proxyJson
 * `pyodide_runtime.ts` — tryRunInWorker
 * `rate-limit.ts` — _resetRateLimitsForTests, allowRate
+* `routes.ts` — BRIDGE_ROUTE, MCP_ROUTE, ROUTES, RouteContext, RouteDef, RouteKind, RouteMatch, STREAM_ROUTE, healthBody, matchRoute, mcpRoutes, routeMatchesPath
 * `runtime.ts` — _resetRunRateLimitForTests, handleRun
 * `scripts.ts` — ScriptMeta, ScriptRow, ScriptVersionRow, _clearMemScripts, handleScripts
 * `tenant.ts` — BILLING_UPGRADE_URL, FlushUsageOpts, QueueTenantUsageInput, TenantAllow, TenantDeny, TenantGate, TenantHttpError, TenantScope, TenantUsageEvent, TenantUsageUnits, USAGE_BATCH_MAX, USAGE_FLUSH_TIMEOUT_MS

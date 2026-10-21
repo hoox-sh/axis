@@ -14,8 +14,13 @@
 
 const ALLOWED_METHODS = new Set(['GET', 'POST', 'PUT', 'DELETE']);
 
-/** Exact path + method pairs. */
-const EXACT: ReadonlyArray<readonly [string, string]> = [
+/**
+ * Exact path + method pairs.
+ *
+ * Exported so the route table and the allowlist can be checked against each
+ * other — they used to be the same list, written down twice.
+ */
+export const ALLOWLIST_EXACT: ReadonlyArray<readonly [string, string]> = [
   ['GET', '/'],
   ['GET', '/health'],
   ['POST', '/api/run'],
@@ -34,7 +39,8 @@ const EXACT: ReadonlyArray<readonly [string, string]> = [
   ['GET', '/api/market/health'],
 ];
 
-const PREFIX_GET = [
+/** GET-only path prefixes. */
+export const ALLOWLIST_PREFIX_GET = [
   '/api/onchain/',
   '/api/market/',
 ] as const;
@@ -67,7 +73,7 @@ function normalizePath(raw: string): string | null {
 
 function scriptsAllowed(method: string, path: string): boolean {
   if (path === '/api/scripts' || path === '/api/scripts/_draft') {
-    return EXACT.some(([m, p]) => m === method && p === path);
+    return ALLOWLIST_EXACT.some(([m, p]) => m === method && p === path);
   }
   if (!path.startsWith('/api/scripts/')) return false;
   const rest = path.slice('/api/scripts/'.length);
@@ -111,11 +117,11 @@ export function allowWorkerRequest(methodRaw: unknown, pathRaw: unknown): Allowl
   if (path.startsWith('/api/git/')) {
     return { ok: false, method, path, reason: 'oauth device-flow is interactive' };
   }
-  for (const [m, p] of EXACT) {
+  for (const [m, p] of ALLOWLIST_EXACT) {
     if (m === method && p === path) return { ok: true, method, path };
   }
   if (method === 'GET') {
-    for (const prefix of PREFIX_GET) {
+    for (const prefix of ALLOWLIST_PREFIX_GET) {
       if (path.startsWith(prefix)) return { ok: true, method, path };
     }
   }
@@ -132,8 +138,8 @@ export function describeAllowlist(): {
 } {
   return {
     methods: [...ALLOWED_METHODS],
-    exact: EXACT.map(([method, path]) => ({ method, path })),
-    prefixes: PREFIX_GET.map((pathPrefix) => ({ method: 'GET', pathPrefix })),
+    exact: ALLOWLIST_EXACT.map(([method, path]) => ({ method, path })),
+    prefixes: ALLOWLIST_PREFIX_GET.map((pathPrefix) => ({ method: 'GET', pathPrefix })),
     scripts:
       'GET|POST /api/scripts; GET|PUT /api/scripts/_draft; GET|PUT|DELETE /api/scripts/:id; GET /api/scripts/:id/versions[/:rev]; POST /api/scripts/:id/restore; GET /api/scripts/_git; POST /api/scripts/_git/token',
   };

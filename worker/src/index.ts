@@ -66,39 +66,19 @@ import { requireApiKey } from './auth';
 import { gateTenantKey, meterTenantUsage } from './tenant';
 import {
   API_CORS,
-  buildHealthBody,
   clientIp,
   errorResponse,
   handleError,
   methodNotAllowed,
+  notFoundResponse,
   preflight,
-  probeUpstream,
   scopedJson,
-  type DeepHealth,
   type JsonBuilder,
 } from './http';
+import { BRIDGE_ROUTE, ROUTES, matchRoute } from './routes';
 import { allowRate } from './rate-limit';
 
 export { SessionDO, McpBridgeDO };
-
-/** Cheapest path that proves each egress peer answers — one small GET each. */
-const UPSTREAM_PROBES: ReadonlyArray<readonly [host: string, url: string]> = [
-  ['binance', 'https://data-api.binance.vision/api/v3/ping'],
-  ['mexc', 'https://api.mexc.com/api/v3/ping'],
-  ['defillama', 'https://api.llama.fi/protocols?limit=1'],
-  ['geckoterminal', 'https://api.geckoterminal.com/api/v2/networks?page=1'],
-];
-
-/** `/health?deep=1` — live egress verdicts for the market + on-chain planes. */
-async function deepUpstreamHealth(): Promise<DeepHealth> {
-  const settled = await Promise.all(
-    UPSTREAM_PROBES.map(async ([host, url]) => {
-      const r = await probeUpstream(host, url);
-      return [host, { ok: r.ok, detail: r.detail }] as const;
-    }),
-  );
-  return { deep: true, report: Object.fromEntries(settled) };
-}
 
 /** Worker bindings and wrangler `[vars]` consumed by handlers. All optional for local stubs. */
 export interface Env {
@@ -239,17 +219,15 @@ function tenantDeny(
  * Called only from the entry `fetch`, inside its try/catch — every path below
  * is therefore covered by the shared 500 envelope.
  */
-async function dispatch(
+/**
+ * PWA MCP control plane: /api/mcp/bridge → McpBridgeDO (partitioned by API key).
+ */
+async function handleBridgeUpgrade(
   req: Request,
   env: Env,
-  ctx: ExecutionContext,
   origin: string,
   url: URL,
 ): Promise<Response> {
-  const mcpRes = await handleMcp(req, env, origin, url.pathname, ctx);
-  if (mcpRes) return mcpRes;
-
-  // PWA MCP control plane: /api/mcp/bridge → McpBridgeDO (partitioned by API key)
   if (url.pathname === '/api/mcp/bridge') {
     if (!env.MCP_BRIDGE) {
       return errorResponse(
@@ -375,8 +353,23 @@ async function dispatch(
     if (bridgeDegraded) headers.set('X-Hoox-Verify', 'degraded');
     return new Response(res.body, { status: res.status, headers });
   }
+  return notFoundResponse(url.pathname, { origin, cors: CORS_HEADERS });
+}
 
-  // WebSocket session relay: /api/stream?session=&symbol=&interval= → SessionDO
+/**
+ * WebSocket session relay: /api/stream?session=&symbol=&interval= → SessionDO
+ * DO is named by `session` query (default "default"); request rewritten to /ws.
+ * SaaS tenant keys (hx_live_…) verify live (`axis:stream` scope) and meter
+ * one `streams` unit per session create. Open self-host path unchanged:
+ * non-tenant callers never touch the console.
+ */
+async function handleStreamUpgrade(
+  req: Request,
+  env: Env,
+  origin: string,
+  url: URL,
+  ctx: ExecutionContext,
+): Promise<Response> {
   // DO is named by `session` query (default "default"); request rewritten to /ws.
   // SaaS tenant keys (hx_live_…) verify live (`axis:stream` scope) and meter
   // one `streams` unit per session create. Open self-host path unchanged:
@@ -416,70 +409,50 @@ async function dispatch(
     if (streamDegraded) streamRes.headers.set('X-Hoox-Verify', 'degraded');
     return streamRes;
   }
+  return notFoundResponse(url.pathname, { origin, cors: CORS_HEADERS });
+}
 
-    // Script library: /api/scripts, /api/scripts/:id, /api/scripts/_draft
-    if (url.pathname === '/api/scripts' || url.pathname.startsWith('/api/scripts/')) {
-      return await handleScripts(req, env, origin, url.pathname, ctx);
-    }
+async function dispatch(
+  req: Request,
+  env: Env,
+  ctx: ExecutionContext,
+  origin: string,
+  url: URL,
+): Promise<Response> {
+  const match = matchRoute(ROUTES, req.method, url.pathname);
+  if (!match) return notFoundResponse(url.pathname, { origin, cors: CORS_HEADERS });
+  const route = match.route;
 
-    // GitHub / GitLab device-flow OAuth proxy (no CORS on forge hosts)
-    if (url.pathname.startsWith('/api/git/oauth/')) {
-      return await handleGitOAuth(req, env, origin, url.pathname, CORS_HEADERS);
-    }
+  if (match.methodMismatch) {
+    return methodNotAllowed((route.methods ?? []).join(', '), { origin, cors: CORS_HEADERS });
+  }
 
-    // On-chain analytics proxy (DefiLlama + GeckoTerminal allowlist — public, no auth)
-    if (url.pathname.startsWith('/api/onchain')) {
-      const onchainRes = await handleOnchain(req, env, origin, url.pathname);
-      if (onchainRes) return onchainRes;
-    }
+  // The MCP Streamable-HTTP transport.
+  if (route.kind === 'mcp') {
+    const mcpRes = await handleMcp(req, env, origin, url.pathname, ctx);
+    if (mcpRes) return mcpRes;
+    return notFoundResponse(url.pathname, { origin, cors: CORS_HEADERS });
+  }
 
-    // CEX market data proxy (public Binance GET + optional request-scoped signed klines)
-    if (url.pathname.startsWith('/api/market')) {
-      const marketRes = await handleMarket(req, env, origin, url.pathname);
-      if (marketRes) return marketRes;
-    }
+  // The WebSocket upgrade routes.
+  if (route.kind === 'upgrade') {
+    if (route.name === BRIDGE_ROUTE) return handleBridgeUpgrade(req, env, origin, url);
+    return handleStreamUpgrade(req, env, origin, url, ctx);
+  }
 
-    // Engine-owned data plane proxy: /api/ws/live → EXTERNAL_BACKEND /ws/live
-    // (ticket or Bearer auth; transparent frame relay).
-    if (url.pathname === '/api/ws/live' || url.pathname.startsWith('/api/ws/live?')) {
-      const liveRes = await handleLiveProxy(req, env, origin, url.pathname);
-      if (liveRes) return liveRes;
-    }
-
-    switch (url.pathname) {
-      case '/':
-      case '/health': {
-        // `?deep=1` pays for one real egress probe per upstream so a dead proxy
-        // plane can never report `market`/`onchain: true` again.
-        const deep = url.searchParams.get('deep') === '1' ? await deepUpstreamHealth() : undefined;
-        const body = buildHealthBody(
-          { db: !!env.DB, keys: !!env.API_KEYS, mcpBridge: !!env.MCP_BRIDGE },
-          deep,
-        );
-        // Stays 200 on a degraded upstream: the Worker is up, an egress peer is
-        // not. Flapping the status here would break uptime probes for a
-        // third-party outage.
-        return apiJson(body, 200, origin);
-      }
-      case '/api/run':
-        return req.method !== 'POST'
-          ? methodNotAllowed('POST', { origin, cors: CORS_HEADERS })
-          : await handleRun(req, env, origin, ctx);
-      case '/api/keys':
-        return await handleKeys(req, env, origin);
-      case '/api/usage':
-        return apiJson(
-          { status: 'success', usage: { calls_used: 0, calls_remaining: null } },
-          200,
-          origin,
-        );
-      default:
-        return errorResponse('NOT_FOUND', `Endpoint ${url.pathname} not found`, {
-          status: 404,
-          origin,
-          cors: CORS_HEADERS,
-        });
-    }
+  if (!route.handle) {
+    return notFoundResponse(url.pathname, { origin, cors: CORS_HEADERS });
+  }
+  const res = await route.handle({
+    req,
+    env,
+    origin,
+    ctx,
+    url,
+    deepHealth: url.searchParams.get('deep') === '1',
+  });
+  // A proxy that owns no route for this path answers 404.
+  return res ?? notFoundResponse(url.pathname, { origin, cors: CORS_HEADERS });
 }
 
 export default {
