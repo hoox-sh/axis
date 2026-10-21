@@ -171,11 +171,16 @@ export function buildOverlayPayloads(ctx: OverlayBuildContext): OverlayBuildOutc
       if (!plotDisplayHas(meta?.display, PLOT_DISPLAY.pane)) continue;
       // Skip if user explicitly hid this plot
       if (userPlotColors[k]?.visible === false) continue;
-      // Prefer panel color override (custom only) → Pine plot color → palette
-      const userColor = userPlotColors[k]?.custom ? userPlotColors[k].color : undefined;
+      // Precedence: explicit panel pick (custom) → Pine plot color → stored
+      // color (non-custom, preserved from previous run) → palette fallback.
+      // This keeps script colors on the chart when a reapply engine response
+      // doesn't ship plot_meta.color (e.g. batched reapply), instead of
+      // falling to the palette and overwriting them.
+      const customColor = userPlotColors[k]?.custom ? userPlotColors[k].color : undefined;
+      const storedColor = userPlotColors[k]?.color;
       const color = pickOverlayColor(
-        userColor,
-        meta?.color,
+        customColor,
+        meta?.color ?? storedColor,
         paletteColor,
       );
       // Prefer panel width override → Pine plot linewidth → default (1)
@@ -210,7 +215,8 @@ export function buildOverlayPayloads(ctx: OverlayBuildContext): OverlayBuildOutc
             : tailAlignSeriesToWindow(result.plots, chartWindowBars),
       );
       if (lineDataHasSample(data)) {
-        // Only use user color if it's a custom panel pick
+        // Same precedence as the named-series path: custom panel pick →
+        // Pine plot color → stored color (non-custom) → palette fallback.
         const userEntry = userPlotColors[scriptName]?.custom
           ? userPlotColors[scriptName]
           : Object.values(userPlotColors).find((v) => v.custom);
@@ -220,11 +226,11 @@ export function buildOverlayPayloads(ctx: OverlayBuildContext): OverlayBuildOutc
         overlayLines.push({
           name: scriptName,
           data,
-          // Same precedence as the named-series path: custom panel pick →
-          // Pine plot color (meta.color) → palette fallback. Previously this
-          // legacy path dropped meta.color entirely, so script colors were
-          // overwritten by the palette whenever the engine sent legacy plots[].
-          color: pickOverlayColor(userColor, meta?.color, PLOT_PALETTE[0]),
+          color: pickOverlayColor(
+            userColor,
+            meta?.color ?? userPlotColors[scriptName]?.color,
+            PLOT_PALETTE[0],
+          ),
           linewidth:
             userWidth != null ? userWidth : (meta?.linewidth != null ? Number(meta.linewidth) : 1),
         });
@@ -249,7 +255,7 @@ export function buildOverlayPayloads(ctx: OverlayBuildContext): OverlayBuildOutc
       const userOhlcColor = userPlotColors[key]?.custom ? userPlotColors[key].color : undefined;
       const color = pickOverlayColor(
         userOhlcColor,
-        meta?.color,
+        meta?.color ?? userPlotColors[key]?.color,
         PLOT_PALETTE[ohlcColorIdx % PLOT_PALETTE.length],
       );
       ohlcColorIdx += 1;
