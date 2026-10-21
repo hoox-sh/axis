@@ -2613,6 +2613,84 @@ export class PaneManager {
     return ok;
   }
 
+  /** Update line width for an overlay series by plot name (owner-scoped or bare). */
+  setOverlayLineWidth(paneId: string, plotName: string, width: number, ownerId?: string): boolean {
+    const pane = this.panes.get(paneId);
+    if (!pane) return false;
+    let ok = false;
+    const keys: string[] = [];
+    if (ownerId) keys.push(makeOverlayLineKey(plotName, ownerId));
+    keys.push(`overlay_${plotName}`);
+    for (const key of keys) {
+      const series = pane.series[key];
+      if (series) {
+        try {
+          series.applyOptions({ lineWidth: Math.max(1, Math.min(4, Math.round(width))) });
+          ok = true;
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+    if (!ok) {
+      const suffix = `__${plotName}`;
+      for (const [key, series] of Object.entries(pane.series)) {
+        if (!series || !key.startsWith('overlay_') || !key.endsWith(suffix)) continue;
+        try {
+          series.applyOptions({ lineWidth: Math.max(1, Math.min(4, Math.round(width))) });
+          ok = true;
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+    const pl = pane.priceLines[plotName];
+    if (pl?.line) {
+      try {
+        pl.line.applyOptions({ lineWidth: Math.max(1, Math.min(4, Math.round(width))) as 1 | 2 | 3 | 4 });
+        ok = true;
+      } catch {
+        /* ignore */
+      }
+    }
+    return ok;
+  }
+
+  /** Show/hide an overlay series by plot name (owner-scoped or bare). */
+  setOverlayLineVisible(paneId: string, plotName: string, visible: boolean, ownerId?: string): boolean {
+    const pane = this.panes.get(paneId);
+    if (!pane) return false;
+    let ok = false;
+    const keys: string[] = [];
+    if (ownerId) keys.push(makeOverlayLineKey(plotName, ownerId));
+    keys.push(`overlay_${plotName}`);
+    for (const key of keys) {
+      const series = pane.series[key];
+      if (series) {
+        try {
+          series.applyOptions({ visible });
+          ok = true;
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+    if (!ok) {
+      const suffix = `__${plotName}`;
+      for (const [key, series] of Object.entries(pane.series)) {
+        if (!series || !key.startsWith('overlay_') || !key.endsWith(suffix)) continue;
+        try {
+          series.applyOptions({ visible });
+          ok = true;
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+    // Price lines don't support visible option, skip them
+    return ok;
+  }
+
   /** Wheel or drag just moved the time scale. Programmatic fits must not count. */
   private noteUserRange = (): void => {
     this.userRangedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();

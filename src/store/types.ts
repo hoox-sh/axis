@@ -84,8 +84,9 @@ export interface Indicator {
   visible: boolean;
   /** Plot name → stroke color for series paint.
    * `custom` marks an explicit panel pick (IndicatorCard) which survives
-   * re-runs; auto-persisted script/palette colors refresh from fresh runs. */
-  plots: Record<string, { color: string; custom?: boolean }>;
+   * re-runs; auto-persisted script/palette colors refresh from fresh runs.
+   * `width` is the line width (1-4), `visible` toggles the plot. */
+  plots: Record<string, { color: string; custom?: boolean; width?: number; visible?: boolean }>;
   /** Last-known input values keyed by title (Script Settings) */
   inputValues?: Record<string, unknown>;
   /**

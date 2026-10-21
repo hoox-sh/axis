@@ -84,7 +84,7 @@ export interface OverlayBuildContext {
   resultTimes: number[] | null;
   chartWindowBars: number;
   seriesMap: Record<string, unknown[] | (number | null)[]>;
-  userPlotColors: Record<string, { color: string; custom?: boolean }>;
+  userPlotColors: Record<string, { color: string; custom?: boolean; width?: number; visible?: boolean }>;
   scriptName: string;
 }
 
@@ -138,7 +138,7 @@ export function buildOverlayPayloads(ctx: OverlayBuildContext): OverlayBuildOutc
   const overlayLines: OverlayLine[] = [];
   // Prefer named `series` + `meta.plot_meta` (PYNE modern). Top-level `plots[]`
   // is often an all-null pad of bar length — never let that block named lines.
-  // User color overrides from Scripts panel (persisted on the script card)
+  // User color/width/visibility overrides from Scripts panel (persisted on the script card)
 
   if (seriesEntries.length > 0) {
     let colorIdx = 0;
@@ -169,6 +169,8 @@ export function buildOverlayPayloads(ctx: OverlayBuildContext): OverlayBuildOutc
       if (!lineDataHasSample(data) && !(isHline && price != null)) continue;
       // display.data_window / display.none: keep series for Data Window, skip pane
       if (!plotDisplayHas(meta?.display, PLOT_DISPLAY.pane)) continue;
+      // Skip if user explicitly hid this plot
+      if (userPlotColors[k]?.visible === false) continue;
       // Prefer panel color override (custom only) → Pine plot color → palette
       const userColor = userPlotColors[k]?.custom ? userPlotColors[k].color : undefined;
       const color = pickOverlayColor(
@@ -176,11 +178,14 @@ export function buildOverlayPayloads(ctx: OverlayBuildContext): OverlayBuildOutc
         meta?.color,
         paletteColor,
       );
+      // Prefer panel width override → Pine plot linewidth → default (2)
+      const userWidth = userPlotColors[k]?.width;
+      const linewidth = userWidth != null ? userWidth : (meta?.linewidth != null ? Number(meta.linewidth) : undefined);
       overlayLines.push({
         name: k,
         data,
         color,
-        linewidth: meta?.linewidth != null ? Number(meta.linewidth) : undefined,
+        linewidth,
         kind: isHline ? 'hline' : 'plot',
         price,
         linestyle: meta?.linestyle ? String(meta.linestyle) : undefined,
@@ -210,10 +215,12 @@ export function buildOverlayPayloads(ctx: OverlayBuildContext): OverlayBuildOutc
           ? userPlotColors[scriptName]
           : Object.values(userPlotColors).find((v) => v.custom);
         const userColor = userEntry?.color;
+        const userWidth = userEntry?.width;
         overlayLines.push({
           name: scriptName,
           data,
           color: resolvePineColor(userColor) ?? PLOT_PALETTE[0],
+          linewidth: userWidth,
         });
       }
     }
@@ -228,6 +235,8 @@ export function buildOverlayPayloads(ctx: OverlayBuildContext): OverlayBuildOutc
         return { superseded: true };
       }
       if (!plotDisplayHas(meta?.display, PLOT_DISPLAY.pane)) continue;
+      // Skip if user explicitly hid this plot
+      if (userPlotColors[key]?.visible === false) continue;
       const data = ohlcSeriesToBarData(ohlcvTimes, values, seriesMap, meta);
       if (!data.length) continue;
       // Only use user color if it's a custom panel pick

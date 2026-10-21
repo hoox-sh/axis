@@ -3487,7 +3487,23 @@ export function setPineTablesLocation(
 /** Override a single plot series color for an applied indicator (explicit panel pick). */
 export function setIndicatorColor(id: string, plotName: string, color: string) {
   setStore('scripts', (s) => s.map((ind) =>
-    ind.id === id ? { ...ind, plots: { ...ind.plots, [plotName]: { color, custom: true } } } : ind
+    ind.id === id ? { ...ind, plots: { ...ind.plots, [plotName]: { ...ind.plots[plotName], color, custom: true } } } : ind
+  ));
+  persist();
+}
+
+/** Override a single plot series line width (1-4). */
+export function setIndicatorPlotWidth(id: string, plotName: string, width: number) {
+  setStore('scripts', (s) => s.map((ind) =>
+    ind.id === id ? { ...ind, plots: { ...ind.plots, [plotName]: { ...ind.plots[plotName], width: Math.max(1, Math.min(4, Math.round(width))) } } } : ind
+  ));
+  persist();
+}
+
+/** Toggle a single plot series visibility. */
+export function setIndicatorPlotVisible(id: string, plotName: string, visible: boolean) {
+  setStore('scripts', (s) => s.map((ind) =>
+    ind.id === id ? { ...ind, plots: { ...ind.plots, [plotName]: { ...ind.plots[plotName], visible } } } : ind
   ));
   persist();
 }

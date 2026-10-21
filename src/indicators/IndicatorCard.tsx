@@ -28,10 +28,12 @@
  * @module indicators/IndicatorCard
  */
 
-import { type Component, For, Show, createMemo, createSignal } from 'solid-js';
+import { type Component, For, Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import type { Indicator } from '../store/types';
 import {
   setIndicatorColor,
+  setIndicatorPlotWidth,
+  setIndicatorPlotVisible,
   openScriptSettings,
   store,
   setStore,
@@ -56,6 +58,7 @@ import {
   liveRerunTitle,
   panePlacementLabel,
 } from './script-meta';
+import { dismissOnOutside } from '../ui/dismiss-on-outside';
 
 interface Props {
   indicator: Indicator;
@@ -114,7 +117,10 @@ const MetaBadge: Component<{
 /** Card for one entry in `store.scripts`. */
 export const IndicatorCard: Component<Props> = (props) => {
   const [editingColor, setEditingColor] = createSignal<string | null>(null);
+  const [editingWidth, setEditingWidth] = createSignal<string | null>(null);
   const [busy, setBusy] = createSignal(false);
+  const colorPopoverRef = createSignal<HTMLDivElement | null>(null);
+  const widthPopoverRef = createSignal<HTMLDivElement | null>(null);
 
   const kind = createMemo(() => detectScriptKind(props.indicator.code));
   const declaredOverlay = createMemo(() =>
@@ -220,6 +226,47 @@ export const IndicatorCard: Component<Props> = (props) => {
       manager.setOverlayLineColor('price', plotName, color);
     }
   };
+
+  const changeWidth = (plotName: string, width: number) => {
+    setIndicatorPlotWidth(props.indicator.id, plotName, width);
+    setEditingWidth(null);
+    const manager = getManager();
+    if (!manager) return;
+    manager.setOverlayLineWidth(props.indicator.paneId, plotName, width);
+  };
+
+  const togglePlotVisible = (plotName: string, visible: boolean) => {
+    setIndicatorPlotVisible(props.indicator.id, plotName, visible);
+    const manager = getManager();
+    if (!manager) return;
+    manager.setOverlayLineVisible?.(props.indicator.paneId, plotName, visible);
+  };
+
+  // Color popover outside click handling
+  onMount(() => {
+    if (!colorPopoverRef[0]()) return;
+    const dispose = dismissOnOutside({
+      inside: () => [
+        colorPopoverRef[0](),
+        document.querySelector(`[data-color-trigger="${props.indicator.id}"]`) as HTMLElement | null,
+      ],
+      onDismiss: () => setEditingColor(null),
+    });
+    onCleanup(dispose);
+  });
+
+  // Width popover outside click handling
+  onMount(() => {
+    if (!widthPopoverRef[0]()) return;
+    const dispose = dismissOnOutside({
+      inside: () => [
+        widthPopoverRef[0](),
+        document.querySelector(`[data-width-trigger="${props.indicator.id}"]`) as HTMLElement | null,
+      ],
+      onDismiss: () => setEditingWidth(null),
+    });
+    onCleanup(dispose);
+  });
 
   return (
     <div
@@ -404,39 +451,95 @@ export const IndicatorCard: Component<Props> = (props) => {
         </Show>
       </div>
 
-      {/* Plot colors */}
+      {/* Plot colors, width, visibility */}
       <Show when={plotCount() > 0}>
         <div class="flex flex-col gap-0.5 border-t border-border/30 pt-1.5">
           <For each={Object.entries(props.indicator.plots)}>
-            {([name, { color }]) => (
-              <div class="flex items-center gap-2 text-[11px] text-text-dim">
-                <button
-                  type="button"
-                  class="inline-block w-2.5 h-2.5 flex-shrink-0 cursor-pointer border border-border"
-                  style={{ background: color }}
-                  title={`Color for "${name}"`}
-                  onClick={() =>
-                    setEditingColor(editingColor() === name ? null : name)
-                  }
-                />
-                <span class="truncate font-mono text-[10px]">{name}</span>
-                <Show when={editingColor() === name}>
-                  <div class="flex gap-1 ml-auto flex-wrap">
-                    <For each={PLOT_PALETTE}>
-                      {(c) => (
-                        <button
-                          type="button"
-                          class="w-3 h-3 cursor-pointer border-2 border-border hover:border-accent"
-                          style={{ background: c }}
-                          title={c}
-                          onClick={() => changeColor(name, c)}
-                        />
-                      )}
-                    </For>
-                  </div>
-                </Show>
-              </div>
-            )}
+            {([name, plot]) => {
+              const plotColor = plot.color;
+              const plotWidth = plot.width ?? 2;
+              const plotVisible = plot.visible !== false;
+              return (
+                <div class="flex items-center gap-2 text-[11px] text-text-dim">
+                  <button
+                    type="button"
+                    class="inline-block w-2.5 h-2.5 flex-shrink-0 cursor-pointer border border-border"
+                    style={{ background: plotColor }}
+                    title={`Color for "${name}"`}
+                    data-color-trigger={props.indicator.id}
+                    onClick={() =>
+                      setEditingColor(editingColor() === name ? null : name)
+                    }
+                  />
+                  <span class="truncate font-mono text-[10px] flex-1 min-w-0">{name}</span>
+                  {/* Width slider */}
+                  <button
+                    type="button"
+                    class="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-text-faint hover:text-text border border-transparent hover:border-border/60 rounded-[var(--radius-chip)]"
+                    title={`Line width for "${name}" (${plotWidth})`}
+                    data-width-trigger={props.indicator.id}
+                    onClick={() =>
+                      setEditingWidth(editingWidth() === name ? null : name)
+                    }
+                  >
+                    <Icons.inputs size={10} />
+                    <span class="font-mono w-4 text-right">{plotWidth}</span>
+                  </button>
+                  {/* Visibility toggle */}
+                  <button
+                    type="button"
+                    class="inline-flex items-center justify-center w-5 h-5 text-text-faint hover:text-accent border border-transparent hover:border-border/60 bg-transparent rounded-[var(--radius-chip)]"
+                    title={plotVisible ? `Hide "${name}"` : `Show "${name}"`}
+                    onClick={() => togglePlotVisible(name, !plotVisible)}
+                    aria-label={plotVisible ? 'Hide plot' : 'Show plot'}
+                  >
+                    {plotVisible ? (
+                      <Icons.eye size={10} />
+                    ) : (
+                      <Icons.eyeOff size={10} />
+                    )}
+                  </button>
+                  {/* Color popover */}
+                  <Show when={editingColor() === name}>
+                    <div
+                      ref={colorPopoverRef[1]}
+                      class="absolute z-20 flex gap-1 ml-auto flex-wrap px-1 py-1 bg-bg-elev border border-border rounded-[var(--radius-chip)] shadow-lg"
+                    >
+                      <For each={PLOT_PALETTE}>
+                        {(c) => (
+                          <button
+                            type="button"
+                            class="w-3 h-3 cursor-pointer border-2 border-border hover:border-accent"
+                            style={{ background: c }}
+                            title={c}
+                            onClick={() => changeColor(name, c)}
+                          />
+                        )}
+                      </For>
+                    </div>
+                  </Show>
+                  {/* Width popover */}
+                  <Show when={editingWidth() === name}>
+                    <div
+                      ref={widthPopoverRef[1]}
+                      class="absolute z-20 flex items-center gap-1 ml-auto px-2 py-1 bg-bg-elev border border-border rounded-[var(--radius-chip)] shadow-lg"
+                    >
+                      <input
+                        type="range"
+                        min="1"
+                        max="4"
+                        step="1"
+                        value={plotWidth}
+                        onInput={(e) => changeWidth(name, Number(e.currentTarget.value))}
+                        class="w-20 accent-accent"
+                        aria-label={`Line width for ${name}`}
+                      />
+                      <span class="font-mono text-[10px] text-text w-4 text-right">{plotWidth}</span>
+                    </div>
+                  </Show>
+                </div>
+              );
+            }}
           </For>
         </div>
       </Show>
