@@ -45,6 +45,7 @@ import type { PlotSample, RunResult as EngineRunResult } from '../plugins/types'
 import type { Bar } from '../store/types';
 import { barsForPine } from '../data/parse-bars';
 import { parseEngineJson } from './json-sanitize';
+import { mapEnginePayload, payloadEngineTimes } from './result-mapper';
 import { combineAbortSignals } from '../utils/fetch-timeout';
 
 /**
@@ -120,80 +121,17 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 }
 
 /**
- * Raw engine bar-time axis when the backend ships one alongside `series`
- * (top-level `times` / `bar_times` / `barTimes`, or a `bars` time column).
- * Mirrors `payloadEngineTimes` in `catalog.ts` so clamped batch results carry
- * the same axis the runner joins by (`meta.engineTimes`); undefined when the
- * payload carries no axis and the runner falls back to index tail-align.
+ * Same envelope mapping as the single-run REST path — the shared mapper, with
+ * the batch policies: a real boolean `overlay` only, and no `script_type`.
  */
-function payloadEngineTimes(payload: unknown): unknown[] | undefined {
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-    return undefined;
-  }
-  const rec = payload as Record<string, unknown>;
-  for (const key of ['times', 'bar_times', 'barTimes'] as const) {
-    const v = rec[key];
-    if (Array.isArray(v) && v.length) return v as unknown[];
-  }
-  const bars = rec.bars;
-  if (Array.isArray(bars) && bars.length) {
-    const times: unknown[] = [];
-    for (const b of bars) {
-      if (Array.isArray(b)) {
-        if (b.length) times.push(b[0]);
-        continue;
-      }
-      if (b && typeof b === 'object') {
-        const row = b as Record<string, unknown>;
-        times.push(row.time ?? row.t ?? row.timestamp);
-      }
-    }
-    if (times.length) return times;
-  }
-  return undefined;
-}
-
-/** Same envelope mapping as the single-run REST path (`catalog.mapRestPayload`). */
 function mapEntryResult(payload: Record<string, unknown>, ms: number): BatchRunResult {
-  const overlayRaw = payload.overlay ?? (payload.meta as Record<string, unknown> | undefined)?.overlay;
-  const name =
-    payload.script_name ||
-    (payload.meta as Record<string, unknown> | undefined)?.script_name ||
-    'plot';
-  return {
-    status: 'success',
-    plots: (payload.plots as (number | null)[]) || [],
-    series: (payload.series as BatchRunResult["series"]) || {},
-    events: (payload.events as BatchRunResult['events']) || [],
-    drawings: (payload.drawings as BatchRunResult['drawings']) || [],
-    inputs: payload.inputs,
-    ...(isRecord(payload.profile) ? { profile: payload.profile } : {}),
-    ...(Array.isArray(payload.logs) ? { logs: payload.logs as BatchRunResult["logs"] } : {}),
-    meta: {
-      ...(isRecord(payload.meta) ? payload.meta : {}),
-      ms,
-      transport: 'rest',
-      mode: payload.mode as string | undefined,
-      script_id: payload.script_id as string | undefined,
-      run_id: payload.run_id as string | undefined,
-      ...(typeof overlayRaw === 'boolean' ? { overlay: overlayRaw } : {}),
-      script_name: String(name),
-      plot_meta:
-        (payload.plot_meta as Record<string, unknown>) ||
-        ((payload.meta as Record<string, unknown> | undefined)?.plot_meta as
-          | Record<string, unknown>
-          | undefined) ||
-        {},
-      inputs: payload.inputs,
-      ...(Array.isArray(payload.alerts) ? { alerts: payload.alerts } : {}),
-      ...(Array.isArray(payload.alert_conditions)
-        ? { alert_conditions: payload.alert_conditions }
-        : {}),
-      ...(isRecord(payload.profile) ? { profile: payload.profile } : {}),
-      ...(Array.isArray(payload.logs) ? { logs: payload.logs } : {}),
-      batch: true,
-    },
-  };
+  return mapEnginePayload(payload, {
+    transport: 'rest',
+    ms,
+    mode: payload.mode as string | undefined,
+    batch: true,
+    overlay: 'boolean-only',
+  }) as BatchRunResult;
 }
 
 /**
