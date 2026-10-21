@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/hp"
-description: "High-performance chart engine (HP PR 1–4)."
+description: "High-performance chart engine (HP PR 1–5)."
 resource: "src/hp"
 tags: [code, hp]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-21T23:35:56Z
+  at: 2026-10-21T23:55:09Z
 sources:
   - id: tree
     resource: "src/hp"

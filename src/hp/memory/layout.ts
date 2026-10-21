@@ -29,11 +29,15 @@
  * 512   tip slot       128 B → 256   2 × 64 B forming-tip records
  * 768   slot 0 columns  …          time / OHLC ticks / volume / flags
  * …     slot 1 columns  …          the other half of the double buffer
+ * …     page columns    …          PageSlot[HOT_CAP] — viewport paging (§9.2)
  * ```
  *
  * Only the **hot window** is double-buffered (`HOT_CAP`, default 5_120 bars).
- * Cold history stays in the worker + IndexedDB (`HISTORY_BARS_MAX`), never in
- * this allocation — that is why the byte length is O(HOT_CAP) and not O(N).
+ * The **page slot** is a *single*-buffered section of the same capacity: when
+ * the viewport pans into cold history, ingest *replaces* its contents with one
+ * page of cold bars (a far-left jump replaces again — the SAB never grows).
+ * Cold history itself stays in the worker + IndexedDB, never in this
+ * allocation — that is why the byte length is O(HOT_CAP) and not O(N).
  *
  * @module hp/memory/layout
  */
@@ -96,6 +100,8 @@ export interface HotLayout {
   cap: number;
   /** `[0]` is written first and published by moving to `[1]`. */
   slots: readonly HotSlotLayout[];
+  /** PageSlot: single-buffered cold page (§9.2), same columns as one hot slot. */
+  page: HotSlotLayout;
 }
 
 /** Round up to the next section boundary. */
@@ -119,31 +125,42 @@ export function computeHotLayout(cap: number = HOT_CAP): HotLayout {
 
   const slots: HotSlotLayout[] = [];
   for (let s = 0; s < HP_HOT_SLOTS; s++) {
-    const slot: Record<HotColumnId, number> = {
-      time_s: 0,
-      open_ticks: 0,
-      high_ticks: 0,
-      low_ticks: 0,
-      close_ticks: 0,
-      volume: 0,
-      bar_flags: 0,
-    };
-    for (const col of HOT_COLUMNS) {
-      cursor = alignUp(cursor);
-      slot[col] = cursor;
-      cursor += HOT_COLUMN_BYTES[col] * cap;
-    }
-    slots.push(slot);
+    const built = buildColumns(cursor, cap);
+    slots.push(built.layout);
+    cursor = built.next;
   }
 
+  const page = buildColumns(cursor, cap);
+
   return {
-    byteLength: alignUp(cursor),
+    byteLength: alignUp(page.next),
     controlOffset,
     headerOffset,
     tipOffset,
     cap,
     slots,
+    page: page.layout,
   };
+}
+
+/** One column set (a hot slot or the page slot): aligned offsets + next cursor. */
+function buildColumns(start: number, cap: number): { layout: HotSlotLayout; next: number } {
+  let cursor = start;
+  const layout: Record<HotColumnId, number> = {
+    time_s: 0,
+    open_ticks: 0,
+    high_ticks: 0,
+    low_ticks: 0,
+    close_ticks: 0,
+    volume: 0,
+    bar_flags: 0,
+  };
+  for (const col of HOT_COLUMNS) {
+    cursor = alignUp(cursor);
+    layout[col] = cursor;
+    cursor += HOT_COLUMN_BYTES[col] * cap;
+  }
+  return { layout, next: cursor };
 }
 
 /** Injectable allocator so a test can simulate a mobile SAB `RangeError`. */

@@ -18,11 +18,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * High-performance chart engine (HP PR 1–4).
+ * High-performance chart engine (HP PR 1–5).
  *
  * Codec, execution context, isolation headers, capability probe, ingest
  * worker, hot double-buffer memory, worker-safe Atomics, rAF generation
- * poll, and the LWC copy-out.
+ * poll, the LWC copy-out, and viewport paging over a columnar cold store.
  *
  * @module hp
  */
@@ -35,6 +35,8 @@ export * from './capabilities';
 export * from './memory/layout';
 export * from './memory/control-block';
 export * from './memory/hot-buffer';
+export * from './memory/cold-store';
+export * from './memory/page-buffer';
 export * from './sync/atomics';
 export * from './sync/is-main-thread';
 export * from './sync/raf-poll';

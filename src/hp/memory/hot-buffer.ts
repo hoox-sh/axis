@@ -29,6 +29,11 @@
  * that reach Lightweight Charts are produced by the copy-out, where the loss
  * is display-only and the price scale already works in float64.
  *
+ * The same SAB also carries a single-buffered **page slot** (§9.2, HP PR 5):
+ * when the viewport pans into cold history, ingest *replaces* that section
+ * with one page of cold bars — a far-left jump replaces it again, so the
+ * allocation never grows past O(HOT_CAP).
+ *
  * Allocation failure is not fatal: a mobile WebView that refuses the SAB
  * returns `null` and drops the tab to rung 1 for the session
  * (`axis.hp.rung = '1'`), so the next reload does not retry the OOM.
@@ -40,7 +45,7 @@ import { priceToTicks, ticksToPrice } from '../axb1/ticks';
 import { HOT_CAP, PRICE_SCALE_DEFAULT } from '../axb1/constants';
 import type { Bar } from '../../store/types';
 import { rememberHpRung } from '../capabilities';
-import { HpControlBlock } from './control-block';
+import { HpControlBlock, HpControlFlag } from './control-block';
 import {
   computeHotLayout,
   defaultSabFactory,
@@ -80,6 +85,45 @@ export function barToTicks(bar: Bar, priceScale: number): HotBarTicks {
 
 type SlotViews = Record<HotColumnId, Int32Array | BigInt64Array | Float64Array | Uint8Array>;
 
+/** Write one bar into a column set (a hot slot or the page slot). */
+function writeColumnBar(v: SlotViews, index: number, bar: HotBarTicks): void {
+  (v.time_s as Int32Array)[index] = bar.time | 0;
+  (v.open_ticks as BigInt64Array)[index] = bar.openTicks;
+  (v.high_ticks as BigInt64Array)[index] = bar.highTicks;
+  (v.low_ticks as BigInt64Array)[index] = bar.lowTicks;
+  (v.close_ticks as BigInt64Array)[index] = bar.closeTicks;
+  (v.volume as Float64Array)[index] = bar.volume;
+  (v.bar_flags as Uint8Array)[index] = bar.flags & 0xff;
+}
+
+/** Read one bar from a column set as float64 (`Bar`). */
+function readColumnBar(v: SlotViews, index: number, priceScale: number): Bar {
+  const flags = (v.bar_flags as Uint8Array)[index] ?? 0;
+  return {
+    time: (v.time_s as Int32Array)[index] ?? 0,
+    open: ticksToPrice((v.open_ticks as BigInt64Array)[index] ?? 0n, priceScale),
+    high: ticksToPrice((v.high_ticks as BigInt64Array)[index] ?? 0n, priceScale),
+    low: ticksToPrice((v.low_ticks as BigInt64Array)[index] ?? 0n, priceScale),
+    close: ticksToPrice((v.close_ticks as BigInt64Array)[index] ?? 0n, priceScale),
+    volume: (v.volume as Float64Array)[index] ?? 0,
+    closed: (flags & BAR_FLAG_CLOSED) !== 0,
+  };
+}
+
+/** Read one bar from a column set as canonical int64 ticks. */
+function readColumnTicks(v: SlotViews, index: number): HotBarTicks {
+  const flags = (v.bar_flags as Uint8Array)[index] ?? 0;
+  return {
+    time: (v.time_s as Int32Array)[index] ?? 0,
+    openTicks: (v.open_ticks as BigInt64Array)[index] ?? 0n,
+    highTicks: (v.high_ticks as BigInt64Array)[index] ?? 0n,
+    lowTicks: (v.low_ticks as BigInt64Array)[index] ?? 0n,
+    closeTicks: (v.close_ticks as BigInt64Array)[index] ?? 0n,
+    volume: (v.volume as Float64Array)[index] ?? 0,
+    flags,
+  };
+}
+
 /**
  * Allocate and initialise the hot SAB.
  *
@@ -109,6 +153,7 @@ export class HotBuffer {
   readonly layout: HotLayout;
   readonly control: HpControlBlock;
   private readonly slots: SlotViews[];
+  private readonly pageViews: SlotViews;
 
   constructor(sab: SharedArrayBuffer, layout: HotLayout) {
     this.sab = sab;
@@ -122,6 +167,7 @@ export class HotBuffer {
       this.priceScale = PRICE_SCALE_DEFAULT;
     }
     this.slots = layout.slots.map((offsets) => this.makeViews(offsets));
+    this.pageViews = this.makeViews(layout.page);
   }
 
   private makeViews(offsets: Record<HotColumnId, number>): SlotViews {
@@ -197,14 +243,7 @@ export class HotBuffer {
     if (index < 0 || index >= this.layout.cap) {
       throw new RangeError(`hot index out of range: ${index}`);
     }
-    const v = this.slots[slot];
-    (v.time_s as Int32Array)[index] = bar.time | 0;
-    (v.open_ticks as BigInt64Array)[index] = bar.openTicks;
-    (v.high_ticks as BigInt64Array)[index] = bar.highTicks;
-    (v.low_ticks as BigInt64Array)[index] = bar.lowTicks;
-    (v.close_ticks as BigInt64Array)[index] = bar.closeTicks;
-    (v.volume as Float64Array)[index] = bar.volume;
-    (v.bar_flags as Uint8Array)[index] = bar.flags & 0xff;
+    writeColumnBar(this.slots[slot], index, bar);
   }
 
   /** Close the write: publish the slot, make the generation even, notify. */
@@ -240,35 +279,85 @@ export class HotBuffer {
   }
 
   // ------------------------------------------------------------------
+  // Page slot (HP PR 5, §9.2): single-buffered cold range, replace semantics
+  // ------------------------------------------------------------------
+
+  get pageActive(): boolean {
+    return (this.control.flags & HpControlFlag.PAGE_ACTIVE) !== 0;
+  }
+
+  get pageFromIndex(): number {
+    return this.control.pageFromIndex;
+  }
+
+  get pageCount(): number {
+    return this.control.pageCount;
+  }
+
+  writePageBar(index: number, bar: HotBarTicks): void {
+    if (index < 0 || index >= this.layout.cap) {
+      throw new RangeError(`page index out of range: ${index}`);
+    }
+    writeColumnBar(this.pageViews, index, bar);
+  }
+
+  /**
+   * Replace the page slot with one cold page.
+   *
+   * The page is *single*-buffered: a far-left jump overwrites the previous
+   * page rather than allocating a third history buffer, so the SAB stays
+   * O(HOT_CAP). The write runs through the seqlock (`beginPageWrite`) but
+   * never moves the hot published slot — a page replace cannot change what
+   * any reader sees of the hot window, and the forming tip keeps updating.
+   */
+  publishPage(
+    bars: readonly HotBarTicks[],
+    meta: { pageFromIndex: number; active?: boolean },
+  ): void {
+    if (bars.length > this.layout.cap) {
+      throw new RangeError(`page overflow: ${bars.length} > ${this.layout.cap}`);
+    }
+    this.control.beginPageWrite();
+    for (let i = 0; i < bars.length; i++) this.writePageBar(i, bars[i] as HotBarTicks);
+    this.control.setFlags(HpControlFlag.PAGE_ACTIVE, meta.active ?? true);
+    this.control.writeMeta({ pageCount: bars.length, pageFromIndex: meta.pageFromIndex });
+    this.control.commitPageWrite();
+  }
+
+  /** Viewport is back inside the hot range: retire the page (keeps no data). */
+  clearPage(): void {
+    this.control.beginPageWrite();
+    this.control.setFlags(HpControlFlag.PAGE_ACTIVE, false);
+    this.control.writeMeta({ pageCount: 0, pageFromIndex: 0 });
+    this.control.commitPageWrite();
+  }
+
+  // ------------------------------------------------------------------
   // Reader side
   // ------------------------------------------------------------------
 
   readBar(slot: 0 | 1, index: number, priceScale: number = this.priceScale): Bar {
-    const v = this.slots[slot];
-    const flags = (v.bar_flags as Uint8Array)[index] ?? 0;
-    return {
-      time: (v.time_s as Int32Array)[index] ?? 0,
-      open: ticksToPrice((v.open_ticks as BigInt64Array)[index] ?? 0n, priceScale),
-      high: ticksToPrice((v.high_ticks as BigInt64Array)[index] ?? 0n, priceScale),
-      low: ticksToPrice((v.low_ticks as BigInt64Array)[index] ?? 0n, priceScale),
-      close: ticksToPrice((v.close_ticks as BigInt64Array)[index] ?? 0n, priceScale),
-      volume: (v.volume as Float64Array)[index] ?? 0,
-      closed: (flags & BAR_FLAG_CLOSED) !== 0,
-    };
+    return readColumnBar(this.slots[slot], index, priceScale);
   }
 
   /** Read ticks directly (calc worker keeps the canonical integer form). */
   readTicks(slot: 0 | 1, index: number): HotBarTicks {
-    const v = this.slots[slot];
-    const flags = (v.bar_flags as Uint8Array)[index] ?? 0;
-    return {
-      time: (v.time_s as Int32Array)[index] ?? 0,
-      openTicks: (v.open_ticks as BigInt64Array)[index] ?? 0n,
-      highTicks: (v.high_ticks as BigInt64Array)[index] ?? 0n,
-      lowTicks: (v.low_ticks as BigInt64Array)[index] ?? 0n,
-      closeTicks: (v.close_ticks as BigInt64Array)[index] ?? 0n,
-      volume: (v.volume as Float64Array)[index] ?? 0,
-      flags,
-    };
+    return readColumnTicks(this.slots[slot], index);
+  }
+
+  /** Read one bar of the page slot (valid inside a sampled generation only). */
+  readPageBar(index: number, priceScale: number = this.priceScale): Bar {
+    if (index < 0 || index >= this.layout.cap) {
+      throw new RangeError(`page index out of range: ${index}`);
+    }
+    return readColumnBar(this.pageViews, index, priceScale);
+  }
+
+  /** Read page ticks directly (cold history in canonical integer form). */
+  readPageTicks(index: number): HotBarTicks {
+    if (index < 0 || index >= this.layout.cap) {
+      throw new RangeError(`page index out of range: ${index}`);
+    }
+    return readColumnTicks(this.pageViews, index);
   }
 }

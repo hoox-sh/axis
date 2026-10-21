@@ -71,6 +71,8 @@ const W = {
   VIEWPORT_REQ_FROM: 13,
   VIEWPORT_REQ_TO: 14,
   VIEWPORT_REQ_GEN: 15,
+  PAGE_FROM_INDEX: 16,
+  PAGE_COUNT: 17,
 } as const;
 
 /** Word index inside the `BigInt64Array` overlay that starts at byte 64. */
@@ -130,6 +132,8 @@ export class HpControlBlock {
     Atomics.store(this.i32, W.WRITE_SLOT, 1);
     Atomics.store(this.i32, W.HOT_COUNT, 0);
     Atomics.store(this.i32, W.HOT_FROM_INDEX, 0);
+    Atomics.store(this.i32, W.PAGE_FROM_INDEX, 0);
+    Atomics.store(this.i32, W.PAGE_COUNT, 0);
     Atomics.store(this.i32, W.CLOSED_UPTO, -1);
     Atomics.store(this.i32, W.SEQ, 0);
     Atomics.store(this.i32, W.FLAGS, 0);
@@ -166,6 +170,16 @@ export class HpControlBlock {
 
   get hotFromIndex(): number {
     return Atomics.load(this.i32, W.HOT_FROM_INDEX);
+  }
+
+  /** Absolute base index of the page slot's first bar (§9.2). */
+  get pageFromIndex(): number {
+    return Atomics.load(this.i32, W.PAGE_FROM_INDEX);
+  }
+
+  /** Bars currently valid in the page slot. `0` = page empty. */
+  get pageCount(): number {
+    return Atomics.load(this.i32, W.PAGE_COUNT);
   }
 
   get closedUpto(): number {
@@ -215,12 +229,17 @@ export class HpControlBlock {
   writeMeta(meta: {
     hotCount?: number;
     hotFromIndex?: number;
+    pageFromIndex?: number;
+    pageCount?: number;
     closedUpto?: number;
     seq?: number;
   }): void {
     if (meta.hotCount !== undefined) Atomics.store(this.i32, W.HOT_COUNT, meta.hotCount | 0);
     if (meta.hotFromIndex !== undefined)
       Atomics.store(this.i32, W.HOT_FROM_INDEX, meta.hotFromIndex | 0);
+    if (meta.pageFromIndex !== undefined)
+      Atomics.store(this.i32, W.PAGE_FROM_INDEX, meta.pageFromIndex | 0);
+    if (meta.pageCount !== undefined) Atomics.store(this.i32, W.PAGE_COUNT, meta.pageCount | 0);
     if (meta.closedUpto !== undefined) Atomics.store(this.i32, W.CLOSED_UPTO, meta.closedUpto | 0);
     if (meta.seq !== undefined) Atomics.store(this.i32, W.SEQ, meta.seq | 0);
   }
@@ -245,6 +264,24 @@ export class HpControlBlock {
   commitWrite(): void {
     const slot = Atomics.load(this.i32, W.WRITE_SLOT) & 1;
     Atomics.store(this.i32, W.PUBLISHED_SLOT, slot);
+    Atomics.add(this.i32, W.GENERATION, 1);
+    Atomics.notify(this.i32, HP_NOTIFY_INDEX, 3);
+  }
+
+  /**
+   * Open a **page-only** seqlock transaction (§9.2).
+   *
+   * Same odd/even protocol as `beginWrite`, but it deliberately does *not*
+   * touch `WRITE_SLOT`: a viewport page replace writes into the single page
+   * section and must leave the published hot slot exactly as it was.
+   */
+  beginPageWrite(): void {
+    const g = Atomics.load(this.i32, W.GENERATION);
+    if ((g & 1) === 0) Atomics.store(this.i32, W.GENERATION, g + 1);
+  }
+
+  /** Close a page-only transaction (even generation) and wake workers. */
+  commitPageWrite(): void {
     Atomics.add(this.i32, W.GENERATION, 1);
     Atomics.notify(this.i32, HP_NOTIFY_INDEX, 3);
   }

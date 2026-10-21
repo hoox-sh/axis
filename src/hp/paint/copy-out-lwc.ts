@@ -18,7 +18,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Copy-out: hot SAB → `Bar[]` for Lightweight Charts (HP PR 4, §6.5).
+ * Copy-out: hot SAB → `Bar[]` for Lightweight Charts (HP PR 4, §6.5;
+ * page slot §9.2 from HP PR 5).
  *
  * LWC is not OffscreenCanvas-capable (and HP-0…HP-2 keep it as the painter),
  * so the main thread samples the published generation once per frame and
@@ -30,6 +31,10 @@
  * Float64 is produced here (`ticks / 10^scale`), which is where price loss is
  * acceptable: LWC and the price scale already work in float64. The shared
  * buffer keeps int64 ticks.
+ *
+ * A viewport that pans out of the hot window is served by the **page slot**
+ * (`copyOutPage`): one replaced page of cold bars, never the whole series.
+ * `copyOutViewport` is the dispatcher the paint path calls.
  *
  * @module hp/paint/copy-out-lwc
  */
@@ -59,17 +64,22 @@ function toIndex(value: number): number {
   return Math.trunc(value);
 }
 
+/** One section of the SAB a copy can come from (hot window or page slot). */
+type SectionRange = { from: number; count: number };
+
 /**
- * Copy the requested range out of the published hot slot.
+ * Seqlock-verified clipped copy from one section (shared by hot and page).
  *
- * Returns `null` when nothing can be read safely: a write is in flight for
- * the whole retry budget, the window is empty, or the request does not
- * overlap the hot window (cold data is paged in by HP PR 5, not read here).
+ * `section()` is evaluated *inside* the sampled generation, so the range and
+ * the column reads always belong to the same published state; the second
+ * generation load after the copy discards a sample a write invalidated.
  */
-export function copyOutBars(
+function copyClipped(
   buffer: HotBuffer,
   req: CopyOutRequest,
-  attempts = 8,
+  section: () => SectionRange | null,
+  read: (slot: 0 | 1, index: number) => Bar,
+  attempts: number,
 ): CopyOutResult | null {
   if (!Number.isFinite(req.fromAbs) || !Number.isFinite(req.count)) return null;
   const count = Math.trunc(req.count);
@@ -79,23 +89,22 @@ export function copyOutBars(
     const sample = buffer.control.sample();
     if (!sample) continue; // odd generation — a write is in flight
 
-    const hotFrom = buffer.control.hotFromIndex;
-    const hotCount = buffer.control.hotCount;
-    if (hotCount <= 0) return null;
+    const range = section();
+    if (!range || range.count <= 0) return null;
 
-    const hotTo = hotFrom + hotCount;
+    const secTo = range.from + range.count;
     const wantFrom = toIndex(req.fromAbs);
     const wantTo = wantFrom + count;
-    if (wantTo <= hotFrom || wantFrom >= hotTo) return null; // no overlap
+    if (wantTo <= range.from || wantFrom >= secTo) return null; // no overlap
 
-    const from = Math.max(wantFrom, hotFrom);
-    const to = Math.min(wantTo, hotTo);
-    const first = from - hotFrom;
+    const from = Math.max(wantFrom, range.from);
+    const to = Math.min(wantTo, secTo);
+    const first = from - range.from;
     const len = to - from;
 
     const bars: Bar[] = new Array<Bar>(len);
     for (let i = 0; i < len; i++) {
-      bars[i] = buffer.readBar(sample.slot, first + i);
+      bars[i] = read(sample.slot, first + i);
     }
 
     // Seqlock verify: any write that started or finished while we copied
@@ -106,10 +115,77 @@ export function copyOutBars(
       bars,
       generation: sample.generation,
       fromAbs: from,
-      complete: wantFrom >= hotFrom && wantTo <= hotTo,
+      complete: wantFrom >= range.from && wantTo <= secTo,
     };
   }
   return null;
+}
+
+/**
+ * Copy the requested range out of the published hot slot.
+ *
+ * Returns `null` when nothing can be read safely: a write is in flight for
+ * the whole retry budget, the window is empty, or the request does not
+ * overlap the hot window (cold ranges come from `copyOutPage`, not here).
+ */
+export function copyOutBars(
+  buffer: HotBuffer,
+  req: CopyOutRequest,
+  attempts = 8,
+): CopyOutResult | null {
+  return copyClipped(
+    buffer,
+    req,
+    () => ({ from: buffer.control.hotFromIndex, count: buffer.control.hotCount }),
+    (slot, index) => buffer.readBar(slot, index),
+    attempts,
+  );
+}
+
+/**
+ * Copy the requested range out of the page slot (HP PR 5, §9.2).
+ *
+ * `null` when the page is inactive, empty, or does not overlap — the caller
+ * keeps the previous frame (or asks ingest for a page replace).
+ */
+export function copyOutPage(
+  buffer: HotBuffer,
+  req: CopyOutRequest,
+  attempts = 8,
+): CopyOutResult | null {
+  return copyClipped(
+    buffer,
+    req,
+    () =>
+      buffer.pageActive
+        ? { from: buffer.control.pageFromIndex, count: buffer.control.pageCount }
+        : null,
+    (_slot, index) => buffer.readPageBar(index),
+    attempts,
+  );
+}
+
+/**
+ * What the paint path calls for a viewport: hot first, then the page slot.
+ *
+ * When the viewport spans both (a very zoomed-out chart), the hot window
+ * wins with `complete: false` — filling the cold gap beyond one page is the
+ * downsampling / conflation task (§9.2), not a copy-out one.
+ */
+export function copyOutViewport(
+  buffer: HotBuffer,
+  req: CopyOutRequest,
+  attempts = 8,
+): CopyOutResult | null {
+  if (!Number.isFinite(req.fromAbs) || !Number.isFinite(req.count)) return null;
+  if (Math.trunc(req.count) <= 0) return null;
+  const wantFrom = toIndex(req.fromAbs);
+  const wantTo = wantFrom + Math.trunc(req.count);
+  const hotFrom = buffer.control.hotFromIndex;
+  const hotCount = buffer.control.hotCount;
+  // A hint only — the copy re-samples under the seqlock.
+  const overlapsHot = hotCount > 0 && wantTo > hotFrom && wantFrom < hotFrom + hotCount;
+  return overlapsHot ? copyOutBars(buffer, req, attempts) : copyOutPage(buffer, req, attempts);
 }
 
 /**
