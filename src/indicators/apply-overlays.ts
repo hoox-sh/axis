@@ -169,9 +169,10 @@ export function buildOverlayPayloads(ctx: OverlayBuildContext): OverlayBuildOutc
       if (!lineDataHasSample(data) && !(isHline && price != null)) continue;
       // display.data_window / display.none: keep series for Data Window, skip pane
       if (!plotDisplayHas(meta?.display, PLOT_DISPLAY.pane)) continue;
-      // Prefer panel color override → Pine plot color → palette
+      // Prefer panel color override (custom only) → Pine plot color → palette
+      const userColor = userPlotColors[k]?.custom ? userPlotColors[k].color : undefined;
       const color = pickOverlayColor(
-        userPlotColors[k]?.color,
+        userColor,
         meta?.color,
         paletteColor,
       );
@@ -204,14 +205,15 @@ export function buildOverlayPayloads(ctx: OverlayBuildContext): OverlayBuildOutc
             : tailAlignSeriesToWindow(result.plots, chartWindowBars),
       );
       if (lineDataHasSample(data)) {
-        const userColor =
-          userPlotColors[scriptName]?.color ||
-          Object.values(userPlotColors)[0]?.color;
+        // Only use user color if it's a custom panel pick
+        const userEntry = userPlotColors[scriptName]?.custom
+          ? userPlotColors[scriptName]
+          : Object.values(userPlotColors).find((v) => v.custom);
+        const userColor = userEntry?.color;
         overlayLines.push({
           name: scriptName,
           data,
-          color:
-            resolvePineColor(userColor) ?? PLOT_PALETTE[0],
+          color: resolvePineColor(userColor) ?? PLOT_PALETTE[0],
         });
       }
     }
@@ -228,8 +230,10 @@ export function buildOverlayPayloads(ctx: OverlayBuildContext): OverlayBuildOutc
       if (!plotDisplayHas(meta?.display, PLOT_DISPLAY.pane)) continue;
       const data = ohlcSeriesToBarData(ohlcvTimes, values, seriesMap, meta);
       if (!data.length) continue;
+      // Only use user color if it's a custom panel pick
+      const userOhlcColor = userPlotColors[key]?.custom ? userPlotColors[key].color : undefined;
       const color = pickOverlayColor(
-        userPlotColors[key]?.color,
+        userOhlcColor,
         meta?.color,
         PLOT_PALETTE[ohlcColorIdx % PLOT_PALETTE.length],
       );
