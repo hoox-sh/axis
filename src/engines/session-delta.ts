@@ -159,6 +159,11 @@ function mergeDelta(
     if (spliced === null) return null;
     mergedTimes = spliced;
   }
+  // Preserve plot_meta from the cache — deltas don't carry it, but the apply
+  // path needs it for plot colors (engine meta colors). Without this, live
+  // re-runs would lose the script's plot colors and fall back to palette.
+  const cachedPlotMeta = (cached as Record<string, unknown>).plot_meta;
+  const cachedMetaPlotMeta = ((cached as Record<string, unknown>).meta as Record<string, unknown> | undefined)?.plot_meta;
   const { delta: _drop, ...rest } = update;
   void _drop;
   return {
@@ -167,6 +172,8 @@ function mergeDelta(
     series: mergedSeries,
     count: delta.count,
     ...(mergedTimes ? { times: mergedTimes } : {}),
+    ...(cachedPlotMeta ? { plot_meta: cachedPlotMeta } : {}),
+    ...(cachedMetaPlotMeta ? { meta: { ...((cached as Record<string, unknown>).meta as Record<string, unknown>), plot_meta: cachedMetaPlotMeta } } : {}),
   };
 }
 
