@@ -18,9 +18,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * High-performance chart engine (HP PR 1–3).
+ * High-performance chart engine (HP PR 1–4).
  *
- * Codec, execution context, isolation headers, capability probe, ingest worker.
+ * Codec, execution context, isolation headers, capability probe, ingest
+ * worker, hot double-buffer memory, worker-safe Atomics, rAF generation
+ * poll, and the LWC copy-out.
  *
  * @module hp
  */
@@ -30,3 +32,10 @@ export * from './calc/execution-context';
 export * from './isolation-headers';
 export * from './feature-flag';
 export * from './capabilities';
+export * from './memory/layout';
+export * from './memory/control-block';
+export * from './memory/hot-buffer';
+export * from './sync/atomics';
+export * from './sync/is-main-thread';
+export * from './sync/raf-poll';
+export * from './paint/copy-out-lwc';

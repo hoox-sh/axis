@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/hp"
-description: "High-performance chart engine (HP PR 1–3)."
+description: "High-performance chart engine (HP PR 1–4)."
 resource: "src/hp"
 tags: [code, hp]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-21T22:35:28Z
+  at: 2026-10-21T23:35:56Z
 sources:
   - id: tree
     resource: "src/hp"
@@ -27,9 +27,13 @@ okf_lock: generated
 
 * [src/hp/axb1](/code/src/hp/axb1.md)
 * [src/hp/calc](/code/src/hp/calc.md)
+* [src/hp/memory](/code/src/hp/memory.md)
+* [src/hp/paint](/code/src/hp/paint.md)
+* [src/hp/sync](/code/src/hp/sync.md)
 
 # Used by
 
+* [src/hp/memory](/code/src/hp/memory.md)
 * [src/hp/workers](/code/src/hp/workers.md)
 * [src/sw](/code/src/sw.md)
 * [tests/hp](/code/tests/hp.md)
@@ -38,4 +42,7 @@ okf_lock: generated
 
 * [src/hp/axb1](/code/src/hp/axb1.md)
 * [src/hp/calc](/code/src/hp/calc.md)
+* [src/hp/memory](/code/src/hp/memory.md)
+* [src/hp/paint](/code/src/hp/paint.md)
+* [src/hp/sync](/code/src/hp/sync.md)
 * [src/hp/workers](/code/src/hp/workers.md)
