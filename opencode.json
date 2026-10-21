@@ -26,6 +26,21 @@
     ]
   },
   "instructions": ["okf/index.md", "okf/playbooks/read-this-first.md"],
+  "references": {
+    "pyne": {
+      "path": "/home/jango/Git/pynescript",
+      "description": "PYNE engine + Pine Script builtin signatures (sister repo; local checkout is still named pynescript)"
+    },
+    "hoox": {
+      "path": "/home/jango/Git/hoox",
+      "description": "HOOX sister project — site, docs, and shared infra"
+    }
+  },
+  "compaction": {
+    "auto": true,
+    "keep": { "tokens": 15000 },
+    "buffer": 20000
+  },
   "permissions": [
     { "action": "edit", "resource": "*.env", "effect": "ask" },
     { "action": "edit", "resource": "*.env.*", "effect": "ask" },
@@ -33,6 +48,10 @@
     { "action": "edit", "resource": "*.pem", "effect": "deny" },
     { "action": "shell", "resource": "git push *", "effect": "ask" },
     { "action": "shell", "resource": "git tag *", "effect": "ask" },
+    { "action": "shell", "resource": "git reset --hard*", "effect": "ask" },
+    { "action": "shell", "resource": "git clean -f*", "effect": "ask" },
+    { "action": "shell", "resource": "git checkout --*", "effect": "ask" },
+    { "action": "shell", "resource": "wrangler secret*", "effect": "ask" },
     { "action": "shell", "resource": "rm -rf *", "effect": "ask" },
     { "action": "shell", "resource": "axis deploy *", "effect": "ask" },
     { "action": "shell", "resource": "make pages-deploy*", "effect": "ask" },

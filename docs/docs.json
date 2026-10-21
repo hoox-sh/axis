@@ -70,10 +70,7 @@
               },
               {
                 "group": "Reference",
-                "pages": [
-                  "enduser/reference/glossary",
-                  "enduser/reference/faq"
-                ]
+                "pages": ["enduser/reference/glossary", "enduser/reference/faq"]
               }
             ]
           }
@@ -166,7 +163,6 @@
               "devops/vps-demo",
               "devops/cors-and-origins",
               "devops/ci-and-testing",
-              "devops/opencode",
               "devops/okf"
             ]
           }
