@@ -39,6 +39,7 @@
 import type { RunResult } from '../plugins/types';
 import { store } from '../store';
 import type { Bar } from '../store/types';
+import { sanitizeStreamBar } from '../data/parse-bars';
 import { readTimeList, scriptDeltaTimeTail, Redesign2DeltaApplier } from './client-apply';
 import type { SubscriptionStatus } from '../store/types';
 
@@ -130,18 +131,9 @@ function toBars(raw: unknown): Bar[] {
   if (!Array.isArray(raw)) return [];
   const out: Bar[] = [];
   for (const row of raw) {
-    if (!row || typeof row !== 'object') continue;
-    const r = row as Record<string, unknown>;
-    const time = Number(r.time);
-    if (!Number.isFinite(time)) continue;
-    out.push({
-      time,
-      open: Number(r.open),
-      high: Number(r.high),
-      low: Number(r.low),
-      close: Number(r.close),
-      volume: Number(r.volume),
-    });
+    // A bar with a non-finite price is dropped rather than painted.
+    const bar = sanitizeStreamBar(row);
+    if (bar) out.push(bar);
   }
   return out;
 }

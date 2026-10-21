@@ -237,7 +237,9 @@ export async function provideDataSeries(
       high: b.high,
       low: b.low,
       close: b.close,
-      volume: b.volume ?? 0,
+      // A missing volume stays missing - coercing it to 0 would store a real
+      // zero volume where the venue never reported one.
+      ...(b.volume !== undefined ? { volume: b.volume } : {}),
     }));
     const r = await call(
       endpoint,

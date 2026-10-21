@@ -158,6 +158,44 @@ function repairOhlc(
 }
 
 /**
+ * Sanitize one **live/stream** bar.
+ *
+ * The historical path ({@link sanitizeBar}) drops the `closed` flag because a
+ * REST bar is always closed. A stream bar is not: a forming tick must stay
+ * distinguishable from a closed candle, so this variant keeps the flag and
+ * applies the same time/OHLC rules — a bar with a non-finite price is dropped
+ * rather than painted.
+ *
+ * @param raw Bar-like object with `time`, OHLC and an optional `closed`.
+ * @param closed Fallback when the payload carries no closed flag of its own.
+ */
+export function sanitizeStreamBar(raw: unknown, closed?: boolean): Bar | null {
+  if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) return null;
+
+  const row = raw as Record<string, unknown>;
+  const lower: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(row)) {
+    if (typeof k === 'string') lower[k.toLowerCase()] = v;
+  }
+
+  const time = normalizeBarTime(lower.time ?? lower.timestamp ?? lower.t);
+  const open = num(lower.open ?? lower.o);
+  const high = num(lower.high ?? lower.h);
+  const low = num(lower.low ?? lower.l);
+  const close = num(lower.close ?? lower.c);
+  if (time == null || open == null || high == null || low == null || close == null) return null;
+  const ohlc = repairOhlc(open, high, low, close);
+  if (!ohlc) return null;
+
+  const bar: Bar = { time, ...ohlc };
+  const volume = num(lower.volume ?? lower.v);
+  if (volume != null && volume >= 0) bar.volume = volume;
+  const isClosed = typeof lower.closed === 'boolean' ? lower.closed : closed;
+  if (isClosed !== undefined) bar.closed = isClosed;
+  return bar;
+}
+
+/**
  * Sanitize one bar-like object into a chart-safe {@link Bar}, or null if
  * time/OHLC is missing, non-finite, or unusable.
  */
@@ -236,10 +274,7 @@ function coerceBarList(bars: unknown): unknown[] | null {
  * dedupe same timestamps (last wins), optionally keep the newest `limit` bars.
  * Never throws — bad payloads yield `[]`.
  */
-export function normalizeHistoricalBars(
-  bars: unknown,
-  opts?: { limit?: number },
-): Bar[] {
+export function normalizeHistoricalBars(bars: unknown, opts?: { limit?: number }): Bar[] {
   const rows = coerceBarList(bars);
   if (!rows || rows.length === 0) return [];
 
@@ -374,8 +409,7 @@ export function parseOhlcvText(text: string, fileName = ''): Bar[] {
   const trimmed = text.trim();
   if (!trimmed) throw new Error('File is empty');
   const lower = String(fileName || '').toLowerCase();
-  const asJson =
-    lower.endsWith('.json') || trimmed.startsWith('[') || trimmed.startsWith('{');
+  const asJson = lower.endsWith('.json') || trimmed.startsWith('[') || trimmed.startsWith('{');
   let bars: Bar[];
   try {
     bars = asJson ? parseJson(trimmed) : parseCsv(trimmed);
@@ -384,9 +418,7 @@ export function parseOhlcvText(text: string, fileName = ''): Bar[] {
     if (e instanceof Error && /empty|No valid|Invalid JSON|JSON must/i.test(e.message)) {
       throw e;
     }
-    throw new Error(
-      e instanceof Error ? e.message : `Parse failed: ${String(e)}`,
-    );
+    throw new Error(e instanceof Error ? e.message : `Parse failed: ${String(e)}`);
   }
   if (!bars.length) {
     throw new Error('No valid OHLCV rows found (need time,open,high,low,close)');

@@ -57,6 +57,7 @@ import type { Bar } from '../store/types';
 import type { StreamPlugin as UnifiedStreamPlugin } from '../plugins/types';
 import { registry } from '../plugins/registry';
 import { getDataManagerSelection } from '../data/data-manager-source';
+import { sanitizeStreamBar } from '../data/parse-bars';
 import { defaultStreamForSource as defaultStreamForSourceId } from '../data/provider';
 import { openReconnectableWs } from './reconnect-ws';
 import { binanceKlineWsUrls } from '../data/binance-http';
@@ -129,15 +130,16 @@ export const binanceStream: StreamPlugin = {
           const data = JSON.parse(e.data as string);
           const k = data.k;
           if (!k) return;
-          onBar({
-            time: Math.floor(k.t / 1000),
-            open: +k.o,
-            high: +k.h,
-            low: +k.l,
-            close: +k.c,
-            volume: +k.v,
+          const bar = sanitizeStreamBar({
+            time: Math.floor(Number(k.t) / 1000),
+            open: k.o,
+            high: k.h,
+            low: k.l,
+            close: k.c,
+            volume: k.v,
             closed: !!k.x,
           });
+          if (bar) onBar(bar);
         } catch {
           /* ignore */
         }
@@ -295,15 +297,16 @@ export const okxStream: StreamPlugin = {
           if (!row || !Array.isArray(row)) return;
           // [ts, o, h, l, c, vol, volCcy, volCcyQuote, confirm]
           const confirm = row[8];
-          onBar({
+          const bar = sanitizeStreamBar({
             time: Math.floor(Number(row[0]) / 1000),
-            open: +row[1],
-            high: +row[2],
-            low: +row[3],
-            close: +row[4],
-            volume: +row[5],
+            open: row[1],
+            high: row[2],
+            low: row[3],
+            close: row[4],
+            volume: row[5],
             closed: confirm === '1' || confirm === 1 || confirm === true,
           });
+          if (bar) onBar(bar);
         } catch {
           /* ignore */
         }
@@ -354,15 +357,16 @@ export const bybitStream: StreamPlugin = {
           const msg = JSON.parse(e.data as string);
           const row = msg?.data?.[0];
           if (!row) return;
-          onBar({
+          const bar = sanitizeStreamBar({
             time: Math.floor(Number(row.start) / 1000),
-            open: +row.open,
-            high: +row.high,
-            low: +row.low,
-            close: +row.close,
-            volume: +row.volume,
+            open: row.open,
+            high: row.high,
+            low: row.low,
+            close: row.close,
+            volume: row.volume,
             closed: row.confirm === true || row.confirm === 'true',
           });
+          if (bar) onBar(bar);
         } catch {
           /* ignore */
         }
@@ -557,16 +561,17 @@ export const krakenStream: StreamPlugin = {
           if (!Number.isFinite(endSec) || endSec <= 0) return;
           const startSec = endSec - intervalMin * 60;
           if (!Number.isFinite(startSec) || startSec <= 0) return;
-          onBar({
+          const bar = sanitizeStreamBar({
             time: startSec,
-            open: +row[2],
-            high: +row[3],
-            low: +row[4],
-            close: +row[5],
-            volume: +row[7],
+            open: row[2],
+            high: row[3],
+            low: row[4],
+            close: row[5],
+            volume: row[7],
             // Kraken does not always send a closed flag; multiplex uses time advance fallback
             closed: false,
           });
+          if (bar) onBar(bar);
         } catch {
           /* ignore */
         }
@@ -699,15 +704,8 @@ export const ccxtWsStream: StreamPlugin = {
       ws.onmessage = (ev: MessageEvent) => {
         try {
           const frame = JSON.parse(String(ev.data));
-          onBar({
-            time: frame.time,
-            open: frame.open,
-            high: frame.high,
-            low: frame.low,
-            close: frame.close,
-            volume: frame.volume,
-            closed: frame.closed,
-          });
+          const bar = sanitizeStreamBar(frame);
+          if (bar) onBar(bar);
         } catch {
           /* ignore malformed frames */
         }
