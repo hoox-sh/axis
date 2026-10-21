@@ -30,10 +30,10 @@
  * Copy orchestration lives in {@link copyScriptsBetweenStorages} so the
  * active plugin stays pinned to the source until the user commits.
  *
- * Surface is a standard AXIS modal (`.sc-dialog-backdrop` + `.sc-dialog` +
- * `.sc-dialog-header` + `.sc-dialog-body` + `.sc-dialog-footer`), matching
- * {@link AboutModal} / {@link ScriptSettingsModal}. Reuses Lucide icons via
- * the project-wide `Icons` map.
+ * Surface is the standard AXIS modal — it renders through the shared
+ * {@link Modal} shell, the same one {@link AboutModal} /
+ * {@link ScriptSettingsModal} use. Reuses Lucide icons via the project-wide
+ * `Icons` map.
  *
  * @module ui/StorageChangeDialog
  */
@@ -46,9 +46,8 @@ import {
   onCleanup,
   type Component,
 } from 'solid-js';
-import { useEventListener } from './use-event-listener';
 import { Icons } from './icons';
-import { installFocusTrap } from './focus-trap';
+import { Modal } from './Modal';
 import { copyScriptsBetweenStorages } from '../storage/service';
 import { resolveCloudConfig } from '../storage/cloud-config';
 import { appendLog } from '../store';
@@ -138,30 +137,6 @@ const StorageChangeDialog: Component<StorageChangeDialogProps> = (props) => {
       setAbort(makeAbortHandle());
     }
   });
-
-  /** Install keydown listener and focus trap on every open. */
-  useEventListener<KeyboardEvent>(window, 'keydown', (e) => {
-    if (!props.open) return;
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      // Escape mid-migration = abort the copy and surface partial state.
-      if (phase() === 'migrating') {
-        abort().aborted = true;
-        return;
-      }
-      handleCancel();
-    }
-  });
-
-  /** Close on backdrop click (no change to storage). */
-  const onBackdrop = (e: MouseEvent) => {
-    if (e.target !== e.currentTarget) return;
-    if (busy()) {
-      abort().aborted = true;
-      return;
-    }
-    handleCancel();
-  };
 
   /** Cancel handler: abort any in-flight copy and tell the parent. */
   const handleCancel = () => {
@@ -296,64 +271,112 @@ const StorageChangeDialog: Component<StorageChangeDialogProps> = (props) => {
     return `Switch storage engine?`;
   };
 
-  return (
-    <Show when={props.open}>
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: backdrop is an intentional click-away dismiss surface for the dialog */}
-      <div
-        class="sc-dialog-backdrop"
-        onClick={onBackdrop}
-        role="presentation"
-        data-testid="axis-storage-change-backdrop"
-      >
-        <div
-          class="sc-dialog w-[min(520px,calc(100vw-2*var(--ui-dialog-margin)))]"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="axis-storage-change-title"
-          aria-describedby="axis-storage-change-body"
-          data-testid="axis-storage-change-dialog"
-          tabIndex={-1}
-          ref={(el) => {
-            if (!el) return;
-            const dispose = installFocusTrap(el, { autoFocus: true });
-            onCleanup(dispose);
-          }}
-        >
-          <div class="sc-dialog-accent" />
-
-          <div class="sc-dialog-header">
-            <div class="flex items-center gap-2.5 min-w-0">
-              <Show when={phase() === 'error'} fallback={<Icons.shuffle class="text-accent flex-shrink-0" />}>
-                <Icons.alert class="text-red flex-shrink-0" />
-              </Show>
-              <div class="min-w-0">
-                <div
-                  id="axis-storage-change-title"
-                  class="text-[0.95em] font-semibold text-text tracking-tight"
-                >
-                  {heading()}
-                </div>
-                <div class="sc-hint truncate">
-                  {props.fromEngineLabel} → {props.toEngineLabel}
-                </div>
-              </div>
-            </div>
-            <button
-              type="button"
-              class="sc-btn sc-btn-ghost px-2"
-              onClick={handleCancel}
-              aria-label="Close"
-              disabled={busy() && failures().length === 0}
-              data-testid="axis-storage-change-close"
-            >
-              <Icons.x />
-            </button>
-          </div>
-
-          <div
-            id="axis-storage-change-body"
-            class="sc-dialog-body flex flex-col gap-3 text-[0.9em]"
+  const footer = (
+    <>
+      <Show
+        when={phase() === 'error'}
+        fallback={
+          <button
+            type="button"
+            class="sc-btn sc-btn-ghost"
+            onClick={handleCancel}
+            disabled={busy()}
+            data-testid="axis-storage-change-cancel"
           >
+            Cancel
+          </button>
+        }
+      >
+        <button
+          type="button"
+          class="sc-btn sc-btn-ghost"
+          onClick={handleCancel}
+          data-testid="axis-storage-change-discard"
+        >
+          Close
+        </button>
+        <div class="flex-1" />
+        <button
+          type="button"
+          class="sc-btn"
+          onClick={handleRetry}
+          data-testid="axis-storage-change-retry"
+        >
+          <Icons.refresh />
+          Retry copy
+        </button>
+      </Show>
+
+      <Show when={phase() === 'idle'}>
+        <div class="flex-1" />
+        <button
+          type="button"
+          class="sc-btn sc-btn-ghost"
+          onClick={() => void handleFresh()}
+          data-testid="axis-storage-change-fresh"
+        >
+          <Icons.eraser />
+          Switch without copying
+        </button>
+        <button
+          type="button"
+          class="sc-btn sc-btn-primary"
+          onClick={() => void handleMigrate()}
+          data-testid="axis-storage-change-migrate"
+          disabled={targetNeedsKey()}
+          title={
+            targetNeedsKey()
+              ? 'Set the Worker API key in Settings before copying'
+              : 'Copy scripts to the new engine (keep the source library)'
+          }
+        >
+          <Icons.shuffle />
+          Copy scripts
+        </button>
+      </Show>
+    </>
+  );
+
+  return (
+    <Modal
+      open={props.open}
+      onClose={handleCancel}
+      title={heading()}
+      titleId="axis-storage-change-title"
+      hintClass="sc-hint truncate"
+      hint={`${props.fromEngineLabel} → ${props.toEngineLabel}`}
+      class="w-[min(520px,calc(100vw-2*var(--ui-dialog-margin)))]"
+      bodyClass="flex flex-col gap-3 text-[0.9em]"
+      bodyId="axis-storage-change-body"
+      describedBy="axis-storage-change-body"
+      testId="axis-storage-change-dialog"
+      backdropTestId="axis-storage-change-backdrop"
+      closeTestId="axis-storage-change-close"
+      closeDisabled={busy() && failures().length === 0}
+      onCloseClick={handleCancel}
+      onEscape={() => {
+        // Escape mid-migration = abort the copy and surface partial state.
+        if (phase() === 'migrating') {
+          abort().aborted = true;
+          return;
+        }
+        handleCancel();
+      }}
+      onBackdropClick={() => {
+        // A backdrop click mid-migration aborts the copy, it does not cancel.
+        if (busy()) {
+          abort().aborted = true;
+          return;
+        }
+        handleCancel();
+      }}
+      footer={footer}
+      headerLead={
+        <Show when={phase() === 'error'} fallback={<Icons.shuffle class="text-accent flex-shrink-0" />}>
+          <Icons.alert class="text-red flex-shrink-0" />
+        </Show>
+      }
+    >
             <p class="text-text-dim leading-relaxed m-0">{bodyDescription()}</p>
 
             <Show when={phase() === 'idle' && targetNeedsKey()}>
@@ -409,74 +432,7 @@ const StorageChangeDialog: Component<StorageChangeDialogProps> = (props) => {
                 </For>
               </div>
             </Show>
-          </div>
-
-          <div class="sc-dialog-footer">
-            <Show
-              when={phase() === 'error'}
-              fallback={
-                <button
-                  type="button"
-                  class="sc-btn sc-btn-ghost"
-                  onClick={handleCancel}
-                  disabled={busy()}
-                  data-testid="axis-storage-change-cancel"
-                >
-                  Cancel
-                </button>
-              }
-            >
-              <button
-                type="button"
-                class="sc-btn sc-btn-ghost"
-                onClick={handleCancel}
-                data-testid="axis-storage-change-discard"
-              >
-                Close
-              </button>
-              <div class="flex-1" />
-              <button
-                type="button"
-                class="sc-btn"
-                onClick={handleRetry}
-                data-testid="axis-storage-change-retry"
-              >
-                <Icons.refresh />
-                Retry copy
-              </button>
-            </Show>
-
-            <Show when={phase() === 'idle'}>
-              <div class="flex-1" />
-              <button
-                type="button"
-                class="sc-btn sc-btn-ghost"
-                onClick={() => void handleFresh()}
-                data-testid="axis-storage-change-fresh"
-              >
-                <Icons.eraser />
-                Switch without copying
-              </button>
-              <button
-                type="button"
-                class="sc-btn sc-btn-primary"
-                onClick={() => void handleMigrate()}
-                data-testid="axis-storage-change-migrate"
-                disabled={targetNeedsKey()}
-                title={
-                  targetNeedsKey()
-                    ? 'Set the Worker API key in Settings before copying'
-                    : 'Copy scripts to the new engine (keep the source library)'
-                }
-              >
-                <Icons.shuffle />
-                Copy scripts
-              </button>
-            </Show>
-          </div>
-        </div>
-      </div>
-    </Show>
+    </Modal>
   );
 };
 

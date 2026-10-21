@@ -42,7 +42,7 @@ import {
   venueLabel,
 } from '../data/symbol-catalog';
 import { activeCcxtExchange, activeCcxtGateway } from '../data/credentials';
-import { installFocusTrap } from './focus-trap';
+import { Modal } from './Modal';
 import { Icons } from './icons';
 
 export type SymbolModalProps = {
@@ -91,17 +91,6 @@ export const SymbolModal: Component<SymbolModalProps> = (props) => {
     setError('');
     queueMicrotask(() => searchRef?.focus());
     requestAnimationFrame(() => searchRef?.select());
-
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        props.onClose();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    onCleanup(() => {
-      window.removeEventListener('keydown', onKey);
-    });
   });
 
   // Preload instrument list for venue (source → stream)
@@ -191,10 +180,6 @@ export const SymbolModal: Component<SymbolModalProps> = (props) => {
     }
   };
 
-  const onBackdrop = (e: MouseEvent) => {
-    if (e.target === e.currentTarget) props.onClose();
-  };
-
   const refresh = () => {
     const v = venue();
     setLoading(true);
@@ -223,66 +208,40 @@ export const SymbolModal: Component<SymbolModalProps> = (props) => {
   };
 
   return (
-    <Show when={props.open}>
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: backdrop is an intentional click-away dismiss surface for the dialog */}
-      <div
-        class="sc-dialog-backdrop sc-dialog-backdrop--start sm:items-center"
-        onClick={onBackdrop}
-        role="presentation"
-      >
-        <div
-          class="sc-dialog w-[min(540px,calc(100vw-2*var(--ui-dialog-margin)))] max-h-[min(86vh,660px)] flex flex-col"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="axis-symbol-modal-title"
-          data-testid="axis-symbol-modal"
-          tabIndex={-1}
-          ref={(el) => {
-            if (!el) return;
-            // Search input already takes focus on open (see effect above); the
-            // trap only adds Tab cycling and restores prior focus on close.
-            const dispose = installFocusTrap(el, { autoFocus: false });
-            onCleanup(dispose);
-          }}
-        >
-          <div class="sc-dialog-accent" />
-          <div class="sc-dialog-header">
-            <div class="min-w-0">
-              <div
-                id="axis-symbol-modal-title"
-                class="text-[0.95em] font-semibold text-text tracking-tight"
-              >
-                Symbol
-              </div>
-              <div class="sc-hint truncate" data-testid="axis-symbol-modal-venue">
-                {venueName()} · {exchangeHint()}
-                <Show when={meta()}>
-                  <span class="text-text-faint"> · {meta()}</span>
-                </Show>
-              </div>
-            </div>
-            <div class="flex items-center gap-1">
-              <button
-                type="button"
-                class="sc-btn sc-btn-ghost sc-btn-sm"
-                onClick={() => refresh()}
-                disabled={loading()}
-                title="Refresh instrument list"
-              >
-                <Icons.refresh />
-              </button>
-              <button
-                type="button"
-                class="sc-btn sc-btn-ghost px-2"
-                onClick={() => props.onClose()}
-                aria-label="Close"
-              >
-                <Icons.x />
-              </button>
-            </div>
-          </div>
-
-          <div class="sc-dialog-body flex flex-col gap-3 min-h-0 overflow-hidden flex-1">
+    <Modal
+      open={props.open}
+      onClose={props.onClose}
+      title="Symbol"
+      titleId="axis-symbol-modal-title"
+      hintClass="sc-hint truncate"
+      hintTestId="axis-symbol-modal-venue"
+      hint={
+        <>
+          {venueName()} · {exchangeHint()}
+          <Show when={meta()}>
+            <span class="text-text-faint"> · {meta()}</span>
+          </Show>
+        </>
+      }
+      class="w-[min(540px,calc(100vw-2*var(--ui-dialog-margin)))] max-h-[min(86vh,660px)] flex flex-col"
+      bodyClass="flex flex-col gap-3 min-h-0 overflow-hidden flex-1"
+      testId="axis-symbol-modal"
+      backdropClass="sc-dialog-backdrop--start sm:items-center"
+      autoFocus={false}
+      headerActions={
+        <div class="flex items-center gap-1">
+          <button
+            type="button"
+            class="sc-btn sc-btn-ghost sc-btn-sm"
+            onClick={() => refresh()}
+            disabled={loading()}
+            title="Refresh instrument list"
+          >
+            <Icons.refresh />
+          </button>
+        </div>
+      }
+    >
             <Show when={error()}>
               <div
                 class="text-[11px] text-amber-200/90 border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 rounded"
@@ -403,9 +362,6 @@ export const SymbolModal: Component<SymbolModalProps> = (props) => {
                 Apply
               </button>
             </div>
-          </div>
-        </div>
-      </div>
-    </Show>
+    </Modal>
   );
 };

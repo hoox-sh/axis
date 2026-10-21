@@ -31,6 +31,7 @@ import { store } from '../../store';
 import { DEFAULT_BINDINGS, getDisplay } from './registry';
 import { detectPlatform } from './keys';
 import type { ShortcutDef } from './types';
+import { Modal } from '../Modal';
 
 const SCOPE_ORDER: ShortcutDef['scope'][] = ['app', 'editor', 'chart', 'palette'];
 const SCOPE_LABEL: Record<ShortcutDef['scope'], string> = {
@@ -64,23 +65,10 @@ export const ShortcutsModal: Component = () => {
   onMount(() => {
     const onOpen = () => openShortcutsModal();
     window.addEventListener('axis-shortcuts-open', onOpen);
-    const onKey = (e: KeyboardEvent) => {
-      if (!shortcutsOpen()) return;
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        close();
-      }
-    };
-    window.addEventListener('keydown', onKey);
     onCleanup(() => {
       window.removeEventListener('axis-shortcuts-open', onOpen);
-      window.removeEventListener('keydown', onKey);
     });
   });
-
-  const onBackdrop = (e: MouseEvent) => {
-    if (e.target === e.currentTarget) close();
-  };
 
   const overrides = () => store.shortcuts?.overrides ?? {};
   const platform = detectPlatform();
@@ -102,48 +90,32 @@ export const ShortcutsModal: Component = () => {
     })).filter((g) => g.bindings.length > 0);
 
   return (
-    <Show when={shortcutsOpen()}>
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: backdrop is an intentional click-away dismiss surface for the dialog */}
-      <div
-        class="sc-dialog-backdrop"
-        onClick={onBackdrop}
-        role="presentation"
-        data-testid="axis-shortcuts-backdrop"
-      >
-        <div
-          class="sc-dialog w-[min(640px,calc(100vw-2*var(--ui-dialog-margin)))] max-h-[min(88vh,720px)] flex flex-col"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="axis-shortcuts-title"
-          data-testid="axis-shortcuts-modal"
-          tabIndex={-1}
-        >
-          <div class="sc-dialog-accent" />
-
-          <div class="sc-dialog-header">
-            <div class="flex items-center gap-2.5 min-w-0">
-              <div class="min-w-0">
-                <div
-                  id="axis-shortcuts-title"
-                  class="text-[0.95em] font-semibold text-text tracking-tight"
-                >
-                  Keyboard shortcuts
-                </div>
-                <div class="sc-hint">Familiar power-user chords · overrides apply</div>
-              </div>
-            </div>
-            <button
-              type="button"
-              class="sc-btn sc-btn-ghost px-2"
-              onClick={close}
-              aria-label="Close shortcuts"
-              data-testid="axis-shortcuts-close"
-            >
-              ✕
-            </button>
-          </div>
-
-          <div class="sc-dialog-body overflow-y-auto flex flex-col gap-5 text-[0.9em]">
+    <Modal
+      open={shortcutsOpen()}
+      onClose={close}
+      title="Keyboard shortcuts"
+      titleId="axis-shortcuts-title"
+      hint="Familiar power-user chords · overrides apply"
+      class="w-[min(640px,calc(100vw-2*var(--ui-dialog-margin)))] max-h-[min(88vh,720px)] flex flex-col"
+      bodyClass="overflow-y-auto flex flex-col gap-5 text-[0.9em]"
+      testId="axis-shortcuts-modal"
+      backdropTestId="axis-shortcuts-backdrop"
+      closeLabel="Close shortcuts"
+      closeTestId="axis-shortcuts-close"
+      footer={
+        <>
+          <span class="sc-hint">Recording a new chord? Settings → Keyboard</span>
+          <button
+            type="button"
+            class="sc-btn sc-btn-primary"
+            onClick={close}
+            data-testid="axis-shortcuts-done"
+          >
+            Done
+          </button>
+        </>
+      }
+    >
             <For each={groups()}>
               {(group) => (
                 <section class="flex flex-col gap-1.5">
@@ -169,23 +141,6 @@ export const ShortcutsModal: Component = () => {
                 </section>
               )}
             </For>
-          </div>
-
-          <div class="sc-dialog-footer">
-            <span class="sc-hint">
-              Recording a new chord? Settings → Keyboard
-            </span>
-            <button
-              type="button"
-              class="sc-btn sc-btn-primary"
-              onClick={close}
-              data-testid="axis-shortcuts-done"
-            >
-              Done
-            </button>
-          </div>
-        </div>
-      </div>
-    </Show>
+    </Modal>
   );
 };
