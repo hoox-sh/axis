@@ -140,7 +140,7 @@ export async function githubListFileCommits(
   opts?: { limit?: number },
 ): Promise<ScriptVersion[]> {
   assertGitConfig(cfg);
-  const limit = Math.min(100, Math.max(1, opts?.limit ?? 30));
+  const limit = Math.min(100, Math.max(1, opts?.limit ?? 40));
   const q = new URLSearchParams({
     path: filePath,
     sha: cfg.branch,

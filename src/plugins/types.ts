@@ -120,6 +120,18 @@ export interface PluginCapabilities {
    * informational.
    */
   results?: boolean;
+  /**
+   * True when the storage plugin keeps script version history
+   * (`listVersions` / `readAtRevision`). The Script Library renders the
+   * history affordance from this flag.
+   */
+  versioning?: boolean;
+  /**
+   * True when the storage plugin round-trips drafts
+   * (`saveDraft` / `loadDraft`). Git backends keep drafts local, so they
+   * declare `false` even though the methods exist.
+   */
+  drafts?: boolean;
 }
 
 /** Shared fields on every plugin kind. */

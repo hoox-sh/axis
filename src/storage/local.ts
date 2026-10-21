@@ -775,7 +775,7 @@ export const localStoragePlugin: StoragePlugin = {
   builtIn: true,
   description:
     'Stores your Pine scripts in this browser (IndexedDB, with localStorage fallback). Works offline. Keeps save history.',
-  capabilities: { offline: true, results: true },
+  capabilities: { offline: true, results: true, versioning: true, drafts: true },
   configSchema: {
     namespace: { type: 'string', default: 'default', label: 'Namespace (advanced)' },
   },

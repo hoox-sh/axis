@@ -103,6 +103,10 @@ export const LibraryScriptCard: Component<{
     setHistoryErr('');
     try {
       const doc = await readScriptVersion(props.item.id, v.sha);
+      if (!doc) {
+        setHistoryErr('Version history is not available on this storage engine');
+        return;
+      }
       props.onLoadVersion({
         content: doc.content,
         name: doc.name,

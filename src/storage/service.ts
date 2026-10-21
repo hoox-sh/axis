@@ -216,6 +216,10 @@ export function getActiveStoragePlugin(): StoragePlugin {
  */
 export function supportsRunResults(): boolean {
   const p = getActiveStoragePlugin();
+  // Declared first: a backend says what it can do. The method probe is the
+  // fallback for a plugin that predates the capability record.
+  const declared = p?.capabilities?.results;
+  if (typeof declared === 'boolean') return declared;
   return typeof p?.saveResult === 'function';
 }
 
@@ -307,36 +311,41 @@ export async function removeRunResult(
 /** True when the active storage can list/restore version history. */
 export function supportsScriptVersioning(): boolean {
   const p = requireActive();
+  // Declared first: a backend says what it can do. The method probe is the
+  // fallback for a plugin that predates the capability record.
+  const declared = p.capabilities?.versioning;
+  if (typeof declared === 'boolean') return declared;
   return typeof p.listVersions === 'function' && typeof p.readAtRevision === 'function';
 }
 
-const VERSIONING_UNAVAILABLE =
-  'Script version history is not available on this storage engine';
-
 /**
  * List version history for a library script (newest first).
- * Throws when the active backend does not implement versioning.
+ *
+ * Returns `[]` when the active backend does not keep version history — the
+ * capability is reported by {@link supportsScriptVersioning}, so an empty
+ * list means "no history here", not a failure.
  */
 export async function listScriptVersions(
   id: string,
   opts?: { limit?: number },
 ): Promise<ScriptVersion[]> {
   const p = requireActive();
-  if (typeof p.listVersions !== 'function') {
-    throw new Error(VERSIONING_UNAVAILABLE);
-  }
+  if (typeof p.listVersions !== 'function') return [];
   return p.listVersions(id, { limit: opts?.limit });
 }
 
 /**
  * Read a library script body at a historical revision.
+ *
+ * Returns `null` when the active backend does not keep version history.
  * Does not modify the current tip — use {@link writeScript} to restore.
  */
-export async function readScriptVersion(id: string, rev: string): Promise<ScriptDocument> {
+export async function readScriptVersion(
+  id: string,
+  rev: string,
+): Promise<ScriptDocument | null> {
   const p = requireActive();
-  if (typeof p.readAtRevision !== 'function') {
-    throw new Error(VERSIONING_UNAVAILABLE);
-  }
+  if (typeof p.readAtRevision !== 'function') return null;
   return p.readAtRevision(id, rev);
 }
 
@@ -350,6 +359,7 @@ export async function restoreScriptVersion(
   opts?: { name?: string },
 ): Promise<ScriptMeta> {
   const doc = await readScriptVersion(id, rev);
+  if (!doc) throw new Error('Script version history is not available on this storage engine');
   const short = rev.slice(0, 7);
   const meta = await writeScript({
     id: doc.id,

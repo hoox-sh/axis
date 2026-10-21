@@ -46,7 +46,7 @@ export const gitStoragePlugin: StoragePlugin = {
   builtIn: true,
   description:
     'Store Pine scripts in a git repo. Each Save commits (and pushes) via the host API. Browse and restore historical versions. Drafts stay local.',
-  capabilities: { needsNetwork: true, needsAuth: true },
+  capabilities: { needsNetwork: true, needsAuth: true, versioning: true, drafts: false },
   configSchema: {
     provider: {
       type: 'select',

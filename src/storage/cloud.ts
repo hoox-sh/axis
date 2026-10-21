@@ -141,7 +141,7 @@ export const cloudStoragePlugin: StoragePlugin = {
   builtIn: true,
   description:
     'Stores scripts on the AXIS Cloudflare Worker (/api/scripts). Uses Pro API keys; partition per key.',
-  capabilities: { needsNetwork: true, needsAuth: true },
+  capabilities: { needsNetwork: true, needsAuth: true, versioning: true, drafts: true },
   configSchema: {
     endpoint: {
       type: 'string',
@@ -168,6 +168,9 @@ export const cloudStoragePlugin: StoragePlugin = {
         (m) => m.name.startsWith(prefix) || (m.path && m.path.startsWith(prefix)),
       );
     }
+    // Newest first, like the local and git backends — the server returns
+    // whatever order the row scan produced.
+    metas.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
     return metas;
   },
 
