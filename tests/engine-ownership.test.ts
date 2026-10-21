@@ -94,12 +94,15 @@ describe('liveRerunModeForEngine', () => {
     expect(liveRerunModeForEngine(undefined)).toBe('every-tick');
   });
 
-  it('falls back to bar close only when the engine answered without every-tick', () => {
+  it('honors the stored every-tick even when the engine lacks it', () => {
+    // The user's preference wins. Downgrading to bar-close because the engine
+    // probe did not advertise every-tick delays every strategy entry/exit and
+    // indicator plot by a whole candle — the chart must not wait for a close.
     _setCachedEngineCapabilitiesForTests({
       ...DEFAULT_ENGINE_CAPABILITIES,
       liveModes: ['bar-close'],
     });
-    expect(liveRerunModeForEngine('every-tick')).toBe('bar-close');
+    expect(liveRerunModeForEngine('every-tick')).toBe('every-tick');
 
     _setCachedEngineCapabilitiesForTests(PRO_CAPS);
     expect(liveRerunModeForEngine('every-tick')).toBe('every-tick');
