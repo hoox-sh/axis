@@ -47,6 +47,7 @@ import {
   type UpstreamResult,
 } from './http';
 import { createProxyRouter } from './proxy-router';
+import { createProxyPlane } from './proxy-plane';
 
 const LLAMA_UPSTREAM = 'https://api.llama.fi';
 const GECKO_UPSTREAM = 'https://api.geckoterminal.com/api/v2';
@@ -81,50 +82,28 @@ const GECKO_OHLCV_QUERY_KEYS = [
 
 const GECKO_SEARCH_QUERY_KEYS = ['query', 'network', 'page', 'include'] as const;
 
-interface CacheEntry {
-  body: string;
-  status: number;
-  contentType: string;
-  expiresAt: number;
-}
-
-const memCache = new Map<string, CacheEntry>();
-
 const json: JsonBuilder = scopedJson(READ_CORS);
 
-function cachedResponse(entry: CacheEntry, origin: string, cacheStatus: string): Response {
-  return new Response(entry.body, {
-    status: entry.status,
-    headers: {
-      'Content-Type': entry.contentType || 'application/json',
-      'X-Axis-Onchain-Cache': cacheStatus,
-      ...READ_CORS(origin),
-    },
-  });
-}
-
-function getCached(key: string): CacheEntry | null {
-  const e = memCache.get(key);
-  if (!e) return null;
-  if (Date.now() > e.expiresAt) {
-    memCache.delete(key);
-    return null;
-  }
-  return e;
-}
-
-function putCached(key: string, entry: CacheEntry): void {
+/**
+ * The on-chain proxy plane.
+ *
+ * It states its differences — the cache header, the eviction policy, the
+ * upstream transport — and shares the cache, the coalescing and the response
+ * builder with the market plane.
+ */
+const plane = createProxyPlane({
+  cors: READ_CORS,
+  cacheHeader: 'X-Axis-Onchain-Cache',
+  maxEntries: 64,
   // Soft cap — drop oldest-ish by clearing all when huge
-  if (memCache.size > 64) memCache.clear();
-  memCache.set(key, entry);
-}
-
-async function fetchUpstream(url: string): Promise<UpstreamResult> {
-  return fetchUpstreamJson(url, {
-    timeoutMs: UPSTREAM_TIMEOUT_MS,
-    headers: { 'User-Agent': 'axis-worker-onchain/1.0' },
-  });
-}
+  eviction: 'clear',
+  fetchUpstream: (url) =>
+    fetchUpstreamJson(url, {
+      timeoutMs: UPSTREAM_TIMEOUT_MS,
+      headers: { 'User-Agent': 'axis-worker-onchain/1.0' },
+    }),
+  json: (body, status, origin, headers) => json(body, status, origin, headers),
+});
 
 /**
  * Forward only allowlisted query keys from the client request.
@@ -151,9 +130,6 @@ function isValidGeckoAddress(address: string): boolean {
   return ETH_ADDRESS_RE.test(address) || SOL_ADDRESS_RE.test(address);
 }
 
-/** Coalesce concurrent identical upstream fetches (A5) — one flight per cache key. */
-const inflight = new Map<string, Promise<UpstreamOutcome>>();
-
 type UpstreamOutcome =
   | { kind: 'response'; status: number; ok: boolean; text: string; contentType: string }
   | { kind: 'network-error'; message: string };
@@ -170,33 +146,25 @@ async function proxyUpstream(
   ttlMs: number,
   providerLabel = 'Upstream',
 ): Promise<Response> {
-  const hit = getCached(cacheKey);
-  if (hit) return cachedResponse(hit, origin, 'HIT');
+  const hit = plane.get(cacheKey);
+  if (hit) return plane.cachedResponse(hit, origin, 'HIT');
 
-  let pending = inflight.get(cacheKey);
-  if (!pending) {
-    pending = (async (): Promise<UpstreamOutcome> => {
-      try {
-        const up = await fetchUpstream(upstreamUrl);
-        return {
-          kind: 'response',
-          status: up.status,
-          ok: up.status >= 200 && up.status < 300,
-          text: up.text,
-          contentType: up.contentType,
-        };
-      } catch (err) {
-        // Client-safe phrase only — raw runtime text never leaves the isolate.
-        return { kind: 'network-error', message: upstreamDetail(err) };
-      }
-    })();
-    inflight.set(cacheKey, pending);
-    const done = pending;
-    void done.finally(() => {
-      if (inflight.get(cacheKey) === done) inflight.delete(cacheKey);
-    });
-  }
-  const up = await pending;
+  // Coalesce concurrent identical upstream fetches (A5) — one flight per key.
+  const up = await plane.coalesce(cacheKey, async (): Promise<UpstreamOutcome> => {
+    try {
+      const up = await plane.fetch(upstreamUrl);
+      return {
+        kind: 'response',
+        status: up.status,
+        ok: up.status >= 200 && up.status < 300,
+        text: up.text,
+        contentType: up.contentType,
+      };
+    } catch (err) {
+      // Client-safe phrase only — raw runtime text never leaves the isolate.
+      return { kind: 'network-error', message: upstreamDetail(err) };
+    }
+  });
 
   if (up.kind === 'network-error') {
     return json(
@@ -208,7 +176,7 @@ async function proxyUpstream(
 
   // Cache successful and 404 bodies briefly (404 avoids stampede on bad paths)
   if (up.ok || up.status === 404) {
-    putCached(cacheKey, {
+    plane.put(cacheKey, {
       body: up.text,
       status: up.status,
       contentType: up.contentType,
@@ -265,7 +233,7 @@ const ROUTER = createProxyRouter({
         ],
       },
     },
-    cache: { entries: memCache.size },
+    cache: { entries: plane.size },
   }),
   routes: [
     {
@@ -388,6 +356,5 @@ export function handleOnchain(
 
 /** Test helper — clear isolate memory cache. */
 export function _resetOnchainCacheForTests(): void {
-  memCache.clear();
-  inflight.clear();
+  plane._resetCache();
 }

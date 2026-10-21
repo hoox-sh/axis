@@ -53,6 +53,7 @@ import {
   type UpstreamResult,
 } from './http';
 import { createProxyRouter } from './proxy-router';
+import { createProxyPlane } from './proxy-plane';
 
 /** Prefer vision data API (public market data), then classic spot API. */
 const BINANCE_UPSTREAMS = [
@@ -83,50 +84,24 @@ const INTERVAL_RE = /^(1s|1m|3m|5m|15m|30m|1h|2h|4h|6h|8h|12h|1d|3d|1w|1M)$/;
  * AXIS TFs plus venue `1M`. No `1s`, `3m`, `2h`, `6h`, `8h`, `12h`, `3d`. */
 const MEXC_INTERVAL_RE = /^(1m|5m|15m|30m|60m|4h|1d|1W|1M)$/;
 
-interface CacheEntry {
-  body: string;
-  status: number;
-  contentType: string;
-  expiresAt: number;
-}
-
-const memCache = new Map<string, CacheEntry>();
-
 const json: JsonBuilder = scopedJson(MARKET_CORS);
 
-function cachedResponse(entry: CacheEntry, origin: string, cacheStatus: string): Response {
-  return new Response(entry.body, {
-    status: entry.status,
-    headers: {
-      'Content-Type': entry.contentType || 'application/json',
-      'X-Axis-Market-Cache': cacheStatus,
-      ...MARKET_CORS(origin),
-    },
-  });
-}
-
-function getCached(key: string): CacheEntry | null {
-  const hit = memCache.get(key);
-  if (!hit) return null;
-  if (Date.now() > hit.expiresAt) {
-    memCache.delete(key);
-    return null;
-  }
-  return hit;
-}
-
-function putCached(key: string, entry: CacheEntry): void {
-  memCache.set(key, entry);
+/**
+ * The market proxy plane.
+ *
+ * It states its differences — the cache header, the eviction policy, the
+ * upstream transport — and shares the cache, the coalescing and the response
+ * builder with the on-chain plane.
+ */
+const plane = createProxyPlane({
+  cors: MARKET_CORS,
+  cacheHeader: 'X-Axis-Market-Cache',
+  maxEntries: 128,
   // Soft bound — drop oldest when large
-  if (memCache.size > 128) {
-    const first = memCache.keys().next().value;
-    if (first) memCache.delete(first);
-  }
-}
-
-async function fetchUpstream(url: string): Promise<UpstreamResult> {
-  return fetchUpstreamJson(url, { timeoutMs: UPSTREAM_TIMEOUT_MS });
-}
+  eviction: 'oldest',
+  fetchUpstream: (url) => fetchUpstreamJson(url, { timeoutMs: UPSTREAM_TIMEOUT_MS }),
+  json: (body, status, origin, headers) => json(body, status, origin, headers),
+});
 
 function bytesToHex(buf: ArrayBuffer): string {
   const bytes = new Uint8Array(buf);
@@ -159,8 +134,6 @@ async function fetchSignedBinance(url: string, apiKey: string): Promise<Upstream
   });
 }
 
-/** Coalesce concurrent identical public fetches (A5) — one flight per cache key. */
-const inflight = new Map<string, Promise<Response>>();
 
 async function proxyPublicPath(
   upstreams: readonly string[],
@@ -170,13 +143,11 @@ async function proxyPublicPath(
   cacheKey: string,
   venueLabel: string,
 ): Promise<Response> {
-  const hit = getCached(cacheKey);
-  if (hit) return cachedResponse(hit, origin, 'HIT');
+  const hit = plane.get(cacheKey);
+  if (hit) return plane.cachedResponse(hit, origin, 'HIT');
 
-  const pending = inflight.get(cacheKey);
-  if (pending) return (await pending).clone();
-
-  const task = (async (): Promise<Response> => {
+  // Coalesce concurrent identical public fetches (A5) — one flight per key.
+  const task = async (): Promise<Response> => {
     let lastErr = 'unreachable';
     let lastStatus = 502;
     let lastBody = '';
@@ -184,7 +155,7 @@ async function proxyPublicPath(
     for (const base of upstreams) {
       const upstreamUrl = `${base}${pathAndQuery}`;
       try {
-        const upstream = await fetchUpstream(upstreamUrl);
+        const upstream = await plane.fetch(upstreamUrl);
         const text = upstream.text;
         const contentType = upstream.contentType;
         // Geo / WAF blocks (403/451) and rate limits (429) on one host should
@@ -197,7 +168,7 @@ async function proxyPublicPath(
           continue;
         }
         if ((upstream.status >= 200 && upstream.status < 300) || upstream.status === 400 || upstream.status === 404) {
-          putCached(cacheKey, {
+          plane.put(cacheKey, {
             body: text,
             status: upstream.status,
             contentType,
@@ -239,13 +210,9 @@ async function proxyPublicPath(
       502,
       origin,
     );
-  })();
-  inflight.set(cacheKey, task);
-  try {
-    return (await task).clone();
-  } finally {
-    if (inflight.get(cacheKey) === task) inflight.delete(cacheKey);
-  }
+  };
+  // Every caller gets its own copy — a Response body can only be read once.
+  return (await plane.coalesce(cacheKey, task)).clone();
 }
 
 function proxyBinancePath(
@@ -394,8 +361,7 @@ function parseMexcTickerQuery(url: URL): MexcTickerQuery {
 
 /** @internal test helper — clear the in-memory market cache between cases. */
 export function _resetMarketCacheForTests(): void {
-  memCache.clear();
-  inflight.clear();
+  plane._resetCache();
 }
 
 /** 400 envelope shared by every query-validation failure. */

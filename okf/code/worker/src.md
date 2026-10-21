@@ -7,7 +7,7 @@ tags: [code, worker]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-21T17:39:44Z
+  at: 2026-10-21T19:24:41Z
 sources:
   - id: tree
     resource: "worker/src"
@@ -28,6 +28,7 @@ okf_lock: generated
 * `live-proxy.ts` — LIVE_TICKET_TTL_S, _resetLiveTicketsForTests, engineLiveWsUrl, handleLiveProxy
 * `market.ts` — _resetMarketCacheForTests, handleMarket, marketAllowlist
 * `onchain.ts` — _resetOnchainCacheForTests, handleOnchain, onchainAllowlist
+* `proxy-plane.ts` — CacheEntry, CacheEviction, ProxyPlane, ProxyPlaneOptions, createProxyPlane
 * `proxy-router.ts` — NotFoundBody, ProxyContext, ProxyHandler, ProxyRoute, ProxyRouter, ProxyRouterOptions, createProxyRouter, proxyJson
 * `pyodide_runtime.ts` — tryRunInWorker
 * `rate-limit.ts` — _resetRateLimitsForTests, allowRate
