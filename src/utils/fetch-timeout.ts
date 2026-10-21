@@ -64,6 +64,18 @@ export function combineAbortSignals(timeoutMs: number, parent?: AbortSignal | nu
   return ctrl.signal;
 }
 
+/**
+ * The caller's signal when it has one, else a plain timeout.
+ *
+ * Deliberately **not** {@link combineAbortSignals}: a caller-provided budget
+ * must not be shortened by a default cap (a paginated venue walk, for example,
+ * owns its own budget and may legitimately run longer than the default).
+ */
+export function signalOrTimeout(timeoutMs: number, parent?: AbortSignal | null): AbortSignal {
+  if (parent) return parent;
+  return AbortSignal.timeout(normalizeTimeoutMs(timeoutMs));
+}
+
 /** Options for {@link fetchWithTimeout}. */
 export interface FetchWithTimeoutOpts {
   /** Hard cap in ms (default {@link DEFAULT_FETCH_TIMEOUT_MS}). */

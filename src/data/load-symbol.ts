@@ -60,6 +60,7 @@ import { isEngineOwnedLive } from '../engines/ownership';
 import { getDataSeriesBars } from '../engines/data-sessions';
 import { getActiveEngineConfig } from '../plugins/active';
 import { fillBarsTowardNow, fillInternalGaps } from './expand-cache';
+import { errMessage } from '../utils/errors';
 
 export { exchangeForSource, normalizeLoadSymbol };
 
@@ -88,12 +89,6 @@ export function _resetLoadGeneration(): void {
 /** @internal test helper — current race token */
 export function _currentLoadGeneration(): number {
   return loadGeneration;
-}
-
-function errMessage(err: unknown): string {
-  if (err instanceof Error && err.message) return err.message;
-  if (typeof err === 'string' && err) return err;
-  return 'Unknown load error';
 }
 
 /** One sentence for the status row and toast. Raw text stays on telemetry. */
@@ -407,7 +402,7 @@ export async function loadSymbolData(
         // Plugin throw / network fail — rethrow into outer handler with clean message
         throw fetchErr instanceof Error
           ? fetchErr
-          : new Error(errMessage(fetchErr));
+          : new Error(errMessage(fetchErr, 'Unknown load error'));
       }
     };
 
@@ -426,7 +421,7 @@ export async function loadSymbolData(
       }
       throw fetchErr instanceof Error
         ? fetchErr
-        : new Error(errMessage(fetchErr));
+        : new Error(errMessage(fetchErr, 'Unknown load error'));
     }
 
     if (!stillCurrent() || signal.aborted) {
@@ -631,7 +626,7 @@ export async function loadSymbolData(
       /* cache miss / IDB unavailable — fall through to hard error */
     }
 
-    const msg = errMessage(err);
+    const msg = errMessage(err, 'Unknown load error');
     console.error('Load failed:', err);
     setTelemetryState('source', 'error', {
       error: msg,

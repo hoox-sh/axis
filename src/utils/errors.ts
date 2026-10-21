@@ -23,11 +23,15 @@
  * @module utils/errors
  */
 
-/** Human message for an unknown thrown value; never empty. */
-export function errMessage(err: unknown): string {
+/**
+ * Human message for an unknown thrown value; never empty.
+ *
+ * @param fallback Text used when the value carries no message of its own.
+ */
+export function errMessage(err: unknown, fallback = 'Unknown error'): string {
   if (err instanceof Error && err.message) return err.message;
   if (typeof err === 'string' && err) return err;
-  return 'Unknown error';
+  return fallback;
 }
 
 /** True for fetch / timer aborts (`AbortError`, `TimeoutError`). */
@@ -35,4 +39,34 @@ export function isAbortError(err: unknown): boolean {
   if (!err || typeof err !== 'object') return false;
   const name = (err as { name?: string }).name;
   return name === 'AbortError' || name === 'TimeoutError';
+}
+
+/**
+ * True when the value *looks* like a cancellation or a timeout.
+ *
+ * Broader than {@link isAbortError}: some runtimes surface an abort only as
+ * text (`"The operation was aborted due to timeout"`, `"signal timed out"`)
+ * with no `name` to inspect.
+ *
+ * Use this for **message shaping**. Use {@link isAbortError} when the answer
+ * decides whether to rethrow — a network error whose text happens to mention
+ * a timeout must still be reported as a network error.
+ */
+export function isAbortLike(err: unknown): boolean {
+  if (isAbortError(err)) return true;
+  return /abort(ed)?|timed?\s*out|timeout/i.test(errText(err));
+}
+
+/** True when an abort-like value is specifically a *timeout*. */
+export function isTimeoutLike(err: unknown): boolean {
+  if (err && typeof err === 'object' && (err as { name?: string }).name === 'TimeoutError') {
+    return true;
+  }
+  return /timed?\s*out|timeout/i.test(errText(err));
+}
+
+/** Message text of a thrown value, without the `Error` wrapper. */
+function errText(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  return typeof err === 'string' ? err : '';
 }

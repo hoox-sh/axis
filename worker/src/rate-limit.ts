@@ -21,7 +21,8 @@
  * Best-effort in-isolate fixed-window rate limiter.
  *
  * Extracted from verbatim copies in `runtime.ts` (`/api/run`) and
- * `git-oauth.ts` (device-flow relay).
+ * `git-oauth.ts` (device-flow relay). The MCP plane used to keep its own
+ * fork of this algorithm; it now shares this one.
  *
  * **Not durable.** Buckets live in isolate memory: per-isolate, best-effort on
  * the edge, and reset whenever an isolate recycles. That is deliberate for
@@ -45,16 +46,23 @@ const MAX_BUCKETS = 5000;
 /**
  * Fixed-window counter.
  *
- * @param key Bucket identity (usually a client IP or an API key).
+ * @param key Bucket identity (usually a client IP or an API key). Callers
+ *   **must** namespace it — the map is shared by every route.
  * @param limit Allowed calls per window.
  * @param windowMs Window length in ms.
+ * @param weight Calls this request consumes. A request is allowed only if the
+ *   whole weight fits in the remaining budget, so a batch can never be
+ *   counted twice.
  * @returns `true` when the call is allowed (and counted), `false` once over.
  */
-export function allowRate(key: string, limit: number, windowMs: number): boolean {
+export function allowRate(key: string, limit: number, windowMs: number, weight = 1): boolean {
   const now = Date.now();
+  const w = weight > 0 ? Math.floor(weight) : 1;
   const bucket = buckets.get(key);
   if (!bucket || now - bucket.windowStart > windowMs) {
-    buckets.set(key, { count: 1, windowStart: now });
+    // Fresh window — the whole request must fit in the limit.
+    if (w > limit) return false;
+    buckets.set(key, { count: w, windowStart: now });
     if (buckets.size > MAX_BUCKETS) {
       for (const [k, v] of buckets) {
         if (now - v.windowStart > windowMs * 2) buckets.delete(k);
@@ -62,8 +70,11 @@ export function allowRate(key: string, limit: number, windowMs: number): boolean
     }
     return true;
   }
-  bucket.count += 1;
-  return bucket.count <= limit;
+  // All-or-nothing: a request that does not fit is rejected *without* being
+  // counted, so a rejected batch never eats into the next caller's budget.
+  if (bucket.count + w > limit) return false;
+  bucket.count += w;
+  return true;
 }
 
 /** @internal test helper — clear buckets between cases. */

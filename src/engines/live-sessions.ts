@@ -88,6 +88,7 @@ import { parseEngineJson } from './json-sanitize';
 import { resolveSessionPayload } from './session-delta';
 import type { EngineLibrarySource } from '../plugins/types';
 import type { Bar } from '../store/types';
+import { combineAbortSignals } from '../utils/fetch-timeout';
 
 /**
  * Bars past the chart window a session may grow before it is rebased.
@@ -355,34 +356,12 @@ function headersFor(apiKey?: string): Record<string, string> {
   return headers;
 }
 
-function withBudget(signal: AbortSignal | undefined, ms: number): AbortSignal {
-  const timer = AbortSignal.timeout(ms);
-  if (!signal) return timer;
-  if (typeof AbortSignal.any === 'function') {
-    return AbortSignal.any([timer, signal]);
-  }
-  // No AbortSignal.any: combine by hand so the budget is never dropped when a
-  // caller signal exists.
-  if (signal.aborted || timer.aborted) return timer.aborted ? timer : signal;
-  const ctrl = new AbortController();
-  const abort = (from: AbortSignal) => {
-    try {
-      ctrl.abort(from.reason as unknown);
-    } catch {
-      ctrl.abort();
-    }
-  };
-  signal.addEventListener('abort', () => abort(signal), { once: true });
-  timer.addEventListener('abort', () => abort(timer), { once: true });
-  return ctrl.signal;
-}
-
 async function postJson(
   url: string,
   body: unknown,
   opts: { apiKey?: string; signal?: AbortSignal; budgetMs: number },
 ): Promise<{ ok: boolean; status: number; payload: unknown }> {
-  const signal = withBudget(opts.signal, opts.budgetMs);
+  const signal = combineAbortSignals(opts.budgetMs, opts.signal);
   const res = await fetch(url, {
     method: 'POST',
     headers: headersFor(opts.apiKey),
@@ -497,7 +476,7 @@ export async function getSessionStatus(
     const res = await fetch(`${endpoint}/session/${encodeURIComponent(sessionId)}`, {
       method: 'GET',
       headers: headersFor(apiKey),
-      signal: withBudget(signal, SESSION_STATUS_BUDGET_MS),
+      signal: combineAbortSignals(SESSION_STATUS_BUDGET_MS, signal),
     });
     if (res.status === 404) return { kind: 'gone' };
     if (!res.ok) return { kind: 'unknown' };

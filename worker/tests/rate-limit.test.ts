@@ -53,4 +53,25 @@ describe('allowRate', () => {
     // Prune only drops entries older than 2x the window used at insert time.
     expect(allowRate('live', 1, 60_000)).toBe(true);
   });
+
+  it('charges a weighted request against the same budget', () => {
+    expect(allowRate('w', 10, 60_000, 4)).toBe(true);
+    expect(allowRate('w', 10, 60_000, 4)).toBe(true);
+    // 8 of 10 used — a third batch of 4 does not fit.
+    expect(allowRate('w', 10, 60_000, 4)).toBe(false);
+    // The rejected batch was not counted, so the remaining budget is intact.
+    expect(allowRate('w', 10, 60_000, 2)).toBe(true);
+    expect(allowRate('w', 10, 60_000, 1)).toBe(false);
+  });
+
+  it('rejects a weighted request that exceeds the limit on a fresh window', () => {
+    expect(allowRate('big', 3, 60_000, 4)).toBe(false);
+    // A rejected request on a fresh window must not open a bucket.
+    expect(allowRate('big', 3, 60_000, 3)).toBe(true);
+  });
+
+  it('treats a non-positive weight as one call', () => {
+    expect(allowRate('z', 1, 60_000, 0)).toBe(true);
+    expect(allowRate('z', 1, 60_000, -5)).toBe(false);
+  });
 });

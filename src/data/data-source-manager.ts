@@ -75,6 +75,7 @@ import {
 } from './dataset-validate';
 import { isSortedUnique } from './merge-datasets';
 import { providerDatasetLock } from './provider';
+import { errMessage, isAbortError } from '../utils/errors';
 
 export type DataSourceJobStatus =
   | 'pending'
@@ -228,18 +229,6 @@ function validateJobBars(
 
 function jobId(): string {
   return `dsj_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function errMessage(err: unknown): string {
-  if (err instanceof Error && err.message) return err.message;
-  if (typeof err === 'string' && err) return err;
-  return 'Unknown error';
-}
-
-function isAbortError(err: unknown): boolean {
-  if (!err || typeof err !== 'object') return false;
-  const name = (err as { name?: string }).name;
-  return name === 'AbortError' || name === 'TimeoutError';
 }
 
 function yieldGap(ms = PAGE_YIELD_MS): Promise<void> {

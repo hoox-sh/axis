@@ -28,6 +28,7 @@
  */
 
 import type { RunResult as EngineRunResult } from '../plugins/types';
+import { isAbortLike, isTimeoutLike } from '../utils/errors';
 
 /** Engine result with `series` / `plots` / `events` always present. */
 export type NormalizedRunResult = EngineRunResult & {
@@ -319,17 +320,8 @@ export function formatRunError(err: unknown): string {
   const lower = msg.toLowerCase();
 
   // Abort / timeout (browser + AbortSignal.timeout)
-  if (
-    err instanceof DOMException &&
-    (err.name === 'TimeoutError' || err.name === 'AbortError')
-  ) {
-    if (err.name === 'TimeoutError' || /timeout/i.test(msg)) {
-      return 'Engine timed out — try fewer bars, or check that the backend is reachable';
-    }
-    return 'Run cancelled';
-  }
-  if (err instanceof Error && err.name === 'AbortError') {
-    return /timeout/i.test(msg)
+  if (isAbortLike(err)) {
+    return isTimeoutLike(err)
       ? 'Engine timed out — try fewer bars, or check that the backend is reachable'
       : 'Run cancelled';
   }

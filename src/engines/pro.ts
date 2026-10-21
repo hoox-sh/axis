@@ -33,6 +33,8 @@
 
 import { getActiveEngineConfig } from '../plugins/active';
 import { confirmEngineApiKeyTarget } from './catalog';
+import { isAbortLike } from '../utils/errors';
+import { combineAbortSignals } from '../utils/fetch-timeout';
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 
@@ -88,13 +90,6 @@ function failure(error: string, unavailable = false): PreviewResult {
   return { ok: false, chart: null, bars: null, lastValue: null, unavailable, error };
 }
 
-function requestSignal(parent: AbortSignal | undefined, timeoutMs: number): AbortSignal {
-  const timeout = AbortSignal.timeout(timeoutMs);
-  return parent && typeof AbortSignal.any === 'function'
-    ? AbortSignal.any([timeout, parent])
-    : timeout;
-}
-
 /** Resolve endpoint/key + consent; returns an error string when unusable. */
 function resolveTarget(opts: ProCallOptions): { endpoint: string; headers: Record<string, string> } | string {
   const cfg = getActiveEngineConfig() || {};
@@ -132,7 +127,7 @@ async function postJson(
       method: 'POST',
       headers: target.headers,
       body: JSON.stringify(body),
-      signal: requestSignal(opts.signal, opts.timeoutMs ?? DEFAULT_TIMEOUT_MS),
+      signal: combineAbortSignals(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS, opts.signal),
     });
     let payload: Record<string, unknown> | null = null;
     try {
@@ -147,7 +142,7 @@ async function postJson(
     return { status: res.status, payload };
   } catch (err: unknown) {
     const raw = err instanceof Error ? err.message : String(err);
-    return { error: /abort/i.test(raw) ? 'Request timed out' : raw };
+    return { error: isAbortLike(err) ? 'Request timed out' : raw };
   }
 }
 
@@ -379,7 +374,7 @@ export async function fetchUsage(opts: ProCallOptions = {}): Promise<UsageResult
     const res = await fetch(`${target.endpoint}/auth/usage`, {
       method: 'GET',
       headers: target.headers,
-      signal: requestSignal(opts.signal, opts.timeoutMs ?? 15_000),
+      signal: combineAbortSignals(opts.timeoutMs ?? 15_000, opts.signal),
     });
     if (res.status === 404 || res.status === 405 || res.status === 501) {
       return { ...empty, unavailable: true, error: 'Usage is not available on this backend' };

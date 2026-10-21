@@ -45,6 +45,7 @@ import type { PlotSample, RunResult as EngineRunResult } from '../plugins/types'
 import type { Bar } from '../store/types';
 import { barsForPine } from '../data/parse-bars';
 import { parseEngineJson } from './json-sanitize';
+import { combineAbortSignals } from '../utils/fetch-timeout';
 
 /**
  * Engine result with the `series` / `plots` the chart-apply path requires
@@ -195,13 +196,6 @@ function mapEntryResult(payload: Record<string, unknown>, ms: number): BatchRunR
   };
 }
 
-function requestSignal(parent: AbortSignal | undefined, timeoutMs: number): AbortSignal {
-  const timeout = AbortSignal.timeout(timeoutMs);
-  return parent && typeof AbortSignal.any === 'function'
-    ? AbortSignal.any([timeout, parent])
-    : timeout;
-}
-
 /**
  * Evaluate `scripts` over `bars` in one request.
  *
@@ -239,7 +233,7 @@ export async function runBatch(opts: BatchRunOptions): Promise<BatchRunOutcome |
   // Fresh timeout per attempt: reusing one AbortSignal across the initial
   // request and the 413 retry would inherit the elapsed first attempt and
   // could already be near expiry when the retry starts.
-  const makeSignal = (): AbortSignal => requestSignal(opts.signal, timeoutMs);
+  const makeSignal = (): AbortSignal => combineAbortSignals(timeoutMs, opts.signal);
   const bodyBase = {
     scripts: scripts.map((s) => ({ id: s.id, script: s.script })),
     symbol: opts.symbol || 'CHART',

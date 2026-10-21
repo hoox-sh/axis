@@ -69,6 +69,7 @@ import {
   buildHealthBody,
   clientIp,
   errorResponse,
+  handleError,
   jsonResponse,
   methodNotAllowed,
   preflight,
@@ -238,10 +239,261 @@ function tenantDeny(
   });
 }
 
+/**
+ * Route dispatch.
+ *
+ * Called only from the entry `fetch`, inside its try/catch — every path below
+ * is therefore covered by the shared 500 envelope.
+ */
+async function dispatch(
+  req: Request,
+  env: Env,
+  ctx: ExecutionContext,
+  origin: string,
+  url: URL,
+): Promise<Response> {
+  const mcpRes = await handleMcp(req, env, origin, url.pathname, ctx);
+  if (mcpRes) return mcpRes;
+
+  // PWA MCP control plane: /api/mcp/bridge → McpBridgeDO (partitioned by API key)
+  if (url.pathname === '/api/mcp/bridge') {
+    if (!env.MCP_BRIDGE) {
+      return errorResponse(
+        'NO_MCP_BRIDGE',
+        'MCP_BRIDGE Durable Object not bound. Add the binding in wrangler.toml and deploy.',
+        { status: 503, origin, cors: CORS_HEADERS },
+      );
+    }
+    const isUpgrade = (req.headers.get('Upgrade') || '').toLowerCase() === 'websocket';
+    const issueTicket = !isUpgrade && url.searchParams.get('issue') === 'ticket';
+
+    if (isUpgrade) {
+      const ticket = (url.searchParams.get('ticket') || '').trim();
+      let userId: string | null = null;
+      let nonce = '';
+      let bridgeHeaderDegraded = false;
+      if (ticket) {
+        const parsed = parseBridgeTicket(ticket);
+        if (!parsed) {
+          return errorResponse('INVALID_TICKET', 'bridge ticket missing, expired, or already used', {
+            status: 401,
+            origin,
+            cors: CORS_HEADERS,
+          });
+        }
+        userId = parsed.userId;
+        nonce = parsed.nonce;
+      } else {
+        // Browser WebSocket cannot set Authorization — prefer ?ticket=.
+        // Header auth remains for tests / non-browser clients. Never ?key=.
+        const header = req.headers.get('Authorization') || '';
+        if (!/^Bearer\s+\S+/i.test(header)) {
+          return errorResponse('NO_KEY', 'bridge ticket or Authorization: Bearer required', {
+            status: 401,
+            origin,
+            cors: CORS_HEADERS,
+          });
+        }
+        // SaaS tenant keys (hx_live_…) verify live against the console
+        // (`axis:stream` scope); all other bearers use the legacy path below.
+        const headerGate = await gateTenantKey(env, req, 'axis:stream');
+        if (headerGate) {
+          if (headerGate.decision === 'deny') return tenantDeny(headerGate, origin);
+          userId = headerGate.userId;
+          bridgeHeaderDegraded = headerGate.degraded;
+        } else {
+          const authReq = new Request(`${url.origin}${url.pathname}`, {
+            headers: { Authorization: header },
+          });
+          const auth = await requireApiKey(authReq, env);
+          if (!auth.ok) {
+            return errorResponse(auth.code, auth.message, {
+              status: auth.status,
+              origin,
+              cors: CORS_HEADERS,
+            });
+          }
+          userId = auth.ctx.userId;
+        }
+      }
+      const stub = env.MCP_BRIDGE.get(env.MCP_BRIDGE.idFromName(userId));
+      const dest = new URL(`${url.origin}/ws`);
+      if (nonce) dest.searchParams.set('ticket', nonce);
+      const bridgeUpgradeRes = await stub.fetch(new Request(dest, req));
+      // Mutate headers in place: rebuilding the Response would drop the upgrade webSocket.
+      if (bridgeHeaderDegraded) bridgeUpgradeRes.headers.set('X-Hoox-Verify', 'degraded');
+      return bridgeUpgradeRes;
+    }
+
+    // Tenant SaaS keys verify live here too; legacy bearers unchanged.
+    let bridgeDegraded = false;
+    let bridgeUserId: string | null = null;
+    const bridgeGate = await gateTenantKey(env, req, 'axis:stream');
+    if (bridgeGate) {
+      if (bridgeGate.decision === 'deny') return tenantDeny(bridgeGate, origin);
+      bridgeUserId = bridgeGate.userId;
+      bridgeDegraded = bridgeGate.degraded;
+    } else {
+      const auth = await requireApiKey(req, env);
+      if (!auth.ok) {
+        return errorResponse(auth.code, auth.message, {
+          status: auth.status,
+          origin,
+          cors: CORS_HEADERS,
+        });
+      }
+      bridgeUserId = auth.ctx.userId;
+    }
+    const stub = env.MCP_BRIDGE.get(env.MCP_BRIDGE.idFromName(bridgeUserId));
+    const bridgeHeaders = bridgeDegraded ? { 'X-Hoox-Verify': 'degraded' } : undefined;
+
+    if (issueTicket || req.method === 'POST') {
+      const ticketRes = await stub.fetch(new Request(`${url.origin}/ticket`, { method: 'POST' }));
+      const payload = (await ticketRes.json()) as { nonce?: unknown; expiresIn?: unknown };
+      const nonce = typeof payload.nonce === 'string' ? payload.nonce : '';
+      if (!nonce) {
+        return errorResponse('TICKET_FAILED', 'failed to mint bridge ticket', {
+          status: 502,
+          origin,
+          cors: CORS_HEADERS,
+        });
+      }
+      const expiresIn =
+        typeof payload.expiresIn === 'number' && Number.isFinite(payload.expiresIn)
+          ? payload.expiresIn
+          : 30;
+      return apiJson(
+        {
+          status: 'ok',
+          ticket: formatBridgeTicket(bridgeUserId, nonce),
+          expiresIn,
+        },
+        200,
+        origin,
+        bridgeHeaders,
+      );
+    }
+
+    // Plain GET → DO /status: how many PWA tabs are attached to this key.
+    const res = await stub.fetch(new Request(`${url.origin}/status`, req));
+    const headers = new Headers(res.headers);
+    for (const [k, v] of Object.entries(CORS_HEADERS(origin))) headers.set(k, v);
+    if (bridgeDegraded) headers.set('X-Hoox-Verify', 'degraded');
+    return new Response(res.body, { status: res.status, headers });
+  }
+
+  // WebSocket session relay: /api/stream?session=&symbol=&interval= → SessionDO
+  // DO is named by `session` query (default "default"); request rewritten to /ws.
+  // SaaS tenant keys (hx_live_…) verify live (`axis:stream` scope) and meter
+  // one `streams` unit per session create. Open self-host path unchanged:
+  // non-tenant callers never touch the console.
+  if (url.pathname === '/api/stream') {
+    if (!env.SESSIONS) {
+      return errorResponse(
+        'NO_DO',
+        'SESSIONS Durable Object not bound. Run `wrangler deploy` after provisioning.',
+        { status: 503, origin, cors: CORS_HEADERS },
+      );
+    }
+    // Non-tenant callers reach the shared session relay without a key, so a
+    // per-IP window is the only backstop here (A14).
+    if (!allowRate(`stream:ip:${clientIp(req)}`, 60, 60_000)) {
+      return errorResponse('RATE_LIMIT', 'Too many /api/stream requests', {
+        status: 429,
+        origin,
+        cors: CORS_HEADERS,
+        headers: { 'Retry-After': '60' },
+      });
+    }
+    let streamDegraded = false;
+    const streamGate = await gateTenantKey(env, req, 'axis:stream');
+    if (streamGate) {
+      if (streamGate.decision === 'deny') return tenantDeny(streamGate, origin);
+      streamDegraded = streamGate.degraded;
+      if (!streamDegraded) {
+        meterTenantUsage(env, streamGate, 'axis:stream', { streams: 1 }, ctx);
+      }
+    }
+    const id = env.SESSIONS.idFromName(url.searchParams.get('session') ?? 'default');
+    const stub = env.SESSIONS.get(id);
+    const wsReq = new Request(`${url.origin}/ws?${url.searchParams.toString()}`, req);
+    const streamRes = await stub.fetch(wsReq);
+    // Mutate headers in place: rebuilding the Response would drop the upgrade webSocket.
+    if (streamDegraded) streamRes.headers.set('X-Hoox-Verify', 'degraded');
+    return streamRes;
+  }
+
+    // Script library: /api/scripts, /api/scripts/:id, /api/scripts/_draft
+    if (url.pathname === '/api/scripts' || url.pathname.startsWith('/api/scripts/')) {
+      return await handleScripts(req, env, origin, url.pathname, ctx);
+    }
+
+    // GitHub / GitLab device-flow OAuth proxy (no CORS on forge hosts)
+    if (url.pathname.startsWith('/api/git/oauth/')) {
+      return await handleGitOAuth(req, env, origin, url.pathname, CORS_HEADERS);
+    }
+
+    // On-chain analytics proxy (DefiLlama + GeckoTerminal allowlist — public, no auth)
+    if (url.pathname.startsWith('/api/onchain')) {
+      const onchainRes = await handleOnchain(req, env, origin, url.pathname);
+      if (onchainRes) return onchainRes;
+    }
+
+    // CEX market data proxy (public Binance GET + optional request-scoped signed klines)
+    if (url.pathname.startsWith('/api/market')) {
+      const marketRes = await handleMarket(req, env, origin, url.pathname);
+      if (marketRes) return marketRes;
+    }
+
+    // Engine-owned data plane proxy: /api/ws/live → EXTERNAL_BACKEND /ws/live
+    // (ticket or Bearer auth; transparent frame relay).
+    if (url.pathname === '/api/ws/live' || url.pathname.startsWith('/api/ws/live?')) {
+      const liveRes = await handleLiveProxy(req, env, origin, url.pathname);
+      if (liveRes) return liveRes;
+    }
+
+    switch (url.pathname) {
+      case '/':
+      case '/health': {
+        // `?deep=1` pays for one real egress probe per upstream so a dead proxy
+        // plane can never report `market`/`onchain: true` again.
+        const deep = url.searchParams.get('deep') === '1' ? await deepUpstreamHealth() : undefined;
+        const body = buildHealthBody(
+          { db: !!env.DB, keys: !!env.API_KEYS, mcpBridge: !!env.MCP_BRIDGE },
+          deep,
+        );
+        // Stays 200 on a degraded upstream: the Worker is up, an egress peer is
+        // not. Flapping the status here would break uptime probes for a
+        // third-party outage.
+        return apiJson(body, 200, origin);
+      }
+      case '/api/run':
+        return req.method !== 'POST'
+          ? methodNotAllowed('POST', { origin, cors: CORS_HEADERS })
+          : await handleRun(req, env, origin, ctx);
+      case '/api/keys':
+        return await handleKeys(req, env, origin);
+      case '/api/usage':
+        return apiJson(
+          { status: 'success', usage: { calls_used: 0, calls_remaining: null } },
+          200,
+          origin,
+        );
+      default:
+        return errorResponse('NOT_FOUND', `Endpoint ${url.pathname} not found`, {
+          status: 404,
+          origin,
+          cors: CORS_HEADERS,
+        });
+    }
+}
+
 export default {
   /**
-   * Single `fetch` entry: CORS → stream DO upgrade → scripts → switch routes.
-   * Uncaught handler errors become `{ status:'error', code:'INTERNAL' }` 500s.
+   * Single `fetch` entry: CORS → dispatch.
+   * Every route — including the MCP, bridge and stream upgrade paths — runs
+   * inside the shared error envelope, so no handler can escape as an
+   * unhandled rejection (A8).
    */
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const origin = pickOrigin(req, env);
@@ -251,254 +503,12 @@ export default {
 
     const url = new URL(req.url);
 
-    const mcpRes = await handleMcp(req, env, origin, url.pathname, ctx);
-    if (mcpRes) return mcpRes;
-
-    // PWA MCP control plane: /api/mcp/bridge → McpBridgeDO (partitioned by API key)
-    if (url.pathname === '/api/mcp/bridge') {
-      if (!env.MCP_BRIDGE) {
-        return errorResponse(
-          'NO_MCP_BRIDGE',
-          'MCP_BRIDGE Durable Object not bound. Add the binding in wrangler.toml and deploy.',
-          { status: 503, origin, cors: CORS_HEADERS },
-        );
-      }
-      const isUpgrade = (req.headers.get('Upgrade') || '').toLowerCase() === 'websocket';
-      const issueTicket = !isUpgrade && url.searchParams.get('issue') === 'ticket';
-
-      if (isUpgrade) {
-        const ticket = (url.searchParams.get('ticket') || '').trim();
-        let userId: string | null = null;
-        let nonce = '';
-        let bridgeHeaderDegraded = false;
-        if (ticket) {
-          const parsed = parseBridgeTicket(ticket);
-          if (!parsed) {
-            return errorResponse('INVALID_TICKET', 'bridge ticket missing, expired, or already used', {
-              status: 401,
-              origin,
-              cors: CORS_HEADERS,
-            });
-          }
-          userId = parsed.userId;
-          nonce = parsed.nonce;
-        } else {
-          // Browser WebSocket cannot set Authorization — prefer ?ticket=.
-          // Header auth remains for tests / non-browser clients. Never ?key=.
-          const header = req.headers.get('Authorization') || '';
-          if (!/^Bearer\s+\S+/i.test(header)) {
-            return errorResponse('NO_KEY', 'bridge ticket or Authorization: Bearer required', {
-              status: 401,
-              origin,
-              cors: CORS_HEADERS,
-            });
-          }
-          // SaaS tenant keys (hx_live_…) verify live against the console
-          // (`axis:stream` scope); all other bearers use the legacy path below.
-          const headerGate = await gateTenantKey(env, req, 'axis:stream');
-          if (headerGate) {
-            if (headerGate.decision === 'deny') return tenantDeny(headerGate, origin);
-            userId = headerGate.userId;
-            bridgeHeaderDegraded = headerGate.degraded;
-          } else {
-            const authReq = new Request(`${url.origin}${url.pathname}`, {
-              headers: { Authorization: header },
-            });
-            const auth = await requireApiKey(authReq, env);
-            if (!auth.ok) {
-              return errorResponse(auth.code, auth.message, {
-                status: auth.status,
-                origin,
-                cors: CORS_HEADERS,
-              });
-            }
-            userId = auth.ctx.userId;
-          }
-        }
-        const stub = env.MCP_BRIDGE.get(env.MCP_BRIDGE.idFromName(userId));
-        const dest = new URL(`${url.origin}/ws`);
-        if (nonce) dest.searchParams.set('ticket', nonce);
-        const bridgeUpgradeRes = await stub.fetch(new Request(dest, req));
-        // Mutate headers in place: rebuilding the Response would drop the upgrade webSocket.
-        if (bridgeHeaderDegraded) bridgeUpgradeRes.headers.set('X-Hoox-Verify', 'degraded');
-        return bridgeUpgradeRes;
-      }
-
-      // Tenant SaaS keys verify live here too; legacy bearers unchanged.
-      let bridgeDegraded = false;
-      let bridgeUserId: string | null = null;
-      const bridgeGate = await gateTenantKey(env, req, 'axis:stream');
-      if (bridgeGate) {
-        if (bridgeGate.decision === 'deny') return tenantDeny(bridgeGate, origin);
-        bridgeUserId = bridgeGate.userId;
-        bridgeDegraded = bridgeGate.degraded;
-      } else {
-        const auth = await requireApiKey(req, env);
-        if (!auth.ok) {
-          return errorResponse(auth.code, auth.message, {
-            status: auth.status,
-            origin,
-            cors: CORS_HEADERS,
-          });
-        }
-        bridgeUserId = auth.ctx.userId;
-      }
-      const stub = env.MCP_BRIDGE.get(env.MCP_BRIDGE.idFromName(bridgeUserId));
-      const bridgeHeaders = bridgeDegraded ? { 'X-Hoox-Verify': 'degraded' } : undefined;
-
-      if (issueTicket || req.method === 'POST') {
-        const ticketRes = await stub.fetch(new Request(`${url.origin}/ticket`, { method: 'POST' }));
-        const payload = (await ticketRes.json()) as { nonce?: unknown; expiresIn?: unknown };
-        const nonce = typeof payload.nonce === 'string' ? payload.nonce : '';
-        if (!nonce) {
-          return errorResponse('TICKET_FAILED', 'failed to mint bridge ticket', {
-            status: 502,
-            origin,
-            cors: CORS_HEADERS,
-          });
-        }
-        const expiresIn =
-          typeof payload.expiresIn === 'number' && Number.isFinite(payload.expiresIn)
-            ? payload.expiresIn
-            : 30;
-        return apiJson(
-          {
-            status: 'ok',
-            ticket: formatBridgeTicket(bridgeUserId, nonce),
-            expiresIn,
-          },
-          200,
-          origin,
-          bridgeHeaders,
-        );
-      }
-
-      // Plain GET → DO /status: how many PWA tabs are attached to this key.
-      const res = await stub.fetch(new Request(`${url.origin}/status`, req));
-      const headers = new Headers(res.headers);
-      for (const [k, v] of Object.entries(CORS_HEADERS(origin))) headers.set(k, v);
-      if (bridgeDegraded) headers.set('X-Hoox-Verify', 'degraded');
-      return new Response(res.body, { status: res.status, headers });
-    }
-
-    // WebSocket session relay: /api/stream?session=&symbol=&interval= → SessionDO
-    // DO is named by `session` query (default "default"); request rewritten to /ws.
-    // SaaS tenant keys (hx_live_…) verify live (`axis:stream` scope) and meter
-    // one `streams` unit per session create. Open self-host path unchanged:
-    // non-tenant callers never touch the console.
-    if (url.pathname === '/api/stream') {
-      if (!env.SESSIONS) {
-        return errorResponse(
-          'NO_DO',
-          'SESSIONS Durable Object not bound. Run `wrangler deploy` after provisioning.',
-          { status: 503, origin, cors: CORS_HEADERS },
-        );
-      }
-      // Non-tenant callers reach the shared session relay without a key, so a
-      // per-IP window is the only backstop here (A14).
-      if (!allowRate(`stream:ip:${clientIp(req)}`, 60, 60_000)) {
-        return errorResponse('RATE_LIMIT', 'Too many /api/stream requests', {
-          status: 429,
-          origin,
-          cors: CORS_HEADERS,
-          headers: { 'Retry-After': '60' },
-        });
-      }
-      let streamDegraded = false;
-      const streamGate = await gateTenantKey(env, req, 'axis:stream');
-      if (streamGate) {
-        if (streamGate.decision === 'deny') return tenantDeny(streamGate, origin);
-        streamDegraded = streamGate.degraded;
-        if (!streamDegraded) {
-          meterTenantUsage(env, streamGate, 'axis:stream', { streams: 1 }, ctx);
-        }
-      }
-      const id = env.SESSIONS.idFromName(url.searchParams.get('session') ?? 'default');
-      const stub = env.SESSIONS.get(id);
-      const wsReq = new Request(`${url.origin}/ws?${url.searchParams.toString()}`, req);
-      const streamRes = await stub.fetch(wsReq);
-      // Mutate headers in place: rebuilding the Response would drop the upgrade webSocket.
-      if (streamDegraded) streamRes.headers.set('X-Hoox-Verify', 'degraded');
-      return streamRes;
-    }
-
     try {
-      // Script library: /api/scripts, /api/scripts/:id, /api/scripts/_draft
-      if (url.pathname === '/api/scripts' || url.pathname.startsWith('/api/scripts/')) {
-        return await handleScripts(req, env, origin, url.pathname, ctx);
-      }
-
-      // GitHub / GitLab device-flow OAuth proxy (no CORS on forge hosts)
-      if (url.pathname.startsWith('/api/git/oauth/')) {
-        return await handleGitOAuth(req, env, origin, url.pathname, CORS_HEADERS);
-      }
-
-      // On-chain analytics proxy (DefiLlama + GeckoTerminal allowlist — public, no auth)
-      if (url.pathname.startsWith('/api/onchain')) {
-        const onchainRes = await handleOnchain(req, env, origin, url.pathname);
-        if (onchainRes) return onchainRes;
-      }
-
-      // CEX market data proxy (public Binance GET + optional request-scoped signed klines)
-      if (url.pathname.startsWith('/api/market')) {
-        const marketRes = await handleMarket(req, env, origin, url.pathname);
-        if (marketRes) return marketRes;
-      }
-
-      // Engine-owned data plane proxy: /api/ws/live → EXTERNAL_BACKEND /ws/live
-      // (ticket or Bearer auth; transparent frame relay).
-      if (url.pathname === '/api/ws/live' || url.pathname.startsWith('/api/ws/live?')) {
-        const liveRes = await handleLiveProxy(req, env, origin, url.pathname);
-        if (liveRes) return liveRes;
-      }
-
-      switch (url.pathname) {
-        case '/':
-        case '/health': {
-          // `?deep=1` pays for one real egress probe per upstream so a dead proxy
-          // plane can never report `market`/`onchain: true` again.
-          const deep = url.searchParams.get('deep') === '1' ? await deepUpstreamHealth() : undefined;
-          const body = buildHealthBody(
-            { db: !!env.DB, keys: !!env.API_KEYS, mcpBridge: !!env.MCP_BRIDGE },
-            deep,
-          );
-          // Stays 200 on a degraded upstream: the Worker is up, an egress peer is
-          // not. Flapping the status here would break uptime probes for a
-          // third-party outage.
-          return apiJson(body, 200, origin);
-        }
-        case '/api/run':
-          return req.method !== 'POST'
-            ? methodNotAllowed('POST', { origin, cors: CORS_HEADERS })
-            : await handleRun(req, env, origin, ctx);
-        case '/api/keys':
-          return await handleKeys(req, env, origin);
-        case '/api/usage':
-          return apiJson(
-            { status: 'success', usage: { calls_used: 0, calls_remaining: null } },
-            200,
-            origin,
-          );
-        default:
-          return errorResponse('NOT_FOUND', `Endpoint ${url.pathname} not found`, {
-            status: 404,
-            origin,
-            cors: CORS_HEADERS,
-          });
-      }
+      return await dispatch(req, env, ctx, origin, url);
     } catch (err) {
-      // Never reflect internal failure detail to the caller (A8) — log
-      // server-side and return a generic envelope.
-      console.error(JSON.stringify({
-        type: 'worker_internal',
-        path: url.pathname,
-        error: err instanceof Error ? err.message : String(err),
-      }));
-      return errorResponse('INTERNAL', 'internal error', {
-        status: 500,
-        origin,
-        cors: CORS_HEADERS,
-      });
+      // Never reflect internal failure detail to the caller (A8) — the shared
+      // handler logs server-side and returns a generic envelope.
+      return handleError(err, { path: url.pathname, origin, cors: CORS_HEADERS });
     }
   },
 } satisfies ExportedHandler<Env>;

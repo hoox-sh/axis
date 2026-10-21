@@ -26,6 +26,7 @@ import {
 } from './protocol';
 import { isNotification, parseJsonText, rpcError, rpcResult } from './jsonrpc';
 import { MCP_CORS, errorResponse } from '../http';
+import { _resetRateLimitsForTests, allowRate } from '../rate-limit';
 import {
   callTool,
   getPrompt,
@@ -40,26 +41,6 @@ const MCP_RATE_LIMIT = 60;
 const MCP_RATE_WINDOW_MS = 60_000;
 /** Fail closed before JSON.parse — workspace.import can be large, 1 MiB is the ceiling. */
 export const MCP_MAX_BODY_BYTES = 1_048_576;
-const rateBuckets = new Map<string, { count: number; windowStart: number }>();
-
-function allowRate(key: string, n = 1): boolean {
-  if (n <= 0) return true;
-  const now = Date.now();
-  const b = rateBuckets.get(key);
-  if (!b || now - b.windowStart > MCP_RATE_WINDOW_MS) {
-    if (n > MCP_RATE_LIMIT) return false;
-    rateBuckets.set(key, { count: n, windowStart: now });
-    if (rateBuckets.size > 5000) {
-      for (const [k, v] of rateBuckets) {
-        if (now - v.windowStart > MCP_RATE_WINDOW_MS * 2) rateBuckets.delete(k);
-      }
-    }
-    return true;
-  }
-  if (b.count + n > MCP_RATE_LIMIT) return false;
-  b.count += n;
-  return true;
-}
 
 function asRecord(v: unknown): Record<string, unknown> {
   return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
@@ -262,9 +243,9 @@ export async function handleMcp(
     });
   }
 
-  const rateKey = auth.ctx.userId || 'anon';
+  const rateKey = `mcp:${auth.ctx.userId || 'anon'}`;
   const methodCount = parsed.batch ? parsed.requests.length : 1;
-  if (!allowRate(rateKey, methodCount)) {
+  if (!allowRate(rateKey, MCP_RATE_LIMIT, MCP_RATE_WINDOW_MS, methodCount)) {
     return new Response(
       JSON.stringify({ status: 'error', code: 'RATE', message: 'MCP rate limit exceeded' }),
       { status: 429, headers: jsonHeaders(origin) },
@@ -287,9 +268,9 @@ export async function handleMcp(
   return new Response(JSON.stringify(res), { status: 200, headers: jsonHeaders(origin) });
 }
 
-/** Exported for unit tests. */
+/** @internal test helper — the MCP plane shares the global bucket map. */
 export function _resetMcpRateForTests(): void {
-  rateBuckets.clear();
+  _resetRateLimitsForTests();
 }
 
 export type { AuthContext };

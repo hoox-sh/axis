@@ -67,6 +67,7 @@ import { asProviderMarket } from '../data/provider';
 import { store } from '../store';
 import { fetchMexcJson } from '../data/mexc-http';
 import { mexcKlineInterval, mexcSpotSymbol } from '../data/venues/mexc';
+import { signalOrTimeout } from '../utils/fetch-timeout';
 
 /** Throw on non-2xx venue response (keeps `Service HTTP <status>` message). */
 export function assertHttpOk(service: string, res: Response): void {
@@ -350,12 +351,6 @@ function synthesizeWalk(
   return out;
 }
 
-/** Prefer job AbortSignal; else a 15s timeout so hung venues cannot stall forever. */
-function fetchSignal(signal?: AbortSignal): AbortSignal {
-  if (signal) return signal;
-  return AbortSignal.timeout(15_000);
-}
-
 /** Append unix-sec bounds as venue ms query params when present. */
 function appendTimeParams(
   params: URLSearchParams,
@@ -443,7 +438,7 @@ export const binanceRest: SourcePlugin = {
         path: 'klines',
         query: params.toString(),
         baseUrl,
-        signal: fetchSignal(signal),
+        signal: signalOrTimeout(15_000, signal),
       });
       if (!Array.isArray(data) || !data.length) throw new Error('empty kline response');
       // Binance: [openTimeMs, o, h, l, c, volume, ...]
@@ -670,7 +665,7 @@ export const okxRest: SourcePlugin = {
       params.set('after', String(Math.floor(endTime * 1000)));
     }
     const url = `https://www.okx.com/api/v5/market/candles?${params}`;
-    const res = await fetch(url, { cache: 'no-store', signal: fetchSignal(signal) });
+    const res = await fetch(url, { cache: 'no-store', signal: signalOrTimeout(15_000, signal) });
     assertHttpOk('OKX', res);
     const json = await res.json();
     if (json.code !== '0' || !Array.isArray(json.data)) {
@@ -720,7 +715,7 @@ export const bybitRest: SourcePlugin = {
       params.set('end', String(Math.floor(endTime * 1000)));
     }
     const url = `https://api.bybit.com/v5/market/kline?${params}`;
-    const res = await fetch(url, { cache: 'no-store', signal: fetchSignal(signal) });
+    const res = await fetch(url, { cache: 'no-store', signal: signalOrTimeout(15_000, signal) });
     assertHttpOk('Bybit', res);
     const json = await res.json();
     const list = json?.result?.list;
@@ -780,7 +775,7 @@ export const coinbaseRest: SourcePlugin = {
     const cappedStart = Math.max(start, end - gran * 280);
     const url = `https://api.exchange.coinbase.com/products/${encodeURIComponent(product)}/candles?granularity=${gran}&start=${new Date(cappedStart * 1000).toISOString()}&end=${new Date(end * 1000).toISOString()}`;
     void config;
-    const res = await fetch(url, { cache: 'no-store', signal: fetchSignal(signal) });
+    const res = await fetch(url, { cache: 'no-store', signal: signalOrTimeout(15_000, signal) });
     assertHttpOk('Coinbase', res);
     const data = await res.json();
     if (!Array.isArray(data) || !data.length) throw new Error('Coinbase empty response');
@@ -843,7 +838,7 @@ export const krakenRest: SourcePlugin = {
       interval: String(iv),
     });
     const url = `https://api.kraken.com/0/public/OHLC?${params}`;
-    const res = await fetch(url, { cache: 'no-store', signal: fetchSignal(signal) });
+    const res = await fetch(url, { cache: 'no-store', signal: signalOrTimeout(15_000, signal) });
     assertHttpOk('Kraken', res);
     const json = await res.json();
     if (Array.isArray(json?.error) && json.error.length) {
@@ -911,7 +906,7 @@ export const mexcRest: SourcePlugin = {
     const json = await fetchMexcJson({
       path: 'klines',
       query: params.toString(),
-      signal: fetchSignal(signal),
+      signal: signalOrTimeout(15_000, signal),
     });
     if (!Array.isArray(json)) {
       const msg =
@@ -999,7 +994,7 @@ export const geckoTerminalOhlcv: SourcePlugin = {
       // DSM walk-back: endTime → before_timestamp (bars strictly before)
       endTime,
       startTime,
-      signal: fetchSignal(signal),
+      signal: signalOrTimeout(15_000, signal),
       baseUrl: baseUrl || undefined,
     });
     if (!Array.isArray(bars) || !bars.length) {

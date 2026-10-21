@@ -158,6 +158,44 @@ export interface ErrorResponseOptions extends JsonOptions {
   status?: number;
 }
 
+/** Options for {@link handleError}. */
+export interface HandleErrorOptions {
+  /** Request path, echoed into the server-side log record only. */
+  path?: string;
+  /** Resolved origin — echoed in `Access-Control-Allow-Origin`. */
+  origin?: string;
+  /** CORS header set for the resolved origin. */
+  cors?: (origin: string) => Record<string, string>;
+  /** Extra headers for the response (e.g. `Retry-After`). */
+  headers?: Record<string, string>;
+  /** Extra fields merged into the server-side log record. */
+  log?: Record<string, unknown>;
+}
+
+/**
+ * Server-side log + canonical 500 envelope for an uncaught handler error.
+ *
+ * Every Worker route funnels its failures through here so no path can escape
+ * as an unhandled rejection (A8). The error text is **never** reflected to the
+ * caller — it goes to the server-side log line only.
+ */
+export function handleError(err: unknown, opts: HandleErrorOptions = {}): Response {
+  console.error(
+    JSON.stringify({
+      type: 'worker_internal',
+      path: opts.path ?? '',
+      error: err instanceof Error ? err.message : String(err),
+      ...(opts.log || {}),
+    }),
+  );
+  return errorResponse('INTERNAL', 'internal error', {
+    status: 500,
+    ...(opts.origin ? { origin: opts.origin } : {}),
+    ...(opts.cors ? { cors: opts.cors } : {}),
+    ...(opts.headers ? { headers: opts.headers } : {}),
+  });
+}
+
 /** `METHOD` rejection for routes that only accept one verb. */
 export function methodNotAllowed(allowed: string, opts: JsonOptions = {}): Response {
   return jsonResponse(errorBody('METHOD', `${allowed} required`), {

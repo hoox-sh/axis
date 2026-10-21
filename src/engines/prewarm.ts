@@ -40,6 +40,7 @@
 
 import { getActiveEngineConfig } from '../plugins/active';
 import { confirmEngineApiKeyTarget } from './catalog';
+import { combineAbortSignals } from '../utils/fetch-timeout';
 
 /** Backend hard cap on `scripts` per prewarm call (`backend/app.py`). */
 export const MAX_PREWARM_SCRIPTS = 16;
@@ -163,14 +164,6 @@ export async function prewarmAppliedScripts(
   return result;
 }
 
-/** Combine the caller's abort with a timeout budget (AbortSignal.any when available). */
-function requestSignal(parent: AbortSignal | undefined, timeoutMs: number): AbortSignal {
-  const timeout = AbortSignal.timeout(timeoutMs);
-  return parent && typeof AbortSignal.any === 'function'
-    ? AbortSignal.any([timeout, parent])
-    : timeout;
-}
-
 /** Trim + drop blanks + enforce the backend cap. */
 function normalizeScripts(scripts: readonly string[] | undefined): string[] {
   if (!scripts?.length) return [];
@@ -224,7 +217,7 @@ export async function prewarmEngine(opts: PrewarmOptions = {}): Promise<PrewarmR
       method: 'POST',
       headers,
       body: JSON.stringify(body),
-      signal: requestSignal(opts.signal, opts.timeoutMs ?? DEFAULT_TIMEOUT_MS),
+      signal: combineAbortSignals(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS, opts.signal),
     });
     if (res.status === 404 || res.status === 405) {
       return failure('Backend has no /compile/prewarm route (older PYNE)');

@@ -39,6 +39,8 @@ import { providerDatasetLock } from './provider';
 import { mergeBars } from './bars-cache';
 import { isEngineOwnedLive } from '../engines/ownership';
 import { findBarGaps, intervalToSec } from './bars-gaps';
+import { errMessage } from '../utils/errors';
+import { linkedAbortBudget } from '../utils/fetch-timeout';
 import {
   DATA_MANAGER_SOURCE_ID,
   getDataManagerSelection,
@@ -87,12 +89,6 @@ function sourceConfig(sourceId: string): Record<string, unknown> {
     string,
     unknown
   >;
-}
-
-function errMessage(err: unknown): string {
-  if (err instanceof Error && err.message) return err.message;
-  if (typeof err === 'string' && err) return err;
-  return 'Expand failed';
 }
 
 /** Lazy catalog access — avoids expand-cache ↔ sources/catalog init cycles. */
@@ -149,14 +145,8 @@ export async function fillBarsTowardNow(
     typeof opts?.budgetMs === 'number' && opts.budgetMs > 0
       ? opts.budgetMs
       : DEFAULT_EXPAND_BUDGET_MS;
-  const ac = new AbortController();
-  const onCallerAbort = () => ac.abort();
-  if (opts?.signal) {
-    if (opts.signal.aborted) ac.abort();
-    else opts.signal.addEventListener('abort', onCallerAbort, { once: true });
-  }
-  const budgetTimer = setTimeout(() => ac.abort(), budgetMs);
-  const signal = ac.signal;
+  const budget = linkedAbortBudget(budgetMs, opts?.signal);
+  const signal = budget.signal;
   const before = bars.length;
 
   try {
@@ -191,7 +181,7 @@ export async function fillBarsTowardNow(
         });
         page = normalizeHistoricalBars(raw, { limit: pageLimit });
       } catch (err: unknown) {
-        lastError = errMessage(err);
+        lastError = errMessage(err, 'Expand failed');
         break;
       }
       if (!page.length) break;
@@ -217,8 +207,8 @@ export async function fillBarsTowardNow(
       error: lastError,
     };
   } finally {
-    clearTimeout(budgetTimer);
-    if (opts?.signal) opts.signal.removeEventListener('abort', onCallerAbort);
+    // dispose() clears the budget timer *and* detaches the parent listener.
+    budget.dispose();
   }
 }
 
@@ -354,14 +344,8 @@ export async function expandCachedSeriesToNow(
     typeof opts?.budgetMs === 'number' && opts.budgetMs > 0
       ? opts.budgetMs
       : DEFAULT_EXPAND_BUDGET_MS;
-  const ac = new AbortController();
-  const onCallerAbort = () => ac.abort();
-  if (opts?.signal) {
-    if (opts.signal.aborted) ac.abort();
-    else opts.signal.addEventListener('abort', onCallerAbort, { once: true });
-  }
-  const budgetTimer = setTimeout(() => ac.abort(), budgetMs);
-  const signal = ac.signal;
+  const budget = linkedAbortBudget(budgetMs, opts?.signal);
+  const signal = budget.signal;
 
   try {
     const step = intervalToSec(iv);
@@ -399,7 +383,7 @@ export async function expandCachedSeriesToNow(
           };
         }
       } catch (err: unknown) {
-        return { bars, added: 0, expanded: false, error: errMessage(err) };
+        return { bars, added: 0, expanded: false, error: errMessage(err, 'Expand failed') };
       }
       return { bars, added: 0, expanded: false };
     }
@@ -431,7 +415,7 @@ export async function expandCachedSeriesToNow(
         });
         page = normalizeHistoricalBars(raw, { limit: pageLimit });
       } catch (err: unknown) {
-        lastError = errMessage(err);
+        lastError = errMessage(err, 'Expand failed');
         break;
       }
 
@@ -468,8 +452,8 @@ export async function expandCachedSeriesToNow(
       error: lastError,
     };
   } finally {
-    clearTimeout(budgetTimer);
-    if (opts?.signal) opts.signal.removeEventListener('abort', onCallerAbort);
+    // dispose() clears the budget timer *and* detaches the parent listener.
+    budget.dispose();
   }
 }
 

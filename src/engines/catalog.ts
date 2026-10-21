@@ -64,6 +64,8 @@ import { registry } from '../plugins/registry';
 import { scriptHasPineAlertCalls } from '../alerts/pine';
 import { parseEngineJson } from './json-sanitize';
 import { healthFromBody, type EngineHealth } from './health';
+import { isAbortLike } from '../utils/errors';
+import { combineAbortSignals } from '../utils/fetch-timeout';
 import {
   callPyodideRunScript,
   formatPyodideBridgeError,
@@ -756,12 +758,7 @@ export const serverEngine: EnginePlugin = {
       // retries must not reuse `restSignal` — it already spent the first
       // attempt's latency and could be near expiry when the retry starts.
       // A fresh parent cancel after each attempt begins is still honoured.
-      const makeRestSignal = (): AbortSignal => {
-        const budget = AbortSignal.timeout(restBudget);
-        return signal && typeof AbortSignal.any === 'function'
-          ? AbortSignal.any([budget, signal])
-          : budget;
-      };
+      const makeRestSignal = (): AbortSignal => combineAbortSignals(restBudget, signal);
       const restSignal = makeRestSignal();
       // mode must be in the JSON body — Pro API validates body only (query is legacy).
       const restMode = mode;
@@ -880,12 +877,8 @@ export const serverEngine: EnginePlugin = {
       }
       return mapped;
     } catch (err: unknown) {
-      const name = err instanceof Error ? err.name : '';
       const raw = err instanceof Error ? err.message : String(err);
-      const aborted =
-        name === 'AbortError' ||
-        signal?.aborted ||
-        /abort(ed)?|timed?\s*out|TimeoutError/i.test(raw);
+      const aborted = isAbortLike(err) || signal?.aborted;
       const msg = aborted
         ? signal?.aborted
           ? 'Aborted'

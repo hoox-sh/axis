@@ -42,6 +42,7 @@ import { normalizeHistoricalBars } from '../data/parse-bars';
 import { pairFormSymbol } from '../engine/market-identity';
 import { resolveSessionPayload } from './session-delta';
 import { ENGINE_SERIES_STALE_STEPS, newestBarTime, seriesBehind } from './series-freshness';
+import { combineAbortSignals } from '../utils/fetch-timeout';
 
 /** Max bars per `POST /data/series/provide` request (contract). */
 export const DATA_PROVIDE_CHUNK = 5_000;
@@ -144,13 +145,6 @@ export function seriesIsStale(
   return seriesBehind(newest, Math.floor(nowSec), interval, ENGINE_SERIES_STALE_STEPS);
 }
 
-function requestSignal(parent?: AbortSignal): AbortSignal {
-  const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
-  return parent && typeof AbortSignal.any === 'function'
-    ? AbortSignal.any([timeout, parent])
-    : timeout;
-}
-
 function authHeaders(apiKey: string, json: boolean): Record<string, string> {
   const h: Record<string, string> = {};
   if (json) h['Content-Type'] = 'application/json';
@@ -178,7 +172,7 @@ async function call(
     method: init.method,
     headers: authHeaders(apiKey, init.body !== undefined),
     body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
-    signal: requestSignal(signal),
+    signal: combineAbortSignals(REQUEST_TIMEOUT_MS, signal),
   });
   let body: Record<string, unknown> = {};
   try {
