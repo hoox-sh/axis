@@ -216,11 +216,17 @@ export function buildOverlayPayloads(ctx: OverlayBuildContext): OverlayBuildOutc
           : Object.values(userPlotColors).find((v) => v.custom);
         const userColor = userEntry?.color;
         const userWidth = userEntry?.width;
+        const meta = plotMeta[scriptName] || {};
         overlayLines.push({
           name: scriptName,
           data,
-          color: resolvePineColor(userColor) ?? PLOT_PALETTE[0],
-          linewidth: userWidth,
+          // Same precedence as the named-series path: custom panel pick →
+          // Pine plot color (meta.color) → palette fallback. Previously this
+          // legacy path dropped meta.color entirely, so script colors were
+          // overwritten by the palette whenever the engine sent legacy plots[].
+          color: pickOverlayColor(userColor, meta?.color, PLOT_PALETTE[0]),
+          linewidth:
+            userWidth != null ? userWidth : (meta?.linewidth != null ? Number(meta.linewidth) : 1),
         });
       }
     }

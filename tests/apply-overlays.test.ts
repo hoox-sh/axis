@@ -260,4 +260,57 @@ describe('buildOverlayPayloads', () => {
     expect(out.overlayLines.length).toBe(2);
     expect(out.overlayLines.map((l) => l.name)).toEqual(['plot1', 'plot2']);
   });
+
+  it('respects engine meta color in legacy plots[] path', () => {
+    const ctx = makeContext({
+      seriesEntries: [],
+      plotMeta: { TestScript: { kind: 'plot', color: '#ff0000', linewidth: 3 } },
+      result: {
+        status: 'success',
+        plots: [10, 20, 30, 40],
+        series: {},
+        events: [],
+        meta: {},
+      } as RunResult,
+    });
+    const out = buildOverlayPayloads(ctx);
+    const line = out.overlayLines.find((l) => l.name === 'TestScript');
+    expect(line?.color).toBe('#ff0000'); // Pine meta color respected
+    expect(line?.linewidth).toBe(3);
+  });
+
+  it('custom user color wins over meta color in legacy plots[] path', () => {
+    const ctx = makeContext({
+      seriesEntries: [],
+      userPlotColors: { TestScript: { color: '#ffff00', custom: true } },
+      plotMeta: { TestScript: { kind: 'plot', color: '#ff0000' } },
+      result: {
+        status: 'success',
+        plots: [10, 20, 30, 40],
+        series: {},
+        events: [],
+        meta: {},
+      } as RunResult,
+    });
+    const out = buildOverlayPayloads(ctx);
+    const line = out.overlayLines.find((l) => l.name === 'TestScript');
+    expect(line?.color).toBe('#ffff00'); // custom user color wins
+  });
+
+  it('falls back to palette in legacy plots[] path with no meta color', () => {
+    const ctx = makeContext({
+      seriesEntries: [],
+      plotMeta: { TestScript: { kind: 'plot' } },
+      result: {
+        status: 'success',
+        plots: [10, 20, 30, 40],
+        series: {},
+        events: [],
+        meta: {},
+      } as RunResult,
+    });
+    const out = buildOverlayPayloads(ctx);
+    const line = out.overlayLines.find((l) => l.name === 'TestScript');
+    expect(line?.color).toBe(PLOT_PALETTE[0]); // palette fallback
+  });
 });
