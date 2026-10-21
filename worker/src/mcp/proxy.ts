@@ -17,7 +17,7 @@ import { handleScripts } from '../scripts';
 import { handleOnchain } from '../onchain';
 import { handleMarket } from '../market';
 import { allowWorkerRequest } from './allowlist';
-import { buildHealthBody, errorResponse, jsonResponse } from '../http';
+import { buildHealthBody, errorBody, errorResponse, jsonResponse } from '../http';
 
 const INTERNAL_ORIGIN = 'https://axis.internal';
 
@@ -90,7 +90,7 @@ export async function proxyWorkerRequest(
     return {
       ok: false,
       status: 403,
-      body: { status: 'error', code: 'MCP_ALLOWLIST', message: gate.reason, path: gate.path },
+      body: { ...errorBody('MCP_ALLOWLIST', gate.reason), path: gate.path },
       headers: {},
     };
   }

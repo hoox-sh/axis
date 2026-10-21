@@ -42,7 +42,7 @@ beforeEach(() => {
 });
 
 function okRoute(path: string): ProxyRoute {
-  return { path, handle: ({ origin }) => proxyJson(READ_CORS)({ hit: path }, origin) };
+  return { path, handle: ({ origin }) => proxyJson(READ_CORS)({ hit: path }, 200, origin) };
 }
 
 function testRouter(routes: ProxyRoute[]) {
@@ -58,9 +58,9 @@ function testRouter(routes: ProxyRoute[]) {
 describe('createProxyRouter routing', () => {
   const router = testRouter([
     okRoute('/one'),
-    { path: '/two', trailingSlash: true, handle: ({ origin }) => proxyJson(READ_CORS)({ hit: 'two' }, origin) },
-    { match: /^\/item\/([^/]+)$/, label: '/item/:id', handle: ({ origin, params }) => proxyJson(READ_CORS)({ item: params[0] }, origin) },
-    { startsWith: '/fam', handle: ({ origin }) => proxyJson(READ_CORS)({ hit: 'family' }, origin) },
+    { path: '/two', trailingSlash: true, handle: ({ origin }) => proxyJson(READ_CORS)({ hit: 'two' }, 200, origin) },
+    { match: /^\/item\/([^/]+)$/, label: '/item/:id', handle: ({ origin, params }) => proxyJson(READ_CORS)({ item: params[0] }, 200, origin) },
+    { startsWith: '/fam', handle: ({ origin }) => proxyJson(READ_CORS)({ hit: 'family' }, 200, origin) },
   ]);
 
   it('returns null for paths outside its prefix', () => {
@@ -102,8 +102,8 @@ describe('createProxyRouter routing', () => {
 
   it('evaluates routes in order so earlier entries win', async () => {
     const ordered = testRouter([
-      { match: /^\/dup\/(.+)$/, label: '/dup/:name', handle: ({ origin }) => proxyJson(READ_CORS)({ which: 'first' }, origin) },
-      { startsWith: '/dup', handle: ({ origin }) => proxyJson(READ_CORS)({ which: 'second' }, origin) },
+      { match: /^\/dup\/(.+)$/, label: '/dup/:name', handle: ({ origin }) => proxyJson(READ_CORS)({ which: 'first' }, 200, origin) },
+      { startsWith: '/dup', handle: ({ origin }) => proxyJson(READ_CORS)({ which: 'second' }, 200, origin) },
     ]);
     const res = (await ordered.handle(req('GET', 'https://a.test/api/x/dup/z'), ORIGIN, '/api/x/dup/z'))!;
     expect(await res.json()).toEqual({ which: 'first' });

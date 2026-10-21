@@ -19,7 +19,7 @@ import {
   type AppInvokeRequest,
   type AppInvokeResponse,
 } from './protocol';
-import { jsonResponse } from '../http';
+import { errorBody, plainJson } from '../http';
 
 /** One-time WS tickets expire quickly so logs/HAR never hold the long-lived key. */
 export const BRIDGE_TICKET_TTL_MS = 30_000;
@@ -51,9 +51,7 @@ interface Pending {
 }
 
 /** WS-adjacent HTTP replies carry no CORS — the socket is the transport. */
-function json(body: unknown, status = 200): Response {
-  return jsonResponse(body, { status });
-}
+const json = plainJson;
 
 function attachmentTime(ws: WebSocket): number {
   try {
@@ -104,16 +102,12 @@ export class McpBridgeDO {
 
     if (url.pathname === '/ws') {
       if (req.headers.get('Upgrade') !== 'websocket') {
-        return json({ status: 'error', code: 'EXPECTED_WEBSOCKET' }, 426);
+        return json(errorBody('EXPECTED_WEBSOCKET'), 426);
       }
       const nonce = (url.searchParams.get('ticket') || '').trim();
       if (nonce && !(await this.consumeTicket(nonce))) {
         return json(
-          {
-            status: 'error',
-            code: 'INVALID_TICKET',
-            message: 'bridge ticket missing, expired, or already used',
-          },
+          errorBody('INVALID_TICKET', 'bridge ticket missing, expired, or already used'),
           401,
         );
       }
@@ -172,7 +166,7 @@ export class McpBridgeDO {
       return json(result, result.ok ? 200 : 502);
     }
 
-    return json({ status: 'error', code: 'NOT_FOUND' }, 404);
+    return json(errorBody('NOT_FOUND'), 404);
   }
 
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {

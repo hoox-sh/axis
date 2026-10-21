@@ -45,9 +45,11 @@
 import type { Env } from './index';
 import {
   MARKET_CORS,
+  errorBody,
   fetchUpstreamJson,
-  jsonResponse,
+  scopedJson,
   upstreamDetail,
+  type JsonBuilder,
   type UpstreamResult,
 } from './http';
 import { createProxyRouter } from './proxy-router';
@@ -90,14 +92,7 @@ interface CacheEntry {
 
 const memCache = new Map<string, CacheEntry>();
 
-function json(
-  body: unknown,
-  status: number,
-  origin: string,
-  extra?: Record<string, string>,
-): Response {
-  return jsonResponse(body, { status, origin, cors: MARKET_CORS, headers: extra });
-}
+const json: JsonBuilder = scopedJson(MARKET_CORS);
 
 function cachedResponse(entry: CacheEntry, origin: string, cacheStatus: string): Response {
   return new Response(entry.body, {
@@ -240,11 +235,7 @@ async function proxyPublicPath(
     }
 
     return json(
-      {
-        status: 'error',
-        code: 'UPSTREAM_NETWORK',
-        message: `${venueLabel} upstream unreachable: ${lastErr}`,
-      },
+      errorBody('UPSTREAM_NETWORK', `${venueLabel} upstream unreachable: ${lastErr}`),
       502,
       origin,
     );
@@ -409,7 +400,7 @@ export function _resetMarketCacheForTests(): void {
 
 /** 400 envelope shared by every query-validation failure. */
 function badRequest(origin: string, message: string): Response {
-  return json({ status: 'error', code: 'BAD_REQUEST', message }, 400, origin);
+  return json(errorBody('BAD_REQUEST', message), 400, origin);
 }
 
 /**
@@ -421,11 +412,7 @@ async function signedKlines(req: Request, url: URL, origin: string): Promise<Res
   const apiSecret = (req.headers.get('X-Exchange-Secret') || '').trim();
   if (!apiKey || !apiSecret) {
     return json(
-      {
-        status: 'error',
-        code: 'AUTH',
-        message: 'X-Exchange-Key and X-Exchange-Secret required',
-      },
+      errorBody('AUTH', 'X-Exchange-Key and X-Exchange-Secret required'),
       401,
       origin,
     );
@@ -455,11 +442,7 @@ async function signedKlines(req: Request, url: URL, origin: string): Promise<Res
     });
   } catch (err) {
     return json(
-      {
-        status: 'error',
-        code: 'UPSTREAM_NETWORK',
-        message: `Binance signed upstream unreachable: ${upstreamDetail(err)}`,
-      },
+      errorBody('UPSTREAM_NETWORK', `Binance signed upstream unreachable: ${upstreamDetail(err)}`),
       502,
       origin,
     );

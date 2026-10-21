@@ -70,11 +70,12 @@ import {
   clientIp,
   errorResponse,
   handleError,
-  jsonResponse,
   methodNotAllowed,
   preflight,
   probeUpstream,
+  scopedJson,
   type DeepHealth,
+  type JsonBuilder,
 } from './http';
 import { allowRate } from './rate-limit';
 
@@ -212,14 +213,7 @@ export function pickOrigin(req: Request, env: Env): string {
 }
 
 /** JSON body + CORS headers shared by all non-stream routes. */
-function apiJson(
-  body: unknown,
-  status: number,
-  origin: string,
-  headers?: Record<string, string>,
-): Response {
-  return jsonResponse(body, { status, origin, cors: CORS_HEADERS, headers });
-}
+const apiJson: JsonBuilder = scopedJson(CORS_HEADERS);
 
 /**
  * Tenant-gate denial as an error envelope (401 / 402 / 429 / 503).

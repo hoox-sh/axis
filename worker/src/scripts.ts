@@ -58,7 +58,7 @@
 
 import type { Env } from './index';
 import { requireApiKey } from './auth';
-import { SCRIPTS_CORS, jsonResponse, readCappedJson } from './http';
+import { SCRIPTS_CORS, errorBody, readCappedJson, scopedJson, type JsonBuilder } from './http';
 import {
   clampCloneTtl,
   commitScriptSave,
@@ -355,14 +355,12 @@ async function delD1(db: D1Database, userId: string, id: string): Promise<boolea
 }
 
 /** JSON response with CORS headers required by the PWA (includes If-Match for revisions). */
-function corsJson(body: unknown, status: number, origin: string): Response {
-  return jsonResponse(body, { status, origin, cors: SCRIPTS_CORS });
-}
+const corsJson: JsonBuilder = scopedJson(SCRIPTS_CORS);
 
 /** 413 envelope shared by the capped body reads below. */
 function tooLarge(origin: string): Response {
   return corsJson(
-    { status: 'error', code: 'PAYLOAD_TOO_LARGE', message: 'script body too large' },
+    errorBody('PAYLOAD_TOO_LARGE', 'script body too large'),
     413,
     origin,
   );
@@ -445,7 +443,7 @@ export async function handleScripts(
 ): Promise<Response> {
   const auth = await requireApiKey(req, env);
   if (!auth.ok) {
-    return corsJson({ status: 'error', code: auth.code, message: auth.message }, auth.status, origin);
+    return corsJson(errorBody(auth.code, auth.message), auth.status, origin);
   }
   const { userId } = auth.ctx;
   const db = env.DB;
@@ -503,7 +501,7 @@ export async function handleScripts(
       }
       return corsJson({ status: 'success' }, 200, origin);
     }
-    return corsJson({ status: 'error', code: 'METHOD', message: 'GET or PUT required' }, 405, origin);
+    return corsJson(errorBody('METHOD', 'GET or PUT required'), 405, origin);
   }
 
   // --- Git-native history + clone credentials (Artifacts, no GitHub creds) ---
@@ -514,11 +512,7 @@ export async function handleScripts(
     const ns = env.SCRIPT_ARTIFACTS;
     if (!ns) {
       return corsJson(
-        {
-          status: 'error',
-          code: 'GIT_BACKEND_UNAVAILABLE',
-          message: 'Artifacts script repos not bound. Add [[artifacts]] SCRIPT_ARTIFACTS in wrangler.toml.',
-        },
+        errorBody('GIT_BACKEND_UNAVAILABLE', 'Artifacts script repos not bound. Add [[artifacts]] SCRIPT_ARTIFACTS in wrangler.toml.'),
         503,
         origin,
       );
@@ -556,7 +550,7 @@ export async function handleScripts(
       );
     }
     return corsJson(
-      { status: 'error', code: 'METHOD', message: 'GET /api/scripts/_git or POST /api/scripts/_git/token required' },
+      errorBody('METHOD', 'GET /api/scripts/_git or POST /api/scripts/_git/token required'),
       405,
       origin,
     );
@@ -573,11 +567,7 @@ export async function handleScripts(
           const msg = e instanceof Error ? e.message : String(e);
           if (/no such table/i.test(msg)) {
             return corsJson(
-              {
-                status: 'error',
-                code: 'NO_SCHEMA',
-                message: 'D1 scripts table missing. Run schemas/scripts.sql',
-              },
+              errorBody('NO_SCHEMA', 'D1 scripts table missing. Run schemas/scripts.sql'),
               503,
               origin,
             );
@@ -614,7 +604,7 @@ export async function handleScripts(
       await mirrorGit(env, ctx, userId, row);
       return corsJson({ status: 'success', script: { ...rowToMeta(row), content: row.content } }, 201, origin);
     }
-    return corsJson({ status: 'error', code: 'METHOD', message: 'GET or POST required' }, 405, origin);
+    return corsJson(errorBody('METHOD', 'GET or POST required'), 405, origin);
   }
 
   // --- Item /api/scripts/:id ---
@@ -626,14 +616,14 @@ export async function handleScripts(
   // deleted scripts (recreates them). Resolves git-first, then D1/memory.
   if (parts[1] === 'restore') {
     if (req.method !== 'POST') {
-      return corsJson({ status: 'error', code: 'METHOD', message: 'POST required' }, 405, origin);
+      return corsJson(errorBody('METHOD', 'POST required'), 405, origin);
     }
     const capped = await readCappedJson(req, SCRIPTS_MAX_BODY_BYTES);
     if (!capped.ok) return tooLarge(origin);
     const rev = String(((capped.value ?? {}) as { revision?: string }).revision || '');
     if (!rev) {
       return corsJson(
-        { status: 'error', code: 'VALIDATION', message: 'revision required' },
+        errorBody('VALIDATION', 'revision required'),
         400,
         origin,
       );
@@ -671,7 +661,7 @@ export async function handleScripts(
     }
     if (!found) {
       return corsJson(
-        { status: 'error', code: 'NOT_FOUND', message: `version ${rev} not found for ${id}` },
+        errorBody('NOT_FOUND', `version ${rev} not found for ${id}`),
         404,
         origin,
       );
@@ -708,7 +698,7 @@ export async function handleScripts(
   // --- Versions: /api/scripts/:id/versions[/:rev] ---
   if (parts[1] === 'versions') {
     if (req.method !== 'GET') {
-      return corsJson({ status: 'error', code: 'METHOD', message: 'GET required' }, 405, origin);
+      return corsJson(errorBody('METHOD', 'GET required'), 405, origin);
     }
     const rev = parts[2] ? decodeURIComponent(parts[2]) : '';
     if (rev) {
@@ -755,7 +745,7 @@ export async function handleScripts(
       }
       if (!row) {
         return corsJson(
-          { status: 'error', code: 'NOT_FOUND', message: `version ${rev} not found for ${id}` },
+          errorBody('NOT_FOUND', `version ${rev} not found for ${id}`),
           404,
           origin,
         );
@@ -816,7 +806,7 @@ export async function handleScripts(
     if (db) row = await getD1(db, userId, id);
     else row = memUser(userId).get(id) || null;
     if (!row) {
-      return corsJson({ status: 'error', code: 'NOT_FOUND', message: `script ${id} not found` }, 404, origin);
+      return corsJson(errorBody('NOT_FOUND', `script ${id} not found`), 404, origin);
     }
     return corsJson(
       {
@@ -857,7 +847,7 @@ export async function handleScripts(
       };
       const current = await getD1(db, userId, id);
       if (!current) {
-        return corsJson({ status: 'error', code: 'NOT_FOUND', message: `script ${id} not found` }, 404, origin);
+        return corsJson(errorBody('NOT_FOUND', `script ${id} not found`), 404, origin);
       }
       next.name = String(body.name || current.name || 'Untitled');
       if (body.description === undefined) next.description = current.description ?? null;
@@ -885,12 +875,7 @@ export async function handleScripts(
       if ((r.meta?.changes ?? 0) === 0) {
         const remote = await getD1(db, userId, id);
         return corsJson(
-          {
-            status: 'error',
-            code: 'CONFLICT',
-            message: 'revision mismatch',
-            remoteRevision: remote?.revision,
-          },
+          { ...errorBody('CONFLICT', 'revision mismatch'), remoteRevision: remote?.revision },
           409,
           origin,
         );
@@ -910,12 +895,7 @@ export async function handleScripts(
 
     if (ifMatch && prev && prev.revision !== ifMatch) {
       return corsJson(
-        {
-          status: 'error',
-          code: 'CONFLICT',
-          message: 'revision mismatch',
-          remoteRevision: prev.revision,
-        },
+        { ...errorBody('CONFLICT', 'revision mismatch'), remoteRevision: prev.revision },
         409,
         origin,
       );
@@ -953,13 +933,13 @@ export async function handleScripts(
       deleted = memUser(userId).delete(id);
     }
     if (!deleted) {
-      return corsJson({ status: 'error', code: 'NOT_FOUND', message: `script ${id} not found` }, 404, origin);
+      return corsJson(errorBody('NOT_FOUND', `script ${id} not found`), 404, origin);
     }
     if (prev) await mirrorGit(env, ctx, userId, prev, { delete: true });
     return corsJson({ status: 'success' }, 200, origin);
   }
 
-  return corsJson({ status: 'error', code: 'METHOD', message: 'unsupported method' }, 405, origin);
+  return corsJson(errorBody('METHOD', 'unsupported method'), 405, origin);
 }
 
 /** Test-only: wipe isolate memory backends between cases. */

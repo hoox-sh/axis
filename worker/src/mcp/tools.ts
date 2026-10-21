@@ -16,12 +16,13 @@ import { findPrompt, findTool, MCP_PROMPTS, MCP_RESOURCES, MCP_TOOLS } from './c
 import { describeAllowlist } from './allowlist';
 import { proxyWorkerRequest, type ProxyResult } from './proxy';
 import {
-  jsonError,
+  toolError,
   jsonText,
   sessionIdFromApiKey,
   type AppInvokeResponse,
   type McpToolResult,
 } from './protocol';
+import { errorBody } from '../http';
 
 export interface ToolContext {
   env: Env;
@@ -104,12 +105,7 @@ async function bridgeStatus(ctx: ToolContext, session: string): Promise<ProxyRes
     return {
       ok: false,
       status: 503,
-      body: {
-        status: 'error',
-        code: 'NO_MCP_BRIDGE',
-        message: 'MCP_BRIDGE Durable Object is not bound. Add the binding in wrangler.toml and deploy.',
-        connected: 0,
-      },
+      body: { ...errorBody('NO_MCP_BRIDGE', 'MCP_BRIDGE Durable Object is not bound. Add the binding in wrangler.toml and deploy.'), connected: 0 },
       headers: {},
     };
   }
@@ -153,14 +149,14 @@ async function bridgeInvoke(
 
 function invokeResult(res: AppInvokeResponse): McpToolResult {
   if (!res.ok) {
-    return jsonError(res.error?.message || 'app invoke failed', res.error);
+    return toolError(res.error?.message || 'app invoke failed', res.error);
   }
   return jsonText(res.result ?? null, true);
 }
 
 export async function callTool(ctx: ToolContext, name: string, argsUnknown: unknown): Promise<McpToolResult> {
   const tool = findTool(name);
-  if (!tool) return jsonError(`Unknown tool: ${name}`);
+  if (!tool) return toolError(`Unknown tool: ${name}`);
   const args = asRecord(argsUnknown);
 
   switch (name) {
@@ -314,7 +310,7 @@ export async function callTool(ctx: ToolContext, name: string, argsUnknown: unkn
     case 'app_invoke': {
       const session = await sessionName(ctx, args.session);
       const capability = str(args.capability);
-      if (!capability) return jsonError('capability is required');
+      if (!capability) return toolError('capability is required');
       const res = await bridgeInvoke(ctx, session, capability, args.payload);
       return invokeResult(res);
     }
@@ -326,12 +322,12 @@ export async function callTool(ctx: ToolContext, name: string, argsUnknown: unkn
     case 'app_set': {
       const session = await sessionName(ctx, args.session);
       const path = str(args.path);
-      if (!path) return jsonError('path is required');
+      if (!path) return toolError('path is required');
       const res = await bridgeInvoke(ctx, session, 'app.set', { path, value: args.value });
       return invokeResult(res);
     }
     default:
-      return jsonError(`Unhandled tool: ${name}`);
+      return toolError(`Unhandled tool: ${name}`);
   }
 }
 

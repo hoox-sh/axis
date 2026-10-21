@@ -49,7 +49,7 @@ import type { Env } from './index';
 import { extractBearer, requireApiKey } from './auth';
 import { gateTenantKey, meterTenantUsage, sha256Hex } from './tenant';
 import { tryRunInWorker } from './pyodide_runtime';
-import { clientIp, jsonResponse, readCappedJson } from './http';
+import { clientIp, errorBody, errorResponse, jsonResponse, readCappedJson } from './http';
 import { _resetRateLimitsForTests, allowRate } from './rate-limit';
 
 /** Max Pine source length (chars) accepted by `/api/run`. */
@@ -97,7 +97,7 @@ function jsonError(
     origin: string,
     extraHeaders?: Record<string, string>,
 ): Response {
-    return jsonResponse({ status: 'error', code, message }, {
+    return errorResponse(code, message, {
         status,
         headers: { 'Access-Control-Allow-Origin': origin, ...(extraHeaders || {}) },
     });
@@ -144,13 +144,8 @@ async function proxyToExternal(
     const target = env.EXTERNAL_BACKEND?.replace(/\/$/, '');
     if (!target) {
         return new Response(
-            JSON.stringify({
-                status: 'error',
-                code: 'NO_BACKEND',
-                message:
-                    'No EXTERNAL_BACKEND configured and PYODIDE_IN_WORKER is disabled. ' +
-                    'Set EXTERNAL_BACKEND=<flask-url> OR PYODIDE_IN_WORKER=enabled (and ship the pynescript wheel in R2).',
-            }),
+            JSON.stringify(errorBody('NO_BACKEND', 'No EXTERNAL_BACKEND configured and PYODIDE_IN_WORKER is disabled. ' +
+                    'Set EXTERNAL_BACKEND=<flask-url> OR PYODIDE_IN_WORKER=enabled (and ship the pynescript wheel in R2).')),
             {
                 status: 503,
                 headers: {
@@ -173,13 +168,9 @@ async function proxyToExternal(
         const msg = err instanceof Error ? err.message : String(err);
         const timedOut = /abort|timeout/i.test(msg);
         return new Response(
-            JSON.stringify({
-                status: 'error',
-                code: timedOut ? 'UPSTREAM_TIMEOUT' : 'UPSTREAM_NETWORK',
-                message: timedOut
+            JSON.stringify(errorBody(timedOut ? 'UPSTREAM_TIMEOUT' : 'UPSTREAM_NETWORK', timedOut
                     ? `EXTERNAL_BACKEND /run timed out after ${PROXY_TIMEOUT_MS}ms`
-                    : `EXTERNAL_BACKEND /run unreachable: ${msg}`,
-            }),
+                    : `EXTERNAL_BACKEND /run unreachable: ${msg}`)),
             {
                 status: 504,
                 headers: {

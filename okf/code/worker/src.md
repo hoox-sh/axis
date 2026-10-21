@@ -7,7 +7,7 @@ tags: [code, worker]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-21T17:20:00Z
+  at: 2026-10-21T17:39:44Z
 sources:
   - id: tree
     resource: "worker/src"
@@ -22,7 +22,7 @@ okf_lock: generated
 * `auth.ts` — AuthContext, BearerClassification, BearerKind, classifyBearer, classifyBearerToken, extractBearer, requireApiKey
 * `git-memfs.ts` — MemoryFS
 * `git-oauth.ts` — GitOAuthEnv, GitOAuthProvider, handleGitOAuth
-* `http.ts` — API_CORS, CorsOptions, DeepHealth, ErrorBody, ErrorResponseOptions, HandleErrorOptions, HealthFlags, JsonOptions, MARKET_CORS, MCP_CORS, ORIGIN_ONLY, READ_CORS
+* `http.ts` — API_CORS, CorsOptions, DeepHealth, ErrorBody, ErrorResponseOptions, HandleErrorOptions, HealthFlags, JsonBuilder, JsonOptions, MARKET_CORS, MCP_CORS, ORIGIN_ONLY
 * `index.ts` — Env, McpBridgeDO, SessionDO, pickOrigin
 * `keys.ts` — handleKeys
 * `live-proxy.ts` — LIVE_TICKET_TTL_S, _resetLiveTicketsForTests, engineLiveWsUrl, handleLiveProxy

@@ -25,7 +25,7 @@ import {
   type JsonRpcResponse,
 } from './protocol';
 import { isNotification, parseJsonText, rpcError, rpcResult } from './jsonrpc';
-import { MCP_CORS, errorResponse } from '../http';
+import { MCP_CORS, errorBody, errorResponse } from '../http';
 import { _resetRateLimitsForTests, allowRate } from '../rate-limit';
 import {
   callTool,
@@ -247,7 +247,7 @@ export async function handleMcp(
   const methodCount = parsed.batch ? parsed.requests.length : 1;
   if (!allowRate(rateKey, MCP_RATE_LIMIT, MCP_RATE_WINDOW_MS, methodCount)) {
     return new Response(
-      JSON.stringify({ status: 'error', code: 'RATE', message: 'MCP rate limit exceeded' }),
+      JSON.stringify(errorBody('RATE', 'MCP rate limit exceeded')),
       { status: 429, headers: jsonHeaders(origin) },
     );
   }

@@ -35,8 +35,10 @@ import {
   errorResponse,
   jsonResponse,
   methodNotAllowed,
+  plainJson,
   preflight,
   readCappedJson,
+  scopedJson,
 } from '../src/http';
 
 describe('corsHeaders', () => {
@@ -180,6 +182,48 @@ describe('buildHealthBody', () => {
     expect(body.service).toBe('worker-axis');
     const features = body.features as Record<string, unknown>;
     expect(features).toMatchObject({ scripts: true, d1: true, keys: false, mcpBridge: true });
+  });
+});
+
+describe('scopedJson', () => {
+  it('binds one CORS policy to the builder', async () => {
+    const json = scopedJson(READ_CORS);
+    const res = json({ ok: true }, 200, 'https://a.test');
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toBe('application/json');
+    expect(res.headers.get('Access-Control-Allow-Origin')).toBe('https://a.test');
+    expect(res.headers.get('Access-Control-Allow-Methods')).toBe('GET, OPTIONS');
+  });
+
+  it('defaults to 200 and carries extra headers', async () => {
+    const json = scopedJson(MARKET_CORS);
+    const res = json({ ok: true }, undefined, 'https://a.test', { 'Retry-After': '60' });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Retry-After')).toBe('60');
+  });
+
+  it('omits CORS when no origin is given', () => {
+    const res = scopedJson(READ_CORS)({ ok: true });
+    expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull();
+  });
+});
+
+describe('plainJson', () => {
+  it('carries no CORS at all', async () => {
+    const res = plainJson({ ok: true }, 204);
+    expect(res.status).toBe(204);
+    expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull();
+  });
+});
+
+describe('errorBody', () => {
+  it('omits the message when there is none', () => {
+    expect(errorBody('NOT_FOUND')).toEqual({ status: 'error', code: 'NOT_FOUND' });
+    expect(errorBody('NOT_FOUND', 'gone')).toEqual({
+      status: 'error',
+      code: 'NOT_FOUND',
+      message: 'gone',
+    });
   });
 });
 

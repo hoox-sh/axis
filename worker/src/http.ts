@@ -21,10 +21,10 @@
  * Shared Worker HTTP helpers: CORS headers, JSON responses, error envelopes,
  * client IP resolution.
  *
- * Extracted from per-module copies that had drifted apart:
- * `index.ts` (CORS_HEADERS / jsonResponse), `onchain.ts` (corsHeaders / json),
- * `market.ts` (corsHeaders / json), `git-oauth.ts` (json), `scripts.ts`
- * (corsJson), `runtime.ts` (jsonError).
+ * Every route answers through these helpers. A route picks its CORS policy
+ * once — {@link scopedJson} binds a builder to that policy — so a route can
+ * never answer with another route's headers by accident, and the error
+ * envelope has exactly one shape across the Worker.
  *
  * Header **values are preserved verbatim** per call site so this stays a pure
  * refactor — `worker/tests/http.test.ts` pins them.
@@ -81,7 +81,7 @@ export function corsHeaders(origin: string, opts: CorsOptions = {}): Record<stri
  */
 export const ORIGIN_ONLY = (origin: string): Record<string, string> => ({
   'Access-Control-Allow-Origin': origin,
-  'Vary': 'Origin',
+  Vary: 'Origin',
 });
 
 /** On-chain proxy CORS: read-only methods, no exchange or MCP headers. */
@@ -138,6 +138,37 @@ export function jsonResponse(body: unknown, opts: JsonOptions = {}): Response {
   });
 }
 
+/**
+ * A response builder bound to one CORS policy.
+ *
+ * The policy is fixed when the builder is created, so a route cannot answer
+ * with another route's headers by accident.
+ */
+export type JsonBuilder = (
+  body: unknown,
+  status?: number,
+  origin?: string,
+  headers?: Record<string, string>,
+) => Response;
+
+/** Bind {@link jsonResponse} to one CORS policy. */
+export function scopedJson(cors: (origin: string) => Record<string, string>): JsonBuilder {
+  return (body, status = 200, origin, headers) =>
+    jsonResponse(body, {
+      status,
+      ...(origin ? { origin, cors } : {}),
+      ...(headers ? { headers } : {}),
+    });
+}
+
+/**
+ * A JSON builder with **no** CORS.
+ *
+ * For WebSocket-adjacent replies, where the socket is the transport and a
+ * preflight would be meaningless.
+ */
+export const plainJson: JsonBuilder = (body, status = 200) => jsonResponse(body, { status });
+
 /** Canonical error envelope shared by every Worker route. */
 export interface ErrorBody {
   status: 'error';
@@ -150,7 +181,11 @@ export function errorBody(code: string, message?: string): ErrorBody {
 }
 
 /** {@link errorBody} as a `Response`. */
-export function errorResponse(code: string, message: string | undefined, opts: JsonOptions = {}): Response {
+export function errorResponse(
+  code: string,
+  message: string | undefined,
+  opts: JsonOptions = {},
+): Response {
   return jsonResponse(errorBody(code, message), { ...opts, status: opts.status ?? 400 });
 }
 
@@ -206,7 +241,10 @@ export function methodNotAllowed(allowed: string, opts: JsonOptions = {}): Respo
 }
 
 /** Preflight / bare CORS 204. */
-export function preflight(cors: (origin: string) => Record<string, string>, origin: string): Response {
+export function preflight(
+  cors: (origin: string) => Record<string, string>,
+  origin: string,
+): Response {
   return new Response(null, { status: 204, headers: cors(origin) });
 }
 
@@ -389,7 +427,10 @@ export function _resetUpstreamHealthForTests(): void {
 }
 
 /** Snapshot of cached reachability, newest state per host. */
-export function upstreamHealth(): Record<string, { ok: boolean; checkedAt: number; detail: string }> {
+export function upstreamHealth(): Record<
+  string,
+  { ok: boolean; checkedAt: number; detail: string }
+> {
   const out: Record<string, { ok: boolean; checkedAt: number; detail: string }> = {};
   for (const [host, r] of reachability) out[host] = { ok: r.ok, checkedAt: r.at, detail: r.detail };
   return out;
@@ -453,7 +494,8 @@ export function buildHealthBody(flags: HealthFlags, deep?: DeepHealth): unknown 
   const degraded = upstreams.some(([, r]) => !r.ok);
   if (deep && upstreams.length > 0) {
     // Only downgrade on a host that was actually probed and failed.
-    features.onchain = deep.report['defillama']?.ok !== false && deep.report['geckoterminal']?.ok !== false;
+    features.onchain =
+      deep.report['defillama']?.ok !== false && deep.report['geckoterminal']?.ok !== false;
     features.market = deep.report['binance']?.ok !== false && deep.report['mexc']?.ok !== false;
   }
   return {

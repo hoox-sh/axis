@@ -38,7 +38,14 @@
  * @module worker/proxy-router
  */
 
-import { clientIp, methodNotAllowed, preflight } from './http';
+import {
+  clientIp,
+  errorBody,
+  methodNotAllowed,
+  preflight,
+  scopedJson,
+  type JsonBuilder,
+} from './http';
 import { allowRate } from './rate-limit';
 
 export interface ProxyContext {
@@ -148,16 +155,16 @@ export function createProxyRouter(opts: ProxyRouterOptions): ProxyRouter {
         if (!allowRate(`${prefix}:ip:${ip}`, opts.ipLimit.limit, opts.ipLimit.windowMs)) {
           return Promise.resolve(
             json(
-              { status: 'error', code: 'RATE_LIMIT', message: 'Too many proxy requests' },
-              origin,
+              errorBody('RATE_LIMIT', 'Too many proxy requests'),
               429,
+              origin,
               { 'Retry-After': String(Math.ceil(opts.ipLimit.windowMs / 1000)) },
             ),
           );
         }
       }
 
-      if (rel === '/' || rel === '/health') return Promise.resolve(json(health(), origin));
+      if (rel === '/' || rel === '/health') return Promise.resolve(json(health(), 200, origin));
 
       for (const route of routes) {
         const params = matches(route, rel);
@@ -167,9 +174,9 @@ export function createProxyRouter(opts: ProxyRouterOptions): ProxyRouter {
 
       return Promise.resolve(
         json(
-          { status: 'error', code: 'NOT_FOUND', message: notFound.message.replace('%s', rel), ...notFound.extra },
-          origin,
+          { ...errorBody('NOT_FOUND', notFound.message.replace('%s', rel)), ...notFound.extra },
           404,
+          origin,
         ),
       );
     },
@@ -194,14 +201,6 @@ export function createProxyRouter(opts: ProxyRouterOptions): ProxyRouter {
 /** Encode `body` with the router's CORS set — the common "return JSON" case. */
 export function proxyJson(
   cors: (origin: string) => Record<string, string>,
-): (body: unknown, origin: string, status?: number, extraHeaders?: Record<string, string>) => Response {
-  return (body, origin, status = 200, extraHeaders) =>
-    new Response(JSON.stringify(body), {
-      status,
-      headers: {
-        'Content-Type': 'application/json',
-        ...cors(origin),
-        ...(extraHeaders || {}),
-      },
-    });
+): JsonBuilder {
+  return scopedJson(cors);
 }

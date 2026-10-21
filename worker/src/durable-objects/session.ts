@@ -220,11 +220,11 @@ export class SessionDO {
     async fetch(req: Request): Promise<Response> {
         const url = new URL(req.url);
         if (url.pathname !== '/ws') {
-            return new Response('not found', { status: 404 });
+            return errorResponse('NOT_FOUND', 'not found', { status: 404 });
         }
 
         if (req.headers.get('Upgrade') !== 'websocket') {
-            return new Response('expected websocket', { status: 426 });
+            return errorResponse('EXPECTED_WEBSOCKET', 'expected websocket', { status: 426 });
         }
 
         const rawVenue = url.searchParams.get('venue') ?? 'binance';

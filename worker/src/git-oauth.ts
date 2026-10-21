@@ -56,17 +56,8 @@ function forgeSignal(): RequestInit {
     : {};
 }
 
-import { clientIp, jsonResponse } from './http';
+import { clientIp, errorBody, scopedJson } from './http';
 import { allowRate } from './rate-limit';
-
-function json(
-    body: unknown,
-    init: ResponseInit,
-    origin: string,
-    cors: (origin: string) => Record<string, string>,
-): Response {
-    return jsonResponse(body, { status: init.status, origin, cors, headers: init.headers as Record<string, string> });
-}
 
 async function readJsonBody(req: Request): Promise<Record<string, unknown>> {
   try {
@@ -246,13 +237,9 @@ export async function handleGitOAuth(
   pathname: string,
   cors: (origin: string) => Record<string, string>,
 ): Promise<Response> {
+  const json = scopedJson(cors);
   if (req.method !== 'POST') {
-    return json(
-      { status: 'error', code: 'METHOD', message: 'POST required' },
-      { status: 405 },
-      origin,
-      cors,
-    );
+    return json(errorBody('METHOD', 'POST required'), 405, origin);
   }
 
   const ip = clientIp(req);
@@ -261,20 +248,10 @@ export async function handleGitOAuth(
   const isPoll = pathname.endsWith('/poll');
   // Tighter start limit (burns forge rate limits); poll stays higher for device UX
   if (isStart && !allowRate(`oauth:start:${ip}`, 8, 60_000)) {
-    return json(
-      { status: 'error', code: 'RATE_LIMIT', message: 'Too many OAuth start requests' },
-      { status: 429 },
-      origin,
-      cors,
-    );
+    return json(errorBody('RATE_LIMIT', 'Too many OAuth start requests'), 429, origin);
   }
   if (isPoll && !allowRate(`oauth:poll:${ip}`, 60, 60_000)) {
-    return json(
-      { status: 'error', code: 'RATE_LIMIT', message: 'Too many OAuth poll requests' },
-      { status: 429 },
-      origin,
-      cors,
-    );
+    return json(errorBody('RATE_LIMIT', 'Too many OAuth poll requests'), 429, origin);
   }
 
   const body = await readJsonBody(req);
@@ -283,19 +260,9 @@ export async function handleGitOAuth(
   const clientId = resolveClientId(provider, body, env);
 
   if (!clientId) {
-    return json(
-      {
-        status: 'error',
-        code: 'NO_CLIENT_ID',
-        message:
-          provider === 'github'
+    return json(errorBody('NO_CLIENT_ID', provider === 'github'
             ? 'GitHub OAuth client id missing. Set Worker env GITHUB_OAUTH_CLIENT_ID (preferred) or pass clientId only when env is unset (local self-host).'
-            : 'GitLab OAuth application id missing. Set Worker env GITLAB_OAUTH_CLIENT_ID (preferred) or pass clientId only when env is unset.',
-      },
-      { status: 400 },
-      origin,
-      cors,
-    );
+            : 'GitLab OAuth application id missing. Set Worker env GITLAB_OAUTH_CLIENT_ID (preferred) or pass clientId only when env is unset.'), 400, origin);
   }
 
   try {
@@ -304,43 +271,24 @@ export async function handleGitOAuth(
       // (still shown on the forge consent screen).
       const scope = provider === 'gitlab' ? GITLAB_SCOPE : GITHUB_SCOPE;
       const started = await startDevice(provider, clientId, scope);
-      return json({ status: 'success', ...started }, { status: 200 }, origin, cors);
+      return json({ status: 'success', ...started }, 200, origin);
     }
 
     if (isPoll) {
       const deviceCode = String(body.device_code || body.deviceCode || '').trim();
       if (!deviceCode) {
-        return json(
-          { status: 'error', code: 'BAD_REQUEST', message: 'device_code required' },
-          { status: 400 },
-          origin,
-          cors,
-        );
+        return json(errorBody('BAD_REQUEST', 'device_code required'), 400, origin);
       }
       const polled = await pollDevice(provider, clientId, deviceCode);
       // Never return refresh_token even if an adapter re-adds it later
       if (polled && typeof polled === 'object' && 'refresh_token' in polled) {
         delete (polled as { refresh_token?: string }).refresh_token;
       }
-      return json(polled, { status: 200 }, origin, cors);
+      return json(polled, 200, origin);
     }
 
-    return json(
-      { status: 'error', code: 'NOT_FOUND', message: `Unknown oauth path ${pathname}` },
-      { status: 404 },
-      origin,
-      cors,
-    );
+    return json(errorBody('NOT_FOUND', `Unknown oauth path ${pathname}`), 404, origin);
   } catch (err) {
-    return json(
-      {
-        status: 'error',
-        code: 'OAUTH_UPSTREAM',
-        message: err instanceof Error ? err.message : String(err),
-      },
-      { status: 502 },
-      origin,
-      cors,
-    );
+    return json(errorBody('OAUTH_UPSTREAM', err instanceof Error ? err.message : String(err)), 502, origin);
   }
 }

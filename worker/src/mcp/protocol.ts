@@ -153,7 +153,7 @@ export function jsonText(data: unknown, pretty = false): McpToolResult {
   };
 }
 
-export function jsonError(message: string, extra?: unknown): McpToolResult {
+export function toolError(message: string, extra?: unknown): McpToolResult {
   return {
     isError: true,
     content: [

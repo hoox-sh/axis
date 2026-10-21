@@ -39,9 +39,11 @@
 import type { Env } from './index';
 import {
   READ_CORS,
+  errorBody,
   fetchUpstreamJson,
-  jsonResponse,
+  scopedJson,
   upstreamDetail,
+  type JsonBuilder,
   type UpstreamResult,
 } from './http';
 import { createProxyRouter } from './proxy-router';
@@ -88,14 +90,7 @@ interface CacheEntry {
 
 const memCache = new Map<string, CacheEntry>();
 
-function json(
-  body: unknown,
-  status: number,
-  origin: string,
-  extra?: Record<string, string>,
-): Response {
-  return jsonResponse(body, { status, origin, cors: READ_CORS, headers: extra });
-}
+const json: JsonBuilder = scopedJson(READ_CORS);
 
 function cachedResponse(entry: CacheEntry, origin: string, cacheStatus: string): Response {
   return new Response(entry.body, {
@@ -168,7 +163,7 @@ function keyPart(s: string): string {
   return s.length > 256 ? s.slice(0, 256) : s;
 }
 
-async function proxyJson(
+async function proxyUpstream(
   cacheKey: string,
   upstreamUrl: string,
   origin: string,
@@ -205,11 +200,7 @@ async function proxyJson(
 
   if (up.kind === 'network-error') {
     return json(
-      {
-        status: 'error',
-        code: 'UPSTREAM_NETWORK',
-        message: `${providerLabel} upstream unreachable: ${up.message}`,
-      },
+      errorBody('UPSTREAM_NETWORK', `${providerLabel} upstream unreachable: ${up.message}`),
       502,
       origin,
     );
@@ -280,7 +271,7 @@ const ROUTER = createProxyRouter({
     {
       path: '/llama/protocols',
       handle: ({ origin }) =>
-        proxyJson('llama:protocols', `${LLAMA_UPSTREAM}/protocols`, origin, PROTOCOLS_TTL_MS, 'DefiLlama'),
+        proxyUpstream('llama:protocols', `${LLAMA_UPSTREAM}/protocols`, origin, PROTOCOLS_TTL_MS, 'DefiLlama'),
     },
     {
       match: /^\/llama\/protocol\/([^/]+)\/?$/,
@@ -289,17 +280,13 @@ const ROUTER = createProxyRouter({
         const slug = decodePathSegment(params[0] || '');
         if (!SLUG_RE.test(slug)) {
           return json(
-            {
-              status: 'error',
-              code: 'BAD_SLUG',
-              message: 'Invalid protocol slug (use letters, digits, ._- only)',
-            },
+            errorBody('BAD_SLUG', 'Invalid protocol slug (use letters, digits, ._- only)'),
             400,
             origin,
           );
         }
         const normalized = slug.toLowerCase();
-        return proxyJson(
+        return proxyUpstream(
           `llama:protocol:${normalized}`,
           `${LLAMA_UPSTREAM}/protocol/${encodeURIComponent(normalized)}`,
           origin,
@@ -312,7 +299,7 @@ const ROUTER = createProxyRouter({
       path: '/gecko/search/pools',
       handle: ({ req, origin }) => {
         const qs = pickQuery(req, GECKO_SEARCH_QUERY_KEYS);
-        return proxyJson(
+        return proxyUpstream(
           `gecko:search:${keyPart(qs)}`,
           `${GECKO_UPSTREAM}/search/pools${qs}`,
           origin,
@@ -331,34 +318,21 @@ const ROUTER = createProxyRouter({
 
         if (!GECKO_NETWORK_RE.test(network)) {
           return json(
-            {
-              status: 'error',
-              code: 'BAD_NETWORK',
-              message: 'Invalid network id (use lowercase letters, digits, underscore)',
-            },
+            errorBody('BAD_NETWORK', 'Invalid network id (use lowercase letters, digits, underscore)'),
             400,
             origin,
           );
         }
         if (!isValidGeckoAddress(address)) {
           return json(
-            {
-              status: 'error',
-              code: 'BAD_ADDRESS',
-              message:
-                'Invalid pool address (EVM 0x+40 hex or Solana-style base58 32–48 chars)',
-            },
+            errorBody('BAD_ADDRESS', 'Invalid pool address (EVM 0x+40 hex or Solana-style base58 32–48 chars)'),
             400,
             origin,
           );
         }
         if (!GECKO_TIMEFRAME_RE.test(timeframe)) {
           return json(
-            {
-              status: 'error',
-              code: 'BAD_TIMEFRAME',
-              message: 'Invalid timeframe (use day, hour, or minute)',
-            },
+            errorBody('BAD_TIMEFRAME', 'Invalid timeframe (use day, hour, or minute)'),
             400,
             origin,
           );
@@ -367,7 +341,7 @@ const ROUTER = createProxyRouter({
         const qs = pickQuery(req, GECKO_OHLCV_QUERY_KEYS);
         const addrKey = address.toLowerCase().startsWith('0x') ? address.toLowerCase() : address;
         const upstream = `${GECKO_UPSTREAM}/networks/${encodeURIComponent(network)}/pools/${encodeURIComponent(address)}/ohlcv/${encodeURIComponent(timeframe)}${qs}`;
-        return proxyJson(
+        return proxyUpstream(
           `gecko:ohlcv:${network}:${keyPart(addrKey)}:${timeframe}:${keyPart(qs)}`,
           upstream,
           origin,
@@ -382,13 +356,7 @@ const ROUTER = createProxyRouter({
       handle: ({ origin, req }) => {
         const pathname = new URL(req.url).pathname;
         return json(
-          {
-            status: 'error',
-            code: 'NOT_FOUND',
-            message: `Unknown GeckoTerminal path ${pathname}`,
-            hint:
-              'Use /api/onchain/gecko/networks/:network/pools/:address/ohlcv/:timeframe or /api/onchain/gecko/search/pools',
-          },
+          { ...errorBody('NOT_FOUND', `Unknown GeckoTerminal path ${pathname}`), hint: 'Use /api/onchain/gecko/networks/:network/pools/:address/ohlcv/:timeframe or /api/onchain/gecko/search/pools' },
           404,
           origin,
         );
