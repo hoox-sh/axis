@@ -117,10 +117,8 @@ const MetaBadge: Component<{
 /** Card for one entry in `store.scripts`. */
 export const IndicatorCard: Component<Props> = (props) => {
   const [editingColor, setEditingColor] = createSignal<string | null>(null);
-  const [editingWidth, setEditingWidth] = createSignal<string | null>(null);
   const [busy, setBusy] = createSignal(false);
   const colorPopoverRef = createSignal<HTMLDivElement | null>(null);
-  const widthPopoverRef = createSignal<HTMLDivElement | null>(null);
 
   const kind = createMemo(() => detectScriptKind(props.indicator.code));
   const declaredOverlay = createMemo(() =>
@@ -229,7 +227,6 @@ export const IndicatorCard: Component<Props> = (props) => {
 
   const changeWidth = (plotName: string, width: number) => {
     setIndicatorPlotWidth(props.indicator.id, plotName, width);
-    setEditingWidth(null);
     const manager = getManager();
     if (!manager) return;
     manager.setOverlayLineWidth(props.indicator.paneId, plotName, width);
@@ -251,19 +248,6 @@ export const IndicatorCard: Component<Props> = (props) => {
         document.querySelector(`[data-color-trigger="${props.indicator.id}"]`) as HTMLElement | null,
       ],
       onDismiss: () => setEditingColor(null),
-    });
-    onCleanup(dispose);
-  });
-
-  // Width popover outside click handling
-  onMount(() => {
-    if (!widthPopoverRef[0]()) return;
-    const dispose = dismissOnOutside({
-      inside: () => [
-        widthPopoverRef[0](),
-        document.querySelector(`[data-width-trigger="${props.indicator.id}"]`) as HTMLElement | null,
-      ],
-      onDismiss: () => setEditingWidth(null),
     });
     onCleanup(dispose);
   });
@@ -472,19 +456,28 @@ export const IndicatorCard: Component<Props> = (props) => {
                     }
                   />
                   <span class="truncate font-mono text-[10px] flex-1 min-w-0">{name}</span>
-                  {/* Width slider */}
-                  <button
-                    type="button"
-                    class="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-text-faint hover:text-text border border-transparent hover:border-border/60 rounded-[var(--radius-chip)]"
-                    title={`Line width for "${name}" (${plotWidth})`}
-                    data-width-trigger={props.indicator.id}
-                    onClick={() =>
-                      setEditingWidth(editingWidth() === name ? null : name)
-                    }
-                  >
-                    <Icons.inputs size={10} />
-                    <span class="font-mono w-4 text-right">{plotWidth}</span>
-                  </button>
+                  {/* Width buttons */}
+                  <div class="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-text-faint hover:text-text border border-transparent hover:border-border/60 rounded-[var(--radius-chip)]">
+                    <button
+                      type="button"
+                      class="inline-flex items-center justify-center w-5 h-5 text-text-faint hover:text-accent border border-border rounded-[var(--radius-chip)] hover:bg-bg"
+                      title={`Decrease line width for "${name}"`}
+                      onClick={() => changeWidth(name, Math.max(1, plotWidth - 1))}
+                      aria-label={`Decrease line width for ${name}`}
+                    >
+                      <Icons.minus size={9} />
+                    </button>
+                    <span class="font-mono w-5 text-center text-text">{plotWidth === 2 && plot.width == null ? 'auto' : String(plotWidth)}</span>
+                    <button
+                      type="button"
+                      class="inline-flex items-center justify-center w-5 h-5 text-text-faint hover:text-accent border border-border rounded-[var(--radius-chip)] hover:bg-bg"
+                      title={`Increase line width for "${name}"`}
+                      onClick={() => changeWidth(name, Math.min(4, plotWidth + 1))}
+                      aria-label={`Increase line width for ${name}`}
+                    >
+                      <Icons.plus size={9} />
+                    </button>
+                  </div>
                   {/* Visibility toggle */}
                   <button
                     type="button"
@@ -516,25 +509,6 @@ export const IndicatorCard: Component<Props> = (props) => {
                           />
                         )}
                       </For>
-                    </div>
-                  </Show>
-                  {/* Width popover */}
-                  <Show when={editingWidth() === name}>
-                    <div
-                      ref={widthPopoverRef[1]}
-                      class="absolute z-20 flex items-center gap-1 ml-auto px-2 py-1 bg-bg-elev border border-border rounded-[var(--radius-chip)] shadow-lg"
-                    >
-                      <input
-                        type="range"
-                        min="1"
-                        max="4"
-                        step="1"
-                        value={plotWidth}
-                        onInput={(e) => changeWidth(name, Number(e.currentTarget.value))}
-                        class="w-20 accent-accent"
-                        aria-label={`Line width for ${name}`}
-                      />
-                      <span class="font-mono text-[10px] text-text w-4 text-right">{plotWidth}</span>
                     </div>
                   </Show>
                 </div>
