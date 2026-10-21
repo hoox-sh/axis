@@ -41,6 +41,14 @@ import { detectScriptKind } from './script-meta';
 /** Bounded fan-out for the per-script fallback runs (not the batch route). */
 export const REAPPLY_MAX_CONCURRENT = 5;
 
+/** Guard against concurrent reapply passes — only one at a time. */
+let reapplyInProgress = false;
+
+/** @internal test helper */
+export function _resetReapplyGuardForTests(): void {
+  reapplyInProgress = false;
+}
+
 /**
  * Endpoints whose backend answered without a batch route. A missing route
  * never appears spontaneously, so once seen it is skipped for the rest of the
@@ -213,54 +221,63 @@ export async function reapplyChartScripts(
 ): Promise<number> {
   const still = opts?.stillCurrent ?? (() => true);
   if (!still()) return 0;
-  if (!Array.isArray(store.bars) || !store.bars.length) return 0;
+  // Only one reapply pass at a time — multiple call sites (load-symbol,
+  // DSM, store, MCP) can fire during a single load. A later call supersedes
+  // the earlier one via `stillCurrent`, so skip if one is already in flight.
+  if (reapplyInProgress) return 0;
+  reapplyInProgress = true;
+  try {
+    if (!Array.isArray(store.bars) || !store.bars.length) return 0;
 
-  const scripts = listReapplicableScripts(opts?.ids);
-  if (!scripts.length) return 0;
+    const scripts = listReapplicableScripts(opts?.ids);
+    if (!scripts.length) return 0;
 
-  const { runAndApply, beginRunEpoch } = await import('./runner');
-  // One shared round-trip when the backend supports it; the apply path below is
-  // identical either way (a batched result is passed through as
-  // `precomputedResult`, so panes / overlays / alerts behave the same).
-  const batched = await runBatchReapply(scripts, still);
-  // One shared epoch for the pass: members run concurrently without
-  // invalidating each other's chart apply (a newer interactive Run still
-  // supersedes the whole pass, as before).
-  const epoch = beginRunEpoch();
-  const warn = (ind: Indicator, detail: unknown): void => {
-    if (opts?.logErrors === false) return;
-    try {
-      console.warn(`[axis] reapply script ${ind.name || ind.id}:`, detail);
-    } catch {
-      /* ignore */
+    const { runAndApply, beginRunEpoch } = await import('./runner');
+    // One shared round-trip when the backend supports it; the apply path below is
+    // identical either way (a batched result is passed through as
+    // `precomputedResult`, so panes / overlays / alerts behave the same).
+    const batched = await runBatchReapply(scripts, still);
+    // One shared epoch for the pass: members run concurrently without
+    // invalidating each other's chart apply (a newer interactive Run still
+    // supersedes the whole pass, as before).
+    const epoch = beginRunEpoch();
+    const warn = (ind: Indicator, detail: unknown): void => {
+      if (opts?.logErrors === false) return;
+      try {
+        console.warn(`[axis] reapply script ${ind.name || ind.id}:`, detail);
+      } catch {
+        /* ignore */
+      }
+    };
+    const runOne = async (ind: Indicator): Promise<boolean> => {
+      if (!still()) return false;
+      try {
+        const result = await runAndApply(ind.code, ind.id, {
+          silent: true,
+          openResults: false,
+          inputs: ind.inputValues,
+          strategyProps: ind.strategyProps,
+          epoch,
+          ...(batched?.has(ind.id) ? { precomputedResult: batched.get(ind.id) } : {}),
+        });
+        if (result && result.status !== 'error') return true;
+        if (result?.status === 'error') warn(ind, result.error || 'error');
+        return false;
+      } catch (err: unknown) {
+        warn(ind, err instanceof Error ? err.message : err);
+        return false;
+      }
+    };
+    let ok = 0;
+    // Producers of plot sources (cross-indicator input.source) run in earlier
+    // levels; independent scripts inside a level run together, bounded.
+    for (const level of groupIndicatorsByPlotDepLevel(scripts)) {
+      if (!still()) break;
+      const done = await mapWithConcurrencyLimit(level, REAPPLY_MAX_CONCURRENT, runOne);
+      for (const d of done) if (d) ok += 1;
     }
-  };
-  const runOne = async (ind: Indicator): Promise<boolean> => {
-    if (!still()) return false;
-    try {
-      const result = await runAndApply(ind.code, ind.id, {
-        silent: true,
-        openResults: false,
-        inputs: ind.inputValues,
-        strategyProps: ind.strategyProps,
-        epoch,
-        ...(batched?.has(ind.id) ? { precomputedResult: batched.get(ind.id) } : {}),
-      });
-      if (result && result.status !== 'error') return true;
-      if (result?.status === 'error') warn(ind, result.error || 'error');
-      return false;
-    } catch (err: unknown) {
-      warn(ind, err instanceof Error ? err.message : err);
-      return false;
-    }
-  };
-  let ok = 0;
-  // Producers of plot sources (cross-indicator input.source) run in earlier
-  // levels; independent scripts inside a level run together, bounded.
-  for (const level of groupIndicatorsByPlotDepLevel(scripts)) {
-    if (!still()) break;
-    const done = await mapWithConcurrencyLimit(level, REAPPLY_MAX_CONCURRENT, runOne);
-    for (const d of done) if (d) ok += 1;
+    return ok;
+  } finally {
+    reapplyInProgress = false;
   }
-  return ok;
 }

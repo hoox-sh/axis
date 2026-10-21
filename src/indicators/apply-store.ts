@@ -253,12 +253,14 @@ export function updateIndicatorStore(ctx: StoreUpdateContext): boolean {
         for (const [k] of ctx.seriesEntries) {
           if (plots[k]?.custom) continue;
           const meta = ctx.plotMeta[k];
-          // Preserve existing width/visible for non-custom plots
+          // Preserve existing width/visible for non-custom plots.
+          // Only overwrite color when the fresh run actually shipped a
+          // resolvable plot_meta.color — otherwise keep the stored color
+          // so a reapply can't wipe script colors to the palette.
+          const resolvedColor = resolvePineColor(meta?.color);
           plots[k] = {
             ...plots[k],
-            color:
-              resolvePineColor(meta?.color) ??
-              PLOT_PALETTE[colorIdx % PLOT_PALETTE.length],
+            ...(resolvedColor != null ? { color: resolvedColor } : {}),
           };
           colorIdx += 1;
         }

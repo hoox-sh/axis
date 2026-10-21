@@ -7,7 +7,7 @@ tags: [code, indicators]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-20T19:25:37Z
+  at: 2026-10-21T04:11:59Z
 sources:
   - id: tree
     resource: "src/indicators"
@@ -28,7 +28,7 @@ okf_lock: generated
 * `apply-store.ts` — StoreUpdateContext, updateIndicatorStore
 * `apply-strategy.ts` — StrategyApplyContext, applyStrategyMarkers
 * `detach.ts` — detachIndicatorFromChart
-* `reapply.ts` — REAPPLY_MAX_CONCURRENT, ReapplyChartScriptsOpts, _resetBatchRouteMemoForTests, listReapplicableScripts, reapplyChartScripts
+* `reapply.ts` — REAPPLY_MAX_CONCURRENT, ReapplyChartScriptsOpts, _resetBatchRouteMemoForTests, _resetReapplyGuardForTests, listReapplicableScripts, reapplyChartScripts
 * `run-helpers.ts` — NormalizedRunResult, _resetRunEpochForTests, beginRunEpoch, claimRunStatus, coercePlotSample, coerceSeriesSample, currentRunEpoch, formatRunError, getRunStatusEpoch, isInteractiveRunInFlight, isRunEpochCurrent, lineDataHasSample
 * `run-target.ts` — EditorRunMode, countChartScriptsForEditor, editorHasChartInstance, extractScriptTitle, findChartScriptForEditor, normalizeScriptSource, pickPreferredScript, resolveScriptDisplayName, runFromEditor
 * `runner.ts` — NormalizedRunResult, RunOptions, RunResult, StrategyPropsPrecedenceOpts, _resetOhlcvTimesCacheForTests, _resetRunEpochForTests, alignSeriesMapToTimes, alignSeriesToTimes, applyRollingWindow, beginRunEpoch, claimRunStatus, coercePlotSample
