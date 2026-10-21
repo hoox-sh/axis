@@ -90,7 +90,12 @@ export function applyStrategyMarkers(ctx: StrategyApplyContext): void {
     });
     // Owner-scoped so removing this strategy clears its long/short labels
     // without relying on a global wipe (and without wiping sibling markers).
-    ctx.manager.setTradeMarkers(markers, ctx.indicatorId ?? EDITOR_RUN_KEY);
+    // On silent live re-runs, merge with existing markers so entry/exit labels
+    // from prior evaluations persist across forming ticks instead of being
+    // wiped and only re-painted on the next bar close.
+    ctx.manager.setTradeMarkers(markers, ctx.indicatorId ?? EDITOR_RUN_KEY, {
+      merge: ctx.silent,
+    });
 
     const report = buildStrategyReport(events, bars, { fillMode });
     if (report.trades.length) {

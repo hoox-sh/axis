@@ -66,9 +66,13 @@ export function appendLiveBar(bar: Bar): BarAppendResult {
   const manager = getManager();
   if (!manager) return result;
 
-  if (result === 'slid') {
-    // The window head moved — the chart series has to drop its oldest bar too.
-    // `series.update` cannot do that, so this is a full replace of the window.
+  // `series.update` can only overwrite the **last** bar in place — it never
+  // adds a new time slot. So a genuinely new bar (`appended`, or a window
+  // slide) must be painted as a full window replace so the new candle lands
+  // at the right edge (within `rightOffset`, no auto-scroll shift). An
+  // in-place forming-tick (`updated`, same time as the tip) still uses the
+  // O(1) `series.update` path.
+  if (result === 'slid' || result === 'appended') {
     const view = sliceToChartWindow(store.bars);
     try {
       setDataToChart(view, { fit: false, clearScriptState: false, clearMarkers: false });

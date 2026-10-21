@@ -52,10 +52,23 @@ afterEach(() => {
 });
 
 describe('appendLiveBar', () => {
-  it('paints a new bar with the incremental path', () => {
+  it('paints a new bar through the full-window path (not incremental)', () => {
+    // A genuinely new bar adds a new time slot. `series.update` can only
+    // overwrite the last bar in place, so new bars are painted like a window
+    // slide (setData) instead of the incremental manager.appendBar path.
     const verdict = appendLiveBar(bar(60));
     expect(verdict).toBe('appended');
-    expect(appended).toHaveLength(1);
+    expect(appended).toHaveLength(0); // manager.appendBar is not used for new bars
+    expect(store.bars).toHaveLength(1);
+  });
+
+  it('keeps the incremental path for a forming-tick update', () => {
+    appendLiveBar(bar(60));
+    appended = [];
+    // Same time as the tip → forming candle updated in place.
+    const verdict = appendLiveBar(bar(60, 101));
+    expect(verdict).toBe('updated');
+    expect(appended).toHaveLength(1); // manager.appendBar / series.update
     expect(store.bars).toHaveLength(1);
   });
 

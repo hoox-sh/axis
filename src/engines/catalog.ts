@@ -1485,18 +1485,15 @@ export function getCachedEngineCapabilities(): EngineCapabilities {
  * Effective live re-run cadence for the selected engine.
  *
  * `store.live.rerunOn` is the user's stored preference — Settings owns it, and
- * capability resolution must never rewrite it (a silent downgrade reads as
- * "my setting does not save"). When the engine has positively advertised its
- * live modes and every-tick is not among them, callers run bar close instead;
- * while capabilities are unknown (no probe yet) the stored preference stands.
+ * capability resolution never rewrites it. `bar-close` is honoured only when
+ * the user explicitly chose it; otherwise re-runs run on every tick so strategy
+ * entries/exits and indicator plots update immediately on each new bar, not
+ * only when the venue marks the candle closed.
  */
 export function liveRerunModeForEngine(
   stored: 'every-tick' | 'bar-close' | string | undefined,
 ): 'every-tick' | 'bar-close' {
-  const mode: 'every-tick' | 'bar-close' =
-    stored === 'bar-close' ? 'bar-close' : 'every-tick';
-  if (mode !== 'every-tick' || cachedEngineCapabilities == null) return mode;
-  return cachedEngineCapabilities.liveModes.includes('every-tick') ? 'every-tick' : 'bar-close';
+  return stored === 'bar-close' ? 'bar-close' : 'every-tick';
 }
 
 /**

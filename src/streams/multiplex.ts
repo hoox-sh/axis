@@ -100,14 +100,12 @@ export { listStreams, defaultStreamForSource };
  */
 export const HEAVY_LIVE_RERUN_BARS = HEAVY_BARS_THRESHOLD;
 
-/** Effective live re-run mode. Delta ticks (O(delta) server-side) plus
- * tip-only chart apply make per-tick updates cheap regardless of history
- * size, so the user's `rerunOn` preference is honored even on heavy
- * histories. A `bar-close` stored choice still defers re-runs to bar close.
+/** Effective live re-run mode. Honors the user's `rerunOn` preference:
+ * `every-tick` re-runs indicators on each bar update; `bar-close` only when
+ * the venue marks the candle closed (or bar time advances).
  */
 export function effectiveLiveRerunMode(
   mode: 'every-tick' | 'bar-close' | undefined,
-  _barCount?: number,
 ): 'every-tick' | 'bar-close' {
   return mode ?? 'every-tick';
 }
@@ -473,10 +471,7 @@ export function startLive(
         // Heavy histories: throttle every-tick → bar-close to avoid full engine re-encode.
         // An engine that advertises bar close only also falls back here — the
         // stored preference itself is never rewritten.
-        const mode = effectiveLiveRerunMode(
-          liveRerunModeForEngine(store.live.rerunOn),
-          store.bars?.length ?? 0,
-        );
+        const mode = effectiveLiveRerunMode(liveRerunModeForEngine(store.live.rerunOn));
           if (mode === 'every-tick' || bar.closed || timeAdvanced) {
             shouldRerun = true;
           }
@@ -572,10 +567,7 @@ export function startLive(
     };
     // Effective re-run mode. Delta ticks make per-tick updates cheap even on
     // heavy histories, so every-tick is honored regardless of bar count.
-    const rerunMode = effectiveLiveRerunMode(
-      liveRerunModeForEngine(store.live.rerunOn),
-      store.bars?.length ?? 0,
-    );
+    const rerunMode = effectiveLiveRerunMode(liveRerunModeForEngine(store.live.rerunOn));
     // Throttle: the engine tick alone costs ~3s server-side, so ticking per
     // venue flush never idles. Within the same forming bar and inside the
     // minimum gap, paint the venue tip locally and skip the round trip — the
@@ -652,10 +644,7 @@ export function startLive(
                 const prevLastSeen = lastSeenBarTime;
                 lastSeenBarTime = Math.max(lastSeenBarTime, tip.time);
                 if (!isCurrent()) return { painted: 'append', shouldRerun: false };
-                const mode = effectiveLiveRerunMode(
-                  liveRerunModeForEngine(store.live.rerunOn),
-                  store.bars?.length ?? 0,
-                );
+                const mode = effectiveLiveRerunMode(liveRerunModeForEngine(store.live.rerunOn));
                 const timeAdvanced = tip.time > prevLastSeen;
                 return {
                   painted: 'append',
@@ -747,10 +736,7 @@ export function startLive(
         // Heavy histories throttle every-tick → bar-close; an engine that
         // advertises bar close only also falls back here — the stored
         // preference itself is never rewritten.
-        const mode = effectiveLiveRerunMode(
-          liveRerunModeForEngine(store.live.rerunOn),
-          store.bars?.length ?? 0,
-        );
+        const mode = effectiveLiveRerunMode(liveRerunModeForEngine(store.live.rerunOn));
         const tipTime = proBars[proBars.length - 1]!.time;
         const timeAdvanced = tipTime > prevLastSeen;
         const shouldRerun =

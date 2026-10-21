@@ -1568,7 +1568,23 @@ export class PaneManager {
    *   replaced. Omit/`__global__` is the legacy single-run bag. Empty list
    *   clears that owner (used when a strategy returns 0 fills).
    */
-  setTradeMarkers(markers: TradeMarker[], ownerId?: string | null) {
+  /**
+   * Replace or merge strategy trade markers for one owner.
+   *
+   * When `opts.merge` is true (silent live re-runs), incoming markers replace
+   * only same-time markers; markers from prior evaluations at other times are
+   * kept. This prevents strategy entry/exit labels from being wiped on every
+   * forming tick and only reappearing on the next bar close — the chart keeps
+   * the correct updated plots and strategy actions at all times.
+   *
+   * When `merge` is false/unset (interactive runs, symbol changes), the owner's
+   * marker list is replaced wholesale (empty list clears that owner).
+   */
+  setTradeMarkers(
+    markers: TradeMarker[],
+    ownerId?: string | null,
+    opts?: { merge?: boolean },
+  ) {
     const owner = (ownerId && String(ownerId).trim()) || '__global__';
     const list = markers.map((m, i) => ({
       time: m.time as UTCTimestamp,
@@ -1578,7 +1594,12 @@ export class PaneManager {
       text: m.text,
       id: `trade_${owner}_${m.time}_${m.text || ''}_${i}`,
     }));
-    if (list.length === 0) {
+    if (opts?.merge) {
+      const existing = this.tradeMarkersByOwner.get(owner) ?? [];
+      const newTimes = new Set(list.map((m) => m.time));
+      const kept = existing.filter((m) => !newTimes.has(m.time));
+      this.tradeMarkersByOwner.set(owner, [...kept, ...list]);
+    } else if (list.length === 0) {
       this.tradeMarkersByOwner.delete(owner);
     } else {
       this.tradeMarkersByOwner.set(owner, list);
