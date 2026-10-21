@@ -44,9 +44,14 @@ export const REAPPLY_MAX_CONCURRENT = 5;
 /** Guard against concurrent reapply passes — only one at a time. */
 let reapplyInProgress = false;
 
+/** Bars length at the last completed reapply — skips redundant passes when
+ *  multiple call sites fire during one load with the same bar window. */
+let lastReapplyBarsLen = -1;
+
 /** @internal test helper */
 export function _resetReapplyGuardForTests(): void {
   reapplyInProgress = false;
+  lastReapplyBarsLen = -1;
 }
 
 /**
@@ -232,6 +237,11 @@ export async function reapplyChartScripts(
     const scripts = listReapplicableScripts(opts?.ids);
     if (!scripts.length) return 0;
 
+    // Skip redundant reapply when the bar window hasn't changed since the
+    // last pass — multiple call sites can fire sequentially during one load
+    // with the same bars, each flashing the chart through intermediate states.
+    if (store.bars.length === lastReapplyBarsLen) return 0;
+
     const { runAndApply, beginRunEpoch } = await import('./runner');
     // One shared round-trip when the backend supports it; the apply path below is
     // identical either way (a batched result is passed through as
@@ -276,6 +286,7 @@ export async function reapplyChartScripts(
       const done = await mapWithConcurrencyLimit(level, REAPPLY_MAX_CONCURRENT, runOne);
       for (const d of done) if (d) ok += 1;
     }
+    lastReapplyBarsLen = store.bars.length;
     return ok;
   } finally {
     reapplyInProgress = false;

@@ -774,6 +774,37 @@ describe('splitSeriesByKind + buildPlotVisuals', () => {
     expect(bands[0]!.upper).toEqual([10, 11, 12]);
     expect(bands[0]!.lower).toEqual([1, 2, 3]);
   });
+
+  it('resolves fill from plot_meta when no fill series array exists', () => {
+    // Fills are derived from edge plots, not a separate series array.
+    // The engine sends plot_meta with kind:'fill' but no series['fill'] key.
+    const series = {
+      Upper: [100, 101, 102],
+      Lower: [90, 91, 92],
+    };
+    const meta = {
+      Upper: { kind: 'plot' as const, title: 'Upper', color: '#fb7185' },
+      Lower: { kind: 'plot' as const, title: 'Lower', color: '#34d399' },
+      fill: {
+        kind: 'fill' as const,
+        title: 'fill',
+        color: 'rgba(99, 102, 241, 0.08)',
+        plot1: 'Upper',
+        plot2: 'Lower',
+      },
+    };
+    const split = splitSeriesByKind(series, meta);
+    expect(split.fills).toHaveLength(0); // no fill series array
+
+    const bands = resolvePlotFillBands(series, meta);
+    expect(bands).toHaveLength(1); // but plot_meta scan finds it
+    expect(bands[0]!.name).toBe('fill');
+    expect(bands[0]!.plot1).toBe('Upper');
+    expect(bands[0]!.plot2).toBe('Lower');
+    expect(bands[0]!.upper).toEqual([100, 101, 102]);
+    expect(bands[0]!.lower).toEqual([90, 91, 92]);
+    expect(bands[0]!.color).toContain('99, 102, 241');
+  });
 });
 
 describe('plotbar / plotcandle OHLC', () => {

@@ -462,6 +462,7 @@ export function resolvePlotFillBands(
   if (!series) return [];
   const split = splitSeriesByKind(series, plotMeta);
   const out: PlotFillBandSpec[] = [];
+  const seen = new Set<string>();
   for (const { key, values, meta } of split.fills) {
     const p1 = meta.plot1 ? String(meta.plot1) : '';
     const p2 = meta.plot2 ? String(meta.plot2) : '';
@@ -471,6 +472,7 @@ export function resolvePlotFillBands(
     if (edge1) used.add(edge1.key);
     const edge2 = seriesValuesForFillRef(series, plotMeta, p2, used);
     if (!edge1 || !edge2) continue;
+    seen.add(key);
     const a = edge1.values;
     const b = edge2.values;
     // The two edges are zipped positionally. When they have different lengths
@@ -489,6 +491,50 @@ export function resolvePlotFillBands(
       colors.push(resolvePineColor(values[i]) ?? fallback);
     }
     // Need at least one pair of finite edges
+    let ok = false;
+    for (let i = 0; i < n; i++) {
+      if (upper[i] != null && lower[i] != null) {
+        ok = true;
+        break;
+      }
+    }
+    if (!ok) continue;
+    out.push({
+      name: key,
+      upper,
+      lower,
+      colors,
+      color: fallback,
+      plot1: edge1.key,
+      plot2: edge2.key,
+    });
+  }
+  // Also scan plot_meta for fill entries that have no corresponding series
+  // array (fills are derived from their edge plots, not a separate series).
+  const meta = plotMeta || {};
+  for (const [key, m] of Object.entries(meta)) {
+    if (!m || seen.has(key)) continue;
+    if (normalizePlotKind(m.kind) !== 'fill') continue;
+    const p1 = m.plot1 ? String(m.plot1) : '';
+    const p2 = m.plot2 ? String(m.plot2) : '';
+    if (!p1 || !p2) continue;
+    const used = new Set<string>();
+    const edge1 = seriesValuesForFillRef(series, meta, p1, used);
+    if (edge1) used.add(edge1.key);
+    const edge2 = seriesValuesForFillRef(series, meta, p2, used);
+    if (!edge1 || !edge2) continue;
+    const a = edge1.values;
+    const b = edge2.values;
+    const n = Math.min(a.length, b.length);
+    const upper: (number | null)[] = [];
+    const lower: (number | null)[] = [];
+    const colors: (string | null)[] = [];
+    const fallback = resolvePineColor(m.color) ?? DEFAULT_FILL_COLOR;
+    for (let i = 0; i < n; i++) {
+      upper.push(asFiniteNumber(a[i]));
+      lower.push(asFiniteNumber(b[i]));
+      colors.push(fallback);
+    }
     let ok = false;
     for (let i = 0; i < n; i++) {
       if (upper[i] != null && lower[i] != null) {
