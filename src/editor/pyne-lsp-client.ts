@@ -37,6 +37,7 @@
 
 import { store } from '../store';
 import { readEditorIntel } from './editor-intel';
+import { engineFamilyForText } from '../plugins/engine-family';
 
 /** One completion item from Pro API `/lsp/completion`. */
 export type RemoteCompletionItem = {
@@ -97,9 +98,10 @@ export function shouldUseRemoteLsp(): boolean {
   const intel = readEditorIntel(store.editorIntel);
   if (!intel.remoteLspEnabled) return false;
   const eng = store.engine || store.activePlugins?.engine || '';
-  if (eng === 'pyodide') return false;
+  const family = engineFamilyForText(eng);
+  if (family === 'pyodide') return false;
   // Worker / edge engines may also expose /lsp/* when pointed at a Pro API host
-  if (eng && eng !== 'server' && eng !== 'worker') return false;
+  if (eng && family !== 'server' && family !== 'worker') return false;
   const ep = (store.endpoint || '').trim();
   return ep.length > 0;
 }

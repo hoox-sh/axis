@@ -31,6 +31,7 @@
  */
 
 import type { ConnState, SubscriptionStatus, TransportClass } from '../store/types';
+import { engineFamilyForText } from '../plugins/engine-family';
 
 export type EngTopology = 'local' | 'remote';
 export type RunClass = 'browser' | 'server' | 'worker';
@@ -137,14 +138,14 @@ export function deriveHud(input: HudInput): HudSnapshot {
   let eng: EngTopology;
   let product: string;
 
-  if (enginePluginId === 'pyodide' || enginePluginId.includes('pyodide')) {
+  const engineFamily = engineFamilyForText(enginePluginId);
+  if (engineFamily === 'pyodide') {
     run = 'browser';
     eng = 'local';
     product = 'pyodide (in-tab Wasm)';
   } else if (
-    enginePluginId.includes('worker') ||
-    enginePluginId === 'pyne-worker' ||
-    (enginePluginId === 'server' && isWorkerEndpoint(endpoint))
+    engineFamily === 'worker' ||
+    (engineFamily === 'server' && isWorkerEndpoint(endpoint))
   ) {
     run = 'worker';
     eng = isLocalEndpoint(endpoint) ? 'local' : 'remote';

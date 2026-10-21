@@ -66,6 +66,7 @@ import { parseEngineJson } from './json-sanitize';
 import { healthFromBody, type EngineHealth } from './health';
 import { isAbortLike } from '../utils/errors';
 import { combineAbortSignals } from '../utils/fetch-timeout';
+import { engineFamilyForText } from '../plugins/engine-family';
 import {
   callPyodideRunScript,
   formatPyodideBridgeError,
@@ -300,6 +301,7 @@ export function capabilitiesFromHealth(body: unknown): EngineCapabilities {
 
 export const serverEngine: EnginePlugin = {
   id: 'server',
+  family: 'server',
   name: 'Server-Side',
   kind: 'engine',
   builtIn: true,
@@ -996,7 +998,10 @@ export function prefetchPyodideAssets(indexUrl?: string): void {
 
 /** True when the user-selected calculation engine is pyodide (not background warm). */
 function pyodideIsActiveEngine(): boolean {
-  return store.engine === 'pyodide' || store.activePlugins?.engine === 'pyodide';
+  return (
+    engineFamilyForText(store.engine || '') === 'pyodide' ||
+    engineFamilyForText(store.activePlugins?.engine || '') === 'pyodide'
+  );
 }
 
 /**
@@ -1111,6 +1116,7 @@ export const pyodideEngine: EnginePlugin & {
   _ensure: () => Promise<PyodideLike | PyodideWorkerRuntime>;
 } = {
   id: 'pyodide',
+  family: 'pyodide',
   name: 'Client-Side (Pyodide)',
   kind: 'engine',
   builtIn: true,
@@ -1324,15 +1330,15 @@ export function resolvePyneWorkerEndpoint(
   const fromCfg = String(config?.endpoint || '').trim().replace(/\/$/, '');
   if (fromCfg) return fromCfg;
   const fromStore = String(store.endpoint || '').trim().replace(/\/$/, '');
-  if (fromStore && /pyne-worker|pine-worker/i.test(fromStore)) return fromStore;
+  if (fromStore && engineFamilyForText(fromStore) === 'worker') return fromStore;
   return DEFAULT_PYNE_WORKER_ENDPOINT;
 }
 
 /** True when a base URL targets the HOOX pyne-worker (not AXIS worker-axis). */
 export function looksLikePyneWorkerEndpoint(raw: string | undefined | null): boolean {
-  const s = String(raw || '').toLowerCase();
+  const s = String(raw || '').trim();
   if (!s) return false;
-  return s.includes('pyne-worker') || s.includes('pine-worker');
+  return engineFamilyForText(s) === 'worker';
 }
 
 /**
@@ -1344,6 +1350,7 @@ export function looksLikePyneWorkerEndpoint(raw: string | undefined | null): boo
  */
 export const pyneWorkerEngine: EnginePlugin = {
   id: 'pyne-worker',
+  family: 'worker',
   name: 'pyne-worker (edge)',
   kind: 'engine',
   builtIn: true,
@@ -1456,7 +1463,7 @@ export async function getEngineCapabilities(id?: string): Promise<EngineCapabili
     cachedEngineCapabilities = caps;
     // Only the `server` engine probes PYNE /health; a stale readiness badge
     // from the previous engine would misreport the newly selected one.
-    if (engine.id !== 'server') cachedEngineHealth = null;
+    if (engine.family !== 'server') cachedEngineHealth = null;
     return caps;
   } catch {
     return fallback();
@@ -1587,7 +1594,7 @@ export function registerDynamicEngine(engine: EnginePlugin): void {
   const existing = registry.getEngine(engine.id);
   if (
     existing?.builtIn &&
-    (engine.id === 'server' || engine.id === 'pyodide' || engine.id === 'pyne-worker')
+    (engine.family === 'server' || engine.family === 'pyodide' || engine.family === 'worker')
   ) {
     throw new Error(
       `Cannot replace built-in engine "${engine.id}" — use a different plugin id`,

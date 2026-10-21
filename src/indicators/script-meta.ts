@@ -25,6 +25,7 @@
  */
 
 import type { Indicator } from '../store/types';
+import { engineFamilyForId } from '../plugins/engine-family';
 
 export type ScriptKind = 'indicator' | 'strategy' | 'library' | 'unknown';
 
@@ -160,17 +161,28 @@ export function panePlacementLabel(ind: Pick<Indicator, 'paneId'>): string {
   return `Sub-pane · ${ind.paneId}`;
 }
 
-/** Collapse engine plugin id to a family for badges. */
+/**
+ * Collapse an engine id to a family for badges.
+ *
+ * A registered engine declares its family; the string heuristics are the
+ * fallback for an id that names no known engine.
+ */
 export function engineFamily(engineId: string): EngineFamily {
-  const id = String(engineId || '').toLowerCase();
-  if (!id || id === 'server' || id.includes('server') || id.includes('flask')) {
-    return 'server';
+  const id = String(engineId || '').trim();
+  if (!id) return 'other';
+  const declared = engineFamilyForId(id);
+  if (declared) {
+    return declared === 'dynamic' ? 'other' : declared;
   }
-  if (id.includes('pyodide') || id.includes('client') || id === 'offline') {
+  const lower = id.toLowerCase();
+  if (lower.includes('pyodide') || lower.includes('client') || lower === 'offline') {
     return 'pyodide';
   }
-  if (id.includes('worker') || id.includes('edge') || id.includes('cloudflare')) {
+  if (lower.includes('worker') || lower.includes('edge') || lower.includes('cloudflare')) {
     return 'worker';
+  }
+  if (lower.includes('server') || lower.includes('flask')) {
+    return 'server';
   }
   return 'other';
 }

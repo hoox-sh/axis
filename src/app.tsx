@@ -150,6 +150,7 @@ import {
 } from './ui/presentation';
 import { StorageChangePrompt } from './ui/StorageChangePrompt';
 import { startMcpHost } from './mcp';
+import { engineFamilyForText } from './plugins/engine-family';
 
 /** Primary charting workspace component mounted by `index.tsx`. */
 export const App: Component = () => {
@@ -250,7 +251,10 @@ export const App: Component = () => {
     }
     // Pyodide: only warm when selected (or user switches later via Workers Manager).
     // Avoid ~14MB download contention on server-engine boots.
-    if (store.engine === 'pyodide' || store.activePlugins?.engine === 'pyodide') {
+    if (
+      engineFamilyForText(store.engine || '') === 'pyodide' ||
+      engineFamilyForText(store.activePlugins?.engine || '') === 'pyodide'
+    ) {
       prefetchPyodideAssets();
       void preloadPyodide();
     }

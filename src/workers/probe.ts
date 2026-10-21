@@ -29,6 +29,7 @@ import { store } from '../store';
 import { getEngine, LOCAL_PYODIDE_INDEX, resolvePyodideIndexUrl } from '../engines/catalog';
 import { compileReadiness, healthFromBody } from '../engines/health';
 import { linkedAbortBudget } from '../utils/fetch-timeout';
+import { engineFamilyForText } from '../plugins/engine-family';
 import {
   endpointsMatch,
   getWorkerCatalogEntry,
@@ -115,13 +116,14 @@ function baseResult(
 ): WorkerProbeResult {
   const endpoint = partial.endpoint ?? entry.defaultEndpoint ?? '';
   const eng = activeEngineId();
-  const isPyodide = eng === 'pyodide' || eng.includes('pyodide');
+  const engFamily = engineFamilyForText(eng);
+  const isPyodide = engFamily === 'pyodide';
   let isActiveEngine = false;
   if (entry.id === 'pyodide') {
     isActiveEngine = isPyodide;
   } else if (entry.canUseAsBackend && !isPyodide) {
     isActiveEngine =
-      eng === 'server' &&
+      engFamily === 'server' &&
       !!endpoint &&
       endpointsMatch(store.endpoint, endpoint);
   }

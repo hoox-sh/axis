@@ -357,8 +357,24 @@ export interface EngineCapabilities {
  * Pine calculation backend.
  * `run` should never throw for script errors — return `status: 'error'`.
  */
+/**
+ * Engine family — the behavioural class of an engine, independent of its id.
+ *
+ * The id is a user-facing name; the family is what the code branches on.
+ * Declaring it means a new engine says what it *is* instead of every call
+ * site guessing from the id string.
+ *
+ * - `server`  — a remote Pine host (the Pro API, a self-hosted pyne)
+ * - `pyodide` — the in-browser WebAssembly engine
+ * - `worker`  — an edge worker engine (the HOOX pyne worker)
+ * - `dynamic` — registered at runtime by a plugin the user installed
+ */
+export type EngineFamily = 'server' | 'pyodide' | 'worker' | 'dynamic';
+
 export interface EnginePlugin extends PluginBase {
   kind: 'engine';
+  /** The behavioural class of this engine. */
+  family: EngineFamily;
   isReady(): Promise<boolean>;
   run(opts: EngineOpts): Promise<RunResult>;
   /**

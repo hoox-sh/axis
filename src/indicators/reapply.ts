@@ -154,7 +154,7 @@ async function runBatchReapply(
         import('../engines/catalog'),
       ]);
     if (isEngineOwnedLive()) return null;
-    if (active.getActiveEngine().id !== 'server') return null;
+    if (active.getActiveEngine().family !== 'server') return null;
 
     const cfg = active.getActiveEngineConfig() || {};
     const endpoint = String(cfg.endpoint || store.endpoint || '')

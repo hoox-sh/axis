@@ -15,6 +15,7 @@ import { reconcile } from 'solid-js/store';
 import { store, setStore, flushPersist, setStatus, setActivePlugin } from '../../store';
 import { getEngine } from '../../engines/catalog';
 import { pluginKey } from '../../plugins/types';
+import { engineFamilyForId } from '../../plugins/engine-family';
 import { getEngineApiKey, setEngineApiKey } from '../../storage/vault';
 
 export type EngineExecMode = 'interpret' | 'compile' | 'auto';
@@ -64,18 +65,19 @@ export function readEnginePluginConfig(engineId: string): Record<string, unknown
 
 export function engineNeedsEndpoint(engineId: string): boolean {
   const e = getEngine(engineId);
-  return e?.id === 'server' || !!e?.configSchema?.endpoint;
+  return e?.family === 'server' || !!e?.configSchema?.endpoint;
 }
 
 export function engineHasExecMode(engineId: string): boolean {
-  if (engineId === 'server' || engineId === 'pyodide' || engineId === 'pyne-worker') return true;
+  const family = engineFamilyForId(engineId);
+  if (family === 'server' || family === 'pyodide' || family === 'worker') return true;
   const schema = getEngine(engineId)?.configSchema;
   if (!schema?.mode) return false;
   return schema.mode.type === 'select' || Array.isArray(schema.mode.options);
 }
 
 export function engineHasPreferWs(engineId: string): boolean {
-  if (engineId === 'server') return true;
+  if (engineFamilyForId(engineId) === 'server') return true;
   return getEngine(engineId)?.configSchema?.preferWs?.type === 'boolean';
 }
 
@@ -90,7 +92,7 @@ export function engineHasApiKey(engineId: string): boolean {
  * worker and Pyodide have no Numba pass to warm.
  */
 export function engineHasAutoPrewarm(engineId: string): boolean {
-  return engineId === 'server';
+  return engineFamilyForId(engineId) === 'server';
 }
 
 /** Plugin-config key holding the auto-prewarm opt-in. */

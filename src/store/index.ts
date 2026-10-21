@@ -175,6 +175,7 @@ import {
 import { setPersistenceMode } from '../data/dataset-store';
 import { onSinkError } from '../data/dataset-sinks';
 import type { ResultMeta, RunResult, StoredRunResult } from '../plugins/types';
+import { engineFamilyForText } from '../plugins/engine-family';
 
 // Stable ID generation — uses timestamp prefix + counter to survive reloads
 let idCounter = 0;
@@ -1752,26 +1753,27 @@ export function setActivePlugin(
       setStore('telemetry', 'stream', 'state', 'idle');
     }
     if (kind === 'engine') {
+      const family = engineFamilyForText(id);
       // Prefer idle/open state from loaders; reset error on switch
-      setStore('telemetry', 'engine', 'state', id === 'pyodide' ? 'connecting' : 'idle');
+      setStore('telemetry', 'engine', 'state', family === 'pyodide' ? 'connecting' : 'idle');
       setStore('telemetry', 'engine', 'error', null);
-      setStore('telemetry', 'engine', 'detail', id === 'pyodide' ? 'select · will load ~20–30s' : undefined);
+      setStore('telemetry', 'engine', 'detail', family === 'pyodide' ? 'select · will load ~20–30s' : undefined);
       setStore(
         'telemetry',
         'engine',
         'transport',
-        id === 'pyodide'
+        family === 'pyodide'
           ? 'local'
-          : id === 'server'
+          : family === 'server'
             ? 'ws'
-            : id === 'pyne-worker'
+            : family === 'worker'
               ? 'rest'
               : store.telemetry.engine.transport,
       );
-      // Seed Backend URL when switching to pyne-worker if endpoint is empty or Flask loopback
-      if (id === 'pyne-worker') {
+      // Seed Backend URL when switching to a worker engine if endpoint is empty or Flask loopback
+      if (family === 'worker') {
         const ep = String(store.endpoint || '').trim();
-        const isPw = /pyne-worker|pine-worker/i.test(ep);
+        const isPw = engineFamilyForText(ep) === 'worker';
         const isLoop =
           !ep ||
           /127\.0\.0\.1|localhost/i.test(ep) ||

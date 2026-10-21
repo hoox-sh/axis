@@ -28,6 +28,7 @@
  */
 
 import type { GitProvider } from './git-config';
+import { engineFamilyForText } from '../plugins/engine-family';
 
 export type DeviceStartResult = {
   provider: GitProvider;
@@ -79,7 +80,7 @@ export function isOAuthProxyBase(
   if (e.includes('github.com') || e.includes('gitlab.com')) return false;
 
   if (e.includes('workers.dev')) return true;
-  if (e.includes('pyne-worker') || e.includes('pine-worker')) return true;
+  if (engineFamilyForText(e) === 'worker') return true;
   if (e.includes('hoox.sh') || e.includes('pynescript.online')) {
     return true;
   }

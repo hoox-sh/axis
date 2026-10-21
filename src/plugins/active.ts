@@ -35,6 +35,7 @@ import { registry } from './registry';
 import { ensureBuiltins } from './bootstrap';
 import { pluginKey, type EnginePlugin, type SourcePlugin, type StoragePlugin, type StreamPlugin } from './types';
 import { getEngineApiKey } from '../storage/vault';
+import { engineFamilyForText } from './engine-family';
 import {
   buildProviderSession,
   type ProviderSession,
@@ -152,14 +153,14 @@ export function getActiveEngineConfig(): Record<string, unknown> {
       ? { ...withMode, apiKey: vaultKey }
       : withMode;
 
-  // pyne-worker: prefer pluginsConfig / a matching store.endpoint / production default
-  // so a leftover Flask localhost URL does not override the edge host.
-  if (id === 'pyne-worker') {
+  // Worker engines: prefer pluginsConfig / a matching store.endpoint / production
+  // default so a leftover Flask localhost URL does not override the edge host.
+  if (engine?.family === 'worker') {
     try {
       // Lazy import path avoided — resolve inline to keep active.ts light
       const fromCfg = String(withKey.endpoint || '').trim();
       const fromStore = String(store.endpoint || '').trim();
-      const looksPw = (s: string) => /pyne-worker|pine-worker/i.test(s);
+      const looksPw = (s: string) => engineFamilyForText(s) === 'worker';
       const endpoint = (
         fromCfg ||
         (looksPw(fromStore) ? fromStore : '') ||
@@ -176,7 +177,7 @@ export function getActiveEngineConfig(): Record<string, unknown> {
 
   // store.endpoint is the Settings field of record — must win over a stale
   // pluginsConfig.endpoint left over from older saves / presets.
-  if (store.endpoint && (engine?.configSchema?.endpoint || id === 'server')) {
+  if (store.endpoint && (engine?.configSchema?.endpoint || engine?.family === 'server')) {
     return { ...withKey, endpoint: store.endpoint };
   }
   return withKey;

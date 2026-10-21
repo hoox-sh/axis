@@ -103,6 +103,7 @@ import {
   toggleChartOnlyMode,
 } from './presentation';
 import { liveBadgeTone, liveBadgeWord, liveIndicatorTitle } from './hud-model';
+import { engineFamilyForText } from '../plugins/engine-family';
 
 const INTERVALS = [...WATCHLIST_INTERVALS];
 
@@ -227,7 +228,7 @@ export const Topbar: Component<{
   const selectEngine = (id: string) => {
     if (!id || id === store.engine) return;
     setActivePlugin('engine', id);
-    if (id === 'pyodide') void preloadPyodide();
+    if (engineFamilyForText(id) === 'pyodide') void preloadPyodide();
   };
 
   const extraEngines = createMemo(() =>
@@ -634,7 +635,7 @@ export const Topbar: Component<{
             value={store.engine}
             tabindex={-1}
             title={
-              store.engine === 'pyodide'
+              engineFamilyForText(store.engine) === 'pyodide'
                 ? 'RUN=browser (Pyodide) · ENG=local — first load often 20–30s. HUD: ENG / RUN / MODE.'
                 : engines().find((en) => en.id === store.engine)?.description ||
                   'Calculation engine — maps to HUD ENG (local|remote) + RUN (browser|server|worker)'

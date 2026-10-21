@@ -42,6 +42,8 @@
  * @module storage/vault
  */
 
+import { engineFamilyForId } from '../plugins/engine-family';
+
 /** Session-storage namespace (per-tab, cleared with the session). */
 export const VAULT_SESSION_PREFIX = 'axis.session-secret.';
 /** Dedicated durable bag — not the app-state `STORAGE_KEY` payload. */
@@ -371,7 +373,10 @@ export function getGitToken(pluginsConfig: unknown): string {
  */
 export function getEngineApiKey(pluginsConfig: unknown, engineId: string): string {
   const id = String(engineId || '').trim();
-  if (id === 'server') {
+  // The exact family lookup decides the slot: an unknown engine id must not
+  // be routed to the shared server or worker slot by accident.
+  const family = engineFamilyForId(id);
+  if (family === 'server') {
     return getVaultSecretWithLegacyFallback(
       ENGINE_SERVER_API_KEY_SLOT,
       pluginsConfig,
@@ -379,7 +384,7 @@ export function getEngineApiKey(pluginsConfig: unknown, engineId: string): strin
       'apiKey',
     );
   }
-  if (id === 'pyne-worker') {
+  if (family === 'worker') {
     return getVaultSecretWithLegacyFallback(
       ENGINE_WORKER_API_KEY_SLOT,
       pluginsConfig,
@@ -394,10 +399,11 @@ export function getEngineApiKey(pluginsConfig: unknown, engineId: string): strin
 
 /** Mirror an engine key into (or out of) the session vault. */
 export function setEngineApiKey(engineId: string, value: string): void {
+  const family = engineFamilyForId(String(engineId || '').trim());
   const slot =
-    engineId === 'server'
+    family === 'server'
       ? ENGINE_SERVER_API_KEY_SLOT
-      : engineId === 'pyne-worker'
+      : family === 'worker'
         ? ENGINE_WORKER_API_KEY_SLOT
         : '';
   if (!slot) return;

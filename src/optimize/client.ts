@@ -165,7 +165,7 @@ function mapPyneStudy(raw: Record<string, unknown>, backend: 'pyne'): StudySnaps
 
 async function tryPyneOptimize(opts: RunStudyOpts): Promise<StudySnapshot | null> {
   const engine = getActiveEngine();
-  if (engine.id === 'pyodide') return null;
+  if (engine.family === 'pyodide') return null;
   const endpoint = engineEndpoint();
   if (!endpoint || /pyodide/i.test(endpoint)) return null;
   let libraries: unknown[] | undefined;
