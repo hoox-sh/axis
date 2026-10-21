@@ -40,6 +40,7 @@
  */
 
 import { parseEngineJson } from './json-sanitize';
+import { BoundedMap } from '../utils/bounded-map';
 
 /** Payload sent on the `/ws/run` socket for one evaluation. */
 export type EngineWsRunRequest = {
@@ -480,7 +481,23 @@ class EngineWsClient {
   }
 }
 
-const clients = new Map<string, EngineWsClient>();
+/** Cap on remembered WS clients — one per distinct endpoint, never unbounded. */
+const WS_CLIENT_MEMO_MAX = 16;
+
+/**
+ * WS clients are shared per endpoint and kept after they die so callers see
+ * `isDead` and skip WS → REST without opening a socket every run. The map is
+ * capped: an evicted client is **closed**, so the socket does not outlive it.
+ */
+const clients = new BoundedMap<string, EngineWsClient>(WS_CLIENT_MEMO_MAX, {
+  onEvict: (_url, client) => {
+    try {
+      client?.close();
+    } catch {
+      /* already closed */
+    }
+  },
+});
 
 /**
  * Return a shared {@link EngineWsClient} for the given HTTP endpoint.

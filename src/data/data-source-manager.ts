@@ -76,6 +76,7 @@ import {
 import { isSortedUnique } from './merge-datasets';
 import { providerDatasetLock } from './provider';
 import { errMessage, isAbortError } from '../utils/errors';
+import { BoundedSet } from '../utils/bounded-map';
 
 export type DataSourceJobStatus =
   | 'pending'
@@ -337,7 +338,15 @@ function pruneJobList(): void {
  * reappears in the DSM panel. Membership in `internals` is the authority:
  * a job that is no longer tracked is never published again.
  */
-const dismissedJobs = new Set<string>();
+/**
+ * Job ids the user dismissed.
+ *
+ * Capped: the set only exists so a dismissed job does not come back, and a
+ * long session that starts thousands of jobs must not keep every id forever.
+ */
+/** Cap on remembered dismissed job ids. */
+const DISMISSED_JOB_MEMO_MAX = 500;
+const dismissedJobs = new BoundedSet<string>(DISMISSED_JOB_MEMO_MAX);
 
 function syncJob(j: InternalJob): void {
   if (dismissedJobs.has(j.id)) return;

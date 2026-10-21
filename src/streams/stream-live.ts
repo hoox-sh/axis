@@ -61,6 +61,7 @@ import {
 import { appendLiveBar } from '../chart/live-append';
 import type { Bar } from '../store/types';
 import type { Indicator } from '../store/types';
+import { BoundedMap } from '../utils/bounded-map';
 
 function chartPairSymbol(): string {
   return pairFormSymbol(String(store.symbol || ''), FALLBACK_MAJORS);
@@ -205,7 +206,15 @@ function continuesChartTail(bars: Bar[]): boolean {
 
 let wire: StreamLiveWire | null = null;
 let wireCred = '';
-const verifiers = new Map<string, Redesign2BarCloseVerifier>();
+/**
+ * (engine + series) → the bar-close verifier for that series.
+ *
+ * Capped: a session that walks many series must not keep one verifier per
+ * series forever.
+ */
+/** Cap on remembered bar-close verifiers — one per (engine + series) pair. */
+const VERIFIER_MEMO_MAX = 32;
+const verifiers = new BoundedMap<string, Redesign2BarCloseVerifier>(VERIFIER_MEMO_MAX);
 
 function wireFingerprint(): string {
   const cfg = getActiveEngineConfig();

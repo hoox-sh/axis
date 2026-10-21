@@ -40,6 +40,7 @@ import { mergeBars } from './bars-cache';
 import { isEngineOwnedLive } from '../engines/ownership';
 import { findBarGaps, intervalToSec } from './bars-gaps';
 import { errMessage } from '../utils/errors';
+import { BoundedMap } from '../utils/bounded-map';
 import { linkedAbortBudget } from '../utils/fetch-timeout';
 import {
   DATA_MANAGER_SOURCE_ID,
@@ -63,8 +64,41 @@ interface PendingLiveBar {
   lock: { market: string; authMode: string };
 }
 
+/**
+ * Cap on pending live-bar writes.
+ *
+ * The pending map is keyed by (source + symbol + interval + market), so a
+ * session that switches series quickly accumulates one pending bar per key.
+ */
+const LIVE_PENDING_MEMO_MAX = 64;
+
 const liveWriteTimers = new Map<string, ReturnType<typeof setTimeout>>();
-const livePendingBars = new Map<string, PendingLiveBar>();
+
+/**
+ * Pending live bars awaiting their debounced write.
+ *
+ * Capped, and an **evicted** pending bar is flushed rather than dropped — it
+ * is still a bar the dataset should receive.
+ */
+const livePendingBars = new BoundedMap<string, PendingLiveBar>(LIVE_PENDING_MEMO_MAX, {
+  onEvict: (key, pending) => {
+    const timer = liveWriteTimers.get(key);
+    if (timer != null) {
+      clearTimeout(timer);
+      liveWriteTimers.delete(key);
+    }
+    if (!pending) return;
+    void putDatasetBars(
+      pending.sourceId,
+      pending.symbol,
+      pending.interval,
+      [pending.bar],
+      pending.lock,
+    ).catch(() => {
+      /* cache write best-effort */
+    });
+  },
+});
 
 /** Sources that cannot fill a network gap. */
 const OFFLINE_SOURCES = new Set([

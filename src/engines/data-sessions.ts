@@ -43,6 +43,7 @@ import { pairFormSymbol } from '../engine/market-identity';
 import { resolveSessionPayload } from './session-delta';
 import { ENGINE_SERIES_STALE_STEPS, newestBarTime, seriesBehind } from './series-freshness';
 import { combineAbortSignals } from '../utils/fetch-timeout';
+import { BoundedMap } from '../utils/bounded-map';
 
 /** Max bars per `POST /data/series/provide` request (contract). */
 export const DATA_PROVIDE_CHUNK = 5_000;
@@ -674,7 +675,15 @@ const seriesProvisionInflight = new Map<string, Promise<'local' | 'fetch'>>();
  * Wall clock of the last automatic staleness repair per (endpoint, series) —
  * the cooldown that keeps a frozen engine from being re-checked every tick.
  */
-const seriesRepairAt = new Map<string, number>();
+/**
+ * (endpoint + series) → timestamp of the last repair attempt.
+ *
+ * Capped: a long session that walks many series must not keep one memo per
+ * series forever.
+ */
+/** Cap on remembered series memos — one per (endpoint + series) pair. */
+const SERIES_MEMO_MAX = 200;
+const seriesRepairAt = new BoundedMap<string, number>(SERIES_MEMO_MAX);
 
 function seriesProvisionMemoKey(endpoint: string, key: DataSeriesKey): string {
   return `${endpoint.replace(/\/$/, '')}|${seriesKeyString(key)}`;
@@ -878,7 +887,12 @@ export async function repairStaleEngineSeries(opts: {
  * always retries so a fixed dataset / host is picked up immediately.
  */
 export const DATA_SESSION_RETRY_COOLDOWN_MS = 60_000;
-const provisionCooldown = new Map<string, { until: number; error: string }>();
+/**
+ * (endpoint + owner + series) → the cooldown of the last failed provision.
+ *
+ * Capped for the same reason as {@link seriesRepairAt}.
+ */
+const provisionCooldown = new BoundedMap<string, { until: number; error: string }>(SERIES_MEMO_MAX);
 
 /** @internal test helper */
 export function _resetDataSessionCooldownForTests(): void {
