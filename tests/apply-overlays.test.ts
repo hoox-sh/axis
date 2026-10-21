@@ -313,4 +313,49 @@ describe('buildOverlayPayloads', () => {
     const line = out.overlayLines.find((l) => l.name === 'TestScript');
     expect(line?.color).toBe(PLOT_PALETTE[0]); // palette fallback
   });
+
+  it('falls back to stored color when meta.color missing in named-series path', () => {
+    const ctx = makeContext({
+      plotMeta: { plot1: { kind: 'plot' }, plot2: { kind: 'plot' } }, // no color
+      userPlotColors: {
+        plot1: { color: '#ff0000' }, // non-custom stored color
+        plot2: { color: '#00ff00', custom: true }, // custom stored color
+      },
+    });
+    const out = buildOverlayPayloads(ctx);
+    const line1 = out.overlayLines.find((l) => l.name === 'plot1');
+    const line2 = out.overlayLines.find((l) => l.name === 'plot2');
+    expect(line1?.color).toBe('#ff0000'); // stored non-custom color preserved
+    expect(line2?.color).toBe('#00ff00'); // custom stored color wins
+  });
+
+  it('falls back to stored color when meta.color missing in legacy plots[] path', () => {
+    const ctx = makeContext({
+      seriesEntries: [],
+      plotMeta: { TestScript: { kind: 'plot' } }, // no color
+      userPlotColors: { TestScript: { color: '#ff0000' } }, // stored color
+      result: {
+        status: 'success',
+        plots: [10, 20, 30, 40],
+        series: {},
+        events: [],
+        meta: {},
+      } as RunResult,
+    });
+    const out = buildOverlayPayloads(ctx);
+    const line = out.overlayLines.find((l) => l.name === 'TestScript');
+    expect(line?.color).toBe('#ff0000'); // stored color preserved, not palette
+  });
+
+  it('custom color wins over stored color when both present', () => {
+    const ctx = makeContext({
+      plotMeta: { plot1: { kind: 'plot', color: '#00ff00' } },
+      userPlotColors: {
+        plot1: { color: '#ff0000', custom: true }, // custom override
+      },
+    });
+    const out = buildOverlayPayloads(ctx);
+    const line1 = out.overlayLines.find((l) => l.name === 'plot1');
+    expect(line1?.color).toBe('#ff0000'); // custom wins over meta.color
+  });
 });
