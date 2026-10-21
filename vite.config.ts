@@ -6,6 +6,7 @@
 import { defineConfig } from 'vite';
 import solid from 'vite-plugin-solid';
 import tailwindcss from '@tailwindcss/vite';
+import { HP_ISOLATION_HEADERS } from './src/hp/isolation-headers';
 
 const host = process.env.TAURI_DEV_HOST;
 
@@ -68,6 +69,7 @@ export default defineConfig({
   },
   server: {
     port: 3000,
+    headers: { ...HP_ISOLATION_HEADERS },
     // Tauri expects a fixed port; fail if 3000 is taken.
     strictPort: true,
     // Bind IPv4 explicitly. `host: false` / "localhost" often listens only on
@@ -89,5 +91,8 @@ export default defineConfig({
       '/run': 'http://localhost:5002',
       '/optimize': 'http://localhost:5002',
     },
+  },
+  preview: {
+    headers: { ...HP_ISOLATION_HEADERS },
   },
 });

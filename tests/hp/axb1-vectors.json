@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "comment": "Golden AXB1 envelopes shared with PYNE. Hex is little-endian, no spaces.",
+  "vectors": [
+    {
+      "name": "heartbeat",
+      "hex": "4158423101000000000000000000000000000000000000000000000000000000"
+    }
+  ]
+}

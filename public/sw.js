@@ -259,7 +259,14 @@ function offlineShellResponse() {
         '<p><a href="./">Retry</a></p></main></body></html>';
     return new Response(html, {
         status: 503,
-        headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
+        headers: {
+            'Content-Type': 'text/html; charset=utf-8',
+            'Cache-Control': 'no-store',
+            // Must not strip isolation headers the static host sends on index.html.
+            'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+            'Cross-Origin-Embedder-Policy': 'credentialless',
+            'Cross-Origin-Resource-Policy': 'same-origin',
+        },
     });
 }
 

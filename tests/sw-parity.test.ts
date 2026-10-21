@@ -119,6 +119,14 @@ describe('sw.js ↔ strategy.ts parity (D18)', () => {
     expect(swSource).toContain('PYODIDE_CACHE_MAX_ENTRIES');
   });
 
+  it('offline shell stamps the HP isolation pair so a synthesized document cannot drop COOP/COEP', () => {
+    expect(swSource).toContain('Cross-Origin-Opener-Policy');
+    expect(swSource).toContain('same-origin-allow-popups');
+    expect(swSource).toContain('Cross-Origin-Embedder-Policy');
+    expect(swSource).toContain('credentialless');
+    expect(swSource).toContain('Cross-Origin-Resource-Policy');
+  });
+
   it('no-store / private semantics exist in both copies', () => {
     expect(isNoStoreRequest({ cache: 'no-store' })).toBe(true);
     expect(isNoStoreRequest({ cacheControl: 'max-age=60, no-store' })).toBe(true);

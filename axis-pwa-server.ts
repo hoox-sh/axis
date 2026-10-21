@@ -5,6 +5,7 @@
 
 // Minimal static server for AXIS dist/
 import { join, resolve } from "node:path";
+import { HP_ISOLATION_HEADERS } from "./src/hp/isolation-headers";
 const ROOT = resolve(import.meta.dir, "dist");
 const PORT = Number(process.env.PORT || 8081);
 const HOST = process.env.HOST || "0.0.0.0";
@@ -43,7 +44,7 @@ const server = Bun.serve({
   port: PORT,
   async fetch(req) {
     if (req.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: CORS_HEADERS });
+      return new Response(null, { status: 204, headers: { ...CORS_HEADERS, ...HP_ISOLATION_HEADERS } });
     }
     const url = new URL(req.url);
     let pathname = decodeURIComponent(url.pathname);
@@ -54,6 +55,7 @@ const server = Bun.serve({
           "Content-Type": "text/plain; charset=utf-8",
           "Cache-Control": "no-cache",
           ...CORS_HEADERS,
+          ...HP_ISOLATION_HEADERS,
         },
       });
     }
@@ -85,6 +87,7 @@ const server = Bun.serve({
           ? "public, max-age=31536000, immutable"
           : "no-cache",
         ...CORS_HEADERS,
+        ...HP_ISOLATION_HEADERS,
       },
     });
   },

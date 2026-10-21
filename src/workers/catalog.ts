@@ -289,6 +289,36 @@ export const WORKER_CATALOG: readonly WorkerCatalogEntry[] = [
     ],
   },
   {
+    id: 'hp-ingest',
+    name: 'HP ingest (browser)',
+    summary: 'Off-thread /ws/live JSON + AXB1 decode',
+    description:
+      'Dedicated module worker that owns the engine live socket and decodes JSON or AXB1 ' +
+      'payloads so the Window thread never JSON.parse-s tick traffic. Opt-in via ' +
+      '`axis.engine.hp.enabled`. Falls back to the main-thread Redesign2 client when Workers ' +
+      'are unavailable.',
+    usage:
+      'Enable HP in a tab (`localStorage.axis.engine.hp.enabled = "1"`), reload, and keep the ' +
+      'stream kill switch off. No extra endpoint — it talks to the same pyne `/ws/live` as the ' +
+      'JSON client. Kill with `axis.engine.hp.disabled`.',
+    icon: 'layers',
+    kind: 'browser',
+    roles: ['stream'],
+    defaultEndpoint: '',
+    docsPath: '/axis/docs/architecture/overview',
+    canUseAsBackend: false,
+    optional: true,
+    probe: 'none',
+    capabilities: ['Web Worker', 'AXB1', 'JSON /ws/live'],
+    install: [
+      {
+        title: 'Opt in',
+        detail: 'Tab-local flag; no rebuild. Reload after setting.',
+        command: 'localStorage.setItem("axis.engine.hp.enabled","1")',
+      },
+    ],
+  },
+  {
     id: 'service-worker',
     name: 'Service Worker (PWA)',
     summary: 'Offline shell + asset cache strategy',

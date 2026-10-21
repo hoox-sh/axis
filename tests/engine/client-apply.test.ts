@@ -98,4 +98,35 @@ describe('redesign2 delta applier (F-06)', () => {
       expect((out.full.series as Record<string, number[]>).a).toEqual([1, 2, 3]);
     }
   });
+
+  test('full stamps snapshot; forming: true stamps tip; forming: false stamps append', () => {
+    const applier = new Redesign2DeltaApplier();
+    const snap = applier.applyFull(full);
+    expect(snap.executionContext).toBe('snapshot');
+    const tip = applier.applyDelta({
+      seq: 11,
+      base_index: 2,
+      count: 3,
+      tail_len: 1,
+      forming: true,
+      plots: [[9]],
+      series: { a: [9] },
+    });
+    expect(tip.ok).toBe(true);
+    if (tip.ok) {
+      expect(tip.executionContext).toBe('tip');
+      expect(tip.full.executionContext).toBe('tip');
+    }
+    const append = applier.applyDelta({
+      seq: 12,
+      base_index: 3,
+      count: 4,
+      tail_len: 1,
+      forming: false,
+      plots: [[8]],
+      series: { a: [8] },
+    });
+    expect(append.ok).toBe(true);
+    if (append.ok) expect(append.executionContext).toBe('append');
+  });
 });

@@ -40,7 +40,7 @@ import { Redesign2BarCloseVerifier, compareClosedOhlcv } from '../engine/bar-clo
 import { currentSeriesKey, pairFormSymbol } from '../engine/market-identity';
 import { pyneMarket } from '../data/provider';
 import { StreamLiveWire, StreamFallbackError, type WireClient } from '../engine/live-wire';
-import { Redesign2WsClient } from '../engine/ws-client';
+import { createLiveWsClient } from '../hp/workers/host';
 import { routeEngineRun } from '../engine/router';
 import { getCachedEngineCapabilities } from '../engines/catalog';
 import type { DataSeriesKey } from '../engines/data-sessions';
@@ -231,7 +231,7 @@ function buildWire(): StreamLiveWire {
   // first frame is `auth`. Read the key the same way every key-gated REST call
   // does, so a vault-restored key reaches the socket too.
   const authToken = String(cfg?.apiKey || '').trim() || undefined;
-  const client = new Redesign2WsClient({ endpoint, authToken }) as unknown as WireClient;
+  const client = createLiveWsClient({ endpoint, authToken }) as unknown as WireClient;
   return new StreamLiveWire(
     client,
     {
