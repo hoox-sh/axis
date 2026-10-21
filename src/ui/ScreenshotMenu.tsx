@@ -24,12 +24,11 @@
  * @module ui/ScreenshotMenu
  */
 
-import { type Component, For, Show, createSignal, onCleanup, onMount } from 'solid-js';
-import { dismissOnOutside } from './dismiss-on-outside';
-import { Portal } from 'solid-js/web';
+import { type Component, For, createSignal } from 'solid-js';
 import { setStatus } from '../store';
 import { reportUiError } from './boot-errors';
 import { Icons } from './icons';
+import { Popover } from './Popover';
 import {
   copyScreenshot,
   downloadScreenshot,
@@ -49,18 +48,7 @@ export const ScreenshotMenu: Component = () => {
   const [open, setOpen] = createSignal(false);
   const [busy, setBusy] = createSignal(false);
   const [opts, setOpts] = createSignal<ScreenshotOptions>(loadScreenshotOptions());
-  const [menuPos, setMenuPos] = createSignal({ top: 0, left: 0 });
   let btnEl: HTMLButtonElement | undefined;
-  let panelEl: HTMLDivElement | undefined;
-
-  const placePanel = () => {
-    const el = btnEl;
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    const width = Math.min(280, window.innerWidth - 24);
-    const left = Math.max(8, Math.min(r.right - width, window.innerWidth - width - 8));
-    setMenuPos({ top: r.bottom + 4, left });
-  };
 
   const close = () => setOpen(false);
 
@@ -92,25 +80,6 @@ export const ScreenshotMenu: Component = () => {
     }
   };
 
-  onMount(() => {
-    const onReposition = () => {
-      if (open()) placePanel();
-    };
-    const disposeDismiss = dismissOnOutside({
-      inside: () => [btnEl, panelEl],
-      onDismiss: () => {
-        if (open()) close();
-      },
-    });
-    window.addEventListener('resize', onReposition);
-    window.addEventListener('scroll', onReposition, true);
-    onCleanup(() => {
-      disposeDismiss();
-      window.removeEventListener('resize', onReposition);
-      window.removeEventListener('scroll', onReposition, true);
-    });
-  });
-
   return (
     <div class="relative" data-testid="axis-screenshot-menu">
       <button
@@ -126,10 +95,7 @@ export const ScreenshotMenu: Component = () => {
         onClick={() => {
           setOpen((o) => {
             const next = !o;
-            if (next) {
-              setOpts(loadScreenshotOptions());
-              placePanel();
-            }
+            if (next) setOpts(loadScreenshotOptions());
             return next;
           });
         }}
@@ -137,16 +103,16 @@ export const ScreenshotMenu: Component = () => {
         <Icons.screenshot />
       </button>
 
-      <Show when={open()}>
-        <Portal>
-          <div
-            ref={panelEl}
-            class="sc-popover fixed z-[200] w-[min(280px,calc(100vw-24px))] p-2 flex flex-col gap-2"
-            style={{ top: `${menuPos().top}px`, left: `${menuPos().left}px` }}
-            role="dialog"
-            aria-label="Screenshot options"
-            data-testid="axis-screenshot-popover"
-          >
+      <Popover
+        open={open()}
+        anchor={btnEl}
+        onClose={close}
+        width={280}
+        class="sc-popover w-[min(280px,calc(100vw-24px))] p-2 flex flex-col gap-2"
+        role="dialog"
+        label="Screenshot options"
+        testId="axis-screenshot-popover"
+      >
             <div class="text-[10px] uppercase tracking-wider text-text-faint font-semibold px-0.5">
               Capture
             </div>
@@ -235,9 +201,7 @@ export const ScreenshotMenu: Component = () => {
                 {busy() ? 'Saving…' : 'Download'}
               </button>
             </div>
-          </div>
-        </Portal>
-      </Show>
+      </Popover>
     </div>
   );
 };
