@@ -54,6 +54,7 @@ import { buildStrategyReport, formatMoney } from '../results/strategy';
 import { ConnectionHud } from './ConnectionHud';
 import { HooxLoader } from './HooxLoader';
 import { CachedDatasetsModal } from './CachedDatasetsModal';
+import { cachedDatasetsOpen, closeCachedDatasets, openCachedDatasets } from './datasets-open';
 import { peekDataset, subscribeDatasets } from '../data/dataset-store';
 import { providerDatasetLock } from '../data/provider';
 import { formatBarCount } from './bar-count';
@@ -108,7 +109,6 @@ export const StatusBar: Component = () => {
   const color = () => STATUS_COLORS[store.status] || 'text-text-dim';
   const [editingChart, setEditingChart] = createSignal(false);
   const [draft, setDraft] = createSignal('');
-  const [datasetsOpen, setDatasetsOpen] = createSignal(false);
   let inputEl: HTMLInputElement | undefined;
 
   const beginEdit = () => {
@@ -233,7 +233,7 @@ export const StatusBar: Component = () => {
               class="hover:text-accent tabular-nums"
               title="Bars in the Data Source Manager dataset — click to open the Dataset manager"
               data-testid="axis-statusbar-dataset"
-              onClick={() => setDatasetsOpen(true)}
+              onClick={() => openCachedDatasets()}
             >
               · dataset {formatBarCount(datasetBars())}
             </button>
@@ -241,8 +241,8 @@ export const StatusBar: Component = () => {
           <span>· {store.scripts.length} scripts · {store.panes.length} panes</span>
         </span>
         <CachedDatasetsModal
-          open={datasetsOpen()}
-          onClose={() => setDatasetsOpen(false)}
+          open={cachedDatasetsOpen()}
+          onClose={() => closeCachedDatasets()}
         />
       </div>
     </Show>

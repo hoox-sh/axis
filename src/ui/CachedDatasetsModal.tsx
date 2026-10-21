@@ -60,7 +60,7 @@ import { Icons } from './icons';
 import { installFocusTrap } from './focus-trap';
 import { announce } from './sr-announce';
 import { CompleteMap } from './dsm/CompleteMap';
-import { DsmField } from './dsm/Field';
+import { ScField } from './Field';
 import { fmtDuration, fmtMillis, fmtTime, loadWindowSpanLabel } from './dsm/format';
 
 export interface CachedDatasetsModalProps {
@@ -601,7 +601,7 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
               class="flex flex-wrap items-end gap-2"
               data-testid="axis-cached-datasets-filters"
             >
-              <DsmField label="Filter" class="min-w-[10rem] flex-1">
+              <ScField label="Filter" class="min-w-[10rem] flex-1">
                 <input
                   ref={(el) => {
                     searchEl = el;
@@ -615,8 +615,8 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
                   autocomplete="off"
                   spellcheck={false}
                 />
-              </DsmField>
-              <DsmField label="Source" class="w-[8.5rem]">
+              </ScField>
+              <ScField label="Source" class="w-[8.5rem]">
                 <select
                   class="sc-input"
                   value={filterSource()}
@@ -626,8 +626,8 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
                   <option value="">All sources</option>
                   <For each={sourceOptions()}>{(s) => <option value={s}>{s}</option>}</For>
                 </select>
-              </DsmField>
-              <DsmField label="Interval" class="w-[6.5rem]">
+              </ScField>
+              <ScField label="Interval" class="w-[6.5rem]">
                 <select
                   class="sc-input"
                   value={filterInterval()}
@@ -637,8 +637,8 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
                   <option value="">All</option>
                   <For each={intervalOptions()}>{(iv) => <option value={iv}>{iv}</option>}</For>
                 </select>
-              </DsmField>
-              <DsmField label="Sort" class="w-[7.5rem]">
+              </ScField>
+              <ScField label="Sort" class="w-[7.5rem]">
                 <select
                   class="sc-input"
                   value={sortKey()}
@@ -649,7 +649,7 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
                     {(opt) => <option value={opt.id}>{opt.label}</option>}
                   </For>
                 </select>
-              </DsmField>
+              </ScField>
               <Show when={filtersActive()}>
                 <button
                   type="button"
@@ -852,7 +852,7 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
                           </div>
 
                           <div class="grid grid-cols-2 gap-2">
-                            <DsmField label="From (UTC)">
+                            <ScField label="From (UTC)">
                               <input
                                 type="date"
                                 class="sc-input"
@@ -862,8 +862,8 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
                                 onInput={(e) => setFromDate(e.currentTarget.value)}
                                 data-testid="axis-cached-datasets-from"
                               />
-                            </DsmField>
-                            <DsmField label="To (UTC)">
+                            </ScField>
+                            <ScField label="To (UTC)">
                               <input
                                 type="date"
                                 class="sc-input"
@@ -873,10 +873,10 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
                                 onInput={(e) => setToDate(e.currentTarget.value)}
                                 data-testid="axis-cached-datasets-to"
                               />
-                            </DsmField>
+                            </ScField>
                           </div>
 
-                          <DsmField label="Max bars (optional)">
+                          <ScField label="Max bars (optional)">
                             <input
                               type="number"
                               class="sc-input"
@@ -887,7 +887,7 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
                               onInput={(e) => setMaxBars(e.currentTarget.value)}
                               data-testid="axis-cached-datasets-max-bars"
                             />
-                          </DsmField>
+                          </ScField>
 
                           <div
                             class="text-[0.72rem] text-muted leading-snug"

@@ -77,6 +77,7 @@ import { startBarReplay, exitBarReplay } from './BarReplayControls';
 import { isReplayActive, subscribeReplay } from '../chart/bar-replay';
 import { WATCHLIST_INTERVALS } from '../data/watchlist-tickers';
 import { CachedDatasetsModal } from './CachedDatasetsModal';
+import { cachedDatasetsOpen, closeCachedDatasets, openCachedDatasets } from './datasets-open';
 import { SymbolModal } from './SymbolModal';
 import { RunSplitButton } from './RunSplitButton';
 import { openAboutModal } from './AboutModal';
@@ -161,7 +162,6 @@ export const Topbar: Component<{
   const [loading, setLoading] = createSignal(false);
   const [uploadLabel, setUploadLabel] = createSignal(getUploadedFileName() || '');
   const [replayOn, setReplayOn] = createSignal(isReplayActive());
-  const [datasetsOpen, setDatasetsOpen] = createSignal(false);
   const [symbolModalOpen, setSymbolModalOpen] = createSignal(false);
   let fileInput: HTMLInputElement | undefined;
   /** Last symbol we successfully requested (avoids redundant blur reloads). */
@@ -218,7 +218,7 @@ export const Topbar: Component<{
       return;
     }
     if (sourceId === DATA_MANAGER_SOURCE_ID) {
-      setDatasetsOpen(true);
+      openCachedDatasets();
       return;
     }
     if (autoloadOn()) void loadHistorical({ force: true });
@@ -561,7 +561,7 @@ export const Topbar: Component<{
             type="button"
             class="sc-btn sc-btn-ghost max-w-[12em]"
             title="Browse cached datasets from the Data Source Manager"
-            onClick={() => setDatasetsOpen(true)}
+            onClick={() => openCachedDatasets()}
             data-testid="axis-btn-datasets"
           >
             <Icons.datasets />
@@ -572,8 +572,8 @@ export const Topbar: Component<{
         <SliceProgressChip />
 
         <CachedDatasetsModal
-          open={datasetsOpen()}
-          onClose={() => setDatasetsOpen(false)}
+          open={cachedDatasetsOpen()}
+          onClose={() => closeCachedDatasets()}
         />
 
         <Show when={!autoloadOn()}>

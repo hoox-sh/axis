@@ -12,7 +12,7 @@ import { type Component, Show } from 'solid-js';
 import { HooxLoader } from '../HooxLoader';
 import { Icons } from '../icons';
 import { manualTokenCreateUrl } from '../../storage/git-oauth';
-import { LibraryField } from './Field';
+import { ScField } from '../Field';
 
 export const GitSettingsForm: Component<{
   provider: 'github' | 'gitlab';
@@ -53,7 +53,7 @@ export const GitSettingsForm: Component<{
       data-testid="axis-git-settings"
     >
       <div class="text-[10px] text-text-dim uppercase tracking-wider">Git repository</div>
-      <LibraryField label="Provider">
+      <ScField label="Provider">
         <select
           class="sc-input"
           value={props.provider}
@@ -63,7 +63,7 @@ export const GitSettingsForm: Component<{
           <option value="github">GitHub</option>
           <option value="gitlab">GitLab</option>
         </select>
-      </LibraryField>
+      </ScField>
 
       <div class="flex flex-col gap-1.5">
         <Show
@@ -142,7 +142,7 @@ export const GitSettingsForm: Component<{
       </div>
 
       <div class="grid grid-cols-2 gap-1.5">
-        <LibraryField label="Owner">
+        <ScField label="Owner">
           <input
             class="sc-input font-mono text-[11px]"
             placeholder="owner / group"
@@ -152,8 +152,8 @@ export const GitSettingsForm: Component<{
             autocomplete="off"
             data-testid="axis-git-owner"
           />
-        </LibraryField>
-        <LibraryField label="Repository">
+        </ScField>
+        <ScField label="Repository">
           <input
             class="sc-input font-mono text-[11px]"
             placeholder="repo"
@@ -163,10 +163,10 @@ export const GitSettingsForm: Component<{
             autocomplete="off"
             data-testid="axis-git-repo"
           />
-        </LibraryField>
+        </ScField>
       </div>
       <Show when={props.provider === 'gitlab'}>
-        <LibraryField label="Project id">
+        <ScField label="Project id">
           <input
             class="sc-input font-mono text-[11px]"
             placeholder="group/repo"
@@ -175,10 +175,10 @@ export const GitSettingsForm: Component<{
             spellcheck={false}
             autocomplete="off"
           />
-        </LibraryField>
+        </ScField>
       </Show>
       <div class="grid grid-cols-2 gap-1.5">
-        <LibraryField label="Branch">
+        <ScField label="Branch">
           <input
             class="sc-input font-mono text-[11px]"
             placeholder="main"
@@ -187,8 +187,8 @@ export const GitSettingsForm: Component<{
             spellcheck={false}
             autocomplete="off"
           />
-        </LibraryField>
-        <LibraryField label="Base path">
+        </ScField>
+        <ScField label="Base path">
           <input
             class="sc-input font-mono text-[11px]"
             placeholder="pyne-library"
@@ -197,7 +197,7 @@ export const GitSettingsForm: Component<{
             spellcheck={false}
             autocomplete="off"
           />
-        </LibraryField>
+        </ScField>
       </div>
 
       <button
@@ -209,7 +209,7 @@ export const GitSettingsForm: Component<{
         {props.showAdvanced ? 'Hide advanced' : 'Advanced (token / OAuth app)'}
       </button>
       <Show when={props.showAdvanced}>
-        <LibraryField label="Personal access token">
+        <ScField label="Personal access token">
           <input
             class="sc-input font-mono text-[11px]"
             type="password"
@@ -224,8 +224,8 @@ export const GitSettingsForm: Component<{
             spellcheck={false}
             data-testid="axis-git-token"
           />
-        </LibraryField>
-        <LibraryField label="OAuth app client id">
+        </ScField>
+        <ScField label="OAuth app client id">
           <input
             class="sc-input font-mono text-[11px]"
             placeholder="Optional if the Worker env is set"
@@ -235,8 +235,8 @@ export const GitSettingsForm: Component<{
             autocomplete="off"
             data-testid="axis-git-oauth-client-id"
           />
-        </LibraryField>
-        <LibraryField label="API base">
+        </ScField>
+        <ScField label="API base">
           <input
             class="sc-input font-mono text-[11px]"
             placeholder="Optional, self-hosted"
@@ -245,7 +245,7 @@ export const GitSettingsForm: Component<{
             spellcheck={false}
             autocomplete="off"
           />
-        </LibraryField>
+        </ScField>
       </Show>
 
       <button

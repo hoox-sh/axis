@@ -8,7 +8,7 @@
  */
 
 import type { Component } from 'solid-js';
-import { LibraryField } from './Field';
+import { ScField } from '../Field';
 
 export const CloudSettingsForm: Component<{
   endpoint: string;
@@ -21,7 +21,7 @@ export const CloudSettingsForm: Component<{
 }> = (props) => (
   <div class="border border-border p-2 flex flex-col gap-2 bg-bg-elev rounded-md">
     <div class="text-[10px] text-text-dim uppercase tracking-wider">Cloud credentials</div>
-    <LibraryField label="Worker URL">
+    <ScField label="Worker URL">
       <input
         class="sc-input font-mono text-[11px]"
         placeholder="https://…"
@@ -30,8 +30,8 @@ export const CloudSettingsForm: Component<{
         spellcheck={false}
         autocomplete="off"
       />
-    </LibraryField>
-    <LibraryField label="API key">
+    </ScField>
+    <ScField label="API key">
       <input
         class="sc-input font-mono text-[11px]"
         placeholder="pn_…"
@@ -41,7 +41,7 @@ export const CloudSettingsForm: Component<{
         spellcheck={false}
         autocomplete="off"
       />
-    </LibraryField>
+    </ScField>
     <div class="flex flex-wrap gap-1.5">
       <button type="button" class="sc-btn sc-btn-ghost text-[10px]" onClick={props.onGenerate}>
         Generate demo key

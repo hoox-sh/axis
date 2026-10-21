@@ -3,12 +3,14 @@
 
 import type { JSX } from 'solid-js';
 
-/** Compact labelled control used by the DSM panel and Dataset manager modal. */
-export function DsmField(props: {
-  label: string;
-  class?: string;
-  children: JSX.Element;
-}) {
+/**
+ * Compact labelled control — the `sc-field` shape.
+ *
+ * One component for the whole app: the DSM panel, the Dataset manager modal
+ * and the Script Library forms all render the same markup, so they all use
+ * this one.
+ */
+export function ScField(props: { label: string; class?: string; children: JSX.Element }) {
   return (
     // biome-ignore lint/a11y/noLabelWithoutControl: the control is passed as children
     <label class={`sc-field min-w-0 ${props.class || ''}`}>

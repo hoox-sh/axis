@@ -108,7 +108,7 @@ import { announce, announceError } from './sr-announce';
 import { BuiltinScriptCard, LibraryScriptCard } from './library/cards';
 import { CloudSettingsForm } from './library/CloudForm';
 import { takeLibraryCommand, type LibraryCommand } from './library/commands';
-import { LibraryField } from './library/Field';
+import { ScField } from './Field';
 import {
   countScriptsByKind,
   filterPersonalScripts,
@@ -759,7 +759,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
           id={`${uid}-panel-personal`}
           aria-labelledby={`${uid}-tab-personal`}
         >
-          <LibraryField label="Storage backend">
+          <ScField label="Storage backend">
             <select
               id={`${uid}-storage`}
               class="sc-input"
@@ -777,7 +777,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
                 )}
               </For>
             </select>
-          </LibraryField>
+          </ScField>
           <p class="text-text-faint font-mono text-[10px] m-0 -mt-1" role="status">
             {statusLine() || (busy() ? 'Loading…' : '')}
           </p>
@@ -861,7 +861,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
             }}
           >
             <div class="text-[10px] text-text-dim uppercase tracking-wider">Save current editor</div>
-            <LibraryField label="Script name">
+            <ScField label="Script name">
               <input
                 class="sc-input"
                 placeholder="Name"
@@ -869,15 +869,15 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
                 onInput={(e) => setName(e.currentTarget.value)}
                 autocomplete="off"
               />
-            </LibraryField>
-            <LibraryField label="Description">
+            </ScField>
+            <ScField label="Description">
               <input
                 class="sc-input"
                 placeholder="Optional"
                 value={desc()}
                 onInput={(e) => setDesc(e.currentTarget.value)}
               />
-            </LibraryField>
+            </ScField>
             <button
               type="submit"
               class="sc-btn sc-btn-primary inline-flex items-center gap-1 justify-center"

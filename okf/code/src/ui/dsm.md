@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/ui/dsm"
-description: "src/ui/dsm contains CompleteMap.tsx, Field.tsx, JobCard.tsx, and 3 more files."
+description: "src/ui/dsm contains CompleteMap.tsx, JobCard.tsx, estimate.ts, and 2 more files."
 resource: "src/ui/dsm"
 tags: [code, dsm, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-27T14:41:44Z
+  at: 2026-10-21T18:24:00Z
 sources:
   - id: tree
     resource: "src/ui/dsm"
@@ -19,7 +19,6 @@ okf_lock: generated
 # Files
 
 * `CompleteMap.tsx` — CompleteMap
-* `Field.tsx` — DsmField
 * `JobCard.tsx` — JobCard
 * `estimate.ts` — BackfillEstimate, estimateBackfill
 * `format.ts` — fmtBarsAsSpan, fmtDuration, fmtMillis, fmtSpanSec, fmtTime, loadWindowSpanLabel

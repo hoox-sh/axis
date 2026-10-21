@@ -49,9 +49,10 @@ import { normalizeLoadSymbol } from '../data/symbol-exchange';
 import { Icons } from './icons';
 import { FloatableShell } from './panels/FloatableShell';
 import { CachedDatasetsModal } from './CachedDatasetsModal';
+import { cachedDatasetsOpen, closeCachedDatasets, openCachedDatasets } from './datasets-open';
 import { announce } from './sr-announce';
 import { estimateBackfill } from './dsm/estimate';
-import { DsmField } from './dsm/Field';
+import { ScField } from './Field';
 import { JobCard } from './dsm/JobCard';
 import {
   JOB_FILTERS,
@@ -74,7 +75,6 @@ export const DataSourceManagerPanel: Component = () => {
   const [formError, setFormError] = createSignal('');
   const [formMsg, setFormMsg] = createSignal('');
   const [applyingId, setApplyingId] = createSignal<string | null>(null);
-  const [datasetsOpen, setDatasetsOpen] = createSignal(false);
   const [jobFilter, setJobFilter] = createSignal<JobFilter>('all');
   const [jobQuery, setJobQuery] = createSignal('');
 
@@ -170,7 +170,7 @@ export const DataSourceManagerPanel: Component = () => {
 
   const openDatasets = (e?: Event) => {
     e?.stopPropagation();
-    setDatasetsOpen(true);
+    openCachedDatasets();
   };
 
   return (
@@ -209,8 +209,8 @@ export const DataSourceManagerPanel: Component = () => {
           </button>
 
           <CachedDatasetsModal
-            open={datasetsOpen()}
-            onClose={() => setDatasetsOpen(false)}
+            open={cachedDatasetsOpen()}
+            onClose={() => closeCachedDatasets()}
           />
 
           <form
@@ -218,7 +218,7 @@ export const DataSourceManagerPanel: Component = () => {
             onSubmit={onStart}
             data-testid="axis-datasource-form"
           >
-            <DsmField label="Symbol">
+            <ScField label="Symbol">
               <input
                 type="text"
                 class="sc-input"
@@ -231,7 +231,7 @@ export const DataSourceManagerPanel: Component = () => {
                 spellcheck={false}
                 data-testid="axis-datasource-symbol"
               />
-            </DsmField>
+            </ScField>
 
             <label class="flex items-center gap-2 cursor-pointer select-none">
               <input
@@ -243,7 +243,7 @@ export const DataSourceManagerPanel: Component = () => {
               <span>Backfill a different source than the chart</span>
             </label>
 
-            <DsmField label="Source / exchange">
+            <ScField label="Source / exchange">
               <select
                 class="sc-input"
                 value={sourceId()}
@@ -253,9 +253,9 @@ export const DataSourceManagerPanel: Component = () => {
               >
                 <For each={sources()}>{(s) => <option value={s.id}>{s.name}</option>}</For>
               </select>
-            </DsmField>
+            </ScField>
 
-            <DsmField label="Timeframe">
+            <ScField label="Timeframe">
               <select
                 class="sc-input"
                 value={interval()}
@@ -267,9 +267,9 @@ export const DataSourceManagerPanel: Component = () => {
               >
                 <For each={[...WATCHLIST_INTERVALS]}>{(iv) => <option value={iv}>{iv}</option>}</For>
               </select>
-            </DsmField>
+            </ScField>
 
-            <DsmField label="Accumulate to (UTC date)">
+            <ScField label="Accumulate to (UTC date)">
               <input
                 type="date"
                 class="sc-input"
@@ -277,7 +277,7 @@ export const DataSourceManagerPanel: Component = () => {
                 onInput={(e) => setPastDate(e.currentTarget.value)}
                 data-testid="axis-datasource-past-date"
               />
-            </DsmField>
+            </ScField>
 
             <div
               class="grid grid-cols-3 gap-2 border-t border-border pt-1.5"

@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/ui"
-description: "src/ui contains AboutModal.tsx, AlertsPanel.tsx, BarReplayControls.tsx, and 77 more files."
+description: "src/ui contains AboutModal.tsx, AlertsPanel.tsx, BarReplayControls.tsx, and 79 more files."
 resource: "src/ui"
 tags: [code, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-20T01:53:18Z
+  at: 2026-10-21T18:24:00Z
 sources:
   - id: tree
     resource: "src/ui"
@@ -35,6 +35,7 @@ okf_lock: generated
 * `EquityChart.tsx` — EquityChart
 * `ErrorFallback.tsx` — ErrorFallback, ErrorFallbackProps, errorFallback
 * `ErrorShareToast.tsx` — ErrorShareToast
+* `Field.tsx` — ScField
 * `HooxLoader.tsx` — HooxLoader, HooxLoaderL, HooxLoaderM, HooxLoaderProps, HooxLoaderXs
 * `HooxLogo.tsx` — HooxLogo, HooxLogoPaths, HooxLogoProps, HooxLogoSize, resolveLogoSize
 * `HpoPanel.tsx` — HpoPanel
@@ -80,6 +81,7 @@ okf_lock: generated
 * `command-registry.ts` — CommandActions, CommandCategory, CommandDef, CommandId, CommandSpec, DEFAULT_COMMAND_SPECS, RankedCommand, buildDefaultCommands, filterCommands, scoreCommand, scoreMatch
 * `context-menu.ts` — ContextMenuEntry, ContextMenuItem, ContextMenuSep, clampMenuPosition
 * `data-plane-notice.ts` — DATA_PLANE_DOCS_URL, DataPlaneActionId, DataPlaneNotice, classifyDataPlaneNotice, cleanStatusLine
+* `datasets-open.ts` — cachedDatasetsOpen, closeCachedDatasets, openCachedDatasets
 * `dismiss-on-outside.ts` — DismissOnOutsideOptions, dismissOnOutside
 * `document-title.ts` — ChartTitleInput, formatChartTitle
 * `editor-problems.ts` — EDITOR_PROBLEMS_DEFAULT_HEIGHT, EDITOR_PROBLEMS_HEIGHT_KEY, EDITOR_PROBLEMS_MIN_HEIGHT, EditorProblem, clampProblemsHeight, countProblemsBySeverity, diagnosticsToProblems, formatProblemForCopy, formatProblemLine, formatProblemSource, formatProblemsListForCopy, severityRank
