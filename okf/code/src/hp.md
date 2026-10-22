@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/hp"
-description: "High-performance chart engine (HP PR 1–8)."
+description: "High-performance chart engine (HP PR 1–9)."
 resource: "src/hp"
 tags: [code, hp]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-22T14:47:03Z
+  at: 2026-10-22T15:15:09Z
 sources:
   - id: tree
     resource: "src/hp"
@@ -20,6 +20,7 @@ okf_lock: generated
 
 * `capabilities.ts` — HpRung, IsolationHost, IsolationProbe, SelectHpRungOpts, isolationProbe, rememberHpRung, selectHpRung
 * `feature-flag.ts` — HP_DISABLED_KEY, HP_ENABLED_KEY, HP_GPU_KEY, HP_RUNG_SESSION_KEY, HP_SAB_KEY, HpGpuMode, HpSabMode, hpGpuMode, hpSabMode, isHpDisabled, isHpEnabled, resetHpFlags
+* `hud.ts` — HpChip, HpChipInput, hpChip
 * `index.ts`
 * `isolation-headers.ts` — COEP_HEADER, COEP_VALUE, COOP_HEADER, COOP_VALUE, CORP_HEADER, CORP_VALUE, HP_ISOLATION_HEADERS, sourceHasIsolationHeaders
 
@@ -39,6 +40,7 @@ okf_lock: generated
 * [src/hp/render](/code/src/hp/render.md)
 * [src/hp/workers](/code/src/hp/workers.md)
 * [src/sw](/code/src/sw.md)
+* [src/ui/workers](/code/src/ui/workers.md)
 * [tests/hp](/code/tests/hp.md)
 
 # Nested

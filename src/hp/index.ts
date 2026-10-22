@@ -18,7 +18,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * High-performance chart engine (HP PR 1–8).
+ * High-performance chart engine (HP PR 1–9).
  *
  * Codec, execution context, isolation headers, capability probe, ingest
  * worker, hot double-buffer memory, worker-safe Atomics, rAF generation
@@ -30,6 +30,9 @@
  * 32-byte NDC records, `render/*` selects and drives a painter — WebGL2
  * instanced quads today, WebGPU later, LWC when neither exists.
  *
+ * PR 9 adds `hud.ts`, the plan-§13 capabilities chip (`hp · sab+gpu` /
+ * `json · lwc`) shown in the Workers Manager.
+ *
  * @module hp
  */
 
@@ -39,6 +42,7 @@ export * from './calc/execution-context';
 export * from './isolation-headers';
 export * from './feature-flag';
 export * from './capabilities';
+export * from './hud';
 export * from './memory/layout';
 export * from './memory/control-block';
 export * from './memory/hot-buffer';
