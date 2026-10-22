@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/hp"
-description: "High-performance chart engine (HP PR 1–5)."
+description: "High-performance chart engine (HP PR 1–6)."
 resource: "src/hp"
 tags: [code, hp]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-21T23:55:09Z
+  at: 2026-10-22T10:43:52Z
 sources:
   - id: tree
     resource: "src/hp"
@@ -30,6 +30,7 @@ okf_lock: generated
 * [src/hp/memory](/code/src/hp/memory.md)
 * [src/hp/paint](/code/src/hp/paint.md)
 * [src/hp/sync](/code/src/hp/sync.md)
+* [src/hp/workers](/code/src/hp/workers.md)
 
 # Used by
 

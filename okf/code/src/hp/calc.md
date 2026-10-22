@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/hp/calc"
-description: "Pine / PYNE bar-state execution context for live apply."
+description: "src/hp/calc contains barstate.ts, execution-context.ts."
 resource: "src/hp/calc"
 tags: [calc, code, hp]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-21T22:35:28Z
+  at: 2026-10-22T10:43:52Z
 sources:
   - id: tree
     resource: "src/hp/calc"
@@ -18,6 +18,7 @@ okf_lock: generated
 
 # Files
 
+* `barstate.ts` — BarStateContext, appendCloseBarState, commitsAccumulators, snapshotBarState, snapshotTipBarState, tipBarState
 * `execution-context.ts` — ExecutionContext, executionContextFromDelta, executionContextFromJsonFrame, executionContextFromOpcode, isExecutionContext
 
 # Depends on
@@ -28,4 +29,5 @@ okf_lock: generated
 
 * [src/engine](/code/src/engine.md)
 * [src/hp](/code/src/hp.md)
+* [src/hp/workers](/code/src/hp/workers.md)
 * [tests/hp](/code/tests/hp.md)

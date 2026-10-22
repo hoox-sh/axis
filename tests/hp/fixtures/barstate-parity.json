@@ -1,0 +1,238 @@
+{
+  "comment": "Recorded from PYNE \u2014 regenerate with scripts/record-hp-fixtures.py, never hand-edit. `confirmed` is the per-bar plot of the closed run: the exact series the AXIS calc worker's committed state must match.",
+  "pynescript": "0.6.18",
+  "mode": "interpret",
+  "bars": [
+    {
+      "time": 0,
+      "open": 100.0,
+      "high": 102.0,
+      "low": 98.0,
+      "close": 100.0,
+      "volume": 100.0
+    },
+    {
+      "time": 60,
+      "open": 100.0,
+      "high": 105.0,
+      "low": 98.0,
+      "close": 103.0,
+      "volume": 101.0
+    },
+    {
+      "time": 120,
+      "open": 103.0,
+      "high": 105.0,
+      "low": 99.0,
+      "close": 101.0,
+      "volume": 102.0
+    },
+    {
+      "time": 180,
+      "open": 101.0,
+      "high": 109.0,
+      "low": 99.0,
+      "close": 107.0,
+      "volume": 103.0
+    },
+    {
+      "time": 240,
+      "open": 107.0,
+      "high": 109.0,
+      "low": 103.0,
+      "close": 105.0,
+      "volume": 104.0
+    },
+    {
+      "time": 300,
+      "open": 105.0,
+      "high": 112.0,
+      "low": 103.0,
+      "close": 110.0,
+      "volume": 105.0
+    },
+    {
+      "time": 360,
+      "open": 110.0,
+      "high": 112.0,
+      "low": 106.0,
+      "close": 108.0,
+      "volume": 106.0
+    },
+    {
+      "time": 420,
+      "open": 108.0,
+      "high": 117.0,
+      "low": 106.0,
+      "close": 115.0,
+      "volume": 107.0
+    },
+    {
+      "time": 480,
+      "open": 115.0,
+      "high": 117.0,
+      "low": 110.0,
+      "close": 112.0,
+      "volume": 108.0
+    },
+    {
+      "time": 540,
+      "open": 112.0,
+      "high": 122.0,
+      "low": 110.0,
+      "close": 120.0,
+      "volume": 109.0
+    },
+    {
+      "time": 600,
+      "open": 120.0,
+      "high": 122.0,
+      "low": 116.0,
+      "close": 118.0,
+      "volume": 110.0
+    },
+    {
+      "time": 660,
+      "open": 118.0,
+      "high": 127.0,
+      "low": 116.0,
+      "close": 125.0,
+      "volume": 111.0
+    }
+  ],
+  "cases": [
+    {
+      "id": "ta-cum",
+      "code": "//@version=6\nindicator(\"HP fixture \u2014 ta.cum\")\nplot(ta.cum(close), \"cum\")\n",
+      "plot": "cum",
+      "confirmed": [
+        100.0,
+        203.0,
+        304.0,
+        411.0,
+        516.0,
+        626.0,
+        734.0,
+        849.0,
+        961.0,
+        1081.0,
+        1199.0,
+        1324.0
+      ]
+    },
+    {
+      "id": "valuewhen-confirmed",
+      "code": "//@version=6\nindicator(\"HP fixture \u2014 ta.valuewhen\")\nplot(ta.valuewhen(barstate.isconfirmed, close, 0), \"valuewhen_confirmed_close\")\n",
+      "plot": "valuewhen_confirmed_close",
+      "confirmed": [
+        100.0,
+        103.0,
+        101.0,
+        107.0,
+        105.0,
+        110.0,
+        108.0,
+        115.0,
+        112.0,
+        120.0,
+        118.0,
+        125.0
+      ]
+    },
+    {
+      "id": "var-assignment",
+      "code": "//@version=6\nindicator(\"HP fixture \u2014 var assignment\")\nvar float x = na\nif barstate.isconfirmed\n    x := close\nplot(x, \"var_x\")\n",
+      "plot": "var_x",
+      "confirmed": [
+        100.0,
+        103.0,
+        101.0,
+        107.0,
+        105.0,
+        110.0,
+        108.0,
+        115.0,
+        112.0,
+        120.0,
+        118.0,
+        125.0
+      ]
+    },
+    {
+      "id": "barstate-flags",
+      "code": "//@version=6\nindicator(\"HP fixture \u2014 barstate flags\")\nplot(barstate.isnew ? 1.0 : 0.0, \"isnew\")\nplot(barstate.isconfirmed ? 1.0 : 0.0, \"isconfirmed\")\nplot(barstate.isrealtime ? 1.0 : 0.0, \"isrealtime\")\nplot(barstate.isfirst ? 1.0 : 0.0, \"isfirst\")\nplot(barstate.islast ? 1.0 : 0.0, \"islast\")\n",
+      "plots": {
+        "isnew": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "isconfirmed": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "isrealtime": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "isfirst": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "islast": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    }
+  ]
+}

@@ -18,16 +18,19 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * High-performance chart engine (HP PR 1–5).
+ * High-performance chart engine (HP PR 1–6).
  *
  * Codec, execution context, isolation headers, capability probe, ingest
  * worker, hot double-buffer memory, worker-safe Atomics, rAF generation
- * poll, the LWC copy-out, and viewport paging over a columnar cold store.
+ * poll, the LWC copy-out, viewport paging over a columnar cold store, and
+ * the calc scratch-vs-commit state machine with its bar-state contexts
+ * (§10.1–§10.2: tips evaluate on scratch, only closed bars commit).
  *
  * @module hp
  */
 
 export * from './axb1';
+export * from './calc/barstate';
 export * from './calc/execution-context';
 export * from './isolation-headers';
 export * from './feature-flag';
@@ -41,3 +44,4 @@ export * from './sync/atomics';
 export * from './sync/is-main-thread';
 export * from './sync/raf-poll';
 export * from './paint/copy-out-lwc';
+export * from './workers/calc-core';
