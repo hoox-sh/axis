@@ -221,3 +221,155 @@ describe('FNV-1a 32', () => {
     expect(fnv1a32('')).toBe(2166136261);
   });
 });
+
+/**
+ * Spec → frame mapper for the shared golden vectors (`axb1-vectors.json`).
+ * The same vectors are asserted by PYNE's `tests/test_axb1.py`, so the spec
+ * must stay language-neutral: int64/uint64 fields are decimal strings.
+ */
+function frameFromSpec(raw: Record<string, unknown>): Axb1Frame {
+  const { opcode, seq, sub_id_hash, session_hash, ts_ms, hdr_flags, ...rest } = raw;
+  const header = {
+    seq: seq as number,
+    subIdHash: sub_id_hash as number,
+    sessionHash: session_hash as number,
+    tsMs: BigInt(ts_ms as string),
+    hdrFlags: (hdr_flags as number) ?? 0,
+  };
+  const tipOf = (t: Record<string, unknown>) => ({
+    mask: (t.mask as string[]).reduce(
+      (m, n) => m | (TipMask as unknown as Record<string, number>)[n],
+      0,
+    ),
+    flags: t.flags as number,
+    timeS: t.time_s as number | undefined,
+    open: t.open != null ? BigInt(t.open as string) : undefined,
+    high: t.high != null ? BigInt(t.high as string) : undefined,
+    low: t.low != null ? BigInt(t.low as string) : undefined,
+    close: t.close != null ? BigInt(t.close as string) : undefined,
+    volume: t.volume as number | undefined,
+  });
+  const kindOf = (k: string) =>
+    k === 'price_ticks' ? ValueKind.PriceTicks : ValueKind.UnitFloat64;
+  switch (opcode) {
+    case 'HEARTBEAT':
+      return { opcode: Axb1Opcode.HEARTBEAT, ...header };
+    case 'UNCHANGED':
+      return { opcode: Axb1Opcode.UNCHANGED, ...header };
+    case 'STATUS':
+      return {
+        opcode: Axb1Opcode.STATUS,
+        ...header,
+        statusCode: rest.status_code as string,
+        detail: rest.detail as string,
+        have: rest.have as number,
+        need: rest.need as number,
+      };
+    case 'TIP_UPDATE':
+      return { opcode: Axb1Opcode.TIP_UPDATE, ...header, ...tipOf(rest) };
+    case 'APPEND_BAR':
+      return {
+        opcode: Axb1Opcode.APPEND_BAR,
+        ...header,
+        priceScale: rest.price_scale as number,
+        closedIndex: rest.closed_index as number,
+        closedTime: rest.closed_time as number,
+        open: BigInt(rest.open as string),
+        high: BigInt(rest.high as string),
+        low: BigInt(rest.low as string),
+        close: BigInt(rest.close as string),
+        volume: rest.volume as number,
+        tip: tipOf(rest.tip as Record<string, unknown>),
+      };
+    case 'CLOSE_VERIFY':
+      return {
+        opcode: Axb1Opcode.CLOSE_VERIFY,
+        ...header,
+        index: rest.index as number,
+        timeS: rest.time_s as number,
+        open: BigInt(rest.open as string),
+        high: BigInt(rest.high as string),
+        low: BigInt(rest.low as string),
+        close: BigInt(rest.close as string),
+        volume: rest.volume as number,
+      };
+    case 'PLOT_TIP':
+      return {
+        opcode: Axb1Opcode.PLOT_TIP,
+        ...header,
+        plots: (rest.plots as Array<Record<string, unknown>>).map((p) => ({
+          keyHash: p.key_hash as number,
+          kind: kindOf(p.kind as string),
+          ticks: p.ticks != null ? BigInt(p.ticks as string) : undefined,
+          value: p.value as number | undefined,
+        })),
+      };
+    case 'SNAPSHOT_OHLCV':
+      return {
+        opcode: Axb1Opcode.SNAPSHOT_OHLCV,
+        ...header,
+        priceScale: rest.price_scale as number,
+        count: rest.count as number,
+        closedUpto: rest.closed_upto as number,
+        hotFromIndex: rest.hot_from_index as number,
+        timeS: rest.time_s as number[],
+        open: (rest.open as string[]).map((x) => BigInt(x)),
+        high: (rest.high as string[]).map((x) => BigInt(x)),
+        low: (rest.low as string[]).map((x) => BigInt(x)),
+        close: (rest.close as string[]).map((x) => BigInt(x)),
+        volume: rest.volume as number[],
+        flags: rest.flags as number[],
+      };
+    case 'SNAPSHOT_PLOTS':
+      return {
+        opcode: Axb1Opcode.SNAPSHOT_PLOTS,
+        ...header,
+        count: rest.count as number,
+        closedUpto: rest.closed_upto as number,
+        times: (rest.times as number[] | null) ?? null,
+        plots: (rest.plots as Array<Record<string, unknown>>).map((col) => ({
+          key: col.key as string,
+          kind: kindOf(col.kind as string),
+          ticks: col.ticks != null ? (col.ticks as string[]).map((x) => BigInt(x)) : undefined,
+          values: col.values as number[] | undefined,
+        })),
+      };
+    case 'ERROR':
+      return {
+        opcode: Axb1Opcode.ERROR,
+        ...header,
+        code: rest.code as string,
+        message: rest.message as string,
+        retryable: rest.retryable as boolean,
+      };
+    case 'JSON_BLOB':
+      return { opcode: Axb1Opcode.JSON_BLOB, ...header, json: rest.json as string };
+    default:
+      throw new Error(`unknown golden-vector opcode ${String(opcode)}`);
+  }
+}
+
+describe('AXB1 golden vectors (shared with PYNE)', () => {
+  const vectorsFile = vectors as unknown as {
+    hash_checks: Array<{ input: string; fnv1a32: number }>;
+    vectors: Array<{ name: string; frame: Record<string, unknown>; hex: string }>;
+  };
+
+  test('fnv1a32 hash checks match the shared file', () => {
+    for (const check of vectorsFile.hash_checks) {
+      expect(fnv1a32(check.input)).toBe(check.fnv1a32);
+    }
+  });
+
+  test.each(vectorsFile.vectors.map((v) => [v.name, v] as const))(
+    'vector %s: encoder emits the golden hex and round-trips',
+    (_name, vector) => {
+      const frame = frameFromSpec(vector.frame);
+      const bytes = encodeFrame(frame);
+      expect(bytesToHex(bytes)).toBe(vector.hex);
+      const decoded = decodeFrame(bytes);
+      expect(decoded.opcode).toBe(frame.opcode);
+      expect(bytesToHex(encodeFrame(decoded))).toBe(vector.hex);
+    },
+  );
+});

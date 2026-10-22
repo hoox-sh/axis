@@ -7,7 +7,7 @@ tags: [axb1, code, hp]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-21T23:35:56Z
+  at: 2026-10-22T11:00:42Z
 sources:
   - id: tree
     resource: "src/hp/axb1"
@@ -29,6 +29,7 @@ okf_lock: generated
 
 # Used by
 
+* [scripts](/code/scripts.md)
 * [src/hp](/code/src/hp.md)
 * [src/hp/calc](/code/src/hp/calc.md)
 * [src/hp/memory](/code/src/hp/memory.md)
