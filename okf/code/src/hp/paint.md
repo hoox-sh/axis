@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/hp/paint"
-description: "Copy-out: hot SAB → Bar[] for Lightweight Charts (HP PR 4, §6.5; page slot §9.2 from HP PR 5)."
+description: "src/hp/paint contains copy-out-lwc.ts, visual-attr.ts."
 resource: "src/hp/paint"
 tags: [code, hp, paint]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-21T23:55:09Z
+  at: 2026-10-22T14:47:03Z
 sources:
   - id: tree
     resource: "src/hp/paint"
@@ -19,6 +19,7 @@ okf_lock: generated
 # Files
 
 * `copy-out-lwc.ts` — CopyOutRequest, CopyOutResult, copyOutBars, copyOutPage, copyOutTail, copyOutViewport
+* `visual-attr.ts` — BAR_FLAG_CLOSED, BAR_FLAG_FORMING, FillFromHotRequest, FillVisualOptions, VISUAL_CANDLE_BYTES, VISUAL_CANDLE_F32, VISUAL_OFFSET, VISUAL_RECORD_WORDS, VISUAL_TAIL, VisualAttrBuffer, VisualPalette, VisualSourceBar
 
 # Depends on
 
@@ -28,4 +29,5 @@ okf_lock: generated
 # Used by
 
 * [src/hp](/code/src/hp.md)
+* [src/hp/render](/code/src/hp/render.md)
 * [tests/hp](/code/tests/hp.md)

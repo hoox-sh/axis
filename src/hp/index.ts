@@ -18,13 +18,17 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * High-performance chart engine (HP PR 1–6).
+ * High-performance chart engine (HP PR 1–8).
  *
  * Codec, execution context, isolation headers, capability probe, ingest
  * worker, hot double-buffer memory, worker-safe Atomics, rAF generation
  * poll, the LWC copy-out, viewport paging over a columnar cold store, and
  * the calc scratch-vs-commit state machine with its bar-state contexts
  * (§10.1–§10.2: tips evaluate on scratch, only closed bars commit).
+ *
+ * The GPU paint plane (PR 8): `paint/visual-attr` stages visible candles as
+ * 32-byte NDC records, `render/*` selects and drives a painter — WebGL2
+ * instanced quads today, WebGPU later, LWC when neither exists.
  *
  * @module hp
  */
@@ -44,4 +48,8 @@ export * from './sync/atomics';
 export * from './sync/is-main-thread';
 export * from './sync/raf-poll';
 export * from './paint/copy-out-lwc';
+export * from './paint/visual-attr';
+export * from './render/types';
+export * from './render/select-renderer';
+export * from './render/webgl2-renderer';
 export * from './workers/calc-core';
