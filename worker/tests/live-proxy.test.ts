@@ -8,11 +8,14 @@
  * auth rejection, and route fall-through.
  */
 
-import { describe, expect, it } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { Axb1Opcode, TipMask } from '../../src/hp/axb1/constants';
+import { encodeFrame } from '../../src/hp/axb1/encode';
 import {
   _resetLiveTicketsForTests,
   engineLiveWsUrl,
   handleLiveProxy,
+  relayFrame,
 } from '../src/live-proxy';
 import type { Env } from '../src/index';
 
@@ -35,7 +38,12 @@ describe('handleLiveProxy routing', () => {
 
   it('refuses ticket issue without a key', async () => {
     _resetLiveTicketsForTests();
-    const res = await handleLiveProxy(req('/api/ws/live?issue=ticket'), {} as Env, origin, '/api/ws/live');
+    const res = await handleLiveProxy(
+      req('/api/ws/live?issue=ticket'),
+      {} as Env,
+      origin,
+      '/api/ws/live',
+    );
     expect(res!.status).toBe(401);
   });
 
@@ -91,9 +99,168 @@ describe('handleLiveProxy routing', () => {
 
 describe('engineLiveWsUrl', () => {
   it('maps http(s) origins to /ws/live', () => {
-    expect(engineLiveWsUrl('https://pyne.example:5002/api')).toBe('wss://pyne.example:5002/ws/live');
+    expect(engineLiveWsUrl('https://pyne.example:5002/api')).toBe(
+      'wss://pyne.example:5002/ws/live',
+    );
     expect(engineLiveWsUrl('http://127.0.0.1:5002')).toBe('ws://127.0.0.1:5002/ws/live');
     expect(engineLiveWsUrl('ftp://x')).toBeNull();
     expect(engineLiveWsUrl('::::')).toBeNull();
+  });
+});
+
+describe('relayFrame', () => {
+  it('passes text through unchanged', () => {
+    const frame = JSON.stringify({ type: 'auth', payload: { token: 'x' } });
+    expect(relayFrame(frame)).toBe(frame);
+  });
+
+  it('passes a binary AXB1 envelope through byte-identical (never text-decoded)', () => {
+    const envelope = encodeFrame({
+      opcode: Axb1Opcode.HEARTBEAT,
+      seq: 0,
+      subIdHash: 0,
+      sessionHash: 0,
+      tsMs: 0n,
+    });
+    const buf = envelope.buffer.slice(
+      envelope.byteOffset,
+      envelope.byteOffset + envelope.byteLength,
+    ) as ArrayBuffer;
+    const out = relayFrame(buf);
+    expect(out).toBeInstanceOf(ArrayBuffer);
+    const bytes = new Uint8Array(out as ArrayBuffer);
+    expect(bytes[0]).toBe(0x41); // 'A' of the AXB1 magic — a TextDecoder round-trip would mangle this
+    expect(bytes).toEqual(envelope);
+  });
+
+  it('passes ArrayBuffer views through untouched', () => {
+    const view = new Uint8Array([1, 2, 3, 4]).subarray(1, 3);
+    expect(relayFrame(view)).toBe(view);
+  });
+
+  it('rejects unsupported frame types', () => {
+    expect(() => relayFrame(42)).toThrow(/unsupported/);
+  });
+});
+
+describe('live relay keeps binary frames binary', () => {
+  type Listener = (ev: { data: unknown }) => void;
+
+  class FakeSocket {
+    readonly sent: unknown[] = [];
+    readonly closed: Array<{ code: number; reason: string }> = [];
+    private readonly listeners = new Map<string, Listener[]>();
+    accept(): void {}
+    addEventListener(type: string, fn: Listener): void {
+      const list = this.listeners.get(type) ?? [];
+      list.push(fn);
+      this.listeners.set(type, list);
+    }
+    send(data: unknown): void {
+      this.sent.push(data);
+    }
+    close(code: number, reason: string): void {
+      this.closed.push({ code, reason });
+    }
+    emit(type: string, data: unknown): void {
+      for (const fn of this.listeners.get(type) ?? []) fn({ data });
+    }
+  }
+
+  const g = globalThis as Record<string, unknown>;
+  const savedPair = g.WebSocketPair;
+  const savedWebSocket = g.WebSocket;
+  let pair: [FakeSocket, FakeSocket] | null = null;
+  let upstreamSocket: FakeSocket | null = null;
+
+  class FakeWebSocketPair {
+    0: FakeSocket;
+    1: FakeSocket;
+    constructor() {
+      this[0] = new FakeSocket();
+      this[1] = new FakeSocket();
+      pair = [this[0], this[1]];
+    }
+  }
+  class FakeUpstream extends FakeSocket {
+    constructor(readonly url: string) {
+      super();
+      upstreamSocket = this;
+    }
+  }
+
+  beforeAll(() => {
+    g.WebSocketPair = FakeWebSocketPair;
+    g.WebSocket = FakeUpstream;
+  });
+  afterAll(() => {
+    g.WebSocketPair = savedPair;
+    g.WebSocket = savedWebSocket;
+  });
+
+  async function connect(): Promise<{ client: FakeSocket; srv: FakeSocket; up: FakeSocket }> {
+    _resetLiveTicketsForTests();
+    const issued = await handleLiveProxy(
+      req('/api/ws/live?issue=ticket', { Authorization: `Bearer ${KEY}` }),
+      {} as Env,
+      origin,
+      '/api/ws/live',
+    );
+    if (!issued) throw new Error('ticket issue returned no response');
+    const { ticket } = (await issued.json()) as { ticket: string };
+    const res = await handleLiveProxy(
+      req(`/api/ws/live?ticket=${ticket}`, { Upgrade: 'websocket' }),
+      { EXTERNAL_BACKEND: 'http://engine.internal:5002' } as unknown as Env,
+      origin,
+      '/api/ws/live',
+    );
+    if (!res) throw new Error('upgrade fell through the router');
+    expect(res.status).toBe(101);
+    if (!pair || !upstreamSocket) throw new Error('fakes were not constructed');
+    return { client: pair[0], srv: pair[1], up: upstreamSocket };
+  }
+
+  it('relays JSON as text and AXB1 bytes as bytes in both directions', async () => {
+    const { srv, up } = await connect();
+
+    // The pair's server end reaches the browser, so engine→client frames land on srv.send.
+    up.emit('open', undefined);
+    expect(srv.sent[0]).toBe(
+      JSON.stringify({ type: 'status', payload: { code: 'live-relay', message: 'connected' } }),
+    );
+
+    // engine → client: JSON stays text.
+    up.emit('message', '{"type":"pong"}');
+    expect(srv.sent[1]).toBe('{"type":"pong"}');
+
+    // engine → client: an AXB1 TIP_UPDATE stays an ArrayBuffer with identical bytes.
+    const envelope = encodeFrame({
+      opcode: Axb1Opcode.TIP_UPDATE,
+      seq: 7,
+      subIdHash: 1,
+      sessionHash: 2,
+      tsMs: 1760000000000n,
+      mask: TipMask.CLOSE | TipMask.TIME,
+      flags: 1,
+      close: 6042550000000n,
+      timeS: 1760000060,
+    });
+    const upBinary = envelope.buffer.slice(
+      envelope.byteOffset,
+      envelope.byteOffset + envelope.byteLength,
+    ) as ArrayBuffer;
+    up.emit('message', upBinary);
+    const got = srv.sent[2];
+    expect(got).toBeInstanceOf(ArrayBuffer);
+    expect(new Uint8Array(got as ArrayBuffer)).toEqual(envelope);
+
+    // client → engine: binary stays bytes.
+    const toUp = new Uint8Array([0x41, 0x58, 0x42, 0x31, 1, 2, 3, 4]).buffer;
+    srv.emit('message', toUp);
+    expect(up.sent[0]).toBe(toUp);
+
+    // client → engine: JSON control frames stay text.
+    srv.emit('message', '{"type":"auth","payload":{"token":"pyne-key"}}');
+    expect(up.sent[1]).toBe('{"type":"auth","payload":{"token":"pyne-key"}}');
   });
 });

@@ -7,7 +7,7 @@ tags: [code, worker]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-21T21:03:40Z
+  at: 2026-10-22T11:14:37Z
 sources:
   - id: tree
     resource: "worker/src"
@@ -25,7 +25,7 @@ okf_lock: generated
 * `http.ts` — API_CORS, CorsOptions, DeepHealth, ErrorBody, ErrorResponseOptions, HandleErrorOptions, HealthFlags, JsonBuilder, JsonOptions, MARKET_CORS, MCP_CORS, ORIGIN_ONLY
 * `index.ts` — Env, McpBridgeDO, SessionDO, pickOrigin
 * `keys.ts` — handleKeys
-* `live-proxy.ts` — LIVE_TICKET_TTL_S, _resetLiveTicketsForTests, engineLiveWsUrl, handleLiveProxy
+* `live-proxy.ts` — LIVE_TICKET_TTL_S, _resetLiveTicketsForTests, engineLiveWsUrl, handleLiveProxy, relayFrame
 * `market.ts` — _resetMarketCacheForTests, handleMarket, marketAllowlist
 * `onchain.ts` — _resetOnchainCacheForTests, handleOnchain, onchainAllowlist
 * `proxy-plane.ts` — CacheEntry, CacheEviction, ProxyPlane, ProxyPlaneOptions, createProxyPlane

@@ -26,7 +26,9 @@
  * unbound local dev — mirroring the scripts in-memory pattern.
  *
  * The relay is fully transparent: the client's PYNE `auth` frame travels
- * untouched to the engine. Worker-level auth (AXIS key) and engine-level
+ * untouched to the engine, and **binary frames pass through as bytes** —
+ * AXB1 (HP) rides the same socket, so a relay that decoded them to text
+ * would corrupt every frame. Worker-level auth (AXIS key) and engine-level
  * auth (PYNE key) stay separate.
  *
  * @module worker/live-proxy
@@ -55,11 +57,9 @@ function randomNonce(): string {
 async function mintTicket(env: Env, userId: string): Promise<string> {
   const nonce = randomNonce();
   if (env.API_KEYS) {
-    await env.API_KEYS.put(
-      `${TICKET_PREFIX}${nonce}`,
-      JSON.stringify({ userId }),
-      { expirationTtl: LIVE_TICKET_TTL_S },
-    );
+    await env.API_KEYS.put(`${TICKET_PREFIX}${nonce}`, JSON.stringify({ userId }), {
+      expirationTtl: LIVE_TICKET_TTL_S,
+    });
   } else {
     memTickets.set(nonce, { userId, exp: Date.now() + LIVE_TICKET_TTL_S * 1000 });
   }
@@ -111,6 +111,21 @@ async function authedUserId(req: Request, env: Env, url: URL): Promise<string | 
 }
 
 /**
+ * Relay payload for one WS frame: text stays text, binary stays binary.
+ *
+ * AXB1 (HP PR 1) rides the same socket as raw bytes, so decoding a binary
+ * frame with `TextDecoder` would corrupt every non-UTF-8 byte before it
+ * reaches the client — the relay must hand the exact payload through.
+ * Workers' `ws.send` accepts `string | ArrayBuffer | ArrayBufferView`.
+ */
+export function relayFrame(data: unknown): string | ArrayBuffer | ArrayBufferView {
+  if (typeof data === 'string') return data;
+  if (data instanceof ArrayBuffer) return data;
+  if (ArrayBuffer.isView(data)) return data;
+  throw new TypeError(`unsupported WS frame type: ${typeof data}`);
+}
+
+/**
  * Handle `/api/ws/live` (ticket issue + WS upgrade proxy).
  * Returns null for any other path so the router can fall through.
  */
@@ -145,20 +160,28 @@ export async function handleLiveProxy(
   }
 
   if (!isUpgrade) {
-    return errorResponse('UPGRADE_REQUIRED', 'GET /api/ws/live upgrades to WebSocket; use ?issue=ticket to mint a ticket', {
-      status: 426,
-      origin,
-      cors: CORS,
-    });
+    return errorResponse(
+      'UPGRADE_REQUIRED',
+      'GET /api/ws/live upgrades to WebSocket; use ?issue=ticket to mint a ticket',
+      {
+        status: 426,
+        origin,
+        cors: CORS,
+      },
+    );
   }
 
   const userId = await authedUserId(req, env, url);
   if (!userId) {
-    return errorResponse('INVALID_TICKET', 'live ticket missing, expired, or already used (or Authorization: Bearer required)', {
-      status: 401,
-      origin,
-      cors: CORS,
-    });
+    return errorResponse(
+      'INVALID_TICKET',
+      'live ticket missing, expired, or already used (or Authorization: Bearer required)',
+      {
+        status: 401,
+        origin,
+        cors: CORS,
+      },
+    );
   }
   if (!env.EXTERNAL_BACKEND) {
     return errorResponse('NO_BACKEND', 'EXTERNAL_BACKEND is not configured', {
@@ -185,40 +208,56 @@ export async function handleLiveProxy(
   } catch (err) {
     try {
       (server as WebSocket).close(1011, 'upstream unavailable');
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     return new Response(null, { status: 101, webSocket: client });
   }
   const up = upstream as WebSocket;
   const srv = server as WebSocket;
   up.addEventListener('open', () => {
     try {
-      srv.send(JSON.stringify({ type: 'status', payload: { code: 'live-relay', message: 'connected' } }));
-    } catch { /* ignore */ }
+      srv.send(
+        JSON.stringify({ type: 'status', payload: { code: 'live-relay', message: 'connected' } }),
+      );
+    } catch {
+      /* ignore */
+    }
   });
   up.addEventListener('message', (ev) => {
     try {
-      srv.send(typeof ev.data === 'string' ? ev.data : new TextDecoder().decode(ev.data as ArrayBuffer));
-    } catch { /* ignore */ }
+      srv.send(relayFrame(ev.data));
+    } catch {
+      /* ignore */
+    }
   });
   const closeUp = (code: number, reason: string) => {
     try {
       up.close(code, reason);
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   };
   up.addEventListener('close', () => {
     try {
       srv.close(1000, 'upstream closed');
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   });
   up.addEventListener('error', () => {
     try {
       srv.close(1011, 'upstream error');
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   });
   srv.addEventListener('message', (ev) => {
     try {
-      up.send(typeof ev.data === 'string' ? ev.data : new TextDecoder().decode(ev.data as ArrayBuffer));
-    } catch { /* ignore */ }
+      up.send(relayFrame(ev.data));
+    } catch {
+      /* ignore */
+    }
   });
   srv.addEventListener('close', () => closeUp(1000, 'client closed'));
   srv.addEventListener('error', () => closeUp(1011, 'client error'));
