@@ -50,14 +50,22 @@ AXIS ships an opt-in **high-performance plane** behind `axis.engine.hp.enabled` 
 
 ## Isolation
 
-SAB needs cross-origin isolation — COOP `same-origin-allow-popups` + COEP `require-corp` — on **every** static host (`public/_headers`, the Vite dev server, `docker/nginx.conf`, the PWA servers), kept honest by `tests/sw-parity.test.ts`. Verify a tab in the DevTools console:
+SAB needs cross-origin isolation. Every static host ships the same pair — `public/_headers`, the Vite dev server, `docker/nginx.conf`, the PWA servers, and the offline shell — kept honest by `tests/sw-parity.test.ts`:
 
-```js
-crossOriginIsolated;       // true → SAB possible
-typeof SharedArrayBuffer;  // "function" when isolated
+```text
+Cross-Origin-Opener-Policy: same-origin-allow-popups
+Cross-Origin-Embedder-Policy: credentialless
+Cross-Origin-Resource-Policy: same-origin
 ```
 
-If isolation is unavailable (Safari quirks, opener-based OAuth), HP stays on rung 1 — the transferable copy — and the app boots normally. `same-origin-allow-popups` exists so the GitHub OAuth popup keeps working; if it regresses, revert the headers and keep HP-1 only.
+**The current pair intentionally does not isolate.** Chromium sets `crossOriginIsolated` only for COOP `same-origin`; `same-origin-allow-popups` was chosen so the GitHub device-flow popup keeps its opener (plan risk: a stricter COOP bricks the opener). The capability probe is the runtime source of truth, so on every host today:
+
+```js
+crossOriginIsolated;       // false — popup-safe COOP does not isolate Chromium
+typeof SharedArrayBuffer;  // "undefined" — Chrome hides the constructor when unisolated
+```
+
+With `isolated === false` HP stays on the transferable copy: rung 1 (or HP-3/HP-4 with copy transport — the matrix says "isolated preferred", so a non-isolated GPU tab still gets `hp · copy+gpu`). A later COOP flip to `same-origin` unlocks HP-2/SAB without retuning the embedder policy — `credentialless` already ships for it; if that flip ever breaks OAuth, revert COOP and keep HP-1 only.
 
 ## Transport: AXB1
 
@@ -81,7 +89,7 @@ If isolation is unavailable (Safari quirks, opener-based OAuth), HP stays on run
 
 ## HUD chip
 
-Workers Manager → **Chart plane** shows the selected rung in plan format: `hp · sab+gpu`, `hp · copy+lwc`, or `json · lwc` (transport memory + painter). `json · lwc` is exactly today's path, so the default-off state reads truthfully. The chip reports the *selection*; the GPU canvas lands with its wiring PR.
+Workers Manager → **Chart plane** shows the selected rung in plan format: `hp · sab+gpu`, `hp · copy+lwc`, or `json · lwc` (transport memory + painter). `json · lwc` is exactly today's path, so the default-off state reads truthfully. Because the popup-safe pair does not isolate, an opted-in Chromium today reads `hp · copy+gpu` (or `hp · copy+lwc` without a GPU): painter selected, transport on the copy. The chip reports the *selection*; the GPU canvas lands with its wiring PR.
 
 ## Invariants
 
