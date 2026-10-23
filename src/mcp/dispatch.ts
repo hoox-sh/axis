@@ -85,6 +85,7 @@ import { drawingsForSymbol, newDrawingId } from '../chart/drawings/sync';
 import { getEngine } from '../engines/catalog';
 import { APP_CAPABILITIES, findCapability, SETTABLE_PATHS } from './catalog';
 import { runPaletteCommand, listPaletteCommandIds } from './commands';
+import { hpSampleView, hpView } from './hp';
 import { buildAppSnapshot, buildSettingsSnapshot, barSummary } from './snapshot';
 import {
   chartBarsView,
@@ -409,7 +410,8 @@ export async function invokeCapability(
     }
     case 'chart.screenshot': {
       const opts = { ...loadScreenshotOptions() };
-      if (p.scope === 'price' || p.scope === 'panes' || p.scope === 'workspace') opts.scope = p.scope;
+      if (p.scope === 'price' || p.scope === 'panes' || p.scope === 'workspace')
+        opts.scope = p.scope;
       if (p.scale === 1 || p.scale === 2) opts.scale = p.scale;
       const canvas = await captureScreenshot(opts);
       return canvasPng(canvas);
@@ -550,7 +552,13 @@ export async function invokeCapability(
     }
     case 'watchlist.lists': {
       const op = str(p.op);
-      if (op === 'create') return { id: createWatchlist(str(p.name), Array.isArray(p.symbols) ? (p.symbols as string[]) : undefined) };
+      if (op === 'create')
+        return {
+          id: createWatchlist(
+            str(p.name),
+            Array.isArray(p.symbols) ? (p.symbols as string[]) : undefined,
+          ),
+        };
       if (op === 'rename') {
         renameWatchlist(str(p.id), str(p.name));
         return { ok: true };
@@ -595,8 +603,7 @@ export async function invokeCapability(
         fail('BAD_LEVEL', 'level must be info|ok|warn|error');
       }
       const entries = store.logs.filter(
-        (l) =>
-          (!source || (l.source || 'system') === source) && (!level || l.level === level),
+        (l) => (!source || (l.source || 'system') === source) && (!level || l.level === level),
       );
       return entries.slice(-(typeof p.limit === 'number' ? p.limit : 50));
     }
@@ -649,7 +656,11 @@ export async function invokeCapability(
     }
 
     case 'theme.get':
-      return { theme: store.theme, chartPreset: store.chartTheme?.presetId, uiScale: store.uiScale };
+      return {
+        theme: store.theme,
+        chartPreset: store.chartTheme?.presetId,
+        uiScale: store.uiScale,
+      };
     case 'theme.set': {
       if (p.theme === 'dark' || p.theme === 'light') {
         setStore('theme', p.theme);
@@ -658,7 +669,11 @@ export async function invokeCapability(
       if (p.presetId) setChartThemePreset(str(p.presetId));
       if (typeof p.uiScale === 'number') setUiScale(p.uiScale);
       persist();
-      return { theme: store.theme, chartPreset: store.chartTheme?.presetId, uiScale: store.uiScale };
+      return {
+        theme: store.theme,
+        chartPreset: store.chartTheme?.presetId,
+        uiScale: store.uiScale,
+      };
     }
 
     case 'workspace.export':
@@ -808,7 +823,10 @@ export async function invokeCapability(
           case 'interval': {
             const iv = str(v).trim();
             if (!(WATCHLIST_INTERVALS as readonly string[]).includes(iv)) {
-              fail('BAD_INTERVAL', `interval must be one of ${(WATCHLIST_INTERVALS as readonly string[]).join(', ')}`);
+              fail(
+                'BAD_INTERVAL',
+                `interval must be one of ${(WATCHLIST_INTERVALS as readonly string[]).join(', ')}`,
+              );
             }
             if (iv !== store.interval) {
               setStore('interval', iv);
@@ -825,7 +843,11 @@ export async function invokeCapability(
             break;
           }
           case 'refreshSec':
-            setStore('watchlist', 'refreshSec', Math.min(120, Math.max(5, Math.round(Number(v) || 15))));
+            setStore(
+              'watchlist',
+              'refreshSec',
+              Math.min(120, Math.max(5, Math.round(Number(v) || 15))),
+            );
             break;
           case 'live.preferAfterLoad':
             setStore('live', 'preferAfterLoad', Boolean(v));
@@ -862,9 +884,7 @@ export async function invokeCapability(
           case 'strategyUi.invertTradeLabels':
           case 'strategyUi.exactOnCandle': {
             const field = key.split('.')[1] as
-              | 'slippageNextOpen'
-              | 'invertTradeLabels'
-              | 'exactOnCandle';
+              'slippageNextOpen' | 'invertTradeLabels' | 'exactOnCandle';
             setStore('strategyUi', {
               slippageNextOpen: !!store.strategyUi?.slippageNextOpen,
               invertTradeLabels: !!store.strategyUi?.invertTradeLabels,
@@ -910,6 +930,11 @@ export async function invokeCapability(
       return streamPlaneView();
     case 'stream.reset':
       return streamResetView(p);
+
+    case 'hp.get':
+      return hpView();
+    case 'hp.sample':
+      return hpSampleView(p);
 
     case 'status.get':
       return {

@@ -7,7 +7,7 @@ tags: [code, mcp]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-20T12:33:03Z
+  at: 2026-10-23T13:51:13Z
 sources:
   - id: tree
     resource: "src/mcp"
@@ -23,6 +23,7 @@ okf_lock: generated
 * `commands.ts` — clearPaletteCommands, listPaletteCommandIds, runPaletteCommand, setPaletteCommand, setPaletteCommands
 * `dispatch.ts` — InvokeCapabilityOpts, McpHostHooks, invokeCapability, setMcpHostHooks
 * `host.ts` — AxisMcpApi, McpPrefs, loadMcpPrefs, requestMcpConnect, saveMcpPrefs, startMcpHost
+* `hp.ts` — HpRingView, HpSampleView, HpVerdictCode, HpView, hpSampleView, hpView
 * `index.ts` — APP_CAPABILITIES, McpInvokeError, SETTABLE_PATHS, buildAppSnapshot, connectMcpBridge, disconnectMcpBridge, findCapability, invokeCapability, loadMcpPrefs, mcpBridgeState, onMcpBridge, requestMcpConnect
 * `live.ts` — chartBarsView, chartLagView, engineFlushView, enginePlaneView, engineRepairView, engineSeriesView, engineTickView, streamPlaneView, streamResetView
 * `protocol.ts` — AppInvokeRequest, AppInvokeResponse, CapabilitySpec, McpInvokeError, getByPath, sessionIdFromApiKey
@@ -36,6 +37,7 @@ okf_lock: generated
 * [src/data](/code/src/data.md)
 * [src/engine](/code/src/engine.md)
 * [src/engines](/code/src/engines.md)
+* [src/hp](/code/src/hp.md)
 * [src/indicators](/code/src/indicators.md)
 * [src/plugins](/code/src/plugins.md)
 * [src/storage](/code/src/storage.md)

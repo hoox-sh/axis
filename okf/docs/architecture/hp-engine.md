@@ -7,7 +7,7 @@ tags: [architecture, doc, docs, hp-engine]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-22T15:15:09Z
+  at: 2026-10-23T13:51:13Z
 sources:
   - id: tree
     resource: "docs/architecture/hp-engine.mdx"
@@ -29,6 +29,7 @@ Repo path `docs/architecture/hp-engine.mdx`.
 * Memory: SAB double-buffer + IndexedDB cold
 * Paint: LWC, then the GPU rung
 * HUD chip
+* MCP observability
 * Invariants
 * Status on engine/high-performance
 * Tests
@@ -39,5 +40,6 @@ Repo path `docs/architecture/hp-engine.mdx`.
 * [src/hp/paint](/code/src/hp/paint.md)
 * [src/hp/render](/code/src/hp/render.md)
 * [src/hp/workers](/code/src/hp/workers.md)
+* [src/mcp](/code/src/mcp.md)
 * [tests](/code/tests.md)
 * [worker/src](/code/worker/src.md)

@@ -4,11 +4,12 @@
  */
 
 import './setup';
-import { describe, expect, it, beforeEach } from 'bun:test';
+import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
 import { setStore, addWatchlistSymbol, appendLog, clearLogs, saveEditorDoc } from '../src/store';
 import { invokeCapability } from '../src/mcp/dispatch';
 import { _resetAlertsForTests } from '../src/alerts';
 import { APP_CAPABILITIES, findCapability, SETTABLE_PATHS } from '../src/mcp/catalog';
+import { resetHpFlags, setHpDisabled, setHpEnabled } from '../src/hp/feature-flag';
 import { buildAppSnapshot } from '../src/mcp/snapshot';
 import { McpInvokeError } from '../src/mcp/protocol';
 import { setPaletteCommands } from '../src/mcp/commands';
@@ -29,7 +30,10 @@ describe('MCP catalog', () => {
 describe('MCP snapshot', () => {
   it('redacts secret-like keys and summarizes bars', () => {
     setStore('symbol', 'ETHUSDT');
-    setStore('pluginsConfig', 'storage:cloud', { endpoint: 'http://127.0.0.1:8787', apiKey: 'pn_secret' });
+    setStore('pluginsConfig', 'storage:cloud', {
+      endpoint: 'http://127.0.0.1:8787',
+      apiKey: 'pn_secret',
+    });
     const snap = buildAppSnapshot();
     expect(snap.symbol).toBe('ETHUSDT');
     const bars = snap.bars as { count?: number };
@@ -47,7 +51,9 @@ describe('MCP dispatch', () => {
   });
 
   it('app.capabilities lists ids', async () => {
-    const r = (await invokeCapability('app.capabilities')) as { capabilities: Array<{ id: string }> };
+    const r = (await invokeCapability('app.capabilities')) as {
+      capabilities: Array<{ id: string }>;
+    };
     expect(r.capabilities.length).toBeGreaterThan(20);
   });
 
@@ -107,7 +113,11 @@ describe('MCP dispatch', () => {
     }>;
     expect(errors.length).toBe(1);
     expect(errors[0]?.level).toBe('error');
-    const both = (await invokeCapability('logs.get', { source: 'mcp', level: 'info', limit: 5 })) as Array<{
+    const both = (await invokeCapability('logs.get', {
+      source: 'mcp',
+      level: 'info',
+      limit: 5,
+    })) as Array<{
       message: string;
     }>;
     expect(both.map((l) => l.message)).toEqual(['mcp line']);
@@ -130,7 +140,14 @@ describe('MCP dispatch', () => {
 
   it('app.command uses palette runner', async () => {
     let ran = false;
-    setPaletteCommands([{ id: 'theme.toggle', run: () => { ran = true; } }]);
+    setPaletteCommands([
+      {
+        id: 'theme.toggle',
+        run: () => {
+          ran = true;
+        },
+      },
+    ]);
     const r = await invokeCapability('app.command', { id: 'theme.toggle' });
     expect(ran).toBe(true);
     expect((r as { ok: boolean }).ok).toBe(true);
@@ -167,9 +184,13 @@ describe('MCP drawings', () => {
     const list = (await invokeCapability('drawings.list')) as Array<{ id: string }>;
     expect(list.some((d) => d.id === added.id)).toBe(true);
 
-    const filtered = (await invokeCapability('drawings.list', { symbol: 'BTCUSDT' })) as Array<{ id: string }>;
+    const filtered = (await invokeCapability('drawings.list', { symbol: 'BTCUSDT' })) as Array<{
+      id: string;
+    }>;
     expect(filtered.some((d) => d.id === added.id)).toBe(true);
-    const other = (await invokeCapability('drawings.list', { symbol: 'ETHUSDT' })) as Array<unknown>;
+    const other = (await invokeCapability('drawings.list', {
+      symbol: 'ETHUSDT',
+    })) as Array<unknown>;
     expect(other.length).toBe(0);
 
     const updated = (await invokeCapability('drawings.update', {
@@ -179,7 +200,9 @@ describe('MCP drawings', () => {
     })) as { id: string };
     expect(updated.id).toBe(added.id);
 
-    const removed = (await invokeCapability('drawings.remove', { id: added.id })) as { ok: boolean };
+    const removed = (await invokeCapability('drawings.remove', { id: added.id })) as {
+      ok: boolean;
+    };
     expect(removed.ok).toBe(true);
     const after = (await invokeCapability('drawings.list')) as Array<unknown>;
     expect(after.some((d) => (d as { id: string }).id === added.id)).toBe(false);
@@ -191,7 +214,16 @@ describe('MCP drawings', () => {
       [{ kind: 'cursor', points: [{ time: 1, price: 2 }] }, 'BAD_KIND'],
       [{ kind: 'trend', points: [] }, 'NO_POINTS'],
       [{ kind: 'trend', points: [{ time: 1, price: 2 }] }, 'BAD_DRAWING'],
-      [{ kind: 'trend', points: [{ time: NaN, price: 2 }, { time: 3, price: 4 }] }, 'BAD_POINT'],
+      [
+        {
+          kind: 'trend',
+          points: [
+            { time: NaN, price: 2 },
+            { time: 3, price: 4 },
+          ],
+        },
+        'BAD_POINT',
+      ],
     ] as Array<[Record<string, unknown>, string]>) {
       try {
         await invokeCapability('drawings.add', payload);
@@ -309,25 +341,19 @@ describe('MCP settings', () => {
     });
   });
 
-  it(
-    'set reloads chart on interval change (mock-walk)',
-    async () => {
-      setStore('source', 'mock-walk');
-      setStore('interval', '15m');
-      const r = (await invokeCapability('settings.set', { interval: '1h' })) as {
-        ok: boolean;
-        reloaded: boolean;
-        bars: number;
-      };
-      expect(r.ok).toBe(true);
-      expect(r.reloaded).toBe(true);
-      expect(r.bars).toBeGreaterThan(0);
-      setStore('source', 'binance-rest');
-    },
-    // The mock-walk reload generates a synthetic series — slow on a loaded CI
-    // runner, past bun's 5s default.
-    20_000,
-  );
+  it('set reloads chart on interval change (mock-walk)', async () => {
+    setStore('source', 'mock-walk');
+    setStore('interval', '15m');
+    const r = (await invokeCapability('settings.set', { interval: '1h' })) as {
+      ok: boolean;
+      reloaded: boolean;
+      bars: number;
+    };
+    expect(r.ok).toBe(true);
+    expect(r.reloaded).toBe(true);
+    expect(r.bars).toBeGreaterThan(0);
+    setStore('source', 'binance-rest');
+  }, 20_000); // runner, past bun's 5s default. // The mock-walk reload generates a synthetic series — slow on a loaded CI
 
   it('set rejects secrets, bad interval, unknown engine', async () => {
     for (const [patch, code] of [
@@ -349,7 +375,10 @@ describe('MCP settings', () => {
 
 describe('MCP zoom + drawing tool aliases', () => {
   it('chart.zoom accepts action alias for reset', async () => {
-    const out = (await invokeCapability('chart.zoom', { action: 'reset' })) as { ok: boolean; op: string };
+    const out = (await invokeCapability('chart.zoom', { action: 'reset' })) as {
+      ok: boolean;
+      op: string;
+    };
     expect(out.ok).toBe(true);
     expect(out.op).toBe('reset');
   });
@@ -452,12 +481,20 @@ describe('MCP mutates gate (F22)', () => {
       expect((err as McpInvokeError).code).toBe('MUTATION_DENIED');
     }
     // Reads still pass.
-    const logs = (await invokeCapability('logs.get', { limit: 1 }, { allowMutations: false })) as unknown[];
+    const logs = (await invokeCapability(
+      'logs.get',
+      { limit: 1 },
+      { allowMutations: false },
+    )) as unknown[];
     expect(Array.isArray(logs)).toBe(true);
   });
 
   it('allows mutations for bridge-style callers', async () => {
-    const r = (await invokeCapability('logs.append', { message: 'f22' }, { allowMutations: true })) as {
+    const r = (await invokeCapability(
+      'logs.append',
+      { message: 'f22' },
+      { allowMutations: true },
+    )) as {
       ok: boolean;
     };
     expect(r.ok).toBe(true);
@@ -494,5 +531,92 @@ describe('MCP targeted set + bounded bars (F9/F23)', () => {
     } finally {
       setStore('bars', []);
     }
+  });
+});
+
+describe('MCP HP plane', () => {
+  beforeEach(() => {
+    resetHpFlags();
+  });
+  afterEach(() => {
+    resetHpFlags();
+  });
+
+  it('registers hp.get + hp.sample as read-only capabilities', () => {
+    const ids = APP_CAPABILITIES.map((c) => c.id);
+    expect(ids).toContain('hp.get');
+    expect(ids).toContain('hp.sample');
+    expect(findCapability('hp.get')?.mutates).toBe(false);
+    expect(findCapability('hp.sample')?.mutates).toBe(false);
+  });
+
+  it('hp.get reports the default-off state', async () => {
+    const v = (await invokeCapability('hp.get')) as {
+      flags: { enabled: boolean };
+      verdict: { code: string };
+      chip: { value: string; engaged: boolean };
+      ring: { present: boolean; aligned: boolean };
+      paint: { canvas: boolean; gpuMode: string };
+    };
+    expect(v.flags.enabled).toBe(false);
+    expect(v.verdict.code).toBe('off');
+    expect(v.chip.value).toBe('json · lwc');
+    expect(v.chip.engaged).toBe(false);
+    expect(v.ring.present).toBe(false);
+    expect(v.ring.aligned).toBe(false);
+    expect(typeof v.paint.gpuMode).toBe('string');
+  });
+
+  it('hp.get: the kill switch wins over enabled', async () => {
+    setHpEnabled(true);
+    setHpDisabled(true);
+    const v = (await invokeCapability('hp.get')) as {
+      verdict: { code: string };
+      chip: { statusLabel: string };
+      flags: { killSwitch: boolean };
+    };
+    expect(v.flags.killSwitch).toBe(true);
+    expect(v.verdict.code).toBe('kill');
+    expect(v.chip.statusLabel).toBe('Kill switch');
+  });
+
+  it('hp.get: opt-in without a wire reports the engaged rung, never "off"', async () => {
+    setHpEnabled(true);
+    const v = (await invokeCapability('hp.get')) as {
+      flags: { enabled: boolean };
+      chip: { engaged: boolean; value: string; rung: number };
+      verdict: { code: string; message: string };
+      wire: { started: boolean };
+      isolation: { isolated: boolean; sab: boolean };
+    };
+    expect(v.flags.enabled).toBe(true);
+    expect(v.chip.engaged).toBe(true);
+    expect(v.chip.value.startsWith('hp ·')).toBe(true);
+    expect(v.wire.started).toBe(false);
+    // No ring exists before a wire client builds it; how the verdict words
+    // that depends on this runtime's isolation/SAB probe.
+    expect(['awaiting', 'copy', 'fallback', 'degraded']).toContain(v.verdict.code);
+    expect(v.verdict.message.length).toBeGreaterThan(10);
+  });
+
+  it('hp.sample clamps the window and returns a liveness envelope', async () => {
+    setHpEnabled(true);
+    const s = (await invokeCapability('hp.sample', { windowMs: 50 })) as {
+      windowMs: number;
+      elapsedMs: number;
+      frames: number | null;
+      fps: number | null;
+      ring: { presentAtStart: boolean; presentAtEnd: boolean; seqDelta: number | null };
+      chart: { barsDelta: number; tailDeltaSec: number };
+      note: string | null;
+    };
+    expect(s.windowMs).toBe(100); // floor — 50 was clamped up
+    expect(s.elapsedMs).toBeGreaterThanOrEqual(90);
+    expect(s.ring.presentAtStart).toBe(false);
+    expect(s.ring.seqDelta).toBeNull();
+    expect(typeof s.chart.barsDelta).toBe('number');
+    expect(s.note === null || typeof s.note === 'string').toBe(true);
+    expect(s.fps === null || s.fps >= 0).toBe(true);
+    expect(s.frames === null || typeof s.frames === 'number').toBe(true);
   });
 });

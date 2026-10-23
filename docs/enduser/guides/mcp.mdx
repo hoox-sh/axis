@@ -176,6 +176,7 @@ Pass these ids to **`app_invoke`** as `capability`, with a JSON `payload`.
 | Settings | `settings.get` / `set` |
 | Engine | `engine.get` / `series` (read the engine's own series bounds + staleness) · `engine.tick` / `repair` (force a drive tick / stale-series repair) |
 | Stream | `stream.get` (route, engine socket, subscriptions, feed chips) · `stream.reset` (drop socket + subscriptions, probes a re-subscribe) |
+| HP | `hp.get` (flags, isolation probe, rung chip, hot-ring alignment, GPU overlay state + verdict) · `hp.sample` (windowed liveness: ring seq delta, frame cadence, chart append progress) |
 | Status | `status.get` |
 
 `app_set` paths (anything else is `PATH_DENIED`): `symbol`, `interval`, `source`, `engine`, `exchange`, `theme`, `chartType`, `uiScale`, `live.active`, `live.preferAfterLoad`, `editor.doc`, `editor.open`, `watchlist.open`.
