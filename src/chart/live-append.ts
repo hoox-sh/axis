@@ -46,6 +46,7 @@
 
 import { appendBar, sliceToChartWindow, store, type BarAppendResult } from '../store';
 import { getManager, setDataToChart } from './manager-access';
+import { notePaintRequest } from './paint-latency';
 import type { Bar } from '../store/types';
 import { intervalToSec } from '../data/bars-gaps';
 import { copyOutTail } from '../hp/paint/copy-out-lwc';
@@ -66,6 +67,10 @@ import type { HotBuffer } from '../hp/memory/hot-buffer';
 export function appendLiveBar(bar: Bar): BarAppendResult {
   const result = appendBar(bar);
   if (result === 'ignored') return result;
+
+  // Measurement only: stamp the arrival before any paint work so the rAF
+  // callback (armed on the first tick of the frame) reports tick → frame.
+  notePaintRequest();
 
   const manager = getManager();
   if (!manager) return result;

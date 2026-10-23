@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "tests"
-description: "tests contains alerts-engine.test.ts, alerts-form.test.ts, alerts-format.test.ts, and 306 more files."
+description: "tests contains alerts-engine.test.ts, alerts-form.test.ts, alerts-format.test.ts, and 307 more files."
 resource: "tests"
 tags: [code, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-23T13:51:13Z
+  at: 2026-10-23T16:59:57Z
 sources:
   - id: tree
     resource: "tests"
@@ -187,6 +187,7 @@ okf_lock: generated
 * `open-script-source.test.ts`
 * `optimize-space.test.ts`
 * `overlay-sync.test.ts`
+* `paint-latency.test.ts`
 * `palette-bridge.test.ts`
 * `pane-badge.test.ts`
 * `pane-manager.test.ts`

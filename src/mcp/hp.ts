@@ -34,6 +34,7 @@ import { isolationProbe } from '../hp/capabilities';
 import { hpGpuMode, hpSabMode, isHpDisabled, isHpEnabled } from '../hp/feature-flag';
 import { hpChip } from '../hp/hud';
 import { copyOutTail } from '../hp/paint/copy-out-lwc';
+import { paintLatencyStats, type PaintLatencyStats } from '../chart/paint-latency';
 import { getLiveHotBuffer, streamWireState } from '../streams/stream-live';
 import { store } from '../store';
 
@@ -83,6 +84,8 @@ export type HpView = {
     painting: boolean | null;
     width: number;
     height: number;
+    /** Applied live tick → first frame that can show it (plan §14.2). */
+    latency: PaintLatencyStats;
   };
   verdict: { code: HpVerdictCode; message: string };
 };
@@ -168,13 +171,14 @@ function ringView(): HpRingView {
 /** Overlay canvas DOM state — the honest "is GL painting right now" read. */
 function paintView(): HpView['paint'] {
   const gpuMode = hpGpuMode();
+  const latency = paintLatencyStats();
   const hasDom = typeof document !== 'undefined' && typeof document.querySelector === 'function';
   if (!hasDom) {
-    return { gpuMode, canvas: false, painting: null, width: 0, height: 0 };
+    return { gpuMode, canvas: false, painting: null, width: 0, height: 0, latency };
   }
   const el = document.querySelector('canvas[data-axis-gpu-overlay="1"]');
   if (!el || (el as { tagName?: string }).tagName !== 'CANVAS') {
-    return { gpuMode, canvas: false, painting: null, width: 0, height: 0 };
+    return { gpuMode, canvas: false, painting: null, width: 0, height: 0, latency };
   }
   const canvas = el as HTMLCanvasElement;
   const painting = canvas.style.display !== 'none';
@@ -184,6 +188,7 @@ function paintView(): HpView['paint'] {
     painting,
     width: canvas.clientWidth,
     height: canvas.clientHeight,
+    latency,
   };
 }
 
@@ -380,12 +385,16 @@ export type HpSampleView = {
     presentAtEnd: boolean;
     /** Ring publishes (seq advances) during the window. */
     seqDelta: number | null;
-    closedUptoDelta: number | null;
+    /** Engine `closed_upto` progress in seconds — the stamp is a time, not
+     * an index; `0` when the engine omits it. */
+    closedUptoTimeDelta: number | null;
     alignedAtStart: boolean;
     alignedAtEnd: boolean;
     seriesLenAtEnd: number | null;
   };
   chart: { barsDelta: number; tailDeltaSec: number };
+  /** Applied tick → frame, over the rolling paint-latency window. */
+  paint: PaintLatencyStats;
   note: string | null;
 };
 
@@ -431,7 +440,7 @@ export async function hpSampleView(payload: unknown = {}): Promise<HpSampleView>
       presentAtStart: before.ring.present,
       presentAtEnd: after.ring.present,
       seqDelta,
-      closedUptoDelta: closedDelta,
+      closedUptoTimeDelta: closedDelta,
       alignedAtStart: before.ring.aligned,
       alignedAtEnd: after.ring.aligned,
       seriesLenAtEnd: after.ring.seriesLen,
@@ -440,6 +449,7 @@ export async function hpSampleView(payload: unknown = {}): Promise<HpSampleView>
       barsDelta: after.bars - before.bars,
       tailDeltaSec: after.tail - before.tail,
     },
+    paint: paintLatencyStats(),
     note,
   };
 }
