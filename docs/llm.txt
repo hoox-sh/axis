@@ -3347,7 +3347,7 @@ Live tab (app_session_status → connected):
 “Load BTCUSDT 1h and tell me bar count and last close.” (chart.load then app_get bars)
 “Put this indicator in the editor and run it.” (editor.set + editor.run)
 “Open the alerts panel and list alerts.” (panels.set + alerts.list)
-“Screenshot the panes.” (chart.screenshot — PNG base64)
+“Screenshot the panes.” (chart.screenshot — PNG base64; includes the HP GPU overlay when the rung paints)
 “My chart seems a bar behind — what's wrong?” (chart.lag — the verdict
 compares the chart tail to the venue clock, the tick, and the engine series)
 “Where are the holes in my bars?” (chart.bars — bounded tail/head rows +

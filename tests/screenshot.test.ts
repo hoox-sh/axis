@@ -10,6 +10,7 @@ import {
   loadScreenshotOptions,
   saveScreenshotOptions,
   screenshotFilename,
+  overlayPlacement,
   stackLayout,
   watermarkText,
 } from '../src/chart/screenshot';
@@ -127,5 +128,40 @@ describe('screenshot commands', () => {
 describe('screenshot icon', () => {
   it('maps to Camera', () => {
     expect(ICON_MAP.screenshot).toBe('Camera');
+  });
+});
+
+
+describe('overlayPlacement (HP GPU canvas in screenshots)', () => {
+  it('maps the overlay CSS rect 1:1 into a CSS-sized screenshot', () => {
+    const p = overlayPlacement(
+      { width: 900, height: 600 },
+      { left: 100, top: 50, width: 900 },
+      { left: 100, top: 50, width: 800, height: 560 },
+    );
+    expect(p).toEqual({ x: 0, y: 0, w: 800, h: 560 });
+  });
+
+  it('scales offsets and size with the screenshot pixel ratio', () => {
+    const p = overlayPlacement(
+      { width: 1800, height: 1200 },
+      { left: 100, top: 50, width: 900 },
+      { left: 110, top: 60, width: 800, height: 560 },
+    );
+    expect(p).toEqual({ x: 20, y: 20, w: 1600, h: 1120 });
+  });
+
+  it('rejects degenerate geometry', () => {
+    const shot = { width: 900, height: 600 };
+    const pane = { left: 0, top: 0, width: 900 };
+    const overlay = { left: 0, top: 0, width: 800, height: 560 };
+    expect(overlayPlacement({ width: 0, height: 600 }, pane, overlay)).toBeNull();
+    expect(overlayPlacement({ width: 900, height: 0 }, pane, overlay)).toBeNull();
+    expect(overlayPlacement(shot, { left: 0, top: 0, width: 0 }, overlay)).toBeNull();
+    expect(overlayPlacement(shot, pane, { ...overlay, width: 0 })).toBeNull();
+    expect(overlayPlacement(shot, pane, { ...overlay, height: 0 })).toBeNull();
+    expect(
+      overlayPlacement(shot, { left: 0, top: 0, width: Number.NaN }, overlay),
+    ).toBeNull();
   });
 });

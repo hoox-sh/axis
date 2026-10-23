@@ -142,14 +142,9 @@ function makeCanvas(width: number, height: number): HTMLCanvasElement | null {
   return c;
 }
 
-function stackCanvases(
-  canvases: HTMLCanvasElement[],
-  bg: string,
-): HTMLCanvasElement | null {
+function stackCanvases(canvases: HTMLCanvasElement[], bg: string): HTMLCanvasElement | null {
   if (!canvases.length) return null;
-  const layout = stackLayout(
-    canvases.map((c) => ({ width: c.width, height: c.height })),
-  );
+  const layout = stackLayout(canvases.map((c) => ({ width: c.width, height: c.height })));
   const out = makeCanvas(layout.width, layout.height);
   const ctx = out?.getContext('2d');
   if (!out || !ctx) return canvases[0] ?? null;
@@ -248,6 +243,89 @@ function paneHost(paneId: string): HTMLElement | null {
   }
 }
 
+/**
+ * Place a CSS-rect overlay inside a pane screenshot (device-px space).
+ *
+ * The GPU canvas is positioned against the pane's border box; LWC's
+ * `takeScreenshot` composes at canvas resolution, so both the offset and the
+ * size scale with `shot.width / pane.width`.
+ */
+export function overlayPlacement(
+  shot: { width: number; height: number },
+  pane: { left: number; top: number; width: number },
+  overlay: { left: number; top: number; width: number; height: number },
+): { x: number; y: number; w: number; h: number } | null {
+  if (!(shot.width > 0) || !(shot.height > 0) || !(pane.width > 0)) return null;
+  if (!(overlay.width > 0) || !(overlay.height > 0)) return null;
+  const scale = shot.width / pane.width;
+  if (!Number.isFinite(scale) || scale <= 0) return null;
+  return {
+    x: (overlay.left - pane.left) * scale,
+    y: (overlay.top - pane.top) * scale,
+    w: overlay.width * scale,
+    h: overlay.height * scale,
+  };
+}
+
+/** The HP GPU overlay canvas overlapping a pane, if any (multi-slot safe). */
+function findOverlayCanvas(paneRect: DOMRect): HTMLCanvasElement | null {
+  if (typeof document === 'undefined' || typeof document.querySelectorAll !== 'function') {
+    return null;
+  }
+  let best: HTMLCanvasElement | null = null;
+  let bestArea = 0;
+  for (const el of Array.from(document.querySelectorAll('canvas[data-axis-gpu-overlay="1"]'))) {
+    if (!(el instanceof HTMLCanvasElement)) continue;
+    if (el.style.display === 'none') continue;
+    const r = el.getBoundingClientRect();
+    const w = Math.min(r.right, paneRect.right) - Math.max(r.left, paneRect.left);
+    const h = Math.min(r.bottom, paneRect.bottom) - Math.max(r.top, paneRect.top);
+    const area = Math.max(0, w) * Math.max(0, h);
+    if (area > bestArea) {
+      bestArea = area;
+      best = el;
+    }
+  }
+  return best;
+}
+
+function nextAnimationFrame(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof requestAnimationFrame !== 'function') {
+      resolve();
+      return;
+    }
+    requestAnimationFrame(() => resolve());
+  });
+}
+
+/**
+ * Composite the HP-3 WebGL candle overlay onto a pane screenshot.
+ *
+ * A WebGL drawing buffer is discarded once the frame is composited unless the
+ * context keeps `preserveDrawingBuffer`, so the copy has to run in the frame
+ * the overlay already drew: its rAF tick was registered earlier, so a callback
+ * registered here runs after the draw and before compositing. No overlay on
+ * the pane (HP off, `gpu=auto`, a cleared frame) is a silent no-op.
+ */
+async function paintGpuOverlay(paneId: string, shot: HTMLCanvasElement): Promise<void> {
+  const paneEl = paneHost(paneId);
+  if (!paneEl) return;
+  const paneRect = paneEl.getBoundingClientRect();
+  const canvas = findOverlayCanvas(paneRect);
+  if (!canvas?.width || !canvas.height) return;
+  const placement = overlayPlacement(shot, paneRect, canvas.getBoundingClientRect());
+  if (!placement) return;
+  await nextAnimationFrame();
+  const ctx = shot.getContext('2d');
+  if (!ctx) return;
+  try {
+    ctx.drawImage(canvas, placement.x, placement.y, placement.w, placement.h);
+  } catch {
+    /* a compositing failure must never lose the screenshot */
+  }
+}
+
 async function capturePaneCanvas(
   paneId: string,
   includeDrawings: boolean,
@@ -262,6 +340,9 @@ async function capturePaneCanvas(
     return null;
   }
   if (!shot?.width || !shot.height) return null;
+  // HP-3: the GPU candle overlay is a sibling canvas, not part of LWC's
+  // screenshot — composite it under the drawings so annotations stay on top.
+  await paintGpuOverlay(paneId, shot);
   if (!includeDrawings) return shot;
   const host = paneHost(paneId);
   const svg = host?.querySelector?.('svg.axis-drawing-layer') as SVGSVGElement | null;
@@ -282,12 +363,14 @@ function visiblePaneIds(scope: ScreenshotScope): string[] {
     return price ? [price.id] : visible.slice(0, 1).map((p) => p.id);
   }
   const order = ['price', 'volume'];
-  return [...visible].sort((a, b) => {
-    const ai = order.indexOf(a.id);
-    const bi = order.indexOf(b.id);
-    if (ai >= 0 || bi >= 0) return (ai < 0 ? 99 : ai) - (bi < 0 ? 99 : bi);
-    return 0;
-  }).map((p) => p.id);
+  return [...visible]
+    .sort((a, b) => {
+      const ai = order.indexOf(a.id);
+      const bi = order.indexOf(b.id);
+      if (ai >= 0 || bi >= 0) return (ai < 0 ? 99 : ai) - (bi < 0 ? 99 : bi);
+      return 0;
+    })
+    .map((p) => p.id);
 }
 
 /** Capture the active chart to a canvas using current options. */
