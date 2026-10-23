@@ -25,7 +25,8 @@
  * @module hp/feature-flag
  */
 
-import { getFlag, getItem, removeItem, setItem } from '../utils/storage';
+import { getItem, removeItem, setItem } from '../utils/storage';
+import { createFlagPair } from '../utils/flags';
 
 export const HP_ENABLED_KEY = 'axis.engine.hp.enabled';
 export const HP_DISABLED_KEY = 'axis.engine.hp.disabled';
@@ -36,40 +37,27 @@ export const HP_RUNG_SESSION_KEY = 'axis.hp.rung';
 export type HpGpuMode = 'auto' | 'off' | 'webgl2' | 'webgpu';
 export type HpSabMode = 'auto' | 'off';
 
-let memoryEnabled = false;
-let memoryDisabled = false;
+const hpFlag = createFlagPair({ enabledKey: HP_ENABLED_KEY, disabledKey: HP_DISABLED_KEY });
+
 let memoryGpu: HpGpuMode = 'auto';
 let memorySab: HpSabMode = 'auto';
 
 /** True when HP is opted in and the kill switch is off. */
 export function isHpEnabled(): boolean {
-  if (isHpDisabled()) return false;
-  if (typeof localStorage === 'undefined') return memoryEnabled;
-  return getFlag(HP_ENABLED_KEY);
+  return hpFlag.isEnabled();
 }
 
 /** Kill switch. Wins over {@link isHpEnabled}. */
 export function isHpDisabled(): boolean {
-  if (typeof localStorage === 'undefined') return memoryDisabled;
-  return getFlag(HP_DISABLED_KEY) || memoryDisabled;
+  return hpFlag.isDisabled();
 }
 
 export function setHpEnabled(on: boolean): void {
-  memoryEnabled = on;
-  memoryDisabled = !on;
-  if (on) {
-    setItem(HP_ENABLED_KEY, '1');
-    removeItem(HP_DISABLED_KEY);
-  } else {
-    removeItem(HP_ENABLED_KEY);
-    setItem(HP_DISABLED_KEY, '1');
-  }
+  hpFlag.setEnabled(on);
 }
 
 export function setHpDisabled(on: boolean): void {
-  memoryDisabled = on;
-  if (on) setItem(HP_DISABLED_KEY, '1');
-  else removeItem(HP_DISABLED_KEY);
+  hpFlag.setDisabled(on);
 }
 
 export function hpGpuMode(): HpGpuMode {
@@ -98,12 +86,9 @@ export function setHpSabMode(mode: HpSabMode): void {
 
 /** Reset in-memory + storage flags (tests). */
 export function resetHpFlags(): void {
-  memoryEnabled = false;
-  memoryDisabled = false;
+  hpFlag.reset();
   memoryGpu = 'auto';
   memorySab = 'auto';
-  removeItem(HP_ENABLED_KEY);
-  removeItem(HP_DISABLED_KEY);
   removeItem(HP_GPU_KEY);
   removeItem(HP_SAB_KEY);
   try {

@@ -28,36 +28,21 @@
  * @module engine/feature-flag
  */
 
-import { getFlag, removeItem, setItem } from '../utils/storage';
+import { createFlagPair } from '../utils/flags';
 
 const FLAG_KEY = 'axis.engine.stream.enabled';
 const DISABLE_KEY = 'axis.engine.stream.disabled';
 
-/** In-memory fallback when localStorage is unavailable (tests, SSR). */
-let memoryFlag = false;
-let memoryDisabled = false;
-
-function readFlag(): boolean {
-  if (typeof localStorage === 'undefined') return memoryFlag;
-  return getFlag(FLAG_KEY);
-}
+const streamFlag = createFlagPair({ enabledKey: FLAG_KEY, disabledKey: DISABLE_KEY });
 
 /** True when the new stream engine path is enabled for this tab. */
 export function isStreamEngineEnabled(): boolean {
-  return readFlag();
+  return streamFlag.isEnabled();
 }
 
 /** Enable or disable the stream engine path for this tab. */
 export function setStreamEngineEnabled(on: boolean): void {
-  memoryFlag = on;
-  memoryDisabled = !on;
-  if (on) {
-    setItem(FLAG_KEY, '1');
-    removeItem(DISABLE_KEY);
-  } else {
-    removeItem(FLAG_KEY);
-    setItem(DISABLE_KEY, '1');
-  }
+  streamFlag.setEnabled(on);
 }
 
 /**
@@ -65,8 +50,7 @@ export function setStreamEngineEnabled(on: boolean): void {
  * Opt-out wins over everything (kill switch).
  */
 export function isStreamEngineDisabled(): boolean {
-  if (typeof localStorage === 'undefined') return memoryDisabled;
-  return getFlag(DISABLE_KEY) || memoryDisabled;
+  return streamFlag.isDisabled();
 }
 
 export const STREAM_ENGINE_FLAG_KEY = FLAG_KEY;

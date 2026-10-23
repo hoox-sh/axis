@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/utils"
-description: "src/utils contains bounded-map.ts, emitter.ts, errors.ts, and 3 more files."
+description: "src/utils contains bounded-map.ts, emitter.ts, errors.ts, and 4 more files."
 resource: "src/utils"
 tags: [code, utils]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-23T19:03:28Z
+  at: 2026-10-23T19:08:46Z
 sources:
   - id: tree
     resource: "src/utils"
@@ -22,6 +22,7 @@ okf_lock: generated
 * `emitter.ts` — Emitter, Singleton, Unsubscribe, createEmitter, createSingleton
 * `errors.ts` — errMessage, isAbortError, isAbortLike, isTimeoutLike
 * `fetch-timeout.ts` — AbortBudget, DEFAULT_FETCH_TIMEOUT_MS, FetchWithTimeoutOpts, combineAbortSignals, fetchWithTimeout, linkedAbortBudget, normalizeTimeoutMs, signalOrTimeout
+* `flags.ts` — FlagPair, FlagPairOptions, createFlagPair
 * `storage.ts` — getFlag, getItem, getJson, removeItem, setFlag, setItem, setJson, storageAvailable
 * `throttle.ts` — Throttle, createThrottle
 
