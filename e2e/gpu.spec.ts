@@ -27,6 +27,12 @@
  * tracking the store as mock-poll opens new forming bars; both merge orders
  * (snapshot-first or venue-tick-first) converge to the same count.
  *
+ * The cold-paging step shrinks the ring to 30 (the production shape: a 501
+ * snapshot on a 9 500-bar chart) and asserts the cold viewport repaints
+ * *without* zooming — first via the pixel-column downsample of the chart
+ * window, then via the paged exact fill once the ingest worker replaces
+ * the page slot. The overlay must never clear and never draw shifted.
+ *
  * Run: `bunx playwright test e2e/gpu.spec.ts`
  */
 import type { AddressInfo } from 'node:net';
@@ -150,8 +156,9 @@ test.beforeAll(async () => {
       // The production shape: the engine's live snapshot (501 in the wild)
       // is far shorter than the chart window (thousands of REST bars). Shrink
       // the ring below the chart count on demand so the spec can assert the
-      // overlay clears (never draws shifted) and then paints once the viewport
-      // moves inside the tail window.
+      // cold viewport repaints without zooming (downsample, then the paged
+      // exact fill — never a clear, never a shifted frame) and paints the
+      // tail window once the viewport moves inside it.
       shrinkRing = () => {
         baseCount = SHRUNK_BARS;
         sendFull(id, slotNow(), countFor(slotNow()));
@@ -317,10 +324,13 @@ test.describe('GPU candle overlay @gpu', () => {
     // Production shape: the engine's live snapshot is far shorter than the
     // chart window (a 501-bar snapshot on a 9 500-bar chart). Shrink the ring
     // below the visible span: the viewport then starts in colder history than
-    // the ring, so the overlay must clear — never draw a shifted frame.
+    // the ring. Cold paging (§9.2) must repaint it *without* zooming — first
+    // the pixel-column downsample of the chart window (same frame the ring
+    // re-seeds), then the paged exact fill once the ingest worker replaces
+    // the page slot. Clearing or a shifted frame fails the poll below.
     expect(shrinkRing).not.toBeNull();
     expect(shrinkRing?.()).toBe(SHRUNK_BARS);
-    await expect.poll(nonzeroPixels, { timeout: 10_000 }).toBe(0);
+    await expect.poll(nonzeroPixels, { timeout: 15_000 }).toBeGreaterThan(0);
 
     // Zoom into the tail (wheel anchored right): the viewport now sits inside
     // the ring window, so the placement offset must paint the right candles.
