@@ -40,7 +40,7 @@ import { Redesign2BarCloseVerifier, compareClosedOhlcv } from '../engine/bar-clo
 import { currentSeriesKey, pairFormSymbol } from '../engine/market-identity';
 import { pyneMarket } from '../data/provider';
 import { StreamLiveWire, StreamFallbackError, type WireClient } from '../engine/live-wire';
-import { createLiveWsClient } from '../hp/workers/host';
+import { createLiveWsClient, IngestHostClient } from '../hp/workers/host';
 import { routeEngineRun } from '../engine/router';
 import { getCachedEngineCapabilities } from '../engines/catalog';
 import type { DataSeriesKey } from '../engines/data-sessions';
@@ -58,7 +58,7 @@ import {
   sliceToChartWindow,
   store,
 } from '../store';
-import { appendLiveBar } from '../chart/live-append';
+import { appendLiveBar, startHotRingPaint } from '../chart/live-append';
 import type { Bar } from '../store/types';
 import type { Indicator } from '../store/types';
 import { BoundedMap } from '../utils/bounded-map';
@@ -87,7 +87,11 @@ function toBarTime(bars: Bar[]): number {
 
 /** Exchange id (canonical) of the chart's current series. */
 function chartExchange(): string {
-  return String(store.exchange || 'binance').trim().toLowerCase() || 'binance';
+  return (
+    String(store.exchange || 'binance')
+      .trim()
+      .toLowerCase() || 'binance'
+  );
 }
 
 /** Window the engine series is subscribed with (bars). */
@@ -206,6 +210,18 @@ function continuesChartTail(bars: Bar[]): boolean {
 
 let wire: StreamLiveWire | null = null;
 let wireCred = '';
+/** HP-2: rAF sampler over the ingest worker's hot SAB ring (null when off). */
+let stopHotRingPaint: (() => void) | null = null;
+
+function stopRingPaint(): void {
+  if (!stopHotRingPaint) return;
+  try {
+    stopHotRingPaint();
+  } catch {
+    /* teardown must never break the caller */
+  }
+  stopHotRingPaint = null;
+}
 /**
  * (engine + series) → the bar-close verifier for that series.
  *
@@ -231,14 +247,24 @@ function buildWire(): StreamLiveWire {
   // first frame is `auth`. Read the key the same way every key-gated REST call
   // does, so a vault-restored key reaches the socket too.
   const authToken = String(cfg?.apiKey || '').trim() || undefined;
-  const client = createLiveWsClient({ endpoint, authToken }) as unknown as WireClient;
+  stopRingPaint();
+  const rawClient = createLiveWsClient({ endpoint, authToken });
+  // HP-2: when the client runs the hot ring (flag on + isolated + SAB),
+  // bars arrive through the shared memory instead of the frame payload —
+  // paint them from the rAF copy-out. Flag-off / non-isolated clients have
+  // no ring and keep the frame path unchanged.
+  if (rawClient instanceof IngestHostClient && rawClient.hotBuffer) {
+    stopHotRingPaint = startHotRingPaint(rawClient.hotBuffer);
+  }
+  const client = rawClient as unknown as WireClient;
   return new StreamLiveWire(
     client,
     {
       onStatus: (subId, status, extra) => {
         if (subId.startsWith('series:')) {
           const key = subId.slice('series:'.length);
-          const clearStale = status === 'connecting' || status === 'live' || status === 'datafeed-loading';
+          const clearStale =
+            status === 'connecting' || status === 'live' || status === 'datafeed-loading';
           setFeedStatus(key, status, {
             ...extra,
             ...(clearStale && extra?.message === undefined ? { message: '' } : {}),
@@ -307,7 +333,10 @@ function buildWire(): StreamLiveWire {
             if (out.verified === 'venue' || out.verified === 'proxy') {
               setFeedStatus(key, 'live', { verified: out.verified });
             } else {
-              setFeedStatus(key, 'degraded', { message: 'unverified close', verified: out.verified });
+              setFeedStatus(key, 'degraded', {
+                message: 'unverified close',
+                verified: out.verified,
+              });
             }
           } catch {
             setFeedStatus(key, 'degraded', { message: 'unverified close', verified: 'none' });
@@ -361,13 +390,19 @@ export function resetStreamWire(): {
   cooledDown: boolean;
 } {
   if (!wire) return { hadWire: false, wasOpen: false, unsubscribed: 0, cooledDown: false };
+  stopRingPaint();
   const target = wire;
   wire = null;
   wireCred = '';
   let out = { hadWire: true, wasOpen: false, unsubscribed: 0, cooledDown: false };
   try {
     const r = target.reset();
-    out = { hadWire: true, wasOpen: r.wasOpen, unsubscribed: r.unsubscribed, cooledDown: r.cooledDown };
+    out = {
+      hadWire: true,
+      wasOpen: r.wasOpen,
+      unsubscribed: r.unsubscribed,
+      cooledDown: r.cooledDown,
+    };
   } catch {
     /* reset must never break the caller */
   }
@@ -618,26 +653,41 @@ export async function verifyClosedBar(
   const query = `symbol=${encodeURIComponent(input.symbol)}&interval=${encodeURIComponent(input.interval)}&startTime=${input.time * 1000}&limit=1`;
   const fetchKlines: KlineFetcher =
     deps?.fetchKlines ??
-    ((opts) => import('../data/binance-http').then((m) => m.fetchBinanceJson(opts as never) as Promise<unknown>));
-  const readRow = (json: unknown): { open: number; high: number; low: number; close: number; volume: number } | null => {
+    ((opts) =>
+      import('../data/binance-http').then(
+        (m) => m.fetchBinanceJson(opts as never) as Promise<unknown>,
+      ));
+  const readRow = (
+    json: unknown,
+  ): { open: number; high: number; low: number; close: number; volume: number } | null => {
     const rows = Array.isArray(json) ? json : (json as { data?: unknown })?.data;
     if (!Array.isArray(rows)) return null;
     const row = rows.find((r) => Array.isArray(r) && Number(r[0]) === input.time * 1000) ?? rows[0];
     if (!Array.isArray(row) || row.length < 6) return null;
-    const [ , o, h, l, c, v] = row.map(Number);
+    const [, o, h, l, c, v] = row.map(Number);
     if (![o, h, l, c, v].every(Number.isFinite)) return null;
     return { open: o, high: h, low: l, close: c, volume: v };
   };
   // Tier 1 — direct venue REST (no proxy involved).
   try {
-    const row = readRow(await fetchKlines({ path: 'klines', query, skipSigned: true, skipWorkerProxy: true, signal: input.signal }));
+    const row = readRow(
+      await fetchKlines({
+        path: 'klines',
+        query,
+        skipSigned: true,
+        skipWorkerProxy: true,
+        signal: input.signal,
+      }),
+    );
     if (row) return { result: compareClosedOhlcv(input.engineOhlcv, row), verified: 'venue' };
   } catch {
     /* fall through */
   }
   // Tier 2 — Worker market proxy.
   try {
-    const row = readRow(await fetchKlines({ path: 'klines', query, skipSigned: true, signal: input.signal }));
+    const row = readRow(
+      await fetchKlines({ path: 'klines', query, skipSigned: true, signal: input.signal }),
+    );
     if (row) return { result: compareClosedOhlcv(input.engineOhlcv, row), verified: 'proxy' };
   } catch {
     /* fall through */

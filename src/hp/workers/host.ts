@@ -31,7 +31,9 @@ import {
   type Redesign2WsClientOptions,
 } from '../../engine/ws-client';
 import type { WireClient, WireFrame } from '../../engine/live-wire';
-import { isHpEnabled } from '../feature-flag';
+import { isolationProbe } from '../capabilities';
+import { hpSabMode, isHpEnabled } from '../feature-flag';
+import { allocateHotBuffer, type HotBuffer } from '../memory/hot-buffer';
 import type { HostToIngest, IngestToHost } from './protocol';
 
 export type IngestWorkerTransport = {
@@ -86,6 +88,9 @@ export class IngestHostClient implements WireClient {
   private readonly reconnectHandlers = new Set<() => void>();
   readonly url: string;
   private readonly authToken?: string;
+  /** HP-2 hot ring reader (main side); `null` until the SAB is allocated. */
+  private hot: HotBuffer | null = null;
+  private hotActive = false;
 
   onFrame: ((frame: WireFrame) => void) | undefined;
   onStatus?: (status: 'connecting' | 'open' | 'closed' | 'error') => void;
@@ -98,6 +103,16 @@ export class IngestHostClient implements WireClient {
 
   get isOpen(): boolean {
     return this.open;
+  }
+
+  /** Hot-ring reader the rAF copy-out samples (`null` when not isolated / off). */
+  get hotBuffer(): HotBuffer | null {
+    return this.hot;
+  }
+
+  /** True once the ingest worker confirmed the ring is live. */
+  get hotRingActive(): boolean {
+    return this.hotActive;
   }
 
   get urlValue(): string {
@@ -124,6 +139,18 @@ export class IngestHostClient implements WireClient {
 
   private post(msg: HostToIngest): void {
     this.ensureWorker().postMessage(msg);
+  }
+
+  /**
+   * HP-2: allocate the hot SAB once per client, when the tab is isolated
+   * and the `sab` flag allows it. `allocateHotBuffer` clamps the session to
+   * rung 1 on OOM, so a refused allocation degrades to the frame path.
+   */
+  private ensureHot(): void {
+    if (this.hot) return;
+    if (hpSabMode() === 'off') return;
+    if (!isolationProbe().sab) return;
+    this.hot = allocateHotBuffer();
   }
 
   private dispatchFrames(frames: Redesign2Frame[]): void {
@@ -179,6 +206,11 @@ export class IngestHostClient implements WireClient {
       this.dispatchFrames(msg.frames);
       return;
     }
+    if (msg.type === 'hot') {
+      this.hotActive = msg.active;
+      if (!msg.active) this.hot = null;
+      return;
+    }
     if (msg.type === 'pong') return;
     if (msg.type === 'malformed') this.onMalformed?.(msg.reason);
   }
@@ -186,15 +218,23 @@ export class IngestHostClient implements WireClient {
   async connect(): Promise<void> {
     this.stopped = false;
     if (this.open) return;
+    this.ensureHot();
     return new Promise((resolve, reject) => {
       this.connectWaiters.push({ resolve, reject });
-      this.post({ type: 'connect', url: this.url, authToken: this.authToken });
+      this.post({
+        type: 'connect',
+        url: this.url,
+        authToken: this.authToken,
+        ...(this.hot ? { hotSab: this.hot.sab } : {}),
+      });
     });
   }
 
   disconnect(): void {
     this.stopped = true;
     this.open = false;
+    this.hot = null;
+    this.hotActive = false;
     this.dropPending(new Error('IngestHostClient stopped'));
     const waiters = this.connectWaiters;
     this.connectWaiters = [];
@@ -222,7 +262,12 @@ export class IngestHostClient implements WireClient {
     id: string,
     kind: 'series' | 'script',
     meta: SeriesMeta | Record<string, unknown>,
-    opts?: { script?: string; inputs?: Record<string, unknown>; libraries?: unknown; mode?: string },
+    opts?: {
+      script?: string;
+      inputs?: Record<string, unknown>;
+      libraries?: unknown;
+      mode?: string;
+    },
   ): void {
     this.send({
       type: 'subscribe',
@@ -294,7 +339,9 @@ export class IngestHostClient implements WireClient {
  * Live `/ws/live` client. HP off (or no Worker) keeps {@link Redesign2WsClient}
  * byte-for-byte, including main-thread `JSON.parse`.
  */
-export function createLiveWsClient(options: Redesign2WsClientOptions): Redesign2WsClient | IngestHostClient {
+export function createLiveWsClient(
+  options: Redesign2WsClientOptions,
+): Redesign2WsClient | IngestHostClient {
   if (isHpEnabled() && ingestWorkerAvailable()) return new IngestHostClient(options);
   return new Redesign2WsClient(options);
 }

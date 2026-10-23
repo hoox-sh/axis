@@ -7,7 +7,7 @@ tags: [chart, code]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-21T23:35:56Z
+  at: 2026-10-23T11:10:09Z
 sources:
   - id: tree
     resource: "src/chart"
@@ -39,7 +39,7 @@ okf_lock: generated
 * `layout-recipes.ts` — LAYOUT_RECIPES, LayoutRecipe, LayoutRecipeSeed, LayoutRecipeSlotSpec, MAJOR_SYMBOLS, applyLayoutRecipe, findLayoutRecipe, recipeToLayout, resolveRecipeSlots
 * `layout.ts` — CHART_GRID_MODES, ChartGridMode, ChartLayoutState, ChartSlot, SavedChartLayout, createChartSlot, defaultChartLayout, findSlot, gridClassForMode, isChartGridMode, normalizeChartLayout, slotCountForMode
 * `line-break-primitive.ts` — LineBreakOverlayPoint, LineBreakPrimitive, LineBreakPrimitiveOpts, lineBreakPointsSig
-* `live-append.ts` — appendLiveBar
+* `live-append.ts` — HOT_RING_PAINT_TAIL, appendLiveBar, startHotRingPaint
 * `manager-access.ts` — SetDataToChartOpts, applyDebugPinsToChart, applyPriceScaleDecimals, clearScriptPaneLayer, clearScriptPaneLayers, ensurePriceSeries, ensureScriptPaneLayer, getActiveDrawingLayer, getDrawingLayer, getManager, jumpToDebugPin, ohlcvPaintSig
 * `onchain-events.ts` — ONCHAIN_EVENTS_SERIES_KEY, OnchainEventInput, OnchainEventMarker, applyOnchainEventMarkers, clearOnchainEventMarkers, eventsToMarkers
 * `onchain-overlay.ts` — ONCHAIN_PRICE_SCALE_ID, ONCHAIN_SERIES_PREFIX, OnchainLineSpec, applyOnchainOverlays, clearOnchainOverlays
@@ -66,6 +66,9 @@ okf_lock: generated
 * [src/chart/drawings/tools](/code/src/chart/drawings/tools.md)
 * [src/data](/code/src/data.md)
 * [src/editor](/code/src/editor.md)
+* [src/hp/memory](/code/src/hp/memory.md)
+* [src/hp/paint](/code/src/hp/paint.md)
+* [src/hp/sync](/code/src/hp/sync.md)
 * [src/indicators](/code/src/indicators.md)
 * [src/onchain](/code/src/onchain.md)
 * [src/plugins](/code/src/plugins.md)

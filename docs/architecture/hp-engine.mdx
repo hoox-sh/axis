@@ -107,7 +107,8 @@ Workers Manager → **Chart plane** shows the selected rung in plan format: `hp 
 | PR 7 / 7b PYNE AXB1 emit, Worker binary relay | landed (VPS deploy is a separate operator step) |
 | PR 8 WebGL2 renderer + probe seam | landed as library; canvas wiring pending |
 | PR 9 docs, playbook, HUD chip | this page |
-| HP-2 chart apply + GPU canvas wiring | deferred to a producer PR |
+| HP-2 SAB hot ring → chart wiring | landed — opt-in producer: ingest writes the ring, the chart samples it on rAF through `appendLiveBar` |
+| GPU canvas wiring (ChartHost stacked canvas, render loop) | still deferred — plan §14.2 gates it on GPU parity tests |
 | PR 10 default flip | not yet — needs production measurement (tick-to-paint ms, SAB OOM rate) |
 
 ## Tests

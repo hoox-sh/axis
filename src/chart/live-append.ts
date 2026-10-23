@@ -47,6 +47,10 @@
 import { appendBar, sliceToChartWindow, store, type BarAppendResult } from '../store';
 import { getManager, setDataToChart } from './manager-access';
 import type { Bar } from '../store/types';
+import { intervalToSec } from '../data/bars-gaps';
+import { copyOutTail } from '../hp/paint/copy-out-lwc';
+import { subscribeGeneration, type SubscribeGenerationOpts } from '../hp/sync/raf-poll';
+import type { HotBuffer } from '../hp/memory/hot-buffer';
 
 /**
  * Append one live bar to the chart window and paint it.
@@ -88,4 +92,65 @@ export function appendLiveBar(bar: Bar): BarAppendResult {
     /* live paint is best-effort — the next flush repairs it */
   }
   return result;
+}
+
+/** How many hot-ring bars the sampler inspects per published generation. */
+export const HOT_RING_PAINT_TAIL = 32;
+
+/**
+ * HP-2 paint pump: sample the hot SAB ring once per animation frame and
+ * feed its published tail through {@link appendLiveBar} (§6.5 — LWC stays
+ * the painter and reads a *completed* generation via copy-out; a torn
+ * sample is discarded and retried inside `copyOutTail`).
+ *
+ * The ingest worker is the ring's single writer, so these bars reach the
+ * chart without crossing `postMessage`. Only the **contiguous** tail run
+ * that continues the store's last bar (same slot, or exactly one interval
+ * beyond it) is appended — a ring that jumped (suspended tab, resume
+ * replay) is left to the snapshot/repair path, exactly like a
+ * non-contiguous wire delta. Everything the store rejects is skipped by
+ * the same `appendBar` verdicts the frame path uses.
+ */
+export function startHotRingPaint(buffer: HotBuffer, opts?: SubscribeGenerationOpts): () => void {
+  return subscribeGeneration(
+    buffer.control,
+    () => {
+      const out = copyOutTail(buffer, HOT_RING_PAINT_TAIL);
+      if (!out?.bars.length) return;
+      for (const bar of contiguousTailRun(out.bars)) appendLiveBar(bar);
+    },
+    opts,
+  );
+}
+
+/**
+ * The newest-first contiguous run of `bars` that continues the store tail:
+ * the last bar must land on the tail (forming update) or exactly one
+ * interval beyond it (new candle), and every bar before it must step back
+ * by exactly one interval. Older bars are snapshot territory, not tick
+ * territory.
+ */
+function contiguousTailRun(bars: Bar[]): Bar[] {
+  const step = intervalToSec(String(store.interval || '1m'));
+  const tail = store.bars.length ? (store.bars[store.bars.length - 1]?.time ?? 0) : 0;
+  const run: Bar[] = [];
+  let cursor = 0;
+  for (let i = bars.length - 1; i >= 0; i--) {
+    const bar = bars[i];
+    if (!bar) continue;
+    if (!cursor) {
+      if (!tail || bar.time === tail || (step > 0 && bar.time === tail + step)) {
+        run.unshift(bar);
+        cursor = bar.time;
+      }
+      continue;
+    }
+    if (step > 0 && bar.time === cursor - step) {
+      run.unshift(bar);
+      cursor = bar.time;
+      continue;
+    }
+    break;
+  }
+  return run;
 }

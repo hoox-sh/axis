@@ -25,7 +25,11 @@
  * @module hp/workers/ingest.worker
  */
 
+import { HOT_CAP } from '../axb1/constants';
+import { HotBuffer } from '../memory/hot-buffer';
+import { computeHotLayout } from '../memory/layout';
 import { decodeInbound, IngestCursorTable, TipCoalescer } from './ingest-core';
+import { HotRingWriter, routeThroughRing } from './hot-ring-writer';
 import {
   INGEST_CONNECT_TIMEOUT_MS,
   INGEST_HEARTBEAT_MS,
@@ -53,6 +57,8 @@ let pongTimer: ReturnType<typeof setTimeout> | null = null;
 let connectTimer: ReturnType<typeof setTimeout> | null = null;
 let liveUrl = '';
 let authToken: string | undefined;
+/** Hot SAB ring (HP-2): bound by the first series snapshot that arrives. */
+let ring: HotRingWriter | null = null;
 
 const coalescer = new TipCoalescer((frames) => {
   scope.postMessage({ type: 'frames', frames });
@@ -138,7 +144,9 @@ function handleRaw(raw: unknown): void {
     post({ type: 'pong' });
     return;
   }
-  coalescer.push(decoded.frames);
+  // HP-2: series bars are written into the hot SAB ring; the posted frames
+  // keep every wire field except the cloned bar payload.
+  coalescer.push(ring ? routeThroughRing(decoded.frames, ring) : decoded.frames);
 }
 
 function openSocket(): void {
@@ -220,6 +228,7 @@ function openSocket(): void {
 
 function disconnect(): void {
   stopped = true;
+  ring = null;
   clearReconnect();
   clearHeartbeat();
   coalescer.flush();
@@ -241,6 +250,19 @@ scope.onmessage = (ev: MessageEvent<HostToIngest>) => {
     stopped = false;
     liveUrl = msg.url;
     authToken = msg.authToken;
+    // HP-2: wrap the host-provided SAB. A failure degrades to the frame
+    // path (no ring) instead of failing the connection.
+    if (msg.hotSab) {
+      try {
+        ring = new HotRingWriter(new HotBuffer(msg.hotSab, computeHotLayout(HOT_CAP)));
+        post({ type: 'hot', active: true });
+      } catch {
+        ring = null;
+        post({ type: 'hot', active: false });
+      }
+    } else {
+      ring = null;
+    }
     if (ws) closeQuietly(ws);
     ws = null;
     clearReconnect();

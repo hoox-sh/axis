@@ -94,6 +94,20 @@ does not retry the allocation). Flags live in
   deliberately unwired — plan §14.2 forbids touching PaneManager before
   GPU parity tests exist. Do not "finish" the rung by wiring paint in a
   docs/flag PR.
+* **HP-2 producer contract** (`hp/workers/hot-ring-writer` +
+  `startHotRingPaint` in `chart/live-append`): the ingest worker is the
+  ring's **single writer**. A bound series `delta` is written into the
+  ring and **stripped** from the posted frame — `seq`, `closed_upto` and
+  the positional block still cross `postMessage`, so resume/repair keep
+  working — while snapshots keep their payload (initial paint) and every
+  other frame (scripts, foreign series, stale-only deltas) passes
+  through untouched: the frame path is always a correct fallback. Each
+  flip publishes the **whole window** (an unpublished slot must be fully
+  rewritten or readers see stale zeros outside the touched indices). The
+  sampler appends only the contiguous tail run that continues the store
+  tail — a jumped ring (suspended tab, replay) is left to the
+  snapshot/repair path, and a forming tick never reopens a closed tip
+  (`appendBar` verdicts decide, exactly like the frame path).
 
 # HUD
 

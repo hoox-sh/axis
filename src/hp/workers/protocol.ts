@@ -35,7 +35,7 @@ export const INGEST_TIP_COALESCE_MS = 16;
 
 export type HostToIngest =
   /** `authToken` rides once on connect and is never echoed back. */
-  | { type: 'connect'; url: string; authToken?: string }
+  | { type: 'connect'; url: string; authToken?: string; hotSab?: SharedArrayBuffer }
   | { type: 'send'; frame: WireFrame }
   | { type: 'disconnect' };
 
@@ -43,5 +43,6 @@ export type IngestToHost =
   | { type: 'status'; status: 'connecting' | 'open' | 'closed' | 'error' }
   | { type: 'open'; first: boolean }
   | { type: 'frames'; frames: Redesign2Frame[] }
+  | { type: 'hot'; active: boolean }
   | { type: 'pong' }
   | { type: 'malformed'; reason: string };
