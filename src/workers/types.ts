@@ -33,29 +33,18 @@ export type WorkerId =
   | 'pyodide'
   | 'pyne-agent'
   | 'service-worker'
-  | 'pyne-worker';
+  | 'pyne-worker'
+  | 'hp-ingest';
 
 /** High-level role a worker plays for AXIS. */
 export type WorkerRole =
-  | 'calc'
-  | 'proxy'
-  | 'onchain'
-  | 'scripts'
-  | 'stream'
-  | 'agent'
-  | 'pwa'
-  | 'oauth';
+  'calc' | 'proxy' | 'onchain' | 'scripts' | 'stream' | 'agent' | 'pwa' | 'oauth';
 
 /** Health classification after probe. */
 export type WorkerHealthStatus = 'healthy' | 'degraded' | 'down' | 'unknown' | 'idle' | 'skipped';
 
 /** How AXIS talks to the worker (for overview badges). */
-export type WorkerKind =
-  | 'process'
-  | 'edge'
-  | 'browser'
-  | 'pwa'
-  | 'optional';
+export type WorkerKind = 'process' | 'edge' | 'browser' | 'pwa' | 'optional';
 
 /** One install / setup step shown in the Install tab. */
 export interface WorkerInstallStep {
@@ -72,14 +61,7 @@ export interface WorkerInstallStep {
  * Distinct per worker so overview cards are scannable.
  */
 export type WorkerIconKey =
-  | 'server'
-  | 'cpu'
-  | 'zap'
-  | 'activity'
-  | 'wifi'
-  | 'download'
-  | 'settings'
-  | 'chain';
+  'server' | 'cpu' | 'zap' | 'activity' | 'wifi' | 'download' | 'settings' | 'chain' | 'layers';
 
 /** Static catalog entry (no live status). */
 export interface WorkerCatalogEntry {

@@ -35,6 +35,7 @@ import {
   type ProviderVenue,
 } from './provider';
 import { gatewayFetch, type GatewayMode } from './gateway';
+import { HttpError } from '../api/client';
 
 export type SymbolVenue =
   | 'binance'
@@ -187,7 +188,7 @@ async function fetchOkx(): Promise<SymbolEntry[]> {
     'https://www.okx.com/api/v5/public/instruments?instType=SPOT',
     { cache: 'no-store' }
   );
-  if (!res.ok) throw new Error(`OKX HTTP ${res.status}`);
+  if (!res.ok) throw new HttpError(res.status, `OKX HTTP ${res.status}`);
   const json = (await res.json()) as {
     code?: string;
     data?: Array<{ instId: string; baseCcy: string; quoteCcy: string; state: string }>;
@@ -205,7 +206,7 @@ async function fetchBybit(): Promise<SymbolEntry[]> {
     'https://api.bybit.com/v5/market/instruments-info?category=spot&limit=1000',
     { cache: 'no-store' }
   );
-  if (!res.ok) throw new Error(`Bybit HTTP ${res.status}`);
+  if (!res.ok) throw new HttpError(res.status, `Bybit HTTP ${res.status}`);
   const json = (await res.json()) as {
     retCode?: number;
     result?: {
@@ -229,7 +230,7 @@ async function fetchCoinbase(): Promise<SymbolEntry[]> {
   const res = await fetch('https://api.exchange.coinbase.com/products', {
     cache: 'no-store',
   });
-  if (!res.ok) throw new Error(`Coinbase HTTP ${res.status}`);
+  if (!res.ok) throw new HttpError(res.status, `Coinbase HTTP ${res.status}`);
   const data = (await res.json()) as Array<{
     id: string;
     base_currency: string;
@@ -254,7 +255,7 @@ async function fetchKraken(): Promise<SymbolEntry[]> {
   const res = await fetch('https://api.kraken.com/0/public/AssetPairs', {
     cache: 'no-store',
   });
-  if (!res.ok) throw new Error(`Kraken HTTP ${res.status}`);
+  if (!res.ok) throw new HttpError(res.status, `Kraken HTTP ${res.status}`);
   const json = (await res.json()) as {
     error?: string[];
     result?: Record<

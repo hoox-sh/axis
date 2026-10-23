@@ -1,0 +1,120 @@
+# Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
+#
+# This file is part of axis.
+#
+# axis is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# axis is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with axis.  If not, see <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
+---
+title: "High-performance engine"
+description: "The opt-in HP plane: rungs HP-0…HP-4, feature flags, isolation, AXB1 transport, SAB memory, the GPU paint rung, HUD chip, and fallback rules."
+---
+
+# High-performance engine (HP)
+
+AXIS ships an opt-in **high-performance plane** behind `axis.engine.hp.enabled` — **default off**. Until the default flip (PR 10), production keeps today's path: JSON `/ws/live` → JS `Bar[]` objects → Lightweight Charts. Every HP flag is a capability *selection*, never a requirement: any browser must keep booting and painting with HP off or fallen back.
+
+## Rungs
+
+| Rung | Isolation | Transport | Series memory | Paint | Typical host |
+| --- | --- | --- | --- | --- | --- |
+| **HP-0** | any | JSON `/ws/live` (today) | JS objects `Bar[]` | Lightweight Charts Canvas 2D, main | current production |
+| **HP-1** | any | AXB1 binary **or** JSON, decoded in the ingest worker | transferable `ArrayBuffer` copy to main | LWC `series.update` / window `setData` | iOS WebView, non-isolated tab |
+| **HP-2** | `crossOriginIsolated` | AXB1 into SAB ring | hot SAB double-buffer + IndexedDB cold | LWC samples completed generations via copy-out of the visible range | Chromium desktop, Tauri, isolated Pages |
+| **HP-3** | isolated preferred | same as HP-2/1 | same | WebGL2 instanced quads; LWC remains for scale chrome or full fallback | GPU without WebGPU |
+| **HP-4** | isolated preferred | same | same | WebGPU instanced quads; float32 NDC only at this boundary | Chromium + Vulkan/Metal |
+
+**Selection** (`selectHpRung` in `src/hp/capabilities.ts`): kill switch → HP-0; not opted in → HP-0; WebGPU with `gpu` ≠ `off` → HP-4; else WebGL2 → HP-3; else isolated → HP-2; else HP-1. A SAB allocation failure clamps the tab to HP-1 for the session (`sessionStorage` `axis.hp.rung`); the cap only ever clamps downward.
+
+## Flags
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `axis.engine.hp.enabled` | unset / off | master opt-in |
+| `axis.engine.hp.disabled` | unset | hard kill — wins over enable |
+| `axis.engine.hp.gpu` | `auto` | `auto` / `off` / `webgl2` / `webgpu` |
+| `axis.engine.hp.sab` | `auto` | `auto` / `off` (force the transferable copy) |
+| `axis.hp.rung` (session) | — | last successful rung; clamps down after a failure |
+
+## Isolation
+
+SAB needs cross-origin isolation. Every static host ships the same pair — `public/_headers`, the Vite dev server, `docker/nginx.conf`, the PWA servers, and the offline shell — kept honest by `tests/sw-parity.test.ts`:
+
+```text
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Embedder-Policy: credentialless
+Cross-Origin-Resource-Policy: same-origin
+```
+
+**The pair isolates.** Chromium sets `crossOriginIsolated` only for COOP `same-origin`, so the capability probe now reads:
+
+```js
+crossOriginIsolated;       // true
+typeof SharedArrayBuffer;  // "function"
+```
+
+COOP was `same-origin-allow-popups` (popup-safe but never isolating) until this flip. No AXIS surface depends on a popup opener, so the stricter policy costs nothing: the GitHub/GitLab device-flow popup is opened `noopener,noreferrer` (`ScriptLibraryPanel`) and the token arrives by Worker polling (`waitForDeviceToken`) — never via `window.opener`; the detachable editor and panel companion windows are same-origin (BroadcastChannel / direct DOM wiring) and stay in the same browsing-context group under `same-origin`. With `isolated === true` the rung matrix unlocks HP-2/SAB; a tab that still fails isolation (exotic host, SAB allocation denied) keeps the transferable copy and reads `hp · copy+gpu` or HP-1 — the probe stays the runtime source of truth.
+
+## Transport: AXB1
+
+- Canonical prices are **int64 ticks**: `decimalToTicks` / `priceToTicks` keep float64 and float32 out of the codec (`priceToTicks(0.00000012, 8) === 12n`).
+- The AXB1 delta is 4-byte aligned with `TIP` vs `APPEND` opcodes and hashed payloads. Golden vectors in `tests/data/axb1-vectors.json` pin every frame shape, shared with the PYNE repo's `tests/test_axb1.py`.
+- The PYNE engine emits binary `/ws/live` frames when `encoding=axb1` is negotiated (sister repo `pynescript`); the AXIS Worker relays non-text frames untouched (`worker/src/live-proxy.ts`).
+- Decode runs off-thread in the ingest worker (`src/hp/workers/ingest.worker.ts`), engaged by `createLiveWsClient` (`src/hp/workers/host.ts`) only when HP is enabled — otherwise the stock JSON client is returned unchanged.
+
+## Memory: SAB double-buffer + IndexedDB cold
+
+- **Hot:** a generation double-buffer in a SharedArrayBuffer of fixed size `O(HOT_CAP)` — never `O(N)` — read through seqlocks; `Atomics.wait` on workers only (main polls via rAF + `waitAsync`).
+- **Cold:** columnar pages over IndexedDB; the viewport page lives in the same SAB behind its own seqlock, so paging never perturbs the hot ring (`src/hp/memory/`).
+- Chart sampling uses the copy-out (`src/hp/paint/copy-out-lwc.ts`): LWC remains the painter through HP-2.
+
+## Paint: LWC, then the GPU rung
+
+- Probe order (`probeRendererKind`): **WebGPU → WebGL2 → LWC**. The `off` flag lands on LWC even where a GPU exists, and a forced mode never claims a backend the probe did not find.
+- The WebGL2 painter (`src/hp/render/webgl2-renderer.ts`) draws the viewport as one instanced call: one VAO, one 32-byte `VisualCandle` record per candle, a fragment shader that carves body + wick from a single quad. Float32 is **NDC-only** at this boundary (WebGPU has no float64); price ticks stay in the SAB.
+- The factory is null-never-throws: any context or shader failure falls through to LWC instead of failing the page.
+- **Status:** the GPU canvas stack (ChartHost layered canvas, render worker) lands with a producer PR — PaneManager is not touched until GPU parity tests exist (plan §14.2).
+
+## HUD chip
+
+Workers Manager → **Chart plane** shows the selected rung in plan format: `hp · sab+gpu`, `hp · copy+lwc`, or `json · lwc` (transport memory + painter). `json · lwc` is exactly today's path, so the default-off state reads truthfully. Because the popup-safe pair does not isolate, an opted-in Chromium today reads `hp · copy+gpu` (or `hp · copy+lwc` without a GPU): painter selected, transport on the copy. The chip reports the *selection*; the GPU canvas lands with its wiring PR.
+
+## Invariants
+
+- Kill switch wins over enable, and the flag-off path stays byte-identical to today's JSON client.
+- int64 ticks never cross the GPU boundary; float32 appears only after NDC mapping.
+- `Atomics.wait` is worker-only; main-thread waiting is rAF/`waitAsync`.
+- AXIS is independent of TradingView® and ships its own painter; Pine Script™ evaluation runs through PYNE, never through a TradingView product API.
+
+## Status on `engine/high-performance`
+
+| Slice | State |
+| --- | --- |
+| PR 1–3 codec, isolation headers, off-thread ingest | landed — live behind the opt-in |
+| PR 4–6 double-buffer, viewport page + cold IDB, calc scratch/commit | landed as library + tests |
+| PR 7 / 7b PYNE AXB1 emit, Worker binary relay | landed (VPS deploy is a separate operator step) |
+| PR 8 WebGL2 renderer + probe seam | landed as library; canvas wiring pending |
+| PR 9 docs, playbook, HUD chip | this page |
+| HP-2 chart apply + GPU canvas wiring | deferred to a producer PR |
+| PR 10 default flip | not yet — needs production measurement (tick-to-paint ms, SAB OOM rate) |
+
+## Tests
+
+```bash
+bun test tests/hp/               # codec, memory, rung selection, chip
+bun test tests/engine/           # JSON regression — the rollback default
+bun test tests/sw-parity.test.ts # headers vs service worker
+bunx tsc --noEmit                # pre-push type gate
+```

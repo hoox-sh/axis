@@ -17,7 +17,7 @@ import {
   probeAbortSignal,
   workerHealthLabel,
 } from '../src/workers/probe';
-import { DEFAULT_AXIS_WORKER_BASE } from '../src/workers/catalog';
+import { DEFAULT_AXIS_WORKER_BASE, getWorkerCatalogEntry } from '../src/workers/catalog';
 import { getEngine } from '../src/engines/catalog';
 import { store, setStore } from '../src/store';
 
@@ -81,9 +81,7 @@ function stubPyodideEngine(stub: {
   if ('py' in stub) eng._pyodide = stub.py;
 }
 
-function pyodideJsFetch(
-  handler: (method: string, url: string) => Response | Promise<Response>,
-) {
+function pyodideJsFetch(handler: (method: string, url: string) => Response | Promise<Response>) {
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url.includes('pyodide.js')) return handler(init?.method || 'GET', url);
@@ -191,7 +189,8 @@ describe('probeWorker http-health mapping branches', () => {
   });
 
   it('reports HTTP status when every path is an error', async () => {
-    globalThis.fetch = (async () => new Response('boom', { status: 500 })) as unknown as typeof fetch;
+    globalThis.fetch = (async () =>
+      new Response('boom', { status: 500 })) as unknown as typeof fetch;
     const r = await probeWorker('axis-worker', {
       endpoint: DEFAULT_AXIS_WORKER_BASE,
       timeoutMs: 1000,
@@ -352,7 +351,8 @@ describe('probeWorker pyodide asset branches', () => {
 
   it('reports down when pyodide.js returns HTML (SPA fallback)', async () => {
     pyodideJsFetch(
-      () => new Response('<html></html>', { status: 200, headers: { 'Content-Type': 'text/html' } }),
+      () =>
+        new Response('<html></html>', { status: 200, headers: { 'Content-Type': 'text/html' } }),
     );
     const r = await probeWorker('pyodide', { timeoutMs: 1500 });
     expect(r.status).toBe('down');
@@ -477,9 +477,13 @@ describe('probeAllWorkers rejection mapping + labels', () => {
     } as unknown as AbortSignal;
     const snap = await probeAllWorkers({ timeoutMs: 300, signal: badSignal });
     expect(snap.results.length).toBeGreaterThan(0);
-    expect(snap.results.every((r) => r.status === 'down')).toBe(true);
-    expect(snap.down).toBe(snap.results.length);
-    expect(snap.results[0]!.error).toBe('boom');
+    // Entries with `probe: 'none'` (e.g. the tab-local HP ingest worker) never
+    // touch the signal, so they stay 'skipped' instead of failing.
+    const probed = snap.results.filter((r) => getWorkerCatalogEntry(r.id)?.probe !== 'none');
+    expect(probed.length).toBeGreaterThan(0);
+    expect(probed.every((r) => r.status === 'down')).toBe(true);
+    expect(snap.down).toBe(probed.length);
+    expect(probed[0]?.error).toBe('boom');
   });
 
   it('labels every health status', () => {

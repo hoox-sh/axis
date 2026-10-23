@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "tests"
-description: "tests contains alerts-engine.test.ts, alerts-form.test.ts, alerts-format.test.ts, and 302 more files."
+description: "tests contains alerts-engine.test.ts, alerts-form.test.ts, alerts-format.test.ts, and 306 more files."
 resource: "tests"
 tags: [code, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-21T19:41:25Z
+  at: 2026-10-21T22:35:28Z
 sources:
   - id: tree
     resource: "tests"
@@ -24,6 +24,7 @@ okf_lock: generated
 * `alerts-pine.test.ts`
 * `alerts-storage.test.ts`
 * `alerts-tick.test.ts`
+* `api-client.test.ts`
 * `apply-overlays.test.ts`
 * `apply-window-alignment.test.ts`
 * `architecture-plan.test.ts`
@@ -116,6 +117,7 @@ okf_lock: generated
 * `engine-ownership.test.ts`
 * `engine-prewarm.test.ts`
 * `engine-pro.test.ts`
+* `engine-result-mapper.test.ts`
 * `engine-runner.test.ts`
 * `engine-ws.test.ts`
 * `engines-catalog.test.ts`
@@ -301,6 +303,8 @@ okf_lock: generated
 * `ui-clock.test.ts`
 * `ui-datasets-open.test.ts`
 * `ui-effects.test.ts`
+* `ui-modal-shell.test.ts`
+* `ui-popover-shell.test.ts`
 * `ui-scale.test.ts`
 * `update-manager.test.ts`
 * `use-event-listener.test.ts`
@@ -332,6 +336,7 @@ okf_lock: generated
 
 * [src](/code/src.md)
 * [src/alerts](/code/src/alerts.md)
+* [src/api](/code/src/api.md)
 * [src/chart](/code/src/chart.md)
 * [src/chart/drawings](/code/src/chart/drawings.md)
 * [src/chart/drawings/toolbar](/code/src/chart/drawings/toolbar.md)
@@ -378,6 +383,7 @@ okf_lock: generated
 * [tests/engine](/code/tests/engine.md)
 * [tests/fixtures](/code/tests/fixtures.md)
 * [tests/helpers](/code/tests/helpers.md)
+* [tests/hp](/code/tests/hp.md)
 * [tests/integration](/code/tests/integration.md)
 * [tests/okf](/code/tests/okf.md)
 * [tests/security](/code/tests/security.md)

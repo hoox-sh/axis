@@ -31,10 +31,7 @@ import {
   Show,
   createMemo,
   createSignal,
-  onCleanup,
-  onMount,
 } from 'solid-js';
-import { Portal } from 'solid-js/web';
 import {
   store,
   setStatus,
@@ -48,6 +45,7 @@ import {
 } from '../indicators/run-target';
 import { reportUiError } from './boot-errors';
 import { Icons } from './icons';
+import { Popover } from './Popover';
 import { openBuiltinPicker } from './shortcuts/palette-bridge';
 
 export const RunSplitButton: Component<{
@@ -63,18 +61,7 @@ export const RunSplitButton: Component<{
   compact?: boolean;
 }> = (props) => {
   const [menuOpen, setMenuOpen] = createSignal(false);
-  const [menuPos, setMenuPos] = createSignal({ top: 0, left: 0 });
   let rootEl: HTMLDivElement | undefined;
-  let menuEl: HTMLDivElement | undefined;
-
-  const placeMenu = () => {
-    const el = rootEl;
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    const mw = menuEl?.offsetWidth || 232;
-    const left = Math.max(8, Math.min(r.right - mw, window.innerWidth - mw - 8));
-    setMenuPos({ top: r.bottom + 4, left });
-  };
 
   /** Prefer pre-eval source (reactive) so the label tracks editor edits. */
   const editorSource = createMemo(
@@ -132,32 +119,6 @@ export const RunSplitButton: Component<{
         };
 
   const closeMenu = () => setMenuOpen(false);
-
-  onMount(() => {
-    const onDoc = (e: MouseEvent) => {
-      if (!menuOpen()) return;
-      const t = e.target as Node | null;
-      if (rootEl && t && rootEl.contains(t)) return;
-      if (menuEl && t && menuEl.contains(t)) return;
-      closeMenu();
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') closeMenu();
-    };
-    const onReposition = () => {
-      if (menuOpen()) placeMenu();
-    };
-    document.addEventListener('mousedown', onDoc);
-    document.addEventListener('keydown', onKey);
-    window.addEventListener('resize', onReposition);
-    window.addEventListener('scroll', onReposition, true);
-    onCleanup(() => {
-      document.removeEventListener('mousedown', onDoc);
-      document.removeEventListener('keydown', onKey);
-      window.removeEventListener('resize', onReposition);
-      window.removeEventListener('scroll', onReposition, true);
-    });
-  });
 
   const gateAndRun = async (mode: 'auto' | 'new') => {
     if (isRunning()) return;
@@ -247,7 +208,6 @@ export const RunSplitButton: Component<{
             e.stopPropagation();
             setMenuOpen((o) => {
               const next = !o;
-              if (next) placeMenu();
               return next;
             });
           }}
@@ -256,24 +216,15 @@ export const RunSplitButton: Component<{
         </button>
       </Show>
 
-      <Show when={menuOpen()}>
-        <Portal>
-        <div
-          ref={(el) => {
-            menuEl = el;
-            if (el) placeMenu();
-          }}
-          class="axis-run-menu"
-          role="menu"
-          aria-label="Add options"
-          data-testid={ids().menu}
-          style={{
-            position: 'fixed',
-            top: `${menuPos().top}px`,
-            left: `${menuPos().left}px`,
-            right: 'auto',
-          }}
-        >
+      <Popover
+        open={menuOpen()}
+        anchor={rootEl}
+        onClose={closeMenu}
+        class="axis-run-menu"
+        role="menu"
+        label="Add options"
+        testId={ids().menu}
+      >
           <Show when={hasInstance() && !runBlocked()}>
             <button
               type="button"
@@ -303,9 +254,7 @@ export const RunSplitButton: Component<{
             <span class="axis-run-menu-title">Add built-in script…</span>
             <span class="axis-run-menu-hint">RSI, MACD, VWAP, Supertrend, …</span>
           </button>
-        </div>
-        </Portal>
-      </Show>
+      </Popover>
     </div>
   );
 };

@@ -24,10 +24,8 @@
  * @module ui/AboutModal
  */
 
-import { type Component, Show, createSignal, onCleanup } from 'solid-js';
-import { useEventListener } from './use-event-listener';
-import { installFocusTrap } from './focus-trap';
-import { Icons } from './icons';
+import { type Component, createSignal } from 'solid-js';
+import { Modal } from './Modal';
 import { HooxLogo } from './HooxLogo';
 import { APP_VERSION } from '../version';
 
@@ -66,131 +64,76 @@ export function isAboutModalOpen(): boolean {
 export const AboutModal: Component = () => {
   const close = () => setAboutOpen(false);
 
-  useEventListener<KeyboardEvent>(window, 'keydown', (e) => {
-    if (!aboutOpen()) return;
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      close();
-    }
-  });
-
-  const onBackdrop = (e: MouseEvent) => {
-    if (e.target === e.currentTarget) close();
-  };
-
   return (
-    <Show when={aboutOpen()}>
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: backdrop is an intentional click-away dismiss surface for the dialog */}
-      <div
-        class="sc-dialog-backdrop"
-        onClick={onBackdrop}
-        role="presentation"
-        data-testid="axis-about-backdrop"
-      >
-        <div
-          class="sc-dialog w-[min(560px,calc(100vw-2*var(--ui-dialog-margin)))] max-h-[min(88vh,720px)] flex flex-col"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="axis-about-title"
-          data-testid="axis-about-modal"
-          tabIndex={-1}
-          ref={(el) => {
-            if (!el) return;
-            const dispose = installFocusTrap(el, { autoFocus: true });
-            onCleanup(dispose);
-          }}
+    <Modal
+      open={aboutOpen()}
+      onClose={close}
+      title="About AXIS"
+      titleId="axis-about-title"
+      hint={`v${AXIS_VERSION} · open charting · AGPL-3.0`}
+      class="w-[min(560px,calc(100vw-2*var(--ui-dialog-margin)))] max-h-[min(88vh,720px)] flex flex-col"
+      bodyClass="overflow-y-auto flex flex-col gap-5 text-[0.9em]"
+      testId="axis-about-modal"
+      backdropTestId="axis-about-backdrop"
+      closeTestId="axis-about-close"
+      headerLead={<HooxLogo size="l" class="text-accent flex-shrink-0" />}
+      footer={
+        <button
+          type="button"
+          class="sc-btn sc-btn-primary px-3"
+          onClick={close}
+          data-testid="axis-about-done"
         >
-          <div class="sc-dialog-accent" />
-
-          <div class="sc-dialog-header">
-            <div class="flex items-center gap-2.5 min-w-0">
-              <HooxLogo size="l" class="text-accent flex-shrink-0" />
-              <div class="min-w-0">
-                <div
-                  id="axis-about-title"
-                  class="text-[0.95em] font-semibold text-text tracking-tight"
-                >
-                  About AXIS
-                </div>
-                <div class="sc-hint">
-                  v{AXIS_VERSION} · open charting · AGPL-3.0
-                </div>
-              </div>
-            </div>
-            <button
-              type="button"
-              class="sc-btn sc-btn-ghost px-2"
-              onClick={close}
-              aria-label="Close"
-              data-testid="axis-about-close"
-            >
-              <Icons.x />
-            </button>
+          Close
+        </button>
+      }
+    >
+      {/* Versions */}
+      <section>
+        <h3 class="sc-section-title">Versions</h3>
+        <div class="grid grid-cols-2 gap-2">
+          <div class="border border-border-soft/80 rounded-[var(--radius-sc)] px-2.5 py-2 bg-bg-base/40">
+            <span class="font-mono text-[10px] text-accent tracking-wider">AXIS</span>
+            <span class="text-text font-medium text-[0.92em] ml-1.5">v{AXIS_VERSION}</span>
           </div>
-
-          <div class="sc-dialog-body overflow-y-auto flex flex-col gap-5 text-[0.9em]">
-            {/* Versions */}
-            <section>
-              <h3 class="sc-section-title">Versions</h3>
-              <div class="grid grid-cols-2 gap-2">
-                <div class="border border-border-soft/80 rounded-[var(--radius-sc)] px-2.5 py-2 bg-bg-base/40">
-                  <span class="font-mono text-[10px] text-accent tracking-wider">AXIS</span>
-                  <span class="text-text font-medium text-[0.92em] ml-1.5">v{AXIS_VERSION}</span>
-                </div>
-                <div class="border border-border-soft/80 rounded-[var(--radius-sc)] px-2.5 py-2 bg-bg-base/40">
-                  <span class="font-mono text-[10px] text-accent tracking-wider">PYNE</span>
-                  <span class="text-text font-medium text-[0.92em] ml-1.5">v{PYNE_VERSION}</span>
-                </div>
-              </div>
-            </section>
-
-            {/* Philosophy */}
-            <section>
-              <h3 class="sc-section-title">Philosophy</h3>
-              <p class="text-text-dim leading-relaxed m-0">
-                No walled garden. The software is free — self-hostable,
-                auditable, and forkable under AGPL-3.0. We charge for hosted
-                service, not for the code.
-              </p>
-              <p class="text-text-faint leading-relaxed mt-2 mb-0 text-[0.92em]">
-                Pluggable engines. Multi-exchange sources. On-chain TVL and DEX
-                pools. A void-shell editor — independent of TradingView®, Inc.
-              </p>
-            </section>
-
-            {/* Stack links */}
-            <section>
-              <h3 class="sc-section-title">Stack &amp; links</h3>
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <AboutLink href={LINKS.axis} label="AXIS product" hint="hoox.sh/axis" />
-                <AboutLink href={LINKS.axisApp} label="Live demo" hint="axis.hoox.sh" />
-                <AboutLink href={LINKS.axisDocs} label="AXIS docs" hint="docs" />
-                <AboutLink href={LINKS.axisGithub} label="AXIS GitHub" hint="hoox-sh/axis" />
-                <AboutLink href={LINKS.pyne} label="PYNE" hint="hoox.sh/pyne" />
-                <AboutLink href={LINKS.pyneDocs} label="PYNE docs" hint="evaluator" />
-              </div>
-            </section>
-
-            <p class="text-text-faint text-[10px] leading-relaxed m-0 border-t border-border-soft pt-3">
-              Pine Script™ and TradingView® are trademarks of TradingView, Inc.
-              AXIS is independent and not affiliated with TradingView.
-              License: AGPL-3.0-only.
-            </p>
-          </div>
-
-          <div class="sc-dialog-footer">
-            <button
-              type="button"
-              class="sc-btn sc-btn-primary px-3"
-              onClick={close}
-              data-testid="axis-about-done"
-            >
-              Close
-            </button>
+          <div class="border border-border-soft/80 rounded-[var(--radius-sc)] px-2.5 py-2 bg-bg-base/40">
+            <span class="font-mono text-[10px] text-accent tracking-wider">PYNE</span>
+            <span class="text-text font-medium text-[0.92em] ml-1.5">v{PYNE_VERSION}</span>
           </div>
         </div>
-      </div>
-    </Show>
+      </section>
+
+      {/* Philosophy */}
+      <section>
+        <h3 class="sc-section-title">Philosophy</h3>
+        <p class="text-text-dim leading-relaxed m-0">
+          No walled garden. The software is free — self-hostable, auditable, and forkable under
+          AGPL-3.0. We charge for hosted service, not for the code.
+        </p>
+        <p class="text-text-faint leading-relaxed mt-2 mb-0 text-[0.92em]">
+          Pluggable engines. Multi-exchange sources. On-chain TVL and DEX pools. A void-shell editor
+          — independent of TradingView®, Inc.
+        </p>
+      </section>
+
+      {/* Stack links */}
+      <section>
+        <h3 class="sc-section-title">Stack &amp; links</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <AboutLink href={LINKS.axis} label="AXIS product" hint="hoox.sh/axis" />
+          <AboutLink href={LINKS.axisApp} label="Live demo" hint="axis.hoox.sh" />
+          <AboutLink href={LINKS.axisDocs} label="AXIS docs" hint="docs" />
+          <AboutLink href={LINKS.axisGithub} label="AXIS GitHub" hint="hoox-sh/axis" />
+          <AboutLink href={LINKS.pyne} label="PYNE" hint="hoox.sh/pyne" />
+          <AboutLink href={LINKS.pyneDocs} label="PYNE docs" hint="evaluator" />
+        </div>
+      </section>
+
+      <p class="text-text-faint text-[10px] leading-relaxed m-0 border-t border-border-soft pt-3">
+        Pine Script™ and TradingView® are trademarks of TradingView, Inc. AXIS is independent and
+        not affiliated with TradingView. License: AGPL-3.0-only.
+      </p>
+    </Modal>
   );
 };
 

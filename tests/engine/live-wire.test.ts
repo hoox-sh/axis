@@ -571,6 +571,78 @@ describe('live-wire P1 series + study push', () => {
     expect(h.wire.snapshotState().subs[0]?.seq).toBe(6);
   });
 
+  test('forming: true script delta applies as executionContext tip', async () => {
+    const seen: Array<{ via: string; executionContext: unknown }> = [];
+    const client: WireClient = {
+      get isOpen() {
+        return true;
+      },
+      onFrame: undefined,
+      async connect() {},
+      disconnect() {},
+      subscribe() {},
+      resumeSubscription() {},
+      unsubscribe() {},
+      awaitFrame() {
+        return new Promise(() => {});
+      },
+      addReconnectHandler() {
+        return () => {};
+      },
+    };
+    const wire = new StreamLiveWire(
+      client,
+      {
+        onStatus: () => {},
+        onSeriesFull: () => {},
+        onSeriesDelta: () => {},
+        onCloseVerified: () => {},
+      },
+      (async (_script, _id, full, via) => {
+        seen.push({
+          via,
+          executionContext: (full as { executionContext?: string }).executionContext,
+        });
+        return { status: 'success', plots: [], series: {}, events: [], meta: {} };
+      }) as never,
+    );
+    const first = wire.evalScript({
+      subId: 's-tip',
+      script: 'indicator() {}',
+      meta: {},
+      bars: BARS,
+    });
+    await tick();
+    await tick();
+    client.onFrame?.({
+      type: 'full',
+      id: 's-tip',
+      sessionId: 'ses',
+      seq: 1,
+      payload: { count: 1, plots: [[1]], series: { a: [1] } },
+    });
+    await first;
+    client.onFrame?.({
+      type: 'delta',
+      id: 's-tip',
+      sessionId: 'ses',
+      seq: 2,
+      payload: {
+        base_index: 0,
+        count: 1,
+        tail_len: 1,
+        forming: true,
+        plots: [[2]],
+        series: { a: [2] },
+      },
+    });
+    await tick();
+    expect(seen).toEqual([
+      { via: 'stream-full', executionContext: 'snapshot' },
+      { via: 'stream-delta', executionContext: 'tip' },
+    ]);
+  });
+
   test('a snapshot counted shorter than its plots still accepts the session delta', async () => {
     const h = makeHarness();
     const bars = [100, 160, 220, 280].map((time) => ({

@@ -11,13 +11,9 @@
  */
 
 import type { Env } from '../index';
-import { handleRun } from '../runtime';
-import { handleKeys } from '../keys';
-import { handleScripts } from '../scripts';
-import { handleOnchain } from '../onchain';
-import { handleMarket } from '../market';
 import { allowWorkerRequest } from './allowlist';
-import { buildHealthBody, errorBody, errorResponse, jsonResponse } from '../http';
+import { errorBody, notFoundResponse } from '../http';
+import { ROUTES, matchRoute } from '../routes';
 
 const INTERNAL_ORIGIN = 'https://axis.internal';
 
@@ -65,11 +61,6 @@ function buildUrl(path: string, query?: ProxyCall['query']): URL {
     }
   }
   return url;
-}
-
-function healthBody(env: Env): unknown {
-  // Shared with the entry `/health` route (A22) — one builder, no drift.
-  return buildHealthBody({ db: !!env.DB, keys: !!env.API_KEYS, mcpBridge: !!env.MCP_BRIDGE });
 }
 
 /**
@@ -123,27 +114,24 @@ export async function proxyWorkerRequest(
   if (body !== undefined) init.body = body;
   const req = new Request(url, init);
 
+  // The dispatch comes from the shared route table — the same one the entry
+  // dispatcher reads. The allowlist above stays the authority on *whether* a
+  // path may be reached over MCP; the table says *how* it is served.
+  const match = matchRoute(ROUTES, method, path);
   let res: Response;
-  if (path === '/' || path === '/health') {
-    res = jsonResponse(healthBody(env));
-  } else if (path === '/api/run') {
-    res = await handleRun(req, env, origin, ctx);
-  } else if (path === '/api/keys') {
-    res = await handleKeys(req, env, origin);
-  } else if (path === '/api/usage') {
-    res = jsonResponse({ status: 'success', usage: { calls_used: 0, calls_remaining: null } });
-  } else if (path === '/api/scripts' || path.startsWith('/api/scripts/')) {
-    res = await handleScripts(req, env, origin, path, ctx);
-  } else if (path.startsWith('/api/onchain')) {
-    const onchain = await handleOnchain(req, env, origin, path);
-    res =
-      onchain ?? errorResponse('NOT_FOUND', path, { status: 404 });
-  } else if (path.startsWith('/api/market')) {
-    const market = await handleMarket(req, env, origin, path);
-    res =
-      market ?? errorResponse('NOT_FOUND', path, { status: 404 });
+  if (!match || match.route.kind !== 'http' || match.route.mcp !== true || !match.route.handle) {
+    res = notFoundResponse(path, { status: 404 });
   } else {
-    res = errorResponse('NOT_FOUND', path, { status: 404 });
+    const handled = await match.route.handle({
+      req,
+      env,
+      origin,
+      ctx: ctx as ExecutionContext,
+      url,
+      // The MCP plane must never pay for the deep egress probe.
+      deepHealth: false,
+    });
+    res = handled ?? notFoundResponse(path, { status: 404 });
   }
 
   const parsed = await readBody(res);

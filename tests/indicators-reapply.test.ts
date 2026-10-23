@@ -21,10 +21,7 @@ import { listReapplicableScripts } from '../src/indicators/reapply';
 import { detachIndicatorFromChart } from '../src/indicators/detach';
 import { setScriptChartVisible, toggleScriptChartVisible } from '../src/indicators/visibility';
 import { setManager, setDrawingLayer } from '../src/chart/manager-access';
-import {
-  ownedOverlayPrefix,
-  sanitizeOverlayOwnerId,
-} from '../src/chart/pane-manager';
+import { ownedOverlayPrefix, sanitizeOverlayOwnerId } from '../src/chart/pane-manager';
 import { mockFetch, jsonResponse } from './helpers/mock-fetch';
 import { _resetMultiplexForTests } from '../src/streams/multiplex';
 
@@ -71,21 +68,14 @@ describe('listReapplicableScripts', () => {
     const a = addIndicator('A', 'plot(1)', 'ind_a', {});
     const b = addIndicator('B', '', 'ind_b', {});
     const c = addIndicator('C', 'plot(2)', 'ind_c', {});
-    setStore('scripts', (s) =>
-      s.map((x) => (x.id === c ? { ...x, visible: false } : x)),
-    );
+    setStore('scripts', (s) => s.map((x) => (x.id === c ? { ...x, visible: false } : x)));
     const list = listReapplicableScripts();
     expect(list.map((x) => x.id)).toEqual([a]);
     void b;
   });
 
   it('skips library() sources', () => {
-    addIndicator(
-      'Lib',
-      '//@version=6\nlibrary("Helpers")\nexport n() => 1',
-      'price',
-      {},
-    );
+    addIndicator('Lib', '//@version=6\nlibrary("Helpers")\nexport n() => 1', 'price', {});
     const ind = addIndicator('A', 'indicator("A")\nplot(1)', 'ind_a', {});
     expect(listReapplicableScripts().map((x) => x.id)).toEqual([ind]);
   });
@@ -95,6 +85,10 @@ describe('setScriptChartVisible', () => {
   let restoreFetch: (() => void) | null = null;
 
   beforeEach(() => {
+    // These cases install a fetch mock and count calls after an 80 ms window.
+    // The suite runs in one process, so a rerun / live-bar timer armed by an
+    // earlier file would land inside that window and fail an unrelated case.
+    _resetMultiplexForTests();
     setStore('scripts', []);
     setStore('bars', []);
     setStore('live', { ...store.live, active: false });
@@ -260,9 +254,7 @@ describe('setScriptChartVisible', () => {
       fetches += 1;
       return jsonResponse({ status: 'success', plots: [], events: [], series: {} });
     });
-    setStore('bars', [
-      { time: 1, open: 1, high: 1, low: 1, close: 1, volume: 1 },
-    ]);
+    setStore('bars', [{ time: 1, open: 1, high: 1, low: 1, close: 1, volume: 1 }]);
     const id = addIndicator('RSI', 'indicator("RSI")\nplot(close)', 'ind_r', {});
     setScriptChartVisible(id, false);
     setStore('live', { ...store.live, active: true });
@@ -273,14 +265,15 @@ describe('setScriptChartVisible', () => {
   });
 
   it('show does not run library() sources', async () => {
-    let fetches = 0;
-    restoreFetch = mockFetch(async () => {
-      fetches += 1;
+    // Record what was fetched, not just how often: a stray call here means
+    // some other case left background work running, and the URL + stack say
+    // which one instead of failing this case mysteriously.
+    const stray: string[] = [];
+    restoreFetch = mockFetch(async (input) => {
+      stray.push(`${String(input)}\nfrom ${new Error('stray').stack}`);
       return jsonResponse({ status: 'success', plots: [], events: [], series: {} });
     });
-    setStore('bars', [
-      { time: 1, open: 1, high: 1, low: 1, close: 1, volume: 1 },
-    ]);
+    setStore('bars', [{ time: 1, open: 1, high: 1, low: 1, close: 1, volume: 1 }]);
     const id = addIndicator(
       'Lib',
       '//@version=6\nlibrary("Helpers")\nexport n() => 1',
@@ -290,16 +283,14 @@ describe('setScriptChartVisible', () => {
     setScriptChartVisible(id, false);
     expect(setScriptChartVisible(id, true)).toBe(true);
     await new Promise((r) => setTimeout(r, 80));
-    expect(fetches).toBe(0);
+    expect(stray).toEqual([]);
   });
 });
 
 describe('detachIndicatorFromChart', () => {
   beforeEach(() => {
     setStore('scripts', []);
-    setStore('panes', [
-      { id: 'price', type: 'price', height: 400, order: 0, visible: true },
-    ]);
+    setStore('panes', [{ id: 'price', type: 'price', height: 400, order: 0, visible: true }]);
     setManager(undefined);
     setDrawingLayer(undefined);
   });

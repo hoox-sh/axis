@@ -28,6 +28,7 @@ describe('workers catalog', () => {
     expect(ids).toContain('axis-worker');
     expect(ids).toContain('axis-worker-local');
     expect(ids).toContain('pyodide');
+    expect(ids).toContain('hp-ingest');
     expect(ids).toContain('service-worker');
     expect(ids).toContain('pyne-agent');
     expect(ids).toContain('pyne-worker');

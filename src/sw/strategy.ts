@@ -26,6 +26,8 @@
  *    so big engine files cannot evict hashed app assets (and vice versa).
  * 8. Navigation is network-first with shell fallback (fresh HTML when online).
  * 9. Navigation never rejects `respondWith` — offline shell HTML if cache miss.
+ * 9b. Offline shell HTML carries the same COOP/COEP/CORP pair as the static
+ *     hosts so a synthesized document cannot drop cross-origin isolation.
  * 10. Same-origin `/version.json` is bypass — the update probe must hit network.
  * 11. `no-store` requests skip the cache read; `private`/`no-store`
  *    responses are never stored.
@@ -41,6 +43,9 @@
 
 /** Bump when shell precache or strategy semantics change. */
 export const SW_VERSION = 'v8';
+
+/** Isolation headers the classic SW stamps on synthesized HTML (parity with `public/sw.js`). */
+export { HP_ISOLATION_HEADERS } from '../hp/isolation-headers';
 
 export const CACHE_PREFIX = 'axis-';
 

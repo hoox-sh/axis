@@ -7,7 +7,7 @@ tags: [code, worker]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-21T19:24:41Z
+  at: 2026-10-22T11:14:37Z
 sources:
   - id: tree
     resource: "worker/src"
@@ -25,13 +25,14 @@ okf_lock: generated
 * `http.ts` — API_CORS, CorsOptions, DeepHealth, ErrorBody, ErrorResponseOptions, HandleErrorOptions, HealthFlags, JsonBuilder, JsonOptions, MARKET_CORS, MCP_CORS, ORIGIN_ONLY
 * `index.ts` — Env, McpBridgeDO, SessionDO, pickOrigin
 * `keys.ts` — handleKeys
-* `live-proxy.ts` — LIVE_TICKET_TTL_S, _resetLiveTicketsForTests, engineLiveWsUrl, handleLiveProxy
+* `live-proxy.ts` — LIVE_TICKET_TTL_S, _resetLiveTicketsForTests, engineLiveWsUrl, handleLiveProxy, relayFrame
 * `market.ts` — _resetMarketCacheForTests, handleMarket, marketAllowlist
 * `onchain.ts` — _resetOnchainCacheForTests, handleOnchain, onchainAllowlist
 * `proxy-plane.ts` — CacheEntry, CacheEviction, ProxyPlane, ProxyPlaneOptions, createProxyPlane
 * `proxy-router.ts` — NotFoundBody, ProxyContext, ProxyHandler, ProxyRoute, ProxyRouter, ProxyRouterOptions, createProxyRouter, proxyJson
 * `pyodide_runtime.ts` — tryRunInWorker
 * `rate-limit.ts` — _resetRateLimitsForTests, allowRate
+* `routes.ts` — BRIDGE_ROUTE, MCP_ROUTE, ROUTES, RouteContext, RouteDef, RouteKind, RouteMatch, STREAM_ROUTE, healthBody, matchRoute, mcpRoutes, routeMatchesPath
 * `runtime.ts` — _resetRunRateLimitForTests, handleRun
 * `scripts.ts` — ScriptMeta, ScriptRow, ScriptVersionRow, _clearMemScripts, handleScripts
 * `tenant.ts` — BILLING_UPGRADE_URL, FlushUsageOpts, QueueTenantUsageInput, TenantAllow, TenantDeny, TenantGate, TenantHttpError, TenantScope, TenantUsageEvent, TenantUsageUnits, USAGE_BATCH_MAX, USAGE_FLUSH_TIMEOUT_MS

@@ -57,10 +57,10 @@ import {
 } from '../data/data-manager-source';
 import { defaultStreamForSource } from '../streams/catalog';
 import { Icons } from './icons';
-import { installFocusTrap } from './focus-trap';
 import { announce } from './sr-announce';
 import { CompleteMap } from './dsm/CompleteMap';
 import { ScField } from './Field';
+import { Modal } from './Modal';
 import { fmtDuration, fmtMillis, fmtTime, loadWindowSpanLabel } from './dsm/format';
 
 export interface CachedDatasetsModalProps {
@@ -400,10 +400,6 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
     else moveSelection(-1);
   };
 
-  const onBackdrop = (e: MouseEvent) => {
-    if (e.target === e.currentTarget) props.onClose();
-  };
-
   const onLoad = async () => {
     const meta = selected();
     if (!meta) return;
@@ -526,60 +522,96 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
   };
 
   return (
-    <Show when={props.open}>
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: backdrop is an intentional click-away dismiss surface for the dialog */}
-      <div class="sc-dialog-backdrop" onClick={onBackdrop} role="presentation">
-        <div
-          class="sc-dialog w-[min(960px,calc(100vw-2*var(--ui-dialog-margin)))] max-h-[min(88vh,820px)] flex flex-col"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="axis-cached-datasets-title"
-          data-testid="axis-cached-datasets-modal"
-          tabIndex={-1}
-          onKeyDown={onDialogKey}
-          ref={(el) => {
-            if (!el) return;
-            const dispose = installFocusTrap(el, { autoFocus: false });
-            queueMicrotask(() => searchEl?.focus());
-            onCleanup(dispose);
-          }}
-        >
-          <div class="sc-dialog-accent" />
-          <div class="sc-dialog-header">
-            <div class="min-w-0">
-              <div
-                id="axis-cached-datasets-title"
-                class="text-[0.95em] font-semibold text-text tracking-tight"
+    <Modal
+      open={props.open}
+      onClose={props.onClose}
+      title="Dataset manager"
+      titleId="axis-cached-datasets-title"
+      hintClass="sc-hint truncate"
+      hint="Local OHLCV cache · filter, inspect coverage, load a date range or max bars"
+      class="w-[min(960px,calc(100vw-2*var(--ui-dialog-margin)))] max-h-[min(88vh,820px)] flex flex-col"
+      bodyClass="flex flex-col gap-3.5 min-h-0 overflow-hidden flex-1"
+      testId="axis-cached-datasets-modal"
+      autoFocus={false}
+      footer={
+        <>
+          <Show
+            when={pendingDelete()}
+            fallback={
+              <button
+                type="button"
+                class="sc-btn sc-btn-ghost"
+                disabled={!selected() || busy()}
+                onClick={() => setPendingDelete(true)}
+                title="Delete dataset (bars + metadata, all sinks)"
               >
-                Dataset manager
-              </div>
-              <div class="sc-hint truncate">
-                Local OHLCV cache · filter, inspect coverage, load a date range or max bars
-              </div>
-            </div>
-            <div class="flex items-center gap-1">
+                <Icons.trash />
+                <span>Delete</span>
+              </button>
+            }
+          >
+            <div class="flex items-center gap-1.5 min-w-0">
+              <span class="text-red text-[0.78rem] truncate">Delete this dataset?</span>
               <button
                 type="button"
                 class="sc-btn sc-btn-ghost sc-btn-sm"
-                onClick={() => void refresh()}
-                disabled={loading()}
-                title="Refresh list"
-                aria-label="Refresh dataset list"
+                onClick={() => setPendingDelete(false)}
               >
-                <Icons.refresh />
+                No
               </button>
               <button
                 type="button"
-                class="sc-btn sc-btn-ghost px-2"
-                onClick={() => props.onClose()}
-                aria-label="Close"
+                class="sc-btn sc-btn-ghost sc-btn-sm text-red"
+                disabled={busy()}
+                onClick={() => void onDelete()}
               >
-                <Icons.x />
+                Yes, delete
               </button>
             </div>
-          </div>
-
-          <div class="sc-dialog-body flex flex-col gap-3.5 min-h-0 overflow-hidden flex-1">
+          </Show>
+          <div class="flex-1" />
+          <button type="button" class="sc-btn sc-btn-ghost" onClick={() => props.onClose()}>
+            Close
+          </button>
+          <button
+            type="button"
+            class="sc-btn sc-btn-primary"
+            disabled={!selected() || busy() || previewCount() <= 0}
+            onClick={() => void onLoad()}
+            data-testid="axis-cached-datasets-load"
+            aria-busy={busy() || undefined}
+          >
+            <Icons.download />
+            <span>
+              {busy()
+                ? 'Loading…'
+                : previewCount() > 0
+                  ? `Load ${previewCount().toLocaleString()} bars`
+                  : 'Load to chart'}
+            </span>
+          </button>
+        </>
+      }
+      onKeyDown={onDialogKey}
+      onDialogRef={() => {
+        // The search input takes focus, not the first focusable element.
+        queueMicrotask(() => searchEl?.focus());
+      }}
+      headerActions={
+        <div class="flex items-center gap-1">
+          <button
+            type="button"
+            class="sc-btn sc-btn-ghost sc-btn-sm"
+            onClick={() => void refresh()}
+            disabled={loading()}
+            title="Refresh list"
+            aria-label="Refresh dataset list"
+          >
+            <Icons.refresh />
+          </button>
+        </div>
+      }
+    >
             <Show when={error()}>
               <div
                 class="text-[11px] text-red border border-red/40 bg-red/10 px-2 py-1.5 rounded"
@@ -915,67 +947,6 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
                 </Show>
               </div>
             </div>
-          </div>
-
-          <div class="sc-dialog-footer">
-            <Show
-              when={pendingDelete()}
-              fallback={
-                <button
-                  type="button"
-                  class="sc-btn sc-btn-ghost"
-                  disabled={!selected() || busy()}
-                  onClick={() => setPendingDelete(true)}
-                  title="Delete dataset (bars + metadata, all sinks)"
-                >
-                  <Icons.trash />
-                  <span>Delete</span>
-                </button>
-              }
-            >
-              <div class="flex items-center gap-1.5 min-w-0">
-                <span class="text-red text-[0.78rem] truncate">Delete this dataset?</span>
-                <button
-                  type="button"
-                  class="sc-btn sc-btn-ghost sc-btn-sm"
-                  onClick={() => setPendingDelete(false)}
-                >
-                  No
-                </button>
-                <button
-                  type="button"
-                  class="sc-btn sc-btn-ghost sc-btn-sm text-red"
-                  disabled={busy()}
-                  onClick={() => void onDelete()}
-                >
-                  Yes, delete
-                </button>
-              </div>
-            </Show>
-            <div class="flex-1" />
-            <button type="button" class="sc-btn sc-btn-ghost" onClick={() => props.onClose()}>
-              Close
-            </button>
-            <button
-              type="button"
-              class="sc-btn sc-btn-primary"
-              disabled={!selected() || busy() || previewCount() <= 0}
-              onClick={() => void onLoad()}
-              data-testid="axis-cached-datasets-load"
-              aria-busy={busy() || undefined}
-            >
-              <Icons.download />
-              <span>
-                {busy()
-                  ? 'Loading…'
-                  : previewCount() > 0
-                    ? `Load ${previewCount().toLocaleString()} bars`
-                    : 'Load to chart'}
-              </span>
-            </button>
-          </div>
-        </div>
-      </div>
-    </Show>
+    </Modal>
   );
 };

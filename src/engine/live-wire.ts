@@ -56,6 +56,7 @@ export interface WireFrame {
   type: string;
   id?: string;
   sessionId?: string;
+  ts?: number;
   seq?: number;
   payload?: Record<string, unknown>;
 }
@@ -64,8 +65,18 @@ export interface WireClient {
   connect(): Promise<void>;
   disconnect(): void;
   readonly isOpen: boolean;
-  subscribe(id: string, kind: 'series' | 'script', meta: Record<string, unknown>, opts?: Record<string, unknown>): void;
-  resumeSubscription(id: string, count: number, lastTime: number, extra?: Record<string, unknown>): void;
+  subscribe(
+    id: string,
+    kind: 'series' | 'script',
+    meta: Record<string, unknown>,
+    opts?: Record<string, unknown>,
+  ): void;
+  resumeSubscription(
+    id: string,
+    count: number,
+    lastTime: number,
+    extra?: Record<string, unknown>,
+  ): void;
   requestRepair?(id: string, fromTime: number): void;
   unsubscribe(id: string): void;
   awaitFrame(id: string, timeoutMs?: number): Promise<WireFrame>;
@@ -76,10 +87,18 @@ export interface WireClient {
 }
 
 export interface WireHandlers {
-  onStatus(subId: string, status: SubscriptionStatus, extra?: { message?: string; have?: number; need?: number }): void;
+  onStatus(
+    subId: string,
+    status: SubscriptionStatus,
+    extra?: { message?: string; have?: number; need?: number },
+  ): void;
   onSeriesFull(bars: Bar[]): void;
   onSeriesDelta(bars: Bar[], append: boolean): void;
-  onCloseVerified(time: number, result: 'match' | 'mismatch' | 'unknown', ohlcv?: Record<string, number>): void;
+  onCloseVerified(
+    time: number,
+    result: 'match' | 'mismatch' | 'unknown',
+    ohlcv?: Record<string, number>,
+  ): void;
 }
 
 export interface EvalScriptInput {
@@ -228,7 +247,10 @@ export class StreamLiveWire {
   /** In-flight `ensureSeries` so concurrent ticks join one snapshot wait. */
   private readonly seriesInflight = new Map<string, Promise<Bar[]>>();
   /** Last script + bars so a push delta can apply without waiting on scheduleRerun. */
-  private readonly scriptCtx = new Map<string, { script: string; indicatorId?: string; bars: Bar[] }>();
+  private readonly scriptCtx = new Map<
+    string,
+    { script: string; indicatorId?: string; bars: Bar[] }
+  >();
   /** Input signature of each script subscription (a change forces a re-subscribe). */
   private readonly scriptInputSig = new Map<string, string>();
   /** `history_bars` the script subscription was created with. */
@@ -322,7 +344,9 @@ export class StreamLiveWire {
       this.client.subscribe(subId, 'series', meta);
       const full = await this.awaitFull(subId, SNAPSHOT_WAIT_MS);
       if (full.type === 'error') {
-        this.handlers.onStatus(subId, 'error', { message: String((full.payload as Record<string, unknown>)?.message ?? 'subscribe failed') });
+        this.handlers.onStatus(subId, 'error', {
+          message: String((full.payload as Record<string, unknown>)?.message ?? 'subscribe failed'),
+        });
         this.fail('subscribe-error');
       }
       if (full.type !== 'full') {
@@ -406,10 +430,7 @@ export class StreamLiveWire {
         this.scriptInputSig.delete(input.subId);
         this.scriptDepth.delete(input.subId);
         if (e instanceof StreamFallbackError) throw e;
-        throw new StreamFallbackError(
-          'script-failed',
-          e instanceof Error ? e.message : String(e),
-        );
+        throw new StreamFallbackError('script-failed', e instanceof Error ? e.message : String(e));
       }
       const cached = applier.cached;
       if (!cached) {
@@ -598,7 +619,11 @@ export class StreamLiveWire {
     this.handlers.onStatus(subId, 'live');
   }
 
-  private applyScriptPush(subId: string, cached: Record<string, unknown>, via: 'stream-full' | 'stream-delta'): void {
+  private applyScriptPush(
+    subId: string,
+    cached: Record<string, unknown>,
+    via: 'stream-full' | 'stream-delta',
+  ): void {
     const ctx = this.scriptCtx.get(subId);
     if (!ctx) return;
     // The subscription captured the window at subscribe time. A new candle
@@ -659,7 +684,11 @@ export class StreamLiveWire {
     const times =
       explicitTimes && explicitTimes.length === tailLen
         ? explicitTimes
-        : scriptDeltaTimeTail(cachedTimes, { base_index: baseIndex, count, tail_len: tailLen }, this.knownBarTimes());
+        : scriptDeltaTimeTail(
+            cachedTimes,
+            { base_index: baseIndex, count, tail_len: tailLen },
+            this.knownBarTimes(),
+          );
     const delta = {
       seq: typeof frame.seq === 'number' ? frame.seq : -1,
       base_index: baseIndex,
@@ -667,6 +696,8 @@ export class StreamLiveWire {
       tail_len: tailLen,
       plots: payload.plots as Record<string, unknown[]> | undefined,
       series: payload.series as Record<string, unknown[]> | undefined,
+      forming: payload.forming === true,
+      unchanged: payload.unchanged === true,
       ...(times ? { times } : {}),
     };
     let out = applier.applyDelta(delta);
@@ -676,12 +707,14 @@ export class StreamLiveWire {
     if (!out.ok && out.reason === 'needs-full') {
       const cached = applier.cached;
       if (cached && (cached.bar_times != null || cached.times != null)) {
-        applier.applyFull(withoutTimeAxis(cached) as {
-          plots?: Record<string, unknown[]>;
-          series?: Record<string, unknown[]>;
-          count: number;
-          seq?: number;
-        });
+        applier.applyFull(
+          withoutTimeAxis(cached) as {
+            plots?: Record<string, unknown[]>;
+            series?: Record<string, unknown[]>;
+            count: number;
+            seq?: number;
+          },
+        );
         const { times: _drop, ...valuesOnly } = delta;
         out = applier.applyDelta(valuesOnly);
       }

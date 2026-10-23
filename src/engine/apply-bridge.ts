@@ -32,6 +32,7 @@
  * @module engine/apply-bridge
  */
 
+import type { ExecutionContext } from '../hp/calc/execution-context';
 import type { RunResult } from '../plugins/types';
 import type { Bar } from '../store/types';
 import { store } from '../store';
@@ -47,6 +48,8 @@ export interface StreamFullPayload {
   drawings?: Array<Record<string, unknown>>;
   plot_meta?: Record<string, unknown>;
   meta?: Record<string, unknown>;
+  /** Stamped by the delta applier: snapshot vs tip scratch vs append commit. */
+  executionContext?: ExecutionContext;
 }
 
 export interface ApplyStreamInput {
@@ -82,6 +85,8 @@ export function streamFullToPrecomputed(full: StreamFullPayload, via: StreamVia)
       ...(full.meta ?? {}),
       sessionVia: via,
       count: full.count,
+      executionContext:
+        full.executionContext ?? (via === 'stream-full' ? 'snapshot' : 'append'),
       ...(full.plot_meta ? { plot_meta: full.plot_meta } : {}),
     },
   } as RunResult;

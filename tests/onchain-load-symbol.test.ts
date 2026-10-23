@@ -9,7 +9,7 @@
  */
 
 import './setup';
-import { describe, expect, it, beforeEach } from 'bun:test';
+import { afterEach, describe, expect, it, beforeEach } from 'bun:test';
 import {
   normalizeLoadSymbol,
   loadSymbolData,
@@ -28,6 +28,7 @@ import { ensureBuiltins, _resetBootstrapFlag } from '../src/plugins/bootstrap';
 import { setStore, store, clearLogs } from '../src/store';
 import { makeBars } from './fixtures/bars';
 import type { SourcePlugin } from '../src/plugins/types';
+import { _resetDataSourceManagerForTests } from '../src/data/data-source-manager';
 
 beforeEach(() => {
   registry.clear();
@@ -48,6 +49,13 @@ beforeEach(() => {
   // Avoid auto-starting live after history load (preferAfterLoad defaults true)
   setStore('live', 'preferAfterLoad', false);
   setStore('live', 'active', false);
+});
+
+afterEach(() => {
+  // `loadSymbolData` queues a background DSM walk that outlives the test. It
+  // keeps paging with whatever the source registry says *later*, so an
+  // unrelated file's fetch mock would suddenly see a real GeckoTerminal call.
+  _resetDataSourceManagerForTests();
 });
 
 describe('normalizeLoadSymbol', () => {

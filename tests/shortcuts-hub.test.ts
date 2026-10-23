@@ -14,11 +14,15 @@
 
 import './setup';
 import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
+// The pure dispatch helpers live in `runtime` — importing them from the
+// `Hub` component would pull the whole UI tree (and its icon library) in.
 import {
   buildDispatchTable,
   dispatchShortcut,
   registerShortcut,
-} from '../src/ui/shortcuts/Hub';
+} from '../src/ui/shortcuts/runtime';
+// Registers the app-level bindings (the `Hub` component used to pull this in).
+import '../src/ui/shortcuts/actions';
 import { isPaletteOpen, closePalette } from '../src/ui/shortcuts/palette-bridge';
 import { resetShortcuts, setShortcutOverride, isPanelOpen, store, setDrawingTool } from '../src/store';
 

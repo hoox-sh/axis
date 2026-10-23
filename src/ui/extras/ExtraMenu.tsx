@@ -28,11 +28,10 @@
  * @module ui/extras/ExtraMenu
  */
 
-import { type Component, For, Show, createEffect, createSignal, onCleanup, onMount } from 'solid-js';
-import { dismissOnOutside } from '../dismiss-on-outside';
-import { Portal } from 'solid-js/web';
+import { type Component, For, Show, createSignal } from 'solid-js';
 import { store, setStore, persist, isPanelOpen, setPanelOpen } from '../../store';
 import { Icons } from '../icons';
+import { Popover } from '../Popover';
 import { StudioColorInput, StudioField, StudioToggle } from '../studio';
 import { anyExtraEnabled, defaultTickerSymbols, resetTickerOptions } from './state';
 
@@ -50,64 +49,9 @@ function toggleTickerSymbol(sym: string, on: boolean): void {
 /** Module-bar Extra button + dropdown panel. */
 export const ExtraMenu: Component = () => {
   const [open, setOpen] = createSignal(false);
-  const [panelPos, setPanelPos] = createSignal({ top: 0, left: 0 });
   let btnEl: HTMLButtonElement | undefined;
-  let panelEl: HTMLDivElement | undefined;
-
-  const placePanel = () => {
-    const el = btnEl;
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    const width = Math.min(320, window.innerWidth - 24);
-    const left = Math.max(8, Math.min(r.right - width, window.innerWidth - width - 8));
-    // Vertical clamp: the ticker section grows the panel, and the module bar can
-    // sit low on short viewports — flip above the button, then hard-cap so the
-    // panel scrolls instead of running off-screen.
-    const margin = 8;
-    const panelH = panelEl?.offsetHeight ?? 0;
-    const below = window.innerHeight - r.bottom - margin;
-    const above = r.top - margin;
-    const top =
-      panelH <= below
-        ? r.bottom + 4
-        : panelH <= above
-          ? Math.max(margin, r.top - 4 - panelH)
-          : Math.max(margin, window.innerHeight - panelH - margin);
-    setPanelPos({ top, left });
-  };
 
   const close = () => setOpen(false);
-
-  onMount(() => {
-    const onReposition = () => {
-      if (open()) placePanel();
-    };
-    const disposeDismiss = dismissOnOutside({
-      inside: () => [btnEl, panelEl],
-      onDismiss: () => {
-        if (open()) close();
-      },
-    });
-    window.addEventListener('resize', onReposition);
-    window.addEventListener('scroll', onReposition, true);
-    onCleanup(() => {
-      disposeDismiss();
-      window.removeEventListener('resize', onReposition);
-      window.removeEventListener('scroll', onReposition, true);
-    });
-  });
-
-  // The panel renders inside <Show>, so its height is only measurable after the
-  // open signal flips. Re-place on open and whenever its content height changes
-  // (toggling the ticker section adds/removes the whole slider stack).
-  createEffect(() => {
-    if (!open()) return;
-    // Re-run when the ticker section expands/collapses — the height changes and
-    // the vertical clamp has to move the panel back inside the viewport.
-    void store.extras.ticker.enabled;
-    panelEl?.offsetHeight;
-    placePanel();
-  });
 
   const resetTicker = () => {
     const { symbols, enabled } = store.extras.ticker;
@@ -121,13 +65,7 @@ export const ExtraMenu: Component = () => {
         ref={btnEl}
         type="button"
         class={`axis-module ${anyExtraEnabled(store.extras) ? 'is-active' : ''}`}
-        onClick={() => {
-          setOpen((o) => {
-            const next = !o;
-            if (next) placePanel();
-            return next;
-          });
-        }}
+        onClick={() => setOpen((o) => !o)}
         title="Extra — price card, ticker, fullscreen alerts"
         aria-label="Extra"
         aria-expanded={open()}
@@ -139,15 +77,16 @@ export const ExtraMenu: Component = () => {
         <span class="axis-tb-btn-label">Extra</span>
       </button>
 
-      <Show when={open()}>
-        <Portal>
-          <div
-            ref={panelEl}
-            class="sc-popover fixed z-[200] w-[min(340px,calc(100vw-24px))] max-h-[calc(100vh-16px)] overflow-y-auto overscroll-contain px-3 py-2.5 flex flex-col"
-            style={{ top: `${panelPos().top}px`, left: `${panelPos().left}px` }}
-            role="dialog"
-            aria-label="Extra widgets"
-          >
+      <Popover
+        open={open()}
+        anchor={btnEl}
+        onClose={close}
+        width={340}
+        class="sc-popover w-[min(340px,calc(100vw-24px))] max-h-[calc(100vh-16px)] overflow-y-auto overscroll-contain px-3 py-2.5 flex flex-col"
+        role="dialog"
+        label="Extra widgets"
+        flip
+      >
             <div class="axis-extra-menu-head">Extra widgets</div>
 
             {/* ── Price card ── */}
@@ -502,9 +441,7 @@ export const ExtraMenu: Component = () => {
                 />
               </div>
             </div>
-          </div>
-        </Portal>
-      </Show>
+      </Popover>
     </div>
   );
 };

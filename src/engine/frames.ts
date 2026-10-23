@@ -58,11 +58,11 @@ export interface FrameBar {
 }
 
 /** Positional delta-merge block (mirrors `session_delta`). */
-export interface DeltaBlock {
+export type DeltaBlock = {
   base_index: number;
   count: number;
   tail_len: number;
-}
+};
 
 /** Per-subscription lifecycle states (see final/plan.mdx §7). */
 export type SubscriptionStatusCode =

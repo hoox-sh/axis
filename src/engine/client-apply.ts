@@ -26,6 +26,10 @@
  * @module engine/client-apply
  */
 
+import {
+  executionContextFromDelta,
+  type ExecutionContext,
+} from '../hp/calc/execution-context';
 import { resolveSessionPayload } from '../engines/session-delta';
 import { classifySeqGap } from './frames';
 
@@ -80,6 +84,8 @@ export interface DeltaApplierDelta {
   plots?: Record<string, unknown[]>;
   series?: Record<string, unknown[]>;
   unchanged?: boolean;
+  /** JSON `forming: true` → tip scratch; `false` → commit append. */
+  forming?: boolean;
   [key: string]: unknown;
 }
 
@@ -145,7 +151,7 @@ export function readTimeList(value: unknown): number[] | null {
 }
 
 export type DeltaApplyOutcome =
-  | { ok: true; full: Record<string, unknown>; replayed: boolean }
+  | { ok: true; full: Record<string, unknown>; replayed: boolean; executionContext: ExecutionContext }
   | { ok: false; reason: 'needs-full' | 'delta-before-full' };
 
 /**
@@ -165,7 +171,7 @@ export class Redesign2DeltaApplier {
 
   applyFull(full: DeltaApplierFull & { seq?: number }): Record<string, unknown> {
     this.states.requestFull();
-    const stored = { ...full };
+    const stored = { ...full, executionContext: 'snapshot' as const };
     this.cache = stored;
     if (typeof full.seq === 'number') this.lastSeq = full.seq;
     this.states.markFullApplied();
@@ -175,12 +181,19 @@ export class Redesign2DeltaApplier {
   applyDelta(delta: DeltaApplierDelta): DeltaApplyOutcome {
     if (!this.cache) return { ok: false, reason: 'delta-before-full' };
     const gap = classifySeqGap(this.lastSeq, delta.seq);
+    const cachedContext = this.cache.executionContext;
     if (gap.kind === 'duplicate') {
-      return { ok: true, full: { ...this.cache }, replayed: true };
+      const executionContext: ExecutionContext =
+        cachedContext === 'snapshot' || cachedContext === 'tip' || cachedContext === 'append'
+          ? cachedContext
+          : 'snapshot';
+      return { ok: true, full: { ...this.cache }, replayed: true, executionContext };
     }
     if (gap.kind !== 'continuous') return { ok: false, reason: 'needs-full' };
-    const { seq: _seq, base_index, count, tail_len, ...rest } = delta;
+    const cachedCount = typeof this.cache.count === 'number' ? this.cache.count : undefined;
+    const { seq: _seq, base_index, count, tail_len, forming, ...rest } = delta;
     void _seq;
+    const executionContext = executionContextFromDelta({ forming, count }, cachedCount);
     const update = {
       ...rest,
       count,
@@ -188,10 +201,11 @@ export class Redesign2DeltaApplier {
     };
     const merged = resolveSessionPayload(this.cache, update);
     if (!merged) return { ok: false, reason: 'needs-full' };
-    this.cache = merged;
+    const stored = { ...merged, executionContext, forming: forming === true };
+    this.cache = stored;
     this.lastSeq = delta.seq;
     this.states.markDeltaApplied();
-    return { ok: true, full: { ...merged }, replayed: false };
+    return { ok: true, full: { ...stored }, replayed: false, executionContext };
   }
 
   get cached(): Record<string, unknown> | null {

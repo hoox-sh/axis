@@ -24,8 +24,6 @@
  */
 
 import { type Component, For, Show, createSignal, onCleanup, onMount } from 'solid-js';
-import { dismissOnOutside } from './dismiss-on-outside';
-import { Portal } from 'solid-js/web';
 import {
   store,
   setChartGridMode,
@@ -42,6 +40,7 @@ import {
   type LayoutRecipe,
 } from '../chart/layout-recipes';
 import { Icons } from './icons';
+import { Popover } from './Popover';
 import { loadSymbolData } from '../data/load-symbol';
 import { getSlotBars } from '../chart/chart-registry';
 
@@ -49,26 +48,11 @@ import { getSlotBars } from '../chart/chart-registry';
 export const ChartLayoutMenu: Component = () => {
   const [open, setOpen] = createSignal(false);
   const [saveName, setSaveName] = createSignal('');
-  const [panelPos, setPanelPos] = createSignal({ top: 0, left: 0 });
   let btnEl: HTMLButtonElement | undefined;
-  let panelEl: HTMLDivElement | undefined;
-
-  const placePanel = () => {
-    const el = btnEl;
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    const width = Math.min(320, window.innerWidth - 24);
-    const left = Math.max(8, Math.min(r.right - width, window.innerWidth - width - 8));
-    const top = r.bottom + 4;
-    setPanelPos({ top, left });
-  };
 
   const close = () => setOpen(false);
 
   onMount(() => {
-    const onReposition = () => {
-      if (open()) placePanel();
-    };
     // Auto-load when a slot is focused and has no bars yet
     const onSlot = (e: Event) => {
       const slotId = (e as CustomEvent).detail?.slotId as string | undefined;
@@ -78,19 +62,8 @@ export const ChartLayoutMenu: Component = () => {
       if (!slot) return;
       void loadSymbolData(slot.symbol, slot.interval, store.source);
     };
-    const disposeDismiss = dismissOnOutside({
-      inside: () => [btnEl, panelEl],
-      onDismiss: () => {
-        if (open()) close();
-      },
-    });
-    window.addEventListener('resize', onReposition);
-    window.addEventListener('scroll', onReposition, true);
     window.addEventListener('axis-slot-activate', onSlot);
     onCleanup(() => {
-      disposeDismiss();
-      window.removeEventListener('resize', onReposition);
-      window.removeEventListener('scroll', onReposition, true);
       window.removeEventListener('axis-slot-activate', onSlot);
     });
   });
@@ -150,28 +123,22 @@ export const ChartLayoutMenu: Component = () => {
         aria-haspopup="menu"
         aria-pressed={open()}
         data-testid="axis-btn-layouts"
-        onClick={() => {
-          setOpen((o) => {
-            const next = !o;
-            if (next) placePanel();
-            return next;
-          });
-        }}
+        onClick={() => setOpen((o) => !o)}
       >
         <Icons.layers />
         <span class="hidden sm:inline">Layouts</span>
         <span class="font-mono text-[10px] opacity-80 ml-0.5">{mode()}</span>
       </button>
 
-      <Show when={open()}>
-        <Portal>
-        <div
-          ref={panelEl}
-          class="sc-popover fixed z-[200] w-[min(320px,calc(100vw-24px))] p-2 flex flex-col gap-2"
-          style={{ top: `${panelPos().top}px`, left: `${panelPos().left}px` }}
-          role="menu"
-          aria-label="Chart layouts"
-        >
+      <Popover
+        open={open()}
+        anchor={btnEl}
+        onClose={close}
+        width={320}
+        class="sc-popover w-[min(320px,calc(100vw-24px))] p-2 flex flex-col gap-2"
+        role="menu"
+        label="Chart layouts"
+      >
           <div class="text-[10px] uppercase tracking-wider text-text-faint font-semibold px-0.5">
             Workspace
           </div>
@@ -315,9 +282,7 @@ export const ChartLayoutMenu: Component = () => {
               </ul>
             </Show>
           </div>
-        </div>
-        </Portal>
-      </Show>
+      </Popover>
     </div>
   );
 };

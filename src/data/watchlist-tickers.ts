@@ -49,6 +49,7 @@
 import { fetchBinanceJson } from './binance-http';
 import { fetchMexcJson } from './mexc-http';
 import { getDataManagerSelection } from './data-manager-source';
+import { HttpError } from '../api/client';
 
 /** One row’s quote state as stored by the Watchlist UI. */
 export interface WatchTicker {
@@ -203,7 +204,7 @@ async function fetchBinance(symbols: string[]): Promise<Record<string, WatchTick
  */
 async function fetchOkx(symbols: string[]): Promise<Record<string, WatchTicker>> {
   const res = await fetch('https://www.okx.com/api/v5/market/tickers?instType=SPOT');
-  if (!res.ok) throw new Error(`okx ${res.status}`);
+  if (!res.ok) throw new HttpError(res.status, `okx ${res.status}`);
   const body = (await res.json()) as {
     data?: Array<{ instId: string; last: string; sodUtc0?: string; open24h?: string }>;
   };
@@ -229,7 +230,7 @@ async function fetchOkx(symbols: string[]): Promise<Record<string, WatchTicker>>
 /** Bybit spot tickers; `price24hPcnt` is a fraction (0.01 = 1%). */
 async function fetchBybit(symbols: string[]): Promise<Record<string, WatchTicker>> {
   const res = await fetch('https://api.bybit.com/v5/market/tickers?category=spot');
-  if (!res.ok) throw new Error(`bybit ${res.status}`);
+  if (!res.ok) throw new HttpError(res.status, `bybit ${res.status}`);
   const body = (await res.json()) as {
     result?: { list?: Array<{ symbol: string; lastPrice: string; price24hPcnt: string }> };
   };
@@ -396,7 +397,7 @@ async function fetchKraken(symbols: string[]): Promise<Record<string, WatchTicke
   const pairs = [...new Set(symbols.map(krakenTickerPair))];
   const url = `https://api.kraken.com/0/public/Ticker?pair=${pairs.join(',')}`;
   const res = await fetch(url, { cache: 'no-store' });
-  if (!res.ok) throw new Error(`kraken ${res.status}`);
+  if (!res.ok) throw new HttpError(res.status, `kraken ${res.status}`);
   const body = (await res.json()) as {
     error?: string[];
     result?: Record<string, { c?: [string, string]; o?: string }>;

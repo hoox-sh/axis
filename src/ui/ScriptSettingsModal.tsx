@@ -50,7 +50,7 @@ import {
   loadEditorDoc,
   EDITOR_RUN_KEY,
 } from '../store';
-import { installFocusTrap } from './focus-trap';
+import { Modal } from './Modal';
 import {
   resolveScriptInputs,
   applyInputOverrides,
@@ -265,22 +265,6 @@ export const ScriptSettingsModal: Component = () => {
     });
   };
 
-  const onBackdrop = (e: MouseEvent) => {
-    if (e.target === e.currentTarget) closeScriptSettings();
-  };
-
-  const onKey = (e: KeyboardEvent) => {
-    if (e.key === 'Escape') closeScriptSettings();
-  };
-
-  // Escape while modal open (dialog itself may not hold focus)
-  createEffect(() => {
-    if (!open()) return;
-    const handler = (e: KeyboardEvent) => onKey(e);
-    window.addEventListener('keydown', handler);
-    onCleanup(() => window.removeEventListener('keydown', handler));
-  });
-
   const onApply = async (andRun: boolean) => {
     const t = untrack(() => targetMeta());
     if (!t) return;
@@ -336,84 +320,93 @@ export const ScriptSettingsModal: Component = () => {
     tab() === 'strategy' ? strategyFields().length > 0 : fields().length > 0;
 
   return (
-    <Show when={open()}>
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: backdrop click-to-close is intentional; dialog handles keyboard */}
-      <div
-        class="sc-dialog-backdrop"
-        onClick={onBackdrop}
-        role="presentation"
-      >
-        <div
-          class="sc-dialog w-[min(520px,calc(100vw-2*var(--ui-dialog-margin)))]"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="axis-script-settings-title"
-          data-testid="axis-script-settings"
-          tabIndex={-1}
-          ref={(el) => {
-            if (!el) return;
-            // Tab cycles inside the dialog; dispose restores prior focus on close.
-            const dispose = installFocusTrap(el, { autoFocus: true });
-            onCleanup(dispose);
-          }}
-        >
-          <div class="sc-dialog-accent" />
-          <div class="sc-dialog-header">
-            <div class="min-w-0">
-              <div
-                id="axis-script-settings-title"
-                class="text-[0.95em] font-semibold text-text tracking-tight"
-              >
-                Script settings
-              </div>
-              <div class="sc-hint truncate">
-                {targetMeta()?.name || 'Script'}
-                {showStrategyTab()
-                  ? ' · inputs & strategy properties'
-                  : ' · input parameters'}
-              </div>
-            </div>
+    <Modal
+      open={open()}
+      onClose={() => closeScriptSettings()}
+      title="Script settings"
+      titleId="axis-script-settings-title"
+      hintClass="sc-hint truncate"
+      hint={
+        <>
+          {targetMeta()?.name || 'Script'}
+          {showStrategyTab() ? ' · inputs & strategy properties' : ' · input parameters'}
+        </>
+      }
+      class="w-[min(520px,calc(100vw-2*var(--ui-dialog-margin)))]"
+      testId="axis-script-settings"
+      footer={
+        <>
+          <button
+            type="button"
+            class="sc-btn sc-btn-ghost"
+            onClick={onReset}
+            disabled={!canReset() || busy()}
+          >
+            Reset
+          </button>
+          <div class="flex-1" />
+          <button
+            type="button"
+            class="sc-btn sc-btn-ghost"
+            onClick={() => closeScriptSettings()}
+            disabled={busy()}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="sc-btn"
+            onClick={() => void onApply(false)}
+            disabled={busy()}
+          >
+            Save
+          </button>
+          <button
+            type="button"
+            class="sc-btn sc-btn-primary"
+            onClick={() => void onApply(true)}
+            disabled={busy() || !targetMeta()?.code?.trim()}
+            data-testid="axis-script-settings-apply"
+          >
+            <Show when={busy()} fallback={<Icons.play />}>
+              <Icons.loader class="animate-spin" />
+            </Show>
+            Apply &amp; run
+          </button>
+        </>
+      }
+      aboveBody={
+        <Show when={showStrategyTab()}>
+          <div
+            class="sc-chip-row px-4 pt-2"
+            role="tablist"
+            aria-label="Script settings tabs"
+            data-testid="axis-script-settings-tabs"
+          >
             <button
               type="button"
-              class="sc-btn sc-btn-ghost px-2"
-              onClick={() => closeScriptSettings()}
-              aria-label="Close"
+              role="tab"
+              aria-selected={tab() === 'inputs'}
+              class={`sc-chip ${tab() === 'inputs' ? 'is-active' : ''}`}
+              onClick={() => setTab('inputs')}
+              data-testid="axis-script-settings-tab-inputs"
             >
-              <Icons.x />
+              Inputs
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab() === 'strategy'}
+              class={`sc-chip ${tab() === 'strategy' ? 'is-active' : ''}`}
+              onClick={() => setTab('strategy')}
+              data-testid="axis-script-settings-tab-strategy"
+            >
+              Properties
             </button>
           </div>
-
-          <Show when={showStrategyTab()}>
-            <div
-              class="sc-chip-row px-4 pt-2"
-              role="tablist"
-              aria-label="Script settings tabs"
-              data-testid="axis-script-settings-tabs"
-            >
-              <button
-                type="button"
-                role="tab"
-                aria-selected={tab() === 'inputs'}
-                class={`sc-chip ${tab() === 'inputs' ? 'is-active' : ''}`}
-                onClick={() => setTab('inputs')}
-                data-testid="axis-script-settings-tab-inputs"
-              >
-                Inputs
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={tab() === 'strategy'}
-                class={`sc-chip ${tab() === 'strategy' ? 'is-active' : ''}`}
-                onClick={() => setTab('strategy')}
-                data-testid="axis-script-settings-tab-strategy"
-              >
-                Properties
-              </button>
-            </div>
-          </Show>
-
-          <div class="sc-dialog-body">
+        </Show>
+      }
+    >
             <Show when={tab() === 'inputs' || !showStrategyTab()}>
               <Show
                 when={fields().length > 0}
@@ -495,50 +488,7 @@ export const ScriptSettingsModal: Component = () => {
                 {error()}
               </div>
             </Show>
-          </div>
-
-          <div class="sc-dialog-footer">
-            <button
-              type="button"
-              class="sc-btn sc-btn-ghost"
-              onClick={onReset}
-              disabled={!canReset() || busy()}
-            >
-              Reset
-            </button>
-            <div class="flex-1" />
-            <button
-              type="button"
-              class="sc-btn sc-btn-ghost"
-              onClick={() => closeScriptSettings()}
-              disabled={busy()}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              class="sc-btn"
-              onClick={() => void onApply(false)}
-              disabled={busy()}
-            >
-              Save
-            </button>
-            <button
-              type="button"
-              class="sc-btn sc-btn-primary"
-              onClick={() => void onApply(true)}
-              disabled={busy() || !targetMeta()?.code?.trim()}
-              data-testid="axis-script-settings-apply"
-            >
-              <Show when={busy()} fallback={<Icons.play />}>
-                <Icons.loader class="animate-spin" />
-              </Show>
-              Apply &amp; run
-            </button>
-          </div>
-        </div>
-      </div>
-    </Show>
+    </Modal>
   );
 };
 

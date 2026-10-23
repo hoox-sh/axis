@@ -23,6 +23,7 @@ describe('redesign2 apply bridge (F-16)', () => {
     );
     expect(result.status).toBe('success');
     expect(result.meta?.sessionVia).toBe('stream-full');
+    expect(result.meta?.executionContext).toBe('snapshot');
     expect(result.meta?.count).toBe(2);
     expect((result as unknown as { bar_times: number[] }).bar_times).toEqual([100, 200]);
   });
@@ -32,6 +33,15 @@ describe('redesign2 apply bridge (F-16)', () => {
     expect(result.plots).toEqual([]);
     expect(result.series).toEqual({});
     expect(result.events).toEqual([]);
+    expect(result.meta?.executionContext).toBe('append');
+  });
+
+  test('carries a forming-tip executionContext on stream-delta', () => {
+    const result = streamFullToPrecomputed(
+      { count: 1, series: { a: [1] }, executionContext: 'tip' },
+      'stream-delta',
+    );
+    expect(result.meta?.executionContext).toBe('tip');
   });
 
   test('applyStreamPayload forwards precomputed + bars + liveTick without re-running', async () => {

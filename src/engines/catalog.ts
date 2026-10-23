@@ -66,6 +66,7 @@ import { parseEngineJson } from './json-sanitize';
 import { healthFromBody, type EngineHealth } from './health';
 import { isAbortLike } from '../utils/errors';
 import { combineAbortSignals } from '../utils/fetch-timeout';
+import { mapEnginePayload, normalizeOverlayFlag, payloadEngineTimes } from './result-mapper';
 import { engineFamilyForText } from '../plugins/engine-family';
 import {
   callPyodideRunScript,
@@ -240,32 +241,6 @@ export const DEFAULT_ENGINE_CAPABILITIES: EngineCapabilities = {
  * (`extractEngineResultTimes`). Undefined when the payload carries no axis —
  * session hits then fall back to the evaluated window's own times.
  */
-function payloadEngineTimes(payload: unknown): unknown[] | undefined {
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-    return undefined;
-  }
-  const rec = payload as Record<string, unknown>;
-  for (const key of ['times', 'bar_times', 'barTimes'] as const) {
-    const v = rec[key];
-    if (Array.isArray(v) && v.length) return v as unknown[];
-  }
-  const bars = rec.bars;
-  if (Array.isArray(bars) && bars.length) {
-    const times: unknown[] = [];
-    for (const b of bars) {
-      if (Array.isArray(b)) {
-        if (b.length) times.push(b[0]);
-        continue;
-      }
-      if (b && typeof b === 'object') {
-        const row = b as Record<string, unknown>;
-        times.push(row.time ?? row.t ?? row.timestamp);
-      }
-    }
-    if (times.length) return times;
-  }
-  return undefined;
-}
 
 const LIVE_MODES: readonly EngineLiveMode[] = ['every-tick', 'bar-close'];
 
@@ -455,56 +430,16 @@ export const serverEngine: EnginePlugin = {
     // Prefer engine meta; do not force true — runner resolves indicator/strategy defaults.
     // Shared by the REST fallback and the live-session fast path (same envelope shape).
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const mapRestPayload = (payload: any): RunResult => {
-      // Prefer engine meta; do not force true — runner resolves indicator/strategy defaults.
-      const restOverlay = normalizeOverlayFlag(payload.overlay ?? payload.meta?.overlay);
-      const restName =
-        payload.script_name || payload.meta?.script_name || 'plot';
-      // Bar-time axis for the apply path: session series are joined to the
-      // chart by time, not index tail-align (see `alignSeriesToTimes`).
-      const restTimes = payloadEngineTimes(payload);
-      const restProfile = (payload.profile ?? payload.meta?.profile) as
-        | Record<string, unknown>
-        | undefined;
-      const restLogs = (payload.logs ?? payload.meta?.logs) as RunResult['logs'] | undefined;
-      const restScriptType =
-        payload.script_type ||
-        payload.meta?.script_type ||
-        (typeof restName === 'string' && /strategy/i.test(String(payload.meta?.kind || ''))
-          ? 'strategy'
-          : undefined);
-      return {
-        status: 'success',
-        plots: (payload.plots as (number | null)[]) || [],
-        series: (payload.series as Record<string, PlotSample[]>) || {},
-        events: (payload.events as RunResult['events']) || [],
-        drawings: (payload.drawings as RunResult['drawings']) || [],
-        inputs: payload.inputs,
-        ...(restProfile ? { profile: restProfile } : {}),
-        ...(Array.isArray(restLogs) ? { logs: restLogs } : {}),
-        meta: {
-          ...(payload.meta || {}),
-          ms: performance.now() - t0,
-          transport: 'rest' as const,
-          mode: payload.mode as string | undefined,
-          script_id: payload.script_id as string | undefined,
-          run_id: payload.run_id as string | undefined,
-          ...(restOverlay !== undefined ? { overlay: restOverlay } : {}),
-          script_name: restName as string,
-          // Engine bar-time axis when the backend shipped one (apply joins by time).
-          ...(restTimes ? { engineTimes: restTimes } : {}),
-          ...(restScriptType ? { script_type: restScriptType } : {}),
-          plot_meta: payload.plot_meta || payload.meta?.plot_meta || {},
-          inputs: payload.inputs,
-          ...(Array.isArray(payload.alerts) ? { alerts: payload.alerts } : {}),
-          ...(Array.isArray(payload.alert_conditions)
-            ? { alert_conditions: payload.alert_conditions }
-            : {}),
-          ...(restProfile ? { profile: restProfile } : {}),
-          ...(Array.isArray(restLogs) ? { logs: restLogs } : {}),
-        },
-      } satisfies RunResult;
-    };
+    const mapRestPayload = (payload: any): RunResult =>
+      mapEnginePayload(payload, {
+        transport: 'rest',
+        ms: performance.now() - t0,
+        mode: payload.mode as string | undefined,
+        // The apply path joins session series by time, not index tail-align
+        // (see `alignSeriesToTimes`) — the axis has to travel with the result.
+        engineTimes: true,
+        scriptType: 'payload+meta+kind',
+      });
 
     // ── Engine-owned series (PYNE Pro every-tick): identity only, never bars ──
     // The engine's store and feed own the OHLCV. A fallback to the bars path
@@ -656,59 +591,15 @@ export const serverEngine: EnginePlugin = {
               meta: { ms, transport: 'ws' },
             } satisfies RunResult;
           }
-          const wsOverlay = normalizeOverlayFlag(
-            wsResult.overlay ??
-              (wsResult.meta as { overlay?: unknown } | undefined)?.overlay,
-          );
-          const wsName =
-            (wsResult.script_name as string) ||
-            (wsResult.meta as { script_name?: string } | undefined)?.script_name ||
-            'plot';
-          const wsProfile =
-            ((wsResult as { profile?: unknown }).profile ??
-              (wsResult.meta as { profile?: unknown } | undefined)?.profile) as
-              | Record<string, unknown>
-              | undefined;
-          const wsLogs = (
-            (wsResult as { logs?: unknown }).logs ??
-            (wsResult.meta as { logs?: unknown } | undefined)?.logs
-          ) as RunResult['logs'] | undefined;
-          const wsScriptType = (wsResult.meta as { script_type?: string } | undefined)
-            ?.script_type;
-          const wsAlerts = (wsResult as { alerts?: unknown }).alerts;
-          const wsAlertConds = (wsResult as { alert_conditions?: unknown }).alert_conditions;
           await rememberResolvedRunMode(modeFields, wsResult.mode || mode);
-          return {
-            status: 'success',
-            plots: (wsResult.plots as (number | null)[]) || [],
-            series: (wsResult.series as Record<string, PlotSample[]>) || {},
-            events: (wsResult.events as RunResult['events']) || [],
-            drawings: (wsResult.drawings as RunResult['drawings']) || [],
-            inputs: (wsResult as { inputs?: unknown }).inputs,
-            ...(wsProfile ? { profile: wsProfile } : {}),
-            ...(Array.isArray(wsLogs) ? { logs: wsLogs } : {}),
-            meta: {
-              ...(typeof wsResult.meta === 'object' && wsResult.meta ? wsResult.meta : {}),
-              ...(Array.isArray(wsAlerts) ? { alerts: wsAlerts } : {}),
-              ...(Array.isArray(wsAlertConds) ? { alert_conditions: wsAlertConds } : {}),
-              ms,
-              transport: 'ws' as const,
-              mode: (wsResult.mode || mode) as string,
-              script_id: wsResult.script_id,
-              run_id: wsResult.run_id,
-              ...(wsOverlay !== undefined ? { overlay: wsOverlay } : {}),
-              script_name: wsName,
-              ...(wsScriptType ? { script_type: wsScriptType } : {}),
-              plot_meta:
-                (wsResult.plot_meta as Record<string, unknown>) ||
-                (wsResult.meta as { plot_meta?: Record<string, unknown> } | undefined)
-                  ?.plot_meta ||
-                {},
-              inputs: (wsResult as { inputs?: unknown }).inputs,
-              ...(wsProfile ? { profile: wsProfile } : {}),
-              ...(Array.isArray(wsLogs) ? { logs: wsLogs } : {}),
-            },
-          } satisfies RunResult;
+          return mapEnginePayload(wsResult, {
+            transport: 'ws',
+            ms,
+            // The WS path resolves the run mode server-side; the requested
+            // mode is only the fallback.
+            mode: (wsResult.mode || mode) as string,
+            scriptType: 'meta',
+          });
         }
       } catch (err) {
         // A user cancel must end the run here — falling through to REST would
@@ -897,15 +788,6 @@ export const serverEngine: EnginePlugin = {
     }
   },
 };
-
-/**
- * Normalize engine `overlay` flags. Runtimes may send bool or 0/1.
- * `undefined` means “not specified” (runner applies defaults).
- */
-function normalizeOverlayFlag(v: unknown): boolean | undefined {
-  if (v === undefined || v === null) return undefined;
-  return v !== false && v !== 0 && v !== '0' && v !== 'false';
-}
 
 declare global {
   interface Window {

@@ -32,9 +32,7 @@ import {
   shouldCacheStaticResponse,
 } from '../src/sw/strategy';
 
-const swSource = await Bun.file(
-  new URL('../public/sw.js', import.meta.url),
-).text();
+const swSource = await Bun.file(new URL('../public/sw.js', import.meta.url)).text();
 
 function swConst(name: string): string | null {
   const m = swSource.match(new RegExp(`const\\s+${name}\\s*=\\s*([^;]+);`));
@@ -73,7 +71,7 @@ describe('sw.js ↔ strategy.ts parity (D18)', () => {
     expect(isApiPath('/api/scripts')).toBe(true);
     expect(isApiPath('/apis')).toBe(false);
     expect(isVersionProbe('/version.json')).toBe(true);
-    expect(swSource).toContain('pathname === \'/api\' || pathname.startsWith(\'/api/\')');
+    expect(swSource).toContain("pathname === '/api' || pathname.startsWith('/api/')");
   });
 
   it('D2 — API responses are never cached in either copy', () => {
@@ -117,6 +115,14 @@ describe('sw.js ↔ strategy.ts parity (D18)', () => {
     expect(isPyodidePath('/assets/index-abc.js')).toBe(false);
     expect(isPyodidePath('/api/scripts')).toBe(false);
     expect(swSource).toContain('PYODIDE_CACHE_MAX_ENTRIES');
+  });
+
+  it('offline shell stamps the HP isolation pair so a synthesized document cannot drop COOP/COEP', () => {
+    expect(swSource).toContain('Cross-Origin-Opener-Policy');
+    expect(swSource).toContain('same-origin');
+    expect(swSource).toContain('Cross-Origin-Embedder-Policy');
+    expect(swSource).toContain('credentialless');
+    expect(swSource).toContain('Cross-Origin-Resource-Policy');
   });
 
   it('no-store / private semantics exist in both copies', () => {
