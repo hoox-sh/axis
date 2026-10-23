@@ -36,7 +36,7 @@ import type {
 import { metaFromScriptContent } from '../indicators/script-meta';
 import { defaultCloudEndpoint, resolveCloudConfig } from './cloud-config';
 import { requireSecureCloudEndpoint } from './cloud-config';
-import { HttpError, readJsonBody } from '../api/client';
+import { fetchJson } from '../api/client';
 
 export type { CloudConfig } from './cloud-config';
 export {
@@ -66,27 +66,23 @@ async function api(
     Authorization: `Bearer ${cfg.apiKey}`,
   };
   if (opts.ifMatch) headers['If-Match'] = opts.ifMatch;
-  const res = await fetch(`${cfg.endpoint}${path}`, {
-    method: opts.method || 'GET',
-    headers,
-    body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
-    signal: AbortSignal.timeout(30_000),
-  });
-  const json = await readJsonBody(res);
-  if (!res.ok) {
-    // The status travels on the error, so a caller can branch on it instead
-    // of parsing the message.
-    throw new HttpError(res.status, String(json.message || json.error || `HTTP ${res.status}`), {
-      code: String(json.code || ''),
-      body: json,
-    });
-  }
-  return { status: res.status, json };
+  // Throws HttpError (status on the error) on non-2xx — shared helper so the
+  // envelope and timeout live in one place.
+  return fetchJson(
+    `${cfg.endpoint}${path}`,
+    {
+      method: opts.method || 'GET',
+      headers,
+      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+    },
+    { label: 'Cloud', timeoutMs: 30_000 },
+  );
 }
 
 function metaFromRemote(r: Record<string, unknown>): ScriptMeta {
   const content = r.content != null ? String(r.content) : '';
-  const kindRaw = r.scriptKind != null ? String(r.scriptKind) : r.kind != null ? String(r.kind) : '';
+  const kindRaw =
+    r.scriptKind != null ? String(r.scriptKind) : r.kind != null ? String(r.kind) : '';
   const scriptKind =
     kindRaw === 'indicator' ||
     kindRaw === 'strategy' ||
@@ -103,11 +99,7 @@ function metaFromRemote(r: Record<string, unknown>): ScriptMeta {
   const derived = content
     ? metaFromScriptContent(content, { scriptKind, pineVersion })
     : {
-        scriptKind: (scriptKind || 'unknown') as
-          | 'indicator'
-          | 'strategy'
-          | 'library'
-          | 'unknown',
+        scriptKind: (scriptKind || 'unknown') as 'indicator' | 'strategy' | 'library' | 'unknown',
         pineVersion,
       };
   return {
