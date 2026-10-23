@@ -36,7 +36,10 @@ import {
   resolveTimestampMs,
   type SignInput,
   type SignedRequest,
+  type VenueInstrument,
+  type VenueTicker,
 } from './types';
+import { okxInst, venueFetch } from './spot';
 
 export const OKX_BASE = 'https://www.okx.com';
 
@@ -81,4 +84,48 @@ export async function signOkx(input: SignInput): Promise<SignedRequest> {
     url: absoluteUrl(OKX_BASE, input.path, queryString),
     headers,
   };
+}
+
+/** Live SPOT instruments (`state === 'live'` only). */
+export async function fetchOkxInstruments(): Promise<VenueInstrument[]> {
+  const json = (await venueFetch(
+    'https://www.okx.com/api/v5/public/instruments?instType=SPOT',
+    'OKX',
+  )) as {
+    code?: string;
+    data?: Array<{ baseCcy: string; quoteCcy: string; state: string }>;
+  };
+  if (json.code !== '0' || !Array.isArray(json.data)) {
+    throw new Error('OKX instruments empty');
+  }
+  return json.data
+    .filter((s) => s.state === 'live')
+    .map((s) => ({ base: s.baseCcy, quote: s.quoteCcy }));
+}
+
+/**
+ * Full SPOT ticker list mapped to the requested symbols.
+ * Change = (last − open) / open × 100 using open24h or sodUtc0.
+ */
+export async function fetchOkxTickers(symbols: string[]): Promise<Record<string, VenueTicker>> {
+  const body = (await venueFetch(
+    'https://www.okx.com/api/v5/market/tickers?instType=SPOT',
+    'okx',
+  )) as {
+    data?: Array<{ instId: string; last: string; sodUtc0?: string; open24h?: string }>;
+  };
+  const byId = new Map((body.data || []).map((t) => [t.instId, t]));
+  const next: Record<string, VenueTicker> = {};
+  for (const sym of symbols) {
+    const t = byId.get(okxInst(sym));
+    if (!t) continue;
+    const last = parseFloat(t.last);
+    const open = parseFloat(t.open24h || t.sodUtc0 || String(last));
+    next[sym] = {
+      price: last,
+      change: open ? ((last - open) / open) * 100 : 0,
+      open24h: Number.isFinite(open) ? open : undefined,
+    };
+  }
+  return next;
 }

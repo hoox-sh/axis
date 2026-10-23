@@ -37,7 +37,10 @@ import {
   resolveTimestampMs,
   type SignInput,
   type SignedRequest,
+  type VenueInstrument,
+  type VenueTicker,
 } from './types';
+import { toUsdt, venueFetch } from './spot';
 
 export const COINBASE_BASE = 'https://api.exchange.coinbase.com';
 
@@ -57,4 +60,64 @@ export async function signCoinbase(input: SignInput): Promise<SignedRequest> {
       'CB-ACCESS-PASSPHRASE': input.passphrase ?? '',
     },
   };
+}
+
+/** Online, trading-enabled products. */
+export async function fetchCoinbaseInstruments(): Promise<VenueInstrument[]> {
+  const data = (await venueFetch(
+    'https://api.exchange.coinbase.com/products',
+    'Coinbase',
+  )) as Array<{
+    base_currency: string;
+    quote_currency: string;
+    status: string;
+    trading_disabled?: boolean;
+  }>;
+  if (!Array.isArray(data)) throw new Error('Coinbase products empty');
+  return data
+    .filter((s) => s.status === 'online' && !s.trading_disabled)
+    .map((s) => ({ base: s.base_currency, quote: s.quote_currency }));
+}
+
+const COINBASE_TICKER_CAP = 12;
+
+/**
+ * Per-product ticker + 24h stats, mapped to the requested symbols.
+ * Capped at 12 symbols to avoid request storms (caller slices).
+ */
+export async function fetchCoinbaseTickers(
+  symbols: string[],
+): Promise<Record<string, VenueTicker>> {
+  const next: Record<string, VenueTicker> = {};
+  await Promise.all(
+    symbols.slice(0, COINBASE_TICKER_CAP).map(async (sym) => {
+      const base = toUsdt(sym).replace(/USDT$/, '').replace(/USDC$/, '').replace(/USD$/, '');
+      const product = `${base}-USD`;
+      try {
+        const t = (await venueFetch(
+          `https://api.exchange.coinbase.com/products/${product}/ticker`,
+          'coinbase',
+        )) as { price?: string };
+        const price = parseFloat(t.price || '0');
+        if (!price) return;
+        // 24h stats
+        let change = 0;
+        try {
+          const st = (await venueFetch(
+            `https://api.exchange.coinbase.com/products/${product}/stats`,
+            'coinbase',
+          )) as { open?: string; last?: string };
+          const open = parseFloat(st.open || '0');
+          const last = parseFloat(st.last || String(price));
+          if (open) change = ((last - open) / open) * 100;
+        } catch {
+          /* stats optional — keep ticker */
+        }
+        next[sym] = { price, change };
+      } catch {
+        /* skip missing / invalid product */
+      }
+    }),
+  );
+  return next;
 }

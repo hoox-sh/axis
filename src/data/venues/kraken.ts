@@ -38,7 +38,10 @@ import {
   sha256,
   type SignInput,
   type SignedRequest,
+  type VenueInstrument,
+  type VenueTicker,
 } from './types';
+import { krakenKeyVariants, krakenTickerPair, toUsdt, venueFetch } from './spot';
 
 export const KRAKEN_BASE = 'https://api.kraken.com';
 
@@ -63,4 +66,79 @@ export async function signKraken(input: SignInput): Promise<SignedRequest> {
       'API-Sign': bytesToBase64(raw),
     },
   };
+}
+
+/**
+ * Asset pairs, normalized for AXIS symbols (`XBT → BTC`, legacy `X`/`Z`
+ * prefixes stripped, `wsname` preferred when present).
+ */
+export async function fetchKrakenInstruments(): Promise<VenueInstrument[]> {
+  const json = (await venueFetch('https://api.kraken.com/0/public/AssetPairs', 'Kraken')) as {
+    error?: string[];
+    result?: Record<string, { base?: string; quote?: string; status?: string; wsname?: string }>;
+  };
+  if (json.error?.length) throw new Error(json.error.join(', '));
+  const out: VenueInstrument[] = [];
+  for (const p of Object.values(json.result || {})) {
+    if (p.status && p.status !== 'online') continue;
+    // wsname like "XBT/USD"
+    const ws = String(p.wsname || '');
+    let base = String(p.base || '')
+      .replace(/^X/, '')
+      .replace(/^Z/, '');
+    let quote = String(p.quote || '')
+      .replace(/^X/, '')
+      .replace(/^Z/, '');
+    if (ws.includes('/')) {
+      const [b, q] = ws.split('/');
+      base = b || base;
+      quote = q || quote;
+    }
+    if (!base || !quote) continue;
+    // Normalize XBT → BTC for AXIS-style symbols
+    if (base === 'XBT') base = 'BTC';
+    if (quote === 'XBT') quote = 'BTC';
+    out.push({ base, quote });
+  }
+  return out;
+}
+
+/**
+ * Public `Ticker` for the requested symbols (one request for all pairs).
+ * Unknown pairs surface as `error: ["EQuery:…"]` with a partial/empty result —
+ * missing rows are skipped, never mixed onto another venue.
+ */
+export async function fetchKrakenTickers(symbols: string[]): Promise<Record<string, VenueTicker>> {
+  const pairs = [...new Set(symbols.map(krakenTickerPair))];
+  const body = (await venueFetch(
+    `https://api.kraken.com/0/public/Ticker?pair=${pairs.join(',')}`,
+    'kraken',
+  )) as {
+    error?: string[];
+    result?: Record<string, { c?: [string, string]; o?: string }>;
+  };
+  const result = body.result && typeof body.result === 'object' ? body.result : {};
+  const entries = Object.entries(result);
+  if (!entries.length) throw new Error(`Kraken: ${(body.error || []).join(', ') || 'no tickers'}`);
+  const byKey = new Map<string, { c?: [string, string]; o?: string }>();
+  for (const [k, v] of entries) {
+    for (const variant of krakenKeyVariants(k)) {
+      if (!byKey.has(variant)) byKey.set(variant, v);
+    }
+  }
+  const next: Record<string, VenueTicker> = {};
+  for (const sym of symbols) {
+    const t = byKey.get(toUsdt(sym));
+    if (!t) continue;
+    const price = parseFloat(t.c?.[0] || '');
+    if (!Number.isFinite(price) || price <= 0) continue;
+    const open = parseFloat(t.o || '');
+    const open24h = Number.isFinite(open) && open > 0 ? open : undefined;
+    next[sym] = {
+      price,
+      change: open24h ? ((price - open24h) / open24h) * 100 : 0,
+      open24h,
+    };
+  }
+  return next;
 }

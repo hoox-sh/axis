@@ -30,22 +30,15 @@
 import { getDataManagerSelection } from './data-manager-source';
 import { fetchBinanceJson } from './binance-http';
 import { fetchMexcJson } from './mexc-http';
-import {
-  resolveProviderVenue,
-  type ProviderVenue,
-} from './provider';
+import { resolveProviderVenue, type ProviderVenue } from './provider';
 import { gatewayFetch, type GatewayMode } from './gateway';
-import { HttpError } from '../api/client';
+import { fetchBybitInstruments } from './venues/bybit';
+import { fetchCoinbaseInstruments } from './venues/coinbase';
+import { fetchKrakenInstruments } from './venues/kraken';
+import { fetchOkxInstruments } from './venues/okx';
 
 export type SymbolVenue =
-  | 'binance'
-  | 'okx'
-  | 'bybit'
-  | 'coinbase'
-  | 'kraken'
-  | 'mexc'
-  | 'gecko'
-  | 'generic';
+  'binance' | 'okx' | 'bybit' | 'coinbase' | 'kraken' | 'mexc' | 'gecko' | 'generic';
 
 export type SymbolEntry = {
   /** AXIS load form (e.g. BTCUSDT, ETH-USD for Coinbase product-ish). */
@@ -109,10 +102,7 @@ function toSymbolVenue(v: ProviderVenue): SymbolVenue {
  * Source wins when it is a known venue; stream is used as a hint for
  * mock / data-manager / unknown sources.
  */
-export function resolveSymbolVenue(
-  sourceId: string,
-  streamId?: string
-): SymbolVenue {
+export function resolveSymbolVenue(sourceId: string, streamId?: string): SymbolVenue {
   const sel = sourceId === 'data-manager' ? getDataManagerSelection() : null;
   return toSymbolVenue(
     resolveProviderVenue(sourceId, streamId, {
@@ -140,10 +130,7 @@ function loadCache(id: string): SymbolEntry[] | null {
 
 function saveCache(id: string, symbols: SymbolEntry[]): void {
   try {
-    localStorage.setItem(
-      cacheKey(id),
-      JSON.stringify({ ts: Date.now(), symbols })
-    );
+    localStorage.setItem(cacheKey(id), JSON.stringify({ ts: Date.now(), symbols }));
   } catch {
     /* quota */
   }
@@ -176,114 +163,34 @@ async function fetchBinance(): Promise<SymbolEntry[]> {
     }>;
   };
   return (data.symbols || [])
-    .filter(
-      (s) =>
-        s.status === 'TRADING' && s.isSpotTradingAllowed !== false
-    )
+    .filter((s) => s.status === 'TRADING' && s.isSpotTradingAllowed !== false)
     .map((s) => entry(s.baseAsset, s.quoteAsset, s.symbol));
 }
 
 async function fetchOkx(): Promise<SymbolEntry[]> {
-  const res = await fetch(
-    'https://www.okx.com/api/v5/public/instruments?instType=SPOT',
-    { cache: 'no-store' }
-  );
-  if (!res.ok) throw new HttpError(res.status, `OKX HTTP ${res.status}`);
-  const json = (await res.json()) as {
-    code?: string;
-    data?: Array<{ instId: string; baseCcy: string; quoteCcy: string; state: string }>;
-  };
-  if (json.code !== '0' || !Array.isArray(json.data)) {
-    throw new Error('OKX instruments empty');
-  }
-  return json.data
-    .filter((s) => s.state === 'live')
-    .map((s) => entry(s.baseCcy, s.quoteCcy, compactPair(s.baseCcy, s.quoteCcy)));
+  const instruments = await fetchOkxInstruments();
+  return instruments.map((s) => entry(s.base, s.quote, compactPair(s.base, s.quote)));
 }
 
 async function fetchBybit(): Promise<SymbolEntry[]> {
-  const res = await fetch(
-    'https://api.bybit.com/v5/market/instruments-info?category=spot&limit=1000',
-    { cache: 'no-store' }
-  );
-  if (!res.ok) throw new HttpError(res.status, `Bybit HTTP ${res.status}`);
-  const json = (await res.json()) as {
-    retCode?: number;
-    result?: {
-      list?: Array<{
-        symbol: string;
-        baseCoin: string;
-        quoteCoin: string;
-        status: string;
-      }>;
-    };
-  };
-  if (json.retCode !== 0 || !Array.isArray(json.result?.list)) {
-    throw new Error('Bybit instruments empty');
-  }
-  return json.result!.list!
-    .filter((s) => s.status === 'Trading')
-    .map((s) => entry(s.baseCoin, s.quoteCoin, s.symbol));
+  const instruments = await fetchBybitInstruments();
+  return instruments.map((s) => entry(s.base, s.quote, s.symbol));
 }
 
 async function fetchCoinbase(): Promise<SymbolEntry[]> {
-  const res = await fetch('https://api.exchange.coinbase.com/products', {
-    cache: 'no-store',
+  const instruments = await fetchCoinbaseInstruments();
+  return instruments.map((s) => {
+    // AXIS coinbase source rewrites USDT → USD product; keep both forms useful
+    const quote = s.quote.toUpperCase();
+    const base = s.base.toUpperCase();
+    const axisSym = quote === 'USD' ? compactPair(base, 'USDT') : compactPair(base, quote);
+    return entry(base, quote === 'USD' ? 'USD' : quote, axisSym);
   });
-  if (!res.ok) throw new HttpError(res.status, `Coinbase HTTP ${res.status}`);
-  const data = (await res.json()) as Array<{
-    id: string;
-    base_currency: string;
-    quote_currency: string;
-    status: string;
-    trading_disabled?: boolean;
-  }>;
-  if (!Array.isArray(data)) throw new Error('Coinbase products empty');
-  return data
-    .filter((s) => s.status === 'online' && !s.trading_disabled)
-    .map((s) => {
-      // AXIS coinbase source rewrites USDT → USD product; keep both forms useful
-      const quote = s.quote_currency.toUpperCase();
-      const base = s.base_currency.toUpperCase();
-      const axisSym =
-        quote === 'USD' ? compactPair(base, 'USDT') : compactPair(base, quote);
-      return entry(base, quote === 'USD' ? 'USD' : quote, axisSym);
-    });
 }
 
 async function fetchKraken(): Promise<SymbolEntry[]> {
-  const res = await fetch('https://api.kraken.com/0/public/AssetPairs', {
-    cache: 'no-store',
-  });
-  if (!res.ok) throw new HttpError(res.status, `Kraken HTTP ${res.status}`);
-  const json = (await res.json()) as {
-    error?: string[];
-    result?: Record<
-      string,
-      { base?: string; quote?: string; altname?: string; status?: string; wsname?: string }
-    >;
-  };
-  if (json.error?.length) throw new Error(json.error.join(', '));
-  const out: SymbolEntry[] = [];
-  for (const [key, p] of Object.entries(json.result || {})) {
-    if (p.status && p.status !== 'online') continue;
-    // wsname like "XBT/USD"
-    const ws = String(p.wsname || '');
-    let base = String(p.base || '').replace(/^X/, '').replace(/^Z/, '');
-    let quote = String(p.quote || '').replace(/^X/, '').replace(/^Z/, '');
-    if (ws.includes('/')) {
-      const [b, q] = ws.split('/');
-      base = b || base;
-      quote = q || quote;
-    }
-    if (!base || !quote) continue;
-    // Normalize XBT → BTC for AXIS-style symbols
-    if (base === 'XBT') base = 'BTC';
-    if (quote === 'XBT') quote = 'BTC';
-    out.push(entry(base, quote, compactPair(base, quote)));
-    void key;
-  }
-  return out;
+  const instruments = await fetchKrakenInstruments();
+  return instruments.map((s) => entry(s.base, s.quote, compactPair(s.base, s.quote)));
 }
 
 async function fetchMexc(): Promise<SymbolEntry[]> {
@@ -324,10 +231,7 @@ async function fetchVenue(venue: SymbolVenue): Promise<SymbolEntry[]> {
   }
 }
 
-async function fetchCcxtMarkets(
-  exchange: string,
-  gateway: GatewayMode,
-): Promise<SymbolEntry[]> {
+async function fetchCcxtMarkets(exchange: string, gateway: GatewayMode): Promise<SymbolEntry[]> {
   const res = await gatewayFetch(gateway, '/markets', { exchange });
   if (!res.ok) throw new Error(`gateway markets ${res.status}`);
   const json: unknown = await res.json();
@@ -371,7 +275,9 @@ export async function loadSymbolCatalog(
     gateway?: GatewayMode;
   },
 ): Promise<SymbolCatalogResult> {
-  const ccxtEx = String(opts?.ccxtExchange || '').trim().toLowerCase();
+  const ccxtEx = String(opts?.ccxtExchange || '')
+    .trim()
+    .toLowerCase();
   if (ccxtEx) {
     const cacheId = `ccxt:${ccxtEx}`;
     const label = `${ccxtEx} (CCXT)`;
@@ -391,7 +297,14 @@ export async function loadSymbolCatalog(
       const msg = err instanceof Error ? err.message : String(err);
       const cached = loadCache(cacheId);
       if (cached?.length) {
-        return { venue: 'generic', label, symbols: cached, fromCache: true, fallback: false, error: msg };
+        return {
+          venue: 'generic',
+          label,
+          symbols: cached,
+          fromCache: true,
+          fallback: false,
+          error: msg,
+        };
       }
       return {
         venue: 'generic',
@@ -462,7 +375,7 @@ export async function loadSymbolCatalog(
 export function filterSymbols(
   list: SymbolEntry[],
   query: string,
-  opts?: { quote?: string; limit?: number }
+  opts?: { quote?: string; limit?: number },
 ): SymbolEntry[] {
   const limit = opts?.limit ?? 80;
   let pool = list;
@@ -501,11 +414,7 @@ export function filterSymbols(
     else if (base === q) score = 1;
     else if (sym.startsWith(q) || compact.startsWith(q)) score = 2;
     else if (base.startsWith(q)) score = 3;
-    else if (
-      sym.includes(q) ||
-      base.includes(q) ||
-      s.display.toUpperCase().includes(q)
-    ) {
+    else if (sym.includes(q) || base.includes(q) || s.display.toUpperCase().includes(q)) {
       score = 4;
     }
     if (score >= 0) {
@@ -513,10 +422,7 @@ export function filterSymbols(
     }
   }
   scored.sort(
-    (a, b) =>
-      a.score - b.score ||
-      a.boost - b.boost ||
-      a.s.symbol.localeCompare(b.s.symbol)
+    (a, b) => a.score - b.score || a.boost - b.boost || a.s.symbol.localeCompare(b.s.symbol),
   );
   return scored.slice(0, limit).map((o) => o.s);
 }

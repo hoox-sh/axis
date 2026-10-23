@@ -36,7 +36,10 @@ import {
   resolveTimestampMs,
   type SignInput,
   type SignedRequest,
+  type VenueInstrument,
+  type VenueTicker,
 } from './types';
+import { toUsdt, venueFetch } from './spot';
 
 export const BYBIT_BASE = 'https://api.bybit.com';
 
@@ -61,4 +64,51 @@ export async function signBybit(input: SignInput): Promise<SignedRequest> {
       'X-BAPI-RECV-WINDOW': recvWindow,
     },
   };
+}
+
+/** Spot instruments with `status === 'Trading'` only. */
+export async function fetchBybitInstruments(): Promise<VenueInstrument[]> {
+  const json = (await venueFetch(
+    'https://api.bybit.com/v5/market/instruments-info?category=spot&limit=1000',
+    'Bybit',
+  )) as {
+    retCode?: number;
+    result?: {
+      list?: Array<{ symbol: string; baseCoin: string; quoteCoin: string; status: string }>;
+    };
+  };
+  if (json.retCode !== 0 || !Array.isArray(json.result?.list)) {
+    throw new Error('Bybit instruments empty');
+  }
+  return json
+    .result!.list!.filter((s) => s.status === 'Trading')
+    .map((s) => ({
+      base: s.baseCoin,
+      quote: s.quoteCoin,
+      symbol: s.symbol,
+    }));
+}
+
+/**
+ * Spot tickers mapped to the requested symbols.
+ * `price24hPcnt` is a fraction (0.01 = 1%).
+ */
+export async function fetchBybitTickers(symbols: string[]): Promise<Record<string, VenueTicker>> {
+  const body = (await venueFetch(
+    'https://api.bybit.com/v5/market/tickers?category=spot',
+    'bybit',
+  )) as {
+    result?: { list?: Array<{ symbol: string; lastPrice: string; price24hPcnt: string }> };
+  };
+  const bySym = new Map((body.result?.list || []).map((t) => [t.symbol, t]));
+  const next: Record<string, VenueTicker> = {};
+  for (const sym of symbols) {
+    const t = bySym.get(toUsdt(sym));
+    if (!t) continue;
+    next[sym] = {
+      price: parseFloat(t.lastPrice),
+      change: parseFloat(t.price24hPcnt) * 100, // fraction → %
+    };
+  }
+  return next;
 }

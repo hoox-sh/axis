@@ -7,7 +7,7 @@ tags: [code, data, venues]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-10T20:32:38Z
+  at: 2026-10-23T18:44:52Z
 sources:
   - id: tree
     resource: "src/data/venues"
@@ -19,13 +19,18 @@ okf_lock: generated
 # Files
 
 * `binance.ts` — BINANCE_BASE, BINANCE_KLINES_PATH, signBinance
-* `bybit.ts` — BYBIT_BASE, BYBIT_KLINE_PATH, signBybit
-* `coinbase.ts` — COINBASE_BASE, signCoinbase
+* `bybit.ts` — BYBIT_BASE, BYBIT_KLINE_PATH, fetchBybitInstruments, fetchBybitTickers, signBybit
+* `coinbase.ts` — COINBASE_BASE, fetchCoinbaseInstruments, fetchCoinbaseTickers, signCoinbase
 * `index.ts` — BINANCE_BASE, BINANCE_KLINES_PATH, BYBIT_BASE, BYBIT_KLINE_PATH, COINBASE_BASE, DEFAULT_RECV_WINDOW, KRAKEN_BASE, KRAKEN_OHLC_PATH, MEXC_BASE, MEXC_KLINES_PATH, OKX_BASE, OKX_CANDLES_PATH
-* `kraken.ts` — KRAKEN_BASE, KRAKEN_OHLC_PATH, signKraken
+* `kraken.ts` — KRAKEN_BASE, KRAKEN_OHLC_PATH, fetchKrakenInstruments, fetchKrakenTickers, signKraken
 * `mexc.ts` — MEXC_BASE, MEXC_KLINES_PATH, mexcKlineInterval, mexcSpotSymbol, mexcWsKlineInterval, signMexc
-* `okx.ts` — OKX_BASE, OKX_CANDLES_PATH, OkxCreds, okxHeaders, signOkx
-* `types.ts` — DEFAULT_RECV_WINDOW, SignInput, SignedRequest, VenueId, absoluteUrl, base64ToBytes, buildQueryString, bytesToBase64, bytesToHex, concatBytes, encodeUtf8, hmacDigest
+* `okx.ts` — OKX_BASE, OKX_CANDLES_PATH, OkxCreds, fetchOkxInstruments, fetchOkxTickers, okxHeaders, signOkx
+* `spot.ts` — coinbaseProduct, krakenKeyVariants, krakenTickerPair, okxInst, toUsdt, venueFetch
+* `types.ts` — DEFAULT_RECV_WINDOW, SignInput, SignedRequest, VenueId, VenueInstrument, VenueTicker, absoluteUrl, base64ToBytes, buildQueryString, bytesToBase64, bytesToHex, concatBytes
+
+# Depends on
+
+* [src/api](/code/src/api.md)
 
 # Used by
 

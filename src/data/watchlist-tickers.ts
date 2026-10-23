@@ -49,7 +49,11 @@
 import { fetchBinanceJson } from './binance-http';
 import { fetchMexcJson } from './mexc-http';
 import { getDataManagerSelection } from './data-manager-source';
-import { HttpError } from '../api/client';
+import { fetchBybitTickers } from './venues/bybit';
+import { fetchCoinbaseTickers } from './venues/coinbase';
+import { fetchKrakenTickers } from './venues/kraken';
+import { fetchOkxTickers } from './venues/okx';
+import { coinbaseProduct, okxInst, toUsdt } from './venues/spot';
 
 /** One row’s quote state as stored by the Watchlist UI. */
 export interface WatchTicker {
@@ -62,30 +66,8 @@ export interface WatchTicker {
   updatedAt?: number;
 }
 
-/**
- * Normalize to a USDT/USD/USDC pair symbol (e.g. `BTC` → `BTCUSDT`).
- * Strips non-alphanumerics; leaves pairs that already end in quote assets alone.
- */
-export function toUsdt(sym: string): string {
-  const s = sym.toUpperCase().replace(/[^A-Z0-9]/g, '');
-  if (s.endsWith('USDT') || s.endsWith('USD') || s.endsWith('USDC')) return s;
-  return `${s}USDT`;
-}
-
-/** OKX spot `instId` from a watchlist symbol (`BTCUSDT` → `BTC-USDT`). */
-export function okxInst(sym: string): string {
-  const s = toUsdt(sym);
-  if (s.endsWith('USDT')) return `${s.slice(0, -4)}-USDT`;
-  if (s.endsWith('USD')) return `${s.slice(0, -3)}-USD`;
-  return `${s}-USDT`;
-}
-
-/** Coinbase product id (`BTCUSDT` / `BTC` → `BTC-USD`). */
-export function coinbaseProduct(sym: string): string {
-  const s = toUsdt(sym);
-  const base = s.replace(/USDT$/, '').replace(/USDC$/, '').replace(/USD$/, '');
-  return `${base}-USD`;
-}
+// Re-exported for `watchlist-live` (WS layer) — single spelling shared with REST.
+export { coinbaseProduct, okxInst, toUsdt };
 
 /**
  * Resolve the effective source id for quotes. `data-manager` is a cache over
@@ -198,93 +180,27 @@ async function fetchBinance(symbols: string[]): Promise<Record<string, WatchTick
   return next;
 }
 
-/**
- * OKX: full SPOT ticker list, filter by instId.
- * Change = (last − open) / open × 100 using open24h or sodUtc0.
- */
+/** OKX spot tickers, mapped to the requested symbols. */
 async function fetchOkx(symbols: string[]): Promise<Record<string, WatchTicker>> {
-  const res = await fetch('https://www.okx.com/api/v5/market/tickers?instType=SPOT');
-  if (!res.ok) throw new HttpError(res.status, `okx ${res.status}`);
-  const body = (await res.json()) as {
-    data?: Array<{ instId: string; last: string; sodUtc0?: string; open24h?: string }>;
-  };
-  const byId = new Map((body.data || []).map((t) => [t.instId, t]));
+  const rows = await fetchOkxTickers(symbols);
   const next: Record<string, WatchTicker> = {};
-  for (const sym of symbols) {
-    const inst = okxInst(sym);
-    const t = byId.get(inst);
-    if (!t) continue;
-    const last = parseFloat(t.last);
-    const open = parseFloat(t.open24h || t.sodUtc0 || String(last));
-    const change = open ? ((last - open) / open) * 100 : 0;
-    next[sym] = {
-      price: last,
-      change,
-      open24h: Number.isFinite(open) ? open : undefined,
-      source: 'okx',
-    };
-  }
+  for (const [sym, t] of Object.entries(rows)) next[sym] = { ...t, source: 'okx' };
   return next;
 }
 
-/** Bybit spot tickers; `price24hPcnt` is a fraction (0.01 = 1%). */
+/** Bybit spot tickers, mapped to the requested symbols. */
 async function fetchBybit(symbols: string[]): Promise<Record<string, WatchTicker>> {
-  const res = await fetch('https://api.bybit.com/v5/market/tickers?category=spot');
-  if (!res.ok) throw new HttpError(res.status, `bybit ${res.status}`);
-  const body = (await res.json()) as {
-    result?: { list?: Array<{ symbol: string; lastPrice: string; price24hPcnt: string }> };
-  };
-  const bySym = new Map((body.result?.list || []).map((t) => [t.symbol, t]));
+  const rows = await fetchBybitTickers(symbols);
   const next: Record<string, WatchTicker> = {};
-  for (const sym of symbols) {
-    const key = toUsdt(sym);
-    const t = bySym.get(key);
-    if (!t) continue;
-    next[sym] = {
-      price: parseFloat(t.lastPrice),
-      change: parseFloat(t.price24hPcnt) * 100, // fraction → %
-      source: 'bybit',
-    };
-  }
+  for (const [sym, t] of Object.entries(rows)) next[sym] = { ...t, source: 'bybit' };
   return next;
 }
 
-/**
- * Coinbase: parallel product ticker + 24h stats.
- * Capped at 12 symbols to avoid request storms.
- */
+/** Coinbase tickers, mapped to the requested symbols. */
 async function fetchCoinbase(symbols: string[]): Promise<Record<string, WatchTicker>> {
-  // Coinbase product ids like BTC-USD
+  const rows = await fetchCoinbaseTickers(symbols);
   const next: Record<string, WatchTicker> = {};
-  await Promise.all(
-    symbols.slice(0, 12).map(async (sym) => {
-      const base = toUsdt(sym).replace(/USDT$/, '').replace(/USD$/, '');
-      const product = `${base}-USD`;
-      try {
-        const res = await fetch(`https://api.exchange.coinbase.com/products/${product}/ticker`);
-        if (!res.ok) return;
-        const t = (await res.json()) as { price?: string };
-        const price = parseFloat(t.price || '0');
-        if (!price) return;
-        // 24h stats
-        let change = 0;
-        try {
-          const s = await fetch(`https://api.exchange.coinbase.com/products/${product}/stats`);
-          if (s.ok) {
-            const st = (await s.json()) as { open?: string; last?: string };
-            const open = parseFloat(st.open || '0');
-            const last = parseFloat(st.last || String(price));
-            if (open) change = ((last - open) / open) * 100;
-          }
-        } catch {
-          /* ignore */
-        }
-        next[sym] = { price, change, source: 'coinbase' };
-      } catch {
-        /* ignore */
-      }
-    }),
-  );
+  for (const [sym, t] of Object.entries(rows)) next[sym] = { ...t, source: 'coinbase' };
   return next;
 }
 
@@ -351,77 +267,11 @@ async function fetchMexc(symbols: string[]): Promise<Record<string, WatchTicker>
   return next;
 }
 
-/** Kraken request pair (`BTCUSDT` → `XBTUSDT`; BTC → XBT). */
-function krakenTickerPair(sym: string): string {
-  const s = toUsdt(sym);
-  if (s.endsWith('USDT')) {
-    const base = s.slice(0, -4);
-    return `${base === 'BTC' ? 'XBT' : base}USDT`;
-  }
-  if (s.endsWith('USDC')) {
-    const base = s.slice(0, -4);
-    return `${base === 'BTC' ? 'XBT' : base}USDC`;
-  }
-  if (s.endsWith('USD')) {
-    const base = s.slice(0, -3);
-    return `${base === 'BTC' ? 'XBT' : base}USD`;
-  }
-  return s;
-}
-
-/**
- * Canonicalize a Kraken `result` key for watchlist lookup.
- *
- * Kraken uses legacy `X`/`Z` asset prefixes (`XXBTZUSD` = XBT/USD,
- * `XETHZUSD` = ETH/USD) while newer pairs are plain (`SOLUSD`). Both the
- * raw and prefix-stripped forms are indexed so `XAUT`-style symbols (leading
- * X, no legacy prefix) still match while `XETH…` resolves to ETH.
- */
-function krakenKeyVariants(key: string): string[] {
-  let s = key.toUpperCase().replace(/[^A-Z0-9]/g, '');
-  s = s.replace(/XBT/g, 'BTC');
-  s = s.replace(/Z(USD|EUR|JPY|GBP|CAD|AUD|USDT|USDC)$/, '$1');
-  const out = [s];
-  if (s.length > 6 && s.startsWith('X')) out.push(s.slice(1));
-  return [...new Set(out)];
-}
-
-/**
- * Kraken public `Ticker` (direct fetch — same CORS posture as the existing
- * Kraken OHLC history fetch, no Worker proxy needed). One request for all
- * pairs; `c[0]` last, `o` today's open → change %.
- * Unknown pairs surface as `error: ["EQuery:…"]` with a partial/empty result —
- * missing rows are skipped, never mixed onto another venue.
- */
+/** Kraken tickers, mapped to the requested symbols. */
 async function fetchKraken(symbols: string[]): Promise<Record<string, WatchTicker>> {
-  const pairs = [...new Set(symbols.map(krakenTickerPair))];
-  const url = `https://api.kraken.com/0/public/Ticker?pair=${pairs.join(',')}`;
-  const res = await fetch(url, { cache: 'no-store' });
-  if (!res.ok) throw new HttpError(res.status, `kraken ${res.status}`);
-  const body = (await res.json()) as {
-    error?: string[];
-    result?: Record<string, { c?: [string, string]; o?: string }>;
-  };
-  const result = body.result && typeof body.result === 'object' ? body.result : {};
-  const entries = Object.entries(result);
-  if (!entries.length) throw new Error(`Kraken: ${(body.error || []).join(', ') || 'no tickers'}`);
-  const byKey = new Map<string, { c?: [string, string]; o?: string }>();
-  for (const [k, v] of entries) {
-    for (const variant of krakenKeyVariants(k)) {
-      if (!byKey.has(variant)) byKey.set(variant, v);
-    }
-  }
+  const rows = await fetchKrakenTickers(symbols);
   const next: Record<string, WatchTicker> = {};
-  for (const orig of symbols) {
-    const t = byKey.get(toUsdt(orig));
-    if (!t) continue;
-    const price = parseFloat(t.c?.[0] || '');
-    if (!Number.isFinite(price) || price <= 0) continue;
-    const open = parseFloat(t.o || '');
-    const open24h = Number.isFinite(open) && open > 0 ? open : undefined;
-    const change = open24h ? ((price - open24h) / open24h) * 100 : 0;
-    next[orig] = { price, change, open24h, source: 'kraken' };
-  }
+  for (const [sym, t] of Object.entries(rows)) next[sym] = { ...t, source: 'kraken' };
   return next;
 }
 

@@ -43,6 +43,27 @@ export interface SignedRequest {
 /** Default recvWindow (ms) for Binance / Bybit signed GET. */
 export const DEFAULT_RECV_WINDOW = 5000;
 
+/**
+ * Neutral spot instrument — one tradable pair before AXIS display mapping.
+ * `symbol-catalog` maps these to {@link SymbolEntry} via `entry()`.
+ */
+export interface VenueInstrument {
+  base: string;
+  quote: string;
+  /** Raw exchange symbol when it carries meaning (e.g. Bybit `BTCUSDT`). */
+  symbol?: string;
+}
+
+/**
+ * Neutral 24h ticker row before Watchlist mapping.
+ * `watchlist-tickers` tags these with `source` to build {@link WatchTicker}.
+ */
+export interface VenueTicker {
+  price: number;
+  change: number;
+  open24h?: number;
+}
+
 const textEncoder = new TextEncoder();
 
 export function encodeUtf8(value: string): Uint8Array {
@@ -54,9 +75,7 @@ export function resolveTimestampMs(input: Pick<SignInput, 'timestampMs'>): numbe
 }
 
 /** Insertion-order `k=v` join. Undefined values are dropped. */
-export function buildQueryString(
-  query?: Record<string, string | number | undefined>,
-): string {
+export function buildQueryString(query?: Record<string, string | number | undefined>): string {
   if (!query) return '';
   const parts: string[] = [];
   for (const [key, value] of Object.entries(query)) {
