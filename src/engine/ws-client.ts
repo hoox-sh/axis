@@ -36,6 +36,7 @@ import type {
   SeriesMeta,
 } from './frames';
 import { normalizeRedesign2Frame, validateRedesign2Frame } from './frames';
+import { PendingRequests, ReconnectHandlers, wireStats } from './wire-bookkeeping';
 
 export type Redesign2WsFrameType =
   | 'auth'
@@ -130,11 +131,8 @@ export class Redesign2WsClient {
   /** Called for frames that fail contract validation (logged + skipped by default). */
   public onMalformed?: (raw: unknown) => void;
 
-  private readonly pending = new Map<
-    string,
-    { resolve: (frame: Redesign2WsFrame) => void; reject: (err: Error) => void; timer: ReturnType<typeof setTimeout> }
-  >();
-  private readonly reconnectHandlers = new Set<() => void>();
+  private readonly pending = new PendingRequests<Redesign2WsFrame>();
+  private readonly reconnects = new ReconnectHandlers();
   private openedOnce = false;
 
   constructor(options: Redesign2WsClientOptions) {
@@ -142,8 +140,7 @@ export class Redesign2WsClient {
       ...DEFAULTS,
       ...options,
       connectTimeoutMs: options.connectTimeoutMs ?? DEFAULTS.connectTimeoutMs,
-      initialReconnectDelayMs:
-        options.initialReconnectDelayMs ?? DEFAULTS.initialReconnectDelayMs,
+      initialReconnectDelayMs: options.initialReconnectDelayMs ?? DEFAULTS.initialReconnectDelayMs,
       maxReconnectDelayMs: options.maxReconnectDelayMs ?? DEFAULTS.maxReconnectDelayMs,
       heartbeatIntervalMs: options.heartbeatIntervalMs ?? DEFAULTS.heartbeatIntervalMs,
       pongTimeoutMs: options.pongTimeoutMs ?? DEFAULTS.pongTimeoutMs,
@@ -164,12 +161,12 @@ export class Redesign2WsClient {
    * never the auth token (it travels as a frame, not in the URL).
    */
   stats(): { open: boolean; openedOnce: boolean; reconnectAttempts: number; stopped: boolean } {
-    return {
+    return wireStats({
       open: this.isOpen,
       openedOnce: this.openedOnce,
       reconnectAttempts: this.reconnectAttempts,
       stopped: this.stopped,
-    };
+    });
   }
 
   /**
@@ -255,13 +252,7 @@ export class Redesign2WsClient {
         this.openedOnce = true;
         const fireResume = () => {
           if (first) return;
-          for (const fn of this.reconnectHandlers) {
-            try {
-              fn();
-            } catch {
-              /* a failing resubscribe must not break the socket */
-            }
-          }
+          this.reconnects.fire();
         };
         if (this.options.authToken) {
           this.send({
@@ -343,7 +334,12 @@ export class Redesign2WsClient {
     id: string,
     kind: 'series' | 'script',
     meta: SeriesMeta,
-    opts?: { script?: string; inputs?: Record<string, unknown>; libraries?: unknown; mode?: string },
+    opts?: {
+      script?: string;
+      inputs?: Record<string, unknown>;
+      libraries?: unknown;
+      mode?: string;
+    },
   ): void {
     const frame: Redesign2SubscribeFrame = {
       type: 'subscribe',
@@ -354,7 +350,12 @@ export class Redesign2WsClient {
     this.send(frame);
   }
 
-  resumeSubscription(id: string, count: number, lastTime: number, extra?: { closed_upto?: number; seq?: number }): void {
+  resumeSubscription(
+    id: string,
+    count: number,
+    lastTime: number,
+    extra?: { closed_upto?: number; seq?: number },
+  ): void {
     const frame: Redesign2ResumeFrame = {
       type: 'resume',
       id,
@@ -385,23 +386,7 @@ export class Redesign2WsClient {
    * socket close so a dead connection cannot leak waiters.
    */
   awaitFrame(id: string, timeoutMs = 10_000): Promise<Redesign2WsFrame> {
-    return new Promise<Redesign2WsFrame>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(id);
-        reject(new Error(`Redesign2 frame wait timed out for id: ${id}`));
-      }, timeoutMs);
-      this.pending.set(id, {
-        resolve: (frame) => {
-          clearTimeout(timer);
-          resolve(frame);
-        },
-        reject: (err) => {
-          clearTimeout(timer);
-          reject(err);
-        },
-        timer,
-      });
-    });
+    return this.pending.awaitFrame(id, timeoutMs);
   }
 
   /**
@@ -411,10 +396,7 @@ export class Redesign2WsClient {
    * preserves every session. Returns an unsubscribe function.
    */
   addReconnectHandler(fn: () => void): () => void {
-    this.reconnectHandlers.add(fn);
-    return () => {
-      this.reconnectHandlers.delete(fn);
-    };
+    return this.reconnects.add(fn);
   }
 
   disconnect(): void {
@@ -460,23 +442,13 @@ export class Redesign2WsClient {
       return;
     }
     if (frame.id) {
-      const waiter = this.pending.get(frame.id);
-      if (waiter) {
-        this.pending.delete(frame.id);
-        clearTimeout(waiter.timer);
-        waiter.resolve(frame);
-      }
+      this.pending.resolveFrame(frame.id, frame);
     }
     this.onFrame?.(frame);
   }
 
   private dropPending(err: Error): void {
-    if (!this.pending.size) return;
-    for (const [id, waiter] of this.pending) {
-      this.pending.delete(id);
-      clearTimeout(waiter.timer);
-      waiter.reject(err);
-    }
+    this.pending.dropAll(err);
   }
 
   private startHeartbeat(): void {

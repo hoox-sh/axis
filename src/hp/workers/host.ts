@@ -31,6 +31,7 @@ import {
   type Redesign2WsClientOptions,
 } from '../../engine/ws-client';
 import type { WireClient, WireFrame } from '../../engine/live-wire';
+import { PendingRequests, ReconnectHandlers, wireStats } from '../../engine/wire-bookkeeping';
 import { isolationProbe } from '../capabilities';
 import { hpSabMode, isHpEnabled } from '../feature-flag';
 import { allocateHotBuffer, type HotBuffer } from '../memory/hot-buffer';
@@ -77,15 +78,8 @@ export class IngestHostClient implements WireClient {
   private stopped = true;
   private reconnectAttempts = 0;
   private connectWaiters: Array<{ resolve: () => void; reject: (err: Error) => void }> = [];
-  private readonly pending = new Map<
-    string,
-    {
-      resolve: (frame: WireFrame) => void;
-      reject: (err: Error) => void;
-      timer: ReturnType<typeof setTimeout>;
-    }
-  >();
-  private readonly reconnectHandlers = new Set<() => void>();
+  private readonly pending = new PendingRequests<WireFrame>();
+  private readonly reconnects = new ReconnectHandlers();
   readonly url: string;
   private readonly authToken?: string;
   /** HP-2 hot ring reader (main side); `null` until the SAB is allocated. */
@@ -125,12 +119,12 @@ export class IngestHostClient implements WireClient {
   }
 
   stats(): { open: boolean; openedOnce: boolean; reconnectAttempts: number; stopped: boolean } {
-    return {
+    return wireStats({
       open: this.open,
       openedOnce: this.openedOnce,
       reconnectAttempts: this.reconnectAttempts,
       stopped: this.stopped,
-    };
+    });
   }
 
   private ensureWorker(): IngestWorkerTransport {
@@ -160,14 +154,7 @@ export class IngestHostClient implements WireClient {
 
   private dispatchFrames(frames: Redesign2Frame[]): void {
     for (const frame of frames) {
-      if (frame.id) {
-        const waiter = this.pending.get(frame.id);
-        if (waiter) {
-          this.pending.delete(frame.id);
-          clearTimeout(waiter.timer);
-          waiter.resolve(frame);
-        }
-      }
+      if (frame.id) this.pending.resolveFrame(frame.id, frame);
       this.onFrame?.(frame);
     }
   }
@@ -195,15 +182,7 @@ export class IngestHostClient implements WireClient {
     }
     if (msg.type === 'open') {
       const first = msg.first;
-      if (!first) {
-        for (const fn of this.reconnectHandlers) {
-          try {
-            fn();
-          } catch {
-            /* resubscribe must not break the socket */
-          }
-        }
-      }
+      if (!first) this.reconnects.fire();
       this.openedOnce = true;
       return;
     }

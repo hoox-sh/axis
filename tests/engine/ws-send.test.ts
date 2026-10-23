@@ -4,9 +4,7 @@
  */
 
 import { describe, expect, test } from 'bun:test';
-import {
-  Redesign2WsClient,
-} from '../../src/engine/ws-client';
+import { Redesign2WsClient } from '../../src/engine/ws-client';
 
 const META = { exchange: 'binance', market: 'spot', symbol: 'BTC/USDT', interval: '1m' };
 
@@ -68,8 +66,8 @@ describe('redesign2 typed send + routing (F-05)', () => {
   test('reconnect handlers register and unregister', () => {
     const { client } = openClient();
     const off = client.addReconnectHandler(() => {});
-    expect((client as unknown as { reconnectHandlers: Set<unknown> }).reconnectHandlers.size).toBe(1);
+    expect((client as unknown as { reconnects: { size: number } }).reconnects.size).toBe(1);
     off();
-    expect((client as unknown as { reconnectHandlers: Set<unknown> }).reconnectHandlers.size).toBe(0);
+    expect((client as unknown as { reconnects: { size: number } }).reconnects.size).toBe(0);
   });
 });
