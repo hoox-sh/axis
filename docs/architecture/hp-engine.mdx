@@ -119,7 +119,7 @@ Both are pure reads — no flag writes, no wire start, no SAB allocation, no sec
 | HP-2 SAB hot ring → chart wiring | landed — opt-in producer: ingest writes the ring, the chart samples it on rAF through `appendLiveBar` |
 | GPU canvas wiring (ChartHost stacked canvas, render loop) | landed — transparent WebGL2 overlay over the price pane on the forced `gpu=webgl2` rung, fed from the hot ring; PaneManager untouched, LWC keeps painting (plan §14.2) |
 | MCP observability (`hp.get` / `hp.sample`) | landed — read-only HP plane over MCP: flags, isolation, chip, ring alignment/seq, overlay state, verdict + windowed liveness sample |
-| PR 10 default flip | not yet — needs production measurement (tick-to-paint ms, SAB OOM rate) |
+| PR 10 default flip | not yet — first production read on `axis.hoox.sh`: ring aligned to the chart tail (501 bars, tail-time identity), WebGL2 overlay painting at ~50 fps, no SAB OOM (`axis.hp.rung` unset); tick-to-paint ms is still uninstrumented |
 
 ## Tests
 
