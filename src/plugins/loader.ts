@@ -36,14 +36,26 @@
  * @module plugins/loader
  */
 
-import { registerDynamicSource, unregisterDynamicSource, listDynamicSourceIds } from '../sources/catalog';
+import {
+  registerDynamicSource,
+  unregisterDynamicSource,
+  listDynamicSourceIds,
+} from '../sources/catalog';
 import { registerDynamicStream, unregisterDynamicStream } from '../streams/catalog';
 import { registerDynamicEngine, unregisterDynamicEngine } from '../engines/catalog';
 import { registerDynamicDataset, unregisterDynamicDataset } from '../onchain/catalog';
 import { ensureBuiltins } from './bootstrap';
 import { appendLog, store, setStore } from '../store';
+import { getJson, setJson } from '../utils/storage';
 import { registry } from './registry';
-import { pluginKey, type ComponentPlugin, type DatasetPlugin, type EnginePlugin, type SourcePlugin, type StreamPlugin } from './types';
+import {
+  pluginKey,
+  type ComponentPlugin,
+  type DatasetPlugin,
+  type EnginePlugin,
+  type SourcePlugin,
+  type StreamPlugin,
+} from './types';
 
 /**
  * Same-origin copy of the PYNE Agent component plugin (avoids cross-origin
@@ -55,8 +67,7 @@ import { pluginKey, type ComponentPlugin, type DatasetPlugin, type EnginePlugin,
 export const DEFAULT_PYNE_AGENT_PLUGIN_URL = '/plugins/axis-pine-agent.js';
 
 /** Known production agent Worker origin (NL → Pine). Not auto-seeded. */
-export const DEFAULT_PYNE_AGENT_ENDPOINT =
-  'https://pyne-agent-worker.cryptolinx.workers.dev';
+export const DEFAULT_PYNE_AGENT_ENDPOINT = 'https://pyne-agent-worker.cryptolinx.workers.dev';
 
 /** Legacy remote plugin URL — migrated to same-origin on restore. */
 export const LEGACY_PYNE_AGENT_PLUGIN_URL =
@@ -91,12 +102,14 @@ const ALLOWED_DATA_JS_MIMES = new Set([
  * (e.g. `java\u0000script:` → `javascript:`).
  */
 function normalizeForSchemeCheck(href: string): string {
-  return href
-    .replace(/^\uFEFF/, '')
-    // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional C0/zero-width char stripping to defeat scheme obfuscation
-    .replace(/[\u0000-\u001F\u007F\u200B-\u200D\uFEFF]/g, '')
-    .toLowerCase()
-    .trim();
+  return (
+    href
+      .replace(/^\uFEFF/, '')
+      // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional C0/zero-width char stripping to defeat scheme obfuscation
+      .replace(/[\u0000-\u001F\u007F\u200B-\u200D\uFEFF]/g, '')
+      .toLowerCase()
+      .trim()
+  );
 }
 
 function isInstalledPlugin(x: unknown): x is InstalledPlugin {
@@ -123,23 +136,14 @@ function sanitizeInstalledEntry(p: InstalledPlugin): InstalledPlugin {
 }
 
 function readInstalled(): InstalledPlugin[] {
-  try {
-    const raw = localStorage.getItem(PLUGINS_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(isInstalledPlugin).map(sanitizeInstalledEntry);
-  } catch {
-    return [];
-  }
+  const parsed = getJson<unknown>(PLUGINS_KEY);
+  if (!Array.isArray(parsed)) return [];
+  return parsed.filter(isInstalledPlugin).map(sanitizeInstalledEntry);
 }
 
 function writeInstalled(list: InstalledPlugin[]) {
-  try {
-    localStorage.setItem(PLUGINS_KEY, JSON.stringify(list));
-  } catch {
-    /* ignore quota / private mode */
-  }
+  // Ignore quota / private mode — memory registry still works this session.
+  setJson(PLUGINS_KEY, list);
 }
 
 function unregisterByKind(kind: string, id: string): void {
@@ -233,9 +237,7 @@ export function migratePyneAgentPluginUrl(url: string): string {
   if (!href) return href;
   try {
     const base =
-      typeof location !== 'undefined' && location?.origin
-        ? location.origin
-        : 'https://axis.local';
+      typeof location !== 'undefined' && location?.origin ? location.origin : 'https://axis.local';
     const u = new URL(href, base);
     if (
       u.pathname.endsWith('/plugin/axis-pine-agent.js') ||
@@ -318,9 +320,7 @@ export function assertSafePluginUrl(href: string): void {
  * Override with `VITE_ALLOW_REMOTE_PLUGINS=1` (or add hosts via
  * `VITE_PLUGIN_REMOTE_ALLOW` comma list).
  */
-export const DEFAULT_REMOTE_PLUGIN_HOSTS = [
-  'pyne-agent-worker.cryptolinx.workers.dev',
-] as const;
+export const DEFAULT_REMOTE_PLUGIN_HOSTS = ['pyne-agent-worker.cryptolinx.workers.dev'] as const;
 
 function isProdBuild(override?: boolean): boolean {
   if (typeof override === 'boolean') return override;
@@ -370,9 +370,7 @@ export function isRemoteHttpPluginUrl(href: string): boolean {
   }
   try {
     const base =
-      typeof location !== 'undefined' && location?.origin
-        ? location.origin
-        : 'https://axis.local';
+      typeof location !== 'undefined' && location?.origin ? location.origin : 'https://axis.local';
     const u = new URL(trimmed, base);
     if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
     if (typeof location !== 'undefined' && location?.origin && u.origin === location.origin) {
@@ -418,9 +416,7 @@ export function assertPluginRemoteAllowed(
   if (!isRemoteHttpPluginUrl(href)) return;
 
   const base =
-    typeof location !== 'undefined' && location?.origin
-      ? location.origin
-      : 'https://axis.local';
+    typeof location !== 'undefined' && location?.origin ? location.origin : 'https://axis.local';
   let host = '';
   try {
     host = new URL(href, base).hostname;
@@ -460,8 +456,7 @@ async function importPluginModule(href: string): Promise<unknown> {
         headers: { Accept: 'text/javascript, application/javascript, */*' },
       });
     } catch (fetchErr: unknown) {
-      const d =
-        directErr instanceof Error ? directErr.message : String(directErr);
+      const d = directErr instanceof Error ? directErr.message : String(directErr);
       const f = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
       throw new Error(
         `Failed to load plugin module (CORS or network). ` +
@@ -470,16 +465,12 @@ async function importPluginModule(href: string): Promise<unknown> {
       );
     }
     if (!res.ok) {
-      throw new Error(
-        `Plugin URL HTTP ${res.status} ${res.statusText || ''}`.trim(),
-      );
+      throw new Error(`Plugin URL HTTP ${res.status} ${res.statusText || ''}`.trim());
     }
     const text = await res.text();
     if (!text.trim()) throw new Error('Plugin URL returned an empty body');
     if (/^\s*</.test(text)) {
-      throw new Error(
-        'Plugin URL returned HTML (not JavaScript) — check the path and deploy',
-      );
+      throw new Error('Plugin URL returned HTML (not JavaScript) — check the path and deploy');
     }
     const blob = new Blob([text], { type: 'text/javascript' });
     const blobUrl = URL.createObjectURL(blob);
@@ -497,9 +488,7 @@ async function importPluginModule(href: string): Promise<unknown> {
 
 export async function loadPluginFromUrl(url: string): Promise<InstalledPlugin> {
   ensureBuiltins();
-  const href = migratePyneAgentPluginUrl(
-    normalizePluginUrl(typeof url === 'string' ? url : ''),
-  );
+  const href = migratePyneAgentPluginUrl(normalizePluginUrl(typeof url === 'string' ? url : ''));
   if (!href) throw new Error('URL required');
   assertPluginRemoteAllowed(href);
 
@@ -524,11 +513,14 @@ export async function loadPluginFromUrl(url: string): Promise<InstalledPlugin> {
   } else if (kind === 'engine') {
     if (typeof p.run !== 'function') throw new Error('Engine plugin needs run()');
   } else if (kind === 'dataset') {
-    if (typeof p.fetchDataset !== 'function') throw new Error('Dataset plugin needs fetchDataset()');
+    if (typeof p.fetchDataset !== 'function')
+      throw new Error('Dataset plugin needs fetchDataset()');
   } else if (kind === 'component') {
     if (typeof p.mount !== 'function') throw new Error('Component plugin needs mount()');
   } else if (kind === 'storage') {
-    throw new Error('Custom storage plugins via URL are not supported yet (use built-in local/cloud)');
+    throw new Error(
+      'Custom storage plugins via URL are not supported yet (use built-in local/cloud)',
+    );
   } else {
     throw new Error(`Unknown plugin kind: ${kind}`);
   }

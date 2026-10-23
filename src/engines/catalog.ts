@@ -53,10 +53,15 @@
  */
 
 /** Production HOOX pyne-worker (edge Pine evaluate). */
-export const DEFAULT_PYNE_WORKER_ENDPOINT =
-  'https://pyne-worker.cryptolinx.workers.dev';
+export const DEFAULT_PYNE_WORKER_ENDPOINT = 'https://pyne-worker.cryptolinx.workers.dev';
 
-import type { EnginePlugin, PlotSample, RunResult, EngineCapabilities, EngineLiveMode } from '../plugins/types';
+import type {
+  EnginePlugin,
+  PlotSample,
+  RunResult,
+  EngineCapabilities,
+  EngineLiveMode,
+} from '../plugins/types';
 import type { LiveSessionModeFields } from './live-sessions';
 import { barsForPine } from '../data/parse-bars';
 import { store, setTelemetryPlane, setTelemetryState, setStatus, appendLog } from '../store';
@@ -65,6 +70,7 @@ import { scriptHasPineAlertCalls } from '../alerts/pine';
 import { parseEngineJson } from './json-sanitize';
 import { healthFromBody, type EngineHealth } from './health';
 import { isAbortLike } from '../utils/errors';
+import { getJson, setJson } from '../utils/storage';
 import { combineAbortSignals } from '../utils/fetch-timeout';
 import { mapEnginePayload, normalizeOverlayFlag, payloadEngineTimes } from './result-mapper';
 import { engineFamilyForText } from '../plugins/engine-family';
@@ -160,16 +166,8 @@ export function isLoopbackOrigin(origin: string): boolean {
 }
 
 function readTrustedEngineOrigins(): string[] {
-  try {
-    const raw = localStorage.getItem(TRUSTED_ENGINE_ORIGINS_KEY);
-    if (!raw) return [];
-    const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed)
-      ? parsed.filter((s): s is string => typeof s === 'string')
-      : [];
-  } catch {
-    return [];
-  }
+  const parsed = getJson<unknown>(TRUSTED_ENGINE_ORIGINS_KEY);
+  return Array.isArray(parsed) ? parsed.filter((s): s is string => typeof s === 'string') : [];
 }
 
 /**
@@ -217,11 +215,7 @@ export function confirmEngineApiKeyTarget(endpoint: string, apiKey: string): boo
     });
     return false;
   }
-  try {
-    localStorage.setItem(TRUSTED_ENGINE_ORIGINS_KEY, JSON.stringify([...trusted, origin]));
-  } catch {
-    /* quota */
-  }
+  setJson(TRUSTED_ENGINE_ORIGINS_KEY, [...trusted, origin]);
   return true;
 }
 
@@ -252,9 +246,11 @@ const LIVE_MODES: readonly EngineLiveMode[] = ['every-tick', 'bar-close'];
  */
 export function capabilitiesFromHealth(body: unknown): EngineCapabilities {
   const features =
-    body && typeof body === 'object' && (body as { features?: unknown }).features &&
+    body &&
+    typeof body === 'object' &&
+    (body as { features?: unknown }).features &&
     typeof (body as { features?: unknown }).features === 'object'
-      ? ((body as { features: Record<string, unknown> }).features)
+      ? (body as { features: Record<string, unknown> }).features
       : {};
   const rawModes = Array.isArray(features.live_modes) ? features.live_modes : [];
   const dataSession = features.data_session === true;
@@ -307,12 +303,18 @@ export const serverEngine: EnginePlugin = {
     },
   },
   async getCapabilities() {
-    const endpoint = String(store.endpoint || this.configSchema?.endpoint.default || '').replace(/\/$/, '');
+    const endpoint = String(store.endpoint || this.configSchema?.endpoint.default || '').replace(
+      /\/$/,
+      '',
+    );
     const probe = await probeEngineHealth(endpoint);
     if (!probe) {
       // Readiness must not outlive the endpoint that reported it.
       cachedEngineHealth = null;
-      return { ...DEFAULT_ENGINE_CAPABILITIES, liveModes: [...DEFAULT_ENGINE_CAPABILITIES.liveModes] };
+      return {
+        ...DEFAULT_ENGINE_CAPABILITIES,
+        liveModes: [...DEFAULT_ENGINE_CAPABILITIES.liveModes],
+      };
     }
     // Same fetch, two views: live-mode caps for the runner, readiness/route
     // metadata for the UI (prewarm, runner, preview gating).
@@ -320,7 +322,10 @@ export const serverEngine: EnginePlugin = {
     return probe.capabilities;
   },
   async isReady() {
-    const endpoint = (store.endpoint || this.configSchema!.endpoint.default as string).replace(/\/$/, '');
+    const endpoint = (store.endpoint || (this.configSchema!.endpoint.default as string)).replace(
+      /\/$/,
+      '',
+    );
     try {
       // Prefer /health: same-origin AXIS hosts serve the SPA on `/`.
       let health: { websocket?: boolean } | null = null;
@@ -402,14 +407,9 @@ export const serverEngine: EnginePlugin = {
       } satisfies RunResult;
     }
     // Generous budget: compile + large OHLCV can exceed 30s on cold Numba.
-    const timeoutMs = Math.min(
-      180_000,
-      Math.max(90_000, 45_000 + (bars?.length || 0) * 40),
-    );
+    const timeoutMs = Math.min(180_000, Math.max(90_000, 45_000 + (bars?.length || 0) * 40));
     const inputOverrides =
-      inputs && typeof inputs === 'object' && Object.keys(inputs).length
-        ? inputs
-        : undefined;
+      inputs && typeof inputs === 'object' && Object.keys(inputs).length ? inputs : undefined;
     // A resumable session freezes its inputs at create — `/tick` and `/append`
     // carry bars only. `resolveInputSourceValues` inlines `input.source` refs as
     // live series arrays that change every tick, so a session created over them
@@ -503,16 +503,10 @@ export const serverEngine: EnginePlugin = {
     // series to interpreted values. REST-only (WS has no session routes); any
     // miss falls through to the full run, so old backends, edge, and proxies
     // behave exactly as before.
-    const sessionSymbol =
-      typeof store.symbol === 'string' && store.symbol ? store.symbol : 'CHART';
+    const sessionSymbol = typeof store.symbol === 'string' && store.symbol ? store.symbol : 'CHART';
     const sessionInterval =
       typeof store.interval === 'string' && store.interval ? store.interval : '1d';
-    if (
-      liveTick === true &&
-      mode !== 'compile' &&
-      pineBars.length > 0 &&
-      !hasLiveInputValues
-    ) {
+    if (liveTick === true && mode !== 'compile' && pineBars.length > 0 && !hasLiveInputValues) {
       try {
         const { tryLiveSessionTick, runModeAllowsSessions } = await import('./live-sessions');
         if (mode === 'interpret' || runModeAllowsSessions(modeFields)) {
@@ -536,16 +530,14 @@ export const serverEngine: EnginePlugin = {
             // (the continuity guards only return in-window hits). Session
             // series are joined to the chart by time, not index tail-align.
             const hitTimes =
-              payloadEngineTimes(hit.payload) ??
-              (hit.barTimes?.length ? hit.barTimes : undefined);
+              payloadEngineTimes(hit.payload) ?? (hit.barTimes?.length ? hit.barTimes : undefined);
             return {
               ...mapped,
               meta: {
                 ...mapped.meta,
                 sessionVia: hit.via,
                 session_id: (hit.payload as { session_id?: unknown }).session_id as
-                  | string
-                  | undefined,
+                  string | undefined,
                 ...(hitTimes ? { engineTimes: hitTimes } : {}),
               },
             } satisfies RunResult;
@@ -737,22 +729,13 @@ export const serverEngine: EnginePlugin = {
       }
       if (!res.ok || payload.status === 'error') {
         const httpHint =
-          res.status >= 500
-            ? `HTTP ${res.status}`
-            : res.status >= 400
-              ? `HTTP ${res.status}`
-              : '';
+          res.status >= 500 ? `HTTP ${res.status}` : res.status >= 400 ? `HTTP ${res.status}` : '';
         return {
           status: 'error',
           plots: [],
           events: [],
           series: {},
-          error: String(
-            payload.message ||
-              payload.error ||
-              httpHint ||
-              `HTTP ${res.status}`,
-          ),
+          error: String(payload.message || payload.error || httpHint || `HTTP ${res.status}`),
           meta: {
             ms: performance.now() - t0,
             transport: 'rest',
@@ -772,11 +755,7 @@ export const serverEngine: EnginePlugin = {
     } catch (err: unknown) {
       const raw = err instanceof Error ? err.message : String(err);
       const aborted = isAbortLike(err) || signal?.aborted;
-      const msg = aborted
-        ? signal?.aborted
-          ? 'Aborted'
-          : raw || 'Request timed out'
-        : raw;
+      const msg = aborted ? (signal?.aborted ? 'Aborted' : raw || 'Request timed out') : raw;
       return {
         status: 'error',
         plots: [],
@@ -1168,8 +1147,7 @@ export const pyodideEngine: EnginePlugin & {
         script_name?: string;
       };
       const overlay = normalizeOverlayFlag(result.overlay ?? result.meta?.overlay);
-      const scriptName =
-        result.script_name || result.meta?.script_name || 'plot';
+      const scriptName = result.script_name || result.meta?.script_name || 'plot';
       return {
         ...result,
         series: result.series || {},
@@ -1206,12 +1184,14 @@ export const pyodideEngine: EnginePlugin & {
  * Resolve the pyne-worker base URL for readiness / run.
  * Prefer plugin config, then a store.endpoint that looks like pyne-worker, else production default.
  */
-export function resolvePyneWorkerEndpoint(
-  config?: Record<string, unknown> | null,
-): string {
-  const fromCfg = String(config?.endpoint || '').trim().replace(/\/$/, '');
+export function resolvePyneWorkerEndpoint(config?: Record<string, unknown> | null): string {
+  const fromCfg = String(config?.endpoint || '')
+    .trim()
+    .replace(/\/$/, '');
   if (fromCfg) return fromCfg;
-  const fromStore = String(store.endpoint || '').trim().replace(/\/$/, '');
+  const fromStore = String(store.endpoint || '')
+    .trim()
+    .replace(/\/$/, '');
   if (fromStore && engineFamilyForText(fromStore) === 'worker') return fromStore;
   return DEFAULT_PYNE_WORKER_ENDPOINT;
 }
@@ -1302,8 +1282,7 @@ export const pyneWorkerEngine: EnginePlugin = {
   },
   async run(opts) {
     const pluginCfg =
-      (store.pluginsConfig?.['engine:pyne-worker'] as Record<string, unknown> | undefined) ||
-      {};
+      (store.pluginsConfig?.['engine:pyne-worker'] as Record<string, unknown> | undefined) || {};
     const merged = {
       ...pluginCfg,
       ...(opts.config || {}),
@@ -1335,9 +1314,7 @@ export async function getEngineCapabilities(id?: string): Promise<EngineCapabili
     ...DEFAULT_ENGINE_CAPABILITIES,
     liveModes: [...DEFAULT_ENGINE_CAPABILITIES.liveModes],
   });
-  const selectedId =
-    id ||
-    String(store.activePlugins?.engine || store.engine || '');
+  const selectedId = id || String(store.activePlugins?.engine || store.engine || '');
   const engine = selectedId ? getEngine(selectedId) : undefined;
   if (!engine || typeof engine.getCapabilities !== 'function') return fallback();
   try {
@@ -1357,10 +1334,12 @@ let cachedEngineHealth: EngineHealth | null = null;
 
 /** Synchronous read of the last resolved capabilities (default when unknown). */
 export function getCachedEngineCapabilities(): EngineCapabilities {
-  return cachedEngineCapabilities ?? {
-    ...DEFAULT_ENGINE_CAPABILITIES,
-    liveModes: [...DEFAULT_ENGINE_CAPABILITIES.liveModes],
-  };
+  return (
+    cachedEngineCapabilities ?? {
+      ...DEFAULT_ENGINE_CAPABILITIES,
+      liveModes: [...DEFAULT_ENGINE_CAPABILITIES.liveModes],
+    }
+  );
 }
 
 /**
@@ -1431,11 +1410,7 @@ export async function probeEngineHealth(
   }
 }
 
-export const BUILTIN_ENGINES: EnginePlugin[] = [
-  serverEngine,
-  pyneWorkerEngine,
-  pyodideEngine,
-];
+export const BUILTIN_ENGINES: EnginePlugin[] = [serverEngine, pyneWorkerEngine, pyodideEngine];
 
 let registered = false;
 
@@ -1478,9 +1453,7 @@ export function registerDynamicEngine(engine: EnginePlugin): void {
     existing?.builtIn &&
     (engine.family === 'server' || engine.family === 'pyodide' || engine.family === 'worker')
   ) {
-    throw new Error(
-      `Cannot replace built-in engine "${engine.id}" — use a different plugin id`,
-    );
+    throw new Error(`Cannot replace built-in engine "${engine.id}" — use a different plugin id`);
   }
   registry.registerEngine({ ...engine, builtIn: engine.builtIn ?? false });
 }
@@ -1492,7 +1465,10 @@ export function unregisterDynamicEngine(id: string): boolean {
 
 export function listDynamicEngineIds(): string[] {
   ensureEnginesRegistered();
-  return registry.listEngines().filter((e) => !e.builtIn).map((e) => e.id);
+  return registry
+    .listEngines()
+    .filter((e) => !e.builtIn)
+    .map((e) => e.id);
 }
 
 /** @internal test helper */

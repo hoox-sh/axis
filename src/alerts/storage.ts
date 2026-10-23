@@ -28,6 +28,7 @@
 
 import type { Alert, AlertsStoreV1 } from './types';
 import { createEmitter } from '../utils/emitter';
+import { getItem, removeItem, setItem, storageAvailable } from '../utils/storage';
 
 /** localStorage key for the alerts blob. */
 export const ALERTS_STORAGE_KEY = 'axis.alerts.v1';
@@ -61,42 +62,6 @@ export function subscribeAlerts(fn: AlertsListener): () => void {
 
 function notifyAlertsListeners(): void {
   alertsEmitter.emit();
-}
-
-function lsAvailable(): boolean {
-  try {
-    return typeof localStorage !== 'undefined' && localStorage !== null;
-  } catch {
-    return false;
-  }
-}
-
-function lsGet(key: string): string | null {
-  try {
-    if (!lsAvailable()) return null;
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function lsSet(key: string, value: string): boolean {
-  try {
-    if (!lsAvailable()) return false;
-    localStorage.setItem(key, value);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function lsRemove(key: string): void {
-  try {
-    if (!lsAvailable()) return;
-    localStorage.removeItem(key);
-  } catch {
-    /* ignore */
-  }
 }
 
 /** Validate and coerce a raw object into an Alert, or null if unusable. */
@@ -171,7 +136,7 @@ function serialize(alerts: Alert[]): string {
  * The LS blob is parsed at most once per distinct raw value (F13).
  */
 export function loadAlerts(): Alert[] {
-  const raw = lsGet(ALERTS_STORAGE_KEY);
+  const raw = getItem(ALERTS_STORAGE_KEY);
   if (raw != null) {
     if (cachedList && raw === cachedRaw) return cloneList(cachedList);
     const list = parseAlertsBlob(raw);
@@ -198,9 +163,9 @@ export function saveAlerts(alerts: Alert[]): boolean {
   memoryStore = copy;
   cachedList = copy;
   let ok = true;
-  if (lsAvailable()) {
+  if (storageAvailable()) {
     const json = serialize(copy);
-    ok = lsSet(ALERTS_STORAGE_KEY, json);
+    ok = setItem(ALERTS_STORAGE_KEY, json);
     if (ok) {
       cachedRaw = json;
       lastPersistError = null;
@@ -240,7 +205,7 @@ export function clearAlertsStorage(): void {
   cachedRaw = undefined;
   cachedList = null;
   lastPersistError = null;
-  lsRemove(ALERTS_STORAGE_KEY);
+  removeItem(ALERTS_STORAGE_KEY);
 }
 
 /** Test helper: seed memory without touching a real LS if desired. */

@@ -31,6 +31,7 @@
 
 import { EDITOR_DOC_KEY } from '../store';
 import { createEmitter } from '../utils/emitter';
+import { getItem, setItem } from '../utils/storage';
 
 /** BroadcastChannel name for AXIS editor ↔ main. */
 export const EDITOR_CHANNEL = 'axis-editor-v1';
@@ -86,26 +87,18 @@ export function bridgePublish(msg: BridgeMessage) {
   ch?.postMessage(msg);
   // Also mirror doc to localStorage for late joiners
   if (msg.type === 'doc') {
-    try {
-      localStorage.setItem(EDITOR_DOC_KEY, msg.doc);
-    } catch {}
+    setItem(EDITOR_DOC_KEY, msg.doc);
   }
 }
 
 /** Read the shared editor document from localStorage. */
 export function readSharedDoc(): string {
-  try {
-    return localStorage.getItem(EDITOR_DOC_KEY) || '';
-  } catch {
-    return '';
-  }
+  return getItem(EDITOR_DOC_KEY) || '';
 }
 
 /** Persist doc to localStorage and broadcast a `doc` message. */
 export function writeSharedDoc(doc: string) {
-  try {
-    localStorage.setItem(EDITOR_DOC_KEY, doc);
-  } catch {}
+  setItem(EDITOR_DOC_KEY, doc);
   bridgePublish({ type: 'doc', doc });
 }
 

@@ -10,7 +10,16 @@
  * @module ui/HpoPanel
  */
 
-import { type Component, For, Show, createEffect, createMemo, createSignal, onMount, untrack } from 'solid-js';
+import {
+  type Component,
+  For,
+  Show,
+  createEffect,
+  createMemo,
+  createSignal,
+  onMount,
+  untrack,
+} from 'solid-js';
 import {
   loadEditorDoc,
   setEditorInputValues,
@@ -24,13 +33,9 @@ import { applyStrategyPropsToSource } from '../results/strategy-props';
 import { runAndApply } from '../indicators/runner';
 import { defaultParamFromInput, spaceReady } from '../optimize/space';
 import type { ParamSpec } from '../optimize/types';
+import { getJson, setJson } from '../utils/storage';
 import { loadPersistedStudy, persistStudy, runHpoStudy } from '../optimize/client';
-import type {
-  ObjectiveId,
-  SamplerId,
-  StudySnapshot,
-  ValidationId,
-} from '../optimize/types';
+import type { ObjectiveId, SamplerId, StudySnapshot, ValidationId } from '../optimize/types';
 import { MAX_TRIALS } from '../optimize/types';
 import { Icons } from './icons';
 
@@ -67,52 +72,41 @@ function isParamSpec(v: unknown): v is ParamSpec {
   if (!v || typeof v !== 'object') return false;
   const o = v as Record<string, unknown>;
   return (
-    typeof o.name === 'string' &&
-    ['int', 'float', 'bool', 'categorical'].includes(String(o.kind))
+    typeof o.name === 'string' && ['int', 'float', 'bool', 'categorical'].includes(String(o.kind))
   );
 }
 
 function loadHpoConfig(): Partial<HpoConfig> | null {
-  try {
-    const raw = localStorage.getItem(HPO_CONFIG_KEY);
-    if (!raw) return null;
-    const p = JSON.parse(raw) as Record<string, unknown>;
-    if (!p || typeof p !== 'object') return null;
-    const out: Partial<HpoConfig> = {};
-    if (typeof p.nTrials === 'number' && Number.isFinite(p.nTrials)) {
-      out.nTrials = Math.min(MAX_TRIALS, Math.max(1, Math.round(p.nTrials)));
-    }
-    if (isSampler(p.sampler)) out.sampler = p.sampler;
-    if (isObjective(p.objective)) out.objective = p.objective;
-    if (isValidation(p.validation)) out.validation = p.validation;
-    if (typeof p.holdoutFrac === 'number' && Number.isFinite(p.holdoutFrac)) {
-      out.holdoutFrac = p.holdoutFrac;
-    }
-    if (typeof p.trainBars === 'number' && Number.isFinite(p.trainBars)) {
-      out.trainBars = Math.max(1, Math.round(p.trainBars));
-    }
-    if (typeof p.testBars === 'number' && Number.isFinite(p.testBars)) {
-      out.testBars = Math.max(1, Math.round(p.testBars));
-    }
-    if (typeof p.stepBars === 'number' && Number.isFinite(p.stepBars)) {
-      out.stepBars = Math.max(1, Math.round(p.stepBars));
-    }
-    if (typeof p.minTrades === 'number' && Number.isFinite(p.minTrades)) {
-      out.minTrades = Math.max(0, Math.round(p.minTrades));
-    }
-    if (Array.isArray(p.params)) out.params = p.params.filter(isParamSpec);
-    return out;
-  } catch {
-    return null;
+  const p = getJson<Record<string, unknown>>(HPO_CONFIG_KEY);
+  if (!p || typeof p !== 'object') return null;
+  const out: Partial<HpoConfig> = {};
+  if (typeof p.nTrials === 'number' && Number.isFinite(p.nTrials)) {
+    out.nTrials = Math.min(MAX_TRIALS, Math.max(1, Math.round(p.nTrials)));
   }
+  if (isSampler(p.sampler)) out.sampler = p.sampler;
+  if (isObjective(p.objective)) out.objective = p.objective;
+  if (isValidation(p.validation)) out.validation = p.validation;
+  if (typeof p.holdoutFrac === 'number' && Number.isFinite(p.holdoutFrac)) {
+    out.holdoutFrac = p.holdoutFrac;
+  }
+  if (typeof p.trainBars === 'number' && Number.isFinite(p.trainBars)) {
+    out.trainBars = Math.max(1, Math.round(p.trainBars));
+  }
+  if (typeof p.testBars === 'number' && Number.isFinite(p.testBars)) {
+    out.testBars = Math.max(1, Math.round(p.testBars));
+  }
+  if (typeof p.stepBars === 'number' && Number.isFinite(p.stepBars)) {
+    out.stepBars = Math.max(1, Math.round(p.stepBars));
+  }
+  if (typeof p.minTrades === 'number' && Number.isFinite(p.minTrades)) {
+    out.minTrades = Math.max(0, Math.round(p.minTrades));
+  }
+  if (Array.isArray(p.params)) out.params = p.params.filter(isParamSpec);
+  return out;
 }
 
 function saveHpoConfig(cfg: HpoConfig): void {
-  try {
-    localStorage.setItem(HPO_CONFIG_KEY, JSON.stringify(cfg));
-  } catch {
-    /* quota */
-  }
+  setJson(HPO_CONFIG_KEY, cfg);
 }
 
 function currentScript(): { code: string; id: string | null; name: string } {
@@ -247,7 +241,12 @@ function TrialChart(props: {
 
   return (
     <div class="ax-hpo-chart-wrap">
-      <svg viewBox={`0 0 ${W} ${H}`} class="ax-hpo-chart" preserveAspectRatio="none" aria-hidden="true">
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        class="ax-hpo-chart"
+        preserveAspectRatio="none"
+        aria-hidden="true"
+      >
         <Show when={bounds()}>
           {(b) => (
             <line
@@ -393,7 +392,11 @@ export const HpoPanel: Component = () => {
         onTrial: (_row, partial) => {
           setStudy((prev) =>
             prev
-              ? { ...prev, trials: partial.trials || prev.trials, engineRuns: partial.engineRuns ?? prev.engineRuns }
+              ? {
+                  ...prev,
+                  trials: partial.trials || prev.trials,
+                  engineRuns: partial.engineRuns ?? prev.engineRuns,
+                }
               : {
                   status: 'running',
                   sampler: sampler(),
@@ -497,7 +500,9 @@ export const HpoPanel: Component = () => {
       <Show when={store.tier !== 'free'}>
         <div class="ax-inline">
           <span
-            class={store.tier === 'pro' ? 'ax-badge ax-badge--pro' : 'ax-badge ax-badge--selfhosted'}
+            class={
+              store.tier === 'pro' ? 'ax-badge ax-badge--pro' : 'ax-badge ax-badge--selfhosted'
+            }
             data-testid="axis-hpo-tier-badge"
           >
             {store.tier === 'pro' ? 'Pro' : 'Self-hosted'}
@@ -529,7 +534,11 @@ export const HpoPanel: Component = () => {
                   min={1}
                   max={MAX_TRIALS}
                   value={nTrials()}
-                  onInput={(e) => setNTrials(Math.min(MAX_TRIALS, Math.max(1, Number(e.currentTarget.value) || 1)))}
+                  onInput={(e) =>
+                    setNTrials(
+                      Math.min(MAX_TRIALS, Math.max(1, Number(e.currentTarget.value) || 1)),
+                    )
+                  }
                 />
               </label>
               <label class="ax-field">
@@ -579,7 +588,9 @@ export const HpoPanel: Component = () => {
                   type="number"
                   min={0}
                   value={minTrades()}
-                  onInput={(e) => setMinTrades(Math.max(0, Math.round(Number(e.currentTarget.value) || 0)))}
+                  onInput={(e) =>
+                    setMinTrades(Math.max(0, Math.round(Number(e.currentTarget.value) || 0)))
+                  }
                 />
               </label>
               <Show when={validation() === 'holdout'}>
@@ -593,7 +604,11 @@ export const HpoPanel: Component = () => {
                     max={0.5}
                     value={holdoutFrac()}
                     onInput={(e) => setHoldoutFrac(Number(e.currentTarget.value) || 0.3)}
-                    onBlur={(e) => setHoldoutFrac(Math.min(0.5, Math.max(0.1, Number(e.currentTarget.value) || 0.3)))}
+                    onBlur={(e) =>
+                      setHoldoutFrac(
+                        Math.min(0.5, Math.max(0.1, Number(e.currentTarget.value) || 0.3)),
+                      )
+                    }
                   />
                 </label>
               </Show>
@@ -605,7 +620,9 @@ export const HpoPanel: Component = () => {
                     type="number"
                     min={1}
                     value={trainBars()}
-                    onInput={(e) => setTrainBars(Math.max(1, Math.round(Number(e.currentTarget.value) || 1)))}
+                    onInput={(e) =>
+                      setTrainBars(Math.max(1, Math.round(Number(e.currentTarget.value) || 1)))
+                    }
                   />
                 </label>
                 <label class="ax-field">
@@ -615,7 +632,9 @@ export const HpoPanel: Component = () => {
                     type="number"
                     min={1}
                     value={testBars()}
-                    onInput={(e) => setTestBars(Math.max(1, Math.round(Number(e.currentTarget.value) || 1)))}
+                    onInput={(e) =>
+                      setTestBars(Math.max(1, Math.round(Number(e.currentTarget.value) || 1)))
+                    }
                   />
                 </label>
                 <label class="ax-field">
@@ -625,7 +644,9 @@ export const HpoPanel: Component = () => {
                     type="number"
                     min={1}
                     value={stepBars()}
-                    onInput={(e) => setStepBars(Math.max(1, Math.round(Number(e.currentTarget.value) || 1)))}
+                    onInput={(e) =>
+                      setStepBars(Math.max(1, Math.round(Number(e.currentTarget.value) || 1)))
+                    }
                   />
                 </label>
               </Show>
@@ -667,7 +688,9 @@ export const HpoPanel: Component = () => {
             <h3 class="ax-section-title">Search space</h3>
             <Show
               when={params().length}
-              fallback={<p class="ax-empty">No searchable input.int / float / bool / enum fields.</p>}
+              fallback={
+                <p class="ax-empty">No searchable input.int / float / bool / enum fields.</p>
+              }
             >
               <div class="ax-list ax-list--dense">
                 <For each={params()}>
@@ -683,7 +706,9 @@ export const HpoPanel: Component = () => {
                           <span class="ax-toggle-title">{p.name}</span>
                           <span class="ax-toggle-hint">
                             {p.kind}
-                            {p.kind === 'categorical' && p.choices?.length ? ` · ${p.choices.join(', ')}` : ''}
+                            {p.kind === 'categorical' && p.choices?.length
+                              ? ` · ${p.choices.join(', ')}`
+                              : ''}
                           </span>
                         </span>
                       </label>
@@ -695,7 +720,12 @@ export const HpoPanel: Component = () => {
                             placeholder="min"
                             value={p.min ?? ''}
                             onInput={(e) =>
-                              patchParam(p.name, { min: e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value) })
+                              patchParam(p.name, {
+                                min:
+                                  e.currentTarget.value === ''
+                                    ? undefined
+                                    : Number(e.currentTarget.value),
+                              })
                             }
                           />
                           <input
@@ -704,7 +734,12 @@ export const HpoPanel: Component = () => {
                             placeholder="max"
                             value={p.max ?? ''}
                             onInput={(e) =>
-                              patchParam(p.name, { max: e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value) })
+                              patchParam(p.name, {
+                                max:
+                                  e.currentTarget.value === ''
+                                    ? undefined
+                                    : Number(e.currentTarget.value),
+                              })
                             }
                           />
                           <input
@@ -714,7 +749,10 @@ export const HpoPanel: Component = () => {
                             value={p.step ?? ''}
                             onInput={(e) =>
                               patchParam(p.name, {
-                                step: e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value),
+                                step:
+                                  e.currentTarget.value === ''
+                                    ? undefined
+                                    : Number(e.currentTarget.value),
                               })
                             }
                           />
@@ -729,104 +767,116 @@ export const HpoPanel: Component = () => {
         </div>
 
         <Show when={study() || busy() || error()}>
-        <div class="ax-hpo-col">
-          <Show when={error()}>
-            <p class="ax-error">{error()}</p>
-          </Show>
+          <div class="ax-hpo-col">
+            <Show when={error()}>
+              <p class="ax-error">{error()}</p>
+            </Show>
 
-          <Show when={runningButNoStudy()}>
-            <p class="ax-hint">Searching on the engine… this can take a moment.</p>
-          </Show>
+            <Show when={runningButNoStudy()}>
+              <p class="ax-hint">Searching on the engine… this can take a moment.</p>
+            </Show>
 
-          <Show when={study()}>
-            {(s) => (
-              <section class="ax-section">
-                <div class="ax-toolbar">
-                  <span class={`ax-status ${statusClass(s().status)}`}>{s().status}</span>
-                  <p class="ax-hint">
-                    {s().trials.length}/{s().nTrials} trials · {s().engineRuns} runs ·{' '}
-                    {s().backend || '—'} · {Math.round(s().ms)}ms
-                  </p>
-                  <Show when={s().warning}>
-                    <span class="ax-hint ax-hint--accent">{s().warning}</span>
-                  </Show>
-                </div>
-
-                <TrialChart trials={s().trials} bestIndex={s().bestIndex} />
-
-                <Show when={s().bestParams}>
+            <Show when={study()}>
+              {(s) => (
+                <section class="ax-section">
                   <div class="ax-toolbar">
-                    <p class="ax-hint ax-hint--accent">
-                      best{' '}
-                      {Object.entries(s().bestParams || {})
-                        .map(([k, v]) => `${k}=${v}`)
-                        .join(' ')}
-                      <Show when={s().bestIsScore != null}> · IS {formatScore(s().bestIsScore!)}</Show>
-                      <Show when={s().bestOosScore != null}> · OOS {formatScore(s().bestOosScore!)}</Show>
+                    <span class={`ax-status ${statusClass(s().status)}`}>{s().status}</span>
+                    <p class="ax-hint">
+                      {s().trials.length}/{s().nTrials} trials · {s().engineRuns} runs ·{' '}
+                      {s().backend || '—'} · {Math.round(s().ms)}ms
                     </p>
-                    <span class="ax-toolbar-spacer" />
-                    <button
-                      type="button"
-                      class="ax-btn ax-btn--ghost"
-                      disabled={busy()}
-                      onClick={() => void applyBest(false)}
-                    >
-                      Apply best
-                    </button>
-                    <button
-                      type="button"
-                      class="ax-btn ax-btn--ghost"
-                      disabled={busy()}
-                      onClick={() => void applyBest(true)}
-                    >
-                      Apply + re-run
-                    </button>
-                    <button type="button" class="ax-btn ax-btn--ghost" onClick={exportCsv}>
-                      <Icons.fileCsv />
-                      CSV
-                    </button>
-                    <button type="button" class="ax-btn ax-btn--ghost" onClick={clear} disabled={busy()}>
-                      <Icons.trash />
-                      Clear
-                    </button>
+                    <Show when={s().warning}>
+                      <span class="ax-hint ax-hint--accent">{s().warning}</span>
+                    </Show>
                   </div>
-                </Show>
 
-                <Show
-                  when={s().trials.length}
-                  fallback={<p class="ax-empty">No trials yet.</p>}
-                >
-                  <div class="ax-table-wrap">
-                    <table class="ax-table">
-                      <thead>
-                        <tr>
-                          <th>#</th>
-                          <th>params</th>
-                          <th>IS</th>
-                          <th>OOS</th>
-                          <th>err</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <For each={s().trials}>
-                          {(t) => (
-                            <tr class={t.index === s().bestIndex ? 'is-best' : undefined}>
-                              <td>{t.index}</td>
-                              <td class="ax-table-cell-wrap">{Object.entries(t.params).map(([k, v]) => `${k}=${v}`).join(' ')}</td>
-                              <td>{t.isScore == null ? '—' : t.isScore.toFixed(3)}</td>
-                              <td>{t.oosScore == null ? '—' : t.oosScore.toFixed(3)}</td>
-                              <td class="ax-table-neg">{t.error || ''}</td>
-                            </tr>
-                          )}
-                        </For>
-                      </tbody>
-                    </table>
-                  </div>
-                </Show>
-              </section>
-            )}
-          </Show>
-        </div>
+                  <TrialChart trials={s().trials} bestIndex={s().bestIndex} />
+
+                  <Show when={s().bestParams}>
+                    <div class="ax-toolbar">
+                      <p class="ax-hint ax-hint--accent">
+                        best{' '}
+                        {Object.entries(s().bestParams || {})
+                          .map(([k, v]) => `${k}=${v}`)
+                          .join(' ')}
+                        <Show when={s().bestIsScore != null}>
+                          {' '}
+                          · IS {formatScore(s().bestIsScore!)}
+                        </Show>
+                        <Show when={s().bestOosScore != null}>
+                          {' '}
+                          · OOS {formatScore(s().bestOosScore!)}
+                        </Show>
+                      </p>
+                      <span class="ax-toolbar-spacer" />
+                      <button
+                        type="button"
+                        class="ax-btn ax-btn--ghost"
+                        disabled={busy()}
+                        onClick={() => void applyBest(false)}
+                      >
+                        Apply best
+                      </button>
+                      <button
+                        type="button"
+                        class="ax-btn ax-btn--ghost"
+                        disabled={busy()}
+                        onClick={() => void applyBest(true)}
+                      >
+                        Apply + re-run
+                      </button>
+                      <button type="button" class="ax-btn ax-btn--ghost" onClick={exportCsv}>
+                        <Icons.fileCsv />
+                        CSV
+                      </button>
+                      <button
+                        type="button"
+                        class="ax-btn ax-btn--ghost"
+                        onClick={clear}
+                        disabled={busy()}
+                      >
+                        <Icons.trash />
+                        Clear
+                      </button>
+                    </div>
+                  </Show>
+
+                  <Show when={s().trials.length} fallback={<p class="ax-empty">No trials yet.</p>}>
+                    <div class="ax-table-wrap">
+                      <table class="ax-table">
+                        <thead>
+                          <tr>
+                            <th>#</th>
+                            <th>params</th>
+                            <th>IS</th>
+                            <th>OOS</th>
+                            <th>err</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <For each={s().trials}>
+                            {(t) => (
+                              <tr class={t.index === s().bestIndex ? 'is-best' : undefined}>
+                                <td>{t.index}</td>
+                                <td class="ax-table-cell-wrap">
+                                  {Object.entries(t.params)
+                                    .map(([k, v]) => `${k}=${v}`)
+                                    .join(' ')}
+                                </td>
+                                <td>{t.isScore == null ? '—' : t.isScore.toFixed(3)}</td>
+                                <td>{t.oosScore == null ? '—' : t.oosScore.toFixed(3)}</td>
+                                <td class="ax-table-neg">{t.error || ''}</td>
+                              </tr>
+                            )}
+                          </For>
+                        </tbody>
+                      </table>
+                    </div>
+                  </Show>
+                </section>
+              )}
+            </Show>
+          </div>
         </Show>
       </div>
     </div>

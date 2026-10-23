@@ -44,6 +44,7 @@
 
 import { engineFamilyForId } from '../plugins/engine-family';
 import { createEmitter } from '../utils/emitter';
+import { getJson, removeItem, setItem } from '../utils/storage';
 
 /** Session-storage namespace (per-tab, cleared with the session). */
 export const VAULT_SESSION_PREFIX = 'axis.session-secret.';
@@ -85,33 +86,22 @@ function clearSession(key: string): void {
 }
 
 function readLocalVault(): Record<string, string> {
-  try {
-    if (typeof localStorage === 'undefined' || localStorage == null) return {};
-    const raw = localStorage.getItem(VAULT_LOCAL_KEY);
-    if (!raw) return {};
-    const parsed: unknown = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
-    const out: Record<string, string> = {};
-    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
-      if (typeof k === 'string' && k && typeof v === 'string' && v.trim()) out[k] = v;
-    }
-    return out;
-  } catch {
-    return {};
+  const parsed = getJson<Record<string, unknown>>(VAULT_LOCAL_KEY);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(parsed)) {
+    if (typeof k === 'string' && k && typeof v === 'string' && v.trim()) out[k] = v;
   }
+  return out;
 }
 
 function writeLocalSlot(key: string, value: string | null): void {
-  try {
-    if (typeof localStorage === 'undefined' || localStorage == null) return;
-    const bag = readLocalVault();
-    if (value == null || !value.trim()) delete bag[key];
-    else bag[key] = value;
-    if (Object.keys(bag).length === 0) localStorage.removeItem(VAULT_LOCAL_KEY);
-    else localStorage.setItem(VAULT_LOCAL_KEY, JSON.stringify(bag));
-  } catch {
-    /* private mode / quota — memory + session still work for this page */
-  }
+  const bag = readLocalVault();
+  if (value == null || !value.trim()) delete bag[key];
+  else bag[key] = value;
+  // Private mode / quota: memory + session still work for this page.
+  if (Object.keys(bag).length === 0) removeItem(VAULT_LOCAL_KEY);
+  else setItem(VAULT_LOCAL_KEY, JSON.stringify(bag));
 }
 
 function readLocalSlot(key: string): string {

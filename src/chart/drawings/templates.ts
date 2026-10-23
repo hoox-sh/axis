@@ -36,6 +36,7 @@ import {
   type DrawingStyle,
   type DrawingMeta,
 } from './normalize';
+import { getJson, setJson } from '../../utils/storage';
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
@@ -255,8 +256,7 @@ export function parseTemplate(raw: unknown): DrawingTemplate | null {
   const name = asNonEmptyString(raw.name);
   if (!name) return null;
 
-  const id =
-    typeof raw.id === 'string' && raw.id.length > 0 ? raw.id : genId('tpl');
+  const id = typeof raw.id === 'string' && raw.id.length > 0 ? raw.id : genId('tpl');
 
   const now = Date.now();
   const createdAt = asFiniteNumber(raw.createdAt) ?? now;
@@ -342,9 +342,7 @@ export function applyTemplateDrawings(
 
   // merge
   const base = Array.isArray(existing)
-    ? (existing
-        .map((d) => deserializeDrawing(d))
-        .filter(Boolean) as NormalizedDrawing[])
+    ? (existing.map((d) => deserializeDrawing(d)).filter(Boolean) as NormalizedDrawing[])
     : [];
 
   const used = new Set(base.map((d) => d.id));
@@ -365,13 +363,9 @@ export function applyTemplateDrawings(
 // ── localStorage I/O ────────────────────────────────────────────────────────
 
 function readStoreRaw(): DrawingTemplatesStore {
-  try {
-    const raw = localStorage.getItem(DRAWING_TEMPLATES_KEY);
-    if (!raw) return { version: TEMPLATE_VERSION, templates: [] };
-    return parseTemplatesStore(JSON.parse(raw));
-  } catch {
-    return { version: TEMPLATE_VERSION, templates: [] };
-  }
+  const parsed = getJson<unknown>(DRAWING_TEMPLATES_KEY);
+  if (parsed == null) return { version: TEMPLATE_VERSION, templates: [] };
+  return parseTemplatesStore(parsed);
 }
 
 function writeStore(store: DrawingTemplatesStore): void {
@@ -379,9 +373,10 @@ function writeStore(store: DrawingTemplatesStore): void {
     version: TEMPLATE_VERSION,
     templates: store.templates,
   };
-  localStorage.setItem(DRAWING_TEMPLATES_KEY, JSON.stringify(payload));
+  // Never throws (quota / private mode) — the read path already tolerates a
+  // missing store, and a template save must not break the click handler.
+  setJson(DRAWING_TEMPLATES_KEY, payload);
 }
-
 /** Load all templates from localStorage. */
 export function loadTemplates(): DrawingTemplate[] {
   return readStoreRaw().templates;
@@ -427,8 +422,7 @@ export function saveTemplate(
   },
 ): DrawingTemplate {
   const catalog = loadTemplates();
-  const existingIdx =
-    opts?.id != null ? catalog.findIndex((t) => t.id === opts.id) : -1;
+  const existingIdx = opts?.id != null ? catalog.findIndex((t) => t.id === opts.id) : -1;
 
   if (existingIdx >= 0) {
     const prev = catalog[existingIdx]!;
@@ -530,10 +524,7 @@ export function importTemplateJson(json: string | unknown): DrawingTemplate[] {
  * - When `forceNewIds` is false, same-id entries overwrite.
  * Returns number of templates added/updated.
  */
-export function importTemplates(
-  raw: string | unknown,
-  opts?: { forceNewIds?: boolean },
-): number {
+export function importTemplates(raw: string | unknown, opts?: { forceNewIds?: boolean }): number {
   const forceNewIds = opts?.forceNewIds !== false;
   const incoming = importTemplateJson(raw);
   if (incoming.length === 0) return 0;

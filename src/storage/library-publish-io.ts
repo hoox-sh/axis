@@ -30,6 +30,7 @@ import { resolveGitConfig, type GitConfig } from './git-config';
 import { githubForge } from './git-github';
 import { gitlabForge } from './git-gitlab';
 import type { GitForge } from './git-forge';
+import { getJson, removeItem, setJson } from '../utils/storage';
 import {
   PUBLISHED_CACHE_KEY,
   buildPublishedRecord,
@@ -67,27 +68,15 @@ function specKey(ns: string, name: string, ver: number): string {
 
 function readCache(): CacheBag {
   const empty: CacheBag = { version: 1, index: emptyPublishedIndex(), sources: {} };
-  try {
-    if (typeof localStorage === 'undefined') return empty;
-    const raw = localStorage.getItem(PUBLISHED_CACHE_KEY);
-    if (!raw) return empty;
-    const parsed = JSON.parse(raw) as CacheBag;
-    if (!parsed || parsed.version !== 1 || !parsed.index) return empty;
-    if (!Array.isArray(parsed.index.libraries)) parsed.index.libraries = [];
-    if (!parsed.sources || typeof parsed.sources !== 'object') parsed.sources = {};
-    return parsed;
-  } catch {
-    return empty;
-  }
+  const parsed = getJson<CacheBag>(PUBLISHED_CACHE_KEY);
+  if (!parsed || parsed.version !== 1 || !parsed.index) return empty;
+  if (!Array.isArray(parsed.index.libraries)) parsed.index.libraries = [];
+  if (!parsed.sources || typeof parsed.sources !== 'object') parsed.sources = {};
+  return parsed;
 }
 
 function writeCache(bag: CacheBag): void {
-  try {
-    if (typeof localStorage === 'undefined') return;
-    localStorage.setItem(PUBLISHED_CACHE_KEY, JSON.stringify(bag));
-  } catch {
-    /* quota / private mode */
-  }
+  setJson(PUBLISHED_CACHE_KEY, bag);
 }
 
 function upsertCache(lib: PublishedLibrary): void {
@@ -112,10 +101,7 @@ function forgeFor(cfg: GitConfig): GitForge {
   return cfg.provider === 'gitlab' ? gitlabForge : githubForge;
 }
 
-async function gitGetFile(
-  cfg: GitConfig,
-  path: string,
-): Promise<{ content: string } | null> {
+async function gitGetFile(cfg: GitConfig, path: string): Promise<{ content: string } | null> {
   const forge = forgeFor(cfg);
   const file = await forge.getFile(cfg, path);
   return file ? { content: file.content } : null;
@@ -172,9 +158,7 @@ export async function publishLibrary(
   }
   const origin = opts?.origin === 'auto' ? 'auto' : 'manual';
   const cfg = resolveGitConfig(opts?.config);
-  const namespace = opts?.namespace?.trim()
-    ? opts.namespace.trim()
-    : defaultPublishNamespace(cfg);
+  const namespace = opts?.namespace?.trim() ? opts.namespace.trim() : defaultPublishNamespace(cfg);
 
   const local = readCache();
   let remote = emptyPublishedIndex();
@@ -309,7 +293,10 @@ export async function resolvePublishedLibrary(
   const cfg = resolveGitConfig(opts?.config);
   if (!gitReady(cfg)) return null;
   try {
-    const file = await gitGetFile(cfg, publishedLibPath(cfg, spec.namespace, spec.name, spec.version));
+    const file = await gitGetFile(
+      cfg,
+      publishedLibPath(cfg, spec.namespace, spec.name, spec.version),
+    );
     if (!file) return null;
     const rec = buildPublishedRecord(file.content, {
       namespace: spec.namespace,
@@ -368,11 +355,7 @@ export function readCachedLibrarySource(
 
 /** @internal tests */
 export function _resetPublishedCacheForTests(): void {
-  try {
-    if (typeof localStorage !== 'undefined') localStorage.removeItem(PUBLISHED_CACHE_KEY);
-  } catch {
-    /* ignore */
-  }
+  removeItem(PUBLISHED_CACHE_KEY);
 }
 
 export { formatImportSnippet } from './library-publish';

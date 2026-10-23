@@ -25,6 +25,7 @@
  */
 
 import { store, setStatus } from '../store';
+import { getJson, setJson } from '../utils/storage';
 import { getManager } from './manager-access';
 import { getThemeManager } from '../theme';
 
@@ -49,32 +50,21 @@ const PREFS_KEY = 'pynescript.axis.screenshot';
 const PANE_GAP = 2;
 
 export function loadScreenshotOptions(): ScreenshotOptions {
-  if (typeof localStorage === 'undefined') return { ...DEFAULT_SCREENSHOT_OPTIONS };
-  try {
-    const raw = localStorage.getItem(PREFS_KEY);
-    if (!raw) return { ...DEFAULT_SCREENSHOT_OPTIONS };
-    const parsed = JSON.parse(raw) as Partial<ScreenshotOptions>;
-    return {
-      scope:
-        parsed.scope === 'price' || parsed.scope === 'workspace' || parsed.scope === 'panes'
-          ? parsed.scope
-          : DEFAULT_SCREENSHOT_OPTIONS.scope,
-      scale: parsed.scale === 1 ? 1 : 2,
-      includeDrawings: parsed.includeDrawings !== false,
-      includeWatermark: parsed.includeWatermark !== false,
-    };
-  } catch {
-    return { ...DEFAULT_SCREENSHOT_OPTIONS };
-  }
+  const parsed = getJson<Partial<ScreenshotOptions>>(PREFS_KEY);
+  if (!parsed) return { ...DEFAULT_SCREENSHOT_OPTIONS };
+  return {
+    scope:
+      parsed.scope === 'price' || parsed.scope === 'workspace' || parsed.scope === 'panes'
+        ? parsed.scope
+        : DEFAULT_SCREENSHOT_OPTIONS.scope,
+    scale: parsed.scale === 1 ? 1 : 2,
+    includeDrawings: parsed.includeDrawings !== false,
+    includeWatermark: parsed.includeWatermark !== false,
+  };
 }
 
 export function saveScreenshotOptions(opts: ScreenshotOptions): void {
-  if (typeof localStorage === 'undefined') return;
-  try {
-    localStorage.setItem(PREFS_KEY, JSON.stringify(opts));
-  } catch {
-    /* quota / private mode */
-  }
+  setJson(PREFS_KEY, opts);
 }
 
 export function screenshotFilename(

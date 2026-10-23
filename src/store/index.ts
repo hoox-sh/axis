@@ -92,10 +92,7 @@ import {
   type PanelDock,
   type PanelId,
 } from '../ui/panels/types';
-import {
-  clearPanelHoverSlideExpanded,
-  setPanelHoverSlideExpanded,
-} from '../ui/panels/hover-slide';
+import { clearPanelHoverSlideExpanded, setPanelHoverSlideExpanded } from '../ui/panels/hover-slide';
 import type { PlotSample } from '../plugins/types';
 import {
   chartOverlayGeometry,
@@ -123,11 +120,7 @@ import {
   removeSlotRuntime,
 } from '../chart/chart-registry';
 import { normalizeUserDrawings } from '../chart/drawings/normalize';
-import {
-  DEFAULT_CHART_TYPE,
-  normalizeChartType,
-  type ChartType,
-} from '../chart/chart-type';
+import { DEFAULT_CHART_TYPE, normalizeChartType, type ChartType } from '../chart/chart-type';
 import {
   defaultChartThemeState,
   hydrateChartTheme,
@@ -156,6 +149,7 @@ import {
   type ThemeTokenValue,
 } from '../theme';
 import { beginRunEpoch, releaseRunStatus } from '../indicators/run-helpers';
+import { getItem, removeItem, setItem } from '../utils/storage';
 import { detectScriptKind } from '../indicators/script-meta';
 import {
   buildStrategyReport,
@@ -189,9 +183,7 @@ export function newEntityId(): string {
 /** Current AXIS app-state localStorage key. */
 export const STORAGE_KEY = 'pynescript.axis.v1';
 /** Older app-state keys — read once and write forward. */
-export const LEGACY_STORAGE_KEYS = [
-  'pynescript.axis.v2',
-] as const;
+export const LEGACY_STORAGE_KEYS = ['pynescript.axis.v2'] as const;
 
 /**
  * Persisted-payload schema version (D21). Written by `buildPersistPayload`;
@@ -253,7 +245,15 @@ function safeHydrate<T>(label: string, fallback: T, fn: () => T): T {
 
 /** localStorage key for the docked/popout editor document body. */
 export const EDITOR_DOC_KEY = 'pynescript.axis.editor.doc';
-const DEFAULT_WATCHLIST = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT'];
+const DEFAULT_WATCHLIST = [
+  'BTCUSDT',
+  'ETHUSDT',
+  'SOLUSDT',
+  'BNBUSDT',
+  'XRPUSDT',
+  'ADAUSDT',
+  'DOGEUSDT',
+];
 const DEFAULT_WATCHLIST_ID = 'wl-main';
 
 function cloneWatchlistLists(lists: WatchlistList[]): WatchlistList[] {
@@ -301,10 +301,7 @@ export function hydrateWatchlistState(raw: unknown): WatchlistState {
   // Drawer width is bounded both ways (D8): absurd values from corrupt or
   // hand-edited blobs cannot push the layout off-screen.
   const width = clampPanelWidth(bag.width, 280);
-  const refreshSec = Math.min(
-    120,
-    Math.max(5, Number(bag.refreshSec) || 15),
-  );
+  const refreshSec = Math.min(120, Math.max(5, Number(bag.refreshSec) || 15));
 
   const lists: WatchlistList[] = [];
   const seenIds = new Set<string>();
@@ -359,15 +356,19 @@ export function hydrateExtras(raw: unknown): ExtrasState {
     };
   }
   const bag = raw as Record<string, unknown>;
-  const pc = (bag.priceCard && typeof bag.priceCard === 'object'
-    ? (bag.priceCard as Record<string, unknown>)
-    : {}) as Record<string, unknown>;
-  const ti = (bag.ticker && typeof bag.ticker === 'object'
-    ? (bag.ticker as Record<string, unknown>)
-    : {}) as Record<string, unknown>;
-  const ao = (bag.alertOverlay && typeof bag.alertOverlay === 'object'
-    ? (bag.alertOverlay as Record<string, unknown>)
-    : {}) as Record<string, unknown>;
+  const pc = (
+    bag.priceCard && typeof bag.priceCard === 'object'
+      ? (bag.priceCard as Record<string, unknown>)
+      : {}
+  ) as Record<string, unknown>;
+  const ti = (
+    bag.ticker && typeof bag.ticker === 'object' ? (bag.ticker as Record<string, unknown>) : {}
+  ) as Record<string, unknown>;
+  const ao = (
+    bag.alertOverlay && typeof bag.alertOverlay === 'object'
+      ? (bag.alertOverlay as Record<string, unknown>)
+      : {}
+  ) as Record<string, unknown>;
   const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
   const color = (v: unknown, fallback: string) =>
     typeof v === 'string' && HEX_COLOR_RE.test(v.trim()) ? v.trim() : fallback;
@@ -811,39 +812,19 @@ export const DEFAULTS: AppState = {
   },
 };
 
-function readLocalStorage(key: string): string | null {
-  try {
-    if (typeof localStorage === 'undefined' || localStorage == null) return null;
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function removeLocalStorage(key: string): void {
-  try {
-    if (typeof localStorage === 'undefined' || localStorage == null) return;
-    localStorage.removeItem(key);
-  } catch {
-    /* private mode / security */
-  }
-}
-
 /**
  * Prefer current key; fall back to older keys and write forward to {@link STORAGE_KEY}.
  * Never throws. Exported for tests (v2 → v1 migration).
  */
 export function loadRawState(): string | null {
-  const current = readLocalStorage(STORAGE_KEY);
+  const current = getItem(STORAGE_KEY);
   if (current) return current;
   for (const legacy of LEGACY_STORAGE_KEYS) {
-    const raw = readLocalStorage(legacy);
+    const raw = getItem(legacy);
     if (raw) {
-      try {
-        localStorage.setItem(STORAGE_KEY, raw);
-      } catch {
-        /* quota — still return raw so hydrate can proceed in-memory */
-      }
+      // Write-forward is best-effort: a quota failure still returns raw so
+      // hydrate can proceed in-memory — same contract as before.
+      setItem(STORAGE_KEY, raw);
       return raw;
     }
   }
@@ -868,25 +849,23 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
     const rawBag = parsed as Record<string, unknown> & Partial<AppState>;
     // Schema migration first (unknown versions pass through; validators
     // below coerce anything unexpected to defaults).
-    const bag = migratePersistedBag(
-      rawBag,
-      persistedSchemaVersion(rawBag),
-    ) as Record<string, unknown> & Partial<AppState>;
+    const bag = migratePersistedBag(rawBag, persistedSchemaVersion(rawBag)) as Record<
+      string,
+      unknown
+    > &
+      Partial<AppState>;
     // Plaintext secrets from pre-vault blobs move to the session vault.
     // In-memory values stay for the running session; future persists strip them.
     migratePlaintextSecrets((bag as { pluginsConfig?: unknown }).pluginsConfig);
-    const source =
-      (typeof bag.source === 'string' && bag.source) || DEFAULTS.source;
-    const engine =
-      (typeof bag.engine === 'string' && bag.engine) || DEFAULTS.engine;
+    const source = (typeof bag.source === 'string' && bag.source) || DEFAULTS.source;
+    const engine = (typeof bag.engine === 'string' && bag.engine) || DEFAULTS.engine;
     const liveBag =
       bag.live && typeof bag.live === 'object' ? (bag.live as AppState['live']) : undefined;
     const pluginsBag =
       bag.activePlugins && typeof bag.activePlugins === 'object'
         ? (bag.activePlugins as AppState['activePlugins'])
         : undefined;
-    const streamId =
-      liveBag?.streamId || pluginsBag?.stream || DEFAULTS.live.streamId;
+    const streamId = liveBag?.streamId || pluginsBag?.stream || DEFAULTS.live.streamId;
 
     // Legacy combined VPS (IP or axis.hoox.sh-as-API) → dedicated Pro API origin.
     // axis.hoox.sh is now the CF Pages PWA; pyne lives at pynescript.online.
@@ -895,9 +874,7 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
         ? bag.endpoint.trim()
         : DEFAULTS.endpoint;
     const endpoint =
-      /^(https?:\/\/162\.254\.38\.194(:5002)?\/?|https:\/\/axis\.hoox\.sh\/?)$/i.test(
-        rawEndpoint,
-      )
+      /^(https?:\/\/162\.254\.38\.194(:5002)?\/?|https:\/\/axis\.hoox\.sh\/?)$/i.test(rawEndpoint)
         ? 'https://pynescript.online'
         : rawEndpoint;
 
@@ -931,8 +908,10 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
       source: hydratePluginId(bag.source, DEFAULTS.source),
       engine: hydratePluginId(bag.engine, DEFAULTS.engine),
       theme: bag.theme === 'light' || bag.theme === 'dark' ? bag.theme : DEFAULTS.theme,
-      panes: safeHydrate('panes', DEFAULTS.panes.map((p) => ({ ...p })), () =>
-        sanitizePersistedPanes(bag.panes),
+      panes: safeHydrate(
+        'panes',
+        DEFAULTS.panes.map((p) => ({ ...p })),
+        () => sanitizePersistedPanes(bag.panes),
       ),
       chartType: normalizeChartType(bag.chartType),
       priceScaleLabelsVisible:
@@ -955,18 +934,15 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
         ...(bag.strategyUi && typeof bag.strategyUi === 'object'
           ? {
               slippageNextOpen:
-                typeof (bag.strategyUi as AppState['strategyUi']).slippageNextOpen ===
-                'boolean'
+                typeof (bag.strategyUi as AppState['strategyUi']).slippageNextOpen === 'boolean'
                   ? (bag.strategyUi as AppState['strategyUi']).slippageNextOpen
                   : DEFAULTS.strategyUi.slippageNextOpen,
               invertTradeLabels:
-                typeof (bag.strategyUi as AppState['strategyUi']).invertTradeLabels ===
-                'boolean'
+                typeof (bag.strategyUi as AppState['strategyUi']).invertTradeLabels === 'boolean'
                   ? (bag.strategyUi as AppState['strategyUi']).invertTradeLabels
                   : DEFAULTS.strategyUi.invertTradeLabels,
               exactOnCandle:
-                typeof (bag.strategyUi as AppState['strategyUi']).exactOnCandle ===
-                'boolean'
+                typeof (bag.strategyUi as AppState['strategyUi']).exactOnCandle === 'boolean'
                   ? (bag.strategyUi as AppState['strategyUi']).exactOnCandle
                   : DEFAULTS.strategyUi.exactOnCandle,
             }
@@ -1010,8 +986,7 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
         if (bag.chartTheme != null) {
           return hydrateChartTheme(bag.chartTheme);
         }
-        const chrome =
-          bag.theme === 'light' || bag.theme === 'dark' ? bag.theme : null;
+        const chrome = bag.theme === 'light' || bag.theme === 'dark' ? bag.theme : null;
         if (chrome === 'light') return withPreset('void-light');
         if (chrome === 'dark') return withPreset('void-dark');
         return defaultChartThemeState();
@@ -1019,14 +994,10 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
       watchlist: safeHydrate('watchlist', hydrateWatchlistState(undefined), () =>
         hydrateWatchlistState(bag.watchlist),
       ),
-      extras: safeHydrate('extras', hydrateExtras(undefined), () =>
-        hydrateExtras(bag.extras),
-      ),
+      extras: safeHydrate('extras', hydrateExtras(undefined), () => hydrateExtras(bag.extras)),
       indicatorPanel: {
         ...DEFAULTS.indicatorPanel,
-        ...(bag.indicatorPanel && typeof bag.indicatorPanel === 'object'
-          ? bag.indicatorPanel
-          : {}),
+        ...(bag.indicatorPanel && typeof bag.indicatorPanel === 'object' ? bag.indicatorPanel : {}),
       },
       dataViewPanel: {
         ...DEFAULTS.dataViewPanel,
@@ -1047,14 +1018,12 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
       editorStrategyProps:
         (bag as { editorStrategyProps?: unknown }).editorStrategyProps &&
         typeof (bag as { editorStrategyProps?: unknown }).editorStrategyProps === 'object'
-          ? ((bag as { editorStrategyProps: Record<string, unknown> }).editorStrategyProps)
+          ? (bag as { editorStrategyProps: Record<string, unknown> }).editorStrategyProps
           : DEFAULTS.editorStrategyProps,
       // Applied chart scripts (code + pane + colors) — durable so reopen re-paints
       scripts: safeHydrate('scripts', [], () => sanitizePersistedScripts(bag.scripts)),
       pineTablesLocation: safeHydrate('pineTablesLocation', {}, () =>
-        hydratePineTablesLocation(
-          (bag as { pineTablesLocation?: unknown }).pineTablesLocation,
-        ),
+        hydratePineTablesLocation((bag as { pineTablesLocation?: unknown }).pineTablesLocation),
       ),
       // Ephemeral UI — never hydrate open modals / crosshair from disk
       scriptSettings: { open: false, indicatorId: null },
@@ -1154,11 +1123,7 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
           'Source',
           'rest',
         ),
-        stream: idlePlane(
-          pluginsBag?.stream || streamId || DEFAULTS.live.streamId,
-          'Stream',
-          'ws',
-        ),
+        stream: idlePlane(pluginsBag?.stream || streamId || DEFAULTS.live.streamId, 'Stream', 'ws'),
         engine: idlePlane(
           pluginsBag?.engine || engine || DEFAULTS.activePlugins.engine,
           'Engine',
@@ -1183,12 +1148,11 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
             : {}),
         },
         // Opt-in error share prompt — default false unless explicitly true
-        shareOnError:
-          !!(
-            bag.telemetry &&
-            typeof bag.telemetry === 'object' &&
-            (bag.telemetry as TelemetryState).shareOnError === true
-          ),
+        shareOnError: !!(
+          bag.telemetry &&
+          typeof bag.telemetry === 'object' &&
+          (bag.telemetry as TelemetryState).shareOnError === true
+        ),
       },
       // Ephemeral error-share toast — never restore from disk
       errorShareOffer: null,
@@ -1196,14 +1160,10 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
       presentation: { fullscreen: false, chartOnly: false },
       // Drawing tool always starts as cursor; list normalized for dual legacy/style fields
       drawingTool: 'cursor',
-      drawings: safeHydrate('drawings', [], () =>
-        normalizeUserDrawings(bag.drawings),
-      ) as Drawing[],
+      drawings: safeHydrate('drawings', [], () => normalizeUserDrawings(bag.drawings)) as Drawing[],
 
-      drawingPrefs: safeHydrate(
-        'drawingPrefs',
-        hydrateDrawingPrefs(undefined),
-        () => hydrateDrawingPrefs(bag.drawingPrefs),
+      drawingPrefs: safeHydrate('drawingPrefs', hydrateDrawingPrefs(undefined), () =>
+        hydrateDrawingPrefs(bag.drawingPrefs),
       ),
       drawingUi: safeHydrate('drawingUi', { ...DEFAULTS.drawingUi }, () => ({
         ...DEFAULTS.drawingUi,
@@ -1220,80 +1180,80 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
       selectedDrawingId: null,
       panelChrome: safeHydrate('panelChrome', defaultPanelChromeMap(), () =>
         mergePanelChrome(bag.panelChrome, {
-        // Bridge legacy open/width into chrome on first load
-        watchlist: {
-          open:
-            bag.watchlist && typeof bag.watchlist === 'object'
-              ? (bag.watchlist as AppState['watchlist']).open
-              : DEFAULTS.watchlist.open,
-          w:
-            bag.watchlist && typeof bag.watchlist === 'object'
-              ? (bag.watchlist as AppState['watchlist']).width
-              : DEFAULTS.watchlist.width,
-        },
-        indicators: {
-          open:
-            bag.indicatorPanel && typeof bag.indicatorPanel === 'object'
-              ? (bag.indicatorPanel as AppState['indicatorPanel']).open
-              : DEFAULTS.indicatorPanel.open,
-          w:
-            bag.indicatorPanel && typeof bag.indicatorPanel === 'object'
-              ? (bag.indicatorPanel as AppState['indicatorPanel']).width
-              : DEFAULTS.indicatorPanel.width,
-        },
-        editor: {
-          open:
-            bag.editor && typeof bag.editor === 'object'
-              ? (bag.editor as AppState['editor']).open
-              : DEFAULTS.editor.open,
-          w:
-            bag.editor && typeof bag.editor === 'object'
-              ? (bag.editor as AppState['editor']).width
-              : DEFAULTS.editor.width,
-          dock:
-            bag.editor &&
-            typeof bag.editor === 'object' &&
-            (bag.editor as AppState['editor']).mode === 'popout'
-              ? 'window'
-              : 'right',
-        },
-        logs: {
-          open: false,
-          h:
-            bag.logsPanel && typeof bag.logsPanel === 'object'
-              ? (bag.logsPanel as AppState['logsPanel']).height
-              : DEFAULTS.logsPanel.height,
-        },
-        dataview: {
-          open:
-            bag.dataViewPanel && typeof bag.dataViewPanel === 'object'
-              ? !!(bag.dataViewPanel as AppState['dataViewPanel']).open
-              : false,
-          w:
-            bag.dataViewPanel && typeof bag.dataViewPanel === 'object'
-              ? (bag.dataViewPanel as AppState['dataViewPanel']).width
-              : 240,
-        },
-        layers: {
-          open:
-            bag.layerPanel && typeof bag.layerPanel === 'object'
-              ? !!(bag.layerPanel as AppState['layerPanel']).open
-              : false,
-          w:
-            bag.layerPanel && typeof bag.layerPanel === 'object'
-              ? (bag.layerPanel as AppState['layerPanel']).width
-              : 240,
-        },
-        alerts: {
-          open:
-            bag.alertsPanel && typeof bag.alertsPanel === 'object'
-              ? !!(bag.alertsPanel as AppState['alertsPanel']).open
-              : false,
-          w:
-            bag.alertsPanel && typeof bag.alertsPanel === 'object'
-              ? (bag.alertsPanel as AppState['alertsPanel']).width
-              : 280,
-        },
+          // Bridge legacy open/width into chrome on first load
+          watchlist: {
+            open:
+              bag.watchlist && typeof bag.watchlist === 'object'
+                ? (bag.watchlist as AppState['watchlist']).open
+                : DEFAULTS.watchlist.open,
+            w:
+              bag.watchlist && typeof bag.watchlist === 'object'
+                ? (bag.watchlist as AppState['watchlist']).width
+                : DEFAULTS.watchlist.width,
+          },
+          indicators: {
+            open:
+              bag.indicatorPanel && typeof bag.indicatorPanel === 'object'
+                ? (bag.indicatorPanel as AppState['indicatorPanel']).open
+                : DEFAULTS.indicatorPanel.open,
+            w:
+              bag.indicatorPanel && typeof bag.indicatorPanel === 'object'
+                ? (bag.indicatorPanel as AppState['indicatorPanel']).width
+                : DEFAULTS.indicatorPanel.width,
+          },
+          editor: {
+            open:
+              bag.editor && typeof bag.editor === 'object'
+                ? (bag.editor as AppState['editor']).open
+                : DEFAULTS.editor.open,
+            w:
+              bag.editor && typeof bag.editor === 'object'
+                ? (bag.editor as AppState['editor']).width
+                : DEFAULTS.editor.width,
+            dock:
+              bag.editor &&
+              typeof bag.editor === 'object' &&
+              (bag.editor as AppState['editor']).mode === 'popout'
+                ? 'window'
+                : 'right',
+          },
+          logs: {
+            open: false,
+            h:
+              bag.logsPanel && typeof bag.logsPanel === 'object'
+                ? (bag.logsPanel as AppState['logsPanel']).height
+                : DEFAULTS.logsPanel.height,
+          },
+          dataview: {
+            open:
+              bag.dataViewPanel && typeof bag.dataViewPanel === 'object'
+                ? !!(bag.dataViewPanel as AppState['dataViewPanel']).open
+                : false,
+            w:
+              bag.dataViewPanel && typeof bag.dataViewPanel === 'object'
+                ? (bag.dataViewPanel as AppState['dataViewPanel']).width
+                : 240,
+          },
+          layers: {
+            open:
+              bag.layerPanel && typeof bag.layerPanel === 'object'
+                ? !!(bag.layerPanel as AppState['layerPanel']).open
+                : false,
+            w:
+              bag.layerPanel && typeof bag.layerPanel === 'object'
+                ? (bag.layerPanel as AppState['layerPanel']).width
+                : 240,
+          },
+          alerts: {
+            open:
+              bag.alertsPanel && typeof bag.alertsPanel === 'object'
+                ? !!(bag.alertsPanel as AppState['alertsPanel']).open
+                : false,
+            w:
+              bag.alertsPanel && typeof bag.alertsPanel === 'object'
+                ? (bag.alertsPanel as AppState['alertsPanel']).width
+                : 280,
+          },
         }),
       ),
       chartLayout: safeHydrate(
@@ -1304,15 +1264,12 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
           exchange: DEFAULTS.exchange,
         }),
         () =>
-          normalizeChartLayout(
-            (bag as { chartLayout?: ChartLayoutState }).chartLayout,
-            {
-              symbol: hydrateMarketSymbol(bag.symbol),
-              interval: hydrateInterval(bag.interval),
-              exchange: hydrateExchange(bag.exchange),
-              chartType: normalizeChartType(bag.chartType),
-            },
-          ),
+          normalizeChartLayout((bag as { chartLayout?: ChartLayoutState }).chartLayout, {
+            symbol: hydrateMarketSymbol(bag.symbol),
+            interval: hydrateInterval(bag.interval),
+            exchange: hydrateExchange(bag.exchange),
+            chartType: normalizeChartType(bag.chartType),
+          }),
       ),
       savedLayouts: safeHydrate('savedLayouts', [], () =>
         Array.isArray((bag as { savedLayouts?: unknown }).savedLayouts)
@@ -1325,9 +1282,7 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
       savedBarThemes,
       activeSavedThemeId,
       activeBarThemeId,
-      compare: safeHydrate('compare', hydrateCompare(undefined), () =>
-        hydrateCompare(bag.compare),
-      ),
+      compare: safeHydrate('compare', hydrateCompare(undefined), () => hydrateCompare(bag.compare)),
       onchain: safeHydrate('onchain', hydrateOnchain(undefined), () =>
         hydrateOnchain((bag as { onchain?: unknown }).onchain),
       ),
@@ -1360,10 +1315,8 @@ export function sanitizePersistedScripts(raw: unknown): Indicator[] {
     if (!id || !code.trim()) continue;
     if (seen.has(id)) continue;
     seen.add(id);
-    const name =
-      typeof o.name === 'string' && o.name.trim() ? o.name.trim() : `Script ${i + 1}`;
-    const paneId =
-      typeof o.paneId === 'string' && o.paneId.trim() ? o.paneId.trim() : 'price';
+    const name = typeof o.name === 'string' && o.name.trim() ? o.name.trim() : `Script ${i + 1}`;
+    const paneId = typeof o.paneId === 'string' && o.paneId.trim() ? o.paneId.trim() : 'price';
     const plots: Record<string, { color: string; custom?: boolean }> = {};
     if (o.plots && typeof o.plots === 'object' && !Array.isArray(o.plots)) {
       for (const [k, v] of Object.entries(o.plots as Record<string, unknown>)) {
@@ -1387,11 +1340,7 @@ export function sanitizePersistedScripts(raw: unknown): Indicator[] {
     if (o.inputValues && typeof o.inputValues === 'object' && !Array.isArray(o.inputValues)) {
       item.inputValues = { ...(o.inputValues as Record<string, unknown>) };
     }
-    if (
-      o.strategyProps &&
-      typeof o.strategyProps === 'object' &&
-      !Array.isArray(o.strategyProps)
-    ) {
+    if (o.strategyProps && typeof o.strategyProps === 'object' && !Array.isArray(o.strategyProps)) {
       item.strategyProps = { ...(o.strategyProps as Record<string, unknown>) };
     }
     out.push(item);
@@ -1409,20 +1358,10 @@ export function sanitizePersistedScripts(raw: unknown): Indicator[] {
  * @returns true when the source key was cleared (backed up or already empty)
  */
 export function backupAndClearCorrupt(sourceKey: string, backupKey: string): boolean {
-  let raw: string | null = null;
-  try {
-    raw = readLocalStorage(sourceKey);
-  } catch {
-    return false;
-  }
+  const raw = getItem(sourceKey);
   if (!raw) return true;
-  try {
-    if (typeof localStorage === 'undefined' || localStorage == null) return false;
-    localStorage.setItem(backupKey, raw);
-  } catch {
-    return false;
-  }
-  removeLocalStorage(sourceKey);
+  if (!setItem(backupKey, raw)) return false;
+  removeItem(sourceKey);
   return true;
 }
 
@@ -1434,7 +1373,7 @@ export function backupAndClearCorrupt(sourceKey: string, backupKey: string): boo
 function loadPersisted(): Partial<AppState> {
   try {
     // Prefer v1 when it parses; if v1 is corrupt, try legacy keys before giving up.
-    const current = readLocalStorage(STORAGE_KEY);
+    const current = getItem(STORAGE_KEY);
     if (current) {
       const overlay = parsePersistedState(current);
       if (overlay) return overlay;
@@ -1446,22 +1385,17 @@ function loadPersisted(): Partial<AppState> {
       backupAndClearCorrupt(STORAGE_KEY, `${STORAGE_KEY}.corrupt`);
     }
     for (const legacy of LEGACY_STORAGE_KEYS) {
-      const raw = readLocalStorage(legacy);
+      const raw = getItem(legacy);
       if (!raw) continue;
       const overlay = parsePersistedState(raw);
       if (overlay) {
-        try {
-          localStorage.setItem(STORAGE_KEY, raw);
-        } catch {
-          /* quota — in-memory hydrate still works */
-        }
+        // Write-forward is best-effort: quota still hydrates in-memory.
+        setItem(STORAGE_KEY, raw);
         return overlay;
       }
       // Corrupt legacy blobs get the same capped backup treatment (D6) —
       // previously they were removed unconditionally with no backup.
-      warnPersistOnce(
-        `[axis] legacy stored state ${legacy} failed to parse; moved to backup key`,
-      );
+      warnPersistOnce(`[axis] legacy stored state ${legacy} failed to parse; moved to backup key`);
       backupAndClearCorrupt(legacy, `${legacy}.corrupt`);
     }
   } catch {
@@ -1495,7 +1429,8 @@ function hydrateShortcuts(raw: unknown): ShortcutSlice {
 }
 
 /** Restore durable compare prefs; always clear bars / loading / error. */
-function hydrateCompare(raw: unknown): CompareState {  const base = { ...DEFAULTS.compare };
+function hydrateCompare(raw: unknown): CompareState {
+  const base = { ...DEFAULTS.compare };
   if (!raw || typeof raw !== 'object') return base;
   const c = raw as Partial<CompareState>;
   return {
@@ -1564,7 +1499,8 @@ export function hydrateTopbar(raw: unknown): TopbarSettings {
   const base = { ...DEFAULTS.topbar };
   if (!raw || typeof raw !== 'object') return base;
   const t = raw as Record<string, unknown>;
-  const bool = (k: string) => typeof t[k] === 'boolean' ? t[k] as boolean : base[k as keyof TopbarSettings];
+  const bool = (k: string) =>
+    typeof t[k] === 'boolean' ? (t[k] as boolean) : base[k as keyof TopbarSettings];
   return {
     brand: bool('brand'),
     market: bool('market'),
@@ -1635,7 +1571,9 @@ function mergePanelChrome(
 ): Record<PanelId, PanelChrome> {
   const base = defaultPanelChromeMap();
   const bag =
-    raw && typeof raw === 'object' ? ({ ...(raw as Record<string, unknown>) } as Record<string, unknown>) : {};
+    raw && typeof raw === 'object'
+      ? ({ ...(raw as Record<string, unknown>) } as Record<string, unknown>)
+      : {};
   // Migrate pre-rename panel id `pinelogs` → `scriptlogs`
   if (bag.pinelogs && !bag.scriptlogs) {
     bag.scriptlogs = bag.pinelogs;
@@ -1679,8 +1617,7 @@ function mergePanelChrome(
 }
 
 function pairedStreamFor(sourceId: string): string {
-  const under =
-    sourceId === 'data-manager' ? getDataManagerSelection()?.sourceId : undefined;
+  const under = sourceId === 'data-manager' ? getDataManagerSelection()?.sourceId : undefined;
   return pairStreamForSource(sourceId, under);
 }
 
@@ -1688,15 +1625,17 @@ function ccxtExchangeFromBags(): string {
   const bags = store.pluginsConfig || {};
   const src = bags['source:ccxt-rest'] as Record<string, unknown> | undefined;
   const stm = bags['stream:ccxt-ws'] as Record<string, unknown> | undefined;
-  return String(src?.exchange || stm?.exchange || '').trim().toLowerCase();
+  return String(src?.exchange || stm?.exchange || '')
+    .trim()
+    .toLowerCase();
 }
 
 function syncProviderSession(): void {
   const sourceId = store.source || store.activePlugins?.source || DEFAULTS.source;
-  const streamId =
-    store.live?.streamId || store.activePlugins?.stream || DEFAULTS.live.streamId;
+  const streamId = store.live?.streamId || store.activePlugins?.stream || DEFAULTS.live.streamId;
   const prev = store.provider;
-  const ccxtExchange = sourceId === 'ccxt-rest' || streamId === 'ccxt-ws' ? ccxtExchangeFromBags() : '';
+  const ccxtExchange =
+    sourceId === 'ccxt-rest' || streamId === 'ccxt-ws' ? ccxtExchangeFromBags() : '';
   const isCcxt = sourceId === 'ccxt-rest' || sourceId.startsWith('ccxt:');
   let gateway = prev?.gateway;
   if (isCcxt && (!gateway || gateway === 'direct')) gateway = 'pyne';
@@ -1730,10 +1669,7 @@ function syncProviderSession(): void {
  * Source changes re-pair the live stream so aggregators cannot mix venues.
  * Persists immediately. Engine switch resets engine telemetry (pyodide shows “connecting”).
  */
-export function setActivePlugin(
-  kind: 'source' | 'stream' | 'engine' | 'storage',
-  id: string,
-) {
+export function setActivePlugin(kind: 'source' | 'stream' | 'engine' | 'storage', id: string) {
   setStore('activePlugins', kind, id);
   if (kind === 'source') {
     setStore('source', id);
@@ -1757,7 +1693,12 @@ export function setActivePlugin(
       // Prefer idle/open state from loaders; reset error on switch
       setStore('telemetry', 'engine', 'state', family === 'pyodide' ? 'connecting' : 'idle');
       setStore('telemetry', 'engine', 'error', null);
-      setStore('telemetry', 'engine', 'detail', family === 'pyodide' ? 'select · will load ~20–30s' : undefined);
+      setStore(
+        'telemetry',
+        'engine',
+        'detail',
+        family === 'pyodide' ? 'select · will load ~20–30s' : undefined,
+      );
       setStore(
         'telemetry',
         'engine',
@@ -1774,10 +1715,7 @@ export function setActivePlugin(
       if (family === 'worker') {
         const ep = String(store.endpoint || '').trim();
         const isPw = engineFamilyForText(ep) === 'worker';
-        const isLoop =
-          !ep ||
-          /127\.0\.0\.1|localhost/i.test(ep) ||
-          ep.includes(':5002');
+        const isLoop = !ep || /127\.0\.0\.1|localhost/i.test(ep) || ep.includes(':5002');
         if (!isPw && isLoop) {
           setStore('endpoint', 'https://pyne-worker.cryptolinx.workers.dev');
         } else if (!isPw && !ep) {
@@ -2170,7 +2108,7 @@ export function flushPersist(): boolean {
   if (isQuotaExceededError(result.err)) {
     // Free space from legacy keys and retry full payload
     for (const legacy of LEGACY_STORAGE_KEYS) {
-      removeLocalStorage(legacy);
+      removeItem(legacy);
     }
     result = trySetItem(STORAGE_KEY, json);
     if (result.ok) {
@@ -2291,8 +2229,7 @@ function appendLogRaw(level: LogLevel, message: string, source = 'system') {
       !!last &&
       last.level === level &&
       (last.source || 'system') === source &&
-      (last.message === message ||
-        (isReconnectLog(last.message) && isReconnectLog(message)));
+      (last.message === message || (isReconnectLog(last.message) && isReconnectLog(message)));
     if (last && sameBurst) {
       const next = logs.slice();
       next[next.length - 1] = {
@@ -2330,7 +2267,12 @@ function pushToastEntry(level: LogLevel, message: string, source: string) {
       .reverse()
       .find((t) => t.message === message && t.level === level && (t.source || '') === source);
     if (dup && now - dup.ts < windowMs) {
-      setStore('toasts', (t) => t.id === dup.id, 'count', (c) => (typeof c === 'number' ? c + 1 : 2));
+      setStore(
+        'toasts',
+        (t) => t.id === dup.id,
+        'count',
+        (c) => (typeof c === 'number' ? c + 1 : 2),
+      );
       setStore('toasts', (t) => t.id === dup.id, 'ts', now);
       return;
     }
@@ -2392,8 +2334,7 @@ export function notify(level: LogLevel, message: string, opts?: NotifyOpts | str
   if (!msg) return;
   appendLogRaw(level, msg, source);
   if (logOnly) return;
-  const category =
-    typeof opts === 'object' ? opts?.category : undefined;
+  const category = typeof opts === 'object' ? opts?.category : undefined;
   if (!toastGate(level, source, category)) return;
   pushToastEntry(level, msg, source);
 }
@@ -2425,12 +2366,7 @@ export interface AppendLogOpts {
  * warn/error entries also raise a toast by default (flood-controlled via
  * Settings → Notifications); pass `{ toast: false }` for noisy paths.
  */
-export function appendLog(
-  level: LogLevel,
-  message: string,
-  source?: string,
-  opts?: AppendLogOpts,
-) {
+export function appendLog(level: LogLevel, message: string, source?: string, opts?: AppendLogOpts) {
   const src = source || 'system';
   const mode = opts?.toast ?? 'auto';
   if (mode === true) {
@@ -2573,7 +2509,7 @@ function readResultMeta(result: unknown): {
 } {
   if (result == null || typeof result !== 'object') return {};
   const m = (result as { meta?: Record<string, unknown> }).meta;
-  return (m && typeof m === 'object') ? m : {};
+  return m && typeof m === 'object' ? m : {};
 }
 
 /**
@@ -2595,8 +2531,7 @@ function buildResultMeta(result: unknown, scriptId: string): ResultMeta {
     typeof meta.startedAt === 'number' && Number.isFinite(meta.startedAt)
       ? meta.startedAt
       : Date.now();
-  const durationMs =
-    typeof meta.ms === 'number' && Number.isFinite(meta.ms) ? meta.ms : 0;
+  const durationMs = typeof meta.ms === 'number' && Number.isFinite(meta.ms) ? meta.ms : 0;
   return {
     scriptId,
     runId: computeRunId(result, scriptId),
@@ -2745,9 +2680,7 @@ function isRunResult(value: unknown): value is RunResult {
  * is best-effort and reflects runs that the current session has executed;
  * previous-session runs only appear after a `loadRunResult` round-trip.
  */
-export function runResultsByStorage(scriptId?: string | null):
-  | Record<string, unknown>
-  | unknown {
+export function runResultsByStorage(scriptId?: string | null): Record<string, unknown> | unknown {
   const bag = store.runResults || {};
   if (scriptId == null || !String(scriptId).trim()) return { ...bag };
   return bag[String(scriptId).trim()];
@@ -2759,8 +2692,7 @@ export function runResultsByStorage(scriptId?: string | null):
  * focus so a later re-run fills the panel).
  */
 export function setResultsFocusId(id: string | null) {
-  const key =
-    id == null || !String(id).trim() ? null : String(id).trim();
+  const key = id == null || !String(id).trim() ? null : String(id).trim();
   setStore('resultsFocusId', key);
   if (key == null) {
     setStore('lastRun', null);
@@ -2868,7 +2800,12 @@ export function setPreEval(next: AppState['preEval']) {
 export function setFeedStatus(
   key: string,
   status: AppState['live']['feeds'][string]['status'],
-  extra?: { have?: number; need?: number; message?: string; verified?: AppState['live']['feeds'][string]['verified'] },
+  extra?: {
+    have?: number;
+    need?: number;
+    message?: string;
+    verified?: AppState['live']['feeds'][string]['verified'];
+  },
 ) {
   setStore('live', 'feeds', key, {
     key,
@@ -3369,7 +3306,10 @@ export function addIndicator(
 export function updateIndicator(
   id: string,
   patch: Partial<
-    Pick<Indicator, 'name' | 'code' | 'paneId' | 'plots' | 'inputValues' | 'strategyProps' | 'visible'>
+    Pick<
+      Indicator,
+      'name' | 'code' | 'paneId' | 'plots' | 'inputValues' | 'strategyProps' | 'visible'
+    >
   >,
 ) {
   if (!id || !patch || !Object.keys(patch).length) return;
@@ -3442,7 +3382,9 @@ export function setIndicatorSeries(
 
 /** Toggle indicator visibility (plot paint gated by ChartHost / runner). */
 export function toggleIndicator(id: string) {
-  setStore('scripts', (s) => s.map((ind) => ind.id === id ? { ...ind, visible: !ind.visible } : ind));
+  setStore('scripts', (s) =>
+    s.map((ind) => (ind.id === id ? { ...ind, visible: !ind.visible } : ind)),
+  );
   persist();
 }
 
@@ -3488,25 +3430,49 @@ export function setPineTablesLocation(
 
 /** Override a single plot series color for an applied indicator (explicit panel pick). */
 export function setIndicatorColor(id: string, plotName: string, color: string) {
-  setStore('scripts', (s) => s.map((ind) =>
-    ind.id === id ? { ...ind, plots: { ...ind.plots, [plotName]: { ...ind.plots[plotName], color, custom: true } } } : ind
-  ));
+  setStore('scripts', (s) =>
+    s.map((ind) =>
+      ind.id === id
+        ? {
+            ...ind,
+            plots: { ...ind.plots, [plotName]: { ...ind.plots[plotName], color, custom: true } },
+          }
+        : ind,
+    ),
+  );
   persist();
 }
 
 /** Override a single plot series line width (1-4). */
 export function setIndicatorPlotWidth(id: string, plotName: string, width: number) {
-  setStore('scripts', (s) => s.map((ind) =>
-    ind.id === id ? { ...ind, plots: { ...ind.plots, [plotName]: { ...ind.plots[plotName], width: Math.max(1, Math.min(4, Math.round(width))) } } } : ind
-  ));
+  setStore('scripts', (s) =>
+    s.map((ind) =>
+      ind.id === id
+        ? {
+            ...ind,
+            plots: {
+              ...ind.plots,
+              [plotName]: {
+                ...ind.plots[plotName],
+                width: Math.max(1, Math.min(4, Math.round(width))),
+              },
+            },
+          }
+        : ind,
+    ),
+  );
   persist();
 }
 
 /** Toggle a single plot series visibility. */
 export function setIndicatorPlotVisible(id: string, plotName: string, visible: boolean) {
-  setStore('scripts', (s) => s.map((ind) =>
-    ind.id === id ? { ...ind, plots: { ...ind.plots, [plotName]: { ...ind.plots[plotName], visible } } } : ind
-  ));
+  setStore('scripts', (s) =>
+    s.map((ind) =>
+      ind.id === id
+        ? { ...ind, plots: { ...ind.plots, [plotName]: { ...ind.plots[plotName], visible } } }
+        : ind,
+    ),
+  );
   persist();
 }
 
@@ -3536,10 +3502,7 @@ export function addPane(
   const id = preferred || uid();
   const maxOrder = Math.max(...store.panes.map((p) => p.order), -1);
   const height = opts?.height != null ? opts.height : type === 'indicator' ? 140 : 120;
-  setStore('panes', (p) => [
-    ...p,
-    { id, type, height, order: maxOrder + 1, visible: true, label },
-  ]);
+  setStore('panes', (p) => [...p, { id, type, height, order: maxOrder + 1, visible: true, label }]);
   persist();
   return id;
 }
@@ -3552,15 +3515,16 @@ export function removePane(id: string) {
 
 /** Set pane height in CSS px. */
 export function resizePane(id: string, height: number) {
-  setStore('panes', (p) => p.map((pane) => pane.id === id ? { ...pane, height } : pane));
+  setStore('panes', (p) => p.map((pane) => (pane.id === id ? { ...pane, height } : pane)));
   persist();
 }
 
 /** Reorder panes by id list (sets `order` then sorts). */
 export function reorderPanes(orderedIds: string[]) {
   setStore('panes', (p) =>
-    p.map((pane) => ({ ...pane, order: orderedIds.indexOf(pane.id) }))
-      .sort((a, b) => a.order - b.order)
+    p
+      .map((pane) => ({ ...pane, order: orderedIds.indexOf(pane.id) }))
+      .sort((a, b) => a.order - b.order),
   );
   persist();
 }
@@ -3706,7 +3670,11 @@ export function setTelemetryPlane(
 }
 
 /** Set connection state on a plane; stamps `lastEventAt` unless overridden. */
-export function setTelemetryState(plane: TelemetryPlane, state: ConnState, extra?: Partial<PlaneTelemetry>) {
+export function setTelemetryState(
+  plane: TelemetryPlane,
+  state: ConnState,
+  extra?: Partial<PlaneTelemetry>,
+) {
   setTelemetryPlane(plane, { state, ...extra, lastEventAt: extra?.lastEventAt ?? Date.now() });
 }
 
@@ -3806,7 +3774,9 @@ function upsertByName<T extends { id: string; name: string }>(
   item: T,
   limit: number,
 ): T[] {
-  const without = list.filter((row) => row.id !== id && row.name.toLowerCase() !== name.toLowerCase());
+  const without = list.filter(
+    (row) => row.id !== id && row.name.toLowerCase() !== name.toLowerCase(),
+  );
   return [item, ...without].slice(0, limit);
 }
 
@@ -3878,14 +3848,17 @@ export function renameCustomTheme(id: string, name: string): ThemeLibraryWrite {
     prev.barTheme.refId == null && prev.barTheme.name === `${prev.name} bars`
       ? `${trimmed} bars`
       : prev.barTheme.name;
-  setStore(
-    'savedChartThemes',
-    (rows) =>
-      (rows || []).map((theme) =>
-        theme.id === id
-          ? { ...theme, name: trimmed, barTheme: { ...theme.barTheme, name: barName }, updatedAt: Date.now() }
-          : theme,
-      ),
+  setStore('savedChartThemes', (rows) =>
+    (rows || []).map((theme) =>
+      theme.id === id
+        ? {
+            ...theme,
+            name: trimmed,
+            barTheme: { ...theme.barTheme, name: barName },
+            updatedAt: Date.now(),
+          }
+        : theme,
+    ),
   );
   persist();
   return 'ok';
@@ -3913,7 +3886,10 @@ export function applyCustomTheme(id: string): boolean {
     : undefined;
   const linked = lib && barTokensEqual(barTokensFromState(painted), lib.tokens) ? lib.id : null;
   batch(() => {
-    setStore('chartTheme', linked === painted.barThemeId ? painted : { ...painted, barThemeId: linked });
+    setStore(
+      'chartTheme',
+      linked === painted.barThemeId ? painted : { ...painted, barThemeId: linked },
+    );
     setStore('theme', painted.base);
     setStore('activeSavedThemeId', found.id);
     setStore('activeBarThemeId', linked);
@@ -3987,7 +3963,12 @@ export function renameBarColorTheme(id: string, name: string): ThemeLibraryWrite
   if (list.some((bar) => bar.id !== id && bar.name.toLowerCase() === trimmed.toLowerCase())) {
     return 'duplicate';
   }
-  const item: BarColorTheme = { ...prev, name: trimmed, tokens: { ...prev.tokens }, updatedAt: Date.now() };
+  const item: BarColorTheme = {
+    ...prev,
+    name: trimmed,
+    tokens: { ...prev.tokens },
+    updatedAt: Date.now(),
+  };
   batch(() => {
     setStore('savedBarThemes', (rows) => (rows || []).map((bar) => (bar.id === id ? item : bar)));
     setStore('savedChartThemes', (rows) => syncBarThemeIntoCharts(rows || [], item));
@@ -4013,7 +3994,11 @@ export function deleteBarColorTheme(id: string) {
 export function applyBarColorTheme(id: string): boolean {
   const bar = (store.savedBarThemes || []).find((item) => item.id === id);
   if (!bar) return false;
-  const painted = withBarColorTheme(store.chartTheme || defaultChartThemeState(), bar.tokens, bar.id);
+  const painted = withBarColorTheme(
+    store.chartTheme || defaultChartThemeState(),
+    bar.tokens,
+    bar.id,
+  );
   const activeId = store.activeSavedThemeId;
   batch(() => {
     setStore('chartTheme', painted);
@@ -4454,9 +4439,7 @@ export function toggleEditorWrapEnabled() {
 }
 
 /** Normalize a persisted / incoming right-rail mode. */
-export function normalizeEditorRightRail(
-  raw: unknown,
-): 'off' | 'minimap' | 'outline' {
+export function normalizeEditorRightRail(raw: unknown): 'off' | 'minimap' | 'outline' {
   return raw === 'minimap' || raw === 'outline' || raw === 'off' ? raw : 'off';
 }
 
@@ -4862,10 +4845,8 @@ export function setPanelChartOverlay(id: PanelId, enabled: boolean): void {
   if (on) {
     // Seed edge geometry when entering overlay from a layout dock
     if (isChartOverlayEligible(cur.dock)) {
-      const vw =
-        typeof window !== 'undefined' && window.innerWidth > 0 ? window.innerWidth : 1280;
-      const vh =
-        typeof window !== 'undefined' && window.innerHeight > 0 ? window.innerHeight : 800;
+      const vw = typeof window !== 'undefined' && window.innerWidth > 0 ? window.innerWidth : 1280;
+      const vh = typeof window !== 'undefined' && window.innerHeight > 0 ? window.innerHeight : 800;
       const geo = chartOverlayGeometry({ ...cur, chartOverlay: true }, vw, vh);
       setStore('panelChrome', id, 'x', geo.x);
       setStore('panelChrome', id, 'y', geo.y);
@@ -5242,9 +5223,7 @@ export function setCompareBars(bars: Bar[]) {
 }
 
 /** Mark compare fetch in flight / failed. */
-export function setCompareLoadState(
-  state: { loading?: boolean; error?: string | null },
-) {
+export function setCompareLoadState(state: { loading?: boolean; error?: string | null }) {
   if (state.loading !== undefined) setStore('compare', 'loading', state.loading);
   if (state.error !== undefined) setStore('compare', 'error', state.error);
 }
@@ -5259,16 +5238,12 @@ export function clearCompareBars() {
 
 /** Persist editor document body under `EDITOR_DOC_KEY` (separate from app JSON). */
 export function saveEditorDoc(doc: string) {
-  try {
-    localStorage.setItem(EDITOR_DOC_KEY, doc);
-  } catch {
-    /* ignore */
-  }
+  setItem(EDITOR_DOC_KEY, doc);
 }
 
 /** Load editor document body from localStorage (empty string if missing). */
 export function loadEditorDoc(): string {
-  try { return localStorage.getItem(EDITOR_DOC_KEY) || ''; } catch { return ''; }
+  return getItem(EDITOR_DOC_KEY) || '';
 }
 
 /**

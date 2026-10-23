@@ -47,6 +47,7 @@ import { ResizeHandle } from './ResizeHandle';
 import { copyToClipboard } from './clipboard';
 import { Icons } from './icons';
 import { store } from '../store';
+import { getItem, setItem } from '../utils/storage';
 
 export type { EditorProblem } from './editor-problems';
 export {
@@ -65,23 +66,13 @@ export {
 } from './editor-problems';
 
 function loadStoredHeight(): number {
-  try {
-    if (typeof localStorage === 'undefined') return EDITOR_PROBLEMS_DEFAULT_HEIGHT;
-    const raw = localStorage.getItem(EDITOR_PROBLEMS_HEIGHT_KEY);
-    if (raw == null || raw === '') return EDITOR_PROBLEMS_DEFAULT_HEIGHT;
-    return clampProblemsHeight(Number(raw));
-  } catch {
-    return EDITOR_PROBLEMS_DEFAULT_HEIGHT;
-  }
+  const raw = getItem(EDITOR_PROBLEMS_HEIGHT_KEY);
+  if (raw == null || raw === '') return EDITOR_PROBLEMS_DEFAULT_HEIGHT;
+  return clampProblemsHeight(Number(raw));
 }
 
 function persistHeight(h: number): void {
-  try {
-    if (typeof localStorage === 'undefined') return;
-    localStorage.setItem(EDITOR_PROBLEMS_HEIGHT_KEY, String(clampProblemsHeight(h)));
-  } catch {
-    /* quota / private mode */
-  }
+  setItem(EDITOR_PROBLEMS_HEIGHT_KEY, String(clampProblemsHeight(h)));
 }
 
 function severityClass(sev: DiagnosticSeverity | string): string {
@@ -189,10 +180,7 @@ export const EditorProblems: Component<EditorProblemsProps> = (props) => {
     if (await copyToClipboard(t)) flashCopied(key);
   };
 
-  const copyOne = async (
-    p: EditorDiagnostic | EditorProblem,
-    key: string,
-  ) => {
+  const copyOne = async (p: EditorDiagnostic | EditorProblem, key: string) => {
     await copyText(formatProblemForCopy(p), key);
   };
 
@@ -230,11 +218,7 @@ export const EditorProblems: Component<EditorProblemsProps> = (props) => {
         getSize={height}
         setSize={setHeight}
         min={EDITOR_PROBLEMS_MIN_HEIGHT}
-        max={
-          typeof window !== 'undefined'
-            ? Math.floor(window.innerHeight * 0.85)
-            : 800
-        }
+        max={typeof window !== 'undefined' ? Math.floor(window.innerHeight * 0.85) : 800}
         class="w-full"
       />
 
@@ -299,9 +283,7 @@ export const EditorProblems: Component<EditorProblemsProps> = (props) => {
               class="px-2 py-1.5 text-text-faint italic"
               data-testid="axis-editor-problems-empty"
               data-pending={
-                (typeof props.pending === 'boolean'
-                  ? props.pending
-                  : !!store.preEval?.pending)
+                (typeof props.pending === 'boolean' ? props.pending : !!store.preEval?.pending)
                   ? 'true'
                   : undefined
               }

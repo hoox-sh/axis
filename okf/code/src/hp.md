@@ -7,7 +7,7 @@ tags: [code, hp]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-23T17:50:02Z
+  at: 2026-10-23T19:03:28Z
 sources:
   - id: tree
     resource: "src/hp"
@@ -33,6 +33,7 @@ okf_lock: generated
 * [src/hp/render](/code/src/hp/render.md)
 * [src/hp/sync](/code/src/hp/sync.md)
 * [src/hp/workers](/code/src/hp/workers.md)
+* [src/utils](/code/src/utils.md)
 
 # Used by
 

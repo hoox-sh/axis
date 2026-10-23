@@ -28,6 +28,8 @@
  * @module engine/feature-flag
  */
 
+import { getFlag, removeItem, setItem } from '../utils/storage';
+
 const FLAG_KEY = 'axis.engine.stream.enabled';
 const DISABLE_KEY = 'axis.engine.stream.disabled';
 
@@ -36,12 +38,8 @@ let memoryFlag = false;
 let memoryDisabled = false;
 
 function readFlag(): boolean {
-  try {
-    if (typeof localStorage === 'undefined') return memoryFlag;
-    return localStorage.getItem(FLAG_KEY) === '1';
-  } catch {
-    return memoryFlag;
-  }
+  if (typeof localStorage === 'undefined') return memoryFlag;
+  return getFlag(FLAG_KEY);
 }
 
 /** True when the new stream engine path is enabled for this tab. */
@@ -53,17 +51,12 @@ export function isStreamEngineEnabled(): boolean {
 export function setStreamEngineEnabled(on: boolean): void {
   memoryFlag = on;
   memoryDisabled = !on;
-  try {
-    if (typeof localStorage === 'undefined') return;
-    if (on) {
-      localStorage.setItem(FLAG_KEY, '1');
-      localStorage.removeItem(DISABLE_KEY);
-    } else {
-      localStorage.removeItem(FLAG_KEY);
-      localStorage.setItem(DISABLE_KEY, '1');
-    }
-  } catch {
-    /* storage unavailable — memory flag still applies */
+  if (on) {
+    setItem(FLAG_KEY, '1');
+    removeItem(DISABLE_KEY);
+  } else {
+    removeItem(FLAG_KEY);
+    setItem(DISABLE_KEY, '1');
   }
 }
 
@@ -72,12 +65,8 @@ export function setStreamEngineEnabled(on: boolean): void {
  * Opt-out wins over everything (kill switch).
  */
 export function isStreamEngineDisabled(): boolean {
-  try {
-    if (typeof localStorage === 'undefined') return memoryDisabled;
-    return localStorage.getItem(DISABLE_KEY) === '1' || memoryDisabled;
-  } catch {
-    return memoryDisabled;
-  }
+  if (typeof localStorage === 'undefined') return memoryDisabled;
+  return getFlag(DISABLE_KEY) || memoryDisabled;
 }
 
 export const STREAM_ENGINE_FLAG_KEY = FLAG_KEY;

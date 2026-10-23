@@ -13,6 +13,7 @@ import { invokeCapability, setMcpHostHooks, type McpHostHooks } from './dispatch
 import { buildAppSnapshot } from './snapshot';
 import { APP_CAPABILITIES } from './catalog';
 import { McpInvokeError } from './protocol';
+import { getJson, setJson } from '../utils/storage';
 import { resolveCloudConfig } from '../storage/cloud-config';
 import {
   connectMcpBridge,
@@ -42,22 +43,13 @@ export type McpPrefs = {
 };
 
 export function loadMcpPrefs(): McpPrefs {
-  try {
-    const raw = localStorage.getItem(MCP_PREF_KEY);
-    if (!raw) return { connect: true };
-    const p = JSON.parse(raw) as { connect?: unknown };
-    return { connect: p.connect !== false };
-  } catch {
-    return { connect: true };
-  }
+  const p = getJson<{ connect?: unknown }>(MCP_PREF_KEY);
+  if (!p) return { connect: true };
+  return { connect: p.connect !== false };
 }
 
 export function saveMcpPrefs(prefs: McpPrefs): void {
-  try {
-    localStorage.setItem(MCP_PREF_KEY, JSON.stringify(prefs));
-  } catch {
-    /* quota */
-  }
+  setJson(MCP_PREF_KEY, prefs);
 }
 
 async function invoke(capability: string, payload?: unknown): Promise<unknown> {

@@ -26,6 +26,7 @@ import {
   tuneIsDirty,
 } from './resolve';
 import type { EffectDef, EffectTune } from './types';
+import { getJson, removeItem, setItem, storageAvailable } from '../../utils/storage';
 
 export const UI_EFFECTS_STORAGE_KEY = 'pynescript.axis.ui-effects.v1';
 
@@ -161,25 +162,15 @@ function commit(): void {
 }
 
 function persist(): void {
-  if (typeof localStorage === 'undefined' || localStorage == null) return;
-  try {
-    const raw = JSON.stringify(tunes);
-    if (raw === '{}') localStorage.removeItem(UI_EFFECTS_STORAGE_KEY);
-    else localStorage.setItem(UI_EFFECTS_STORAGE_KEY, raw);
-  } catch {
-    /* quota — the in-memory tune still paints */
-  }
+  // Quota — the in-memory tune still paints.
+  const raw = JSON.stringify(tunes);
+  if (raw === '{}') removeItem(UI_EFFECTS_STORAGE_KEY);
+  else setItem(UI_EFFECTS_STORAGE_KEY, raw);
 }
 
 function hydrate(): void {
-  let parsed: unknown = null;
-  try {
-    if (typeof localStorage === 'undefined' || localStorage == null) return;
-    const raw = localStorage.getItem(UI_EFFECTS_STORAGE_KEY);
-    if (raw) parsed = JSON.parse(raw);
-  } catch {
-    parsed = null;
-  }
+  if (!storageAvailable()) return;
+  const parsed = getJson<unknown>(UI_EFFECTS_STORAGE_KEY);
   setTunes(reconcile(sanitizeTunes(parsed, listEffects())));
 }
 

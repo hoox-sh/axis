@@ -51,6 +51,7 @@ import type {
 } from '../plugins/types';
 import { metaFromScriptContent } from '../indicators/script-meta';
 import { idbAvailable, idbReq, idbTxDone, openDb } from './idb';
+import { getItem, setItem, removeItem } from '../utils/storage';
 
 const DB_NAME = 'pynescript.axis.storage';
 /**
@@ -97,21 +98,12 @@ export const MAX_RESULTS_PER_SCRIPT = 50;
  */
 export const MAX_VERSIONS_PER_SCRIPT = 50;
 
-const LEGACY_LIBRARY_KEYS = [
-  'pynescript.axis.library.legacy',
-] as const;
+const LEGACY_LIBRARY_KEYS = ['pynescript.axis.library.legacy'] as const;
 
-const LEGACY_DRAFT_KEYS = [
-  'pynescript.axis.editor.doc',
-] as const;
+const LEGACY_DRAFT_KEYS = ['pynescript.axis.editor.doc'] as const;
 
 type KvValue =
-  | string
-  | ScriptDocument
-  | ScriptMeta[]
-  | boolean
-  | null
-  | { content: string; name: string };
+  string | ScriptDocument | ScriptMeta[] | boolean | null | { content: string; name: string };
 
 /** In-memory fallback when neither IDB nor localStorage exist (tests / SSR). */
 const memLibrary = new Map<string, ScriptDocument>();
@@ -147,33 +139,6 @@ let memVersionsLoaded = false;
 let dbPromise: Promise<IDBDatabase> | null = null;
 let migrated = false;
 let memResultsLoaded = false;
-
-function lsGet(key: string): string | null {
-  try {
-    if (typeof localStorage === 'undefined') return null;
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function lsSet(key: string, value: string): void {
-  try {
-    if (typeof localStorage === 'undefined') return;
-    localStorage.setItem(key, value);
-  } catch {
-    /* quota / private mode */
-  }
-}
-
-function lsRemove(key: string): void {
-  try {
-    if (typeof localStorage === 'undefined') return;
-    localStorage.removeItem(key);
-  } catch {
-    /* ignore */
-  }
-}
 
 function newId(): string {
   return `s_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -267,7 +232,7 @@ async function getDb(): Promise<IDBDatabase | null> {
 // --- localStorage fallback ---
 
 function lsReadLibrary(): ScriptDocument[] {
-  const raw = lsGet(LS_LIBRARY);
+  const raw = getItem(LS_LIBRARY);
   if (!raw) {
     if (memLibrary.size) return [...memLibrary.values()].map((d) => normalizeDoc(d));
     return [];
@@ -284,7 +249,7 @@ function lsReadLibrary(): ScriptDocument[] {
 function lsWriteLibrary(docs: ScriptDocument[]) {
   memLibrary.clear();
   for (const d of docs) memLibrary.set(d.id, d);
-  lsSet(LS_LIBRARY, JSON.stringify(docs));
+  setItem(LS_LIBRARY, JSON.stringify(docs));
 }
 
 // --- IDB ops ---
@@ -303,7 +268,9 @@ async function idbGet(id: string): Promise<ScriptDocument | undefined> {
   const db = await getDb();
   if (!db) return lsReadLibrary().find((d) => d.id === id);
   const tx = db.transaction(STORE_SCRIPTS, 'readonly');
-  const doc = await idbReq(tx.objectStore(STORE_SCRIPTS).get(id) as IDBRequest<ScriptDocument | undefined>);
+  const doc = await idbReq(
+    tx.objectStore(STORE_SCRIPTS).get(id) as IDBRequest<ScriptDocument | undefined>,
+  );
   await idbTxDone(tx);
   return doc ? normalizeDoc(doc) : undefined;
 }
@@ -336,7 +303,7 @@ async function idbKvGet(key: string): Promise<KvValue> {
   const db = await getDb();
   if (!db) {
     if (memKv.has(key)) return memKv.get(key) ?? null;
-    const raw = lsGet(`${LS_DRAFT}:${key}`);
+    const raw = getItem(`${LS_DRAFT}:${key}`);
     if (raw == null) return null;
     try {
       return JSON.parse(raw) as KvValue;
@@ -354,7 +321,7 @@ async function idbKvSet(key: string, value: KvValue): Promise<void> {
   const db = await getDb();
   if (!db) {
     memKv.set(key, value);
-    lsSet(`${LS_DRAFT}:${key}`, JSON.stringify(value));
+    setItem(`${LS_DRAFT}:${key}`, JSON.stringify(value));
     return;
   }
   const tx = db.transaction(STORE_KV, 'readwrite');
@@ -371,7 +338,7 @@ type LsResultsShape = Record<string, Record<string, StoredRunResult>>;
 function ensureMemResults(): void {
   if (memResultsLoaded) return;
   memResultsLoaded = true;
-  const raw = lsGet(LS_RESULTS);
+  const raw = getItem(LS_RESULTS);
   if (!raw) return;
   let parsed: unknown;
   try {
@@ -398,7 +365,7 @@ function flushMemResults(): void {
   for (const [scriptId, bucket] of memResults.entries()) {
     out[scriptId] = Object.fromEntries(bucket);
   }
-  lsSet(LS_RESULTS, JSON.stringify(out));
+  setItem(LS_RESULTS, JSON.stringify(out));
 }
 
 /**
@@ -406,10 +373,7 @@ function flushMemResults(): void {
  * evicting oldest by `meta.startedAt`. The `protectedRunId` (the run we just
  * saved) is never removed even when it happens to be the oldest entry by ts.
  */
-function trimBucketToCap(
-  bucket: Map<string, StoredRunResult>,
-  protectedRunId: string,
-): void {
+function trimBucketToCap(bucket: Map<string, StoredRunResult>, protectedRunId: string): void {
   if (bucket.size <= MAX_RESULTS_PER_SCRIPT) return;
   const entries = [...bucket.entries()].sort(
     (a, b) => (a[1].meta.startedAt || 0) - (b[1].meta.startedAt || 0),
@@ -509,9 +473,7 @@ async function idbListResults(scriptId: string): Promise<ResultMeta[]> {
   const all =
     (await idbReq(idx.getAll(IDBKeyRange.only(scriptId)) as IDBRequest<StoredRunResult[]>)) || [];
   await idbTxDone(tx);
-  return all
-    .map((r) => r.meta)
-    .sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
+  return all.map((r) => r.meta).sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
 }
 
 async function idbRemoveResult(scriptId: string, runId: string): Promise<void> {
@@ -529,7 +491,7 @@ type LsVersionsShape = Record<string, StoredScriptVersion[]>;
 function ensureMemVersions(): void {
   if (memVersionsLoaded) return;
   memVersionsLoaded = true;
-  const raw = lsGet(LS_VERSIONS);
+  const raw = getItem(LS_VERSIONS);
   if (!raw) return;
   let parsed: unknown;
   try {
@@ -541,7 +503,8 @@ function ensureMemVersions(): void {
   for (const [scriptId, rows] of Object.entries(parsed as LsVersionsShape)) {
     if (!Array.isArray(rows)) continue;
     const kept = rows.filter(
-      (r) => r && typeof r === 'object' && typeof r.sha === 'string' && typeof r.content === 'string',
+      (r) =>
+        r && typeof r === 'object' && typeof r.sha === 'string' && typeof r.content === 'string',
     );
     if (kept.length) memVersions.set(scriptId, kept);
   }
@@ -552,7 +515,7 @@ function flushMemVersions(): void {
   for (const [scriptId, rows] of memVersions.entries()) {
     out[scriptId] = rows;
   }
-  lsSet(LS_VERSIONS, JSON.stringify(out));
+  setItem(LS_VERSIONS, JSON.stringify(out));
 }
 
 function shortLocalRev(rev: string): string {
@@ -592,7 +555,10 @@ function toScriptVersion(row: StoredScriptVersion): ScriptVersion {
   };
 }
 
-function trimVersionsToCap(rows: StoredScriptVersion[], protectedSha: string): StoredScriptVersion[] {
+function trimVersionsToCap(
+  rows: StoredScriptVersion[],
+  protectedSha: string,
+): StoredScriptVersion[] {
   if (rows.length <= MAX_VERSIONS_PER_SCRIPT) return rows;
   const sorted = [...rows].sort((a, b) => (a.committedAt || 0) - (b.committedAt || 0));
   const over = rows.length - MAX_VERSIONS_PER_SCRIPT;
@@ -659,27 +625,34 @@ async function idbListVersions(scriptId: string): Promise<StoredScriptVersion[]>
   const tx = db.transaction(STORE_VERSIONS, 'readonly');
   const idx = tx.objectStore(STORE_VERSIONS).index(IDX_VERSIONS_BY_SCRIPT);
   const all =
-    (await idbReq(
-      idx.getAll(IDBKeyRange.only(scriptId)) as IDBRequest<StoredScriptVersion[]>,
-    )) || [];
+    (await idbReq(idx.getAll(IDBKeyRange.only(scriptId)) as IDBRequest<StoredScriptVersion[]>)) ||
+    [];
   await idbTxDone(tx);
   return all.sort((a, b) => (b.committedAt || 0) - (a.committedAt || 0));
 }
 
-async function idbReadVersion(scriptId: string, sha: string): Promise<StoredScriptVersion | undefined> {
+async function idbReadVersion(
+  scriptId: string,
+  sha: string,
+): Promise<StoredScriptVersion | undefined> {
   const db = await getDb();
   if (!db?.objectStoreNames.contains(STORE_VERSIONS)) {
     return memReadVersion(scriptId, sha);
   }
   const tx = db.transaction(STORE_VERSIONS, 'readonly');
   const v = await idbReq(
-    tx.objectStore(STORE_VERSIONS).get([scriptId, sha]) as IDBRequest<StoredScriptVersion | undefined>,
+    tx.objectStore(STORE_VERSIONS).get([scriptId, sha]) as IDBRequest<
+      StoredScriptVersion | undefined
+    >,
   );
   await idbTxDone(tx);
   return v;
 }
 
-async function appendVersionForWrite(prev: ScriptDocument | undefined, next: ScriptDocument): Promise<void> {
+async function appendVersionForWrite(
+  prev: ScriptDocument | undefined,
+  next: ScriptDocument,
+): Promise<void> {
   const unchanged =
     prev &&
     prev.content === next.content &&
@@ -712,7 +685,7 @@ async function migrateOnce(): Promise<void> {
   if (migrated) return;
   migrated = true;
 
-  const already = lsGet(LS_MIGRATED) === '1';
+  const already = getItem(LS_MIGRATED) === '1';
   const flag = await idbKvGet('migratedLibrary');
   if (already || flag === true) return;
 
@@ -722,7 +695,7 @@ async function migrateOnce(): Promise<void> {
 
   for (const key of LEGACY_LIBRARY_KEYS) {
     try {
-      const raw = lsGet(key);
+      const raw = getItem(key);
       if (!raw) continue;
       const arr = JSON.parse(raw);
       if (!Array.isArray(arr)) continue;
@@ -742,7 +715,7 @@ async function migrateOnce(): Promise<void> {
   const draft = await idbKvGet('draft');
   if (!draft) {
     for (const key of LEGACY_DRAFT_KEYS) {
-      const content = lsGet(key);
+      const content = getItem(key);
       if (content && content.trim()) {
         await idbKvSet('draft', { content, name: 'Draft' });
         break;
@@ -750,7 +723,7 @@ async function migrateOnce(): Promise<void> {
     }
   }
 
-  lsSet(LS_MIGRATED, '1');
+  setItem(LS_MIGRATED, '1');
   await idbKvSet('migratedLibrary', true);
   if (imported > 0) {
     console.info(`[storage-local] migrated ${imported} script(s) from legacy keys`);
@@ -785,9 +758,7 @@ export const localStoragePlugin: StoragePlugin = {
     let docs = await idbList();
     const prefix = opts?.prefix;
     if (prefix) {
-      docs = docs.filter(
-        (d) => d.name.startsWith(prefix) || (d.path && d.path.startsWith(prefix)),
-      );
+      docs = docs.filter((d) => d.name.startsWith(prefix) || (d.path && d.path.startsWith(prefix)));
     }
     docs.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
     return docs.map(toMeta);
@@ -828,7 +799,7 @@ export const localStoragePlugin: StoragePlugin = {
       name: doc.name || 'Draft',
     });
     // Mirror to legacy editor doc key for bridge / late joiners
-    lsSet('pynescript.axis.editor.doc', doc.content ?? '');
+    setItem('pynescript.axis.editor.doc', doc.content ?? '');
   },
 
   async loadDraft() {
@@ -840,7 +811,7 @@ export const localStoragePlugin: StoragePlugin = {
     }
     if (typeof v === 'string') return { content: v, name: 'Draft' };
     // Fallback editor key
-    const content = lsGet('pynescript.axis.editor.doc');
+    const content = getItem('pynescript.axis.editor.doc');
     if (content) return { content, name: 'Draft' };
     return null;
   },
@@ -922,12 +893,12 @@ export async function _clearLocalLibraryForTests() {
   memKv.clear();
   memResults.clear();
   memVersions.clear();
-  lsRemove(LS_LIBRARY);
-  lsRemove(LS_MIGRATED);
-  lsRemove(`${LS_DRAFT}:draft`);
-  lsRemove(`${LS_DRAFT}:migratedLibrary`);
-  lsRemove(LS_RESULTS);
-  lsRemove(LS_VERSIONS);
+  removeItem(LS_LIBRARY);
+  removeItem(LS_MIGRATED);
+  removeItem(`${LS_DRAFT}:draft`);
+  removeItem(`${LS_DRAFT}:migratedLibrary`);
+  removeItem(LS_RESULTS);
+  removeItem(LS_VERSIONS);
   const db = await getDb();
   if (db) {
     const names = [STORE_SCRIPTS, STORE_KV, STORE_RESULTS];
@@ -948,6 +919,9 @@ export async function _clearLocalLibraryForTests() {
  * assert FIFO trim and idempotent overwrite behavior without going through
  * the IDB / localStorage paths.
  */
-export function _getMemResultsForTests(): ReadonlyMap<string, ReadonlyMap<string, StoredRunResult>> {
+export function _getMemResultsForTests(): ReadonlyMap<
+  string,
+  ReadonlyMap<string, StoredRunResult>
+> {
   return memResults;
 }

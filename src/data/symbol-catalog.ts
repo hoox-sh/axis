@@ -36,6 +36,7 @@ import { fetchBybitInstruments } from './venues/bybit';
 import { fetchCoinbaseInstruments } from './venues/coinbase';
 import { fetchKrakenInstruments } from './venues/kraken';
 import { fetchOkxInstruments } from './venues/okx';
+import { getJson, setJson } from '../utils/storage';
 
 export type SymbolVenue =
   'binance' | 'okx' | 'bybit' | 'coinbase' | 'kraken' | 'mexc' | 'gecko' | 'generic';
@@ -116,24 +117,14 @@ function cacheKey(id: string): string {
 }
 
 function loadCache(id: string): SymbolEntry[] | null {
-  try {
-    const raw = localStorage.getItem(cacheKey(id));
-    if (!raw) return null;
-    const c = JSON.parse(raw) as { ts?: number; symbols?: SymbolEntry[] };
-    if (!c?.symbols?.length) return null;
-    if (typeof c.ts !== 'number' || Date.now() - c.ts > CACHE_TTL_MS) return null;
-    return c.symbols;
-  } catch {
-    return null;
-  }
+  const c = getJson<{ ts?: number; symbols?: SymbolEntry[] }>(cacheKey(id));
+  if (!c?.symbols?.length) return null;
+  if (typeof c.ts !== 'number' || Date.now() - c.ts > CACHE_TTL_MS) return null;
+  return c.symbols;
 }
 
 function saveCache(id: string, symbols: SymbolEntry[]): void {
-  try {
-    localStorage.setItem(cacheKey(id), JSON.stringify({ ts: Date.now(), symbols }));
-  } catch {
-    /* quota */
-  }
+  setJson(cacheKey(id), { ts: Date.now(), symbols });
 }
 
 /** Compact pair → BASEQUOTE (AXIS binance/okx/bybit form). */

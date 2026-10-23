@@ -25,6 +25,8 @@
  * @module hp/feature-flag
  */
 
+import { getFlag, getItem, removeItem, setItem } from '../utils/storage';
+
 export const HP_ENABLED_KEY = 'axis.engine.hp.enabled';
 export const HP_DISABLED_KEY = 'axis.engine.hp.disabled';
 export const HP_GPU_KEY = 'axis.engine.hp.gpu';
@@ -39,83 +41,59 @@ let memoryDisabled = false;
 let memoryGpu: HpGpuMode = 'auto';
 let memorySab: HpSabMode = 'auto';
 
-function lsGet(key: string): string | null {
-  try {
-    if (typeof localStorage === 'undefined') return null;
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function lsSet(key: string, value: string | null): void {
-  try {
-    if (typeof localStorage === 'undefined') return;
-    if (value == null) localStorage.removeItem(key);
-    else localStorage.setItem(key, value);
-  } catch {
-    /* storage unavailable — memory flag still applies */
-  }
-}
-
 /** True when HP is opted in and the kill switch is off. */
 export function isHpEnabled(): boolean {
   if (isHpDisabled()) return false;
-  try {
-    if (typeof localStorage === 'undefined') return memoryEnabled;
-    return localStorage.getItem(HP_ENABLED_KEY) === '1';
-  } catch {
-    return memoryEnabled;
-  }
+  if (typeof localStorage === 'undefined') return memoryEnabled;
+  return getFlag(HP_ENABLED_KEY);
 }
 
 /** Kill switch. Wins over {@link isHpEnabled}. */
 export function isHpDisabled(): boolean {
-  try {
-    if (typeof localStorage === 'undefined') return memoryDisabled;
-    return localStorage.getItem(HP_DISABLED_KEY) === '1' || memoryDisabled;
-  } catch {
-    return memoryDisabled;
-  }
+  if (typeof localStorage === 'undefined') return memoryDisabled;
+  return getFlag(HP_DISABLED_KEY) || memoryDisabled;
 }
 
 export function setHpEnabled(on: boolean): void {
   memoryEnabled = on;
   memoryDisabled = !on;
   if (on) {
-    lsSet(HP_ENABLED_KEY, '1');
-    lsSet(HP_DISABLED_KEY, null);
+    setItem(HP_ENABLED_KEY, '1');
+    removeItem(HP_DISABLED_KEY);
   } else {
-    lsSet(HP_ENABLED_KEY, null);
-    lsSet(HP_DISABLED_KEY, '1');
+    removeItem(HP_ENABLED_KEY);
+    setItem(HP_DISABLED_KEY, '1');
   }
 }
 
 export function setHpDisabled(on: boolean): void {
   memoryDisabled = on;
-  lsSet(HP_DISABLED_KEY, on ? '1' : null);
+  if (on) setItem(HP_DISABLED_KEY, '1');
+  else removeItem(HP_DISABLED_KEY);
 }
 
 export function hpGpuMode(): HpGpuMode {
-  const raw = lsGet(HP_GPU_KEY) ?? memoryGpu;
+  const raw = getItem(HP_GPU_KEY) ?? memoryGpu;
   if (raw === 'off' || raw === 'webgl2' || raw === 'webgpu' || raw === 'auto') return raw;
   return 'auto';
 }
 
 export function setHpGpuMode(mode: HpGpuMode): void {
   memoryGpu = mode;
-  lsSet(HP_GPU_KEY, mode === 'auto' ? null : mode);
+  if (mode === 'auto') removeItem(HP_GPU_KEY);
+  else setItem(HP_GPU_KEY, mode);
 }
 
 export function hpSabMode(): HpSabMode {
-  const raw = lsGet(HP_SAB_KEY) ?? memorySab;
+  const raw = getItem(HP_SAB_KEY) ?? memorySab;
   if (raw === 'off' || raw === 'auto') return raw;
   return 'auto';
 }
 
 export function setHpSabMode(mode: HpSabMode): void {
   memorySab = mode;
-  lsSet(HP_SAB_KEY, mode === 'auto' ? null : mode);
+  if (mode === 'auto') removeItem(HP_SAB_KEY);
+  else setItem(HP_SAB_KEY, mode);
 }
 
 /** Reset in-memory + storage flags (tests). */
@@ -124,10 +102,10 @@ export function resetHpFlags(): void {
   memoryDisabled = false;
   memoryGpu = 'auto';
   memorySab = 'auto';
-  lsSet(HP_ENABLED_KEY, null);
-  lsSet(HP_DISABLED_KEY, null);
-  lsSet(HP_GPU_KEY, null);
-  lsSet(HP_SAB_KEY, null);
+  removeItem(HP_ENABLED_KEY);
+  removeItem(HP_DISABLED_KEY);
+  removeItem(HP_GPU_KEY);
+  removeItem(HP_SAB_KEY);
   try {
     if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem(HP_RUNG_SESSION_KEY);
   } catch {

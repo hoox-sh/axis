@@ -32,6 +32,7 @@
  */
 
 import type { Alert, EvaluateContext } from './types';
+import { getJson, removeItem, setJson } from '../utils/storage';
 
 /** Per-symbol last evaluated price (for cross detection across ticks). */
 const prevPriceBySymbol = new Map<string, number>();
@@ -50,32 +51,21 @@ let prevPricesRestored = false;
 function restorePrevPrices(): void {
   if (prevPricesRestored) return;
   prevPricesRestored = true;
-  try {
-    if (typeof localStorage === 'undefined' || localStorage == null) return;
-    const raw = localStorage.getItem(PREV_PRICE_LS_KEY);
-    if (!raw) return;
-    const data = JSON.parse(raw) as unknown;
-    if (!data || typeof data !== 'object' || Array.isArray(data)) return;
-    for (const [k, v] of Object.entries(data as Record<string, unknown>)) {
-      if (typeof v === 'number' && Number.isFinite(v)) {
-        prevPriceBySymbol.set(normalizeSymbol(k), v);
-      }
+  const data = getJson<Record<string, unknown>>(PREV_PRICE_LS_KEY);
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return;
+  for (const [k, v] of Object.entries(data)) {
+    if (typeof v === 'number' && Number.isFinite(v)) {
+      prevPriceBySymbol.set(normalizeSymbol(k), v);
     }
-  } catch {
-    /* corrupt / unavailable — start fresh */
   }
 }
 
 function persistPrevPrices(): void {
-  try {
-    if (typeof localStorage === 'undefined' || localStorage == null) return;
-    const entries = Array.from(prevPriceBySymbol.entries()).slice(-PREV_PRICE_MAX);
-    const obj: Record<string, number> = {};
-    for (const [k, v] of entries) obj[k] = v;
-    localStorage.setItem(PREV_PRICE_LS_KEY, JSON.stringify(obj));
-  } catch {
-    /* quota / private mode — cross-tracking stays memory-only */
-  }
+  const entries = Array.from(prevPriceBySymbol.entries()).slice(-PREV_PRICE_MAX);
+  const obj: Record<string, number> = {};
+  for (const [k, v] of entries) obj[k] = v;
+  // Quota / private mode: cross-tracking stays memory-only.
+  setJson(PREV_PRICE_LS_KEY, obj);
 }
 
 /** Normalize symbol for matching (trim + upper). */
@@ -103,13 +93,7 @@ export function setPrevPrice(symbol: string, price: number): void {
 export function clearPrevPrices(): void {
   prevPriceBySymbol.clear();
   prevPricesRestored = true;
-  try {
-    if (typeof localStorage !== 'undefined' && localStorage != null) {
-      localStorage.removeItem(PREV_PRICE_LS_KEY);
-    }
-  } catch {
-    /* ignore */
-  }
+  removeItem(PREV_PRICE_LS_KEY);
 }
 
 /**
@@ -178,10 +162,7 @@ export function crossesLevel(prev: number, price: number, level: number): boolea
  * Edge-triggered: condition becomes true (or stays true with no prev).
  * Used for price_above / price_below.
  */
-export function becomesTrue(
-  nowTrue: boolean,
-  wasTrue: boolean | undefined,
-): boolean {
+export function becomesTrue(nowTrue: boolean, wasTrue: boolean | undefined): boolean {
   if (!nowTrue) return false;
   // First sample with condition already true → fire once
   if (wasTrue === undefined) return true;
@@ -360,8 +341,7 @@ export function evaluateOne(
       let prevValue = numParam(params, 'prevValue');
       const threshold = numParam(params, 'threshold');
       if (value == null && ctx.plotSamples) {
-        const ind =
-          params.indicatorId != null ? String(params.indicatorId).trim() : '';
+        const ind = params.indicatorId != null ? String(params.indicatorId).trim() : '';
         const plot = params.plotKey != null ? String(params.plotKey).trim() : '';
         if (ind && plot) {
           const sample = ctx.plotSamples[`${ind}:${plot}`];
@@ -553,11 +533,7 @@ export function eventMatchesProtocol(
   event: OnchainEvalEvent,
   ctx: OnchainEvalContext,
 ): boolean {
-  const want = normalizeId(
-    alert.params?.protocolId != null
-      ? String(alert.params.protocolId)
-      : '',
-  );
+  const want = normalizeId(alert.params?.protocolId != null ? String(alert.params.protocolId) : '');
   if (!want) return true;
   const fromCtx = normalizeId(ctx.protocolId);
   if (fromCtx === want) return true;
@@ -592,8 +568,7 @@ export function eventMatchesOnchainAlert(
     if (!eventMatchesDirection(event, alert.params?.direction as string | undefined)) {
       return false;
     }
-    const minAbs =
-      numParam(alert.params ?? {}, 'minAbsPct') ?? DEFAULT_ONCHAIN_TVL_MIN_ABS_PCT;
+    const minAbs = numParam(alert.params ?? {}, 'minAbsPct') ?? DEFAULT_ONCHAIN_TVL_MIN_ABS_PCT;
     if (minAbs < 0) return false;
     const abs = eventAbsPct(event);
     if (abs == null) return false;
@@ -602,9 +577,7 @@ export function eventMatchesOnchainAlert(
 
   // onchain_event — optional type filter + optional minAbsPct when payload has %
   const wantType =
-    alert.params?.eventType != null
-      ? String(alert.params.eventType).trim().toLowerCase()
-      : '';
+    alert.params?.eventType != null ? String(alert.params.eventType).trim().toLowerCase() : '';
   if (wantType && type.toLowerCase() !== wantType) return false;
   if (!eventMatchesDirection(event, alert.params?.direction as string | undefined)) {
     return false;
@@ -645,10 +618,7 @@ export function onchainWatermark(alert: Alert, protocolKey: string): number | nu
 }
 
 /** Protocol key for an event: batch context first, then `payload.protocolId`. */
-export function onchainEventProtocolKey(
-  event: OnchainEvalEvent,
-  ctx: OnchainEvalContext,
-): string {
+export function onchainEventProtocolKey(event: OnchainEvalEvent, ctx: OnchainEvalContext): string {
   const fromCtx = normalizeId(ctx.protocolId);
   if (fromCtx) return fromCtx;
   return event.payload && event.payload.protocolId != null
@@ -753,8 +723,7 @@ export function evaluateAlerts(
 ): Alert[] {
   restorePrevPrices();
   const sym = normalizeSymbol(ctx.symbol);
-  const prev =
-    ctx.prevPrice !== undefined ? ctx.prevPrice : prevPriceBySymbol.get(sym);
+  const prev = ctx.prevPrice !== undefined ? ctx.prevPrice : prevPriceBySymbol.get(sym);
 
   const fired: Alert[] = [];
   for (const alert of alerts) {

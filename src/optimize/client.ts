@@ -14,6 +14,7 @@ import { buildStrategyReport, type StrategyStats } from '../results/strategy';
 import { runScript } from '../indicators/runner';
 import { getActiveEngine, getActiveEngineConfig } from '../plugins/active';
 import { confirmEngineApiKeyTarget } from '../engines/catalog';
+import { getJson, removeItem, setJson } from '../utils/storage';
 import type { Bar } from '../store/types';
 import { beginStudy, endStudy } from './guard';
 import { randomAssignment, toPyneSpace } from './space';
@@ -45,7 +46,11 @@ export interface RunStudyOpts {
   fixedInputs?: Record<string, unknown>;
 }
 
-function scoreStats(stats: StrategyStats | null | undefined, objective: ObjectiveId, minTrades: number): number {
+function scoreStats(
+  stats: StrategyStats | null | undefined,
+  objective: ObjectiveId,
+  minTrades: number,
+): number {
   if (!stats || stats.trades < minTrades) return REJECT;
   if (objective === 'net_pnl') return stats.totalPnl;
   if (objective === 'profit_factor') {
@@ -54,7 +59,9 @@ function scoreStats(stats: StrategyStats | null | undefined, objective: Objectiv
   }
   if (objective === 'calmar') return stats.totalPnl / Math.max(stats.maxDD, 1e-9);
   const sign = stats.totalPnl >= 0 ? 1 : -1;
-  return (sign * Math.abs(stats.totalPnl) * Math.sqrt(Math.max(stats.trades, 1))) / (1 + stats.maxDD);
+  return (
+    (sign * Math.abs(stats.totalPnl) * Math.sqrt(Math.max(stats.trades, 1))) / (1 + stats.maxDD)
+  );
 }
 
 function holdoutOk(n: number, frac: number): boolean {
@@ -158,7 +165,8 @@ function mapPyneStudy(raw: Record<string, unknown>, backend: 'pyne'): StudySnaps
     engineRuns: Number(raw.engine_runs ?? 0),
     ms: Number(raw.ms ?? 0),
     warning: raw.warning == null ? null : String(raw.warning),
-    error: raw.error == null ? raw.message == null ? null : String(raw.message) : String(raw.error),
+    error:
+      raw.error == null ? (raw.message == null ? null : String(raw.message)) : String(raw.error),
     backend,
   };
 }
@@ -255,9 +263,7 @@ function scoreFinite(n: number | null | undefined): boolean {
 }
 
 function pickWinner(trials: TrialRow[], mode: ValidationSpec['mode']): TrialRow | null {
-  const ok = trials.filter(
-    (t) => !t.error && (scoreFinite(t.oosScore) || scoreFinite(t.isScore)),
-  );
+  const ok = trials.filter((t) => !t.error && (scoreFinite(t.oosScore) || scoreFinite(t.isScore)));
   if (!ok.length) return null;
   const key = (t: TrialRow): [number, number] => {
     const oos = t.oosScore ?? REJECT;
@@ -299,7 +305,7 @@ async function runClientStudy(opts: RunStudyOpts): Promise<StudySnapshot> {
   for (let i = 0; i < n; i++) {
     if (opts.signal?.aborted) break;
     const params: Record<string, ParamValue> = {
-      ...(opts.fixedInputs as Record<string, ParamValue> || {}),
+      ...((opts.fixedInputs as Record<string, ParamValue>) || {}),
       ...randomAssignment(enabled),
     };
     let isStats: StrategyStats | null = null;
@@ -318,7 +324,12 @@ async function runClientStudy(opts: RunStudyOpts): Promise<StudySnapshot> {
         isStats = a.stats;
         if (a.error) error = a.error;
         else {
-          const b = await evalWindow(opts.script, sliceBars(bars, split, nBars), params, opts.signal);
+          const b = await evalWindow(
+            opts.script,
+            sliceBars(bars, split, nBars),
+            params,
+            opts.signal,
+          );
           oosStats = b.stats;
           if (b.error) error = b.error;
         }
@@ -465,26 +476,16 @@ export async function runHpoStudy(opts: RunStudyOpts): Promise<StudySnapshot> {
 }
 
 export function persistStudy(snap: StudySnapshot | null): void {
-  try {
-    if (!snap) {
-      localStorage.removeItem('pynescript.axis.hpo.v1');
-      return;
-    }
-    localStorage.setItem('pynescript.axis.hpo.v1', JSON.stringify(snap));
-  } catch {
-    /* quota */
+  if (!snap) {
+    removeItem('pynescript.axis.hpo.v1');
+    return;
   }
+  setJson('pynescript.axis.hpo.v1', snap);
 }
 
 export function loadPersistedStudy(): StudySnapshot | null {
-  try {
-    const raw = localStorage.getItem('pynescript.axis.hpo.v1');
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as StudySnapshot;
-    return parsed && typeof parsed === 'object' ? parsed : null;
-  } catch {
-    return null;
-  }
+  const parsed = getJson<StudySnapshot>('pynescript.axis.hpo.v1');
+  return parsed && typeof parsed === 'object' ? parsed : null;
 }
 
 /** @internal — exported for tests */
