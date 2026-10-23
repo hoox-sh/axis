@@ -99,6 +99,11 @@ export class IngestHostClient implements WireClient {
   constructor(options: Redesign2WsClientOptions) {
     this.url = endpointToRedesign2WsUrl(options.endpoint, options.authToken);
     this.authToken = options.authToken;
+    // HP-2/3: allocate up-front so `hotBuffer` is readable the moment the
+    // client exists. `buildWire` starts the rAF copy-out sampler and
+    // exposes the ring to the GPU overlay synchronously — before the first
+    // `connect()` — so a lazily allocated ring would never be seen.
+    this.ensureHot();
   }
 
   get isOpen(): boolean {
@@ -218,7 +223,6 @@ export class IngestHostClient implements WireClient {
   async connect(): Promise<void> {
     this.stopped = false;
     if (this.open) return;
-    this.ensureHot();
     return new Promise((resolve, reject) => {
       this.connectWaiters.push({ resolve, reject });
       this.post({

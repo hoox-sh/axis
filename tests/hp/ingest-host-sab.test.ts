@@ -84,6 +84,9 @@ describe('IngestHostClient hot ring gate', () => {
     setIsolated(true);
     const loop = new SabLoopback();
     const client = isolatedClient(loop);
+    // `buildWire` reads `hotBuffer` synchronously right after construction
+    // (rAF sampler + GPU overlay) — the ring must exist before `connect()`.
+    expect(client.hotBuffer).not.toBeNull();
     await client.connect();
     const msg = loop.connectMessage();
     expect(msg && 'hotSab' in msg ? msg.hotSab : null).toBeInstanceOf(SharedArrayBuffer);
