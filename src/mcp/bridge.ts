@@ -13,6 +13,7 @@
 import { resolveCloudConfig } from '../storage/cloud-config';
 import { appendLog } from '../store';
 import { fetchWithTimeout } from '../utils/fetch-timeout';
+import { createEmitter } from '../utils/emitter';
 import { invokeCapability } from './dispatch';
 import { McpInvokeError, sessionIdFromApiKey } from './protocol';
 
@@ -41,7 +42,7 @@ let state: McpBridgeState = {
   lastInvokeAt: null,
   lastCapability: null,
 };
-const listeners = new Set<(s: McpBridgeState) => void>();
+const bridgeEmitter = createEmitter<(s: McpBridgeState) => void>();
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let rotateTimer: ReturnType<typeof setTimeout> | null = null;
 let stopped = true;
@@ -70,14 +71,7 @@ function mcpConnectEnabled(): boolean {
 }
 
 function emit(): void {
-  const snap = { ...state };
-  for (const fn of listeners) {
-    try {
-      fn(snap);
-    } catch {
-      /* ignore */
-    }
-  }
+  bridgeEmitter.emit({ ...state });
 }
 
 export function mcpBridgeState(): McpBridgeState {
@@ -85,8 +79,7 @@ export function mcpBridgeState(): McpBridgeState {
 }
 
 export function onMcpBridge(fn: (s: McpBridgeState) => void): () => void {
-  listeners.add(fn);
-  return () => listeners.delete(fn);
+  return bridgeEmitter.on(fn);
 }
 
 function workerWsUrl(httpBase: string): string {
@@ -219,7 +212,8 @@ export async function refreshBridgeTabs(): Promise<number | null> {
     );
     if (!res.ok) return state.tabs;
     const body = (await res.json()) as { connected?: unknown };
-    const n = typeof body.connected === 'number' && Number.isFinite(body.connected) ? body.connected : null;
+    const n =
+      typeof body.connected === 'number' && Number.isFinite(body.connected) ? body.connected : null;
     if (n != null) setTabs(n);
     return n;
   } catch {
@@ -358,7 +352,11 @@ export async function connectMcpBridge(): Promise<void> {
         lastCapability: null,
       };
       emit();
-      appendLog('ok', `MCP bridge open · session ${session.slice(0, 8)}… · this tab attached`, 'mcp');
+      appendLog(
+        'ok',
+        `MCP bridge open · session ${session.slice(0, 8)}… · this tab attached`,
+        'mcp',
+      );
       startTabsPoll();
       // A fresh socket means fresh Worker contact — a good moment to notice a
       // deployed app update (throttled; the interval poll is the backstop).

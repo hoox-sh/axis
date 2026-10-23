@@ -34,6 +34,7 @@ import type { ProviderVenue } from './provider';
 import { resolveProviderVenue, venueFromPluginId } from './provider';
 import { getDataManagerSelection } from './data-manager-source';
 import { applyProviderVaultAuth, store } from '../store';
+import { createEmitter } from '../utils/emitter';
 
 /** True: vault is RAM-only. Phase 1.5: Tauri keychain / AES-GCM wrap. */
 export const CREDENTIALS_MEMORY_ONLY = true;
@@ -63,7 +64,9 @@ export type CredentialMeta = {
 
 /** Vault id for a CCXT gateway exchange (`bybit` → `ccxt:bybit`). */
 export function ccxtCredentialId(exchange: string): string {
-  return `ccxt:${String(exchange || '').trim().toLowerCase()}`;
+  return `ccxt:${String(exchange || '')
+    .trim()
+    .toLowerCase()}`;
 }
 
 export function isCcxtCredentialId(id: string): boolean {
@@ -73,7 +76,7 @@ export function isCcxtCredentialId(id: string): boolean {
 const vault = new Map<string, ExchangeCredential>();
 /** One credential per venue (v1). Maps venue → credential id. */
 const byVenue = new Map<ProviderVenue, string>();
-const listeners = new Set<() => void>();
+const credentialsEmitter = createEmitter<() => void>();
 
 const SECRET_KEY_RE =
   /^(api[_-]?key|secret|api[_-]?secret|passphrase|password|passwd|token|access[_-]?token|refresh[_-]?token)$/i;
@@ -111,13 +114,7 @@ function toMeta(c: ExchangeCredential): CredentialMeta {
 }
 
 function notify(): void {
-  for (const cb of [...listeners]) {
-    try {
-      cb();
-    } catch {
-      // Subscriber errors must not break the vault.
-    }
-  }
+  credentialsEmitter.emit();
 }
 
 export function activeCcxtExchange(): string {
@@ -125,7 +122,9 @@ export function activeCcxtExchange(): string {
     const bags = store.pluginsConfig || {};
     const src = bags['source:ccxt-rest'] as Record<string, unknown> | undefined;
     const stm = bags['stream:ccxt-ws'] as Record<string, unknown> | undefined;
-    const ex = String(src?.exchange || stm?.exchange || '').trim().toLowerCase();
+    const ex = String(src?.exchange || stm?.exchange || '')
+      .trim()
+      .toLowerCase();
     return ex;
   } catch {
     return '';
@@ -216,7 +215,9 @@ export function putCcxtCredential(input: {
   uid?: string;
   label?: string;
 }): ExchangeCredential {
-  const exchange = String(input.exchange || '').trim().toLowerCase();
+  const exchange = String(input.exchange || '')
+    .trim()
+    .toLowerCase();
   if (!exchange) throw new Error('CCXT exchange id is required');
   return putCredential({
     id: ccxtCredentialId(exchange),
@@ -277,10 +278,7 @@ export function clearCredentials(): void {
 }
 
 export function subscribeCredentials(cb: () => void): () => void {
-  listeners.add(cb);
-  return () => {
-    listeners.delete(cb);
-  };
+  return credentialsEmitter.on(cb);
 }
 
 /**

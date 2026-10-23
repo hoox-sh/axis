@@ -30,6 +30,7 @@
  */
 
 import { EDITOR_DOC_KEY } from '../store';
+import { createEmitter } from '../utils/emitter';
 
 /** BroadcastChannel name for AXIS editor ↔ main. */
 export const EDITOR_CHANNEL = 'axis-editor-v1';
@@ -49,7 +50,7 @@ export type BridgeMessage =
 type Handler = (msg: BridgeMessage) => void;
 
 let channel: BroadcastChannel | null = null;
-const handlers = new Set<Handler>();
+const bridgeEmitter = createEmitter<Handler>();
 
 function dispatch(msg: BridgeMessage) {
   if (!msg || typeof msg !== 'object' || !('type' in msg)) return;
@@ -61,7 +62,7 @@ function dispatch(msg: BridgeMessage) {
   ) {
     return;
   }
-  for (const h of handlers) h(msg);
+  bridgeEmitter.emit(msg);
 }
 
 function ensureChannel(): BroadcastChannel | null {
@@ -76,8 +77,7 @@ function ensureChannel(): BroadcastChannel | null {
 /** Subscribe to bridge messages; returns unsubscribe. */
 export function bridgeSubscribe(handler: Handler): () => void {
   ensureChannel();
-  handlers.add(handler);
-  return () => handlers.delete(handler);
+  return bridgeEmitter.on(handler);
 }
 
 /** Publish on the AXIS editor channel. */

@@ -50,6 +50,7 @@ import {
   type MergeResult,
 } from './merge-datasets';
 import { repairBars } from './dataset-validate';
+import { createEmitter } from '../utils/emitter';
 
 /** Soft cap on memory-mirrored series (matches bars-cache series cap). */
 const MEMORY_MAX_SERIES = 48;
@@ -76,7 +77,7 @@ export interface PutResult {
 
 type ChangeListener = (key: string, bars: Bar[]) => void;
 
-const listeners = new Set<ChangeListener>();
+const datasetEmitter = createEmitter<ChangeListener>();
 
 let persistenceMode: PersistenceMode = 'local';
 /** Active merge policy for dataset-vs-dataset conflicts. */
@@ -92,18 +93,12 @@ let mergePolicy: MergePolicy = 'newest-wins';
 const memory = new Map<string, Bar[]>();
 
 function notify(key: string, bars: Bar[]): void {
-  if (!listeners.size) return;
+  if (!datasetEmitter.size) return;
   // Hand out a copy: the array is the live memory mirror and the sink write
   // uses the same reference — a listener that mutated it would corrupt both.
   // One copy for all listeners, not one per listener.
   const payload = bars.slice();
-  for (const fn of listeners) {
-    try {
-      fn(key, payload);
-    } catch {
-      /* listener errors are swallowed */
-    }
-  }
+  datasetEmitter.emit(key, payload);
 }
 
 function remember(key: string, bars: Bar[]): void {
@@ -134,10 +129,12 @@ export function getPersistenceMode(): PersistenceMode {
 let pendingCopies: Promise<void> = Promise.resolve();
 
 function trackCopy(p: Promise<unknown>): void {
-  pendingCopies = pendingCopies.then(() => p).then(
-    () => undefined,
-    () => undefined,
-  );
+  pendingCopies = pendingCopies
+    .then(() => p)
+    .then(
+      () => undefined,
+      () => undefined,
+    );
 }
 
 /** Wait for every in-flight persistence-mode copy to settle. */
@@ -213,8 +210,7 @@ export function setMergePolicy(policy: MergePolicy): void {
 
 /** Subscribe to dataset changes (progressive paint). Returns unsubscribe. */
 export function subscribeDatasets(fn: ChangeListener): () => void {
-  listeners.add(fn);
-  return () => listeners.delete(fn);
+  return datasetEmitter.on(fn);
 }
 
 /**
@@ -579,7 +575,7 @@ export function _resetDatasetStoreForTests(): void {
   // repopulate the mirror (or the sink) after the reset.
   generation += 1;
   memory.clear();
-  listeners.clear();
+  datasetEmitter.clear();
   persistenceMode = 'local';
   mergePolicy = 'newest-wins';
   pendingCopies = Promise.resolve();

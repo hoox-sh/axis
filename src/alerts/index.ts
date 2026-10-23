@@ -41,13 +41,9 @@ import {
   upsertAlert,
 } from './storage';
 import { deliverAlert, isAllowedWebhookUrl, WEBHOOK_TIMEOUT_MS } from './webhook';
+import { createEmitter } from '../utils/emitter';
 import { fetchWithTimeout } from '../utils/fetch-timeout';
-import type {
-  Alert,
-  AlertCreateInput,
-  AlertUpdatePatch,
-  EvaluateContext,
-} from './types';
+import type { Alert, AlertCreateInput, AlertUpdatePatch, EvaluateContext } from './types';
 
 export type {
   Alert,
@@ -96,11 +92,7 @@ export {
   setPrevPrice,
 } from './engine';
 
-export type {
-  OnchainEvalContext,
-  OnchainEvalEvent,
-  OnchainEvalFired,
-} from './engine';
+export type { OnchainEvalContext, OnchainEvalEvent, OnchainEvalFired } from './engine';
 
 export {
   buildL2WebhookPayload,
@@ -165,17 +157,9 @@ export {
   parsePineAlertEvents,
   pineAlertsFromStrategyEvents,
 } from './pine';
-export type {
-  PineAlertEvent,
-  PineAlertEvalContext,
-  PineAlertFired,
-  PineAlertSource,
-} from './pine';
+export type { PineAlertEvent, PineAlertEvalContext, PineAlertFired, PineAlertSource } from './pine';
 
-export {
-  evaluatePineAlertsFromRun,
-  notifyPineAlertsFromRun,
-} from './pine-bridge';
+export { evaluatePineAlertsFromRun, notifyPineAlertsFromRun } from './pine-bridge';
 export type { EvaluatePineAlertsOpts } from './pine-bridge';
 
 /** Request browser Notification permission (UI gesture). */
@@ -318,9 +302,7 @@ export type CreateOnchainTvlSpikeAlertInput = {
  * Convenience wrapper over {@link createAlert} with sensible defaults for
  * the on-chain data plane.
  */
-export function createOnchainTvlSpikeAlert(
-  input: CreateOnchainTvlSpikeAlertInput,
-): Alert {
+export function createOnchainTvlSpikeAlert(input: CreateOnchainTvlSpikeAlertInput): Alert {
   const protocolId = String(input.protocolId ?? '').trim();
   if (!protocolId) {
     throw new Error('protocolId is required');
@@ -410,14 +392,11 @@ export interface FiredAlertEvent {
 
 type FiredAlertListener = (e: FiredAlertEvent) => void;
 
-const firedAlertListeners = new Set<FiredAlertListener>();
+const firedAlertsEmitter = createEmitter<FiredAlertListener>();
 
 /** Subscribe to fired price alerts. Returns unsubscribe. Never throws. */
 export function subscribeFiredAlerts(fn: FiredAlertListener): () => void {
-  firedAlertListeners.add(fn);
-  return () => {
-    firedAlertListeners.delete(fn);
-  };
+  return firedAlertsEmitter.on(fn);
 }
 
 /**
@@ -465,13 +444,7 @@ export async function evaluateAlerts(
       symbol: ctx.symbol,
       at: now,
     };
-    for (const fn of firedAlertListeners) {
-      try {
-        fn(event);
-      } catch {
-        /* listener faults must not break alert delivery */
-      }
-    }
+    firedAlertsEmitter.emit(event);
   }
 
   if (deliver) {

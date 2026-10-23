@@ -32,6 +32,8 @@ export interface Emitter<TListener extends (...args: never[]) => void> {
   on(listener: TListener): Unsubscribe;
   emit(...args: Parameters<TListener>): void;
   readonly size: number;
+  /** Remove all listeners (test reset). */
+  clear(): void;
 }
 
 /** Tiny pub/sub with listener-error isolation. */
@@ -55,6 +57,9 @@ export function createEmitter<TListener extends (...args: never[]) => void>(): E
     },
     get size(): number {
       return listeners.size;
+    },
+    clear(): void {
+      listeners.clear();
     },
   };
 }

@@ -27,6 +27,8 @@
  * @module chart/bar-replay
  */
 
+import { createEmitter } from '../utils/emitter';
+
 /** Immutable snapshot of a replay session. */
 export interface ReplayState {
   /** True while the user is in bar-replay mode (chart shows a prefix of history). */
@@ -92,16 +94,10 @@ function normalizeSpeed(speed: number): number {
  *
  * Pass `opts.cursorIndex` to override (e.g. 0 for “from start”).
  */
-export function createReplay(
-  barsLength: number,
-  opts?: { cursorIndex?: number },
-): ReplayState {
+export function createReplay(barsLength: number, opts?: { cursorIndex?: number }): ReplayState {
   const len = Math.max(0, Math.trunc(barsLength) || 0);
   const defaultCursor = len > 0 ? len - 1 : 0;
-  const cursor =
-    opts?.cursorIndex != null
-      ? clampCursor(opts.cursorIndex, len)
-      : defaultCursor;
+  const cursor = opts?.cursorIndex != null ? clampCursor(opts.cursorIndex, len) : defaultCursor;
   return {
     active: true,
     cursorIndex: cursor,
@@ -121,11 +117,7 @@ export function idleReplay(): ReplayState {
 }
 
 /** Move the cursor to an absolute bar index (clamped). No-op when inactive. */
-export function setCursor(
-  state: ReplayState,
-  index: number,
-  barsLength: number,
-): ReplayState {
+export function setCursor(state: ReplayState, index: number, barsLength: number): ReplayState {
   if (!state.active) return state;
   const next = clampCursor(index, barsLength);
   if (next === state.cursorIndex) return state;
@@ -136,11 +128,7 @@ export function setCursor(
  * Step the cursor by `delta` bars (+1 forward / −1 back).
  * Clamped to bounds; no wrap. No-op when inactive.
  */
-export function step(
-  state: ReplayState,
-  delta: number,
-  barsLength: number,
-): ReplayState {
+export function step(state: ReplayState, delta: number, barsLength: number): ReplayState {
   if (!state.active) return state;
   if (!Number.isFinite(delta) || delta === 0) return state;
   return setCursor(state, state.cursorIndex + Math.trunc(delta), barsLength);
@@ -240,16 +228,10 @@ type ReplayListener = (state: ReplayState) => void;
 
 let sessionState: ReplayState = idleReplay();
 let sessionBarsLength = 0;
-const listeners = new Set<ReplayListener>();
+const replayEmitter = createEmitter<ReplayListener>();
 
 function emit() {
-  for (const fn of listeners) {
-    try {
-      fn(sessionState);
-    } catch {
-      /* ignore listener errors */
-    }
-  }
+  replayEmitter.emit(sessionState);
 }
 
 function applySession(next: ReplayState, barsLength?: number): ReplayState {
@@ -291,10 +273,7 @@ export function getVisibleBars<T>(bars: readonly T[]): T[] {
 
 /** Subscribe to session changes; returns unsubscribe. */
 export function subscribeReplay(listener: ReplayListener): () => void {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
+  return replayEmitter.on(listener);
 }
 
 /**

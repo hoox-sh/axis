@@ -27,6 +27,7 @@
  */
 
 import type { Alert, AlertsStoreV1 } from './types';
+import { createEmitter } from '../utils/emitter';
 
 /** localStorage key for the alerts blob. */
 export const ALERTS_STORAGE_KEY = 'axis.alerts.v1';
@@ -51,24 +52,15 @@ function cloneList(list: Alert[]): Alert[] {
 }
 
 type AlertsListener = () => void;
-const listeners = new Set<AlertsListener>();
+const alertsEmitter = createEmitter<AlertsListener>();
 
 /** Subscribe to persist writes. Returns an unsubscribe function. */
 export function subscribeAlerts(fn: AlertsListener): () => void {
-  listeners.add(fn);
-  return () => {
-    listeners.delete(fn);
-  };
+  return alertsEmitter.on(fn);
 }
 
 function notifyAlertsListeners(): void {
-  for (const fn of listeners) {
-    try {
-      fn();
-    } catch {
-      /* listener errors must not break persist */
-    }
-  }
+  alertsEmitter.emit();
 }
 
 function lsAvailable(): boolean {

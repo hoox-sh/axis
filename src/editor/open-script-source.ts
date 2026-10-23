@@ -27,25 +27,24 @@
  */
 
 import { setEditorMode, setEditorOpen, setStatus } from '../store';
+import { createEmitter } from '../utils/emitter';
 
 export type OpenScriptSourceDetail = { code: string; name: string };
 
-const listeners = new Set<(detail: OpenScriptSourceDetail) => void>();
+const openScriptEmitter = createEmitter<(detail: OpenScriptSourceDetail) => void>();
 let pending: OpenScriptSourceDetail | null = null;
 
 /** Called from TabbedEditor onMount; delivers any queued open immediately. */
 export function subscribeOpenScriptSource(
   fn: (detail: OpenScriptSourceDetail) => void,
 ): () => void {
-  listeners.add(fn);
+  const unsub = openScriptEmitter.on(fn);
   if (pending) {
     const detail = pending;
     pending = null;
     queueMicrotask(() => fn(detail));
   }
-  return () => {
-    listeners.delete(fn);
-  };
+  return unsub;
 }
 
 /** Open the docked editor on `code` (new tab, or replace empty/demo). */
@@ -62,7 +61,7 @@ export function openScriptSourceInEditor(code: string, name?: string): void {
   pending = detail;
   setEditorMode('docked');
   setEditorOpen(true);
-  if (!listeners.size) return;
+  if (!openScriptEmitter.size) return;
   pending = null;
-  for (const fn of listeners) fn(detail);
+  openScriptEmitter.emit(detail);
 }

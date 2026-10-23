@@ -43,6 +43,7 @@
  */
 
 import { engineFamilyForId } from '../plugins/engine-family';
+import { createEmitter } from '../utils/emitter';
 
 /** Session-storage namespace (per-tab, cleared with the session). */
 export const VAULT_SESSION_PREFIX = 'axis.session-secret.';
@@ -50,16 +51,10 @@ export const VAULT_SESSION_PREFIX = 'axis.session-secret.';
 export const VAULT_LOCAL_KEY = 'axis.secret-vault.v1';
 
 const memory = new Map<string, string>();
-const listeners = new Set<() => void>();
+const secretsEmitter = createEmitter<() => void>();
 
 function notify(): void {
-  for (const cb of [...listeners]) {
-    try {
-      cb();
-    } catch {
-      /* subscriber errors must not break the vault */
-    }
-  }
+  secretsEmitter.emit();
 }
 
 function readSession(key: string): string | null {
@@ -126,10 +121,7 @@ function readLocalSlot(key: string): string {
 
 /** Subscribe to vault changes (settings forms). Returns an unsubscribe. */
 export function subscribeSecrets(cb: () => void): () => void {
-  listeners.add(cb);
-  return () => {
-    listeners.delete(cb);
-  };
+  return secretsEmitter.on(cb);
 }
 
 /** Store a secret (memory + session + durable local). Empty values clear the slot. */
@@ -358,12 +350,7 @@ export function getCloudApiKey(pluginsConfig: unknown): string {
 
 /** Git forge token: vault first, legacy `pluginsConfig` bag fallback. */
 export function getGitToken(pluginsConfig: unknown): string {
-  return getVaultSecretWithLegacyFallback(
-    GIT_TOKEN_SLOT,
-    pluginsConfig,
-    GIT_TOKEN_BAGS,
-    'token',
-  );
+  return getVaultSecretWithLegacyFallback(GIT_TOKEN_SLOT, pluginsConfig, GIT_TOKEN_BAGS, 'token');
 }
 
 /**
