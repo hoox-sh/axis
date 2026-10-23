@@ -7,7 +7,7 @@ tags: [chart, code]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-23T11:10:09Z
+  at: 2026-10-23T13:20:02Z
 sources:
   - id: tree
     resource: "src/chart"
@@ -68,6 +68,7 @@ okf_lock: generated
 * [src/editor](/code/src/editor.md)
 * [src/hp/memory](/code/src/hp/memory.md)
 * [src/hp/paint](/code/src/hp/paint.md)
+* [src/hp/render](/code/src/hp/render.md)
 * [src/hp/sync](/code/src/hp/sync.md)
 * [src/indicators](/code/src/indicators.md)
 * [src/onchain](/code/src/onchain.md)
@@ -75,6 +76,7 @@ okf_lock: generated
 * [src/results](/code/src/results.md)
 * [src/sources](/code/src/sources.md)
 * [src/store](/code/src/store.md)
+* [src/streams](/code/src/streams.md)
 * [src/theme](/code/src/theme.md)
 * [src/ui](/code/src/ui.md)
 * [src/ui/panels](/code/src/ui/panels.md)

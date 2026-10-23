@@ -82,13 +82,15 @@
     "@tailwindcss/vite": "^4.1.0",
     "@tauri-apps/cli": "^2.11.4",
     "@types/bun": "latest",
+    "@types/ws": "^8.18.2",
     "prettier": "^3.9.6",
     "storybook": "^10.6.1",
     "storybook-solidjs-vite": "^10.7.2",
     "tailwindcss": "^4.1.0",
     "typescript": "^5.8.0",
     "vite": "^6.3.0",
-    "vite-plugin-solid": "^2.11.0"
+    "vite-plugin-solid": "^2.11.0",
+    "ws": "^8.22.0"
   },
   "description": "AXIS — open charting PWA: CEX OHLCV, drawings, on-chain overlays, and Pine Script™ via PYNE (local API, Cloudflare Worker, or Pyodide). Part of HOOX: hoox.sh/axis",
   "keywords": [

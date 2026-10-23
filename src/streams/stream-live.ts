@@ -59,6 +59,7 @@ import {
   store,
 } from '../store';
 import { appendLiveBar, startHotRingPaint } from '../chart/live-append';
+import type { HotBuffer } from '../hp/memory/hot-buffer';
 import type { Bar } from '../store/types';
 import type { Indicator } from '../store/types';
 import { BoundedMap } from '../utils/bounded-map';
@@ -212,8 +213,28 @@ let wire: StreamLiveWire | null = null;
 let wireCred = '';
 /** HP-2: rAF sampler over the ingest worker's hot SAB ring (null when off). */
 let stopHotRingPaint: (() => void) | null = null;
+/**
+ * HP-3: the live wire's hot ring, for the GPU candle overlay.
+ *
+ * Identity changes with the wire (symbol switch, reconnect, flag flip) —
+ * consumers must re-read it every frame rather than capture it once.
+ * `null` means "no ring today": flag off, not cross-origin isolated, no
+ * live wire yet, or teardown.
+ */
+let liveHotBuffer: HotBuffer | null = null;
+
+/**
+ * The ingest worker's hot SAB ring backing the live chart, or `null`.
+ *
+ * Read per frame — the buffer is swapped whenever the live wire is
+ * (re)built. HP consumers: the LWC copy-out sampler and the GPU overlay.
+ */
+export function getLiveHotBuffer(): HotBuffer | null {
+  return liveHotBuffer;
+}
 
 function stopRingPaint(): void {
+  liveHotBuffer = null;
   if (!stopHotRingPaint) return;
   try {
     stopHotRingPaint();
@@ -254,6 +275,7 @@ function buildWire(): StreamLiveWire {
   // paint them from the rAF copy-out. Flag-off / non-isolated clients have
   // no ring and keep the frame path unchanged.
   if (rawClient instanceof IngestHostClient && rawClient.hotBuffer) {
+    liveHotBuffer = rawClient.hotBuffer;
     stopHotRingPaint = startHotRingPaint(rawClient.hotBuffer);
   }
   const client = rawClient as unknown as WireClient;

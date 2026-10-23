@@ -7,7 +7,7 @@ tags: [code, hp, memory]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-23T11:10:09Z
+  at: 2026-10-23T13:20:02Z
 sources:
   - id: tree
     resource: "src/hp/memory"
@@ -36,6 +36,8 @@ okf_lock: generated
 * [src/chart](/code/src/chart.md)
 * [src/hp](/code/src/hp.md)
 * [src/hp/paint](/code/src/hp/paint.md)
+* [src/hp/render](/code/src/hp/render.md)
 * [src/hp/sync](/code/src/hp/sync.md)
 * [src/hp/workers](/code/src/hp/workers.md)
+* [src/streams](/code/src/streams.md)
 * [tests/hp](/code/tests/hp.md)

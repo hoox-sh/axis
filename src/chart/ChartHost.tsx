@@ -26,7 +26,16 @@
  * @module chart/ChartHost
  */
 
-import { type Component, Show, createEffect, createMemo, createSignal, onMount, onCleanup, untrack } from 'solid-js';
+import {
+  type Component,
+  Show,
+  createEffect,
+  createMemo,
+  createSignal,
+  onMount,
+  onCleanup,
+  untrack,
+} from 'solid-js';
 import { PaneManager } from './pane-manager';
 import { ChartContextMenu } from './ChartContextMenu';
 import { DrawingToolbar } from './DrawingToolbar';
@@ -72,23 +81,18 @@ import {
   disposeSlotChart,
 } from './chart-registry';
 import { getVisibleBars, isReplayActive } from './bar-replay';
-import {
-  applyCompareOverlay,
-  clearCompareOverlay,
-  fetchCompareBars,
-} from './compare-overlay';
+import { applyCompareOverlay, clearCompareOverlay, fetchCompareBars } from './compare-overlay';
 import {
   applyOnchainOverlays,
   clearOnchainOverlays,
   type OnchainLineSpec,
 } from './onchain-overlay';
-import {
-  applyOnchainEventMarkers,
-  clearOnchainEventMarkers,
-} from './onchain-events';
+import { applyOnchainEventMarkers, clearOnchainEventMarkers } from './onchain-events';
 import { onchainManagerState } from '../onchain/manager';
 import { seriesSeriesKey } from '../onchain/keys';
-import { PLOT_PALETTE, RIGHT_PRICE_SCALE_WIDTH } from './series-factory';
+import { PLOT_PALETTE, RIGHT_PRICE_SCALE_WIDTH, VOID } from './series-factory';
+import { parseCssColorToRgb, startGpuOverlay } from '../hp/render/gpu-overlay';
+import { getLiveHotBuffer } from '../streams/stream-live';
 import { reportUiError } from '../ui/boot-errors';
 
 export {
@@ -143,6 +147,8 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
   let panesEl: HTMLDivElement | undefined;
   const [contextHost, setContextHost] = createSignal<HTMLElement | undefined>(undefined);
   let localManager: PaneManager | undefined;
+  /** HP-3: stacked GPU candle overlay disposer (active slot only). */
+  let stopGpuOverlay: (() => void) | null = null;
   /** False after host teardown — drops late rAF / RO callbacks. */
   let alive = true;
   /** Coalesced reflow handles (cancelled on unmount). */
@@ -262,12 +268,7 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
 
     for (const pane of store.panes) {
       try {
-        manager.createPane(
-          pane.id,
-          pane.type,
-          pane.label || pane.type,
-          pane.height || undefined,
-        );
+        manager.createPane(pane.id, pane.type, pane.label || pane.type, pane.height || undefined);
       } catch (err: unknown) {
         reportUiError(err, {
           source: 'chart',
@@ -299,9 +300,7 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
       manager.syncCrosshair((data) => {
         if (!alive || !isActive()) return;
         const t =
-          data?.time != null && Number.isFinite(Number(data.time))
-            ? Number(data.time)
-            : null;
+          data?.time != null && Number.isFinite(Number(data.time)) ? Number(data.time) : null;
         // Pointer left the chart: clear immediately so Data Window falls back
         if (t == null) {
           crosshairRaf.cancel();
@@ -330,8 +329,7 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
         // Inactive: apply directly on this manager (restore in finally so a
         // throw never leaves the global active slot stolen).
         const prev = getManager();
-        const prevActiveId =
-          store.chartLayout?.activeId || getActiveSlotId() || null;
+        const prevActiveId = store.chartLayout?.activeId || getActiveSlotId() || null;
         setActiveSlotId(id);
         setManager(manager, id);
         try {
@@ -359,6 +357,39 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
       safePaint(store.bars, { fit: true }, 'Initial chart paint');
       setSlotBars(id, store.bars, false);
     }
+
+    // HP-3: stacked GPU candle overlay over the price pane (active slot
+    // only). Additive parity mode — LWC keeps painting every candle
+    // underneath and stays the full fallback; nothing here removes LWC
+    // rendering (plan §14.2). The overlay self-disables whenever the ring
+    // or geometry is unavailable and clears itself to transparent.
+    if (isActive() && hostEl) {
+      try {
+        const host = hostEl;
+        stopGpuOverlay = startGpuOverlay({
+          host,
+          getPriceChart: () => localManager?.getPane('price')?.chart ?? null,
+          getPricePaneEl: () => {
+            const mgr = localManager;
+            return mgr ? document.getElementById(mgr.paneDomId('price')) : null;
+          },
+          getBarsLength: () => store.bars.length,
+          getHotBuffer: getLiveHotBuffer,
+          getCandleSeries: () => localManager?.getPane('price')?.series.candle ?? null,
+          fallbackPalette: {
+            up: parseCssColorToRgb(VOID.up) ?? 0x3ddc97,
+            down: parseCssColorToRgb(VOID.down) ?? 0xf07178,
+          },
+        });
+      } catch (err: unknown) {
+        reportUiError(err, {
+          source: 'chart',
+          context: 'GPU overlay start failed',
+          status: false,
+        });
+      }
+    }
+
     // Inactive empty slots stay on the empty hint until focused — clicking a
     // cell focuses it and auto-loads its symbol via `axis-slot-activate`.
     // (Never prefetch here: loadSymbolData writes the ACTIVE plane, so a
@@ -432,8 +463,7 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
       if (!alive) return;
       const price = m.getPane('price');
       if (!price?.series['candle']) return;
-      const prevActiveId =
-        store.chartLayout?.activeId || getActiveSlotId() || null;
+      const prevActiveId = store.chartLayout?.activeId || getActiveSlotId() || null;
       setActiveSlotId(id);
       setManager(m, id);
       try {
@@ -462,11 +492,7 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     if (!getManager()) return;
     untrack(() => {
       if (!alive || !store.bars.length) return;
-      safePaint(
-        barsForPaint(store.bars),
-        { fit: false, clearMarkers: false },
-        'Chart type paint',
-      );
+      safePaint(barsForPaint(store.bars), { fit: false, clearMarkers: false }, 'Chart type paint');
     });
   });
 
@@ -732,6 +758,12 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     alive = false;
     cancelReflow();
     crosshairRaf.cancel();
+    try {
+      stopGpuOverlay?.();
+    } catch {
+      /* teardown must never break cleanup */
+    }
+    stopGpuOverlay = null;
 
     // Optional subsystems first (need live LWC charts).
     try {
@@ -771,11 +803,7 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     disposeSlotChart(id);
     // Drop getManager() module fallback when this host owned the active manager
     // (avoids zombie after activeSlotId is later cleared).
-    if (
-      getActiveSlotId() === id ||
-      isActive() ||
-      (owned != null && getManager() === owned)
-    ) {
+    if (getActiveSlotId() === id || isActive() || (owned != null && getManager() === owned)) {
       setManager(undefined, id);
     }
     localManager = undefined;
@@ -785,9 +813,7 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     const sym = props.symbol || store.symbol || 'chart';
     const iv = props.interval || store.interval || '';
     const n = bars().length;
-    return n
-      ? `Chart ${sym} ${iv}, ${n} bars`
-      : `Chart ${sym} ${iv}, no data`;
+    return n ? `Chart ${sym} ${iv}, ${n} bars` : `Chart ${sym} ${iv}, no data`;
   };
 
   return (
