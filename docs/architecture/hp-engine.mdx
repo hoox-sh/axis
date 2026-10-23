@@ -53,19 +53,19 @@ AXIS ships an opt-in **high-performance plane** behind `axis.engine.hp.enabled` 
 SAB needs cross-origin isolation. Every static host ships the same pair — `public/_headers`, the Vite dev server, `docker/nginx.conf`, the PWA servers, and the offline shell — kept honest by `tests/sw-parity.test.ts`:
 
 ```text
-Cross-Origin-Opener-Policy: same-origin-allow-popups
+Cross-Origin-Opener-Policy: same-origin
 Cross-Origin-Embedder-Policy: credentialless
 Cross-Origin-Resource-Policy: same-origin
 ```
 
-**The current pair intentionally does not isolate.** Chromium sets `crossOriginIsolated` only for COOP `same-origin`; `same-origin-allow-popups` was chosen so the GitHub device-flow popup keeps its opener (plan risk: a stricter COOP bricks the opener). The capability probe is the runtime source of truth, so on every host today:
+**The pair isolates.** Chromium sets `crossOriginIsolated` only for COOP `same-origin`, so the capability probe now reads:
 
 ```js
-crossOriginIsolated;       // false — popup-safe COOP does not isolate Chromium
-typeof SharedArrayBuffer;  // "undefined" — Chrome hides the constructor when unisolated
+crossOriginIsolated;       // true
+typeof SharedArrayBuffer;  // "function"
 ```
 
-With `isolated === false` HP stays on the transferable copy: rung 1 (or HP-3/HP-4 with copy transport — the matrix says "isolated preferred", so a non-isolated GPU tab still gets `hp · copy+gpu`). A later COOP flip to `same-origin` unlocks HP-2/SAB without retuning the embedder policy — `credentialless` already ships for it; if that flip ever breaks OAuth, revert COOP and keep HP-1 only.
+COOP was `same-origin-allow-popups` (popup-safe but never isolating) until this flip. No AXIS surface depends on a popup opener, so the stricter policy costs nothing: the GitHub/GitLab device-flow popup is opened `noopener,noreferrer` (`ScriptLibraryPanel`) and the token arrives by Worker polling (`waitForDeviceToken`) — never via `window.opener`; the detachable editor and panel companion windows are same-origin (BroadcastChannel / direct DOM wiring) and stay in the same browsing-context group under `same-origin`. With `isolated === true` the rung matrix unlocks HP-2/SAB; a tab that still fails isolation (exotic host, SAB allocation denied) keeps the transferable copy and reads `hp · copy+gpu` or HP-1 — the probe stays the runtime source of truth.
 
 ## Transport: AXB1
 

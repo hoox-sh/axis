@@ -22,7 +22,7 @@ class Handler(SimpleHTTPRequestHandler):
         else:
             self.send_header("Cache-Control", "no-cache")
         # HP PR 2 — popup-safe isolation pair (lockstep with src/hp/isolation-headers.ts)
-        self.send_header("Cross-Origin-Opener-Policy", "same-origin-allow-popups")
+        self.send_header("Cross-Origin-Opener-Policy", "same-origin")
         self.send_header("Cross-Origin-Embedder-Policy", "credentialless")
         self.send_header("Cross-Origin-Resource-Policy", "same-origin")
         super().end_headers()

@@ -22,11 +22,11 @@ function read(rel: string): string {
 }
 
 describe('HP isolation headers lockstep', () => {
-  test('canonical map is the popup-safe pair', () => {
+  test('canonical map is the isolating pair', () => {
     expect(HP_ISOLATION_HEADERS['Cross-Origin-Opener-Policy']).toBe(COOP_VALUE);
     expect(HP_ISOLATION_HEADERS['Cross-Origin-Embedder-Policy']).toBe(COEP_VALUE);
     expect(HP_ISOLATION_HEADERS['Cross-Origin-Resource-Policy']).toBe(CORP_VALUE);
-    expect(COOP_VALUE).toBe('same-origin-allow-popups');
+    expect(COOP_VALUE).toBe('same-origin');
     expect(COEP_VALUE).toBe('credentialless');
     expect(CORP_VALUE).toBe('same-origin');
   });
@@ -53,7 +53,7 @@ describe('HP isolation headers lockstep', () => {
 
   test('SW strategy re-exports the same map the classic worker stamps', () => {
     expect(swIsolationHeaders).toEqual(HP_ISOLATION_HEADERS);
-    expect(read('public/sw.js')).toContain("'Cross-Origin-Opener-Policy': 'same-origin-allow-popups'");
+    expect(read('public/sw.js')).toContain("'Cross-Origin-Opener-Policy': 'same-origin'");
   });
 
   test('sourceHasIsolationHeaders rejects a file missing a value', () => {

@@ -20,15 +20,21 @@
 /**
  * Cross-origin isolation headers (HP PR 2).
  *
- * Popup-safe pair: `same-origin-allow-popups` keeps GitHub device-flow and
- * same-tab panel popouts from being bricked. `credentialless` COEP avoids
- * CORP on every third-party subresource (pyne-agent-worker script-src).
+ * Isolating pair: COOP `same-origin` + COEP `credentialless` — Chromium
+ * sets `crossOriginIsolated` (unlocking SharedArrayBuffer) only for this
+ * combination. `credentialless` COEP avoids requiring CORP on every
+ * third-party subresource (pyne-agent-worker script-src).
  *
- * Chromium currently sets `crossOriginIsolated` only when COOP is
- * `same-origin`. This pair still ships COEP + CORP so a later COOP flip
- * can isolate without retuning embedder policy. The capability probe is
- * the runtime source of truth; HP stays on rung 1 until it reports
- * `isolated`.
+ * COOP was `same-origin-allow-popups` (popup-safe, but Chromium never
+ * isolates on it). No AXIS surface depends on a popup opener, so the
+ * stricter policy costs nothing: the GitHub/GitLab device-flow popup is
+ * opened `noopener,noreferrer` (ScriptLibraryPanel) and the token arrives
+ * by Worker polling (`waitForDeviceToken`), never via `window.opener`;
+ * the detachable editor and panel companion windows are same-origin
+ * (BroadcastChannel / direct DOM wiring) and stay in the same
+ * browsing-context group under `same-origin`. The capability probe is
+ * the runtime source of truth — a tab that fails isolation keeps the
+ * transferable copy (HP-1 / `copy+gpu`).
  *
  * Keep every static host in lockstep: `public/_headers`, nginx, Vite
  * `server.headers` / `preview.headers`, `axis-pwa-server.ts`,
@@ -41,7 +47,7 @@ export const COOP_HEADER = 'Cross-Origin-Opener-Policy';
 export const COEP_HEADER = 'Cross-Origin-Embedder-Policy';
 export const CORP_HEADER = 'Cross-Origin-Resource-Policy';
 
-export const COOP_VALUE = 'same-origin-allow-popups';
+export const COOP_VALUE = 'same-origin';
 export const COEP_VALUE = 'credentialless';
 export const CORP_VALUE = 'same-origin';
 

@@ -114,8 +114,8 @@ bunx tsc --noEmit && bun run typecheck:check && bun run lint
 ```
 
 Manual: open `http://127.0.0.1:3000`, DevTools → `crossOriginIsolated`
-(**`false` is expected** with the popup-safe COOP pair — HP then runs the
-copy path; only a COOP flip to `same-origin` reads `true`) and
+(**`true` since the COOP flip to `same-origin`** — if it reads `false`,
+HP runs the copy path instead: `hp · copy+gpu` / HP-1) and
 `typeof SharedArrayBuffer`; load BTCUSDT 1m live and confirm the
 forming wick moves (the tip must never commit).
 
