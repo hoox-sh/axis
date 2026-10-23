@@ -374,6 +374,7 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
             return mgr ? document.getElementById(mgr.paneDomId('price')) : null;
           },
           getBarsLength: () => store.bars.length,
+          getBars: () => store.bars,
           getBarsTailTime: () => {
             const bars = store.bars;
             const last = bars.length ? bars[bars.length - 1] : undefined;

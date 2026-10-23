@@ -51,9 +51,8 @@
  * - the live wire has no hot ring (flag off, not isolated, no wire yet),
  * - the ring and the chart disagree on series length (symbol switch or
  *   snapshot merge in flight),
- * - the visible logical range's left edge leaves the hot window *and* no
- *   cold page covers it yet (the pager re-requests every ~200 ms while the
- *   viewport stays cold — LWC owns the range until the page lands),
+ * - the viewport holds no real chart bars at all (entirely in LWC's right
+ *   margin or left of bar 0 — there is nothing for either painter),
  * - the right price scale is not linear (log/percentage/indexed scales
  *   round-trip differently — LWC owns those), or
  * - the visible bar count is absurd (zoomed out past the sanity cap).
@@ -62,17 +61,20 @@
  */
 
 import type { IChartApi } from 'lightweight-charts';
+import type { Bar } from '../../store/types';
 import { isolationProbe } from '../capabilities';
 import { hpGpuMode } from '../feature-flag';
 import type { HotBuffer } from '../memory/hot-buffer';
 import { copyOutTail, chartRangeToAbsolute } from '../paint/copy-out-lwc';
 import {
   allocateVisualAttr,
+  fillVisualAttr,
   fillVisualAttrFromHot,
   fillVisualAttrFromViewport,
   type VisualAttrBuffer,
   type VisualPalette,
 } from '../paint/visual-attr';
+import { clipViewportToChart, downsampleToPixelColumns } from '../paint/downsample';
 import { probeRendererKind } from './select-renderer';
 import { lwcCandleBodyCss, lwcCandleWickCss } from './lwc-candle-width';
 import type { CandleRenderer, RenderViewport } from './types';
@@ -108,6 +110,8 @@ export type GpuOverlayDeps = {
   getPricePaneEl: () => HTMLElement | null;
   /** Bars the chart currently holds — the ring-window placement anchor. */
   getBarsLength: () => number;
+  /** Full chart window LWC paints (downsample fallback reads it directly). */
+  getBars: () => readonly Bar[];
   /** Newest bar time the chart holds (unix seconds, `0` when empty). */
   getBarsTailTime: () => number;
   /** The live wire's hot ring (`null` when HP is off / no wire). */
@@ -414,9 +418,11 @@ export function startGpuOverlay(deps: GpuOverlayDeps): () => void {
       /* paging must never break the frame */
     }
     // Hot-covered viewports fill from the hot window exactly as before; cold
-    // ones fill the merged hot+page viewport (§9.2) — the fill stops at the
-    // first uncovered bar and LWC keeps painting underneath. The price scale
-    // resolves first: a non-linear scale belongs to LWC either way.
+    // ones fill the merged hot+page viewport (§9.2). A viewport wider than
+    // hot+page (far zoom-out) cannot be covered from shared memory without
+    // breaking the O(HOT_CAP) contract — it falls back to a pixel-column
+    // downsample of the chart window LWC paints (§9.2 conflation). The price
+    // scale resolves first: a non-linear scale belongs to LWC either way.
     const y = priceScaleLinear(series, h);
     if (!y) {
       clear();
@@ -431,6 +437,15 @@ export function startGpuOverlay(deps: GpuOverlayDeps): () => void {
       ? { fromAbs: control.hotFromIndex + place.hotIndex, visibleCount: geom.visibleCount, y }
       : { fromAbs: absFrom, visibleCount: geom.visibleCount, y };
 
+    // Real bars in the viewport (LWC's right margin holds none): the exact
+    // fill only needs to cover these — anything past the tail is empty for
+    // both painters, so a margin-only shortfall draws as-is.
+    const clip = clipViewportToChart(chartBars, geom.fromBase, geom.visibleCount);
+    if (!clip) {
+      clear();
+      return;
+    }
+
     if (!attr || attr.capacity < geom.visibleCount) {
       attr = allocateVisualAttr(geom.visibleCount);
       if (!attr) {
@@ -440,15 +455,35 @@ export function startGpuOverlay(deps: GpuOverlayDeps): () => void {
     }
     resolvePalette(series);
 
-    const n = place
+    const exact = place
       ? fillVisualAttrFromHot(hot, attr, req, palette)
       : fillVisualAttrFromViewport(hot, attr, req, palette);
-    if (n == null || n <= 0) {
-      // Hot miss: a torn sample — keep the previous frame. Cold miss: the
-      // page is stale or still in flight — clear, never hold a stale frame
-      // at the wrong scroll position (the pager re-requests every ~200 ms).
-      if (!place) clear();
-      return;
+    let n: number | null = exact;
+    if (n == null || n < clip.count) {
+      if (place) return; // hot miss: torn sample — keep the previous frame
+      // Cold miss (page stale/pending/torn) or a viewport wider than
+      // hot+page: downsample the chart window — the exact array LWC paints —
+      // to one min/max candle per pixel column. This also covers the
+      // page-pending frame, so panning into cold history paints immediately
+      // instead of clearing until the page lands.
+      const bins = downsampleToPixelColumns(
+        deps.getBars(),
+        clip.fromIdx,
+        clip.count,
+        w,
+        geom.fromBase,
+      );
+      if (!bins.length) {
+        clear();
+        return;
+      }
+      let maxVolume = 0;
+      for (const b of bins) if (b.volume > maxVolume) maxVolume = b.volume;
+      n = fillVisualAttr({ buf: attr, bars: bins, y, maxVolume, palette });
+      if (n <= 0) {
+        clear();
+        return;
+      }
     }
 
     lastVp = {

@@ -7,7 +7,7 @@ tags: [code, store]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-23T19:03:28Z
+  at: 2026-10-23T19:35:34Z
 sources:
   - id: tree
     resource: "src/store"
@@ -54,6 +54,7 @@ okf_lock: generated
 * [src/engines](/code/src/engines.md)
 * [src/hp/memory](/code/src/hp/memory.md)
 * [src/hp/paint](/code/src/hp/paint.md)
+* [src/hp/render](/code/src/hp/render.md)
 * [src/hp/workers](/code/src/hp/workers.md)
 * [src/indicators](/code/src/indicators.md)
 * [src/indicators/builtins](/code/src/indicators/builtins.md)

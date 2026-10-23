@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/hp/paint"
-description: "src/hp/paint contains copy-out-lwc.ts, visual-attr.ts."
+description: "src/hp/paint contains copy-out-lwc.ts, downsample.ts, visual-attr.ts."
 resource: "src/hp/paint"
 tags: [code, hp, paint]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-23T19:00:54Z
+  at: 2026-10-23T19:35:34Z
 sources:
   - id: tree
     resource: "src/hp/paint"
@@ -19,6 +19,7 @@ okf_lock: generated
 # Files
 
 * `copy-out-lwc.ts` — CopyOutRequest, CopyOutResult, chartRangeToAbsolute, copyOutBars, copyOutPage, copyOutTail, copyOutViewport
+* `downsample.ts` — clipViewportToChart, downsampleToPixelColumns
 * `visual-attr.ts` — BAR_FLAG_CLOSED, BAR_FLAG_FORMING, FillFromHotRequest, FillVisualOptions, VISUAL_CANDLE_BYTES, VISUAL_CANDLE_F32, VISUAL_OFFSET, VISUAL_RECORD_WORDS, VISUAL_TAIL, VisualAttrBuffer, VisualPalette, VisualSourceBar
 
 # Depends on
