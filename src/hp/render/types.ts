@@ -58,6 +58,14 @@ export type RenderViewport = {
    * width`, `x_index` 0 lands exactly on the left edge (NDC `-1`).
    */
   rightEdgeIndex: number;
+  /**
+   * Candle body width in CSS px — LWC's `optimalCandlestickWidth`. When
+   * omitted the renderer falls back to a fixed fraction of the slot (the
+   * pre-parity default, kept for callers that only need a rough frame).
+   */
+  bodyWidthPx?: number;
+  /** Wick width in CSS px (LWC draws a flat one-CSS-pixel wick). */
+  wickWidthPx?: number;
 };
 
 /**

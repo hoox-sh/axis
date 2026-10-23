@@ -95,6 +95,10 @@ const FLOAT_INSTANCE_ATTRS: ReadonlyArray<readonly [location: number, offset: nu
 /** Unit-quad corners for `TRIANGLE_STRIP`: bottom-left, bottom-right, top-left, top-right. */
 const QUAD_CORNERS = new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]);
 
+/** Pre-parity slot fractions, used when the caller omits explicit widths. */
+const FALLBACK_BODY_FRAC = 0.75;
+const FALLBACK_WICK_FRAC = 0.125;
+
 const VERTEX_SHADER_SRC = `#version 300 es
 precision highp float;
 // uint arithmetic below — state the precision instead of leaning on the
@@ -123,7 +127,6 @@ out vec4 v_rgba;
 out float v_y;
 out float v_ndcX;
 out float v_centerX;
-out float v_slotNdc;
 out float v_bodyLo;
 out float v_bodyHi;
 
@@ -170,7 +173,6 @@ void main() {
   v_y = y;
   v_ndcX = ndcX;
   v_centerX = center;
-  v_slotNdc = slotNdc;
   // Body span is open..close regardless of direction (down bars included).
   v_bodyLo = min(a_open, a_close);
   v_bodyHi = max(a_open, a_close);
@@ -184,22 +186,22 @@ in vec4 v_rgba;
 in float v_y;
 in float v_ndcX;
 in float v_centerX;
-in float v_slotNdc;
 in float v_bodyLo;
 in float v_bodyHi;
 
 out vec4 fragColor;
 
-// The body fills this fraction of the bar slot (small gap between adjacent
-// candles); the wick is 1/8 of the slot, centered, so thin bars still show
-// a visible wick.
-const float BODY_FRAC = 0.75;
-const float WICK_FRAC = 0.125;
+// Half-widths in NDC, computed from LWC's own candle geometry
+// (optimalCandlestickWidth for the body, a flat one-pixel wick) so the GL
+// candles sit inside LWC's pixels instead of a slightly different slot
+// fraction.
+uniform float u_bodyHalf;
+uniform float u_wickHalf;
 
 void main() {
   float dx = abs(v_ndcX - v_centerX);
-  bool inBody = v_y >= v_bodyLo && v_y <= v_bodyHi && dx <= v_slotNdc * BODY_FRAC * 0.5;
-  bool inWick = dx <= v_slotNdc * WICK_FRAC * 0.5;
+  bool inBody = v_y >= v_bodyLo && v_y <= v_bodyHi && dx <= u_bodyHalf;
+  bool inWick = dx <= u_wickHalf;
   // The quad spans low..high — carve out everything that is neither body
   // nor wick (the fragment is not interpolated across discarded regions).
   if (!inBody && !inWick) discard;
@@ -353,6 +355,8 @@ function makeRenderer(
     barSpacing: gl.getUniformLocation(res.program, 'u_barSpacing'),
     rightEdgeIndex: gl.getUniformLocation(res.program, 'u_rightEdgeIndex'),
     heightPx: gl.getUniformLocation(res.program, 'u_heightPx'),
+    bodyHalf: gl.getUniformLocation(res.program, 'u_bodyHalf'),
+    wickHalf: gl.getUniformLocation(res.program, 'u_wickHalf'),
   };
 
   let disposed = false;
@@ -397,6 +401,17 @@ function makeRenderer(
       const n = Math.min(Math.max(0, Math.trunc(count)), buf.capacity);
       if (n <= 0) return;
 
+      // Candle geometry: LWC's own body/wick widths when the caller passes
+      // them, else the historical slot fractions (rough frames only).
+      const bodyPx =
+        typeof viewport.bodyWidthPx === 'number' && viewport.bodyWidthPx > 0
+          ? viewport.bodyWidthPx
+          : barSpacing * FALLBACK_BODY_FRAC;
+      const wickPx =
+        typeof viewport.wickWidthPx === 'number' && viewport.wickWidthPx > 0
+          ? viewport.wickWidthPx
+          : barSpacing * FALLBACK_WICK_FRAC;
+
       gl.bindVertexArray(res.vao);
       gl.bindBuffer(gl.ARRAY_BUFFER, res.candleVbo);
 
@@ -418,6 +433,9 @@ function makeRenderer(
       setU1f(uniforms.barSpacing, barSpacing);
       setU1f(uniforms.rightEdgeIndex, rightEdgeIndex);
       setU1f(uniforms.heightPx, height);
+      // NDC half-width of a CSS-pixel width is `px / width`.
+      setU1f(uniforms.bodyHalf, bodyPx / width);
+      setU1f(uniforms.wickHalf, wickPx / width);
 
       gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, n);
       gl.bindVertexArray(null);

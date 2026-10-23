@@ -48,6 +48,12 @@ import {
   type VisualSourceBar,
 } from '../../src/hp/paint/visual-attr';
 import { copyOutBars } from '../../src/hp/paint/copy-out-lwc';
+import {
+  lwcCandleBodyCss,
+  lwcCandleBodyPx,
+  lwcCandleWickCss,
+  lwcCandleWickPx,
+} from '../../src/hp/render/lwc-candle-width';
 import { setHpGpuMode } from '../../src/hp/feature-flag';
 import {
   MAX_OVERLAY_BARS,
@@ -560,5 +566,39 @@ describe('parseCssColorToRgb (palette source)', () => {
     expect(parseCssColorToRgb('')).toBeNull();
     expect(parseCssColorToRgb(null)).toBeNull();
     expect(parseCssColorToRgb(undefined)).toBeNull();
+  });
+});
+
+describe('LWC candle width parity (no edge fringe)', () => {
+  it('matches lightweight-charts optimalCandlestickWidth', () => {
+    // 2.5..4 is LWC's flat special case: a 3-device-pixel body.
+    expect(lwcCandleBodyPx(3, 1)).toBe(3);
+    expect(lwcCandleBodyPx(3, 2)).toBe(6);
+    // Below the special case the coefficient is 1 (atan(0)).
+    expect(lwcCandleBodyPx(2, 2)).toBe(4);
+    // Growing spacing narrows the body relative to the slot.
+    expect(lwcCandleBodyPx(5.7, 2)).toBe(9);
+    expect(lwcCandleBodyPx(5.7, 1)).toBe(4);
+    expect(lwcCandleBodyPx(20, 2)).toBe(32);
+    // Never below one device pixel, never above the scaled slot.
+    expect(lwcCandleBodyPx(0.4, 2)).toBe(2);
+    expect(lwcCandleBodyPx(Number.NaN, 2)).toBe(2);
+  });
+
+  it('keeps the wick at one CSS pixel', () => {
+    expect(lwcCandleWickPx(5.7, 1)).toBe(1);
+    expect(lwcCandleWickPx(5.7, 2)).toBe(2);
+    expect(lwcCandleWickPx(0.4, 2)).toBe(0);
+    expect(lwcCandleWickPx(1, 1)).toBe(1);
+  });
+
+  it('converts device widths to the renderer’s CSS px', () => {
+    expect(lwcCandleBodyCss(5.7, 2)).toBeCloseTo(4.5, 9);
+    expect(lwcCandleBodyCss(5.7, 1)).toBeCloseTo(4, 9);
+    expect(lwcCandleWickCss(5.7, 2)).toBeCloseTo(1, 9);
+    expect(lwcCandleWickCss(5.7, 1)).toBeCloseTo(1, 9);
+    // Degenerate ratios fall back to 1 instead of dividing by zero.
+    expect(lwcCandleBodyCss(5.7, 0)).toBeCloseTo(4, 9);
+    expect(lwcCandleWickCss(5.7, Number.NaN)).toBeCloseTo(1, 9);
   });
 });

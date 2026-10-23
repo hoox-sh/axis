@@ -7,7 +7,7 @@ tags: [code, hp, render]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-23T15:10:49Z
+  at: 2026-10-23T16:26:48Z
 sources:
   - id: tree
     resource: "src/hp/render"
@@ -19,6 +19,7 @@ okf_lock: generated
 # Files
 
 * `gpu-overlay.ts` — GpuCandleSeries, GpuOverlayDeps, MAX_OVERLAY_BARS, OverlayGeometry, overlayViewport, parseCssColorToRgb, ringWindowPlacement, startGpuOverlay
+* `lwc-candle-width.ts` — lwcCandleBodyCss, lwcCandleBodyPx, lwcCandleWickCss, lwcCandleWickPx
 * `select-renderer.ts` — probeRendererKind, resolveGpuFlag
 * `types.ts` — CandleRenderer, RenderViewport, RendererHandle, RendererKind
 * `webgl2-renderer.ts` — createWebgl2Renderer

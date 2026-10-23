@@ -72,6 +72,7 @@ import {
   type VisualPalette,
 } from '../paint/visual-attr';
 import { probeRendererKind } from './select-renderer';
+import { lwcCandleBodyCss, lwcCandleWickCss } from './lwc-candle-width';
 import type { CandleRenderer, RenderViewport } from './types';
 import { createWebgl2Renderer } from './webgl2-renderer';
 
@@ -283,12 +284,14 @@ export function startGpuOverlay(deps: GpuOverlayDeps): () => void {
     h: number,
   ): { yMin: number; yMax: number } | null => {
     const top = series.coordinateToPrice(0);
-    const bottom = series.coordinateToPrice(h - 1);
+    // The GL viewport spans the full canvas height, so its bottom edge is
+    // price at coordinate `h` (not `h − 1`) — LWC maps prices into [0, h].
+    const bottom = series.coordinateToPrice(h);
     if (top == null || bottom == null || !(top > bottom)) return null;
     // The renderer's NDC map is linear; verify LWC's current scale is too
     // (log/percentage/indexed scales round-trip off the midpoint).
     const midBack = series.priceToCoordinate((top + bottom) / 2);
-    if (midBack == null || Math.abs(midBack - (h - 1) / 2) > LINEAR_EPSILON_PX) return null;
+    if (midBack == null || Math.abs(midBack - h / 2) > LINEAR_EPSILON_PX) return null;
     return { yMin: bottom, yMax: top };
   };
 
@@ -303,17 +306,25 @@ export function startGpuOverlay(deps: GpuOverlayDeps): () => void {
     paneRect: DOMRect,
     scaleWidth: number,
     timeScaleHeight: number,
-  ): { w: number; h: number } {
+  ): { w: number; h: number; pixelRatio: number } {
     for (const el of Array.from(paneEl.querySelectorAll('canvas'))) {
       const r = el.getBoundingClientRect();
       if (r.width <= 2 || r.height <= 2) continue;
       if (Math.abs(r.left - paneRect.left) < 1 && Math.abs(r.top - paneRect.top) < 1) {
-        return { w: Math.floor(r.width), h: Math.floor(r.height) };
+        // LWC sizes its canvases by the device pixel ratio it reads at
+        // creation; the overlay must use the *same* ratio to reproduce its
+        // body/wick rounding.
+        return {
+          w: Math.floor(r.width),
+          h: Math.floor(r.height),
+          pixelRatio: el.width / Math.max(1, r.width),
+        };
       }
     }
     return {
       w: Math.floor(paneRect.width - scaleWidth),
       h: Math.floor(paneRect.height - timeScaleHeight),
+      pixelRatio: globalThis.devicePixelRatio || 1,
     };
   }
 
@@ -349,7 +360,12 @@ export function startGpuOverlay(deps: GpuOverlayDeps): () => void {
     const ps = chart.priceScale('right');
     const paneRect = paneEl.getBoundingClientRect();
     const hostRect = deps.host.getBoundingClientRect();
-    const { w, h } = paneContentSize(paneEl, paneRect, ps.width(), chart.timeScale().height());
+    const { w, h, pixelRatio } = paneContentSize(
+      paneEl,
+      paneRect,
+      ps.width(),
+      chart.timeScale().height(),
+    );
     if (w < 2 || h < 2) {
       clear();
       return;
@@ -408,6 +424,8 @@ export function startGpuOverlay(deps: GpuOverlayDeps): () => void {
       height: h,
       barSpacing: geom.barSpacing,
       rightEdgeIndex: geom.rightEdgeIndex,
+      bodyWidthPx: lwcCandleBodyCss(geom.barSpacing, pixelRatio),
+      wickWidthPx: lwcCandleWickCss(geom.barSpacing, pixelRatio),
     };
 
     const dpr = globalThis.devicePixelRatio || 1;
