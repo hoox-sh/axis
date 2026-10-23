@@ -153,6 +153,10 @@ Live tab (`app_session_status` → connected):
 - “Tick the engine now / repair the stale series / reset the socket.”
   (`engine.tick` · `engine.repair` · `stream.reset` — the last one drops the
   socket and subscriptions so the next tick re-subscribes)
+- “Is HP actually working in this tab?” (`hp.get` — flags, isolation, the
+  rung chip, hot-ring alignment vs the chart, overlay state, and a verdict)
+- “Is the hot ring moving, or just aligned?” (`hp.sample` — ring `seq` delta,
+  frame cadence, and chart append progress over a window)
 
 Start with `app_capabilities` if the client has not cached the catalog.
 

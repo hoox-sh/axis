@@ -3357,6 +3357,10 @@ a missing-slot map)
 “Tick the engine now / repair the stale series / reset the socket.”
 (engine.tick · engine.repair · stream.reset — the last one drops the
 socket and subscriptions so the next tick re-subscribes)
+“Is HP actually working in this tab?” (hp.get — flags, isolation, the
+rung chip, hot-ring alignment vs the chart, overlay state, and a verdict)
+“Is the hot ring moving, or just aligned?” (hp.sample — ring seq delta,
+frame cadence, and chart append progress over a window)
 Start with app_capabilities if the client has not cached the catalog.
 Capabilities at a glance
 Pass these ids to app_invoke as capability, with a JSON payload.
@@ -4618,6 +4622,7 @@ Pine Script and TradingView are trademarks of TradingView, Inc. Cloudflare is a 
 What's new
 The current 2.24.5 build — full detail in the changelog:
 Agents can read and drive the live plane over MCP — eight new app_invoke capabilities: chart.lag (the "why is the chart a bar behind?" ledger with live / one-bar-behind / behind verdicts), chart.bars (bounded OHLCV windows plus a gap map and forming-bar flag), engine.get / engine.series / engine.tick / engine.repair, and stream.get / stream.reset. Every engine call reuses the active endpoint and key in-tab — the key never leaves the browser and is reported as hasApiKey only. See MCP (agents).
+The HP plane is observable over MCP — hp.get (flags, cross-origin isolation, the hp · sab+gpu chip, hot-ring window/alignment/seq, GPU overlay state, verdict) and hp.sample (windowed ring-publish / frame-cadence / chart-append measurement). Pure reads — no flag writes, no wire start, no SAB allocation. See HP engine.
 Engine-owned live stops lagging — the venue's forming tip survives every engine repaint (no bar chopped off the tail), a frozen engine series is repaired instead of back-dating the chart, a superseded engine socket can no longer tear down the connection, and the stream plane now drives the engine's series itself (10s cadence, new venue bars immediately). See engine-owned data plane.
 The browser engine runs the PYNE 0.6.12 wheel — the same release as the Pro API, including the chart.point.copy argument fix, numeric multi-return UDFs, and interpret/compile fill() parity. See engine plugins.
 Abstract
