@@ -53,6 +53,7 @@ import {
   MAX_OVERLAY_BARS,
   overlayViewport,
   parseCssColorToRgb,
+  ringWindowPlacement,
   startGpuOverlay,
   type GpuOverlayDeps,
 } from '../../src/hp/render/gpu-overlay';
@@ -397,6 +398,7 @@ describe('overlay activation gate (explicit rung only)', () => {
       getCandleSeries: () => null,
       getPricePaneEl: () => null,
       getBarsLength: () => 0,
+      getBarsTailTime: () => 0,
       getHotBuffer: () => null,
       fallbackPalette: PALETTE,
     };
@@ -453,6 +455,84 @@ describe('overlay activation gate (explicit rung only)', () => {
       expect(() => stop()).not.toThrow();
     });
     expect(appended.n).toBe(1); // canvas mounted → the rung engaged
+  });
+});
+
+describe('ring window placement (the ring is the chart tail, not the series)', () => {
+  it('places a short engine snapshot at the chart tail (production shape)', () => {
+    // Production: a 501-bar live snapshot on a 9 500-bar REST chart. The
+    // engine's own index space says `hotFrom: 0` — placement must come from
+    // the window length, never from that number.
+    const chartBars = 9500;
+    const hotCount = 501;
+    const ringStart = chartBars - hotCount;
+    expect(ringWindowPlacement({ chartBars, hotCount, fromBase: ringStart })).toEqual({
+      ringStart,
+      hotIndex: 0,
+    });
+    expect(ringWindowPlacement({ chartBars, hotCount, fromBase: ringStart + 1 })).toEqual({
+      ringStart,
+      hotIndex: 1,
+    });
+    // A viewport that reaches into colder history has no ring records.
+    expect(ringWindowPlacement({ chartBars, hotCount, fromBase: ringStart - 1 })).toBeNull();
+    // Past the tail: LWC's right margin is `rightEdgeIndex`'s job.
+    expect(ringWindowPlacement({ chartBars, hotCount, fromBase: chartBars })).toBeNull();
+  });
+
+  it('refuses windows that cannot host the range', () => {
+    expect(ringWindowPlacement({ chartBars: 10, hotCount: 11, fromBase: 0 })).toBeNull();
+    expect(ringWindowPlacement({ chartBars: 10, hotCount: 0, fromBase: 0 })).toBeNull();
+    expect(ringWindowPlacement({ chartBars: 10, hotCount: -1, fromBase: 0 })).toBeNull();
+    expect(ringWindowPlacement({ chartBars: Number.NaN, hotCount: 5, fromBase: 0 })).toBeNull();
+    expect(ringWindowPlacement({ chartBars: 10, hotCount: 5, fromBase: Number.NaN })).toBeNull();
+    // Whole-chart ring (the e2e shape) still anchors at 0.
+    expect(ringWindowPlacement({ chartBars: 120, hotCount: 120, fromBase: 0 })).toEqual({
+      ringStart: 0,
+      hotIndex: 0,
+    });
+  });
+
+  it('feeds the same candles LWC paints for the placed window', () => {
+    // Ring holds 8 candles in its own index space (`hotFrom: 500`); the
+    // chart holds 108 bars, so the window starts at chart index 100.
+    const buf = hot();
+    buf.publish(parityBars(), { hotFromIndex: HOT_FROM });
+    const chartBars = 108;
+    const hotCount = 8;
+    const fromBase = 101; // one bar into the window
+    const place = ringWindowPlacement({ chartBars, hotCount, fromBase });
+    expect(place).not.toBeNull();
+    if (!place) return;
+
+    const vis = allocateVisualAttr(3);
+    if (!vis) throw new Error('allocate');
+    const n = fillVisualAttrFromHot(
+      buf,
+      vis,
+      {
+        fromAbs: HOT_FROM + place.hotIndex,
+        visibleCount: 3,
+        y: Y,
+      },
+      PALETTE,
+    );
+    expect(n).toBe(3);
+
+    const ref = copyOutBars(buf, { fromAbs: HOT_FROM + 1, count: 3 });
+    expect(ref).not.toBeNull();
+    if (!ref) return;
+    const back = (ndc: number): number => Y.yMin + ((ndc + 1) / 2) * (Y.yMax - Y.yMin);
+    for (let i = 0; i < 3; i++) {
+      const bar = ref.bars[i];
+      if (!bar) continue;
+      // Record i is the candle LWC paints at chart index fromBase + i.
+      expect(vis.f32[i * WORDS] ?? Number.NaN).toBe(i);
+      expect(vis.f32[i * WORDS + 2] ?? Number.NaN).toBe(priceToNdc(bar.high, Y.yMin, Y.yMax));
+      expect(Math.abs(back(vis.f32[i * WORDS + 3] ?? Number.NaN) - (bar.low ?? 0))).toBeLessThan(
+        1e-4,
+      );
+    }
   });
 });
 

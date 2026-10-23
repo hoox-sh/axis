@@ -76,6 +76,12 @@ function snapshotBars(end: number, count: number): WireBar[] {
 /** Current 1m slot on the test host clock (same clock mock-poll ticks on). */
 const slotNow = (): number => Math.floor(Date.now() / 1000 / STEP_SEC) * STEP_SEC;
 
+/** Snapshot depth after the shrink step — still shorter than the chart. */
+const SHRUNK_BARS = 30;
+
+/** Shrinks the ring below the chart count (production shape). */
+let shrinkRing: (() => number) | null = null;
+
 /** Server-side chain milestones — each narrows a failure to one hop. */
 const state = {
   wsConnected: false,
@@ -118,6 +124,7 @@ test.beforeAll(async () => {
     };
     socket.on('close', () => {
       if (rollover) clearInterval(rollover);
+      shrinkRing = null;
     });
     socket.on('message', (data) => {
       let msg: { type?: string; id?: string; ts?: number; payload?: { kind?: string } };
@@ -136,12 +143,23 @@ test.beforeAll(async () => {
       state.seriesSubscribed = true;
       const id = msg.id;
       const firstSlot = slotNow();
+      let baseCount = SNAPSHOT_BARS;
+      const countFor = (end: number): number => baseCount + (end - firstSlot) / STEP_SEC;
       socket.send(JSON.stringify({ type: 'status', id, payload: { code: 'live' } }));
-      sendFull(id, firstSlot, SNAPSHOT_BARS);
+      sendFull(id, firstSlot, countFor(firstSlot));
+      // The production shape: the engine's live snapshot (501 in the wild)
+      // is far shorter than the chart window (thousands of REST bars). Shrink
+      // the ring below the chart count on demand so the spec can assert the
+      // overlay clears (never draws shifted) and then paints once the viewport
+      // moves inside the tail window.
+      shrinkRing = () => {
+        baseCount = SHRUNK_BARS;
+        sendFull(id, slotNow(), countFor(slotNow()));
+        return baseCount;
+      };
       // mock-poll appends one store bar per slot advance — re-seed the
       // ring at each boundary (slightly after the venue tick lands) so
-      // ring seriesLen and chart bar count re-align without a window of
-      // guard mismatch.
+      // the ring window keeps tracking the chart tail.
       let lastSeen = firstSlot;
       rollover = setInterval(() => {
         const slot = slotNow();
@@ -149,7 +167,7 @@ test.beforeAll(async () => {
         lastSeen = slot;
         setTimeout(() => {
           const end = slotNow();
-          sendFull(id, end, SNAPSHOT_BARS + (end - firstSlot) / STEP_SEC);
+          sendFull(id, end, countFor(end));
         }, 800);
       }, 250);
     });
@@ -263,38 +281,68 @@ test.describe('GPU candle overlay @gpu', () => {
     console.log('[gpu-e2e] sockets:', sockets.join(', ') || '(none)');
     console.log('[gpu-e2e] page errors:', pageErrors.join(' | ') || '(none)');
 
-    // The overlay canvas shows on its first successful frame (the guard
-    // chain — ring alignment, contained viewport, linear scale — passed).
-    await expect(page.locator('canvas[data-axis-gpu-overlay="1"]')).toBeVisible({
+    // The overlay canvas shows on its first successful frame (the placement
+    // guard — tail identity, contained viewport, linear scale — passed).
+    const canvas = page.locator('canvas[data-axis-gpu-overlay="1"]');
+    await expect(canvas).toBeVisible({
       timeout: 20_000,
     });
 
-    // The framebuffer carries GL candles: alpha-nonzero pixels over the
+    // Alpha-nonzero pixels in the framebuffer = GL candles over the
     // transparent clear. Read inside rAF so the just-drawn buffer is still
-    // intact (no preserveDrawingBuffer).
-    await expect
-      .poll(
+    // intact (no preserveDrawingBuffer). A guard bail clears the canvas but
+    // keeps `display:block` (LWC shows through) — so "cleared" is alpha 0,
+    // not invisible.
+    const nonzeroPixels = (): Promise<number> =>
+      page.evaluate(
         () =>
-          page.evaluate(
-            () =>
-              new Promise<number>((resolve) => {
-                requestAnimationFrame(() => {
-                  const canvas = document.querySelector('canvas[data-axis-gpu-overlay="1"]');
-                  const gl =
-                    canvas instanceof HTMLCanvasElement ? canvas.getContext('webgl2') : null;
-                  if (!gl) return resolve(-1);
-                  const w = gl.drawingBufferWidth;
-                  const h = gl.drawingBufferHeight;
-                  const px = new Uint8Array(w * h * 4);
-                  gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
-                  let nonzero = 0;
-                  for (let i = 3; i < px.length; i += 4) if (px[i] !== 0) nonzero += 1;
-                  resolve(nonzero);
-                });
-              }),
-          ),
-        { timeout: 20_000 },
-      )
-      .toBeGreaterThan(0);
+          new Promise<number>((resolve) => {
+            requestAnimationFrame(() => {
+              const el = document.querySelector('canvas[data-axis-gpu-overlay="1"]');
+              const gl = el instanceof HTMLCanvasElement ? el.getContext('webgl2') : null;
+              if (!gl) return resolve(-1);
+              const w = gl.drawingBufferWidth;
+              const h = gl.drawingBufferHeight;
+              const px = new Uint8Array(w * h * 4);
+              gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+              let nonzero = 0;
+              for (let i = 3; i < px.length; i += 4) if (px[i] !== 0) nonzero += 1;
+              resolve(nonzero);
+            });
+          }),
+      );
+
+    await expect.poll(nonzeroPixels, { timeout: 20_000 }).toBeGreaterThan(0);
+
+    // Production shape: the engine's live snapshot is far shorter than the
+    // chart window (a 501-bar snapshot on a 9 500-bar chart). Shrink the ring
+    // below the visible span: the viewport then starts in colder history than
+    // the ring, so the overlay must clear — never draw a shifted frame.
+    expect(shrinkRing).not.toBeNull();
+    expect(shrinkRing?.()).toBe(SHRUNK_BARS);
+    await expect.poll(nonzeroPixels, { timeout: 10_000 }).toBe(0);
+
+    // Zoom into the tail (wheel anchored right): the viewport now sits inside
+    // the ring window, so the placement offset must paint the right candles.
+    const anchor = await page.evaluate(() => {
+      const canvases = Array.from(document.querySelectorAll('canvas')).filter(
+        (el) => el.clientWidth > 300 && el.clientHeight > 150,
+      );
+      canvases.sort((a, b) => b.clientWidth * b.clientHeight - a.clientWidth * a.clientHeight);
+      const c = canvases[0];
+      if (!c) return null;
+      const r = c.getBoundingClientRect();
+      return { x: r.left + r.width * 0.8, y: r.top + r.height / 2 };
+    });
+    expect(anchor).not.toBeNull();
+    if (anchor) {
+      await page.mouse.move(anchor.x, anchor.y);
+      for (let i = 0; i < 12; i++) {
+        await page.mouse.wheel(0, -600);
+        await page.waitForTimeout(150);
+        if ((await nonzeroPixels()) > 0) break;
+      }
+    }
+    await expect.poll(nonzeroPixels, { timeout: 10_000 }).toBeGreaterThan(0);
   });
 });

@@ -33,6 +33,7 @@
 import { isolationProbe } from '../hp/capabilities';
 import { hpGpuMode, hpSabMode, isHpDisabled, isHpEnabled } from '../hp/feature-flag';
 import { hpChip } from '../hp/hud';
+import { copyOutTail } from '../hp/paint/copy-out-lwc';
 import { getLiveHotBuffer, streamWireState } from '../streams/stream-live';
 import { store } from '../store';
 
@@ -46,12 +47,17 @@ export type HpVerdictCode =
 
 export type HpRingView = {
   present: boolean;
-  /** `hotFromIndex + hotCount` — the series length the overlay guard compares. */
+  /** Writer-side series length (`hotFrom + hotCount`) — its own index space,
+   * not the chart's. */
   seriesLen: number | null;
   hotFrom: number | null;
   hotCount: number | null;
   chartBars: number;
-  /** The exact GPU-overlay guard: `store.bars.length === seriesLen`. */
+  /** Newest bar time in the published ring slot (unix seconds). */
+  tailTime: number | null;
+  chartTailTime: number;
+  /** The GPU overlay's alignment: the ring's newest bar is the chart's
+   * newest bar and the window fits inside the chart (`hotCount ≤ chartBars`). */
   aligned: boolean;
   seq: number | null;
   closedUpto: number | null;
@@ -111,6 +117,7 @@ function chartTailTime(): number {
 function ringView(): HpRingView {
   const hot = getLiveHotBuffer();
   const chartBars = store.bars.length;
+  const chartTail = chartTailTime();
   if (!hot) {
     return {
       present: false,
@@ -118,6 +125,8 @@ function ringView(): HpRingView {
       hotFrom: null,
       hotCount: null,
       chartBars,
+      tailTime: null,
+      chartTailTime: chartTail,
       aligned: false,
       seq: null,
       closedUpto: null,
@@ -131,13 +140,22 @@ function ringView(): HpRingView {
   const hotFrom = num(c.hotFromIndex);
   const hotCount = num(c.hotCount);
   const seriesLen = hotFrom !== null && hotCount !== null ? hotFrom + hotCount : null;
+  const rawTail = copyOutTail(hot, 1)?.bars[0]?.time;
+  const tailTime = num(rawTail);
   return {
     present: true,
     seriesLen,
     hotFrom,
     hotCount,
     chartBars,
-    aligned: seriesLen !== null && seriesLen === chartBars,
+    tailTime,
+    chartTailTime: chartTail,
+    aligned:
+      tailTime !== null &&
+      tailTime === chartTail &&
+      hotCount !== null &&
+      hotCount > 0 &&
+      chartBars >= hotCount,
     seq: num(c.seq),
     closedUpto: num(c.closedUpto),
     epoch: num(hot.epoch),
@@ -190,26 +208,30 @@ function verdictOf(
   }
   if (ring.present) {
     if (!ring.aligned) {
+      const why =
+        ring.hotCount !== null && ring.hotCount > ring.chartBars
+          ? `the ring window (${ring.hotCount} bars) is larger than the chart (${ring.chartBars} bars)`
+          : `ring tail ${ring.tailTime ?? 'n/a'} ≠ chart tail ${ring.chartTailTime}`;
       return {
         code: 'misaligned',
-        message: `Hot ring window ${ring.seriesLen} bars ≠ chart ${ring.chartBars} bars — the GPU overlay guard clears every frame (LWC keeps painting) until a full snapshot re-seeds the ring.`,
+        message: `Hot ring is not the chart's tail window: ${why} — the GPU overlay clears every frame (LWC keeps painting) until both paths converge.`,
       };
     }
     if (paint.painting) {
       return {
         code: 'live',
-        message: `Hot ring aligned at ${ring.chartBars} bars (seq ${ring.seq}) and the WebGL2 overlay is painting (${paint.width}×${paint.height}).`,
+        message: `Hot ring covers the chart's last ${ring.hotCount} bars (seq ${ring.seq}) and the WebGL2 overlay is painting (${paint.width}×${paint.height}).`,
       };
     }
     if (paint.gpuMode !== 'webgl2') {
       return {
         code: 'live',
-        message: `Hot ring aligned at ${ring.chartBars} bars (seq ${ring.seq}); overlay dormant — axis.engine.hp.gpu is '${paint.gpuMode}' (forced 'webgl2' engages it).`,
+        message: `Hot ring covers the chart's last ${ring.hotCount} bars (seq ${ring.seq}); overlay dormant — axis.engine.hp.gpu is '${paint.gpuMode}' (forced 'webgl2' engages it).`,
       };
     }
     return {
       code: 'live',
-      message: `Hot ring aligned at ${ring.chartBars} bars (seq ${ring.seq}); overlay canvas not painting yet (first sized frame pending or the probe bailed).`,
+      message: `Hot ring covers the chart's last ${ring.hotCount} bars (seq ${ring.seq}); overlay canvas not painting yet — viewport outside the ring window or the first sized frame pending.`,
     };
   }
   if (chip.rung === 1) {

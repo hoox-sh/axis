@@ -64,6 +64,7 @@ import type { IChartApi } from 'lightweight-charts';
 import { isolationProbe } from '../capabilities';
 import { hpGpuMode } from '../feature-flag';
 import type { HotBuffer } from '../memory/hot-buffer';
+import { copyOutTail } from '../paint/copy-out-lwc';
 import {
   allocateVisualAttr,
   fillVisualAttrFromHot,
@@ -102,8 +103,10 @@ export type GpuOverlayDeps = {
   getCandleSeries: () => GpuCandleSeries | null;
   /** The price pane's DOM element (geometry anchor). */
   getPricePaneEl: () => HTMLElement | null;
-  /** Bars the chart currently holds — the ring-alignment guard. */
+  /** Bars the chart currently holds — the ring-window placement anchor. */
   getBarsLength: () => number;
+  /** Newest bar time the chart holds (unix seconds, `0` when empty). */
+  getBarsTailTime: () => number;
   /** The live wire's hot ring (`null` when HP is off / no wire). */
   getHotBuffer: () => HotBuffer | null;
   /** Palette used until the candle series exists (theme fallback). */
@@ -185,6 +188,36 @@ export function overlayViewport(
 }
 
 /**
+ * Place an LWC logical range inside the hot ring's slot space.
+ *
+ * The ring is the chart's **tail window**, not the chart series: the engine's
+ * live snapshot starts its own index space at `hotFrom` (a 501-bar snapshot
+ * of a 9 500-bar chart still says `hotFrom: 0`), and the writer slides within
+ * the ring once it fills. Chart index `i` therefore maps to ring slot
+ * `hotFrom + (i − (chartBars − hotCount))` — by **identity**, not by count:
+ * the ring's newest bar is assumed to be the chart's newest bar (the caller
+ * verifies that by tail time before drawing).
+ *
+ * Returns `null` when the window cannot host the range: the ring holds more
+ * bars than the chart, the range starts in colder history than the ring
+ * (cold paging is not wired — clear rather than misalign), or it starts past
+ * the chart tail (LWC's right margin is handled by `rightEdgeIndex`).
+ */
+export function ringWindowPlacement(args: {
+  chartBars: number;
+  hotCount: number;
+  fromBase: number;
+}): { ringStart: number; hotIndex: number } | null {
+  const { chartBars, hotCount, fromBase } = args;
+  if (!Number.isFinite(chartBars) || !Number.isFinite(hotCount)) return null;
+  if (!Number.isFinite(fromBase)) return null;
+  if (hotCount <= 0 || chartBars < hotCount) return null;
+  const ringStart = chartBars - hotCount;
+  if (fromBase < ringStart || fromBase >= chartBars) return null;
+  return { ringStart, hotIndex: fromBase - ringStart };
+}
+
+/**
  * Start the overlay pump. Returns the disposer; a no-op disposer unless the
  * *forced* `webgl2` rung is available (see the module doc for why `auto`
  * stays dormant: no default path may recolor LWC's translucent candles).
@@ -261,9 +294,20 @@ export function startGpuOverlay(deps: GpuOverlayDeps): () => void {
     }
 
     const control = hot.control;
-    const hotFrom = control.hotFromIndex;
-    const seriesLen = hotFrom + control.hotCount;
-    if (control.hotCount <= 0 || deps.getBarsLength() !== seriesLen) {
+    const chartBars = deps.getBarsLength();
+    const hotCount = control.hotCount;
+    if (hotCount <= 0 || chartBars < hotCount) {
+      clear();
+      return;
+    }
+    // The ring is the chart's **tail window** — the engine's snapshot starts
+    // its own index space at `hotFrom` and the chart window can hold far more
+    // REST bars. Place the window by identity: the ring's newest bar must be
+    // the chart's newest bar; then ring slot `j` is chart index
+    // `chartBars − hotCount + j`. A tap that is a bar ahead or behind clears
+    // for a frame instead of shifting every candle.
+    const ringTail = copyOutTail(hot, 1)?.bars[0];
+    if (!ringTail || ringTail.time !== deps.getBarsTailTime()) {
       clear();
       return;
     }
@@ -284,13 +328,18 @@ export function startGpuOverlay(deps: GpuOverlayDeps): () => void {
       clear();
       return;
     }
-    // Left-containment (cold paging unwired): a cold left edge would make
-    // the fill's record 0 mean a different bar than the renderer's anchor
-    // assumes. Fully past-the-ring views draw nothing — clear, never keep
-    // a stale frame. The right edge may stick out into LWC's right margin:
-    // those slots hold no bars for either painter, and `rightEdgeIndex`
-    // keeps every existing record anchored exactly where LWC puts it.
-    if (geom.fromBase < hotFrom || geom.fromBase >= seriesLen) {
+    // Left-containment (cold paging unwired): a ring cannot host colder
+    // history than its window, so a viewport that starts left of the window
+    // draws nothing — clear, never keep a stale or shifted frame. The right
+    // edge may stick out into LWC's right margin: those slots hold no bars
+    // for either painter, and `rightEdgeIndex` keeps every existing record
+    // anchored exactly where LWC puts it.
+    const place = ringWindowPlacement({
+      chartBars,
+      hotCount,
+      fromBase: geom.fromBase,
+    });
+    if (!place) {
       clear();
       return;
     }
@@ -313,7 +362,11 @@ export function startGpuOverlay(deps: GpuOverlayDeps): () => void {
     const n = fillVisualAttrFromHot(
       hot,
       attr,
-      { fromAbs: geom.fromBase, visibleCount: geom.visibleCount, y },
+      {
+        fromAbs: control.hotFromIndex + place.hotIndex,
+        visibleCount: geom.visibleCount,
+        y,
+      },
       palette,
     );
     if (n == null || n <= 0) return; // torn sample — keep the previous frame

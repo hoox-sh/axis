@@ -7,7 +7,7 @@ tags: [code, mcp]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-23T13:51:13Z
+  at: 2026-10-23T15:10:49Z
 sources:
   - id: tree
     resource: "src/mcp"
@@ -38,6 +38,7 @@ okf_lock: generated
 * [src/engine](/code/src/engine.md)
 * [src/engines](/code/src/engines.md)
 * [src/hp](/code/src/hp.md)
+* [src/hp/paint](/code/src/hp/paint.md)
 * [src/indicators](/code/src/indicators.md)
 * [src/plugins](/code/src/plugins.md)
 * [src/storage](/code/src/storage.md)
