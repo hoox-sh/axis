@@ -51,6 +51,7 @@ import {
 } from './merge-datasets';
 import { repairBars } from './dataset-validate';
 import { createEmitter } from '../utils/emitter';
+import { BoundedMap } from '../utils/bounded-map';
 
 /** Soft cap on memory-mirrored series (matches bars-cache series cap). */
 const MEMORY_MAX_SERIES = 48;
@@ -90,7 +91,7 @@ let mergePolicy: MergePolicy = 'newest-wins';
  * not move it, so a plain FIFO would drop the hottest series (the one a
  * backfill writes on every page) first. `remember` re-inserts on access.
  */
-const memory = new Map<string, Bar[]>();
+const memory = new BoundedMap<string, Bar[]>(MEMORY_MAX_SERIES);
 
 function notify(key: string, bars: Bar[]): void {
   if (!datasetEmitter.size) return;
@@ -102,15 +103,9 @@ function notify(key: string, bars: Bar[]): void {
 }
 
 function remember(key: string, bars: Bar[]): void {
-  // Refresh recency: delete + re-insert moves the key to the end of the
-  // insertion order, so the eviction below drops the coldest series first.
-  if (memory.has(key)) memory.delete(key);
+  // Refresh recency and evict the coldest series first — both are built into
+  // BoundedMap.set, which never evicts the key just written.
   memory.set(key, bars);
-  while (memory.size > MEMORY_MAX_SERIES) {
-    const oldest = memory.keys().next().value;
-    if (oldest == null || oldest === key) break;
-    memory.delete(oldest);
-  }
 }
 
 /** Current persistence mode (settings switch). */

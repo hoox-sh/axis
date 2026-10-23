@@ -89,6 +89,7 @@ import { resolveSessionPayload } from './session-delta';
 import type { EngineLibrarySource } from '../plugins/types';
 import type { Bar } from '../store/types';
 import { combineAbortSignals } from '../utils/fetch-timeout';
+import { BoundedMap } from '../utils/bounded-map';
 
 /**
  * Bars past the chart window a session may grow before it is rebased.
@@ -153,7 +154,8 @@ export interface LiveSessionTickOpts extends LiveSessionKeyFields {
   signal?: AbortSignal;
 }
 
-export type LiveSessionVia = 'session-create' | 'session-tick' | 'session-append' | 'session-cached';
+export type LiveSessionVia =
+  'session-create' | 'session-tick' | 'session-append' | 'session-cached';
 
 export interface LiveSessionHit {
   /** Raw engine payload (shaped like `/run` — caller maps to `RunResult`). */
@@ -219,9 +221,9 @@ const noDeltaEndpoints = new Set<string>();
 /** endpoint → timestamp of last `SESSIONS_FULL` (create cooldown). */
 const fullCooldown = new Map<string, number>();
 /** session key → timestamp until which the fast path is skipped after a miss. */
-const keyCooldown = new Map<string, number>();
+const keyCooldown = new BoundedMap<string, number>(KEY_MEMO_MAX);
 /** (endpoint + script + mode + profiler) run key → last backend-reported mode. */
-const runModes = new Map<string, string>();
+const runModes = new BoundedMap<string, string>(RUN_MODE_MEMO_MAX);
 
 /** Fields that identify the *full run* whose mode decides session eligibility. */
 export interface LiveSessionModeFields {
@@ -249,13 +251,9 @@ function runModeKey(f: LiveSessionModeFields): string {
 export function noteRunMode(fields: LiveSessionModeFields, mode: unknown): void {
   if (!fields?.endpoint || typeof mode !== 'string' || !mode) return;
   const key = runModeKey(fields);
-  runModes.delete(key);
+  // Refresh recency (delete + re-insert is built into BoundedMap.set), then
+  // trim the coldest entries — the cap bounds distinct keys, not uses.
   runModes.set(key, mode);
-  while (runModes.size > RUN_MODE_MEMO_MAX) {
-    const oldest = runModes.keys().next().value;
-    if (oldest === undefined) break;
-    runModes.delete(oldest);
-  }
 }
 
 /** True when the last full run for this script resolved to `interpret`. */
@@ -266,11 +264,6 @@ export function runModeAllowsSessions(fields: LiveSessionModeFields): boolean {
 
 function markSessionFailure(key: string): void {
   keyCooldown.set(key, Date.now() + SESSION_RETRY_COOLDOWN_MS);
-  while (keyCooldown.size > KEY_MEMO_MAX) {
-    const oldest = keyCooldown.keys().next().value;
-    if (oldest === undefined) break;
-    keyCooldown.delete(oldest);
-  }
 }
 
 function clearSessionFailure(key: string): void {
@@ -454,9 +447,7 @@ export interface LiveSessionStatus {
 }
 
 export type LiveSessionStatusResult =
-  | { kind: 'ok'; status: LiveSessionStatus }
-  | { kind: 'gone' }
-  | { kind: 'unknown' };
+  { kind: 'ok'; status: LiveSessionStatus } | { kind: 'gone' } | { kind: 'unknown' };
 
 /**
  * `GET /session/{id}` — status blob the backend exposes for introspection.
@@ -670,7 +661,12 @@ async function createSession(
     lastReconciledAt: created,
     lastStatus: null,
   });
-  return { payload: res.payload, via: 'session-create', sessionId, barTimes: evaluatedBarTimes(opts.pineBars) };
+  return {
+    payload: res.payload,
+    via: 'session-create',
+    sessionId,
+    barTimes: evaluatedBarTimes(opts.pineBars),
+  };
 }
 
 /**
@@ -682,16 +678,10 @@ async function createSession(
  * (transport error/timeout) — transient, so it does not cool the key down.
  */
 type SessionOpOutcome =
-  | { kind: 'ok'; payload: unknown }
-  | { kind: 'gone' }
-  | { kind: 'invalid' }
-  | { kind: 'miss' };
+  { kind: 'ok'; payload: unknown } | { kind: 'gone' } | { kind: 'invalid' } | { kind: 'miss' };
 
 /** True when `payload` can be treated as `sessionId`'s evaluation result. */
-function isSessionResult(
-  payload: unknown,
-  sessionId: string,
-): payload is Record<string, unknown> {
+function isSessionResult(payload: unknown, sessionId: string): payload is Record<string, unknown> {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
   const rec = payload as Record<string, unknown>;
   // `/run`-shaped envelopes report failures as `{ status: 'error' }`, sometimes
@@ -784,9 +774,7 @@ export async function tryLiveSessionTick(
   }
 }
 
-async function tryLiveSessionTickInner(
-  opts: LiveSessionTickOpts,
-): Promise<LiveSessionHit | null> {
+async function tryLiveSessionTickInner(opts: LiveSessionTickOpts): Promise<LiveSessionHit | null> {
   const bars = Array.isArray(opts.pineBars) ? opts.pineBars : [];
   if (!opts.endpoint || !opts.script || bars.length === 0) return null;
   if (unsupported.has(opts.endpoint)) return null;
@@ -828,7 +816,12 @@ async function tryLiveSessionTickInner(
       return createSession(opts, key);
     }
     if (barSnapshot(last) === st.lastBar) {
-      return { payload: st.lastPayload, via: 'session-cached', sessionId: st.id, barTimes: evaluatedBarTimes(bars) };
+      return {
+        payload: st.lastPayload,
+        via: 'session-cached',
+        sessionId: st.id,
+        barTimes: evaluatedBarTimes(bars),
+      };
     }
     const tick = await tickSession(opts, st, last);
     if (tick.kind !== 'ok') {
@@ -847,7 +840,12 @@ async function tryLiveSessionTickInner(
     st.lastBar = barSnapshot(last);
     st.lastPayload = mergedSame;
     st.lastUsedAt = Date.now();
-    return { payload: mergedSame, via: 'session-tick', sessionId: st.id, barTimes: evaluatedBarTimes(bars) };
+    return {
+      payload: mergedSame,
+      via: 'session-tick',
+      sessionId: st.id,
+      barTimes: evaluatedBarTimes(bars),
+    };
   }
 
   // Series advanced (or shrank) — locate the session tip in the fresh bars.
@@ -876,7 +874,12 @@ async function tryLiveSessionTickInner(
   if (!tail.length) {
     // Count differs but no newer bars (duplicate stamps) — re-tick the tip.
     if (barSnapshot(last) === st.lastBar) {
-      return { payload: st.lastPayload, via: 'session-cached', sessionId: st.id, barTimes: evaluatedBarTimes(bars) };
+      return {
+        payload: st.lastPayload,
+        via: 'session-cached',
+        sessionId: st.id,
+        barTimes: evaluatedBarTimes(bars),
+      };
     }
     const tick = await tickSession(opts, st, last);
     if (tick.kind !== 'ok') {
@@ -898,7 +901,12 @@ async function tryLiveSessionTickInner(
     st.lastPayload = mergedDup;
     st.closedHash = hashBars(bars, n - 2);
     st.lastUsedAt = Date.now();
-    return { payload: mergedDup, via: 'session-tick', sessionId: st.id, barTimes: evaluatedBarTimes(bars) };
+    return {
+      payload: mergedDup,
+      via: 'session-tick',
+      sessionId: st.id,
+      barTimes: evaluatedBarTimes(bars),
+    };
   }
   // Tick-then-append: finalize the base with its current (closed) values
   // BEFORE appending, or append would confirm the stale forming values and
@@ -934,7 +942,12 @@ async function tryLiveSessionTickInner(
   // The appended tail is now closed history; fingerprint it for the next tick.
   st.closedHash = hashBars(bars, n - 2);
   st.lastUsedAt = Date.now();
-  return { payload: mergedTail, via: 'session-append', sessionId: st.id, barTimes: evaluatedBarTimes(bars) };
+  return {
+    payload: mergedTail,
+    via: 'session-append',
+    sessionId: st.id,
+    barTimes: evaluatedBarTimes(bars),
+  };
 }
 
 /** Release every cached session (best-effort DELETE) and clear the cache. */

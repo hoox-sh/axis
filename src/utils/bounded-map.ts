@@ -88,6 +88,11 @@ export class BoundedMap<K, V> {
     return this.items.entries();
   }
 
+  /** Iterate entries, so ranged `for..of` works like on a `Map`. */
+  [Symbol.iterator](): IterableIterator<[K, V]> {
+    return this.items.entries();
+  }
+
   forEach(fn: (value: V, key: K) => void): void {
     this.items.forEach((v, k) => {
       fn(v, k);
