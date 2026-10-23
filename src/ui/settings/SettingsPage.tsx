@@ -9,7 +9,7 @@
  * @module ui/settings/SettingsPage
  */
 
-import { For, Show, createEffect, createSignal, onCleanup, type JSX } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from 'solid-js';
 import {
   store,
   setStore,
@@ -82,6 +82,18 @@ import {
   StudioToggle,
   type StudioHealth,
 } from '../studio';
+import {
+  hpChip,
+  hpGpuMode,
+  hpSabMode,
+  isHpDisabled,
+  isHpEnabled,
+  setHpEnabled,
+  setHpGpuMode,
+  setHpSabMode,
+  type HpGpuMode,
+  type HpSabMode,
+} from '../../hp';
 
 const SETTINGS_TABS: { id: SettingsTabId; label: string; hint: string }[] = [
   { id: 'general', label: 'General', hint: 'Chart chrome · live · storage' },
@@ -290,6 +302,15 @@ export function SettingsPage(props: { onClose: () => void; initialTab?: Settings
   );
   createEffect(() => setHudDiagnostics(store.telemetry?.hud?.diagnostics === true));
   const [shareOnError, setShareOnError] = createSignal(!!store.telemetry?.shareOnError);
+  // HP flags are tab-local (localStorage), not store state: the section writes
+  // them directly and asks for a reload — nothing here is persisted by Apply.
+  const [hpEnabled, setHpEnabledLocal] = createSignal(isHpEnabled());
+  const [hpGpu, setHpGpuLocal] = createSignal<HpGpuMode>(hpGpuMode());
+  const [hpSab, setHpSabLocal] = createSignal<HpSabMode>(hpSabMode());
+  const [hpDirty, setHpDirty] = createSignal(false);
+  const hpStatus = createMemo(() =>
+    hpChip({ enabled: hpEnabled(), disabled: isHpDisabled(), gpu: hpGpu(), sab: hpSab() }),
+  );
   const [uiScale, setUiScaleLocal] = createSignal(clampUiScale(store.uiScale ?? 1));
   const [priceScaleLabels, setPriceScaleLabels] = createSignal(
     store.priceScaleLabelsVisible !== false,
@@ -753,6 +774,82 @@ export function SettingsPage(props: { onClose: () => void; initialTab?: Settings
                     </For>
                   </StudioSelect>
                 </StudioField>
+              </StudioSection>
+
+              <StudioSection
+                title="High-performance engine"
+                lead="Opt-in shared-memory transport and the GPU candle painter. Off by default; these toggles write the tab's HP flags, so a reload applies them."
+                testId="axis-settings-hp"
+              >
+                <StudioToggle
+                  id="axis-hp-enabled"
+                  testId="axis-settings-hp-enabled"
+                  checked={hpEnabled()}
+                  onChange={(v) => {
+                    setHpEnabled(v);
+                    setHpEnabledLocal(v);
+                    setHpDirty(true);
+                  }}
+                  label="Enable high-performance engine"
+                  hint="Off keeps today's JSON /ws/live → Lightweight Charts path byte-identical."
+                />
+                <StudioField
+                  label="GPU painter"
+                  for="axis-hp-gpu"
+                  hint="WebGL2 stacks GPU candles over the price pane. Auto only selects the rung — Lightweight Charts keeps painting until WebGL2 is forced."
+                >
+                  <StudioSelect
+                    id="axis-hp-gpu"
+                    testId="axis-settings-hp-gpu"
+                    value={hpGpu()}
+                    onChange={(v) => {
+                      const mode: HpGpuMode =
+                        v === 'webgl2' || v === 'webgpu' || v === 'off' ? v : 'auto';
+                      setHpGpuMode(mode);
+                      setHpGpuLocal(mode);
+                      setHpDirty(true);
+                    }}
+                  >
+                    <option value="auto">Auto (select the rung only)</option>
+                    <option value="webgl2">WebGL2 overlay (forced)</option>
+                    <option value="webgpu">WebGPU (when available)</option>
+                    <option value="off">Off (Lightweight Charts paints)</option>
+                  </StudioSelect>
+                </StudioField>
+                <StudioField
+                  label="SAB transport"
+                  for="axis-hp-sab"
+                  hint="Off forces the transferable copy instead of the shared hot ring."
+                >
+                  <StudioSelect
+                    id="axis-hp-sab"
+                    testId="axis-settings-hp-sab"
+                    value={hpSab()}
+                    onChange={(v) => {
+                      const mode: HpSabMode = v === 'off' ? 'off' : 'auto';
+                      setHpSabMode(mode);
+                      setHpSabLocal(mode);
+                      setHpDirty(true);
+                    }}
+                  >
+                    <option value="auto">Auto (shared ring when isolated)</option>
+                    <option value="off">Off (transferable copy)</option>
+                  </StudioSelect>
+                </StudioField>
+                <StudioHint>
+                  <span data-testid="axis-settings-hp-status">
+                    {hpStatus().value} · {hpStatus().detail}
+                  </span>
+                </StudioHint>
+                <Show when={hpDirty()}>
+                  <StudioButton
+                    variant="ghost"
+                    testId="axis-settings-hp-reload"
+                    onClick={() => window.location.reload()}
+                  >
+                    Reload to apply
+                  </StudioButton>
+                </Show>
               </StudioSection>
 
               <StudioSection

@@ -40,6 +40,8 @@ AXIS ships an opt-in **high-performance plane** behind `axis.engine.hp.enabled` 
 
 ## Flags
 
+Set these in **Studio → Settings → General → High-performance engine** — no DevTools or console needed. The keys below are the same values, useful for automation and tests; the section also shows the resulting chip and offers the reload that applies a change.
+
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `axis.engine.hp.enabled` | unset / off | master opt-in |
@@ -93,7 +95,7 @@ Workers Manager → **Chart plane** shows the selected rung in plan format: `hp 
 
 ## MCP observability
 
-The HP flags are tab-local `localStorage` and isolation is a runtime property — neither crosses the sanitized app snapshot, so agents get two dedicated read-only capabilities (`src/mcp/hp.ts`):
+The HP flags are tab-local `localStorage` — written by **Settings → General → High-performance engine**, never by MCP — and isolation is a runtime property: neither crosses the sanitized app snapshot, so agents get two dedicated read-only capabilities (`src/mcp/hp.ts`):
 
 - **`hp.get`** — flags (enable / kill switch / `gpu` / `sab`), the cross-origin isolation probe, the HUD chip verbatim, the session rung cap (`axis.hp.rung` after a SAB OOM), the **actual** hot-ring runtime (window bounds, `seq` / `closedUpto`, SAB bytes, `tailTime` vs `chartTailTime`, and the tail-identity placement the GPU overlay guard enforces), the wire state, the overlay canvas's DOM state, and a verdict: `kill` / `off` / `awaiting` / `copy` / `fallback` / `degraded` / `misaligned` / `live`.
 - **`hp.sample`** — a bounded window (100 ms–10 s, default 1 s) of *movement*: ring `seq` delta (ingest publishes actually landing), `closedUpto` progress, rAF frame cadence, the chart's append/tail deltas, and the rolling **tick → frame latency** (p50 / p95 / max over the last 240 applied live ticks — the number plan §14.2 wants before a default flip). A snapshot says "the ring is aligned"; the sample says "the ring is moving".

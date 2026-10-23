@@ -48,10 +48,9 @@ test.describe('AXIS smoke @smoke', () => {
     await loadBtn.click();
 
     // Status message — not getByText(/bars/i), which matches hidden <option>Bars
-    await expect(page.getByTestId('axis-status-message')).toContainText(
-      /Loaded \d+ bars|Ready/i,
-      { timeout: 15_000 },
-    );
+    await expect(page.getByTestId('axis-status-message')).toContainText(/Loaded \d+ bars|Ready/i, {
+      timeout: 15_000,
+    });
 
     await page.getByTestId('axis-select-engine').selectOption('server');
     await page.getByTestId('axis-btn-run').click();
@@ -125,9 +124,29 @@ test.describe('AXIS smoke @smoke', () => {
     await expect(page.getByTestId('axis-settings')).toHaveCount(0);
   });
 
-  test('Mod-K opens and closes the command palette (shortcut hub guard)', async ({
-    page,
-  }) => {
+  test('Settings → General drives the HP engine flags', async ({ page }) => {
+    await page.goto('/');
+    await openStudio(page, 'settings');
+    await expect(page.getByTestId('axis-settings-hp')).toBeVisible();
+
+    const toggle = page.getByTestId('axis-settings-hp-enabled');
+    await expect(toggle).not.toBeChecked();
+    await toggle.check();
+    // The section writes the tab-local flags directly and asks for the reload
+    // that applies them (no console / DevTools step).
+    await expect
+      .poll(() => page.evaluate(() => localStorage.getItem('axis.engine.hp.enabled')))
+      .toBe('1');
+    await expect(page.getByTestId('axis-settings-hp-reload')).toBeVisible();
+
+    await page.getByTestId('axis-settings-hp-gpu').selectOption('webgl2');
+    await expect
+      .poll(() => page.evaluate(() => localStorage.getItem('axis.engine.hp.gpu')))
+      .toBe('webgl2');
+    await expect(page.getByTestId('axis-settings-hp-status')).toContainText('hp ·');
+  });
+
+  test('Mod-K opens and closes the command palette (shortcut hub guard)', async ({ page }) => {
     // Guard for the 2026-09 regression: ShortcutHub was defined but never
     // mounted, leaving Mod-K dead. If this test fails, the mount is gone.
     await page.goto('/');
@@ -146,9 +165,7 @@ test.describe('AXIS smoke @smoke', () => {
     await expect(page.getByTestId('axis-command-palette')).toHaveCount(0);
   });
 
-  test('Workers page is fullscreen like other studio pages, no top status', async ({
-    page,
-  }) => {
+  test('Workers page is fullscreen like other studio pages, no top status', async ({ page }) => {
     await page.goto('/');
     await openStudio(page, 'workers');
     await expect(page.getByTestId('axis-workers-manager')).toBeVisible();
@@ -163,7 +180,10 @@ test.describe('AXIS smoke @smoke', () => {
     // Top status grid removed — only per-worker cards keep a status chip.
     await expect(page.getByText('Active backend', { exact: true })).toHaveCount(0);
     await expect(
-      page.getByTestId('axis-workers-manager').getByTestId(/axis-worker-card-/).first(),
+      page
+        .getByTestId('axis-workers-manager')
+        .getByTestId(/axis-worker-card-/)
+        .first(),
     ).toBeVisible({ timeout: 15_000 });
 
     // Modal studio pages close on Escape.
@@ -171,9 +191,7 @@ test.describe('AXIS smoke @smoke', () => {
     await expect(page.getByTestId('axis-workers-manager')).toHaveCount(0);
   });
 
-  test('Script Logs lives in the editor bottom bar, not the topbar', async ({
-    page,
-  }) => {
+  test('Script Logs lives in the editor bottom bar, not the topbar', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByTestId('axis-topbar')).toBeVisible({ timeout: 30_000 });
     // Topbar entry removed.

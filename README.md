@@ -254,7 +254,7 @@ await loadPluginFromUrl('https://example.com/my-plugin.js');
 | **Workers Manager** | Health cards + install helpers for Flask / Worker / Pyodide / PWA / PYNE Agent |
 | **AXIS CLI** | `packages/cli` — install, doctor, setup, secrets, deploy, health, MCP |
 | **MCP** | Agents control Worker APIs and a connected tab (`POST /mcp`, Settings → MCP) — incl. HP diagnostics (`hp.get`, `hp.sample`) |
-| **HP chart engine** | Opt-in high-performance plane behind `axis.engine.hp.*`: off-thread ingest, SAB hot ring, WebGL2 candle overlay on the forced `gpu=webgl2` rung, observable over MCP and in the Workers Manager chip |
+| **HP chart engine** | Opt-in high-performance plane behind `axis.engine.hp.*`: off-thread ingest, SAB hot ring, WebGL2 candle overlay on the forced `gpu=webgl2` rung — toggle it in **Settings → General → High-performance engine**, observe it over MCP (`hp.get`, `hp.sample`) and in the Workers Manager chip |
 | **Extra chrome** | Module-bar `Extra` menu: live price-card trend, watchlist ticker marquee (direction/speed/24h toggle), fullscreen price-alert overlay, float-only time + price panels, quote dock sheet |
 | **Background catchup** | Live ticks queue in order with timer fallback + auto backfill on `visibilitychange`/`focus`/`online` — hidden tabs keep every closed slot |
 | **Chart engine** | Per-chart Heikin-Ashi cache, pane-qualified overlay fingerprints, future Pine drawings (≤500 bars past last candle) |
