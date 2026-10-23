@@ -34,10 +34,7 @@ import {
 import type { TopbarSettings } from '../../store/types';
 import { Icons } from '../icons';
 import { HooxLoader } from '../HooxLoader';
-import {
-  WATCHLIST_INTERVALS,
-  WATCHLIST_REFRESH_OPTIONS,
-} from '../../data/watchlist-tickers';
+import { WATCHLIST_INTERVALS, WATCHLIST_REFRESH_OPTIONS } from '../../data/watchlist-tickers';
 import { loadSymbolData, reloadChart } from '../../data/load-symbol';
 import { flushLocalAndEngine } from '../../data/engine-flush';
 import { syncLiveToPreference } from '../../streams/multiplex';
@@ -151,23 +148,48 @@ const TOPBAR_GROUPS: TopbarToggle[] = [
 ];
 
 const TOPBAR_PANELS: TopbarToggle[] = [
-  { key: 'panelsWatchlist', id: 'topbar-panels-watchlist', label: 'Watchlist', hint: 'Symbol list.' },
+  {
+    key: 'panelsWatchlist',
+    id: 'topbar-panels-watchlist',
+    label: 'Watchlist',
+    hint: 'Symbol list.',
+  },
   { key: 'panelsEditor', id: 'topbar-panels-editor', label: 'Editor', hint: 'Pine editor dock.' },
   { key: 'panelsLibrary', id: 'topbar-panels-library', label: 'Library', hint: 'Script library.' },
   { key: 'panelsScripts', id: 'topbar-panels-scripts', label: 'Scripts', hint: 'Running scripts.' },
   { key: 'panelsLayers', id: 'topbar-panels-layers', label: 'Layers', hint: 'Drawings and plots.' },
   { key: 'panelsDsm', id: 'topbar-panels-dsm', label: 'Data', hint: 'Data Source Manager (DSM).' },
-  { key: 'panelsOnchain', id: 'topbar-panels-onchain', label: 'On-Chain', hint: 'Protocol metrics.' },
-  { key: 'panelsAlerts', id: 'topbar-panels-alerts', label: 'Alerts', hint: 'Price and script alerts.' },
+  {
+    key: 'panelsOnchain',
+    id: 'topbar-panels-onchain',
+    label: 'On-Chain',
+    hint: 'Protocol metrics.',
+  },
+  {
+    key: 'panelsAlerts',
+    id: 'topbar-panels-alerts',
+    label: 'Alerts',
+    hint: 'Price and script alerts.',
+  },
   { key: 'panelsValues', id: 'topbar-panels-values', label: 'Values', hint: 'Data window.' },
-  { key: 'panelsResults', id: 'topbar-panels-results', label: 'Results', hint: 'Strategy results.' },
+  {
+    key: 'panelsResults',
+    id: 'topbar-panels-results',
+    label: 'Results',
+    hint: 'Strategy results.',
+  },
   {
     key: 'panelsSystemLogs',
     id: 'topbar-panels-systemlogs',
     label: 'System Logs',
     hint: 'Boot, data, and engine log.',
   },
-  { key: 'panelsStatus', id: 'topbar-panels-status', label: 'Status', hint: 'Connection status strip.' },
+  {
+    key: 'panelsStatus',
+    id: 'topbar-panels-status',
+    label: 'Status',
+    hint: 'Connection status strip.',
+  },
 ];
 
 function settingsFooterStatus(tab: SettingsTabId, scaleLabel: string): string {
@@ -249,10 +271,7 @@ function TopbarToggleGrid(props: { items: TopbarToggle[]; columns?: 2 | 3 }) {
   );
 }
 
-export function SettingsPage(props: {
-  onClose: () => void;
-  initialTab?: SettingsTabId;
-}) {
+export function SettingsPage(props: { onClose: () => void; initialTab?: SettingsTabId }) {
   const [chartInterval, setChartInterval] = createSignal(store.interval);
   const [historyBars, setHistoryBars] = createSignal(
     clampHistoryBars(store.historyBars ?? HISTORY_BARS_DEFAULT),
@@ -278,21 +297,15 @@ export function SettingsPage(props: {
   const [lastValueLabels, setLastValueLabels] = createSignal(
     store.lastValueLabelsVisible !== false,
   );
-  const [lastValueNames, setLastValueNames] = createSignal(
-    store.lastValueNamesVisible !== false,
-  );
+  const [lastValueNames, setLastValueNames] = createSignal(store.lastValueNamesVisible !== false);
   const [slippageNextOpen, setSlippageNextOpen] = createSignal(
     !!store.strategyUi?.slippageNextOpen,
   );
   const [invertTradeLabels, setInvertTradeLabels] = createSignal(
     !!store.strategyUi?.invertTradeLabels,
   );
-  const [exactOnCandle, setExactOnCandle] = createSignal(
-    store.strategyUi?.exactOnCandle !== false,
-  );
-  const [resultsAutoOpen, setResultsAutoOpen] = createSignal(
-    store.resultsAutoOpen !== false,
-  );
+  const [exactOnCandle, setExactOnCandle] = createSignal(store.strategyUi?.exactOnCandle !== false);
+  const [resultsAutoOpen, setResultsAutoOpen] = createSignal(store.resultsAutoOpen !== false);
   const [autoload, setAutoload] = createSignal(store.autoload !== false);
   const [mcpConnect, setMcpConnect] = createSignal(loadMcpPrefs().connect);
   const [mcpBridge, setMcpBridge] = createSignal(mcpBridgeState());
@@ -377,19 +390,14 @@ export function SettingsPage(props: {
       `Settings saved · ${nextInterval} · ${nextHistoryBars} bars · refresh ${nextRefresh}s · live ${preferAfterLoad() ? 'on' : 'off'} · re-run=${rerunOn()}`,
       { toast: true, source: 'settings' },
     );
-    if (
-      store.symbol &&
-      (nextInterval !== prevInterval || nextHistoryBars !== prevHistoryBars)
-    ) {
+    if (store.symbol && (nextInterval !== prevInterval || nextHistoryBars !== prevHistoryBars)) {
       void loadSymbolData(store.symbol, nextInterval, store.source);
     } else if (nextRollingWindow !== prevRollingWindow) {
       // The Rolling window changed — re-slice the painted chart so it matches
       // the new setting instead of keeping the old window until the next load.
       void (async () => {
         try {
-          const { applyChartWindow } = await import(
-            '../../data/data-source-manager'
-          );
+          const { applyChartWindow } = await import('../../data/data-source-manager');
           await applyChartWindow(nextRollingWindow);
         } catch {
           /* re-slice is best-effort */
@@ -422,7 +430,7 @@ export function SettingsPage(props: {
             'Flush the dataset manager?\n\n' +
               'Deletes every cached OHLCV dataset (bars + metadata) from memory, ' +
               'the local IndexedDB cache, and the remote dataset stores (git / cloud) — ' +
-              'and the engine\'s own copy of the venue data (per series).\n\n' +
+              "and the engine's own copy of the venue data (per series).\n\n" +
               'The chart keeps the bars it already shows until you reload the symbol.',
           )
         : true;
@@ -486,533 +494,527 @@ export function SettingsPage(props: {
       />
       <div class="ax-page-canvas">
         <SettingsTabPanel id="general" active={tab()}>
-            <div class="ax-split">
+          <div class="ax-split">
             <div class="ax-split-col">
-            <StudioSection title="Appearance" testId="axis-ui-scale-field">
-              <StudioField
-                label={`UI scale · ${formatUiScalePct(uiScale())}`}
-                for="axis-ui-scale"
-                hint="Scales text, icons, inputs, padding, and gaps. Chart candles stay sharp. Live preview — Save to keep."
+              <StudioSection title="Appearance" testId="axis-ui-scale-field">
+                <StudioField
+                  label={`UI scale · ${formatUiScalePct(uiScale())}`}
+                  for="axis-ui-scale"
+                  hint="Scales text, icons, inputs, padding, and gaps. Chart candles stay sharp. Live preview — Save to keep."
+                >
+                  <span data-testid="axis-ui-scale-value" hidden>
+                    {formatUiScalePct(uiScale())}
+                  </span>
+                  <input
+                    id="axis-ui-scale"
+                    class="ax-range"
+                    type="range"
+                    min={UI_SCALE_MIN}
+                    max={UI_SCALE_MAX}
+                    step={UI_SCALE_STEP}
+                    value={uiScale()}
+                    data-testid="axis-ui-scale"
+                    aria-valuemin={UI_SCALE_MIN}
+                    aria-valuemax={UI_SCALE_MAX}
+                    aria-valuenow={uiScale()}
+                    aria-label="UI scale"
+                    onInput={(e) => previewScale(Number(e.currentTarget.value))}
+                  />
+                  <div class="ax-chip-row">
+                    <For each={UI_SCALE_PRESETS}>
+                      {(p) => (
+                        <StudioChip
+                          pressed={Math.abs(uiScale() - p.value) < 0.01}
+                          title={p.hint}
+                          onClick={() => previewScale(p.value)}
+                        >
+                          {p.label}
+                        </StudioChip>
+                      )}
+                    </For>
+                  </div>
+                </StudioField>
+              </StudioSection>
+
+              <StudioSection
+                title="Chart & watchlist"
+                lead="Interval and history depth used when loading symbols. Label toggles match the chart [$] [N] [T] controls."
               >
-                <span data-testid="axis-ui-scale-value" hidden>
-                  {formatUiScalePct(uiScale())}
-                </span>
-                <input
-                  id="axis-ui-scale"
-                  class="ax-range"
-                  type="range"
-                  min={UI_SCALE_MIN}
-                  max={UI_SCALE_MAX}
-                  step={UI_SCALE_STEP}
-                  value={uiScale()}
-                  data-testid="axis-ui-scale"
-                  aria-valuemin={UI_SCALE_MIN}
-                  aria-valuemax={UI_SCALE_MAX}
-                  aria-valuenow={uiScale()}
-                  aria-label="UI scale"
-                  onInput={(e) => previewScale(Number(e.currentTarget.value))}
+                <StudioField label="Default interval" for="axis-default-interval">
+                  <StudioSelect
+                    id="axis-default-interval"
+                    value={chartInterval()}
+                    onChange={setChartInterval}
+                  >
+                    <For each={[...WATCHLIST_INTERVALS]}>
+                      {(i) => <option value={i}>{i}</option>}
+                    </For>
+                  </StudioSelect>
+                </StudioField>
+                <StudioField
+                  label="Historical bars"
+                  for="axis-history-bars"
+                  hint={`Bars downloaded into the dataset on Load / Reload (${HISTORY_BARS_MIN}–${HISTORY_BARS_MAX}). Default ${HISTORY_BARS_DEFAULT}. The DSM backfills up to this depth; venues page (e.g. 1000/request) so deep loads walk multiple pages.`}
+                >
+                  <StudioInput
+                    id="axis-history-bars"
+                    type="number"
+                    mono
+                    min={HISTORY_BARS_MIN}
+                    max={HISTORY_BARS_MAX}
+                    step={50}
+                    value={historyBars()}
+                    onInput={(v) => setHistoryBars(Number(v))}
+                    onChange={(v) => setHistoryBars(clampHistoryBars(v))}
+                  />
+                </StudioField>
+                <StudioField
+                  label="Rolling window"
+                  for="axis-rolling-window-bars"
+                  hint={`Newest bars shown on the chart and handed to the engine on every run (${ROLLING_WINDOW_MIN}–${ROLLING_WINDOW_MAX}). Default ${ROLLING_WINDOW_DEFAULT}. The dataset keeps the full Historical bars depth — this caps only what is displayed, evaluated, and returned. Lower it to cut run time and payload size on deep histories; raise it if a study needs more lookback than the window. Click the status-bar bar count to edit inline.`}
+                >
+                  <StudioInput
+                    id="axis-rolling-window-bars"
+                    type="number"
+                    mono
+                    min={ROLLING_WINDOW_MIN}
+                    max={ROLLING_WINDOW_MAX}
+                    step={500}
+                    value={rollingWindowBars()}
+                    onInput={(v) => setRollingWindowBars(Number(v))}
+                    onChange={(v) => setRollingWindowBars(clampRollingWindowBars(v))}
+                  />
+                </StudioField>
+                <StudioToggle
+                  id="axis-autoload"
+                  testId="axis-settings-autoload"
+                  checked={autoload()}
+                  onChange={setAutoload}
+                  label="Autoload chart"
+                  hint="When on, symbol, interval, and venue changes fetch bars immediately and the topbar Load button is hidden. When off, change fields then click Load."
                 />
-                <div class="ax-chip-row">
-                  <For each={UI_SCALE_PRESETS}>
-                    {(p) => (
-                      <StudioChip
-                        pressed={Math.abs(uiScale() - p.value) < 0.01}
-                        title={p.hint}
-                        onClick={() => previewScale(p.value)}
-                      >
-                        {p.label}
-                      </StudioChip>
-                    )}
-                  </For>
+                <StudioToggle
+                  id="axis-price-scale-labels"
+                  testId="axis-settings-price-scale-labels"
+                  checked={priceScaleLabels()}
+                  onChange={setPriceScaleLabels}
+                  label="Right price scale labels"
+                  hint="Show price numbers on the right axis. Off collapses the gutter."
+                />
+                <StudioToggle
+                  id="axis-last-value-labels"
+                  testId="axis-settings-last-value-labels"
+                  checked={lastValueLabels()}
+                  onChange={setLastValueLabels}
+                  label="Series last-value labels"
+                  hint="Show last prices on the right scale (plots, volume, hlines)."
+                />
+                <StudioToggle
+                  id="axis-last-value-names"
+                  testId="axis-settings-last-value-names"
+                  checked={lastValueNames()}
+                  onChange={setLastValueNames}
+                  label="Plot names on last-value labels"
+                  hint="Show RSI / Overbought titles next to the last value."
+                />
+              </StudioSection>
+
+              <StudioSection
+                title="Strategy fills & marks"
+                lead="Historical and live default: execute on signal bar close. Marker options also live on Results → Strategy."
+              >
+                <StudioToggle
+                  id="axis-strategy-slippage"
+                  testId="axis-settings-strategy-slippage"
+                  checked={slippageNextOpen()}
+                  onChange={setSlippageNextOpen}
+                  label="Slippage → next bar open"
+                  hint="Off = fill at signal candle close. On = fill at next candle open."
+                />
+                <StudioToggle
+                  id="axis-strategy-invert-labels"
+                  testId="axis-settings-strategy-invert-labels"
+                  checked={invertTradeLabels()}
+                  onChange={setInvertTradeLabels}
+                  label="Invert long / short labels"
+                  hint="Default: long entry below, short above."
+                />
+                <StudioToggle
+                  id="axis-strategy-exact-marks"
+                  testId="axis-settings-strategy-exact-marks"
+                  checked={exactOnCandle()}
+                  onChange={setExactOnCandle}
+                  label="Exact marks on candle"
+                  hint="Circle on the fill bar body plus directional side arrows."
+                />
+              </StudioSection>
+
+              <StudioSection
+                title="Results"
+                lead="The fullscreen Results overlay opens from the Topbar, command palette, or a script card. Strategies can open it automatically on run."
+              >
+                <StudioToggle
+                  id="axis-results-auto-open"
+                  testId="axis-settings-results-auto-open"
+                  checked={resultsAutoOpen()}
+                  onChange={setResultsAutoOpen}
+                  label="Auto-open results on strategies"
+                  hint="When on, running a strategy() script opens the Results overlay. Indicators never auto-open."
+                />
+              </StudioSection>
+
+              <StudioSection
+                title="Workspace"
+                lead="Chart reload refetches OHLCV. UI reset restores panel layout and density only. Engine and endpoint live on Runtime."
+                testId="axis-settings-workspace"
+              >
+                <div class="ax-toolbar">
+                  <StudioButton
+                    variant="ghost"
+                    testId="axis-settings-reload-chart"
+                    disabled={reloading()}
+                    onClick={() => void onReloadChart()}
+                  >
+                    {reloading() ? <HooxLoader size="xs" /> : <Icons.refresh />}
+                    {reloading() ? 'Reloading…' : 'Reload chart'}
+                  </StudioButton>
+                  <StudioButton variant="ghost" testId="axis-settings-reset-ui" onClick={onResetUi}>
+                    <Icons.reset />
+                    Reset UI layout
+                  </StudioButton>
+                  <WorkspaceSnapshotMenu />
                 </div>
-              </StudioField>
-            </StudioSection>
-
-            <StudioSection
-              title="Chart & watchlist"
-              lead="Interval and history depth used when loading symbols. Label toggles match the chart [$] [N] [T] controls."
-            >
-              <StudioField label="Default interval" for="axis-default-interval">
-                <StudioSelect
-                  id="axis-default-interval"
-                  value={chartInterval()}
-                  onChange={setChartInterval}
-                >
-                  <For each={[...WATCHLIST_INTERVALS]}>
-                    {(i) => <option value={i}>{i}</option>}
-                  </For>
-                </StudioSelect>
-              </StudioField>
-              <StudioField
-                label="Historical bars"
-                for="axis-history-bars"
-                hint={`Bars downloaded into the dataset on Load / Reload (${HISTORY_BARS_MIN}–${HISTORY_BARS_MAX}). Default ${HISTORY_BARS_DEFAULT}. The DSM backfills up to this depth; venues page (e.g. 1000/request) so deep loads walk multiple pages.`}
-              >
-                <StudioInput
-                  id="axis-history-bars"
-                  type="number"
-                  mono
-                  min={HISTORY_BARS_MIN}
-                  max={HISTORY_BARS_MAX}
-                  step={50}
-                  value={historyBars()}
-                  onInput={(v) => setHistoryBars(Number(v))}
-                  onChange={(v) => setHistoryBars(clampHistoryBars(v))}
-                />
-              </StudioField>
-              <StudioField
-                label="Rolling window"
-                for="axis-rolling-window-bars"
-                hint={`Newest bars shown on the chart and handed to the engine on every run (${ROLLING_WINDOW_MIN}–${ROLLING_WINDOW_MAX}). Default ${ROLLING_WINDOW_DEFAULT}. The dataset keeps the full Historical bars depth — this caps only what is displayed, evaluated, and returned. Lower it to cut run time and payload size on deep histories; raise it if a study needs more lookback than the window. Click the status-bar bar count to edit inline.`}
-              >
-                <StudioInput
-                  id="axis-rolling-window-bars"
-                  type="number"
-                  mono
-                  min={ROLLING_WINDOW_MIN}
-                  max={ROLLING_WINDOW_MAX}
-                  step={500}
-                  value={rollingWindowBars()}
-                  onInput={(v) => setRollingWindowBars(Number(v))}
-                  onChange={(v) => setRollingWindowBars(clampRollingWindowBars(v))}
-                />
-              </StudioField>
-              <StudioToggle
-                id="axis-autoload"
-                testId="axis-settings-autoload"
-                checked={autoload()}
-                onChange={setAutoload}
-                label="Autoload chart"
-                hint="When on, symbol, interval, and venue changes fetch bars immediately and the topbar Load button is hidden. When off, change fields then click Load."
-              />
-              <StudioToggle
-                id="axis-price-scale-labels"
-                testId="axis-settings-price-scale-labels"
-                checked={priceScaleLabels()}
-                onChange={setPriceScaleLabels}
-                label="Right price scale labels"
-                hint="Show price numbers on the right axis. Off collapses the gutter."
-              />
-              <StudioToggle
-                id="axis-last-value-labels"
-                testId="axis-settings-last-value-labels"
-                checked={lastValueLabels()}
-                onChange={setLastValueLabels}
-                label="Series last-value labels"
-                hint="Show last prices on the right scale (plots, volume, hlines)."
-              />
-              <StudioToggle
-                id="axis-last-value-names"
-                testId="axis-settings-last-value-names"
-                checked={lastValueNames()}
-                onChange={setLastValueNames}
-                label="Plot names on last-value labels"
-                hint="Show RSI / Overbought titles next to the last value."
-              />
-            </StudioSection>
-
-            <StudioSection
-              title="Strategy fills & marks"
-              lead="Historical and live default: execute on signal bar close. Marker options also live on Results → Strategy."
-            >
-              <StudioToggle
-                id="axis-strategy-slippage"
-                testId="axis-settings-strategy-slippage"
-                checked={slippageNextOpen()}
-                onChange={setSlippageNextOpen}
-                label="Slippage → next bar open"
-                hint="Off = fill at signal candle close. On = fill at next candle open."
-              />
-              <StudioToggle
-                id="axis-strategy-invert-labels"
-                testId="axis-settings-strategy-invert-labels"
-                checked={invertTradeLabels()}
-                onChange={setInvertTradeLabels}
-                label="Invert long / short labels"
-                hint="Default: long entry below, short above."
-              />
-              <StudioToggle
-                id="axis-strategy-exact-marks"
-                testId="axis-settings-strategy-exact-marks"
-                checked={exactOnCandle()}
-                onChange={setExactOnCandle}
-                label="Exact marks on candle"
-                hint="Circle on the fill bar body plus directional side arrows."
-              />
-            </StudioSection>
-
-            <StudioSection
-              title="Results"
-              lead="The fullscreen Results overlay opens from the Topbar, command palette, or a script card. Strategies can open it automatically on run."
-            >
-              <StudioToggle
-                id="axis-results-auto-open"
-                testId="axis-settings-results-auto-open"
-                checked={resultsAutoOpen()}
-                onChange={setResultsAutoOpen}
-                label="Auto-open results on strategies"
-                hint="When on, running a strategy() script opens the Results overlay. Indicators never auto-open."
-              />
-            </StudioSection>
-
-            <StudioSection
-              title="Workspace"
-              lead="Chart reload refetches OHLCV. UI reset restores panel layout and density only. Engine and endpoint live on Runtime."
-              testId="axis-settings-workspace"
-            >
-              <div class="ax-toolbar">
-                <StudioButton
-                  variant="ghost"
-                  testId="axis-settings-reload-chart"
-                  disabled={reloading()}
-                  onClick={() => void onReloadChart()}
-                >
-                  {reloading() ? <HooxLoader size="xs" /> : <Icons.refresh />}
-                  {reloading() ? 'Reloading…' : 'Reload chart'}
-                </StudioButton>
-                <StudioButton
-                  variant="ghost"
-                  testId="axis-settings-reset-ui"
-                  onClick={onResetUi}
-                >
-                  <Icons.reset />
-                  Reset UI layout
-                </StudioButton>
-                <WorkspaceSnapshotMenu />
-              </div>
-            </StudioSection>
+              </StudioSection>
             </div>
 
             <div class="ax-split-col">
-            <StudioSection title="Live stream">
-              <StudioToggle
-                id="axis-prefer-live"
-                testId="axis-settings-live-enabled"
-                checked={preferAfterLoad()}
-                onChange={setPreferAfterLoad}
-                label="Enable live stream"
-                hint="On by default. Connects the venue WebSocket after bars load (and on boot when history is already there). Turn off for replay-only or offline work."
-              />
-              <StudioField
-                label="Indicator re-run on live bars"
-                for="axis-rerun-on"
-                hint="Bar-close uses venue closed flags or bar time advance."
-              >
-                <StudioSelect
-                  id="axis-rerun-on"
-                  value={rerunOn()}
-                  onChange={(v) => setRerunOn(v === 'bar-close' ? 'bar-close' : 'every-tick')}
-                >
-                  <option value="every-tick">Every tick (responsive)</option>
-                  <option value="bar-close">Bar close only (lighter)</option>
-                </StudioSelect>
-              </StudioField>
-              <StudioToggle
-                id="axis-hud-diagnostics"
-                testId="axis-settings-hud-diagnostics"
-                checked={hudDiagnostics()}
-                onChange={(v) => {
-                  setHudDiagnostics(v);
-                  setStore('telemetry', 'hud', 'diagnostics', v);
-                  flushPersist();
-                }}
-                label="Connection diagnostics"
-                hint="Expand the status row to engine, path, source, stream, and storage."
-              />
-              <StudioToggle
-                id="axis-hud-compact"
-                checked={hudCompact()}
-                onChange={setHudCompact}
-                label="Compact connection HUD"
-                hint="When diagnostics are expanded, hide source, stream, and storage chips."
-              />
-              <StudioToggle
-                id="axis-share-on-error"
-                testId="axis-settings-share-on-error"
-                checked={shareOnError()}
-                onChange={setShareOnError}
-                label="Ask to share data on errors"
-                hint="Telemetry · off by default. Nothing is uploaded automatically."
-              />
-              <StudioField
-                label="Watchlist REST fallback"
-                for="axis-watchlist-refresh"
-                hint="Used only when WebSocket quotes fail."
-              >
-                <StudioSelect
-                  id="axis-watchlist-refresh"
-                  value={String(refreshSec())}
-                  onChange={(v) => setRefreshSec(Number(v))}
-                >
-                  <For each={[...WATCHLIST_REFRESH_OPTIONS]}>
-                    {(o) => <option value={o.value}>{o.label}</option>}
-                  </For>
-                </StudioSelect>
-              </StudioField>
-            </StudioSection>
-
-            <StudioSection
-              title="Script storage"
-              lead="Local browser, cloud Worker, or git. Switching copies the library and never deletes the source."
-              testId="axis-settings-storage"
-            >
-              <StudioField
-                label="Storage"
-                for="axis-studio-storage"
-                hint="Pick cloud to keep scripts on the Worker. The URL and API key below are shared with MCP. Git credentials stay in Script Library."
-              >
-                <StudioSelect
-                  id="axis-studio-storage"
-                  value={storage()}
-                  onChange={setStorage}
-                  testId="axis-studio-storage"
-                >
-                  <For each={storages()}>
-                    {(s) => (
-                      <option value={s.id}>
-                        {s.name}
-                        {s.builtIn ? '' : ' (plugin)'}
-                      </option>
-                    )}
-                  </For>
-                </StudioSelect>
-              </StudioField>
-            </StudioSection>
-
-            <StudioSection
-              title="Worker (cloud + MCP)"
-              lead="One key unlocks both: cloud script storage (/api/scripts) and the MCP server (/mcp + tab bridge). Stored in this browser only — sent as Authorization: Bearer."
-              testId="axis-settings-worker"
-            >
-              <StudioField label="Worker URL" for="axis-studio-cloud-endpoint">
-                <StudioInput
-                  id="axis-studio-cloud-endpoint"
-                  mono
-                  value={cloudEndpoint()}
-                  placeholder="https://worker.axis.hoox.sh"
-                  spellcheck={false}
-                  testId="axis-studio-cloud-endpoint"
-                  onInput={setCloudEndpoint}
+              <StudioSection title="Live stream">
+                <StudioToggle
+                  id="axis-prefer-live"
+                  testId="axis-settings-live-enabled"
+                  checked={preferAfterLoad()}
+                  onChange={setPreferAfterLoad}
+                  label="Enable live stream"
+                  hint="On by default. Connects the venue WebSocket after bars load (and on boot when history is already there). Turn off for replay-only or offline work."
                 />
-              </StudioField>
-              <StudioField
-                label="Worker API key"
-                for="axis-studio-cloud-apikey"
-                hint="pn_… from /api/keys (admin), or Generate demo key for local wrangler with ALLOW_OPEN_KEYS=1. Saved in this browser as you type."
+                <StudioField
+                  label="Indicator re-run on live bars"
+                  for="axis-rerun-on"
+                  hint="Bar-close uses venue closed flags or bar time advance."
+                >
+                  <StudioSelect
+                    id="axis-rerun-on"
+                    value={rerunOn()}
+                    onChange={(v) => setRerunOn(v === 'bar-close' ? 'bar-close' : 'every-tick')}
+                  >
+                    <option value="every-tick">Every tick (responsive)</option>
+                    <option value="bar-close">Bar close only (lighter)</option>
+                  </StudioSelect>
+                </StudioField>
+                <StudioToggle
+                  id="axis-hud-diagnostics"
+                  testId="axis-settings-hud-diagnostics"
+                  checked={hudDiagnostics()}
+                  onChange={(v) => {
+                    setHudDiagnostics(v);
+                    setStore('telemetry', 'hud', 'diagnostics', v);
+                    flushPersist();
+                  }}
+                  label="Connection diagnostics"
+                  hint="Expand the status row to engine, path, source, stream, and storage."
+                />
+                <StudioToggle
+                  id="axis-hud-compact"
+                  checked={hudCompact()}
+                  onChange={setHudCompact}
+                  label="Compact connection HUD"
+                  hint="When diagnostics are expanded, hide source, stream, and storage chips."
+                />
+                <StudioToggle
+                  id="axis-share-on-error"
+                  testId="axis-settings-share-on-error"
+                  checked={shareOnError()}
+                  onChange={setShareOnError}
+                  label="Ask to share data on errors"
+                  hint="Telemetry · off by default. Nothing is uploaded automatically."
+                />
+                <StudioField
+                  label="Watchlist REST fallback"
+                  for="axis-watchlist-refresh"
+                  hint="Used only when WebSocket quotes fail."
+                >
+                  <StudioSelect
+                    id="axis-watchlist-refresh"
+                    value={String(refreshSec())}
+                    onChange={(v) => setRefreshSec(Number(v))}
+                  >
+                    <For each={[...WATCHLIST_REFRESH_OPTIONS]}>
+                      {(o) => <option value={o.value}>{o.label}</option>}
+                    </For>
+                  </StudioSelect>
+                </StudioField>
+              </StudioSection>
+
+              <StudioSection
+                title="Script storage"
+                lead="Local browser, cloud Worker, or git. Switching copies the library and never deletes the source."
+                testId="axis-settings-storage"
               >
-                <StudioInput
-                  id="axis-studio-cloud-apikey"
-                  type="password"
-                  mono
-                  value={cloudApiKey()}
-                  placeholder="pn_…"
-                  spellcheck={false}
-                  autocomplete="off"
-                  testId="axis-studio-cloud-apikey"
-                  onInput={(v) => {
-                    setCloudApiKey(v);
-                    // Live-persist so MCP can attach without waiting for Save.
-                    writeStoredCloudConfig(cloudEndpoint(), v);
-                    rotateMcpBridge();
-                  }}
-                />
-              </StudioField>
-              <div class="ax-toolbar">
-                <StudioButton
-                  variant="ghost"
-                  testId="axis-studio-cloud-generate"
-                  onClick={() => {
-                    const key = generateDemoApiKey();
-                    setCloudApiKey(key);
-                    writeStoredCloudConfig(cloudEndpoint(), key);
-                    setCloudProbeTone('info');
-                    setCloudProbeMsg('Generated a local key. Save, then Test connection.');
-                    rotateMcpBridge({ immediate: true });
-                  }}
+                <StudioField
+                  label="Storage"
+                  for="axis-studio-storage"
+                  hint="Pick cloud to keep scripts on the Worker. The URL and API key below are shared with MCP. Git credentials stay in Script Library."
                 >
-                  Generate demo key
-                </StudioButton>
-                <StudioButton
-                  variant="ghost"
-                  testId="axis-studio-cloud-probe"
-                  disabled={cloudProbing()}
-                  onClick={() => {
-                    writeStoredCloudConfig(cloudEndpoint(), cloudApiKey());
-                    setCloudProbing(true);
-                    setCloudProbeMsg('');
-                    setCloudProbeTone('');
-                    void probeCloudStorage({
-                      endpoint: cloudEndpoint(),
-                      apiKey: cloudApiKey(),
-                    }).then((r) => {
-                      setCloudProbeTone(r.ok ? 'ok' : 'err');
-                      setCloudProbeMsg(r.message);
-                      setCloudProbing(false);
-                      if (r.ok) rotateMcpBridge({ immediate: true });
-                    });
-                  }}
-                >
-                  {cloudProbing() ? 'Testing…' : 'Test connection'}
-                </StudioButton>
-              </div>
-              <Show when={cloudProbeMsg()}>
-                <p
-                  class={
-                    cloudProbeTone() === 'ok'
-                      ? 'ax-hint ax-hint--accent'
-                      : cloudProbeTone() === 'err'
-                        ? 'ax-error'
-                        : 'ax-hint'
-                  }
-                  role="status"
-                  data-testid="axis-studio-cloud-probe-msg"
-                >
-                  {cloudProbeMsg()}
-                </p>
-              </Show>
-            </StudioSection>
+                  <StudioSelect
+                    id="axis-studio-storage"
+                    value={storage()}
+                    onChange={setStorage}
+                    testId="axis-studio-storage"
+                  >
+                    <For each={storages()}>
+                      {(s) => (
+                        <option value={s.id}>
+                          {s.name}
+                          {s.builtIn ? '' : ' (plugin)'}
+                        </option>
+                      )}
+                    </For>
+                  </StudioSelect>
+                </StudioField>
+              </StudioSection>
 
-            <StudioSection
-              title="MCP"
-              lead="Remote agents (Claude, Cursor, Grok, Inspector) control this tab through the Worker MCP server at POST /mcp. Uses the Worker API key in the section above."
-            >
-              <StudioToggle
-                id="axis-mcp-connect"
-                testId="axis-settings-mcp-connect"
-                checked={mcpConnect()}
-                onChange={(v) => {
-                  setMcpConnect(v);
-                  saveMcpPrefs({ connect: v });
-                  if (v) void connectMcpBridge();
-                  else disconnectMcpBridge();
-                }}
-                label="Connect this tab to MCP"
-                hint="When on, this browser session answers app_invoke / app_get / app_set. Worker-only tools (axis_run, scripts, onchain) work without a tab."
-              />
-              <div class="ax-inline">
-                <StudioStatus
-                  status={bridgeHealth(mcpBridge().status)}
-                  label={`Bridge ${mcpBridge().status}`}
-                />
-              </div>
-              <Show when={bridgeDetail(mcpBridge(), !!cloudApiKey())}>
-                <StudioHint>{bridgeDetail(mcpBridge(), !!cloudApiKey())}</StudioHint>
-              </Show>
-            </StudioSection>
-
-            <StudioSection
-              title="On-Chain"
-              lead="TVL / DEX traffic uses the AXIS Worker allowlisted proxy. Not a wallet — public metrics only."
-              testId="axis-settings-onchain"
-            >
-              <StudioHint>
-                <code>…/api/onchain/llama</code>
-                {' · '}
-                <code>…/api/onchain/gecko</code>
-                {' · '}
-                local <code>http://127.0.0.1:8787</code>
-              </StudioHint>
-              <div class="ax-toolbar">
-                <StudioButton
-                  variant="ghost"
-                  testId="axis-settings-open-onchain"
-                  onClick={() => {
-                    toggleOnchainPanel();
-                    props.onClose();
-                  }}
+              <StudioSection
+                title="Worker (cloud + MCP)"
+                lead="One key unlocks both: cloud script storage (/api/scripts) and the MCP server (/mcp + tab bridge). Stored in this browser only — sent as Authorization: Bearer."
+                testId="axis-settings-worker"
+              >
+                <StudioField label="Worker URL" for="axis-studio-cloud-endpoint">
+                  <StudioInput
+                    id="axis-studio-cloud-endpoint"
+                    mono
+                    value={cloudEndpoint()}
+                    placeholder="https://worker.axis.hoox.sh"
+                    spellcheck={false}
+                    testId="axis-studio-cloud-endpoint"
+                    onInput={setCloudEndpoint}
+                  />
+                </StudioField>
+                <StudioField
+                  label="Worker API key"
+                  for="axis-studio-cloud-apikey"
+                  hint="pn_… from /api/keys (admin), or Generate demo key for local wrangler with ALLOW_OPEN_KEYS=1. Saved in this browser as you type."
                 >
-                  Open On-Chain panel
-                </StudioButton>
-              </div>
-            </StudioSection>
+                  <StudioInput
+                    id="axis-studio-cloud-apikey"
+                    type="password"
+                    mono
+                    value={cloudApiKey()}
+                    placeholder="pn_…"
+                    spellcheck={false}
+                    autocomplete="off"
+                    testId="axis-studio-cloud-apikey"
+                    onInput={(v) => {
+                      setCloudApiKey(v);
+                      // Live-persist so MCP can attach without waiting for Save.
+                      writeStoredCloudConfig(cloudEndpoint(), v);
+                      rotateMcpBridge();
+                    }}
+                  />
+                </StudioField>
+                <div class="ax-toolbar">
+                  <StudioButton
+                    variant="ghost"
+                    testId="axis-studio-cloud-generate"
+                    onClick={() => {
+                      const key = generateDemoApiKey();
+                      setCloudApiKey(key);
+                      writeStoredCloudConfig(cloudEndpoint(), key);
+                      setCloudProbeTone('info');
+                      setCloudProbeMsg('Generated a local key. Save, then Test connection.');
+                      rotateMcpBridge({ immediate: true });
+                    }}
+                  >
+                    Generate demo key
+                  </StudioButton>
+                  <StudioButton
+                    variant="ghost"
+                    testId="axis-studio-cloud-probe"
+                    disabled={cloudProbing()}
+                    onClick={() => {
+                      writeStoredCloudConfig(cloudEndpoint(), cloudApiKey());
+                      setCloudProbing(true);
+                      setCloudProbeMsg('');
+                      setCloudProbeTone('');
+                      void probeCloudStorage({
+                        endpoint: cloudEndpoint(),
+                        apiKey: cloudApiKey(),
+                      }).then((r) => {
+                        setCloudProbeTone(r.ok ? 'ok' : 'err');
+                        setCloudProbeMsg(r.message);
+                        setCloudProbing(false);
+                        if (r.ok) rotateMcpBridge({ immediate: true });
+                      });
+                    }}
+                  >
+                    {cloudProbing() ? 'Testing…' : 'Test connection'}
+                  </StudioButton>
+                </div>
+                <Show when={cloudProbeMsg()}>
+                  <p
+                    class={
+                      cloudProbeTone() === 'ok'
+                        ? 'ax-hint ax-hint--accent'
+                        : cloudProbeTone() === 'err'
+                          ? 'ax-error'
+                          : 'ax-hint'
+                    }
+                    role="status"
+                    data-testid="axis-studio-cloud-probe-msg"
+                  >
+                    {cloudProbeMsg()}
+                  </p>
+                </Show>
+              </StudioSection>
+
+              <StudioSection
+                title="MCP"
+                lead="Remote agents (Claude, Cursor, Grok, Inspector) control this tab through the Worker MCP server at POST /mcp. Uses the Worker API key in the section above."
+              >
+                <StudioToggle
+                  id="axis-mcp-connect"
+                  testId="axis-settings-mcp-connect"
+                  checked={mcpConnect()}
+                  onChange={(v) => {
+                    setMcpConnect(v);
+                    saveMcpPrefs({ connect: v });
+                    if (v) void connectMcpBridge();
+                    else disconnectMcpBridge();
+                  }}
+                  label="Connect this tab to MCP"
+                  hint="When on, this browser session answers app_invoke / app_get / app_set. Worker-only tools (axis_run, scripts, onchain) work without a tab."
+                />
+                <div class="ax-inline">
+                  <StudioStatus
+                    status={bridgeHealth(mcpBridge().status)}
+                    label={`Bridge ${mcpBridge().status}`}
+                  />
+                </div>
+                <Show when={bridgeDetail(mcpBridge(), !!cloudApiKey())}>
+                  <StudioHint>{bridgeDetail(mcpBridge(), !!cloudApiKey())}</StudioHint>
+                </Show>
+              </StudioSection>
+
+              <StudioSection
+                title="On-Chain"
+                lead="TVL / DEX traffic uses the AXIS Worker allowlisted proxy. Not a wallet — public metrics only."
+                testId="axis-settings-onchain"
+              >
+                <StudioHint>
+                  <code>…/api/onchain/llama</code>
+                  {' · '}
+                  <code>…/api/onchain/gecko</code>
+                  {' · '}
+                  local <code>http://127.0.0.1:8787</code>
+                </StudioHint>
+                <div class="ax-toolbar">
+                  <StudioButton
+                    variant="ghost"
+                    testId="axis-settings-open-onchain"
+                    onClick={() => {
+                      toggleOnchainPanel();
+                      props.onClose();
+                    }}
+                  >
+                    Open On-Chain panel
+                  </StudioButton>
+                </div>
+              </StudioSection>
             </div>
-            </div>
+          </div>
         </SettingsTabPanel>
 
         <SettingsTabPanel id="data" active={tab()}>
-            <div class="ax-split">
+          <div class="ax-split">
+            <StudioSection
+              title="Source & stream plugins"
+              lead="Advanced fields hidden from the topbar. How many bars to load is under General → Historical bars."
+              testId="axis-settings-plugins"
+            >
+              <PluginConfigRow layout="stacked" showAdvanced />
+            </StudioSection>
+            <div class="ax-split-col">
+              <ExchangeCredentialsPanel />
               <StudioSection
-                title="Source & stream plugins"
-                lead="Advanced fields hidden from the topbar. How many bars to load is under General → Historical bars."
-                testId="axis-settings-plugins"
+                title="Dataset manager"
+                lead="Cached OHLCV datasets (bars + metadata). Flush deletes every dataset from memory, the local IndexedDB cache, and the remote dataset stores (git / cloud). Chart bars stay until the symbol is reloaded."
+                testId="axis-settings-datasets"
               >
-                <PluginConfigRow layout="stacked" showAdvanced />
+                <div class="ax-toolbar">
+                  <StudioButton
+                    variant="danger"
+                    testId="axis-settings-flush-datasets"
+                    disabled={flushingDatasets()}
+                    onClick={() => void onFlushDatasets()}
+                  >
+                    <Icons.trash />
+                    {flushingDatasets() ? 'Flushing…' : 'Flush dataset manager'}
+                  </StudioButton>
+                </div>
+                <Show when={datasetFlushMsg()}>
+                  <p
+                    class={datasetFlushTone() === 'err' ? 'ax-error' : 'ax-hint ax-hint--accent'}
+                    role="status"
+                    data-testid="axis-settings-flush-datasets-msg"
+                  >
+                    {datasetFlushMsg()}
+                  </p>
+                </Show>
               </StudioSection>
-              <div class="ax-split-col">
-                <ExchangeCredentialsPanel />
-                <StudioSection
-                  title="Dataset manager"
-                  lead="Cached OHLCV datasets (bars + metadata). Flush deletes every dataset from memory, the local IndexedDB cache, and the remote dataset stores (git / cloud). Chart bars stay until the symbol is reloaded."
-                  testId="axis-settings-datasets"
-                >
-                  <div class="ax-toolbar">
-                    <StudioButton
-                      variant="danger"
-                      testId="axis-settings-flush-datasets"
-                      disabled={flushingDatasets()}
-                      onClick={() => void onFlushDatasets()}
-                    >
-                      <Icons.trash />
-                      {flushingDatasets() ? 'Flushing…' : 'Flush dataset manager'}
-                    </StudioButton>
-                  </div>
-                  <Show when={datasetFlushMsg()}>
-                    <p
-                      class={
-                        datasetFlushTone() === 'err' ? 'ax-error' : 'ax-hint ax-hint--accent'
-                      }
-                      role="status"
-                      data-testid="axis-settings-flush-datasets-msg"
-                    >
-                      {datasetFlushMsg()}
-                    </p>
-                  </Show>
-                </StudioSection>
-              </div>
             </div>
+          </div>
         </SettingsTabPanel>
 
         <SettingsTabPanel id="editor" active={tab()}>
-            <EditorIntelPanel />
+          <EditorIntelPanel />
         </SettingsTabPanel>
 
         <SettingsTabPanel id="theme" active={tab()}>
-            <div class="ax-stack">
-              <ThemePanel />
-              <EffectsPanel />
-            </div>
+          <div class="ax-stack">
+            <ThemePanel />
+            <EffectsPanel />
+          </div>
         </SettingsTabPanel>
 
         <SettingsTabPanel id="topbar" active={tab()}>
-            <div class="ax-split-col">
+          <div class="ax-split-col">
+            <StudioSection
+              title="Topbar groups"
+              lead="Choose which groups stay in the top bar. Changes apply immediately."
+            >
+              <TopbarToggleGrid items={TOPBAR_GROUPS} />
+            </StudioSection>
+            <Show when={store.topbar.panels}>
               <StudioSection
-                title="Topbar groups"
-                lead="Choose which groups stay in the top bar. Changes apply immediately."
+                title="Panel buttons"
+                lead="Buttons inside the Panels group. Hidden when that group is off."
               >
-                <TopbarToggleGrid items={TOPBAR_GROUPS} />
+                <TopbarToggleGrid items={TOPBAR_PANELS} columns={3} />
               </StudioSection>
-              <Show when={store.topbar.panels}>
-                <StudioSection
-                  title="Panel buttons"
-                  lead="Buttons inside the Panels group. Hidden when that group is off."
-                >
-                  <TopbarToggleGrid items={TOPBAR_PANELS} columns={3} />
-                </StudioSection>
-              </Show>
-            </div>
+            </Show>
+          </div>
         </SettingsTabPanel>
 
         <SettingsTabPanel id="keyboard" active={tab()}>
-            <StudioSection
-              title="Keyboard shortcuts"
-              lead="Record a chord for any binding. Same-scope conflicts are flagged and still saved."
-            >
-              <KeyboardSettingsPanel />
-            </StudioSection>
+          <StudioSection
+            title="Keyboard shortcuts"
+            lead="Record a chord for any binding. Same-scope conflicts are flagged and still saved."
+          >
+            <KeyboardSettingsPanel />
+          </StudioSection>
         </SettingsTabPanel>
 
         <SettingsTabPanel id="notifications" active={tab()}>
-            <NotificationsPanel />
+          <NotificationsPanel />
         </SettingsTabPanel>
       </div>
       <StudioFooter status={footerStatus()}>
