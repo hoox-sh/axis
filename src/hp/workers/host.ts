@@ -304,38 +304,15 @@ export class IngestHostClient implements WireClient {
   }
 
   awaitFrame(id: string, timeoutMs = 10_000): Promise<WireFrame> {
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(id);
-        reject(new Error(`Redesign2 frame wait timed out for id: ${id}`));
-      }, timeoutMs);
-      this.pending.set(id, {
-        resolve: (frame) => {
-          clearTimeout(timer);
-          resolve(frame);
-        },
-        reject: (err) => {
-          clearTimeout(timer);
-          reject(err);
-        },
-        timer,
-      });
-    });
+    return this.pending.awaitFrame(id, timeoutMs);
   }
 
   addReconnectHandler(fn: () => void): () => void {
-    this.reconnectHandlers.add(fn);
-    return () => {
-      this.reconnectHandlers.delete(fn);
-    };
+    return this.reconnects.add(fn);
   }
 
   private dropPending(err: Error): void {
-    for (const [id, waiter] of this.pending) {
-      this.pending.delete(id);
-      clearTimeout(waiter.timer);
-      waiter.reject(err);
-    }
+    this.pending.dropAll(err);
   }
 }
 
