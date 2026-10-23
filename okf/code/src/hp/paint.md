@@ -7,7 +7,7 @@ tags: [code, hp, paint]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-23T15:10:49Z
+  at: 2026-10-23T19:00:54Z
 sources:
   - id: tree
     resource: "src/hp/paint"
@@ -18,7 +18,7 @@ okf_lock: generated
 
 # Files
 
-* `copy-out-lwc.ts` — CopyOutRequest, CopyOutResult, copyOutBars, copyOutPage, copyOutTail, copyOutViewport
+* `copy-out-lwc.ts` — CopyOutRequest, CopyOutResult, chartRangeToAbsolute, copyOutBars, copyOutPage, copyOutTail, copyOutViewport
 * `visual-attr.ts` — BAR_FLAG_CLOSED, BAR_FLAG_FORMING, FillFromHotRequest, FillVisualOptions, VISUAL_CANDLE_BYTES, VISUAL_CANDLE_F32, VISUAL_OFFSET, VISUAL_RECORD_WORDS, VISUAL_TAIL, VisualAttrBuffer, VisualPalette, VisualSourceBar
 
 # Depends on
@@ -32,4 +32,5 @@ okf_lock: generated
 * [src/hp](/code/src/hp.md)
 * [src/hp/render](/code/src/hp/render.md)
 * [src/mcp](/code/src/mcp.md)
+* [src/streams](/code/src/streams.md)
 * [tests/hp](/code/tests/hp.md)

@@ -42,6 +42,7 @@ import type { Bar } from '../../store/types';
 import { HOT_CAP } from '../axb1/constants';
 import type { ColdStore } from './cold-store';
 import type { HotBarTicks, HotBuffer } from './hot-buffer';
+import { barToTicks } from './hot-buffer';
 
 /** One page holds at most the hot capacity — a jump replaces, never grows. */
 export const PAGE_CAPACITY = HOT_CAP;
@@ -106,6 +107,28 @@ export function publishViewportPage(
   }
   buffer.publishPage(page, { pageFromIndex: fromAbs });
   return page.length;
+}
+
+/**
+ * Main-thread cold page → page slot, converted with the buffer's own price
+ * scale (HP PR 5 wiring, §9.2).
+ *
+ * The main thread owns the full chart window, but only ingest may write the
+ * SAB — so the ingest worker calls this on a `page` message instead of the
+ * main thread writing directly (a second writer would tear the shared
+ * seqlock generation). Empty `bars` retires the page.
+ */
+export function publishBarPage(buffer: HotBuffer, bars: readonly Bar[], fromAbs: number): number {
+  if (!bars.length) {
+    buffer.clearPage();
+    return 0;
+  }
+  const scale = buffer.priceScale;
+  return publishViewportPage(
+    buffer,
+    bars.map((b) => barToTicks(b, scale)),
+    fromAbs,
+  );
 }
 
 /**

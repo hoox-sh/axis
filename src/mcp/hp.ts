@@ -54,6 +54,8 @@ export type HpRingView = {
   hotFrom: number | null;
   hotCount: number | null;
   chartBars: number;
+  /** Cold page slot (§9.2): the range the GPU overlay paints outside hot. */
+  page: { active: boolean; from: number | null; count: number | null };
   /** Newest bar time in the published ring slot (unix seconds). */
   tailTime: number | null;
   chartTailTime: number;
@@ -128,6 +130,7 @@ function ringView(): HpRingView {
       hotFrom: null,
       hotCount: null,
       chartBars,
+      page: { active: false, from: null, count: null },
       tailTime: null,
       chartTailTime: chartTail,
       aligned: false,
@@ -145,12 +148,18 @@ function ringView(): HpRingView {
   const seriesLen = hotFrom !== null && hotCount !== null ? hotFrom + hotCount : null;
   const rawTail = copyOutTail(hot, 1)?.bars[0]?.time;
   const tailTime = num(rawTail);
+  const pageActive = hot.pageActive;
   return {
     present: true,
     seriesLen,
     hotFrom,
     hotCount,
     chartBars,
+    page: {
+      active: pageActive,
+      from: pageActive ? num(c.pageFromIndex) : null,
+      count: pageActive ? num(c.pageCount) : null,
+    },
     tailTime,
     chartTailTime: chartTail,
     aligned:
@@ -236,7 +245,11 @@ function verdictOf(
     }
     return {
       code: 'live',
-      message: `Hot ring covers the chart's last ${ring.hotCount} bars (seq ${ring.seq}); overlay canvas not painting yet — viewport outside the ring window or the first sized frame pending.`,
+      message: `Hot ring covers the chart's last ${ring.hotCount} bars (seq ${ring.seq}); overlay canvas not painting yet — ${
+        ring.page.active
+          ? `cold page covers [${ring.page.from}, +${ring.page.count}) and the viewport fill is catching up`
+          : 'viewport outside the ring window and no cold page yet (the pager re-requests while the viewport stays cold)'
+      } or the first sized frame pending.`,
     };
   }
   if (chip.rung === 1) {

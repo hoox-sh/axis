@@ -24,6 +24,7 @@ import { computeHotLayout, HP_SECTION_ALIGN, HOT_COLUMNS } from '../../src/hp/me
 import {
   copyOutPageFromCold,
   planViewportPage,
+  publishBarPage,
   publishViewportPage,
 } from '../../src/hp/memory/page-buffer';
 import {
@@ -352,5 +353,30 @@ describe('rung 1 — no SAB at all', () => {
     } finally {
       delete g.sessionStorage;
     }
+  });
+});
+
+describe('publishBarPage — main-thread cold page (§9.2 wiring)', () => {
+  test('converts Bars with the buffer scale and activates the page', () => {
+    const buf = mustAllocate();
+    buf.priceScale = 2; // cents: the worker converts with its own scale
+    const n = publishBarPage(buf, [bar(60, 101.5), bar(120, 102.25)], 40);
+    expect(n).toBe(2);
+    expect(buf.pageActive).toBe(true);
+    expect(buf.pageFromIndex).toBe(40);
+    expect(buf.pageCount).toBe(2);
+    const first = buf.readPageBar(0);
+    expect(first.time).toBe(60);
+    expect(first.close).toBeCloseTo(101.5, 10);
+    expect(buf.readPageBar(1).close).toBeCloseTo(102.25, 10);
+  });
+
+  test('an empty page retires a stale page instead of leaving it active', () => {
+    const buf = mustAllocate();
+    publishBarPage(buf, [bar(60)], 40);
+    expect(buf.pageActive).toBe(true);
+    expect(publishBarPage(buf, [], 0)).toBe(0);
+    expect(buf.pageActive).toBe(false);
+    expect(buf.pageCount).toBe(0);
   });
 });

@@ -32,7 +32,7 @@ import {
   type HotBarTicks,
   type HotBuffer,
 } from '../../src/hp/memory/hot-buffer';
-import { copyOutBars } from '../../src/hp/paint/copy-out-lwc';
+import { copyOutBars, chartRangeToAbsolute } from '../../src/hp/paint/copy-out-lwc';
 
 const DEFAULT_WINDOW = 10_000;
 
@@ -226,5 +226,43 @@ describe('copy-out bars through appendLiveBar', () => {
     expect(appended).toHaveLength(0); // a slide repaints, it is not incremental
     expect(store.bars).toHaveLength(3);
     expect(store.bars[0]?.time).toBe(180); // head moved: 60 and 120 are gone
+  });
+});
+
+describe('chartRangeToAbsolute — chart index to ring absolute (§9.2)', () => {
+  // Ring [900, 1000) is the tail window of a 1000-bar chart: chart index
+  // `i` is absolute `900 + i`.
+  it('maps the tail window by identity', () => {
+    expect(chartRangeToAbsolute(1000, 900, 100, 900, 100)).toEqual({
+      fromAbs: 900,
+      count: 100,
+    });
+    expect(chartRangeToAbsolute(1000, 900, 100, 950, 10)).toEqual({
+      fromAbs: 950,
+      count: 10,
+    });
+  });
+
+  it('clips the right margin (LWC slots with no bars)', () => {
+    expect(chartRangeToAbsolute(1000, 900, 100, 990, 50)).toEqual({
+      fromAbs: 990,
+      count: 10,
+    });
+  });
+
+  it('clips a head underflow to bar 0', () => {
+    expect(chartRangeToAbsolute(1000, 900, 100, -5, 10)).toEqual({
+      fromAbs: 0,
+      count: 5,
+    });
+  });
+
+  it('returns null past the tail, for empty windows, or degenerate ranges', () => {
+    expect(chartRangeToAbsolute(1000, 900, 100, 1000, 10)).toBeNull();
+    expect(chartRangeToAbsolute(1000, 900, 100, 0, 0)).toBeNull();
+    expect(chartRangeToAbsolute(0, 0, 0, 0, 10)).toBeNull();
+    // The ring can never hold more than the chart (identity would lie).
+    expect(chartRangeToAbsolute(50, 0, 100, 0, 10)).toBeNull();
+    expect(chartRangeToAbsolute(1000, 900, 100, Number.NaN, 10)).toBeNull();
   });
 });

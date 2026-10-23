@@ -92,7 +92,7 @@ import { onchainManagerState } from '../onchain/manager';
 import { seriesSeriesKey } from '../onchain/keys';
 import { PLOT_PALETTE, RIGHT_PRICE_SCALE_WIDTH, VOID } from './series-factory';
 import { parseCssColorToRgb, startGpuOverlay } from '../hp/render/gpu-overlay';
-import { getLiveHotBuffer } from '../streams/stream-live';
+import { getLiveHotBuffer, noteHpViewport } from '../streams/stream-live';
 import { reportUiError } from '../ui/boot-errors';
 
 export {
@@ -384,6 +384,16 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
           fallbackPalette: {
             up: parseCssColorToRgb(VOID.up) ?? 0x3ddc97,
             down: parseCssColorToRgb(VOID.down) ?? 0xf07178,
+          },
+          // Cold-page pager (§9.2): the overlay reports its absolute viewport
+          // every frame; the stream pager posts a cold page to the ingest
+          // worker while the viewport stays out of the hot ring.
+          onViewport: (fromAbs, count) => {
+            try {
+              noteHpViewport(fromAbs, count);
+            } catch {
+              /* paging is best-effort */
+            }
           },
         });
       } catch (err: unknown) {

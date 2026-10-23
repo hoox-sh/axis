@@ -32,6 +32,7 @@ import {
 } from '../../engine/ws-client';
 import type { WireClient, WireFrame } from '../../engine/live-wire';
 import { PendingRequests, ReconnectHandlers, wireStats } from '../../engine/wire-bookkeeping';
+import type { Bar } from '../../store/types';
 import { isolationProbe } from '../capabilities';
 import { hpSabMode, isHpEnabled } from '../feature-flag';
 import { allocateHotBuffer, type HotBuffer } from '../memory/hot-buffer';
@@ -280,6 +281,26 @@ export class IngestHostClient implements WireClient {
 
   unsubscribe(id: string): void {
     this.send({ type: 'unsubscribe', id, ts: Date.now() });
+  }
+
+  /**
+   * Cold page → ingest worker (HP PR 5 wiring, §9.2).
+   *
+   * Best-effort by design: the caller is a per-frame overlay pump, so this
+   * never throws and never spawns a worker just for paging — no worker, no
+   * page, and the overlay clears for a frame. Empty `bars` retires the page.
+   */
+  publishColdPage(fromAbs: number, bars: Bar[]): void {
+    try {
+      if (!this.worker) return;
+      this.worker.postMessage({
+        type: 'page',
+        fromAbs: Math.trunc(fromAbs),
+        bars,
+      });
+    } catch {
+      /* paging is best-effort — the overlay clears for a frame */
+    }
   }
 
   awaitFrame(id: string, timeoutMs = 10_000): Promise<WireFrame> {

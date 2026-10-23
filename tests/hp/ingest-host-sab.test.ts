@@ -132,3 +132,32 @@ describe('IngestHostClient hot ring gate', () => {
     client.disconnect();
   });
 });
+
+describe('IngestHostClient.publishColdPage (§9.2 wiring)', () => {
+  test('a cold page crosses the port; empty bars retire it', async () => {
+    setIsolated(true);
+    const loop = new SabLoopback();
+    const client = isolatedClient(loop);
+    await client.connect();
+
+    const bars = [{ time: 60, open: 1, high: 1, low: 1, close: 1, volume: 1 }];
+    client.publishColdPage(40, bars);
+    const page = loop.inbound.find((m) => m.type === 'page');
+    expect(page).toMatchObject({ type: 'page', fromAbs: 40, bars });
+
+    client.publishColdPage(0, []);
+    const release = loop.inbound.filter((m) => m.type === 'page').at(-1);
+    expect(release).toMatchObject({ type: 'page', fromAbs: 0, bars: [] });
+    client.disconnect();
+  });
+
+  test('no worker, no post — never spawns or throws', () => {
+    setIsolated(true);
+    const loop = new SabLoopback();
+    const client = isolatedClient(loop);
+    // Not connected: publishColdPage is best-effort and returns silently.
+    client.publishColdPage(40, [{ time: 60, open: 1, high: 1, low: 1, close: 1, volume: 2 }]);
+    expect(loop.inbound).toHaveLength(0);
+    client.disconnect();
+  });
+});

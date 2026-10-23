@@ -51,8 +51,9 @@
  * - the live wire has no hot ring (flag off, not isolated, no wire yet),
  * - the ring and the chart disagree on series length (symbol switch or
  *   snapshot merge in flight),
- * - the visible logical range's left edge leaves the hot window (cold
- *   viewport paging is a later phase — LWC owns cold ranges),
+ * - the visible logical range's left edge leaves the hot window *and* no
+ *   cold page covers it yet (the pager re-requests every ~200 ms while the
+ *   viewport stays cold — LWC owns the range until the page lands),
  * - the right price scale is not linear (log/percentage/indexed scales
  *   round-trip differently — LWC owns those), or
  * - the visible bar count is absurd (zoomed out past the sanity cap).
@@ -64,10 +65,11 @@ import type { IChartApi } from 'lightweight-charts';
 import { isolationProbe } from '../capabilities';
 import { hpGpuMode } from '../feature-flag';
 import type { HotBuffer } from '../memory/hot-buffer';
-import { copyOutTail } from '../paint/copy-out-lwc';
+import { copyOutTail, chartRangeToAbsolute } from '../paint/copy-out-lwc';
 import {
   allocateVisualAttr,
   fillVisualAttrFromHot,
+  fillVisualAttrFromViewport,
   type VisualAttrBuffer,
   type VisualPalette,
 } from '../paint/visual-attr';
@@ -112,6 +114,12 @@ export type GpuOverlayDeps = {
   getHotBuffer: () => HotBuffer | null;
   /** Palette used until the candle series exists (theme fallback). */
   fallbackPalette: VisualPalette;
+  /**
+   * Cold-page pager (HP PR 5 wiring, §9.2): the overlay reports its absolute
+   * viewport every frame; the pager posts a cold page to the ingest worker
+   * when the viewport leaves the hot ring (throttled, best-effort).
+   */
+  onViewport?: (fromAbs: number, count: number) => void;
 };
 
 /**
@@ -208,10 +216,11 @@ export function overlayViewport(
  * the ring's newest bar is assumed to be the chart's newest bar (the caller
  * verifies that by tail time before drawing).
  *
- * Returns `null` when the window cannot host the range: the ring holds more
- * bars than the chart, the range starts in colder history than the ring
- * (cold paging is not wired — clear rather than misalign), or it starts past
- * the chart tail (LWC's right margin is handled by `rightEdgeIndex`).
+ * Returns `null` when the hot window cannot host the range: the ring holds
+ * more bars than the chart, the range starts in colder history than the ring
+ * (the caller falls back to the merged hot+page viewport fill, §9.2), or it
+ * starts past the chart tail (LWC's right margin is handled by
+ * `rightEdgeIndex`).
  */
 export function ringWindowPlacement(args: {
   chartBars: number;
@@ -376,27 +385,51 @@ export function startGpuOverlay(deps: GpuOverlayDeps): () => void {
       clear();
       return;
     }
-    // Left-containment (cold paging unwired): a ring cannot host colder
-    // history than its window, so a viewport that starts left of the window
-    // draws nothing — clear, never keep a stale or shifted frame. The right
-    // edge may stick out into LWC's right margin: those slots hold no bars
-    // for either painter, and `rightEdgeIndex` keeps every existing record
-    // anchored exactly where LWC puts it.
-    const place = ringWindowPlacement({
-      chartBars,
-      hotCount,
-      fromBase: geom.fromBase,
-    });
-    if (!place) {
+    // Chart index → absolute (§9.2): the ring is the chart's tail window
+    // (tail identity verified above), so chart index `i` is absolute
+    // `hotFrom + hotCount − chartBars + i` — the same mapping the pager and
+    // the page slot use, so all three can never disagree. A viewport left of
+    // bar 0 or past the tail has no bars for either painter — clear.
+    if (geom.fromBase < 0) {
       clear();
       return;
     }
-
+    const absRange = chartRangeToAbsolute(
+      chartBars,
+      control.hotFromIndex,
+      hotCount,
+      geom.fromBase,
+      geom.visibleCount,
+    );
+    if (!absRange) {
+      clear();
+      return;
+    }
+    const absFrom = absRange.fromAbs;
+    // Keep the pager posted: a cold viewport needs its page, a hot viewport
+    // retires a stale one. Throttled and best-effort inside the callback.
+    try {
+      deps.onViewport?.(absFrom, geom.visibleCount);
+    } catch {
+      /* paging must never break the frame */
+    }
+    // Hot-covered viewports fill from the hot window exactly as before; cold
+    // ones fill the merged hot+page viewport (§9.2) — the fill stops at the
+    // first uncovered bar and LWC keeps painting underneath. The price scale
+    // resolves first: a non-linear scale belongs to LWC either way.
     const y = priceScaleLinear(series, h);
     if (!y) {
       clear();
       return;
     }
+    const place = ringWindowPlacement({
+      chartBars,
+      hotCount,
+      fromBase: geom.fromBase,
+    });
+    const req = place
+      ? { fromAbs: control.hotFromIndex + place.hotIndex, visibleCount: geom.visibleCount, y }
+      : { fromAbs: absFrom, visibleCount: geom.visibleCount, y };
 
     if (!attr || attr.capacity < geom.visibleCount) {
       attr = allocateVisualAttr(geom.visibleCount);
@@ -407,17 +440,16 @@ export function startGpuOverlay(deps: GpuOverlayDeps): () => void {
     }
     resolvePalette(series);
 
-    const n = fillVisualAttrFromHot(
-      hot,
-      attr,
-      {
-        fromAbs: control.hotFromIndex + place.hotIndex,
-        visibleCount: geom.visibleCount,
-        y,
-      },
-      palette,
-    );
-    if (n == null || n <= 0) return; // torn sample — keep the previous frame
+    const n = place
+      ? fillVisualAttrFromHot(hot, attr, req, palette)
+      : fillVisualAttrFromViewport(hot, attr, req, palette);
+    if (n == null || n <= 0) {
+      // Hot miss: a torn sample — keep the previous frame. Cold miss: the
+      // page is stale or still in flight — clear, never hold a stale frame
+      // at the wrong scroll position (the pager re-requests every ~200 ms).
+      if (!place) clear();
+      return;
+    }
 
     lastVp = {
       width: w,

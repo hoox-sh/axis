@@ -27,6 +27,7 @@
 
 import type { Redesign2Frame } from '../../engine/frames';
 import type { WireFrame } from '../../engine/live-wire';
+import type { Bar } from '../../store/types';
 
 export const INGEST_CONNECT_TIMEOUT_MS = 5_000;
 export const INGEST_HEARTBEAT_MS = 15_000;
@@ -37,6 +38,13 @@ export type HostToIngest =
   /** `authToken` rides once on connect and is never echoed back. */
   | { type: 'connect'; url: string; authToken?: string; hotSab?: SharedArrayBuffer }
   | { type: 'send'; frame: WireFrame }
+  /**
+   * Main → ingest cold page (HP PR 5 wiring, §9.2): the main thread owns the
+   * full chart window, so it slices the cold range and the single writer
+   * (ingest) replaces the page slot with it. Empty `bars` retires the page.
+   * Best-effort — a dropped page only clears the overlay for a frame.
+   */
+  | { type: 'page'; fromAbs: number; bars: Bar[] }
   | { type: 'disconnect' };
 
 export type IngestToHost =

@@ -246,7 +246,8 @@ export type FillFromHotRequest = {
  *
  * `null` — keep the previous frame — when a write is in flight for the whole
  * retry budget, the window is empty, or the viewport misses the hot window
- * (cold ranges need the page slot, a later PR). Never paints a torn sample.
+ * (cold ranges need the page slot — see `fillVisualAttrFromViewport`).
+ * Never paints a torn sample.
  */
 export function fillVisualAttrFromHot(
   buffer: HotBuffer,
@@ -313,6 +314,98 @@ export function fillVisualAttrFromHot(
     // Seqlock verify: a write that landed mid-copy discards the whole sample.
     if (buffer.control.generation !== sample.generation) continue;
     return n;
+  }
+  return null;
+}
+
+/**
+ * Fill a viewport from the hot window **and** the cold page slot (HP PR 5
+ * wiring, §9.2) — one seqlock sample for both sections.
+ *
+ * Same dispatch as `copyOutViewport`, but merged into one fill: the cold
+ * prefix (records `[0, coldLen)`) reads the page slot, the hot suffix reads
+ * the published hot slot, and `x_index` stays the slot within the viewport
+ * so the renderer needs no section awareness. Volume is normalized over the
+ * merged covered prefix.
+ *
+ * The fill is a **contiguous run from `req.fromAbs`**: it stops at the first
+ * bar neither section covers (a gap means the page is stale or pending — the
+ * caller re-requests it and LWC keeps painting underneath). `null` when
+ * nothing is covered, the window is empty, or a write is in flight for the
+ * whole retry budget. Never paints a torn sample.
+ */
+export function fillVisualAttrFromViewport(
+  buffer: HotBuffer,
+  buf: VisualAttrBuffer,
+  req: FillFromHotRequest,
+  palette: VisualPalette,
+  attempts = 8,
+): number | null {
+  if (!Number.isFinite(req.fromAbs) || !Number.isFinite(req.visibleCount)) return null;
+  if (!(req.y.yMax > req.y.yMin)) return null;
+  const wantFrom = Math.trunc(req.fromAbs);
+  const wantCount = Math.trunc(req.visibleCount);
+  if (wantCount <= 0) return null;
+
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const sample = buffer.control.sample();
+    if (!sample) continue; // odd generation — a write is in flight
+
+    const hotFrom = buffer.control.hotFromIndex;
+    const hotCount = buffer.control.hotCount;
+    const pageOn = buffer.pageActive;
+    const pageFrom = buffer.control.pageFromIndex;
+    const pageCount = buffer.control.pageCount;
+    if (hotCount <= 0 && !(pageOn && pageCount > 0)) return null;
+
+    const scale = buffer.priceScale;
+    const slot = sample.slot;
+    const inHot = (abs: number): boolean => abs >= hotFrom && abs < hotFrom + hotCount;
+    const inPage = (abs: number): boolean =>
+      pageOn && abs >= pageFrom && abs < pageFrom + pageCount;
+
+    // Pass 1: the covered prefix length and its visible volume maximum.
+    let len = 0;
+    let maxVolume = 0;
+    while (len < wantCount && len < buf.capacity) {
+      const abs = wantFrom + len;
+      let v: number | undefined;
+      if (inHot(abs)) v = buffer.readBar(slot, abs - hotFrom, scale).volume ?? 0;
+      else if (inPage(abs)) v = buffer.readPageBar(abs - pageFrom, scale).volume ?? 0;
+      else break; // gap — the page is stale or pending; stop the run
+      if (v > maxVolume) maxVolume = v;
+      len++;
+    }
+    if (len <= 0) return null;
+
+    // Pass 2: write the records. x_index is the slot within this fill.
+    const { f32, u32 } = buf;
+    for (let i = 0; i < len; i++) {
+      const abs = wantFrom + i;
+      const bar = inHot(abs)
+        ? buffer.readBar(slot, abs - hotFrom, scale)
+        : buffer.readPageBar(abs - pageFrom, scale);
+      const open = bar.open ?? 0;
+      const high = bar.high ?? 0;
+      const low = bar.low ?? 0;
+      const close = bar.close ?? 0;
+      const volume = bar.volume ?? 0;
+      const word = i * VISUAL_RECORD_WORDS;
+      f32[word] = Math.fround(i);
+      f32[word + 1] = priceToNdc(open, req.y.yMin, req.y.yMax);
+      f32[word + 2] = priceToNdc(high, req.y.yMin, req.y.yMax);
+      f32[word + 3] = priceToNdc(low, req.y.yMin, req.y.yMax);
+      f32[word + 4] = priceToNdc(close, req.y.yMin, req.y.yMax);
+      f32[word + 5] = normalizeVolume(volume, maxVolume);
+      const flags = (bar.closed === false ? BAR_FLAG_FORMING : BAR_FLAG_CLOSED) >>> 0;
+      const rising = close >= open;
+      u32[word + (VISUAL_OFFSET.color >> 2)] = packRgba(rising ? palette.up : palette.down, 194);
+      u32[word + (VISUAL_OFFSET.flags >> 2)] = flags;
+    }
+
+    // Seqlock verify: a write that landed mid-copy discards the whole sample.
+    if (buffer.control.generation !== sample.generation) continue;
+    return len;
   }
   return null;
 }

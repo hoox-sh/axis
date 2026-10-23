@@ -34,6 +34,7 @@ import {
   allocateVisualAttr,
   fillVisualAttr,
   fillVisualAttrFromHot,
+  fillVisualAttrFromViewport,
   normalizeVolume,
   packRgba,
   priceToNdc,
@@ -294,5 +295,127 @@ describe('fillVisualAttrFromHot', () => {
     ).toBeNull();
     // Non-finite request is refused.
     expect(fillVisualAttrFromHot(hotBuf, buf, { ...req, fromAbs: Number.NaN }, PALETTE)).toBeNull();
+  });
+});
+
+describe('fillVisualAttrFromViewport — merged hot+page fill (§9.2)', () => {
+  /** Hot window [2, 4) + cold page [0, 2): a zoomed-out viewport [0, 4). */
+  function hotWithPage() {
+    const hotBuf = hot();
+    hotBuf.publish([ticks(300, BAR_FLAG_CLOSED), ticks(400, BAR_FLAG_CLOSED)], { hotFromIndex: 2 });
+    hotBuf.publishPage([ticks(100, BAR_FLAG_CLOSED), ticks(200, BAR_FLAG_CLOSED)], {
+      pageFromIndex: 0,
+    });
+    return hotBuf;
+  }
+
+  const R1 = VISUAL_CANDLE_BYTES >> 2; // second record starts 8 words in
+
+  it('fills a hot-only viewport exactly like the hot fill', () => {
+    const hotBuf = hotWithPage();
+    const buf = allocateVisualAttr(2);
+    if (!buf) throw new Error('alloc');
+    const n = fillVisualAttrFromViewport(
+      hotBuf,
+      buf,
+      { fromAbs: 2, visibleCount: 2, y: Y },
+      PALETTE,
+    );
+    expect(n).toBe(2);
+    expect(buf.f32[0]).toBe(0);
+    expect(buf.f32[1]).toBe(priceToNdc(300, 100, 200));
+    expect(buf.f32[R1]).toBe(1);
+    expect(buf.f32[R1 + 4]).toBe(priceToNdc(400, 100, 200));
+  });
+
+  it('fills a page-only cold viewport from the page slot', () => {
+    const hotBuf = hotWithPage();
+    const buf = allocateVisualAttr(2);
+    if (!buf) throw new Error('alloc');
+    const n = fillVisualAttrFromViewport(
+      hotBuf,
+      buf,
+      { fromAbs: 0, visibleCount: 2, y: Y },
+      PALETTE,
+    );
+    expect(n).toBe(2);
+    expect(buf.f32[0]).toBe(0);
+    expect(buf.f32[1]).toBe(priceToNdc(100, 100, 200));
+    expect(buf.f32[R1]).toBe(1);
+    expect(buf.f32[R1 + 4]).toBe(priceToNdc(200, 100, 200));
+  });
+
+  it('merges the page prefix and hot suffix with continuous x_index', () => {
+    const hotBuf = hotWithPage();
+    const buf = allocateVisualAttr(4);
+    if (!buf) throw new Error('alloc');
+    const n = fillVisualAttrFromViewport(
+      hotBuf,
+      buf,
+      { fromAbs: 0, visibleCount: 4, y: Y },
+      PALETTE,
+    );
+    expect(n).toBe(4);
+    const closes = [0, 1, 2, 3].map((i) => buf.f32[i * R1 + 4]);
+    expect(closes).toEqual([100, 200, 300, 400].map((c) => priceToNdc(c, 100, 200)));
+    expect([buf.f32[0], buf.f32[R1], buf.f32[2 * R1], buf.f32[3 * R1]]).toEqual([0, 1, 2, 3]);
+  });
+
+  it('stops at the first bar neither section covers (stale page gap)', () => {
+    const hotBuf = hot();
+    hotBuf.publish([ticks(500, BAR_FLAG_CLOSED)], { hotFromIndex: 5 });
+    hotBuf.publishPage([ticks(100, BAR_FLAG_CLOSED)], { pageFromIndex: 0 });
+    const buf = allocateVisualAttr(4);
+    if (!buf) throw new Error('alloc');
+    // Absolute 1..4 are covered by nothing: only the page prefix survives.
+    const n = fillVisualAttrFromViewport(
+      hotBuf,
+      buf,
+      { fromAbs: 0, visibleCount: 4, y: Y },
+      PALETTE,
+    );
+    expect(n).toBe(1);
+    expect(buf.f32[1]).toBe(priceToNdc(100, 100, 200));
+  });
+
+  it('normalizes volume over the merged covered prefix', () => {
+    const hotBuf = hot();
+    hotBuf.publish([ticks(300, BAR_FLAG_CLOSED, 8)], { hotFromIndex: 1 });
+    hotBuf.publishPage([ticks(100, BAR_FLAG_CLOSED, 4)], { pageFromIndex: 0 });
+    const buf = allocateVisualAttr(2);
+    if (!buf) throw new Error('alloc');
+    const n = fillVisualAttrFromViewport(
+      hotBuf,
+      buf,
+      { fromAbs: 0, visibleCount: 2, y: Y },
+      PALETTE,
+    );
+    expect(n).toBe(2);
+    expect(buf.f32[5]).toBe(0.5); // page volume 4 of merged max 8
+    expect(buf.f32[R1 + 5]).toBe(1);
+  });
+
+  it('returns null when nothing is covered, torn, or degenerate', () => {
+    const buf = allocateVisualAttr(1);
+    if (!buf) throw new Error('alloc');
+    const req = { fromAbs: 0, visibleCount: 1, y: Y };
+
+    // Neither section has bars.
+    expect(fillVisualAttrFromViewport(hot(), buf, req, PALETTE)).toBeNull();
+
+    const hotBuf = hotWithPage();
+    // Viewport past everything both sections cover.
+    expect(fillVisualAttrFromViewport(hotBuf, buf, { ...req, fromAbs: 99 }, PALETTE)).toBeNull();
+    // A write in flight poisons both sections (shared generation).
+    hotBuf.beginWrite();
+    expect(fillVisualAttrFromViewport(hotBuf, buf, req, PALETTE)).toBeNull();
+    hotBuf.commit();
+    // Degenerate y-range and non-finite requests are refused.
+    expect(
+      fillVisualAttrFromViewport(hotBuf, buf, { ...req, y: { yMin: 5, yMax: 5 } }, PALETTE),
+    ).toBeNull();
+    expect(
+      fillVisualAttrFromViewport(hotBuf, buf, { ...req, visibleCount: 0 }, PALETTE),
+    ).toBeNull();
   });
 });

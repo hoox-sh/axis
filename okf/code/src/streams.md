@@ -7,7 +7,7 @@ tags: [code, streams]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-23T13:20:02Z
+  at: 2026-10-23T19:00:54Z
 sources:
   - id: tree
     resource: "src/streams"
@@ -21,7 +21,7 @@ okf_lock: generated
 * `catalog.ts` — BUILTIN_STREAMS, StreamPlugin, _resetStreamRegistrationFlag, binanceStream, bybitStream, ccxtWsStream, coinbaseStream, defaultStreamForSource, ensureStreamsRegistered, foldVenueCandle, getStream, krakenStream
 * `multiplex.ts` — ENGINE_OWNED_APPEND_CAP, ENGINE_OWNED_TICK_MIN_MS, EngineOwnedPaintDiff, HEAVY_LIVE_RERUN_BARS, LIVE_RERUN_MAX_CONCURRENT, StopLiveOpts, StopLiveReason, StreamPlugin, _awaitEnginePaintForTests, _getLiveEpochForTests, _getPendingLiveBarCountForTests, _getRerunAttemptCountForTests
 * `reconnect-ws.ts` — RECONNECT_DEFAULTS, ReconnectableWsOpts, WsStatus, nextBackoffMs, openReconnectableWs
-* `stream-live.ts` — StreamFallbackError, VerifyClosedBarInput, VerifyClosedBarOutcome, VerifyStrength, getLiveHotBuffer, mergeEngineSnapshot, resetStreamWire, scriptHistoryBars, streamDriveSeries, streamEvalScript, streamRouteActive, streamSeriesTick
+* `stream-live.ts` — StreamFallbackError, VerifyClosedBarInput, VerifyClosedBarOutcome, VerifyStrength, getLiveHotBuffer, mergeEngineSnapshot, noteHpViewport, resetStreamWire, scriptHistoryBars, streamDriveSeries, streamEvalScript, streamRouteActive
 * `ws-venues.ts` — VENUE_WS_HOSTS, VenueId, VenueWsConfig, buildVenueWs
 
 # Depends on
@@ -33,6 +33,7 @@ okf_lock: generated
 * [src/engine](/code/src/engine.md)
 * [src/engines](/code/src/engines.md)
 * [src/hp/memory](/code/src/hp/memory.md)
+* [src/hp/paint](/code/src/hp/paint.md)
 * [src/hp/workers](/code/src/hp/workers.md)
 * [src/indicators](/code/src/indicators.md)
 * [src/optimize](/code/src/optimize.md)

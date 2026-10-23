@@ -7,7 +7,7 @@ tags: [architecture, doc, docs, hp-engine]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-23T13:51:13Z
+  at: 2026-10-23T19:00:54Z
 sources:
   - id: tree
     resource: "docs/architecture/hp-engine.mdx"
@@ -41,5 +41,6 @@ Repo path `docs/architecture/hp-engine.mdx`.
 * [src/hp/render](/code/src/hp/render.md)
 * [src/hp/workers](/code/src/hp/workers.md)
 * [src/mcp](/code/src/mcp.md)
+* [src/streams](/code/src/streams.md)
 * [tests](/code/tests.md)
 * [worker/src](/code/worker/src.md)

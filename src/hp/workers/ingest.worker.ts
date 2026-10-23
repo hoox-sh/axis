@@ -28,6 +28,7 @@
 import { HOT_CAP } from '../axb1/constants';
 import { HotBuffer } from '../memory/hot-buffer';
 import { computeHotLayout } from '../memory/layout';
+import { publishBarPage } from '../memory/page-buffer';
 import { decodeInbound, IngestCursorTable, TipCoalescer } from './ingest-core';
 import { HotRingWriter, routeThroughRing } from './hot-ring-writer';
 import {
@@ -255,6 +256,9 @@ scope.onmessage = (ev: MessageEvent<HostToIngest>) => {
     if (msg.hotSab) {
       try {
         ring = new HotRingWriter(new HotBuffer(msg.hotSab, computeHotLayout(HOT_CAP)));
+        // A fresh bind (symbol switch, reconnect) invalidates any cold page
+        // the previous series published — retire it, the pager re-requests.
+        ring.buffer.clearPage();
         post({ type: 'hot', active: true });
       } catch {
         ring = null;
@@ -277,5 +281,18 @@ scope.onmessage = (ev: MessageEvent<HostToIngest>) => {
     table.rememberOutbound(msg.frame);
     if (ws?.readyState !== 1) return;
     ws.send(JSON.stringify(msg.frame));
+    return;
+  }
+  if (msg.type === 'page') {
+    // Cold page replace from the main thread's chart window (HP PR 5
+    // wiring, §9.2): the worker stays the SAB's single writer, so a page
+    // replace can never tear a concurrent hot-window publish.
+    if (ring && Number.isFinite(msg.fromAbs) && Array.isArray(msg.bars)) {
+      try {
+        publishBarPage(ring.buffer, msg.bars, Math.trunc(msg.fromAbs));
+      } catch {
+        /* paging is best-effort — the overlay clears for a frame */
+      }
+    }
   }
 };

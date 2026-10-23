@@ -199,3 +199,37 @@ export function copyOutTail(buffer: HotBuffer, count: number, attempts = 8): Cop
   const n = Math.min(count, hotCount);
   return copyOutBars(buffer, { fromAbs: hotFrom + hotCount - n, count: n }, attempts);
 }
+
+/**
+ * Map a chart-window range to the ring's absolute index space (HP PR 5
+ * wiring, §9.2).
+ *
+ * The ring is the chart's **tail window** by identity (the ring's newest bar
+ * is the chart's newest bar — callers verify that by tail time first), so
+ * chart index `i` is absolute `hotFrom + hotCount − chartBars + i`. The
+ * range is clipped to `[0, chartBars)`; `null` when nothing mappable remains
+ * (empty window, degenerate range, or the ring holding more than the chart).
+ *
+ * Both the cold-page pager and the GL viewport fill use this, so the page
+ * `fromAbs` and the fill's `fromAbs` can never disagree.
+ */
+export function chartRangeToAbsolute(
+  chartBars: number,
+  hotFrom: number,
+  hotCount: number,
+  fromBase: number,
+  count: number,
+): { fromAbs: number; count: number } | null {
+  if (!Number.isFinite(chartBars) || !Number.isFinite(hotFrom) || !Number.isFinite(hotCount)) {
+    return null;
+  }
+  if (!Number.isFinite(fromBase) || !Number.isFinite(count)) return null;
+  if (!(chartBars > 0) || !(hotCount > 0) || chartBars < hotCount) return null;
+  const n = Math.trunc(count);
+  if (n <= 0) return null;
+  const base = Math.trunc(fromBase);
+  const from = Math.max(base, 0);
+  const to = Math.min(base + n, Math.trunc(chartBars));
+  if (to <= from) return null;
+  return { fromAbs: hotFrom + hotCount - Math.trunc(chartBars) + from, count: to - from };
+}

@@ -118,6 +118,10 @@ export class HotRingWriter {
       this.buffer.bumpEpoch();
       this.boundId = id;
     }
+    // Any (re-)seed can move the window's absolute base (a snapshot with a
+    // different depth shifts `hotFrom`), so a cold page from the previous
+    // window must not linger — the pager re-requests it on the next frame.
+    this.buffer.clearPage();
     const cap = this.buffer.layout.cap;
     const total = bars.length;
     const n = Math.min(total, cap);
