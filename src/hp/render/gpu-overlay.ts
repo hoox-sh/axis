@@ -179,11 +179,20 @@ export function overlayViewport(
   const fromBase = Math.floor(range.from);
   const visibleCount = Math.ceil(range.to) - fromBase;
   if (visibleCount <= 0 || visibleCount > MAX_OVERLAY_BARS) return null;
+  // LWC's visible range is inset by half a slot on each side: the logical
+  // span is `width / barSpacing − 1` (see `_private__updateVisibleRange`),
+  // not `width / barSpacing`. Recover the real spacing from the range.
+  const barSpacing = contentWidth / (range.to - range.from + 1);
+  if (!Number.isFinite(barSpacing) || barSpacing <= 0) return null;
   return {
     fromBase,
     visibleCount,
-    barSpacing: contentWidth / (range.to - range.from),
-    rightEdgeIndex: range.to - fromBase,
+    barSpacing,
+    // LWC's `indexToCoordinate` is
+    // `x = width − (to − i + 0.5) · barSpacing − 1`;
+    // the renderer draws record i at `width − (rightEdgeIndex − i) · barSpacing`,
+    // so the half-slot phase and the 1px inset fold into the anchor.
+    rightEdgeIndex: range.to - fromBase + 0.5 + 1 / barSpacing,
   };
 }
 
@@ -283,6 +292,31 @@ export function startGpuOverlay(deps: GpuOverlayDeps): () => void {
     return { yMin: bottom, yMax: top };
   };
 
+  /**
+   * LWC's candle content box: the pane's own canvas size. The pane element also
+   * carries the price-scale canvas and a bottom slot for the time scale, so
+   * arithmetic on the element rect is off by the scale width and by a pixel of
+   * time-scale gutter. Falls back to the arithmetic when no canvas exists yet.
+   */
+  function paneContentSize(
+    paneEl: HTMLElement,
+    paneRect: DOMRect,
+    scaleWidth: number,
+    timeScaleHeight: number,
+  ): { w: number; h: number } {
+    for (const el of Array.from(paneEl.querySelectorAll('canvas'))) {
+      const r = el.getBoundingClientRect();
+      if (r.width <= 2 || r.height <= 2) continue;
+      if (Math.abs(r.left - paneRect.left) < 1 && Math.abs(r.top - paneRect.top) < 1) {
+        return { w: Math.floor(r.width), h: Math.floor(r.height) };
+      }
+    }
+    return {
+      w: Math.floor(paneRect.width - scaleWidth),
+      h: Math.floor(paneRect.height - timeScaleHeight),
+    };
+  }
+
   const drawOnce = (): void => {
     const chart = deps.getPriceChart();
     const paneEl = deps.getPricePaneEl();
@@ -315,9 +349,7 @@ export function startGpuOverlay(deps: GpuOverlayDeps): () => void {
     const ps = chart.priceScale('right');
     const paneRect = paneEl.getBoundingClientRect();
     const hostRect = deps.host.getBoundingClientRect();
-    const tsHeight = chart.timeScale().height();
-    const w = Math.floor(paneRect.width - ps.width());
-    const h = Math.floor(paneRect.height - tsHeight);
+    const { w, h } = paneContentSize(paneEl, paneRect, ps.width(), chart.timeScale().height());
     if (w < 2 || h < 2) {
       clear();
       return;

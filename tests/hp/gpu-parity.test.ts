@@ -313,21 +313,26 @@ describe('hot fill ≡ CPU reference fill (bit parity)', () => {
 });
 
 describe('overlayViewport (LWC anchor math)', () => {
-  it('places every record where LWC puts its logical bar, fractionals included', () => {
-    const geom = overlayViewport({ from: 100.7, to: 140.2 }, 790);
+  it('reproduces LWC indexToCoordinate exactly (half-slot phase + 1px inset)', () => {
+    const W = 790;
+    const from = 100.7;
+    const to = 140.2;
+    const geom = overlayViewport({ from, to }, W);
     expect(geom).not.toBeNull();
     if (!geom) return;
     expect(geom.fromBase).toBe(100);
     expect(geom.visibleCount).toBe(41); // ceil(140.2) − 100
-    expect(geom.barSpacing).toBeCloseTo(790 / 39.5, 9);
-    expect(geom.rightEdgeIndex).toBeCloseTo(40.2, 9);
+    // LWC's visible range spans `width / barSpacing − 1` logical steps.
+    const bs = W / (to - from + 1);
+    expect(geom.barSpacing).toBeCloseTo(bs, 12);
+    expect(geom.rightEdgeIndex).toBeCloseTo(to - geom.fromBase + 0.5 + 1 / bs, 12);
 
-    // Parity identity: GL distance-from-right for bar b equals LWC's own
-    // (to − b) · spacing — the definition of "aligned by construction".
+    // Renderer: x = W − (rightEdgeIndex − (b − fromBase)) · bs.
+    // LWC:      x = W − (to − b + 0.5) · bs − 1   (indexToCoordinate).
     for (let b = geom.fromBase; b < geom.fromBase + geom.visibleCount; b++) {
-      const gl = (geom.rightEdgeIndex - (b - geom.fromBase)) * geom.barSpacing;
-      const lwc = (140.2 - b) * geom.barSpacing;
-      expect(Math.abs(gl - lwc)).toBeLessThan(1e-9);
+      const glX = W - (geom.rightEdgeIndex - (b - geom.fromBase)) * geom.barSpacing;
+      const lwcX = W - (to - b + 0.5) * bs - 1;
+      expect(Math.abs(glX - lwcX)).toBeLessThan(1e-9);
     }
   });
 
@@ -337,14 +342,15 @@ describe('overlayViewport (LWC anchor math)', () => {
     for (let i = 0; i < 10; i++) bars.push(mk(60 * (i + 1), 100, 105, 98, 102, i + 1));
     buf.publish(bars, { hotFromIndex: 90 }); // series ends at index 100
 
-    // Range reaches to 105 — five margin slots LWC keeps empty.
-    const geom = overlayViewport({ from: 90, to: 105 }, 300);
+    const W = 300;
+    const from = 90;
+    const to = 105; // five margin slots LWC keeps empty
+    const geom = overlayViewport({ from, to }, W);
     expect(geom).not.toBeNull();
     if (!geom) return;
     expect(geom.fromBase).toBe(90);
     expect(geom.visibleCount).toBe(15);
-    expect(geom.barSpacing).toBe(20);
-    expect(geom.rightEdgeIndex).toBe(15);
+    expect(geom.barSpacing).toBeCloseTo(W / 16, 12);
 
     // The fill yields only the ten bars that exist; the margin tail is
     // absent, but every present record keeps its LWC anchor.
@@ -359,9 +365,9 @@ describe('overlayViewport (LWC anchor math)', () => {
     expect(n).toBe(10);
     for (let i = 0; i < 10; i++) {
       const b = geom.fromBase + i;
-      const gl = (geom.rightEdgeIndex - i) * geom.barSpacing;
-      const lwc = (105 - b) * geom.barSpacing;
-      expect(gl).toBe(lwc);
+      const glX = W - (geom.rightEdgeIndex - i) * geom.barSpacing;
+      const lwcX = W - (to - b + 0.5) * geom.barSpacing - 1;
+      expect(Math.abs(glX - lwcX)).toBeLessThan(1e-9);
       expect(vis.f32[i * WORDS] ?? Number.NaN).toBe(i);
     }
   });
