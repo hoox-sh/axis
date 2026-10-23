@@ -77,7 +77,11 @@ export type HpChip = {
 
 const OFF_VALUE = 'json · lwc';
 
-function painterWord(rung: HpRung): string {
+function painterWord(rung: HpRung, renderer: RendererKind): string {
+  // Rung 4 / `webgpu` has no painter yet (HP-4 reserved): the probe can
+  // select it, but LWC paints — saying "WebGPU" here would claim a backend
+  // that does not exist.
+  if (renderer === 'webgpu') return 'LWC (WebGPU has no painter yet — HP-4 reserved)';
   if (rung === 4) return 'WebGPU';
   if (rung === 3) return 'WebGL2';
   return 'LWC';
@@ -131,14 +135,16 @@ export function hpChip(input: HpChipInput = {}): HpChip {
     storedRung: input.storedRung,
   });
   const transport = rung === 1 || !probe.sab || sab === 'off' ? 'copy' : 'sab';
-  const painter = rung >= 3 ? 'gpu' : 'lwc';
+  // `webgpu` is selectable but not paintable (no WebGPU painter ships yet) —
+  // the painter stays LWC even at rung 4, so the value must not claim `+gpu`.
+  const painter = rung >= 3 && renderer !== 'webgpu' ? 'gpu' : 'lwc';
   const transportWord = transport === 'sab' ? 'SAB ring' : 'transferable copy';
 
   return {
     value: `hp · ${transport}+${painter}`,
     health: 'healthy',
     statusLabel: `HP-${rung}`,
-    detail: `Selected HP-${rung} · ${transportWord} · painter ${painterWord(rung)} · ${
+    detail: `Selected HP-${rung} · ${transportWord} · painter ${painterWord(rung, renderer)} · ${
       probe.isolated ? 'cross-origin isolated' : 'not cross-origin isolated'
     }`,
     rung,

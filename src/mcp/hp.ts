@@ -238,9 +238,16 @@ function verdictOf(
       };
     }
     if (paint.gpuMode !== 'webgl2') {
+      // `webgpu` (forced or auto-selected) has no painter — HP-4 is reserved.
+      // Say so explicitly: otherwise "dormant" reads like the overlay *could*
+      // engage on this rung.
+      const noPainter =
+        chip.renderer === 'webgpu'
+          ? ' WebGPU has no painter yet (HP-4 reserved) — LWC paints.'
+          : '';
       return {
         code: 'live',
-        message: `Hot ring covers the chart's last ${ring.hotCount} bars (seq ${ring.seq}); overlay dormant — axis.engine.hp.gpu is '${paint.gpuMode}' (forced 'webgl2' engages it).`,
+        message: `Hot ring covers the chart's last ${ring.hotCount} bars (seq ${ring.seq}); overlay dormant — axis.engine.hp.gpu is '${paint.gpuMode}' (forced 'webgl2' engages it).${noPainter}`,
       };
     }
     return {

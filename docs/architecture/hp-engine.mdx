@@ -34,9 +34,9 @@ AXIS ships an opt-in **high-performance plane** behind `axis.engine.hp.enabled` 
 | **HP-1** | any | AXB1 binary **or** JSON, decoded in the ingest worker | transferable `ArrayBuffer` copy to main | LWC `series.update` / window `setData` | iOS WebView, non-isolated tab |
 | **HP-2** | `crossOriginIsolated` | AXB1 into SAB ring | hot SAB double-buffer + IndexedDB cold | LWC samples completed generations via copy-out of the visible range | Chromium desktop, Tauri, isolated Pages |
 | **HP-3** | isolated preferred | same as HP-2/1 | same | WebGL2 instanced quads; LWC remains for scale chrome or full fallback | GPU without WebGPU |
-| **HP-4** | isolated preferred | same | same | WebGPU instanced quads; float32 NDC only at this boundary | Chromium + Vulkan/Metal |
+| **HP-4** | isolated preferred | same | same | **reserved — no painter ships yet**; a `webgpu` outcome falls through to LWC (float32 NDC only at this boundary when HP-4 lands) | — |
 
-**Selection** (`selectHpRung` in `src/hp/capabilities.ts`): kill switch → HP-0; not opted in → HP-0; WebGPU with `gpu` ≠ `off` → HP-4; else WebGL2 → HP-3; else isolated → HP-2; else HP-1. A SAB allocation failure clamps the tab to HP-1 for the session (`sessionStorage` `axis.hp.rung`); the cap only ever clamps downward.
+**Selection** (`selectHpRung` in `src/hp/capabilities.ts`): kill switch → HP-0; not opted in → HP-0; WebGPU with `gpu` ≠ `off` → HP-4; else WebGL2 → HP-3; else isolated → HP-2; else HP-1. HP-4 is selection only — no WebGPU painter exists yet, so the HUD chip, Settings status, and `hp.get` verdict report the painter as LWC until HP-4 lands. A SAB allocation failure clamps the tab to HP-1 for the session (`sessionStorage` `axis.hp.rung`); the cap only ever clamps downward.
 
 ## Flags
 
@@ -46,7 +46,7 @@ Set these in **Studio → Settings → General → High-performance engine** —
 | --- | --- | --- |
 | `axis.engine.hp.enabled` | unset / off | master opt-in |
 | `axis.engine.hp.disabled` | unset | hard kill — wins over enable |
-| `axis.engine.hp.gpu` | `auto` | `auto` / `off` / `webgl2` / `webgpu` |
+| `axis.engine.hp.gpu` | `auto` | `auto` / `off` / `webgl2` / `webgpu` — `webgpu` selects the rung only (no painter ships yet; LWC paints) |
 | `axis.engine.hp.sab` | `auto` | `auto` / `off` (force the transferable copy) |
 | `axis.hp.rung` (session) | — | last successful rung; clamps down after a failure |
 
@@ -84,14 +84,14 @@ COOP was `same-origin-allow-popups` (popup-safe but never isolating) until this 
 
 ## Paint: LWC, then the GPU rung
 
-- Probe order (`probeRendererKind`): **WebGPU → WebGL2 → LWC**. The `off` flag lands on LWC even where a GPU exists, and a forced mode never claims a backend the probe did not find.
+- Probe order (`probeRendererKind`): **WebGPU → WebGL2 → LWC**. The `off` flag lands on LWC even where a GPU exists, and a forced mode never claims a backend the probe did not find. **Caveat:** no WebGPU painter ships yet — a `webgpu` outcome is selection only (HP-4 reserved) and every consumer falls through to LWC; the chip, Settings status, and `hp.get` say so explicitly instead of claiming `+gpu`.
 - The WebGL2 painter (`src/hp/render/webgl2-renderer.ts`) draws the viewport as one instanced call: one VAO, one 32-byte `VisualCandle` record per candle, a fragment shader that carves body + wick from a single quad. Float32 is **NDC-only** at this boundary (WebGPU has no float64); price ticks stay in the SAB.
 - The factory is null-never-throws: any context or shader failure falls through to LWC instead of failing the page.
 - **Status:** the stacked GPU overlay lands with `src/hp/render/gpu-overlay.ts` — a transparent WebGL2 canvas over the price pane's content area, fed from the HP-2 hot ring, engaging **only** on the forced `gpu=webgl2` rung (LWC paints candles translucent; stacking would composite darker, so `auto`/`off`/`webgpu` stay dormant). The ring is placed as the chart's **tail window** by identity (ring tail time = chart tail time → slot `j` is chart index `chartBars − hotCount + j`), so a short engine snapshot on a long REST chart paints the visible tail; a viewport reaching into colder history fills from the cold page slot (§9.2 wiring — the overlay reports its absolute viewport, the main thread slices the chart window, ingest replaces the page — instead of clearing). The anchor mirrors LWC's own `indexToCoordinate` exactly — `x = width − (to − i + 0.5) · barSpacing − 1`, with the spacing recovered from the range (`width / (to − from + 1)`) and the content box taken from the pane's canvas — and the candle widths come from LWC's own `optimalCandlestickWidth` (plus its flat one-pixel wick), measured in CSS px against the pixel ratio of LWC's pane canvas, so the GL candles sit inside LWC's pixels instead of a sheared approximation. Screenshots (`chart.screenshot` and the Screenshot menu) composite the overlay under the drawings with a frame-synced copy, so a captured image shows the GPU candles without needing `preserveDrawingBuffer`. PaneManager is not touched and LWC keeps painting every candle underneath — hiding LWC's candle series stays gated on production measurement (plan §14.2).
 
 ## HUD chip
 
-Workers Manager → **Chart plane** shows the selected rung in plan format: `hp · sab+gpu`, `hp · copy+lwc`, or `json · lwc` (transport memory + painter). `json · lwc` is exactly today's path, so the default-off state reads truthfully. On an opted-in, cross-origin isolated Chromium with a GPU the chip reads `hp · sab+gpu`: the SAB hot ring feeds both the rAF copy-out and the stacked GPU overlay (the overlay itself still waits for the forced `gpu=webgl2` rung — selection is not wiring). The chip reports the *selection*.
+Workers Manager → **Chart plane** shows the selected rung in plan format: `hp · sab+gpu`, `hp · copy+lwc`, or `json · lwc` (transport memory + painter). `json · lwc` is exactly today's path, so the default-off state reads truthfully. On an opted-in, cross-origin isolated Chromium with a GPU the chip reads `hp · sab+gpu`: the SAB hot ring feeds both the rAF copy-out and the stacked GPU overlay (the overlay itself still waits for the forced `gpu=webgl2` rung — selection is not wiring). The chip reports the *selection* — except for WebGPU: HP-4 has no painter yet, so a `webgpu` outcome reads `hp · …+lwc` with a `no painter yet` note instead of claiming `+gpu`.
 
 ## MCP observability
 
@@ -117,7 +117,7 @@ Both are pure reads — no flag writes, no wire start, no SAB allocation, no sec
 | PR 4 hot ring + PR 6 calc scratch/commit | ring landed + wired (`appendLiveBar`); calc landed as library + tests |
 | PR 5 viewport page + cold page | **wired** — pager (`noteHpViewport`), `page` message + `publishBarPage`, merged hot+page viewport fill; worker-side `ColdStore`/IDB adapter stays library-only |
 | PR 7 / 7b PYNE AXB1 emit, Worker binary relay | landed (VPS deploy is a separate operator step) |
-| PR 8 WebGL2 renderer + probe seam | landed as library + GPU parity tests; wired through the HP-3 overlay |
+| PR 8 WebGL2 renderer + probe seam | WebGL2 landed as library + GPU parity tests and wired through the HP-3 overlay; **WebGPU is probe-only (no painter)** — `webgpu` outcomes fall through to LWC and the chip/Settings/`hp.get` report it honestly |
 | PR 9 docs, playbook, HUD chip | this page |
 | HP-2 SAB hot ring → chart wiring | landed — opt-in producer: ingest writes the ring, the chart samples it on rAF through `appendLiveBar` |
 | GPU canvas wiring (ChartHost stacked canvas, render loop) | landed — transparent WebGL2 overlay over the price pane on the forced `gpu=webgl2` rung, fed from the hot ring; PaneManager untouched, LWC keeps painting (plan §14.2) |

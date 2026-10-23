@@ -102,11 +102,11 @@ describe('hpChip — engaged rung selection', () => {
     expect(chip.renderer).toBe('webgl2');
   });
 
-  it('isolated + WebGPU → HP-4 · sab+gpu', () => {
+  it('isolated + WebGPU → HP-4 selected but LWC paints (no painter yet)', () => {
     const chip = hpChip({ host: host({ isolated: true, webgpu: true }), ...ON });
-    expect(chip.value).toBe('hp · sab+gpu');
+    expect(chip.value).toBe('hp · sab+lwc');
     expect(chip.rung).toBe(4);
-    expect(chip.detail).toContain('painter WebGPU');
+    expect(chip.detail).toContain('painter LWC (WebGPU has no painter yet');
     expect(chip.renderer).toBe('webgpu');
   });
 

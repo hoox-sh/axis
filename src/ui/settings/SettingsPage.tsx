@@ -796,7 +796,7 @@ export function SettingsPage(props: { onClose: () => void; initialTab?: Settings
                 <StudioField
                   label="GPU painter"
                   for="axis-hp-gpu"
-                  hint="WebGL2 stacks GPU candles over the price pane. Auto only selects the rung — Lightweight Charts keeps painting until WebGL2 is forced."
+                  hint="WebGL2 stacks GPU candles over the price pane. Auto only selects the rung — Lightweight Charts keeps painting until WebGL2 is forced. WebGPU has no painter yet, so it selects the rung only."
                 >
                   <StudioSelect
                     id="axis-hp-gpu"
@@ -812,7 +812,7 @@ export function SettingsPage(props: { onClose: () => void; initialTab?: Settings
                   >
                     <option value="auto">Auto (select the rung only)</option>
                     <option value="webgl2">WebGL2 overlay (forced)</option>
-                    <option value="webgpu">WebGPU (when available)</option>
+                    <option value="webgpu">WebGPU (no painter yet — rung only)</option>
                     <option value="off">Off (Lightweight Charts paints)</option>
                   </StudioSelect>
                 </StudioField>
