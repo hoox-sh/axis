@@ -591,6 +591,11 @@ export const serverEngine: EnginePlugin = {
             // mode is only the fallback.
             mode: (wsResult.mode || mode) as string,
             scriptType: 'meta',
+            // Same axis contract as the REST path: when the backend ships
+            // bar times, they travel in meta so session/stream applies can
+            // time-join instead of tail-pinning (hp2 follow-up to the SOLUSDT
+            // desync — WS runs never carried the axis).
+            engineTimes: true,
           });
         }
       } catch (err) {

@@ -65,7 +65,10 @@ beforeEach(() => {
   _resetDataSessionMemo();
   _resetChartDataSessionForTests();
   captured = [];
-  setStore('bars', SAMPLE_BARS.map((b) => ({ ...b })));
+  setStore(
+    'bars',
+    SAMPLE_BARS.map((b) => ({ ...b })),
+  );
   setStore('endpoint', ENDPOINT);
   setStore('source', 'binance-rest');
   setStore('symbol', 'BTCUSDT');
@@ -247,6 +250,64 @@ describe('alignApplySeries staleNoAxis', () => {
     expect(aligned.staleNoAxis).toBe(false);
     expect(aligned.seriesMap.plot0).toEqual([null, null, 11, 12, 13]);
   });
+
+  it('skips a fresh full run whose window grossly mismatches without axis', () => {
+    // 20-bar engine window on a 5-bar chart, no axis, not a live push: this
+    // is a different window, not mid-run appends — pinning would displace
+    // every value (the 9577-on-5000 desync).
+    const result = {
+      status: 'success',
+      series: { plot0: Array.from({ length: 20 }, (_, i) => i) },
+      meta: sessionMeta(),
+    } as unknown as RunResult;
+    const aligned = alignApplySeries('indicator("x", overlay=true)\nplot(close)', result, bars, {
+      silent: true,
+    });
+    expect(aligned.staleNoAxis).toBe(true);
+    expect(aligned.resultTimes).toBeNull();
+  });
+
+  it('skips a gross plots-array mismatch without axis', () => {
+    const result = {
+      status: 'success',
+      plots: Array.from({ length: 20 }, (_, i) => i),
+      series: {},
+      meta: sessionMeta(),
+    } as unknown as RunResult;
+    const aligned = alignApplySeries('indicator("x", overlay=true)\nplot(close)', result, bars, {
+      silent: true,
+    });
+    expect(aligned.staleNoAxis).toBe(true);
+  });
+
+  it('keeps pinning a deliberate free-tier clamp without axis (session windowBars)', () => {
+    // The engine evaluated the newest 3 bars on purpose — tail-align is the
+    // documented clamp behavior, not a stale window.
+    const result = {
+      status: 'success',
+      series: { plot0: [11, 12, 13] },
+      meta: sessionMeta({ windowBars: 3 }),
+    } as unknown as RunResult;
+    const aligned = alignApplySeries('indicator("x", overlay=true)\nplot(close)', result, bars, {
+      silent: true,
+    });
+    expect(aligned.staleNoAxis).toBe(false);
+    expect(aligned.seriesMap.plot0).toEqual([null, null, 11, 12, 13]);
+  });
+
+  it('pins a small mismatch without axis (bars appended mid-run)', () => {
+    // 7-long series on a 5-bar chart: within tolerance, still a race.
+    const result = {
+      status: 'success',
+      series: { plot0: [1, 2, 3, 4, 5, 6, 7] },
+      meta: sessionMeta(),
+    } as unknown as RunResult;
+    const aligned = alignApplySeries('indicator("x", overlay=true)\nplot(close)', result, bars, {
+      silent: true,
+    });
+    expect(aligned.staleNoAxis).toBe(false);
+    expect(aligned.seriesMap.plot0).toEqual([3, 4, 5, 6, 7]);
+  });
 });
 
 describe('alignSeriesToTimes', () => {
@@ -293,7 +354,9 @@ describe('alignSeriesToTimes', () => {
   });
 
   it('keeps equal-length aligned series on their own bars', () => {
-    expect(alignSeriesToTimes([1, 2, 3], [T(0), T(1), T(2)], [T(0), T(1), T(2)])).toEqual([1, 2, 3]);
+    expect(alignSeriesToTimes([1, 2, 3], [T(0), T(1), T(2)], [T(0), T(1), T(2)])).toEqual([
+      1, 2, 3,
+    ]);
   });
 });
 

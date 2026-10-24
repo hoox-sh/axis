@@ -51,7 +51,8 @@ import { resolveScriptDisplayName } from './run-target';
 import { appendLog } from '../store';
 
 export interface ResolvedRunContext {
-  ind: { inputValues?: Record<string, unknown>; strategyProps?: Record<string, unknown> } | undefined;
+  ind:
+    { inputValues?: Record<string, unknown>; strategyProps?: Record<string, unknown> } | undefined;
   inputs: Record<string, unknown> | undefined;
   strategyProps: Record<string, unknown>;
   bars: Bar[];
@@ -84,7 +85,9 @@ export function resolveRunContext(
   // Capture the exact bars the engine will evaluate so the resulting series
   // align 1:1 with the time axis we build below. A live tick or an HPO
   // holdout slice must not desync series from bars (see getOhlcvTimesForApply).
-  const bars = (Array.isArray(opts.bars) && opts.bars.length ? opts.bars : store.bars || []) as Bar[];
+  const bars = (
+    Array.isArray(opts.bars) && opts.bars.length ? opts.bars : store.bars || []
+  ) as Bar[];
   // A live tick is only a chart-series tick when the caller did NOT override
   // the window. Record that here: by the time `runScript` runs, `store.bars`
   // may already be a different array (DSM progressive slices, live appends),
@@ -105,12 +108,14 @@ export interface AlignedApplySeries {
   resultTimes: number[] | null;
   chartWindowBars: number;
   /**
-   * A live push from a session/stream run whose engine shipped no bar axis
-   * while its series length disagrees with the chart window (gap fill,
-   * backfill, slide while the tab was idle). Index tail-pinning would shift
-   * stale values onto new bars and LWC would span the `na` gap as a long
-   * diagonal — the apply must be skipped instead so the last good plots stay
-   * on screen until a full run with an axis arrives.
+   * A session/stream run whose engine shipped no bar axis while its series
+   * length disagrees with the chart window: a live push over a moved window
+   * (gap fill, backfill, slide while the tab was idle), or any run whose
+   * length misses the window by more than a few appended bars (a different
+   * window, not a race). Index tail-pinning would shift stale values onto
+   * new bars and LWC would span the `na` gap as a long diagonal — the apply
+   * must be skipped instead so the last good plots stay on screen until a
+   * full run with an axis arrives.
    */
   staleNoAxis: boolean;
 }
@@ -171,7 +176,7 @@ export function alignApplySeries(
 ): AlignedApplySeries {
   const ohlcvTimes = getOhlcvTimesForApply(bars);
   const plotMeta = {
-    ...(((result as { plot_meta?: Record<string, PlotMetaEntry> }).plot_meta) || {}),
+    ...((result as { plot_meta?: Record<string, PlotMetaEntry> }).plot_meta || {}),
     ...((result.meta?.plot_meta || {}) as Record<string, PlotMetaEntry>),
   };
   const sessionVia = String(result.meta?.sessionVia || '');
@@ -186,10 +191,11 @@ export function alignApplySeries(
     engineWindowBars !== chartWindowBars;
   const rawSeries = (result.series || {}) as Record<string, unknown[] | (number | null)[]>;
   let lengthMismatch = false;
+  let seriesLen = 0;
   for (const arr of Object.values(rawSeries)) {
-    if (Array.isArray(arr) && arr.length > 0 && arr.length !== chartWindowBars) {
-      lengthMismatch = true;
-      break;
+    if (Array.isArray(arr)) {
+      if (arr.length > 0 && arr.length !== chartWindowBars) lengthMismatch = true;
+      if (arr.length > seriesLen) seriesLen = arr.length;
     }
   }
   // The legacy `plots[]` fallback is zipped against the chart axis by index,
@@ -197,6 +203,19 @@ export function alignApplySeries(
   if (!lengthMismatch && Array.isArray(result.plots) && result.plots.length) {
     if (result.plots.length !== chartWindowBars) lengthMismatch = true;
   }
+  if (Array.isArray(result.plots) && result.plots.length > seriesLen) {
+    seriesLen = result.plots.length;
+  }
+  /**
+   * Tolerance for the fresh-run tail-pin: bars appended (or a forming bar
+   * sliding in) while the engine evaluated shift lengths by a handful, and
+   * pinning bridges those. Anything beyond it is a *different window*, not a
+   * race — pinning would displace every value (a 9577-bar engine window
+   * tail-pinned onto a 5000-bar chart shifts the whole overlay by 4577).
+   */
+  const PIN_TOLERANCE_BARS = 8;
+  const grossMismatch =
+    lengthMismatch && seriesLen > 0 && Math.abs(seriesLen - chartWindowBars) > PIN_TOLERANCE_BARS;
   const needsAlignBase = sessionAligned || engineClampedTail || lengthMismatch;
   // A same-length series can still cover a **different** window: a session or
   // stream that slides independently of the chart. The index zip would then
@@ -206,8 +225,7 @@ export function alignApplySeries(
   const engineTimes = needsAlignBase ? null : extractEngineResultTimes(result);
   const engineLast = engineTimes?.length ? engineTimes[engineTimes.length - 1]! : null;
   const chartLast = ohlcvTimes.length ? ohlcvTimes[ohlcvTimes.length - 1]! : null;
-  const windowMismatch =
-    engineLast != null && chartLast != null && engineLast !== chartLast;
+  const windowMismatch = engineLast != null && chartLast != null && engineLast !== chartLast;
   const needsAlign = needsAlignBase || windowMismatch;
   const resultTimes = needsAlign ? (engineTimes ?? extractEngineResultTimes(result)) : null;
   // A session/stream run whose engine shipped **no** bar axis cannot be
@@ -218,9 +236,18 @@ export function alignApplySeries(
   // keeps the last good plots until a full run with an axis arrives. Fresh
   // full evaluations keep the tail-pin: their values were just computed over
   // nearly this window, so the pin only bridges bars appended mid-run.
+  // Exception: a gross length mismatch is a different window, not mid-run
+  // appends — pinning would displace the whole overlay, so full runs skip
+  // exactly like live pushes (the deliberate free-tier clamp keeps pinning:
+  // the engine evaluated the newest `windowBars` on purpose).
   // Equal-length axis-less runs keep the index zip either way: without an
   // axis a same-window series is the only assumption available.
-  const staleNoAxis = sessionAligned && !resultTimes && lengthMismatch && opts.livePush === true;
+  const staleNoAxis =
+    sessionAligned &&
+    !resultTimes &&
+    lengthMismatch &&
+    !engineClampedTail &&
+    (opts.livePush === true || grossMismatch);
   const seriesMap = staleNoAxis
     ? rawSeries
     : !needsAlign
@@ -250,8 +277,7 @@ export function alignApplySeries(
   // Pine: indicator defaults overlay=false; strategy defaults overlay=true.
   // Explicit false must never be coerced to true.
   const overlayFlag = result.meta?.overlay as unknown;
-  const overlayExplicitTrue =
-    overlayFlag === true || overlayFlag === 1 || overlayFlag === 'true';
+  const overlayExplicitTrue = overlayFlag === true || overlayFlag === 1 || overlayFlag === 'true';
   let overlay = resolveOverlayFlag(overlayFlag, scriptTypeOf(result));
 
   // Oscillator-scale plots (RSI, MACD, …) on the price pane are effectively
@@ -274,7 +300,19 @@ export function alignApplySeries(
     result.meta?.script_name != null ? String(result.meta.script_name) : null,
     existingName,
   );
-  return { ohlcvTimes, plotMeta, seriesMap, split, scriptName, scriptType: scriptTypeOf(result), overlay, needsAlign, resultTimes, chartWindowBars, staleNoAxis };
+  return {
+    ohlcvTimes,
+    plotMeta,
+    seriesMap,
+    split,
+    scriptName,
+    scriptType: scriptTypeOf(result),
+    overlay,
+    needsAlign,
+    resultTimes,
+    chartWindowBars,
+    staleNoAxis,
+  };
 }
 
 function scriptTypeOf(result: RunResult): string {

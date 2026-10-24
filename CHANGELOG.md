@@ -15,6 +15,10 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ## [Unreleased]
 
+### Fixed
+
+- **Session overlays no longer tail-pin a window they never evaluated.** A session/stream run whose engine shipped no bar axis was tail-pinned onto the chart even when its series length missed the window by thousands of bars (a 9577-bar engine window on a 5000-bar chart shifts every value and marker by 4577 slots — the SOLUSDT desync). The `staleNoAxis` skip now also covers full runs whose length misses the window by more than a few mid-run appends (`PIN_TOLERANCE_BARS = 8`); the deliberate free-tier clamp (`windowBars`) keeps pinning, and equal-length runs keep the index zip. The WS `/ws/run` path now also carries `meta.engineTimes` like REST, so WS session runs can time-join instead of pinning. Pinned by four new `alignApplySeries` guard tests (gross mismatch skips, plots-array mismatch skips, clamp still pins, small race still pins).
+
 ### Added
 
 - **Tick → frame latency is split into pipeline stages (hp2 A1).** The §14.2 number was one delta — applied tick to next frame — so a bad p95 could hide anywhere between the worker and the glass. The ingest worker now stamps `publishedAt` on every `frames` message (dedicated-worker `performance.now` shares the main clock origin), and `paint-latency` records per-burst stage marks: worker publish → main apply (`publishToApply`, covers postMessage + dispatch), apply → hot-ring copy-out, copy-out → overlay draw. Stages that never stamp (JSON path, LWC-only paint) report `null` instead of fictional zeros, and the existing total is untouched. `hp.get` exposes the split as `paint.stages` p50s next to `paint.latency`, so the p95-tail hunt in `.opencode/hp2/implementation.md` can point at a stage instead of the whole pipeline. Pinned by three new `paint-latency` stage tests (first-stamp-wins, null-path, burst reset).
