@@ -15,22 +15,10 @@
 export type StudioPageId = 'runtime' | 'wire' | 'settings' | 'workers' | 'plugins';
 
 export type SettingsTabId =
-  | 'general'
-  | 'data'
-  | 'editor'
-  | 'theme'
-  | 'topbar'
-  | 'keyboard'
-  | 'notifications';
+  'general' | 'data' | 'editor' | 'theme' | 'topbar' | 'keyboard' | 'notifications' | 'developer';
 
 export function isStudioPageId(v: unknown): v is StudioPageId {
-  return (
-    v === 'runtime' ||
-    v === 'wire' ||
-    v === 'settings' ||
-    v === 'workers' ||
-    v === 'plugins'
-  );
+  return v === 'runtime' || v === 'wire' || v === 'settings' || v === 'workers' || v === 'plugins';
 }
 
 export function isSettingsTabId(v: unknown): v is SettingsTabId {

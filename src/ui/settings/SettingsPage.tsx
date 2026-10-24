@@ -91,6 +91,8 @@ import {
   setHpEnabled,
   setHpGpuMode,
   setHpSabMode,
+  isDevTrace,
+  setDevTrace,
   type HpGpuMode,
   type HpSabMode,
 } from '../../hp';
@@ -103,6 +105,7 @@ const SETTINGS_TABS: { id: SettingsTabId; label: string; hint: string }[] = [
   { id: 'topbar', label: 'Topbar', hint: 'Show or hide topbar groups' },
   { id: 'keyboard', label: 'Keyboard', hint: 'Shortcut chords · conflicts' },
   { id: 'notifications', label: 'Notifications', hint: 'Toasts · categories · flood control' },
+  { id: 'developer', label: 'Developer', hint: 'Opt-in development-mode features' },
 ];
 
 /** Tabs that write as you edit. General is the only tab with Save / Cancel. */
@@ -1112,6 +1115,22 @@ export function SettingsPage(props: { onClose: () => void; initialTab?: Settings
 
         <SettingsTabPanel id="notifications" active={tab()}>
           <NotificationsPanel />
+        </SettingsTabPanel>
+
+        <SettingsTabPanel id="developer" active={tab()}>
+          <StudioSection
+            title="Developer"
+            lead="Opt-in development-mode features. These toggles write tab-local flags so a reload applies them."
+          >
+            <StudioToggle
+              id="axis-dev-trace"
+              testId="axis-settings-dev-trace"
+              checked={isDevTrace()}
+              onChange={setDevTrace}
+              label="HP development tracer"
+              hint="Writes a JSONL ring buffer of HP flags, rung, overlay state, paint latency. Download via dev.trace MCP. Opt‑in only; never runs when HP is disabled."
+            />
+          </StudioSection>
         </SettingsTabPanel>
       </div>
       <StudioFooter status={footerStatus()}>

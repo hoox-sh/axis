@@ -42,6 +42,7 @@ import {
 } from '../chart/paint-latency';
 import { getLiveHotBuffer, streamWireState } from '../streams/stream-live';
 import { store } from '../store';
+import { buffer as _traceBuffer, getTraceLog as _getTraceLog } from '../dev/trace';
 
 /** Sample window bounds (one invoke stays far below the bridge's 20 s cap). */
 const WINDOW_MIN_MS = 100;
@@ -481,4 +482,28 @@ export async function hpSampleView(payload: unknown = {}): Promise<HpSampleView>
     paint: paintLatencyStats(),
     note,
   };
+}
+
+/**
+ * `dev.trace` — development-mode tracer snapshot.
+ *
+ * Returns the JSONL ring buffer (if any) and a download URL.  The tracer
+ * is opt‑in only: it is active only when HP is opted in and the kill switch
+ * is off.  It writes one entry per frame/tick with HP flags, rung, overlay
+ * state, paint latency, and a free‑form note.  The buffer wraps at 500
+ * entries.  The returned URL can be fetched by the agent or downloaded
+ * by the operator.
+ *
+ * @module mcp/hp
+ */
+export function getTraceLog(): { log: string; url: string | null } {
+  const lines = _traceBuffer.map((e) => JSON.stringify(e)).join('\n');
+  const blob = new Blob([lines], { type: 'application/jsonl' });
+  const url = URL.createObjectURL(blob);
+  return { log: lines, url };
+}
+
+/** `dev.trace` — development-mode tracer snapshot. */
+export function devTraceView(): { log: string; url: string | null } {
+  return getTraceLog();
 }

@@ -334,6 +334,13 @@ export const APP_CAPABILITIES: readonly CapabilitySpec[] = [
       'Windowed HP liveness sample: ring seq delta, frame cadence, chart append progress',
     mutates: false,
   },
+  {
+    id: 'dev.trace',
+    domain: 'dev',
+    description:
+      'Development-mode tracer: JSONL ring buffer of HP flags, rung, overlay, paint latency. Download via blob URL. Opt‑in only via Settings.',
+    mutates: false,
+  },
 
   { id: 'status.get', domain: 'status', description: 'Status bar + telemetry HUD', mutates: false },
 ];

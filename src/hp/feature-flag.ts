@@ -41,6 +41,7 @@ const hpFlag = createFlagPair({ enabledKey: HP_ENABLED_KEY, disabledKey: HP_DISA
 
 let memoryGpu: HpGpuMode = 'auto';
 let memorySab: HpSabMode = 'auto';
+let memoryDevTrace = false;
 
 /** True when HP is opted in and the kill switch is off. */
 export function isHpEnabled(): boolean {
@@ -96,4 +97,39 @@ export function resetHpFlags(): void {
   } catch {
     /* ignore */
   }
+}
+
+/** Dev‑trace opt‑in key (`'1'` = on). */
+export const DEV_TRACE_KEY = 'axis.dev.trace';
+
+/** True when the dev‑trace is opted in and the kill switch is off. */
+export function isDevTrace(): boolean {
+  const raw = getItem(DEV_TRACE_KEY) ?? memoryDevTrace;
+  if (raw === '1') return true;
+  if (raw === '0') return false;
+  return memoryDevTrace;
+}
+
+/** Set the dev‑trace flag. */
+export function setDevTrace(on: boolean): void {
+  memoryDevTrace = on;
+  if (on) {
+    setItem(DEV_TRACE_KEY, '1');
+    removeItem('axis.dev.trace.disabled');
+  } else {
+    removeItem(DEV_TRACE_KEY);
+    setItem('axis.dev.trace.disabled', '1');
+  }
+}
+
+/** Kill switch for dev‑trace wins over enable. */
+export function isDevTraceDisabled(): boolean {
+  return getItem('axis.dev.trace.disabled') === '1';
+}
+
+/** Reset dev‑trace flags (tests). */
+export function resetDevTrace(): void {
+  memoryDevTrace = false;
+  removeItem(DEV_TRACE_KEY);
+  removeItem('axis.dev.trace.disabled');
 }
