@@ -125,7 +125,8 @@ import { applyStrategyMarkers } from './apply-strategy';
 import { appliedScriptStillOnChart, applyDrawings } from './apply-drawings';
 import { updateIndicatorStore } from './apply-store';
 import { resolveRunContext, alignApplySeries } from './apply-context';
-import { ensureApplyPane } from './apply-pane';import { detectScriptKind } from './script-meta';
+import { ensureApplyPane } from './apply-pane';
+import { detectScriptKind } from './script-meta';
 import { notifyPineAlertsFromRun } from '../alerts/pine-bridge';
 
 /** Engine result with `series` always present (empty object if missing). */
@@ -198,7 +199,11 @@ export function tailAlignSeriesToWindow(values: unknown, len: number): unknown[]
   const arr = Array.isArray(values) ? values : [];
   if (len <= 0 || arr.length === 0 || arr.length === len) return arr;
   if (arr.length > len) return arr.slice(arr.length - len);
-  return [...new Array(len - arr.length).fill(null), ...arr];
+  // Missing values are at the tail (live candle not yet evaluated by the
+  // engine), never at the head. Pad at the end so historical indices stay
+  // aligned; a null tail cell renders as Pine `na` (no plot on the live
+  // candle until the engine ships its value).
+  return [...arr, ...new Array(len - arr.length).fill(null)];
 }
 
 /** Tail-align every series in a `result.series` map (see {@link tailAlignSeriesToWindow}). */
@@ -334,9 +339,7 @@ export function alignSeriesMapToTimes(
  * is NOT `store.bars`. Only a genuinely different axis takes the override path;
  * when `barsInput` is `store.bars` itself (the common case) the cache is reused.
  */
-export function getOhlcvTimesForApply(
-  barsInput?: import('../store/types').Bar[],
-): number[] {
+export function getOhlcvTimesForApply(barsInput?: import('../store/types').Bar[]): number[] {
   const isOverride = !!barsInput && barsInput !== store.bars;
   const bars = (isOverride ? barsInput : store.bars) || [];
   const gen = typeof store.chartDataGen === 'number' ? store.chartDataGen : 0;
@@ -523,9 +526,7 @@ export function resolveStrategyPrecedence(
   if (explicit !== undefined && (opts?.emptyExplicitWins || nonemptyBag(explicit))) {
     return explicit ?? undefined;
   }
-  return (
-    nonemptyBag(saved) ?? (opts?.allowEditorDraft ? nonemptyBag(editorDraft) : undefined)
-  );
+  return nonemptyBag(saved) ?? (opts?.allowEditorDraft ? nonemptyBag(editorDraft) : undefined);
 }
 
 /** Options shared by {@link runScript} and {@link runAndApply}. */
@@ -611,10 +612,7 @@ type PyneLogLine = { level?: string; message?: string; [k: string]: unknown };
  * - explicit true → price pane
  * - missing: indicator → sub-pane, strategy (or unknown) → price (Pine default)
  */
-export function resolveOverlayFlag(
-  overlayFlag: unknown,
-  scriptType?: string,
-): boolean {
+export function resolveOverlayFlag(overlayFlag: unknown, scriptType?: string): boolean {
   if (overlayFlag === false || overlayFlag === 0 || overlayFlag === 'false') {
     return false;
   }
@@ -730,13 +728,7 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
   // won't match `preEval.source`; interactive Run always matches.
   if (!silent && !isolate) {
     const pe = store.preEval;
-    if (
-      pe &&
-      !pe.pending &&
-      pe.hasErrors &&
-      pe.source === script &&
-      isScriptRunBlocked()
-    ) {
+    if (pe && !pe.pending && pe.hasErrors && pe.source === script && isScriptRunBlocked()) {
       const msg = 'Script has errors — fix them in the editor before running';
       setTelemetryState('engine', 'error', { error: msg });
       finishInteractiveStatus(epoch, silent, 'error', msg);
@@ -803,9 +795,7 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
     // Soft outer budget for status messaging only — engines manage their own
     // AbortSignal.timeout for HTTP (WS probe + REST fallback must not share a
     // short parent abort). We still surface timeout wording via formatRunError.
-    void (silent
-      ? 60_000
-      : Math.min(180_000, Math.max(90_000, 45_000 + bars.length * 40)));
+    void (silent ? 60_000 : Math.min(180_000, Math.max(90_000, 45_000 + bars.length * 40)));
     // Prefer explicit opts → applied indicator saved values → editor draft
     const indicatorId = opts.indicatorId;
     const applied =
@@ -841,32 +831,39 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
     const scriptForEngine = applyStrategyPropsToSource(script, strategyProps);
     let engineLibraries: import('../plugins/types').EngineLibrarySource[] | undefined;
     try {
-      const { resolveLibrariesForScript, publishLibrary } = await import(
-        '../storage/library-publish-io'
-      );
+      const { resolveLibrariesForScript, publishLibrary } =
+        await import('../storage/library-publish-io');
       const { detectScriptKind } = await import('../indicators/script-meta');
       if (detectScriptKind(scriptForEngine) === 'library') {
-        void publishLibrary(scriptForEngine, { origin: 'auto' }).then((pub) => {
-          if (pub.skipped) return;
-          appendLog(
-            'ok',
-            `Published ${pub.library.namespace}/${pub.library.name}/${pub.library.version}` +
-              (pub.remote ? ' → git' : ' (local cache)'),
-            'library',
-          );
-        }).catch((e: unknown) => {
-          appendLog(
-            'warn',
-            `Library auto-publish skipped: ${e instanceof Error ? e.message : String(e)}`,
-            'library',
-          );
-        });
+        void publishLibrary(scriptForEngine, { origin: 'auto' })
+          .then((pub) => {
+            if (pub.skipped) return;
+            appendLog(
+              'ok',
+              `Published ${pub.library.namespace}/${pub.library.name}/${pub.library.version}` +
+                (pub.remote ? ' → git' : ' (local cache)'),
+              'library',
+            );
+          })
+          .catch((e: unknown) => {
+            appendLog(
+              'warn',
+              `Library auto-publish skipped: ${e instanceof Error ? e.message : String(e)}`,
+              'library',
+            );
+          });
       }
       const resolved = await resolveLibrariesForScript(scriptForEngine);
       if (resolved.libraries.length) engineLibraries = resolved.libraries;
       if (resolved.missing.length && !silent) {
-        const miss = resolved.missing.map((s) => `${s.namespace}/${s.name}/${s.version}`).join(', ');
-        appendLog('warn', `Unresolved import ${miss} — publish the library or check git`, 'library');
+        const miss = resolved.missing
+          .map((s) => `${s.namespace}/${s.name}/${s.version}`)
+          .join(', ');
+        appendLog(
+          'warn',
+          `Unresolved import ${miss} — publish the library or check git`,
+          'library',
+        );
       }
     } catch {
       /* publish / resolve optional */
@@ -1098,14 +1095,7 @@ export async function runAndApply(
   const epoch = opts.epoch ?? beginRunEpoch();
 
   try {
-    const result = await runAndApplyInner(
-      script,
-      indicatorId,
-      opts,
-      epoch,
-      silent,
-      openResults,
-    );
+    const result = await runAndApplyInner(script, indicatorId, opts, epoch, silent, openResults);
     return result;
   } catch (e: unknown) {
     // Last-resort fence: callers use void runAndApply / fire-and-forget.
@@ -1228,9 +1218,7 @@ async function runAndApplyInner(
     };
   }
 
-  const existing = indicatorId
-    ? store.scripts.find((s) => s.id === indicatorId)
-    : undefined;
+  const existing = indicatorId ? store.scripts.find((s) => s.id === indicatorId) : undefined;
   // Always prefer Pine indicator()/strategy()/library() title over engine meta
   // (engine often sends "plot") or a stale file-based existing name.
   const {

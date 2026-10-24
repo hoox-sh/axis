@@ -227,7 +227,25 @@ export class CalcEngine {
         state.cold.upsertByTime(bars.map((b) => barToTicks(b, state.cold.priceScale)));
       }
       const replay = state.cold.length ? coldToCalcBars(state.cold) : [...bars];
+      // Include the forming tip in replay so indicators see the live candle
+      if (forming && replay.length > 0 && bars.length > 0) {
+        const last = bars[bars.length - 1];
+        if (last && last.time > replay[replay.length - 1]?.time)
+          replay.push(
+            toCalcBar(last.time, last.open, last.high, last.low, last.close, last.volume ?? 0),
+          );
+      }
       state.evaluator.setValues(values);
+      // Inject replay plot values by replayed bar time so plots[] isn't empty
+      if (values) {
+        for (const replayBar of replay) {
+          for (const entry of values) {
+            if (entry && Number.isFinite(entry.time) && entry.time === replayBar.time) {
+              state.evaluator.setTipValues(replayBar.time, entry.plots ?? {});
+            }
+          }
+        }
+      }
       state.session.onSnapshot(replay, forming ? { forming } : undefined);
       return this.plots(seriesId, state);
     } catch (err) {

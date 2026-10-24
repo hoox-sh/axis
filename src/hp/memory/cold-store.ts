@@ -89,6 +89,8 @@ export class ColdStore {
    * Sorted by time, deduped (last write wins for a repeated time — a
    * corrected history bar), newest-capped to `max`.
    */
+  private head = 0;
+
   setTicks(bars: readonly HotBarTicks[]): void {
     const sorted = [...bars].sort((a, b) => a.time - b.time);
     const deduped: HotBarTicks[] = [];

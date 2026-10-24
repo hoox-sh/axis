@@ -37,6 +37,7 @@ import { store, EDITOR_RUN_KEY } from '../store';
 // resolve safely under bun/vite/tsc.
 import {
   alignSeriesMapToTimes,
+  alignSeriesToTimes,
   extractEngineResultTimes,
   getOhlcvTimesForApply,
   resolveInputPrecedence,
@@ -44,6 +45,7 @@ import {
   resolveStrategyPrecedence,
   seriesWouldHideOnPrice,
   tailAlignSeriesMap,
+  tailAlignSeriesToWindow,
 } from './runner';
 import type { PlotMetaEntry } from '../results/plot-visuals';
 import { splitSeriesByKind } from '../results/plot-visuals';
@@ -255,6 +257,31 @@ export function alignApplySeries(
       : resultTimes
         ? alignSeriesMapToTimes(rawSeries, resultTimes, ohlcvTimes)
         : tailAlignSeriesMap(rawSeries, chartWindowBars);
+  // When the engine's named series arrays are short of the chart window
+  // (live candle not yet evaluated), fill the tail from the legacy
+  // plots[] array which the backend always ships complete. This keeps
+  // historical indices aligned (padded at end by tailAlignSeriesMap) while
+  // supplying the live candle's plot value so it renders on the chart.
+  if (result.plots && Array.isArray(result.plots) && result.plots.length > 0 && seriesMap) {
+    const plotsAligned = !needsAlign
+      ? result.plots
+      : resultTimes
+        ? alignSeriesToTimes(result.plots, resultTimes, ohlcvTimes)
+        : tailAlignSeriesToWindow(result.plots, chartWindowBars);
+    for (const arr of Object.values(seriesMap)) {
+      if (!Array.isArray(arr)) continue;
+      for (let i = arr.length - 1; i >= 0; i--) {
+        if (arr[i] == null || arr[i] === undefined) {
+          const plotVal = plotsAligned[i];
+          if (plotVal != null && Number.isFinite(plotVal)) {
+            arr[i] = plotVal;
+          } else {
+            break;
+          }
+        }
+      }
+    }
+  }
   // A session/stream run whose engine shipped **no** bar axis is tail-pinned
   // onto the chart only when the window is unchanged (see `staleNoAxis`).
   if (sessionAligned && !resultTimes && !staleNoAxis) {

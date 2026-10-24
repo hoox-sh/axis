@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "scripts"
-description: "scripts contains capture-fix.ts, capture-screenshots.ts, check-coverage.mjs, and 6 more files."
+description: "scripts contains audit-graph.py, capture-fix.ts, capture-screenshots.ts, and 7 more files."
 resource: "scripts"
 tags: [code, scripts]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-22T11:00:42Z
+  at: 2026-10-24T13:08:56Z
 sources:
   - id: tree
     resource: "scripts"
@@ -18,6 +18,7 @@ okf_lock: generated
 
 # Files
 
+* `audit-graph.py` — main, refs
 * `capture-fix.ts`
 * `capture-screenshots.ts`
 * `check-coverage.mjs`
