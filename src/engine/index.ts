@@ -18,22 +18,18 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Redesign2 engine module barrel. Runtime wiring is intentionally deferred to
- * a follow-up feature-gated integration pass.
+ * AXB1-Light WS engine module barrel.
+ *
+ * Lightweight engine implementation using AXB1 transport over WebSocket
+ * for the stream profile. Calculator profile fallback is handled by
+ * the engine router.
  *
  * @module engine
  */
 
 export * from './policy';
-export * from './ws-client';
-export * from './frames';
-export * from './rest-fallback';
-export * from './session-multiplexer';
-export * from './session-broker';
-export * from './client-apply';
-export * from './bar-close-verify';
-export * from './market-identity';
-export * from './feature-flag';
 export * from './router';
-export * from './apply-bridge';
-export * from './live-wire';
+export * from './sessions';
+export * from './axb1-client';
+export * from './runner';
+export * from './health';

@@ -7,7 +7,7 @@ tags: [code, plugins]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-21T19:16:17Z
+  at: 2026-10-24T16:20:16Z
 sources:
   - id: tree
     resource: "src/plugins"
@@ -55,7 +55,6 @@ okf_lock: generated
 * [src/chart](/code/src/chart.md)
 * [src/data](/code/src/data.md)
 * [src/editor](/code/src/editor.md)
-* [src/engine](/code/src/engine.md)
 * [src/engines](/code/src/engines.md)
 * [src/indicators](/code/src/indicators.md)
 * [src/mcp](/code/src/mcp.md)

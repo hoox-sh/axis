@@ -18,12 +18,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Stream-vs-legacy routing (F-09).
+ * Engine routing for AXB1-Light.
  *
  * Decides per evaluation whether the new engine-owned stream path may run.
- * Both gates must pass: the local feature flag AND a `stream` capability
- * profile. Anything else — flag off, unresolved capabilities, calculator
- * engine — takes the legacy `serverEngine` path untouched.
+ * Both gates must pass: the local feature flag AND a `stream` capability profile.
+ * Anything else — flag off, unresolved capabilities, calculator engine — takes
+ * the legacy `serverEngine` path untouched.
  *
  * This module only *decides*; it never evaluates. No runtime wiring leaks
  * into the default path until the flag is on.

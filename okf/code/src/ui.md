@@ -7,7 +7,7 @@ tags: [code, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-21T21:13:22Z
+  at: 2026-10-24T16:20:16Z
 sources:
   - id: tree
     resource: "src/ui"

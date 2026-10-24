@@ -1,5 +1,6 @@
 // Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 //
+
 // This file is part of axis.
 //
 // axis is free software: you can redistribute it and/or modify
@@ -18,7 +19,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Market identity helpers for Redesign2.
+ * Market identity helpers for AXB1-Light WS engine.
  *
  * Canonical series key (final/plan.mdx §3.5): `exchange|market|SYMBOL|interval`
  * with a lowercased exchange, lowercased market, UPPERCASE pair-form symbol,

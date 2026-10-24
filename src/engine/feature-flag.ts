@@ -18,39 +18,31 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Feature flag for the engine-owned data plane (F-09).
+ * AXB1-Light WS engine feature flag.
  *
- * The new stream engine is strictly opt-in: unless this flag is on, every
- * evaluation takes the legacy `serverEngine` path byte-for-byte. The flag is
- * a runtime localStorage toggle (`axis.engine.stream.enabled === '1'`) so a
- * build can carry both paths during the rollout; flipping it needs no rebuild.
+ * Stream engine enable/disable flag. When disabled, the calculator profile
+ * is always used as fallback.
  *
  * @module engine/feature-flag
  */
 
-import { createFlagPair } from '../utils/flags';
+/** Key for the stream engine feature flag in store/config. */
+export const STREAM_ENGINE_FLAG_KEY = 'axis.engine.stream.disabled';
 
-const FLAG_KEY = 'axis.engine.stream.enabled';
-const DISABLE_KEY = 'axis.engine.stream.disabled';
-
-const streamFlag = createFlagPair({ enabledKey: FLAG_KEY, disabledKey: DISABLE_KEY });
-
-/** True when the new stream engine path is enabled for this tab. */
-export function isStreamEngineEnabled(): boolean {
-  return streamFlag.isEnabled();
-}
-
-/** Enable or disable the stream engine path for this tab. */
-export function setStreamEngineEnabled(on: boolean): void {
-  streamFlag.setEnabled(on);
-}
-
-/**
- * True when the stream path is explicitly opted out for this tab.
- * Opt-out wins over everything (kill switch).
- */
+/** Whether the stream engine is disabled. */
 export function isStreamEngineDisabled(): boolean {
-  return streamFlag.isDisabled();
+  try {
+    const val =
+      typeof store !== 'undefined' && store.engine
+        ? String(store.engine.flags?.streamDisabled ?? '').trim()
+        : '';
+    return val === '1' || val === 'true';
+  } catch {
+    return false; // safe default: engine not disabled = calculator fallback
+  }
 }
 
-export const STREAM_ENGINE_FLAG_KEY = FLAG_KEY;
+/** Whether the stream engine is enabled. */
+export function isStreamEngineEnabled(): boolean {
+  return !isStreamEngineDisabled();
+}
