@@ -14,6 +14,7 @@ import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
 import { mockFetch, jsonResponse } from './helpers/mock-fetch';
 import {
   canonicalSeriesKey,
+  invalidateDataSessions,
   seriesKeyString,
   provideDataSeries,
   createDataSession,
@@ -76,16 +77,18 @@ interface Call {
 }
 
 /** Record every request; answer with `respond`. */
-function recorder(
-  respond: (call: Call) => Response | Promise<Response>,
-): { calls: Call[]; restore: () => void } {
+function recorder(respond: (call: Call) => Response | Promise<Response>): {
+  calls: Call[];
+  restore: () => void;
+} {
   const calls: Call[] = [];
   const restore = mockFetch(async (input, init) => {
     const url = new URL(String(input));
     const call: Call = {
       method: init?.method ?? 'GET',
       path: `${url.pathname}${url.search}`,
-      body: typeof init?.body === 'string' ? (JSON.parse(init.body) as Record<string, unknown>) : null,
+      body:
+        typeof init?.body === 'string' ? (JSON.parse(init.body) as Record<string, unknown>) : null,
     };
     calls.push(call);
     return respond(call);
@@ -122,7 +125,11 @@ afterEach(() => {
 describe('capabilitiesFromHealth', () => {
   it('advertises every-tick + bar-close for a data-session engine', () => {
     const caps = capabilitiesFromHealth({
-      features: { live_modes: ['every-tick', 'bar-close'], data_session: true, data_exchanges: ['binance'] },
+      features: {
+        live_modes: ['every-tick', 'bar-close'],
+        data_session: true,
+        data_exchanges: ['binance'],
+      },
     });
     expect(caps.liveModes).toEqual(['every-tick', 'bar-close']);
     expect(caps.ownsData).toBe(true);
@@ -183,7 +190,9 @@ describe('canonicalSeriesKey', () => {
 
 describe('createDataSession', () => {
   it('returns the session id on a hit', async () => {
-    const rec = recorder(() => jsonResponse({ status: 'success', session_id: 'ses1', cache: 'hit' }));
+    const rec = recorder(() =>
+      jsonResponse({ status: 'success', session_id: 'ses1', cache: 'hit' }),
+    );
     restore = rec.restore;
     const r = await createDataSession(ENDPOINT, '', { key: KEY, historyBars: 3, script: 's' });
     expect(r.ok).toBe(true);
@@ -196,7 +205,10 @@ describe('createDataSession', () => {
 
   it('maps 409 DATA_MISS to a structured miss', async () => {
     restore = recorder(() =>
-      jsonResponse({ status: 'miss', code: 'DATA_MISS', key: 'binance|spot|BTC/USDT|1h', have: 1, need: 3 }, 409),
+      jsonResponse(
+        { status: 'miss', code: 'DATA_MISS', key: 'binance|spot|BTC/USDT|1h', have: 1, need: 3 },
+        409,
+      ),
     ).restore;
     const r = await createDataSession(ENDPOINT, '', { key: KEY, historyBars: 3, script: 's' });
     expect(r).toEqual({ ok: false, miss: { key: 'binance|spot|BTC/USDT|1h', have: 1, need: 3 } });
@@ -209,7 +221,9 @@ describe('createDataSession', () => {
   });
 
   it('binds pair-form even when the key and input.symbol are compact load-form', async () => {
-    const rec = recorder(() => jsonResponse({ status: 'success', session_id: 'ses-bnb', cache: 'hit' }));
+    const rec = recorder(() =>
+      jsonResponse({ status: 'success', session_id: 'ses-bnb', cache: 'hit' }),
+    );
     restore = rec.restore;
     const r = await createDataSession(ENDPOINT, '', {
       key: { exchange: 'binance', symbol: 'BNBUSDT', interval: '1m' },
@@ -229,25 +243,40 @@ describe('createDataSession', () => {
 
 describe('tickDataSession', () => {
   it('sends only exchange and symbol — never bars', async () => {
-    const rec = recorder(() => jsonResponse({ status: 'success', session_id: 'ses1', appended: 0 }));
+    const rec = recorder(() =>
+      jsonResponse({ status: 'success', session_id: 'ses1', appended: 0 }),
+    );
     restore = rec.restore;
-    const r = await tickDataSession(ENDPOINT, '', 'ses1', { exchange: 'BINANCE', symbol: 'btc/usdt' });
+    const r = await tickDataSession(ENDPOINT, '', 'ses1', {
+      exchange: 'BINANCE',
+      symbol: 'btc/usdt',
+    });
     expect(r.ok).toBe(true);
     expect(rec.calls[0]?.path).toBe('/data/session/ses1/tick');
     expect(rec.calls[0]?.body).toEqual({ exchange: 'binance', symbol: 'BTC/USDT' });
   });
 
   it('looks up compact load-form as the canonical pair-form', async () => {
-    const rec = recorder(() => jsonResponse({ status: 'success', session_id: 'ses1', appended: 0 }));
+    const rec = recorder(() =>
+      jsonResponse({ status: 'success', session_id: 'ses1', appended: 0 }),
+    );
     restore = rec.restore;
-    const r = await tickDataSession(ENDPOINT, '', 'ses1', { exchange: 'binance', symbol: 'BNBUSDT' });
+    const r = await tickDataSession(ENDPOINT, '', 'ses1', {
+      exchange: 'binance',
+      symbol: 'BNBUSDT',
+    });
     expect(r.ok).toBe(true);
     expect(rec.calls[0]?.body).toEqual({ exchange: 'binance', symbol: 'BNB/USDT' });
   });
 
   it('marks an expired session as gone', async () => {
-    restore = recorder(() => jsonResponse({ status: 'error', code: 'NO_SESSION', message: 'gone' }, 404)).restore;
-    const r = await tickDataSession(ENDPOINT, '', 'ses1', { exchange: 'binance', symbol: 'BTC/USDT' });
+    restore = recorder(() =>
+      jsonResponse({ status: 'error', code: 'NO_SESSION', message: 'gone' }, 404),
+    ).restore;
+    const r = await tickDataSession(ENDPOINT, '', 'ses1', {
+      exchange: 'binance',
+      symbol: 'BTC/USDT',
+    });
     expect(r).toEqual({ ok: false, error: 'gone', gone: true });
   });
 });
@@ -274,7 +303,13 @@ describe('ensureDataSession broker', () => {
   it('creates directly on a hit (nothing provisioned)', async () => {
     const rec = recorder(() => jsonResponse({ status: 'success', session_id: 's1' }));
     restore = rec.restore;
-    const h = await ensureDataSession({ endpoint: ENDPOINT, apiKey: '', ...REQ, script: 's', localBars: local([]) });
+    const h = await ensureDataSession({
+      endpoint: ENDPOINT,
+      apiKey: '',
+      ...REQ,
+      script: 's',
+      localBars: local([]),
+    });
     expect(h).toMatchObject({ sessionId: 's1', provisioned: 'none' });
     expect(rec.calls.map((c) => c.path)).toEqual(['/data/session']);
   });
@@ -318,7 +353,13 @@ describe('ensureDataSession broker', () => {
       return jsonResponse({ status: 'success', fetched: 3, count: 3 });
     });
     restore = rec.restore;
-    const h = await ensureDataSession({ endpoint: ENDPOINT, apiKey: '', ...REQ, script: 's', localBars: local([]) });
+    const h = await ensureDataSession({
+      endpoint: ENDPOINT,
+      apiKey: '',
+      ...REQ,
+      script: 's',
+      localBars: local([]),
+    });
     expect(h).toMatchObject({ sessionId: 's3', provisioned: 'fetch' });
     const fetchCall = must(rec.calls, (c) => c.path === '/data/series/fetch');
     expect(fetchCall.body).toMatchObject({ exchange: 'binance', history_bars: 3 });
@@ -371,7 +412,13 @@ describe('ensureDataSession broker', () => {
     });
     restore = rec.restore;
     await expect(
-      ensureDataSession({ endpoint: ENDPOINT, apiKey: '', ...REQ, script: 's', localBars: local([freshBars(1)[0]!]) }),
+      ensureDataSession({
+        endpoint: ENDPOINT,
+        apiKey: '',
+        ...REQ,
+        script: 's',
+        localBars: local([freshBars(1)[0]!]),
+      }),
     ).rejects.toThrow(/still short after local upload/);
     expect(rec.calls.filter((c) => c.path === '/data/session').length).toBe(3);
     // The exchange fetch is never attempted for data the host may not download.
@@ -386,7 +433,10 @@ describe('ensureDataSession broker', () => {
         requested.push(Number(body?.history_bars || 0));
         // First two creates ask for 5; the third asks for what was uploaded (2).
         if (requested.length <= 2) {
-          return jsonResponse({ status: 'miss', code: 'DATA_MISS', key: 'k', have: 2, need: 5 }, 409);
+          return jsonResponse(
+            { status: 'miss', code: 'DATA_MISS', key: 'k', have: 2, need: 5 },
+            409,
+          );
         }
         return jsonResponse({ status: 'success', session_id: 's-clamped' });
       }
@@ -493,8 +543,21 @@ describe('runDataSession memo', () => {
   it('reuses the owner session on a live tick (identity only)', async () => {
     const rec = engine();
     restore = rec.restore;
-    const a = await runDataSession({ endpoint: ENDPOINT, apiKey: '', owner: 'ind1', request: req, script: 's' });
-    const b = await runDataSession({ endpoint: ENDPOINT, apiKey: '', owner: 'ind1', request: req, script: 's', tick: true });
+    const a = await runDataSession({
+      endpoint: ENDPOINT,
+      apiKey: '',
+      owner: 'ind1',
+      request: req,
+      script: 's',
+    });
+    const b = await runDataSession({
+      endpoint: ENDPOINT,
+      apiKey: '',
+      owner: 'ind1',
+      request: req,
+      script: 's',
+      tick: true,
+    });
     expect(a).toMatchObject({ ok: true, via: 'data-session-create' });
     expect(b).toMatchObject({ ok: true, via: 'data-session-tick', sessionId: 's1' });
     const tick = must(rec.calls, (c) => c.path.endsWith('/tick'));
@@ -525,7 +588,12 @@ describe('runDataSession memo', () => {
     expect(a).toMatchObject({ ok: true, via: 'data-session-create' });
     expect(b).toMatchObject({ ok: true, via: 'data-session-tick' });
     const create = must(rec.calls, (c) => c.path === '/data/session');
-    expect(create.body).toMatchObject({ exchange: 'binance', market: 'spot', symbol: 'BNB/USDT', interval: '1m' });
+    expect(create.body).toMatchObject({
+      exchange: 'binance',
+      market: 'spot',
+      symbol: 'BNB/USDT',
+      interval: '1m',
+    });
     const tick = must(rec.calls, (c) => c.path.endsWith('/tick'));
     expect(tick.body).toMatchObject({ exchange: 'binance', symbol: 'BNB/USDT' });
   });
@@ -562,8 +630,21 @@ describe('runDataSession memo', () => {
       return jsonResponse({ status: 'error' }, 500);
     });
     restore = rec.restore;
-    await runDataSession({ endpoint: ENDPOINT, apiKey: '', owner: 'ind1', request: req, script: 's' });
-    const r = await runDataSession({ endpoint: ENDPOINT, apiKey: '', owner: 'ind1', request: req, script: 's', tick: true });
+    await runDataSession({
+      endpoint: ENDPOINT,
+      apiKey: '',
+      owner: 'ind1',
+      request: req,
+      script: 's',
+    });
+    const r = await runDataSession({
+      endpoint: ENDPOINT,
+      apiKey: '',
+      owner: 'ind1',
+      request: req,
+      script: 's',
+      tick: true,
+    });
     expect(r).toMatchObject({ ok: true, via: 'data-session-tick' });
     expect(ticks).toBe(1);
     // One cell traveled; the applied payload is the full merged window.
@@ -602,8 +683,21 @@ describe('runDataSession memo', () => {
       });
     });
     restore = rec.restore;
-    await runDataSession({ endpoint: ENDPOINT, apiKey: '', owner: 'ind1', request: req, script: 's' });
-    const r = await runDataSession({ endpoint: ENDPOINT, apiKey: '', owner: 'ind1', request: req, script: 's', tick: true });
+    await runDataSession({
+      endpoint: ENDPOINT,
+      apiKey: '',
+      owner: 'ind1',
+      request: req,
+      script: 's',
+    });
+    const r = await runDataSession({
+      endpoint: ENDPOINT,
+      apiKey: '',
+      owner: 'ind1',
+      request: req,
+      script: 's',
+      tick: true,
+    });
     expect(r).toMatchObject({ ok: true, via: 'data-session-create', sessionId: 's2' });
     expect(creates).toBe(2);
   });
@@ -613,21 +707,51 @@ describe('runDataSession memo', () => {
     const rec = recorder((c) => {
       if (c.method === 'DELETE') return jsonResponse({ status: 'success' });
       if (c.path === '/data/session') {
-        return jsonResponse({ status: 'success', session_id: 's1', count: 3, plots: [1, 2, 3], series: {}, events: [] });
+        return jsonResponse({
+          status: 'success',
+          session_id: 's1',
+          count: 3,
+          plots: [1, 2, 3],
+          series: {},
+          events: [],
+        });
       }
       if (c.path.endsWith('/tick')) {
         tickBodies.push(c.body);
         const body = c.body as { delta?: boolean } | null;
         if (body?.delta === true) {
-          return jsonResponse({ status: 'error', code: 'UNKNOWN_FIELDS', message: 'unknown field: delta' }, 400);
+          return jsonResponse(
+            { status: 'error', code: 'UNKNOWN_FIELDS', message: 'unknown field: delta' },
+            400,
+          );
         }
-        return jsonResponse({ status: 'success', session_id: 's1', count: 3, plots: [1, 2, 3], series: {}, events: [] });
+        return jsonResponse({
+          status: 'success',
+          session_id: 's1',
+          count: 3,
+          plots: [1, 2, 3],
+          series: {},
+          events: [],
+        });
       }
       return jsonResponse({ status: 'error' }, 500);
     });
     restore = rec.restore;
-    await runDataSession({ endpoint: ENDPOINT, apiKey: '', owner: 'ind1', request: req, script: 's' });
-    const r1 = await runDataSession({ endpoint: ENDPOINT, apiKey: '', owner: 'ind1', request: req, script: 's', tick: true });
+    await runDataSession({
+      endpoint: ENDPOINT,
+      apiKey: '',
+      owner: 'ind1',
+      request: req,
+      script: 's',
+    });
+    const r1 = await runDataSession({
+      endpoint: ENDPOINT,
+      apiKey: '',
+      owner: 'ind1',
+      request: req,
+      script: 's',
+      tick: true,
+    });
     expect(r1).toMatchObject({ ok: true, via: 'data-session-tick' });
     expect(tickBodies).toEqual([
       { exchange: 'binance', symbol: 'BTC/USDT', delta: true },
@@ -635,7 +759,14 @@ describe('runDataSession memo', () => {
     ]);
     // Remembered: the next tick goes plain immediately (one request).
     tickBodies.length = 0;
-    const r2 = await runDataSession({ endpoint: ENDPOINT, apiKey: '', owner: 'ind1', request: req, script: 's', tick: true });
+    const r2 = await runDataSession({
+      endpoint: ENDPOINT,
+      apiKey: '',
+      owner: 'ind1',
+      request: req,
+      script: 's',
+      tick: true,
+    });
     expect(r2).toMatchObject({ ok: true, via: 'data-session-tick' });
     expect(tickBodies).toEqual([{ exchange: 'binance', symbol: 'BTC/USDT' }]);
   });
@@ -643,8 +774,20 @@ describe('runDataSession memo', () => {
   it('keeps sibling indicators on separate sessions', async () => {
     const rec = engine();
     restore = rec.restore;
-    await runDataSession({ endpoint: ENDPOINT, apiKey: '', owner: 'ind1', request: req, script: 's' });
-    await runDataSession({ endpoint: ENDPOINT, apiKey: '', owner: 'ind2', request: req, script: 's' });
+    await runDataSession({
+      endpoint: ENDPOINT,
+      apiKey: '',
+      owner: 'ind1',
+      request: req,
+      script: 's',
+    });
+    await runDataSession({
+      endpoint: ENDPOINT,
+      apiKey: '',
+      owner: 'ind2',
+      request: req,
+      script: 's',
+    });
     expect(rec.calls.filter((c) => c.path === '/data/session').length).toBe(2);
     expect(rec.calls.some((c) => c.method === 'DELETE')).toBe(false);
   });
@@ -652,8 +795,21 @@ describe('runDataSession memo', () => {
   it('recreates a session the engine expired', async () => {
     const rec = engine({ tickGone: true });
     restore = rec.restore;
-    await runDataSession({ endpoint: ENDPOINT, apiKey: '', owner: 'ind1', request: req, script: 's' });
-    const r = await runDataSession({ endpoint: ENDPOINT, apiKey: '', owner: 'ind1', request: req, script: 's', tick: true });
+    await runDataSession({
+      endpoint: ENDPOINT,
+      apiKey: '',
+      owner: 'ind1',
+      request: req,
+      script: 's',
+    });
+    const r = await runDataSession({
+      endpoint: ENDPOINT,
+      apiKey: '',
+      owner: 'ind1',
+      request: req,
+      script: 's',
+      tick: true,
+    });
     expect(r).toMatchObject({ ok: true, via: 'data-session-create' });
     expect(rec.calls.filter((c) => c.path === '/data/session').length).toBe(2);
   });
@@ -661,8 +817,21 @@ describe('runDataSession memo', () => {
   it('releases the old session when the script changes', async () => {
     const rec = engine();
     restore = rec.restore;
-    await runDataSession({ endpoint: ENDPOINT, apiKey: '', owner: 'ind1', request: req, script: 'v1' });
-    await runDataSession({ endpoint: ENDPOINT, apiKey: '', owner: 'ind1', request: req, script: 'v2', tick: true });
+    await runDataSession({
+      endpoint: ENDPOINT,
+      apiKey: '',
+      owner: 'ind1',
+      request: req,
+      script: 'v1',
+    });
+    await runDataSession({
+      endpoint: ENDPOINT,
+      apiKey: '',
+      owner: 'ind1',
+      request: req,
+      script: 'v2',
+      tick: true,
+    });
     await new Promise((r) => setTimeout(r, 0));
     expect(rec.calls.some((c) => c.method === 'DELETE' && c.path === '/session/s1')).toBe(true);
   });
@@ -673,7 +842,10 @@ describe('runDataSession memo', () => {
         return jsonResponse({ status: 'miss', code: 'DATA_MISS', key: 'k', have: 0, need: 3 }, 409);
       }
       // Host without an exchange feed: fetch cannot fill the store.
-      return jsonResponse({ status: 'error', code: 'DATA_FETCH_FAILED', message: 'ccxt missing' }, 500);
+      return jsonResponse(
+        { status: 'error', code: 'DATA_FETCH_FAILED', message: 'ccxt missing' },
+        500,
+      );
     });
     restore = rec.restore;
     const first = await runDataSession({
@@ -713,6 +885,51 @@ describe('runDataSession memo', () => {
   });
 });
 
+describe('invalidateDataSessions (repair hook)', () => {
+  function engine() {
+    let n = 0;
+    return recorder((c) => {
+      if (c.method === 'DELETE') return jsonResponse({ status: 'success' });
+      if (c.path === '/data/session') {
+        n++;
+        return jsonResponse({ status: 'success', session_id: `s${n}`, mode: 'interpret' });
+      }
+      if (c.path.endsWith('/tick')) {
+        return jsonResponse({ status: 'success', session_id: 's1', appended: 0, unchanged: true });
+      }
+      return jsonResponse({ status: 'error' }, 500);
+    });
+  }
+  const req = { ...KEY, historyBars: 3 };
+
+  it('forces a fresh session create after a repair instead of reusing the stale memo', async () => {
+    const rec = engine();
+    restore = rec.restore;
+    const run = { endpoint: ENDPOINT, apiKey: '', owner: 'ind1', request: req, script: 's' };
+    await runDataSession(run);
+    await runDataSession({ ...run, tick: true });
+    expect(rec.calls.filter((c) => c.path === '/data/session').length).toBe(1);
+    expect(invalidateDataSessions(ENDPOINT, KEY)).toBe(1);
+    await runDataSession({ ...run, tick: true });
+    // A new create, not the pre-repair session: the engine window moved.
+    expect(rec.calls.filter((c) => c.path === '/data/session').length).toBe(2);
+    // The recreated session drops the same way (idempotent).
+    expect(invalidateDataSessions(ENDPOINT, KEY)).toBe(1);
+  });
+
+  it('leaves other series and endpoints alone', async () => {
+    const rec = engine();
+    restore = rec.restore;
+    const run = { endpoint: ENDPOINT, apiKey: '', owner: 'ind1', request: req, script: 's' };
+    await runDataSession(run);
+    const other = { ...KEY, symbol: 'eth/usdt' };
+    expect(invalidateDataSessions(ENDPOINT, other)).toBe(0);
+    expect(invalidateDataSessions('http://other.test', KEY)).toBe(0);
+    await runDataSession({ ...run, tick: true });
+    expect(rec.calls.filter((c) => c.path === '/data/session').length).toBe(1);
+  });
+});
+
 describe('series provisioning memo (shared across owners)', () => {
   const local = (bars: Bar[]) => async () => bars;
   const bars5 = freshBars(5);
@@ -727,7 +944,10 @@ describe('series provisioning memo (shared across owners)', () => {
       const call: Call & { host: string } = {
         method: init?.method ?? 'GET',
         path: `${url.pathname}${url.search}`,
-        body: typeof init?.body === 'string' ? (JSON.parse(init.body) as Record<string, unknown>) : null,
+        body:
+          typeof init?.body === 'string'
+            ? (JSON.parse(init.body) as Record<string, unknown>)
+            : null,
         host: url.host,
       };
       calls.push(call);
@@ -742,7 +962,10 @@ describe('series provisioning memo (shared across owners)', () => {
     const rec = hostRecorder((c, host) => {
       if (c.path === '/data/session') {
         if (!provided.has(host)) {
-          return jsonResponse({ status: 'miss', code: 'DATA_MISS', key: 'k', have: 0, need: 3 }, 409);
+          return jsonResponse(
+            { status: 'miss', code: 'DATA_MISS', key: 'k', have: 0, need: 3 },
+            409,
+          );
         }
         sessions += 1;
         return jsonResponse({ status: 'success', session_id: `s${sessions}` });
@@ -765,7 +988,10 @@ describe('series provisioning memo (shared across owners)', () => {
     expect(b.provisioned).toBe('local');
     // …but the identical window is uploaded exactly once.
     expect(rec.calls.filter((c) => c.path === '/data/series/provide')).toHaveLength(1);
-    expect(_getSeriesProvisionForTests(ENDPOINT, KEY)).toMatchObject({ historyBars: 3, via: 'local' });
+    expect(_getSeriesProvisionForTests(ENDPOINT, KEY)).toMatchObject({
+      historyBars: 3,
+      via: 'local',
+    });
   });
 
   it('reuses provisioning for a later owner without re-uploading', async () => {
@@ -777,7 +1003,10 @@ describe('series provisioning memo (shared across owners)', () => {
         creates += 1;
         if (creates === 1 || staleMissOnce) {
           staleMissOnce = false;
-          return jsonResponse({ status: 'miss', code: 'DATA_MISS', key: 'k', have: 0, need: 3 }, 409);
+          return jsonResponse(
+            { status: 'miss', code: 'DATA_MISS', key: 'k', have: 0, need: 3 },
+            409,
+          );
         }
         return jsonResponse({ status: 'success', session_id: `s${creates}` });
       }
@@ -846,7 +1075,10 @@ describe('series provisioning memo (shared across owners)', () => {
     expect(second.provisioned).toBe('local');
     // The 3-bar tail first, then the wider 5-bar window: coverage takes max.
     expect(providedSizes).toEqual([3, 5]);
-    expect(_getSeriesProvisionForTests(ENDPOINT, KEY)).toMatchObject({ historyBars: 5, via: 'local' });
+    expect(_getSeriesProvisionForTests(ENDPOINT, KEY)).toMatchObject({
+      historyBars: 5,
+      via: 'local',
+    });
   });
 
   it('does not leak provisioning across endpoints', async () => {
@@ -856,7 +1088,10 @@ describe('series provisioning memo (shared across owners)', () => {
       if (c.path === '/data/session') {
         if (!missed.has(host)) {
           missed.add(host);
-          return jsonResponse({ status: 'miss', code: 'DATA_MISS', key: 'k', have: 0, need: 3 }, 409);
+          return jsonResponse(
+            { status: 'miss', code: 'DATA_MISS', key: 'k', have: 0, need: 3 },
+            409,
+          );
         }
         return jsonResponse({ status: 'success', session_id: `s-${host}` });
       }
@@ -894,7 +1129,10 @@ describe('series provisioning memo (shared across owners)', () => {
       if (c.path === '/data/session') {
         creates += 1;
         if (creates === 1) {
-          return jsonResponse({ status: 'miss', code: 'DATA_MISS', key: 'k', have: 0, need: 3 }, 409);
+          return jsonResponse(
+            { status: 'miss', code: 'DATA_MISS', key: 'k', have: 0, need: 3 },
+            409,
+          );
         }
         return jsonResponse({ status: 'success', session_id: `s${creates}` });
       }
@@ -970,7 +1208,11 @@ describe('serverEngine engine-owned run', () => {
     });
     expect(r.status).toBe('error');
     expect(r.error).toMatch(/upstream down/);
-    expect(rec.calls.every((c) => c.path.startsWith('/data/session') || c.path.startsWith('/data/series'))).toBe(true);
+    expect(
+      rec.calls.every(
+        (c) => c.path.startsWith('/data/session') || c.path.startsWith('/data/series'),
+      ),
+    ).toBe(true);
   });
 });
 
@@ -1005,7 +1247,8 @@ describe('repairStaleEngineSeries', () => {
 
   it('skips a series the engine already holds at now', async () => {
     const rec = recorder((c) => {
-      if (isStatus(c)) return jsonResponse({ status: 'success', count: 100, newest: nowSec() - 60 });
+      if (isStatus(c))
+        return jsonResponse({ status: 'success', count: 100, newest: nowSec() - 60 });
       return jsonResponse({ status: 'error' }, 500);
     });
     restore = rec.restore;

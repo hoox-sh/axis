@@ -435,6 +435,55 @@ function dropSession(key: string, endpoint: string): void {
   }
 }
 
+/**
+ * Drop live sessions for one series (repair hook, hp2 follow-up).
+ *
+ * Same staleness as data sessions: a tick/append session created before a
+ * repair evaluates the window it was born with. Unlike the data-session
+ * memo (one entry per series), live sessions are keyed per script — match
+ * every entry whose series coordinates equal the repaired one.
+ *
+ * @returns how many sessions were dropped (and released engine-side).
+ */
+export function invalidateLiveSessionsForSeries(
+  endpoint: string,
+  symbol: string,
+  interval: string,
+): number {
+  const ep = String(endpoint || '').replace(/\/$/, '');
+  // Series identity, not string identity: live-session keys carry the
+  // caller's symbol spelling (`SOLUSDT`) while repair keys carry the pair
+  // form (`SOL/USDT`). Compare case-insensitively without separators.
+  const sym = String(symbol || '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+  const iv = String(interval || '');
+  if (!ep || !sym || !iv) return 0;
+  let dropped = 0;
+  for (const key of [...sessions.keys()]) {
+    let o: Record<string, unknown> | null = null;
+    try {
+      const parsed: unknown = JSON.parse(key);
+      o = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
+    } catch {
+      o = null;
+    }
+    if (!o) continue;
+    const oSym = String(o.symbol || '')
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '');
+    if (
+      String(o.endpoint || '').replace(/\/$/, '') === ep &&
+      oSym === sym &&
+      String(o.interval || '') === iv
+    ) {
+      dropSession(key, ep);
+      dropped += 1;
+    }
+  }
+  return dropped;
+}
+
 /** Engine-side view of a live session (`GET /session/{id}`). */
 export interface LiveSessionStatus {
   sessionId: string;

@@ -46,10 +46,12 @@ import {
   stepsBehind,
 } from './series-freshness';
 import {
+  invalidateDataSessions,
   repairStaleEngineSeries,
   type DataSeriesKey,
   type SeriesRepairResult,
 } from './data-sessions';
+import { invalidateLiveSessionsForSeries } from './live-sessions';
 
 /** Minimum gap between "engine series stale" log lines for one series (ms). */
 export const ENGINE_STALE_LOG_MIN_MS = 60_000;
@@ -113,15 +115,12 @@ export function engineSeriesStale(input: {
   const behindChart = engineWindowBehindChart(input.chartBars, input.engineBars, input.interval);
   const marketNow = Math.max(0, Math.floor(input.marketNow ?? 0));
   const engineNewest = newestBarTime(input.engineBars);
-  const behindMarket =
-    marketNow > 0 && seriesBehind(engineNewest, marketNow, input.interval);
+  const behindMarket = marketNow > 0 && seriesBehind(engineNewest, marketNow, input.interval);
   if (!behindChart && !behindMarket) return null;
   const lag = behindChart
     ? stepsBehind(engineNewest, newestBarTime(input.chartBars), input.interval)
     : stepsBehind(engineNewest, marketNow, input.interval);
-  return behindChart
-    ? `behind the chart tail by ${lag} bars`
-    : `behind the market by ${lag} bars`;
+  return behindChart ? `behind the chart tail by ${lag} bars` : `behind the market by ${lag} bars`;
 }
 
 /**
@@ -149,9 +148,7 @@ export function noteStaleEngineSeries(opts: StaleEngineSeriesNotice): void {
   if (sig !== staleLoggedSig || nowMs - staleLoggedAt > ENGINE_STALE_LOG_MIN_MS) {
     staleLoggedSig = sig;
     staleLoggedAt = nowMs;
-    const newest = opts.engineNewest
-      ? new Date(opts.engineNewest * 1000).toISOString()
-      : 'unknown';
+    const newest = opts.engineNewest ? new Date(opts.engineNewest * 1000).toISOString() : 'unknown';
     try {
       appendLog(
         'warn',
@@ -182,6 +179,21 @@ export function noteStaleEngineSeries(opts: StaleEngineSeriesNotice): void {
   })
     .then((result: SeriesRepairResult) => {
       if (!result.repaired) return;
+      // The series moved underneath every session created earlier: drop
+      // memoized data sessions and live tick/append sessions for this key
+      // so the next run creates a fresh session over the current window
+      // instead of evaluating (and pinning) the stale one. Best-effort —
+      // the engine reclaims orphaned sessions via TTL.
+      try {
+        invalidateDataSessions(opts.repair.endpoint, opts.repair.key);
+        invalidateLiveSessionsForSeries(
+          opts.repair.endpoint,
+          opts.repair.key.symbol,
+          opts.repair.key.interval,
+        );
+      } catch {
+        /* invalidation is best-effort */
+      }
       try {
         appendLog(
           'ok',

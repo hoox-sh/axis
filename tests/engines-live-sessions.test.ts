@@ -14,6 +14,7 @@ import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
 import { mockFetch, jsonResponse } from './helpers/mock-fetch';
 import {
   tryLiveSessionTick,
+  invalidateLiveSessionsForSeries,
   noteRunMode,
   runModeAllowsSessions,
   getSessionStatus,
@@ -121,16 +122,14 @@ function installBackend(handlers: {
       const data = (body as { data?: unknown[] } | null)?.data || [];
       counts.set(id, data.length);
       const payload =
-        handlers.onCreate?.((body as Record<string, unknown>) || {}) ??
-        envelope(id, data.length);
+        handlers.onCreate?.((body as Record<string, unknown>) || {}) ?? envelope(id, data.length);
       return jsonResponse(payload);
     }
     const tick = /^\/session\/([^/]+)\/tick$/.exec(path);
     if (method === 'POST' && tick) {
       const out = handlers.onTick?.(tick[1]!, (body as Record<string, unknown>) || {});
       if (out instanceof Response) return out;
-      const payload =
-        out ?? envelope(tick[1]!, counts.get(tick[1]!) ?? 0);
+      const payload = out ?? envelope(tick[1]!, counts.get(tick[1]!) ?? 0);
       return jsonResponse(payload);
     }
     const append = /^\/session\/([^/]+)\/append$/.exec(path);
@@ -173,9 +172,7 @@ describe('live-sessions', () => {
     expect(hit).not.toBeNull();
     expect(hit!.via).toBe('session-create');
     expect(hit!.sessionId).toBe('s1');
-    expect(backend.calls.map((c) => `${c.method} ${c.path}`)).toEqual([
-      'POST /session',
-    ]);
+    expect(backend.calls.map((c) => `${c.method} ${c.path}`)).toEqual(['POST /session']);
     const createBody = backend.calls[0]!.body as Record<string, unknown>;
     expect(createBody.script).toBe(SCRIPT);
     expect((createBody.data as unknown[]).length).toBe(8);
@@ -332,8 +329,7 @@ describe('live-sessions', () => {
     const backend = installBackend({
       onTick: (id) => {
         ticks += 1;
-        if (ticks === 1)
-          return jsonResponse({ status: 'error', code: 'NO_SESSION' }, 404);
+        if (ticks === 1) return jsonResponse({ status: 'error', code: 'NO_SESSION' }, 404);
         return envelope(id, 8);
       },
     });
@@ -761,5 +757,44 @@ describe('refreshLiveSessionTelemetry', () => {
     st.lastReconciledAt = 0;
     expect(await refreshLiveSessionTelemetry()).toBeNull();
     expect(_liveSessionStateForTests(keyFields)).toBeNull();
+  });
+});
+
+describe('invalidateLiveSessionsForSeries (repair hook)', () => {
+  it('drops the script session and forces a recreate on the next tick', async () => {
+    const deleted: string[] = [];
+    const backend = installBackend({
+      onDelete: (id) => {
+        deleted.push(id);
+      },
+    });
+    restore = backend.restore;
+    const first = await tryLiveSessionTick(opts(pineBars(8)));
+    expect(first?.sessionId).toBe('s1');
+    const creates = () =>
+      backend.calls.filter((c) => c.method === 'POST' && c.path === '/session').length;
+    expect(creates()).toBe(1);
+    // Repair keys carry the pair form (`BTC/USDT`); session keys carry the
+    // caller spelling (`BTCUSDT`). The repair must still match.
+    expect(invalidateLiveSessionsForSeries(ENDPOINT, 'BTC/USDT', INTERVAL)).toBe(1);
+    expect(deleted).toEqual(['s1']);
+    const second = await tryLiveSessionTick(opts(pineBars(8)));
+    expect(second?.sessionId).toBe('s2');
+    expect(creates()).toBe(2);
+    // Dropping is idempotent: the recreated session drops the same way.
+    expect(invalidateLiveSessionsForSeries(ENDPOINT, 'BTC/USDT', INTERVAL)).toBe(1);
+    expect(deleted).toEqual(['s1', 's2']);
+  });
+
+  it('leaves other symbols, intervals and endpoints alone', async () => {
+    const backend = installBackend({});
+    restore = backend.restore;
+    await tryLiveSessionTick(opts(pineBars(8)));
+    expect(invalidateLiveSessionsForSeries(ENDPOINT, 'ETH/USDT', INTERVAL)).toBe(0);
+    expect(invalidateLiveSessionsForSeries(ENDPOINT, 'BTCUSDT', '1h')).toBe(0);
+    expect(invalidateLiveSessionsForSeries('http://other.test:5002', 'BTC/USDT', INTERVAL)).toBe(0);
+    expect(backend.calls.filter((c) => c.method === 'POST' && c.path === '/session').length).toBe(
+      1,
+    );
   });
 });

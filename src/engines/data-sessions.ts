@@ -93,7 +93,9 @@ export type DataSessionCreateResult =
 /** Canonical series key used by the engine store (`exchange|market|SYMBOL|interval`, pair-form). */
 export function canonicalSeriesKey(k: DataSeriesKey): CanonicalSeriesKey {
   return {
-    exchange: String(k.exchange || '').trim().toLowerCase(),
+    exchange: String(k.exchange || '')
+      .trim()
+      .toLowerCase(),
     market: pyneMarket(k.market),
     symbol: pairFormSymbol(String(k.symbol || ''), FALLBACK_MAJORS),
     interval: String(k.interval || '').trim(),
@@ -203,7 +205,13 @@ export async function getDataSeriesStatus(
   key: DataSeriesKey,
   signal?: AbortSignal,
 ): Promise<DataSeriesStatus> {
-  const r = await call(endpoint, `/data/series?${seriesQuery(key)}`, { method: 'GET' }, apiKey, signal);
+  const r = await call(
+    endpoint,
+    `/data/series?${seriesQuery(key)}`,
+    { method: 'GET' },
+    apiKey,
+    signal,
+  );
   if (!r.ok) throw new Error(errorMessage(r, 'series status failed'));
   return {
     key: typeof r.body.key === 'string' ? r.body.key : seriesKeyString(key),
@@ -400,9 +408,13 @@ export async function tickDataSession(
   identity: { exchange: string; symbol: string },
   signal?: AbortSignal,
   opts?: { delta?: boolean },
-): Promise<{ ok: true; payload: Record<string, unknown> } | { ok: false; error: string; gone: boolean }> {
+): Promise<
+  { ok: true; payload: Record<string, unknown> } | { ok: false; error: string; gone: boolean }
+> {
   const plain = {
-    exchange: String(identity.exchange || '').trim().toLowerCase(),
+    exchange: String(identity.exchange || '')
+      .trim()
+      .toLowerCase(),
     symbol: pairFormSymbol(String(identity.symbol || ''), FALLBACK_MAJORS),
   };
   const wantDelta = opts?.delta === true && !noDeltaEndpoints.has(endpoint);
@@ -424,10 +436,7 @@ export async function tickDataSession(
       return {
         ok: false,
         error: errorMessage(r, 'data session tick failed'),
-        gone:
-          r.status === 404 ||
-          code === 'NO_SESSION' ||
-          code === 'SESSION_KEY_MISMATCH',
+        gone: r.status === 404 || code === 'NO_SESSION' || code === 'SESSION_KEY_MISMATCH',
       };
     }
     return { ok: true, payload: r.body };
@@ -499,7 +508,9 @@ async function localDatasetSourceIds(key: DataSeriesKey): Promise<string[]> {
  * of a paired symbol so a pair-form drive still finds the local window.
  */
 function localLookupSymbols(key: DataSeriesKey): string[] {
-  const raw = String(key.symbol || '').trim().toUpperCase();
+  const raw = String(key.symbol || '')
+    .trim()
+    .toUpperCase();
   const paired = pairFormSymbol(raw, FALLBACK_MAJORS);
   const compact = paired.includes('/') ? paired.replaceAll('/', '') : paired;
   const out: string[] = [];
@@ -549,7 +560,9 @@ async function defaultLocalBars(key: DataSeriesKey): Promise<readonly Bar[]> {
  * Only identity and script leave the browser; bars travel only in step 2, and
  * only when the Data Manager already holds them.
  */
-export async function ensureDataSession(opts: EnsureDataSessionOptions): Promise<DataSessionHandle> {
+export async function ensureDataSession(
+  opts: EnsureDataSessionOptions,
+): Promise<DataSessionHandle> {
   const need = Math.max(1, Math.floor(opts.historyBars));
   const input: DataSessionCreateInput = {
     key: opts.key,
@@ -642,6 +655,32 @@ interface DataSessionMemo {
 const dataSessionMemo = new Map<string, DataSessionMemo>();
 
 /**
+ * Drop memoized data sessions for one series (repair hook, hp2 follow-up).
+ *
+ * Uploading fresh bars (local provision) or refetching the engine window
+ * moves the series underneath any session created earlier: a memoized
+ * session still evaluates the window it was born with, so reusing it after
+ * a repair paints stale values (or skips forever under the no-axis guard).
+ * Dropping the memo forces the next run to create a fresh session over the
+ * current window. The engine reclaims the orphaned session via TTL (the
+ * memo never kept the apiKey, so it cannot release explicitly).
+ *
+ * @returns how many memo entries were dropped.
+ */
+export function invalidateDataSessions(endpoint: string, key: DataSeriesKey): number {
+  const prefix = `${String(endpoint || '').replace(/\/$/, '')}|`;
+  const suffix = `|${seriesKeyString(key)}`;
+  let dropped = 0;
+  for (const memoKey of [...dataSessionMemo.keys()]) {
+    if (memoKey.startsWith(prefix) && memoKey.endsWith(suffix)) {
+      dataSessionMemo.delete(memoKey);
+      dropped += 1;
+    }
+  }
+  return dropped;
+}
+
+/**
  * Series-level provisioning memo: one entry per (endpoint, series), shared
  * across owners. The owner memo above (endpoint|owner|series + script
  * fingerprint) keeps per-script sessions for evaluation isolation — but the
@@ -714,7 +753,14 @@ function sharedProvisionSeries(
     const local = await (opts.localBars ?? (() => defaultLocalBars(opts.key)))();
     if (local.length) {
       const tail = local.slice(-need);
-      await provideDataSeries(opts.endpoint, opts.apiKey, opts.key, tail, 'axis-local', opts.signal);
+      await provideDataSeries(
+        opts.endpoint,
+        opts.apiKey,
+        opts.key,
+        tail,
+        'axis-local',
+        opts.signal,
+      );
       noteSeriesProvisioned(memoKey, need, 'local');
       // A local window that does not reach "now" (stale Data Manager cache for a
       // symbol last visited days ago) must never become the engine's frozen
@@ -853,7 +899,14 @@ export async function repairStaleEngineSeries(opts: {
   const tail = local.slice(-need);
   if (tail.length && !seriesIsStale(newestBarTime(tail), opts.key.interval, now)) {
     try {
-      await provideDataSeries(opts.endpoint, opts.apiKey, opts.key, tail, 'axis-local', opts.signal);
+      await provideDataSeries(
+        opts.endpoint,
+        opts.apiKey,
+        opts.key,
+        tail,
+        'axis-local',
+        opts.signal,
+      );
       noteSeriesProvisioned(memoKey, need, 'local');
       return { repaired: true, via: 'local', bars: tail.length };
     } catch (err: unknown) {
@@ -1028,7 +1081,11 @@ export async function runDataSession(o: RunDataSessionOptions): Promise<DataSess
       localBars: o.localBars,
     });
     provisionCooldown.delete(memoKey);
-    dataSessionMemo.set(memoKey, { sessionId: handle.sessionId, fingerprint, payload: handle.payload });
+    dataSessionMemo.set(memoKey, {
+      sessionId: handle.sessionId,
+      fingerprint,
+      payload: handle.payload,
+    });
     return {
       ok: true,
       payload: handle.payload,
