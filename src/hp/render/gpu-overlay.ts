@@ -75,6 +75,7 @@ import {
   type VisualPalette,
 } from '../paint/visual-attr';
 import { clipViewportToChart, downsampleToPixelColumns } from '../paint/downsample';
+import { noteHpGlDraw } from '../../chart/paint-latency';
 import { probeRendererKind } from './select-renderer';
 import { lwcCandleBodyCss, lwcCandleWickCss } from './lwc-candle-width';
 import type { CandleRenderer, RenderViewport } from './types';
@@ -512,6 +513,7 @@ export function startGpuOverlay(deps: GpuOverlayDeps): () => void {
     }
 
     renderer.draw(attr, n, lastVp);
+    noteHpGlDraw();
     painted = true;
   };
 

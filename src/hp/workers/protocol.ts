@@ -50,7 +50,7 @@ export type HostToIngest =
 export type IngestToHost =
   | { type: 'status'; status: 'connecting' | 'open' | 'closed' | 'error' }
   | { type: 'open'; first: boolean }
-  | { type: 'frames'; frames: Redesign2Frame[] }
+  | { type: 'frames'; frames: Redesign2Frame[]; publishedAt?: number }
   | { type: 'hot'; active: boolean }
   | { type: 'pong' }
   | { type: 'malformed'; reason: string };

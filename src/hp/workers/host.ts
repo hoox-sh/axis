@@ -34,6 +34,7 @@ import type { WireClient, WireFrame } from '../../engine/live-wire';
 import { PendingRequests, ReconnectHandlers, wireStats } from '../../engine/wire-bookkeeping';
 import type { Bar } from '../../store/types';
 import { isolationProbe } from '../capabilities';
+import { noteIngestPublish } from '../../chart/paint-latency';
 import { hpSabMode, isHpEnabled } from '../feature-flag';
 import { allocateHotBuffer, type HotBuffer } from '../memory/hot-buffer';
 import type { HostToIngest, IngestToHost } from './protocol';
@@ -188,6 +189,7 @@ export class IngestHostClient implements WireClient {
       return;
     }
     if (msg.type === 'frames') {
+      noteIngestPublish(msg.publishedAt);
       this.dispatchFrames(msg.frames);
       return;
     }

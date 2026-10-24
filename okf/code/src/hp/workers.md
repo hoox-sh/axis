@@ -7,7 +7,7 @@ tags: [code, hp, workers]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-23T11:10:09Z
+  at: 2026-10-24T01:05:33Z
 sources:
   - id: tree
     resource: "src/hp/workers"
@@ -27,6 +27,7 @@ okf_lock: generated
 
 # Depends on
 
+* [src/chart](/code/src/chart.md)
 * [src/data](/code/src/data.md)
 * [src/engine](/code/src/engine.md)
 * [src/hp](/code/src/hp.md)

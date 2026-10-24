@@ -34,7 +34,12 @@ import { isolationProbe } from '../hp/capabilities';
 import { hpGpuMode, hpSabMode, isHpDisabled, isHpEnabled } from '../hp/feature-flag';
 import { hpChip } from '../hp/hud';
 import { copyOutTail } from '../hp/paint/copy-out-lwc';
-import { paintLatencyStats, type PaintLatencyStats } from '../chart/paint-latency';
+import {
+  paintLatencyStats,
+  paintStageStats,
+  type PaintLatencyStats,
+  type PaintStageStats,
+} from '../chart/paint-latency';
 import { getLiveHotBuffer, streamWireState } from '../streams/stream-live';
 import { store } from '../store';
 
@@ -88,6 +93,8 @@ export type HpView = {
     height: number;
     /** Applied live tick → first frame that can show it (plan §14.2). */
     latency: PaintLatencyStats;
+    /** Worker publish → apply → copy-out → draw split (hp2 A1). Nulls = stage never stamped. */
+    stages: PaintStageStats;
   };
   verdict: { code: HpVerdictCode; message: string };
 };
@@ -181,13 +188,14 @@ function ringView(): HpRingView {
 function paintView(): HpView['paint'] {
   const gpuMode = hpGpuMode();
   const latency = paintLatencyStats();
+  const stages = paintStageStats();
   const hasDom = typeof document !== 'undefined' && typeof document.querySelector === 'function';
   if (!hasDom) {
-    return { gpuMode, canvas: false, painting: null, width: 0, height: 0, latency };
+    return { gpuMode, canvas: false, painting: null, width: 0, height: 0, latency, stages };
   }
   const el = document.querySelector('canvas[data-axis-gpu-overlay="1"]');
   if (!el || (el as { tagName?: string }).tagName !== 'CANVAS') {
-    return { gpuMode, canvas: false, painting: null, width: 0, height: 0, latency };
+    return { gpuMode, canvas: false, painting: null, width: 0, height: 0, latency, stages };
   }
   const canvas = el as HTMLCanvasElement;
   const painting = canvas.style.display !== 'none';
@@ -198,6 +206,7 @@ function paintView(): HpView['paint'] {
     width: canvas.clientWidth,
     height: canvas.clientHeight,
     latency,
+    stages,
   };
 }
 

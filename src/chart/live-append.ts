@@ -46,7 +46,7 @@
 
 import { appendBar, sliceToChartWindow, store, type BarAppendResult } from '../store';
 import { getManager, setDataToChart } from './manager-access';
-import { notePaintRequest } from './paint-latency';
+import { noteHpCopyOut, notePaintRequest } from './paint-latency';
 import type { Bar } from '../store/types';
 import { intervalToSec } from '../data/bars-gaps';
 import { copyOutTail } from '../hp/paint/copy-out-lwc';
@@ -122,6 +122,7 @@ export function startHotRingPaint(buffer: HotBuffer, opts?: SubscribeGenerationO
     () => {
       const out = copyOutTail(buffer, HOT_RING_PAINT_TAIL);
       if (!out?.bars.length) return;
+      noteHpCopyOut();
       for (const bar of contiguousTailRun(out.bars)) appendLiveBar(bar);
     },
     opts,

@@ -7,7 +7,7 @@ tags: [chart, code]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-23T18:51:33Z
+  at: 2026-10-24T01:05:33Z
 sources:
   - id: tree
     resource: "src/chart"
@@ -43,7 +43,7 @@ okf_lock: generated
 * `manager-access.ts` — SetDataToChartOpts, applyDebugPinsToChart, applyPriceScaleDecimals, clearScriptPaneLayer, clearScriptPaneLayers, ensurePriceSeries, ensureScriptPaneLayer, getActiveDrawingLayer, getDrawingLayer, getManager, jumpToDebugPin, ohlcvPaintSig
 * `onchain-events.ts` — ONCHAIN_EVENTS_SERIES_KEY, OnchainEventInput, OnchainEventMarker, applyOnchainEventMarkers, clearOnchainEventMarkers, eventsToMarkers
 * `onchain-overlay.ts` — ONCHAIN_PRICE_SCALE_ID, ONCHAIN_SERIES_PREFIX, OnchainLineSpec, applyOnchainOverlays, clearOnchainOverlays
-* `paint-latency.ts` — PaintLatencyStats, _resetPaintLatency, _setPaintLatencyScheduler, flushPaintFrame, notePaintRequest, paintLatencyStats
+* `paint-latency.ts` — PaintLatencyStats, PaintStageStats, _resetPaintLatency, _setPaintLatencyScheduler, flushPaintFrame, noteHpCopyOut, noteHpGlDraw, noteIngestPublish, notePaintRequest, paintLatencyStats, paintStageStats
 * `pane-badge.ts` — mountPaneBadge, refreshAllPaneBadges, refreshPaneBadge, setPaneBadgeLabel
 * `pane-manager.ts` — ManagedPane, OVERLAY_OHLC_PREFIX, OverlayLineSpec, OverlayOhlcSpec, OverlayOwnerOpts, OverlayPoint, OverlayTipPeek, PaneManager, inferOverlayTitle, isFiniteOhlcBar, makeBgcolorKey, makeOverlayLineKey
 * `pine-tables.ts` — CollectTablesOpts, PineTable, PineTableCell, PineTableLocation, PineTablesLocationMap, bottomPanelColumnFractions, bottomPanelHasHeightHints, buildTableGrid, cellTextAlign, cellTextVerticalAlign, collectVisiblePineTables, groupBottomTablesByOwner
@@ -91,6 +91,8 @@ okf_lock: generated
 * [src/chart/drawings/tools](/code/src/chart/drawings/tools.md)
 * [src/data](/code/src/data.md)
 * [src/editor](/code/src/editor.md)
+* [src/hp/render](/code/src/hp/render.md)
+* [src/hp/workers](/code/src/hp/workers.md)
 * [src/indicators](/code/src/indicators.md)
 * [src/mcp](/code/src/mcp.md)
 * [src/results](/code/src/results.md)

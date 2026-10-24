@@ -31,10 +31,27 @@ const MAX_SAMPLES = 240;
 /** rAF scheduler shape — injectable so unit tests need no browser. */
 type FrameScheduler = (cb: (timestamp: number) => void) => number;
 
+/** Stage marks for one frame burst: every stamp is `performance.now()`. */
+type StageMarks = {
+  /** Ingest-worker publish (`IngestToHost.frames.publishedAt`). Null on the JSON path. */
+  publishedAt: number | null;
+  /** First applied live tick of the burst (same clock as the total). */
+  appliedAt: number | null;
+  /** HP-2 hot-ring copy-out completed. Null on the LWC-only path. */
+  copyOutAt: number | null;
+  /** WebGL2 overlay draw completed. Null unless the overlay painted. */
+  drawAt: number | null;
+};
+
 let scheduler: FrameScheduler | null = null;
 let samples: number[] = [];
 let pendingAt: number | null = null;
 let armed = false;
+let marks: StageMarks = { publishedAt: null, appliedAt: null, copyOutAt: null, drawAt: null };
+/** Rolling per-stage deltas (ms), capped like the totals. */
+let publishToApply: number[] = [];
+let applyToCopyOut: number[] = [];
+let copyOutToDraw: number[] = [];
 
 function now(): number {
   return typeof performance !== 'undefined' && typeof performance.now === 'function'
@@ -55,7 +72,10 @@ function defaultScheduler(): FrameScheduler | null {
  * same frame are no-ops.
  */
 export function notePaintRequest(at: number = now()): void {
-  if (pendingAt === null) pendingAt = at;
+  if (pendingAt === null) {
+    pendingAt = at;
+    if (marks.appliedAt === null) marks.appliedAt = at;
+  }
   if (armed) return;
   const schedule = scheduler ?? defaultScheduler();
   if (!schedule) {
@@ -75,10 +95,81 @@ export function notePaintRequest(at: number = now()): void {
 export function flushPaintFrame(frameTimestamp: number): void {
   const started = pendingAt;
   pendingAt = null;
-  if (started === null) return;
+  if (started === null) {
+    marks = { publishedAt: null, appliedAt: null, copyOutAt: null, drawAt: null };
+    return;
+  }
   const dt = Math.max(0, frameTimestamp - started);
   samples.push(dt);
   if (samples.length > MAX_SAMPLES) samples.shift();
+  // Stage split: every delta is best-effort — a stage that never stamped
+  // (JSON path, LWC-only paint) simply contributes no sample.
+  if (marks.publishedAt !== null && marks.appliedAt !== null) {
+    pushStage(publishToApply, Math.max(0, marks.appliedAt - marks.publishedAt));
+  }
+  if (marks.appliedAt !== null && marks.copyOutAt !== null) {
+    pushStage(applyToCopyOut, Math.max(0, marks.copyOutAt - marks.appliedAt));
+  }
+  if (marks.copyOutAt !== null && marks.drawAt !== null) {
+    pushStage(copyOutToDraw, Math.max(0, marks.drawAt - marks.copyOutAt));
+  }
+  marks = { publishedAt: null, appliedAt: null, copyOutAt: null, drawAt: null };
+}
+
+function pushStage(into: number[], dt: number): void {
+  into.push(dt);
+  if (into.length > MAX_SAMPLES) into.shift();
+}
+
+/**
+ * Record the ingest worker's publish stamp for the current burst.
+ *
+ * First stamp wins per burst (same rule as the arrival). `undefined` —
+ * the JSON path, which never crosses a worker — leaves the burst
+ * unmarked so the stage reports null instead of a fictional zero.
+ */
+export function noteIngestPublish(at: number | undefined): void {
+  if (at === undefined || marks.publishedAt !== null) return;
+  marks.publishedAt = at;
+}
+
+/** Record that the HP-2 hot-ring copy-out completed for this burst. */
+export function noteHpCopyOut(at: number = now()): void {
+  if (pendingAt === null && marks.publishedAt === null) return;
+  if (marks.copyOutAt === null) marks.copyOutAt = at;
+}
+
+/** Record that the WebGL2 overlay drew this burst. */
+export function noteHpGlDraw(at: number = now()): void {
+  if (pendingAt === null && marks.publishedAt === null) return;
+  if (marks.drawAt === null) marks.drawAt = at;
+}
+
+export type PaintStageStats = {
+  /** Bursts that carried a worker publish stamp. */
+  publishedBursts: number;
+  /** Worker publish → main-thread apply (postMessage + dispatch). Null without HP ingest. */
+  publishToApplyP50: number | null;
+  /** Apply → hot-ring copy-out. Null on the LWC-only path. */
+  applyToCopyOutP50: number | null;
+  /** Copy-out → overlay draw. Null unless the overlay painted. */
+  copyOutToDrawP50: number | null;
+};
+
+/** Rolling p50 per pipeline stage. Null = that stage never stamped. */
+export function paintStageStats(): PaintStageStats {
+  return {
+    publishedBursts: publishToApply.length,
+    publishToApplyP50: stageP50(publishToApply),
+    applyToCopyOutP50: stageP50(applyToCopyOut),
+    copyOutToDrawP50: stageP50(copyOutToDraw),
+  };
+}
+
+function stageP50(values: readonly number[]): number | null {
+  if (!values.length) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  return percentile(sorted, 0.5);
 }
 
 export type PaintLatencyStats = {
@@ -120,4 +211,8 @@ export function _resetPaintLatency(): void {
   samples = [];
   pendingAt = null;
   armed = false;
+  marks = { publishedAt: null, appliedAt: null, copyOutAt: null, drawAt: null };
+  publishToApply = [];
+  applyToCopyOut = [];
+  copyOutToDraw = [];
 }

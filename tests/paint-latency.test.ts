@@ -9,8 +9,12 @@ import {
   _resetPaintLatency,
   _setPaintLatencyScheduler,
   flushPaintFrame,
+  noteHpCopyOut,
+  noteHpGlDraw,
+  noteIngestPublish,
   notePaintRequest,
   paintLatencyStats,
+  paintStageStats,
 } from '../src/chart/paint-latency';
 
 /** Manual frame clock: the test decides when a frame fires. */
@@ -102,5 +106,62 @@ describe('paint latency (tick → frame, plan §14.2)', () => {
     _resetPaintLatency();
     notePaintRequest(0);
     expect(paintLatencyStats().n).toBe(0);
+  });
+});
+
+describe('paint stages (hp2 A1: worker → apply → copy-out → draw)', () => {
+  beforeEach(() => {
+    _setPaintLatencyScheduler(null);
+    _resetPaintLatency();
+  });
+  afterEach(() => {
+    _setPaintLatencyScheduler(null);
+    _resetPaintLatency();
+  });
+
+  it('splits publish → apply → copy-out → draw', () => {
+    const clock = manualScheduler();
+    _setPaintLatencyScheduler(clock.schedule);
+    noteIngestPublish(90);
+    notePaintRequest(100);
+    noteHpCopyOut(110);
+    noteHpGlDraw(114);
+    clock.fire(116);
+    expect(paintLatencyStats()).toEqual({ n: 1, last: 16, p50: 16, p95: 16, max: 16 });
+    expect(paintStageStats()).toEqual({
+      publishedBursts: 1,
+      publishToApplyP50: 10,
+      applyToCopyOutP50: 10,
+      copyOutToDrawP50: 4,
+    });
+  });
+
+  it('reports null stages on the JSON / LWC-only path', () => {
+    const clock = manualScheduler();
+    _setPaintLatencyScheduler(clock.schedule);
+    noteIngestPublish(undefined);
+    notePaintRequest(100);
+    clock.fire(116);
+    expect(paintLatencyStats().n).toBe(1);
+    expect(paintStageStats()).toEqual({
+      publishedBursts: 0,
+      publishToApplyP50: null,
+      applyToCopyOutP50: null,
+      copyOutToDrawP50: null,
+    });
+  });
+
+  it('takes the first publish stamp per burst and resets between bursts', () => {
+    const clock = manualScheduler();
+    _setPaintLatencyScheduler(clock.schedule);
+    noteIngestPublish(80);
+    noteIngestPublish(95);
+    notePaintRequest(100);
+    clock.fire(116);
+    expect(paintStageStats().publishToApplyP50).toBe(20);
+    notePaintRequest(200);
+    clock.fire(210);
+    // Second burst had no publish stamp: no new stage sample.
+    expect(paintStageStats().publishedBursts).toBe(1);
   });
 });

@@ -62,7 +62,9 @@ let authToken: string | undefined;
 let ring: HotRingWriter | null = null;
 
 const coalescer = new TipCoalescer((frames) => {
-  scope.postMessage({ type: 'frames', frames });
+  // Stage mark for the §14.2 split: the worker clock shares its time origin
+  // with the main thread for dedicated workers, so main can subtract this.
+  scope.postMessage({ type: 'frames', frames, publishedAt: performance.now() });
 }, INGEST_TIP_COALESCE_MS);
 
 function post(msg: IngestToHost): void {

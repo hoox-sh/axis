@@ -7,7 +7,7 @@ tags: [code, hp, render]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-23T19:35:34Z
+  at: 2026-10-24T01:05:33Z
 sources:
   - id: tree
     resource: "src/hp/render"
@@ -30,6 +30,7 @@ okf_lock: generated
 
 # Depends on
 
+* [src/chart](/code/src/chart.md)
 * [src/hp](/code/src/hp.md)
 * [src/hp/memory](/code/src/hp/memory.md)
 * [src/hp/paint](/code/src/hp/paint.md)
