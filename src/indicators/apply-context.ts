@@ -104,6 +104,15 @@ export interface AlignedApplySeries {
   needsAlign: boolean;
   resultTimes: number[] | null;
   chartWindowBars: number;
+  /**
+   * A live push from a session/stream run whose engine shipped no bar axis
+   * while its series length disagrees with the chart window (gap fill,
+   * backfill, slide while the tab was idle). Index tail-pinning would shift
+   * stale values onto new bars and LWC would span the `na` gap as a long
+   * diagonal — the apply must be skipped instead so the last good plots stay
+   * on screen until a full run with an axis arrives.
+   */
+  staleNoAxis: boolean;
 }
 
 /**
@@ -111,9 +120,11 @@ export interface AlignedApplySeries {
  * (`meta.sessionVia` containing `session`) and stream-backed runs
  * (`stream-full` / `stream-delta`) evaluate a window that slides independently
  * of the local chart window, so join by bar time when the engine shipped its
- * axis; otherwise pin the tail (index fallback). Equal-length series pass
- * through untouched. A length mismatch (fresh `/run` vs a chart that grew
- * DSM/forming bars) always aligns so fills/lines/markers zip on the window.
+ * axis. Equal-length series without an axis keep the index zip; a length
+ * mismatch without an axis on a live push (`staleNoAxis`) must NOT tail-pin —
+ * the caller skips the apply and keeps the last good plots. A length mismatch
+ * with an axis (fresh `/run` vs a chart that grew DSM/forming bars) always
+ * aligns so fills/lines/markers zip on the window.
  */
 /**
  * Scripts already warned about a session run without an engine bar axis.
@@ -122,6 +133,7 @@ export interface AlignedApplySeries {
  * chart; the warning must not repeat on every live tick.
  */
 const noEngineAxisWarned = new Set<string>();
+const staleSkipWarned = new Set<string>();
 
 function warnOnceNoEngineAxis(scriptName: string): void {
   const key = String(scriptName || 'script');
@@ -134,16 +146,28 @@ function warnOnceNoEngineAxis(scriptName: string): void {
   );
 }
 
+function warnOnceStaleSkip(scriptName: string): void {
+  const key = String(scriptName || 'script');
+  if (staleSkipWarned.has(key)) return;
+  staleSkipWarned.add(key);
+  appendLog(
+    'warn',
+    'Skipped a stale session apply (no bar axis over a moved window) — keeping last good plots',
+    'run',
+  );
+}
+
 /** @internal test helper — clear the warn-once registry. */
 export function _resetNoEngineAxisWarnForTests(): void {
   noEngineAxisWarned.clear();
+  staleSkipWarned.clear();
 }
 
 export function alignApplySeries(
   script: string,
   result: RunResult,
   bars: Bar[],
-  opts: { silent: boolean; existingName?: string },
+  opts: { silent: boolean; existingName?: string; livePush?: boolean },
 ): AlignedApplySeries {
   const ohlcvTimes = getOhlcvTimesForApply(bars);
   const plotMeta = {
@@ -186,17 +210,30 @@ export function alignApplySeries(
     engineLast != null && chartLast != null && engineLast !== chartLast;
   const needsAlign = needsAlignBase || windowMismatch;
   const resultTimes = needsAlign ? (engineTimes ?? extractEngineResultTimes(result)) : null;
-  const seriesMap = !needsAlign
+  // A session/stream run whose engine shipped **no** bar axis cannot be
+  // time-joined. On a **live push** (background tick/delta) over a moved
+  // window the tail-pin fallback would misplace every value (a gap fill or
+  // slide while idle shifts stale values onto new bars; LWC then spans the
+  // `na` gap as a diagonal to the tip). Skip the apply instead — the caller
+  // keeps the last good plots until a full run with an axis arrives. Fresh
+  // full evaluations keep the tail-pin: their values were just computed over
+  // nearly this window, so the pin only bridges bars appended mid-run.
+  // Equal-length axis-less runs keep the index zip either way: without an
+  // axis a same-window series is the only assumption available.
+  const staleNoAxis = sessionAligned && !resultTimes && lengthMismatch && opts.livePush === true;
+  const seriesMap = staleNoAxis
     ? rawSeries
-    : resultTimes
-      ? alignSeriesMapToTimes(rawSeries, resultTimes, ohlcvTimes)
-      : tailAlignSeriesMap(rawSeries, chartWindowBars);
+    : !needsAlign
+      ? rawSeries
+      : resultTimes
+        ? alignSeriesMapToTimes(rawSeries, resultTimes, ohlcvTimes)
+        : tailAlignSeriesMap(rawSeries, chartWindowBars);
   // A session/stream run whose engine shipped **no** bar axis is tail-pinned
-  // onto the chart: the series is assumed to cover the chart's tail. That is
-  // only true when the session's window is the chart's window — say so
-  // instead of mis-plotting silently.
-  if (sessionAligned && !resultTimes) {
+  // onto the chart only when the window is unchanged (see `staleNoAxis`).
+  if (sessionAligned && !resultTimes && !staleNoAxis) {
     warnOnceNoEngineAxis(resolveScriptDisplayName(script, undefined));
+  } else if (staleNoAxis) {
+    warnOnceStaleSkip(resolveScriptDisplayName(script, undefined));
   }
   const split = splitSeriesByKind(seriesMap, plotMeta);
   if (engineClampedTail && !sessionAligned && !opts.silent) {
@@ -237,7 +274,7 @@ export function alignApplySeries(
     result.meta?.script_name != null ? String(result.meta.script_name) : null,
     existingName,
   );
-  return { ohlcvTimes, plotMeta, seriesMap, split, scriptName, scriptType: scriptTypeOf(result), overlay, needsAlign, resultTimes, chartWindowBars };
+  return { ohlcvTimes, plotMeta, seriesMap, split, scriptName, scriptType: scriptTypeOf(result), overlay, needsAlign, resultTimes, chartWindowBars, staleNoAxis };
 }
 
 function scriptTypeOf(result: RunResult): string {

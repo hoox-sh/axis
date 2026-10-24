@@ -167,20 +167,20 @@ export type DeltaApplyOutcome =
 export class Redesign2DeltaApplier {
   private readonly states = new Redesign2ApplyStateManager();
   private cache: Record<string, unknown> | null = null;
-  private lastSeq = 0;
+  private appliedSeq = 0;
 
   applyFull(full: DeltaApplierFull & { seq?: number }): Record<string, unknown> {
     this.states.requestFull();
     const stored = { ...full, executionContext: 'snapshot' as const };
     this.cache = stored;
-    if (typeof full.seq === 'number') this.lastSeq = full.seq;
+    if (typeof full.seq === 'number') this.appliedSeq = full.seq;
     this.states.markFullApplied();
     return stored;
   }
 
   applyDelta(delta: DeltaApplierDelta): DeltaApplyOutcome {
     if (!this.cache) return { ok: false, reason: 'delta-before-full' };
-    const gap = classifySeqGap(this.lastSeq, delta.seq);
+    const gap = classifySeqGap(this.appliedSeq, delta.seq);
     const cachedContext = this.cache.executionContext;
     if (gap.kind === 'duplicate') {
       const executionContext: ExecutionContext =
@@ -203,13 +203,19 @@ export class Redesign2DeltaApplier {
     if (!merged) return { ok: false, reason: 'needs-full' };
     const stored = { ...merged, executionContext, forming: forming === true };
     this.cache = stored;
-    this.lastSeq = delta.seq;
+    this.appliedSeq = delta.seq;
     this.states.markDeltaApplied();
     return { ok: true, full: { ...stored }, replayed: false, executionContext };
   }
 
   get cached(): Record<string, unknown> | null {
     return this.cache ? { ...this.cache } : null;
+  }
+
+  /** Last applied `seq` — lets callers tell a missed-frames gap (resubscribe)
+   * from a continuous-seq axis splice (values-only salvage is safe). */
+  get lastSeq(): number {
+    return this.appliedSeq;
   }
 
   get state(): ApplyState {
@@ -219,6 +225,6 @@ export class Redesign2DeltaApplier {
   reset(): void {
     this.states.reset();
     this.cache = null;
-    this.lastSeq = 0;
+    this.appliedSeq = 0;
   }
 }

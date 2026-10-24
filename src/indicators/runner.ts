@@ -1244,7 +1244,22 @@ async function runAndApplyInner(
     needsAlign,
     resultTimes,
     chartWindowBars,
-  } = alignApplySeries(script, result, bars, { silent, existingName: existing?.name });
+    staleNoAxis,
+  } = alignApplySeries(script, result, bars, {
+    silent,
+    existingName: existing?.name,
+    livePush: opts.liveTick === true,
+  });
+  // Stale session/stream apply (no bar axis over a moved window): painting it
+  // would tail-pin stale values onto new bars and LWC would span the `na`
+  // gap as a diagonal to the tip. Keep the last good plots on screen; the
+  // next full run (or stream resubscribe) brings a real axis and repaints.
+  if (staleNoAxis) {
+    return {
+      ...result,
+      meta: { ...result.meta, skipped: 'stale-no-axis' },
+    };
+  }
   // Line-like series only — bgcolor/plotshape handled below
   const seriesEntries = split.lines.map((e) => [e.key, e.values] as const);
 

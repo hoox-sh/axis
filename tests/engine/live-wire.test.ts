@@ -7,6 +7,7 @@ import { describe, expect, test } from 'bun:test';
 import { StreamFallbackError, StreamLiveWire, type WireClient, type WireFrame, type WireHandlers } from '../../src/engine/live-wire';
 import type { RunResult } from '../../src/plugins/types';
 import type { Bar } from '../../src/store/types';
+import { setStore, store } from '../../src/store';
 
 function makeHarness() {
   const sent: Array<{ kind: string; id: string }> = [];
@@ -723,6 +724,95 @@ describe('live-wire P1 series + study push', () => {
     expect(h.applied.map((a) => a.via)).toEqual(['stream-full', 'stream-delta']);
     expect(h.resumes).toEqual([]);
     expect(h.statuses.some((s) => s.status === 'degraded')).toBe(false);
+  });
+
+  test('a script delta with a seq gap resubscribes instead of painting', async () => {
+    const h = makeHarness();
+    const first = h.wire.evalScript({ subId: 's-1', script: 'indicator() {}', meta: {}, bars: BARS });
+    await tick(); await tick();
+    h.emit({
+      type: 'full',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 5,
+      payload: { count: 1, plots: [[1]], series: { a: [1] } },
+    });
+    await first;
+    expect(h.applied).toEqual([{ via: 'stream-full' }]);
+    // Frames 6..7 were missed while the tab was idle: force-merging delta 8
+    // would silently drop bars, and any axis-less salvage would tail-pin.
+    // The wire holds the last good paint and asks for a fresh full instead.
+    h.emit({
+      type: 'delta',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 8,
+      payload: { base_index: 0, count: 1, tail_len: 1, plots: [[2]], series: { a: [2] } },
+    });
+    await tick();
+    expect(h.applied).toEqual([{ via: 'stream-full' }]);
+    expect(h.statuses.map((s) => s.status)).toContain('degraded');
+    expect(h.resumes).toHaveLength(1);
+    expect(h.resumes[0]).toMatchObject({ id: 's-1' });
+  });
+
+  test('an axis-less merge over a moved window resubscribes instead of painting', async () => {
+    // Hermetic window: the tail extrapolator reads the live store, so pin
+    // it to the subscribe window (another file may have left bars behind;
+    // bun shares module state across test files).
+    const prevBars = store.bars;
+    setStore('bars', BARS.map((b) => ({ ...b })));
+    try {
+const h = makeHarness();
+    const first = h.wire.evalScript({ subId: 's-1', script: 'indicator() {}', meta: {}, bars: BARS });
+    await tick(); await tick();
+    h.emit({
+    type: 'full',
+    id: 's-1',
+    sessionId: 'ses',
+    seq: 1,
+    payload: {
+      count: 1,
+      plots: [[1]],
+      series: { a: [1] },
+      bar_times: [100],
+    },
+    });
+    await first;
+    expect(h.applied).toEqual([{ via: 'stream-full' }]);
+    // New candle while the chart has not painted it yet: the single-stamp
+    // cached axis cannot extrapolate the tail (no step, no known times), so
+    // the values-only salvage merges without an axis and covers 2 bars of a
+    // 1-bar subscribe window. Painting would tail-pin; resubscribe instead
+    // so a real full restores the pane instead of freezing it.
+    h.emit({
+    type: 'delta',
+    id: 's-1',
+    sessionId: 'ses',
+    seq: 2,
+    payload: { base_index: 1, count: 2, tail_len: 1, plots: [[2]], series: { a: [2] } },
+    });
+    await tick();
+    expect(h.applied).toEqual([{ via: 'stream-full' }]);
+    expect(h.statuses.map((st) => st.status)).toContain('degraded');
+    expect(h.resumes).toHaveLength(1);
+    expect(h.resumes[0]).toMatchObject({ id: 's-1' });
+    // The next consistent delta merges against the axis-less cache and
+    // paints normally (the runner still refuses it while the window
+    // disagrees) — and it must not re-request: one resub per snapshot.
+    h.emit({
+    type: 'delta',
+    id: 's-1',
+    sessionId: 'ses',
+    seq: 3,
+    payload: { base_index: 1, count: 2, tail_len: 1, plots: [[3]], series: { a: [3] } },
+    });
+    await tick();
+    expect(h.applied).toEqual([{ via: 'stream-full' }, { via: 'stream-delta' }]);
+    expect(h.resumes).toHaveLength(1);
+    } finally {
+      setStore('bars', prevBars as Bar[]);
+    }
   });
 
   test('reconnect resumes every live subscription', async () => {

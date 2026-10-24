@@ -163,6 +163,92 @@ describe('alignApplySeries length mismatch', () => {
   });
 });
 
+describe('alignApplySeries staleNoAxis', () => {
+  const T = (i: number) => 1_700_000_000 + i * 300;
+  const bars = Array.from({ length: 5 }, (_, i) => ({
+    time: T(i),
+    open: 1,
+    high: 1,
+    low: 1,
+    close: 1,
+    volume: 1,
+  }));
+  const sessionMeta = (extra?: Record<string, unknown>) => ({
+    sessionVia: 'session-tick',
+    overlay: true,
+    ...(extra ?? {}),
+  });
+
+  it('flags a live push without axis over a moved window', () => {
+    const result = {
+      status: 'success',
+      series: { plot0: [1, 2, 3] },
+      meta: sessionMeta(),
+    } as unknown as RunResult;
+    const aligned = alignApplySeries('indicator("x", overlay=true)\nplot(close)', result, bars, {
+      silent: true,
+      livePush: true,
+    });
+    expect(aligned.staleNoAxis).toBe(true);
+    expect(aligned.resultTimes).toBeNull();
+  });
+
+  it('keeps the tail-pin for a fresh full run without axis (values just computed)', () => {
+    const result = {
+      status: 'success',
+      series: { plot0: [1, 2, 3] },
+      meta: sessionMeta(),
+    } as unknown as RunResult;
+    const aligned = alignApplySeries('indicator("x", overlay=true)\nplot(close)', result, bars, {
+      silent: true,
+    });
+    expect(aligned.staleNoAxis).toBe(false);
+    expect(aligned.seriesMap.plot0).toEqual([null, null, 1, 2, 3]);
+  });
+
+  it('does not flag an equal-length session series without axis', () => {
+    const result = {
+      status: 'success',
+      series: { plot0: [1, 2, 3, 4, 5] },
+      meta: sessionMeta(),
+    } as unknown as RunResult;
+    const aligned = alignApplySeries('indicator("x", overlay=true)\nplot(close)', result, bars, {
+      silent: true,
+      livePush: true,
+    });
+    expect(aligned.staleNoAxis).toBe(false);
+  });
+
+  it('does not flag a time-joined session run that ships an axis', () => {
+    const times = bars.map((b) => b.time);
+    const result = {
+      status: 'success',
+      series: { plot0: [1, 2, 3] },
+      meta: sessionMeta({ engineTimes: times.slice(0, 3) }),
+    } as unknown as RunResult;
+    const aligned = alignApplySeries('indicator("x", overlay=true)\nplot(close)', result, bars, {
+      silent: true,
+      livePush: true,
+    });
+    expect(aligned.staleNoAxis).toBe(false);
+    expect(aligned.seriesMap.plot0).toEqual([1, 2, 3, null, null]);
+  });
+
+  it('does not flag a non-session length mismatch (free-tier clamp still tail-pins)', () => {
+    const result = {
+      status: 'success',
+      series: { plot0: [11, 12, 13] },
+      meta: { overlay: true, windowBars: 3 },
+    } as unknown as RunResult;
+    const aligned = alignApplySeries('indicator("x", overlay=true)\nplot(close)', result, bars, {
+      silent: true,
+      livePush: true,
+    });
+    expect(aligned.staleNoAxis).toBe(false);
+    expect(aligned.seriesMap.plot0).toEqual([null, null, 11, 12, 13]);
+  });
+});
+
 describe('alignSeriesToTimes', () => {
   const T = (i: number) => 1_700_000_000 + i * 86_400;
 
@@ -513,8 +599,7 @@ describe('engine-owned series apply', () => {
     expect(tip.value).toBe(5);
   });
 
-  it('tail-aligns a longer session-tick series grown inside the slack window', async () => {
-    const bars = SAMPLE_BARS;
+  it('skips a longer session-tick series grown past the chart without an axis', async () => {
     setManager({
       getPane: (id: string) =>
         id === 'price'
@@ -526,9 +611,11 @@ describe('engine-owned series apply', () => {
       syncBgcolorBands: () => {},
     } as never);
 
-    // A live session that outgrew the chart window (growth inside
-    // SESSION_GROWTH_SLACK) without shipping a bar-time axis: the index
-    // fallback still pins the newest engine value to the newest chart bar.
+    // A live push from a session that outgrew the chart window without
+    // shipping a bar-time axis: index tail-pinning would slide stale values
+    // onto new bars and LWC would span the `na` gap as a diagonal to the
+    // tip. The apply is skipped instead so the last good plots stay on
+    // screen until a full run brings an axis.
     const precomputed: RunResult = {
       status: 'success',
       plots: [],
@@ -545,17 +632,91 @@ describe('engine-owned series apply', () => {
     const r = await runAndApply(SCRIPT, undefined, {
       silent: true,
       openResults: false,
+      liveTick: true,
       precomputedResult: precomputed,
     });
     expect(r.status).toBe('success');
+    expect(r.meta?.skipped).toBe('stale-no-axis');
 
+    // Nothing painted — the previous plots are untouched.
+    expect(captured).toHaveLength(0);
+  });
+
+  it('skips a shorter session series when the chart grew without an axis (idle gap)', async () => {
+    setManager({
+      getPane: (id: string) =>
+        id === 'price'
+          ? { id: 'price', type: 'price', chart: {}, series: {}, priceLines: {} }
+          : undefined,
+      syncOverlayLines: (paneId: string, lines: CapturedApply['lines']) => {
+        captured.push({ paneId, lines });
+      },
+      syncBgcolorBands: () => {},
+    } as never);
+
+    // Idle/backfill case: the chart holds 5 bars but the stale push only
+    // evaluated 3. Tail-pinning would head-pad `na`s and shift every value;
+    // LWC connects the gap as a diagonal from the last pre-break value.
+    const precomputed: RunResult = {
+      status: 'success',
+      plots: [],
+      series: { plot0: [1, 2, 3] },
+      events: [],
+      meta: {
+        sessionVia: 'session-append',
+        session_id: 's10',
+        overlay: true,
+        script_name: 'eo',
+        plot_meta: { plot0: {} },
+      },
+    };
+    const r = await runAndApply(SCRIPT, undefined, {
+      silent: true,
+      openResults: false,
+      liveTick: true,
+      precomputedResult: precomputed,
+    });
+    expect(r.status).toBe('success');
+    expect(r.meta?.skipped).toBe('stale-no-axis');
+    expect(captured).toHaveLength(0);
+  });
+
+  it('still paints an equal-length session series without an axis (same window)', async () => {
+    setManager({
+      getPane: (id: string) =>
+        id === 'price'
+          ? { id: 'price', type: 'price', chart: {}, series: {}, priceLines: {} }
+          : undefined,
+      syncOverlayLines: (paneId: string, lines: CapturedApply['lines']) => {
+        captured.push({ paneId, lines });
+      },
+      syncBgcolorBands: () => {},
+    } as never);
+
+    // No axis and no length drift: the index zip is the only assumption
+    // available, and painting keeps live ticks updating the tip.
+    const precomputed: RunResult = {
+      status: 'success',
+      plots: [],
+      series: { plot0: [1, 2, 3, 4, 5] },
+      events: [],
+      meta: {
+        sessionVia: 'session-tick',
+        session_id: 's11',
+        overlay: true,
+        script_name: 'eo',
+        plot_meta: { plot0: {} },
+      },
+    };
+    const r = await runAndApply(SCRIPT, undefined, {
+      silent: true,
+      openResults: false,
+      liveTick: true,
+      precomputedResult: precomputed,
+    });
+    expect(r.status).toBe('success');
+    expect(r.meta?.skipped).toBeUndefined();
     const line = captured[captured.length - 1]!.lines[0]!;
-    expect(line.data).toHaveLength(bars.length);
-    // session-* hits used to skip alignment entirely: the longer series
-    // head-aligned as [1, 2, 3, 4, 5]. The tail fallback keeps the newest values.
-    expect(line.data.map((d) => d.value)).toEqual([3, 4, 5, 6, 7]);
-    const tip = line.data[line.data.length - 1]!;
-    expect(tip.time).toBe(bars[bars.length - 1]!.time);
-    expect(tip.value).toBe(7);
+    expect(line.data.map((d) => d.value)).toEqual([1, 2, 3, 4, 5]);
   });
 });

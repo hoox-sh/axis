@@ -41,6 +41,7 @@ import { store } from '../store';
 import type { Bar } from '../store/types';
 import { sanitizeStreamBar } from '../data/parse-bars';
 import { readTimeList, scriptDeltaTimeTail, Redesign2DeltaApplier } from './client-apply';
+import { classifySeqGap } from './frames';
 import type { SubscriptionStatus } from '../store/types';
 
 export class StreamFallbackError extends Error {
@@ -253,6 +254,8 @@ export class StreamLiveWire {
   >();
   /** Input signature of each script subscription (a change forces a re-subscribe). */
   private readonly scriptInputSig = new Map<string, string>();
+  /** Subs with an outstanding axis-resubscribe (one resub per full snapshot). */
+  private readonly axisResubPending = new Set<string>();
   /** `history_bars` the script subscription was created with. */
   private readonly scriptDepth = new Map<string, number>();
   /** Inbox for frames that arrive before their waiter (one TCP segment can
@@ -422,6 +425,7 @@ export class StreamLiveWire {
           );
         }
         const payload = full.payload as Record<string, unknown>;
+        this.axisResubPending.delete(input.subId);
         applier.applyFull(scriptFullForApplier(payload, full.seq));
         this.appliedSeq.set(input.subId, typeof full.seq === 'number' ? full.seq : 0);
         this.handlers.onStatus(input.subId, 'live');
@@ -667,6 +671,7 @@ export class StreamLiveWire {
     }
     const wasLive = this.appliedSeq.has(subId);
     if (frame.type === 'full') {
+      this.axisResubPending.delete(subId);
       applier.applyFull(scriptFullForApplier(payload, frame.seq));
       if (typeof frame.seq === 'number') this.appliedSeq.set(subId, frame.seq);
       this.handlers.onStatus(subId, 'live');
@@ -701,10 +706,32 @@ export class StreamLiveWire {
       ...(times ? { times } : {}),
     };
     let out = applier.applyDelta(delta);
-    // An axis that does not match the plots rejects every later delta and
-    // leaves the script drawn on the snapshot from load. Drop the axis and
-    // apply the values; a later full snapshot brings a matching axis back.
+    // A rejected delta means the merge is unsafe. Two cases:
+    // - Missed frames (seq gap after idle/throttle): force-merging would
+    //   silently drop bars, and any values-only salvage would paint without
+    //   an axis (tail-pinned diagonals). Resubscribe for a fresh full.
+    // - Continuous seq but an axis splice the applier cannot join (cached
+    //   bar_times longer than the script window, e.g. Donchian): drop the
+    //   axis and merge the values — but only paint when the merge still
+    //   covers the chart window. An axis-less merge over a moved window
+    //   would be skipped by the apply path anyway (`staleNoAxis` keeps the
+    //   last good plots), so resubscribe for a real full instead of holding
+    //   a frozen pane on every tick.
     if (!out.ok && out.reason === 'needs-full') {
+      const incomingSeq = typeof frame.seq === 'number' ? frame.seq : -1;
+      if (classifySeqGap(applier.lastSeq, incomingSeq).kind !== 'continuous') {
+        this.handlers.onStatus(subId, 'degraded', { message: 'delta gap — resubscribing' });
+        const gapCtx = this.scriptCtx.get(subId);
+        const gapBars = gapCtx?.bars ?? [];
+        try {
+          this.client.resumeSubscription(subId, gapBars.length, this.lastBarTime(gapBars), {
+            seq: this.appliedSeq.get(subId) ?? 0,
+          });
+        } catch {
+          /* resume is best-effort; HUD already shows degraded */
+        }
+        return;
+      }
       const cached = applier.cached;
       if (cached && (cached.bar_times != null || cached.times != null)) {
         applier.applyFull(
@@ -717,19 +744,14 @@ export class StreamLiveWire {
         );
         const { times: _drop, ...valuesOnly } = delta;
         out = applier.applyDelta(valuesOnly);
+        if (out.ok && this.mergedFullLacksAxisForChart(subId, out.full)) {
+          this.requestAxisResub(subId);
+          return;
+        }
       }
     }
     if (!out.ok) {
-      this.handlers.onStatus(subId, 'degraded', { message: 'delta rejected — resubscribing' });
-      const ctx = this.scriptCtx.get(subId);
-      const bars = ctx?.bars ?? [];
-      try {
-        this.client.resumeSubscription(subId, bars.length, this.lastBarTime(bars), {
-          seq: this.appliedSeq.get(subId) ?? 0,
-        });
-      } catch {
-        /* resume is best-effort; HUD already shows degraded */
-      }
+      this.requestAxisResub(subId, 'delta rejected — resubscribing');
       return;
     }
     if (typeof frame.seq === 'number') this.appliedSeq.set(subId, frame.seq);
@@ -737,7 +759,51 @@ export class StreamLiveWire {
     if (!out.replayed) this.applyScriptPush(subId, out.full, 'stream-delta');
   }
 
+  /**
+   * True when a merged script `full` carries no bar-time axis and its window
+   * disagrees with the subscribed window — painting it would index-zip stale
+   * values onto the wrong bars (the runner skips it as `staleNoAxis`). The
+   * caller resubscribes for a real full instead. Compared against the
+   * subscription window (not the live store) so the verdict is stable while
+   * the chart slides; a residual store-window drift at paint time is still
+   * guarded downstream.
+   */
+  private mergedFullLacksAxisForChart(subId: string, full: Record<string, unknown>): boolean {
+    const times = readTimeList(full.bar_times) ?? readTimeList(full.times);
+    if (times?.length) return false;
+    const windowLen = this.scriptCtx.get(subId)?.bars.length ?? 0;
+    const count = Number((full as { count?: unknown }).count);
+    let fullLen = Number.isFinite(count) && count > 0 ? count : 0;
+    if (!fullLen) {
+      const series = (full as { series?: unknown }).series;
+      if (series && typeof series === 'object' && !Array.isArray(series)) {
+        for (const arr of Object.values(series as Record<string, unknown>)) {
+          if (Array.isArray(arr)) fullLen = Math.max(fullLen, arr.length);
+        }
+      }
+    }
+    if (!windowLen || !fullLen) return false;
+    return fullLen !== windowLen;
+  }
+
+  /** Degraded + one resub per snapshot for an unpaintable merge (no paint). */
+  private requestAxisResub(subId: string, message = 'axis mismatch — resubscribing'): void {
+    this.handlers.onStatus(subId, 'degraded', { message });
+    if (this.axisResubPending.has(subId)) return;
+    this.axisResubPending.add(subId);
+    const ctx = this.scriptCtx.get(subId);
+    const bars = ctx?.bars ?? [];
+    try {
+      this.client.resumeSubscription(subId, bars.length, this.lastBarTime(bars), {
+        seq: this.appliedSeq.get(subId) ?? 0,
+      });
+    } catch {
+      /* resume is best-effort; HUD already shows degraded */
+    }
+  }
+
   release(subId: string): void {
+    this.axisResubPending.delete(subId);
     this.appliers.delete(subId);
     this.appliedSeq.delete(subId);
     this.seriesBars.delete(subId);
