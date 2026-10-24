@@ -23,9 +23,11 @@
  * 3. **Anchor math** — `overlayViewport` places record `i` exactly where
  *    LWC puts logical `fromBase + i`, fractional pan offsets and right
  *    margin included.
- * 4. **Activation gate** — the overlay never engages on the default `auto`
- *    flag: no default path may recolor LWC's translucent candles by
- *    stacking a second painter on top (module doc, hp/render/gpu-overlay).
+ * 4. **Activation gate** — the overlay engages on HP-3 selection
+ *    (forced `webgl2` + context, or `auto` on WebGL2-only) and stays
+ *    dormant on `off`, GPU-less `auto`, painterless HP-4, and HP disabled:
+ *    no path but HP-3 may stack a second painter over LWC's translucent
+ *    candles (module doc, hp/render/gpu-overlay).
  */
 
 import '../setup';
@@ -54,7 +56,7 @@ import {
   lwcCandleWickCss,
   lwcCandleWickPx,
 } from '../../src/hp/render/lwc-candle-width';
-import { setHpGpuMode } from '../../src/hp/feature-flag';
+import { resetHpFlags, setHpEnabled, setHpGpuMode } from '../../src/hp/feature-flag';
 import {
   MAX_OVERLAY_BARS,
   overlayViewport,
@@ -394,9 +396,9 @@ describe('overlayViewport (LWC anchor math)', () => {
   });
 });
 
-describe('overlay activation gate (explicit rung only)', () => {
+describe('overlay activation gate (HP-3 selection)', () => {
   afterEach(() => {
-    setHpGpuMode('auto');
+    resetHpFlags();
   });
 
   function trapDeps(appended: { n: number }): GpuOverlayDeps {
@@ -416,10 +418,12 @@ describe('overlay activation gate (explicit rung only)', () => {
     };
   }
 
-  /** Make the isolation probe answer "webgl2 available" for this scope. */
+  /** Make the isolation probe answer "webgl2 available, no webgpu". */
   function withProbeableWebgl2<T>(fn: () => T): T {
     const hadDoc = 'document' in globalThis;
-    const prev = (globalThis as { document?: unknown }).document;
+    const prevDoc = (globalThis as { document?: unknown }).document;
+    const hadNav = 'navigator' in globalThis;
+    const prevNav = (globalThis as { navigator?: unknown }).navigator;
     (globalThis as { document?: unknown }).document = {
       createElement: () => ({
         setAttribute: () => {},
@@ -429,16 +433,42 @@ describe('overlay activation gate (explicit rung only)', () => {
         // rejects the fake context → renderer null → safe no-op fallback.
       }),
     };
+    // Bun has no navigator.gpu; delete a host-provided one so the probe
+    // reads WebGL2-only (HP-3), not HP-4.
+    try {
+      const g = globalThis as { navigator?: { gpu?: unknown } };
+      if (g.navigator && 'gpu' in g.navigator) delete g.navigator.gpu;
+    } catch {
+      /* ignore */
+    }
     try {
       return fn();
     } finally {
-      if (hadDoc) (globalThis as { document?: unknown }).document = prev;
+      if (hadDoc) (globalThis as { document?: unknown }).document = prevDoc;
       else delete (globalThis as { document?: unknown }).document;
+      if (hadNav) (globalThis as { navigator?: unknown }).navigator = prevNav;
+      else delete (globalThis as { navigator?: unknown }).navigator;
     }
   }
 
-  it('stays dormant on the default auto flag even with WebGL2 probeable', () => {
-    setHpGpuMode('auto');
+  /** Probe answers "both GPUs" → `auto` selects painterless HP-4. */
+  function withProbeableBoth<T>(fn: () => T): T {
+    return withProbeableWebgl2(() => {
+      const g = globalThis as { navigator?: unknown };
+      const hadNav = 'navigator' in globalThis;
+      const prevNav = g.navigator;
+      g.navigator = { ...(prevNav as object | null), gpu: {} };
+      try {
+        return fn();
+      } finally {
+        if (hadNav) g.navigator = prevNav;
+        else delete (globalThis as { navigator?: unknown }).navigator;
+      }
+    });
+  }
+
+  it('stays dormant when HP is not opted in, even forced + probeable', () => {
+    setHpGpuMode('webgl2');
     const appended = { n: 0 };
     withProbeableWebgl2(() => {
       const stop = startGpuOverlay(trapDeps(appended));
@@ -448,7 +478,43 @@ describe('overlay activation gate (explicit rung only)', () => {
     expect(appended.n).toBe(0);
   });
 
+  it('stays dormant on gpu=off even with WebGL2 probeable', () => {
+    setHpEnabled(true);
+    setHpGpuMode('off');
+    const appended = { n: 0 };
+    withProbeableWebgl2(() => {
+      const stop = startGpuOverlay(trapDeps(appended));
+      expect(typeof stop).toBe('function');
+      stop();
+    });
+    expect(appended.n).toBe(0);
+  });
+
+  it('stays dormant on auto without a GPU (HP-1/HP-2 have no painter)', () => {
+    setHpEnabled(true);
+    setHpGpuMode('auto');
+    const appended = { n: 0 };
+    // Bun: the document stub's canvas has no getContext → probe says no.
+    const stop = startGpuOverlay(trapDeps(appended));
+    expect(typeof stop).toBe('function');
+    stop();
+    expect(appended.n).toBe(0);
+  });
+
+  it('stays dormant on auto with both GPUs (HP-4 is painterless)', () => {
+    setHpEnabled(true);
+    setHpGpuMode('auto');
+    const appended = { n: 0 };
+    withProbeableBoth(() => {
+      const stop = startGpuOverlay(trapDeps(appended));
+      expect(typeof stop).toBe('function');
+      stop();
+    });
+    expect(appended.n).toBe(0);
+  });
+
   it('stays dormant on the forced webgl2 flag when no context probes', () => {
+    setHpEnabled(true);
     setHpGpuMode('webgl2');
     const appended = { n: 0 };
     // Bun: the document stub's canvas has no getContext → probe says no.
@@ -458,7 +524,8 @@ describe('overlay activation gate (explicit rung only)', () => {
     expect(appended.n).toBe(0);
   });
 
-  it('engages only when the flag is forced and a context probes', () => {
+  it('engages on forced webgl2 + context (HP-3)', () => {
+    setHpEnabled(true);
     setHpGpuMode('webgl2');
     const appended = { n: 0 };
     withProbeableWebgl2(() => {
@@ -467,6 +534,18 @@ describe('overlay activation gate (explicit rung only)', () => {
       expect(() => stop()).not.toThrow();
     });
     expect(appended.n).toBe(1); // canvas mounted → the rung engaged
+  });
+
+  it('engages on auto + WebGL2-only (HP-3 selection, D1)', () => {
+    setHpEnabled(true);
+    setHpGpuMode('auto');
+    const appended = { n: 0 };
+    withProbeableWebgl2(() => {
+      const stop = startGpuOverlay(trapDeps(appended));
+      expect(typeof stop).toBe('function');
+      expect(() => stop()).not.toThrow();
+    });
+    expect(appended.n).toBe(1); // canvas mounted → auto-rung engaged
   });
 });
 

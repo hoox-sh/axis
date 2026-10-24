@@ -36,18 +36,20 @@
  * and `draw()` clears the transparent canvas every frame, so a skipped
  * frame shows the LWC candles underneath, never a stale GL layer.
  *
- * **Explicit rung only**: the overlay engages solely when
- * `axis.engine.hp.gpu` is *forced* to `webgl2`. LWC paints candle bodies
- * translucent (`0.76`) — stacking identical GL bodies on top composites
- * them darker, and no default path may recolor candles the user never
- * asked to change. While LWC still paints the same candles (the
- * hide-LWC-candles switch is gated on production measurement), `auto`,
- * `off`, and the painterless `webgpu` rung all leave this overlay
- * dormant: this is a parity instrument, not yet the production painter.
+ * **HP-3 selection**: the overlay engages whenever the rung selector
+ * lands on 3 — forced `gpu=webgl2` with a context, *or* `auto` on a
+ * WebGL2-only machine (no WebGPU). `off`, `auto` without a GPU, and the
+ * painterless `webgpu` rung (HP-4, `auto` with WebGPU or forced `webgpu`)
+ * all stay dormant, as does any session-cap clamp below 3 (SAB OOM) or HP
+ * disabled / not opted in. LWC paints candle bodies translucent (`0.76`)
+ * — stacking identical GL bodies on top composites them darker, and the
+ * hide-LWC-candles switch that removes the double paint is the *next*
+ * gated step (D2), not this one: until then this stays a parity overlay,
+ * not yet the production painter.
  *
  * A frame is skipped (canvas cleared) whenever:
  *
- * - the gpu flag is not the forced `webgl2` rung (see above),
+ * - the selected rung is not HP-3 (see above),
  * - the live wire has no hot ring (flag off, not isolated, no wire yet),
  * - the ring and the chart disagree on series length (symbol switch or
  *   snapshot merge in flight),
@@ -62,7 +64,7 @@
 
 import type { IChartApi } from 'lightweight-charts';
 import type { Bar } from '../../store/types';
-import { isolationProbe } from '../capabilities';
+import { isolationProbe, selectHpRung } from '../capabilities';
 import { hpGpuMode } from '../feature-flag';
 import type { HotBuffer } from '../memory/hot-buffer';
 import { copyOutTail, chartRangeToAbsolute } from '../paint/copy-out-lwc';
@@ -242,14 +244,16 @@ export function ringWindowPlacement(args: {
 }
 
 /**
- * Start the overlay pump. Returns the disposer; a no-op disposer unless the
- * *forced* `webgl2` rung is available (see the module doc for why `auto`
- * stays dormant: no default path may recolor LWC's translucent candles).
+ * Start the overlay pump. Returns the disposer; a no-op disposer unless
+ * HP-3 is selected (forced `webgl2` with a context, or `auto` on a
+ * WebGL2-only machine — see the module doc). HP-4 (`webgpu` outcome) has
+ * no painter yet and stays on LWC; `off`, GPU-less `auto`, a session-cap
+ * clamp below 3, and HP disabled / not opted in all stay dormant.
  */
 export function startGpuOverlay(deps: GpuOverlayDeps): () => void {
-  const mode = hpGpuMode();
-  if (mode !== 'webgl2') return () => {};
-  if (probeRendererKind(isolationProbe(), mode) !== 'webgl2') return () => {};
+  const probe = isolationProbe();
+  if (probeRendererKind(probe, hpGpuMode()) !== 'webgl2') return () => {};
+  if (selectHpRung(probe) !== 3) return () => {};
 
   const canvas = document.createElement('canvas');
   canvas.setAttribute('data-axis-gpu-overlay', '1');
