@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "tests/hp"
-description: "tests/hp contains atomics-main-guard.test.ts, axb1-codec.test.ts, axb1-fuzz.test.ts, and 20 more files."
+description: "tests/hp contains atomics-main-guard.test.ts, axb1-codec.test.ts, axb1-fuzz.test.ts, and 21 more files."
 resource: "tests/hp"
 tags: [code, hp, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-24T01:16:08Z
+  at: 2026-10-24T01:24:00Z
 sources:
   - id: tree
     resource: "tests/hp"
@@ -22,6 +22,7 @@ okf_lock: generated
 * `axb1-codec.test.ts`
 * `axb1-fuzz.test.ts`
 * `barstate-tip.test.ts`
+* `calc-worker.test.ts`
 * `capabilities.test.ts`
 * `copy-out-lwc.test.ts`
 * `downsample.test.ts`
