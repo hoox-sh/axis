@@ -47,6 +47,17 @@ let scheduler: FrameScheduler | null = null;
 let samples: number[] = [];
 let pendingAt: number | null = null;
 let armed = false;
+/**
+ * Bursts armed while the tab is hidden (or hidden mid-burst) are counted,
+ * not sampled: rAF stops while hidden, so the arrival-to-frame delay would
+ * measure the background duration instead of paint latency and pollute
+ * rolling max (observed: 47 s / 96 s samples). Gate numbers stay
+ * foreground-true; `suspended` says how many were skipped.
+ */
+let suspendedSamples = 0;
+let hiddenAtArm = false;
+let suspendedMidBurst = false;
+let visibilityHooked = false;
 let marks: StageMarks = { publishedAt: null, appliedAt: null, copyOutAt: null, drawAt: null };
 /** Rolling per-stage deltas (ms), capped like the totals. */
 let publishToApply: number[] = [];
@@ -64,6 +75,37 @@ function defaultScheduler(): FrameScheduler | null {
   return (cb) => globalThis.requestAnimationFrame(cb);
 }
 
+/** Tab-hidden probe — `false` outside a DOM (tests, workers). */
+function tabHidden(): boolean {
+  try {
+    return typeof document !== 'undefined' && document.hidden === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Flag bursts the tab suspends mid-flight. Attached lazily on the first
+ * armed burst; a no-op without a DOM. The flag is consumed (and cleared)
+ * by the next frame flush.
+ */
+function ensureVisibilityHook(): void {
+  if (visibilityHooked) return;
+  visibilityHooked = true;
+  try {
+    if (typeof document === 'undefined' || typeof document.addEventListener !== 'function') return;
+    document.addEventListener('visibilitychange', () => {
+      try {
+        if (document.hidden === true) suspendedMidBurst = true;
+      } catch {
+        /* visibility is best-effort telemetry */
+      }
+    });
+  } catch {
+    /* never break paint for telemetry */
+  }
+}
+
 /**
  * Record that an applied live tick is waiting for a frame.
  *
@@ -75,6 +117,9 @@ export function notePaintRequest(at: number = now()): void {
   if (pendingAt === null) {
     pendingAt = at;
     if (marks.appliedAt === null) marks.appliedAt = at;
+    hiddenAtArm = tabHidden();
+    suspendedMidBurst = false;
+    ensureVisibilityHook();
   }
   if (armed) return;
   const schedule = scheduler ?? defaultScheduler();
@@ -97,6 +142,17 @@ export function flushPaintFrame(frameTimestamp: number): void {
   pendingAt = null;
   if (started === null) {
     marks = { publishedAt: null, appliedAt: null, copyOutAt: null, drawAt: null };
+    hiddenAtArm = false;
+    suspendedMidBurst = false;
+    return;
+  }
+  if (hiddenAtArm || suspendedMidBurst) {
+    // Suspended burst: the delay measures background time, not paint.
+    // Count it and drop the marks so no stage inherits a stale stamp.
+    suspendedSamples += 1;
+    marks = { publishedAt: null, appliedAt: null, copyOutAt: null, drawAt: null };
+    hiddenAtArm = false;
+    suspendedMidBurst = false;
     return;
   }
   const dt = Math.max(0, frameTimestamp - started);
@@ -186,6 +242,8 @@ export type PaintLatencyStats = {
   p50: number | null;
   p95: number | null;
   max: number | null;
+  /** Bursts skipped for tab suspension (armed hidden or hidden mid-burst). */
+  suspended: number;
 };
 
 function percentile(sorted: readonly number[], p: number): number | null {
@@ -196,7 +254,8 @@ function percentile(sorted: readonly number[], p: number): number | null {
 
 /** Rolling tick → frame latency: p50, p95 and the worst recent tick. */
 export function paintLatencyStats(): PaintLatencyStats {
-  if (!samples.length) return { n: 0, last: null, p50: null, p95: null, max: null };
+  if (!samples.length)
+    return { n: 0, last: null, p50: null, p95: null, max: null, suspended: suspendedSamples };
   const sorted = [...samples].sort((a, b) => a - b);
   return {
     n: samples.length,
@@ -204,6 +263,7 @@ export function paintLatencyStats(): PaintLatencyStats {
     p50: percentile(sorted, 0.5),
     p95: percentile(sorted, 0.95),
     max: Math.round((sorted[sorted.length - 1] ?? 0) * 100) / 100,
+    suspended: suspendedSamples,
   };
 }
 
@@ -217,8 +277,16 @@ export function _resetPaintLatency(): void {
   samples = [];
   pendingAt = null;
   armed = false;
+  suspendedSamples = 0;
+  hiddenAtArm = false;
+  suspendedMidBurst = false;
   marks = { publishedAt: null, appliedAt: null, copyOutAt: null, drawAt: null };
   publishToApply = [];
   applyToCopyOut = [];
   copyOutToDraw = [];
+}
+
+/** Tests: drop the visibility hook so a fake DOM can be re-installed. */
+export function _resetPaintLatencyVisibilityHook(): void {
+  visibilityHooked = false;
 }
