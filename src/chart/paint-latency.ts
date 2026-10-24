@@ -35,6 +35,8 @@ type FrameScheduler = (cb: (timestamp: number) => void) => number;
 type StageMarks = {
   /** Ingest-worker publish (`IngestToHost.frames.publishedAt`). Null on the JSON path. */
   publishedAt: number | null;
+  /** Main-clock receipt of the surviving publish (origin-delta pairing). */
+  publishedArrivalAt: number | null;
   /** First applied live tick of the burst (same clock as the total). */
   appliedAt: number | null;
   /** HP-2 hot-ring copy-out completed. Null on the LWC-only path. */
@@ -68,6 +70,7 @@ let suspendedMidBurst = false;
 let visibilityHooked = false;
 let marks: StageMarks = {
   publishedAt: null,
+  publishedArrivalAt: null,
   appliedAt: null,
   copyOutAt: null,
   drawAt: null,
@@ -77,6 +80,14 @@ let marks: StageMarks = {
 let publishToApply: number[] = [];
 let applyToCopyOut: number[] = [];
 let copyOutToDraw: number[] = [];
+/**
+ * Per-message `arrival − publish` floor (ms), rolling like the totals.
+ * Its minimum estimates the worker→main clock-origin delta (+ fastest
+ * postMessage transit); the flush subtracts it so publish→apply reads
+ * true dispatch instead of boot timing. A worker restart re-baselines as
+ * the window rolls.
+ */
+let transitFloor: number[] = [];
 
 function now(): number {
   return typeof performance !== 'undefined' && typeof performance.now === 'function'
@@ -160,6 +171,7 @@ export function flushPaintFrame(frameTimestamp: number): void {
   if (started === null) {
     marks = {
       publishedAt: null,
+      publishedArrivalAt: null,
       appliedAt: null,
       copyOutAt: null,
       drawAt: null,
@@ -175,6 +187,7 @@ export function flushPaintFrame(frameTimestamp: number): void {
     suspendedSamples += 1;
     marks = {
       publishedAt: null,
+      publishedArrivalAt: null,
       appliedAt: null,
       copyOutAt: null,
       drawAt: null,
@@ -190,9 +203,19 @@ export function flushPaintFrame(frameTimestamp: number): void {
   // Stage split: every delta is best-effort — a stage that never stamped
   // (JSON path, LWC-only paint) simply contributes no sample. The publish
   // stage additionally requires a worker-caused burst: venue-tick appends
-  // must not consume the engine's publish stamp (causal pairing).
-  if (marks.workerCaused && marks.publishedAt !== null && marks.appliedAt !== null) {
-    pushStage(publishToApply, Math.max(0, marks.appliedAt - marks.publishedAt));
+  // must not consume the engine's publish stamp (causal pairing). The raw
+  // delta mixes the worker's clock origin, so the rolling minimum transit
+  // (origin delta + fastest postMessage) is subtracted, leaving true
+  // post→apply dispatch. Math.max guards a restart mid-window (stale
+  // floor) — the window rolls and re-baselines.
+  if (
+    marks.workerCaused &&
+    marks.publishedAt !== null &&
+    marks.publishedArrivalAt !== null &&
+    marks.appliedAt !== null
+  ) {
+    const originDelta = transitFloor.length ? Math.min(...transitFloor) : 0;
+    pushStage(publishToApply, Math.max(0, marks.appliedAt - marks.publishedAt - originDelta));
   }
   if (marks.appliedAt !== null && marks.copyOutAt !== null) {
     pushStage(applyToCopyOut, Math.max(0, marks.copyOutAt - marks.appliedAt));
@@ -202,6 +225,7 @@ export function flushPaintFrame(frameTimestamp: number): void {
   }
   marks = {
     publishedAt: null,
+    publishedArrivalAt: null,
     appliedAt: null,
     copyOutAt: null,
     drawAt: null,
@@ -217,11 +241,18 @@ function pushStage(into: number[], dt: number): void {
 /**
  * Record the ingest worker's publish stamp for the current burst.
  *
- * First stamp wins per burst (same rule as the arrival). `undefined` —
+ * Last stamp wins per burst (same rule as the arrival). `undefined` —
  * the JSON path, which never crosses a worker — leaves the burst
  * unmarked so the stage reports null instead of a fictional zero.
+ *
+ * The worker's `performance.now()` runs on its own time origin (worker
+ * creation, seconds after the document's), so the raw stamp reads
+ * seconds behind the main clock. `arrivalAt` (default: receipt time)
+ * pairs each stamp with a main-clock reading; the flush subtracts the
+ * rolling minimum transit as the origin-delta estimate, leaving true
+ * post→apply dispatch. Tests pass both clocks explicitly.
  */
-export function noteIngestPublish(at: number | undefined): void {
+export function noteIngestPublish(at: number | undefined, arrivalAt: number = now()): void {
   if (at === undefined) return;
   // Last stamp wins: a worker `frames` message that appends nothing (a
   // snapshot over bars the chart already holds) must not lend its stamp to
@@ -230,6 +261,8 @@ export function noteIngestPublish(at: number | undefined): void {
   // burst's postMessage + dispatch. The stamp that survives is the message
   // being dispatched when the append lands, same task.
   marks.publishedAt = at;
+  marks.publishedArrivalAt = arrivalAt;
+  pushStage(transitFloor, Math.max(0, arrivalAt - at));
 }
 
 /** Record that the HP-2 hot-ring copy-out completed for this burst. */
@@ -319,6 +352,7 @@ export function _resetPaintLatency(): void {
   suspendedMidBurst = false;
   marks = {
     publishedAt: null,
+    publishedArrivalAt: null,
     appliedAt: null,
     copyOutAt: null,
     drawAt: null,
@@ -327,6 +361,7 @@ export function _resetPaintLatency(): void {
   publishToApply = [];
   applyToCopyOut = [];
   copyOutToDraw = [];
+  transitFloor = [];
 }
 
 /** Tests: drop the visibility hook so a fake DOM can be re-installed. */

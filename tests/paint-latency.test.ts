@@ -130,7 +130,7 @@ describe('paint stages (hp2 A1: worker → apply → copy-out → draw)', () => 
   it('splits publish → apply → copy-out → draw', () => {
     const clock = manualScheduler();
     _setPaintLatencyScheduler(clock.schedule);
-    noteIngestPublish(90);
+    noteIngestPublish(90, 90);
     notePaintRequest(100, true);
     noteHpCopyOut(110);
     noteHpGlDraw(114);
@@ -171,8 +171,8 @@ describe('paint stages (hp2 A1: worker → apply → copy-out → draw)', () => 
     _setPaintLatencyScheduler(clock.schedule);
     // An earlier message in the same burst (e.g. a snapshot that appends
     // nothing) must not lend its stamp to the append that follows.
-    noteIngestPublish(80);
-    noteIngestPublish(95);
+    noteIngestPublish(80, 80);
+    noteIngestPublish(95, 95);
     notePaintRequest(100, true);
     clock.fire(116);
     expect(paintStageStats().publishToApplyP50).toBe(5);
@@ -188,10 +188,10 @@ describe('paint stages (hp2 A1: worker → apply → copy-out → draw)', () => 
     // Snapshot burst: worker publishes, chart already holds the bars, so
     // no paint request arms — but a frame still closes the burst and drops
     // the orphaned stamp. The later tip burst carries its own stamp.
-    noteIngestPublish(80);
+    noteIngestPublish(80, 80);
     flushPaintFrame(90);
     expect(paintLatencyStats().n).toBe(0);
-    noteIngestPublish(195);
+    noteIngestPublish(195, 195);
     notePaintRequest(200, true);
     clock.fire(216);
     expect(paintStageStats().publishToApplyP50).toBe(5);
@@ -250,7 +250,7 @@ describe('suspended bursts (hidden tab, plan §14.2)', () => {
     })();
     _setPaintLatencyScheduler(clock.schedule);
     fakeDocument(true);
-    noteIngestPublish(90);
+    noteIngestPublish(90, 90);
     notePaintRequest(100);
     // rAF resumes 96 s later — background time, not paint latency.
     clock.fire(96_100);
@@ -266,7 +266,7 @@ describe('suspended bursts (hidden tab, plan §14.2)', () => {
     expect(paintStageStats().publishedBursts).toBe(0);
     // Foreground bursts sample normally afterwards.
     (g.document as Record<string, (v: boolean) => void>).__setHidden(false);
-    noteIngestPublish(96_190);
+    noteIngestPublish(96_190, 96_190);
     notePaintRequest(96_200, true);
     clock.fire(96_216);
     expect(paintLatencyStats().n).toBe(1);
@@ -322,7 +322,7 @@ describe('causal pairing (worker vs venue appends, plan §14.2)', () => {
     const clock = manual();
     _setPaintLatencyScheduler(clock.schedule);
     // Engine posted 8 s ago; a venue tick paints the forming tip now.
-    noteIngestPublish(100);
+    noteIngestPublish(100, 100);
     notePaintRequest(8100);
     clock.fire(8116);
     // Total tick→frame still samples — the tick really painted this frame.
@@ -336,7 +336,7 @@ describe('causal pairing (worker vs venue appends, plan §14.2)', () => {
   it('a worker burst consumes the stamp for the dispatch number', () => {
     const clock = manual();
     _setPaintLatencyScheduler(clock.schedule);
-    noteIngestPublish(100);
+    noteIngestPublish(100, 100);
     notePaintRequest(108, true);
     clock.fire(116);
     expect(paintLatencyStats().n).toBe(1);
@@ -347,7 +347,7 @@ describe('causal pairing (worker vs venue appends, plan §14.2)', () => {
   it('a mixed burst pairs on the worker append (OR across the burst)', () => {
     const clock = manual();
     _setPaintLatencyScheduler(clock.schedule);
-    noteIngestPublish(100);
+    noteIngestPublish(100, 100);
     notePaintRequest(104);
     notePaintRequest(108, true);
     clock.fire(116);
@@ -355,5 +355,63 @@ describe('causal pairing (worker vs venue appends, plan §14.2)', () => {
     expect(paintLatencyStats().last).toBe(12);
     expect(paintStageStats().publishedBursts).toBe(1);
     expect(paintStageStats().publishToApplyP50).toBe(4);
+  });
+});
+
+describe('worker clock origin (plan §14.2)', () => {
+  function manual() {
+    const queue: Array<(ts: number) => void> = [];
+    return {
+      schedule: (cb: (ts: number) => void): number => {
+        queue.push(cb);
+        return queue.length;
+      },
+      fire(ts: number): void {
+        const next = queue.shift();
+        if (next) next(ts);
+      },
+    };
+  }
+
+  beforeEach(() => {
+    _setPaintLatencyScheduler(null);
+    _resetPaintLatency();
+  });
+  afterEach(() => {
+    _setPaintLatencyScheduler(null);
+    _resetPaintLatency();
+  });
+
+  it('subtracts the worker clock origin, leaving dispatch', () => {
+    const clock = manual();
+    _setPaintLatencyScheduler(clock.schedule);
+    // The worker's time origin trails the main clock by 7 s: the stamp
+    // reads 1000 where the main clock reads 8000 at receipt.
+    noteIngestPublish(1000, 8000);
+    notePaintRequest(8010, true);
+    noteHpCopyOut(8012);
+    clock.fire(8026);
+    expect(paintLatencyStats().n).toBe(1);
+    expect(paintLatencyStats().last).toBe(16);
+    // (8010 − 1000) − 7000 origin delta = 10 ms of true dispatch.
+    expect(paintStageStats().publishedBursts).toBe(1);
+    expect(paintStageStats().publishToApplyP50).toBe(10);
+    expect(paintStageStats().applyToCopyOutP50).toBe(2);
+  });
+
+  it('tracks the minimum transit as the origin estimate', () => {
+    const clock = manual();
+    _setPaintLatencyScheduler(clock.schedule);
+    // A slow first post (transit 7050 ms) then a faster one (6002 ms):
+    // the floor settles on the fastest, not the first.
+    noteIngestPublish(1000, 8050);
+    notePaintRequest(8060, true);
+    clock.fire(8076);
+    expect(paintStageStats().publishToApplyP50).toBe(10);
+    noteIngestPublish(2000, 8002);
+    notePaintRequest(8010, true);
+    clock.fire(8026);
+    // (8010 − 2000) − 6002 floor = 8: the stale 7050 ms floor no longer rules.
+    expect(paintStageStats().publishToApplyP50).toBe(8);
   });
 });
