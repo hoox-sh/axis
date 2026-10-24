@@ -131,7 +131,7 @@ describe('paint stages (hp2 A1: worker → apply → copy-out → draw)', () => 
     const clock = manualScheduler();
     _setPaintLatencyScheduler(clock.schedule);
     noteIngestPublish(90);
-    notePaintRequest(100);
+    notePaintRequest(100, true);
     noteHpCopyOut(110);
     noteHpGlDraw(114);
     clock.fire(116);
@@ -155,7 +155,7 @@ describe('paint stages (hp2 A1: worker → apply → copy-out → draw)', () => 
     const clock = manualScheduler();
     _setPaintLatencyScheduler(clock.schedule);
     noteIngestPublish(undefined);
-    notePaintRequest(100);
+    notePaintRequest(100, true);
     clock.fire(116);
     expect(paintLatencyStats().n).toBe(1);
     expect(paintStageStats()).toEqual({
@@ -173,7 +173,7 @@ describe('paint stages (hp2 A1: worker → apply → copy-out → draw)', () => 
     // nothing) must not lend its stamp to the append that follows.
     noteIngestPublish(80);
     noteIngestPublish(95);
-    notePaintRequest(100);
+    notePaintRequest(100, true);
     clock.fire(116);
     expect(paintStageStats().publishToApplyP50).toBe(5);
     notePaintRequest(200);
@@ -192,7 +192,7 @@ describe('paint stages (hp2 A1: worker → apply → copy-out → draw)', () => 
     flushPaintFrame(90);
     expect(paintLatencyStats().n).toBe(0);
     noteIngestPublish(195);
-    notePaintRequest(200);
+    notePaintRequest(200, true);
     clock.fire(216);
     expect(paintStageStats().publishToApplyP50).toBe(5);
   });
@@ -267,7 +267,7 @@ describe('suspended bursts (hidden tab, plan §14.2)', () => {
     // Foreground bursts sample normally afterwards.
     (g.document as Record<string, (v: boolean) => void>).__setHidden(false);
     noteIngestPublish(96_190);
-    notePaintRequest(96_200);
+    notePaintRequest(96_200, true);
     clock.fire(96_216);
     expect(paintLatencyStats().n).toBe(1);
     expect(paintLatencyStats().last).toBe(16);
@@ -291,5 +291,69 @@ describe('suspended bursts (hidden tab, plan §14.2)', () => {
     const stats = paintLatencyStats();
     expect(stats.n).toBe(0);
     expect(stats.suspended).toBe(1);
+  });
+});
+
+describe('causal pairing (worker vs venue appends, plan §14.2)', () => {
+  function manual() {
+    const queue: Array<(ts: number) => void> = [];
+    return {
+      schedule: (cb: (ts: number) => void): number => {
+        queue.push(cb);
+        return queue.length;
+      },
+      fire(ts: number): void {
+        const next = queue.shift();
+        if (next) next(ts);
+      },
+    };
+  }
+
+  beforeEach(() => {
+    _setPaintLatencyScheduler(null);
+    _resetPaintLatency();
+  });
+  afterEach(() => {
+    _setPaintLatencyScheduler(null);
+    _resetPaintLatency();
+  });
+
+  it('a venue burst never consumes the engine publish stamp', () => {
+    const clock = manual();
+    _setPaintLatencyScheduler(clock.schedule);
+    // Engine posted 8 s ago; a venue tick paints the forming tip now.
+    noteIngestPublish(100);
+    notePaintRequest(8100);
+    clock.fire(8116);
+    // Total tick→frame still samples — the tick really painted this frame.
+    expect(paintLatencyStats().n).toBe(1);
+    expect(paintLatencyStats().last).toBe(16);
+    // But the publish stage stays empty: engine cadence is not dispatch.
+    expect(paintStageStats().publishedBursts).toBe(0);
+    expect(paintStageStats().publishToApplyP50).toBeNull();
+  });
+
+  it('a worker burst consumes the stamp for the dispatch number', () => {
+    const clock = manual();
+    _setPaintLatencyScheduler(clock.schedule);
+    noteIngestPublish(100);
+    notePaintRequest(108, true);
+    clock.fire(116);
+    expect(paintLatencyStats().n).toBe(1);
+    expect(paintStageStats().publishedBursts).toBe(1);
+    expect(paintStageStats().publishToApplyP50).toBe(8);
+  });
+
+  it('a mixed burst pairs on the worker append (OR across the burst)', () => {
+    const clock = manual();
+    _setPaintLatencyScheduler(clock.schedule);
+    noteIngestPublish(100);
+    notePaintRequest(104);
+    notePaintRequest(108, true);
+    clock.fire(116);
+    // Total counts from the first arrival; the stage pairs worker-caused.
+    expect(paintLatencyStats().last).toBe(12);
+    expect(paintStageStats().publishedBursts).toBe(1);
+    expect(paintStageStats().publishToApplyP50).toBe(4);
   });
 });

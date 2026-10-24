@@ -41,6 +41,14 @@ type StageMarks = {
   copyOutAt: number | null;
   /** WebGL2 overlay draw completed. Null unless the overlay painted. */
   drawAt: number | null;
+  /**
+   * Any append in the burst was engine-driven (ingest ring pump, engine
+   * series merge/diff). Only those bursts may consume the publish stamp:
+   * venue-tick appends paint the forming tip from the venue feed, and
+   * pairing them with the engine's last post measures engine cadence, not
+   * dispatch latency (§14.2 causal pairing).
+   */
+  workerCaused: boolean;
 };
 
 let scheduler: FrameScheduler | null = null;
@@ -58,7 +66,13 @@ let suspendedSamples = 0;
 let hiddenAtArm = false;
 let suspendedMidBurst = false;
 let visibilityHooked = false;
-let marks: StageMarks = { publishedAt: null, appliedAt: null, copyOutAt: null, drawAt: null };
+let marks: StageMarks = {
+  publishedAt: null,
+  appliedAt: null,
+  copyOutAt: null,
+  drawAt: null,
+  workerCaused: false,
+};
 /** Rolling per-stage deltas (ms), capped like the totals. */
 let publishToApply: number[] = [];
 let applyToCopyOut: number[] = [];
@@ -111,9 +125,11 @@ function ensureVisibilityHook(): void {
  *
  * Cheap enough for the per-bar path: the first call since the last frame
  * stores the arrival time and arms one frame callback; later calls in the
- * same frame are no-ops.
+ * same frame are no-ops. `workerCaused` marks engine-driven appends; it is
+ * OR-ed across the burst — any worker append in the frame lets the burst
+ * consume the ingest publish stamp.
  */
-export function notePaintRequest(at: number = now()): void {
+export function notePaintRequest(at: number = now(), workerCaused = false): void {
   if (pendingAt === null) {
     pendingAt = at;
     if (marks.appliedAt === null) marks.appliedAt = at;
@@ -121,6 +137,7 @@ export function notePaintRequest(at: number = now()): void {
     suspendedMidBurst = false;
     ensureVisibilityHook();
   }
+  if (workerCaused) marks.workerCaused = true;
   if (armed) return;
   const schedule = scheduler ?? defaultScheduler();
   if (!schedule) {
@@ -141,7 +158,13 @@ export function flushPaintFrame(frameTimestamp: number): void {
   const started = pendingAt;
   pendingAt = null;
   if (started === null) {
-    marks = { publishedAt: null, appliedAt: null, copyOutAt: null, drawAt: null };
+    marks = {
+      publishedAt: null,
+      appliedAt: null,
+      copyOutAt: null,
+      drawAt: null,
+      workerCaused: false,
+    };
     hiddenAtArm = false;
     suspendedMidBurst = false;
     return;
@@ -150,7 +173,13 @@ export function flushPaintFrame(frameTimestamp: number): void {
     // Suspended burst: the delay measures background time, not paint.
     // Count it and drop the marks so no stage inherits a stale stamp.
     suspendedSamples += 1;
-    marks = { publishedAt: null, appliedAt: null, copyOutAt: null, drawAt: null };
+    marks = {
+      publishedAt: null,
+      appliedAt: null,
+      copyOutAt: null,
+      drawAt: null,
+      workerCaused: false,
+    };
     hiddenAtArm = false;
     suspendedMidBurst = false;
     return;
@@ -159,8 +188,10 @@ export function flushPaintFrame(frameTimestamp: number): void {
   samples.push(dt);
   if (samples.length > MAX_SAMPLES) samples.shift();
   // Stage split: every delta is best-effort — a stage that never stamped
-  // (JSON path, LWC-only paint) simply contributes no sample.
-  if (marks.publishedAt !== null && marks.appliedAt !== null) {
+  // (JSON path, LWC-only paint) simply contributes no sample. The publish
+  // stage additionally requires a worker-caused burst: venue-tick appends
+  // must not consume the engine's publish stamp (causal pairing).
+  if (marks.workerCaused && marks.publishedAt !== null && marks.appliedAt !== null) {
     pushStage(publishToApply, Math.max(0, marks.appliedAt - marks.publishedAt));
   }
   if (marks.appliedAt !== null && marks.copyOutAt !== null) {
@@ -169,7 +200,13 @@ export function flushPaintFrame(frameTimestamp: number): void {
   if (marks.copyOutAt !== null && marks.drawAt !== null) {
     pushStage(copyOutToDraw, Math.max(0, marks.drawAt - marks.copyOutAt));
   }
-  marks = { publishedAt: null, appliedAt: null, copyOutAt: null, drawAt: null };
+  marks = {
+    publishedAt: null,
+    appliedAt: null,
+    copyOutAt: null,
+    drawAt: null,
+    workerCaused: false,
+  };
 }
 
 function pushStage(into: number[], dt: number): void {
@@ -280,7 +317,13 @@ export function _resetPaintLatency(): void {
   suspendedSamples = 0;
   hiddenAtArm = false;
   suspendedMidBurst = false;
-  marks = { publishedAt: null, appliedAt: null, copyOutAt: null, drawAt: null };
+  marks = {
+    publishedAt: null,
+    appliedAt: null,
+    copyOutAt: null,
+    drawAt: null,
+    workerCaused: false,
+  };
   publishToApply = [];
   applyToCopyOut = [];
   copyOutToDraw = [];

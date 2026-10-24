@@ -428,7 +428,7 @@ function buildWire(): StreamLiveWire {
         // setData. Same-slot or next-slot tips path-set through appendLiveBar.
         if (!append || bars.length > 4 || !continuesChartTail(bars)) return;
         for (const bar of bars) {
-          appendLiveBar(bar);
+          appendLiveBar(bar, { via: 'worker' });
         }
       },
       onCloseVerified: (time, _result, ohlcv) => {

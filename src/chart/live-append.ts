@@ -63,14 +63,20 @@ import type { HotBuffer } from '../hp/memory/hot-buffer';
  * not run for a stale tick: the price card would show a stale price, an
  * armed alert could fire on a stale close, and the dataset would be
  * overwritten with the stale bar.
+ *
+ * `opts.via: 'worker'` marks engine-driven appends (ingest ring pump,
+ * engine series merge/diff): only those may consume the ingest publish
+ * stamp for the publish→apply stage. Venue-tick appends paint the forming
+ * tip from the venue feed — pairing them with the engine's last post would
+ * measure engine cadence, not dispatch latency (§14.2 causal pairing).
  */
-export function appendLiveBar(bar: Bar): BarAppendResult {
+export function appendLiveBar(bar: Bar, opts?: { via?: 'worker' }): BarAppendResult {
   const result = appendBar(bar);
   if (result === 'ignored') return result;
 
   // Measurement only: stamp the arrival before any paint work so the rAF
   // callback (armed on the first tick of the frame) reports tick → frame.
-  notePaintRequest();
+  notePaintRequest(undefined, opts?.via === 'worker');
 
   const manager = getManager();
   if (!manager) return result;
@@ -123,7 +129,7 @@ export function startHotRingPaint(buffer: HotBuffer, opts?: SubscribeGenerationO
       const out = copyOutTail(buffer, HOT_RING_PAINT_TAIL);
       if (!out?.bars.length) return;
       noteHpCopyOut();
-      for (const bar of contiguousTailRun(out.bars)) appendLiveBar(bar);
+      for (const bar of contiguousTailRun(out.bars)) appendLiveBar(bar, { via: 'worker' });
     },
     opts,
   );

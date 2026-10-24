@@ -67,16 +67,18 @@ import { isInteractiveRunInFlight, runAndApply, beginRunEpoch } from '../indicat
 import { isStudyActive } from '../optimize/guard';
 import { groupIndicatorsByPlotDepLevel, mapWithConcurrencyLimit } from '../results/plot-sources';
 import { detectScriptKind } from '../indicators/script-meta';
-import {
-  getStream,
-  listStreams,
-  defaultStreamForSource,
-  type StreamPlugin,
-} from './catalog';
+import { getStream, listStreams, defaultStreamForSource, type StreamPlugin } from './catalog';
 import { noteDataManagerLiveBar } from '../data/expand-cache';
 import { isEngineOwnedLive } from '../engines/ownership';
 import { liveRerunModeForEngine } from '../engines/catalog';
-import { streamEvalScript, streamRouteActive, streamSeriesTick, streamDriveSeries, streamStop, StreamFallbackError } from './stream-live';
+import {
+  streamEvalScript,
+  streamRouteActive,
+  streamSeriesTick,
+  streamDriveSeries,
+  streamStop,
+  StreamFallbackError,
+} from './stream-live';
 import { tickChartDataSession, releaseChartDataSession } from '../engines/chart-data-session';
 import { getDataSeriesBars } from '../engines/data-sessions';
 import { engineWindowBehindChart, newestBarTime } from '../engines/series-freshness';
@@ -461,28 +463,28 @@ export function startLive(
       const appendVenueBars = (bars: Bar[]) => {
         let shouldRerun = false;
         for (const bar of bars) {
-        if (!isCurrent()) break;
-        // A rejected bar (stale, out of order, or a forming tick trying to
-        // reopen a closed candle) must not reach telemetry, alerts or the
-        // dataset — the store refused it for a reason.
-        const verdict = appendLiveBar(bar);
-        if (verdict === 'ignored') continue;
-        noteTick(bar.close, bar.time, sym);
-        // F2 (cross-workstream): pass the stream's own identity so alerts
-        // evaluate against the stream symbol, dropping stale-stream bars.
-        noteLiveBarForAlerts(bar, { symbol: sym, interval: iv });
+          if (!isCurrent()) break;
+          // A rejected bar (stale, out of order, or a forming tick trying to
+          // reopen a closed candle) must not reach telemetry, alerts or the
+          // dataset — the store refused it for a reason.
+          const verdict = appendLiveBar(bar);
+          if (verdict === 'ignored') continue;
+          noteTick(bar.close, bar.time, sym);
+          // F2 (cross-workstream): pass the stream's own identity so alerts
+          // evaluate against the stream symbol, dropping stale-stream bars.
+          noteLiveBarForAlerts(bar, { symbol: sym, interval: iv });
 
-        // Data Manager: grow the underlying bars-cache dataset with live ticks.
-        // Skipped in engine-owned live mode — the engine's store owns the series,
-        // so local persistence would fight the feed the chart renders from.
-        if (!isEngineOwnedLive()) noteDataManagerLiveBar(bar);
+          // Data Manager: grow the underlying bars-cache dataset with live ticks.
+          // Skipped in engine-owned live mode — the engine's store owns the series,
+          // so local persistence would fight the feed the chart renders from.
+          if (!isEngineOwnedLive()) noteDataManagerLiveBar(bar);
 
-        const timeAdvanced = lastSeenBarTime > 0 && bar.time > lastSeenBarTime;
-        lastSeenBarTime = Math.max(lastSeenBarTime, bar.time);
-        // Heavy histories: throttle every-tick → bar-close to avoid full engine re-encode.
-        // An engine that advertises bar close only also falls back here — the
-        // stored preference itself is never rewritten.
-        const mode = effectiveLiveRerunMode(liveRerunModeForEngine(store.live.rerunOn));
+          const timeAdvanced = lastSeenBarTime > 0 && bar.time > lastSeenBarTime;
+          lastSeenBarTime = Math.max(lastSeenBarTime, bar.time);
+          // Heavy histories: throttle every-tick → bar-close to avoid full engine re-encode.
+          // An engine that advertises bar close only also falls back here — the
+          // stored preference itself is never rewritten.
+          const mode = effectiveLiveRerunMode(liveRerunModeForEngine(store.live.rerunOn));
           if (mode === 'every-tick' || bar.closed || timeAdvanced) {
             shouldRerun = true;
           }
@@ -654,11 +656,11 @@ export function startLive(
               const at = tail.findIndex((b) => b.time === curTip.time);
               if (at >= 0) {
                 if (at < tail.length - 1 || !sameEngineOhlc(curTip, tail[at]!)) {
-                  appendLiveBar(tail[at]!);
+                  appendLiveBar(tail[at]!, { via: 'worker' });
                 }
                 for (let i = at + 1; i < tail.length; i++) {
                   if (!isCurrent()) break;
-                  appendLiveBar(tail[i]!);
+                  appendLiveBar(tail[i]!, { via: 'worker' });
                 }
                 const tip = tail[tail.length - 1]!;
                 const prevLastSeen = lastSeenBarTime;
@@ -711,7 +713,7 @@ export function startLive(
           // (store path-set, no array clone) + O(1) `series.update`. The full
           // `setBarsQuiet` + `setDataToChart` repaint is unnecessary here.
           const tip = proBars[proBars.length - 1]!;
-          appendLiveBar(tip);
+          appendLiveBar(tip, { via: 'worker' });
           lastSeenBarTime = Math.max(lastSeenBarTime, tip.time);
         } else if (diff.kind === 'append') {
           // Same prefix plus a few new bars: revise the former tip first
@@ -719,13 +721,13 @@ export function startLive(
           const curLen = store.bars.length;
           if (diff.reviseTip && curLen > 0) {
             const revised = proBars[curLen - 1]!;
-            appendLiveBar(revised);
+            appendLiveBar(revised, { via: 'worker' });
           }
           for (const nb of diff.newBars) {
             if (!isCurrent()) break;
             // Store first (`PaneManager.appendBar` reads it for HA mapping),
             // then the O(1) chart update.
-            appendLiveBar(nb);
+            appendLiveBar(nb, { via: 'worker' });
           }
           const tip = proBars[proBars.length - 1]!;
           lastSeenBarTime = Math.max(lastSeenBarTime, tip.time);
@@ -759,8 +761,7 @@ export function startLive(
         const mode = effectiveLiveRerunMode(liveRerunModeForEngine(store.live.rerunOn));
         const tipTime = proBars[proBars.length - 1]!.time;
         const timeAdvanced = tipTime > prevLastSeen;
-        const shouldRerun =
-          mode === 'every-tick' ? true : timeAdvanced || venueClosed;
+        const shouldRerun = mode === 'every-tick' ? true : timeAdvanced || venueClosed;
         return { painted: diff.kind, shouldRerun };
       } catch {
         // Tick / bars fetch failed — keep the last good series; no new data
@@ -789,8 +790,7 @@ export function startLive(
   /** Schedule a queue flush: rAF while visible, timer fallback while hidden. */
   const scheduleLiveBarFlush = () => {
     if (liveBarRaf || liveBarTimer) return;
-    const canRaf =
-      !isPageHidden() && typeof requestAnimationFrame === 'function';
+    const canRaf = !isPageHidden() && typeof requestAnimationFrame === 'function';
     if (canRaf) {
       liveBarRaf = requestAnimationFrame(flushPendingBar);
       // Safety net: if rAF never fires (tab hidden mid-frame), the timer
@@ -803,104 +803,101 @@ export function startLive(
 
   // Per-plugin config (Topbar config row → store.pluginsConfig) — e.g. ccxt-ws exchange id
   const streamCfg =
-    ((store.pluginsConfig || {})[pluginKey('stream', stream.id)] as Record<string, unknown> | undefined) ||
-    {};
+    ((store.pluginsConfig || {})[pluginKey('stream', stream.id)] as
+      Record<string, unknown> | undefined) || {};
   let stop: () => void;
   try {
     stop = stream.start({
-    symbol: sym,
-    interval: iv,
-    lastBar,
-    config: streamCfg,
-    onBar: (raw: Bar) => {
-      if (!isCurrent()) return;
-      // Drop partial / NaN OHLCV so a bad venue tick cannot poison the chart
-      const bar = sanitizeBar(raw);
-      if (!bar) return;
-      // Queue in order, coalescing open-bar ticks of the same slot onto the tail.
-      // Only distinct slots grow the queue, so the cap below cannot evict a
-      // closed slot that a hidden tab's tick burst would otherwise have pushed out.
-      const tail = pendingLiveBars[pendingLiveBars.length - 1];
-      if (tail && tail.time === bar.time) pendingLiveBars[pendingLiveBars.length - 1] = bar;
-      else pendingLiveBars.push(bar);
-      // Bound memory when a hidden tab queues hours of distinct slots.
-      if (pendingLiveBars.length > 5000) {
-        pendingLiveBars.splice(0, pendingLiveBars.length - 5000);
-      }
-      scheduleLiveBarFlush();
-    },
-    onStatus: (s) => {
-      if (liveEpoch !== epoch) return;
-      try {
-        if (s.state === 'open') {
-          if (!store.live.active) return;
-          const since = outageSince;
-          outageSince = 0;
-          const recovered = since > 0 && Date.now() - since >= LONG_OUTAGE_MS;
-          setStore('stream', 'status', 'connected');
-          setTelemetryState('stream', 'open', {
-            detail: s.detail || s.url || `${sym} ${iv}`,
-            error: null,
-          });
-          // Routine opens stay in the log. Toast only after a long outage.
-          appendLog('ok', `Stream open${s.detail ? ` · ${s.detail}` : ''}`, 'stream', {
-            toast: recovered,
-          });
-          if (recovered) {
-            // WS was down for a while (backgrounded tab, network drop) — REST
-            // backfill any slots the socket missed so aggregation stays dense.
-            void import('../data/background-catchup')
-              .then(({ repairChartGapsAfterBackground }) =>
-                repairChartGapsAfterBackground('reconnect'),
-              )
-              .catch(() => {});
-          }
-        } else if (s.state === 'reconnecting') {
-          if (!store.live.active) return;
-          if (!outageSince) outageSince = Date.now();
-          setStore('stream', 'status', 'connecting');
-          setTelemetryState('stream', 'degraded', { detail: s.detail || 'reconnecting' });
-          // Log only. Identical bursts collapse to one line. No toast.
-          appendLog(
-            'warn',
-            `Stream reconnecting${s.detail ? ` · ${s.detail}` : ''}`,
-            'stream',
-            { toast: false },
-          );
-        } else if (s.state === 'closed') {
-          // Exhausted reconnect while Live is still armed → Offline, not a success Live chip
-          if (!store.live.active) {
-            setStore('stream', 'status', 'disconnected');
-            setTelemetryState('stream', 'closed');
-          } else {
-            // Any unexpected close while Live is armed (reconnect exhausted, or a
-            // plain socket drop from a non-reconnecting stream) → Offline, not Live.
-            outageSince = 0;
-            setStore('stream', 'status', 'disconnected');
-            setTelemetryState('stream', 'closed', { detail: s.detail });
-            const why =
-              s.detail === 'reconnect exhausted'
-                ? 'retries exhausted'
-                : s.detail || 'connection closed';
-            appendLog('error', `Stream offline · ${why}`, 'stream', { toast: true });
-          }
+      symbol: sym,
+      interval: iv,
+      lastBar,
+      config: streamCfg,
+      onBar: (raw: Bar) => {
+        if (!isCurrent()) return;
+        // Drop partial / NaN OHLCV so a bad venue tick cannot poison the chart
+        const bar = sanitizeBar(raw);
+        if (!bar) return;
+        // Queue in order, coalescing open-bar ticks of the same slot onto the tail.
+        // Only distinct slots grow the queue, so the cap below cannot evict a
+        // closed slot that a hidden tab's tick burst would otherwise have pushed out.
+        const tail = pendingLiveBars[pendingLiveBars.length - 1];
+        if (tail && tail.time === bar.time) pendingLiveBars[pendingLiveBars.length - 1] = bar;
+        else pendingLiveBars.push(bar);
+        // Bound memory when a hidden tab queues hours of distinct slots.
+        if (pendingLiveBars.length > 5000) {
+          pendingLiveBars.splice(0, pendingLiveBars.length - 5000);
         }
-      } catch {
-        /* status UI best-effort */
-      }
-    },
-    onError: (e) => {
-      if (liveEpoch !== epoch) return;
-      try {
-        const msg = e?.message || 'Stream error';
-        appendLog('error', msg, 'stream');
-        setStatus('error', `Live error: ${msg}`);
-        // Preserve error telemetry/status while clearing live.active
-        stopLive({ reason: 'error', error: msg });
-      } catch {
-        /* ignore */
-      }
-    },
+        scheduleLiveBarFlush();
+      },
+      onStatus: (s) => {
+        if (liveEpoch !== epoch) return;
+        try {
+          if (s.state === 'open') {
+            if (!store.live.active) return;
+            const since = outageSince;
+            outageSince = 0;
+            const recovered = since > 0 && Date.now() - since >= LONG_OUTAGE_MS;
+            setStore('stream', 'status', 'connected');
+            setTelemetryState('stream', 'open', {
+              detail: s.detail || s.url || `${sym} ${iv}`,
+              error: null,
+            });
+            // Routine opens stay in the log. Toast only after a long outage.
+            appendLog('ok', `Stream open${s.detail ? ` · ${s.detail}` : ''}`, 'stream', {
+              toast: recovered,
+            });
+            if (recovered) {
+              // WS was down for a while (backgrounded tab, network drop) — REST
+              // backfill any slots the socket missed so aggregation stays dense.
+              void import('../data/background-catchup')
+                .then(({ repairChartGapsAfterBackground }) =>
+                  repairChartGapsAfterBackground('reconnect'),
+                )
+                .catch(() => {});
+            }
+          } else if (s.state === 'reconnecting') {
+            if (!store.live.active) return;
+            if (!outageSince) outageSince = Date.now();
+            setStore('stream', 'status', 'connecting');
+            setTelemetryState('stream', 'degraded', { detail: s.detail || 'reconnecting' });
+            // Log only. Identical bursts collapse to one line. No toast.
+            appendLog('warn', `Stream reconnecting${s.detail ? ` · ${s.detail}` : ''}`, 'stream', {
+              toast: false,
+            });
+          } else if (s.state === 'closed') {
+            // Exhausted reconnect while Live is still armed → Offline, not a success Live chip
+            if (!store.live.active) {
+              setStore('stream', 'status', 'disconnected');
+              setTelemetryState('stream', 'closed');
+            } else {
+              // Any unexpected close while Live is armed (reconnect exhausted, or a
+              // plain socket drop from a non-reconnecting stream) → Offline, not Live.
+              outageSince = 0;
+              setStore('stream', 'status', 'disconnected');
+              setTelemetryState('stream', 'closed', { detail: s.detail });
+              const why =
+                s.detail === 'reconnect exhausted'
+                  ? 'retries exhausted'
+                  : s.detail || 'connection closed';
+              appendLog('error', `Stream offline · ${why}`, 'stream', { toast: true });
+            }
+          }
+        } catch {
+          /* status UI best-effort */
+        }
+      },
+      onError: (e) => {
+        if (liveEpoch !== epoch) return;
+        try {
+          const msg = e?.message || 'Stream error';
+          appendLog('error', msg, 'stream');
+          setStatus('error', `Live error: ${msg}`);
+          // Preserve error telemetry/status while clearing live.active
+          stopLive({ reason: 'error', error: msg });
+        } catch {
+          /* ignore */
+        }
+      },
     });
   } catch (err: unknown) {
     // Synchronous start failure: report it and disarm Live. Without this,
@@ -932,13 +929,15 @@ export function startLive(
   // hidden (visibility / focus / online), so the chart always delivers correct
   // data even after rAF + timer throttling. Installed once, idempotent.
   try {
-    void import('../data/background-catchup').then(({ startBackgroundCatchup }) => {
-      try {
-        startBackgroundCatchup();
-      } catch {
-        /* ignore */
-      }
-    }).catch(() => {});
+    void import('../data/background-catchup')
+      .then(({ startBackgroundCatchup }) => {
+        try {
+          startBackgroundCatchup();
+        } catch {
+          /* ignore */
+        }
+      })
+      .catch(() => {});
   } catch {
     /* catch-up is best-effort */
   }
