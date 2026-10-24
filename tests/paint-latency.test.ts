@@ -151,17 +151,34 @@ describe('paint stages (hp2 A1: worker → apply → copy-out → draw)', () => 
     });
   });
 
-  it('takes the first publish stamp per burst and resets between bursts', () => {
+  it('takes the last publish stamp per burst and resets between bursts', () => {
     const clock = manualScheduler();
     _setPaintLatencyScheduler(clock.schedule);
+    // An earlier message in the same burst (e.g. a snapshot that appends
+    // nothing) must not lend its stamp to the append that follows.
     noteIngestPublish(80);
     noteIngestPublish(95);
     notePaintRequest(100);
     clock.fire(116);
-    expect(paintStageStats().publishToApplyP50).toBe(20);
+    expect(paintStageStats().publishToApplyP50).toBe(5);
     notePaintRequest(200);
     clock.fire(210);
     // Second burst had no publish stamp: no new stage sample.
     expect(paintStageStats().publishedBursts).toBe(1);
+  });
+
+  it('an orphaned publish does not survive a frame into a later burst', () => {
+    const clock = manualScheduler();
+    _setPaintLatencyScheduler(clock.schedule);
+    // Snapshot burst: worker publishes, chart already holds the bars, so
+    // no paint request arms — but a frame still closes the burst and drops
+    // the orphaned stamp. The later tip burst carries its own stamp.
+    noteIngestPublish(80);
+    flushPaintFrame(90);
+    expect(paintLatencyStats().n).toBe(0);
+    noteIngestPublish(195);
+    notePaintRequest(200);
+    clock.fire(216);
+    expect(paintStageStats().publishToApplyP50).toBe(5);
   });
 });

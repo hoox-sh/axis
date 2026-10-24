@@ -129,7 +129,13 @@ function pushStage(into: number[], dt: number): void {
  * unmarked so the stage reports null instead of a fictional zero.
  */
 export function noteIngestPublish(at: number | undefined): void {
-  if (at === undefined || marks.publishedAt !== null) return;
+  if (at === undefined) return;
+  // Last stamp wins: a worker `frames` message that appends nothing (a
+  // snapshot over bars the chart already holds) must not lend its stamp to
+  // a later burst — otherwise publish→apply measures the gap between two
+  // unrelated messages (seconds on a quiet 5m chart) instead of this
+  // burst's postMessage + dispatch. The stamp that survives is the message
+  // being dispatched when the append lands, same task.
   marks.publishedAt = at;
 }
 
