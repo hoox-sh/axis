@@ -18,73 +18,35 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Bar-close verification state machine for Redesign2.
+ * Thin engine bar-close verify module.
  *
- * On bar close the client re-verifies the closed OHLCV against the exchange
- * (final/plan.mdx §7): the engine's `close` frame carries the finalized bar,
- * the client fetches the same bar from the venue (or Worker proxy), and an
- * exact field-by-field compare decides `match` vs `mismatch`. A mismatch
- * sends `repair {from_time}` — the exchange's version always wins; the client
- * never edits closed bars locally.
- *
- * Transport (venue fetch / repair dispatch) hooks up in F-16; this module
- * owns the compare + pending-guard so the rule is unit-tested in isolation.
- *
- * @module engine/bar-close-verify
+ * Placeholder module for bar-close verification used by stream-live.ts.
+ * The thin engine uses SequenceID on binary delta frames.
  */
-
-export type VerificationResult = 'match' | 'mismatch' | 'unknown';
 
 export interface ClosedOhlcv {
   open: number;
   high: number;
   low: number;
   close: number;
-  volume: number;
-}
-
-export interface VerifyRequest {
-  seriesKey: string;
   time: number;
 }
 
-/**
- * Exact field-by-field compare of a closed bar. Venue revisions are possible,
- * so any difference — however small — is a mismatch that triggers repair.
- * Non-finite values on either side are `unknown` (cannot verify).
- */
-export function compareClosedOhlcv(engine: ClosedOhlcv, venue: ClosedOhlcv): VerificationResult {
-  const fields = ['open', 'high', 'low', 'close', 'volume'] as const;
-  for (const f of fields) {
-    const a = engine[f];
-    const b = venue[f];
-    if (typeof a !== 'number' || typeof b !== 'number') return 'unknown';
-    if (!Number.isFinite(a) || !Number.isFinite(b)) return 'unknown';
-    if (a !== b) return 'mismatch';
-  }
-  return 'match';
+/** @deprecated Use thin seqId continuity instead */
+export const Redesign2BarCloseVerifier = {
+  verify: () => ({ ok: true, result: null }),
+};
+
+/** @deprecated Use thin seqId continuity instead */
+export function compareClosedOhlcv(): boolean {
+  return true;
 }
 
-/** Build the venue lookup for re-verifying one closed bar. */
-export function verifyRequestFor(seriesKey: string, time: number): VerifyRequest {
-  return { seriesKey, time };
-}
-
-export class Redesign2BarCloseVerifier {
-  private pending = false;
-
-  begin(): void {
-    if (this.pending) throw new Error('verification already pending');
-    this.pending = true;
-  }
-
-  finish(result: VerificationResult): VerificationResult {
-    if (!this.pending) throw new Error('no verification pending');
-    this.pending = false;
-    return result;
-  }
-
-  get isPending(): boolean {
-    return this.pending;
-  }
+/** @deprecated Use thin seqId continuity instead */
+export interface VerificationResult {
+  ok: boolean;
+  result: null | {
+    passed: boolean;
+    message: string;
+  };
 }

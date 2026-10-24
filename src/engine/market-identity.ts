@@ -18,14 +18,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Market identity helpers for Redesign2.
+ * Thin engine market identity helpers.
  *
- * Canonical series key (final/plan.mdx §3.5): `exchange|market|SYMBOL|interval`
- * with a lowercased exchange, lowercased market, UPPERCASE pair-form symbol,
- * and a verbatim interval. This matches the PYNE store key exactly
- * (`binance|spot|BTC/USDT|1m`) — a fully lowercased key would miss the store.
- *
- * Provides deterministic keying for resettable session state.
+ * Canonical series key: `exchange|market|SYMBOL|interval` with a lowercased
+ * exchange, lowercased market, UPPERCASE pair-form symbol, and a verbatim
+ * interval. Matches the PYNE store key exactly.
  *
  * @module engine/market-identity
  */
@@ -52,9 +49,7 @@ export interface CatalogSymbol {
 
 /**
  * Map an AXIS load-form symbol (`BTCUSDT`) to pair form (`BTC/USDT`) via an
- * optional catalog list. Already-paired symbols and unknown symbols pass
- * through uppercased — writer and reader agree as long as both use this
- * helper with the same catalog.
+ * optional catalog list.
  */
 export function pairFormSymbol(symbol: string, catalog?: CatalogSymbol[]): string {
   const up = symbol.trim().toUpperCase();
@@ -66,8 +61,7 @@ export function pairFormSymbol(symbol: string, catalog?: CatalogSymbol[]): strin
 
 /**
  * Build the canonical series key for the current chart from store-shaped
- * fields. `market` defaults to `spot` (the engine-side default); pass an
- * explicit market for futures/swap charts.
+ * fields. `market` defaults to `spot`.
  */
 export function currentSeriesKey(opts: {
   exchange: string;

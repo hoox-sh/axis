@@ -18,80 +18,39 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Redesign2 data-plane policy.
+ * Thin engine policy.
  *
- * This module documents the default levers for the backend-owned, exchange-truth
- * data plane. It is intentionally inert in Phase 1: importing or reading these
- * values does not change runtime behavior. The purpose is to remove implicit
- * default decisions from scattered call sites before wiring Redesign2 transport.
+ * Default levers for the thin engine plane. Supports two profiles:
+ * thin-stream (multiplexed WSS delta envelopes) and calculator
+ * (legacy JSON fallback).
  *
- * @module engines/data-plane-policy
+ * @module engine/policy
  */
 
-/** How the client may use a venue stream under Redesign2. */
-export type ClientVenueStreamMode = 'disabled' | 'verification';
+/** Engine profile identifier. */
+export type EngineProfile = 'thin-stream' | 'calculator';
 
-/** Documented default levers for the Redesign2 data plane. */
-export interface DataPlanePolicy {
-  /** Backend exchange feed is the canonical price source. */
-  backendTruthDefault: true;
-  /** Client venue streams are not eval input by default. */
-  clientVenueStreamMode: ClientVenueStreamMode;
-  /** Server-owned stream persists metadata only, not a competing dataset. */
-  serverOwnedPersistence: 'metadata-only';
-  /** Bar-close values are re-verified against backend truth. */
-  barCloseVerification: 'enabled';
-  /** New script sessions use a websocket connection when available. */
-  webSocketPreferred: true;
-  /** Full run/apply happens once per useful session. */
-  fullRunOnce: true;
-  /** Live updates are delta-only after the full result. */
-  liveDeltaOnly: true;
-}
-
-/** Phase 1 default policy. No runtime code consumes this yet. */
-export const DEFAULT_DATA_PLANE_POLICY: Readonly<DataPlanePolicy> = {
-  backendTruthDefault: true,
-  clientVenueStreamMode: 'verification',
-  serverOwnedPersistence: 'metadata-only',
-  barCloseVerification: 'enabled',
-  webSocketPreferred: true,
-  fullRunOnce: true,
-  liveDeltaOnly: true,
-};
-
-/** How an engine participates in the data plane (final/plan.mdx §5). */
-export type EngineProfile = 'stream' | 'calculator';
-
+/** Engine profile capabilities. */
 export interface EngineProfileCaps {
-  liveStream?: boolean;
+  /** Thin delta envelope stream available. */
+  stream?: boolean;
 }
 
 /**
- * Choose the engine profile from declared capabilities (F-08).
+ * Choose the engine profile from declared capabilities.
  *
- * Strictly opt-in: only `liveStream === true` (from `features.live_stream`)
- * selects `stream`. Anything else — including `null`/unresolved capabilities
- * while health is still loading — fails open to `calculator` (bars-in), so the
- * default flip can never strand the chart without data.
+ * Priority: thin-stream (delta envelopes) > calculator (legacy JSON path).
  */
-export function profileForCapabilities(
-  caps: EngineProfileCaps | null | undefined,
-): EngineProfile {
-  return caps?.liveStream === true ? 'stream' : 'calculator';
+export function profileForCapabilities(caps: EngineProfileCaps | null | undefined): EngineProfile {
+  if (caps?.stream === true) return 'thin-stream';
+  return 'calculator';
 }
 
-/**
- * Policy levers that can materially change picture/runtime behavior.
- * Keep this list synchronized with redesign2-plan.mdx.
- */
-export const DATA_PLANE_DEFAULT_LEVERS = [
-  'live.rerunOn',
-  'rollingWindowBars',
+/** Default policy levers for the thin engine. */
+export const THIN_DEFAULT_LEVERS = [
   'historyBars',
-  'autoload',
+  'rollingWindowBars',
   'engine',
-  'datasetPersistence',
   'endpoint',
   'health features (data_session, live_modes, websocket)',
 ] as const;
