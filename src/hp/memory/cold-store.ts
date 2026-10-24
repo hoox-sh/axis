@@ -51,6 +51,18 @@ export class ColdStore {
   private closeT: bigint[] = [];
   private vol: number[] = [];
   private flags: number[] = [];
+  /**
+   * Absolute bar index of `time[0]`. Reads are absolute (`read(fromAbs)`),
+   * so every mutation that drops the head must shift this — a silent shift
+   * would paint cold bars at the wrong chart slots.
+   */
+  private baseAbs = 0;
+  /**
+   * False once the head was evicted or the tail extended past a gap: cold
+   * no longer covers `[0, length)` absolutely and the page merge must not
+   * fill from it. Restored only by a full-history replace.
+   */
+  private complete = true;
 
   constructor(opts: { priceScale?: number; max?: number } = {}) {
     this.priceScale = opts.priceScale ?? PRICE_SCALE_DEFAULT;
@@ -59,6 +71,11 @@ export class ColdStore {
 
   get length(): number {
     return this.time.length;
+  }
+
+  /** Absolute index of the oldest retained bar + retained length + absoluteness. */
+  coverage(): { baseAbs: number; length: number; complete: boolean } {
+    return { baseAbs: this.baseAbs, length: this.time.length, complete: this.complete };
   }
 
   /** Replace the cold series from float64 bars (IDB / JSON path). */
@@ -101,6 +118,132 @@ export class ColdStore {
       this.vol[i] = b.volume;
       this.flags[i] = b.flags & 0xff;
     }
+    this.baseAbs = 0;
+    this.complete = true;
+  }
+
+  /**
+   * Write-back of one closed bar (bar-close write-back, hp2 B1).
+   *
+   * Appends only when strictly newer than the tail — a forming re-tick or a
+   * stale redelivery shares the tail time (or older) and must never fork
+   * cold history. Returns false when ignored. Evicting the head breaks
+   * absolute coverage (`complete` flips, `baseAbs` shifts); that only
+   * happens past `max`, which the history cap already bounds.
+   */
+  appendTick(bar: HotBarTicks): boolean {
+    if (!Number.isFinite(bar.time)) return false;
+    const last = this.time.length ? (this.time[this.time.length - 1] ?? 0) : -Infinity;
+    if (bar.time <= last) return false;
+    this.time.push(Math.trunc(bar.time));
+    this.openT.push(bar.openTicks);
+    this.highT.push(bar.highTicks);
+    this.lowT.push(bar.lowTicks);
+    this.closeT.push(bar.closeTicks);
+    this.vol.push(bar.volume);
+    this.flags.push(bar.flags & 0xff);
+    if (this.time.length > this.max) {
+      this.time.shift();
+      this.openT.shift();
+      this.highT.shift();
+      this.lowT.shift();
+      this.closeT.shift();
+      this.vol.shift();
+      this.flags.shift();
+      this.baseAbs += 1;
+      this.complete = false;
+    }
+    return true;
+  }
+
+  /**
+   * Merge a tick run into cold history by bar time (snapshot / page slices).
+   *
+   * Same-time bars overwrite (a corrected history bar), newer bars append,
+   * older bars prepend (a snapshot deeper than cold shifts the absolute
+   * base down). Unsorted input is sorted first; non-finite times are
+   * dropped. Returns how many slots changed.
+   */
+  upsertByTime(bars: readonly HotBarTicks[]): number {
+    const clean = bars.filter((b) => Number.isFinite(b.time));
+    if (!clean.length) return 0;
+    if (!this.time.length) {
+      this.setTicks(clean);
+      return clean.length;
+    }
+    const sorted = [...clean].sort((a, b) => a.time - b.time);
+    let changed = 0;
+    // Older run first: prepend, shifting the absolute base down.
+    const head = this.time[0] ?? 0;
+    const older = sorted.filter((b) => b.time < head);
+    if (older.length) {
+      const deduped: HotBarTicks[] = [];
+      for (const b of older) {
+        const prev = deduped[deduped.length - 1];
+        if (prev && prev.time === b.time) deduped[deduped.length - 1] = b;
+        else deduped.push(b);
+      }
+      this.time.unshift(...deduped.map((b) => Math.trunc(b.time)));
+      this.openT.unshift(...deduped.map((b) => b.openTicks));
+      this.highT.unshift(...deduped.map((b) => b.highTicks));
+      this.lowT.unshift(...deduped.map((b) => b.lowTicks));
+      this.closeT.unshift(...deduped.map((b) => b.closeTicks));
+      this.vol.unshift(...deduped.map((b) => b.volume));
+      this.flags.unshift(...deduped.map((b) => b.flags & 0xff));
+      this.baseAbs -= deduped.length;
+      changed += deduped.length;
+    }
+    for (const b of sorted) {
+      if (b.time < head) continue;
+      const idx = this.indexOfTime(b.time);
+      if (idx >= 0) {
+        this.openT[idx] = b.openTicks;
+        this.highT[idx] = b.highTicks;
+        this.lowT[idx] = b.lowTicks;
+        this.closeT[idx] = b.closeTicks;
+        this.vol[idx] = b.volume;
+        this.flags[idx] = b.flags & 0xff;
+        changed += 1;
+      } else if (!this.appendTick(b)) {
+        // Older than the tail but no exact slot (a hole): absolute
+        // coverage no longer holds — stop trusting positions.
+        this.complete = false;
+      } else {
+        changed += 1;
+      }
+    }
+    return changed;
+  }
+
+  /** Columnar copy of the whole store (hydrate handoff, tests). */
+  toTicks(): HotBarTicks[] {
+    const out: HotBarTicks[] = [];
+    for (let i = 0; i < this.time.length; i++) {
+      out.push({
+        time: this.time[i] ?? 0,
+        openTicks: this.openT[i] ?? 0n,
+        highTicks: this.highT[i] ?? 0n,
+        lowTicks: this.lowT[i] ?? 0n,
+        closeTicks: this.closeT[i] ?? 0n,
+        volume: this.vol[i] ?? 0,
+        flags: this.flags[i] ?? BAR_FLAG_CLOSED,
+      });
+    }
+    return out;
+  }
+
+  /** Binary search for an exact bar time; -1 when absent. */
+  private indexOfTime(time: number): number {
+    let lo = 0;
+    let hi = this.time.length - 1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      const t = this.time[mid] ?? 0;
+      if (t === time) return mid;
+      if (t < time) lo = mid + 1;
+      else hi = mid - 1;
+    }
+    return -1;
   }
 
   /** Columnar read of `[fromAbs, fromAbs + count)`, clipped; empty outside. */
@@ -142,7 +285,11 @@ export class ColdStore {
   }
 
   private clip(fromAbs: number, count: number): { from: number; to: number } {
-    const from = Math.max(0, Math.trunc(fromAbs));
+    const want = Math.trunc(fromAbs);
+    // A range starting before the retained head is not covered — clamping
+    // to zero would return the wrong bars at the wrong slots.
+    if (!Number.isFinite(want) || want < this.baseAbs) return { from: 0, to: 0 };
+    const from = want - this.baseAbs;
     const to = Math.min(this.time.length, from + Math.max(0, Math.trunc(count)));
     return { from, to: Math.max(from, to) };
   }

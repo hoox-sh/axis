@@ -335,8 +335,10 @@ export function noteHpViewport(fromAbs: number, count: number): void {
     const slice = chart.slice(c0, c1);
     if (!slice.length) return;
     try {
-      // A clip at the chart head shifts the page base forward with it.
-      client.publishColdPage(plan.fromAbs + (c0 - startIdx), slice);
+      // A clip at the chart head shifts the page base forward with it; the
+      // wanted count rides along so the worker can fill the clipped head
+      // from its cold store (hp2 B1).
+      client.publishColdPage(plan.fromAbs + (c0 - startIdx), slice, plan.count);
     } catch {
       /* best-effort */
     }
@@ -370,7 +372,17 @@ function buildWire(): StreamLiveWire {
   // does, so a vault-restored key reaches the socket too.
   const authToken = String(cfg?.apiKey || '').trim() || undefined;
   stopRingPaint();
-  const rawClient = createLiveWsClient({ endpoint, authToken });
+  const rawClient = createLiveWsClient({
+    endpoint,
+    authToken,
+    // Bars-cache identity so the ingest worker can hydrate its cold store
+    // (hp2 B1): same source/symbol/interval the dataset layer caches under.
+    coldKey: {
+      sourceId: String(store.source || ''),
+      symbol: String(store.symbol || ''),
+      interval: String(store.interval || ''),
+    },
+  });
   // HP-2: when the client runs the hot ring (flag on + isolated + SAB),
   // bars arrive through the shared memory instead of the frame payload —
   // paint them from the rAF copy-out. Flag-off / non-isolated clients have

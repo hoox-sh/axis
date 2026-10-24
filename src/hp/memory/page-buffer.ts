@@ -154,3 +154,43 @@ export function copyOutPageFromCold(
     complete: wantFrom >= 0 && wantTo <= cold.length,
   };
 }
+
+/**
+ * Merge one page request from the main-thread slice and the worker's cold
+ * store (hp2 B1: worker-side cold read).
+ *
+ * `mainBars[j]` covers absolute slot `fromAbs + j` (the caller's contract —
+ * the pager shifts the base when the chart head clips). Slots the main
+ * slice does not cover are filled from cold, but only when cold covers
+ * them absolutely (`coverage().complete` with the slot inside
+ * `[baseAbs, baseAbs + length)`); anything else truncates the page at the
+ * first uncovered slot instead of inventing a bar. An empty result retires
+ * the page, exactly like an empty `page` message does today.
+ */
+export function mergePageBars(
+  cold: ColdStore | null,
+  fromAbs: number,
+  count: number,
+  mainBars: readonly Bar[],
+): { bars: Bar[]; fromAbs: number } {
+  const base = Math.trunc(fromAbs);
+  const want = Math.min(Math.max(0, Math.trunc(count)), PAGE_CAPACITY);
+  if (!Number.isFinite(base) || want <= 0) return { bars: [], fromAbs: base };
+  const cov = cold?.coverage();
+  const coldUsable = !!cold && !!cov && cov.complete;
+  const out: Bar[] = [];
+  for (let j = 0; j < want; j++) {
+    const main = j < mainBars.length ? mainBars[j] : undefined;
+    if (main) {
+      out.push(main);
+      continue;
+    }
+    if (!coldUsable || !cold || !cov) break;
+    const slot = base + j - cov.baseAbs;
+    if (slot < 0 || slot >= cov.length) break;
+    const filled = cold.readBars(base + j, 1);
+    if (!filled.length) break;
+    out.push(filled[0] as Bar);
+  }
+  return { bars: out, fromAbs: base };
+}

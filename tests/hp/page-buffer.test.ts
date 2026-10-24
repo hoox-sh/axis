@@ -23,6 +23,7 @@ import { allocateHotBuffer, BAR_FLAG_CLOSED, barToTicks } from '../../src/hp/mem
 import { computeHotLayout, HP_SECTION_ALIGN, HOT_COLUMNS } from '../../src/hp/memory/layout';
 import {
   copyOutPageFromCold,
+  mergePageBars,
   planViewportPage,
   publishBarPage,
   publishViewportPage,
@@ -290,7 +291,9 @@ describe('ColdStore', () => {
 
     expect(cold.read(10, 5).map((t) => t.time)).toEqual([600, 660, 720, 780, 840]);
     expect(cold.read(45, 10)).toHaveLength(5); // clipped at the newest end
-    expect(cold.read(-5, 3)).toHaveLength(3); // clipped at the oldest end
+    // A range starting before the retained head is uncovered, not clamped:
+    // clamping to zero would return the wrong bars at the wrong slots.
+    expect(cold.read(-5, 3)).toHaveLength(0); // before the absolute base
     expect(cold.read(90, 5)).toHaveLength(0); // outside the series
 
     const asBars = cold.readBars(0, 2);
@@ -378,5 +381,84 @@ describe('publishBarPage — main-thread cold page (§9.2 wiring)', () => {
     expect(publishBarPage(buf, [], 0)).toBe(0);
     expect(buf.pageActive).toBe(false);
     expect(buf.pageCount).toBe(0);
+  });
+});
+
+describe('ColdStore write-back (hp2 B1)', () => {
+  test('appendTick extends the tail; stale and forming re-ticks are ignored', () => {
+    const cold = new ColdStore();
+    cold.setBars(bars(5));
+    const last = 4 * 60;
+    expect(cold.appendTick(barToTicks(bar(last + 60, 105), 8))).toBe(true);
+    expect(cold.length).toBe(6);
+    expect(cold.readBars(5, 1)[0]?.close).toBe(105);
+    // Same-time re-tick (forming update) and older redelivery: ignored.
+    expect(cold.appendTick(barToTicks(bar(last + 60, 999), 8))).toBe(false);
+    expect(cold.appendTick(barToTicks(bar(last, 999), 8))).toBe(false);
+    expect(cold.readBars(5, 1)[0]?.close).toBe(105);
+  });
+
+  test('eviction shifts the absolute base and drops absoluteness', () => {
+    const cold = new ColdStore({ max: 4 });
+    cold.setBars(bars(4));
+    expect(cold.coverage()).toEqual({ baseAbs: 0, length: 4, complete: true });
+    cold.appendTick(barToTicks(bar(4 * 60, 104), 8));
+    expect(cold.coverage()).toEqual({ baseAbs: 1, length: 4, complete: false });
+    // Absolute slot 0 is gone — no clamping to the wrong bar.
+    expect(cold.readBars(0, 2)).toHaveLength(0);
+    expect(cold.readBars(1, 1)[0]?.time).toBe(60);
+  });
+
+  test('upsertByTime overwrites, appends and prepends without forking', () => {
+    const cold = new ColdStore();
+    cold.setBars(bars(5, 0));
+    // Overwrite one slot (corrected history bar).
+    expect(cold.upsertByTime([barToTicks(bar(2 * 60, 777), 8)])).toBe(1);
+    expect(cold.readBars(2, 1)[0]?.close).toBe(777);
+    // Newer bar appends at the tail.
+    cold.upsertByTime([barToTicks(bar(5 * 60, 105), 8)]);
+    expect(cold.length).toBe(6);
+    // Older run prepends and shifts the base down.
+    cold.upsertByTime([barToTicks(bar(-120, 90), 8), barToTicks(bar(-60, 91), 8)]);
+    expect(cold.coverage().baseAbs).toBe(-2);
+    expect(cold.length).toBe(8);
+    expect(cold.readBars(-2, 1)[0]?.close).toBe(90);
+    // The full run still reads back in order.
+    expect(cold.readBars(-2, 8).map((b) => b.time)).toEqual([-120, -60, 0, 60, 120, 180, 240, 300]);
+  });
+});
+
+describe('mergePageBars — worker cold fill (hp2 B1)', () => {
+  test('main slice alone when cold is absent', () => {
+    const merged = mergePageBars(null, 40, 4, [bar(0, 100), bar(60, 101)]);
+    expect(merged).toEqual({ bars: [bar(0, 100), bar(60, 101)], fromAbs: 40 });
+  });
+
+  test('cold fills the slots the main slice does not cover', () => {
+    const cold = new ColdStore();
+    cold.setBars(bars(50)); // absolute slots 0..49
+    const merged = mergePageBars(cold, 40, 5, [bar(2400, 200)]);
+    expect(merged.fromAbs).toBe(40);
+    expect(merged.bars).toHaveLength(5);
+    expect(merged.bars[0]?.close).toBe(200); // main wins on overlap
+    expect(merged.bars.map((b) => b.time)).toEqual([2400, 2460, 2520, 2580, 2640]);
+  });
+
+  test('truncates at the first uncovered slot instead of inventing bars', () => {
+    const cold = new ColdStore();
+    cold.setBars(bars(42)); // slots 0..41
+    const merged = mergePageBars(cold, 40, 5, []);
+    expect(merged.bars).toHaveLength(2);
+    // Incomplete cold (evicted head) is never trusted for positions.
+    const evicted = new ColdStore({ max: 4 });
+    evicted.setBars(bars(4));
+    evicted.appendTick(barToTicks(bar(4 * 60, 104), 8));
+    expect(mergePageBars(evicted, 1, 3, []).bars).toHaveLength(0);
+  });
+
+  test('a nonsense request retires the page', () => {
+    const cold = new ColdStore();
+    cold.setBars(bars(10));
+    expect(mergePageBars(cold, 5, 0, []).bars).toHaveLength(0);
   });
 });

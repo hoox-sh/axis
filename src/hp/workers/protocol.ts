@@ -34,17 +34,34 @@ export const INGEST_HEARTBEAT_MS = 15_000;
 export const INGEST_PONG_TIMEOUT_MS = 5_000;
 export const INGEST_TIP_COALESCE_MS = 16;
 
+/** Bars-cache identity so the worker can hydrate its cold store (hp2 B1). */
+export type ColdKey = {
+  sourceId: string;
+  symbol: string;
+  interval: string;
+};
+
 export type HostToIngest =
   /** `authToken` rides once on connect and is never echoed back. */
-  | { type: 'connect'; url: string; authToken?: string; hotSab?: SharedArrayBuffer }
+  | {
+      type: 'connect';
+      url: string;
+      authToken?: string;
+      hotSab?: SharedArrayBuffer;
+      coldKey?: ColdKey;
+    }
   | { type: 'send'; frame: WireFrame }
   /**
    * Main → ingest cold page (HP PR 5 wiring, §9.2): the main thread owns the
    * full chart window, so it slices the cold range and the single writer
    * (ingest) replaces the page slot with it. Empty `bars` retires the page.
    * Best-effort — a dropped page only clears the overlay for a frame.
+   *
+   * `count` is the wanted slot count: the main slice may be shorter than
+   * the plan (clipped at the chart head), and the worker fills the rest
+   * from its cold store (hp2 B1). Absent = `bars.length` (today's path).
    */
-  | { type: 'page'; fromAbs: number; bars: Bar[] }
+  | { type: 'page'; fromAbs: number; bars: Bar[]; count?: number }
   | { type: 'disconnect' };
 
 export type IngestToHost =

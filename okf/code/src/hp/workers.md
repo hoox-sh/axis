@@ -7,7 +7,7 @@ tags: [code, hp, workers]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-24T01:05:33Z
+  at: 2026-10-24T01:13:25Z
 sources:
   - id: tree
     resource: "src/hp/workers"
@@ -19,11 +19,11 @@ okf_lock: generated
 # Files
 
 * `calc-core.ts` — CalcBar, CalcEvaluator, CalcPlotValues, CalcSession, CommittedSeries
-* `host.ts` — IngestHostClient, IngestWorkerFactory, IngestWorkerTransport, createLiveWsClient, ingestWorkerAvailable, setIngestWorkerFactory
+* `host.ts` — IngestHostClient, IngestHostOptions, IngestWorkerFactory, IngestWorkerTransport, createLiveWsClient, ingestWorkerAvailable, setIngestWorkerFactory
 * `hot-ring-writer.ts` — HotRingWriter, routeThroughRing
 * `ingest-core.ts` — CursorBar, IngestCursorTable, IngestDecode, TipCoalescer, decodeInbound
 * `ingest.worker.ts`
-* `protocol.ts` — HostToIngest, INGEST_CONNECT_TIMEOUT_MS, INGEST_HEARTBEAT_MS, INGEST_PONG_TIMEOUT_MS, INGEST_TIP_COALESCE_MS, IngestToHost
+* `protocol.ts` — ColdKey, HostToIngest, INGEST_CONNECT_TIMEOUT_MS, INGEST_HEARTBEAT_MS, INGEST_PONG_TIMEOUT_MS, INGEST_TIP_COALESCE_MS, IngestToHost
 
 # Depends on
 

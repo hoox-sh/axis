@@ -37,7 +37,7 @@ import { isolationProbe } from '../capabilities';
 import { noteIngestPublish } from '../../chart/paint-latency';
 import { hpSabMode, isHpEnabled } from '../feature-flag';
 import { allocateHotBuffer, type HotBuffer } from '../memory/hot-buffer';
-import type { HostToIngest, IngestToHost } from './protocol';
+import type { HostToIngest, IngestToHost, ColdKey } from './protocol';
 
 export type IngestWorkerTransport = {
   postMessage: (msg: HostToIngest) => void;
@@ -84,6 +84,7 @@ export class IngestHostClient implements WireClient {
   private readonly reconnects = new ReconnectHandlers();
   readonly url: string;
   private readonly authToken?: string;
+  private readonly coldKey?: ColdKey;
   /** HP-2 hot ring reader (main side); `null` until the SAB is allocated. */
   private hot: HotBuffer | null = null;
   private hotActive = false;
@@ -92,9 +93,10 @@ export class IngestHostClient implements WireClient {
   onStatus?: (status: 'connecting' | 'open' | 'closed' | 'error') => void;
   onMalformed?: (reason: string) => void;
 
-  constructor(options: Redesign2WsClientOptions) {
+  constructor(options: Redesign2WsClientOptions & { coldKey?: ColdKey }) {
     this.url = endpointToRedesign2WsUrl(options.endpoint, options.authToken);
     this.authToken = options.authToken;
+    this.coldKey = options.coldKey;
     // HP-2/3: allocate up-front so `hotBuffer` is readable the moment the
     // client exists. `buildWire` starts the rAF copy-out sampler and
     // exposes the ring to the GPU overlay synchronously — before the first
@@ -212,6 +214,7 @@ export class IngestHostClient implements WireClient {
         url: this.url,
         authToken: this.authToken,
         ...(this.hot ? { hotSab: this.hot.sab } : {}),
+        ...(this.coldKey ? { coldKey: this.coldKey } : {}),
       });
     });
   }
@@ -292,13 +295,14 @@ export class IngestHostClient implements WireClient {
    * never throws and never spawns a worker just for paging — no worker, no
    * page, and the overlay clears for a frame. Empty `bars` retires the page.
    */
-  publishColdPage(fromAbs: number, bars: Bar[]): void {
+  publishColdPage(fromAbs: number, bars: Bar[], count?: number): void {
     try {
       if (!this.worker) return;
       this.worker.postMessage({
         type: 'page',
         fromAbs: Math.trunc(fromAbs),
         bars,
+        ...(count !== undefined ? { count: Math.trunc(count) } : {}),
       });
     } catch {
       /* paging is best-effort — the overlay clears for a frame */
@@ -318,12 +322,14 @@ export class IngestHostClient implements WireClient {
   }
 }
 
+export type IngestHostOptions = Redesign2WsClientOptions & { coldKey?: ColdKey };
+
 /**
  * Live `/ws/live` client. HP off (or no Worker) keeps {@link Redesign2WsClient}
  * byte-for-byte, including main-thread `JSON.parse`.
  */
 export function createLiveWsClient(
-  options: Redesign2WsClientOptions,
+  options: IngestHostOptions,
 ): Redesign2WsClient | IngestHostClient {
   if (isHpEnabled() && ingestWorkerAvailable()) return new IngestHostClient(options);
   return new Redesign2WsClient(options);
