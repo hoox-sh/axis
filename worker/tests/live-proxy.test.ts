@@ -263,4 +263,53 @@ describe('live relay keeps binary frames binary', () => {
     srv.emit('message', '{"type":"auth","payload":{"token":"pyne-key"}}');
     expect(up.sent[1]).toBe('{"type":"auth","payload":{"token":"pyne-key"}}');
   });
+
+  it('keeps binary byte-identical across an upstream drop + client reconnect', async () => {
+    const first = await connect();
+    first.up.emit('open', undefined);
+
+    // Upstream drops: the relay closes the server side (no auto-reconnect
+    // inside the proxy — the client redials and resubscribes, HP PR 7 flow).
+    first.up.emit('close', { code: 1012, reason: 'restart' });
+    expect(first.srv.closed.length).toBe(1);
+
+    // Client reconnects: fresh ticket, fresh pair, fresh upstream.
+    const second = await connect();
+    second.up.emit('open', undefined);
+    expect(second.srv.sent[0]).toBe(
+      JSON.stringify({ type: 'status', payload: { code: 'live-relay', message: 'connected' } }),
+    );
+
+    // The resubscribe is a JSON control frame and stays text.
+    second.srv.emit('message', '{"type":"subscribe","id":"series:binance|spot|BTC/USDT|1m"}');
+    expect(second.up.sent[0]).toBe('{"type":"subscribe","id":"series:binance|spot|BTC/USDT|1m"}');
+
+    // And the first binary frame on the new socket is still byte-identical.
+    const envelope = encodeFrame({
+      opcode: Axb1Opcode.SNAPSHOT_OHLCV,
+      seq: 1,
+      subIdHash: 9,
+      sessionHash: 3,
+      tsMs: 1760000000000n,
+      priceScale: 8,
+      count: 2,
+      closedUpto: 1,
+      hotFromIndex: 0,
+      timeS: [1760000000, 1760000060],
+      open: [6042550000000n, 6042600000000n],
+      high: [6043000000000n, 6043100000000n],
+      low: [6042000000000n, 6042500000000n],
+      close: [6042600000000n, 6042900000000n],
+      volume: [1.5, 2.5],
+      flags: [1, 0],
+    });
+    const bytes = envelope.buffer.slice(
+      envelope.byteOffset,
+      envelope.byteOffset + envelope.byteLength,
+    ) as ArrayBuffer;
+    second.up.emit('message', bytes);
+    const got = second.srv.sent[1];
+    expect(got).toBeInstanceOf(ArrayBuffer);
+    expect(new Uint8Array(got as ArrayBuffer)).toEqual(envelope);
+  });
 });

@@ -28,7 +28,8 @@
 /** `'AXB1'` as a little-endian uint32 (`41 58 42 31`). */
 export const AXB1_MAGIC = 0x31425841;
 
-/** Control-block magic `'HPC1'` (little-endian `48 50 43 31`). Reserved for HP-2. */
+/** Control-block magic `'HPC1'` (little-endian `48 50 43 31`).
+ * Audited hp2 E1: live, owned by `hp/memory/control-block.ts` — not dead. */
 export const HPC1_MAGIC = 0x31435048;
 
 export const AXB1_VERSION = 1;
@@ -68,7 +69,9 @@ export enum TipMask {
 /** hdr_flags bit 0: envelope carries a UTF-8 sub id (unused in v1). */
 export const AXB1_HDR_HAS_SUB_ID = 1 << 0;
 
-/** hdr_flags bit 1: compressed payload. Must be 0 in v1. */
+/** hdr_flags bit 1: compressed payload. Must be 0 in v1.
+ * Audited hp2 E1: live as a reject-rule (`decode` throws, `encode` refuses)
+ * — the flag's job *is* to forbid compression, not to enable it. */
 export const AXB1_HDR_COMPRESSED = 1 << 1;
 
 export enum ValueKind {
