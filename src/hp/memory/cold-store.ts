@@ -118,8 +118,8 @@ export class ColdStore {
       this.vol[i] = b.volume;
       this.flags[i] = b.flags & 0xff;
     }
-    this.baseAbs = 0;
-    this.complete = true;
+    this.baseAbs = deduped.length - capped.length;
+    this.complete = capped.length === deduped.length;
   }
 
   /**

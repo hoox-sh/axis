@@ -230,17 +230,22 @@ describe('page replace in the SAB', () => {
     expect(copyOutPage(buf, { fromAbs: 0, count: 10 })?.bars[0]?.time).toBe(999);
   });
 
-  test('a page replace leaves the hot window and its published slot alone', () => {
+  test('a page replace leaves the hot window, its slot, and its generation alone', () => {
     const { buf, cold } = scene();
     const before = copyOutBars(buf, { fromAbs: 92, count: 8 });
     const slot = buf.control.publishedSlot;
+    const hotGeneration = buf.control.generation;
+    const pageGeneration = buf.control.pageGeneration;
 
     publishViewportPage(buf, cold.read(0, 10), 0);
 
     expect(buf.control.publishedSlot).toBe(slot);
     const after = copyOutBars(buf, { fromAbs: 92, count: 8 });
     expect(after?.bars).toEqual(before?.bars);
-    expect(after?.generation).toBeGreaterThan(before?.generation ?? 0); // seqlock moved on
+    // A page replace is page-only: it must not invalidate a hot reader.
+    expect(after?.generation).toBe(before?.generation ?? 0);
+    expect(buf.control.generation).toBe(hotGeneration);
+    expect(buf.control.pageGeneration).toBeGreaterThan(pageGeneration); // page seqlock moved on
   });
 });
 

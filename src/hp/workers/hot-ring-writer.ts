@@ -49,10 +49,15 @@
 import type { Redesign2Frame } from '../../engine/frames';
 import { sanitizeStreamBar } from '../../data/parse-bars';
 import type { Bar } from '../../store/types';
-import { barToTicks, type HotBuffer, type HotBarTicks } from '../memory/hot-buffer';
+import {
+  BAR_FLAG_FORMING,
+  barToTicks,
+  type HotBuffer,
+  type HotBarTicks,
+} from '../memory/hot-buffer';
 
 /** Meta carried from the frame that produced a ring write. */
-type RingMeta = { seq?: number; closedUpto?: number };
+type RingMeta = { seq?: number; closedUpto?: number; priceScale?: number };
 
 export class HotRingWriter {
   readonly buffer: HotBuffer;
@@ -80,14 +85,21 @@ export class HotRingWriter {
    * Route one decoded frame: absorb bar payloads into the ring and return
    * the frame that should still be posted to the host (the original, or a
    * copy with `payload.bars` stripped).
+   *
+   * `priceScale` comes from the AXB1 cursor (the wire carries ticks, not
+   * floats); JSON frames leave it `undefined` and keep the ring's scale.
    */
-  absorb(frame: Redesign2Frame): Redesign2Frame {
+  absorb(frame: Redesign2Frame, priceScale?: number): Redesign2Frame {
     if (frame.type === 'full' && frame.id) {
       const raw = frame.payload?.bars;
       if (Array.isArray(raw)) {
         const bars = sanitizeBars(raw, undefined);
         if (bars.length) {
-          this.seed(frame.id, bars, { seq: frame.seq, closedUpto: frame.payload.closed_upto });
+          this.seed(frame.id, bars, {
+            seq: frame.seq,
+            closedUpto: frame.payload.closed_upto,
+            priceScale,
+          });
         }
       }
       return frame; // snapshots always keep their payload (initial paint)
@@ -98,10 +110,15 @@ export class HotRingWriter {
         const forming = frame.payload.forming === true;
         const bars = sanitizeBars(raw, !forming);
         if (bars.length) {
-          const touched = this.applyDelta(bars, {
-            seq: frame.seq,
-            closedUpto: frame.payload.closed_upto,
-          });
+          const touched = this.applyDelta(
+            bars,
+            {
+              seq: frame.seq,
+              closedUpto: frame.payload.closed_upto,
+              priceScale,
+            },
+            forming,
+          );
           if (touched) {
             const { bars: _drop, ...rest } = frame.payload;
             return { ...frame, payload: rest } as Redesign2Frame;
@@ -117,6 +134,9 @@ export class HotRingWriter {
     if (id !== this.boundId) {
       this.buffer.bumpEpoch();
       this.boundId = id;
+    }
+    if (meta.priceScale !== undefined && meta.priceScale !== this.buffer.priceScale) {
+      this.buffer.priceScale = meta.priceScale;
     }
     // Any (re-)seed can move the window's absolute base (a snapshot with a
     // different depth shifts `hotFrom`), so a cold page from the previous
@@ -142,25 +162,24 @@ export class HotRingWriter {
       ...(meta.seq !== undefined ? { seq: meta.seq } : {}),
       ...(meta.closedUpto !== undefined ? { closedUpto: meta.closedUpto } : {}),
     });
+    this.publishTipIfForming(meta.seq);
   }
 
   /**
    * Append / update the ring from one delta's bars (oldest → newest).
-   * One generation flip per frame, and the flip publishes the **whole**
-   * window (§6.2 double-buffer: the unpublished slot must be rewritten
-   * completely or readers would see stale zeros outside the touched
-   * indices). Returns true when anything applied.
    *
-   * The in-memory mirror holds the window between flips:
+   * One generation flip per frame, but **not** one full rewrite (HP-P01):
    *
-   * - a forming tip overwrites the newest entry in place,
-   * - an append below capacity pushes at the end (window-relative indices
-   *   stay put — `copyOutBars` reads `slot = abs - hotFrom`),
-   * - an append into a **full** window slides it one step: every retained
-   *   bar shifts one index down (one full rewrite per closed candle, not
-   *   per tick).
+   * - a forming tip overwrites the newest entry in place and is published as
+   *   a single 64-byte tip record (no hot flip at all),
+   * - an append below capacity copies the published prefix and writes only
+   *   the new bars (`publishTail`),
+   * - an append into a **full** window slides it one step and republishes the
+   *   whole window (the one unavoidable full rewrite per closed candle).
+   *
+   * Returns true when anything applied.
    */
-  private applyDelta(bars: Bar[], meta: RingMeta): boolean {
+  private applyDelta(bars: Bar[], meta: RingMeta, forming: boolean): boolean {
     if (!this.boundId || this.seriesLen === 0) return false;
 
     // Pre-check: the generation only moves when at least one bar applies,
@@ -175,23 +194,35 @@ export class HotRingWriter {
     if (!applies) return false;
 
     const cap = this.buffer.layout.cap;
-    const scale = this.buffer.priceScale;
+    const scale = meta.priceScale ?? this.buffer.priceScale;
+    if (scale !== this.buffer.priceScale) this.buffer.priceScale = scale;
+    let appended = false;
+    let slid = false;
+    let firstDirty = this.mirror.length;
     for (const bar of bars) {
       const ticks = barToTicks(bar, scale);
       if (bar.time === this.lastTime) {
-        // Forming tip: overwrite the newest window entry in place.
-        this.mirror[this.mirror.length - 1] = ticks;
+        // Same bucket: overwrite the newest window entry in place.
+        const last = this.mirror.length - 1;
+        if (last >= 0) {
+          this.mirror[last] = ticks;
+          if (last < firstDirty) firstDirty = last;
+        }
         continue;
       }
       if (bar.time > this.lastTime) {
+        appended = true;
         if (this.hotCount < cap) {
+          firstDirty = Math.min(firstDirty, this.mirror.length);
           this.mirror.push(ticks);
           this.hotCount += 1;
         } else {
-          // Full window: slide one step — retained bars shift one index.
+          // Full window: slide one step — every retained bar shifts one index.
           this.mirror.copyWithin(0, 1);
           this.mirror[cap - 1] = ticks;
           this.hotFrom = this.seriesLen - (cap - 1);
+          slid = true;
+          firstDirty = 0;
         }
         this.seriesLen += 1;
         this.lastTime = bar.time;
@@ -199,12 +230,43 @@ export class HotRingWriter {
       // Stale (older than the tail): skipped — the store would `ignore`
       // it, and older-history repair is a `full` re-seed.
     }
-    this.buffer.publish(this.mirror, {
-      hotFromIndex: this.hotFrom,
-      ...(meta.seq !== undefined ? { seq: meta.seq } : {}),
-      ...(meta.closedUpto !== undefined ? { closedUpto: meta.closedUpto } : {}),
-    });
+
+    // The common tick path: only the forming bar moved. The published hot
+    // window is still correct, so publish just the tip record.
+    if (forming && !appended) {
+      this.publishTipIfForming(meta.seq);
+      return true;
+    }
+
+    if (slid) {
+      this.buffer.publish(this.mirror, {
+        hotFromIndex: this.hotFrom,
+        ...(meta.seq !== undefined ? { seq: meta.seq } : {}),
+        ...(meta.closedUpto !== undefined ? { closedUpto: meta.closedUpto } : {}),
+      });
+    } else {
+      this.buffer.publishTail(
+        this.mirror,
+        {
+          hotFromIndex: this.hotFrom,
+          ...(meta.seq !== undefined ? { seq: meta.seq } : {}),
+          ...(meta.closedUpto !== undefined ? { closedUpto: meta.closedUpto } : {}),
+        },
+        firstDirty,
+      );
+    }
+    this.publishTipIfForming(meta.seq);
     return true;
+  }
+
+  /** Publish the newest bar as the tip when it is still forming, else retire. */
+  private publishTipIfForming(seq?: number): void {
+    const newest = this.mirror[this.mirror.length - 1];
+    if (newest && (newest.flags & BAR_FLAG_FORMING) !== 0) {
+      this.buffer.writeTip(newest, this.hotFrom + this.hotCount - 1, seq ?? 0);
+    } else {
+      this.buffer.clearTip();
+    }
   }
 }
 
@@ -221,8 +283,14 @@ function sanitizeBars(
 }
 
 /** Map decoded frames through the ring; returned frames are the ones to post. */
-export function routeThroughRing(frames: Redesign2Frame[], ring: HotRingWriter): Redesign2Frame[] {
+export function routeThroughRing(
+  frames: Redesign2Frame[],
+  ring: HotRingWriter,
+  priceScaleFor?: (id: string) => number | undefined,
+): Redesign2Frame[] {
   const out: Redesign2Frame[] = [];
-  for (const frame of frames) out.push(ring.absorb(frame));
+  for (const frame of frames) {
+    out.push(ring.absorb(frame, frame.id ? priceScaleFor?.(frame.id) : undefined));
+  }
   return out;
 }

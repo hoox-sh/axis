@@ -117,8 +117,11 @@ function toCalcBar(
 }
 
 function coldToCalcBars(cold: ColdStore): CalcBar[] {
+  const cov = cold.coverage();
+  if (!cov || cov.length <= 0) return [];
+  const baseAbs = cov.baseAbs ?? 0;
   return cold
-    .readBars(0, cold.length)
+    .readBars(baseAbs, cov.length)
     .map((b) => toCalcBar(b.time, b.open, b.high, b.low, b.close, b.volume ?? 0));
 }
 

@@ -20,9 +20,10 @@
 /**
  * Control block — the seqlock words of the hot double-buffer (HP PR 4, §6.1).
  *
- * 256 bytes viewed as `Int32Array` (64 words) plus a `BigInt64Array` overlay
- * at byte 64 for the 64-bit epoch. Byte 72 is the dedicated `Atomics.notify`
- * word (`HP_NOTIFY_INDEX = 18`).
+ * 256 bytes viewed as `Int32Array` (64 words) plus a single-entry
+ * `BigInt64Array` overlay at byte 64 for the 64-bit epoch. Bytes 72–79 stay
+ * int32 control words: byte 72 is the dedicated `Atomics.notify` word
+ * (`HP_NOTIFY_INDEX = 18`) and byte 76 is the page seqlock generation.
  *
  * Generation protocol (lock-free, single writer = ingest):
  *
@@ -53,6 +54,9 @@ export const HP_NOTIFY_INDEX = 18;
 /** i32 index of the seqlock generation word (byte 8). */
 export const HP_GEN_INDEX = 2;
 
+/** i32 index of the independent page seqlock generation word (byte 76). */
+export const HP_PAGE_GEN_INDEX = 19;
+
 /** i32 word indices inside the control section. */
 const W = {
   MAGIC: 0,
@@ -73,6 +77,9 @@ const W = {
   VIEWPORT_REQ_GEN: 15,
   PAGE_FROM_INDEX: 16,
   PAGE_COUNT: 17,
+  PAGE_GENERATION: 19,
+  TIP_SLOT: 20,
+  TIP_INDEX: 21,
 } as const;
 
 /** Word index inside the `BigInt64Array` overlay that starts at byte 64. */
@@ -120,7 +127,10 @@ export class HpControlBlock {
     // require the natural alignment instead of silently building a misaligned
     // BigInt64Array (browsers throw RangeError, other runtimes do not).
     if ((byteOffset + 64) % 8 !== 0) throw new RangeError('control block epoch misaligned');
-    this.i64 = new BigInt64Array(source, byteOffset + 64, 2);
+    // Exactly one i64 (bytes 64–71). Bytes 72–79 are int32 words: notify at
+    // 72 and the page generation at 76, so a two-word overlay would alias and
+    // corrupt both.
+    this.i64 = new BigInt64Array(source, byteOffset + 64, 1);
   }
 
   /** Stamp magic + version. Called once by the allocator. */
@@ -137,6 +147,10 @@ export class HpControlBlock {
     Atomics.store(this.i32, W.CLOSED_UPTO, -1);
     Atomics.store(this.i32, W.SEQ, 0);
     Atomics.store(this.i32, W.FLAGS, 0);
+    Atomics.store(this.i32, W.PAGE_GENERATION, 0);
+    Atomics.store(this.i32, W.TIP_GENERATION, 0);
+    Atomics.store(this.i32, W.TIP_SLOT, 0);
+    Atomics.store(this.i32, W.TIP_INDEX, -1);
   }
 
   get magic(): number {
@@ -154,6 +168,11 @@ export class HpControlBlock {
 
   get generation(): number {
     return Atomics.load(this.i32, W.GENERATION);
+  }
+
+  /** Independent page-slot seqlock generation (odd = page write in flight). */
+  get pageGeneration(): number {
+    return Atomics.load(this.i32, W.PAGE_GENERATION);
   }
 
   get publishedSlot(): 0 | 1 {
@@ -196,6 +215,16 @@ export class HpControlBlock {
 
   get tipGeneration(): number {
     return Atomics.load(this.i32, W.TIP_GENERATION);
+  }
+
+  /** Which of the two 64-byte tip records is published. */
+  get tipSlot(): 0 | 1 {
+    return (Atomics.load(this.i32, W.TIP_SLOT) & 1) as 0 | 1;
+  }
+
+  /** Absolute index the published tip belongs to; `-1` = no tip. */
+  get tipIndex(): number {
+    return Atomics.load(this.i32, W.TIP_INDEX);
   }
 
   get plotGeneration(): number {
@@ -271,19 +300,36 @@ export class HpControlBlock {
   /**
    * Open a **page-only** seqlock transaction (§9.2).
    *
-   * Same odd/even protocol as `beginWrite`, but it deliberately does *not*
-   * touch `WRITE_SLOT`: a viewport page replace writes into the single page
-   * section and must leave the published hot slot exactly as it was.
+   * Uses the dedicated `PAGE_GENERATION` word, so a page replace never
+   * invalidates a hot reader and never forces a repaint of an unchanged hot
+   * window. It also deliberately does *not* touch `WRITE_SLOT`: a viewport
+   * page replace writes into the single page section and must leave the
+   * published hot slot exactly as it was.
    */
   beginPageWrite(): void {
-    const g = Atomics.load(this.i32, W.GENERATION);
-    if ((g & 1) === 0) Atomics.store(this.i32, W.GENERATION, g + 1);
+    const g = Atomics.load(this.i32, W.PAGE_GENERATION);
+    if ((g & 1) === 0) Atomics.store(this.i32, W.PAGE_GENERATION, g + 1);
   }
 
   /** Close a page-only transaction (even generation) and wake workers. */
   commitPageWrite(): void {
-    Atomics.add(this.i32, W.GENERATION, 1);
+    Atomics.add(this.i32, W.PAGE_GENERATION, 1);
     Atomics.notify(this.i32, HP_NOTIFY_INDEX, 3);
+  }
+
+  /**
+   * Page seqlock read: `null` while a page write is in flight or if the
+   * sample tore. The hot generation is intentionally not consulted.
+   */
+  samplePage(attempts = 8): { generation: number; slot: 0 | 1 } | null {
+    for (let i = 0; i < attempts; i++) {
+      const g1 = Atomics.load(this.i32, W.PAGE_GENERATION);
+      if (g1 & 1) continue;
+      const slot = (Atomics.load(this.i32, W.PUBLISHED_SLOT) & 1) as 0 | 1;
+      const g2 = Atomics.load(this.i32, W.PAGE_GENERATION);
+      if (g1 === g2 && (g2 & 1) === 0) return { generation: g2, slot };
+    }
+    return null;
   }
 
   /**
@@ -307,6 +353,20 @@ export class HpControlBlock {
 
   bumpTipGeneration(): number {
     return Atomics.add(this.i32, W.TIP_GENERATION, 1) + 1;
+  }
+
+  /** Open the forming-tip seqlock (odd tip generation). */
+  beginTipWrite(): void {
+    const g = Atomics.load(this.i32, W.TIP_GENERATION);
+    if ((g & 1) === 0) Atomics.store(this.i32, W.TIP_GENERATION, g + 1);
+  }
+
+  /** Close the forming-tip seqlock (even tip generation) and publish. */
+  commitTipWrite(slot: 0 | 1, index: number): void {
+    Atomics.store(this.i32, W.TIP_SLOT, slot & 1);
+    Atomics.store(this.i32, W.TIP_INDEX, index | 0);
+    Atomics.add(this.i32, W.TIP_GENERATION, 1);
+    Atomics.notify(this.i32, HP_NOTIFY_INDEX, 3);
   }
 
   bumpVisualGeneration(): number {

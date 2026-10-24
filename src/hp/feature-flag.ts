@@ -104,6 +104,7 @@ export const DEV_TRACE_KEY = 'axis.dev.trace';
 
 /** True when the dev‑trace is opted in and the kill switch is off. */
 export function isDevTrace(): boolean {
+  if (isDevTraceDisabled()) return false;
   const raw = getItem(DEV_TRACE_KEY) ?? memoryDevTrace;
   if (raw === '1') return true;
   if (raw === '0') return false;

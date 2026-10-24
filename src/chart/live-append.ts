@@ -131,38 +131,41 @@ export function startHotRingPaint(buffer: HotBuffer, opts?: SubscribeGenerationO
       noteHpCopyOut();
       for (const bar of contiguousTailRun(out.bars)) appendLiveBar(bar, { via: 'worker' });
     },
-    opts,
+    // A forming tick only moves the tip seqlock; the hot generation stays
+    // put, so poll the combined value or the tip would never repaint.
+    { generation: () => buffer.paintGeneration, ...opts },
   );
 }
 
 /**
- * The newest-first contiguous run of `bars` that continues the store tail:
- * the last bar must land on the tail (forming update) or exactly one
- * interval beyond it (new candle), and every bar before it must step back
- * by exactly one interval. Older bars are snapshot territory, not tick
- * territory.
+ * The newest-first contiguous run of `bars` that continues the store tail.
+ *
+ * Walk back from the newest bar while every step is exactly one interval, and
+ * stop at (or just below) the store's tail. The **oldest** bar of the run
+ * must then land on the tail (forming update) or exactly one interval beyond
+ * it (new candle). This accepts a generation that carries several new
+ * candles (a venue frame batched across a minute boundary) while still
+ * rejecting a lone jumped bar (`tail + 2·step` with nothing in between).
+ * Older bars are snapshot territory, not tick territory.
  */
 function contiguousTailRun(bars: Bar[]): Bar[] {
   const step = intervalToSec(String(store.interval || '1m'));
   const tail = store.bars.length ? (store.bars[store.bars.length - 1]?.time ?? 0) : 0;
+  if (!tail) return [];
+  // Collect newest → oldest, then reverse once.
   const run: Bar[] = [];
   let cursor = 0;
   for (let i = bars.length - 1; i >= 0; i--) {
     const bar = bars[i];
     if (!bar) continue;
-    if (!cursor) {
-      if (!tail || bar.time === tail || (step > 0 && bar.time === tail + step)) {
-        run.unshift(bar);
-        cursor = bar.time;
-      }
-      continue;
-    }
-    if (step > 0 && bar.time === cursor - step) {
-      run.unshift(bar);
-      cursor = bar.time;
-      continue;
-    }
-    break;
+    if (run.length > 0 && !(step > 0 && bar.time === cursor - step)) break;
+    run.push(bar);
+    cursor = bar.time;
+    if (bar.time <= tail) break;
   }
+  run.reverse();
+  const oldest = run[0];
+  if (!oldest) return [];
+  if (oldest.time !== tail && !(step > 0 && oldest.time === tail + step)) return [];
   return run;
 }

@@ -7,7 +7,7 @@ tags: [code, hp, memory]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-24T01:13:25Z
+  at: 2026-10-24T11:47:05Z
 sources:
   - id: tree
     resource: "src/hp/memory"
@@ -19,7 +19,7 @@ okf_lock: generated
 # Files
 
 * `cold-store.ts` — ColdStore, hydrateColdFromCache
-* `control-block.ts` — HP_CONTROL_VERSION, HP_GEN_INDEX, HP_NOTIFY_INDEX, HpControlBlock, HpControlFlag, HpControlSnapshot
+* `control-block.ts` — HP_CONTROL_VERSION, HP_GEN_INDEX, HP_NOTIFY_INDEX, HP_PAGE_GEN_INDEX, HpControlBlock, HpControlFlag, HpControlSnapshot
 * `hot-buffer.ts` — BAR_FLAG_CLOSED, BAR_FLAG_FORMING, HotBarTicks, HotBuffer, allocateHotBuffer, barToTicks
 * `layout.ts` — HOT_CAP, HOT_COLUMNS, HOT_COLUMN_BYTES, HP_CONTROL_BYTES, HP_HOT_SLOTS, HP_SECTION_ALIGN, HP_SERIES_HEADER_BYTES, HP_TIP_BYTES, HP_TIP_SLOTS, HotColumnId, HotLayout, HotSlotLayout
 * `page-buffer.ts` — HotRange, PAGE_CAPACITY, ViewportPagePlan, ViewportRequest, copyOutPageFromCold, mergePageBars, planViewportPage, publishBarPage, publishViewportPage

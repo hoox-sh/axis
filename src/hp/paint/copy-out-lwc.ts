@@ -67,12 +67,27 @@ function toIndex(value: number): number {
 /** One section of the SAB a copy can come from (hot window or page slot). */
 type SectionRange = { from: number; count: number };
 
+/** Even-generation sample of one seqlock section. */
+type SectionSample = { generation: number; slot: 0 | 1 };
+
+type CopyOptions = {
+  /** Section sampler; defaults to the hot seqlock. */
+  sample?: () => SectionSample | null;
+  /** True when the section is still at `generation` after the copy. */
+  verify?: (generation: number) => boolean;
+  /** Overlay the forming-tip record on the matching absolute index. */
+  tip?: boolean;
+};
+
 /**
  * Seqlock-verified clipped copy from one section (shared by hot and page).
  *
  * `section()` is evaluated *inside* the sampled generation, so the range and
  * the column reads always belong to the same published state; the second
  * generation load after the copy discards a sample a write invalidated.
+ *
+ * Hot copies may overlay the independent forming-tip record (HP-P01): the tip
+ * has its own generation, so it is verified separately.
  */
 function copyClipped(
   buffer: HotBuffer,
@@ -80,14 +95,21 @@ function copyClipped(
   section: () => SectionRange | null,
   read: (slot: 0 | 1, index: number) => Bar,
   attempts: number,
+  opts?: CopyOptions,
 ): CopyOutResult | null {
   if (!Number.isFinite(req.fromAbs) || !Number.isFinite(req.count)) return null;
   const count = Math.trunc(req.count);
   if (count <= 0) return null;
+  const sampleFn = opts?.sample ?? (() => buffer.control.sample());
+  const verifyFn =
+    opts?.verify ?? ((generation: number) => buffer.control.generation === generation);
 
   for (let attempt = 0; attempt < attempts; attempt++) {
-    const sample = buffer.control.sample();
+    const sample = sampleFn();
     if (!sample) continue; // odd generation — a write is in flight
+    // Sampled before the section read; `null` means no tip or a tip write is
+    // in flight, in which case the published slot is still a valid frame.
+    const tip = opts?.tip ? buffer.sampleTip() : null;
 
     const range = section();
     if (!range || range.count <= 0) return null;
@@ -104,12 +126,14 @@ function copyClipped(
 
     const bars: Bar[] = new Array<Bar>(len);
     for (let i = 0; i < len; i++) {
-      bars[i] = read(sample.slot, first + i);
+      const abs = from + i;
+      bars[i] = tip && abs === tip.index ? tip.bar : read(sample.slot, first + i);
     }
 
     // Seqlock verify: any write that started or finished while we copied
     // changed the generation — discard the sample and try again.
-    if (buffer.control.generation !== sample.generation) continue;
+    if (!verifyFn(sample.generation)) continue;
+    if (tip && buffer.control.tipGeneration !== tip.generation) continue;
 
     return {
       bars,
@@ -139,6 +163,7 @@ export function copyOutBars(
     () => ({ from: buffer.control.hotFromIndex, count: buffer.control.hotCount }),
     (slot, index) => buffer.readBar(slot, index),
     attempts,
+    { tip: true },
   );
 }
 
@@ -162,6 +187,15 @@ export function copyOutPage(
         : null,
     (_slot, index) => buffer.readPageBar(index),
     attempts,
+    {
+      // The page has its own seqlock: a hot write must not invalidate a page
+      // copy, and a page replace must not be mistaken for a hot generation.
+      sample: () => {
+        const s = buffer.control.samplePage();
+        return s ? { generation: s.generation, slot: s.slot } : null;
+      },
+      verify: (generation) => buffer.control.pageGeneration === generation,
+    },
   );
 }
 

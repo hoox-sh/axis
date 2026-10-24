@@ -40,6 +40,11 @@ export type CancelRafFn = (handle: number) => void;
 export type SubscribeGenerationOpts = {
   raf?: RafFn;
   cancelRaf?: CancelRafFn;
+  /**
+   * Generation source. Defaults to the hot seqlock. Pass a combined value
+   * (e.g. `buffer.paintGeneration`) so a tip-only update still repaints.
+   */
+  generation?: () => number;
   /** Also repaint when the worker posts an explicit generation poke. */
   poke?: (onPoke: (generation: number) => void) => () => void;
 };
@@ -88,7 +93,7 @@ export function subscribeGeneration(
 
   const tick = (): void => {
     if (stopped) return;
-    paint(control.generation);
+    paint((opts.generation ?? (() => control.generation))());
     handle = raf(tick);
   };
 

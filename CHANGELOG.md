@@ -15,6 +15,16 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ## [Unreleased]
 
+- `hp/memory/control-block.ts` (A05/A06): dedicated `PAGE_GENERATION` word (19); shrank i64 overlay to 1 word (bytes 64–71) avoiding alias with notify/page; added `samplePage`; added `beginTipWrite`/`commitTipWrite`; `init()` seeds page gen, tip slot/index.
+- `hp/memory/hot-buffer.ts` (P01/P02/A07/A08): `publishTail` + `publish` with tip clear; `writeTip`/`clearTip`/`sampleTip`; `paintGeneration`; cached `headerView`; `allocateHotBuffer` guards `ReferenceError`/bad-size → rung 1.
+- `hp/paint/copy-out-lwc.ts` (A05/A10): `copyClipped` supports independent page seqlock (`samplePage` / `pageGeneration`) and tip overlay (`tip` option); `copyOutBars` uses `tip: true`; `copyOutPage` uses page sampler.
+- `hp/sync/raf-poll.ts`: `subscribeGeneration` accepts `generation?: () => number` (combined hot+tip).
+- `hp/workers/hot-ring-writer.ts` (A03/P01/A04): `absorb`/`applyDelta` use forming-tip-only path (`publishTipIfForming`); `publishTail` for append; `priceScale` propagation; `routeThroughRing` takes `priceScaleFor`; `contiguousTailRun` accepts multi-candle generations.
+- `chart/live-append.ts` (A04): `contiguousTailRun` walks contiguously from newest, validates oldest is `tail` or `tail+step`; `startHotRingPaint` uses `buffer.paintGeneration`.
+- `hp/workers/calc-engine.ts` (A01): `coldToCalcBars` uses `coverage().baseAbs` + `length > 0` guard.
+- `hp/memory/cold-store.ts` (A18/A23): `setTicks` `baseAbs = deduped.length - capped.length`; `complete = capped.length === deduped.length`; avoids `unshift` spread.
+- `tests/hp/` updated for page-only seqlock and forming-tip behavior (265 pass / 0 fail).
+
 ### Fixed
 
 - **Session overlays no longer tail-pin a window they never evaluated.** A session/stream run whose engine shipped no bar axis was tail-pinned onto the chart even when its series length missed the window by thousands of bars (a 9577-bar engine window on a 5000-bar chart shifts every value and marker by 4577 slots — the SOLUSDT desync). The `staleNoAxis` skip now also covers full runs whose length misses the window by more than a few mid-run appends (`PIN_TOLERANCE_BARS = 8`); the deliberate free-tier clamp (`windowBars`) keeps pinning, and equal-length runs keep the index zip. The WS `/ws/run` path now also carries `meta.engineTimes` like REST, so WS session runs can time-join instead of pinning. And a series repair now invalidates memoized data sessions + live tick/append sessions for that key, so the next run creates a fresh session over the repaired window instead of evaluating (and pinning) the stale one. Pinned by four new `alignApplySeries` guard tests (gross mismatch skips, plots-array mismatch skips, clamp still pins, small race still pins) plus data-session / live-session invalidation tests.

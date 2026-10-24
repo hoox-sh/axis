@@ -118,13 +118,18 @@ describe('HotRingWriter', () => {
     const { buf, ring } = writer();
     ring.absorb(full(SUB, mkBars(3)));
     const gen = buf.control.generation;
+    const tipGen = buf.control.tipGeneration;
     const d = delta(SUB, [tickBar(T0 + 120, 999, 2)], 7, true);
     const posted = ring.absorb(d);
     expect(posted).not.toBe(d); // a stripped copy is posted, not the original
     expect(payloadOf(posted).bars).toBeUndefined();
     expect(posted.seq).toBe(7);
     expect(payloadOf(posted).closed_upto).toBe(T0 + 120);
-    expect(buf.control.generation).toBeGreaterThan(gen); // published
+    // A forming tick publishes only the 64-byte tip: the hot window and its
+    // generation stay byte-identical.
+    expect(buf.control.generation).toBe(gen);
+    expect(buf.control.tipGeneration).toBeGreaterThan(tipGen);
+    expect(buf.paintGeneration).toBeGreaterThan(gen + tipGen);
     const tip = copyOutTail(buf, 1)?.bars[0];
     expect(tip?.close).toBe(999);
     expect(tip?.closed).toBe(false); // the forming flag survived the ticks round-trip
