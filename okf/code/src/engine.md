@@ -7,7 +7,7 @@ tags: [code, engine]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-26T05:04:14Z
+  at: 2026-10-31T04:38:09Z
 sources:
   - id: tree
     resource: "src/engine"
@@ -18,26 +18,28 @@ okf_lock: generated
 
 # Files
 
-* `apply-bridge.ts` — ApplyStreamInput, StreamFullPayload, StreamVia, _clearApplyBridgeCachesForTests, applyStreamDelta, applyStreamPayload, resolveStreamExecutionContext, streamFullToPrecomputed
+* `apply-bridge.ts` — ApplyStreamInput, StreamFullPayload, StreamVia, applyStreamPayload, streamFullToPrecomputed
 * `bar-close-verify.ts` — ClosedOhlcv, Redesign2BarCloseVerifier, VerificationResult, VerifyRequest, compareClosedOhlcv, verifyRequestFor
 * `client-apply.ts` — ApplyState, DeltaApplierDelta, DeltaApplierFull, DeltaApplyOutcome, Redesign2ApplyStateManager, Redesign2DeltaApplier, readTimeList, scriptDeltaTimeTail
+* `delta-client.ts` — BufferPool, DeltaFrame, DeltaMask, DeltaOpCode, DeltaWsClientOptions, THIN_PATHS
+* `delta-frames.ts` — DeltaFrameType, Redesign2Frame, SeriesMeta, ThinFrame, normalizeRedesign2Frame, validateRedesign2Frame
 * `feature-flag.ts` — STREAM_ENGINE_FLAG_KEY, isStreamEngineDisabled, isStreamEngineEnabled, setStreamEngineEnabled
 * `frames.ts` — DeltaBlock, FrameBar, Redesign2AuthFrame, Redesign2AuthOkFrame, Redesign2CloseFrame, Redesign2DeltaFrame, Redesign2ErrorFrame, Redesign2Frame, Redesign2FullFrame, Redesign2PingFrame, Redesign2PongFrame, Redesign2RepairFrame
 * `index.ts`
 * `live-ticket.ts` — LIVE_TICKET_TTL_S, LiveProxy, LiveTicketError, isLiveTicketError, liveProxyForEngine, liveTicketRetryable, mintLiveTicket, shouldUseLiveProxy, workerLiveHttpUrl, workerLiveWsUrl
-* `live-wire.ts` — EvalScriptInput, HIDDEN_WAKE_MS, StreamFallbackError, StreamLiveWire, WireClient, WireFrame, WireHandlers
+* `live-wire.ts` — EvalScriptInput, StreamFallbackError, StreamLiveWire, WireClient, WireFrame, WireHandlers
 * `market-identity.ts` — CatalogSymbol, MarketIdentity, currentSeriesKey, marketIdentityKey, pairFormSymbol, sameMarketIdentity
 * `policy.ts` — ClientVenueStreamMode, DATA_PLANE_DEFAULT_LEVERS, DEFAULT_DATA_PLANE_POLICY, DataPlanePolicy, EngineProfile, EngineProfileCaps, profileForCapabilities
 * `rest-fallback.ts` — Redesign2RestRequest, Redesign2TailEnvelope, Redesign2TailRequest, buildSessionTailUrl, requestRedesign2RestFrame, requestSessionTail
 * `router.ts` — RouteDecision, routeEngineRun
 * `session-broker.ts` — Redesign2Session, Redesign2SessionBroker
 * `session-multiplexer.ts` — Redesign2SessionHandler, Redesign2SessionMultiplexer
+* `sessions.ts` — AppendSessionInput, CreateSessionInput, ReleaseSessionInput, SessionError, SessionState, TickSessionInput
 * `wire-bookkeeping.ts` — PendingRequests, ReconnectHandlers, WireStats, wireStats
 * `ws-client.ts` — Redesign2WsAuth, Redesign2WsClient, Redesign2WsClientOptions, Redesign2WsFrame, Redesign2WsFrameType, endpointToRedesign2WsUrl
 
 # Depends on
 
-* [src](/code/src.md)
 * [src/data](/code/src/data.md)
 * [src/engine/v1](/code/src/engine/v1.md)
 * [src/engines](/code/src/engines.md)

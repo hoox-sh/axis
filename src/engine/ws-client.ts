@@ -18,13 +18,25 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Thin engine ws-client module.
+ * Phase 2 WebSocket transport for Redesign2.
  *
- * WebSocket client for the thin engine. Provides endpoint-to-WS-URL
- * mapping and the Redesign2WsClient class used by the thin ingest host.
+ * This is a scaffold/client foundation, not yet wired into the evaluation
+ * pipeline. It implements the connection lifecycle that Redesign2 requires:
+ * origin URL mapping, auth handshake, reconnect backoff, heartbeat, and frame
+ * routing hooks. Frame payload validation lives in the dedicated frame validators
+ * (subtask 13), which this client calls through its `onFrame` Hook.
  *
  * @module engine/ws-client
  */
+
+import type {
+  Redesign2RepairFrame,
+  Redesign2ResumeFrame,
+  Redesign2SubscribeFrame,
+  SeriesMeta,
+} from './frames';
+import { normalizeRedesign2Frame, validateRedesign2Frame } from './frames';
+import { PendingRequests, ReconnectHandlers, wireStats } from './wire-bookkeeping';
 
 export type Redesign2WsFrameType =
   | 'auth'
@@ -77,17 +89,11 @@ const DEFAULTS = {
   pongTimeoutMs: 5_000,
 } as const;
 
-interface SeriesMeta {
-  symbol: string;
-  interval: string;
-  timezone: string;
-}
-
 /**
  * Map an engine HTTP(S) endpoint to the engine-owned data plane WebSocket URL.
  *
- * Pinned contract: `${origin}/ws/live`. Any path on the configured endpoint
- * is dropped — the live route lives at the origin root.
+ * Pinned contract (final/plan.mdx §6): `${origin}/ws/live`. Any path on the
+ * configured endpoint is dropped — the live route lives at the origin root.
  */
 export function endpointToRedesign2WsUrl(endpoint: string, authToken?: string): string {
   const base = endpoint.replace(/\/$/, '');
@@ -107,34 +113,6 @@ export function endpointToRedesign2WsUrl(endpoint: string, authToken?: string): 
   return u.toString();
 }
 
-/** Validate a thin/Redesign2 WS frame. */
-function validateRedesign2Frame(frame: Redesign2WsFrame): boolean {
-  if (!frame || typeof frame.type !== 'string') return false;
-  const validTypes: Redesign2WsFrameType[] = [
-    'auth',
-    'auth.ok',
-    'subscribe',
-    'resume',
-    'repair',
-    'unsubscribe',
-    'status',
-    'full',
-    'delta',
-    'close',
-    'verify.result',
-    'ping',
-    'pong',
-    'error',
-  ];
-  return validTypes.includes(frame.type);
-}
-
-/**
- * Thin WebSocket client.
- *
- * Full connection lifecycle: origin URL mapping, auth handshake, reconnect
- * backoff, heartbeat, and frame routing hooks.
- */
 export class Redesign2WsClient {
   private readonly options: Omit<Required<Redesign2WsClientOptions>, 'authToken'> & {
     authToken?: string;
@@ -147,15 +125,15 @@ export class Redesign2WsClient {
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private pongTimer: ReturnType<typeof setTimeout> | null = null;
   private stopped = false;
-  private readonly handlers: Array<() => void> = [];
-  private openedOnce = false;
 
   public onFrame?: (frame: Redesign2WsFrame) => void;
   public onStatus?: (status: 'connecting' | 'open' | 'closed' | 'error') => void;
   /** Called for frames that fail contract validation (logged + skipped by default). */
   public onMalformed?: (raw: unknown) => void;
 
-  private readonly pending = new Map<string, ((frame: Redesign2WsFrame) => void) | null>();
+  private readonly pending = new PendingRequests<Redesign2WsFrame>();
+  private readonly reconnects = new ReconnectHandlers();
+  private openedOnce = false;
 
   constructor(options: Redesign2WsClientOptions) {
     this.options = {
@@ -178,15 +156,23 @@ export class Redesign2WsClient {
     return this.url;
   }
 
+  /**
+   * Diagnostic counters for MCP `stream.get` — connection bookkeeping only,
+   * never the auth token (it travels as a frame, not in the URL).
+   */
   stats(): { open: boolean; openedOnce: boolean; reconnectAttempts: number; stopped: boolean } {
-    return {
+    return wireStats({
       open: this.isOpen,
       openedOnce: this.openedOnce,
       reconnectAttempts: this.reconnectAttempts,
       stopped: this.stopped,
-    };
+    });
   }
 
+  /**
+   * Detach and close a socket this client no longer owns, without letting its
+   * late events reach the client (never throws).
+   */
   private closeQuietly(ws: WebSocket): void {
     try {
       ws.onopen = null;
@@ -200,6 +186,7 @@ export class Redesign2WsClient {
   }
 
   async connect(): Promise<void> {
+    // Explicit stop sets stopped; a later connect() must still be able to open.
     this.stopped = false;
     if (this.isOpen) return;
     if (this.connectPromise) return this.connectPromise;
@@ -216,6 +203,16 @@ export class Redesign2WsClient {
       }
       this.ws = ws;
 
+      /**
+       * True while `ws` is still the client's live socket. A superseded socket
+       * — its attempt timed out or errored while a later attempt took over
+       * `this.ws` — must not touch client state: its late open / error / close
+       * and its frames all belong to a dead connection. Nulling `this.ws` from
+       * a stale close used to tear down the *live* socket, so the auth frame
+       * sent from the live socket's `onopen` threw `WebSocket not open` out of
+       * the handler (an uncaught window error) and the client sat degraded
+       * until some later reconnect happened to win the race.
+       */
       const owns = (): boolean => this.ws === ws;
 
       const timer = setTimeout(() => {
@@ -234,6 +231,8 @@ export class Redesign2WsClient {
 
       ws.onopen = () => {
         if (settled) {
+          // Opened after this attempt was abandoned: never adopt it, and never
+          // leak a live socket whose later events would hit the client.
           if (!owns()) this.closeQuietly(ws);
           return;
         }
@@ -251,6 +250,10 @@ export class Redesign2WsClient {
         this.startHeartbeat();
         const first = !this.openedOnce;
         this.openedOnce = true;
+        const fireResume = () => {
+          if (first) return;
+          this.reconnects.fire();
+        };
         if (this.options.authToken) {
           this.send({
             type: 'auth',
@@ -258,6 +261,10 @@ export class Redesign2WsClient {
             payload: { token: this.options.authToken },
           });
         }
+        // Upgrade already carries ?api_key= (handshake). Do not block connect on
+        // auth.ok — production timed out here while the engine was still hashing
+        // the key, and subscribe never ran.
+        fireResume();
         resolve();
       };
 
@@ -266,6 +273,8 @@ export class Redesign2WsClient {
         settled = true;
         clearTimeout(timer);
         if (!owns()) {
+          // A superseded socket failed: report this attempt, leave the live
+          // socket (and its reconnect bookkeeping) alone.
           reject(new Error('Redesign2 WebSocket superseded'));
           return;
         }
@@ -276,6 +285,9 @@ export class Redesign2WsClient {
       };
 
       ws.onclose = () => {
+        // Only the socket this client currently owns may close the client down:
+        // a superseded socket's late close must not null the live socket, stop
+        // its heartbeat, or drop its pending frames.
         if (!owns()) return;
         this.stopHeartbeat();
         this.ws = null;
@@ -293,6 +305,8 @@ export class Redesign2WsClient {
       };
 
       ws.onmessage = (ev) => {
+        // Frames from a superseded socket are stale by definition — never let
+        // them reach the router (they would double-feed a subscription).
         if (!owns()) return;
         this.handleMessage(ev?.data);
       };
@@ -312,6 +326,10 @@ export class Redesign2WsClient {
     this.ws.send(JSON.stringify(frame));
   }
 
+  // -------------------------------------------------------------------------
+  // Typed send helpers (F-05). Each builds a contract frame and sends it.
+  // -------------------------------------------------------------------------
+
   subscribe(
     id: string,
     kind: 'series' | 'script',
@@ -323,7 +341,7 @@ export class Redesign2WsClient {
       mode?: string;
     },
   ): void {
-    const frame: Redesign2WsFrame = {
+    const frame: Redesign2SubscribeFrame = {
       type: 'subscribe',
       id,
       ts: Date.now(),
@@ -338,7 +356,7 @@ export class Redesign2WsClient {
     lastTime: number,
     extra?: { closed_upto?: number; seq?: number },
   ): void {
-    const frame: Redesign2WsFrame = {
+    const frame: Redesign2ResumeFrame = {
       type: 'resume',
       id,
       ts: Date.now(),
@@ -348,7 +366,7 @@ export class Redesign2WsClient {
   }
 
   requestRepair(id: string, fromTime: number): void {
-    const frame: Redesign2WsFrame = {
+    const frame: Redesign2RepairFrame = {
       type: 'repair',
       id,
       ts: Date.now(),
@@ -361,22 +379,24 @@ export class Redesign2WsClient {
     this.send({ type: 'unsubscribe', id, ts: Date.now() });
   }
 
+  /**
+   * Await the next inbound frame carrying `id` (e.g. a `status` or `error`
+   * reply to a `subscribe`). The pending entry also resolves through the
+   * normal `onFrame` dispatch. Rejects on timeout; entries are dropped on
+   * socket close so a dead connection cannot leak waiters.
+   */
   awaitFrame(id: string, timeoutMs = 10_000): Promise<Redesign2WsFrame> {
-    return new Promise((resolve) => {
-      this.pending.set(id, resolve);
-      setTimeout(() => {
-        this.pending.delete(id);
-        resolve(null);
-      }, timeoutMs);
-    });
+    return this.pending.awaitFrame(id, timeoutMs);
   }
 
+  /**
+   * Register a handler fired on every successful (re)connect — the caller
+   * re-issues `subscribe`/`resume` here. Session ids are owned by the caller
+   * (see `session-multiplexer`); the client never clears them, so a reconnect
+   * preserves every session. Returns an unsubscribe function.
+   */
   addReconnectHandler(fn: () => void): () => void {
-    this.handlers.push(fn);
-    return () => {
-      const idx = this.handlers.indexOf(fn);
-      if (idx > -1) this.handlers.splice(idx, 1);
-    };
+    return this.reconnects.add(fn);
   }
 
   disconnect(): void {
@@ -404,7 +424,7 @@ export class Redesign2WsClient {
       return;
     }
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
-    const frame = parsed as Redesign2WsFrame;
+    const frame = normalizeRedesign2Frame(parsed) as Redesign2WsFrame;
     if (!frame || typeof frame.type !== 'string') return;
     if (frame.type === 'pong') {
       if (this.pongTimer) {
@@ -428,10 +448,7 @@ export class Redesign2WsClient {
   }
 
   private dropPending(err: Error): void {
-    this.pending.forEach((resolve) => {
-      if (resolve) resolve(err);
-    });
-    this.pending.clear();
+    this.pending.dropAll(err);
   }
 
   private startHeartbeat(): void {
@@ -441,10 +458,14 @@ export class Redesign2WsClient {
       try {
         this.send({ type: 'ping', ts: Date.now() });
       } catch {
+        // The socket closed between the check and the send: the close handler
+        // nulls it and reconnects, so there is nothing to do here. Never let
+        // it escape — a timer throw is an uncaught window error.
         return;
       }
       if (this.pongTimer) clearTimeout(this.pongTimer);
       this.pongTimer = setTimeout(() => {
+        // No pong; close and reconnect.
         if (this.ws) {
           try {
             this.ws.close();
@@ -477,6 +498,7 @@ export class Redesign2WsClient {
     this.reconnectAttempts += 1;
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
+      // disconnect() can race a timer that already elapsed; connect() un-stops.
       if (this.stopped) return;
       void this.connect().catch(() => {
         /* connect handles retry */

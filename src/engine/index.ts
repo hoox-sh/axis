@@ -18,28 +18,22 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Thin engine module barrel.
- *
- * Ultra-fast lightweight charting engine: TradingView LWC + PYNE backend,
- * PYNE Incremental State Machine ($S_{t-1}$ hot state, O(1) tip evaluation),
- * multiplexed WSS streaming packed binary Delta Envelopes (OHLCV + indicators
- * in one frame), SequenceID gap detection, LWC series.update() hot path.
- *
- * Uses its own Delta Envelope protocol (NOT AXB1).
+ * Redesign2 engine module barrel. Runtime wiring is intentionally deferred to
+ * a follow-up feature-gated integration pass.
  *
  * @module engine
  */
 
 export * from './policy';
-export * from './router';
-export * from './sessions';
-export * from './delta-client';
-export * from './runner';
-export * from './health';
-export * from './feature-flag';
-export * from './live-wire';
 export * from './ws-client';
-export * from './wire-bookkeeping';
-export * from './delta-frames';
-export * from './apply-bridge';
+export * from './frames';
+export * from './rest-fallback';
+export * from './session-multiplexer';
+export * from './session-broker';
+export * from './client-apply';
+export * from './bar-close-verify';
 export * from './market-identity';
+export * from './feature-flag';
+export * from './router';
+export * from './apply-bridge';
+export * from './live-wire';
