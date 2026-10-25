@@ -421,7 +421,7 @@ export function releaseSlotWire(fingerprint: string, slotId: string): StreamLive
   return tabSockets.release(fingerprint, slotId);
 }
 
-/** Chart-host pins: slotId → fingerprint taken at pin time. */
+/** Chart-host pins: slotId → fingerprint taken at pin time. Keys are mounted hosts. */
 const chartSlotPins = new Map<string, string>();
 
 function forgetChartSlotPins(): void {
@@ -456,6 +456,20 @@ export function unpinChartSlot(slotId: string): StreamLiveWire | undefined {
   if (fp === undefined) return undefined;
   chartSlotPins.delete(id);
   return releaseSlotWire(fp, id);
+}
+
+/**
+ * After a pool drain, pin still-mounted ChartHost ids onto the current
+ * engine fingerprint. Empty when no host is alive (primary stays lazy).
+ */
+function rePinMountedChartSlots(slotIds: readonly string[]): void {
+  for (const id of slotIds) {
+    try {
+      pinChartSlot(id);
+    } catch {
+      /* next getWire still opens the primary */
+    }
+  }
 }
 
 /** Live engine sockets this tab currently holds. */
@@ -496,7 +510,10 @@ export function streamWireState(): ReturnType<StreamLiveWire['snapshotState']> |
  * `Redesign2WsClient` is terminal after `disconnect()`, so the next stream
  * tick rebuilds from the current engine config — recovering a changed API
  * key/endpoint, a superseded socket, or a failure cooldown in one step.
- * Never throws.
+ * Mounted ChartHost slot ids survive the drain and are re-pinned onto the
+ * current fingerprint (new sockets). Unpinned hosts stay gone. With no
+ * mounted slots the pool stays empty; the primary wire is still lazy via
+ * {@link getStreamWire}. Never throws.
  */
 export function resetStreamWire(): {
   hadWire: boolean;
@@ -504,26 +521,30 @@ export function resetStreamWire(): {
   unsubscribed: number;
   cooledDown: boolean;
 } {
+  const mounted = [...chartSlotPins.keys()];
   const held = tabSockets.drain();
-  forgetChartSlotPins();
+  chartSlotPins.clear();
   if (wire && !held.includes(wire)) held.push(wire);
   wire = null;
   wireCred = '';
-  if (!held.length) return { hadWire: false, wasOpen: false, unsubscribed: 0, cooledDown: false };
-  let out = { hadWire: true, wasOpen: false, unsubscribed: 0, cooledDown: false };
-  for (const target of held) {
-    try {
-      const r = target.reset();
-      out = {
-        hadWire: true,
-        wasOpen: out.wasOpen || r.wasOpen,
-        unsubscribed: out.unsubscribed + r.unsubscribed,
-        cooledDown: out.cooledDown || r.cooledDown,
-      };
-    } catch {
-      /* reset must never break the caller */
+  let out = { hadWire: false, wasOpen: false, unsubscribed: 0, cooledDown: false };
+  if (held.length) {
+    out = { hadWire: true, wasOpen: false, unsubscribed: 0, cooledDown: false };
+    for (const target of held) {
+      try {
+        const r = target.reset();
+        out = {
+          hadWire: true,
+          wasOpen: out.wasOpen || r.wasOpen,
+          unsubscribed: out.unsubscribed + r.unsubscribed,
+          cooledDown: out.cooledDown || r.cooledDown,
+        };
+      } catch {
+        /* reset must never break the caller */
+      }
     }
   }
+  rePinMountedChartSlots(mounted);
   return out;
 }
 

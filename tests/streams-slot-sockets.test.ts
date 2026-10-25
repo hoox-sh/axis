@@ -166,4 +166,50 @@ describe('chart slot socket pins (concept §4.1)', () => {
     expect(unpinChartSlot('slot-x')).toBeUndefined();
     expect(streamSocketSize()).toBe(0);
   });
+
+  it('resetStreamWire re-pins mounted slots onto the current fingerprint', () => {
+    const fp = streamWireFingerprint();
+    const first = pinChartSlot('slot-1');
+    const second = pinChartSlot('slot-2');
+    expect(first?.status).toBe('live');
+    expect(second?.status).toBe('live');
+    expect(streamSocketSize()).toBe(1);
+    expect(streamSocketRefs(fp)).toBe(2);
+    if (first?.status !== 'live') throw new Error('expected live');
+    const before = first.value;
+    resetStreamWire();
+    expect(streamSocketSize()).toBe(1);
+    expect(streamSocketRefs(fp)).toBe(2);
+    const again = pinChartSlot('slot-1');
+    expect(again?.status).toBe('live');
+    if (again?.status !== 'live') throw new Error('expected live');
+    expect(again.value).not.toBe(before);
+    expect(streamSocketRefs(fp)).toBe(2);
+    expect(unpinChartSlot('slot-1')).toBeUndefined();
+    expect(unpinChartSlot('slot-2')).toBeDefined();
+    expect(streamSocketSize()).toBe(0);
+  });
+
+  it('resetStreamWire does not resurrect an unpinned slot', () => {
+    const fp = streamWireFingerprint();
+    pinChartSlot('slot-keep');
+    pinChartSlot('slot-drop');
+    expect(streamSocketRefs(fp)).toBe(2);
+    expect(unpinChartSlot('slot-drop')).toBeUndefined();
+    expect(streamSocketRefs(fp)).toBe(1);
+    resetStreamWire();
+    expect(streamSocketSize()).toBe(1);
+    expect(streamSocketRefs(fp)).toBe(1);
+    expect(unpinChartSlot('slot-drop')).toBeUndefined();
+    expect(unpinChartSlot('slot-keep')).toBeDefined();
+    expect(streamSocketSize()).toBe(0);
+  });
+
+  it('resetStreamWire with no pins leaves the pool empty', () => {
+    expect(streamSocketSize()).toBe(0);
+    const out = resetStreamWire();
+    expect(out.hadWire).toBe(false);
+    expect(streamSocketSize()).toBe(0);
+    expect(streamSocketRefs(streamWireFingerprint())).toBe(0);
+  });
 });

@@ -29,6 +29,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Fixed
 
+- **MCP `stream.reset` re-pins mounted chart hosts.** `resetStreamWire` keeps live ChartHost slot ids, drains the pool, then pins those hosts onto the current engine fingerprint (new sockets). Unpin still drops a slot so reset cannot resurrect it. With no hosts mounted the pool stays empty until `getWire`.
+
 - **A pane whose visible logical range disagrees with the price axis is reported.** `alignTimeRangesFromPrice` samples `logicalRangeSkew` after the single-layout early return (shared chart, no mirror) and after the multi-chart write. Dev warns on every new skew size. Production warns about 1 in 32 times, once per size. Matching ranges are silent.
 
 - **A plot column shorter than the price axis is reported.** `applyChartMutations` samples `plotLengthSkew`. Dev warns on every new absolute size. Production warns about 1 in 32 times, once per size. A longer column still uses the overhang text and is not warned twice.
