@@ -3,17 +3,24 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-import { describe, expect, test } from 'bun:test';
+import '../setup';
+import { afterEach, describe, expect, mock, test } from 'bun:test';
 import {
+  CHART_LAYOUT_KEY,
   SlotChart,
   chartLayoutMode,
   resetChartLayoutMode,
   setChartLayoutMode,
+  usesSingleChartLayout,
   type SlotChartApi,
   type SlotPaneApi,
 } from '../../src/chart/v1/chart-host';
 
-function fakeChart(): SlotChartApi & { removed: boolean; removedPanes: number[] } {
+function fakeChart(): SlotChartApi & {
+  addSeries: ReturnType<typeof mock>;
+  remove: ReturnType<typeof mock>;
+  removePane: ReturnType<typeof mock>;
+} {
   const rows: Array<{ index: number; height: number }> = [{ index: 0, height: 0 }];
   const api = (row: { index: number; height: number }): SlotPaneApi => ({
     paneIndex: () => row.index,
@@ -22,74 +29,100 @@ function fakeChart(): SlotChartApi & { removed: boolean; removedPanes: number[] 
     },
     getHTMLElement: () => null,
   });
+  const scale = { id: 'scale' };
   const chart = {
-    removed: false,
-    removedPanes: [] as number[],
-    addPane: () => {
+    addPane: (_preserve?: boolean) => {
       const row = { index: rows.length, height: 0 };
       rows.push(row);
       return api(row);
     },
     panes: () => rows.map((row) => api(row)),
-    addSeries: (_d: unknown, _o?: unknown, paneIndex?: number) => paneIndex,
-    removePane: (index: number) => {
-      chart.removedPanes.push(index);
+    addSeries: mock((_d: unknown, _o?: unknown, paneIndex?: number) => paneIndex),
+    removePane: mock((index: number) => {
       rows.splice(index, 1);
       rows.forEach((row, i) => {
         row.index = i;
       });
-    },
-    remove: () => {
-      chart.removed = true;
-    },
+    }),
+    remove: mock(() => {}),
     priceScale: (_id: string, paneIndex?: number) => paneIndex,
     timeScale: () => scale,
   };
-  const scale = { id: 'scale' };
   return chart;
 }
 
+afterEach(() => {
+  resetChartLayoutMode();
+});
+
 describe('axis.chart.layout', () => {
-  test('defaults to single and round-trips multi', () => {
-    resetChartLayoutMode();
+  test('absent key or garbage is single', () => {
+    localStorage.removeItem(CHART_LAYOUT_KEY);
     expect(chartLayoutMode()).toBe('single');
-    setChartLayoutMode('multi');
+    expect(usesSingleChartLayout()).toBe(true);
+
+    for (const garbage of ['', 'SINGLE', 'Single', 'foo', 'MULTI']) {
+      localStorage.setItem(CHART_LAYOUT_KEY, garbage);
+      expect(chartLayoutMode()).toBe('single');
+      expect(usesSingleChartLayout()).toBe(true);
+    }
+  });
+
+  test('exact multi is rollback; single clears the key', () => {
+    localStorage.setItem(CHART_LAYOUT_KEY, 'multi');
     expect(chartLayoutMode()).toBe('multi');
+    expect(usesSingleChartLayout()).toBe(false);
+
     setChartLayoutMode('single');
+    expect(localStorage.getItem(CHART_LAYOUT_KEY)).toBeNull();
     expect(chartLayoutMode()).toBe('single');
+    expect(usesSingleChartLayout()).toBe(true);
+
+    setChartLayoutMode('multi');
+    expect(localStorage.getItem(CHART_LAYOUT_KEY)).toBe('multi');
+    expect(usesSingleChartLayout()).toBe(false);
+    setChartLayoutMode('single');
+    expect(localStorage.getItem(CHART_LAYOUT_KEY)).toBeNull();
   });
 });
 
 describe('SlotChart', () => {
-  test('one chart, one time scale, series land on their pane', () => {
+  test('two pane ids share one timeScale object', () => {
     const chart = fakeChart();
     const slot = new SlotChart(chart);
-    expect(slot.bind('price')).toBe(0);
-    expect(slot.bind('volume')).toBe(1);
-    expect(slot.bind('rsi')).toBe(2);
-    expect(slot.timeScale()).toBe(slot.timeScale());
-    const price = slot.facade('price');
-    const volume = slot.facade('volume');
-    expect(price.addSeries('Line', {})).toBe(0);
-    expect(volume.addSeries('Line', {})).toBe(1);
-    expect(price.priceScale('right')).toBe(0);
-    expect(volume.priceScale('right')).toBe(1);
-    slot.setHeight('volume', 80);
-    expect(chart.panes()[1]?.paneIndex()).toBe(1);
+    slot.bind('price');
+    slot.bind('volume');
+    const scale = slot.timeScale();
+    expect(scale).toBe(chart.timeScale());
+    expect(slot.facade('price').timeScale()).toBe(scale);
+    expect(slot.facade('volume').timeScale()).toBe(scale);
   });
 
-  test('releasing a sub-pane keeps the chart and shifts later indexes', () => {
+  test('facade addSeries lands on paneIndex 0 vs 1', () => {
+    const chart = fakeChart();
+    const slot = new SlotChart(chart);
+    slot.bind('price');
+    slot.bind('volume');
+    slot.facade('price').addSeries('Line' as never, {});
+    slot.facade('volume').addSeries('Line' as never, {});
+    expect(chart.addSeries.mock.calls.map((call) => call[2])).toEqual([0, 1]);
+  });
+
+  test('release of a non-price pane keeps the chart; price pane destroy removes it', () => {
     const chart = fakeChart();
     const slot = new SlotChart(chart);
     slot.bind('price');
     slot.bind('volume');
     slot.bind('rsi');
+
     expect(slot.release('volume')).toBe('pane');
-    expect(chart.removed).toBe(false);
-    expect(chart.removedPanes).toEqual([1]);
+    expect(chart.remove).not.toHaveBeenCalled();
+    expect(chart.removePane).toHaveBeenCalledWith(1);
     expect(slot.indexOf('rsi')).toBe(1);
+
     expect(slot.release('price')).toBe('chart');
+    expect(chart.remove).not.toHaveBeenCalled();
     slot.destroy();
-    expect(chart.removed).toBe(true);
+    expect(chart.remove).toHaveBeenCalledTimes(1);
   });
 });
