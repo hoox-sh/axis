@@ -121,6 +121,7 @@ import {
 } from '../chart/chart-registry';
 import { normalizeUserDrawings } from '../chart/drawings/normalize';
 import { DEFAULT_CHART_TYPE, normalizeChartType, type ChartType } from '../chart/chart-type';
+import { closedOhlcChanged, noteClosedRewrite } from '../chart/v1/invariants';
 import {
   defaultChartThemeState,
   hydrateChartTheme,
@@ -3570,6 +3571,15 @@ export function appendBar(bar: Bar): BarAppendResult {
     if (bar.time === tip.time) {
       // A closed tip stays closed: a stale forming tick must not reopen it.
       if (tip.closed && bar.closed !== true) return 'ignored';
+      if (
+        tip.closed &&
+        bar.closed === true &&
+        closedOhlcChanged(tip, bar)
+      ) {
+        noteClosedRewrite(bar.time, {
+          dev: typeof import.meta !== 'undefined' && import.meta.env?.DEV === true,
+        });
+      }
       // Same open bar — fine-grained path set (no full-array clone).
       // The payload is normalised first: Solid's store setter *merges* an
       // object into the existing node, so a tick without a volume would keep

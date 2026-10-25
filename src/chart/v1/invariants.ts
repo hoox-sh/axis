@@ -75,6 +75,32 @@ export function noteSyncSample(
 
 export function _resetSyncSampleForTests(): void {
   syncWarned.clear();
+  closedWarned.clear();
+}
+
+const closedWarned = new Set<string>();
+
+/** True when a later close changes OHLC of a bar that was already closed. */
+export function closedOhlcChanged(
+  prev: { open: number; high: number; low: number; close: number },
+  next: { open: number; high: number; low: number; close: number },
+): boolean {
+  return prev.open !== next.open || prev.high !== next.high || prev.low !== next.low || prev.close !== next.close;
+}
+
+/** Dev warns every rewritten close. Prod samples about 1 in 32, once per bar time. */
+export function noteClosedRewrite(
+  time: number,
+  opts?: { dev?: boolean; rand?: number; warn?: (message: string) => void },
+): void {
+  const dev = opts?.dev === true;
+  const rand = opts?.rand ?? Math.random();
+  if (!dev && rand >= 1 / 32) return;
+  const key = String(time);
+  if (closedWarned.has(key)) return;
+  closedWarned.add(key);
+  const warn = opts?.warn ?? ((message: string) => console.warn(message));
+  warn(`[axis] closed bar ${time} changed after commit`);
 }
 
 /** Largest absolute gap between `barCount` and a plot column length. */

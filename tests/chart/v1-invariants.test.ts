@@ -7,6 +7,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   _resetSyncSampleForTests,
   closedBarHash,
+  noteClosedRewrite,
   noteSyncSample,
   paneAxisSkew,
   plotLengthSkew,
@@ -81,5 +82,13 @@ describe('v1 sync invariants', () => {
     noteSyncSample(10, [14], { dev: false, rand: 0.5, warn: (message) => messages.push(message) });
     noteSyncSample(10, [14], { dev: false, rand: 0, warn: (message) => messages.push(message) });
     expect(messages).toEqual(['[axis] plot column is 4 bars past the price axis']);
+  });
+
+  test('a rewritten closed bar warns once', () => {
+    _resetSyncSampleForTests();
+    const messages: string[] = [];
+    noteClosedRewrite(60, { dev: true, warn: (message) => messages.push(message) });
+    noteClosedRewrite(60, { dev: true, warn: (message) => messages.push(message) });
+    expect(messages).toEqual(['[axis] closed bar 60 changed after commit']);
   });
 });
