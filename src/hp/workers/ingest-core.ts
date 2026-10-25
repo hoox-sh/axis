@@ -165,14 +165,19 @@ function snapshotBars(snap: Axb1OhlcvSnapshot): CursorBar[] {
   return bars;
 }
 
-function mapAxb1(ax: Axb1Frame | Axb1Unknown, table: IngestCursorTable): IngestDecode {
-  const id = table.resolveSubId(ax.subIdHash);
-  const sessionId = table.resolveSession(ax.sessionHash);
-  const ts = Number(ax.tsMs);
-  const seq = ax.seq;
-  if ('unknown' in ax && ax.unknown === true) {
-    return { ok: true, kind: 'unknown-opcode', opcode: ax.opcode, id, seq };
+function isAxb1Unknown(ax: Axb1Frame | Axb1Unknown): ax is Axb1Unknown {
+  return 'unknown' in ax && ax.unknown === true;
+}
+
+function mapAxb1(frame: Axb1Frame | Axb1Unknown, table: IngestCursorTable): IngestDecode {
+  const id = table.resolveSubId(frame.subIdHash);
+  const sessionId = table.resolveSession(frame.sessionHash);
+  const ts = Number(frame.tsMs);
+  const seq = frame.seq;
+  if (isAxb1Unknown(frame)) {
+    return { ok: true, kind: 'unknown-opcode', opcode: frame.opcode, id, seq };
   }
+  const ax: Axb1Frame = frame;
   /** Captured before the opcode narrowing below (the fallback sees `never`). */
   const opcode = ax.opcode;
 
