@@ -1016,24 +1016,51 @@ export class StreamLiveWire {
 
   private applySeriesPush(subId: string, frame: WireFrame, payload: Record<string, unknown>): void {
     const bars = toBars(payload.bars);
-    const seq = typeof frame.seq === 'number' ? frame.seq : 0;
+    const seq = typeof frame.seq === 'number' ? frame.seq : null;
     const prevSeq = this.appliedSeq.get(subId);
-    if (frame.type === 'full') this.holdUntilFull.delete(subId);
-    if (frame.type !== 'full' && this.holdUntilFull.has(subId)) return;
-    if (frame.type === 'full' && prevSeq != null && seq < prevSeq) return;
     if (frame.type === 'full') {
+      this.holdUntilFull.delete(subId);
+      if (seq != null && prevSeq != null && seq < prevSeq) return;
       if (!bars.length) return;
       this.seriesBars.set(subId, bars);
-      this.appliedSeq.set(subId, seq);
+      this.appliedSeq.set(subId, seq ?? prevSeq ?? 0);
       this.handlers.onSeriesFull(bars);
-    } else if (bars.length) {
-      this.appliedSeq.set(subId, seq);
-      this.handlers.onSeriesDelta(bars, true);
-      this.seriesBars.set(subId, mergeTip(this.seriesBars.get(subId) ?? [], bars));
-    } else if (typeof frame.seq === 'number') {
-      this.appliedSeq.set(subId, seq);
+      this.handlers.onStatus(subId, 'live');
+      return;
     }
-    this.handlers.onStatus(subId, 'live');
+    if (this.holdUntilFull.has(subId)) return;
+    const seqAckFrom = typeof payload.seqAckFrom === 'number' ? payload.seqAckFrom : undefined;
+    runApplyTransaction({
+      seq,
+      lastSeq: prevSeq ?? 0,
+      ...(seqAckFrom != null ? { seqAckFrom } : {}),
+      commit: () => {
+        if (seq != null) this.appliedSeq.set(subId, seq);
+        if (bars.length) {
+          this.handlers.onSeriesDelta(bars, true);
+          this.seriesBars.set(subId, mergeTip(this.seriesBars.get(subId) ?? [], bars));
+        }
+        this.handlers.onStatus(subId, 'live');
+      },
+      onStale: (reason) => {
+        if (reason !== 'gap') return;
+        v1Count('seqGap');
+        v1Count('resync');
+        this.holdUntilFull.add(subId);
+        this.handlers.onStatus(subId, 'degraded', { message: 'delta gap — resubscribing' });
+        const have = this.seriesBars.get(subId) ?? [];
+        try {
+          this.client.resumeSubscription(
+            subId,
+            have.length,
+            this.lastBarTime(have),
+            this.resumePayload(subId, this.appliedSeq.get(subId) ?? 0),
+          );
+        } catch {
+          /* resume is best-effort; HUD already shows degraded */
+        }
+      },
+    });
   }
 
   private applyScriptPush(

@@ -55,6 +55,39 @@ describe('decodeInbound JSON', () => {
     expect(out.ok).toBe(true);
     if (out.ok && out.kind === 'frames') expect(out.frames[0]?.type).toBe('status');
   });
+
+  test('JSON still decodes after the client negotiated AXB1', () => {
+    const table = tableWithSub();
+    const ax = decodeInbound(
+      encodeFrame({
+        opcode: Axb1Opcode.UNCHANGED,
+        seq: 1,
+        subIdHash: fnv1a32(SUB),
+        sessionHash: fnv1a32('ses-1'),
+        tsMs: 0n,
+      }),
+      table,
+    );
+    expect(ax.ok).toBe(true);
+    const json = JSON.stringify({
+      type: 'full',
+      id: SUB,
+      sessionId: 'ses-1',
+      seq: 2,
+      payload: {
+        seriesKey: SUB,
+        count: 1,
+        closed_upto: 0,
+        bars: [{ time: 60, open: 1, high: 1, low: 1, close: 1, volume: 1 }],
+      },
+    });
+    const out = decodeInbound(json, table);
+    expect(out.ok).toBe(true);
+    if (!(out.ok && out.kind === 'frames')) throw new Error('expected frames');
+    expect(out.frames[0]?.type).toBe('full');
+    expect(out.frames[0]?.seq).toBe(2);
+    expect(validateRedesign2Frame(out.frames[0])).toBe(true);
+  });
 });
 
 describe('decodeInbound AXB1', () => {

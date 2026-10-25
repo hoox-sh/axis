@@ -17,6 +17,7 @@ function makeHarness(opts?: { delayDelta?: boolean }) {
   const unsubscribed: string[] = [];
   const seriesFull: Bar[][] = [];
   const seriesDelta: Array<{ bars: Bar[]; append: boolean }> = [];
+  const closes: Array<{ time: number; ohlcv?: Record<string, number> }> = [];
   const resumes: Array<{ id: string; count: number; lastTime: number; extra?: Record<string, unknown> }> = [];
   const counters = { disconnects: 0, connects: 0, reconnects: 0 };
   let open = true;
@@ -63,7 +64,7 @@ function makeHarness(opts?: { delayDelta?: boolean }) {
     onStatus: (sub, status) => statuses.push({ sub, status }),
     onSeriesFull: (bars) => seriesFull.push(bars),
     onSeriesDelta: (bars, append) => seriesDelta.push({ bars, append }),
-    onCloseVerified: () => {},
+    onCloseVerified: (time, _result, ohlcv) => closes.push({ time, ohlcv }),
   };
   const applied: Array<{ via: string }> = [];
   const wire = new StreamLiveWire(
@@ -87,6 +88,7 @@ function makeHarness(opts?: { delayDelta?: boolean }) {
     counters,
     seriesFull,
     seriesDelta,
+    closes,
     resumes,
     fireReconnect: () => reconnect?.(),
     pumpReconnect: () => {
@@ -615,6 +617,132 @@ describe('live-wire P1 series + study push', () => {
       });
     }
     expect(h.resumes).toHaveLength(1);
+  });
+
+  test('snapshot, ticks, close, gap, then replay paint as one generation each', async () => {
+    _resetV1Metrics();
+    const h = makeHarness();
+    const sub = 'series:k';
+    const p = h.wire.ensureSeries(sub, {});
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: sub,
+      sessionId: 'ses',
+      seq: 1,
+      payload: { count: 1, bars: BARS },
+    });
+    await p;
+    expect(h.seriesFull).toEqual([BARS]);
+    expect(h.seriesDelta).toEqual([]);
+
+    const tip: Bar = { time: 100, open: 1, high: 2, low: 1, close: 2, volume: 1 };
+    h.emit({
+      type: 'delta',
+      id: sub,
+      sessionId: 'ses',
+      seq: 2,
+      payload: { bars: [tip], forming: true, base_index: 0, count: 1, tail_len: 1 },
+    });
+    expect(h.seriesDelta).toEqual([{ bars: [tip], append: true }]);
+
+    const closed: Bar = { ...tip, high: 3, close: 3, closed: true };
+    h.emit({
+      type: 'delta',
+      id: sub,
+      sessionId: 'ses',
+      seq: 3,
+      payload: { bars: [closed], forming: false, base_index: 0, count: 1, tail_len: 1 },
+    });
+    h.emit({
+      type: 'close',
+      id: sub,
+      sessionId: 'ses',
+      seq: 3,
+      payload: { time: 100, ohlcv: { open: 1, high: 2, low: 1, close: 3, volume: 1 } },
+    });
+    expect(h.seriesDelta).toEqual([
+      { bars: [tip], append: true },
+      { bars: [closed], append: true },
+    ]);
+    expect(h.closes).toEqual([{ time: 100, ohlcv: { open: 1, high: 2, low: 1, close: 3, volume: 1 } }]);
+
+    h.resumes.length = 0;
+    const skipped: Bar = { time: 160, open: 3, high: 4, low: 3, close: 4, volume: 1 };
+    h.emit({
+      type: 'delta',
+      id: sub,
+      sessionId: 'ses',
+      seq: 6,
+      payload: { bars: [skipped], forming: true, base_index: 1, count: 2, tail_len: 1 },
+    });
+    expect(h.seriesDelta).toHaveLength(2);
+    expect(h.resumes).toHaveLength(1);
+    expect(h.resumes[0]).toMatchObject({ id: sub, extra: { seq: 3 } });
+    expect(h.statuses.map((s) => s.status)).toContain('degraded');
+    expect(v1MetricsSnapshot().counts.seqGap).toBe(1);
+    expect(v1MetricsSnapshot().counts.resync).toBe(1);
+
+    h.emit({
+      type: 'delta',
+      id: sub,
+      sessionId: 'ses',
+      seq: 7,
+      payload: { bars: [skipped], forming: true, base_index: 1, count: 2, tail_len: 1 },
+    });
+    expect(h.seriesDelta).toHaveLength(2);
+    expect(h.resumes).toHaveLength(1);
+
+    const replay: Bar[] = [closed, skipped];
+    h.emit({
+      type: 'full',
+      id: sub,
+      sessionId: 'ses',
+      seq: 6,
+      payload: { count: 2, bars: replay },
+    });
+    expect(h.seriesFull).toEqual([BARS, replay]);
+    expect(h.wire.snapshotState().subs[0]?.seq).toBe(6);
+
+    const next: Bar = { time: 160, open: 3, high: 5, low: 3, close: 5, volume: 1 };
+    h.emit({
+      type: 'delta',
+      id: sub,
+      sessionId: 'ses',
+      seq: 7,
+      payload: { bars: [next], forming: true, base_index: 1, count: 2, tail_len: 1 },
+    });
+    expect(h.seriesDelta.at(-1)).toEqual({ bars: [next], append: true });
+    expect(h.wire.snapshotState().subs[0]?.seq).toBe(7);
+    expect(h.statuses.at(-1)?.status).toBe('live');
+  });
+
+  test('an AXB1 subscribe still paints JSON when the server ignores encoding', async () => {
+    _resetV1Metrics();
+    setEngineTransport('worker');
+    const h = makeHarness();
+    const p = h.wire.ensureSeries('series:k', {});
+    await tick();
+    await tick();
+    expect(h.sent[0]?.opts).toEqual({ encoding: 'axb1' });
+    h.emit({
+      type: 'full',
+      id: 'series:k',
+      seq: 1,
+      payload: { count: 1, bars: BARS },
+    });
+    await p;
+    const tip: Bar = { time: 100, open: 1, high: 2, low: 1, close: 2, volume: 1 };
+    h.emit({
+      type: 'delta',
+      id: 'series:k',
+      seq: 2,
+      payload: { bars: [tip], forming: true, base_index: 0, count: 1, tail_len: 1 },
+    });
+    expect(h.seriesFull).toEqual([BARS]);
+    expect(h.seriesDelta).toEqual([{ bars: [tip], append: true }]);
+    expect(v1MetricsSnapshot().counts.jsonFallback).toBe(0);
   });
 
   test('series delta paints without an applier and advances seq', async () => {
