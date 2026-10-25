@@ -23,8 +23,9 @@
  * Converts a merged engine-owned `full` payload (first snapshot or a delta
  * merged by `Redesign2DeltaApplier`) into a `precomputedResult` the existing
  * apply pipeline consumes — no engine re-run. `runAndApply` is invoked with
- * the caller's bar window so series align to the chart axis; `liveTick: true`
- * keeps delta applies tip-only instead of full repaints.
+ * the caller's bar window so series align to the chart axis. A stream
+ * snapshot paints the whole series. A stream delta keeps `liveTick` so the
+ * chart updates the tip only.
  *
  * `sessionVia` is tagged `stream-full` / `stream-delta` so the runner's
  * session time-join treats stream series like any session-backed window.
@@ -121,7 +122,7 @@ export async function applyStreamPayload(
       bars: input.bars,
       silent: input.silent ?? true,
       openResults: false,
-      liveTick: true,
+      liveTick: input.via === 'stream-delta',
     });
   } finally {
     v1Gauge('visibleBars', input.bars.length);

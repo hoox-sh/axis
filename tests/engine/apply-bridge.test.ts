@@ -73,6 +73,29 @@ describe('redesign2 apply bridge (F-16)', () => {
     expect(pre.meta?.sessionVia).toBe('stream-delta');
   });
 
+  test('a stream snapshot is a full apply, not a live tip', async () => {
+    const seen: Array<{ opts: Record<string, unknown> }> = [];
+    await applyStreamPayload(
+      {
+        script: 'indicator("x")',
+        indicatorId: 'ind-1',
+        full: { series: { a: [1, 2] }, count: 2 },
+        via: 'stream-full',
+        bars: [
+          { time: 100, open: 1, high: 1, low: 1, close: 1, volume: 1 },
+          { time: 160, open: 2, high: 2, low: 2, close: 2, volume: 2 },
+        ],
+      },
+      {
+        runAndApply: (async (_script, _id, opts) => {
+          seen.push({ opts });
+          return { status: 'success', plots: [], series: {}, events: [], meta: {} };
+        }) as never,
+      },
+    );
+    expect(seen[0]?.opts.liveTick).toBe(false);
+  });
+
   test('carries the last run input descriptors into the stream payload', async () => {
     // The socket payload carries the values, not the run's metadata. Without
     // the descriptors a live apply empties the script's input list (the

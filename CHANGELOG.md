@@ -21,7 +21,9 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Fixed
 
-- **A newer snapshot is not painted under a late forming tip.** Script paints wait on a per-subscription chain. If the cursor has already moved, that delayed apply is dropped. The last paint is the snapshot, then later deltas.
+- **A live stream snapshot paints the whole indicator.** Stream deltas still update the tip only. Treating the first snapshot as a live tick skipped the apply when the engine window and the chart window disagreed and there was no `bar_times` axis, so the pane stayed empty once live started.
+
+- **A newer snapshot is not painted under a late forming tip.** Script paints wait on a per-subscription chain and always apply the newest payload. The last paint is the snapshot, then later deltas.
 
 - **APPEND_BAR flushes a pending forming tip then the append.** Same as a `close`: a confirmed (`forming: false`) delta for that subscription does not wait for the coalesce timer.
 

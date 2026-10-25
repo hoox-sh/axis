@@ -303,8 +303,13 @@ export class StreamLiveWire {
   private readonly axisResubPending = new Set<string>();
   /** Seq gap: drop deltas until the next full. Axis repair does not use this. */
   private readonly holdUntilFull = new Set<string>();
-  /** In-flight script paints. A later full waits so a forming tip cannot land on top. */
-  private readonly paintChain = new Map<string, Promise<unknown>>();
+  /** Latest unpainted script payload. The in-flight apply drains this. */
+  private readonly paintLatest = new Map<
+    string,
+    { cached: Record<string, unknown>; via: 'stream-full' | 'stream-delta'; bars: Bar[] }
+  >();
+  /** In-flight script paint drain. A later push waits, then paints the newest payload. */
+  private readonly paintTail = new Map<string, Promise<void>>();
   /** Inbox could not drop a tip. One snapshot until the next full. */
   private readonly inboxOverflowPending = new Set<string>();
   /** `history_bars` the script subscription was created with. */
@@ -722,7 +727,8 @@ export class StreamLiveWire {
       this.appliedSeq.delete(input.subId);
       this.scriptInputSig.delete(input.subId);
       this.scriptDepth.delete(input.subId);
-      this.paintChain.delete(input.subId);
+      this.paintLatest.delete(input.subId);
+      this.paintTail.delete(input.subId);
       applier = undefined;
       try {
         this.client.unsubscribe(input.subId);
@@ -1040,26 +1046,36 @@ export class StreamLiveWire {
     // window on screen or the closed %B lands on the next bar.
     const bars = this.barsForScript(ctx.bars);
     if (bars !== ctx.bars) this.scriptCtx.set(subId, { ...ctx, bars });
-    const seq = this.appliedSeq.get(subId) ?? 0;
-    const run = (): Promise<unknown> => {
-      // A newer snapshot (or a later delta) already moved the cursor.
-      if ((this.appliedSeq.get(subId) ?? 0) !== seq) return Promise.resolve();
-      return Promise.resolve(this.apply(ctx.script, ctx.indicatorId, cached, via, bars));
-    };
-    const prev = this.paintChain.get(subId);
-    if (!prev) {
-      const chained = run().catch(() => undefined);
-      this.paintChain.set(subId, chained);
-      void chained.finally(() => {
-        if (this.paintChain.get(subId) === chained) this.paintChain.delete(subId);
-      });
-      return;
-    }
-    const next = prev.then(run, run).catch(() => undefined);
-    this.paintChain.set(subId, next);
-    void next.finally(() => {
-      if (this.paintChain.get(subId) === next) this.paintChain.delete(subId);
+    this.paintLatest.set(subId, { cached, via, bars });
+    void this.flushScriptPaint(subId);
+  }
+
+  /** One apply at a time. Always the newest payload, never a skipped snapshot. */
+  private flushScriptPaint(subId: string): Promise<void> {
+    const existing = this.paintTail.get(subId);
+    if (existing) return existing.then(() => this.flushScriptPaint(subId));
+    const run = this.drainScriptPaint(subId);
+    this.paintTail.set(subId, run);
+    void run.finally(() => {
+      if (this.paintTail.get(subId) === run) this.paintTail.delete(subId);
     });
+    return run;
+  }
+
+  private async drainScriptPaint(subId: string): Promise<void> {
+    while (this.paintLatest.has(subId)) {
+      const job = this.paintLatest.get(subId);
+      this.paintLatest.delete(subId);
+      if (!job) continue;
+      const ctx = this.scriptCtx.get(subId);
+      if (!ctx) continue;
+      try {
+        await this.apply(ctx.script, ctx.indicatorId, job.cached, job.via, job.bars);
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : 'paint failed';
+        this.requestAxisResub(subId, `apply aborted — ${reason}`);
+      }
+    }
   }
 
   /** Chart window when the store has one; the caller's bars in tests and before the first paint. */
@@ -1270,7 +1286,8 @@ export class StreamLiveWire {
     this.scriptCtx.delete(subId);
     this.scriptInputSig.delete(subId);
     this.scriptDepth.delete(subId);
-    this.paintChain.delete(subId);
+    this.paintLatest.delete(subId);
+    this.paintTail.delete(subId);
     try {
       this.client.unsubscribe(subId);
     } catch {
@@ -1337,7 +1354,8 @@ export class StreamLiveWire {
     this.scriptCtx.clear();
     this.scriptInputSig.clear();
     this.scriptDepth.clear();
-    this.paintChain.clear();
+    this.paintLatest.clear();
+    this.paintTail.clear();
     this.inbox.clear();
     this.inboxWaiters.clear();
     this.inboxOverflowPending.clear();
@@ -1360,7 +1378,8 @@ export class StreamLiveWire {
     this.scriptCtx.clear();
     this.scriptInputSig.clear();
     this.scriptDepth.clear();
-    this.paintChain.clear();
+    this.paintLatest.clear();
+    this.paintTail.clear();
     this.clearHidden();
     try {
       this.client.disconnect();
