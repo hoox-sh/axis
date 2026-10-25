@@ -7,6 +7,8 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { Redesign2WsClient } from '../../src/engine/ws-client';
 import { resetHpFlags, setHpEnabled } from '../../src/hp/feature-flag';
 import { decodeInbound, IngestCursorTable } from '../../src/hp/workers/ingest-core';
+import { setEngineTransport } from '../../src/engine/v1/transport';
+import { _resetV1Metrics, v1MetricsSnapshot } from '../../src/engine/v1/metrics';
 import {
   createLiveWsClient,
   IngestHostClient,
@@ -76,6 +78,10 @@ class FakeIngest {
     this.emit({ type: 'status', status });
   }
 
+  unknownOpcode(id: string, opcode: number, seq: number): void {
+    this.emit({ type: 'unknown-opcode', opcode, id, seq });
+  }
+
   reopen(first: boolean): void {
     this.emit({ type: 'open', first });
   }
@@ -102,7 +108,8 @@ afterEach(() => {
 });
 
 describe('createLiveWsClient', () => {
-  test('HP off keeps the main-thread Redesign2 client byte-for-byte', () => {
+  test('HP off and explicit json keep the main-thread client', () => {
+    setEngineTransport('json');
     const fake = new FakeIngest();
     setIngestWorkerFactory(() => fake.transport);
     const client = createLiveWsClient({ endpoint: 'http://127.0.0.1:5002' });
@@ -228,6 +235,21 @@ describe('IngestHostClient over a fake ingest port', () => {
     expect(fakes).toHaveLength(6);
     expect(client.isOpen).toBe(false);
     client.disconnect();
+  });
+
+  test('an unknown opcode is counted and does not close the socket', async () => {
+    _resetV1Metrics();
+    const { client, fake } = makeClient();
+    await client.connect();
+    const seen: Array<{ id: string; opcode: number; seq: number }> = [];
+    client.onUnknownOpcode = (info) => seen.push(info);
+    fake.unknownOpcode('s-1', 127, 3);
+    expect(seen).toEqual([{ id: 's-1', opcode: 127, seq: 3 }]);
+    expect(client.isOpen).toBe(true);
+    expect(fake.terminated).toBe(false);
+    expect(v1MetricsSnapshot().counts.unknownOpcode).toBe(1);
+    client.disconnect();
+    _resetV1Metrics();
   });
 
   test('worker status errors reject a pending connect and drop waiters', async () => {

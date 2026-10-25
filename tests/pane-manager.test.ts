@@ -77,6 +77,7 @@ describe('PaneManager', () => {
   let pm: InstanceType<typeof PaneManager>;
 
   beforeEach(() => {
+    setChartLayoutMode('multi');
     container = document.createElement('div') as unknown as HTMLElement;
     (container as { id: string }).id = 'chart-root';
     document.body.appendChild(container as never);
@@ -899,6 +900,7 @@ describe('pruneCoPaintedSeriesToPaintedRange', () => {
   let pm: InstanceType<typeof PaneManager>;
 
   beforeEach(() => {
+    setChartLayoutMode('multi');
     container = document.createElement('div') as unknown as HTMLElement;
     (container as { id: string }).id = 'chart-root';
     document.body.appendChild(container as never);
@@ -1007,6 +1009,7 @@ describe('live candle axis', () => {
   let pm: InstanceType<typeof PaneManager>;
 
   beforeEach(() => {
+    setChartLayoutMode('multi');
     container = document.createElement('div') as unknown as HTMLElement;
     (container as { id: string }).id = 'chart-root';
     document.body.appendChild(container as never);
@@ -1059,6 +1062,7 @@ describe('load paint while the user is zooming', () => {
   let pm: InstanceType<typeof PaneManager>;
 
   beforeEach(() => {
+    setChartLayoutMode('multi');
     container = document.createElement('div') as unknown as HTMLElement;
     (container as { id: string }).id = 'chart-root';
     document.body.appendChild(container as never);
@@ -1127,6 +1131,7 @@ describe('auditTimeParity', () => {
   let pm: InstanceType<typeof PaneManager>;
 
   beforeEach(() => {
+    setChartLayoutMode('multi');
     container = document.createElement('div') as unknown as HTMLElement;
     (container as { id: string }).id = 'chart-root';
     document.body.appendChild(container as never);

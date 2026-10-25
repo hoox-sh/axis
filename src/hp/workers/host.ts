@@ -35,7 +35,7 @@ import { PendingRequests, ReconnectHandlers, wireStats } from '../../engine/wire
 import type { Bar } from '../../store/types';
 import { isolationProbe } from '../capabilities';
 import { noteIngestPublish } from '../../chart/paint-latency';
-import { v1Mark } from '../../engine/v1/metrics';
+import { v1Count, v1Mark } from '../../engine/v1/metrics';
 import { hpSabMode, isHpEnabled } from '../feature-flag';
 import { noteWorkerTransportFallback, wantsWorkerTransport } from '../../engine/v1/transport';
 import { allocateHotBuffer, type HotBuffer } from '../memory/hot-buffer';
@@ -107,6 +107,8 @@ export class IngestHostClient implements WireClient {
   onFrame: ((frame: WireFrame) => void) | undefined;
   onStatus?: (status: 'connecting' | 'open' | 'closed' | 'error') => void;
   onMalformed?: (reason: string) => void;
+  /** Unknown AXB1 opcode for one subscription. The socket is still open. */
+  onUnknownOpcode?: (info: { id: string; opcode: number; seq: number }) => void;
 
   constructor(options: Redesign2WsClientOptions & { coldKey?: ColdKey }) {
     this.url = endpointToRedesign2WsUrl(options.endpoint, options.authToken);
@@ -274,6 +276,10 @@ export class IngestHostClient implements WireClient {
     }
     if (msg.type === 'pong') return;
     if (msg.type === 'malformed') this.onMalformed?.(msg.reason);
+    if (msg.type === 'unknown-opcode') {
+      v1Count('unknownOpcode');
+      this.onUnknownOpcode?.({ id: msg.id, opcode: msg.opcode, seq: msg.seq });
+    }
   }
 
   async connect(): Promise<void> {
@@ -394,10 +400,10 @@ export type IngestHostOptions = Redesign2WsClientOptions & { coldKey?: ColdKey }
 /**
  * Live `/ws/live` client.
  *
- * The ingest worker owns the socket when HP is on, or when
- * `axis.engine.transport=worker`. Both require a Worker. Otherwise the
- * main-thread {@link Redesign2WsClient} stays, including `JSON.parse`.
- * A requested worker that cannot start counts one JSON fallback.
+ * The ingest worker owns the socket by default, and when HP is on.
+ * `axis.engine.transport=json` keeps the main-thread
+ * {@link Redesign2WsClient}, including `JSON.parse`.
+ * A worker that cannot start counts one JSON fallback.
  */
 export function createLiveWsClient(
   options: IngestHostOptions,

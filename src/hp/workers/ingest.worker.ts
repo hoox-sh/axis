@@ -154,6 +154,10 @@ function handleRaw(raw: unknown): void {
     post({ type: 'malformed', reason: decoded.reason });
     return;
   }
+  if (decoded.kind === 'unknown-opcode') {
+    post({ type: 'unknown-opcode', opcode: decoded.opcode, id: decoded.id, seq: decoded.seq });
+    return;
+  }
   if (decoded.kind === 'pong') {
     if (pongTimer) {
       clearTimeout(pongTimer);

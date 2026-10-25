@@ -7,7 +7,7 @@ tags: [axb1, code, hp]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-22T11:14:37Z
+  at: 2026-10-25T15:25:14Z
 sources:
   - id: tree
     resource: "src/hp/axb1"
@@ -25,7 +25,7 @@ okf_lock: generated
 * `hash.ts` — fnv1a32
 * `index.ts` — assertI64Aligned
 * `ticks.ts` — assertPriceScale, decimalToTicks, float32LosesTicks, priceToTicks, ticksToPrice
-* `types.ts` — Axb1Frame, Axb1HeaderFields, Axb1OhlcvSnapshot, Axb1PlotColumn, Axb1TipFields
+* `types.ts` — Axb1Frame, Axb1HeaderFields, Axb1OhlcvSnapshot, Axb1PlotColumn, Axb1TipFields, Axb1Unknown
 
 # Used by
 

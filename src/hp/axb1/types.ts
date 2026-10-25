@@ -33,6 +33,9 @@ export interface Axb1HeaderFields {
   hdrFlags?: number;
 }
 
+/** Header decoded, payload not. The socket stays up; that sub falls back to JSON. */
+export type Axb1Unknown = Axb1HeaderFields & { unknown: true; opcode: number };
+
 export interface Axb1TipFields {
   mask: number;
   flags: number;

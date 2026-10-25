@@ -7,6 +7,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { HIDDEN_WAKE_MS, StreamFallbackError, StreamLiveWire, type WireClient, type WireFrame, type WireHandlers } from '../../src/engine/live-wire';
 import type { RunResult } from '../../src/plugins/types';
 import type { Bar } from '../../src/store/types';
+import { _resetV1Metrics, v1MetricsSnapshot } from '../../src/engine/v1/metrics';
 import { setStore, store } from '../../src/store';
 import { resetHpFlags, setHpEnabled } from '../../src/hp/feature-flag';
 import { resetEngineTransport, setEngineTransport } from '../../src/engine/v1/transport';
@@ -674,6 +675,99 @@ describe('live-wire P1 series + study push', () => {
     h.wire.reset();
   });
 
+  test('an unknown opcode resumes that sub in JSON and leaves the socket up', async () => {
+    _resetV1Metrics();
+    setHpEnabled(true);
+    const h = makeHarness();
+    const first = h.wire.evalScript({ subId: 's-1', script: 'indicator() {}', meta: {}, bars: BARS });
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 5,
+      payload: { count: 1, plots: [[1]], series: { a: [1] }, closed_upto: 10 },
+    });
+    await first;
+    h.client.onUnknownOpcode?.({ id: 's-1', opcode: 127, seq: 9 });
+    h.client.onUnknownOpcode?.({ id: 's-1', opcode: 127, seq: 10 });
+    expect(h.resumes).toHaveLength(1);
+    expect(h.resumes[0]?.extra).toEqual({ seq: 5, closed_upto: 10 });
+    expect(h.counters.disconnects).toBe(0);
+    expect(v1MetricsSnapshot().counts.jsonFallback).toBe(1);
+    h.wire.reset();
+    resetHpFlags();
+    _resetV1Metrics();
+  });
+
+  test('a thrown paint aborts the batch and resumes once', async () => {
+    let paints = 0;
+    const sent: string[] = [];
+    const statuses: string[] = [];
+    const client: WireClient = {
+      get isOpen() {
+        return true;
+      },
+      onFrame: undefined,
+      async connect() {},
+      disconnect() {},
+      subscribe() {},
+      resumeSubscription(id) {
+        sent.push(id);
+      },
+      unsubscribe() {},
+      awaitFrame() {
+        return new Promise(() => {});
+      },
+      addReconnectHandler() {
+        return () => {};
+      },
+    };
+    const wire = new StreamLiveWire(
+      client,
+      {
+        onStatus: (_sub, _status, extra) => statuses.push(extra?.message ?? ''),
+        onSeriesFull: () => {},
+        onSeriesDelta: () => {},
+        onCloseVerified: () => {},
+      },
+      (() => {
+        paints += 1;
+        if (paints > 1) throw new Error('paint failed');
+        return Promise.resolve({ status: 'success', plots: [], series: {}, events: [], meta: {} });
+      }) as never,
+    );
+    const first = wire.evalScript({ subId: 's-1', script: 'indicator() {}', meta: {}, bars: BARS });
+    await tick();
+    await tick();
+    client.onFrame?.({
+      type: 'full',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 1,
+      payload: { count: 1, plots: [[1]], series: { a: [1] } },
+    });
+    await first;
+    client.onFrame?.({
+      type: 'delta',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 2,
+      payload: { base_index: 0, count: 1, tail_len: 1, plots: [[2]], series: { a: [2] } },
+    });
+    client.onFrame?.({
+      type: 'delta',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 3,
+      payload: { base_index: 0, count: 1, tail_len: 1, plots: [[3]], series: { a: [3] } },
+    });
+    expect(sent).toEqual(['s-1']);
+    expect(statuses.some((m) => m.startsWith('apply aborted'))).toBe(true);
+    wire.reset();
+  });
+
   test('forming: true script delta applies as executionContext tip', async () => {
     const seen: Array<{ via: string; executionContext: unknown }> = [];
     const client: WireClient = {
@@ -918,17 +1012,20 @@ const h = makeHarness();
   });
 
   test('reconnect resumes every live subscription', async () => {
+    resetEngineTransport();
     const h = makeHarness();
     const p = h.wire.ensureSeries('series:k', {});
     await tick(); await tick();
     h.emit({ type: 'full', id: 'series:k', seq: 4, payload: { count: 1, bars: BARS } });
     await p;
     h.fireReconnect();
-    expect(h.resumes).toEqual([{ id: 'series:k', count: 1, lastTime: 100, extra: { seq: 4 } }]);
+    expect(h.resumes).toEqual([
+      { id: 'series:k', count: 1, lastTime: 100, extra: { seq: 4, encoding: 'axb1' } },
+    ]);
   });
 
   test('json omits encoding; worker or HP negotiates axb1', async () => {
-    resetEngineTransport();
+    setEngineTransport('json');
     resetHpFlags();
 
     const plain = makeHarness();

@@ -36,7 +36,7 @@ import {
   ValueKind,
 } from './constants';
 import { assertPriceScale } from './ticks';
-import type { Axb1Frame, Axb1HeaderFields, Axb1TipFields } from './types';
+import type { Axb1Frame, Axb1HeaderFields, Axb1TipFields, Axb1Unknown } from './types';
 
 export interface Axb1Envelope {
   magic: number;
@@ -131,7 +131,7 @@ function readN<T>(n: number, read: () => T): T[] {
   return out;
 }
 
-export function decodeFrame(raw: ArrayBuffer | ArrayBufferView): Axb1Frame {
+export function decodeFrame(raw: ArrayBuffer | ArrayBufferView): Axb1Frame | Axb1Unknown {
   const env = decodeEnvelope(raw);
   const h = headerFrom(env);
   const r = new BinReader(env.payload);
@@ -289,7 +289,7 @@ export function decodeFrame(raw: ArrayBuffer | ArrayBufferView): Axb1Frame {
       return { opcode: Axb1Opcode.JSON_BLOB, ...h, json };
     }
     default:
-      throw new RangeError(`unknown AXB1 opcode ${env.opcode}`);
+      return { ...h, opcode: env.opcode, unknown: true };
   }
 }
 

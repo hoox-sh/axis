@@ -50,13 +50,13 @@ function fakeChart(): SlotChartApi & { removed: boolean; removedPanes: number[] 
 }
 
 describe('axis.chart.layout', () => {
-  test('defaults to multi', () => {
+  test('defaults to single and round-trips multi', () => {
     resetChartLayoutMode();
-    expect(chartLayoutMode()).toBe('multi');
-    setChartLayoutMode('single');
     expect(chartLayoutMode()).toBe('single');
     setChartLayoutMode('multi');
     expect(chartLayoutMode()).toBe('multi');
+    setChartLayoutMode('single');
+    expect(chartLayoutMode()).toBe('single');
   });
 });
 

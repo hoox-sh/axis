@@ -70,4 +70,6 @@ export type IngestToHost =
   | { type: 'frames'; frames: Redesign2Frame[]; publishedAt?: number }
   | { type: 'hot'; active: boolean }
   | { type: 'pong' }
-  | { type: 'malformed'; reason: string };
+  | { type: 'malformed'; reason: string }
+  /** Unknown AXB1 opcode. The socket stays open; the host asks that sub for JSON. */
+  | { type: 'unknown-opcode'; opcode: number; id: string; seq: number };

@@ -37,15 +37,16 @@ afterEach(() => {
 });
 
 describe('axis.engine.transport', () => {
-  test('defaults to json and round-trips worker', () => {
-    expect(engineTransport()).toBe('json');
-    setEngineTransport('worker');
+  test('defaults to worker and round-trips json', () => {
     expect(engineTransport()).toBe('worker');
     setEngineTransport('json');
     expect(engineTransport()).toBe('json');
+    setEngineTransport('worker');
+    expect(engineTransport()).toBe('worker');
   });
 
-  test('HP off and the flag off keep the main-thread client', () => {
+  test('explicit json keeps the main-thread client', () => {
+    setEngineTransport('json');
     setIngestWorkerFactory(() => fakeWorker());
     const client = createLiveWsClient({ endpoint: 'http://127.0.0.1:5002' });
     expect(client).toBeInstanceOf(Redesign2WsClient);

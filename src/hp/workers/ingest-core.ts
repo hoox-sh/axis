@@ -36,12 +36,13 @@ import { Axb1Opcode, PRICE_SCALE_DEFAULT, TipMask, ValueKind } from '../axb1/con
 import { decodeFrame, looksLikeAxb1 } from '../axb1/decode';
 import { fnv1a32 } from '../axb1/hash';
 import { ticksToPrice } from '../axb1/ticks';
-import type { Axb1Frame, Axb1OhlcvSnapshot, Axb1TipFields } from '../axb1/types';
+import type { Axb1Frame, Axb1OhlcvSnapshot, Axb1TipFields, Axb1Unknown } from '../axb1/types';
 import { INGEST_TIP_COALESCE_MS } from './protocol';
 
 export type IngestDecode =
   | { ok: true; kind: 'pong' }
   | { ok: true; kind: 'frames'; frames: Redesign2Frame[] }
+  | { ok: true; kind: 'unknown-opcode'; opcode: number; id: string; seq: number }
   | { ok: false; kind: 'malformed'; reason: string };
 
 export type CursorBar = {
@@ -164,11 +165,14 @@ function snapshotBars(snap: Axb1OhlcvSnapshot): CursorBar[] {
   return bars;
 }
 
-function mapAxb1(ax: Axb1Frame, table: IngestCursorTable): IngestDecode {
+function mapAxb1(ax: Axb1Frame | Axb1Unknown, table: IngestCursorTable): IngestDecode {
   const id = table.resolveSubId(ax.subIdHash);
   const sessionId = table.resolveSession(ax.sessionHash);
   const ts = Number(ax.tsMs);
   const seq = ax.seq;
+  if ('unknown' in ax && ax.unknown === true) {
+    return { ok: true, kind: 'unknown-opcode', opcode: ax.opcode, id, seq };
+  }
   /** Captured before the opcode narrowing below (the fallback sees `never`). */
   const opcode = ax.opcode;
 

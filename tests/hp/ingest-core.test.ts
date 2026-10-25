@@ -58,6 +58,25 @@ describe('decodeInbound JSON', () => {
 });
 
 describe('decodeInbound AXB1', () => {
+  test('an unknown opcode names the sub and stays a successful decode', () => {
+    const table = tableWithSub();
+    const bytes = encodeFrame({
+      opcode: Axb1Opcode.HEARTBEAT,
+      seq: 4,
+      subIdHash: fnv1a32(SUB),
+      sessionHash: fnv1a32('ses-1'),
+      tsMs: 0n,
+    });
+    bytes[5] = 0x7f;
+    expect(decodeInbound(bytes, table)).toEqual({
+      ok: true,
+      kind: 'unknown-opcode',
+      opcode: 0x7f,
+      id: SUB,
+      seq: 4,
+    });
+  });
+
   test('heartbeat is pong', () => {
     const bytes = encodeFrame({
       opcode: Axb1Opcode.HEARTBEAT,

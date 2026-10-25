@@ -86,6 +86,8 @@ export interface WireClient {
   unsubscribe(id: string): void;
   awaitFrame(id: string, timeoutMs?: number): Promise<WireFrame>;
   onFrame: ((frame: WireFrame) => void) | undefined;
+  /** Set by the wire. An unknown AXB1 opcode for one sub; the socket stays open. */
+  onUnknownOpcode?: (info: { id: string; opcode: number; seq: number }) => void;
   addReconnectHandler(fn: () => void): () => void;
   /** Optional connection counters for diagnostics (MCP `stream.get`). */
   stats?(): { open: boolean; openedOnce: boolean; reconnectAttempts: number; stopped: boolean };
@@ -308,6 +310,8 @@ export class StreamLiveWire {
   private wakeUntil = 0;
   private wakeTimer: ReturnType<typeof setTimeout> | null = null;
   private removeVisibility: (() => void) | null = null;
+  /** Subs that must speak JSON after an unknown AXB1 opcode. */
+  private readonly jsonSubs = new Set<string>();
 
   constructor(
     private readonly client: WireClient,
@@ -431,7 +435,7 @@ export class StreamLiveWire {
         subId,
         bars.length,
         this.lastBarTime(bars),
-        resumeExtra(seq, this.appliedClosedUpto.get(subId)),
+        this.resumePayload(subId, seq, this.appliedClosedUpto.get(subId)),
       );
     } catch {
       /* socket may still be coming up */
@@ -443,6 +447,7 @@ export class StreamLiveWire {
     this.wakeUntil = 0;
     this.heldLive.clear();
     this.appliedClosedUpto.clear();
+    this.jsonSubs.clear();
     if (this.wakeTimer) {
       clearTimeout(this.wakeTimer);
       this.wakeTimer = null;
@@ -474,6 +479,43 @@ export class StreamLiveWire {
       this.fail('connect', e instanceof Error ? e.message : String(e));
     }
     this.client.onFrame = (frame) => this.ingest(frame);
+    this.client.onUnknownOpcode = (info) => this.useJsonForSub(info.id);
+  }
+
+  private encodingFor(subId: string): 'axb1' | undefined {
+    if (this.jsonSubs.has(subId)) return undefined;
+    return negotiatedEncoding();
+  }
+
+  private resumePayload(
+    subId: string,
+    seq: number,
+    closedUpto?: number,
+  ): { seq: number; closed_upto?: number; encoding?: 'axb1' } {
+    if (this.jsonSubs.has(subId)) {
+      return { seq, ...(closedUpto != null ? { closed_upto: closedUpto } : {}) };
+    }
+    return resumeExtra(seq, closedUpto);
+  }
+
+  /** One unknown opcode: that sub resumes in JSON. The socket is not closed. */
+  private useJsonForSub(subId: string): void {
+    if (!subId || this.jsonSubs.has(subId)) return;
+    this.jsonSubs.add(subId);
+    v1Count('jsonFallback');
+    this.handlers.onStatus(subId, 'degraded', { message: 'unknown opcode — JSON' });
+    const bars = this.seriesBars.get(subId) ?? this.scriptCtx.get(subId)?.bars ?? [];
+    const seq = this.appliedSeq.get(subId) ?? 0;
+    try {
+      this.client.resumeSubscription(
+        subId,
+        bars.length,
+        this.lastBarTime(bars),
+        this.resumePayload(subId, seq, this.appliedClosedUpto.get(subId)),
+      );
+    } catch {
+      /* keep the socket */
+    }
   }
 
   /** Every inbound frame lands in the inbox AND the router — neither path
@@ -521,7 +563,7 @@ export class StreamLiveWire {
     if (this.cooledDown) this.fail('cooldown', 'stream in failure cooldown');
     this.handlers.onStatus(subId, 'connecting');
     try {
-      const encoding = negotiatedEncoding();
+      const encoding = this.encodingFor(subId);
       this.client.subscribe(subId, 'series', meta, encoding ? { encoding } : undefined);
       const full = await this.awaitFull(subId, SNAPSHOT_WAIT_MS);
       if (full.type === 'error') {
@@ -588,7 +630,7 @@ export class StreamLiveWire {
       this.scriptDepth.set(input.subId, depth);
       this.handlers.onStatus(input.subId, 'connecting');
       try {
-        const encoding = negotiatedEncoding();
+        const encoding = this.encodingFor(input.subId);
         this.client.subscribe(input.subId, 'script', input.meta, {
           script: input.script,
           ...(input.inputs ? { inputs: input.inputs } : {}),
@@ -775,7 +817,7 @@ export class StreamLiveWire {
     for (const [subId, seq] of this.appliedSeq) {
       const bars = this.seriesBars.get(subId) ?? this.scriptCtx.get(subId)?.bars ?? [];
       try {
-        this.client.resumeSubscription(subId, bars.length, this.lastBarTime(bars), resumeExtra(seq));
+        this.client.resumeSubscription(subId, bars.length, this.lastBarTime(bars), this.resumePayload(subId, seq));
       } catch {
         /* socket may still be coming up */
       }
@@ -921,7 +963,7 @@ export class StreamLiveWire {
             subId,
             gapBars.length,
             this.lastBarTime(gapBars),
-            resumeExtra(this.appliedSeq.get(subId) ?? 0),
+            this.resumePayload(subId, this.appliedSeq.get(subId) ?? 0),
           );
         } catch {
           /* resume is best-effort; HUD already shows degraded */
@@ -962,7 +1004,7 @@ export class StreamLiveWire {
         if (!out.replayed) this.applyScriptPush(subId, out.full, 'stream-delta');
       },
       onStale: (reason) => {
-        this.handlers.onStatus(subId, 'degraded', { message: `apply aborted — ${reason}` });
+        this.requestAxisResub(subId, `apply aborted — ${reason}`);
       },
     });
   }
@@ -1006,7 +1048,7 @@ export class StreamLiveWire {
         subId,
         bars.length,
         this.lastBarTime(bars),
-        resumeExtra(this.appliedSeq.get(subId) ?? 0),
+        this.resumePayload(subId, this.appliedSeq.get(subId) ?? 0),
       );
     } catch {
       /* resume is best-effort; HUD already shows degraded */
@@ -1017,6 +1059,7 @@ export class StreamLiveWire {
     this.axisResubPending.delete(subId);
     this.appliers.delete(subId);
     this.appliedSeq.delete(subId);
+    this.jsonSubs.delete(subId);
     this.seriesBars.delete(subId);
     this.seriesInflight.delete(subId);
     this.scriptCtx.delete(subId);

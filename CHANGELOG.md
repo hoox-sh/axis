@@ -27,6 +27,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Fixed
 
+- **An unknown AXB1 opcode does not close the socket.** The decode counts `unknownOpcode`, names the subscription, and that subscription resumes without `encoding: 'axb1'`. Other subscriptions stay on AXB1. A second unknown opcode for the same subscription does not resume again.
+
 - **A hidden tab does not replay every missed tick.** The live socket stays open. Forming ticks fold into one slot per subscription. When the tab is shown, a `closed_upto` that moved resumes once from the last painted close. Otherwise the latest tip is applied once. A seq that never arrived still resumes.
 
 - **A dead ingest worker is replaced.** `onerror` terminates that worker, starts another, and connects again. The next open resubscribes through the same reconnect handlers as a socket drop. After five crashes in one `connect()` the host stays down. It does not switch the socket back to main-thread `JSON.parse`.
@@ -44,6 +46,10 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 - **The WebGL2 overlay engages on HP-3 selection (hp2 D1).** The overlay was a forced-`gpu=webgl2` instrument; `auto` stayed dormant even where the rung selector already landed on HP-3. `startGpuOverlay` now gates on the same selection the HUD chip reports — `probeRendererKind` webgl2 plus `selectHpRung() === 3` — so `auto` on a WebGL2-only machine paints the parity overlay. `off`, GPU-less `auto`, the painterless HP-4 rung, session-cap clamps below 3, and HP disabled all stay dormant. The hide-LWC switch remains gated (D2): this is still additive parity, not the production painter.
 
 ### Added
+
+- **A thrown paint resumes once instead of leaving a stale badge.** The apply transaction still skips the rest of the batch. The status says why, and that subscription asks for one snapshot. A later failure does not resume again until a full arrives.
+
+- **The worker transport and the single chart are the defaults.** A tab with no `axis.engine.transport` uses the ingest worker. A tab with no `axis.chart.layout` uses one Lightweight Charts chart per slot. `json` and `multi` remain the rollback. A missing Worker still counts one JSON fallback and stays on the main-thread socket.
 
 - **Panning to the left edge prefetches one older history page.** The dataset read does not run on the drag frame. The page is painted with `fit` off, and the logical range shifts by the number of bars inserted on the left so the viewport stays put. The rolling window grows with that page, up to the 100k cap, so the next live bar does not slice the page away. Conflation itself is unchanged: on at 2,500 bars, precomputed from 10,000.
 
@@ -67,7 +73,7 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 - **Subscribe and resume send `encoding: 'axb1'` only when the ingest worker owns the socket.** That is `axis.engine.transport=worker` or HP on. The main-thread JSON client omits the field, so a server that ignores it keeps the old JSON frames, and a server that honors it does not switch a parse-only client onto binary.
 
-- **`axis.engine.transport=worker` decodes `/ws/live` off the main thread without turning HP on.** The default stays `json` (main-thread `JSON.parse`). `worker` reuses the ingest worker for the same JSON frames and does not allocate the hot ring, negotiate AXB1, or start the overlay. A tab that asks for the worker where `Worker` is missing stays on the JSON client and counts one `jsonFallback`. Pinned by `tests/engine/v1-transport.test.ts`.
+- **`axis.engine.transport=worker` decodes `/ws/live` off the main thread without turning HP on.** `worker` is now the default (see above); `json` is the main-thread rollback. `worker` reuses the ingest worker for the same JSON frames and does not allocate the hot ring, negotiate AXB1, or start the overlay. A tab that asks for the worker where `Worker` is missing stays on the JSON client and counts one `jsonFallback`. Pinned by `tests/engine/v1-transport.test.ts`.
 
 - **v1 engine metrics record tick→apply, tick→paint, long tasks, and pan frames.** `src/engine/v1/metrics.ts` stamps `tick:recv` before main-thread `JSON.parse` on `full`/`delta`/`close`, `batch:post` when the ingest worker delivers a decoded batch, and `apply:start`/`apply:end` around `applyStreamPayload`, then one frame for tick→paint. The first stamp in a burst wins. Seq gaps and gap-driven resumes increment counters; conflation and the visible bar count are gauges on `setData`; pan and wheel frame deltas sample while the price pane is ranging. `chart.lag` returns the rolling p50/p95/p99 snapshot as `v1`. Pinned by `tests/engine/v1-metrics.test.ts`.
 
