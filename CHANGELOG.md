@@ -15,6 +15,10 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ## [Unreleased]
 
+### Added
+
+- **A tab keeps at most two engine sockets.** Chart slots share one WebSocket per engine endpoint. A second socket opens only for a different endpoint. A third waits until a slot is released.
+
 ### Removed
 
 - **The shared-memory ring, GPU candle overlay, and HP flags are gone.** Lightweight Charts paints candles, indicators, and fills. The ingest worker still owns `/ws/live` and decodes AXB1 when `axis.engine.transport` is `worker` (the default). `axis.engine.transport=json` keeps the main-thread client. Settings no longer has a high-performance section. `hp.get`, `hp.sample`, and `dev.trace` are no longer MCP capabilities. Isolation headers stay.

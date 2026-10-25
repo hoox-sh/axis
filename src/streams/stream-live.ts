@@ -20,8 +20,10 @@
 /**
  * Stream-path glue between the live loop and the engine-owned plane (F-19).
  *
- * Owns one `StreamLiveWire` per tab, built lazily from the active engine
- * config. Handlers paint series snapshots/deltas through the same store/chart
+ * Owns the tab's live wires, built lazily from the active engine config.
+ * Chart slots share one socket per fingerprint; a second socket opens only
+ * for a different engine endpoint (tab cap 2). Handlers paint series
+ * snapshots/deltas through the same store/chart
  * helpers the legacy path uses (`setBarsQuiet` + `setDataToChart` for full
  * replaces, `appendLiveBar` for tip appends) and report subscription status
  * into `store.live.feeds` / `scriptStatus`.
@@ -40,6 +42,7 @@ import { Redesign2BarCloseVerifier, compareClosedOhlcv } from '../engine/bar-clo
 import { currentSeriesKey, pairFormSymbol } from '../engine/market-identity';
 import { pyneMarket } from '../data/provider';
 import { StreamLiveWire, StreamFallbackError, type WireClient } from '../engine/live-wire';
+import { SocketPool, socketFingerprint } from '../engine/v1/socket-pool';
 import { createLiveWsClient } from '../hp/workers/host';
 import { routeEngineRun } from '../engine/router';
 import { getCachedEngineCapabilities } from '../engines/catalog';
@@ -210,6 +213,7 @@ function continuesChartTail(bars: Bar[]): boolean {
   return delta >= 0 && delta <= step;
 }
 
+const tabSockets = new SocketPool<StreamLiveWire>();
 let wire: StreamLiveWire | null = null;
 let wireCred = '';
 /**
@@ -226,7 +230,7 @@ function wireFingerprint(): string {
   const cfg = getActiveEngineConfig();
   const endpoint = String(cfg?.endpoint || store.endpoint || '');
   const authToken = String(cfg?.apiKey || '').trim();
-  return `${endpoint}\0${authToken}`;
+  return socketFingerprint(endpoint, authToken);
 }
 
 function buildWire(): StreamLiveWire {
@@ -308,11 +312,15 @@ function buildWire(): StreamLiveWire {
                 message: 'close mismatch — repair requested',
                 verified: out.verified,
               });
-              try {
-                getWire().repair(seriesSubId(), time);
-              } catch {
-                /* repair is best-effort */
-              }
+              void getWire()
+                .then((w) => {
+                  try {
+                    w.repair(seriesSubId(), time);
+                  } catch {
+                    /* repair is best-effort */
+                  }
+                })
+                .catch(() => {});
               return;
             }
             if (out.verified === 'venue' || out.verified === 'proxy') {
@@ -334,14 +342,27 @@ function buildWire(): StreamLiveWire {
   );
 }
 
-function getWire(): StreamLiveWire {
+async function getWire(): Promise<StreamLiveWire> {
   const fp = wireFingerprint();
-  if (wire && fp !== wireCred) resetStreamWire();
-  if (!wire) {
-    wireCred = fp;
-    wire = buildWire();
+  if (wire && wireCred === fp) return wire;
+  // Primary slot moved: drop this tab's previous fingerprint. Other
+  // acquires can still hold a second socket. Cap is 2.
+  if (wireCred && wireCred !== fp) {
+    const dead = tabSockets.release(wireCred);
+    if (dead) {
+      try {
+        dead.reset();
+      } catch {
+        /* previous socket is gone */
+      }
+    }
+    if (wire === dead) wire = null;
   }
-  return wire;
+  const got = tabSockets.acquire(fp, buildWire);
+  const next = got.status === 'live' ? got.value : await got.wait;
+  wire = next;
+  wireCred = fp;
+  return next;
 }
 
 /**
@@ -363,10 +384,11 @@ export function streamWireState(): ReturnType<StreamLiveWire['snapshotState']> |
 /**
  * Drop the engine socket and every subscription (MCP `stream.reset`).
  *
- * The wire singleton is discarded (not just disconnected): `Redesign2WsClient`
- * is terminal after `disconnect()`, so the next stream tick rebuilds from the
- * current engine config — recovering a changed API key/endpoint, a superseded
- * socket, or a failure cooldown in one step. Never throws.
+ * Every live wire in the tab pool is discarded (not just disconnected):
+ * `Redesign2WsClient` is terminal after `disconnect()`, so the next stream
+ * tick rebuilds from the current engine config — recovering a changed API
+ * key/endpoint, a superseded socket, or a failure cooldown in one step.
+ * Never throws.
  */
 export function resetStreamWire(): {
   hadWire: boolean;
@@ -374,21 +396,24 @@ export function resetStreamWire(): {
   unsubscribed: number;
   cooledDown: boolean;
 } {
-  if (!wire) return { hadWire: false, wasOpen: false, unsubscribed: 0, cooledDown: false };
-  const target = wire;
+  const held = tabSockets.drain();
+  if (wire && !held.includes(wire)) held.push(wire);
   wire = null;
   wireCred = '';
+  if (!held.length) return { hadWire: false, wasOpen: false, unsubscribed: 0, cooledDown: false };
   let out = { hadWire: true, wasOpen: false, unsubscribed: 0, cooledDown: false };
-  try {
-    const r = target.reset();
-    out = {
-      hadWire: true,
-      wasOpen: r.wasOpen,
-      unsubscribed: r.unsubscribed,
-      cooledDown: r.cooledDown,
-    };
-  } catch {
-    /* reset must never break the caller */
+  for (const target of held) {
+    try {
+      const r = target.reset();
+      out = {
+        hadWire: true,
+        wasOpen: out.wasOpen || r.wasOpen,
+        unsubscribed: out.unsubscribed + r.unsubscribed,
+        cooledDown: out.cooledDown || r.cooledDown,
+      };
+    } catch {
+      /* reset must never break the caller */
+    }
   }
   return out;
 }
@@ -511,7 +536,7 @@ export async function streamDriveSeries(marketNow = 0): Promise<void> {
 export async function streamSeriesTick(marketNow = 0): Promise<boolean> {
   const token = String(getActiveEngineConfig()?.apiKey || '').trim();
   if (!token) throw new StreamFallbackError('no-auth', 'engine API key missing');
-  const w = getWire();
+  const w = await getWire();
   const subId = seriesSubId();
   try {
     const before = toBarTime(store.bars);
@@ -545,7 +570,7 @@ export async function streamSeriesTick(marketNow = 0): Promise<boolean> {
 export async function streamEvalScript(ind: Indicator): Promise<void> {
   const token = String(getActiveEngineConfig()?.apiKey || '').trim();
   if (!token) throw new StreamFallbackError('no-auth', 'engine API key missing');
-  const w = getWire();
+  const w = await getWire();
   try {
     await w.evalScript({
       subId: ind.id,
@@ -692,12 +717,17 @@ export async function verifyClosedBar(
 
 /** Tear down the stream path (stopLive / symbol switch / restart). */
 export function streamStop(): void {
-  try {
-    wire?.disconnect();
-  } catch {
-    /* ignore */
+  const held = tabSockets.drain();
+  if (wire && !held.includes(wire)) held.push(wire);
+  for (const w of held) {
+    try {
+      w.disconnect();
+    } catch {
+      /* ignore */
+    }
   }
   wire = null;
+  wireCred = '';
   verifiers.clear();
   try {
     for (const key of Object.keys(store.live.feeds)) clearFeedStatus(key);
