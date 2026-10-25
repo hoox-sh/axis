@@ -5,6 +5,7 @@
 
 import { afterEach, describe, expect, test } from 'bun:test';
 import { Redesign2WsClient } from '../../src/engine/ws-client';
+import { StreamLiveWire, type WireClient, type WireHandlers } from '../../src/engine/live-wire';
 import { decodeInbound, IngestCursorTable } from '../../src/hp/workers/ingest-core';
 import { resetEngineTransport, setEngineTransport } from '../../src/engine/v1/transport';
 import { _resetV1Metrics, v1MetricsSnapshot } from '../../src/engine/v1/metrics';
@@ -15,8 +16,12 @@ import {
   type IngestWorkerTransport,
 } from '../../src/hp/workers/host';
 import type { HostToIngest, IngestToHost } from '../../src/hp/workers/protocol';
+import type { Bar } from '../../src/store/types';
 
 const SUB = 'series:binance|spot|BTC/USDT|1m';
+const SCRIPT = 'script:ema';
+const SCRIPT_BARS: Bar[] = [{ time: 100, open: 1, high: 1, low: 1, close: 1, volume: 1 }];
+const tick = () => new Promise<void>((r) => setTimeout(r, 0));
 
 /**
  * Loopback "worker": the host posts {@link HostToIngest}, this replies with the
@@ -99,6 +104,28 @@ function fullJson(seq: number): string {
       bars: [{ time: 60, open: 1, high: 1, low: 1, close: 1, volume: 1 }],
     },
   });
+}
+
+function scriptFullJson(seq: number): string {
+  return JSON.stringify({
+    type: 'full',
+    id: SCRIPT,
+    sessionId: 'ses-1',
+    seq,
+    payload: {
+      seriesKey: SUB,
+      count: 1,
+      closed_upto: 0,
+      plots: [[1]],
+      series: { a: [1] },
+    },
+  });
+}
+
+type Outbound = { type: string; id?: string; payload?: Record<string, unknown> };
+
+function outbound(fake: FakeIngest): Outbound[] {
+  return fake.sent.map((s) => JSON.parse(s) as Outbound);
 }
 
 afterEach(() => {
@@ -213,6 +240,153 @@ describe('IngestHostClient over a fake ingest port', () => {
     expect(fired).toBe(1);
     expect(client).toBeInstanceOf(IngestHostClient);
     client.disconnect();
+  });
+
+  test('a worker crash resumes series and script with axb1 on the replacement worker', async () => {
+    _resetV1Metrics();
+    setEngineTransport('worker');
+    const fakes: FakeIngest[] = [];
+    setIngestWorkerFactory(() => {
+      const fake = new FakeIngest();
+      fakes.push(fake);
+      return fake.transport;
+    });
+    const client = new IngestHostClient({ endpoint: 'http://127.0.0.1:5002' });
+    const handlers: WireHandlers = {
+      onStatus: () => {},
+      onSeriesFull: () => {},
+      onSeriesDelta: () => {},
+      onCloseVerified: () => {},
+    };
+    const wire = new StreamLiveWire(
+      client as unknown as WireClient,
+      handlers,
+      (async () => ({
+        status: 'success',
+        plots: [],
+        series: {},
+        events: [],
+        meta: {},
+      })) as never,
+    );
+    try {
+      const series = wire.ensureSeries(SUB, {
+        exchange: 'binance',
+        market: 'spot',
+        symbol: 'BTC/USDT',
+        interval: '1m',
+      });
+      await tick();
+      await tick();
+      const first = fakes[0];
+      if (!first) throw new Error('missing worker');
+      expect(outbound(first).some((f) => f.type === 'subscribe' && f.id === SUB)).toBe(true);
+      expect(outbound(first).find((f) => f.id === SUB)?.payload).toMatchObject({
+        kind: 'series',
+        encoding: 'axb1',
+      });
+      first.push(fullJson(4));
+      await series;
+
+      const script = wire.evalScript({
+        subId: SCRIPT,
+        script: 'indicator() {}',
+        meta: {},
+        bars: SCRIPT_BARS,
+      });
+      await tick();
+      await tick();
+      expect(outbound(first).find((f) => f.id === SCRIPT)?.payload).toMatchObject({
+        kind: 'script',
+        encoding: 'axb1',
+      });
+      first.push(scriptFullJson(7));
+      await script;
+
+      expect(wire.snapshotState().subs.map((s) => ({ subId: s.subId, seq: s.seq }))).toEqual([
+        { subId: SCRIPT, seq: 7 },
+        { subId: SUB, seq: 4 },
+      ]);
+
+      first.transport.onerror?.(new Event('error') as ErrorEvent);
+      await Promise.resolve();
+
+      expect(first.terminated).toBe(true);
+      expect(fakes).toHaveLength(2);
+      expect(client.isOpen).toBe(true);
+      expect(client).toBeInstanceOf(IngestHostClient);
+      expect(v1MetricsSnapshot().counts.jsonFallback ?? 0).toBe(0);
+
+      const next = fakes[1];
+      if (!next) throw new Error('missing replacement worker');
+      const resumes = outbound(next).filter((f) => f.type === 'resume');
+      expect(resumes.map((f) => f.id).sort()).toEqual([SCRIPT, SUB].sort());
+      expect(resumes.find((f) => f.id === SUB)?.payload).toEqual({
+        count: 1,
+        last_time: 60,
+        seq: 4,
+        encoding: 'axb1',
+      });
+      expect(resumes.find((f) => f.id === SCRIPT)?.payload).toEqual({
+        count: 1,
+        last_time: 100,
+        seq: 7,
+        encoding: 'axb1',
+      });
+    } finally {
+      wire.reset();
+      _resetV1Metrics();
+    }
+  });
+
+  test('a live wire still stops spawning after the crash cap', async () => {
+    setEngineTransport('worker');
+    const fakes: FakeIngest[] = [];
+    setIngestWorkerFactory(() => {
+      const fake = new FakeIngest();
+      fakes.push(fake);
+      return fake.transport;
+    });
+    const client = new IngestHostClient({ endpoint: 'http://127.0.0.1:5002' });
+    const wire = new StreamLiveWire(
+      client as unknown as WireClient,
+      {
+        onStatus: () => {},
+        onSeriesFull: () => {},
+        onSeriesDelta: () => {},
+        onCloseVerified: () => {},
+      },
+      (async () => ({
+        status: 'success',
+        plots: [],
+        series: {},
+        events: [],
+        meta: {},
+      })) as never,
+    );
+    try {
+      const series = wire.ensureSeries(SUB, {
+        exchange: 'binance',
+        market: 'spot',
+        symbol: 'BTC/USDT',
+        interval: '1m',
+      });
+      await tick();
+      await tick();
+      fakes[0]?.push(fullJson(1));
+      await series;
+      for (let i = 0; i < 8; i++) {
+        const current = fakes[fakes.length - 1];
+        if (!current) throw new Error('missing worker');
+        current.transport.onerror?.(new Event('error') as ErrorEvent);
+        await Promise.resolve();
+      }
+      expect(fakes).toHaveLength(6);
+      expect(client.isOpen).toBe(false);
+      expect(client).toBeInstanceOf(IngestHostClient);
+    } finally {
+      wire.reset();
+    }
   });
 
   test('worker crashes stop spawning after the cap', async () => {
