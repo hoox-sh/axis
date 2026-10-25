@@ -91,6 +91,30 @@ describe('v1 sync invariants', () => {
     expect(closedBarHash(older, 8)).toBe(hash);
   });
 
+  test('a forming tip is not in the last-N closed hash', () => {
+    const closed = Array.from({ length: 8 }, (_, i) => ({
+      ...bar((i + 1) * 60, i + 1),
+      closed: true as const,
+    }));
+    const hash = closedBarHash(closed, 8);
+    const withForming = [...closed, { ...bar(540, 99), closed: false }];
+    expect(closedBarHash(withForming, 8)).toBe(hash);
+    const formingTick = withForming.map((row, i) =>
+      i === withForming.length - 1 ? { ...row, close: 42, high: 42 } : row,
+    );
+    expect(closedBarHash(formingTick, 8)).toBe(hash);
+
+    const committed = withForming.map((row, i) =>
+      i === withForming.length - 1 ? { ...row, closed: true, close: 99 } : row,
+    );
+    expect(closedBarHash(committed, 8)).not.toBe(hash);
+
+    const restated = committed.map((row, i) =>
+      i === committed.length - 1 ? { ...row, close: 7 } : row,
+    );
+    expect(closedBarHash(restated, 8)).not.toBe(closedBarHash(committed, 8));
+  });
+
   test('a plot column past the price axis warns once in dev and is sampled in prod', () => {
     _resetSyncSampleForTests();
     expect(plotOverhang(10, [10, 8])).toBe(0);

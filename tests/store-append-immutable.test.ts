@@ -31,6 +31,10 @@ import {
   store,
 } from '../src/store';
 import type { Bar } from '../src/store/types';
+import {
+  _resetSyncSampleForTests,
+  closedBarHash,
+} from '../src/chart/v1/invariants';
 
 function bar(t: number, close = 100, extra: Partial<Bar> = {}): Bar {
   return { time: t, open: close, high: close + 1, low: close - 1, close, volume: 1, ...extra };
@@ -99,6 +103,58 @@ describe('appendBar — immutable history', () => {
     const verdict = appendBar(bar(1_700_000_000, 101, { closed: true }));
     expect(verdict).toBe('updated');
     expect(store.bars[0]!.close).toBe(101);
+  });
+
+  it('a forming tick on a new tip does not change the last N closed-bar hash', () => {
+    const start = 1_700_000_000;
+    loadBars(
+      Array.from({ length: 8 }, (_, i) => bar(start + i * 60, 100 + i, { closed: true })),
+      'BTCUSDT',
+      '1m',
+      'test',
+    );
+    const hash = closedBarHash(store.bars, 8);
+    expect(appendBar(bar(start + 8 * 60, 200, { closed: false }))).toBe('appended');
+    expect(closedBarHash(store.bars, 8)).toBe(hash);
+    expect(appendBar(bar(start + 8 * 60, 201, { closed: false }))).toBe('updated');
+    expect(closedBarHash(store.bars, 8)).toBe(hash);
+  });
+
+  it('closing the forming tip changes the last N closed-bar hash', () => {
+    const start = 1_700_000_000;
+    loadBars(
+      Array.from({ length: 8 }, (_, i) => bar(start + i * 60, 100 + i, { closed: true })),
+      'BTCUSDT',
+      '1m',
+      'test',
+    );
+    const hash = closedBarHash(store.bars, 8);
+    appendBar(bar(start + 8 * 60, 200, { closed: false }));
+    expect(closedBarHash(store.bars, 8)).toBe(hash);
+    expect(appendBar(bar(start + 8 * 60, 200, { closed: true }))).toBe('updated');
+    expect(closedBarHash(store.bars, 8)).not.toBe(hash);
+  });
+
+  it('rewriting a closed tip still stores the correction and changes the hash', () => {
+    loadBars([bar(1_700_000_000, 100, { closed: true })], 'BTCUSDT', '1m', 'test');
+    const hash = closedBarHash(store.bars, 8);
+    _resetSyncSampleForTests();
+    const messages: string[] = [];
+    const origWarn = console.warn;
+    const origRand = Math.random;
+    console.warn = ((message?: unknown) => {
+      messages.push(String(message));
+    }) as typeof console.warn;
+    Math.random = () => 0;
+    try {
+      expect(appendBar(bar(1_700_000_000, 101, { closed: true }))).toBe('updated');
+    } finally {
+      console.warn = origWarn;
+      Math.random = origRand;
+    }
+    expect(store.bars[0]!.close).toBe(101);
+    expect(closedBarHash(store.bars, 8)).not.toBe(hash);
+    expect(messages).toContain('[axis] closed bar 1700000000 changed after commit');
   });
 
   it('replaces the tip payload instead of merging into it', () => {

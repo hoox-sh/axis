@@ -75,6 +75,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 - **A late snapshot does not paint over a newer sequence.** A full whose `seq` is behind the cursor already applied for that subscription is dropped. The newer bars and the newer seq stay.
 
+- **A forming tick does not change the closed-bar hash.** `closedBarHash` hashes only bars that are closed (`closed !== false`). History rows that omit the flag still count as closed. Closing the tip or rewriting a closed OHLC still changes the hash. A closed restatement is still stored and still reported.
+
 - **A closed bar whose OHLC changes after commit is reported.** The update is still applied, so a later verified close can correct the candle. Dev warns on every new bar time. Production warns about 1 in 32 times, once per bar.
 
 - **A plot column longer than the price axis is reported.** `applyChartMutations` samples the column lengths. Dev warns on every new overhang. Production warns about 1 in 32 times, once per size. A shorter column is sampled as length skew.

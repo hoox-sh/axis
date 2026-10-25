@@ -9,8 +9,8 @@
  * Pure checks. A positive pane skew, or any series time past the price tip,
  * is forbidden. Plot column length must match the price axis; apply samples
  * both short and long mismatches. Every pane's visible logical range must
- * match `chart.timeScale()`. Closed-bar identity is the last N bars joined
- * as text, not a clock.
+ * match `chart.timeScale()`. Closed-bar identity is the last N **closed**
+ * bars joined as text, not a clock. A forming tip is not in that window.
  *
  * @module chart/v1/invariants
  */
@@ -21,6 +21,11 @@ export type ClosedBar = {
   high: number;
   low: number;
   close: number;
+  /**
+   * Venue closed flag. History rows often omit it — those count as closed.
+   * `false` is a forming tip and is not hashed.
+   */
+  closed?: boolean;
 };
 
 function finite(value: number | null): value is number {
@@ -208,10 +213,21 @@ export function plotLengthSkew(barCount: number, lengths: readonly number[]): nu
   return skew;
 }
 
-/** Last `n` closed bars (default 8) as `time:open:high:low:close` joined by `|`. */
+/**
+ * Last `n` closed bars (default 8) as `time:open:high:low:close` joined by `|`.
+ * Skips `closed === false` (forming tips). Missing `closed` is treated as
+ * closed so REST/history rows that omit the flag still hash.
+ */
 export function closedBarHash(bars: readonly ClosedBar[], n = 8): string {
   if (bars.length === 0) return '';
   const take = Math.max(0, Math.floor(n));
-  const window = bars.slice(Math.max(0, bars.length - take));
+  if (take === 0) return '';
+  const window: ClosedBar[] = [];
+  for (let i = bars.length - 1; i >= 0 && window.length < take; i--) {
+    const bar = bars[i];
+    if (bar == null || bar.closed === false) continue;
+    window.push(bar);
+  }
+  window.reverse();
   return window.map((bar) => `${bar.time}:${bar.open}:${bar.high}:${bar.low}:${bar.close}`).join('|');
 }
