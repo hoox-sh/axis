@@ -27,6 +27,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Fixed
 
+- **A late snapshot does not paint over a newer sequence.** A full whose `seq` is behind the cursor already applied for that subscription is dropped. The newer bars and the newer seq stay.
+
 - **A closed bar whose OHLC changes after commit is reported.** The update is still applied, so a later verified close can correct the candle. Dev warns on every new bar time. Production warns about 1 in 32 times, once per bar.
 
 - **A plot column longer than the price axis is reported.** `applyChartMutations` samples the column lengths. Dev warns on every new overhang. Production warns about 1 in 32 times, once per size. A shorter column is warmup and is not a warning.

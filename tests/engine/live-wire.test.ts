@@ -561,6 +561,30 @@ describe('live-wire P1 series + study push', () => {
     ]);
   });
 
+  test('a stale full does not paint over a newer series seq', async () => {
+    const h = makeHarness();
+    const p = h.wire.ensureSeries('series:k', {});
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: 'series:k',
+      sessionId: 'ses',
+      seq: 4,
+      payload: { count: 1, bars: BARS },
+    });
+    await p;
+    h.emit({
+      type: 'full',
+      id: 'series:k',
+      sessionId: 'ses',
+      seq: 2,
+      payload: { count: 1, bars: [{ time: 1, open: 9, high: 9, low: 9, close: 9, volume: 9 }] },
+    });
+    expect(h.seriesFull).toHaveLength(1);
+    expect(h.wire.snapshotState().subs[0]?.seq).toBe(4);
+  });
+
   test('script delta applies through the bridge without a re-subscribe', async () => {
     const h = makeHarness();
     const first = h.wire.evalScript({ subId: 's-1', script: 'indicator() {}', meta: {}, bars: BARS });
@@ -574,6 +598,16 @@ describe('live-wire P1 series + study push', () => {
     });
     await first;
     expect(h.applied).toEqual([{ via: 'stream-full' }]);
+    h.emit({
+      type: 'full',
+      id: 's-1',
+      sessionId: 'old',
+      seq: 3,
+      payload: { count: 1, plots: [[9]], series: { a: [9] } },
+    });
+    await tick();
+    expect(h.applied).toEqual([{ via: 'stream-full' }]);
+    expect(h.wire.snapshotState().subs[0]?.seq).toBe(5);
     h.emit({
       type: 'delta',
       id: 's-1',

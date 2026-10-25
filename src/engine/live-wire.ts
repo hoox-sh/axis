@@ -895,6 +895,8 @@ export class StreamLiveWire {
   private applySeriesPush(subId: string, frame: WireFrame, payload: Record<string, unknown>): void {
     const bars = toBars(payload.bars);
     const seq = typeof frame.seq === 'number' ? frame.seq : 0;
+    const prevSeq = this.appliedSeq.get(subId);
+    if (frame.type === 'full' && prevSeq != null && seq < prevSeq) return;
     if (frame.type === 'full') {
       if (!bars.length) return;
       this.seriesBars.set(subId, bars);
@@ -958,6 +960,9 @@ export class StreamLiveWire {
     }
     const wasLive = this.appliedSeq.has(subId);
     if (frame.type === 'full') {
+      const seq = typeof frame.seq === 'number' ? frame.seq : null;
+      // A snapshot that left before a newer delta must not paint over it.
+      if (wasLive && seq != null && seq < applier.lastSeq) return;
       this.axisResubPending.delete(subId);
       applier.applyFull(scriptFullForApplier(payload, frame.seq));
       if (typeof frame.seq === 'number') this.appliedSeq.set(subId, frame.seq);
