@@ -74,12 +74,14 @@ describe('liveBarMatchesChart (F2)', () => {
       params: { price: 100 },
       cooldownMs: 0,
     });
-    noteLiveBarForAlerts({ close: 90 }, { symbol: 'BTCUSDT', interval: '1h' });
+    noteLiveBarForAlerts({ close: 90, closed: true }, { symbol: 'BTCUSDT', interval: '1h' });
     await sleep(20);
-    noteLiveBarForAlerts({ close: 500 }, { symbol: 'ETHUSDT', interval: '1h' });
+    noteLiveBarForAlerts({ close: 500, closed: true }, { symbol: 'ETHUSDT', interval: '1h' });
+    await sleep(20);
+    noteLiveBarForAlerts({ close: 500, closed: false }, { symbol: 'BTCUSDT', interval: '1h' });
     await sleep(20);
     expect(firstAlert().lastFiredAt).toBeUndefined();
-    noteLiveBarForAlerts({ close: 500 }, { symbol: 'BTCUSDT', interval: '1h' });
+    noteLiveBarForAlerts({ close: 500, closed: true }, { symbol: 'BTCUSDT', interval: '1h' });
     await sleep(20);
     expect(typeof firstAlert().lastFiredAt).toBe('number');
   });

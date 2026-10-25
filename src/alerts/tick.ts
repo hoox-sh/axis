@@ -153,11 +153,20 @@ export async function evaluateLiveAlerts(
  */
 export function noteLiveBarForAlerts(
   bar:
-    | { close?: number; open?: number; high?: number; low?: number; time?: number }
+    | {
+        close?: number;
+        open?: number;
+        high?: number;
+        low?: number;
+        time?: number;
+        closed?: boolean;
+      }
     | null
     | undefined,
   stream?: LiveBarStreamCtx,
 ): void {
+  // A forming tip is not a commit. Alerts run on the closed bar only.
+  if (bar?.closed !== true) return;
   const close = bar && typeof bar.close === 'number' ? bar.close : NaN;
   if (!Number.isFinite(close)) return;
   void evaluateLiveAlerts(close, stream, bar).catch(() => {

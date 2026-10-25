@@ -27,6 +27,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Fixed
 
+- **Alerts wait for a closed bar.** A forming tick no longer evaluates price, drawing, or indicator alerts. The live hook runs only when the bar is marked closed.
+
 - **A live bar time comes from the server, not the local clock.** AXB1 snapshot, tip, close, and append times go through the same unix-second normalizer as venue bars. A tip that omits the bar open stays on the previous server bar. The frame's `tsMs` is not used as the candle time.
 
 - **A live `setData` puts the visible range back.** Window slides and left-edge prefetches replace the series with `fit` off. `setData` can still jump the logical range, so the range from before the replace is written back. A full load still fits. A tick still uses `update` and does not call `fitContent`.
