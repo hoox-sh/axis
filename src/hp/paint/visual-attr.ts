@@ -364,35 +364,41 @@ export function fillVisualAttrFromViewport(
     const inPage = (abs: number): boolean =>
       pageOn && abs >= pageFrom && abs < pageFrom + pageCount;
 
-    // Single pass: write records and track max volume in one loop (P03).
-    const { f32, u32 } = buf;
-    const len = 0;
+    const barAt = (abs: number) =>
+      inHot(abs)
+        ? buffer.readBar(slot, abs - hotFrom, scale)
+        : inPage(abs)
+          ? buffer.readPageBar(abs - pageFrom, scale)
+          : null;
+
+    // Pass 1: the contiguous covered prefix and its volume maximum, so
+    // `volume_norm` is viewport-relative and the caller learns the fill
+    // length. A gap (page stale/pending) ends the run at the first hole.
+    const limit = Math.min(wantCount, buf.capacity);
+    let len = 0;
     let maxVolume = 0;
-    while (len < wantCount && len < buf.capacity) {
-      const abs = wantFrom + len;
-      let bar: {
-        time: number;
-        open: number;
-        high: number;
-        low: number;
-        close: number;
-        volume?: number;
-        closed?: boolean;
-      } | null = null;
-      if (inHot(abs)) bar = buffer.readBar(slot, abs - hotFrom, scale);
-      else if (inPage(abs)) bar = buffer.readPageBar(abs - pageFrom, scale);
-      else break;
+    for (; len < limit; len++) {
+      const bar = barAt(wantFrom + len);
       if (!bar) break;
-      const open = bar.open ?? 0,
-        high = bar.high ?? 0,
-        low = bar.low ?? 0,
-        close = bar.close ?? 0;
       const volume = bar.volume ?? 0;
       if (volume > maxVolume) maxVolume = volume;
-      const word = len * VISUAL_RECORD_WORDS;
-      f32[word] = Math.fround(len); // x_index is index within this fill
-      f32[word + 1] = priceToNdc(open, req.y.yMin, req.y.yMax);
-      f32[word + 2] = priceToNdc(high, req.y.yMin, req.y.yMax);
+    }
+    if (len === 0) return null; // nothing covered — keep the previous frame
+
+    // Pass 2: write the records. x_index is the slot within this fill; the
+    // renderer turns it into screen x via barSpacing, so a merged hot+page
+    // viewport needs no section awareness.
+    const { f32, u32 } = buf;
+    for (let i = 0; i < len; i++) {
+      const bar = barAt(wantFrom + i);
+      if (!bar) break;
+      const open = bar.open ?? 0;
+      const high = bar.high ?? 0;
+      const low = bar.low ?? 0;
+      const close = bar.close ?? 0;
+      const volume = bar.volume ?? 0;
+      const word = i * VISUAL_RECORD_WORDS;
+      f32[word] = Math.fround(i);
       f32[word + 1] = priceToNdc(open, req.y.yMin, req.y.yMax);
       f32[word + 2] = priceToNdc(high, req.y.yMin, req.y.yMax);
       f32[word + 3] = priceToNdc(low, req.y.yMin, req.y.yMax);

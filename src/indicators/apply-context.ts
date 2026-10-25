@@ -257,11 +257,12 @@ export function alignApplySeries(
       : resultTimes
         ? alignSeriesMapToTimes(rawSeries, resultTimes, ohlcvTimes)
         : tailAlignSeriesMap(rawSeries, chartWindowBars);
-  // When the engine's named series arrays are short of the chart window
-  // (live candle not yet evaluated), fill the tail from the legacy
-  // plots[] array which the backend always ships complete. This keeps
-  // historical indices aligned (padded at end by tailAlignSeriesMap) while
-  // supplying the live candle's plot value so it renders on the chart.
+  // When a named series ends in `na` (the backend evaluated history but not
+  // the forming candle), fill that trailing run from the legacy `plots[]`
+  // array, which the backend always ships complete. Series are head-padded
+  // by `tailAlignSeriesMap` (`tailAlignSeriesToWindow`), so a short series
+  // already keeps its newest value on the newest bar; this only fills an
+  // explicit trailing `na`, never a positional shift.
   if (result.plots && Array.isArray(result.plots) && result.plots.length > 0 && seriesMap) {
     const plotsAligned = !needsAlign
       ? result.plots

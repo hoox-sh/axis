@@ -310,7 +310,9 @@ describe('ColdStore', () => {
     const cold = new ColdStore({ max: 10 });
     cold.setBars(bars(20));
     expect(cold.length).toBe(10);
-    expect(cold.read(0, 1)[0]?.time).toBe(10 * 60); // oldest 10 dropped
+    // `read` is absolute-indexed: the first 10 bars were evicted, so the
+    // oldest surviving slot is `baseAbs`, not 0.
+    expect(cold.read(cold.coverage().baseAbs, 1)[0]?.time).toBe(10 * 60);
 
     cold.setBars([bar(600, 1), bar(600, 2)]);
     expect(cold.length).toBe(1);

@@ -111,6 +111,15 @@ describe('tailAlignSeriesToWindow', () => {
     expect(tailAlignSeriesToWindow([1, 2], 4)).toEqual([null, null, 1, 2]);
   });
 
+  it('keeps the newest value on the newest bar (never tail-pads)', () => {
+    // Regression guard: a perf pass flipped this to pad at the end, which
+    // painted a `windowBars: 3` clamp on the three *oldest* bars and shifted
+    // every value earlier (see the free-tier clamp case below). The tail-pin
+    // contract is head-padding: the engine's last value is the newest bar's.
+    expect(tailAlignSeriesToWindow([11, 12, 13], 5)).toEqual([null, null, 11, 12, 13]);
+    expect(tailAlignSeriesToWindow([11, 12, 13], 5)[4]).toBe(13);
+  });
+
   it('returns equal-length and empty input untouched', () => {
     const same = [1, 2, 3];
     expect(tailAlignSeriesToWindow(same, 3)).toBe(same);

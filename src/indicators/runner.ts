@@ -199,11 +199,14 @@ export function tailAlignSeriesToWindow(values: unknown, len: number): unknown[]
   const arr = Array.isArray(values) ? values : [];
   if (len <= 0 || arr.length === 0 || arr.length === len) return arr;
   if (arr.length > len) return arr.slice(arr.length - len);
-  // Missing values are at the tail (live candle not yet evaluated by the
-  // engine), never at the head. Pad at the end so historical indices stay
-  // aligned; a null tail cell renders as Pine `na` (no plot on the live
-  // candle until the engine ships its value).
-  return [...arr, ...new Array(len - arr.length).fill(null)];
+  // The newest engine value belongs on the newest chart bar, so a short
+  // series is head-padded (Pine `na` whitespace) — never tail-padded.
+  // Padding at the end would paint a `windowBars: 3` clamp on the three
+  // *oldest* bars and shift every value earlier. When the engine evaluated
+  // fewer historical bars and the chart has newer ones, that is what the
+  // bar-time join (`alignSeriesToTimes`) is for; without an axis the
+  // documented fallback is this tail-pin.
+  return [...new Array(len - arr.length).fill(null), ...arr];
 }
 
 /** Tail-align every series in a `result.series` map (see {@link tailAlignSeriesToWindow}). */
