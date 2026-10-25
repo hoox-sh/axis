@@ -169,6 +169,52 @@ describe('decodeInbound AXB1', () => {
     expect(payload.bars[0]?.volume).toBe(2);
   });
 
+  test('a tip without a server bar time stays on the previous bar', () => {
+    const table = tableWithSub();
+    decodeInbound(
+      encodeFrame({
+        opcode: Axb1Opcode.SNAPSHOT_OHLCV,
+        seq: 1,
+        subIdHash: fnv1a32(SUB),
+        sessionHash: fnv1a32('ses-1'),
+        tsMs: 9_000_000_000_000n,
+        priceScale: 2,
+        count: 1,
+        closedUpto: 0,
+        hotFromIndex: 0,
+        timeS: [60],
+        open: [10000n],
+        high: [10000n],
+        low: [10000n],
+        close: [10000n],
+        volume: [1],
+        flags: [0],
+      }),
+      table,
+    );
+    const out = decodeInbound(
+      encodeFrame({
+        opcode: Axb1Opcode.TIP_UPDATE,
+        seq: 2,
+        subIdHash: fnv1a32(SUB),
+        sessionHash: fnv1a32('ses-1'),
+        tsMs: 9_000_000_000_000n,
+        mask: TipMask.CLOSE | TipMask.TIME,
+        flags: 1,
+        close: 10100n,
+        timeS: 0,
+      }),
+      table,
+    );
+    expect(out.ok).toBe(true);
+    if (!(out.ok && out.kind === 'frames')) throw new Error('expected frames');
+    const frame = out.frames[0];
+    const payload = frame?.payload as { bars?: Array<{ time: number; close: number }> } | undefined;
+    const bar = payload?.bars?.[0];
+    expect(bar?.time).toBe(60);
+    expect(bar?.close).toBe(101);
+  });
+
   test('APPEND_BAR emits a delta then a close', () => {
     const table = tableWithSub();
     decodeInbound(

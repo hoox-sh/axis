@@ -36,6 +36,7 @@ import { Axb1Opcode, PRICE_SCALE_DEFAULT, TipMask, ValueKind } from '../axb1/con
 import { decodeFrame, looksLikeAxb1 } from '../axb1/decode';
 import { fnv1a32 } from '../axb1/hash';
 import { ticksToPrice } from '../axb1/ticks';
+import { normalizeBarTime } from '../../data/parse-bars';
 import type { Axb1Frame, Axb1OhlcvSnapshot, Axb1TipFields, Axb1Unknown } from '../axb1/types';
 import { INGEST_TIP_COALESCE_MS } from './protocol';
 
@@ -136,12 +137,18 @@ function decodeJsonText(text: string, table: IngestCursorTable): IngestDecode {
   return { ok: true, kind: 'frames', frames: [frame] };
 }
 
+/** Server bar open, in unix seconds. A missing or unusable time stays on the previous bar. */
+function serverBarSec(raw: number | null | undefined, fallback: number): number {
+  if (raw == null) return fallback;
+  return normalizeBarTime(raw) ?? fallback;
+}
+
 function barFromTip(tip: Axb1TipFields, scale: number, prev: CursorBar | null): CursorBar {
   const base: CursorBar = prev ?? { time: 0, open: 0, high: 0, low: 0, close: 0, volume: 0 };
   const price = (ticks: bigint | undefined, fallback: number) =>
     ticks == null ? fallback : ticksToPrice(ticks, scale);
   return {
-    time: tip.mask & TipMask.TIME && tip.timeS != null ? tip.timeS : base.time,
+    time: tip.mask & TipMask.TIME ? serverBarSec(tip.timeS, base.time) : base.time,
     open: tip.mask & TipMask.OPEN ? price(tip.open, base.open) : base.open,
     high: tip.mask & TipMask.HIGH ? price(tip.high, base.high) : base.high,
     low: tip.mask & TipMask.LOW ? price(tip.low, base.low) : base.low,
@@ -154,7 +161,7 @@ function snapshotBars(snap: Axb1OhlcvSnapshot): CursorBar[] {
   const bars: CursorBar[] = [];
   for (let i = 0; i < snap.count; i++) {
     bars.push({
-      time: snap.timeS[i] ?? 0,
+      time: serverBarSec(snap.timeS[i], 0),
       open: ticksToPrice(snap.open[i] ?? 0n, snap.priceScale),
       high: ticksToPrice(snap.high[i] ?? 0n, snap.priceScale),
       low: ticksToPrice(snap.low[i] ?? 0n, snap.priceScale),
@@ -371,7 +378,7 @@ function mapAxb1(frame: Axb1Frame | Axb1Unknown, table: IngestCursorTable): Inge
       ts,
       payload: {
         index: ax.index,
-        time: ax.timeS,
+        time: serverBarSec(ax.timeS, 0),
         ohlcv: {
           open: ticksToPrice(ax.open, cur.priceScale),
           high: ticksToPrice(ax.high, cur.priceScale),
@@ -386,7 +393,7 @@ function mapAxb1(frame: Axb1Frame | Axb1Unknown, table: IngestCursorTable): Inge
 
   if (ax.opcode === Axb1Opcode.APPEND_BAR) {
     const closed: CursorBar = {
-      time: ax.closedTime,
+      time: serverBarSec(ax.closedTime, cur.lastBar?.time ?? 0),
       open: ticksToPrice(ax.open, ax.priceScale),
       high: ticksToPrice(ax.high, ax.priceScale),
       low: ticksToPrice(ax.low, ax.priceScale),
@@ -411,7 +418,7 @@ function mapAxb1(frame: Axb1Frame | Axb1Unknown, table: IngestCursorTable): Inge
       ts,
       payload: {
         index: ax.closedIndex,
-        time: ax.closedTime,
+        time: serverBarSec(ax.closedTime, 0),
         ohlcv: {
           open: closed.open,
           high: closed.high,
