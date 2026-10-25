@@ -124,6 +124,51 @@ describe('manager-access', () => {
     expect(markersCleared).toBe(0);
   });
 
+  it('setDataToChart with fit false puts the logical range back', () => {
+    let range = { from: 10, to: 40 };
+    const ts = {
+      getVisibleLogicalRange: () => ({ ...range }),
+      setVisibleLogicalRange: (next: { from: number; to: number }) => {
+        range = { from: next.from, to: next.to };
+      },
+      applyOptions: () => {},
+      fitContent: () => {
+        range = { from: 0, to: 100 };
+      },
+    };
+    const candle = {
+      setData: () => {
+        range = { from: 0, to: 100 };
+      },
+      applyOptions: () => {},
+      seriesType: () => 'Candlestick',
+    };
+    const chart = {
+      timeScale: () => ts,
+      priceScale: () => ({ applyOptions: () => {} }),
+      addSeries: () => candle,
+    };
+    const panes = new Map<string, { id: string; series: Record<string, unknown>; chart: typeof chart }>();
+    panes.set('price', { id: 'price', series: { candle }, chart });
+    setManager({
+      getPane: (id: string) => panes.get(id),
+      clearTradeMarkers: () => {},
+      getPriceChartType: () => 'candles',
+      setPriceChartType: () => {},
+      detachPriceMarkers: () => {},
+      reapplyPriceMarkers: () => {},
+    } as never);
+
+    setDataToChart(
+      [
+        { time: 1, open: 1, high: 1, low: 1, close: 1, volume: 1 },
+        { time: 2, open: 1, high: 1, low: 1, close: 1, volume: 1 },
+      ],
+      { fit: false, clearMarkers: false, clearScriptState: false },
+    );
+    expect(range).toEqual({ from: 10, to: 40 });
+  });
+
   it('drawing layer get/set', () => {
     expect(getDrawingLayer()).toBeUndefined();
     setDrawingLayer({ destroy: () => {} } as never);

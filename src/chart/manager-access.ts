@@ -627,6 +627,30 @@ export function ensurePriceSeries(chartType?: ChartType): void {
  * Series mutations are isolated: LWC failures are logged + status-bar surfaced
  * instead of bubbling through Solid effects (which would unmount the tree).
  */
+function readLogicalRange(
+  chart: { timeScale?: () => { getVisibleLogicalRange?: () => { from: number; to: number } | null } },
+): { from: number; to: number } | null {
+  try {
+    const range = chart.timeScale?.().getVisibleLogicalRange?.() ?? null;
+    if (!range || !Number.isFinite(range.from) || !Number.isFinite(range.to)) return null;
+    return { from: range.from, to: range.to };
+  } catch {
+    return null;
+  }
+}
+
+function writeLogicalRange(
+  chart: { timeScale?: () => { setVisibleLogicalRange?: (range: { from: number; to: number }) => void } },
+  range: { from: number; to: number } | null,
+): void {
+  if (!range) return;
+  try {
+    chart.timeScale?.().setVisibleLogicalRange?.(range);
+  } catch {
+    /* a mock scale may not restore */
+  }
+}
+
 export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
   const mgr = getManager();
   if (!mgr) return;
@@ -638,6 +662,9 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
       opts.clearScriptState !== undefined ? !!opts.clearScriptState : fit;
     const pricePane = mgr.getPane('price');
     const volPane = mgr.getPane('volume');
+    // A slide or prefetch replace must not jump the viewport. `fit` loads
+    // still call afterDataReload below.
+    const keepRange = !fit && pricePane?.chart ? readLogicalRange(pricePane.chart) : null;
     const chartType = normalizeChartType(store.chartType);
 
     if (clearMarkers) {
@@ -759,6 +786,7 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
         ).prepareCoPaintedForCandleTimes;
         if (typeof prepare === 'function') prepare.call(mgr, nextCandleTimes);
         pricePane.series['candle'].setData(checked.clean as never);
+        writeLogicalRange(pricePane.chart, keepRange);
         const times = checked.clean as Array<{ time?: unknown }>;
         const firstT = times.length ? times[0]?.time : undefined;
         const lastT = times.length ? times[times.length - 1]?.time : undefined;
@@ -894,6 +922,7 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
       }
       try {
         volPane.series['volume'].setData(volChecked.clean as never);
+        if (pricePane?.chart) writeLogicalRange(pricePane.chart, keepRange);
       } catch (err: unknown) {
         const inner = err instanceof Error ? err.message : String(err);
         throw new Error(
