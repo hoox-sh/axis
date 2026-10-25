@@ -27,6 +27,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Fixed
 
+- **A dropped socket waits with jitter and does not retry a rejected login.** The reconnect delay grows from 500 ms and stays at or under 30 s, with a little downward jitter. An error frame with no subscription and `retryable: false` stops the loop until the next `connect()`.
+
 - **Only a close marks a bar closed.** An AXB1 tip is always `closed: false`. `APPEND_BAR` and `CLOSE_VERIFY` set `closed: true` on the committed candle. A later forming tick cannot reopen it.
 
 - **Alerts wait for a closed bar.** A forming tick no longer evaluates price, drawing, or indicator alerts. The live hook runs only when the bar is marked closed.

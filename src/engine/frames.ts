@@ -444,6 +444,22 @@ export function normalizeRedesign2Frame<T>(value: T): T {
   return { ...value, payload } as T;
 }
 
+/**
+ * Exponential reconnect delay with downward jitter, never above `cap`.
+ * `attempt` is how many failures have already been scheduled.
+ */
+export function reconnectDelayMs(
+  attempt: number,
+  initial = 500,
+  cap = 30_000,
+  rand = Math.random,
+): number {
+  const exp = Math.min(cap, initial * 2 ** Math.min(Math.max(0, attempt), 10));
+  const span = Math.floor(exp * 0.2);
+  if (span <= 0) return exp;
+  return exp - Math.floor(rand() * (span + 1));
+}
+
 // ---------------------------------------------------------------------------
 // Sequence-gap classification
 // ---------------------------------------------------------------------------

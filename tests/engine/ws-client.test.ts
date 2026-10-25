@@ -178,6 +178,35 @@ describe('redesign2 socket ownership', () => {
     client.disconnect();
   });
 
+  test('a non-retryable connection error does not reconnect', async () => {
+    restore = ManualSocket.install();
+    const client = new Redesign2WsClient({
+      endpoint: 'https://example.test',
+      initialReconnectDelayMs: 5,
+      maxReconnectDelayMs: 5,
+      heartbeatIntervalMs: 60_000,
+    });
+    const first = client.connect();
+    const ws1 = ManualSocket.instances[0];
+    if (!ws1) throw new Error('missing socket');
+    ws1.open();
+    await first;
+    ws1.push({
+      type: 'error',
+      payload: { code: 'unauthorized', message: 'bad token', retryable: false },
+    });
+    ws1.emitClose();
+    await new Promise((r) => setTimeout(r, 30));
+    expect(ManualSocket.instances.length).toBe(1);
+    const again = client.connect();
+    const ws2 = ManualSocket.instances[1];
+    if (!ws2) throw new Error('missing retry socket');
+    ws2.open();
+    await again;
+    expect(client.isOpen).toBe(true);
+    client.disconnect();
+  });
+
   test('disconnect with a pending reconnect does not open a second socket', async () => {
     restore = ManualSocket.install();
     const delayMs = 20;
@@ -195,7 +224,7 @@ describe('redesign2 socket ownership', () => {
     const origSetTimeout = globalThis.setTimeout;
     let queued: (() => void) | null = null;
     globalThis.setTimeout = ((fn: TimerHandler, ms?: number, ...args: unknown[]) => {
-      if (typeof fn === 'function' && ms === delayMs) {
+      if (typeof fn === 'function' && typeof ms === 'number' && ms <= delayMs && ms >= delayMs * 0.8) {
         queued = fn as () => void;
         return origSetTimeout(() => {}, 1_000_000);
       }

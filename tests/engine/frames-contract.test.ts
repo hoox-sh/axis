@@ -17,6 +17,7 @@ import {
   isSubscribeFrame,
   isUnsubscribeFrame,
   normalizeRedesign2Frame,
+  reconnectDelayMs,
   validateRedesign2Frame,
 } from '../../src/engine/frames';
 
@@ -91,6 +92,9 @@ describe('redesign2 frame contract (F-01)', () => {
     expect(classifySeqGap(7, 10, 6)).toEqual({ kind: 'gap', missing: 2 });
     expect(classifySeqGap(7, 7)).toEqual({ kind: 'duplicate' });
     expect(classifySeqGap(7, 5)).toEqual({ kind: 'rewind' });
+    expect(reconnectDelayMs(0, 500, 30_000, () => 0)).toBe(500);
+    expect(reconnectDelayMs(0, 500, 30_000, () => 0.999)).toBe(400);
+    expect(reconnectDelayMs(20, 500, 30_000, () => 0)).toBe(30_000);
   });
 
   test('validateRedesign2Frame covers the whole contract', () => {

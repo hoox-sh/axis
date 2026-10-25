@@ -33,7 +33,7 @@ import { publishBarPage, mergePageBars } from '../memory/page-buffer';
 import { ColdStore, hydrateColdFromCache } from '../memory/cold-store';
 import { sanitizeStreamBar } from '../../data/parse-bars';
 import { decodeInbound, IngestCursorTable, TipCoalescer } from './ingest-core';
-import type { Redesign2Frame } from '../../engine/frames';
+import { reconnectDelayMs, type Redesign2Frame } from '../../engine/frames';
 import { HotRingWriter, routeThroughRing } from './hot-ring-writer';
 import {
   INGEST_CONNECT_TIMEOUT_MS,
@@ -57,6 +57,7 @@ let ws: WebSocket | null = null;
 let stopped = true;
 let openedOnce = false;
 let reconnectAttempts = 0;
+let authBlocked = false;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 let pongTimer: ReturnType<typeof setTimeout> | null = null;
@@ -137,9 +138,9 @@ function clearReconnect(): void {
 }
 
 function scheduleReconnect(): void {
-  if (stopped) return;
+  if (stopped || authBlocked) return;
   if (reconnectTimer) return;
-  const delay = Math.min(30_000, 500 * 2 ** Math.min(reconnectAttempts, 10));
+  const delay = reconnectDelayMs(reconnectAttempts);
   reconnectAttempts += 1;
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
@@ -165,6 +166,14 @@ function handleRaw(raw: unknown): void {
     }
     post({ type: 'pong' });
     return;
+  }
+  for (const frame of decoded.frames) {
+    if (frame.type !== 'error' || frame.id) continue;
+    const payload = frame.payload as { retryable?: unknown } | undefined;
+    if (payload?.retryable === false) {
+      authBlocked = true;
+      clearReconnect();
+    }
   }
   feedCold(decoded.frames);
   // HP-2: series bars are written into the hot SAB ring; the posted frames
@@ -354,6 +363,7 @@ scope.onmessage = (ev: MessageEvent<HostToIngest>) => {
   if (!msg || typeof msg !== 'object') return;
   if (msg.type === 'connect') {
     stopped = false;
+    authBlocked = false;
     liveUrl = msg.url;
     authToken = msg.authToken;
     coldKey = msg.coldKey;

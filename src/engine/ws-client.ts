@@ -35,7 +35,7 @@ import type {
   Redesign2SubscribeFrame,
   SeriesMeta,
 } from './frames';
-import { normalizeRedesign2Frame, stripSeqAck, validateRedesign2Frame } from './frames';
+import { normalizeRedesign2Frame, reconnectDelayMs, stripSeqAck, validateRedesign2Frame } from './frames';
 import { v1Mark } from './v1/metrics';
 import { PendingRequests, ReconnectHandlers, wireStats } from './wire-bookkeeping';
 
@@ -122,6 +122,8 @@ export class Redesign2WsClient {
   private ws: WebSocket | null = null;
   private connectPromise: Promise<void> | null = null;
   private reconnectAttempts = 0;
+  /** A non-retryable connection error. `connect()` clears it. */
+  private authBlocked = false;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private pongTimer: ReturnType<typeof setTimeout> | null = null;
@@ -189,6 +191,7 @@ export class Redesign2WsClient {
   async connect(): Promise<void> {
     // Explicit stop sets stopped; a later connect() must still be able to open.
     this.stopped = false;
+    this.authBlocked = false;
     if (this.isOpen) return;
     if (this.connectPromise) return this.connectPromise;
 
@@ -449,6 +452,14 @@ export class Redesign2WsClient {
     if (frame.type === 'full' || frame.type === 'delta' || frame.type === 'close') {
       v1Mark('tick:recv', recvAt);
     }
+    if (frame.type === 'error' && !frame.id) {
+      const payload = frame.payload as { retryable?: unknown } | undefined;
+      if (payload?.retryable === false) {
+        this.authBlocked = true;
+        this.clearReconnect();
+        this.onStatus?.('error');
+      }
+    }
     if (frame.type === 'pong') {
       if (this.pongTimer) {
         clearTimeout(this.pongTimer);
@@ -512,11 +523,12 @@ export class Redesign2WsClient {
   }
 
   private scheduleReconnect(): void {
-    if (this.stopped) return;
+    if (this.stopped || this.authBlocked) return;
     if (this.reconnectTimer) return;
-    const delay = Math.min(
+    const delay = reconnectDelayMs(
+      this.reconnectAttempts,
+      this.options.initialReconnectDelayMs,
       this.options.maxReconnectDelayMs,
-      this.options.initialReconnectDelayMs * 2 ** Math.min(this.reconnectAttempts, 10),
     );
     this.reconnectAttempts += 1;
     this.reconnectTimer = setTimeout(() => {
