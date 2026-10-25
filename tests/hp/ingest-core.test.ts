@@ -209,10 +209,13 @@ describe('decodeInbound AXB1', () => {
     expect(out.ok).toBe(true);
     if (!(out.ok && out.kind === 'frames')) throw new Error('expected frames');
     const frame = out.frames[0];
-    const payload = frame?.payload as { bars?: Array<{ time: number; close: number }> } | undefined;
+    const payload = frame?.payload as
+      | { bars?: Array<{ time: number; close: number; closed?: boolean }> }
+      | undefined;
     const bar = payload?.bars?.[0];
     expect(bar?.time).toBe(60);
     expect(bar?.close).toBe(101);
+    expect(bar?.closed).toBe(false);
   });
 
   test('APPEND_BAR emits a delta then a close', () => {
@@ -262,6 +265,12 @@ describe('decodeInbound AXB1', () => {
     expect(out.frames.map((f) => f.type)).toEqual(['delta', 'close']);
     expect(validateRedesign2Frame(out.frames[0])).toBe(true);
     expect(validateRedesign2Frame(out.frames[1])).toBe(true);
+    const payload = out.frames[0]?.payload as
+      | { bars?: Array<{ time: number; closed?: boolean }> }
+      | undefined;
+    const bars = payload?.bars;
+    expect(bars?.[0]).toMatchObject({ time: 60, closed: true });
+    expect(bars?.[1]).toMatchObject({ time: 120, closed: false });
   });
 
   test('bad magic is not silently treated as JSON if it is not utf8 JSON', () => {

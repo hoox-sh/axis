@@ -53,6 +53,8 @@ export type CursorBar = {
   low: number;
   close: number;
   volume: number;
+  /** Set only by APPEND_BAR / CLOSE_VERIFY. A tip is never closed. */
+  closed?: boolean;
 };
 
 type SubCursor = {
@@ -154,6 +156,7 @@ function barFromTip(tip: Axb1TipFields, scale: number, prev: CursorBar | null): 
     low: tip.mask & TipMask.LOW ? price(tip.low, base.low) : base.low,
     close: tip.mask & TipMask.CLOSE ? price(tip.close, base.close) : base.close,
     volume: tip.mask & TipMask.VOLUME && tip.volume != null ? tip.volume : base.volume,
+    closed: false,
   };
 }
 
@@ -370,7 +373,18 @@ function mapAxb1(frame: Axb1Frame | Axb1Unknown, table: IngestCursorTable): Inge
   }
 
   if (ax.opcode === Axb1Opcode.CLOSE_VERIFY) {
-    const frame: Redesign2Frame = {
+    const time = serverBarSec(ax.timeS, cur.lastBar?.time ?? 0);
+    const verified: CursorBar = {
+      time,
+      open: ticksToPrice(ax.open, cur.priceScale),
+      high: ticksToPrice(ax.high, cur.priceScale),
+      low: ticksToPrice(ax.low, cur.priceScale),
+      close: ticksToPrice(ax.close, cur.priceScale),
+      volume: ax.volume,
+      closed: true,
+    };
+    table.setCursor(id, { ...cur, lastBar: verified, sessionId: cur.sessionId });
+    const closeFrame: Redesign2Frame = {
       type: 'close',
       id,
       sessionId: cur.sessionId,
@@ -378,17 +392,32 @@ function mapAxb1(frame: Axb1Frame | Axb1Unknown, table: IngestCursorTable): Inge
       ts,
       payload: {
         index: ax.index,
-        time: serverBarSec(ax.timeS, 0),
+        time,
         ohlcv: {
-          open: ticksToPrice(ax.open, cur.priceScale),
-          high: ticksToPrice(ax.high, cur.priceScale),
-          low: ticksToPrice(ax.low, cur.priceScale),
-          close: ticksToPrice(ax.close, cur.priceScale),
-          volume: ax.volume,
+          open: verified.open,
+          high: verified.high,
+          low: verified.low,
+          close: verified.close,
+          volume: verified.volume,
         },
       },
     };
-    return { ok: true, kind: 'frames', frames: [frame] };
+    const delta: Redesign2Frame = {
+      type: 'delta',
+      id,
+      sessionId: cur.sessionId,
+      seq,
+      ts,
+      payload: {
+        base_index: Math.max(0, cur.count - 1),
+        count: cur.count,
+        tail_len: 1,
+        closed_upto: cur.closedUpto,
+        forming: false,
+        bars: [verified],
+      },
+    };
+    return { ok: true, kind: 'frames', frames: [delta, closeFrame] };
   }
 
   if (ax.opcode === Axb1Opcode.APPEND_BAR) {
@@ -399,6 +428,7 @@ function mapAxb1(frame: Axb1Frame | Axb1Unknown, table: IngestCursorTable): Inge
       low: ticksToPrice(ax.low, ax.priceScale),
       close: ticksToPrice(ax.close, ax.priceScale),
       volume: ax.volume,
+      closed: true,
     };
     const hasTip = (ax.tip.mask & TipMask.TIME) !== 0;
     const nextCount = cur.count + (hasTip ? 1 : 0);

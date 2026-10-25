@@ -27,6 +27,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Fixed
 
+- **Only a close marks a bar closed.** An AXB1 tip is always `closed: false`. `APPEND_BAR` and `CLOSE_VERIFY` set `closed: true` on the committed candle. A later forming tick cannot reopen it.
+
 - **Alerts wait for a closed bar.** A forming tick no longer evaluates price, drawing, or indicator alerts. The live hook runs only when the bar is marked closed.
 
 - **A live bar time comes from the server, not the local clock.** AXB1 snapshot, tip, close, and append times go through the same unix-second normalizer as venue bars. A tip that omits the bar open stays on the previous server bar. The frame's `tsMs` is not used as the candle time.
