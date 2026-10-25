@@ -37,6 +37,7 @@ import type {
 } from './frames';
 import { normalizeRedesign2Frame, reconnectDelayMs, stripSeqAck, validateRedesign2Frame } from './frames';
 import { v1Mark } from './v1/metrics';
+import { isFormingTipFrame, sendBufferHeld } from './v1/backpressure';
 import { PendingRequests, ReconnectHandlers, wireStats } from './wire-bookkeeping';
 
 export type Redesign2WsFrameType =
@@ -128,9 +129,13 @@ export class Redesign2WsClient {
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private pongTimer: ReturnType<typeof setTimeout> | null = null;
   private stopped = false;
+  /** Outbound buffer is over the cap. Forming tips are not delivered. */
+  private sendHeld = false;
 
   public onFrame?: (frame: Redesign2WsFrame) => void;
   public onStatus?: (status: 'connecting' | 'open' | 'closed' | 'error') => void;
+  /** Outbound buffer crossed or left the 1 MB cap. The socket stays open. */
+  public onBackpressure?: (held: boolean) => void;
   /** Called for frames that fail contract validation (logged + skipped by default). */
   public onMalformed?: (raw: unknown) => void;
 
@@ -328,6 +333,14 @@ export class Redesign2WsClient {
   send(frame: Redesign2WsFrame): void {
     if (!this.isOpen || !this.ws) throw new Error('WebSocket not open');
     this.ws.send(JSON.stringify(frame));
+    this.noteSendBuffer();
+  }
+
+  private noteSendBuffer(): void {
+    const held = sendBufferHeld(this.ws?.bufferedAmount);
+    if (held === this.sendHeld) return;
+    this.sendHeld = held;
+    this.onBackpressure?.(held);
   }
 
   // -------------------------------------------------------------------------
@@ -475,6 +488,8 @@ export class Redesign2WsClient {
       }
       return;
     }
+    this.noteSendBuffer();
+    if (this.sendHeld && isFormingTipFrame(frame)) return;
     if (frame.id) {
       this.pending.resolveFrame(frame.id, frame);
     }

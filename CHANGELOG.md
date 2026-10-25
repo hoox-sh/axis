@@ -21,6 +21,10 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Fixed
 
+- **An inbox full of closes asks for one snapshot.** Forming tips are still the only frames dropped. When the inbox is over its cap and every frame left is a close, a snapshot, or a confirmed delta, those frames stay and the subscription resumes once. The next snapshot allows another resume.
+
+- **A full send buffer drops forming tips and resyncs when it drains.** Past 1 MB of unsent socket data the socket stays open, forming deltas are not applied, and each live subscription is marked resyncing. When the buffer drains, those subscriptions resume once. Snapshots and closes still pass.
+
 - **A forming tick notifies Solid once per frame.** The bar value is written immediately. The quote tick and the tip subscription flush together on the next animation frame, so a burst of ticks does not re-render the price chrome once per tick. A new bar and a window slide still commit immediately.
 
 - **Pane badges sit on the shared chart's plot cell.** On the one-chart layout, a volume or indicator badge was rebuilt onto the hidden placeholder the next time badges refreshed. The badge now stays on that pane's plot cell, and a refresh finds it there. The multi-chart rollback still badges its own pane div.

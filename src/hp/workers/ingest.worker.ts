@@ -26,6 +26,7 @@
  */
 
 import { decodeInbound, IngestCursorTable, TipCoalescer } from './ingest-core';
+import { isFormingTipFrame, sendBufferHeld } from '../../engine/v1/backpressure';
 import { reconnectDelayMs } from '../../engine/frames';
 import {
   INGEST_CONNECT_TIMEOUT_MS,
@@ -55,6 +56,8 @@ let pongTimer: ReturnType<typeof setTimeout> | null = null;
 let connectTimer: ReturnType<typeof setTimeout> | null = null;
 let liveUrl = '';
 let authToken: string | undefined;
+/** Outbound buffer is over the cap. Forming tips are not forwarded. */
+let sendHeld = false;
 
 const coalescer = new TipCoalescer((frames) => {
   // Stage mark for the §14.2 split: the worker clock shares its time origin
@@ -86,6 +89,7 @@ function startHeartbeat(): void {
     } catch {
       return;
     }
+    noteSendBuffer();
     if (pongTimer) clearTimeout(pongTimer);
     pongTimer = setTimeout(() => {
       try {
@@ -128,7 +132,15 @@ function scheduleReconnect(): void {
   }, delay);
 }
 
+function noteSendBuffer(): void {
+  const held = sendBufferHeld(ws?.bufferedAmount);
+  if (held === sendHeld) return;
+  sendHeld = held;
+  post({ type: 'backpressure', held });
+}
+
 function handleRaw(raw: unknown): void {
+  noteSendBuffer();
   const decoded = decodeInbound(raw, table);
   if (!decoded.ok) {
     post({ type: 'malformed', reason: decoded.reason });
@@ -154,7 +166,10 @@ function handleRaw(raw: unknown): void {
       clearReconnect();
     }
   }
-  coalescer.push(decoded.frames);
+  const frames = sendHeld
+    ? decoded.frames.filter((frame) => !isFormingTipFrame(frame))
+    : decoded.frames;
+  if (frames.length) coalescer.push(frames);
 }
 
 function openSocket(): void {
@@ -191,6 +206,7 @@ function openSocket(): void {
     reconnectAttempts = 0;
     const first = !openedOnce;
     openedOnce = true;
+    sendHeld = false;
     post({ type: 'status', status: 'open' });
     post({ type: 'open', first });
     startHeartbeat();
@@ -272,6 +288,7 @@ scope.onmessage = (ev: MessageEvent<HostToIngest>) => {
     table.rememberOutbound(msg.frame);
     if (ws?.readyState !== 1) return;
     ws.send(JSON.stringify(msg.frame));
+    noteSendBuffer();
     return;
   }
 };

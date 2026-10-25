@@ -88,6 +88,8 @@ export interface WireClient {
   onFrame: ((frame: WireFrame) => void) | undefined;
   /** Set by the wire. An unknown AXB1 opcode for one sub; the socket stays open. */
   onUnknownOpcode?: (info: { id: string; opcode: number; seq: number }) => void;
+  /** Set by the wire. Outbound buffer is over the cap (`held`) or has drained. */
+  onBackpressure?: (held: boolean) => void;
   addReconnectHandler(fn: () => void): () => void;
   /** Optional connection counters for diagnostics (MCP `stream.get`). */
   stats?(): { open: boolean; openedOnce: boolean; reconnectAttempts: number; stopped: boolean };
@@ -301,6 +303,8 @@ export class StreamLiveWire {
   private readonly axisResubPending = new Set<string>();
   /** Seq gap: drop deltas until the next full. Axis repair does not use this. */
   private readonly holdUntilFull = new Set<string>();
+  /** Inbox could not drop a tip. One snapshot until the next full. */
+  private readonly inboxOverflowPending = new Set<string>();
   /** `history_bars` the script subscription was created with. */
   private readonly scriptDepth = new Map<string, number>();
   /** Inbox for frames that arrive before their waiter (one TCP segment can
@@ -486,6 +490,20 @@ export class StreamLiveWire {
     }
     this.client.onFrame = (frame) => this.ingest(frame);
     this.client.onUnknownOpcode = (info) => this.useJsonForSub(info.id);
+    this.client.onBackpressure = (held) => this.noteSendBackpressure(held);
+  }
+
+  /** Forming tips are already dropped. A drain resumes every live sub once. */
+  private noteSendBackpressure(held: boolean): void {
+    if (held) {
+      for (const subId of this.appliedSeq.keys()) {
+        this.handlers.onStatus(subId, 'degraded', {
+          message: 'send buffer full — resyncing',
+        });
+      }
+      return;
+    }
+    this.resumeAll();
   }
 
   private encodingFor(subId: string): 'axb1' | undefined {
@@ -552,13 +570,40 @@ export class StreamLiveWire {
     if (!id) return;
     const queue = this.inbox.get(id) ?? [];
     queue.push(frame);
+    let overflow = false;
     while (queue.length > INBOX_CAP) {
       const dropAt = queue.findIndex((item) => this.isDroppableTip(item));
-      if (dropAt < 0) break;
+      if (dropAt < 0) {
+        overflow = true;
+        break;
+      }
       queue.splice(dropAt, 1);
       v1Count('droppedTip');
     }
     this.inbox.set(id, queue);
+    if (overflow) this.forceInboxSnapshot(id);
+  }
+
+  /**
+   * The inbox is over the cap and every frame left is a close, a snapshot,
+   * or a confirmed delta. Those stay. One resume asks for a fresh snapshot.
+   */
+  private forceInboxSnapshot(subId: string): void {
+    if (this.inboxOverflowPending.has(subId)) return;
+    this.inboxOverflowPending.add(subId);
+    this.handlers.onStatus(subId, 'degraded', { message: 'inbox full — resyncing' });
+    const bars = this.seriesBars.get(subId) ?? this.scriptCtx.get(subId)?.bars ?? [];
+    const seq = this.appliedSeq.get(subId) ?? 0;
+    try {
+      this.client.resumeSubscription(
+        subId,
+        bars.length,
+        this.lastBarTime(bars),
+        this.resumePayload(subId, seq),
+      );
+    } catch {
+      /* the socket may still be opening */
+    }
   }
 
   private isDroppableTip(frame: WireFrame): boolean {
@@ -733,7 +778,10 @@ export class StreamLiveWire {
         this.holdFrame(frame);
         return;
       }
-      if (frame.type === 'full' && frame.id) this.heldLive.delete(frame.id);
+      if (frame.type === 'full' && frame.id) {
+        this.heldLive.delete(frame.id);
+        this.inboxOverflowPending.delete(frame.id);
+      }
       this.rememberClosedUpto(frame);
       if (frame.type === 'status' && frame.id) {
         this.routeStatusFrame(frame);
@@ -1237,6 +1285,7 @@ export class StreamLiveWire {
     this.scriptDepth.clear();
     this.inbox.clear();
     this.inboxWaiters.clear();
+    this.inboxOverflowPending.clear();
     this.failures = 0;
     this.coolUntil = 0;
     this.clearHidden();

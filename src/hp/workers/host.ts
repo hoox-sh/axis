@@ -102,6 +102,8 @@ export class IngestHostClient implements WireClient {
   onMalformed?: (reason: string) => void;
   /** Unknown AXB1 opcode for one subscription. The socket is still open. */
   onUnknownOpcode?: (info: { id: string; opcode: number; seq: number }) => void;
+  /** Outbound buffer crossed or left the 1 MB cap. The socket stays open. */
+  onBackpressure?: (held: boolean) => void;
 
   constructor(options: Redesign2WsClientOptions) {
     this.url = endpointToRedesign2WsUrl(options.endpoint, options.authToken);
@@ -234,7 +236,9 @@ export class IngestHostClient implements WireClient {
     if (msg.type === 'unknown-opcode') {
       v1Count('unknownOpcode');
       this.onUnknownOpcode?.({ id: msg.id, opcode: msg.opcode, seq: msg.seq });
+      return;
     }
+    if (msg.type === 'backpressure') this.onBackpressure?.(msg.held);
   }
 
   async connect(): Promise<void> {

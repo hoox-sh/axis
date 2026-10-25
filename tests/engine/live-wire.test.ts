@@ -575,6 +575,47 @@ describe('live-wire P1 series + study push', () => {
     expect(queued).toBeLessThanOrEqual(32);
   });
 
+  test('a queue of closes is kept and resumes once', async () => {
+    const h = makeHarness();
+    const p = h.wire.ensureSeries('series:k', {});
+    await tick();
+    await tick();
+    h.emit({ type: 'full', id: 'series:k', seq: 1, payload: { count: 1, bars: BARS } });
+    await p;
+    h.resumes.length = 0;
+    for (let i = 0; i < 40; i++) {
+      h.emit({
+        type: 'close',
+        id: 'series:k',
+        seq: i + 2,
+        payload: { index: 0, time: 100, ohlcv: { open: 1, high: 1, low: 1, close: 1, volume: 1 } },
+      });
+    }
+    expect(h.wire.inboxDepth('series:k')).toBe(40);
+    expect(h.resumes).toHaveLength(1);
+    expect(h.resumes[0]?.id).toBe('series:k');
+    expect(h.statuses.at(-1)).toMatchObject({ sub: 'series:k', status: 'degraded' });
+    h.emit({
+      type: 'close',
+      id: 'series:k',
+      seq: 80,
+      payload: { index: 0, time: 100, ohlcv: { open: 1, high: 1, low: 1, close: 1, volume: 1 } },
+    });
+    expect(h.resumes).toHaveLength(1);
+    h.emit({ type: 'full', id: 'series:k', seq: 90, payload: { count: 1, bars: BARS } });
+    await tick();
+    h.resumes.length = 0;
+    for (let i = 0; i < 40; i++) {
+      h.emit({
+        type: 'close',
+        id: 'series:k',
+        seq: 100 + i,
+        payload: { index: 0, time: 100, ohlcv: { open: 1, high: 1, low: 1, close: 1, volume: 1 } },
+      });
+    }
+    expect(h.resumes).toHaveLength(1);
+  });
+
   test('series delta paints without an applier and advances seq', async () => {
     const h = makeHarness();
     const p = h.wire.ensureSeries('series:binance|spot|BTC/USDT|1m', {});
@@ -1099,6 +1140,23 @@ const h = makeHarness();
     } finally {
       setStore('bars', prevBars as Bar[]);
     }
+  });
+
+  test('a full send buffer marks the sub and resumes when it drains', async () => {
+    const h = makeHarness();
+    const p = h.wire.ensureSeries('series:k', {});
+    await tick();
+    await tick();
+    h.emit({ type: 'full', id: 'series:k', seq: 4, payload: { count: 1, bars: BARS } });
+    await p;
+    h.client.onBackpressure?.(true);
+    expect(h.statuses.at(-1)).toMatchObject({
+      sub: 'series:k',
+      status: 'degraded',
+    });
+    h.resumes.length = 0;
+    h.client.onBackpressure?.(false);
+    expect(h.resumes.map((r) => r.id)).toEqual(['series:k']);
   });
 
   test('reconnect resumes every live subscription', async () => {

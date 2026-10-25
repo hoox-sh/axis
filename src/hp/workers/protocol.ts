@@ -50,4 +50,10 @@ export type IngestToHost =
   | { type: 'pong' }
   | { type: 'malformed'; reason: string }
   /** Unknown AXB1 opcode. The socket stays open; the host asks that sub for JSON. */
-  | { type: 'unknown-opcode'; opcode: number; id: string; seq: number };
+  | { type: 'unknown-opcode'; opcode: number; id: string; seq: number }
+  /**
+   * Outbound buffer crossed 1 MB (`held`) or drained (`held: false`).
+   * The socket stays open. The host skips nothing itself — the worker
+   * already dropped forming tips — and resumes subs when the buffer drains.
+   */
+  | { type: 'backpressure'; held: boolean };
