@@ -27,6 +27,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Fixed
 
+- **A plot column shorter than the price axis is reported.** `applyChartMutations` samples `plotLengthSkew`. Dev warns on every new absolute size. Production warns about 1 in 32 times, once per size. A longer column still uses the overhang text and is not warned twice.
+
 - **The single chart wires one crosshair listener.** Sub-pane facades are different Proxy objects around the same Lightweight Charts chart. Once the slot exists, later panes do not subscribe again.
 
 - **A series that ends after the price tip is reported.** `applyChartMutations` samples overlay and plot times against the candle axis. Dev warns on every new past time. Production warns about 1 in 32 times, once per time. A shorter series is warmup and is not a warning.
@@ -71,7 +73,7 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 - **A closed bar whose OHLC changes after commit is reported.** The update is still applied, so a later verified close can correct the candle. Dev warns on every new bar time. Production warns about 1 in 32 times, once per bar.
 
-- **A plot column longer than the price axis is reported.** `applyChartMutations` samples the column lengths. Dev warns on every new overhang. Production warns about 1 in 32 times, once per size. A shorter column is warmup and is not a warning.
+- **A plot column longer than the price axis is reported.** `applyChartMutations` samples the column lengths. Dev warns on every new overhang. Production warns about 1 in 32 times, once per size. A shorter column is sampled as length skew.
 
 - **Several live ticks in one turn paint the chart once.** The store still updates immediately. Same-time ticks keep the latest bar. A newer time is applied after the previous bar in that same flush. A window slide still replaces the series immediately, with `fit` off.
 

@@ -44,7 +44,7 @@ import {
 } from '../results/plot-visuals';
 import type { OverlayLine, OverlayOhlc } from './apply-overlays';
 import type { splitSeriesByKind } from '../results/plot-visuals';
-import { noteSeriesPastTip, noteSyncSample, type SyncSampleOpts } from '../chart/v1/invariants';
+import { notePlotLengthSkew, noteSeriesPastTip, type SyncSampleOpts } from '../chart/v1/invariants';
 import { extendSeriesToWindow } from './runner';
 import { runApplyTransaction, type ApplyResult } from '../engine/v1/apply-transaction';
 import {
@@ -181,7 +181,7 @@ export function applyChartMutations(ctx: ChartMutationContext, sample?: SyncSamp
     rand: sample?.rand,
     warn: sample?.warn,
   };
-  noteSyncSample(ctx.ohlcvTimes.length, plotLengths, sampleOpts);
+  notePlotLengthSkew(ctx.ohlcvTimes.length, plotLengths, sampleOpts);
   const seriesTimes = lastOverlayTimes(ctx);
   if (seriesTimes.length) {
     noteSeriesPastTip(lastFiniteTime(ctx.ohlcvTimes), seriesTimes, sampleOpts);

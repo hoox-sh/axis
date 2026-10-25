@@ -7,8 +7,9 @@
  * Sync invariants (concept §6.3).
  *
  * Pure checks. A positive pane skew, or any series time past the price tip,
- * is forbidden. An indicator may end earlier. Closed-bar identity is the
- * last N bars joined as text, not a clock.
+ * is forbidden. Plot column length must match the price axis; apply samples
+ * both short and long mismatches. Closed-bar identity is the last N bars
+ * joined as text, not a clock.
  *
  * @module chart/v1/invariants
  */
@@ -80,16 +81,35 @@ function emitSample(
   warn(message);
 }
 
+/**
+ * Dev warns every new length mismatch (short or long). Prod samples about
+ * 1 in 32, once per absolute size. Long uses the overhang text; short says
+ * the column is N bars short of the price axis.
+ */
+export function notePlotLengthSkew(
+  barCount: number,
+  lengths: readonly number[],
+  opts?: SyncSampleOpts,
+): void {
+  const skew = plotLengthSkew(barCount, lengths);
+  if (skew <= 0) return;
+  if (!shouldSample(opts)) return;
+  const over = plotOverhang(barCount, lengths);
+  const message =
+    over === skew
+      ? `[axis] plot column is ${skew} bars past the price axis`
+      : `[axis] plot column is ${skew} bars short of the price axis`;
+  emitSample(String(skew), syncWarned, message, opts);
+}
+
 /** Dev warns every new overhang. Prod samples about 1 in 32, once per size. */
 export function noteSyncSample(
   barCount: number,
   lengths: readonly number[],
   opts?: SyncSampleOpts,
 ): void {
-  const over = plotOverhang(barCount, lengths);
-  if (over <= 0) return;
-  if (!shouldSample(opts)) return;
-  emitSample(String(over), syncWarned, `[axis] plot column is ${over} bars past the price axis`, opts);
+  if (plotOverhang(barCount, lengths) <= 0) return;
+  notePlotLengthSkew(barCount, lengths, opts);
 }
 
 /**

@@ -9,6 +9,7 @@ import {
   _resetSyncSampleForTests,
   closedBarHash,
   noteClosedRewrite,
+  notePlotLengthSkew,
   noteSeriesPastTip,
   noteSyncSample,
   paneAxisSkew,
@@ -103,6 +104,38 @@ describe('v1 sync invariants', () => {
     expect(messages).toEqual(['[axis] plot column is 4 bars past the price axis']);
   });
 
+  test('equal plot lengths do not warn', () => {
+    _resetSyncSampleForTests();
+    const messages: string[] = [];
+    const warn = (message: string) => messages.push(message);
+    notePlotLengthSkew(10, [10, 10, 10], { dev: true, warn });
+    notePlotLengthSkew(10, [], { dev: true, warn });
+    expect(messages).toEqual([]);
+  });
+
+  test('a plot column short of the price axis warns once in dev and is sampled in prod', () => {
+    _resetSyncSampleForTests();
+    const messages: string[] = [];
+    const warn = (message: string) => messages.push(message);
+    notePlotLengthSkew(10, [8], { dev: true, warn });
+    notePlotLengthSkew(10, [8], { dev: true, warn });
+    expect(messages).toEqual(['[axis] plot column is 2 bars short of the price axis']);
+    _resetSyncSampleForTests();
+    messages.length = 0;
+    notePlotLengthSkew(10, [7], { dev: false, rand: 0.5, warn });
+    notePlotLengthSkew(10, [7], { dev: false, rand: 0, warn });
+    expect(messages).toEqual(['[axis] plot column is 3 bars short of the price axis']);
+  });
+
+  test('the same length-skew size does not warn twice', () => {
+    _resetSyncSampleForTests();
+    const messages: string[] = [];
+    const warn = (message: string) => messages.push(message);
+    noteSyncSample(10, [12], { dev: true, warn });
+    notePlotLengthSkew(10, [8], { dev: true, warn });
+    expect(messages).toEqual(['[axis] plot column is 2 bars past the price axis']);
+  });
+
   test('a rewritten closed bar warns once', () => {
     _resetSyncSampleForTests();
     const messages: string[] = [];
@@ -172,6 +205,7 @@ describe('applyChartMutations series-past-tip sample', () => {
     applyChartMutations(
       stubMutation({
         ohlcvTimes: [60, 120],
+        seriesMap: { plot0: [1, 2] },
         overlayLines: [{ name: 'plot0', data: [{ time: 60, value: 1 }, { time: 180, value: 2 }] }],
       }),
       { dev: true, warn: (message) => messages.push(message) },
@@ -180,6 +214,7 @@ describe('applyChartMutations series-past-tip sample', () => {
     applyChartMutations(
       stubMutation({
         ohlcvTimes: [60, 120],
+        seriesMap: { plot0: [1, 2] },
         overlayLines: [{ name: 'plot0', data: [{ time: 180, value: 2 }] }],
       }),
       { dev: true, warn: (message) => messages.push(message) },
@@ -192,5 +227,44 @@ describe('applyChartMutations series-past-tip sample', () => {
     const messages: string[] = [];
     applyChartMutations(stubMutation(), { dev: true, warn: (message) => messages.push(message) });
     expect(messages).toEqual([]);
+  });
+});
+
+describe('applyChartMutations plot-length-skew sample', () => {
+  test('a plot column shorter than the candle axis hits the sampler', () => {
+    _resetSyncSampleForTests();
+    const messages: string[] = [];
+    applyChartMutations(
+      stubMutation({
+        ohlcvTimes: [60, 120, 180],
+        seriesMap: { plot0: [1] },
+        overlayLines: [{ name: 'plot0', data: [{ time: 60, value: 1 }] }],
+      }),
+      { dev: true, warn: (message) => messages.push(message) },
+    );
+    expect(messages).toEqual(['[axis] plot column is 2 bars short of the price axis']);
+    applyChartMutations(
+      stubMutation({
+        ohlcvTimes: [60, 120, 180],
+        seriesMap: { plot0: [1] },
+        overlayLines: [{ name: 'plot0', data: [{ time: 60, value: 1 }] }],
+      }),
+      { dev: true, warn: (message) => messages.push(message) },
+    );
+    expect(messages).toEqual(['[axis] plot column is 2 bars short of the price axis']);
+  });
+
+  test('a plot column longer than the candle axis warns once', () => {
+    _resetSyncSampleForTests();
+    const messages: string[] = [];
+    applyChartMutations(
+      stubMutation({
+        ohlcvTimes: [60],
+        seriesMap: { plot0: [1, 2, 3] },
+        overlayLines: [{ name: 'plot0', data: [{ time: 60, value: 1 }] }],
+      }),
+      { dev: true, warn: (message) => messages.push(message) },
+    );
+    expect(messages).toEqual(['[axis] plot column is 2 bars past the price axis']);
   });
 });
