@@ -8,8 +8,9 @@
  *
  * Pure checks. A positive pane skew, or any series time past the price tip,
  * is forbidden. Plot column length must match the price axis; apply samples
- * both short and long mismatches. Closed-bar identity is the last N bars
- * joined as text, not a clock.
+ * both short and long mismatches. Every pane's visible logical range must
+ * match `chart.timeScale()`. Closed-bar identity is the last N bars joined
+ * as text, not a clock.
  *
  * @module chart/v1/invariants
  */
@@ -24,6 +25,26 @@ export type ClosedBar = {
 
 function finite(value: number | null): value is number {
   return value != null && Number.isFinite(value);
+}
+
+/** Logical-range from/to are bar indices; treat sub-bar float noise as equal. */
+const LOGICAL_RANGE_EPS = 1e-6;
+
+export type LogicalRange = { from: number; to: number };
+
+/** Greatest abs gap of `from`/`to`. Null if either range is missing. */
+export function logicalRangeSkew(
+  price: LogicalRange | null,
+  pane: LogicalRange | null,
+): number | null {
+  if (price == null || pane == null) return null;
+  if (!finite(price.from) || !finite(price.to) || !finite(pane.from) || !finite(pane.to)) {
+    return null;
+  }
+  const dFrom = Math.abs(price.from - pane.from);
+  const dTo = Math.abs(price.to - pane.to);
+  if (dFrom <= LOGICAL_RANGE_EPS && dTo <= LOGICAL_RANGE_EPS) return 0;
+  return Math.max(dFrom, dTo);
 }
 
 /** `seriesLast - priceLast`. Positive means the series ends after the price tip. */
@@ -62,6 +83,7 @@ export type SyncSampleOpts = {
 
 const syncWarned = new Set<string>();
 const pastTipWarned = new Set<string>();
+const rangeSkewWarned = new Set<string>();
 
 function shouldSample(opts?: SyncSampleOpts): boolean {
   const dev = opts?.dev === true;
@@ -136,7 +158,28 @@ export function noteSeriesPastTip(
 export function _resetSyncSampleForTests(): void {
   syncWarned.clear();
   pastTipWarned.clear();
+  rangeSkewWarned.clear();
   closedWarned.clear();
+}
+
+/**
+ * Warn when a pane's visible logical range disagrees with the price axis.
+ * Dev warns once per distinct skew size. Prod samples about 1 in 32.
+ */
+export function noteLogicalRangeSkew(
+  price: LogicalRange | null,
+  pane: LogicalRange | null,
+  opts?: SyncSampleOpts,
+): void {
+  const skew = logicalRangeSkew(price, pane);
+  if (skew == null || skew <= 0) return;
+  if (!shouldSample(opts)) return;
+  emitSample(
+    String(skew),
+    rangeSkewWarned,
+    '[axis] pane logical range skews the price axis',
+    opts,
+  );
 }
 
 const closedWarned = new Set<string>();

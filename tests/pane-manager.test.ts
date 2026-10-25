@@ -12,6 +12,7 @@ import './setup';
 import { describe, expect, it, beforeAll, beforeEach, afterEach } from 'bun:test';
 import { installLightweightChartsMock } from './helpers/mock-lwc';
 import { resetChartLayoutMode, setChartLayoutMode } from '../src/chart/v1/chart-host';
+import { _resetSyncSampleForTests } from '../src/chart/v1/invariants';
 import { setStore } from '../src/store';
 
 beforeAll(() => {
@@ -159,6 +160,108 @@ describe('PaneManager', () => {
     pm.syncTimeScales();
     expect(sets).toBe(0);
     expect(pm.getPane('volume')?.chart).toBe(volume.chart);
+  });
+
+  it('single layout samples matching logical ranges without mirroring', () => {
+    setChartLayoutMode('single');
+    const price = pm.createPane('price', 'price', 'Price');
+    pm.createPane('rsi', 'indicator', 'RSI', 140);
+    let sets = 0;
+    let gets = 0;
+    const range = { from: 0, to: 10 };
+    const chart = price.chart as unknown as {
+      timeScale: () => {
+        getVisibleLogicalRange: () => { from: number; to: number };
+        setVisibleLogicalRange: (range: unknown) => void;
+      };
+    };
+    const origTs = chart.timeScale.bind(chart);
+    chart.timeScale = () => {
+      const ts = origTs();
+      const origSet = ts.setVisibleLogicalRange.bind(ts);
+      ts.getVisibleLogicalRange = () => {
+        gets += 1;
+        return range;
+      };
+      ts.setVisibleLogicalRange = (next) => {
+        sets += 1;
+        origSet(next);
+      };
+      return ts;
+    };
+    _resetSyncSampleForTests();
+    const messages: string[] = [];
+    pm.alignTimeRangesFromPrice({
+      dev: true,
+      warn: (message) => messages.push(message),
+    });
+    expect(sets).toBe(0);
+    expect(gets).toBeGreaterThanOrEqual(2);
+    expect(messages).toEqual([]);
+  });
+
+  it('multi layout samples logical range after the mirror write', () => {
+    const price = pm.createPane('price', 'price', 'Price');
+    const rsi = pm.createPane('rsi', 'indicator', 'RSI', 140);
+    const priceRange = { from: 0, to: 10 };
+    let rsiRange = { from: 5, to: 15 };
+    const patch = (
+      chart: { timeScale: () => unknown },
+      get: () => { from: number; to: number },
+      set?: (range: { from: number; to: number }) => void,
+    ) => {
+      const origTs = chart.timeScale.bind(chart);
+      chart.timeScale = () => {
+        const ts = origTs() as {
+          getVisibleLogicalRange: () => { from: number; to: number } | null;
+          setVisibleLogicalRange: (range: { from: number; to: number }) => void;
+        };
+        ts.getVisibleLogicalRange = get;
+        ts.setVisibleLogicalRange = (next) => set?.(next);
+        return ts;
+      };
+    };
+    patch(price.chart, () => priceRange);
+    patch(rsi.chart, () => rsiRange, (next) => {
+      rsiRange = { from: next.from, to: next.to };
+    });
+    _resetSyncSampleForTests();
+    const messages: string[] = [];
+    pm.alignTimeRangesFromPrice({
+      dev: true,
+      warn: (message) => messages.push(message),
+    });
+    expect(rsiRange).toEqual(priceRange);
+    expect(messages).toEqual([]);
+  });
+
+  it('multi layout warns when a pane still skews after the mirror', () => {
+    const price = pm.createPane('price', 'price', 'Price');
+    const rsi = pm.createPane('rsi', 'indicator', 'RSI', 140);
+    const patch = (
+      chart: { timeScale: () => unknown },
+      range: { from: number; to: number },
+    ) => {
+      const origTs = chart.timeScale.bind(chart);
+      chart.timeScale = () => {
+        const ts = origTs() as {
+          getVisibleLogicalRange: () => { from: number; to: number } | null;
+          setVisibleLogicalRange: (range: unknown) => void;
+        };
+        ts.getVisibleLogicalRange = () => range;
+        ts.setVisibleLogicalRange = () => {};
+        return ts;
+      };
+    };
+    patch(price.chart, { from: 0, to: 10 });
+    patch(rsi.chart, { from: 2, to: 10 });
+    _resetSyncSampleForTests();
+    const messages: string[] = [];
+    pm.alignTimeRangesFromPrice({
+      dev: true,
+      warn: (message) => messages.push(message),
+    });
+    expect(messages).toEqual(['[axis] pane logical range skews the price axis']);
   });
 
   it('single layout wires one crosshair listener and does not mirror', () => {

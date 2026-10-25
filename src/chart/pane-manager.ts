@@ -53,6 +53,7 @@ import {
 } from 'lightweight-charts';
 import { v1NotePanActivity } from '../engine/v1/metrics';
 import { SlotChart, usesSingleChartLayout } from './v1/chart-host';
+import { noteLogicalRangeSkew, type SyncSampleOpts } from './v1/invariants';
 import { noteLeftEdge } from './v1/left-prefetch';
 import {
   createBaseChart,
@@ -1683,9 +1684,7 @@ export class PaneManager {
   }
 
   /** Push the price pane logical range onto all other visible panes. */
-  alignTimeRangesFromPrice() {
-    // One chart has one time scale. Mirroring would write the same range back.
-    if (usesSingleChartLayout()) return;
+  alignTimeRangesFromPrice(opts?: SyncSampleOpts) {
     const price =
       this.panes.get('price')?.visible !== false ? this.panes.get('price') : null;
     const src = price ?? this.getAllPanes().find((p) => p.visible);
@@ -1695,6 +1694,11 @@ export class PaneManager {
       range = src.chart.timeScale().getVisibleLogicalRange();
     } catch {
       range = null;
+    }
+    // One chart has one time scale. Mirroring would write the same range back.
+    if (usesSingleChartLayout()) {
+      this.sampleLogicalRangeSkew(src, range, opts);
+      return;
     }
     if (!range) return;
     this.suppressSync = true;
@@ -1709,6 +1713,30 @@ export class PaneManager {
       }
     } finally {
       this.suppressSync = false;
+    }
+    this.sampleLogicalRangeSkew(src, range, opts);
+  }
+
+  /** Sample each visible pane against the price axis. Warn-only; never throws. */
+  private sampleLogicalRangeSkew(
+    src: ManagedPane,
+    priceRange: { from: number; to: number } | null,
+    opts?: SyncSampleOpts,
+  ) {
+    const sampleOpts: SyncSampleOpts = {
+      dev: opts?.dev ?? (typeof import.meta !== 'undefined' && import.meta.env?.DEV === true),
+      rand: opts?.rand,
+      warn: opts?.warn,
+    };
+    for (const pane of this.getAllPanes()) {
+      if (!pane.visible || pane.id === src.id) continue;
+      let paneRange: { from: number; to: number } | null = null;
+      try {
+        paneRange = pane.chart.timeScale().getVisibleLogicalRange();
+      } catch {
+        paneRange = null;
+      }
+      noteLogicalRangeSkew(priceRange, paneRange, sampleOpts);
     }
   }
 

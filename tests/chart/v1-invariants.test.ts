@@ -8,7 +8,9 @@ import { describe, expect, test } from 'bun:test';
 import {
   _resetSyncSampleForTests,
   closedBarHash,
+  logicalRangeSkew,
   noteClosedRewrite,
+  noteLogicalRangeSkew,
   notePlotLengthSkew,
   noteSeriesPastTip,
   noteSyncSample,
@@ -166,6 +168,53 @@ describe('v1 sync invariants', () => {
     noteSeriesPastTip(100, [160], { dev: false, rand: 0.5, warn });
     noteSeriesPastTip(100, [160], { dev: false, rand: 0, warn });
     expect(messages).toEqual(['[axis] series time 160 is past the price tip']);
+  });
+
+  test('equal logical ranges are zero and missing ranges are null', () => {
+    expect(logicalRangeSkew({ from: 0, to: 10 }, { from: 0, to: 10 })).toBe(0);
+    expect(logicalRangeSkew({ from: 0, to: 10 }, { from: 0 + 1e-9, to: 10 - 1e-9 })).toBe(0);
+    expect(logicalRangeSkew(null, { from: 0, to: 10 })).toBe(null);
+    expect(logicalRangeSkew({ from: 0, to: 10 }, null)).toBe(null);
+    expect(logicalRangeSkew({ from: Number.NaN, to: 10 }, { from: 0, to: 10 })).toBe(null);
+  });
+
+  test('a skewed from or to is the max abs delta', () => {
+    const rows: Array<{
+      price: { from: number; to: number };
+      pane: { from: number; to: number };
+      skew: number;
+    }> = [
+      { price: { from: 0, to: 10 }, pane: { from: 2, to: 10 }, skew: 2 },
+      { price: { from: 0, to: 10 }, pane: { from: 0, to: 13 }, skew: 3 },
+      { price: { from: 0, to: 10 }, pane: { from: -1, to: 14 }, skew: 4 },
+    ];
+    for (const row of rows) {
+      expect(logicalRangeSkew(row.price, row.pane)).toBe(row.skew);
+    }
+  });
+
+  test('matching logical ranges do not warn', () => {
+    _resetSyncSampleForTests();
+    const messages: string[] = [];
+    const warn = (message: string) => messages.push(message);
+    noteLogicalRangeSkew({ from: 0, to: 10 }, { from: 0, to: 10 }, { dev: true, warn });
+    noteLogicalRangeSkew(null, { from: 0, to: 10 }, { dev: true, warn });
+    noteLogicalRangeSkew({ from: 0, to: 10 }, null, { dev: true, warn });
+    expect(messages).toEqual([]);
+  });
+
+  test('a skewed logical range warns once in dev and is sampled in prod', () => {
+    _resetSyncSampleForTests();
+    const messages: string[] = [];
+    const warn = (message: string) => messages.push(message);
+    noteLogicalRangeSkew({ from: 0, to: 10 }, { from: 2, to: 10 }, { dev: true, warn });
+    noteLogicalRangeSkew({ from: 0, to: 10 }, { from: 2, to: 10 }, { dev: true, warn });
+    expect(messages).toEqual(['[axis] pane logical range skews the price axis']);
+    _resetSyncSampleForTests();
+    messages.length = 0;
+    noteLogicalRangeSkew({ from: 0, to: 10 }, { from: 0, to: 14 }, { dev: false, rand: 0.5, warn });
+    noteLogicalRangeSkew({ from: 0, to: 10 }, { from: 0, to: 14 }, { dev: false, rand: 0, warn });
+    expect(messages).toEqual(['[axis] pane logical range skews the price axis']);
   });
 });
 
