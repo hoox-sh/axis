@@ -1041,24 +1041,18 @@ export class StreamLiveWire {
     const bars = this.barsForScript(ctx.bars);
     if (bars !== ctx.bars) this.scriptCtx.set(subId, { ...ctx, bars });
     const seq = this.appliedSeq.get(subId) ?? 0;
-    const run = (): ReturnType<StreamLiveWire['apply']> | void => {
+    const run = (): Promise<unknown> => {
       // A newer snapshot (or a later delta) already moved the cursor.
-      if ((this.appliedSeq.get(subId) ?? 0) !== seq) return;
-      return this.apply(ctx.script, ctx.indicatorId, cached, via, bars);
+      if ((this.appliedSeq.get(subId) ?? 0) !== seq) return Promise.resolve();
+      return Promise.resolve(this.apply(ctx.script, ctx.indicatorId, cached, via, bars));
     };
     const prev = this.paintChain.get(subId);
     if (!prev) {
-      try {
-        const started = run();
-        const chained = Promise.resolve(started).catch(() => undefined);
-        this.paintChain.set(subId, chained);
-        void chained.finally(() => {
-          if (this.paintChain.get(subId) === chained) this.paintChain.delete(subId);
-        });
-      } catch (err) {
-        this.paintChain.delete(subId);
-        throw err;
-      }
+      const chained = run().catch(() => undefined);
+      this.paintChain.set(subId, chained);
+      void chained.finally(() => {
+        if (this.paintChain.get(subId) === chained) this.paintChain.delete(subId);
+      });
       return;
     }
     const next = prev.then(run, run).catch(() => undefined);
