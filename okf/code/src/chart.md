@@ -7,7 +7,7 @@ tags: [chart, code]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-25T18:32:15Z
+  at: 2026-10-25T19:16:49Z
 sources:
   - id: tree
     resource: "src/chart"
@@ -44,7 +44,7 @@ okf_lock: generated
 * `onchain-events.ts` — ONCHAIN_EVENTS_SERIES_KEY, OnchainEventInput, OnchainEventMarker, applyOnchainEventMarkers, clearOnchainEventMarkers, eventsToMarkers
 * `onchain-overlay.ts` — ONCHAIN_PRICE_SCALE_ID, ONCHAIN_SERIES_PREFIX, OnchainLineSpec, applyOnchainOverlays, clearOnchainOverlays
 * `paint-latency.ts` — PaintLatencyStats, PaintStageStats, _resetPaintLatency, _resetPaintLatencyVisibilityHook, _setPaintLatencyScheduler, flushPaintFrame, noteIngestPublish, notePaintRequest, paintLatencyStats, paintStageStats
-* `pane-badge.ts` — mountPaneBadge, refreshAllPaneBadges, refreshPaneBadge, setPaneBadgeLabel
+* `pane-badge.ts` — mountPaneBadge, panePlotHost, refreshAllPaneBadges, refreshPaneBadge, setPaneBadgeLabel
 * `pane-manager.ts` — ManagedPane, OVERLAY_OHLC_PREFIX, OverlayLineSpec, OverlayOhlcSpec, OverlayOwnerOpts, OverlayPoint, OverlayTipPeek, PaneManager, inferOverlayTitle, isFiniteOhlcBar, makeBgcolorKey, makeOverlayLineKey
 * `pine-tables.ts` — CollectTablesOpts, PineTable, PineTableCell, PineTableLocation, PineTablesLocationMap, bottomPanelColumnFractions, bottomPanelHasHeightHints, buildTableGrid, cellTextAlign, cellTextVerticalAlign, collectVisiblePineTables, groupBottomTablesByOwner
 * `plot-rect.ts` — ChartPlotRect, PlotRectChart, PlotRectHost, measureChartPlotRect

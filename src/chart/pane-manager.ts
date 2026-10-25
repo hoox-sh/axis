@@ -99,7 +99,7 @@ import type { Bar } from '../store/types';
 import { resizePane, store } from '../store';
 import type { TradeMarker } from '../results/events';
 import type { ShapeMarkerSpec } from '../results/plot-visuals';
-import { mountPaneBadge, refreshPaneBadge, setPaneBadgeLabel } from './pane-badge';
+import { mountPaneBadge, panePlotHost, refreshPaneBadge, setPaneBadgeLabel } from './pane-badge';
 import { getVisibleBars, isReplayActive } from './bar-replay';
 import { reportUiError } from '../ui/boot-errors';
 import {
@@ -1117,15 +1117,14 @@ export class PaneManager {
         this.resizeRaf.schedule(() => this.flushPendingPaneResizes());
       });
       resizeObserver.observe(div);
-      mountPaneBadge(div, id, type, label);
+      this.attachSharedPaneChrome(div, id, type, label);
     } else {
       this.slot.bind(id);
       chart = this.slot.facade(id);
       if (height && height > 0) this.slot.setHeight(id, height);
       div.style.display = 'none';
       this.container.appendChild(div);
-      const host = this.slot.element(id) ?? div;
-      mountPaneBadge(host, id, type, label);
+      this.attachSharedPaneChrome(div, id, type, label);
     }
 
     const pane: ManagedPane = {
@@ -1143,6 +1142,26 @@ export class PaneManager {
     this.syncTimeScales();
     this.rewireCrosshair();
     return pane;
+  }
+
+  /**
+   * Badge host for one shared chart. The Lightweight Charts pane row is a
+   * `<tr>`; the badge sits on its plot cell so a later refresh does not
+   * rebuild it on the hidden placeholder div.
+   */
+  private attachSharedPaneChrome(
+    fallback: HTMLElement,
+    id: string,
+    type: string,
+    label: string,
+  ): void {
+    const row = this.slot?.element(id);
+    const host = row ? panePlotHost(row) : fallback;
+    if (host.dataset) {
+      host.dataset.axisPaneChrome = id;
+      host.dataset.paneType = type;
+    }
+    mountPaneBadge(host, id, type, label);
   }
 
   /** Multi-chart panes remove their own chart. A shared sub-pane removes one LWC pane. */

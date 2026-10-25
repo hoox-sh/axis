@@ -101,6 +101,16 @@ describe('PaneManager', () => {
     const volume = pm.createPane('volume', 'volume', 'Volume', 80);
     const volumeEl = document.getElementById(pm.paneDomId('volume'));
     expect(volumeEl?.style.display).toBe('none');
+    const panes = (
+      volume.chart as unknown as {
+        panes: () => Array<{ getHTMLElement: () => { dataset?: { axisPaneChrome?: string } } | null }>;
+      }
+    ).panes();
+    expect(panes[1]?.getHTMLElement()?.dataset?.axisPaneChrome).toBe('volume');
+    expect(
+      (volumeEl as unknown as { dataset?: { axisPaneChrome?: string } } | null)?.dataset
+        ?.axisPaneChrome,
+    ).toBeUndefined();
     const series = volume.chart.addSeries('LineSeries' as never, {});
     expect((series as { _paneIndex?: number })._paneIndex).toBe(1);
     expect(price.chart.addSeries('LineSeries' as never, {})).toBeTruthy();

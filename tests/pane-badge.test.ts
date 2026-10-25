@@ -9,7 +9,7 @@
 
 import './setup';
 import { describe, expect, it, beforeEach } from 'bun:test';
-import { mountPaneBadge } from '../src/chart/pane-badge';
+import { mountPaneBadge, panePlotHost } from '../src/chart/pane-badge';
 import { setStore, addIndicator, removeIndicator, store } from '../src/store';
 
 /** Tiny DOM tree that supports the methods mountPaneBadge uses. */
@@ -118,6 +118,26 @@ function makeHost() {
 
 beforeEach(() => {
   setStore('scripts', []);
+});
+
+describe('panePlotHost', () => {
+  it('uses the middle cell of a Lightweight Charts pane row', () => {
+    const canvas = { tagName: 'CANVAS' };
+    const left = { tagName: 'TD', children: [], querySelector: () => null };
+    const plot = {
+      tagName: 'TD',
+      children: [canvas],
+      querySelector: (sel: string) => (sel === 'canvas' ? canvas : null),
+    };
+    const right = { tagName: 'TD', children: [], querySelector: () => null };
+    const row = { tagName: 'TR', children: [left, plot, right] };
+    expect(panePlotHost(row as unknown as HTMLElement)).toBe(plot);
+  });
+
+  it('leaves a multi-chart pane div alone', () => {
+    const div = { tagName: 'DIV', children: [] };
+    expect(panePlotHost(div as unknown as HTMLElement)).toBe(div);
+  });
 });
 
 describe('mountPaneBadge', () => {

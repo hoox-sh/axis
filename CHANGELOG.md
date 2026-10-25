@@ -21,6 +21,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Fixed
 
+- **Pane badges sit on the shared chart's plot cell.** On the one-chart layout, a volume or indicator badge was rebuilt onto the hidden placeholder the next time badges refreshed. The badge now stays on that pane's plot cell, and a refresh finds it there. The multi-chart rollback still badges its own pane div.
+
 - **Script and strategy runs stay on the WebSocket.** A failed socket run does not POST `/run` or open a REST data session. Live scripts that miss the stream wait on the socket instead of falling back to `venue+REST`. REST `/run` remains only when WebSocket is explicitly turned off.
 
 - **The live inbox drops extra forming tips.** Each subscription keeps at most 32 frames. Only a forming delta is dropped. A `close`, a `full`, an error, and a non-forming delta stay, and the snapshot waiter still receives the `full`.

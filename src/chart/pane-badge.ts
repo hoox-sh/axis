@@ -128,6 +128,26 @@ function hidePane(paneId: string) {
 }
 
 /**
+ * Plot cell inside a Lightweight Charts pane row.
+ *
+ * `pane.getHTMLElement()` is the `<tr>` (axis, plot, axis). A badge
+ * appended to that row is hoisted out of the table. The middle cell is
+ * `position: relative` and is the overlay host. Anything else is returned
+ * unchanged, including the multi-chart pane div.
+ */
+export function panePlotHost(row: HTMLElement): HTMLElement {
+  if (String(row.tagName).toUpperCase() !== 'TR') return row;
+  const cells = Array.from(row.children ?? []) as HTMLElement[];
+  const tds = cells.filter((el) => String(el.tagName).toUpperCase() === 'TD');
+  const plot = tds[1];
+  if (tds.length >= 3 && plot) return plot;
+  for (const td of tds) {
+    if (typeof td.querySelector === 'function' && td.querySelector('canvas')) return td;
+  }
+  return row;
+}
+
+/**
  * Build / rebuild badge chrome inside a pane host.
  * Safe to call repeatedly; replaces previous badge root.
  */
@@ -277,6 +297,10 @@ function findPaneHost(paneId: string): HTMLElement | null {
       typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
         ? CSS.escape(paneId)
         : paneId.replace(/"/g, '\\"');
+    const chrome = document.querySelector(
+      `[data-axis-pane-chrome="${esc}"]`,
+    ) as HTMLElement | null;
+    if (chrome) return chrome;
     return document.querySelector(`[data-pane-id="${esc}"]`) as HTMLElement | null;
   } catch {
     return null;
@@ -322,8 +346,13 @@ export function refreshAllPaneBadges() {
   if (typeof document === 'undefined' || typeof document.querySelectorAll !== 'function') {
     return;
   }
-  document.querySelectorAll<HTMLElement>('[data-pane-id]').forEach((el) => {
-    const id = el.dataset?.paneId;
-    if (id) refreshPaneBadge(id);
-  });
+  const seen = new Set<string>();
+  const visit = (el: HTMLElement) => {
+    const id = el.dataset?.axisPaneChrome || el.dataset?.paneId;
+    if (!id || seen.has(id)) return;
+    seen.add(id);
+    refreshPaneBadge(id);
+  };
+  document.querySelectorAll<HTMLElement>('[data-axis-pane-chrome]').forEach(visit);
+  document.querySelectorAll<HTMLElement>('[data-pane-id]').forEach(visit);
 }
