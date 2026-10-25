@@ -93,6 +93,7 @@ import { seriesSeriesKey } from '../onchain/keys';
 import { PLOT_PALETTE, RIGHT_PRICE_SCALE_WIDTH } from './series-factory';
 
 import { reportUiError } from '../ui/boot-errors';
+import { pinChartSlot, unpinChartSlot } from '../streams/stream-live';
 
 export {
   getManager,
@@ -247,6 +248,7 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
   onMount(() => {
     if (!panesEl) return;
     const id = slotId();
+    pinChartSlot(id);
     alive = true;
     if (isActive()) setActiveSlotId(id);
 
@@ -726,6 +728,7 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     cancelReflow();
     crosshairRaf.cancel();
     try {
+      unpinChartSlot(id);
     } catch {
       /* teardown must never break cleanup */
     }

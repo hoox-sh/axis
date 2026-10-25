@@ -21,6 +21,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 - **A tab keeps at most two engine sockets.** Chart slots share one WebSocket per engine endpoint (`acquireSlotWire` / `releaseSlotWire`). Same endpoint from N slots is one live client with N refs. A second socket opens only for a different endpoint. A third waits until a slot is released. The primary chart drops its previous fingerprint on engine change so a single chart does not pin two unused sockets.
 
+- **Each chart host pins that pool for its slot.** `ChartHost` calls `pinChartSlot` on mount and `unpinChartSlot` on cleanup. Four hosts on one endpoint share one client (refs 4); unmounting three leaves one. Unpin remembers the fingerprint from pin, so a later engine change still releases the original socket. A second pin of the same slot id does not bump refs.
+
 ### Removed
 
 - **The shared-memory ring, GPU candle overlay, and HP flags are gone.** Lightweight Charts paints candles, indicators, and fills. The ingest worker still owns `/ws/live` and decodes AXB1 when `axis.engine.transport` is `worker` (the default). `axis.engine.transport=json` keeps the main-thread client. Settings no longer has a high-performance section. `hp.get`, `hp.sample`, and `dev.trace` are no longer MCP capabilities. Isolation headers stay.

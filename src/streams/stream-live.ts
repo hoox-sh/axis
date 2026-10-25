@@ -421,6 +421,43 @@ export function releaseSlotWire(fingerprint: string, slotId: string): StreamLive
   return tabSockets.release(fingerprint, slotId);
 }
 
+/** Chart-host pins: slotId → fingerprint taken at pin time. */
+const chartSlotPins = new Map<string, string>();
+
+function forgetChartSlotPins(): void {
+  chartSlotPins.clear();
+}
+
+/**
+ * Pin a ChartHost slot onto the current engine fingerprint (concept §4.1).
+ *
+ * Remembers `{ slotId, fingerprint }` so {@link unpinChartSlot} releases the
+ * same socket after the primary engine moves. A second pin of the same
+ * `slotId` does not bump refs.
+ */
+export function pinChartSlot(slotId: string): SocketPoolAcquire<StreamLiveWire> | undefined {
+  const id = String(slotId ?? '').trim();
+  if (!id) return undefined;
+  const fp = chartSlotPins.get(id) ?? streamWireFingerprint();
+  const got = acquireSlotWire(fp, id);
+  chartSlotPins.set(id, fp);
+  return got;
+}
+
+/**
+ * Drop a ChartHost pin. Releases the fingerprint remembered at pin, not
+ * the current store endpoint. Idempotent: unknown / already-unpinned
+ * `slotId` is a no-op.
+ */
+export function unpinChartSlot(slotId: string): StreamLiveWire | undefined {
+  const id = String(slotId ?? '').trim();
+  if (!id) return undefined;
+  const fp = chartSlotPins.get(id);
+  if (fp === undefined) return undefined;
+  chartSlotPins.delete(id);
+  return releaseSlotWire(fp, id);
+}
+
 /** Live engine sockets this tab currently holds. */
 export function streamSocketSize(): number {
   return tabSockets.size();
@@ -468,6 +505,7 @@ export function resetStreamWire(): {
   cooledDown: boolean;
 } {
   const held = tabSockets.drain();
+  forgetChartSlotPins();
   if (wire && !held.includes(wire)) held.push(wire);
   wire = null;
   wireCred = '';
@@ -789,6 +827,7 @@ export async function verifyClosedBar(
 /** Tear down the stream path (stopLive / symbol switch / restart). */
 export function streamStop(): void {
   const held = tabSockets.drain();
+  forgetChartSlotPins();
   if (wire && !held.includes(wire)) held.push(wire);
   for (const w of held) {
     try {

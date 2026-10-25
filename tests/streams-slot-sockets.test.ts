@@ -12,12 +12,14 @@ import { setStore, store } from '../src/store';
 import {
   acquireSlotWire,
   getStreamWire,
+  pinChartSlot,
   releaseSlotWire,
   resetStreamWire,
   streamSocketRefs,
   streamSocketSize,
   streamStop,
   streamWireFingerprint,
+  unpinChartSlot,
 } from '../src/streams/stream-live';
 
 beforeEach(() => {
@@ -106,5 +108,62 @@ describe('chart slot socket pins (concept §4.1)', () => {
     const dead = releaseSlotWire(fpA, 'slot-2');
     expect(dead).toBeDefined();
     expect(streamSocketSize()).toBe(1);
+  });
+
+  it('pinChartSlot: four hosts share one client; unpin three leaves one', () => {
+    const fp = streamWireFingerprint();
+    for (let i = 0; i < 4; i++) {
+      const got = pinChartSlot(`slot-${i}`);
+      expect(got?.status).toBe('live');
+    }
+    expect(streamSocketSize()).toBe(1);
+    expect(streamSocketRefs(fp)).toBe(4);
+    expect(unpinChartSlot('slot-0')).toBeUndefined();
+    expect(unpinChartSlot('slot-1')).toBeUndefined();
+    expect(unpinChartSlot('slot-2')).toBeUndefined();
+    expect(streamSocketSize()).toBe(1);
+    expect(streamSocketRefs(fp)).toBe(1);
+    const last = unpinChartSlot('slot-3');
+    expect(last).toBeDefined();
+    expect(streamSocketSize()).toBe(0);
+  });
+
+  it('unpinChartSlot releases the remembered fingerprint after the store endpoint moves', () => {
+    const fpA = streamWireFingerprint();
+    const pin = pinChartSlot('slot-A');
+    expect(pin?.status).toBe('live');
+    expect(streamSocketRefs(fpA)).toBe(1);
+    setStore('endpoint', 'http://other.test');
+    const fpB = streamWireFingerprint();
+    expect(fpB).not.toBe(fpA);
+    expect(streamSocketRefs(fpA)).toBe(1);
+    expect(streamSocketRefs(fpB)).toBe(0);
+    const dead = unpinChartSlot('slot-A');
+    expect(dead).toBeDefined();
+    expect(streamSocketRefs(fpA)).toBe(0);
+    expect(streamSocketSize()).toBe(0);
+  });
+
+  it('double pin of the same slotId does not bump refs twice', () => {
+    const fp = streamWireFingerprint();
+    const first = pinChartSlot('slot-dup');
+    const second = pinChartSlot('slot-dup');
+    expect(first?.status).toBe('live');
+    expect(second?.status).toBe('live');
+    expect(streamSocketSize()).toBe(1);
+    expect(streamSocketRefs(fp)).toBe(1);
+    expect(unpinChartSlot('slot-dup')).toBeDefined();
+    expect(streamSocketSize()).toBe(0);
+  });
+
+  it('unpin of an unknown slot is a no-op', () => {
+    expect(unpinChartSlot('ghost')).toBeUndefined();
+    expect(unpinChartSlot('')).toBeUndefined();
+    expect(streamSocketSize()).toBe(0);
+    pinChartSlot('slot-x');
+    expect(streamSocketSize()).toBe(1);
+    expect(unpinChartSlot('slot-x')).toBeDefined();
+    expect(unpinChartSlot('slot-x')).toBeUndefined();
+    expect(streamSocketSize()).toBe(0);
   });
 });
