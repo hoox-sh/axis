@@ -488,8 +488,8 @@ function mergeTip(prev: Redesign2Frame, next: Redesign2Frame): Redesign2Frame {
   const bars = np.bars !== undefined ? np.bars : pp.bars;
   const series = np.series !== undefined ? unionColumns(pp.series, np.series) : pp.series;
   const plots = np.plots !== undefined ? unionColumns(pp.plots, np.plots) : pp.plots;
-  const prevSeq = typeof prev.seq === 'number' ? prev.seq : 0;
-  const nextSeq = typeof next.seq === 'number' ? next.seq : prevSeq;
+  const prevSeq = 'seq' in prev && typeof prev.seq === 'number' ? prev.seq : 0;
+  const nextSeq = 'seq' in next && typeof next.seq === 'number' ? next.seq : prevSeq;
   return {
     ...next,
     seq: Math.max(prevSeq, nextSeq),
