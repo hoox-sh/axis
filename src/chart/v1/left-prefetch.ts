@@ -14,15 +14,15 @@
  */
 
 import { mergeBars } from '../../data/bars-cache';
-import { getManager, setDataToChart } from '../manager-access';
 import {
   chartWindowLimit,
   clampRollingWindowBars,
   setBarsQuiet,
   setStore,
   store,
-  type Bar,
 } from '../../store';
+import type { Bar } from '../../store/types';
+import { getManager, setDataToChart } from '../manager-access';
 
 /** Start a page when the viewport is this many bars from the left edge. */
 export const LEFT_EDGE_MARGIN = 64;
