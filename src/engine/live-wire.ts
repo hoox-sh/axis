@@ -522,6 +522,33 @@ export class StreamLiveWire {
     return resumeExtra(seq, closedUpto);
   }
 
+  /**
+   * Resume could not replay. Stay on the socket: one JSON resume, then a
+   * stale badge and no paint. REST is not a fallback.
+   */
+  private noteReplayUnavailable(subId: string): void {
+    const waiting =
+      this.holdUntilFull.has(subId) ||
+      this.axisResubPending.has(subId) ||
+      this.inboxOverflowPending.has(subId);
+    if (!waiting) return;
+    this.holdUntilFull.add(subId);
+    if (this.jsonSubs.has(subId)) {
+      this.handlers.onStatus(subId, 'degraded', { message: 'replay unavailable' });
+      return;
+    }
+    this.jsonSubs.add(subId);
+    v1Count('jsonFallback');
+    this.handlers.onStatus(subId, 'degraded', { message: 'replay unavailable — JSON' });
+    const bars = this.seriesBars.get(subId) ?? this.scriptCtx.get(subId)?.bars ?? [];
+    const seq = this.appliedSeq.get(subId) ?? 0;
+    try {
+      this.client.resumeSubscription(subId, bars.length, this.lastBarTime(bars), this.resumePayload(subId, seq));
+    } catch {
+      /* the socket may still be opening */
+    }
+  }
+
   /** One unknown opcode: that sub resumes in JSON. The socket is not closed. */
   private useJsonForSub(subId: string): void {
     if (!subId || this.jsonSubs.has(subId)) return;
@@ -785,6 +812,10 @@ export class StreamLiveWire {
       this.rememberClosedUpto(frame);
       if (frame.type === 'status' && frame.id) {
         this.routeStatusFrame(frame);
+        return;
+      }
+      if (frame.type === 'error' && frame.id) {
+        this.noteReplayUnavailable(frame.id);
         return;
       }
       if ((frame.type === 'full' || frame.type === 'delta') && (frame.sessionId || frame.id)) {

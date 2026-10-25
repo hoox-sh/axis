@@ -1,5 +1,5 @@
 AXIS CONSOLIDATED DOCUMENTATION — LLM CONTEXT PACK
-Generated: 2026-10-17
+Generated: 2026-10-25
 Source: github.com/hoox-sh/axis/docs
 Public: https://hoox.sh/axis/docs
 Repository: https://github.com/hoox-sh/axis
@@ -125,7 +125,7 @@ Cloud uses Bearer Pro keys and optional optimistic concurrency.
 ---
 ADR-008: Frozen CF project id
 Context
-Renaming Cloudflare Pages/Worker projects severs KV/D1/R2 bindings, custom domains, and CI secrets. Product brand evolved to AXIS. The original freeze used a single id pynescript-axis for both Pages and the Worker.
+Renaming Cloudflare® Pages/Worker projects severs KV/D1/R2 bindings, custom domains, and CI secrets. Product brand evolved to AXIS. The original freeze used a single id pynescript-axis for both Pages and the Worker.
 Decision
 Pages project is axis. Canonical URL https://axis.hoox.sh (custom domain). Preview hashes live on .axis.pages.dev. The previous Pages id pynescript-axis remains a CORS legacy alias for old preview hosts.
 Worker script is worker-axis. Canonical URL https://worker.axis.hoox.sh (custom domain). Health JSON service is worker-axis. The pre-rename workers.dev host (pynescript-axis..workers.dev) is treated as a legacy alias in client host matching.
@@ -315,7 +315,7 @@ Alternatives considered
 | Alternative | Rejected because |
 | --- | --- |
 | Bundle CCXT in browser | ~1 MB+ bundle, Node APIs, isolate CPU, CORS issues |
-| CCXT in Cloudflare Worker | Bundle size, 128 MB memory, shared rate-limit IP, not designed for 100-exchange routing |
+| CCXT in Cloudflare® Worker | Bundle size, 128 MB memory, shared rate-limit IP, not designed for 100-exchange routing |
 | Keep venues as raw URL substrings | Silent venue mismatches poison aggregation correctness |
 | Pluggable venue resolver | Over-engineered; first-party venues are a fixed set of 5 |
 Consequences
@@ -518,6 +518,38 @@ PyneTS
 HOOX pyne-worker
 AXIS and HOOX
 ---
+FILE: docs/architecture/hp-engine.mdx
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
+This file is part of axis.
+axis is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+axis is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+You should have received a copy of the GNU Affero General Public License
+along with axis. If not, see .
+SPDX-License-Identifier: AGPL-3.0-only
+---
+title: "Live chart engine"
+description: "Lightweight Charts paints the chart. One ingest worker owns /ws/live and decodes AXB1. The shared-memory ring and GPU overlay were removed."
+---
+Live chart engine
+Lightweight Charts paints candles, indicators, and fills. There is no second candle painter.
+One browser worker owns the engine live socket. It decodes JSON and AXB1 off the window thread and posts frames to the chart. That path is the default: axis.engine.transport unset or worker. Set the flag to json and reload to keep the main-thread client. If the worker cannot start, the chart uses that client once and counts the fallback.
+What stayed
+| Piece | Where | Role |
+| --- | --- | --- |
+| AXB1 codec | src/hp/axb1/ | Binary frames on the worker socket. Prices stay int64 ticks. |
+| Ingest worker | src/hp/workers/ | Owns /ws/live, coalesces forming tips, posts decoded frames. |
+| Execution context | src/hp/calc/execution-context.ts | A forming tip does not commit a closed bar. |
+| Isolation headers | src/hp/isolation-headers.ts | COOP / COEP / CORP for the static hosts and the offline shell. |
+What was removed
+The shared-memory hot ring, the cold page slot, the WebGL2 and WebGPU candle overlay, the calc worker, the HUD chip, and the axis.engine.hp.* flags are gone. Settings has no high-performance section. hp.get, hp.sample, and dev.trace are not MCP capabilities.
+Stored axis.engine.hp.enabled, axis.engine.hp.gpu, and axis.engine.hp.sab values are ignored.
+---
 FILE: docs/architecture/index.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
@@ -545,7 +577,7 @@ Abstract
 | Plugin contracts | source \| stream \| engine \| storage \| dataset (+ reserved component) |
 | Engines | PYNE evaluation (browser Pyodide or remote /run) |
 | On-chain plane | Parallel non-OHLCV datasets (TVL, DEX, events) via Worker allowlist proxy — ADR-015 |
-| Optional edge | Cloudflare Pages + Worker + DO/KV/D1/R2 |
+| Optional edge | Cloudflare® Pages + Worker + DO/KV/D1/R2 |
 | Optional desk API | Flask Pro API |
 Invariant: AXIS ≠ engine. Evaluation always crosses an engine plugin boundary.
 Track map
@@ -556,6 +588,7 @@ Track map
 | Topologies | Dev, static, edge deploy shapes |
 | State namespaces | Keys, migration, hash, IDB |
 | Drawings and plot parity | User tools vs Pine plots/drawings vs PYNE export |
+| Live chart engine | Lightweight Charts paint, ingest worker, AXB1. The shared-memory ring and GPU overlay are gone |
 Conceptual model
 Formal namespaces
 ``text
@@ -658,7 +691,7 @@ Plugin registry
 PluginRegistry holds ordered maps per kind; events registered / unregistered. Built-ins register once (ensureBuiltins / catalog ensureRegistered). Dynamic plugins via loadPluginFromUrl. Active selection is not inside the registry—it is store state.
 Contract namespace conceptually: pynescript.axis.plugins.v1 (fields: id, name, kind, configSchema, capabilities, kind-specific methods).
 Edge plane (optional)
-Cloudflare split:
+Cloudflare® split:
 Pages project axis (https://axis.hoox.sh): static dist/
 Worker script worker-axis (https://worker.axis.hoox.sh): /api/run proxy, keys/usage KV, scripts D1, stream DO fan-out
 AXIS still speaks engine/storage plugins—not raw CF APIs in UI components
@@ -822,7 +855,7 @@ along with axis. If not, see .
 SPDX-License-Identifier: AGPL-3.0-only
 ---
 title: "Topologies"
-description: "AXIS deploy and dev topologies: Vite+Flask, static PWA, Cloudflare Pages+Worker, offline Pyodide lab, and local Bun sidecar."
+description: "AXIS deploy and dev topologies: Vite+Flask, static PWA, Cloudflare® Pages+Worker, offline Pyodide lab, and local Bun sidecar."
 ---
 Topologies
 Concrete process and network shapes for AXIS. Choose a topology; then compose plugins inside it (recipes).
@@ -848,7 +881,7 @@ python3 axis_pwa_server.py
 make run # separate process
 `
 VPS demo pattern: systemd units for axis-pwa and pynescript-api; ALLOWED_ORIGINS includes AXIS origin.
-Topology C — Cloudflare AXIS at the edge
+Topology C — Cloudflare® AXIS at the edge
 Deploy sketch
 `bash
 axis deploy
@@ -943,7 +976,7 @@ description: "Vite production build, dist layout, axis_pwa_server.py SPA rules, 
 ---
 Build and serve
 Abstract
-Production AXIS assets are a static site produced by Vite (bun run build → dist). Serve them with any static host, Cloudflare Pages, or the repo’s axis_pwa_server.py SPA-aware server.
+Production AXIS assets are a static site produced by Vite (bun run build → dist). Serve them with any static host, Cloudflare® Pages, or the repo’s axis_pwa_server.py SPA-aware server.
 Critical requirement: real binary assets for Pyodide (.wasm, .whl, .zip) must not be rewritten to index.html.
 Conceptual model
 Interface surface
@@ -1022,7 +1055,7 @@ Failure modes
 | Missing plugins | public/plugins` not copied (check Vite publicDir) |
 See also
 Local dev
-Cloudflare
+Cloudflare®
 Engines
 ---
 FILE: docs/devops/ci-and-testing.mdx
@@ -1137,7 +1170,7 @@ description: "packages/cli — install, doctor, Worker setup (D1/OAuth), secrets
 ---
 AXIS CLI
 Abstract
-The AXIS CLI (@hoox-sh/axis-cli under packages/cli) is the CLI-first operator entry for local install, Worker bootstrap, Cloudflare secrets, deploy, and health checks. It wraps Bun + Wrangler with AXIS-specific paths and defaults (Worker name worker-axis, D1 pynescript, OAuth device flow).
+The AXIS CLI (@hoox-sh/axis-cli under packages/cli) is the CLI-first operator entry for local install, Worker bootstrap, Cloudflare® secrets, deploy, and health checks. It wraps Bun + Wrangler with AXIS-specific paths and defaults (Worker name worker-axis, D1 pynescript, OAuth device flow).
 Requires Node ≥ 20 to run the published binary (npm i -g @hoox-sh/axis-cli) and Bun ≥ 1.2 for install/dev/build commands that shell out to Bun. Product version follows root package.json; the CLI package (@hoox-sh/axis-cli) is versioned independently and publishes on v tags via .github/workflows/release.yml.
 Conceptual model
 Install
@@ -1189,7 +1222,7 @@ Command surface
 | axis health [--oauth] [--scripts] [--url …] | Probe /health, optional OAuth start, optional /api/scripts |
 | axis mcp [--key pn_…] | Stdio MCP proxy to Worker POST /mcp |
 | axis mcp config [--stdio] | Print MCP client JSON (remote URL or stdio spawn) |
-| axis whoami | Cloudflare account |
+| axis whoami | Cloudflare® account |
 | axis dev | Vite product UI |
 | axis dev worker | Local wrangler Worker |
 | axis dev desktop | Tauri desktop shell |
@@ -1217,7 +1250,7 @@ Paste Worker URL + pn_… into Settings → Script storage
 | --- | --- |
 | GITHUB_OAUTH_CLIENT_ID | Public OAuth App id; Device Flow enabled on GitHub; env wins over body clientId |
 | GITLAB_OAUTH_CLIENT_ID | Same for GitLab when using git storage |
-| ADMIN_TOKEN / EXTERNAL_BACKEND | Prefer axis secret put. An empty [vars] stub collides with secrets (Cloudflare 10053) |
+| ADMIN_TOKEN / EXTERNAL_BACKEND | Prefer axis secret put. An empty [vars] stub collides with secrets (Cloudflare® 10053) |
 | API_KEYS KV | axis setup kv then axis deploy worker. D1 without KV fails closed (API_KEYS_REQUIRED) |
 | ALLOW_OPEN_KEYS | "0" in production |
 | REQUIRE_RUN_AUTH | "1" to force Bearer on /api/run even without KV |
@@ -1241,7 +1274,7 @@ Internals
 | packages/cli/src/services/health.ts | /health + OAuth probes |
 | Root package.json axis / axis: scripts | Convenience wrappers |
 | Root Makefile axis / axis-` | Make wrappers |
-See also: Installation, MCP (agents), MCP server, Cloudflare deployment, Worker bindings, Worker auth, packages/cli/README.md.
+See also: Installation, MCP (agents), MCP server, Cloudflare® deployment, Worker bindings, Worker auth, packages/cli/README.md.
 ---
 FILE: docs/devops/cloudflare.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
@@ -1258,18 +1291,18 @@ You should have received a copy of the GNU Affero General Public License
 along with axis. If not, see .
 SPDX-License-Identifier: AGPL-3.0-only
 ---
-title: "Cloudflare deployment"
+title: "Cloudflare® deployment"
 description: "Pages + Worker for AXIS: Pages axis.hoox.sh (project axis), Worker worker.axis.hoox.sh, CLI deploy, bindings, security checklist."
 ---
-Cloudflare deployment
+Cloudflare® deployment
 Abstract
-Production AXIS on Cloudflare is a split deploy:
+Production AXIS on Cloudflare® is a split deploy:
 | Piece | Role |
 | --- | --- |
 | Pages | Static PWA (dist/) |
 | Worker | JSON API + WebSocket (worker/) |
 Pages: project axis, canonical https://axis.hoox.sh. Worker: script worker-axis at https://worker.axis.hoox.sh.
-Evaluation truth: Worker /api/run proxies to EXTERNAL_BACKEND unless the gated Pyodide path is fully implemented and enabled. You still need a Python host (VPS Flask, container, etc.) for real Pine Script fidelity today.
+Evaluation truth: Worker /api/run proxies to EXTERNAL_BACKEND unless the gated Pyodide path is fully implemented and enabled. You still need a Python host (VPS Flask, container, etc.) for real Pine Script™ fidelity today.
 Prefer the AXIS CLI for setup and deploy (axis deploy).
 Conceptual model
 Deploy procedure
@@ -1381,7 +1414,7 @@ Exact product / HOOX / legacy PYNE hosts under:
 .hoox.sh / hoox.sh
 .pynescript.online / pynescript.online
 Examples: https://axis.hoox.sh (canonical Pages), https://hoox.sh, https://pynescript.online.
-3. Project-scoped Cloudflare Pages (not open .pages.dev)
+3. Project-scoped Cloudflare® Pages (not open .pages.dev)
 Canonical Pages is https://axis.hoox.sh (product host above). Preview hashes on .axis.pages.dev (and the apex axis.pages.dev) are also echoed. Legacy .pynescript-axis.pages.dev still matches. Arbitrary third-party Pages projects (evil.pages.dev, other apps) fall through to the allowlist fallback — they are not reflected.
 4. ALLOWED_ORIGIN allowlist
 Comma-separated exact origins in env.ALLOWED_ORIGIN (e.g. https://a.example,https://b.example). If the request Origin is listed, echo it; otherwise return the first entry (default https://pynescript.online).
@@ -1500,7 +1533,7 @@ one of:
 | Engine | Notes |
 |--------|--------|
 | Local pyne Pro API | Clone hoox-sh/pyne as ../pyne (make run → :5002; Vite proxies /run in dev). Local checkouts are sometimes still named pynescript. |
-| Cloudflare Worker | Configure worker URL in Manager |
+| Cloudflare® Worker | Configure worker URL in Manager |
 | Pyodide (in-webview) | Fully offline path; largest first load |
 Layout
 | Path | Role |
@@ -1901,14 +1934,14 @@ along with axis. If not, see .
 SPDX-License-Identifier: AGPL-3.0-only
 ---
 title: "DevOps"
-description: "Build, serve, Cloudflare, VPS demo, CORS, and CI for the AXIS PWA and Worker."
+description: "Build, serve, Cloudflare®, VPS demo, CORS, and CI for the AXIS PWA and Worker."
 ---
 DevOps
 Abstract
 AXIS DevOps spans five runnable surfaces:
 1. Vite + Solid PWA — product UI (bun run dev)
 2. Static server (axis_pwa_server.py or Vite preview) — production-like assets
-3. Cloudflare Worker (worker/) — edge API / WS / OAuth / on-chain proxy
+3. Cloudflare® Worker (worker/) — edge API / WS / OAuth / on-chain proxy
 4. Desktop (Tauri 2) — native shell around the same UI (bun run desktop:dev)
 5. AXIS CLI (packages/cli) — install, doctor, setup, secrets, deploy, health
 See Desktop (Tauri) and AXIS CLI for operator entry points.
@@ -1929,7 +1962,7 @@ Page map
 | Local dev | Day-to-day loop |
 | AXIS CLI | Install, doctor, setup, secrets, deploy, health |
 | Build and serve | Vite build, SPA server, assets |
-| Cloudflare | Pages + Worker deploy |
+| Cloudflare® | Pages + Worker deploy |
 | Desktop (Tauri) | Native shell |
 | VPS demo | Single-box static + Flask |
 | CORS and origins | Allowed origins matrix |
@@ -1997,7 +2030,7 @@ Worker
 bun run axis dev worker # http://127.0.0.1:8787
 or: cd worker && bun run dev
 `
-Point cloud storage / Worker endpoint at http://127.0.0.1:8787. For /api/run proxy, set Worker EXTERNAL_BACKEND=http://127.0.0.1:5002 (works on local wrangler; not on Cloudflare edge).
+Point cloud storage / Worker endpoint at http://127.0.0.1:8787. For /api/run proxy, set Worker EXTERNAL_BACKEND=http://127.0.0.1:5002 (works on local wrangler; not on Cloudflare® edge).
 AXIS CLI
 Preferred operator entry for install / doctor / setup / deploy — see AXIS CLI:
 `bash
@@ -2173,7 +2206,7 @@ along with axis. If not, see .
 SPDX-License-Identifier: AGPL-3.0-only
 ---
 title: "VPS demo topology"
-description: "Single-box demo: static AXIS dist + Flask Pro API (+ optional reverse proxy) without Cloudflare."
+description: "Single-box demo: static AXIS dist + Flask Pro API (+ optional reverse proxy) without Cloudflare®."
 ---
 VPS demo topology
 Abstract
@@ -2203,12 +2236,12 @@ reverse_proxy 127.0.0.1:8081
 `
 Then PWA endpoint = https://axis.example.com and the server engine posts to /run on the same host.
 Production (split: Pages PWA + Hetzner API)
-PWA — Cloudflare Pages custom domain https://axis.hoox.sh
-PYNE Pro API — Hetzner VPS https://pynescript.online (Cloudflare orange-cloud → origin
+PWA — Cloudflare® Pages custom domain https://axis.hoox.sh
+PYNE Pro API — Hetzner VPS https://pynescript.online (Cloudflare® orange-cloud → origin
 204.168.138.51). nginx :443 reverse-proxies /run, /optimize, /ws/, /health,
 /lsp/, /datafeed/, … to gunicorn 127.0.0.1:5002
 PWA Backend URL = https://pynescript.online (cross-origin; product CORS regex)
-Cloudflare Pages previews (.axis.pages.dev) use the same Backend URL
+Cloudflare® Pages previews (.axis.pages.dev) use the same Backend URL
 — pyne must allow those Origins on /health and /run (always-on product regex;
 see CORS)
 SSH alias: ssh pynescript (204.168.138.51). The previous combined VPS
@@ -2232,7 +2265,7 @@ Production VPS pattern (verified on pynescript.online):
 | UFW | deny incoming default; allow 22/tcp, 80/tcp, 443/tcp | — |
 | nginx | 0.0.0.0:443 TLS (+ :80 ACME) | https://pynescript.online/health → proxy 127.0.0.1:5002/health |
 | Pro API (gunicorn) | 127.0.0.1:5002 only | loopback; not public |
-| PWA static | Cloudflare Pages (axis.hoox.sh) | not on this VPS |
+| PWA static | Cloudflare® Pages (axis.hoox.sh) | not on this VPS |
 | fail2ban | sshd jail | — |
 Do not open UFW for 5002, 80, or 8787 on a public VPS. Direct probes to http://:5002/health must time out if hardening is correct.
 Workers Manager browser probes:
@@ -2273,7 +2306,7 @@ Failure modes
 | 502 on /run | Flask crashed; check journalctl |
 See also
 Build and serve
-Cloudflare
+Cloudflare®
 CORS
 ---
 FILE: docs/enduser/getting-started/compose-recipes.mdx
@@ -2385,7 +2418,7 @@ Invariants: bars stay in memory/session upload store—not the long-lived app st
 Failure modes: bad headers/time units; empty parse; re-select same file requires clearing input (AXIS resets file input after pick).
 ---
 AXIS at the edge
-Intent: browser AXIS + Cloudflare Worker data plane (keys, usage, optional D1 scripts, DO fan-out).
+Intent: browser AXIS + Cloudflare® Worker data plane (keys, usage, optional D1 scripts, DO fan-out).
 | Axis | Id | Why |
 | --- | --- | --- |
 | Source | venue REST (built-in or proxy-aware) | History |
@@ -2448,7 +2481,7 @@ along with axis. If not, see .
 SPDX-License-Identifier: AGPL-3.0-only
 ---
 title: "Installation"
-description: "Install AXIS via the AXIS CLI, Vite+Solid dev, static dist PWA, desktop shell, or Cloudflare Worker backends."
+description: "Install AXIS via the AXIS CLI, Vite+Solid dev, static dist PWA, desktop shell, or Cloudflare® Worker backends."
 ---
 Installation
 AXIS ships as the axis package (Solid + Vite). The product path is the UI under src/ — use bun run dev or the built dist/. The pre-Solid static shell (main.js, root style.css) was removed in 2.21.0.
@@ -2466,7 +2499,7 @@ Prerequisites
 Bun ≥ 1.2 for package install, Vite, and the AXIS CLI
 Python 3.10+ if you use Flask Pro API (make run) or axis_pwa_server.py
 Modern Chromium / Firefox / Safari (PWA install works best on Chromium)
-Optional: Cloudflare auth (CLOUDFLARE_API_TOKEN or wrangler login) for Worker deploy
+Optional: Cloudflare® auth (CLOUDFLARE_API_TOKEN or wrangler login) for Worker deploy
 Optional desktop: Rust + platform webview libs — Desktop (Tauri)
 CLI-first bootstrap (recommended)
 ``bash
@@ -2569,7 +2602,7 @@ Internals (repo paths)
 | vite.config.ts | Build |
 | axis_pwa_server.py | Static host |
 | public/manifest.webmanifest, SW | PWA |
-| worker/ | Cloudflare Worker data plane |
+| worker/ | Cloudflare® Worker data plane |
 | packages/cli/ | AXIS CLI (@hoox-sh/axis-cli) |
 | src-tauri/` | Desktop shell |
 See also
@@ -2600,7 +2633,7 @@ description: "First historical load, first Pine Run, live stream, and reading th
 ---
 Quick start
 Fifteen-minute path from empty AXIS to plots, strategy stats, and optional live updates.
-AXIS is a charting app you run in the browser (or install as a PWA / desktop app). You pick where candles come from, whether they keep updating, who runs your Pine Script, and where scripts are saved. The status bar uses short chips for those four planes:
+AXIS is a charting app you run in the browser (or install as a PWA / desktop app). You pick where candles come from, whether they keep updating, who runs your Pine Script™, and where scripts are saved. The status bar uses short chips for those four planes:
 | Chip | Means |
 | --- | --- |
 | SRC | Source — historical candles (Binance REST, CSV, mock, …) |
@@ -2787,9 +2820,9 @@ AXIS ships a first-party catalog of Pine indicator() / strategy() scripts so you
 Every built-in starts with:
 ``pine
 //@version=6
-// AXIS first-party built-in. Original source — not a TradingView template.
+// AXIS first-party built-in. Original source — not a TradingView® template.
 `
-They wrap public technical-analysis formulas through PYNE ta.* (SMA, RSI, ATR, …) or short original implementations of well-known public recurrences (McGinley Dynamic, Fisher Transform, floor pivots). AXIS Drawings is the overlay example for line, linefill, box, label, polyline, and table. They are not copies of TradingView built-in templates.
+They wrap public technical-analysis formulas through PYNE ta.* (SMA, RSI, ATR, …) or short original implementations of well-known public recurrences (McGinley Dynamic, Fisher Transform, floor pivots). AXIS Drawings is the overlay example for line, linefill, box, label, polyline, and table. They are not copies of TradingView® built-in templates.
 Apply
 | Where | How |
 | --- | --- |
@@ -2877,6 +2910,14 @@ How to use
 6. Click Load to chart when ready (or rely on apply-when-complete).
 7. Browse datasets (header icon or the button) opens the Dataset manager: coverage map, date range / max bars, then load onto the chart.
 Pause / resume / cancel apply between pages. Multiple jobs queue with low concurrency (rate-limit friendly).
+Deleting datasets
+Delete in the Dataset manager removes the dataset in full — bars and
+metadata — from every persistence sink (session / local / git / worker), so the
+row does not come back on the next refresh.
+To wipe every dataset at once, use Settings → Data → Dataset manager →
+Flush dataset manager. The flush clears the memory mirror, the local
+IndexedDB cache, and the remote dataset stores (git / cloud). Bars already
+painted on the chart stay until the symbol is reloaded.
 Phases
 | Phase | Behavior |
 | --- | --- |
@@ -2904,6 +2945,8 @@ Internals
 | --- | --- |
 | src/data/data-source-manager.ts | Job queue, walk-back, validate, gap-fill |
 | src/data/bars-cache.ts | Memory-first + IDB durable OHLCV cache |
+| src/data/dataset-store.ts | Dataset mirror + delete / flush entry points |
+| src/data/dataset-sinks.ts | Persistence sinks (session / local / git / worker) |
 | src/data/bars-gaps.ts | Gap detection / coverage report |
 | src/ui/DataSourceManagerPanel.tsx | Panel UI |
 | src/ui/CachedDatasetsModal.tsx | Dataset manager modal |
@@ -3018,7 +3061,7 @@ Engine drawings[] map through pyne-drawings.ts before paint:
 | table. | Chart overlay HUD by default, or the bottom Tables panel (see below) |
 Non-overlay scripts place ordinary geometry on the indicator pane Y-scale; user toolbar drawings always stay on price.
 Pine tables: chart HUD vs bottom Tables panel
-Pine Script table. drawings render as a chart overlay HUD (PyneTableHud) by default. Any script's tables can move off the chart into a bottom Tables tab — TradingView September 2026 parity:
+Pine Script™ table. drawings render as a chart overlay HUD (PyneTableHud) by default. Any script's tables can move off the chart into a bottom Tables tab — TradingView® September 2026 parity:
 1. Chart ⋯ menu (or the pane badge ⋯) → Move tables to bottom.
 2. Tables stack vertically in creation order, stretch to the pane width with proportional columns from table.cell(width=…), keep tooltips and merged cells, never truncate text (scrollbars when needed), and allow text selection / copy — unlike chart overlay tables.
 3. Move back via Move tables to chart (same menus).
@@ -3055,7 +3098,7 @@ title: "Hyperparameter Optimisation"
 description: "Search strategy input. values over N trials (TPE / random / grid) with holdout or walk-forward. Strategies only."
 ---
 Hyperparameter Optimisation
-AXIS can search Pine Script input. values on a strategy() script and apply the best assignment for this symbol and bar window.
+AXIS can search Pine Script™ input. values on a strategy() script and apply the best assignment for this symbol and bar window.
 The search engine is pyne (POST /optimize / pynescript.optimize). AXIS is the plugin UI. Pyodide and engines without /optimize fall back to an isolated local loop (random only).
 This is not a live trading optimiser and not a Pine builtin. Best-on-sample is not a guarantee out of sample.
 Holdout is the default for a reason. In-sample-only search overfits. Winners on one symbol or timeframe often fail on another.
@@ -3347,7 +3390,7 @@ Live tab (app_session_status → connected):
 “Load BTCUSDT 1h and tell me bar count and last close.” (chart.load then app_get bars)
 “Put this indicator in the editor and run it.” (editor.set + editor.run)
 “Open the alerts panel and list alerts.” (panels.set + alerts.list)
-“Screenshot the panes.” (chart.screenshot — PNG base64; includes the HP GPU overlay when the rung paints)
+“Screenshot the panes.” (chart.screenshot — PNG base64 of the Lightweight Charts panes)
 “My chart seems a bar behind — what's wrong?” (chart.lag — the verdict
 compares the chart tail to the venue clock, the tick, and the engine series)
 “Where are the holes in my bars?” (chart.bars — bounded tail/head rows +
@@ -3357,10 +3400,6 @@ a missing-slot map)
 “Tick the engine now / repair the stale series / reset the socket.”
 (engine.tick · engine.repair · stream.reset — the last one drops the
 socket and subscriptions so the next tick re-subscribes)
-“Is HP actually working in this tab?” (hp.get — flags, isolation, the
-rung chip, hot-ring alignment vs the chart, overlay state, and a verdict)
-“Is the hot ring moving, or just aligned?” (hp.sample — ring seq delta,
-frame cadence, and chart append progress over a window)
 Start with app_capabilities if the client has not cached the catalog.
 Capabilities at a glance
 Pass these ids to app_invoke as capability, with a JSON payload.
@@ -3380,7 +3419,6 @@ Pass these ids to app_invoke as capability, with a JSON payload.
 | Settings | settings.get / set |
 | Engine | engine.get / series (read the engine's own series bounds + staleness) · engine.tick / repair (force a drive tick / stale-series repair) |
 | Stream | stream.get (route, engine socket, subscriptions, feed chips) · stream.reset (drop socket + subscriptions, probes a re-subscribe) |
-| HP | hp.get (flags, isolation probe, rung chip, hot-ring alignment, GPU overlay state + verdict) · hp.sample (windowed liveness: ring seq delta, frame cadence, chart append progress) |
 | Status | status.get |
 app_set paths (anything else is PATH_DENIED): symbol, interval, source, engine, exchange, theme, chartType, uiScale, live.active, live.preferAfterLoad, editor.doc, editor.open, watchlist.open.
 Example payloads:
@@ -3588,13 +3626,13 @@ This file is part of AXIS.
 SPDX-License-Identifier: AGPL-3.0-only
 ---
 title: "PYNE Agent"
-description: "Write scripts from natural language (PYNE Agent) in AXIS using the optional pyne-agent-worker Cloudflare plugin."
+description: "Write scripts from natural language (PYNE Agent) in AXIS using the optional pyne-agent-worker Cloudflare® plugin."
 ---
 PYNE Agent
 What it does
-Describe an indicator or strategy in plain language. The PYNE Agent (Cloudflare Workers AI) returns a full script you can insert into the AXIS editor, then run with your normal engine (local PYNE Pro API, edge worker, or Pyodide).
+Describe an indicator or strategy in plain language. The PYNE Agent (Cloudflare® Workers AI™) returns a full script you can insert into the AXIS editor, then run with your normal engine (local PYNE Pro API, edge worker, or Pyodide).
 You do not need the full HOOX mesh. The agent worker is usable standalone.
-Pine Script and TradingView are trademarks of TradingView, Inc. Cloudflare is a registered trademark of Cloudflare, Inc.
+Pine Script™ and TradingView® are trademarks of TradingView®, Inc. Cloudflare® is a registered trademark of Cloudflare®, Inc.
 Prerequisites
 1. A deployed pyne-agent-worker origin (or local wrangler dev).
 2. AXIS open in the browser (dev or production PWA).
@@ -3765,8 +3803,8 @@ Manager → Script Library:
 | Git fields | provider, token, owner, repo, branch, basePath, … |
 Status line: backend · remote · branch · connected · count.
 Built-in studies (always in the app)
-Original AXIS Pine catalog — apply from Scripts → Built-in or ⌘K Add built-in script…. Not TradingView templates. See Built-in scripts.
-Pine Script v6 starter pack
+Original AXIS Pine catalog — apply from Scripts → Built-in or ⌘K Add built-in script…. Not TradingView® templates. See Built-in scripts.
+Pine Script™ v6 starter pack
 Repo ships a portable library dump of v6 language examples (libraries, enums, MTF):
 | Path | Role |
 | --- | --- |
@@ -4077,7 +4115,7 @@ title: "End User"
 description: "Install AXIS, compose source/stream/engine/storage recipes, and run research workflows without a proprietary chart host."
 ---
 End User
-AXIS is an installable charting PWA: load history, stream the present, evaluate Pine Script through a pluggable engine, and keep a script library on disk, IndexedDB, cloud, or git. This track is for operators and researchers who use the AXIS—not for plugin authors or Worker deployers.
+AXIS is an installable charting PWA: load history, stream the present, evaluate Pine Script™ through a pluggable engine, and keep a script library on disk, IndexedDB, cloud, or git. This track is for operators and researchers who use the AXIS—not for plugin authors or Worker deployers.
 Language fidelity (grammar, builtins, runtime semantics) lives in PYNE. AXIS never reimplements the language; it hosts evaluation via engine plugins.
 Abstract
 You compose four axes:
@@ -4088,7 +4126,7 @@ You compose four axes:
 | Engine | Who evaluates the script? |
 | Storage | Where do saved scripts live? |
 | On-chain | Protocol TVL, DEX OHLCV, events — parallel plane (not a wallet) |
-Any lawful combination is valid. Offline lab, desk research against Binance + Flask, AXIS at the edge through a Cloudflare Worker, and a git-backed library are all first-class recipes—see Compose recipes.
+Any lawful combination is valid. Offline lab, desk research against Binance + Flask, AXIS at the edge through a Cloudflare® Worker, and a git-backed library are all first-class recipes—see Compose recipes.
 Conceptual model
 The shell (topbar, chart, editor, results, manager) is AXIS. Calculation is always engine.run({ script, bars, config }). Persistence of scripts is always a storage plugin.
 Interface surface
@@ -4097,7 +4135,7 @@ Interface surface
 | Topbar | Symbol, interval, source/stream/engine pickers, Load, Run, Live, On-Chain |
 | Watchlist | Quick symbol switch + quote poll |
 | Chart | lightweight-charts panes, drawings, trade markers, on-chain overlays, price-scale decimals |
-| Editor | CodeMirror 6 Pine Script document (docked / popout) |
+| Editor | CodeMirror 6 Pine Script™ document (docked / popout) |
 | Results | Events, Strategy, Optimise, Plots, Metrics, Raw + export |
 | On-Chain | DefiLlama TVL, GeckoTerminal DEX, spike events, export / refresh |
 | Manager | Plugin catalog, URL install (incl. component / PYNE Agent), Script Library |
@@ -4155,13 +4193,13 @@ along with axis. If not, see .
 SPDX-License-Identifier: AGPL-3.0-only
 ---
 title: "FAQ"
-description: "Frequently asked questions about AXIS, engines, offline use, TradingView relation, and data privacy."
+description: "Frequently asked questions about AXIS, engines, offline use, TradingView® relation, and data privacy."
 ---
 FAQ
 Product scope
-Is AXIS TradingView?
-No. AXIS is an independent charting PWA. Pine Script and TradingView are trademarks of TradingView, Inc. This project is not affiliated with or endorsed by TradingView, Inc. Trademark notice appears on the AXIS docs home.
-Does AXIS implement Pine Script?
+Is AXIS TradingView®?
+No. AXIS is an independent charting PWA. Pine Script™ and TradingView® are trademarks of TradingView®, Inc. This project is not affiliated with or endorsed by TradingView®, Inc. Trademark notice appears on the AXIS docs home.
+Does AXIS implement Pine Script™?
 Evaluation is performed by engines that call PYNE (or proxies that do). The AXIS does not embed a closed interpreter. See PYNE for language fidelity.
 AXIS vs engine?
 AXIS = UI + orchestration. Engine = run(script, bars). You can swap engines without rewriting the chart host. That is ADR-002 territory—ADRs.
@@ -4214,7 +4252,7 @@ How do I download years of history?
 Topbar Load is one venue page. Open the Data panel (Data Source Manager) to backfill in the background to a past date, validate completeness, and fill gaps — see Data Source Manager.
 Ops
 What is pynescript-axis?
-Former Cloudflare Pages / Worker id. Pages project is now axis (https://axis.hoox.sh); Worker script is worker-axis (https://worker.axis.hoox.sh). Brand is AXIS.
+Former Cloudflare® Pages / Worker id. Pages project is now axis (https://axis.hoox.sh); Worker script is worker-axis (https://worker.axis.hoox.sh). Brand is AXIS.
 Legacy localStorage keys?
 Migrated automatically into pynescript.axis.v1 and library keys. See State namespaces.
 Tests for the PWA?
@@ -4253,7 +4291,7 @@ Product
 | --- | --- |
 | AXIS | Charting PWA product : chart, editor, panels, and store—not the language engine. |
 | UI track | Docs track for presentation surfaces (chart host, editor, shell, store) under /axis/docs/ui. |
-| PYNE | Pine Script toolchain (parse/eval); engines embed or call it. |
+| PYNE | Pine Script™ toolchain (parse/eval); engines embed or call it. |
 | Active set | Tuple { source, stream, engine, storage } currently selected. |
 | Compose / recipe | A purposeful active set for a workflow (offline lab, desk, edge, …). |
 | MCP | Model Context Protocol. AXIS Worker POST /mcp plus an optional PWA bridge so agents can read/write the app. |
@@ -4274,7 +4312,7 @@ Engines & backends
 | server engine | POST {endpoint}/run with script + bars. |
 | pyodide engine | In-browser Python + pynescript wheels. |
 | Pro API / Flask | Local Python backend (make run, typically :5002). |
-| Worker | Cloudflare Worker data plane for AXIS. |
+| Worker | Cloudflare® Worker data plane for AXIS. |
 | Endpoint | Base URL the server engine (and often cloud storage) calls. |
 Data & chart
 | Term | Definition |
@@ -4617,19 +4655,18 @@ title: "AXIS Documentation"
 description: "Open charting PWA — orthogonal sources, streams, engines, and storage. Own the axes; swap the engine."
 ---
 AXIS Documentation
-AXIS is an installable charting PWA (v2.24.5, package.json / VERSION) that treats price, time, and calculation as separable axes. Release history is CHANGELOG.md (online changelog). Sources load history. Streams advance the present. Engines evaluate Pine Script via PYNE. Storage keeps your script library. Compose any lawful combination without a proprietary charting host.
-Pine Script and TradingView are trademarks of TradingView, Inc. Cloudflare is a registered trademark of Cloudflare, Inc. This project is independent and not affiliated with or endorsed by TradingView, Inc. or Cloudflare, Inc.
+AXIS is an installable charting PWA (v2.24.5, package.json / VERSION) that treats price, time, and calculation as separable axes. Release history is CHANGELOG.md (online changelog). Sources load history. Streams advance the present. Engines evaluate Pine Script™ via PYNE. Storage keeps your script library. Compose any lawful combination without a proprietary charting host.
+Pine Script™ and TradingView® are trademarks of TradingView®, Inc. Cloudflare® is a registered trademark of Cloudflare®, Inc. This project is independent and not affiliated with or endorsed by TradingView®, Inc. or Cloudflare®, Inc.
 What's new
 The current 2.24.5 build — full detail in the changelog:
 Agents can read and drive the live plane over MCP — eight new app_invoke capabilities: chart.lag (the "why is the chart a bar behind?" ledger with live / one-bar-behind / behind verdicts), chart.bars (bounded OHLCV windows plus a gap map and forming-bar flag), engine.get / engine.series / engine.tick / engine.repair, and stream.get / stream.reset. Every engine call reuses the active endpoint and key in-tab — the key never leaves the browser and is reported as hasApiKey only. See MCP (agents).
-The HP plane is observable over MCP — hp.get (flags, cross-origin isolation, the hp · sab+gpu chip, hot-ring window/alignment/seq, GPU overlay state, verdict) and hp.sample (windowed ring-publish / frame-cadence / chart-append measurement). Pure reads — no flag writes, no wire start, no SAB allocation. See HP engine.
 Engine-owned live stops lagging — the venue's forming tip survives every engine repaint (no bar chopped off the tail), a frozen engine series is repaired instead of back-dating the chart, a superseded engine socket can no longer tear down the connection, and the stream plane now drives the engine's series itself (10s cadence, new venue bars immediately). See engine-owned data plane.
 The browser engine runs the PYNE 0.6.12 wheel — the same release as the Pro API, including the chart.point.copy argument fix, numeric multi-return UDFs, and interpret/compile fill() parity. See engine plugins.
 Abstract
 AXIS is a charting PWA, not a language rewrite. Language fidelity lives in PYNE. The PWA contributes:
 1. A unified plugin registry (source | stream | engine | storage | dataset | component)
 2. A Solid + Vite product UI (chart, editor, results, manager, Workers Manager, on-chain panel) with a mobile-first responsive shell and global keyboard shortcuts (recordable, persisted)
-3. Optional backends: local Flask, offline Pyodide, Cloudflare Worker (+ DO/KV/D1/R2 + /api/onchain proxy)
+3. Optional backends: local Flask, offline Pyodide, Cloudflare® Worker (+ DO/KV/D1/R2 + /api/onchain proxy)
 4. AXIS CLI + optional Tauri desktop shell for operators
 5. MCP on the Worker (POST /mcp) so agents can drive APIs and a connected tab — MCP (agents)
 Invariant (AXIS ≠ engine): the shell never embeds a closed interpreter. Evaluation is always an engine plugin.
@@ -5113,7 +5150,7 @@ An engine evaluates a script against bars and returns plots, series, events, and
 | id | Name | Where Python runs |
 | --- | --- | --- |
 | server | Server-Side | External Flask Pro API or AXIS Worker /api/run proxy |
-| pyne-worker | pyne-worker (edge) | HOOX pyne-worker Cloudflare edge evaluator (POST /run) |
+| pyne-worker | pyne-worker (edge) | HOOX pyne-worker Cloudflare® edge evaluator (POST /run) |
 | pyodide | Client-Side (Pyodide) | Browser WebAssembly via self-hosted Pyodide |
 AXIS Worker in-process Pyodide (PYODIDE_IN_WORKER) remains a separate, feature-gated edge path — see Worker runtime.
 Conceptual model
@@ -5294,7 +5331,7 @@ Failure modes
 | Engine “not ready” | Flask/Worker down (server) or missing /vendor/.whl / /pyodide/ (pyodide) |
 | Cloud library 401 | Missing Bearer pn_… key or unbound API_KEYS KV in production |
 PYNE Agent (sister worker)
-Natural-language script authoring is not an engine — it is an optional component plugin backed by pyne-agent-worker (Cloudflare Workers AI). Install from:
+Natural-language script authoring is not an engine — it is an optional component plugin backed by pyne-agent-worker (Cloudflare® Workers AI™). Install from:
 `text
 https:///plugin/axis-pine-agent.js
 ``
@@ -5313,19 +5350,19 @@ This file is part of AXIS.
 SPDX-License-Identifier: AGPL-3.0-only
 ---
 title: "PYNE Agent plugin"
-description: "Install the pyne-agent-worker AXIS component plugin — natural-language PYNE script chat via Cloudflare Workers AI (standalone or HOOX-enhanced)."
+description: "Install the pyne-agent-worker AXIS component plugin — natural-language PYNE script chat via Cloudflare® Workers AI™ (standalone or HOOX-enhanced)."
 ---
 PYNE Agent plugin
 Abstract
-pyne-agent-worker is a sister Cloudflare Worker that turns natural language into PYNE-compatible scripts. AXIS consumes it as a component plugin (kind: 'component') loaded from URL. It does not replace engines — evaluation still goes through your active engine (server, pyodide, …). The agent only writes script source into the editor / chat UI.
+pyne-agent-worker is a sister Cloudflare® Worker that turns natural language into PYNE-compatible scripts. AXIS consumes it as a component plugin (kind: 'component') loaded from URL. It does not replace engines — evaluation still goes through your active engine (server, pyodide, …). The agent only writes script source into the editor / chat UI.
 | | |
 |--|--|
 | Repo | hoox-sh/pyne-agent-worker |
 | Plugin module | AXIS ships /plugins/axis-pine-agent.js; remote GET /plugin/axis-pine-agent.js on the agent Worker |
 | API | POST /v1/chat |
-| Standalone | Workers AI only — no pyne-worker / HOOX mesh required |
+| Standalone | Workers AI™ only — no pyne-worker / HOOX mesh required |
 | Optional | pyne-worker validate→retry when configured |
-Pine Script and TradingView are trademarks of TradingView, Inc. Cloudflare is a registered trademark of Cloudflare, Inc. Independent project — not affiliated with TradingView, Inc. or Cloudflare, Inc.
+Pine Script™ and TradingView® are trademarks of TradingView®, Inc. Cloudflare® is a registered trademark of Cloudflare®, Inc. Independent project — not affiliated with TradingView®, Inc. or Cloudflare®, Inc.
 Conceptual model
 Install in AXIS
 1. Deploy pyne-agent-worker (standalone is enough) for the API endpoint.
@@ -5364,9 +5401,9 @@ API surface (worker)
 | GET | / | Built-in chat shell (iframe / demo) |
 Auth: X-API-Key or Authorization: Bearer when the worker secret is set.
 Legal / content
-The agent repo never ships TradingView built-in indicator sources.
-Knowledge (docs v5/v6, open corpus ≤ 1000, operator builtin refs) is ingested privately into R2 + Vectorize.
-Always treat marks: Pine Script, TradingView, Cloudflare.
+The agent repo never ships TradingView® built-in indicator sources.
+Knowledge (docs v5/v6, open corpus ≤ 1000, operator builtin refs) is ingested privately into R2 + Vectorize™.
+Always treat marks: Pine Script™, TradingView®, Cloudflare®.
 Failure modes
 | Symptom | Likely cause |
 | --- | --- |
@@ -5759,11 +5796,11 @@ along with axis. If not, see .
 SPDX-License-Identifier: AGPL-3.0-only
 ---
 title: "Streams"
-description: "Live bar plugins: venue WebSockets, mock poll, and Cloudflare Durable Object relay example."
+description: "Live bar plugins: venue WebSockets, mock poll, and Cloudflare® Durable Object relay example."
 ---
 Streams
 Abstract
-A stream advances the chart’s present. It opens a connection (or timer), emits onBar updates, and returns a stop function. Built-ins live in src/streams/catalog.ts. An optional Cloudflare Durable Object relay lives as a loadable example (example-cf-do-stream.js) plus Worker SessionDO.
+A stream advances the chart’s present. It opens a connection (or timer), emits onBar updates, and returns a stop function. Built-ins live in src/streams/catalog.ts. An optional Cloudflare® Durable Object relay lives as a loadable example (example-cf-do-stream.js) plus Worker SessionDO.
 Conceptual model
 Built-in catalog
 | id | Name | Offline | Upstream |
@@ -5809,7 +5846,7 @@ mock-poll behavior
 Aligns bar time to interval slots.
 Updates high/low/close within the open slot; advances on slot change.
 Immediate first tick so live mode feels responsive offline.
-Cloudflare DO stream (example plugin)
+Cloudflare® DO stream (example plugin)
 Not built-in. After load:
 1. Config endpoint = Worker origin (https://…workers.dev or local http://127.0.0.1:8787).
 2. Client opens wss://…/api/stream?session=…&venue=binance&symbol=BTCUSDT&interval=1m.
@@ -6228,7 +6265,7 @@ along with axis. If not, see .
 SPDX-License-Identifier: AGPL-3.0-only
 ---
 title: "Plugin examples"
-description: "Worked AXIS example plugins: CoinGecko source, Tiny Pine engine, Cloudflare DO stream — load paths and contracts."
+description: "Worked AXIS example plugins: CoinGecko source, Tiny Pine engine, Cloudflare® DO stream — load paths and contracts."
 ---
 Plugin examples
 Abstract
@@ -6253,7 +6290,7 @@ Example catalog
 | example-coingecko-source.js | coingecko | source | Public CoinGecko market_chart → synthetic OHLC |
 | example-tiny-pyne-engine.js | tiny-pyne | engine | In-browser JS DSL: sma/ema/rsi/plot/strategy |
 | example-cf-do-stream.js | cf-do | stream | WS to Worker /api/stream SessionDO |
-| External: pyne-agent-worker /plugin/axis-pine-agent.js | pyne-agent | component | NL → PYNE Agent chat (Cloudflare Workers AI); docs |
+| External: pyne-agent-worker /plugin/axis-pine-agent.js | pyne-agent | component | NL → PYNE Agent chat (Cloudflare® Workers AI™); docs |
 Paths:
 Served: public/plugins/
 Source copies: src/plugins/example-.js
@@ -6276,7 +6313,7 @@ Built-ins: close, open, high, low, volume, sma, ema, rsi, plot, strategy.entry /
 Returns RunResult with plots/events — not full PYNE fidelity.
 Use when: offline demos without loading ~14MB Pyodide or hitting Flask.
 ---
-Cloudflare DO stream
+Cloudflare® DO stream
 Contract: kind: 'stream', start → stop.
 Config: endpoint — Worker base URL (https://… or http://127.0.0.1:8787). Empty → error.
 URL built:
@@ -6523,7 +6560,7 @@ Price pane labels use chart/price-precision.ts:
 | 0–8 | Fixed display decimals + matching minMove |
 UI control cycles A → 0 → … → 8 → A on the price-pane scale chrome. Store field: priceScaleDecimals (persisted).
 Plot style parity
-Engine plot series honor Pine Script plot.style_* via mapPlotStyleToSeriesKind (results/plot-visuals.ts → pane-manager series factory):
+Engine plot series honor Pine Script™ plot.style_* via mapPlotStyleToSeriesKind (results/plot-visuals.ts → pane-manager series factory):
 | Pine style (examples) | Chart series |
 | --- | --- |
 | plot.style_line / default | Line |
@@ -6672,7 +6709,7 @@ Four information surfaces
 | Param checklist | Inside a call | Which arguments remain? |
 | Pre-eval | While typing / Save | What is wrong before Run? |
 | Debug chips | After Run, Debug on | What did this source line log or error? |
-Hover and the param checklist never invent TradingView host APIs — they read PYNE builtins / local docs. Pre-eval marks the buffer; Debug chips still read last run only.
+Hover and the param checklist never invent TradingView® host APIs — they read PYNE builtins / local docs. Pre-eval marks the buffer; Debug chips still read last run only.
 ---
 Debug vs Pins
 | | Debug | Pins |
@@ -6824,12 +6861,12 @@ Bottom of tabbed editor (data-testid="axis-editor-stats"):
 | Symbols | Insert TV-editor-safe arrows, box drawing, marks, spaces, and chart emoji (raw, quoted, or plotchar) |
 | wrap | Soft wrap toggle (editorWrapEnabled, default on) |
 Symbols & emoji
-Status-bar Symbols (data-testid="axis-editor-symbols") opens a searchable catalog of glyphs used in Pine Script plotchar / label.new / table text.
+Status-bar Symbols (data-testid="axis-editor-symbols") opens a searchable catalog of glyphs used in Pine Script™ plotchar / label.new / table text.
 Mono-safe — ~1 cell in IBM Plex Mono / the TV editor (box drawing, ▲▼●◆✓★, arrows).
 Wide / chart-only — official 🠅🠇 and emoji (). Filter with Mono-safe.
 Click inserts at the cursor (replaces the selection). Right-click copies.
 Insert mode: raw glyph, quoted string, or a plotchar(cond, "mark", "…", location.belowbar) snippet.
-Sources: TradingView Exploring Unicode, Text and shapes, box-drawing U+2500, PineCoders conventions.
+Sources: TradingView® Exploring Unicode, Text and shapes, box-drawing U+2500, PineCoders conventions.
 Highlighting
 pyne-language.ts is a stateful stream tokenizer: //@ annotations, // and / / (including across lines), quoted and """ / ''' strings with \\n escapes, #RRGGBB(AA) colors, namespaces (ta., label.new), types (int / float / string, series / simple in qualifier position, and declared UDTs / enums as typeName, bold in the void theme), control vs definition keywords, and function names before (. Format leaves continuation lines of an open string or block comment untouched.
 Four information surfaces
@@ -6839,7 +6876,7 @@ Four information surfaces
 | Param checklist | Inside a call | Used / current / unused args with type + default |
 | Pre-eval | While typing / Save | What is wrong before Run |
 | Debug chips | After Run, Debug on | Last-run log. / errors on that source line |
-Hover + param checklist are writing-time docs — not a TradingView debug API. Pre-eval marks the buffer; chips still read last run. Details: Debugging.
+Hover + param checklist are writing-time docs — not a TradingView® debug API. Pre-eval marks the buffer; chips still read last run. Details: Debugging.
 Diagnostics & Problems
 Pre-eval (as you type) — schedulePreeval waits the idle delay after the last keystroke (default PREEVAL_IDLE_MS = 1000 ms; tab switch uses a shorter beat). Problems and underlines stay until the next idle check replaces them (optional Clear marks while typing hides them mid-keystroke). Local parse/lint (localPreevaluate) plus POST /lsp/diagnostics when engine=server and remote lint is on. Severity error disables Run when Block Run on errors is on (topbar, editor, Mod-Enter, command palette). Warnings and typos do not block.
 Every lint / hover / complete / underline / chip option lives in Settings → Editor (command palette: Open Editor Settings*). Defaults match the previous hardcoded behavior.
@@ -7011,7 +7048,7 @@ Detach path: detachIndicatorFromChart (Scripts panel, Layers, pane badges) — o
 Prefer indicator(..., overlay=false) and raw plot(rsi) for oscillators — not strategy(..., overlay=true) with rsi 0.01 on price.
 Series selection
 Prefer result.series entries whose keys do not start with _ / __. Fallback: single plots[] array as one line named from script_name.
-Colors: plot_meta[k].color or PLOT_PALETTE[i]. Pine Script plot.style_ maps to LWC series kinds (line, stepline, histogram/columns, area, circles) — see Charting — plot style parity.
+Colors: plot_meta[k].color or PLOT_PALETTE[i]. Pine Script™ plot.style_ maps to LWC series kinds (line, stepline, histogram/columns, area, circles) — see Charting — plot style parity.
 Indicator panel & pane badges
 Side list of store.scripts (Indicator: id, name, code, paneId, visible, plots)
 Visibility toggles affect display; re-run is still engine-driven
@@ -7464,7 +7501,7 @@ Admin keys API (/api/keys)
 | validate (GET or ?action=validate) | Bearer or ?key= | Tier + created_at if known |
 Tiers: free \| hobby \| pro \| team \| enterprise.
 Without ADMIN_TOKEN set, create always fails (isAdmin false).
-Do not leave ADMIN_TOKEN = "" in [vars]. That empty assignment is still a Worker binding, and Cloudflare error 10053 rejects wrangler secret put ADMIN_TOKEN (Binding name already in use). axis secret put ADMIN_TOKEN comments the stub, deploys to drop it, then sets the secret.
+Do not leave ADMIN_TOKEN = "" in [vars]. That empty assignment is still a Worker binding, and Cloudflare® error 10053 rejects wrangler secret put ADMIN_TOKEN (Binding name already in use). axis secret put ADMIN_TOKEN comments the stub, deploys to drop it, then sets the secret.
 CLI:
 `bash
 axis setup kv # create + bind API_KEYS
@@ -7543,7 +7580,7 @@ description: "wrangler.toml vars, KV, D1, R2, Durable Objects — provision once
 ---
 Worker bindings
 Abstract
-Bindings and vars for the AXIS Worker are declared in worker/wrangler.toml (copy from wrangler.toml.example via axis setup worker). Many production bindings ship commented so clone-and-dev does not require Cloudflare resources; wrangler dev synthesizes local substitutes where possible.
+Bindings and vars for the AXIS Worker are declared in worker/wrangler.toml (copy from wrangler.toml.example via axis setup worker). Many production bindings ship commented so clone-and-dev does not require Cloudflare® resources; wrangler dev synthesizes local substitutes where possible.
 Worker script name: name = "worker-axis". Canonical host worker.axis.hoox.sh. Pages project is axis; canonical Pages host is axis.hoox.sh.
 Conceptual model
 Interface surface — Env
@@ -7641,7 +7678,7 @@ Failure modes
 | Stream 503 | Enable DO binding + migration |
 | CORS fails prod origin | Set ALLOWED_ORIGIN` to exact Pages origin |
 See also
-Cloudflare DevOps
+Cloudflare® DevOps
 Runtime
 CORS
 ---
@@ -7668,7 +7705,7 @@ Abstract
 The Worker data plane for user scripts is worker/src/scripts.ts — REST under /api/scripts with Bearer auth (auth). Persistence prefers D1 (env.DB); without D1, per-isolate in-memory maps support local wrangler dev. With the optional SCRIPT_ARTIFACTS binding, every save additionally mirrors as a git commit to a per-key Artifacts repo — full history and git clone with no GitHub credentials (see below).
 The PWA cloud storage plugin is the primary client.
 Conceptual model
-Git-native history (Cloudflare Artifacts, no GitHub creds)
+Git-native history (Cloudflare® Artifacts, no GitHub creds)
 When SCRIPT_ARTIFACTS is bound (axis setup artifacts), every save/delete
 mirrors as a git commit to a per-key repo (axis-scripts-):
 scripts/.pine plus a meta sidecar. History endpoints serve from
@@ -7874,11 +7911,11 @@ along with axis. If not, see .
 SPDX-License-Identifier: AGPL-3.0-only
 ---
 title: "Worker"
-description: "Cloudflare Worker for AXIS: /api/run proxy, keys, scripts, usage, and Durable Object stream relay."
+description: "Cloudflare® Worker for AXIS: /api/run proxy, keys, scripts, usage, and Durable Object stream relay."
 ---
 Worker
 Abstract
-The AXIS Cloudflare Worker (worker/) is the edge data plane for the PWA: JSON APIs, optional script library (D1), API keys (KV), usage meters, on-chain proxy, and a WebSocket session relay (Durable Objects). It is not a full Pine Script interpreter in production today.
+The AXIS Cloudflare® Worker (worker/) is the edge data plane for the PWA: JSON APIs, optional script library (D1), API keys (KV), usage meters, on-chain proxy, and a WebSocket session relay (Durable Objects). It is not a full Pine Script™ interpreter in production today.
 Honest runtime fact: POST /api/run proxies to EXTERNAL_BACKEND (typically Flask) unless PYODIDE_IN_WORKER=enabled and the in-worker path succeeds. That path is implemented and off by default (disabled in worker/wrangler.toml.example). It is not a planned feature. See Runtime and worker/RUNTIME.md.
 Security (2.0.1+): gated /api/run (auth when API_KEYS / REQUIRE_RUN_AUTH), rate limits + body caps, fail-closed Worker auth when D1 is bound without API_KEYS KV, product-scoped CORS (not open .pages.dev), OAuth env client ids over body clientId. See Auth and CORS.
 Operator path: AXIS CLI — axis setup · axis deploy worker · axis health.
@@ -7947,7 +7984,7 @@ Page map
 | Bindings | wrangler.toml, vars, provision |
 | MCP server | POST /mcp, tools, PWA bridge |
 See also
-Cloudflare deploy
+Cloudflare® deploy
 Engines
 Worker README: worker/README.md`
 ---
@@ -7971,7 +8008,7 @@ description: "Remote MCP for AXIS — Streamable HTTP /mcp, Bearer keys, Worker 
 ---
 MCP server
 Abstract
-AXIS exposes a Model Context Protocol server on the Cloudflare Worker so agents can request and respond across the data plane and a connected PWA.
+AXIS exposes a Model Context Protocol server on the Cloudflare® Worker so agents can request and respond across the data plane and a connected PWA.
 | Plane | Live tab? | Tools |
 | --- | --- | --- |
 | Worker | No | axis_health, axis_request, axis_run, axis_scripts_, axis_keys_, axis_usage, axis_onchain, axis_market |
@@ -7993,7 +8030,7 @@ Canonical host: https://worker.axis.hoox.sh.
 | /api/mcp/bridge?issue=ticket | GET | Bearer | Mint a single-use WS ticket ({ ticket, expiresIn }, 30s TTL) |
 Health JSON includes features.mcp: true and features.mcpBridge when the DO is bound.
 Bindings
-MCP_BRIDGE Durable Object (class_name = "McpBridgeDO", migration tag v1 new_sqlite_classes). Declared in worker/wrangler.toml.example. App-plane tools return NO_MCP_BRIDGE until this is deployed. Cloudflare no longer creates KV-backed DO namespaces (new_classes).
+MCP_BRIDGE Durable Object (class_name = "McpBridgeDO", migration tag v1 new_sqlite_classes). Declared in worker/wrangler.toml.example. App-plane tools return NO_MCP_BRIDGE until this is deployed. Cloudflare® no longer creates KV-backed DO namespaces (new_classes).
 Session name is the API-key partition (userId = first 32 hex chars of SHA-256 of the key). Optional suffix userId:label is allowed; foreign session ids are ignored.
 Worker tools
 | Tool | Role |
@@ -8090,8 +8127,6 @@ Capability ids (app_invoke)
 | engine.repair | { symbol?, interval?, historyBars? } — force a stale-series repair (local upload or engine fetch) | yes |
 | stream.get | — live plane: route, engine socket, subscriptions, feed chips, telemetry | no |
 | stream.reset | { resubscribe? } — drop the socket + subscriptions; probes one re-subscribe (default true) | yes |
-| hp.get | — HP engine plane: flags, isolation probe, rung chip, hot-ring window/alignment/seq, GPU overlay DOM state + verdict | no |
-| hp.sample | { windowMs? } — windowed HP liveness: ring seq delta, rAF frame cadence, chart append progress (100–10000 ms, default 1000) | no |
 | status.get | status bar + telemetry | no |
 app_set paths: symbol, interval, source, engine, exchange, theme, chartType, uiScale, live.active, live.preferAfterLoad, editor.doc, editor.open, watchlist.open.
 Resources and prompts

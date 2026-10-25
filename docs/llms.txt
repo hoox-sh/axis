@@ -1,6 +1,6 @@
 # AXIS — llms.txt
 # https://llmstxt.org/ — machine-readable project map for LLMs
-# Generated 2026-10-17
+# Generated 2026-10-25
 
 # AXIS
 > Open charting PWA — own the axes, swap the engine
@@ -52,6 +52,7 @@ Installable AXIS for price and time. Orthogonal plugins: sources, streams, engin
 - [Topologies](https://hoox.sh/axis/docs/architecture/topologies)
 - [State Namespaces](https://hoox.sh/axis/docs/architecture/state-namespaces)
 - [Drawings Parity](https://hoox.sh/axis/docs/architecture/drawings-parity)
+- [Hp Engine](https://hoox.sh/axis/docs/architecture/hp-engine)
 
 ### Plugins
 

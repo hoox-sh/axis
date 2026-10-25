@@ -1043,6 +1043,54 @@ describe('live-wire P1 series + study push', () => {
     expect(h.statuses.some((s) => s.status === 'degraded')).toBe(false);
   });
 
+  test('a replay refusal resumes once in JSON and then stops painting', async () => {
+    resetEngineTransport();
+    const h = makeHarness();
+    const first = h.wire.evalScript({ subId: 's-1', script: 'indicator() {}', meta: {}, bars: BARS });
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 5,
+      payload: { count: 1, plots: [[1]], series: { a: [1] } },
+    });
+    await first;
+    h.emit({
+      type: 'delta',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 8,
+      payload: { base_index: 0, count: 1, tail_len: 1, plots: [[2]], series: { a: [2] } },
+    });
+    await tick();
+    expect(h.resumes).toHaveLength(1);
+    h.emit({
+      type: 'error',
+      id: 's-1',
+      payload: { code: 'replay-unavailable', message: 'no replay' },
+    });
+    expect(h.resumes).toHaveLength(2);
+    expect(h.resumes[1]?.extra).toEqual({ seq: 5 });
+    expect(h.statuses.map((s) => s.status)).toContain('degraded');
+    h.emit({
+      type: 'error',
+      id: 's-1',
+      payload: { code: 'replay-unavailable', message: 'no replay' },
+    });
+    expect(h.resumes).toHaveLength(2);
+    h.emit({
+      type: 'delta',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 9,
+      payload: { base_index: 0, count: 1, tail_len: 1, plots: [[3]], series: { a: [3] } },
+    });
+    await tick();
+    expect(h.applied).toEqual([{ via: 'stream-full' }]);
+  });
+
   test('a script delta with a seq gap resubscribes instead of painting', async () => {
     const h = makeHarness();
     const first = h.wire.evalScript({ subId: 's-1', script: 'indicator() {}', meta: {}, bars: BARS });

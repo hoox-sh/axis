@@ -21,6 +21,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Fixed
 
+- **A refused replay stays on the socket.** After a gap, an error from the engine asks once more without AXB1. A second error leaves the subscription stale and does not paint later deltas. There is no REST repair.
+
 - **An inbox full of closes asks for one snapshot.** Forming tips are still the only frames dropped. When the inbox is over its cap and every frame left is a close, a snapshot, or a confirmed delta, those frames stay and the subscription resumes once. The next snapshot allows another resume.
 
 - **A full send buffer drops forming tips and resyncs when it drains.** Past 1 MB of unsent socket data the socket stays open, forming deltas are not applied, and each live subscription is marked resyncing. When the buffer drains, those subscriptions resume once. Snapshots and closes still pass.
