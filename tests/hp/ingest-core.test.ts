@@ -19,6 +19,64 @@ function tableWithSub(): IngestCursorTable {
   return table;
 }
 
+function axb1Hdr(seq: number) {
+  return {
+    seq,
+    subIdHash: fnv1a32(SUB),
+    sessionHash: fnv1a32('ses-1'),
+    tsMs: 0n,
+  };
+}
+
+/** SNAPSHOT_OHLCV so mapAxb1 has a cursor and priceScale for later tips. */
+function seedOhlcvSnapshot(table: IngestCursorTable, seq = 1): void {
+  const out = decodeInbound(
+    encodeFrame({
+      opcode: Axb1Opcode.SNAPSHOT_OHLCV,
+      ...axb1Hdr(seq),
+      priceScale: 2,
+      count: 1,
+      closedUpto: 0,
+      hotFromIndex: 0,
+      timeS: [60],
+      open: [10000n],
+      high: [10000n],
+      low: [10000n],
+      close: [10000n],
+      volume: [1],
+      flags: [0],
+    }),
+    table,
+  );
+  if (!(out.ok && out.kind === 'frames')) throw new Error('expected snapshot frames');
+}
+
+function inboundFrames(bytes: Uint8Array, table: IngestCursorTable): Redesign2Frame[] {
+  const out = decodeInbound(bytes, table);
+  if (!(out.ok && out.kind === 'frames')) throw new Error('expected frames');
+  return out.frames;
+}
+
+function scheduledCoalescer(): {
+  c: TipCoalescer;
+  seen: Redesign2Frame[][];
+  flush: () => void;
+} {
+  const seen: Redesign2Frame[][] = [];
+  let fire: (() => void) | undefined;
+  const c = new TipCoalescer(
+    (frames) => seen.push(frames),
+    16,
+    (fn) => {
+      fire = fn;
+      return () => {
+        fire = undefined;
+      };
+    },
+  );
+  return { c, seen, flush: () => fire?.() };
+}
+
 describe('decodeInbound JSON', () => {
   test('parses a valid full frame and remembers the id', () => {
     const table = new IngestCursorTable();
@@ -831,6 +889,125 @@ describe('TipCoalescer', () => {
     const payload = tip?.payload as { seqAckFrom?: number } | undefined;
     expect(tip?.seq).toBe(7);
     expect(payload?.seqAckFrom).toBeUndefined();
+  });
+
+  test('AXB1 PLOT_TIP frames union series by keyHash', () => {
+    const table = tableWithSub();
+    seedOhlcvSnapshot(table, 1);
+    const { c, seen, flush } = scheduledCoalescer();
+    const k1 = 0x11111111;
+    const k2 = 0x22222222;
+    c.push(
+      inboundFrames(
+        encodeFrame({
+          opcode: Axb1Opcode.PLOT_TIP,
+          ...axb1Hdr(2),
+          plots: [{ keyHash: k1, kind: ValueKind.PriceTicks, ticks: 10100n }],
+        }),
+        table,
+      ),
+    );
+    c.push(
+      inboundFrames(
+        encodeFrame({
+          opcode: Axb1Opcode.PLOT_TIP,
+          ...axb1Hdr(3),
+          plots: [{ keyHash: k2, kind: ValueKind.UnitFloat64, value: 0.5 }],
+        }),
+        table,
+      ),
+    );
+    expect(seen).toEqual([]);
+    flush();
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toHaveLength(1);
+    const frame = seen[0]?.[0];
+    expect(frame?.type).toBe('delta');
+    expect(frame?.seq).toBe(3);
+    expect(validateRedesign2Frame(frame)).toBe(true);
+    const payload = frame?.payload as { series: Record<string, unknown[]> };
+    expect(payload.series).toEqual({
+      [`p:${k1 >>> 0}`]: [101],
+      [`p:${k2 >>> 0}`]: [0.5],
+    });
+  });
+
+  test('AXB1 PLOT_TIP last value wins for the same keyHash', () => {
+    const table = tableWithSub();
+    seedOhlcvSnapshot(table, 1);
+    const { c, seen, flush } = scheduledCoalescer();
+    const same = 0xaaaa0001;
+    const other = 0xbbbb0002;
+    c.push(
+      inboundFrames(
+        encodeFrame({
+          opcode: Axb1Opcode.PLOT_TIP,
+          ...axb1Hdr(2),
+          plots: [
+            { keyHash: same, kind: ValueKind.UnitFloat64, value: 1 },
+            { keyHash: other, kind: ValueKind.UnitFloat64, value: 3 },
+          ],
+        }),
+        table,
+      ),
+    );
+    c.push(
+      inboundFrames(
+        encodeFrame({
+          opcode: Axb1Opcode.PLOT_TIP,
+          ...axb1Hdr(3),
+          plots: [{ keyHash: same, kind: ValueKind.UnitFloat64, value: 9 }],
+        }),
+        table,
+      ),
+    );
+    flush();
+    const payload = seen[0]?.[0]?.payload as { series: Record<string, number[]> };
+    expect(seen[0]?.[0]?.seq).toBe(3);
+    expect(payload.series).toEqual({
+      [`p:${same >>> 0}`]: [9],
+      [`p:${other >>> 0}`]: [3],
+    });
+  });
+
+  test('an AXB1 PLOT_TIP keeps a pending TIP_UPDATE candle', () => {
+    const table = tableWithSub();
+    seedOhlcvSnapshot(table, 1);
+    const { c, seen, flush } = scheduledCoalescer();
+    const key = 0x9;
+    c.push(
+      inboundFrames(
+        encodeFrame({
+          opcode: Axb1Opcode.TIP_UPDATE,
+          ...axb1Hdr(2),
+          mask: TipMask.CLOSE | TipMask.VOLUME | TipMask.TIME,
+          flags: 1,
+          close: 10100n,
+          volume: 2,
+          timeS: 60,
+        }),
+        table,
+      ),
+    );
+    c.push(
+      inboundFrames(
+        encodeFrame({
+          opcode: Axb1Opcode.PLOT_TIP,
+          ...axb1Hdr(3),
+          plots: [{ keyHash: key, kind: ValueKind.UnitFloat64, value: 8 }],
+        }),
+        table,
+      ),
+    );
+    flush();
+    const payload = seen[0]?.[0]?.payload as {
+      bars: Array<{ close: number; volume: number }>;
+      series: Record<string, number[]>;
+    };
+    expect(seen[0]?.[0]?.seq).toBe(3);
+    expect(payload.bars[0]?.close).toBe(101);
+    expect(payload.bars[0]?.volume).toBe(2);
+    expect(payload.series[`p:${key >>> 0}`]).toEqual([8]);
   });
 
   test('JSON decode strips a forged seq ack', () => {
