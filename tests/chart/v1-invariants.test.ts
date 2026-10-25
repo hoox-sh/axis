@@ -42,6 +42,19 @@ describe('v1 sync invariants', () => {
     expect(seriesPastTip(100, [40, 80, 100])).toBe(null);
   });
 
+  test('pane last-bar times must match the price tip', () => {
+    const rows: Array<{ price: number; panes: number[]; skew: number }> = [
+      { price: 100, panes: [100, 100, 100], skew: 0 },
+      { price: 100, panes: [100, 160], skew: 60 },
+      { price: 100, panes: [40], skew: -60 },
+    ];
+    for (const row of rows) {
+      const gaps = row.panes.map((pane) => paneAxisSkew(row.price, pane));
+      const worst = gaps.reduce((a, b) => (Math.abs(b ?? 0) > Math.abs(a ?? 0) ? b : a), 0);
+      expect({ panes: row.panes, worst }).toEqual({ panes: row.panes, worst: row.skew });
+    }
+  });
+
   test('a missing or non-finite price returns null', () => {
     expect(paneAxisSkew(null, 100)).toBe(null);
     expect(paneAxisSkew(100, null)).toBe(null);

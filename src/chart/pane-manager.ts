@@ -2274,6 +2274,9 @@ export class PaneManager {
 
     const seenCharts = new Set<IChartApi>();
     for (const pane of this.getAllPanes()) {
+      // Facades are distinct Proxy objects around one IChartApi. A slot is
+      // that one chart — subscribe once, then skip the rest of the panes.
+      if (this.slot && seenCharts.size > 0) continue;
       if (seenCharts.has(pane.chart)) continue;
       seenCharts.add(pane.chart);
       const handler = (param: MouseEventParams) => {

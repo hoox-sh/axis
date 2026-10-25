@@ -240,6 +240,16 @@ export function v1MetricsSnapshot(): V1Metrics {
   };
 }
 
+/**
+ * Concept §8 / §11 Perf CI: a change that grows p95 by more than 20% vs the
+ * recorded fixture fails review. Equality at +20% still passes.
+ */
+export function v1BudgetRegressed(baseline: number, current: number, max = 0.2): boolean {
+  if (!Number.isFinite(baseline) || baseline <= 0) return false;
+  if (!Number.isFinite(current) || current < 0) return true;
+  return current > baseline * (1 + max);
+}
+
 /** Tests: `null` restores `requestAnimationFrame`. */
 export function _setV1FrameScheduler(next: FrameScheduler | null): void {
   scheduler = next;

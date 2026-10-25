@@ -165,6 +165,27 @@ describe('v1 apply transaction', () => {
     if (!lengths.ok) expect(lengths.reason).toBe('plot-length');
   });
 
+  test('a thrown plot step does not commit the price paint', () => {
+    let pricePainted = false;
+    const result = runApplyTransaction({
+      seq: 2,
+      lastSeq: 1,
+      steps: [
+        () => {
+          /* price validated */
+        },
+        () => {
+          throw new Error('plot');
+        },
+      ],
+      commit: () => {
+        pricePainted = true;
+      },
+    });
+    expect(result).toEqual({ ok: false, reason: 'aborted' });
+    expect(pricePainted).toBe(false);
+  });
+
   test('a thrown marker setter skips plot setData (markers in steps, plots in commit)', () => {
     const plot = { setData: 0, update: 0 };
     const result = runApplyTransaction({

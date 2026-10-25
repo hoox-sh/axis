@@ -134,6 +134,21 @@ describe('createCoordContext', () => {
   }
   const rect = (left: number, top: number) => ({ left, top }) as unknown as DOMRect;
 
+  it('a drawing unix time stays the anchor after the window drops the head', () => {
+    const all = bars(10, 1_000, 60);
+    const t = all[5]!.time;
+    expect(unixTimeToLogicalIndex(t, all)).toBe(5);
+    const slid = all.slice(1);
+    expect(unixTimeToLogicalIndex(t, slid)).toBe(4);
+    const ctx = createCoordContext(
+      stubChart({ timeToCoordinate: (time: unknown) => (time === t ? 250 : 0) }),
+      stubSeries({}),
+      () => ({ width: 800, height: 600 }),
+      { getBars: () => slid },
+    );
+    expect(ctx.timeToX(t)).toBe(250);
+  });
+
   it('timeToX hits the scale directly and rejects NaN', () => {
     const ctx = createCoordContext(
       stubChart({ timeToCoordinate: () => 123 }),

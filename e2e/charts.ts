@@ -142,3 +142,55 @@ export async function drawingShapeCount(page: Page): Promise<number> {
     )
     .count();
 }
+
+/** Drag the chart host horizontally (pan) and optionally wheel-zoom. */
+export async function panChart(page: Page, dxRatio = -0.2): Promise<void> {
+  const host = page.locator('[data-axis-chart-host]').first();
+  const box = await host.boundingBox();
+  if (!box) throw new Error('chart host has no bounding box');
+  const y = box.y + box.height * 0.5;
+  const fromX = box.x + box.width * 0.55;
+  const toX = box.x + box.width * (0.55 + dxRatio);
+  await page.mouse.move(fromX, y);
+  await page.mouse.down();
+  await page.mouse.move(toX, y, { steps: 12 });
+  await page.mouse.up();
+}
+
+/** Wheel-zoom at the center of the chart host. */
+export async function zoomChart(page: Page, deltaY = 400): Promise<void> {
+  const host = page.locator('[data-axis-chart-host]').first();
+  await host.hover();
+  await page.mouse.wheel(0, deltaY);
+}
+
+/**
+ * Sample rAF frame deltas while `work` runs. Used by the v1 pan/zoom e2e.
+ * CI skips the 50 ms gate (concept §11: no machine-dependent thresholds).
+ */
+export async function measureRafDuring(
+  page: Page,
+  work: () => Promise<void>,
+): Promise<number[]> {
+  await page.evaluate(() => {
+    const w = window as unknown as {
+      __axisFrames?: number[];
+      __axisRafId?: number;
+    };
+    w.__axisFrames = [];
+    let last = performance.now();
+    const tick = (ts: number) => {
+      w.__axisFrames?.push(ts - last);
+      last = ts;
+      w.__axisRafId = requestAnimationFrame(tick);
+    };
+    w.__axisRafId = requestAnimationFrame(tick);
+  });
+  await work();
+  await page.waitForTimeout(80);
+  return page.evaluate(() => {
+    const w = window as unknown as { __axisFrames?: number[]; __axisRafId?: number };
+    if (w.__axisRafId != null) cancelAnimationFrame(w.__axisRafId);
+    return w.__axisFrames ?? [];
+  });
+}

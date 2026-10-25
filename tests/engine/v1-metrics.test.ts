@@ -8,6 +8,7 @@ import { Redesign2DeltaApplier } from '../../src/engine/client-apply';
 import {
   _resetV1Metrics,
   _setV1FrameScheduler,
+  v1BudgetRegressed,
   v1Mark,
   v1MetricsSnapshot,
   v1NotePanActivity,
@@ -98,6 +99,34 @@ describe('v1 metrics', () => {
     applier.applyDelta({ seq: 13, base_index: 0, count: 1, tail_len: 1, series: { a: [2] } });
     applier.applyDelta({ seq: 9, base_index: 0, count: 1, tail_len: 1, series: { a: [3] } });
     expect(v1MetricsSnapshot().counts.seqGap).toBe(1);
+    _resetV1Metrics();
+  });
+
+  test('p95 growing more than 20% vs the fixture fails the budget', () => {
+    expect(v1BudgetRegressed(8, 8)).toBe(false);
+    expect(v1BudgetRegressed(8, 9.6)).toBe(false);
+    expect(v1BudgetRegressed(8, 9.61)).toBe(true);
+    expect(v1BudgetRegressed(100, 121)).toBe(true);
+    expect(v1BudgetRegressed(0, 10)).toBe(false);
+    expect(v1BudgetRegressed(8, Number.NaN)).toBe(true);
+  });
+
+  test('a 10k-bar drag sampler records p95 ≤ 16.7 ms and no frame > 50 ms', () => {
+    _resetV1Metrics();
+    const frames = queuedScheduler();
+    _setV1FrameScheduler(frames.schedule);
+    let ts = 0;
+    v1NotePanActivity(ts);
+    for (let i = 0; i < 24; i++) {
+      if (!frames.drain(ts)) break;
+      ts += 16.7;
+      v1NotePanActivity(ts);
+    }
+    const snap = v1MetricsSnapshot();
+    expect(snap.panFrame.n).toBeGreaterThan(10);
+    expect(snap.panFrame.p95 ?? 99).toBeLessThanOrEqual(16.7);
+    expect(snap.panFrame.max ?? 99).toBeLessThanOrEqual(50);
+    _setV1FrameScheduler(null);
     _resetV1Metrics();
   });
 });

@@ -19,8 +19,10 @@ import {
   clickChart,
   drawingShapeCount,
   loadMockBars,
+  panChart,
   selectDrawingTool,
   stubAppNetwork,
+  zoomChart,
 } from './charts';
 
 test.describe('Drawings overlay @critical', () => {
@@ -59,5 +61,19 @@ test.describe('Drawings overlay @critical', () => {
     // Each selection asserts the Layers active-tool mirror internally.
     await selectDrawingTool(page, 'lines', 'Trend line');
     await selectDrawingTool(page, 'fib', 'Fib retracement');
+  });
+
+  test('a trend line survives pan and zoom', async ({ page }) => {
+    await loadMockBars(page);
+    await selectDrawingTool(page, 'lines', 'Trend line');
+    await clickChart(page, 0.3, 0.4);
+    await page.mouse.move(400, 300);
+    await clickChart(page, 0.6, 0.5);
+    await expect.poll(() => drawingShapeCount(page), { timeout: 10_000 }).toBeGreaterThan(0);
+    const before = await drawingShapeCount(page);
+    await panChart(page, -0.15);
+    await expect.poll(() => drawingShapeCount(page)).toBe(before);
+    await zoomChart(page, 200);
+    await expect.poll(() => drawingShapeCount(page)).toBe(before);
   });
 });

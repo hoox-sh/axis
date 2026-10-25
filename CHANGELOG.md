@@ -17,6 +17,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Added
 
+- **v1 concept tests cover pane/crosshair identity, drawings through a window slide, the 20% p95 budget, and pan/zoom e2e.** `v1BudgetRegressed` fails review when p95 grows more than 20% vs the fixture.
+
 - **A tab keeps at most two engine sockets.** Chart slots share one WebSocket per engine endpoint. A second socket opens only for a different endpoint. A third waits until a slot is released.
 
 ### Removed
@@ -24,6 +26,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 - **The shared-memory ring, GPU candle overlay, and HP flags are gone.** Lightweight Charts paints candles, indicators, and fills. The ingest worker still owns `/ws/live` and decodes AXB1 when `axis.engine.transport` is `worker` (the default). `axis.engine.transport=json` keeps the main-thread client. Settings no longer has a high-performance section. `hp.get`, `hp.sample`, and `dev.trace` are no longer MCP capabilities. Isolation headers stay.
 
 ### Fixed
+
+- **The single chart wires one crosshair listener.** Sub-pane facades are different Proxy objects around the same Lightweight Charts chart. Once the slot exists, later panes do not subscribe again.
 
 - **A series that ends after the price tip is reported.** `applyChartMutations` samples overlay and plot times against the candle axis. Dev warns on every new past time. Production warns about 1 in 32 times, once per time. A shorter series is warmup and is not a warning.
 

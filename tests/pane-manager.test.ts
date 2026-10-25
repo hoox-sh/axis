@@ -161,6 +161,38 @@ describe('PaneManager', () => {
     expect(pm.getPane('volume')?.chart).toBe(volume.chart);
   });
 
+  it('single layout wires one crosshair listener and does not mirror', () => {
+    setChartLayoutMode('single');
+    const price = pm.createPane('price', 'price', 'Price');
+    const rsi = pm.createPane('rsi', 'indicator', 'RSI', 140);
+    const priceChart = price.chart as unknown as {
+      setCrosshairPosition: (...args: unknown[]) => void;
+      _crosshairHandlers: Array<(p: unknown) => void>;
+    };
+    const rsiChart = rsi.chart as unknown as {
+      _crosshairHandlers: Array<(p: unknown) => void>;
+    };
+    expect(rsiChart._crosshairHandlers).toBe(priceChart._crosshairHandlers);
+    let mirrors = 0;
+    const orig = priceChart.setCrosshairPosition.bind(priceChart);
+    priceChart.setCrosshairPosition = (...args: unknown[]) => {
+      mirrors += 1;
+      orig(...args);
+    };
+    let lastTime: unknown;
+    pm.syncCrosshair((data) => {
+      lastTime = data.time;
+    });
+    expect(priceChart._crosshairHandlers).toHaveLength(1);
+    priceChart._crosshairHandlers[0]!({
+      time: 1_700_000_000,
+      point: { x: 10, y: 20 },
+      seriesData: new Map(),
+    });
+    expect(lastTime).toBe(1_700_000_000);
+    expect(mirrors).toBe(0);
+  });
+
   it('syncTimeScales with 2 panes', () => {
     pm.createPane('price', 'price', 'Price');
     pm.createPane('volume', 'volume', 'Volume', 80);
