@@ -786,25 +786,27 @@ export class StreamLiveWire {
       if (!cached) {
         throw new StreamFallbackError('no-state', 'script snapshot produced no state');
       }
-      return this.apply(
-        input.script,
-        input.indicatorId,
-        cached,
-        'stream-full',
-        this.barsForScript(input.bars),
-      );
+      await this.applyScriptPush(input.subId, cached, 'stream-full');
+      return {
+        status: 'success',
+        plots: [],
+        series: {},
+        events: [],
+        meta: {},
+      };
     }
     const cached = applier.cached;
     if (!cached) {
       throw new StreamFallbackError('no-state', 'script has no merged state yet');
     }
-    return this.apply(
-      input.script,
-      input.indicatorId,
-      cached,
-      'stream-delta',
-      this.barsForScript(input.bars),
-    );
+    await this.applyScriptPush(input.subId, cached, 'stream-delta');
+    return {
+      status: 'success',
+      plots: [],
+      series: {},
+      events: [],
+      meta: {},
+    };
   }
 
   /** Route an inbound frame to appliers + handlers. Never throws. */
@@ -1038,16 +1040,16 @@ export class StreamLiveWire {
     subId: string,
     cached: Record<string, unknown>,
     via: 'stream-full' | 'stream-delta',
-  ): void {
+  ): Promise<void> {
     const ctx = this.scriptCtx.get(subId);
-    if (!ctx) return;
+    if (!ctx) return Promise.resolve();
     // The subscription captured the window at subscribe time. A new candle
     // replaces that array when the chart slides, so the paint has to use the
     // window on screen or the closed %B lands on the next bar.
     const bars = this.barsForScript(ctx.bars);
     if (bars !== ctx.bars) this.scriptCtx.set(subId, { ...ctx, bars });
     this.paintLatest.set(subId, { cached, via, bars });
-    void this.flushScriptPaint(subId);
+    return this.flushScriptPaint(subId);
   }
 
   /** One apply at a time. Always the newest payload, never a skipped snapshot. */
@@ -1072,6 +1074,7 @@ export class StreamLiveWire {
       try {
         await this.apply(ctx.script, ctx.indicatorId, job.cached, job.via, job.bars);
       } catch (err) {
+        if (job.via === 'stream-full') throw err;
         const reason = err instanceof Error ? err.message : 'paint failed';
         this.requestAxisResub(subId, `apply aborted — ${reason}`);
       }

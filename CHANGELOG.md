@@ -21,6 +21,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Fixed
 
+- **The first live script snapshot uses the same paint pump as later ticks.** `evalScript` no longer paints off to the side of the chain, so a delta cannot race the snapshot.
+
 - **A live stream snapshot paints the whole indicator.** Stream deltas still update the tip only. Treating the first snapshot as a live tick skipped the apply when the engine window and the chart window disagreed and there was no `bar_times` axis, so the pane stayed empty once live started.
 
 - **A newer snapshot is not painted under a late forming tip.** Script paints wait on a per-subscription chain and always apply the newest payload. The last paint is the snapshot, then later deltas.
