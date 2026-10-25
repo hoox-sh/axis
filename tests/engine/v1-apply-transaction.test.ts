@@ -164,4 +164,24 @@ describe('v1 apply transaction', () => {
     if (!skew.ok) expect(skew.reason).toBe('pane-skew');
     if (!lengths.ok) expect(lengths.reason).toBe('plot-length');
   });
+
+  test('a thrown marker setter skips plot setData (markers in steps, plots in commit)', () => {
+    const plot = { setData: 0, update: 0 };
+    const result = runApplyTransaction({
+      lastSeq: 0,
+      seq: null,
+      steps: [
+        () => {
+          throw new Error('setShapeMarkers');
+        },
+      ],
+      commit: () => {
+        plot.setData += 1;
+        plot.update += 1;
+      },
+    });
+    expect(result).toEqual({ ok: false, reason: 'aborted' });
+    expect(plot.setData).toBe(0);
+    expect(plot.update).toBe(0);
+  });
 });

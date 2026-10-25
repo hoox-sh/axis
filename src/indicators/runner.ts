@@ -120,8 +120,7 @@ import {
 } from './run-helpers';
 import { resolveScriptDisplayName } from './run-target';
 import { buildOverlayPayloads, type OverlayLine, type OverlayOhlc } from './apply-overlays';
-import { applyChartMutations } from './apply-mutations';
-import { applyStrategyMarkers } from './apply-strategy';
+import { applyPlotsAndMarkers } from './apply-mutations';
 import { appliedScriptStillOnChart, applyDrawings } from './apply-drawings';
 import { updateIndicatorStore } from './apply-store';
 import { resolveRunContext, alignApplySeries } from './apply-context';
@@ -1403,21 +1402,26 @@ async function runAndApplyInner(
       // Force a full redraw unless this is a genuine live tick: an input/script
       // recompute changes every bar, so the tip-only smart-apply must not skip
       // the history (see pane-manager applyOverlayLineDataSmart).
-      applyChartMutations({
-        manager,
-        paneId,
-        overlay,
-        overlayLines,
-        overlayOhlc,
-        split,
-        plotMeta,
-        seriesMap,
-        ohlcvTimes,
-        silent,
-        indicatorId,
-        forceFull: opts.liveTick !== true,
+      const painted = applyPlotsAndMarkers({
+        mutation: {
+          manager,
+          paneId,
+          overlay,
+          overlayLines,
+          overlayOhlc,
+          split,
+          plotMeta,
+          seriesMap,
+          ohlcvTimes,
+          silent,
+          indicatorId,
+          forceFull: opts.liveTick !== true,
+        },
+        strategy: { manager, result, scriptType, silent, indicatorId, bars },
       });
-      applyStrategyMarkers({ manager, result, scriptType, silent, indicatorId, bars });
+      if (!painted.ok) {
+        throw new Error(`Chart apply aborted (${painted.reason})`);
+      }
 
       // Debug pins from logs (bar_index/time) — independent of trade/shape lists
       applyDebugPinsToChart();

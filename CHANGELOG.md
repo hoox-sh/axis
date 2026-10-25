@@ -25,6 +25,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Fixed
 
+- **Strategy and plotshape markers commit with the plot series.** Marker lists are built before the chart mutates. One `runApplyTransaction` paints markers then plots, so a throw in `setShapeMarkers` / `setTradeMarkers` does not leave a new plot generation on the chart. The 2500 marker cap is unchanged. Live ticks still update that bar's markers.
+
 - **A price seq gap waits for a snapshot.** A live series delta that skips `seq` no longer paints. The subscription resumes once, later ticks stay dropped, and the next `full` paints.
 
 - **The first live script snapshot uses the same paint pump as later ticks.** `evalScript` no longer paints off to the side of the chain, so a delta cannot race the snapshot.

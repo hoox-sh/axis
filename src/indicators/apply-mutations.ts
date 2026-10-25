@@ -22,8 +22,8 @@
  *
  * LWC series mutations extracted from `runAndApplyInner`: overlay lines,
  * OHLC overlays, badges, bgcolor bands, fills, shape markers, barcolors and
- * the non-overlay price-pane repair. Called inside the orchestrator's chart
- * fence (LWC throws must not reject the run).
+ * the non-overlay price-pane repair. {@link applyPlotsAndMarkers} paints
+ * plots and markers in one `runApplyTransaction` commit (concept §5.5 / §6.1).
  *
  * @module indicators/apply-mutations
  */
@@ -40,11 +40,19 @@ import {
   resolvePlotFillBands,
   shapeSeriesToMarkers,
   type PlotMetaEntry,
+  type ShapeMarkerSpec,
 } from '../results/plot-visuals';
 import type { OverlayLine, OverlayOhlc } from './apply-overlays';
 import type { splitSeriesByKind } from '../results/plot-visuals';
 import { noteSyncSample } from '../chart/v1/invariants';
 import { extendSeriesToWindow } from './runner';
+import { runApplyTransaction, type ApplyResult } from '../engine/v1/apply-transaction';
+import {
+  applyStrategyMarkers,
+  buildStrategyMarkerPlan,
+  type StrategyApplyContext,
+  type StrategyMarkerPlan,
+} from './apply-strategy';
 
 export interface ChartMutationContext {
   manager: PaneManager;
@@ -59,6 +67,83 @@ export interface ChartMutationContext {
   silent: boolean;
   indicatorId: string | undefined;
   forceFull: boolean;
+  /**
+   * When true, skip `setShapeMarkers` so the caller can paint shapes in the
+   * same apply transaction as plots (concept §5.5 / §6.1).
+   */
+  skipShapeMarkers?: boolean;
+}
+
+/** plotshape / plotchar markers. Pure — does not touch the chart. */
+export function buildShapeMarkers(
+  ctx: Pick<ChartMutationContext, 'split' | 'ohlcvTimes'>,
+): ShapeMarkerSpec[] {
+  return ctx.split.shapes
+    .filter(({ meta }) => plotDisplayHas(meta.display, PLOT_DISPLAY.pane))
+    .flatMap(({ key, values, meta }) =>
+      shapeSeriesToMarkers(ctx.ohlcvTimes, values, meta, { idPrefix: key }),
+    );
+}
+
+export function applyShapeMarkers(
+  ctx: Pick<
+    ChartMutationContext,
+    'manager' | 'indicatorId' | 'overlay' | 'paneId' | 'silent' | 'split'
+  >,
+  markers: ShapeMarkerSpec[],
+): void {
+  const shapeOwner = ctx.indicatorId ?? EDITOR_RUN_KEY;
+  if (markers.length || ctx.split.shapes.length) {
+    ctx.manager.setShapeMarkers(
+      markers,
+      shapeOwner,
+      ctx.overlay ? 'price' : ctx.paneId,
+    );
+  }
+  if (markers.length && !ctx.silent) {
+    appendLog('ok', `plotshape: ${markers.length} marker(s)`, 'plot');
+  }
+}
+
+export type PlotsAndMarkersInput = {
+  mutation: ChartMutationContext;
+  strategy: StrategyApplyContext;
+};
+
+/**
+ * One synchronous apply: build markers, then paint markers and plots in a
+ * single `runApplyTransaction` commit.
+ *
+ * Marker setters run before plot `setData`/`update` so a throw in
+ * `setShapeMarkers` / `setTradeMarkers` never leaves a new plot generation
+ * on the chart. Overlay=false shapes need a plot series as host, so they
+ * are re-applied once after plots.
+ */
+export function applyPlotsAndMarkers(input: PlotsAndMarkersInput): ApplyResult {
+  let shapeMarkers: ShapeMarkerSpec[] = [];
+  let strategyPlan: StrategyMarkerPlan | undefined;
+  const mutation = input.mutation;
+  const shapePane = mutation.overlay ? 'price' : mutation.paneId;
+  return runApplyTransaction({
+    lastSeq: 0,
+    seq: null,
+    steps: [
+      () => {
+        shapeMarkers = buildShapeMarkers(mutation);
+      },
+      () => {
+        strategyPlan = buildStrategyMarkerPlan(input.strategy);
+      },
+    ],
+    commit: () => {
+      applyShapeMarkers(mutation, shapeMarkers);
+      applyStrategyMarkers(input.strategy, strategyPlan);
+      applyChartMutations({ ...mutation, skipShapeMarkers: true });
+      if (shapePane !== 'price' && (shapeMarkers.length || mutation.split.shapes.length)) {
+        applyShapeMarkers(mutation, shapeMarkers);
+      }
+    },
+  });
 }
 
 export function applyChartMutations(ctx: ChartMutationContext): void {
@@ -171,22 +256,8 @@ export function applyChartMutations(ctx: ChartMutationContext): void {
     /* drawing layer optional in tests */
   }
 
-  // plotshape / plotchar → markers (owner-scoped so multi-script runs keep others)
-  const shapeMarkers = ctx.split.shapes
-    .filter(({ meta }) => plotDisplayHas(meta.display, PLOT_DISPLAY.pane))
-    .flatMap(({ key, values, meta }) =>
-      shapeSeriesToMarkers(ctx.ohlcvTimes, values, meta, { idPrefix: key }),
-    );
-  const shapeOwner = ctx.indicatorId ?? EDITOR_RUN_KEY;
-  if (shapeMarkers.length || ctx.split.shapes.length) {
-    ctx.manager.setShapeMarkers(
-      shapeMarkers,
-      shapeOwner,
-      ctx.overlay ? 'price' : ctx.paneId,
-    );
-  }
-  if (shapeMarkers.length && !ctx.silent) {
-    appendLog('ok', `plotshape: ${shapeMarkers.length} marker(s)`, 'plot');
+  if (!ctx.skipShapeMarkers) {
+    applyShapeMarkers(ctx, buildShapeMarkers(ctx));
   }
 
   // barcolor() → tint price candles (LWC per-bar color fields).
