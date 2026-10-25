@@ -5,9 +5,12 @@
 
 import { describe, expect, test } from 'bun:test';
 import {
+  _resetSyncSampleForTests,
   closedBarHash,
+  noteSyncSample,
   paneAxisSkew,
   plotLengthSkew,
+  plotOverhang,
   seriesPastTip,
   type ClosedBar,
 } from '../../src/chart/v1/invariants';
@@ -63,5 +66,20 @@ describe('v1 sync invariants', () => {
 
     const older = bars.map((row, i) => (i === 0 ? { ...row, close: 99 } : row));
     expect(closedBarHash(older, 8)).toBe(hash);
+  });
+
+  test('a plot column past the price axis warns once in dev and is sampled in prod', () => {
+    _resetSyncSampleForTests();
+    expect(plotOverhang(10, [10, 8])).toBe(0);
+    expect(plotOverhang(10, [12, 15])).toBe(5);
+    const messages: string[] = [];
+    noteSyncSample(10, [12], { dev: true, warn: (message) => messages.push(message) });
+    noteSyncSample(10, [12], { dev: true, warn: (message) => messages.push(message) });
+    expect(messages).toEqual(['[axis] plot column is 2 bars past the price axis']);
+    _resetSyncSampleForTests();
+    messages.length = 0;
+    noteSyncSample(10, [14], { dev: false, rand: 0.5, warn: (message) => messages.push(message) });
+    noteSyncSample(10, [14], { dev: false, rand: 0, warn: (message) => messages.push(message) });
+    expect(messages).toEqual(['[axis] plot column is 4 bars past the price axis']);
   });
 });

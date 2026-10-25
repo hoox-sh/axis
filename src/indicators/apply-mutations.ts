@@ -43,6 +43,7 @@ import {
 } from '../results/plot-visuals';
 import type { OverlayLine, OverlayOhlc } from './apply-overlays';
 import type { splitSeriesByKind } from '../results/plot-visuals';
+import { noteSyncSample } from '../chart/v1/invariants';
 import { extendSeriesToWindow } from './runner';
 
 export interface ChartMutationContext {
@@ -61,6 +62,13 @@ export interface ChartMutationContext {
 }
 
 export function applyChartMutations(ctx: ChartMutationContext): void {
+  const plotLengths: number[] = [];
+  for (const column of Object.values(ctx.seriesMap)) {
+    if (Array.isArray(column)) plotLengths.push(column.length);
+  }
+  noteSyncSample(ctx.ohlcvTimes.length, plotLengths, {
+    dev: typeof import.meta !== 'undefined' && import.meta.env?.DEV === true,
+  });
   const overlayOwner = {
     ownerId: ctx.indicatorId ?? EDITOR_RUN_KEY,
     forceFull: ctx.forceFull,

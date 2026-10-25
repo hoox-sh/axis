@@ -42,6 +42,41 @@ export function seriesPastTip(priceLast: number | null, times: readonly number[]
   return past;
 }
 
+/** How many bars the longest plot column extends past the price axis. Shorter is fine. */
+export function plotOverhang(barCount: number, lengths: readonly number[]): number {
+  let over = 0;
+  for (const length of lengths) {
+    if (!Number.isFinite(length) || length <= barCount) continue;
+    const extra = length - barCount;
+    if (extra > over) over = extra;
+  }
+  return over;
+}
+
+const syncWarned = new Set<string>();
+
+/** Dev warns every new overhang. Prod samples about 1 in 32, once per size. */
+export function noteSyncSample(
+  barCount: number,
+  lengths: readonly number[],
+  opts?: { dev?: boolean; rand?: number; warn?: (message: string) => void },
+): void {
+  const over = plotOverhang(barCount, lengths);
+  if (over <= 0) return;
+  const dev = opts?.dev === true;
+  const rand = opts?.rand ?? Math.random();
+  if (!dev && rand >= 1 / 32) return;
+  const key = String(over);
+  if (syncWarned.has(key)) return;
+  syncWarned.add(key);
+  const warn = opts?.warn ?? ((message: string) => console.warn(message));
+  warn(`[axis] plot column is ${over} bars past the price axis`);
+}
+
+export function _resetSyncSampleForTests(): void {
+  syncWarned.clear();
+}
+
 /** Largest absolute gap between `barCount` and a plot column length. */
 export function plotLengthSkew(barCount: number, lengths: readonly number[]): number {
   let skew = 0;
