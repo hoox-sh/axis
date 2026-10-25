@@ -18,16 +18,41 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * AXB1-Light WS engine ws-client module.
+ * Phase 2 WebSocket transport for Redesign2.
  *
- * Placeholder module for WebSocket client used by the AXB1-Light WS engine.
- * The AXB1-Light WS engine uses binary AXB1 frames over WebSocket — no
- * redesign2 WS client needed.
+ * This is a scaffold/client foundation, not yet wired into the evaluation
+ * pipeline. It implements the connection lifecycle that Redesign2 requires:
+ * origin URL mapping, auth handshake, reconnect backoff, heartbeat, and frame
+ * routing hooks. Frame payload validation lives in the dedicated frame validators
+ * (subtask 13), which this client calls through its `onFrame` Hook.
  *
  * @module engine/ws-client
  */
 
-export type Redesign2WsFrameType = 'ws';
+import type {
+  Redesign2RepairFrame,
+  Redesign2ResumeFrame,
+  Redesign2SubscribeFrame,
+  SeriesMeta,
+} from './frames';
+import { normalizeRedesign2Frame, validateRedesign2Frame } from './frames';
+import { PendingRequests, ReconnectHandlers, wireStats } from './wire-bookkeeping';
+
+export type Redesign2WsFrameType =
+  | 'auth'
+  | 'auth.ok'
+  | 'subscribe'
+  | 'resume'
+  | 'repair'
+  | 'unsubscribe'
+  | 'status'
+  | 'full'
+  | 'delta'
+  | 'close'
+  | 'verify.result'
+  | 'ping'
+  | 'pong'
+  | 'error';
 
 export interface Redesign2WsFrame {
   type: Redesign2WsFrameType;
@@ -88,13 +113,6 @@ export function endpointToRedesign2WsUrl(endpoint: string, authToken?: string): 
   return u.toString();
 }
 
-/**
- * AXB1-Light WS client class.
- *
- * Note: This is a lightweight placeholder. The full Redesign2WsClient
- * implementation with heartbeat, reconnect, and frame validation lives
- * in the redesign2 engine. AXB1-Light WS uses a simpler protocol.
- */
 export class Redesign2WsClient {
   private readonly options: Omit<Required<Redesign2WsClientOptions>, 'authToken'> & {
     authToken?: string;
@@ -113,8 +131,8 @@ export class Redesign2WsClient {
   /** Called for frames that fail contract validation (logged + skipped by default). */
   public onMalformed?: (raw: unknown) => void;
 
-  private readonly pending = new Map<string, ((frame: Redesign2WsFrame) => void) | null>();
-  private readonly reconnects = new (() => {})();
+  private readonly pending = new PendingRequests<Redesign2WsFrame>();
+  private readonly reconnects = new ReconnectHandlers();
   private openedOnce = false;
 
   constructor(options: Redesign2WsClientOptions) {
@@ -138,13 +156,17 @@ export class Redesign2WsClient {
     return this.url;
   }
 
+  /**
+   * Diagnostic counters for MCP `stream.get` — connection bookkeeping only,
+   * never the auth token (it travels as a frame, not in the URL).
+   */
   stats(): { open: boolean; openedOnce: boolean; reconnectAttempts: number; stopped: boolean } {
-    return {
+    return wireStats({
       open: this.isOpen,
       openedOnce: this.openedOnce,
       reconnectAttempts: this.reconnectAttempts,
       stopped: this.stopped,
-    };
+    });
   }
 
   /**
@@ -181,6 +203,16 @@ export class Redesign2WsClient {
       }
       this.ws = ws;
 
+      /**
+       * True while `ws` is still the client's live socket. A superseded socket
+       * — its attempt timed out or errored while a later attempt took over
+       * `this.ws` — must not touch client state: its late open / error / close
+       * and its frames all belong to a dead connection. Nulling `this.ws` from
+       * a stale close used to tear down the *live* socket, so the auth frame
+       * sent from the live socket's `onopen` threw `WebSocket not open` out of
+       * the handler (an uncaught window error) and the client sat degraded
+       * until some later reconnect happened to win the race.
+       */
       const owns = (): boolean => this.ws === ws;
 
       const timer = setTimeout(() => {
@@ -216,6 +248,8 @@ export class Redesign2WsClient {
         this.reconnectAttempts = 0;
         this.onStatus?.('open');
         this.startHeartbeat();
+        const first = !this.openedOnce;
+        this.openedOnce = true;
         const fireResume = () => {
           if (first) return;
           this.reconnects.fire();
@@ -227,6 +261,9 @@ export class Redesign2WsClient {
             payload: { token: this.options.authToken },
           });
         }
+        // Upgrade already carries ?api_key= (handshake). Do not block connect on
+        // auth.ok — production timed out here while the engine was still hashing
+        // the key, and subscribe never ran.
         fireResume();
         resolve();
       };
@@ -304,7 +341,7 @@ export class Redesign2WsClient {
       mode?: string;
     },
   ): void {
-    const frame: Redesign2WsFrame = {
+    const frame: Redesign2SubscribeFrame = {
       type: 'subscribe',
       id,
       ts: Date.now(),
@@ -319,7 +356,7 @@ export class Redesign2WsClient {
     lastTime: number,
     extra?: { closed_upto?: number; seq?: number },
   ): void {
-    const frame: Redesign2WsFrame = {
+    const frame: Redesign2ResumeFrame = {
       type: 'resume',
       id,
       ts: Date.now(),
@@ -329,7 +366,7 @@ export class Redesign2WsClient {
   }
 
   requestRepair(id: string, fromTime: number): void {
-    const frame: Redesign2WsFrame = {
+    const frame: Redesign2RepairFrame = {
       type: 'repair',
       id,
       ts: Date.now(),
@@ -349,13 +386,7 @@ export class Redesign2WsClient {
    * socket close so a dead connection cannot leak waiters.
    */
   awaitFrame(id: string, timeoutMs = 10_000): Promise<Redesign2WsFrame> {
-    return new Promise((resolve) => {
-      this.pending.set(id, resolve);
-      setTimeout(() => {
-        this.pending.delete(id);
-        resolve(null);
-      }, timeoutMs);
-    });
+    return this.pending.awaitFrame(id, timeoutMs);
   }
 
   /**
@@ -393,7 +424,7 @@ export class Redesign2WsClient {
       return;
     }
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
-    const frame = this.normalizeRedesign2Frame(parsed) as Redesign2WsFrame;
+    const frame = normalizeRedesign2Frame(parsed) as Redesign2WsFrame;
     if (!frame || typeof frame.type !== 'string') return;
     if (frame.type === 'pong') {
       if (this.pongTimer) {
@@ -402,7 +433,7 @@ export class Redesign2WsClient {
       }
       return;
     }
-    if (!this.validateRedesign2Frame(frame)) {
+    if (!validateRedesign2Frame(frame)) {
       if (this.onMalformed) {
         this.onMalformed(parsed);
       } else if (typeof console !== 'undefined') {
@@ -417,10 +448,7 @@ export class Redesign2WsClient {
   }
 
   private dropPending(err: Error): void {
-    this.pending.forEach((resolve) => {
-      if (resolve) resolve(err);
-    });
-    this.pending.clear();
+    this.pending.dropAll(err);
   }
 
   private startHeartbeat(): void {
@@ -484,31 +512,5 @@ export class Redesign2WsClient {
       this.reconnectTimer = null;
     }
     this.reconnectAttempts = 0;
-  }
-
-  private normalizeRedesign2Frame(raw: unknown): Redesign2WsFrame | null {
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
-    return raw as Redesign2WsFrame;
-  }
-
-  private validateRedesign2Frame(frame: Redesign2WsFrame): boolean {
-    if (!frame || typeof frame.type !== 'string') return false;
-    const validTypes = [
-      'auth',
-      'auth.ok',
-      'subscribe',
-      'resume',
-      'repair',
-      'unsubscribe',
-      'status',
-      'full',
-      'delta',
-      'close',
-      'verify.result',
-      'ping',
-      'pong',
-      'error',
-    ];
-    return validTypes.includes(frame.type);
   }
 }
