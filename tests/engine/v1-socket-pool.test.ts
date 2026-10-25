@@ -53,6 +53,60 @@ describe('tab socket pool', () => {
     expect(pool.get('c')).toBeUndefined();
   });
 
+  test('four acquires of the same fingerprint share one client', () => {
+    let n = 0;
+    const pool = new SocketPool<number>();
+    const create = () => ++n;
+    for (let i = 0; i < 4; i++) {
+      const got = pool.acquire('fp', create);
+      expect(got.status).toBe('live');
+    }
+    expect(n).toBe(1);
+    expect(pool.size()).toBe(1);
+    expect(pool.refs('fp')).toBe(4);
+    expect(pool.release('fp')).toBeUndefined();
+    expect(pool.release('fp')).toBeUndefined();
+    expect(pool.release('fp')).toBeUndefined();
+    expect(pool.size()).toBe(1);
+    expect(pool.get('fp')).toBe(1);
+    expect(pool.refs('fp')).toBe(1);
+    expect(pool.release('fp')).toBe(1);
+    expect(pool.size()).toBe(0);
+    expect(pool.get('fp')).toBeUndefined();
+  });
+
+  test('a holder moving A→B stays size 1', () => {
+    let n = 0;
+    const pool = new SocketPool<string>();
+    const create = (id: string) => () => {
+      n += 1;
+      return id;
+    };
+    const a = pool.acquire('a', create('a'), 'primary');
+    expect(a.status).toBe('live');
+    const b = pool.acquire('b', create('b'), 'primary');
+    expect(b.status).toBe('live');
+    if (b.status !== 'live') throw new Error('expected live');
+    expect(b.value).toBe('b');
+    expect(n).toBe(2);
+    expect(pool.size()).toBe(1);
+    expect(pool.get('a')).toBeUndefined();
+    expect(pool.get('b')).toBe('b');
+    expect(pool.refs('b')).toBe(1);
+  });
+
+  test('the same holder does not bump refs on re-acquire', () => {
+    let n = 0;
+    const pool = new SocketPool<number>();
+    const create = () => ++n;
+    pool.acquire('a', create, 'slot-1');
+    pool.acquire('a', create, 'slot-1');
+    expect(n).toBe(1);
+    expect(pool.refs('a')).toBe(1);
+    expect(pool.release('a', 'slot-1')).toBe(1);
+    expect(pool.size()).toBe(0);
+  });
+
   test('release of one fingerprint lets the queued one proceed', async () => {
     let n = 0;
     const pool = new SocketPool<string>();

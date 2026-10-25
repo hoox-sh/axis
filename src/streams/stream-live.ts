@@ -42,7 +42,12 @@ import { Redesign2BarCloseVerifier, compareClosedOhlcv } from '../engine/bar-clo
 import { currentSeriesKey, pairFormSymbol } from '../engine/market-identity';
 import { pyneMarket } from '../data/provider';
 import { StreamLiveWire, StreamFallbackError, type WireClient } from '../engine/live-wire';
-import { SocketPool, socketFingerprint } from '../engine/v1/socket-pool';
+import {
+  SocketPool,
+  TAB_SOCKET_CAP,
+  socketFingerprint,
+  type SocketPoolAcquire,
+} from '../engine/v1/socket-pool';
 import { createLiveWsClient } from '../hp/workers/host';
 import { routeEngineRun } from '../engine/router';
 import { getCachedEngineCapabilities } from '../engines/catalog';
@@ -213,9 +218,25 @@ function continuesChartTail(bars: Bar[]): boolean {
   return delta >= 0 && delta <= step;
 }
 
-const tabSockets = new SocketPool<StreamLiveWire>();
+/** Reserved holder id for `getWire()` — not a chart-layout slot id. */
+const PRIMARY_HOLDER = '\0primary';
+
 let wire: StreamLiveWire | null = null;
 let wireCred = '';
+
+function evictWire(dead: StreamLiveWire): void {
+  try {
+    dead.reset();
+  } catch {
+    /* previous socket is gone */
+  }
+  if (wire === dead) {
+    wire = null;
+    wireCred = '';
+  }
+}
+
+const tabSockets = new SocketPool<StreamLiveWire>(TAB_SOCKET_CAP, evictWire);
 /**
  * (engine + series) → the bar-close verifier for that series.
  *
@@ -233,6 +254,20 @@ function wireFingerprint(): string {
   return socketFingerprint(endpoint, authToken);
 }
 
+/** Active-engine fingerprint, or an explicit endpoint+token pair. */
+export function streamWireFingerprint(endpoint?: string, apiKey?: string): string {
+  if (endpoint != null) return socketFingerprint(endpoint, String(apiKey || '').trim());
+  return wireFingerprint();
+}
+
+function buildWireForFingerprint(fingerprint: string): StreamLiveWire {
+  if (fingerprint === wireFingerprint()) return buildWire();
+  const sep = fingerprint.indexOf('\0');
+  const endpoint = (sep >= 0 ? fingerprint.slice(0, sep) : fingerprint) || 'http://localhost:5002';
+  const token = (sep >= 0 ? fingerprint.slice(sep + 1) : '').trim();
+  return buildWireAt(endpoint, token || undefined);
+}
+
 function buildWire(): StreamLiveWire {
   const cfg = getActiveEngineConfig();
   const endpoint = String(cfg?.endpoint || store.endpoint || 'http://localhost:5002');
@@ -241,6 +276,10 @@ function buildWire(): StreamLiveWire {
   // first frame is `auth`. Read the key the same way every key-gated REST call
   // does, so a vault-restored key reaches the socket too.
   const authToken = String(cfg?.apiKey || '').trim() || undefined;
+  return buildWireAt(endpoint, authToken);
+}
+
+function buildWireAt(endpoint: string, authToken: string | undefined): StreamLiveWire {
   const rawClient = createLiveWsClient({
     endpoint,
     authToken,
@@ -346,23 +385,55 @@ async function getWire(): Promise<StreamLiveWire> {
   const fp = wireFingerprint();
   if (wire && wireCred === fp) return wire;
   // Primary slot moved: drop this tab's previous fingerprint. Other
-  // acquires can still hold a second socket. Cap is 2.
+  // acquires can still hold a second socket. Cap is 2. A single chart
+  // therefore never pins two unused sockets.
   if (wireCred && wireCred !== fp) {
-    const dead = tabSockets.release(wireCred);
-    if (dead) {
-      try {
-        dead.reset();
-      } catch {
-        /* previous socket is gone */
-      }
-    }
-    if (wire === dead) wire = null;
+    tabSockets.release(wireCred, PRIMARY_HOLDER);
   }
-  const got = tabSockets.acquire(fp, buildWire);
+  const got = tabSockets.acquire(fp, () => buildWireForFingerprint(fp), PRIMARY_HOLDER);
   const next = got.status === 'live' ? got.value : await got.wait;
   wire = next;
   wireCred = fp;
   return next;
+}
+
+/**
+ * Pin a chart slot onto an engine fingerprint (concept §4.1).
+ *
+ * Same fingerprint from N slots is one live client (refs = N). A
+ * different fingerprint opens a second socket or queues (tab cap 2).
+ * Does not replace the primary `getWire()` identity unless this pin
+ * was the last holder of that client.
+ */
+export function acquireSlotWire(
+  fingerprint: string,
+  slotId: string,
+): SocketPoolAcquire<StreamLiveWire> {
+  return tabSockets.acquire(fingerprint, () => buildWireForFingerprint(fingerprint), slotId);
+}
+
+/**
+ * Drop one chart-slot pin. Disconnects only when the last holder of
+ * that fingerprint is gone. The primary wire is reset only when this
+ * pin was the last holder of that client.
+ */
+export function releaseSlotWire(fingerprint: string, slotId: string): StreamLiveWire | undefined {
+  return tabSockets.release(fingerprint, slotId);
+}
+
+/** Live engine sockets this tab currently holds. */
+export function streamSocketSize(): number {
+  return tabSockets.size();
+}
+
+/** Live holders of `fingerprint` (0 if queued or unknown). */
+export function streamSocketRefs(fingerprint: string): number {
+  return tabSockets.refs(fingerprint);
+}
+
+/** Primary chart's live wire (lazy). Same pool as `acquireSlotWire`. */
+export function getStreamWire(): Promise<StreamLiveWire> {
+  return getWire();
 }
 
 /**

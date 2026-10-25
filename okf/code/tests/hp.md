@@ -7,7 +7,7 @@ tags: [code, hp, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-25T18:32:15Z
+  at: 2026-10-25T22:20:51Z
 sources:
   - id: tree
     resource: "tests/hp"
@@ -42,4 +42,5 @@ okf_lock: generated
 * [src/hp/axb1](/code/src/hp/axb1.md)
 * [src/hp/calc](/code/src/hp/calc.md)
 * [src/hp/workers](/code/src/hp/workers.md)
+* [src/store](/code/src/store.md)
 * [src/sw](/code/src/sw.md)

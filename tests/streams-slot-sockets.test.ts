@@ -1,0 +1,110 @@
+/**
+ * Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+import './setup';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { reconcile } from 'solid-js/store';
+import { setIngestWorkerAvailableForTests } from '../src/hp/workers/host';
+import { setEngineApiKey } from '../src/storage/vault';
+import { setStore, store } from '../src/store';
+import {
+  acquireSlotWire,
+  getStreamWire,
+  releaseSlotWire,
+  resetStreamWire,
+  streamSocketRefs,
+  streamSocketSize,
+  streamStop,
+  streamWireFingerprint,
+} from '../src/streams/stream-live';
+
+beforeEach(() => {
+  setIngestWorkerAvailableForTests(false);
+  setStore('activePlugins', reconcile({ ...(store.activePlugins ?? {}), engine: 'server' }) as never);
+  setStore('engine', 'server');
+  setStore('symbol', 'BTCUSDT');
+  setStore('interval', '1m');
+  setStore('exchange', 'binance');
+  setStore('endpoint', 'http://engine.test');
+  setStore(
+    'pluginsConfig',
+    reconcile({
+      'engine:server': { endpoint: 'http://engine.test', apiKey: 'key-1' },
+    }) as never,
+  );
+  setEngineApiKey('server', 'key-1');
+  resetStreamWire();
+});
+
+afterEach(() => {
+  streamStop();
+  setIngestWorkerAvailableForTests(null);
+});
+
+describe('chart slot socket pins (concept §4.1)', () => {
+  it('getWire engine change does not leak a third live socket', async () => {
+    await getStreamWire();
+    expect(streamSocketSize()).toBe(1);
+    const fpA = streamWireFingerprint();
+    expect(streamSocketRefs(fpA)).toBe(1);
+    setStore('endpoint', 'http://other.test');
+    await getStreamWire();
+    expect(streamSocketSize()).toBe(1);
+    expect(streamSocketRefs(fpA)).toBe(0);
+    expect(streamSocketRefs(streamWireFingerprint())).toBe(1);
+  });
+
+  it('four slot pins of the same fingerprint share one client', () => {
+    const fp = streamWireFingerprint();
+    for (let i = 0; i < 4; i++) {
+      const got = acquireSlotWire(fp, `slot-${i}`);
+      expect(got.status).toBe('live');
+    }
+    expect(streamSocketSize()).toBe(1);
+    expect(streamSocketRefs(fp)).toBe(4);
+    expect(releaseSlotWire(fp, 'slot-0')).toBeUndefined();
+    expect(releaseSlotWire(fp, 'slot-1')).toBeUndefined();
+    expect(releaseSlotWire(fp, 'slot-2')).toBeUndefined();
+    expect(streamSocketSize()).toBe(1);
+    const last = releaseSlotWire(fp, 'slot-3');
+    expect(last).toBeDefined();
+    expect(streamSocketSize()).toBe(0);
+  });
+
+  it('a third fingerprint queues until a slot releases', async () => {
+    await getStreamWire();
+    const fpB = streamWireFingerprint('http://b.test', 'k');
+    const fpC = streamWireFingerprint('http://c.test', 'k');
+    expect(acquireSlotWire(fpB, 's2').status).toBe('live');
+    const third = acquireSlotWire(fpC, 's3');
+    expect(third.status).toBe('queued');
+    expect(streamSocketSize()).toBe(2);
+    releaseSlotWire(fpB, 's2');
+    if (third.status !== 'queued') throw new Error('expected queued');
+    await third.wait;
+    expect(streamSocketSize()).toBe(2);
+    expect(streamSocketRefs(fpC)).toBe(1);
+    expect(streamSocketRefs(fpB)).toBe(0);
+  });
+
+  it('a slot pin keeps the old endpoint when the primary moves', async () => {
+    const fpA = streamWireFingerprint();
+    await getStreamWire();
+    const pin = acquireSlotWire(fpA, 'slot-2');
+    expect(pin.status).toBe('live');
+    expect(streamSocketSize()).toBe(1);
+    expect(streamSocketRefs(fpA)).toBe(2);
+    setStore('endpoint', 'http://other.test');
+    await getStreamWire();
+    expect(streamSocketSize()).toBe(2);
+    expect(streamSocketRefs(fpA)).toBe(1);
+    expect(streamSocketRefs(streamWireFingerprint())).toBe(1);
+    const primary = await getStreamWire();
+    expect(primary).not.toBe(pin.status === 'live' ? pin.value : undefined);
+    const dead = releaseSlotWire(fpA, 'slot-2');
+    expect(dead).toBeDefined();
+    expect(streamSocketSize()).toBe(1);
+  });
+});
