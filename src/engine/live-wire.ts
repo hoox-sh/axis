@@ -720,6 +720,7 @@ export class StreamLiveWire {
     // seq and refuse to paint it; the next delta is continuous with that
     // cursor and must still be allowed to paint.
     const acceptedSeq = applier.lastSeq;
+    const seqAckFrom = typeof payload.seqAckFrom === 'number' ? payload.seqAckFrom : undefined;
     const delta = {
       seq: typeof frame.seq === 'number' ? frame.seq : -1,
       base_index: baseIndex,
@@ -729,6 +730,7 @@ export class StreamLiveWire {
       series: payload.series as Record<string, unknown[]> | undefined,
       forming: payload.forming === true,
       unchanged: payload.unchanged === true,
+      ...(seqAckFrom != null ? { seqAckFrom } : {}),
       ...(times ? { times } : {}),
     };
     let out = applier.applyDelta(delta);
@@ -745,7 +747,7 @@ export class StreamLiveWire {
     //   a frozen pane on every tick.
     if (!out.ok && out.reason === 'needs-full') {
       const incomingSeq = typeof frame.seq === 'number' ? frame.seq : -1;
-      if (classifySeqGap(applier.lastSeq, incomingSeq).kind !== 'continuous') {
+      if (classifySeqGap(applier.lastSeq, incomingSeq, seqAckFrom).kind !== 'continuous') {
         v1Count('resync');
         this.handlers.onStatus(subId, 'degraded', { message: 'delta gap — resubscribing' });
         const gapCtx = this.scriptCtx.get(subId);
@@ -789,6 +791,7 @@ export class StreamLiveWire {
     runApplyTransaction({
       seq,
       lastSeq: acceptedSeq,
+      ...(seqAckFrom != null ? { seqAckFrom } : {}),
       commit: () => {
         if (typeof frame.seq === 'number') this.appliedSeq.set(subId, frame.seq);
         this.handlers.onStatus(subId, 'live');

@@ -35,7 +35,8 @@
  * @module engines/series-repair
  */
 
-import { appendLog, setFeedStatus, setTelemetryState } from '../store';
+import { appendLog, setFeedStatus, setTelemetryState, store } from '../store';
+import { getActiveEngineConfig } from '../plugins/active';
 import type { Bar } from '../store/types';
 import { currentSeriesKey } from '../engine/market-identity';
 import { FALLBACK_MAJORS } from '../data/symbol-catalog';
@@ -139,6 +140,84 @@ export function engineSeriesStale(input: {
  * holds (the fresher local series) while the engine's series is re-provisioned;
  * the next snapshot/tick paints the healed window.
  */
+/**
+ * A script axis jumped while the chart did not. Ask the broker to upload the
+ * local window. The in-memory session is dropped when that upload lands.
+ */
+let axisBehindAt = 0;
+
+/**
+ * The script axis ends before the chart tip. Drop the memoized session so the
+ * next run reads the store, which already has the live bar. Cooldown keeps a
+ * one-bar forming lag from recreating the session on every tick.
+ */
+export function noteEngineAxisBehindChart(engineLast: number, chartLast: number): void {
+  if (!(chartLast > engineLast)) return;
+  const now = Date.now();
+  if (now - axisBehindAt < 5_000) return;
+  axisBehindAt = now;
+  const symbol = String(store.symbol || '');
+  const interval = String(store.interval || '1m');
+  const exchange = String(store.exchange || 'binance').trim().toLowerCase() || 'binance';
+  let endpoint = String(store.endpoint || '');
+  try {
+    const cfg = getActiveEngineConfig() || {};
+    endpoint = String(cfg.endpoint || endpoint);
+  } catch {
+    /* engine config is optional */
+  }
+  if (!endpoint) return;
+  try {
+    invalidateDataSessions(endpoint, {
+      exchange,
+      market: store.provider?.market || 'spot',
+      symbol,
+      interval,
+    });
+    invalidateLiveSessionsForSeries(endpoint, symbol, interval);
+  } catch {
+    /* the extended tip still paints this frame */
+  }
+}
+
+export function noteChartSeriesHole(engineTimes: readonly number[], chartBars: readonly Bar[]): void {
+  const interval = String(store.interval || '1m');
+  const axisGap = internalGapBars(
+    engineTimes.map((time) => ({ time })),
+    interval,
+  );
+  const chartGap = internalGapBars(chartBars, interval);
+  if (axisGap < ENGINE_SERIES_GAP_BARS || axisGap <= chartGap + ENGINE_SERIES_GAP_BARS) return;
+  const symbol = String(store.symbol || '');
+  const exchange = String(store.exchange || 'binance').trim().toLowerCase() || 'binance';
+  let endpoint = String(store.endpoint || '');
+  let apiKey = '';
+  try {
+    const cfg = getActiveEngineConfig() || {};
+    endpoint = String(cfg.endpoint || endpoint);
+    apiKey = String(cfg.apiKey || '');
+  } catch {
+    /* engine config is optional */
+  }
+  noteStaleEngineSeries({
+    exchange,
+    symbol,
+    interval,
+    engineNewest: newestBarTime(chartBars) || null,
+    reason: `internal gap of ${axisGap} bars`,
+    repair: {
+      endpoint,
+      apiKey,
+      key: {
+        exchange,
+        market: store.provider?.market || 'spot',
+        symbol,
+        interval,
+      },
+    },
+  });
+}
+
 export function noteStaleEngineSeries(opts: StaleEngineSeriesNotice): void {
   let seriesKey = '';
   try {

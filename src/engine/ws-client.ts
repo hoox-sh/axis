@@ -35,7 +35,7 @@ import type {
   Redesign2SubscribeFrame,
   SeriesMeta,
 } from './frames';
-import { normalizeRedesign2Frame, validateRedesign2Frame } from './frames';
+import { normalizeRedesign2Frame, stripSeqAck, validateRedesign2Frame } from './frames';
 import { v1Mark } from './v1/metrics';
 import { PendingRequests, ReconnectHandlers, wireStats } from './wire-bookkeeping';
 
@@ -443,7 +443,7 @@ export class Redesign2WsClient {
       return;
     }
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
-    const frame = normalizeRedesign2Frame(parsed) as Redesign2WsFrame;
+    const frame = stripSeqAck(normalizeRedesign2Frame(parsed)) as Redesign2WsFrame;
     if (!frame || typeof frame.type !== 'string') return;
     // Stamp before the rest of the handler so tick→apply includes parse.
     if (frame.type === 'full' || frame.type === 'delta' || frame.type === 'close') {

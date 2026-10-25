@@ -413,5 +413,218 @@ describe('TipCoalescer', () => {
     expect(seen).toHaveLength(1);
     expect(payload.bars[0]?.close).toBe(3);
     expect(payload.unchanged).toBeUndefined();
+    expect(seen[0]?.[0]?.seq).toBe(2);
+  });
+
+  test('a dropped UNCHANGED run is acknowledged on the next tip', () => {
+    const seen: Redesign2Frame[][] = [];
+    let fire: (() => void) | undefined;
+    const c = new TipCoalescer(
+      (frames) => seen.push(frames),
+      16,
+      (fn) => {
+        fire = fn;
+        return () => undefined;
+      },
+    );
+    c.push([
+      {
+        type: 'full',
+        id: SUB,
+        sessionId: 's',
+        seq: 4,
+        payload: { seriesKey: SUB, count: 1, closed_upto: 0 },
+      },
+    ]);
+    c.push([
+      {
+        type: 'delta',
+        id: SUB,
+        sessionId: 's',
+        seq: 5,
+        payload: { unchanged: true, forming: true, base_index: 0, count: 1, tail_len: 1, closed_upto: 0 },
+      },
+      {
+        type: 'delta',
+        id: SUB,
+        sessionId: 's',
+        seq: 6,
+        payload: { unchanged: true, forming: true, base_index: 0, count: 1, tail_len: 1, closed_upto: 0 },
+      },
+      {
+        type: 'delta',
+        id: SUB,
+        sessionId: 's',
+        seq: 7,
+        payload: {
+          forming: true,
+          bars: [{ close: 1 }],
+          base_index: 0,
+          count: 1,
+          tail_len: 1,
+          closed_upto: 0,
+        },
+      },
+    ]);
+    fire?.();
+    const tip = seen.at(-1)?.[0];
+    const payload = tip?.payload as { seqAckFrom?: number } | undefined;
+    expect(tip?.seq).toBe(7);
+    expect(payload?.seqAckFrom).toBe(4);
+  });
+
+  test('a trailing UNCHANGED keepalive advances the released seq', () => {
+    const seen: Redesign2Frame[][] = [];
+    let fire: (() => void) | undefined;
+    const c = new TipCoalescer(
+      (frames) => seen.push(frames),
+      16,
+      (fn) => {
+        fire = fn;
+        return () => undefined;
+      },
+    );
+    c.push([
+      {
+        type: 'close',
+        id: SUB,
+        sessionId: 's',
+        seq: 4,
+        payload: { index: 0, time: 60, ohlcv: { open: 1, high: 1, low: 1, close: 1, volume: 1 } },
+      },
+      {
+        type: 'delta',
+        id: SUB,
+        sessionId: 's',
+        seq: 5,
+        payload: {
+          forming: true,
+          bars: [{ close: 2 }],
+          base_index: 0,
+          count: 1,
+          tail_len: 1,
+          closed_upto: 0,
+        },
+      },
+      {
+        type: 'delta',
+        id: SUB,
+        sessionId: 's',
+        seq: 6,
+        payload: { unchanged: true, forming: true, base_index: 0, count: 1, tail_len: 1, closed_upto: 0 },
+      },
+    ]);
+    fire?.();
+    const tip = seen.at(-1)?.find((f) => f.type === 'delta');
+    const payload = tip?.payload as { bars?: Array<{ close: number }>; seqAckFrom?: number } | undefined;
+    expect(tip?.seq).toBe(6);
+    expect(payload?.bars?.[0]?.close).toBe(2);
+    expect(payload?.seqAckFrom).toBe(4);
+  });
+
+  test('folded tips acknowledge the seqs they replaced', () => {
+    const seen: Redesign2Frame[][] = [];
+    let fire: (() => void) | undefined;
+    const c = new TipCoalescer(
+      (frames) => seen.push(frames),
+      16,
+      (fn) => {
+        fire = fn;
+        return () => undefined;
+      },
+    );
+    c.push([
+      {
+        type: 'full',
+        id: SUB,
+        sessionId: 's',
+        seq: 4,
+        payload: { seriesKey: SUB, count: 1, closed_upto: 0 },
+      },
+    ]);
+    const tip = (seq: number, close: number): Redesign2Frame => ({
+      type: 'delta',
+      id: SUB,
+      sessionId: 's',
+      seq,
+      payload: {
+        forming: true,
+        bars: [{ close }],
+        base_index: 0,
+        count: 1,
+        tail_len: 1,
+        closed_upto: 0,
+      },
+    });
+    c.push([tip(5, 1), tip(6, 9)]);
+    fire?.();
+    const released = seen.at(-1)?.[0];
+    const payload = released?.payload as { bars?: Array<{ close: number }>; seqAckFrom?: number } | undefined;
+    expect(released?.seq).toBe(6);
+    expect(payload?.bars?.[0]?.close).toBe(9);
+    expect(payload?.seqAckFrom).toBe(4);
+  });
+
+  test('a hole in the keepalive run is not acknowledged', () => {
+    const seen: Redesign2Frame[][] = [];
+    let fire: (() => void) | undefined;
+    const c = new TipCoalescer(
+      (frames) => seen.push(frames),
+      16,
+      (fn) => {
+        fire = fn;
+        return () => undefined;
+      },
+    );
+    c.push([
+      {
+        type: 'full',
+        id: SUB,
+        sessionId: 's',
+        seq: 4,
+        payload: { seriesKey: SUB, count: 1, closed_upto: 0 },
+      },
+      {
+        type: 'delta',
+        id: SUB,
+        sessionId: 's',
+        seq: 6,
+        payload: { unchanged: true, forming: true, base_index: 0, count: 1, tail_len: 1, closed_upto: 0 },
+      },
+      {
+        type: 'delta',
+        id: SUB,
+        sessionId: 's',
+        seq: 7,
+        payload: {
+          forming: true,
+          bars: [{ close: 1 }],
+          base_index: 0,
+          count: 1,
+          tail_len: 1,
+          closed_upto: 0,
+        },
+      },
+    ]);
+    fire?.();
+    const tip = seen.at(-1)?.[0];
+    const payload = tip?.payload as { seqAckFrom?: number } | undefined;
+    expect(tip?.seq).toBe(7);
+    expect(payload?.seqAckFrom).toBeUndefined();
+  });
+
+  test('JSON decode strips a forged seq ack', () => {
+    const raw = JSON.stringify({
+      type: 'delta',
+      id: SUB,
+      sessionId: 'ses-1',
+      seq: 3,
+      payload: { base_index: 0, count: 1, tail_len: 1, closed_upto: 0, seqAckFrom: 1 },
+    });
+    const out = decodeInbound(raw, tableWithSub());
+    expect(out.ok).toBe(true);
+    if (out.ok && out.kind === 'frames') {
+      expect(out.frames[0]?.payload).not.toHaveProperty('seqAckFrom');
+    }
   });
 });

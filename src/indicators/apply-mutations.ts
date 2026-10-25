@@ -43,7 +43,7 @@ import {
 } from '../results/plot-visuals';
 import type { OverlayLine, OverlayOhlc } from './apply-overlays';
 import type { splitSeriesByKind } from '../results/plot-visuals';
-import { tailAlignSeriesToWindow } from './runner';
+import { extendSeriesToWindow } from './runner';
 
 export interface ChartMutationContext {
   manager: PaneManager;
@@ -137,11 +137,12 @@ export function applyChartMutations(ctx: ChartMutationContext): void {
           fillBands.map((f) => ({
             name: f.name,
             times,
-            // Index zip: pin the tail so a shorter series still covers the last bars.
-            upper: tailAlignSeriesToWindow(f.upper, axisLen) as (number | null)[],
-            lower: tailAlignSeriesToWindow(f.lower, axisLen) as (number | null)[],
+            // Extend a short band onto the new tip. Tail-pinning head-pads and
+            // slides the cloud onto later bars.
+            upper: extendSeriesToWindow(f.upper, axisLen) as (number | null)[],
+            lower: extendSeriesToWindow(f.lower, axisLen) as (number | null)[],
             colors: f.colors
-              ? (tailAlignSeriesToWindow(f.colors, axisLen) as (string | null)[])
+              ? (extendSeriesToWindow(f.colors, axisLen) as (string | null)[])
               : f.colors,
             color: f.color,
           })),

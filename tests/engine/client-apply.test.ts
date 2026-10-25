@@ -4,6 +4,7 @@ import {
   Redesign2DeltaApplier,
   scriptDeltaTimeTail,
 } from '../../src/engine/client-apply';
+import { _resetV1Metrics, v1MetricsSnapshot } from '../../src/engine/v1/metrics';
 import { alignSeriesToTimes } from '../../src/indicators/runner';
 
 describe('redesign2 client apply', () => {
@@ -77,6 +78,42 @@ describe('redesign2 delta applier (F-06)', () => {
     const applier = new Redesign2DeltaApplier();
     const out = applier.applyDelta({ seq: 1, base_index: 0, count: 1, tail_len: 1, series: { a: [1] } });
     expect(out).toEqual({ ok: false, reason: 'delta-before-full' });
+  });
+
+  test('an acknowledged keepalive hole applies and does not count as a gap', () => {
+    _resetV1Metrics();
+    const applier = new Redesign2DeltaApplier();
+    applier.applyFull(full);
+    const out = applier.applyDelta({
+      seq: 12,
+      seqAckFrom: 10,
+      base_index: 2,
+      count: 3,
+      tail_len: 1,
+      plots: [[9]],
+      series: { a: [9] },
+    });
+    expect(out.ok).toBe(true);
+    if (out.ok) {
+      expect(out.full.seqAckFrom).toBeUndefined();
+      expect((out.full.series as Record<string, number[]>).a).toEqual([1, 2, 9]);
+    }
+    expect(applier.lastSeq).toBe(12);
+    expect(v1MetricsSnapshot().counts.seqGap).toBe(0);
+    expect(v1MetricsSnapshot().counts.droppedTip).toBe(1);
+    const wrong = new Redesign2DeltaApplier();
+    wrong.applyFull(full);
+    const rejected = wrong.applyDelta({
+      seq: 13,
+      seqAckFrom: 9,
+      base_index: 2,
+      count: 3,
+      tail_len: 1,
+      series: { a: [9] },
+    });
+    expect(rejected).toEqual({ ok: false, reason: 'needs-full' });
+    expect(v1MetricsSnapshot().counts.seqGap).toBe(1);
+    _resetV1Metrics();
   });
 
   test('seq gap and rebase report needs-full', () => {

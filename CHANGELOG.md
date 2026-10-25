@@ -27,6 +27,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Fixed
 
+- **A dropped keepalive no longer looks like a missed frame.** The tip coalescer still drops `UNCHANGED` frames and still folds several forming tips into one. Those seqs are now acknowledged on the next frame that is actually released (`seqAckFrom`). The applier and the apply transaction advance through that run. A seq nobody saw is still a gap and still resubscribes. JSON decode strips a forged ack, so a socket payload cannot hide a real hole.
+
 - **Tail-align pads at the head again, so a clamped series no longer paints early.** `tailAlignSeriesToWindow` was flipped to pad at the *end* by the P03 perf commit (`33cc4269`) without a test or changelog change, contradicting its own doc block ("a shorter one head-padded with `null`") and the `tailAlign*` contract. Consequence: a `meta.windowBars: 3` free-tier clamp (`[11,12,13]` on a 5-bar chart) painted 11/12/13 on the three **oldest** bars instead of the newest three — every value shifted two bars early. Restored head-padding (the newest engine value belongs on the newest chart bar); the engine-evaluated-fewer-history-bars case stays the job of the bar-time join (`alignSeriesToTimes`). Added a unit regression guard so a future "pad at the end" edit fails loudly, and corrected the stale comment in `apply-context.ts` that described the flipped behaviour. `tests/runner-engine-owned-apply.test.ts` goes 22/7 → 30/0.
 
 - **`fillVisualAttrFromViewport` no longer spins forever (GPU overlay / test-suite hang).** The P03 single-pass rewrite left `const len = 0` with no increment in the merged hot+page fill loop, and `len` was returned as the fill length. Any viewport that touched the page slot — a zoomed-out chart on HP-3, or `tests/hp/visual-attr.test.ts` — wedged the thread in an infinite loop; because that file never returned, `bun run test` stalled after its last completed test and only exited on timeout. Rewritten as the same two-pass shape `fillVisualAttrFromHot` uses: pass 1 walks the contiguous covered prefix and tracks the visible volume maximum (a gap ends the run), pass 2 writes the records. Also removed the duplicated `open`/`high` NDC writes the merge left behind.
@@ -38,6 +40,12 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 - **The WebGL2 overlay engages on HP-3 selection (hp2 D1).** The overlay was a forced-`gpu=webgl2` instrument; `auto` stayed dormant even where the rung selector already landed on HP-3. `startGpuOverlay` now gates on the same selection the HUD chip reports — `probeRendererKind` webgl2 plus `selectHpRung() === 3` — so `auto` on a WebGL2-only machine paints the parity overlay. `off`, GPU-less `auto`, the painterless HP-4 rung, session-cap clamps below 3, and HP disabled all stay dormant. The hide-LWC switch remains gated (D2): this is still additive parity, not the production painter.
 
 ### Added
+
+- **Panning to the left edge prefetches one older history page.** The dataset read does not run on the drag frame. The page is painted with `fit` off, and the logical range shifts by the number of bars inserted on the left so the viewport stays put. The rolling window grows with that page, up to the 100k cap, so the next live bar does not slice the page away. Conflation itself is unchanged: on at 2,500 bars, precomputed from 10,000.
+
+- **A live bar keeps its plot and its fill.** When the engine axis ends before the chart tip, the last value is extended onto the newer bars instead of head-padding the series, which slid the fill onto later candles. A live tick whose axis is behind also drops the memoized session so the next run evaluates the bar the candle is already showing.
+
+- **A script axis with a hole the candles do not have asks for a series repair.** `noteChartSeriesHole` runs at apply time, so Donchian does not wait for the next series snapshot.
 
 - **A PYNE tick that reports `stale` drops the script session.** That flag means the engine clamped its history walk, not that the feed was idle. The next run loads the store after the gap page is written.
 

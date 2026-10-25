@@ -41,6 +41,11 @@ export type ApplyCheck = {
 export type ApplyTransaction = {
   /** Incoming seq. `null` skips the seq gate (frames that do not carry one). */
   seq?: number | null;
+  /**
+   * Cursor the coalescer released before `seq`. When it equals `lastSeq`,
+   * the seqs in between were folded or dropped here and are not a gap.
+   */
+  seqAckFrom?: number;
   /** Last seq this subscription painted. */
   lastSeq: number;
   /** Snapshot token captured when the batch started. */
@@ -96,7 +101,7 @@ export function runApplyTransaction(input: ApplyTransaction): ApplyResult {
 
   let action: 'commit' | 'replay' = 'commit';
   if (typeof input.seq === 'number' && Number.isFinite(input.seq)) {
-    const gap = classifySeqGap(input.lastSeq, input.seq);
+    const gap = classifySeqGap(input.lastSeq, input.seq, input.seqAckFrom);
     if (gap.kind === 'gap') return stale('gap');
     if (gap.kind === 'rewind') return stale('rewind');
     if (gap.kind === 'duplicate') action = 'replay';

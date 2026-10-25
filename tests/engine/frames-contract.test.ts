@@ -87,6 +87,8 @@ describe('redesign2 frame contract (F-01)', () => {
   test('classifySeqGap detects continuous, gap, duplicate and rewind', () => {
     expect(classifySeqGap(7, 8)).toEqual({ kind: 'continuous' });
     expect(classifySeqGap(7, 10)).toEqual({ kind: 'gap', missing: 2 });
+    expect(classifySeqGap(7, 10, 7)).toEqual({ kind: 'continuous' });
+    expect(classifySeqGap(7, 10, 6)).toEqual({ kind: 'gap', missing: 2 });
     expect(classifySeqGap(7, 7)).toEqual({ kind: 'duplicate' });
     expect(classifySeqGap(7, 5)).toEqual({ kind: 'rewind' });
   });

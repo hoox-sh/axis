@@ -85,6 +85,11 @@ export interface DeltaApplierDelta {
   plots?: Record<string, unknown[]>;
   series?: Record<string, unknown[]>;
   unchanged?: boolean;
+  /**
+   * Set by the tip coalescer when every seq between this and the previous
+   * released frame was folded or dropped. Not a wire field.
+   */
+  seqAckFrom?: number;
   /** JSON `forming: true` → tip scratch; `false` → commit append. */
   forming?: boolean;
   [key: string]: unknown;
@@ -181,7 +186,9 @@ export class Redesign2DeltaApplier {
 
   applyDelta(delta: DeltaApplierDelta): DeltaApplyOutcome {
     if (!this.cache) return { ok: false, reason: 'delta-before-full' };
-    const gap = classifySeqGap(this.appliedSeq, delta.seq);
+    const ackFrom = typeof delta.seqAckFrom === 'number' ? delta.seqAckFrom : undefined;
+    const raw = classifySeqGap(this.appliedSeq, delta.seq);
+    const gap = classifySeqGap(this.appliedSeq, delta.seq, ackFrom);
     const cachedContext = this.cache.executionContext;
     if (gap.kind === 'duplicate') {
       const executionContext: ExecutionContext =
@@ -191,12 +198,14 @@ export class Redesign2DeltaApplier {
       return { ok: true, full: { ...this.cache }, replayed: true, executionContext };
     }
     if (gap.kind !== 'continuous') {
-      if (gap.kind === 'gap') v1Count('seqGap');
+      if (raw.kind === 'gap') v1Count('seqGap');
       return { ok: false, reason: 'needs-full' };
     }
+    const dropped = raw.kind === 'gap' ? delta.seq - this.appliedSeq - 1 : 0;
     const cachedCount = typeof this.cache.count === 'number' ? this.cache.count : undefined;
-    const { seq: _seq, base_index, count, tail_len, forming, ...rest } = delta;
+    const { seq: _seq, seqAckFrom: _ack, base_index, count, tail_len, forming, ...rest } = delta;
     void _seq;
+    void _ack;
     const executionContext = executionContextFromDelta({ forming, count }, cachedCount);
     const update = {
       ...rest,
@@ -208,6 +217,7 @@ export class Redesign2DeltaApplier {
     const stored = { ...merged, executionContext, forming: forming === true };
     this.cache = stored;
     this.appliedSeq = delta.seq;
+    if (dropped > 0) v1Count('droppedTip', dropped);
     this.states.markDeltaApplied();
     return { ok: true, full: { ...stored }, replayed: false, executionContext };
   }

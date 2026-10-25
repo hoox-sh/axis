@@ -7,7 +7,7 @@ tags: [code, engines]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-25T14:15:06Z
+  at: 2026-10-25T14:59:58Z
 sources:
   - id: tree
     resource: "src/engines"
@@ -33,7 +33,7 @@ okf_lock: generated
 * `runner.ts` — DeployHostedScriptInput, HostedJob, HostedJobCronState, HostedScript, RunnerCallOptions, RunnerResult, deployHostedScript, listHostedJobs, runHostedJobNow, runnerAvailable, setHostedJobEnabled
 * `series-drive.ts` — SERIES_DRIVE_MIN_MS, SeriesDriveOptions, SeriesDriveResult, SeriesDriveTick, SeriesDriveTickFn, _resetSeriesDriveForTests, driveEngineSeries
 * `series-freshness.ts` — ENGINE_SERIES_GAP_BARS, ENGINE_SERIES_STALE_STEPS, engineWindowBehindChart, internalGapBars, missingSlotsInBounds, newestBarTime, seriesBehind, seriesBehindNow, stepsBehind
-* `series-repair.ts` — ENGINE_STALE_LOG_MIN_MS, StaleEngineSeriesNotice, _resetEngineStaleNoticeForTests, engineSeriesStale, noteStaleEngineSeries
+* `series-repair.ts` — ENGINE_STALE_LOG_MIN_MS, StaleEngineSeriesNotice, _resetEngineStaleNoticeForTests, engineSeriesStale, noteChartSeriesHole, noteEngineAxisBehindChart, noteStaleEngineSeries
 * `session-delta.ts` — SessionDeltaInfo, readDeltaInfo, resolveSessionPayload
 
 # Depends on

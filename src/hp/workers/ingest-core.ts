@@ -27,6 +27,7 @@
 
 import {
   normalizeRedesign2Frame,
+  stripSeqAck,
   validateRedesign2Frame,
   type Redesign2Frame,
 } from '../../engine/frames';
@@ -122,7 +123,7 @@ function decodeJsonText(text: string, table: IngestCursorTable): IngestDecode {
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     return { ok: false, kind: 'malformed', reason: 'json-shape' };
   }
-  const frame = normalizeRedesign2Frame(parsed) as Redesign2Frame;
+  const frame = stripSeqAck(normalizeRedesign2Frame(parsed)) as Redesign2Frame;
   if (!frame || typeof frame.type !== 'string') {
     return { ok: false, kind: 'malformed', reason: 'type' };
   }
@@ -457,6 +458,12 @@ function payloadOf(frame: Redesign2Frame): Record<string, unknown> {
   return isRecord(frame.payload) ? frame.payload : {};
 }
 
+function seqOfFrame(frame: Redesign2Frame): number | null {
+  return 'seq' in frame && typeof frame.seq === 'number' && Number.isFinite(frame.seq) ? frame.seq : null;
+}
+
+type SeqChain = { cursor: number; seenTo: number; broken: boolean };
+
 /** Keepalive. No bars and no plot columns — safe to drop. */
 function isUnchangedFrame(frame: Redesign2Frame): boolean {
   if (frame.type !== 'delta') return false;
@@ -509,10 +516,15 @@ function mergeTip(prev: Redesign2Frame, next: Redesign2Frame): Redesign2Frame {
  *
  * Within the window, OHLC is a fold (last bar wins) and plot columns union
  * by key. A non-tip frame flushes the pending tip for that subscription
- * first. `UNCHANGED` keepalives are dropped.
+ * first. `UNCHANGED` keepalives are dropped. Their seq, and any tip seq
+ * folded into the one frame we keep, stays on a per-subscription chain.
+ * The frame we release carries `seqAckFrom` (the cursor before that run)
+ * so the applier advances through it. A seq we never saw breaks the chain
+ * and stays a real gap.
  */
 export class TipCoalescer {
   private readonly pending = new Map<string, Redesign2Frame>();
+  private readonly chains = new Map<string, SeqChain>();
   private cancel: (() => void) | null = null;
 
   constructor(
@@ -525,25 +537,90 @@ export class TipCoalescer {
   ) {}
 
   push(frames: Redesign2Frame[]): void {
-    const immediate: Redesign2Frame[] = [];
+    const out: Redesign2Frame[] = [];
     for (const frame of frames) {
-      if (isUnchangedFrame(frame)) continue;
+      if (isUnchangedFrame(frame)) {
+        this.observe(frame);
+        continue;
+      }
       if (isFormingTip(frame) && frame.id) {
+        this.observe(frame);
         const prev = this.pending.get(frame.id);
         this.pending.set(frame.id, prev ? mergeTip(prev, frame) : frame);
         this.arm();
-      } else {
-        immediate.push(...this.take(frame.id));
-        immediate.push(frame);
+        continue;
       }
+      // Release the non-tip before later keepalives in this batch are
+      // observed, so those keepalives extend the chain this frame just set.
+      for (const prior of this.take(frame.id)) out.push(this.releaseSeq(prior));
+      out.push(this.releaseSeq(frame));
     }
-    if (immediate.length) this.emit(immediate);
+    if (out.length) this.emit(out);
   }
 
   flush(): void {
     this.disarm();
-    const batch = this.drain();
-    if (batch.length) this.emit(batch);
+    this.send(this.drain());
+  }
+
+  private send(frames: Redesign2Frame[]): void {
+    if (!frames.length) return;
+    const out: Redesign2Frame[] = [];
+    for (const frame of frames) out.push(this.releaseSeq(frame));
+    this.emit(out);
+  }
+
+  /** Extend the contiguous run. A hole marks the chain broken. */
+  private observe(frame: Redesign2Frame): void {
+    const id = frame.id;
+    const seq = seqOfFrame(frame);
+    if (!id || seq == null) return;
+    const chain = this.chains.get(id);
+    if (!chain || chain.broken) return;
+    if (seq <= chain.seenTo) return;
+    if (seq === chain.seenTo + 1) {
+      chain.seenTo = seq;
+      return;
+    }
+    chain.broken = true;
+  }
+
+  /**
+   * Hand one frame to the host. A full snapshot, or a seq behind the
+   * cursor, starts a new chain. A contiguous run releases at its high
+   * water and names the cursor it started from.
+   */
+  private releaseSeq(frame: Redesign2Frame): Redesign2Frame {
+    const id = frame.id;
+    const seq = seqOfFrame(frame);
+    if (!id || seq == null) return frame;
+    const prev = this.chains.get(id);
+    if (frame.type === 'full' || (prev != null && seq < prev.cursor)) {
+      this.chains.set(id, { cursor: seq, seenTo: seq, broken: false });
+      return frame;
+    }
+    this.observe(frame);
+    const chain = this.chains.get(id);
+    if (!chain) {
+      this.chains.set(id, { cursor: seq, seenTo: seq, broken: false });
+      return frame;
+    }
+    let released = seq;
+    let ackFrom: number | undefined;
+    if (!chain.broken && seq > chain.cursor && seq <= chain.seenTo) {
+      released = chain.seenTo;
+      if (released > chain.cursor + 1) ackFrom = chain.cursor;
+    }
+    this.chains.set(id, { cursor: released, seenTo: released, broken: false });
+    if (released === seq && ackFrom == null) return frame;
+    return {
+      ...frame,
+      seq: released,
+      payload: {
+        ...payloadOf(frame),
+        ...(ackFrom != null ? { seqAckFrom: ackFrom } : {}),
+      },
+    } as Redesign2Frame;
   }
 
   private arm(): void {

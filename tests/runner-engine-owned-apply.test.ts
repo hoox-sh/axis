@@ -243,7 +243,7 @@ describe('alignApplySeries staleNoAxis', () => {
       livePush: true,
     });
     expect(aligned.staleNoAxis).toBe(false);
-    expect(aligned.seriesMap.plot0).toEqual([1, 2, 3, null, null]);
+    expect(aligned.seriesMap.plot0).toEqual([1, 2, 3, 3, 3]);
   });
 
   it('does not flag a non-session length mismatch (free-tier clamp still tail-pins)', () => {
@@ -332,9 +332,9 @@ describe('alignSeriesToTimes', () => {
     expect(out).toEqual([1, 2, 3, 4, 5]);
   });
 
-  it('nulls chart bars the engine never evaluated (trailing gap)', () => {
+  it('extends the last value onto chart bars newer than the engine axis', () => {
     const out = alignSeriesToTimes([1, 2, 3], [T(0), T(1), T(2)], [T(0), T(1), T(2), T(3), T(4)]);
-    expect(out).toEqual([1, 2, 3, null, null]);
+    expect(out).toEqual([1, 2, 3, 3, 3]);
   });
 
   it('normalizes Pine-ms engine times to chart seconds', () => {

@@ -49,6 +49,32 @@ describe('v1 apply transaction', () => {
     expect(order).toEqual([]);
   });
 
+  test('an acknowledged hole commits', () => {
+    let painted = 0;
+    const result = runApplyTransaction({
+      seq: 8,
+      lastSeq: 5,
+      seqAckFrom: 5,
+      commit: () => {
+        painted += 1;
+      },
+    });
+    expect(result).toEqual({ ok: true, action: 'commit' });
+    expect(painted).toBe(1);
+  });
+
+  test('a forged ack from the wrong cursor does not commit', () => {
+    const result = runApplyTransaction({
+      seq: 8,
+      lastSeq: 5,
+      seqAckFrom: 4,
+      commit: () => {
+        throw new Error('should not paint');
+      },
+    });
+    expect(result).toEqual({ ok: false, reason: 'gap' });
+  });
+
   test('a rewind does not commit', () => {
     const result = runApplyTransaction({
       seq: 1,

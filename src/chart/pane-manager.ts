@@ -53,6 +53,7 @@ import {
 } from 'lightweight-charts';
 import { v1NotePanActivity } from '../engine/v1/metrics';
 import { SlotChart, usesSingleChartLayout } from './v1/chart-host';
+import { noteLeftEdge } from './v1/left-prefetch';
 import {
   createBaseChart,
   createLineSeries,
@@ -1570,6 +1571,8 @@ export class PaneManager {
       this.timeSyncUnsubs = [];
       this.pendingTimeRange = null;
       this.timeSyncRaf.cancel();
+      const price = this.panes.get('price') ?? this.getAllPanes()[0];
+      if (price) this.watchLeftEdge(price.chart);
       this.alignRightScales();
       return;
     }
@@ -1586,6 +1589,7 @@ export class PaneManager {
 
     const panes = this.getAllPanes().filter((p) => p.visible);
     if (panes.length < 2) {
+      if (panes[0]) this.watchLeftEdge(panes[0].chart);
       this.alignRightScales();
       return;
     }
@@ -1604,6 +1608,7 @@ export class PaneManager {
     const handler = (range: { from: number; to: number } | null) => {
       if (this.suppressSync || !range) return;
       if (this.ranging) v1NotePanActivity();
+      noteLeftEdge(range, () => this.userIsRanging());
       this.pendingTimeRange = range;
       this.timeSyncRaf.schedule(() => {
         const next = this.pendingTimeRange;
@@ -1635,6 +1640,27 @@ export class PaneManager {
 
     this.alignTimeRangesFromPrice();
     this.alignRightScales();
+  }
+
+  /** One listener for left-edge prefetch. Not a time-scale mirror. */
+  private watchLeftEdge(chart: IChartApi): void {
+    const handler = (range: { from: number; to: number } | null) => {
+      if (!range) return;
+      if (this.ranging) v1NotePanActivity();
+      noteLeftEdge(range, () => this.userIsRanging());
+    };
+    try {
+      chart.timeScale().subscribeVisibleLogicalRangeChange(handler);
+      this.timeSyncUnsubs.push(() => {
+        try {
+          chart.timeScale().unsubscribeVisibleLogicalRangeChange(handler);
+        } catch {
+          /* ignore */
+        }
+      });
+    } catch {
+      /* time scale optional in tests */
+    }
   }
 
   /** Push the price pane logical range onto all other visible panes. */

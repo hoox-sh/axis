@@ -7,7 +7,7 @@ tags: [code, data]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-23T18:44:52Z
+  at: 2026-10-25T14:59:58Z
 sources:
   - id: tree
     resource: "src/data"
@@ -70,6 +70,7 @@ okf_lock: generated
 
 * [src](/code/src.md)
 * [src/chart](/code/src/chart.md)
+* [src/chart/v1](/code/src/chart/v1.md)
 * [src/engine](/code/src/engine.md)
 * [src/engines](/code/src/engines.md)
 * [src/hp/memory](/code/src/hp/memory.md)

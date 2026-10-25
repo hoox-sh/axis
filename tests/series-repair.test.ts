@@ -17,6 +17,7 @@ import {
   ENGINE_STALE_LOG_MIN_MS,
   _resetEngineStaleNoticeForTests,
   engineSeriesStale,
+  noteChartSeriesHole,
   noteStaleEngineSeries,
 } from '../src/engines/series-repair';
 import {
@@ -126,6 +127,20 @@ describe('engineSeriesStale', () => {
         marketNow: nowSec,
       }),
     ).not.toBeNull();
+  });
+});
+
+describe('noteChartSeriesHole', () => {
+  it('stays quiet when the chart has the same jump', () => {
+    const end = 1_800_000_000;
+    const both = [b(end - 40 * HOUR), b(end)];
+    setStore('interval', '1h');
+    setStore('symbol', 'BTCUSDT');
+    noteChartSeriesHole(
+      both.map((bar) => bar.time),
+      both,
+    );
+    expect(store.logs.some((l) => /internal gap/.test(l.message))).toBe(false);
   });
 });
 

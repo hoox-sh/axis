@@ -460,10 +460,26 @@ export interface SeqGap {
  * Classify the relationship between the last applied `seq` and an incoming
  * `seq`. A `gap` means frames were dropped → the caller must `resume` instead
  * of applying the delta. A `duplicate` is a safe replay → ignore.
+ *
+ * `ackFrom` is the cursor the coalescer released before this frame. It is
+ * set only when every seq in `(ackFrom, seq)` was a frame this process
+ * folded or dropped. JSON decode strips the field, so a socket payload
+ * cannot invent it.
  */
-export function classifySeqGap(lastSeq: number, seq: number): SeqGap {
+export function classifySeqGap(lastSeq: number, seq: number, ackFrom?: number): SeqGap {
   if (seq === lastSeq + 1) return { kind: 'continuous' };
   if (seq === lastSeq) return { kind: 'duplicate' };
-  if (seq > lastSeq + 1) return { kind: 'gap', missing: seq - lastSeq - 1 };
+  if (seq > lastSeq + 1) {
+    if (ackFrom === lastSeq) return { kind: 'continuous' };
+    return { kind: 'gap', missing: seq - lastSeq - 1 };
+  }
   return { kind: 'rewind' };
+}
+
+/** Drop a coalescer ack so a network frame cannot suppress gap detection. */
+export function stripSeqAck<T>(frame: T): T {
+  if (!isRecord(frame) || !isRecord(frame.payload) || !('seqAckFrom' in frame.payload)) return frame;
+  const { seqAckFrom: _ack, ...payload } = frame.payload;
+  void _ack;
+  return { ...frame, payload } as T;
 }

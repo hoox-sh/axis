@@ -312,12 +312,49 @@ export function alignSeriesToTimes(
   }
   const byTime = new Map<number, unknown>();
   for (let i = 0; i < rt.length; i++) byTime.set(rt[i] as number, arr[i]);
+  const engineLast = rt[rt.length - 1] ?? null;
   const out: unknown[] = new Array(len);
+  let hold: unknown = null;
   for (let i = 0; i < len; i++) {
     const t = normalizeBarTime(chartTimes[i]);
-    out[i] = t != null && byTime.has(t) ? byTime.get(t) : null;
+    if (t != null && byTime.has(t)) {
+      const value = byTime.get(t);
+      out[i] = value;
+      if (value != null && Number.isFinite(Number(value))) hold = value;
+      continue;
+    }
+    // Chart bars newer than the engine axis keep the last value. Head-padding
+    // would slide the whole series onto those bars; this only extends the tip.
+    if (t != null && engineLast != null && t > engineLast && hold != null) {
+      out[i] = hold;
+      continue;
+    }
+    out[i] = null;
   }
   return out;
+}
+
+/**
+ * A series a few bars shorter than the chart window is missing the new tip.
+ * Append the last finite value. A large shortfall stays on the tail-pin
+ * (the engine evaluated the newest bars, not a prefix).
+ */
+export function extendSeriesToWindow(values: unknown, len: number, maxGap = 8): unknown[] {
+  const arr = Array.isArray(values) ? values : [];
+  if (len <= 0 || arr.length === 0 || arr.length === len) return arr;
+  if (arr.length > len) return arr.slice(arr.length - len);
+  const missing = len - arr.length;
+  if (missing > maxGap) return tailAlignSeriesToWindow(arr, len);
+  let hold: unknown = null;
+  for (let i = arr.length - 1; i >= 0; i--) {
+    const value = arr[i];
+    const numeric = typeof value === 'number' ? Number.isFinite(value) : value != null && value !== '';
+    if (numeric) {
+      hold = value;
+      break;
+    }
+  }
+  return [...arr, ...new Array(missing).fill(hold)];
 }
 
 /** Join every series in a `result.series` map by bar time (see {@link alignSeriesToTimes}). */
@@ -1250,6 +1287,22 @@ async function runAndApplyInner(
       ...result,
       meta: { ...result.meta, skipped: 'stale-no-axis' },
     };
+  }
+  if (resultTimes && resultTimes.length > 1) {
+    const { noteChartSeriesHole, noteEngineAxisBehindChart } = await import(
+      '../engines/series-repair'
+    );
+    noteChartSeriesHole(resultTimes, bars);
+    const engineLast = resultTimes[resultTimes.length - 1];
+    const chartLast = ohlcvTimes.length ? ohlcvTimes[ohlcvTimes.length - 1] : null;
+    if (
+      opts.liveTick === true &&
+      typeof engineLast === 'number' &&
+      typeof chartLast === 'number' &&
+      chartLast > engineLast
+    ) {
+      noteEngineAxisBehindChart(engineLast, chartLast);
+    }
   }
   // Line-like series only — bgcolor/plotshape handled below
   const seriesEntries = split.lines.map((e) => [e.key, e.values] as const);
