@@ -149,7 +149,63 @@ describe('AXB1 payloads', () => {
         { key: '%B', kind: ValueKind.UnitFloat64, values: [0.2, 0.8] },
       ],
     };
+    const decoded = decodeFrame(encodeFrame(frame));
+    expect(decoded).toEqual(frame);
+    if (decoded.opcode !== Axb1Opcode.SNAPSHOT_PLOTS) throw new Error('expected SNAPSHOT_PLOTS');
+    expect(decoded.times).toEqual([60, 120]);
+    expect(decoded.times?.length).toBe(decoded.count);
+    for (const col of decoded.plots) {
+      const values = col.ticks ?? col.values;
+      expect(values?.length).toBe(decoded.count);
+    }
+  });
+
+  test('SNAPSHOT_PLOTS times stay optional', () => {
+    const frame: Axb1Frame = {
+      opcode: Axb1Opcode.SNAPSHOT_PLOTS,
+      ...hdr,
+      count: 1,
+      closedUpto: 0,
+      times: null,
+      plots: [{ key: 'rsi', kind: ValueKind.UnitFloat64, values: [55] }],
+    };
     expect(decodeFrame(encodeFrame(frame))).toEqual(frame);
+  });
+
+  test('SNAPSHOT_PLOTS times length mismatch throws', () => {
+    expect(() =>
+      encodeFrame({
+        opcode: Axb1Opcode.SNAPSHOT_PLOTS,
+        ...hdr,
+        count: 2,
+        closedUpto: 1,
+        times: [60],
+        plots: [{ key: 'close', kind: ValueKind.PriceTicks, ticks: [1n, 2n] }],
+      }),
+    ).toThrow(/times length/);
+  });
+
+  test('SNAPSHOT_PLOTS plot column length mismatch throws', () => {
+    expect(() =>
+      encodeFrame({
+        opcode: Axb1Opcode.SNAPSHOT_PLOTS,
+        ...hdr,
+        count: 2,
+        closedUpto: 1,
+        times: [60, 120],
+        plots: [{ key: 'close', kind: ValueKind.PriceTicks, ticks: [1n] }],
+      }),
+    ).toThrow(/ticks length/);
+    expect(() =>
+      encodeFrame({
+        opcode: Axb1Opcode.SNAPSHOT_PLOTS,
+        ...hdr,
+        count: 2,
+        closedUpto: 1,
+        times: null,
+        plots: [{ key: '%B', kind: ValueKind.UnitFloat64, values: [0.2] }],
+      }),
+    ).toThrow(/values length/);
   });
 
   test('APPEND_BAR + PLOT_TIP + STATUS + ERROR + JSON_BLOB round-trip', () => {

@@ -21,6 +21,10 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Fixed
 
+- **APPEND_BAR flushes a pending forming tip then the append.** Same as a `close`: a confirmed (`forming: false`) delta for that subscription does not wait for the coalesce timer.
+
+- **AXB1 `SNAPSHOT_PLOTS` keeps `bar_times` aligned with `count`.** A plots snapshot with times round-trips exactly. Encode throws when times or a plot column is the wrong length. The ingest mapper copies those times onto the JSON full as `bar_times`. Times stay optional so a frame without them still encodes.
+
 - **A refused replay stays on the socket.** After a gap, an error from the engine asks once more without AXB1. A second error leaves the subscription stale and does not paint later deltas. There is no REST repair.
 
 - **An inbox full of closes asks for one snapshot.** Forming tips are still the only frames dropped. When the inbox is over its cap and every frame left is a close, a snapshot, or a confirmed delta, those frames stay and the subscription resumes once. The next snapshot allows another resume.

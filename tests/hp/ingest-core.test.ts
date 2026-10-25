@@ -5,7 +5,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import { validateRedesign2Frame, type Redesign2Frame } from '../../src/engine/frames';
-import { Axb1Opcode, TipMask } from '../../src/hp/axb1/constants';
+import { Axb1Opcode, TipMask, ValueKind } from '../../src/hp/axb1/constants';
 import { encodeFrame } from '../../src/hp/axb1/encode';
 import { fnv1a32 } from '../../src/hp/axb1/hash';
 import { decodeInbound, IngestCursorTable, TipCoalescer } from '../../src/hp/workers/ingest-core';
@@ -280,6 +280,74 @@ describe('decodeInbound AXB1', () => {
   });
 });
 
+describe('mapAxb1 SNAPSHOT_PLOTS', () => {
+  test('puts bar_times on the full payload when times are present', () => {
+    const table = tableWithSub();
+    const out = decodeInbound(
+      encodeFrame({
+        opcode: Axb1Opcode.SNAPSHOT_PLOTS,
+        seq: 5,
+        subIdHash: fnv1a32(SUB),
+        sessionHash: fnv1a32('ses-1'),
+        tsMs: 0n,
+        count: 2,
+        closedUpto: 1,
+        times: [60, 120],
+        plots: [
+          { key: 'close', kind: ValueKind.PriceTicks, ticks: [100000000n, 200000000n] },
+          { key: '%B', kind: ValueKind.UnitFloat64, values: [0.2, 0.8] },
+        ],
+      }),
+      table,
+    );
+    expect(out.ok).toBe(true);
+    if (!(out.ok && out.kind === 'frames')) throw new Error('expected frames');
+    const frame = out.frames[0];
+    if (!frame) throw new Error('expected frame');
+    expect(validateRedesign2Frame(frame)).toBe(true);
+    expect(frame.type).toBe('full');
+    const payload = frame.payload as {
+      count: number;
+      bar_times?: number[];
+      series?: Record<string, unknown[]>;
+    };
+    expect(payload.bar_times).toEqual([60, 120]);
+    expect(payload.bar_times?.length).toBe(payload.count);
+    expect(payload.series?.close).toEqual([1, 2]);
+    expect(payload.series?.['%B']).toEqual([0.2, 0.8]);
+    for (const col of Object.values(payload.series ?? {})) {
+      expect(col.length).toBe(payload.count);
+    }
+  });
+
+  test('omits bar_times when the AXB1 times column is absent', () => {
+    const table = tableWithSub();
+    const out = decodeInbound(
+      encodeFrame({
+        opcode: Axb1Opcode.SNAPSHOT_PLOTS,
+        seq: 6,
+        subIdHash: fnv1a32(SUB),
+        sessionHash: fnv1a32('ses-1'),
+        tsMs: 0n,
+        count: 1,
+        closedUpto: 0,
+        times: null,
+        plots: [{ key: 'rsi', kind: ValueKind.UnitFloat64, values: [55] }],
+      }),
+      table,
+    );
+    expect(out.ok).toBe(true);
+    if (!(out.ok && out.kind === 'frames')) throw new Error('expected frames');
+    const payload = out.frames[0]?.payload as {
+      count: number;
+      bar_times?: number[];
+      series?: Record<string, unknown[]>;
+    };
+    expect(payload.bar_times).toBeUndefined();
+    expect(payload.series?.rsi?.length).toBe(payload.count);
+  });
+});
+
 describe('TipCoalescer', () => {
   test('keeps the latest forming tip per id until flush', () => {
     const seen: Redesign2Frame[][] = [];
@@ -330,6 +398,51 @@ describe('TipCoalescer', () => {
     ]);
     expect(seen).toHaveLength(1);
     expect(seen[0]?.map((f) => f.type)).toEqual(['delta', 'close']);
+  });
+
+  test('APPEND_BAR flushes the pending tip then the append', () => {
+    const seen: Redesign2Frame[][] = [];
+    const c = new TipCoalescer((frames) => seen.push(frames), 16, () => () => {});
+    c.push([
+      {
+        type: 'delta',
+        id: SUB,
+        sessionId: 's',
+        seq: 1,
+        payload: {
+          forming: true,
+          bars: [{ time: 60, close: 101, closed: false }],
+          base_index: 0,
+          count: 1,
+          tail_len: 1,
+          closed_upto: 0,
+        },
+      },
+      {
+        type: 'delta',
+        id: SUB,
+        sessionId: 's',
+        seq: 2,
+        payload: {
+          forming: false,
+          bars: [{ time: 60, open: 100, high: 110, low: 90, close: 105, volume: 9, closed: true }],
+          base_index: 0,
+          count: 1,
+          tail_len: 1,
+          closed_upto: 0,
+        },
+      },
+    ]);
+    expect(seen).toHaveLength(1);
+    expect(seen[0]?.map((f) => f.type)).toEqual(['delta', 'delta']);
+    const tip = seen[0]?.[0]?.payload as { forming?: boolean; bars?: Array<{ close: number }> } | undefined;
+    const append = seen[0]?.[1]?.payload as
+      | { forming?: boolean; bars?: Array<{ closed?: boolean; close: number }> }
+      | undefined;
+    expect(tip?.forming).toBe(true);
+    expect(tip?.bars?.[0]?.close).toBe(101);
+    expect(append?.forming).toBe(false);
+    expect(append?.bars?.[0]).toMatchObject({ closed: true, close: 105 });
   });
 
   test('folds OHLC to the last tip and unions plot columns', () => {

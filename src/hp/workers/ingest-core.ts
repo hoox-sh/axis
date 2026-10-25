@@ -561,8 +561,9 @@ function mergeTip(prev: Redesign2Frame, next: Redesign2Frame): Redesign2Frame {
  * Hold forming tip deltas per subscription and flush on a timer.
  *
  * Within the window, OHLC is a fold (last bar wins) and plot columns union
- * by key. A non-tip frame flushes the pending tip for that subscription
- * first. `UNCHANGED` keepalives are dropped. Their seq, and any tip seq
+ * by key. A non-tip frame (`close`, APPEND_BAR / `forming: false`) flushes
+ * the pending tip for that subscription first. `UNCHANGED` keepalives are
+ * dropped. Their seq, and any tip seq
  * folded into the one frame we keep, stays on a per-subscription chain.
  * The frame we release carries `seqAckFrom` (the cursor before that run)
  * so the applier advances through it. A seq we never saw breaks the chain
