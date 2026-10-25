@@ -27,6 +27,12 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Fixed
 
+- **Several live ticks in one turn paint the chart once.** The store still updates immediately. Same-time ticks keep the latest bar. A newer time is applied after the previous bar in that same flush. A window slide still replaces the series immediately, with `fit` off.
+
+- **An open stream with no tick for 3 seconds says `delayed Ns`.** Reconnecting keeps its own text. The live tooltip on the top bar, the connection HUD, and the mobile live button reads the stream plane's last event time.
+
+- **Sync checks for the price tip, plot length, and closed bars.** `paneAxisSkew`, `seriesPastTip`, `plotLengthSkew`, and `closedBarHash` are pure helpers. They do not paint.
+
 - **A dropped socket waits with jitter and does not retry a rejected login.** The reconnect delay grows from 500 ms and stays at or under 30 s, with a little downward jitter. An error frame with no subscription and `retryable: false` stops the loop until the next `connect()`.
 
 - **Only a close marks a bar closed.** An AXB1 tip is always `closed: false`. `APPEND_BAR` and `CLOSE_VERIFY` set `closed: true` on the committed candle. A later forming tick cannot reopen it.

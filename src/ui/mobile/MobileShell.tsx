@@ -251,6 +251,8 @@ export const MobileHeader: Component<MobileChromeProps> = (_props) => {
             liveActive: store.live.active,
             streamStatus: store.stream.status,
             detail: store.telemetry?.stream?.detail,
+            lastEventAt: store.telemetry?.stream?.lastEventAt,
+            now: Date.now(),
             startHint: 'Start live',
           })}
           aria-pressed={store.live.active}

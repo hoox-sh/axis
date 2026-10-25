@@ -33,9 +33,15 @@
  * | Append result | Chart action |
  * | --- | --- |
  * | `ignored` | nothing changed (stale tick) — do not paint |
- * | `updated` | O(1) `series.update` on the forming tip |
- * | `appended` | O(1) `series.update` with the new bar; the first bar is a `setData` (`update` throws on an empty series) |
- * | `slid` | the window head moved — full `setData` of the windowed series |
+ * | `updated` | O(1) `series.update` on the forming tip, coalesced to one flush per turn |
+ * | `appended` | O(1) `series.update` with the new bar, same flush; the first bar is a synchronous `setData` (`update` throws on an empty series) |
+ * | `slid` | any tick already queued paints now, then a full `setData` of the windowed series (`fit` false) |
+ *
+ * Several `updated` / `appended` ticks in one turn share that flush
+ * (`queueMicrotask`). Same-time updates collapse to the latest bar. A new
+ * time is kept and applied after the prior bar in the same flush — never a
+ * second `setData`. The store write stays synchronous; only the chart paint
+ * waits.
  *
  * Painting a bar the store rejected is how a stale tick used to reach the
  * library: Lightweight Charts then throws `Cannot update oldest data item`
@@ -52,6 +58,73 @@ import { intervalToSec } from '../data/bars-gaps';
 import { copyOutTail } from '../hp/paint/copy-out-lwc';
 import { subscribeGeneration, type SubscribeGenerationOpts } from '../hp/sync/raf-poll';
 import type { HotBuffer } from '../hp/memory/hot-buffer';
+
+/** Chart handle this module paints through. Identity is the live manager. */
+type LivePainter = { appendBar: (bar: Bar) => void };
+
+/** Chart paint waiting for the end of this turn (`updated` / `appended` only). */
+let pendingManager: LivePainter | null = null;
+let pendingBars: Bar[] | null = null;
+let paintScheduled = false;
+
+function applyLivePaint(manager: LivePainter, bars: readonly Bar[]): void {
+  for (const bar of bars) {
+    try {
+      manager.appendBar(bar);
+    } catch {
+      /* live paint is best-effort — the next flush repairs it */
+    }
+  }
+}
+
+/**
+ * Queue one chart append. Same-time ticks keep the latest bar; a newer time
+ * is appended so the flush does not skip a candle.
+ */
+function enqueueLivePaint(manager: LivePainter, bar: Bar): void {
+  if (pendingManager !== manager) {
+    pendingManager = manager;
+    pendingBars = [bar];
+  } else {
+    const bars = pendingBars ?? [];
+    pendingBars = bars;
+    const last = bars[bars.length - 1];
+    if (last && last.time === bar.time) bars[bars.length - 1] = bar;
+    else bars.push(bar);
+  }
+  if (paintScheduled) return;
+  paintScheduled = true;
+  queueMicrotask(flushLivePaint);
+}
+
+function flushLivePaint(): void {
+  paintScheduled = false;
+  const manager = pendingManager;
+  const bars = pendingBars;
+  pendingManager = null;
+  pendingBars = null;
+  if (!manager || !bars?.length) return;
+  // Torn down or swapped before the turn ended — do not paint the old chart.
+  if (getManager() !== manager) return;
+  applyLivePaint(manager, bars);
+}
+
+/** A slide paints the queued tick before `setData` replaces the series. */
+function flushLivePaintSync(manager: LivePainter): void {
+  if (pendingManager !== manager) return;
+  const bars = pendingBars;
+  pendingManager = null;
+  pendingBars = null;
+  if (!bars?.length) return;
+  applyLivePaint(manager, bars);
+}
+
+/** Drop a queued paint for this chart so it cannot land after a replace. */
+function cancelLivePaint(manager: LivePainter): void {
+  if (pendingManager !== manager) return;
+  pendingManager = null;
+  pendingBars = null;
+}
 
 /**
  * Append one live bar to the chart window and paint it.
@@ -86,7 +159,10 @@ export function appendLiveBar(bar: Bar, opts?: { via?: 'worker' }): BarAppendRes
   // window slide still replaces: the head moved, so `update` cannot drop it.
   // The first bar has no last bar to append onto — same replace, once.
   // `manager.appendBar` updates the candle and the volume series together.
+  // Normal ticks do not call it here: one flush per turn, latest bar per time.
   if (result === 'slid' || (result === 'appended' && store.bars.length === 1)) {
+    if (result === 'slid') flushLivePaintSync(manager);
+    else cancelLivePaint(manager);
     const view = sliceToChartWindow(store.bars);
     try {
       setDataToChart(view, { fit: false, clearScriptState: false, clearMarkers: false });
@@ -96,11 +172,7 @@ export function appendLiveBar(bar: Bar, opts?: { via?: 'worker' }): BarAppendRes
     return result;
   }
 
-  try {
-    manager.appendBar(bar);
-  } catch {
-    /* live paint is best-effort — the next flush repairs it */
-  }
+  enqueueLivePaint(manager, bar);
   return result;
 }
 

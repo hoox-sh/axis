@@ -199,19 +199,48 @@ export function deriveHud(input: HudInput): HudSnapshot {
   };
 }
 
+/** Open-socket silence before the live label says `delayed Ns`. */
+const OPEN_STREAM_DELAY_MS = 3000;
+
+/**
+ * `delayed Ns` when the caller clock is at least 3s past the last bar/tick.
+ * No timestamp or no `now` → null. Does not read the clock.
+ */
+function openStreamDelayLabel(opts: {
+  lastEventAt?: number | null;
+  now?: number | null;
+}): string | null {
+  const at = opts.lastEventAt;
+  const now = opts.now;
+  if (typeof at !== 'number' || typeof now !== 'number') return null;
+  if (!Number.isFinite(at) || !Number.isFinite(now)) return null;
+  const ageMs = now - at;
+  if (ageMs < OPEN_STREAM_DELAY_MS) return null;
+  return `delayed ${Math.floor(ageMs / 1000)}s`;
+}
+
 /**
  * HUD Live chip copy.
  * The visible word stays “Live” while the socket reconnects — tone carries
  * the state. “Offline” is only the armed-but-down failure label.
  * “OFF” / “LIVE” remain the machine labels for tests and tone mapping.
+ * An open socket names `delayed Ns` on this label when the last event is
+ * at least 3s behind the caller’s `now`. Reconnecting does not.
  */
 export function liveBadgeLabel(opts: {
   liveActive: boolean;
   streamStatus: string;
+  /** Last bar or tick wall time. Missing → never claim delayed. */
+  lastEventAt?: number | null;
+  /** Caller clock. Missing → never claim delayed. */
+  now?: number | null;
 }): string {
   if (!opts.liveActive) return 'OFF';
-  if (opts.streamStatus === 'connected') return 'LIVE';
   if (opts.streamStatus === 'connecting') return 'Live';
+  if (opts.streamStatus === 'connected') {
+    const delay = openStreamDelayLabel(opts);
+    return delay ? `LIVE · ${delay}` : 'LIVE';
+  }
   return 'Offline';
 }
 
@@ -223,19 +252,28 @@ export function liveBadgeWord(tone: ReturnType<typeof liveBadgeTone>): 'Live' | 
 /**
  * Tooltip for the Live control. Attempt / backoff stay here, not in the label.
  * `detail` is the stream plane string (`attempt 1/8 in 1000ms`).
+ * An open socket with no event for ≥3s adds `delayed Ns`. Reconnecting keeps
+ * its own text even if the last event is old. `now` is caller-supplied.
  */
 export function liveIndicatorTitle(opts: {
   liveActive: boolean;
   streamStatus: string;
   detail?: string | null;
   startHint?: string;
+  /** Last bar or tick wall time. Missing → never claim delayed. */
+  lastEventAt?: number | null;
+  /** Caller clock. Missing → never claim delayed. */
+  now?: number | null;
 }): string {
   if (!opts.liveActive) return opts.startHint || 'Start live stream';
-  if (opts.streamStatus === 'connected') return 'Live — click to stop';
   if (opts.streamStatus === 'connecting') {
     const d = String(opts.detail || '').trim();
     const extra = d && d.toLowerCase() !== 'reconnecting' ? ` · ${d}` : '';
     return `Reconnecting${extra} — click to stop`;
+  }
+  if (opts.streamStatus === 'connected') {
+    const delay = openStreamDelayLabel(opts);
+    return delay ? `Live · ${delay} — click to stop` : 'Live — click to stop';
   }
   return 'Offline — click to stop';
 }

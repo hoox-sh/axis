@@ -62,6 +62,94 @@ describe('liveBadgeLabel / liveBadgeTone', () => {
     expect(liveBadgeLabel({ liveActive: true, streamStatus: 'error' })).toBe('Offline');
     expect(liveBadgeTone({ liveActive: true, streamStatus: 'disconnected' })).toBe('offline');
   });
+
+  it('names an open stream delayed Ns when the last event is at least 3s behind', () => {
+    const at = 1_000;
+    const exact = {
+      liveActive: true,
+      streamStatus: 'connected',
+      lastEventAt: at,
+      now: at + 3_000,
+    };
+    expect(liveBadgeLabel(exact)).toBe('LIVE · delayed 3s');
+    expect(liveIndicatorTitle(exact)).toBe('Live · delayed 3s — click to stop');
+    const floored = {
+      liveActive: true,
+      streamStatus: 'connected',
+      lastEventAt: 0,
+      now: 4_999,
+    };
+    expect(liveBadgeLabel(floored)).toContain('delayed 4s');
+    expect(liveIndicatorTitle(floored)).toContain('delayed 4s');
+  });
+
+  it('does not add delayed under 3s, without a timestamp, or without now', () => {
+    const fresh = {
+      liveActive: true,
+      streamStatus: 'connected',
+      lastEventAt: 1_000,
+      now: 1_000 + 2_999,
+    };
+    expect(liveBadgeLabel(fresh)).toBe('LIVE');
+    expect(liveIndicatorTitle(fresh)).toBe('Live — click to stop');
+    expect(
+      liveIndicatorTitle({ liveActive: true, streamStatus: 'connected', now: 10_000 }),
+    ).toBe('Live — click to stop');
+    expect(
+      liveBadgeLabel({
+        liveActive: true,
+        streamStatus: 'connected',
+        lastEventAt: null,
+        now: 10_000,
+      }),
+    ).toBe('LIVE');
+    expect(
+      liveIndicatorTitle({
+        liveActive: true,
+        streamStatus: 'connected',
+        lastEventAt: 0,
+      }),
+    ).toBe('Live — click to stop');
+  });
+
+  it('keeps reconnecting text when the last event is old', () => {
+    expect(
+      liveBadgeLabel({
+        liveActive: true,
+        streamStatus: 'connecting',
+        lastEventAt: 0,
+        now: 60_000,
+      }),
+    ).toBe('Live');
+    expect(
+      liveIndicatorTitle({
+        liveActive: true,
+        streamStatus: 'connecting',
+        detail: 'attempt 1/8 in 1000ms',
+        lastEventAt: 0,
+        now: 60_000,
+      }),
+    ).toBe('Reconnecting · attempt 1/8 in 1000ms — click to stop');
+  });
+
+  it('does not claim delayed when the socket is not open', () => {
+    expect(
+      liveBadgeLabel({
+        liveActive: false,
+        streamStatus: 'connected',
+        lastEventAt: 0,
+        now: 9_000,
+      }),
+    ).toBe('OFF');
+    expect(
+      liveIndicatorTitle({
+        liveActive: true,
+        streamStatus: 'disconnected',
+        lastEventAt: 0,
+        now: 9_000,
+      }),
+    ).toBe('Offline — click to stop');
+  });
 });
 
 describe('hud-model helpers', () => {

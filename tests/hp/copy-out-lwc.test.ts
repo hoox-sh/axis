@@ -168,7 +168,7 @@ describe('copy-out bars through appendLiveBar', () => {
     setStore('rollingWindowBars', DEFAULT_WINDOW);
   });
 
-  it('produces appended, updated, ignored and slid from SAB data alone', () => {
+  it('produces appended, updated, ignored and slid from SAB data alone', async () => {
     const buf = hot();
     const forming = (time: number, closeTicks: bigint): HotBarTicks =>
       mk(time, closeTicks, BAR_FLAG_FORMING);
@@ -204,6 +204,7 @@ describe('copy-out bars through appendLiveBar', () => {
     const moved = copyOutBars(buf, { fromAbs: 2, count: 1 });
     expect(moved?.bars[0]?.close).toBe(350);
     expect(appendLiveBar(barAt(buf, 2))).toBe('updated');
+    await Promise.resolve();
     expect(appended).toHaveLength(1);
     expect(store.bars.at(-1)?.close).toBe(350);
 
@@ -223,6 +224,7 @@ describe('copy-out bars through appendLiveBar', () => {
     expect(appendLiveBar(barAt(buf, 3))).toBe('appended');
     expect(store.bars).toHaveLength(3);
     // Cap not yet sliding the head — a new time slot is series.update.
+    await Promise.resolve();
     expect(appended).toHaveLength(1);
     appended = [];
     expect(appendLiveBar(barAt(buf, 4))).toBe('slid');

@@ -528,6 +528,8 @@ function LiveBadge(props: {
       liveActive: store.live.active,
       streamStatus: st(),
       detail: store.telemetry?.stream?.detail,
+      lastEventAt: store.telemetry?.stream?.lastEventAt,
+      now: Date.now(),
       startHint: 'Live stream is off',
     });
   const cls = () => {

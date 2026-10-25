@@ -724,6 +724,8 @@ export const Topbar: Component<{
             liveActive: store.live.active,
             streamStatus: store.stream.status,
             detail: store.telemetry?.stream?.detail,
+            lastEventAt: store.telemetry?.stream?.lastEventAt,
+            now: Date.now(),
             startHint: `Start live stream (${
               streams().find((s) => s.id === defaultStreamForSource(store.source))?.name ||
               defaultStreamForSource(store.source)
