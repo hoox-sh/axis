@@ -98,6 +98,7 @@ export class IngestHostClient implements WireClient {
   private readonly authToken?: string;
 
   onFrame: ((frame: WireFrame) => void) | undefined;
+  onFrames?: ((frames: WireFrame[]) => void) | undefined;
   onStatus?: (status: 'connecting' | 'open' | 'closed' | 'error') => void;
   onMalformed?: (reason: string) => void;
   /** Unknown AXB1 opcode for one subscription. The socket is still open. */
@@ -191,8 +192,12 @@ export class IngestHostClient implements WireClient {
   private dispatchFrames(frames: Redesign2Frame[]): void {
     for (const frame of frames) {
       if (frame.id) this.pending.resolveFrame(frame.id, frame);
-      this.onFrame?.(frame);
     }
+    if (this.onFrames) {
+      this.onFrames(frames);
+      return;
+    }
+    for (const frame of frames) this.onFrame?.(frame);
   }
 
   private onWorkerMessage(msg: IngestToHost | undefined): void {

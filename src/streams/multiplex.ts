@@ -472,7 +472,10 @@ export function startLive(
           noteTick(bar.close, bar.time, sym);
           // F2 (cross-workstream): pass the stream's own identity so alerts
           // evaluate against the stream symbol, dropping stale-stream bars.
-          noteLiveBarForAlerts(bar, { symbol: sym, interval: iv });
+          // Engine series commits alerts after the live batch (concept §6.1).
+          if (!streamRouteActive()) {
+            noteLiveBarForAlerts(bar, { symbol: sym, interval: iv });
+          }
 
           // Data Manager: grow the underlying bars-cache dataset with live ticks.
           // Skipped in engine-owned live mode — the engine's store owns the series,

@@ -34,6 +34,7 @@
  */
 
 import type { ExecutionContext } from '../hp/calc/execution-context';
+import { applyPrecomputedChart } from '../indicators/apply-live';
 import { v1Gauge, v1Mark } from './v1/metrics';
 import type { RunResult } from '../plugins/types';
 import type { Bar } from '../store/types';
@@ -95,9 +96,35 @@ export function streamFullToPrecomputed(full: StreamFullPayload, via: StreamVia)
 }
 
 /**
+ * Apply a stream **delta** without yielding. Plot paint is synchronous
+ * (`applyPrecomputedChart`); snapshots stay on {@link applyStreamPayload}.
+ */
+export function applyStreamDelta(
+  input: ApplyStreamInput,
+  deps?: { applyChart?: typeof applyPrecomputedChart },
+): RunResult {
+  const precomputedResult = streamFullToPrecomputed(input.full, input.via);
+  const prevInputs = previousRunInputs(input.indicatorId);
+  if (prevInputs && !precomputedResult.meta?.inputs) {
+    precomputedResult.meta = { ...(precomputedResult.meta ?? {}), inputs: prevInputs };
+  }
+  const applyChart = deps?.applyChart ?? applyPrecomputedChart;
+  v1Mark('apply:start');
+  try {
+    return applyChart(input.script, input.indicatorId, precomputedResult as never, input.bars, {
+      silent: input.silent ?? true,
+      liveTick: true,
+    });
+  } finally {
+    v1Gauge('visibleBars', input.bars.length);
+    v1Mark('apply:end');
+  }
+}
+
+/**
  * Apply a stream payload through the existing pipeline without re-running.
- * The runner import is dynamic so this module never creates a static
- * engine↔indicators cycle; pass `deps.runAndApply` in tests.
+ * Snapshots stay async (`runAndApply`). Live deltas use {@link applyStreamDelta}.
+ * Pass `deps.runAndApply` in tests.
  */
 export async function applyStreamPayload(
   input: ApplyStreamInput,

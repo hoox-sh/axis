@@ -3552,8 +3552,9 @@ export type BarAppendResult = 'ignored' | 'updated' | 'appended' | 'slid';
  * never rewritten: a late or out-of-order tick for an older bar is dropped
  * instead of being appended behind the tip (which would put the series out of
  * order and break every index-based zip downstream). The tip itself may only
- * be replaced by a bar for the same open time, and a **closed** tip is never
- * reopened by a forming tick.
+ * be replaced by a bar for the same open time, a **closed** tip is never
+ * reopened by a forming tick, and a closed tip's OHLC is never restated
+ * (G0 — warn and `ignored`).
  *
  * **Hot path:** path-update the last index (no O(N) `slice()` clone) so Solid
  * and GC stay cheap on 10k–100k histories. Full array replace only when the
@@ -3580,6 +3581,8 @@ export function appendBar(bar: Bar): BarAppendResult {
         noteClosedRewrite(bar.time, {
           dev: typeof import.meta !== 'undefined' && import.meta.env?.DEV === true,
         });
+        // G0: a closed bar's OHLC is immutable. Warn and drop the restatement.
+        return 'ignored';
       }
       // Same open bar. Write the raw node now so readers see the tick.
       // Solid hears this index once per frame, not once per tick.

@@ -131,3 +131,47 @@ export function runApplyTransaction(input: ApplyTransaction): ApplyResult {
   }
   return { ok: true, action };
 }
+
+/**
+ * One live batch: price → plots → markers → alerts (concept §6.1).
+ *
+ * `prep` runs in `steps` (a throw skips every mutation). Mutations run in
+ * `commit` in order. Lightweight Charts has no rollback: a throw in `plots`
+ * after `price` has already painted leaves the price on the chart and
+ * aborts the rest of the batch.
+ */
+export type LiveBatch = {
+  seq?: number | null;
+  seqAckFrom?: number;
+  lastSeq: number;
+  generation?: number;
+  currentGeneration?: number;
+  check?: ApplyCheck;
+  /** Pure work before paint. A throw skips price/plots/markers/alerts. */
+  prep?: () => void;
+  price: () => void;
+  plots: () => void;
+  markers?: () => void;
+  /** Closed-bar alerts. Omitted on forming tips. */
+  alerts?: () => void;
+  onStale?: (reason: ApplyAbortReason) => void;
+};
+
+export function commitLiveBatch(input: LiveBatch): ApplyResult {
+  return runApplyTransaction({
+    seq: input.seq,
+    lastSeq: input.lastSeq,
+    ...(input.seqAckFrom != null ? { seqAckFrom: input.seqAckFrom } : {}),
+    generation: input.generation,
+    currentGeneration: input.currentGeneration,
+    check: input.check,
+    onStale: input.onStale,
+    ...(input.prep ? { steps: [input.prep] } : {}),
+    commit: () => {
+      input.price();
+      input.plots();
+      input.markers?.();
+      input.alerts?.();
+    },
+  });
+}

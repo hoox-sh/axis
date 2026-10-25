@@ -5,6 +5,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import {
+  applyStreamDelta,
   applyStreamPayload,
   streamFullToPrecomputed,
 } from '../../src/engine/apply-bridge';
@@ -130,5 +131,31 @@ describe('redesign2 apply bridge (F-16)', () => {
     } finally {
       setStore('runResults', 'ind-2', null as never);
     }
+  });
+
+  test('applyStreamDelta is synchronous and does not wrap in a Promise', () => {
+    const bars = [{ time: 100, open: 1, high: 1, low: 1, close: 1, volume: 1 }];
+    const seen: string[] = [];
+    const out = applyStreamDelta(
+      {
+        script: 'indicator("x")',
+        indicatorId: 'ind-1',
+        full: { series: { a: [1] }, bar_times: [100], count: 1 },
+        via: 'stream-delta',
+        bars,
+      },
+      {
+        applyChart: (script, id, result, appliedBars) => {
+          seen.push(script);
+          expect(id).toBe('ind-1');
+          expect(appliedBars).toBe(bars);
+          expect(result.meta?.sessionVia).toBe('stream-delta');
+          return result;
+        },
+      },
+    );
+    expect(seen).toEqual(['indicator("x")']);
+    expect(out && typeof (out as { then?: unknown }).then).not.toBe('function');
+    expect(out.status).toBe('success');
   });
 });

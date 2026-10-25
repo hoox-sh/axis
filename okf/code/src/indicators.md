@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/indicators"
-description: "src/indicators contains IndicatorCard.tsx, IndicatorPanel.tsx, apply-context.ts, and 13 more files."
+description: "src/indicators contains IndicatorCard.tsx, IndicatorPanel.tsx, apply-context.ts, and 14 more files."
 resource: "src/indicators"
 tags: [code, indicators]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-25T21:44:18Z
+  at: 2026-10-25T23:16:48Z
 sources:
   - id: tree
     resource: "src/indicators"
@@ -22,6 +22,7 @@ okf_lock: generated
 * `IndicatorPanel.tsx` — IndicatorPanel
 * `apply-context.ts` — AlignedApplySeries, ResolvedRunContext, _resetNoEngineAxisWarnForTests, alignApplySeries, resolveRunContext
 * `apply-drawings.ts` — DrawingsApplyContext, appliedScriptStillOnChart, applyDrawings
+* `apply-live.ts` — ApplyLiveOpts, applyPrecomputedChart
 * `apply-mutations.ts` — ChartMutationContext, PlotsAndMarkersInput, applyChartMutations, applyPlotsAndMarkers, applyShapeMarkers, buildShapeMarkers
 * `apply-overlays.ts` — OverlayBuildContext, OverlayBuildOutcome, OverlayLine, OverlayOhlc, buildOverlayPayloads, pickOverlayColor
 * `apply-pane.ts` — PaneSetupContext, ensureApplyPane
@@ -79,6 +80,7 @@ okf_lock: generated
 * [tests](/code/tests.md)
 * [tests/chart](/code/tests/chart.md)
 * [tests/engine](/code/tests/engine.md)
+* [tests/indicators](/code/tests/indicators.md)
 * [tests/integration](/code/tests/integration.md)
 
 # Nested

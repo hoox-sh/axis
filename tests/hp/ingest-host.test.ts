@@ -16,6 +16,7 @@ import {
   type IngestWorkerTransport,
 } from '../../src/hp/workers/host';
 import type { HostToIngest, IngestToHost } from '../../src/hp/workers/protocol';
+import type { Redesign2Frame } from '../../src/engine/frames';
 import type { Bar } from '../../src/store/types';
 
 const SUB = 'series:binance|spot|BTC/USDT|1m';
@@ -93,6 +94,11 @@ class FakeIngest {
 
   reopen(first: boolean): void {
     this.emit({ type: 'open', first });
+  }
+
+  /** Already-decoded batch, as the real worker posts `type: 'frames'`. */
+  postFrames(frames: Redesign2Frame[]): void {
+    this.emit({ type: 'frames', frames });
   }
 }
 
@@ -201,6 +207,34 @@ describe('IngestHostClient over a fake ingest port', () => {
     const { client } = makeClient();
     await client.connect();
     expect(client.isOpen).toBe(true);
+    client.disconnect();
+  });
+
+  test('a worker batch reaches onFrames as one array', async () => {
+    const { client, fake } = makeClient();
+    await client.connect();
+    const batches: number[] = [];
+    const types: string[] = [];
+    client.onFrames = (frames) => {
+      batches.push(frames.length);
+      for (const frame of frames) types.push(frame.type);
+    };
+    fake.postFrames([
+      {
+        type: 'delta',
+        id: SUB,
+        seq: 1,
+        payload: { bars: SCRIPT_BARS, forming: true },
+      },
+      {
+        type: 'delta',
+        id: SCRIPT,
+        seq: 1,
+        payload: { base_index: 0, count: 1, tail_len: 1, series: { a: [1] } },
+      },
+    ]);
+    expect(batches).toEqual([2]);
+    expect(types).toEqual(['delta', 'delta']);
     client.disconnect();
   });
 
@@ -411,7 +445,9 @@ describe('IngestHostClient over a fake ingest port', () => {
 
       const nextPayload = fullJson(5);
       const after: unknown[] = [];
-      client.onFrame = (frame) => after.push(frame);
+      client.onFrames = (frames) => {
+        for (const frame of frames) after.push(frame);
+      };
       const spy = spyParseOnHost(next.transport);
       try {
         next.push(nextPayload);

@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, test } from 'bun:test';
-import { runApplyTransaction } from '../../src/engine/v1/apply-transaction';
+import { commitLiveBatch, runApplyTransaction } from '../../src/engine/v1/apply-transaction';
 
 describe('v1 apply transaction', () => {
   test('a continuous seq runs every step and commits once', () => {
@@ -204,5 +204,55 @@ describe('v1 apply transaction', () => {
     expect(result).toEqual({ ok: false, reason: 'aborted' });
     expect(plot.setData).toBe(0);
     expect(plot.update).toBe(0);
+  });
+});
+
+describe('v1 live batch commit', () => {
+  test('price, plots, markers, then alerts run in one commit', () => {
+    const order: string[] = [];
+    const result = commitLiveBatch({
+      seq: 2,
+      lastSeq: 1,
+      price: () => order.push('price'),
+      plots: () => order.push('plots'),
+      markers: () => order.push('markers'),
+      alerts: () => order.push('alerts'),
+    });
+    expect(result).toEqual({ ok: true, action: 'commit' });
+    expect(order).toEqual(['price', 'plots', 'markers', 'alerts']);
+  });
+
+  test('a thrown prep skips price, plots, markers, and alerts', () => {
+    const order: string[] = [];
+    const result = commitLiveBatch({
+      seq: 2,
+      lastSeq: 1,
+      prep: () => {
+        throw new Error('shape');
+      },
+      price: () => order.push('price'),
+      plots: () => order.push('plots'),
+      markers: () => order.push('markers'),
+      alerts: () => order.push('alerts'),
+    });
+    expect(result).toEqual({ ok: false, reason: 'aborted' });
+    expect(order).toEqual([]);
+  });
+
+  test('a thrown plots step leaves price painted (LWC has no rollback)', () => {
+    const order: string[] = [];
+    const result = commitLiveBatch({
+      seq: 2,
+      lastSeq: 1,
+      price: () => order.push('price'),
+      plots: () => {
+        order.push('plots');
+        throw new Error('plot');
+      },
+      markers: () => order.push('markers'),
+      alerts: () => order.push('alerts'),
+    });
+    expect(result).toEqual({ ok: false, reason: 'aborted' });
+    expect(order).toEqual(['price', 'plots']);
   });
 });

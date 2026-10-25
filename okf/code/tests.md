@@ -7,7 +7,7 @@ tags: [code, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-25T22:20:23Z
+  at: 2026-10-25T23:16:48Z
 sources:
   - id: tree
     resource: "tests"
@@ -390,6 +390,7 @@ okf_lock: generated
 * [tests/fixtures](/code/tests/fixtures.md)
 * [tests/helpers](/code/tests/helpers.md)
 * [tests/hp](/code/tests/hp.md)
+* [tests/indicators](/code/tests/indicators.md)
 * [tests/integration](/code/tests/integration.md)
 * [tests/okf](/code/tests/okf.md)
 * [tests/security](/code/tests/security.md)

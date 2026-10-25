@@ -37,7 +37,8 @@
 import { getManager, setDataToChart } from '../chart/manager-access';
 import { FALLBACK_MAJORS } from '../data/symbol-catalog';
 import { intervalToSec } from '../data/bars-gaps';
-import { applyStreamPayload } from '../engine/apply-bridge';
+import { applyStreamDelta, applyStreamPayload } from '../engine/apply-bridge';
+import { noteLiveBarForAlerts } from '../alerts/tick';
 import { Redesign2BarCloseVerifier, compareClosedOhlcv } from '../engine/bar-close-verify';
 import { currentSeriesKey, pairFormSymbol } from '../engine/market-identity';
 import { pyneMarket } from '../data/provider';
@@ -320,7 +321,12 @@ function buildWireAt(endpoint: string, authToken: string | undefined): StreamLiv
         // setData. Same-slot or next-slot tips path-set through appendLiveBar.
         if (!append || bars.length > 4 || !continuesChartTail(bars)) return;
         for (const bar of bars) {
-          appendLiveBar(bar, { via: 'worker' });
+          const verdict = appendLiveBar(bar, { via: 'worker' });
+          if (verdict === 'ignored') continue;
+          noteLiveBarForAlerts(bar, {
+            symbol: store.symbol || '',
+            interval: store.interval || '',
+          });
         }
       },
       onCloseVerified: (time, _result, ohlcv) => {
@@ -377,7 +383,9 @@ function buildWireAt(endpoint: string, authToken: string | undefined): StreamLiv
       },
     },
     (script, indicatorId, full, via, bars) =>
-      applyStreamPayload({ script, indicatorId, full: full as never, via, bars }),
+      via === 'stream-delta'
+        ? applyStreamDelta({ script, indicatorId, full: full as never, via, bars })
+        : applyStreamPayload({ script, indicatorId, full: full as never, via, bars }),
   );
 }
 

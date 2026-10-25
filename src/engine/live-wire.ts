@@ -44,7 +44,7 @@ import { sanitizeStreamBar } from '../data/parse-bars';
 import { readTimeList, scriptDeltaTimeTail, Redesign2DeltaApplier } from './client-apply';
 import { classifySeqGap } from './frames';
 import { v1Count } from './v1/metrics';
-import { runApplyTransaction } from './v1/apply-transaction';
+import { commitLiveBatch, runApplyTransaction } from './v1/apply-transaction';
 import { wantsWorkerTransport } from './v1/transport';
 import type { SubscriptionStatus } from '../store/types';
 
@@ -86,6 +86,8 @@ export interface WireClient {
   unsubscribe(id: string): void;
   awaitFrame(id: string, timeoutMs?: number): Promise<WireFrame>;
   onFrame: ((frame: WireFrame) => void) | undefined;
+  /** Worker batches. When set, the host delivers the whole batch here. */
+  onFrames?: ((frames: WireFrame[]) => void) | undefined;
   /** Set by the wire. An unknown AXB1 opcode for one sub; the socket stays open. */
   onUnknownOpcode?: (info: { id: string; opcode: number; seq: number }) => void;
   /** Set by the wire. Outbound buffer is over the cap (`held`) or has drained. */
@@ -201,6 +203,10 @@ function toBars(raw: unknown): Bar[] {
     if (bar) out.push(bar);
   }
   return out;
+}
+
+function isThenable<T>(value: T | Promise<T>): value is Promise<T> {
+  return !!value && typeof (value as Promise<T>).then === 'function';
 }
 
 function mergeTip(cur: Bar[], next: Bar[]): Bar[] {
@@ -339,7 +345,7 @@ export class StreamLiveWire {
       full: Record<string, unknown>,
       via: 'stream-full' | 'stream-delta',
       bars: Bar[],
-    ) => Promise<RunResult>,
+    ) => Promise<RunResult> | RunResult,
   ) {
     this.client.addReconnectHandler(() => this.resumeAll());
     this.watchVisibility();
@@ -496,6 +502,7 @@ export class StreamLiveWire {
       this.fail('connect', e instanceof Error ? e.message : String(e));
     }
     this.client.onFrame = (frame) => this.ingest(frame);
+    this.client.onFrames = (frames) => this.ingestBatch(frames);
     this.client.onUnknownOpcode = (info) => this.useJsonForSub(info.id);
     this.client.onBackpressure = (held) => this.noteSendBackpressure(held);
   }
@@ -588,6 +595,69 @@ export class StreamLiveWire {
       this.notifyInboxWaiters(frame.id);
     }
     this.routeFrame(frame);
+  }
+
+  /**
+   * One worker batch. Mixed series+script deltas commit price then plots
+   * in one transaction (concept §6.1). Fulls, status, and closes still
+   * route immediately so a snapshot is never held behind a tip.
+   */
+  ingestBatch(frames: readonly WireFrame[]): void {
+    if (frames.length === 0) return;
+    if (frames.length === 1) {
+      this.ingest(frames[0]!);
+      return;
+    }
+    const pendingSeries: WireFrame[] = [];
+    const pendingScript: WireFrame[] = [];
+    const flushDeltas = (): void => {
+      if (!pendingSeries.length && !pendingScript.length) return;
+      if (pendingSeries.length && pendingScript.length) {
+        this.commitDeltaBatch(pendingSeries.splice(0), pendingScript.splice(0));
+        return;
+      }
+      for (const frame of pendingSeries) this.routeFrame(frame);
+      for (const frame of pendingScript) this.routeFrame(frame);
+      pendingSeries.length = 0;
+      pendingScript.length = 0;
+    };
+    for (const frame of frames) {
+      if (this.shouldHold(frame)) {
+        this.holdFrame(frame);
+        continue;
+      }
+      if (frame.id) {
+        this.enqueueInbox(frame);
+        this.notifyInboxWaiters(frame.id);
+      }
+      if (frame.type === 'delta' && (frame.sessionId || frame.id)) {
+        if (this.isSeriesFrame(frame)) pendingSeries.push(frame);
+        else pendingScript.push(frame);
+        continue;
+      }
+      flushDeltas();
+      this.routeFrame(frame);
+    }
+    flushDeltas();
+  }
+
+  private isSeriesFrame(frame: WireFrame): boolean {
+    const id = frame.id ?? '';
+    const payload = (frame.payload as Record<string, unknown>) ?? {};
+    return payload.bars != null || id.startsWith('series:');
+  }
+
+  private commitDeltaBatch(series: WireFrame[], scripts: WireFrame[]): void {
+    commitLiveBatch({
+      lastSeq: 0,
+      seq: null,
+      price: () => {
+        for (const frame of series) this.routeFrame(frame);
+      },
+      plots: () => {
+        for (const frame of scripts) this.routeFrame(frame);
+      },
+    });
   }
 
   /** Test seam. Frames waiting for a snapshot waiter. */
@@ -830,7 +900,7 @@ export class StreamLiveWire {
         return;
       }
       if ((frame.type === 'full' || frame.type === 'delta') && (frame.sessionId || frame.id)) {
-        void this.applyRemoteFrame(frame);
+        this.applyRemoteFrame(frame);
         return;
       }
       if (frame.type === 'close' && frame.id) {
@@ -1067,9 +1137,9 @@ export class StreamLiveWire {
     subId: string,
     cached: Record<string, unknown>,
     via: 'stream-full' | 'stream-delta',
-  ): Promise<void> {
+  ): Promise<void> | void {
     const ctx = this.scriptCtx.get(subId);
-    if (!ctx) return Promise.resolve();
+    if (!ctx) return;
     // The subscription captured the window at subscribe time. A new candle
     // replaces that array when the chart slides, so the paint has to use the
     // window on screen or the closed %B lands on the next bar.
@@ -1080,10 +1150,11 @@ export class StreamLiveWire {
   }
 
   /** One apply at a time. Always the newest payload, never a skipped snapshot. */
-  private flushScriptPaint(subId: string): Promise<void> {
+  private flushScriptPaint(subId: string): Promise<void> | void {
     const existing = this.paintTail.get(subId);
     if (existing) return existing.then(() => this.flushScriptPaint(subId));
     const run = this.drainScriptPaint(subId);
+    if (!isThenable(run)) return;
     this.paintTail.set(subId, run);
     void run.finally(() => {
       if (this.paintTail.get(subId) === run) this.paintTail.delete(subId);
@@ -1091,7 +1162,11 @@ export class StreamLiveWire {
     return run;
   }
 
-  private async drainScriptPaint(subId: string): Promise<void> {
+  /**
+   * Drain the newest script payload. A sync `apply` (live delta) runs in this
+   * task; a thenable (snapshot) is the only yield.
+   */
+  private drainScriptPaint(subId: string): Promise<void> | void {
     while (this.paintLatest.has(subId)) {
       const job = this.paintLatest.get(subId);
       this.paintLatest.delete(subId);
@@ -1099,7 +1174,18 @@ export class StreamLiveWire {
       const ctx = this.scriptCtx.get(subId);
       if (!ctx) continue;
       try {
-        await this.apply(ctx.script, ctx.indicatorId, job.cached, job.via, job.bars);
+        const out = this.apply(ctx.script, ctx.indicatorId, job.cached, job.via, job.bars);
+        if (isThenable(out)) {
+          return Promise.resolve(out).then(
+            () => this.drainScriptPaint(subId),
+            (err: unknown) => {
+              if (job.via === 'stream-full') throw err;
+              const reason = err instanceof Error ? err.message : 'paint failed';
+              this.requestAxisResub(subId, `apply aborted — ${reason}`);
+              return this.drainScriptPaint(subId);
+            },
+          );
+        }
       } catch (err) {
         if (job.via === 'stream-full') throw err;
         const reason = err instanceof Error ? err.message : 'paint failed';
@@ -1128,7 +1214,7 @@ export class StreamLiveWire {
     return out;
   }
 
-  private async applyRemoteFrame(frame: WireFrame): Promise<void> {
+  private applyRemoteFrame(frame: WireFrame): void {
     const subId = frame.id;
     if (!subId) return;
     const payload = (frame.payload as Record<string, unknown>) ?? {};

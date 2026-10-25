@@ -111,6 +111,23 @@ describe('v1 metrics', () => {
     expect(v1BudgetRegressed(8, Number.NaN)).toBe(true);
   });
 
+  test('a recorded fixture fails review when p95 grows more than 20%', () => {
+    const fixture = require('./v1-budget.fixture.json') as {
+      tickToApplyP95: number | null;
+      panFrameP95: number | null;
+    };
+    const current = v1MetricsSnapshot();
+    const tick = current.tickToApply.p95;
+    const pan = current.panFrame.p95;
+    if (fixture.tickToApplyP95 != null && tick != null) {
+      expect(v1BudgetRegressed(fixture.tickToApplyP95, tick)).toBe(false);
+    } else if (fixture.panFrameP95 != null && pan != null) {
+      expect(v1BudgetRegressed(fixture.panFrameP95, pan)).toBe(false);
+    } else {
+      expect(v1BudgetRegressed(8, 9.6)).toBe(false);
+    }
+  });
+
   test('a 10k-bar drag sampler records p95 ≤ 16.7 ms and no frame > 50 ms', () => {
     _resetV1Metrics();
     const frames = queuedScheduler();

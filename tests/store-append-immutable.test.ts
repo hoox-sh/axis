@@ -98,11 +98,11 @@ describe('appendBar — immutable history', () => {
     expect(store.bars[0]!.close).toBe(100);
   });
 
-  it('accepts a closed restatement of the closed tip', () => {
+  it('drops a closed restatement of the closed tip', () => {
     loadBars([bar(1_700_000_000, 100, { closed: true })], 'BTCUSDT', '1m', 'test');
     const verdict = appendBar(bar(1_700_000_000, 101, { closed: true }));
-    expect(verdict).toBe('updated');
-    expect(store.bars[0]!.close).toBe(101);
+    expect(verdict).toBe('ignored');
+    expect(store.bars[0]!.close).toBe(100);
   });
 
   it('a forming tick on a new tip does not change the last N closed-bar hash', () => {
@@ -135,7 +135,7 @@ describe('appendBar — immutable history', () => {
     expect(closedBarHash(store.bars, 8)).not.toBe(hash);
   });
 
-  it('rewriting a closed tip still stores the correction and changes the hash', () => {
+  it('rewriting a closed tip is dropped and the hash stays', () => {
     loadBars([bar(1_700_000_000, 100, { closed: true })], 'BTCUSDT', '1m', 'test');
     const hash = closedBarHash(store.bars, 8);
     _resetSyncSampleForTests();
@@ -147,13 +147,13 @@ describe('appendBar — immutable history', () => {
     }) as typeof console.warn;
     Math.random = () => 0;
     try {
-      expect(appendBar(bar(1_700_000_000, 101, { closed: true }))).toBe('updated');
+      expect(appendBar(bar(1_700_000_000, 101, { closed: true }))).toBe('ignored');
     } finally {
       console.warn = origWarn;
       Math.random = origRand;
     }
-    expect(store.bars[0]!.close).toBe(101);
-    expect(closedBarHash(store.bars, 8)).not.toBe(hash);
+    expect(store.bars[0]!.close).toBe(100);
+    expect(closedBarHash(store.bars, 8)).toBe(hash);
     expect(messages).toContain('[axis] closed bar 1700000000 changed after commit');
   });
 

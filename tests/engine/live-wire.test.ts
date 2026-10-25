@@ -11,7 +11,7 @@ import { _resetV1Metrics, v1MetricsSnapshot } from '../../src/engine/v1/metrics'
 import { setStore, store } from '../../src/store';
 import { resetEngineTransport, setEngineTransport } from '../../src/engine/v1/transport';
 
-function makeHarness(opts?: { delayDelta?: boolean }) {
+function makeHarness(opts?: { delayDelta?: boolean; syncApply?: boolean }) {
   const sent: Array<{ kind: string; id: string; opts?: Record<string, unknown> }> = [];
   const statuses: Array<{ sub: string; status: string }> = [];
   const unsubscribed: string[] = [];
@@ -28,6 +28,7 @@ function makeHarness(opts?: { delayDelta?: boolean }) {
       return open;
     },
     onFrame: undefined,
+    onFrames: undefined,
     async connect() {
       stopped = false;
       counters.connects += 1;
@@ -67,23 +68,43 @@ function makeHarness(opts?: { delayDelta?: boolean }) {
     onCloseVerified: (time, _result, ohlcv) => closes.push({ time, ohlcv }),
   };
   const applied: Array<{ via: string }> = [];
-  const wire = new StreamLiveWire(
-    client,
-    handlers,
-    (async (_script, _id, _full, via) => {
-      if (opts?.delayDelta && via === 'stream-delta') await tick();
+  const applyOrder: string[] = [];
+  const applyFn = (
+    _script: string,
+    _id: string | undefined,
+    _full: Record<string, unknown>,
+    via: 'stream-full' | 'stream-delta',
+  ): RunResult | Promise<RunResult> => {
+    const done = (): RunResult => {
+      applyOrder.push(`plots:${via}`);
       applied.push({ via });
       return { status: 'success', plots: [], series: {}, events: [], meta: {} };
-    }) as never,
-  );
+    };
+    if (opts?.syncApply) return done();
+    return (async () => {
+      if (opts?.delayDelta && via === 'stream-delta') await tick();
+      return done();
+    })();
+  };
+  handlers.onSeriesDelta = (bars, append) => {
+    applyOrder.push('price');
+    seriesDelta.push({ bars, append });
+  };
+  const wire = new StreamLiveWire(client, handlers, applyFn);
   const emit = (frame: WireFrame) => client.onFrame!(frame);
+  const emitBatch = (frames: WireFrame[]) => {
+    if (client.onFrames) client.onFrames(frames);
+    else for (const frame of frames) client.onFrame!(frame);
+  };
   return {
     wire,
     client,
     sent,
     statuses,
     applied,
+    applyOrder,
     emit,
+    emitBatch,
     unsubscribed,
     counters,
     seriesFull,
@@ -1484,5 +1505,63 @@ const h = makeHarness();
     expect(worker.resumes).toEqual([
       { id: 's-w', count: 1, lastTime: 100, extra: { seq: 5, encoding: 'axb1' } },
     ]);
+  });
+});
+
+describe('live-wire mixed delta batch', () => {
+  test('series+script deltas in one batch paint price then plots without yielding', async () => {
+    const h = makeHarness({ syncApply: true });
+    const seriesP = h.wire.ensureSeries('series:k', {});
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: 'series:k',
+      sessionId: 'ses',
+      seq: 1,
+      payload: { count: 1, bars: BARS },
+    });
+    await seriesP;
+
+    const scriptP = h.wire.evalScript({
+      subId: 's-1',
+      script: 'indicator() {}',
+      meta: {},
+      bars: BARS,
+    });
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 1,
+      payload: { count: 1, plots: [[1]], series: { a: [1] } },
+    });
+    await scriptP;
+    h.applyOrder.length = 0;
+    h.applied.length = 0;
+    h.seriesDelta.length = 0;
+
+    const tip: Bar = { time: 100, open: 1, high: 2, low: 1, close: 2, volume: 1 };
+    h.emitBatch([
+      {
+        type: 'delta',
+        id: 'series:k',
+        sessionId: 'ses',
+        seq: 2,
+        payload: { bars: [tip], forming: true, base_index: 0, count: 1, tail_len: 1 },
+      },
+      {
+        type: 'delta',
+        id: 's-1',
+        sessionId: 'ses',
+        seq: 2,
+        payload: { base_index: 0, count: 1, tail_len: 1, plots: [[2]], series: { a: [2] } },
+      },
+    ]);
+    expect(h.applyOrder).toEqual(['price', 'plots:stream-delta']);
+    expect(h.seriesDelta).toEqual([{ bars: [tip], append: true }]);
+    expect(h.applied).toEqual([{ via: 'stream-delta' }]);
   });
 });

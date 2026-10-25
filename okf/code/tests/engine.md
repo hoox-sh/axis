@@ -7,7 +7,7 @@ tags: [code, engine, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-25T22:43:18Z
+  at: 2026-10-25T23:16:48Z
 sources:
   - id: tree
     resource: "tests/engine"
@@ -43,6 +43,10 @@ okf_lock: generated
 * `verify-strength.test.ts`
 * `ws-client.test.ts`
 * `ws-send.test.ts`
+
+# Other files
+
+* `v1-budget.fixture.json`
 
 # Packages
 
