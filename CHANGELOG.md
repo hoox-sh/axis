@@ -21,6 +21,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Fixed
 
+- **A newer snapshot is not painted under a late forming tip.** Script paints wait on a per-subscription chain. If the cursor has already moved, that delayed apply is dropped. The last paint is the snapshot, then later deltas.
+
 - **APPEND_BAR flushes a pending forming tip then the append.** Same as a `close`: a confirmed (`forming: false`) delta for that subscription does not wait for the coalesce timer.
 
 - **AXB1 `SNAPSHOT_PLOTS` keeps `bar_times` aligned with `count`.** A plots snapshot with times round-trips exactly. Encode throws when times or a plot column is the wrong length. The ingest mapper copies those times onto the JSON full as `bar_times`. Times stay optional so a frame without them still encodes.

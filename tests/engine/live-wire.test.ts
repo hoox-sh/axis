@@ -11,7 +11,7 @@ import { _resetV1Metrics, v1MetricsSnapshot } from '../../src/engine/v1/metrics'
 import { setStore, store } from '../../src/store';
 import { resetEngineTransport, setEngineTransport } from '../../src/engine/v1/transport';
 
-function makeHarness() {
+function makeHarness(opts?: { delayDelta?: boolean }) {
   const sent: Array<{ kind: string; id: string; opts?: Record<string, unknown> }> = [];
   const statuses: Array<{ sub: string; status: string }> = [];
   const unsubscribed: string[] = [];
@@ -70,6 +70,7 @@ function makeHarness() {
     client,
     handlers,
     (async (_script, _id, _full, via) => {
+      if (opts?.delayDelta && via === 'stream-delta') await tick();
       applied.push({ via });
       return { status: 'success', plots: [], series: {}, events: [], meta: {} };
     }) as never,
@@ -700,6 +701,57 @@ describe('live-wire P1 series + study push', () => {
     expect(h.applied).toEqual([{ via: 'stream-full' }, { via: 'stream-delta' }]);
     expect(h.sent.filter((s) => s.kind === 'subscribe:script').length).toBe(1);
     expect(h.wire.snapshotState().subs[0]?.seq).toBe(6);
+  });
+
+  test('a mid-stream snapshot replaces a pending forming tip as one generation', async () => {
+    const h = makeHarness({ delayDelta: true });
+    const first = h.wire.evalScript({ subId: 's-1', script: 'indicator() {}', meta: {}, bars: BARS });
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 5,
+      payload: { count: 1, plots: [[1]], series: { a: [1] } },
+    });
+    await first;
+    h.emit({
+      type: 'delta',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 6,
+      payload: {
+        base_index: 0,
+        count: 1,
+        tail_len: 1,
+        forming: true,
+        plots: [[6]],
+        series: { a: [6] },
+      },
+    });
+    h.emit({
+      type: 'full',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 10,
+      payload: { count: 1, plots: [[10]], series: { a: [10] } },
+    });
+    await tick();
+    expect(h.applied.filter((a) => a.via === 'stream-full')).toHaveLength(2);
+    expect(h.applied.at(-1)).toEqual({ via: 'stream-full' });
+    expect(h.wire.snapshotState().subs[0]?.seq).toBe(10);
+    h.emit({
+      type: 'delta',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 11,
+      payload: { base_index: 0, count: 1, tail_len: 1, plots: [[11]], series: { a: [11] } },
+    });
+    await tick();
+    await tick();
+    expect(h.applied.at(-1)).toEqual({ via: 'stream-delta' });
+    expect(h.wire.snapshotState().subs[0]?.seq).toBe(11);
   });
 
   test('a hidden tab applies one tip when no bar closed', async () => {
