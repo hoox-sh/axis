@@ -156,6 +156,8 @@ const FAILURE_COOLDOWN_MS = 60_000;
 /** PYNE history ensure of a painted 5m window routinely exceeds 30s. */
 const SNAPSHOT_WAIT_MS = 120_000;
 const LOADING_WAIT_CAP_MS = 120_000;
+/** Two more asks before an AXB1 snapshot gives up and that sub uses JSON. */
+const SNAPSHOT_BACKOFF_MS = [50, 200] as const;
 /**
  * After the tab is shown, fold the queued burst into one decision.
  * A hidden tab must not replay every tick it missed.
@@ -563,9 +565,12 @@ export class StreamLiveWire {
     if (this.cooledDown) this.fail('cooldown', 'stream in failure cooldown');
     this.handlers.onStatus(subId, 'connecting');
     try {
-      const encoding = this.encodingFor(subId);
-      this.client.subscribe(subId, 'series', meta, encoding ? { encoding } : undefined);
-      const full = await this.awaitFull(subId, SNAPSHOT_WAIT_MS);
+      const send = () => {
+        const encoding = this.encodingFor(subId);
+        this.client.subscribe(subId, 'series', meta, encoding ? { encoding } : undefined);
+      };
+      send();
+      const full = await this.awaitSnapshot(subId, SNAPSHOT_WAIT_MS, { fatal: true, resend: send });
       if (full.type === 'error') {
         this.handlers.onStatus(subId, 'error', {
           message: String((full.payload as Record<string, unknown>)?.message ?? 'subscribe failed'),
@@ -630,13 +635,19 @@ export class StreamLiveWire {
       this.scriptDepth.set(input.subId, depth);
       this.handlers.onStatus(input.subId, 'connecting');
       try {
-        const encoding = this.encodingFor(input.subId);
-        this.client.subscribe(input.subId, 'script', input.meta, {
-          script: input.script,
-          ...(input.inputs ? { inputs: input.inputs } : {}),
-          ...(encoding ? { encoding } : {}),
+        const send = () => {
+          const encoding = this.encodingFor(input.subId);
+          this.client.subscribe(input.subId, 'script', input.meta, {
+            script: input.script,
+            ...(input.inputs ? { inputs: input.inputs } : {}),
+            ...(encoding ? { encoding } : {}),
+          });
+        };
+        send();
+        const full = await this.awaitSnapshot(input.subId, SNAPSHOT_WAIT_MS, {
+          fatal: false,
+          resend: send,
         });
-        const full = await this.awaitFull(input.subId, SNAPSHOT_WAIT_MS, { fatal: false });
         if (full.type === 'error' || full.type !== 'full') {
           this.appliers.delete(input.subId);
           this.scriptInputSig.delete(input.subId);
@@ -739,6 +750,54 @@ export class StreamLiveWire {
     const i = list.indexOf(fn);
     if (i >= 0) list.splice(i, 1);
     if (!list.length) this.inboxWaiters.delete(subId);
+  }
+
+  /**
+   * One deadline, then two backoff resends, then one JSON subscribe when
+   * this socket is negotiating AXB1. The loop is bounded.
+   */
+  private async awaitSnapshot(
+    subId: string,
+    timeoutMs: number,
+    opts: { fatal: boolean; resend: () => void },
+  ): Promise<WireFrame> {
+    let last: StreamFallbackError | null = null;
+    const attempts = SNAPSHOT_BACKOFF_MS.length + 1;
+    for (let i = 0; i < attempts; i++) {
+      if (i > 0) {
+        await new Promise<void>((resolve) => setTimeout(resolve, SNAPSHOT_BACKOFF_MS[i - 1]));
+        try {
+          opts.resend();
+        } catch {
+          /* the next wait still ends */
+        }
+      }
+      try {
+        return await this.awaitFull(subId, timeoutMs, { fatal: false });
+      } catch (e) {
+        if (!(e instanceof StreamFallbackError) || e.reason !== 'snapshot-timeout') throw e;
+        last = e;
+      }
+    }
+    if (negotiatedEncoding() && !this.jsonSubs.has(subId)) {
+      this.jsonSubs.add(subId);
+      v1Count('jsonFallback');
+      this.handlers.onStatus(subId, 'degraded', { message: 'snapshot timeout — JSON' });
+      try {
+        opts.resend();
+      } catch {
+        /* keep the socket */
+      }
+      try {
+        return await this.awaitFull(subId, timeoutMs, { fatal: false });
+      } catch (e) {
+        if (!(e instanceof StreamFallbackError) || e.reason !== 'snapshot-timeout') throw e;
+        last = e;
+      }
+    }
+    const message = last?.message ?? `no snapshot for ${subId}`;
+    if (!opts.fatal) throw last ?? new StreamFallbackError('snapshot-timeout', message);
+    this.fail('snapshot-timeout', message);
   }
 
   /**

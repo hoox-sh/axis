@@ -27,6 +27,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Fixed
 
+- **A snapshot that never arrives retries twice, then that subscription asks in JSON.** The waits stay bounded (the same snapshot deadline, then 50 ms and 200 ms). An AXB1 socket resubscribes once without `encoding`. A JSON socket just fails. The series socket stays open.
+
 - **An unknown AXB1 opcode does not close the socket.** The decode counts `unknownOpcode`, names the subscription, and that subscription resumes without `encoding: 'axb1'`. Other subscriptions stay on AXB1. A second unknown opcode for the same subscription does not resume again.
 
 - **A hidden tab does not replay every missed tick.** The live socket stays open. Forming ticks fold into one slot per subscription. When the tab is shown, a `closed_upto` that moved resumes once from the last painted close. Otherwise the latest tip is applied once. A seq that never arrived still resumes.

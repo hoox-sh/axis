@@ -289,6 +289,8 @@ describe('redesign2 live-wire (F-19)', () => {
   });
 
   test('series snapshot-timeout does not disconnect; later ensureSeries can subscribe on the same client', async () => {
+    _resetV1Metrics();
+    resetEngineTransport();
     const realSetTimeout = globalThis.setTimeout;
     const origNow = Date.now;
     const t0 = origNow();
@@ -296,7 +298,7 @@ describe('redesign2 live-wire (F-19)', () => {
     Date.now = () => now;
     globalThis.setTimeout = ((fn: TimerHandler, ms?: number, ...args: unknown[]) => {
       if (typeof ms === 'number' && ms > 1_000) {
-        now = t0 + 130_000;
+        now += ms;
         return realSetTimeout(fn as () => void, 0);
       }
       return realSetTimeout(fn as () => void, ms as number, ...args);
@@ -310,13 +312,18 @@ describe('redesign2 live-wire (F-19)', () => {
       expect(h.wire.snapshotState().stats).toMatchObject({ stopped: false, open: true });
       expect(h.wire.isSubscribed('series:binance|spot|BTC/USDT|5m')).toBe(false);
       expect(h.wire.snapshotState().lastFail?.reason).toBe('snapshot-timeout');
+      const seriesSubs = h.sent.filter((s) => s.kind === 'subscribe:series');
+      expect(seriesSubs).toHaveLength(4);
+      expect(seriesSubs[3]?.opts).toBeUndefined();
+      expect(v1MetricsSnapshot().counts.jsonFallback).toBe(1);
     } finally {
       Date.now = origNow;
       globalThis.setTimeout = realSetTimeout;
     }
 
     expect(h.wire.cooledDown).toBe(true);
-    Date.now = () => origNow() + 200_000;
+    // Four snapshot deadlines plus the cooldown, on the fake clock.
+    Date.now = () => origNow() + 700_000;
     try {
       expect(h.wire.cooledDown).toBe(false);
       const p2 = h.wire.ensureSeries('series:binance|spot|BTC/USDT|5m', {});
@@ -332,7 +339,7 @@ describe('redesign2 live-wire (F-19)', () => {
       expect(h.client.isOpen).toBe(true);
       expect(h.counters.disconnects).toBe(0);
       expect(h.wire.snapshotState().stats).toMatchObject({ stopped: false, open: true });
-      expect(h.sent.filter((s) => s.kind === 'subscribe:series').length).toBe(2);
+      expect(h.sent.filter((s) => s.kind === 'subscribe:series').length).toBe(5);
     } finally {
       Date.now = origNow;
     }
