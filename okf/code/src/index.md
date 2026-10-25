@@ -35,6 +35,7 @@
 
 * [chart](chart/) - Solid chart host — mounts PaneManager for one layout slot.
 * [data](data/) - Background Data Source Manager — multi-page OHLCV backfill to a past date.
+* [engine](engine/) - Redesign2 engine module barrel.
 * [hp](hp/) - High-performance chart engine (HP PR 1–9).
 * [indicators](indicators/) - src/indicators contains IndicatorCard.tsx, IndicatorPanel.tsx, apply-context.ts, and 13 more files.
 * [ui](ui/) - src/ui contains AboutModal.tsx, AlertsPanel.tsx, BarReplayControls.tsx, and 82 more files.

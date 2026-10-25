@@ -32,6 +32,7 @@ import {
 } from '../hp/calc/execution-context';
 import { resolveSessionPayload } from '../engines/session-delta';
 import { classifySeqGap } from './frames';
+import { v1Count } from './v1/metrics';
 
 export type ApplyState = 'idle' | 'requesting' | 'full-applied' | 'delta-only';
 
@@ -189,7 +190,10 @@ export class Redesign2DeltaApplier {
           : 'snapshot';
       return { ok: true, full: { ...this.cache }, replayed: true, executionContext };
     }
-    if (gap.kind !== 'continuous') return { ok: false, reason: 'needs-full' };
+    if (gap.kind !== 'continuous') {
+      if (gap.kind === 'gap') v1Count('seqGap');
+      return { ok: false, reason: 'needs-full' };
+    }
     const cachedCount = typeof this.cache.count === 'number' ? this.cache.count : undefined;
     const { seq: _seq, base_index, count, tail_len, forming, ...rest } = delta;
     void _seq;

@@ -35,6 +35,7 @@ import { PendingRequests, ReconnectHandlers, wireStats } from '../../engine/wire
 import type { Bar } from '../../store/types';
 import { isolationProbe } from '../capabilities';
 import { noteIngestPublish } from '../../chart/paint-latency';
+import { v1Mark } from '../../engine/v1/metrics';
 import { hpSabMode, isHpEnabled } from '../feature-flag';
 import { allocateHotBuffer, type HotBuffer } from '../memory/hot-buffer';
 import type { HostToIngest, IngestToHost, ColdKey } from './protocol';
@@ -192,6 +193,8 @@ export class IngestHostClient implements WireClient {
     }
     if (msg.type === 'frames') {
       noteIngestPublish(msg.publishedAt);
+      // Worker already decoded. This stamp is main-thread receipt, not parse.
+      v1Mark('batch:post');
       this.dispatchFrames(msg.frames);
       return;
     }

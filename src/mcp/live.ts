@@ -25,6 +25,7 @@ import { pyneMarket } from '../data/provider';
 import { intervalToSec } from '../data/bars-gaps';
 import { flushLocalAndEngine } from '../data/engine-flush';
 import { currentSeriesKey, pairFormSymbol } from '../engine/market-identity';
+import { v1MetricsSnapshot } from '../engine/v1/metrics';
 import { routeEngineRun } from '../engine/router';
 import type { DataSeriesKey, DataSeriesStatus } from '../engines/data-sessions';
 import {
@@ -402,6 +403,7 @@ export async function chartLagView(p: Record<string, unknown>): Promise<Record<s
       engine: store.telemetry?.engine ?? null,
       stream: store.telemetry?.stream ?? null,
     },
+    v1: v1MetricsSnapshot(),
     verdict,
   };
 }

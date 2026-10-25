@@ -33,6 +33,7 @@
  */
 
 import type { ExecutionContext } from '../hp/calc/execution-context';
+import { v1Gauge, v1Mark } from './v1/metrics';
 import type { RunResult } from '../plugins/types';
 import type { Bar } from '../store/types';
 import { store } from '../store';
@@ -113,13 +114,19 @@ export async function applyStreamPayload(
   const run =
     deps?.runAndApply ??
     (await import('../indicators/runner')).runAndApply as unknown as RunAndApplyFn;
-  return run(input.script, input.indicatorId, {
-    precomputedResult,
-    bars: input.bars,
-    silent: input.silent ?? true,
-    openResults: false,
-    liveTick: true,
-  });
+  v1Mark('apply:start');
+  try {
+    return await run(input.script, input.indicatorId, {
+      precomputedResult,
+      bars: input.bars,
+      silent: input.silent ?? true,
+      openResults: false,
+      liveTick: true,
+    });
+  } finally {
+    v1Gauge('visibleBars', input.bars.length);
+    v1Mark('apply:end');
+  }
 }
 
 /** Input descriptors of a script's last stored run (empty when unknown). */

@@ -51,6 +51,7 @@ import {
   type SeriesMarker,
   type UTCTimestamp,
 } from 'lightweight-charts';
+import { v1NotePanActivity } from '../engine/v1/metrics';
 import {
   createBaseChart,
   createLineSeries,
@@ -1199,6 +1200,7 @@ export class PaneManager {
     div.addEventListener('pointerup', onRangePointerUp);
     div.addEventListener('pointercancel', onRangePointerUp);
     div.addEventListener('wheel', this.noteUserRange, { passive: true });
+    div.addEventListener('wheel', () => v1NotePanActivity(), { passive: true });
 
     const pane: ManagedPane = {
       id,
@@ -1499,6 +1501,7 @@ export class PaneManager {
     const src = srcPane.chart;
     const handler = (range: { from: number; to: number } | null) => {
       if (this.suppressSync || !range) return;
+      if (this.ranging) v1NotePanActivity();
       this.pendingTimeRange = range;
       this.timeSyncRaf.schedule(() => {
         const next = this.pendingTimeRange;

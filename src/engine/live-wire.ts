@@ -42,6 +42,7 @@ import type { Bar } from '../store/types';
 import { sanitizeStreamBar } from '../data/parse-bars';
 import { readTimeList, scriptDeltaTimeTail, Redesign2DeltaApplier } from './client-apply';
 import { classifySeqGap } from './frames';
+import { v1Count } from './v1/metrics';
 import type { SubscriptionStatus } from '../store/types';
 
 export class StreamFallbackError extends Error {
@@ -720,6 +721,7 @@ export class StreamLiveWire {
     if (!out.ok && out.reason === 'needs-full') {
       const incomingSeq = typeof frame.seq === 'number' ? frame.seq : -1;
       if (classifySeqGap(applier.lastSeq, incomingSeq).kind !== 'continuous') {
+        v1Count('resync');
         this.handlers.onStatus(subId, 'degraded', { message: 'delta gap — resubscribing' });
         const gapCtx = this.scriptCtx.get(subId);
         const gapBars = gapCtx?.bars ?? [];
