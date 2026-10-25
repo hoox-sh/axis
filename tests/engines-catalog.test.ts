@@ -417,7 +417,7 @@ describe('engines catalog', () => {
     expect(r.plots?.[0]).toBeNull();
   });
 
-  it('WS connect fail falls through to REST', async () => {
+  it('WS connect fail stays on the socket and does not call REST', async () => {
     installCatalogFakeWs();
     CatalogFakeWS.failConstruct = true;
     restoreFetch = mockFetch(async () =>
@@ -437,12 +437,11 @@ describe('engines catalog', () => {
         preferWs: true,
       },
     });
-    expect(r.status).toBe('success');
-    expect(r.plots).toEqual([7]);
-    expect(r.meta?.transport).toBe('rest');
+    expect(r.status).toBe('error');
+    expect(r.meta?.transport).toBe('ws');
   });
 
-  it('WS premature close falls through to REST', async () => {
+  it('WS premature close stays on the socket and does not call REST', async () => {
     installCatalogFakeWs();
     restoreFetch = mockFetch(async () =>
       jsonResponse({
@@ -466,9 +465,8 @@ describe('engines catalog', () => {
     expect(CatalogFakeWS.instances[0]).toBeDefined();
     CatalogFakeWS.instances[0]!.close();
     const r = await runP;
-    expect(r.status).toBe('success');
-    expect(r.meta?.transport).toBe('rest');
-    expect(r.plots).toEqual([3]);
+    expect(r.status).toBe('error');
+    expect(r.meta?.transport).toBe('ws');
   });
 
   it('server catalog exposes interpret|compile|auto modes', () => {

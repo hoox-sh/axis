@@ -442,9 +442,9 @@ export const serverEngine: EnginePlugin = {
       });
 
     // ── Engine-owned series (PYNE Pro every-tick): identity only, never bars ──
-    // The engine's store and feed own the OHLCV. A fallback to the bars path
-    // here would ship the window the engine is meant to own, so errors surface.
-    if (dataSession) {
+    // REST `/data/session` only when the user turned WebSocket off. The default
+    // path speaks `/ws/run` and must not fall through to a bar POST.
+    if (dataSession && !preferWs) {
       const { runDataSession } = await import('./data-sessions');
       const ds = await runDataSession({
         endpoint,
@@ -548,9 +548,7 @@ export const serverEngine: EnginePlugin = {
       }
     }
 
-    // ── WSS-first path (short budget so REST still has time) ──────
-    // Gunicorn default workers do NOT speak WebSocket — connect can hang then
-    // burn the whole AbortSignal; REST fallback must get a *fresh* timeout.
+    // ── WebSocket run. REST is only when preferWs is explicitly false. ──
     if (preferWs && typeof WebSocket !== 'undefined') {
       try {
         const { getEngineWsClient } = await import('./engine-ws');
@@ -611,18 +609,34 @@ export const serverEngine: EnginePlugin = {
             meta: { ms: performance.now() - t0, transport: 'ws' },
           } satisfies RunResult;
         }
-        // Surface the fallback (previously silent) — REST still runs below.
-        // toast:false: once per run while WS is unavailable would flood toasts.
         appendLog(
           'warn',
-          `WebSocket run unavailable — using REST (${err instanceof Error ? err.message : String(err)})`,
+          `WebSocket run failed (${err instanceof Error ? err.message : String(err)})`,
           'engine',
           { toast: false },
         );
+        return {
+          status: 'error',
+          plots: [],
+          events: [],
+          series: {},
+          error: err instanceof Error ? err.message : String(err),
+          meta: { ms: performance.now() - t0, transport: 'ws' },
+        } satisfies RunResult;
       }
     }
+    if (preferWs) {
+      return {
+        status: 'error',
+        plots: [],
+        events: [],
+        series: {},
+        error: 'WebSocket run unavailable',
+        meta: { ms: performance.now() - t0, transport: 'ws' },
+      } satisfies RunResult;
+    }
 
-    // ── REST fallback ─────────────────────────────────────────────
+    // ── REST only when preferWs is explicitly false ──────────────
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (apiKey) {
       headers['X-API-Key'] = apiKey;

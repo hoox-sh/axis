@@ -27,6 +27,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Fixed
 
+- **Script and strategy runs stay on the WebSocket.** A failed socket run does not POST `/run` or open a REST data session. Live scripts that miss the stream wait on the socket instead of falling back to `venue+REST`. REST `/run` remains only when WebSocket is explicitly turned off.
+
 - **The live inbox drops extra forming tips.** Each subscription keeps at most 32 frames. Only a forming delta is dropped. A `close`, a `full`, an error, and a non-forming delta stay, and the snapshot waiter still receives the `full`.
 
 - **The quote card stays on the candle while the stream is down.** The quote sheet, the float price panel, and the chart price card use the last bar close when the stream plane is connecting, degraded, closed, or in error. An open stream still shows the live tick.

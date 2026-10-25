@@ -909,15 +909,19 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
       /* publish / resolve optional */
     }
     const windowBars = applyRollingWindow(bars);
+    // Default is WebSocket. Engine-owned REST sessions are only for an
+    // explicit preferWs: false. Otherwise the chart window goes over /ws/run.
+    const preferWs = (config as { preferWs?: boolean }).preferWs !== false;
+    const restSession = engineOwned && !preferWs;
     const rawResult = await engine.run({
       script: scriptForEngine,
-      bars: engineOwned ? [] : windowBars,
+      bars: restSession ? [] : windowBars,
       config,
       inputs,
       ...(engineLibraries?.length ? { libraries: engineLibraries } : {}),
       // Engine-owned series: identity only, never bars. The engine's store and
       // feed own the OHLCV; a live tick re-ticks the per-script session.
-      ...(engineOwned
+      ...(restSession
         ? {
             dataSession: {
               exchange: exchangeForSource(store.source),

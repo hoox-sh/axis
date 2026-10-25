@@ -1124,17 +1124,9 @@ function scheduleRerun() {
                 await streamEvalScript(ind);
               } catch (e) {
                 if (!(e instanceof StreamFallbackError)) throw e;
-                await runAndApply(ind.code, ind.id, {
-                  silent: true,
-                  openResults: false,
-                  inputs: ind.inputValues,
-                  strategyProps: ind.strategyProps,
-                  liveTick: true,
-                  epoch: batch,
-                });
-                // REST calculator ran; do not leave a sticky `cooldown` chip
-                // on a live EMA — the HUD names the fallback path instead.
-                setScriptStatus(ind.id, 'degraded', 'venue+REST');
+                // The socket owns this script. A REST run here posts the
+                // whole window and freezes the page.
+                setScriptStatus(ind.id, 'degraded', 'websocket');
               }
               return;
             }
