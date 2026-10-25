@@ -183,6 +183,53 @@ describe('IngestHostClient over a fake ingest port', () => {
     expect(fake.terminated).toBe(true);
   });
 
+  test('a dead worker is replaced and callers resubscribe', async () => {
+    setHpEnabled(true);
+    const fakes: FakeIngest[] = [];
+    setIngestWorkerFactory(() => {
+      const fake = new FakeIngest();
+      fakes.push(fake);
+      return fake.transport;
+    });
+    const client = new IngestHostClient({ endpoint: 'http://127.0.0.1:5002' });
+    await client.connect();
+    let fired = 0;
+    client.addReconnectHandler(() => {
+      fired += 1;
+    });
+    const first = fakes[0];
+    if (!first) throw new Error('missing worker');
+    first.transport.onerror?.(new Event('error') as ErrorEvent);
+    await Promise.resolve();
+    expect(first.terminated).toBe(true);
+    expect(fakes).toHaveLength(2);
+    expect(client.isOpen).toBe(true);
+    expect(fired).toBe(1);
+    expect(client).toBeInstanceOf(IngestHostClient);
+    client.disconnect();
+  });
+
+  test('worker crashes stop spawning after the cap', async () => {
+    setHpEnabled(true);
+    const fakes: FakeIngest[] = [];
+    setIngestWorkerFactory(() => {
+      const fake = new FakeIngest();
+      fakes.push(fake);
+      return fake.transport;
+    });
+    const client = new IngestHostClient({ endpoint: 'http://127.0.0.1:5002' });
+    await client.connect();
+    for (let i = 0; i < 8; i++) {
+      const current = fakes[fakes.length - 1];
+      if (!current) throw new Error('missing worker');
+      current.transport.onerror?.(new Event('error') as ErrorEvent);
+      await Promise.resolve();
+    }
+    expect(fakes).toHaveLength(6);
+    expect(client.isOpen).toBe(false);
+    client.disconnect();
+  });
+
   test('worker status errors reject a pending connect and drop waiters', async () => {
     const { client, fake } = makeClient();
     fake.autoOpen = false;

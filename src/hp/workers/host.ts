@@ -50,6 +50,9 @@ export type IngestWorkerTransport = {
 
 export type IngestWorkerFactory = () => IngestWorkerTransport;
 
+/** Respawns after a dead worker. Then the host stays down until `connect()`. */
+const INGEST_WORKER_CRASH_CAP = 5;
+
 let workerFactory: IngestWorkerFactory | null = null;
 /** Tests force the Worker probe. `null` uses the runtime check. */
 let workerAvailableOverride: boolean | null = null;
@@ -89,6 +92,8 @@ export class IngestHostClient implements WireClient {
   private openedOnce = false;
   private stopped = true;
   private reconnectAttempts = 0;
+  private crashes = 0;
+  private crashQueued = false;
   private connectWaiters: Array<{ resolve: () => void; reject: (err: Error) => void }> = [];
   private readonly pending = new PendingRequests<WireFrame>();
   private readonly reconnects = new ReconnectHandlers();
@@ -145,9 +150,59 @@ export class IngestHostClient implements WireClient {
     if (this.worker) return this.worker;
     const w = (workerFactory ?? defaultFactory)();
     w.onmessage = (ev) => this.onWorkerMessage(ev.data);
-    w.onerror = () => this.onStatus?.('error');
+    w.onerror = () => this.onWorkerCrash();
     this.worker = w;
     return w;
+  }
+
+  /**
+   * The worker thread died. Spawn another one and connect again so the
+   * live wire can resubscribe. Do not switch the socket back to
+   * main-thread `JSON.parse`.
+   */
+  private onWorkerCrash(): void {
+    if (this.stopped || this.crashQueued) return;
+    this.crashQueued = true;
+    this.open = false;
+    this.crashes += 1;
+    const dead = this.worker;
+    this.worker = null;
+    if (dead) {
+      dead.onerror = null;
+      dead.onmessage = null;
+      try {
+        dead.terminate();
+      } catch {
+        /* already dead */
+      }
+    }
+    this.onStatus?.('error');
+    const err = new Error('ingest worker crashed');
+    this.dropPending(err);
+    const waiters = this.connectWaiters;
+    this.connectWaiters = [];
+    for (const w of waiters) w.reject(err);
+    queueMicrotask(() => {
+      this.crashQueued = false;
+      if (this.stopped || !this.openedOnce) return;
+      if (this.crashes > INGEST_WORKER_CRASH_CAP) return;
+      try {
+        this.ensureWorker();
+        this.postConnect();
+      } catch {
+        /* stay down; a silent JSON fallback would hide the crash */
+      }
+    });
+  }
+
+  private postConnect(): void {
+    this.post({
+      type: 'connect',
+      url: this.url,
+      authToken: this.authToken,
+      ...(this.hot ? { hotSab: this.hot.sab } : {}),
+      ...(this.coldKey ? { coldKey: this.coldKey } : {}),
+    });
   }
 
   private post(msg: HostToIngest): void {
@@ -198,9 +253,11 @@ export class IngestHostClient implements WireClient {
       return;
     }
     if (msg.type === 'open') {
-      const first = msg.first;
-      if (!first) this.reconnects.fire();
+      // A replacement worker reports `first: true` for its own socket.
+      // The host has already been live, so callers still resubscribe.
+      const hostFirst = !this.openedOnce;
       this.openedOnce = true;
+      if (!hostFirst) this.reconnects.fire();
       return;
     }
     if (msg.type === 'frames') {
@@ -221,16 +278,11 @@ export class IngestHostClient implements WireClient {
 
   async connect(): Promise<void> {
     this.stopped = false;
+    this.crashes = 0;
     if (this.open) return;
     return new Promise((resolve, reject) => {
       this.connectWaiters.push({ resolve, reject });
-      this.post({
-        type: 'connect',
-        url: this.url,
-        authToken: this.authToken,
-        ...(this.hot ? { hotSab: this.hot.sab } : {}),
-        ...(this.coldKey ? { coldKey: this.coldKey } : {}),
-      });
+      this.postConnect();
     });
   }
 
