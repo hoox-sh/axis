@@ -44,7 +44,7 @@ import {
 } from '../results/plot-visuals';
 import type { OverlayLine, OverlayOhlc } from './apply-overlays';
 import type { splitSeriesByKind } from '../results/plot-visuals';
-import { noteSyncSample } from '../chart/v1/invariants';
+import { noteSeriesPastTip, noteSyncSample, type SyncSampleOpts } from '../chart/v1/invariants';
 import { extendSeriesToWindow } from './runner';
 import { runApplyTransaction, type ApplyResult } from '../engine/v1/apply-transaction';
 import {
@@ -146,14 +146,46 @@ export function applyPlotsAndMarkers(input: PlotsAndMarkersInput): ApplyResult {
   });
 }
 
-export function applyChartMutations(ctx: ChartMutationContext): void {
+function lastFiniteTime(values: readonly number[]): number | null {
+  for (let i = values.length - 1; i >= 0; i--) {
+    const value = values[i];
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+  }
+  return null;
+}
+
+function lastOverlayTimes(ctx: ChartMutationContext): number[] {
+  const times: number[] = [];
+  const pushLast = (rows: readonly { time: number }[] | undefined) => {
+    if (!rows?.length) return;
+    for (let i = rows.length - 1; i >= 0; i--) {
+      const time = rows[i]?.time;
+      if (typeof time === 'number' && Number.isFinite(time)) {
+        times.push(time);
+        return;
+      }
+    }
+  };
+  for (const line of ctx.overlayLines) pushLast(line.data);
+  for (const ohlc of ctx.overlayOhlc) pushLast(ohlc.data);
+  return times;
+}
+
+export function applyChartMutations(ctx: ChartMutationContext, sample?: SyncSampleOpts): void {
   const plotLengths: number[] = [];
   for (const column of Object.values(ctx.seriesMap)) {
     if (Array.isArray(column)) plotLengths.push(column.length);
   }
-  noteSyncSample(ctx.ohlcvTimes.length, plotLengths, {
-    dev: typeof import.meta !== 'undefined' && import.meta.env?.DEV === true,
-  });
+  const sampleOpts: SyncSampleOpts = {
+    dev: sample?.dev ?? (typeof import.meta !== 'undefined' && import.meta.env?.DEV === true),
+    rand: sample?.rand,
+    warn: sample?.warn,
+  };
+  noteSyncSample(ctx.ohlcvTimes.length, plotLengths, sampleOpts);
+  const seriesTimes = lastOverlayTimes(ctx);
+  if (seriesTimes.length) {
+    noteSeriesPastTip(lastFiniteTime(ctx.ohlcvTimes), seriesTimes, sampleOpts);
+  }
   const overlayOwner = {
     ownerId: ctx.indicatorId ?? EDITOR_RUN_KEY,
     forceFull: ctx.forceFull,

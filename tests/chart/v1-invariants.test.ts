@@ -3,11 +3,13 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
+import '../setup';
 import { describe, expect, test } from 'bun:test';
 import {
   _resetSyncSampleForTests,
   closedBarHash,
   noteClosedRewrite,
+  noteSeriesPastTip,
   noteSyncSample,
   paneAxisSkew,
   plotLengthSkew,
@@ -15,6 +17,10 @@ import {
   seriesPastTip,
   type ClosedBar,
 } from '../../src/chart/v1/invariants';
+import {
+  applyChartMutations,
+  type ChartMutationContext,
+} from '../../src/indicators/apply-mutations';
 
 const bar = (time: number, close: number): ClosedBar => ({
   time,
@@ -90,5 +96,88 @@ describe('v1 sync invariants', () => {
     noteClosedRewrite(60, { dev: true, warn: (message) => messages.push(message) });
     noteClosedRewrite(60, { dev: true, warn: (message) => messages.push(message) });
     expect(messages).toEqual(['[axis] closed bar 60 changed after commit']);
+  });
+
+  test('a series on or before the price tip does not warn', () => {
+    _resetSyncSampleForTests();
+    const messages: string[] = [];
+    const warn = (message: string) => messages.push(message);
+    noteSeriesPastTip(100, [40, 80, 100], { dev: true, warn });
+    noteSeriesPastTip(100, [40, 80], { dev: true, warn });
+    noteSeriesPastTip(100, [], { dev: true, warn });
+    expect(messages).toEqual([]);
+  });
+
+  test('a series past the price tip warns once in dev and is sampled in prod', () => {
+    _resetSyncSampleForTests();
+    const messages: string[] = [];
+    const warn = (message: string) => messages.push(message);
+    noteSeriesPastTip(100, [40, 160], { dev: true, warn });
+    noteSeriesPastTip(100, [160], { dev: true, warn });
+    expect(messages).toEqual(['[axis] series time 160 is past the price tip']);
+    _resetSyncSampleForTests();
+    messages.length = 0;
+    noteSeriesPastTip(100, [160], { dev: false, rand: 0.5, warn });
+    noteSeriesPastTip(100, [160], { dev: false, rand: 0, warn });
+    expect(messages).toEqual(['[axis] series time 160 is past the price tip']);
+  });
+});
+
+function stubMutation(extra?: Partial<ChartMutationContext>): ChartMutationContext {
+  const manager = {
+    syncOverlayLines: () => {},
+    syncOverlayOhlc: () => {},
+    refreshBadges: () => {},
+    syncBgcolorBands: () => {},
+    applyBarColors: () => 0,
+    getPane: () => undefined,
+    auditTimeParity: () => [],
+    setShapeMarkers: () => {},
+  };
+  return {
+    manager: manager as unknown as ChartMutationContext['manager'],
+    paneId: 'price',
+    overlay: true,
+    overlayLines: [{ name: 'plot0', data: [{ time: 100, value: 1 }] }],
+    overlayOhlc: [],
+    split: { lines: [], bgcolors: [], barcolors: [], shapes: [], fills: [], ohlc: [] },
+    plotMeta: {},
+    seriesMap: { plot0: [1] },
+    ohlcvTimes: [100],
+    silent: true,
+    indicatorId: 'script_a',
+    forceFull: false,
+    skipShapeMarkers: true,
+    ...extra,
+  };
+}
+
+describe('applyChartMutations series-past-tip sample', () => {
+  test('a plot time past the candle axis hits the sampler', () => {
+    _resetSyncSampleForTests();
+    const messages: string[] = [];
+    applyChartMutations(
+      stubMutation({
+        ohlcvTimes: [60, 120],
+        overlayLines: [{ name: 'plot0', data: [{ time: 60, value: 1 }, { time: 180, value: 2 }] }],
+      }),
+      { dev: true, warn: (message) => messages.push(message) },
+    );
+    expect(messages).toEqual(['[axis] series time 180 is past the price tip']);
+    applyChartMutations(
+      stubMutation({
+        ohlcvTimes: [60, 120],
+        overlayLines: [{ name: 'plot0', data: [{ time: 180, value: 2 }] }],
+      }),
+      { dev: true, warn: (message) => messages.push(message) },
+    );
+    expect(messages).toEqual(['[axis] series time 180 is past the price tip']);
+  });
+
+  test('a plot that ends with the candle axis is silent', () => {
+    _resetSyncSampleForTests();
+    const messages: string[] = [];
+    applyChartMutations(stubMutation(), { dev: true, warn: (message) => messages.push(message) });
+    expect(messages).toEqual([]);
   });
 });

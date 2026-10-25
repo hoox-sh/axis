@@ -53,28 +53,69 @@ export function plotOverhang(barCount: number, lengths: readonly number[]): numb
   return over;
 }
 
+export type SyncSampleOpts = {
+  dev?: boolean;
+  rand?: number;
+  warn?: (message: string) => void;
+};
+
 const syncWarned = new Set<string>();
+const pastTipWarned = new Set<string>();
+
+function shouldSample(opts?: SyncSampleOpts): boolean {
+  const dev = opts?.dev === true;
+  const rand = opts?.rand ?? Math.random();
+  return dev || rand < 1 / 32;
+}
+
+function emitSample(
+  key: string,
+  seen: Set<string>,
+  message: string,
+  opts?: SyncSampleOpts,
+): void {
+  if (seen.has(key)) return;
+  seen.add(key);
+  const warn = opts?.warn ?? ((text: string) => console.warn(text));
+  warn(message);
+}
 
 /** Dev warns every new overhang. Prod samples about 1 in 32, once per size. */
 export function noteSyncSample(
   barCount: number,
   lengths: readonly number[],
-  opts?: { dev?: boolean; rand?: number; warn?: (message: string) => void },
+  opts?: SyncSampleOpts,
 ): void {
   const over = plotOverhang(barCount, lengths);
   if (over <= 0) return;
-  const dev = opts?.dev === true;
-  const rand = opts?.rand ?? Math.random();
-  if (!dev && rand >= 1 / 32) return;
-  const key = String(over);
-  if (syncWarned.has(key)) return;
-  syncWarned.add(key);
-  const warn = opts?.warn ?? ((message: string) => console.warn(message));
-  warn(`[axis] plot column is ${over} bars past the price axis`);
+  if (!shouldSample(opts)) return;
+  emitSample(String(over), syncWarned, `[axis] plot column is ${over} bars past the price axis`, opts);
+}
+
+/**
+ * Warn when a series time is strictly after the price tip.
+ * No-ops when the series ends on or before the price last (warmup / na).
+ * Dev warns once per past time. Prod samples about 1 in 32, once per time.
+ */
+export function noteSeriesPastTip(
+  priceLast: number | null,
+  times: readonly number[],
+  opts?: SyncSampleOpts,
+): void {
+  const past = seriesPastTip(priceLast, times);
+  if (past == null) return;
+  if (!shouldSample(opts)) return;
+  emitSample(
+    String(past),
+    pastTipWarned,
+    `[axis] series time ${past} is past the price tip`,
+    opts,
+  );
 }
 
 export function _resetSyncSampleForTests(): void {
   syncWarned.clear();
+  pastTipWarned.clear();
   closedWarned.clear();
 }
 
@@ -89,18 +130,9 @@ export function closedOhlcChanged(
 }
 
 /** Dev warns every rewritten close. Prod samples about 1 in 32, once per bar time. */
-export function noteClosedRewrite(
-  time: number,
-  opts?: { dev?: boolean; rand?: number; warn?: (message: string) => void },
-): void {
-  const dev = opts?.dev === true;
-  const rand = opts?.rand ?? Math.random();
-  if (!dev && rand >= 1 / 32) return;
-  const key = String(time);
-  if (closedWarned.has(key)) return;
-  closedWarned.add(key);
-  const warn = opts?.warn ?? ((message: string) => console.warn(message));
-  warn(`[axis] closed bar ${time} changed after commit`);
+export function noteClosedRewrite(time: number, opts?: SyncSampleOpts): void {
+  if (!shouldSample(opts)) return;
+  emitSample(String(time), closedWarned, `[axis] closed bar ${time} changed after commit`, opts);
 }
 
 /** Largest absolute gap between `barCount` and a plot column length. */

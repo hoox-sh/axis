@@ -25,6 +25,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Fixed
 
+- **A series that ends after the price tip is reported.** `applyChartMutations` samples overlay and plot times against the candle axis. Dev warns on every new past time. Production warns about 1 in 32 times, once per time. A shorter series is warmup and is not a warning.
+
 - **Inbound live frames as `Blob` decode like `ArrayBuffer`.** Cloudflare compat ≥ 2026-03-17 delivers binary WebSocket frames as `Blob`. `decodeInbound` stays sync for string / `ArrayBuffer` / views; `decodeInboundAsync` awaits `blob.arrayBuffer()` then decodes. AXB1 is detected on the bytes and is never `TextDecoder`'d. Malformed Blob bytes stay `malformed` and do not throw. The ingest worker calls `decodeInboundAsync` for Blob instead of unwrapping itself.
 
 - **Strategy and plotshape markers commit with the plot series.** Marker lists are built before the chart mutates. One `runApplyTransaction` paints markers then plots, so a throw in `setShapeMarkers` / `setTradeMarkers` does not leave a new plot generation on the chart. The 2500 marker cap is unchanged. Live ticks still update that bar's markers.
