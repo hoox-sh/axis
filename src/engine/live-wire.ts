@@ -40,7 +40,7 @@ import type { RunResult } from '../plugins/types';
 import { store } from '../store';
 import type { Bar } from '../store/types';
 import { sanitizeStreamBar } from '../data/parse-bars';
-import { isHpEnabled } from '../hp/feature-flag';
+
 import { readTimeList, scriptDeltaTimeTail, Redesign2DeltaApplier } from './client-apply';
 import { classifySeqGap } from './frames';
 import { v1Count } from './v1/metrics';
@@ -129,7 +129,7 @@ export interface EvalScriptInput {
  * `JSON.parse`s strings, so a binary reply would be dropped. Absent means JSON.
  */
 function negotiatedEncoding(): 'axb1' | undefined {
-  if (wantsWorkerTransport() || isHpEnabled()) return 'axb1';
+  if (wantsWorkerTransport()) return 'axb1';
   return undefined;
 }
 

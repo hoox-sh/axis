@@ -85,7 +85,7 @@ import { drawingsForSymbol, newDrawingId } from '../chart/drawings/sync';
 import { getEngine } from '../engines/catalog';
 import { APP_CAPABILITIES, findCapability, SETTABLE_PATHS } from './catalog';
 import { runPaletteCommand, listPaletteCommandIds } from './commands';
-import { hpSampleView, hpView, devTraceView } from './hp';
+
 import { buildAppSnapshot, buildSettingsSnapshot, barSummary } from './snapshot';
 import {
   chartBarsView,
@@ -930,14 +930,6 @@ export async function invokeCapability(
       return streamPlaneView();
     case 'stream.reset':
       return streamResetView(p);
-
-    case 'hp.get':
-      return hpView();
-    case 'hp.sample':
-      return hpSampleView(p);
-
-    case 'dev.trace':
-      return devTraceView();
 
     case 'status.get':
       return {

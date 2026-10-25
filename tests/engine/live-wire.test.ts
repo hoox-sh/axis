@@ -9,7 +9,6 @@ import type { RunResult } from '../../src/plugins/types';
 import type { Bar } from '../../src/store/types';
 import { _resetV1Metrics, v1MetricsSnapshot } from '../../src/engine/v1/metrics';
 import { setStore, store } from '../../src/store';
-import { resetHpFlags, setHpEnabled } from '../../src/hp/feature-flag';
 import { resetEngineTransport, setEngineTransport } from '../../src/engine/v1/transport';
 
 function makeHarness() {
@@ -107,7 +106,6 @@ const tick = () => new Promise<void>((r) => setTimeout(r, 0));
 describe('redesign2 live-wire (F-19)', () => {
   afterEach(() => {
     resetEngineTransport();
-    resetHpFlags();
   });
 
   test('ensureSeries resolves snapshot bars and goes live', async () => {
@@ -760,7 +758,7 @@ describe('live-wire P1 series + study push', () => {
 
   test('an unknown opcode resumes that sub in JSON and leaves the socket up', async () => {
     _resetV1Metrics();
-    setHpEnabled(true);
+    resetEngineTransport();
     const h = makeHarness();
     const first = h.wire.evalScript({ subId: 's-1', script: 'indicator() {}', meta: {}, bars: BARS });
     await tick();
@@ -780,7 +778,6 @@ describe('live-wire P1 series + study push', () => {
     expect(h.counters.disconnects).toBe(0);
     expect(v1MetricsSnapshot().counts.jsonFallback).toBe(1);
     h.wire.reset();
-    resetHpFlags();
     _resetV1Metrics();
   });
 
@@ -1117,9 +1114,8 @@ const h = makeHarness();
     ]);
   });
 
-  test('json omits encoding; worker or HP negotiates axb1', async () => {
+  test('json omits encoding; the worker transport negotiates axb1', async () => {
     setEngineTransport('json');
-    resetHpFlags();
 
     const plain = makeHarness();
     const series = plain.wire.ensureSeries('series:json', {});
@@ -1202,15 +1198,5 @@ const h = makeHarness();
     expect(worker.resumes).toEqual([
       { id: 's-w', count: 1, lastTime: 100, extra: { seq: 5, encoding: 'axb1' } },
     ]);
-
-    resetEngineTransport();
-    setHpEnabled(true);
-    const hp = makeHarness();
-    const hpSeries = hp.wire.ensureSeries('series:hp', {});
-    await tick();
-    await tick();
-    expect(hp.sent[0]?.opts).toEqual({ encoding: 'axb1' });
-    hp.emit({ type: 'full', id: 'series:hp', seq: 2, payload: { count: 1, bars: BARS } });
-    await hpSeries;
   });
 });

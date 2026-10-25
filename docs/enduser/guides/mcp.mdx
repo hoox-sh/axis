@@ -143,7 +143,7 @@ Live tab (`app_session_status` → connected):
 - “Load BTCUSDT 1h and tell me bar count and last close.” (`chart.load` then `app_get` `bars`)
 - “Put this indicator in the editor and run it.” (`editor.set` + `editor.run`)
 - “Open the alerts panel and list alerts.” (`panels.set` + `alerts.list`)
-- “Screenshot the panes.” (`chart.screenshot` — PNG base64; includes the HP GPU overlay when the rung paints)
+- “Screenshot the panes.” (`chart.screenshot` — PNG base64 of the Lightweight Charts panes)
 - “My chart seems a bar behind — what's wrong?” (`chart.lag` — the verdict
   compares the chart tail to the venue clock, the tick, and the engine series)
 - “Where are the holes in my bars?” (`chart.bars` — bounded tail/head rows +
@@ -153,11 +153,6 @@ Live tab (`app_session_status` → connected):
 - “Tick the engine now / repair the stale series / reset the socket.”
   (`engine.tick` · `engine.repair` · `stream.reset` — the last one drops the
   socket and subscriptions so the next tick re-subscribes)
-- “Is HP actually working in this tab?” (`hp.get` — flags, isolation, the
-  rung chip, hot-ring alignment vs the chart, overlay state, and a verdict)
-- “Is the hot ring moving, or just aligned?” (`hp.sample` — ring `seq` delta,
-  frame cadence, and chart append progress over a window)
-
 Start with `app_capabilities` if the client has not cached the catalog.
 
 ## Capabilities at a glance
@@ -180,7 +175,6 @@ Pass these ids to **`app_invoke`** as `capability`, with a JSON `payload`.
 | Settings | `settings.get` / `set` |
 | Engine | `engine.get` / `series` (read the engine's own series bounds + staleness) · `engine.tick` / `repair` (force a drive tick / stale-series repair) |
 | Stream | `stream.get` (route, engine socket, subscriptions, feed chips) · `stream.reset` (drop socket + subscriptions, probes a re-subscribe) |
-| HP | `hp.get` (flags, isolation probe, rung chip, hot-ring alignment, GPU overlay state + verdict) · `hp.sample` (windowed liveness: ring seq delta, frame cadence, chart append progress) |
 | Status | `status.get` |
 
 `app_set` paths (anything else is `PATH_DENIED`): `symbol`, `interval`, `source`, `engine`, `exchange`, `theme`, `chartType`, `uiScale`, `live.active`, `live.preferAfterLoad`, `editor.doc`, `editor.open`, `watchlist.open`.

@@ -124,28 +124,6 @@ test.describe('AXIS smoke @smoke', () => {
     await expect(page.getByTestId('axis-settings')).toHaveCount(0);
   });
 
-  test('Settings → General drives the HP engine flags', async ({ page }) => {
-    await page.goto('/');
-    await openStudio(page, 'settings');
-    await expect(page.getByTestId('axis-settings-hp')).toBeVisible();
-
-    const toggle = page.getByTestId('axis-settings-hp-enabled');
-    await expect(toggle).not.toBeChecked();
-    await toggle.check();
-    // The section writes the tab-local flags directly and asks for the reload
-    // that applies them (no console / DevTools step).
-    await expect
-      .poll(() => page.evaluate(() => localStorage.getItem('axis.engine.hp.enabled')))
-      .toBe('1');
-    await expect(page.getByTestId('axis-settings-hp-reload')).toBeVisible();
-
-    await page.getByTestId('axis-settings-hp-gpu').selectOption('webgl2');
-    await expect
-      .poll(() => page.evaluate(() => localStorage.getItem('axis.engine.hp.gpu')))
-      .toBe('webgl2');
-    await expect(page.getByTestId('axis-settings-hp-status')).toContainText('hp ·');
-  });
-
   test('Mod-K opens and closes the command palette (shortcut hub guard)', async ({ page }) => {
     // Guard for the 2026-09 regression: ShortcutHub was defined but never
     // mounted, leaving Mod-K dead. If this test fails, the mount is gone.

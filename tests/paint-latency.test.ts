@@ -10,8 +10,6 @@ import {
   _resetPaintLatencyVisibilityHook,
   _setPaintLatencyScheduler,
   flushPaintFrame,
-  noteHpCopyOut,
-  noteHpGlDraw,
   noteIngestPublish,
   notePaintRequest,
   paintLatencyStats,
@@ -117,7 +115,7 @@ describe('paint latency (tick → frame, plan §14.2)', () => {
   });
 });
 
-describe('paint stages (hp2 A1: worker → apply → copy-out → draw)', () => {
+describe('paint stages (worker publish → apply)', () => {
   beforeEach(() => {
     _setPaintLatencyScheduler(null);
     _resetPaintLatency();
@@ -127,13 +125,11 @@ describe('paint stages (hp2 A1: worker → apply → copy-out → draw)', () => 
     _resetPaintLatency();
   });
 
-  it('splits publish → apply → copy-out → draw', () => {
+  it('splits publish → apply', () => {
     const clock = manualScheduler();
     _setPaintLatencyScheduler(clock.schedule);
     noteIngestPublish(90, 90);
     notePaintRequest(100, true);
-    noteHpCopyOut(110);
-    noteHpGlDraw(114);
     clock.fire(116);
     expect(paintLatencyStats()).toEqual({
       n: 1,
@@ -146,12 +142,10 @@ describe('paint stages (hp2 A1: worker → apply → copy-out → draw)', () => 
     expect(paintStageStats()).toEqual({
       publishedBursts: 1,
       publishToApplyP50: 10,
-      applyToCopyOutP50: 10,
-      copyOutToDrawP50: 4,
     });
   });
 
-  it('reports null stages on the JSON / LWC-only path', () => {
+  it('reports null stages on the JSON path', () => {
     const clock = manualScheduler();
     _setPaintLatencyScheduler(clock.schedule);
     noteIngestPublish(undefined);
@@ -161,8 +155,6 @@ describe('paint stages (hp2 A1: worker → apply → copy-out → draw)', () => 
     expect(paintStageStats()).toEqual({
       publishedBursts: 0,
       publishToApplyP50: null,
-      applyToCopyOutP50: null,
-      copyOutToDrawP50: null,
     });
   });
 
@@ -389,14 +381,12 @@ describe('worker clock origin (plan §14.2)', () => {
     // reads 1000 where the main clock reads 8000 at receipt.
     noteIngestPublish(1000, 8000);
     notePaintRequest(8010, true);
-    noteHpCopyOut(8012);
     clock.fire(8026);
     expect(paintLatencyStats().n).toBe(1);
     expect(paintLatencyStats().last).toBe(16);
     // (8010 − 1000) − 7000 origin delta = 10 ms of true dispatch.
     expect(paintStageStats().publishedBursts).toBe(1);
     expect(paintStageStats().publishToApplyP50).toBe(10);
-    expect(paintStageStats().applyToCopyOutP50).toBe(2);
   });
 
   it('tracks the minimum transit as the origin estimate', () => {

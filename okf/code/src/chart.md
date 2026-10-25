@@ -7,7 +7,7 @@ tags: [chart, code]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-25T14:59:58Z
+  at: 2026-10-25T18:32:15Z
 sources:
   - id: tree
     resource: "src/chart"
@@ -39,18 +39,18 @@ okf_lock: generated
 * `layout-recipes.ts` — LAYOUT_RECIPES, LayoutRecipe, LayoutRecipeSeed, LayoutRecipeSlotSpec, MAJOR_SYMBOLS, applyLayoutRecipe, findLayoutRecipe, recipeToLayout, resolveRecipeSlots
 * `layout.ts` — CHART_GRID_MODES, ChartGridMode, ChartLayoutState, ChartSlot, SavedChartLayout, createChartSlot, defaultChartLayout, findSlot, gridClassForMode, isChartGridMode, normalizeChartLayout, slotCountForMode
 * `line-break-primitive.ts` — LineBreakOverlayPoint, LineBreakPrimitive, LineBreakPrimitiveOpts, lineBreakPointsSig
-* `live-append.ts` — HOT_RING_PAINT_TAIL, appendLiveBar, startHotRingPaint
+* `live-append.ts` — appendLiveBar
 * `manager-access.ts` — SetDataToChartOpts, applyDebugPinsToChart, applyPriceScaleDecimals, clearScriptPaneLayer, clearScriptPaneLayers, ensurePriceSeries, ensureScriptPaneLayer, getActiveDrawingLayer, getDrawingLayer, getManager, jumpToDebugPin, ohlcvPaintSig
 * `onchain-events.ts` — ONCHAIN_EVENTS_SERIES_KEY, OnchainEventInput, OnchainEventMarker, applyOnchainEventMarkers, clearOnchainEventMarkers, eventsToMarkers
 * `onchain-overlay.ts` — ONCHAIN_PRICE_SCALE_ID, ONCHAIN_SERIES_PREFIX, OnchainLineSpec, applyOnchainOverlays, clearOnchainOverlays
-* `paint-latency.ts` — PaintLatencyStats, PaintStageStats, _resetPaintLatency, _resetPaintLatencyVisibilityHook, _setPaintLatencyScheduler, flushPaintFrame, noteHpCopyOut, noteHpGlDraw, noteIngestPublish, notePaintRequest, paintLatencyStats, paintStageStats
+* `paint-latency.ts` — PaintLatencyStats, PaintStageStats, _resetPaintLatency, _resetPaintLatencyVisibilityHook, _setPaintLatencyScheduler, flushPaintFrame, noteIngestPublish, notePaintRequest, paintLatencyStats, paintStageStats
 * `pane-badge.ts` — mountPaneBadge, refreshAllPaneBadges, refreshPaneBadge, setPaneBadgeLabel
 * `pane-manager.ts` — ManagedPane, OVERLAY_OHLC_PREFIX, OverlayLineSpec, OverlayOhlcSpec, OverlayOwnerOpts, OverlayPoint, OverlayTipPeek, PaneManager, inferOverlayTitle, isFiniteOhlcBar, makeBgcolorKey, makeOverlayLineKey
 * `pine-tables.ts` — CollectTablesOpts, PineTable, PineTableCell, PineTableLocation, PineTablesLocationMap, bottomPanelColumnFractions, bottomPanelHasHeightHints, buildTableGrid, cellTextAlign, cellTextVerticalAlign, collectVisiblePineTables, groupBottomTablesByOwner
 * `plot-rect.ts` — ChartPlotRect, PlotRectChart, PlotRectHost, measureChartPlotRect
 * `price-precision.ts` — PRICE_SCALE_DECIMALS_MAX, PRICE_SCALE_DECIMALS_MIN, PriceFormatOpts, PriceScaleDecimalsMode, clampPriceDecimals, countSignificantDecimals, cyclePriceScaleDecimalsMode, decimalsFromMagnitude, detectDecimalsFromBars, detectDecimalsFromSymbol, formatPriceWithDecimals, normalizePriceScaleDecimalsMode
 * `pyne-drawings.ts` — DEFAULT_DRAWING_LIMITS, DrawingLimits, ScriptDrawing, YLOC_PAD_PX, alignDrawingTimeToBars, clampScriptDrawingTimes, clampTimeToLastBar, dedupeScriptLabelsAtSameTime, garbageCollectScriptDrawings, labelBubbleLayout, labelFontSizePx, normalizeExtend
-* `screenshot.ts` — DEFAULT_SCREENSHOT_OPTIONS, ScreenshotOptions, ScreenshotScale, ScreenshotScope, canvasToBlob, captureScreenshot, copyBlob, copyScreenshot, downloadBlob, downloadScreenshot, loadScreenshotOptions, overlayPlacement
+* `screenshot.ts` — DEFAULT_SCREENSHOT_OPTIONS, ScreenshotOptions, ScreenshotScale, ScreenshotScope, canvasToBlob, captureScreenshot, copyBlob, copyScreenshot, downloadBlob, downloadScreenshot, loadScreenshotOptions, saveScreenshotOptions
 * `series-factory.ts` — PLOT_PALETTE, RIGHT_PRICE_SCALE_WIDTH, SERIES_STACK_BGCOLOR, SERIES_STACK_OVERLAY, SERIES_STACK_PRICE, TV, VOID, colorWithAlpha, createAreaSeries, createBarSeries, createBaseChart, createBgcolorSeries
 * `series-sanitize.ts` — PaintedCandleRange, SeriesSanitizeResult, clampPointsToPaintedRange, extendPaintedRange, looksLikeOhlcData, notePaintedCandleRange, projectToCandleAxis, rangeFromSeriesData, resetPaintedCandleRangeForTests, sanitizeSeriesDataForSetData
 * `volume-profile.ts` — DEFAULT_VALUE_AREA_PCT, DEFAULT_VP_ROWS, VolumeDistribution, VolumeProfileBin, VolumeProfileOptions, VolumeProfileResult, VpBar, computeVolumeProfile, expandValueArea, formatVpPrice, formatVpVolume, priceToBinIndex
@@ -69,17 +69,12 @@ okf_lock: generated
 * [src/data](/code/src/data.md)
 * [src/editor](/code/src/editor.md)
 * [src/engine/v1](/code/src/engine/v1.md)
-* [src/hp/memory](/code/src/hp/memory.md)
-* [src/hp/paint](/code/src/hp/paint.md)
-* [src/hp/render](/code/src/hp/render.md)
-* [src/hp/sync](/code/src/hp/sync.md)
 * [src/indicators](/code/src/indicators.md)
 * [src/onchain](/code/src/onchain.md)
 * [src/plugins](/code/src/plugins.md)
 * [src/results](/code/src/results.md)
 * [src/sources](/code/src/sources.md)
 * [src/store](/code/src/store.md)
-* [src/streams](/code/src/streams.md)
 * [src/theme](/code/src/theme.md)
 * [src/ui](/code/src/ui.md)
 * [src/ui/panels](/code/src/ui/panels.md)
@@ -94,7 +89,6 @@ okf_lock: generated
 * [src/chart/v1](/code/src/chart/v1.md)
 * [src/data](/code/src/data.md)
 * [src/editor](/code/src/editor.md)
-* [src/hp/render](/code/src/hp/render.md)
 * [src/hp/workers](/code/src/hp/workers.md)
 * [src/indicators](/code/src/indicators.md)
 * [src/mcp](/code/src/mcp.md)
@@ -108,7 +102,6 @@ okf_lock: generated
 * [src/ui/settings](/code/src/ui/settings.md)
 * [src/ui/shortcuts](/code/src/ui/shortcuts.md)
 * [tests](/code/tests.md)
-* [tests/hp](/code/tests/hp.md)
 
 # Nested
 

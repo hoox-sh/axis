@@ -40,7 +40,7 @@ import {
   type WorkerProbeResult,
   type WorkersOverviewSnapshot,
 } from '../../workers';
-import { hpChip } from '../../hp/hud';
+
 import type { StudioPageId } from '../studio/types';
 import {
   StudioButton,
@@ -130,10 +130,6 @@ export function WorkersPage(props: {
   const [jobs, setJobs] = createSignal<HostedJob[]>([]);
   const [jobsBusy, setJobsBusy] = createSignal(false);
   const [jobsErr, setJobsErr] = createSignal('');
-  // HP rung chip — computed once per mount (flags live in localStorage and
-  // cannot change while this modal is open).
-  const hp = hpChip();
-
   const catalog = createMemo(() => {
     const all = listWorkerCatalog();
     if (showOptional()) return all;
@@ -488,16 +484,6 @@ export function WorkersPage(props: {
 
         <div class="ax-deck">
           <div class="ax-deck-pane">
-          <StudioSection
-            title="Chart plane"
-            lead="High-performance engine (HP) — opt-in, off by default. The chip is the rung this browser selects (transport memory + painter); the GPU canvas lands with a later wiring PR."
-          >
-            <StudioCard kicker="HP" title={hp.value} testId="axis-hp-chip">
-              <StudioStatus status={hp.health} label={hp.statusLabel} />
-              <StudioHint>{hp.detail}</StudioHint>
-            </StudioCard>
-          </StudioSection>
-
           <StudioSection
             title="Inventory"
             lead="Each card is a way AXIS can run Pine or fetch data. Click one to inspect health, features, and install steps."

@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/hp"
-description: "High-performance chart engine (HP PR 1–9)."
+description: "What remains of the old HP tree: the AXB1 codec and the Pine execution context."
 resource: "src/hp"
 tags: [code, hp]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-25T12:45:11Z
+  at: 2026-10-25T18:32:15Z
 sources:
   - id: tree
     resource: "src/hp"
@@ -18,9 +18,6 @@ okf_lock: generated
 
 # Files
 
-* `capabilities.ts` — HpRung, IsolationHost, IsolationProbe, SelectHpRungOpts, isolationProbe, rememberHpRung, selectHpRung
-* `feature-flag.ts` — DEV_TRACE_KEY, HP_DISABLED_KEY, HP_ENABLED_KEY, HP_GPU_KEY, HP_RUNG_SESSION_KEY, HP_SAB_KEY, HpGpuMode, HpSabMode, hpGpuMode, hpSabMode, isDevTrace, isDevTraceDisabled
-* `hud.ts` — HpChip, HpChipInput, hpChip
 * `index.ts`
 * `isolation-headers.ts` — COEP_HEADER, COEP_VALUE, COOP_HEADER, COOP_VALUE, CORP_HEADER, CORP_VALUE, HP_ISOLATION_HEADERS, sourceHasIsolationHeaders
 
@@ -28,34 +25,14 @@ okf_lock: generated
 
 * [src/hp/axb1](/code/src/hp/axb1.md)
 * [src/hp/calc](/code/src/hp/calc.md)
-* [src/hp/memory](/code/src/hp/memory.md)
-* [src/hp/paint](/code/src/hp/paint.md)
-* [src/hp/render](/code/src/hp/render.md)
-* [src/hp/sync](/code/src/hp/sync.md)
-* [src/hp/workers](/code/src/hp/workers.md)
-* [src/utils](/code/src/utils.md)
 
 # Used by
 
-* [src/dev](/code/src/dev.md)
-* [src/engine](/code/src/engine.md)
-* [src/hp/memory](/code/src/hp/memory.md)
-* [src/hp/render](/code/src/hp/render.md)
-* [src/hp/workers](/code/src/hp/workers.md)
-* [src/mcp](/code/src/mcp.md)
 * [src/sw](/code/src/sw.md)
-* [src/ui/settings](/code/src/ui/settings.md)
-* [src/ui/workers](/code/src/ui/workers.md)
-* [tests](/code/tests.md)
-* [tests/engine](/code/tests/engine.md)
 * [tests/hp](/code/tests/hp.md)
 
 # Nested
 
 * [src/hp/axb1](/code/src/hp/axb1.md)
 * [src/hp/calc](/code/src/hp/calc.md)
-* [src/hp/memory](/code/src/hp/memory.md)
-* [src/hp/paint](/code/src/hp/paint.md)
-* [src/hp/render](/code/src/hp/render.md)
-* [src/hp/sync](/code/src/hp/sync.md)
 * [src/hp/workers](/code/src/hp/workers.md)

@@ -125,7 +125,7 @@ axis mcp --key pn_…                   # stdio proxy → POST /mcp
 
 `GET /mcp` is public discovery. Tool calls use the same API-key auth as `/api/scripts`. App tools return `SESSION_OFFLINE` until a tab is bridged (`wss://…/api/mcp/bridge?ticket=…`).
 
-The app plane also exposes the opt-in **HP chart engine** (`src/hp/`): `hp.get` reports its flags, cross-origin isolation, the rung chip (`hp · sab+gpu`), the hot SAB ring's window/alignment/`seq` and the GPU overlay's DOM state — plus a verdict (`kill` / `off` / `awaiting` / `copy` / `fallback` / `degraded` / `misaligned` / `live`). `hp.sample` measures a bounded window (100 ms–10 s) of *movement*: ring publishes, rAF frame cadence, and chart append progress. Both are pure reads — no flag writes, no wire start, no SAB allocation. See [HP engine](/axis/docs/architecture/hp-engine#mcp-observability).
+Live candles are painted by Lightweight Charts. The ingest worker owns `/ws/live` and decodes AXB1 by default. See [Live chart engine](/axis/docs/architecture/hp-engine).
 
 Docs: [MCP (agents)](https://hoox.sh/axis/docs/enduser/guides/mcp) · [MCP server](https://hoox.sh/axis/docs/worker/mcp) · in-tree [docs/enduser/guides/mcp.mdx](./docs/enduser/guides/mcp.mdx)
 
@@ -253,8 +253,8 @@ await loadPluginFromUrl('https://example.com/my-plugin.js');
 | **Library / Plugins / Settings** | Script storage (import v6 starter pack), first-party built-in studies (Scripts → Built-in), plugin catalog (incl. **component** URL), engine endpoint |
 | **Workers Manager** | Health cards + install helpers for Flask / Worker / Pyodide / PWA / PYNE Agent |
 | **AXIS CLI** | `packages/cli` — install, doctor, setup, secrets, deploy, health, MCP |
-| **MCP** | Agents control Worker APIs and a connected tab (`POST /mcp`, Settings → MCP) — incl. HP diagnostics (`hp.get`, `hp.sample`) |
-| **HP chart engine** | Opt-in high-performance plane behind `axis.engine.hp.*`: off-thread ingest, SAB hot ring, WebGL2 candle overlay on the forced `gpu=webgl2` rung — toggle it in **Settings → General → High-performance engine**, observe it over MCP (`hp.get`, `hp.sample`) and in the Workers Manager chip |
+| **MCP** | Agents control Worker APIs and a connected tab (`POST /mcp`, Settings → MCP) |
+| **Live chart** | Lightweight Charts paints the chart. One ingest worker owns `/ws/live` and decodes AXB1 unless `axis.engine.transport=json` |
 | **Extra chrome** | Module-bar `Extra` menu: live price-card trend, watchlist ticker marquee (direction/speed/24h toggle), fullscreen price-alert overlay, float-only time + price panels, quote dock sheet |
 | **Background catchup** | Live ticks queue in order with timer fallback + auto backfill on `visibilitychange`/`focus`/`online` — hidden tabs keep every closed slot |
 | **Chart engine** | Per-chart Heikin-Ashi cache, pane-qualified overlay fingerprints, future Pine drawings (≤500 bars past last candle) |
@@ -309,7 +309,7 @@ axis/                         (this repo root)
     indicators/               runAndApply + Scripts panel UI
     editor/                   CM6 Pine editor, diagnostics, profiler, pins
     chart/                    lightweight-charts host, drawings, on-chain overlays
-    hp/                       Opt-in HP plane: SAB hot ring, WebGL2 overlay, HUD chip
+    hp/                       AXB1 codec, ingest worker, execution context, isolation headers
     ui/                       Topbar, panels, On-Chain, command palette, settings
     mcp/                      In-app MCP host (capabilities, snapshot, Worker WS bridge)
     store/                    Solid app state + persistence

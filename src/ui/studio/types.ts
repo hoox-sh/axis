@@ -15,7 +15,7 @@
 export type StudioPageId = 'runtime' | 'wire' | 'settings' | 'workers' | 'plugins';
 
 export type SettingsTabId =
-  'general' | 'data' | 'editor' | 'theme' | 'topbar' | 'keyboard' | 'notifications' | 'developer';
+  'general' | 'data' | 'editor' | 'theme' | 'topbar' | 'keyboard' | 'notifications';
 
 export function isStudioPageId(v: unknown): v is StudioPageId {
   return v === 'runtime' || v === 'wire' || v === 'settings' || v === 'workers' || v === 'plugins';

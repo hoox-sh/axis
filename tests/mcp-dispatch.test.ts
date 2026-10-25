@@ -4,12 +4,12 @@
  */
 
 import './setup';
-import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
+import { describe, expect, it, beforeEach } from 'bun:test';
 import { setStore, addWatchlistSymbol, appendLog, clearLogs, saveEditorDoc } from '../src/store';
 import { invokeCapability } from '../src/mcp/dispatch';
 import { _resetAlertsForTests } from '../src/alerts';
 import { APP_CAPABILITIES, findCapability, SETTABLE_PATHS } from '../src/mcp/catalog';
-import { resetHpFlags, setHpDisabled, setHpEnabled } from '../src/hp/feature-flag';
+
 import { buildAppSnapshot } from '../src/mcp/snapshot';
 import { McpInvokeError } from '../src/mcp/protocol';
 import { setPaletteCommands } from '../src/mcp/commands';
@@ -534,89 +534,18 @@ describe('MCP targeted set + bounded bars (F9/F23)', () => {
   });
 });
 
-describe('MCP HP plane', () => {
-  beforeEach(() => {
-    resetHpFlags();
-  });
-  afterEach(() => {
-    resetHpFlags();
-  });
-
-  it('registers hp.get + hp.sample as read-only capabilities', () => {
+describe('removed HP capabilities', () => {
+  it('does not advertise the overlay tools', async () => {
     const ids = APP_CAPABILITIES.map((c) => c.id);
-    expect(ids).toContain('hp.get');
-    expect(ids).toContain('hp.sample');
-    expect(findCapability('hp.get')?.mutates).toBe(false);
-    expect(findCapability('hp.sample')?.mutates).toBe(false);
-  });
-
-  it('hp.get reports the default-off state', async () => {
-    const v = (await invokeCapability('hp.get')) as {
-      flags: { enabled: boolean };
-      verdict: { code: string };
-      chip: { value: string; engaged: boolean };
-      ring: { present: boolean; aligned: boolean };
-      paint: { canvas: boolean; gpuMode: string };
-    };
-    expect(v.flags.enabled).toBe(false);
-    expect(v.verdict.code).toBe('off');
-    expect(v.chip.value).toBe('json · lwc');
-    expect(v.chip.engaged).toBe(false);
-    expect(v.ring.present).toBe(false);
-    expect(v.ring.aligned).toBe(false);
-    expect(typeof v.paint.gpuMode).toBe('string');
-  });
-
-  it('hp.get: the kill switch wins over enabled', async () => {
-    setHpEnabled(true);
-    setHpDisabled(true);
-    const v = (await invokeCapability('hp.get')) as {
-      verdict: { code: string };
-      chip: { statusLabel: string };
-      flags: { killSwitch: boolean };
-    };
-    expect(v.flags.killSwitch).toBe(true);
-    expect(v.verdict.code).toBe('kill');
-    expect(v.chip.statusLabel).toBe('Kill switch');
-  });
-
-  it('hp.get: opt-in without a wire reports the engaged rung, never "off"', async () => {
-    setHpEnabled(true);
-    const v = (await invokeCapability('hp.get')) as {
-      flags: { enabled: boolean };
-      chip: { engaged: boolean; value: string; rung: number };
-      verdict: { code: string; message: string };
-      wire: { started: boolean };
-      isolation: { isolated: boolean; sab: boolean };
-    };
-    expect(v.flags.enabled).toBe(true);
-    expect(v.chip.engaged).toBe(true);
-    expect(v.chip.value.startsWith('hp ·')).toBe(true);
-    expect(v.wire.started).toBe(false);
-    // No ring exists before a wire client builds it; how the verdict words
-    // that depends on this runtime's isolation/SAB probe.
-    expect(['awaiting', 'copy', 'fallback', 'degraded']).toContain(v.verdict.code);
-    expect(v.verdict.message.length).toBeGreaterThan(10);
-  });
-
-  it('hp.sample clamps the window and returns a liveness envelope', async () => {
-    setHpEnabled(true);
-    const s = (await invokeCapability('hp.sample', { windowMs: 50 })) as {
-      windowMs: number;
-      elapsedMs: number;
-      frames: number | null;
-      fps: number | null;
-      ring: { presentAtStart: boolean; presentAtEnd: boolean; seqDelta: number | null };
-      chart: { barsDelta: number; tailDeltaSec: number };
-      note: string | null;
-    };
-    expect(s.windowMs).toBe(100); // floor — 50 was clamped up
-    expect(s.elapsedMs).toBeGreaterThanOrEqual(90);
-    expect(s.ring.presentAtStart).toBe(false);
-    expect(s.ring.seqDelta).toBeNull();
-    expect(typeof s.chart.barsDelta).toBe('number');
-    expect(s.note === null || typeof s.note === 'string').toBe(true);
-    expect(s.fps === null || s.fps >= 0).toBe(true);
-    expect(s.frames === null || typeof s.frames === 'number').toBe(true);
+    expect(ids.includes('hp.get')).toBe(false);
+    expect(ids.includes('hp.sample')).toBe(false);
+    expect(ids.includes('dev.trace')).toBe(false);
+    expect(findCapability('hp.get')).toBeUndefined();
+    try {
+      await invokeCapability('hp.get');
+      throw new Error('should have thrown');
+    } catch (err) {
+      expect((err as McpInvokeError).code).toBe('UNKNOWN_CAPABILITY');
+    }
   });
 });

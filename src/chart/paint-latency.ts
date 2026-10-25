@@ -39,12 +39,8 @@ type StageMarks = {
   publishedArrivalAt: number | null;
   /** First applied live tick of the burst (same clock as the total). */
   appliedAt: number | null;
-  /** HP-2 hot-ring copy-out completed. Null on the LWC-only path. */
-  copyOutAt: number | null;
-  /** WebGL2 overlay draw completed. Null unless the overlay painted. */
-  drawAt: number | null;
   /**
-   * Any append in the burst was engine-driven (ingest ring pump, engine
+   * Any append in the burst was engine-driven (ingest worker, engine
    * series merge/diff). Only those bursts may consume the publish stamp:
    * venue-tick appends paint the forming tip from the venue feed, and
    * pairing them with the engine's last post measures engine cadence, not
@@ -72,14 +68,10 @@ let marks: StageMarks = {
   publishedAt: null,
   publishedArrivalAt: null,
   appliedAt: null,
-  copyOutAt: null,
-  drawAt: null,
   workerCaused: false,
 };
 /** Rolling per-stage deltas (ms), capped like the totals. */
 let publishToApply: number[] = [];
-let applyToCopyOut: number[] = [];
-let copyOutToDraw: number[] = [];
 /**
  * Per-message `arrival − publish` floor (ms), rolling like the totals.
  * Its minimum estimates the worker→main clock-origin delta (+ fastest
@@ -173,8 +165,6 @@ export function flushPaintFrame(frameTimestamp: number): void {
       publishedAt: null,
       publishedArrivalAt: null,
       appliedAt: null,
-      copyOutAt: null,
-      drawAt: null,
       workerCaused: false,
     };
     hiddenAtArm = false;
@@ -189,8 +179,6 @@ export function flushPaintFrame(frameTimestamp: number): void {
       publishedAt: null,
       publishedArrivalAt: null,
       appliedAt: null,
-      copyOutAt: null,
-      drawAt: null,
       workerCaused: false,
     };
     hiddenAtArm = false;
@@ -217,18 +205,10 @@ export function flushPaintFrame(frameTimestamp: number): void {
     const originDelta = transitFloor.length ? Math.min(...transitFloor) : 0;
     pushStage(publishToApply, Math.max(0, marks.appliedAt - marks.publishedAt - originDelta));
   }
-  if (marks.appliedAt !== null && marks.copyOutAt !== null) {
-    pushStage(applyToCopyOut, Math.max(0, marks.copyOutAt - marks.appliedAt));
-  }
-  if (marks.copyOutAt !== null && marks.drawAt !== null) {
-    pushStage(copyOutToDraw, Math.max(0, marks.drawAt - marks.copyOutAt));
-  }
   marks = {
     publishedAt: null,
     publishedArrivalAt: null,
     appliedAt: null,
-    copyOutAt: null,
-    drawAt: null,
     workerCaused: false,
   };
 }
@@ -265,27 +245,11 @@ export function noteIngestPublish(at: number | undefined, arrivalAt: number = no
   pushStage(transitFloor, Math.max(0, arrivalAt - at));
 }
 
-/** Record that the HP-2 hot-ring copy-out completed for this burst. */
-export function noteHpCopyOut(at: number = now()): void {
-  if (pendingAt === null && marks.publishedAt === null) return;
-  if (marks.copyOutAt === null) marks.copyOutAt = at;
-}
-
-/** Record that the WebGL2 overlay drew this burst. */
-export function noteHpGlDraw(at: number = now()): void {
-  if (pendingAt === null && marks.publishedAt === null) return;
-  if (marks.drawAt === null) marks.drawAt = at;
-}
-
 export type PaintStageStats = {
   /** Bursts that carried a worker publish stamp. */
   publishedBursts: number;
-  /** Worker publish → main-thread apply (postMessage + dispatch). Null without HP ingest. */
+  /** Worker publish → main-thread apply (postMessage + dispatch). Null on the JSON path. */
   publishToApplyP50: number | null;
-  /** Apply → hot-ring copy-out. Null on the LWC-only path. */
-  applyToCopyOutP50: number | null;
-  /** Copy-out → overlay draw. Null unless the overlay painted. */
-  copyOutToDrawP50: number | null;
 };
 
 /** Rolling p50 per pipeline stage. Null = that stage never stamped. */
@@ -293,8 +257,6 @@ export function paintStageStats(): PaintStageStats {
   return {
     publishedBursts: publishToApply.length,
     publishToApplyP50: stageP50(publishToApply),
-    applyToCopyOutP50: stageP50(applyToCopyOut),
-    copyOutToDrawP50: stageP50(copyOutToDraw),
   };
 }
 
@@ -354,13 +316,9 @@ export function _resetPaintLatency(): void {
     publishedAt: null,
     publishedArrivalAt: null,
     appliedAt: null,
-    copyOutAt: null,
-    drawAt: null,
     workerCaused: false,
   };
   publishToApply = [];
-  applyToCopyOut = [];
-  copyOutToDraw = [];
   transitFloor = [];
 }
 

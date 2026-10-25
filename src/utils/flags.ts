@@ -3,13 +3,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Tab-local opt-in flag with a kill switch (`engine/feature-flag`,
- * `hp/feature-flag`).
+ * Tab-local opt-in flag with a kill switch (`engine/feature-flag`).
  *
- * Both planes grew the same state machine: an `enabled` key, a `disabled`
- * key, in-memory fallbacks for tests/SSR, and one precedence rule — the
- * opt-out wins over everything. This module owns that rule once, so a fix
- * to the precedence cannot land in one plane and miss the other.
+ * An `enabled` key, a `disabled` key, in-memory fallbacks for tests/SSR,
+ * and one precedence rule — the opt-out wins over everything.
  *
  * Storage itself never throws (see `utils/storage`); the memory fallback
  * only matters when `localStorage` is entirely absent.

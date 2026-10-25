@@ -5,9 +5,8 @@
 
 import { afterEach, describe, expect, test } from 'bun:test';
 import { Redesign2WsClient } from '../../src/engine/ws-client';
-import { resetHpFlags, setHpEnabled } from '../../src/hp/feature-flag';
 import { decodeInbound, IngestCursorTable } from '../../src/hp/workers/ingest-core';
-import { setEngineTransport } from '../../src/engine/v1/transport';
+import { resetEngineTransport, setEngineTransport } from '../../src/engine/v1/transport';
 import { _resetV1Metrics, v1MetricsSnapshot } from '../../src/engine/v1/metrics';
 import {
   createLiveWsClient,
@@ -104,11 +103,11 @@ function fullJson(seq: number): string {
 
 afterEach(() => {
   setIngestWorkerFactory(null);
-  resetHpFlags();
+  resetEngineTransport();
 });
 
 describe('createLiveWsClient', () => {
-  test('HP off and explicit json keep the main-thread client', () => {
+  test('explicit json keeps the main-thread client', () => {
     setEngineTransport('json');
     const fake = new FakeIngest();
     setIngestWorkerFactory(() => fake.transport);
@@ -117,8 +116,8 @@ describe('createLiveWsClient', () => {
     expect(client).not.toBeInstanceOf(IngestHostClient);
   });
 
-  test('HP on with a Worker uses the ingest host', () => {
-    setHpEnabled(true);
+  test('the worker transport uses the ingest host', () => {
+    setEngineTransport('worker');
     const fake = new FakeIngest();
     setIngestWorkerFactory(() => fake.transport);
     const client = createLiveWsClient({ endpoint: 'http://127.0.0.1:5002' });
@@ -129,7 +128,7 @@ describe('createLiveWsClient', () => {
 
 describe('IngestHostClient over a fake ingest port', () => {
   function makeClient(): { client: IngestHostClient; fake: FakeIngest } {
-    setHpEnabled(true);
+    setEngineTransport('worker');
     const fake = new FakeIngest();
     setIngestWorkerFactory(() => fake.transport);
     const client = new IngestHostClient({ endpoint: 'http://127.0.0.1:5002' });
@@ -191,7 +190,7 @@ describe('IngestHostClient over a fake ingest port', () => {
   });
 
   test('a dead worker is replaced and callers resubscribe', async () => {
-    setHpEnabled(true);
+    setEngineTransport('worker');
     const fakes: FakeIngest[] = [];
     setIngestWorkerFactory(() => {
       const fake = new FakeIngest();
@@ -217,7 +216,7 @@ describe('IngestHostClient over a fake ingest port', () => {
   });
 
   test('worker crashes stop spawning after the cap', async () => {
-    setHpEnabled(true);
+    setEngineTransport('worker');
     const fakes: FakeIngest[] = [];
     setIngestWorkerFactory(() => {
       const fake = new FakeIngest();

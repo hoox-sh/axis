@@ -18,42 +18,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * High-performance chart engine (HP PR 1–9).
- *
- * Codec, execution context, isolation headers, capability probe, ingest
- * worker, hot double-buffer memory, worker-safe Atomics, rAF generation
- * poll, the LWC copy-out, viewport paging over a columnar cold store, and
- * the calc scratch-vs-commit state machine with its bar-state contexts
- * (§10.1–§10.2: tips evaluate on scratch, only closed bars commit).
- *
- * The GPU paint plane (PR 8): `paint/visual-attr` stages visible candles as
- * 32-byte NDC records, `render/*` selects and drives a painter — WebGL2
- * instanced quads today, WebGPU later, LWC when neither exists.
- *
- * PR 9 adds `hud.ts`, the plan-§13 capabilities chip (`hp · sab+gpu` /
- * `json · lwc`) shown in the Workers Manager.
+ * What remains of the old HP tree: the AXB1 codec and the Pine execution
+ * context. The shared-memory ring and the GPU candle overlay are gone.
+ * Lightweight Charts paints the chart. The ingest worker still decodes
+ * `/ws/live`.
  *
  * @module hp
  */
 
 export * from './axb1';
-export * from './calc/barstate';
 export * from './calc/execution-context';
 export * from './isolation-headers';
-export * from './feature-flag';
-export * from './capabilities';
-export * from './hud';
-export * from './memory/layout';
-export * from './memory/control-block';
-export * from './memory/hot-buffer';
-export * from './memory/cold-store';
-export * from './memory/page-buffer';
-export * from './sync/atomics';
-export * from './sync/is-main-thread';
-export * from './sync/raf-poll';
-export * from './paint/copy-out-lwc';
-export * from './paint/visual-attr';
-export * from './render/types';
-export * from './render/select-renderer';
-export * from './render/webgl2-renderer';
-export * from './workers/calc-core';

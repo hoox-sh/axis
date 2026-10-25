@@ -18,8 +18,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Main-thread ingest host. Spawns the ingest worker when HP is on;
- * otherwise returns {@link Redesign2WsClient} unchanged.
+ * Main-thread ingest host. Spawns the ingest worker for the default
+ * worker transport. `axis.engine.transport=json` returns
+ * {@link Redesign2WsClient} unchanged.
  *
  * @module hp/workers/host
  */
@@ -32,14 +33,10 @@ import {
 } from '../../engine/ws-client';
 import type { WireClient, WireFrame } from '../../engine/live-wire';
 import { PendingRequests, ReconnectHandlers, wireStats } from '../../engine/wire-bookkeeping';
-import type { Bar } from '../../store/types';
-import { isolationProbe } from '../capabilities';
 import { noteIngestPublish } from '../../chart/paint-latency';
 import { v1Count, v1Mark } from '../../engine/v1/metrics';
-import { hpSabMode, isHpEnabled } from '../feature-flag';
 import { noteWorkerTransportFallback, wantsWorkerTransport } from '../../engine/v1/transport';
-import { allocateHotBuffer, type HotBuffer } from '../memory/hot-buffer';
-import type { HostToIngest, IngestToHost, ColdKey } from './protocol';
+import type { HostToIngest, IngestToHost } from './protocol';
 
 export type IngestWorkerTransport = {
   postMessage: (msg: HostToIngest) => void;
@@ -99,10 +96,6 @@ export class IngestHostClient implements WireClient {
   private readonly reconnects = new ReconnectHandlers();
   readonly url: string;
   private readonly authToken?: string;
-  private readonly coldKey?: ColdKey;
-  /** HP-2 hot ring reader (main side); `null` until the SAB is allocated. */
-  private hot: HotBuffer | null = null;
-  private hotActive = false;
 
   onFrame: ((frame: WireFrame) => void) | undefined;
   onStatus?: (status: 'connecting' | 'open' | 'closed' | 'error') => void;
@@ -110,29 +103,13 @@ export class IngestHostClient implements WireClient {
   /** Unknown AXB1 opcode for one subscription. The socket is still open. */
   onUnknownOpcode?: (info: { id: string; opcode: number; seq: number }) => void;
 
-  constructor(options: Redesign2WsClientOptions & { coldKey?: ColdKey }) {
+  constructor(options: Redesign2WsClientOptions) {
     this.url = endpointToRedesign2WsUrl(options.endpoint, options.authToken);
     this.authToken = options.authToken;
-    this.coldKey = options.coldKey;
-    // HP-2/3: allocate up-front so `hotBuffer` is readable the moment the
-    // client exists. `buildWire` starts the rAF copy-out sampler and
-    // exposes the ring to the GPU overlay synchronously — before the first
-    // `connect()` — so a lazily allocated ring would never be seen.
-    this.ensureHot();
   }
 
   get isOpen(): boolean {
     return this.open;
-  }
-
-  /** Hot-ring reader the rAF copy-out samples (`null` when not isolated / off). */
-  get hotBuffer(): HotBuffer | null {
-    return this.hot;
-  }
-
-  /** True once the ingest worker confirmed the ring is live. */
-  get hotRingActive(): boolean {
-    return this.hotActive;
   }
 
   get urlValue(): string {
@@ -202,28 +179,11 @@ export class IngestHostClient implements WireClient {
       type: 'connect',
       url: this.url,
       authToken: this.authToken,
-      ...(this.hot ? { hotSab: this.hot.sab } : {}),
-      ...(this.coldKey ? { coldKey: this.coldKey } : {}),
     });
   }
 
   private post(msg: HostToIngest): void {
     this.ensureWorker().postMessage(msg);
-  }
-
-  /**
-   * HP-2: allocate the hot SAB once per client, when the tab is isolated
-   * and the `sab` flag allows it. `allocateHotBuffer` clamps the session to
-   * rung 1 on OOM, so a refused allocation degrades to the frame path.
-   */
-  private ensureHot(): void {
-    if (this.hot) return;
-    // P1 worker transport reuses this client for JSON decode only.
-    // The hot ring stays an HP opt-in.
-    if (!isHpEnabled()) return;
-    if (hpSabMode() === 'off') return;
-    if (!isolationProbe().sab) return;
-    this.hot = allocateHotBuffer();
   }
 
   private dispatchFrames(frames: Redesign2Frame[]): void {
@@ -269,11 +229,6 @@ export class IngestHostClient implements WireClient {
       this.dispatchFrames(msg.frames);
       return;
     }
-    if (msg.type === 'hot') {
-      this.hotActive = msg.active;
-      if (!msg.active) this.hot = null;
-      return;
-    }
     if (msg.type === 'pong') return;
     if (msg.type === 'malformed') this.onMalformed?.(msg.reason);
     if (msg.type === 'unknown-opcode') {
@@ -295,8 +250,6 @@ export class IngestHostClient implements WireClient {
   disconnect(): void {
     this.stopped = true;
     this.open = false;
-    this.hot = null;
-    this.hotActive = false;
     this.dropPending(new Error('IngestHostClient stopped'));
     const waiters = this.connectWaiters;
     this.connectWaiters = [];
@@ -361,27 +314,6 @@ export class IngestHostClient implements WireClient {
     this.send({ type: 'unsubscribe', id, ts: Date.now() });
   }
 
-  /**
-   * Cold page → ingest worker (HP PR 5 wiring, §9.2).
-   *
-   * Best-effort by design: the caller is a per-frame overlay pump, so this
-   * never throws and never spawns a worker just for paging — no worker, no
-   * page, and the overlay clears for a frame. Empty `bars` retires the page.
-   */
-  publishColdPage(fromAbs: number, bars: Bar[], count?: number): void {
-    try {
-      if (!this.worker) return;
-      this.worker.postMessage({
-        type: 'page',
-        fromAbs: Math.trunc(fromAbs),
-        bars,
-        ...(count !== undefined ? { count: Math.trunc(count) } : {}),
-      });
-    } catch {
-      /* paging is best-effort — the overlay clears for a frame */
-    }
-  }
-
   awaitFrame(id: string, timeoutMs = 10_000): Promise<WireFrame> {
     return this.pending.awaitFrame(id, timeoutMs);
   }
@@ -395,12 +327,12 @@ export class IngestHostClient implements WireClient {
   }
 }
 
-export type IngestHostOptions = Redesign2WsClientOptions & { coldKey?: ColdKey };
+export type IngestHostOptions = Redesign2WsClientOptions;
 
 /**
  * Live `/ws/live` client.
  *
- * The ingest worker owns the socket by default, and when HP is on.
+ * The ingest worker owns the socket by default.
  * `axis.engine.transport=json` keeps the main-thread
  * {@link Redesign2WsClient}, including `JSON.parse`.
  * A worker that cannot start counts one JSON fallback.
@@ -409,7 +341,7 @@ export function createLiveWsClient(
   options: IngestHostOptions,
 ): Redesign2WsClient | IngestHostClient {
   const worker = ingestWorkerAvailable();
-  if (worker && (isHpEnabled() || wantsWorkerTransport())) return new IngestHostClient(options);
+  if (worker && wantsWorkerTransport()) return new IngestHostClient(options);
   if (!worker && wantsWorkerTransport()) noteWorkerTransportFallback();
   return new Redesign2WsClient(options);
 }

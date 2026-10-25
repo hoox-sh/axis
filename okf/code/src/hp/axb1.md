@@ -7,7 +7,7 @@ tags: [axb1, code, hp]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-25T15:25:14Z
+  at: 2026-10-25T18:32:15Z
 sources:
   - id: tree
     resource: "src/hp/axb1"
@@ -19,7 +19,7 @@ okf_lock: generated
 # Files
 
 * `binary.ts` — BinReader, BinWriter, assertI64Aligned
-* `constants.ts` — AXB1_HDR_COMPRESSED, AXB1_HDR_HAS_SUB_ID, AXB1_HEADER_BYTES, AXB1_MAGIC, AXB1_MAX_PAYLOAD, AXB1_STATUS_CODES, AXB1_VERSION, Axb1Opcode, Axb1StatusCode, HOT_CAP, HPC1_MAGIC, PRICE_SCALE_DEFAULT
+* `constants.ts` — AXB1_HDR_COMPRESSED, AXB1_HDR_HAS_SUB_ID, AXB1_HEADER_BYTES, AXB1_MAGIC, AXB1_MAX_PAYLOAD, AXB1_STATUS_CODES, AXB1_VERSION, Axb1Opcode, Axb1StatusCode, PRICE_SCALE_DEFAULT, PRICE_SCALE_MAX, PRICE_SCALE_MIN
 * `decode.ts` — Axb1Envelope, bytesToHex, decodeEnvelope, decodeFrame, hexToBytes, looksLikeAxb1
 * `encode.ts` — encodeEnvelope, encodeFrame
 * `hash.ts` — fnv1a32
@@ -32,7 +32,6 @@ okf_lock: generated
 * [scripts](/code/scripts.md)
 * [src/hp](/code/src/hp.md)
 * [src/hp/calc](/code/src/hp/calc.md)
-* [src/hp/memory](/code/src/hp/memory.md)
 * [src/hp/workers](/code/src/hp/workers.md)
 * [tests/hp](/code/tests/hp.md)
 * [worker/tests](/code/worker/tests.md)

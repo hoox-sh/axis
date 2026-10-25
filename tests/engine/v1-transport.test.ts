@@ -11,7 +11,6 @@ import {
   resetEngineTransport,
   setEngineTransport,
 } from '../../src/engine/v1/transport';
-import { resetHpFlags, setHpEnabled } from '../../src/hp/feature-flag';
 import {
   createLiveWsClient,
   IngestHostClient,
@@ -31,7 +30,6 @@ function fakeWorker(): IngestWorkerTransport {
 afterEach(() => {
   setIngestWorkerFactory(null);
   setIngestWorkerAvailableForTests(null);
-  resetHpFlags();
   resetEngineTransport();
   _resetV1Metrics();
 });
@@ -53,17 +51,8 @@ describe('axis.engine.transport', () => {
     expect(client).not.toBeInstanceOf(IngestHostClient);
   });
 
-  test('worker flag uses the ingest host and does not allocate the hot ring', () => {
+  test('worker flag uses the ingest host', () => {
     setEngineTransport('worker');
-    setIngestWorkerFactory(() => fakeWorker());
-    const client = createLiveWsClient({ endpoint: 'http://127.0.0.1:5002' });
-    expect(client).toBeInstanceOf(IngestHostClient);
-    if (client instanceof IngestHostClient) expect(client.hotBuffer).toBeNull();
-    client.disconnect();
-  });
-
-  test('HP on still uses the ingest host when the transport flag is json', () => {
-    setHpEnabled(true);
     setIngestWorkerFactory(() => fakeWorker());
     const client = createLiveWsClient({ endpoint: 'http://127.0.0.1:5002' });
     expect(client).toBeInstanceOf(IngestHostClient);

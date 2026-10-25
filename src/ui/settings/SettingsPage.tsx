@@ -82,20 +82,7 @@ import {
   StudioToggle,
   type StudioHealth,
 } from '../studio';
-import {
-  hpChip,
-  hpGpuMode,
-  hpSabMode,
-  isHpDisabled,
-  isHpEnabled,
-  setHpEnabled,
-  setHpGpuMode,
-  setHpSabMode,
-  isDevTrace,
-  setDevTrace,
-  type HpGpuMode,
-  type HpSabMode,
-} from '../../hp';
+
 
 const SETTINGS_TABS: { id: SettingsTabId; label: string; hint: string }[] = [
   { id: 'general', label: 'General', hint: 'Chart chrome · live · storage' },
@@ -105,7 +92,6 @@ const SETTINGS_TABS: { id: SettingsTabId; label: string; hint: string }[] = [
   { id: 'topbar', label: 'Topbar', hint: 'Show or hide topbar groups' },
   { id: 'keyboard', label: 'Keyboard', hint: 'Shortcut chords · conflicts' },
   { id: 'notifications', label: 'Notifications', hint: 'Toasts · categories · flood control' },
-  { id: 'developer', label: 'Developer', hint: 'Opt-in development-mode features' },
 ];
 
 /** Tabs that write as you edit. General is the only tab with Save / Cancel. */
@@ -305,15 +291,6 @@ export function SettingsPage(props: { onClose: () => void; initialTab?: Settings
   );
   createEffect(() => setHudDiagnostics(store.telemetry?.hud?.diagnostics === true));
   const [shareOnError, setShareOnError] = createSignal(!!store.telemetry?.shareOnError);
-  // HP flags are tab-local (localStorage), not store state: the section writes
-  // them directly and asks for a reload — nothing here is persisted by Apply.
-  const [hpEnabled, setHpEnabledLocal] = createSignal(isHpEnabled());
-  const [hpGpu, setHpGpuLocal] = createSignal<HpGpuMode>(hpGpuMode());
-  const [hpSab, setHpSabLocal] = createSignal<HpSabMode>(hpSabMode());
-  const [hpDirty, setHpDirty] = createSignal(false);
-  const hpStatus = createMemo(() =>
-    hpChip({ enabled: hpEnabled(), disabled: isHpDisabled(), gpu: hpGpu(), sab: hpSab() }),
-  );
   const [uiScale, setUiScaleLocal] = createSignal(clampUiScale(store.uiScale ?? 1));
   const [priceScaleLabels, setPriceScaleLabels] = createSignal(
     store.priceScaleLabelsVisible !== false,
@@ -780,82 +757,6 @@ export function SettingsPage(props: { onClose: () => void; initialTab?: Settings
               </StudioSection>
 
               <StudioSection
-                title="High-performance engine"
-                lead="Opt-in shared-memory transport and the GPU candle painter. Off by default; these toggles write the tab's HP flags, so a reload applies them."
-                testId="axis-settings-hp"
-              >
-                <StudioToggle
-                  id="axis-hp-enabled"
-                  testId="axis-settings-hp-enabled"
-                  checked={hpEnabled()}
-                  onChange={(v) => {
-                    setHpEnabled(v);
-                    setHpEnabledLocal(v);
-                    setHpDirty(true);
-                  }}
-                  label="Enable high-performance engine"
-                  hint="Off keeps today's JSON /ws/live → Lightweight Charts path byte-identical."
-                />
-                <StudioField
-                  label="GPU painter"
-                  for="axis-hp-gpu"
-                  hint="WebGL2 stacks GPU candles over the price pane. Auto only selects the rung — Lightweight Charts keeps painting until WebGL2 is forced. WebGPU has no painter yet, so it selects the rung only."
-                >
-                  <StudioSelect
-                    id="axis-hp-gpu"
-                    testId="axis-settings-hp-gpu"
-                    value={hpGpu()}
-                    onChange={(v) => {
-                      const mode: HpGpuMode =
-                        v === 'webgl2' || v === 'webgpu' || v === 'off' ? v : 'auto';
-                      setHpGpuMode(mode);
-                      setHpGpuLocal(mode);
-                      setHpDirty(true);
-                    }}
-                  >
-                    <option value="auto">Auto (select the rung only)</option>
-                    <option value="webgl2">WebGL2 overlay (forced)</option>
-                    <option value="webgpu">WebGPU (no painter yet — rung only)</option>
-                    <option value="off">Off (Lightweight Charts paints)</option>
-                  </StudioSelect>
-                </StudioField>
-                <StudioField
-                  label="SAB transport"
-                  for="axis-hp-sab"
-                  hint="Off forces the transferable copy instead of the shared hot ring."
-                >
-                  <StudioSelect
-                    id="axis-hp-sab"
-                    testId="axis-settings-hp-sab"
-                    value={hpSab()}
-                    onChange={(v) => {
-                      const mode: HpSabMode = v === 'off' ? 'off' : 'auto';
-                      setHpSabMode(mode);
-                      setHpSabLocal(mode);
-                      setHpDirty(true);
-                    }}
-                  >
-                    <option value="auto">Auto (shared ring when isolated)</option>
-                    <option value="off">Off (transferable copy)</option>
-                  </StudioSelect>
-                </StudioField>
-                <StudioHint>
-                  <span data-testid="axis-settings-hp-status">
-                    {hpStatus().value} · {hpStatus().detail}
-                  </span>
-                </StudioHint>
-                <Show when={hpDirty()}>
-                  <StudioButton
-                    variant="ghost"
-                    testId="axis-settings-hp-reload"
-                    onClick={() => window.location.reload()}
-                  >
-                    Reload to apply
-                  </StudioButton>
-                </Show>
-              </StudioSection>
-
-              <StudioSection
                 title="Script storage"
                 lead="Local browser, cloud Worker, or git. Switching copies the library and never deletes the source."
                 testId="axis-settings-storage"
@@ -1115,22 +1016,6 @@ export function SettingsPage(props: { onClose: () => void; initialTab?: Settings
 
         <SettingsTabPanel id="notifications" active={tab()}>
           <NotificationsPanel />
-        </SettingsTabPanel>
-
-        <SettingsTabPanel id="developer" active={tab()}>
-          <StudioSection
-            title="Developer"
-            lead="Opt-in development-mode features. These toggles write tab-local flags so a reload applies them."
-          >
-            <StudioToggle
-              id="axis-dev-trace"
-              testId="axis-settings-dev-trace"
-              checked={isDevTrace()}
-              onChange={setDevTrace}
-              label="HP development tracer"
-              hint="Writes a JSONL ring buffer of HP flags, rung, overlay state, paint latency. Download via dev.trace MCP. Opt‑in only; never runs when HP is disabled."
-            />
-          </StudioSection>
         </SettingsTabPanel>
       </div>
       <StudioFooter status={footerStatus()}>

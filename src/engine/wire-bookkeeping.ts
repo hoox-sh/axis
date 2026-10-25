@@ -20,7 +20,7 @@
 /**
  * Shared connection bookkeeping for the live wire clients.
  *
- * `Redesign2WsClient` (direct WebSocket) and `IngestHostClient` (HP ingest
+ * `Redesign2WsClient` (direct WebSocket) and `IngestHostClient` (ingest
  * worker) are different transports over the same lifecycle: request/response
  * waiters keyed by frame id, resubscribe handlers fired on reconnect, and a
  * diagnostic stats snapshot for MCP `stream.get`. This module owns that layer

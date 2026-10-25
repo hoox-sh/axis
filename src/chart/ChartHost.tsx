@@ -90,9 +90,8 @@ import {
 import { applyOnchainEventMarkers, clearOnchainEventMarkers } from './onchain-events';
 import { onchainManagerState } from '../onchain/manager';
 import { seriesSeriesKey } from '../onchain/keys';
-import { PLOT_PALETTE, RIGHT_PRICE_SCALE_WIDTH, VOID } from './series-factory';
-import { parseCssColorToRgb, startGpuOverlay } from '../hp/render/gpu-overlay';
-import { getLiveHotBuffer, noteHpViewport } from '../streams/stream-live';
+import { PLOT_PALETTE, RIGHT_PRICE_SCALE_WIDTH } from './series-factory';
+
 import { reportUiError } from '../ui/boot-errors';
 
 export {
@@ -148,7 +147,7 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
   const [contextHost, setContextHost] = createSignal<HTMLElement | undefined>(undefined);
   let localManager: PaneManager | undefined;
   /** HP-3: stacked GPU candle overlay disposer (active slot only). */
-  let stopGpuOverlay: (() => void) | null = null;
+
   /** False after host teardown — drops late rAF / RO callbacks. */
   let alive = true;
   /** Coalesced reflow handles (cancelled on unmount). */
@@ -356,54 +355,6 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     } else if (isActive() && store.bars.length) {
       safePaint(store.bars, { fit: true }, 'Initial chart paint');
       setSlotBars(id, store.bars, false);
-    }
-
-    // HP-3: stacked GPU candle overlay over the price pane (active slot
-    // only). Additive parity mode — LWC keeps painting every candle
-    // underneath and stays the full fallback; nothing here removes LWC
-    // rendering (plan §14.2). The overlay self-disables whenever the ring
-    // or geometry is unavailable and clears itself to transparent.
-    if (isActive() && hostEl) {
-      try {
-        const host = hostEl;
-        stopGpuOverlay = startGpuOverlay({
-          host,
-          getPriceChart: () => localManager?.getPane('price')?.chart ?? null,
-          getPricePaneEl: () => {
-            const mgr = localManager;
-            return mgr ? document.getElementById(mgr.paneDomId('price')) : null;
-          },
-          getBarsLength: () => store.bars.length,
-          getBars: () => store.bars,
-          getBarsTailTime: () => {
-            const bars = store.bars;
-            const last = bars.length ? bars[bars.length - 1] : undefined;
-            return last?.time ?? 0;
-          },
-          getHotBuffer: getLiveHotBuffer,
-          getCandleSeries: () => localManager?.getPane('price')?.series.candle ?? null,
-          fallbackPalette: {
-            up: parseCssColorToRgb(VOID.up) ?? 0x3ddc97,
-            down: parseCssColorToRgb(VOID.down) ?? 0xf07178,
-          },
-          // Cold-page pager (§9.2): the overlay reports its absolute viewport
-          // every frame; the stream pager posts a cold page to the ingest
-          // worker while the viewport stays out of the hot ring.
-          onViewport: (fromAbs, count) => {
-            try {
-              noteHpViewport(fromAbs, count);
-            } catch {
-              /* paging is best-effort */
-            }
-          },
-        });
-      } catch (err: unknown) {
-        reportUiError(err, {
-          source: 'chart',
-          context: 'GPU overlay start failed',
-          status: false,
-        });
-      }
     }
 
     // Inactive empty slots stay on the empty hint until focused — clicking a
@@ -775,11 +726,9 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     cancelReflow();
     crosshairRaf.cancel();
     try {
-      stopGpuOverlay?.();
     } catch {
       /* teardown must never break cleanup */
     }
-    stopGpuOverlay = null;
 
     // Optional subsystems first (need live LWC charts).
     try {

@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "tests/hp"
-description: "tests/hp contains atomics-main-guard.test.ts, axb1-codec.test.ts, axb1-fuzz.test.ts, and 21 more files."
+description: "AXB1 randomized round-trip fuzz (hp2 E1)."
 resource: "tests/hp"
 tags: [code, hp, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-25T15:25:14Z
+  at: 2026-10-25T18:32:15Z
 sources:
   - id: tree
     resource: "tests/hp"
@@ -18,30 +18,13 @@ okf_lock: generated
 
 # Files
 
-* `atomics-main-guard.test.ts`
 * `axb1-codec.test.ts`
 * `axb1-fuzz.test.ts`
-* `barstate-tip.test.ts`
-* `calc-worker.test.ts`
-* `capabilities.test.ts`
-* `copy-out-lwc.test.ts`
-* `downsample.test.ts`
 * `execution-context.test.ts`
-* `feature-flag.test.ts`
-* `gpu-parity.test.ts`
-* `hot-buffer.test.ts`
-* `hot-ring-paint.test.ts`
-* `hot-ring-writer.test.ts`
-* `hud.test.ts`
 * `ingest-core.test.ts`
-* `ingest-host-sab.test.ts`
 * `ingest-host.test.ts`
 * `isolation-headers.test.ts`
-* `page-buffer.test.ts`
-* `select-renderer.test.ts`
 * `ticks-precision.test.ts`
-* `visual-attr.test.ts`
-* `webgl2-renderer.test.ts`
 
 # Other files
 
@@ -53,17 +36,10 @@ okf_lock: generated
 
 # Depends on
 
-* [src/chart](/code/src/chart.md)
-* [src/data](/code/src/data.md)
 * [src/engine](/code/src/engine.md)
 * [src/engine/v1](/code/src/engine/v1.md)
 * [src/hp](/code/src/hp.md)
 * [src/hp/axb1](/code/src/hp/axb1.md)
 * [src/hp/calc](/code/src/hp/calc.md)
-* [src/hp/memory](/code/src/hp/memory.md)
-* [src/hp/paint](/code/src/hp/paint.md)
-* [src/hp/render](/code/src/hp/render.md)
-* [src/hp/sync](/code/src/hp/sync.md)
 * [src/hp/workers](/code/src/hp/workers.md)
-* [src/store](/code/src/store.md)
 * [src/sw](/code/src/sw.md)

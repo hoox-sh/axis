@@ -28,10 +28,6 @@
 /** `'AXB1'` as a little-endian uint32 (`41 58 42 31`). */
 export const AXB1_MAGIC = 0x31425841;
 
-/** Control-block magic `'HPC1'` (little-endian `48 50 43 31`).
- * Audited hp2 E1: live, owned by `hp/memory/control-block.ts` — not dead. */
-export const HPC1_MAGIC = 0x31435048;
-
 export const AXB1_VERSION = 1;
 
 /** Envelope size; payload starts here and is 8-byte aligned. */
@@ -39,9 +35,6 @@ export const AXB1_HEADER_BYTES = 32;
 
 /** Reject payloads larger than this (4 MiB). */
 export const AXB1_MAX_PAYLOAD = 4 * 1024 * 1024;
-
-/** Hot-window capacity (multiple of 64). SAB sizing for later PRs. */
-export const HOT_CAP = 5120;
 
 export enum Axb1Opcode {
   HEARTBEAT = 0x00,

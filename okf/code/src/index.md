@@ -7,11 +7,10 @@
 * [src/chart](chart.md) - Solid chart host — mounts PaneManager for one layout slot.
 * [src/data](data.md) - Background Data Source Manager — multi-page OHLCV backfill to a past date.
 * [src/desktop](desktop.md) - AXIS desktop (Tauri) shell helpers.
-* [src/dev](dev.md) - Development-mode HP + chart tracer.
 * [src/editor](editor.md) - Root component for the standalone editor window (?view=editor).
 * [src/engine](engine.md) - Redesign2 engine module barrel.
 * [src/engines](engines.md) - src/engines contains batch.ts, catalog.ts, chart-data-session.ts, and 14 more files.
-* [src/hp](hp.md) - High-performance chart engine (HP PR 1–9).
+* [src/hp](hp.md) - What remains of the old HP tree: the AXB1 codec and the Pine execution context.
 * [src/indicators](indicators.md) - src/indicators contains IndicatorCard.tsx, IndicatorPanel.tsx, apply-context.ts, and 13 more files.
 * [src/mcp](mcp.md) - AXIS in-app MCP host — capabilities, snapshot, Worker bridge.
 * [src/onchain](onchain.md) - Public entry for the AXIS on-chain data plane (Phase 1–3 light).
@@ -36,6 +35,6 @@
 * [chart](chart/) - Solid chart host — mounts PaneManager for one layout slot.
 * [data](data/) - Background Data Source Manager — multi-page OHLCV backfill to a past date.
 * [engine](engine/) - Redesign2 engine module barrel.
-* [hp](hp/) - High-performance chart engine (HP PR 1–9).
+* [hp](hp/) - What remains of the old HP tree: the AXB1 codec and the Pine execution context.
 * [indicators](indicators/) - src/indicators contains IndicatorCard.tsx, IndicatorPanel.tsx, apply-context.ts, and 13 more files.
 * [ui](ui/) - src/ui contains AboutModal.tsx, AlertsPanel.tsx, BarReplayControls.tsx, and 82 more files.

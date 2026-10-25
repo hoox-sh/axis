@@ -40,9 +40,7 @@ import { Redesign2BarCloseVerifier, compareClosedOhlcv } from '../engine/bar-clo
 import { currentSeriesKey, pairFormSymbol } from '../engine/market-identity';
 import { pyneMarket } from '../data/provider';
 import { StreamLiveWire, StreamFallbackError, type WireClient } from '../engine/live-wire';
-import { createLiveWsClient, IngestHostClient } from '../hp/workers/host';
-import { copyOutTail } from '../hp/paint/copy-out-lwc';
-import { PAGE_CAPACITY, planViewportPage } from '../hp/memory/page-buffer';
+import { createLiveWsClient } from '../hp/workers/host';
 import { routeEngineRun } from '../engine/router';
 import { getCachedEngineCapabilities } from '../engines/catalog';
 import type { DataSeriesKey } from '../engines/data-sessions';
@@ -62,8 +60,7 @@ import {
   sliceToChartWindow,
   store,
 } from '../store';
-import { appendLiveBar, startHotRingPaint } from '../chart/live-append';
-import type { HotBuffer } from '../hp/memory/hot-buffer';
+import { appendLiveBar } from '../chart/live-append';
 import type { Bar } from '../store/types';
 import type { Indicator } from '../store/types';
 import { BoundedMap } from '../utils/bounded-map';
@@ -215,139 +212,6 @@ function continuesChartTail(bars: Bar[]): boolean {
 
 let wire: StreamLiveWire | null = null;
 let wireCred = '';
-/** The ingest client behind the wire, when HP owns the socket (page posts). */
-let liveIngestClient: IngestHostClient | null = null;
-/** HP-2: rAF sampler over the ingest worker's hot SAB ring (null when off). */
-let stopHotRingPaint: (() => void) | null = null;
-/**
- * HP-3: the live wire's hot ring, for the GPU candle overlay.
- *
- * Identity changes with the wire (symbol switch, reconnect, flag flip) —
- * consumers must re-read it every frame rather than capture it once.
- * `null` means "no ring today": flag off, not cross-origin isolated, no
- * live wire yet, or teardown.
- */
-let liveHotBuffer: HotBuffer | null = null;
-
-/**
- * The ingest worker's hot SAB ring backing the live chart, or `null`.
- *
- * Read per frame — the buffer is swapped whenever the live wire is
- * (re)built. HP consumers: the LWC copy-out sampler and the GPU overlay.
- */
-export function getLiveHotBuffer(): HotBuffer | null {
-  return liveHotBuffer;
-}
-
-function stopRingPaint(): void {
-  liveHotBuffer = null;
-  liveIngestClient = null;
-  if (!stopHotRingPaint) return;
-  try {
-    stopHotRingPaint();
-  } catch {
-    /* teardown must never break the caller */
-  }
-  stopHotRingPaint = null;
-}
-
-/** Cold-page pager throttle (ms) — a pan gesture resolves to single posts. */
-const HP_PAGE_NOTE_MS = 200;
-let lastPageNote = 0;
-
-/**
- * Cold-page pager for the HP-3 overlay (HP PR 5 wiring, §9.2).
- *
- * The GPU overlay paints the visible logical range every frame; when the
- * range leaves the hot ring it reports its absolute window here. This plans
- * the request against the ring (`planViewportPage`), slices the cold bars
- * out of the chart window the main thread already owns, and hands them to
- * the ingest worker — the SAB's single writer — which replaces the page
- * slot:
- *
- * - the range overlaps hot → `ack` (a stale page is `release`d instead),
- * - a cold range → one page post, clipped to `PAGE_CAPACITY`,
- * - nothing mappable (ring/chart disagree mid-slide) → retire, wait a frame.
- *
- * Best-effort: a skipped post only clears the overlay until the next frame
- * notes again. Never throws into the overlay's rAF pump.
- */
-export function noteHpViewport(fromAbs: number, count: number): void {
-  try {
-    const hot = liveHotBuffer;
-    const client = liveIngestClient;
-    if (!hot || !client) return;
-    const now = Date.now();
-    if (now - lastPageNote < HP_PAGE_NOTE_MS) return;
-
-    const c = hot.control;
-    const hotFrom = c.hotFromIndex;
-    const hotCount = c.hotCount;
-    if (!(hotCount > 0)) return;
-    const chart = store.bars;
-    const chartBars = chart.length;
-    if (!(chartBars > 0)) return;
-
-    // Tail identity (the overlay's own guard): the absolute mapping below
-    // only holds while the ring is the chart's tail window.
-    const ringTail = copyOutTail(hot, 1)?.bars[0]?.time ?? 0;
-    const chartTail = chart[chartBars - 1]?.time ?? 0;
-    if (!ringTail || ringTail !== chartTail) {
-      lastPageNote = now;
-      try {
-        client.publishColdPage(0, []);
-      } catch {
-        /* best-effort */
-      }
-      return;
-    }
-
-    if (!Number.isFinite(fromAbs) || !Number.isFinite(count)) return;
-    const plan = planViewportPage(
-      { fromAbs: Math.trunc(fromAbs), count: Math.trunc(count) },
-      { fromIndex: hotFrom, count: hotCount },
-      { pageActive: hot.pageActive, capacity: PAGE_CAPACITY },
-    );
-    if (plan.action === 'ack') return;
-    lastPageNote = now;
-    if (plan.action === 'release') {
-      try {
-        client.publishColdPage(0, []);
-      } catch {
-        /* best-effort */
-      }
-      return;
-    }
-    // 'replace': the page slot must cover [fromAbs, fromAbs + count).
-    const pageFrom = hot.pageActive ? c.pageFromIndex : 0;
-    const pageCount = hot.pageActive ? c.pageCount : 0;
-    if (
-      hot.pageActive &&
-      pageFrom <= plan.fromAbs &&
-      plan.fromAbs + plan.count <= pageFrom + pageCount
-    ) {
-      return; // already covered — no post
-    }
-    // Chart index of an absolute bar (tail identity, see above).
-    const toChartIdx = (abs: number): number => abs - (hotFrom + hotCount - chartBars);
-    const startIdx = toChartIdx(plan.fromAbs);
-    const c0 = Math.max(startIdx, 0);
-    const c1 = Math.min(startIdx + plan.count, chartBars);
-    if (c1 <= c0) return;
-    const slice = chart.slice(c0, c1);
-    if (!slice.length) return;
-    try {
-      // A clip at the chart head shifts the page base forward with it; the
-      // wanted count rides along so the worker can fill the clipped head
-      // from its cold store (hp2 B1).
-      client.publishColdPage(plan.fromAbs + (c0 - startIdx), slice, plan.count);
-    } catch {
-      /* best-effort */
-    }
-  } catch {
-    /* paging is best-effort — the overlay clears for a frame */
-  }
-}
 /**
  * (engine + series) → the bar-close verifier for that series.
  *
@@ -373,27 +237,10 @@ function buildWire(): StreamLiveWire {
   // first frame is `auth`. Read the key the same way every key-gated REST call
   // does, so a vault-restored key reaches the socket too.
   const authToken = String(cfg?.apiKey || '').trim() || undefined;
-  stopRingPaint();
   const rawClient = createLiveWsClient({
     endpoint,
     authToken,
-    // Bars-cache identity so the ingest worker can hydrate its cold store
-    // (hp2 B1): same source/symbol/interval the dataset layer caches under.
-    coldKey: {
-      sourceId: String(store.source || ''),
-      symbol: String(store.symbol || ''),
-      interval: String(store.interval || ''),
-    },
   });
-  // HP-2: when the client runs the hot ring (flag on + isolated + SAB),
-  // bars arrive through the shared memory instead of the frame payload —
-  // paint them from the rAF copy-out. Flag-off / non-isolated clients have
-  // no ring and keep the frame path unchanged.
-  if (rawClient instanceof IngestHostClient && rawClient.hotBuffer) {
-    liveHotBuffer = rawClient.hotBuffer;
-    liveIngestClient = rawClient;
-    stopHotRingPaint = startHotRingPaint(rawClient.hotBuffer);
-  }
   const client = rawClient as unknown as WireClient;
   return new StreamLiveWire(
     client,
@@ -528,7 +375,6 @@ export function resetStreamWire(): {
   cooledDown: boolean;
 } {
   if (!wire) return { hadWire: false, wasOpen: false, unsubscribed: 0, cooledDown: false };
-  stopRingPaint();
   const target = wire;
   wire = null;
   wireCred = '';
