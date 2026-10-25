@@ -39,6 +39,10 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Added
 
+- **A PYNE tick that reports `stale` drops the script session.** That flag means the engine clamped its history walk, not that the feed was idle. The next run loads the store after the gap page is written.
+
+- **A fresh engine tip no longer hides a hole in the series.** Repair used to stop when `newest` was current, so a tick walk that skipped the middle (about 22 hours on DOGEUSDT 1m) stayed in the store and the Donchian axis. A bounds deficit of 30 or more bars now uploads the local window. An upload that adds nothing is remembered, so a weekend on a session venue does not re-upload every cooldown. A snapshot whose stamps jump, while the chart's do not, asks for that repair.
+
 - **`axis.chart.layout=single` uses one Lightweight Charts chart per slot.** The default stays `multi` (one chart per pane, manual time-scale sync). `single` adds indicator and volume panes with `addPane` on the price chart, sends each series to that pane index, and removing a sub-pane does not remove the candles. Time-scale mirroring is skipped because there is one scale.
 
 - **The ingest tip coalescer folds a window instead of keeping one frame.** Last OHLC tip wins, plot columns union by key, and a plot tip no longer drops the pending candle. A non-tip frame flushes that subscription's tip first. `UNCHANGED` keepalives with no bars and no columns are dropped.

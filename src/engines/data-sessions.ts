@@ -37,6 +37,7 @@
 import type { Bar } from '../store/types';
 import type { EngineDataSessionRequest } from '../plugins/types';
 import { providerDatasetLock, pyneMarket } from '../data/provider';
+import { ENGINE_SERIES_GAP_BARS, missingSlotsInBounds } from './series-freshness';
 import { FALLBACK_MAJORS } from '../data/symbol-catalog';
 import { normalizeHistoricalBars } from '../data/parse-bars';
 import { pairFormSymbol } from '../engine/market-identity';
@@ -725,6 +726,12 @@ const seriesProvisionInflight = new Map<string, Promise<'local' | 'fetch'>>();
 /** Cap on remembered series memos — one per (endpoint + series) pair. */
 const SERIES_MEMO_MAX = 200;
 const seriesRepairAt = new BoundedMap<string, number>(SERIES_MEMO_MAX);
+/**
+ * Bounds signature of a hole the local window could not fill (`added === 0`).
+ * A session venue's closed hours look like a hole and must not re-upload
+ * every cooldown.
+ */
+const gapNoFill = new BoundedMap<string, string>(SERIES_MEMO_MAX);
 
 function seriesProvisionMemoKey(endpoint: string, key: DataSeriesKey): string {
   return `${endpoint.replace(/\/$/, '')}|${seriesKeyString(key)}`;
@@ -800,6 +807,7 @@ export function _resetDataSessionMemo(): void {
   seriesProvisionMemo.clear();
   seriesProvisionInflight.clear();
   seriesRepairAt.clear();
+  gapNoFill.clear();
 }
 
 /** @internal test helper — drop only the series provisioning memo. */
@@ -811,6 +819,7 @@ export function _resetSeriesProvisionMemoForTests(): void {
 /** @internal test helper — clear the per-series staleness-repair cooldown. */
 export function _resetSeriesRepairCooldownForTests(): void {
   seriesRepairAt.clear();
+  gapNoFill.clear();
 }
 
 /** @internal test helper — recorded coverage for (endpoint, series). */
@@ -881,9 +890,25 @@ export async function repairStaleEngineSeries(opts: {
   // Someone else may have healed it already (second tab, the engine's own
   // catch-up): one cheap status read avoids a pointless upload. Advisory only —
   // a failed status read still repairs.
+  let holed = false;
+  let gapSig = '';
   try {
     const status = await getDataSeriesStatus(opts.endpoint, opts.apiKey, opts.key, opts.signal);
-    if (status.count > 0 && !seriesIsStale(status.newest, opts.key.interval, now)) {
+    const missing = missingSlotsInBounds(
+      status.oldest,
+      status.newest,
+      status.count,
+      opts.key.interval,
+    );
+    holed = missing >= ENGINE_SERIES_GAP_BARS;
+    gapSig = `${status.count}|${status.oldest ?? ''}|${status.newest ?? ''}`;
+    const freshTip = status.count > 0 && !seriesIsStale(status.newest, opts.key.interval, now);
+    // A fresh tip used to stop here. That left a series whose newest bar is
+    // "now" but whose middle is missing (the tick walk never pages the hole).
+    if (freshTip && !holed) {
+      return { repaired: false, via: 'none', bars: 0 };
+    }
+    if (freshTip && holed && gapNoFill.get(memoKey) === gapSig) {
       return { repaired: false, via: 'none', bars: 0 };
     }
   } catch {
@@ -899,7 +924,7 @@ export async function repairStaleEngineSeries(opts: {
   const tail = local.slice(-need);
   if (tail.length && !seriesIsStale(newestBarTime(tail), opts.key.interval, now)) {
     try {
-      await provideDataSeries(
+      const uploaded = await provideDataSeries(
         opts.endpoint,
         opts.apiKey,
         opts.key,
@@ -907,6 +932,12 @@ export async function repairStaleEngineSeries(opts: {
         'axis-local',
         opts.signal,
       );
+      // Closed-market holes are already absent from the local window. Uploading
+      // them adds nothing; remember the bounds so the next tick does not retry.
+      if (holed && uploaded.added <= 0) {
+        if (gapSig) gapNoFill.set(memoKey, gapSig);
+        return { repaired: false, via: 'local', bars: 0 };
+      }
       noteSeriesProvisioned(memoKey, need, 'local');
       return { repaired: true, via: 'local', bars: tail.length };
     } catch (err: unknown) {

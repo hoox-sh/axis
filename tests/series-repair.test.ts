@@ -83,6 +83,16 @@ describe('engineSeriesStale', () => {
     expect(engineSeriesStale({ chartBars: [], engineBars: [], interval: '1h' })).toBeNull();
   });
 
+  it('reports an internal hole the chart does not have', () => {
+    const end = 1_800_000_000;
+    const reason = engineSeriesStale({
+      chartBars: barsEnding(end, 48),
+      engineBars: [b(end - 47 * HOUR), b(end)],
+      interval: '1h',
+    });
+    expect(reason).toContain('internal gap');
+  });
+
   it('reports the engine window behind the chart tail', () => {
     const reason = engineSeriesStale({
       chartBars: chart,

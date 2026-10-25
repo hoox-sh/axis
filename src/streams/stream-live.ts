@@ -46,6 +46,8 @@ import { PAGE_CAPACITY, planViewportPage } from '../hp/memory/page-buffer';
 import { routeEngineRun } from '../engine/router';
 import { getCachedEngineCapabilities } from '../engines/catalog';
 import type { DataSeriesKey } from '../engines/data-sessions';
+import { invalidateDataSessions } from '../engines/data-sessions';
+import { invalidateLiveSessionsForSeries } from '../engines/live-sessions';
 import { driveEngineSeries } from '../engines/series-drive';
 import { engineWindowBehindChart, newestBarTime } from '../engines/series-freshness';
 import { engineSeriesStale, noteStaleEngineSeries } from '../engines/series-repair';
@@ -626,7 +628,7 @@ export async function streamDriveSeries(marketNow = 0): Promise<void> {
     interval: store.interval || '',
   };
   try {
-    await driveEngineSeries({
+    const outcome = await driveEngineSeries({
       endpoint,
       apiKey,
       key,
@@ -635,6 +637,16 @@ export async function streamDriveSeries(marketNow = 0): Promise<void> {
       // existing chart data session instead of re-provisioning it.
       historyBars: chartWindowLimit(),
     });
+    // PYNE `stale` means the tick clamped and a hole was filled or remains.
+    // The in-memory script session still has the old axis until it is dropped.
+    if (outcome === 'stale') {
+      try {
+        invalidateDataSessions(endpoint, key);
+        invalidateLiveSessionsForSeries(endpoint, key.symbol, key.interval);
+      } catch {
+        /* the next explicit run still recreates */
+      }
+    }
   } catch {
     /* the drive is best-effort — the staleness broker is the backstop */
   }

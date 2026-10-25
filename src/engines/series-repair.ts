@@ -40,7 +40,9 @@ import type { Bar } from '../store/types';
 import { currentSeriesKey } from '../engine/market-identity';
 import { FALLBACK_MAJORS } from '../data/symbol-catalog';
 import {
+  ENGINE_SERIES_GAP_BARS,
   engineWindowBehindChart,
+  internalGapBars,
   newestBarTime,
   seriesBehind,
   stepsBehind,
@@ -116,7 +118,14 @@ export function engineSeriesStale(input: {
   const marketNow = Math.max(0, Math.floor(input.marketNow ?? 0));
   const engineNewest = newestBarTime(input.engineBars);
   const behindMarket = marketNow > 0 && seriesBehind(engineNewest, marketNow, input.interval);
-  if (!behindChart && !behindMarket) return null;
+  if (!behindChart && !behindMarket) {
+    const engineGap = internalGapBars(input.engineBars, input.interval);
+    const chartGap = internalGapBars(input.chartBars, input.interval);
+    if (engineGap >= ENGINE_SERIES_GAP_BARS && engineGap > chartGap + ENGINE_SERIES_GAP_BARS) {
+      return `internal gap of ${engineGap} bars`;
+    }
+    return null;
+  }
   const lag = behindChart
     ? stepsBehind(engineNewest, newestBarTime(input.chartBars), input.interval)
     : stepsBehind(engineNewest, marketNow, input.interval);

@@ -46,6 +46,13 @@ import { intervalToSec } from '../data/bars-gaps';
 /** Whole interval steps a series may lag before it counts as stale (2 × interval). */
 export const ENGINE_SERIES_STALE_STEPS = 2;
 
+/**
+ * Missing slots that count as an internal hole, not a weekend or a one-bar slip.
+ * A fresh tip can still hide a hole: the engine tick walks only the recent
+ * window and leaves the minutes in between unfilled.
+ */
+export const ENGINE_SERIES_GAP_BARS = 30;
+
 /** Newest bar open time of a bar list (0 when empty / non-finite). */
 export function newestBarTime(bars: readonly Bar[] | null | undefined): number {
   if (!Array.isArray(bars) || !bars.length) return 0;
@@ -106,6 +113,47 @@ export function engineWindowBehindChart(
  * {@link ENGINE_SERIES_STALE_STEPS} steps — the market (venue trigger clock)
  * has moved on while the engine's series has not.
  */
+/**
+ * Slots implied by `[oldest, newest]` that `count` does not cover.
+ * Unknown bounds count as no hole — a status read without `oldest` must not
+ * look like a gap.
+ */
+export function missingSlotsInBounds(
+  oldest: number | null,
+  newest: number | null,
+  count: number,
+  interval: string,
+): number {
+  if (oldest == null || newest == null || count <= 0) return 0;
+  if (!Number.isFinite(oldest) || !Number.isFinite(newest) || newest < oldest) return 0;
+  const step = intervalToSec(interval);
+  if (step <= 0) return 0;
+  const expected = Math.floor((newest - oldest) / step) + 1;
+  return Math.max(0, expected - count);
+}
+
+/**
+ * Bars skipped between consecutive stamps. One step apart contributes 0.
+ * A Friday-to-Monday jump on a session venue is a large number; compare it
+ * with the chart's own gap before calling the engine holed.
+ */
+export function internalGapBars(
+  bars: readonly { time?: number }[] | null | undefined,
+  interval: string,
+): number {
+  if (!bars || bars.length < 2) return 0;
+  const step = intervalToSec(interval);
+  if (step <= 0) return 0;
+  let missing = 0;
+  for (let i = 1; i < bars.length; i++) {
+    const prev = bars[i - 1]?.time;
+    const cur = bars[i]?.time;
+    if (typeof prev !== 'number' || typeof cur !== 'number') continue;
+    if (cur - prev > step) missing += Math.floor((cur - prev) / step) - 1;
+  }
+  return missing;
+}
+
 export function seriesBehindNow(
   bars: readonly Bar[] | null | undefined,
   interval: string,

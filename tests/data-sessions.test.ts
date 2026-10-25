@@ -1334,6 +1334,71 @@ describe('repairStaleEngineSeries', () => {
     expect(statusReads).toBe(2);
   });
 
+  it('uploads a fresh local window when the tip is current but the span is holed', async () => {
+    const localBars = freshBars(8);
+    const newest = localBars[localBars.length - 1]!.time;
+    const rec = recorder((c) => {
+      if (isStatus(c)) {
+        return jsonResponse({
+          status: 'success',
+          count: 40,
+          oldest: newest - 100 * HOUR,
+          newest,
+        });
+      }
+      if (c.path === '/data/series/provide') {
+        return jsonResponse({ status: 'success', added: 60, updated: 8, count: 100 });
+      }
+      return jsonResponse({ status: 'error' }, 500);
+    });
+    restore = rec.restore;
+    const r = await repairStaleEngineSeries({
+      endpoint: ENDPOINT,
+      apiKey: '',
+      key: KEY,
+      localBars: local(localBars),
+      nowSec: newest + 60,
+    });
+    expect(r.repaired).toBe(true);
+    expect(r.via).toBe('local');
+    expect(rec.calls.some((c) => c.path === '/data/series/provide')).toBe(true);
+  });
+
+  it('does not re-upload a hole the local window cannot fill', async () => {
+    const localBars = freshBars(4);
+    const newest = localBars[localBars.length - 1]!.time;
+    let provides = 0;
+    const rec = recorder((c) => {
+      if (isStatus(c)) {
+        return jsonResponse({
+          status: 'success',
+          count: 40,
+          oldest: newest - 100 * HOUR,
+          newest,
+        });
+      }
+      if (c.path === '/data/series/provide') {
+        provides += 1;
+        return jsonResponse({ status: 'success', added: 0, updated: 4, count: 40 });
+      }
+      return jsonResponse({ status: 'error' }, 500);
+    });
+    restore = rec.restore;
+    const opts = {
+      endpoint: ENDPOINT,
+      apiKey: '',
+      key: KEY,
+      localBars: local(localBars),
+      nowSec: newest + 60,
+      force: true,
+    };
+    const first = await repairStaleEngineSeries(opts);
+    const second = await repairStaleEngineSeries(opts);
+    expect(first).toEqual({ repaired: false, via: 'local', bars: 0 });
+    expect(second).toEqual({ repaired: false, via: 'none', bars: 0 });
+    expect(provides).toBe(1);
+  });
+
   it('is cooldown-guarded per (endpoint, series)', async () => {
     const other = 'http://pro-other.test';
     const fetches: string[] = [];
