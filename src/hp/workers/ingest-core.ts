@@ -109,12 +109,19 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === 'object' && !Array.isArray(v);
 }
 
+function isBlob(raw: unknown): raw is Blob {
+  return typeof Blob !== 'undefined' && raw instanceof Blob;
+}
+
+/** Exact payload bytes. A view's offset/length are kept so a subarray cannot see padding. */
+function inboundBytes(raw: ArrayBuffer | ArrayBufferView): Uint8Array {
+  if (raw instanceof Uint8Array) return raw;
+  if (raw instanceof ArrayBuffer) return new Uint8Array(raw);
+  return new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength);
+}
+
 function utf8From(raw: ArrayBuffer | ArrayBufferView): string {
-  const bytes =
-    raw instanceof ArrayBuffer
-      ? new Uint8Array(raw)
-      : new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength);
-  return new TextDecoder().decode(bytes);
+  return new TextDecoder().decode(inboundBytes(raw));
 }
 
 function decodeJsonText(text: string, table: IngestCursorTable): IngestDecode {
@@ -483,11 +490,17 @@ function mapAxb1(frame: Axb1Frame | Axb1Unknown, table: IngestCursorTable): Inge
 /**
  * Decode one inbound socket payload. JSON stays the compatibility path;
  * AXB1 is detected by magic. `table` restores subscription ids from hashes.
+ *
+ * Sync for `string | ArrayBuffer | ArrayBufferView`. A `Blob` (Cloudflare
+ * binary WS on compat ≥ 2026-03-17) is not readable here — use
+ * {@link decodeInboundAsync}. Passing a Blob is `malformed` (`blob`), not
+ * `type` and not a TextDecoder of the bytes.
  */
 export function decodeInbound(raw: unknown, table: IngestCursorTable): IngestDecode {
   if (typeof raw === 'string') return decodeJsonText(raw, table);
+  if (isBlob(raw)) return { ok: false, kind: 'malformed', reason: 'blob' };
   if (raw instanceof ArrayBuffer || ArrayBuffer.isView(raw)) {
-    const view = raw instanceof ArrayBuffer ? new Uint8Array(raw) : raw;
+    const view = inboundBytes(raw);
     if (looksLikeAxb1(view)) {
       try {
         return mapAxb1(decodeFrame(view), table);
@@ -498,6 +511,25 @@ export function decodeInbound(raw: unknown, table: IngestCursorTable): IngestDec
     return decodeJsonText(utf8From(view), table);
   }
   return { ok: false, kind: 'malformed', reason: 'type' };
+}
+
+/**
+ * Same as {@link decodeInbound}, plus `Blob` via `arrayBuffer()`.
+ * AXB1 magic is inspected on those bytes — never TextDecoder a binary frame.
+ * A failed Blob read or malformed bytes is `malformed`, not a throw.
+ */
+export async function decodeInboundAsync(
+  raw: unknown,
+  table: IngestCursorTable,
+): Promise<IngestDecode> {
+  if (isBlob(raw)) {
+    try {
+      return decodeInbound(await raw.arrayBuffer(), table);
+    } catch (e) {
+      return { ok: false, kind: 'malformed', reason: e instanceof Error ? e.message : 'blob' };
+    }
+  }
+  return decodeInbound(raw, table);
 }
 
 function payloadOf(frame: Redesign2Frame): Record<string, unknown> {

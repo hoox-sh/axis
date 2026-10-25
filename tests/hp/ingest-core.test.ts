@@ -8,7 +8,12 @@ import { validateRedesign2Frame, type Redesign2Frame } from '../../src/engine/fr
 import { Axb1Opcode, TipMask, ValueKind } from '../../src/hp/axb1/constants';
 import { encodeFrame } from '../../src/hp/axb1/encode';
 import { fnv1a32 } from '../../src/hp/axb1/hash';
-import { decodeInbound, IngestCursorTable, TipCoalescer } from '../../src/hp/workers/ingest-core';
+import {
+  decodeInbound,
+  decodeInboundAsync,
+  IngestCursorTable,
+  TipCoalescer,
+} from '../../src/hp/workers/ingest-core';
 
 const SUB = 'series:binance|spot|BTC/USDT|1m';
 
@@ -368,6 +373,114 @@ describe('decodeInbound AXB1', () => {
     const buf = new Uint8Array([0, 1, 2, 3, 4, 5]);
     const out = decodeInbound(buf, new IngestCursorTable());
     expect(out.ok).toBe(false);
+  });
+});
+
+describe('decodeInbound Blob and views', () => {
+  const jsonFull = JSON.stringify({
+    type: 'full',
+    id: SUB,
+    sessionId: 'ses-1',
+    seq: 1,
+    payload: {
+      seriesKey: SUB,
+      count: 1,
+      closed_upto: 0,
+      bars: [{ time: 60, open: 1, high: 1, low: 1, close: 1, volume: 1 }],
+    },
+  });
+
+  function snapshotBytes(): Uint8Array {
+    return encodeFrame({
+      opcode: Axb1Opcode.SNAPSHOT_OHLCV,
+      seq: 3,
+      subIdHash: fnv1a32(SUB),
+      sessionHash: fnv1a32('ses-1'),
+      tsMs: 0n,
+      priceScale: 2,
+      count: 1,
+      closedUpto: 0,
+      hotFromIndex: 0,
+      timeS: [60],
+      open: [10000n],
+      high: [11000n],
+      low: [9000n],
+      close: [10500n],
+      volume: [3],
+      flags: [1],
+    });
+  }
+
+  test('JSON full as Blob matches the string path', async () => {
+    const fromString = decodeInbound(jsonFull, new IngestCursorTable());
+    const fromBlob = await decodeInboundAsync(new Blob([jsonFull]), new IngestCursorTable());
+    expect(fromBlob).toEqual(fromString);
+    expect(fromBlob.ok).toBe(true);
+    if (fromBlob.ok && fromBlob.kind === 'frames') {
+      expect(fromBlob.frames[0]?.type).toBe('full');
+    }
+  });
+
+  test('AXB1 SNAPSHOT_OHLCV as Blob matches ArrayBuffer and is not utf8-corrupted', async () => {
+    const bytes = snapshotBytes();
+    const fromView = decodeInbound(bytes, tableWithSub());
+    const copy = bytes.slice();
+    const fromAb = decodeInbound(copy.buffer, tableWithSub());
+    const fromBlob = await decodeInboundAsync(new Blob([bytes]), tableWithSub());
+    expect(fromBlob).toEqual(fromView);
+    expect(fromBlob).toEqual(fromAb);
+    expect(fromBlob.ok).toBe(true);
+    if (!(fromBlob.ok && fromBlob.kind === 'frames')) throw new Error('expected frames');
+    expect(fromBlob.frames[0]?.type).toBe('full');
+    const asText = new TextDecoder().decode(bytes);
+    const utf8Path = decodeInbound(asText, tableWithSub());
+    expect(utf8Path.ok).toBe(false);
+  });
+
+  test('AXB1 HEARTBEAT as Blob matches ArrayBuffer', async () => {
+    const bytes = encodeFrame({
+      opcode: Axb1Opcode.HEARTBEAT,
+      seq: 0,
+      subIdHash: 0,
+      sessionHash: 0,
+      tsMs: 0n,
+    });
+    const fromAb = decodeInbound(bytes, new IngestCursorTable());
+    const fromBlob = await decodeInboundAsync(new Blob([bytes]), new IngestCursorTable());
+    expect(fromBlob).toEqual(fromAb);
+    expect(fromBlob).toEqual({ ok: true, kind: 'pong' });
+  });
+
+  test('Blob of malformed bytes is malformed, not a throw', async () => {
+    const blob = new Blob([new Uint8Array([0, 1, 2, 3, 4, 5])]);
+    const out = await decodeInboundAsync(blob, new IngestCursorTable());
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.kind).toBe('malformed');
+  });
+
+  test('sync decodeInbound does not throw on Blob', () => {
+    const out = decodeInbound(new Blob([jsonFull]), new IngestCursorTable());
+    expect(out).toEqual({ ok: false, kind: 'malformed', reason: 'blob' });
+  });
+
+  test('ArrayBufferView subarray still decodes AXB1 and JSON', () => {
+    const bytes = snapshotBytes();
+    const padded = new Uint8Array(bytes.byteLength + 16);
+    padded.fill(0xff);
+    padded.set(bytes, 8);
+    const view = padded.subarray(8, 8 + bytes.byteLength);
+    const fromSlice = decodeInbound(view, tableWithSub());
+    const fromBytes = decodeInbound(bytes, tableWithSub());
+    expect(fromSlice).toEqual(fromBytes);
+    expect(fromSlice.ok).toBe(true);
+
+    const jsonBytes = new TextEncoder().encode(jsonFull);
+    const jsonPad = new Uint8Array(jsonBytes.byteLength + 10);
+    jsonPad.set(jsonBytes, 3);
+    const jsonView = jsonPad.subarray(3, 3 + jsonBytes.byteLength);
+    expect(decodeInbound(jsonView, new IngestCursorTable())).toEqual(
+      decodeInbound(jsonFull, new IngestCursorTable()),
+    );
   });
 });
 

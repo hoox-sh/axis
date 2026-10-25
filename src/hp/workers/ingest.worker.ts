@@ -25,7 +25,13 @@
  * @module hp/workers/ingest.worker
  */
 
-import { decodeInbound, IngestCursorTable, TipCoalescer } from './ingest-core';
+import {
+  decodeInbound,
+  decodeInboundAsync,
+  IngestCursorTable,
+  TipCoalescer,
+  type IngestDecode,
+} from './ingest-core';
 import { isFormingTipFrame, sendBufferHeld } from '../../engine/v1/backpressure';
 import { reconnectDelayMs } from '../../engine/frames';
 import {
@@ -139,9 +145,7 @@ function noteSendBuffer(): void {
   post({ type: 'backpressure', held });
 }
 
-function handleRaw(raw: unknown): void {
-  noteSendBuffer();
-  const decoded = decodeInbound(raw, table);
+function handleDecoded(decoded: IngestDecode): void {
   if (!decoded.ok) {
     post({ type: 'malformed', reason: decoded.reason });
     return;
@@ -170,6 +174,12 @@ function handleRaw(raw: unknown): void {
     ? decoded.frames.filter((frame) => !isFormingTipFrame(frame))
     : decoded.frames;
   if (frames.length) coalescer.push(frames);
+}
+
+function handleRaw(raw: unknown): void {
+  noteSendBuffer();
+  const decoded = decodeInbound(raw, table);
+  handleDecoded(decoded);
 }
 
 function openSocket(): void {
@@ -240,9 +250,10 @@ function openSocket(): void {
   socket.onmessage = (ev) => {
     if (ws !== socket) return;
     const data = ev.data;
-    if (data instanceof Blob) {
-      void data.arrayBuffer().then((buf) => {
-        if (ws === socket) handleRaw(buf);
+    if (typeof Blob !== 'undefined' && data instanceof Blob) {
+      noteSendBuffer();
+      void decodeInboundAsync(data, table).then((decoded) => {
+        if (ws === socket) handleDecoded(decoded);
       });
       return;
     }
