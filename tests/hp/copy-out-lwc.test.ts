@@ -222,6 +222,9 @@ describe('copy-out bars through appendLiveBar', () => {
     appended = [];
     expect(appendLiveBar(barAt(buf, 3))).toBe('appended');
     expect(store.bars).toHaveLength(3);
+    // Cap not yet sliding the head — a new time slot is series.update.
+    expect(appended).toHaveLength(1);
+    appended = [];
     expect(appendLiveBar(barAt(buf, 4))).toBe('slid');
     expect(appended).toHaveLength(0); // a slide repaints, it is not incremental
     expect(store.bars).toHaveLength(3);

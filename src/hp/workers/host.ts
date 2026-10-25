@@ -37,6 +37,7 @@ import { isolationProbe } from '../capabilities';
 import { noteIngestPublish } from '../../chart/paint-latency';
 import { v1Mark } from '../../engine/v1/metrics';
 import { hpSabMode, isHpEnabled } from '../feature-flag';
+import { noteWorkerTransportFallback, wantsWorkerTransport } from '../../engine/v1/transport';
 import { allocateHotBuffer, type HotBuffer } from '../memory/hot-buffer';
 import type { HostToIngest, IngestToHost, ColdKey } from './protocol';
 
@@ -50,13 +51,21 @@ export type IngestWorkerTransport = {
 export type IngestWorkerFactory = () => IngestWorkerTransport;
 
 let workerFactory: IngestWorkerFactory | null = null;
+/** Tests force the Worker probe. `null` uses the runtime check. */
+let workerAvailableOverride: boolean | null = null;
 
 /** Tests inject a loopback transport so we never spawn a real Worker. */
 export function setIngestWorkerFactory(factory: IngestWorkerFactory | null): void {
   workerFactory = factory;
 }
 
+/** Tests: `false` is the no-Worker fallback. `null` restores the runtime probe. */
+export function setIngestWorkerAvailableForTests(available: boolean | null): void {
+  workerAvailableOverride = available;
+}
+
 export function ingestWorkerAvailable(): boolean {
+  if (workerAvailableOverride !== null) return workerAvailableOverride;
   if (workerFactory) return true;
   try {
     return typeof Worker === 'function' && typeof document !== 'undefined';
@@ -152,6 +161,9 @@ export class IngestHostClient implements WireClient {
    */
   private ensureHot(): void {
     if (this.hot) return;
+    // P1 worker transport reuses this client for JSON decode only.
+    // The hot ring stays an HP opt-in.
+    if (!isHpEnabled()) return;
     if (hpSabMode() === 'off') return;
     if (!isolationProbe().sab) return;
     this.hot = allocateHotBuffer();
@@ -328,12 +340,18 @@ export class IngestHostClient implements WireClient {
 export type IngestHostOptions = Redesign2WsClientOptions & { coldKey?: ColdKey };
 
 /**
- * Live `/ws/live` client. HP off (or no Worker) keeps {@link Redesign2WsClient}
- * byte-for-byte, including main-thread `JSON.parse`.
+ * Live `/ws/live` client.
+ *
+ * The ingest worker owns the socket when HP is on, or when
+ * `axis.engine.transport=worker`. Both require a Worker. Otherwise the
+ * main-thread {@link Redesign2WsClient} stays, including `JSON.parse`.
+ * A requested worker that cannot start counts one JSON fallback.
  */
 export function createLiveWsClient(
   options: IngestHostOptions,
 ): Redesign2WsClient | IngestHostClient {
-  if (isHpEnabled() && ingestWorkerAvailable()) return new IngestHostClient(options);
+  const worker = ingestWorkerAvailable();
+  if (worker && (isHpEnabled() || wantsWorkerTransport())) return new IngestHostClient(options);
+  if (!worker && wantsWorkerTransport()) noteWorkerTransportFallback();
   return new Redesign2WsClient(options);
 }

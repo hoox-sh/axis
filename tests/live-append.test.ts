@@ -35,10 +35,19 @@ beforeEach(() => {
   setDataCalls = [];
   setStore('bars', []);
   setStore('rollingWindowBars', DEFAULT_WINDOW);
+  // Candle series only — no chart, so `ensurePriceSeries` does not swap it.
+  // `setData` here is the full-window replace; `appendBar` is `series.update`.
+  const candle = {
+    setData: (data: unknown[]) => {
+      setDataCalls.push(data);
+    },
+    applyOptions: () => {},
+  };
+  const pricePane = { id: 'price', series: { candle } };
   manager = {
     appendBar: (b: Bar) => appended.push(b),
-    getPane: () => undefined,
-    getAllPanes: () => [],
+    getPane: (id: string) => (id === 'price' ? pricePane : undefined),
+    getAllPanes: () => [pricePane],
   };
   setManager(manager as never);
 });
@@ -52,14 +61,25 @@ afterEach(() => {
 });
 
 describe('appendLiveBar', () => {
-  it('paints a new bar through the full-window path (not incremental)', () => {
-    // A genuinely new bar adds a new time slot. `series.update` can only
-    // overwrite the last bar in place, so new bars are painted like a window
-    // slide (setData) instead of the incremental manager.appendBar path.
+  it('paints the first bar through setData (update throws on an empty series)', () => {
     const verdict = appendLiveBar(bar(60));
     expect(verdict).toBe('appended');
-    expect(appended).toHaveLength(0); // manager.appendBar is not used for new bars
+    expect(appended).toHaveLength(0); // manager.appendBar is not used for the first bar
+    expect(setDataCalls).toHaveLength(1);
     expect(store.bars).toHaveLength(1);
+  });
+
+  it('paints a later new bar with series.update, not a full replace', () => {
+    appendLiveBar(bar(60));
+    appended = [];
+    setDataCalls = [];
+    // Time greater than the tip, window not full — a new slot, not a replace.
+    const verdict = appendLiveBar(bar(120));
+    expect(verdict).toBe('appended');
+    expect(appended).toHaveLength(1); // manager.appendBar / series.update
+    expect(setDataCalls).toHaveLength(0);
+    expect(store.bars).toHaveLength(2);
+    expect(store.bars[1]!.time).toBe(120);
   });
 
   it('keeps the incremental path for a forming-tick update', () => {

@@ -453,14 +453,63 @@ export function decodeInbound(raw: unknown, table: IngestCursorTable): IngestDec
   return { ok: false, kind: 'malformed', reason: 'type' };
 }
 
+function payloadOf(frame: Redesign2Frame): Record<string, unknown> {
+  return isRecord(frame.payload) ? frame.payload : {};
+}
+
+/** Keepalive. No bars and no plot columns — safe to drop. */
+function isUnchangedFrame(frame: Redesign2Frame): boolean {
+  if (frame.type !== 'delta') return false;
+  const payload = payloadOf(frame);
+  if (payload.unchanged !== true) return false;
+  if (payload.bars != null || payload.series != null || payload.plots != null) return false;
+  return true;
+}
+
 function isFormingTip(frame: Redesign2Frame): boolean {
-  if (frame.type !== 'delta' || !frame.id) return false;
-  return isRecord(frame.payload) && frame.payload.forming === true;
+  if (frame.type !== 'delta' || !frame.id || isUnchangedFrame(frame)) return false;
+  return payloadOf(frame).forming === true;
+}
+
+/** Record columns union by key. A non-record (a plot array) is replaced whole. */
+function unionColumns(prev: unknown, next: unknown): unknown {
+  if (next === undefined) return prev;
+  if (!isRecord(prev) || !isRecord(next)) return next;
+  return { ...prev, ...next };
 }
 
 /**
- * Hold forming tip deltas per subscription and flush on a timer, except
- * non-tip frames which flush pending tips immediately then pass through.
+ * Last OHLC tip wins. Plot columns already pending stay unless this tip
+ * replaces that key. The later seq wins.
+ */
+function mergeTip(prev: Redesign2Frame, next: Redesign2Frame): Redesign2Frame {
+  const pp = payloadOf(prev);
+  const np = payloadOf(next);
+  const bars = np.bars !== undefined ? np.bars : pp.bars;
+  const series = np.series !== undefined ? unionColumns(pp.series, np.series) : pp.series;
+  const plots = np.plots !== undefined ? unionColumns(pp.plots, np.plots) : pp.plots;
+  const prevSeq = typeof prev.seq === 'number' ? prev.seq : 0;
+  const nextSeq = typeof next.seq === 'number' ? next.seq : prevSeq;
+  return {
+    ...next,
+    seq: Math.max(prevSeq, nextSeq),
+    payload: {
+      ...pp,
+      ...np,
+      ...(bars !== undefined ? { bars } : {}),
+      ...(series !== undefined ? { series } : {}),
+      ...(plots !== undefined ? { plots } : {}),
+      forming: true,
+    },
+  } as Redesign2Frame;
+}
+
+/**
+ * Hold forming tip deltas per subscription and flush on a timer.
+ *
+ * Within the window, OHLC is a fold (last bar wins) and plot columns union
+ * by key. A non-tip frame flushes the pending tip for that subscription
+ * first. `UNCHANGED` keepalives are dropped.
  */
 export class TipCoalescer {
   private readonly pending = new Map<string, Redesign2Frame>();
@@ -478,11 +527,13 @@ export class TipCoalescer {
   push(frames: Redesign2Frame[]): void {
     const immediate: Redesign2Frame[] = [];
     for (const frame of frames) {
+      if (isUnchangedFrame(frame)) continue;
       if (isFormingTip(frame) && frame.id) {
-        this.pending.set(frame.id, frame);
+        const prev = this.pending.get(frame.id);
+        this.pending.set(frame.id, prev ? mergeTip(prev, frame) : frame);
         this.arm();
       } else {
-        immediate.push(...this.drain());
+        immediate.push(...this.take(frame.id));
         immediate.push(frame);
       }
     }
@@ -505,10 +556,21 @@ export class TipCoalescer {
     this.cancel = null;
   }
 
+  /** Pending tip for one subscription, or every tip when the frame has no id. */
+  private take(id: string | undefined): Redesign2Frame[] {
+    if (!id) return this.drain();
+    const one = this.pending.get(id);
+    if (!one) return [];
+    this.pending.delete(id);
+    if (!this.pending.size) this.disarm();
+    return [one];
+  }
+
   private drain(): Redesign2Frame[] {
     if (!this.pending.size) return [];
     const out = [...this.pending.values()];
     this.pending.clear();
+    this.disarm();
     return out;
   }
 }

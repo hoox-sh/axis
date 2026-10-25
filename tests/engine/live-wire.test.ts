@@ -3,14 +3,16 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-import { describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
 import { StreamFallbackError, StreamLiveWire, type WireClient, type WireFrame, type WireHandlers } from '../../src/engine/live-wire';
 import type { RunResult } from '../../src/plugins/types';
 import type { Bar } from '../../src/store/types';
 import { setStore, store } from '../../src/store';
+import { resetHpFlags, setHpEnabled } from '../../src/hp/feature-flag';
+import { resetEngineTransport, setEngineTransport } from '../../src/engine/v1/transport';
 
 function makeHarness() {
-  const sent: Array<{ kind: string; id: string }> = [];
+  const sent: Array<{ kind: string; id: string; opts?: Record<string, unknown> }> = [];
   const statuses: Array<{ sub: string; status: string }> = [];
   const unsubscribed: string[] = [];
   const seriesFull: Bar[][] = [];
@@ -35,8 +37,8 @@ function makeHarness() {
       open = false;
       counters.disconnects += 1;
     },
-    subscribe(id, kind) {
-      sent.push({ kind: `subscribe:${kind}`, id });
+    subscribe(id, kind, _meta, opts) {
+      sent.push({ kind: `subscribe:${kind}`, id, opts });
     },
     resumeSubscription(id, count, lastTime, extra) {
       resumes.push({ id, count, lastTime, extra });
@@ -102,6 +104,11 @@ const BARS: Bar[] = [{ time: 100, open: 1, high: 1, low: 1, close: 1, volume: 1 
 const tick = () => new Promise<void>((r) => setTimeout(r, 0));
 
 describe('redesign2 live-wire (F-19)', () => {
+  afterEach(() => {
+    resetEngineTransport();
+    resetHpFlags();
+  });
+
   test('ensureSeries resolves snapshot bars and goes live', async () => {
     const h = makeHarness();
     const p = h.wire.ensureSeries('series-1', { symbol: 'BTC/USDT' });
@@ -823,5 +830,102 @@ const h = makeHarness();
     await p;
     h.fireReconnect();
     expect(h.resumes).toEqual([{ id: 'series:k', count: 1, lastTime: 100, extra: { seq: 4 } }]);
+  });
+
+  test('json omits encoding; worker or HP negotiates axb1', async () => {
+    resetEngineTransport();
+    resetHpFlags();
+
+    const plain = makeHarness();
+    const series = plain.wire.ensureSeries('series:json', {});
+    await tick();
+    await tick();
+    expect(plain.sent[0]).toMatchObject({ kind: 'subscribe:series', id: 'series:json' });
+    expect(plain.sent[0]?.opts).toBeUndefined();
+    plain.emit({ type: 'full', id: 'series:json', seq: 1, payload: { count: 1, bars: BARS } });
+    await series;
+    const script = plain.wire.evalScript({
+      subId: 's-json',
+      script: 'indicator() {}',
+      meta: {},
+      bars: BARS,
+    });
+    await tick();
+    await tick();
+    expect(plain.sent.find((s) => s.kind === 'subscribe:script')?.opts).toEqual({
+      script: 'indicator() {}',
+    });
+    plain.emit({
+      type: 'full',
+      id: 's-json',
+      sessionId: 'ses',
+      seq: 1,
+      payload: { count: 1, plots: [[1]], series: { a: [1] } },
+    });
+    await script;
+    plain.emit({
+      type: 'delta',
+      id: 's-json',
+      sessionId: 'ses',
+      seq: 4,
+      payload: { base_index: 0, count: 1, tail_len: 1, plots: [[2]], series: { a: [2] } },
+    });
+    await tick();
+    expect(plain.resumes[0]?.extra).toEqual({ seq: 1 });
+
+    setEngineTransport('worker');
+    const worker = makeHarness();
+    const wSeries = worker.wire.ensureSeries('series:w', {});
+    await tick();
+    await tick();
+    expect(worker.sent[0]?.opts).toEqual({ encoding: 'axb1' });
+    worker.emit({ type: 'full', id: 'series:w', seq: 1, payload: { count: 1, bars: BARS } });
+    await wSeries;
+    worker.fireReconnect();
+    expect(worker.resumes).toEqual([
+      { id: 'series:w', count: 1, lastTime: 100, extra: { seq: 1, encoding: 'axb1' } },
+    ]);
+    const wScript = worker.wire.evalScript({
+      subId: 's-w',
+      script: 'indicator() {}',
+      meta: {},
+      bars: BARS,
+    });
+    await tick();
+    await tick();
+    expect(worker.sent.find((s) => s.kind === 'subscribe:script')?.opts).toEqual({
+      script: 'indicator() {}',
+      encoding: 'axb1',
+    });
+    worker.emit({
+      type: 'full',
+      id: 's-w',
+      sessionId: 'ses',
+      seq: 5,
+      payload: { count: 1, plots: [[1]], series: { a: [1] } },
+    });
+    await wScript;
+    worker.resumes.length = 0;
+    worker.emit({
+      type: 'delta',
+      id: 's-w',
+      sessionId: 'ses',
+      seq: 8,
+      payload: { base_index: 0, count: 1, tail_len: 1, plots: [[2]], series: { a: [2] } },
+    });
+    await tick();
+    expect(worker.resumes).toEqual([
+      { id: 's-w', count: 1, lastTime: 100, extra: { seq: 5, encoding: 'axb1' } },
+    ]);
+
+    resetEngineTransport();
+    setHpEnabled(true);
+    const hp = makeHarness();
+    const hpSeries = hp.wire.ensureSeries('series:hp', {});
+    await tick();
+    await tick();
+    expect(hp.sent[0]?.opts).toEqual({ encoding: 'axb1' });
+    hp.emit({ type: 'full', id: 'series:hp', seq: 2, payload: { count: 1, bars: BARS } });
+    await hpSeries;
   });
 });

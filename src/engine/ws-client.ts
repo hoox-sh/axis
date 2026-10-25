@@ -340,13 +340,21 @@ export class Redesign2WsClient {
       inputs?: Record<string, unknown>;
       libraries?: unknown;
       mode?: string;
+      /** Include only when the caller negotiates AXB1. Omit for JSON. */
+      encoding?: 'axb1';
     },
   ): void {
+    const { encoding, ...rest } = opts ?? {};
     const frame: Redesign2SubscribeFrame = {
       type: 'subscribe',
       id,
       ts: Date.now(),
-      payload: { kind, meta, ...opts },
+      payload: {
+        kind,
+        meta,
+        ...rest,
+        ...(encoding !== undefined ? { encoding } : {}),
+      },
     };
     this.send(frame);
   }
@@ -355,13 +363,19 @@ export class Redesign2WsClient {
     id: string,
     count: number,
     lastTime: number,
-    extra?: { closed_upto?: number; seq?: number },
+    extra?: { closed_upto?: number; seq?: number; encoding?: 'axb1' },
   ): void {
+    const { encoding, ...rest } = extra ?? {};
     const frame: Redesign2ResumeFrame = {
       type: 'resume',
       id,
       ts: Date.now(),
-      payload: { count, last_time: lastTime, ...extra },
+      payload: {
+        count,
+        last_time: lastTime,
+        ...rest,
+        ...(encoding !== undefined ? { encoding } : {}),
+      },
     };
     this.send(frame);
   }

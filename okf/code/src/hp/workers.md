@@ -7,7 +7,7 @@ tags: [code, hp, workers]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-25T11:59:48Z
+  at: 2026-10-25T12:45:11Z
 sources:
   - id: tree
     resource: "src/hp/workers"
@@ -22,7 +22,7 @@ okf_lock: generated
 * `calc-engine.ts` — CalcEngine, FrameValuesEvaluator
 * `calc-protocol.ts` — CalcToHost, HostToCalc, TimedValues
 * `calc.worker.ts`
-* `host.ts` — IngestHostClient, IngestHostOptions, IngestWorkerFactory, IngestWorkerTransport, createLiveWsClient, ingestWorkerAvailable, setIngestWorkerFactory
+* `host.ts` — IngestHostClient, IngestHostOptions, IngestWorkerFactory, IngestWorkerTransport, createLiveWsClient, ingestWorkerAvailable, setIngestWorkerAvailableForTests, setIngestWorkerFactory
 * `hot-ring-writer.ts` — HotRingWriter, routeThroughRing
 * `ingest-core.ts` — CursorBar, IngestCursorTable, IngestDecode, TipCoalescer, decodeInbound
 * `ingest.worker.ts`
@@ -44,4 +44,5 @@ okf_lock: generated
 
 * [src/hp](/code/src/hp.md)
 * [src/streams](/code/src/streams.md)
+* [tests/engine](/code/tests/engine.md)
 * [tests/hp](/code/tests/hp.md)

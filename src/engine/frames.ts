@@ -95,6 +95,8 @@ export type Redesign2SubscribeFrame = {
     inputs?: Record<string, unknown>;
     libraries?: unknown;
     mode?: string;
+    /** `'axb1'` negotiates binary frames. Absent means JSON (concept §4.2). */
+    encoding?: 'axb1';
   };
 };
 
@@ -108,6 +110,8 @@ export type Redesign2ResumeFrame = {
     closed_upto?: number;
     /** Last applied per-subscription `seq`; the resync cursor. */
     seq?: number;
+    /** Same negotiation as subscribe. Absent means JSON. */
+    encoding?: 'axb1';
   };
 };
 

@@ -52,6 +52,7 @@ import {
   type UTCTimestamp,
 } from 'lightweight-charts';
 import { v1NotePanActivity } from '../engine/v1/metrics';
+import { SlotChart, usesSingleChartLayout } from './v1/chart-host';
 import {
   createBaseChart,
   createLineSeries,
@@ -536,6 +537,8 @@ function mapLineStyle(linestyle?: string): LineStyle {
  */
 export class PaneManager {
   private panes: Map<string, ManagedPane> = new Map();
+  /** Set only when `axis.chart.layout=single`. One chart for every pane. */
+  private slot: SlotChart | null = null;
   private container: HTMLElement;
   /** Slot / host id for unique pane DOM ids (empty = legacy `pane-price`). */
   private hostKey: string;
@@ -1070,7 +1073,96 @@ export class PaneManager {
     return Array.from(this.panes.values());
   }
 
+  /**
+   * `axis.chart.layout=single`: the price pane owns the only chart.
+   * Later panes are LWC panes on that chart. Their facade `remove` is a
+   * no-op so destroying an indicator cannot remove the candles.
+   */
+  private createSharedPane(id: string, type: string, label: string, height?: number): ManagedPane {
+    const div = document.createElement('div');
+    div.id = this.paneDomId(id);
+    div.className = 'relative';
+    div.dataset.paneId = id;
+    div.dataset.paneType = type;
+
+    let chart: IChartApi;
+    let resizeObserver: ResizeObserver | null = null;
+    if (!this.slot) {
+      div.style.flex = '1 1 auto';
+      div.style.minHeight = '48px';
+      div.style.background = getThemeManager().getColor('chart.bg_color') || '#0a0b10';
+      this.container.appendChild(div);
+      const real = createBaseChart(div, {
+        handleScroll: { vertTouchDrag: true },
+        rightPriceScale: {
+          borderColor: VOID.border,
+          borderVisible: this.priceScaleLabelsVisible,
+          textColor: VOID.textDim,
+          visible: this.priceScaleLabelsVisible,
+          minimumWidth: this.priceScaleLabelsVisible ? RIGHT_PRICE_SCALE_WIDTH : 0,
+        },
+      });
+      this.slot = new SlotChart(real as never);
+      this.slot.bind(id);
+      chart = this.slot.facade(id);
+      try {
+        this.themeUnregs.get(id)?.();
+        this.themeUnregs.set(id, getThemeManager().registerChart(real, { secondary: false }));
+      } catch {
+        /* theme optional */
+      }
+      resizeObserver = new ResizeObserver(() => {
+        this.pendingResizePaneIds.add(id);
+        this.resizeRaf.schedule(() => this.flushPendingPaneResizes());
+      });
+      resizeObserver.observe(div);
+      mountPaneBadge(div, id, type, label);
+    } else {
+      this.slot.bind(id);
+      chart = this.slot.facade(id);
+      if (height && height > 0) this.slot.setHeight(id, height);
+      div.style.display = 'none';
+      this.container.appendChild(div);
+      const host = this.slot.element(id) ?? div;
+      mountPaneBadge(host, id, type, label);
+    }
+
+    const pane: ManagedPane = {
+      id,
+      type,
+      chart,
+      series: {},
+      priceLines: {},
+      visible: true,
+      label,
+      resizeObserver,
+    };
+    this.panes.set(id, pane);
+    this.alignRightScales();
+    this.syncTimeScales();
+    this.rewireCrosshair();
+    return pane;
+  }
+
+  /** Multi-chart panes remove their own chart. A shared sub-pane removes one LWC pane. */
+  private releasePaneChart(id: string, chart: IChartApi): void {
+    if (!this.slot) {
+      try {
+        chart.remove();
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+    const kind = this.slot.release(id);
+    if (kind === 'chart') {
+      this.slot.destroy();
+      this.slot = null;
+    }
+  }
+
   createPane(id: string, type: string, label: string, height?: number): ManagedPane {
+    if (usesSingleChartLayout()) return this.createSharedPane(id, type, label, height);
     // Horizontal resize handle above this pane (except first)
     if (this.panes.size > 0) {
       this.attachPaneResizeHandle(id);
@@ -1270,11 +1362,7 @@ export class PaneManager {
       /* ignore */
     }
     this.themeUnregs.delete(id);
-    try {
-      pane.chart.remove();
-    } catch {
-      /* ignore */
-    }
+    this.releasePaneChart(id, pane.chart);
     const el = document.getElementById(this.paneDomId(id));
     el?.remove();
     document.getElementById(this.handleDomId(id))?.remove();
@@ -1471,6 +1559,20 @@ export class PaneManager {
    * but any pane that does emit a range change still propagates to the rest.
    */
   syncTimeScales() {
+    if (usesSingleChartLayout()) {
+      for (const u of this.timeSyncUnsubs) {
+        try {
+          u();
+        } catch {
+          /* ignore */
+        }
+      }
+      this.timeSyncUnsubs = [];
+      this.pendingTimeRange = null;
+      this.timeSyncRaf.cancel();
+      this.alignRightScales();
+      return;
+    }
     for (const u of this.timeSyncUnsubs) {
       try {
         u();
@@ -2123,7 +2225,10 @@ export class PaneManager {
     this.crosshairUnsubs = [];
     if (!this.crosshairOnMove) return;
 
+    const seenCharts = new Set<IChartApi>();
     for (const pane of this.getAllPanes()) {
+      if (seenCharts.has(pane.chart)) continue;
+      seenCharts.add(pane.chart);
       const handler = (param: MouseEventParams) => {
         if (this.suppressCrosshair) return;
 

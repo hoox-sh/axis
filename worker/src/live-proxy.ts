@@ -28,8 +28,9 @@
  * The relay is fully transparent: the client's PYNE `auth` frame travels
  * untouched to the engine, and **binary frames pass through as bytes** —
  * AXB1 (HP) rides the same socket, so a relay that decoded them to text
- * would corrupt every frame. Worker-level auth (AXIS key) and engine-level
- * auth (PYNE key) stay separate.
+ * would corrupt every frame. A `Blob` (Workers compat dates ≥ 2026-03-17)
+ * is read with `arrayBuffer()` and forwarded as those bytes. Worker-level
+ * auth (AXIS key) and engine-level auth (PYNE key) stay separate.
  *
  * @module worker/live-proxy
  */
@@ -117,12 +118,83 @@ async function authedUserId(req: Request, env: Env, url: URL): Promise<string | 
  * frame with `TextDecoder` would corrupt every non-UTF-8 byte before it
  * reaches the client — the relay must hand the exact payload through.
  * Workers' `ws.send` accepts `string | ArrayBuffer | ArrayBufferView`.
+ *
+ * Compatibility dates ≥ 2026-03-17 deliver binary frames as `Blob` by
+ * default. That branch returns `blob.arrayBuffer()` (async); strings,
+ * ArrayBuffers, and views stay synchronous and are not copied. AXIS stays
+ * on compat date 2024-11-01 — this is forward-compat only.
  */
-export function relayFrame(data: unknown): string | ArrayBuffer | ArrayBufferView {
+export function relayFrame(
+  data: unknown,
+): string | ArrayBuffer | ArrayBufferView | Promise<ArrayBuffer> {
   if (typeof data === 'string') return data;
   if (data instanceof ArrayBuffer) return data;
   if (ArrayBuffer.isView(data)) return data;
+  if (typeof Blob !== 'undefined' && data instanceof Blob) return data.arrayBuffer();
   throw new TypeError(`unsupported WS frame type: ${typeof data}`);
+}
+
+/** ArrayBuffer binary frames when the socket exposes `binaryType`. */
+function preferArrayBuffer(ws: WebSocket): void {
+  try {
+    if (!('binaryType' in ws)) return;
+    ws.binaryType = 'arraybuffer';
+  } catch {
+    /* a mock socket without the setter must not break the relay */
+  }
+}
+
+type RelayLane = { pending: number; tail: Promise<void> };
+
+/** In-order send chain per destination. Idle text/bytes stay synchronous. */
+const relayLanes = new WeakMap<WebSocket, RelayLane>();
+
+function relayIncoming(dest: WebSocket, data: unknown): void {
+  const deliver = (): Promise<void> | null => {
+    let frame: ReturnType<typeof relayFrame>;
+    try {
+      frame = relayFrame(data);
+    } catch {
+      return null;
+    }
+    if (!(frame instanceof Promise)) {
+      try {
+        dest.send(frame);
+      } catch {
+        /* ignore */
+      }
+      return null;
+    }
+    const pending = frame;
+    return (async () => {
+      try {
+        dest.send(await pending);
+      } catch {
+        /* ignore a failed Blob read or a closed socket */
+      }
+    })();
+  };
+
+  const lane = relayLanes.get(dest);
+  if (!lane || lane.pending === 0) {
+    const job = deliver();
+    if (!job) return;
+    const leg: RelayLane = lane ?? { pending: 0, tail: Promise.resolve() };
+    leg.pending = 1;
+    leg.tail = job.finally(() => {
+      leg.pending -= 1;
+    });
+    relayLanes.set(dest, leg);
+    return;
+  }
+
+  lane.pending += 1;
+  lane.tail = lane.tail
+    .catch(() => undefined)
+    .then(() => deliver() ?? undefined)
+    .finally(() => {
+      lane.pending -= 1;
+    });
 }
 
 /**
@@ -201,10 +273,14 @@ export async function handleLiveProxy(
 
   const pair = new WebSocketPair();
   const [client, server] = [pair[0], pair[1]];
-  (server as WebSocket).accept();
+  const srv = server as WebSocket;
+  // Before accept(): compat dates ≥ 2026-03-17 otherwise deliver Blob.
+  preferArrayBuffer(srv);
+  srv.accept();
   let upstream: WebSocket | null = null;
   try {
     upstream = new WebSocket(upstreamUrl);
+    preferArrayBuffer(upstream);
   } catch (err) {
     try {
       (server as WebSocket).close(1011, 'upstream unavailable');
@@ -214,7 +290,6 @@ export async function handleLiveProxy(
     return new Response(null, { status: 101, webSocket: client });
   }
   const up = upstream as WebSocket;
-  const srv = server as WebSocket;
   up.addEventListener('open', () => {
     try {
       srv.send(
@@ -225,11 +300,7 @@ export async function handleLiveProxy(
     }
   });
   up.addEventListener('message', (ev) => {
-    try {
-      srv.send(relayFrame(ev.data));
-    } catch {
-      /* ignore */
-    }
+    relayIncoming(srv, ev.data);
   });
   const closeUp = (code: number, reason: string) => {
     try {
@@ -253,11 +324,7 @@ export async function handleLiveProxy(
     }
   });
   srv.addEventListener('message', (ev) => {
-    try {
-      up.send(relayFrame(ev.data));
-    } catch {
-      /* ignore */
-    }
+    relayIncoming(up, ev.data);
   });
   srv.addEventListener('close', () => closeUp(1000, 'client closed'));
   srv.addEventListener('error', () => closeUp(1011, 'client error'));

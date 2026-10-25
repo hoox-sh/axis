@@ -140,6 +140,20 @@ describe('relayFrame', () => {
 
   it('rejects unsupported frame types', () => {
     expect(() => relayFrame(42)).toThrow(/unsupported/);
+    expect(() => relayFrame(null)).toThrow(/unsupported/);
+  });
+
+  it('reads a Blob as the original bytes (not text)', async () => {
+    const text = '{"type":"pong"}';
+    expect(relayFrame(text)).toBe(text);
+    const buf = new Uint8Array([0x41, 0x58, 0x42, 0x31]).buffer;
+    expect(relayFrame(buf)).toBe(buf);
+
+    // 0xff / 0xfe are not valid UTF-8 — a TextDecoder pass would replace them.
+    const raw = new Uint8Array([0x41, 0x58, 0x42, 0x31, 0xff, 0x00, 0xfe, 0x80]);
+    const out = await relayFrame(new Blob([raw]));
+    expect(out).toBeInstanceOf(ArrayBuffer);
+    expect(new Uint8Array(out as ArrayBuffer)).toEqual(raw);
   });
 });
 
@@ -218,6 +232,14 @@ describe('live relay keeps binary frames binary', () => {
     expect(res.status).toBe(101);
     if (!pair || !upstreamSocket) throw new Error('fakes were not constructed');
     return { client: pair[0], srv: pair[1], up: upstreamSocket };
+  }
+
+  async function waitForSent(sock: { sent: unknown[] }, n: number): Promise<void> {
+    for (let i = 0; i < 30; i++) {
+      if (sock.sent.length >= n) return;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    throw new Error(`relay did not forward ${n} frame(s) (have ${sock.sent.length})`);
   }
 
   it('relays JSON as text and AXB1 bytes as bytes in both directions', async () => {
@@ -311,5 +333,60 @@ describe('live relay keeps binary frames binary', () => {
     const got = second.srv.sent[1];
     expect(got).toBeInstanceOf(ArrayBuffer);
     expect(new Uint8Array(got as ArrayBuffer)).toEqual(envelope);
+  });
+
+  it('relays a Blob as the original bytes in both directions, in order', async () => {
+    const { srv, up } = await connect();
+    const down = new Uint8Array([0x41, 0x58, 0x42, 0x31, 0xff, 0xfe, 0x00, 0x80]);
+    up.emit('message', new Blob([down]));
+    // A later text frame must not overtake the in-flight Blob read.
+    up.emit('message', '{"type":"pong"}');
+    await waitForSent(srv, 2);
+    expect(srv.sent[0]).toBeInstanceOf(ArrayBuffer);
+    expect(new Uint8Array(srv.sent[0] as ArrayBuffer)).toEqual(down);
+    expect(srv.sent[1]).toBe('{"type":"pong"}');
+
+    const back = new Uint8Array([0x00, 0x41, 0xff, 0x7f]);
+    srv.emit('message', new Blob([back]));
+    srv.emit('message', new Uint8Array([1, 2, 3, 4]).buffer);
+    await waitForSent(up, 2);
+    expect(up.sent[0]).toBeInstanceOf(ArrayBuffer);
+    expect(new Uint8Array(up.sent[0] as ArrayBuffer)).toEqual(back);
+    expect(new Uint8Array(up.sent[1] as ArrayBuffer)).toEqual(new Uint8Array([1, 2, 3, 4]));
+  });
+
+  it('sets binaryType = arraybuffer on both legs when the socket exposes it', async () => {
+    Object.defineProperty(FakeSocket.prototype, 'binaryType', {
+      configurable: true,
+      writable: true,
+      value: 'blob',
+    });
+    try {
+      const { srv, up } = await connect();
+      expect((srv as { binaryType?: string }).binaryType).toBe('arraybuffer');
+      expect((up as { binaryType?: string }).binaryType).toBe('arraybuffer');
+    } finally {
+      delete (FakeSocket.prototype as { binaryType?: string }).binaryType;
+    }
+  });
+
+  it('still relays text when binaryType cannot be set', async () => {
+    Object.defineProperty(FakeSocket.prototype, 'binaryType', {
+      configurable: true,
+      get() {
+        return 'blob';
+      },
+      set() {
+        throw new Error('binaryType unsupported');
+      },
+    });
+    try {
+      const { srv, up } = await connect();
+      up.emit('message', '{"type":"pong"}');
+      expect(srv.sent[0]).toBe('{"type":"pong"}');
+      expect(() => relayFrame({ nope: true })).toThrow(/unsupported/);
+    } finally {
+      delete (FakeSocket.prototype as { binaryType?: string }).binaryType;
+    }
   });
 });

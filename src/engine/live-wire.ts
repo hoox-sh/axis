@@ -40,9 +40,12 @@ import type { RunResult } from '../plugins/types';
 import { store } from '../store';
 import type { Bar } from '../store/types';
 import { sanitizeStreamBar } from '../data/parse-bars';
+import { isHpEnabled } from '../hp/feature-flag';
 import { readTimeList, scriptDeltaTimeTail, Redesign2DeltaApplier } from './client-apply';
 import { classifySeqGap } from './frames';
 import { v1Count } from './v1/metrics';
+import { runApplyTransaction } from './v1/apply-transaction';
+import { wantsWorkerTransport } from './v1/transport';
 import type { SubscriptionStatus } from '../store/types';
 
 export class StreamFallbackError extends Error {
@@ -117,6 +120,21 @@ export interface EvalScriptInput {
    * chart: the live subscription keeps the values it was created with.
    */
   inputs?: Record<string, unknown>;
+}
+
+/**
+ * Concept §4.2. The main-thread JSON client must not negotiate: it only
+ * `JSON.parse`s strings, so a binary reply would be dropped. Absent means JSON.
+ */
+function negotiatedEncoding(): 'axb1' | undefined {
+  if (wantsWorkerTransport() || isHpEnabled()) return 'axb1';
+  return undefined;
+}
+
+function resumeExtra(seq: number): { seq: number; encoding?: 'axb1' } {
+  const encoding = negotiatedEncoding();
+  if (!encoding) return { seq };
+  return { seq, encoding };
 }
 
 const FAILURE_COOLDOWN_MS = 60_000;
@@ -345,7 +363,8 @@ export class StreamLiveWire {
     if (this.cooledDown) this.fail('cooldown', 'stream in failure cooldown');
     this.handlers.onStatus(subId, 'connecting');
     try {
-      this.client.subscribe(subId, 'series', meta);
+      const encoding = negotiatedEncoding();
+      this.client.subscribe(subId, 'series', meta, encoding ? { encoding } : undefined);
       const full = await this.awaitFull(subId, SNAPSHOT_WAIT_MS);
       if (full.type === 'error') {
         this.handlers.onStatus(subId, 'error', {
@@ -411,9 +430,11 @@ export class StreamLiveWire {
       this.scriptDepth.set(input.subId, depth);
       this.handlers.onStatus(input.subId, 'connecting');
       try {
+        const encoding = negotiatedEncoding();
         this.client.subscribe(input.subId, 'script', input.meta, {
           script: input.script,
           ...(input.inputs ? { inputs: input.inputs } : {}),
+          ...(encoding ? { encoding } : {}),
         });
         const full = await this.awaitFull(input.subId, SNAPSHOT_WAIT_MS, { fatal: false });
         if (full.type === 'error' || full.type !== 'full') {
@@ -590,7 +611,7 @@ export class StreamLiveWire {
     for (const [subId, seq] of this.appliedSeq) {
       const bars = this.seriesBars.get(subId) ?? this.scriptCtx.get(subId)?.bars ?? [];
       try {
-        this.client.resumeSubscription(subId, bars.length, this.lastBarTime(bars), { seq });
+        this.client.resumeSubscription(subId, bars.length, this.lastBarTime(bars), resumeExtra(seq));
       } catch {
         /* socket may still be coming up */
       }
@@ -695,6 +716,10 @@ export class StreamLiveWire {
             { base_index: baseIndex, count, tail_len: tailLen },
             this.knownBarTimes(),
           );
+    // The applier's cursor, not the last painted seq. A salvage can accept a
+    // seq and refuse to paint it; the next delta is continuous with that
+    // cursor and must still be allowed to paint.
+    const acceptedSeq = applier.lastSeq;
     const delta = {
       seq: typeof frame.seq === 'number' ? frame.seq : -1,
       base_index: baseIndex,
@@ -726,9 +751,12 @@ export class StreamLiveWire {
         const gapCtx = this.scriptCtx.get(subId);
         const gapBars = gapCtx?.bars ?? [];
         try {
-          this.client.resumeSubscription(subId, gapBars.length, this.lastBarTime(gapBars), {
-            seq: this.appliedSeq.get(subId) ?? 0,
-          });
+          this.client.resumeSubscription(
+            subId,
+            gapBars.length,
+            this.lastBarTime(gapBars),
+            resumeExtra(this.appliedSeq.get(subId) ?? 0),
+          );
         } catch {
           /* resume is best-effort; HUD already shows degraded */
         }
@@ -756,9 +784,20 @@ export class StreamLiveWire {
       this.requestAxisResub(subId, 'delta rejected — resubscribing');
       return;
     }
-    if (typeof frame.seq === 'number') this.appliedSeq.set(subId, frame.seq);
-    this.handlers.onStatus(subId, 'live');
-    if (!out.replayed) this.applyScriptPush(subId, out.full, 'stream-delta');
+    // One commit for this delta. A gap or a thrown step never paints.
+    const seq = typeof frame.seq === 'number' ? frame.seq : null;
+    runApplyTransaction({
+      seq,
+      lastSeq: acceptedSeq,
+      commit: () => {
+        if (typeof frame.seq === 'number') this.appliedSeq.set(subId, frame.seq);
+        this.handlers.onStatus(subId, 'live');
+        if (!out.replayed) this.applyScriptPush(subId, out.full, 'stream-delta');
+      },
+      onStale: (reason) => {
+        this.handlers.onStatus(subId, 'degraded', { message: `apply aborted — ${reason}` });
+      },
+    });
   }
 
   /**
@@ -796,9 +835,12 @@ export class StreamLiveWire {
     const ctx = this.scriptCtx.get(subId);
     const bars = ctx?.bars ?? [];
     try {
-      this.client.resumeSubscription(subId, bars.length, this.lastBarTime(bars), {
-        seq: this.appliedSeq.get(subId) ?? 0,
-      });
+      this.client.resumeSubscription(
+        subId,
+        bars.length,
+        this.lastBarTime(bars),
+        resumeExtra(this.appliedSeq.get(subId) ?? 0),
+      );
     } catch {
       /* resume is best-effort; HUD already shows degraded */
     }

@@ -24,15 +24,67 @@ function openClient() {
 describe('redesign2 typed send + routing (F-05)', () => {
   test('subscribe/resume/repair/unsubscribe emit contract frames', () => {
     const { client, sent } = openClient();
-    client.subscribe('sub-1', 'script', META, { script: 'indicator("x")' });
-    client.resumeSubscription('sub-1', 100, 123);
-    client.requestRepair('sub-1', 120);
-    client.unsubscribe('sub-1');
+    const ts = 1_700_000_000_000;
+    const now = Date.now;
+    Date.now = () => ts;
+    try {
+      client.subscribe('sub-1', 'script', META, { script: 'indicator("x")' });
+      client.resumeSubscription('sub-1', 100, 123);
+      client.requestRepair('sub-1', 120);
+      client.unsubscribe('sub-1');
+    } finally {
+      Date.now = now;
+    }
     const types = sent.map((s) => (JSON.parse(s) as { type: string }).type);
     expect(types).toEqual(['subscribe', 'resume', 'repair', 'unsubscribe']);
-    const sub = JSON.parse(sent[0]!) as { id: string; payload: { kind: string } };
-    expect(sub.id).toBe('sub-1');
-    expect(sub.payload.kind).toBe('script');
+    // Absent encoding is JSON, byte-for-byte the frame from before negotiation.
+    expect(sent[0]).toBe(
+      JSON.stringify({
+        type: 'subscribe',
+        id: 'sub-1',
+        ts,
+        payload: { kind: 'script', meta: META, script: 'indicator("x")' },
+      }),
+    );
+    expect(sent[1]).toBe(
+      JSON.stringify({
+        type: 'resume',
+        id: 'sub-1',
+        ts,
+        payload: { count: 100, last_time: 123 },
+      }),
+    );
+    expect(sent[0]).not.toContain('encoding');
+    expect(sent[1]).not.toContain('encoding');
+  });
+
+  test('encoding is included only when the caller passes axb1', () => {
+    const { client, sent } = openClient();
+    const ts = 1_700_000_000_000;
+    const now = Date.now;
+    Date.now = () => ts;
+    try {
+      client.subscribe('sub-1', 'series', META, { encoding: 'axb1' });
+      client.resumeSubscription('sub-1', 100, 123, { seq: 4, encoding: 'axb1' });
+    } finally {
+      Date.now = now;
+    }
+    expect(sent[0]).toBe(
+      JSON.stringify({
+        type: 'subscribe',
+        id: 'sub-1',
+        ts,
+        payload: { kind: 'series', meta: META, encoding: 'axb1' },
+      }),
+    );
+    expect(sent[1]).toBe(
+      JSON.stringify({
+        type: 'resume',
+        id: 'sub-1',
+        ts,
+        payload: { count: 100, last_time: 123, seq: 4, encoding: 'axb1' },
+      }),
+    );
   });
 
   test('awaitFrame resolves on a matching validated id frame', async () => {

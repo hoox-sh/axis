@@ -41,6 +41,7 @@ export type FakeSeries = {
   _data: unknown;
   _opts: Record<string, unknown>;
   _primitives: unknown[];
+  _paneIndex?: number;
 };
 
 export type FakeChart = {
@@ -64,6 +65,17 @@ export type FakeChart = {
   setCrosshairPosition: (price: number, time: unknown, series: unknown) => void;
   clearCrosshairPosition: () => void;
   paneSize: () => { width: number; height: number };
+  addPane: (preserveEmptyPane?: boolean) => {
+    paneIndex: () => number;
+    setHeight: (height: number) => void;
+    getHTMLElement: () => HTMLElement | null;
+  };
+  panes: () => Array<{
+    paneIndex: () => number;
+    setHeight: (height: number) => void;
+    getHTMLElement: () => HTMLElement | null;
+  }>;
+  removePane: (index: number) => void;
   _series: FakeSeries[];
   _crosshairHandlers: Array<(p: unknown) => void>;
 };
@@ -140,10 +152,40 @@ export function makeFakeChart(): FakeChart {
   };
   let rangeCb: ((r: unknown) => void) | null = null;
   const crosshairHandlers: Array<(p: unknown) => void> = [];
+  const panes: Array<{ index: number; height: number; el: HTMLElement | null }> = [
+    { index: 0, height: 0, el: null },
+  ];
+  const paneApi = (row: { index: number; height: number; el: HTMLElement | null }) => ({
+    paneIndex: () => row.index,
+    setHeight: (height: number) => {
+      row.height = height;
+    },
+    getHTMLElement: () => row.el,
+  });
   return {
     _series: series,
     _crosshairHandlers: crosshairHandlers,
-    addSeries: () => makeSeries(),
+    addSeries: (_type: unknown, _opts?: unknown, paneIndex?: number) => {
+      const s = makeSeries();
+      s._paneIndex = paneIndex;
+      return s;
+    },
+    addPane: () => {
+      const row = {
+        index: panes.length,
+        height: 0,
+        el: typeof document !== 'undefined' ? (document.createElement('div') as HTMLElement) : null,
+      };
+      panes.push(row);
+      return paneApi(row);
+    },
+    panes: () => panes.map((row) => paneApi(row)),
+    removePane: (index: number) => {
+      panes.splice(index, 1);
+      panes.forEach((row, i) => {
+        row.index = i;
+      });
+    },
     removeSeries: (ser) => {
       const i = series.indexOf(ser);
       if (i >= 0) series.splice(i, 1);

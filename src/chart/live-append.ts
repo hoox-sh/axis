@@ -34,7 +34,7 @@
  * | --- | --- |
  * | `ignored` | nothing changed (stale tick) — do not paint |
  * | `updated` | O(1) `series.update` on the forming tip |
- * | `appended` | O(1) `series.update` with the new bar |
+ * | `appended` | O(1) `series.update` with the new bar; the first bar is a `setData` (`update` throws on an empty series) |
  * | `slid` | the window head moved — full `setData` of the windowed series |
  *
  * Painting a bar the store rejected is how a stale tick used to reach the
@@ -81,13 +81,12 @@ export function appendLiveBar(bar: Bar, opts?: { via?: 'worker' }): BarAppendRes
   const manager = getManager();
   if (!manager) return result;
 
-  // `series.update` can only overwrite the **last** bar in place — it never
-  // adds a new time slot. So a genuinely new bar (`appended`, or a window
-  // slide) must be painted as a full window replace so the new candle lands
-  // at the right edge (within `rightOffset`, no auto-scroll shift). An
-  // in-place forming-tick (`updated`, same time as the tip) still uses the
-  // O(1) `series.update` path.
-  if (result === 'slid' || result === 'appended') {
+  // LWC 5.2 `series.update` appends when the point's time is newer than the
+  // last bar, and throws when the series is empty or the time is older. A
+  // window slide still replaces: the head moved, so `update` cannot drop it.
+  // The first bar has no last bar to append onto — same replace, once.
+  // `manager.appendBar` updates the candle and the volume series together.
+  if (result === 'slid' || (result === 'appended' && store.bars.length === 1)) {
     const view = sliceToChartWindow(store.bars);
     try {
       setDataToChart(view, { fit: false, clearScriptState: false, clearMarkers: false });

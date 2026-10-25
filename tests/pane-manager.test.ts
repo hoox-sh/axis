@@ -9,8 +9,9 @@
  */
 
 import './setup';
-import { describe, expect, it, beforeAll, beforeEach } from 'bun:test';
+import { describe, expect, it, beforeAll, beforeEach, afterEach } from 'bun:test';
 import { installLightweightChartsMock } from './helpers/mock-lwc';
+import { resetChartLayoutMode, setChartLayoutMode } from '../src/chart/v1/chart-host';
 import { setStore } from '../src/store';
 
 beforeAll(() => {
@@ -82,11 +83,31 @@ describe('PaneManager', () => {
     pm = new PaneManager(container);
   });
 
+  afterEach(() => {
+    resetChartLayoutMode();
+  });
+
   it('createPane / getPane / getAllPanes', () => {
     const p = pm.createPane('price', 'price', 'Price');
     expect(p.id).toBe('price');
     expect(pm.getPane('price')).toBe(p);
     expect(pm.getAllPanes()).toHaveLength(1);
+  });
+
+  it('single layout puts volume on the price chart and keeps candles when volume goes', () => {
+    setChartLayoutMode('single');
+    const price = pm.createPane('price', 'price', 'Price');
+    const volume = pm.createPane('volume', 'volume', 'Volume', 80);
+    const volumeEl = document.getElementById(pm.paneDomId('volume'));
+    expect(volumeEl?.style.display).toBe('none');
+    const series = volume.chart.addSeries('LineSeries' as never, {});
+    expect((series as { _paneIndex?: number })._paneIndex).toBe(1);
+    expect(price.chart.addSeries('LineSeries' as never, {})).toBeTruthy();
+    expect((price.chart.addSeries('LineSeries' as never, {}) as { _paneIndex?: number })._paneIndex).toBe(0);
+    pm.destroyPane('volume');
+    expect(pm.getPane('price')).toBe(price);
+    expect(pm.getPane('volume')).toBeUndefined();
+    price.chart.timeScale().getVisibleLogicalRange();
   });
 
   it('second pane attaches resize handle', () => {

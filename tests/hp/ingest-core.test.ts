@@ -257,4 +257,161 @@ describe('TipCoalescer', () => {
     expect(seen).toHaveLength(1);
     expect(seen[0]?.map((f) => f.type)).toEqual(['delta', 'close']);
   });
+
+  test('folds OHLC to the last tip and unions plot columns', () => {
+    const seen: Redesign2Frame[][] = [];
+    let fire: (() => void) | undefined;
+    const c = new TipCoalescer(
+      (frames) => seen.push(frames),
+      16,
+      (fn) => {
+        fire = fn;
+        return () => {
+          fire = undefined;
+        };
+      },
+    );
+    c.push([
+      {
+        type: 'delta',
+        id: SUB,
+        sessionId: 's',
+        seq: 1,
+        payload: {
+          forming: true,
+          bars: [{ close: 1 }],
+          series: { 'p:1': [1] },
+          base_index: 0,
+          count: 1,
+          tail_len: 1,
+          closed_upto: 0,
+        },
+      },
+      {
+        type: 'delta',
+        id: SUB,
+        sessionId: 's',
+        seq: 2,
+        payload: {
+          forming: true,
+          bars: [{ close: 9 }],
+          series: { 'p:2': [2] },
+          base_index: 0,
+          count: 1,
+          tail_len: 1,
+          closed_upto: 0,
+        },
+      },
+    ]);
+    fire?.();
+    const payload = seen[0]?.[0]?.payload as {
+      bars: Array<{ close: number }>;
+      series: Record<string, number[]>;
+    };
+    expect(payload.bars[0]?.close).toBe(9);
+    expect(payload.series).toEqual({ 'p:1': [1], 'p:2': [2] });
+    expect(seen[0]?.[0]?.seq).toBe(2);
+  });
+
+  test('a plot tip keeps the pending candle', () => {
+    const seen: Redesign2Frame[][] = [];
+    let fire: (() => void) | undefined;
+    const c = new TipCoalescer(
+      (frames) => seen.push(frames),
+      16,
+      (fn) => {
+        fire = fn;
+        return () => undefined;
+      },
+    );
+    c.push([
+      {
+        type: 'delta',
+        id: SUB,
+        sessionId: 's',
+        seq: 3,
+        payload: {
+          forming: true,
+          bars: [{ close: 4 }],
+          base_index: 0,
+          count: 1,
+          tail_len: 1,
+          closed_upto: 0,
+        },
+      },
+      {
+        type: 'delta',
+        id: SUB,
+        sessionId: 's',
+        seq: 4,
+        payload: {
+          forming: true,
+          series: { 'p:9': [8] },
+          base_index: 0,
+          count: 1,
+          tail_len: 1,
+          closed_upto: 0,
+        },
+      },
+    ]);
+    fire?.();
+    const payload = seen[0]?.[0]?.payload as {
+      bars: Array<{ close: number }>;
+      series: Record<string, number[]>;
+    };
+    expect(payload.bars[0]?.close).toBe(4);
+    expect(payload.series['p:9']).toEqual([8]);
+  });
+
+  test('drops an UNCHANGED keepalive and does not clobber a pending tip', () => {
+    const seen: Redesign2Frame[][] = [];
+    let fire: (() => void) | undefined;
+    const c = new TipCoalescer(
+      (frames) => seen.push(frames),
+      16,
+      (fn) => {
+        fire = fn;
+        return () => undefined;
+      },
+    );
+    c.push([
+      {
+        type: 'delta',
+        id: SUB,
+        sessionId: 's',
+        seq: 1,
+        payload: { unchanged: true, forming: true, base_index: 0, count: 1, tail_len: 1, closed_upto: 0 },
+      },
+    ]);
+    expect(seen).toEqual([]);
+    expect(fire).toBeUndefined();
+    c.push([
+      {
+        type: 'delta',
+        id: SUB,
+        sessionId: 's',
+        seq: 2,
+        payload: {
+          forming: true,
+          bars: [{ close: 3 }],
+          base_index: 0,
+          count: 1,
+          tail_len: 1,
+          closed_upto: 0,
+        },
+      },
+      {
+        type: 'delta',
+        id: SUB,
+        sessionId: 's',
+        seq: 3,
+        payload: { unchanged: true, forming: true, base_index: 0, count: 1, tail_len: 1, closed_upto: 0 },
+      },
+    ]);
+    fire?.();
+    const payload = seen[0]?.[0]?.payload as { bars: Array<{ close: number }>; unchanged?: boolean };
+    expect(seen).toHaveLength(1);
+    expect(payload.bars[0]?.close).toBe(3);
+    expect(payload.unchanged).toBeUndefined();
+  });
 });
