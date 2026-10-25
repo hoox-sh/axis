@@ -15,8 +15,29 @@ import {
 import { bytesToHex, decodeEnvelope, decodeFrame, hexToBytes } from '../../src/hp/axb1/decode';
 import { encodeFrame } from '../../src/hp/axb1/encode';
 import { fnv1a32 } from '../../src/hp/axb1/hash';
+import { float32LosesTicks, priceToTicks, ticksToPrice } from '../../src/hp/axb1/ticks';
 import type { Axb1Frame } from '../../src/hp/axb1/types';
 import vectors from './axb1-vectors.json';
+
+/** Price whose float32 rounding disagrees with float64 ticks at scale 8. */
+const F32_LOSSY_PRICE = 123456.78901234;
+const F32_LOSSY_SCALE = 8;
+
+function i64le(ticks: bigint): Uint8Array {
+  const out = new Uint8Array(8);
+  new DataView(out.buffer).setBigInt64(0, ticks, true);
+  return out;
+}
+
+function f32le(price: number): Uint8Array {
+  const out = new Uint8Array(4);
+  new DataView(out.buffer).setFloat32(0, price, true);
+  return out;
+}
+
+function sliceAt(bytes: Uint8Array, offset: number, n: number): Uint8Array {
+  return bytes.subarray(offset, offset + n);
+}
 
 const hdr = {
   seq: 0,
@@ -135,6 +156,94 @@ describe('AXB1 payloads', () => {
     const bytes = encodeFrame(frame);
     expect(bytes.byteLength % 4).toBe(0);
     expect(decodeFrame(bytes)).toEqual(frame);
+  });
+
+  test('SNAPSHOT_OHLCV stores i64 ticks, not float32, for a price float32 cannot represent', () => {
+    expect(float32LosesTicks(F32_LOSSY_PRICE, F32_LOSSY_SCALE)).toBe(true);
+    const ticks = priceToTicks(F32_LOSSY_PRICE, F32_LOSSY_SCALE);
+    const f32 = new Float32Array([F32_LOSSY_PRICE])[0] as number;
+    const f32Ticks = priceToTicks(f32, F32_LOSSY_SCALE);
+    expect(ticks).not.toBe(f32Ticks);
+
+    const frame: Axb1Frame = {
+      opcode: Axb1Opcode.SNAPSHOT_OHLCV,
+      ...hdr,
+      seq: 2,
+      priceScale: F32_LOSSY_SCALE,
+      count: 1,
+      closedUpto: 0,
+      hotFromIndex: 0,
+      timeS: [60],
+      open: [ticks],
+      high: [ticks + 1n],
+      low: [ticks - 1n],
+      close: [ticks],
+      volume: [1],
+      flags: [1],
+    };
+    const bytes = encodeFrame(frame);
+    const decoded = decodeFrame(bytes);
+    expect(decoded.opcode).toBe(Axb1Opcode.SNAPSHOT_OHLCV);
+    if (decoded.opcode !== Axb1Opcode.SNAPSHOT_OHLCV) throw new Error('expected SNAPSHOT_OHLCV');
+    expect(decoded.close[0]).toBe(ticks);
+    expect(decoded.close[0]).not.toBe(f32Ticks);
+    expect(ticksToPrice(decoded.close[0] as bigint, F32_LOSSY_SCALE)).toBe(
+      ticksToPrice(ticks, F32_LOSSY_SCALE),
+    );
+    expect(ticksToPrice(decoded.close[0] as bigint, F32_LOSSY_SCALE)).not.toBe(
+      ticksToPrice(f32Ticks, F32_LOSSY_SCALE),
+    );
+
+    // payload: u8 scale + 3 pad + 3×u32 + i32 time + align8 → OHLC i64s at +24
+    const ohlcOff = AXB1_HEADER_BYTES + 24;
+    const want = [ticks, ticks + 1n, ticks - 1n, ticks];
+    const f32Bits = f32le(F32_LOSSY_PRICE);
+    for (let i = 0; i < 4; i++) {
+      const field = sliceAt(bytes, ohlcOff + i * 8, 8);
+      expect([...field]).toEqual([...i64le(want[i] as bigint)]);
+      expect(field.byteLength).toBe(8);
+      expect([...sliceAt(field, 0, 4)]).not.toEqual([...f32Bits]);
+    }
+  });
+
+  test('TIP_UPDATE close is 8-byte little-endian i64 ticks, not IEEE f32', () => {
+    expect(float32LosesTicks(F32_LOSSY_PRICE, F32_LOSSY_SCALE)).toBe(true);
+    const ticks = priceToTicks(F32_LOSSY_PRICE, F32_LOSSY_SCALE);
+    const f32 = new Float32Array([F32_LOSSY_PRICE])[0] as number;
+    const frame: Axb1Frame = {
+      opcode: Axb1Opcode.TIP_UPDATE,
+      ...hdr,
+      seq: 12,
+      mask: TipMask.CLOSE | TipMask.TIME,
+      flags: 1,
+      close: ticks,
+      timeS: 60,
+    };
+    const bytes = encodeFrame(frame);
+    const decoded = decodeFrame(bytes);
+    expect(decoded.opcode).toBe(Axb1Opcode.TIP_UPDATE);
+    if (decoded.opcode !== Axb1Opcode.TIP_UPDATE) throw new Error('expected TIP_UPDATE');
+    expect(decoded.close).toBe(ticks);
+    expect(decoded.close).not.toBe(priceToTicks(f32, F32_LOSSY_SCALE));
+
+    // payload: u32 mask + u32 flags, then close i64
+    const closeOff = AXB1_HEADER_BYTES + 8;
+    const field = sliceAt(bytes, closeOff, 8);
+    expect([...field]).toEqual([...i64le(ticks)]);
+    expect([...sliceAt(field, 0, 4)]).not.toEqual([...f32le(F32_LOSSY_PRICE)]);
+  });
+
+  test('TIP_UPDATE refuses a non-bigint close tick', () => {
+    expect(() =>
+      encodeFrame({
+        opcode: Axb1Opcode.TIP_UPDATE,
+        ...hdr,
+        mask: TipMask.CLOSE | TipMask.TIME,
+        flags: 1,
+        close: F32_LOSSY_PRICE as unknown as bigint,
+        timeS: 60,
+      }),
+    ).toThrow(TypeError);
   });
 
   test('SNAPSHOT_PLOTS ticks + float64 + times', () => {
