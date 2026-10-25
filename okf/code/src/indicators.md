@@ -7,7 +7,7 @@ tags: [code, indicators]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-25T17:15:16Z
+  at: 2026-10-25T21:43:50Z
 sources:
   - id: tree
     resource: "src/indicators"
@@ -22,11 +22,11 @@ okf_lock: generated
 * `IndicatorPanel.tsx` — IndicatorPanel
 * `apply-context.ts` — AlignedApplySeries, ResolvedRunContext, _resetNoEngineAxisWarnForTests, alignApplySeries, resolveRunContext
 * `apply-drawings.ts` — DrawingsApplyContext, appliedScriptStillOnChart, applyDrawings
-* `apply-mutations.ts` — ChartMutationContext, applyChartMutations
+* `apply-mutations.ts` — ChartMutationContext, PlotsAndMarkersInput, applyChartMutations, applyPlotsAndMarkers, applyShapeMarkers, buildShapeMarkers
 * `apply-overlays.ts` — OverlayBuildContext, OverlayBuildOutcome, OverlayLine, OverlayOhlc, buildOverlayPayloads, pickOverlayColor
 * `apply-pane.ts` — PaneSetupContext, ensureApplyPane
 * `apply-store.ts` — StoreUpdateContext, updateIndicatorStore
-* `apply-strategy.ts` — StrategyApplyContext, applyStrategyMarkers
+* `apply-strategy.ts` — StrategyApplyContext, StrategyMarkerPlan, applyStrategyMarkers, buildStrategyMarkerPlan
 * `detach.ts` — detachIndicatorFromChart
 * `reapply.ts` — REAPPLY_MAX_CONCURRENT, ReapplyChartScriptsOpts, _resetBatchRouteMemoForTests, _resetReapplyGuardForTests, listReapplicableScripts, reapplyChartScripts
 * `run-helpers.ts` — NormalizedRunResult, _resetRunEpochForTests, beginRunEpoch, claimRunStatus, coercePlotSample, coerceSeriesSample, currentRunEpoch, formatRunError, getRunStatusEpoch, isInteractiveRunInFlight, isRunEpochCurrent, lineDataHasSample
@@ -46,6 +46,7 @@ okf_lock: generated
 * [src/chart/v1](/code/src/chart/v1.md)
 * [src/data](/code/src/data.md)
 * [src/editor](/code/src/editor.md)
+* [src/engine/v1](/code/src/engine/v1.md)
 * [src/engines](/code/src/engines.md)
 * [src/indicators/builtins](/code/src/indicators/builtins.md)
 * [src/plugins](/code/src/plugins.md)

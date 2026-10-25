@@ -30,6 +30,9 @@
  * This module owns the **paint** invariant: `store.bars` and the Lightweight
  * Charts series must hold the same bars at all times.
  *
+ * `paintAction` in `v1/paint-action.ts` is the decision table (concept
+ * §5.2 / §11). Do not re-derive the write from the verdict here.
+ *
  * | Append result | Chart action |
  * | --- | --- |
  * | `ignored` | nothing changed (stale tick) — do not paint |
@@ -53,6 +56,7 @@
 import { appendBar, sliceToChartWindow, store, type BarAppendResult } from '../store';
 import { getManager, setDataToChart } from './manager-access';
 import { notePaintRequest } from './paint-latency';
+import { paintAction } from './v1/paint-action';
 import type { Bar } from '../store/types';
 
 
@@ -142,7 +146,8 @@ function cancelLivePaint(manager: LivePainter): void {
  */
 export function appendLiveBar(bar: Bar, opts?: { via?: 'worker' }): BarAppendResult {
   const result = appendBar(bar);
-  if (result === 'ignored') return result;
+  const action = paintAction(result, store.bars.length);
+  if (action === 'none') return result;
 
   // Measurement only: stamp the arrival before any paint work so the rAF
   // callback (armed on the first tick of the frame) reports tick → frame.
@@ -151,13 +156,13 @@ export function appendLiveBar(bar: Bar, opts?: { via?: 'worker' }): BarAppendRes
   const manager = getManager();
   if (!manager) return result;
 
-  // LWC 5.2 `series.update` appends when the point's time is newer than the
-  // last bar, and throws when the series is empty or the time is older. A
-  // window slide still replaces: the head moved, so `update` cannot drop it.
-  // The first bar has no last bar to append onto — same replace, once.
+  // LWC `series.update` appends when the point's time is newer than the last
+  // bar, and throws when the series is empty or the time is older. A window
+  // slide still replaces: the head moved, so `update` cannot drop it.
+  // `paintAction` is the §5.2 / §11 table — do not branch on verdict here.
   // `manager.appendBar` updates the candle and the volume series together.
   // Normal ticks do not call it here: one flush per turn, latest bar per time.
-  if (result === 'slid' || (result === 'appended' && store.bars.length === 1)) {
+  if (action === 'setData') {
     if (result === 'slid') flushLivePaintSync(manager);
     else cancelLivePaint(manager);
     const view = sliceToChartWindow(store.bars);

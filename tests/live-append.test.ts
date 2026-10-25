@@ -15,9 +15,10 @@
 
 import './setup';
 import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
-import { setStore, store } from '../src/store';
+import { setStore, store, type BarAppendResult } from '../src/store';
 import { setManager } from '../src/chart/manager-access';
 import { appendLiveBar } from '../src/chart/live-append';
+import { paintAction, type PaintAction } from '../src/chart/v1/paint-action';
 import type { Bar } from '../src/store/types';
 
 function bar(t: number, close = 100, extra: Partial<Bar> = {}): Bar {
@@ -31,6 +32,7 @@ function settlePaint(): Promise<void> {
 
 let appended: Bar[] = [];
 let setDataCalls: unknown[][] = [];
+let fitCalls = 0;
 let manager: unknown;
 
 const DEFAULT_WINDOW = 10_000;
@@ -40,10 +42,12 @@ beforeEach(async () => {
   await settlePaint();
   appended = [];
   setDataCalls = [];
+  fitCalls = 0;
   setStore('bars', []);
   setStore('rollingWindowBars', DEFAULT_WINDOW);
   // Candle series only — no chart, so `ensurePriceSeries` does not swap it.
   // `setData` here is the full-window replace; `appendBar` is `series.update`.
+  // `afterDataReload` is the fit path when `setDataToChart({ fit: true })`.
   const candle = {
     setData: (data: unknown[]) => {
       setDataCalls.push(data);
@@ -55,6 +59,9 @@ beforeEach(async () => {
     appendBar: (b: Bar) => appended.push(b),
     getPane: (id: string) => (id === 'price' ? pricePane : undefined),
     getAllPanes: () => [pricePane],
+    afterDataReload: () => {
+      fitCalls += 1;
+    },
   };
   setManager(manager as never);
 });
@@ -148,9 +155,11 @@ describe('appendLiveBar', () => {
   it('reports "ignored" for a late tick and paints nothing', () => {
     appendLiveBar(bar(120));
     appended = [];
+    setDataCalls = [];
     const verdict = appendLiveBar(bar(60));
     expect(verdict).toBe('ignored');
     expect(appended).toHaveLength(0);
+    expect(setDataCalls).toHaveLength(0);
     expect(store.bars).toHaveLength(1);
     expect(store.bars[0]!.time).toBe(120);
   });
@@ -176,6 +185,7 @@ describe('appendLiveBar', () => {
     // setData runs inside the call; it does not wait for the turn to end.
     expect(appended).toHaveLength(0);
     expect(setDataCalls).toHaveLength(1);
+    expect(fitCalls).toBe(0);
     expect(store.bars).toHaveLength(3);
     expect(store.bars[0]!.time).toBe(120);
   });
@@ -192,5 +202,132 @@ describe('appendLiveBar', () => {
     expect(appended.map((b) => [b.time, b.close])).toEqual([[120, 110]]);
     expect(setDataCalls).toHaveLength(1);
     expect(store.bars.map((b) => b.time)).toEqual([120, 180]);
+  });
+});
+
+type PaintRow = {
+  name: string;
+  seed: () => void | Promise<void>;
+  tick: Bar;
+  verdict: BarAppendResult;
+  windowLength: number;
+  action: PaintAction;
+  updates: number;
+  setData: number;
+};
+
+describe('v1 paint-action table (concept §5.2 / §11)', () => {
+  const rows: PaintRow[] = [
+    {
+      name: 'ignored (late tick)',
+      seed: () => {
+        appendLiveBar(bar(120));
+      },
+      tick: bar(60),
+      verdict: 'ignored',
+      windowLength: 1,
+      action: 'none',
+      updates: 0,
+      setData: 0,
+    },
+    {
+      name: 'updated (forming tick, same bar)',
+      seed: () => {
+        appendLiveBar(bar(60));
+      },
+      tick: bar(60, 101),
+      verdict: 'updated',
+      windowLength: 1,
+      action: 'update',
+      updates: 1,
+      setData: 0,
+    },
+    {
+      name: 'appended-first (empty series)',
+      seed: () => {},
+      tick: bar(60),
+      verdict: 'appended',
+      windowLength: 1,
+      action: 'setData',
+      updates: 0,
+      setData: 1,
+    },
+    {
+      name: 'appended-later (window not full)',
+      seed: () => {
+        appendLiveBar(bar(60));
+      },
+      tick: bar(120),
+      verdict: 'appended',
+      windowLength: 2,
+      action: 'update',
+      updates: 1,
+      setData: 0,
+    },
+    {
+      name: 'slid (cap reached)',
+      seed: () => {
+        setStore('rollingWindowBars', 3);
+        for (let i = 0; i < 3; i++) appendLiveBar(bar(60 + i * 60));
+      },
+      tick: bar(60 + 3 * 60),
+      verdict: 'slid',
+      windowLength: 3,
+      action: 'setData',
+      updates: 0,
+      setData: 1,
+    },
+  ];
+
+  for (const row of rows) {
+    it(`${row.name} → ${row.action}`, async () => {
+      expect(paintAction(row.verdict, row.windowLength)).toBe(row.action);
+      await row.seed();
+      await settlePaint();
+      appended = [];
+      setDataCalls = [];
+      fitCalls = 0;
+
+      const verdict = appendLiveBar(row.tick);
+      expect(verdict).toBe(row.verdict);
+      expect(paintAction(verdict, store.bars.length)).toBe(row.action);
+      await settlePaint();
+      expect(appended).toHaveLength(row.updates);
+      expect(setDataCalls).toHaveLength(row.setData);
+      expect(fitCalls).toBe(0);
+    });
+  }
+
+  it('coalesces forming ticks in one turn to one update, zero setData', async () => {
+    appendLiveBar(bar(60));
+    await settlePaint();
+    appended = [];
+    setDataCalls = [];
+
+    expect(paintAction(appendLiveBar(bar(60, 101)), 1)).toBe('update');
+    expect(paintAction(appendLiveBar(bar(60, 102)), 1)).toBe('update');
+    expect(appended).toHaveLength(0);
+    expect(setDataCalls).toHaveLength(0);
+
+    await settlePaint();
+    expect(appended).toHaveLength(1);
+    expect(appended[0]?.close).toBe(102);
+    expect(setDataCalls).toHaveLength(0);
+    expect(fitCalls).toBe(0);
+  });
+
+  it('late tick ignored: zero paints', async () => {
+    appendLiveBar(bar(120));
+    await settlePaint();
+    appended = [];
+    setDataCalls = [];
+    fitCalls = 0;
+
+    expect(appendLiveBar(bar(60))).toBe('ignored');
+    expect(paintAction('ignored', store.bars.length)).toBe('none');
+    await settlePaint();
+    expect(appended).toHaveLength(0);
+    expect(setDataCalls).toHaveLength(0);
+    expect(fitCalls).toBe(0);
   });
 });
