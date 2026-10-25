@@ -131,16 +131,34 @@ function negotiatedEncoding(): 'axb1' | undefined {
   return undefined;
 }
 
-function resumeExtra(seq: number): { seq: number; encoding?: 'axb1' } {
+function resumeExtra(
+  seq: number,
+  closedUpto?: number,
+): { seq: number; closed_upto?: number; encoding?: 'axb1' } {
   const encoding = negotiatedEncoding();
-  if (!encoding) return { seq };
-  return { seq, encoding };
+  return {
+    seq,
+    ...(closedUpto != null ? { closed_upto: closedUpto } : {}),
+    ...(encoding ? { encoding } : {}),
+  };
 }
+
+function readClosedUpto(frame: WireFrame): number | null {
+  const n = frame.payload?.closed_upto;
+  return typeof n === 'number' && Number.isFinite(n) ? n : null;
+}
+
+type HeldLive = { frame: WireFrame; cursor: number; broken: boolean };
 
 const FAILURE_COOLDOWN_MS = 60_000;
 /** PYNE history ensure of a painted 5m window routinely exceeds 30s. */
 const SNAPSHOT_WAIT_MS = 120_000;
 const LOADING_WAIT_CAP_MS = 120_000;
+/**
+ * After the tab is shown, fold the queued burst into one decision.
+ * A hidden tab must not replay every tick it missed.
+ */
+export const HIDDEN_WAKE_MS = 50;
 
 function historyBarsOf(meta: Record<string, unknown> | undefined): number {
   const n = Number(meta?.history_bars);
@@ -282,6 +300,14 @@ export class StreamLiveWire {
   private readonly inbox = new Map<string, WireFrame[]>();
   /** Fan-out waiters — a second waiter must not steal the first. */
   private readonly inboxWaiters = new Map<string, Array<() => void>>();
+  /** Latest unpainted tick while the tab is hidden or waking. One slot per sub. */
+  private readonly heldLive = new Map<string, HeldLive>();
+  /** `closed_upto` last routed for each sub. A later value means a bar closed. */
+  private readonly appliedClosedUpto = new Map<string, number>();
+  private pageHidden = false;
+  private wakeUntil = 0;
+  private wakeTimer: ReturnType<typeof setTimeout> | null = null;
+  private removeVisibility: (() => void) | null = null;
 
   constructor(
     private readonly client: WireClient,
@@ -295,6 +321,134 @@ export class StreamLiveWire {
     ) => Promise<RunResult>,
   ) {
     this.client.addReconnectHandler(() => this.resumeAll());
+    this.watchVisibility();
+  }
+
+  /**
+   * The socket stays up while the tab is hidden. Ticks fold into one slot.
+   * On show, a moved `closed_upto` resumes once; otherwise the latest tip
+   * is applied once. Tests call this directly.
+   */
+  notePageVisibility(hidden: boolean): void {
+    if (hidden) {
+      this.pageHidden = true;
+      this.wakeUntil = 0;
+      if (this.wakeTimer) {
+        clearTimeout(this.wakeTimer);
+        this.wakeTimer = null;
+      }
+      return;
+    }
+    if (!this.pageHidden && this.wakeUntil === 0) return;
+    this.pageHidden = false;
+    this.wakeUntil = Date.now() + HIDDEN_WAKE_MS;
+    if (this.wakeTimer) clearTimeout(this.wakeTimer);
+    this.wakeTimer = setTimeout(() => {
+      this.wakeTimer = null;
+      this.flushHeld();
+    }, HIDDEN_WAKE_MS);
+  }
+
+  private watchVisibility(): void {
+    if (typeof document === 'undefined' || typeof document.addEventListener !== 'function') return;
+    const onVis = () => this.notePageVisibility(document.hidden === true);
+    document.addEventListener('visibilitychange', onVis);
+    this.removeVisibility = () => document.removeEventListener('visibilitychange', onVis);
+  }
+
+  private holding(): boolean {
+    return this.pageHidden || Date.now() < this.wakeUntil;
+  }
+
+  private shouldHold(frame: WireFrame): boolean {
+    if (!frame.id) return false;
+    if (frame.type !== 'delta' && frame.type !== 'close') return false;
+    return this.holding();
+  }
+
+  /** Keep the latest frame. A seq we did not see marks the run broken. */
+  private holdFrame(frame: WireFrame): void {
+    const id = frame.id;
+    if (!id) return;
+    const seq = typeof frame.seq === 'number' ? frame.seq : null;
+    const prev = this.heldLive.get(id);
+    const applied = this.appliedSeq.get(id);
+    let cursor = prev?.cursor ?? (typeof applied === 'number' ? applied : -1);
+    let broken = prev?.broken ?? false;
+    if (seq == null) {
+      broken = true;
+    } else if (cursor < 0 || seq === cursor + 1) {
+      cursor = seq;
+    } else if (seq !== cursor) {
+      cursor = Math.max(cursor, seq);
+      broken = true;
+    }
+    this.heldLive.set(id, { frame, cursor, broken });
+  }
+
+  private rememberClosedUpto(frame: WireFrame): void {
+    if (!frame.id) return;
+    const n = readClosedUpto(frame);
+    if (n == null) return;
+    const prev = this.appliedClosedUpto.get(frame.id);
+    if (prev == null || n > prev) this.appliedClosedUpto.set(frame.id, n);
+  }
+
+  /** One resume, or one tip. Never the backlog. */
+  private flushHeld(): void {
+    this.wakeUntil = 0;
+    this.pageHidden = false;
+    const held = [...this.heldLive.entries()];
+    this.heldLive.clear();
+    for (const [subId, slot] of held) {
+      const next = readClosedUpto(slot.frame);
+      const prev = this.appliedClosedUpto.get(subId);
+      const closedMoved = next != null && prev != null && next > prev;
+      if (closedMoved || slot.broken) {
+        this.resumeFromHold(subId);
+        continue;
+      }
+      const applied = this.appliedSeq.get(subId);
+      const seq = typeof slot.frame.seq === 'number' ? slot.frame.seq : null;
+      let frame = slot.frame;
+      if (seq != null && applied != null && seq > applied + 1) {
+        frame = {
+          ...frame,
+          payload: { ...(frame.payload ?? {}), seqAckFrom: applied },
+        };
+      }
+      this.routeFrame(frame);
+    }
+  }
+
+  private resumeFromHold(subId: string): void {
+    v1Count('resync');
+    this.handlers.onStatus(subId, 'degraded', { message: 'resyncing' });
+    const bars = this.seriesBars.get(subId) ?? this.scriptCtx.get(subId)?.bars ?? [];
+    const seq = this.appliedSeq.get(subId) ?? 0;
+    try {
+      this.client.resumeSubscription(
+        subId,
+        bars.length,
+        this.lastBarTime(bars),
+        resumeExtra(seq, this.appliedClosedUpto.get(subId)),
+      );
+    } catch {
+      /* socket may still be coming up */
+    }
+  }
+
+  private clearHidden(): void {
+    this.pageHidden = false;
+    this.wakeUntil = 0;
+    this.heldLive.clear();
+    this.appliedClosedUpto.clear();
+    if (this.wakeTimer) {
+      clearTimeout(this.wakeTimer);
+      this.wakeTimer = null;
+    }
+    this.removeVisibility?.();
+    this.removeVisibility = null;
   }
 
   get cooledDown(): boolean {
@@ -325,6 +479,10 @@ export class StreamLiveWire {
   /** Every inbound frame lands in the inbox AND the router — neither path
    * can starve the other when frames arrive back-to-back. */
   private ingest(frame: WireFrame): void {
+    if (this.shouldHold(frame)) {
+      this.holdFrame(frame);
+      return;
+    }
     if (frame.id) {
       const queue = this.inbox.get(frame.id) ?? [];
       queue.push(frame);
@@ -486,6 +644,12 @@ export class StreamLiveWire {
   /** Route an inbound frame to appliers + handlers. Never throws. */
   routeFrame(frame: WireFrame): void {
     try {
+      if (this.shouldHold(frame)) {
+        this.holdFrame(frame);
+        return;
+      }
+      if (frame.type === 'full' && frame.id) this.heldLive.delete(frame.id);
+      this.rememberClosedUpto(frame);
       if (frame.type === 'status' && frame.id) {
         this.routeStatusFrame(frame);
         return;
@@ -928,6 +1092,7 @@ export class StreamLiveWire {
     this.inboxWaiters.clear();
     this.failures = 0;
     this.coolUntil = 0;
+    this.clearHidden();
     try {
       this.client.disconnect();
     } catch {
@@ -944,6 +1109,7 @@ export class StreamLiveWire {
     this.scriptCtx.clear();
     this.scriptInputSig.clear();
     this.scriptDepth.clear();
+    this.clearHidden();
     try {
       this.client.disconnect();
     } catch {

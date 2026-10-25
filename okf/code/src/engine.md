@@ -7,7 +7,7 @@ tags: [code, engine]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-25T12:45:11Z
+  at: 2026-10-25T15:11:35Z
 sources:
   - id: tree
     resource: "src/engine"
@@ -24,7 +24,7 @@ okf_lock: generated
 * `feature-flag.ts` — STREAM_ENGINE_FLAG_KEY, isStreamEngineDisabled, isStreamEngineEnabled, setStreamEngineEnabled
 * `frames.ts` — DeltaBlock, FrameBar, Redesign2AuthFrame, Redesign2AuthOkFrame, Redesign2CloseFrame, Redesign2DeltaFrame, Redesign2ErrorFrame, Redesign2Frame, Redesign2FullFrame, Redesign2PingFrame, Redesign2PongFrame, Redesign2RepairFrame
 * `index.ts`
-* `live-wire.ts` — EvalScriptInput, StreamFallbackError, StreamLiveWire, WireClient, WireFrame, WireHandlers
+* `live-wire.ts` — EvalScriptInput, HIDDEN_WAKE_MS, StreamFallbackError, StreamLiveWire, WireClient, WireFrame, WireHandlers
 * `market-identity.ts` — CatalogSymbol, MarketIdentity, currentSeriesKey, marketIdentityKey, pairFormSymbol, sameMarketIdentity
 * `policy.ts` — ClientVenueStreamMode, DATA_PLANE_DEFAULT_LEVERS, DEFAULT_DATA_PLANE_POLICY, DataPlanePolicy, EngineProfile, EngineProfileCaps, profileForCapabilities
 * `rest-fallback.ts` — Redesign2RestRequest, Redesign2TailEnvelope, Redesign2TailRequest, buildSessionTailUrl, requestRedesign2RestFrame, requestSessionTail

@@ -4,7 +4,7 @@
  */
 
 import { afterEach, describe, expect, test } from 'bun:test';
-import { StreamFallbackError, StreamLiveWire, type WireClient, type WireFrame, type WireHandlers } from '../../src/engine/live-wire';
+import { HIDDEN_WAKE_MS, StreamFallbackError, StreamLiveWire, type WireClient, type WireFrame, type WireHandlers } from '../../src/engine/live-wire';
 import type { RunResult } from '../../src/plugins/types';
 import type { Bar } from '../../src/store/types';
 import { setStore, store } from '../../src/store';
@@ -577,6 +577,101 @@ describe('live-wire P1 series + study push', () => {
     expect(h.applied).toEqual([{ via: 'stream-full' }, { via: 'stream-delta' }]);
     expect(h.sent.filter((s) => s.kind === 'subscribe:script').length).toBe(1);
     expect(h.wire.snapshotState().subs[0]?.seq).toBe(6);
+  });
+
+  test('a hidden tab applies one tip when no bar closed', async () => {
+    const h = makeHarness();
+    const first = h.wire.evalScript({ subId: 's-1', script: 'indicator() {}', meta: {}, bars: BARS });
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 5,
+      payload: { count: 1, plots: [[1]], series: { a: [1] }, closed_upto: 10 },
+    });
+    await first;
+    h.wire.notePageVisibility(true);
+    for (let seq = 6; seq <= 9; seq++) {
+      h.emit({
+        type: 'delta',
+        id: 's-1',
+        sessionId: 'ses',
+        seq,
+        payload: {
+          base_index: 0,
+          count: 1,
+          tail_len: 1,
+          plots: [[seq]],
+          series: { a: [seq] },
+          closed_upto: 10,
+          forming: true,
+        },
+      });
+    }
+    expect(h.applied).toEqual([{ via: 'stream-full' }]);
+    expect(h.counters.disconnects).toBe(0);
+    h.wire.notePageVisibility(false);
+    await new Promise((r) => setTimeout(r, HIDDEN_WAKE_MS + 20));
+    await tick();
+    expect(h.applied).toEqual([{ via: 'stream-full' }, { via: 'stream-delta' }]);
+    expect(h.resumes).toEqual([]);
+    expect(h.wire.snapshotState().subs[0]?.seq).toBe(9);
+    h.wire.reset();
+  });
+
+  test('a hidden tab resumes once when a bar closed', async () => {
+    const h = makeHarness();
+    const first = h.wire.evalScript({ subId: 's-1', script: 'indicator() {}', meta: {}, bars: BARS });
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 5,
+      payload: { count: 1, plots: [[1]], series: { a: [1] }, closed_upto: 10 },
+    });
+    await first;
+    h.wire.notePageVisibility(true);
+    h.emit({
+      type: 'delta',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 6,
+      payload: {
+        base_index: 0,
+        count: 1,
+        tail_len: 1,
+        plots: [[6]],
+        series: { a: [6] },
+        closed_upto: 12,
+        forming: true,
+      },
+    });
+    h.emit({
+      type: 'delta',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 8,
+      payload: {
+        base_index: 0,
+        count: 1,
+        tail_len: 1,
+        plots: [[8]],
+        series: { a: [8] },
+        closed_upto: 12,
+        forming: true,
+      },
+    });
+    h.wire.notePageVisibility(false);
+    await new Promise((r) => setTimeout(r, HIDDEN_WAKE_MS + 20));
+    expect(h.applied).toEqual([{ via: 'stream-full' }]);
+    expect(h.resumes).toHaveLength(1);
+    expect(h.resumes[0]).toMatchObject({ id: 's-1', extra: { seq: 5, closed_upto: 10 } });
+    expect(h.counters.disconnects).toBe(0);
+    h.wire.reset();
   });
 
   test('forming: true script delta applies as executionContext tip', async () => {

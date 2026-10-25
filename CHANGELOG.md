@@ -27,6 +27,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Fixed
 
+- **A hidden tab does not replay every missed tick.** The live socket stays open. Forming ticks fold into one slot per subscription. When the tab is shown, a `closed_upto` that moved resumes once from the last painted close. Otherwise the latest tip is applied once. A seq that never arrived still resumes.
+
 - **A dead ingest worker is replaced.** `onerror` terminates that worker, starts another, and connects again. The next open resubscribes through the same reconnect handlers as a socket drop. After five crashes in one `connect()` the host stays down. It does not switch the socket back to main-thread `JSON.parse`.
 
 - **A dropped keepalive no longer looks like a missed frame.** The tip coalescer still drops `UNCHANGED` frames and still folds several forming tips into one. Those seqs are now acknowledged on the next frame that is actually released (`seqAckFrom`). The applier and the apply transaction advance through that run. A seq nobody saw is still a gap and still resubscribes. JSON decode strips a forged ack, so a socket payload cannot hide a real hole.
