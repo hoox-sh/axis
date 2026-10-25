@@ -394,6 +394,9 @@ async function getWire(): Promise<StreamLiveWire> {
   const next = got.status === 'live' ? got.value : await got.wait;
   wire = next;
   wireCred = fp;
+  // streamStop keeps mounted ChartHost ids (fingerprints cleared). Re-pin
+  // onto this acquire so a still-mounted host does not wait for remount.
+  rePinMountedChartSlots([...chartSlotPins.keys()]);
   return next;
 }
 
@@ -421,10 +424,15 @@ export function releaseSlotWire(fingerprint: string, slotId: string): StreamLive
   return tabSockets.release(fingerprint, slotId);
 }
 
-/** Chart-host pins: slotId → fingerprint taken at pin time. Keys are mounted hosts. */
+/**
+ * Chart-host pins: slotId → fingerprint taken at pin time.
+ * Keys are mounted hosts. Empty fingerprint means still mounted after
+ * {@link streamStop} — the next pin uses the current engine.
+ */
 const chartSlotPins = new Map<string, string>();
 
-function forgetChartSlotPins(): void {
+/** Drop remembered ChartHost pins (tests). Sockets stay until drain/unpin. */
+export function forgetChartSlotPins(): void {
   chartSlotPins.clear();
 }
 
@@ -433,12 +441,13 @@ function forgetChartSlotPins(): void {
  *
  * Remembers `{ slotId, fingerprint }` so {@link unpinChartSlot} releases the
  * same socket after the primary engine moves. A second pin of the same
- * `slotId` does not bump refs.
+ * `slotId` does not bump refs. An empty remembered fingerprint (after
+ * {@link streamStop}) uses the current engine, not the pre-stop socket.
  */
 export function pinChartSlot(slotId: string): SocketPoolAcquire<StreamLiveWire> | undefined {
   const id = String(slotId ?? '').trim();
   if (!id) return undefined;
-  const fp = chartSlotPins.get(id) ?? streamWireFingerprint();
+  const fp = chartSlotPins.get(id) || streamWireFingerprint();
   const got = acquireSlotWire(fp, id);
   chartSlotPins.set(id, fp);
   return got;
@@ -845,10 +854,19 @@ export async function verifyClosedBar(
   return { result: streamVerifyClose(input.time, input.engineOhlcv), verified: 'engine' };
 }
 
-/** Tear down the stream path (stopLive / symbol switch / restart). */
+/**
+ * Tear down the stream path (stopLive / symbol switch / restart).
+ *
+ * Sockets drain and disconnect as before. Mounted ChartHost slot ids stay
+ * so a still-mounted host is re-pinned on the next {@link getStreamWire}
+ * (new sockets, current fingerprint). Unpin still drops an id so stop
+ * cannot resurrect it. Never throws.
+ */
 export function streamStop(): void {
   const held = tabSockets.drain();
-  forgetChartSlotPins();
+  for (const id of chartSlotPins.keys()) {
+    chartSlotPins.set(id, '');
+  }
   if (wire && !held.includes(wire)) held.push(wire);
   for (const w of held) {
     try {

@@ -11,6 +11,7 @@ import { setEngineApiKey } from '../src/storage/vault';
 import { setStore, store } from '../src/store';
 import {
   acquireSlotWire,
+  forgetChartSlotPins,
   getStreamWire,
   pinChartSlot,
   releaseSlotWire,
@@ -37,11 +38,13 @@ beforeEach(() => {
     }) as never,
   );
   setEngineApiKey('server', 'key-1');
+  forgetChartSlotPins();
   resetStreamWire();
 });
 
 afterEach(() => {
   streamStop();
+  forgetChartSlotPins();
   setIngestWorkerAvailableForTests(null);
 });
 
@@ -211,5 +214,67 @@ describe('chart slot socket pins (concept §4.1)', () => {
     expect(out.hadWire).toBe(false);
     expect(streamSocketSize()).toBe(0);
     expect(streamSocketRefs(streamWireFingerprint())).toBe(0);
+  });
+
+  it('streamStop then getWire re-pins the mounted slot ids', async () => {
+    const fp = streamWireFingerprint();
+    expect(pinChartSlot('slot-1')?.status).toBe('live');
+    expect(pinChartSlot('slot-2')?.status).toBe('live');
+    expect(streamSocketSize()).toBe(1);
+    expect(streamSocketRefs(fp)).toBe(2);
+    streamStop();
+    expect(streamSocketSize()).toBe(0);
+    expect(streamSocketRefs(fp)).toBe(0);
+    await getStreamWire();
+    expect(streamSocketSize()).toBe(1);
+    expect(streamSocketRefs(streamWireFingerprint())).toBe(3);
+    expect(unpinChartSlot('slot-1')).toBeUndefined();
+    expect(streamSocketRefs(streamWireFingerprint())).toBe(2);
+    expect(unpinChartSlot('slot-2')).toBeUndefined();
+    expect(streamSocketSize()).toBe(1);
+    expect(streamSocketRefs(streamWireFingerprint())).toBe(1);
+  });
+
+  it('unpin then streamStop then getWire re-pins only the remaining slot', async () => {
+    const fp = streamWireFingerprint();
+    pinChartSlot('slot-keep');
+    pinChartSlot('slot-drop');
+    expect(streamSocketRefs(fp)).toBe(2);
+    expect(unpinChartSlot('slot-drop')).toBeUndefined();
+    expect(streamSocketRefs(fp)).toBe(1);
+    streamStop();
+    expect(streamSocketSize()).toBe(0);
+    await getStreamWire();
+    expect(streamSocketSize()).toBe(1);
+    expect(streamSocketRefs(streamWireFingerprint())).toBe(2);
+    expect(unpinChartSlot('slot-drop')).toBeUndefined();
+    expect(streamSocketRefs(streamWireFingerprint())).toBe(2);
+    expect(unpinChartSlot('slot-keep')).toBeUndefined();
+    expect(streamSocketRefs(streamWireFingerprint())).toBe(1);
+  });
+
+  it('streamStop with no pins then getWire is one primary socket', async () => {
+    expect(streamSocketSize()).toBe(0);
+    streamStop();
+    expect(streamSocketSize()).toBe(0);
+    await getStreamWire();
+    expect(streamSocketSize()).toBe(1);
+    expect(streamSocketRefs(streamWireFingerprint())).toBe(1);
+  });
+
+  it('streamStop then getWire pins onto the current fingerprint', async () => {
+    const fpA = streamWireFingerprint();
+    expect(pinChartSlot('slot-A')?.status).toBe('live');
+    expect(streamSocketRefs(fpA)).toBe(1);
+    streamStop();
+    setStore('endpoint', 'http://other.test');
+    const fpB = streamWireFingerprint();
+    expect(fpB).not.toBe(fpA);
+    await getStreamWire();
+    expect(streamSocketSize()).toBe(1);
+    expect(streamSocketRefs(fpA)).toBe(0);
+    expect(streamSocketRefs(fpB)).toBe(2);
+    expect(unpinChartSlot('slot-A')).toBeUndefined();
+    expect(streamSocketRefs(fpB)).toBe(1);
   });
 });
