@@ -18,56 +18,80 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * AXB1-HP engine policy.
+ * Redesign2 data-plane policy.
  *
- * Default levers for the high-performance engine plane. Supports three
- * profiles: hp-sab (SharedArrayBuffer hot ring, cross-origin isolated),
- * hp-zero-sab (AXB1 WS without SAB, no COOP/COEP), and calculator
- * (legacy JSON fallback).
+ * This module documents the default levers for the backend-owned, exchange-truth
+ * data plane. It is intentionally inert in Phase 1: importing or reading these
+ * values does not change runtime behavior. The purpose is to remove implicit
+ * default decisions from scattered call sites before wiring Redesign2 transport.
  *
- * @module engine/policy
+ * @module engines/data-plane-policy
  */
 
-/** Engine profile identifier. */
-export type EngineProfile = 'hp-sab' | 'hp-zero-sab' | 'calculator';
+/** How the client may use a venue stream under Redesign2. */
+export type ClientVenueStreamMode = 'disabled' | 'verification';
 
-/** Engine profile capabilities. */
+/** Documented default levers for the Redesign2 data plane. */
+export interface DataPlanePolicy {
+  /** Backend exchange feed is the canonical price source. */
+  backendTruthDefault: true;
+  /** Client venue streams are not eval input by default. */
+  clientVenueStreamMode: ClientVenueStreamMode;
+  /** Server-owned stream persists metadata only, not a competing dataset. */
+  serverOwnedPersistence: 'metadata-only';
+  /** Bar-close values are re-verified against backend truth. */
+  barCloseVerification: 'enabled';
+  /** New script sessions use a websocket connection when available. */
+  webSocketPreferred: true;
+  /** Full run/apply happens once per useful session. */
+  fullRunOnce: true;
+  /** Live updates are delta-only after the full result. */
+  liveDeltaOnly: true;
+}
+
+/** Phase 1 default policy. No runtime code consumes this yet. */
+export const DEFAULT_DATA_PLANE_POLICY: Readonly<DataPlanePolicy> = {
+  backendTruthDefault: true,
+  clientVenueStreamMode: 'verification',
+  serverOwnedPersistence: 'metadata-only',
+  barCloseVerification: 'enabled',
+  webSocketPreferred: true,
+  fullRunOnce: true,
+  liveDeltaOnly: true,
+};
+
+/** How an engine participates in the data plane (final/plan.mdx §5). */
+export type EngineProfile = 'stream' | 'calculator';
+
 export interface EngineProfileCaps {
-  /** SAB hot ring available (cross-origin isolated). */
-  sab?: boolean;
-  /** GPU painter available (WebGL2 / WebGPU). */
-  gpu?: boolean;
-  /** AXB1 WS stream available. */
-  stream?: boolean;
+  liveStream?: boolean;
 }
 
 /**
- * Choose the engine profile from declared capabilities.
+ * Choose the engine profile from declared capabilities (F-08).
  *
- * Priority: hp-sab (SAB + GPU) > hp-zero-sab (AXB1 WS, no SAB) >
- * calculator (legacy JSON path). Falls back to calculator when nothing
- * is available — the chart never strands without data.
+ * Strictly opt-in: only `liveStream === true` (from `features.live_stream`)
+ * selects `stream`. Anything else — including `null`/unresolved capabilities
+ * while health is still loading — fails open to `calculator` (bars-in), so the
+ * default flip can never strand the chart without data.
  */
-export function profileForCapabilities(caps: EngineProfileCaps | null | undefined): EngineProfile {
-  if (caps?.sab === true) return 'hp-sab';
-  if (caps?.stream === true) return 'hp-zero-sab';
-  return 'calculator';
+export function profileForCapabilities(
+  caps: EngineProfileCaps | null | undefined,
+): EngineProfile {
+  return caps?.liveStream === true ? 'stream' : 'calculator';
 }
 
-/** Default policy levers for the AXB1-HP engine. */
-export const AXB1_HP_DEFAULT_LEVERS = [
-  'historyBars',
+/**
+ * Policy levers that can materially change picture/runtime behavior.
+ * Keep this list synchronized with redesign2-plan.mdx.
+ */
+export const DATA_PLANE_DEFAULT_LEVERS = [
+  'live.rerunOn',
   'rollingWindowBars',
+  'historyBars',
+  'autoload',
   'engine',
   'datasetPersistence',
   'endpoint',
-  'health features (data_session, live_modes, websocket, sab, gpu)',
+  'health features (data_session, live_modes, websocket)',
 ] as const;
-
-/** Rung selection thresholds. */
-export const HP_RUNG_THRESHOLDS = {
-  /** Minimum bars for SAB hot ring allocation. */
-  MIN_SAB_BARS: 500,
-  /** Minimum bars for GPU painter. */
-  MIN_GPU_BARS: 1000,
-} as const;

@@ -8,7 +8,7 @@
 * [src/data](data.md) - Background Data Source Manager — multi-page OHLCV backfill to a past date.
 * [src/desktop](desktop.md) - AXIS desktop (Tauri) shell helpers.
 * [src/editor](editor.md) - Root component for the standalone editor window (?view=editor).
-* [src/engine](engine.md) - AXB1-HP engine module barrel.
+* [src/engine](engine.md) - Redesign2 engine module barrel.
 * [src/engines](engines.md) - src/engines contains batch.ts, catalog.ts, chart-data-session.ts, and 14 more files.
 * [src/hp](hp.md) - What remains of the old HP tree: the AXB1 codec and the Pine execution context.
 * [src/indicators](indicators.md) - src/indicators contains IndicatorCard.tsx, IndicatorPanel.tsx, apply-context.ts, and 14 more files.

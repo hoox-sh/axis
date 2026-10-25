@@ -18,48 +18,39 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * AXB1-HP engine feature flag.
+ * Feature flag for the engine-owned data plane (F-09).
  *
- * HP engine enable/disable and SAB mode flags. When disabled, the calculator
- * profile is always used as fallback.
+ * The new stream engine is strictly opt-in: unless this flag is on, every
+ * evaluation takes the legacy `serverEngine` path byte-for-byte. The flag is
+ * a runtime localStorage toggle (`axis.engine.stream.enabled === '1'`) so a
+ * build can carry both paths during the rollout; flipping it needs no rebuild.
  *
  * @module engine/feature-flag
  */
 
-/** Key for the HP engine feature flag in store/config. */
-export const HP_ENGINE_FLAG_KEY = 'axis.engine.hp.disabled';
+import { createFlagPair } from '../utils/flags';
 
-/** Key for the SAB mode flag. */
-export const SAB_MODE_FLAG_KEY = 'axis.engine.hp.sab';
+const FLAG_KEY = 'axis.engine.stream.enabled';
+const DISABLE_KEY = 'axis.engine.stream.disabled';
 
-/** Whether the HP engine is disabled. */
-export function isHpEngineDisabled(): boolean {
-  try {
-    const val =
-      typeof store !== 'undefined' && store.engine
-        ? String(store.engine.flags?.hpDisabled ?? '').trim()
-        : '';
-    return val === '1' || val === 'true';
-  } catch {
-    return false;
-  }
+const streamFlag = createFlagPair({ enabledKey: FLAG_KEY, disabledKey: DISABLE_KEY });
+
+/** True when the new stream engine path is enabled for this tab. */
+export function isStreamEngineEnabled(): boolean {
+  return streamFlag.isEnabled();
 }
 
-/** Whether the HP engine is enabled. */
-export function isHpEngineEnabled(): boolean {
-  return !isHpEngineDisabled();
+/** Enable or disable the stream engine path for this tab. */
+export function setStreamEngineEnabled(on: boolean): void {
+  streamFlag.setEnabled(on);
 }
 
-/** SAB mode: 'on', 'off', or 'auto'. */
-export function sabMode(): 'on' | 'off' | 'auto' {
-  try {
-    const val =
-      typeof store !== 'undefined' && store.engine
-        ? String(store.engine.flags?.sabMode ?? 'auto').trim()
-        : 'auto';
-    if (val === 'on' || val === 'off') return val as 'on' | 'off';
-    return 'auto';
-  } catch {
-    return 'auto';
-  }
+/**
+ * True when the stream path is explicitly opted out for this tab.
+ * Opt-out wins over everything (kill switch).
+ */
+export function isStreamEngineDisabled(): boolean {
+  return streamFlag.isDisabled();
 }
+
+export const STREAM_ENGINE_FLAG_KEY = FLAG_KEY;
