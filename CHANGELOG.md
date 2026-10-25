@@ -21,6 +21,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Fixed
 
+- **A forming tick notifies Solid once per frame.** The bar value is written immediately. The quote tick and the tip subscription flush together on the next animation frame, so a burst of ticks does not re-render the price chrome once per tick. A new bar and a window slide still commit immediately.
+
 - **Pane badges sit on the shared chart's plot cell.** On the one-chart layout, a volume or indicator badge was rebuilt onto the hidden placeholder the next time badges refreshed. The badge now stays on that pane's plot cell, and a refresh finds it there. The multi-chart rollback still badges its own pane div.
 
 - **Script and strategy runs stay on the WebSocket.** A failed socket run does not POST `/run` or open a REST data session. Live scripts that miss the stream wait on the socket instead of falling back to `venue+REST`. REST `/run` remains only when WebSocket is explicitly turned off.

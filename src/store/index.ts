@@ -41,6 +41,7 @@
 
 import { batch } from 'solid-js';
 import { createStore, reconcile, unwrap } from 'solid-js/store';
+import { scheduleLiveFrame } from './live-frame';
 import type {
   AccountTier,
   AppState,
@@ -3580,11 +3581,11 @@ export function appendBar(bar: Bar): BarAppendResult {
           dev: typeof import.meta !== 'undefined' && import.meta.env?.DEV === true,
         });
       }
-      // Same open bar — fine-grained path set (no full-array clone).
-      // The payload is normalised first: Solid's store setter *merges* an
-      // object into the existing node, so a tick without a volume would keep
-      // the previous volume and draw a stale histogram.
-      setStore('bars', n - 1, normalizeBarPayload(bar));
+      // Same open bar. Write the raw node now so readers see the tick.
+      // Solid hears this index once per frame, not once per tick.
+      Object.assign(unwrap(tip) as Bar, normalizeBarPayload(bar));
+      frameTipIndex = n - 1;
+      scheduleLiveFrame(flushLiveFrame);
       if (store.live.lastBarTime !== bar.time) {
         setStore('live', 'lastBarTime', bar.time);
       }
@@ -3609,6 +3610,7 @@ export function appendBar(bar: Bar): BarAppendResult {
     const raw = unwrap(b) as Bar[];
     const next = raw.slice(n - (limit - 1));
     next.push(bar);
+    frameTipIndex = null;
     setStore('bars', next);
     // Keep the multi-chart slot cache in step: it holds the *same* array
     // reference, so a replaced array would leave the slot on the old window
@@ -3696,9 +3698,34 @@ export function recordRunLatency(ms: number) {
   setStore('lastRunMs', ms);
 }
 
+/** Tip index waiting for this frame's Solid commit. Null when none. */
+let frameTipIndex: number | null = null;
+/** Latest quote tick waiting for this frame's Solid commit. */
+let frameTick: {
+  time: number;
+  price: number;
+  dir: 'up' | 'down' | 'flat';
+  at: number;
+  symbol: string;
+} | null = null;
+
+function flushLiveFrame(): void {
+  const tip = frameTipIndex;
+  const tick = frameTick;
+  frameTipIndex = null;
+  frameTick = null;
+  if (tip != null && tip >= 0 && tip < store.bars.length && store.bars[tip]) {
+    setStore('bars', tip, { ...(unwrap(store.bars[tip]) as Bar) });
+  }
+  if (tick) {
+    setStore('telemetry', 'lastTick', tick);
+    setTelemetryPlane('stream', { lastEventAt: tick.at });
+  }
+}
+
 /** Record last live tick price/time and bump stream `lastEventAt`. */
 export function noteTick(price: number, time: number, symbol: string = store.symbol) {
-  const prevTick = store.telemetry?.lastTick;
+  const prevTick = frameTick ?? store.telemetry?.lastTick;
   // Direction is only meaningful within the same symbol stream.
   let dir: 'up' | 'down' | 'flat' = 'flat';
   if (prevTick != null && (prevTick.symbol === undefined || prevTick.symbol === symbol)) {
@@ -3706,8 +3733,8 @@ export function noteTick(price: number, time: number, symbol: string = store.sym
     if (price > prev) dir = 'up';
     else if (price < prev) dir = 'down';
   }
-  setStore('telemetry', 'lastTick', { time, price, dir, at: Date.now(), symbol });
-  setTelemetryPlane('stream', { lastEventAt: Date.now() });
+  frameTick = { time, price, dir, at: Date.now(), symbol };
+  scheduleLiveFrame(flushLiveFrame);
 }
 
 /** Flip dark/light theme and update chart theme + `data-theme` on `<html>`. */

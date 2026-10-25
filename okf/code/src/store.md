@@ -7,7 +7,7 @@ tags: [code, store]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-25T18:32:15Z
+  at: 2026-10-25T19:22:38Z
 sources:
   - id: tree
     resource: "src/store"
@@ -19,6 +19,7 @@ okf_lock: generated
 # Files
 
 * `index.ts` — AppendLogOpts, BarAppendResult, DEFAULTS, DEFAULT_NOTIFICATIONS, EDITOR_DOC_KEY, EDITOR_RUN_KEY, HISTORY_BARS_DEFAULT, HISTORY_BARS_MAX, HISTORY_BARS_MIN, LEGACY_STORAGE_KEYS, NotifyOpts, PERSIST_SCHEMA_VERSION
+* `live-frame.ts` — _setLiveFrameSchedulerForTests, scheduleLiveFrame
 * `types.ts` — AccountTier, ActivePlugins, AppState, AppStatus, Bar, ChartThemeState, CompareState, ConnState, Drawing, DrawingPrefs, DrawingToolId, DrawingUi
 
 # Packages

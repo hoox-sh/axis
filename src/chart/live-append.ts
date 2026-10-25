@@ -40,8 +40,8 @@
  * Several `updated` / `appended` ticks in one turn share that flush
  * (`queueMicrotask`). Same-time updates collapse to the latest bar. A new
  * time is kept and applied after the prior bar in the same flush — never a
- * second `setData`. The store write stays synchronous; only the chart paint
- * waits.
+ * second `setData`. The bar value is written immediately. Solid hears a
+ * forming tip, and the quote tick, once per frame.
  *
  * Painting a bar the store rejected is how a stale tick used to reach the
  * library: Lightweight Charts then throws `Cannot update oldest data item`
