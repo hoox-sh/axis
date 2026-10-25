@@ -535,6 +535,48 @@ describe('live-wire diagnostics (MCP stream.get / stream.reset)', () => {
 });
 
 describe('live-wire P1 series + study push', () => {
+  test('the inbox drops forming tips and still delivers the snapshot', async () => {
+    const h = makeHarness();
+    const p = h.wire.ensureSeries('series:k', {});
+    await tick();
+    await tick();
+    for (let i = 0; i < 40; i++) {
+      h.emit({
+        type: 'delta',
+        id: 'series:k',
+        sessionId: 'ses',
+        seq: i + 1,
+        payload: {
+          forming: true,
+          bars: [{ time: 100, open: 1, high: 1, low: 1, close: i, volume: 1 }],
+          base_index: 0,
+          count: 1,
+          tail_len: 1,
+        },
+      });
+    }
+    h.emit({
+      type: 'close',
+      id: 'series:k',
+      sessionId: 'ses',
+      seq: 90,
+      payload: { index: 0, time: 100, ohlcv: { open: 1, high: 1, low: 1, close: 1, volume: 1 } },
+    });
+    expect(h.wire.inboxDepth('series:k')).toBeLessThanOrEqual(32);
+    expect(h.wire.inboxDepth('series:k')).toBeGreaterThan(0);
+    h.emit({
+      type: 'full',
+      id: 'series:k',
+      sessionId: 'ses',
+      seq: 100,
+      payload: { count: 1, bars: BARS },
+    });
+    const bars = await p;
+    expect(bars.length).toBeGreaterThan(0);
+    const queued = h.wire.inboxDepth('series:k');
+    expect(queued).toBeLessThanOrEqual(32);
+  });
+
   test('series delta paints without an applier and advances seq', async () => {
     const h = makeHarness();
     const p = h.wire.ensureSeries('series:binance|spot|BTC/USDT|1m', {});

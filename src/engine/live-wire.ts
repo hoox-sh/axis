@@ -163,6 +163,8 @@ const SNAPSHOT_BACKOFF_MS = [50, 200] as const;
  * A hidden tab must not replay every tick it missed.
  */
 export const HIDDEN_WAKE_MS = 50;
+/** Per-subscription inbox. Extra forming tips are dropped; closes and snapshots stay. */
+const INBOX_CAP = 32;
 
 function historyBarsOf(meta: Record<string, unknown> | undefined): number {
   const n = Number(meta?.history_bars);
@@ -530,12 +532,39 @@ export class StreamLiveWire {
       return;
     }
     if (frame.id) {
-      const queue = this.inbox.get(frame.id) ?? [];
-      queue.push(frame);
-      this.inbox.set(frame.id, queue);
+      this.enqueueInbox(frame);
       this.notifyInboxWaiters(frame.id);
     }
     this.routeFrame(frame);
+  }
+
+  /** Test seam. Frames waiting for a snapshot waiter. */
+  inboxDepth(subId: string): number {
+    return this.inbox.get(subId)?.length ?? 0;
+  }
+
+  /**
+   * Keep the inbox bounded. Forming tips are the only frames dropped.
+   * A `close`, `full`, `error`, or non-forming delta stays.
+   */
+  private enqueueInbox(frame: WireFrame): void {
+    const id = frame.id;
+    if (!id) return;
+    const queue = this.inbox.get(id) ?? [];
+    queue.push(frame);
+    while (queue.length > INBOX_CAP) {
+      const dropAt = queue.findIndex((item) => this.isDroppableTip(item));
+      if (dropAt < 0) break;
+      queue.splice(dropAt, 1);
+      v1Count('droppedTip');
+    }
+    this.inbox.set(id, queue);
+  }
+
+  private isDroppableTip(frame: WireFrame): boolean {
+    if (frame.type !== 'delta') return false;
+    const payload = frame.payload as { forming?: unknown } | undefined;
+    return payload?.forming === true;
   }
 
   /** True once this series sub has a snapshot (subscribe-once). */
