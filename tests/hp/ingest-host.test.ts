@@ -25,8 +25,9 @@ const tick = () => new Promise<void>((r) => setTimeout(r, 0));
 
 /**
  * Loopback "worker": the host posts {@link HostToIngest}, this replies with the
- * same {@link IngestToHost} messages the real ingest worker emits. Decoding uses
- * the production {@link decodeInbound}, so JSON and AXB1 both travel the port.
+ * same {@link IngestToHost} messages the real ingest worker emits. Decode
+ * (including `JSON.parse`) runs here, not on {@link IngestHostClient}. The
+ * host port only sees objects — G1.
  */
 class FakeIngest {
   readonly sent: string[] = [];
@@ -60,11 +61,15 @@ class FakeIngest {
     };
   }
 
+  /** Post an already-decoded worker message onto the host port. */
   private emit(msg: IngestToHost): void {
     this.transport.onmessage?.({ data: msg } as MessageEvent<IngestToHost>);
   }
 
-  /** Simulate an inbound socket payload (string or AXB1 bytes). */
+  /**
+   * Simulate an inbound socket payload (JSON text or AXB1 bytes).
+   * {@link decodeInbound} is the fake worker; the host never sees the string.
+   */
   push(raw: unknown): void {
     const out = decodeInbound(raw, this.table);
     if (!out.ok) {
@@ -128,7 +133,37 @@ function outbound(fake: FakeIngest): Outbound[] {
   return fake.sent.map((s) => JSON.parse(s) as Outbound);
 }
 
+const nativeJsonParse = JSON.parse.bind(JSON);
+
+/**
+ * Spy `JSON.parse` only while the fake worker posts to the host. Decode of
+ * the socket payload already ran in {@link FakeIngest.push}.
+ */
+function spyParseOnHost(transport: IngestWorkerTransport): { calls: string[]; restore: () => void } {
+  const origOnmessage = transport.onmessage;
+  const calls: string[] = [];
+  transport.onmessage = (ev) => {
+    JSON.parse = ((text: string, reviver?: (this: unknown, key: string, value: unknown) => unknown) => {
+      calls.push(text);
+      return nativeJsonParse(text, reviver);
+    }) as typeof JSON.parse;
+    try {
+      origOnmessage?.call(transport, ev);
+    } finally {
+      JSON.parse = nativeJsonParse;
+    }
+  };
+  return {
+    calls,
+    restore() {
+      transport.onmessage = origOnmessage;
+      JSON.parse = nativeJsonParse;
+    },
+  };
+}
+
 afterEach(() => {
+  JSON.parse = nativeJsonParse;
   setIngestWorkerFactory(null);
   resetEngineTransport();
 });
@@ -183,6 +218,46 @@ describe('IngestHostClient over a fake ingest port', () => {
     expect(frame.type).toBe('full');
     expect(frame.seq).toBe(1);
     expect((frame.payload as { count: number }).count).toBe(1);
+    client.disconnect();
+  });
+
+  test('G1: a JSON string from the socket is an object on onFrame with no host parse', async () => {
+    const { client, fake } = makeClient();
+    await client.connect();
+    const payload = fullJson(1);
+    const seen: unknown[] = [];
+    client.onFrame = (frame) => seen.push(frame);
+    const spy = spyParseOnHost(fake.transport);
+    try {
+      fake.push(payload);
+    } finally {
+      spy.restore();
+    }
+    expect(seen).toHaveLength(1);
+    const frame = seen[0];
+    expect(frame).toBeDefined();
+    expect(typeof frame).toBe('object');
+    expect(frame).not.toBeNull();
+    expect(typeof frame === 'string').toBe(false);
+    expect(frame).toMatchObject({ type: 'full', id: SUB, seq: 1 });
+    expect(spy.calls.filter((text) => text === payload)).toEqual([]);
+    client.disconnect();
+  });
+
+  test('G1: a raw JSON string on the worker port is not parsed on the host', async () => {
+    const { client, fake } = makeClient();
+    await client.connect();
+    const payload = fullJson(1);
+    const seen: unknown[] = [];
+    client.onFrame = (frame) => seen.push(frame);
+    const spy = spyParseOnHost(fake.transport);
+    try {
+      fake.transport.onmessage?.({ data: payload } as unknown as MessageEvent<IngestToHost>);
+    } finally {
+      spy.restore();
+    }
+    expect(seen).toEqual([]);
+    expect(spy.calls).toEqual([]);
     client.disconnect();
   });
 
@@ -333,6 +408,21 @@ describe('IngestHostClient over a fake ingest port', () => {
         seq: 7,
         encoding: 'axb1',
       });
+
+      const nextPayload = fullJson(5);
+      const after: unknown[] = [];
+      client.onFrame = (frame) => after.push(frame);
+      const spy = spyParseOnHost(next.transport);
+      try {
+        next.push(nextPayload);
+      } finally {
+        spy.restore();
+      }
+      expect(after).toHaveLength(1);
+      expect(typeof after[0]).toBe('object');
+      expect(after[0]).toMatchObject({ type: 'full', seq: 5 });
+      expect(spy.calls.filter((text) => text === nextPayload)).toEqual([]);
+      expect(v1MetricsSnapshot().counts.jsonFallback ?? 0).toBe(0);
     } finally {
       wire.reset();
       _resetV1Metrics();
