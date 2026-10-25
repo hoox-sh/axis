@@ -991,6 +991,16 @@ describe('live-wire P1 series + study push', () => {
     expect(h.statuses.map((s) => s.status)).toContain('degraded');
     expect(h.resumes).toHaveLength(1);
     expect(h.resumes[0]).toMatchObject({ id: 's-1' });
+    h.emit({
+      type: 'delta',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 9,
+      payload: { base_index: 0, count: 1, tail_len: 1, plots: [[3]], series: { a: [3] } },
+    });
+    await tick();
+    expect(h.applied).toEqual([{ via: 'stream-full' }]);
+    expect(h.resumes).toHaveLength(1);
   });
 
   test('an axis-less merge over a moved window resubscribes instead of painting', async () => {

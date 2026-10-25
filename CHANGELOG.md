@@ -27,6 +27,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Fixed
 
+- **A subscription that is waiting for a snapshot does not paint deltas.** After a gap or a failed apply, further deltas are dropped until the next `full`. That snapshot clears the wait and paints once.
+
 - **A late snapshot does not paint over a newer sequence.** A full whose `seq` is behind the cursor already applied for that subscription is dropped. The newer bars and the newer seq stay.
 
 - **A closed bar whose OHLC changes after commit is reported.** The update is still applied, so a later verified close can correct the candle. Dev warns on every new bar time. Production warns about 1 in 32 times, once per bar.

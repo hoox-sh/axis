@@ -297,6 +297,8 @@ export class StreamLiveWire {
   private readonly scriptInputSig = new Map<string, string>();
   /** Subs with an outstanding axis-resubscribe (one resub per full snapshot). */
   private readonly axisResubPending = new Set<string>();
+  /** Seq gap: drop deltas until the next full. Axis repair does not use this. */
+  private readonly holdUntilFull = new Set<string>();
   /** `history_bars` the script subscription was created with. */
   private readonly scriptDepth = new Map<string, number>();
   /** Inbox for frames that arrive before their waiter (one TCP segment can
@@ -659,6 +661,7 @@ export class StreamLiveWire {
         }
         const payload = full.payload as Record<string, unknown>;
         this.axisResubPending.delete(input.subId);
+        this.holdUntilFull.delete(input.subId);
         applier.applyFull(scriptFullForApplier(payload, full.seq));
         this.appliedSeq.set(input.subId, typeof full.seq === 'number' ? full.seq : 0);
         this.handlers.onStatus(input.subId, 'live');
@@ -896,6 +899,8 @@ export class StreamLiveWire {
     const bars = toBars(payload.bars);
     const seq = typeof frame.seq === 'number' ? frame.seq : 0;
     const prevSeq = this.appliedSeq.get(subId);
+    if (frame.type === 'full') this.holdUntilFull.delete(subId);
+    if (frame.type !== 'full' && this.holdUntilFull.has(subId)) return;
     if (frame.type === 'full' && prevSeq != null && seq < prevSeq) return;
     if (frame.type === 'full') {
       if (!bars.length) return;
@@ -963,6 +968,7 @@ export class StreamLiveWire {
       const seq = typeof frame.seq === 'number' ? frame.seq : null;
       // A snapshot that left before a newer delta must not paint over it.
       if (wasLive && seq != null && seq < applier.lastSeq) return;
+      this.holdUntilFull.delete(subId);
       this.axisResubPending.delete(subId);
       applier.applyFull(scriptFullForApplier(payload, frame.seq));
       if (typeof frame.seq === 'number') this.appliedSeq.set(subId, frame.seq);
@@ -973,6 +979,9 @@ export class StreamLiveWire {
       }
       return;
     }
+    // Stale until the snapshot lands. A delta in between would paint a
+    // half-applied generation.
+    if (this.holdUntilFull.has(subId)) return;
     const baseIndex = Number(payload.base_index ?? -1);
     const count = Number(payload.count ?? -1);
     const tailLen = Number(payload.tail_len ?? -1);
@@ -1019,6 +1028,7 @@ export class StreamLiveWire {
       const incomingSeq = typeof frame.seq === 'number' ? frame.seq : -1;
       if (classifySeqGap(applier.lastSeq, incomingSeq, seqAckFrom).kind !== 'continuous') {
         v1Count('resync');
+        this.holdUntilFull.add(subId);
         this.handlers.onStatus(subId, 'degraded', { message: 'delta gap — resubscribing' });
         const gapCtx = this.scriptCtx.get(subId);
         const gapBars = gapCtx?.bars ?? [];
@@ -1121,6 +1131,7 @@ export class StreamLiveWire {
 
   release(subId: string): void {
     this.axisResubPending.delete(subId);
+    this.holdUntilFull.delete(subId);
     this.appliers.delete(subId);
     this.appliedSeq.delete(subId);
     this.jsonSubs.delete(subId);
