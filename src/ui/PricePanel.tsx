@@ -29,6 +29,7 @@ import { type Component, Show, createEffect, createSignal, onCleanup } from 'sol
 import { store, isPanelOpen } from '../store';
 import { FloatableShell } from './panels/FloatableShell';
 import { formatExtraPrice } from './extras/format';
+import { displayedLastPrice } from './extras/quote';
 import { fetchWatchlistTickers } from '../data/watchlist-tickers';
 
 /** Float-only price panel (big last price + 24h change). */
@@ -60,13 +61,16 @@ export const PricePanel: Component = () => {
     const bars = store.bars;
     // Live tick is stream-scoped: ignore it when it belongs to a previous
     // symbol (symbol switch before the first new tick arrives).
-    const live =
+    const tickPrice =
       tick && (tick.symbol === undefined || tick.symbol === store.symbol) && Number.isFinite(tick.price)
         ? (tick.price as number)
         : NaN;
     const last = bars.length ? bars[bars.length - 1]?.close : NaN;
-    if (Number.isFinite(live)) return live as number;
-    return Number.isFinite(last) ? (last as number) : NaN;
+    return displayedLastPrice({
+      tickPrice,
+      barClose: Number.isFinite(last) ? (last as number) : NaN,
+      streamState: store.telemetry?.stream?.state,
+    });
   };
 
   const change = () => {

@@ -29,7 +29,7 @@
 import { type Component, For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { store, isPanelOpen } from '../store';
 import { FloatableShell } from './panels/FloatableShell';
-import { buildQuoteRows, type QuoteRow } from './extras/quote';
+import { buildQuoteRows, displayedLastPrice, type QuoteRow } from './extras/quote';
 import { fetchWatchlistTickers } from '../data/watchlist-tickers';
 
 /** Full quote sheet dock panel for the current symbol. */
@@ -61,6 +61,7 @@ export const QuotePanel: Component = () => {
     void store.bars.length;
     void store.chartDataGen;
     void store.telemetry?.lastTick;
+    void store.telemetry?.stream?.state;
     void store.symbol;
     void store.interval;
     const tick = store.telemetry?.lastTick;
@@ -68,11 +69,14 @@ export const QuotePanel: Component = () => {
     const last = bars.length ? bars[bars.length - 1] : null;
     // Live tick is stream-scoped: ignore it when it belongs to a previous
     // symbol (symbol switch before the first new tick arrives).
-    const live =
+    const tickPrice =
       tick && (tick.symbol === undefined || tick.symbol === store.symbol) && Number.isFinite(tick.price)
         ? (tick.price as number)
         : NaN;
-    const price = Number.isFinite(live) ? live : (last && Number.isFinite(last.close) ? (last.close as number) : NaN);
+    const barClose = last && Number.isFinite(last.close) ? (last.close as number) : NaN;
+    const streamState = store.telemetry?.stream?.state;
+    const price = displayedLastPrice({ tickPrice, barClose, streamState });
+    const showTick = streamState == null || streamState === 'open';
     const venue =
       store.provider?.venue && store.provider.venue !== 'generic' && store.provider.venue !== 'cache'
         ? store.provider.venue
@@ -82,7 +86,7 @@ export const QuotePanel: Component = () => {
       venue,
       bars,
       lastPrice: price,
-      lastTickAt: tick && Number.isFinite(tick.at) ? (tick.at as number) : null,
+      lastTickAt: showTick && tick && Number.isFinite(tick.at) ? (tick.at as number) : null,
       change24h: change24h(),
     });
   });

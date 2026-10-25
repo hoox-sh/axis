@@ -58,6 +58,25 @@ export function formatCompactVolume(v: number): string {
   return `${Math.round(v * 100) / 100}`;
 }
 
+/**
+ * A missing stream plane still follows the tick. Connecting, degraded,
+ * error, and closed keep the card on the candle so it cannot run ahead
+ * of the chart.
+ */
+export function streamAllowsLivePrice(state: string | null | undefined): boolean {
+  return state == null || state === 'open';
+}
+
+/** Tick price while the stream is open; otherwise the last painted close. */
+export function displayedLastPrice(opts: {
+  tickPrice: number;
+  barClose: number;
+  streamState?: string | null;
+}): number {
+  if (streamAllowsLivePrice(opts.streamState) && Number.isFinite(opts.tickPrice)) return opts.tickPrice;
+  return Number.isFinite(opts.barClose) ? opts.barClose : NaN;
+}
+
 /** UTC clock HH:MM:SS for a wall-ms tick time. */
 export function formatTickTime(at: number | null): string {
   if (at == null || !Number.isFinite(at)) return '—';

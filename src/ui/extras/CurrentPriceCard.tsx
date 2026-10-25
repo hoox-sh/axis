@@ -27,6 +27,7 @@
 import { type Component, Show } from 'solid-js';
 import { useNow } from '../clock';
 import { store } from '../../store';
+import { displayedLastPrice } from './quote';
 import { trendOverTicks } from './trend';
 import { formatExtraPrice } from './format';
 import {
@@ -46,19 +47,21 @@ export const CurrentPriceCard: Component = () => {
    */
   const livePrice = () => {
     const tick = store.telemetry?.lastTick;
-    return tick &&
+    const tickPrice =
+      tick &&
       (tick.symbol === undefined || tick.symbol === store.symbol) &&
       Number.isFinite(tick.price)
-      ? (tick.price as number)
-      : NaN;
-  };
-  const price = () => {
-    const live = livePrice();
+        ? (tick.price as number)
+        : NaN;
     const bars = store.bars;
     const last = bars.length ? bars[bars.length - 1]?.close : NaN;
-    if (Number.isFinite(live)) return live as number;
-    return Number.isFinite(last) ? (last as number) : NaN;
+    return displayedLastPrice({
+      tickPrice,
+      barClose: Number.isFinite(last) ? (last as number) : NaN,
+      streamState: store.telemetry?.stream?.state,
+    });
   };
+  const price = () => livePrice();
   /** Trend head is the live tick when available — the arrow reacts to every tick, not just bar closes. */
   const trend = () => trendOverTicks(store.bars, store.extras.priceCard.tickLength, livePrice());
   /**

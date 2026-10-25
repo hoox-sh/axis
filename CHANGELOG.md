@@ -27,6 +27,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Fixed
 
+- **The quote card stays on the candle while the stream is down.** The quote sheet, the float price panel, and the chart price card use the last bar close when the stream plane is connecting, degraded, closed, or in error. An open stream still shows the live tick.
+
 - **The single chart does not copy its time range or crosshair onto a second chart.** Volume and indicator panes share the price chart's time scale. Range mirroring and crosshair mirroring run only for the multi-chart rollback.
 
 - **A subscription that is waiting for a snapshot does not paint deltas.** After a gap or a failed apply, further deltas are dropped until the next `full`. That snapshot clears the wait and paints once.
