@@ -134,6 +134,23 @@ describe('PaneManager', () => {
     pm.resize('price', 180);
   });
 
+  it('single layout does not copy the logical range onto a second chart', () => {
+    setChartLayoutMode('single');
+    const price = pm.createPane('price', 'price', 'Price');
+    const volume = pm.createPane('volume', 'volume', 'Volume', 80);
+    let sets = 0;
+    const ts = price.chart.timeScale() as { setVisibleLogicalRange: (range: unknown) => void };
+    const orig = ts.setVisibleLogicalRange.bind(ts);
+    ts.setVisibleLogicalRange = (range: unknown) => {
+      sets += 1;
+      orig(range);
+    };
+    pm.alignTimeRangesFromPrice();
+    pm.syncTimeScales();
+    expect(sets).toBe(0);
+    expect(pm.getPane('volume')?.chart).toBe(volume.chart);
+  });
+
   it('syncTimeScales with 2 panes', () => {
     pm.createPane('price', 'price', 'Price');
     pm.createPane('volume', 'volume', 'Volume', 80);

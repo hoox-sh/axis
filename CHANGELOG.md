@@ -27,6 +27,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Fixed
 
+- **The single chart does not copy its time range or crosshair onto a second chart.** Volume and indicator panes share the price chart's time scale. Range mirroring and crosshair mirroring run only for the multi-chart rollback.
+
 - **A subscription that is waiting for a snapshot does not paint deltas.** After a gap or a failed apply, further deltas are dropped until the next `full`. That snapshot clears the wait and paints once.
 
 - **A late snapshot does not paint over a newer sequence.** A full whose `seq` is behind the cursor already applied for that subscription is dropped. The newer bars and the newer seq stay.

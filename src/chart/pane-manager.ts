@@ -1665,6 +1665,8 @@ export class PaneManager {
 
   /** Push the price pane logical range onto all other visible panes. */
   alignTimeRangesFromPrice() {
+    // One chart has one time scale. Mirroring would write the same range back.
+    if (usesSingleChartLayout()) return;
     const price =
       this.panes.get('price')?.visible !== false ? this.panes.get('price') : null;
     const src = price ?? this.getAllPanes().find((p) => p.visible);
@@ -2302,9 +2304,10 @@ export class PaneManager {
           this.pointerInside === true &&
           (param as MouseEventParams & { sourceEvent?: unknown }).sourceEvent == null;
 
-        if (!isDataDriven) {
+        if (!isDataDriven && !usesSingleChartLayout()) {
           // Mirror onto all other panes once per animation frame (10k+ bars:
           // setCrosshairPosition per move × N panes was a major hover cost).
+          // A single chart has one crosshair; there is no second pane to drive.
           const sourcePane = pane;
           const snap = param;
           this.crosshairRaf.schedule(() => {
