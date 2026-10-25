@@ -273,6 +273,7 @@ describe('PaneManager', () => {
       _crosshairHandlers: Array<(p: unknown) => void>;
     };
     const rsiChart = rsi.chart as unknown as {
+      setCrosshairPosition: (...args: unknown[]) => void;
       _crosshairHandlers: Array<(p: unknown) => void>;
     };
     expect(rsiChart._crosshairHandlers).toBe(priceChart._crosshairHandlers);
@@ -282,18 +283,32 @@ describe('PaneManager', () => {
       mirrors += 1;
       orig(...args);
     };
+    let rsiMirrors = 0;
+    const origRsi = rsiChart.setCrosshairPosition.bind(rsiChart);
+    rsiChart.setCrosshairPosition = (...args: unknown[]) => {
+      rsiMirrors += 1;
+      origRsi(...args);
+    };
+    const T = 1_700_000_000;
+    const times: unknown[] = [];
     let lastTime: unknown;
     pm.syncCrosshair((data) => {
       lastTime = data.time;
+      times.push(data.time);
     });
     expect(priceChart._crosshairHandlers).toHaveLength(1);
+    expect(rsiChart._crosshairHandlers).toHaveLength(1);
     priceChart._crosshairHandlers[0]!({
-      time: 1_700_000_000,
+      time: T,
       point: { x: 10, y: 20 },
       seriesData: new Map(),
     });
-    expect(lastTime).toBe(1_700_000_000);
+    const uniqueTimes = [...new Set(times)];
+    expect(lastTime).toBe(T);
+    expect(times).toEqual([T]);
+    expect(uniqueTimes).toEqual([T]);
     expect(mirrors).toBe(0);
+    expect(rsiMirrors).toBe(0);
   });
 
   it('syncTimeScales with 2 panes', () => {
