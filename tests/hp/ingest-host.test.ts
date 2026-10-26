@@ -37,6 +37,11 @@ class FakeIngest {
   lastConnect: Extract<HostToIngest, { type: 'connect' }> | null = null;
   /** When false, `connect` stays pending until the test posts a status. */
   autoOpen = true;
+  /**
+   * When true with an `authToken`, defer `open` until {@link authOk} — mirrors
+   * the real ingest worker waiting for `auth.ok` before signaling the host.
+   */
+  waitForAuthOk = false;
   transport: IngestWorkerTransport;
   terminated = false;
 
@@ -47,6 +52,13 @@ class FakeIngest {
         if (msg.type === 'connect') {
           self.lastConnect = msg;
           if (!self.autoOpen) return;
+          if (self.waitForAuthOk && msg.authToken) {
+            // Real worker sends auth on socket open and waits for auth.ok.
+            self.sent.push(
+              JSON.stringify({ type: 'auth', ts: Date.now(), payload: { token: msg.authToken } }),
+            );
+            return;
+          }
           self.emit({ type: 'status', status: 'open' });
           self.emit({ type: 'open', first: true });
           return;
@@ -63,6 +75,12 @@ class FakeIngest {
       onmessage: null,
       onerror: null,
     };
+  }
+
+  /** Complete a {@link waitForAuthOk} connect (concept: auth before subscribe). */
+  authOk(): void {
+    this.emit({ type: 'status', status: 'open' });
+    this.emit({ type: 'open', first: true });
   }
 
   /** Post an already-decoded worker message onto the host port. */
@@ -209,6 +227,31 @@ describe('IngestHostClient over a fake ingest port', () => {
   test('connect resolves when the worker reports open', async () => {
     const { client } = makeClient();
     await client.connect();
+    expect(client.isOpen).toBe(true);
+    client.disconnect();
+  });
+
+  test('with an auth token, open waits for auth.ok before connect resolves', async () => {
+    setEngineTransport('worker');
+    const fake = new FakeIngest();
+    fake.waitForAuthOk = true;
+    setIngestWorkerFactory(() => fake.transport);
+    const client = new IngestHostClient({
+      endpoint: 'https://pynescript.online',
+      authToken: 'engine-key',
+    });
+    let opened = false;
+    const connecting = client.connect().then(() => {
+      opened = true;
+    });
+    await tick();
+    expect(opened).toBe(false);
+    expect(client.isOpen).toBe(false);
+    const auth = outbound(fake).find((f) => f.type === 'auth');
+    expect(auth?.payload?.token).toBe('engine-key');
+    fake.authOk();
+    await connecting;
+    expect(opened).toBe(true);
     expect(client.isOpen).toBe(true);
     client.disconnect();
   });

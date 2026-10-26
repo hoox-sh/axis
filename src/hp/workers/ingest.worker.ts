@@ -41,6 +41,7 @@ import {
   type LiveProxy,
 } from '../../engine/live-ticket';
 import {
+  INGEST_AUTH_WAIT_MS,
   INGEST_CONNECT_TIMEOUT_MS,
   INGEST_HEARTBEAT_MS,
   INGEST_PONG_TIMEOUT_MS,
@@ -48,6 +49,7 @@ import {
   type HostToIngest,
   type IngestToHost,
 } from './protocol';
+import { isAuthOkFrame } from '../../engine/frames';
 
 interface IngestWorkerScope {
   postMessage: (msg: IngestToHost) => void;
@@ -66,6 +68,7 @@ let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 let pongTimer: ReturnType<typeof setTimeout> | null = null;
 let connectTimer: ReturnType<typeof setTimeout> | null = null;
+let authWaitTimer: ReturnType<typeof setTimeout> | null = null;
 let liveUrl = '';
 let authToken: string | undefined;
 let liveProxy: LiveProxy | undefined;
@@ -73,6 +76,8 @@ let liveProxy: LiveProxy | undefined;
 let openGen = 0;
 /** Outbound buffer is over the cap. Forming tips are not forwarded. */
 let sendHeld = false;
+/** Socket is up; `open` is deferred until `auth.ok` (or auth wait timeout). */
+let pendingOpen: { first: boolean; socket: WebSocket } | null = null;
 
 const coalescer = new TipCoalescer((frames) => {
   // Stage mark for the §14.2 split: the worker clock shares its time origin
@@ -93,6 +98,21 @@ function clearHeartbeat(): void {
     clearTimeout(pongTimer);
     pongTimer = null;
   }
+}
+
+function clearAuthWait(): void {
+  if (authWaitTimer) {
+    clearTimeout(authWaitTimer);
+    authWaitTimer = null;
+  }
+  pendingOpen = null;
+}
+
+/** Host `connect()` resolves on `open` — only fire it after auth (or timeout). */
+function finishOpen(first: boolean): void {
+  clearAuthWait();
+  post({ type: 'status', status: 'open' });
+  post({ type: 'open', first });
 }
 
 function startHeartbeat(): void {
@@ -172,11 +192,15 @@ function handleDecoded(decoded: IngestDecode): void {
     return;
   }
   for (const frame of decoded.frames) {
+    if (pendingOpen && isAuthOkFrame(frame) && ws === pendingOpen.socket) {
+      finishOpen(pendingOpen.first);
+    }
     if (frame.type !== 'error' || frame.id) continue;
     const payload = frame.payload as { retryable?: unknown } | undefined;
     if (payload?.retryable === false) {
       authBlocked = true;
       clearReconnect();
+      clearAuthWait();
     }
   }
   const frames = sendHeld
@@ -245,12 +269,24 @@ async function openSocket(): Promise<void> {
     const first = !openedOnce;
     openedOnce = true;
     sendHeld = false;
-    post({ type: 'status', status: 'open' });
-    post({ type: 'open', first });
     startHeartbeat();
     if (authToken) {
-      socket.send(JSON.stringify({ type: 'auth', ts: Date.now(), payload: { token: authToken } }));
+      // Defer host `open` until auth.ok so subscribe cannot beat auth through
+      // the Worker ticket proxy (PYNE UNAUTHORIZED → subscribe-error cooldown).
+      clearAuthWait();
+      pendingOpen = { first, socket };
+      authWaitTimer = setTimeout(() => {
+        if (ws !== socket || !pendingOpen || pendingOpen.socket !== socket) return;
+        finishOpen(first);
+      }, INGEST_AUTH_WAIT_MS);
+      try {
+        socket.send(JSON.stringify({ type: 'auth', ts: Date.now(), payload: { token: authToken } }));
+      } catch {
+        finishOpen(first);
+      }
+      return;
     }
+    finishOpen(first);
   };
 
   socket.onerror = () => {
@@ -268,6 +304,7 @@ async function openSocket(): Promise<void> {
       clearTimeout(connectTimer);
       connectTimer = null;
     }
+    clearAuthWait();
     clearHeartbeat();
     coalescer.flush();
     ws = null;
@@ -293,6 +330,7 @@ function disconnect(): void {
   stopped = true;
   openGen += 1;
   clearReconnect();
+  clearAuthWait();
   clearHeartbeat();
   coalescer.flush();
   if (connectTimer) {

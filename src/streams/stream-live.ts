@@ -62,6 +62,7 @@ import { engineWindowBehindChart, newestBarTime } from '../engines/series-freshn
 import { engineSeriesStale, noteStaleEngineSeries } from '../engines/series-repair';
 import { getActiveEngineConfig } from '../plugins/active';
 import {
+  appendLog,
   clearFeedStatus,
   clearScriptStatus,
   chartWindowLimit,
@@ -307,8 +308,14 @@ function buildWireAt(endpoint: string, authToken: string | undefined): StreamLiv
             ...extra,
             ...(clearStale && extra?.message === undefined ? { message: '' } : {}),
           });
+          if (status === 'error' && extra?.message) {
+            appendLog('error', `Engine series ${status}: ${extra.message}`, 'stream');
+          }
         } else {
           setScriptStatus(subId, status, extra?.message);
+          if (status === 'error' && extra?.message) {
+            appendLog('error', `Engine script ${subId}: ${extra.message}`, 'stream');
+          }
         }
       },
       onSeriesFull: (bars) => {

@@ -15,6 +15,10 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ## [Unreleased]
 
+### Fixed
+
+- **Ingest worker waits for `auth.ok` before signaling host `open`.** With the Worker ticket proxy, subscribe was racing ahead of PYNE auth (`UNAUTHORIZED` → `subscribe-error` cooldown → venue+REST). `INGEST_AUTH_WAIT_MS` (5s) still opens on timeout so a slow key hash cannot wedge the socket.
+
 ### Added
 
 - **P6 flag flip is proven in unit tests.** One test switches worker+single to json+multi and back: the live client and the pane chart identity follow both flags together. The worker transport test also asserts inbound frames are already objects (no window `JSON.parse`).

@@ -756,10 +756,13 @@ export class StreamLiveWire {
       send();
       const full = await this.awaitSnapshot(subId, SNAPSHOT_WAIT_MS, { fatal: true, resend: send });
       if (full.type === 'error') {
+        const body = (full.payload ?? {}) as Record<string, unknown>;
+        const errMsg = String(body.message ?? (full as { message?: unknown }).message ?? 'subscribe failed');
+        const errCode = String(body.code ?? (full as { code?: unknown }).code ?? '');
         this.handlers.onStatus(subId, 'error', {
-          message: String((full.payload as Record<string, unknown>)?.message ?? 'subscribe failed'),
+          message: errCode ? `${errCode}: ${errMsg}` : errMsg,
         });
-        this.fail('subscribe-error');
+        this.fail('subscribe-error', errCode ? `${errCode}: ${errMsg}` : errMsg);
       }
       if (full.type !== 'full') {
         this.fail('no-snapshot', `expected full, got ${full.type}`);

@@ -30,6 +30,13 @@ import type { WireFrame } from '../../engine/live-wire';
 import type { LiveProxy } from '../../engine/live-ticket';
 
 export const INGEST_CONNECT_TIMEOUT_MS = 5_000;
+/**
+ * After sending `auth`, wait this long for `auth.ok` before signaling `open`.
+ * The Worker ticket proxy adds a hop; subscribe must not race ahead of auth
+ * (PYNE answers UNAUTHORIZED and the live wire cools down). A timeout still
+ * opens so a slow key hash cannot wedge the socket forever.
+ */
+export const INGEST_AUTH_WAIT_MS = 5_000;
 export const INGEST_HEARTBEAT_MS = 15_000;
 export const INGEST_PONG_TIMEOUT_MS = 5_000;
 export const INGEST_TIP_COALESCE_MS = 16;
