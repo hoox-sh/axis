@@ -367,6 +367,12 @@ export class StreamLiveWire {
   private readonly axisResubPending = new Set<string>();
   /** Seq gap: drop deltas until the next full. Axis repair does not use this. */
   private readonly holdUntilFull = new Set<string>();
+  /**
+   * Script subscribe / input-resubscribe in flight. A late unsubscribe ack
+   * (`idle`/`released`) must not `dropScriptLocal` the new half-open sub —
+   * that left Momentum blank after an input change while Bollinger stayed up.
+   */
+  private readonly pendingScriptSubscribe = new Set<string>();
   /** Last fresh gap-resync wall time per sub (unsubscribe+subscribe backoff). */
   private readonly gapResyncAt = new Map<string, number>();
   /** Fresh gap-resync attempts since the last successful full. */
@@ -933,6 +939,8 @@ export class StreamLiveWire {
         subId: input.subId,
         indicatorId: input.indicatorId ?? null,
       });
+      // Arm before unsubscribe so the ack cannot wipe the replacement sub.
+      this.pendingScriptSubscribe.add(input.subId);
       this.appliers.delete(input.subId);
       this.appliedSeq.delete(input.subId);
       this.scriptInputSig.delete(input.subId);
@@ -942,6 +950,7 @@ export class StreamLiveWire {
       this.holdUntilFull.delete(input.subId);
       this.gapResyncAt.delete(input.subId);
       this.gapResyncAttempts.delete(input.subId);
+      this.inbox.delete(input.subId);
       applier = undefined;
       try {
         this.client.unsubscribe(input.subId);
@@ -952,12 +961,14 @@ export class StreamLiveWire {
     if (!applier) {
       // A script subscribe must not cool down or fail() the series socket.
       if (this.cooledDown) {
+        this.pendingScriptSubscribe.delete(input.subId);
         throw new StreamFallbackError('cooldown', 'stream in failure cooldown');
       }
       applier = new Redesign2DeltaApplier();
       this.appliers.set(input.subId, applier);
       this.scriptInputSig.set(input.subId, sig);
       this.scriptDepth.set(input.subId, depth);
+      this.pendingScriptSubscribe.add(input.subId);
       this.handlers.onStatus(input.subId, 'connecting');
       try {
         const send = () => {
@@ -982,15 +993,31 @@ export class StreamLiveWire {
           });
         }
         if (full.type === 'error' || full.type !== 'full') {
+          const body = (full.payload ?? {}) as Record<string, unknown>;
+          const errMsg = String(
+            body.message ?? (full as { message?: unknown }).message ?? full.type,
+          );
+          const errCode = String(body.code ?? (full as { code?: unknown }).code ?? '');
           throw new StreamFallbackError(
             'script-subscribe-failed',
-            `expected full, got ${full.type}`,
+            errCode ? `${errCode}: ${errMsg}` : errMsg,
           );
         }
         const payload = full.payload as Record<string, unknown>;
         this.axisResubPending.delete(input.subId);
         this.holdUntilFull.delete(input.subId);
         this.clearGapResync(input.subId);
+        // Re-bind in case a raced status frame cleared the maps mid-await.
+        this.appliers.set(input.subId, applier);
+        this.scriptInputSig.set(input.subId, sig);
+        this.scriptDepth.set(input.subId, depth);
+        this.scriptCtx.set(input.subId, {
+          script: input.script,
+          indicatorId: input.indicatorId,
+          bars: input.bars,
+          meta: input.meta,
+          ...(input.inputs ? { inputs: input.inputs } : {}),
+        });
         const fallbackTimes = this.scriptCtx.get(input.subId)?.bars.map((b) => b.time) ?? null;
         applier.applyFull(scriptFullForApplier(payload, full.seq, fallbackTimes));
         this.appliedSeq.set(input.subId, typeof full.seq === 'number' ? full.seq : 0);
@@ -1000,6 +1027,8 @@ export class StreamLiveWire {
         this.release(input.subId);
         if (e instanceof StreamFallbackError) throw e;
         throw new StreamFallbackError('script-failed', e instanceof Error ? e.message : String(e));
+      } finally {
+        this.pendingScriptSubscribe.delete(input.subId);
       }
       const cached = applier.cached;
       if (!cached) {
@@ -1072,18 +1101,28 @@ export class StreamLiveWire {
     const payload = (frame.payload as Record<string, unknown>) ?? {};
     const code = String(payload.code ?? 'live');
     const message = payload.message as string | undefined;
-    this.handlers.onStatus(frame.id, code as SubscriptionStatus, {
-      message,
-      have: typeof payload.have === 'number' ? payload.have : undefined,
-      need: typeof payload.need === 'number' ? payload.need : undefined,
-    });
+    const isReleaseAck = code === 'idle' || message === 'released';
+    // Own unsubscribe (gap resync / input resub / failed subscribe) — ignore
+    // the ack so it cannot blank the replacement half-open subscription.
+    const ignoreReleaseAck =
+      isReleaseAck &&
+      !frame.id.startsWith('series:') &&
+      (this.holdUntilFull.has(frame.id) || this.pendingScriptSubscribe.has(frame.id));
+    if (!ignoreReleaseAck) {
+      this.handlers.onStatus(frame.id, code as SubscriptionStatus, {
+        message,
+        have: typeof payload.have === 'number' ? payload.have : undefined,
+        need: typeof payload.need === 'number' ? payload.need : undefined,
+      });
+    }
     // Server released the sub (unsubscribe ack or idle eviction). Drop local
     // state so the next streamEvalScript re-subscribes — unless we are already
-    // waiting on a fresh full (our own gap resync just unsubscribed).
+    // waiting on a fresh full / in-flight subscribe (our own unsubscribe).
     if (
       !frame.id.startsWith('series:') &&
       !this.holdUntilFull.has(frame.id) &&
-      (code === 'idle' || message === 'released') &&
+      !this.pendingScriptSubscribe.has(frame.id) &&
+      isReleaseAck &&
       (this.appliers.has(frame.id) || this.appliedSeq.has(frame.id) || this.scriptCtx.has(frame.id))
     ) {
       this.dropScriptLocal(frame.id);
@@ -1716,6 +1755,7 @@ export class StreamLiveWire {
   private dropScriptLocal(subId: string): void {
     this.axisResubPending.delete(subId);
     this.holdUntilFull.delete(subId);
+    this.pendingScriptSubscribe.delete(subId);
     this.clearGapResync(subId);
     this.appliers.delete(subId);
     this.appliedSeq.delete(subId);
@@ -1725,11 +1765,13 @@ export class StreamLiveWire {
     this.scriptDepth.delete(subId);
     this.paintLatest.delete(subId);
     this.paintTail.delete(subId);
+    this.inbox.delete(subId);
   }
 
   release(subId: string): void {
     this.axisResubPending.delete(subId);
     this.holdUntilFull.delete(subId);
+    this.pendingScriptSubscribe.delete(subId);
     this.clearGapResync(subId);
     this.appliers.delete(subId);
     this.appliedSeq.delete(subId);
@@ -1742,6 +1784,7 @@ export class StreamLiveWire {
     this.scriptDepth.delete(subId);
     this.paintLatest.delete(subId);
     this.paintTail.delete(subId);
+    this.inbox.delete(subId);
     try {
       this.client.unsubscribe(subId);
     } catch {

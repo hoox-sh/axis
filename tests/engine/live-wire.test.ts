@@ -1677,6 +1677,72 @@ describe('live-wire P1 series + study push', () => {
     expect(h.wire.snapshotState().subs.some((s) => s.subId === 's-1')).toBe(true);
   });
 
+  test('input-change resubscribe ignores a late idle/released ack and stays live', async () => {
+    // Repro: Momentum Length 10→100 unsubscribed then re-subscribed; the PYNE
+    // release ack arrived during awaitSnapshot and dropScriptLocal wiped the
+    // new applier, so the next eval re-subscribed forever and stayed released.
+    const h = makeHarness();
+    const first = h.wire.evalScript({
+      subId: 'mom',
+      script: 'plot(ta.mom(close, len))',
+      meta: { history_bars: 500 },
+      bars: BARS,
+      inputs: { Length: 10 },
+    });
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: 'mom',
+      sessionId: 'ses',
+      seq: 1,
+      payload: { count: 1, plots: [[1]], series: { Mom: [1] } },
+    });
+    await first;
+    expect(h.wire.snapshotState().subs.some((s) => s.subId === 'mom')).toBe(true);
+
+    const second = h.wire.evalScript({
+      subId: 'mom',
+      script: 'plot(ta.mom(close, len))',
+      meta: { history_bars: 500 },
+      bars: BARS,
+      inputs: { Length: 100 },
+    });
+    await tick();
+    await tick();
+    expect(h.unsubscribed).toContain('mom');
+    expect(h.sent.filter((s) => s.kind === 'subscribe:script').length).toBeGreaterThanOrEqual(2);
+
+    // Late unsubscribe ack for the old identity — must not blank the new sub.
+    h.emit({
+      type: 'status',
+      id: 'mom',
+      payload: { code: 'idle', message: 'released' },
+    });
+    h.emit({
+      type: 'full',
+      id: 'mom',
+      sessionId: 'ses-2',
+      seq: 1,
+      payload: { count: 1, plots: [[2]], series: { Mom: [2] } },
+    });
+    await second;
+    expect(h.wire.snapshotState().subs.some((s) => s.subId === 'mom')).toBe(true);
+
+    // Subscribe-once: same inputs keep the applier (no third subscribe).
+    const before = h.sent.filter((s) => s.kind === 'subscribe:script').length;
+    const third = h.wire.evalScript({
+      subId: 'mom',
+      script: 'plot(ta.mom(close, len))',
+      meta: { history_bars: 500 },
+      bars: BARS,
+      inputs: { Length: 100 },
+    });
+    await third;
+    expect(h.sent.filter((s) => s.kind === 'subscribe:script')).toHaveLength(before);
+    expect(h.wire.snapshotState().subs.some((s) => s.subId === 'mom')).toBe(true);
+  });
+
   test('an axis-less merge over a moved window resubscribes instead of painting', async () => {
     // Hermetic window: the tail extrapolator reads the live store, so pin
     // it to the subscribe window (another file may have left bars behind;

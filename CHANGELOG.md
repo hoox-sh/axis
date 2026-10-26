@@ -33,6 +33,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Fixed
 
+- **Live script input-change resubscribe no longer stays `idle`/`released`.** An input edit (e.g. Momentum Length 10→100) unsubscribes then re-subscribes on the same id; the PYNE `idle`/`released` ack arriving during `awaitSnapshot` used to `dropScriptLocal` the half-open replacement (wiping `appliers` / ctx), so the next eval re-subscribed forever and never rejoined while Bollinger/SMA stayed live. In-flight script subscribe now ignores that ack (same idea as gap-resync `holdUntilFull`), clears the inbox on release, and re-binds applier state when the new full lands.
+
 - **Venue live owns candle paint — engine series snapshots/deltas no longer `setData` or overwrite forming bars.** Worker tips were painting stub OHLC (tiny volume, disconnected opens) on top of Binance candles — visual gaps — and 5k `setData` on every engine full stalled scripts (`websocket · cooldown` / stop updating). Replica stays on the wire for indicators; chart tail stays venue.
 
 - **Live start / scheduleRerun re-subscribes every visible non-library script, including `idle`/`released`.** PYNE unsubscribe acks (`idle` + message `released` via live-wire `release`→unsubscribe) no longer leave EMA/Momentum blank while Bollinger stays on the wire: multiplex bypasses stream-eval backoff for released scripts, clears their retry state, and on stream-route live start kicks an immediate (0-debounce) scheduleRerun. `scriptHistoryBars` uses the stable chart window so a 1-bar length flicker cannot change `history_bars` and bounce subs.
