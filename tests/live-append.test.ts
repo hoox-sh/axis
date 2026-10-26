@@ -207,14 +207,17 @@ describe('appendLiveBar', () => {
     const verdict = appendLiveBar(bar(60 + 3 * 60));
     expect(verdict).toBe('slid');
     // Default scheduler has no rAF in bun tests → sync fallback replace.
-    expect(appended).toHaveLength(0);
+    // Tip update is microtask-coalesced; setData is sync without rAF.
     expect(setDataCalls).toHaveLength(1);
+    await settlePaint();
+    expect(appended).toHaveLength(1);
+    expect(appended[0]?.time).toBe(240);
     expect(fitCalls).toBe(0);
     expect(store.bars).toHaveLength(3);
     expect(store.bars[0]!.time).toBe(120);
   });
 
-  it('cancels a queued tip paint instead of flushing it before a slide replace', () => {
+  it('cancels a stale tip flush and tip-updates the new slide bar', async () => {
     setStore('rollingWindowBars', 2);
     appendLiveBar(bar(60));
     appendLiveBar(bar(120, 110));
@@ -223,9 +226,13 @@ describe('appendLiveBar', () => {
 
     const verdict = appendLiveBar(bar(180, 130));
     expect(verdict).toBe('slid');
-    // The queued update would have been overwritten by setData — skip it.
+    // Stale tip for t=120 is cancelled; new tip is queued then flushed.
     expect(appended).toHaveLength(0);
     expect(setDataCalls).toHaveLength(1);
+    await settlePaint();
+    expect(appended).toHaveLength(1);
+    expect(appended[0]?.time).toBe(180);
+    expect(appended[0]?.close).toBe(130);
     expect(store.bars.map((b) => b.time)).toEqual([120, 180]);
   });
 
@@ -392,7 +399,8 @@ describe('v1 paint-action table (concept §5.2 / §11)', () => {
       verdict: 'slid',
       windowLength: 3,
       action: 'setData',
-      updates: 0,
+      // Tip update paints the new bar; setData drops the slid head.
+      updates: 1,
       setData: 1,
     },
   ];

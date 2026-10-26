@@ -3,10 +3,11 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-import { describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { Redesign2DeltaApplier } from '../../src/engine/client-apply';
 import {
   _resetV1Metrics,
+  _resetV1PaintVisibilityHook,
   _setV1FrameScheduler,
   V1_SKIP_WARMUP,
   V1_WINDOW,
@@ -229,5 +230,93 @@ describe('v1 metrics', () => {
     expect(snap.queueWait.max).toBe(18);
     _setV1FrameScheduler(null);
     _resetV1Metrics({ warmup: 0 });
+  });
+
+  test('a second apply in the same paint burst keeps the first recv for tick→paint', () => {
+    _resetV1Metrics({ warmup: 0 });
+    const frames = queuedScheduler();
+    _setV1FrameScheduler(frames.schedule);
+    v1Mark('batch:post', 1_000);
+    v1Mark('apply:start', 1_002);
+    v1Mark('apply:end', 1_006);
+    v1Mark('batch:post', 1_010);
+    v1Mark('apply:start', 1_011);
+    v1Mark('apply:end', 1_012);
+    expect(frames.drain(1_020)).toBe(true);
+    const snap = v1MetricsSnapshot();
+    expect(snap.tickToApply.n).toBe(2);
+    expect(snap.tickToPaint).toMatchObject({ n: 1, p50: 20, max: 20 });
+    _setV1FrameScheduler(null);
+    _resetV1Metrics({ warmup: 0 });
+  });
+});
+
+describe('v1 paint:raf suspended bursts (hidden tab)', () => {
+  const g = globalThis as Record<string, unknown>;
+  const realDocument = g.document;
+
+  function fakeDocument(hidden: boolean) {
+    const listeners: Record<string, Array<() => void>> = {};
+    g.document = {
+      hidden,
+      addEventListener: (name: string, fn: () => void) => {
+        const list = listeners[name];
+        if (list) list.push(fn);
+        else listeners[name] = [fn];
+      },
+      __fire: (name: string) => {
+        for (const fn of listeners[name] ?? []) fn();
+      },
+      __setHidden: (value: boolean) => {
+        (g.document as Record<string, unknown>).hidden = value;
+      },
+    };
+    return g.document as Record<string, unknown>;
+  }
+
+  beforeEach(() => {
+    _setV1FrameScheduler(null);
+    _resetV1Metrics({ warmup: 0 });
+    _resetV1PaintVisibilityHook();
+  });
+  afterEach(() => {
+    _setV1FrameScheduler(null);
+    _resetV1Metrics({ warmup: 0 });
+    _resetV1PaintVisibilityHook();
+    if (realDocument === undefined) delete g.document;
+    else g.document = realDocument;
+  });
+
+  test('skips a paint burst armed while the tab is hidden', () => {
+    const frames = queuedScheduler();
+    _setV1FrameScheduler(frames.schedule);
+    fakeDocument(true);
+    v1Mark('batch:post', 100);
+    v1Mark('apply:start', 102);
+    v1Mark('apply:end', 106);
+    // No rAF armed while hidden — a late fire must not invent a sample.
+    expect(frames.drain(96_100)).toBe(false);
+    expect(v1MetricsSnapshot().tickToPaint.n).toBe(0);
+    expect(v1MetricsSnapshot().tickToApply.n).toBe(1);
+  });
+
+  test('skips a paint burst hidden mid-flight so occlusion does not pin p95', () => {
+    const frames = queuedScheduler();
+    _setV1FrameScheduler(frames.schedule);
+    const doc = fakeDocument(false);
+    v1Mark('batch:post', 100);
+    v1Mark('apply:start', 102);
+    v1Mark('apply:end', 106);
+    (doc.__setHidden as (v: boolean) => void)(true);
+    (doc.__fire as (n: string) => void)('visibilitychange');
+    expect(frames.drain(200_100)).toBe(true);
+    expect(v1MetricsSnapshot().tickToPaint.n).toBe(0);
+    // Foreground burst after show samples normally.
+    (doc.__setHidden as (v: boolean) => void)(false);
+    v1Mark('batch:post', 200_200);
+    v1Mark('apply:start', 200_202);
+    v1Mark('apply:end', 200_206);
+    expect(frames.drain(200_216)).toBe(true);
+    expect(v1MetricsSnapshot().tickToPaint).toMatchObject({ n: 1, p50: 16, max: 16 });
   });
 });

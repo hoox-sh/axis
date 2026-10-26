@@ -13,6 +13,10 @@
  * bridge). `apply` is `apply:start` → `apply:end`. `apply:end` arms one
  * frame for tick→paint.
  *
+ * Bursts armed while the tab is hidden, or hidden before that frame fires,
+ * are dropped: rAF pauses in the background, so arrival→frame would measure
+ * occlusion time (hundreds of ms) instead of paint latency and pin p95.
+ *
  * Latency rings keep the last {@link V1_WINDOW} samples and ignore the first
  * {@link V1_SKIP_WARMUP} after connect/reset so cold-start spikes do not pin
  * p95 forever. Pan/long-task rings share the window but not the warmup skip.
@@ -83,6 +87,9 @@ let recvAt: number | null = null;
 let applyAt: number | null = null;
 let paintFrom: number | null = null;
 let paintArmed = false;
+/** Tab hid after paint was armed — drop the sample when the late rAF fires. */
+let paintSuspended = false;
+let paintVisibilityHooked = false;
 let panLoop = false;
 let panHave = false;
 let panLast = 0;
@@ -107,6 +114,24 @@ function tabHidden(): boolean {
     return typeof document !== 'undefined' && document.hidden === true;
   } catch {
     return false;
+  }
+}
+
+/** Drop in-flight paint samples when the tab hides mid-burst (rAF stalls). */
+function ensurePaintVisibilityHook(): void {
+  if (paintVisibilityHooked) return;
+  paintVisibilityHooked = true;
+  try {
+    if (typeof document === 'undefined' || typeof document.addEventListener !== 'function') return;
+    document.addEventListener('visibilitychange', () => {
+      try {
+        if (document.hidden === true && paintArmed) paintSuspended = true;
+      } catch {
+        /* visibility is best-effort telemetry */
+      }
+    });
+  } catch {
+    /* never break paint for telemetry */
   }
 }
 
@@ -177,13 +202,22 @@ function armPaint(): void {
   if (paintArmed || paintFrom === null) return;
   if (tabHidden()) {
     paintFrom = null;
+    paintSuspended = false;
     return;
   }
   paintArmed = true;
+  paintSuspended = false;
+  ensurePaintVisibilityHook();
   if (!schedule((ts) => v1Mark('paint:raf', ts))) {
     paintArmed = false;
     paintFrom = null;
   }
+}
+
+function clearPaintBurst(): void {
+  paintArmed = false;
+  paintFrom = null;
+  paintSuspended = false;
 }
 
 /** Record a pipeline mark. Times are `performance.now()` milliseconds. */
@@ -213,10 +247,12 @@ export function v1Mark(name: V1Mark, at: number = now()): void {
     armPaint();
     return;
   }
-  paintArmed = false;
-  if (paintFrom !== null) {
-    push(tickToPaint, Math.max(0, at - paintFrom), 'tickToPaint');
-    paintFrom = null;
+  // paint:raf — one sample per armed burst; skip if the tab hid mid-flight.
+  const from = paintFrom;
+  const suspended = paintSuspended || tabHidden();
+  clearPaintBurst();
+  if (from !== null && !suspended) {
+    push(tickToPaint, Math.max(0, at - from), 'tickToPaint');
   }
 }
 
@@ -314,9 +350,15 @@ export function _resetV1Metrics(opts?: { warmup?: number }): void {
   applyAt = null;
   paintFrom = null;
   paintArmed = false;
+  paintSuspended = false;
   panLoop = false;
   panHave = false;
   panLast = 0;
   panDeadline = 0;
   panSteps = 0;
+}
+
+/** Tests: drop the visibility hook so a fake DOM can be re-installed. */
+export function _resetV1PaintVisibilityHook(): void {
+  paintVisibilityHooked = false;
 }

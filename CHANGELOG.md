@@ -33,6 +33,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Fixed
 
+- **Tick→paint p95 no longer absorbs hidden-tab stalls or same-frame slide `setData`.** `paint:raf` drops bursts armed while hidden or suspended mid-flight (rAF occlusion was pinning live p95 ~177 ms / max ~300 ms while apply stayed ~30 ms). A window slide tip-`update`s the new bar immediately and yields the head-drop `setData` to a microtask after rAF so sibling `paint:raf` callbacks in that frame are not queued behind a 5k-bar replace. Snapshot field names unchanged.
+
 - **Live-wire same-slot series tips close `queueWait` synchronously.** Metrics-only `apply:start`/`end` no longer waits on a kick microtask (the ~16 ms p50 after the prior microtask move). A new tip time still coalesces one cached-script paint on a microtask so a real script frame in the same turn can cancel it. `holdUntilFull`, seq, and one-tip inbox unchanged.
 
 - **Live tip-cache now hits on forming deltas that lacked a tip stamp.** `stream-delta` coerces a leftover `snapshot` context (series→script kick after `applyFull`) and `forming: true` without `executionContext` to `tip`, so `applyPrecomputedChart` tip-patches instead of re-aligning ~5k bars every tick (live apply was p50 ~6.4 ms / p95 ~10.6 ms; cached tip microbench ~0.03–0.3 ms). OHLC overlays tip-patch the last candle; lean tip hits sync lines/OHLC only. Append/snapshot full path unchanged.

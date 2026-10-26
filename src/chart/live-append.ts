@@ -38,7 +38,7 @@
  * | `ignored` | nothing changed (stale tick) — do not paint |
  * | `updated` | O(1) `series.update` on the forming tip, coalesced to one flush per turn |
  * | `appended` | O(1) `series.update` with the new bar, same flush; the first bar is a synchronous `setData` (`update` throws on an empty series) |
- * | `slid` | cancel any queued tip paint (the replace includes it), then one rAF-coalesced `setData` of the windowed series (`fit` false); while `isRanging()` the replace stays armed and skips `setData` until the gesture ends |
+ * | `slid` | tip `update` for the new bar immediately, cancel any stale tip flush, then one rAF→microtask-coalesced `setData` of the windowed series (`fit` false) to drop the head; while `isRanging()` the replace stays armed and skips `setData` until the gesture ends |
  *
  * Several `updated` / `appended` ticks in one turn share that flush
  * (`queueMicrotask`). Same-time updates collapse to the latest bar. A new
@@ -47,10 +47,12 @@
  * forming tip, and the quote tick, once per frame.
  *
  * A window slide still needs a full replace: LWC `update` appends a newer
- * time but cannot drop the slid head. Deferring that replace to one
- * animation frame keeps the heavy `setData` off the tick/apply path and
- * coalesces bursts. Without `requestAnimationFrame` (tests/SSR) the replace
- * runs synchronously so the series never lags the store.
+ * time but cannot drop the slid head. The new tip is painted with `update`
+ * first so the candle is on screen without waiting for `setData`. The
+ * replace is scheduled on rAF then yielded to a microtask so sibling rAF
+ * callbacks (v1 `paint:raf`) in the same frame run before the heavy write.
+ * Without `requestAnimationFrame` (tests/SSR) the replace runs
+ * synchronously so the series never lags the store.
  *
  * While the chart is ranging (pan/zoom), the slide replace stays armed and
  * does not call `setDataToChart` — a full-window write on the same frame as
@@ -149,8 +151,11 @@ function cancelLivePaint(manager: LivePainter): void {
 function defaultSlideScheduler(): SlideScheduler {
   if (typeof globalThis.requestAnimationFrame === 'function') {
     return (cb) => {
+      // rAF then microtask: sibling rAF callbacks scheduled in this frame
+      // (paint:raf) run before the heavy setData, so tip→paint is not stuck
+      // behind a 5k-bar replace on the same frame callback list.
       globalThis.requestAnimationFrame(() => {
-        cb();
+        queueMicrotask(cb);
       });
     };
   }
@@ -272,10 +277,11 @@ export function appendLiveBar(bar: Bar, opts?: { via?: 'worker' }): BarAppendRes
   // `manager.appendBar` updates the candle and the volume series together.
   // Normal ticks do not call it here: one flush per turn, latest bar per time.
   if (action === 'setData') {
-    // Queued tip paints are superseded by the full replace — flushing them
-    // first was a wasted `update` immediately overwritten by `setData`.
+    // Drop any stale tip flush (previous bar). A slide still tip-updates the
+    // new bar so the candle is visible before the deferred head-drop setData.
     cancelLivePaint(manager);
     if (result === 'slid') {
+      enqueueLivePaint(manager, bar);
       scheduleSlideReplace(manager);
       return result;
     }
