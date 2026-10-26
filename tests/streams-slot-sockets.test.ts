@@ -262,6 +262,20 @@ describe('chart slot socket pins (concept §4.1)', () => {
     expect(streamSocketRefs(streamWireFingerprint())).toBe(1);
   });
 
+  it('a symbol switch does not open a second socket', async () => {
+    expect(pinChartSlot('main')?.status).toBe('live');
+    await getStreamWire();
+    expect(streamSocketSize()).toBe(1);
+    const fp = streamWireFingerprint();
+    setStore('symbol', 'ETHUSDT');
+    streamStop();
+    expect(streamSocketSize()).toBe(0);
+    await getStreamWire();
+    expect(streamSocketSize()).toBe(1);
+    expect(streamSocketRefs(streamWireFingerprint())).toBeGreaterThan(0);
+    expect(streamWireFingerprint()).toBe(fp);
+  });
+
   it('streamStop then getWire pins onto the current fingerprint', async () => {
     const fpA = streamWireFingerprint();
     expect(pinChartSlot('slot-A')?.status).toBe('live');

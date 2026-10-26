@@ -21,7 +21,7 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 - **One live batch commits price, plots, markers, then alerts.** `commitLiveBatch` is the §6.1 transaction. A worker `onFrames` batch of mixed series+script deltas paints price then plots in the same task. Stream deltas apply through synchronous `applyStreamDelta` / `applyPrecomputedChart` (snapshots stay on async `applyStreamPayload`).
 
-- **v1 concept tests cover pane/crosshair identity, drawings through a window slide, the 20% p95 budget, and pan/zoom e2e.** `v1BudgetRegressed` fails review when p95 grows more than 20% vs the fixture.
+- **v1 concept tests cover pane/crosshair identity, drawings through a window slide, the 20% p95 budget, and pan/zoom e2e.** Playwright `@v1` loads 10k mock bars while mock-poll is live and bounds pan/zoom frames; applies RSI + MACD + ATR for a price+3-indicator pane-parity screenshot; and keeps a trend line through pan, zoom, and a clock-advanced window slide. `v1BudgetRegressed` fails review when p95 grows more than 20% vs the fixture.
 
 - **A tab keeps at most two engine sockets.** Chart slots share one WebSocket per engine endpoint (`acquireSlotWire` / `releaseSlotWire`). Same endpoint from N slots is one live client with N refs. A second socket opens only for a different endpoint. A third waits until a slot is released. The primary chart drops its previous fingerprint on engine change so a single chart does not pin two unused sockets.
 

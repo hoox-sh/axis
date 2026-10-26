@@ -83,18 +83,117 @@ export async function stubAppNetwork(
   );
 }
 
+export type LoadMockBarsOpts = {
+  /** Settings → Historical bars. Seeded before boot. */
+  historyBars?: number;
+  /** Chart rolling window. Seeded before boot. */
+  rollingWindowBars?: number;
+  /** Bar interval (`1m`, `15m`, …). Seeded before boot. */
+  interval?: string;
+};
+
 /** Boot on `/` and load mock-walk bars so the chart has a drawable series. */
-export async function loadMockBars(page: Page): Promise<void> {
+export async function loadMockBars(page: Page, opts: LoadMockBarsOpts = {}): Promise<void> {
   // Autoload hides the manual Load button; opt out before boot.
-  await seedManualLoad(page);
+  await seedAxisStore(page, {
+    autoload: false,
+    ...(opts.historyBars != null ? { historyBars: opts.historyBars } : {}),
+    ...(opts.rollingWindowBars != null ? { rollingWindowBars: opts.rollingWindowBars } : {}),
+    ...(opts.interval ? { interval: opts.interval } : {}),
+  });
   await page.goto('/');
   await expect(page.getByTestId('axis-topbar')).toBeVisible();
   await page.getByTestId('axis-select-source').selectOption('mock-walk');
   await page.getByTestId('axis-btn-load').click();
   await expect(page.getByTestId('axis-status-message')).toContainText(/Loaded \d+ bars|Ready/i, {
-    timeout: 15_000,
+    timeout: 30_000,
   });
   await expect(page.locator('[data-axis-chart-host]')).toBeVisible();
+}
+
+/** Start the default live stream (mock-poll when the source is mock-walk). */
+export async function startMockLive(page: Page): Promise<void> {
+  const live = page.getByTestId('axis-btn-live');
+  await expect(live).toBeVisible();
+  await expect
+    .poll(
+      async () => {
+        if ((await live.getAttribute('aria-pressed')) === 'true') return true;
+        await live.evaluate((el: HTMLElement) => el.click());
+        return (await live.getAttribute('aria-pressed')) === 'true';
+      },
+      { timeout: 20_000 },
+    )
+    .toBe(true);
+}
+
+/**
+ * Apply overlay=false builtins from the Script Library. Each Apply hits the
+ * stubbed `/run` and creates a private indicator pane.
+ */
+export async function applyBuiltinPanes(page: Page, ids: readonly string[]): Promise<void> {
+  const libBtn = page.getByTestId('axis-btn-library');
+  await expect(libBtn).toBeVisible();
+  if ((await libBtn.getAttribute('aria-pressed')) !== 'true') {
+    await libBtn.click();
+  }
+  await expect(page.getByTestId('axis-library-builtin-list')).toBeVisible();
+  for (const id of ids) {
+    const search = page.getByTestId('axis-library-builtin-search');
+    await search.fill(id);
+    const apply = page.locator(`[data-builtin-id="${id}"]`).getByTestId('axis-library-builtin-apply');
+    await expect(apply).toBeVisible();
+    await expect(apply).toBeEnabled();
+    await apply.click();
+    await expect(page.getByTestId('axis-status-message')).toContainText(/Applied built-in/i, {
+      timeout: 15_000,
+    });
+    await expect(apply).toBeEnabled();
+  }
+  await expect(page.getByText(new RegExp(`${ids.length} scripts\\s*·\\s*\\d+ panes`))).toBeVisible({
+    timeout: 10_000,
+  });
+  if ((await libBtn.getAttribute('aria-pressed')) === 'true') {
+    await libBtn.click();
+  }
+  const scriptsBtn = page.getByTestId('axis-btn-indicators');
+  if ((await scriptsBtn.getAttribute('aria-pressed')) === 'true') {
+    await scriptsBtn.click();
+  }
+}
+
+/** Advance fake timers so mock-poll emits a new closed bar (window slide). */
+export async function slideLiveWindow(page: Page, ms = 70_000): Promise<void> {
+  await page.clock.install();
+  await startMockLive(page);
+  await page.clock.fastForward(ms);
+}
+
+/** Last time-axis tick strings painted in each Lightweight Charts table. */
+export async function paneTimeTicks(page: Page): Promise<{
+  charts: number;
+  paneChrome: number;
+  uniqueLastTicks: string[];
+}> {
+  return page.evaluate(() => {
+    const root = document.querySelector('[data-axis-chart-host]');
+    if (!root) {
+      return { charts: 0, paneChrome: 0, uniqueLastTicks: [] as string[] };
+    }
+    const charts = Array.from(root.querySelectorAll('.tv-lightweight-charts'));
+    const lastTicks: string[] = [];
+    for (const chart of charts) {
+      const rows = chart.querySelectorAll('table tr');
+      const last = rows[rows.length - 1];
+      const tick = last?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+      if (tick) lastTicks.push(tick);
+    }
+    return {
+      charts: charts.length,
+      paneChrome: document.querySelectorAll('[data-axis-pane-chrome]').length,
+      uniqueLastTicks: [...new Set(lastTicks)],
+    };
+  });
 }
 
 /** Open a toolbar group flyout and pick a tool; asserts the active indicator. */

@@ -7,7 +7,7 @@ tags: [code, e2e]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-25T22:08:58Z
+  at: 2026-10-26T00:25:04Z
 sources:
   - id: tree
     resource: "e2e"
@@ -18,7 +18,7 @@ okf_lock: generated
 
 # Files
 
-* `charts.ts` — clickChart, drawingShapeCount, isEngineRunUrl, loadMockBars, measureRafDuring, panChart, seedAxisStore, seedManualLoad, selectDrawingTool, stubAppNetwork, zoomChart
+* `charts.ts` — LoadMockBarsOpts, applyBuiltinPanes, clickChart, drawingShapeCount, isEngineRunUrl, loadMockBars, measureRafDuring, panChart, paneTimeTicks, seedAxisStore, seedManualLoad, selectDrawingTool
 * `colors.spec.ts`
 * `critical.spec.ts`
 * `datasets.spec.ts`
