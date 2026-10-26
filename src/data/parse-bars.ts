@@ -128,8 +128,14 @@ function num(raw: unknown): number | null {
 /**
  * Repair mild OHLC inconsistencies (high below open/close, low above).
  * Returns null if values are non-finite or still inverted after repair.
+ *
+ * Keeps `open` and `close` as-is; only clamps `high` up to `max(open, close)`
+ * and `low` down to `min(open, close)`, swapping if the two cross. This makes
+ * every finite bar safe for Lightweight Charts candlestick rendering — without
+ * it, an inverted/high-below-low tick paints a shredded candle with a body
+ * that extends past its wick.
  */
-function repairOhlc(
+export function repairOhlc(
   open: number,
   high: number,
   low: number,

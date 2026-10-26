@@ -106,6 +106,7 @@ import {
 } from './heavy-data';
 import type { Bar } from '../store/types';
 import { resizePane, store } from '../store';
+import { repairOhlc } from '../data/parse-bars';
 import type { TradeMarker } from '../results/events';
 import type { ShapeMarkerSpec } from '../results/plot-visuals';
 import { mountPaneBadge, panePlotHost, refreshPaneBadge, setPaneBadgeLabel } from './pane-badge';
@@ -3238,13 +3239,32 @@ export class PaneManager {
       if (pricePane?.series['candle']) {
         const barsForMap = chartType === 'heikinashi' && storeBars?.length ? storeBars : [bar];
         const point = mapBarUpdate(barsForMap, chartType, this.haHolder);
-        if (point && this.applyCandlePoint(pricePane.series['candle'], point)) {
-          const t = Number(point.time);
-          if (Number.isFinite(t)) {
-            this.noteLiveCandleTime(t);
-            paintedTime = t;
+        if (point) {
+          // Repair OHLC consistency so an inverted tick (high < low, high below
+          // open/close, low above open/close) cannot paint a shredded candle
+          // with random body/wick sizes. Keeps open/close; only clamps high up
+          // and low down. Venue bars are already repaired by sanitizeBar, but
+          // the engine-owned path reaches series.update unsanitized.
+          if ('close' in point) {
+            const fixed = repairOhlc(point.open, point.high, point.low, point.close);
+            if (!fixed) {
+              // Non-finite / unrepairable — drop this tick entirely.
+              this.updateVolumeBar(bar, null);
+              return;
+            }
+            point.open = fixed.open;
+            point.high = fixed.high;
+            point.low = fixed.low;
+            point.close = fixed.close;
           }
-          this.applyPriceLineTint(pricePane.series['candle'], chartType, point, storeBars, bar);
+          if (this.applyCandlePoint(pricePane.series['candle'], point)) {
+            const t = Number(point.time);
+            if (Number.isFinite(t)) {
+              this.noteLiveCandleTime(t);
+              paintedTime = t;
+            }
+            this.applyPriceLineTint(pricePane.series['candle'], chartType, point, storeBars, bar);
+          }
         }
         // Extend the painted candle window so overlay clamps keep the newest tip.
         // Extend never creates the range — full paints do — so pre-paint ticks stay a no-op.

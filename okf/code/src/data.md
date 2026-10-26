@@ -7,7 +7,7 @@ tags: [code, data]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-25T18:32:15Z
+  at: 2026-10-26T13:41:53Z
 sources:
   - id: tree
     resource: "src/data"
@@ -37,7 +37,7 @@ okf_lock: generated
 * `market-worker.ts` — DEFAULT_MARKET_WORKER_BASE, resolveMarketWorkerBase
 * `merge-datasets.ts` — BarConflict, CONFLICT_ABS_FLOOR, DEFAULT_CONFLICT_TOLERANCE, MergePolicy, MergeResult, barsConflict, isSortedUnique, mergeSortedSeries, mergeWithConflictPolicy
 * `mexc-http.ts` — DEFAULT_MARKET_WORKER_BASE, MEXC_REST_HOSTS, MexcFetchOpts, MexcRestPath, fetchMexcJson, resolveMarketWorkerBase
-* `parse-bars.ts` — barTimeToPineMs, barsForPine, normalizeBarTime, normalizeHistoricalBars, parseOhlcvFile, parseOhlcvText, sanitizeBar, sanitizeStreamBar, toUnixSeconds
+* `parse-bars.ts` — barTimeToPineMs, barsForPine, normalizeBarTime, normalizeHistoricalBars, parseOhlcvFile, parseOhlcvText, repairOhlc, sanitizeBar, sanitizeStreamBar, toUnixSeconds
 * `provider.ts` — DEFAULT_PROVIDER, MARKET_LABELS, ProviderAuthMode, ProviderGateway, ProviderMarket, ProviderSession, ProviderVenue, asProviderMarket, buildProviderSession, defaultStreamForSource, formatProviderLabel, hydrateProviderSession
 * `signed-fetch.ts` — SignedFetchOpts, fetchSignedJson, hasSignedCreds
 * `symbol-catalog.ts` — FALLBACK_MAJORS, SymbolCatalogResult, SymbolEntry, SymbolVenue, compactPair, filterSymbols, listQuotes, loadSymbolCatalog, resolveSymbolVenue, venueLabel
