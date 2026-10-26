@@ -36,6 +36,9 @@ export const INGEST_CONNECT_TIMEOUT_MS = 5_000;
  * (PYNE answers UNAUTHORIZED and the live wire cools down). On timeout the
  * worker resends auth (and listens for `live-relay`); it never signals host
  * `open` without `auth.ok` when a token is set.
+ *
+ * Connection-level `UNAUTHORIZED` / "Authenticate first" is not a permanent
+ * auth failure — the worker resends auth or reconnects instead of authBlock.
  */
 export const INGEST_AUTH_WAIT_MS = 5_000;
 export const INGEST_HEARTBEAT_MS = 15_000;

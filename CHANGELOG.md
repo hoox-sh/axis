@@ -33,6 +33,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Fixed
 
+- **Ingest worker no longer permanently `authBlock`s on PYNE `UNAUTHORIZED`.** Connection-level `UNAUTHORIZED` / "Authenticate first" means not-yet-authed (pre-auth race), not a bad API key: while waiting for `auth.ok` the worker resends `auth`; otherwise it clears the auth wait and reconnects. Permanent blocks stay for other non-retryable connection errors (e.g. invalid/missing API key).
+
 - **Tick→paint p95 no longer absorbs hidden-tab stalls or same-frame slide `setData`.** `paint:raf` drops bursts armed while hidden or suspended mid-flight (rAF occlusion was pinning live p95 ~177 ms / max ~300 ms while apply stayed ~30 ms). A window slide tip-`update`s the new bar immediately and yields the head-drop `setData` to a microtask after rAF so sibling `paint:raf` callbacks in that frame are not queued behind a 5k-bar replace. Snapshot field names unchanged.
 
 - **Live-wire same-slot series tips close `queueWait` synchronously.** Metrics-only `apply:start`/`end` no longer waits on a kick microtask (the ~16 ms p50 after the prior microtask move). A new tip time still coalesces one cached-script paint on a microtask so a real script frame in the same turn can cancel it. `holdUntilFull`, seq, and one-tip inbox unchanged.

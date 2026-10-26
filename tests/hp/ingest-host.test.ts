@@ -6,7 +6,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { Redesign2WsClient } from '../../src/engine/ws-client';
 import { StreamLiveWire, type WireClient, type WireHandlers } from '../../src/engine/live-wire';
-import { decodeInbound, IngestCursorTable } from '../../src/hp/workers/ingest-core';
+import { decodeInbound, IngestCursorTable, shouldAuthBlock } from '../../src/hp/workers/ingest-core';
 import { resetEngineTransport, setEngineTransport } from '../../src/engine/v1/transport';
 import { _resetV1Metrics, v1MetricsSnapshot } from '../../src/engine/v1/metrics';
 import {
@@ -202,6 +202,67 @@ afterEach(() => {
   JSON.parse = nativeJsonParse;
   setIngestWorkerFactory(null);
   resetEngineTransport();
+});
+
+describe('shouldAuthBlock', () => {
+  test('UNAUTHORIZED / Authenticate first is not a permanent auth block', () => {
+    expect(
+      shouldAuthBlock({
+        type: 'error',
+        payload: { code: 'UNAUTHORIZED', message: 'Authenticate first', retryable: false },
+      }),
+    ).toBe(false);
+    expect(
+      shouldAuthBlock({
+        type: 'error',
+        payload: { code: 'unauthorized', message: 'please authenticate first', retryable: false },
+      }),
+    ).toBe(false);
+    expect(
+      shouldAuthBlock({
+        type: 'error',
+        payload: { code: 'AUTH_REQUIRED', message: 'Authenticate first', retryable: false },
+      }),
+    ).toBe(false);
+  });
+
+  test('invalid or missing API key permanently auth-blocks', () => {
+    expect(
+      shouldAuthBlock({
+        type: 'error',
+        payload: { code: 'FORBIDDEN', message: 'Invalid or missing API key', retryable: false },
+      }),
+    ).toBe(true);
+    expect(
+      shouldAuthBlock({
+        type: 'error',
+        payload: { code: 'invalid_api_key', message: 'bad token', retryable: false },
+      }),
+    ).toBe(true);
+  });
+
+  test('subscription-scoped or retryable errors do not auth-block', () => {
+    expect(
+      shouldAuthBlock({
+        type: 'error',
+        id: 'series:binance|spot|BTC/USDT|1m',
+        payload: { code: 'FORBIDDEN', message: 'nope', retryable: false },
+      }),
+    ).toBe(false);
+    expect(
+      shouldAuthBlock({
+        type: 'error',
+        payload: { code: 'UNAUTHORIZED', message: 'Authenticate first', retryable: true },
+      }),
+    ).toBe(false);
+    expect(
+      shouldAuthBlock({
+        type: 'error',
+        payload: { code: 'TEMP', message: 'try again', retryable: true },
+      }),
+    ).toBe(false);
+    expect(shouldAuthBlock({ type: 'status', payload: { code: 'live' } })).toBe(false);
+  });
 });
 
 describe('createLiveWsClient', () => {

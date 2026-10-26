@@ -29,6 +29,7 @@ import {
   decodeInbound,
   decodeInboundAsync,
   IngestCursorTable,
+  shouldAuthBlock,
   TipCoalescer,
   type IngestDecode,
 } from './ingest-core';
@@ -242,11 +243,25 @@ function handleDecoded(decoded: IngestDecode): void {
     }
     if (frame.type !== 'error' || frame.id) continue;
     const payload = frame.payload as { retryable?: unknown } | undefined;
-    if (payload?.retryable === false) {
-      authBlocked = true;
-      clearReconnect();
-      clearAuthWait();
+    if (payload?.retryable !== false) continue;
+    // PYNE UNAUTHORIZED = "authenticate first", not a bad key.
+    if (!shouldAuthBlock(frame)) {
+      if (pendingOpen && ws === pendingOpen.socket) {
+        pendingOpen.authAttempts += 1;
+        sendAuth(pendingOpen.socket);
+      } else {
+        clearAuthWait();
+        try {
+          ws?.close();
+        } catch {
+          /* ignore — onclose schedules reconnect */
+        }
+      }
+      continue;
     }
+    authBlocked = true;
+    clearReconnect();
+    clearAuthWait();
   }
   const frames = sendHeld
     ? decoded.frames.filter((frame) => !isFormingTipFrame(frame))
