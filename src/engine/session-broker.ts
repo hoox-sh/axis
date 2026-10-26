@@ -18,11 +18,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
+ * SCAFFOLD — NOT PRODUCTION.
  * In-memory broker for Redesign2 series sessions.
  *
  * This scaffold models open/create/full/delta/cache-miss behavior without
  * wiring it into the live evaluation pipeline. It is intended to be replaced
  * or backed by the real PYNE broker during Phase 3.
+ *
+ * WARNING: Do not use this broker in production; session isolation and
+ * persistence depend on a real PYNE broker (see Phase 3 integration).
  *
  * @module engine/session-broker
  */
@@ -41,6 +45,7 @@ export class Redesign2SessionBroker {
   private nextId = 1;
 
   open(identity: MarketIdentity, existingId?: string): Redesign2Session {
+    console.warn('[session-broker] SCAFFOLD USED — replace with real PYNE broker (Phase 3)');
     if (existingId) {
       const existing = this.sessions.get(existingId);
       if (existing && sameIdentity(existing.identity, identity)) {

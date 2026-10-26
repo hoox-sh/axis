@@ -26,10 +26,7 @@
  * @module engine/client-apply
  */
 
-import {
-  executionContextFromDelta,
-  type ExecutionContext,
-} from '../hp/calc/execution-context';
+import { executionContextFromDelta, type ExecutionContext } from '../hp/calc/execution-context';
 import { resolveSessionPayload } from '../engines/session-delta';
 import { classifySeqGap } from './frames';
 import { v1Count } from './v1/metrics';
@@ -157,7 +154,12 @@ export function readTimeList(value: unknown): number[] | null {
 }
 
 export type DeltaApplyOutcome =
-  | { ok: true; full: Record<string, unknown>; replayed: boolean; executionContext: ExecutionContext }
+  | {
+      ok: true;
+      full: Record<string, unknown>;
+      replayed: boolean;
+      executionContext: ExecutionContext;
+    }
   | { ok: false; reason: 'needs-full' | 'delta-before-full' };
 
 /**
@@ -191,10 +193,14 @@ export class Redesign2DeltaApplier {
     const gap = classifySeqGap(this.appliedSeq, delta.seq, ackFrom);
     const cachedContext = this.cache.executionContext;
     if (gap.kind === 'duplicate') {
+      // Defensive: don't replay a stale snapshot context if delta carries fresh info
+      const deltaCtx = (delta as { executionContext?: ExecutionContext }).executionContext;
       const executionContext: ExecutionContext =
-        cachedContext === 'snapshot' || cachedContext === 'tip' || cachedContext === 'append'
-          ? cachedContext
-          : 'snapshot';
+        deltaCtx && (deltaCtx === 'snapshot' || deltaCtx === 'tip' || deltaCtx === 'append')
+          ? deltaCtx
+          : cachedContext === 'snapshot' || cachedContext === 'tip' || cachedContext === 'append'
+            ? cachedContext
+            : 'snapshot';
       return { ok: true, full: { ...this.cache }, replayed: true, executionContext };
     }
     if (gap.kind !== 'continuous') {

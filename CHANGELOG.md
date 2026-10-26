@@ -2871,3 +2871,4 @@ python3 scripts/generate-changelog.py
 3. Commit changelog with the release; then tag, push, publish, sync
    (see `AGENTS.md` § Changelog & releases).
 
+- fix(engine): session-broker scaffold guard, drawing-layer handled-kinds guard, client-apply replay context refresh

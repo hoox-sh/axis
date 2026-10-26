@@ -76,11 +76,7 @@ import {
 } from './drawings/coords';
 import { measureChartPlotRect } from './plot-rect';
 import { indexRangeForSortedTimes } from './heavy-data';
-import {
-  getToolHandler,
-  type ToolHitCtx,
-  type ToolViewCtx,
-} from './drawings/tools';
+import { getToolHandler, type ToolHitCtx, type ToolViewCtx } from './drawings/tools';
 import {
   clampStrokeWidth,
   isFinitePoint,
@@ -302,9 +298,7 @@ export class DrawingLayer {
     this.svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     this.svg.setAttribute(
       'class',
-      this.scriptOnly
-        ? 'axis-drawing-layer axis-script-only'
-        : 'axis-drawing-layer',
+      this.scriptOnly ? 'axis-drawing-layer axis-script-only' : 'axis-drawing-layer',
     );
     Object.assign(this.svg.style, {
       position: 'absolute',
@@ -547,10 +541,7 @@ export class DrawingLayer {
     // Labels clamp to last bar at paint; geometry (line/box/…) keeps
     // bar_index+1 / varip future endpoints (logical extrapolation).
     const next = dedupeScriptLabelsAtSameTime(
-      garbageCollectScriptDrawings(
-        normalizeScriptDrawings(raw, this.lastBarTime()),
-        limits,
-      ),
+      garbageCollectScriptDrawings(normalizeScriptDrawings(raw, this.lastBarTime()), limits),
     );
     const owner = ownerId && String(ownerId).trim();
     if (owner) {
@@ -694,7 +685,9 @@ export class DrawingLayer {
     const cur = this.drawings.find((d) => d.id === this.selectedId);
     if (cur && (this.lockAll || resolveDrawingStyle(cur).locked)) {
       this.flashLockedNotice(
-        this.lockAll ? 'Drawings are locked — unlock all before deleting' : 'Drawing is locked — unlock it before deleting',
+        this.lockAll
+          ? 'Drawings are locked — unlock all before deleting'
+          : 'Drawing is locked — unlock it before deleting',
       );
       return;
     }
@@ -927,7 +920,9 @@ export class DrawingLayer {
     this.unsubs.push(() => window.removeEventListener('pointerup', onUp));
     this.unsubs.push(() => this.svg.removeEventListener('contextmenu', onCtx));
     this.unsubs.push(() => window.removeEventListener('keydown', onKey, true));
-    this.unsubs.push(() => window.removeEventListener('axis-drawing-cancel-draft', onCancelDraftEvent));
+    this.unsubs.push(() =>
+      window.removeEventListener('axis-drawing-cancel-draft', onCancelDraftEvent),
+    );
 
     // Pan/zoom only — do NOT redraw on crosshair (that rebuilt pine SVG every
     // mousemove and looked like hide/show flicker).
@@ -1038,7 +1033,7 @@ export class DrawingLayer {
         t =
           typeof rawTime === 'number'
             ? rawTime
-            : (rawTime as { timestamp?: number }).timestamp ?? null;
+            : ((rawTime as { timestamp?: number }).timestamp ?? null);
       }
       // Empty right margin / future: coordinateToTime is null — use logical × period
       const bars = this.barsProvider?.() ?? null;
@@ -1094,10 +1089,7 @@ export class DrawingLayer {
     if (!Number.isFinite(logical) || barCount <= 0) return;
     const lastIdx = barCount - 1;
     if (logical <= lastIdx) return;
-    const need = Math.min(
-      DRAWING_FUTURE_BARS,
-      Math.ceil(logical - lastIdx) + 2,
-    );
+    const need = Math.min(DRAWING_FUTURE_BARS, Math.ceil(logical - lastIdx) + 2);
     try {
       const cur = this.chart.timeScale().options().rightOffset ?? 0;
       if (need > cur) {
@@ -1469,10 +1461,7 @@ export class DrawingLayer {
       // patterns (XABCD / H&S) which commit as soon as minPoints is reached.
       if (need === 'n') {
         const minPts = getToolHandler(this.tool)?.minPoints ?? 2;
-        if (
-          n >= minPts &&
-          (this.tool === 'xabcd' || this.tool === 'headShoulders')
-        ) {
+        if (n >= minPts && (this.tool === 'xabcd' || this.tool === 'headShoulders')) {
           this.commitDraftPoints(this.draft.points);
           return;
         }
@@ -1525,10 +1514,7 @@ export class DrawingLayer {
     if (resolveDrawingStyle(d).locked) return;
     e.preventDefault();
     e.stopPropagation();
-    const fallback =
-      d.kind === 'priceLabel' && 'p1' in d && d.p1
-        ? d.p1.price.toFixed(2)
-        : 'Note';
+    const fallback = d.kind === 'priceLabel' && 'p1' in d && d.p1 ? d.p1.price.toFixed(2) : 'Note';
     const current = drawingTextOf(d) || fallback;
     // In-app prompt for text edits (never a blocking window.prompt).
     void promptDrawingText({ title: 'Label text', value: current }).then((raw) => {
@@ -1554,9 +1540,7 @@ export class DrawingLayer {
     const clean = sanitizePoints(points);
     const handler = getToolHandler(tool);
     const arity = toolArity(tool);
-    const minPts =
-      handler?.minPoints ??
-      (arity === 3 ? 3 : arity === 1 ? 1 : 2);
+    const minPts = handler?.minPoints ?? (arity === 3 ? 3 : arity === 1 ? 1 : 2);
     if (clean.length < minPts) return;
     // Refuse zero-length 2-pt geometry (would paint as a single handle)
     if (minPts >= 2 && anchorsTooClose(clean[0]!, clean[clean.length - 1]!)) return;
@@ -1656,7 +1640,10 @@ export class DrawingLayer {
         handler.paintDraft(points, ctx);
         return;
       }
-      if (handler?.create && points.length >= (typeof handler.arity === 'number' ? handler.arity : 2)) {
+      if (
+        handler?.create &&
+        points.length >= (typeof handler.arity === 'number' ? handler.arity : 2)
+      ) {
         // Empty text keeps preview non-prompting (handlers fall back to 'Note').
         const d = handler.create(points, DRAWING_COLORS.muted, '');
         if (d) {
@@ -1724,6 +1711,26 @@ export class DrawingLayer {
     if (!this.selectedId) return null;
     const d = this.drawings.find((x) => x.id === this.selectedId);
     if (!d) return null;
+    // Defensive: unhandled Pine drawing kind should not render silently
+    const handledKinds = new Set([
+      'line',
+      'label',
+      'box',
+      'polyline',
+      'table',
+      'text',
+      'priceLabel',
+      'hline',
+      'vline',
+      'brush',
+      'highlighter',
+      'rect',
+      'ellipse',
+      'path',
+    ]);
+    if (d.kind && typeof d.kind === 'string' && !handledKinds.has(d.kind)) {
+      console.warn('[drawing-layer] Unhandled drawing kind:', d.kind, '(Pine parity gap?)');
+    }
     try {
       const rect = this.svg.getBoundingClientRect();
       const x = e.clientX - rect.left;
@@ -1882,8 +1889,14 @@ export class DrawingLayer {
         return distToSegment(x, y, a.x, a.y, a.x + dx * scale, a.y + dy * scale) <= tol;
       }
       return (
-        distToSegment(x, y, a.x - dx * scale, a.y - dy * scale, a.x + dx * scale, a.y + dy * scale) <=
-        tol
+        distToSegment(
+          x,
+          y,
+          a.x - dx * scale,
+          a.y - dy * scale,
+          a.x + dx * scale,
+          a.y + dy * scale,
+        ) <= tol
       );
     }
     return distToSegment(x, y, a.x, a.y, b.x, b.y) <= tol;
@@ -1964,14 +1977,8 @@ export class DrawingLayer {
     let tMax = Infinity;
     try {
       const vr = this.chart.timeScale().getVisibleRange() as
-        | { from: number; to: number }
-        | null
-        | undefined;
-      if (
-        vr &&
-        Number.isFinite(vr.from as number) &&
-        Number.isFinite(vr.to as number)
-      ) {
+        { from: number; to: number } | null | undefined;
+      if (vr && Number.isFinite(vr.from as number) && Number.isFinite(vr.to as number)) {
         const pad = Math.max(1, (Number(vr.to) - Number(vr.from)) * 0.05);
         tMin = Number(vr.from) - pad;
         tMax = Number(vr.to) + pad;
@@ -2029,9 +2036,7 @@ export class DrawingLayer {
       for (let i = lowerPts.length - 1; i >= 0; i--) d += ` L ${lowerPts[i]!.x} ${lowerPts[i]!.y}`;
       d += ' Z';
       const rawC =
-        (fill.colors[from] && String(fill.colors[from])) ||
-        fill.color ||
-        'rgba(255, 82, 82, 0.2)';
+        (fill.colors[from] && String(fill.colors[from])) || fill.color || 'rgba(255, 82, 82, 0.2)';
       const c = sanitizeStrokeColor(rawC, 'rgba(255, 82, 82, 0.2)');
       el(g, 'path', {
         d,
@@ -2041,14 +2046,10 @@ export class DrawingLayer {
         'data-fill': String(fill.name || ''),
       });
     };
-    for (const run of fillBandRunBounds(
-      n,
-      fill.upper,
-      fill.lower,
-      fill.times,
-      fill.colors,
-      { from: winFrom, to: winTo },
-    )) {
+    for (const run of fillBandRunBounds(n, fill.upper, fill.lower, fill.times, fill.colors, {
+      from: winFrom,
+      to: winTo,
+    })) {
       flush(run.from, run.to);
     }
   }
@@ -2074,10 +2075,7 @@ export class DrawingLayer {
    * Script (Pine) paint. Future anchors extrapolate up to
    * {@link DRAWING_FUTURE_BARS} (500) and grow the right margin to match.
    */
-  private toXYScript(
-    p: Point,
-    type?: ScriptDrawing['type'],
-  ): { x: number; y: number } | null {
+  private toXYScript(p: Point, type?: ScriptDrawing['type']): { x: number; y: number } | null {
     return this.toXY(p, {
       clampToLastBar: scriptPaintClampsToLastBar(type),
       growRightOffset: true,
@@ -2119,8 +2117,7 @@ export class DrawingLayer {
       let dPath = `M ${coords[0]!.x} ${coords[0]!.y}`;
       for (let i = 1; i < coords.length; i++) dPath += ` L ${coords[i]!.x} ${coords[i]!.y}`;
       if (d.closed) dPath += ' Z';
-      const dash =
-        d.style === 'dashed' ? '4 3' : d.style === 'dotted' ? '1 3' : undefined;
+      const dash = d.style === 'dashed' ? '4 3' : d.style === 'dotted' ? '1 3' : undefined;
       const fill = d.closed
         ? sanitizeStrokeColor(d.bgcolor || 'rgba(147,159,255,0.06)', 'rgba(147,159,255,0.06)')
         : 'none';
@@ -2169,12 +2166,16 @@ export class DrawingLayer {
       return;
     }
     if (d.type === 'line' && d.t2 != null && d.p2 != null) {
-      if (!Number.isFinite(d.t1) || !Number.isFinite(d.p1) || !Number.isFinite(d.t2) || !Number.isFinite(d.p2)) {
+      if (
+        !Number.isFinite(d.t1) ||
+        !Number.isFinite(d.p1) ||
+        !Number.isFinite(d.t2) ||
+        !Number.isFinite(d.p2)
+      ) {
         return;
       }
       const ext = (d.extend || 'none').toLowerCase();
-      const dash =
-        d.style === 'dashed' ? '4 3' : d.style === 'dotted' ? '1 3' : undefined;
+      const dash = d.style === 'dashed' ? '4 3' : d.style === 'dotted' ? '1 3' : undefined;
       // Pine hline → full-width price level (matches user hline tool)
       const isHline = d.id.startsWith('pine_hline_') || (d.p1 === d.p2 && ext === 'both');
       if (isHline && d.p1 === d.p2) {
@@ -2222,7 +2223,12 @@ export class DrawingLayer {
       return;
     }
     if (d.type === 'box' && d.t2 != null && d.p2 != null) {
-      if (!Number.isFinite(d.t1) || !Number.isFinite(d.p1) || !Number.isFinite(d.t2) || !Number.isFinite(d.p2)) {
+      if (
+        !Number.isFinite(d.t1) ||
+        !Number.isFinite(d.p1) ||
+        !Number.isFinite(d.t2) ||
+        !Number.isFinite(d.p2)
+      ) {
         return;
       }
       const a = this.toXYScript({ time: d.t1, price: d.p1 }, d.type);
@@ -2791,22 +2797,10 @@ export class DrawingLayer {
   }
 }
 
-type TwoPointKind =
-  | 'trend'
-  | 'ray'
-  | 'extend'
-  | 'rect'
-  | 'ellipse'
-  | 'arrow'
-  | 'fib'
-  | 'measure';
+type TwoPointKind = 'trend' | 'ray' | 'extend' | 'rect' | 'ellipse' | 'arrow' | 'fib' | 'measure';
 
 /** Create an SVG element in the SVG namespace and append to `parent`. */
-function el(
-  parent: SVGElement,
-  name: string,
-  attrs: Record<string, string>,
-): SVGElement {
+function el(parent: SVGElement, name: string, attrs: Record<string, string>): SVGElement {
   const node = document.createElementNS('http://www.w3.org/2000/svg', name);
   for (const [k, v] of Object.entries(attrs)) {
     if (v == null) continue;
@@ -2859,14 +2853,7 @@ function line(
   });
 }
 
-function circle(
-  g: SVGElement,
-  cx: number,
-  cy: number,
-  r: number,
-  stroke: string,
-  handle = false,
-) {
+function circle(g: SVGElement, cx: number, cy: number, r: number, stroke: string, handle = false) {
   if (!isFiniteNum(cx) || !isFiniteNum(cy) || !isFiniteNum(r) || r <= 0) return;
   const safeStroke = sanitizeStrokeColor(stroke);
   el(g, 'circle', {
@@ -2893,7 +2880,7 @@ function extendSegment(
   const dx = bx - ax;
   const dy = by - ay;
   const len = Math.hypot(dx, dy) || 1;
-  const scale = Math.max(w, h) * 4 / len;
+  const scale = (Math.max(w, h) * 4) / len;
   let x1 = ax;
   let y1 = ay;
   let x2 = bx;
@@ -3012,9 +2999,7 @@ export function shiftDrawing(d: Drawing, dTime: number, dPrice: number): Drawing
     return { ...d, time: d.time + dTime };
   }
   if ('points' in d && Array.isArray(d.points) && d.points.length) {
-    const points = d.points.map((p) =>
-      isFinitePoint(p) ? shiftPoint(p, dTime, dPrice) : p,
-    );
+    const points = d.points.map((p) => (isFinitePoint(p) ? shiftPoint(p, dTime, dPrice) : p));
     const last = points[points.length - 1];
     return {
       ...d,
