@@ -49,7 +49,7 @@ import {
   type HostToIngest,
   type IngestToHost,
 } from './protocol';
-import { isAuthOkFrame } from '../../engine/frames';
+import { isAuthOkFrame, isStatusFrame } from '../../engine/frames';
 
 interface IngestWorkerScope {
   postMessage: (msg: IngestToHost) => void;
@@ -76,8 +76,8 @@ let liveProxy: LiveProxy | undefined;
 let openGen = 0;
 /** Outbound buffer is over the cap. Forming tips are not forwarded. */
 let sendHeld = false;
-/** Socket is up; `open` is deferred until `auth.ok` (or auth wait timeout). */
-let pendingOpen: { first: boolean; socket: WebSocket } | null = null;
+/** Socket is up; `open` is deferred until `auth.ok` (never open unauthenticated). */
+let pendingOpen: { first: boolean; socket: WebSocket; authAttempts: number } | null = null;
 
 const coalescer = new TipCoalescer((frames) => {
   // Stage mark for the §14.2 split: the worker clock shares its time origin
@@ -108,11 +108,49 @@ function clearAuthWait(): void {
   pendingOpen = null;
 }
 
-/** Host `connect()` resolves on `open` — only fire it after auth (or timeout). */
+/** Host `connect()` resolves on `open` — only fire it after auth.ok. */
 function finishOpen(first: boolean): void {
   clearAuthWait();
   post({ type: 'status', status: 'open' });
   post({ type: 'open', first });
+}
+
+function sendAuth(socket: WebSocket): void {
+  if (!authToken || socket.readyState !== 1) return;
+  try {
+    socket.send(JSON.stringify({ type: 'auth', ts: Date.now(), payload: { token: authToken } }));
+  } catch {
+    /* closing socket */
+  }
+}
+
+function isLiveRelayStatus(frame: unknown): boolean {
+  return isStatusFrame(frame) && String(frame.payload.code || '') === 'live-relay';
+}
+
+/** Arm / re-arm the auth wait. Never finishOpen without auth.ok when a token is set. */
+function armAuthWait(socket: WebSocket, first: boolean): void {
+  if (authWaitTimer) {
+    clearTimeout(authWaitTimer);
+    authWaitTimer = null;
+  }
+  authWaitTimer = setTimeout(() => {
+    if (ws !== socket || !pendingOpen || pendingOpen.socket !== socket) return;
+    // Resend auth a few times (Worker may have dropped the first before upstream open).
+    if (pendingOpen.authAttempts < 3) {
+      pendingOpen.authAttempts += 1;
+      sendAuth(socket);
+      armAuthWait(socket, first);
+      return;
+    }
+    // Give up: close and reconnect rather than subscribe while unauthenticated.
+    clearAuthWait();
+    try {
+      socket.close();
+    } catch {
+      /* ignore */
+    }
+  }, INGEST_AUTH_WAIT_MS);
 }
 
 function startHeartbeat(): void {
@@ -192,8 +230,15 @@ function handleDecoded(decoded: IngestDecode): void {
     return;
   }
   for (const frame of decoded.frames) {
-    if (pendingOpen && isAuthOkFrame(frame) && ws === pendingOpen.socket) {
-      finishOpen(pendingOpen.first);
+    if (pendingOpen && ws === pendingOpen.socket) {
+      // Worker live-proxy signals upstream ready; (re)send auth then.
+      if (isLiveRelayStatus(frame)) {
+        pendingOpen.authAttempts += 1;
+        sendAuth(pendingOpen.socket);
+      }
+      if (isAuthOkFrame(frame)) {
+        finishOpen(pendingOpen.first);
+      }
     }
     if (frame.type !== 'error' || frame.id) continue;
     const payload = frame.payload as { retryable?: unknown } | undefined;
@@ -271,19 +316,13 @@ async function openSocket(): Promise<void> {
     sendHeld = false;
     startHeartbeat();
     if (authToken) {
-      // Defer host `open` until auth.ok so subscribe cannot beat auth through
-      // the Worker ticket proxy (PYNE UNAUTHORIZED → subscribe-error cooldown).
+      // Defer host `open` until auth.ok. Early auth can race the Worker
+      // upstream open (frame dropped → UNAUTHORIZED on subscribe). Send now,
+      // resend on live-relay / timer; never open unauthenticated.
       clearAuthWait();
-      pendingOpen = { first, socket };
-      authWaitTimer = setTimeout(() => {
-        if (ws !== socket || !pendingOpen || pendingOpen.socket !== socket) return;
-        finishOpen(first);
-      }, INGEST_AUTH_WAIT_MS);
-      try {
-        socket.send(JSON.stringify({ type: 'auth', ts: Date.now(), payload: { token: authToken } }));
-      } catch {
-        finishOpen(first);
-      }
+      pendingOpen = { first, socket, authAttempts: 1 };
+      sendAuth(socket);
+      armAuthWait(socket, first);
       return;
     }
     finishOpen(first);

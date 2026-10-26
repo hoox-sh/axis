@@ -31,10 +31,11 @@ import type { LiveProxy } from '../../engine/live-ticket';
 
 export const INGEST_CONNECT_TIMEOUT_MS = 5_000;
 /**
- * After sending `auth`, wait this long for `auth.ok` before signaling `open`.
+ * After sending `auth`, wait this long for `auth.ok` before retrying.
  * The Worker ticket proxy adds a hop; subscribe must not race ahead of auth
- * (PYNE answers UNAUTHORIZED and the live wire cools down). A timeout still
- * opens so a slow key hash cannot wedge the socket forever.
+ * (PYNE answers UNAUTHORIZED and the live wire cools down). On timeout the
+ * worker resends auth (and listens for `live-relay`); it never signals host
+ * `open` without `auth.ok` when a token is set.
  */
 export const INGEST_AUTH_WAIT_MS = 5_000;
 export const INGEST_HEARTBEAT_MS = 15_000;

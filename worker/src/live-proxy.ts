@@ -290,7 +290,18 @@ export async function handleLiveProxy(
     return new Response(null, { status: 101, webSocket: client });
   }
   const up = upstream as WebSocket;
+  // The browser `onopen` can fire (and send `auth`) before the upstream
+  // engine socket is open. Buffer client→engine frames until then so the
+  // first auth is not silently dropped (subscribe would then see UNAUTHORIZED).
+  let upstreamOpen = false;
+  const pendingToUpstream: unknown[] = [];
+  const PENDING_TO_UP_CAP = 32;
   up.addEventListener('open', () => {
+    upstreamOpen = true;
+    for (const data of pendingToUpstream) {
+      relayIncoming(up, data);
+    }
+    pendingToUpstream.length = 0;
     try {
       srv.send(
         JSON.stringify({ type: 'status', payload: { code: 'live-relay', message: 'connected' } }),
@@ -324,6 +335,10 @@ export async function handleLiveProxy(
     }
   });
   srv.addEventListener('message', (ev) => {
+    if (!upstreamOpen) {
+      if (pendingToUpstream.length < PENDING_TO_UP_CAP) pendingToUpstream.push(ev.data);
+      return;
+    }
     relayIncoming(up, ev.data);
   });
   srv.addEventListener('close', () => closeUp(1000, 'client closed'));

@@ -242,6 +242,20 @@ describe('live relay keeps binary frames binary', () => {
     throw new Error(`relay did not forward ${n} frame(s) (have ${sock.sent.length})`);
   }
 
+  it('buffers client→engine frames until the upstream socket is open', async () => {
+    const { srv, up } = await connect();
+
+    // Browser onopen can send auth before the engine socket is ready.
+    srv.emit('message', '{"type":"auth","payload":{"token":"pyne-key"}}');
+    expect(up.sent).toHaveLength(0);
+
+    up.emit('open', undefined);
+    expect(srv.sent[0]).toBe(
+      JSON.stringify({ type: 'status', payload: { code: 'live-relay', message: 'connected' } }),
+    );
+    expect(up.sent[0]).toBe('{"type":"auth","payload":{"token":"pyne-key"}}');
+  });
+
   it('relays JSON as text and AXB1 bytes as bytes in both directions', async () => {
     const { srv, up } = await connect();
 
@@ -337,14 +351,19 @@ describe('live relay keeps binary frames binary', () => {
 
   it('relays a Blob as the original bytes in both directions, in order', async () => {
     const { srv, up } = await connect();
+    up.emit('open', undefined);
+    expect(srv.sent[0]).toBe(
+      JSON.stringify({ type: 'status', payload: { code: 'live-relay', message: 'connected' } }),
+    );
+
     const down = new Uint8Array([0x41, 0x58, 0x42, 0x31, 0xff, 0xfe, 0x00, 0x80]);
     up.emit('message', new Blob([down]));
     // A later text frame must not overtake the in-flight Blob read.
     up.emit('message', '{"type":"pong"}');
-    await waitForSent(srv, 2);
-    expect(srv.sent[0]).toBeInstanceOf(ArrayBuffer);
-    expect(new Uint8Array(srv.sent[0] as ArrayBuffer)).toEqual(down);
-    expect(srv.sent[1]).toBe('{"type":"pong"}');
+    await waitForSent(srv, 3);
+    expect(srv.sent[1]).toBeInstanceOf(ArrayBuffer);
+    expect(new Uint8Array(srv.sent[1] as ArrayBuffer)).toEqual(down);
+    expect(srv.sent[2]).toBe('{"type":"pong"}');
 
     const back = new Uint8Array([0x00, 0x41, 0xff, 0x7f]);
     srv.emit('message', new Blob([back]));
