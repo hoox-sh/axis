@@ -33,6 +33,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Fixed
 
+- **Live-wire same-slot series tips close `queueWait` synchronously.** Metrics-only `apply:start`/`end` no longer waits on a kick microtask (the ~16 ms p50 after the prior microtask move). A new tip time still coalesces one cached-script paint on a microtask so a real script frame in the same turn can cancel it. `holdUntilFull`, seq, and one-tip inbox unchanged.
+
 - **Live tip-cache now hits on forming deltas that lacked a tip stamp.** `stream-delta` coerces a leftover `snapshot` context (series→script kick after `applyFull`) and `forming: true` without `executionContext` to `tip`, so `applyPrecomputedChart` tip-patches instead of re-aligning ~5k bars every tick (live apply was p50 ~6.4 ms / p95 ~10.6 ms; cached tip microbench ~0.03–0.3 ms). OHLC overlays tip-patch the last candle; lean tip hits sync lines/OHLC only. Append/snapshot full path unchanged.
 
 - **Live-wire inbox and series kick cut residual `droppedTip` / pan `queueWait`.** Live forming tips (already applied via `routeFrame`) skip the waiter inbox once the sub has an applied seq, so same-slot replaces no longer inflate `droppedTip` (was 85–239 under load). The series→script kick closes `batch:post` → `apply:start` on a microtask instead of `rAF`, so pan/zoom at ~15k bars cannot stall queueWait behind a delayed animation frame (~430 ms p95). TipCoalescer forwards contiguous `UNCHANGED` keepalives (after flushing a pending tip) so the applier advances seq without `seqAckFrom` holes that `client-apply` counted as drops; gap keepalives stay observe-only. Snapshot-waiter inbox still keeps ≤1 forming tip; same-slot kick stays metrics-only.

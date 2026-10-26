@@ -352,11 +352,11 @@ export class StreamLiveWire {
   /** Subs that must speak JSON after an unknown AXB1 opcode. */
   private readonly jsonSubs = new Set<string>();
   /**
-   * Series tip landed without script frames in the same batch. One coalesced
-   * microtask kick closes `batch:post` → `apply:start` (not rAF — pan/zoom
-   * at large windows can delay animation frames hundreds of ms). Same-slot
-   * forming tips only stamp metrics (no script reapply); a new tip time
-   * paints at most one cached script. Real script paints cancel a pending kick.
+   * Series tip landed without script frames in the same batch. Same-slot
+   * forming tips stamp `apply:start`/`end` synchronously (metrics-only — no
+   * microtask, so queueWait stays near zero). A new tip time still coalesces
+   * one cached-script paint on a microtask so a real script frame in the same
+   * turn can cancel it. Real script paints cancel a pending kick.
    */
   private seriesScriptKick = false;
   private seriesScriptKickNeedsPaint = false;
@@ -635,9 +635,8 @@ export class StreamLiveWire {
    * One worker batch. Mixed series+script deltas commit price then plots
    * in one transaction (concept §6.1). Fulls, status, and closes still
    * route immediately so a snapshot is never held behind a tip.
-   * Series-only tips schedule one coalesced kick so `batch:post` is not
-   * left open until a later script frame (light metrics close, or one
-   * script paint when the tip time advances).
+   * Series-only tips close `batch:post` → `apply:start` (sync metrics for
+   * same-slot; one coalesced microtask paint when the tip time advances).
    */
   ingestBatch(frames: readonly WireFrame[]): void {
     if (frames.length === 0) return;
@@ -1259,11 +1258,11 @@ export class StreamLiveWire {
   }
 
   /**
-   * After a series-only tip, close `batch:post` → `apply:start` once per
-   * turn via microtask. Same-slot forming tips only stamp metrics; a new
-   * tip time paints one cached script so overlays can extend before the
-   * script's own wire frame. Microtask (not rAF) keeps queueWait off the
-   * pan/zoom frame budget at large windows.
+   * After a series-only tip, close `batch:post` → `apply:start`. Same-slot
+   * forming tips stamp metrics synchronously (no microtask — that delay was
+   * the ~16 ms queueWait p50). A new tip time coalesces one cached-script
+   * paint on a microtask so a real script frame in the same turn can cancel
+   * it; overlays can still extend before the script's own wire frame.
    */
   private scheduleSeriesScriptKick(frame?: WireFrame): void {
     this.seriesScriptKick = true;
@@ -1277,24 +1276,35 @@ export class StreamLiveWire {
       this.seriesScriptKickNeedsPaint = true;
       this.seriesScriptKickTipTime = null;
     }
+
+    // Pending or just-armed paint kick: coalesce on a microtask.
+    if (this.seriesScriptKickNeedsPaint) {
+      if (this.seriesScriptKickScheduled) return;
+      this.seriesScriptKickScheduled = true;
+      queueMicrotask(() => {
+        this.seriesScriptKickScheduled = false;
+        if (!this.seriesScriptKick) return;
+        this.seriesScriptKick = false;
+        const needsPaint = this.seriesScriptKickNeedsPaint;
+        const paintedTip = this.seriesScriptKickTipTime;
+        this.seriesScriptKickNeedsPaint = false;
+        this.seriesScriptKickTipTime = null;
+        if (needsPaint) {
+          if (paintedTip != null) this.seriesKickPaintedTipTime = paintedTip;
+          if (this.kickOneCachedScriptPaint()) return;
+        }
+        // Light close when no eligible script (e.g. holdUntilFull).
+        v1Mark('apply:start');
+        v1Mark('apply:end');
+      });
+      return;
+    }
+
+    // Same-slot metrics-only: close queueWait in this task.
+    this.seriesScriptKick = false;
     if (this.seriesScriptKickScheduled) return;
-    this.seriesScriptKickScheduled = true;
-    queueMicrotask(() => {
-      this.seriesScriptKickScheduled = false;
-      if (!this.seriesScriptKick) return;
-      this.seriesScriptKick = false;
-      const needsPaint = this.seriesScriptKickNeedsPaint;
-      const paintedTip = this.seriesScriptKickTipTime;
-      this.seriesScriptKickNeedsPaint = false;
-      this.seriesScriptKickTipTime = null;
-      if (needsPaint) {
-        if (paintedTip != null) this.seriesKickPaintedTipTime = paintedTip;
-        if (this.kickOneCachedScriptPaint()) return;
-      }
-      // Light close: end queueWait without reapplying every live script.
-      v1Mark('apply:start');
-      v1Mark('apply:end');
-    });
+    v1Mark('apply:start');
+    v1Mark('apply:end');
   }
 
   private cancelSeriesScriptKick(): void {

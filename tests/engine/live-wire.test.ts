@@ -1687,6 +1687,10 @@ describe('live-wire mixed delta batch', () => {
         },
       },
     ]);
+    // Sync metrics close — queueWait ends in this task (no microtask).
+    expect(v1MetricsSnapshot().queueWait.n).toBe(1);
+    expect(h.applied).toEqual([]);
+    v1Mark('batch:post');
     h.emitBatch([
       {
         type: 'delta',
@@ -1702,11 +1706,10 @@ describe('live-wire mixed delta batch', () => {
         },
       },
     ]);
+    expect(v1MetricsSnapshot().queueWait.n).toBe(2);
     await flushKick();
     expect(h.applied).toEqual([]);
     expect(h.applyOrder).toEqual(['price', 'price']);
-    // Light metrics close still ends queueWait once for the coalesced frame.
-    expect(v1MetricsSnapshot().queueWait.n).toBe(1);
 
     h.applied.length = 0;
     h.applyOrder.length = 0;
@@ -1922,7 +1925,7 @@ describe('live-wire mixed delta batch', () => {
     expect(h.applied).toEqual([]);
   });
 
-  test('series kick closes queueWait on microtask without waiting for rAF', async () => {
+  test('same-slot series tip closes queueWait synchronously without rAF or microtask', async () => {
     _resetV1Metrics({ warmup: 0 });
     const h = makeHarness({ syncApply: true });
     const seriesP = h.wire.ensureSeries('series:k', {});
@@ -1937,23 +1940,42 @@ describe('live-wire mixed delta batch', () => {
     });
     await seriesP;
 
+    // Prime painted tip time so the next forming tip is same-slot metrics-only.
+    h.emitBatch([
+      {
+        type: 'delta',
+        id: 'series:k',
+        sessionId: 'ses',
+        seq: 2,
+        payload: {
+          bars: [{ time: 100, open: 1, high: 2, low: 1, close: 2, volume: 1 }],
+          forming: true,
+          base_index: 0,
+          count: 1,
+          tail_len: 1,
+        },
+      },
+    ]);
+    await flushKick();
+
     const held: FrameRequestCallback[] = [];
     const prevRaf = globalThis.requestAnimationFrame;
+    let microtaskRan = false;
     globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) => {
-      // Simulate a pan frame stall — rAF callbacks are held back.
       held.push(cb);
       return held.length;
     }) as typeof requestAnimationFrame;
     try {
+      _resetV1Metrics({ warmup: 0 });
       v1Mark('batch:post');
       h.emitBatch([
         {
           type: 'delta',
           id: 'series:k',
           sessionId: 'ses',
-          seq: 2,
+          seq: 3,
           payload: {
-            bars: [{ time: 100, open: 1, high: 2, low: 1, close: 2, volume: 1 }],
+            bars: [{ time: 100, open: 1, high: 2, low: 1, close: 3, volume: 1 }],
             forming: true,
             base_index: 0,
             count: 1,
@@ -1961,13 +1983,69 @@ describe('live-wire mixed delta batch', () => {
           },
         },
       ]);
-      await flushKick();
-      // Kick used a microtask; queueWait closed even though rAF is stalled.
+      // Sync close — queueWait ends in this task (no kick microtask).
       expect(v1MetricsSnapshot().queueWait.n).toBe(1);
-      // paint:raf from apply:end may be queued, but the kick itself did not need it.
+      queueMicrotask(() => {
+        microtaskRan = true;
+      });
+      expect(microtaskRan).toBe(false);
+      // paint:raf from apply:end may be queued; the kick itself did not wait on it.
       for (const cb of held) cb(0);
     } finally {
       globalThis.requestAnimationFrame = prevRaf;
     }
+  });
+
+  test('new tip-time kick still paints on microtask so a script frame can cancel', async () => {
+    const h = makeHarness({ syncApply: true });
+    const seriesP = h.wire.ensureSeries('series:k', {});
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: 'series:k',
+      sessionId: 'ses',
+      seq: 1,
+      payload: { count: 1, bars: BARS },
+    });
+    await seriesP;
+
+    const scriptP = h.wire.evalScript({
+      subId: 's-1',
+      script: 'indicator() {}',
+      meta: {},
+      bars: BARS,
+    });
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 1,
+      payload: { count: 1, plots: [[1]], series: { a: [1] } },
+    });
+    await scriptP;
+    h.applied.length = 0;
+
+    h.emitBatch([
+      {
+        type: 'delta',
+        id: 'series:k',
+        sessionId: 'ses',
+        seq: 2,
+        payload: {
+          bars: [{ time: 100, open: 1, high: 2, low: 1, close: 2, volume: 1 }],
+          forming: true,
+          base_index: 0,
+          count: 1,
+          tail_len: 1,
+        },
+      },
+    ]);
+    // New tip time defers paint — not yet applied before the microtask.
+    expect(h.applied).toEqual([]);
+    await flushKick();
+    expect(h.applied).toEqual([{ via: 'stream-delta' }]);
   });
 });
