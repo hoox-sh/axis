@@ -27,7 +27,7 @@ import {
   clampPointsToPaintedRange,
   projectToCandleAxis,
 } from '../src/chart/series-sanitize';
-import { mergeEngineSnapshot } from '../src/streams/stream-live';
+import { mergeEngineSnapshot, snapshotMatchesChart } from '../src/streams/stream-live';
 import type { Bar } from '../src/store/types';
 
 function bar(time: number, extra: Partial<Bar> = {}): Bar {
@@ -87,6 +87,18 @@ describe('mergeEngineSnapshot', () => {
   it('is a no-op for an empty snapshot', () => {
     const chart = [bar(0), bar(300)];
     expect(mergeEngineSnapshot(chart, [])).toBe(chart);
+  });
+
+  it('snapshotMatchesChart is true when merge added no times', () => {
+    const chart = [bar(0), bar(300), bar(600)];
+    const merged = mergeEngineSnapshot(chart, [bar(300, { close: 9 })]);
+    expect(snapshotMatchesChart(chart, merged)).toBe(true);
+  });
+
+  it('snapshotMatchesChart is false when the engine filled a hole', () => {
+    const chart = [bar(0), bar(600)];
+    const merged = mergeEngineSnapshot(chart, [bar(300)]);
+    expect(snapshotMatchesChart(chart, merged)).toBe(false);
   });
 });
 

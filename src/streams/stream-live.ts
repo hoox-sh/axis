@@ -188,6 +188,16 @@ export function mergeEngineSnapshot(chartBars: Bar[], snapshot: Bar[]): Bar[] {
   return sliceToChartWindow(merged);
 }
 
+/** True when merge did not add times or change the tail — skip a 5k setData. */
+export function snapshotMatchesChart(chartBars: Bar[], merged: Bar[]): boolean {
+  if (!chartBars.length || !merged.length) return false;
+  if (merged.length !== chartBars.length) return false;
+  return (
+    merged[0]!.time === chartBars[0]!.time &&
+    merged[merged.length - 1]!.time === chartBars[chartBars.length - 1]!.time
+  );
+}
+
 /**
  * Report a stale engine series and queue the background repair (throttled log
  * + plane/feed telemetry + broker call — see `engines/series-repair.ts`).
@@ -329,6 +339,10 @@ function buildWireAt(endpoint: string, authToken: string | undefined): StreamLiv
         }
       },
       onSeriesFull: (bars) => {
+        // Venue multiplex owns candle paint. An engine full must not
+        // setData the window (5k hitch) or fill the tail with stub OHLC
+        // that shows as gaps. Replica stays on the wire for scripts.
+        if (streamRouteActive() && store.bars.length) return;
         if (!engineSeriesPaintable(bars)) return;
         // The chart window is the single authority — an engine snapshot that
         // carries more bars than the window is trimmed before it is painted.
@@ -337,11 +351,15 @@ function buildWireAt(endpoint: string, authToken: string | undefined): StreamLiv
         // away.
         const view = mergeEngineSnapshot(store.bars, bars);
         if (!view.length) return;
+        if (snapshotMatchesChart(store.bars, view)) return;
         setBarsQuiet(view);
         setDataToChart(view, { fit: false, clearMarkers: false });
       },
       onSeriesDelta: (bars, append) => {
         if (!bars.length) return;
+        // Same-slot worker tips overwrite venue candles (tiny-volume dojis /
+        // disconnected opens). Venue stream owns the price series.
+        if (streamRouteActive()) return;
         if (!engineSeriesPaintable(bars)) return;
         // Ticks never rewrite the window (P3): only a snapshot/repair uses
         // setData. Same-slot or next-slot tips path-set through appendLiveBar.
@@ -723,12 +741,22 @@ export async function streamSeriesTick(marketNow = 0): Promise<boolean> {
       return false;
     }
     if (!engineSeriesPaintable(bars, marketNow)) return false;
+    // Venue stream already painted DSM/REST + live tips. Do not setData a
+    // 5k engine snapshot over that (gaps + hitch). Scripts still subscribe.
+    if (streamRouteActive() && store.bars.length) {
+      setFeedStatus(chartSeriesKey(), 'live');
+      return toBarTime(bars) !== before;
+    }
     // The tail snapshot is merged into the chart's window — it must not
     // shrink a longer REST/DSM window (that replace threw the freshly loaded
     // dataset away).
     const manager = getManager();
     const view = mergeEngineSnapshot(store.bars, bars);
     if (!view.length) return false;
+    if (snapshotMatchesChart(store.bars, view)) {
+      setFeedStatus(chartSeriesKey(), 'live');
+      return false;
+    }
     setBarsQuiet(view);
     if (manager) setDataToChart(view, { fit: false, clearMarkers: false });
     setFeedStatus(chartSeriesKey(), 'live');

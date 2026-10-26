@@ -33,6 +33,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Fixed
 
+- **Venue live owns candle paint — engine series snapshots/deltas no longer `setData` or overwrite forming bars.** Worker tips were painting stub OHLC (tiny volume, disconnected opens) on top of Binance candles — visual gaps — and 5k `setData` on every engine full stalled scripts (`websocket · cooldown` / stop updating). Replica stays on the wire for indicators; chart tail stays venue.
+
 - **Live start / scheduleRerun re-subscribes every visible non-library script, including `idle`/`released`.** PYNE unsubscribe acks (`idle` + message `released` via live-wire `release`→unsubscribe) no longer leave EMA/Momentum blank while Bollinger stays on the wire: multiplex bypasses stream-eval backoff for released scripts, clears their retry state, and on stream-route live start kicks an immediate (0-debounce) scheduleRerun. `scriptHistoryBars` uses the stable chart window so a 1-bar length flicker cannot change `history_bars` and bounce subs.
 
 - **Live-wire seq-gap thrash no longer blanks indicators.** A script/series gap now does one backoff-gated unsubscribe+subscribe for a fresh full (instead of resume-loop forever), honors `seqAckFrom` as continuous, paints when that full lands, and clears `holdUntilFull`. `history_bars` shrink/flicker no longer bounces the sub; engine `idle`/`released` drops local state so the next eval rejoins; script HUD live/connecting clears a stale “delta gap — resubscribing” message.
