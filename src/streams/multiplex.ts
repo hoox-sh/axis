@@ -281,6 +281,27 @@ export function shouldAttemptScriptStream(
   return !prev || now >= prev.retryAfter;
 }
 
+/**
+ * PYNE unsubscribe ack (`idle` / `released`) means the sub is gone. A prior
+ * StreamFallbackError backoff must not skip the re-subscribe — otherwise EMA /
+ * Momentum stay blank while Bollinger (still on the wire) keeps updating.
+ */
+export function isScriptStreamReleased(id: string): boolean {
+  const entry = store.live?.scriptStatus?.[id];
+  if (!entry) return false;
+  return entry.status === 'idle' || entry.message === 'released';
+}
+
+/** Attempt stream eval when backoff allows, or when the sub was released. */
+export function shouldEvalScriptStream(
+  id: string,
+  now: number = Date.now(),
+  map: Map<string, ScriptStreamRetryState> = scriptStreamRetries,
+): boolean {
+  if (isScriptStreamReleased(id)) return true;
+  return shouldAttemptScriptStream(id, now, map);
+}
+
 /** Record a stream-eval failure and return the HUD message + next retry time. */
 export function noteScriptStreamFallback(
   id: string,
@@ -1008,9 +1029,10 @@ export function startLive(
     /* catch-up is best-effort */
   }
 
-  // Visible chart scripts start immediately — do not wait for the first tick
-  // or a manual Run. Hidden scripts stay out of the live loop.
-  scheduleRerun();
+  // Visible chart scripts start immediately — do not wait for the first venue
+  // tick or a manual Run. On the stream path, flush with no debounce so every
+  // overlay subscribes before the first kline debounce window.
+  scheduleRerun({ immediate: streamRouteActive() });
 }
 
 /**
@@ -1094,8 +1116,11 @@ function isLiveRerunScript(s: { visible?: boolean; code?: string }): boolean {
  *
  * Does **not** cancel an in-flight interactive Run (MTF / request.security).
  * Those set `live.needsRerun` and flush after the interactive epoch ends.
+ *
+ * `immediate` skips the adaptive debounce (used on live start when the stream
+ * route is already active so overlays subscribe without waiting on venue quiet).
  */
-function scheduleRerun() {
+function scheduleRerun(opts?: { immediate?: boolean }) {
   if (!store.bars?.length) return;
   if (!store.scripts.some(isLiveRerunScript)) return;
   // Interactive Run owns the engine — mark dirty and wait (do not beginRunEpoch)
@@ -1109,9 +1134,10 @@ function scheduleRerun() {
     return;
   }
   const epochAtSchedule = liveEpoch;
-  // Adaptive debounce: heavier histories need longer quiet windows
+  // Adaptive debounce: heavier histories need longer quiet windows. Live-start
+  // on the stream path passes immediate so every visible script subscribes now.
   const barN = store.bars?.length ?? 0;
-  const debounceMs = barN >= 10_000 ? 900 : barN >= 2_500 ? 600 : 400;
+  const debounceMs = opts?.immediate ? 0 : barN >= 10_000 ? 900 : barN >= 2_500 ? 600 : 400;
   rerunTimer = setTimeout(async () => {
     rerunTimer = null;
     if (liveEpoch !== epochAtSchedule || !store.live.active) return;
@@ -1190,7 +1216,10 @@ function scheduleRerun() {
               // Stream owns the script — never REST full-window fallback.
               // After StreamFallbackError, wait out exponential backoff before
               // the next subscribe/eval so a broken script cannot hammer /ws/live.
-              if (!shouldAttemptScriptStream(ind.id)) return;
+              // idle/released (PYNE unsubscribe ack) always re-attempts: the sub
+              // is gone and backoff must not leave the overlay blank.
+              if (!shouldEvalScriptStream(ind.id)) return;
+              if (isScriptStreamReleased(ind.id)) clearScriptStreamRetry(ind.id);
               try {
                 await streamEvalScript(ind);
                 clearScriptStreamRetry(ind.id);

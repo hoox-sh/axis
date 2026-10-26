@@ -76,8 +76,18 @@ class ManualSocket {
   }
 }
 
-const { subscribeHistoryBars, streamVerifyClose, streamWireState, resetStreamWire, streamRouteActive, streamStop, verifyClosedBar, streamSeriesTick, streamEvalScript } =
-  await import('../src/streams/stream-live');
+const {
+  subscribeHistoryBars,
+  scriptHistoryBars,
+  streamVerifyClose,
+  streamWireState,
+  resetStreamWire,
+  streamRouteActive,
+  streamStop,
+  verifyClosedBar,
+  streamSeriesTick,
+  streamEvalScript,
+} = await import('../src/streams/stream-live');
 const { setStore, store } = await import('../src/store');
 const { reconcile } = await import('solid-js/store');
 const { setEngineApiKey } = await import('../src/storage/vault');
@@ -141,6 +151,20 @@ describe('subscribeHistoryBars', () => {
   it('falls back to the snapshot cap for an invalid rolling window', () => {
     expect(subscribeHistoryBars(10, 0)).toBe(500);
     expect(subscribeHistoryBars(10, Number.NaN)).toBe(500);
+  });
+});
+
+describe('scriptHistoryBars', () => {
+  it('tracks the chart window, not a flickering bars.length', () => {
+    setStore('rollingWindowBars', 5000);
+    setStore('bars', [bar(1), bar(2), bar(3)]);
+    expect(scriptHistoryBars()).toBe(5000);
+    // A 1-bar trim/grow must not change the subscribe depth (live-wire used to
+    // bounce scripts to idle/released on history_bars flicker).
+    setStore('bars', Array.from({ length: 4999 }, (_, i) => bar(i + 1)));
+    expect(scriptHistoryBars()).toBe(5000);
+    setStore('bars', Array.from({ length: 5000 }, (_, i) => bar(i + 1)));
+    expect(scriptHistoryBars()).toBe(5000);
   });
 });
 

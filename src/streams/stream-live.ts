@@ -629,11 +629,14 @@ function scriptMeta(): Record<string, unknown> {
 /**
  * Bars a script subscription must cover: the chart window, not the short
  * prefix painted before the dataset fills.
+ *
+ * Use the stable window target only — `store.bars.length` can flicker by one
+ * around a rolling trim, which changed `history_bars` and bounced live-wire
+ * into unsubscribe → PYNE `idle`/`released` (blank EMA/Momentum while another
+ * script stayed subscribed).
  */
 export function scriptHistoryBars(): number {
-  const want = chartWindowLimit();
-  const have = store.bars.length;
-  return Math.max(1, want, have);
+  return Math.max(1, chartWindowLimit());
 }
 
 /**

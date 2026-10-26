@@ -34,6 +34,8 @@ const {
   SCRIPT_STREAM_RETRY_MS,
   scriptStreamRetryDelay,
   shouldAttemptScriptStream,
+  shouldEvalScriptStream,
+  isScriptStreamReleased,
   noteScriptStreamFallback,
   clearScriptStreamRetry,
   _getScriptStreamRetryForTests,
@@ -253,5 +255,112 @@ describe('multiplex stream eval backoff', () => {
     noteScriptStreamFallback('ind-ws', 'cooldown');
     _resetMultiplexForTests();
     expect(_getScriptStreamRetryForTests('ind-ws')).toBeUndefined();
+  });
+
+  it('re-evals idle/released scripts even while backoff is armed', async () => {
+    const seen: string[] = [];
+    evalScript.mockImplementation(async (ind) => {
+      seen.push(ind.id);
+      setScriptStatus(ind.id, 'live');
+    });
+
+    setStore('scripts', [
+      {
+        id: 'ema',
+        name: 'EMA',
+        code: 'plot(close)',
+        paneId: 'price',
+        visible: true,
+        plots: {},
+      },
+      {
+        id: 'mom',
+        name: 'Momentum',
+        code: 'plot(close)',
+        paneId: 'pane-mom',
+        visible: true,
+        plots: {},
+      },
+      {
+        id: 'bb',
+        name: 'Bollinger',
+        code: 'plot(close)',
+        paneId: 'pane-bb',
+        visible: true,
+        plots: {},
+      },
+    ]);
+
+    let pushBar: ((closed?: boolean) => void) | null = null;
+    registerDynamicStream({
+      id: 'retry-stream',
+      name: 'Retry',
+      kind: 'stream',
+      start({ onBar, onStatus }) {
+        onStatus({ state: 'open' });
+        pushBar = (closed = true) => {
+          const last = store.bars[store.bars.length - 1];
+          const t = (last?.time ?? 1000) + 60;
+          onBar({
+            time: t,
+            open: 1,
+            high: 1,
+            low: 1,
+            close: 1,
+            volume: 1,
+            closed,
+          });
+        };
+        return () => {
+          pushBar = null;
+        };
+      },
+    });
+
+    startLive('retry-stream', 'BTCUSDT', '1m');
+    const firstWave = await waitFor(
+      () => seen.includes('ema') && seen.includes('mom') && seen.includes('bb'),
+      2500,
+    );
+    expect(firstWave).toBe(true);
+
+    // Simulate PYNE unsubscribe ack mid-session (depth flicker / release).
+    setScriptStatus('ema', 'idle', 'released');
+    setScriptStatus('mom', 'idle', 'released');
+    noteScriptStreamFallback('ema', 'snapshot-timeout');
+    noteScriptStreamFallback('mom', 'snapshot-timeout');
+    expect(shouldAttemptScriptStream('ema')).toBe(false);
+    expect(isScriptStreamReleased('ema')).toBe(true);
+    expect(shouldEvalScriptStream('ema')).toBe(true);
+
+    const before = seen.length;
+    pushBar?.(true);
+    scheduleLiveRerun();
+    const recovered = await waitFor(
+      () =>
+        store.live.scriptStatus.ema?.status === 'live' &&
+        store.live.scriptStatus.mom?.status === 'live' &&
+        seen.length >= before + 2,
+      2500,
+    );
+    expect(recovered).toBe(true);
+    expect(seen.slice(before)).toEqual(expect.arrayContaining(['ema', 'mom']));
+    expect(_getScriptStreamRetryForTests('ema')).toBeUndefined();
+    expect(_getScriptStreamRetryForTests('mom')).toBeUndefined();
+    stopLive();
+  });
+});
+
+describe('shouldEvalScriptStream / released', () => {
+  it('treats idle or message released as must-attempt', () => {
+    const map = new Map();
+    noteScriptStreamFallback('x', 'cooldown', 1_000_000, map);
+    expect(shouldAttemptScriptStream('x', 1_000_000, map)).toBe(false);
+    setScriptStatus('x', 'idle', 'released');
+    expect(isScriptStreamReleased('x')).toBe(true);
+    expect(shouldEvalScriptStream('x', 1_000_000, map)).toBe(true);
+    setScriptStatus('x', 'degraded', 'websocket · cooldown');
+    expect(isScriptStreamReleased('x')).toBe(false);
+    expect(shouldEvalScriptStream('x', 1_000_000, map)).toBe(false);
   });
 });
