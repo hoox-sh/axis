@@ -13,6 +13,11 @@ import { describe, expect, it, beforeAll, beforeEach, afterEach } from 'bun:test
 import { installLightweightChartsMock } from './helpers/mock-lwc';
 import { resetChartLayoutMode, setChartLayoutMode } from '../src/chart/v1/chart-host';
 import { _resetSyncSampleForTests } from '../src/chart/v1/invariants';
+import {
+  _resetV1Metrics,
+  _setV1FrameScheduler,
+  v1MetricsSnapshot,
+} from '../src/engine/v1/metrics';
 import { setStore, store } from '../src/store';
 import { PANE_RESIZE_LAYOUT } from '../src/chart/series-factory';
 
@@ -367,6 +372,84 @@ describe('PaneManager', () => {
     expect(uniqueTimes).toEqual([T]);
     expect(mirrors).toBe(0);
     expect(rsiMirrors).toBe(0);
+  });
+
+  it('single layout wheel on the shared host arms chart.lag panFrame', () => {
+    setChartLayoutMode('single');
+    _resetV1Metrics();
+    let pending: ((ts: number) => void) | null = null;
+    _setV1FrameScheduler((cb) => {
+      pending = cb;
+      return 1;
+    });
+    pm.createPane('price', 'price', 'Price');
+    pm.createPane('volume', 'volume', 'Volume', 80);
+    const host = document.getElementById(pm.paneDomId('price'));
+    expect(host).toBeTruthy();
+    host!.dispatchEvent(new Event('wheel', { bubbles: true }));
+    let ts = 0;
+    while (pending) {
+      const cb = pending;
+      pending = null;
+      cb(ts);
+      ts += 16;
+    }
+    expect(v1MetricsSnapshot().panFrame.n).toBeGreaterThan(0);
+    _setV1FrameScheduler(null);
+    _resetV1Metrics();
+  });
+
+  it('single layout drag range change samples panFrame while ranging', () => {
+    setChartLayoutMode('single');
+    _resetV1Metrics();
+    let pending: ((ts: number) => void) | null = null;
+    _setV1FrameScheduler((cb) => {
+      pending = cb;
+      return 1;
+    });
+    const price = pm.createPane('price', 'price', 'Price');
+    let rangeHandler: ((r: { from: number; to: number } | null) => void) | null = null;
+    const chart = price.chart as unknown as {
+      timeScale: () => {
+        subscribeVisibleLogicalRangeChange: (cb: (r: { from: number; to: number } | null) => void) => void;
+        unsubscribeVisibleLogicalRangeChange: (cb: (r: { from: number; to: number } | null) => void) => void;
+        getVisibleLogicalRange: () => { from: number; to: number } | null;
+        setVisibleLogicalRange: (r: unknown) => void;
+        fitContent: () => void;
+        setVisibleRange: (r: unknown) => void;
+        timeToCoordinate: (t: unknown) => number | null;
+        coordinateToLogical: (c: number) => number | null;
+      };
+    };
+    const origTs = chart.timeScale.bind(chart);
+    chart.timeScale = () => {
+      const ts = origTs();
+      return {
+        ...ts,
+        subscribeVisibleLogicalRangeChange: (cb) => {
+          rangeHandler = cb;
+        },
+        unsubscribeVisibleLogicalRangeChange: () => {
+          rangeHandler = null;
+        },
+      };
+    };
+    pm.syncTimeScales();
+    expect(rangeHandler).toBeTruthy();
+    const host = document.getElementById(pm.paneDomId('price'));
+    host!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    rangeHandler!({ from: 1, to: 20 });
+    let t = 0;
+    while (pending) {
+      const cb = pending;
+      pending = null;
+      cb(t);
+      t += 16;
+    }
+    expect(v1MetricsSnapshot().panFrame.n).toBeGreaterThan(0);
+    host!.dispatchEvent(new Event('pointerup', { bubbles: true }));
+    _setV1FrameScheduler(null);
+    _resetV1Metrics();
   });
 
   it('syncTimeScales with 2 panes', () => {

@@ -1125,18 +1125,38 @@ export class PaneManager {
       });
       resizeObserver.observe(div);
       const persistHeights = () => this.persistSharedPaneHeights();
+      // Same pan/wheel arming as multi createPane — single layout skipped it,
+      // so chart.lag panFrame stayed at n=0 while ranging never flipped true.
+      const onRangePointerDown = () => {
+        this.ranging = true;
+      };
+      const onRangePointerUp = () => {
+        this.ranging = false;
+        this.noteUserRange();
+      };
+      const onWheelPan = () => v1NotePanActivity();
+      div.addEventListener('pointerdown', onRangePointerDown);
+      div.addEventListener('pointerup', onRangePointerUp);
       div.addEventListener('pointerup', persistHeights);
+      div.addEventListener('pointercancel', onRangePointerUp);
       div.addEventListener('pointercancel', persistHeights);
-      const unsubPersist = () => {
+      div.addEventListener('wheel', this.noteUserRange, { passive: true });
+      div.addEventListener('wheel', onWheelPan, { passive: true });
+      const unsubHost = () => {
         try {
+          div.removeEventListener('pointerdown', onRangePointerDown);
+          div.removeEventListener('pointerup', onRangePointerUp);
           div.removeEventListener('pointerup', persistHeights);
+          div.removeEventListener('pointercancel', onRangePointerUp);
           div.removeEventListener('pointercancel', persistHeights);
+          div.removeEventListener('wheel', this.noteUserRange);
+          div.removeEventListener('wheel', onWheelPan);
         } catch {
           /* ignore */
         }
       };
-      this.pointerUnsubs.push(unsubPersist);
-      this.panePointerUnsubs.set(id, unsubPersist);
+      this.pointerUnsubs.push(unsubHost);
+      this.panePointerUnsubs.set(id, unsubHost);
       this.attachSharedPaneChrome(div, id, type, label);
     } else {
       this.slot.bind(id);
