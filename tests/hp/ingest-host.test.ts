@@ -102,6 +102,15 @@ class FakeIngest {
       this.emit({ type: 'pong' });
       return;
     }
+    if (out.kind === 'unknown-opcode') {
+      this.emit({
+        type: 'unknown-opcode',
+        opcode: out.opcode,
+        id: out.id,
+        seq: out.seq,
+      });
+      return;
+    }
     this.emit({ type: 'frames', frames: out.frames });
   }
 
@@ -361,20 +370,56 @@ describe('IngestHostClient over a fake ingest port', () => {
     client.disconnect();
   });
 
-  test('subscribe is serialized exactly like the JSON client would send it', async () => {
+  test('subscribe includes encoding only when the caller asks for axb1', async () => {
     const { client, fake } = makeClient();
     await client.connect();
-    client.subscribe(SUB, 'series', {
+    const meta = {
       exchange: 'binance',
       market: 'spot',
       symbol: 'BTC/USDT',
       interval: '1m',
+    };
+    client.subscribe(SUB, 'series', meta, { encoding: 'axb1' });
+    client.subscribe(`${SUB}:json`, 'series', meta);
+    expect(fake.sent).toHaveLength(2);
+    const axb1 = JSON.parse(fake.sent[0] ?? '{}') as {
+      type: string;
+      id: string;
+      payload: Record<string, unknown>;
+    };
+    const json = JSON.parse(fake.sent[1] ?? '{}') as {
+      type: string;
+      id: string;
+      payload: Record<string, unknown>;
+    };
+    expect(axb1).toMatchObject({
+      type: 'subscribe',
+      id: SUB,
+      payload: { kind: 'series', encoding: 'axb1' },
     });
-    expect(fake.sent).toHaveLength(1);
-    const sent = JSON.parse(fake.sent[0] ?? '{}') as Record<string, unknown>;
-    expect(sent.type).toBe('subscribe');
-    expect(sent.id).toBe(SUB);
-    expect(sent.payload).toMatchObject({ kind: 'series', encoding: 'axb1' });
+    expect(json.type).toBe('subscribe');
+    expect(json.id).toBe(`${SUB}:json`);
+    expect(json.payload).toMatchObject({ kind: 'series' });
+    expect(json.payload).not.toHaveProperty('encoding');
+    client.disconnect();
+  });
+
+  test('resume omits encoding when the caller falls back to JSON', async () => {
+    const { client, fake } = makeClient();
+    await client.connect();
+    client.resumeSubscription(SUB, 10, 60, { seq: 4, encoding: 'axb1' });
+    client.resumeSubscription(SUB, 10, 60, { seq: 4 });
+    expect(fake.sent).toHaveLength(2);
+    const withEnc = JSON.parse(fake.sent[0] ?? '{}') as { payload: Record<string, unknown> };
+    const without = JSON.parse(fake.sent[1] ?? '{}') as { payload: Record<string, unknown> };
+    expect(withEnc.payload).toEqual({
+      count: 10,
+      last_time: 60,
+      seq: 4,
+      encoding: 'axb1',
+    });
+    expect(without.payload).toEqual({ count: 10, last_time: 60, seq: 4 });
+    expect(without.payload).not.toHaveProperty('encoding');
     client.disconnect();
   });
 

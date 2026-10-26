@@ -482,6 +482,23 @@ describe('decodeInbound Blob and views', () => {
       decodeInbound(jsonFull, new IngestCursorTable()),
     );
   });
+
+  test('a misaligned AXB1 view still decodes (no false malformed)', () => {
+    const bytes = snapshotBytes();
+    const fromAligned = decodeInbound(bytes, tableWithSub());
+    expect(fromAligned.ok).toBe(true);
+    for (const off of [1, 2, 3, 4, 5, 6, 7]) {
+      const padded = new Uint8Array(bytes.byteLength + 16);
+      padded.fill(0xff);
+      padded.set(bytes, off);
+      const view = padded.subarray(off, off + bytes.byteLength);
+      const out = decodeInbound(view, tableWithSub());
+      expect(out).toEqual(fromAligned);
+      expect(out.ok).toBe(true);
+      if (!(out.ok && out.kind === 'frames')) throw new Error('expected frames');
+      expect(out.frames[0]?.type).toBe('full');
+    }
+  });
 });
 
 describe('mapAxb1 SNAPSHOT_PLOTS', () => {

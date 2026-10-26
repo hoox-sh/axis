@@ -297,13 +297,24 @@ export class IngestHostClient implements WireClient {
       inputs?: Record<string, unknown>;
       libraries?: unknown;
       mode?: string;
+      /** Include only when the caller negotiates AXB1. Omit for JSON. */
+      encoding?: 'axb1';
     },
   ): void {
+    // Same rule as Redesign2WsClient: absent encoding keeps JSON. A hardcoded
+    // `encoding: 'axb1'` here made live-wire's JSON fallback (snapshot timeout /
+    // jsonSubs) still negotiate AXB1, so those subs never left the binary path.
+    const { encoding, ...rest } = opts ?? {};
     this.send({
       type: 'subscribe',
       id,
       ts: Date.now(),
-      payload: { kind, meta, encoding: 'axb1', ...opts },
+      payload: {
+        kind,
+        meta,
+        ...rest,
+        ...(encoding !== undefined ? { encoding } : {}),
+      },
     });
   }
 
@@ -311,13 +322,19 @@ export class IngestHostClient implements WireClient {
     id: string,
     count: number,
     lastTime: number,
-    extra?: { closed_upto?: number; seq?: number },
+    extra?: { closed_upto?: number; seq?: number; encoding?: 'axb1' },
   ): void {
+    const { encoding, ...rest } = extra ?? {};
     this.send({
       type: 'resume',
       id,
       ts: Date.now(),
-      payload: { count, last_time: lastTime, ...extra },
+      payload: {
+        count,
+        last_time: lastTime,
+        ...rest,
+        ...(encoding !== undefined ? { encoding } : {}),
+      },
     });
   }
 

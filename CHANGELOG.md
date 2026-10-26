@@ -27,6 +27,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Fixed
 
+- **Ingest host subscribe/resume omit `encoding` unless the caller asks, and misaligned AXB1 views no longer decode as malformed.** `IngestHostClient` had hardcoded `encoding: 'axb1'` on every subscribe, so live-wire's JSON fallback (snapshot timeout / `jsonSubs`) still negotiated AXB1 and could not leave the binary path — matching live `chart.lag` `jsonFallback: 3` with `unknownOpcode: 0`. Resume now matches the JSON client (encoding only when set). A sliced AXB1 frame whose buffer `byteOffset` is not a multiple of 8 is copied before decode so absolute i64 alignment checks cannot drop a valid snapshot.
+
 - **Live-wire closes `batch:post` → `apply:start` after series-only tips.** Series batches stamped `queueWait` without an apply while script frames lagged (coalesce skew, UNCHANGED, or axis-resub). A coalesced per-frame kick now reapplies cached script state after series-only tips (first sub sync, later subs yield a macrotask); the inbox keeps one forming tip per sub. Mixed series+script batches stay one price-then-plots transaction; `holdUntilFull` still skips the kick.
 
 - **Single-chart layout arms `chart.lag` `panFrame` on pan/zoom.** `createSharedPane` never set `ranging` or wired wheel → `v1NotePanActivity`, so the default one-chart host left `panFrame.n = 0` after user gestures. The shared price host now mirrors the multi-pane listeners (pointer ranging + wheel).

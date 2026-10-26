@@ -120,6 +120,18 @@ function inboundBytes(raw: ArrayBuffer | ArrayBufferView): Uint8Array {
   return new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength);
 }
 
+/**
+ * AXB1 i64/f64 readers assert absolute buffer alignment. A view whose
+ * `byteOffset` is not a multiple of 8 (a sliced frame) fails that check even
+ * when the relative payload layout is valid — a false malformed that drops
+ * the snapshot and can push the live wire into JSON fallback. Copy onto a
+ * fresh buffer so decode sees offset 0.
+ */
+function axb1Bytes(view: Uint8Array): Uint8Array {
+  if (view.byteOffset % 8 === 0) return view;
+  return view.slice();
+}
+
 function utf8From(raw: ArrayBuffer | ArrayBufferView): string {
   return new TextDecoder().decode(inboundBytes(raw));
 }
@@ -503,7 +515,7 @@ export function decodeInbound(raw: unknown, table: IngestCursorTable): IngestDec
     const view = inboundBytes(raw);
     if (looksLikeAxb1(view)) {
       try {
-        return mapAxb1(decodeFrame(view), table);
+        return mapAxb1(decodeFrame(axb1Bytes(view)), table);
       } catch (e) {
         return { ok: false, kind: 'malformed', reason: e instanceof Error ? e.message : 'axb1' };
       }
