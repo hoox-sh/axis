@@ -35,6 +35,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Fixed
 
+- **Series live no longer storms `full` snapshots (~6/s) into chart `setData`.** Debug ring showed 228 `wire.series.full` + 200 `setData` in ~40s: gap recovery cleared its backoff on every full, then unsubscribe+subscribed again. Series gaps now **resume** (scripts still fresh-subscribe); sliding fulls after the first snapshot tip-merge only; backoff clears only after a continuous delta.
+
 - **Live script input-change resubscribe no longer stays `idle`/`released`.** An input edit (e.g. Momentum Length 10→100) unsubscribes then re-subscribes on the same id; the PYNE `idle`/`released` ack arriving during `awaitSnapshot` used to `dropScriptLocal` the half-open replacement (wiping `appliers` / ctx), so the next eval re-subscribed forever and never rejoined while Bollinger/SMA stayed live. In-flight script subscribe now ignores that ack (same idea as gap-resync `holdUntilFull`), clears the inbox on release, and re-binds applier state when the new full lands.
 
 - **Venue live owns candle paint — engine series snapshots/deltas no longer `setData` or overwrite forming bars.** Worker tips were painting stub OHLC (tiny volume, disconnected opens) on top of Binance candles — visual gaps — and 5k `setData` on every engine full stalled scripts (`websocket · cooldown` / stop updating). Replica stays on the wire for indicators; chart tail stays venue.

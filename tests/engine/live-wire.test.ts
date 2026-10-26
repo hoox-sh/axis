@@ -863,13 +863,12 @@ describe('live-wire P1 series + study push', () => {
       payload: { bars: [skipped], forming: true, base_index: 1, count: 2, tail_len: 1 },
     });
     expect(h.seriesDelta).toHaveLength(2);
-    // Fresh unsubscribe+subscribe — not a resume loop.
-    expect(h.resumes).toHaveLength(0);
-    expect(h.unsubscribed).toEqual([sub]);
-    expect(h.sent.filter((s) => s.kind === 'subscribe:series')).toHaveLength(subsBeforeGap + 1);
+    // Series gaps resume (no unsubscribe+subscribe storm — that was ~6 fulls/s).
+    expect(h.resumes).toHaveLength(1);
+    expect(h.unsubscribed).toHaveLength(0);
+    expect(h.sent.filter((s) => s.kind === 'subscribe:series')).toHaveLength(subsBeforeGap);
     expect(h.statuses.map((s) => s.status)).toContain('degraded');
     expect(v1MetricsSnapshot().counts.seqGap).toBe(1);
-    expect(v1MetricsSnapshot().counts.resync).toBe(1);
 
     h.emit({
       type: 'delta',
@@ -879,8 +878,8 @@ describe('live-wire P1 series + study push', () => {
       payload: { bars: [skipped], forming: true, base_index: 1, count: 2, tail_len: 1 },
     });
     expect(h.seriesDelta).toHaveLength(2);
-    expect(h.unsubscribed).toHaveLength(1);
-    expect(h.sent.filter((s) => s.kind === 'subscribe:series')).toHaveLength(subsBeforeGap + 1);
+    // Backoff: second gap does not fire another resume immediately.
+    expect(h.resumes).toHaveLength(1);
 
     const replay: Bar[] = [closed, skipped];
     h.emit({

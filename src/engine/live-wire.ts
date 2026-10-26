@@ -1297,8 +1297,10 @@ export class StreamLiveWire {
     const seq = typeof frame.seq === 'number' ? frame.seq : null;
     const prevSeq = this.appliedSeq.get(subId);
     if (frame.type === 'full') {
+      const recovering = this.holdUntilFull.has(subId);
       this.holdUntilFull.delete(subId);
-      this.clearGapResync(subId);
+      // Do NOT clearGapResync on every full — that reset backoff and let a
+      // gap→resync→full loop run at ~6 Hz (debug log: 228 series.full / ~40s).
       if (seq != null && prevSeq != null && seq < prevSeq) return;
       if (!bars.length) return;
       this.seriesBars.set(subId, bars);
@@ -1310,7 +1312,15 @@ export class StreamLiveWire {
         first: bars[0]?.time ?? null,
         last: bars[bars.length - 1]?.time ?? null,
       });
-      this.handlers.onSeriesFull(bars);
+      // Already live: a sliding 500-bar "full" is tip-equivalent — do not
+      // re-run onSeriesFull. First snapshot or post-gap recovery still paints.
+      const tip = bars[bars.length - 1]!;
+      if (prevSeq != null && !recovering && Number.isFinite(tip.time)) {
+        this.handlers.onSeriesDelta([tip], true);
+      } else {
+        this.handlers.onSeriesFull(bars);
+        this.clearGapResync(subId);
+      }
       this.handlers.onStatus(subId, 'live');
       return;
     }
@@ -1322,6 +1332,8 @@ export class StreamLiveWire {
       ...(seqAckFrom != null ? { seqAckFrom } : {}),
       commit: () => {
         if (seq != null) this.appliedSeq.set(subId, seq);
+        // A continuous delta after gap recovery resets the resync backoff.
+        this.clearGapResync(subId);
         if (bars.length) {
           engineDebugSample(
             'wire.series.delta',
@@ -1344,7 +1356,8 @@ export class StreamLiveWire {
         engineDebug('wire.stale', { subId, reason, seq, lastSeq: prevSeq ?? 0 });
         if (reason !== 'gap') return;
         v1Count('seqGap');
-        this.requestFreshSnapshot(subId, 'delta gap — resubscribing');
+        // Series: resume (cheap). Scripts: fresh subscribe (requestFreshSnapshot).
+        this.requestSeriesGapRecover(subId);
       },
     });
   }
@@ -1679,6 +1692,36 @@ export class StreamLiveWire {
   private clearGapResync(subId: string): void {
     this.gapResyncAt.delete(subId);
     this.gapResyncAttempts.delete(subId);
+  }
+
+  /**
+   * Series gap recovery: resume from last applied seq (no unsubscribe storm).
+   * Debug logs showed unsubscribe+subscribe fulls at ~6/s when every tip looked
+   * like a gap and each full cleared the backoff counter.
+   */
+  private requestSeriesGapRecover(subId: string): void {
+    this.holdUntilFull.add(subId);
+    this.handlers.onStatus(subId, 'degraded', { message: 'delta gap — resyncing' });
+    const now = Date.now();
+    const attempts = this.gapResyncAttempts.get(subId) ?? 0;
+    const lastAt = this.gapResyncAt.get(subId) ?? 0;
+    const backoff =
+      GAP_RESYNC_BACKOFF_MS[Math.min(attempts, GAP_RESYNC_BACKOFF_MS.length - 1)] ?? 10_000;
+    if (attempts > 0 && now - lastAt < backoff) return;
+    this.gapResyncAt.set(subId, now);
+    this.gapResyncAttempts.set(subId, attempts + 1);
+    const bars = this.seriesBars.get(subId) ?? [];
+    const seq = this.appliedSeq.get(subId) ?? 0;
+    try {
+      this.client.resumeSubscription(
+        subId,
+        bars.length,
+        this.lastBarTime(bars),
+        this.resumePayload(subId, seq, this.appliedClosedUpto.get(subId)),
+      );
+    } catch {
+      /* socket may still be coming up */
+    }
   }
 
   /**
