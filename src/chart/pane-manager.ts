@@ -1009,8 +1009,7 @@ export class PaneManager {
   private paintedCandleTimes(): number[] | null {
     if (this.paintedCandleTimesList) return this.paintedCandleTimesList;
     const price = this.panes.get('price')?.series['candle'] as
-      | { data?: () => readonly { time?: unknown }[] }
-      | undefined;
+      { data?: () => readonly { time?: unknown }[] } | undefined;
     if (!price || typeof price.data !== 'function') return null;
     let rows: readonly { time?: unknown }[];
     try {
@@ -1184,6 +1183,8 @@ export class PaneManager {
         this.resizeRaf.schedule(() => this.flushPendingPaneResizes());
       });
       resizeObserver.observe(div);
+      // Defensive: rebuild indicator badges when layout switches (multi→single)
+      this.refreshBadges();
       const persistHeights = () => this.persistSharedPaneHeights();
       // Same pan/wheel arming as multi createPane — single layout skipped it,
       // so chart.lag panFrame stayed at n=0 while ranging never flipped true.
@@ -1739,8 +1740,7 @@ export class PaneManager {
     // Price pane is the only user-driven scroller; secondary panes have
     // handleScroll/Scale locked. Subscribing every pane used to bounce
     // range-change events across 45k-point charts on every pan tick.
-    const price =
-      this.panes.get('price')?.visible !== false ? this.panes.get('price') : null;
+    const price = this.panes.get('price')?.visible !== false ? this.panes.get('price') : null;
     const srcPane = price ?? panes[0];
     if (!srcPane) {
       this.alignRightScales();
@@ -1807,8 +1807,7 @@ export class PaneManager {
 
   /** Push the price pane logical range onto all other visible panes. */
   alignTimeRangesFromPrice(opts?: SyncSampleOpts) {
-    const price =
-      this.panes.get('price')?.visible !== false ? this.panes.get('price') : null;
+    const price = this.panes.get('price')?.visible !== false ? this.panes.get('price') : null;
     const src = price ?? this.getAllPanes().find((p) => p.visible);
     if (!src) return;
     let range: { from: number; to: number } | null = null;
@@ -1882,11 +1881,7 @@ export class PaneManager {
    * When `merge` is false/unset (interactive runs, symbol changes), the owner's
    * marker list is replaced wholesale (empty list clears that owner).
    */
-  setTradeMarkers(
-    markers: TradeMarker[],
-    ownerId?: string | null,
-    opts?: { merge?: boolean },
-  ) {
+  setTradeMarkers(markers: TradeMarker[], ownerId?: string | null, opts?: { merge?: boolean }) {
     const owner = (ownerId && String(ownerId).trim()) || '__global__';
     const list = markers.map((m, i) => ({
       time: m.time as UTCTimestamp,
@@ -2072,12 +2067,12 @@ export class PaneManager {
   }
 
   /**
-  * Re-set candle data with optional barcolor fields (color/borderColor/wickColor).
-  * Maps through the active chart type (with the visible replay prefix when a
-  * replay session is active) so barcolor repaints neither revert Heikin-Ashi
-  * transforms nor reveal future bars. Colors ride on OHLC-shaped rows only.
-  * Returns number of bars that received a custom color.
-  */
+   * Re-set candle data with optional barcolor fields (color/borderColor/wickColor).
+   * Maps through the active chart type (with the visible replay prefix when a
+   * replay session is active) so barcolor repaints neither revert Heikin-Ashi
+   * transforms nor reveal future bars. Colors ride on OHLC-shaped rows only.
+   * Returns number of bars that received a custom color.
+   */
   private repaintCandlesWithBarColors(): number {
     // Full candle setData during pan/zoom spikes panFrame — skip until idle.
     if (this.isRanging()) return 0;
@@ -2462,11 +2457,7 @@ export class PaneManager {
 
         // While hovering, only the pane under the mouse may drive multi-pane
         // sync. Secondary panes still re-fire on their own series updates.
-        if (
-          this.pointerInside === true &&
-          this.hoveredPaneId &&
-          pane.id !== this.hoveredPaneId
-        ) {
+        if (this.pointerInside === true && this.hoveredPaneId && pane.id !== this.hoveredPaneId) {
           return;
         }
 
@@ -2533,10 +2524,7 @@ export class PaneManager {
           logical = target.chart.timeScale().coordinateToLogical(param.point.x);
         }
         if (logical != null && typeof series.dataByIndex === 'function') {
-          const d = series.dataByIndex(
-            Math.round(logical),
-            MismatchDirection.NearestLeft,
-          );
+          const d = series.dataByIndex(Math.round(logical), MismatchDirection.NearestLeft);
           price = PaneManager.seriesPointPrice(d);
         }
       } catch {
@@ -2547,10 +2535,7 @@ export class PaneManager {
     if (price == null) {
       // Still show the vertical line: anchor to mid-plot or last known value
       try {
-        const h =
-          typeof target.chart.paneSize === 'function'
-            ? target.chart.paneSize().height
-            : 0;
+        const h = typeof target.chart.paneSize === 'function' ? target.chart.paneSize().height : 0;
         if (h > 0 && typeof series.coordinateToPrice === 'function') {
           const mid = series.coordinateToPrice(h / 2);
           if (typeof mid === 'number' && Number.isFinite(mid)) price = mid;
@@ -2831,7 +2816,8 @@ export class PaneManager {
       line.data,
       {
         color: line.color || VOID.indigo,
-        lineWidth: line.linewidth != null ? Math.max(1, Math.min(4, Math.round(line.linewidth))) : 1,
+        lineWidth:
+          line.linewidth != null ? Math.max(1, Math.min(4, Math.round(line.linewidth))) : 1,
         lineStyle: normalizeLineStyleToken(line.linestyle),
         stepped: seriesKind === 'stepline',
         area: seriesKind === 'area',
@@ -2896,12 +2882,12 @@ export class PaneManager {
   }
 
   /**
-  * Apply a user color override to an overlay plot or hline on a pane.
-  * Overlay series are owner-scoped (`overlay_<owner>__<name>`), so the legacy
-  * bare key is tried first, then the owner key when `ownerId` is given, then
-  * any owner-scoped series for the same plot name (callers without an owner).
-  * Returns true when a series/price-line was found and updated.
-  */
+   * Apply a user color override to an overlay plot or hline on a pane.
+   * Overlay series are owner-scoped (`overlay_<owner>__<name>`), so the legacy
+   * bare key is tried first, then the owner key when `ownerId` is given, then
+   * any owner-scoped series for the same plot name (callers without an owner).
+   * Returns true when a series/price-line was found and updated.
+   */
   setOverlayLineColor(paneId: string, plotName: string, color: string, ownerId?: string): boolean {
     const pane = this.panes.get(paneId);
     if (!pane || !color) return false;
@@ -2980,7 +2966,9 @@ export class PaneManager {
     const pl = pane.priceLines[plotName];
     if (pl?.line) {
       try {
-        pl.line.applyOptions({ lineWidth: Math.max(1, Math.min(4, Math.round(width))) as 1 | 2 | 3 | 4 });
+        pl.line.applyOptions({
+          lineWidth: Math.max(1, Math.min(4, Math.round(width))) as 1 | 2 | 3 | 4,
+        });
         ok = true;
       } catch {
         /* ignore */
@@ -2990,7 +2978,12 @@ export class PaneManager {
   }
 
   /** Show/hide an overlay series by plot name (owner-scoped or bare). */
-  setOverlayLineVisible(paneId: string, plotName: string, visible: boolean, ownerId?: string): boolean {
+  setOverlayLineVisible(
+    paneId: string,
+    plotName: string,
+    visible: boolean,
+    ownerId?: string,
+  ): boolean {
     const pane = this.panes.get(paneId);
     if (!pane) return false;
     let ok = false;
@@ -3297,9 +3290,7 @@ export class PaneManager {
       if (volPane?.series['volume']) {
         const volColors = getThemeManager().getVolumeColors();
         const vol =
-          bar.volume != null && Number.isFinite(bar.volume) && bar.volume >= 0
-            ? bar.volume
-            : 0;
+          bar.volume != null && Number.isFinite(bar.volume) && bar.volume >= 0 ? bar.volume : 0;
         // The volume row lands on the **candles'** bar time — never on a bar
         // the candles do not have (see the union note above). With no candle
         // series the volume stands alone and may use the tick's own time.
@@ -3362,11 +3353,7 @@ export class PaneManager {
    * the same tick — and it broke the `__editor__` → script-id re-own (the
    * markers were deleted before they could be re-homed).
    */
-  removeOverlaysForOwner(
-    paneId: string,
-    ownerId: string,
-    opts?: { keepMarkers?: boolean },
-  ) {
+  removeOverlaysForOwner(paneId: string, ownerId: string, opts?: { keepMarkers?: boolean }) {
     const pane = this.panes.get(paneId);
     if (!pane || !ownerId) return;
     const linePrefix = ownedOverlayPrefix(ownerId);
@@ -3375,11 +3362,7 @@ export class PaneManager {
     const plPrefix = `${sanitizeOverlayOwnerId(ownerId)}__`;
 
     for (const k of Object.keys(pane.series)) {
-      if (
-        k.startsWith(linePrefix) ||
-        k.startsWith(ohlcPrefix) ||
-        k.startsWith(bgPrefix)
-      ) {
+      if (k.startsWith(linePrefix) || k.startsWith(ohlcPrefix) || k.startsWith(bgPrefix)) {
         this.dropLineBreak(pane.series[k], paneId, k);
         safeRemoveSeries(pane.chart, pane.series[k]);
         delete pane.series[k];
@@ -3432,8 +3415,7 @@ export class PaneManager {
   ): void {
     if (!ownerId) return;
     const exclusive = paneId !== 'price' && paneId !== 'volume';
-    const ownerPrefix =
-      kind === 'ohlc' ? ownedOhlcPrefix(ownerId) : ownedOverlayPrefix(ownerId);
+    const ownerPrefix = kind === 'ohlc' ? ownedOhlcPrefix(ownerId) : ownedOverlayPrefix(ownerId);
     // store.EDITOR_RUN_KEY — keep string literal to avoid circular import
     const editorPrefix =
       kind === 'ohlc' ? ownedOhlcPrefix('__editor__') : ownedOverlayPrefix('__editor__');
@@ -3537,7 +3519,8 @@ export class PaneManager {
     // Plot series keys we want to keep (hline may fall back to series too)
     const wantSeries = new Set(plotLines.map((l) => makeOverlayLineKey(l.name, ownerId)));
     // Price lines namespaced by owner when set (avoid multi-script hline wipe)
-    const plName = (name: string) => (ownerId ? `${sanitizeOverlayOwnerId(ownerId)}__${name}` : name);
+    const plName = (name: string) =>
+      ownerId ? `${sanitizeOverlayOwnerId(ownerId)}__${name}` : name;
     const wantPrice = new Set(hLines.map((l) => plName(l.name)));
 
     // Drop editor leftovers / exclusive-pane orphans before owner-scoped keep set
@@ -3586,7 +3569,8 @@ export class PaneManager {
       const seriesKind = mapPlotStyleToSeriesKind(line.style);
       const existing = pane.series[key];
       const prevKind = this.overlaySeriesKinds.get(kindKey);
-      const lw = line.linewidth != null ? Math.max(1, Math.min(4, Math.round(line.linewidth))) : undefined;
+      const lw =
+        line.linewidth != null ? Math.max(1, Math.min(4, Math.round(line.linewidth))) : undefined;
       // Recreate when Pine style family changes (line ↔ histogram ↔ area, …)
       if (existing && prevKind != null && prevKind !== seriesKind) {
         this.dropLineBreak(existing, paneId, key);
@@ -3653,7 +3637,15 @@ export class PaneManager {
         } catch {
           /* ignore */
         }
-        this.syncLineBreakPrimitive(seriesNow, paneId, key, line, seriesKind, breakStyle, forceFull);
+        this.syncLineBreakPrimitive(
+          seriesNow,
+          paneId,
+          key,
+          line,
+          seriesKind,
+          breakStyle,
+          forceFull,
+        );
       } else {
         try {
           const c = line.color || PLOT_PALETTE[colorIdx % PLOT_PALETTE.length];
@@ -3856,13 +3848,7 @@ export class PaneManager {
       this.rememberSeriesTitle(pane.id, key, line.name);
     } else if (mapped.length) {
       try {
-        const series = createLineSeries(
-          pane.chart,
-          labels.title,
-          color,
-          undefined,
-          lineWidth,
-        );
+        const series = createLineSeries(pane.chart, labels.title, color, undefined, lineWidth);
         try {
           series.applyOptions({
             lastValueVisible: labels.lastValueVisible,
@@ -3880,7 +3866,12 @@ export class PaneManager {
     }
   }
 
-  addOverlayLine(paneId: string, name: string, data: { time: number; value: number }[], color?: string) {
+  addOverlayLine(
+    paneId: string,
+    name: string,
+    data: { time: number; value: number }[],
+    color?: string,
+  ) {
     const pane = this.panes.get(paneId);
     if (!pane) return;
     const overlayCount = Object.keys(pane.series).filter((k) => k.startsWith('overlay_')).length;
@@ -4191,9 +4182,7 @@ export class PaneManager {
       const pane = this.panes.get(paneId);
       if (!pane?.chart) continue;
       const el =
-        typeof document !== 'undefined'
-          ? document.getElementById(this.paneDomId(paneId))
-          : null;
+        typeof document !== 'undefined' ? document.getElementById(this.paneDomId(paneId)) : null;
       const div = el || null;
       if (!div || typeof div.getBoundingClientRect !== 'function') continue;
       const rect = div.getBoundingClientRect();

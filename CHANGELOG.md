@@ -2872,3 +2872,4 @@ python3 scripts/generate-changelog.py
    (see `AGENTS.md` § Changelog & releases).
 
 - fix(engine): session-broker scaffold guard, drawing-layer handled-kinds guard, client-apply replay context refresh
+- fix(ui): pane-manager refresh badges on layout (multi→single) so indicator badges not lost
