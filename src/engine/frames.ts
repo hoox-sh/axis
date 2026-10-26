@@ -332,6 +332,41 @@ export function isAuthOkFrame(value: unknown): value is Redesign2AuthOkFrame {
   return isRecord(value) && value.type === 'auth.ok';
 }
 
+/**
+ * Whether a connection-level error should permanently stop reconnects.
+ *
+ * PYNE `UNAUTHORIZED` / "Authenticate first" means the socket is not yet
+ * authed (pre-auth ping or race) — retryable by resending auth or reconnecting.
+ * Permanent failures (invalid/missing API key, other non-retryable codes) block.
+ */
+export function shouldAuthBlock(frame: {
+  type?: unknown;
+  id?: unknown;
+  payload?: unknown;
+  /** Flat error shape (some relays put code/message on the frame). */
+  code?: unknown;
+  message?: unknown;
+  retryable?: unknown;
+}): boolean {
+  if (frame?.type !== 'error') return false;
+  if (frame.id) return false;
+  const payload =
+    frame.payload && typeof frame.payload === 'object'
+      ? (frame.payload as { code?: unknown; message?: unknown; retryable?: unknown })
+      : null;
+  const retryable = payload?.retryable ?? frame.retryable;
+  if (retryable !== false) return false;
+  const code = String(payload?.code ?? frame.code ?? '')
+    .trim()
+    .toUpperCase();
+  const message = String(payload?.message ?? frame.message ?? '')
+    .trim()
+    .toLowerCase();
+  if (code === 'UNAUTHORIZED') return false;
+  if (message.includes('authenticate first')) return false;
+  return true;
+}
+
 export function isStatusFrame(value: unknown): value is Redesign2StatusFrame {
   if (!isRecord(value)) return false;
   if (value.type !== 'status') return false;

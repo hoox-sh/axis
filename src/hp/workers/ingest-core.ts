@@ -46,32 +46,7 @@ export type IngestDecode =
   | { ok: true; kind: 'unknown-opcode'; opcode: number; id: string; seq: number }
   | { ok: false; kind: 'malformed'; reason: string };
 
-/**
- * Whether a connection-level error should permanently stop reconnects.
- *
- * PYNE `UNAUTHORIZED` / "Authenticate first" means the socket is not yet
- * authed (pre-auth ping or race) — retryable by resending auth or reconnecting.
- * Permanent failures (invalid/missing API key, other non-retryable codes) block.
- */
-export function shouldAuthBlock(frame: {
-  type?: unknown;
-  id?: unknown;
-  payload?: { code?: unknown; message?: unknown; retryable?: unknown } | null;
-}): boolean {
-  if (frame?.type !== 'error') return false;
-  if (frame.id) return false;
-  const payload = frame.payload;
-  if (payload?.retryable !== false) return false;
-  const code = String(payload.code ?? '')
-    .trim()
-    .toUpperCase();
-  const message = String(payload.message ?? '')
-    .trim()
-    .toLowerCase();
-  if (code === 'UNAUTHORIZED') return false;
-  if (message.includes('authenticate first')) return false;
-  return true;
-}
+export { shouldAuthBlock } from '../../engine/frames';
 
 export type CursorBar = {
   time: number;

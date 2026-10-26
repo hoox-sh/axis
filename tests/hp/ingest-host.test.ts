@@ -6,7 +6,8 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { Redesign2WsClient } from '../../src/engine/ws-client';
 import { StreamLiveWire, type WireClient, type WireHandlers } from '../../src/engine/live-wire';
-import { decodeInbound, IngestCursorTable, shouldAuthBlock } from '../../src/hp/workers/ingest-core';
+import { decodeInbound, IngestCursorTable } from '../../src/hp/workers/ingest-core';
+import { shouldAuthBlock } from '../../src/engine/frames';
 import { resetEngineTransport, setEngineTransport } from '../../src/engine/v1/transport';
 import { _resetV1Metrics, v1MetricsSnapshot } from '../../src/engine/v1/metrics';
 import {

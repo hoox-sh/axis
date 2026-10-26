@@ -33,6 +33,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Fixed
 
+- **Main-thread live WS shares the soft `UNAUTHORIZED` authBlock policy with the ingest worker.** `shouldAuthBlock` lives in `frames.ts`; JSON and worker transports only permanently block on real bad-key errors, and otherwise close to remint/re-auth.
+
 - **Stream script eval retries with backoff after `StreamFallbackError` instead of staying `degraded · websocket` forever.** Multiplex records a per-script retry-after (1s → 2s → 5s … cap 30s), skips mid-backoff ticks (still no REST full-window fallback), and clears backoff when `streamEvalScript` succeeds so status returns to live.
 
 - **Live-wire auth-race subscribe and reconnect cooldown.** Series/script subscribe errors with `UNAUTHORIZED` (or "Authenticate first") retry once after a short delay instead of immediate fail/cooldown; a successful reconnect (`resumeAll`) clears `coolUntil` so a transient fail cannot keep rejecting `ensureSeries`; a failed script subscribe fully `release()`s the applier so the next `streamEvalScript` can try again.

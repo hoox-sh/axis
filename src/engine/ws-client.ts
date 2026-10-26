@@ -35,7 +35,13 @@ import type {
   Redesign2SubscribeFrame,
   SeriesMeta,
 } from './frames';
-import { normalizeRedesign2Frame, reconnectDelayMs, stripSeqAck, validateRedesign2Frame } from './frames';
+import {
+  normalizeRedesign2Frame,
+  reconnectDelayMs,
+  shouldAuthBlock,
+  stripSeqAck,
+  validateRedesign2Frame,
+} from './frames';
 import { axisDebugSafeUrl, engineDebug } from '../debug';
 import {
   liveTicketRetryable,
@@ -518,11 +524,21 @@ export class Redesign2WsClient {
       v1Mark('tick:recv', recvAt);
     }
     if (frame.type === 'error' && !frame.id) {
-      const payload = frame.payload as { retryable?: unknown } | undefined;
-      if (payload?.retryable === false) {
+      // PYNE UNAUTHORIZED = not yet authed — reconnect / re-auth. Bad keys block.
+      if (shouldAuthBlock(frame)) {
         this.authBlocked = true;
         this.clearReconnect();
         this.onStatus?.('error');
+      } else if (
+        (frame.payload as { retryable?: unknown } | undefined)?.retryable === false ||
+        (frame as { retryable?: unknown }).retryable === false
+      ) {
+        // Soft non-block: drop the socket so reconnect remints ticket + re-auths.
+        try {
+          this.ws?.close();
+        } catch {
+          /* onclose schedules reconnect when not authBlocked */
+        }
       }
     }
     if (frame.type === 'pong') {
