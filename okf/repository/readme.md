@@ -1,13 +1,13 @@
 ---
 type: "Document"
 title: "AXIS"
-description: "AXIS — installable open charting PWA: CEX OHLCV, drawings, on-chain overlays, and Pine Script™ via PYNE."
+description: "An installable open charting PWA: CEX OHLCV, drawings, on-chain overlays, and Pine Script™ evaluation through PYNE."
 resource: "README.md"
 tags: [doc, readme]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-07T04:35:08Z
+  at: 2026-10-26T04:20:11Z
 sources:
   - id: tree
     resource: "README.md"
@@ -22,34 +22,14 @@ Repo path `README.md`.
 
 # Outline
 
-* Ecosystem
-  * AXIS CLI (packages/cli)
-* MCP (agents)
-* What's in this repo
 * Architecture
-* Plugin contract
-* Built-in plugins
-* Product highlights
+* CLI and MCP
 * Local dev
-  * Offline demo
-* File map
-* Backend targets
-* CORS (AXIS browser origin → Pro API)
-  * Pyne Pro API
-  * AXIS Worker
-* PWA
-* Persistence (localStorage)
-* Verification
-* The HOOX Stack — all products & sister projects
-* Ethos
+* Documentation
+* Ecosystem
 * License
 
 # Mentions
 
-* [scripts](/code/scripts.md)
 * [src](/code/src.md)
-* [src/onchain](/code/src/onchain.md)
 * [src/plugins](/code/src/plugins.md)
-* [src/sources](/code/src/sources.md)
-* [src/ui](/code/src/ui.md)
-* [worker/src](/code/worker/src.md)
