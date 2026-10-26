@@ -33,6 +33,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Fixed
 
+- **Stream script eval retries with backoff after `StreamFallbackError` instead of staying `degraded · websocket` forever.** Multiplex records a per-script retry-after (1s → 2s → 5s … cap 30s), skips mid-backoff ticks (still no REST full-window fallback), and clears backoff when `streamEvalScript` succeeds so status returns to live.
+
 - **Live-wire auth-race subscribe and reconnect cooldown.** Series/script subscribe errors with `UNAUTHORIZED` (or "Authenticate first") retry once after a short delay instead of immediate fail/cooldown; a successful reconnect (`resumeAll`) clears `coolUntil` so a transient fail cannot keep rejecting `ensureSeries`; a failed script subscribe fully `release()`s the applier so the next `streamEvalScript` can try again.
 
 - **Ingest worker no longer permanently `authBlock`s on PYNE `UNAUTHORIZED`.** Connection-level `UNAUTHORIZED` / "Authenticate first" means not-yet-authed (pre-auth race), not a bad API key: while waiting for `auth.ok` the worker resends `auth`; otherwise it clears the auth wait and reconnects. Permanent blocks stay for other non-retryable connection errors (e.g. invalid/missing API key).

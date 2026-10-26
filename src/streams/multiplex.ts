@@ -253,6 +253,63 @@ export function diffEngineOwnedBars(
 }
 /** Test-only: increments each time a debounced live re-run is attempted. */
 let rerunAttemptCount = 0;
+
+/**
+ * Backoff after `streamEvalScript` throws {@link StreamFallbackError}.
+ * REST full-window fallback is forbidden on the stream path; later ticks
+ * retry once `retryAfter` elapses instead of leaving the script degraded forever.
+ */
+export const SCRIPT_STREAM_RETRY_MS = [1000, 2000, 5000, 10_000, 20_000, 30_000] as const;
+
+export type ScriptStreamRetryState = { retryAfter: number; attempts: number };
+
+const scriptStreamRetries = new Map<string, ScriptStreamRetryState>();
+
+/** Delay before the next stream-eval attempt (`attempt` is 0-based failure count). */
+export function scriptStreamRetryDelay(attempt: number): number {
+  const idx = Math.max(0, Math.min(Math.floor(attempt), SCRIPT_STREAM_RETRY_MS.length - 1));
+  return SCRIPT_STREAM_RETRY_MS[idx] ?? 30_000;
+}
+
+/** True when no backoff is armed, or the armed `retryAfter` has elapsed. */
+export function shouldAttemptScriptStream(
+  id: string,
+  now: number = Date.now(),
+  map: Map<string, ScriptStreamRetryState> = scriptStreamRetries,
+): boolean {
+  const prev = map.get(id);
+  return !prev || now >= prev.retryAfter;
+}
+
+/** Record a stream-eval failure and return the HUD message + next retry time. */
+export function noteScriptStreamFallback(
+  id: string,
+  reason: string,
+  now: number = Date.now(),
+  map: Map<string, ScriptStreamRetryState> = scriptStreamRetries,
+): { message: string; retryAfter: number; attempts: number; delayMs: number } {
+  const prev = map.get(id);
+  const attempts = (prev?.attempts ?? 0) + 1;
+  const delayMs = scriptStreamRetryDelay(attempts - 1);
+  const retryAfter = now + delayMs;
+  map.set(id, { retryAfter, attempts });
+  const detail = reason.trim() || 'error';
+  return {
+    message: detail === 'websocket' ? 'websocket' : `websocket · ${detail}`,
+    retryAfter,
+    attempts,
+    delayMs,
+  };
+}
+
+/** Clear backoff after a successful stream eval (or session stop). */
+export function clearScriptStreamRetry(
+  id?: string,
+  map: Map<string, ScriptStreamRetryState> = scriptStreamRetries,
+): void {
+  if (id === undefined) map.clear();
+  else map.delete(id);
+}
 /**
  * Live bars waiting for paint flush.
  *
@@ -339,6 +396,12 @@ export function _resetMultiplexForTests(): void {
   }
   rerunInFlight = false;
   rerunAttemptCount = 0;
+  clearScriptStreamRetry();
+}
+
+/** @internal Test helper — per-script stream-eval backoff entry. */
+export function _getScriptStreamRetryForTests(id: string): ScriptStreamRetryState | undefined {
+  return scriptStreamRetries.get(id);
 }
 
 /**
@@ -997,6 +1060,7 @@ export function stopLive(opts?: StopLiveOpts) {
   // Drop in-flight gate so the next startLive can schedule reruns
   // (a hung prior runAndApply must not block suite / restarts forever).
   rerunInFlight = false;
+  clearScriptStreamRetry();
   // Engine-owned mode: drop the serialized paint chain and release the
   // chart's engine session so a symbol change / restart starts clean.
   enginePaintChain = Promise.resolve();
@@ -1123,13 +1187,17 @@ function scheduleRerun() {
           }
           try {
             if (streamRouteActive()) {
+              // Stream owns the script — never REST full-window fallback.
+              // After StreamFallbackError, wait out exponential backoff before
+              // the next subscribe/eval so a broken script cannot hammer /ws/live.
+              if (!shouldAttemptScriptStream(ind.id)) return;
               try {
                 await streamEvalScript(ind);
+                clearScriptStreamRetry(ind.id);
               } catch (e) {
                 if (!(e instanceof StreamFallbackError)) throw e;
-                // The socket owns this script. A REST run here posts the
-                // whole window and freezes the page.
-                setScriptStatus(ind.id, 'degraded', 'websocket');
+                const noted = noteScriptStreamFallback(ind.id, e.reason || e.message);
+                setScriptStatus(ind.id, 'degraded', noted.message);
               }
               return;
             }
