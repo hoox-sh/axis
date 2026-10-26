@@ -821,7 +821,7 @@ describe('TipCoalescer', () => {
     expect(payload.series['p:9']).toEqual([8]);
   });
 
-  test('drops an UNCHANGED keepalive and does not clobber a pending tip', () => {
+  test('a keepalive with no cursor is dropped; a contiguous one flushes a pending tip', () => {
     const seen: Redesign2Frame[][] = [];
     let fire: (() => void) | undefined;
     const c = new TipCoalescer(
@@ -841,8 +841,18 @@ describe('TipCoalescer', () => {
         payload: { unchanged: true, forming: true, base_index: 0, count: 1, tail_len: 1, closed_upto: 0 },
       },
     ]);
+    // No chain yet — observe only, do not emit a gap keepalive.
     expect(seen).toEqual([]);
     expect(fire).toBeUndefined();
+    c.push([
+      {
+        type: 'full',
+        id: SUB,
+        sessionId: 's',
+        seq: 1,
+        payload: { seriesKey: SUB, count: 1, closed_upto: 0 },
+      },
+    ]);
     c.push([
       {
         type: 'delta',
@@ -866,15 +876,20 @@ describe('TipCoalescer', () => {
         payload: { unchanged: true, forming: true, base_index: 0, count: 1, tail_len: 1, closed_upto: 0 },
       },
     ]);
+    // Contiguous UNCHANGED flushes the pending tip then forwards (no timer wait).
     fire?.();
-    const payload = seen[0]?.[0]?.payload as { bars: Array<{ close: number }>; unchanged?: boolean };
-    expect(seen).toHaveLength(1);
-    expect(payload.bars[0]?.close).toBe(3);
-    expect(payload.unchanged).toBeUndefined();
-    expect(seen[0]?.[0]?.seq).toBe(2);
+    const batch = seen.at(-1) ?? [];
+    expect(batch.map((f) => f.type)).toEqual(['delta', 'delta']);
+    const tip = batch[0]?.payload as { bars?: Array<{ close: number }>; unchanged?: boolean };
+    const keep = batch[1]?.payload as { unchanged?: boolean };
+    expect(tip?.bars?.[0]?.close).toBe(3);
+    expect(tip?.unchanged).toBeUndefined();
+    expect(batch[0]?.seq).toBe(2);
+    expect(keep?.unchanged).toBe(true);
+    expect(batch[1]?.seq).toBe(3);
   });
 
-  test('a dropped UNCHANGED run is acknowledged on the next tip', () => {
+  test('forwarded UNCHANGED keepalives advance seq so the next tip needs no ack', () => {
     const seen: Redesign2Frame[][] = [];
     let fire: (() => void) | undefined;
     const c = new TipCoalescer(
@@ -924,14 +939,19 @@ describe('TipCoalescer', () => {
         },
       },
     ]);
+    // Keepalives forwarded in the same push; tip still pending on the timer.
+    expect(seen).toHaveLength(2);
+    expect(seen[1]?.map((f) => f.seq)).toEqual([5, 6]);
     fire?.();
     const tip = seen.at(-1)?.[0];
-    const payload = tip?.payload as { seqAckFrom?: number } | undefined;
+    const payload = tip?.payload as { seqAckFrom?: number; bars?: Array<{ close: number }> } | undefined;
     expect(tip?.seq).toBe(7);
-    expect(payload?.seqAckFrom).toBe(4);
+    expect(payload?.bars?.[0]?.close).toBe(1);
+    // Cursor already at 6 from forwarded keepalives — continuous, no ack hole.
+    expect(payload?.seqAckFrom).toBeUndefined();
   });
 
-  test('a trailing UNCHANGED keepalive advances the released seq', () => {
+  test('a trailing UNCHANGED keepalive flushes the pending tip then forwards', () => {
     const seen: Redesign2Frame[][] = [];
     let fire: (() => void) | undefined;
     const c = new TipCoalescer(
@@ -973,11 +993,17 @@ describe('TipCoalescer', () => {
       },
     ]);
     fire?.();
-    const tip = seen.at(-1)?.find((f) => f.type === 'delta');
-    const payload = tip?.payload as { bars?: Array<{ close: number }>; seqAckFrom?: number } | undefined;
-    expect(tip?.seq).toBe(6);
-    expect(payload?.bars?.[0]?.close).toBe(2);
-    expect(payload?.seqAckFrom).toBe(4);
+    const batch = seen.at(-1) ?? [];
+    expect(batch.map((f) => f.type)).toEqual(['close', 'delta', 'delta']);
+    const tip = batch[1];
+    const keep = batch[2];
+    const tipPayload = tip?.payload as { bars?: Array<{ close: number }>; seqAckFrom?: number } | undefined;
+    const keepPayload = keep?.payload as { unchanged?: boolean } | undefined;
+    expect(tip?.seq).toBe(5);
+    expect(tipPayload?.bars?.[0]?.close).toBe(2);
+    expect(tipPayload?.seqAckFrom).toBeUndefined();
+    expect(keep?.seq).toBe(6);
+    expect(keepPayload?.unchanged).toBe(true);
   });
 
   test('folded tips acknowledge the seqs they replaced', () => {

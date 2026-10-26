@@ -609,11 +609,12 @@ function mergeTip(prev: Redesign2Frame, next: Redesign2Frame): Redesign2Frame {
  * tip for the same id folds onto the pending one and releases immediately
  * so `batch:post` is not stuck behind the rest of the window under load.
  * A non-tip frame (`close`, APPEND_BAR / `forming: false`) flushes the
- * pending tip for that subscription first. `UNCHANGED` keepalives are
- * dropped. Their seq, and any tip seq folded into the one frame we keep,
- * stays on a per-subscription chain. The frame we release carries
- * `seqAckFrom` (the cursor before that run) so the applier advances
- * through it. A seq we never saw breaks the chain and stays a real gap.
+ * pending tip for that subscription first. `UNCHANGED` keepalives flush
+ * any pending tip then forward so the applier advances seq one-by-one —
+ * dropping them used to force `seqAckFrom` holes that `client-apply`
+ * counted as `droppedTip` even though no tip payload was lost. Tip seqs
+ * folded into the one frame we keep still ride `seqAckFrom`. A seq we
+ * never saw breaks the chain and stays a real gap.
  */
 export class TipCoalescer {
   private readonly pending = new Map<string, Redesign2Frame>();
@@ -633,7 +634,20 @@ export class TipCoalescer {
     const out: Redesign2Frame[] = [];
     for (const frame of frames) {
       if (isUnchangedFrame(frame)) {
-        this.observe(frame);
+        const id = frame.id;
+        const seq = seqOfFrame(frame);
+        const chain = id != null ? this.chains.get(id) : undefined;
+        const contiguous =
+          chain != null && !chain.broken && seq != null && seq === chain.seenTo + 1;
+        if (contiguous) {
+          // Pending tip first so its payload is not stranded behind a keepalive.
+          for (const prior of this.take(id)) out.push(this.releaseSeq(prior));
+          out.push(this.releaseSeq(frame));
+        } else {
+          // Hole or no cursor: observe only (may mark broken). Do not emit a
+          // gap keepalive — that would force the applier to resync.
+          this.observe(frame);
+        }
         continue;
       }
       if (isFormingTip(frame) && frame.id) {

@@ -557,8 +557,9 @@ describe('live-wire diagnostics (MCP stream.get / stream.reset)', () => {
 });
 
 describe('live-wire P1 series + study push', () => {
-  test('the inbox drops forming tips and still delivers the snapshot', async () => {
+  test('the inbox keeps one forming tip for the snapshot waiter', async () => {
     const h = makeHarness();
+    _resetV1Metrics({ warmup: 0 });
     const p = h.wire.ensureSeries('series:k', {});
     await tick();
     await tick();
@@ -584,8 +585,9 @@ describe('live-wire P1 series + study push', () => {
       seq: 90,
       payload: { index: 0, time: 100, ohlcv: { open: 1, high: 1, low: 1, close: 1, volume: 1 } },
     });
-    // Latest forming tip + close; tips coalesce to one slot.
+    // Latest forming tip + close; tips coalesce to one slot (not counted as drops).
     expect(h.wire.inboxDepth('series:k')).toBe(2);
+    expect(v1MetricsSnapshot().counts.droppedTip).toBe(0);
     h.emit({
       type: 'full',
       id: 'series:k',
@@ -597,6 +599,36 @@ describe('live-wire P1 series + study push', () => {
     expect(bars.length).toBeGreaterThan(0);
     const queued = h.wire.inboxDepth('series:k');
     expect(queued).toBeLessThanOrEqual(32);
+  });
+
+  test('live forming tips skip the inbox and do not inflate droppedTip', async () => {
+    const h = makeHarness();
+    _resetV1Metrics({ warmup: 0 });
+    const p = h.wire.ensureSeries('series:k', {});
+    await tick();
+    await tick();
+    h.emit({ type: 'full', id: 'series:k', seq: 1, payload: { count: 1, bars: BARS } });
+    await p;
+    expect(h.wire.inboxDepth('series:k')).toBe(0);
+    for (let i = 0; i < 50; i++) {
+      h.emit({
+        type: 'delta',
+        id: 'series:k',
+        sessionId: 'ses',
+        seq: i + 2,
+        payload: {
+          forming: true,
+          bars: [{ time: 100, open: 1, high: 1, low: 1, close: i + 1, volume: 1 }],
+          base_index: 0,
+          count: 1,
+          tail_len: 1,
+        },
+      });
+    }
+    // Already applied via routeFrame — no waiter inbox churn.
+    expect(h.wire.inboxDepth('series:k')).toBe(0);
+    expect(v1MetricsSnapshot().counts.droppedTip).toBe(0);
+    expect(h.seriesDelta.length).toBe(50);
   });
 
   test('a queue of closes is kept and resumes once', async () => {
@@ -1508,12 +1540,9 @@ const h = makeHarness();
   });
 });
 
-const raf = () =>
+/** Drain the series→script kick (microtask) and any nested thenables. */
+const flushKick = () =>
   new Promise<void>((resolve) => {
-    if (typeof requestAnimationFrame === 'function') {
-      requestAnimationFrame(() => resolve());
-      return;
-    }
     queueMicrotask(() => resolve());
   });
 
@@ -1633,7 +1662,7 @@ describe('live-wire mixed delta batch', () => {
     ]);
     expect(h.applyOrder).toEqual(['price', 'price']);
     expect(h.applied).toEqual([]);
-    await raf();
+    await flushKick();
     // First new tip time paints one cached script.
     expect(h.applied).toEqual([{ via: 'stream-delta' }]);
     expect(h.applyOrder).toEqual(['price', 'price', 'plots:stream-delta']);
@@ -1673,7 +1702,7 @@ describe('live-wire mixed delta batch', () => {
         },
       },
     ]);
-    await raf();
+    await flushKick();
     expect(h.applied).toEqual([]);
     expect(h.applyOrder).toEqual(['price', 'price']);
     // Light metrics close still ends queueWait once for the coalesced frame.
@@ -1697,7 +1726,7 @@ describe('live-wire mixed delta batch', () => {
         },
       },
     ]);
-    await raf();
+    await flushKick();
     expect(h.applied).toEqual([{ via: 'stream-delta' }]);
   });
 
@@ -1751,7 +1780,7 @@ describe('live-wire mixed delta batch', () => {
         },
       },
     ]);
-    await raf();
+    await flushKick();
     // One paint closes the burst; the other sub waits for its wire frame.
     expect(h.applied).toEqual([{ via: 'stream-delta' }]);
     await tick();
@@ -1816,7 +1845,7 @@ describe('live-wire mixed delta batch', () => {
         },
       },
     ]);
-    await raf();
+    await flushKick();
     await tick();
     expect(h.applied).toEqual([]);
     // No eligible script to paint; light close still ends queueWait.
@@ -1856,7 +1885,7 @@ describe('live-wire mixed delta batch', () => {
     h.applied.length = 0;
     h.applyOrder.length = 0;
 
-    // Series-only schedules a kick, then a script delta lands before rAF.
+    // Series-only schedules a kick, then a script delta lands before it runs.
     h.emitBatch([
       {
         type: 'delta',
@@ -1888,8 +1917,57 @@ describe('live-wire mixed delta batch', () => {
     });
     expect(h.applied).toEqual([{ via: 'stream-delta' }]);
     h.applied.length = 0;
-    await raf();
+    await flushKick();
     // Pending kick must not re-paint after the wire already closed the burst.
     expect(h.applied).toEqual([]);
+  });
+
+  test('series kick closes queueWait on microtask without waiting for rAF', async () => {
+    _resetV1Metrics({ warmup: 0 });
+    const h = makeHarness({ syncApply: true });
+    const seriesP = h.wire.ensureSeries('series:k', {});
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: 'series:k',
+      sessionId: 'ses',
+      seq: 1,
+      payload: { count: 1, bars: BARS },
+    });
+    await seriesP;
+
+    const held: FrameRequestCallback[] = [];
+    const prevRaf = globalThis.requestAnimationFrame;
+    globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) => {
+      // Simulate a pan frame stall — rAF callbacks are held back.
+      held.push(cb);
+      return held.length;
+    }) as typeof requestAnimationFrame;
+    try {
+      v1Mark('batch:post');
+      h.emitBatch([
+        {
+          type: 'delta',
+          id: 'series:k',
+          sessionId: 'ses',
+          seq: 2,
+          payload: {
+            bars: [{ time: 100, open: 1, high: 2, low: 1, close: 2, volume: 1 }],
+            forming: true,
+            base_index: 0,
+            count: 1,
+            tail_len: 1,
+          },
+        },
+      ]);
+      await flushKick();
+      // Kick used a microtask; queueWait closed even though rAF is stalled.
+      expect(v1MetricsSnapshot().queueWait.n).toBe(1);
+      // paint:raf from apply:end may be queued, but the kick itself did not need it.
+      for (const cb of held) cb(0);
+    } finally {
+      globalThis.requestAnimationFrame = prevRaf;
+    }
   });
 });

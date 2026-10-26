@@ -353,16 +353,16 @@ export class StreamLiveWire {
   private readonly jsonSubs = new Set<string>();
   /**
    * Series tip landed without script frames in the same batch. One coalesced
-   * per-frame kick closes `batch:post` → `apply:start`. Same-slot forming
-   * tips only stamp metrics (no script reapply); a new tip time paints at
-   * most one cached script. Real script paints cancel a pending kick.
+   * microtask kick closes `batch:post` → `apply:start` (not rAF — pan/zoom
+   * at large windows can delay animation frames hundreds of ms). Same-slot
+   * forming tips only stamp metrics (no script reapply); a new tip time
+   * paints at most one cached script. Real script paints cancel a pending kick.
    */
   private seriesScriptKick = false;
   private seriesScriptKickNeedsPaint = false;
   private seriesScriptKickTipTime: number | null = null;
   private seriesKickPaintedTipTime: number | null = null;
   private seriesScriptKickScheduled = false;
-  private seriesScriptKickTimer: ReturnType<typeof setTimeout> | number | null = null;
 
   constructor(
     private readonly client: WireClient,
@@ -708,19 +708,29 @@ export class StreamLiveWire {
   }
 
   /**
-   * Keep the inbox bounded. At most one forming tip per sub (latest wins);
-   * a `close`, `full`, `error`, or non-forming delta stays. Overflow of
-   * those resumes once.
+   * Keep the inbox bounded for snapshot waiters. Live forming tips are
+   * already applied via `routeFrame` — skip enqueueing them once the sub
+   * has an applied seq and no waiter (stops `droppedTip` from counting
+   * every same-slot replace). While awaiting a snapshot, at most one
+   * forming tip per sub (latest wins, not counted as a drop). A `close`,
+   * `full`, `error`, or non-forming delta stays. Cap overflow of those
+   * resumes once; only a spliced forming tip under the cap counts as a drop.
    */
   private enqueueInbox(frame: WireFrame): void {
     const id = frame.id;
     if (!id) return;
+    if (
+      this.isDroppableTip(frame) &&
+      this.appliedSeq.has(id) &&
+      !this.inboxWaiters.has(id)
+    ) {
+      return;
+    }
     const queue = this.inbox.get(id) ?? [];
     if (this.isDroppableTip(frame)) {
       const tipAt = queue.findIndex((item) => this.isDroppableTip(item));
       if (tipAt >= 0) {
         queue[tipAt] = frame;
-        v1Count('droppedTip');
         this.inbox.set(id, queue);
         return;
       }
@@ -1250,9 +1260,10 @@ export class StreamLiveWire {
 
   /**
    * After a series-only tip, close `batch:post` → `apply:start` once per
-   * frame (or microtask when rAF is missing). Same-slot forming tips only
-   * stamp metrics; a new tip time paints one cached script so overlays can
-   * extend before the script's own wire frame.
+   * turn via microtask. Same-slot forming tips only stamp metrics; a new
+   * tip time paints one cached script so overlays can extend before the
+   * script's own wire frame. Microtask (not rAF) keeps queueWait off the
+   * pan/zoom frame budget at large windows.
    */
   private scheduleSeriesScriptKick(frame?: WireFrame): void {
     this.seriesScriptKick = true;
@@ -1268,28 +1279,22 @@ export class StreamLiveWire {
     }
     if (this.seriesScriptKickScheduled) return;
     this.seriesScriptKickScheduled = true;
-    const run = (): void => {
-      this.seriesScriptKickTimer = null;
+    queueMicrotask(() => {
       this.seriesScriptKickScheduled = false;
       if (!this.seriesScriptKick) return;
       this.seriesScriptKick = false;
       const needsPaint = this.seriesScriptKickNeedsPaint;
-      const tipTime = this.seriesScriptKickTipTime;
+      const paintedTip = this.seriesScriptKickTipTime;
       this.seriesScriptKickNeedsPaint = false;
       this.seriesScriptKickTipTime = null;
       if (needsPaint) {
-        if (tipTime != null) this.seriesKickPaintedTipTime = tipTime;
+        if (paintedTip != null) this.seriesKickPaintedTipTime = paintedTip;
         if (this.kickOneCachedScriptPaint()) return;
       }
       // Light close: end queueWait without reapplying every live script.
       v1Mark('apply:start');
       v1Mark('apply:end');
-    };
-    if (typeof globalThis.requestAnimationFrame === 'function') {
-      this.seriesScriptKickTimer = globalThis.requestAnimationFrame(run);
-      return;
-    }
-    queueMicrotask(run);
+    });
   }
 
   private cancelSeriesScriptKick(): void {
@@ -1298,14 +1303,6 @@ export class StreamLiveWire {
     this.seriesScriptKickTipTime = null;
     this.seriesKickPaintedTipTime = null;
     this.seriesScriptKickScheduled = false;
-    if (this.seriesScriptKickTimer != null) {
-      if (typeof globalThis.cancelAnimationFrame === 'function') {
-        globalThis.cancelAnimationFrame(this.seriesScriptKickTimer as number);
-      } else {
-        clearTimeout(this.seriesScriptKickTimer as ReturnType<typeof setTimeout>);
-      }
-      this.seriesScriptKickTimer = null;
-    }
   }
 
   /**
