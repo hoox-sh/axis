@@ -13,6 +13,7 @@
  * @module engine/v1/apply-transaction
  */
 
+import { engineDebug, engineDebugSample } from '../../debug';
 import { classifySeqGap } from '../frames';
 
 export type ApplyAbortReason =
@@ -83,6 +84,7 @@ function structuralReason(check: ApplyCheck | undefined): ApplyAbortReason | nul
  */
 export function runApplyTransaction(input: ApplyTransaction): ApplyResult {
   const stale = (reason: ApplyAbortReason): ApplyResult => {
+    engineDebug('apply.abort', { reason, seq: input.seq ?? null, lastSeq: input.lastSeq });
     try {
       input.onStale?.(reason);
     } catch {
@@ -128,6 +130,11 @@ export function runApplyTransaction(input: ApplyTransaction): ApplyResult {
     input.commit();
   } catch {
     return stale('aborted');
+  }
+  if (action === 'replay') {
+    engineDebug('apply.replay', { seq: input.seq ?? null, lastSeq: input.lastSeq });
+  } else {
+    engineDebugSample('apply.commit', { seq: input.seq ?? null, lastSeq: input.lastSeq });
   }
   return { ok: true, action };
 }

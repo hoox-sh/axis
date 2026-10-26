@@ -30,6 +30,7 @@
 import { type Component, For, Show, createEffect, createMemo, createSignal } from 'solid-js';
 import { store, setStore, persist, clearLogs, isPanelOpen } from '../store';
 import type { LogEntry } from '../store/types';
+import { downloadAxisDebugLog, isAxisDebug } from '../debug';
 import { Icons } from './icons';
 import { copyToClipboard } from './clipboard';
 
@@ -244,6 +245,17 @@ export const SystemLogs: Component = () => {
             </span>
           </Show>
 
+          <Show when={isAxisDebug()}>
+            <button
+              type="button"
+              class="sc-btn sc-btn-ghost px-1.5 py-0.5"
+              title="Download rotating chart/engine debug log"
+              data-testid="axis-debug-log-download"
+              onClick={() => downloadAxisDebugLog()}
+            >
+              <Icons.download size={13} />
+            </button>
+          </Show>
           <button
             type="button"
             class="sc-btn sc-btn-ghost px-1.5 py-0.5"

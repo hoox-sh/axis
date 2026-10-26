@@ -40,6 +40,7 @@ import type { RunResult } from '../plugins/types';
 import { store } from '../store';
 import type { Bar } from '../store/types';
 import { sanitizeStreamBar } from '../data/parse-bars';
+import { engineDebug, engineDebugSample } from '../debug';
 
 import { readTimeList, scriptDeltaTimeTail, Redesign2DeltaApplier } from './client-apply';
 import { classifySeqGap } from './frames';
@@ -486,11 +487,13 @@ export class StreamLiveWire {
   private fail(reason: string, message?: string): never {
     // Re-arming here latched forever: live ticks called fail() every flush.
     if (this.cooledDown) {
+      engineDebugSample('wire.fail', { reason: 'cooldown', message: message ?? reason });
       throw new StreamFallbackError('cooldown', message ?? 'stream in failure cooldown');
     }
     this.failures += 1;
     this.coolUntil = Date.now() + FAILURE_COOLDOWN_MS;
     this.lastFail = { reason, message: message ?? reason, at: Date.now() };
+    engineDebug('wire.fail', { reason, message: message ?? reason, failures: this.failures });
     // Multiplex falls back to venue+REST; only reset()/disconnect() stop the client.
     throw new StreamFallbackError(reason, message);
   }
@@ -604,6 +607,7 @@ export class StreamLiveWire {
    */
   ingestBatch(frames: readonly WireFrame[]): void {
     if (frames.length === 0) return;
+    engineDebugSample('wire.batch', { n: frames.length });
     if (frames.length === 1) {
       this.ingest(frames[0]!);
       return;
@@ -765,6 +769,13 @@ export class StreamLiveWire {
       this.appliedSeq.set(subId, typeof full.seq === 'number' ? full.seq : 0);
       this.seriesBars.set(subId, bars);
       this.handlers.onStatus(subId, 'live');
+      engineDebug('wire.series.snapshot', {
+        subId,
+        n: bars.length,
+        seq: typeof full.seq === 'number' ? full.seq : null,
+        first: bars[0]?.time ?? null,
+        last: bars[bars.length - 1]?.time ?? null,
+      });
       return bars;
     } catch (e) {
       if (e instanceof StreamFallbackError) throw e;
@@ -774,6 +785,16 @@ export class StreamLiveWire {
 
   /** Evaluate a script over the latest merged stream state (no re-run). */
   async evalScript(input: EvalScriptInput): Promise<RunResult> {
+    engineDebugSample(
+      'wire.script.eval',
+      {
+        subId: input.subId,
+        indicatorId: input.indicatorId ?? null,
+        bars: input.bars.length,
+      },
+      1000,
+      input.subId,
+    );
     await this.ensureConnected();
     this.scriptCtx.set(input.subId, {
       script: input.script,
@@ -793,6 +814,10 @@ export class StreamLiveWire {
       ((prevSig !== undefined && prevSig !== sig) ||
         (prevDepth !== undefined && prevDepth !== depth));
     if (identityChanged) {
+      engineDebug('wire.script.resubscribe', {
+        subId: input.subId,
+        indicatorId: input.indicatorId ?? null,
+      });
       this.appliers.delete(input.subId);
       this.appliedSeq.delete(input.subId);
       this.scriptInputSig.delete(input.subId);
@@ -1094,6 +1119,13 @@ export class StreamLiveWire {
       if (!bars.length) return;
       this.seriesBars.set(subId, bars);
       this.appliedSeq.set(subId, seq ?? prevSeq ?? 0);
+      engineDebug('wire.series.full', {
+        subId,
+        n: bars.length,
+        seq,
+        first: bars[0]?.time ?? null,
+        last: bars[bars.length - 1]?.time ?? null,
+      });
       this.handlers.onSeriesFull(bars);
       this.handlers.onStatus(subId, 'live');
       return;
@@ -1107,12 +1139,25 @@ export class StreamLiveWire {
       commit: () => {
         if (seq != null) this.appliedSeq.set(subId, seq);
         if (bars.length) {
+          engineDebugSample(
+            'wire.series.delta',
+            {
+              subId,
+              n: bars.length,
+              seq,
+              time: bars[bars.length - 1]?.time ?? null,
+              close: bars[bars.length - 1]?.close ?? null,
+            },
+            1000,
+            subId,
+          );
           this.handlers.onSeriesDelta(bars, true);
           this.seriesBars.set(subId, mergeTip(this.seriesBars.get(subId) ?? [], bars));
         }
         this.handlers.onStatus(subId, 'live');
       },
       onStale: (reason) => {
+        engineDebug('wire.stale', { subId, reason, seq, lastSeq: prevSeq ?? 0 });
         if (reason !== 'gap') return;
         v1Count('seqGap');
         v1Count('resync');

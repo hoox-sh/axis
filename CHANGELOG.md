@@ -17,6 +17,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Added
 
+- **AXIS debug mode (`VITE_AXIS_DEBUG`) — detailed chart-action and engine logs.** Set `VITE_AXIS_DEBUG=1` (also `true` / `yes`; alias `VITE_DEBUG`) in `.env` and restart `bun run dev`. Boot prints `[axis:debug]`; DevTools filter `[axis:chart]` / `[axis:engine]`. Lines also persist in a rotating localStorage ring (`axis.debug.log.0`…`.3`, 64 KiB each, oldest dropped). Download the ring as `axis-debug-*.log` from System Logs (download icon) or `window.__AXIS_DEBUG__.download()`. Forming ticks and live deltas are sampled (~1/s). Optional overlay: `localStorage.axis.debug=1` then reload. e2e forces the flag off.
+
 - **One live batch commits price, plots, markers, then alerts.** `commitLiveBatch` is the §6.1 transaction. A worker `onFrames` batch of mixed series+script deltas paints price then plots in the same task. Stream deltas apply through synchronous `applyStreamDelta` / `applyPrecomputedChart` (snapshots stay on async `applyStreamPayload`).
 
 - **v1 concept tests cover pane/crosshair identity, drawings through a window slide, the 20% p95 budget, and pan/zoom e2e.** `v1BudgetRegressed` fails review when p95 grows more than 20% vs the fixture.

@@ -36,6 +36,7 @@ import {
   onCleanup,
   untrack,
 } from 'solid-js';
+import { chartDebug } from '../debug';
 import { PaneManager } from './pane-manager';
 import { ChartContextMenu } from './ChartContextMenu';
 import { DrawingToolbar } from './DrawingToolbar';
@@ -266,6 +267,14 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     localManager = manager;
     setSlotManager(id, manager);
     if (isActive()) setManager(manager, id);
+    chartDebug('host.mount', {
+      slot: id,
+      active: isActive(),
+      panes: store.panes.length,
+      bars: getSlotBars(id).length,
+      symbol: props.symbol || store.symbol,
+      interval: props.interval || store.interval,
+    });
 
     for (const pane of store.panes) {
       try {
@@ -724,6 +733,7 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
   onCleanup(() => {
     const id = slotId();
     const owned = localManager;
+    chartDebug('host.unmount', { slot: id });
     alive = false;
     cancelReflow();
     crosshairRaf.cancel();

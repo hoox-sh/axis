@@ -7,7 +7,7 @@ tags: [devops, doc, docs, local-dev]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-08T19:09:06Z
+  at: 2026-10-26T00:24:45Z
 sources:
   - id: tree
     resource: "docs/devops/local-dev.mdx"
@@ -33,6 +33,7 @@ Repo path `docs/devops/local-dev.mdx`.
   * AXIS CLI
   * Makefile helpers
   * Storybook (component lab)
+* Debug mode (chart + engine)
 * Internals — useful paths
 * Worked loop
   * Load an example plugin

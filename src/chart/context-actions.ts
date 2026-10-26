@@ -25,6 +25,8 @@
  * @module chart/context-actions
  */
 
+import { chartDebug } from '../debug';
+
 /** Window event so the [A]/[L] cluster re-reads manager scale flags. */
 export const CHART_SCALE_EVENT = 'axis-chart-scale';
 
@@ -73,6 +75,7 @@ const SCRIPT_PREFIXES = [
  */
 export function dispatchChartMenu(id: string, env: ChartMenuEnv): void {
   if (!id || !env) return;
+  chartDebug('action.menu', { id });
   if (id.startsWith('type.')) {
     const chartType = id.slice('type.'.length);
     if (chartType) env.setChartType(chartType);

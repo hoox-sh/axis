@@ -7,7 +7,7 @@ tags: [code]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-25T18:32:15Z
+  at: 2026-10-26T00:24:45Z
 sources:
   - id: tree
     resource: "src"
@@ -19,6 +19,8 @@ okf_lock: generated
 # Files
 
 * `app.tsx` — App
+* `debug-log.ts` — AXIS_DEBUG_LOG_FILES, AXIS_DEBUG_LOG_FILE_BYTES, AXIS_DEBUG_LOG_FLUSH_MS, AXIS_DEBUG_LOG_LINE_DATA, AXIS_DEBUG_LOG_PREFIX, AxisDebugLogStats, RotatingLogOptions, RotatingLogStorage, RotatingLogStore, appendAxisDebugLine, axisDebugLogFilename, axisDebugLogStats
+* `debug.ts` — AXIS_DEBUG_ENV_ALIAS, AXIS_DEBUG_ENV_KEY, AXIS_DEBUG_LOG_FILES, AXIS_DEBUG_LOG_FILE_BYTES, AXIS_DEBUG_LOG_PREFIX, AXIS_DEBUG_STORAGE_KEY, AXIS_DEBUG_TICK_SAMPLE_MS, AxisDebugData, AxisDebugScope, AxisDebugSource, announceAxisDebug, axisDebug
 * `index.tsx`
 * `maintenance.ts` — isMaintenanceMode
 * `version.ts` — APP_VERSION, BAKED_APP_VERSION, appVersion
@@ -55,9 +57,13 @@ okf_lock: generated
 * [src/ui/shortcuts](/code/src/ui/shortcuts.md)
 * [src/ui/studio](/code/src/ui/studio.md)
 * [src/update](/code/src/update.md)
+* [src/utils](/code/src/utils.md)
 
 # Used by
 
+* [src/chart](/code/src/chart.md)
+* [src/engine](/code/src/engine.md)
+* [src/engine/v1](/code/src/engine/v1.md)
 * [src/ui](/code/src/ui.md)
 * [src/update](/code/src/update.md)
 * [tests](/code/tests.md)

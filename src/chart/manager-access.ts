@@ -72,6 +72,7 @@ import {
   setSlotManager,
 } from './chart-registry';
 import { reportUiError } from '../ui/boot-errors';
+import { chartDebug } from '../debug';
 import { notePaintedCandleRange, sanitizeSeriesDataForSetData } from './series-sanitize';
 import { resolvedPrefsForTool } from './drawings/tool-settings';
 import { getThemeManager } from '../theme';
@@ -700,6 +701,17 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
     const sigKey = priceThemeKey();
     const skipSeries =
       paintSig === lastOhlcvPaintSig.get(sigKey) && !clearScriptState && clearMarkers === false;
+
+    chartDebug('setData', {
+      n,
+      fit,
+      clearMarkers,
+      clearScriptState,
+      skip: skipSeries,
+      type: chartType,
+      first: n ? bars[0]?.time : null,
+      last: n ? bars[n - 1]?.time : null,
+    });
 
     // Tune LWC conflation for this history size before the heavy setData paint.
     // Apply to every pane — indicator charts used to keep default 0.5px min

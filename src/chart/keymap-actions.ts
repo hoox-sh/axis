@@ -28,6 +28,7 @@
 
 import { CrosshairMode } from 'lightweight-charts';
 import { store, setDrawingTool, setChartGridMode, setDrawingUi } from '../store';
+import { chartDebug } from '../debug';
 import { getActiveManager, getActiveDrawingLayer } from './chart-registry';
 import type { DrawingToolId } from './drawing-types';
 
@@ -41,6 +42,7 @@ function getPriceChart() {
 
 /** Zoom the visible range by a relative factor (positive = in, negative = out). */
 export function zoomChartBy(delta: number): void {
+  chartDebug('action.zoom', { delta });
   const chart = getPriceChart();
   if (!chart) return;
   try {
@@ -58,6 +60,7 @@ export function zoomChartBy(delta: number): void {
 
 /** Pan the visible range by a bar count (negative = left). */
 export function panChartBy(shift: number): void {
+  chartDebug('action.pan', { shift });
   const chart = getPriceChart();
   if (!chart) return;
   try {
@@ -72,6 +75,7 @@ export function panChartBy(shift: number): void {
 
 /** Fit the whole series into view. */
 export function resetChartZoom(): void {
+  chartDebug('action.resetZoom');
   const mgr = getActiveManager();
   if (!mgr) return;
   try {
@@ -83,6 +87,7 @@ export function resetChartZoom(): void {
 
 /** Toggle the lightweight-charts crosshair mode (Normal ↔ Magnet). */
 export function toggleCrosshair(): void {
+  chartDebug('action.crosshair');
   const chart = getPriceChart();
   if (!chart) return;
   try {
@@ -97,6 +102,7 @@ export function toggleCrosshair(): void {
 
 /** Cycle drawing magnet strength: off → weak → strong → off. */
 export function toggleMagnet(): void {
+  chartDebug('action.magnet', { from: store.drawingUi.magnet });
   const order = ['off', 'weak', 'strong'] as const;
   const i = order.indexOf(store.drawingUi.magnet);
   const next = order[(i + 1) % order.length]!;
@@ -106,6 +112,7 @@ export function toggleMagnet(): void {
 
 /** Delete the selected drawing on the active layer (respects lock rules). */
 export function deleteSelectedDrawing(): void {
+  chartDebug('action.drawing.delete');
   const layer = getActiveDrawingLayer();
   if (!layer) return;
   layer.deleteSelected();
@@ -113,6 +120,7 @@ export function deleteSelectedDrawing(): void {
 
 /** Cancel an in-progress drawing draft and clear selection. */
 export function cancelDraft(): void {
+  chartDebug('action.drawing.cancel');
   const layer = getActiveDrawingLayer();
   if (!layer) return;
   layer.cancelDraft();
@@ -120,10 +128,12 @@ export function cancelDraft(): void {
 
 /** Select a drawing tool (cursor / place tool). */
 export function selectDrawingTool(tool: DrawingToolId): void {
+  chartDebug('action.drawing.tool', { tool });
   setDrawingTool(tool);
 }
 
 /** Apply a chart grid layout. */
 export function applyChartGrid(mode: '1' | '2h' | '2v' | '4'): void {
+  chartDebug('action.grid', { mode });
   setChartGridMode(mode);
 }

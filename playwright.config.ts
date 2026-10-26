@@ -37,7 +37,7 @@ export default defineConfig({
     // Always test the real app: a local `.env` may have the maintenance gate
     // on (VITE_MAINTENANCE_MODE), and process env outranks `.env` files in
     // Vite — so force the flag off for the e2e build + preview.
-    env: { VITE_MAINTENANCE_MODE: '0' },
+    env: { VITE_MAINTENANCE_MODE: '0', VITE_AXIS_DEBUG: '0' },
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,
   },

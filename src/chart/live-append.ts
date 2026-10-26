@@ -54,6 +54,7 @@
  */
 
 import { appendBar, sliceToChartWindow, store, type BarAppendResult } from '../store';
+import { chartDebug, chartDebugSample } from '../debug';
 import { getManager, setDataToChart } from './manager-access';
 import { notePaintRequest } from './paint-latency';
 import { paintAction } from './v1/paint-action';
@@ -147,7 +148,20 @@ function cancelLivePaint(manager: LivePainter): void {
 export function appendLiveBar(bar: Bar, opts?: { via?: 'worker' }): BarAppendResult {
   const result = appendBar(bar);
   const action = paintAction(result, store.bars.length);
-  if (action === 'none') return result;
+  const debugPayload = {
+    verdict: result,
+    paint: action,
+    time: bar.time,
+    close: bar.close,
+    n: store.bars.length,
+    via: opts?.via ?? 'venue',
+  };
+  if (action === 'none') {
+    chartDebugSample('live.ignored', debugPayload, 2000);
+    return result;
+  }
+  if (result === 'updated') chartDebugSample('live.append', debugPayload);
+  else chartDebug('live.append', debugPayload);
 
   // Measurement only: stamp the arrival before any paint work so the rAF
   // callback (armed on the first tick of the frame) reports tick → frame.
