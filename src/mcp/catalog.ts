@@ -50,7 +50,8 @@ export const APP_CAPABILITIES: readonly CapabilitySpec[] = [
   {
     id: 'chart.lag',
     domain: 'chart',
-    description: 'Lag ledger: chart vs venue clock vs engine series + verdict',
+    description:
+      'Lag ledger: chart vs venue clock vs engine series + verdict; v1 tick/paint plus transport and layout flags',
     mutates: false,
   },
   {

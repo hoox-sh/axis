@@ -20,11 +20,13 @@
  * @module mcp/live
  */
 
+import { chartLayoutMode } from '../chart/v1/chart-host';
 import { FALLBACK_MAJORS } from '../data/symbol-catalog';
 import { pyneMarket } from '../data/provider';
 import { intervalToSec } from '../data/bars-gaps';
 import { flushLocalAndEngine } from '../data/engine-flush';
 import { currentSeriesKey, pairFormSymbol } from '../engine/market-identity';
+import { engineTransport } from '../engine/v1/transport';
 import { v1MetricsSnapshot } from '../engine/v1/metrics';
 import { routeEngineRun } from '../engine/router';
 import type { DataSeriesKey, DataSeriesStatus } from '../engines/data-sessions';
@@ -288,6 +290,8 @@ export function chartBarsView(p: Record<string, unknown>): Record<string, unknow
  *
  * The engine read is one `GET /data/series` (in-tab key, 6 s budget,
  * fail-soft). Pass `engine: false` for the purely local view.
+ * `v1` is the tick/paint snapshot plus `transport` / `layout` so a live
+ * G1/G2 read can tell worker+single from the JSON/multi rollback.
  */
 export async function chartLagView(p: Record<string, unknown>): Promise<Record<string, unknown>> {
   const nowMs = Date.now();
@@ -403,7 +407,11 @@ export async function chartLagView(p: Record<string, unknown>): Promise<Record<s
       engine: store.telemetry?.engine ?? null,
       stream: store.telemetry?.stream ?? null,
     },
-    v1: v1MetricsSnapshot(),
+    v1: {
+      ...v1MetricsSnapshot(),
+      transport: engineTransport(),
+      layout: chartLayoutMode(),
+    },
     verdict,
   };
 }

@@ -16,6 +16,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { putDatasetBars, _resetDatasetStoreForTests } from '../src/data/dataset-store';
 import { _resetChartDataSessionForTests } from '../src/engines/chart-data-session';
 import { _resetSeriesDriveForTests } from '../src/engines/series-drive';
+import { resetChartLayoutMode, setChartLayoutMode } from '../src/chart/v1/chart-host';
+import { resetEngineTransport, setEngineTransport } from '../src/engine/v1/transport';
 import { invokeCapability } from '../src/mcp/dispatch';
 import { APP_CAPABILITIES, findCapability } from '../src/mcp/catalog';
 import { McpInvokeError } from '../src/mcp/protocol';
@@ -114,6 +116,8 @@ afterEach(() => {
   _resetChartDataSessionForTests();
   _resetSeriesDriveForTests();
   _resetDatasetStoreForTests();
+  resetEngineTransport();
+  resetChartLayoutMode();
 });
 
 describe('MCP live-plane catalog', () => {
@@ -249,6 +253,21 @@ describe('chart.lag', () => {
   it('verdict is empty for an empty chart', async () => {
     const r = (await invokeCapability('chart.lag', { engine: false })) as CapResult;
     expect(r.verdict).toMatchObject({ code: 'empty' });
+  });
+
+  it('v1 names the worker+single defaults and the json/multi rollback', async () => {
+    const live = (await invokeCapability('chart.lag', { engine: false })) as CapResult;
+    expect(live.v1.transport).toBe('worker');
+    expect(live.v1.layout).toBe('single');
+    expect(live.v1.tickToApply).toEqual(expect.objectContaining({ n: expect.any(Number) }));
+
+    setEngineTransport('json');
+    setChartLayoutMode('multi');
+    const rollback = (await invokeCapability('chart.lag', { engine: false })) as CapResult;
+    expect(rollback.v1.transport).toBe('json');
+    expect(rollback.v1.layout).toBe('multi');
+    resetEngineTransport();
+    resetChartLayoutMode();
   });
 });
 
