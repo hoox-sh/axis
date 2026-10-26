@@ -17,6 +17,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Added
 
+- **P6 flag flip is proven in unit tests.** One test switches worker+single to json+multi and back: the live client and the pane chart identity follow both flags together. The worker transport test also asserts inbound frames are already objects (no window `JSON.parse`).
+
 - **Inactive chart slots paint without stealing the focused manager.** `setDataToChart` takes an optional `manager` / `slotId` so a 2h/2v/4 cell can `setData` on its own PaneManager. Drawings and selection stay on the focused slot.
 
 - **`chart.lag` `v1` names the live transport and chart layout.** The snapshot already had tick→apply / tick→paint. It now also reports `axis.engine.transport` and `axis.chart.layout` so a live G1/G2 read can tell worker+single from the JSON/multi rollback.

@@ -118,4 +118,60 @@ describe('axis.engine.transport', () => {
       restoreWs();
     }
   });
+
+  test('worker path delivers decoded frames without JSON.parse on the window', async () => {
+    setEngineTransport('worker');
+    let port: IngestWorkerTransport | null = null;
+    setIngestWorkerFactory(() => {
+      const transport: IngestWorkerTransport = {
+        postMessage(msg) {
+          if (msg.type === 'connect') {
+            queueMicrotask(() => {
+              transport.onmessage?.({
+                data: { type: 'status', status: 'open' },
+              } as MessageEvent);
+              transport.onmessage?.({
+                data: { type: 'open', first: true },
+              } as MessageEvent);
+            });
+          }
+        },
+        terminate() {},
+        onmessage: null,
+        onerror: null,
+      };
+      port = transport;
+      return transport;
+    });
+    const client = createLiveWsClient({ endpoint: 'http://127.0.0.1:5002' });
+    expect(client).toBeInstanceOf(IngestHostClient);
+    try {
+      await client.connect();
+      const seen: unknown[] = [];
+      client.onFrame = (frame) => seen.push(frame);
+      const calls: string[] = [];
+      JSON.parse = ((
+        text: string,
+        reviver?: (this: unknown, key: string, value: unknown) => unknown,
+      ) => {
+        calls.push(text);
+        return nativeJsonParse(text, reviver);
+      }) as typeof JSON.parse;
+      try {
+        port?.onmessage?.({
+          data: {
+            type: 'frames',
+            frames: [{ type: 'full', id: 'series:x', seq: 1, payload: { count: 1 } }],
+          },
+        } as MessageEvent);
+      } finally {
+        JSON.parse = nativeJsonParse;
+      }
+      expect(seen).toHaveLength(1);
+      expect(seen[0]).toMatchObject({ type: 'full', seq: 1 });
+      expect(calls).toEqual([]);
+    } finally {
+      client.disconnect();
+    }
+  });
 });

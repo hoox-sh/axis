@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "tests/engine"
-description: "Calculator-profile parity (F-26): engines without livestream resolve to the bars-in path, with or without /health."
+description: "tests/engine contains apply-bridge.test.ts, apply-extras.test.ts, calculator-profile.test.ts, and 24 more files."
 resource: "tests/engine"
 tags: [code, engine, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-26T00:25:26Z
+  at: 2026-10-26T00:41:38Z
 sources:
   - id: tree
     resource: "tests/engine"
@@ -39,6 +39,7 @@ okf_lock: generated
 * `v1-apply-transaction.test.ts`
 * `v1-backpressure.test.ts`
 * `v1-metrics.test.ts`
+* `v1-p6-flags.test.ts`
 * `v1-socket-pool.test.ts`
 * `v1-transport.test.ts`
 * `verify-strength.test.ts`
@@ -56,6 +57,7 @@ okf_lock: generated
 # Depends on
 
 * [src/chart](/code/src/chart.md)
+* [src/chart/v1](/code/src/chart/v1.md)
 * [src/engine](/code/src/engine.md)
 * [src/engine/v1](/code/src/engine/v1.md)
 * [src/engines](/code/src/engines.md)
