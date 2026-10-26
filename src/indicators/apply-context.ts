@@ -236,15 +236,15 @@ export function alignApplySeries(
   // last good plots until a full with an axis arrives.
   // When the engine series is **longer** than the chart (common: replica /
   // DSM holds 20k while the rolling window is 5k), tail-clamp is safe: take
-  // the newest `chartWindowBars` values onto the painted tip. Skipping that
-  // case left overlays blank forever (tip cache never seeded).
+  // the newest `chartWindowBars` values onto the painted tip. When it is
+  // **shorter** (a 500-bar script snapshot on a 5000-bar rolling window), head
+  // pad with `null` so the newest values land on the newest bars instead of
+  // skipping the whole apply — that used to leave indicators frozen on every
+  // live push (`skipped: 'stale-no-axis'`) until the snapshot outgrew the
+  // window. `tailAlignSeriesMap` handles both directions.
   // Fresh full evaluations keep the small-mismatch tail-pin; gross shorter
   // or unknown windows still skip. Free-tier `windowBars` still clamps.
-  const canTailClampLive =
-    opts.livePush === true &&
-    lengthMismatch &&
-    seriesLen >= chartWindowBars &&
-    chartWindowBars > 0;
+  const canTailClampLive = opts.livePush === true && lengthMismatch && chartWindowBars > 0;
   const staleNoAxis =
     sessionAligned &&
     !resultTimes &&

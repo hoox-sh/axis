@@ -45,7 +45,7 @@ flowchart TB
   AXW -->|EXTERNAL_BACKEND| FLASK
   AXW -->|no backend| E503[503 NO_BACKEND]
   SESS -.->|any miss| HTTP
-  ENG -->|pyodide| WASM[Pyodide 0.29.5 (Python 3.13) + pynescript wheel]
+  ENG -->|pyodide| WASM["Pyodide 0.29.5 (Python 3.13) + pynescript wheel"]
   ENG -->|pyne-worker| PYW[HOOX pyne-worker POST /run]
   UI -.->|not an engine| PYNETS[PyneTS library]
   PYW -->|if TRADE_SERVICE| HOOX[HOOX trade-worker]

@@ -91,7 +91,9 @@
         "packages/cli/bin/axis.js",
         "mcp",
         "--url",
-        "https://worker.axis.hoox.sh/mcp"
+        "https://worker.axis.hoox.sh/mcp",
+        "--key",
+        "{env:AXIS_API_KEY}"
       ],
       "environment": {
         "AXIS_API_KEY": "{env:AXIS_API_KEY}"

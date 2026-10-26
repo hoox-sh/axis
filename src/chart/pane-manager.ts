@@ -88,15 +88,21 @@ import {
   lastBarDirection,
   normalizeChartType,
   createHaCacheHolder,
+  isOhlcChartType,
+  resetHeikinAshiCache,
+  resetHaCacheHolder,
   type ChartType,
   type HaCacheHolder,
   DEFAULT_CHART_TYPE,
 } from './chart-type';
 import {
   MAX_CHART_MARKERS,
+  heavyTimeScaleOptions,
+  isHeavyBarLoad,
   barIndexAtTimeBinary,
   capNewest,
   createRafCoalescer,
+  mapBarsToVolumeData,
 } from './heavy-data';
 import type { Bar } from '../store/types';
 import { resizePane, store } from '../store';
@@ -105,6 +111,7 @@ import type { ShapeMarkerSpec } from '../results/plot-visuals';
 import { mountPaneBadge, panePlotHost, refreshPaneBadge, setPaneBadgeLabel } from './pane-badge';
 import { getVisibleBars, isReplayActive } from './bar-replay';
 import { reportUiError } from '../ui/boot-errors';
+import { applyPriceScaleDecimals } from './manager-access';
 import {
   clampPointsToPaintedRange,
   projectToCandleAxis,
@@ -112,6 +119,7 @@ import {
   looksLikeOhlcData,
   rangeFromSeriesData,
   sanitizeSeriesDataForSetData,
+  notePaintedCandleRange,
   type PaintedCandleRange,
 } from './series-sanitize';
 import { getThemeManager } from '../theme';
@@ -660,9 +668,9 @@ export class PaneManager {
   /** Host callback for Data Window / store (set via {@link syncCrosshair}) */
   private crosshairOnMove:
     | ((data: {
-        time: any;
+        time: number | null;
         point: { x: number; y: number } | null;
-        seriesData: Map<ISeriesApi<any>, any>;
+        seriesData: Map<ISeriesApi<any>, unknown>;
       }) => void)
     | null = null;
   /** Guard re-entrant crosshair setCrosshairPosition loops */
@@ -2398,9 +2406,9 @@ export class PaneManager {
    */
   syncCrosshair(
     onMove: (data: {
-      time: any;
+      time: number | null;
       point: { x: number; y: number } | null;
-      seriesData: Map<ISeriesApi<any>, any>;
+      seriesData: Map<ISeriesApi<any>, unknown>;
     }) => void,
   ) {
     this.crosshairOnMove = onMove;
@@ -2490,9 +2498,9 @@ export class PaneManager {
         }
 
         this.crosshairOnMove?.({
-          time: param.time,
+          time: typeof param.time === 'number' ? param.time : null,
           point: param.point,
-          seriesData: param.seriesData as Map<ISeriesApi<any>, any>,
+          seriesData: param.seriesData as Map<ISeriesApi<any>, unknown>,
         });
       };
 
@@ -3190,7 +3198,7 @@ export class PaneManager {
     raf(run);
   }
 
-  setData(paneId: string, seriesKey: string, data: any[]) {
+  setData(paneId: string, seriesKey: string, data: unknown[]) {
     const pane = this.panes.get(paneId);
     if (!pane) return;
     // G2: suppress full-series writes while the user is panning/zooming.
@@ -3207,102 +3215,45 @@ export class PaneManager {
    * Prefers `series.update` (single bar) over full `setData` for live ticks.
    * Non-finite OHLCV is skipped so NaN candles never reach LWC.
    */
+  /**
+   * Live bar update on price + volume panes.
+   * Uses `store.bars` (already updated by store.appendBar) for Heikin-Ashi /
+   * line styles that need prior bars. Falls back to the single `bar` when
+   * the store is empty (unit tests).
+   *
+   * Prefers `series.update` (single bar) over full `setData` for live ticks.
+   * Non-finite OHLCV is skipped so NaN candles never reach LWC.
+   */
   appendBar(bar: Bar) {
     try {
       if (!bar || !isFiniteOhlcBar(bar)) return;
 
       const pricePane = this.panes.get('price');
       const chartType = normalizeChartType(store.chartType ?? this.priceChartType);
-      // The candle and the volume series must carry the **same** bar times:
-      // the library's shared time scale is the union of every series' rows,
-      // and each renderer asks its own series for the bar at the rendered
-      // index. A volume row at a time the candles do not have (a bar the
-      // candles rejected for a null high/low) makes the candlestick renderer
-      // throw `Value is null` on every render.
+      const storeBars = store.bars;
       let paintedTime: number | null = null;
+
+      // Candle series: O(1) series.update for the forming tick.
+      // Non-HA maps the single tick; HA maps store history (incremental cache).
       if (pricePane?.series['candle']) {
-        // Non-HA: O(1) from the single tick. HA: use this chart's holder +
-        // store history (mapBarUpdate is O(1) after full paint seeded into
-        // the holder; never filter+sort 10k bars).
-        const storeBars = store.bars;
-        const barsForMap: readonly Bar[] =
-          chartType === 'heikinashi' && storeBars?.length ? storeBars : [bar];
+        const barsForMap = chartType === 'heikinashi' && storeBars?.length ? storeBars : [bar];
         const point = mapBarUpdate(barsForMap, chartType, this.haHolder);
-        if (point && Number.isFinite(point.time)) {
-          const ohlcOk =
-            'close' in point
-              ? Number.isFinite((point as { open: number }).open) &&
-                Number.isFinite((point as { high: number }).high) &&
-                Number.isFinite((point as { low: number }).low) &&
-                Number.isFinite((point as { close: number }).close)
-              : Number.isFinite((point as { value: number }).value);
-          if (ohlcOk) {
-            const applied = safeUpdate(pricePane.series['candle'], {
-              ...point,
-              time: point.time as UTCTimestamp,
-            });
-            // The candle series now holds this bar's time — the co-painted
-            // clamp must know it, or a row at this time would be dropped as
-            // "not a candle time" and the shared time scale would grow a
-            // slot the candles do not have (LWC `Value is null`).
-            const t = Number(point?.time);
-            if (applied && Number.isFinite(t)) {
-              this.noteLiveCandleTime(t);
-              paintedTime = t;
-            }
+        if (point && this.applyCandlePoint(pricePane.series['candle'], point)) {
+          const t = Number(point.time);
+          if (Number.isFinite(t)) {
+            this.noteLiveCandleTime(t);
+            paintedTime = t;
           }
+          this.applyPriceLineTint(pricePane.series['candle'], chartType, point, storeBars, bar);
         }
-        // Tint last-price line to bar direction (O(1): HA reuses the point
-        // just computed instead of a full-history transform).
-        try {
-          let dir: 'up' | 'down' | null = null;
-          if (chartType === 'heikinashi') {
-            if (point && 'close' in point) {
-              const o = (point as { open: number }).open;
-              const c = (point as { close: number }).close;
-              if (Number.isFinite(o) && Number.isFinite(c)) dir = c >= o ? 'up' : 'down';
-            }
-          } else {
-            // Both branches used to be `storeBars` — the ternary was dead
-            // code. Keep it explicit: the store history (or the single tick
-            // when the store is empty) drives the direction.
-            const dirBars = storeBars?.length ? storeBars : [bar];
-            dir = lastBarDirection(dirBars, chartType);
-          }
-          if (dir) {
-            const voidLike = getThemeManager().getVoidLike();
-            pricePane.series['candle'].applyOptions({
-              priceLineColor: dir === 'up' ? voidLike.up : voidLike.down,
-              priceLineWidth: 1,
-              priceLineStyle: 2,
-            });
-          }
-        } catch {
-          /* price line tint optional */
-        }
-        // Live ticks extend this chart's painted window so the next overlay
-        // clamp keeps the newest tip instead of dropping it. Extend never
-        // creates the range — full paints do — so pre-paint ticks stay a
-        // clamp no-op.
+        // Extend the painted candle window so overlay clamps keep the newest tip.
+        // Extend never creates the range — full paints do — so pre-paint ticks stay a no-op.
         this.extendPaintedCandleRange(bar.time);
       }
-      const volPane = this.panes.get('volume');
-      if (volPane?.series['volume']) {
-        const volColors = getThemeManager().getVolumeColors();
-        const vol =
-          bar.volume != null && Number.isFinite(bar.volume) && bar.volume >= 0 ? bar.volume : 0;
-        // The volume row lands on the **candles'** bar time — never on a bar
-        // the candles do not have (see the union note above). With no candle
-        // series the volume stands alone and may use the tick's own time.
-        const volTime = paintedTime ?? (pricePane?.series['candle'] ? null : bar.time);
-        if (volTime != null && Number.isFinite(volTime)) {
-          safeUpdate(volPane.series['volume'], {
-            time: volTime as UTCTimestamp,
-            value: vol,
-            color: bar.close >= bar.open ? volColors.up : volColors.down,
-          });
-        }
-      }
+
+      // Volume series: row lands on the candle's bar time so both series share
+      // the same time axis (LWC shared time scale = union of all series rows).
+      this.updateVolumeBar(bar, paintedTime);
     } catch (err: unknown) {
       // Live ticks must not tear down the Solid tree or flood the status bar
       reportUiError(err, {
@@ -3311,6 +3262,303 @@ export class PaneManager {
         status: true,
         throttleMs: 4000,
       });
+    }
+  }
+
+  /**
+   * Apply a single mapped LWC point to the candle series via series.update.
+   * Returns true when the point was painted (finite time + valid OHLC/value).
+   */
+  private applyCandlePoint(
+    series: ISeriesApi<any>,
+    point: { time: number } & (
+      { open: number; high: number; low: number; close: number } | { value: number }
+    ),
+  ): boolean {
+    if (!point || !Number.isFinite(point.time)) return false;
+    const ok =
+      'close' in point
+        ? Number.isFinite(point.open) &&
+          Number.isFinite(point.high) &&
+          Number.isFinite(point.low) &&
+          Number.isFinite(point.close)
+        : Number.isFinite(point.value);
+    if (!ok) return false;
+    return safeUpdate(series, { ...point, time: point.time as UTCTimestamp });
+  }
+
+  /**
+   * Tint the last-price line to bar direction (O(1): HA reuses the computed
+   * point; line/area use store history or the single tick).
+   */
+  private applyPriceLineTint(
+    series: ISeriesApi<any>,
+    chartType: ChartType,
+    point:
+      | ({ time: number } & (
+          { open: number; high: number; low: number; close: number } | { value: number }
+        ))
+      | undefined,
+    storeBars: readonly Bar[],
+    bar: Bar,
+  ): void {
+    try {
+      let dir: 'up' | 'down' | null = null;
+      if (chartType === 'heikinashi') {
+        if (point && 'close' in point) {
+          const o = (point as { open: number }).open;
+          const c = (point as { close: number }).close;
+          if (Number.isFinite(o) && Number.isFinite(c)) dir = c >= o ? 'up' : 'down';
+        }
+      } else {
+        const dirBars = storeBars?.length ? storeBars : [bar];
+        dir = lastBarDirection(dirBars, chartType);
+      }
+      if (!dir) return;
+      const voidLike = getThemeManager().getVoidLike();
+      series.applyOptions({
+        priceLineColor: dir === 'up' ? voidLike.up : voidLike.down,
+        priceLineWidth: 1,
+        priceLineStyle: 2,
+      });
+    } catch {
+      /* price line tint optional */
+    }
+  }
+
+  /**
+   * Paint one live volume bar on the volume pane.
+   * The volume row shares the candle's bar time so both series carry the same
+   * time axis (LWC shared time scale = union of all series rows).
+   */
+  private updateVolumeBar(bar: Bar, candleTime: number | null): void {
+    const volPane = this.panes.get('volume');
+    if (!volPane?.series['volume']) return;
+    const vol =
+      bar.volume != null && Number.isFinite(bar.volume) && bar.volume >= 0 ? bar.volume : 0;
+    // With no candle series the volume stands alone and may use the tick's own time.
+    const volTime =
+      candleTime != null && Number.isFinite(candleTime)
+        ? candleTime
+        : this.panes.get('price')?.series['candle']
+          ? null
+          : bar.time;
+    if (volTime == null || !Number.isFinite(volTime)) return;
+    const volColors = getThemeManager().getVolumeColors();
+    safeUpdate(volPane.series['volume'], {
+      time: volTime as UTCTimestamp,
+      value: vol,
+      color: bar.close >= bar.open ? volColors.up : volColors.down,
+    });
+  }
+
+  /**
+   * Full-history candle series paint (setData). Extracted from setDataToChart
+   * so the full-load and live-slide paths share one code path.
+   *
+   * Resets HA live state, maps + sanitizes bars, paints the candle series,
+   * records the painted candle range for overlay clamping, and re-applies
+   * price-scale decimals.
+   */
+  setCandleData(
+    bars: Bar[],
+    chartType: ChartType,
+    opts: {
+      fit?: boolean;
+      clearMarkers?: boolean;
+      keepRange?: { from: number; to: number } | null;
+      holder?: HaCacheHolder | null;
+    } = {},
+  ): void {
+    const { fit = true, clearMarkers = false, keepRange = null, holder } = opts;
+    const pricePane = this.panes.get('price');
+    if (!pricePane?.series['candle']) return;
+
+    // Full replace invalidates incremental HA live state (re-seeded by mapper
+    // into this chart's holder, not the legacy global).
+    if (chartType !== 'heikinashi') {
+      resetHeikinAshiCache();
+      resetHaCacheHolder(holder);
+    }
+    const data = mapBarsToPriceData(bars, chartType, holder);
+    // Legacy global stays in sync for non-holder callers (tests / older doubles).
+    if (chartType !== 'heikinashi') resetHeikinAshiCache();
+
+    const checked = sanitizeSeriesDataForSetData(data, { requireOhlc: isOhlcChartType(chartType) });
+    if (checked.dropped > 0 || checked.merged > 0 || checked.filled > 0) {
+      reportUiError(
+        new Error(
+          `repair dropped=${checked.dropped} merged=${checked.merged} filled=${checked.filled} ` +
+            `of ${data.length} rows (first=${checked.firstBadIndex}:${checked.firstBadReason || 'ok'}, ` +
+            `nonIntegerTimes=${checked.nonIntegerTimes})`,
+        ),
+        {
+          source: 'chart',
+          context: 'Candle series data sanitized',
+          status: false,
+        },
+      );
+    }
+
+    try {
+      const nextCandleTimes = new Set<number>();
+      for (const row of checked.clean as Array<{ time?: unknown }>) {
+        const t = Number(row?.time);
+        if (Number.isFinite(t)) nextCandleTimes.add(t);
+      }
+      const prepare = (
+        this as unknown as {
+          prepareCoPaintedForCandleTimes?: (times: ReadonlySet<number>) => void;
+        }
+      ).prepareCoPaintedForCandleTimes;
+      if (typeof prepare === 'function') prepare.call(this, nextCandleTimes);
+      pricePane.series['candle'].setData(checked.clean as never);
+      if (pricePane.chart && keepRange) {
+        pricePane.chart.timeScale()?.setVisibleLogicalRange?.(keepRange);
+      }
+      const times = checked.clean as Array<{ time?: unknown }>;
+      const firstT = times.length ? times[0]?.time : undefined;
+      const lastT = times.length ? times[times.length - 1]?.time : undefined;
+      if (typeof firstT === 'number' && typeof lastT === 'number') {
+        const candleTimes: number[] = [];
+        for (const row of times) {
+          const t = Number(row?.time);
+          if (Number.isFinite(t)) candleTimes.push(t);
+        }
+        const perChart = (
+          this as unknown as {
+            notePaintedCandleRange?: (
+              first: number,
+              last: number,
+              times?: readonly number[],
+            ) => void;
+          }
+        ).notePaintedCandleRange;
+        if (typeof perChart === 'function') {
+          perChart.call(this, firstT, lastT, candleTimes);
+        } else {
+          notePaintedCandleRange(firstT, lastT);
+        }
+      }
+    } catch (err: unknown) {
+      const inner = err instanceof Error ? err.message : String(err);
+      let seriesType = '?';
+      try {
+        seriesType = String(pricePane.series['candle']?.seriesType?.() || '?');
+      } catch {
+        /* ignore */
+      }
+      const firstT = (data[0] as { time?: unknown } | undefined)?.time;
+      const lastT = (data[data.length - 1] as { time?: unknown } | undefined)?.time;
+      throw new Error(
+        `candle setData failed: ${inner} (rows=${checked.clean.length}, dataLen=${data.length}, ` +
+          `dropped=${checked.dropped}, filled=${checked.filled}, merged=${checked.merged}, ` +
+          `nonInt=${checked.nonIntegerTimes}, firstBad=${checked.firstBadIndex}:${checked.firstBadReason || 'ok'}, ` +
+          `chartType=${chartType}, seriesType=${seriesType}, range=${String(firstT)}..${String(lastT)})`,
+        { cause: err },
+      );
+    }
+
+    // Re-detect decimals after history lands (auto uses symbol + bars)
+    try {
+      applyPriceScaleDecimals({ bars, symbol: store.symbol });
+    } catch {
+      /* ignore */
+    }
+
+    // Baseline: base at first bar close so early range splits meaningfully
+    if (chartType === 'baseline' && bars.length) {
+      try {
+        pricePane.series['candle'].applyOptions({
+          baseValue: { type: 'price', price: bars[0]!.close },
+        });
+      } catch {
+        /* baseline option optional */
+      }
+    }
+
+    // Price-line tint: reuse painted HA datum (O(1)) instead of a second
+    // full-history HA transform on 10k+ bars.
+    let dir: 'up' | 'down' | null = null;
+    if (chartType === 'heikinashi') {
+      const lastPt = data.length ? data[data.length - 1] : null;
+      if (lastPt && 'close' in lastPt) {
+        dir =
+          (lastPt as { close: number }).close >= (lastPt as { open: number }).open ? 'up' : 'down';
+      }
+    } else {
+      dir = lastBarDirection(bars, chartType);
+    }
+    if (dir) {
+      try {
+        const voidLike = getThemeManager().getVoidLike();
+        pricePane.series['candle'].applyOptions({
+          priceLineColor: dir === 'up' ? voidLike.up : voidLike.down,
+        });
+      } catch {
+        /* price line tint optional */
+      }
+    }
+
+    if (fit) {
+      // Defer fit/layout work one frame so LWC can commit setData first
+      // (noticeable on 10k+ candles — avoids long main-thread block).
+      const runFit = () => {
+        try {
+          if (typeof this.afterDataReload === 'function') {
+            this.afterDataReload();
+          } else {
+            pricePane.chart.timeScale().fitContent();
+          }
+        } catch {
+          /* fit optional */
+        }
+      };
+      if (isHeavyBarLoad(bars.length) && typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(runFit);
+      } else {
+        runFit();
+      }
+    }
+  }
+
+  /**
+   * Full-history volume series paint (setData). Extracted from setDataToChart.
+   */
+  setVolumeData(bars: Bar[], volColors: { up: string; down: string }): void {
+    const volPane = this.panes.get('volume');
+    if (!volPane?.series['volume']) return;
+
+    const volData = mapBarsToVolumeData(bars, volColors);
+    const volChecked = sanitizeSeriesDataForSetData(volData);
+    if (volChecked.dropped > 0 || volChecked.merged > 0 || volChecked.filled > 0) {
+      reportUiError(
+        new Error(
+          `repair dropped=${volChecked.dropped} merged=${volChecked.merged} filled=${volChecked.filled} ` +
+            `of ${volData.length} rows (first=${volChecked.firstBadIndex}:${volChecked.firstBadReason || 'ok'})`,
+        ),
+        {
+          source: 'chart',
+          context: 'Volume series data sanitized',
+          status: false,
+        },
+      );
+    }
+    try {
+      volPane.series['volume'].setData(volChecked.clean as never);
+    } catch (err: unknown) {
+      const inner = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `volume setData failed: ${inner} (rows=${volChecked.clean.length}, dropped=${volChecked.dropped})`,
+        { cause: err },
+      );
+    }
+    try {
+      volPane.series['volume'].applyOptions({
+        lastValueVisible: store.lastValueLabelsVisible !== false,
+      });
+    } catch {
+      /* ignore */
     }
   }
 

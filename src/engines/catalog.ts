@@ -429,12 +429,11 @@ export const serverEngine: EnginePlugin = {
 
     // Prefer engine meta; do not force true — runner resolves indicator/strategy defaults.
     // Shared by the REST fallback and the live-session fast path (same envelope shape).
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const mapRestPayload = (payload: any): RunResult =>
+    const mapRestPayload = (payload: unknown): RunResult =>
       mapEnginePayload(payload, {
         transport: 'rest',
         ms: performance.now() - t0,
-        mode: payload.mode as string | undefined,
+        mode: (payload as { mode?: unknown } | null | undefined)?.mode as string | undefined,
         // The apply path joins session series by time, not index tail-align
         // (see `alignSeriesToTimes`) — the axis has to travel with the result.
         engineTimes: true,
@@ -727,8 +726,7 @@ export const serverEngine: EnginePlugin = {
         }
       }
       const text = await res.text();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let payload: any;
+      let payload: unknown;
       try {
         // Empty body is not valid JSON for /run.
         if (!text || !String(text).trim()) {
@@ -746,7 +744,14 @@ export const serverEngine: EnginePlugin = {
           message: `invalid JSON (HTTP ${res.status}${snippet ? `: ${snippet}` : ''})`,
         };
       }
-      if (!res.ok || payload.status === 'error') {
+      const errPayload = payload as {
+        status?: unknown;
+        message?: unknown;
+        error?: unknown;
+        mode?: unknown;
+        meta?: { mode?: unknown };
+      };
+      if (!res.ok || errPayload.status === 'error') {
         const httpHint =
           res.status >= 500 ? `HTTP ${res.status}` : res.status >= 400 ? `HTTP ${res.status}` : '';
         return {
@@ -754,7 +759,7 @@ export const serverEngine: EnginePlugin = {
           plots: [],
           events: [],
           series: {},
-          error: String(payload.message || payload.error || httpHint || `HTTP ${res.status}`),
+          error: String(errPayload.message || errPayload.error || httpHint || `HTTP ${res.status}`),
           meta: {
             ms: performance.now() - t0,
             transport: 'rest',
@@ -763,7 +768,7 @@ export const serverEngine: EnginePlugin = {
         } satisfies RunResult;
       }
       // Prefer engine meta; do not force true — runner resolves indicator/strategy defaults.
-      await rememberResolvedRunMode(modeFields, payload.mode ?? payload.meta?.mode ?? mode);
+      await rememberResolvedRunMode(modeFields, errPayload.mode ?? errPayload.meta?.mode ?? mode);
       const mapped = mapRestPayload(payload);
       if (clampedBars > 0) {
         // The engine evaluated only the newest `clampedBars`; the apply path

@@ -35,7 +35,7 @@ flowchart TB
   U[Unit Bun] --> CORE[plugins storage store catalogs]
   W[Worker Bun] --> API[auth keys scripts runtime]
   S[Security] --> THREAT[URL schemes partitions If-Match]
-  E[Playwright] --> SMOKE[@smoke PR]
+  E[Playwright] --> SMOKE["@smoke PR"]
   E --> FULL[nightly all]
   C[Coverage gate] --> SCOPED[95% scoped lines]
 ```

@@ -32,10 +32,10 @@ import { createPriceSeries, createVolumeSeries } from './series-factory';
 import {
   mapBarsToPriceData,
   isOhlcChartType,
-  lastBarDirection,
   normalizeChartType,
   resetHeikinAshiCache,
   resetHaCacheHolder,
+  lastBarDirection,
   type ChartType,
 } from './chart-type';
 import {
@@ -44,19 +44,14 @@ import {
   isVeryHeavyBarLoad,
   mapBarsToVolumeData,
 } from './heavy-data';
+import { sanitizeSeriesDataForSetData, notePaintedCandleRange } from './series-sanitize';
 import { v1Gauge } from '../engine/v1/metrics';
 import {
   formatPriceWithDecimals,
   priceFormatForDecimals,
   resolvePriceDecimals,
 } from './price-precision';
-import {
-  store,
-  setDrawings,
-  setSelectedDrawingId,
-  setDrawingTool,
-  setCrosshair,
-} from '../store';
+import { store, setDrawings, setSelectedDrawingId, setDrawingTool, setCrosshair } from '../store';
 import type { Bar, Drawing } from '../store/types';
 import {
   debugPinsToMarkers,
@@ -73,21 +68,15 @@ import {
 } from './chart-registry';
 import { reportUiError } from '../ui/boot-errors';
 import { chartDebug } from '../debug';
-import { notePaintedCandleRange, sanitizeSeriesDataForSetData } from './series-sanitize';
 import { resolvedPrefsForTool } from './drawings/tool-settings';
 import { getThemeManager } from '../theme';
-import {
-  drawingsForSymbol,
-  mergeLayerDrawingsForSymbol,
-} from './drawings/sync';
+import { drawingsForSymbol, mergeLayerDrawingsForSymbol } from './drawings/sync';
 
 /**
  * User drawings visible on the active chart for the current symbol.
  * Includes untagged (legacy) drawings so pre-anchoring data still paints.
  */
-export function visibleDrawingsForActiveSymbol(
-  symbol: string = store.symbol,
-): Drawing[] {
+export function visibleDrawingsForActiveSymbol(symbol: string = store.symbol): Drawing[] {
   return drawingsForSymbol(store.drawings, symbol, {
     includeUntagged: true,
   }) as Drawing[];
@@ -98,12 +87,9 @@ export function visibleDrawingsForActiveSymbol(
  * so place/edit/clear on the active symbol never drops other symbols’ drawings.
  */
 function onLayerDrawingsChange(list: Drawing[]) {
-  const merged = mergeLayerDrawingsForSymbol(
-    store.drawings,
-    store.symbol,
-    list,
-    { includeUntagged: true },
-  ) as Drawing[];
+  const merged = mergeLayerDrawingsForSymbol(store.drawings, store.symbol, list, {
+    includeUntagged: true,
+  }) as Drawing[];
   setDrawings(merged);
 }
 
@@ -273,8 +259,7 @@ export function ensureScriptPaneLayer(paneId: string): DrawingLayer | undefined 
   // Prefer first line overlay series as Y reference; fall back to any series
   const seriesMap = pane.series || {};
   const seriesKey =
-    Object.keys(seriesMap).find((k) => k && !k.startsWith('_')) ||
-    Object.keys(seriesMap)[0];
+    Object.keys(seriesMap).find((k) => k && !k.startsWith('_')) || Object.keys(seriesMap)[0];
   const series = seriesKey ? seriesMap[seriesKey] : undefined;
   const existing = scriptPaneLayers.get(paneId);
   if (existing) {
@@ -290,8 +275,7 @@ export function ensureScriptPaneLayer(paneId: string): DrawingLayer | undefined 
     return existing;
   }
   if (!series) return undefined;
-  const paneElId =
-    typeof mgr.paneDomId === 'function' ? mgr.paneDomId(paneId) : `pane-${paneId}`;
+  const paneElId = typeof mgr.paneDomId === 'function' ? mgr.paneDomId(paneId) : `pane-${paneId}`;
   const el = typeof document !== 'undefined' ? document.getElementById(paneElId) : null;
   if (!el || typeof document.createElementNS !== 'function') return undefined;
   try {
@@ -383,8 +367,7 @@ function ensureDrawingLayer() {
   const candle = pricePane?.series['candle'];
   if (!pricePane || !candle) return;
   // Real PaneManager exposes paneDomId; test doubles often omit it.
-  const paneElId =
-    typeof mgr.paneDomId === 'function' ? mgr.paneDomId('price') : 'pane-price';
+  const paneElId = typeof mgr.paneDomId === 'function' ? mgr.paneDomId('price') : 'pane-price';
   const el = typeof document !== 'undefined' ? document.getElementById(paneElId) : null;
   if (!el) return;
   // happy-dom / minimal test envs may lack createElementNS
@@ -582,10 +565,7 @@ export function ensurePriceSeries(
     mgr.setPriceChartType(type);
 
     try {
-      const unreg = getThemeManager().registerPriceSeries(
-        pricePane.series['candle'],
-        type,
-      );
+      const unreg = getThemeManager().registerPriceSeries(pricePane.series['candle'], type);
       priceSeriesThemeUnregs.set(themeKey, unreg);
     } catch {
       priceSeriesThemeUnregs.delete(themeKey);
@@ -644,9 +624,9 @@ export function ensurePriceSeries(
  * Series mutations are isolated: LWC failures are logged + status-bar surfaced
  * instead of bubbling through Solid effects (which would unmount the tree).
  */
-function readLogicalRange(
-  chart: { timeScale?: () => { getVisibleLogicalRange?: () => { from: number; to: number } | null } },
-): { from: number; to: number } | null {
+function readLogicalRange(chart: {
+  timeScale?: () => { getVisibleLogicalRange?: () => { from: number; to: number } | null };
+}): { from: number; to: number } | null {
   try {
     const range = chart.timeScale?.().getVisibleLogicalRange?.() ?? null;
     if (!range || !Number.isFinite(range.from) || !Number.isFinite(range.to)) return null;
@@ -657,7 +637,9 @@ function readLogicalRange(
 }
 
 function writeLogicalRange(
-  chart: { timeScale?: () => { setVisibleLogicalRange?: (range: { from: number; to: number }) => void } },
+  chart: {
+    timeScale?: () => { setVisibleLogicalRange?: (range: { from: number; to: number }) => void };
+  },
   range: { from: number; to: number } | null,
 ): void {
   if (!range) return;
@@ -687,8 +669,7 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
     }
     const clearMarkers = opts.clearMarkers !== false;
     // Clearing script state is opt-out when fitting (default clear on full loads)
-    const clearScriptState =
-      opts.clearScriptState !== undefined ? !!opts.clearScriptState : fit;
+    const clearScriptState = opts.clearScriptState !== undefined ? !!opts.clearScriptState : fit;
     const pricePane = mgr.getPane('price');
     const volPane = mgr.getPane('volume');
     // A slide or prefetch replace must not jump the viewport. `fit` loads
@@ -765,7 +746,8 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
           enableConflation: tsHeavy.enableConflation,
           conflationThresholdFactor: tsHeavy.conflationThresholdFactor,
           minBarSpacing: tsHeavy.minBarSpacing,
-          precomputeConflationOnInit: isPrice || veryHeavy ? tsHeavy.precomputeConflationOnInit : false,
+          precomputeConflationOnInit:
+            isPrice || veryHeavy ? tsHeavy.precomputeConflationOnInit : false,
           precomputeConflationPriority: tsHeavy.precomputeConflationPriority,
         } as never);
       }
@@ -793,11 +775,14 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
     }
     lastOhlcvPaintSig.set(sigKey, paintSig);
 
-    if (pricePane?.series['candle']) {
+    const holder = typeof mgr.getHaHolder === 'function' ? mgr.getHaHolder() : undefined;
+    // Candle series: full setData via PaneManager (HA reset, sanitize, decimals, fit).
+    // Fall back to inline painting for test doubles / managers without setCandleData.
+    if (typeof mgr.setCandleData === 'function') {
+      mgr.setCandleData(bars, chartType, { fit, clearMarkers, keepRange, holder });
+    } else if (pricePane?.series['candle']) {
       // Full replace invalidates incremental HA live state (re-seeded by mapper
       // into this chart's holder, not the legacy global).
-      const holder =
-        typeof mgr.getHaHolder === 'function' ? mgr.getHaHolder() : undefined;
       if (chartType !== 'heikinashi') {
         resetHeikinAshiCache();
         resetHaCacheHolder(holder);
@@ -805,7 +790,9 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
       const data = mapBarsToPriceData(bars, chartType, holder);
       // Legacy global stays in sync for non-holder callers (tests / older doubles).
       if (chartType !== 'heikinashi') resetHeikinAshiCache();
-      const checked = sanitizeSeriesDataForSetData(data, { requireOhlc: isOhlcChartType(chartType) });
+      const checked = sanitizeSeriesDataForSetData(data, {
+        requireOhlc: isOhlcChartType(chartType),
+      });
       if (checked.dropped > 0 || checked.merged > 0 || checked.filled > 0) {
         reportUiError(
           new Error(
@@ -838,21 +825,12 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
         const firstT = times.length ? times[0]?.time : undefined;
         const lastT = times.length ? times[times.length - 1]?.time : undefined;
         if (typeof firstT === 'number' && typeof lastT === 'number') {
-          // Co-painted overlays / equity clamp to this range so a stale window
-          // can never extend the shared time scale past the candles (LWC
-          // `Value is null` on every paint until the ranges converge again).
-          // The **times** matter too: the candles can miss a slot (a venue
-          // hole), and a co-painted row at that slot is a time the candles do
-          // not hold — the shared time scale is the union of every series'
-          // rows, so the candlestick painter would throw `Value is null` on
-          // every render.
-          // Per-chart scope: slot B never inherits slot A's window.
           const candleTimes: number[] = [];
           for (const row of times) {
             const t = Number(row?.time);
             if (Number.isFinite(t)) candleTimes.push(t);
           }
-          const perChartNote = (
+          const perChart = (
             mgr as unknown as {
               notePaintedCandleRange?: (
                 first: number,
@@ -861,10 +839,9 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
               ) => void;
             }
           ).notePaintedCandleRange;
-          if (typeof perChartNote === 'function') {
-            perChartNote.call(mgr, firstT, lastT, candleTimes);
+          if (typeof perChart === 'function') {
+            perChart.call(mgr, firstT, lastT, candleTimes);
           } else {
-            // Legacy test doubles without per-chart state — keep the global net.
             notePaintedCandleRange(firstT, lastT);
           }
         }
@@ -888,11 +865,10 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
       }
       // Re-detect decimals after history lands (auto uses symbol + bars)
       try {
-        applyPriceScaleDecimals({ bars, symbol: store.symbol, manager: mgr });
+        applyPriceScaleDecimals({ bars, symbol: store.symbol });
       } catch {
         /* ignore */
       }
-
       // Baseline: base at first bar close so early range splits meaningfully
       if (chartType === 'baseline' && bars.length) {
         try {
@@ -903,7 +879,6 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
           /* baseline option optional */
         }
       }
-
       // Price-line tint: reuse painted HA datum (O(1)) instead of a second
       // full-history HA transform on 10k+ bars.
       let dir: 'up' | 'down' | null = null;
@@ -927,7 +902,6 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
       }
       if (fit) {
         // Defer fit/layout work one frame so LWC can commit setData first
-        // (noticeable on 10k+ candles — avoids long main-thread block).
         const runFit = () => {
           try {
             if (typeof mgr.afterDataReload === 'function') {
@@ -946,44 +920,11 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
         }
       }
     }
-
-    if (volPane && !volPane.series['volume']) {
+    // Volume series: full setData via PaneManager
+    if (volPane?.series['volume'] && typeof mgr.setVolumeData === 'function') {
+      mgr.setVolumeData(bars, getThemeManager().getVolumeColors());
+    } else if (volPane && !volPane.series['volume']) {
       volPane.series['volume'] = createVolumeSeries(volPane.chart);
-    }
-    if (volPane?.series['volume']) {
-      const volColors = getThemeManager().getVolumeColors();
-      const volData = mapBarsToVolumeData(bars, volColors);
-      const volChecked = sanitizeSeriesDataForSetData(volData);
-      if (volChecked.dropped > 0 || volChecked.merged > 0 || volChecked.filled > 0) {
-        reportUiError(
-          new Error(
-            `repair dropped=${volChecked.dropped} merged=${volChecked.merged} filled=${volChecked.filled} ` +
-              `of ${volData.length} rows (first=${volChecked.firstBadIndex}:${volChecked.firstBadReason || 'ok'})`,
-          ),
-          {
-            source: 'chart',
-            context: 'Volume series data sanitized',
-            status: false,
-          },
-        );
-      }
-      try {
-        volPane.series['volume'].setData(volChecked.clean as never);
-        if (pricePane?.chart) writeLogicalRange(pricePane.chart, keepRange);
-      } catch (err: unknown) {
-        const inner = err instanceof Error ? err.message : String(err);
-        throw new Error(
-          `volume setData failed: ${inner} (rows=${volChecked.clean.length}, dropped=${volChecked.dropped})`,
-          { cause: err },
-        );
-      }
-      try {
-        volPane.series['volume'].applyOptions({
-          lastValueVisible: store.lastValueLabelsVisible !== false,
-        });
-      } catch {
-        /* ignore */
-      }
     }
 
     // Volume/indicator setData can reset local logical range — re-lock to price

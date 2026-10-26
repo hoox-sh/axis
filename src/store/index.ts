@@ -3573,11 +3573,7 @@ export function appendBar(bar: Bar): BarAppendResult {
     if (bar.time === tip.time) {
       // A closed tip stays closed: a stale forming tick must not reopen it.
       if (tip.closed && bar.closed !== true) return 'ignored';
-      if (
-        tip.closed &&
-        bar.closed === true &&
-        closedOhlcChanged(tip, bar)
-      ) {
+      if (tip.closed && bar.closed === true && closedOhlcChanged(tip, bar)) {
         noteClosedRewrite(bar.time, {
           dev: typeof import.meta !== 'undefined' && import.meta.env?.DEV === true,
         });
@@ -3615,6 +3611,8 @@ export function appendBar(bar: Bar): BarAppendResult {
     next.push(bar);
     frameTipIndex = null;
     setStore('bars', next);
+    // chartDataGen bump tells ChartHost / runner the window slid (head dropped).
+    setStore('chartDataGen', (g) => (typeof g === 'number' ? g + 1 : 1));
     // Keep the multi-chart slot cache in step: it holds the *same* array
     // reference, so a replaced array would leave the slot on the old window
     // and switching back would roll the chart back by one bar.

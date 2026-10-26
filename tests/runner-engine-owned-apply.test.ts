@@ -191,7 +191,10 @@ describe('alignApplySeries staleNoAxis', () => {
     ...(extra ?? {}),
   });
 
-  it('flags a live push without axis when the series is shorter than the chart', () => {
+  it('tail-clamps a shorter live stream push onto the chart tip instead of skipping', () => {
+    // A 500-bar script snapshot on a 5000-bar rolling window must not be
+    // skipped (staleNoAxis) — that left indicators frozen on every live push.
+    // Head-pad with null so the newest values land on the newest bars.
     const result = {
       status: 'success',
       series: { plot0: [1, 2, 3] },
@@ -201,8 +204,8 @@ describe('alignApplySeries staleNoAxis', () => {
       silent: true,
       livePush: true,
     });
-    expect(aligned.staleNoAxis).toBe(true);
-    expect(aligned.resultTimes).toBeNull();
+    expect(aligned.staleNoAxis).toBe(false);
+    expect(aligned.seriesMap.plot0).toEqual([null, null, 1, 2, 3]);
   });
 
   it('tail-clamps a live stream push when the engine series is longer than the chart (no axis)', () => {
@@ -740,13 +743,14 @@ describe('engine-owned series apply', () => {
       syncBgcolorBands: () => {},
     } as never);
 
-    // Idle/backfill case: the chart holds 5 bars but the stale push only
-    // evaluated 3. Tail-pinning would head-pad `na`s and shift every value;
-    // LWC connects the gap as a diagonal from the last pre-break value.
+    // Idle/backfill case: the chart holds 5 bars but the stale push evaluated
+    // a grossly different window (20 bars). With no bar axis and no live-push
+    // flag, tail-pinning would misplace every value — skip and keep the last
+    // good plots until a full run with a real axis arrives.
     const precomputed: RunResult = {
       status: 'success',
       plots: [],
-      series: { plot0: [1, 2, 3] },
+      series: { plot0: Array.from({ length: 20 }, (_, i) => i) },
       events: [],
       meta: {
         sessionVia: 'session-append',
@@ -759,7 +763,7 @@ describe('engine-owned series apply', () => {
     const r = await runAndApply(SCRIPT, undefined, {
       silent: true,
       openResults: false,
-      liveTick: true,
+      liveTick: false,
       precomputedResult: precomputed,
     });
     expect(r.status).toBe('success');
