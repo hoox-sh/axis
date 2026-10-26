@@ -3582,7 +3582,15 @@ export function appendBar(bar: Bar): BarAppendResult {
       }
       // Same open bar. Write the raw node now so readers see the tick.
       // Solid hears this index once per frame, not once per tick.
-      Object.assign(unwrap(tip) as Bar, normalizeBarPayload(bar));
+      const tipRef = unwrap(tip) as Bar;
+      const payload = normalizeBarPayload(bar);
+      // Preserve the candle's open once it has started forming. A historical
+      // close for the same bar updates high/low/close but must not move the
+      // open — otherwise the candle's open jumps when the final close lands.
+      if (!tipRef.closed && bar.closed === true) {
+        payload.open = tipRef.open;
+      }
+      Object.assign(tipRef, payload);
       frameTipIndex = n - 1;
       scheduleLiveFrame(flushLiveFrame);
       if (store.live.lastBarTime !== bar.time) {
@@ -3611,8 +3619,11 @@ export function appendBar(bar: Bar): BarAppendResult {
     next.push(bar);
     frameTipIndex = null;
     setStore('bars', next);
-    // chartDataGen bump tells ChartHost / runner the window slid (head dropped).
-    setStore('chartDataGen', (g) => (typeof g === 'number' ? g + 1 : 1));
+    // Do NOT bump chartDataGen on a live slide: ChartHost's chartDataGen
+    // effect responds with fit:true → fitContent(), which resets zoom/position
+    // on every new candle. appendLiveBar already paints the slide with
+    // fit:false via scheduleSlideReplace, so ChartHost does not need to
+    // repaint here. chartDataGen stays for full loads (loadBars) only.
     // Keep the multi-chart slot cache in step: it holds the *same* array
     // reference, so a replaced array would leave the slot on the old window
     // and switching back would roll the chart back by one bar.
