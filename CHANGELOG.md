@@ -29,6 +29,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Added
 
+- **MCP `logs.debug.get` / `logs.debug.clear`.** Reads or clears the rotating `axis.debug.log.*` localStorage ring written when AXIS debug mode is on (`VITE_AXIS_DEBUG` or `localStorage.axis.debug`).
+
 - **`chart.lag` `v1.queueWait` is recv → `apply:start`.** On the worker path that is `batch:post` → bridge entry, so a live G1 read can separate main-thread queueing from the apply span. Live ticks also skip the O(n) internal-hole scan and debug-pin clear when pins are off.
 
 ### Fixed

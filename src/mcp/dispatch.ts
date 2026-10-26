@@ -100,6 +100,12 @@ import {
 } from './live';
 import { getByPath, McpInvokeError } from './protocol';
 import { isSecureCloudEndpoint } from '../storage/cloud-config';
+import {
+  axisDebugLogStats,
+  clearAxisDebugLog,
+  isAxisDebug,
+  readAxisDebugLog,
+} from '../debug';
 import type { ChartGridMode } from '../chart/layout';
 import type { ChartType } from '../chart/chart-type';
 
@@ -607,6 +613,23 @@ export async function invokeCapability(
       );
       return entries.slice(-(typeof p.limit === 'number' ? p.limit : 50));
     }
+    case 'logs.debug.get': {
+      // Rotating localStorage ring written by axis:chart / axis:engine when
+      // VITE_AXIS_DEBUG or localStorage.axis.debug is on.
+      const maxCharsRaw = typeof p.maxChars === 'number' ? p.maxChars : 120_000;
+      const maxChars = Math.max(4_000, Math.min(Math.floor(maxCharsRaw), 250_000));
+      const stats = axisDebugLogStats();
+      const full = readAxisDebugLog();
+      const truncated = full.length > maxChars;
+      const text = truncated ? full.slice(full.length - maxChars) : full;
+      return {
+        enabled: isAxisDebug(),
+        stats,
+        truncated,
+        maxChars,
+        text,
+      };
+    }
     case 'logs.append': {
       appendLog(
         (str(p.level || 'info') as 'info' | 'ok' | 'warn' | 'error') || 'info',
@@ -618,6 +641,10 @@ export async function invokeCapability(
     case 'logs.clear': {
       clearLogs();
       return { ok: true };
+    }
+    case 'logs.debug.clear': {
+      clearAxisDebugLog();
+      return { ok: true, stats: axisDebugLogStats() };
     }
 
     case 'panels.get': {

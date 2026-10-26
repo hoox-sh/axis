@@ -197,8 +197,20 @@ export const APP_CAPABILITIES: readonly CapabilitySpec[] = [
     mutates: false,
   },
   { id: 'logs.get', domain: 'logs', description: 'System log strip', mutates: false },
+  {
+    id: 'logs.debug.get',
+    domain: 'logs',
+    description: 'Rotating axis.debug.log.* ring (localStorage) when debug mode is on',
+    mutates: false,
+  },
   { id: 'logs.append', domain: 'logs', description: 'Append a system log line', mutates: true },
   { id: 'logs.clear', domain: 'logs', description: 'Clear system logs', mutates: true },
+  {
+    id: 'logs.debug.clear',
+    domain: 'logs',
+    description: 'Clear the rotating axis.debug.log.* ring',
+    mutates: true,
+  },
 
   { id: 'panels.get', domain: 'panels', description: 'Panel chrome (open/dock)', mutates: false },
   { id: 'panels.set', domain: 'panels', description: 'Open/close/dock a panel', mutates: true },

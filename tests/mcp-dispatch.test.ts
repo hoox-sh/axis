@@ -129,6 +129,21 @@ describe('MCP dispatch', () => {
     }
   });
 
+  it('logs.debug.get returns the rotating ring shape', async () => {
+    const dump = (await invokeCapability('logs.debug.get', { maxChars: 8_000 })) as {
+      enabled: boolean;
+      stats: { files: number; bytes: number; lines: number };
+      truncated: boolean;
+      text: string;
+    };
+    expect(typeof dump.enabled).toBe('boolean');
+    expect(typeof dump.stats.files).toBe('number');
+    expect(typeof dump.text).toBe('string');
+    await invokeCapability('logs.debug.clear');
+    const after = (await invokeCapability('logs.debug.get')) as { stats: { lines: number } };
+    expect(after.stats.lines).toBe(0);
+  });
+
   it('editor get/set', async () => {
     saveEditorDoc('//@version=6\nindicator("t")');
     const before = (await invokeCapability('editor.get')) as { doc: string };
