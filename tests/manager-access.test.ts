@@ -176,6 +176,59 @@ describe('manager-access', () => {
     setDrawingLayer(undefined);
   });
 
+  it('setDataToChart paints a sibling manager without changing the active one', () => {
+    const makeMgr = () => {
+      const el = document.createElement('div') as unknown as HTMLElement;
+      document.body.appendChild(el as never);
+      const chart = createBaseChart(el);
+      const candle = {
+        setData: (d: unknown) => {
+          (candle as { _data?: unknown })._data = d;
+        },
+        applyOptions: () => {},
+        seriesType: () => 'Candlestick',
+      };
+      const panes = new Map<
+        string,
+        { id: string; series: Record<string, unknown>; chart: typeof chart }
+      >();
+      panes.set('price', { id: 'price', series: { candle }, chart });
+      const mgr = {
+        getPane: (id: string) => panes.get(id),
+        clearTradeMarkers: () => {},
+        getPriceChartType: () => 'candles',
+        setPriceChartType: () => {},
+        detachPriceMarkers: () => {},
+        reapplyPriceMarkers: () => {},
+      };
+      return { mgr, candle };
+    };
+    const active = makeMgr();
+    const sibling = makeMgr();
+    setManager(active.mgr as never);
+    expect(getManager()).toBe(active.mgr);
+
+    setDataToChart(
+      [
+        { time: 10, open: 1, high: 1, low: 1, close: 1, volume: 1 },
+        { time: 20, open: 2, high: 2, low: 2, close: 2, volume: 1 },
+      ],
+      {
+        fit: false,
+        clearMarkers: false,
+        clearScriptState: false,
+        manager: sibling.mgr as never,
+        slotId: 'slot-b',
+      },
+    );
+
+    expect(getManager()).toBe(active.mgr);
+    expect((active.candle as { _data?: unknown })._data).toBeUndefined();
+    const painted = (sibling.candle as { _data?: Array<{ time: number }> })._data;
+    expect(painted?.length).toBe(2);
+    expect(painted?.[1]?.time).toBe(20);
+  });
+
   it('getManager does not return stale legacy when active slot is empty', async () => {
     const { setActiveSlotId, setSlotManager, getSlotManager } = await import(
       '../src/chart/chart-registry'

@@ -454,6 +454,14 @@ export type SetDataToChartOpts = {
   clearScriptState?: boolean;
   /** Clear trade markers before applying OHLCV. Default true for full loads. */
   clearMarkers?: boolean;
+  /**
+   * Paint this PaneManager without calling {@link setManager}. ChartHost
+   * inactive 2h/2v/4 cells pass their own manager so the focused slot keeps
+   * `getManager()`.
+   */
+  manager?: PaneManager;
+  /** Paint-sig / theme key. Defaults to the active slot. */
+  slotId?: string;
 };
 
 /**
@@ -487,8 +495,10 @@ export function ohlcvPaintSig(bars: Bar[], chartType: ChartType): string {
 export function applyPriceScaleDecimals(opts?: {
   bars?: typeof store.bars;
   symbol?: string;
+  /** Paint this manager; defaults to the active slot. */
+  manager?: PaneManager;
 }): number {
-  const mgr = getManager();
+  const mgr = opts?.manager ?? getManager();
   const pricePane = mgr?.getPane('price');
   const series = pricePane?.series['candle'];
   if (!series || !pricePane?.chart) return 2;
@@ -522,8 +532,11 @@ export function applyPriceScaleDecimals(opts?: {
  * Creates the replacement before removing the old series so a failed create
  * never leaves the pane without a price series.
  */
-export function ensurePriceSeries(chartType?: ChartType): void {
-  const mgr = getManager();
+export function ensurePriceSeries(
+  chartType?: ChartType,
+  target?: { manager?: PaneManager; slotId?: string; sidecar?: boolean },
+): void {
+  const mgr = target?.manager ?? getManager();
   if (!mgr) return;
   try {
     const type = normalizeChartType(chartType ?? store.chartType);
@@ -533,7 +546,7 @@ export function ensurePriceSeries(chartType?: ChartType): void {
     const currentType = mgr.getPriceChartType();
     const existing = pricePane.series['candle'];
     if (existing && currentType === type) return;
-    const themeKey = priceThemeKey();
+    const themeKey = priceThemeKey(target?.slotId);
 
     // Create the replacement first — on throw the old series stays live.
     let next: ReturnType<typeof createPriceSeries>;
@@ -588,16 +601,19 @@ export function ensurePriceSeries(chartType?: ChartType): void {
     }
     // Price scale decimals (auto from symbol/bars or fixed)
     try {
-      applyPriceScaleDecimals();
+      applyPriceScaleDecimals({ manager: mgr });
     } catch {
       /* ignore */
     }
 
-    // Drawing layer needs the new series for price ↔ Y
-    try {
-      getDrawingLayer()?.setSeries(pricePane.series['candle'] as never);
-    } catch {
-      /* layer optional */
+    // Drawing layer needs the new series for price ↔ Y. A sidecar paint
+    // must not rebind the focused slot's overlay onto this chart.
+    if (!target?.sidecar) {
+      try {
+        getDrawingLayer()?.setSeries(pricePane.series['candle'] as never);
+      } catch {
+        /* layer optional */
+      }
     }
 
     // Re-attach markers onto the new host series
@@ -653,8 +669,10 @@ function writeLogicalRange(
 }
 
 export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
-  const mgr = getManager();
+  const active = getManager();
+  const mgr = opts.manager ?? active;
   if (!mgr) return;
+  const sidecar = opts.manager != null && mgr !== active;
   try {
     const fit = opts.fit !== false;
     const clearMarkers = opts.clearMarkers !== false;
@@ -684,21 +702,28 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
 
     // Full history replace (symbol / interval): wipe script visuals before paint
     if (clearScriptState) {
-      clearChartScriptState(mgr, getDrawingLayer());
-      // Drop selection that may point at a drawing not on the new symbol
-      setSelectedDrawingId(null);
-      try {
-        getDrawingLayer()?.setSelectedId?.(null);
-      } catch {
-        /* optional */
+      const layer = sidecar
+        ? opts.slotId
+          ? getSlotDrawingLayer(opts.slotId)
+          : undefined
+        : getDrawingLayer();
+      clearChartScriptState(mgr, layer);
+      if (!sidecar) {
+        // Drop selection that may point at a drawing not on the new symbol
+        setSelectedDrawingId(null);
+        try {
+          getDrawingLayer()?.setSelectedId?.(null);
+        } catch {
+          /* optional */
+        }
       }
     }
 
-    ensurePriceSeries(chartType);
+    ensurePriceSeries(chartType, { manager: mgr, slotId: opts.slotId, sidecar });
 
     const n = bars.length;
     const paintSig = ohlcvPaintSig(bars, chartType);
-    const sigKey = priceThemeKey();
+    const sigKey = priceThemeKey(opts.slotId);
     const skipSeries =
       paintSig === lastOhlcvPaintSig.get(sigKey) && !clearScriptState && clearMarkers === false;
 
@@ -853,7 +878,7 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
       }
       // Re-detect decimals after history lands (auto uses symbol + bars)
       try {
-        applyPriceScaleDecimals({ bars, symbol: store.symbol });
+        applyPriceScaleDecimals({ bars, symbol: store.symbol, manager: mgr });
       } catch {
         /* ignore */
       }
@@ -969,15 +994,17 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
 
     // Ensure overlay exists after candle series is ready; re-sync **per-symbol**
     // user drawings (drawings only on the active multi-chart slot)
-    ensureDrawingLayer();
-    try {
-      getDrawingLayer()?.setDrawings(visibleDrawingsForActiveSymbol());
-    } catch (err: unknown) {
-      reportUiError(err, {
-        source: 'chart',
-        context: 'Drawing layer sync failed',
-        status: false,
-      });
+    if (!sidecar) {
+      ensureDrawingLayer();
+      try {
+        getDrawingLayer()?.setDrawings(visibleDrawingsForActiveSymbol());
+      } catch (err: unknown) {
+        reportUiError(err, {
+          source: 'chart',
+          context: 'Drawing layer sync failed',
+          status: false,
+        });
+      }
     }
   } catch (err: unknown) {
     reportUiError(err, {

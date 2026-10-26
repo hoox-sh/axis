@@ -131,7 +131,13 @@ export interface ChartHostProps {
 /** Paint path that never throws into Solid effects. */
 function safePaint(
   bars: typeof store.bars,
-  opts: { fit?: boolean; clearMarkers?: boolean; clearScriptState?: boolean },
+  opts: {
+    fit?: boolean;
+    clearMarkers?: boolean;
+    clearScriptState?: boolean;
+    manager?: PaneManager;
+    slotId?: string;
+  },
   context: string,
 ) {
   try {
@@ -335,33 +341,13 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     const existing = getSlotBars(id);
     if (existing.length) {
       if (isActive()) safePaint(existing, { fit: true }, 'Initial chart paint');
-      else {
-        // Inactive: apply directly on this manager (restore in finally so a
-        // throw never leaves the global active slot stolen).
-        const prev = getManager();
-        const prevActiveId = store.chartLayout?.activeId || getActiveSlotId() || null;
-        setActiveSlotId(id);
-        setManager(manager, id);
-        try {
-          if (!alive) return;
-          safePaint(existing, { fit: true }, 'Inactive slot paint');
-        } catch (err: unknown) {
-          reportUiError(err, {
-            source: 'chart',
-            context: 'Inactive slot paint failed',
-            status: false,
-          });
-        } finally {
-          // restore previous active (layout wins; fall back to pre-steal id)
-          const activeId = store.chartLayout?.activeId || prevActiveId;
-          if (activeId && activeId !== id) {
-            setActiveSlotId(activeId);
-            const am = getSlotManager(activeId);
-            if (am) setManager(am, activeId);
-          } else if (prev && prev !== manager) {
-            setManager(prev);
-          }
-        }
+      else if (alive) {
+        // Inactive: paint this manager without making it getManager().
+        safePaint(
+          existing,
+          { fit: true, manager, slotId: id },
+          'Inactive slot paint',
+        );
       }
     } else if (isActive() && store.bars.length) {
       safePaint(store.bars, { fit: true }, 'Initial chart paint');
@@ -436,30 +422,15 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     const bl = getSlotBars(id);
     const m = localManager || getSlotManager(id);
     if (!m || !bl.length) return;
-    // lightweight re-apply without stealing active manager for long
     untrack(() => {
       if (!alive) return;
       const price = m.getPane('price');
       if (!price?.series['candle']) return;
-      const prevActiveId = store.chartLayout?.activeId || getActiveSlotId() || null;
-      setActiveSlotId(id);
-      setManager(m, id);
-      try {
-        safePaint(bl, { fit: false, clearMarkers: false }, 'Inactive slot re-paint');
-      } catch (err: unknown) {
-        reportUiError(err, {
-          source: 'chart',
-          context: 'Inactive slot re-paint failed',
-          status: false,
-        });
-      } finally {
-        const aid = store.chartLayout?.activeId || prevActiveId;
-        if (aid && aid !== id) {
-          setActiveSlotId(aid);
-          const am = getSlotManager(aid);
-          if (am) setManager(am, aid);
-        }
-      }
+      safePaint(
+        bl,
+        { fit: false, clearMarkers: false, manager: m, slotId: id },
+        'Inactive slot re-paint',
+      );
     });
   });
 
