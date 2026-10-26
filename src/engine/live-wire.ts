@@ -169,6 +169,11 @@ const SNAPSHOT_BACKOFF_MS = [50, 200] as const;
  */
 const AUTH_SUBSCRIBE_RETRY_MS = 150;
 /**
+ * After a seq gap, prefer one fresh unsubscribe+subscribe over resume-loop thrash.
+ * Backoff grows so a wedged sub cannot hammer `/ws/live` every tip.
+ */
+const GAP_RESYNC_BACKOFF_MS = [0, 500, 1_500, 4_000, 10_000] as const;
+/**
  * After the tab is shown, fold the queued burst into one decision.
  * A hidden tab must not replay every tick it missed.
  */
@@ -346,14 +351,26 @@ export class StreamLiveWire {
   /** Last script + bars so a push delta can apply without waiting on scheduleRerun. */
   private readonly scriptCtx = new Map<
     string,
-    { script: string; indicatorId?: string; bars: Bar[] }
+    {
+      script: string;
+      indicatorId?: string;
+      bars: Bar[];
+      meta: Record<string, unknown>;
+      inputs?: Record<string, unknown>;
+    }
   >();
+  /** Series subscribe meta — needed to fresh-subscribe after a seq gap. */
+  private readonly seriesSubMeta = new Map<string, Record<string, unknown>>();
   /** Input signature of each script subscription (a change forces a re-subscribe). */
   private readonly scriptInputSig = new Map<string, string>();
   /** Subs with an outstanding axis-resubscribe (one resub per full snapshot). */
   private readonly axisResubPending = new Set<string>();
   /** Seq gap: drop deltas until the next full. Axis repair does not use this. */
   private readonly holdUntilFull = new Set<string>();
+  /** Last fresh gap-resync wall time per sub (unsubscribe+subscribe backoff). */
+  private readonly gapResyncAt = new Map<string, number>();
+  /** Fresh gap-resync attempts since the last successful full. */
+  private readonly gapResyncAttempts = new Map<string, number>();
   /** Latest unpainted script payload. The in-flight apply drains this. */
   private readonly paintLatest = new Map<
     string,
@@ -833,6 +850,7 @@ export class StreamLiveWire {
   private async subscribeSeriesOnce(subId: string, meta: Record<string, unknown>): Promise<Bar[]> {
     await this.ensureConnected();
     if (this.cooledDown) this.fail('cooldown', 'stream in failure cooldown');
+    this.seriesSubMeta.set(subId, meta);
     this.handlers.onStatus(subId, 'connecting');
     try {
       const send = () => {
@@ -894,19 +912,22 @@ export class StreamLiveWire {
       script: input.script,
       indicatorId: input.indicatorId,
       bars: input.bars,
+      meta: input.meta,
+      ...(input.inputs ? { inputs: input.inputs } : {}),
     });
     // A changed input must re-subscribe: the engine evaluates the script with
     // the values it was subscribed with, so the cached state (and every delta
-    // merged into it) would keep the old ones.
+    // merged into it) would keep the old ones. Depth *growth* also re-subscribes
+    // so a longer window is covered; a 1-bar shrink/flicker must not bounce the
+    // sub (that left EMA/Momentum as idle/released while Bollinger stayed up).
     const sig = inputSignature(input.inputs);
     const depth = historyBarsOf(input.meta);
     const prevSig = this.scriptInputSig.get(input.subId);
     const prevDepth = this.scriptDepth.get(input.subId);
     let applier = this.appliers.get(input.subId);
-    const identityChanged =
-      !!applier &&
-      ((prevSig !== undefined && prevSig !== sig) ||
-        (prevDepth !== undefined && prevDepth !== depth));
+    const inputsChanged = prevSig !== undefined && prevSig !== sig;
+    const depthGrew = prevDepth !== undefined && depth > prevDepth;
+    const identityChanged = !!applier && (inputsChanged || depthGrew);
     if (identityChanged) {
       engineDebug('wire.script.resubscribe', {
         subId: input.subId,
@@ -918,6 +939,9 @@ export class StreamLiveWire {
       this.scriptDepth.delete(input.subId);
       this.paintLatest.delete(input.subId);
       this.paintTail.delete(input.subId);
+      this.holdUntilFull.delete(input.subId);
+      this.gapResyncAt.delete(input.subId);
+      this.gapResyncAttempts.delete(input.subId);
       applier = undefined;
       try {
         this.client.unsubscribe(input.subId);
@@ -966,6 +990,7 @@ export class StreamLiveWire {
         const payload = full.payload as Record<string, unknown>;
         this.axisResubPending.delete(input.subId);
         this.holdUntilFull.delete(input.subId);
+        this.clearGapResync(input.subId);
         const fallbackTimes = this.scriptCtx.get(input.subId)?.bars.map((b) => b.time) ?? null;
         applier.applyFull(scriptFullForApplier(payload, full.seq, fallbackTimes));
         this.appliedSeq.set(input.subId, typeof full.seq === 'number' ? full.seq : 0);
@@ -988,6 +1013,11 @@ export class StreamLiveWire {
         events: [],
         meta: {},
       };
+    }
+    // Still waiting on a gap snapshot: retry fresh subscribe under backoff so a
+    // wedged sub cannot sit on holdUntilFull forever between venue ticks.
+    if (this.holdUntilFull.has(input.subId)) {
+      this.requestFreshSnapshot(input.subId, 'delta gap — resubscribing');
     }
     const cached = applier.cached;
     if (!cached) {
@@ -1040,11 +1070,24 @@ export class StreamLiveWire {
   private routeStatusFrame(frame: WireFrame): void {
     if (!frame.id) return;
     const payload = (frame.payload as Record<string, unknown>) ?? {};
-    this.handlers.onStatus(frame.id, String(payload.code ?? 'live') as SubscriptionStatus, {
-      message: payload.message as string | undefined,
+    const code = String(payload.code ?? 'live');
+    const message = payload.message as string | undefined;
+    this.handlers.onStatus(frame.id, code as SubscriptionStatus, {
+      message,
       have: typeof payload.have === 'number' ? payload.have : undefined,
       need: typeof payload.need === 'number' ? payload.need : undefined,
     });
+    // Server released the sub (unsubscribe ack or idle eviction). Drop local
+    // state so the next streamEvalScript re-subscribes — unless we are already
+    // waiting on a fresh full (our own gap resync just unsubscribed).
+    if (
+      !frame.id.startsWith('series:') &&
+      !this.holdUntilFull.has(frame.id) &&
+      (code === 'idle' || message === 'released') &&
+      (this.appliers.has(frame.id) || this.appliedSeq.has(frame.id) || this.scriptCtx.has(frame.id))
+    ) {
+      this.dropScriptLocal(frame.id);
+    }
   }
 
   private notifyInboxWaiters(subId: string): void {
@@ -1216,6 +1259,7 @@ export class StreamLiveWire {
     const prevSeq = this.appliedSeq.get(subId);
     if (frame.type === 'full') {
       this.holdUntilFull.delete(subId);
+      this.clearGapResync(subId);
       if (seq != null && prevSeq != null && seq < prevSeq) return;
       if (!bars.length) return;
       this.seriesBars.set(subId, bars);
@@ -1261,20 +1305,7 @@ export class StreamLiveWire {
         engineDebug('wire.stale', { subId, reason, seq, lastSeq: prevSeq ?? 0 });
         if (reason !== 'gap') return;
         v1Count('seqGap');
-        v1Count('resync');
-        this.holdUntilFull.add(subId);
-        this.handlers.onStatus(subId, 'degraded', { message: 'delta gap — resubscribing' });
-        const have = this.seriesBars.get(subId) ?? [];
-        try {
-          this.client.resumeSubscription(
-            subId,
-            have.length,
-            this.lastBarTime(have),
-            this.resumePayload(subId, this.appliedSeq.get(subId) ?? 0),
-          );
-        } catch {
-          /* resume is best-effort; HUD already shows degraded */
-        }
+        this.requestFreshSnapshot(subId, 'delta gap — resubscribing');
       },
     });
   }
@@ -1451,15 +1482,19 @@ export class StreamLiveWire {
     const wasLive = this.appliedSeq.has(subId);
     if (frame.type === 'full') {
       const seq = typeof frame.seq === 'number' ? frame.seq : null;
-      // A snapshot that left before a newer delta must not paint over it.
-      if (wasLive && seq != null && seq < applier.lastSeq) return;
+      const waitingFull = this.holdUntilFull.has(subId);
+      // A snapshot that left before a newer delta must not paint over it —
+      // unless we asked for a fresh full after a gap (seq may restart at 1).
+      if (wasLive && !waitingFull && seq != null && seq < applier.lastSeq) return;
       this.holdUntilFull.delete(subId);
       this.axisResubPending.delete(subId);
+      this.clearGapResync(subId);
       const fallbackTimes = this.scriptCtx.get(subId)?.bars.map((b) => b.time) ?? null;
       applier.applyFull(scriptFullForApplier(payload, frame.seq, fallbackTimes));
       if (typeof frame.seq === 'number') this.appliedSeq.set(subId, frame.seq);
       this.handlers.onStatus(subId, 'live');
-      if (wasLive) {
+      // First subscribe paints from evalScript; gap recovery paints here.
+      if (wasLive || waitingFull) {
         const cached = applier.cached;
         if (cached) this.applyScriptPush(subId, cached, 'stream-full');
       }
@@ -1512,22 +1547,9 @@ export class StreamLiveWire {
     //   a frozen pane on every tick.
     if (!out.ok && out.reason === 'needs-full') {
       const incomingSeq = typeof frame.seq === 'number' ? frame.seq : -1;
+      // seqAckFrom makes a coalesced hole continuous — do not thrash resync.
       if (classifySeqGap(applier.lastSeq, incomingSeq, seqAckFrom).kind !== 'continuous') {
-        v1Count('resync');
-        this.holdUntilFull.add(subId);
-        this.handlers.onStatus(subId, 'degraded', { message: 'delta gap — resubscribing' });
-        const gapCtx = this.scriptCtx.get(subId);
-        const gapBars = gapCtx?.bars ?? [];
-        try {
-          this.client.resumeSubscription(
-            subId,
-            gapBars.length,
-            this.lastBarTime(gapBars),
-            this.resumePayload(subId, this.appliedSeq.get(subId) ?? 0),
-          );
-        } catch {
-          /* resume is best-effort; HUD already shows degraded */
-        }
+        this.requestFreshSnapshot(subId, 'delta gap — resubscribing');
         return;
       }
       const cached = applier.cached;
@@ -1615,13 +1637,105 @@ export class StreamLiveWire {
     }
   }
 
+  private clearGapResync(subId: string): void {
+    this.gapResyncAt.delete(subId);
+    this.gapResyncAttempts.delete(subId);
+  }
+
+  /**
+   * After a seq gap: hold deltas, ask once (with backoff) for a fresh full via
+   * unsubscribe+subscribe. Resume-loop thrash left scripts degraded forever when
+   * tip coalesce / UNCHANGED acks kept looking like holes.
+   */
+  private requestFreshSnapshot(subId: string, message: string): void {
+    this.holdUntilFull.add(subId);
+    this.handlers.onStatus(subId, 'degraded', { message });
+    v1Count('resync');
+
+    const now = Date.now();
+    const attempts = this.gapResyncAttempts.get(subId) ?? 0;
+    const lastAt = this.gapResyncAt.get(subId) ?? 0;
+    const backoff =
+      GAP_RESYNC_BACKOFF_MS[Math.min(attempts, GAP_RESYNC_BACKOFF_MS.length - 1)] ?? 10_000;
+    if (attempts > 0 && now - lastAt < backoff) return;
+
+    this.gapResyncAt.set(subId, now);
+    this.gapResyncAttempts.set(subId, attempts + 1);
+
+    // Fresh subscribe often restarts seq at 1 — drop appliedSeq so wasLive is
+    // false and the rewind gate cannot reject it. Keep the applier cache so
+    // evalScript / kick paints still have a last-good frame while we wait.
+    this.appliedSeq.delete(subId);
+
+    try {
+      this.client.unsubscribe(subId);
+    } catch {
+      /* already gone */
+    }
+
+    const ctx = this.scriptCtx.get(subId);
+    if (ctx) {
+      try {
+        const encoding = this.encodingFor(subId);
+        this.client.subscribe(subId, 'script', ctx.meta, {
+          script: ctx.script,
+          ...(ctx.inputs ? { inputs: ctx.inputs } : {}),
+          ...(encoding ? { encoding } : {}),
+        });
+      } catch {
+        /* socket may still be coming up */
+      }
+      return;
+    }
+
+    const seriesMeta = this.seriesSubMeta.get(subId);
+    if (seriesMeta) {
+      try {
+        const encoding = this.encodingFor(subId);
+        this.client.subscribe(subId, 'series', seriesMeta, encoding ? { encoding } : undefined);
+      } catch {
+        /* socket may still be coming up */
+      }
+      return;
+    }
+
+    const bars = this.seriesBars.get(subId) ?? [];
+    try {
+      this.client.resumeSubscription(
+        subId,
+        bars.length,
+        this.lastBarTime(bars),
+        this.resumePayload(subId, 0),
+      );
+    } catch {
+      /* best-effort */
+    }
+  }
+
+  /** Clear script wire state without unsubscribing (server already released). */
+  private dropScriptLocal(subId: string): void {
+    this.axisResubPending.delete(subId);
+    this.holdUntilFull.delete(subId);
+    this.clearGapResync(subId);
+    this.appliers.delete(subId);
+    this.appliedSeq.delete(subId);
+    this.jsonSubs.delete(subId);
+    this.scriptCtx.delete(subId);
+    this.scriptInputSig.delete(subId);
+    this.scriptDepth.delete(subId);
+    this.paintLatest.delete(subId);
+    this.paintTail.delete(subId);
+  }
+
   release(subId: string): void {
     this.axisResubPending.delete(subId);
     this.holdUntilFull.delete(subId);
+    this.clearGapResync(subId);
     this.appliers.delete(subId);
     this.appliedSeq.delete(subId);
     this.jsonSubs.delete(subId);
     this.seriesBars.delete(subId);
+    this.seriesSubMeta.delete(subId);
     this.seriesInflight.delete(subId);
     this.scriptCtx.delete(subId);
     this.scriptInputSig.delete(subId);
@@ -1690,12 +1804,17 @@ export class StreamLiveWire {
     this.appliers.clear();
     this.appliedSeq.clear();
     this.seriesBars.clear();
+    this.seriesSubMeta.clear();
     this.seriesInflight.clear();
     this.scriptCtx.clear();
     this.scriptInputSig.clear();
     this.scriptDepth.clear();
     this.paintLatest.clear();
     this.paintTail.clear();
+    this.holdUntilFull.clear();
+    this.axisResubPending.clear();
+    this.gapResyncAt.clear();
+    this.gapResyncAttempts.clear();
     this.cancelSeriesScriptKick();
     this.inbox.clear();
     this.inboxWaiters.clear();
@@ -1715,12 +1834,17 @@ export class StreamLiveWire {
     this.appliers.clear();
     this.appliedSeq.clear();
     this.seriesBars.clear();
+    this.seriesSubMeta.clear();
     this.seriesInflight.clear();
     this.scriptCtx.clear();
     this.scriptInputSig.clear();
     this.scriptDepth.clear();
     this.paintLatest.clear();
     this.paintTail.clear();
+    this.holdUntilFull.clear();
+    this.axisResubPending.clear();
+    this.gapResyncAt.clear();
+    this.gapResyncAttempts.clear();
     this.cancelSeriesScriptKick();
     this.clearHidden();
     try {

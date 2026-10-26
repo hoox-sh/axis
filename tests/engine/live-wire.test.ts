@@ -852,6 +852,8 @@ describe('live-wire P1 series + study push', () => {
     expect(h.closes).toEqual([{ time: 100, ohlcv: { open: 1, high: 2, low: 1, close: 3, volume: 1 } }]);
 
     h.resumes.length = 0;
+    h.unsubscribed.length = 0;
+    const subsBeforeGap = h.sent.filter((s) => s.kind === 'subscribe:series').length;
     const skipped: Bar = { time: 160, open: 3, high: 4, low: 3, close: 4, volume: 1 };
     h.emit({
       type: 'delta',
@@ -861,8 +863,10 @@ describe('live-wire P1 series + study push', () => {
       payload: { bars: [skipped], forming: true, base_index: 1, count: 2, tail_len: 1 },
     });
     expect(h.seriesDelta).toHaveLength(2);
-    expect(h.resumes).toHaveLength(1);
-    expect(h.resumes[0]).toMatchObject({ id: sub, extra: { seq: 3 } });
+    // Fresh unsubscribe+subscribe — not a resume loop.
+    expect(h.resumes).toHaveLength(0);
+    expect(h.unsubscribed).toEqual([sub]);
+    expect(h.sent.filter((s) => s.kind === 'subscribe:series')).toHaveLength(subsBeforeGap + 1);
     expect(h.statuses.map((s) => s.status)).toContain('degraded');
     expect(v1MetricsSnapshot().counts.seqGap).toBe(1);
     expect(v1MetricsSnapshot().counts.resync).toBe(1);
@@ -875,7 +879,8 @@ describe('live-wire P1 series + study push', () => {
       payload: { bars: [skipped], forming: true, base_index: 1, count: 2, tail_len: 1 },
     });
     expect(h.seriesDelta).toHaveLength(2);
-    expect(h.resumes).toHaveLength(1);
+    expect(h.unsubscribed).toHaveLength(1);
+    expect(h.sent.filter((s) => s.kind === 'subscribe:series')).toHaveLength(subsBeforeGap + 1);
 
     const replay: Bar[] = [closed, skipped];
     h.emit({
@@ -1428,21 +1433,23 @@ describe('live-wire P1 series + study push', () => {
       payload: { base_index: 0, count: 1, tail_len: 1, plots: [[2]], series: { a: [2] } },
     });
     await tick();
-    expect(h.resumes).toHaveLength(1);
+    // Gap asks for a fresh subscribe; resume is only the JSON fallback.
+    expect(h.unsubscribed).toContain('s-1');
+    expect(h.resumes).toHaveLength(0);
     h.emit({
       type: 'error',
       id: 's-1',
       payload: { code: 'replay-unavailable', message: 'no replay' },
     });
-    expect(h.resumes).toHaveLength(2);
-    expect(h.resumes[1]?.extra).toEqual({ seq: 5 });
+    expect(h.resumes).toHaveLength(1);
+    expect(h.resumes[0]?.extra).toEqual({ seq: 0 });
     expect(h.statuses.map((s) => s.status)).toContain('degraded');
     h.emit({
       type: 'error',
       id: 's-1',
       payload: { code: 'replay-unavailable', message: 'no replay' },
     });
-    expect(h.resumes).toHaveLength(2);
+    expect(h.resumes).toHaveLength(1);
     h.emit({
       type: 'delta',
       id: 's-1',
@@ -1467,9 +1474,9 @@ describe('live-wire P1 series + study push', () => {
     });
     await first;
     expect(h.applied).toEqual([{ via: 'stream-full' }]);
+    const subsBefore = h.sent.filter((s) => s.kind === 'subscribe:script').length;
     // Frames 6..7 were missed while the tab was idle: force-merging delta 8
-    // would silently drop bars, and any axis-less salvage would tail-pin.
-    // The wire holds the last good paint and asks for a fresh full instead.
+    // would silently drop bars. Prefer unsubscribe+subscribe over resume thrash.
     h.emit({
       type: 'delta',
       id: 's-1',
@@ -1480,8 +1487,9 @@ describe('live-wire P1 series + study push', () => {
     await tick();
     expect(h.applied).toEqual([{ via: 'stream-full' }]);
     expect(h.statuses.map((s) => s.status)).toContain('degraded');
-    expect(h.resumes).toHaveLength(1);
-    expect(h.resumes[0]).toMatchObject({ id: 's-1' });
+    expect(h.resumes).toHaveLength(0);
+    expect(h.unsubscribed).toEqual(['s-1']);
+    expect(h.sent.filter((s) => s.kind === 'subscribe:script')).toHaveLength(subsBefore + 1);
     h.emit({
       type: 'delta',
       id: 's-1',
@@ -1491,7 +1499,182 @@ describe('live-wire P1 series + study push', () => {
     });
     await tick();
     expect(h.applied).toEqual([{ via: 'stream-full' }]);
-    expect(h.resumes).toHaveLength(1);
+    expect(h.unsubscribed).toHaveLength(1);
+    expect(h.sent.filter((s) => s.kind === 'subscribe:script')).toHaveLength(subsBefore + 1);
+  });
+
+  test('a seqAckFrom hole is continuous and does not fresh-resubscribe', async () => {
+    const h = makeHarness();
+    const first = h.wire.evalScript({ subId: 's-1', script: 'indicator() {}', meta: {}, bars: BARS });
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 5,
+      payload: { count: 1, plots: [[1]], series: { a: [1] } },
+    });
+    await first;
+    const subsBefore = h.sent.filter((s) => s.kind === 'subscribe:script').length;
+    // Coalescer dropped 6..7; ackFrom=5 makes 8 continuous.
+    h.emit({
+      type: 'delta',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 8,
+      payload: {
+        base_index: 0,
+        count: 1,
+        tail_len: 1,
+        plots: [[2]],
+        series: { a: [2] },
+        seqAckFrom: 5,
+      },
+    });
+    await tick();
+    expect(h.applied).toEqual([{ via: 'stream-full' }, { via: 'stream-delta' }]);
+    expect(h.unsubscribed).toEqual([]);
+    expect(h.resumes).toEqual([]);
+    expect(h.sent.filter((s) => s.kind === 'subscribe:script')).toHaveLength(subsBefore);
+    expect(h.statuses.some((s) => s.status === 'degraded')).toBe(false);
+  });
+
+  test('a gap fresh-full paints and clears holdUntilFull', async () => {
+    const h = makeHarness();
+    const first = h.wire.evalScript({ subId: 's-1', script: 'indicator() {}', meta: {}, bars: BARS });
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 5,
+      payload: { count: 1, plots: [[1]], series: { a: [1] } },
+    });
+    await first;
+    h.emit({
+      type: 'delta',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 8,
+      payload: { base_index: 0, count: 1, tail_len: 1, plots: [[2]], series: { a: [2] } },
+    });
+    await tick();
+    expect(h.applied).toEqual([{ via: 'stream-full' }]);
+    h.applied.length = 0;
+    // Fresh snapshot after gap must paint even when seq restarts below the old cursor.
+    h.emit({
+      type: 'full',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 1,
+      payload: { count: 1, plots: [[9]], series: { a: [9] } },
+    });
+    await tick();
+    expect(h.applied).toEqual([{ via: 'stream-full' }]);
+    expect(h.statuses.at(-1)?.status).toBe('live');
+    h.emit({
+      type: 'delta',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 2,
+      payload: { base_index: 0, count: 1, tail_len: 1, plots: [[10]], series: { a: [10] } },
+    });
+    await tick();
+    expect(h.applied).toEqual([{ via: 'stream-full' }, { via: 'stream-delta' }]);
+  });
+
+  test('gap resync backs off before another fresh subscribe', async () => {
+    const h = makeHarness();
+    const first = h.wire.evalScript({ subId: 's-1', script: 'indicator() {}', meta: {}, bars: BARS });
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 1,
+      payload: { count: 1, plots: [[1]], series: { a: [1] } },
+    });
+    await first;
+    h.emit({
+      type: 'delta',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 4,
+      payload: { base_index: 0, count: 1, tail_len: 1, plots: [[2]], series: { a: [2] } },
+    });
+    await tick();
+    expect(h.unsubscribed).toEqual(['s-1']);
+    const subsAfterGap = h.sent.filter((s) => s.kind === 'subscribe:script').length;
+    // Still holding (no full yet). A live re-eval retries under backoff — the
+    // immediate retry must not unsubscribe+subscribe again (500ms floor).
+    await h.wire.evalScript({ subId: 's-1', script: 'indicator() {}', meta: {}, bars: BARS });
+    expect(h.unsubscribed).toHaveLength(1);
+    expect(h.sent.filter((s) => s.kind === 'subscribe:script')).toHaveLength(subsAfterGap);
+  });
+
+  test('history_bars shrink does not bounce the script subscription', async () => {
+    const h = makeHarness();
+    const first = h.wire.evalScript({
+      subId: 's-1',
+      script: 'indicator() {}',
+      meta: { history_bars: 50 },
+      bars: BARS,
+    });
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: 's-1',
+      seq: 1,
+      payload: { count: 1, plots: [[1]], series: { a: [1] } },
+    });
+    await first;
+    await h.wire.evalScript({
+      subId: 's-1',
+      script: 'indicator() {}',
+      meta: { history_bars: 49 },
+      bars: BARS,
+    });
+    expect(h.unsubscribed).toEqual([]);
+    expect(h.sent.filter((s) => s.kind === 'subscribe:script')).toHaveLength(1);
+  });
+
+  test('idle/released status drops local script state so the next eval can rejoin', async () => {
+    const h = makeHarness();
+    const first = h.wire.evalScript({ subId: 's-1', script: 'indicator() {}', meta: {}, bars: BARS });
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 1,
+      payload: { count: 1, plots: [[1]], series: { a: [1] } },
+    });
+    await first;
+    expect(h.wire.snapshotState().subs.some((s) => s.subId === 's-1')).toBe(true);
+    h.emit({
+      type: 'status',
+      id: 's-1',
+      payload: { code: 'idle', message: 'released' },
+    });
+    expect(h.wire.snapshotState().subs.some((s) => s.subId === 's-1')).toBe(false);
+    const again = h.wire.evalScript({ subId: 's-1', script: 'indicator() {}', meta: {}, bars: BARS });
+    await tick();
+    await tick();
+    expect(h.sent.filter((s) => s.kind === 'subscribe:script')).toHaveLength(2);
+    h.emit({
+      type: 'full',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 1,
+      payload: { count: 1, plots: [[2]], series: { a: [2] } },
+    });
+    await again;
+    expect(h.wire.snapshotState().subs.some((s) => s.subId === 's-1')).toBe(true);
   });
 
   test('an axis-less merge over a moved window resubscribes instead of painting', async () => {
@@ -1621,7 +1804,10 @@ const h = makeHarness();
       payload: { base_index: 0, count: 1, tail_len: 1, plots: [[2]], series: { a: [2] } },
     });
     await tick();
-    expect(plain.resumes[0]?.extra).toEqual({ seq: 1 });
+    // Gap fresh-subscribe stays on JSON (no encoding) — not a resume.
+    const jsonResub = plain.sent.filter((s) => s.kind === 'subscribe:script').at(-1);
+    expect(jsonResub?.opts).toEqual({ script: 'indicator() {}' });
+    expect(plain.resumes).toEqual([]);
 
     setEngineTransport('worker');
     const worker = makeHarness();
@@ -1664,9 +1850,12 @@ const h = makeHarness();
       payload: { base_index: 0, count: 1, tail_len: 1, plots: [[2]], series: { a: [2] } },
     });
     await tick();
-    expect(worker.resumes).toEqual([
-      { id: 's-w', count: 1, lastTime: 100, extra: { seq: 5, encoding: 'axb1' } },
-    ]);
+    const workerResub = worker.sent.filter((s) => s.kind === 'subscribe:script').at(-1);
+    expect(workerResub?.opts).toEqual({
+      script: 'indicator() {}',
+      encoding: 'axb1',
+    });
+    expect(worker.resumes).toEqual([]);
   });
 });
 

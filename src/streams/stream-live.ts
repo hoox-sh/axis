@@ -312,7 +312,17 @@ function buildWireAt(endpoint: string, authToken: string | undefined): StreamLiv
             appendLog('error', `Engine series ${status}: ${extra.message}`, 'stream');
           }
         } else {
-          setScriptStatus(subId, status, extra?.message);
+          // Mirror feed status: live/connecting clear a stale degraded message
+          // (e.g. "delta gap — resubscribing") so the HUD matches the wire.
+          const clearStale =
+            status === 'connecting' || status === 'live' || status === 'datafeed-loading';
+          const message =
+            extra?.message !== undefined
+              ? extra.message
+              : clearStale
+                ? ''
+                : undefined;
+          setScriptStatus(subId, status, message);
           if (status === 'error' && extra?.message) {
             appendLog('error', `Engine script ${subId}: ${extra.message}`, 'stream');
           }

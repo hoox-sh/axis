@@ -33,6 +33,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Fixed
 
+- **Live-wire seq-gap thrash no longer blanks indicators.** A script/series gap now does one backoff-gated unsubscribe+subscribe for a fresh full (instead of resume-loop forever), honors `seqAckFrom` as continuous, paints when that full lands, and clears `holdUntilFull`. `history_bars` shrink/flicker no longer bounces the sub; engine `idle`/`released` drops local state so the next eval rejoins; script HUD live/connecting clears a stale “delta gap — resubscribing” message.
+
 - **Live stream overlays paint when the engine series is longer than the chart window without a bar axis.** A 20k replica vs 5k rolling window used to hit `staleNoAxis` and skip forever (tip cache never seeded → blank indicators). Live pushes now tail-clamp onto the chart tip; wire snapshots synthesize `bar_times` from the subscription window when the engine omits them. Shorter-than-chart axis-less pushes still skip.
 
 - **Main-thread live WS shares the soft `UNAUTHORIZED` authBlock policy with the ingest worker.** `shouldAuthBlock` lives in `frames.ts`; JSON and worker transports only permanently block on real bad-key errors, and otherwise close to remint/re-auth.
