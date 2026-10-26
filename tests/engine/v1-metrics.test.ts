@@ -58,8 +58,24 @@ describe('v1 metrics', () => {
     v1Mark('batch:post', 5);
     v1Mark('apply:start', 6);
     v1Mark('apply:end', 8);
-    expect(v1MetricsSnapshot().tickToApply.p50).toBe(3);
-    expect(v1MetricsSnapshot().apply.p50).toBe(2);
+    const snap = v1MetricsSnapshot();
+    expect(snap.tickToApply.p50).toBe(3);
+    expect(snap.queueWait.p50).toBe(1);
+    expect(snap.apply.p50).toBe(2);
+    _setV1FrameScheduler(null);
+    _resetV1Metrics();
+  });
+
+  test('queueWait is recv → apply:start and does not include the apply span', () => {
+    _resetV1Metrics();
+    _setV1FrameScheduler(() => 1);
+    v1Mark('batch:post', 100);
+    v1Mark('apply:start', 1_900);
+    v1Mark('apply:end', 1_920);
+    const snap = v1MetricsSnapshot();
+    expect(snap.queueWait).toMatchObject({ n: 1, p50: 1_800, p95: 1_800, max: 1_800 });
+    expect(snap.apply).toMatchObject({ n: 1, p50: 20 });
+    expect(snap.tickToApply).toMatchObject({ n: 1, p50: 1_820 });
     _setV1FrameScheduler(null);
     _resetV1Metrics();
   });
@@ -72,6 +88,7 @@ describe('v1 metrics', () => {
     const snap = v1MetricsSnapshot();
     expect(snap.apply.p50).toBe(4);
     expect(snap.tickToApply.n).toBe(0);
+    expect(snap.queueWait.n).toBe(0);
     expect(snap.tickToPaint.n).toBe(0);
     _setV1FrameScheduler(null);
     _resetV1Metrics();

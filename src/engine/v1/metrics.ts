@@ -9,7 +9,9 @@
  * Spans use one clock. `tick:recv` is stamped before main-thread
  * `JSON.parse`; the worker path stamps `batch:post` on receipt instead,
  * so tick→apply on that path excludes decode. The first stamp in a burst
- * wins. `apply:end` arms one frame for tick→paint.
+ * wins. `queueWait` is recv → `apply:start` (main-thread queue before the
+ * bridge). `apply` is `apply:start` → `apply:end`. `apply:end` arms one
+ * frame for tick→paint.
  *
  * @module engine/v1/metrics
  */
@@ -28,6 +30,8 @@ export type V1Dist = {
 
 export type V1Metrics = {
   tickToApply: V1Dist;
+  /** Recv (`tick:recv` / `batch:post`) → `apply:start`. */
+  queueWait: V1Dist;
   tickToPaint: V1Dist;
   apply: V1Dist;
   panFrame: V1Dist;
@@ -43,6 +47,7 @@ const PAN_HOLD_MS = 100;
 type FrameScheduler = (cb: (ts: number) => void) => number;
 
 const tickToApply: number[] = [];
+const queueWait: number[] = [];
 const tickToPaint: number[] = [];
 const applySpan: number[] = [];
 const panFrame: number[] = [];
@@ -167,7 +172,10 @@ export function v1Mark(name: V1Mark, at: number = now()): void {
     return;
   }
   if (name === 'apply:start') {
-    if (applyAt === null) applyAt = at;
+    if (applyAt === null) {
+      applyAt = at;
+      if (recvAt !== null) push(queueWait, Math.max(0, at - recvAt));
+    }
     return;
   }
   if (name === 'apply:end') {
@@ -230,6 +238,7 @@ export function v1NotePanActivity(at: number = now()): void {
 export function v1MetricsSnapshot(): V1Metrics {
   return {
     tickToApply: dist(tickToApply),
+    queueWait: dist(queueWait),
     tickToPaint: dist(tickToPaint),
     apply: dist(applySpan),
     panFrame: dist(panFrame),
@@ -258,6 +267,7 @@ export function _setV1FrameScheduler(next: FrameScheduler | null): void {
 /** Tests: clear samples, open bursts, and counters. */
 export function _resetV1Metrics(): void {
   tickToApply.length = 0;
+  queueWait.length = 0;
   tickToPaint.length = 0;
   applySpan.length = 0;
   panFrame.length = 0;

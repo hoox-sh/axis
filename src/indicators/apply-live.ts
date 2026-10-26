@@ -49,6 +49,13 @@ export type ApplyLiveOpts = {
   liveTick?: boolean;
 };
 
+/** Test seams — production callers omit this. */
+export type ApplyLiveDeps = {
+  getManager?: typeof getManager;
+  noteChartSeriesHole?: typeof noteChartSeriesHole;
+  applyDebugPins?: typeof applyDebugPinsToChart;
+};
+
 function withAxisSource(result: RunResult, script: string): RunResult {
   return {
     ...result,
@@ -66,6 +73,7 @@ export function applyPrecomputedChart(
   raw: RunResult,
   bars: Bar[],
   opts: ApplyLiveOpts = {},
+  deps?: ApplyLiveDeps,
 ): RunResult {
   const silent = opts.silent !== false;
   const liveTick = opts.liveTick !== false;
@@ -78,6 +86,9 @@ export function applyPrecomputedChart(
     openResults: false,
   };
   const result = raw;
+  const resolveManager = deps?.getManager ?? getManager;
+  const scanHole = deps?.noteChartSeriesHole ?? noteChartSeriesHole;
+  const paintPins = deps?.applyDebugPins ?? applyDebugPinsToChart;
 
   if (!isRunEpochCurrent(epoch)) {
     return { ...result, meta: { ...result.meta, superseded: true } };
@@ -107,7 +118,7 @@ export function applyPrecomputedChart(
     /* Pine alerts must not break chart apply */
   }
 
-  const manager = getManager();
+  const manager = resolveManager();
   if (!manager) return result;
 
   if (!isRunEpochCurrent(epoch)) {
@@ -136,7 +147,9 @@ export function applyPrecomputedChart(
     return { ...result, meta: { ...result.meta, skipped: 'stale-no-axis' } };
   }
   if (resultTimes && resultTimes.length > 1) {
-    noteChartSeriesHole(resultTimes, bars);
+    // Forming tips do not open new internal holes; the O(n) scan + alloc
+    // belongs on snapshots / non-live applies (runner still covers those).
+    if (!liveTick) scanHole(resultTimes, bars);
     const engineLast = resultTimes[resultTimes.length - 1];
     const chartLast = ohlcvTimes.length ? ohlcvTimes[ohlcvTimes.length - 1] : null;
     if (
@@ -224,7 +237,8 @@ export function applyPrecomputedChart(
       if (!painted.ok) {
         throw new Error(`Chart apply aborted (${painted.reason})`);
       }
-      applyDebugPinsToChart();
+      // Pins off is the hot path; skip getManager + clearDebugPinMarkers.
+      if (store.debugPinsEnabled) paintPins();
     }
   } catch (e: unknown) {
     const msg = formatRunError(e);

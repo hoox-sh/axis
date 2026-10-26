@@ -104,21 +104,22 @@ export function applyStreamDelta(
   input: ApplyStreamInput,
   deps?: { applyChart?: typeof applyPrecomputedChart },
 ): RunResult {
-  engineDebugSample('apply.delta', {
-    via: input.via,
-    indicatorId: input.indicatorId ?? null,
-    count: input.full.count,
-    bars: input.bars.length,
-    context: input.full.executionContext ?? null,
-  });
-  const precomputedResult = streamFullToPrecomputed(input.full, input.via);
-  const prevInputs = previousRunInputs(input.indicatorId);
-  if (prevInputs && !precomputedResult.meta?.inputs) {
-    precomputedResult.meta = { ...(precomputedResult.meta ?? {}), inputs: prevInputs };
-  }
-  const applyChart = deps?.applyChart ?? applyPrecomputedChart;
+  // End queue wait as soon as the bridge is entered (prep counts as apply).
   v1Mark('apply:start');
   try {
+    engineDebugSample('apply.delta', {
+      via: input.via,
+      indicatorId: input.indicatorId ?? null,
+      count: input.full.count,
+      bars: input.bars.length,
+      context: input.full.executionContext ?? null,
+    });
+    const precomputedResult = streamFullToPrecomputed(input.full, input.via);
+    const prevInputs = previousRunInputs(input.indicatorId);
+    if (prevInputs && !precomputedResult.meta?.inputs) {
+      precomputedResult.meta = { ...(precomputedResult.meta ?? {}), inputs: prevInputs };
+    }
+    const applyChart = deps?.applyChart ?? applyPrecomputedChart;
     return applyChart(input.script, input.indicatorId, precomputedResult as never, input.bars, {
       silent: input.silent ?? true,
       liveTick: true,
@@ -138,28 +139,29 @@ export async function applyStreamPayload(
   input: ApplyStreamInput,
   deps?: { runAndApply?: RunAndApplyFn },
 ): Promise<RunResult> {
-  engineDebug('apply.payload', {
-    via: input.via,
-    indicatorId: input.indicatorId ?? null,
-    count: input.full.count,
-    bars: input.bars.length,
-    liveTick: input.via === 'stream-delta',
-    context: input.full.executionContext ?? null,
-  });
-  const precomputedResult = streamFullToPrecomputed(input.full, input.via);
-  // The socket payload carries the values, not the run's metadata. Keep the
-  // input descriptors of the script's last full run: the Results panel and
-  // the Script Settings modal read them from the run (the socket payload has
-  // none, so a live apply would empty the script's input list).
-  const prevInputs = previousRunInputs(input.indicatorId);
-  if (prevInputs && !precomputedResult.meta?.inputs) {
-    precomputedResult.meta = { ...(precomputedResult.meta ?? {}), inputs: prevInputs };
-  }
-  const run =
-    deps?.runAndApply ??
-    (await import('../indicators/runner')).runAndApply as unknown as RunAndApplyFn;
+  // End queue wait as soon as the bridge is entered (prep counts as apply).
   v1Mark('apply:start');
   try {
+    engineDebug('apply.payload', {
+      via: input.via,
+      indicatorId: input.indicatorId ?? null,
+      count: input.full.count,
+      bars: input.bars.length,
+      liveTick: input.via === 'stream-delta',
+      context: input.full.executionContext ?? null,
+    });
+    const precomputedResult = streamFullToPrecomputed(input.full, input.via);
+    // The socket payload carries the values, not the run's metadata. Keep the
+    // input descriptors of the script's last full run: the Results panel and
+    // the Script Settings modal read them from the run (the socket payload has
+    // none, so a live apply would empty the script's input list).
+    const prevInputs = previousRunInputs(input.indicatorId);
+    if (prevInputs && !precomputedResult.meta?.inputs) {
+      precomputedResult.meta = { ...(precomputedResult.meta ?? {}), inputs: prevInputs };
+    }
+    const run =
+      deps?.runAndApply ??
+      (await import('../indicators/runner')).runAndApply as unknown as RunAndApplyFn;
     return await run(input.script, input.indicatorId, {
       precomputedResult,
       bars: input.bars,

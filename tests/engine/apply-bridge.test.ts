@@ -9,6 +9,12 @@ import {
   applyStreamPayload,
   streamFullToPrecomputed,
 } from '../../src/engine/apply-bridge';
+import {
+  _resetV1Metrics,
+  _setV1FrameScheduler,
+  v1Mark,
+  v1MetricsSnapshot,
+} from '../../src/engine/v1/metrics';
 
 describe('redesign2 apply bridge (F-16)', () => {
   test('converts a full payload to a runner-ready result', () => {
@@ -157,5 +163,33 @@ describe('redesign2 apply bridge (F-16)', () => {
     expect(seen).toEqual(['indicator("x")']);
     expect(out && typeof (out as { then?: unknown }).then).not.toBe('function');
     expect(out.status).toBe('success');
+  });
+
+  test('applyStreamDelta closes queueWait at bridge entry', () => {
+    _resetV1Metrics();
+    _setV1FrameScheduler(() => 1);
+    v1Mark('batch:post', 50);
+    const bars = [{ time: 100, open: 1, high: 1, low: 1, close: 1, volume: 1 }];
+    applyStreamDelta(
+      {
+        script: 'indicator("x")',
+        indicatorId: 'ind-1',
+        full: { series: { a: [1] }, bar_times: [100], count: 1 },
+        via: 'stream-delta',
+        bars,
+      },
+      {
+        applyChart: (_script, _id, result) => result,
+      },
+    );
+    const snap = v1MetricsSnapshot();
+    expect(snap.queueWait.n).toBe(1);
+    expect(snap.apply.n).toBe(1);
+    expect(snap.tickToApply.n).toBe(1);
+    // Dist values are rounded to 0.01; queue + apply reconstructs tick→apply.
+    const sum = (snap.queueWait.p50 ?? 0) + (snap.apply.p50 ?? 0);
+    expect(Math.abs(sum - (snap.tickToApply.p50 ?? -1))).toBeLessThanOrEqual(0.02);
+    _setV1FrameScheduler(null);
+    _resetV1Metrics();
   });
 });
