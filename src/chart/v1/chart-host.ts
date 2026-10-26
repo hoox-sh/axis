@@ -58,6 +58,8 @@ export type SlotChartApi = {
 export type SlotPaneApi = {
   paneIndex(): number;
   setHeight(height: number): void;
+  getHeight(): number;
+  setStretchFactor(stretchFactor: number): void;
   getHTMLElement(): HTMLElement | null;
 };
 
@@ -102,6 +104,20 @@ export class SlotChart {
     const index = this.ids.get(id);
     if (index == null) return;
     this.chart.panes()[index]?.setHeight(height);
+  }
+
+  getHeight(id: string): number {
+    const index = this.ids.get(id);
+    if (index == null) return 0;
+    const pane = this.chart.panes()[index];
+    const height = pane?.getHeight?.() ?? 0;
+    return Number.isFinite(height) ? height : 0;
+  }
+
+  setStretchFactor(id: string, stretchFactor: number): void {
+    const index = this.ids.get(id);
+    if (index == null) return;
+    this.chart.panes()[index]?.setStretchFactor(stretchFactor);
   }
 
   element(id: string): HTMLElement | null {

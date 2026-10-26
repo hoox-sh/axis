@@ -155,6 +155,11 @@ export interface ApplyChartThemeOpts {
   applyPriceScale?: boolean;
   /** Secondary pane (volume/indicator) — hide time scale chrome. */
   secondary?: boolean;
+  /**
+   * LWC `layout.panes.enableResize`. Default true (single-chart).
+   * Multi-chart rollback passes false so theme reapply cannot turn separators on.
+   */
+  enablePaneResize?: boolean;
 }
 
 /** Options when applying price-series colors. */

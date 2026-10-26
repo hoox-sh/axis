@@ -302,6 +302,11 @@ export function buildChartOptionsFromTokens(
     layout: {
       background: { type: ColorType.Solid, color: bg },
       textColor: fg,
+      panes: {
+        enableResize: opts.enablePaneResize !== false,
+        separatorColor: border,
+        separatorHoverColor: cross,
+      },
     },
     grid: {
       vertLines: { color: gridVert, visible: gridOn },

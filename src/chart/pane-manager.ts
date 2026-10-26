@@ -52,11 +52,13 @@ import {
   type UTCTimestamp,
 } from 'lightweight-charts';
 import { v1NotePanActivity } from '../engine/v1/metrics';
+import { chartDebug } from '../debug';
 import { SlotChart, usesSingleChartLayout } from './v1/chart-host';
 import { noteLogicalRangeSkew, type SyncSampleOpts } from './v1/invariants';
 import { noteLeftEdge } from './v1/left-prefetch';
 import {
   createBaseChart,
+  PANE_RESIZE_LAYOUT,
   createLineSeries,
   createAreaSeries,
   createBgcolorSeries,
@@ -1096,6 +1098,7 @@ export class PaneManager {
       this.container.appendChild(div);
       const real = createBaseChart(div, {
         handleScroll: { vertTouchDrag: true },
+        layout: { panes: { ...PANE_RESIZE_LAYOUT } },
         rightPriceScale: {
           borderColor: VOID.border,
           borderVisible: this.priceScaleLabelsVisible,
@@ -1109,7 +1112,10 @@ export class PaneManager {
       chart = this.slot.facade(id);
       try {
         this.themeUnregs.get(id)?.();
-        this.themeUnregs.set(id, getThemeManager().registerChart(real, { secondary: false }));
+        this.themeUnregs.set(
+          id,
+          getThemeManager().registerChart(real, { secondary: false, enablePaneResize: true }),
+        );
       } catch {
         /* theme optional */
       }
@@ -1118,6 +1124,19 @@ export class PaneManager {
         this.resizeRaf.schedule(() => this.flushPendingPaneResizes());
       });
       resizeObserver.observe(div);
+      const persistHeights = () => this.persistSharedPaneHeights();
+      div.addEventListener('pointerup', persistHeights);
+      div.addEventListener('pointercancel', persistHeights);
+      const unsubPersist = () => {
+        try {
+          div.removeEventListener('pointerup', persistHeights);
+          div.removeEventListener('pointercancel', persistHeights);
+        } catch {
+          /* ignore */
+        }
+      };
+      this.pointerUnsubs.push(unsubPersist);
+      this.panePointerUnsubs.set(id, unsubPersist);
       this.attachSharedPaneChrome(div, id, type, label);
     } else {
       this.slot.bind(id);
@@ -1230,6 +1249,7 @@ export class PaneManager {
     // Only pass keys that apply — never `timeScale: undefined` (wipes base
     // timeVisible and leaves crosshair labels date-only).
     const chart = createBaseChart(div, {
+      layout: { panes: { enableResize: false } },
       ...(isSecondary
         ? {
             // Secondary panes: no time axis / scrollbar; range follows price pane.
@@ -1288,7 +1308,10 @@ export class PaneManager {
     // Live theme updates for this LWC chart (price vs secondary panes)
     try {
       this.themeUnregs.get(id)?.();
-      const unreg = getThemeManager().registerChart(chart, { secondary: type !== 'price' });
+      const unreg = getThemeManager().registerChart(chart, {
+        secondary: type !== 'price',
+        enablePaneResize: false,
+      });
       this.themeUnregs.set(id, unreg);
     } catch {
       /* theme optional */
@@ -1559,6 +1582,10 @@ export class PaneManager {
   }
 
   resize(id: string, height: number) {
+    if (this.slot) {
+      if (height > 0) this.slot.setHeight(id, height);
+      return;
+    }
     const el = document.getElementById(this.paneDomId(id));
     if (el) el.style.height = `${height}px`;
     const pane = this.panes.get(id);
@@ -1571,6 +1598,21 @@ export class PaneManager {
           /* ignore */
         }
       }
+    }
+  }
+
+  /**
+   * Write LWC pane pixel heights into the store after a native separator drag.
+   * Custom handles on the multi-chart rollback already call {@link resizePane}.
+   */
+  private persistSharedPaneHeights(): void {
+    if (!this.slot) return;
+    for (const pane of this.panes.values()) {
+      const height = Math.round(this.slot.getHeight(pane.id));
+      if (!Number.isFinite(height) || height <= 0) continue;
+      const stored = store.panes.find((row) => row.id === pane.id);
+      if (!stored || Math.round(stored.height) === height) continue;
+      resizePane(pane.id, height);
     }
   }
 
@@ -2445,6 +2487,7 @@ export class PaneManager {
   }
 
   fitContent() {
+    chartDebug('fitContent');
     const pricePane = this.panes.get('price');
     if (pricePane) {
       try {

@@ -21,18 +21,24 @@ function fakeChart(): SlotChartApi & {
   remove: ReturnType<typeof mock>;
   removePane: ReturnType<typeof mock>;
 } {
-  const rows: Array<{ index: number; height: number }> = [{ index: 0, height: 0 }];
-  const api = (row: { index: number; height: number }): SlotPaneApi => ({
+  const rows: Array<{ index: number; height: number; stretch: number }> = [
+    { index: 0, height: 0, stretch: 1 },
+  ];
+  const api = (row: { index: number; height: number; stretch: number }): SlotPaneApi => ({
     paneIndex: () => row.index,
     setHeight: (height) => {
       row.height = height;
+    },
+    getHeight: () => row.height,
+    setStretchFactor: (stretchFactor) => {
+      row.stretch = stretchFactor;
     },
     getHTMLElement: () => null,
   });
   const scale = { id: 'scale' };
   const chart = {
     addPane: (_preserve?: boolean) => {
-      const row = { index: rows.length, height: 0 };
+      const row = { index: rows.length, height: 0, stretch: 1 };
       rows.push(row);
       return api(row);
     },
@@ -124,5 +130,17 @@ describe('SlotChart', () => {
     expect(chart.remove).not.toHaveBeenCalled();
     slot.destroy();
     expect(chart.remove).toHaveBeenCalledTimes(1);
+  });
+
+  test('setHeight, getHeight, and setStretchFactor address the pane index', () => {
+    const chart = fakeChart();
+    const slot = new SlotChart(chart);
+    slot.bind('price');
+    slot.bind('volume');
+    slot.setHeight('volume', 140);
+    slot.setStretchFactor('volume', 0.3);
+    expect(slot.getHeight('volume')).toBe(140);
+    expect(slot.getHeight('missing')).toBe(0);
+    expect(chart.panes()[1]?.getHeight()).toBe(140);
   });
 });

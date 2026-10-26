@@ -107,6 +107,13 @@ export const VOID = {
   orange: '#E8B84A',
 };
 
+/** LWC `layout.panes` for the single-chart layout (concept §5.1). */
+export const PANE_RESIZE_LAYOUT = {
+  enableResize: true,
+  separatorColor: VOID.border,
+  separatorHoverColor: VOID.indigoSoft,
+} as const;
+
 /**
  * @deprecated Use {@link VOID}. Kept as an alias only — **not** TradingView®.
  * Do not add methods or treat as a runtime API.
@@ -271,6 +278,7 @@ export function createBaseChart(
       textColor: VOID.textDim,
       fontSize: 11,
       attributionLogo: false,
+      panes: { ...PANE_RESIZE_LAYOUT },
     },
     grid: {
       vertLines: { color: VOID.grid },

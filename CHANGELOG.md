@@ -17,6 +17,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Added
 
+- **The one-chart layout resizes panes with Lightweight Charts `layout.panes.enableResize`.** Separator colors follow the void theme. A drag writes pixel heights into the store. `PaneManager.resize` calls `IPaneApi.setHeight` on that layout so a sub-pane drag does not resize the whole chart. The multi-chart rollback keeps the custom handles and turns LWC separators off.
+
 - **AXIS debug mode (`VITE_AXIS_DEBUG`) — detailed chart-action and engine logs.** Set `VITE_AXIS_DEBUG=1` (also `true` / `yes`; alias `VITE_DEBUG`) in `.env` and restart `bun run dev`. Boot prints `[axis:debug]`; DevTools filter `[axis:chart]` / `[axis:engine]`. Lines also persist in a rotating localStorage ring (`axis.debug.log.0`…`.3`, 64 KiB each, oldest dropped). Download the ring as `axis-debug-*.log` from System Logs (download icon) or `window.__AXIS_DEBUG__.download()`. Forming ticks and live deltas are sampled (~1/s). Optional overlay: `localStorage.axis.debug=1` then reload. e2e forces the flag off.
 
 - **The engine socket mints a Worker live ticket instead of putting `api_key` on `/ws/live`.** When a cloud Worker key is set and neither the engine nor the Worker is loopback, the PWA `GET`s `/api/ws/live?issue=ticket` with Bearer and upgrades `?ticket=`. The PYNE `auth` frame still carries the engine key. Direct local `/ws/live` still uses `?api_key=` because the browser cannot send `Authorization`. A 401/403 mint does not reconnect; transport failures remint.

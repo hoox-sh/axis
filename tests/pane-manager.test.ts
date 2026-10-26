@@ -13,7 +13,8 @@ import { describe, expect, it, beforeAll, beforeEach, afterEach } from 'bun:test
 import { installLightweightChartsMock } from './helpers/mock-lwc';
 import { resetChartLayoutMode, setChartLayoutMode } from '../src/chart/v1/chart-host';
 import { _resetSyncSampleForTests } from '../src/chart/v1/invariants';
-import { setStore } from '../src/store';
+import { setStore, store } from '../src/store';
+import { PANE_RESIZE_LAYOUT } from '../src/chart/series-factory';
 
 beforeAll(() => {
   installLightweightChartsMock();
@@ -86,6 +87,16 @@ describe('PaneManager', () => {
   });
 
   afterEach(() => {
+    try {
+      pm.dispose();
+    } catch {
+      /* ignore */
+    }
+    try {
+      container.remove();
+    } catch {
+      /* ignore */
+    }
     resetChartLayoutMode();
   });
 
@@ -127,6 +138,53 @@ describe('PaneManager', () => {
     pm.createPane('volume', 'volume', 'Volume', 100);
     expect(pm.getAllPanes()).toHaveLength(2);
     expect(document.getElementById('pane-volume')).toBeTruthy();
+    expect(document.getElementById('pane-handle-volume')).toBeTruthy();
+    const price = pm.getPane('price')?.chart as {
+      _options?: { layout?: { panes?: { enableResize?: boolean } } };
+      _applied?: { layout?: { panes?: { enableResize?: boolean } } };
+    };
+    expect(price?._options?.layout?.panes?.enableResize).toBe(false);
+    expect(price?._applied?.layout?.panes?.enableResize).toBe(false);
+  });
+
+  it('single layout uses LWC pane resize and skips the custom handle', () => {
+    setChartLayoutMode('single');
+    const price = pm.createPane('price', 'price', 'Price');
+    pm.createPane('volume', 'volume', 'Volume', 80);
+    expect(document.getElementById('pane-handle-volume')).toBeNull();
+    const opts = (price.chart as { _options?: { layout?: { panes?: typeof PANE_RESIZE_LAYOUT } } })._options;
+    expect(opts?.layout?.panes?.enableResize).toBe(true);
+    expect(opts?.layout?.panes?.separatorColor).toBe(PANE_RESIZE_LAYOUT.separatorColor);
+  });
+
+  it('single layout resize sets IPaneApi height, not the whole chart', () => {
+    setChartLayoutMode('single');
+    const price = pm.createPane('price', 'price', 'Price');
+    pm.createPane('volume', 'volume', 'Volume', 80);
+    const panes = price.chart as {
+      panes: () => Array<{ getHeight: () => number }>;
+      _applied?: unknown;
+    };
+    const appliedBefore = panes._applied;
+    pm.resize('volume', 160);
+    expect(panes.panes()[1]?.getHeight()).toBe(160);
+    expect(panes._applied).toBe(appliedBefore);
+  });
+
+  it('single layout pointerup persists LWC pane heights into the store', () => {
+    setChartLayoutMode('single');
+    setStore('panes', [
+      { id: 'price', type: 'price', height: 400, order: 0, visible: true, label: 'Price' },
+      { id: 'volume', type: 'volume', height: 80, order: 1, visible: true, label: 'Volume' },
+    ]);
+    const price = pm.createPane('price', 'price', 'Price');
+    pm.createPane('volume', 'volume', 'Volume', 80);
+    (
+      price.chart as { panes: () => Array<{ setHeight: (h: number) => void }> }
+    ).panes()[1]?.setHeight(132);
+    const host = document.getElementById(pm.paneDomId('price')) as { dispatchEvent: (ev: { type: string }) => void } | null;
+    host?.dispatchEvent({ type: 'pointerup' });
+    expect(store.panes.find((p) => p.id === 'volume')?.height).toBe(132);
   });
 
   it('destroyPane removes pane', () => {

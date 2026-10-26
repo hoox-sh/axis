@@ -48,6 +48,8 @@ export type FakeChart = {
   addSeries: (type: unknown, opts?: unknown, paneIndex?: number) => FakeSeries;
   removeSeries: (series: FakeSeries) => void;
   applyOptions: (o: unknown) => void;
+  _options?: Record<string, unknown>;
+  _applied?: unknown;
   remove: () => void;
   priceScale: (id: string) => { applyOptions: (o: unknown) => void };
   timeScale: () => {
@@ -68,11 +70,15 @@ export type FakeChart = {
   addPane: (preserveEmptyPane?: boolean) => {
     paneIndex: () => number;
     setHeight: (height: number) => void;
+    getHeight: () => number;
+    setStretchFactor: (stretchFactor: number) => void;
     getHTMLElement: () => HTMLElement | null;
   };
   panes: () => Array<{
     paneIndex: () => number;
     setHeight: (height: number) => void;
+    getHeight: () => number;
+    setStretchFactor: (stretchFactor: number) => void;
     getHTMLElement: () => HTMLElement | null;
   }>;
   removePane: (index: number) => void;
@@ -152,17 +158,21 @@ export function makeFakeChart(): FakeChart {
   };
   let rangeCb: ((r: unknown) => void) | null = null;
   const crosshairHandlers: Array<(p: unknown) => void> = [];
-  const panes: Array<{ index: number; height: number; el: HTMLElement | null }> = [
-    { index: 0, height: 0, el: null },
+  const panes: Array<{ index: number; height: number; stretch: number; el: HTMLElement | null }> = [
+    { index: 0, height: 0, stretch: 1, el: null },
   ];
-  const paneApi = (row: { index: number; height: number; el: HTMLElement | null }) => ({
+  const paneApi = (row: { index: number; height: number; stretch: number; el: HTMLElement | null }) => ({
     paneIndex: () => row.index,
     setHeight: (height: number) => {
       row.height = height;
     },
+    getHeight: () => row.height,
+    setStretchFactor: (stretchFactor: number) => {
+      row.stretch = stretchFactor;
+    },
     getHTMLElement: () => row.el,
   });
-  return {
+  const chart: FakeChart = {
     _series: series,
     _crosshairHandlers: crosshairHandlers,
     addSeries: (_type: unknown, _opts?: unknown, paneIndex?: number) => {
@@ -174,6 +184,7 @@ export function makeFakeChart(): FakeChart {
       const row = {
         index: panes.length,
         height: 0,
+        stretch: 1,
         el: typeof document !== 'undefined' ? (document.createElement('div') as HTMLElement) : null,
       };
       panes.push(row);
@@ -190,7 +201,9 @@ export function makeFakeChart(): FakeChart {
       const i = series.indexOf(ser);
       if (i >= 0) series.splice(i, 1);
     },
-    applyOptions: () => {},
+    applyOptions: (o) => {
+      chart._applied = o;
+    },
     remove: () => {},
     priceScale: () => ({ applyOptions: () => {} }),
     timeScale: () => ({
@@ -218,13 +231,15 @@ export function makeFakeChart(): FakeChart {
     clearCrosshairPosition: () => {},
     paneSize: () => ({ width: 400, height: 200 }),
   };
+  return chart;
 }
 
 export function installLightweightChartsMock() {
   const charts: FakeChart[] = [];
   mock.module('lightweight-charts', () => ({
-    createChart: () => {
+    createChart: (_el?: unknown, opts?: Record<string, unknown>) => {
       const c = makeFakeChart();
+      c._options = opts ?? {};
       charts.push(c);
       return c;
     },

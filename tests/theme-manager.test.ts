@@ -323,11 +323,22 @@ describe('theme apply', () => {
   it('buildChartOptionsFromTokens sets layout.background.color', () => {
     const tokens = catalogDefaults();
     const opts = buildChartOptionsFromTokens(tokens) as {
-      layout: { background: { color: string }; textColor: string };
+      layout: {
+        background: { color: string };
+        textColor: string;
+        panes: { enableResize: boolean; separatorColor: string };
+      };
       grid: { vertLines: { visible: boolean } };
     };
     expect(opts.layout.background.color).toBe(String(tokens['chart.bg_color']));
     expect(opts.grid.vertLines.visible).toBe(true);
+    expect(opts.layout.panes.enableResize).toBe(true);
+    expect(opts.layout.panes.separatorColor).toBe(String(tokens['scale.border']));
+    expect(
+      (buildChartOptionsFromTokens(tokens, { enablePaneResize: false }) as {
+        layout: { panes: { enableResize: boolean } };
+      }).layout.panes.enableResize,
+    ).toBe(false);
 
     const noGrid = buildChartOptionsFromTokens({
       ...tokens,
