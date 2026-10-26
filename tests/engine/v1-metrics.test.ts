@@ -8,6 +8,8 @@ import { Redesign2DeltaApplier } from '../../src/engine/client-apply';
 import {
   _resetV1Metrics,
   _setV1FrameScheduler,
+  V1_SKIP_WARMUP,
+  V1_WINDOW,
   v1BudgetRegressed,
   v1Mark,
   v1MetricsSnapshot,
@@ -33,9 +35,17 @@ function queuedScheduler(): { schedule: (cb: FrameCb) => number; drain: (ts: num
   };
 }
 
+/** One recv → apply cycle. Returns the apply:end timestamp used. */
+function sampleApply(t0: number, queueMs: number, applyMs: number): number {
+  v1Mark('batch:post', t0);
+  v1Mark('apply:start', t0 + queueMs);
+  v1Mark('apply:end', t0 + queueMs + applyMs);
+  return t0 + queueMs + applyMs;
+}
+
 describe('v1 metrics', () => {
   test('pairs tick→apply with the apply span and tick→paint on the next frame', () => {
-    _resetV1Metrics();
+    _resetV1Metrics({ warmup: 0 });
     const frames = queuedScheduler();
     _setV1FrameScheduler(frames.schedule);
     v1Mark('tick:recv', 1_000);
@@ -49,11 +59,11 @@ describe('v1 metrics', () => {
     expect(frames.drain(1_016)).toBe(true);
     expect(v1MetricsSnapshot().tickToPaint).toMatchObject({ n: 1, p50: 16, p95: 16 });
     _setV1FrameScheduler(null);
-    _resetV1Metrics();
+    _resetV1Metrics({ warmup: 0 });
   });
 
   test('batch:post is the main-thread receipt when the worker already decoded', () => {
-    _resetV1Metrics();
+    _resetV1Metrics({ warmup: 0 });
     _setV1FrameScheduler(() => 1);
     v1Mark('batch:post', 5);
     v1Mark('apply:start', 6);
@@ -63,11 +73,11 @@ describe('v1 metrics', () => {
     expect(snap.queueWait.p50).toBe(1);
     expect(snap.apply.p50).toBe(2);
     _setV1FrameScheduler(null);
-    _resetV1Metrics();
+    _resetV1Metrics({ warmup: 0 });
   });
 
   test('queueWait is recv → apply:start and does not include the apply span', () => {
-    _resetV1Metrics();
+    _resetV1Metrics({ warmup: 0 });
     _setV1FrameScheduler(() => 1);
     v1Mark('batch:post', 100);
     v1Mark('apply:start', 1_900);
@@ -77,11 +87,11 @@ describe('v1 metrics', () => {
     expect(snap.apply).toMatchObject({ n: 1, p50: 20 });
     expect(snap.tickToApply).toMatchObject({ n: 1, p50: 1_820 });
     _setV1FrameScheduler(null);
-    _resetV1Metrics();
+    _resetV1Metrics({ warmup: 0 });
   });
 
   test('an apply with no recv records the transaction only', () => {
-    _resetV1Metrics();
+    _resetV1Metrics({ warmup: 0 });
     _setV1FrameScheduler(() => 1);
     v1Mark('apply:start', 10);
     v1Mark('apply:end', 14);
@@ -91,11 +101,11 @@ describe('v1 metrics', () => {
     expect(snap.queueWait.n).toBe(0);
     expect(snap.tickToPaint.n).toBe(0);
     _setV1FrameScheduler(null);
-    _resetV1Metrics();
+    _resetV1Metrics({ warmup: 0 });
   });
 
   test('pan sampling records frame deltas until the gesture goes quiet', () => {
-    _resetV1Metrics();
+    _resetV1Metrics({ warmup: 0 });
     const frames = queuedScheduler();
     _setV1FrameScheduler(frames.schedule);
     v1NotePanActivity(0);
@@ -106,17 +116,17 @@ describe('v1 metrics', () => {
     expect(snap.panFrame.p50).toBe(16);
     expect(snap.panFrame.max).toBeLessThanOrEqual(16);
     _setV1FrameScheduler(null);
-    _resetV1Metrics();
+    _resetV1Metrics({ warmup: 0 });
   });
 
   test('a seq gap increments the counter and a rewind does not', () => {
-    _resetV1Metrics();
+    _resetV1Metrics({ warmup: 0 });
     const applier = new Redesign2DeltaApplier();
     applier.applyFull({ seq: 10, count: 1, series: { a: [1] } });
     applier.applyDelta({ seq: 13, base_index: 0, count: 1, tail_len: 1, series: { a: [2] } });
     applier.applyDelta({ seq: 9, base_index: 0, count: 1, tail_len: 1, series: { a: [3] } });
     expect(v1MetricsSnapshot().counts.seqGap).toBe(1);
-    _resetV1Metrics();
+    _resetV1Metrics({ warmup: 0 });
   });
 
   test('p95 growing more than 20% vs the fixture fails the budget', () => {
@@ -146,7 +156,7 @@ describe('v1 metrics', () => {
   });
 
   test('a 10k-bar drag sampler records p95 ≤ 16.7 ms and no frame > 50 ms', () => {
-    _resetV1Metrics();
+    _resetV1Metrics({ warmup: 0 });
     const frames = queuedScheduler();
     _setV1FrameScheduler(frames.schedule);
     let ts = 0;
@@ -161,6 +171,63 @@ describe('v1 metrics', () => {
     expect(snap.panFrame.p95 ?? 99).toBeLessThanOrEqual(16.7);
     expect(snap.panFrame.max ?? 99).toBeLessThanOrEqual(50);
     _setV1FrameScheduler(null);
+    _resetV1Metrics({ warmup: 0 });
+  });
+
+  test('default warmup skips the first V1_SKIP_WARMUP pipeline samples', () => {
     _resetV1Metrics();
+    _setV1FrameScheduler(() => 1);
+    for (let i = 0; i < V1_SKIP_WARMUP; i++) {
+      sampleApply(i * 10, 2_000, 5);
+    }
+    expect(v1MetricsSnapshot().tickToApply.n).toBe(0);
+    expect(v1MetricsSnapshot().queueWait.n).toBe(0);
+    expect(v1MetricsSnapshot().apply.n).toBe(0);
+    sampleApply(V1_SKIP_WARMUP * 10, 20, 4);
+    const snap = v1MetricsSnapshot();
+    expect(snap.tickToApply).toMatchObject({ n: 1, p50: 24, max: 24 });
+    expect(snap.queueWait).toMatchObject({ n: 1, p50: 20, max: 20 });
+    expect(snap.apply).toMatchObject({ n: 1, p50: 4, max: 4 });
+    _setV1FrameScheduler(null);
+    _resetV1Metrics({ warmup: 0 });
+  });
+
+  test('a cold spike dropped by warmup does not pin steady-state p95', () => {
+    _resetV1Metrics();
+    _setV1FrameScheduler(() => 1);
+    for (let i = 0; i < V1_SKIP_WARMUP; i++) {
+      sampleApply(i * 10, 2_764, 10);
+    }
+    for (let i = 0; i < 40; i++) {
+      sampleApply(1_000 + i * 10, 20, 5);
+    }
+    const snap = v1MetricsSnapshot();
+    expect(snap.queueWait.n).toBe(40);
+    expect(snap.queueWait.p50).toBe(20);
+    expect(snap.queueWait.p95).toBe(20);
+    expect(snap.queueWait.max).toBe(20);
+    expect(snap.tickToApply.p95).toBe(25);
+    _setV1FrameScheduler(null);
+    _resetV1Metrics({ warmup: 0 });
+  });
+
+  test(`latency rings keep only the last ${V1_WINDOW} samples`, () => {
+    _resetV1Metrics({ warmup: 0 });
+    _setV1FrameScheduler(() => 1);
+    const total = V1_WINDOW + 30;
+    for (let i = 0; i < total; i++) {
+      // First 30 are cold spikes; once the window slides they must leave.
+      const queue = i < 30 ? 2_764 : 18;
+      sampleApply(i * 10, queue, 3);
+    }
+    const snap = v1MetricsSnapshot();
+    expect(snap.queueWait.n).toBe(V1_WINDOW);
+    expect(snap.tickToApply.n).toBe(V1_WINDOW);
+    expect(snap.apply.n).toBe(V1_WINDOW);
+    expect(snap.queueWait.p50).toBe(18);
+    expect(snap.queueWait.p95).toBe(18);
+    expect(snap.queueWait.max).toBe(18);
+    _setV1FrameScheduler(null);
+    _resetV1Metrics({ warmup: 0 });
   });
 });

@@ -13,6 +13,10 @@
  * bridge). `apply` is `apply:start` → `apply:end`. `apply:end` arms one
  * frame for tick→paint.
  *
+ * Latency rings keep the last {@link V1_WINDOW} samples and ignore the first
+ * {@link V1_SKIP_WARMUP} after connect/reset so cold-start spikes do not pin
+ * p95 forever. Pan/long-task rings share the window but not the warmup skip.
+ *
  * @module engine/v1/metrics
  */
 
@@ -41,10 +45,14 @@ export type V1Metrics = {
   visibleBars: number;
 };
 
-const MAX = 240;
+/** Recent samples retained per latency / pan / long-task ring. */
+export const V1_WINDOW = 120;
+/** Pipeline latency samples ignored after connect/reset (cold-start). */
+export const V1_SKIP_WARMUP = 16;
 const PAN_HOLD_MS = 100;
 
 type FrameScheduler = (cb: (ts: number) => void) => number;
+type WarmKey = 'tickToApply' | 'queueWait' | 'tickToPaint' | 'apply';
 
 const tickToApply: number[] = [];
 const queueWait: number[] = [];
@@ -52,6 +60,13 @@ const tickToPaint: number[] = [];
 const applySpan: number[] = [];
 const panFrame: number[] = [];
 const longTask: number[] = [];
+
+const warmLeft: Record<WarmKey, number> = {
+  tickToApply: V1_SKIP_WARMUP,
+  queueWait: V1_SKIP_WARMUP,
+  tickToPaint: V1_SKIP_WARMUP,
+  apply: V1_SKIP_WARMUP,
+};
 
 const counts: Record<V1Counter, number> = {
   seqGap: 0,
@@ -95,9 +110,16 @@ function tabHidden(): boolean {
   }
 }
 
-function push(buf: number[], value: number): void {
+function push(buf: number[], value: number, warm?: WarmKey): void {
+  if (warm) {
+    const left = warmLeft[warm];
+    if (left > 0) {
+      warmLeft[warm] = left - 1;
+      return;
+    }
+  }
   buf.push(value);
-  if (buf.length > MAX) buf.shift();
+  if (buf.length > V1_WINDOW) buf.shift();
 }
 
 function percentile(sorted: readonly number[], p: number): number | null {
@@ -174,17 +196,17 @@ export function v1Mark(name: V1Mark, at: number = now()): void {
   if (name === 'apply:start') {
     if (applyAt === null) {
       applyAt = at;
-      if (recvAt !== null) push(queueWait, Math.max(0, at - recvAt));
+      if (recvAt !== null) push(queueWait, Math.max(0, at - recvAt), 'queueWait');
     }
     return;
   }
   if (name === 'apply:end') {
     if (applyAt !== null) {
-      push(applySpan, Math.max(0, at - applyAt));
+      push(applySpan, Math.max(0, at - applyAt), 'apply');
       applyAt = null;
     }
     if (recvAt !== null) {
-      push(tickToApply, Math.max(0, at - recvAt));
+      push(tickToApply, Math.max(0, at - recvAt), 'tickToApply');
       if (paintFrom === null) paintFrom = recvAt;
       recvAt = null;
     }
@@ -193,7 +215,7 @@ export function v1Mark(name: V1Mark, at: number = now()): void {
   }
   paintArmed = false;
   if (paintFrom !== null) {
-    push(tickToPaint, Math.max(0, at - paintFrom));
+    push(tickToPaint, Math.max(0, at - paintFrom), 'tickToPaint');
     paintFrom = null;
   }
 }
@@ -264,14 +286,22 @@ export function _setV1FrameScheduler(next: FrameScheduler | null): void {
   scheduler = next;
 }
 
-/** Tests: clear samples, open bursts, and counters. */
-export function _resetV1Metrics(): void {
+/**
+ * Tests: clear samples, open bursts, counters, and warmup.
+ * Pass `{ warmup: 0 }` to retain the next sample immediately.
+ */
+export function _resetV1Metrics(opts?: { warmup?: number }): void {
+  const warm = opts?.warmup ?? V1_SKIP_WARMUP;
   tickToApply.length = 0;
   queueWait.length = 0;
   tickToPaint.length = 0;
   applySpan.length = 0;
   panFrame.length = 0;
   longTask.length = 0;
+  warmLeft.tickToApply = warm;
+  warmLeft.queueWait = warm;
+  warmLeft.tickToPaint = warm;
+  warmLeft.apply = warm;
   counts.seqGap = 0;
   counts.resync = 0;
   counts.droppedTip = 0;

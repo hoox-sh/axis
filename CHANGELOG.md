@@ -17,6 +17,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Changed
 
+- **`chart.lag` v1 latency rings are a recent window of 120 samples and skip the first 16 after connect/reset.** Cold-start / one-off spikes no longer pin live p95 forever in the old 240-cap ring. Field names (`queueWait`, `tickToApply`, …) stay stable. Pan and long-task rings share the 120 window but not the warmup skip.
+
 - **Rolling-window slides defer the full-series `setData` to one animation frame.** Forming ticks stay on `series.update`. A slide still needs a replace (LWC `update` cannot drop the rolled-off head), but the replace is coalesced to one rAF and no longer flushes a wasted tip `update` immediately before `setData`, so the per-minute 5k-bar hit leaves the tick/apply path. Without `requestAnimationFrame` the replace stays synchronous.
 
 ### Added
