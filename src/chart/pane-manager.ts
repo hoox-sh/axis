@@ -2976,6 +2976,15 @@ export class PaneManager {
   }
 
   /**
+   * Live paint reads this to defer full-window `setData` (window slides) while
+   * a pan/zoom gesture is active. Tip `update` stays cheap; a slide during the
+   * gesture is what spikes `chart.lag` panFrame past the G2 50 ms max.
+   */
+  isRanging(): boolean {
+    return this.userIsRanging();
+  }
+
+  /**
    * Drop co-painted rows the next candle `setData` will not contain.
    *
    * `setData` renders immediately. Volume or an indicator that still holds a

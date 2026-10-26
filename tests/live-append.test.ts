@@ -283,6 +283,44 @@ describe('appendLiveBar', () => {
     expect(painted.map((b) => b.time)).toEqual([120, 180]);
     expect(painted[1]?.close).toBe(131);
   });
+
+  it('suppresses slide setData while ranging and flushes after the gesture', async () => {
+    const clock = manualSlideScheduler();
+    _setSlideReplaceScheduler(clock.schedule);
+    let ranging = true;
+    (manager as { isRanging: () => boolean }).isRanging = () => ranging;
+
+    setStore('rollingWindowBars', 2);
+    appendLiveBar(bar(60));
+    appendLiveBar(bar(120));
+    await settlePaint();
+    appended = [];
+    setDataCalls = [];
+
+    expect(appendLiveBar(bar(180, 130))).toBe('slid');
+    expect(setDataCalls).toHaveLength(0);
+    expect(clock.pending).toBe(1);
+
+    // Frame while still ranging: expensive path must not run; retry stays armed.
+    clock.fire();
+    expect(setDataCalls).toHaveLength(0);
+    expect(clock.pending).toBe(1);
+
+    // Tip updates stay cheap during the gesture.
+    expect(appendLiveBar(bar(180, 131))).toBe('updated');
+    await settlePaint();
+    expect(appended).toHaveLength(1);
+    expect(appended[0]?.close).toBe(131);
+    expect(setDataCalls).toHaveLength(0);
+
+    ranging = false;
+    clock.fire();
+    expect(setDataCalls).toHaveLength(1);
+    const painted = setDataCalls[0] as Bar[];
+    expect(painted.map((b) => b.time)).toEqual([120, 180]);
+    expect(painted[1]?.close).toBe(131);
+    expect(clock.pending).toBe(0);
+  });
 });
 
 type PaintRow = {

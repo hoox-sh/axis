@@ -38,7 +38,7 @@
  * | `ignored` | nothing changed (stale tick) — do not paint |
  * | `updated` | O(1) `series.update` on the forming tip, coalesced to one flush per turn |
  * | `appended` | O(1) `series.update` with the new bar, same flush; the first bar is a synchronous `setData` (`update` throws on an empty series) |
- * | `slid` | cancel any queued tip paint (the replace includes it), then one rAF-coalesced `setData` of the windowed series (`fit` false) |
+ * | `slid` | cancel any queued tip paint (the replace includes it), then one rAF-coalesced `setData` of the windowed series (`fit` false); while `isRanging()` the replace stays armed and skips `setData` until the gesture ends |
  *
  * Several `updated` / `appended` ticks in one turn share that flush
  * (`queueMicrotask`). Same-time updates collapse to the latest bar. A new
@@ -51,6 +51,11 @@
  * animation frame keeps the heavy `setData` off the tick/apply path and
  * coalesces bursts. Without `requestAnimationFrame` (tests/SSR) the replace
  * runs synchronously so the series never lags the store.
+ *
+ * While the chart is ranging (pan/zoom), the slide replace stays armed and
+ * does not call `setDataToChart` — a full-window write on the same frame as
+ * the gesture is what pushed `panFrame` max to ~84 ms. Tip `update` continues.
+ * The next frame after the gesture ends flushes the pending replace.
  *
  * Painting a bar the store rejected is how a stale tick used to reach the
  * library: Lightweight Charts then throws `Cannot update oldest data item`
@@ -68,7 +73,11 @@ import type { Bar } from '../store/types';
 
 
 /** Chart handle this module paints through. Identity is the live manager. */
-type LivePainter = { appendBar: (bar: Bar) => void };
+type LivePainter = {
+  appendBar: (bar: Bar) => void;
+  /** When true, defer full-window slide `setData` (G2 panFrame). */
+  isRanging?: () => boolean;
+};
 
 /** Frame scheduler for slide replaces — injectable so unit tests need no browser. */
 type SlideScheduler = (cb: () => void) => void;
@@ -82,6 +91,10 @@ let paintScheduled = false;
 let slideManager: LivePainter | null = null;
 let slideScheduled = false;
 let slideScheduler: SlideScheduler | null = null;
+
+function managerIsRanging(manager: LivePainter): boolean {
+  return typeof manager.isRanging === 'function' && manager.isRanging();
+}
 
 function applyLivePaint(manager: LivePainter, bars: readonly Bar[]): void {
   for (const bar of bars) {
@@ -149,9 +162,26 @@ function defaultSlideScheduler(): SlideScheduler {
 function runSlideReplace(): void {
   slideScheduled = false;
   const manager = slideManager;
-  slideManager = null;
   if (!manager) return;
-  if (getManager() !== manager) return;
+  if (getManager() !== manager) {
+    slideManager = null;
+    return;
+  }
+  // Full-window setData during pan/zoom spikes panFrame (G2: no frame > 50 ms).
+  // Stay armed and retry next frame; a sync scheduler must not re-enter here.
+  if (managerIsRanging(manager)) {
+    const schedule = slideScheduler ?? defaultSlideScheduler();
+    const canRetryAsync =
+      slideScheduler != null || typeof globalThis.requestAnimationFrame === 'function';
+    if (canRetryAsync) {
+      slideScheduled = true;
+      schedule(runSlideReplace);
+    }
+    // else: leave slideManager set — the next scheduleSlideReplace / idle flush
+    // runs after ranging ends (tests without rAF).
+    return;
+  }
+  slideManager = null;
   const view = sliceToChartWindow(store.bars);
   try {
     setDataToChart(view, { fit: false, clearScriptState: false, clearMarkers: false });
@@ -170,6 +200,16 @@ function scheduleSlideReplace(manager: LivePainter): void {
   slideScheduled = true;
   const schedule = slideScheduler ?? defaultSlideScheduler();
   schedule(runSlideReplace);
+}
+
+/**
+ * If a slide stayed armed through a ranging gesture (no async retry), flush
+ * it once the gesture is idle. No-op when already scheduled or still ranging.
+ */
+function flushDeferredSlideIfIdle(manager: LivePainter): void {
+  if (slideManager !== manager || slideScheduled) return;
+  if (managerIsRanging(manager)) return;
+  scheduleSlideReplace(manager);
 }
 
 /** Drop a pending slide replace so a sync first-bar `setData` wins. */
@@ -219,6 +259,10 @@ export function appendLiveBar(bar: Bar, opts?: { via?: 'worker' }): BarAppendRes
 
   const manager = getManager();
   if (!manager) return result;
+
+  // A slide that stayed armed through ranging (sync/no-rAF path) flushes once
+  // the gesture is idle — before this tick's tip paint or another slide.
+  flushDeferredSlideIfIdle(manager);
 
   // LWC `series.update` appends when the point's time is newer than the last
   // bar, and throws when the series is empty or the time is older. A window

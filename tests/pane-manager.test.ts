@@ -437,7 +437,9 @@ describe('PaneManager', () => {
     pm.syncTimeScales();
     expect(rangeHandler).toBeTruthy();
     const host = document.getElementById(pm.paneDomId('price'));
+    expect(pm.isRanging()).toBe(false);
     host!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(pm.isRanging()).toBe(true);
     rangeHandler!({ from: 1, to: 20 });
     let t = 0;
     while (pending) {
@@ -448,6 +450,8 @@ describe('PaneManager', () => {
     }
     expect(v1MetricsSnapshot().panFrame.n).toBeGreaterThan(0);
     host!.dispatchEvent(new Event('pointerup', { bubbles: true }));
+    // Post-gesture quiet window still counts as ranging for live slide deferral.
+    expect(pm.isRanging()).toBe(true);
     _setV1FrameScheduler(null);
     _resetV1Metrics();
   });
