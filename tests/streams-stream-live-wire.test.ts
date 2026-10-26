@@ -91,6 +91,7 @@ const {
 const { setStore, store } = await import('../src/store');
 const { reconcile } = await import('solid-js/store');
 const { setEngineApiKey } = await import('../src/storage/vault');
+const { setEngineTransport, resetEngineTransport } = await import('../src/engine/v1/transport');
 
 function bar(time: number, close = 1.5) {
   return { time, open: 1, high: 2, low: 0.5, close, volume: 10 } as never;
@@ -111,6 +112,9 @@ async function until(fn: () => boolean, ms = 2_000): Promise<void> {
 
 beforeEach(() => {
   restoreSocket = ManualSocket.install();
+  // ManualSocket stubs global WebSocket — JSON client only. Worker ingest
+  // would spawn a real Worker and fail with "ingest error".
+  setEngineTransport('json');
   // The store is shared across test files in one process: pin the engine id
   // (the API key lives in that engine's config bag) and the chart identity.
   setStore('activePlugins', reconcile({ ...(store.activePlugins ?? {}), engine: 'server' }) as never);
@@ -134,6 +138,7 @@ afterEach(() => {
   streamStop();
   restoreSocket?.();
   restoreSocket = null;
+  resetEngineTransport();
 });
 
 describe('subscribeHistoryBars', () => {
