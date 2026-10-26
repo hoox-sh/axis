@@ -7,7 +7,7 @@ tags: [chart, code]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-26T00:25:37Z
+  at: 2026-10-26T01:55:54Z
 sources:
   - id: tree
     resource: "src/chart"
@@ -39,7 +39,7 @@ okf_lock: generated
 * `layout-recipes.ts` — LAYOUT_RECIPES, LayoutRecipe, LayoutRecipeSeed, LayoutRecipeSlotSpec, MAJOR_SYMBOLS, applyLayoutRecipe, findLayoutRecipe, recipeToLayout, resolveRecipeSlots
 * `layout.ts` — CHART_GRID_MODES, ChartGridMode, ChartLayoutState, ChartSlot, SavedChartLayout, createChartSlot, defaultChartLayout, findSlot, gridClassForMode, isChartGridMode, normalizeChartLayout, slotCountForMode
 * `line-break-primitive.ts` — LineBreakOverlayPoint, LineBreakPrimitive, LineBreakPrimitiveOpts, lineBreakPointsSig
-* `live-append.ts` — appendLiveBar
+* `live-append.ts` — _resetSlideReplaceForTests, _setSlideReplaceScheduler, appendLiveBar
 * `manager-access.ts` — SetDataToChartOpts, applyDebugPinsToChart, applyPriceScaleDecimals, clearScriptPaneLayer, clearScriptPaneLayers, ensurePriceSeries, ensureScriptPaneLayer, getActiveDrawingLayer, getDrawingLayer, getManager, jumpToDebugPin, ohlcvPaintSig
 * `onchain-events.ts` — ONCHAIN_EVENTS_SERIES_KEY, OnchainEventInput, OnchainEventMarker, applyOnchainEventMarkers, clearOnchainEventMarkers, eventsToMarkers
 * `onchain-overlay.ts` — ONCHAIN_PRICE_SCALE_ID, ONCHAIN_SERIES_PREFIX, OnchainLineSpec, applyOnchainOverlays, clearOnchainOverlays

@@ -17,7 +17,11 @@ import './setup';
 import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
 import { setStore, store, type BarAppendResult } from '../src/store';
 import { setManager } from '../src/chart/manager-access';
-import { appendLiveBar } from '../src/chart/live-append';
+import {
+  appendLiveBar,
+  _resetSlideReplaceForTests,
+  _setSlideReplaceScheduler,
+} from '../src/chart/live-append';
 import { paintAction, type PaintAction } from '../src/chart/v1/paint-action';
 import type { Bar } from '../src/store/types';
 
@@ -30,6 +34,23 @@ function settlePaint(): Promise<void> {
   return Promise.resolve();
 }
 
+/** Manual frame clock for deferred slide replaces. */
+function manualSlideScheduler() {
+  const queue: Array<() => void> = [];
+  return {
+    schedule: (cb: () => void): void => {
+      queue.push(cb);
+    },
+    fire(): void {
+      const next = queue.shift();
+      if (next) next();
+    },
+    get pending(): number {
+      return queue.length;
+    },
+  };
+}
+
 let appended: Bar[] = [];
 let setDataCalls: unknown[][] = [];
 let fitCalls = 0;
@@ -40,6 +61,8 @@ const DEFAULT_WINDOW = 10_000;
 beforeEach(async () => {
   // A previous test's flush must not paint into this manager.
   await settlePaint();
+  _setSlideReplaceScheduler(null);
+  _resetSlideReplaceForTests();
   appended = [];
   setDataCalls = [];
   fitCalls = 0;
@@ -70,6 +93,8 @@ beforeEach(async () => {
 // window would slice the bars of every later test.
 afterEach(async () => {
   await settlePaint();
+  _setSlideReplaceScheduler(null);
+  _resetSlideReplaceForTests();
   setManager(undefined);
   setStore('bars', []);
   setStore('rollingWindowBars', DEFAULT_WINDOW);
@@ -181,8 +206,7 @@ describe('appendLiveBar', () => {
     setDataCalls = [];
     const verdict = appendLiveBar(bar(60 + 3 * 60));
     expect(verdict).toBe('slid');
-    // The incremental path is not used for a slide — the head moved.
-    // setData runs inside the call; it does not wait for the turn to end.
+    // Default scheduler has no rAF in bun tests → sync fallback replace.
     expect(appended).toHaveLength(0);
     expect(setDataCalls).toHaveLength(1);
     expect(fitCalls).toBe(0);
@@ -190,7 +214,7 @@ describe('appendLiveBar', () => {
     expect(store.bars[0]!.time).toBe(120);
   });
 
-  it('flushes a queued tick synchronously before a slide replace', () => {
+  it('cancels a queued tip paint instead of flushing it before a slide replace', () => {
     setStore('rollingWindowBars', 2);
     appendLiveBar(bar(60));
     appendLiveBar(bar(120, 110));
@@ -199,9 +223,65 @@ describe('appendLiveBar', () => {
 
     const verdict = appendLiveBar(bar(180, 130));
     expect(verdict).toBe('slid');
-    expect(appended.map((b) => [b.time, b.close])).toEqual([[120, 110]]);
+    // The queued update would have been overwritten by setData — skip it.
+    expect(appended).toHaveLength(0);
     expect(setDataCalls).toHaveLength(1);
     expect(store.bars.map((b) => b.time)).toEqual([120, 180]);
+  });
+
+  it('defers a slide setData to one frame and coalesces bursts', async () => {
+    const clock = manualSlideScheduler();
+    _setSlideReplaceScheduler(clock.schedule);
+    setStore('rollingWindowBars', 2);
+    appendLiveBar(bar(60));
+    appendLiveBar(bar(120));
+    await settlePaint();
+    appended = [];
+    setDataCalls = [];
+
+    expect(appendLiveBar(bar(180))).toBe('slid');
+    expect(setDataCalls).toHaveLength(0);
+    expect(clock.pending).toBe(1);
+    expect(store.bars.map((b) => b.time)).toEqual([120, 180]);
+
+    // A second slide in the same frame reuses the armed callback.
+    expect(appendLiveBar(bar(240))).toBe('slid');
+    expect(setDataCalls).toHaveLength(0);
+    expect(clock.pending).toBe(1);
+    expect(store.bars.map((b) => b.time)).toEqual([180, 240]);
+
+    clock.fire();
+    expect(setDataCalls).toHaveLength(1);
+    expect((setDataCalls[0] as Bar[]).map((b) => b.time)).toEqual([180, 240]);
+    expect(clock.pending).toBe(0);
+    expect(fitCalls).toBe(0);
+  });
+
+  it('keeps forming-tick updates on the tip while a slide replace is armed', async () => {
+    const clock = manualSlideScheduler();
+    _setSlideReplaceScheduler(clock.schedule);
+    setStore('rollingWindowBars', 2);
+    appendLiveBar(bar(60));
+    appendLiveBar(bar(120));
+    await settlePaint();
+    appended = [];
+    setDataCalls = [];
+
+    expect(appendLiveBar(bar(180, 130))).toBe('slid');
+    expect(setDataCalls).toHaveLength(0);
+
+    expect(appendLiveBar(bar(180, 131))).toBe('updated');
+    expect(appended).toHaveLength(0);
+    await settlePaint();
+    expect(appended).toHaveLength(1);
+    expect(appended[0]?.close).toBe(131);
+    expect(setDataCalls).toHaveLength(0);
+
+    clock.fire();
+    expect(setDataCalls).toHaveLength(1);
+    const painted = setDataCalls[0] as Bar[];
+    expect(painted.map((b) => b.time)).toEqual([120, 180]);
+    expect(painted[1]?.close).toBe(131);
   });
 });
 
@@ -329,5 +409,72 @@ describe('v1 paint-action table (concept §5.2 / §11)', () => {
     expect(appended).toHaveLength(0);
     expect(setDataCalls).toHaveLength(0);
     expect(fitCalls).toBe(0);
+  });
+});
+
+describe('slide replace still requires setData (update cannot drop the head)', () => {
+  it('an update-only painter keeps the slid head until setData runs', () => {
+    // Local series model mirrors LWC 5.2: update replaces the tip or appends
+    // a newer time; it never removes an older row. Owned mock — not mock-lwc.
+    const series: Bar[] = [];
+    const updateOnly = (b: Bar) => {
+      const last = series[series.length - 1];
+      if (!last) {
+        series.push(b);
+        return;
+      }
+      if (b.time < last.time) throw new Error('Cannot update oldest data item');
+      if (b.time === last.time) series[series.length - 1] = b;
+      else series.push(b);
+    };
+    const candle = {
+      setData: (data: Bar[]) => {
+        series.splice(0, series.length, ...data);
+        setDataCalls.push(data);
+      },
+      applyOptions: () => {},
+    };
+    const pricePane = { id: 'price', series: { candle } };
+    const localManager = {
+      appendBar: (b: Bar) => {
+        updateOnly(b);
+        appended.push(b);
+      },
+      getPane: (id: string) => (id === 'price' ? pricePane : undefined),
+      getAllPanes: () => [pricePane],
+      afterDataReload: () => {
+        fitCalls += 1;
+      },
+    };
+    setManager(localManager as never);
+    setStore('rollingWindowBars', 2);
+
+    const clock = manualSlideScheduler();
+    _setSlideReplaceScheduler(clock.schedule);
+
+    appendLiveBar(bar(60));
+    // First bar is sync setData.
+    expect(series.map((b) => b.time)).toEqual([60]);
+    appendLiveBar(bar(120));
+    // appended path uses manager.appendBar after microtask — drive it.
+    return settlePaint().then(() => {
+      expect(series.map((b) => b.time)).toEqual([60, 120]);
+      appended = [];
+      setDataCalls = [];
+
+      expect(appendLiveBar(bar(180))).toBe('slid');
+      expect(store.bars.map((b) => b.time)).toEqual([120, 180]);
+      // Store slid; series still holds the old head until the deferred replace.
+      expect(series.map((b) => b.time)).toEqual([60, 120]);
+      expect(setDataCalls).toHaveLength(0);
+
+      // Tip update alone would only grow the series — head stays.
+      updateOnly(bar(180, 130));
+      expect(series.map((b) => b.time)).toEqual([60, 120, 180]);
+
+      clock.fire();
+      expect(setDataCalls).toHaveLength(1);
+      expect(series.map((b) => b.time)).toEqual([120, 180]);
+    });
   });
 });

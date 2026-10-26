@@ -15,6 +15,10 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ## [Unreleased]
 
+### Changed
+
+- **Rolling-window slides defer the full-series `setData` to one animation frame.** Forming ticks stay on `series.update`. A slide still needs a replace (LWC `update` cannot drop the rolled-off head), but the replace is coalesced to one rAF and no longer flushes a wasted tip `update` immediately before `setData`, so the per-minute 5k-bar hit leaves the tick/apply path. Without `requestAnimationFrame` the replace stays synchronous.
+
 ### Fixed
 
 - **Ingest tip coalesce and send-buffer backpressure cut tip delay under load.** A second forming tip for the same subscription folds and releases immediately instead of waiting out the 16 ms coalesce window, so `batch:post` is not stuck behind a quiet-period timer. Send-buffer hold uses hysteresis (enter above 1 MB, clear only below 256 KiB) so a buffer that jitters around 1 MB cannot resume every live sub in a loop. UNCHANGED keepalives are no longer treated as droppable forming tips under send hold, so their seq still reaches the coalescer and is acked. Closes and snapshots stay immediate; the pending queue remains one tip per subscription.

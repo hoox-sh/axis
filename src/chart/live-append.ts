@@ -38,13 +38,19 @@
  * | `ignored` | nothing changed (stale tick) — do not paint |
  * | `updated` | O(1) `series.update` on the forming tip, coalesced to one flush per turn |
  * | `appended` | O(1) `series.update` with the new bar, same flush; the first bar is a synchronous `setData` (`update` throws on an empty series) |
- * | `slid` | any tick already queued paints now, then a full `setData` of the windowed series (`fit` false) |
+ * | `slid` | cancel any queued tip paint (the replace includes it), then one rAF-coalesced `setData` of the windowed series (`fit` false) |
  *
  * Several `updated` / `appended` ticks in one turn share that flush
  * (`queueMicrotask`). Same-time updates collapse to the latest bar. A new
  * time is kept and applied after the prior bar in the same flush — never a
  * second `setData`. The bar value is written immediately. Solid hears a
  * forming tip, and the quote tick, once per frame.
+ *
+ * A window slide still needs a full replace: LWC `update` appends a newer
+ * time but cannot drop the slid head. Deferring that replace to one
+ * animation frame keeps the heavy `setData` off the tick/apply path and
+ * coalesces bursts. Without `requestAnimationFrame` (tests/SSR) the replace
+ * runs synchronously so the series never lags the store.
  *
  * Painting a bar the store rejected is how a stale tick used to reach the
  * library: Lightweight Charts then throws `Cannot update oldest data item`
@@ -64,10 +70,18 @@ import type { Bar } from '../store/types';
 /** Chart handle this module paints through. Identity is the live manager. */
 type LivePainter = { appendBar: (bar: Bar) => void };
 
+/** Frame scheduler for slide replaces — injectable so unit tests need no browser. */
+type SlideScheduler = (cb: () => void) => void;
+
 /** Chart paint waiting for the end of this turn (`updated` / `appended` only). */
 let pendingManager: LivePainter | null = null;
 let pendingBars: Bar[] | null = null;
 let paintScheduled = false;
+
+/** One pending window-slide `setData`, coalesced to a single frame. */
+let slideManager: LivePainter | null = null;
+let slideScheduled = false;
+let slideScheduler: SlideScheduler | null = null;
 
 function applyLivePaint(manager: LivePainter, bars: readonly Bar[]): void {
   for (const bar of bars) {
@@ -111,21 +125,57 @@ function flushLivePaint(): void {
   applyLivePaint(manager, bars);
 }
 
-/** A slide paints the queued tick before `setData` replaces the series. */
-function flushLivePaintSync(manager: LivePainter): void {
-  if (pendingManager !== manager) return;
-  const bars = pendingBars;
-  pendingManager = null;
-  pendingBars = null;
-  if (!bars?.length) return;
-  applyLivePaint(manager, bars);
-}
-
-/** Drop a queued paint for this chart so it cannot land after a replace. */
+/** Drop a queued tip paint for this chart so it cannot land after a replace. */
 function cancelLivePaint(manager: LivePainter): void {
   if (pendingManager !== manager) return;
   pendingManager = null;
   pendingBars = null;
+}
+
+function defaultSlideScheduler(): SlideScheduler {
+  if (typeof globalThis.requestAnimationFrame === 'function') {
+    return (cb) => {
+      globalThis.requestAnimationFrame(() => {
+        cb();
+      });
+    };
+  }
+  // Tests / SSR: keep store and series aligned in the same turn.
+  return (cb) => {
+    cb();
+  };
+}
+
+function runSlideReplace(): void {
+  slideScheduled = false;
+  const manager = slideManager;
+  slideManager = null;
+  if (!manager) return;
+  if (getManager() !== manager) return;
+  const view = sliceToChartWindow(store.bars);
+  try {
+    setDataToChart(view, { fit: false, clearScriptState: false, clearMarkers: false });
+  } catch {
+    /* live paint is best-effort — the next flush repairs it */
+  }
+}
+
+/**
+ * Schedule one full-window replace for a slide. Later slides in the same
+ * frame reuse this callback and re-slice from the store at flush time.
+ */
+function scheduleSlideReplace(manager: LivePainter): void {
+  slideManager = manager;
+  if (slideScheduled) return;
+  slideScheduled = true;
+  const schedule = slideScheduler ?? defaultSlideScheduler();
+  schedule(runSlideReplace);
+}
+
+/** Drop a pending slide replace so a sync first-bar `setData` wins. */
+function cancelSlideReplace(manager: LivePainter): void {
+  if (slideManager !== manager) return;
+  slideManager = null;
 }
 
 /**
@@ -177,8 +227,15 @@ export function appendLiveBar(bar: Bar, opts?: { via?: 'worker' }): BarAppendRes
   // `manager.appendBar` updates the candle and the volume series together.
   // Normal ticks do not call it here: one flush per turn, latest bar per time.
   if (action === 'setData') {
-    if (result === 'slid') flushLivePaintSync(manager);
-    else cancelLivePaint(manager);
+    // Queued tip paints are superseded by the full replace — flushing them
+    // first was a wasted `update` immediately overwritten by `setData`.
+    cancelLivePaint(manager);
+    if (result === 'slid') {
+      scheduleSlideReplace(manager);
+      return result;
+    }
+    // First bar: `update` throws on an empty series — replace now.
+    cancelSlideReplace(manager);
     const view = sliceToChartWindow(store.bars);
     try {
       setDataToChart(view, { fit: false, clearScriptState: false, clearMarkers: false });
@@ -190,4 +247,15 @@ export function appendLiveBar(bar: Bar, opts?: { via?: 'worker' }): BarAppendRes
 
   enqueueLivePaint(manager, bar);
   return result;
+}
+
+/** Tests: swap the slide-replace frame scheduler (`null` restores default). */
+export function _setSlideReplaceScheduler(next: SlideScheduler | null): void {
+  slideScheduler = next;
+}
+
+/** Tests: drop any armed slide replace without painting. */
+export function _resetSlideReplaceForTests(): void {
+  slideManager = null;
+  slideScheduled = false;
 }

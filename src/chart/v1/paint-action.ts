@@ -11,6 +11,10 @@
  * (`update` throws on an empty series), a window slide, and snapshot/resync
  * outside this helper. Pan/zoom never writes.
  *
+ * A slide stays `setData`: LWC `update` can append a newer tip but cannot
+ * drop the rolled-off head. `live-append` may defer that replace to one
+ * animation frame; the decision table here is still the write kind.
+ *
  * | Situation | API |
  * | --- | --- |
  * | `ignored` | none |

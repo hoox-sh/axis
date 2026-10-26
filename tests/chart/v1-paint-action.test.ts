@@ -19,6 +19,8 @@ describe('paintAction (concept §5.2 / §11)', () => {
     { name: 'updated (forming tick)', verdict: 'updated', windowLength: 1, action: 'update' },
     { name: 'appended-first', verdict: 'appended', windowLength: 1, action: 'setData' },
     { name: 'appended-later', verdict: 'appended', windowLength: 2, action: 'update' },
+    // Slide stays setData: update can append a tip but cannot drop the head.
+    // live-append may defer that replace to rAF; the action kind is unchanged.
     { name: 'slid', verdict: 'slid', windowLength: 10_000, action: 'setData' },
   ];
 
