@@ -148,12 +148,25 @@ function axisBarsForLive(bars: Bar[], liveTick: boolean): Bar[] {
   return bars;
 }
 
+/** Last-cell OHLC tip from a plotbar/plotcandle series sample. */
+function asOhlcTip(
+  cell: unknown,
+): { open: number; high: number; low: number; close: number; color?: string } | null {
+  if (cell == null || typeof cell !== 'object') return null;
+  const o = cell as Record<string, unknown>;
+  const open = asFinite(o.open);
+  const high = asFinite(o.high);
+  const low = asFinite(o.low);
+  const close = asFinite(o.close);
+  if (open == null || high == null || low == null || close == null) return null;
+  const color = typeof o.color === 'string' ? o.color : undefined;
+  return color !== undefined ? { open, high, low, close, color } : { open, high, low, close };
+}
+
 function patchTipCache(cache: LiveTipCache, raw: RunResult): boolean {
   const series = (raw.series || {}) as Record<string, unknown[]>;
   if (seriesKeySig(series) !== cache.seriesKeySig) return false;
   if (maxSeriesLen(series) !== cache.seriesLen) return false;
-  // OHLC overlays need a full rebuild (multi-field tip); lines/bgcolor tip-patch.
-  if (cache.overlayOhlc.length) return false;
 
   for (const line of cache.overlayLines) {
     if (line.kind === 'hline' && line.price != null) continue;
@@ -166,12 +179,38 @@ function patchTipCache(cache: LiveTipCache, raw: RunResult): boolean {
     else pt.value = v;
   }
 
+  for (const ohlc of cache.overlayOhlc) {
+    if (!ohlc.data.length) continue;
+    const arr = series[ohlc.name];
+    if (!Array.isArray(arr) || !arr.length) return false;
+    const tip = asOhlcTip(arr[arr.length - 1]);
+    if (!tip) return false;
+    const pt = ohlc.data[ohlc.data.length - 1];
+    if (!pt) return false;
+    pt.open = tip.open;
+    pt.high = tip.high;
+    pt.low = tip.low;
+    pt.close = tip.close;
+    if (tip.color !== undefined) pt.color = tip.color;
+    else delete pt.color;
+  }
+
   for (const [k, arr] of Object.entries(cache.seriesMap)) {
     if (!Array.isArray(arr) || !arr.length) continue;
     const rawArr = series[k];
     if (!Array.isArray(rawArr) || !rawArr.length) continue;
     arr[arr.length - 1] = rawArr[rawArr.length - 1] as never;
   }
+  return true;
+}
+
+/** True when tip paint can skip marker/bgcolor/fill rebuilds. */
+function tipPaintIsLean(cache: LiveTipCache, raw: RunResult): boolean {
+  if (cache.split.shapes.length || cache.split.bgcolors.length || cache.split.barcolors.length) {
+    return false;
+  }
+  if (cache.split.fills.length) return false;
+  if (Array.isArray(raw.events) && raw.events.length) return false;
   return true;
 }
 
@@ -277,6 +316,14 @@ export function applyPrecomputedChart(
               'plot',
             );
           }
+        } else if (tipPaintIsLean(cache, result)) {
+          // Lines/OHLC tip-update only — skip marker/bgcolor/fill rebuilds.
+          const owner = { ownerId: id, forceFull: false };
+          manager.syncOverlayLines(cache.paneId, cache.overlayLines, owner);
+          if (cache.overlayOhlc.length && typeof manager.syncOverlayOhlc === 'function') {
+            manager.syncOverlayOhlc(cache.paneId, cache.overlayOhlc, owner);
+          }
+          if (store.debugPinsEnabled) paintPins();
         } else {
           const painted = applyPlotsAndMarkers({
             mutation: {

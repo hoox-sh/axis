@@ -341,4 +341,138 @@ describe('applyPrecomputedChart', () => {
       removeIndicator(id);
     }
   });
+
+  test('a lean tip hit syncs overlay lines without rebuild', () => {
+    const times = [100, 160, 220];
+    const bars = barsFromTimes(times);
+    const script = 'indicator("EMA", overlay=true)';
+    const id = addIndicator('EMA', script, 'price', {});
+    const syncCalls: number[] = [];
+    const alignCalls: number[] = [];
+    const mgr = {
+      ...stubManager,
+      syncOverlayLines: () => {
+        syncCalls.push(1);
+      },
+    } as never;
+
+    try {
+      const seed = tipResult({ a: [1, 2, 3] }, times);
+      applyPrecomputedChart(script, id, seed, bars, { silent: true, liveTick: true }, {
+        getManager: () => mgr,
+        alignApplySeries: ((...args: Parameters<typeof alignApplySeries>) => {
+          alignCalls.push(1);
+          return alignApplySeries(...args);
+        }) as typeof alignApplySeries,
+      });
+      expect(alignCalls.length).toBe(1);
+
+      (store as { runResults: Record<string, unknown> }).runResults = {
+        ...(store.runResults as Record<string, unknown>),
+        [id]: seed,
+      };
+      alignCalls.length = 0;
+      syncCalls.length = 0;
+
+      applyPrecomputedChart(
+        script,
+        id,
+        tipResult({ a: [1, 2, 9] }, times),
+        bars,
+        { silent: true, liveTick: true },
+        {
+          getManager: () => mgr,
+          alignApplySeries: ((...args: Parameters<typeof alignApplySeries>) => {
+            alignCalls.push(1);
+            return alignApplySeries(...args);
+          }) as typeof alignApplySeries,
+        },
+      );
+      expect(alignCalls.length).toBe(0);
+      expect(syncCalls.length).toBe(1);
+      delete (store.runResults as Record<string, unknown>)[id];
+    } finally {
+      removeIndicator(id);
+    }
+  });
+
+  test('OHLC tip patches the last candle without a full rebuild', () => {
+    const times = [100, 160, 220];
+    const bars = barsFromTimes(times);
+    const script = 'indicator("Bars", overlay=true)';
+    const id = addIndicator('Bars', script, 'price', {});
+    const alignCalls: number[] = [];
+    const ohlcSync: Array<{ open: number; high: number; low: number; close: number }> = [];
+
+    const candle = [
+      { open: 1, high: 2, low: 0.5, close: 1.5 },
+      { open: 1.5, high: 2.5, low: 1, close: 2 },
+      { open: 2, high: 3, low: 1.5, close: 2.5 },
+    ];
+    const seed = {
+      status: 'success',
+      plots: [],
+      series: { candle },
+      events: [],
+      bar_times: times,
+      meta: {
+        sessionVia: 'stream-delta',
+        executionContext: 'tip',
+        plot_meta: { candle: { kind: 'plotcandle', title: 'candle' } },
+      },
+    } as RunResult;
+
+    const mgr = {
+      ...stubManager,
+      syncOverlayOhlc: (
+        _pane: string,
+        rows: Array<{ data: Array<{ open: number; high: number; low: number; close: number }> }>,
+      ) => {
+        const last = rows[0]?.data[rows[0]!.data.length - 1];
+        if (last) ohlcSync.push({ open: last.open, high: last.high, low: last.low, close: last.close });
+      },
+    } as never;
+
+    const alignSpy = ((...args: Parameters<typeof alignApplySeries>) => {
+      alignCalls.push(1);
+      return alignApplySeries(...args);
+    }) as typeof alignApplySeries;
+
+    try {
+      applyPrecomputedChart(script, id, seed, bars, { silent: true, liveTick: true }, {
+        getManager: () => mgr,
+        alignApplySeries: alignSpy,
+      });
+      expect(alignCalls.length).toBe(1);
+
+      (store as { runResults: Record<string, unknown> }).runResults = {
+        ...(store.runResults as Record<string, unknown>),
+        [id]: seed,
+      };
+      alignCalls.length = 0;
+      ohlcSync.length = 0;
+
+      const tip2 = {
+        ...seed,
+        series: {
+          candle: [candle[0], candle[1], { open: 2.5, high: 4, low: 2, close: 3.5 }],
+        },
+      } as RunResult;
+      applyPrecomputedChart(script, id, tip2, bars, { silent: true, liveTick: true }, {
+        getManager: () => mgr,
+        alignApplySeries: alignSpy,
+      });
+      expect(alignCalls.length).toBe(0);
+      expect(ohlcSync.length).toBeGreaterThanOrEqual(1);
+      expect(ohlcSync[ohlcSync.length - 1]).toEqual({
+        open: 2.5,
+        high: 4,
+        low: 2,
+        close: 3.5,
+      });
+      delete (store.runResults as Record<string, unknown>)[id];
+    } finally {
+      removeIndicator(id);
+    }
+  });
 });

@@ -8,6 +8,7 @@ import {
   _clearApplyBridgeCachesForTests,
   applyStreamDelta,
   applyStreamPayload,
+  resolveStreamExecutionContext,
   streamFullToPrecomputed,
 } from '../../src/engine/apply-bridge';
 import {
@@ -45,7 +46,8 @@ describe('redesign2 apply bridge (F-16)', () => {
     expect(result.plots).toEqual([]);
     expect(result.series).toEqual({});
     expect(result.events).toEqual([]);
-    expect(result.meta?.executionContext).toBe('append');
+    // Same-length / omitted forming → tip (matches executionContextFromDelta).
+    expect(result.meta?.executionContext).toBe('tip');
   });
 
   test('carries a forming-tip executionContext on stream-delta', () => {
@@ -54,6 +56,47 @@ describe('redesign2 apply bridge (F-16)', () => {
       'stream-delta',
     );
     expect(result.meta?.executionContext).toBe('tip');
+  });
+
+  test('forming: true without executionContext resolves to tip', () => {
+    expect(
+      resolveStreamExecutionContext({ count: 5, forming: true }, 'stream-delta'),
+    ).toBe('tip');
+    expect(
+      streamFullToPrecomputed({ count: 5, series: { a: [1] }, forming: true }, 'stream-delta')
+        .meta?.executionContext,
+    ).toBe('tip');
+  });
+
+  test('forming: false without executionContext resolves to append', () => {
+    expect(
+      resolveStreamExecutionContext({ count: 5, forming: false }, 'stream-delta'),
+    ).toBe('append');
+  });
+
+  test('stream-delta coerces a leftover snapshot stamp to tip', () => {
+    // Series→script kick reuses applier.cached after applyFull (snapshot stamp).
+    expect(
+      resolveStreamExecutionContext(
+        { count: 5, executionContext: 'snapshot' },
+        'stream-delta',
+      ),
+    ).toBe('tip');
+    expect(
+      streamFullToPrecomputed(
+        { count: 5, series: { a: [1] }, executionContext: 'snapshot' },
+        'stream-delta',
+      ).meta?.executionContext,
+    ).toBe('tip');
+  });
+
+  test('stream-full keeps snapshot even when forming is set', () => {
+    expect(
+      resolveStreamExecutionContext(
+        { count: 5, executionContext: 'tip', forming: true },
+        'stream-full',
+      ),
+    ).toBe('snapshot');
   });
 
   test('applyStreamPayload forwards precomputed + bars + liveTick without re-running', async () => {
@@ -196,6 +239,27 @@ describe('redesign2 apply bridge (F-16)', () => {
     expect(Math.abs(sum - (snap.tickToApply.p50 ?? -1))).toBeLessThanOrEqual(0.02);
     _setV1FrameScheduler(null);
     _resetV1Metrics();
+  });
+
+  test('stream-delta with snapshot stamp reaches apply as tip', () => {
+    const bars = [{ time: 100, open: 1, high: 1, low: 1, close: 1, volume: 1 }];
+    let seen: unknown;
+    applyStreamDelta(
+      {
+        script: 'indicator("x")',
+        indicatorId: 'ind-snap',
+        full: { series: { a: [1] }, count: 1, executionContext: 'snapshot' },
+        via: 'stream-delta',
+        bars,
+      },
+      {
+        applyChart: (_s, _id, result) => {
+          seen = result.meta?.executionContext;
+          return result;
+        },
+      },
+    );
+    expect(seen).toBe('tip');
   });
 
   test('tip deltas reuse cached input descriptors after the first lookup', async () => {

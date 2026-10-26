@@ -33,7 +33,11 @@
  * @module engine/apply-bridge
  */
 
-import type { ExecutionContext } from '../hp/calc/execution-context';
+import {
+  executionContextFromDelta,
+  isExecutionContext,
+  type ExecutionContext,
+} from '../hp/calc/execution-context';
 import { applyPrecomputedChart } from '../indicators/apply-live';
 import { engineDebug, engineDebugSample } from '../debug';
 import { v1Gauge, v1Mark } from './v1/metrics';
@@ -54,6 +58,27 @@ export interface StreamFullPayload {
   meta?: Record<string, unknown>;
   /** Stamped by the delta applier: snapshot vs tip scratch vs append commit. */
   executionContext?: ExecutionContext;
+  /** Forming tip flag from the wire / applier when `executionContext` is absent. */
+  forming?: boolean;
+}
+
+/**
+ * Resolve the apply execution context for a stream payload.
+ *
+ * Stream deltas must not keep a leftover `snapshot` stamp — the series→script
+ * kick reuses `applier.cached` after `applyFull`, and that stamp would skip the
+ * tip cache and re-align ~5k bars every tick. Missing context falls back to
+ * `forming` / count via {@link executionContextFromDelta} (same-length → tip).
+ */
+export function resolveStreamExecutionContext(
+  full: StreamFullPayload,
+  via: StreamVia,
+): ExecutionContext {
+  if (via === 'stream-full') return 'snapshot';
+  const raw = full.executionContext;
+  if (raw === 'snapshot') return 'tip';
+  if (isExecutionContext(raw)) return raw;
+  return executionContextFromDelta({ forming: full.forming, count: full.count });
 }
 
 export interface ApplyStreamInput {
@@ -89,8 +114,7 @@ export function streamFullToPrecomputed(full: StreamFullPayload, via: StreamVia)
       ...(full.meta ?? {}),
       sessionVia: via,
       count: full.count,
-      executionContext:
-        full.executionContext ?? (via === 'stream-full' ? 'snapshot' : 'append'),
+      executionContext: resolveStreamExecutionContext(full, via),
       ...(full.plot_meta ? { plot_meta: full.plot_meta } : {}),
     },
   } as RunResult;
@@ -116,8 +140,9 @@ export function applyStreamDelta(
     });
     const precomputedResult = streamFullToPrecomputed(input.full, input.via);
     // Tip deltas reuse the cached descriptors; avoid a store walk every tick.
+    const ctx = precomputedResult.meta?.executionContext;
     const prevInputs = previousRunInputs(input.indicatorId, {
-      refresh: input.full.executionContext !== 'tip',
+      refresh: ctx !== 'tip',
     });
     if (prevInputs && !precomputedResult.meta?.inputs) {
       precomputedResult.meta = { ...(precomputedResult.meta ?? {}), inputs: prevInputs };
