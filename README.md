@@ -13,6 +13,8 @@ AXIS is a Solid + Vite workspace. Historical bars, live streams, and calculation
 
 <div align="center">
 
+![AXIS — Stays open](brand/png/tagline-axis-stays-open-github-1280x640-br-split-dark.png)
+
 [![CI](https://img.shields.io/github/actions/workflow/status/hoox-sh/axis/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/hoox-sh/axis/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/hoox-sh/axis/graph/badge.svg)](https://codecov.io/gh/hoox-sh/axis)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9%2B-3178c6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
