@@ -17,6 +17,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Changed
 
+- **Live forming-tip apply skips O(n) align / overlay rebuild and store sync.** When `executionContext === 'tip'`, `applyPrecomputedChart` reuses the last aligned overlay payloads (tip-patch only), skips `setLastRun` / `updateIndicatorStore` / drawings when unchanged, and reuses `store.bars` for the cached OHLCV axis. Append and snapshot still take the full path. Bridge tip deltas reuse cached input descriptors. Aimed at G1 apply ≤ 8 ms on a 5k-bar tip.
+
 - **Live window-slide `setData` defers while the chart is ranging.** Tip `series.update` stays on; a full-window replace during pan/zoom was the ~84 ms `panFrame` spike under live ticks. The pending slide flushes on the next frame after the gesture. `PaneManager.isRanging()` exposes the gesture for the paint path.
 
 - **`chart.lag` v1 latency rings are a recent window of 120 samples and skip the first 16 after connect/reset.** Cold-start / one-off spikes no longer pin live p95 forever in the old 240-cap ring. Field names (`queueWait`, `tickToApply`, …) stay stable. Pan and long-task rings share the 120 window but not the warmup skip.

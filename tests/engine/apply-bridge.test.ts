@@ -3,8 +3,9 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-import { describe, expect, test } from 'bun:test';
+import { beforeEach, describe, expect, test } from 'bun:test';
 import {
+  _clearApplyBridgeCachesForTests,
   applyStreamDelta,
   applyStreamPayload,
   streamFullToPrecomputed,
@@ -17,6 +18,10 @@ import {
 } from '../../src/engine/v1/metrics';
 
 describe('redesign2 apply bridge (F-16)', () => {
+  beforeEach(() => {
+    _clearApplyBridgeCachesForTests();
+  });
+
   test('converts a full payload to a runner-ready result', () => {
     const result = streamFullToPrecomputed(
       {
@@ -166,7 +171,7 @@ describe('redesign2 apply bridge (F-16)', () => {
   });
 
   test('applyStreamDelta closes queueWait at bridge entry', () => {
-    _resetV1Metrics();
+    _resetV1Metrics({ warmup: 0 });
     _setV1FrameScheduler(() => 1);
     v1Mark('batch:post', 50);
     const bars = [{ time: 100, open: 1, high: 1, low: 1, close: 1, volume: 1 }];
@@ -191,5 +196,57 @@ describe('redesign2 apply bridge (F-16)', () => {
     expect(Math.abs(sum - (snap.tickToApply.p50 ?? -1))).toBeLessThanOrEqual(0.02);
     _setV1FrameScheduler(null);
     _resetV1Metrics();
+  });
+
+  test('tip deltas reuse cached input descriptors after the first lookup', async () => {
+    const { setStore } = await import('../../src/store');
+    const inputs = [{ title: 'Length', value: 9 }];
+    setStore('runResults', 'ind-cache', {
+      status: 'success',
+      plots: [],
+      series: {},
+      events: [],
+      meta: { inputs },
+    } as never);
+    const bars = [{ time: 100, open: 1, high: 1, low: 1, close: 1, volume: 1 }];
+    try {
+      const seen: unknown[] = [];
+      applyStreamDelta(
+        {
+          script: 'indicator("x")',
+          indicatorId: 'ind-cache',
+          full: { series: { a: [1] }, count: 1, executionContext: 'tip' },
+          via: 'stream-delta',
+          bars,
+        },
+        {
+          applyChart: (_s, _id, result) => {
+            seen.push(result.meta?.inputs);
+            return result;
+          },
+        },
+      );
+      // Clear the store entry — a tip must still serve the cached descriptors.
+      setStore('runResults', 'ind-cache', null as never);
+      applyStreamDelta(
+        {
+          script: 'indicator("x")',
+          indicatorId: 'ind-cache',
+          full: { series: { a: [2] }, count: 1, executionContext: 'tip' },
+          via: 'stream-delta',
+          bars,
+        },
+        {
+          applyChart: (_s, _id, result) => {
+            seen.push(result.meta?.inputs);
+            return result;
+          },
+        },
+      );
+      expect(seen).toEqual([inputs, inputs]);
+    } finally {
+      setStore('runResults', 'ind-cache', null as never);
+      _clearApplyBridgeCachesForTests();
+    }
   });
 });

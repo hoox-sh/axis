@@ -115,7 +115,10 @@ export function applyStreamDelta(
       context: input.full.executionContext ?? null,
     });
     const precomputedResult = streamFullToPrecomputed(input.full, input.via);
-    const prevInputs = previousRunInputs(input.indicatorId);
+    // Tip deltas reuse the cached descriptors; avoid a store walk every tick.
+    const prevInputs = previousRunInputs(input.indicatorId, {
+      refresh: input.full.executionContext !== 'tip',
+    });
     if (prevInputs && !precomputedResult.meta?.inputs) {
       precomputedResult.meta = { ...(precomputedResult.meta ?? {}), inputs: prevInputs };
     }
@@ -155,7 +158,9 @@ export async function applyStreamPayload(
     // input descriptors of the script's last full run: the Results panel and
     // the Script Settings modal read them from the run (the socket payload has
     // none, so a live apply would empty the script's input list).
-    const prevInputs = previousRunInputs(input.indicatorId);
+    const prevInputs = previousRunInputs(input.indicatorId, {
+      refresh: input.via === 'stream-full',
+    });
     if (prevInputs && !precomputedResult.meta?.inputs) {
       precomputedResult.meta = { ...(precomputedResult.meta ?? {}), inputs: prevInputs };
     }
@@ -175,16 +180,36 @@ export async function applyStreamPayload(
   }
 }
 
+/** Per-script input descriptors — refreshed on snapshot / non-tip deltas. */
+const runInputsCache = new Map<string, unknown[]>();
+
+/** @internal test helper — drop cached input descriptors. */
+export function _clearApplyBridgeCachesForTests(): void {
+  runInputsCache.clear();
+}
+
 /** Input descriptors of a script's last stored run (empty when unknown). */
-function previousRunInputs(indicatorId: string | undefined): unknown[] | undefined {
+function previousRunInputs(
+  indicatorId: string | undefined,
+  opts?: { refresh?: boolean },
+): unknown[] | undefined {
   if (!indicatorId) return undefined;
+  if (!opts?.refresh) {
+    const cached = runInputsCache.get(indicatorId);
+    if (cached) return cached;
+  }
   try {
     const results = (store.runResults ?? {}) as Record<
       string,
       { meta?: { inputs?: unknown[] } } | undefined
     >;
     const inputs = results[indicatorId]?.meta?.inputs;
-    return Array.isArray(inputs) ? inputs : undefined;
+    if (Array.isArray(inputs)) {
+      runInputsCache.set(indicatorId, inputs);
+      return inputs;
+    }
+    runInputsCache.delete(indicatorId);
+    return undefined;
   } catch {
     return undefined;
   }
