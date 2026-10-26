@@ -191,7 +191,7 @@ describe('alignApplySeries staleNoAxis', () => {
     ...(extra ?? {}),
   });
 
-  it('flags a live push without axis over a moved window', () => {
+  it('flags a live push without axis when the series is shorter than the chart', () => {
     const result = {
       status: 'success',
       series: { plot0: [1, 2, 3] },
@@ -203,6 +203,22 @@ describe('alignApplySeries staleNoAxis', () => {
     });
     expect(aligned.staleNoAxis).toBe(true);
     expect(aligned.resultTimes).toBeNull();
+  });
+
+  it('tail-clamps a live stream push when the engine series is longer than the chart (no axis)', () => {
+    // DSM/replica often holds 20k while the rolling window is 5k — skipping
+    // left overlays blank (tip cache never seeded).
+    const result = {
+      status: 'success',
+      series: { plot0: Array.from({ length: 20 }, (_, i) => i) },
+      meta: { ...sessionMeta(), sessionVia: 'stream-delta' },
+    } as unknown as RunResult;
+    const aligned = alignApplySeries('indicator("x", overlay=true)\nplot(close)', result, bars, {
+      silent: true,
+      livePush: true,
+    });
+    expect(aligned.staleNoAxis).toBe(false);
+    expect(aligned.seriesMap.plot0).toEqual([15, 16, 17, 18, 19]);
   });
 
   it('keeps the tail-pin for a fresh full run without axis (values just computed)', () => {
@@ -671,7 +687,7 @@ describe('engine-owned series apply', () => {
     expect(tip.value).toBe(5);
   });
 
-  it('skips a longer session-tick series grown past the chart without an axis', async () => {
+  it('tail-clamps a longer live series grown past the chart without an axis', async () => {
     setManager({
       getPane: (id: string) =>
         id === 'price'
@@ -683,18 +699,15 @@ describe('engine-owned series apply', () => {
       syncBgcolorBands: () => {},
     } as never);
 
-    // A live push from a session that outgrew the chart window without
-    // shipping a bar-time axis: index tail-pinning would slide stale values
-    // onto new bars and LWC would span the `na` gap as a diagonal to the
-    // tip. The apply is skipped instead so the last good plots stay on
-    // screen until a full run brings an axis.
+    // Live stream/session often holds a longer replica than the rolling chart
+    // window. Tail-clamp paints the tip instead of skipping forever.
     const precomputed: RunResult = {
       status: 'success',
       plots: [],
       series: { plot0: [1, 2, 3, 4, 5, 6, 7] },
       events: [],
       meta: {
-        sessionVia: 'session-tick',
+        sessionVia: 'stream-delta',
         session_id: 's9',
         overlay: true,
         script_name: 'eo',
@@ -708,10 +721,11 @@ describe('engine-owned series apply', () => {
       precomputedResult: precomputed,
     });
     expect(r.status).toBe('success');
-    expect(r.meta?.skipped).toBe('stale-no-axis');
-
-    // Nothing painted — the previous plots are untouched.
-    expect(captured).toHaveLength(0);
+    expect(r.meta?.skipped).not.toBe('stale-no-axis');
+    expect(captured.length).toBeGreaterThan(0);
+    const line = captured[captured.length - 1]!.lines[0]!;
+    expect(line.data).toHaveLength(SAMPLE_BARS.length);
+    expect(line.data.map((p) => p.value)).toEqual([3, 4, 5, 6, 7]);
   });
 
   it('skips a shorter session series when the chart grew without an axis (idle gap)', async () => {

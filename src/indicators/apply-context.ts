@@ -231,24 +231,26 @@ export function alignApplySeries(
   const needsAlign = needsAlignBase || windowMismatch;
   const resultTimes = needsAlign ? (engineTimes ?? extractEngineResultTimes(result)) : null;
   // A session/stream run whose engine shipped **no** bar axis cannot be
-  // time-joined. On a **live push** (background tick/delta) over a moved
-  // window the tail-pin fallback would misplace every value (a gap fill or
-  // slide while idle shifts stale values onto new bars; LWC then spans the
-  // `na` gap as a diagonal to the tip). Skip the apply instead — the caller
-  // keeps the last good plots until a full run with an axis arrives. Fresh
-  // full evaluations keep the tail-pin: their values were just computed over
-  // nearly this window, so the pin only bridges bars appended mid-run.
-  // Exception: a gross length mismatch is a different window, not mid-run
-  // appends — pinning would displace the whole overlay, so full runs skip
-  // exactly like live pushes (the deliberate free-tier clamp keeps pinning:
-  // the engine evaluated the newest `windowBars` on purpose).
-  // Equal-length axis-less runs keep the index zip either way: without an
-  // axis a same-window series is the only assumption available.
+  // time-joined. On a **live push** over a *shorter* series than the chart,
+  // tail-pin would misplace values (gap/slide diagonals) — skip and keep
+  // last good plots until a full with an axis arrives.
+  // When the engine series is **longer** than the chart (common: replica /
+  // DSM holds 20k while the rolling window is 5k), tail-clamp is safe: take
+  // the newest `chartWindowBars` values onto the painted tip. Skipping that
+  // case left overlays blank forever (tip cache never seeded).
+  // Fresh full evaluations keep the small-mismatch tail-pin; gross shorter
+  // or unknown windows still skip. Free-tier `windowBars` still clamps.
+  const canTailClampLive =
+    opts.livePush === true &&
+    lengthMismatch &&
+    seriesLen >= chartWindowBars &&
+    chartWindowBars > 0;
   const staleNoAxis =
     sessionAligned &&
     !resultTimes &&
     lengthMismatch &&
     !engineClampedTail &&
+    !canTailClampLive &&
     (opts.livePush === true || grossMismatch);
   const seriesMap = staleNoAxis
     ? rawSeries

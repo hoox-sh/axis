@@ -298,6 +298,8 @@ function scriptColumnCount(payload: Record<string, unknown>): number | null {
 function scriptFullForApplier(
   payload: Record<string, unknown>,
   seq: unknown,
+  /** Chart/subscription bar times — used when the engine omits `bar_times`. */
+  fallbackTimes?: readonly number[] | null,
 ): {
   plots?: Record<string, unknown[]>;
   series?: Record<string, unknown[]>;
@@ -309,7 +311,13 @@ function scriptFullForApplier(
   const declared = Number(payload.count ?? 0);
   const count = columns && columns > 0 ? columns : declared;
   const raw = readTimeList(payload.bar_times) ?? readTimeList(payload.times);
-  const times = raw && raw.length === count ? raw : null;
+  let times = raw && raw.length === count ? raw : null;
+  // Synthesize an axis from the subscribed window so apply can time-join
+  // instead of hitting staleNoAxis (engine 20k replica vs 5k chart).
+  if (!times && fallbackTimes && fallbackTimes.length && count > 0) {
+    if (fallbackTimes.length === count) times = [...fallbackTimes];
+    else if (fallbackTimes.length > count) times = fallbackTimes.slice(-count);
+  }
   return {
     plots: payload.plots as Record<string, unknown[]> | undefined,
     series: payload.series as Record<string, unknown[]> | undefined,
@@ -958,7 +966,8 @@ export class StreamLiveWire {
         const payload = full.payload as Record<string, unknown>;
         this.axisResubPending.delete(input.subId);
         this.holdUntilFull.delete(input.subId);
-        applier.applyFull(scriptFullForApplier(payload, full.seq));
+        const fallbackTimes = this.scriptCtx.get(input.subId)?.bars.map((b) => b.time) ?? null;
+        applier.applyFull(scriptFullForApplier(payload, full.seq, fallbackTimes));
         this.appliedSeq.set(input.subId, typeof full.seq === 'number' ? full.seq : 0);
         this.handlers.onStatus(input.subId, 'live');
       } catch (e) {
@@ -1446,7 +1455,8 @@ export class StreamLiveWire {
       if (wasLive && seq != null && seq < applier.lastSeq) return;
       this.holdUntilFull.delete(subId);
       this.axisResubPending.delete(subId);
-      applier.applyFull(scriptFullForApplier(payload, frame.seq));
+      const fallbackTimes = this.scriptCtx.get(subId)?.bars.map((b) => b.time) ?? null;
+      applier.applyFull(scriptFullForApplier(payload, frame.seq, fallbackTimes));
       if (typeof frame.seq === 'number') this.appliedSeq.set(subId, frame.seq);
       this.handlers.onStatus(subId, 'live');
       if (wasLive) {
