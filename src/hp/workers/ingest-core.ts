@@ -593,13 +593,15 @@ function mergeTip(prev: Redesign2Frame, next: Redesign2Frame): Redesign2Frame {
  * Hold forming tip deltas per subscription and flush on a timer.
  *
  * Within the window, OHLC is a fold (last bar wins) and plot columns union
- * by key. A non-tip frame (`close`, APPEND_BAR / `forming: false`) flushes
- * the pending tip for that subscription first. `UNCHANGED` keepalives are
- * dropped. Their seq, and any tip seq
- * folded into the one frame we keep, stays on a per-subscription chain.
- * The frame we release carries `seqAckFrom` (the cursor before that run)
- * so the applier advances through it. A seq we never saw breaks the chain
- * and stays a real gap.
+ * by key. A quiet first tip waits {@link INGEST_TIP_COALESCE_MS}. A second
+ * tip for the same id folds onto the pending one and releases immediately
+ * so `batch:post` is not stuck behind the rest of the window under load.
+ * A non-tip frame (`close`, APPEND_BAR / `forming: false`) flushes the
+ * pending tip for that subscription first. `UNCHANGED` keepalives are
+ * dropped. Their seq, and any tip seq folded into the one frame we keep,
+ * stays on a per-subscription chain. The frame we release carries
+ * `seqAckFrom` (the cursor before that run) so the applier advances
+ * through it. A seq we never saw breaks the chain and stays a real gap.
  */
 export class TipCoalescer {
   private readonly pending = new Map<string, Redesign2Frame>();
@@ -625,8 +627,15 @@ export class TipCoalescer {
       if (isFormingTip(frame) && frame.id) {
         this.observe(frame);
         const prev = this.pending.get(frame.id);
-        this.pending.set(frame.id, prev ? mergeTip(prev, frame) : frame);
-        this.arm();
+        if (prev) {
+          // Under load: fold then release now. One pending tip per id —
+          // the queue stays bounded while the host sees the tip sooner.
+          this.pending.set(frame.id, mergeTip(prev, frame));
+          for (const prior of this.take(frame.id)) out.push(this.releaseSeq(prior));
+        } else {
+          this.pending.set(frame.id, frame);
+          this.arm();
+        }
         continue;
       }
       // Release the non-tip before later keepalives in this batch are

@@ -22,7 +22,10 @@
  *
  * `bufferedAmount` is bytes waiting to leave the browser. Past 1 MB the
  * socket is kept, forming tips are not applied, and a drain asks for a
- * snapshot. Closes and snapshots are never dropped.
+ * snapshot. Hold clears only after the buffer drains below
+ * {@link SEND_BUFFER_CLEAR_BYTES} so a jitter around 1 MB cannot resume
+ * every live sub in a loop. Closes, snapshots, and UNCHANGED keepalives
+ * are never dropped.
  *
  * @module engine/v1/backpressure
  */
@@ -30,11 +33,43 @@
 /** Bytes of unsent socket data before forming tips are held. */
 export const SEND_BUFFER_STALE_BYTES = 1_048_576;
 
-export function sendBufferHeld(bufferedAmount: number | null | undefined): boolean {
-  return (bufferedAmount ?? 0) > SEND_BUFFER_STALE_BYTES;
+/**
+ * Exit hold only after unsent bytes fall to this watermark. Without the
+ * gap, a buffer that oscillates around 1 MB would flip held→clear→resume
+ * on every heartbeat and flood the main thread with snapshots.
+ */
+export const SEND_BUFFER_CLEAR_BYTES = 262_144;
+
+/** Latched hold so one-arg callers get hysteresis without a signature change. */
+let heldLatch = false;
+
+/**
+ * Whether forming tips should be held.
+ *
+ * Pass `wasHeld` when the caller tracks its own latch (preferred). Omit it
+ * to use the module latch shared by the single active transport.
+ */
+export function sendBufferHeld(
+  bufferedAmount: number | null | undefined,
+  wasHeld?: boolean,
+): boolean {
+  const n = bufferedAmount ?? 0;
+  const prev = wasHeld ?? heldLatch;
+  const next = prev ? n > SEND_BUFFER_CLEAR_BYTES : n > SEND_BUFFER_STALE_BYTES;
+  heldLatch = next;
+  return next;
 }
 
-/** A forming delta. Snapshots, closes, and non-forming deltas stay. */
+/** Tests: clear the module hysteresis latch. */
+export function _resetSendBufferHeldForTests(): void {
+  heldLatch = false;
+}
+
+/**
+ * A forming delta with real tip data. Snapshots, closes, confirmed
+ * deltas, and UNCHANGED keepalives stay — keepalives must reach the tip
+ * coalescer so their seq can be acked while the send buffer is held.
+ */
 export function isFormingTipFrame(frame: {
   type?: string;
   id?: string;
@@ -43,5 +78,15 @@ export function isFormingTipFrame(frame: {
   if (frame.type !== 'delta' || !frame.id) return false;
   const payload = frame.payload;
   if (!payload || typeof payload !== 'object') return false;
-  return (payload as { forming?: unknown }).forming === true;
+  const p = payload as {
+    forming?: unknown;
+    unchanged?: unknown;
+    bars?: unknown;
+    series?: unknown;
+    plots?: unknown;
+  };
+  if (p.unchanged === true && p.bars == null && p.series == null && p.plots == null) {
+    return false;
+  }
+  return p.forming === true;
 }

@@ -17,6 +17,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Fixed
 
+- **Ingest tip coalesce and send-buffer backpressure cut tip delay under load.** A second forming tip for the same subscription folds and releases immediately instead of waiting out the 16 ms coalesce window, so `batch:post` is not stuck behind a quiet-period timer. Send-buffer hold uses hysteresis (enter above 1 MB, clear only below 256 KiB) so a buffer that jitters around 1 MB cannot resume every live sub in a loop. UNCHANGED keepalives are no longer treated as droppable forming tips under send hold, so their seq still reaches the coalescer and is acked. Closes and snapshots stay immediate; the pending queue remains one tip per subscription.
+
 - **Ingest worker waits for `auth.ok` before signaling host `open`.** With the Worker ticket proxy, subscribe was racing ahead of PYNE auth (`UNAUTHORIZED` → `subscribe-error` cooldown → venue+REST). `INGEST_AUTH_WAIT_MS` (5s) still opens on timeout so a slow key hash cannot wedge the socket.
 
 ### Added

@@ -553,7 +553,35 @@ describe('mapAxb1 SNAPSHOT_PLOTS', () => {
 });
 
 describe('TipCoalescer', () => {
-  test('keeps the latest forming tip per id until flush', () => {
+  test('a quiet first tip waits for the coalesce timer', () => {
+    const seen: Redesign2Frame[][] = [];
+    let fire: (() => void) | undefined;
+    const c = new TipCoalescer(
+      (frames) => seen.push(frames),
+      16,
+      (fn) => {
+        fire = fn;
+        return () => {
+          fire = undefined;
+        };
+      },
+    );
+    const tip = (close: number): Redesign2Frame => ({
+      type: 'delta',
+      id: SUB,
+      sessionId: 's',
+      seq: close,
+      payload: { forming: true, bars: [{ close }], base_index: 0, count: 1, tail_len: 1, closed_upto: 0 },
+    });
+    c.push([tip(1)]);
+    expect(seen).toEqual([]);
+    fire?.();
+    expect(seen).toHaveLength(1);
+    const payload = seen[0]?.[0]?.payload as { bars: Array<{ close: number }> } | undefined;
+    expect(payload?.bars[0]?.close).toBe(1);
+  });
+
+  test('a second tip folds and releases without waiting for the timer', () => {
     const seen: Redesign2Frame[][] = [];
     let fire: (() => void) | undefined;
     const c = new TipCoalescer(
@@ -574,11 +602,33 @@ describe('TipCoalescer', () => {
       payload: { forming: true, bars: [{ close }], base_index: 0, count: 1, tail_len: 1, closed_upto: 0 },
     });
     c.push([tip(1), tip(2)]);
-    expect(seen).toEqual([]);
-    fire?.();
+    // Under load the fold releases immediately — batch:post is not delayed
+    // by the rest of the coalesce window.
     expect(seen).toHaveLength(1);
+    expect(fire).toBeUndefined();
     const payload = seen[0]?.[0]?.payload as { bars: Array<{ close: number }> } | undefined;
     expect(payload?.bars[0]?.close).toBe(2);
+    expect(seen[0]?.[0]?.seq).toBe(2);
+  });
+
+  test('a later push folds onto a pending tip and releases early', () => {
+    const { c, seen, flush } = scheduledCoalescer();
+    const tip = (seq: number, close: number): Redesign2Frame => ({
+      type: 'delta',
+      id: SUB,
+      sessionId: 's',
+      seq,
+      payload: { forming: true, bars: [{ close }], base_index: 0, count: 1, tail_len: 1, closed_upto: 0 },
+    });
+    c.push([tip(1, 1)]);
+    expect(seen).toEqual([]);
+    c.push([tip(2, 9)]);
+    expect(seen).toHaveLength(1);
+    const payload = seen[0]?.[0]?.payload as { bars: Array<{ close: number }> } | undefined;
+    expect(payload?.bars[0]?.close).toBe(9);
+    expect(seen[0]?.[0]?.seq).toBe(2);
+    flush();
+    expect(seen).toHaveLength(1);
   });
 
   test('a close flushes the pending tip then the close', () => {
@@ -1020,6 +1070,7 @@ describe('TipCoalescer', () => {
         table,
       ),
     );
+    expect(seen).toEqual([]);
     c.push(
       inboundFrames(
         encodeFrame({
@@ -1030,10 +1081,11 @@ describe('TipCoalescer', () => {
         table,
       ),
     );
-    expect(seen).toEqual([]);
-    flush();
+    // Second tip folds and releases under load — no timer wait.
     expect(seen).toHaveLength(1);
     expect(seen[0]).toHaveLength(1);
+    flush();
+    expect(seen).toHaveLength(1);
     const frame = seen[0]?.[0];
     expect(frame?.type).toBe('delta');
     expect(frame?.seq).toBe(3);
