@@ -7,7 +7,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { HIDDEN_WAKE_MS, StreamFallbackError, StreamLiveWire, type WireClient, type WireFrame, type WireHandlers } from '../../src/engine/live-wire';
 import type { RunResult } from '../../src/plugins/types';
 import type { Bar } from '../../src/store/types';
-import { _resetV1Metrics, v1MetricsSnapshot } from '../../src/engine/v1/metrics';
+import { _resetV1Metrics, v1Mark, v1MetricsSnapshot } from '../../src/engine/v1/metrics';
 import { setStore, store } from '../../src/store';
 import { resetEngineTransport, setEngineTransport } from '../../src/engine/v1/transport';
 
@@ -1574,7 +1574,8 @@ describe('live-wire mixed delta batch', () => {
     expect(h.applied).toEqual([{ via: 'stream-delta' }]);
   });
 
-  test('a series-only batch kicks cached script paint once per frame', async () => {
+  test('a new tip time paints one cached script; same-slot forming only closes metrics', async () => {
+    _resetV1Metrics({ warmup: 0 });
     const h = makeHarness({ syncApply: true });
     const seriesP = h.wire.ensureSeries('series:k', {});
     await tick();
@@ -1633,11 +1634,15 @@ describe('live-wire mixed delta batch', () => {
     expect(h.applyOrder).toEqual(['price', 'price']);
     expect(h.applied).toEqual([]);
     await raf();
+    // First new tip time paints one cached script.
     expect(h.applied).toEqual([{ via: 'stream-delta' }]);
     expect(h.applyOrder).toEqual(['price', 'price', 'plots:stream-delta']);
 
     h.applied.length = 0;
     h.applyOrder.length = 0;
+    _resetV1Metrics({ warmup: 0 });
+    // Same-slot forming tips must not reapply scripts (the p50 regression).
+    v1Mark('batch:post');
     h.emitBatch([
       {
         type: 'delta',
@@ -1669,11 +1674,34 @@ describe('live-wire mixed delta batch', () => {
       },
     ]);
     await raf();
-    // One coalesced kick for both series-only batches in the same frame.
+    expect(h.applied).toEqual([]);
+    expect(h.applyOrder).toEqual(['price', 'price']);
+    // Light metrics close still ends queueWait once for the coalesced frame.
+    expect(v1MetricsSnapshot().queueWait.n).toBe(1);
+
+    h.applied.length = 0;
+    h.applyOrder.length = 0;
+    // A new tip time paints again.
+    h.emitBatch([
+      {
+        type: 'delta',
+        id: 'series:k',
+        sessionId: 'ses',
+        seq: 6,
+        payload: {
+          bars: [{ time: 160, open: 3, high: 4, low: 3, close: 4, volume: 1 }],
+          forming: true,
+          base_index: 1,
+          count: 2,
+          tail_len: 1,
+        },
+      },
+    ]);
+    await raf();
     expect(h.applied).toEqual([{ via: 'stream-delta' }]);
   });
 
-  test('series script kick yields between multiple script subs', async () => {
+  test('series script kick paints at most one script sub', async () => {
     const h = makeHarness({ syncApply: true });
     const seriesP = h.wire.ensureSeries('series:k', {});
     await tick();
@@ -1724,13 +1752,14 @@ describe('live-wire mixed delta batch', () => {
       },
     ]);
     await raf();
-    // First script paints in the kick task; the second yields a macrotask.
+    // One paint closes the burst; the other sub waits for its wire frame.
     expect(h.applied).toEqual([{ via: 'stream-delta' }]);
     await tick();
-    expect(h.applied).toEqual([{ via: 'stream-delta' }, { via: 'stream-delta' }]);
+    expect(h.applied).toEqual([{ via: 'stream-delta' }]);
   });
 
   test('holdUntilFull skips the series script kick for that sub', async () => {
+    _resetV1Metrics({ warmup: 0 });
     const h = makeHarness({ syncApply: true });
     const seriesP = h.wire.ensureSeries('series:k', {});
     await tick();
@@ -1771,6 +1800,7 @@ describe('live-wire mixed delta batch', () => {
     });
     h.applied.length = 0;
     h.applyOrder.length = 0;
+    v1Mark('batch:post');
     h.emitBatch([
       {
         type: 'delta',
@@ -1788,6 +1818,78 @@ describe('live-wire mixed delta batch', () => {
     ]);
     await raf();
     await tick();
+    expect(h.applied).toEqual([]);
+    // No eligible script to paint; light close still ends queueWait.
+    expect(v1MetricsSnapshot().queueWait.n).toBe(1);
+  });
+
+  test('a real script paint cancels the pending series kick', async () => {
+    const h = makeHarness({ syncApply: true });
+    const seriesP = h.wire.ensureSeries('series:k', {});
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: 'series:k',
+      sessionId: 'ses',
+      seq: 1,
+      payload: { count: 1, bars: BARS },
+    });
+    await seriesP;
+
+    const scriptP = h.wire.evalScript({
+      subId: 's-1',
+      script: 'indicator() {}',
+      meta: {},
+      bars: BARS,
+    });
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 1,
+      payload: { count: 1, plots: [[1]], series: { a: [1] } },
+    });
+    await scriptP;
+    h.applied.length = 0;
+    h.applyOrder.length = 0;
+
+    // Series-only schedules a kick, then a script delta lands before rAF.
+    h.emitBatch([
+      {
+        type: 'delta',
+        id: 'series:k',
+        sessionId: 'ses',
+        seq: 2,
+        payload: {
+          bars: [{ time: 100, open: 1, high: 2, low: 1, close: 2, volume: 1 }],
+          forming: true,
+          base_index: 0,
+          count: 1,
+          tail_len: 1,
+        },
+      },
+    ]);
+    h.emit({
+      type: 'delta',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 2,
+      payload: {
+        base_index: 0,
+        count: 1,
+        tail_len: 1,
+        plots: [[2]],
+        series: { a: [2] },
+        forming: true,
+      },
+    });
+    expect(h.applied).toEqual([{ via: 'stream-delta' }]);
+    h.applied.length = 0;
+    await raf();
+    // Pending kick must not re-paint after the wire already closed the burst.
     expect(h.applied).toEqual([]);
   });
 });
