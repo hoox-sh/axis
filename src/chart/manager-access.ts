@@ -675,6 +675,16 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
   const sidecar = opts.manager != null && mgr !== active;
   try {
     const fit = opts.fit !== false;
+    // G2: a non-fit full-window replace during pan/zoom spikes panFrame past
+    // 50 ms. Live slides already defer via isRanging(); this is defense in depth
+    // for any other fit:false caller (prefetch, etc.).
+    if (
+      !fit &&
+      typeof (mgr as { isRanging?: () => boolean }).isRanging === 'function' &&
+      (mgr as { isRanging: () => boolean }).isRanging()
+    ) {
+      return;
+    }
     const clearMarkers = opts.clearMarkers !== false;
     // Clearing script state is opt-out when fitting (default clear on full loads)
     const clearScriptState =

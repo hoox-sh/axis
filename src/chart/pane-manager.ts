@@ -404,6 +404,11 @@ type SeriesApplyMeta = { len: number; lastTime: number; lastVal: number };
  * `forceFull` bypasses the tip-only check and always repaints the whole
  * series — required when the run recomputed the script (input override,
  * edited source) rather than just appending a live bar.
+ *
+ * `tipOnly` (pan/zoom ranging): never call full `setData`. Tip `update` and
+ * one-bar append stay on; a history rewrite is skipped and meta is left
+ * stale so the next idle paint repairs. Full-series writes during a gesture
+ * are what push `panFrame` max past the G2 50 ms budget.
  */
 function applySeriesDataSmart(
   series: ISeriesApi<any>,
@@ -411,11 +416,12 @@ function applySeriesDataSmart(
   metaKey: string,
   metaMap: Map<string, SeriesApplyMeta>,
   forceFull = false,
+  tipOnly = false,
 ): void {
   const last = mapped.length ? mapped[mapped.length - 1] : null;
   const lastTime = last && Number.isFinite(last.time) ? Number(last.time) : null;
   const lastVal = seriesTipValue(last);
-  if (forceFull) {
+  if (forceFull && !tipOnly) {
     safeSetData(series, mapped);
     metaMap.set(metaKey, { len: mapped.length, lastTime: lastTime ?? 0, lastVal });
     return;
@@ -438,6 +444,22 @@ function applySeriesDataSmart(
       return;
     }
   }
+  if (tipOnly) {
+    // Window grew by one and tip is newer — `update` can append without setData.
+    // Meta may be empty after a candle-window move (`notePaintedCandleRange`
+    // clears it); still skip full replace — caller uses tipOnly=false on create.
+    if (
+      prev &&
+      last &&
+      lastTime != null &&
+      mapped.length === prev.len + 1 &&
+      lastTime > prev.lastTime &&
+      safeUpdate(series, last)
+    ) {
+      metaMap.set(metaKey, { len: mapped.length, lastTime, lastVal });
+    }
+    return;
+  }
   safeSetData(series, mapped);
   metaMap.set(metaKey, {
     len: mapped.length,
@@ -455,6 +477,8 @@ function applySeriesDataSmart(
  * `forceFull` bypasses the tip-only fast path so a recomputed series (input
  * override / edited source) repaints every bar, not just the last point.
  *
+ * `tipOnly` (pan/zoom ranging): tip `update` only — never full `setData`.
+ *
  * @param range - Owning chart's painted candle range (`null` = not painted
  *   yet → clamp is a no-op). `undefined` falls back to the legacy
  *   module-global range.
@@ -468,6 +492,7 @@ function applyOverlayLineDataSmart(
   range?: PaintedCandleRange | null,
   allowedTimes?: ReadonlySet<number> | null,
   candleTimes?: readonly number[] | null,
+  tipOnly = false,
 ): void {
   // Pin to the painted candle range first: points from a stale window would
   // otherwise extend the shared time scale past the candles and LWC throws
@@ -479,7 +504,8 @@ function applyOverlayLineDataSmart(
   // a bar at that index — LWC throws `Value is null` and names no series.
   const points = projectToCandleAxis(clamped, candleTimes, (time) => ({ time }));
   const prev = metaMap.get(metaKey);
-  if (!forceFull && prev && prev.len > 0) {
+  // Try tip peek even when forceFull was requested if ranging forbids setData.
+  if ((!forceFull || tipOnly) && prev && prev.len > 0) {
     const peek = peekOverlayLineTip(points, prev.len);
     if (peek && peek.lastTime === prev.lastTime) {
       if (Object.is(prev.lastVal, peek.lastVal) || prev.lastVal === peek.lastVal) {
@@ -494,6 +520,33 @@ function applyOverlayLineDataSmart(
         return;
       }
     }
+  }
+  if (tipOnly) {
+    // Length/time changed or meta cleared after a candle-window move — prefer a
+    // one-bar append without mapping the whole window; otherwise skip. Create
+    // paths pass tipOnly=false so a brand-new series still gets its first paint.
+    // projectToCandleAxis may insert blank `{ time }` rows; cast keeps optional value.
+    const tip = (points.length ? points[points.length - 1] : null) as OverlayPoint | null;
+    if (
+      prev &&
+      tip &&
+      Number.isFinite(tip.time) &&
+      points.length === prev.len + 1 &&
+      Number(tip.time) > prev.lastTime
+    ) {
+      const row =
+        tip.value !== undefined && Number.isFinite(tip.value)
+          ? { time: tip.time, value: tip.value }
+          : { time: tip.time };
+      if (safeUpdate(series, row)) {
+        metaMap.set(metaKey, {
+          len: points.length,
+          lastTime: Number(tip.time),
+          lastVal: seriesTipValue(row),
+        });
+      }
+    }
+    return;
   }
   applySeriesDataSmart(series, toLwcLineData(points), metaKey, metaMap, forceFull);
 }
@@ -658,6 +711,13 @@ export class PaneManager {
   private ranging = false;
   /** Last wheel-zoom time. A load must not fitContent over that gesture. */
   private userRangedAt = 0;
+  /**
+   * Marker plugin rewrite deferred while ranging. In-memory bags still update;
+   * `setMarkers` on a 10k+ series during pan spikes panFrame past G2.
+   */
+  private markersApplyDeferred = false;
+  /** rAF/timeout handle for flushing deferred marker paints after the gesture. */
+  private rangingPaintTimer: ReturnType<typeof setTimeout> | number | null = null;
   /**
    * Last successfully painted candle range for THIS chart (multi-chart safe).
    * Co-painted overlays / equity clamp to this window so a stale engine
@@ -1847,7 +1907,7 @@ export class PaneManager {
       this.tradeMarkersByOwner.set(owner, list);
     }
     this.rebuildTradeMarkerList();
-    this.applyCandleMarkers();
+    this.applyMarkersOrDefer();
   }
 
   /**
@@ -1890,7 +1950,7 @@ export class PaneManager {
     const pane = (paneId && String(paneId).trim()) || 'price';
     this.shapePaneByOwner.set(owner, pane);
     this.rebuildShapeMarkerList();
-    this.applyAllShapeMarkers();
+    this.applyMarkersOrDefer();
   }
 
   /**
@@ -1905,7 +1965,7 @@ export class PaneManager {
       this.tradeMarkersByOwner.clear();
     }
     this.rebuildTradeMarkerList();
-    this.applyCandleMarkers();
+    this.applyMarkersOrDefer();
   }
 
   clearShapeMarkers(ownerId?: string | null) {
@@ -1918,7 +1978,7 @@ export class PaneManager {
       this.shapePaneByOwner.clear();
     }
     this.rebuildShapeMarkerList();
-    this.applyAllShapeMarkers();
+    this.applyMarkersOrDefer();
   }
 
   /**
@@ -1938,7 +1998,7 @@ export class PaneManager {
     this.shapeMarkersByOwner.set(to, existing ? existing.concat(list) : list);
     this.shapePaneByOwner.set(to, pane);
     this.rebuildShapeMarkerList();
-    this.applyAllShapeMarkers();
+    this.applyMarkersOrDefer();
   }
 
   private rebuildTradeMarkerList() {
@@ -2019,6 +2079,8 @@ export class PaneManager {
   * Returns number of bars that received a custom color.
   */
   private repaintCandlesWithBarColors(): number {
+    // Full candle setData during pan/zoom spikes panFrame — skip until idle.
+    if (this.isRanging()) return 0;
     const pricePane = this.getPane('price');
     const candle = pricePane?.series?.['candle'];
     if (!candle || typeof candle.setData !== 'function') return 0;
@@ -2080,12 +2142,12 @@ export class PaneManager {
       }
       return base;
     });
-    this.applyCandleMarkers();
+    this.applyMarkersOrDefer();
   }
 
   clearDebugPinMarkers() {
     this.debugPinMarkerList = [];
-    this.applyCandleMarkers();
+    this.applyMarkersOrDefer();
   }
 
   /** Apply plotshape markers on price candles and overlay=false panes. */
@@ -2979,9 +3041,53 @@ export class PaneManager {
    * Live paint reads this to defer full-window `setData` (window slides) while
    * a pan/zoom gesture is active. Tip `update` stays cheap; a slide during the
    * gesture is what spikes `chart.lag` panFrame past the G2 50 ms max.
+   * Overlay/marker paths also tip-only / defer while this is true.
    */
   isRanging(): boolean {
     return this.userIsRanging();
+  }
+
+  /** Arm a one-shot flush of paints skipped during ranging. */
+  private scheduleRangingPaintFlush(): void {
+    if (this.rangingPaintTimer != null) return;
+    const run = () => {
+      this.rangingPaintTimer = null;
+      if (this.isRanging()) {
+        this.scheduleRangingPaintFlush();
+        return;
+      }
+      this.flushDeferredRangingPaint();
+    };
+    if (typeof globalThis.requestAnimationFrame === 'function') {
+      this.rangingPaintTimer = globalThis.requestAnimationFrame(run);
+    } else {
+      this.rangingPaintTimer = setTimeout(run, 0);
+    }
+  }
+
+  /** Apply marker bags that were updated while the gesture blocked setMarkers. */
+  private flushDeferredRangingPaint(): void {
+    if (this.isRanging()) {
+      this.scheduleRangingPaintFlush();
+      return;
+    }
+    if (!this.markersApplyDeferred) return;
+    this.markersApplyDeferred = false;
+    this.applyAllShapeMarkers();
+  }
+
+  /**
+   * Run marker plugin writes, or defer them while ranging.
+   * In-memory owner bags are already updated by the caller.
+   */
+  private applyMarkersOrDefer(): void {
+    if (this.isRanging()) {
+      this.markersApplyDeferred = true;
+      this.scheduleRangingPaintFlush();
+      return;
+    }
+    if (this.markersApplyDeferred) this.markersApplyDeferred = false;
+    this.applyAllShapeMarkers();
   }
 
   /**
@@ -3094,6 +3200,8 @@ export class PaneManager {
   setData(paneId: string, seriesKey: string, data: any[]) {
     const pane = this.panes.get(paneId);
     if (!pane) return;
+    // G2: suppress full-series writes while the user is panning/zooming.
+    if (this.isRanging()) return;
     safeSetData(pane.series[seriesKey], data);
   }
 
@@ -3503,6 +3611,7 @@ export class PaneManager {
           this.clampRange(),
           this.candleTimeSet(),
           this.paintedCandleTimes(),
+          this.isRanging(),
         );
         try {
           const labels = this.plotLabelOptions(line);
@@ -3576,7 +3685,8 @@ export class PaneManager {
               /* ignore */
             }
           }
-          // First paint always maps full series (incl. na whitespace slots)
+          // First paint always maps full series (incl. na whitespace slots).
+          // tipOnly stays false so a create during a gesture is not left empty.
           applyOverlayLineDataSmart(
             series,
             line.data,
@@ -3586,6 +3696,7 @@ export class PaneManager {
             this.clampRange(),
             this.candleTimeSet(),
             this.paintedCandleTimes(),
+            false,
           );
           pane.series[key] = series;
           this.overlaySeriesKinds.set(kindKey, seriesKind);
@@ -3889,6 +4000,7 @@ export class PaneManager {
           this.overlayMetaKey(paneId, key),
           this.overlayDataMeta,
           forceFull,
+          this.isRanging(),
         );
         try {
           const opts: Record<string, unknown> = {
@@ -4018,17 +4130,20 @@ export class PaneManager {
           this.overlayMetaKey(pane.id, key),
           this.overlayDataMeta,
           forceFull,
+          this.isRanging(),
         );
       } else {
         try {
           const series = createBgcolorSeries(pane.chart);
           applyTitle(series);
+          // Create path: always full paint (tipOnly false) so the series is not empty.
           applySeriesDataSmart(
             series,
             mapped,
             this.overlayMetaKey(pane.id, key),
             this.overlayDataMeta,
             forceFull,
+            false,
           );
           pane.series[key] = series;
           try {

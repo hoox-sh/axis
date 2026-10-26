@@ -124,6 +124,49 @@ describe('manager-access', () => {
     expect(markersCleared).toBe(0);
   });
 
+  it('setDataToChart fit:false no-ops while manager is ranging', () => {
+    let setDataCalls = 0;
+    const candle = {
+      setData: () => {
+        setDataCalls += 1;
+      },
+      applyOptions: () => {},
+      seriesType: () => 'Candlestick',
+    };
+    const ts = {
+      getVisibleLogicalRange: () => ({ from: 0, to: 10 }),
+      setVisibleLogicalRange: () => {},
+      applyOptions: () => {},
+      fitContent: () => {},
+    };
+    const chart = {
+      timeScale: () => ts,
+      priceScale: () => ({ applyOptions: () => {} }),
+      addSeries: () => candle,
+    };
+    const panes = new Map<string, { id: string; series: Record<string, unknown>; chart: typeof chart }>();
+    panes.set('price', { id: 'price', series: { candle }, chart });
+    setManager({
+      getPane: (id: string) => panes.get(id),
+      getAllPanes: () => [...panes.values()],
+      clearTradeMarkers: () => {},
+      getPriceChartType: () => 'candles',
+      setPriceChartType: () => {},
+      detachPriceMarkers: () => {},
+      reapplyPriceMarkers: () => {},
+      isRanging: () => true,
+    } as never);
+
+    setDataToChart(
+      [
+        { time: 1, open: 1, high: 1, low: 1, close: 1, volume: 1 },
+        { time: 2, open: 1, high: 1, low: 1, close: 1, volume: 1 },
+      ],
+      { fit: false, clearMarkers: false, clearScriptState: false },
+    );
+    expect(setDataCalls).toBe(0);
+  });
+
   it('setDataToChart with fit false puts the logical range back', () => {
     let range = { from: 10, to: 40 };
     const ts = {

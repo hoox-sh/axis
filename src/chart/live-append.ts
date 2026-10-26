@@ -54,8 +54,9 @@
  *
  * While the chart is ranging (pan/zoom), the slide replace stays armed and
  * does not call `setDataToChart` — a full-window write on the same frame as
- * the gesture is what pushed `panFrame` max to ~84 ms. Tip `update` continues.
- * The next frame after the gesture ends flushes the pending replace.
+ * the gesture is what pushed `panFrame` max past 50 ms. Tip `update` continues.
+ * Overlay/marker full writes are tip-only or deferred in PaneManager. The next
+ * frame after the gesture ends flushes the pending replace.
  *
  * Painting a bar the store rejected is how a stale tick used to reach the
  * library: Lightweight Charts then throws `Cannot update oldest data item`

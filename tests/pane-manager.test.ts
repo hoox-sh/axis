@@ -1498,3 +1498,183 @@ describe('auditTimeParity', () => {
     expect(pm.auditTimeParity()).toEqual([]);
   });
 });
+
+describe('ranging defers expensive chart paints (G2 panFrame)', () => {
+  let pm: InstanceType<typeof PaneManager>;
+  let container: HTMLElement;
+
+  beforeEach(() => {
+    setChartLayoutMode('multi');
+    container = document.createElement('div') as unknown as HTMLElement;
+    (container as { id: string }).id = 'chart-root';
+    document.body.appendChild(container as never);
+    pm = new PaneManager(container);
+  });
+
+  afterEach(() => {
+    try {
+      pm.dispose();
+    } catch {
+      /* ignore */
+    }
+    resetChartLayoutMode();
+    container?.remove();
+  });
+
+  it('ranging blocks overlay full setData and keeps tip update', () => {
+    const price = pm.createPane('price', 'price', 'Price');
+    pm.notePaintedCandleRange(1, 2, [1, 2]);
+    pm.syncOverlayLines(
+      'price',
+      [
+        {
+          name: 'EMA',
+          data: [
+            { time: 1, value: 10 },
+            { time: 2, value: 12 },
+          ],
+          color: '#0f0',
+        },
+      ],
+      { ownerId: 's1' },
+    );
+    const key = Object.keys(price.series).find((k) => k.includes('EMA'));
+    expect(key).toBeTruthy();
+    const series = price.series[key!] as {
+      setData: (d: unknown) => void;
+      update: (d: unknown) => void;
+    };
+    let setDataCount = 0;
+    let updateCount = 0;
+    const origSet = series.setData.bind(series);
+    const origUp = series.update.bind(series);
+    series.setData = (d) => {
+      setDataCount += 1;
+      origSet(d);
+    };
+    series.update = (d) => {
+      updateCount += 1;
+      origUp(d);
+    };
+
+    const internal = pm as unknown as { ranging: boolean; userRangedAt: number };
+    internal.ranging = true;
+    setDataCount = 0;
+    updateCount = 0;
+    // Same length + tip time, new tip value → update only.
+    pm.syncOverlayLines(
+      'price',
+      [
+        {
+          name: 'EMA',
+          data: [
+            { time: 1, value: 10 },
+            { time: 2, value: 13 },
+          ],
+          color: '#0f0',
+        },
+      ],
+      { ownerId: 's1' },
+    );
+    expect(setDataCount).toBe(0);
+    expect(updateCount).toBe(1);
+
+    // History rewrite while ranging → no full setData (meta stays stale).
+    pm.notePaintedCandleRange(1, 3, [1, 2, 3]);
+    setDataCount = 0;
+    updateCount = 0;
+    pm.syncOverlayLines(
+      'price',
+      [
+        {
+          name: 'EMA',
+          data: [
+            { time: 1, value: 10 },
+            { time: 2, value: 12 },
+            { time: 3, value: 14 },
+          ],
+          color: '#0f0',
+        },
+      ],
+      { ownerId: 's1', forceFull: true },
+    );
+    expect(setDataCount).toBe(0);
+
+    pm.setData('price', key!, [{ time: 1, value: 99 }]);
+    expect(setDataCount).toBe(0);
+
+    internal.ranging = false;
+    internal.userRangedAt = 0;
+    setDataCount = 0;
+    pm.syncOverlayLines(
+      'price',
+      [
+        {
+          name: 'EMA',
+          data: [
+            { time: 1, value: 10 },
+            { time: 2, value: 12 },
+            { time: 3, value: 14 },
+          ],
+          color: '#0f0',
+        },
+      ],
+      { ownerId: 's1', forceFull: true },
+    );
+    expect(setDataCount).toBe(1);
+  });
+
+  it('ranging defers marker setMarkers until the gesture ends', () => {
+    const price = pm.createPane('price', 'price', 'Price');
+    price.series['candle'] = {
+      setData: () => {},
+      applyOptions: () => {},
+      priceScale: () => ({ applyOptions: () => {} }),
+      seriesOrder: () => 1,
+      setSeriesOrder: () => {},
+    } as never;
+
+    pm.setShapeMarkers([
+      {
+        time: 1000,
+        position: 'aboveBar',
+        color: '#f00',
+        shape: 'circle',
+        text: 'S',
+        id: 's1',
+      },
+    ]);
+    const internal = pm as unknown as {
+      ranging: boolean;
+      userRangedAt: number;
+      markersApplyDeferred: boolean;
+      candleMarkers: { setMarkers: (m: unknown) => void } | null;
+      flushDeferredRangingPaint: () => void;
+    };
+    expect(internal.candleMarkers).toBeTruthy();
+    let setMarkerCalls = 0;
+    internal.candleMarkers!.setMarkers = () => {
+      setMarkerCalls += 1;
+    };
+
+    internal.ranging = true;
+    pm.setShapeMarkers([
+      {
+        time: 2000,
+        position: 'aboveBar',
+        color: '#0f0',
+        shape: 'circle',
+        text: 'T',
+        id: 's2',
+      },
+    ]);
+    expect(setMarkerCalls).toBe(0);
+    expect(internal.markersApplyDeferred).toBe(true);
+
+    internal.ranging = false;
+    internal.userRangedAt = 0;
+    internal.flushDeferredRangingPaint();
+    expect(setMarkerCalls).toBe(1);
+    expect(internal.markersApplyDeferred).toBe(false);
+  });
+});

@@ -17,6 +17,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Changed
 
+- **While ranging, chart paints stay tip-`update` only.** Overlay/bgcolor/OHLC smart-apply skips full-series `setData`, marker `setMarkers` defers until the gesture ends, `PaneManager.setData` and non-fit `setDataToChart` no-op, and the existing slide-replace deferral stays. Tip updates continue. Cuts the post-slide-defer `panFrame` max spike (~133 ms at 15k bars) from engine plot/marker writes during pan.
+
 - **Live forming-tip apply skips O(n) align / overlay rebuild and store sync.** When `executionContext === 'tip'`, `applyPrecomputedChart` reuses the last aligned overlay payloads (tip-patch only), skips `setLastRun` / `updateIndicatorStore` / drawings when unchanged, and reuses `store.bars` for the cached OHLCV axis. Append and snapshot still take the full path. Bridge tip deltas reuse cached input descriptors. Aimed at G1 apply ≤ 8 ms on a 5k-bar tip.
 
 - **Live window-slide `setData` defers while the chart is ranging.** Tip `series.update` stays on; a full-window replace during pan/zoom was the ~84 ms `panFrame` spike under live ticks. The pending slide flushes on the next frame after the gesture. `PaneManager.isRanging()` exposes the gesture for the paint path.
