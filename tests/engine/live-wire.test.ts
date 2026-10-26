@@ -201,6 +201,136 @@ describe('redesign2 live-wire (F-19)', () => {
     expect(h.wire.isSubscribed('series-1')).toBe(true);
   });
 
+  test('script subscribe error releases the applier so the next eval can retry', async () => {
+    const h = makeHarness();
+    const first = h.wire.evalScript({
+      subId: 'id_keltner',
+      script: 'indicator() {}',
+      meta: {},
+      bars: BARS,
+    });
+    await tick();
+    await tick();
+    h.emit({ type: 'error', id: 'id_keltner', payload: { code: 'x', message: 'boom' } });
+    await expect(first).rejects.toMatchObject({ reason: 'script-subscribe-failed' });
+    expect(h.unsubscribed).toEqual(['id_keltner']);
+    expect(h.wire.snapshotState().subs).toEqual([]);
+    expect(h.wire.cooledDown).toBe(false);
+
+    const second = h.wire.evalScript({
+      subId: 'id_keltner',
+      script: 'indicator() {}',
+      meta: {},
+      bars: BARS,
+    });
+    await tick();
+    await tick();
+    expect(h.sent.filter((s) => s.kind === 'subscribe:script')).toHaveLength(2);
+    h.emit({
+      type: 'full',
+      id: 'id_keltner',
+      seq: 1,
+      payload: { count: 1, plots: [[1]], series: { a: [1] } },
+    });
+    await expect(second).resolves.toMatchObject({ status: 'success' });
+    expect(h.wire.snapshotState().subs).toEqual([
+      { subId: 'id_keltner', kind: 'script', seq: 1, merged: true },
+    ]);
+  });
+
+  test('UNAUTHORIZED series subscribe retries once then succeeds without cooldown', async () => {
+    const h = makeHarness();
+    const p = h.wire.ensureSeries('series-1', {});
+    await tick();
+    await tick();
+    expect(h.sent.filter((s) => s.kind === 'subscribe:series')).toHaveLength(1);
+    h.emit({
+      type: 'error',
+      id: 'series-1',
+      payload: { code: 'UNAUTHORIZED', message: 'Authenticate first' },
+    });
+    await new Promise<void>((r) => setTimeout(r, 180));
+    await tick();
+    expect(h.sent.filter((s) => s.kind === 'subscribe:series')).toHaveLength(2);
+    h.emit({ type: 'full', id: 'series-1', seq: 1, payload: { count: 1, bars: BARS } });
+    expect(await p).toEqual(BARS);
+    expect(h.wire.cooledDown).toBe(false);
+    expect(h.wire.snapshotState().failures).toBe(0);
+  });
+
+  test('UNAUTHORIZED series subscribe that fails twice cools down', async () => {
+    const h = makeHarness();
+    const p = h.wire.ensureSeries('series-1', {});
+    await tick();
+    await tick();
+    h.emit({
+      type: 'error',
+      id: 'series-1',
+      payload: { code: 'UNAUTHORIZED', message: 'Authenticate first' },
+    });
+    await new Promise<void>((r) => setTimeout(r, 180));
+    await tick();
+    expect(h.sent.filter((s) => s.kind === 'subscribe:series')).toHaveLength(2);
+    h.emit({
+      type: 'error',
+      id: 'series-1',
+      payload: { code: 'UNAUTHORIZED', message: 'Authenticate first' },
+    });
+    await expect(p).rejects.toMatchObject({ reason: 'subscribe-error' });
+    expect(h.wire.cooledDown).toBe(true);
+    expect(h.wire.snapshotState().failures).toBe(1);
+  });
+
+  test('Authenticate-first script subscribe retries once then succeeds', async () => {
+    const h = makeHarness();
+    const p = h.wire.evalScript({
+      subId: 's-1',
+      script: 'indicator() {}',
+      meta: {},
+      bars: BARS,
+    });
+    await tick();
+    await tick();
+    h.emit({
+      type: 'error',
+      id: 's-1',
+      payload: { code: 'x', message: 'Authenticate first' },
+    });
+    await new Promise<void>((r) => setTimeout(r, 180));
+    await tick();
+    expect(h.sent.filter((s) => s.kind === 'subscribe:script')).toHaveLength(2);
+    h.emit({
+      type: 'full',
+      id: 's-1',
+      seq: 1,
+      payload: { count: 1, plots: [[1]], series: { a: [1] } },
+    });
+    await expect(p).resolves.toMatchObject({ status: 'success' });
+    expect(h.wire.cooledDown).toBe(false);
+    expect(h.unsubscribed).toEqual([]);
+  });
+
+  test('reconnect resumeAll clears failure cooldown so ensureSeries can retry', async () => {
+    const h = makeHarness();
+    const p = h.wire.ensureSeries('series-1', {});
+    await tick();
+    await tick();
+    h.emit({ type: 'error', id: 'series-1', payload: { code: 'x', message: 'boom' } });
+    await expect(p).rejects.toBeInstanceOf(StreamFallbackError);
+    expect(h.wire.cooledDown).toBe(true);
+    await expect(h.wire.ensureSeries('series-2', {})).rejects.toMatchObject({ reason: 'cooldown' });
+
+    h.fireReconnect();
+    expect(h.wire.cooledDown).toBe(false);
+
+    const p2 = h.wire.ensureSeries('series-2', {});
+    await tick();
+    await tick();
+    h.emit({ type: 'full', id: 'series-2', seq: 1, payload: { count: 1, bars: BARS } });
+    expect(await p2).toEqual(BARS);
+    expect(h.wire.cooledDown).toBe(false);
+  });
+
   test('evalScript re-subscribes when history_bars grows and does not cool the wire', async () => {
     const h = makeHarness();
     const first = h.wire.evalScript({

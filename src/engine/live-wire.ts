@@ -164,6 +164,11 @@ const LOADING_WAIT_CAP_MS = 120_000;
 /** Two more asks before an AXB1 snapshot gives up and that sub uses JSON. */
 const SNAPSHOT_BACKOFF_MS = [50, 200] as const;
 /**
+ * Subscribe can race the auth handshake (`UNAUTHORIZED` / "Authenticate first").
+ * One short retry after open, then the normal fail path.
+ */
+const AUTH_SUBSCRIBE_RETRY_MS = 150;
+/**
  * After the tab is shown, fold the queued burst into one decision.
  * A hidden tab must not replay every tick it missed.
  */
@@ -174,6 +179,22 @@ const INBOX_CAP = 32;
 function historyBarsOf(meta: Record<string, unknown> | undefined): number {
   const n = Number(meta?.history_bars);
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
+/** True when subscribe beat the auth handshake — retry once, do not cool yet. */
+function isAuthPendingSubscribeError(frame: WireFrame): boolean {
+  if (frame.type !== 'error') return false;
+  const body = (frame.payload ?? {}) as Record<string, unknown>;
+  const code = String(body.code ?? (frame as { code?: unknown }).code ?? '')
+    .trim()
+    .toUpperCase();
+  const message = String(body.message ?? (frame as { message?: unknown }).message ?? '');
+  if (code === 'UNAUTHORIZED') return true;
+  return /authenticate first/i.test(message);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -811,7 +832,12 @@ export class StreamLiveWire {
         this.client.subscribe(subId, 'series', meta, encoding ? { encoding } : undefined);
       };
       send();
-      const full = await this.awaitSnapshot(subId, SNAPSHOT_WAIT_MS, { fatal: true, resend: send });
+      let full = await this.awaitSnapshot(subId, SNAPSHOT_WAIT_MS, { fatal: true, resend: send });
+      if (full.type === 'error' && isAuthPendingSubscribeError(full)) {
+        await sleep(AUTH_SUBSCRIBE_RETRY_MS);
+        send();
+        full = await this.awaitSnapshot(subId, SNAPSHOT_WAIT_MS, { fatal: true, resend: send });
+      }
       if (full.type === 'error') {
         const body = (full.payload ?? {}) as Record<string, unknown>;
         const errMsg = String(body.message ?? (full as { message?: unknown }).message ?? 'subscribe failed');
@@ -911,14 +937,19 @@ export class StreamLiveWire {
           });
         };
         send();
-        const full = await this.awaitSnapshot(input.subId, SNAPSHOT_WAIT_MS, {
+        let full = await this.awaitSnapshot(input.subId, SNAPSHOT_WAIT_MS, {
           fatal: false,
           resend: send,
         });
+        if (full.type === 'error' && isAuthPendingSubscribeError(full)) {
+          await sleep(AUTH_SUBSCRIBE_RETRY_MS);
+          send();
+          full = await this.awaitSnapshot(input.subId, SNAPSHOT_WAIT_MS, {
+            fatal: false,
+            resend: send,
+          });
+        }
         if (full.type === 'error' || full.type !== 'full') {
-          this.appliers.delete(input.subId);
-          this.scriptInputSig.delete(input.subId);
-          this.scriptDepth.delete(input.subId);
           throw new StreamFallbackError(
             'script-subscribe-failed',
             `expected full, got ${full.type}`,
@@ -931,9 +962,8 @@ export class StreamLiveWire {
         this.appliedSeq.set(input.subId, typeof full.seq === 'number' ? full.seq : 0);
         this.handlers.onStatus(input.subId, 'live');
       } catch (e) {
-        this.appliers.delete(input.subId);
-        this.scriptInputSig.delete(input.subId);
-        this.scriptDepth.delete(input.subId);
+        // Drop half-state so the next streamEvalScript can subscribe cleanly.
+        this.release(input.subId);
         if (e instanceof StreamFallbackError) throw e;
         throw new StreamFallbackError('script-failed', e instanceof Error ? e.message : String(e));
       }
@@ -1150,6 +1180,8 @@ export class StreamLiveWire {
 
   /** Re-issue resume for every live sub after the socket comes back. */
   private resumeAll(): void {
+    // A transient fail must not keep rejecting ensureSeries after a healthy open.
+    this.coolUntil = 0;
     for (const [subId, seq] of this.appliedSeq) {
       const bars = this.seriesBars.get(subId) ?? this.scriptCtx.get(subId)?.bars ?? [];
       try {
