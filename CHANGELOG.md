@@ -27,6 +27,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Fixed
 
+- **Live-wire closes `batch:post` → `apply:start` after series-only tips.** Series batches stamped `queueWait` without an apply while script frames lagged (coalesce skew, UNCHANGED, or axis-resub). A coalesced per-frame kick now reapplies cached script state after series-only tips (first sub sync, later subs yield a macrotask); the inbox keeps one forming tip per sub. Mixed series+script batches stay one price-then-plots transaction; `holdUntilFull` still skips the kick.
+
 - **Single-chart layout arms `chart.lag` `panFrame` on pan/zoom.** `createSharedPane` never set `ranging` or wired wheel → `v1NotePanActivity`, so the default one-chart host left `panFrame.n = 0` after user gestures. The shared price host now mirrors the multi-pane listeners (pointer ranging + wheel).
 
 - **Live-proxy buffers client frames until the engine upstream is open, and the ingest worker resends `auth` on `live-relay`.** Browser `onopen` could send `auth` before the Worker’s upstream socket was ready; the frame was dropped and subscribe then failed with `UNAUTHORIZED`. The proxy queues early client→engine frames; the ingest worker also resends auth when it sees `live-relay` and never signals host `open` without `auth.ok`.

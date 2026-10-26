@@ -584,8 +584,8 @@ describe('live-wire P1 series + study push', () => {
       seq: 90,
       payload: { index: 0, time: 100, ohlcv: { open: 1, high: 1, low: 1, close: 1, volume: 1 } },
     });
-    expect(h.wire.inboxDepth('series:k')).toBeLessThanOrEqual(32);
-    expect(h.wire.inboxDepth('series:k')).toBeGreaterThan(0);
+    // Latest forming tip + close; tips coalesce to one slot.
+    expect(h.wire.inboxDepth('series:k')).toBe(2);
     h.emit({
       type: 'full',
       id: 'series:k',
@@ -1508,6 +1508,15 @@ const h = makeHarness();
   });
 });
 
+const raf = () =>
+  new Promise<void>((resolve) => {
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => resolve());
+      return;
+    }
+    queueMicrotask(() => resolve());
+  });
+
 describe('live-wire mixed delta batch', () => {
   test('series+script deltas in one batch paint price then plots without yielding', async () => {
     const h = makeHarness({ syncApply: true });
@@ -1563,5 +1572,222 @@ describe('live-wire mixed delta batch', () => {
     expect(h.applyOrder).toEqual(['price', 'plots:stream-delta']);
     expect(h.seriesDelta).toEqual([{ bars: [tip], append: true }]);
     expect(h.applied).toEqual([{ via: 'stream-delta' }]);
+  });
+
+  test('a series-only batch kicks cached script paint once per frame', async () => {
+    const h = makeHarness({ syncApply: true });
+    const seriesP = h.wire.ensureSeries('series:k', {});
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: 'series:k',
+      sessionId: 'ses',
+      seq: 1,
+      payload: { count: 1, bars: BARS },
+    });
+    await seriesP;
+
+    const scriptP = h.wire.evalScript({
+      subId: 's-1',
+      script: 'indicator() {}',
+      meta: {},
+      bars: BARS,
+    });
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 1,
+      payload: { count: 1, plots: [[1]], series: { a: [1] } },
+    });
+    await scriptP;
+    h.applyOrder.length = 0;
+    h.applied.length = 0;
+
+    const tip: Bar = { time: 100, open: 1, high: 2, low: 1, close: 2, volume: 1 };
+    h.emitBatch([
+      {
+        type: 'delta',
+        id: 'series:k',
+        sessionId: 'ses',
+        seq: 2,
+        payload: { bars: [tip], forming: true, base_index: 0, count: 1, tail_len: 1 },
+      },
+      {
+        type: 'delta',
+        id: 'series:k',
+        sessionId: 'ses',
+        seq: 3,
+        payload: {
+          bars: [{ ...tip, close: 3 }],
+          forming: true,
+          base_index: 0,
+          count: 1,
+          tail_len: 1,
+        },
+      },
+    ]);
+    expect(h.applyOrder).toEqual(['price', 'price']);
+    expect(h.applied).toEqual([]);
+    await raf();
+    expect(h.applied).toEqual([{ via: 'stream-delta' }]);
+    expect(h.applyOrder).toEqual(['price', 'price', 'plots:stream-delta']);
+
+    h.applied.length = 0;
+    h.applyOrder.length = 0;
+    h.emitBatch([
+      {
+        type: 'delta',
+        id: 'series:k',
+        sessionId: 'ses',
+        seq: 4,
+        payload: {
+          bars: [{ ...tip, close: 4 }],
+          forming: true,
+          base_index: 0,
+          count: 1,
+          tail_len: 1,
+        },
+      },
+    ]);
+    h.emitBatch([
+      {
+        type: 'delta',
+        id: 'series:k',
+        sessionId: 'ses',
+        seq: 5,
+        payload: {
+          bars: [{ ...tip, close: 5 }],
+          forming: true,
+          base_index: 0,
+          count: 1,
+          tail_len: 1,
+        },
+      },
+    ]);
+    await raf();
+    // One coalesced kick for both series-only batches in the same frame.
+    expect(h.applied).toEqual([{ via: 'stream-delta' }]);
+  });
+
+  test('series script kick yields between multiple script subs', async () => {
+    const h = makeHarness({ syncApply: true });
+    const seriesP = h.wire.ensureSeries('series:k', {});
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: 'series:k',
+      sessionId: 'ses',
+      seq: 1,
+      payload: { count: 1, bars: BARS },
+    });
+    await seriesP;
+
+    for (const subId of ['s-a', 's-b']) {
+      const scriptP = h.wire.evalScript({
+        subId,
+        script: 'indicator() {}',
+        meta: {},
+        bars: BARS,
+      });
+      await tick();
+      await tick();
+      h.emit({
+        type: 'full',
+        id: subId,
+        sessionId: 'ses',
+        seq: 1,
+        payload: { count: 1, plots: [[1]], series: { a: [1] } },
+      });
+      await scriptP;
+    }
+    h.applied.length = 0;
+    h.applyOrder.length = 0;
+
+    h.emitBatch([
+      {
+        type: 'delta',
+        id: 'series:k',
+        sessionId: 'ses',
+        seq: 2,
+        payload: {
+          bars: [{ time: 100, open: 1, high: 2, low: 1, close: 2, volume: 1 }],
+          forming: true,
+          base_index: 0,
+          count: 1,
+          tail_len: 1,
+        },
+      },
+    ]);
+    await raf();
+    // First script paints in the kick task; the second yields a macrotask.
+    expect(h.applied).toEqual([{ via: 'stream-delta' }]);
+    await tick();
+    expect(h.applied).toEqual([{ via: 'stream-delta' }, { via: 'stream-delta' }]);
+  });
+
+  test('holdUntilFull skips the series script kick for that sub', async () => {
+    const h = makeHarness({ syncApply: true });
+    const seriesP = h.wire.ensureSeries('series:k', {});
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: 'series:k',
+      sessionId: 'ses',
+      seq: 1,
+      payload: { count: 1, bars: BARS },
+    });
+    await seriesP;
+
+    const scriptP = h.wire.evalScript({
+      subId: 's-1',
+      script: 'indicator() {}',
+      meta: {},
+      bars: BARS,
+    });
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 1,
+      payload: { count: 1, plots: [[1]], series: { a: [1] } },
+    });
+    await scriptP;
+
+    // Seq gap holds deltas until the next full.
+    h.emit({
+      type: 'delta',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 99,
+      payload: { base_index: 0, count: 1, tail_len: 1, plots: [[9]], series: { a: [9] } },
+    });
+    h.applied.length = 0;
+    h.applyOrder.length = 0;
+    h.emitBatch([
+      {
+        type: 'delta',
+        id: 'series:k',
+        sessionId: 'ses',
+        seq: 2,
+        payload: {
+          bars: [{ time: 100, open: 1, high: 2, low: 1, close: 2, volume: 1 }],
+          forming: true,
+          base_index: 0,
+          count: 1,
+          tail_len: 1,
+        },
+      },
+    ]);
+    await raf();
+    await tick();
+    expect(h.applied).toEqual([]);
   });
 });

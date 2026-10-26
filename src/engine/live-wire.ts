@@ -336,6 +336,15 @@ export class StreamLiveWire {
   private removeVisibility: (() => void) | null = null;
   /** Subs that must speak JSON after an unknown AXB1 opcode. */
   private readonly jsonSubs = new Set<string>();
+  /**
+   * Series tip landed without script frames in the same batch. One coalesced
+   * kick reapplies cached script state so `apply:start` closes the metrics
+   * burst instead of waiting on a later script wire frame (UNCHANGED skip,
+   * coalesce skew, or axis-resub snapshot).
+   */
+  private seriesScriptKick = false;
+  private seriesScriptKickScheduled = false;
+  private seriesScriptKickTimer: ReturnType<typeof setTimeout> | number | null = null;
 
   constructor(
     private readonly client: WireClient,
@@ -598,12 +607,18 @@ export class StreamLiveWire {
       this.notifyInboxWaiters(frame.id);
     }
     this.routeFrame(frame);
+    // A lone series tip must still close the apply burst (see scheduleSeriesScriptKick).
+    if (frame.type === 'delta' && this.isSeriesFrame(frame)) {
+      this.scheduleSeriesScriptKick();
+    }
   }
 
   /**
    * One worker batch. Mixed series+script deltas commit price then plots
    * in one transaction (concept §6.1). Fulls, status, and closes still
    * route immediately so a snapshot is never held behind a tip.
+   * Series-only tips schedule one coalesced script paint kick so
+   * `batch:post` is not left open until a later script frame.
    */
   ingestBatch(frames: readonly WireFrame[]): void {
     if (frames.length === 0) return;
@@ -620,9 +635,12 @@ export class StreamLiveWire {
         this.commitDeltaBatch(pendingSeries.splice(0), pendingScript.splice(0));
         return;
       }
-      for (const frame of pendingSeries) this.routeFrame(frame);
+      if (pendingSeries.length) {
+        for (const frame of pendingSeries) this.routeFrame(frame);
+        pendingSeries.length = 0;
+        this.scheduleSeriesScriptKick();
+      }
       for (const frame of pendingScript) this.routeFrame(frame);
-      pendingSeries.length = 0;
       pendingScript.length = 0;
     };
     for (const frame of frames) {
@@ -670,13 +688,23 @@ export class StreamLiveWire {
   }
 
   /**
-   * Keep the inbox bounded. Forming tips are the only frames dropped.
-   * A `close`, `full`, `error`, or non-forming delta stays.
+   * Keep the inbox bounded. At most one forming tip per sub (latest wins);
+   * a `close`, `full`, `error`, or non-forming delta stays. Overflow of
+   * those resumes once.
    */
   private enqueueInbox(frame: WireFrame): void {
     const id = frame.id;
     if (!id) return;
     const queue = this.inbox.get(id) ?? [];
+    if (this.isDroppableTip(frame)) {
+      const tipAt = queue.findIndex((item) => this.isDroppableTip(item));
+      if (tipAt >= 0) {
+        queue[tipAt] = frame;
+        v1Count('droppedTip');
+        this.inbox.set(id, queue);
+        return;
+      }
+    }
     queue.push(frame);
     let overflow = false;
     while (queue.length > INBOX_CAP) {
@@ -1197,6 +1225,67 @@ export class StreamLiveWire {
     return this.flushScriptPaint(subId);
   }
 
+  /**
+   * After a series-only tip, re-paint live scripts from cached state once per
+   * frame (or microtask when rAF is missing). Closes `batch:post` →
+   * `apply:start` without waiting on the script's own wire frame.
+   */
+  private scheduleSeriesScriptKick(): void {
+    this.seriesScriptKick = true;
+    if (this.seriesScriptKickScheduled) return;
+    this.seriesScriptKickScheduled = true;
+    const run = (): void => {
+      this.seriesScriptKickTimer = null;
+      this.seriesScriptKickScheduled = false;
+      if (!this.seriesScriptKick) return;
+      this.seriesScriptKick = false;
+      this.kickCachedScriptPaints();
+    };
+    if (typeof globalThis.requestAnimationFrame === 'function') {
+      this.seriesScriptKickTimer = globalThis.requestAnimationFrame(run);
+      return;
+    }
+    queueMicrotask(run);
+  }
+
+  private cancelSeriesScriptKick(): void {
+    this.seriesScriptKick = false;
+    this.seriesScriptKickScheduled = false;
+    if (this.seriesScriptKickTimer != null) {
+      if (typeof globalThis.cancelAnimationFrame === 'function') {
+        globalThis.cancelAnimationFrame(this.seriesScriptKickTimer as number);
+      } else {
+        clearTimeout(this.seriesScriptKickTimer as ReturnType<typeof setTimeout>);
+      }
+      this.seriesScriptKickTimer = null;
+    }
+  }
+
+  /**
+   * Paint every live script that has merged state. The first sub runs in this
+   * task so `apply:start` lands immediately; later subs yield a macrotask so a
+   * following worker batch (series tip) can interleave.
+   */
+  private kickCachedScriptPaints(): void {
+    const ids: string[] = [];
+    for (const subId of this.scriptCtx.keys()) {
+      if (this.holdUntilFull.has(subId)) continue;
+      if (!this.appliers.get(subId)?.cached) continue;
+      ids.push(subId);
+    }
+    if (!ids.length) return;
+    const paintAt = (i: number): void => {
+      const subId = ids[i];
+      if (!subId) return;
+      if (!this.holdUntilFull.has(subId)) {
+        const cached = this.appliers.get(subId)?.cached;
+        if (cached) this.applyScriptPush(subId, cached, 'stream-delta');
+      }
+      if (i + 1 < ids.length) setTimeout(() => paintAt(i + 1), 0);
+    };
+    paintAt(0);
+  }
+
   /** One apply at a time. Always the newest payload, never a skipped snapshot. */
   private flushScriptPaint(subId: string): Promise<void> | void {
     const existing = this.paintTail.get(subId);
@@ -1520,6 +1609,7 @@ export class StreamLiveWire {
     this.scriptDepth.clear();
     this.paintLatest.clear();
     this.paintTail.clear();
+    this.cancelSeriesScriptKick();
     this.inbox.clear();
     this.inboxWaiters.clear();
     this.inboxOverflowPending.clear();
@@ -1544,6 +1634,7 @@ export class StreamLiveWire {
     this.scriptDepth.clear();
     this.paintLatest.clear();
     this.paintTail.clear();
+    this.cancelSeriesScriptKick();
     this.clearHidden();
     try {
       this.client.disconnect();
