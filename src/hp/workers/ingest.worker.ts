@@ -35,6 +35,12 @@ import {
 import { isFormingTipFrame, sendBufferHeld } from '../../engine/v1/backpressure';
 import { reconnectDelayMs } from '../../engine/frames';
 import {
+  liveTicketRetryable,
+  mintLiveTicket,
+  workerLiveWsUrl,
+  type LiveProxy,
+} from '../../engine/live-ticket';
+import {
   INGEST_CONNECT_TIMEOUT_MS,
   INGEST_HEARTBEAT_MS,
   INGEST_PONG_TIMEOUT_MS,
@@ -62,6 +68,9 @@ let pongTimer: ReturnType<typeof setTimeout> | null = null;
 let connectTimer: ReturnType<typeof setTimeout> | null = null;
 let liveUrl = '';
 let authToken: string | undefined;
+let liveProxy: LiveProxy | undefined;
+/** Abandoned mint/open generations must not create a socket. */
+let openGen = 0;
 /** Outbound buffer is over the cap. Forming tips are not forwarded. */
 let sendHeld = false;
 
@@ -182,11 +191,30 @@ function handleRaw(raw: unknown): void {
   handleDecoded(decoded);
 }
 
-function openSocket(): void {
-  if (!liveUrl) return;
+async function openSocket(): Promise<void> {
+  const gen = ++openGen;
+  let url = liveUrl;
+  if (liveProxy) {
+    post({ type: 'status', status: 'connecting' });
+    try {
+      const ticket = await mintLiveTicket(liveProxy);
+      if (stopped || gen !== openGen) return;
+      url = workerLiveWsUrl(liveProxy.endpoint, ticket);
+    } catch (err) {
+      if (stopped || gen !== openGen) return;
+      post({ type: 'status', status: 'error' });
+      if (!liveTicketRetryable(err)) {
+        authBlocked = true;
+        return;
+      }
+      scheduleReconnect();
+      return;
+    }
+  }
+  if (!url || stopped || gen !== openGen) return;
   let socket: WebSocket;
   try {
-    socket = new WebSocket(liveUrl);
+    socket = new WebSocket(url);
   } catch {
     post({ type: 'status', status: 'error' });
     scheduleReconnect();
@@ -263,6 +291,7 @@ function openSocket(): void {
 
 function disconnect(): void {
   stopped = true;
+  openGen += 1;
   clearReconnect();
   clearHeartbeat();
   coalescer.flush();
@@ -285,10 +314,11 @@ scope.onmessage = (ev: MessageEvent<HostToIngest>) => {
     authBlocked = false;
     liveUrl = msg.url;
     authToken = msg.authToken;
+    liveProxy = msg.liveProxy;
     if (ws) closeQuietly(ws);
     ws = null;
     clearReconnect();
-    openSocket();
+    void openSocket();
     return;
   }
   if (msg.type === 'disconnect') {

@@ -31,6 +31,7 @@ import {
   Redesign2WsClient,
   type Redesign2WsClientOptions,
 } from '../../engine/ws-client';
+import { workerLiveWsUrl, type LiveProxy } from '../../engine/live-ticket';
 import type { WireClient, WireFrame } from '../../engine/live-wire';
 import { PendingRequests, ReconnectHandlers, wireStats } from '../../engine/wire-bookkeeping';
 import { noteIngestPublish } from '../../chart/paint-latency';
@@ -96,6 +97,7 @@ export class IngestHostClient implements WireClient {
   private readonly reconnects = new ReconnectHandlers();
   readonly url: string;
   private readonly authToken?: string;
+  private readonly liveProxy?: LiveProxy;
 
   onFrame: ((frame: WireFrame) => void) | undefined;
   onFrames?: ((frames: WireFrame[]) => void) | undefined;
@@ -107,7 +109,10 @@ export class IngestHostClient implements WireClient {
   onBackpressure?: (held: boolean) => void;
 
   constructor(options: Redesign2WsClientOptions) {
-    this.url = endpointToRedesign2WsUrl(options.endpoint, options.authToken);
+    this.liveProxy = options.liveProxy;
+    this.url = options.liveProxy
+      ? workerLiveWsUrl(options.liveProxy.endpoint)
+      : endpointToRedesign2WsUrl(options.endpoint, options.authToken);
     this.authToken = options.authToken;
   }
 
@@ -182,6 +187,7 @@ export class IngestHostClient implements WireClient {
       type: 'connect',
       url: this.url,
       authToken: this.authToken,
+      liveProxy: this.liveProxy,
     });
   }
 

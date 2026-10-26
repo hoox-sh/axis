@@ -43,6 +43,8 @@ import { Redesign2BarCloseVerifier, compareClosedOhlcv } from '../engine/bar-clo
 import { currentSeriesKey, pairFormSymbol } from '../engine/market-identity';
 import { pyneMarket } from '../data/provider';
 import { StreamLiveWire, StreamFallbackError, type WireClient } from '../engine/live-wire';
+import { liveProxyForEngine } from '../engine/live-ticket';
+import { resolveCloudConfig } from '../storage/cloud-config';
 import {
   SocketPool,
   TAB_SOCKET_CAP,
@@ -281,9 +283,16 @@ function buildWire(): StreamLiveWire {
 }
 
 function buildWireAt(endpoint: string, authToken: string | undefined): StreamLiveWire {
+  const cloud = resolveCloudConfig();
+  const liveProxy = liveProxyForEngine({
+    engineEndpoint: endpoint,
+    workerEndpoint: cloud.endpoint,
+    workerApiKey: cloud.apiKey,
+  });
   const rawClient = createLiveWsClient({
     endpoint,
     authToken,
+    liveProxy,
   });
   const client = rawClient as unknown as WireClient;
   return new StreamLiveWire(

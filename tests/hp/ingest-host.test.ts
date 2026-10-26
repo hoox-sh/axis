@@ -33,6 +33,8 @@ const tick = () => new Promise<void>((r) => setTimeout(r, 0));
 class FakeIngest {
   readonly sent: string[] = [];
   readonly table = new IngestCursorTable();
+  /** Last `connect` post from the host (url, auth, liveProxy). */
+  lastConnect: Extract<HostToIngest, { type: 'connect' }> | null = null;
   /** When false, `connect` stays pending until the test posts a status. */
   autoOpen = true;
   transport: IngestWorkerTransport;
@@ -43,6 +45,7 @@ class FakeIngest {
     this.transport = {
       postMessage(msg: HostToIngest) {
         if (msg.type === 'connect') {
+          self.lastConnect = msg;
           if (!self.autoOpen) return;
           self.emit({ type: 'status', status: 'open' });
           self.emit({ type: 'open', first: true });
@@ -207,6 +210,26 @@ describe('IngestHostClient over a fake ingest port', () => {
     const { client } = makeClient();
     await client.connect();
     expect(client.isOpen).toBe(true);
+    client.disconnect();
+  });
+
+  test('a liveProxy connect posts the Worker path without api_key', async () => {
+    setEngineTransport('worker');
+    const fake = new FakeIngest();
+    setIngestWorkerFactory(() => fake.transport);
+    const proxy = { endpoint: 'https://worker.axis.hoox.sh', apiKey: `pn_${'ab'.repeat(24)}` };
+    const client = new IngestHostClient({
+      endpoint: 'https://pynescript.online',
+      authToken: 'pn_engine',
+      liveProxy: proxy,
+    });
+    await client.connect();
+    expect(client.urlValue).toBe('wss://worker.axis.hoox.sh/api/ws/live');
+    expect(client.urlValue).not.toContain('api_key');
+    expect(fake.lastConnect?.url).toBe('wss://worker.axis.hoox.sh/api/ws/live');
+    expect(fake.lastConnect?.url).not.toContain('api_key');
+    expect(fake.lastConnect?.authToken).toBe('pn_engine');
+    expect(fake.lastConnect?.liveProxy).toEqual(proxy);
     client.disconnect();
   });
 

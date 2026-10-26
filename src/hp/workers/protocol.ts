@@ -27,6 +27,7 @@
 
 import type { Redesign2Frame } from '../../engine/frames';
 import type { WireFrame } from '../../engine/live-wire';
+import type { LiveProxy } from '../../engine/live-ticket';
 
 export const INGEST_CONNECT_TIMEOUT_MS = 5_000;
 export const INGEST_HEARTBEAT_MS = 15_000;
@@ -39,6 +40,8 @@ export type HostToIngest =
       type: 'connect';
       url: string;
       authToken?: string;
+      /** Mint a Worker ticket per socket open; never put the engine key on the URL. */
+      liveProxy?: LiveProxy;
     }
   | { type: 'send'; frame: WireFrame }
   | { type: 'disconnect' };

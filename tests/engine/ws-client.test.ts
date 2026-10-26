@@ -263,3 +263,109 @@ describe('redesign2 socket ownership', () => {
     client.disconnect();
   });
 });
+
+const WORKER_KEY = `pn_${'ab'.repeat(24)}`;
+const TICKET_A = 'a'.repeat(32);
+const TICKET_B = 'b'.repeat(32);
+const realFetch = globalThis.fetch;
+
+describe('redesign2 Worker live tickets', () => {
+  let restore: (() => void) | null = null;
+
+  afterEach(() => {
+    restore?.();
+    restore = null;
+    globalThis.fetch = realFetch;
+  });
+
+  function stubTickets(tickets: string[]): { urls: string[]; auths: Array<string | null> } {
+    const urls: string[] = [];
+    const auths: Array<string | null> = [];
+    let i = 0;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      urls.push(url);
+      auths.push(new Headers(init?.headers).get('Authorization'));
+      const ticket = tickets[Math.min(i, tickets.length - 1)]!;
+      i += 1;
+      return new Response(JSON.stringify({ status: 'success', ticket, expiresIn: 60 }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }) as typeof fetch;
+    return { urls, auths };
+  }
+
+  test('mints a ticket, upgrades with ?ticket=, and keeps the engine key off the URL', async () => {
+    restore = ManualSocket.install();
+    const seen = stubTickets([TICKET_A]);
+    const client = new Redesign2WsClient({
+      endpoint: 'https://pynescript.online',
+      authToken: 'pn_engine',
+      liveProxy: { endpoint: 'https://worker.axis.hoox.sh', apiKey: WORKER_KEY },
+      connectTimeoutMs: 200,
+      heartbeatIntervalMs: 60_000,
+    });
+    expect(client.urlValue).toBe('wss://worker.axis.hoox.sh/api/ws/live');
+    expect(client.urlValue).not.toContain('api_key');
+    const opened = client.connect();
+    await until(() => ManualSocket.instances.length === 1);
+    const ws = ManualSocket.instances[0]!;
+    expect(ws.url).toBe(`wss://worker.axis.hoox.sh/api/ws/live?ticket=${TICKET_A}`);
+    expect(ws.url).not.toContain('api_key');
+    expect(seen.urls).toEqual(['https://worker.axis.hoox.sh/api/ws/live?issue=ticket']);
+    expect(seen.auths).toEqual([`Bearer ${WORKER_KEY}`]);
+    ws.open();
+    await opened;
+    expect(ws.sent.map((s) => (JSON.parse(s) as { type: string }).type)).toEqual(['auth']);
+    expect(JSON.parse(ws.sent[0]!) as { payload: { token: string } }).toMatchObject({
+      payload: { token: 'pn_engine' },
+    });
+    expect(client.isOpen).toBe(true);
+    client.disconnect();
+  });
+
+  test('reconnect remints a one-time ticket', async () => {
+    restore = ManualSocket.install();
+    stubTickets([TICKET_A, TICKET_B]);
+    const client = new Redesign2WsClient({
+      endpoint: 'https://pynescript.online',
+      authToken: 'pn_engine',
+      liveProxy: { endpoint: 'https://worker.axis.hoox.sh', apiKey: WORKER_KEY },
+      connectTimeoutMs: 200,
+      initialReconnectDelayMs: 1,
+      maxReconnectDelayMs: 2,
+      heartbeatIntervalMs: 60_000,
+    });
+    const first = client.connect();
+    await until(() => ManualSocket.instances.length === 1);
+    ManualSocket.instances[0]!.open();
+    await first;
+    ManualSocket.instances[0]!.emitClose();
+    await until(() => ManualSocket.instances.length === 2);
+    const ws2 = ManualSocket.instances[1]!;
+    expect(ws2.url).toBe(`wss://worker.axis.hoox.sh/api/ws/live?ticket=${TICKET_B}`);
+    expect(ws2.url).not.toContain('api_key');
+    expect(ws2.url).not.toContain(TICKET_A);
+    ws2.open();
+    client.disconnect();
+  });
+
+  test('a 401 mint does not reconnect', async () => {
+    restore = ManualSocket.install();
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ status: 'error' }), { status: 401 })) as typeof fetch;
+    const client = new Redesign2WsClient({
+      endpoint: 'https://pynescript.online',
+      authToken: 'pn_engine',
+      liveProxy: { endpoint: 'https://worker.axis.hoox.sh', apiKey: WORKER_KEY },
+      initialReconnectDelayMs: 5,
+      maxReconnectDelayMs: 5,
+      heartbeatIntervalMs: 60_000,
+    });
+    await expect(client.connect()).rejects.toThrow(/401/);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(ManualSocket.instances.length).toBe(0);
+    client.disconnect();
+  });
+});

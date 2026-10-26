@@ -36,6 +36,13 @@ import type {
   SeriesMeta,
 } from './frames';
 import { normalizeRedesign2Frame, reconnectDelayMs, stripSeqAck, validateRedesign2Frame } from './frames';
+import { axisDebugSafeUrl, engineDebug } from '../debug';
+import {
+  liveTicketRetryable,
+  mintLiveTicket,
+  workerLiveWsUrl,
+  type LiveProxy,
+} from './live-ticket';
 import { v1Mark } from './v1/metrics';
 import { isFormingTipFrame, sendBufferHeld } from './v1/backpressure';
 import { PendingRequests, ReconnectHandlers, wireStats } from './wire-bookkeeping';
@@ -71,6 +78,12 @@ export interface Redesign2WsAuth {
 export interface Redesign2WsClientOptions {
   endpoint: string;
   authToken?: string;
+  /**
+   * AXIS Worker live-proxy. When set, each connect mints a one-time ticket
+   * and upgrades `/api/ws/live?ticket=` — the engine key stays off the URL
+   * and still rides the `auth` frame.
+   */
+  liveProxy?: LiveProxy;
   /** Initial connect timeout in ms. */
   connectTimeoutMs?: number;
   /** Delay before first reconnect attempt in ms. */
@@ -110,14 +123,16 @@ export function endpointToRedesign2WsUrl(endpoint: string, authToken?: string): 
   u.search = '';
   u.hash = '';
   const token = String(authToken || '').trim();
-  // Browser WS cannot set Authorization; the engine accepts ?api_key= on upgrade.
+  // Direct PYNE: browsers cannot set Authorization, so the engine accepts
+  // ?api_key= on upgrade. The Worker live-proxy path uses a ticket instead.
   if (token) u.searchParams.set('api_key', token);
   return u.toString();
 }
 
 export class Redesign2WsClient {
-  private readonly options: Omit<Required<Redesign2WsClientOptions>, 'authToken'> & {
+  private readonly options: Omit<Required<Redesign2WsClientOptions>, 'authToken' | 'liveProxy'> & {
     authToken?: string;
+    liveProxy?: LiveProxy;
   };
   private url: string;
   private ws: WebSocket | null = null;
@@ -153,7 +168,9 @@ export class Redesign2WsClient {
       heartbeatIntervalMs: options.heartbeatIntervalMs ?? DEFAULTS.heartbeatIntervalMs,
       pongTimeoutMs: options.pongTimeoutMs ?? DEFAULTS.pongTimeoutMs,
     };
-    this.url = endpointToRedesign2WsUrl(options.endpoint, options.authToken);
+    this.url = options.liveProxy
+      ? workerLiveWsUrl(options.liveProxy.endpoint)
+      : endpointToRedesign2WsUrl(options.endpoint, options.authToken);
   }
 
   get isOpen(): boolean {
@@ -200,7 +217,30 @@ export class Redesign2WsClient {
     if (this.isOpen) return;
     if (this.connectPromise) return this.connectPromise;
 
-    const attempt = new Promise<void>((resolve, reject) => {
+    const attempt = (async () => {
+      if (this.options.liveProxy) {
+        try {
+          const ticket = await mintLiveTicket(this.options.liveProxy);
+          if (this.stopped) return;
+          this.url = workerLiveWsUrl(this.options.liveProxy.endpoint, ticket);
+        } catch (e) {
+          if (this.stopped) return;
+          this.onStatus?.('error');
+          if (!liveTicketRetryable(e)) {
+            this.authBlocked = true;
+            this.clearReconnect();
+          } else {
+            this.scheduleReconnect();
+          }
+          throw e instanceof Error ? e : new Error(String(e));
+        }
+      }
+      if (this.stopped) return;
+      engineDebug('ws.connect', {
+        url: axisDebugSafeUrl(this.url),
+        attempt: this.reconnectAttempts,
+      });
+      await new Promise<void>((resolve, reject) => {
       let settled = false;
       let ws: WebSocket;
       try {
@@ -254,6 +294,11 @@ export class Redesign2WsClient {
         }
         settled = true;
         clearTimeout(timer);
+        engineDebug('ws.open', {
+          url: axisDebugSafeUrl(this.url),
+          first: !this.openedOnce,
+          reconnectAttempts: this.reconnectAttempts,
+        });
         this.reconnectAttempts = 0;
         this.onStatus?.('open');
         this.startHeartbeat();
@@ -270,9 +315,9 @@ export class Redesign2WsClient {
             payload: { token: this.options.authToken },
           });
         }
-        // Upgrade already carries ?api_key= (handshake). Do not block connect on
-        // auth.ok — production timed out here while the engine was still hashing
-        // the key, and subscribe never ran.
+        // Direct PYNE still handshakes with ?api_key=; the Worker proxy uses a
+        // ticket. Do not block connect on auth.ok — production timed out here
+        // while the engine was still hashing the key, and subscribe never ran.
         fireResume();
         resolve();
       };
@@ -298,6 +343,11 @@ export class Redesign2WsClient {
         // a superseded socket's late close must not null the live socket, stop
         // its heartbeat, or drop its pending frames.
         if (!owns()) return;
+        engineDebug('ws.close', {
+          url: axisDebugSafeUrl(this.url),
+          settled,
+          reconnectAttempts: this.reconnectAttempts,
+        });
         this.stopHeartbeat();
         this.ws = null;
         this.dropPending(new Error('Redesign2 WebSocket closed'));
@@ -319,7 +369,8 @@ export class Redesign2WsClient {
         if (!owns()) return;
         this.handleMessage(ev?.data);
       };
-    });
+      });
+    })();
 
     this.connectPromise = attempt;
     const clear = () => {
@@ -431,6 +482,7 @@ export class Redesign2WsClient {
   }
 
   disconnect(): void {
+    engineDebug('ws.disconnect', { url: axisDebugSafeUrl(this.url) });
     this.stopped = true;
     this.clearReconnect();
     this.stopHeartbeat();
@@ -481,6 +533,7 @@ export class Redesign2WsClient {
       return;
     }
     if (!validateRedesign2Frame(frame)) {
+      engineDebug('ws.malformed', { type: frame?.type ?? null });
       if (this.onMalformed) {
         this.onMalformed(parsed);
       } else if (typeof console !== 'undefined') {
@@ -546,6 +599,11 @@ export class Redesign2WsClient {
       this.options.maxReconnectDelayMs,
     );
     this.reconnectAttempts += 1;
+    engineDebug('ws.reconnect', {
+      url: axisDebugSafeUrl(this.url),
+      delayMs: delay,
+      attempt: this.reconnectAttempts,
+    });
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       // disconnect() can race a timer that already elapsed; connect() un-stops.
