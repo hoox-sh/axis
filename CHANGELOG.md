@@ -57,6 +57,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 - **Default rolling window lowered to 5,000 bars to match PYNE free tier limit.** `ROLLING_WINDOW_DEFAULT` was 10,000 — the free tier engine refuses windows above 5,000 with HTTP 413, surfacing “Live re-run failed: OHLCV exceeds free-tier limit (5000 bars)” on boot. Pro tier users can still raise the window in Settings → Chart → Rolling window.
 
+- **Adding a second indicator no longer supersedes the first.** `runAndApply` reused the current epoch when an interactive run was already in flight, so rapidly added indicators no longer mark each other “Run superseded” before either engine evaluation completes.
+
 - **Indicator overlays update on the live forming candle again.** `alignApplySeries` `staleNoAxis` skipped every stream live push whose engine series was shorter than the chart window — which is the steady state, because script snapshots are capped at `LIVE_SNAPSHOT_BARS` (500) while the rolling window is typically 5000. Tail-clamp shorter series onto the chart tip (head-padded with `na`, newest values on newest bars) instead of skipping, so indicators repaint every tick instead of freezing until the snapshot outgrows the window (`skipped: 'stale-no-axis'`).
 
 - **Live-wire seq-gap thrash no longer blanks indicators.** A script/series gap now does one backoff-gated unsubscribe+subscribe for a fresh full (instead of resume-loop forever), honors `seqAckFrom` as continuous, paints when that full lands, and clears `holdUntilFull`. `history_bars` shrink/flicker no longer bounces the sub; engine `idle`/`released` drops local state so the next eval rejoins; script HUD live/connecting clears a stale “delta gap — resubscribing” message.

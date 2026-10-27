@@ -109,6 +109,7 @@ import { isScriptRunBlocked } from '../editor/preevaluate';
 import {
   beginRunEpoch,
   claimRunStatus,
+  currentRunEpoch,
   formatRunError,
   isInteractiveRunInFlight,
   isRunEpochCurrent,
@@ -347,7 +348,8 @@ export function extendSeriesToWindow(values: unknown, len: number, maxGap = 8): 
   let hold: unknown = null;
   for (let i = arr.length - 1; i >= 0; i--) {
     const value = arr[i];
-    const numeric = typeof value === 'number' ? Number.isFinite(value) : value != null && value !== '';
+    const numeric =
+      typeof value === 'number' ? Number.isFinite(value) : value != null && value !== '';
     if (numeric) {
       hold = value;
       break;
@@ -1135,7 +1137,13 @@ export async function runAndApply(
     }
   }
 
-  const epoch = opts.epoch ?? beginRunEpoch();
+  // When an interactive run is already in flight (e.g. adding a second
+  // indicator while the first is still being evaluated), reuse the current
+  // epoch instead of bumping it. Bumping would supersede the in-flight run
+  // and mark it "superseded" before it ever paints. Sharing the epoch lets
+  // both runs complete and paint without clobbering each other.
+  const epoch =
+    !silent && isInteractiveRunInFlight() ? currentRunEpoch() : (opts.epoch ?? beginRunEpoch());
 
   try {
     const result = await runAndApplyInner(script, indicatorId, opts, epoch, silent, openResults);
@@ -1292,9 +1300,8 @@ async function runAndApplyInner(
     };
   }
   if (resultTimes && resultTimes.length > 1) {
-    const { noteChartSeriesHole, noteEngineAxisBehindChart } = await import(
-      '../engines/series-repair'
-    );
+    const { noteChartSeriesHole, noteEngineAxisBehindChart } =
+      await import('../engines/series-repair');
     noteChartSeriesHole(resultTimes, bars);
     const engineLast = resultTimes[resultTimes.length - 1];
     const chartLast = ohlcvTimes.length ? ohlcvTimes[ohlcvTimes.length - 1] : null;
