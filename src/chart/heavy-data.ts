@@ -161,19 +161,18 @@ export function heavyTimeScaleOptions(barCount: number): {
 } {
   const heavy = isHeavyBarLoad(barCount);
   const veryHeavy = isVeryHeavyBarLoad(barCount);
-  const mid = barCount >= CONFLATION_BARS_THRESHOLD;
   return {
-    // Always on for mid+ loads; tiny histories keep default path (no cost)
-    enableConflation: mid || heavy,
+    // Conflation disabled for debugging: every bar renders distinctly,
+    // no sub-pixel merging that hides candle bodies or creates gaps.
+    enableConflation: false,
     // Precompute only when truly large — costs memory / init, pays off on zoom
     precomputeConflationOnInit: heavy,
     // 25k+ needs chunks ready before the first fit/zoom or the UI hitchs
     precomputeConflationPriority: veryHeavy ? 'user-visible' : 'background',
     // 1.0 = merge only when bars share a sub-pixel column (candles stay crisp)
     conflationThresholdFactor: 1,
-    // Default LWC minBarSpacing is 0.5px — that blocks fit-content on 45k
-    // candles (never reaches the conflation threshold). Drop it on heavy loads.
-    minBarSpacing: heavy ? 0.001 : 0.5,
+    // Very small spacing so bars never merge even when zoomed out.
+    minBarSpacing: 0.001,
   };
 }
 
@@ -196,8 +195,7 @@ export function mapBarsToVolumeData(
   for (let i = 0; i < bars.length; i++) {
     const b = bars[i]!;
     if (!isFinitePriceBar(b)) continue;
-    const vol =
-      b.volume != null && Number.isFinite(b.volume) && b.volume >= 0 ? b.volume : 0;
+    const vol = b.volume != null && Number.isFinite(b.volume) && b.volume >= 0 ? b.volume : 0;
     out.push({
       time: b.time,
       value: vol,

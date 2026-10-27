@@ -306,13 +306,13 @@ export function createBaseChart(
       // Empty right margin so trendlines / drawings can start past the last bar.
       // Drawing layer may grow this up to DRAWING_FUTURE_BARS (500) while placing.
       rightOffset: 20,
-      // Never auto-scroll when a live bar is appended / updated
-      shiftVisibleRangeOnNewBar: false,
+      // Auto-scroll when a live bar is appended so new candles stay in view
+      shiftVisibleRangeOnNewBar: true,
       allowShiftVisibleRangeOnWhitespaceReplacement: false,
       rightBarStaysOnScroll: true,
-      // Merge sub-pixel bars when zoomed out — critical for 10k+ candle histories.
-      // Precompute is toggled on after heavy setData (see manager-access).
-      enableConflation: true,
+      // Conflation disabled for debugging: every bar renders distinctly,
+      // no sub-pixel merging that hides candle bodies or creates gaps.
+      enableConflation: false,
       conflationThresholdFactor: 1,
       precomputeConflationOnInit: false,
       precomputeConflationPriority: 'background',
