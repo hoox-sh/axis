@@ -521,7 +521,7 @@ export function clampHistoryBars(n: unknown): number {
  * rail are the same number: a window above the rail could never be painted,
  * and the chart would silently collapse on the first live tick.
  */
-export const ROLLING_WINDOW_DEFAULT = 10_000;
+export const ROLLING_WINDOW_DEFAULT = 5_000;
 export const ROLLING_WINDOW_MIN = 200;
 export const ROLLING_WINDOW_MAX = HISTORY_BARS_MAX;
 
