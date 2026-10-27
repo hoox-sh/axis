@@ -387,14 +387,21 @@ export function sanitizeSeriesDataForSetData<T extends { time?: unknown }>(
   }
 
   if (requireOhlc) {
-    // Fill missing OHLC from the nearest valid neighbour (previous preferred).
+    // Fill missing OHLC fields from the nearest valid neighbour (previous preferred).
+    // Only fields that are actually non-finite are repaired — valid fields are
+    // preserved. Replacing all four values from a single donor could make
+    // multiple bars identical (collapse to lines).
     for (let i = 0; i < out.length; i++) {
       const row = out[i] as unknown as Record<string, unknown>;
+      const open = row.open as number;
+      const high = row.high as number;
+      const low = row.low as number;
+      const close = row.close as number;
       if (
-        Number.isFinite(row.open as number) &&
-        Number.isFinite(row.high as number) &&
-        Number.isFinite(row.low as number) &&
-        Number.isFinite(row.close as number)
+        Number.isFinite(open) &&
+        Number.isFinite(high) &&
+        Number.isFinite(low) &&
+        Number.isFinite(close)
       ) {
         continue;
       }
@@ -405,14 +412,28 @@ export function sanitizeSeriesDataForSetData<T extends { time?: unknown }>(
         i--;
         continue;
       }
-      row.open = donor.open;
-      row.high = donor.high;
-      row.low = donor.low;
-      row.close = donor.close;
+      const repaired: string[] = [];
+      if (!Number.isFinite(open)) {
+        row.open = donor.open;
+        repaired.push('open');
+      }
+      if (!Number.isFinite(high)) {
+        row.high = donor.high;
+        repaired.push('high');
+      }
+      if (!Number.isFinite(low)) {
+        row.low = donor.low;
+        repaired.push('low');
+      }
+      if (!Number.isFinite(close)) {
+        row.close = donor.close;
+        repaired.push('close');
+      }
       filled++;
       chartDebug('sanitizeSeriesDataForSetData', {
-        verdict: 'filled-from-donor',
+        verdict: 'filled-fields-from-donor',
         rowIndex: i,
+        repaired,
         donorOhlc: { open: donor.open, high: donor.high, low: donor.low, close: donor.close },
       });
     }
