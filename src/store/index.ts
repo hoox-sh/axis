@@ -123,6 +123,7 @@ import {
 import { normalizeUserDrawings } from '../chart/drawings/normalize';
 import { DEFAULT_CHART_TYPE, normalizeChartType, type ChartType } from '../chart/chart-type';
 import { closedOhlcChanged, noteClosedRewrite } from '../chart/v1/invariants';
+import { chartDebug, chartDebugSample } from '../debug';
 import {
   defaultChartThemeState,
   hydrateChartTheme,
@@ -3561,23 +3562,50 @@ export type BarAppendResult = 'ignored' | 'updated' | 'appended' | 'slid';
  * chart window slides (the head is dropped) or the series is empty.
  */
 export function appendBar(bar: Bar): BarAppendResult {
-  if (!bar || !Number.isFinite(bar.time)) return 'ignored';
+  if (!bar || !Number.isFinite(bar.time)) {
+    chartDebug('appendBar', {
+      verdict: 'ignored',
+      reason: 'bad-bar',
+      time: bar?.time,
+      close: bar?.close,
+    });
+    return 'ignored';
+  }
   const b = store.bars;
   const n = b.length;
   if (n) {
     const tip = b[n - 1]!;
     if (bar.time < tip.time) {
       // Late tick for an already-closed candle — history is immutable.
+      chartDebugSample(
+        'appendBar',
+        { verdict: 'ignored', reason: 'late-tick', time: bar.time, tipTime: tip.time },
+        1000,
+      );
       return 'ignored';
     }
     if (bar.time === tip.time) {
       // A closed tip stays closed: a stale forming tick must not reopen it.
-      if (tip.closed && bar.closed !== true) return 'ignored';
+      if (tip.closed && bar.closed !== true) {
+        chartDebugSample(
+          'appendBar',
+          { verdict: 'ignored', reason: 'closed-tip-stale-tick', time: bar.time },
+          1000,
+        );
+        return 'ignored';
+      }
       if (tip.closed && bar.closed === true && closedOhlcChanged(tip, bar)) {
         noteClosedRewrite(bar.time, {
           dev: typeof import.meta !== 'undefined' && import.meta.env?.DEV === true,
         });
         // G0: a closed bar's OHLC is immutable. Warn and drop the restatement.
+        chartDebug('appendBar', {
+          verdict: 'ignored',
+          reason: 'closed-ohlc-changed',
+          time: bar.time,
+          tip: { open: tip.open, high: tip.high, low: tip.low, close: tip.close },
+          bar: { open: bar.open, high: bar.high, low: bar.low, close: bar.close },
+        });
         return 'ignored';
       }
       // Same open bar. Write the raw node now so readers see the tick.
@@ -3589,6 +3617,14 @@ export function appendBar(bar: Bar): BarAppendResult {
       // open — otherwise the candle's open jumps when the final close lands.
       if (!tipRef.closed && bar.closed === true) {
         payload.open = tipRef.open;
+        chartDebug('appendBar', {
+          verdict: 'updated',
+          reason: 'preserve-open-on-close',
+          time: bar.time,
+          tipOpen: tipRef.open,
+          payloadOpen: bar.open,
+          finalOpen: payload.open,
+        });
       }
       Object.assign(tipRef, payload);
       frameTipIndex = n - 1;
@@ -3600,6 +3636,15 @@ export function appendBar(bar: Bar): BarAppendResult {
       if (!store.live.needsRerun) {
         setStore('live', 'needsRerun', true);
       }
+      chartDebugSample(
+        'appendBar',
+        {
+          verdict: 'updated',
+          time: bar.time,
+          ohlc: { open: payload.open, high: payload.high, low: payload.low, close: payload.close },
+        },
+        500,
+      );
       return 'updated';
     }
   }
@@ -3640,6 +3685,16 @@ export function appendBar(bar: Bar): BarAppendResult {
   if (!store.live.needsRerun) {
     setStore('live', 'needsRerun', true);
   }
+  chartDebugSample(
+    'appendBar',
+    {
+      verdict: n >= limit ? 'slid' : 'appended',
+      time: bar.time,
+      ohlc: { open: bar.open, high: bar.high, low: bar.low, close: bar.close },
+      n: b.length + 1,
+    },
+    500,
+  );
   return n >= limit ? 'slid' : 'appended';
 }
 

@@ -17,6 +17,8 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { chartDebug } from '../debug';
+
 /**
  * Boundary guard for Lightweight Charts `setData` payloads.
  *
@@ -249,9 +251,7 @@ export function rangeFromSeriesData(
     if (t < first) first = t;
     if (t > last) last = t;
   }
-  return Number.isFinite(first) && Number.isFinite(last) && last >= first
-    ? { first, last }
-    : null;
+  return Number.isFinite(first) && Number.isFinite(last) && last >= first ? { first, last } : null;
 }
 
 /** Nearest row with finite OHLC (previous bar first, then next). */
@@ -279,12 +279,19 @@ function findOhlcDonor(
   };
   for (let i = index - 1; i >= 0; i--) {
     const hit = usable(rows[i]);
-    if (hit) return hit;
+    if (hit) {
+      chartDebug('findOhlcDonor', { verdict: 'found-prev', index, donorIndex: i, ohlc: hit });
+      return hit;
+    }
   }
   for (let i = index + 1; i < rows.length; i++) {
     const hit = usable(rows[i]);
-    if (hit) return hit;
+    if (hit) {
+      chartDebug('findOhlcDonor', { verdict: 'found-next', index, donorIndex: i, ohlc: hit });
+      return hit;
+    }
   }
+  chartDebug('findOhlcDonor', { verdict: 'none', index });
   return null;
 }
 
@@ -310,6 +317,14 @@ export function sanitizeSeriesDataForSetData<T extends { time?: unknown }>(
   let firstBadIndex = -1;
   let firstBadReason = '';
   let nonIntegerTimes = 0;
+
+  chartDebug('sanitizeSeriesDataForSetData', {
+    verdict: 'start',
+    requireOhlc,
+    inputLen: data.length,
+    firstRow: data.length ? data[0] : undefined,
+    lastRow: data.length ? data[data.length - 1] : undefined,
+  });
 
   for (let i = 0; i < data.length; i++) {
     const row = data[i];
@@ -395,11 +410,31 @@ export function sanitizeSeriesDataForSetData<T extends { time?: unknown }>(
       row.low = donor.low;
       row.close = donor.close;
       filled++;
+      chartDebug('sanitizeSeriesDataForSetData', {
+        verdict: 'filled-from-donor',
+        rowIndex: i,
+        donorOhlc: { open: donor.open, high: donor.high, low: donor.low, close: donor.close },
+      });
     }
   } else {
     // Intake already coerced null/NaN to 0 — report those fixes once.
     filled += valueFixes;
   }
+
+  chartDebug('sanitizeSeriesDataForSetData', {
+    verdict: 'done',
+    requireOhlc,
+    inputLen: data.length,
+    outputLen: out.length,
+    dropped,
+    merged,
+    filled,
+    firstBadIndex,
+    firstBadReason,
+    nonIntegerTimes,
+    firstRow: out.length ? out[0] : undefined,
+    lastRow: out.length ? out[out.length - 1] : undefined,
+  });
 
   return { clean: out, dropped, merged, filled, firstBadIndex, firstBadReason, nonIntegerTimes };
 }

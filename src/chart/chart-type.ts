@@ -28,19 +28,13 @@
  */
 
 import type { Bar } from '../store/types';
+import { chartDebug } from '../debug';
 
 /**
  * Supported main-pane price series styles.
  * Values are stable for persistence (`store.chartType`).
  */
-export type ChartType =
-  | 'candles'
-  | 'hollow'
-  | 'bars'
-  | 'line'
-  | 'area'
-  | 'baseline'
-  | 'heikinashi';
+export type ChartType = 'candles' | 'hollow' | 'bars' | 'line' | 'area' | 'baseline' | 'heikinashi';
 
 /** Catalog entry for UI selects. */
 export type ChartTypeInfo = {
@@ -188,10 +182,7 @@ export function toHeikinAshi(bars: readonly Bar[]): Bar[] {
  * module-global cache. Drops non-finite rows first so one NaN candle cannot
  * poison every later HA open (parity with `toOhlcData` poison-row drops).
  */
-export function toHeikinAshiInto(
-  bars: readonly Bar[],
-  holder?: HaCacheHolder | null,
-): Bar[] {
+export function toHeikinAshiInto(bars: readonly Bar[], holder?: HaCacheHolder | null): Bar[] {
   const clean: Bar[] = [];
   for (let i = 0; i < bars.length; i++) {
     const b = bars[i]!;
@@ -271,13 +262,23 @@ export type PriceSeriesDatum = OhlcDatum | ValueDatum;
  * time the candlestick renderer cannot find, and it throws `Value is null`.
  */
 export function isFinitePriceBar(b: Bar): boolean {
-  return (
+  const ok =
     Number.isFinite(b.time) &&
     Number.isFinite(b.open) &&
     Number.isFinite(b.high) &&
     Number.isFinite(b.low) &&
-    Number.isFinite(b.close)
-  );
+    Number.isFinite(b.close);
+  if (!ok) {
+    chartDebug('isFinitePriceBar', {
+      verdict: 'false',
+      time: b.time,
+      open: b.open,
+      high: b.high,
+      low: b.low,
+      close: b.close,
+    });
+  }
+  return ok;
 }
 
 function toOhlcData(bars: readonly Bar[]): OhlcDatum[] {
@@ -294,6 +295,13 @@ function toOhlcData(bars: readonly Bar[]): OhlcDatum[] {
       close: b.close,
     });
   }
+  chartDebug('toOhlcData', {
+    verdict: 'ok',
+    inputLen: bars.length,
+    outputLen: out.length,
+    firstRow: out.length ? out[0] : undefined,
+    lastRow: out.length ? out[out.length - 1] : undefined,
+  });
   return out;
 }
 
@@ -304,6 +312,7 @@ function toCloseData(bars: readonly Bar[]): ValueDatum[] {
     if (!isFinitePriceBar(b)) continue;
     out.push({ time: b.time, value: b.close });
   }
+  chartDebug('toCloseData', { verdict: 'ok', inputLen: bars.length, outputLen: out.length });
   return out;
 }
 
@@ -320,13 +329,43 @@ export function mapBarsToPriceData(
 ): PriceSeriesDatum[] {
   if (!bars.length) {
     if (holder) holder.cache = null;
+    chartDebug('mapBarsToPriceData', { verdict: 'empty', type, outputLen: 0 });
     return [];
   }
   if (type === 'heikinashi') {
-    return toOhlcData(toHeikinAshiInto(bars, holder ?? undefined));
+    const result = toOhlcData(toHeikinAshiInto(bars, holder ?? undefined));
+    chartDebug('mapBarsToPriceData', {
+      verdict: 'heikinashi',
+      type,
+      inputLen: bars.length,
+      outputLen: result.length,
+      firstRow: result.length ? result[0] : undefined,
+      lastRow: result.length ? result[result.length - 1] : undefined,
+    });
+    return result;
   }
-  if (isOhlcChartType(type)) return toOhlcData(bars);
-  return toCloseData(bars);
+  if (isOhlcChartType(type)) {
+    const result = toOhlcData(bars);
+    chartDebug('mapBarsToPriceData', {
+      verdict: 'ohlc',
+      type,
+      inputLen: bars.length,
+      outputLen: result.length,
+      firstRow: result.length ? result[0] : undefined,
+      lastRow: result.length ? result[result.length - 1] : undefined,
+    });
+    return result;
+  }
+  const result = toCloseData(bars);
+  chartDebug('mapBarsToPriceData', {
+    verdict: 'close',
+    type,
+    inputLen: bars.length,
+    outputLen: result.length,
+    firstRow: result.length ? result[0] : undefined,
+    lastRow: result.length ? result[result.length - 1] : undefined,
+  });
+  return result;
 }
 
 /**
@@ -341,24 +380,53 @@ export function mapBarUpdate(
   type: ChartType,
   holder?: HaCacheHolder | null,
 ): PriceSeriesDatum | null {
-  if (!bars.length) return null;
+  if (!bars.length) {
+    chartDebug('mapBarUpdate', { verdict: 'null', reason: 'empty-bars', type });
+    return null;
+  }
   const last = bars[bars.length - 1]!;
-  if (!isFinitePriceBar(last)) return null;
+  if (!isFinitePriceBar(last)) {
+    chartDebug('mapBarUpdate', {
+      verdict: 'null',
+      reason: 'non-finite-bar',
+      type,
+      time: last.time,
+      open: last.open,
+      high: last.high,
+      low: last.low,
+      close: last.close,
+    });
+    return null;
+  }
 
   if (type === 'heikinashi') {
-    return mapHeikinAshiUpdate(bars, last, holder ?? undefined);
+    const result = mapHeikinAshiUpdate(bars, last, holder ?? undefined);
+    chartDebug('mapBarUpdate', {
+      verdict: result ? 'heikinashi-ok' : 'null',
+      type,
+      time: last.time,
+      inputLen: bars.length,
+      result: result
+        ? { open: result.open, high: result.high, low: result.low, close: result.close }
+        : undefined,
+    });
+    return result;
   }
 
   if (isOhlcChartType(type)) {
-    return {
+    const result = {
       time: last.time,
       open: last.open,
       high: last.high,
       low: last.low,
       close: last.close,
     };
+    chartDebug('mapBarUpdate', { verdict: 'ohlc-ok', type, time: last.time, result });
+    return result;
   }
-  return { time: last.time, value: last.close };
+  const result = { time: last.time, value: last.close };
+  chartDebug('mapBarUpdate', { verdict: 'close-ok', type, time: last.time, result });
+  return result;
 }
 
 function mapHeikinAshiUpdate(
@@ -376,7 +444,19 @@ function mapHeikinAshiUpdate(
   if (!cache || bars.length === 1) {
     const all = toHeikinAshiInto(bars, holder ?? undefined);
     const h = all[all.length - 1];
-    if (!h) return null;
+    if (!h) {
+      chartDebug('mapHeikinAshiUpdate', {
+        verdict: 'null',
+        reason: 'no-ha-result',
+        barsLen: bars.length,
+      });
+      return null;
+    }
+    chartDebug('mapHeikinAshiUpdate', {
+      verdict: 'full-recompute',
+      time: h.time,
+      result: { open: h.open, high: h.high, low: h.low, close: h.close },
+    });
     return { time: h.time, open: h.open, high: h.high, low: h.low, close: h.close };
   }
 
@@ -387,6 +467,11 @@ function mapHeikinAshiUpdate(
       ...cache,
       lastOpen: ha.open,
       lastClose: ha.close,
+    });
+    chartDebug('mapHeikinAshiUpdate', {
+      verdict: 'same-bar-tick',
+      time: last.time,
+      result: { open: ha.open, high: ha.high, low: ha.low, close: ha.close },
     });
     return { time: last.time, open: ha.open, high: ha.high, low: ha.low, close: ha.close };
   }
@@ -412,10 +497,7 @@ function mapHeikinAshiUpdate(
 }
 
 /** Price-line tint from last painted bar (up/down vs prior close for line types). */
-export function lastBarDirection(
-  bars: readonly Bar[],
-  type: ChartType,
-): 'up' | 'down' | null {
+export function lastBarDirection(bars: readonly Bar[], type: ChartType): 'up' | 'down' | null {
   if (!bars.length) return null;
   const src = sourceBarsForChartType(bars, type);
   const last = src[src.length - 1]!;

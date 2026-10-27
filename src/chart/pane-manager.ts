@@ -3256,12 +3256,31 @@ export class PaneManager {
   appendBar(bar: Bar) {
     this.applyTimeScaleOptions();
     try {
-      if (!bar || !isFiniteOhlcBar(bar)) return;
+      if (!bar || !isFiniteOhlcBar(bar)) {
+        chartDebug('PaneManager.appendBar', {
+          verdict: 'ignored',
+          reason: 'non-finite-bar',
+          time: bar?.time,
+          open: bar?.open,
+          high: bar?.high,
+          low: bar?.low,
+          close: bar?.close,
+        });
+        return;
+      }
 
       const pricePane = this.panes.get('price');
       const chartType = normalizeChartType(store.chartType ?? this.priceChartType);
       const storeBars = store.bars;
       let paintedTime: number | null = null;
+
+      chartDebug('PaneManager.appendBar', {
+        verdict: 'start',
+        time: bar.time,
+        ohlc: { open: bar.open, high: bar.high, low: bar.low, close: bar.close },
+        chartType,
+        storeBarsLen: storeBars.length,
+      });
 
       // Candle series: O(1) series.update for the forming tick.
       // Non-HA maps the single tick; HA maps store history (incremental cache).
@@ -3269,6 +3288,15 @@ export class PaneManager {
         const barsForMap = chartType === 'heikinashi' && storeBars?.length ? storeBars : [bar];
         const point = mapBarUpdate(barsForMap, chartType, this.haHolder);
         if (point) {
+          chartDebug('PaneManager.appendBar', {
+            verdict: 'mapped-point',
+            time: bar.time,
+            pointOHLC:
+              'close' in point
+                ? { open: point.open, high: point.high, low: point.low, close: point.close }
+                : { value: point.value },
+            chartType,
+          });
           // Repair OHLC consistency so an inverted tick (high < low, high below
           // open/close, low above open/close) cannot paint a shredded candle
           // with random body/wick sizes. Keeps open/close; only clamps high up
@@ -3278,8 +3306,32 @@ export class PaneManager {
             const fixed = repairOhlc(point.open, point.high, point.low, point.close);
             if (!fixed) {
               // Non-finite / unrepairable — drop this tick entirely.
+              chartDebug('PaneManager.appendBar', {
+                verdict: 'drop',
+                reason: 'repairOhlc-null',
+                time: bar.time,
+                pointOHLC: {
+                  open: point.open,
+                  high: point.high,
+                  low: point.low,
+                  close: point.close,
+                },
+              });
               this.updateVolumeBar(bar, null);
               return;
+            }
+            if (
+              fixed.open !== point.open ||
+              fixed.high !== point.high ||
+              fixed.low !== point.low ||
+              fixed.close !== point.close
+            ) {
+              chartDebug('PaneManager.appendBar', {
+                verdict: 'repaired-ohlc',
+                time: bar.time,
+                before: { open: point.open, high: point.high, low: point.low, close: point.close },
+                after: { open: fixed.open, high: fixed.high, low: fixed.low, close: fixed.close },
+              });
             }
             point.open = fixed.open;
             point.high = fixed.high;
@@ -3293,6 +3345,24 @@ export class PaneManager {
               paintedTime = t;
             }
             this.applyPriceLineTint(pricePane.series['candle'], chartType, point, storeBars, bar);
+            chartDebug('PaneManager.appendBar', {
+              verdict: 'candle-point-applied',
+              time: bar.time,
+              finalOHLC:
+                'close' in point
+                  ? { open: point.open, high: point.high, low: point.low, close: point.close }
+                  : { value: point.value },
+            });
+          } else {
+            chartDebug('PaneManager.appendBar', {
+              verdict: 'candle-point-rejected',
+              time: bar.time,
+              reason: 'applyCandlePoint-false',
+              pointOHLC:
+                'close' in point
+                  ? { open: point.open, high: point.high, low: point.low, close: point.close }
+                  : { value: point.value },
+            });
           }
         }
         // Extend the painted candle window so overlay clamps keep the newest tip.
@@ -3324,7 +3394,10 @@ export class PaneManager {
       { open: number; high: number; low: number; close: number } | { value: number }
     ),
   ): boolean {
-    if (!point || !Number.isFinite(point.time)) return false;
+    if (!point || !Number.isFinite(point.time)) {
+      chartDebug('applyCandlePoint', { verdict: 'false', reason: 'no-point-or-time', point });
+      return false;
+    }
     const ok =
       'close' in point
         ? Number.isFinite(point.open) &&
@@ -3332,7 +3405,18 @@ export class PaneManager {
           Number.isFinite(point.low) &&
           Number.isFinite(point.close)
         : Number.isFinite(point.value);
-    if (!ok) return false;
+    if (!ok) {
+      chartDebug('applyCandlePoint', { verdict: 'false', reason: 'non-finite-ohlc', point });
+      return false;
+    }
+    chartDebug('applyCandlePoint', {
+      verdict: 'safeUpdate',
+      time: point.time,
+      pointOHLC:
+        'close' in point
+          ? { open: point.open, high: point.high, low: point.low, close: point.close }
+          : { value: point.value },
+    });
     return safeUpdate(series, { ...point, time: point.time as UTCTimestamp });
   }
 
@@ -3421,7 +3505,23 @@ export class PaneManager {
   ): void {
     const { fit = true, clearMarkers = false, keepRange = null, holder } = opts;
     const pricePane = this.panes.get('price');
-    if (!pricePane?.series['candle']) return;
+    if (!pricePane?.series['candle']) {
+      chartDebug('setCandleData', {
+        verdict: 'no-candle-series',
+        type: chartType,
+        barsLen: bars.length,
+      });
+      return;
+    }
+
+    chartDebug('setCandleData', {
+      verdict: 'start',
+      type: chartType,
+      fit,
+      barsLen: bars.length,
+      firstBar: bars.length ? bars[0] : undefined,
+      lastBar: bars.length ? bars[bars.length - 1] : undefined,
+    });
 
     // Full replace invalidates incremental HA live state (re-seeded by mapper
     // into this chart's holder, not the legacy global).
@@ -3462,6 +3562,16 @@ export class PaneManager {
       ).prepareCoPaintedForCandleTimes;
       if (typeof prepare === 'function') prepare.call(this, nextCandleTimes);
       pricePane.series['candle'].setData(checked.clean as never);
+      chartDebug('setCandleData', {
+        verdict: 'setData-ok',
+        type: chartType,
+        rowsLen: checked.clean.length,
+        dropped: checked.dropped,
+        merged: checked.merged,
+        filled: checked.filled,
+        firstRow: checked.clean.length ? checked.clean[0] : undefined,
+        lastRow: checked.clean.length ? checked.clean[checked.clean.length - 1] : undefined,
+      });
       if (pricePane.chart && keepRange) {
         pricePane.chart.timeScale()?.setVisibleLogicalRange?.(keepRange);
       }

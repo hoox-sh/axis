@@ -48,6 +48,7 @@
  */
 
 import type { Bar } from '../store/types';
+import { chartDebug } from '../debug';
 
 /** Unix seconds past ~year 2100 — reject clearly absurd post-normalize times. */
 const MAX_UNIX_SECONDS = 4_102_444_800;
@@ -147,20 +148,47 @@ export function repairOhlc(
     !Number.isFinite(low) ||
     !Number.isFinite(close)
   ) {
+    chartDebug('repairOhlc', { verdict: 'null', reason: 'non-finite', open, high, low, close });
     return null;
   }
   const maxOC = Math.max(open, close);
   const minOC = Math.min(open, close);
   let h = high < maxOC ? maxOC : high;
   let l = low > minOC ? minOC : low;
+  const clamped = h !== high || l !== low;
   if (h < l) {
     // swap if fully inverted
     const tmp = h;
     h = l;
     l = tmp;
   }
-  if (h < l || !Number.isFinite(h) || !Number.isFinite(l)) return null;
-  return { open, high: h, low: l, close };
+  if (h < l || !Number.isFinite(h) || !Number.isFinite(l)) {
+    chartDebug('repairOhlc', {
+      verdict: 'null',
+      reason: 'inverted-after-clamp',
+      open,
+      high,
+      low,
+      close,
+      h,
+      l,
+    });
+    return null;
+  }
+  const result = { open, high: h, low: l, close };
+  if (clamped || open === close) {
+    chartDebug('repairOhlc', {
+      verdict: 'ok',
+      reason: clamped ? 'clamped' : 'open-eq-close',
+      open,
+      high: h,
+      low: l,
+      close,
+      wasHigh: high,
+      wasLow: low,
+    });
+  }
+  return result;
 }
 
 /**

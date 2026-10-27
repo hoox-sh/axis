@@ -7,7 +7,7 @@ tags: [code]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-26T10:34:17Z
+  at: 2026-10-27T11:51:28Z
 sources:
   - id: tree
     resource: "src"
@@ -62,9 +62,11 @@ okf_lock: generated
 # Used by
 
 * [src/chart](/code/src/chart.md)
+* [src/data](/code/src/data.md)
 * [src/engine](/code/src/engine.md)
 * [src/engine/v1](/code/src/engine/v1.md)
 * [src/mcp](/code/src/mcp.md)
+* [src/store](/code/src/store.md)
 * [src/ui](/code/src/ui.md)
 * [src/update](/code/src/update.md)
 * [tests](/code/tests.md)
