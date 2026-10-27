@@ -74,7 +74,6 @@ import { notePaintRequest } from './paint-latency';
 import { paintAction } from './v1/paint-action';
 import type { Bar } from '../store/types';
 
-
 /** Chart handle this module paints through. Identity is the live manager. */
 type LivePainter = {
   appendBar: (bar: Bar) => void;
@@ -248,6 +247,9 @@ export function appendLiveBar(bar: Bar, opts?: { via?: 'worker' }): BarAppendRes
     verdict: result,
     paint: action,
     time: bar.time,
+    open: bar.open,
+    high: bar.high,
+    low: bar.low,
     close: bar.close,
     n: store.bars.length,
     via: opts?.via ?? 'venue',
