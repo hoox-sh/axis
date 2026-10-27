@@ -3649,6 +3649,16 @@ export function appendBar(bar: Bar): BarAppendResult {
     }
   }
 
+  // A new candle arriving closes the previous forming one: the live tip
+  // becomes historical at the moment the next bar starts. Mark it closed so
+  // indicators/alerts and the chart treat it as immutable history.
+  if (n > 0) {
+    const tipRef = unwrap(store.bars[n - 1]!) as Bar;
+    if (tipRef && tipRef.closed !== true) {
+      tipRef.closed = true;
+    }
+  }
+
   const limit = chartWindowLimit();
   if (n === 0) {
     setStore('bars', [bar]);

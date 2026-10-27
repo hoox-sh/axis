@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "tests"
-description: "tests contains alerts-engine.test.ts, alerts-form.test.ts, alerts-format.test.ts, and 312 more files."
+description: "tests contains alerts-engine.test.ts, alerts-form.test.ts, alerts-format.test.ts, and 313 more files."
 resource: "tests"
 tags: [code, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-26T05:04:14Z
+  at: 2026-10-27T14:52:53Z
 sources:
   - id: tree
     resource: "tests"
@@ -281,6 +281,7 @@ okf_lock: generated
 * `storage-service-results.test.ts`
 * `store-append-immutable.test.ts`
 * `store-append-scale.test.ts`
+* `store-closed-on-new-bar.test.ts`
 * `store-live-frame.test.ts`
 * `store.test.ts`
 * `strategy-extra.test.ts`
