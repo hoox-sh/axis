@@ -36,8 +36,8 @@ export { DEFAULT_AXIS_WORKER_BASE };
 /** Local wrangler default for `worker/` package. */
 export const LOCAL_AXIS_WORKER_BASE = 'http://127.0.0.1:8787';
 
-/** Default pyne Pro API (Flask). */
-export const DEFAULT_PYNE_PRO_BASE = 'http://127.0.0.1:5002';
+/** Production pyne Pro API origin (Hetzner VPS behind nginx). */
+export const DEFAULT_PYNE_PRO_BASE = 'https://pynescript.online';
 
 /** Production pyne Pro API origin (Hetzner VPS behind nginx). */
 export const PRODUCT_PYNE_PRO_HINT = 'https://pynescript.online';

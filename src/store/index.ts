@@ -436,7 +436,7 @@ let persistQuotaExceeded = false;
 let persistWriteWarned = false;
 
 /** Default / clamp bounds for {@link AppState.historyBars}. */
-export const HISTORY_BARS_DEFAULT = 5000;
+export const HISTORY_BARS_DEFAULT = 4000; // stay < 5000 free-tier engine limit
 export const HISTORY_BARS_MIN = 50;
 export const HISTORY_BARS_MAX = 100_000;
 
@@ -522,7 +522,7 @@ export function clampHistoryBars(n: unknown): number {
  * rail are the same number: a window above the rail could never be painted,
  * and the chart would silently collapse on the first live tick.
  */
-export const ROLLING_WINDOW_DEFAULT = 5_000;
+export const ROLLING_WINDOW_DEFAULT = 4000; // stay < 5000 engine free-tier cap
 export const ROLLING_WINDOW_MIN = 200;
 export const ROLLING_WINDOW_MAX = HISTORY_BARS_MAX;
 
@@ -532,7 +532,7 @@ export function clampRollingWindowBars(n: unknown): number {
   if (!Number.isFinite(v)) return ROLLING_WINDOW_DEFAULT;
   const r = Math.round(v);
   if (r <= 0) return ROLLING_WINDOW_DEFAULT;
-  return Math.min(ROLLING_WINDOW_MAX, Math.max(ROLLING_WINDOW_MIN, r));
+  return Math.min(4500, Math.max(ROLLING_WINDOW_MIN, r));
 }
 
 /** Bounds for the durable watchlist drawer width (D8 — was lower-bounded only). */

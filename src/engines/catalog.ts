@@ -281,7 +281,7 @@ export const serverEngine: EnginePlugin = {
   // transport is dual (WS preferred, REST fallback) — classified via preferWs in telemetry
   capabilities: { needsNetwork: true },
   configSchema: {
-    endpoint: { type: 'string', default: 'http://localhost:5002', label: 'Backend URL' },
+    endpoint: { type: 'string', default: 'https://pynescript.online', label: 'Backend URL' },
     mode: {
       type: 'select',
       options: ['interpret', 'compile', 'auto'],

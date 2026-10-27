@@ -125,7 +125,7 @@ export function resolveOAuthProxyBase(endpoint?: string): string {
     }
     // VPS static shell (:8080/:8081) has no /api — caller should pass engine endpoint
     if (/:(8080|8081)$/.test(o)) {
-      return 'http://127.0.0.1:5002';
+      return 'https://pynescript.online';
     }
     return o;
   }

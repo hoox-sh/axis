@@ -124,7 +124,7 @@ export function gatewayBase(mode: GatewayMode, endpoint?: string, pageOrigin?: s
   if (mode === 'pyne') {
     if (endpoint) return `${endpoint}/datafeed`;
     if (remote && origin) return remoteDatafeedBase(origin);
-    return 'http://127.0.0.1:5002/datafeed';
+    return 'https://pynescript.online/datafeed';
   }
   if (mode === 'sidecar') return `http://127.0.0.1:${DATAFEED_DEFAULT_PORT}`;
   // auto: prefer sidecar (local pages only), fall back to pyne
@@ -132,7 +132,7 @@ export function gatewayBase(mode: GatewayMode, endpoint?: string, pageOrigin?: s
   if (remote && origin) {
     return endpoint ? `${endpoint}/datafeed` : remoteDatafeedBase(origin);
   }
-  return `${endpoint ?? 'http://127.0.0.1:5002'}/datafeed`;
+  return `${endpoint ?? 'https://pynescript.online'}/datafeed`;
 }
 
 // ---------------------------------------------------------------------------

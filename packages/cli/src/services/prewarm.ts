@@ -26,7 +26,7 @@ export type PrewarmResponse = {
 };
 
 /** Local pyne Pro API default, matching the server engine's schema default. */
-export const FALLBACK_PYNE_URL = "http://127.0.0.1:5002";
+export const FALLBACK_PYNE_URL = "https://pynescript.online";
 
 export function defaultPyneUrl(): string {
   const fromEnv = process.env.AXIS_PYNE_URL?.trim();

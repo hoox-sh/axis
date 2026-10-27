@@ -277,14 +277,14 @@ export function streamWireFingerprint(endpoint?: string, apiKey?: string): strin
 function buildWireForFingerprint(fingerprint: string): StreamLiveWire {
   if (fingerprint === wireFingerprint()) return buildWire();
   const sep = fingerprint.indexOf('\0');
-  const endpoint = (sep >= 0 ? fingerprint.slice(0, sep) : fingerprint) || 'http://localhost:5002';
+  const endpoint = (sep >= 0 ? fingerprint.slice(0, sep) : fingerprint) || 'https://pynescript.online';
   const token = (sep >= 0 ? fingerprint.slice(sep + 1) : '').trim();
   return buildWireAt(endpoint, token || undefined);
 }
 
 function buildWire(): StreamLiveWire {
   const cfg = getActiveEngineConfig();
-  const endpoint = String(cfg?.endpoint || store.endpoint || 'http://localhost:5002');
+  const endpoint = String(cfg?.endpoint || store.endpoint || 'https://pynescript.online');
   // The engine-owned plane authenticates over the socket, not the URL: the
   // server answers UNAUTHORIZED (and AXIS then falls back to REST) unless the
   // first frame is `auth`. Read the key the same way every key-gated REST call
