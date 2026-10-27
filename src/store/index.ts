@@ -3608,6 +3608,20 @@ export function appendBar(bar: Bar): BarAppendResult {
         });
         return 'ignored';
       }
+      // Degenerate venue/engine tick: a bar whose OHLC all collapse to one
+      // price must not overwrite the forming candle's open/high/low. Preserve
+      // the tip's range and only advance close (plus high/low extrema).
+      const allEqual = bar.open === bar.high && bar.high === bar.low && bar.low === bar.close;
+      const tipDegenerate = tip.open === tip.high && tip.high === tip.low && tip.low === tip.close;
+      if (allEqual && !tipDegenerate) {
+        bar = {
+          ...bar,
+          open: tip.open,
+          high: Math.max(tip.high, bar.close),
+          low: Math.min(tip.low, bar.close),
+          close: bar.close,
+        };
+      }
       // Same open bar. Write the raw node now so readers see the tick.
       // Solid hears this index once per frame, not once per tick.
       const tipRef = unwrap(tip) as Bar;
