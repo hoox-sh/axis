@@ -176,10 +176,10 @@ export function repairOhlc(
     return null;
   }
   const result = { open, high: h, low: l, close };
-  if (clamped || open === close) {
+  if (clamped) {
     chartDebug('repairOhlc', {
       verdict: 'ok',
-      reason: clamped ? 'clamped' : 'open-eq-close',
+      reason: 'clamped',
       open,
       high: h,
       low: l,
@@ -218,6 +218,7 @@ export function sanitizeStreamBar(raw: unknown, closed?: boolean): Bar | null {
   const low = num(lower.low ?? lower.l);
   const close = num(lower.close ?? lower.c);
   if (time == null || open == null || high == null || low == null || close == null) return null;
+  chartDebug('sanitizeStreamBar', { verdict: 'pre-repair', time, open, high, low, close });
   const ohlc = repairOhlc(open, high, low, close);
   if (!ohlc) return null;
 
@@ -245,6 +246,7 @@ export function sanitizeBar(raw: unknown): Bar | null {
       const low = num(raw[3]);
       const close = num(raw[4]);
       if (time == null || open == null || high == null || low == null || close == null) return null;
+      chartDebug('sanitizeBar', { verdict: 'pre-repair-array', time, open, high, low, close });
       const ohlc = repairOhlc(open, high, low, close);
       if (!ohlc) return null;
       const volume = raw.length > 5 ? num(raw[5]) : null;
@@ -267,6 +269,7 @@ export function sanitizeBar(raw: unknown): Bar | null {
     const low = num(lower.low ?? lower.l);
     const close = num(lower.close ?? lower.c);
     if (time == null || open == null || high == null || low == null || close == null) return null;
+    chartDebug('sanitizeBar', { verdict: 'pre-repair-object', time, open, high, low, close });
     const ohlc = repairOhlc(open, high, low, close);
     if (!ohlc) return null;
     const volRaw = num(lower.volume ?? lower.vol ?? lower.v);
