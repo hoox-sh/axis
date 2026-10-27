@@ -741,6 +741,10 @@ export class PaneManager {
   /** The candle axis (one time per candle), cached at paint time. */
   private paintedCandleTimesList: number[] | null = null;
 
+  /** Time scale options (conflation disabled) re-applied once on live ticks so
+   * charts created before the option change still render every bar distinctly. */
+  private timeScaleOptionsApplied: boolean = false;
+
   constructor(container: HTMLElement, hostKey = '') {
     this.container = container;
     this.hostKey = hostKey || '';
@@ -3225,7 +3229,32 @@ export class PaneManager {
    * Prefers `series.update` (single bar) over full `setData` for live ticks.
    * Non-finite OHLCV is skipped so NaN candles never reach LWC.
    */
+  /**
+   * Re-apply LWC time scale options (conflation disabled) so that charts
+   * created before the option change still render every bar distinctly.
+   * Called once per PaneManager from the live-tick path.
+   */
+  private applyTimeScaleOptions(): void {
+    if (this.timeScaleOptionsApplied) return;
+    const pricePane = this.panes.get('price');
+    if (!pricePane?.chart) return;
+    try {
+      const opts = heavyTimeScaleOptions(store.bars.length);
+      pricePane.chart.timeScale().applyOptions({
+        enableConflation: opts.enableConflation,
+        conflationThresholdFactor: opts.conflationThresholdFactor,
+        minBarSpacing: opts.minBarSpacing,
+        precomputeConflationOnInit: opts.precomputeConflationOnInit,
+        precomputeConflationPriority: opts.precomputeConflationPriority,
+      } as never);
+      this.timeScaleOptionsApplied = true;
+    } catch {
+      /* time scale options optional */
+    }
+  }
+
   appendBar(bar: Bar) {
+    this.applyTimeScaleOptions();
     try {
       if (!bar || !isFiniteOhlcBar(bar)) return;
 

@@ -51,7 +51,7 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 - **Chart view no longer resets (zoom/position) on each new candle.** `appendBar` no longer bumps `chartDataGen` on a window slide. ChartHost's `chartDataGen` effect previously responded with `fit:true` → `fitContent()`, which reset the viewport on every new candle. `appendLiveBar` already paints slides with `fit:false` via `scheduleSlideReplace`, preserving the view.
 
-- **Candle rendering no longer merges bars or hides bodies.** LWC conflation (`enableConflation`) and `minBarSpacing: 0.5` were merging sub-pixel bars at 2500+ bar histories, rendering candles as dojis with gaps between them. Conflation is now disabled and `minBarSpacing` set to 0.001 so every bar renders distinctly. Viewport auto-scrolls to follow new candles (`shiftVisibleRangeOnNewBar: true`).
+- **Candle rendering no longer merges bars or hides bodies.** LWC conflation (`enableConflation`) and `minBarSpacing: 0.5` were merging sub-pixel bars at 2500+ bar histories, rendering candles as dojis with gaps between them. Conflation is now disabled (`enableConflation: false`, `minBarSpacing: 0.001`) in both `series-factory.ts` base config and `heavy-data.ts`, and time scale options are re-applied on every live tick so existing charts pick up the change without a reload. Viewport auto-scrolls to follow new candles (`shiftVisibleRangeOnNewBar: true`).
 
 - **Live candle debug logs include full OHLC.** `live.append` entries now record `open` / `high` / `low` alongside `close`, so MCP `logs.debug.get` shows each candle's complete OHLCV for verifying forming-tick and historical-bar values.
 
