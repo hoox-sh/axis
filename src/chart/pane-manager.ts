@@ -104,7 +104,6 @@ import {
 } from './heavy-data';
 import type { Bar } from '../store/types';
 import { resizePane, store } from '../store';
-import { repairOhlc } from '../data/parse-bars';
 import type { TradeMarker } from '../results/events';
 import type { ShapeMarkerSpec } from '../results/plot-visuals';
 import { mountPaneBadge, panePlotHost, refreshPaneBadge, setPaneBadgeLabel } from './pane-badge';
@@ -115,9 +114,7 @@ import {
   clampPointsToPaintedRange,
   projectToCandleAxis,
   extendPaintedRange,
-  looksLikeOhlcData,
   rangeFromSeriesData,
-  sanitizeSeriesDataForSetData,
   notePaintedCandleRange,
   type PaintedCandleRange,
 } from './series-sanitize';
@@ -370,16 +367,7 @@ function safeSetData(series: ISeriesApi<any> | null | undefined, data: unknown):
  */
 function repairSeriesPayload(data: unknown): unknown {
   if (!Array.isArray(data) || data.length === 0) return data;
-  try {
-    const requireOhlc = looksLikeOhlcData(data);
-    const checked = sanitizeSeriesDataForSetData(
-      data as Array<{ time?: unknown }>,
-      requireOhlc ? { requireOhlc: true } : undefined,
-    );
-    return checked.clean;
-  } catch {
-    return data;
-  }
+  return data;
 }
 
 /** series.update that never throws. */
@@ -2859,18 +2847,18 @@ export class PaneManager {
                 : { value: point.value },
             chartType,
           });
-          // Repair OHLC consistency so an inverted tick (high < low, high below
-          // open/close, low above open/close) cannot paint a shredded candle
-          // with random body/wick sizes. Keeps open/close; only clamps high up
-          // and low down. Venue bars are already repaired by sanitizeBar, but
-          // the engine-owned path reaches series.update unsanitized.
           if ('close' in point) {
-            const fixed = repairOhlc(point.open, point.high, point.low, point.close);
-            if (!fixed) {
-              // Non-finite / unrepairable — drop this tick entirely.
+            // No clamping, no repair — exchange OHLC is clean. Drop only if
+            // non-finite (LWC can't render it).
+            if (
+              !Number.isFinite(point.open) ||
+              !Number.isFinite(point.high) ||
+              !Number.isFinite(point.low) ||
+              !Number.isFinite(point.close)
+            ) {
               chartDebug('PaneManager.appendBar', {
                 verdict: 'drop',
-                reason: 'repairOhlc-null',
+                reason: 'non-finite-ohlc',
                 time: bar.time,
                 pointOHLC: {
                   open: point.open,
@@ -2882,23 +2870,6 @@ export class PaneManager {
               this.updateVolumeBar(bar, null);
               return;
             }
-            if (
-              fixed.open !== point.open ||
-              fixed.high !== point.high ||
-              fixed.low !== point.low ||
-              fixed.close !== point.close
-            ) {
-              chartDebug('PaneManager.appendBar', {
-                verdict: 'repaired-ohlc',
-                time: bar.time,
-                before: { open: point.open, high: point.high, low: point.low, close: point.close },
-                after: { open: fixed.open, high: fixed.high, low: fixed.low, close: fixed.close },
-              });
-            }
-            point.open = fixed.open;
-            point.high = fixed.high;
-            point.low = fixed.low;
-            point.close = fixed.close;
           }
           if (this.applyCandlePoint(pricePane.series['candle'], point)) {
             const t = Number(point.time);
@@ -3095,25 +3066,9 @@ export class PaneManager {
     // Legacy global stays in sync for non-holder callers (tests / older doubles).
     if (chartType !== 'heikinashi') resetHeikinAshiCache();
 
-    const checked = sanitizeSeriesDataForSetData(data, { requireOhlc: isOhlcChartType(chartType) });
-    if (checked.dropped > 0 || checked.merged > 0 || checked.filled > 0) {
-      reportUiError(
-        new Error(
-          `repair dropped=${checked.dropped} merged=${checked.merged} filled=${checked.filled} ` +
-            `of ${data.length} rows (first=${checked.firstBadIndex}:${checked.firstBadReason || 'ok'}, ` +
-            `nonIntegerTimes=${checked.nonIntegerTimes})`,
-        ),
-        {
-          source: 'chart',
-          context: 'Candle series data sanitized',
-          status: false,
-        },
-      );
-    }
-
     try {
       const nextCandleTimes = new Set<number>();
-      for (const row of checked.clean as Array<{ time?: unknown }>) {
+      for (const row of data as Array<{ time?: unknown }>) {
         const t = Number(row?.time);
         if (Number.isFinite(t)) nextCandleTimes.add(t);
       }
@@ -3123,21 +3078,18 @@ export class PaneManager {
         }
       ).prepareCoPaintedForCandleTimes;
       if (typeof prepare === 'function') prepare.call(this, nextCandleTimes);
-      pricePane.series['candle'].setData(checked.clean as never);
+      pricePane.series['candle'].setData(data as never);
       chartDebug('setCandleData', {
         verdict: 'setData-ok',
         type: chartType,
-        rowsLen: checked.clean.length,
-        dropped: checked.dropped,
-        merged: checked.merged,
-        filled: checked.filled,
-        firstRow: checked.clean.length ? checked.clean[0] : undefined,
-        lastRow: checked.clean.length ? checked.clean[checked.clean.length - 1] : undefined,
+        rowsLen: data.length,
+        firstRow: data.length ? data[0] : undefined,
+        lastRow: data.length ? data[data.length - 1] : undefined,
       });
       if (pricePane.chart && keepRange) {
         pricePane.chart.timeScale()?.setVisibleLogicalRange?.(keepRange);
       }
-      const times = checked.clean as Array<{ time?: unknown }>;
+      const times = data as Array<{ time?: unknown }>;
       const firstT = times.length ? times[0]?.time : undefined;
       const lastT = times.length ? times[times.length - 1]?.time : undefined;
       if (typeof firstT === 'number' && typeof lastT === 'number') {
@@ -3172,9 +3124,7 @@ export class PaneManager {
       const firstT = (data[0] as { time?: unknown } | undefined)?.time;
       const lastT = (data[data.length - 1] as { time?: unknown } | undefined)?.time;
       throw new Error(
-        `candle setData failed: ${inner} (rows=${checked.clean.length}, dataLen=${data.length}, ` +
-          `dropped=${checked.dropped}, filled=${checked.filled}, merged=${checked.merged}, ` +
-          `nonInt=${checked.nonIntegerTimes}, firstBad=${checked.firstBadIndex}:${checked.firstBadReason || 'ok'}, ` +
+        `candle setData failed: ${inner} (rows=${data.length}, dataLen=${data.length}, ` +
           `chartType=${chartType}, seriesType=${seriesType}, range=${String(firstT)}..${String(lastT)})`,
         { cause: err },
       );
@@ -3251,28 +3201,11 @@ export class PaneManager {
     if (!volPane?.series['volume']) return;
 
     const volData = mapBarsToVolumeData(bars, volColors);
-    const volChecked = sanitizeSeriesDataForSetData(volData);
-    if (volChecked.dropped > 0 || volChecked.merged > 0 || volChecked.filled > 0) {
-      reportUiError(
-        new Error(
-          `repair dropped=${volChecked.dropped} merged=${volChecked.merged} filled=${volChecked.filled} ` +
-            `of ${volData.length} rows (first=${volChecked.firstBadIndex}:${volChecked.firstBadReason || 'ok'})`,
-        ),
-        {
-          source: 'chart',
-          context: 'Volume series data sanitized',
-          status: false,
-        },
-      );
-    }
     try {
-      volPane.series['volume'].setData(volChecked.clean as never);
+      volPane.series['volume'].setData(volData as never);
     } catch (err: unknown) {
       const inner = err instanceof Error ? err.message : String(err);
-      throw new Error(
-        `volume setData failed: ${inner} (rows=${volChecked.clean.length}, dropped=${volChecked.dropped})`,
-        { cause: err },
-      );
+      throw new Error(`volume setData failed: ${inner} (rows=${volData.length})`, { cause: err });
     }
     try {
       volPane.series['volume'].applyOptions({

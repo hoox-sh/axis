@@ -44,7 +44,7 @@ import {
   isVeryHeavyBarLoad,
   mapBarsToVolumeData,
 } from './heavy-data';
-import { sanitizeSeriesDataForSetData, notePaintedCandleRange } from './series-sanitize';
+import { notePaintedCandleRange } from './series-sanitize';
 import {
   formatPriceWithDecimals,
   priceFormatForDecimals,
@@ -787,26 +787,9 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
       const data = mapBarsToPriceData(bars, chartType, holder);
       // Legacy global stays in sync for non-holder callers (tests / older doubles).
       if (chartType !== 'heikinashi') resetHeikinAshiCache();
-      const checked = sanitizeSeriesDataForSetData(data, {
-        requireOhlc: isOhlcChartType(chartType),
-      });
-      if (checked.dropped > 0 || checked.merged > 0 || checked.filled > 0) {
-        reportUiError(
-          new Error(
-            `repair dropped=${checked.dropped} merged=${checked.merged} filled=${checked.filled} ` +
-              `of ${data.length} rows (first=${checked.firstBadIndex}:${checked.firstBadReason || 'ok'}, ` +
-              `nonIntegerTimes=${checked.nonIntegerTimes})`,
-          ),
-          {
-            source: 'chart',
-            context: 'Candle series data sanitized',
-            status: false,
-          },
-        );
-      }
       try {
         const nextCandleTimes = new Set<number>();
-        for (const row of checked.clean as Array<{ time?: unknown }>) {
+        for (const row of data as Array<{ time?: unknown }>) {
           const t = Number(row?.time);
           if (Number.isFinite(t)) nextCandleTimes.add(t);
         }
@@ -816,9 +799,9 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
           }
         ).prepareCoPaintedForCandleTimes;
         if (typeof prepare === 'function') prepare.call(mgr, nextCandleTimes);
-        pricePane.series['candle'].setData(checked.clean as never);
+        pricePane.series['candle'].setData(data as never);
         writeLogicalRange(pricePane.chart, keepRange);
-        const times = checked.clean as Array<{ time?: unknown }>;
+        const times = data as Array<{ time?: unknown }>;
         const firstT = times.length ? times[0]?.time : undefined;
         const lastT = times.length ? times[times.length - 1]?.time : undefined;
         if (typeof firstT === 'number' && typeof lastT === 'number') {
@@ -850,12 +833,10 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
         } catch {
           /* ignore */
         }
-        const firstT = (data[0] as { time?: unknown } | undefined)?.time;
-        const lastT = (data[data.length - 1] as { time?: unknown } | undefined)?.time;
+        const firstT = (bars[0] as { time?: unknown } | undefined)?.time;
+        const lastT = (bars[bars.length - 1] as { time?: unknown } | undefined)?.time;
         throw new Error(
-          `candle setData failed: ${inner} (rows=${checked.clean.length}, dataLen=${data.length}, ` +
-            `dropped=${checked.dropped}, filled=${checked.filled}, merged=${checked.merged}, ` +
-            `nonInt=${checked.nonIntegerTimes}, firstBad=${checked.firstBadIndex}:${checked.firstBadReason || 'ok'}, ` +
+          `candle setData failed: ${inner} (rows=${data.length}, dataLen=${bars.length}, ` +
             `chartType=${chartType}, seriesType=${seriesType}, range=${String(firstT)}..${String(lastT)})`,
           { cause: err },
         );

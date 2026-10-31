@@ -7,7 +7,7 @@ tags: [chart, code]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-31T02:43:24Z
+  at: 2026-10-31T04:01:57Z
 sources:
   - id: tree
     resource: "src/chart"
@@ -52,7 +52,7 @@ okf_lock: generated
 * `pyne-drawings.ts` — DEFAULT_DRAWING_LIMITS, DrawingLimits, ScriptDrawing, YLOC_PAD_PX, alignDrawingTimeToBars, clampScriptDrawingTimes, clampTimeToLastBar, dedupeScriptLabelsAtSameTime, garbageCollectScriptDrawings, labelBubbleLayout, labelFontSizePx, normalizeExtend
 * `screenshot.ts` — DEFAULT_SCREENSHOT_OPTIONS, ScreenshotOptions, ScreenshotScale, ScreenshotScope, canvasToBlob, captureScreenshot, copyBlob, copyScreenshot, downloadBlob, downloadScreenshot, loadScreenshotOptions, saveScreenshotOptions
 * `series-factory.ts` — PANE_RESIZE_LAYOUT, PLOT_PALETTE, RIGHT_PRICE_SCALE_WIDTH, SERIES_STACK_BGCOLOR, SERIES_STACK_OVERLAY, SERIES_STACK_PRICE, TV, VOID, colorWithAlpha, createAreaSeries, createBarSeries, createBaseChart
-* `series-sanitize.ts` — PaintedCandleRange, SeriesSanitizeResult, clampPointsToPaintedRange, extendPaintedRange, looksLikeOhlcData, notePaintedCandleRange, projectToCandleAxis, rangeFromSeriesData, resetPaintedCandleRangeForTests, sanitizeSeriesDataForSetData
+* `series-sanitize.ts` — PaintedCandleRange, clampPointsToPaintedRange, extendPaintedRange, looksLikeOhlcData, notePaintedCandleRange, projectToCandleAxis, rangeFromSeriesData, resetPaintedCandleRangeForTests
 * `volume-profile.ts` — DEFAULT_VALUE_AREA_PCT, DEFAULT_VP_ROWS, VolumeDistribution, VolumeProfileBin, VolumeProfileOptions, VolumeProfileResult, VpBar, computeVolumeProfile, expandValueArea, formatVpPrice, formatVpVolume, priceToBinIndex
 
 # Packages
