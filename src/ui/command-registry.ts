@@ -153,7 +153,7 @@ export interface CommandActions {
   convertToV6?: () => void;
   /** Focus the active chart pane (Mod-Alt-0). */
   focusChart?: () => void;
-  /** Open the keyboard-shortcuts modal (Shift-?). */
+  /** Open the keyboard-shortcuts modal (Alt-Shift-?). */
   openShortcuts?: () => void;
   /** Clear all shortcut overrides back to defaults. */
   resetShortcuts?: () => void;
@@ -261,10 +261,9 @@ export function scoreCommand(
  * Filter + rank commands by fuzzy score. Empty query returns all in input order
  * with score `1`. Non-matching commands (score 0) are dropped.
  */
-export function filterCommands<T extends Pick<CommandSpec, 'id' | 'title' | 'keywords' | 'category'>>(
-  commands: readonly T[],
-  query: string,
-): RankedCommand<T>[] {
+export function filterCommands<
+  T extends Pick<CommandSpec, 'id' | 'title' | 'keywords' | 'category'>,
+>(commands: readonly T[], query: string): RankedCommand<T>[] {
   const q = String(query || '').trim();
   if (!q) {
     return commands.map((c) => ({ ...c, score: 1 }));
@@ -380,70 +379,31 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
     id: 'panel.onchain',
     title: 'Toggle On-Chain panel',
     category: 'panels',
-    keywords: [
-      'onchain',
-      'on-chain',
-      'defillama',
-      'tvl',
-      'chain',
-      'protocol',
-      'liquidity',
-    ],
+    keywords: ['onchain', 'on-chain', 'defillama', 'tvl', 'chain', 'protocol', 'liquidity'],
   },
   {
     id: 'onchain.mode.tvl',
     title: 'On-Chain: Open TVL',
     category: 'actions',
-    keywords: [
-      'onchain',
-      'on-chain',
-      'tvl',
-      'defillama',
-      'protocol',
-      'open onchain',
-    ],
+    keywords: ['onchain', 'on-chain', 'tvl', 'defillama', 'protocol', 'open onchain'],
   },
   {
     id: 'onchain.clear.series',
     title: 'On-Chain: Clear Series',
     category: 'actions',
-    keywords: [
-      'onchain',
-      'on-chain',
-      'clear',
-      'series',
-      'detach',
-      'remove overlays',
-      'tvl lines',
-    ],
+    keywords: ['onchain', 'on-chain', 'clear', 'series', 'detach', 'remove overlays', 'tvl lines'],
   },
   {
     id: 'onchain.clear.events',
     title: 'On-Chain: Clear Events',
     category: 'actions',
-    keywords: [
-      'onchain',
-      'on-chain',
-      'clear',
-      'events',
-      'markers',
-      'spikes',
-      'event plane',
-    ],
+    keywords: ['onchain', 'on-chain', 'clear', 'events', 'markers', 'spikes', 'event plane'],
   },
   {
     id: 'onchain.health',
     title: 'On-Chain: Refresh Health',
     category: 'actions',
-    keywords: [
-      'onchain',
-      'on-chain',
-      'health',
-      'probe',
-      'telemetry',
-      'proxy',
-      'worker',
-    ],
+    keywords: ['onchain', 'on-chain', 'health', 'probe', 'telemetry', 'proxy', 'worker'],
   },
   {
     id: 'onchain.refresh',
@@ -464,16 +424,7 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
     id: 'onchain.export.series',
     title: 'On-Chain: Export Series CSV',
     category: 'actions',
-    keywords: [
-      'onchain',
-      'on-chain',
-      'export',
-      'csv',
-      'download',
-      'series',
-      'tvl',
-      'save data',
-    ],
+    keywords: ['onchain', 'on-chain', 'export', 'csv', 'download', 'series', 'tvl', 'save data'],
   },
   {
     id: 'onchain.attach.popular',
@@ -579,7 +530,16 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
     id: 'chart.settings',
     title: 'Chart Settings',
     category: 'chart',
-    keywords: ['chart settings', 'panel', 'interval', 'chart type', 'log', 'auto scale', 'labels', 'gear'],
+    keywords: [
+      'chart settings',
+      'panel',
+      'interval',
+      'chart type',
+      'log',
+      'auto scale',
+      'labels',
+      'gear',
+    ],
   },
   {
     id: 'chart.grid.1',
@@ -664,16 +624,7 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
     id: 'action.settings-notifications',
     title: 'Open Notification Settings',
     category: 'navigation',
-    keywords: [
-      'toast',
-      'toasts',
-      'notifications',
-      'alerts',
-      'notify',
-      'flood',
-      'dedupe',
-      'quiet',
-    ],
+    keywords: ['toast', 'toasts', 'notifications', 'alerts', 'notify', 'flood', 'dedupe', 'quiet'],
   },
   {
     id: 'action.connect-mcp',
@@ -743,7 +694,15 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
     id: 'action.script-settings',
     title: 'Open Script Inputs',
     category: 'actions',
-    keywords: ['inputs', 'parameters', 'input.*', 'strategy', 'properties', 'capital', 'pyramiding'],
+    keywords: [
+      'inputs',
+      'parameters',
+      'input.*',
+      'strategy',
+      'properties',
+      'capital',
+      'pyramiding',
+    ],
   },
   {
     id: 'action.optimise-strategy',
@@ -806,14 +765,7 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
     id: 'action.chart-only',
     title: 'Toggle Chart Only',
     category: 'navigation',
-    keywords: [
-      'chart only',
-      'fullscreen chart',
-      'hide chrome',
-      'focus chart',
-      'zen',
-      'immersive',
-    ],
+    keywords: ['chart only', 'fullscreen chart', 'hide chrome', 'focus chart', 'zen', 'immersive'],
     shortcut: '⇧F',
   },
   {
@@ -845,15 +797,7 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
     id: 'editor.toggle-outline',
     title: 'Toggle Function Tree',
     category: 'actions',
-    keywords: [
-      'outline',
-      'function tree',
-      'symbols',
-      'goto',
-      'types',
-      'enums',
-      'right rail',
-    ],
+    keywords: ['outline', 'function tree', 'symbols', 'goto', 'types', 'enums', 'right rail'],
   },
   {
     id: 'editor.toggle-inline-debug',
@@ -910,7 +854,7 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
     category: 'actions',
     keywords: ['git', 'pull', 'fetch', 'remote', 'sync', 'download'],
   },
-  // Keyboard shortcuts (Shift-? / Settings → Keyboard)
+  // Keyboard shortcuts (Alt-Shift-? / Settings → Keyboard)
   {
     id: 'help.shortcuts',
     title: 'Show keyboard shortcuts',

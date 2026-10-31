@@ -41,7 +41,7 @@ export {
 
 /**
  * Mount once from the product shell. Owns the capture-phase keydown listener
- * for the whole app and mounts the read-only {@link ShortcutsModal} (Shift-?
+ * for the whole app and mounts the read-only {@link ShortcutsModal} (Alt-Shift-?
  * / palette "Show keyboard shortcuts") beside it. Was never mounted before
  * (E1): the modal only reacted to `axis-shortcuts-open` once rendered.
  */

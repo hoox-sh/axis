@@ -24,7 +24,13 @@ import {
 // Registers the app-level bindings (the `Hub` component used to pull this in).
 import '../src/ui/shortcuts/actions';
 import { isPaletteOpen, closePalette } from '../src/ui/shortcuts/palette-bridge';
-import { resetShortcuts, setShortcutOverride, isPanelOpen, store, setDrawingTool } from '../src/store';
+import {
+  resetShortcuts,
+  setShortcutOverride,
+  isPanelOpen,
+  store,
+  setDrawingTool,
+} from '../src/store';
 
 /** Minimal HTMLElement so `target instanceof HTMLElement` works in the stub env. */
 class FakeHTMLElement {
@@ -113,10 +119,15 @@ describe('ShortcutHub dispatch', () => {
 
   it('invokes a registered action once for a matching chord', () => {
     let calls = 0;
-    cleanups.push(registerShortcut('app.run', () => {
-      calls++;
-    }));
-    const consumed = dispatchShortcut(buildDispatchTable(), makeKeyEvent({ key: 'Enter', ctrlKey: true }));
+    cleanups.push(
+      registerShortcut('app.run', () => {
+        calls++;
+      }),
+    );
+    const consumed = dispatchShortcut(
+      buildDispatchTable(),
+      makeKeyEvent({ key: 'Enter', ctrlKey: true }),
+    );
     expect(calls).toBe(1);
     expect(consumed).toBe(true);
   });
@@ -125,16 +136,21 @@ describe('ShortcutHub dispatch', () => {
     // editor.toggle-comment (Mod-/) is in the table but its action lives in
     // the editor keymap (subtask 05) — not registered in this test env.
     const calls = 0;
-    const consumed = dispatchShortcut(buildDispatchTable(), makeKeyEvent({ key: '/', ctrlKey: true }));
+    const consumed = dispatchShortcut(
+      buildDispatchTable(),
+      makeKeyEvent({ key: '/', ctrlKey: true }),
+    );
     expect(calls).toBe(0);
     expect(consumed).toBe(false);
   });
 
   it('honors overrides: new chord fires, old chord does not', () => {
     let calls = 0;
-    cleanups.push(registerShortcut('app.run', () => {
-      calls++;
-    }));
+    cleanups.push(
+      registerShortcut('app.run', () => {
+        calls++;
+      }),
+    );
     setShortcutOverride('app.run', 'Mod-Shift-Enter');
     const table = buildDispatchTable();
     dispatchShortcut(table, makeKeyEvent({ key: 'Enter', ctrlKey: true }));
@@ -145,9 +161,11 @@ describe('ShortcutHub dispatch', () => {
 
   it('skips chart pan while a modal dialog is open', () => {
     let calls = 0;
-    cleanups.push(registerShortcut('chart.pan-right', () => {
-      calls++;
-    }));
+    cleanups.push(
+      registerShortcut('chart.pan-right', () => {
+        calls++;
+      }),
+    );
     const open = dispatchShortcut(buildDispatchTable(), makeKeyEvent({ key: 'ArrowRight' }));
     expect(calls).toBe(1);
     expect(open).toBe(true);
@@ -155,7 +173,9 @@ describe('ShortcutHub dispatch', () => {
     calls = 0;
     const origQuery = document.querySelector.bind(document);
     document.querySelector = ((sel: string) =>
-      sel.includes('[role="dialog"]') ? ({} as Element) : origQuery(sel)) as typeof document.querySelector;
+      sel.includes('[role="dialog"]')
+        ? ({} as Element)
+        : origQuery(sel)) as typeof document.querySelector;
     try {
       const consumed = dispatchShortcut(buildDispatchTable(), makeKeyEvent({ key: 'ArrowRight' }));
       expect(calls).toBe(0);
@@ -167,12 +187,16 @@ describe('ShortcutHub dispatch', () => {
 
   it('skips app.escape when a modal dialog is open', () => {
     let calls = 0;
-    cleanups.push(registerShortcut('app.escape', () => {
-      calls++;
-    }));
+    cleanups.push(
+      registerShortcut('app.escape', () => {
+        calls++;
+      }),
+    );
     const origQuery = document.querySelector.bind(document);
     document.querySelector = ((sel: string) =>
-      sel.includes('axis-command-palette') ? ({} as Element) : origQuery(sel)) as typeof document.querySelector;
+      sel.includes('axis-command-palette')
+        ? ({} as Element)
+        : origQuery(sel)) as typeof document.querySelector;
     try {
       const consumed = dispatchShortcut(buildDispatchTable(), makeKeyEvent({ key: 'Escape' }));
       expect(calls).toBe(0);
@@ -184,9 +208,11 @@ describe('ShortcutHub dispatch', () => {
 
   it('skips app.escape when focus is in an editable input', () => {
     let calls = 0;
-    cleanups.push(registerShortcut('app.escape', () => {
-      calls++;
-    }));
+    cleanups.push(
+      registerShortcut('app.escape', () => {
+        calls++;
+      }),
+    );
     const input = new FakeHTMLElement();
     input.tagName = 'INPUT';
     const consumed = dispatchShortcut(
@@ -199,14 +225,21 @@ describe('ShortcutHub dispatch', () => {
 
   it('fires app.open-palette even when a dialog is open (global open chord)', () => {
     let calls = 0;
-    cleanups.push(registerShortcut('app.open-palette', () => {
-      calls++;
-    }));
+    cleanups.push(
+      registerShortcut('app.open-palette', () => {
+        calls++;
+      }),
+    );
     const origQuery = document.querySelector.bind(document);
     document.querySelector = ((sel: string) =>
-      sel.includes('axis-command-palette') ? ({} as Element) : origQuery(sel)) as typeof document.querySelector;
+      sel.includes('axis-command-palette')
+        ? ({} as Element)
+        : origQuery(sel)) as typeof document.querySelector;
     try {
-      const consumed = dispatchShortcut(buildDispatchTable(), makeKeyEvent({ key: 'k', ctrlKey: true }));
+      const consumed = dispatchShortcut(
+        buildDispatchTable(),
+        makeKeyEvent({ key: 'k', ctrlKey: true }),
+      );
       expect(calls).toBe(1);
       expect(consumed).toBe(true);
     } finally {
@@ -223,20 +256,27 @@ describe('ShortcutHub dispatch', () => {
 
   it('does not fire when the user cleared the binding', () => {
     let calls = 0;
-    cleanups.push(registerShortcut('app.run', () => {
-      calls++;
-    }));
+    cleanups.push(
+      registerShortcut('app.run', () => {
+        calls++;
+      }),
+    );
     setShortcutOverride('app.run', null);
-    const consumed = dispatchShortcut(buildDispatchTable(), makeKeyEvent({ key: 'Enter', ctrlKey: true }));
+    const consumed = dispatchShortcut(
+      buildDispatchTable(),
+      makeKeyEvent({ key: 'Enter', ctrlKey: true }),
+    );
     expect(calls).toBe(0);
     expect(consumed).toBe(false);
   });
 
   it('does not fire when the event was already handled', () => {
     let calls = 0;
-    cleanups.push(registerShortcut('app.run', () => {
-      calls++;
-    }));
+    cleanups.push(
+      registerShortcut('app.run', () => {
+        calls++;
+      }),
+    );
     const consumed = dispatchShortcut(
       buildDispatchTable(),
       makeKeyEvent({ key: 'Enter', ctrlKey: true, defaultPrevented: true }),
@@ -275,7 +315,10 @@ describe('app-level bindings (actions.ts)', () => {
   });
 
   it('Mod-Shift-P toggles the palette open signal', () => {
-    dispatchShortcut(buildDispatchTable(), makeKeyEvent({ key: 'P', ctrlKey: true, shiftKey: true }));
+    dispatchShortcut(
+      buildDispatchTable(),
+      makeKeyEvent({ key: 'P', ctrlKey: true, shiftKey: true }),
+    );
     expect(isPaletteOpen()).toBe(true);
   });
 
@@ -294,9 +337,18 @@ describe('app-level bindings (actions.ts)', () => {
     expect(win.fired).toContain('axis-open-settings');
   });
 
-  it('Shift-? fires axis-shortcuts-open', () => {
-    dispatchShortcut(buildDispatchTable(), makeKeyEvent({ key: '?', shiftKey: true }));
+  it('Alt-Shift-? fires axis-shortcuts-open', () => {
+    dispatchShortcut(
+      buildDispatchTable(),
+      makeKeyEvent({ key: '?', shiftKey: true, altKey: true }),
+    );
     expect(win.fired).toContain('axis-shortcuts-open');
+  });
+
+  it('bare Shift-? does not fire axis-shortcuts-open (editor typing)', () => {
+    const before = win.fired.length;
+    dispatchShortcut(buildDispatchTable(), makeKeyEvent({ key: '?', shiftKey: true }));
+    expect(win.fired.slice(before)).not.toContain('axis-shortcuts-open');
   });
 
   it('Esc fires axis-escape when nothing is open', () => {
@@ -307,7 +359,9 @@ describe('app-level bindings (actions.ts)', () => {
   it('Esc does not fire axis-escape while the palette is open (no double-fire)', () => {
     const origQuery = document.querySelector.bind(document);
     document.querySelector = ((sel: string) =>
-      sel.includes('axis-command-palette') ? ({} as Element) : origQuery(sel)) as typeof document.querySelector;
+      sel.includes('axis-command-palette')
+        ? ({} as Element)
+        : origQuery(sel)) as typeof document.querySelector;
     try {
       dispatchShortcut(buildDispatchTable(), makeKeyEvent({ key: 'Escape' }));
       expect(win.fired).not.toContain('axis-escape');

@@ -143,6 +143,10 @@ function shouldSkip(id: ShortcutId, target: EventTarget | null): boolean {
   }
   if (id === 'app.open-palette' || id === 'app.open-palette-alt') return false;
   if (id === 'app.escape') return isInOpenDialog(target);
+  // Help must never swallow a keystroke while the user is typing (the old
+  // bare `Shift-?` / `Shift-/` binding opened the shortcuts modal from the
+  // editor and made `//` impossible to type).
+  if (id === 'app.show-shortcuts') return isInOpenDialog(target);
   return false;
 }
 

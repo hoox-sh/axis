@@ -133,8 +133,11 @@ describe('shortcut feedback event', () => {
     expect(types).toContain(SHORTCUT_FIRED_EVENT);
   });
 
-  it('emits for Shift-? (shortcuts help)', () => {
-    dispatchShortcut(buildDispatchTable(), makeKeyEvent({ key: '?', shiftKey: true }));
+  it('emits for Alt-Shift-? (shortcuts help)', () => {
+    dispatchShortcut(
+      buildDispatchTable(),
+      makeKeyEvent({ key: '?', shiftKey: true, altKey: true }),
+    );
     const types = env.fired.map((e) => e.type);
     expect(types).toContain('axis-shortcuts-open');
     expect(types).toContain(SHORTCUT_FIRED_EVENT);

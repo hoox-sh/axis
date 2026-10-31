@@ -83,7 +83,8 @@ registerShortcut('app.toggle-editor', () => {
 // Mod-, — open Settings (app shell listens for the event).
 registerShortcut('app.open-settings', () => emit('axis-open-settings'));
 
-// Shift-? — open the Shortcuts modal (ShortcutsModal listens).
+// Alt-Shift-? — open the Shortcuts modal (ShortcutsModal listens). Not bare
+// Shift, so it cannot swallow typing keys in the editor.
 registerShortcut('app.show-shortcuts', () => emit('axis-shortcuts-open'));
 
 // Esc — close topmost modal. The dialog-skip guard in runtime.ts keeps this

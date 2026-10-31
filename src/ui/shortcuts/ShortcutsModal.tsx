@@ -19,8 +19,8 @@
 
 /**
  * Read-only keyboard-shortcuts reference overlay. Opens via the
- * `axis-shortcuts-open` window event (fired by the Hub's `Shift-?` /
- * `Shift-/` binding and the palette's "Show keyboard shortcuts" command).
+ * `axis-shortcuts-open` window event (fired by the Hub's `Alt-Shift-?` /
+ * `Alt-Shift-/` binding and the palette's "Show keyboard shortcuts" command).
  * Lists every active binding grouped by scope, honoring user overrides.
  *
  * @module ui/shortcuts/ShortcutsModal
@@ -73,7 +73,7 @@ export const ShortcutsModal: Component = () => {
   const overrides = () => store.shortcuts?.overrides ?? {};
   const platform = detectPlatform();
 
-  // Dedupe aliased bindings (e.g. Shift-? / Shift-/ share one id).
+  // Dedupe aliased bindings (e.g. Alt-Shift-? / Alt-Shift-/ share one id).
   const uniqueBindings = () => {
     const seen = new Set<string>();
     return DEFAULT_BINDINGS.filter((def) => {
@@ -116,31 +116,31 @@ export const ShortcutsModal: Component = () => {
         </>
       }
     >
-            <For each={groups()}>
-              {(group) => (
-                <section class="flex flex-col gap-1.5">
-                  <h3 class="text-[0.78em] font-semibold uppercase tracking-wider text-text-dim">
-                    {SCOPE_LABEL[group.scope]}
-                  </h3>
-                  <For each={group.bindings}>
-                    {(def) => {
-                      const chord = getDisplay(def.id, overrides(), platform);
-                      return (
-                        <div
-                          class="flex items-center justify-between gap-3 rounded-md px-2 py-1.5 hover:bg-bg-hover"
-                          data-testid={`axis-shortcut-${def.id}`}
-                        >
-                          <span class="text-text">{def.description}</span>
-                          <Show when={chord} fallback={<span class="sc-hint">—</span>}>
-                            <kbd class="sc-kbd">{chord}</kbd>
-                          </Show>
-                        </div>
-                      );
-                    }}
-                  </For>
-                </section>
-              )}
+      <For each={groups()}>
+        {(group) => (
+          <section class="flex flex-col gap-1.5">
+            <h3 class="text-[0.78em] font-semibold uppercase tracking-wider text-text-dim">
+              {SCOPE_LABEL[group.scope]}
+            </h3>
+            <For each={group.bindings}>
+              {(def) => {
+                const chord = getDisplay(def.id, overrides(), platform);
+                return (
+                  <div
+                    class="flex items-center justify-between gap-3 rounded-md px-2 py-1.5 hover:bg-bg-hover"
+                    data-testid={`axis-shortcut-${def.id}`}
+                  >
+                    <span class="text-text">{def.description}</span>
+                    <Show when={chord} fallback={<span class="sc-hint">—</span>}>
+                      <kbd class="sc-kbd">{chord}</kbd>
+                    </Show>
+                  </div>
+                );
+              }}
             </For>
+          </section>
+        )}
+      </For>
     </Modal>
   );
 };

@@ -36,22 +36,65 @@ export const DEFAULT_BINDINGS: readonly ShortcutDef[] = [
   { id: 'app.run', chord: 'Mod-Enter', description: 'Run script', scope: 'app' },
   { id: 'app.toggle-editor', chord: 'Mod-\\', description: 'Toggle editor', scope: 'app' },
   { id: 'app.open-settings', chord: 'Mod-,', description: 'Open settings', scope: 'app' },
-  { id: 'app.open-palette-alt', chord: 'Mod-Shift-P', description: 'Open command palette (alt)', scope: 'app' },
-  { id: 'app.show-shortcuts', chord: 'Shift-?', description: 'Show keyboard shortcuts', scope: 'app' },
-  // Alias: Shift+/ (non-US layouts) maps to the same id; getDisplay shows the first entry.
-  { id: 'app.show-shortcuts', chord: 'Shift-/', description: 'Show keyboard shortcuts', scope: 'app' },
+  {
+    id: 'app.open-palette-alt',
+    chord: 'Mod-Shift-P',
+    description: 'Open command palette (alt)',
+    scope: 'app',
+  },
+  // Help/shortcuts must not steal bare Shift+typing keys (e.g. `/` or `?` on
+  // many layouts), which made the editor impossible to type `//` in.
+  // Require a real modifier: Alt+Shift.
+  {
+    id: 'app.show-shortcuts',
+    chord: 'Alt-Shift-?',
+    description: 'Show keyboard shortcuts',
+    scope: 'app',
+  },
+  // Alias: Alt+Shift+/ (non-US layouts) maps to the same id; getDisplay shows the first entry.
+  {
+    id: 'app.show-shortcuts',
+    chord: 'Alt-Shift-/',
+    description: 'Show keyboard shortcuts',
+    scope: 'app',
+  },
   { id: 'app.escape', chord: 'Esc', description: 'Close topmost modal / cancel', scope: 'app' },
 
   // --- Editor ---
-  { id: 'editor.toggle-comment', chord: 'Mod-/', description: 'Toggle line comment', scope: 'editor' },
+  {
+    id: 'editor.toggle-comment',
+    chord: 'Mod-/',
+    description: 'Toggle line comment',
+    scope: 'editor',
+  },
   { id: 'editor.duplicate-line', chord: 'Mod-D', description: 'Duplicate line', scope: 'editor' },
   { id: 'editor.delete-line', chord: 'Mod-Shift-K', description: 'Delete line', scope: 'editor' },
   { id: 'editor.move-line-up', chord: 'Alt-Up', description: 'Move line up', scope: 'editor' },
-  { id: 'editor.move-line-down', chord: 'Alt-Down', description: 'Move line down', scope: 'editor' },
+  {
+    id: 'editor.move-line-down',
+    chord: 'Alt-Down',
+    description: 'Move line down',
+    scope: 'editor',
+  },
   { id: 'editor.goto-line', chord: 'Mod-G', description: 'Go to line', scope: 'editor' },
-  { id: 'editor.toggle-ruler', chord: 'Mod-Shift-L', description: 'Toggle column ruler', scope: 'editor' },
-  { id: 'editor.toggle-inline-debug', chord: 'Mod-Shift-D', description: 'Toggle inline debug', scope: 'editor' },
-  { id: 'editor.toggle-profiler', chord: 'Mod-Shift-B', description: 'Toggle profiler', scope: 'editor' },
+  {
+    id: 'editor.toggle-ruler',
+    chord: 'Mod-Shift-L',
+    description: 'Toggle column ruler',
+    scope: 'editor',
+  },
+  {
+    id: 'editor.toggle-inline-debug',
+    chord: 'Mod-Shift-D',
+    description: 'Toggle inline debug',
+    scope: 'editor',
+  },
+  {
+    id: 'editor.toggle-profiler',
+    chord: 'Mod-Shift-B',
+    description: 'Toggle profiler',
+    scope: 'editor',
+  },
 
   // --- Chart ---
   { id: 'chart.zoom-in', chord: 'I', description: 'Zoom in', scope: 'chart' },
@@ -59,8 +102,18 @@ export const DEFAULT_BINDINGS: readonly ShortcutDef[] = [
   { id: 'chart.reset-zoom', chord: '0', description: 'Reset zoom', scope: 'chart' },
   { id: 'chart.pan-left', chord: 'ArrowLeft', description: 'Pan left', scope: 'chart' },
   { id: 'chart.pan-right', chord: 'ArrowRight', description: 'Pan right', scope: 'chart' },
-  { id: 'chart.pan-left-big', chord: 'Shift-ArrowLeft', description: 'Pan left (large step)', scope: 'chart' },
-  { id: 'chart.pan-right-big', chord: 'Shift-ArrowRight', description: 'Pan right (large step)', scope: 'chart' },
+  {
+    id: 'chart.pan-left-big',
+    chord: 'Shift-ArrowLeft',
+    description: 'Pan left (large step)',
+    scope: 'chart',
+  },
+  {
+    id: 'chart.pan-right-big',
+    chord: 'Shift-ArrowRight',
+    description: 'Pan right (large step)',
+    scope: 'chart',
+  },
   { id: 'chart.step-prev', chord: 'Alt-ArrowLeft', description: 'Previous bar', scope: 'chart' },
   { id: 'chart.step-next', chord: 'Alt-ArrowRight', description: 'Next bar', scope: 'chart' },
   { id: 'chart.tool-crosshair', chord: 'Q', description: 'Crosshair tool', scope: 'chart' },
@@ -73,7 +126,12 @@ export const DEFAULT_BINDINGS: readonly ShortcutDef[] = [
   { id: 'chart.tool-text', chord: 'T', description: 'Text tool', scope: 'chart' },
   { id: 'chart.tool-hline', chord: 'H', description: 'Horizontal line tool', scope: 'chart' },
   { id: 'chart.tool-brush', chord: 'X', description: 'Brush tool', scope: 'chart' },
-  { id: 'chart.delete-selected', chord: 'Delete', description: 'Delete selected drawing', scope: 'chart' },
+  {
+    id: 'chart.delete-selected',
+    chord: 'Delete',
+    description: 'Delete selected drawing',
+    scope: 'chart',
+  },
   { id: 'chart.cancel-draft', chord: 'Esc', description: 'Cancel drawing draft', scope: 'chart' },
   { id: 'chart.layout-1', chord: 'Alt-1', description: 'Single chart layout', scope: 'chart' },
   { id: 'chart.layout-2h', chord: 'Alt-2', description: 'Two charts (horizontal)', scope: 'chart' },
@@ -101,7 +159,7 @@ export function resolveBinding(
   const override = overrides[def.id];
   if (override === null) return null;
   if (override !== undefined) return override;
-  return 'chord' in def ? def.chord : getDefaultChord(def.id) ?? null;
+  return 'chord' in def ? def.chord : (getDefaultChord(def.id) ?? null);
 }
 
 /**
@@ -129,7 +187,11 @@ export function detectConflicts(
 }
 
 /** Convenience: resolve + format a binding for display (palette hint, modal). */
-export function getDisplay(id: ShortcutId, overrides: ShortcutOverrides, platform?: Platform): string {
+export function getDisplay(
+  id: ShortcutId,
+  overrides: ShortcutOverrides,
+  platform?: Platform,
+): string {
   const def = DEFAULT_BINDINGS.find((d) => d.id === id);
   if (!def) return '';
   const chord = resolveBinding(def, overrides);

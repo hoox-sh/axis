@@ -35,6 +35,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Fixed
 
+- **Shortcuts help no longer steals typing keys.** `app.show-shortcuts` was bound to bare `Shift-?` / `Shift-/`, so typing `/` (Shift+7 on many layouts) or `?` opened the shortcuts overlay — the editor could not type `//`. The binding now requires a real modifier (`Alt-Shift-?` / `Alt-Shift-/`) and is skipped while focus is inside an editor/input/dialog.
+
 - **Series live no longer storms `full` snapshots (~6/s) into chart `setData`.** Debug ring showed 228 `wire.series.full` + 200 `setData` in ~40s: gap recovery cleared its backoff on every full, then unsubscribe+subscribed again. Series gaps now **resume** (scripts still fresh-subscribe); sliding fulls after the first snapshot tip-merge only; backoff clears only after a continuous delta.
 
 - **Live candle paint no longer clamps or repairs OHLC.** `PaneManager.appendBar` no longer calls `repairOhlc` on forming ticks — exchange OHLC is clean ~99.9% of the time, and clamping could alter real values. Non-finite ticks are dropped instead.

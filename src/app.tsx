@@ -101,9 +101,7 @@ const OnChainPanel = lazy(() =>
 const CommandPalette = lazy(() =>
   import('./ui/CommandPalette').then((m) => ({ default: m.CommandPalette })),
 );
-const AboutModal = lazy(() =>
-  import('./ui/AboutModal').then((m) => ({ default: m.AboutModal })),
-);
+const AboutModal = lazy(() => import('./ui/AboutModal').then((m) => ({ default: m.AboutModal })));
 
 // Ensure built-in source/stream/engine plugins are registered before first paint.
 registerBuiltins();
@@ -119,16 +117,9 @@ import {
   setStatus,
   isAutoloadEnabled,
 } from './store';
-import {
-  PanelDragOverlay,
-  installPanelWindowBridge,
-} from './ui/panels/FloatableShell';
+import { PanelDragOverlay, installPanelWindowBridge } from './ui/panels/FloatableShell';
 import { ChartOverlayHost, DockColumn, FloatRoot } from './ui/panels/DockColumn';
-import {
-  MobileHeader,
-  MobileTabBar,
-  MobileOverlays,
-} from './ui/mobile/MobileShell';
+import { MobileHeader, MobileTabBar, MobileOverlays } from './ui/mobile/MobileShell';
 import { isPhoneViewport } from './ui/responsive';
 import {
   bridgeSubscribe,
@@ -144,10 +135,7 @@ import { isTauriShell } from './desktop/is-tauri';
 import { applyThemeToDocument } from './theme';
 import { formatChartTitle } from './ui/document-title';
 import { resolvePriceDecimals } from './chart/price-precision';
-import {
-  installPresentationControls,
-  setPresentationRoot,
-} from './ui/presentation';
+import { installPresentationControls, setPresentationRoot } from './ui/presentation';
 import { StorageChangePrompt } from './ui/StorageChangePrompt';
 import { startMcpHost } from './mcp';
 import { engineFamilyForText } from './plugins/engine-family';
@@ -180,9 +168,7 @@ export const App: Component = () => {
     getDoc: () => string;
     setDoc?: (doc: string) => void;
     loadLibraryDoc?: (doc: string, name?: string, libraryId?: string) => void;
-    loadLibraryDocs?: (
-      docs: Array<{ content: string; name?: string; libraryId?: string }>,
-    ) => void;
+    loadLibraryDocs?: (docs: Array<{ content: string; name?: string; libraryId?: string }>) => void;
     isUnsaved?: () => boolean;
     ensureSavedForRun?: () => Promise<{ ok: boolean; doc: string }>;
   } = {
@@ -490,10 +476,7 @@ export const App: Component = () => {
       ref={(el) => setPresentationRoot(el)}
     >
       {/* Phone: app-style header. ≥768px: full desktop topbar. */}
-      <Show
-        when={!isPhoneViewport()}
-        fallback={<MobileHeader {...mobileChrome()} />}
-      >
+      <Show when={!isPhoneViewport()} fallback={<MobileHeader {...mobileChrome()} />}>
         <Topbar
           onToggleEditor={() => {
             if (store.editor.mode === 'popout') {
@@ -644,7 +627,7 @@ export const App: Component = () => {
 
       {/* Keyboard shortcut dispatcher + fired-key feedback. ShortcutHub owns
           the capture-phase keydown dispatch for every binding (Mod-K palette,
-          Shift-? help, chart tools, …); Feedback flashes a transient chip. */}
+          Alt-Shift-? help, chart tools, …); Feedback flashes a transient chip. */}
       <ShortcutHub />
       <ShortcutFeedback />
 
@@ -724,9 +707,7 @@ export const App: Component = () => {
             <div class="text-accent text-sm font-medium tracking-wide mb-1">
               Drop to add to script library
             </div>
-            <div class="text-text-dim text-[11px] font-mono">
-              .pyne · .pine · .pinescript
-            </div>
+            <div class="text-text-dim text-[11px] font-mono">.pyne · .pine · .pinescript</div>
           </div>
         </div>
       </Show>

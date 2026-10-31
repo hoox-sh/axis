@@ -45,7 +45,7 @@ export const KeyboardSettingsPanel: Component = () => {
   const overrides = () => store.shortcuts?.overrides ?? {};
   const platform = detectPlatform();
 
-  // Dedupe aliased bindings (e.g. Shift-? / Shift-/ share one id).
+  // Dedupe aliased bindings (e.g. Alt-Shift-? / Alt-Shift-/ share one id).
   const uniqueBindings = () => {
     const seen = new Set<string>();
     return DEFAULT_BINDINGS.filter((def) => {
@@ -138,7 +138,10 @@ export const KeyboardSettingsPanel: Component = () => {
                 {/* biome-ignore lint/a11y/useSemanticElements: custom flex/grid table layout requires divs */}
                 <span class="axis-keyboard-chord" role="cell">
                   <Show when={isRecording()}>
-                    <span class="axis-keyboard-recording" data-testid={`axis-keyboard-recording-${def.id}`}>
+                    <span
+                      class="axis-keyboard-recording"
+                      data-testid={`axis-keyboard-recording-${def.id}`}
+                    >
                       Press a key… (Esc records Escape)
                     </span>
                   </Show>
@@ -149,7 +152,10 @@ export const KeyboardSettingsPanel: Component = () => {
                     <span class="sc-hint">—</span>
                   </Show>
                   <Show when={conflictsFor.length > 0}>
-                    <span class="axis-keyboard-conflict" data-testid={`axis-keyboard-conflict-${def.id}`}>
+                    <span
+                      class="axis-keyboard-conflict"
+                      data-testid={`axis-keyboard-conflict-${def.id}`}
+                    >
                       conflict with {conflictsFor.join(', ')}
                     </span>
                   </Show>
