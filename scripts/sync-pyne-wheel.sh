@@ -91,17 +91,21 @@ find "${ROOT}/public/vendor" "${ROOT}/vendor" -maxdepth 1 \
   \( -name 'pynescript-*-py3-none-any.whl' -o -name 'hoox_pyne-*-py3-none-any.whl' -o -name 'pyne-*-py3-none-any.whl' \) \
   ! -name "${BASE}" -print -delete 2>/dev/null || true
 
-# Spot-check compiler payload is present (not a stale thin wheel)
-if ! unzip -l "${ROOT}/public/vendor/${BASE}" | grep -q 'pynescript/compiler/numba_builtins.py'; then
+# Spot-check compiler payload is present (not a stale thin wheel).
+# Read the full listing (no `grep -q` / `awk exit`) so `unzip` never gets
+# SIGPIPE — `set -o pipefail` would otherwise turn a successful match into a
+# non-zero pipeline exit.
+WHEEL_LIST="$(unzip -l "${ROOT}/public/vendor/${BASE}")"
+if ! grep -F 'pynescript/compiler/numba_builtins.py' <<<"${WHEEL_LIST}" >/dev/null; then
   echo "error: wheel missing compiler package" >&2
   exit 1
 fi
 # Spot-check micropip naming constraint
-if ! unzip -l "${ROOT}/public/vendor/${BASE}" | grep -q "pynescript-${VER}.dist-info/"; then
+if ! grep -F "pynescript-${VER}.dist-info/" <<<"${WHEEL_LIST}" >/dev/null; then
   echo "error: wheel .dist-info was not rewritten to pynescript-${VER}.dist-info" >&2
   exit 1
 fi
-NB_SIZE="$(unzip -l "${ROOT}/public/vendor/${BASE}" | awk '/numba_builtins\.py/{print $1; exit}')"
+NB_SIZE="$(awk '/numba_builtins\.py/{size=$1} END{print size}' <<<"${WHEEL_LIST}")"
 echo "==> numba_builtins.py in wheel: ${NB_SIZE} bytes"
 if [[ "${NB_SIZE}" -lt 10000 ]]; then
   echo "warning: numba_builtins.py looks truncated (<10k)" >&2
