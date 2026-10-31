@@ -241,7 +241,7 @@ function cancelSlideReplace(manager: LivePainter): void {
  * measure engine cadence, not dispatch latency (§14.2 causal pairing).
  */
 export function appendLiveBar(bar: Bar, opts?: { via?: 'worker' }): BarAppendResult {
-  const result = appendBar(bar);
+  const result = appendBar(bar, opts?.via);
   const action = paintAction(result, store.bars.length);
   const debugPayload = {
     verdict: result,

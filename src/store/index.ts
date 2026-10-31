@@ -3561,7 +3561,7 @@ export type BarAppendResult = 'ignored' | 'updated' | 'appended' | 'slid';
  * and GC stay cheap on 10k–100k histories. Full array replace only when the
  * chart window slides (the head is dropped) or the series is empty.
  */
-export function appendBar(bar: Bar): BarAppendResult {
+export function appendBar(bar: Bar, via?: 'worker' | 'venue'): BarAppendResult {
   if (!bar || !Number.isFinite(bar.time)) {
     chartDebug('appendBar', {
       verdict: 'ignored',
@@ -3640,6 +3640,26 @@ export function appendBar(bar: Bar): BarAppendResult {
           tipOpen: tipRef.open,
           payloadOpen: bar.open,
           finalOpen: payload.open,
+        });
+      }
+      // Venue owns candle paint: when the engine (via: 'worker') updates a
+      // forming tip, preserve venue's OHLC values. Engine deltas may have
+      // slightly different values due to computation/rounding — overwriting
+      // them causes candles to collapse / change OHLC on every engine tick.
+      // Venue ticks (via: 'venue' or undefined) always overwrite — they are
+      // the source of truth for forming candles.
+      if (via === 'worker' && !tipRef.closed && bar.closed !== true) {
+        payload.open = tipRef.open;
+        payload.high = tipRef.high;
+        payload.low = tipRef.low;
+        payload.close = tipRef.close;
+        chartDebug('appendBar', {
+          verdict: 'updated',
+          reason: 'preserve-venue-ohlc',
+          time: bar.time,
+          via: 'worker',
+          tipOHLC: { open: tipRef.open, high: tipRef.high, low: tipRef.low, close: tipRef.close },
+          engineOHLC: { open: bar.open, high: bar.high, low: bar.low, close: bar.close },
         });
       }
       // setStore triggers Solid fine-grained reactivity for this index — the
