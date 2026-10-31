@@ -34,6 +34,18 @@ export const APP_CAPABILITIES: readonly CapabilitySpec[] = [
     mutates: true,
   },
   { id: 'app.event', domain: 'app', description: 'Dispatch a window CustomEvent', mutates: true },
+  {
+    id: 'app.tab.list',
+    domain: 'app',
+    description: 'List PWA tabs attached to this MCP session',
+    mutates: false,
+  },
+  {
+    id: 'app.tab.switch',
+    domain: 'app',
+    description: 'Select which tab receives MCP invokes',
+    mutates: true,
+  },
 
   {
     id: 'chart.get',

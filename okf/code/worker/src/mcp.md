@@ -7,7 +7,7 @@ tags: [code, mcp, worker]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-21T21:03:40Z
+  at: 2026-10-31T09:56:15Z
 sources:
   - id: tree
     resource: "worker/src/mcp"
@@ -19,7 +19,7 @@ okf_lock: generated
 # Files
 
 * `allowlist.ts` — ALLOWLIST_EXACT, ALLOWLIST_PREFIX_GET, AllowlistDecision, allowWorkerRequest, describeAllowlist
-* `bridge.ts` — BRIDGE_TICKET_TTL_MS, McpBridgeDO, formatBridgeTicket, parseBridgeTicket
+* `bridge.ts` — BRIDGE_TICKET_TTL_MS, McpBridgeDO, TabInfo, formatBridgeTicket, parseBridgeTicket
 * `catalog.ts` — MCP_PROMPTS, MCP_RESOURCES, MCP_TOOLS, findPrompt, findResource, findTool
 * `handler.ts` — AuthContext, MCP_MAX_BODY_BYTES, _resetMcpRateForTests, handleMcp
 * `index.ts` — BRIDGE_TICKET_TTL_MS, MCP_PROMPTS, MCP_PROTOCOL_VERSION, MCP_RESOURCES, MCP_SERVER_NAME, MCP_TOOLS, McpBridgeDO, allowWorkerRequest, describeAllowlist, formatBridgeTicket, handleMcp, parseBridgeTicket

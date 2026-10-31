@@ -11,7 +11,7 @@
  */
 
 import { resolveCloudConfig } from '../storage/cloud-config';
-import { appendLog } from '../store';
+import { appendLog, store } from '../store';
 import { fetchWithTimeout } from '../utils/fetch-timeout';
 import { createEmitter } from '../utils/emitter';
 import { invokeCapability } from './dispatch';
@@ -26,6 +26,8 @@ export interface McpBridgeState {
   lastEventAt: number | null;
   /** PWA tabs attached to this key's Worker session (null = unknown). */
   tabs: number | null;
+  /** This tab's id (null until the bridge connects). */
+  tabId: string | null;
   /** Last agent invoke received on this socket (null = none yet). */
   lastInvokeAt: number | null;
   /** Capability of the last agent invoke. */
@@ -39,6 +41,7 @@ let state: McpBridgeState = {
   error: null,
   lastEventAt: null,
   tabs: null,
+  tabId: null,
   lastInvokeAt: null,
   lastCapability: null,
 };
@@ -104,6 +107,14 @@ async function handleFrame(raw: string, socket: WebSocket | null): Promise<void>
       socket?.send(JSON.stringify({ type: 'pong', t: Date.now() }));
     } catch {
       /* closing socket — drop the pong */
+    }
+    return;
+  }
+  if (type === 'hello-ok') {
+    const tabId = typeof msg.tabId === 'string' ? msg.tabId : null;
+    if (tabId) {
+      state = { ...state, tabId };
+      emit();
     }
     return;
   }
@@ -255,6 +266,7 @@ function idleNoKey(): void {
       'No Worker API key — set one in Settings → General → Worker (cloud + MCP) to attach this tab.',
     lastEventAt: state.lastEventAt,
     tabs: null,
+    tabId: null,
     lastInvokeAt: null,
     lastCapability: null,
   };
@@ -301,6 +313,7 @@ export async function connectMcpBridge(): Promise<void> {
         'Worker API key is incomplete — paste a full pn_… key in Settings → General → Worker (cloud + MCP).',
       lastEventAt: state.lastEventAt,
       tabs: null,
+      tabId: null,
       lastInvokeAt: null,
       lastCapability: null,
     };
@@ -320,6 +333,7 @@ export async function connectMcpBridge(): Promise<void> {
     error: null,
     lastEventAt: Date.now(),
     tabs: null,
+    tabId: null,
     lastInvokeAt: null,
     lastCapability: null,
   };
@@ -339,6 +353,9 @@ export async function connectMcpBridge(): Promise<void> {
       return;
     }
     ws = socket;
+    // Unique id for this tab, reported to the Worker DO so the MCP agent can
+    // select which tab receives invokes.
+    const tabId = crypto.randomUUID();
     socket.addEventListener('open', () => {
       if (ws !== socket) return;
       attempt = 0;
@@ -348,6 +365,7 @@ export async function connectMcpBridge(): Promise<void> {
         error: null,
         lastEventAt: Date.now(),
         tabs: null,
+        tabId,
         lastInvokeAt: null,
         lastCapability: null,
       };
@@ -358,6 +376,21 @@ export async function connectMcpBridge(): Promise<void> {
         'mcp',
       );
       startTabsPoll();
+      // Tell the Worker DO who we are (tabId + chart context) so it can route
+      // invokes to this tab when selected.
+      try {
+        socket.send(
+          JSON.stringify({
+            type: 'hello',
+            tabId,
+            symbol: typeof store !== 'undefined' ? store.symbol : null,
+            interval: typeof store !== 'undefined' ? store.interval : null,
+            chartType: typeof store !== 'undefined' ? store.chartType : null,
+          }),
+        );
+      } catch {
+        /* socket may already be closing */
+      }
       // A fresh socket means fresh Worker contact — a good moment to notice a
       // deployed app update (throttled; the interval poll is the backstop).
       void checkForUpdatesOnConnect();
@@ -371,7 +404,7 @@ export async function connectMcpBridge(): Promise<void> {
       if (ws !== socket) return;
       ws = null;
       stopTabsPoll();
-      state = { ...state, status: 'closed', tabs: null };
+      state = { ...state, status: 'closed', tabs: null, tabId: null };
       emit();
       if (stopped) return;
       logReconnect('warn', 'MCP bridge closed — reconnecting');
@@ -380,7 +413,7 @@ export async function connectMcpBridge(): Promise<void> {
     socket.addEventListener('error', () => {
       if (ws !== socket) return;
       stopTabsPoll();
-      state = { ...state, status: 'error', error: 'WebSocket error', tabs: null };
+      state = { ...state, status: 'error', error: 'WebSocket error', tabs: null, tabId: null };
       emit();
       if (stopped) return;
       logReconnect('error', 'MCP bridge socket error');
@@ -395,6 +428,7 @@ export async function connectMcpBridge(): Promise<void> {
       error: message,
       lastEventAt: Date.now(),
       tabs: null,
+      tabId: null,
       lastInvokeAt: state.lastInvokeAt,
       lastCapability: state.lastCapability,
     };

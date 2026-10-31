@@ -85,6 +85,8 @@ import { drawingsForSymbol, newDrawingId } from '../chart/drawings/sync';
 import { getEngine } from '../engines/catalog';
 import { APP_CAPABILITIES, findCapability, SETTABLE_PATHS } from './catalog';
 import { runPaletteCommand, listPaletteCommandIds } from './commands';
+import { fetchWithTimeout } from '../utils/fetch-timeout';
+import { resolveCloudConfig } from '../storage/cloud-config';
 
 import { buildAppSnapshot, buildSettingsSnapshot, barSummary } from './snapshot';
 import {
@@ -100,12 +102,7 @@ import {
 } from './live';
 import { getByPath, McpInvokeError } from './protocol';
 import { isSecureCloudEndpoint } from '../storage/cloud-config';
-import {
-  axisDebugLogStats,
-  clearAxisDebugLog,
-  isAxisDebug,
-  readAxisDebugLog,
-} from '../debug';
+import { axisDebugLogStats, clearAxisDebugLog, isAxisDebug, readAxisDebugLog } from '../debug';
 import type { ChartGridMode } from '../chart/layout';
 import type { ChartType } from '../chart/chart-type';
 
@@ -345,6 +342,49 @@ export async function invokeCapability(
         window.dispatchEvent(new CustomEvent(name, { detail: p.detail }));
       }
       return { ok: true, name };
+    }
+
+    case 'app.tab.list': {
+      const cfg = resolveCloudConfig();
+      if (!cfg.apiKey) fail('NO_API_KEY', 'Worker API key not configured');
+      const res = await fetchWithTimeout(
+        `${cfg.endpoint.replace(/\/$/, '')}/api/mcp/bridge/tabs`,
+        { headers: { Authorization: `Bearer ${cfg.apiKey}`, Accept: 'application/json' } },
+        { timeoutMs: 10_000 },
+      );
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as {
+          error?: { code?: string; message?: string };
+        };
+        fail(body.error?.code || 'FETCH_FAILED', body.error?.message || `HTTP ${res.status}`);
+      }
+      return res.json();
+    }
+    case 'app.tab.switch': {
+      const tabId = str(p.tabId);
+      if (!tabId) fail('NO_TAB_ID', 'tabId required');
+      const cfg = resolveCloudConfig();
+      if (!cfg.apiKey) fail('NO_API_KEY', 'Worker API key not configured');
+      const res = await fetchWithTimeout(
+        `${cfg.endpoint.replace(/\/$/, '')}/api/mcp/bridge/select-tab`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${cfg.apiKey}`,
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ tabId }),
+        },
+        { timeoutMs: 10_000 },
+      );
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as {
+          error?: { code?: string; message?: string };
+        };
+        fail(body.error?.code || 'FETCH_FAILED', body.error?.message || `HTTP ${res.status}`);
+      }
+      return res.json();
     }
 
     case 'chart.get': {

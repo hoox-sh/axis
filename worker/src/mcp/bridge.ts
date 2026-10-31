@@ -14,11 +14,7 @@
  * @module worker/mcp/bridge
  */
 
-import {
-  APP_INVOKE_TIMEOUT_MS,
-  type AppInvokeRequest,
-  type AppInvokeResponse,
-} from './protocol';
+import { APP_INVOKE_TIMEOUT_MS, type AppInvokeRequest, type AppInvokeResponse } from './protocol';
 import { errorBody, plainJson, readCappedText } from '../http';
 
 /** One-time WS tickets expire quickly so logs/HAR never hold the long-lived key. */
@@ -86,10 +82,22 @@ function pickInvokeSocket(sockets: WebSocket[]): WebSocket | null {
 /**
  * Per-user MCP bridge. Bind as `MCP_BRIDGE` / class `McpBridgeDO`.
  */
+export interface TabInfo {
+  tabId: string;
+  symbol: string | null;
+  interval: string | null;
+  chartType: string | null;
+  attachedAt: number;
+}
+
 export class McpBridgeDO {
   private readonly state: DurableObjectState;
   private readonly pending = new Map<string, Pending>();
   private readonly tickets = new Map<string, number>();
+  /** tabId → socket info for connected PWA tabs. */
+  private readonly tabs = new Map<string, TabInfo>();
+  /** When set, route all invokes to this tab only. Null = newest-tab routing. */
+  private selectedTabId: string | null = null;
 
   constructor(state: DurableObjectState, _env: unknown) {
     this.state = state;
@@ -127,6 +135,63 @@ export class McpBridgeDO {
       });
     }
 
+    if (url.pathname === '/tabs' && req.method === 'GET') {
+      const sockets = this.state.getWebSockets();
+      return json({
+        status: 'ok',
+        selectedTabId: this.selectedTabId,
+        tabs: sockets.map((ws) => {
+          const info = (ws as WebSocket & { tabInfo?: TabInfo }).tabInfo;
+          return info
+            ? { ...info, attached: true }
+            : {
+                tabId: 'unknown',
+                symbol: null,
+                interval: null,
+                chartType: null,
+                attachedAt: 0,
+                attached: false,
+              };
+        }),
+      });
+    }
+
+    if (url.pathname === '/select-tab' && req.method === 'POST') {
+      const capped = await readCappedText(req, BRIDGE_MAX_BODY_BYTES);
+      if (!capped.ok) {
+        return json(
+          { ok: false, error: { code: 'BODY_TOO_LARGE', message: 'body too large' } },
+          413,
+        );
+      }
+      let body: unknown;
+      try {
+        body = JSON.parse(capped.text);
+      } catch {
+        return json({ ok: false, error: { code: 'BAD_JSON', message: 'invalid JSON' } }, 400);
+      }
+      const rec = body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
+      const tabId = typeof rec.tabId === 'string' ? rec.tabId : null;
+      const sockets = this.state.getWebSockets();
+      if (tabId !== null) {
+        const hasTab = sockets.some((ws) => {
+          const info = (ws as WebSocket & { tabInfo?: TabInfo }).tabInfo;
+          return info?.tabId === tabId;
+        });
+        if (!hasTab) {
+          return json(
+            {
+              ok: false,
+              error: { code: 'TAB_NOT_FOUND', message: `No connected tab with id: ${tabId}` },
+            },
+            404,
+          );
+        }
+      }
+      this.selectedTabId = tabId;
+      return json({ ok: true, selectedTabId: this.selectedTabId });
+    }
+
     if (url.pathname === '/invoke' && req.method === 'POST') {
       const sockets = this.state.getWebSockets();
       if (!sockets.length) {
@@ -144,7 +209,10 @@ export class McpBridgeDO {
       }
       const capped = await readCappedText(req, BRIDGE_MAX_BODY_BYTES);
       if (!capped.ok) {
-        return json({ ok: false, error: { code: 'BODY_TOO_LARGE', message: 'invoke body too large' } }, 413);
+        return json(
+          { ok: false, error: { code: 'BODY_TOO_LARGE', message: 'invoke body too large' } },
+          413,
+        );
       }
       let body: unknown;
       try {
@@ -155,7 +223,10 @@ export class McpBridgeDO {
       const rec = body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
       const capability = String(rec.capability || '').trim();
       if (!capability) {
-        return json({ ok: false, error: { code: 'NO_CAPABILITY', message: 'capability required' } }, 400);
+        return json(
+          { ok: false, error: { code: 'NO_CAPABILITY', message: 'capability required' } },
+          400,
+        );
       }
       const id = typeof rec.id === 'string' && rec.id ? rec.id : crypto.randomUUID();
       const invoke: AppInvokeRequest = {
@@ -167,8 +238,9 @@ export class McpBridgeDO {
         typeof rec.timeoutMs === 'number' && rec.timeoutMs > 0
           ? Math.min(rec.timeoutMs, 60_000)
           : APP_INVOKE_TIMEOUT_MS;
+      const tabId = typeof rec.tabId === 'string' ? rec.tabId : (this.selectedTabId ?? undefined);
 
-      const result = await this.dispatch(sockets, invoke, timeoutMs);
+      const result = await this.dispatch(sockets, invoke, timeoutMs, tabId);
       return json(result, result.ok ? 200 : 502);
     }
 
@@ -191,7 +263,17 @@ export class McpBridgeDO {
       return;
     }
     if (type === 'hello') {
-      ws.send(JSON.stringify({ type: 'hello-ok', t: Date.now() }));
+      const tabId = typeof msg.tabId === 'string' ? msg.tabId : crypto.randomUUID();
+      const info: TabInfo = {
+        tabId,
+        symbol: typeof msg.symbol === 'string' ? msg.symbol : null,
+        interval: typeof msg.interval === 'string' ? msg.interval : null,
+        chartType: typeof msg.chartType === 'string' ? msg.chartType : null,
+        attachedAt: Date.now(),
+      };
+      (ws as WebSocket & { tabInfo?: TabInfo }).tabInfo = info;
+      this.tabs.set(tabId, info);
+      ws.send(JSON.stringify({ type: 'hello-ok', t: Date.now(), tabId }));
       return;
     }
     if (type === 'result' || type === 'error') {
@@ -218,6 +300,11 @@ export class McpBridgeDO {
   }
 
   async webSocketClose(ws: WebSocket): Promise<void> {
+    const info = (ws as WebSocket & { tabInfo?: TabInfo }).tabInfo;
+    if (info) {
+      this.tabs.delete(info.tabId);
+      if (this.selectedTabId === info.tabId) this.selectedTabId = null;
+    }
     for (const [id, pending] of this.pending) {
       if (pending.ws !== ws) continue;
       this.pending.delete(id);
@@ -277,9 +364,26 @@ export class McpBridgeDO {
     sockets: WebSocket[],
     invoke: AppInvokeRequest,
     timeoutMs: number,
+    tabId?: string,
   ): Promise<AppInvokeResponse> {
     return new Promise((resolve) => {
-      const target = pickInvokeSocket(sockets);
+      let target: WebSocket | null = null;
+      if (tabId) {
+        target =
+          sockets.find((ws) => {
+            const info = (ws as WebSocket & { tabInfo?: TabInfo }).tabInfo;
+            return info?.tabId === tabId;
+          }) ?? null;
+      } else if (this.selectedTabId) {
+        target =
+          sockets.find((ws) => {
+            const info = (ws as WebSocket & { tabInfo?: TabInfo }).tabInfo;
+            return info?.tabId === this.selectedTabId;
+          }) ?? null;
+      }
+      if (!target) {
+        target = pickInvokeSocket(sockets);
+      }
       if (!target) {
         resolve({
           id: invoke.id,
