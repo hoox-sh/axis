@@ -228,7 +228,7 @@ async function handleBridgeUpgrade(
   origin: string,
   url: URL,
 ): Promise<Response> {
-  if (url.pathname === '/api/mcp/bridge') {
+  if (url.pathname.startsWith('/api/mcp/bridge')) {
     if (!env.MCP_BRIDGE) {
       return errorResponse(
         'NO_MCP_BRIDGE',
@@ -247,11 +247,15 @@ async function handleBridgeUpgrade(
       if (ticket) {
         const parsed = parseBridgeTicket(ticket);
         if (!parsed) {
-          return errorResponse('INVALID_TICKET', 'bridge ticket missing, expired, or already used', {
-            status: 401,
-            origin,
-            cors: CORS_HEADERS,
-          });
+          return errorResponse(
+            'INVALID_TICKET',
+            'bridge ticket missing, expired, or already used',
+            {
+              status: 401,
+              origin,
+              cors: CORS_HEADERS,
+            },
+          );
         }
         userId = parsed.userId;
         nonce = parsed.nonce;
@@ -319,7 +323,23 @@ async function handleBridgeUpgrade(
     const stub = env.MCP_BRIDGE.get(env.MCP_BRIDGE.idFromName(bridgeUserId));
     const bridgeHeaders = bridgeDegraded ? { 'X-Hoox-Verify': 'degraded' } : undefined;
 
-    if (issueTicket || req.method === 'POST') {
+    // Sub-path routing: /tabs, /select-tab, /invoke → forward to DO with sub-path.
+    const bridgeSubPath = url.pathname.startsWith('/api/mcp/bridge/')
+      ? url.pathname.slice('/api/mcp/bridge'.length)
+      : null;
+
+    if (bridgeSubPath !== null) {
+      // Forward HTTP sub-path requests to the Durable Object.
+      const dest = new URL(`${url.origin}${bridgeSubPath}`);
+      const res = await stub.fetch(new Request(dest, req));
+      const headers = new Headers(res.headers);
+      for (const [k, v] of Object.entries(CORS_HEADERS(origin))) headers.set(k, v);
+      if (bridgeDegraded) headers.set('X-Hoox-Verify', 'degraded');
+      return new Response(res.body, { status: res.status, headers });
+    }
+
+    // Bare /api/mcp/bridge: POST mints a WS ticket; GET returns tab count.
+    if (req.method === 'POST') {
       const ticketRes = await stub.fetch(new Request(`${url.origin}/ticket`, { method: 'POST' }));
       const payload = (await ticketRes.json()) as { nonce?: unknown; expiresIn?: unknown };
       const nonce = typeof payload.nonce === 'string' ? payload.nonce : '';
@@ -346,7 +366,7 @@ async function handleBridgeUpgrade(
       );
     }
 
-    // Plain GET → DO /status: how many PWA tabs are attached to this key.
+    // Plain GET → DO /status.
     const res = await stub.fetch(new Request(`${url.origin}/status`, req));
     const headers = new Headers(res.headers);
     for (const [k, v] of Object.entries(CORS_HEADERS(origin))) headers.set(k, v);
