@@ -39,6 +39,7 @@ import {
   alignSeriesMapToTimes,
   alignSeriesToTimes,
   extractEngineResultTimes,
+  extendSeriesToWindow,
   getOhlcvTimesForApply,
   resolveInputPrecedence,
   resolveOverlayFlag,
@@ -252,13 +253,36 @@ export function alignApplySeries(
     !engineClampedTail &&
     !canTailClampLive &&
     (opts.livePush === true || grossMismatch);
-  const seriesMap = staleNoAxis
-    ? rawSeries
-    : !needsAlign
-      ? rawSeries
-      : resultTimes
-        ? alignSeriesMapToTimes(rawSeries, resultTimes, ohlcvTimes)
-        : tailAlignSeriesMap(rawSeries, chartWindowBars);
+  // When the engine evaluated a shorter window than the chart (a new forming
+  // bar arrived after evaluation), tail-extend by holding the last value
+  // instead of head-padding with nulls — head-padding shifts every indicator
+  // value right by one position instead of extending onto the new bar.
+  let seriesMap: Record<string, unknown[] | (number | null)[]>;
+  if (staleNoAxis) {
+    seriesMap = rawSeries;
+  } else if (!needsAlign) {
+    seriesMap = rawSeries;
+  } else if (resultTimes) {
+    seriesMap = alignSeriesMapToTimes(rawSeries, resultTimes, ohlcvTimes);
+  } else if (canTailClampLive && !sessionAligned && !engineClampedTail) {
+    // Venue live push: a new forming bar arrived after the engine evaluated,
+    // so the chart window grew by one bar but the engine series is one short.
+    // Tail-extend by holding the last value forward instead of head-padding
+    // with nulls — head-padding shifts every indicator value right by one
+    // position instead of extending onto the new bar.
+    seriesMap = {};
+    for (const [key, arr] of Object.entries(rawSeries)) {
+      if (Array.isArray(arr) && arr.length < chartWindowBars) {
+        seriesMap[key] = extendSeriesToWindow(arr, chartWindowBars);
+      } else if (Array.isArray(arr)) {
+        seriesMap[key] = tailAlignSeriesToWindow(arr, chartWindowBars);
+      } else {
+        seriesMap[key] = arr;
+      }
+    }
+  } else {
+    seriesMap = tailAlignSeriesMap(rawSeries, chartWindowBars);
+  }
   // When a named series ends in `na` (the backend evaluated history but not
   // the forming candle), fill that trailing run from the legacy `plots[]`
   // array, which the backend always ships complete. Series are head-padded
