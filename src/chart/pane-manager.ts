@@ -115,6 +115,7 @@ import {
   projectToCandleAxis,
   extendPaintedRange,
   rangeFromSeriesData,
+  filterValidCandleRows,
   notePaintedCandleRange,
   type PaintedCandleRange,
 } from './series-sanitize';
@@ -3065,10 +3066,14 @@ export class PaneManager {
     const data = mapBarsToPriceData(bars, chartType, holder);
     // Legacy global stays in sync for non-holder callers (tests / older doubles).
     if (chartType !== 'heikinashi') resetHeikinAshiCache();
-
+    // Drop rows LWC cannot render (non-finite OHLC, bad time, duplicate times).
+    // No clamping, no donor fill — bad rows are simply removed.
+    const cleanData = filterValidCandleRows(
+      data as Array<{ time?: number; open?: number; high?: number; low?: number; close?: number }>,
+    );
     try {
       const nextCandleTimes = new Set<number>();
-      for (const row of data as Array<{ time?: unknown }>) {
+      for (const row of cleanData as Array<{ time?: unknown }>) {
         const t = Number(row?.time);
         if (Number.isFinite(t)) nextCandleTimes.add(t);
       }
@@ -3078,18 +3083,18 @@ export class PaneManager {
         }
       ).prepareCoPaintedForCandleTimes;
       if (typeof prepare === 'function') prepare.call(this, nextCandleTimes);
-      pricePane.series['candle'].setData(data as never);
+      pricePane.series['candle'].setData(cleanData as never);
       chartDebug('setCandleData', {
         verdict: 'setData-ok',
         type: chartType,
-        rowsLen: data.length,
-        firstRow: data.length ? data[0] : undefined,
-        lastRow: data.length ? data[data.length - 1] : undefined,
+        rowsLen: cleanData.length,
+        firstRow: cleanData.length ? cleanData[0] : undefined,
+        lastRow: cleanData.length ? cleanData[cleanData.length - 1] : undefined,
       });
       if (pricePane.chart && keepRange) {
         pricePane.chart.timeScale()?.setVisibleLogicalRange?.(keepRange);
       }
-      const times = data as Array<{ time?: unknown }>;
+      const times = cleanData as Array<{ time?: unknown }>;
       const firstT = times.length ? times[0]?.time : undefined;
       const lastT = times.length ? times[times.length - 1]?.time : undefined;
       if (typeof firstT === 'number' && typeof lastT === 'number') {
@@ -3121,10 +3126,10 @@ export class PaneManager {
       } catch {
         /* ignore */
       }
-      const firstT = (data[0] as { time?: unknown } | undefined)?.time;
-      const lastT = (data[data.length - 1] as { time?: unknown } | undefined)?.time;
+      const firstT = (cleanData[0] as { time?: unknown } | undefined)?.time;
+      const lastT = (cleanData[cleanData.length - 1] as { time?: unknown } | undefined)?.time;
       throw new Error(
-        `candle setData failed: ${inner} (rows=${data.length}, dataLen=${data.length}, ` +
+        `candle setData failed: ${inner} (rows=${cleanData.length}, dataLen=${data.length}, ` +
           `chartType=${chartType}, seriesType=${seriesType}, range=${String(firstT)}..${String(lastT)})`,
         { cause: err },
       );

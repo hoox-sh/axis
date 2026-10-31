@@ -149,3 +149,40 @@ export function rangeFromSeriesData(
   }
   return Number.isFinite(first) && Number.isFinite(last) && last >= first ? { first, last } : null;
 }
+
+/**
+ * Drop rows LWC cannot render before `setData`. No clamping, no donor fill,
+ * no repair — bad rows are simply removed.
+ * - Non-finite or missing time
+ * - Non-finite OHLC (open/high/low/close)
+ * - Duplicate open times (last write wins)
+ */
+export function filterValidCandleRows<
+  T extends { time?: number; open?: number; high?: number; low?: number; close?: number },
+>(rows: readonly T[]): T[] {
+  const out: T[] = [];
+  const seen = new Set<number>();
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    if (!r) continue;
+    const t = r.time;
+    if (typeof t !== 'number' || !Number.isFinite(t)) continue;
+    if (
+      !Number.isFinite(r.open as number) ||
+      !Number.isFinite(r.high as number) ||
+      !Number.isFinite(r.low as number) ||
+      !Number.isFinite(r.close as number)
+    ) {
+      continue;
+    }
+    if (seen.has(t)) {
+      // Last write wins for duplicate times
+      const idx = out.findIndex((x) => x != null && x.time === t);
+      if (idx >= 0) out[idx] = r;
+      continue;
+    }
+    seen.add(t);
+    out.push(r);
+  }
+  return out;
+}

@@ -44,7 +44,7 @@ import {
   isVeryHeavyBarLoad,
   mapBarsToVolumeData,
 } from './heavy-data';
-import { notePaintedCandleRange } from './series-sanitize';
+import { notePaintedCandleRange, filterValidCandleRows } from './series-sanitize';
 import {
   formatPriceWithDecimals,
   priceFormatForDecimals,
@@ -787,9 +787,20 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
       const data = mapBarsToPriceData(bars, chartType, holder);
       // Legacy global stays in sync for non-holder callers (tests / older doubles).
       if (chartType !== 'heikinashi') resetHeikinAshiCache();
+      // Drop rows LWC cannot render (non-finite OHLC, bad time, duplicate times).
+      // No clamping, no donor fill — bad rows are simply removed.
+      const cleanData = filterValidCandleRows(
+        data as Array<{
+          time?: number;
+          open?: number;
+          high?: number;
+          low?: number;
+          close?: number;
+        }>,
+      );
       try {
         const nextCandleTimes = new Set<number>();
-        for (const row of data as Array<{ time?: unknown }>) {
+        for (const row of cleanData as Array<{ time?: unknown }>) {
           const t = Number(row?.time);
           if (Number.isFinite(t)) nextCandleTimes.add(t);
         }
@@ -799,7 +810,7 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
           }
         ).prepareCoPaintedForCandleTimes;
         if (typeof prepare === 'function') prepare.call(mgr, nextCandleTimes);
-        pricePane.series['candle'].setData(data as never);
+        pricePane.series['candle'].setData(cleanData as never);
         writeLogicalRange(pricePane.chart, keepRange);
         const times = data as Array<{ time?: unknown }>;
         const firstT = times.length ? times[0]?.time : undefined;
