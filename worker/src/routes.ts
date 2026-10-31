@@ -150,14 +150,23 @@ export const ROUTES: readonly RouteDef[] = [
     paths: ['/mcp', '/.well-known/oauth-protected-resource'],
     startsWith: '/mcp/',
   },
-  { kind: 'upgrade', name: BRIDGE_ROUTE, paths: ['/api/mcp/bridge'] },
+  {
+    kind: 'upgrade',
+    name: BRIDGE_ROUTE,
+    paths: ['/api/mcp/bridge'],
+    startsWith: '/api/mcp/bridge',
+  },
   { kind: 'upgrade', name: STREAM_ROUTE, paths: ['/api/stream'] },
   {
     kind: 'http',
     paths: ['/', '/health'],
     mcp: true,
     handle: async ({ env, origin, deepHealth }) =>
-      jsonResponse(await healthBody(env, deepHealth === true), { status: 200, origin, cors: API_CORS }),
+      jsonResponse(await healthBody(env, deepHealth === true), {
+        status: 200,
+        origin,
+        cors: API_CORS,
+      }),
   },
   {
     kind: 'http',
