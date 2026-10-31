@@ -63,11 +63,7 @@ import {
 import { type Extension, StateEffect, StateField, type EditorState } from '@codemirror/state';
 import builtinsJson from './data/pyne-builtins.json';
 import { store } from '../store';
-import {
-  DEFAULT_EDITOR_INTEL,
-  readEditorIntel,
-  type EditorIntelSettings,
-} from './editor-intel';
+import { DEFAULT_EDITOR_INTEL, readEditorIntel, type EditorIntelSettings } from './editor-intel';
 import {
   fetchRemoteCompletion,
   fetchRemoteHover,
@@ -362,9 +358,7 @@ function textBeforeCursor(context: CompletionContext, maxChars = 4000): string {
 }
 
 /** Completion for named-arg enums across any Pine call (`style=`, `shape=`, …). */
-export function completeNamedArgEnum(
-  context: CompletionContext,
-): CompletionResult | null {
+export function completeNamedArgEnum(context: CompletionContext): CompletionResult | null {
   initIndex();
   const before = textBeforeCursor(context);
   const ctx = namedArgEnumContext(before);
@@ -404,9 +398,7 @@ export function completeNamedArgEnum(
           from: context.pos - memberPrefix.length,
           options: filtered.map((m, i) =>
             toCompletion(
-              isColorCtorLabel(m.label)
-                ? m
-                : { ...m, kind: 'constant', snippet: undefined },
+              isColorCtorLabel(m.label) ? m : { ...m, kind: 'constant', snippet: undefined },
               isColorCtorLabel(m.label) ? 110 : 100 - Math.min(i, 20),
             ),
           ),
@@ -430,14 +422,16 @@ export function completeNamedArgEnum(
   if (!list.length) return null;
   return {
     from: absFrom,
-    options: list.slice(0, 80).map((m, i) =>
-      toCompletion(
-        isColorCtorLabel(m.label)
-          ? { ...m, label: m.label }
-          : { ...m, label: m.label, kind: 'constant', snippet: undefined },
-        isColorCtorLabel(m.label) ? 110 : 100 - Math.min(i, 20),
+    options: list
+      .slice(0, 80)
+      .map((m, i) =>
+        toCompletion(
+          isColorCtorLabel(m.label)
+            ? { ...m, label: m.label }
+            : { ...m, label: m.label, kind: 'constant', snippet: undefined },
+          isColorCtorLabel(m.label) ? 110 : 100 - Math.min(i, 20),
+        ),
       ),
-    ),
     validFor: /^[\w.]*$/,
   };
 }
@@ -459,9 +453,7 @@ function sigForCall(name: string, source: string): PineCallSig | null {
  * Named-parameter completions inside a call — unused first, then already used.
  * Opens after `(` / `,` and while typing a param name (`ti` → `title=`).
  */
-export function completeCallParams(
-  context: CompletionContext,
-): CompletionResult | null {
+export function completeCallParams(context: CompletionContext): CompletionResult | null {
   if (!readEditorIntel(store.editorIntel).paramCompletions) return null;
   const text = context.state.doc.toString();
   const site = findCallSite(text, context.pos);
@@ -480,7 +472,8 @@ export function completeCallParams(
     /^(close|high|low|open|volume|time|hl2|hlc3|ohlc4|true|false|na|color|ta|math|str|input|strategy|bar_index|syminfo|request)$/i.test(
       site.prefix,
     );
-  const nameHit = typingName && items.some((p) => p.name.toLowerCase().startsWith(site.prefix.toLowerCase()));
+  const nameHit =
+    typingName && items.some((p) => p.name.toLowerCase().startsWith(site.prefix.toLowerCase()));
   if (!context.explicit) {
     if (afterComma) {
       // always offer remaining params after `,`
@@ -501,9 +494,7 @@ export function completeCallParams(
     info: p.description || `Parameter of ${sig.name}`,
     apply: p.insert,
     boost: p.used ? 10 - Math.min(i, 8) : 92 - Math.min(i, 30),
-    section: p.used
-      ? { name: 'Already used', rank: 2 }
-      : { name: 'Parameters', rank: 1 },
+    section: p.used ? { name: 'Already used', rank: 2 } : { name: 'Parameters', rank: 1 },
   }));
   const leadWs = /^\s*/.exec(text.slice(site.argFrom, context.pos))?.[0].length || 0;
   return {
@@ -539,11 +530,7 @@ function selectParamHintRows(rows: ParamHintRow[], max: number): ParamHintRow[] 
  * Compact `plot(series, title, color, …)` header with the current name
  * wrapped in `.is-current` so the live hint can emphasize it.
  */
-function compactParamHintSig(
-  parent: HTMLElement,
-  sig: PineCallSig,
-  currentName?: string,
-): void {
+function compactParamHintSig(parent: HTMLElement, sig: PineCallSig, currentName?: string): void {
   const names = sig.params.filter((p) => !p.rest).map((p) => p.name);
   let shown = names;
   let leadEllip = false;
@@ -759,9 +746,7 @@ function toCompletion(meta: BuiltinMeta, boost = 0): Completion {
     return snippetCompletion(meta.snippet, base);
   }
   if (meta.kind === 'function' || (meta.snippet && meta.snippet.includes('('))) {
-    const snip = meta.snippet && meta.snippet.includes('${')
-      ? meta.snippet
-      : `${label}(\${1})`;
+    const snip = meta.snippet && meta.snippet.includes('${') ? meta.snippet : `${label}(\${1})`;
     return snippetCompletion(snip, base);
   }
   return base;
@@ -857,8 +842,7 @@ export function lookupBuiltinMember(name: string): BuiltinMeta | undefined {
  */
 export function scanLocalBindings(source: string): Set<string> {
   const names = new Set<string>();
-  const re =
-    /(?:^|\n)[ \t]*(?:(?:var|varip)\s+)*(?:\[([^\]]+)\]|([A-Za-z_]\w*))\s*=(?![=>])/g;
+  const re = /(?:^|\n)[ \t]*(?:(?:var|varip)\s+)*(?:\[([^\]]+)\]|([A-Za-z_]\w*))\s*=(?![=>])/g;
   for (let m = re.exec(source); m; m = re.exec(source)) {
     if (m[2]) {
       names.add(m[2]!);
@@ -972,7 +956,8 @@ export function pyneCompleteLocal(context: CompletionContext): CompletionResult 
     if (p && l.startsWith(p)) s += 50;
     if (m.category === 'local' || locals.has(m.label)) s += 40;
     if (stmt && m.kind === 'keyword') s += 40;
-    if (value && (m.kind === 'variable' || m.kind === 'constant' || m.category === 'series')) s += 30;
+    if (value && (m.kind === 'variable' || m.kind === 'constant' || m.category === 'series'))
+      s += 30;
     if (stmt && (m.kind === 'variable' || m.kind === 'constant') && !locals.has(m.label)) s -= 15;
     return s;
   };
@@ -1028,9 +1013,7 @@ function completionFromPos(
  * Completion: named-arg enums + local builtins always; optional remote enrich
  * with a short timeout. Dead Backend URLs cool down so typing stays instant.
  */
-export async function pyneComplete(
-  context: CompletionContext,
-): Promise<CompletionResult | null> {
+export async function pyneComplete(context: CompletionContext): Promise<CompletionResult | null> {
   const cfg = readEditorIntel(store.editorIntel);
   if (!cfg.autocompleteEnabled) return null;
   // Named-arg enums (style/shape/size/color/…) are client-owned — remote
@@ -1141,33 +1124,137 @@ export function peelLeadingSignature(md: string): { signature: string | null; re
   return { signature: m[1]!.trim(), rest: md.slice(m[0].length) };
 }
 
-/** Append text with light inline markdown: `code` and **bold**. */
+/** Only http(s)/mailto targets become live links (XSS-safe). */
+function safeHref(raw: string): string | null {
+  const u = raw.trim();
+  if (!u) return null;
+  return /^(https?:|mailto:)/i.test(u) ? u : null;
+}
+
+/**
+ * Append text with inline Markdown: `code`, **bold**, *italic*, ~~strike~~,
+ * `[text](url)` links and `![alt](url)` images. Links/images are only
+ * created for http(s)/mailto targets; everything else stays plain text.
+ */
 export function appendInlineMarkdown(parent: HTMLElement, text: string): void {
-  const re = /(\*\*[^*\n]+\*\*|`[^`\n]+`)/g;
+  const re =
+    /!\[([^\]\n]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)|\[([^\]\n]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)|\*\*([^*\n]+)\*\*|~~([^~\n]+)~~|\*([^*\n]+)\*|`([^`\n]+)`/g;
   let last = 0;
   for (const m of text.matchAll(re)) {
-    if (m.index > last) {
-      parent.appendChild(document.createTextNode(text.slice(last, m.index)));
-    }
-    const tok = m[1]!;
-    if (tok.startsWith('**') && tok.endsWith('**')) {
+    const idx = m.index ?? 0;
+    if (idx > last) parent.appendChild(document.createTextNode(text.slice(last, idx)));
+    const [, imgAlt, imgUrl, linkText, linkUrl, bold, strike, italic, code] = m;
+    if (imgUrl !== undefined) {
+      const href = safeHref(imgUrl);
+      if (href) {
+        const img = document.createElement('img');
+        img.className = 'cm-pine-hover-img';
+        img.src = href;
+        img.alt = imgAlt || '';
+        img.loading = 'lazy';
+        parent.appendChild(img);
+      } else {
+        parent.appendChild(document.createTextNode(m[0]));
+      }
+    } else if (linkUrl !== undefined) {
+      const href = safeHref(linkUrl);
+      if (href) {
+        const a = document.createElement('a');
+        a.className = 'cm-pine-hover-link';
+        a.href = href;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        appendInlineMarkdown(a, linkText || '');
+        parent.appendChild(a);
+      } else {
+        parent.appendChild(document.createTextNode(linkText || ''));
+      }
+    } else if (bold !== undefined) {
       const strong = document.createElement('strong');
       strong.className = 'cm-pine-hover-strong';
-      strong.textContent = tok.slice(2, -2);
+      strong.textContent = bold;
       parent.appendChild(strong);
-    } else if (tok.startsWith('`') && tok.endsWith('`')) {
-      const code = document.createElement('code');
-      code.className = 'cm-pine-hover-code-inline';
-      code.textContent = tok.slice(1, -1);
-      parent.appendChild(code);
-    } else {
-      parent.appendChild(document.createTextNode(tok));
+    } else if (strike !== undefined) {
+      const del = document.createElement('del');
+      del.className = 'cm-pine-hover-del';
+      del.textContent = strike;
+      parent.appendChild(del);
+    } else if (italic !== undefined) {
+      const em = document.createElement('em');
+      em.className = 'cm-pine-hover-em';
+      em.textContent = italic;
+      parent.appendChild(em);
+    } else if (code !== undefined) {
+      const el = document.createElement('code');
+      el.className = 'cm-pine-hover-code-inline';
+      el.textContent = code;
+      parent.appendChild(el);
     }
-    last = m.index + tok.length;
+    last = idx + m[0].length;
   }
   if (last < text.length) {
     parent.appendChild(document.createTextNode(text.slice(last)));
   }
+}
+
+/**
+ * Render a paragraph, honoring two-trailing-space Markdown hard breaks.
+ * Plain single newlines soft-wrap to a space (GFM).
+ */
+function appendParagraph(root: HTMLElement, lines: string[]): void {
+  const p = document.createElement('p');
+  p.className = 'cm-pine-hover-p';
+  let prevHard = false;
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i] ?? '';
+    const hard = / {2,}$/.test(raw);
+    const text = raw.replace(/\s+$/, '');
+    if (i > 0 && !prevHard) p.appendChild(document.createTextNode(' '));
+    if (text) appendInlineMarkdown(p, text);
+    if (hard && i < lines.length - 1) p.appendChild(document.createElement('br'));
+    prevHard = hard;
+  }
+  root.appendChild(p);
+}
+
+/** GFM table: header row + `---` separator row. */
+function isTableChunk(lines: string[]): boolean {
+  if (lines.length < 2) return false;
+  if (!lines[0]!.includes('|')) return false;
+  return lines[1]!.includes('-') && /^\s*\|?[\s:|-]+\|?\s*$/.test(lines[1]!.trim());
+}
+
+function appendTable(root: HTMLElement, lines: string[]): void {
+  const cells = (line: string): string[] =>
+    line
+      .trim()
+      .replace(/^\|/, '')
+      .replace(/\|$/, '')
+      .split('|')
+      .map((c) => c.trim());
+  const table = document.createElement('table');
+  table.className = 'cm-pine-hover-table';
+  const thead = document.createElement('thead');
+  const htr = document.createElement('tr');
+  for (const c of cells(lines[0]!)) {
+    const th = document.createElement('th');
+    appendInlineMarkdown(th, c);
+    htr.appendChild(th);
+  }
+  thead.appendChild(htr);
+  table.appendChild(thead);
+  const tbody = document.createElement('tbody');
+  for (const line of lines.slice(2)) {
+    const tr = document.createElement('tr');
+    for (const c of cells(line)) {
+      const td = document.createElement('td');
+      appendInlineMarkdown(td, c);
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  root.appendChild(table);
 }
 
 const HOVER_SECTION_RE = /^\*\*([^*]+)\*\*:?\s*$/;
@@ -1182,12 +1269,10 @@ function isBulletChunk(lines: string[]): boolean {
 function mergeHoverChunks(raw: string[]): string[] {
   const out: string[] = [];
   for (const chunk of raw) {
-    const lines = chunk.split('\n').map((l) => l.trimEnd()).filter((l) => l.trim().length > 0);
+    // Keep trailing whitespace: two trailing spaces are a Markdown hard break.
+    const lines = chunk.split('\n').filter((l) => l.trim().length > 0);
     if (isBulletChunk(lines) && out.length) {
-      const prevLines = out[out.length - 1]!
-        .split('\n')
-        .map((l) => l.trimEnd())
-        .filter((l) => l.trim().length > 0);
+      const prevLines = out[out.length - 1]!.split('\n').filter((l) => l.trim().length > 0);
       if (isBulletChunk(prevLines)) {
         out[out.length - 1] = prevLines.concat(lines).join('\n');
         continue;
@@ -1213,9 +1298,7 @@ export function renderHoverMarkdown(root: HTMLElement, md: string): void {
 
   // Tokenize into blocks: fences vs prose
   const fenceRe = /```([\w.-]*)[ \t]*\n([\s\S]*?)```/g;
-  type Block =
-    | { kind: 'code'; lang: string; code: string }
-    | { kind: 'prose'; text: string };
+  type Block = { kind: 'code'; lang: string; code: string } | { kind: 'prose'; text: string };
   const blocks: Block[] = [];
   let cursor = 0;
   for (const fm of src.matchAll(fenceRe)) {
@@ -1248,7 +1331,8 @@ export function renderHoverMarkdown(root: HTMLElement, md: string): void {
     // Prose: split on blank lines / horizontal rules, then merge adjacent lists
     const chunks = mergeHoverChunks(block.text.split(/\n{2,}/));
     for (const chunk of chunks) {
-      const lines = chunk.split('\n').map((l) => l.trimEnd());
+      // Do not trimEnd: two trailing spaces mark a Markdown hard break.
+      const lines = chunk.split('\n');
       const nonEmpty = lines.filter((l) => l.trim().length > 0);
       if (!nonEmpty.length) continue;
 
@@ -1301,6 +1385,23 @@ export function renderHoverMarkdown(root: HTMLElement, md: string): void {
         }
       }
 
+      // Blockquote (`> …`), GFM table, then bullet / numbered lists.
+      if (rest.every((l) => /^>\s?/.test(l.trim()))) {
+        const bq = document.createElement('blockquote');
+        bq.className = 'cm-pine-hover-quote';
+        appendParagraph(
+          bq,
+          rest.map((l) => l.trim().replace(/^>\s?/, '')),
+        );
+        root.appendChild(bq);
+        continue;
+      }
+
+      if (isTableChunk(rest)) {
+        appendTable(root, rest);
+        continue;
+      }
+
       // Bullet / numbered lists (library doc @param blocks, etc.)
       if (rest.every((l) => HOVER_BULLET_RE.test(l.trim()))) {
         const asParams = rest.every((l) => HOVER_PARAM_ITEM_RE.test(l.trim()));
@@ -1336,11 +1437,8 @@ export function renderHoverMarkdown(root: HTMLElement, md: string): void {
         continue;
       }
 
-      const p = document.createElement('p');
-      p.className = 'cm-pine-hover-p';
-      // Soft-wrap single newlines inside a paragraph as spaces
-      appendInlineMarkdown(p, rest.join(' ').replace(/[ \t]+/g, ' ').trim());
-      root.appendChild(p);
+      // Soft-wrap single newlines as spaces; two trailing spaces force a <br>.
+      appendParagraph(root, rest);
     }
   }
 }
@@ -1546,6 +1644,21 @@ export function pyneHoverLocal(
     );
   }
 
+  // 1b. Library declaration — script-level `//@description` card (PYNE parity).
+  if (hit.word === 'library') {
+    const lib = lookupPyneDoc(text, '__library_description__');
+    if (lib?.description) {
+      return makeHoverTooltip(
+        hit.from,
+        hit.to,
+        'library',
+        '```pinescript\nlibrary\n```\n\n' + lib.description,
+        'library',
+        { markdown: true, category: 'library' },
+      );
+    }
+  }
+
   // 2. User / library annotations in the open document (`//@function`, …)
   const localDoc = lookupPyneDoc(text, hit.word);
   if (localDoc && localDoc.kind !== 'description') {
@@ -1598,17 +1711,10 @@ export function pyneHoverLocal(
   }
   if (meta && !isThinModuleStub(meta)) {
     const sig = sigForCall(meta.label || hit.word, text);
-    return makeHoverTooltip(
-      hit.from,
-      hit.to,
-      meta.label,
-      hoverDocs(meta, sig),
-      'local metadata',
-      {
-        markdown: !!sig?.params.length || looksLikeMarkdown(hoverDocs(meta, sig)),
-        category: meta.category,
-      },
-    );
+    return makeHoverTooltip(hit.from, hit.to, meta.label, hoverDocs(meta, sig), 'local metadata', {
+      markdown: !!sig?.params.length || looksLikeMarkdown(hoverDocs(meta, sig)),
+      category: meta.category,
+    });
   }
 
   // 5. User symbols in this buffer
@@ -1632,17 +1738,10 @@ export function pyneHoverLocal(
   }
   if (meta) {
     const sig = sigForCall(meta.label || hit.word, text);
-    return makeHoverTooltip(
-      hit.from,
-      hit.to,
-      meta.label,
-      hoverDocs(meta, sig),
-      'local metadata',
-      {
-        markdown: !!sig?.params.length || looksLikeMarkdown(hoverDocs(meta, sig)),
-        category: meta.category,
-      },
-    );
+    return makeHoverTooltip(hit.from, hit.to, meta.label, hoverDocs(meta, sig), 'local metadata', {
+      markdown: !!sig?.params.length || looksLikeMarkdown(hoverDocs(meta, sig)),
+      category: meta.category,
+    });
   }
   return null;
 }
@@ -1721,7 +1820,7 @@ export function pyneLspExtensions(intel?: EditorIntelSettings): Extension[] {
   // Escape dismisses overlays (suggest / hover / signature) before any other
   // Escape consumer — mounted first so it wins over completionKeymap.
   if (cfg.autocompleteEnabled || cfg.hoverEnabled || cfg.signatureHints) {
-    out.push(keymap.of([{ key: "Escape", run: escapeDismissEditorOverlay }]));
+    out.push(keymap.of([{ key: 'Escape', run: escapeDismissEditorOverlay }]));
   }
   if (cfg.autocompleteEnabled) {
     out.push(

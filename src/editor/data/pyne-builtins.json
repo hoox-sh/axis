@@ -22,7 +22,7 @@
     "kind": "function",
     "detail": "acceleration_factor(...)",
     "brief": "Acceleration Factor - Momentum acceleration/deceleration",
-    "documentation": "Acceleration Factor - Momentum acceleration/deceleration.\n\nta.acceleration_factor(momentum_list, period)\nReturns: Factor (-2.0 to 2.0)",
+    "documentation": "Acceleration Factor - Momentum acceleration/deceleration.\n\nta.acceleration_factor(momentum_list, period)\nReturns: Factor (-2.0 to 2.0)\n\nBar-mode incremental last sample uses ``_acceleration_factor_inc_update``.",
     "snippet": "acceleration_factor(${1:arg})",
     "category": "builtin"
   },
@@ -130,7 +130,7 @@
     "kind": "function",
     "detail": "apo(...)",
     "brief": "Absolute Price Oscillator",
-    "documentation": "Absolute Price Oscillator.\n\nta.apo(series, fast_period, slow_period)\nAPO = EMA(fast) - EMA(slow)\nReturns APO series.",
+    "documentation": "Absolute Price Oscillator.\n\nta.apo(series, fast_period, slow_period)\nAPO = EMA(fast) - EMA(slow)\nReturns APO series (full) or last scalar (incremental bar mode).",
     "snippet": "apo(${1:arg})",
     "category": "builtin"
   },
@@ -796,7 +796,7 @@
     "kind": "function",
     "detail": "atr_stop(...)",
     "brief": "ATR-based Stop Loss",
-    "documentation": "ATR-based Stop Loss.\n\nta.atr_stop(atr_value, multiplier)\nCalculate stop levels based on ATR.",
+    "documentation": "ATR-based Stop Loss.\n\nta.atr_stop(atr_value, multiplier)\nCalculate stop levels based on ATR.\nBar-mode incremental last sample uses ``_atr_stop_inc_update``.",
     "snippet": "atr_stop(${1:arg})",
     "category": "builtin"
   },
@@ -1309,7 +1309,7 @@
     "kind": "function",
     "detail": "color.aqua(...)",
     "brief": "RGBA color value used by plot/drawing builtins and ``color",
-    "documentation": "RGBA color value used by plot/drawing builtins and ``color.*`` helpers.\n\nComponents are clamped to 0–255. Stringification yields an 8-digit hex\nform (``#RRGGBBAA``) suitable for export and comparison.",
+    "documentation": "RGBA color value used by plot/drawing builtins and ``color.*`` helpers.\n\nComponents are clamped to 0-255. Stringification yields an 8-digit hex\nform (``#RRGGBBAA``) suitable for export and comparison.",
     "snippet": "color.aqua(${1:param1})",
     "category": "color"
   },
@@ -1327,7 +1327,7 @@
     "kind": "function",
     "detail": "color.black(...)",
     "brief": "RGBA color value used by plot/drawing builtins and ``color",
-    "documentation": "RGBA color value used by plot/drawing builtins and ``color.*`` helpers.\n\nComponents are clamped to 0–255. Stringification yields an 8-digit hex\nform (``#RRGGBBAA``) suitable for export and comparison.",
+    "documentation": "RGBA color value used by plot/drawing builtins and ``color.*`` helpers.\n\nComponents are clamped to 0-255. Stringification yields an 8-digit hex\nform (``#RRGGBBAA``) suitable for export and comparison.",
     "snippet": "color.black(${1:param1})",
     "category": "color"
   },
@@ -1336,7 +1336,7 @@
     "kind": "function",
     "detail": "color.blue(...)",
     "brief": "RGBA color value used by plot/drawing builtins and ``color",
-    "documentation": "RGBA color value used by plot/drawing builtins and ``color.*`` helpers.\n\nComponents are clamped to 0–255. Stringification yields an 8-digit hex\nform (``#RRGGBBAA``) suitable for export and comparison.",
+    "documentation": "RGBA color value used by plot/drawing builtins and ``color.*`` helpers.\n\nComponents are clamped to 0-255. Stringification yields an 8-digit hex\nform (``#RRGGBBAA``) suitable for export and comparison.",
     "snippet": "color.blue(${1:param1})",
     "category": "color"
   },
@@ -1354,7 +1354,7 @@
     "kind": "function",
     "detail": "color.fuchsia(...)",
     "brief": "RGBA color value used by plot/drawing builtins and ``color",
-    "documentation": "RGBA color value used by plot/drawing builtins and ``color.*`` helpers.\n\nComponents are clamped to 0–255. Stringification yields an 8-digit hex\nform (``#RRGGBBAA``) suitable for export and comparison.",
+    "documentation": "RGBA color value used by plot/drawing builtins and ``color.*`` helpers.\n\nComponents are clamped to 0-255. Stringification yields an 8-digit hex\nform (``#RRGGBBAA``) suitable for export and comparison.",
     "snippet": "color.fuchsia(${1:param1})",
     "category": "color"
   },
@@ -1372,7 +1372,7 @@
     "kind": "function",
     "detail": "color.gray(...)",
     "brief": "RGBA color value used by plot/drawing builtins and ``color",
-    "documentation": "RGBA color value used by plot/drawing builtins and ``color.*`` helpers.\n\nComponents are clamped to 0–255. Stringification yields an 8-digit hex\nform (``#RRGGBBAA``) suitable for export and comparison.",
+    "documentation": "RGBA color value used by plot/drawing builtins and ``color.*`` helpers.\n\nComponents are clamped to 0-255. Stringification yields an 8-digit hex\nform (``#RRGGBBAA``) suitable for export and comparison.",
     "snippet": "color.gray(${1:param1})",
     "category": "color"
   },
@@ -1381,7 +1381,7 @@
     "kind": "function",
     "detail": "color.green(...)",
     "brief": "RGBA color value used by plot/drawing builtins and ``color",
-    "documentation": "RGBA color value used by plot/drawing builtins and ``color.*`` helpers.\n\nComponents are clamped to 0–255. Stringification yields an 8-digit hex\nform (``#RRGGBBAA``) suitable for export and comparison.",
+    "documentation": "RGBA color value used by plot/drawing builtins and ``color.*`` helpers.\n\nComponents are clamped to 0-255. Stringification yields an 8-digit hex\nform (``#RRGGBBAA``) suitable for export and comparison.",
     "snippet": "color.green(${1:param1})",
     "category": "color"
   },
@@ -1390,7 +1390,7 @@
     "kind": "function",
     "detail": "color.grey(...)",
     "brief": "RGBA color value used by plot/drawing builtins and ``color",
-    "documentation": "RGBA color value used by plot/drawing builtins and ``color.*`` helpers.\n\nComponents are clamped to 0–255. Stringification yields an 8-digit hex\nform (``#RRGGBBAA``) suitable for export and comparison.",
+    "documentation": "RGBA color value used by plot/drawing builtins and ``color.*`` helpers.\n\nComponents are clamped to 0-255. Stringification yields an 8-digit hex\nform (``#RRGGBBAA``) suitable for export and comparison.",
     "snippet": "color.grey(${1:param1})",
     "category": "color"
   },
@@ -1399,7 +1399,7 @@
     "kind": "function",
     "detail": "color.lime(...)",
     "brief": "RGBA color value used by plot/drawing builtins and ``color",
-    "documentation": "RGBA color value used by plot/drawing builtins and ``color.*`` helpers.\n\nComponents are clamped to 0–255. Stringification yields an 8-digit hex\nform (``#RRGGBBAA``) suitable for export and comparison.",
+    "documentation": "RGBA color value used by plot/drawing builtins and ``color.*`` helpers.\n\nComponents are clamped to 0-255. Stringification yields an 8-digit hex\nform (``#RRGGBBAA``) suitable for export and comparison.",
     "snippet": "color.lime(${1:param1})",
     "category": "color"
   },
@@ -1408,7 +1408,7 @@
     "kind": "function",
     "detail": "color.maroon(...)",
     "brief": "RGBA color value used by plot/drawing builtins and ``color",
-    "documentation": "RGBA color value used by plot/drawing builtins and ``color.*`` helpers.\n\nComponents are clamped to 0–255. Stringification yields an 8-digit hex\nform (``#RRGGBBAA``) suitable for export and comparison.",
+    "documentation": "RGBA color value used by plot/drawing builtins and ``color.*`` helpers.\n\nComponents are clamped to 0-255. Stringification yields an 8-digit hex\nform (``#RRGGBBAA``) suitable for export and comparison.",
     "snippet": "color.maroon(${1:param1})",
     "category": "color"
   },
@@ -1417,7 +1417,7 @@
     "kind": "function",
     "detail": "color.navy(...)",
     "brief": "RGBA color value used by plot/drawing builtins and ``color",
-    "documentation": "RGBA color value used by plot/drawing builtins and ``color.*`` helpers.\n\nComponents are clamped to 0–255. Stringification yields an 8-digit hex\nform (``#RRGGBBAA``) suitable for export and comparison.",
+    "documentation": "RGBA color value used by plot/drawing builtins and ``color.*`` helpers.\n\nComponents are clamped to 0-255. Stringification yields an 8-digit hex\nform (``#RRGGBBAA``) suitable for export and comparison.",
     "snippet": "color.navy(${1:param1})",
     "category": "color"
   },
@@ -1435,7 +1435,7 @@
     "kind": "function",
     "detail": "color.olive(...)",
     "brief": "RGBA color value used by plot/drawing builtins and ``color",
-    "documentation": "RGBA color value used by plot/drawing builtins and ``color.*`` helpers.\n\nComponents are clamped to 0–255. Stringification yields an 8-digit hex\nform (``#RRGGBBAA``) suitable for export and comparison.",
+    "documentation": "RGBA color value used by plot/drawing builtins and ``color.*`` helpers.\n\nComponents are clamped to 0-255. Stringification yields an 8-digit hex\nform (``#RRGGBBAA``) suitable for export and comparison.",
     "snippet": "color.olive(${1:param1})",
     "category": "color"
   },
@@ -1444,7 +1444,7 @@
     "kind": "function",
     "detail": "color.orange(...)",
     "brief": "RGBA color value used by plot/drawing builtins and ``color",
-    "documentation": "RGBA color value used by plot/drawing builtins and ``color.*`` helpers.\n\nComponents are clamped to 0–255. Stringification yields an 8-digit hex\nform (``#RRGGBBAA``) suitable for export and comparison.",
+    "documentation": "RGBA color value used by plot/drawing builtins and ``color.*`` helpers.\n\nComponents are clamped to 0-255. Stringification yields an 8-digit hex\nform (``#RRGGBBAA``) suitable for export and comparison.",
     "snippet": "color.orange(${1:param1})",
     "category": "color"
   },
@@ -1453,7 +1453,7 @@
     "kind": "function",
     "detail": "color.purple(...)",
     "brief": "RGBA color value used by plot/drawing builtins and ``color",
-    "documentation": "RGBA color value used by plot/drawing builtins and ``color.*`` helpers.\n\nComponents are clamped to 0–255. Stringification yields an 8-digit hex\nform (``#RRGGBBAA``) suitable for export and comparison.",
+    "documentation": "RGBA color value used by plot/drawing builtins and ``color.*`` helpers.\n\nComponents are clamped to 0-255. Stringification yields an 8-digit hex\nform (``#RRGGBBAA``) suitable for export and comparison.",
     "snippet": "color.purple(${1:param1})",
     "category": "color"
   },
@@ -1471,7 +1471,7 @@
     "kind": "function",
     "detail": "color.red(...)",
     "brief": "RGBA color value used by plot/drawing builtins and ``color",
-    "documentation": "RGBA color value used by plot/drawing builtins and ``color.*`` helpers.\n\nComponents are clamped to 0–255. Stringification yields an 8-digit hex\nform (``#RRGGBBAA``) suitable for export and comparison.",
+    "documentation": "RGBA color value used by plot/drawing builtins and ``color.*`` helpers.\n\nComponents are clamped to 0-255. Stringification yields an 8-digit hex\nform (``#RRGGBBAA``) suitable for export and comparison.",
     "snippet": "color.red(${1:param1})",
     "category": "color"
   },
@@ -1489,7 +1489,7 @@
     "kind": "function",
     "detail": "color.silver(...)",
     "brief": "RGBA color value used by plot/drawing builtins and ``color",
-    "documentation": "RGBA color value used by plot/drawing builtins and ``color.*`` helpers.\n\nComponents are clamped to 0–255. Stringification yields an 8-digit hex\nform (``#RRGGBBAA``) suitable for export and comparison.",
+    "documentation": "RGBA color value used by plot/drawing builtins and ``color.*`` helpers.\n\nComponents are clamped to 0-255. Stringification yields an 8-digit hex\nform (``#RRGGBBAA``) suitable for export and comparison.",
     "snippet": "color.silver(${1:param1})",
     "category": "color"
   },
@@ -1507,7 +1507,7 @@
     "kind": "function",
     "detail": "color.teal(...)",
     "brief": "RGBA color value used by plot/drawing builtins and ``color",
-    "documentation": "RGBA color value used by plot/drawing builtins and ``color.*`` helpers.\n\nComponents are clamped to 0–255. Stringification yields an 8-digit hex\nform (``#RRGGBBAA``) suitable for export and comparison.",
+    "documentation": "RGBA color value used by plot/drawing builtins and ``color.*`` helpers.\n\nComponents are clamped to 0-255. Stringification yields an 8-digit hex\nform (``#RRGGBBAA``) suitable for export and comparison.",
     "snippet": "color.teal(${1:param1})",
     "category": "color"
   },
@@ -1516,7 +1516,7 @@
     "kind": "function",
     "detail": "color.white(...)",
     "brief": "RGBA color value used by plot/drawing builtins and ``color",
-    "documentation": "RGBA color value used by plot/drawing builtins and ``color.*`` helpers.\n\nComponents are clamped to 0–255. Stringification yields an 8-digit hex\nform (``#RRGGBBAA``) suitable for export and comparison.",
+    "documentation": "RGBA color value used by plot/drawing builtins and ``color.*`` helpers.\n\nComponents are clamped to 0-255. Stringification yields an 8-digit hex\nform (``#RRGGBBAA``) suitable for export and comparison.",
     "snippet": "color.white(${1:param1})",
     "category": "color"
   },
@@ -1525,7 +1525,7 @@
     "kind": "function",
     "detail": "color.yellow(...)",
     "brief": "RGBA color value used by plot/drawing builtins and ``color",
-    "documentation": "RGBA color value used by plot/drawing builtins and ``color.*`` helpers.\n\nComponents are clamped to 0–255. Stringification yields an 8-digit hex\nform (``#RRGGBBAA``) suitable for export and comparison.",
+    "documentation": "RGBA color value used by plot/drawing builtins and ``color.*`` helpers.\n\nComponents are clamped to 0-255. Stringification yields an 8-digit hex\nform (``#RRGGBBAA``) suitable for export and comparison.",
     "snippet": "color.yellow(${1:param1})",
     "category": "color"
   },
@@ -1606,7 +1606,7 @@
     "kind": "function",
     "detail": "crowd_sentiment(...)",
     "brief": "Crowd Sentiment - Crowd consensus strength",
-    "documentation": "Crowd Sentiment - Crowd consensus strength.\n\nta.crowd_sentiment(price_agreement, volume_agreement, time_agreement)\nReturns: Score (0-100)",
+    "documentation": "Crowd Sentiment - Crowd consensus strength.\n\nta.crowd_sentiment(price_agreement, volume_agreement, time_agreement)\nReturns: Score (0-100)\n\nBar-mode incremental last sample uses ``_crowd_sentiment_inc_update``.",
     "snippet": "crowd_sentiment(${1:arg})",
     "category": "builtin"
   },
@@ -1624,7 +1624,7 @@
     "kind": "function",
     "detail": "cumulative_delta(...)",
     "brief": "Cumulative Delta - Buy-sell volume delta",
-    "documentation": "Cumulative Delta - Buy-sell volume delta.\n\nta.cumulative_delta(close, volume, period)\nReturns: Cumulative signed volume",
+    "documentation": "Cumulative Delta - Buy-sell volume delta.\n\nta.cumulative_delta(close, volume, period)\nReturns: Cumulative signed volume\nDuplicate of ``EconomicsIndicators._builtin_ta_cumulative_delta`` — keep in sync.\nBar-mode incremental last sample uses ``_cumulative_delta_inc_update``.",
     "snippet": "cumulative_delta(${1:arg})",
     "category": "builtin"
   },
@@ -1804,7 +1804,7 @@
     "kind": "function",
     "detail": "fear_greed_index(...)",
     "brief": "Fear Greed Index - Market psychology measurement",
-    "documentation": "Fear Greed Index - Market psychology measurement.\n\nta.fear_greed_index(rsi, vix_proxy, put_call_ratio, breadth)\nReturns: Score (-100 to 100)",
+    "documentation": "Fear Greed Index - Market psychology measurement.\n\nta.fear_greed_index(rsi, vix_proxy, put_call_ratio, breadth)\nReturns: Score (-100 to 100)\n\nBar-mode incremental last sample uses ``_fear_greed_index_inc_update``.",
     "snippet": "fear_greed_index(${1:arg})",
     "category": "builtin"
   },
@@ -2245,7 +2245,7 @@
     "kind": "function",
     "detail": "kama(...)",
     "brief": "Kaufman's Adaptive Moving Average",
-    "documentation": "Kaufman's Adaptive Moving Average.\n\nreference / community form: ``ta.kama(source, length, fastLength=2, slowLength=30)``.\nAccepts 2–4 positional args (fast/slow default to Kaufman's 2/30).",
+    "documentation": "Kaufman's Adaptive Moving Average.\n\nreference / community form: ``ta.kama(source, length, fastLength=2, slowLength=30)``.\nAccepts 2-4 positional args (fast/slow default to Kaufman's 2/30).",
     "snippet": "kama(${1:arg})",
     "category": "builtin"
   },
@@ -2630,9 +2630,9 @@
   "line.fill": {
     "label": "line.fill",
     "kind": "function",
-    "detail": "line.fill(line1, line2, color)",
-    "brief": "Fill the region between two lines (alias of linefill.new)",
-    "documentation": "line.fill(line1, line2, color)\n\nFill the region between two line objects. Alias of linefill.new(line1, line2, color).",
+    "detail": "line.fill(...)",
+    "brief": "Fill the region between two lines",
+    "documentation": "Fill the region between two lines.\n\nSignature: linefill.new(line1, line2, color)\n\n``line.fill`` is an alias of ``linefill.new``.",
     "snippet": "line.fill(${1:line1}, ${2:line2}, ${3:color})",
     "category": "line"
   },
@@ -2855,9 +2855,9 @@
   "linefill.new": {
     "label": "linefill.new",
     "kind": "function",
-    "detail": "linefill.new(line1, line2, color)",
+    "detail": "linefill.new(...)",
     "brief": "Fill the region between two lines",
-    "documentation": "linefill.new(line1, line2, color)\n\nFill the region between two line objects. ``line.fill`` is an alias.",
+    "documentation": "Fill the region between two lines.\n\nSignature: linefill.new(line1, line2, color)\n\n``line.fill`` is an alias of ``linefill.new``.",
     "snippet": "linefill.new(${1:line1}, ${2:line2}, ${3:color})",
     "category": "linefill"
   },
@@ -2884,7 +2884,7 @@
     "kind": "function",
     "detail": "liquidity_score(...)",
     "brief": "Liquidity Score - Market liquidity measurement",
-    "documentation": "Liquidity Score - Market liquidity measurement.\n\nta.liquidity_score(volume, volatility, bid_ask_spread, period)\nReturns: Score (0-100)",
+    "documentation": "Liquidity Score - Market liquidity measurement.\n\nta.liquidity_score(volume, volatility, bid_ask_spread, period)\nReturns: Score (0-100)\n\nBar-mode incremental last sample uses ``_liquidity_score_inc_update``.",
     "snippet": "liquidity_score(${1:arg})",
     "category": "builtin"
   },
@@ -3073,7 +3073,7 @@
     "kind": "function",
     "detail": "market_condition(...)",
     "brief": "Market Condition Detection",
-    "documentation": "Market Condition Detection.",
+    "documentation": "Market Condition Detection.\n\nBar-mode incremental last sample uses ``_market_condition_inc_update``.",
     "snippet": "market_condition(${1:arg})",
     "category": "builtin"
   },
@@ -3478,7 +3478,7 @@
     "kind": "function",
     "detail": "matrix.fill(...)",
     "brief": "matrix",
-    "documentation": "matrix.fill(id, value[, from_row, to_row, from_column, to_column]) -> void.\n\nreference region form uses half-open ``[from_row, to_row)`` × ``[from_col, to_col)``.\n``na`` matrix → no-op; ``na`` region bound → full extent for that edge.",
+    "documentation": "matrix.fill(id, value[, from_row, to_row, from_column, to_column]) -> void.\n\nreference region form uses half-open ``[from_row, to_row)`` x ``[from_col, to_col)``.\n``na`` matrix → no-op; ``na`` region bound → full extent for that edge.",
     "snippet": "matrix.fill(${1:param1})",
     "category": "matrix"
   },
@@ -3757,7 +3757,7 @@
     "kind": "function",
     "detail": "matrix.new(...)",
     "brief": "matrix",
-    "documentation": "matrix.new() | matrix.new(rows, cols, default_value?) -> Matrix.\n\nZero-arg form creates an empty 0×0 matrix (reference ``matrix.new<T>()``).\nSoft: ``na`` rows/cols → empty 0×0 (unresolved size inputs).",
+    "documentation": "matrix.new() | matrix.new(rows, cols, default_value?) -> Matrix.\n\nZero-arg form creates an empty 0x0 matrix (reference ``matrix.new<T>()``).\nSoft: ``na`` rows/cols → empty 0x0 (unresolved size inputs).",
     "snippet": "matrix.new(${1:param1})",
     "category": "matrix"
   },
@@ -4009,7 +4009,7 @@
     "kind": "function",
     "detail": "max_loss_level(...)",
     "brief": "Maximum Loss Stop - Calculates stop for max loss",
-    "documentation": "Maximum Loss Stop - Calculates stop for max loss.\n\nta.max_loss_level(entry, account, max_loss_pct)\nReturns: Stop price.",
+    "documentation": "Maximum Loss Stop - Calculates stop for max loss.\n\nta.max_loss_level(entry, account, max_loss_pct)\nReturns: Stop price.\n\nBar-mode incremental last sample uses ``_max_loss_level_inc_update``.",
     "snippet": "max_loss_level(${1:arg})",
     "category": "builtin"
   },
@@ -4027,7 +4027,7 @@
     "kind": "function",
     "detail": "mean_reversion_score(...)",
     "brief": "Mean Reversion Score - Probability of price reverting to mean",
-    "documentation": "Mean Reversion Score - Probability of price reverting to mean.\n\nta.mean_reversion_score(close, sma, stdev, period)\nReturns: Score (0-100)",
+    "documentation": "Mean Reversion Score - Probability of price reverting to mean.\n\nta.mean_reversion_score(close, sma, stdev, period)\nReturns: Score (0-100)\n\nBar-mode incremental last sample uses ``_mean_reversion_score_inc_update``.",
     "snippet": "mean_reversion_score(${1:arg})",
     "category": "builtin"
   },
@@ -4099,7 +4099,7 @@
     "kind": "function",
     "detail": "momentum_filter(...)",
     "brief": "Momentum Filter - Adaptive momentum filtering",
-    "documentation": "Momentum Filter - Adaptive momentum filtering.\n\nta.momentum_filter(momentum_raw, volume, period)\nReturns: Filtered momentum value",
+    "documentation": "Momentum Filter - Adaptive momentum filtering.\n\nta.momentum_filter(momentum_raw, volume, period)\nReturns: Filtered momentum value\n\nBar-mode incremental last sample uses ``_momentum_filter_inc_update``.",
     "snippet": "momentum_filter(${1:arg})",
     "category": "builtin"
   },
@@ -4180,7 +4180,7 @@
     "kind": "function",
     "detail": "order_flow_imbalance(...)",
     "brief": "Order Flow Imbalance",
-    "documentation": "Order Flow Imbalance.",
+    "documentation": "Order Flow Imbalance.\n\nBar-mode incremental last sample uses ``_order_flow_imbalance_inc_update``.",
     "snippet": "order_flow_imbalance(${1:arg})",
     "category": "builtin"
   },
@@ -4603,7 +4603,7 @@
     "kind": "function",
     "detail": "profit_lock_level(...)",
     "brief": "Profit Lock Level - Dynamic trailing stop",
-    "documentation": "Profit Lock Level - Dynamic trailing stop.\n\nta.profit_lock_level(entry, current, trail_pct, direction)\nDirection: 1 for long, -1 for short.\nReturns: Stop price that trails behind price.",
+    "documentation": "Profit Lock Level - Dynamic trailing stop.\n\nta.profit_lock_level(entry, current, trail_pct, direction)\nDirection: 1 for long, -1 for short.\nReturns: Stop price that trails behind price.\n\nBar-mode incremental last sample uses ``_profit_lock_level_inc_update``.",
     "snippet": "profit_lock_level(${1:arg})",
     "category": "builtin"
   },
@@ -4684,7 +4684,7 @@
     "kind": "function",
     "detail": "request.currency_rate(...)",
     "brief": "request",
-    "documentation": "request.currency_rate(from_currency, to_currency)\n\nRequest exchange rate between two currencies.\n\nParameters:\n    from_currency: Source currency code (str, e.g., \"USD\")\n    to_currency: Target currency code (str, e.g., \"EUR\")\n\nReturns exchange rate as float.\nThis is a mock implementation.",
+    "documentation": "request.currency_rate(from_currency, to_currency)\n\nRequest exchange rate between two currencies.\n\nParameters:\n    from_currency: Source currency code (str, e.g., \"USD\")\n    to_currency: Target currency code (str, e.g., \"EUR\")\n\nReturns the live feed pair rate when available, else a hooked\nfetch_fundamental(\"currency_rate\", pair, ...) value, else na —\nnever an invented static table.",
     "snippet": "request.currency_rate(${1:param1})",
     "category": "request"
   },
@@ -4693,7 +4693,7 @@
     "kind": "function",
     "detail": "request.dividends(...)",
     "brief": "request",
-    "documentation": "request.dividends(symbol, currency)\n\nRequest dividend information for a symbol.\n\nParameters:\n    symbol: Symbol/ticker string (str)\n    currency: Currency code (str or None)\n\nReturns dividend amount as float.\nThis is a mock implementation.",
+    "documentation": "request.dividends(symbol, currency)\n\nRequest dividend information for a symbol.\n\nParameters:\n    symbol: Symbol/ticker string (str)\n    currency: Currency code (str or None)\n\nReturns the dividend amount, or na when no host supplies\nfundamentals via fetch_fundamental(\"dividends\", symbol, ...).",
     "snippet": "request.dividends(${1:param1})",
     "category": "request"
   },
@@ -4702,7 +4702,7 @@
     "kind": "function",
     "detail": "request.earnings(...)",
     "brief": "request",
-    "documentation": "request.earnings(symbol, currency)\n\nRequest earnings information for a symbol.\n\nParameters:\n    symbol: Symbol/ticker string (str)\n    currency: Currency code (str or None)\n\nReturns earnings per share as float.\nThis is a mock implementation.",
+    "documentation": "request.earnings(symbol, currency)\n\nRequest earnings information for a symbol.\n\nParameters:\n    symbol: Symbol/ticker string (str)\n    currency: Currency code (str or None)\n\nReturns earnings per share, or na when no host supplies\nfundamentals via fetch_fundamental(\"earnings\", symbol, ...).",
     "snippet": "request.earnings(${1:param1})",
     "category": "request"
   },
@@ -4711,7 +4711,7 @@
     "kind": "function",
     "detail": "request.economic(...)",
     "brief": "request",
-    "documentation": "request.economic(country, indicator_code)\n\nRequest economic indicator data (e.g., unemployment, inflation).\n\nParameters:\n    country: Country code (str, e.g., \"US\", \"EU\")\n    indicator_code: Economic indicator code (str)\n\nReturns economic data as series or value.\nThis is a mock implementation.",
+    "documentation": "request.economic(country, indicator_code)\n\nRequest economic indicator data (e.g., unemployment, inflation).\n\nParameters:\n    country: Country code (str, e.g., \"US\", \"EU\")\n    indicator_code: Economic indicator code (str)\n\nReturns the indicator series, or na when no host supplies data\nvia fetch_fundamental(\"economic\", country, ...).",
     "snippet": "request.economic(${1:param1})",
     "category": "request"
   },
@@ -4720,7 +4720,7 @@
     "kind": "function",
     "detail": "request.financial(...)",
     "brief": "request",
-    "documentation": "request.financial(symbol, financial_id, period)\n\nRequest financial statement data (from SEC filings).\n\nParameters:\n    symbol: Symbol/ticker string (str)\n    financial_id: Financial metric identifier (str)\n    period: Reporting period (str, e.g., \"FQ\", \"FY\")\n\nReturns financial metric value as float.\nMock table with optional price-based scaling when data_feed is wired.",
+    "documentation": "request.financial(symbol, financial_id, period)\n\nRequest financial statement data (from SEC filings).\n\nParameters:\n    symbol: Symbol/ticker string (str)\n    financial_id: Financial metric identifier (str)\n    period: Reporting period (str, e.g., \"FQ\", \"FY\")\n\nReturns the financial metric value, or na when no host supplies\nfundamentals via fetch_fundamental(\"financial\", symbol, ...).",
     "snippet": "request.financial(${1:param1})",
     "category": "request"
   },
@@ -4738,7 +4738,7 @@
     "kind": "function",
     "detail": "request.quandl(...)",
     "brief": "request",
-    "documentation": "request.quandl(quandl_code, column)\n\nRequest data from Quandl database.\n\nParameters:\n    quandl_code: Quandl dataset code (str)\n    column: Column name within dataset (str)\n\nReturns series data from Quandl dataset.\nThis is a mock implementation.",
+    "documentation": "request.quandl(quandl_code, column)\n\nRequest data from Quandl database.\n\nParameters:\n    quandl_code: Quandl dataset code (str)\n    column: Column name within dataset (str)\n\nReturns the dataset series, or na when no host supplies data\nvia fetch_fundamental(\"quandl\", quandl_code, ...).",
     "snippet": "request.quandl(${1:param1})",
     "category": "request"
   },
@@ -4747,7 +4747,7 @@
     "kind": "function",
     "detail": "request.security(...)",
     "brief": "request",
-    "documentation": "request.security(symbol, timeframe, expression, gaps, lookahead)\n\nRequest data from another symbol or timeframe.\n\nv6+: Supports real data via context['data_provider'] (historical)\nor context['data_feed'] (CCXTProDataFeed for live/latest data).\n\nPolicy (parity with compile foreign-na / same-symbol simple OHLCV):\n\n- **Foreign** without a multi-symbol feed hit → ``na`` (never invent chart\n  series or legacy mock OHLCV as foreign fundamentals when a host chart\n  identity is wired). Standalone unit eval without chart identity may\n  still use legacy mock prices for bare string series names.\n- **Same-symbol + simple OHLCV** on a **coarser** TF with bar times →\n  timestamp resample of chart OHLCV (``htf_ohlcv_resample``): last\n  completed HTF bar only (lookahead_off-style; gaps/lookahead unused).\n- **Same-symbol + allowlisted simple ta.*** (``ta.sma/ema/rsi/atr/wma/rma`` with\n  bare OHLCV source + const length) on a **coarser** TF → run the\n  interpret TA helper on resampled HTF bars (``htf_simple_ta_resample``).\n- **Same-symbol + simple OHLCV** otherwise → chart passthrough /\n  provider series (``chart_passthrough_htf_stub`` / same-TF eval).\n- **Same-symbol Heikin-Ashi** (``ticker.heikinashi``) → transform chart\n  OHLCV to HA (do not return raw chart candles or all-``na``).\n- **Same-symbol + complex pre-eval** (UDF / nested / multi-arg ta) on a\n  **different** TF → ``na`` without full multi-TF re-eval.\n- **Same-symbol + same TF** pre-eval → chart eval is correct; allow.\n- **gaps / lookahead** (``barmerge.*``) are accepted for API shape but\n  **unused** (no gap-fill series, no lookahead offset). Recorded in\n  policy metadata rather than silently affecting values.",
+    "documentation": "request.security(symbol, timeframe, expression, gaps, lookahead)\n\nRequest data from another symbol or timeframe.\n\nv6+: Supports real data via context['data_provider'] (historical)\nor context['data_feed'] (CCXTProDataFeed for live/latest data).\n\nPolicy (parity with compile foreign-na / same-symbol simple OHLCV):\n\n- **Foreign** without a multi-symbol feed hit → ``na`` (never invent chart\n  series or legacy mock OHLCV as foreign fundamentals when a host chart\n  identity is wired). Standalone unit eval without chart identity may\n  still use legacy mock prices for bare string series names.\n- **Same-symbol + simple OHLCV** on a **coarser** TF with bar times →\n  timestamp resample of chart OHLCV (``htf_ohlcv_resample``): last\n  completed HTF bar by default; ``gaps_on`` / ``lookahead_on`` honored\n  on this path (bucket-start na-gaps / historical final-from-period-start).\n- **Provider/feed simple OHLCV** already coarser than the chart, with\n  bar times that align to chart bars → same merge (``provider_htf_ohlcv``).\n  Chart-length / no-timestamp provider series stay stubs\n  (``provider_ohlcv`` / ``provider_ohlcv_chart_stub``) with unused merge.\n- **Same-symbol + allowlisted simple ta.*** (``ta.sma/ema/rsi/atr/wma/rma/cmo/stdev/linreg/cci/roc/mom/hma/vwma/dema/tema/highest/lowest/range/median/dev/variance/mode/percentrank/change/cog/highestbars/lowestbars/kama/rising/falling/swma/ao/vwap/cum``\n  with bare OHLCV source + const length; 1-arg ``ta.cci(n)`` uses HTF hlc3;\n  1-arg ``ta.wpr(n)`` uses HTF high/low/close; 1-arg ``ta.adx(n)`` uses HTF\n  high/low/close; 1-arg ``ta.mfi(n)`` uses HTF high/low/close/volume;\n  0-arg ``ta.obv()`` uses HTF close+volume; 1-arg ``ta.cmf(n)`` uses HTF\n  high/low/close/volume; 0-arg ``ta.vpt()`` / ``ta.pvt()`` uses HTF\n  close+volume; 1-arg ``ta.wvad(n)`` uses HTF high/low/close/volume;\n  3-arg ``ta.uo(n1, n2, n3)`` uses HTF high/low/close (extra packs\n  n2*1000+n3); 3-arg ``ta.apo(source, fast, slow)`` uses HTF source\n  (extra=fast, length=slow); 1-arg ``ta.emv(n)`` uses HTF\n  high/low/volume;\n  1-arg ``ta.highest(n)`` /\n  ``ta.lowest(n)`` / ``ta.highestbars(n)`` / ``ta.lowestbars(n)`` use HTF\n  high / low; 1-arg ``ta.range(n)`` is HTF high-low; 1-arg ``ta.swma``\n  is fixed 4-period; 0-arg ``ta.ao()`` is SMA(hl2,5)-SMA(hl2,34);\n  1-arg ``ta.ao(fast)`` uses HTF hl2 with slow=34; 2-arg\n  ``ta.ao(fast, slow)`` uses HTF hl2 at those periods;\n  1-arg ``ta.stoch(n)`` / 2-arg ``ta.stoch(k, d)`` is %K on HTF\n  high/low/close (dPeriod stored unused);\n  3-arg ``ta.linreg(source, n, offset)`` honors ``extra`` as offset;\n  2-arg ``ta.kama`` uses Kaufman fast=2, slow=30;\n  1-arg ``ta.cum(source)`` is the running sum on unique HTF bars;\n  1-arg ``ta.change(source)`` defaults length to 1) on a\n  **coarser** TF → run the\n  interpret TA helper on resampled HTF bars (``htf_simple_ta_resample``).\n- **Same-symbol + simple OHLCV** otherwise → chart passthrough /\n  provider series (``chart_passthrough_htf_stub`` / same-TF eval).\n- **Same-symbol Heikin-Ashi** (``ticker.heikinashi``) → transform chart\n  OHLCV to HA (do not return raw chart candles or all-``na``).\n- **Same-symbol + complex pre-eval** (UDF / nested / multi-arg ta) on a\n  **different** TF → ``na`` without full multi-TF re-eval.\n- **Same-symbol + same TF** pre-eval → chart eval is correct; allow.\n- **gaps / lookahead** (``barmerge.*``) are honored on the HTF resample\n  paths above (chart and provider-backed coarser OHLCV) and\n  accepted-but-unused elsewhere (passthrough, chart-length provider\n  stubs, complex/foreign na, LTF). Presence vs effect is recorded in\n  policy metadata (``gaps_lookahead_provided`` vs ``gaps_applied`` /\n  ``lookahead_applied``) rather than silently affecting values.",
     "snippet": "request.security(${1:param1})",
     "category": "request"
   },
@@ -4765,7 +4765,7 @@
     "kind": "function",
     "detail": "request.seed(...)",
     "brief": "request",
-    "documentation": "request.seed(seed_value)\n\nSeed the random number generator for reproducible mock request data.\nStores the seed on evaluator context and optional numpy RNG.",
+    "documentation": "request.seed(seed_value)\n\nSeed the random number generator for reproducible request data.\nStores the seed on evaluator context and optional numpy RNG.",
     "snippet": "request.seed(${1:param1})",
     "category": "request"
   },
@@ -4774,7 +4774,7 @@
     "kind": "function",
     "detail": "request.splits(...)",
     "brief": "request",
-    "documentation": "request.splits(symbol, currency)\n\nRequest stock split information for a symbol.\n\nParameters:\n    symbol: Symbol/ticker string (str)\n    currency: Currency code (str or None)\n\nReturns split ratio as float.\nThis is a mock implementation.",
+    "documentation": "request.splits(symbol, currency)\n\nRequest stock split information for a symbol.\n\nParameters:\n    symbol: Symbol/ticker string (str)\n    currency: Currency code (str or None)\n\nReturns the split ratio, or na when no host supplies\nfundamentals via fetch_fundamental(\"splits\", symbol, ...).",
     "snippet": "request.splits(${1:param1})",
     "category": "request"
   },
@@ -4855,7 +4855,7 @@
     "kind": "function",
     "detail": "rsi_divergence(...)",
     "brief": "RSI Divergence Detector",
-    "documentation": "RSI Divergence Detector.",
+    "documentation": "RSI Divergence Detector.\n\nLast-(period+1) min/max of numeric RSI scaled to [-1, 1]:\n``(rsi - min) / (max - min) * 2 - 1``. 0.0 while ``i < period``,\nwhen fewer than 2 numeric values are in the window, when the current\nsample is non-numeric, or when the range is 0. Bar-mode incremental\nreturns the last sample.",
     "snippet": "rsi_divergence(${1:arg})",
     "category": "builtin"
   },
@@ -4864,7 +4864,7 @@
     "kind": "function",
     "detail": "rsi_oversold_overbought(...)",
     "brief": "RSI Oversold/Overbought Levels - Custom RSI threshold detection",
-    "documentation": "RSI Oversold/Overbought Levels - Custom RSI threshold detection.\n\nta.rsi_oversold_overbought(rsi_series, oversold_level, overbought_level)\nReturns boolean flags for oversold/overbought conditions.",
+    "documentation": "RSI Oversold/Overbought Levels - Custom RSI threshold detection.\n\nta.rsi_oversold_overbought(rsi_series, oversold_level, overbought_level)\nReturns boolean flags for oversold/overbought conditions.\nBar-mode incremental last sample uses ``_rsi_oversold_overbought_inc_update``.",
     "snippet": "rsi_oversold_overbought(${1:arg})",
     "category": "builtin"
   },
@@ -4900,7 +4900,7 @@
     "kind": "function",
     "detail": "security(...)",
     "brief": "request",
-    "documentation": "request.security(symbol, timeframe, expression, gaps, lookahead)\n\nRequest data from another symbol or timeframe.\n\nv6+: Supports real data via context['data_provider'] (historical)\nor context['data_feed'] (CCXTProDataFeed for live/latest data).\n\nPolicy (parity with compile foreign-na / same-symbol simple OHLCV):\n\n- **Foreign** without a multi-symbol feed hit → ``na`` (never invent chart\n  series or legacy mock OHLCV as foreign fundamentals when a host chart\n  identity is wired). Standalone unit eval without chart identity may\n  still use legacy mock prices for bare string series names.\n- **Same-symbol + simple OHLCV** on a **coarser** TF with bar times →\n  timestamp resample of chart OHLCV (``htf_ohlcv_resample``): last\n  completed HTF bar only (lookahead_off-style; gaps/lookahead unused).\n- **Same-symbol + allowlisted simple ta.*** (``ta.sma/ema/rsi/atr/wma/rma`` with\n  bare OHLCV source + const length) on a **coarser** TF → run the\n  interpret TA helper on resampled HTF bars (``htf_simple_ta_resample``).\n- **Same-symbol + simple OHLCV** otherwise → chart passthrough /\n  provider series (``chart_passthrough_htf_stub`` / same-TF eval).\n- **Same-symbol Heikin-Ashi** (``ticker.heikinashi``) → transform chart\n  OHLCV to HA (do not return raw chart candles or all-``na``).\n- **Same-symbol + complex pre-eval** (UDF / nested / multi-arg ta) on a\n  **different** TF → ``na`` without full multi-TF re-eval.\n- **Same-symbol + same TF** pre-eval → chart eval is correct; allow.\n- **gaps / lookahead** (``barmerge.*``) are accepted for API shape but\n  **unused** (no gap-fill series, no lookahead offset). Recorded in\n  policy metadata rather than silently affecting values.",
+    "documentation": "request.security(symbol, timeframe, expression, gaps, lookahead)\n\nRequest data from another symbol or timeframe.\n\nv6+: Supports real data via context['data_provider'] (historical)\nor context['data_feed'] (CCXTProDataFeed for live/latest data).\n\nPolicy (parity with compile foreign-na / same-symbol simple OHLCV):\n\n- **Foreign** without a multi-symbol feed hit → ``na`` (never invent chart\n  series or legacy mock OHLCV as foreign fundamentals when a host chart\n  identity is wired). Standalone unit eval without chart identity may\n  still use legacy mock prices for bare string series names.\n- **Same-symbol + simple OHLCV** on a **coarser** TF with bar times →\n  timestamp resample of chart OHLCV (``htf_ohlcv_resample``): last\n  completed HTF bar by default; ``gaps_on`` / ``lookahead_on`` honored\n  on this path (bucket-start na-gaps / historical final-from-period-start).\n- **Provider/feed simple OHLCV** already coarser than the chart, with\n  bar times that align to chart bars → same merge (``provider_htf_ohlcv``).\n  Chart-length / no-timestamp provider series stay stubs\n  (``provider_ohlcv`` / ``provider_ohlcv_chart_stub``) with unused merge.\n- **Same-symbol + allowlisted simple ta.*** (``ta.sma/ema/rsi/atr/wma/rma/cmo/stdev/linreg/cci/roc/mom/hma/vwma/dema/tema/highest/lowest/range/median/dev/variance/mode/percentrank/change/cog/highestbars/lowestbars/kama/rising/falling/swma/ao/vwap/cum``\n  with bare OHLCV source + const length; 1-arg ``ta.cci(n)`` uses HTF hlc3;\n  1-arg ``ta.wpr(n)`` uses HTF high/low/close; 1-arg ``ta.adx(n)`` uses HTF\n  high/low/close; 1-arg ``ta.mfi(n)`` uses HTF high/low/close/volume;\n  0-arg ``ta.obv()`` uses HTF close+volume; 1-arg ``ta.cmf(n)`` uses HTF\n  high/low/close/volume; 0-arg ``ta.vpt()`` / ``ta.pvt()`` uses HTF\n  close+volume; 1-arg ``ta.wvad(n)`` uses HTF high/low/close/volume;\n  3-arg ``ta.uo(n1, n2, n3)`` uses HTF high/low/close (extra packs\n  n2*1000+n3); 3-arg ``ta.apo(source, fast, slow)`` uses HTF source\n  (extra=fast, length=slow); 1-arg ``ta.emv(n)`` uses HTF\n  high/low/volume;\n  1-arg ``ta.highest(n)`` /\n  ``ta.lowest(n)`` / ``ta.highestbars(n)`` / ``ta.lowestbars(n)`` use HTF\n  high / low; 1-arg ``ta.range(n)`` is HTF high-low; 1-arg ``ta.swma``\n  is fixed 4-period; 0-arg ``ta.ao()`` is SMA(hl2,5)-SMA(hl2,34);\n  1-arg ``ta.ao(fast)`` uses HTF hl2 with slow=34; 2-arg\n  ``ta.ao(fast, slow)`` uses HTF hl2 at those periods;\n  1-arg ``ta.stoch(n)`` / 2-arg ``ta.stoch(k, d)`` is %K on HTF\n  high/low/close (dPeriod stored unused);\n  3-arg ``ta.linreg(source, n, offset)`` honors ``extra`` as offset;\n  2-arg ``ta.kama`` uses Kaufman fast=2, slow=30;\n  1-arg ``ta.cum(source)`` is the running sum on unique HTF bars;\n  1-arg ``ta.change(source)`` defaults length to 1) on a\n  **coarser** TF → run the\n  interpret TA helper on resampled HTF bars (``htf_simple_ta_resample``).\n- **Same-symbol + simple OHLCV** otherwise → chart passthrough /\n  provider series (``chart_passthrough_htf_stub`` / same-TF eval).\n- **Same-symbol Heikin-Ashi** (``ticker.heikinashi``) → transform chart\n  OHLCV to HA (do not return raw chart candles or all-``na``).\n- **Same-symbol + complex pre-eval** (UDF / nested / multi-arg ta) on a\n  **different** TF → ``na`` without full multi-TF re-eval.\n- **Same-symbol + same TF** pre-eval → chart eval is correct; allow.\n- **gaps / lookahead** (``barmerge.*``) are honored on the HTF resample\n  paths above (chart and provider-backed coarser OHLCV) and\n  accepted-but-unused elsewhere (passthrough, chart-length provider\n  stubs, complex/foreign na, LTF). Presence vs effect is recorded in\n  policy metadata (``gaps_lookahead_provided`` vs ``gaps_applied`` /\n  ``lookahead_applied``) rather than silently affecting values.",
     "snippet": "security(${1:arg})",
     "category": "builtin"
   },
@@ -4972,7 +4972,7 @@
     "kind": "function",
     "detail": "smart_money_flow(...)",
     "brief": "Smart Money Flow - Institutional money flow estimation",
-    "documentation": "Smart Money Flow - Institutional money flow estimation.\n\nta.smart_money_flow(price_change, volume, time_since_high, time_since_low)\nReturns: Flow intensity (-1.0 to 1.0)",
+    "documentation": "Smart Money Flow - Institutional money flow estimation.\n\nta.smart_money_flow(price_change, volume, time_since_high, time_since_low)\nReturns: Flow intensity (-1.0 to 1.0)\n\nBar-mode incremental last sample uses ``_smart_money_flow_inc_update``.",
     "snippet": "smart_money_flow(${1:arg})",
     "category": "builtin"
   },
@@ -5017,7 +5017,7 @@
     "kind": "function",
     "detail": "stoch_smooth(...)",
     "brief": "Smoothed Stochastic Oscillator",
-    "documentation": "Smoothed Stochastic Oscillator.",
+    "documentation": "Smoothed Stochastic Oscillator.\n\n``ta.stoch_smooth(high, low, close, period, smooth_k, smooth_d)``:\nraw stochastic per bar, then ``EMA(stoch, smooth_k)``, then\n``EMA(that, smooth_d)``. Bar-mode incremental returns the last\nsample of the second EMA.",
     "snippet": "stoch_smooth(${1:arg})",
     "category": "builtin"
   },
@@ -5611,7 +5611,7 @@
     "kind": "function",
     "detail": "strategy.exit(...)",
     "brief": "strategy",
-    "documentation": "strategy.exit(id, from_entry, qty, qty_percent, profit, limit, loss, stop,\ntrail_price, trail_points, trail_offset, ...)\n\nPlace a bracket exit against the open position.\n\n* ``profit`` / ``loss`` are **ticks** from entry average\n  (``ticks * syminfo.mintick``). Long: ``entry ± ticks*mintick``;\n  short flips the sign. ``na`` / None / ``<= 0`` ignore that leg.\n* ``limit`` / ``stop`` are absolute prices (unchanged).\n* No ``limit``/``stop``/profit/loss/trail → market close now (with slippage).\n* With ``limit`` and/or ``stop`` (after tick conversion) → pending\n  order(s) filled by :meth:`process_pending_orders` when bar OHLC\n  touches the level. Both legs share an OCA cancel group so one fill\n  cancels the other (first-touch pair-eval unchanged).\n* ``qty_percent`` (kwargs or Pine positional) sizes the exit as a\n  percent of the open target (whole position or ``from_entry`` size);\n  wins over absolute ``qty`` when both are set.\n* Trail: ``trail_points`` / ``trail_offset`` (ticks × mintick) with\n  optional ``trail_price`` activation. Pending stop ratchets with\n  favorable extremes after arming.\n* When ``from_entry`` is set, only that entry id's open qty is reduced;\n  other open trades (pyramiding) are left intact. Unknown from_entry is\n  a soft no-op after the placement event (no crash).\n\nAlways records a ``kind=exit`` event for host bookkeeping (placement).",
+    "documentation": "strategy.exit(id, from_entry, qty, qty_percent, profit, limit, loss, stop,\ntrail_price, trail_points, trail_offset, ...)\n\nPlace a bracket exit against the open position.\n\n* ``profit`` / ``loss`` are **ticks** from entry average\n  (``ticks * syminfo.mintick``). Long: ``entry ± ticks*mintick``;\n  short flips the sign. ``na`` / None / ``<= 0`` ignore that leg.\n* ``limit`` / ``stop`` are absolute prices (unchanged).\n* No ``limit``/``stop``/profit/loss/trail → market close now (with slippage).\n* With ``limit`` and/or ``stop`` (after tick conversion) → pending\n  order(s) filled by :meth:`process_pending_orders` when bar OHLC\n  touches the level. Both legs share an OCA cancel group so one fill\n  cancels the other (first-touch pair-eval unchanged).\n* ``qty_percent`` (kwargs or Pine positional) sizes the exit as a\n  percent of the open target (whole position or ``from_entry`` size);\n  wins over absolute ``qty`` when both are set.\n* Trail: ``trail_points`` / ``trail_offset`` (ticks x mintick) with\n  optional ``trail_price`` activation. Pending stop ratchets with\n  favorable extremes after arming.\n* When ``from_entry`` is set, only that entry id's open qty is reduced;\n  other open trades (pyramiding) are left intact. Unknown from_entry is\n  a soft no-op after the placement event (no crash).\n\nAlways records a ``kind=exit`` event for host bookkeeping (placement).",
     "snippet": "strategy.exit(${1:param1}, ${2:param2})",
     "category": "strategy"
   },
@@ -6016,7 +6016,7 @@
     "kind": "function",
     "detail": "strategy.risk.max_intraday_filled_orders(...)",
     "brief": "strategy",
-    "documentation": "strategy.risk.max_intraday_filled_orders(max_orders)\n\nSet maximum number of intraday filled orders to limit trading.\n\nParameters:\n    max_orders: Maximum number of filled orders per day (int)\n\nReturns None.",
+    "documentation": "strategy.risk.max_intraday_filled_orders(max_orders) — day fill cap.\n\nCounts entry + exit fills per bar-time day bucket; further entries\nare blocked once the cap is hit (day-scoped, no permanent halt).",
     "snippet": "strategy.risk.max_intraday_filled_orders(${1:param1}, ${2:param2})",
     "category": "strategy"
   },
@@ -6025,7 +6025,7 @@
     "kind": "function",
     "detail": "strategy.risk.max_intraday_loss(...)",
     "brief": "strategy",
-    "documentation": "strategy.risk.max_intraday_loss(percent)\n\nSet maximum intraday loss to stop trading.\n\nParameters:\n    percent: Maximum loss in % (float)\n\nReturns None.",
+    "documentation": "strategy.risk.max_intraday_loss(value, type) — halt on day loss.\n\n``type`` is percent-of-initial-capital by default\n(``percent`` / ``percentage`` / ``strategy.percent_of_equity`` / ``%``)\nor absolute account-currency cash (``cash`` / ``strategy.cash``,\nlike max_drawdown). Cash values are interpreted in the strategy\naccount currency — no FX conversion. Percent and cash are mutually\nexclusive; setting one clears the other.",
     "snippet": "strategy.risk.max_intraday_loss(${1:param1}, ${2:param2})",
     "category": "strategy"
   },
@@ -6034,7 +6034,7 @@
     "kind": "function",
     "detail": "strategy.risk.max_position_size(...)",
     "brief": "strategy",
-    "documentation": "strategy.risk.max_position_size(percent)\n\nSet maximum position size as percentage of account equity.\nSubsequent entries cap qty so (qty * price) <= equity * percent/100.",
+    "documentation": "strategy.risk.max_position_size(value)\n\nDefault: maximum position size as percentage of account equity.\nSubsequent entries cap qty so (qty * price) <= equity * percent/100.\n\nWith ``PYNE_STRATEGY_RISK_CONTRACTS=1`` the value is an absolute\ncontracts cap (reference Pine semantics) instead; invalid values\nare ignored.",
     "snippet": "strategy.risk.max_position_size(${1:param1}, ${2:param2})",
     "category": "strategy"
   },
@@ -6142,7 +6142,7 @@
     "kind": "function",
     "detail": "ta.acceleration_factor(...)",
     "brief": "Acceleration Factor - Momentum acceleration/deceleration",
-    "documentation": "Acceleration Factor - Momentum acceleration/deceleration.\n\nta.acceleration_factor(momentum_list, period)\nReturns: Factor (-2.0 to 2.0)",
+    "documentation": "Acceleration Factor - Momentum acceleration/deceleration.\n\nta.acceleration_factor(momentum_list, period)\nReturns: Factor (-2.0 to 2.0)\n\nBar-mode incremental last sample uses ``_acceleration_factor_inc_update``.",
     "snippet": "ta.acceleration_factor(${1:param1}, ${2:param2})",
     "category": "ta.technical_analysis"
   },
@@ -6196,7 +6196,7 @@
     "kind": "function",
     "detail": "ta.apo(...)",
     "brief": "Absolute Price Oscillator",
-    "documentation": "Absolute Price Oscillator.\n\nta.apo(series, fast_period, slow_period)\nAPO = EMA(fast) - EMA(slow)\nReturns APO series.",
+    "documentation": "Absolute Price Oscillator.\n\nta.apo(series, fast_period, slow_period)\nAPO = EMA(fast) - EMA(slow)\nReturns APO series (full) or last scalar (incremental bar mode).",
     "snippet": "ta.apo(${1:param1}, ${2:param2})",
     "category": "ta.technical_analysis"
   },
@@ -6232,7 +6232,7 @@
     "kind": "function",
     "detail": "ta.atr_stop(...)",
     "brief": "ATR-based Stop Loss",
-    "documentation": "ATR-based Stop Loss.\n\nta.atr_stop(atr_value, multiplier)\nCalculate stop levels based on ATR.",
+    "documentation": "ATR-based Stop Loss.\n\nta.atr_stop(atr_value, multiplier)\nCalculate stop levels based on ATR.\nBar-mode incremental last sample uses ``_atr_stop_inc_update``.",
     "snippet": "ta.atr_stop(${1:param1}, ${2:param2})",
     "category": "ta.technical_analysis"
   },
@@ -6421,7 +6421,7 @@
     "kind": "function",
     "detail": "ta.crowd_sentiment(...)",
     "brief": "Crowd Sentiment - Crowd consensus strength",
-    "documentation": "Crowd Sentiment - Crowd consensus strength.\n\nta.crowd_sentiment(price_agreement, volume_agreement, time_agreement)\nReturns: Score (0-100)",
+    "documentation": "Crowd Sentiment - Crowd consensus strength.\n\nta.crowd_sentiment(price_agreement, volume_agreement, time_agreement)\nReturns: Score (0-100)\n\nBar-mode incremental last sample uses ``_crowd_sentiment_inc_update``.",
     "snippet": "ta.crowd_sentiment(${1:param1}, ${2:param2})",
     "category": "ta.technical_analysis"
   },
@@ -6439,7 +6439,7 @@
     "kind": "function",
     "detail": "ta.cumulative_delta(...)",
     "brief": "Cumulative Delta - Buy-sell volume delta",
-    "documentation": "Cumulative Delta - Buy-sell volume delta.\n\nta.cumulative_delta(close, volume, period)\nReturns: Cumulative signed volume",
+    "documentation": "Cumulative Delta - Buy-sell volume delta.\n\nta.cumulative_delta(close, volume, period)\nReturns: Cumulative signed volume\nDuplicate of ``EconomicsIndicators._builtin_ta_cumulative_delta`` — keep in sync.\nBar-mode incremental last sample uses ``_cumulative_delta_inc_update``.",
     "snippet": "ta.cumulative_delta(${1:param1}, ${2:param2})",
     "category": "ta.technical_analysis"
   },
@@ -6592,7 +6592,7 @@
     "kind": "function",
     "detail": "ta.fear_greed_index(...)",
     "brief": "Fear Greed Index - Market psychology measurement",
-    "documentation": "Fear Greed Index - Market psychology measurement.\n\nta.fear_greed_index(rsi, vix_proxy, put_call_ratio, breadth)\nReturns: Score (-100 to 100)",
+    "documentation": "Fear Greed Index - Market psychology measurement.\n\nta.fear_greed_index(rsi, vix_proxy, put_call_ratio, breadth)\nReturns: Score (-100 to 100)\n\nBar-mode incremental last sample uses ``_fear_greed_index_inc_update``.",
     "snippet": "ta.fear_greed_index(${1:param1}, ${2:param2})",
     "category": "ta.technical_analysis"
   },
@@ -6727,7 +6727,7 @@
     "kind": "function",
     "detail": "ta.kama(...)",
     "brief": "Kaufman's Adaptive Moving Average",
-    "documentation": "Kaufman's Adaptive Moving Average.\n\nreference / community form: ``ta.kama(source, length, fastLength=2, slowLength=30)``.\nAccepts 2–4 positional args (fast/slow default to Kaufman's 2/30).",
+    "documentation": "Kaufman's Adaptive Moving Average.\n\nreference / community form: ``ta.kama(source, length, fastLength=2, slowLength=30)``.\nAccepts 2-4 positional args (fast/slow default to Kaufman's 2/30).",
     "snippet": "ta.kama(${1:param1}, ${2:param2})",
     "category": "ta.technical_analysis"
   },
@@ -6799,7 +6799,7 @@
     "kind": "function",
     "detail": "ta.liquidity_score(...)",
     "brief": "Liquidity Score - Market liquidity measurement",
-    "documentation": "Liquidity Score - Market liquidity measurement.\n\nta.liquidity_score(volume, volatility, bid_ask_spread, period)\nReturns: Score (0-100)",
+    "documentation": "Liquidity Score - Market liquidity measurement.\n\nta.liquidity_score(volume, volatility, bid_ask_spread, period)\nReturns: Score (0-100)\n\nBar-mode incremental last sample uses ``_liquidity_score_inc_update``.",
     "snippet": "ta.liquidity_score(${1:param1}, ${2:param2})",
     "category": "ta.technical_analysis"
   },
@@ -6844,7 +6844,7 @@
     "kind": "function",
     "detail": "ta.market_condition(...)",
     "brief": "Market Condition Detection",
-    "documentation": "Market Condition Detection.",
+    "documentation": "Market Condition Detection.\n\nBar-mode incremental last sample uses ``_market_condition_inc_update``.",
     "snippet": "ta.market_condition(${1:param1}, ${2:param2})",
     "category": "ta.technical_analysis"
   },
@@ -6871,7 +6871,7 @@
     "kind": "function",
     "detail": "ta.max(...)",
     "brief": "Maximum value over a period (alias for ta",
-    "documentation": "Maximum value over a period (alias for ta.highest).\n\nAlso accepts a single series arg (extension methods like\n``method max(float data) => ta.max(data)``) — returns the max of\navailable history, or the scalar itself.",
+    "documentation": "Maximum value over a period (alias for ta.highest).\n\nAlso accepts a single series arg (extension methods like\n``method max(float data) => ta.max(data)``) — returns the max of\navailable history, or the scalar itself. 1-arg stays full-path.",
     "snippet": "ta.max(${1:param1}, ${2:param2})",
     "category": "ta.technical_analysis"
   },
@@ -6880,7 +6880,7 @@
     "kind": "function",
     "detail": "ta.max_loss_level(...)",
     "brief": "Maximum Loss Stop - Calculates stop for max loss",
-    "documentation": "Maximum Loss Stop - Calculates stop for max loss.\n\nta.max_loss_level(entry, account, max_loss_pct)\nReturns: Stop price.",
+    "documentation": "Maximum Loss Stop - Calculates stop for max loss.\n\nta.max_loss_level(entry, account, max_loss_pct)\nReturns: Stop price.\n\nBar-mode incremental last sample uses ``_max_loss_level_inc_update``.",
     "snippet": "ta.max_loss_level(${1:param1}, ${2:param2})",
     "category": "ta.technical_analysis"
   },
@@ -6898,7 +6898,7 @@
     "kind": "function",
     "detail": "ta.mean_reversion_score(...)",
     "brief": "Mean Reversion Score - Probability of price reverting to mean",
-    "documentation": "Mean Reversion Score - Probability of price reverting to mean.\n\nta.mean_reversion_score(close, sma, stdev, period)\nReturns: Score (0-100)",
+    "documentation": "Mean Reversion Score - Probability of price reverting to mean.\n\nta.mean_reversion_score(close, sma, stdev, period)\nReturns: Score (0-100)\n\nBar-mode incremental last sample uses ``_mean_reversion_score_inc_update``.",
     "snippet": "ta.mean_reversion_score(${1:param1}, ${2:param2})",
     "category": "ta.technical_analysis"
   },
@@ -6925,7 +6925,7 @@
     "kind": "function",
     "detail": "ta.min(...)",
     "brief": "Minimum value over a period (alias for ta",
-    "documentation": "Minimum value over a period (alias for ta.lowest).\n\nSingle-arg form mirrors ``ta.max`` (full-history min / scalar).",
+    "documentation": "Minimum value over a period (alias for ta.lowest).\n\nSingle-arg form mirrors ``ta.max`` (full-history min / scalar).\n1-arg stays full-path.",
     "snippet": "ta.min(${1:param1}, ${2:param2})",
     "category": "ta.technical_analysis"
   },
@@ -6961,7 +6961,7 @@
     "kind": "function",
     "detail": "ta.momentum_filter(...)",
     "brief": "Momentum Filter - Adaptive momentum filtering",
-    "documentation": "Momentum Filter - Adaptive momentum filtering.\n\nta.momentum_filter(momentum_raw, volume, period)\nReturns: Filtered momentum value",
+    "documentation": "Momentum Filter - Adaptive momentum filtering.\n\nta.momentum_filter(momentum_raw, volume, period)\nReturns: Filtered momentum value\n\nBar-mode incremental last sample uses ``_momentum_filter_inc_update``.",
     "snippet": "ta.momentum_filter(${1:param1}, ${2:param2})",
     "category": "ta.technical_analysis"
   },
@@ -7006,7 +7006,7 @@
     "kind": "function",
     "detail": "ta.order_flow_imbalance(...)",
     "brief": "Order Flow Imbalance",
-    "documentation": "Order Flow Imbalance.",
+    "documentation": "Order Flow Imbalance.\n\nBar-mode incremental last sample uses ``_order_flow_imbalance_inc_update``.",
     "snippet": "ta.order_flow_imbalance(${1:param1}, ${2:param2})",
     "category": "ta.technical_analysis"
   },
@@ -7105,7 +7105,7 @@
     "kind": "function",
     "detail": "ta.profit_lock_level(...)",
     "brief": "Profit Lock Level - Dynamic trailing stop",
-    "documentation": "Profit Lock Level - Dynamic trailing stop.\n\nta.profit_lock_level(entry, current, trail_pct, direction)\nDirection: 1 for long, -1 for short.\nReturns: Stop price that trails behind price.",
+    "documentation": "Profit Lock Level - Dynamic trailing stop.\n\nta.profit_lock_level(entry, current, trail_pct, direction)\nDirection: 1 for long, -1 for short.\nReturns: Stop price that trails behind price.\n\nBar-mode incremental last sample uses ``_profit_lock_level_inc_update``.",
     "snippet": "ta.profit_lock_level(${1:param1}, ${2:param2})",
     "category": "ta.technical_analysis"
   },
@@ -7150,7 +7150,7 @@
     "kind": "function",
     "detail": "ta.range(...)",
     "brief": "Range = highest - lowest over a period",
-    "documentation": "Range = highest - lowest over a period.",
+    "documentation": "Range = highest - lowest over a period.\n\n2-arg ``ta.range(source, n)``; 1-arg ``ta.range(n)`` is high - low.",
     "snippet": "ta.range(${1:param1}, ${2:param2})",
     "category": "ta.technical_analysis"
   },
@@ -7231,7 +7231,7 @@
     "kind": "function",
     "detail": "ta.rsi_divergence(...)",
     "brief": "RSI Divergence Detector",
-    "documentation": "RSI Divergence Detector.",
+    "documentation": "RSI Divergence Detector.\n\nLast-(period+1) min/max of numeric RSI scaled to [-1, 1]:\n``(rsi - min) / (max - min) * 2 - 1``. 0.0 while ``i < period``,\nwhen fewer than 2 numeric values are in the window, when the current\nsample is non-numeric, or when the range is 0. Bar-mode incremental\nreturns the last sample.",
     "snippet": "ta.rsi_divergence(${1:param1}, ${2:param2})",
     "category": "ta.technical_analysis"
   },
@@ -7240,7 +7240,7 @@
     "kind": "function",
     "detail": "ta.rsi_oversold_overbought(...)",
     "brief": "RSI Oversold/Overbought Levels - Custom RSI threshold detection",
-    "documentation": "RSI Oversold/Overbought Levels - Custom RSI threshold detection.\n\nta.rsi_oversold_overbought(rsi_series, oversold_level, overbought_level)\nReturns boolean flags for oversold/overbought conditions.",
+    "documentation": "RSI Oversold/Overbought Levels - Custom RSI threshold detection.\n\nta.rsi_oversold_overbought(rsi_series, oversold_level, overbought_level)\nReturns boolean flags for oversold/overbought conditions.\nBar-mode incremental last sample uses ``_rsi_oversold_overbought_inc_update``.",
     "snippet": "ta.rsi_oversold_overbought(${1:param1}, ${2:param2})",
     "category": "ta.technical_analysis"
   },
@@ -7294,7 +7294,7 @@
     "kind": "function",
     "detail": "ta.smart_money_flow(...)",
     "brief": "Smart Money Flow - Institutional money flow estimation",
-    "documentation": "Smart Money Flow - Institutional money flow estimation.\n\nta.smart_money_flow(price_change, volume, time_since_high, time_since_low)\nReturns: Flow intensity (-1.0 to 1.0)",
+    "documentation": "Smart Money Flow - Institutional money flow estimation.\n\nta.smart_money_flow(price_change, volume, time_since_high, time_since_low)\nReturns: Flow intensity (-1.0 to 1.0)\n\nBar-mode incremental last sample uses ``_smart_money_flow_inc_update``.",
     "snippet": "ta.smart_money_flow(${1:param1}, ${2:param2})",
     "category": "ta.technical_analysis"
   },
@@ -7330,7 +7330,7 @@
     "kind": "function",
     "detail": "ta.stoch_smooth(...)",
     "brief": "Smoothed Stochastic Oscillator",
-    "documentation": "Smoothed Stochastic Oscillator.",
+    "documentation": "Smoothed Stochastic Oscillator.\n\n``ta.stoch_smooth(high, low, close, period, smooth_k, smooth_d)``:\nraw stochastic per bar, then ``EMA(stoch, smooth_k)``, then\n``EMA(that, smooth_d)``. Bar-mode incremental returns the last\nsample of the second EMA.",
     "snippet": "ta.stoch_smooth(${1:param1}, ${2:param2})",
     "category": "ta.technical_analysis"
   },
@@ -7393,7 +7393,7 @@
     "kind": "function",
     "detail": "ta.tr(...)",
     "brief": "True Range",
-    "documentation": "True Range.\n\nReference Pine: ``ta.tr(handle_na)`` with 0–1 args (uses high/low/close\nfrom context). Also accepts the legacy 3-arg form for unit tests.",
+    "documentation": "True Range.\n\nReference Pine: ``ta.tr(handle_na)`` with 0-1 args (uses high/low/close\nfrom context). Also accepts the legacy 3-arg form for unit tests.",
     "snippet": "ta.tr(${1:param1}, ${2:param2})",
     "category": "ta.technical_analysis"
   },
@@ -7411,7 +7411,7 @@
     "kind": "function",
     "detail": "ta.trend_confirmation_score(...)",
     "brief": "Trend Confirmation Score - Multi-signal trend strength",
-    "documentation": "Trend Confirmation Score - Multi-signal trend strength.\n\nta.trend_confirmation_score(momentum, trend_alignment, strength, rsi,\n                             rsi_alignment, support_distance)\nReturns: float (0-100)",
+    "documentation": "Trend Confirmation Score - Multi-signal trend strength.\n\nta.trend_confirmation_score(momentum, trend_alignment, strength, rsi,\n                             rsi_alignment, support_distance)\nReturns: float (0-100)\n\nBar-mode incremental last sample uses ``_trend_confirmation_score_inc_update``.\nThe sixth argument (support_distance) is unused after the length check.",
     "snippet": "ta.trend_confirmation_score(${1:param1}, ${2:param2})",
     "category": "ta.technical_analysis"
   },
@@ -7474,7 +7474,7 @@
     "kind": "function",
     "detail": "ta.volatility_regime(...)",
     "brief": "Volatility Regime Classification",
-    "documentation": "Volatility Regime Classification.",
+    "documentation": "Volatility Regime Classification.\n\nBar-mode incremental last sample uses ``_volatility_regime_inc_update``.",
     "snippet": "ta.volatility_regime(${1:param1}, ${2:param2})",
     "category": "ta.technical_analysis"
   },
@@ -7492,7 +7492,7 @@
     "kind": "function",
     "detail": "ta.volume_momentum(...)",
     "brief": "Volume Momentum - Rate of change of volume",
-    "documentation": "Volume Momentum - Rate of change of volume.\n\nta.volume_momentum(volume, period)\nReturns: Momentum (-100 to 100)",
+    "documentation": "Volume Momentum - Rate of change of volume.\n\nta.volume_momentum(volume, period)\nReturns: Momentum (-100 to 100)\nDuplicate of ``EconomicsIndicators._builtin_ta_volume_momentum`` — keep in sync.\nBar-mode incremental last sample uses ``_volume_momentum_inc_update``.",
     "snippet": "ta.volume_momentum(${1:param1}, ${2:param2})",
     "category": "ta.technical_analysis"
   },
@@ -7519,7 +7519,7 @@
     "kind": "function",
     "detail": "ta.volume_thrust(...)",
     "brief": "Volume Thrust - Volume surge pattern detection",
-    "documentation": "Volume Thrust - Volume surge pattern detection.\n\nta.volume_thrust(close, volume, volume_sma, sensitivity)\nReturns: bool",
+    "documentation": "Volume Thrust - Volume surge pattern detection.\n\nta.volume_thrust(close, volume, volume_sma, sensitivity)\nReturns: bool\n\nBar-mode incremental last sample uses ``_volume_thrust_inc_update``.",
     "snippet": "ta.volume_thrust(${1:param1}, ${2:param2})",
     "category": "ta.technical_analysis"
   },
@@ -7609,7 +7609,7 @@
     "kind": "function",
     "detail": "ta.zigzag(...)",
     "brief": "Zigzag pattern detector (returns high, low, direction)",
-    "documentation": "Zigzag pattern detector (returns high, low, direction).",
+    "documentation": "Zigzag pattern detector (returns high, low, direction).\n\nBar-mode incremental last sample uses ``_zigzag_inc_update``.",
     "snippet": "ta.zigzag(${1:param1}, ${2:param2})",
     "category": "ta.technical_analysis"
   },
@@ -7798,7 +7798,7 @@
     "kind": "function",
     "detail": "table.new(...)",
     "brief": "table",
-    "documentation": "table.new(position, rows, columns, ...)",
+    "documentation": "table.new(position, columns, rows, bgcolor, frame_color, ...).\n\nPositional order matches Pine: columns then rows, then bgcolor.",
     "snippet": "table.new(${1:param1})",
     "category": "table"
   },
@@ -7996,7 +7996,7 @@
     "kind": "function",
     "detail": "timeframe.change(...)",
     "brief": "``timeframe",
-    "documentation": "``timeframe.change(tf)`` — true on the first bar of a new *tf* period.\n\nUTC fixed-width buckets (same widths as ``timeframe.in_seconds``).\nBar 0 is a new period. Missing times / unusable tf → False.",
+    "documentation": "``timeframe.change(tf)`` — true on the first bar of a new *tf* period.\n\nBare ``D`` / ``W`` / ``M`` resolve on the exchange calendar in\n``syminfo.timezone`` (UTC when the host leaves it unset); all other\nframes keep fixed-width UTC buckets. Bar 0 is a new period.\nMissing times / unusable tf → False.",
     "snippet": "timeframe.change(${1:param1})",
     "category": "timeframe"
   },
@@ -8176,7 +8176,7 @@
     "kind": "function",
     "detail": "trend_confirmation_score(...)",
     "brief": "Trend Confirmation Score - Multi-signal trend strength",
-    "documentation": "Trend Confirmation Score - Multi-signal trend strength.\n\nta.trend_confirmation_score(momentum, trend_alignment, strength, rsi,\n                             rsi_alignment, support_distance)\nReturns: float (0-100)",
+    "documentation": "Trend Confirmation Score - Multi-signal trend strength.\n\nta.trend_confirmation_score(momentum, trend_alignment, strength, rsi,\n                             rsi_alignment, support_distance)\nReturns: float (0-100)\n\nBar-mode incremental last sample uses ``_trend_confirmation_score_inc_update``.\nThe sixth argument (support_distance) is unused after the length check.",
     "snippet": "trend_confirmation_score(${1:arg})",
     "category": "builtin"
   },
@@ -8239,7 +8239,7 @@
     "kind": "function",
     "detail": "volatility_regime(...)",
     "brief": "Volatility Regime Classification",
-    "documentation": "Volatility Regime Classification.",
+    "documentation": "Volatility Regime Classification.\n\nBar-mode incremental last sample uses ``_volatility_regime_inc_update``.",
     "snippet": "volatility_regime(${1:arg})",
     "category": "builtin"
   },
@@ -8257,7 +8257,7 @@
     "kind": "function",
     "detail": "volume_momentum(...)",
     "brief": "Volume Momentum - Rate of change of volume",
-    "documentation": "Volume Momentum - Rate of change of volume.\n\nta.volume_momentum(volume, period)\nReturns: Momentum (-100 to 100)",
+    "documentation": "Volume Momentum - Rate of change of volume.\n\nta.volume_momentum(volume, period)\nReturns: Momentum (-100 to 100)\nDuplicate of ``EconomicsIndicators._builtin_ta_volume_momentum`` — keep in sync.\nBar-mode incremental last sample uses ``_volume_momentum_inc_update``.",
     "snippet": "volume_momentum(${1:arg})",
     "category": "builtin"
   },
@@ -8356,7 +8356,7 @@
     "kind": "function",
     "detail": "volume_thrust(...)",
     "brief": "Volume Thrust - Volume surge pattern detection",
-    "documentation": "Volume Thrust - Volume surge pattern detection.\n\nta.volume_thrust(close, volume, volume_sma, sensitivity)\nReturns: bool",
+    "documentation": "Volume Thrust - Volume surge pattern detection.\n\nta.volume_thrust(close, volume, volume_sma, sensitivity)\nReturns: bool\n\nBar-mode incremental last sample uses ``_volume_thrust_inc_update``.",
     "snippet": "volume_thrust(${1:arg})",
     "category": "builtin"
   },
@@ -8464,7 +8464,7 @@
     "kind": "function",
     "detail": "zigzag(...)",
     "brief": "Zigzag pattern detector (returns high, low, direction)",
-    "documentation": "Zigzag pattern detector (returns high, low, direction).",
+    "documentation": "Zigzag pattern detector (returns high, low, direction).\n\nBar-mode incremental last sample uses ``_zigzag_inc_update``.",
     "snippet": "zigzag(${1:arg})",
     "category": "builtin"
   }

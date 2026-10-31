@@ -33,6 +33,10 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 - **`chart.lag` `v1.queueWait` is recv → `apply:start`.** On the worker path that is `batch:post` → bridge entry, so a live G1 read can separate main-thread queueing from the apply span. Live ticks also skip the O(n) internal-hole scan and debug-pin clear when pins are off.
 
+### Added
+
+- **Pine hover/autocomplete refreshed against PYNE 0.6.25.** `src/editor/data/pyne-builtins.json` re-synced from `pyne` (`builtin_metadata.json`, 88 improved docs incl. `line.fill` / `linefill.new`). Library annotation cards now render the description **verbatim as Markdown** (headings, code fences, blockquotes, tables, links, images, italic/strikethrough and two-space line breaks), matching PYNE's hover. `//@description` on `library` shows a library card. Card sections use PYNE's `**Fields:**` / `**Parameters:**` / `**Returns:**` shape with `- \`name\`: desc` bullets.
+
 ### Fixed
 
 - **Shortcuts help no longer steals typing keys.** `app.show-shortcuts` was bound to bare `Shift-?` / `Shift-/`, so typing `/` (Shift+7 on many layouts) or `?` opened the shortcuts overlay — the editor could not type `//`. The binding now requires a real modifier (`Alt-Shift-?` / `Alt-Shift-/`) and is skipped while focus is inside an editor/input/dialog.

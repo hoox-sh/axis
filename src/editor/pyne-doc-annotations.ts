@@ -36,13 +36,7 @@
  */
 
 /** Kind of documented declaration. */
-export type PyneDocKind =
-  | 'function'
-  | 'type'
-  | 'enum'
-  | 'variable'
-  | 'description'
-  | 'field';
+export type PyneDocKind = 'function' | 'type' | 'enum' | 'variable' | 'description' | 'field';
 
 /** One documented symbol extracted from annotation + declaration. */
 export interface PyneDocEntry {
@@ -66,8 +60,7 @@ export interface PyneDocEntry {
 const COMMENT_LINE = /^\/\/(.*)$/;
 
 /** Function / method header: optional export/method, name, params, => */
-const FUNC_DECL =
-  /^(?:export\s+)?(?:method\s+)?([A-Za-z_][\w]*)\s*\(([^)]*)\)\s*=>/;
+const FUNC_DECL = /^(?:export\s+)?(?:method\s+)?([A-Za-z_][\w]*)\s*\(([^)]*)\)\s*=>/;
 
 const TYPE_DECL = /^(?:export\s+)?type\s+([A-Za-z_][\w]*)\b/;
 const ENUM_DECL = /^(?:export\s+)?enum\s+([A-Za-z_][\w]*)\b/;
@@ -84,43 +77,29 @@ type RawTag = {
   cont: string[];
 };
 
+/**
+ * Join an annotation tag's first-line payload with its continuation lines.
+ *
+ * PYNE renders annotation bodies as **verbatim Markdown**: headings, lists,
+ * code fences, blockquotes, tables and two-space line breaks must survive.
+ * Do not soft-wrap single newlines into spaces (that destroyed fences and
+ * headings in the old card). Only trailing blank lines are trimmed, matching
+ * PYNE's `"\n".join(...).rstrip("\n")`.
+ */
 function joinTagText(payload: string, cont: string[]): string {
-  const parts: string[] = [];
-  if (payload.trim()) parts.push(payload.trimEnd());
-  for (const c of cont) {
-    if (c.trim() === '') {
-      parts.push('');
-    } else {
-      parts.push(c.trimEnd());
-    }
-  }
-  // Join single newlines as soft wrap (space); blank lines stay as \n\n
-  const out: string[] = [];
-  let buf: string[] = [];
-  const flush = () => {
-    if (buf.length) {
-      out.push(buf.join(' ').replace(/[ \t]+/g, ' ').trim());
-      buf = [];
-    }
-  };
-  for (const p of parts) {
-    if (p === '') {
-      flush();
-      out.push('');
-    } else {
-      buf.push(p);
-    }
-  }
-  flush();
-  // Collapse multiple empties, join paragraphs with \n\n
-  const paras = out.filter((p, i, a) => p !== '' || (i > 0 && a[i - 1] !== ''));
-  return paras.join('\n\n').trim();
+  const lines: string[] = [];
+  // Keep the payload verbatim (trailing two spaces = Markdown line break).
+  if (payload.length > 0) lines.push(payload);
+  for (const c of cont) lines.push(c);
+  while (lines.length && lines[lines.length - 1]!.trim() === '') lines.pop();
+  return lines.join('\n');
 }
 
 function parseParamPayload(payload: string): { name: string; description: string } | null {
-  const m = payload.match(/^([A-Za-z_][\w]*)\s*(.*)$/s);
+  // Keep the description verbatim (trailing two spaces = Markdown line break).
+  const m = payload.match(/^([A-Za-z_][\w]*)(?:[ \t]+(.*))?$/s);
   if (!m) return null;
-  return { name: m[1]!, description: (m[2] || '').trim() };
+  return { name: m[1]!, description: m[2] || '' };
 }
 
 /**
@@ -128,10 +107,7 @@ function parseParamPayload(payload: string): { name: string; description: string
  * (0-based exclusive end = declaration line). Returns raw tags in order.
  * Blank source lines break the block (TV: no blank lines between cont lines).
  */
-function collectAnnotationBlock(
-  lines: string[],
-  endLine: number,
-): RawTag[] {
+function collectAnnotationBlock(lines: string[], endLine: number): RawTag[] {
   // Walk upward over pure // comment lines only
   let start = endLine;
   while (start > 0) {
@@ -294,7 +270,10 @@ export function parsePyneDocAnnotations(source: string): Map<string, PyneDocEntr
             name = v[1]!;
             kind = 'variable';
           }
-        } else if (partial.kindHint === 'description' || tags.some((t) => t.tag === 'description')) {
+        } else if (
+          partial.kindHint === 'description' ||
+          tags.some((t) => t.tag === 'description')
+        ) {
           // Library-level //@description — no declaration name; use synthetic key
           name = '__library_description__';
           kind = 'description';
@@ -319,9 +298,25 @@ export function parsePyneDocAnnotations(source: string): Map<string, PyneDocEntr
   return byName;
 }
 
+/** Markdown bullet list of `name`/description pairs (PYNE card shape). */
+function formatNamedList(
+  title: string,
+  items: Array<{ name: string; description: string }>,
+): string {
+  const lines = [`**${title}:**`, ''];
+  for (const it of items) {
+    lines.push(it.description ? `- \`${it.name}\`: ${it.description}` : `- \`${it.name}\``);
+  }
+  return lines.join('\n');
+}
+
 /**
  * Format a doc entry as markdown for {@link renderHoverMarkdown}.
- * Shape mirrors common LSP / Pine Editor hovers.
+ *
+ * Mirrors PYNE's library-annotation card: fenced signature, the description
+ * rendered **verbatim as Markdown**, then `**Fields:**`, `**Parameters:**`
+ * and `**Returns:**` sections. Bodies keep headings, lists, code fences,
+ * blockquotes, tables, links and two-space line breaks.
  */
 export function formatPyneDocMarkdown(entry: PyneDocEntry): string {
   const parts: string[] = [];
@@ -334,28 +329,20 @@ export function formatPyneDocMarkdown(entry: PyneDocEntry): string {
     parts.push(entry.description);
   }
 
-  if (entry.params.length) {
-    parts.push('---');
-    parts.push('**Parameters**');
-    for (const p of entry.params) {
-      const d = p.description ? ` — ${p.description}` : '';
-      parts.push(`- \`${p.name}\`${d}`);
-    }
+  if (entry.fields.length) {
+    parts.push(formatNamedList('Fields', entry.fields));
   }
 
-  if (entry.fields.length) {
-    parts.push('---');
-    parts.push('**Fields**');
-    for (const f of entry.fields) {
-      const d = f.description ? ` — ${f.description}` : '';
-      parts.push(`- \`${f.name}\`${d}`);
-    }
+  if (entry.params.length) {
+    parts.push(formatNamedList('Parameters', entry.params));
   }
 
   if (entry.returns) {
-    parts.push('---');
-    parts.push('**Returns**');
-    parts.push(entry.returns);
+    parts.push(`**Returns:** ${entry.returns}`);
+  }
+
+  if (parts.length === (entry.signature ? 1 : 0)) {
+    parts.push(`User-defined ${entry.kind}.`);
   }
 
   return parts.filter(Boolean).join('\n\n').trim();
@@ -365,10 +352,7 @@ export function formatPyneDocMarkdown(entry: PyneDocEntry): string {
  * Look up documentation for a symbol name in `source`.
  * Tries exact name, then bare member after `.`.
  */
-export function lookupPyneDoc(
-  source: string,
-  name: string,
-): PyneDocEntry | null {
+export function lookupPyneDoc(source: string, name: string): PyneDocEntry | null {
   if (!name) return null;
   const map = parsePyneDocAnnotations(source);
   if (map.has(name)) return map.get(name)!;

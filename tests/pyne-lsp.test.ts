@@ -66,7 +66,11 @@ plot(demo(2))
 `;
     const pos = src.indexOf('demo(2)') + 2;
     const tip = pyneHoverLocal(
-      { state: { doc: { sliceString: (a: number, b: number) => src.slice(a, b), length: src.length } } },
+      {
+        state: {
+          doc: { sliceString: (a: number, b: number) => src.slice(a, b), length: src.length },
+        },
+      },
       pos,
     );
     expect(tip).toBeTruthy();
@@ -105,8 +109,9 @@ x = ta.sma(close, 14)
   });
 
   it('completion trigger keymap binds Mod-Space', () => {
-    const keys = (pyneCompletionTriggerKeymap as { value?: Array<{ key?: string }> }).value
-      || (pyneCompletionTriggerKeymap as unknown as Array<{ key?: string }>);
+    const keys =
+      (pyneCompletionTriggerKeymap as { value?: Array<{ key?: string }> }).value ||
+      (pyneCompletionTriggerKeymap as unknown as Array<{ key?: string }>);
     // Facet/extension shape varies; ensure extension is non-empty
     expect(pyneCompletionTriggerKeymap).toBeTruthy();
     void keys;
@@ -399,7 +404,8 @@ plot(
   });
 
   it('peels leading signature fence from LSP hover', () => {
-    const md = '```pinescript\nta.sma(...)\n```\n\nSimple Moving Average\n\n---\n**See also:** `ta.ema`\n';
+    const md =
+      '```pinescript\nta.sma(...)\n```\n\nSimple Moving Average\n\n---\n**See also:** `ta.ema`\n';
     const { signature, rest } = peelLeadingSignature(md);
     expect(signature).toBe('ta.sma(...)');
     expect(rest).toContain('Simple Moving Average');
@@ -438,6 +444,33 @@ plot(
       expect(findByTag(el, 'strong')?.textContent).toBe('bold');
       expect(findByTag(el, 'code')?.textContent).toBe('code');
       expect(collectText(el)).toBe('Use bold and code together');
+    } finally {
+      restore();
+    }
+  });
+
+  it('renders links, italic, strike, blockquote, table and hard breaks', () => {
+    const restore = installMinimalDom();
+    try {
+      const el = document.createElement('div');
+      appendInlineMarkdown(el, 'See [docs](https://example.test/x), *em*, ~~gone~~ and **bold**');
+      const a = findByTag(el, 'a') as { textContent?: string; href?: string } | null;
+      expect(a?.textContent).toBe('docs');
+      expect(a?.href).toBe('https://example.test/x');
+      expect(findByTag(el, 'em')?.textContent).toBe('em');
+      expect(findByTag(el, 'del')?.textContent).toBe('gone');
+
+      const root = document.createElement('div');
+      renderHoverMarkdown(
+        root,
+        '> quoted line\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n\nline one  \nline two',
+      );
+      expect(findByClass(root, 'cm-pine-hover-quote')).toBeTruthy();
+      expect(findByTag(root, 'table')).toBeTruthy();
+      expect(findByTag(root, 'br')).toBeTruthy();
+      const text = collectText(root);
+      expect(text).toContain('quoted line');
+      expect(text).toContain('line two');
     } finally {
       restore();
     }
@@ -622,7 +655,6 @@ plot(foo(1))
   });
 });
 
-
 /** Lightweight DOM for hover markdown tests (no browser). Restores prior document. */
 function installMinimalDom(): () => void {
   type NodeLike = {
@@ -681,7 +713,11 @@ function installMinimalDom(): () => void {
 }
 
 function walk(node: { childNodes?: unknown[]; textContent?: string }, out: string[]) {
-  const kids = (node.childNodes || []) as Array<{ nodeType: number; textContent?: string; childNodes?: unknown[] }>;
+  const kids = (node.childNodes || []) as Array<{
+    nodeType: number;
+    textContent?: string;
+    childNodes?: unknown[];
+  }>;
   if (!kids.length && node.textContent) {
     out.push(node.textContent);
     return;
@@ -698,7 +734,10 @@ function collectText(root: { childNodes?: unknown[]; textContent?: string }): st
   return parts.join('');
 }
 
-function findByClass(root: { childNodes?: unknown[]; className?: string }, cls: string): { textContent?: string } | null {
+function findByClass(
+  root: { childNodes?: unknown[]; className?: string },
+  cls: string,
+): { textContent?: string } | null {
   const stack = [root as { childNodes?: unknown[]; className?: string; textContent?: string }];
   while (stack.length) {
     const n = stack.pop()!;

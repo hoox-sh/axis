@@ -99,14 +99,51 @@ method push(array<float> id, float v) =>
 });
 
 describe('formatPyneDocMarkdown', () => {
-  it('builds signature fence + params + returns', () => {
+  it('builds signature fence + params + returns (PYNE card shape)', () => {
     const e = parsePyneDocAnnotations(MIX_EMA).get('mixEMA')!;
     const md = formatPyneDocMarkdown(e);
     expect(md).toContain('```pinescript');
     expect(md).toContain('mixEMA(');
-    expect(md).toContain('**Parameters**');
-    expect(md).toContain('`source`');
-    expect(md).toContain('**Returns**');
+    expect(md).toContain('**Parameters:**');
+    expect(md).toContain('- `source`:');
+    expect(md).toContain('**Returns:**');
+  });
+
+  it('preserves Markdown verbatim (headings, fences, two-space breaks)', () => {
+    const src = `// @function **Bold** heading  
+// #### Usage
+// \`\`\`
+// x = foo(1)
+// \`\`\`
+// @param a The first.
+// @returns The result.
+export foo(a) => a
+`;
+    const e = parsePyneDocAnnotations(src).get('foo')!;
+    expect(e.description).toContain('**Bold** heading');
+    expect(e.description).toContain('#### Usage');
+    expect(e.description).toContain('```\nx = foo(1)\n```');
+    // Two trailing spaces must survive (Markdown hard break).
+    expect(e.description).toContain('**Bold** heading  \n');
+    const md = formatPyneDocMarkdown(e);
+    expect(md).toContain('#### Usage');
+    expect(md).toContain('```');
+  });
+
+  it('renders fields and returns sections', () => {
+    const src = `// @type Point in chart space.
+// @field x Bar time.
+// @field y Price.
+// @returns A point.
+type Point
+    int x
+    float y
+`;
+    const e = parsePyneDocAnnotations(src).get('Point')!;
+    const md = formatPyneDocMarkdown(e);
+    expect(md).toContain('**Fields:**');
+    expect(md).toContain('- `x`: Bar time.');
+    expect(md).toContain('**Returns:** A point.');
   });
 });
 
@@ -114,5 +151,16 @@ describe('lookupPyneDoc', () => {
   it('finds by name', () => {
     expect(lookupPyneDoc(MIX_EMA, 'mixEMA')?.name).toBe('mixEMA');
     expect(lookupPyneDoc(MIX_EMA, 'nope')).toBeNull();
+  });
+
+  it('exposes the library-level //@description under a synthetic key', () => {
+    const src = `//@version=6
+//@description **Demo library** for testing.
+library("Demo")
+`;
+    const lib = lookupPyneDoc(src, '__library_description__');
+    expect(lib).toBeTruthy();
+    expect(lib!.kind).toBe('description');
+    expect(lib!.description).toContain('Demo library');
   });
 });

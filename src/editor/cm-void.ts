@@ -352,6 +352,48 @@ export const voidEditorTheme = EditorView.theme(
       color: 'var(--color-accent-2)',
       whiteSpace: 'pre',
     },
+    '.cm-pine-hover-quote': {
+      margin: '2px 0 0',
+      padding: '2px 0 2px 9px',
+      borderLeft: '2px solid color-mix(in srgb, var(--color-accent) 45%, transparent)',
+      color: 'var(--color-text-faint)',
+    },
+    '.cm-pine-hover-table': {
+      margin: '2px 0 0',
+      borderCollapse: 'collapse',
+      fontSize: '11px',
+      width: '100%',
+    },
+    '.cm-pine-hover-table th': {
+      textAlign: 'left',
+      fontWeight: '600',
+      color: 'var(--color-text)',
+      padding: '2px 6px',
+      borderBottom: '1px solid var(--color-border-soft)',
+    },
+    '.cm-pine-hover-table td': {
+      padding: '2px 6px',
+      borderBottom: '1px solid color-mix(in srgb, var(--color-border-soft) 55%, transparent)',
+      verticalAlign: 'top',
+    },
+    '.cm-pine-hover-link': {
+      color: 'var(--color-accent)',
+      textDecoration: 'underline',
+      textUnderlineOffset: '2px',
+    },
+    '.cm-pine-hover-img': {
+      maxWidth: '100%',
+      height: 'auto',
+      borderRadius: '4px',
+      marginTop: '2px',
+    },
+    '.cm-pine-hover-em': {
+      fontStyle: 'italic',
+    },
+    '.cm-pine-hover-del': {
+      textDecoration: 'line-through',
+      color: 'var(--color-text-faint)',
+    },
     '.cm-tooltip:has(.cm-pine-param-hint)': {
       border: '1px solid var(--color-border-soft)',
       borderRadius: '8px',
@@ -477,7 +519,10 @@ export const voidHighlightStyle = HighlightStyle.define([
   { tag: t.definition(t.variableName), color: 'var(--color-accent)', fontWeight: '500' },
   { tag: t.function(t.variableName), color: 'var(--color-accent)', fontWeight: '500' },
   // Built-in members: ta.sma, color.red
-  { tag: t.propertyName, color: 'color-mix(in srgb, var(--color-accent-2) 72%, var(--color-text))' },
+  {
+    tag: t.propertyName,
+    color: 'color-mix(in srgb, var(--color-accent-2) 72%, var(--color-text))',
+  },
   // Library members: m.easing, m.SuperTrend (imported types use typeName)
   { tag: t.special(t.propertyName), color: 'var(--color-editor-lib-member)' },
   { tag: t.typeName, color: 'var(--color-editor-type)', fontWeight: '700' },
@@ -489,7 +534,4 @@ export const voidHighlightStyle = HighlightStyle.define([
 ]);
 
 /** Theme + syntax highlighting bundle for {@link PyneEditor}. */
-export const voidEditorExtensions = [
-  voidEditorTheme,
-  syntaxHighlighting(voidHighlightStyle),
-];
+export const voidEditorExtensions = [voidEditorTheme, syntaxHighlighting(voidHighlightStyle)];
