@@ -4,17 +4,8 @@
  */
 
 import '../setup';
-import { afterEach, describe, expect, mock, test } from 'bun:test';
-import {
-  CHART_LAYOUT_KEY,
-  SlotChart,
-  chartLayoutMode,
-  resetChartLayoutMode,
-  setChartLayoutMode,
-  usesSingleChartLayout,
-  type SlotChartApi,
-  type SlotPaneApi,
-} from '../../src/chart/v1/chart-host';
+import { describe, expect, mock, test } from 'bun:test';
+import { SlotChart, type SlotChartApi, type SlotPaneApi } from '../../src/chart/v1/chart-host';
 
 function fakeChart(): SlotChartApi & {
   addSeries: ReturnType<typeof mock>;
@@ -56,41 +47,6 @@ function fakeChart(): SlotChartApi & {
   };
   return chart;
 }
-
-afterEach(() => {
-  resetChartLayoutMode();
-});
-
-describe('axis.chart.layout', () => {
-  test('absent key or garbage is single', () => {
-    localStorage.removeItem(CHART_LAYOUT_KEY);
-    expect(chartLayoutMode()).toBe('single');
-    expect(usesSingleChartLayout()).toBe(true);
-
-    for (const garbage of ['', 'SINGLE', 'Single', 'foo', 'MULTI']) {
-      localStorage.setItem(CHART_LAYOUT_KEY, garbage);
-      expect(chartLayoutMode()).toBe('single');
-      expect(usesSingleChartLayout()).toBe(true);
-    }
-  });
-
-  test('exact multi is rollback; single clears the key', () => {
-    localStorage.setItem(CHART_LAYOUT_KEY, 'multi');
-    expect(chartLayoutMode()).toBe('multi');
-    expect(usesSingleChartLayout()).toBe(false);
-
-    setChartLayoutMode('single');
-    expect(localStorage.getItem(CHART_LAYOUT_KEY)).toBeNull();
-    expect(chartLayoutMode()).toBe('single');
-    expect(usesSingleChartLayout()).toBe(true);
-
-    setChartLayoutMode('multi');
-    expect(localStorage.getItem(CHART_LAYOUT_KEY)).toBe('multi');
-    expect(usesSingleChartLayout()).toBe(false);
-    setChartLayoutMode('single');
-    expect(localStorage.getItem(CHART_LAYOUT_KEY)).toBeNull();
-  });
-});
 
 describe('SlotChart', () => {
   test('two pane ids share one timeScale object', () => {

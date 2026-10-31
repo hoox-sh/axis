@@ -41,7 +41,6 @@
 import {
   createSeriesMarkers,
   LineStyle,
-  MismatchDirection,
   PriceScaleMode,
   type IChartApi,
   type IPriceLine,
@@ -51,9 +50,8 @@ import {
   type SeriesMarker,
   type UTCTimestamp,
 } from 'lightweight-charts';
-import { v1NotePanActivity } from '../engine/v1/metrics';
 import { chartDebug } from '../debug';
-import { SlotChart, usesSingleChartLayout } from './v1/chart-host';
+import { SlotChart } from './v1/chart-host';
 import { noteLogicalRangeSkew, type SyncSampleOpts } from './v1/invariants';
 import { noteLeftEdge } from './v1/left-prefetch';
 import {
@@ -804,35 +802,6 @@ export class PaneManager {
     return this.hostKey ? `pane-${this.hostKey}-${paneId}` : `pane-${paneId}`;
   }
 
-  private handleDomId(belowId: string): string {
-    return this.hostKey ? `pane-handle-${this.hostKey}-${belowId}` : `pane-handle-${belowId}`;
-  }
-
-  /** Prefer main geometry series on a pane for crosshair anchoring. */
-  private primarySeries(pane: ManagedPane): ISeriesApi<any> | null {
-    const prefer = ['candle', 'volume', 'equity'] as const;
-    for (const k of prefer) {
-      if (pane.series[k]) return pane.series[k]!;
-    }
-    for (const [k, s] of Object.entries(pane.series)) {
-      if (k.startsWith('bgcolor')) continue;
-      if (s) return s;
-    }
-    const first = Object.values(pane.series)[0];
-    return first ?? null;
-  }
-
-  /** Extract a Y price from a candle/line/histogram data point. */
-  private static seriesPointPrice(data: unknown): number | null {
-    if (data == null || typeof data !== 'object') return null;
-    const d = data as Record<string, unknown>;
-    for (const k of ['value', 'close', 'high', 'low', 'open'] as const) {
-      const v = d[k];
-      if (typeof v === 'number' && Number.isFinite(v)) return v;
-    }
-    return null;
-  }
-
   isPriceAutoScale(): boolean {
     return this.priceAutoScale;
   }
@@ -1208,14 +1177,12 @@ export class PaneManager {
         this.ranging = false;
         this.noteUserRange();
       };
-      const onWheelPan = () => v1NotePanActivity();
       div.addEventListener('pointerdown', onRangePointerDown);
       div.addEventListener('pointerup', onRangePointerUp);
       div.addEventListener('pointerup', persistHeights);
       div.addEventListener('pointercancel', onRangePointerUp);
       div.addEventListener('pointercancel', persistHeights);
       div.addEventListener('wheel', this.noteUserRange, { passive: true });
-      div.addEventListener('wheel', onWheelPan, { passive: true });
       const unsubHost = () => {
         try {
           div.removeEventListener('pointerdown', onRangePointerDown);
@@ -1224,7 +1191,6 @@ export class PaneManager {
           div.removeEventListener('pointercancel', onRangePointerUp);
           div.removeEventListener('pointercancel', persistHeights);
           div.removeEventListener('wheel', this.noteUserRange);
-          div.removeEventListener('wheel', onWheelPan);
         } catch {
           /* ignore */
         }
@@ -1278,16 +1244,12 @@ export class PaneManager {
     mountPaneBadge(host, id, type, label);
   }
 
-  /** Multi-chart panes remove their own chart. A shared sub-pane removes one LWC pane. */
-  private releasePaneChart(id: string, chart: IChartApi): void {
-    if (!this.slot) {
-      try {
-        chart.remove();
-      } catch {
-        /* ignore */
-      }
-      return;
-    }
+  /**
+   * A shared sub-pane removes one LWC pane. Releasing the pane that owns the
+   * chart destroys the whole {@link SlotChart}.
+   */
+  private releasePaneChart(id: string): void {
+    if (!this.slot) return;
     const kind = this.slot.release(id);
     if (kind === 'chart') {
       this.slot.destroy();
@@ -1296,159 +1258,7 @@ export class PaneManager {
   }
 
   createPane(id: string, type: string, label: string, height?: number): ManagedPane {
-    if (usesSingleChartLayout()) return this.createSharedPane(id, type, label, height);
-    // Horizontal resize handle above this pane (except first)
-    if (this.panes.size > 0) {
-      this.attachPaneResizeHandle(id);
-    }
-
-    const div = document.createElement('div');
-    div.id = this.paneDomId(id);
-    div.className = 'relative';
-    div.dataset.paneId = id;
-    if (height) {
-      div.style.height = `${height}px`;
-      div.style.flex = '0 0 auto';
-    } else {
-      div.style.flex = '1 1 auto';
-    }
-    div.style.minHeight = type === 'volume' ? '72px' : '48px';
-    div.style.background = getThemeManager().getColor('chart.bg_color') || '#0a0b10';
-    div.dataset.paneType = type;
-
-    // Name badge + script action icons (settings / eye / re-run / remove)
-    mountPaneBadge(div, id, type, label);
-
-    this.container.appendChild(div);
-
-    // Hover ownership for crosshair: only this pane drives multi-pane sync
-    if (typeof div.addEventListener === 'function') {
-      const onPaneEnter = () => {
-        this.pointerInside = true;
-        this.hoveredPaneId = id;
-      };
-      div.addEventListener('pointerenter', onPaneEnter);
-      const unsubPaneEnter = () => {
-        try {
-          div.removeEventListener('pointerenter', onPaneEnter);
-        } catch {
-          /* ignore */
-        }
-      };
-      this.pointerUnsubs.push(unsubPaneEnter);
-      this.panePointerUnsubs.set(id, unsubPaneEnter);
-    }
-
-    const isSecondary = type !== 'price';
-    // Only pass keys that apply — never `timeScale: undefined` (wipes base
-    // timeVisible and leaves crosshair labels date-only).
-    const chart = createBaseChart(div, {
-      layout: { panes: { enableResize: false } },
-      ...(isSecondary
-        ? {
-            // Secondary panes: no time axis / scrollbar; range follows price pane.
-            timeScale: {
-              visible: false,
-              borderVisible: false,
-              borderColor: VOID.border,
-              timeVisible: false,
-              ticksVisible: false,
-              minimumHeight: 0,
-              shiftVisibleRangeOnNewBar: false,
-              allowShiftVisibleRangeOnWhitespaceReplacement: false,
-              rightBarStaysOnScroll: true,
-            },
-            // Lock horz scroll/zoom — price pane is the driver.
-            handleScroll: {
-              mouseWheel: false,
-              pressedMouseMove: false,
-              horzTouchDrag: false,
-              vertTouchDrag: false,
-            },
-            handleScale: {
-              mouseWheel: false,
-              pinch: false,
-              axisPressedMouseMove: { time: false, price: true },
-              axisDoubleClickReset: { time: false, price: true },
-            },
-          }
-        : {
-            handleScroll: { vertTouchDrag: true },
-          }),
-      rightPriceScale: {
-        borderColor: VOID.border,
-        borderVisible: this.priceScaleLabelsVisible,
-        textColor: VOID.textDim,
-        visible: this.priceScaleLabelsVisible,
-        minimumWidth: this.priceScaleLabelsVisible ? RIGHT_PRICE_SCALE_WIDTH : 0,
-        scaleMargins:
-          type === 'volume'
-            ? { top: 0.12, bottom: 0.02 }
-            : type === 'equity'
-              ? { top: 0.1, bottom: 0.05 }
-              : type === 'indicator'
-                ? { top: 0.08, bottom: 0.08 }
-                : { top: 0.06, bottom: 0.06 },
-      },
-    });
-
-    // Lock right scale width so all pane plot areas share the same right edge
-    try {
-      chart.priceScale('right').applyOptions(this.rightScaleLayoutOptions());
-    } catch {
-      /* ignore */
-    }
-
-    // Live theme updates for this LWC chart (price vs secondary panes)
-    try {
-      this.themeUnregs.get(id)?.();
-      const unreg = getThemeManager().registerChart(chart, {
-        secondary: type !== 'price',
-        enablePaneResize: false,
-      });
-      this.themeUnregs.set(id, unreg);
-    } catch {
-      /* theme optional */
-    }
-
-    const ro = new ResizeObserver(() => {
-      // Coalesce rapid RO entries (panel drag, multi-pane, multi-slot) to 1 frame
-      this.pendingResizePaneIds.add(id);
-      this.resizeRaf.schedule(() => this.flushPendingPaneResizes());
-    });
-    ro.observe(div);
-    // A history replace that fits while this gesture is active collapses the
-    // candle viewport. The series stays blank until the next bar update.
-    const onRangePointerDown = () => {
-      this.ranging = true;
-    };
-    const onRangePointerUp = () => {
-      this.ranging = false;
-      this.noteUserRange();
-    };
-    div.addEventListener('pointerdown', onRangePointerDown);
-    div.addEventListener('pointerup', onRangePointerUp);
-    div.addEventListener('pointercancel', onRangePointerUp);
-    div.addEventListener('wheel', this.noteUserRange, { passive: true });
-    div.addEventListener('wheel', () => v1NotePanActivity(), { passive: true });
-
-    const pane: ManagedPane = {
-      id,
-      type,
-      chart,
-      series: {},
-      priceLines: {},
-      visible: true,
-      label,
-      resizeObserver: ro,
-    };
-    this.panes.set(id, pane);
-    this.alignRightScales();
-    // Wire range + crosshair for every new pane (equity / indicator created late)
-    this.syncTimeScales();
-    this.rewireCrosshair();
-
-    return pane;
+    return this.createSharedPane(id, type, label, height);
   }
 
   /** Shared right-scale width/visibility options (labels on = fixed gutter). */
@@ -1500,10 +1310,9 @@ export class PaneManager {
       /* ignore */
     }
     this.themeUnregs.delete(id);
-    this.releasePaneChart(id, pane.chart);
+    this.releasePaneChart(id);
     const el = document.getElementById(this.paneDomId(id));
     el?.remove();
-    document.getElementById(this.handleDomId(id))?.remove();
     this.paneShapePlugins.delete(id);
     // Detach this pane's hover listener: it closes over the removed div, so
     // leaving it in pointerUnsubs leaks the node and can re-arm hoveredPaneId.
@@ -1549,95 +1358,6 @@ export class PaneManager {
       const el = document.getElementById(this.paneDomId(pane.id));
       if (el) el.style.background = bg;
     }
-  }
-
-  /**
-   * Drag handle above `belowId` — resizes the pane above by changing pixel heights.
-   */
-  private attachPaneResizeHandle(belowId: string) {
-    const handle = document.createElement('div');
-    handle.id = this.handleDomId(belowId);
-    handle.className = 'sc-pane-resize-handle';
-    handle.title = 'Drag to resize panes';
-    handle.setAttribute('role', 'separator');
-    handle.setAttribute('aria-orientation', 'horizontal');
-
-    let dragging = false;
-    let startY = 0;
-    let aboveStart = 0;
-    let belowStart = 0;
-    let aboveEl: HTMLElement | null = null;
-    let belowEl: HTMLElement | null = null;
-
-    handle.addEventListener('pointerdown', (e) => {
-      e.preventDefault();
-      belowEl = document.getElementById(this.paneDomId(belowId));
-      // Previous sibling pane element (skip handles)
-      let prev = handle.previousElementSibling as HTMLElement | null;
-      while (prev && !prev.id?.startsWith('pane-')) {
-        prev = prev.previousElementSibling as HTMLElement | null;
-      }
-      aboveEl = prev;
-      if (!aboveEl || !belowEl) return;
-      dragging = true;
-      startY = e.clientY;
-      aboveStart = aboveEl.getBoundingClientRect().height;
-      belowStart = belowEl.getBoundingClientRect().height;
-      handle.setPointerCapture(e.pointerId);
-      document.body.style.cursor = 'row-resize';
-      document.body.style.userSelect = 'none';
-    });
-
-    handle.addEventListener('pointermove', (e) => {
-      if (!dragging || !aboveEl || !belowEl) return;
-      const dy = e.clientY - startY;
-      const minAbove = 48;
-      const minBelow = belowEl.dataset.paneId === 'volume' ? 72 : 48;
-      let newAbove = aboveStart + dy;
-      let newBelow = belowStart - dy;
-      if (newAbove < minAbove) {
-        newBelow -= minAbove - newAbove;
-        newAbove = minAbove;
-      }
-      if (newBelow < minBelow) {
-        newAbove -= minBelow - newBelow;
-        newBelow = minBelow;
-      }
-      if (newAbove < minAbove || newBelow < minBelow) return;
-
-      aboveEl.style.flex = '0 0 auto';
-      belowEl.style.flex = '0 0 auto';
-      aboveEl.style.height = `${newAbove}px`;
-      belowEl.style.height = `${newBelow}px`;
-
-      const aboveId = aboveEl.id.replace(/^pane-/, '');
-      this.resize(aboveId, newAbove);
-      this.resize(belowId, newBelow);
-    });
-
-    const endDrag = (e: PointerEvent) => {
-      if (!dragging) return;
-      dragging = false;
-      try {
-        handle.releasePointerCapture(e.pointerId);
-      } catch {
-        /* ignore */
-      }
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-      // Persist heights into store
-      if (aboveEl && belowEl) {
-        const aboveId = aboveEl.id.replace(/^pane-/, '');
-        const ah = aboveEl.getBoundingClientRect().height;
-        const bh = belowEl.getBoundingClientRect().height;
-        resizePane(aboveId, Math.round(ah));
-        resizePane(belowId, Math.round(bh));
-      }
-    };
-    handle.addEventListener('pointerup', endDrag);
-    handle.addEventListener('pointercancel', endDrag);
-
-    this.container.appendChild(handle);
   }
 
   setVisible(id: string, visible: boolean) {
@@ -1711,27 +1431,10 @@ export class PaneManager {
   }
 
   /**
-   * Keep every pane on the same visible logical range.
-   * Price pane is the preferred driver (sub-panes have horz scroll disabled),
-   * but any pane that does emit a range change still propagates to the rest.
+   * Watch the one time scale for left-edge prefetch. One chart has one
+   * scale; there is nothing to mirror onto other panes.
    */
   syncTimeScales() {
-    if (usesSingleChartLayout()) {
-      for (const u of this.timeSyncUnsubs) {
-        try {
-          u();
-        } catch {
-          /* ignore */
-        }
-      }
-      this.timeSyncUnsubs = [];
-      this.pendingTimeRange = null;
-      this.timeSyncRaf.cancel();
-      const price = this.panes.get('price') ?? this.getAllPanes()[0];
-      if (price) this.watchLeftEdge(price.chart);
-      this.alignRightScales();
-      return;
-    }
     for (const u of this.timeSyncUnsubs) {
       try {
         u();
@@ -1742,58 +1445,8 @@ export class PaneManager {
     this.timeSyncUnsubs = [];
     this.pendingTimeRange = null;
     this.timeSyncRaf.cancel();
-
-    const panes = this.getAllPanes().filter((p) => p.visible);
-    if (panes.length < 2) {
-      if (panes[0]) this.watchLeftEdge(panes[0].chart);
-      this.alignRightScales();
-      return;
-    }
-
-    // Price pane is the only user-driven scroller; secondary panes have
-    // handleScroll/Scale locked. Subscribing every pane used to bounce
-    // range-change events across 45k-point charts on every pan tick.
-    const price = this.panes.get('price')?.visible !== false ? this.panes.get('price') : null;
-    const srcPane = price ?? panes[0];
-    if (!srcPane) {
-      this.alignRightScales();
-      return;
-    }
-    const src = srcPane.chart;
-    const handler = (range: { from: number; to: number } | null) => {
-      if (this.suppressSync || !range) return;
-      if (this.ranging) v1NotePanActivity();
-      noteLeftEdge(range, () => this.userIsRanging());
-      this.pendingTimeRange = range;
-      this.timeSyncRaf.schedule(() => {
-        const next = this.pendingTimeRange;
-        this.pendingTimeRange = null;
-        if (!next) return;
-        this.suppressSync = true;
-        try {
-          for (const pane of this.getAllPanes()) {
-            if (!pane.visible || pane.chart === src) continue;
-            try {
-              pane.chart.timeScale().setVisibleLogicalRange(next);
-            } catch {
-              /* ignore per-pane */
-            }
-          }
-        } finally {
-          this.suppressSync = false;
-        }
-      });
-    };
-    src.timeScale().subscribeVisibleLogicalRangeChange(handler);
-    this.timeSyncUnsubs.push(() => {
-      try {
-        src.timeScale().unsubscribeVisibleLogicalRangeChange(handler);
-      } catch {
-        /* ignore */
-      }
-    });
-
-    this.alignTimeRangesFromPrice();
+    const price = this.panes.get('price') ?? this.getAllPanes()[0];
+    if (price) this.watchLeftEdge(price.chart);
     this.alignRightScales();
   }
 
@@ -1801,7 +1454,6 @@ export class PaneManager {
   private watchLeftEdge(chart: IChartApi): void {
     const handler = (range: { from: number; to: number } | null) => {
       if (!range) return;
-      if (this.ranging) v1NotePanActivity();
       noteLeftEdge(range, () => this.userIsRanging());
     };
     try {
@@ -1818,7 +1470,10 @@ export class PaneManager {
     }
   }
 
-  /** Push the price pane logical range onto all other visible panes. */
+  /**
+   * Sample the shared logical range against every other pane. One chart has
+   * one time scale; there is nothing to push onto other panes.
+   */
   alignTimeRangesFromPrice(opts?: SyncSampleOpts) {
     const price = this.panes.get('price')?.visible !== false ? this.panes.get('price') : null;
     const src = price ?? this.getAllPanes().find((p) => p.visible);
@@ -1828,25 +1483,6 @@ export class PaneManager {
       range = src.chart.timeScale().getVisibleLogicalRange();
     } catch {
       range = null;
-    }
-    // One chart has one time scale. Mirroring would write the same range back.
-    if (usesSingleChartLayout()) {
-      this.sampleLogicalRangeSkew(src, range, opts);
-      return;
-    }
-    if (!range) return;
-    this.suppressSync = true;
-    try {
-      for (const pane of this.getAllPanes()) {
-        if (!pane.visible || pane.chart === src.chart) continue;
-        try {
-          pane.chart.timeScale().setVisibleLogicalRange(range);
-        } catch {
-          /* ignore */
-        }
-      }
-    } finally {
-      this.suppressSync = false;
     }
     this.sampleLogicalRangeSkew(src, range, opts);
   }
@@ -2474,34 +2110,6 @@ export class PaneManager {
           return;
         }
 
-        // Real pointer moves (and unknown/test mode) prefer sourceEvent when present.
-        // Data-driven re-fires pass no sourceEvent — if we already know we're
-        // hovering this pane, still update Data Window OHLC for the locked bar
-        // index but do NOT re-apply setCrosshairPosition (would pin Y to close).
-        const isDataDriven =
-          this.pointerInside === true &&
-          (param as MouseEventParams & { sourceEvent?: unknown }).sourceEvent == null;
-
-        if (!isDataDriven && !usesSingleChartLayout()) {
-          // Mirror onto all other panes once per animation frame (10k+ bars:
-          // setCrosshairPosition per move × N panes was a major hover cost).
-          // A single chart has one crosshair; there is no second pane to drive.
-          const sourcePane = pane;
-          const snap = param;
-          this.crosshairRaf.schedule(() => {
-            if (this.suppressCrosshair) return;
-            this.suppressCrosshair = true;
-            try {
-              for (const other of this.getAllPanes()) {
-                if (!other.visible || other.chart === sourcePane.chart) continue;
-                this.applyCrosshairToPane(other, snap);
-              }
-            } finally {
-              this.suppressCrosshair = false;
-            }
-          });
-        }
-
         this.crosshairOnMove?.({
           time: typeof param.time === 'number' ? param.time : null,
           point: param.point,
@@ -2517,52 +2125,6 @@ export class PaneManager {
           /* ignore */
         }
       });
-    }
-  }
-
-  /**
-   * Place the crosshair on `target` at the same time as `param`, using a local
-   * series value for the horizontal arm when available.
-   */
-  private applyCrosshairToPane(target: ManagedPane, param: MouseEventParams) {
-    const series = this.primarySeries(target);
-    if (!series || param.time == null) return;
-
-    let price = PaneManager.seriesPointPrice(param.seriesData?.get(series));
-
-    if (price == null) {
-      try {
-        let logical: number | null = null;
-        if (param.point) {
-          logical = target.chart.timeScale().coordinateToLogical(param.point.x);
-        }
-        if (logical != null && typeof series.dataByIndex === 'function') {
-          const d = series.dataByIndex(Math.round(logical), MismatchDirection.NearestLeft);
-          price = PaneManager.seriesPointPrice(d);
-        }
-      } catch {
-        /* ignore */
-      }
-    }
-
-    if (price == null) {
-      // Still show the vertical line: anchor to mid-plot or last known value
-      try {
-        const h = typeof target.chart.paneSize === 'function' ? target.chart.paneSize().height : 0;
-        if (h > 0 && typeof series.coordinateToPrice === 'function') {
-          const mid = series.coordinateToPrice(h / 2);
-          if (typeof mid === 'number' && Number.isFinite(mid)) price = mid;
-        }
-      } catch {
-        /* ignore */
-      }
-    }
-    if (price == null || !Number.isFinite(price)) price = 0;
-
-    try {
-      target.chart.setCrosshairPosition(price, param.time as UTCTimestamp, series);
-    } catch {
-      /* ignore */
     }
   }
 

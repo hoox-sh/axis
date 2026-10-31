@@ -35,7 +35,7 @@ import { workerLiveWsUrl, type LiveProxy } from '../../engine/live-ticket';
 import type { WireClient, WireFrame } from '../../engine/live-wire';
 import { PendingRequests, ReconnectHandlers, wireStats } from '../../engine/wire-bookkeeping';
 import { noteIngestPublish } from '../../chart/paint-latency';
-import { v1Count, v1Mark } from '../../engine/v1/metrics';
+import { v1Count } from '../../engine/v1/metrics';
 import { noteWorkerTransportFallback, wantsWorkerTransport } from '../../engine/v1/transport';
 import type { HostToIngest, IngestToHost } from './protocol';
 
@@ -237,8 +237,6 @@ export class IngestHostClient implements WireClient {
     }
     if (msg.type === 'frames') {
       noteIngestPublish(msg.publishedAt);
-      // Worker already decoded. This stamp is main-thread receipt, not parse.
-      v1Mark('batch:post');
       this.dispatchFrames(msg.frames);
       return;
     }

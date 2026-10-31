@@ -45,7 +45,6 @@ import {
   mapBarsToVolumeData,
 } from './heavy-data';
 import { sanitizeSeriesDataForSetData, notePaintedCandleRange } from './series-sanitize';
-import { v1Gauge } from '../engine/v1/metrics';
 import {
   formatPriceWithDecimals,
   priceFormatForDecimals,
@@ -734,8 +733,6 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
     // spacing and never precomputed, so 45k overlay series stayed janky.
     const tsHeavy = heavyTimeScaleOptions(n);
     const veryHeavy = isVeryHeavyBarLoad(n);
-    v1Gauge('conflation', tsHeavy.enableConflation ? 1 : 0);
-    v1Gauge('visibleBars', n);
     try {
       const allPanes =
         typeof mgr.getAllPanes === 'function' ? mgr.getAllPanes() : [pricePane, volPane];

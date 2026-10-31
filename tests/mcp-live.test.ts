@@ -16,7 +16,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { putDatasetBars, _resetDatasetStoreForTests } from '../src/data/dataset-store';
 import { _resetChartDataSessionForTests } from '../src/engines/chart-data-session';
 import { _resetSeriesDriveForTests } from '../src/engines/series-drive';
-import { resetChartLayoutMode, setChartLayoutMode } from '../src/chart/v1/chart-host';
 import { resetEngineTransport, setEngineTransport } from '../src/engine/v1/transport';
 import { invokeCapability } from '../src/mcp/dispatch';
 import { APP_CAPABILITIES, findCapability } from '../src/mcp/catalog';
@@ -117,7 +116,6 @@ afterEach(() => {
   _resetSeriesDriveForTests();
   _resetDatasetStoreForTests();
   resetEngineTransport();
-  resetChartLayoutMode();
 });
 
 describe('MCP live-plane catalog', () => {
@@ -176,7 +174,11 @@ describe('chart.bars', () => {
   it('bounds tail/head independently and honours gaps: false', async () => {
     const slot = slotNow();
     setStore('bars', makeBars([slot - 240, slot - 180, slot - 120, slot - 60, slot]));
-    const tail = (await invokeCapability('chart.bars', { limit: 2, head: 2, gaps: false })) as CapResult;
+    const tail = (await invokeCapability('chart.bars', {
+      limit: 2,
+      head: 2,
+      gaps: false,
+    })) as CapResult;
     expect(tail.tail.map((b: { time: number }) => b.time)).toEqual([slot - 60, slot]);
     expect(tail.head.map((b: { time: number }) => b.time)).toEqual([slot - 240, slot - 180]);
     expect('gaps' in tail).toBe(false);
@@ -238,7 +240,13 @@ describe('chart.lag', () => {
     const seen: string[] = [];
     globalThis.fetch = (async (input: string | URL | Request) => {
       seen.push(urlOf(input));
-      return json({ key: 'binance|spot|BTCUSDT|1m', count: 9, oldest: 1, newest: slot - 600, updated_at: slot - 600 });
+      return json({
+        key: 'binance|spot|BTCUSDT|1m',
+        count: 9,
+        oldest: 1,
+        newest: slot - 600,
+        updated_at: slot - 600,
+      });
     }) as typeof fetch;
 
     const r = (await invokeCapability('chart.lag')) as CapResult;
@@ -255,19 +263,19 @@ describe('chart.lag', () => {
     expect(r.verdict).toMatchObject({ code: 'empty' });
   });
 
-  it('v1 names the worker+single defaults and the json/multi rollback', async () => {
+  it('v1 names the worker default and the json rollback', async () => {
     const live = (await invokeCapability('chart.lag', { engine: false })) as CapResult;
     expect(live.v1.transport).toBe('worker');
     expect(live.v1.layout).toBe('single');
-    expect(live.v1.tickToApply).toEqual(expect.objectContaining({ n: expect.any(Number) }));
+    // Counters only: latency rings removed — v1 reports counts + transport + layout.
+    expect(typeof live.v1.counts.seqGap).toBe('number');
+    expect(typeof live.v1.counts.jsonFallback).toBe('number');
 
     setEngineTransport('json');
-    setChartLayoutMode('multi');
     const rollback = (await invokeCapability('chart.lag', { engine: false })) as CapResult;
     expect(rollback.v1.transport).toBe('json');
-    expect(rollback.v1.layout).toBe('multi');
+    expect(rollback.v1.layout).toBe('single');
     resetEngineTransport();
-    resetChartLayoutMode();
   });
 });
 
@@ -308,7 +316,13 @@ describe('engine.series', () => {
     globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
       seenUrl = urlOf(input);
       seenAuth = (init?.headers as Record<string, string> | undefined)?.Authorization;
-      return json({ key: 'binance|spot|BTCUSDT|1m', count: 42, oldest: 1792000000, newest: 1792003600, updated_at: 1792003610 });
+      return json({
+        key: 'binance|spot|BTCUSDT|1m',
+        count: 42,
+        oldest: 1792000000,
+        newest: 1792003600,
+        updated_at: 1792003610,
+      });
     }) as typeof fetch;
 
     const r = (await invokeCapability('engine.series')) as CapResult;
@@ -328,8 +342,17 @@ describe('engine.series', () => {
   it('accepts an explicit series key and reports it does not match the chart', async () => {
     setEngine('https://mock-engine.test/series2');
     globalThis.fetch = (async () =>
-      json({ key: 'binance|spot|ETHUSDT|15m', count: 3, oldest: 1, newest: 2, updated_at: 2 })) as typeof fetch;
-    const r = (await invokeCapability('engine.series', { symbol: 'ETHUSDT', interval: '15m' })) as CapResult;
+      json({
+        key: 'binance|spot|ETHUSDT|15m',
+        count: 3,
+        oldest: 1,
+        newest: 2,
+        updated_at: 2,
+      })) as typeof fetch;
+    const r = (await invokeCapability('engine.series', {
+      symbol: 'ETHUSDT',
+      interval: '15m',
+    })) as CapResult;
     expect(r.matchesChart).toBe(false);
     expect(r.requested).toBe('binance|spot|ETH/USDT|15m');
   });
@@ -357,7 +380,13 @@ describe('engine.tick', () => {
       if (url.includes('/data/series?')) {
         statusCalls += 1;
         const newest = statusCalls <= 1 ? 1792230000 : 1792230120;
-        return json({ key: 'binance|spot|BTCUSDT|1m', count: 20, oldest: 1, newest, updated_at: newest });
+        return json({
+          key: 'binance|spot|BTCUSDT|1m',
+          count: 20,
+          oldest: 1,
+          newest,
+          updated_at: newest,
+        });
       }
       if (url.endsWith('/tick')) {
         return json({ status: 'ok', appended: 3, forming: true, unchanged: false, stale: false });
@@ -373,7 +402,9 @@ describe('engine.tick', () => {
     expect(r.after.newest).toBe(1792230120);
     expect(r.advancedBars).toBe(120);
     expect(typeof r.ms).toBe('number');
-    expect(requests.some((q) => q.startsWith('POST ') && q.includes('/data/session/sess_mcp_tick/tick'))).toBe(true);
+    expect(
+      requests.some((q) => q.startsWith('POST ') && q.includes('/data/session/sess_mcp_tick/tick')),
+    ).toBe(true);
     expect(requests.every((q) => !q.includes('SECRET_TICK_KEY'))).toBe(true);
   });
 
@@ -381,7 +412,8 @@ describe('engine.tick', () => {
     setEngine('https://mock-engine.test/drv-stale');
     globalThis.fetch = (async (input: string | URL | Request) => {
       const url = urlOf(input);
-      if (url.includes('/data/series?')) return json({ key: 'k', count: 0, oldest: null, newest: null, updated_at: null });
+      if (url.includes('/data/series?'))
+        return json({ key: 'k', count: 0, oldest: null, newest: null, updated_at: null });
       if (url.endsWith('/tick')) return json({ status: 'ok', stale: true });
       if (url.endsWith('/data/session')) return json({ session_id: 'sess_stale', status: 'ok' });
       return new Response('not found', { status: 404 });
@@ -406,7 +438,12 @@ describe('engine.repair', () => {
     // Fresh local window: the broker prefers uploading AXIS' own bars over
     // asking the engine to fetch from its exchange feed.
     const slot = slotNow();
-    await putDatasetBars('binance-rest', 'BTCUSDT', '1m', makeBars([slot - 240, slot - 180, slot - 120, slot - 60, slot]));
+    await putDatasetBars(
+      'binance-rest',
+      'BTCUSDT',
+      '1m',
+      makeBars([slot - 240, slot - 180, slot - 120, slot - 60, slot]),
+    );
     let statusCalls = 0;
     const requests: string[] = [];
     globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
@@ -427,7 +464,9 @@ describe('engine.repair', () => {
     expect(r.via).toBe('local');
     expect(r.bars).toBe(5);
     expect(r.advancedBars).toBe(10000);
-    expect(requests.some((q) => q.startsWith('POST ') && q.includes('/data/series/provide'))).toBe(true);
+    expect(requests.some((q) => q.startsWith('POST ') && q.includes('/data/series/provide'))).toBe(
+      true,
+    );
     expect(requests.every((q) => !q.includes('SECRET_REPAIR_KEY'))).toBe(true);
   });
 });

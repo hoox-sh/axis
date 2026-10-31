@@ -92,6 +92,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 - **Single-chart layout arms `chart.lag` `panFrame` on pan/zoom.** `createSharedPane` never set `ranging` or wired wheel → `v1NotePanActivity`, so the default one-chart host left `panFrame.n = 0` after user gestures. The shared price host now mirrors the multi-pane listeners (pointer ranging + wheel).
 
+- **`chart.lag` v1 is counters only.** The per-tick latency rings (tick→apply / tick→paint / apply / queueWait / panFrame / longTask), the rAF paint arming, the pan-sampling loop, the `conflation` / `visibleBars` gauges and the long-task `PerformanceObserver` were removed from the hot path — they sampled every tick and kept 120-sample windows just to report p95. `v1Count` counters (`seqGap`, `resync`, `droppedTip`, `jsonFallback`, `unknownOpcode`, `longTask`) stay; `chart.lag` v1 now reports `counts` + `transport` + `layout`. `chart.v1/invariants.ts` 1-in-32 sampling and `v1BudgetRegressed` are gone.
+
 - **Live-proxy buffers client frames until the engine upstream is open, and the ingest worker resends `auth` on `live-relay`.** Browser `onopen` could send `auth` before the Worker’s upstream socket was ready; the frame was dropped and subscribe then failed with `UNAUTHORIZED`. The proxy queues early client→engine frames; the ingest worker also resends auth when it sees `live-relay` and never signals host `open` without `auth.ok`.
 
 - **Ingest tip coalesce and send-buffer backpressure cut tip delay under load.** A second forming tip for the same subscription folds and releases immediately instead of waiting out the 16 ms coalesce window, so `batch:post` is not stuck behind a quiet-period timer. Send-buffer hold uses hysteresis (enter above 1 MB, clear only below 256 KiB) so a buffer that jitters around 1 MB cannot resume every live sub in a loop. UNCHANGED keepalives are no longer treated as droppable forming tips under send hold, so their seq still reaches the coalescer and is acked. Closes and snapshots stay immediate; the pending queue remains one tip per subscription.
@@ -100,7 +102,7 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Added
 
-- **P6 flag flip is proven in unit tests.** One test switches worker+single to json+multi and back: the live client and the pane chart identity follow both flags together. The worker transport test also asserts inbound frames are already objects (no window `JSON.parse`).
+- **P6 flag flip proven in unit tests.** The test switches worker+single to json and back: the live client follows both flags together, but the chart stays the shared single layout — the `axis.chart.layout=multi` rollback is gone (see Removed below).
 
 - **Inactive chart slots paint without stealing the focused manager.** `setDataToChart` takes an optional `manager` / `slotId` so a 2h/2v/4 cell can `setData` on its own PaneManager. Drawings and selection stay on the focused slot.
 
@@ -124,15 +126,19 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 - **The shared-memory ring, GPU candle overlay, and HP flags are gone.** Lightweight Charts paints candles, indicators, and fills. The ingest worker still owns `/ws/live` and decodes AXB1 when `axis.engine.transport` is `worker` (the default). `axis.engine.transport=json` keeps the main-thread client. Settings no longer has a high-performance section. `hp.get`, `hp.sample`, and `dev.trace` are no longer MCP capabilities. Isolation headers stay.
 
+- **The `axis.chart.layout=multi` rollback is gone.** `axis.chart.layout` is no longer read or persisted — stored values are ignored like `axis.engine.hp.*`. One Lightweight Charts chart per slot only: `ChartLayoutMode`/`chartLayoutMode`/`setChartLayoutMode`/`resetChartLayoutMode`/`usesSingleChartLayout`, `CHART_LAYOUT_KEY`, `SlotChart`, shared-pane chrome, multi-chart slot-bar caches, custom pane-resize handles (`pane-handle-*`), crosshair mirroring across panes, and the `map`/`mirror` branches in `syncTimeScales`, `alignTimeRangesFromPrice`, and crosshair rewiring are removed. `chart.lag` v1 always reports `layout: 'single'`.
+
 ### Fixed
 
 - **MCP `stream.reset` re-pins mounted chart hosts.** `resetStreamWire` keeps live ChartHost slot ids, drains the pool, then pins those hosts onto the current engine fingerprint (new sockets). Unpin still drops a slot so reset cannot resurrect it. With no hosts mounted the pool stays empty until `getWire`.
 
 - **`streamStop` keeps mounted ChartHost slots.** Stop drains and disconnects sockets and clears remembered fingerprints, but still-mounted slot ids survive. The next `getWire` re-pins those hosts onto the current engine. Unpin still drops a slot so stop cannot resurrect it. With no hosts mounted, `getWire` opens one primary socket.
 
-- **A pane whose visible logical range disagrees with the price axis is reported.** `alignTimeRangesFromPrice` samples `logicalRangeSkew` after the single-layout early return (shared chart, no mirror) and after the multi-chart write. Dev warns on every new skew size. Production warns about 1 in 32 times, once per size. Matching ranges are silent.
+- **A pane whose visible logical range disagrees with the price axis is reported.** `alignTimeRangesFromPrice` samples `logicalRangeSkew` once against the one shared chart (no per-pane mirror). Dev warns on every new skew size. Production warns about 1 in 32 times, once per size. Matching ranges are silent.
 
 - **A plot column shorter than the price axis is reported.** `applyChartMutations` samples `plotLengthSkew`. Dev warns on every new absolute size. Production warns about 1 in 32 times, once per size. A longer column still uses the overhang text and is not warned twice.
+
+- **Crosshair stays on the shared single chart.** Data-driven (no `sourceEvent`) moves no longer attempt a cross-mirror that never had a second chart to write to; `syncCrosshair`/`rewireCrosshair` subscribe once per `IChartApi` instead of per pane, and `applyCrosshairToPane` + the multi-pane resize handle are gone. Hovered-pane gating only gates the host callback now.
 
 - **The single chart wires one crosshair listener.** Sub-pane facades are different Proxy objects around the same Lightweight Charts chart. Once the slot exists, later panes do not subscribe again.
 
