@@ -3622,8 +3622,10 @@ export function appendBar(bar: Bar): BarAppendResult {
           close: bar.close,
         };
       }
-      // Same open bar. Write the raw node now so readers see the tick.
-      // Solid hears this index once per frame, not once per tick.
+      // Same open bar. Write the payload into the store via setStore so the
+      // OHLC actually persists. unwrap() returns a deep copy — Object.assign on
+      // it never reached store.bars, so live ticks never updated closed candles'
+      // OHLC and a subsequent full setData painted stale (collapsed) values.
       const tipRef = unwrap(tip) as Bar;
       const payload = normalizeBarPayload(bar);
       // Preserve the candle's open once it has started forming. A historical
@@ -3640,7 +3642,10 @@ export function appendBar(bar: Bar): BarAppendResult {
           finalOpen: payload.open,
         });
       }
-      Object.assign(tipRef, payload);
+      // setStore triggers Solid fine-grained reactivity for this index — the
+      // chart's series.update reads from the stream's bar, but full setData
+      // (slide / engine merge) reads from store.bars and needs fresh OHLC.
+      setStore('bars', n - 1, payload);
       frameTipIndex = n - 1;
       scheduleLiveFrame(flushLiveFrame);
       if (store.live.lastBarTime !== bar.time) {
@@ -3669,7 +3674,9 @@ export function appendBar(bar: Bar): BarAppendResult {
   if (n > 0) {
     const tipRef = unwrap(store.bars[n - 1]!) as Bar;
     if (tipRef && tipRef.closed !== true) {
-      tipRef.closed = true;
+      // setStore (not Object.assign on unwrap() copy) so the closed flag
+      // actually persists in store.bars for subsequent reads.
+      setStore('bars', n - 1, { ...tipRef, closed: true } as Bar);
     }
   }
 
