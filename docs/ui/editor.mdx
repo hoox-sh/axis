@@ -153,6 +153,8 @@ Every lint / hover / complete / underline / chip option lives in **Settings → 
 
 Local checks: unclosed `(` / `[` / `{` and strings, missing entry point, `study()` → `indicator()` / `strategy()`, bare `security()` → `request.security`, duplicate `indicator()` / `strategy()` / `library()`, unknown builtin members (`strategy.etry`, `plt` → “did you mean …?”). User functions and import aliases are not flagged.
 
+PYNE lint parity offline: a pre-v5 `//@version` warns as deprecated (`W002`), and kwargs Pine v6 removed are flagged (`W104`) — `when=` on `strategy.*` order calls and `transp=` on drawing / plot calls (`plot*`, `fill`, `bgcolor`, `barcolor`, `hline`, `line.*`, `box.*`, `label.*`, `table.*`, `polyline.*`, `linefill.*`). `color.new` / `color()` keep a valid `transp` and are never flagged. Both stay on when the Pro API is unreachable, so Pyodide / offline mode reports the same warnings as `POST /lsp/diagnostics`. Toggles: **Warn if //@version is missing** (also covers `W002`) and **Warn on v6-removed kwargs**.
+
 Merge: remote style-noise C001–C004 is dropped; remote syntax errors win the same span; local unknown-member marks still show when remote is down. Hover tooltips use the diagnostic message (including the suggestion).
 
 **After a run**, `diagnosticsFromLastRun(lastRun, doc)` still builds ranges from engine `error`, `meta.errors` / `diagnostics`, and error logs with line refs (`line 12:`, `L12:`, …). Live pre-eval for the current buffer is listed first; last-run engine messages are kept when they add detail (dropped only when the buffer no longer matches the stamped run source).
@@ -178,6 +180,12 @@ Tab toolbar **Pull / Push / status** (`EditorGitBar`):
 ### Completion corpus
 
 `src/editor/data/pyne-builtins.json` is synced from PYNE (`scripts/sync-pyne-builtins.sh`). Offline completion/hover fall back to this catalog; optional remote LSP when the Pro API is available.
+
+### Remote LSP bridge
+
+PYNE exposes four HTTP endpoints, and AXIS wires all four: `POST /lsp/completion`, `POST /lsp/hover`, `POST /lsp/diagnostics`, `POST /lsp/convert` (`src/editor/pyne-lsp-client.ts`). Everything else the PYNE language server advertises over stdio (signature help, document symbols, formatting, folding, document color, convert-to-v6) has a local CodeMirror implementation instead — `pine-call-params.ts`, `pine-symbols.ts`, `pine-format.ts`, `code-folding.ts`, `pine-colors.ts`, `pine-convert.ts`. Library annotation hover (`//@function`, `//@param`, `//@returns`, `//@type`, `//@field`, `//@variable`, `//@description`) is parsed locally in `pyne-doc-annotations.ts` and rendered as verbatim Markdown, matching PYNE's card shape.
+
+The Pyodide runtime vendors `pynescript-0.6.28-py3-none-any.whl`; the builtins catalog is byte-identical to PYNE's `builtin_metadata.json` (941 entries).
 
 ### Library load
 

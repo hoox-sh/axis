@@ -92,6 +92,31 @@ describe('scanAllCallSites', () => {
     const plot = sites.find((s) => s.name === 'plot');
     expect(plot?.namedUsed.has('coltor')).toBe(true);
   });
+
+  it('skips control calls, strings and comments', () => {
+    const src = [
+      'if (close > open)',
+      '  x = "plot(close, transp=1)"',
+      '// plot(close, transp=2)',
+      '/* label.new(1, 2, transp=3) */',
+      'plot(close)',
+    ].join('\n');
+    expect(scanAllCallSites(src).map((s) => s.name)).toEqual(['plot']);
+  });
+
+  it('ignores an unclosed call while the user is still typing', () => {
+    const src = 'plot(close, transp=20';
+    expect(scanAllCallSites(src)).toEqual([]);
+  });
+
+  it('keeps arg spans aligned for deep nesting', () => {
+    const src = 'x = fill(plot(a(1), transp=2), plot(b(3)))';
+    const sites = scanAllCallSites(src);
+    expect(sites.map((s) => s.name).sort()).toEqual(['a', 'b', 'fill', 'plot', 'plot']);
+    const plotA = sites.find((s) => s.name === 'plot' && s.args.some((a) => a.name === 'transp'));
+    const transp = plotA?.args.find((a) => a.name === 'transp');
+    expect(transp && src.slice(transp.from, transp.to).trim()).toBe('transp=2');
+  });
 });
 
 describe('classifyParams / paramCompletions', () => {

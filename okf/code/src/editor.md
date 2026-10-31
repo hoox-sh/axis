@@ -7,7 +7,7 @@ tags: [code, editor]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-23T18:51:33Z
+  at: 2026-10-31T22:13:18Z
 sources:
   - id: tree
     resource: "src/editor"
@@ -51,7 +51,7 @@ okf_lock: generated
 * `pine-hover-facts.ts` — HoverFact, HoverFactKind, HoverFactLookupOpts, UserSymbol, UserSymbolKind, declarationTypeFact, dottedSegmentAt, enclosingStringAt, formatColorLiteralMarkdown, formatHoverFactMarkdown, formatUserSymbolMarkdown, hexColorAt
 * `pine-scan-util.ts` — QuoteChar, isQuoteChar, isQuoteClose
 * `pine-symbols.ts` — PINE_SYMBOLS, PINE_SYMBOL_CATEGORIES, PineSymbol, PineSymbolCategory, PineSymbolUse, filterPineSymbols, plotcharSnippet, quotePineString
-* `preevaluate.ts` — DottedRef, EXTRA_KNOWN_BUILTIN_PATHS, PREEVAL_DEBOUNCE_MS, PREEVAL_IDLE_MS, PreevalResult, cancelPreeval, checkUnknownBuiltinMembers, checkUnknownNamedArgs, checkUnknownUserIdents, clearPreevalOnEdit, collectUserBindings, collectUserFunctionParams
+* `preevaluate.ts` — DottedRef, EXTRA_KNOWN_BUILTIN_PATHS, PREEVAL_DEBOUNCE_MS, PREEVAL_IDLE_MS, PreevalResult, cancelPreeval, checkUnknownBuiltinMembers, checkUnknownNamedArgs, checkUnknownUserIdents, checkV6RemovedKwargs, clearPreevalOnEdit, collectUserBindings
 * `profiler-gutter.ts` — ProfileLineStat, RunProfile, applyProfilerProfile, normalizeRunProfile, profileLineMap, profilerGutterExtension, profilerGutterTheme, profilerStateField, setProfilerData
 * `pyne-doc-annotations.ts` — PyneDocEntry, PyneDocKind, formatPyneDocMarkdown, lookupPyneDoc, parsePyneDocAnnotations
 * `pyne-language.ts` — PineHighlightState, PineToken, advancePineLineState, defaultPineHighlightState, pineOffsetInLiteral, pyneParser, pyneScript, tokenizePine

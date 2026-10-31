@@ -77,6 +77,12 @@ export type EditorIntelSettings = {
   preevalSecurityWarn: boolean;
   /** Warn on a second `indicator()` / `strategy()` / `library()`. */
   preevalDuplicateDecl: boolean;
+  /**
+   * Warn on kwargs Pine v6 removed but the evaluator still ignores:
+   * `when=` on `strategy.*` order calls and `transp=` on drawing / plot calls
+   * (PYNE lint `W104`). `color.new` / `color()` keep a valid `transp`.
+   */
+  preevalV6Kwargs: boolean;
   /** Severity **error** disables Run (typos never block). */
   preevalBlockRun: boolean;
 
@@ -143,6 +149,7 @@ export const DEFAULT_EDITOR_INTEL: EditorIntelSettings = {
   preevalStudyWarn: true,
   preevalSecurityWarn: true,
   preevalDuplicateDecl: true,
+  preevalV6Kwargs: true,
   preevalBlockRun: true,
 
   diagUnderlines: true,
@@ -227,6 +234,7 @@ export function readEditorIntel(raw: unknown): EditorIntelSettings {
     preevalStudyWarn: asBool(o.preevalStudyWarn, d.preevalStudyWarn),
     preevalSecurityWarn: asBool(o.preevalSecurityWarn, d.preevalSecurityWarn),
     preevalDuplicateDecl: asBool(o.preevalDuplicateDecl, d.preevalDuplicateDecl),
+    preevalV6Kwargs: asBool(o.preevalV6Kwargs, d.preevalV6Kwargs),
     preevalBlockRun: asBool(o.preevalBlockRun, d.preevalBlockRun),
 
     diagUnderlines: asBool(o.diagUnderlines, d.diagUnderlines),

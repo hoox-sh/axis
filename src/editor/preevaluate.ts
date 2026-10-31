@@ -65,6 +65,7 @@ import {
   parseSignatureParams,
   resolveCallSignature,
   scanAllCallSites,
+  type CallArg,
   type ResolveCallSigOpts,
 } from './pine-call-params';
 import { parseAssignLine } from './pine-declare-types';
@@ -1172,10 +1173,80 @@ function diag(
 
 // ── Local static checks ──────────────────────────────────────────────────────
 
+/** Plot callees whose `transp=` kwarg Pine v6 removed (PYNE lint `W104`). */
+const V6_TRANSP_CALLS = new Set([
+  'plot',
+  'plotarrow',
+  'plotbar',
+  'plotcandle',
+  'plotchar',
+  'plotshape',
+  'fill',
+  'bgcolor',
+  'barcolor',
+  'hline',
+]);
+
+/** Drawing namespaces whose `transp=` kwarg Pine v6 removed (PYNE lint `W104`). */
+const V6_TRANSP_HEADS = new Set(['line', 'box', 'label', 'table', 'polyline', 'linefill']);
+
+/** `color.new` / `color()` keep a valid `transp` — never flagged. */
+const V6_TRANSP_EXEMPT = new Set(['color.new', 'color']);
+
+function v6KwargDiag(
+  source: string,
+  arg: CallArg,
+  callee: string,
+  kwarg: 'when' | 'transp',
+): EditorDiagnostic {
+  const lead = arg.raw.match(/^\s*/)?.[0].length ?? 0;
+  const from = arg.from + lead;
+  const to = from + kwarg.length;
+  const { line } = offsetToLineCol(source, from);
+  return {
+    from,
+    to,
+    line,
+    severity: 'warning',
+    source: 'preeval-local',
+    message:
+      kwarg === 'when'
+        ? "strategy.* 'when=' was removed in v6 and is ignored; gate with an 'if' block instead"
+        : `'transp=' on ${callee}() was removed in v6 and is ignored; use color.new(color, transp) instead`,
+  };
+}
+
+/**
+ * Pine v6 removed `when=` on `strategy.*` order calls and `transp=` on drawing
+ * / plot calls; the evaluator silently ignores both (PYNE lint `W104`).
+ *
+ * Kept local so offline / Pyodide mode reports the same warning as
+ * `POST /lsp/diagnostics`. `color.new` / `color()` keep a valid `transp`.
+ */
+export function checkV6RemovedKwargs(source: string): EditorDiagnostic[] {
+  const out: EditorDiagnostic[] = [];
+  for (const site of scanAllCallSites(source)) {
+    if (!site.args.length) continue;
+    const head = site.name.includes('.') ? site.name.slice(0, site.name.indexOf('.')) : site.name;
+
+    if (head === 'strategy') {
+      const when = site.args.find((a) => a.name === 'when');
+      if (when) out.push(v6KwargDiag(source, when, site.name, 'when'));
+    }
+
+    if (V6_TRANSP_EXEMPT.has(site.name)) continue;
+    if (!V6_TRANSP_CALLS.has(site.name) && !V6_TRANSP_HEADS.has(head)) continue;
+    const transp = site.args.find((a) => a.name === 'transp');
+    if (transp) out.push(v6KwargDiag(source, transp, site.name, 'transp'));
+  }
+  return out;
+}
+
 /**
  * Fast client-side checks (no engine). Catches unbalanced brackets, unclosed
  * strings, missing / duplicate entry point, v3 `study()`, bare `security()`,
- * and unknown builtin members — enough to mark wrong code offline.
+ * a pre-v5 `//@version`, v6-removed kwargs, and unknown builtin members —
+ * enough to mark wrong code offline.
  */
 export function localPreevaluate(source: string): EditorDiagnostic[] {
   if (!source.trim()) return [];
@@ -1354,15 +1425,32 @@ export function localPreevaluate(source: string): EditorDiagnostic[] {
   }
 
   // Entry point / version (warnings — do not block Run alone if remote will decide)
-  if (cfg.preevalVersionWarn && !/\/\/\s*@version\s*=\s*\d+/m.test(source)) {
-    out.push(
-      diag(source, {
-        line: 1,
-        message: "Missing //@version declaration. Add '//@version=6' at the top.",
-        severity: 'warning',
-        source: 'preeval-local',
-      }),
-    );
+  if (cfg.preevalVersionWarn) {
+    const versionMatch = /\/\/\s*@version\s*=\s*(\d+)/.exec(source);
+    if (!versionMatch) {
+      out.push(
+        diag(source, {
+          line: 1,
+          message: "Missing //@version declaration. Add '//@version=6' at the top.",
+          severity: 'warning',
+          source: 'preeval-local',
+        }),
+      );
+    } else {
+      // PYNE lint W002: a pre-v5 pragma is deprecated.
+      const version = Number(versionMatch[1]);
+      if (Number.isFinite(version) && version < 5) {
+        const { line } = offsetToLineCol(source, versionMatch.index);
+        out.push(
+          diag(source, {
+            line,
+            message: `Pine Script v${version} is deprecated. Consider upgrading to v6.`,
+            severity: 'warning',
+            source: 'preeval-local',
+          }),
+        );
+      }
+    }
   }
   const bareCalls = scanBareCallRefs(source);
   const entryDecls = bareCalls.filter(
@@ -1431,6 +1519,9 @@ export function localPreevaluate(source: string): EditorDiagnostic[] {
 
   // Unknown builtin members (strategy.etry, ta.smma, …) — not catchable by parse alone
   if (cfg.preevalTypos) out.push(...checkUnknownBuiltinMembers(source));
+
+  // Pine v6 removed kwargs the evaluator silently ignores (PYNE lint W104)
+  if (cfg.preevalV6Kwargs) out.push(...checkV6RemovedKwargs(source));
 
   return out;
 }

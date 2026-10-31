@@ -4675,6 +4675,7 @@ const PREEVAL_GEN_KEYS: (keyof EditorIntelSettings)[] = [
   'preevalStudyWarn',
   'preevalSecurityWarn',
   'preevalDuplicateDecl',
+  'preevalV6Kwargs',
   'preevalLocal',
   'preevalRemote',
 ];

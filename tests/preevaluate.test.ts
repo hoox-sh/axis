@@ -241,6 +241,96 @@ plot(close)
     expect(hit!.severity).toBe('warning');
   });
 
+  it('warns on a pre-v5 //@version (PYNE W002)', () => {
+    const src = `//@version=4
+indicator("t")
+plot(close)
+`;
+    const diags = localPreevaluate(src);
+    const hit = diags.find((d) => /v4 is deprecated/i.test(d.message));
+    expect(hit).toBeTruthy();
+    expect(hit!.severity).toBe('warning');
+    expect(hit!.line).toBe(1);
+    expect(diags.some((d) => /Missing \/\/@version/i.test(d.message))).toBe(false);
+  });
+
+  it('does not warn on //@version=5 or v6', () => {
+    for (const v of [5, 6]) {
+      const src = `//@version=${v}\nindicator("t")\nplot(close)\n`;
+      const diags = localPreevaluate(src);
+      expect(diags.some((d) => /deprecated/i.test(d.message))).toBe(false);
+    }
+  });
+
+  it('warns on strategy.* when= removed in v6 (PYNE W104)', () => {
+    const src = `//@version=6
+indicator("t")
+strategy.entry("L", strategy.long, when = close > open)
+plot(close)
+`;
+    const diags = localPreevaluate(src);
+    const hit = diags.find((d) => /'when=' was removed in v6/.test(d.message));
+    expect(hit).toBeTruthy();
+    expect(hit!.severity).toBe('warning');
+    // Range points at the kwarg, not the whole call.
+    expect(src.slice(hit!.from, hit!.to)).toBe('when');
+  });
+
+  it('warns on transp= on plot and drawing calls (PYNE W104)', () => {
+    const src = `//@version=6
+indicator("t")
+plot(close, transp = 20)
+line.new(bar_index, low, bar_index + 1, high, transp = 30)
+label.new(bar_index, high, "x", transp = 40)
+bgcolor(color.red, transp = 50)
+`;
+    const diags = localPreevaluate(src);
+    const hits = diags.filter((d) => /'transp=' .* removed in v6/.test(d.message));
+    expect(hits.length).toBe(4);
+    expect(hits.every((d) => d.severity === 'warning')).toBe(true);
+    expect(hits.every((d) => src.slice(d.from, d.to) === 'transp')).toBe(true);
+  });
+
+  it('never flags transp= on color.new / color()', () => {
+    const src = `//@version=6
+indicator("t")
+c = color.new(color.red, 20)
+d = color(color.red, 30)
+plot(close, color = c)
+plot(close, color = d)
+`;
+    const diags = localPreevaluate(src);
+    expect(diags.some((d) => /'transp='/.test(d.message))).toBe(false);
+  });
+
+  it('ignores when= on non-strategy calls and transp= inside strings', () => {
+    const src = `//@version=6
+indicator("t")
+f(x) => x
+plot(f(close))
+s = "strategy.entry(when=1) plot(transp=2)"
+plot(close)
+`;
+    const diags = localPreevaluate(src);
+    expect(diags.some((d) => /removed in v6/.test(d.message))).toBe(false);
+  });
+
+  it('honours the preevalV6Kwargs toggle', () => {
+    const src = `//@version=6
+indicator("t")
+plot(close, transp = 20)
+`;
+    patchEditorIntel({ preevalV6Kwargs: false });
+    try {
+      const off = localPreevaluate(src);
+      expect(off.some((d) => /'transp='/.test(d.message))).toBe(false);
+    } finally {
+      patchEditorIntel({ preevalV6Kwargs: true });
+    }
+    const on = localPreevaluate(src);
+    expect(on.some((d) => /'transp='/.test(d.message))).toBe(true);
+  });
+
   it('does not flag user foo() as an unknown builtin', () => {
     const src = `//@version=6
 indicator("t")

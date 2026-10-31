@@ -569,6 +569,13 @@ export const EditorIntelPanel: Component = () => {
           onChange={(v) => set({ preevalDuplicateDecl: v })}
         />
         <IntelCheck
+          id="axis-intel-preeval-v6-kwargs"
+          label="Warn on v6-removed kwargs"
+          hint="strategy.* when= and drawing/plot transp= are ignored in v6 (PYNE W104)."
+          checked={intel().preevalV6Kwargs}
+          onChange={(v) => set({ preevalV6Kwargs: v })}
+        />
+        <IntelCheck
           id="axis-intel-preeval-block"
           label="Block Run on errors"
           hint="Severity error disables Run. Typos and warnings never block."

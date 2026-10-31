@@ -7,7 +7,7 @@ tags: [doc, docs, editor, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:02:55Z
+  at: 2026-10-31T22:13:18Z
 sources:
   - id: tree
     resource: "docs/ui/editor.mdx"
@@ -37,6 +37,7 @@ Repo path `docs/ui/editor.mdx`.
   * 80-column ruler
   * Git sync bar
   * Completion corpus
+  * Remote LSP bridge
   * Library load
 * Internals
   * editorRef pattern

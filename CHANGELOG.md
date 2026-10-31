@@ -15,6 +15,16 @@ _Generated/updated: 2026-10-31 · 876 commits · describe-tag: `v2.25.3`_
 
 ## [Unreleased]
 
+### Changed
+
+- **Pre-eval call scanning is single-pass (O(n) instead of O(n²)).** `scanAllCallSites` (`src/editor/pine-call-params.ts`) used to call `findCallSite` per `(`, and `findCallSite` re-scanned from offset 0 — so idle pre-eval stalled for seconds on real scripts (measured ~2.9 s at 2 000 lines, ~22 s at 4 000). Open parens are now stacked and each call is parsed when its closer is reached. Same source, both lint passes on: **5.9 s → 43 ms** at 2 000 lines and **22.3 s → 120 ms** at 4 000. Unclosed calls are skipped (mid-edit input is not linted).
+
+- **Vendored PYNE wheel bumped to `pynescript-0.6.28`.** PYNE 0.6.27 / 0.6.28 only touch the VS Code extension and the version string, so the Python runtime, compiler, and language server are identical to 0.6.26; the wheel, the three hard-coded `/vendor/` paths, and the engine docs now agree. The builtins catalog (`src/editor/data/pyne-builtins.json`, 941 entries) is byte-identical to PYNE's `builtin_metadata.json`.
+
+### Added
+
+- **Offline PYNE lint parity: `W002` and `W104`.** `localPreevaluate` now warns on a pre-v5 `//@version` pragma (`W002`) and on kwargs Pine v6 removed (`W104`) — `when=` on `strategy.*` order calls and `transp=` on drawing / plot calls (`plot*`, `fill`, `bgcolor`, `barcolor`, `hline`, `line.*`, `box.*`, `label.*`, `table.*`, `polyline.*`, `linefill.*`). `color.new` / `color()` keep a valid `transp` and are never flagged. Previously these came only from `POST /lsp/diagnostics`, so Pyodide / offline mode missed them. New setting `preevalV6Kwargs` (default on) with a Settings → Editor toggle; `preevalVersionWarn` now covers both `W001` and `W002`.
+
 ## [2.26.0] — 2026-10-31
 
 ### Changed

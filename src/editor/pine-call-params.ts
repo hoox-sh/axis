@@ -1199,8 +1199,38 @@ export function findCallSite(text: string, pos: number): CallSite | null {
   if (!frame) return null;
 
   const close = matchCloseParen(src, frame.openParen);
-  const inner = src.slice(frame.openParen + 1, close);
-  const rawParts = splitTopLevelParts(inner, frame.openParen + 1);
+  const base = buildCallSiteAt(src, frame.name, frame.openParen, close);
+  const { args } = base;
+
+  let cursorArgIndex = 0;
+  for (let a = 0; a < args.length; a++) {
+    if (pos >= args[a]!.from) cursorArgIndex = a;
+  }
+  const cur = args[cursorArgIndex];
+  const prefix = cur ? src.slice(cur.from, pos).trim() : '';
+  const argFrom = cur ? cur.from : frame.openParen + 1;
+
+  return {
+    ...base,
+    cursorArgIndex,
+    prefix,
+    argFrom,
+  };
+}
+
+/**
+ * Parse the arguments of one already-bounded call. Shared by
+ * {@link findCallSite} (cursor) and {@link scanAllCallSites} (single pass) so
+ * both agree on arg spans and named-arg detection.
+ */
+function buildCallSiteAt(
+  src: string,
+  name: string,
+  openParen: number,
+  closeParen: number,
+): Omit<CallSite, 'cursorArgIndex' | 'prefix' | 'argFrom'> {
+  const inner = src.slice(openParen + 1, closeParen);
+  const rawParts = splitTopLevelParts(inner, openParen + 1);
 
   const args: CallArg[] = [];
   const namedUsed = new Set<string>();
@@ -1224,33 +1254,23 @@ export function findCallSite(text: string, pos: number): CallSite | null {
     else if (trimmed.length) positionalUsed += 1;
   }
 
-  let cursorArgIndex = 0;
-  for (let a = 0; a < args.length; a++) {
-    if (pos >= args[a]!.from) cursorArgIndex = a;
-  }
-  const cur = args[cursorArgIndex];
-  const prefix = cur ? src.slice(cur.from, pos).trim() : '';
-  const argFrom = cur ? cur.from : frame.openParen + 1;
-
-  return {
-    name: frame.name,
-    openParen: frame.openParen,
-    cursorArgIndex,
-    args,
-    namedUsed,
-    positionalUsed,
-    prefix,
-    argFrom,
-  };
+  return { name, openParen, args, namedUsed, positionalUsed };
 }
 
 /**
  * Every non-control call in `source` (nested calls included).
- * Used by pre-eval to lint named arguments (`coltor=` → `color=`).
+ * Used by pre-eval to lint named arguments (`coltor=` → `color=`) and
+ * v6-removed kwargs (`W104`).
+ *
+ * Single pass: open parens are stacked and each call is parsed when its
+ * closer is reached, so this is O(n). The old implementation called
+ * {@link findCallSite} per paren, which re-scanned from offset 0 (O(n²)) and
+ * stalled idle pre-eval for seconds on a few thousand lines.
  */
 export function scanAllCallSites(source: string): CallSite[] {
   const src = String(source ?? '');
   const out: CallSite[] = [];
+  const stack: Array<{ name: string; openParen: number }> = [];
   let inStr: QuoteChar | null = null;
   let inBlock = false;
   for (let i = 0; i < src.length; i++) {
@@ -1286,13 +1306,20 @@ export function scanAllCallSites(source: string): CallSite[] {
       i += 1;
       continue;
     }
-    if (c !== '(') continue;
-    const name = identBefore(src, i);
+    if (c === '(') {
+      stack.push({ name: identBefore(src, i), openParen: i });
+      continue;
+    }
+    if (c !== ')') continue;
+
+    const frame = stack.pop();
+    if (!frame) continue;
+    const name = frame.name;
     if (!name || !/^[A-Za-z_]/.test(name)) continue;
     const head = name.includes('.') ? name.slice(0, name.indexOf('.')) : name;
     if (CONTROL_CALLS.has(name) || CONTROL_CALLS.has(head)) continue;
-    const site = findCallSite(src, i + 1);
-    if (site && site.openParen === i) out.push(site);
+    const base = buildCallSiteAt(src, name, frame.openParen, i);
+    out.push({ ...base, cursorArgIndex: 0, prefix: '', argFrom: frame.openParen + 1 });
   }
   return out;
 }
