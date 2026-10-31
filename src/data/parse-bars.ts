@@ -50,6 +50,26 @@
 import type { Bar } from '../store/types';
 import { chartDebug } from '../debug';
 
+/** Symbol marker: bar has already passed sanitizeBar. Skip re-processing. */
+const SANITIZED: unique symbol = Symbol('sanitized');
+
+type SanitizedBar = Bar & { [SANITIZED]?: true };
+
+function markSanitized(bar: SanitizedBar): void {
+  Object.defineProperty(bar, SANITIZED, {
+    value: true,
+    enumerable: false,
+    configurable: false,
+    writable: false,
+  });
+}
+
+function isSanitized(bar: unknown): bar is SanitizedBar {
+  return (
+    bar != null && typeof bar === 'object' && Object.prototype.hasOwnProperty.call(bar, SANITIZED)
+  );
+}
+
 /** Unix seconds past ~year 2100 — reject clearly absurd post-normalize times. */
 const MAX_UNIX_SECONDS = 4_102_444_800;
 
@@ -237,6 +257,26 @@ export function sanitizeStreamBar(raw: unknown, closed?: boolean): Bar | null {
 export function sanitizeBar(raw: unknown): Bar | null {
   if (raw == null || typeof raw !== 'object') return null;
 
+  // Fast path: already-sanitized bars skip the Object.entries + field
+  // parse loop. Returns the same object (callers must not mutate).
+  if (isSanitized(raw)) {
+    const o = raw.open as number;
+    const h = raw.high as number;
+    const l = raw.low as number;
+    const c = raw.close as number;
+    const t = raw.time as number;
+    if (
+      Number.isFinite(o) &&
+      Number.isFinite(h) &&
+      Number.isFinite(l) &&
+      Number.isFinite(c) &&
+      Number.isFinite(t) &&
+      t > 0
+    ) {
+      return raw as Bar;
+    }
+  }
+
   try {
     if (Array.isArray(raw)) {
       if (raw.length < 5) return null;
@@ -250,8 +290,9 @@ export function sanitizeBar(raw: unknown): Bar | null {
       const ohlc = repairOhlc(open, high, low, close);
       if (!ohlc) return null;
       const volume = raw.length > 5 ? num(raw[5]) : null;
-      const bar: Bar = { time, ...ohlc };
+      const bar: SanitizedBar = { time, ...ohlc };
       if (volume != null && volume >= 0) bar.volume = volume;
+      markSanitized(bar);
       return bar;
     }
 
@@ -273,9 +314,10 @@ export function sanitizeBar(raw: unknown): Bar | null {
     const ohlc = repairOhlc(open, high, low, close);
     if (!ohlc) return null;
     const volRaw = num(lower.volume ?? lower.vol ?? lower.v);
-    const bar: Bar = { time, ...ohlc };
+    const bar: SanitizedBar = { time, ...ohlc };
     if (volRaw != null && volRaw >= 0) bar.volume = volRaw;
     if (typeof lower.closed === 'boolean') bar.closed = lower.closed;
+    markSanitized(bar);
     return bar;
   } catch {
     return null;
