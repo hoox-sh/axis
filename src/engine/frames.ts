@@ -66,12 +66,7 @@ export type DeltaBlock = {
 
 /** Per-subscription lifecycle states (see final/plan.mdx §7). */
 export type SubscriptionStatusCode =
-  | 'datafeed-loading'
-  | 'datafeed-ready'
-  | 'calculating'
-  | 'live'
-  | 'degraded'
-  | 'error';
+  'datafeed-loading' | 'datafeed-ready' | 'calculating' | 'live' | 'degraded' | 'error';
 
 // ---------------------------------------------------------------------------
 // Client → engine frames
@@ -457,9 +452,66 @@ export interface SeqGap {
  * `seq`. A `gap` means frames were dropped → the caller must `resume` instead
  * of applying the delta. A `duplicate` is a safe replay → ignore.
  */
-export function classifySeqGap(lastSeq: number, seq: number): SeqGap {
+export function classifySeqGap(lastSeq: number, seq: number, ackFrom?: number): SeqGap {
+  if (ackFrom != null && seq <= ackFrom) return { kind: 'duplicate' };
   if (seq === lastSeq + 1) return { kind: 'continuous' };
   if (seq === lastSeq) return { kind: 'duplicate' };
   if (seq > lastSeq + 1) return { kind: 'gap', missing: seq - lastSeq - 1 };
   return { kind: 'rewind' };
+}
+
+/**
+ * Whether a connection-level error should permanently stop reconnects.
+ *
+ * PYNE `UNAUTHORIZED` / "Authenticate first" means the socket is not yet
+ * authed (pre-auth ping or race) — retryable by resending auth or reconnecting.
+ * Permanent failures (invalid/missing API key, other non-retryable codes) block.
+ */
+export function shouldAuthBlock(frame: {
+  type?: unknown;
+  id?: unknown;
+  payload?: unknown;
+  /** Flat error shape (some relays put code/message on the frame). */
+  code?: unknown;
+  message?: unknown;
+  retryable?: unknown;
+}): boolean {
+  if (frame?.type !== 'error') return false;
+  if (frame.id) return false;
+  const payload =
+    frame.payload && typeof frame.payload === 'object'
+      ? (frame.payload as { code?: unknown; message?: unknown; retryable?: unknown })
+      : null;
+  const retryable = payload?.retryable ?? frame.retryable;
+  if (retryable !== false) return false;
+  const code = String(payload?.code ?? frame.code ?? '')
+    .trim()
+    .toUpperCase();
+  const message = String(payload?.message ?? frame.message ?? '')
+    .trim()
+    .toLowerCase();
+  if (code === 'UNAUTHORIZED') return false;
+  if (message.includes('authenticate first')) return false;
+  return true;
+}
+
+export function reconnectDelayMs(
+  attempt: number,
+  initial = 500,
+  cap = 30_000,
+  rand = Math.random,
+): number {
+  const exp = Math.min(cap, initial * 2 ** Math.min(Math.max(0, attempt), 10));
+  const span = Math.floor(exp * 0.2);
+  if (span <= 0) return exp;
+  return exp - Math.floor(rand() * (span + 1));
+}
+
+/** Drop a coalescer ack so a network frame cannot suppress gap detection. */
+export function stripSeqAck<T>(frame: T): T {
+  if (!isRecord(frame) || !isRecord(frame.payload) || !('seqAckFrom' in frame.payload))
+    return frame;
+  const { seqAckFrom: _ack, ...payload } = frame.payload;
+  void _ack;
+  return { ...frame, payload } as T;
 }

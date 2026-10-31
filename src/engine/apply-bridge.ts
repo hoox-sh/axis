@@ -85,8 +85,7 @@ export function streamFullToPrecomputed(full: StreamFullPayload, via: StreamVia)
       ...(full.meta ?? {}),
       sessionVia: via,
       count: full.count,
-      executionContext:
-        full.executionContext ?? (via === 'stream-full' ? 'snapshot' : 'append'),
+      executionContext: full.executionContext ?? (via === 'stream-full' ? 'snapshot' : 'append'),
       ...(full.plot_meta ? { plot_meta: full.plot_meta } : {}),
     },
   } as RunResult;
@@ -112,7 +111,7 @@ export async function applyStreamPayload(
   }
   const run =
     deps?.runAndApply ??
-    (await import('../indicators/runner')).runAndApply as unknown as RunAndApplyFn;
+    ((await import('../indicators/runner')).runAndApply as unknown as RunAndApplyFn);
   return run(input.script, input.indicatorId, {
     precomputedResult,
     bars: input.bars,
@@ -122,7 +121,17 @@ export async function applyStreamPayload(
   });
 }
 
-/** Input descriptors of a script's last stored run (empty when unknown). */
+/**
+ * Apply a stream delta payload through the existing pipeline without re-running.
+ * Alias for {@link applyStreamPayload} — deltas carry the same input shape,
+ * just with a smaller `full` payload (delta block instead of full snapshot).
+ */
+export async function applyStreamDelta(
+  input: ApplyStreamInput,
+  deps?: { runAndApply?: RunAndApplyFn },
+): Promise<RunResult> {
+  return applyStreamPayload(input, deps);
+}
 function previousRunInputs(indicatorId: string | undefined): unknown[] | undefined {
   if (!indicatorId) return undefined;
   try {
