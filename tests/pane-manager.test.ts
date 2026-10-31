@@ -11,13 +11,7 @@
 import './setup';
 import { describe, expect, it, beforeAll, beforeEach, afterEach } from 'bun:test';
 import { installLightweightChartsMock } from './helpers/mock-lwc';
-import { resetChartLayoutMode, setChartLayoutMode } from '../src/chart/v1/chart-host';
 import { _resetSyncSampleForTests } from '../src/chart/v1/invariants';
-import {
-  _resetV1Metrics,
-  _setV1FrameScheduler,
-  v1MetricsSnapshot,
-} from '../src/engine/v1/metrics';
 import { setStore, store } from '../src/store';
 import { PANE_RESIZE_LAYOUT } from '../src/chart/series-factory';
 
@@ -25,7 +19,8 @@ beforeAll(() => {
   installLightweightChartsMock();
 });
 
-const { PaneManager, peekOverlayLineTip, toLwcLineData, inferOverlayTitle } = await import('../src/chart/pane-manager');
+const { PaneManager, peekOverlayLineTip, toLwcLineData, inferOverlayTitle } =
+  await import('../src/chart/pane-manager');
 
 describe('peekOverlayLineTip', () => {
   it('returns tip when raw length matches expected mapped length', () => {
@@ -84,7 +79,6 @@ describe('PaneManager', () => {
   let pm: InstanceType<typeof PaneManager>;
 
   beforeEach(() => {
-    setChartLayoutMode('multi');
     container = document.createElement('div') as unknown as HTMLElement;
     (container as { id: string }).id = 'chart-root';
     document.body.appendChild(container as never);
@@ -102,7 +96,6 @@ describe('PaneManager', () => {
     } catch {
       /* ignore */
     }
-    resetChartLayoutMode();
   });
 
   it('createPane / getPane / getAllPanes', () => {
@@ -113,14 +106,15 @@ describe('PaneManager', () => {
   });
 
   it('single layout puts volume on the price chart and keeps candles when volume goes', () => {
-    setChartLayoutMode('single');
     const price = pm.createPane('price', 'price', 'Price');
     const volume = pm.createPane('volume', 'volume', 'Volume', 80);
     const volumeEl = document.getElementById(pm.paneDomId('volume'));
     expect(volumeEl?.style.display).toBe('none');
     const panes = (
       volume.chart as unknown as {
-        panes: () => Array<{ getHTMLElement: () => { dataset?: { axisPaneChrome?: string } } | null }>;
+        panes: () => Array<{
+          getHTMLElement: () => { dataset?: { axisPaneChrome?: string } } | null;
+        }>;
       }
     ).panes();
     expect(panes[1]?.getHTMLElement()?.dataset?.axisPaneChrome).toBe('volume');
@@ -131,39 +125,26 @@ describe('PaneManager', () => {
     const series = volume.chart.addSeries('LineSeries' as never, {});
     expect((series as { _paneIndex?: number })._paneIndex).toBe(1);
     expect(price.chart.addSeries('LineSeries' as never, {})).toBeTruthy();
-    expect((price.chart.addSeries('LineSeries' as never, {}) as { _paneIndex?: number })._paneIndex).toBe(0);
+    expect(
+      (price.chart.addSeries('LineSeries' as never, {}) as { _paneIndex?: number })._paneIndex,
+    ).toBe(0);
     pm.destroyPane('volume');
     expect(pm.getPane('price')).toBe(price);
     expect(pm.getPane('volume')).toBeUndefined();
     price.chart.timeScale().getVisibleLogicalRange();
   });
 
-  it('second pane attaches resize handle', () => {
-    pm.createPane('price', 'price', 'Price');
-    pm.createPane('volume', 'volume', 'Volume', 100);
-    expect(pm.getAllPanes()).toHaveLength(2);
-    expect(document.getElementById('pane-volume')).toBeTruthy();
-    expect(document.getElementById('pane-handle-volume')).toBeTruthy();
-    const price = pm.getPane('price')?.chart as {
-      _options?: { layout?: { panes?: { enableResize?: boolean } } };
-      _applied?: { layout?: { panes?: { enableResize?: boolean } } };
-    };
-    expect(price?._options?.layout?.panes?.enableResize).toBe(false);
-    expect(price?._applied?.layout?.panes?.enableResize).toBe(false);
-  });
-
   it('single layout uses LWC pane resize and skips the custom handle', () => {
-    setChartLayoutMode('single');
     const price = pm.createPane('price', 'price', 'Price');
     pm.createPane('volume', 'volume', 'Volume', 80);
     expect(document.getElementById('pane-handle-volume')).toBeNull();
-    const opts = (price.chart as { _options?: { layout?: { panes?: typeof PANE_RESIZE_LAYOUT } } })._options;
+    const opts = (price.chart as { _options?: { layout?: { panes?: typeof PANE_RESIZE_LAYOUT } } })
+      ._options;
     expect(opts?.layout?.panes?.enableResize).toBe(true);
     expect(opts?.layout?.panes?.separatorColor).toBe(PANE_RESIZE_LAYOUT.separatorColor);
   });
 
   it('single layout resize sets IPaneApi height, not the whole chart', () => {
-    setChartLayoutMode('single');
     const price = pm.createPane('price', 'price', 'Price');
     pm.createPane('volume', 'volume', 'Volume', 80);
     const panes = price.chart as {
@@ -177,17 +158,18 @@ describe('PaneManager', () => {
   });
 
   it('single layout pointerup persists LWC pane heights into the store', () => {
-    setChartLayoutMode('single');
     setStore('panes', [
       { id: 'price', type: 'price', height: 400, order: 0, visible: true, label: 'Price' },
       { id: 'volume', type: 'volume', height: 80, order: 1, visible: true, label: 'Volume' },
     ]);
     const price = pm.createPane('price', 'price', 'Price');
     pm.createPane('volume', 'volume', 'Volume', 80);
-    (
-      price.chart as { panes: () => Array<{ setHeight: (h: number) => void }> }
-    ).panes()[1]?.setHeight(132);
-    const host = document.getElementById(pm.paneDomId('price')) as { dispatchEvent: (ev: { type: string }) => void } | null;
+    (price.chart as { panes: () => Array<{ setHeight: (h: number) => void }> })
+      .panes()[1]
+      ?.setHeight(132);
+    const host = document.getElementById(pm.paneDomId('price')) as {
+      dispatchEvent: (ev: { type: string }) => void;
+    } | null;
     host?.dispatchEvent({ type: 'pointerup' });
     expect(store.panes.find((p) => p.id === 'volume')?.height).toBe(132);
   });
@@ -209,7 +191,6 @@ describe('PaneManager', () => {
   });
 
   it('single layout does not copy the logical range onto a second chart', () => {
-    setChartLayoutMode('single');
     const price = pm.createPane('price', 'price', 'Price');
     const volume = pm.createPane('volume', 'volume', 'Volume', 80);
     let sets = 0;
@@ -226,7 +207,6 @@ describe('PaneManager', () => {
   });
 
   it('single layout samples matching logical ranges without mirroring', () => {
-    setChartLayoutMode('single');
     const price = pm.createPane('price', 'price', 'Price');
     pm.createPane('rsi', 'indicator', 'RSI', 140);
     let sets = 0;
@@ -263,72 +243,7 @@ describe('PaneManager', () => {
     expect(messages).toEqual([]);
   });
 
-  it('multi layout samples logical range after the mirror write', () => {
-    const price = pm.createPane('price', 'price', 'Price');
-    const rsi = pm.createPane('rsi', 'indicator', 'RSI', 140);
-    const priceRange = { from: 0, to: 10 };
-    let rsiRange = { from: 5, to: 15 };
-    const patch = (
-      chart: { timeScale: () => unknown },
-      get: () => { from: number; to: number },
-      set?: (range: { from: number; to: number }) => void,
-    ) => {
-      const origTs = chart.timeScale.bind(chart);
-      chart.timeScale = () => {
-        const ts = origTs() as {
-          getVisibleLogicalRange: () => { from: number; to: number } | null;
-          setVisibleLogicalRange: (range: { from: number; to: number }) => void;
-        };
-        ts.getVisibleLogicalRange = get;
-        ts.setVisibleLogicalRange = (next) => set?.(next);
-        return ts;
-      };
-    };
-    patch(price.chart, () => priceRange);
-    patch(rsi.chart, () => rsiRange, (next) => {
-      rsiRange = { from: next.from, to: next.to };
-    });
-    _resetSyncSampleForTests();
-    const messages: string[] = [];
-    pm.alignTimeRangesFromPrice({
-      dev: true,
-      warn: (message) => messages.push(message),
-    });
-    expect(rsiRange).toEqual(priceRange);
-    expect(messages).toEqual([]);
-  });
-
-  it('multi layout warns when a pane still skews after the mirror', () => {
-    const price = pm.createPane('price', 'price', 'Price');
-    const rsi = pm.createPane('rsi', 'indicator', 'RSI', 140);
-    const patch = (
-      chart: { timeScale: () => unknown },
-      range: { from: number; to: number },
-    ) => {
-      const origTs = chart.timeScale.bind(chart);
-      chart.timeScale = () => {
-        const ts = origTs() as {
-          getVisibleLogicalRange: () => { from: number; to: number } | null;
-          setVisibleLogicalRange: (range: unknown) => void;
-        };
-        ts.getVisibleLogicalRange = () => range;
-        ts.setVisibleLogicalRange = () => {};
-        return ts;
-      };
-    };
-    patch(price.chart, { from: 0, to: 10 });
-    patch(rsi.chart, { from: 2, to: 10 });
-    _resetSyncSampleForTests();
-    const messages: string[] = [];
-    pm.alignTimeRangesFromPrice({
-      dev: true,
-      warn: (message) => messages.push(message),
-    });
-    expect(messages).toEqual(['[axis] pane logical range skews the price axis']);
-  });
-
   it('single layout wires one crosshair listener and does not mirror', () => {
-    setChartLayoutMode('single');
     const price = pm.createPane('price', 'price', 'Price');
     const rsi = pm.createPane('rsi', 'indicator', 'RSI', 140);
     const priceChart = price.chart as unknown as {
@@ -374,88 +289,6 @@ describe('PaneManager', () => {
     expect(rsiMirrors).toBe(0);
   });
 
-  it('single layout wheel on the shared host arms chart.lag panFrame', () => {
-    setChartLayoutMode('single');
-    _resetV1Metrics();
-    let pending: ((ts: number) => void) | null = null;
-    _setV1FrameScheduler((cb) => {
-      pending = cb;
-      return 1;
-    });
-    pm.createPane('price', 'price', 'Price');
-    pm.createPane('volume', 'volume', 'Volume', 80);
-    const host = document.getElementById(pm.paneDomId('price'));
-    expect(host).toBeTruthy();
-    host!.dispatchEvent(new Event('wheel', { bubbles: true }));
-    let ts = 0;
-    while (pending) {
-      const cb = pending;
-      pending = null;
-      cb(ts);
-      ts += 16;
-    }
-    expect(v1MetricsSnapshot().panFrame.n).toBeGreaterThan(0);
-    _setV1FrameScheduler(null);
-    _resetV1Metrics();
-  });
-
-  it('single layout drag range change samples panFrame while ranging', () => {
-    setChartLayoutMode('single');
-    _resetV1Metrics();
-    let pending: ((ts: number) => void) | null = null;
-    _setV1FrameScheduler((cb) => {
-      pending = cb;
-      return 1;
-    });
-    const price = pm.createPane('price', 'price', 'Price');
-    let rangeHandler: ((r: { from: number; to: number } | null) => void) | null = null;
-    const chart = price.chart as unknown as {
-      timeScale: () => {
-        subscribeVisibleLogicalRangeChange: (cb: (r: { from: number; to: number } | null) => void) => void;
-        unsubscribeVisibleLogicalRangeChange: (cb: (r: { from: number; to: number } | null) => void) => void;
-        getVisibleLogicalRange: () => { from: number; to: number } | null;
-        setVisibleLogicalRange: (r: unknown) => void;
-        fitContent: () => void;
-        setVisibleRange: (r: unknown) => void;
-        timeToCoordinate: (t: unknown) => number | null;
-        coordinateToLogical: (c: number) => number | null;
-      };
-    };
-    const origTs = chart.timeScale.bind(chart);
-    chart.timeScale = () => {
-      const ts = origTs();
-      return {
-        ...ts,
-        subscribeVisibleLogicalRangeChange: (cb) => {
-          rangeHandler = cb;
-        },
-        unsubscribeVisibleLogicalRangeChange: () => {
-          rangeHandler = null;
-        },
-      };
-    };
-    pm.syncTimeScales();
-    expect(rangeHandler).toBeTruthy();
-    const host = document.getElementById(pm.paneDomId('price'));
-    expect(pm.isRanging()).toBe(false);
-    host!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
-    expect(pm.isRanging()).toBe(true);
-    rangeHandler!({ from: 1, to: 20 });
-    let t = 0;
-    while (pending) {
-      const cb = pending;
-      pending = null;
-      cb(t);
-      t += 16;
-    }
-    expect(v1MetricsSnapshot().panFrame.n).toBeGreaterThan(0);
-    host!.dispatchEvent(new Event('pointerup', { bubbles: true }));
-    // Post-gesture quiet window still counts as ranging for live slide deferral.
-    expect(pm.isRanging()).toBe(true);
-    _setV1FrameScheduler(null);
-    _resetV1Metrics();
-  });
-
   it('syncTimeScales with 2 panes', () => {
     pm.createPane('price', 'price', 'Price');
     pm.createPane('volume', 'volume', 'Volume', 80);
@@ -477,7 +310,7 @@ describe('PaneManager', () => {
       coordinateToPrice: () => 10,
     } as never;
 
-    let lastTime: unknown ;
+    let lastTime: unknown;
     pm.syncCrosshair((data) => {
       lastTime = data.time;
     });
@@ -512,7 +345,7 @@ describe('PaneManager', () => {
     } as never;
 
     let calls = 0;
-    let lastTime: unknown ;
+    let lastTime: unknown;
     pm.syncCrosshair((data) => {
       calls += 1;
       lastTime = data.time;
@@ -522,11 +355,9 @@ describe('PaneManager', () => {
     (pm as unknown as { pointerInside: boolean; hoveredPaneId: string }).pointerInside = true;
     (pm as unknown as { hoveredPaneId: string }).hoveredPaneId = 'price';
 
+    // One chart has one crosshair subscription — owned by the first pane iterated.
     const priceHandlers = (
       price.chart as unknown as { _crosshairHandlers: Array<(p: unknown) => void> }
-    )._crosshairHandlers;
-    const volHandlers = (
-      vol.chart as unknown as { _crosshairHandlers: Array<(p: unknown) => void> }
     )._crosshairHandlers;
 
     // User move on price (sourceEvent present) → accepted
@@ -539,8 +370,10 @@ describe('PaneManager', () => {
     expect(lastTime).toBe(1_700_000_000);
     expect(calls).toBe(1);
 
-    // Live series update re-fire on volume (no sourceEvent, not hovered) → ignored
-    volHandlers[0]!({
+    // Live series update re-fire (no sourceEvent) while the pointer hovers a
+    // different pane → ignored
+    (pm as unknown as { hoveredPaneId: string }).hoveredPaneId = 'volume';
+    priceHandlers[0]!({
       time: 1_700_000_100,
       point: { x: 11, y: 21 },
       seriesData: new Map(),
@@ -549,6 +382,7 @@ describe('PaneManager', () => {
     expect(calls).toBe(1);
 
     // Outside chart: data-driven re-fire ignored
+    (pm as unknown as { hoveredPaneId: string }).hoveredPaneId = 'price';
     (pm as unknown as { pointerInside: boolean }).pointerInside = false;
     priceHandlers[0]!({
       time: 1_700_000_200,
@@ -728,27 +562,19 @@ describe('PaneManager', () => {
       { time: 1_700_000_000, value: 10 },
       { time: 1_700_000_060, value: 12 },
     ];
-    pm.syncOverlayLines(
-      'ind_script1',
-      [{ name: 'ATR', data, color: '#00f' }],
-      { ownerId: '__editor__' },
-    );
+    pm.syncOverlayLines('ind_script1', [{ name: 'ATR', data, color: '#00f' }], {
+      ownerId: '__editor__',
+    });
     const afterEditor = pm.getPane('ind_script1')!;
-    const editorKeys = Object.keys(afterEditor.series).filter((k) =>
-      k.startsWith('overlay_'),
-    );
+    const editorKeys = Object.keys(afterEditor.series).filter((k) => k.startsWith('overlay_'));
     expect(editorKeys.length).toBe(1);
     expect(editorKeys[0]).toContain('__editor__');
 
-    pm.syncOverlayLines(
-      'ind_script1',
-      [{ name: 'ATR', data, color: '#00f' }],
-      { ownerId: 'script1' },
-    );
+    pm.syncOverlayLines('ind_script1', [{ name: 'ATR', data, color: '#00f' }], {
+      ownerId: 'script1',
+    });
     const afterReal = pm.getPane('ind_script1')!;
-    const overlayKeys = Object.keys(afterReal.series).filter((k) =>
-      k.startsWith('overlay_'),
-    );
+    const overlayKeys = Object.keys(afterReal.series).filter((k) => k.startsWith('overlay_'));
     // Only the real-owner series remains — no stacked last/current labels
     expect(overlayKeys.length).toBe(1);
     expect(overlayKeys[0]).toContain('script1');
@@ -758,24 +584,10 @@ describe('PaneManager', () => {
   it('price pane keeps sibling owners but drops editor leftovers for same plot', () => {
     pm.createPane('price', 'price', 'Price');
     const data = [{ time: 1_700_000_000, value: 1 }];
-    pm.syncOverlayLines(
-      'price',
-      [{ name: 'EMA', data, color: '#0f0' }],
-      { ownerId: 'sibling' },
-    );
-    pm.syncOverlayLines(
-      'price',
-      [{ name: 'EMA', data, color: '#f00' }],
-      { ownerId: '__editor__' },
-    );
-    pm.syncOverlayLines(
-      'price',
-      [{ name: 'EMA', data, color: '#f00' }],
-      { ownerId: 'mine' },
-    );
-    const keys = Object.keys(pm.getPane('price')!.series).filter((k) =>
-      k.startsWith('overlay_'),
-    );
+    pm.syncOverlayLines('price', [{ name: 'EMA', data, color: '#0f0' }], { ownerId: 'sibling' });
+    pm.syncOverlayLines('price', [{ name: 'EMA', data, color: '#f00' }], { ownerId: '__editor__' });
+    pm.syncOverlayLines('price', [{ name: 'EMA', data, color: '#f00' }], { ownerId: 'mine' });
+    const keys = Object.keys(pm.getPane('price')!.series).filter((k) => k.startsWith('overlay_'));
     // sibling kept; editor dropped; mine kept
     expect(keys.some((k) => k.includes('sibling'))).toBe(true);
     expect(keys.some((k) => k.includes('mine'))).toBe(true);
@@ -1099,7 +911,10 @@ describe('PaneManager', () => {
     expect(bg._priceLines).toHaveLength(0);
     const total = Object.entries(pane.series)
       .filter(([k]) => k !== bgKey)
-      .reduce((n, [, s]) => n + ((s as never as { _priceLines?: unknown[] })._priceLines?.length ?? 0), 0);
+      .reduce(
+        (n, [, s]) => n + ((s as never as { _priceLines?: unknown[] })._priceLines?.length ?? 0),
+        0,
+      );
     expect(total).toBe(3);
   });
 
@@ -1125,20 +940,14 @@ describe('PaneManager', () => {
       pointerUnsubs: Array<() => void>;
       panePointerUnsubs: Map<string, () => void>;
     };
-    expect(
-      [...internal.overlayDataMeta.keys()].some((k) => k.startsWith('price:')),
-    ).toBe(true);
+    expect([...internal.overlayDataMeta.keys()].some((k) => k.startsWith('price:'))).toBe(true);
     const unsubsBefore = internal.pointerUnsubs.length;
     pm.destroyPane('price');
-    expect(
-      [...internal.overlayDataMeta.keys()].some((k) => k.startsWith('price:')),
-    ).toBe(false);
-    expect(
-      [...internal.overlaySeriesKinds.keys()].some((k) => k.startsWith('price:')),
-    ).toBe(false);
-    expect(
-      [...internal.lastValueTitleByKey.keys()].some((k) => k.startsWith('price:')),
-    ).toBe(false);
+    expect([...internal.overlayDataMeta.keys()].some((k) => k.startsWith('price:'))).toBe(false);
+    expect([...internal.overlaySeriesKinds.keys()].some((k) => k.startsWith('price:'))).toBe(false);
+    expect([...internal.lastValueTitleByKey.keys()].some((k) => k.startsWith('price:'))).toBe(
+      false,
+    );
     expect(internal.panePointerUnsubs.has('price')).toBe(false);
     expect(internal.pointerUnsubs.length).toBe(unsubsBefore - 1);
     // Recreate + re-apply repaints (no stale tip fast-path leaving it empty)
@@ -1196,9 +1005,7 @@ describe('PaneManager', () => {
       expect(painted[1]!['color']).toBe('#ff0000');
       expect(painted[0]!['color']).toBeUndefined();
 
-      const { startReplaySession, stopReplaySession } = await import(
-        '../src/chart/bar-replay'
-      );
+      const { startReplaySession, stopReplaySession } = await import('../src/chart/bar-replay');
       startReplaySession(3, { cursorIndex: 0 });
       try {
         painted = [];
@@ -1222,7 +1029,6 @@ describe('pruneCoPaintedSeriesToPaintedRange', () => {
   let pm: InstanceType<typeof PaneManager>;
 
   beforeEach(() => {
-    setChartLayoutMode('multi');
     container = document.createElement('div') as unknown as HTMLElement;
     (container as { id: string }).id = 'chart-root';
     document.body.appendChild(container as never);
@@ -1331,7 +1137,6 @@ describe('live candle axis', () => {
   let pm: InstanceType<typeof PaneManager>;
 
   beforeEach(() => {
-    setChartLayoutMode('multi');
     container = document.createElement('div') as unknown as HTMLElement;
     (container as { id: string }).id = 'chart-root';
     document.body.appendChild(container as never);
@@ -1384,7 +1189,6 @@ describe('load paint while the user is zooming', () => {
   let pm: InstanceType<typeof PaneManager>;
 
   beforeEach(() => {
-    setChartLayoutMode('multi');
     container = document.createElement('div') as unknown as HTMLElement;
     (container as { id: string }).id = 'chart-root';
     document.body.appendChild(container as never);
@@ -1453,7 +1257,6 @@ describe('auditTimeParity', () => {
   let pm: InstanceType<typeof PaneManager>;
 
   beforeEach(() => {
-    setChartLayoutMode('multi');
     container = document.createElement('div') as unknown as HTMLElement;
     (container as { id: string }).id = 'chart-root';
     document.body.appendChild(container as never);
@@ -1504,7 +1307,6 @@ describe('ranging defers expensive chart paints (G2 panFrame)', () => {
   let container: HTMLElement;
 
   beforeEach(() => {
-    setChartLayoutMode('multi');
     container = document.createElement('div') as unknown as HTMLElement;
     (container as { id: string }).id = 'chart-root';
     document.body.appendChild(container as never);
@@ -1517,7 +1319,6 @@ describe('ranging defers expensive chart paints (G2 panFrame)', () => {
     } catch {
       /* ignore */
     }
-    resetChartLayoutMode();
     container?.remove();
   });
 

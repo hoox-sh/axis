@@ -37,17 +37,22 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 - **Series live no longer storms `full` snapshots (~6/s) into chart `setData`.** Debug ring showed 228 `wire.series.full` + 200 `setData` in ~40s: gap recovery cleared its backoff on every full, then unsubscribe+subscribed again. Series gaps now **resume** (scripts still fresh-subscribe); sliding fulls after the first snapshot tip-merge only; backoff clears only after a continuous delta.
 
-- **Live candle paint no longer renders shredded / random-size candles.** `PaneManager.appendBar` now clamps OHLC consistency (`high` up to `max(open, close)`, `low` down to `min(open, close)`) before `series.update` on every live forming tick. An inverted tick (`high < low`, `high` below `open`/`close`, `low` above `open`/`close`) previously reached Lightweight Charts unsanitized and painted a malformed candle. Venue bars were already repaired by `sanitizeBar`; this closes the engine-owned path and any future caller that reaches `series.update` directly.
+- **Live candle paint no longer clamps or repairs OHLC.** `PaneManager.appendBar` no longer calls `repairOhlc` on forming ticks — exchange OHLC is clean ~99.9% of the time, and clamping could alter real values. Non-finite ticks are dropped instead.
+- **`sanitizeSeriesDataForSetData` removed entirely.** No donor fill, no OHLC fill-from-neighbor, no clamping — bad rows are simply dropped before `setData`. A minimal `filterValidCandleRows` guard drops rows with non-finite time/OHLC or duplicate times (last write wins) so LWC never throws `Value is null`. `repairSeriesPayload`, `setCandleData`, and `setVolumeData` pass data straight to Lightweight Charts.
 
 - **Live script input-change resubscribe no longer stays `idle`/`released`.** An input edit (e.g. Momentum Length 10→100) unsubscribes then re-subscribes on the same id; the PYNE `idle`/`released` ack arriving during `awaitSnapshot` used to `dropScriptLocal` the half-open replacement (wiping `appliers` / ctx), so the next eval re-subscribed forever and never rejoined while Bollinger/SMA stayed live. In-flight script subscribe now ignores that ack (same idea as gap-resync `holdUntilFull`), clears the inbox on release, and re-binds applier state when the new full lands.
 
 - **Venue live owns candle paint — engine series snapshots/deltas no longer `setData` or overwrite forming bars.** Worker tips were painting stub OHLC (tiny volume, disconnected opens) on top of Binance candles — visual gaps — and 5k `setData` on every engine full stalled scripts (`websocket · cooldown` / stop updating). Replica stays on the wire for indicators; chart tail stays venue.
+
+- **Engine-owned mode no longer repaints the full window from PYNE on every tick.** The `full` diff branch called `setDataToChart(proBars)`, replacing every candle — including venue-closed bars whose OHLC PYNE could report collapsed or stale. Now engine bars are merged into the venue window via `mergeEngineSnapshot`: existing times keep venue's OHLC, only new times from the engine are appended, and the chart is only repainted when the merged window actually changed. Closed candles no longer get collapsed on a new candle.
 
 - **Live start / scheduleRerun re-subscribes every visible non-library script, including `idle`/`released`.** PYNE unsubscribe acks (`idle` + message `released` via live-wire `release`→unsubscribe) no longer leave EMA/Momentum blank while Bollinger stays on the wire: multiplex bypasses stream-eval backoff for released scripts, clears their retry state, and on stream-route live start kicks an immediate (0-debounce) scheduleRerun. `scriptHistoryBars` uses the stable chart window so a 1-bar length flicker cannot change `history_bars` and bounce subs.
 
 - **Price chart printing pipeline refactored.** `store.appendBar` splits into `applyCandlePoint` / `applyPriceLineTint` / `updateVolumeBar` for a simple O(1) live-tick path; `setCandleData` / `setVolumeData` extract full-history setData out of `manager-access.setDataToChart` so both full loads and live slides share one code path. Test doubles / managers without the new methods fall back to inline painting. `appendBar` no longer bumps `chartDataGen` on a live slide — ChartHost's `chartDataGen` effect responded with `fit:true` → `fitContent()`, resetting zoom/position on every new candle. `appendLiveBar` already paints slides with `fit:false`, so ChartHost does not need to repaint.
 
 - **Live candle open no longer jumps when historical data arrives.** `store.appendBar` preserves the candle's open once it has started forming: a historical close for the same bar updates high/low/close only, so the open set by the venue's first tick is not overwritten.
+
+- **`store.appendBar` now writes live-tick OHLC to `store.bars` instead of a discarded `unwrap()` copy.** `Object.assign(unwrap(tip), payload)` mutated a deep copy returned by Solid's `unwrap()`, so live ticks never persisted updated OHLC/high/low/close into `store.bars`. A full `setData` (window slide at capacity, engine `mergeEngineSnapshot`, etc.) then painted stale OHLC from the store — old candles collapsed/lost their OHLC when a new candle arrived. Both the OHLC write and the `closed = true` flag now go through `setStore('bars', index, ...)` so the store is the source of truth for both `series.update` (live tip) and `setData` (full window).
 
 - **Chart view no longer resets (zoom/position) on each new candle.** `appendBar` no longer bumps `chartDataGen` on a window slide. ChartHost's `chartDataGen` effect previously responded with `fit:true` → `fitContent()`, which reset the viewport on every new candle. `appendLiveBar` already paints slides with `fit:false` via `scheduleSlideReplace`, preserving the view.
 
@@ -92,6 +97,8 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 - **Single-chart layout arms `chart.lag` `panFrame` on pan/zoom.** `createSharedPane` never set `ranging` or wired wheel → `v1NotePanActivity`, so the default one-chart host left `panFrame.n = 0` after user gestures. The shared price host now mirrors the multi-pane listeners (pointer ranging + wheel).
 
+- **`chart.lag` v1 is counters only.** The per-tick latency rings (tick→apply / tick→paint / apply / queueWait / panFrame / longTask), the rAF paint arming, the pan-sampling loop, the `conflation` / `visibleBars` gauges and the long-task `PerformanceObserver` were removed from the hot path — they sampled every tick and kept 120-sample windows just to report p95. `v1Count` counters (`seqGap`, `resync`, `droppedTip`, `jsonFallback`, `unknownOpcode`, `longTask`) stay; `chart.lag` v1 now reports `counts` + `transport` + `layout`. `chart.v1/invariants.ts` 1-in-32 sampling and `v1BudgetRegressed` are gone.
+
 - **Live-proxy buffers client frames until the engine upstream is open, and the ingest worker resends `auth` on `live-relay`.** Browser `onopen` could send `auth` before the Worker’s upstream socket was ready; the frame was dropped and subscribe then failed with `UNAUTHORIZED`. The proxy queues early client→engine frames; the ingest worker also resends auth when it sees `live-relay` and never signals host `open` without `auth.ok`.
 
 - **Ingest tip coalesce and send-buffer backpressure cut tip delay under load.** A second forming tip for the same subscription folds and releases immediately instead of waiting out the 16 ms coalesce window, so `batch:post` is not stuck behind a quiet-period timer. Send-buffer hold uses hysteresis (enter above 1 MB, clear only below 256 KiB) so a buffer that jitters around 1 MB cannot resume every live sub in a loop. UNCHANGED keepalives are no longer treated as droppable forming tips under send hold, so their seq still reaches the coalescer and is acked. Closes and snapshots stay immediate; the pending queue remains one tip per subscription.
@@ -100,7 +107,7 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 ### Added
 
-- **P6 flag flip is proven in unit tests.** One test switches worker+single to json+multi and back: the live client and the pane chart identity follow both flags together. The worker transport test also asserts inbound frames are already objects (no window `JSON.parse`).
+- **P6 flag flip proven in unit tests.** The test switches worker+single to json and back: the live client follows both flags together, but the chart stays the shared single layout — the `axis.chart.layout=multi` rollback is gone (see Removed below).
 
 - **Inactive chart slots paint without stealing the focused manager.** `setDataToChart` takes an optional `manager` / `slotId` so a 2h/2v/4 cell can `setData` on its own PaneManager. Drawings and selection stay on the focused slot.
 
@@ -124,15 +131,19 @@ _Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
 
 - **The shared-memory ring, GPU candle overlay, and HP flags are gone.** Lightweight Charts paints candles, indicators, and fills. The ingest worker still owns `/ws/live` and decodes AXB1 when `axis.engine.transport` is `worker` (the default). `axis.engine.transport=json` keeps the main-thread client. Settings no longer has a high-performance section. `hp.get`, `hp.sample`, and `dev.trace` are no longer MCP capabilities. Isolation headers stay.
 
+- **The `axis.chart.layout=multi` rollback is gone.** `axis.chart.layout` is no longer read or persisted — stored values are ignored like `axis.engine.hp.*`. One Lightweight Charts chart per slot only: `ChartLayoutMode`/`chartLayoutMode`/`setChartLayoutMode`/`resetChartLayoutMode`/`usesSingleChartLayout`, `CHART_LAYOUT_KEY`, `SlotChart`, shared-pane chrome, multi-chart slot-bar caches, custom pane-resize handles (`pane-handle-*`), crosshair mirroring across panes, and the `map`/`mirror` branches in `syncTimeScales`, `alignTimeRangesFromPrice`, and crosshair rewiring are removed. `chart.lag` v1 always reports `layout: 'single'`.
+
 ### Fixed
 
 - **MCP `stream.reset` re-pins mounted chart hosts.** `resetStreamWire` keeps live ChartHost slot ids, drains the pool, then pins those hosts onto the current engine fingerprint (new sockets). Unpin still drops a slot so reset cannot resurrect it. With no hosts mounted the pool stays empty until `getWire`.
 
 - **`streamStop` keeps mounted ChartHost slots.** Stop drains and disconnects sockets and clears remembered fingerprints, but still-mounted slot ids survive. The next `getWire` re-pins those hosts onto the current engine. Unpin still drops a slot so stop cannot resurrect it. With no hosts mounted, `getWire` opens one primary socket.
 
-- **A pane whose visible logical range disagrees with the price axis is reported.** `alignTimeRangesFromPrice` samples `logicalRangeSkew` after the single-layout early return (shared chart, no mirror) and after the multi-chart write. Dev warns on every new skew size. Production warns about 1 in 32 times, once per size. Matching ranges are silent.
+- **A pane whose visible logical range disagrees with the price axis is reported.** `alignTimeRangesFromPrice` samples `logicalRangeSkew` once against the one shared chart (no per-pane mirror). Dev warns on every new skew size. Production warns about 1 in 32 times, once per size. Matching ranges are silent.
 
 - **A plot column shorter than the price axis is reported.** `applyChartMutations` samples `plotLengthSkew`. Dev warns on every new absolute size. Production warns about 1 in 32 times, once per size. A longer column still uses the overhang text and is not warned twice.
+
+- **Crosshair stays on the shared single chart.** Data-driven (no `sourceEvent`) moves no longer attempt a cross-mirror that never had a second chart to write to; `syncCrosshair`/`rewireCrosshair` subscribe once per `IChartApi` instead of per pane, and `applyCrosshairToPane` + the multi-pane resize handle are gone. Hovered-pane gating only gates the host callback now.
 
 - **The single chart wires one crosshair listener.** Sub-pane facades are different Proxy objects around the same Lightweight Charts chart. Once the slot exists, later panes do not subscribe again.
 

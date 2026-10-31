@@ -44,7 +44,7 @@ import { engineDebug, engineDebugSample } from '../debug';
 
 import { readTimeList, scriptDeltaTimeTail, Redesign2DeltaApplier } from './client-apply';
 import { classifySeqGap } from './frames';
-import { v1Count, v1Mark } from './v1/metrics';
+import { v1Count } from './v1/metrics';
 import { commitLiveBatch, runApplyTransaction } from './v1/apply-transaction';
 import { wantsWorkerTransport } from './v1/transport';
 import type { SubscriptionStatus } from '../store/types';
@@ -639,7 +639,12 @@ export class StreamLiveWire {
     const bars = this.seriesBars.get(subId) ?? this.scriptCtx.get(subId)?.bars ?? [];
     const seq = this.appliedSeq.get(subId) ?? 0;
     try {
-      this.client.resumeSubscription(subId, bars.length, this.lastBarTime(bars), this.resumePayload(subId, seq));
+      this.client.resumeSubscription(
+        subId,
+        bars.length,
+        this.lastBarTime(bars),
+        this.resumePayload(subId, seq),
+      );
     } catch {
       /* the socket may still be opening */
     }
@@ -770,11 +775,7 @@ export class StreamLiveWire {
   private enqueueInbox(frame: WireFrame): void {
     const id = frame.id;
     if (!id) return;
-    if (
-      this.isDroppableTip(frame) &&
-      this.appliedSeq.has(id) &&
-      !this.inboxWaiters.has(id)
-    ) {
+    if (this.isDroppableTip(frame) && this.appliedSeq.has(id) && !this.inboxWaiters.has(id)) {
       return;
     }
     const queue = this.inbox.get(id) ?? [];
@@ -872,7 +873,9 @@ export class StreamLiveWire {
       }
       if (full.type === 'error') {
         const body = (full.payload ?? {}) as Record<string, unknown>;
-        const errMsg = String(body.message ?? (full as { message?: unknown }).message ?? 'subscribe failed');
+        const errMsg = String(
+          body.message ?? (full as { message?: unknown }).message ?? 'subscribe failed',
+        );
         const errCode = String(body.code ?? (full as { code?: unknown }).code ?? '');
         this.handlers.onStatus(subId, 'error', {
           message: errCode ? `${errCode}: ${errMsg}` : errMsg,
@@ -1276,7 +1279,12 @@ export class StreamLiveWire {
     for (const [subId, seq] of this.appliedSeq) {
       const bars = this.seriesBars.get(subId) ?? this.scriptCtx.get(subId)?.bars ?? [];
       try {
-        this.client.resumeSubscription(subId, bars.length, this.lastBarTime(bars), this.resumePayload(subId, seq));
+        this.client.resumeSubscription(
+          subId,
+          bars.length,
+          this.lastBarTime(bars),
+          this.resumePayload(subId, seq),
+        );
       } catch {
         /* socket may still be coming up */
       }
@@ -1418,8 +1426,6 @@ export class StreamLiveWire {
           if (this.kickOneCachedScriptPaint()) return;
         }
         // Light close when no eligible script (e.g. holdUntilFull).
-        v1Mark('apply:start');
-        v1Mark('apply:end');
       });
       return;
     }
@@ -1427,8 +1433,6 @@ export class StreamLiveWire {
     // Same-slot metrics-only: close queueWait in this task.
     this.seriesScriptKick = false;
     if (this.seriesScriptKickScheduled) return;
-    v1Mark('apply:start');
-    v1Mark('apply:end');
   }
 
   private cancelSeriesScriptKick(): void {

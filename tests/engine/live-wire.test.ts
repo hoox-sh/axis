@@ -4,10 +4,17 @@
  */
 
 import { afterEach, describe, expect, test } from 'bun:test';
-import { HIDDEN_WAKE_MS, StreamFallbackError, StreamLiveWire, type WireClient, type WireFrame, type WireHandlers } from '../../src/engine/live-wire';
+import {
+  HIDDEN_WAKE_MS,
+  StreamFallbackError,
+  StreamLiveWire,
+  type WireClient,
+  type WireFrame,
+  type WireHandlers,
+} from '../../src/engine/live-wire';
 import type { RunResult } from '../../src/plugins/types';
 import type { Bar } from '../../src/store/types';
-import { _resetV1Metrics, v1Mark, v1MetricsSnapshot } from '../../src/engine/v1/metrics';
+import { _resetV1Metrics, v1MetricsSnapshot } from '../../src/engine/v1/metrics';
 import { setStore, store } from '../../src/store';
 import { resetEngineTransport, setEngineTransport } from '../../src/engine/v1/transport';
 
@@ -18,7 +25,12 @@ function makeHarness(opts?: { delayDelta?: boolean; syncApply?: boolean }) {
   const seriesFull: Bar[][] = [];
   const seriesDelta: Array<{ bars: Bar[]; append: boolean }> = [];
   const closes: Array<{ time: number; ohlcv?: Record<string, number> }> = [];
-  const resumes: Array<{ id: string; count: number; lastTime: number; extra?: Record<string, unknown> }> = [];
+  const resumes: Array<{
+    id: string;
+    count: number;
+    lastTime: number;
+    extra?: Record<string, unknown>;
+  }> = [];
   const counters = { disconnects: 0, connects: 0, reconnects: 0 };
   let open = true;
   let stopped = false;
@@ -135,7 +147,8 @@ describe('redesign2 live-wire (F-19)', () => {
   test('ensureSeries resolves snapshot bars and goes live', async () => {
     const h = makeHarness();
     const p = h.wire.ensureSeries('series-1', { symbol: 'BTC/USDT' });
-    await tick(); await tick();
+    await tick();
+    await tick();
     h.emit({ type: 'status', id: 'series-1', payload: { code: 'datafeed-loading' } });
     h.emit({
       type: 'full',
@@ -151,7 +164,8 @@ describe('redesign2 live-wire (F-19)', () => {
   test('back-to-back status+full never loses the snapshot', async () => {
     const h = makeHarness();
     const p = h.wire.ensureSeries('series-1', {});
-    await tick(); await tick();
+    await tick();
+    await tick();
     h.emit({ type: 'status', id: 'series-1', payload: { code: 'datafeed-ready' } });
     h.emit({ type: 'status', id: 'series-1', payload: { code: 'calculating' } });
     h.emit({
@@ -167,7 +181,8 @@ describe('redesign2 live-wire (F-19)', () => {
   test('ensureSeries falls back on empty snapshot', async () => {
     const h = makeHarness();
     const p = h.wire.ensureSeries('series-1', {});
-    await tick(); await tick();
+    await tick();
+    await tick();
     h.emit({ type: 'full', id: 'series-1', seq: 1, payload: { count: 0 } });
     await expect(p).rejects.toBeInstanceOf(StreamFallbackError);
     expect(h.wire.cooledDown).toBe(true);
@@ -378,8 +393,14 @@ describe('redesign2 live-wire (F-19)', () => {
 
   test('evalScript subscribes once, then applies cached state', async () => {
     const h = makeHarness();
-    const first = h.wire.evalScript({ subId: 's-1', script: 'indicator() {}', meta: {}, bars: BARS });
-    await tick(); await tick();
+    const first = h.wire.evalScript({
+      subId: 's-1',
+      script: 'indicator() {}',
+      meta: {},
+      bars: BARS,
+    });
+    await tick();
+    await tick();
     h.emit({
       type: 'full',
       id: 's-1',
@@ -389,7 +410,12 @@ describe('redesign2 live-wire (F-19)', () => {
     const r1 = (await first) as RunResult;
     expect(r1.status).toBe('success');
     expect(h.applied).toEqual([{ via: 'stream-full' }]);
-    const r2 = (await h.wire.evalScript({ subId: 's-1', script: 'indicator() {}', meta: {}, bars: BARS })) as RunResult;
+    const r2 = (await h.wire.evalScript({
+      subId: 's-1',
+      script: 'indicator() {}',
+      meta: {},
+      bars: BARS,
+    })) as RunResult;
     expect(r2.status).toBe('success');
     expect(h.applied).toEqual([{ via: 'stream-full' }, { via: 'stream-delta' }]);
     expect(h.sent.filter((s) => s.kind === 'subscribe:script').length).toBe(1);
@@ -398,7 +424,8 @@ describe('redesign2 live-wire (F-19)', () => {
   test('cooldown forces fallback after a failure', async () => {
     const h = makeHarness();
     const p = h.wire.ensureSeries('series-1', {});
-    await tick(); await tick();
+    await tick();
+    await tick();
     h.emit({ type: 'error', id: 'series-1', payload: { code: 'x', message: 'boom' } });
     await expect(p).rejects.toBeInstanceOf(StreamFallbackError);
     await expect(h.wire.ensureSeries('series-2', {})).rejects.toMatchObject({ reason: 'cooldown' });
@@ -407,7 +434,8 @@ describe('redesign2 live-wire (F-19)', () => {
   test('cooldown throw does not increment failures or re-arm', async () => {
     const h = makeHarness();
     const p = h.wire.ensureSeries('series-1', {});
-    await tick(); await tick();
+    await tick();
+    await tick();
     h.emit({ type: 'error', id: 'series-1', payload: { code: 'x', message: 'boom' } });
     await expect(p).rejects.toBeInstanceOf(StreamFallbackError);
     expect(h.wire.snapshotState().failures).toBe(1);
@@ -421,7 +449,8 @@ describe('redesign2 live-wire (F-19)', () => {
   test('fail() keeps the socket connectable during cooldown', async () => {
     const h = makeHarness();
     const p = h.wire.ensureSeries('series-1', {});
-    await tick(); await tick();
+    await tick();
+    await tick();
     h.emit({ type: 'error', id: 'series-1', payload: { code: 'x', message: 'boom' } });
     await expect(p).rejects.toBeInstanceOf(StreamFallbackError);
     expect(h.counters.disconnects).toBe(0);
@@ -500,7 +529,8 @@ describe('redesign2 live-wire (F-19)', () => {
   test('after cooldown a later ensureSeries can open again', async () => {
     const h = makeHarness();
     const p = h.wire.ensureSeries('series-1', {});
-    await tick(); await tick();
+    await tick();
+    await tick();
     h.emit({ type: 'error', id: 'series-1', payload: { code: 'x', message: 'boom' } });
     await expect(p).rejects.toBeInstanceOf(StreamFallbackError);
     expect(h.wire.cooledDown).toBe(true);
@@ -510,7 +540,8 @@ describe('redesign2 live-wire (F-19)', () => {
     try {
       expect(h.wire.cooledDown).toBe(false);
       const p2 = h.wire.ensureSeries('series-2', {});
-      await tick(); await tick();
+      await tick();
+      await tick();
       h.emit({ type: 'full', id: 'series-2', seq: 1, payload: { count: 1, bars: BARS } });
       expect(await p2).toEqual(BARS);
       expect(h.client.isOpen).toBe(true);
@@ -523,13 +554,15 @@ describe('redesign2 live-wire (F-19)', () => {
   test('a new wire can open after another wire failed', async () => {
     const h = makeHarness();
     const p = h.wire.ensureSeries('series-1', {});
-    await tick(); await tick();
+    await tick();
+    await tick();
     h.emit({ type: 'error', id: 'series-1', payload: { code: 'x', message: 'boom' } });
     await expect(p).rejects.toBeInstanceOf(StreamFallbackError);
 
     const h2 = makeHarness();
     const p2 = h2.wire.ensureSeries('series-1', {});
-    await tick(); await tick();
+    await tick();
+    await tick();
     h2.emit({ type: 'full', id: 'series-1', seq: 1, payload: { count: 1, bars: BARS } });
     expect(await p2).toEqual(BARS);
     expect(h2.client.isOpen).toBe(true);
@@ -538,7 +571,8 @@ describe('redesign2 live-wire (F-19)', () => {
   test('ensureSeries subscribes once and returns cached bars', async () => {
     const h = makeHarness();
     const p = h.wire.ensureSeries('series-1', {});
-    await tick(); await tick();
+    await tick();
+    await tick();
     h.emit({ type: 'full', id: 'series-1', seq: 1, payload: { count: 1, bars: BARS } });
     expect(await p).toEqual(BARS);
     expect(h.wire.isSubscribed('series-1')).toBe(true);
@@ -551,7 +585,8 @@ describe('redesign2 live-wire (F-19)', () => {
     const h = makeHarness();
     const p1 = h.wire.ensureSeries('series-1', {});
     const p2 = h.wire.ensureSeries('series-1', {});
-    await tick(); await tick();
+    await tick();
+    await tick();
     h.emit({ type: 'full', id: 'series-1', seq: 1, payload: { count: 1, bars: BARS } });
     expect(await p1).toEqual(BARS);
     expect(await p2).toEqual(BARS);
@@ -588,7 +623,8 @@ describe('redesign2 live-wire (F-19)', () => {
   test('awaitFull ignores leftover delta and waits for full', async () => {
     const h = makeHarness();
     const p = h.wire.ensureSeries('series-1', {});
-    await tick(); await tick();
+    await tick();
+    await tick();
     h.emit({ type: 'delta', id: 'series-1', seq: 2, payload: { bars: [] } });
     h.emit({
       type: 'full',
@@ -603,7 +639,8 @@ describe('redesign2 live-wire (F-19)', () => {
   test('routeFrame applies remote deltas and degrades on rejection', async () => {
     const h = makeHarness();
     const first = h.wire.evalScript({ subId: 's-1', script: 'x', meta: {}, bars: BARS });
-    await tick(); await tick();
+    await tick();
+    await tick();
     h.emit({
       type: 'full',
       id: 's-1',
@@ -611,7 +648,13 @@ describe('redesign2 live-wire (F-19)', () => {
       payload: { count: 2, plots: [[1], [2]], series: { a: [1, 2] } },
     });
     await first;
-    h.wire.routeFrame({ type: 'delta', id: 's-1', sessionId: 'ses', seq: 99, payload: { base_index: 0, count: 1, tail_len: 1 } });
+    h.wire.routeFrame({
+      type: 'delta',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 99,
+      payload: { base_index: 0, count: 1, tail_len: 1 },
+    });
     expect(h.statuses.map((s) => s.status)).toContain('degraded');
   });
 });
@@ -620,7 +663,8 @@ describe('live-wire diagnostics (MCP stream.get / stream.reset)', () => {
   test('snapshotState lists subscriptions with seq — never frame payloads', async () => {
     const h = makeHarness();
     const p = h.wire.ensureSeries('series:binance|spot|BTCUSDT|1m', {});
-    await tick(); await tick();
+    await tick();
+    await tick();
     h.emit({
       type: 'full',
       id: 'series:binance|spot|BTCUSDT|1m',
@@ -646,7 +690,8 @@ describe('live-wire diagnostics (MCP stream.get / stream.reset)', () => {
   test('script subscriptions report kind script + merged applier', async () => {
     const h = makeHarness();
     const p = h.wire.evalScript({ subId: 's-1', script: 'x', meta: {}, bars: BARS });
-    await tick(); await tick();
+    await tick();
+    await tick();
     h.emit({ type: 'full', id: 's-1', seq: 2, payload: { count: 1, plots: [[1]], series: {} } });
     await p;
     const state = h.wire.snapshotState();
@@ -656,8 +701,14 @@ describe('live-wire diagnostics (MCP stream.get / stream.reset)', () => {
   test('reset unsubscribes every sub, disconnects once and clears state', async () => {
     const h = makeHarness();
     const p = h.wire.ensureSeries('series:binance|spot|BTCUSDT|1m', {});
-    await tick(); await tick();
-    h.emit({ type: 'full', id: 'series:binance|spot|BTCUSDT|1m', seq: 1, payload: { count: 1, bars: BARS } });
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: 'series:binance|spot|BTCUSDT|1m',
+      seq: 1,
+      payload: { count: 1, bars: BARS },
+    });
     await p;
 
     const out = h.wire.reset();
@@ -673,7 +724,8 @@ describe('live-wire diagnostics (MCP stream.get / stream.reset)', () => {
   test('reset clears a failure cooldown so the caller can start over', async () => {
     const h = makeHarness();
     const p = h.wire.ensureSeries('series-1', {});
-    await tick(); await tick();
+    await tick();
+    await tick();
     h.emit({ type: 'error', id: 'series-1', payload: { code: 'x', message: 'boom' } });
     await expect(p).rejects.toBeInstanceOf(StreamFallbackError);
     expect(h.wire.cooledDown).toBe(true);
@@ -689,7 +741,7 @@ describe('live-wire diagnostics (MCP stream.get / stream.reset)', () => {
 describe('live-wire P1 series + study push', () => {
   test('the inbox keeps one forming tip for the snapshot waiter', async () => {
     const h = makeHarness();
-    _resetV1Metrics({ warmup: 0 });
+    _resetV1Metrics();
     const p = h.wire.ensureSeries('series:k', {});
     await tick();
     await tick();
@@ -733,7 +785,7 @@ describe('live-wire P1 series + study push', () => {
 
   test('live forming tips skip the inbox and do not inflate droppedTip', async () => {
     const h = makeHarness();
-    _resetV1Metrics({ warmup: 0 });
+    _resetV1Metrics();
     const p = h.wire.ensureSeries('series:k', {});
     await tick();
     await tick();
@@ -849,7 +901,9 @@ describe('live-wire P1 series + study push', () => {
       { bars: [tip], append: true },
       { bars: [closed], append: true },
     ]);
-    expect(h.closes).toEqual([{ time: 100, ohlcv: { open: 1, high: 2, low: 1, close: 3, volume: 1 } }]);
+    expect(h.closes).toEqual([
+      { time: 100, ohlcv: { open: 1, high: 2, low: 1, close: 3, volume: 1 } },
+    ]);
 
     h.resumes.length = 0;
     h.unsubscribed.length = 0;
@@ -935,7 +989,8 @@ describe('live-wire P1 series + study push', () => {
   test('series delta paints without an applier and advances seq', async () => {
     const h = makeHarness();
     const p = h.wire.ensureSeries('series:binance|spot|BTC/USDT|1m', {});
-    await tick(); await tick();
+    await tick();
+    await tick();
     h.emit({
       type: 'full',
       id: 'series:binance|spot|BTC/USDT|1m',
@@ -984,8 +1039,14 @@ describe('live-wire P1 series + study push', () => {
 
   test('script delta applies through the bridge without a re-subscribe', async () => {
     const h = makeHarness();
-    const first = h.wire.evalScript({ subId: 's-1', script: 'indicator() {}', meta: {}, bars: BARS });
-    await tick(); await tick();
+    const first = h.wire.evalScript({
+      subId: 's-1',
+      script: 'indicator() {}',
+      meta: {},
+      bars: BARS,
+    });
+    await tick();
+    await tick();
     h.emit({
       type: 'full',
       id: 's-1',
@@ -1020,7 +1081,12 @@ describe('live-wire P1 series + study push', () => {
 
   test('a mid-stream snapshot replaces a pending forming tip as one generation', async () => {
     const h = makeHarness({ delayDelta: true });
-    const first = h.wire.evalScript({ subId: 's-1', script: 'indicator() {}', meta: {}, bars: BARS });
+    const first = h.wire.evalScript({
+      subId: 's-1',
+      script: 'indicator() {}',
+      meta: {},
+      bars: BARS,
+    });
     await tick();
     await tick();
     h.emit({
@@ -1071,7 +1137,12 @@ describe('live-wire P1 series + study push', () => {
 
   test('a hidden tab applies one tip when no bar closed', async () => {
     const h = makeHarness();
-    const first = h.wire.evalScript({ subId: 's-1', script: 'indicator() {}', meta: {}, bars: BARS });
+    const first = h.wire.evalScript({
+      subId: 's-1',
+      script: 'indicator() {}',
+      meta: {},
+      bars: BARS,
+    });
     await tick();
     await tick();
     h.emit({
@@ -1113,7 +1184,12 @@ describe('live-wire P1 series + study push', () => {
 
   test('a hidden tab resumes once when a bar closed', async () => {
     const h = makeHarness();
-    const first = h.wire.evalScript({ subId: 's-1', script: 'indicator() {}', meta: {}, bars: BARS });
+    const first = h.wire.evalScript({
+      subId: 's-1',
+      script: 'indicator() {}',
+      meta: {},
+      bars: BARS,
+    });
     await tick();
     await tick();
     h.emit({
@@ -1168,7 +1244,12 @@ describe('live-wire P1 series + study push', () => {
     _resetV1Metrics();
     resetEngineTransport();
     const h = makeHarness();
-    const first = h.wire.evalScript({ subId: 's-1', script: 'indicator() {}', meta: {}, bars: BARS });
+    const first = h.wire.evalScript({
+      subId: 's-1',
+      script: 'indicator() {}',
+      meta: {},
+      bars: BARS,
+    });
     await tick();
     await tick();
     h.emit({
@@ -1378,7 +1459,12 @@ describe('live-wire P1 series + study push', () => {
 
   test('a snapshot whose bar times do not match the plots still accepts the next delta', async () => {
     const h = makeHarness();
-    const first = h.wire.evalScript({ subId: 's-1', script: 'indicator() {}', meta: {}, bars: BARS });
+    const first = h.wire.evalScript({
+      subId: 's-1',
+      script: 'indicator() {}',
+      meta: {},
+      bars: BARS,
+    });
     await tick();
     await tick();
     h.emit({
@@ -1413,7 +1499,12 @@ describe('live-wire P1 series + study push', () => {
   test('a replay refusal resumes once in JSON and then stops painting', async () => {
     resetEngineTransport();
     const h = makeHarness();
-    const first = h.wire.evalScript({ subId: 's-1', script: 'indicator() {}', meta: {}, bars: BARS });
+    const first = h.wire.evalScript({
+      subId: 's-1',
+      script: 'indicator() {}',
+      meta: {},
+      bars: BARS,
+    });
     await tick();
     await tick();
     h.emit({
@@ -1462,8 +1553,14 @@ describe('live-wire P1 series + study push', () => {
 
   test('a script delta with a seq gap resubscribes instead of painting', async () => {
     const h = makeHarness();
-    const first = h.wire.evalScript({ subId: 's-1', script: 'indicator() {}', meta: {}, bars: BARS });
-    await tick(); await tick();
+    const first = h.wire.evalScript({
+      subId: 's-1',
+      script: 'indicator() {}',
+      meta: {},
+      bars: BARS,
+    });
+    await tick();
+    await tick();
     h.emit({
       type: 'full',
       id: 's-1',
@@ -1504,7 +1601,12 @@ describe('live-wire P1 series + study push', () => {
 
   test('a seqAckFrom hole is continuous and does not fresh-resubscribe', async () => {
     const h = makeHarness();
-    const first = h.wire.evalScript({ subId: 's-1', script: 'indicator() {}', meta: {}, bars: BARS });
+    const first = h.wire.evalScript({
+      subId: 's-1',
+      script: 'indicator() {}',
+      meta: {},
+      bars: BARS,
+    });
     await tick();
     await tick();
     h.emit({
@@ -1541,7 +1643,12 @@ describe('live-wire P1 series + study push', () => {
 
   test('a gap fresh-full paints and clears holdUntilFull', async () => {
     const h = makeHarness();
-    const first = h.wire.evalScript({ subId: 's-1', script: 'indicator() {}', meta: {}, bars: BARS });
+    const first = h.wire.evalScript({
+      subId: 's-1',
+      script: 'indicator() {}',
+      meta: {},
+      bars: BARS,
+    });
     await tick();
     await tick();
     h.emit({
@@ -1586,7 +1693,12 @@ describe('live-wire P1 series + study push', () => {
 
   test('gap resync backs off before another fresh subscribe', async () => {
     const h = makeHarness();
-    const first = h.wire.evalScript({ subId: 's-1', script: 'indicator() {}', meta: {}, bars: BARS });
+    const first = h.wire.evalScript({
+      subId: 's-1',
+      script: 'indicator() {}',
+      meta: {},
+      bars: BARS,
+    });
     await tick();
     await tick();
     h.emit({
@@ -1643,7 +1755,12 @@ describe('live-wire P1 series + study push', () => {
 
   test('idle/released status drops local script state so the next eval can rejoin', async () => {
     const h = makeHarness();
-    const first = h.wire.evalScript({ subId: 's-1', script: 'indicator() {}', meta: {}, bars: BARS });
+    const first = h.wire.evalScript({
+      subId: 's-1',
+      script: 'indicator() {}',
+      meta: {},
+      bars: BARS,
+    });
     await tick();
     await tick();
     h.emit({
@@ -1661,7 +1778,12 @@ describe('live-wire P1 series + study push', () => {
       payload: { code: 'idle', message: 'released' },
     });
     expect(h.wire.snapshotState().subs.some((s) => s.subId === 's-1')).toBe(false);
-    const again = h.wire.evalScript({ subId: 's-1', script: 'indicator() {}', meta: {}, bars: BARS });
+    const again = h.wire.evalScript({
+      subId: 's-1',
+      script: 'indicator() {}',
+      meta: {},
+      bars: BARS,
+    });
     await tick();
     await tick();
     expect(h.sent.filter((s) => s.kind === 'subscribe:script')).toHaveLength(2);
@@ -1747,55 +1869,64 @@ describe('live-wire P1 series + study push', () => {
     // it to the subscribe window (another file may have left bars behind;
     // bun shares module state across test files).
     const prevBars = store.bars;
-    setStore('bars', BARS.map((b) => ({ ...b })));
+    setStore(
+      'bars',
+      BARS.map((b) => ({ ...b })),
+    );
     try {
-const h = makeHarness();
-    const first = h.wire.evalScript({ subId: 's-1', script: 'indicator() {}', meta: {}, bars: BARS });
-    await tick(); await tick();
-    h.emit({
-    type: 'full',
-    id: 's-1',
-    sessionId: 'ses',
-    seq: 1,
-    payload: {
-      count: 1,
-      plots: [[1]],
-      series: { a: [1] },
-      bar_times: [100],
-    },
-    });
-    await first;
-    expect(h.applied).toEqual([{ via: 'stream-full' }]);
-    // New candle while the chart has not painted it yet: the single-stamp
-    // cached axis cannot extrapolate the tail (no step, no known times), so
-    // the values-only salvage merges without an axis and covers 2 bars of a
-    // 1-bar subscribe window. Painting would tail-pin; resubscribe instead
-    // so a real full restores the pane instead of freezing it.
-    h.emit({
-    type: 'delta',
-    id: 's-1',
-    sessionId: 'ses',
-    seq: 2,
-    payload: { base_index: 1, count: 2, tail_len: 1, plots: [[2]], series: { a: [2] } },
-    });
-    await tick();
-    expect(h.applied).toEqual([{ via: 'stream-full' }]);
-    expect(h.statuses.map((st) => st.status)).toContain('degraded');
-    expect(h.resumes).toHaveLength(1);
-    expect(h.resumes[0]).toMatchObject({ id: 's-1' });
-    // The next consistent delta merges against the axis-less cache and
-    // paints normally (the runner still refuses it while the window
-    // disagrees) — and it must not re-request: one resub per snapshot.
-    h.emit({
-    type: 'delta',
-    id: 's-1',
-    sessionId: 'ses',
-    seq: 3,
-    payload: { base_index: 1, count: 2, tail_len: 1, plots: [[3]], series: { a: [3] } },
-    });
-    await tick();
-    expect(h.applied).toEqual([{ via: 'stream-full' }, { via: 'stream-delta' }]);
-    expect(h.resumes).toHaveLength(1);
+      const h = makeHarness();
+      const first = h.wire.evalScript({
+        subId: 's-1',
+        script: 'indicator() {}',
+        meta: {},
+        bars: BARS,
+      });
+      await tick();
+      await tick();
+      h.emit({
+        type: 'full',
+        id: 's-1',
+        sessionId: 'ses',
+        seq: 1,
+        payload: {
+          count: 1,
+          plots: [[1]],
+          series: { a: [1] },
+          bar_times: [100],
+        },
+      });
+      await first;
+      expect(h.applied).toEqual([{ via: 'stream-full' }]);
+      // New candle while the chart has not painted it yet: the single-stamp
+      // cached axis cannot extrapolate the tail (no step, no known times), so
+      // the values-only salvage merges without an axis and covers 2 bars of a
+      // 1-bar subscribe window. Painting would tail-pin; resubscribe instead
+      // so a real full restores the pane instead of freezing it.
+      h.emit({
+        type: 'delta',
+        id: 's-1',
+        sessionId: 'ses',
+        seq: 2,
+        payload: { base_index: 1, count: 2, tail_len: 1, plots: [[2]], series: { a: [2] } },
+      });
+      await tick();
+      expect(h.applied).toEqual([{ via: 'stream-full' }]);
+      expect(h.statuses.map((st) => st.status)).toContain('degraded');
+      expect(h.resumes).toHaveLength(1);
+      expect(h.resumes[0]).toMatchObject({ id: 's-1' });
+      // The next consistent delta merges against the axis-less cache and
+      // paints normally (the runner still refuses it while the window
+      // disagrees) — and it must not re-request: one resub per snapshot.
+      h.emit({
+        type: 'delta',
+        id: 's-1',
+        sessionId: 'ses',
+        seq: 3,
+        payload: { base_index: 1, count: 2, tail_len: 1, plots: [[3]], series: { a: [3] } },
+      });
+      await tick();
+      expect(h.applied).toEqual([{ via: 'stream-full' }, { via: 'stream-delta' }]);
+      expect(h.resumes).toHaveLength(1);
     } finally {
       setStore('bars', prevBars as Bar[]);
     }
@@ -1822,7 +1953,8 @@ const h = makeHarness();
     resetEngineTransport();
     const h = makeHarness();
     const p = h.wire.ensureSeries('series:k', {});
-    await tick(); await tick();
+    await tick();
+    await tick();
     h.emit({ type: 'full', id: 'series:k', seq: 4, payload: { count: 1, bars: BARS } });
     await p;
     h.fireReconnect();
@@ -1988,7 +2120,7 @@ describe('live-wire mixed delta batch', () => {
   });
 
   test('a new tip time paints one cached script; same-slot forming only closes metrics', async () => {
-    _resetV1Metrics({ warmup: 0 });
+    _resetV1Metrics();
     const h = makeHarness({ syncApply: true });
     const seriesP = h.wire.ensureSeries('series:k', {});
     await tick();
@@ -2053,9 +2185,8 @@ describe('live-wire mixed delta batch', () => {
 
     h.applied.length = 0;
     h.applyOrder.length = 0;
-    _resetV1Metrics({ warmup: 0 });
+    _resetV1Metrics();
     // Same-slot forming tips must not reapply scripts (the p50 regression).
-    v1Mark('batch:post');
     h.emitBatch([
       {
         type: 'delta',
@@ -2071,10 +2202,8 @@ describe('live-wire mixed delta batch', () => {
         },
       },
     ]);
-    // Sync metrics close — queueWait ends in this task (no microtask).
-    expect(v1MetricsSnapshot().queueWait.n).toBe(1);
+    // Same-slot forming tips must not reapply scripts (the p50 regression).
     expect(h.applied).toEqual([]);
-    v1Mark('batch:post');
     h.emitBatch([
       {
         type: 'delta',
@@ -2090,7 +2219,7 @@ describe('live-wire mixed delta batch', () => {
         },
       },
     ]);
-    expect(v1MetricsSnapshot().queueWait.n).toBe(2);
+    expect(h.applied).toEqual([]);
     await flushKick();
     expect(h.applied).toEqual([]);
     expect(h.applyOrder).toEqual(['price', 'price']);
@@ -2175,7 +2304,7 @@ describe('live-wire mixed delta batch', () => {
   });
 
   test('holdUntilFull skips the series script kick for that sub', async () => {
-    _resetV1Metrics({ warmup: 0 });
+    _resetV1Metrics();
     const h = makeHarness({ syncApply: true });
     const seriesP = h.wire.ensureSeries('series:k', {});
     await tick();
@@ -2216,7 +2345,6 @@ describe('live-wire mixed delta batch', () => {
     });
     h.applied.length = 0;
     h.applyOrder.length = 0;
-    v1Mark('batch:post');
     h.emitBatch([
       {
         type: 'delta',
@@ -2236,7 +2364,6 @@ describe('live-wire mixed delta batch', () => {
     await tick();
     expect(h.applied).toEqual([]);
     // No eligible script to paint; light close still ends queueWait.
-    expect(v1MetricsSnapshot().queueWait.n).toBe(1);
   });
 
   test('a real script paint cancels the pending series kick', async () => {
@@ -2310,7 +2437,7 @@ describe('live-wire mixed delta batch', () => {
   });
 
   test('same-slot series tip closes queueWait synchronously without rAF or microtask', async () => {
-    _resetV1Metrics({ warmup: 0 });
+    _resetV1Metrics();
     const h = makeHarness({ syncApply: true });
     const seriesP = h.wire.ensureSeries('series:k', {});
     await tick();
@@ -2350,8 +2477,7 @@ describe('live-wire mixed delta batch', () => {
       return held.length;
     }) as typeof requestAnimationFrame;
     try {
-      _resetV1Metrics({ warmup: 0 });
-      v1Mark('batch:post');
+      _resetV1Metrics();
       h.emitBatch([
         {
           type: 'delta',
@@ -2367,8 +2493,7 @@ describe('live-wire mixed delta batch', () => {
           },
         },
       ]);
-      // Sync close — queueWait ends in this task (no kick microtask).
-      expect(v1MetricsSnapshot().queueWait.n).toBe(1);
+      // Sync close — no kick microtask.
       queueMicrotask(() => {
         microtaskRan = true;
       });

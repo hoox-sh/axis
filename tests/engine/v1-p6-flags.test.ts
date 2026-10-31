@@ -4,8 +4,8 @@
  */
 
 /**
- * P6 DoD: worker+single is the default; json+multi is the paired rollback.
- * One flag flip of both keys together is the proof (concept §10).
+ * P6 DoD: worker transport is the default; json is the rollback. The chart is
+ * always the shared single-chart layout (the multi rollback is gone).
  */
 
 import '../setup';
@@ -23,11 +23,6 @@ import {
   resetEngineTransport,
   setEngineTransport,
 } from '../../src/engine/v1/transport';
-import {
-  chartLayoutMode,
-  resetChartLayoutMode,
-  setChartLayoutMode,
-} from '../../src/chart/v1/chart-host';
 
 beforeAll(() => {
   installLightweightChartsMock();
@@ -70,72 +65,42 @@ function enableResize(pane: {
 afterEach(() => {
   setIngestWorkerFactory(null);
   resetEngineTransport();
-  resetChartLayoutMode();
 });
 
 describe('P6 flag flip (concept DoD)', () => {
-  test('worker+single is the default; json+multi is the paired rollback', () => {
+  test('worker is the default; json is the rollback; the chart stays shared', () => {
     expect(engineTransport()).toBe('worker');
-    expect(chartLayoutMode()).toBe('single');
 
     setIngestWorkerFactory(() => fakeWorker());
     const workerClient = createLiveWsClient({ endpoint: 'http://127.0.0.1:5002' });
     expect(workerClient).toBeInstanceOf(IngestHostClient);
     workerClient.disconnect();
 
-    const singleHost = makeHost();
-    const single = new PaneManager(singleHost);
+    const host = makeHost();
+    const pm = new PaneManager(host);
     try {
-      const panes = priceVolume(single);
+      const panes = priceVolume(pm);
       expect(paneIndex(panes.volume)).toBe(1);
       expect(enableResize(panes.price)).toBe(true);
-      expect(document.getElementById(single.paneDomId('volume'))?.style.display).toBe('none');
+      expect(document.getElementById(pm.paneDomId('volume'))?.style.display).toBe('none');
       expect(document.getElementById('pane-handle-volume')).toBeNull();
     } finally {
-      single.dispose();
-      singleHost.remove();
+      pm.dispose();
+      host.remove();
     }
 
     setEngineTransport('json');
-    setChartLayoutMode('multi');
     expect(engineTransport()).toBe('json');
-    expect(chartLayoutMode()).toBe('multi');
 
     const jsonClient = createLiveWsClient({ endpoint: 'http://127.0.0.1:5002' });
     expect(jsonClient).toBeInstanceOf(Redesign2WsClient);
     expect(jsonClient).not.toBeInstanceOf(IngestHostClient);
 
-    const multiHost = makeHost();
-    const multi = new PaneManager(multiHost);
-    try {
-      const panes = priceVolume(multi);
-      expect(paneIndex(panes.volume)).not.toBe(1);
-      expect(enableResize(panes.price)).toBe(false);
-      expect(document.getElementById('pane-handle-volume')).toBeTruthy();
-    } finally {
-      multi.dispose();
-      multiHost.remove();
-    }
-
     setEngineTransport('worker');
-    setChartLayoutMode('single');
     expect(engineTransport()).toBe('worker');
-    expect(chartLayoutMode()).toBe('single');
 
     const restored = createLiveWsClient({ endpoint: 'http://127.0.0.1:5002' });
     expect(restored).toBeInstanceOf(IngestHostClient);
     restored.disconnect();
-
-    const restoredHost = makeHost();
-    const restoredPm = new PaneManager(restoredHost);
-    try {
-      const panes = priceVolume(restoredPm);
-      expect(paneIndex(panes.volume)).toBe(1);
-      expect(enableResize(panes.price)).toBe(true);
-      expect(document.getElementById('pane-handle-volume')).toBeNull();
-    } finally {
-      restoredPm.dispose();
-      restoredHost.remove();
-    }
   });
 });

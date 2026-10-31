@@ -6,43 +6,15 @@
 /**
  * One Lightweight Charts chart per slot (concept §5.1).
  *
- * The default is `single`: one chart per slot. `axis.chart.layout=multi`
- * is the rollback to one chart per pane. A {@link SlotChart} assigns each logical pane an
- * index on that one chart, so the time scale is shared and nothing syncs it.
+ * A {@link SlotChart} assigns each logical pane an index on that one
+ * chart, so the time scale is shared and nothing syncs it. The old
+ * `axis.chart.layout=multi` rollback (one chart per pane) is gone; a
+ * stored value is ignored, like `axis.engine.hp.*`.
  *
  * @module chart/v1/chart-host
  */
 
 import type { IChartApi } from 'lightweight-charts';
-import { getItem, removeItem, setItem, storageAvailable } from '../../utils/storage';
-
-export type ChartLayoutMode = 'multi' | 'single';
-
-export const CHART_LAYOUT_KEY = 'axis.chart.layout';
-
-let memory: ChartLayoutMode = 'single';
-
-/** `multi` only when the tab set that value. Anything else is `single`. */
-export function chartLayoutMode(): ChartLayoutMode {
-  if (!storageAvailable()) return memory;
-  return getItem(CHART_LAYOUT_KEY) === 'multi' ? 'multi' : 'single';
-}
-
-export function setChartLayoutMode(mode: ChartLayoutMode): void {
-  memory = mode === 'multi' ? 'multi' : 'single';
-  if (!storageAvailable()) return;
-  if (memory === 'multi') setItem(CHART_LAYOUT_KEY, 'multi');
-  else removeItem(CHART_LAYOUT_KEY);
-}
-
-export function resetChartLayoutMode(): void {
-  memory = 'single';
-  removeItem(CHART_LAYOUT_KEY);
-}
-
-export function usesSingleChartLayout(): boolean {
-  return chartLayoutMode() === 'single';
-}
 
 /** The slice of IChartApi this host needs. Tests pass a fake. */
 export type SlotChartApi = {

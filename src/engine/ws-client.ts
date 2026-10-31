@@ -49,7 +49,6 @@ import {
   workerLiveWsUrl,
   type LiveProxy,
 } from './live-ticket';
-import { v1Mark } from './v1/metrics';
 import { isFormingTipFrame, sendBufferHeld } from './v1/backpressure';
 import { PendingRequests, ReconnectHandlers, wireStats } from './wire-bookkeeping';
 
@@ -247,134 +246,134 @@ export class Redesign2WsClient {
         attempt: this.reconnectAttempts,
       });
       await new Promise<void>((resolve, reject) => {
-      let settled = false;
-      let ws: WebSocket;
-      try {
-        ws = new WebSocket(this.url);
-      } catch (e) {
-        this.onStatus?.('error');
-        reject(e instanceof Error ? e : new Error(String(e)));
-        return;
-      }
-      this.ws = ws;
-
-      /**
-       * True while `ws` is still the client's live socket. A superseded socket
-       * — its attempt timed out or errored while a later attempt took over
-       * `this.ws` — must not touch client state: its late open / error / close
-       * and its frames all belong to a dead connection. Nulling `this.ws` from
-       * a stale close used to tear down the *live* socket, so the auth frame
-       * sent from the live socket's `onopen` threw `WebSocket not open` out of
-       * the handler (an uncaught window error) and the client sat degraded
-       * until some later reconnect happened to win the race.
-       */
-      const owns = (): boolean => this.ws === ws;
-
-      const timer = setTimeout(() => {
-        if (settled) return;
-        settled = true;
+        let settled = false;
+        let ws: WebSocket;
         try {
-          ws.close();
-        } catch {
-          /* ignore */
-        }
-        if (owns()) this.ws = null;
-        this.onStatus?.('error');
-        reject(new Error('Redesign2 WebSocket connect timeout'));
-        this.scheduleReconnect();
-      }, this.options.connectTimeoutMs);
-
-      ws.onopen = () => {
-        if (settled) {
-          // Opened after this attempt was abandoned: never adopt it, and never
-          // leak a live socket whose later events would hit the client.
-          if (!owns()) this.closeQuietly(ws);
+          ws = new WebSocket(this.url);
+        } catch (e) {
+          this.onStatus?.('error');
+          reject(e instanceof Error ? e : new Error(String(e)));
           return;
         }
-        if (!owns()) {
+        this.ws = ws;
+
+        /**
+         * True while `ws` is still the client's live socket. A superseded socket
+         * — its attempt timed out or errored while a later attempt took over
+         * `this.ws` — must not touch client state: its late open / error / close
+         * and its frames all belong to a dead connection. Nulling `this.ws` from
+         * a stale close used to tear down the *live* socket, so the auth frame
+         * sent from the live socket's `onopen` threw `WebSocket not open` out of
+         * the handler (an uncaught window error) and the client sat degraded
+         * until some later reconnect happened to win the race.
+         */
+        const owns = (): boolean => this.ws === ws;
+
+        const timer = setTimeout(() => {
+          if (settled) return;
           settled = true;
-          clearTimeout(timer);
-          this.closeQuietly(ws);
-          reject(new Error('Redesign2 WebSocket superseded'));
-          return;
-        }
-        settled = true;
-        clearTimeout(timer);
-        engineDebug('ws.open', {
-          url: axisDebugSafeUrl(this.url),
-          first: !this.openedOnce,
-          reconnectAttempts: this.reconnectAttempts,
-        });
-        this.reconnectAttempts = 0;
-        this.onStatus?.('open');
-        this.startHeartbeat();
-        const first = !this.openedOnce;
-        this.openedOnce = true;
-        const fireResume = () => {
-          if (first) return;
-          this.reconnects.fire();
-        };
-        if (this.options.authToken) {
-          this.send({
-            type: 'auth',
-            ts: Date.now(),
-            payload: { token: this.options.authToken },
-          });
-        }
-        // Direct PYNE still handshakes with ?api_key=; the Worker proxy uses a
-        // ticket. Do not block connect on auth.ok — production timed out here
-        // while the engine was still hashing the key, and subscribe never ran.
-        fireResume();
-        resolve();
-      };
-
-      ws.onerror = () => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        if (!owns()) {
-          // A superseded socket failed: report this attempt, leave the live
-          // socket (and its reconnect bookkeeping) alone.
-          reject(new Error('Redesign2 WebSocket superseded'));
-          return;
-        }
-        this.ws = null;
-        this.onStatus?.('error');
-        reject(new Error('Redesign2 WebSocket error'));
-        this.scheduleReconnect();
-      };
-
-      ws.onclose = () => {
-        // Only the socket this client currently owns may close the client down:
-        // a superseded socket's late close must not null the live socket, stop
-        // its heartbeat, or drop its pending frames.
-        if (!owns()) return;
-        engineDebug('ws.close', {
-          url: axisDebugSafeUrl(this.url),
-          settled,
-          reconnectAttempts: this.reconnectAttempts,
-        });
-        this.stopHeartbeat();
-        this.ws = null;
-        this.dropPending(new Error('Redesign2 WebSocket closed'));
-        if (!settled) {
-          settled = true;
-          clearTimeout(timer);
-          this.onStatus?.('closed');
-          reject(new Error('Redesign2 WebSocket closed before open'));
+          try {
+            ws.close();
+          } catch {
+            /* ignore */
+          }
+          if (owns()) this.ws = null;
+          this.onStatus?.('error');
+          reject(new Error('Redesign2 WebSocket connect timeout'));
           this.scheduleReconnect();
-          return;
-        }
-        this.onStatus?.('closed');
-        this.scheduleReconnect();
-      };
+        }, this.options.connectTimeoutMs);
 
-      ws.onmessage = (ev) => {
-        // Frames from a superseded socket are stale by definition — never let
-        // them reach the router (they would double-feed a subscription).
-        if (!owns()) return;
-        this.handleMessage(ev?.data);
-      };
+        ws.onopen = () => {
+          if (settled) {
+            // Opened after this attempt was abandoned: never adopt it, and never
+            // leak a live socket whose later events would hit the client.
+            if (!owns()) this.closeQuietly(ws);
+            return;
+          }
+          if (!owns()) {
+            settled = true;
+            clearTimeout(timer);
+            this.closeQuietly(ws);
+            reject(new Error('Redesign2 WebSocket superseded'));
+            return;
+          }
+          settled = true;
+          clearTimeout(timer);
+          engineDebug('ws.open', {
+            url: axisDebugSafeUrl(this.url),
+            first: !this.openedOnce,
+            reconnectAttempts: this.reconnectAttempts,
+          });
+          this.reconnectAttempts = 0;
+          this.onStatus?.('open');
+          this.startHeartbeat();
+          const first = !this.openedOnce;
+          this.openedOnce = true;
+          const fireResume = () => {
+            if (first) return;
+            this.reconnects.fire();
+          };
+          if (this.options.authToken) {
+            this.send({
+              type: 'auth',
+              ts: Date.now(),
+              payload: { token: this.options.authToken },
+            });
+          }
+          // Direct PYNE still handshakes with ?api_key=; the Worker proxy uses a
+          // ticket. Do not block connect on auth.ok — production timed out here
+          // while the engine was still hashing the key, and subscribe never ran.
+          fireResume();
+          resolve();
+        };
+
+        ws.onerror = () => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          if (!owns()) {
+            // A superseded socket failed: report this attempt, leave the live
+            // socket (and its reconnect bookkeeping) alone.
+            reject(new Error('Redesign2 WebSocket superseded'));
+            return;
+          }
+          this.ws = null;
+          this.onStatus?.('error');
+          reject(new Error('Redesign2 WebSocket error'));
+          this.scheduleReconnect();
+        };
+
+        ws.onclose = () => {
+          // Only the socket this client currently owns may close the client down:
+          // a superseded socket's late close must not null the live socket, stop
+          // its heartbeat, or drop its pending frames.
+          if (!owns()) return;
+          engineDebug('ws.close', {
+            url: axisDebugSafeUrl(this.url),
+            settled,
+            reconnectAttempts: this.reconnectAttempts,
+          });
+          this.stopHeartbeat();
+          this.ws = null;
+          this.dropPending(new Error('Redesign2 WebSocket closed'));
+          if (!settled) {
+            settled = true;
+            clearTimeout(timer);
+            this.onStatus?.('closed');
+            reject(new Error('Redesign2 WebSocket closed before open'));
+            this.scheduleReconnect();
+            return;
+          }
+          this.onStatus?.('closed');
+          this.scheduleReconnect();
+        };
+
+        ws.onmessage = (ev) => {
+          // Frames from a superseded socket are stale by definition — never let
+          // them reach the router (they would double-feed a subscription).
+          if (!owns()) return;
+          this.handleMessage(ev?.data);
+        };
       });
     })();
 
@@ -505,10 +504,6 @@ export class Redesign2WsClient {
   }
 
   private handleMessage(raw: unknown): void {
-    const recvAt =
-      typeof performance !== 'undefined' && typeof performance.now === 'function'
-        ? performance.now()
-        : Date.now();
     let parsed: unknown;
     try {
       parsed = typeof raw === 'string' ? JSON.parse(raw) : null;
@@ -519,10 +514,6 @@ export class Redesign2WsClient {
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
     const frame = stripSeqAck(normalizeRedesign2Frame(parsed)) as Redesign2WsFrame;
     if (!frame || typeof frame.type !== 'string') return;
-    // Stamp before the rest of the handler so tick→apply includes parse.
-    if (frame.type === 'full' || frame.type === 'delta' || frame.type === 'close') {
-      v1Mark('tick:recv', recvAt);
-    }
     if (frame.type === 'error' && !frame.id) {
       // PYNE UNAUTHORIZED = not yet authed — reconnect / re-auth. Bad keys block.
       if (shouldAuthBlock(frame)) {

@@ -20,7 +20,6 @@
  * @module mcp/live
  */
 
-import { chartLayoutMode } from '../chart/v1/chart-host';
 import { FALLBACK_MAJORS } from '../data/symbol-catalog';
 import { pyneMarket } from '../data/provider';
 import { intervalToSec } from '../data/bars-gaps';
@@ -41,7 +40,12 @@ import { getCachedEngineCapabilities, getCachedEngineHealth } from '../engines/c
 import { driveEngineSeries, type SeriesDriveTick } from '../engines/series-drive';
 import { newestBarTime, stepsBehind } from '../engines/series-freshness';
 import { getActiveEngineConfig, getActiveEngineId } from '../plugins/active';
-import { resetStreamWire, streamRouteActive, streamSeriesTick, streamWireState } from '../streams/stream-live';
+import {
+  resetStreamWire,
+  streamRouteActive,
+  streamSeriesTick,
+  streamWireState,
+} from '../streams/stream-live';
 import { chartWindowLimit, store } from '../store';
 import type { Bar } from '../store/types';
 import { McpInvokeError } from './protocol';
@@ -116,7 +120,10 @@ function requireEngineConnection(): EngineConnection {
  * subscribes/drives with (`exchange|market|SYMBOL|interval`, pair-form). */
 function chartSeriesKeyObject(): DataSeriesKey {
   return {
-    exchange: String(store.exchange || 'binance').trim().toLowerCase() || 'binance',
+    exchange:
+      String(store.exchange || 'binance')
+        .trim()
+        .toLowerCase() || 'binance',
     market: pyneMarket(store.provider?.market),
     symbol: pairFormSymbol(String(store.symbol || ''), FALLBACK_MAJORS),
     interval: String(store.interval || '1m'),
@@ -126,7 +133,10 @@ function chartSeriesKeyObject(): DataSeriesKey {
 /** Payload key for `engine.*`: falls back to the chart series field-by-field. */
 function keyFromPayload(p: Record<string, unknown>): DataSeriesKey {
   const key: DataSeriesKey = {
-    exchange: String(p.exchange || store.exchange || 'binance').trim().toLowerCase() || 'binance',
+    exchange:
+      String(p.exchange || store.exchange || 'binance')
+        .trim()
+        .toLowerCase() || 'binance',
     market: pyneMarket(p.market || store.provider?.market),
     symbol: pairFormSymbol(String(p.symbol || store.symbol || '').trim(), FALLBACK_MAJORS),
     interval: String(p.interval || store.interval || '1m').trim() || '1m',
@@ -307,7 +317,10 @@ export async function chartLagView(p: Record<string, unknown>): Promise<Record<s
   const tick = store.telemetry?.lastTick ?? null;
   const tickAgeMs = tick ? Math.max(0, nowMs - Number(tick.at || 0)) : null;
   const tickFresh =
-    tick !== null && tick.symbol === store.symbol && tickAgeMs !== null && tickAgeMs <= 2 * stepSec * 1000;
+    tick !== null &&
+    tick.symbol === store.symbol &&
+    tickAgeMs !== null &&
+    tickAgeMs <= 2 * stepSec * 1000;
   const tickSlot = tick && tick.time > 0 ? Math.floor(tick.time / stepSec) * stepSec : null;
   const wallSlot = now - (now % stepSec);
   const useTick = tickFresh && tickSlot !== null;
@@ -330,7 +343,8 @@ export async function chartLagView(p: Record<string, unknown>): Promise<Record<s
       code: 'one-bar-behind',
       bars: 1,
       clock: venueSource,
-      message: 'chart tail is the last closed bar — the forming bar is not on the chart (1 bar behind)',
+      message:
+        'chart tail is the last closed bar — the forming bar is not on the chart (1 bar behind)',
     };
   } else {
     verdict = {
@@ -408,9 +422,11 @@ export async function chartLagView(p: Record<string, unknown>): Promise<Record<s
       stream: store.telemetry?.stream ?? null,
     },
     v1: {
+      // Counters only (latency rings removed — see engine/v1/metrics).
       ...v1MetricsSnapshot(),
       transport: engineTransport(),
-      layout: chartLayoutMode(),
+      // The multi-chart rollback is gone; the one-chart layout is the only one.
+      layout: 'single' as const,
     },
     verdict,
   };
@@ -464,7 +480,9 @@ export function enginePlaneView(): Record<string, unknown> {
  * engine's newest persisted bar, `updatedAgeSec` says whether anything is
  * writing it at all, and `stale` is the same verdict the paint guard uses.
  */
-export async function engineSeriesView(p: Record<string, unknown>): Promise<Record<string, unknown>> {
+export async function engineSeriesView(
+  p: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
   const key = keyFromPayload(p);
   const conn = requireEngineConnection();
   const interval = key.interval;
@@ -529,8 +547,7 @@ export async function engineTickView(p: Record<string, unknown>): Promise<Record
     tick: captured.tick,
     before: seriesView(before, interval, chartLast, now),
     after: seriesView(after, interval, chartLast, now),
-    advancedBars:
-      before && after ? (after.newest ?? 0) - (before.newest ?? 0) : null,
+    advancedBars: before && after ? (after.newest ?? 0) - (before.newest ?? 0) : null,
   };
 }
 
@@ -540,7 +557,9 @@ export async function engineTickView(p: Record<string, unknown>): Promise<Record
  * freshest window, `via: 'fetch'` asks the engine to pull from its own feed.
  * Before/after bounds show whether the engine's `newest` actually moved.
  */
-export async function engineRepairView(p: Record<string, unknown>): Promise<Record<string, unknown>> {
+export async function engineRepairView(
+  p: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
   const key = keyFromPayload(p);
   const conn = requireEngineConnection();
   const interval = key.interval;
@@ -576,7 +595,9 @@ export async function engineRepairView(p: Record<string, unknown>): Promise<Reco
  * The local flush always runs; the engine purge is best effort and reports
  * what it could not drop.
  */
-export async function engineFlushView(p: Record<string, unknown>): Promise<Record<string, unknown>> {
+export async function engineFlushView(
+  p: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
   const started = Date.now();
   const flushed = await flushLocalAndEngine();
   const local = flushed.local;
@@ -633,7 +654,9 @@ export function streamPlaneView(): Record<string, unknown> {
  * engine has nothing to subscribe) and is raced against a report timeout: the
  * attempt keeps running, and `stream.get` shows its outcome.
  */
-export async function streamResetView(p: Record<string, unknown>): Promise<Record<string, unknown>> {
+export async function streamResetView(
+  p: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
   const reset = resetStreamWire();
   let resubscribe: Record<string, unknown> = { requested: false, reason: 'disabled' };
   if (p.resubscribe !== false) {
@@ -649,7 +672,11 @@ export async function streamResetView(p: Record<string, unknown>): Promise<Recor
       let timer: ReturnType<typeof setTimeout> | null = null;
       const timeout = new Promise<{ ok: boolean; error: string }>((resolve) => {
         timer = setTimeout(
-          () => resolve({ ok: false, error: `resubscribe not confirmed within ${RESUBSCRIBE_PROBE_MS}ms` }),
+          () =>
+            resolve({
+              ok: false,
+              error: `resubscribe not confirmed within ${RESUBSCRIBE_PROBE_MS}ms`,
+            }),
           RESUBSCRIBE_PROBE_MS,
         );
       });
