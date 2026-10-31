@@ -9,11 +9,13 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-10-20 · 639 commits · describe-tag: `v2.25.1`_
+_Generated/updated: 2026-10-31 · 876 commits · describe-tag: `v2.25.3`_
 
 ---
 
 ## [Unreleased]
+
+## [2.26.0] — 2026-10-31
 
 ### Changed
 
@@ -2136,12 +2138,53 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-10 (158 commits)
+### 2026-10 (395 commits)
 
 #### Features
 
+- `319d3399` (2026-10-31) — feat(editor): refresh Pine LSP/hover against PYNE 0.6.25
+- `ed8992a3` (2026-10-31) — feat(mcp): add tab switch for multi-tab MCP sessions
+- `8ca2ca2a` (2026-10-27) — feat(chart): mark previous tip closed when a new bar arrives
+- `2499d6bb` (2026-10-26) — feat(mcp): expose rotating axis.debug.log via logs.debug.get
+- `22c10e48` (2026-10-26) — feat(engine): expose queueWait and trim live apply hot path
+- `82e6a595` (2026-10-26) — feat(chart): paint inactive slots without stealing getManager
+- `9517fe49` (2026-10-26) — feat(mcp): put transport and layout on chart.lag v1
+- `74bb1ef0` (2026-10-26) — feat(chart): resize single-layout panes with LWC enableResize
+- `aa9163d7` (2026-10-26) — feat(engine): mint a Worker ticket instead of api_key on /ws/live
+- `5f45eb4c` (2026-10-26) — feat(debug): log chart and engine actions behind VITE_AXIS_DEBUG
+- `be4bfd55` (2026-10-26) — feat(engine): commit live price, plots, markers, and alerts in one batch
+- `092b9dd6` (2026-10-25) — feat(chart): pin each ChartHost slot onto the engine socket pool
+- `2ea224b8` (2026-10-25) — feat(engine): share one socket per endpoint across chart slots
+- `41acd12e` (2026-10-25) — feat(engine): cap tab engine sockets at two
+- `26427e47` (2026-10-25) — feat(engine): default to the worker and one chart
+- `b0590389` (2026-10-25) — feat(engine): flag the v1 worker, apply, and single-chart paths
+- `35a49f11` (2026-10-25) — feat(engine): record v1 tick-to-apply and tick-to-paint
+- `c10c1399` (2026-10-24) — feat(dev): add HP development tracer capability (hp2 tracer)
+- `816c976e` (2026-10-24) — feat(hp): engage WebGL2 overlay on HP-3 selection (D1)
+- `b124fc5c` (2026-10-24) — feat(hp): causal pairing for publish-to-apply stage
+- `6f76ca8a` (2026-10-24) — feat(hp): calc session runs in a worker off cold history
+- `6470db21` (2026-10-24) — feat(hp): AXB1 fuzz round-trip and relay reconnect proof
+- `1940e8c8` (2026-10-24) — feat(hp): worker-side cold store with bar-close write-back
+- `2848aee9` (2026-10-24) — feat(hp): split tick-to-frame latency into pipeline stages
+- `b5849514` (2026-10-23) — feat(hp): downsample cold viewports wider than hot+page
+- `3e8722ff` (2026-10-23) — feat(hp): wire cold paging through the page slot
+- `6f32870e` (2026-10-23) — feat(settings): expose the HP engine flags in Settings
+- `9620bbee` (2026-10-23) — feat(hp): measure tick-to-frame latency for the PR-10 gate
+- `a1aef9cb` (2026-10-23) — feat(chart): composite the HP GPU overlay into chart screenshots
+- `92bb7d6e` (2026-10-23) — feat(mcp): expose the HP plane as read-only capabilities
+- `b1c33936` (2026-10-23) — feat(hp): wire the WebGL2 candle overlay over the price pane (HP-3 parity mode)
+- `51d21023` (2026-10-23) — feat(hp): wire the ingest hot SAB ring into the live chart (HP-2)
+- `ab3d45cf` (2026-10-23) — feat(hp): flip COOP to same-origin — cross-origin isolation on
+- `8393e866` (2026-10-22) — feat(hp): GPU rung — NDC visual-attr staging + WebGL2 renderer (PR 8)
+- `b634e656` (2026-10-22) — feat(hp): calc worker scratch vs commit (PR 6)
+- `a569f233` (2026-10-22) — feat(hp): viewport page + cold IDB (PR 5)
+- `7d151c98` (2026-10-22) — feat(hp): generation double-buffer + main rAF copy-out (PR 4)
+- `63204c73` (2026-10-22) — feat(hp): AXB1 codec, isolation headers, and off-thread ingest (PR 1-3)
+- `ab974f14` (2026-10-20) — feat(data): flush the engine's own copy of the venue data
 - `10b88f78` (2026-10-19) — feat(ci): GitHub Release notes from CHANGELOG version section
 - `6efb6967` (2026-10-19) — feat(chart): topbar market select for spot vs USDT-M / COIN-M
 - `0984b889` (2026-10-17) — feat(mcp): live-plane capabilities — chart.lag/bars, engine.*, stream.*
@@ -2182,6 +2225,133 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `9355de14` (2026-10-31) — fix(shortcuts): require Alt+Shift for help, not bare Shift
+- `c7218f32` (2026-10-31) — fix(mcp): restore ticket minting on GET ?issue=ticket
+- `a67325ee` (2026-10-31) — fix(mcp): route /api/mcp/bridge sub-paths to bridge DO
+- `24e20b61` (2026-10-31) — fix(mcp): route /api/mcp/bridge sub-paths to bridge DO
+- `49e59814` (2026-10-31) — fix(engine): extend indicator series on new live bar instead of shifting right
+- `880655f2` (2026-10-31) — fix(engine): preserve venue OHLC when engine updates forming candle
+- `b25213e7` (2026-10-31) — fix(engine): persist live-tick OHLC to store.bars via setStore
+- `698abf30` (2026-10-31) — fix(engine): drop-only guard before LWC setData to prevent Value is null
+- `68d91341` (2026-10-31) — fix(engine): remove sanitizeSeriesDataForSetData, donor fill, and OHLC clamping
+- `bf1c74bc` (2026-10-31) — fix(engine): merge engine bars instead of full-window replace in engine-owned live mode
+- `e6e494b5` (2026-10-27) — fix(store): preserve forming candle OHLC on degenerate single-price live ticks
+- `0b95333d` (2026-10-27) — fix(engine,store): point pyne endpoint to pynescript.online; cap rolling window &lt;5000 bars
+- `df7b6edd` (2026-10-27) — fix(chart): log raw venue OHLC before repairOhlc, reduce repairOhlc noise
+- `7b6e82ff` (2026-10-27) — fix(chart): repair only missing OHLC fields in sanitizeSeriesDataForSetData
+- `0408b414` (2026-10-27) — fix(chart): add comprehensive debug logging to candle paint path
+- `7bf67689` (2026-10-27) — fix(chart): stop run superseded when adding second indicator
+- `d3158b5b` (2026-10-27) — fix(chart): lower default rolling window to 5,000 bars for free tier
+- `b702518c` (2026-10-27) — fix(chart): re-apply time scale options on live ticks to disable conflation
+- `eb13eb5e` (2026-10-27) — fix(chart): disable conflation, auto-scroll on new bar
+- `13a7ad08` (2026-10-27) — fix(chart): log full OHLC on live.append debug entries
+- `93cdf048` (2026-10-26) — fix(chart): stop view reset on new candle and preserve live candle open
+- `fbd451eb` (2026-10-26) — fix(chart): clamp OHLC on live candle paint to stop shredded candles
+- `37b6115d` (2026-10-26) — fix(engine): stop series.full setData storm from gap resync
+- `7b1650a9` (2026-10-26) — fix(engine): keep script live after input-change resubscribe
+- `a382e98f` (2026-10-26) — fix(stream): venue owns live candles; stop engine setData gaps
+- `ca49c08a` (2026-10-26) — fix(ui): pane-manager refresh badges on layout change
+- `457809f3` (2026-10-26) — fix(engine): session-broker guard, drawing-layer parity guard, client-apply replay context
+- `8cda212b` (2026-10-26) — fix(streams): re-eval idle/released scripts on live start
+- `6fe6604b` (2026-10-26) — fix(engine): stop live-wire delta-gap thrash blanking indicators
+- `d0461f50` (2026-10-26) — fix(engine): paint live overlays when engine series outgrows chart
+- `e2ed87c0` (2026-10-26) — fix(engine): soft-authBlock UNAUTHORIZED on JSON live WS too
+- `7e134626` (2026-10-26) — fix(streams): retry degraded websocket scripts with backoff
+- `f0327488` (2026-10-26) — fix(engine): retry auth-race subscribe and clear reconnect cooldown
+- `b93e4390` (2026-10-26) — fix(engine): do not authBlock ingest on PYNE UNAUTHORIZED
+- `93bd38f2` (2026-10-26) — fix(engine): cut tick→paint p95 from hidden stalls and slide setData
+- `ece068a1` (2026-10-26) — fix(engine): close same-slot queueWait synchronously
+- `afbbafbe` (2026-10-26) — fix(engine): hit tip-cache when stream-delta lacks tip stamp
+- `acd6c18e` (2026-10-26) — fix(engine): cut residual droppedTip and pan queueWait
+- `6c08a562` (2026-10-26) — fix(engine): throttle series→script kick to cut queueWait p50
+- `abaf4a3c` (2026-10-26) — fix(hp): honor JSON encoding omit and decode misaligned AXB1
+- `4df26790` (2026-10-26) — fix(engine): close queueWait after series-only live tips
+- `e74a860e` (2026-10-26) — fix(chart): arm panFrame sampler on single-chart layout
+- `281f9660` (2026-10-26) — fix(engine): keep v1 latency p95 on a recent window
+- `e8e48c17` (2026-10-26) — fix(engine): buffer live auth until upstream open
+- `1203c6f7` (2026-10-26) — fix(engine): release tips sooner under coalesce and send-buffer load
+- `05cecf1d` (2026-10-26) — fix(engine): wait for auth.ok before ingest host open
+- `a0d53d3a` (2026-10-26) — fix(streams): re-pin ChartHost slots after streamStop
+- `cc6fe955` (2026-10-25) — fix(streams): re-pin ChartHost slots after stream.reset
+- `e0a0f70d` (2026-10-25) — fix(chart): keep forming ticks out of the closed-bar hash
+- `00eb0e2a` (2026-10-25) — fix(chart): warn when a pane logical range skews the price axis
+- `1ef93781` (2026-10-25) — fix(chart): warn when a plot column is short of the axis
+- `a14a2805` (2026-10-25) — fix(chart): wire one crosshair listener on the single chart
+- `03a2d6a3` (2026-10-25) — fix(chart): warn when a series runs past the price tip
+- `322c633d` (2026-10-25) — fix(hp): decode Blob inbound frames like ArrayBuffer
+- `3b8f2672` (2026-10-25) — fix(chart): commit strategy and plotshape markers with plots
+- `5eb5a2a7` (2026-10-25) — fix(engine): hold a price seq gap until the next snapshot
+- `e8e6d00f` (2026-10-25) — fix(engine): paint the first script snapshot on the live pump
+- `e36861ef` (2026-10-25) — fix(engine): paint a stream snapshot as a full indicator
+- `327aba66` (2026-10-25) — fix(engine): type the script paint chain as Promise
+- `97f382da` (2026-10-25) — fix(engine): do not paint a late forming tip over a newer snapshot
+- `fddaad8d` (2026-10-25) — fix(engine): stay on the socket when replay is refused
+- `7ef6980e` (2026-10-25) — fix(engine): resync when the send buffer or the inbox is full
+- `096a8e5f` (2026-10-25) — fix(chart): keep pane badges on the shared plot cell
+- `a628f144` (2026-10-25) — fix(engine): keep script runs on the WebSocket
+- `49d7fc91` (2026-10-25) — fix(engine): cap the live inbox and drop extra forming tips
+- `be7acb58` (2026-10-25) — fix(ui): keep the quote on the candle while the stream is down
+- `95fad86b` (2026-10-25) — fix(chart): do not mirror range or crosshair on one chart
+- `6e5aa6bc` (2026-10-25) — fix(engine): hold deltas after a seq gap until the snapshot
+- `6b27f3fb` (2026-10-25) — fix(engine): drop a snapshot older than the applied seq
+- `ed4fb1e8` (2026-10-25) — fix(chart): warn when a closed bar changes after commit
+- `85ef0a91` (2026-10-25) — fix(chart): warn when a plot runs past the price axis
+- `3afedadd` (2026-10-25) — fix(chart): paint one live burst and name a quiet stream
+- `89a31ed9` (2026-10-25) — fix(engine): jitter socket reconnect and stop a rejected login
+- `08878da5` (2026-10-25) — fix(engine): mark a bar closed only on a close
+- `8b9bf555` (2026-10-25) — fix(alerts): evaluate only a closed bar
+- `6aee416b` (2026-10-25) — fix(engine): take live bar time from the server
+- `74df56ee` (2026-10-25) — fix(chart): restore the visible range after a live setData
+- `87dcbe68` (2026-10-25) — fix(engine): narrow an unknown AXB1 frame before the opcode switch
+- `2306ed5d` (2026-10-25) — fix(engine): retry a missed snapshot, then ask in JSON
+- `7dc0053d` (2026-10-25) — fix(engine): do not replay ticks missed while hidden
+- `531a49be` (2026-10-25) — fix(engine): replace a dead ingest worker
+- `f62d728a` (2026-10-25) — fix(chart): import Bar from the store types
+- `d5f49ff5` (2026-10-25) — fix(engine): hold the live plot on the tip and ack folded seqs
+- `a3c38dd0` (2026-10-25) — fix(engine): repair a series whose tip is fresh but holed
+- `d31c424c` (2026-10-25) — fix(engine): read tip seq only on frames that carry one
+- `f7cdb71f` (2026-10-25) — fix: green the suite — tail-align head-pad, viewport fill hang, ColdStore test
+- `21ab0d09` (2026-10-24) — fix(hp): audit A01/A04/A05/A06/A10/A23/P01 + changelog + tests
+- `cfa20e61` (2026-10-24) — fix(hp): normalize worker clock origin in publish-to-apply
+- `efad345b` (2026-10-24) — fix(hp): skip tab-suspended bursts in paint latency
+- `068972e5` (2026-10-24) — fix(hp): last ingest-publish stamp wins per paint burst
+- `41647761` (2026-10-24) — fix(engine): invalidate sessions on series repair
+- `32a5224b` (2026-10-24) — fix(chart): skip axis-less session applies on gross window mismatch
+- `ce6a0c35` (2026-10-24) — fix(stream): stale axis-less pushes skip paint and resubscribe
+- `db657d98` (2026-10-23) — fix(engine): reconcile IngestHostClient with the wire-bookkeeping API
+- `fd85003e` (2026-10-23) — fix(hp): report WebGPU as selected, without a painter
+- `749f8696` (2026-10-23) — fix(hp): draw LWC's own candle widths in the GPU overlay
+- `fc1b65db` (2026-10-23) — fix(hp): anchor the GPU overlay to LWC's exact index-to-coordinate
+- `f8e086ca` (2026-10-23) — fix(hp): place the hot ring as the chart tail window in the GPU overlay
+- `a4b31a77` (2026-10-23) — fix(hp): allocate the ingest hot ring at construction
+- `0fd68177` (2026-10-22) — fix(worker): relay live WS binary frames untouched (PR 7b)
+- `387f42d5` (2026-10-22) — fix(test): stop a leaked DSM walk from failing unrelated fetch mocks
+- `4d417b81` (2026-10-21) — fix(storage): declare backend capabilities instead of probing for them
+- `33a278bd` (2026-10-21) — fix(app): drop a malformed live bar instead of painting it
+- `40eb507b` (2026-10-21) — fix(app): bound the module-level maps that grew per key
+- `92db96c4` (2026-10-21) — fix(worker): cap every route that accepts a body
+- `215c88e1` (2026-10-21) — fix(live): keep live indicators aligned with the candles
+- `533c2af8` (2026-10-21) — fix(chart): new candle advances chart; strategy events persist on every tick
+- `69e9cb13` (2026-10-21) — fix(fill): resolve plot bands from plot_meta; skip redundant reapplies
+- `6d8ae15f` (2026-10-21) — fix(plots): preserve stored script colors on chart when meta.color missing
+- `81013fd8` (2026-10-21) — fix(indicators): single reapply pass, preserve script colors on re-run
+- `e89b9afb` (2026-10-21) — fix(plots): respect Pine meta.color in legacy plots[] overlay path
+- `e4e303bf` (2026-10-21) — fix(indicators): default linewidth to 1 instead of 2/auto
+- `5291b80d` (2026-10-21) — fix(engine): preserve plot_meta in session delta merges
+- `eed5e248` (2026-10-21) — fix(indicators): preserve plot width/visible on re-run
+- `bd8137dd` (2026-10-21) — fix(indicators): replace width slider with +/- buttons, show 'auto' when not explicitly set
+- `d8e53c61` (2026-10-21) — fix(indicators): color picker stays open, add line width slider and plot visibility toggle
+- `92d3956d` (2026-10-21) — fix(plots): only apply custom user colors, respect Pine script colors on re-run
+- `49ffe663` (2026-10-20) — fix(engine): count Donchian from the plots, not the request
+- `d18fb622` (2026-10-20) — fix(engine): keep Donchian moving after a reload
+- `2b94b3e2` (2026-10-20) — fix(chart): keep candles visible when a load meets a zoom
+- `2286b879` (2026-10-20) — fix(engine): keep closed Bollinger %B on its own bar
+- `2aa7bdb1` (2026-10-20) — fix(chart): keep the indicator axis on one row per candle
+- `cdb9f5d2` (2026-10-20) — fix(data): keep a flush from rewriting the wrong series
+- `e0ef21a8` (2026-10-20) — fix(data): a remote dataset document that is already gone is not a failure
+- `d663bc6d` (2026-10-20) — fix(engine): keep the script's input descriptors across a live apply
+- `f70ea949` (2026-10-20) — fix(test): drain the dataset writes before resetting the store
+- `85bc8547` (2026-10-20) — fix(test): drop a dataset write that was queued before a reset
 - `453258f9` (2026-10-20) — fix(stream): subscribe scripts with the chart window and their inputs
 - `cf66630c` (2026-10-20) — fix(chart): keep every painted series on the candle axis
 - `7fe4de9e` (2026-10-20) — fix(test): reset the shared singletons the suite leaks between files
@@ -2258,12 +2428,42 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Performance
 
+- `b261206c` (2026-10-31) — perf(engine): skip re-sanitizing already-clean bars in appendBar path
+- `a25c5eb2` (2026-10-26) — perf(chart): tip-only paints while ranging for G2 panFrame
+- `463b2ba5` (2026-10-26) — perf(engine): tip-cache live apply to cut G1 apply work
+- `ee206d4f` (2026-10-26) — perf(chart): defer slide setData while ranging for G2 panFrame
+- `1d3edb04` (2026-10-26) — perf(chart): defer rolling-window slide setData to one rAF
+- `e871173a` (2026-10-25) — perf(store): notify Solid once per frame for a forming tick
+- `33cc4269` (2026-10-24) — perf(hp): P03 single-pass fill, P07 overlay cache, P09 replay watermark, P13 encoder SPDX-License-Identifier: AGPL-3.0-only
 - `0d7cfb1e` (2026-10-20) — perf(store): copy the sliding window once, and keep the benches honest
 - `0d0ffd1c` (2026-10-13) — perf(engine): run Pyodide in a dedicated Web Worker
 - `5ed34ef1` (2026-10-05) — perf(scripts): prefer Bun-native file, hash, spawn and image APIs
 
 #### Refactors
 
+- `82b019c8` (2026-10-31) — refactor(engine): retire multi-chart layout, strip v1 hot-path sampling
+- `eae0462f` (2026-10-26) — refactor(chart): split price print path and unfreeze short live overlays
+- `73bf272f` (2026-10-25) — refactor(chart): remove the HP overlay and shared-memory ring
+- `3ea34fc0` (2026-10-23) — refactor(app): last hand-rolled LRU trims use BoundedMap
+- `09f657ef` (2026-10-23) — refactor(app): cloud client uses the shared JSON fetch
+- `3e0e31e1` (2026-10-23) — refactor(app): one flag pair instead of two state machines
+- `005f51ae` (2026-10-23) — refactor(app): one storage accessor instead of eight helpers
+- `3efd4fe9` (2026-10-23) — refactor(app): nine listener sets share one emitter
+- `70132762` (2026-10-23) — refactor(engine): one wire-bookkeeping core for both socket clients
+- `83fbd5a6` (2026-10-23) — refactor(data): one public-REST definition per venue
+- `460c19aa` (2026-10-21) — refactor(app): a network failure carries its status code
+- `4c53aeff` (2026-10-21) — refactor(ui): one popover shell instead of four copies of the menu skeleton
+- `70360db7` (2026-10-21) — refactor(worker): one route table instead of four copies of the route list
+- `5d88c490` (2026-10-21) — refactor(engine): one run-result envelope instead of three
+- `b7ed5788` (2026-10-21) — refactor(ui): one modal shell instead of six copies of the dialog chrome
+- `8448c6ef` (2026-10-21) — refactor(ui): one event-listener primitive
+- `93ebf296` (2026-10-21) — refactor(worker): one proxy plane behind the on-chain and market routes
+- `cbfa1cc7` (2026-10-21) — refactor(engine): declare an engine family instead of guessing from its id
+- `6569fdc1` (2026-10-21) — refactor(storage): one git backend instead of two near-identical files
+- `98e665c9` (2026-10-21) — refactor(ui): one cached-datasets state, one labelled field
+- `dcdc359a` (2026-10-21) — refactor(app): one time normalizer instead of five
+- `3574f7a9` (2026-10-21) — refactor(worker): one JSON builder per CORS policy, one error envelope
+- `f1ce2495` (2026-10-21) — refactor(worker): one error envelope, one rate limiter, one abort combiner
 - `d5b40875` (2026-10-17) — refactor(hud): unify chips on ChipShell, stable footprint, slimmer panels
 - `f0b7ff4e` (2026-10-16) — refactor(indicators): decompose runAndApplyInner into apply stages (F-25)
 - `b71179eb` (2026-10-07) — refactor: remove the pre-Solid static shell
@@ -2271,6 +2471,22 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Documentation
 
+- `97bd701c` (2026-10-26) — docs(readme): use the HOOX stack banner and family badges
+- `3a206b58` (2026-10-26) — docs(readme): add the GitHub tagline banner
+- `77468040` (2026-10-26) — docs(readme): rewrite as an academic operator brief
+- `3f82cceb` (2026-10-24) — docs(changelog): note D1 auto-rung overlay
+- `d89b47fe` (2026-10-24) — docs(changelog): freeze HP-2/HP-3 gate numbers after live verification
+- `ae2f47b9` (2026-10-24) — docs(changelog): record hp2 A1 controlled live runs
+- `8670b5c8` (2026-10-23) — docs(hp): record the foreground tick-to-frame numbers
+- `7b4bb349` (2026-10-23) — docs(hp): record the first production measurement of the GPU overlay
+- `62f9cb2d` (2026-10-23) — docs(mcp): surface hp.get + hp.sample in the README and guides
+- `fc72d731` (2026-10-22) — docs(hp): tell the isolation truth — popup-safe COOP does not isolate
+- `c38d3a8f` (2026-10-22) — docs(hp): architecture page + OKF playbook + rung chip (PR 9)
+- `6ae6ff34` (2026-10-21) — docs(changelog): fold the refactor notes into one Added section
+- `3722bfea` (2026-10-21) — docs(changelog): record the time normalizer, datasets modal and field merges
+- `4214148f` (2026-10-21) — docs(changelog): record fill bands and reapply dedup fixes
+- `7bcc3c5a` (2026-10-21) — docs(changelog): record chart overlay color preservation fix
+- `9962c2be` (2026-10-21) — docs(changelog): record reapply guard and color-preservation fixes
 - `6d13a542` (2026-10-19) — docs(changelog): refresh the recursive history block
 - `39a73dd6` (2026-10-19) — docs(changelog): note the CI serialization and live-plane coverage in 2.24.7
 - `6f4dfedc` (2026-10-17) — docs: refresh landing index to 2.24.5 with a What's new section
@@ -2286,6 +2502,22 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Tests
 
+- `d86eabf7` (2026-10-26) — test(streams): pin ManualSocket wire tests to JSON transport
+- `69ed000f` (2026-10-26) — test(engine): prove P6 json+multi flag flip
+- `57a83aa5` (2026-10-26) — test(chart): cover v1 pane, drawings, and 10k pan/zoom e2e
+- `86bf66cb` (2026-10-26) — test(hp): pin AXB1 OHLC as int64 ticks, not float32
+- `6705e927` (2026-10-25) — test(chart): prove axis.chart.layout single default and SlotChart
+- `5bc20a75` (2026-10-25) — test(chart): pin one crosshair time on the single chart
+- `35367e02` (2026-10-25) — test(engine): pin G1 no JSON.parse of live frames on the window
+- `048e3a13` (2026-10-25) — test(engine): resume series and script after an ingest worker crash
+- `d9e87ee6` (2026-10-25) — test(chart): pin update() vs setData() as a paint-action table
+- `4ad40b36` (2026-10-25) — test(hp): union encoded AXB1 PLOT_TIP columns in the coalescer
+- `85e1eb98` (2026-10-25) — test(engine): pin APPEND_BAR flush and SNAPSHOT_PLOTS times
+- `d61935bf` (2026-10-23) — test(hp): assert the cold viewport repaints without zooming
+- `a020dc3b` (2026-10-22) — test(hp): AXB1 golden vectors pin every payload shape (PR 7 prep)
+- `3e51b6ab` (2026-10-21) — test(engine): honor stored every-tick in liveRerunModeForEngine
+- `cf47c71f` (2026-10-21) — test: cover stored-color fallback in overlay paths
+- `4c11493f` (2026-10-21) — test: add coverage for plot width/visibility and apply-overlays
 - `c719f49c` (2026-10-19) — test(streams): cover the engine-owned live plane end to end
 - `03dc1405` (2026-10-14) — test: stop cross-file store leakage from making CI order-dependent
 - `e5453220` (2026-10-13) — test(datasession): mint an API key in the e2e harness
@@ -2294,6 +2526,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Chores
 
+- `d86eaf03` (2026-10-31) — chore(pyodide): vendor pynescript 0.6.26 wheel (#4)
+- `60c8e57b` (2026-10-31) — chore(pyodide): vendor pynescript 0.6.25 wheel (#3)
+- `05f625fc` (2026-10-21) — chore(tooling): project references, compaction, destructive-git guard rails
+- `ce8c9b51` (2026-10-21) — chore(tooling): make the OpenCode project config actually work
+- `223d7108` (2026-10-20) — chore(release): AXIS v2.25.2
 - `119c77b7` (2026-10-20) — chore(release): AXIS v2.25.1
 - `069bd8d9` (2026-10-20) — chore(release): AXIS 2.25.0
 - `2aed84f1` (2026-10-19) — chore(release): AXIS 2.24.8
@@ -2316,8 +2553,15 @@ Security and performance release from the multi-agent **harden-perf** audit
 - `8949d283` (2026-10-03) — chore(release): 2.19.0 — Extra chrome widgets
 - `db4e3862` (2026-10-03) — chore: ignore local git worktrees
 
+#### Style
+
+- `bd940d4e` (2026-10-23) — style(settings): format SettingsPage with Prettier
+
 #### Merges
 
+- `427ee17b` (2026-10-30) — Merge pull request #2 from hoox-sh/feat/concept-simplify
+- `5e604afc` (2026-10-27) — Merge feat/chart-engine-simplify
+- `80e782cd` (2026-10-23) — Merge branch 'engine/high-performance' — HP chart engine (AXB1, SAB memory, GPU paint, isolating COOP)
 - `129c9656` (2026-10-04) — Merge branch 'feat/quote-panel' — Quote dock panel + Extra menu polish
 - `277bb465` (2026-10-04) — Merge branch 'main' into feat/quote-panel
 - `6051219e` (2026-10-03) — Merge branch 'feat/extra-widgets' — Extra chrome widgets
@@ -2923,5 +3167,3 @@ python3 scripts/generate-changelog.py
 3. Commit changelog with the release; then tag, push, publish, sync
    (see `AGENTS.md` § Changelog & releases).
 
-- fix(engine): session-broker scaffold guard, drawing-layer handled-kinds guard, client-apply replay context refresh
-- fix(ui): pane-manager refresh badges on layout (multi→single) so indicator badges not lost
