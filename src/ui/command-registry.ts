@@ -151,6 +151,9 @@ export interface CommandActions {
   focusEditor?: () => void;
   /** Rewrite the active editor buffer toward Pine v6. */
   convertToV6?: () => void;
+  goToDefinition?: () => void;
+  findReferences?: () => void;
+  renameSymbol?: () => void;
   /** Focus the active chart pane (Mod-Alt-0). */
   focusChart?: () => void;
   /** Open the keyboard-shortcuts modal (Alt-Shift-?). */
@@ -843,6 +846,27 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
     keywords: ['convert', 'version', 'v6', 'migrate', 'upgrade', 'pine', 'v4', 'v5'],
   },
   {
+    id: 'editor.goto-definition',
+    title: 'Go to Definition',
+    category: 'navigation',
+    keywords: ['definition', 'goto', 'jump', 'symbol', 'f12', 'declare'],
+    shortcut: 'F12',
+  },
+  {
+    id: 'editor.find-references',
+    title: 'Find References',
+    category: 'navigation',
+    keywords: ['references', 'usages', 'occurrences', 'symbol', 'shift f12', 'find'],
+    shortcut: '⇧F12',
+  },
+  {
+    id: 'editor.rename-symbol',
+    title: 'Rename Symbol',
+    category: 'actions',
+    keywords: ['rename', 'symbol', 'refactor', 'f2', 'identifier'],
+    shortcut: 'F2',
+  },
+  {
     id: 'git.push',
     title: 'Git Push',
     category: 'actions',
@@ -1102,6 +1126,9 @@ export function buildDefaultCommands(actions: CommandActions): CommandDef[] {
   if (actions.saveToLibrary) byId.set('editor.save-library', () => void actions.saveToLibrary?.());
   if (actions.focusEditor) byId.set('editor.focus', actions.focusEditor);
   if (actions.convertToV6) byId.set('editor.convert-v6', actions.convertToV6);
+  if (actions.goToDefinition) byId.set('editor.goto-definition', actions.goToDefinition);
+  if (actions.findReferences) byId.set('editor.find-references', actions.findReferences);
+  if (actions.renameSymbol) byId.set('editor.rename-symbol', actions.renameSymbol);
   if (actions.focusChart) byId.set('panel.focus-chart', actions.focusChart);
   if (actions.openShortcuts) byId.set('help.shortcuts', actions.openShortcuts);
   if (actions.resetShortcuts) byId.set('help.reset-shortcuts', actions.resetShortcuts);

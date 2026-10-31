@@ -23,6 +23,8 @@ _Generated/updated: 2026-10-31 · 876 commits · describe-tag: `v2.25.3`_
 
 ### Added
 
+- **Pine symbol navigation: definition, references, rename, occurrence highlight.** One local index (`src/editor/symbol-index.ts`) parses functions / methods, parameters, `type` and `enum` bodies, variables (incl. `var` / `varip` and tuple destructuring), loop bindings and `import … as alias`, then answers all four features without a Pro API round trip — so they work in Pyodide and offline. `F12` (or `Alt`-click) jumps to the declaration, `Shift-F12` lists every reference in a CodeMirror panel, `F2` renames the declaration plus its references, and the cursor symbol is highlighted automatically. Scope is indentation-based like Pine, so `f(n)` and `g(n)` resolve separately and a parameter rename stays inside its function. Rename refuses builtins, builtin namespaces, keywords, invalid identifiers, same-scope collisions, and `type` / `enum` members. Also in the command palette.
+
 - **Offline PYNE lint parity: `W002` and `W104`.** `localPreevaluate` now warns on a pre-v5 `//@version` pragma (`W002`) and on kwargs Pine v6 removed (`W104`) — `when=` on `strategy.*` order calls and `transp=` on drawing / plot calls (`plot*`, `fill`, `bgcolor`, `barcolor`, `hline`, `line.*`, `box.*`, `label.*`, `table.*`, `polyline.*`, `linefill.*`). `color.new` / `color()` keep a valid `transp` and are never flagged. Previously these came only from `POST /lsp/diagnostics`, so Pyodide / offline mode missed them. New setting `preevalV6Kwargs` (default on) with a Settings → Editor toggle; `preevalVersionWarn` now covers both `W001` and `W002`.
 
 ## [2.26.0] — 2026-10-31

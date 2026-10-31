@@ -365,6 +365,18 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
         setEditorOpen(true);
         emitWindowEvent('axis-editor-convert-v6');
       },
+      goToDefinition: () => {
+        setEditorOpen(true);
+        emitWindowEvent('axis-editor-goto-definition');
+      },
+      findReferences: () => {
+        setEditorOpen(true);
+        emitWindowEvent('axis-editor-find-references');
+      },
+      renameSymbol: () => {
+        setEditorOpen(true);
+        emitWindowEvent('axis-editor-rename-symbol');
+      },
       focusChart: () => {
         queueMicrotask(() => {
           const el = document.querySelector<HTMLElement>('[data-testid="axis-chart-pane"]');

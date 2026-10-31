@@ -70,6 +70,8 @@ import { runPreevalNow } from './preevaluate';
 import { formatPineSource } from './pine-format';
 import { convertPineToV6Result } from './pine-convert';
 import { addMissingTypeDeclarations } from './pine-declare-types';
+import { getRegisteredDebugEditorView } from './inline-debug';
+import { findReferences, goToDefinition, startRename } from './symbol-nav';
 
 interface Props {
   editorRef: {
@@ -270,8 +272,28 @@ export const EditorPane: Component<Props> = (props) => {
 
   onMount(() => {
     const onConvert = () => convertActiveDocToV6();
+    const onDefinition = () => {
+      const view = getRegisteredDebugEditorView();
+      if (view) goToDefinition(view);
+    };
+    const onReferences = () => {
+      const view = getRegisteredDebugEditorView();
+      if (view) findReferences(view);
+    };
+    const onRename = () => {
+      const view = getRegisteredDebugEditorView();
+      if (view) startRename(view);
+    };
     window.addEventListener('axis-editor-convert-v6', onConvert);
-    onCleanup(() => window.removeEventListener('axis-editor-convert-v6', onConvert));
+    window.addEventListener('axis-editor-goto-definition', onDefinition);
+    window.addEventListener('axis-editor-find-references', onReferences);
+    window.addEventListener('axis-editor-rename-symbol', onRename);
+    onCleanup(() => {
+      window.removeEventListener('axis-editor-convert-v6', onConvert);
+      window.removeEventListener('axis-editor-goto-definition', onDefinition);
+      window.removeEventListener('axis-editor-find-references', onReferences);
+      window.removeEventListener('axis-editor-rename-symbol', onRename);
+    });
   });
 
   /** True after at least one successful engine run (enables type-declare). */

@@ -187,6 +187,21 @@ PYNE exposes four HTTP endpoints, and AXIS wires all four: `POST /lsp/completion
 
 The Pyodide runtime vendors `pynescript-0.6.28-py3-none-any.whl`; the builtins catalog is byte-identical to PYNE's `builtin_metadata.json` (941 entries).
 
+### Navigation
+
+Pine-aware symbol navigation runs **locally** from one symbol index (`src/editor/symbol-index.ts`) — no round trip to the Pro API, so it works in Pyodide and offline mode.
+
+| Action | Key | Also |
+|---|---|---|
+| Go to definition | `F12` | `Alt`-click the symbol |
+| Find references | `Shift-F12` | — |
+| Rename symbol | `F2` | — |
+| Occurrence highlight | automatic | cursor move / click |
+
+Definition resolves a parameter or local inside the enclosing function before a script-level name, so `f(n)` and `g(n)` stay distinct. References use the same scope, which keeps a parameter rename inside its function. Rename refuses builtins and builtin namespaces (`ta`, `strategy`), Pine keywords, invalid identifiers, a name already declared in the same scope, and `type` / `enum` members (a field name is shared by every value of its type).
+
+The same actions are in the command palette (*Go to Definition*, *Find References*, *Rename Symbol*). Browsers may reserve `F12` for devtools — use the palette or `Alt`-click there.
+
 ### Library load
 
 `loadLibraryDoc(doc, name)` on `editorRef` injects storage reads into the active tab.

@@ -43,6 +43,7 @@ import { bracketMatching } from '@codemirror/language';
 import { pyneScript } from './pyne-language';
 import { voidEditorExtensions } from './cm-void';
 import { buildRunKeymap } from './cm-line-ops';
+import { symbolNavExtension } from './symbol-nav';
 import { pyneLspExtensions, pineParamHintField } from './pyne-lsp';
 import { store } from '../store';
 import { readEditorIntel } from './editor-intel';
@@ -495,6 +496,8 @@ export const PyneEditor: Component<Props> = (props) => {
         highlightSelectionMatches(),
         // Pine LSP-lite: typing completion + hover docs (from pyne builtin metadata)
         lspCompartment.of(pyneLspExtensions(readEditorIntel(store.editorIntel))),
+        // Navigation: definition / references / rename / occurrence highlight
+        symbolNavExtension(),
         // Profiler gutter: always mounted; driven by setProfilerData effects
         profilerGutterExtension(),
         // Inline debug chips / pin gutter / flash (driven by apply*)
