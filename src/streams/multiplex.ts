@@ -78,6 +78,7 @@ import {
   streamDriveSeries,
   streamStop,
   StreamFallbackError,
+  mergeEngineSnapshot,
 } from './stream-live';
 import { tickChartDataSession, releaseChartDataSession } from '../engines/chart-data-session';
 import { getDataSeriesBars } from '../engines/data-sessions';
@@ -819,15 +820,21 @@ export function startLive(
           const tip = proBars[proBars.length - 1]!;
           lastSeenBarTime = Math.max(lastSeenBarTime, tip.time);
         } else {
-          // The engine's store is the source of truth, but the runner builds the
-          // overlay time axis from `store.bars` (`getOhlcvTimesForApply`) — without
-          // this sync the axis stays frozen at the load window, so indicator and
-          // strategy series never gain the new bars the engine evaluated. Memory
-          // only (no dataset write, no persist), and quiet so ChartHost does not
-          // re-fit the viewport; the paint below is this frame's chart update.
-          setBarsQuiet(proBars);
-          setDataToChart(proBars, { fit: false, clearMarkers: false });
-          const tip = proBars[proBars.length - 1]!;
+          // Engine-owned mode: merge engine bars into the venue window instead of
+          // replacing the entire window. Venue's closed candles keep their OHLC;
+          // only times the engine knows that the chart doesn't are appended.
+          // This avoids repainting the full window on every engine tick and
+          // prevents PYNE's stored/stale OHLC from overwriting venue candles
+          // that are already painted correctly.
+          const merged = mergeEngineSnapshot(store.bars, proBars);
+          const changed =
+            merged.length !== store.bars.length ||
+            merged[merged.length - 1]?.time !== store.bars[store.bars.length - 1]?.time;
+          if (changed) {
+            setBarsQuiet(merged);
+            setDataToChart(merged, { fit: false, clearMarkers: false });
+          }
+          const tip = merged[merged.length - 1] ?? proBars[proBars.length - 1]!;
           lastSeenBarTime = Math.max(lastSeenBarTime, tip.time);
         }
         // Introspection only: the engine's own session bookkeeping (bars / idle /
