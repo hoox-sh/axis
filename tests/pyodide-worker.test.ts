@@ -459,7 +459,7 @@ describe('pyodide worker — worker-side handler (createPyodideWorkerCore)', () 
     // antlr4 first, then pynescript — same order as the in-thread path.
     expect(py.installs).toEqual([
       'https://app.test/vendor/antlr4_python3_runtime-4.13.2-py3-none-any.whl',
-      'https://app.test/vendor/pynescript-0.6.25-py3-none-any.whl',
+      'https://app.test/vendor/pynescript-0.6.26-py3-none-any.whl',
     ]);
     expect(py.calls).toContain('runPythonAsync');
 
