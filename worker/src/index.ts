@@ -338,8 +338,9 @@ async function handleBridgeUpgrade(
       return new Response(res.body, { status: res.status, headers });
     }
 
-    // Bare /api/mcp/bridge: POST mints a WS ticket; GET returns tab count.
-    if (req.method === 'POST') {
+    // Bare /api/mcp/bridge: POST mints a WS ticket; GET ?issue=ticket also mints;
+    // GET returns tab count.
+    if (req.method === 'POST' || issueTicket) {
       const ticketRes = await stub.fetch(new Request(`${url.origin}/ticket`, { method: 'POST' }));
       const payload = (await ticketRes.json()) as { nonce?: unknown; expiresIn?: unknown };
       const nonce = typeof payload.nonce === 'string' ? payload.nonce : '';
