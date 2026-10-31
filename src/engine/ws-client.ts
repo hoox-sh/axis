@@ -37,6 +37,7 @@ import type {
 } from './frames';
 import { normalizeRedesign2Frame, validateRedesign2Frame } from './frames';
 import { PendingRequests, ReconnectHandlers, wireStats } from './wire-bookkeeping';
+import type { LiveProxy } from './live-ticket';
 
 export type Redesign2WsFrameType =
   | 'auth'
@@ -79,6 +80,8 @@ export interface Redesign2WsClientOptions {
   heartbeatIntervalMs?: number;
   /** Pong timeout in ms. */
   pongTimeoutMs?: number;
+  /** Optional live-proxy ticket (endpoint + apiKey) for Worker-proxied WS. */
+  liveProxy?: LiveProxy;
 }
 
 const DEFAULTS = {
@@ -114,8 +117,9 @@ export function endpointToRedesign2WsUrl(endpoint: string, authToken?: string): 
 }
 
 export class Redesign2WsClient {
-  private readonly options: Omit<Required<Redesign2WsClientOptions>, 'authToken'> & {
+  private readonly options: Omit<Required<Redesign2WsClientOptions>, 'authToken' | 'liveProxy'> & {
     authToken?: string;
+    liveProxy?: LiveProxy;
   };
   private url: string;
   private ws: WebSocket | null = null;

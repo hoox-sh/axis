@@ -7,7 +7,7 @@ tags: [code, engine]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-31T04:38:09Z
+  at: 2026-10-31T04:54:11Z
 sources:
   - id: tree
     resource: "src/engine"
@@ -18,7 +18,7 @@ okf_lock: generated
 
 # Files
 
-* `apply-bridge.ts` — ApplyStreamInput, StreamFullPayload, StreamVia, applyStreamPayload, streamFullToPrecomputed
+* `apply-bridge.ts` — ApplyStreamInput, StreamFullPayload, StreamVia, applyStreamDelta, applyStreamPayload, streamFullToPrecomputed
 * `bar-close-verify.ts` — ClosedOhlcv, Redesign2BarCloseVerifier, VerificationResult, VerifyRequest, compareClosedOhlcv, verifyRequestFor
 * `client-apply.ts` — ApplyState, DeltaApplierDelta, DeltaApplierFull, DeltaApplyOutcome, Redesign2ApplyStateManager, Redesign2DeltaApplier, readTimeList, scriptDeltaTimeTail
 * `delta-client.ts` — BufferPool, DeltaFrame, DeltaMask, DeltaOpCode, DeltaWsClientOptions, THIN_PATHS
