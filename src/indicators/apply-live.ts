@@ -163,6 +163,65 @@ function asOhlcTip(
   return color !== undefined ? { open, high, low, close, color } : { open, high, low, close };
 }
 
+/**
+ * New candle(s) arrived. Keep overlay points attached to their bar times,
+ * drop the rolled-off head, and append the latest engine value onto the new
+ * tip. Index-zipping a same-length stale window would shift Donchian/SMA.
+ */
+function slideTipCache(cache: LiveTipCache, bars: Bar[], raw: RunResult, t: number): boolean {
+  const series = (raw.series || {}) as Record<string, unknown[]>;
+  if (seriesKeySig(series) !== cache.seriesKeySig) return false;
+  const first = Number(bars[0]?.time);
+  if (!Number.isFinite(first) || !Number.isFinite(t) || t <= cache.lastTime) return false;
+
+  const times: number[] = [];
+  for (const b of bars) {
+    const bt = Number(b.time);
+    if (Number.isFinite(bt)) times.push(bt);
+  }
+  if (!times.length) return false;
+
+  for (const line of cache.overlayLines) {
+    if (line.kind === 'hline' && line.price != null) continue;
+    if (!line.data.length) continue;
+    let i = 0;
+    while (i < line.data.length && Number(line.data[i]?.time) < first) i++;
+    if (i > 0) line.data = line.data.slice(i);
+    const lastPt = line.data[line.data.length - 1];
+    const lastT = lastPt ? Number(lastPt.time) : Number.NaN;
+    const arr = series[line.name];
+    const v = Array.isArray(arr) ? asFinite(arr[arr.length - 1]) : undefined;
+    const hold = v ?? (lastPt?.value != null && Number.isFinite(lastPt.value) ? lastPt.value : undefined);
+    if (Number.isFinite(lastT) && t === lastT && lastPt) {
+      if (v == null) delete lastPt.value;
+      else lastPt.value = v;
+    } else if (!Number.isFinite(lastT) || t > lastT) {
+      const pt: { time: number; value?: number } = { time: t };
+      if (hold != null) pt.value = hold;
+      line.data.push(pt);
+    }
+  }
+
+  for (const [k, arr] of Object.entries(cache.seriesMap)) {
+    if (!Array.isArray(arr)) continue;
+    const rawArr = series[k];
+    const tip = Array.isArray(rawArr) ? rawArr[rawArr.length - 1] : arr[arr.length - 1];
+    const missing = times.length - arr.length;
+    if (missing > 0) {
+      for (let n = 0; n < missing; n++) arr.push(tip as never);
+    } else if (arr.length) {
+      arr[arr.length - 1] = tip as never;
+    }
+    while (arr.length > times.length) arr.shift();
+  }
+
+  cache.lastTime = t;
+  cache.ohlcvTimes = times;
+  const nextLen = maxSeriesLen(series);
+  if (nextLen > 0) cache.seriesLen = nextLen;
+  return true;
+}
+
 function patchTipCache(cache: LiveTipCache, raw: RunResult): boolean {
   const series = (raw.series || {}) as Record<string, unknown[]>;
   if (seriesKeySig(series) !== cache.seriesKeySig) return false;
@@ -299,14 +358,22 @@ export function applyPrecomputedChart(
   const t = tipTime(bars);
   if (formingTip) {
     const cache = tipCaches.get(id);
-    if (
-      cache &&
+    const seriesLen = maxSeriesLen(result.series as Record<string, unknown>);
+    const sameTip =
+      !!cache &&
       cache.script === script &&
-      cache.seriesLen === maxSeriesLen(result.series as Record<string, unknown>) &&
+      cache.seriesLen === seriesLen &&
       cache.lastTime === t &&
       Number.isFinite(t) &&
-      patchTipCache(cache, result)
-    ) {
+      patchTipCache(cache, result);
+    const slid =
+      !sameTip &&
+      !!cache &&
+      cache.script === script &&
+      Number.isFinite(t) &&
+      t > cache.lastTime &&
+      slideTipCache(cache, bars, result, t);
+    if ((sameTip || slid) && cache) {
       try {
         if (!manager.getPane(cache.paneId)) {
           if (!silent) {

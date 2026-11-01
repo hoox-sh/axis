@@ -1161,6 +1161,44 @@ describe('live candle axis', () => {
     return { time, open: 1, high: 2, low: 0.5, close: 1.5, volume: 1 };
   }
 
+  it('holds overlay last values onto a new candle when the script is idle', () => {
+    const price = pm.getPane('price')!;
+    const updates: unknown[] = [];
+    const sets: unknown[] = [];
+    price.series['overlay_sma__SMA'] = {
+      update: (p: unknown) => {
+        updates.push(p);
+      },
+      setData: (d: unknown) => {
+        sets.push(d);
+      },
+      applyOptions: () => {},
+      data: () => [],
+    } as never;
+    pm.notePaintedCandleRange(100, 220, [100, 160, 220]);
+    pm.syncOverlayLines(
+      'price',
+      [
+        {
+          name: 'SMA',
+          data: [
+            { time: 100, value: 40 },
+            { time: 160, value: 41 },
+            { time: 220, value: 42 },
+          ],
+          kind: 'plot',
+        },
+      ],
+      { ownerId: 'sma' },
+    );
+    expect(sets.length).toBeGreaterThan(0);
+    updates.length = 0;
+    pm.extendOverlayTips(220);
+    expect(updates).toEqual([]);
+    pm.appendBar(bar(280));
+    expect(updates).toEqual([{ time: 280, value: 42 }]);
+  });
+
   it('does not grow the indicator axis on forming ticks, and extends it once on a new candle', () => {
     pm.notePaintedCandleRange(100, 220, [100, 160, 220]);
     // Several updates of the open candle used to push 220 again on every tick.
