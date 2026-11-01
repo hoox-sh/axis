@@ -56,6 +56,10 @@ _Generated/updated: 2026-11-01 · 880 commits · describe-tag: `v2.26.0`_
 
 - **Live overlay SMA/Donchian vs candles.** A 1–8 bar stream shortfall no longer head-pads (that shifted Donchian onto newer candles). The last finite value is held forward instead. `appendBar` also extends idle overlay tips onto the new candle so a released SMA keeps covering the forming bar.
 
+- **Painted chart no longer keeps multi-bar internal holes after Dataset complete / live ticks.** `expandCachedSeriesToNow` used to return on a current tip without `fillInternalGaps`, so a live append that jumped closed slots (e.g. 23 missing 1m bars) stayed blank while venue REST still had them. Expand, background catch-up, and live jump detection now REST-fill those holes and repaint the window.
+
+- **Released overlay scripts rejoin the live wire.** A sticky `message: 'released'` after `setScriptStatus(id, 'live')` kept multiplex treating the sub as gone; duplicate PYNE idle/released acks after `release()` overwrote degraded backoff and looped. Status clears the message on live, duplicate release acks are ignored, and an idle/released ack kicks `scheduleLiveRerun` immediately.
+
 ### Added
 
 - **Phase 4 UX polish.** Shared `Spinner`, theme tokens on `ChartScaleControls`, safe-area / motion CSS variables, coarse-pointer topbar targets, compositor-only drawing-rail fade, hover-slide gated on `prefersReducedMotion`, and `installFocusTrap` `returnElement` plus aria-hidden sibling hiding (retries on a microtask so Solid refs that fire before insert still hide the background).

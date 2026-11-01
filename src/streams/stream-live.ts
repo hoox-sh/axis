@@ -336,6 +336,14 @@ function buildWireAt(endpoint: string, authToken: string | undefined): StreamLiv
           if (status === 'error' && extra?.message) {
             appendLog('error', `Engine script ${subId}: ${extra.message}`, 'stream');
           }
+          // Rejoin immediately — do not wait for the next venue bar.
+          if (status === 'idle' || message === 'released') {
+            void import('./multiplex')
+              .then((m) => {
+                m.scheduleLiveRerun?.();
+              })
+              .catch(() => {});
+          }
         }
       },
       onSeriesFull: (bars) => {
@@ -786,7 +794,8 @@ export async function streamEvalScript(ind: Indicator): Promise<void> {
       // script's defaults otherwise, which makes an input change a no-op.
       inputs: (ind.inputValues ?? undefined) as Record<string, unknown> | undefined,
     });
-    setScriptStatus(ind.id, 'live');
+    // Solid merges nested status — clear message or `released` sticks.
+    setScriptStatus(ind.id, 'live', '');
   } catch (e) {
     if (e instanceof StreamFallbackError) {
       setScriptStatus(ind.id, 'degraded', 'venue+REST');

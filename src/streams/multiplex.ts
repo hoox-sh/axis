@@ -59,6 +59,7 @@ import {
   setTelemetryPlane,
   setTelemetryState,
   setScriptStatus,
+  sliceToChartWindow,
 } from '../store';
 import { setDataToChart } from '../chart/manager-access';
 import { appendLiveBar } from '../chart/live-append';
@@ -69,6 +70,7 @@ import { groupIndicatorsByPlotDepLevel, mapWithConcurrencyLimit } from '../resul
 import { detectScriptKind } from '../indicators/script-meta';
 import { getStream, listStreams, defaultStreamForSource, type StreamPlugin } from './catalog';
 import { noteDataManagerLiveBar } from '../data/expand-cache';
+import { intervalToSec } from '../data/bars-gaps';
 import { isEngineOwnedLive } from '../engines/ownership';
 import { liveRerunModeForEngine } from '../engines/catalog';
 import {
@@ -148,6 +150,93 @@ let enginePaintChain: Promise<unknown> = Promise.resolve();
  * indicators are evaluated against the freshly driven series.
  */
 let pendingSeriesDrive: Promise<void> | null = null;
+
+/**
+ * Live internal-gap repair. Venue ticks only append the tip — a reconnect that
+ * skips closed slots leaves a multi-bar hole fillBarsTowardNow cannot see.
+ * One in-flight pass; a concurrent request sets pending and re-arms in finally.
+ */
+let liveGapRepairInFlight = false;
+let liveGapRepairPending = false;
+
+/**
+ * REST-fill holes inside the painted window and repaint. No-op when dense,
+ * offline, or the session that armed the repair has stopped.
+ */
+async function repairLiveInternalGaps(epoch: number): Promise<void> {
+  if (liveEpoch !== epoch || !store.live.active) return;
+  if (liveGapRepairInFlight) {
+    liveGapRepairPending = true;
+    return;
+  }
+  liveGapRepairInFlight = true;
+  liveGapRepairPending = false;
+  try {
+    const bars = store.bars;
+    if (!bars?.length || bars.length < 2) return;
+    const iv = String(store.interval || '');
+
+    let srcId = String(store.source || '');
+    let sym = String(store.symbol || '');
+    let fillIv = iv;
+    try {
+      const { getDataManagerSelection, DATA_MANAGER_SOURCE_ID } = await import(
+        '../data/data-manager-source'
+      );
+      if (srcId === DATA_MANAGER_SOURCE_ID || srcId === 'data-manager') {
+        const sel = getDataManagerSelection();
+        if (sel?.sourceId && sel.symbol && sel.interval) {
+          srcId = sel.sourceId;
+          sym = sel.symbol;
+          fillIv = sel.interval;
+        }
+      }
+    } catch {
+      /* keep store key */
+    }
+    if (!srcId || !sym) return;
+
+    const { fillInternalGaps } = await import('../data/expand-cache');
+    if (liveEpoch !== epoch || !store.live.active) return;
+
+    const seed = store.bars.slice();
+    const result = await fillInternalGaps(seed, srcId, sym, fillIv);
+    if (liveEpoch !== epoch || !store.live.active) return;
+    if (!result.expanded || !result.bars.length) return;
+
+    // Filled holes as base; current store wins same-time conflicts (forming tip).
+    const { mergeBars } = await import('../data/bars-cache');
+    if (liveEpoch !== epoch || !store.live.active) return;
+    const view = sliceToChartWindow(mergeBars(result.bars, store.bars.slice()));
+    setBarsQuiet(view);
+    try {
+      setDataToChart(view, { fit: false, clearMarkers: false });
+    } catch {
+      /* chart paint best-effort */
+    }
+    if (!isEngineOwnedLive()) {
+      try {
+        const { putDatasetBars } = await import('../data/dataset-store');
+        const { providerDatasetLock } = await import('../data/provider');
+        void putDatasetBars(srcId, sym, fillIv, view, providerDatasetLock(store.provider));
+      } catch {
+        /* persist best-effort */
+      }
+    }
+    if (liveEpoch === epoch && store.live.active) scheduleRerun();
+  } catch {
+    /* gap repair best-effort */
+  } finally {
+    liveGapRepairInFlight = false;
+    if (liveGapRepairPending && store.live.active) {
+      // Re-arm for the current session (may differ from the epoch that just finished).
+      liveGapRepairPending = false;
+      void repairLiveInternalGaps(liveEpoch);
+    } else {
+      liveGapRepairPending = false;
+    }
+  }
+}
 
 /**
  * How freshly painted engine bars differ from `store.bars`.
@@ -284,13 +373,17 @@ export function shouldAttemptScriptStream(
 
 /**
  * PYNE unsubscribe ack (`idle` / `released`) means the sub is gone. A prior
- * StreamFallbackError backoff must not skip the re-subscribe — otherwise EMA /
- * Momentum stay blank while Bollinger (still on the wire) keeps updating.
+ * StreamFallbackError backoff must not skip the re-subscribe. Ignore a sticky
+ * `message: 'released'` once status is already live/connecting.
  */
 export function isScriptStreamReleased(id: string): boolean {
   const entry = store.live?.scriptStatus?.[id];
   if (!entry) return false;
-  return entry.status === 'idle' || entry.message === 'released';
+  if (entry.status === 'idle') return true;
+  if (entry.status === 'live' || entry.status === 'connecting' || entry.status === 'datafeed-loading') {
+    return false;
+  }
+  return entry.message === 'released';
 }
 
 /** Attempt stream eval when backoff allows, or when the sub was released. */
@@ -401,6 +494,8 @@ function cancelPendingLiveBarFlush(): void {
 export function _resetMultiplexForTests(): void {
   liveEpoch += 1;
   cancelPendingLiveBarFlush();
+  liveGapRepairInFlight = false;
+  liveGapRepairPending = false;
   // Drop the serialized paint chain so a prior case's in-flight paint cannot
   // settle into (or delay) the next case's re-runs.
   enginePaintChain = Promise.resolve();
@@ -545,8 +640,10 @@ export function startLive(
       // Venue append shared by the legacy path and the stream-path fallback
       // below. Defined before either branch: the stream branch returns early,
       // so a fallback closure must never reach past it for initialization.
+      const stepSec = intervalToSec(iv);
       const appendVenueBars = (bars: Bar[]) => {
         let shouldRerun = false;
+        let jumped = false;
         for (const bar of bars) {
           if (!isCurrent()) break;
           // A rejected bar (stale, out of order, or a forming tick trying to
@@ -567,6 +664,14 @@ export function startLive(
           // so local persistence would fight the feed the chart renders from.
           if (!isEngineOwnedLive()) noteDataManagerLiveBar(bar);
 
+          // Tip jump over closed slots — appendBar never backfills.
+          if (
+            lastSeenBarTime > 0 &&
+            stepSec > 0 &&
+            bar.time - lastSeenBarTime > stepSec * 1.5
+          ) {
+            jumped = true;
+          }
           const timeAdvanced = lastSeenBarTime > 0 && bar.time > lastSeenBarTime;
           lastSeenBarTime = Math.max(lastSeenBarTime, bar.time);
           // Heavy histories: throttle every-tick → bar-close to avoid full engine re-encode.
@@ -577,6 +682,7 @@ export function startLive(
             shouldRerun = true;
           }
         }
+        if (jumped && isCurrent()) void repairLiveInternalGaps(epoch);
         if (shouldRerun && isCurrent()) scheduleRerun();
       };
       // Stream path (F-19): paint the venue first so LWC never waits on the
@@ -1040,6 +1146,8 @@ export function startLive(
   // tick or a manual Run. On the stream path, flush with no debounce so every
   // overlay subscribes before the first kline debounce window.
   scheduleRerun({ immediate: streamRouteActive() });
+  // Successful repair schedules its own rerun after merging filled bars.
+  void repairLiveInternalGaps(epoch);
 }
 
 /**

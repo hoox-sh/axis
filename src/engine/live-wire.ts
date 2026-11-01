@@ -1105,13 +1105,22 @@ export class StreamLiveWire {
     const code = String(payload.code ?? 'live');
     const message = payload.message as string | undefined;
     const isReleaseAck = code === 'idle' || message === 'released';
+    const isScript = !frame.id.startsWith('series:');
+    const hadLocal =
+      isScript &&
+      (this.appliers.has(frame.id) ||
+        this.appliedSeq.has(frame.id) ||
+        this.scriptCtx.has(frame.id) ||
+        this.pendingScriptSubscribe.has(frame.id));
     // Own unsubscribe (gap resync / input resub / failed subscribe) — ignore
     // the ack so it cannot blank the replacement half-open subscription.
     const ignoreReleaseAck =
       isReleaseAck &&
-      !frame.id.startsWith('series:') &&
+      isScript &&
       (this.holdUntilFull.has(frame.id) || this.pendingScriptSubscribe.has(frame.id));
-    if (!ignoreReleaseAck) {
+    // Duplicate release ack after local drop must not overwrite degraded backoff.
+    const skipDuplicateRelease = isReleaseAck && isScript && !hadLocal && !ignoreReleaseAck;
+    if (!ignoreReleaseAck && !skipDuplicateRelease) {
       this.handlers.onStatus(frame.id, code as SubscriptionStatus, {
         message,
         have: typeof payload.have === 'number' ? payload.have : undefined,
@@ -1122,11 +1131,11 @@ export class StreamLiveWire {
     // state so the next streamEvalScript re-subscribes — unless we are already
     // waiting on a fresh full / in-flight subscribe (our own unsubscribe).
     if (
-      !frame.id.startsWith('series:') &&
+      isScript &&
       !this.holdUntilFull.has(frame.id) &&
       !this.pendingScriptSubscribe.has(frame.id) &&
       isReleaseAck &&
-      (this.appliers.has(frame.id) || this.appliedSeq.has(frame.id) || this.scriptCtx.has(frame.id))
+      hadLocal
     ) {
       this.dropScriptLocal(frame.id);
     }

@@ -54,6 +54,7 @@ describe('expand-cache', () => {
       registry.unregisterSource('expand-test-src');
       registry.unregisterSource('fill-tail-src');
       registry.unregisterSource('fill-hole-src');
+      registry.unregisterSource('fill-near-src');
     } catch {
       /* ignore */
     }
@@ -136,6 +137,54 @@ describe('expand-cache', () => {
     const times = result.bars.map((b) => b.time);
     for (let i = 1; i < times.length; i++) {
       expect(times[i]! - times[i - 1]!).toBe(step);
+    }
+  });
+
+  it('expandCachedSeriesToNow fills an internal hole when the tip is already current', async () => {
+    // Repro: live append jumped 23 minutes; newest matched venue "now" so the
+    // nearNow path returned without fillInternalGaps and Dataset complete left
+    // the blank painted.
+    const step = 60;
+    // Epoch-aligned so tip refresh pages stay on the same grid as the seed.
+    const t0 = Math.floor(1_700_000_000 / step) * step;
+    const hole = 23;
+    const left = Array.from({ length: 5 }, (_, i) => bar(t0 + i * step));
+    const rightStart = t0 + (5 + hole) * step;
+    const right = Array.from({ length: 5 }, (_, i) => bar(rightStart + i * step));
+    const seed = [...left, ...right];
+    // Tip is current (within 1.5 steps) so expand takes the nearNow path.
+    const nowSec = right[right.length - 1]!.time + 30;
+    await putCachedBars('fill-near-src', 'BTCUSDT', '1m', seed);
+
+    const src: SourcePlugin = {
+      id: 'fill-near-src',
+      name: 'Fill Near',
+      kind: 'source',
+      builtIn: false,
+      capabilities: { needsNetwork: true },
+      async fetchHistorical({ endTime, limit }) {
+        const rawEnd = Math.floor(Number(endTime) || nowSec);
+        const end = rawEnd - (rawEnd % step);
+        const n = Math.min(Number(limit) || 40, 40);
+        const out: Bar[] = [];
+        for (let i = n - 1; i >= 0; i--) {
+          out.push(bar(end - i * step));
+        }
+        return out;
+      },
+    };
+    registry.registerSource(src);
+
+    const result = await expandCachedSeriesToNow('fill-near-src', 'BTCUSDT', '1m', {
+      nowSec,
+    });
+    expect(result.expanded).toBe(true);
+    const times = result.bars.map((b) => b.time);
+    const from = left[0]!.time;
+    const to = right[right.length - 1]!.time;
+    const inWin = times.filter((t) => t >= from && t <= to);
+    for (let i = 1; i < inWin.length; i++) {
+      expect(inWin[i]! - inWin[i - 1]!).toBe(step);
     }
   });
 
