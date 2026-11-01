@@ -17,6 +17,7 @@ src-tauri/gen/
 
 # Test / coverage
 coverage/
+reports/
 coverage.lcov
 .nyc_output/
 test-results/

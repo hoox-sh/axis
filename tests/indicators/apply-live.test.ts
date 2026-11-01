@@ -265,6 +265,50 @@ describe('applyPrecomputedChart', () => {
     }
   });
 
+  test('a forming tip on a new bar slides the overlay instead of index-zipping', () => {
+    const times = [100, 160, 220];
+    const bars = barsFromTimes(times);
+    const script = 'indicator("SMA", overlay=true)';
+    const id = addIndicator('SMA', script, 'price', {});
+    const alignCalls: number[] = [];
+    const alignSpy = ((...args: Parameters<typeof alignApplySeries>) => {
+      alignCalls.push(1);
+      return alignApplySeries(...args);
+    }) as typeof alignApplySeries;
+
+    try {
+      applyPrecomputedChart(
+        script,
+        id,
+        tipResult({ a: [1, 2, 3] }, times),
+        bars,
+        { silent: true, liveTick: true },
+        { getManager: () => stubManager, alignApplySeries: alignSpy },
+      );
+      expect(alignCalls.length).toBe(1);
+      alignCalls.length = 0;
+
+      (store as { runResults: Record<string, unknown> }).runResults = {
+        ...(store.runResults as Record<string, unknown>),
+        [id]: tipResult({ a: [1, 2, 3] }, times),
+      };
+
+      const nextTimes = [160, 220, 280];
+      applyPrecomputedChart(
+        script,
+        id,
+        tipResult({ a: [2, 3, 4] }, nextTimes),
+        barsFromTimes(nextTimes),
+        { silent: true, liveTick: true },
+        { getManager: () => stubManager, alignApplySeries: alignSpy },
+      );
+      expect(alignCalls.length).toBe(0);
+      delete (store.runResults as Record<string, unknown>)[id];
+    } finally {
+      removeIndicator(id);
+    }
+  });
+
   test('an append delta rebuilds overlays and refreshes the indicator store', () => {
     const times = [100, 160, 220];
     const bars = barsFromTimes(times);

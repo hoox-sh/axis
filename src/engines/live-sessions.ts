@@ -84,7 +84,7 @@
  * @module engines/live-sessions
  */
 
-import { parseEngineJson } from './json-sanitize';
+import { parseEngineJson, parseEngineJsonAsync } from './json-sanitize';
 import { resolveSessionPayload } from './session-delta';
 import type { EngineLibrarySource } from '../plugins/types';
 import type { Bar } from '../store/types';
@@ -364,7 +364,7 @@ async function postJson(
   const text = await res.text();
   let payload: unknown = null;
   try {
-    payload = text && String(text).trim() ? parseEngineJson(text) : null;
+    payload = text && String(text).trim() ? await parseEngineJsonAsync(text) : null;
   } catch {
     payload = null;
   }
@@ -523,7 +523,7 @@ export async function getSessionStatus(
     const text = await res.text();
     let record: Record<string, unknown> | null = null;
     try {
-      const parsed: unknown = text.trim() ? parseEngineJson(text) : null;
+      const parsed: unknown = text.trim() ? await parseEngineJsonAsync(text) : null;
       if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
         record = parsed as Record<string, unknown>;
       }

@@ -264,12 +264,12 @@ export function alignApplySeries(
     seriesMap = rawSeries;
   } else if (resultTimes) {
     seriesMap = alignSeriesMapToTimes(rawSeries, resultTimes, ohlcvTimes);
-  } else if (canTailClampLive && !sessionAligned && !engineClampedTail) {
-    // Venue live push: a new forming bar arrived after the engine evaluated,
-    // so the chart window grew by one bar but the engine series is one short.
-    // Tail-extend by holding the last value forward instead of head-padding
-    // with nulls — head-padding shifts every indicator value right by one
-    // position instead of extending onto the new bar.
+  } else if (canTailClampLive && !engineClampedTail) {
+    // Live push, no engine axis: a 1–8 bar shortfall is the forming candle
+    // arriving during eval (venue *or* stream). Head-padding would shift every
+    // overlay value onto newer bars (Donchian "slides" vs candles). Hold the
+    // last finite value forward. A larger shortfall is a newest-N snapshot
+    // and still head-pads (`extendSeriesToWindow` switches at maxGap=8).
     seriesMap = {};
     for (const [key, arr] of Object.entries(rawSeries)) {
       if (Array.isArray(arr) && arr.length < chartWindowBars) {

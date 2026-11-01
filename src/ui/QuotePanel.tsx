@@ -26,8 +26,17 @@
  * (docks right, stacks multirow with other right-dock panels).
  */
 
-import { type Component, For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
+import {
+  type Component,
+  For,
+  Show,
+  createEffect,
+  createMemo,
+  createSignal,
+  onCleanup,
+} from 'solid-js';
 import { store, isPanelOpen } from '../store';
+import { barPlane } from '../stores/bars';
 import { FloatableShell } from './panels/FloatableShell';
 import { buildQuoteRows, displayedLastPrice, type QuoteRow } from './extras/quote';
 import { fetchWatchlistTickers } from '../data/watchlist-tickers';
@@ -58,19 +67,22 @@ export const QuotePanel: Component = () => {
 
   const rows = createMemo((): QuoteRow[] => {
     if (!isPanelOpen('quote')) return [];
-    void store.bars.length;
+    void barPlane.length;
     void store.chartDataGen;
     void store.telemetry?.lastTick;
     void store.telemetry?.stream?.state;
     void store.symbol;
     void store.interval;
     const tick = store.telemetry?.lastTick;
-    const bars = store.bars;
-    const last = bars.length ? bars[bars.length - 1] : null;
+    const bars = barPlane.bars;
+    const tip = barPlane.tip;
+    const last = tip ?? (bars.length ? bars[bars.length - 1] : null);
     // Live tick is stream-scoped: ignore it when it belongs to a previous
     // symbol (symbol switch before the first new tick arrives).
     const tickPrice =
-      tick && (tick.symbol === undefined || tick.symbol === store.symbol) && Number.isFinite(tick.price)
+      tick &&
+      (tick.symbol === undefined || tick.symbol === store.symbol) &&
+      Number.isFinite(tick.price)
         ? (tick.price as number)
         : NaN;
     const barClose = last && Number.isFinite(last.close) ? (last.close as number) : NaN;
@@ -78,7 +90,9 @@ export const QuotePanel: Component = () => {
     const price = displayedLastPrice({ tickPrice, barClose, streamState });
     const showTick = streamState == null || streamState === 'open';
     const venue =
-      store.provider?.venue && store.provider.venue !== 'generic' && store.provider.venue !== 'cache'
+      store.provider?.venue &&
+      store.provider.venue !== 'generic' &&
+      store.provider.venue !== 'cache'
         ? store.provider.venue
         : store.exchange;
     return buildQuoteRows({
@@ -96,7 +110,7 @@ export const QuotePanel: Component = () => {
       <FloatableShell id="quote" testId="axis-quote">
         <div class="flex-1 overflow-y-auto min-h-0 text-[12px]">
           <Show
-            when={store.bars.length > 0}
+            when={barPlane.length > 0}
             fallback={
               <div class="axis-empty-state text-[12px] text-text-dim py-2">No data loaded</div>
             }
@@ -106,7 +120,9 @@ export const QuotePanel: Component = () => {
               {(row) => (
                 <div class="axis-quote-row">
                   <span class="axis-quote-label">{row.label}</span>
-                  <span class={`axis-quote-value axis-quote-${row.tone ?? 'flat'}`}>{row.value}</span>
+                  <span class={`axis-quote-value axis-quote-${row.tone ?? 'flat'}`}>
+                    {row.value}
+                  </span>
                 </div>
               )}
             </For>

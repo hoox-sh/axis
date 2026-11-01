@@ -173,6 +173,8 @@ import { setPersistenceMode } from '../data/dataset-store';
 import { onSinkError } from '../data/dataset-sinks';
 import type { ResultMeta, RunResult, StoredRunResult } from '../plugins/types';
 import { engineFamilyForText } from '../plugins/engine-family';
+import { barPlane, setBarPlaneAppend, setBarPlaneFull, setBarPlaneTip } from '../stores/bars';
+import { perfMark } from '../perf/telemetry';
 
 // Stable ID generation — uses timestamp prefix + counter to survive reloads
 let idCounter = 0;
@@ -2949,6 +2951,7 @@ function restoreSlotBarsToActivePlane(slotId: string): void {
   const epoch = ++slotRefreshEpoch;
   batch(() => {
     setStore('bars', cached);
+    setBarPlaneFull(cached, { bumpGen: true });
     setStore('chartDataGen', (g) => (typeof g === 'number' ? g + 1 : 1));
   });
   void refreshAfterSlotBarsRestore(store.symbol, store.interval, epoch).catch(() => {
@@ -3256,6 +3259,8 @@ export function loadBars(bars: Bar[], symbol: string, interval: string, exchange
   // One reactive flush for Topbar + ChartHost + StatusBar (not 5 micro-updates)
   batch(() => {
     setStore('bars', view);
+    perfMark('axis:loadBars:setStore');
+    setBarPlaneFull(view, { symbol, interval, exchange, bumpGen: true });
     setStore('chartDataGen', (g) => (typeof g === 'number' ? g + 1 : 1));
     setStore('symbol', symbol);
     setStore('interval', interval);
@@ -3703,6 +3708,7 @@ export function appendBar(bar: Bar, via?: 'worker' | 'venue'): BarAppendResult {
   const limit = chartWindowLimit();
   if (n === 0) {
     setStore('bars', [bar]);
+    setBarPlaneAppend(bar, 0);
   } else if (n >= limit) {
     // The chart window is at its cap: the head slides, the new bar is the tail.
     // The paint layer must mirror this with a full setData (see `slid`).
@@ -3715,6 +3721,7 @@ export function appendBar(bar: Bar, via?: 'worker' | 'venue'): BarAppendResult {
     next.push(bar);
     frameTipIndex = null;
     setStore('bars', next);
+    setBarPlaneFull(next, { bumpGen: true });
     // Do NOT bump chartDataGen on a live slide: ChartHost's chartDataGen
     // effect responds with fit:true → fitContent(), which resets zoom/position
     // on every new candle. appendLiveBar already paints the slide with
@@ -3726,9 +3733,18 @@ export function appendBar(bar: Bar, via?: 'worker' | 'venue'): BarAppendResult {
     const slotId = getActiveSlotId() || store.chartLayout?.activeId;
     if (slotId) setSlotBars(slotId, next, false);
   } else {
-    // Append by index — Solid extends the array without copying prior bars
+    // Append by index — Solid extends the array without copying prior bars.
+    // Use the targeted plane append so we do not copy the whole 4.5k window
+    // on every live tick. If the plane has drifted (e.g. tests that set
+    // store.bars directly without loadBars), fall back to a full replace.
     setStore('bars', n, bar);
+    if (n === barPlane.length) {
+      setBarPlaneAppend(bar, n);
+    } else {
+      setBarPlaneFull(unwrap(store.bars) as Bar[], { bumpGen: false });
+    }
   }
+  perfMark('axis:appendBar:store');
   if (store.live.lastBarTime !== bar.time) {
     setStore('live', 'lastBarTime', bar.time);
   }
@@ -3834,6 +3850,7 @@ function flushLiveFrame(): void {
   frameTick = null;
   if (tip != null && tip >= 0 && tip < store.bars.length && store.bars[tip]) {
     setStore('bars', tip, { ...(unwrap(store.bars[tip]) as Bar) });
+    setBarPlaneTip(unwrap(store.bars[tip]) as Bar);
   }
   if (tick) {
     setStore('telemetry', 'lastTick', tick);

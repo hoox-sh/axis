@@ -68,6 +68,7 @@ import {
 import { reportUiError } from '../ui/boot-errors';
 import { chartDebug } from '../debug';
 import { resolvedPrefsForTool } from './drawings/tool-settings';
+import { perfMeasureSync } from '../perf/telemetry';
 import { getThemeManager } from '../theme';
 import { drawingsForSymbol, mergeLayerDrawingsForSymbol } from './drawings/sync';
 
@@ -650,309 +651,315 @@ function writeLogicalRange(
 }
 
 export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
-  const active = getManager();
-  const mgr = opts.manager ?? active;
-  if (!mgr) return;
-  const sidecar = opts.manager != null && mgr !== active;
-  try {
-    const fit = opts.fit !== false;
-    // G2: a non-fit full-window replace during pan/zoom spikes panFrame past
-    // 50 ms. Live slides already defer via isRanging(); this is defense in depth
-    // for any other fit:false caller (prefetch, etc.).
-    if (
-      !fit &&
-      typeof (mgr as { isRanging?: () => boolean }).isRanging === 'function' &&
-      (mgr as { isRanging: () => boolean }).isRanging()
-    ) {
-      return;
-    }
-    const clearMarkers = opts.clearMarkers !== false;
-    // Clearing script state is opt-out when fitting (default clear on full loads)
-    const clearScriptState = opts.clearScriptState !== undefined ? !!opts.clearScriptState : fit;
-    const pricePane = mgr.getPane('price');
-    const volPane = mgr.getPane('volume');
-    // A slide or prefetch replace must not jump the viewport. `fit` loads
-    // still call afterDataReload below.
-    const keepRange = !fit && pricePane?.chart ? readLogicalRange(pricePane.chart) : null;
-    const chartType = normalizeChartType(store.chartType);
-
-    if (clearMarkers) {
-      try {
-        mgr.clearTradeMarkers();
-        mgr.clearShapeMarkers?.();
-        mgr.clearDebugPinMarkers?.();
-      } catch (err: unknown) {
-        reportUiError(err, {
-          source: 'chart',
-          context: 'Clear markers failed',
-          status: false,
-        });
-      }
-    }
-
-    // Full history replace (symbol / interval): wipe script visuals before paint
-    if (clearScriptState) {
-      const layer = sidecar
-        ? opts.slotId
-          ? getSlotDrawingLayer(opts.slotId)
-          : undefined
-        : getDrawingLayer();
-      clearChartScriptState(mgr, layer);
-      if (!sidecar) {
-        // Drop selection that may point at a drawing not on the new symbol
-        setSelectedDrawingId(null);
-        try {
-          getDrawingLayer()?.setSelectedId?.(null);
-        } catch {
-          /* optional */
-        }
-      }
-    }
-
-    ensurePriceSeries(chartType, { manager: mgr, slotId: opts.slotId, sidecar });
-
-    const n = bars.length;
-    const paintSig = ohlcvPaintSig(bars, chartType);
-    const sigKey = priceThemeKey(opts.slotId);
-    const skipSeries =
-      paintSig === lastOhlcvPaintSig.get(sigKey) && !clearScriptState && clearMarkers === false;
-
-    chartDebug('setData', {
-      n,
-      fit,
-      clearMarkers,
-      clearScriptState,
-      skip: skipSeries,
-      type: chartType,
-      first: n ? bars[0]?.time : null,
-      last: n ? bars[n - 1]?.time : null,
-    });
-
-    // Tune LWC conflation for this history size before the heavy setData paint.
-    // Apply to every pane — indicator charts used to keep default 0.5px min
-    // spacing and never precomputed, so 45k overlay series stayed janky.
-    const tsHeavy = heavyTimeScaleOptions(n);
-    const veryHeavy = isVeryHeavyBarLoad(n);
+  return perfMeasureSync('axis:setDataToChart', () => {
+    const active = getManager();
+    const mgr = opts.manager ?? active;
+    if (!mgr) return;
+    const sidecar = opts.manager != null && mgr !== active;
     try {
-      const allPanes =
-        typeof mgr.getAllPanes === 'function' ? mgr.getAllPanes() : [pricePane, volPane];
-      for (const pane of allPanes) {
-        if (!pane?.chart) continue;
-        const isPrice = pane === pricePane || pane.id === 'price';
-        pane.chart.timeScale().applyOptions({
-          enableConflation: tsHeavy.enableConflation,
-          conflationThresholdFactor: tsHeavy.conflationThresholdFactor,
-          minBarSpacing: tsHeavy.minBarSpacing,
-          precomputeConflationOnInit:
-            isPrice || veryHeavy ? tsHeavy.precomputeConflationOnInit : false,
-          precomputeConflationPriority: tsHeavy.precomputeConflationPriority,
-        } as never);
+      const fit = opts.fit !== false;
+      // G2: a non-fit full-window replace during pan/zoom spikes panFrame past
+      // 50 ms. Live slides already defer via isRanging(); this is defense in depth
+      // for any other fit:false caller (prefetch, etc.).
+      if (
+        !fit &&
+        typeof (mgr as { isRanging?: () => boolean }).isRanging === 'function' &&
+        (mgr as { isRanging: () => boolean }).isRanging()
+      ) {
+        return;
       }
-    } catch {
-      /* conflation options optional on older mocks */
-    }
+      const clearMarkers = opts.clearMarkers !== false;
+      // Clearing script state is opt-out when fitting (default clear on full loads)
+      const clearScriptState = opts.clearScriptState !== undefined ? !!opts.clearScriptState : fit;
+      const pricePane = mgr.getPane('price');
+      const volPane = mgr.getPane('volume');
+      // A slide or prefetch replace must not jump the viewport. `fit` loads
+      // still call afterDataReload below.
+      const keepRange = !fit && pricePane?.chart ? readLogicalRange(pricePane.chart) : null;
+      const chartType = normalizeChartType(store.chartType);
 
-    if (skipSeries) {
-      if (fit) {
-        const runFit = () => {
-          try {
-            if (typeof mgr.afterDataReload === 'function') mgr.afterDataReload();
-            else pricePane?.chart.timeScale().fitContent();
-          } catch {
-            /* fit optional */
-          }
-        };
-        if (isHeavyBarLoad(n) && typeof requestAnimationFrame === 'function') {
-          requestAnimationFrame(runFit);
-        } else {
-          runFit();
-        }
-      }
-      return;
-    }
-    lastOhlcvPaintSig.set(sigKey, paintSig);
-
-    const holder = typeof mgr.getHaHolder === 'function' ? mgr.getHaHolder() : undefined;
-    // Candle series: full setData via PaneManager (HA reset, sanitize, decimals, fit).
-    // Fall back to inline painting for test doubles / managers without setCandleData.
-    if (typeof mgr.setCandleData === 'function') {
-      mgr.setCandleData(bars, chartType, { fit, clearMarkers, keepRange, holder });
-    } else if (pricePane?.series['candle']) {
-      // Full replace invalidates incremental HA live state (re-seeded by mapper
-      // into this chart's holder, not the legacy global).
-      if (chartType !== 'heikinashi') {
-        resetHeikinAshiCache();
-        resetHaCacheHolder(holder);
-      }
-      const data = mapBarsToPriceData(bars, chartType, holder);
-      // Legacy global stays in sync for non-holder callers (tests / older doubles).
-      if (chartType !== 'heikinashi') resetHeikinAshiCache();
-      // Drop rows LWC cannot render (non-finite OHLC, bad time, duplicate times).
-      // No clamping, no donor fill — bad rows are simply removed.
-      const cleanData = filterValidCandleRows(
-        data as Array<{
-          time?: number;
-          open?: number;
-          high?: number;
-          low?: number;
-          close?: number;
-        }>,
-      );
-      try {
-        const nextCandleTimes = new Set<number>();
-        for (const row of cleanData as Array<{ time?: unknown }>) {
-          const t = Number(row?.time);
-          if (Number.isFinite(t)) nextCandleTimes.add(t);
-        }
-        const prepare = (
-          mgr as unknown as {
-            prepareCoPaintedForCandleTimes?: (times: ReadonlySet<number>) => void;
-          }
-        ).prepareCoPaintedForCandleTimes;
-        if (typeof prepare === 'function') prepare.call(mgr, nextCandleTimes);
-        pricePane.series['candle'].setData(cleanData as never);
-        writeLogicalRange(pricePane.chart, keepRange);
-        const times = data as Array<{ time?: unknown }>;
-        const firstT = times.length ? times[0]?.time : undefined;
-        const lastT = times.length ? times[times.length - 1]?.time : undefined;
-        if (typeof firstT === 'number' && typeof lastT === 'number') {
-          const candleTimes: number[] = [];
-          for (const row of times) {
-            const t = Number(row?.time);
-            if (Number.isFinite(t)) candleTimes.push(t);
-          }
-          const perChart = (
-            mgr as unknown as {
-              notePaintedCandleRange?: (
-                first: number,
-                last: number,
-                times?: readonly number[],
-              ) => void;
-            }
-          ).notePaintedCandleRange;
-          if (typeof perChart === 'function') {
-            perChart.call(mgr, firstT, lastT, candleTimes);
-          } else {
-            notePaintedCandleRange(firstT, lastT);
-          }
-        }
-      } catch (err: unknown) {
-        const inner = err instanceof Error ? err.message : String(err);
-        let seriesType = '?';
+      if (clearMarkers) {
         try {
-          seriesType = String(pricePane.series['candle']?.seriesType?.() || '?');
+          mgr.clearTradeMarkers();
+          mgr.clearShapeMarkers?.();
+          mgr.clearDebugPinMarkers?.();
+        } catch (err: unknown) {
+          reportUiError(err, {
+            source: 'chart',
+            context: 'Clear markers failed',
+            status: false,
+          });
+        }
+      }
+
+      // Full history replace (symbol / interval): wipe script visuals before paint
+      if (clearScriptState) {
+        const layer = sidecar
+          ? opts.slotId
+            ? getSlotDrawingLayer(opts.slotId)
+            : undefined
+          : getDrawingLayer();
+        clearChartScriptState(mgr, layer);
+        if (!sidecar) {
+          // Drop selection that may point at a drawing not on the new symbol
+          setSelectedDrawingId(null);
+          try {
+            getDrawingLayer()?.setSelectedId?.(null);
+          } catch {
+            /* optional */
+          }
+        }
+      }
+
+      ensurePriceSeries(chartType, { manager: mgr, slotId: opts.slotId, sidecar });
+
+      const n = bars.length;
+      const paintSig = ohlcvPaintSig(bars, chartType);
+      const sigKey = priceThemeKey(opts.slotId);
+      const skipSeries =
+        paintSig === lastOhlcvPaintSig.get(sigKey) && !clearScriptState && clearMarkers === false;
+
+      chartDebug('setData', {
+        n,
+        fit,
+        clearMarkers,
+        clearScriptState,
+        skip: skipSeries,
+        type: chartType,
+        first: n ? bars[0]?.time : null,
+        last: n ? bars[n - 1]?.time : null,
+      });
+
+      // Tune LWC conflation for this history size before the heavy setData paint.
+      // Apply to every pane — indicator charts used to keep default 0.5px min
+      // spacing and never precomputed, so 45k overlay series stayed janky.
+      const tsHeavy = heavyTimeScaleOptions(n);
+      const veryHeavy = isVeryHeavyBarLoad(n);
+      try {
+        const allPanes =
+          typeof mgr.getAllPanes === 'function' ? mgr.getAllPanes() : [pricePane, volPane];
+        for (const pane of allPanes) {
+          if (!pane?.chart) continue;
+          const isPrice = pane === pricePane || pane.id === 'price';
+          pane.chart.timeScale().applyOptions({
+            enableConflation: tsHeavy.enableConflation,
+            conflationThresholdFactor: tsHeavy.conflationThresholdFactor,
+            minBarSpacing: tsHeavy.minBarSpacing,
+            precomputeConflationOnInit:
+              isPrice || veryHeavy ? tsHeavy.precomputeConflationOnInit : false,
+            precomputeConflationPriority: tsHeavy.precomputeConflationPriority,
+          } as never);
+        }
+      } catch {
+        /* conflation options optional on older mocks */
+      }
+
+      if (skipSeries) {
+        if (fit) {
+          const runFit = () => {
+            try {
+              if (typeof mgr.afterDataReload === 'function') mgr.afterDataReload();
+              else pricePane?.chart.timeScale().fitContent();
+            } catch {
+              /* fit optional */
+            }
+          };
+          if (isHeavyBarLoad(n) && typeof requestAnimationFrame === 'function') {
+            requestAnimationFrame(runFit);
+          } else {
+            runFit();
+          }
+        }
+        return;
+      }
+      lastOhlcvPaintSig.set(sigKey, paintSig);
+
+      const holder = typeof mgr.getHaHolder === 'function' ? mgr.getHaHolder() : undefined;
+      // Candle series: full setData via PaneManager (HA reset, sanitize, decimals, fit).
+      // Fall back to inline painting for test doubles / managers without setCandleData.
+      if (typeof mgr.setCandleData === 'function') {
+        mgr.setCandleData(bars, chartType, { fit, clearMarkers, keepRange, holder });
+      } else if (pricePane?.series['candle']) {
+        // Full replace invalidates incremental HA live state (re-seeded by mapper
+        // into this chart's holder, not the legacy global).
+        if (chartType !== 'heikinashi') {
+          resetHeikinAshiCache();
+          resetHaCacheHolder(holder);
+        }
+        const data = mapBarsToPriceData(bars, chartType, holder);
+        // Legacy global stays in sync for non-holder callers (tests / older doubles).
+        if (chartType !== 'heikinashi') resetHeikinAshiCache();
+        // Drop rows LWC cannot render (non-finite OHLC, bad time, duplicate times).
+        // No clamping, no donor fill — bad rows are simply removed.
+        const cleanData = filterValidCandleRows(
+          data as Array<{
+            time?: number;
+            open?: number;
+            high?: number;
+            low?: number;
+            close?: number;
+          }>,
+        );
+        try {
+          const nextCandleTimes = new Set<number>();
+          for (const row of cleanData as Array<{ time?: unknown }>) {
+            const t = Number(row?.time);
+            if (Number.isFinite(t)) nextCandleTimes.add(t);
+          }
+          const prepare = (
+            mgr as unknown as {
+              prepareCoPaintedForCandleTimes?: (times: ReadonlySet<number>) => void;
+            }
+          ).prepareCoPaintedForCandleTimes;
+          if (typeof prepare === 'function') prepare.call(mgr, nextCandleTimes);
+          pricePane.series['candle'].setData(cleanData as never);
+          writeLogicalRange(pricePane.chart, keepRange);
+          const times = data as Array<{ time?: unknown }>;
+          const firstT = times.length ? times[0]?.time : undefined;
+          const lastT = times.length ? times[times.length - 1]?.time : undefined;
+          if (typeof firstT === 'number' && typeof lastT === 'number') {
+            const candleTimes: number[] = [];
+            for (const row of times) {
+              const t = Number(row?.time);
+              if (Number.isFinite(t)) candleTimes.push(t);
+            }
+            const perChart = (
+              mgr as unknown as {
+                notePaintedCandleRange?: (
+                  first: number,
+                  last: number,
+                  times?: readonly number[],
+                ) => void;
+              }
+            ).notePaintedCandleRange;
+            if (typeof perChart === 'function') {
+              perChart.call(mgr, firstT, lastT, candleTimes);
+            } else {
+              notePaintedCandleRange(firstT, lastT);
+            }
+          }
+        } catch (err: unknown) {
+          const inner = err instanceof Error ? err.message : String(err);
+          let seriesType = '?';
+          try {
+            seriesType = String(pricePane.series['candle']?.seriesType?.() || '?');
+          } catch {
+            /* ignore */
+          }
+          const firstT = (bars[0] as { time?: unknown } | undefined)?.time;
+          const lastT = (bars[bars.length - 1] as { time?: unknown } | undefined)?.time;
+          throw new Error(
+            `candle setData failed: ${inner} (rows=${data.length}, dataLen=${bars.length}, ` +
+              `chartType=${chartType}, seriesType=${seriesType}, range=${String(firstT)}..${String(lastT)})`,
+            { cause: err },
+          );
+        }
+        // Re-detect decimals after history lands (auto uses symbol + bars)
+        try {
+          applyPriceScaleDecimals({ bars, symbol: store.symbol });
         } catch {
           /* ignore */
         }
-        const firstT = (bars[0] as { time?: unknown } | undefined)?.time;
-        const lastT = (bars[bars.length - 1] as { time?: unknown } | undefined)?.time;
-        throw new Error(
-          `candle setData failed: ${inner} (rows=${data.length}, dataLen=${bars.length}, ` +
-            `chartType=${chartType}, seriesType=${seriesType}, range=${String(firstT)}..${String(lastT)})`,
-          { cause: err },
-        );
-      }
-      // Re-detect decimals after history lands (auto uses symbol + bars)
-      try {
-        applyPriceScaleDecimals({ bars, symbol: store.symbol });
-      } catch {
-        /* ignore */
-      }
-      // Baseline: base at first bar close so early range splits meaningfully
-      if (chartType === 'baseline' && bars.length) {
-        try {
-          pricePane.series['candle'].applyOptions({
-            baseValue: { type: 'price', price: bars[0]!.close },
-          });
-        } catch {
-          /* baseline option optional */
-        }
-      }
-      // Price-line tint: reuse painted HA datum (O(1)) instead of a second
-      // full-history HA transform on 10k+ bars.
-      let dir: 'up' | 'down' | null = null;
-      if (chartType === 'heikinashi') {
-        const lastPt = data.length ? data[data.length - 1] : null;
-        if (lastPt && 'close' in lastPt) {
-          dir = lastPt.close >= (lastPt as { open: number }).open ? 'up' : 'down';
-        }
-      } else {
-        dir = lastBarDirection(bars, chartType);
-      }
-      if (dir) {
-        try {
-          const voidLike = getThemeManager().getVoidLike();
-          pricePane.series['candle'].applyOptions({
-            priceLineColor: dir === 'up' ? voidLike.up : voidLike.down,
-          });
-        } catch {
-          /* price line tint optional */
-        }
-      }
-      if (fit) {
-        // Defer fit/layout work one frame so LWC can commit setData first
-        const runFit = () => {
+        // Baseline: base at first bar close so early range splits meaningfully
+        if (chartType === 'baseline' && bars.length) {
           try {
-            if (typeof mgr.afterDataReload === 'function') {
-              mgr.afterDataReload();
-            } else {
-              pricePane.chart.timeScale().fitContent();
-            }
+            pricePane.series['candle'].applyOptions({
+              baseValue: { type: 'price', price: bars[0]!.close },
+            });
           } catch {
-            /* fit optional */
+            /* baseline option optional */
           }
-        };
-        if (isHeavyBarLoad(bars.length) && typeof requestAnimationFrame === 'function') {
-          requestAnimationFrame(runFit);
+        }
+        // Price-line tint: reuse painted HA datum (O(1)) instead of a second
+        // full-history HA transform on 10k+ bars.
+        let dir: 'up' | 'down' | null = null;
+        if (chartType === 'heikinashi') {
+          const lastPt = data.length ? data[data.length - 1] : null;
+          if (lastPt && 'close' in lastPt) {
+            dir = lastPt.close >= (lastPt as { open: number }).open ? 'up' : 'down';
+          }
         } else {
-          runFit();
+          dir = lastBarDirection(bars, chartType);
+        }
+        if (dir) {
+          try {
+            const voidLike = getThemeManager().getVoidLike();
+            pricePane.series['candle'].applyOptions({
+              priceLineColor: dir === 'up' ? voidLike.up : voidLike.down,
+            });
+          } catch {
+            /* price line tint optional */
+          }
+        }
+        if (fit) {
+          // Defer fit/layout work one frame so LWC can commit setData first
+          const runFit = () => {
+            try {
+              if (typeof mgr.afterDataReload === 'function') {
+                mgr.afterDataReload();
+              } else {
+                pricePane.chart.timeScale().fitContent();
+              }
+            } catch {
+              /* fit optional */
+            }
+          };
+          if (isHeavyBarLoad(bars.length) && typeof requestAnimationFrame === 'function') {
+            requestAnimationFrame(runFit);
+          } else {
+            runFit();
+          }
         }
       }
-    }
-    // Volume series: full setData via PaneManager
-    if (volPane?.series['volume'] && typeof mgr.setVolumeData === 'function') {
-      mgr.setVolumeData(bars, getThemeManager().getVolumeColors());
-    } else if (volPane && !volPane.series['volume']) {
-      volPane.series['volume'] = createVolumeSeries(volPane.chart);
-    }
+      // Volume series: full setData via PaneManager. When the candle series
+      // paint was skipped because the bar window is identical, the volume
+      // window is identical too — avoid a second O(n) setData.
+      if (!skipSeries) {
+        if (volPane?.series['volume'] && typeof mgr.setVolumeData === 'function') {
+          mgr.setVolumeData(bars, getThemeManager().getVolumeColors());
+        } else if (volPane && !volPane.series['volume']) {
+          volPane.series['volume'] = createVolumeSeries(volPane.chart);
+        }
+      }
 
-    // Volume/indicator setData can reset local logical range — re-lock to price
-    if (typeof mgr.alignTimeRangesFromPrice === 'function') {
+      // Volume/indicator setData can reset local logical range — re-lock to price
+      if (typeof mgr.alignTimeRangesFromPrice === 'function') {
+        try {
+          mgr.alignTimeRangesFromPrice();
+        } catch {
+          /* align optional */
+        }
+      }
+
+      // Re-assert series name / last-value labels after series create/paint
       try {
-        mgr.alignTimeRangesFromPrice();
+        mgr.applyLastValueLabelsToAllSeries?.();
       } catch {
-        /* align optional */
+        /* optional */
       }
-    }
 
-    // Re-assert series name / last-value labels after series create/paint
-    try {
-      mgr.applyLastValueLabelsToAllSeries?.();
-    } catch {
-      /* optional */
-    }
-
-    // Ensure overlay exists after candle series is ready; re-sync **per-symbol**
-    // user drawings (drawings only on the active multi-chart slot)
-    if (!sidecar) {
-      ensureDrawingLayer();
-      try {
-        getDrawingLayer()?.setDrawings(visibleDrawingsForActiveSymbol());
-      } catch (err: unknown) {
-        reportUiError(err, {
-          source: 'chart',
-          context: 'Drawing layer sync failed',
-          status: false,
-        });
+      // Ensure overlay exists after candle series is ready; re-sync **per-symbol**
+      // user drawings (drawings only on the active multi-chart slot)
+      if (!sidecar) {
+        ensureDrawingLayer();
+        try {
+          getDrawingLayer()?.setDrawings(visibleDrawingsForActiveSymbol());
+        } catch (err: unknown) {
+          reportUiError(err, {
+            source: 'chart',
+            context: 'Drawing layer sync failed',
+            status: false,
+          });
+        }
       }
+    } catch (err: unknown) {
+      reportUiError(err, {
+        source: 'chart',
+        context: 'Chart series update failed',
+        status: true,
+      });
     }
-  } catch (err: unknown) {
-    reportUiError(err, {
-      source: 'chart',
-      context: 'Chart series update failed',
-      status: true,
-    });
-  }
+  });
 }
 
 /**

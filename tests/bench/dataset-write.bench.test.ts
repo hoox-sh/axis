@@ -25,7 +25,7 @@ import {
 } from '../../src/data/merge-datasets';
 import { repairBars } from '../../src/data/dataset-validate';
 import { BENCH_HISTORY_BARS, makeScaleBars } from './fixtures-scale';
-import { formatSample, measureOps } from './metrics';
+import { formatSample, formatSampleJson, measureOps } from './metrics';
 
 const RUN = process.env.AXIS_BENCH === '1';
 
@@ -62,6 +62,8 @@ describe.skipIf(!RUN)('dataset write path (AXIS_BENCH=1)', () => {
     expect(sample.ms).toBeLessThan(MERGE_SOFT_BUDGET_MS);
     // eslint-disable-next-line no-console
     console.log(formatSample(sample));
+    // eslint-disable-next-line no-console
+    console.log(formatSampleJson(sample));
   });
 });
 

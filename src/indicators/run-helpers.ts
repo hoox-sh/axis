@@ -394,6 +394,30 @@ export function isRunEpochCurrent(epoch: number): boolean {
   return epoch === runEpoch;
 }
 
+/**
+ * Whether a stale global epoch should abort this apply.
+ *
+ * Chart indicators (applied card, catalog add, live ticks) always paint —
+ * a later live delta or a sibling add must not show "Run superseded" or
+ * skip overlays. Only overlapping **editor** Runs (no `indicatorId`, no
+ * `skipEditorDraft`) still cancel the previous click.
+ */
+export function runEpochInvalidates(
+  epoch: number | undefined | null,
+  opts?: {
+    silent?: boolean;
+    liveTick?: boolean;
+    skipEditorDraft?: boolean;
+    isolate?: boolean;
+  },
+  indicatorId?: string | null,
+): boolean {
+  if (epoch == null || isRunEpochCurrent(epoch)) return false;
+  if (opts?.isolate) return false;
+  if (indicatorId || opts?.skipEditorDraft || opts?.liveTick) return false;
+  return true;
+}
+
 /** Epoch that currently owns interactive Run status, if any. */
 export function getRunStatusEpoch(): number | null {
   return runStatusEpoch;

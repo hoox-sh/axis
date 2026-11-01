@@ -5,7 +5,8 @@
 /**
  * Lightweight focus trap for AXIS modal dialogs (div[role=dialog][aria-modal]).
  *
- * - Restores focus to the previously focused element on dispose
+ * - Restores focus to `returnElement` (or the previously focused element) on dispose
+ * - Hides sibling subtrees with aria-hidden while the trap is active
  * - Tabs cycle within the container
  * - Does not own Escape (callers still handle close)
  *
@@ -28,6 +29,89 @@ function isHtmlEl(x: unknown): x is HTMLElement {
     typeof (x as HTMLElement).addEventListener === 'function' &&
     typeof (x as HTMLElement).focus === 'function'
   );
+}
+
+function isFocusTarget(x: unknown): x is HTMLElement {
+  return !!x && typeof x === 'object' && typeof (x as HTMLElement).focus === 'function';
+}
+
+function isHideableSibling(x: unknown): x is HTMLElement {
+  if (!x || typeof x !== 'object') return false;
+  if (typeof HTMLElement !== 'undefined') {
+    try {
+      if (x instanceof HTMLElement) return true;
+    } catch {
+      /* incomplete test DOM */
+    }
+  }
+  const el = x as HTMLElement;
+  return (
+    typeof el.setAttribute === 'function' &&
+    typeof el.getAttribute === 'function' &&
+    typeof el.removeAttribute === 'function'
+  );
+}
+
+function inDocument(el: HTMLElement): boolean {
+  try {
+    if (typeof document === 'undefined' || typeof document.contains !== 'function') return true;
+    return document.contains(el);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Hide siblings of `dialogRoot`'s ancestor chain up to `document.body` so
+ * background content is inert to AT while the trap is active.
+ *
+ * No-ops when `document.body` is missing (minimal test stubs). Leaves
+ * already-hidden siblings alone so dispose does not unhide them.
+ */
+function hideAriaSiblings(dialogRoot: HTMLElement): () => void {
+  const hidden: Array<{ el: HTMLElement; prev: string | null }> = [];
+  let cancelled = false;
+
+  const apply = () => {
+    if (cancelled) return;
+    if (typeof document === 'undefined' || !document.body) return;
+    if (hidden.length > 0) return;
+    let node: HTMLElement | null = dialogRoot;
+    try {
+      while (node && node !== document.body && node !== document.documentElement) {
+        const parent = node.parentElement;
+        if (!parent || parent.children == null) break;
+        for (const sibling of Array.from(parent.children)) {
+          if (sibling === node) continue;
+          if (!isHideableSibling(sibling)) continue;
+          const prev = sibling.getAttribute('aria-hidden');
+          if (prev === 'true') continue;
+          sibling.setAttribute('aria-hidden', 'true');
+          hidden.push({ el: sibling, prev });
+        }
+        node = parent as HTMLElement;
+      }
+    } catch {
+      /* incomplete test DOM */
+    }
+  };
+
+  // Solid refs fire before the node is inserted. Walk now (tests already
+  // parent the double) and retry on a microtask once the dialog is in-tree.
+  apply();
+  if (hidden.length === 0) queueMicrotask(apply);
+
+  return () => {
+    cancelled = true;
+    for (const { el, prev } of hidden) {
+      try {
+        if (prev == null) el.removeAttribute('aria-hidden');
+        else el.setAttribute('aria-hidden', prev);
+      } catch {
+        /* ignore */
+      }
+    }
+  };
 }
 
 /** Visible focusable elements inside `root` (order = document order). */
@@ -54,17 +138,23 @@ export function listFocusable(root: HTMLElement): HTMLElement[] {
 
 /**
  * Install a Tab trap on `root`. Focuses `root` (or first focusable) when
- * `autoFocus` is true. Returns dispose that restores prior active element.
+ * `autoFocus` is true. Returns dispose that restores `returnElement` or the
+ * previously focused element.
  */
 export function installFocusTrap(
   root: HTMLElement,
-  opts?: { autoFocus?: boolean },
+  opts?: {
+    autoFocus?: boolean;
+    /** Restore focus here on dispose. Defaults to the previously focused element. */
+    returnElement?: HTMLElement | null;
+  },
 ): () => void {
   if (!isHtmlEl(root) || typeof root.addEventListener !== 'function') {
     return () => {};
   }
   const active = typeof document !== 'undefined' ? document.activeElement : null;
-  const prev = isHtmlEl(active) ? active : null;
+  const prev = isFocusTarget(active) ? active : null;
+  const restoreAria = hideAriaSiblings(root);
 
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.key !== 'Tab') return;
@@ -103,6 +193,8 @@ export function installFocusTrap(
   const onFocusIn = (e: FocusEvent) => {
     const t = e.target as Node | null;
     if (t && root.contains(t)) return;
+    // Focus that landed outside `root` (including aria-hidden background) is
+    // pulled back; listFocusable already skips aria-hidden descendants.
     const list = listFocusable(root);
     const target = list[0] || root;
     try {
@@ -136,12 +228,21 @@ export function installFocusTrap(
   return () => {
     root.removeEventListener('keydown', onKeyDown);
     if (canUseDocumentFocus) document.removeEventListener('focusin', onFocusIn);
-    if (prev && typeof prev.focus === 'function') {
+    try {
+      restoreAria();
+    } catch {
+      /* ignore */
+    }
+    const preferred = opts?.returnElement;
+    const target =
+      isFocusTarget(preferred) && inDocument(preferred)
+        ? preferred
+        : isFocusTarget(prev) && inDocument(prev)
+          ? prev
+          : null;
+    if (target) {
       try {
-        // Only restore if still in document
-        if (typeof document?.contains !== 'function' || document.contains(prev)) {
-          prev.focus();
-        }
+        target.focus();
       } catch {
         /* ignore */
       }

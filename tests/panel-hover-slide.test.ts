@@ -6,12 +6,15 @@
  */
 
 import { describe, expect, it, beforeEach } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   HOVER_SLIDE_PEEK_SIDE,
   HOVER_SLIDE_PEEK_BOTTOM,
   HOVER_SLIDE_LEAVE_MS,
   clearPanelHoverSlideExpanded,
   hoverSlideLayoutSize,
+  hoverSlideTransition,
   isPanelHoverSlideExpanded,
   setPanelHoverSlideExpanded,
 } from '../src/ui/panels/hover-slide.ts';
@@ -163,5 +166,38 @@ describe('setPanelHoverSlide / layout', () => {
     expect(panelDockLayoutHeight('scriptlogs')).toBe(HOVER_SLIDE_PEEK_BOTTOM);
     setPanelHoverSlideExpanded('scriptlogs', true);
     expect(panelDockLayoutHeight('scriptlogs')).toBe(220);
+  });
+});
+
+describe('hoverSlideTransition', () => {
+  const durationCss = 'var(--axis-fx-panel-open-duration, 120ms)';
+  const layoutTransition = `width ${durationCss} linear, height ${durationCss} linear, flex-basis ${durationCss} linear, min-width ${durationCss} linear`;
+
+  it('returns undefined when hover-slide is off', () => {
+    expect(hoverSlideTransition({ hoverSlide: false, reducedMotion: false }, durationCss)).toBeUndefined();
+    expect(hoverSlideTransition({ hoverSlide: false, reducedMotion: true }, durationCss)).toBeUndefined();
+  });
+
+  it('returns undefined when reduced motion is on', () => {
+    expect(hoverSlideTransition({ hoverSlide: true, reducedMotion: true }, durationCss)).toBeUndefined();
+  });
+
+  it('applies layout transition when hover-slide is on and motion is allowed', () => {
+    expect(hoverSlideTransition({ hoverSlide: true, reducedMotion: false }, durationCss)).toBe(
+      layoutTransition,
+    );
+  });
+});
+
+describe('FloatableShell reduced-motion hover-slide gate', () => {
+  it('calls prefersReducedMotion and only applies layout transition when motion is allowed', () => {
+    const src = readFileSync(resolve(__dirname, '../src/ui/panels/FloatableShell.tsx'), 'utf8');
+    expect(src).toMatch(/from ['"]\.\.\/effects['"]/);
+    expect(src).toContain('prefersReducedMotion');
+    expect(src).toContain('hoverSlideTransition');
+    expect(src).toMatch(/reducedMotion:\s*prefersReducedMotion\(\)/);
+    expect(src).not.toMatch(
+      /slide\s*\?\s*`width \$\{slideMs\} linear, height \$\{slideMs\} linear/,
+    );
   });
 });

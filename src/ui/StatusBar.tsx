@@ -31,14 +31,7 @@
  * @module ui/StatusBar
  */
 
-import {
-  type Component,
-  Show,
-  createMemo,
-  createSignal,
-  onCleanup,
-  untrack,
-} from 'solid-js';
+import { type Component, Show, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
 import {
   store,
   isPanelOpen,
@@ -51,6 +44,7 @@ import {
 import { Icons } from './icons';
 import type { RunResult } from '../indicators/runner';
 import { buildStrategyReport, formatMoney } from '../results/strategy';
+import { barPlane } from '../stores/bars';
 import { ConnectionHud } from './ConnectionHud';
 import { HooxLoader } from './HooxLoader';
 import { CachedDatasetsModal } from './CachedDatasetsModal';
@@ -112,7 +106,7 @@ export const StatusBar: Component = () => {
   let inputEl: HTMLInputElement | undefined;
 
   const beginEdit = () => {
-    setDraft(String(store.bars.length));
+    setDraft(String(barPlane.length));
     setEditingChart(true);
     queueMicrotask(() => inputEl?.select());
   };
@@ -151,11 +145,7 @@ export const StatusBar: Component = () => {
 
   return (
     <Show when={isPanelOpen('statusbar')}>
-      <div
-        class="axis-statusbar flex-shrink-0"
-        data-testid="axis-statusbar"
-        role="status"
-      >
+      <div class="axis-statusbar flex-shrink-0" data-testid="axis-statusbar" role="status">
         <ConnectionHud />
 
         <span
@@ -166,9 +156,7 @@ export const StatusBar: Component = () => {
             <HooxLoader size="xs" class="flex-shrink-0" />
           )}
           {store.status === 'error' && <Icons.alert class="text-red flex-shrink-0" />}
-          {store.status === 'ready' && (
-            <Icons.activity class="text-accent-2 flex-shrink-0" />
-          )}
+          {store.status === 'ready' && <Icons.activity class="text-accent-2 flex-shrink-0" />}
           <span class="truncate">{store.statusMessage}</span>
         </span>
 
@@ -198,7 +186,7 @@ export const StatusBar: Component = () => {
                 data-testid="axis-statusbar-bars"
                 onClick={beginEdit}
               >
-                {store.bars.length} bars
+                {barPlane.length} bars
               </button>
             }
           >
@@ -227,7 +215,7 @@ export const StatusBar: Component = () => {
               onBlur={() => commitEdit()}
             />
           </Show>
-          <Show when={datasetBars() > 0 && datasetBars() !== store.bars.length}>
+          <Show when={datasetBars() > 0 && datasetBars() !== barPlane.length}>
             <button
               type="button"
               class="hover:text-accent tabular-nums"
@@ -238,12 +226,11 @@ export const StatusBar: Component = () => {
               · dataset {formatBarCount(datasetBars())}
             </button>
           </Show>
-          <span>· {store.scripts.length} scripts · {store.panes.length} panes</span>
+          <span>
+            · {store.scripts.length} scripts · {store.panes.length} panes
+          </span>
         </span>
-        <CachedDatasetsModal
-          open={cachedDatasetsOpen()}
-          onClose={() => closeCachedDatasets()}
-        />
+        <CachedDatasetsModal open={cachedDatasetsOpen()} onClose={() => closeCachedDatasets()} />
       </div>
     </Show>
   );

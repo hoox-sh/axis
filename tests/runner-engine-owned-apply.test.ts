@@ -191,10 +191,10 @@ describe('alignApplySeries staleNoAxis', () => {
     ...(extra ?? {}),
   });
 
-  it('tail-clamps a shorter live stream push onto the chart tip instead of skipping', () => {
-    // A 500-bar script snapshot on a 5000-bar rolling window must not be
-    // skipped (staleNoAxis) — that left indicators frozen on every live push.
-    // Head-pad with null so the newest values land on the newest bars.
+  it('extends a small live-stream shortfall instead of head-padding (no shift)', () => {
+    // Chart grew by 1–8 bars while the engine still had the previous window.
+    // Head-padding [null,null,1,2,3] would slide Donchian/SMA onto newer
+    // candles. Hold the last value forward instead.
     const result = {
       status: 'success',
       series: { plot0: [1, 2, 3] },
@@ -205,7 +205,32 @@ describe('alignApplySeries staleNoAxis', () => {
       livePush: true,
     });
     expect(aligned.staleNoAxis).toBe(false);
-    expect(aligned.seriesMap.plot0).toEqual([null, null, 1, 2, 3]);
+    expect(aligned.seriesMap.plot0).toEqual([1, 2, 3, 3, 3]);
+  });
+
+  it('head-pads a deep live-stream snapshot (gap larger than 8 bars)', () => {
+    // A 500-bar script snapshot on a 5000-bar rolling window: newest values
+    // belong on the newest bars, older chart bars stay `na`.
+    const deep = Array.from({ length: 20 }, (_, i) => ({
+      time: T(i),
+      open: 1,
+      high: 1,
+      low: 1,
+      close: 1,
+      volume: 1,
+    }));
+    const result = {
+      status: 'success',
+      series: { plot0: [1, 2, 3] },
+      meta: sessionMeta({ sessionVia: 'stream-delta' }),
+    } as unknown as RunResult;
+    const aligned = alignApplySeries('indicator("x", overlay=true)\nplot(close)', result, deep, {
+      silent: true,
+      livePush: true,
+    });
+    expect(aligned.staleNoAxis).toBe(false);
+    expect(aligned.seriesMap.plot0?.slice(0, 17)).toEqual(Array.from({ length: 17 }, () => null));
+    expect(aligned.seriesMap.plot0?.slice(17)).toEqual([1, 2, 3]);
   });
 
   it('tail-clamps a live stream push when the engine series is longer than the chart (no axis)', () => {

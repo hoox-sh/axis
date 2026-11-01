@@ -36,6 +36,7 @@ flowchart TB
   PR --> UNIT[Bun unit + worker tests]
   PR --> GATE[Coverage gate 95%]
   PR --> E2E[Playwright @smoke]
+  PR --> BENCH[AXIS_BENCH firehose 120s]
   PR --> WTC[Worker tsc]
   NIGHT[Nightly cron]
   NIGHT --> FULL[Playwright all]
@@ -53,6 +54,9 @@ bun run test:e2e:smoke
 bun run test:e2e:critical
 bun run test:e2e
 bun run test:all             # gate + security
+bun run test:bench           # AXIS_BENCH=1 firehose (120s wall budget)
+bun run perf:audit           # typecheck + hot-path unit + benches → reports/perf-audit.json
+bun run perf:audit:full      # also full unit + Playwright @smoke
 ```
 
 Worker:
@@ -77,6 +81,7 @@ make worker-typecheck
 | --- | --- |
 | Frontend tests / coverage | Bun install, coverage, artifact `axis-coverage-lcov` |
 | `axis-e2e` | Playwright `@smoke` on PR |
+| Firehose budget | `bun run test:bench` (`AXIS_BENCH=1`). Fails if 500k `appendBar` ticks on ~50k history exceed `FIREHOSE_SOFT_BUDGET_MS` (120 s) |
 | Worker typecheck | `worker` tsc |
 | Related | Python suite remains for pynescript core |
 
@@ -95,6 +100,7 @@ Schedule: `0 4 * * *` UTC + `workflow_dispatch`.
 | --- | --- |
 | `TESTING.md` | Authoritative testing guide |
 | `scripts/check-coverage.mjs` | Scoped line gate |
+| `scripts/perf-audit.mjs` | `bun run perf:audit` — typecheck, hot-path unit, AXIS_BENCH, JSON report |
 | `playwright.config.ts` | webServer build+preview `:4173` |
 | `e2e/` | Specs with `@smoke` / `@critical` tags |
 | `worker/tests/` | auth, keys, scripts, runtime, http, proxy-router, rate-limit |

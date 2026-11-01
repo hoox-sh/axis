@@ -29,6 +29,7 @@ import {
 import {
   FIREHOSE_SOFT_BUDGET_MS,
   formatSample,
+  formatSampleJson,
   measureOps,
 } from './metrics';
 
@@ -80,6 +81,8 @@ describe.skipIf(!RUN)('appendBar firehose (AXIS_BENCH=1)', () => {
 
     // eslint-disable-next-line no-console
     console.log(formatSample(sample));
+    // eslint-disable-next-line no-console
+    console.log(formatSampleJson(sample));
     // The window slides on every new bar, so the run copies the window once
     // per bar — the opt-in bench needs more than Bun's 5s default timeout.
   }, 180_000);

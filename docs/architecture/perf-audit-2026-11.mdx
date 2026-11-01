@@ -1,0 +1,305 @@
+# Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
+#
+# This file is part of axis.
+#
+# axis is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# axis is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with axis.  If not, see <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
+---
+title: "Performance & architecture audit — Q4 2026"
+description: "Prioritized gap analysis for turning AXIS into a production-grade, super-snappy, modern charting application."
+---
+
+# Performance & architecture audit — Q4 2026
+
+## 1. Baseline health
+
+The repo is already in a strong performance culture:
+
+- Type check passes (`bun run typecheck` clean).
+- Unit + worker test suite passes: **4708 pass / 10 skip / 0 fail**.
+- `lint` finishes with zero errors (warnings only).
+- A dedicated firehose bench exists under `AXIS_BENCH=1` (`tests/bench/`).
+- The v1 live chart path has explicit frame-budget guardrails (`e2e/v1-chart.spec.ts`, 50 ms `panFrame` ceiling).
+- `CHANGELOG.md` shows recent O(n) fixes (pre-eval call scanning, bar append path no longer re-sanitizes clean bars, windowed merges are linear).
+
+The objective now is to move from "already good" to "absolutely world-class": sub-16 ms feedback, 60 FPS during live streaming + pan/zoom, and a UI/UX that feels like a premium commercial product.
+
+## 2. Architecture strengths to preserve
+
+1. **Plugin boundary is respected.** `AXIS ≠ engine` is enforced through `src/plugins/*`, `src/engines/*`, `src/workers/*`. No Solid component imports PYNE directly.
+2. **Live/paint split is explicit.** `src/chart/live-append.ts` owns the only chart paint path from a live tick, with coalesced flushes and ranging-aware `setData` suppression.
+3. **Data Source Manager is backgrounded.** `src/data/data-source-manager.ts` does all network paging on detached async jobs; `PAGE_YIELD_MS` keeps a page from starving the event loop.
+4. **Per-slot runtime is separated from global state.** `src/chart/chart-registry.ts` keeps per-slot bars/gen in a dedicated store while managers/layers are imperative refs.
+5. **Lazy UI loading.** `src/app.tsx` splits heavy shells (`StudioHost`, `EditorPane`, `CommandPalette`, panels) with `lazy()`.
+
+## 3. Top bottlenecks & weaknesses
+
+### 3.1 Reactivity surface too coarse
+
+- **Evidence:** `src/store/index.ts` is 1,300+ lines and exports many mutation helpers. `loadBars` (`src/store/index.ts:3252`) uses `batch()` but still replaces `store.bars` with a fresh array, which notifies any component/effect that reads `store.bars`.
+- **Impact:** `App.tsx` updates `document.title` on every bar update (`bars` effect, `src/app.tsx:179`), and `ChartHost.tsx` has ~15 `createEffect`s that read global store paths. A live tick causes a chain of effect runs even when nothing visible changes.
+- **Severity:** High.
+
+### 3.2 ChartHost is an effect-dense component
+
+- **Evidence:** `src/chart/ChartHost.tsx` contains 11+ `createEffect`s with `untrack()` fences. Several effects read `store.chartDataGen`/`store.bars.length` per live append to guard overlays/drawings/pins. Each effect re-evaluates independently.
+- **Impact:** More effect scheduling means more microtasks, especially during streaming pan/zoom.
+- **Severity:** High.
+
+### 3.3 Overlay updates are unconditional
+
+- **Evidence:** Compare overlay effect (`src/chart/ChartHost.tsx:529`) calls `applyCompareOverlay()` whenever tracked compare state changes, even if the visible OHLC suffix is identical. On-chain overlay effect (`src/chart/ChartHost.tsx:573`) maps a full reactive array of points on every `chartDataGen` bump.
+- **Impact:** Redundant full-series writes to LWC, GC pressure, possible frame drops.
+- **Severity:** Medium-High.
+
+### 3.4 Live tick still propagates to non-visual store paths
+
+- **Evidence:** `appendBar` (`src/store/index.ts:3564`) sets `store.live.needsRerun` and `store.live.lastBarTime` on every accepted tick. These paths are read by the live re-run scheduler and, transitively, by indicator state.
+- **Impact:** Thrashing indicator state / re-run bookkeeping on every tick while eval is still running, causing unnecessary work.
+- **Severity:** Medium.
+
+### 3.5 Engine response parsing is main-thread synchronous
+
+- **Evidence:** `src/engines/pro.ts`, `src/workers/pyodide-client.ts`, and `src/engine/*` pass JSON back to the main thread and parse with `JSON.parse`. Large strategy/equity arrays block the main thread.
+- **Impact:** A large backtest or deep indicator run can freeze the chart for 50–300 ms while the result is deserialized and applied.
+- **Severity:** High.
+
+### 3.6 Memory pressure from long-lived transient objects
+
+- **Evidence:** `validateJobBars` (`src/data/data-source-manager.ts:195-229`) still calls `repairBars` on the dataset when sorting is suspected. Array slices in `applyCompareOverlay`, `applyOnchainOverlays` and `series-factory.ts` allocate new objects on every effect run.
+- **Impact:** Extra GC on long sessions / 50k+ datasets.
+- **Severity:** Medium.
+
+### 3.7 UI theming and layout effects are not batched
+
+- **Evidence:** `src/ui/panels/DockColumn.tsx` reads `store.panelChrome` in three separate memos (`ids`, `width`, `bottomHeight`) plus `getHoverSlideExpandedMap()`. `src/chart/ChartHost.tsx:448` schedules a reflow effect on `store.panelChrome` and `store.chartLayout.mode`.
+- **Impact:** A single panel resize may trigger multiple effect passes and reflow RAFs.
+- **Severity:** Medium.
+
+### 3.8 Accessibility & polish gaps
+
+- **Evidence:** Micro-interactions rely on ad-hoc inline Tailwind classes (e.g., `src/ui/shortcuts/Feedback.tsx` uses a hard-coded 1200 ms timeout and no `prefers-reduced-motion`). Many modal/panel components do not expose `aria-labelledby` routes. Focus traps are implemented per-component rather than through a single focus manager.
+- **Impact:** Power users notice inconsistent feedback; keyboard/screen-reader users hit friction.
+- **Severity:** Medium.
+
+## 4. Prioritized improvement plan
+
+### Phase 0 — Measure first (week 1)
+
+1. Add runtime telemetry hooks:
+   - `performance.mark` around `appendBar`, `setDataToChart`, engine request/response, and JSON parse.
+   - Track effect-count per tick using a dev-only ProbeStore wrapper.
+   - Record `panFrame` / `rAF` budgets from the existing e2e harness.
+2. Create a profiling issue template and baseline dashboard entry.
+3. Establish decision rule: **no Phase 1 change ships without a before/after measurement**.
+
+### Phase 1 — Reactive architecture (weeks 2–3)
+
+1. **Decouple bars from the giant app store.**
+   - Move the canonical OHLCV series and live-tip metadata out of `store.bars` into a dedicated, narrow signal/store (`src/stores/bars.ts`).
+   - Keep `AppState` as UI orchestration state only; derive any UI reads from the narrow store.
+2. **Audit every `store.bars` reader.**
+   - Replace `createEffect(() => { const n = store.bars.length; ... })` with fine-grained derived signals (`tip`, `lastPrice`, `dataGen`).
+   - Throttle `document.title` updates to 250 ms or only on tip closure.
+3. **Coalesce ChartHost effects.**
+   - Merge overlay and drawing effects where possible; use a single `createEffect` with a discriminated notification object.
+   - Guard every chart write behind a deep-equality check for the visible data window.
+4. **Batch store mutations.**
+   - Wrap every public mutation helper in `batch()` where not already done.
+   - Eliminate dual writes to legacy flat flags + `panelChrome` in the same turn.
+
+### Phase 2 — Rendering & data-plane performance (weeks 3–4)
+
+1. **Incremental series updates.**
+   - Make `applyCompareOverlay`, `applyOnchainOverlays`, and indicator apply paths compute a diff and only call `series.update` / `setMarkers` for changed data.
+   - Use typed arrays or shared flat buffers for large numeric series when calling into LWC.
+2. **Ranging-aware overlay writes.**
+   - Suppress overlay/marker full-rewrites while `isRanging()` is true, mirroring the candle slide logic.
+3. **Lazy bar payloads.**
+   - Reuse arrays between store and slot cache by slicing from the same immutable ring buffer; avoid `unwrap()` copies on each append.
+4. **GC hygiene.**
+   - Pool transient arrays in heavy paths (indicator apply preview, on-chain overlays) with size caps.
+
+### Phase 3 — Engine boundary improvements (weeks 4–5)
+
+1. **Main-thread deser offloading.**
+   - For large responses, parse engine JSON in a Worker (`src/workers/json-parse.worker.ts`) or use streaming `JSON.parse` (`async` chunked parser) for result arrays > 100 KB.
+2. **Typed-result contracts.**
+   - Add engine result envelopes that separate metadata from numeric series, enabling transfer of typed arrays and reducing string overhead.
+3. **Pyodide streaming.**
+   - Evaluate whether `TransformStream` can push back partial line/mark results as they are produced, instead of one huge JSON string.
+4. **Result caching.**
+   - Cache indicator evaluation for unchanged `(scriptId, barsGen, inputs)`; invalidate only when one of those changes.
+
+### Phase 4 — UX / visual polish (weeks 5–6)
+
+1. **Design system hardening.**
+   - Ensure every color/spacing/radius uses the void Tailwind theme tokens in `src/index.css` (@theme); delete leftover hard-coded color literals.
+   - Add `prefers-reduced-motion` support globally; remove layout-property CSS transitions and rely on `transform/opacity` only.
+2. **Focus & keyboard system.**
+   - Introduce a central focus manager for modals/panels/drawers (`src/ui/focus-trap.ts`) and use it from `Modal.tsx`, `StudioHost`, `AlertsPanel`.
+   - Add visible focus rings that match the design tokens; audit focus order in the chart/workspace.
+3. **Loading and feedback states.**
+   - Unify skeletons/spinners under one component hierarchy.
+   - Improve shortcut feedback to respect reduced motion and debounce rapid chords.
+4. **Mobile / responsive refinements.**
+   - Verify bottom-sheet panel portals honor safe areas; reduce touch-target fragility on the toolbar.
+
+### Phase 5 — Continuous quality gates (week 6+)
+
+1. Add a `bun run perf:audit` script that runs unit/e2e + records selected benchmark numbers.
+2. Add a CI gate that fails if `AXIS_BENCH=1` firehose exceeds a budget.
+3. Document ADR for the new narrow bars store and result-streaming contracts.
+4. Keep `CHANGELOG.md` updated per checkpoint rule.
+
+## 5. Validation metrics
+
+| Metric | Current target | World-class target |
+| --- | --- | --- |
+| `appendBar` → paint latency (p99) | < 8 ms per tick | < 2 ms |
+| Live pan/zoom frame budget (e2e) | < 50 ms | < 16 ms |
+| Engine result JSON parse blocking | < 100 ms | parse off main thread or < 8 ms |
+| Reactors triggered per live tick | untracked | ≤ 3 |
+| Lighthouse performance | not measured | > 90 |
+| Unit test pass rate | 100% | 100% with perf gates |
+
+## 6. Risks & mitigations
+
+| Risk | Mitigation |
+| --- | --- |
+| Splitting the store breaks persistence shape | Keep `store.bars` as a derived view for migration; persist canonical data through the narrow store only if needed |
+| Off-thread JSON parsing increases latency for small results | Only offload when payload > threshold (50–100 KB) |
+| Typed-array result contracts require backend changes | Gate behind feature flags; server-only first, Worker later |
+| Too many UI polish changes regress accessibility | Add a11y lint / Playwright a11y spec |
+
+## 7. Related files
+
+- Store: `src/store/index.ts`, `src/chart/chart-registry.ts`
+- Rendering: `src/chart/ChartHost.tsx`, `src/chart/live-append.ts`, `src/chart/series-factory.ts`, `src/chart/manager-access.ts`
+- Data plane: `src/data/data-source-manager.ts`, `src/data/merge-datasets.ts`, `src/data/dataset-validate.ts`
+- Engine boundary: `src/engines/pro.ts`, `src/engine/router.ts`, `src/workers/pyodide-client.ts`, `src/workers/pyodide-protocol.ts`
+- UI shell: `src/app.tsx`, `src/ui/panels/DockColumn.tsx`, `src/ui/shortcuts/Feedback.tsx`, `src/index.css`
+- Editor: `src/editor/PyneEditor.tsx`
+- Tests/bench: `tests/bench/`, `e2e/v1-chart.spec.ts`
+
+## 8. Phase 0 / Phase 1 implementation notes
+
+> Updated during the first pass — these items have landed on the `development` branch.
+
+### Phase 0 — Instrumentation (landed)
+
+- Added a tiny telemetry module at `src/perf/telemetry.ts` that wraps `performance.mark` / `measure` and only activates in dev/test builds.
+- Placed marks/measures on the current dominant costs so future work has a before/after signal:
+  - `src/store/index.ts`: `perfMark('axis:loadBars:setStore')`, `perfMark('axis:appendBar:store')`.
+  - `src/chart/manager-access.ts`: `perfMeasureSync('axis:setDataToChart', …)` around the full paint path.
+  - `src/engines/json-sanitize.ts`: `perfMeasureSync('axis:parseEngineJson', …)` around the shared engine response parser.
+- Deviations from the plan: the dev-only ProbeStore wrapper and effect-count probe were deferred. The existing `chart.lag`/`chart.bars` MCP app capabilities already expose live latency data, so we are using those plus the new marks for initial profiling.
+
+### Phase 1 — Narrow bar plane (landed)
+
+- Created `src/stores/bars.ts` with four fine-grained accessors:
+  - `bars` — full visible window (readers can still subscribe to the whole array).
+  - `tip` — the forming/newest bar; updates independently of `bars` on every live tick.
+  - `length` — window size; only changes on grow/slide, not on every tick.
+  - `gen` — full-reload generation; bumped by `loadBars`/slot restores and rolling-window slides.
+- Wired the plane from the existing authoritative paths:
+  - `loadBars` pushes the validated view into `barPlane` (with symbol/interval/exchange).
+  - `appendBar` pushes appends and slides into `barPlane` (`bumpGen: true` only for slides).
+  - `restoreSlotBarsToActivePlane` restores slot cache via `barPlane`.
+  - `flushLiveFrame` updates only `barPlane.tip` when a forming tick lands.
+- Discovered and fixed a Solid-store proxy-link issue during the migration: when the same raw bar object was placed both in `barPlane.bars` and in `barPlane.tip`, *and* that object was also an element of `store.bars`, the two stores' proxies could interfere with the app store's `closed` mutation during index appends. The fix is to clone the plane's `tip` in `setBarPlaneFull` so the narrow plane never exposes the exact same object instance as both the tail of `bars` and the live tip.
+- Migrated the highest-frequency UI readers from `store.bars` / `store.bars.length` to `barPlane`:
+  - Shell chrome: `App.tsx` (document title, rAF-throttled), `StatusBar.tsx`, `Topbar.tsx`.
+  - Float/overlay panels: `PricePanel.tsx`, `DataViewPanel.tsx`, `QuotePanel.tsx`, `VolumeProfileOverlay.tsx`, `TimePanel.tsx`.
+  - Extras/modals: `CurrentPriceCard.tsx`, `HpoPanel.tsx`, `BarReplayControls.tsx`.
+- `store.bars` remains the canonical source for engine evaluation, legacy components, and `ChartHost`'s full paint path during this migration. Phase 2 will decide whether to move the paint path to the plane or to the slot cache.
+
+### Tooling updates
+
+- `package.json` now exposes `bun check` as the canonical typecheck command (root, worker, and CLI). The old `bunx tsc --noEmit` is retired for the standard alias.
+- Fixed `packages/cli/tsconfig.json` where `baseUrl` now emits a TS5102 error; replaced it with `"paths": { "*": ["./*"] }` so `typecheck:all` passes cleanly.
+
+### Validation after Phase 0/1
+
+- `bun run typecheck:all` — clean (563 app + 29 worker + 39 CLI files).
+- `bun run lint` — exits 0 (warnings remain; no errors).
+- `bun run test:unit` — **4708 pass / 10 skip / 0 fail**.
+- Introduced **zero** new test failures; the only transient regression was the existing `store-closed-on-new-bar.test.ts` asserting `closed` mutation persistence, which exposed the proxy-link bug above and was fixed before commit.
+
+### Phase 2 — Rendering & data-plane performance (landed)
+
+- **Bar-plane append no longer copies the whole window.** Added a targeted `setBarPlaneAppend(bar, index)` path in `src/stores/bars.ts` used by `appendBar` for the common in-place append. The previous full-array `setBarPlaneFull` is still used for initial loads, slot restores, and rolling-window slides, plus a fallback when the plane length has drifted from `store.bars` (e.g. tests that write `store.bars` directly).
+- **`setDataToChart` skips duplicate volume writes.** When the candle series paint is skipped because the bar window is unchanged (`skipSeries`), the volume series `setData` is now skipped too — it derives from the same bars.
+- **Compare overlay avoids identical `setData`.** `applyCompareOverlay` (`src/chart/compare-overlay.ts`) now caches the last result from `buildCompareSeriesData` and short-circuits the LWC write when the built data is identical (which happens on unrelated `chartDataGen`/label-pref effect re-runs).
+- **On-chain scalar overlays avoid identical `setData`.** `applyOnchainOverlays` (`src/chart/onchain-overlay.ts`) fingerprints each line's point array and skips `series.setData` when the fingerprint matches the last paint, while still re-applying visibility options.
+- **On-chain event markers avoid full rebuilds.** `applyOnchainEventMarkers` (`src/chart/onchain-events.ts`) fingerprints the event set and skips the invisible host-series `setData`/marker-plugin rebuild when unchanged.
+- **Ranging-aware overlay suppression in ChartHost.** Added a reactive `isRanging` signal in `src/chart/ChartHost.tsx` that polls `PaneManager.isRanging()` while mounted. The compare, on-chain scalar, and on-chain event effects now suppress full writes while the user is panning/zooming and flush the latest state once the gesture ends.
+
+### Validation after Phase 2
+
+- `bun run typecheck:all` — clean.
+- `bun run lint` — exits 0.
+- `bun run test:unit` — **4708 pass / 10 skip / 0 fail**.
+
+### Phase 3 — Engine-boundary performance (landed)
+
+- **Off-thread engine JSON parsing.** Added `parseEngineJsonAsync` in `src/engines/json-sanitize.ts` and a dedicated `src/engines/json-parse-worker.ts`. Payloads above 256 KB are parsed in a module Worker using the same `sanitizeNonFiniteJson` logic, so main-thread blocking drops for large `/run`, `/run/batch`, and Pyodide result strings. Wired into:
+  - `src/engines/live-sessions.ts` (create/tick/append/status)
+  - `src/engines/engine-ws.ts` (inbound WebSocket frames)
+  - `src/engines/catalog.ts` (REST `/run` and Pyodide local path)
+  - `src/engines/batch.ts` (batch `/run/batch` envelope)
+- **Typed-result contract for Pyodide.** The local Pyodide path now runs its result JSON through `parseEngineJson` and lifts it with `normalizeEngineResult` (`src/indicators/run-helpers.ts`) before returning, so REST/WS/Pyodide all present the same `NormalizedRunResult` shape to the apply pipeline.
+- **In-memory result cache keyed by `(scriptId, barsGen, inputs)`.** New `src/indicators/run-cache.ts` memoizes successful non-live runs using a stable fingerprint of engine id, script id/script source hash, resolved inputs, engine config, bar-plane generation, bar window length, and resolved library sources. It is bounded (16 entries, 30 s TTL), clones cached values on store and retrieve to protect apply-stage mutations, and is automatically disabled in test environments to avoid cross-test pollution. Wired into `runScript` in `src/indicators/runner.ts`.
+- **Pyodide streaming.** True chunked/incremental result streaming is still outstanding; the immediate win is that the final large Pyodide JSON string now parses off the main thread. Streaming evaluation remains on the Phase 5 backlog.
+
+### Validation after Phase 3
+
+- `bun run typecheck:all` — clean.
+- `bun run lint` — exits 0.
+- `bun run test:unit` — **4708 pass / 10 skip / 0 fail**.
+
+### Phase 4 — UX / visual polish (landed)
+
+- **Motion + safe-area tokens.** `@theme` now owns `--ui-motion-duration-fast/base/slow` and `--ui-safe-top/bottom/left/right`. Raw `env(safe-area-inset-*)` call sites (mobile chrome, dialog sheets, `FloatableShell` phone geometry) read the tokens. Reduced motion collapses the duration tokens to `0.01ms` on `:root, html` and globally shortens animation/transition duration so `transitionend` still fires.
+- **Drawing rail is compositor-only.** `.axis-draw-rail` fades with `opacity var(--ui-motion-duration-fast)` instead of `max-height` / `max-width`. Hover-slide layout transitions (`width` / `height` / `flex-basis` / `min-width`) go through `hoverSlideTransition()` and are skipped when `prefersReducedMotion()` is true; CSS also sets `transition: none` on `.axis-panel-hover-slide` under reduced motion. Peek/expand still happens, instantly.
+- **Theme tokens on chart scale chrome.** `ChartScaleControls` uses `--color-border`, `--color-accent`, `--color-text(-dim)`, `--color-bg-panel` instead of hard-coded hex.
+- **Shared `Spinner`.** `src/ui/Spinner.tsx` wraps the loader icon with `role="status"`, `aria-busy`, a stable `data-testid="axis-spinner"`, and a default "Loading" label. Wired into IndicatorCard, OnChainPanel, ResultsModal, ScriptSettingsModal, StorageChangeDialog, and SymbolModal. Busy *refresh* glyphs keep `Icons.refresh` + `animate-spin`.
+- **Coarse-pointer topbar targets.** `@media (pointer: coarse)` raises command-bar / module / engine-switch buttons to a 40×40 px minimum with `touch-action: manipulation`.
+- **Modal focus restore + aria-hidden siblings.** `installFocusTrap` accepts `returnElement` and hides ancestor-chain siblings with `aria-hidden="true"` while the trap is active (already-hidden nodes stay hidden; previous values including `false` are restored on dispose). Solid `ref` fires before insert, so the sibling walk retries on a microtask once the dialog is in-tree. `Modal` passes `returnElement` through. Dispose order: unhide, then focus `returnElement` or the previously focused element. Missing `document.body` is a no-op so test doubles keep working.
+
+### Validation after Phase 4
+
+- `bun run typecheck:all` — clean (566 app + 29 worker + 39 CLI files).
+- `bun run lint` — exits 0 (warnings remain; no errors). New `!important` on the global reduced-motion rule is intentional.
+- Phase 4 pins: `tests/spinner.test.ts`, `tests/phase4-ux-tokens.test.ts`, plus extensions of `tests/focus-trap.test.ts`, `tests/ui-modal-shell.test.ts`, `tests/panel-hover-slide.test.ts` — **36 pass**.
+- `bun run test:unit` — **4723 pass / 10 skip / 1 fail**. The failure is `data-source-manager > applyCachedToChart with onlyIfCurrent skips paint for a stale symbol` timing out at 5 s (reproduced in isolation at ~6 s). It does not import Phase 4 UI files; treat it as a pre-existing slow DSM path, not a Phase 4 regression.
+
+### Phase 5 — Continuous quality gates (landed)
+
+- **`bun run perf:audit`.** `scripts/perf-audit.mjs` runs `typecheck`, a hot-path unit slice (`store-append-scale`, `live-append`, `store-live-frame`, `paint-latency`), then `AXIS_BENCH=1 bun test tests/bench/`. It scrapes `AXIS_BENCH {json}` lines from bench stdout and writes `reports/perf-audit.json` (gitignored). `--full` / `bun run perf:audit:full` also runs `test:unit` and Playwright `@smoke`. `--skip-typecheck` / `--skip-bench` exist for iterating on one side.
+- **CI firehose budget.** `.github/workflows/ci.yml` adds a parallel **Firehose budget** job: `bun run test:bench` with `AXIS_BENCH=1`, 10-minute job timeout. The existing `expect(sample.ms).toBeLessThan(FIREHOSE_SOFT_BUDGET_MS)` (120 s) fails the job if the 500k-tick append path regresses into minutes. Dataset linear-merge keeps its 5 s soft budget.
+- **ADR-017 — Narrow bar plane.** `docs/architecture/adrs.mdx` records `barPlane` (`bars` / `tip` / `length` / `gen`), the clone-on-full-write rule, and that `store.bars` stays the engine/eval source during migration.
+- **ADR-018 — Engine result parse + typed contract.** Records the 256 KB Worker parse threshold, `normalizeEngineResult` as the apply envelope, and the bounded run-cache. Chunked Pyodide evaluation stays future work.
+
+### Validation after Phase 5
+
+- `bun run typecheck:all` — clean (566 app + 29 worker + 39 CLI files).
+- Phase 5 pins: `tests/perf-audit.test.ts` — **9 pass**.
+- `bun run perf:audit --skip-typecheck` (this host, 2026-11-01): hot-path unit 441 ms; **appendBar firehose 500k ticks in 19.1 s** (26.1k ops/s, budget 120 s); dataset linear merge 50 pages in 829 ms (budget 5 s). Report: `reports/perf-audit.json`.
+
+## 9. Next move
+
+The six-phase audit plan is implemented through quality gates. Follow-ups that remain open: chunked Pyodide result streaming, typed-array engine envelopes, a nightly `axis-nightly.yml` if full e2e should stay off PR CI, and shrinking the DSM `applyCachedToChart` timeout. Keep requiring before/after measurements for any new hot-path change.

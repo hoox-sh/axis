@@ -267,15 +267,13 @@ export async function reapplyChartScripts(
     const windowId = barWindowIdentity();
     if (windowId && windowId === lastReapplyWindow) return 0;
 
-    const { runAndApply, beginRunEpoch } = await import('./runner');
+    const { runAndApply, currentRunEpoch, isInteractiveRunInFlight } = await import('./runner');
+    if (isInteractiveRunInFlight()) return 0;
     // One shared round-trip when the backend supports it; the apply path below is
     // identical either way (a batched result is passed through as
     // `precomputedResult`, so panes / overlays / alerts behave the same).
     const batched = await runBatchReapply(scripts, still);
-    // One shared epoch for the pass: members run concurrently without
-    // invalidating each other's chart apply (a newer interactive Run still
-    // supersedes the whole pass, as before).
-    const epoch = beginRunEpoch();
+    const epoch = currentRunEpoch();
     const warn = (ind: Indicator, detail: unknown): void => {
       if (opts?.logErrors === false) return;
       try {

@@ -45,6 +45,7 @@ import { getManager } from '../chart/manager-access';
 import { toggleScriptChartVisible } from './visibility';
 import { PLOT_PALETTE } from '../chart/series-factory';
 import { Icons } from '../ui/icons';
+import { Spinner } from '../ui/Spinner';
 import {
   activeChartContext,
   cycleLiveRerunOn,
@@ -80,9 +81,7 @@ const MetaBadge: Component<{
 }> = (props) => {
   const cls = () =>
     `${badgeShell} ${props.class || 'text-text-dim'} ${
-      props.onClick
-        ? 'cursor-pointer hover:border-accent/50 hover:bg-accent/10'
-        : ''
+      props.onClick ? 'cursor-pointer hover:border-accent/50 hover:bg-accent/10' : ''
     }`;
   if (props.onClick) {
     return (
@@ -121,19 +120,13 @@ export const IndicatorCard: Component<Props> = (props) => {
   const colorPopoverRef = createSignal<HTMLDivElement | null>(null);
 
   const kind = createMemo(() => detectScriptKind(props.indicator.code));
-  const declaredOverlay = createMemo(() =>
-    detectDeclaredOverlay(props.indicator.code),
-  );
+  const declaredOverlay = createMemo(() => detectDeclaredOverlay(props.indicator.code));
   const engId = () => store.engine || store.activePlugins?.engine || 'server';
   const engFam = createMemo(() => engineFamily(engId()));
-  const runStatus = createMemo(() =>
-    lastRunStatus(store.runResults?.[props.indicator.id]),
-  );
+  const runStatus = createMemo(() => lastRunStatus(store.runResults?.[props.indicator.id]));
   /** Engine-owned stream runtime status — present only on the stream path. */
   const streamStatus = createMemo(() => store.live.scriptStatus?.[props.indicator.id]);
-  const plotCount = createMemo(
-    () => Object.keys(props.indicator.plots || {}).length,
-  );
+  const plotCount = createMemo(() => Object.keys(props.indicator.plots || {}).length);
 
   const chartCtx = createMemo(() => {
     const slots = store.chartLayout?.slots?.length ?? 1;
@@ -176,9 +169,7 @@ export const IndicatorCard: Component<Props> = (props) => {
     persist();
     setStatus(
       'ready',
-      next === 'bar-close'
-        ? 'Live re-run: bar close only'
-        : 'Live re-run: every tick',
+      next === 'bar-close' ? 'Live re-run: bar close only' : 'Live re-run: every tick',
     );
   };
 
@@ -215,11 +206,7 @@ export const IndicatorCard: Component<Props> = (props) => {
     setEditingColor(null);
     const manager = getManager();
     if (!manager) return;
-    const applied = manager.setOverlayLineColor(
-      props.indicator.paneId,
-      plotName,
-      color,
-    );
+    const applied = manager.setOverlayLineColor(props.indicator.paneId, plotName, color);
     if (!applied && props.indicator.paneId !== 'price') {
       manager.setOverlayLineColor('price', plotName, color);
     }
@@ -245,7 +232,9 @@ export const IndicatorCard: Component<Props> = (props) => {
     const dispose = dismissOnOutside({
       inside: () => [
         colorPopoverRef[0](),
-        document.querySelector(`[data-color-trigger="${props.indicator.id}"]`) as HTMLElement | null,
+        document.querySelector(
+          `[data-color-trigger="${props.indicator.id}"]`,
+        ) as HTMLElement | null,
       ],
       onDismiss: () => setEditingColor(null),
     });
@@ -261,10 +250,7 @@ export const IndicatorCard: Component<Props> = (props) => {
       {/* Title row */}
       <div class="flex items-start justify-between gap-1 mb-1">
         <div class="min-w-0 flex-1">
-          <div
-            class="text-xs font-semibold text-text truncate"
-            title={props.indicator.name}
-          >
+          <div class="text-xs font-semibold text-text truncate" title={props.indicator.name}>
             {props.indicator.name}
           </div>
           <div
@@ -294,11 +280,7 @@ export const IndicatorCard: Component<Props> = (props) => {
             aria-label={props.indicator.visible ? 'Hide' : 'Show'}
             data-testid="axis-indicator-visibility"
           >
-            {props.indicator.visible ? (
-              <Icons.eye size={12} />
-            ) : (
-              <Icons.eyeOff size={12} />
-            )}
+            {props.indicator.visible ? <Icons.eye size={12} /> : <Icons.eyeOff size={12} />}
           </button>
           <button
             type="button"
@@ -319,11 +301,7 @@ export const IndicatorCard: Component<Props> = (props) => {
             aria-label="Re-run"
             data-testid="axis-indicator-rerun"
           >
-            {busy() ? (
-              <Icons.loader size={12} class="animate-spin" />
-            ) : (
-              <Icons.refresh size={12} />
-            )}
+            {busy() ? <Spinner size={12} /> : <Icons.refresh size={12} />}
           </button>
           <button
             type="button"
@@ -339,10 +317,7 @@ export const IndicatorCard: Component<Props> = (props) => {
       </div>
 
       {/* Meta badges — icon-only, hover for detail */}
-      <div
-        class="flex flex-wrap items-center gap-0.5 mb-1.5"
-        data-testid="axis-indicator-badges"
-      >
+      <div class="flex flex-wrap items-center gap-0.5 mb-1.5" data-testid="axis-indicator-badges">
         <MetaBadge title={kindTitle()} testId="axis-badge-kind">
           {kind() === 'strategy' ? (
             <Icons.trend size={11} class="text-accent-2" />
@@ -361,10 +336,7 @@ export const IndicatorCard: Component<Props> = (props) => {
           )}
         </MetaBadge>
 
-        <MetaBadge
-          title={engineFamilyLabel(engFam(), engId())}
-          testId="axis-badge-engine"
-        >
+        <MetaBadge title={engineFamilyLabel(engFam(), engId())} testId="axis-badge-engine">
           {engFam() === 'pyodide' ? (
             <Icons.cpu size={11} class="text-accent-2" />
           ) : engFam() === 'worker' ? (
@@ -377,11 +349,7 @@ export const IndicatorCard: Component<Props> = (props) => {
         <MetaBadge
           title={liveRerunTitle(store.live.active, store.live.rerunOn, true)}
           testId="axis-badge-live-policy"
-          class={
-            store.live.active
-              ? 'text-accent border-accent/40'
-              : 'text-text-faint'
-          }
+          class={store.live.active ? 'text-accent border-accent/40' : 'text-text-faint'}
           onClick={cycleRerun}
         >
           {!store.live.active ? (
@@ -451,9 +419,7 @@ export const IndicatorCard: Component<Props> = (props) => {
                     style={{ background: plotColor }}
                     title={`Color for "${name}"`}
                     data-color-trigger={props.indicator.id}
-                    onClick={() =>
-                      setEditingColor(editingColor() === name ? null : name)
-                    }
+                    onClick={() => setEditingColor(editingColor() === name ? null : name)}
                   />
                   <span class="truncate font-mono text-[10px] flex-1 min-w-0">{name}</span>
                   {/* Width buttons */}
@@ -467,7 +433,9 @@ export const IndicatorCard: Component<Props> = (props) => {
                     >
                       <Icons.minus size={9} />
                     </button>
-                    <span class="font-mono w-5 text-center text-text">{plot.width == null ? '1' : String(plotWidth)}</span>
+                    <span class="font-mono w-5 text-center text-text">
+                      {plot.width == null ? '1' : String(plotWidth)}
+                    </span>
                     <button
                       type="button"
                       class="inline-flex items-center justify-center w-5 h-5 text-text-faint hover:text-accent border border-border rounded-[var(--radius-chip)] hover:bg-bg"
@@ -486,11 +454,7 @@ export const IndicatorCard: Component<Props> = (props) => {
                     onClick={() => togglePlotVisible(name, !plotVisible)}
                     aria-label={plotVisible ? 'Hide plot' : 'Show plot'}
                   >
-                    {plotVisible ? (
-                      <Icons.eye size={10} />
-                    ) : (
-                      <Icons.eyeOff size={10} />
-                    )}
+                    {plotVisible ? <Icons.eye size={10} /> : <Icons.eyeOff size={10} />}
                   </button>
                   {/* Color popover */}
                   <Show when={editingColor() === name}>

@@ -34,7 +34,9 @@ import { runAndApply } from '../indicators/runner';
 import { defaultParamFromInput, spaceReady } from '../optimize/space';
 import type { ParamSpec } from '../optimize/types';
 import { getJson, setJson } from '../utils/storage';
+import { barPlane } from '../stores/bars';
 import { loadPersistedStudy, persistStudy, runHpoStudy } from '../optimize/client';
+import type { Bar } from '../store/types';
 import type { ObjectiveId, SamplerId, StudySnapshot, ValidationId } from '../optimize/types';
 import { MAX_TRIALS } from '../optimize/types';
 import { Icons } from './icons';
@@ -303,7 +305,7 @@ export const HpoPanel: Component = () => {
   let abort: AbortController | null = null;
 
   const kind = createMemo(() => detectScriptKind(currentScript().code));
-  const barsN = createMemo(() => store.bars?.length ?? 0);
+  const barsN = createMemo(() => barPlane.length ?? 0);
   const ready = createMemo(() => spaceReady(params()));
 
   const refreshSpace = (source?: ParamSpec[]) => {
@@ -374,7 +376,7 @@ export const HpoPanel: Component = () => {
     try {
       const snap = await runHpoStudy({
         script,
-        bars: store.bars || [],
+        bars: (barPlane.bars as Bar[]) || [],
         params: params(),
         fixedInputs: currentInputValues(),
         nTrials: nTrials(),

@@ -389,9 +389,12 @@ export async function expandCachedSeriesToNow(
         : Math.floor(Date.now() / 1000);
     const newest = bars[bars.length - 1]!.time;
 
-    // Already covering current / prior bar — still refresh the forming candle once
+    // Tip near now still needs fillInternalGaps — live append can leave mid-window holes.
     const nearNow = newest >= nowSec - step * 1.5;
     if (nearNow) {
+      let added = 0;
+      let expanded = false;
+      let tipError: string | undefined;
       try {
         const pageLimit = Math.min(5, sourcePageLimit(srcId));
         const raw = await source.fetchHistorical({
@@ -410,16 +413,29 @@ export async function expandCachedSeriesToNow(
         if (page.length) {
           const before = bars.length;
           bars = (await putDatasetBars(srcId, sym, iv, page, lock)).bars;
-          return {
-            bars,
-            added: Math.max(0, bars.length - before),
-            expanded: true,
-          };
+          added += Math.max(0, bars.length - before);
+          expanded = true;
         }
       } catch (err: unknown) {
-        return { bars, added: 0, expanded: false, error: errMessage(err, 'Expand failed') };
+        tipError = errMessage(err, 'Expand failed');
       }
-      return { bars, added: 0, expanded: false };
+      try {
+        const holes = await fillInternalGaps(bars, srcId, sym, iv, { signal });
+        if (holes.expanded && holes.bars.length) {
+          const before = bars.length;
+          bars = (await putDatasetBars(srcId, sym, iv, holes.bars, lock)).bars;
+          added += Math.max(0, bars.length - before);
+          expanded = true;
+        }
+      } catch {
+        /* internal fill is best-effort */
+      }
+      return {
+        bars,
+        added,
+        expanded,
+        ...(tipError && !expanded ? { error: tipError } : {}),
+      };
     }
 
     const pageLimit = sourcePageLimit(srcId);
@@ -479,10 +495,24 @@ export async function expandCachedSeriesToNow(
       /* keep last bars */
     }
 
+    let added = Math.max(0, bars.length - beforeCount);
+    let expanded = pages > 0;
+    try {
+      const holes = await fillInternalGaps(bars, srcId, sym, iv, { signal });
+      if (holes.expanded && holes.bars.length) {
+        const before = bars.length;
+        bars = (await putDatasetBars(srcId, sym, iv, holes.bars, lock)).bars;
+        added += Math.max(0, bars.length - before);
+        expanded = true;
+      }
+    } catch {
+      /* internal fill is best-effort */
+    }
+
     return {
       bars,
-      added: Math.max(0, bars.length - beforeCount),
-      expanded: pages > 0,
+      added,
+      expanded,
       error: lastError,
     };
   } finally {

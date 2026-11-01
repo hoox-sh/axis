@@ -1798,6 +1798,43 @@ describe('live-wire P1 series + study push', () => {
     expect(h.wire.snapshotState().subs.some((s) => s.subId === 's-1')).toBe(true);
   });
 
+  test('a duplicate idle/released ack after local drop does not re-signal status', async () => {
+    // Failed subscribe calls release(); the PYNE ack must not fire onStatus again
+    // or multiplex overwrites degraded backoff with idle/released and loops.
+    const h = makeHarness();
+    const first = h.wire.evalScript({
+      subId: 'sma',
+      script: 'indicator() {}',
+      meta: {},
+      bars: BARS,
+    });
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: 'sma',
+      sessionId: 'ses',
+      seq: 1,
+      payload: { count: 1, plots: [[1]], series: { a: [1] } },
+    });
+    await first;
+    const statusesBefore = h.statuses.length;
+    h.emit({
+      type: 'status',
+      id: 'sma',
+      payload: { code: 'idle', message: 'released' },
+    });
+    expect(h.wire.snapshotState().subs.some((s) => s.subId === 'sma')).toBe(false);
+    expect(h.statuses.length).toBeGreaterThan(statusesBefore);
+    const afterDrop = h.statuses.length;
+    h.emit({
+      type: 'status',
+      id: 'sma',
+      payload: { code: 'idle', message: 'released' },
+    });
+    expect(h.statuses.length).toBe(afterDrop);
+  });
+
   test('input-change resubscribe ignores a late idle/released ack and stays live', async () => {
     // Repro: Momentum Length 10→100 unsubscribed then re-subscribed; the PYNE
     // release ack arrived during awaitSnapshot and dropScriptLocal wiped the

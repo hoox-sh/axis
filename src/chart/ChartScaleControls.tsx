@@ -237,9 +237,7 @@ export const ChartScaleControls: Component = () => {
 
   const onLabels = () => {
     const m = getManager();
-    const next = m
-      ? m.togglePriceScaleLabelsVisible()
-      : !(store.priceScaleLabelsVisible !== false);
+    const next = m ? m.togglePriceScaleLabelsVisible() : !(store.priceScaleLabelsVisible !== false);
     setLabelsOn(next);
     setStore('priceScaleLabelsVisible', next);
     persist();
@@ -249,9 +247,7 @@ export const ChartScaleControls: Component = () => {
 
   const onNames = () => {
     const m = getManager();
-    const next = m
-      ? m.toggleLastValueLabelsVisible()
-      : !(store.lastValueLabelsVisible !== false);
+    const next = m ? m.toggleLastValueLabelsVisible() : !(store.lastValueLabelsVisible !== false);
     setNamesOn(next);
     setStore('lastValueLabelsVisible', next);
     persist();
@@ -259,17 +255,13 @@ export const ChartScaleControls: Component = () => {
 
   const onTitles = () => {
     const m = getManager();
-    const next = m
-      ? m.toggleLastValueNamesVisible()
-      : !(store.lastValueNamesVisible !== false);
+    const next = m ? m.toggleLastValueNamesVisible() : !(store.lastValueNamesVisible !== false);
     setTitlesOn(next);
     setStore('lastValueNamesVisible', next);
     persist();
   };
 
-  const decimalsMode = createMemo(() =>
-    normalizePriceScaleDecimalsMode(store.priceScaleDecimals),
-  );
+  const decimalsMode = createMemo(() => normalizePriceScaleDecimalsMode(store.priceScaleDecimals));
   const decimalsEffective = createMemo(() =>
     resolvePriceDecimals(decimalsMode(), {
       symbol: store.symbol,
@@ -304,18 +296,18 @@ export const ChartScaleControls: Component = () => {
       'axis-scale-seg',
       'h-[22px] min-w-[22px] px-1.5',
       'font-mono text-[11px] font-semibold leading-none',
-      'border-0 border-r border-[#1C2230] last:border-r-0',
+      'border-0 border-r border-[var(--color-border)] last:border-r-0',
       'rounded-none select-none',
       'transition-colors',
       active
-        ? 'bg-[#8B9CFF]/15 text-[#8B9CFF]'
-        : 'bg-transparent text-[#9AA3B2] hover:text-[#E8EAEE] hover:bg-white/[0.04]',
+        ? 'bg-[var(--color-accent)]/15 text-[var(--color-accent)]'
+        : 'bg-transparent text-[var(--color-text-dim)] hover:text-[var(--color-text)] hover:bg-[var(--color-text)]/[0.04]',
     ].join(' ');
 
   const cluster = () => (
     // biome-ignore lint/a11y/useSemanticElements: fieldset would inject UA border/padding styles into the overlay cluster
     <div
-      class="axis-chart-scale-controls absolute z-[15] flex items-stretch h-[22px] overflow-visible pointer-events-auto rounded-[4px] border border-[#1C2230] bg-[#0C0E14]/90"
+      class="axis-chart-scale-controls absolute z-[15] flex items-stretch h-[22px] overflow-visible pointer-events-auto rounded-[4px] border border-[var(--color-border)] bg-[var(--color-bg-panel)]/90"
       style={{
         right: `${inset().right}px`,
         bottom: `${inset().bottom}px`,
@@ -422,11 +414,7 @@ export const ChartScaleControls: Component = () => {
 
   return (
     <Show when={paneEl()} fallback={null}>
-      {(el) => (
-        <Portal mount={el()}>
-          {cluster()}
-        </Portal>
-      )}
+      {(el) => <Portal mount={el()}>{cluster()}</Portal>}
     </Show>
   );
 };

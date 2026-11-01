@@ -40,13 +40,7 @@ import {
   onMount,
   untrack,
 } from 'solid-js';
-import {
-  store,
-  setStore,
-  setStrategyUi,
-  setLastRun,
-  appendLog,
-} from '../store';
+import { store, setStore, setStrategyUi, setLastRun, appendLog } from '../store';
 import type { RunResult } from '../indicators/runner';
 import {
   buildStrategyReport,
@@ -56,15 +50,19 @@ import {
   type ClosedTrade,
   type StrategyEvent,
 } from '../results/strategy';
-import {
-  buildPositionViews,
-  type PositionView,
-  type StreamEventView,
-} from '../results/positions';
+import { buildPositionViews, type PositionView, type StreamEventView } from '../results/positions';
 import { eventsToMarkers, normalizeStrategyEvents } from '../results/events';
 import { getManager } from '../chart/manager-access';
 import { Icons } from './icons';
-import { StudioButton, StudioFooter, StudioHint, StudioJson, StudioStat, StudioTabs } from './studio';
+import { Spinner } from './Spinner';
+import {
+  StudioButton,
+  StudioFooter,
+  StudioHint,
+  StudioJson,
+  StudioStat,
+  StudioTabs,
+} from './studio';
 import { StrategyReport } from './StrategyReport';
 import { ScriptRunSelect } from './ScriptRunSelect';
 import { HpoPanel } from './HpoPanel';
@@ -81,14 +79,7 @@ import {
 import { getActiveStorageId } from '../plugins/active';
 import { MAX_RESULTS_PER_SCRIPT } from '../storage/local';
 
-type TabId =
-  | 'events'
-  | 'strategy'
-  | 'optimise'
-  | 'plots'
-  | 'metrics'
-  | 'raw'
-  | 'saved';
+type TabId = 'events' | 'strategy' | 'optimise' | 'plots' | 'metrics' | 'raw' | 'saved';
 
 type EventsView = 'stream' | 'positions';
 
@@ -149,11 +140,7 @@ function Sparkline(props: { data: (number | null)[]; positive?: boolean }) {
   };
   return (
     <svg viewBox={`0 0 ${W} ${H}`} class="ax-spark" preserveAspectRatio="none" aria-hidden="true">
-      <path
-        d={path()}
-        fill="none"
-        class={props.positive ? 'ax-spark-pos' : 'ax-spark-neg'}
-      />
+      <path d={path()} fill="none" class={props.positive ? 'ax-spark-pos' : 'ax-spark-neg'} />
     </svg>
   );
 }
@@ -190,9 +177,7 @@ function defaultSavedLabel(run: ResultMeta): string {
 function savedRunMarket(run: ResultMeta): { symbol: string; timeframe: string } {
   const inputs = run.inputs ?? {};
   const symbol = String(
-    (inputs as Record<string, unknown>).symbol ??
-      (inputs as Record<string, unknown>).ticker ??
-      '',
+    (inputs as Record<string, unknown>).symbol ?? (inputs as Record<string, unknown>).ticker ?? '',
   ).trim();
   const timeframe = String(
     (inputs as Record<string, unknown>).timeframe ??
@@ -421,7 +406,10 @@ export const ResultsModal: Component = () => {
       m.push({ label: 'Closed trades', value: String(rep.stats.trades) });
       m.push({ label: 'Net P&L', value: formatMoney(rep.stats.totalPnl) });
       m.push({ label: 'Win rate', value: `${rep.stats.winRate.toFixed(1)}%` });
-      m.push({ label: 'Profit factor', value: Number.isFinite(rep.stats.profitFactor) ? rep.stats.profitFactor.toFixed(2) : '∞' });
+      m.push({
+        label: 'Profit factor',
+        value: Number.isFinite(rep.stats.profitFactor) ? rep.stats.profitFactor.toFixed(2) : '∞',
+      });
       m.push({ label: 'Max DD', value: `${(rep.stats.maxDD * 100).toFixed(2)}%` });
     }
     if (r.error) m.push({ label: 'Error', value: r.error });
@@ -516,10 +504,7 @@ export const ResultsModal: Component = () => {
   const restoreSavedRun = async (run: ResultMeta) => {
     if (!supportsRunResults()) return;
     try {
-      const stored: StoredRunResult | null = await loadRunResult(
-        run.scriptId,
-        run.runId,
-      );
+      const stored: StoredRunResult | null = await loadRunResult(run.scriptId, run.runId);
       if (!stored) return;
       // Push the loaded payload back into the store; skip persistence since
       // the run is already on disk.
@@ -548,9 +533,7 @@ export const ResultsModal: Component = () => {
     const ok =
       typeof window === 'undefined'
         ? true
-        : window.confirm(
-            `Delete saved run "${label}"? This cannot be undone.`,
-          );
+        : window.confirm(`Delete saved run "${label}"? This cannot be undone.`);
     if (!ok) return;
     try {
       await removeRunResult(run.scriptId, run.runId);
@@ -640,9 +623,12 @@ export const ResultsModal: Component = () => {
             <header class="ax-page-header">
               <div>
                 <p class="ax-page-kicker">AXIS Studio · Run</p>
-                <h2 id="axis-results-title" class="ax-page-title">Results</h2>
+                <h2 id="axis-results-title" class="ax-page-title">
+                  Results
+                </h2>
                 <p class="ax-page-purpose">
-                  Inspect the last script run — events, strategy performance, plots, and raw payload.
+                  Inspect the last script run — events, strategy performance, plots, and raw
+                  payload.
                 </p>
               </div>
               <div class="ax-page-header-actions">
@@ -674,7 +660,7 @@ export const ResultsModal: Component = () => {
                       {savedRuns().length} saved
                     </button>
                     <Show when={savedRunsResource.loading}>
-                      <Icons.loader class="animate-spin" />
+                      <Spinner />
                     </Show>
                   </div>
                 </Show>
@@ -708,9 +694,7 @@ export const ResultsModal: Component = () => {
                     <div class="ax-empty axis-empty-state">Run a script to populate results.</div>
                   </Show>
                   <Show when={result()?.status === 'error'}>
-                    <div class="ax-callout">
-                      {result()?.error || 'Run error'}
-                    </div>
+                    <div class="ax-callout">{result()?.error || 'Run error'}</div>
                   </Show>
 
                   {/* Events */}
@@ -775,19 +759,28 @@ export const ResultsModal: Component = () => {
                                 const isClose =
                                   kind.toLowerCase().includes('close') ||
                                   kind.toLowerCase().includes('exit');
-                                const fromEntry = typeof ev.from_entry === 'string' ? ev.from_entry : '';
+                                const fromEntry =
+                                  typeof ev.from_entry === 'string' ? ev.from_entry : '';
                                 return (
                                   <li class="ax-row ax-event-row">
-                                    <span class="ax-mono ax-event-time">{formatEventTime(ev.time)}</span>
+                                    <span class="ax-mono ax-event-time">
+                                      {formatEventTime(ev.time)}
+                                    </span>
                                     <span class="ax-event-kind">{kind}</span>
                                     <Show when={dir}>
                                       <span class={dirClass}>{dir}</span>
                                     </Show>
-                                    <span class="ax-event-id" title={`Order id: ${String(ev.id || '')}`}>
+                                    <span
+                                      class="ax-event-id"
+                                      title={`Order id: ${String(ev.id || '')}`}
+                                    >
                                       {String(ev.id || '')}
                                     </span>
                                     <Show when={fromEntry}>
-                                      <span class="ax-event-from" title={`from_entry: ${fromEntry}`}>
+                                      <span
+                                        class="ax-event-from"
+                                        title={`from_entry: ${fromEntry}`}
+                                      >
                                         ← {fromEntry}
                                       </span>
                                     </Show>
@@ -852,7 +845,9 @@ export const ResultsModal: Component = () => {
                                     <div class="ax-pos-head">
                                       <span
                                         class={`ax-event-dir ${
-                                          p.dir === 'long' ? 'ax-event-dir--long' : 'ax-event-dir--short'
+                                          p.dir === 'long'
+                                            ? 'ax-event-dir--long'
+                                            : 'ax-event-dir--short'
                                         }`}
                                       >
                                         {p.dir}
@@ -882,7 +877,9 @@ export const ResultsModal: Component = () => {
                                               <span class="ax-mono ax-pos-fill-time">
                                                 {formatEventTime(f.time)}
                                               </span>
-                                              <span class="ax-mono">@ {formatPosPrice(f.price)}</span>
+                                              <span class="ax-mono">
+                                                @ {formatPosPrice(f.price)}
+                                              </span>
                                               <span class="ax-mono">× {formatFillQty(f.qty)}</span>
                                             </button>
                                           </li>
@@ -914,8 +911,12 @@ export const ResultsModal: Component = () => {
                                                 <span class="ax-mono ax-pos-fill-time">
                                                   {formatEventTime(c.time)}
                                                 </span>
-                                                <span class="ax-mono">@ {formatPosPrice(c.price)}</span>
-                                                <span class="ax-mono">× {formatFillQty(c.qty)}</span>
+                                                <span class="ax-mono">
+                                                  @ {formatPosPrice(c.price)}
+                                                </span>
+                                                <span class="ax-mono">
+                                                  × {formatFillQty(c.qty)}
+                                                </span>
                                                 <span
                                                   class={`ax-mono ax-pos-fill-pnl ${
                                                     c.pnl >= 0 ? 'ax-table-pos' : 'ax-table-neg'
@@ -973,7 +974,9 @@ export const ResultsModal: Component = () => {
                           trades: 0,
                         }
                       }
-                      hasEvents={normalizedEvents().length > 0 || (result()?.events?.length ?? 0) > 0}
+                      hasEvents={
+                        normalizedEvents().length > 0 || (result()?.events?.length ?? 0) > 0
+                      }
                       onJumpToTrade={jumpToTrade}
                       slippageNextOpen={!!store.strategyUi?.slippageNextOpen}
                       invertTradeLabels={!!store.strategyUi?.invertTradeLabels}
@@ -1058,8 +1061,8 @@ export const ResultsModal: Component = () => {
                       when={supportsRunResults()}
                       fallback={
                         <div class="ax-empty">
-                          Saved runs are unavailable on the current storage engine
-                          ({storageEngineId()}). Switch to a backend that supports
+                          Saved runs are unavailable on the current storage engine (
+                          {storageEngineId()}). Switch to a backend that supports
                           <code class="ax-mono"> saveResult</code> to use this tab.
                         </div>
                       }
@@ -1076,14 +1079,16 @@ export const ResultsModal: Component = () => {
                             data-testid="axis-results-saved-refresh"
                             onClick={reloadSavedRuns}
                           >
-                            <Icons.refresh class={savedRunsResource.loading ? 'animate-spin' : ''} />
+                            <Icons.refresh
+                              class={savedRunsResource.loading ? 'animate-spin' : ''}
+                            />
                             Refresh
                           </button>
                         </div>
 
                         <Show when={savedRunsResource.loading && savedRuns().length === 0}>
                           <div class="ax-empty">
-                            <Icons.loader class="animate-spin" />
+                            <Spinner />
                             Loading saved runs…
                           </div>
                         </Show>
@@ -1103,12 +1108,22 @@ export const ResultsModal: Component = () => {
                           </div>
                         </Show>
 
-                        <Show when={!savedRunsResource.loading && !savedRunsError() && savedRuns().length === 0}>
-                          <div class="ax-empty axis-empty-state" data-testid="axis-results-saved-empty">
+                        <Show
+                          when={
+                            !savedRunsResource.loading &&
+                            !savedRunsError() &&
+                            savedRuns().length === 0
+                          }
+                        >
+                          <div
+                            class="ax-empty axis-empty-state"
+                            data-testid="axis-results-saved-empty"
+                          >
                             <div>
                               No saved runs
                               <Show when={savedRunsScriptId()}>
-                                {' '}for <code class="ax-mono">{savedRunsScriptId()}</code>
+                                {' '}
+                                for <code class="ax-mono">{savedRunsScriptId()}</code>
                               </Show>
                             </div>
                           </div>
@@ -1164,10 +1179,15 @@ export const ResultsModal: Component = () => {
                                             <span class="ax-saved-stat" title="Win rate">
                                               <span class="ax-saved-stat-k">Win %</span>
                                               <span class="ax-saved-stat-v">
-                                                {stats.winRate != null ? `${stats.winRate.toFixed(1)}%` : '—'}
+                                                {stats.winRate != null
+                                                  ? `${stats.winRate.toFixed(1)}%`
+                                                  : '—'}
                                               </span>
                                             </span>
-                                            <span class="ax-saved-stat" title="Profit factor (∞ = no losses)">
+                                            <span
+                                              class="ax-saved-stat"
+                                              title="Profit factor (∞ = no losses)"
+                                            >
                                               <span class="ax-saved-stat-k">PF</span>
                                               <span class="ax-saved-stat-v">
                                                 {formatSavedPf(stats.profitFactor)}
@@ -1218,7 +1238,9 @@ export const ResultsModal: Component = () => {
                                         </Show>
 
                                         <p class="ax-hint">
-                                          <span class="ax-mono">{formatSavedAt(run.startedAt)}</span>
+                                          <span class="ax-mono">
+                                            {formatSavedAt(run.startedAt)}
+                                          </span>
                                           {' · '}
                                           {formatSavedDuration(run.durationMs)}
                                         </p>
@@ -1252,8 +1274,8 @@ export const ResultsModal: Component = () => {
                             </For>
                           </ul>
                           <p class="ax-hint">
-                            {savedRuns().length} run{savedRuns().length === 1 ? '' : 's'} ·
-                            FIFO cap <span class="ax-mono">{MAX_RESULTS_PER_SCRIPT}</span>
+                            {savedRuns().length} run{savedRuns().length === 1 ? '' : 's'} · FIFO cap{' '}
+                            <span class="ax-mono">{MAX_RESULTS_PER_SCRIPT}</span>
                           </p>
                         </Show>
                       </div>

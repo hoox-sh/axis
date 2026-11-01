@@ -27,6 +27,7 @@
 import { type Component, Show } from 'solid-js';
 import { useNow } from './clock';
 import { store, isPanelOpen } from '../store';
+import { barPlane } from '../stores/bars';
 import { FloatableShell } from './panels/FloatableShell';
 import {
   barCloseRemainingMs,
@@ -41,8 +42,7 @@ export const TimePanel: Component = () => {
 
   /** Remaining ms to the current bar close; NaN while no bars are loaded. */
   const remaining = () => {
-    const bars = store.bars;
-    const last = bars.length ? bars[bars.length - 1] : undefined;
+    const last = barPlane.tip ?? barPlane.bars[barPlane.length - 1];
     if (!last || !Number.isFinite(last.time)) return NaN;
     return barCloseRemainingMs(last.time * 1000, store.interval, now());
   };

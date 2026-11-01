@@ -376,4 +376,12 @@ describe('shouldEvalScriptStream / released', () => {
     expect(isScriptStreamReleased('x')).toBe(false);
     expect(shouldEvalScriptStream('x', 1_000_000, map)).toBe(false);
   });
+
+  it('does not treat a sticky released message on a live status as released', () => {
+    // setScriptStatus(id, 'live') without clearing message left message:'released'
+    // and the re-eval path thought the sub was still gone.
+    setScriptStatus('x', 'live', 'released');
+    expect(isScriptStreamReleased('x')).toBe(false);
+    expect(shouldEvalScriptStream('x', 1_000_000, new Map())).toBe(true);
+  });
 });

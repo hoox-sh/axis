@@ -73,4 +73,12 @@ describe('shared modal shell', () => {
     expect(src).toContain('installFocusTrap');
     expect(src).toContain('useEventListener');
   });
+
+  it('exposes returnElement and an aria-hidden sibling guard', () => {
+    const modal = read('src/ui/Modal.tsx');
+    expect(modal).toContain('returnElement');
+    const trap = read('src/ui/focus-trap.ts');
+    expect(trap).toContain('returnElement');
+    expect(trap).toContain('aria-hidden');
+  });
 });

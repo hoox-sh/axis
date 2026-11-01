@@ -84,6 +84,7 @@ import {
 import {
   HOVER_SLIDE_LEAVE_MS,
   clearPanelHoverSlideExpanded,
+  hoverSlideTransition,
   isPanelHoverSlideExpanded,
   setPanelHoverSlideExpanded,
 } from './hover-slide';
@@ -94,12 +95,9 @@ import {
   isPanelInChartOverlayMode,
   PANEL_IDS,
 } from './panel-manager';
+import { prefersReducedMotion } from '../effects';
 import { isPhoneViewport } from '../responsive';
-import {
-  activeMobileSheet,
-  closeMobileSheet,
-  openMobileSheet,
-} from './mobile-sheet';
+import { activeMobileSheet, closeMobileSheet, openMobileSheet } from './mobile-sheet';
 
 /** Props for a dockable panel wrapper (title falls back to PANEL_META). */
 export interface FloatableShellProps {
@@ -383,11 +381,7 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
     const m = meta();
     const c = getPanelChrome(props.id);
     const isEditor = props.id === 'editor';
-    const w = Math.max(
-      m.minW,
-      fromRect?.width ?? c.w ?? m.defaultW,
-      Math.min(m.defaultW, 320),
-    );
+    const w = Math.max(m.minW, fromRect?.width ?? c.w ?? m.defaultW, Math.min(m.defaultW, 320));
     // Editor float: prefer full remaining viewport height
     const topPad = 48;
     const bottomPad = 36;
@@ -395,11 +389,7 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
     const fullH = Math.max(200, window.innerHeight - y0 - bottomPad);
     const h = isEditor
       ? fullH
-      : Math.max(
-          m.minH,
-          fromRect?.height ?? c.h ?? m.defaultH,
-          Math.min(m.defaultH, 240),
-        );
+      : Math.max(m.minH, fromRect?.height ?? c.h ?? m.defaultH, Math.min(m.defaultH, 240));
     const maxX = Math.max(0, window.innerWidth - Math.min(w, window.innerWidth));
     const maxY = Math.max(0, window.innerHeight - Math.min(h, window.innerHeight));
     let x = fromRect?.left ?? c.x;
@@ -421,7 +411,8 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
 
   const setDock = (d: PanelDock) => {
     setMenuOpen(false);
-    const rect = d === 'float' || isPanelChartOverlay(props.id) ? rootEl?.getBoundingClientRect() : null;
+    const rect =
+      d === 'float' || isPanelChartOverlay(props.id) ? rootEl?.getBoundingClientRect() : null;
     setPanelDock(props.id, d);
     if (d === 'float') {
       seedFloatGeometry(rect ?? null);
@@ -631,10 +622,7 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
 
     const onMove = (ev: PointerEvent) => {
       if (started) return;
-      if (
-        Math.abs(ev.clientX - startX) > MOVE_PX ||
-        Math.abs(ev.clientY - startY) > MOVE_PX
-      ) {
+      if (Math.abs(ev.clientX - startX) > MOVE_PX || Math.abs(ev.clientY - startY) > MOVE_PX) {
         // Use current pointer so the first move frame matches the hand
         startDrag(ev.clientX, ev.clientY);
       }
@@ -786,69 +774,68 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
    * Edges: e | w | n | s | se (corner). Min size is panel border (1px).
    * West/north also move x/y so the opposite edge stays fixed.
    */
-  const onFloatResizePointerDown =
-    (edge: 'e' | 'w' | 'n' | 's' | 'se') => (e: PointerEvent) => {
-      if (e.button !== 0) return;
-      e.stopPropagation();
-      e.preventDefault();
-      const cur = getPanelChrome(props.id);
-      // Float, window, or chart-overlay edge presentation
-      if (!isPanelInChartOverlayMode(cur)) return;
-      const startX = e.clientX;
-      const startY = e.clientY;
-      const origX = cur.x;
-      const origY = cur.y;
-      const origW = cur.w;
-      const origH = cur.h;
-      const minW = meta().minW;
-      const minH = meta().minH;
-      (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
-      document.body.style.userSelect = 'none';
-      const cursor =
-        edge === 'e' || edge === 'w'
-          ? 'col-resize'
-          : edge === 'n' || edge === 's'
-            ? 'row-resize'
-            : 'nwse-resize';
-      document.body.style.cursor = cursor;
+  const onFloatResizePointerDown = (edge: 'e' | 'w' | 'n' | 's' | 'se') => (e: PointerEvent) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    e.preventDefault();
+    const cur = getPanelChrome(props.id);
+    // Float, window, or chart-overlay edge presentation
+    if (!isPanelInChartOverlayMode(cur)) return;
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const origX = cur.x;
+    const origY = cur.y;
+    const origW = cur.w;
+    const origH = cur.h;
+    const minW = meta().minW;
+    const minH = meta().minH;
+    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+    document.body.style.userSelect = 'none';
+    const cursor =
+      edge === 'e' || edge === 'w'
+        ? 'col-resize'
+        : edge === 'n' || edge === 's'
+          ? 'row-resize'
+          : 'nwse-resize';
+    document.body.style.cursor = cursor;
 
-      const onMove = (ev: PointerEvent) => {
-        const dx = ev.clientX - startX;
-        const dy = ev.clientY - startY;
-        const geo: Partial<{ x: number; y: number; w: number; h: number }> = {};
-        if (edge === 'e' || edge === 'se') {
-          geo.w = Math.max(minW, origW + dx);
-        }
-        if (edge === 'w') {
-          const w = Math.max(minW, origW - dx);
-          geo.w = w;
-          geo.x = origX + (origW - w);
-        }
-        if (edge === 's' || edge === 'se') {
-          geo.h = Math.max(minH, origH + dy);
-        }
-        if (edge === 'n') {
-          const h = Math.max(minH, origH - dy);
-          geo.h = h;
-          geo.y = origY + (origH - h);
-        }
-        setPanelGeometry(props.id, geo);
-      };
-      const onUp = (ev: PointerEvent) => {
-        try {
-          (e.currentTarget as HTMLElement).releasePointerCapture?.(ev.pointerId);
-        } catch {
-          /* ignore */
-        }
-        clearBodyDragStyles();
-        window.removeEventListener('pointermove', onMove);
-        window.removeEventListener('pointerup', onUp);
-        window.removeEventListener('pointercancel', onUp);
-      };
-      window.addEventListener('pointermove', onMove);
-      window.addEventListener('pointerup', onUp);
-      window.addEventListener('pointercancel', onUp);
+    const onMove = (ev: PointerEvent) => {
+      const dx = ev.clientX - startX;
+      const dy = ev.clientY - startY;
+      const geo: Partial<{ x: number; y: number; w: number; h: number }> = {};
+      if (edge === 'e' || edge === 'se') {
+        geo.w = Math.max(minW, origW + dx);
+      }
+      if (edge === 'w') {
+        const w = Math.max(minW, origW - dx);
+        geo.w = w;
+        geo.x = origX + (origW - w);
+      }
+      if (edge === 's' || edge === 'se') {
+        geo.h = Math.max(minH, origH + dy);
+      }
+      if (edge === 'n') {
+        const h = Math.max(minH, origH - dy);
+        geo.h = h;
+        geo.y = origY + (origH - h);
+      }
+      setPanelGeometry(props.id, geo);
     };
+    const onUp = (ev: PointerEvent) => {
+      try {
+        (e.currentTarget as HTMLElement).releasePointerCapture?.(ev.pointerId);
+      } catch {
+        /* ignore */
+      }
+      clearBodyDragStyles();
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+  };
 
   const dockWidth = () => getPanelChrome(props.id).w;
   const dockHeight = () => getPanelChrome(props.id).h;
@@ -896,8 +883,8 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
         position: 'fixed',
         left: '0',
         right: '0',
-        top: 'calc(var(--axis-mobile-header-h, 48px) + env(safe-area-inset-top, 0px))',
-        bottom: 'calc(var(--axis-mobile-tabbar-h, 58px) + env(safe-area-inset-bottom, 0px))',
+        top: 'calc(var(--axis-mobile-header-h, 48px) + var(--ui-safe-top))',
+        bottom: 'calc(var(--axis-mobile-tabbar-h, 58px) + var(--ui-safe-bottom))',
         width: 'auto',
         height: 'auto',
         'z-index': '60',
@@ -914,9 +901,10 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
     // Linear mechanical slide, tuned by the shared `panel.open` duration —
     // no expo/spring curve, so the peek strip never wobbles.
     const slideMs = 'var(--axis-fx-panel-open-duration, 120ms)';
-    const slideTransition = slide
-      ? `width ${slideMs} linear, height ${slideMs} linear, flex-basis ${slideMs} linear, min-width ${slideMs} linear`
-      : undefined;
+    const slideTransition = hoverSlideTransition(
+      { hoverSlide: slide, reducedMotion: prefersReducedMotion() },
+      slideMs,
+    );
 
     // Free float/window — fixed over the workspace
     if (isFloat()) {
@@ -1111,351 +1099,352 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
   return (
     <Show when={!!mountEl() && (!isPhoneViewport() || activeMobileSheet() === props.id)}>
       <Portal mount={mountEl()!}>
+        <div
+          ref={rootEl}
+          class={`axis-panel-shell flex flex-col min-h-0 overflow-hidden rounded-md ${dockClass()} ${props.class || ''}`}
+          classList={{
+            'is-dragging': dragging(),
+            'axis-panel-hover-slide': hoverSlideOn(),
+            'is-hover-collapsed': hoverCollapsed(),
+            'is-hover-expanded': hoverSlideOn() && hoverExpanded(),
+            'is-chart-overlay': isEdgeOverlay(),
+          }}
+          style={shellStyle()}
+          data-panel-id={props.id}
+          data-panel-dock={dock()}
+          data-panel-stacked={stacked() ? '1' : '0'}
+          data-hover-slide={hoverSlideOn() ? '1' : '0'}
+          data-testid={props.testId}
+          onPointerEnter={() => expandHoverSlide()}
+          onPointerMove={() => {
+            if (hoverSlideOn() && hoverExpanded()) armHoverSlideHide();
+          }}
+          onPointerLeave={(e) => {
+            const next = e.relatedTarget as Node | null;
+            if (next && rootEl?.contains(next)) return;
+            if (watchlistAlertOpen()) return;
+            scheduleCollapseHoverSlide();
+          }}
+          onFocusOut={(e) => {
+            if (!hoverSlideOn() || !hoverExpanded()) return;
+            const next = e.relatedTarget as Node | null;
+            if (next && rootEl?.contains(next)) return;
+            if (watchlistAlertOpen()) return;
+            armHoverSlideHide();
+          }}
+          onPointerDown={() => {
+            if (isOverlay()) bumpPanelZ(props.id);
+            // Touch / click on peek strip should expand immediately
+            if (hoverCollapsed()) expandHoverSlide();
+          }}
+        >
+          {/* Title bar — desktop: drag (move) to undock/move; phone: swipe down to dismiss */}
           <div
-            ref={rootEl}
-            class={`axis-panel-shell flex flex-col min-h-0 overflow-hidden rounded-md ${dockClass()} ${props.class || ''}`}
-            classList={{
-              'is-dragging': dragging(),
-              'axis-panel-hover-slide': hoverSlideOn(),
-              'is-hover-collapsed': hoverCollapsed(),
-              'is-hover-expanded': hoverSlideOn() && hoverExpanded(),
-              'is-chart-overlay': isEdgeOverlay(),
-            }}
-            style={shellStyle()}
-            data-panel-id={props.id}
-            data-panel-dock={dock()}
-            data-panel-stacked={stacked() ? '1' : '0'}
-            data-hover-slide={hoverSlideOn() ? '1' : '0'}
-            data-testid={props.testId}
-            onPointerEnter={() => expandHoverSlide()}
-            onPointerMove={() => {
-              if (hoverSlideOn() && hoverExpanded()) armHoverSlideHide();
-            }}
-            onPointerLeave={(e) => {
-              const next = e.relatedTarget as Node | null;
-              if (next && rootEl?.contains(next)) return;
-              if (watchlistAlertOpen()) return;
-              scheduleCollapseHoverSlide();
-            }}
-            onFocusOut={(e) => {
-              if (!hoverSlideOn() || !hoverExpanded()) return;
-              const next = e.relatedTarget as Node | null;
-              if (next && rootEl?.contains(next)) return;
-              if (watchlistAlertOpen()) return;
-              armHoverSlideHide();
-            }}
-            onPointerDown={() => {
-              if (isOverlay()) bumpPanelZ(props.id);
-              // Touch / click on peek strip should expand immediately
-              if (hoverCollapsed()) expandHoverSlide();
+            class="axis-panel-handle sc-float-panel-header cursor-grab active:cursor-grabbing select-none relative h-9 min-h-9"
+            role="toolbar"
+            aria-label={title()}
+            onPointerDown={onSheetHandlePointerDown}
+            title={
+              hoverCollapsed()
+                ? `${title()} — hover to expand`
+                : 'Drag title to move or undock · right-click for menu · drop on edges to dock'
+            }
+            onContextMenu={(e) => {
+              const t = e.target as HTMLElement | null;
+              if (t?.closest?.('[role="menu"]')) {
+                e.preventDefault();
+                return;
+              }
+              e.preventDefault();
+              e.stopPropagation();
+              setMenuCursor({ x: e.clientX, y: e.clientY });
+              setMenuOpen(true);
             }}
           >
-            {/* Title bar — desktop: drag (move) to undock/move; phone: swipe down to dismiss */}
-            <div
-              class="axis-panel-handle sc-float-panel-header cursor-grab active:cursor-grabbing select-none relative h-9 min-h-9"
-              role="toolbar"
-              aria-label={title()}
-              onPointerDown={onSheetHandlePointerDown}
-              title={
-                hoverCollapsed()
-                  ? `${title()} — hover to expand`
-                  : 'Drag title to move or undock · right-click for menu · drop on edges to dock'
-              }
-              onContextMenu={(e) => {
-                const t = e.target as HTMLElement | null;
-                if (t?.closest?.('[role="menu"]')) {
-                  e.preventDefault();
-                  return;
-                }
-                e.preventDefault();
-                e.stopPropagation();
-                setMenuCursor({ x: e.clientX, y: e.clientY });
-                setMenuOpen(true);
-              }}
-            >
-              {/* Per-panel identity glyph is the dock-menu trigger (click = menu,
+            {/* Per-panel identity glyph is the dock-menu trigger (click = menu,
                   hold/drag = move). `keyed` so the children fn receives the
                   Component value directly, not an Accessor. */}
-              <div
-                class="axis-panel-menu relative flex-shrink-0"
-                ref={menuWrapEl}
-                onPointerDown={(e) => e.stopPropagation()}
+            <div
+              class="axis-panel-menu relative flex-shrink-0"
+              ref={menuWrapEl}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                class={`sc-btn sc-btn-ghost px-1 axis-panel-menu-btn ${menuOpen() ? 'is-open text-accent' : ''}`}
+                title="Click: dock options · Hold: drag panel"
+                aria-label="Panel menu"
+                aria-expanded={menuOpen()}
+                aria-haspopup="menu"
+                data-testid={`axis-panel-header-icon-${props.id}`}
+                onPointerDown={onPanelIconPointerDown}
               >
-                <button
-                  type="button"
-                  class={`sc-btn sc-btn-ghost px-1 axis-panel-menu-btn ${menuOpen() ? 'is-open text-accent' : ''}`}
-                  title="Click: dock options · Hold: drag panel"
+                <Show when={PanelHeaderIcon()} keyed fallback={<Icons.menu size={14} />}>
+                  {(Icon) => <Icon size={14} />}
+                </Show>
+              </button>
+              <Show when={menuOpen()}>
+                <div
+                  ref={menuPopEl}
+                  class="axis-panel-menu-pop"
+                  classList={{ 'is-cursor': !!menuCursor() }}
+                  role="menu"
                   aria-label="Panel menu"
-                  aria-expanded={menuOpen()}
-                  aria-haspopup="menu"
-                  data-testid={`axis-panel-header-icon-${props.id}`}
-                  onPointerDown={onPanelIconPointerDown}
-                >
-                  <Show when={PanelHeaderIcon()} keyed fallback={<Icons.menu size={14} />}>
-                    {(Icon) => <Icon size={14} />}
-                  </Show>
-                </button>
-                <Show when={menuOpen()}>
-                  <div
-                    ref={menuPopEl}
-                    class="axis-panel-menu-pop"
-                    classList={{ 'is-cursor': !!menuCursor() }}
-                    role="menu"
-                    aria-label="Panel menu"
-                    style={cursorMenuStyle()}
-                    onClick={(e) => {
-                      // Close after any menuitem action (dock items + menuExtra)
+                  style={cursorMenuStyle()}
+                  onClick={(e) => {
+                    // Close after any menuitem action (dock items + menuExtra)
+                    const t = e.target as HTMLElement | null;
+                    if (t?.closest?.('[role="menuitem"]')) setMenuOpen(false);
+                  }}
+                  onKeyDown={(e) => {
+                    // Mirror onClick: keyboard activation of a menuitem closes the menu
+                    if (e.key === 'Enter' || e.key === ' ') {
                       const t = e.target as HTMLElement | null;
                       if (t?.closest?.('[role="menuitem"]')) setMenuOpen(false);
-                    }}
-                    onKeyDown={(e) => {
-                      // Mirror onClick: keyboard activation of a menuitem closes the menu
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        const t = e.target as HTMLElement | null;
-                        if (t?.closest?.('[role="menuitem"]')) setMenuOpen(false);
-                      }
-                    }}
-                  >
-                    <For each={DOCK_MENU.filter((item) => !props.floatOnly || item.dock === 'float')}>
-                      {(item) => {
-                        const ItemIcon = item.Icon;
-                        const active = () => dock() === item.dock;
-                        return (
-                          <button
-                            type="button"
-                            role="menuitem"
-                            class={`axis-panel-menu-item ${active() ? 'is-active' : ''}`}
-                            onClick={() => setDock(item.dock)}
-                          >
-                            <ItemIcon size={MENU_ICON} />
-                            <span>{item.label}</span>
-                          </button>
-                        );
-                      }}
-                    </For>
-                    <hr class="axis-panel-menu-sep border-0" />
-                    <Show when={!props.floatOnly && (isChartOverlayEligible(dock()) || isFloat())}>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        class={`axis-panel-menu-item ${
-                          isPanelChartOverlay(props.id) || isFloat() ? 'is-active' : ''
-                        }`}
-                        title="Overlay this panel on the chart inner edge (chart does not shrink)"
-                        data-testid={`axis-panel-chart-overlay-${props.id}`}
-                        disabled={isFloat()}
-                        onClick={() => {
-                          if (isFloat()) return;
-                          onToggleChartOverlay();
-                        }}
-                      >
-                        <Icons.layers size={MENU_ICON} />
-                        <span>Chart overlay</span>
-                        <Show when={isPanelChartOverlay(props.id) || isFloat()}>
-                          <Icons.check size={MENU_CHECK} class="ml-auto opacity-80" />
-                        </Show>
-                      </button>
-                      <Show when={isEdgeOverlay()}>
-                        <div
-                          class="axis-panel-menu-opacity"
-                          data-testid={`axis-panel-overlay-opacity-${props.id}`}
+                    }
+                  }}
+                >
+                  <For each={DOCK_MENU.filter((item) => !props.floatOnly || item.dock === 'float')}>
+                    {(item) => {
+                      const ItemIcon = item.Icon;
+                      const active = () => dock() === item.dock;
+                      return (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          class={`axis-panel-menu-item ${active() ? 'is-active' : ''}`}
+                          onClick={() => setDock(item.dock)}
                         >
-                          <span class="axis-panel-menu-opacity-label">Opacity</span>
-                          <input
-                            type="range"
-                            min="25"
-                            max="100"
-                            step="1"
-                            value={Math.round(getPanelOverlayOpacity(props.id) * 100)}
-                            aria-label="Overlay opacity"
-                            onInput={(e) => {
-                              setPanelOverlayOpacity(
-                                props.id,
-                                Number(e.currentTarget.value) / 100,
-                              );
-                            }}
-                          />
-                          <span class="axis-panel-menu-opacity-val">
-                            {Math.round(getPanelOverlayOpacity(props.id) * 100)}%
-                          </span>
-                        </div>
-                      </Show>
-                    </Show>
+                          <ItemIcon size={MENU_ICON} />
+                          <span>{item.label}</span>
+                        </button>
+                      );
+                    }}
+                  </For>
+                  <hr class="axis-panel-menu-sep border-0" />
+                  <Show when={!props.floatOnly && (isChartOverlayEligible(dock()) || isFloat())}>
                     <button
                       type="button"
                       role="menuitem"
                       class={`axis-panel-menu-item ${
-                        isAllPanelsChartOverlay() ? 'is-active' : ''
+                        isPanelChartOverlay(props.id) || isFloat() ? 'is-active' : ''
                       }`}
-                      title="Overlay every panel on the chart — chart goes full width"
-                      data-testid="axis-panel-chart-overlay-all"
-                      onClick={() => onToggleAllChartOverlay()}
+                      title="Overlay this panel on the chart inner edge (chart does not shrink)"
+                      data-testid={`axis-panel-chart-overlay-${props.id}`}
+                      disabled={isFloat()}
+                      onClick={() => {
+                        if (isFloat()) return;
+                        onToggleChartOverlay();
+                      }}
                     >
                       <Icons.layers size={MENU_ICON} />
-                      <span>
-                        {isAllPanelsChartOverlay()
-                          ? 'Chart overlay: all off'
-                          : 'Chart overlay: all on'}
-                      </span>
-                      <Show when={isAllPanelsChartOverlay()}>
+                      <span>Chart overlay</span>
+                      <Show when={isPanelChartOverlay(props.id) || isFloat()}>
                         <Icons.check size={MENU_CHECK} class="ml-auto opacity-80" />
                       </Show>
                     </button>
-                    <Show when={!props.floatOnly && isHoverSlideEligible(dock()) && !isPanelChartOverlay(props.id)}>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        class={`axis-panel-menu-item ${
-                          isPanelHoverSlide(props.id) ? 'is-active' : ''
-                        }`}
-                        title="When docked: collapse to a strip, expand on hover, hide after 3s idle"
-                        data-testid={`axis-panel-hover-slide-${props.id}`}
-                        onClick={() => {
-                          setPanelHoverSlide(props.id, !isPanelHoverSlide(props.id));
-                        }}
+                    <Show when={isEdgeOverlay()}>
+                      <div
+                        class="axis-panel-menu-opacity"
+                        data-testid={`axis-panel-overlay-opacity-${props.id}`}
                       >
-                        <Icons.panelRight size={MENU_ICON} />
-                        <span>Slide on hover</span>
-                        <Show when={isPanelHoverSlide(props.id)}>
-                          <Icons.check size={MENU_CHECK} class="ml-auto opacity-80" />
-                        </Show>
-                      </button>
+                        <span class="axis-panel-menu-opacity-label">Opacity</span>
+                        <input
+                          type="range"
+                          min="25"
+                          max="100"
+                          step="1"
+                          value={Math.round(getPanelOverlayOpacity(props.id) * 100)}
+                          aria-label="Overlay opacity"
+                          onInput={(e) => {
+                            setPanelOverlayOpacity(props.id, Number(e.currentTarget.value) / 100);
+                          }}
+                        />
+                        <span class="axis-panel-menu-opacity-val">
+                          {Math.round(getPanelOverlayOpacity(props.id) * 100)}%
+                        </span>
+                      </div>
                     </Show>
+                  </Show>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    class={`axis-panel-menu-item ${isAllPanelsChartOverlay() ? 'is-active' : ''}`}
+                    title="Overlay every panel on the chart — chart goes full width"
+                    data-testid="axis-panel-chart-overlay-all"
+                    onClick={() => onToggleAllChartOverlay()}
+                  >
+                    <Icons.layers size={MENU_ICON} />
+                    <span>
+                      {isAllPanelsChartOverlay()
+                        ? 'Chart overlay: all off'
+                        : 'Chart overlay: all on'}
+                    </span>
+                    <Show when={isAllPanelsChartOverlay()}>
+                      <Icons.check size={MENU_CHECK} class="ml-auto opacity-80" />
+                    </Show>
+                  </button>
+                  <Show
+                    when={
+                      !props.floatOnly &&
+                      isHoverSlideEligible(dock()) &&
+                      !isPanelChartOverlay(props.id)
+                    }
+                  >
                     <button
                       type="button"
                       role="menuitem"
-                      class="axis-panel-menu-item"
-                      title="Restore factory dock, size, and position for this panel"
-                      data-testid={`axis-panel-reset-default-${props.id}`}
-                      onClick={() => onResetDefault()}
+                      class={`axis-panel-menu-item ${
+                        isPanelHoverSlide(props.id) ? 'is-active' : ''
+                      }`}
+                      title="When docked: collapse to a strip, expand on hover, hide after 3s idle"
+                      data-testid={`axis-panel-hover-slide-${props.id}`}
+                      onClick={() => {
+                        setPanelHoverSlide(props.id, !isPanelHoverSlide(props.id));
+                      }}
                     >
-                      <Icons.reset size={MENU_ICON} />
-                      <span>Reset to default</span>
+                      <Icons.panelRight size={MENU_ICON} />
+                      <span>Slide on hover</span>
+                      <Show when={isPanelHoverSlide(props.id)}>
+                        <Icons.check size={MENU_CHECK} class="ml-auto opacity-80" />
+                      </Show>
                     </button>
-                    <Show when={props.menuExtra}>
-                      <hr class="axis-panel-menu-sep border-0" />
-                      {props.menuExtra}
-                    </Show>
-                  </div>
-                </Show>
-              </div>
-              <span class="flex-1 truncate min-w-0 axis-panel-title">{title()}</span>
-              <Show when={!hoverCollapsed() && props.headerExtra}>{props.headerExtra}</Show>
-              <div
-                class="flex items-center gap-0.5 flex-shrink-0"
-                onPointerDown={(e) => e.stopPropagation()}
-              >
-                <Show when={!hoverCollapsed() && props.headerEnd}>{props.headerEnd}</Show>
-                <Show when={!hoverCollapsed()}>
+                  </Show>
                   <button
                     type="button"
-                    class="sc-btn sc-btn-ghost px-1"
-                    title="Close"
-                    aria-label="Close panel"
-                    onClick={close}
+                    role="menuitem"
+                    class="axis-panel-menu-item"
+                    title="Restore factory dock, size, and position for this panel"
+                    data-testid={`axis-panel-reset-default-${props.id}`}
+                    onClick={() => onResetDefault()}
                   >
-                    <Icons.x />
+                    <Icons.reset size={MENU_ICON} />
+                    <span>Reset to default</span>
                   </button>
-                </Show>
-              </div>
-            </div>
-
-            <div
-              class="flex-1 min-h-0 overflow-auto axis-panel-body"
-              classList={{
-                'is-hover-hidden': hoverCollapsed(),
-                'p-3': props.id !== 'editor' && props.id !== 'watchlist',
-              }}
-              aria-hidden={hoverCollapsed() || undefined}
-            >
-              {props.children}
-            </div>
-
-            {/* Docked left/right: column width on free vertical edge */}
-            <Show when={showSideWidthResize() && dock() === 'left'}>
-              <ResizeHandle
-                direction="grow-right"
-                getSize={dockWidth}
-                setSize={setDockWidth}
-                min={meta().minW}
-                class="absolute right-0 top-0 bottom-0"
-              />
-            </Show>
-            <Show when={showSideWidthResize() && dock() === 'right'}>
-              <ResizeHandle
-                direction="grow-left"
-                getSize={dockWidth}
-                setSize={setDockWidth}
-                min={meta().minW}
-                class="absolute left-0 top-0 bottom-0"
-              />
-            </Show>
-            {/* Bottom dock top edge, or split between stacked side panels */}
-            <Show when={showBottomHeightResize()}>
-              <ResizeHandle
-                direction={dock() === 'bottom' ? 'grow-up' : 'grow-down'}
-                getSize={dockHeight}
-                setSize={dock() === 'bottom' ? setDockHeight : setStackedHeight}
-                min={meta().minH}
-                class={
-                  dock() === 'bottom'
-                    ? 'absolute left-0 right-0 top-0'
-                    : 'absolute left-0 right-0 bottom-0'
-                }
-              />
-            </Show>
-
-            {/* Free float: borders. Editor keeps full viewport height — width-only resize. */}
-            <Show when={isFloat() && !isPhoneViewport()}>
-              {/* biome-ignore lint/a11y/useSemanticElements: pointer-drag resize handle; <hr> cannot carry the pointer-capture drag styling */}
-              <div
-                class="sc-resize-handle absolute right-0 top-0 bottom-0"
-                role="separator"
-                aria-orientation="vertical"
-                aria-valuenow={getPanelChrome(props.id).w}
-                tabIndex={0}
-                title="Drag to resize width"
-                onPointerDown={onFloatResizePointerDown('e')}
-              />
-              {/* biome-ignore lint/a11y/useSemanticElements: pointer-drag resize handle; <hr> cannot carry the pointer-capture drag styling */}
-              <div
-                class="sc-resize-handle absolute left-0 top-0 bottom-0"
-                role="separator"
-                aria-orientation="vertical"
-                aria-valuenow={getPanelChrome(props.id).w}
-                tabIndex={0}
-                title="Drag to resize width"
-                onPointerDown={onFloatResizePointerDown('w')}
-              />
-              <Show when={props.id !== 'editor'}>
-                {/* biome-ignore lint/a11y/useSemanticElements: pointer-drag resize handle; <hr> cannot carry the pointer-capture drag styling */}
-                <div
-                  class="sc-pane-resize-handle absolute left-0 right-3 bottom-0"
-                  role="separator"
-                  aria-orientation="horizontal"
-                  aria-valuenow={getPanelChrome(props.id).h}
-                  tabIndex={0}
-                  title="Drag to resize"
-                  onPointerDown={onFloatResizePointerDown('s')}
-                />
-                {/* biome-ignore lint/a11y/useSemanticElements: pointer-drag resize handle; <hr> cannot carry the pointer-capture drag styling */}
-                <div
-                  class="sc-pane-resize-handle absolute left-0 right-0 top-0"
-                  role="separator"
-                  aria-orientation="horizontal"
-                  aria-valuenow={getPanelChrome(props.id).h}
-                  tabIndex={0}
-                  title="Drag to resize"
-                  onPointerDown={onFloatResizePointerDown('n')}
-                />
-                <div
-                  class="axis-panel-resize"
-                  title="Resize"
-                  onPointerDown={onFloatResizePointerDown('se')}
-                />
+                  <Show when={props.menuExtra}>
+                    <hr class="axis-panel-menu-sep border-0" />
+                    {props.menuExtra}
+                  </Show>
+                </div>
               </Show>
-            </Show>
+            </div>
+            <span class="flex-1 truncate min-w-0 axis-panel-title">{title()}</span>
+            <Show when={!hoverCollapsed() && props.headerExtra}>{props.headerExtra}</Show>
+            <div
+              class="flex items-center gap-0.5 flex-shrink-0"
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <Show when={!hoverCollapsed() && props.headerEnd}>{props.headerEnd}</Show>
+              <Show when={!hoverCollapsed()}>
+                <button
+                  type="button"
+                  class="sc-btn sc-btn-ghost px-1"
+                  title="Close"
+                  aria-label="Close panel"
+                  onClick={close}
+                >
+                  <Icons.x />
+                </button>
+              </Show>
+            </div>
           </div>
+
+          <div
+            class="flex-1 min-h-0 overflow-auto axis-panel-body"
+            classList={{
+              'is-hover-hidden': hoverCollapsed(),
+              'p-3': props.id !== 'editor' && props.id !== 'watchlist',
+            }}
+            aria-hidden={hoverCollapsed() || undefined}
+          >
+            {props.children}
+          </div>
+
+          {/* Docked left/right: column width on free vertical edge */}
+          <Show when={showSideWidthResize() && dock() === 'left'}>
+            <ResizeHandle
+              direction="grow-right"
+              getSize={dockWidth}
+              setSize={setDockWidth}
+              min={meta().minW}
+              class="absolute right-0 top-0 bottom-0"
+            />
+          </Show>
+          <Show when={showSideWidthResize() && dock() === 'right'}>
+            <ResizeHandle
+              direction="grow-left"
+              getSize={dockWidth}
+              setSize={setDockWidth}
+              min={meta().minW}
+              class="absolute left-0 top-0 bottom-0"
+            />
+          </Show>
+          {/* Bottom dock top edge, or split between stacked side panels */}
+          <Show when={showBottomHeightResize()}>
+            <ResizeHandle
+              direction={dock() === 'bottom' ? 'grow-up' : 'grow-down'}
+              getSize={dockHeight}
+              setSize={dock() === 'bottom' ? setDockHeight : setStackedHeight}
+              min={meta().minH}
+              class={
+                dock() === 'bottom'
+                  ? 'absolute left-0 right-0 top-0'
+                  : 'absolute left-0 right-0 bottom-0'
+              }
+            />
+          </Show>
+
+          {/* Free float: borders. Editor keeps full viewport height — width-only resize. */}
+          <Show when={isFloat() && !isPhoneViewport()}>
+            {/* biome-ignore lint/a11y/useSemanticElements: pointer-drag resize handle; <hr> cannot carry the pointer-capture drag styling */}
+            <div
+              class="sc-resize-handle absolute right-0 top-0 bottom-0"
+              role="separator"
+              aria-orientation="vertical"
+              aria-valuenow={getPanelChrome(props.id).w}
+              tabIndex={0}
+              title="Drag to resize width"
+              onPointerDown={onFloatResizePointerDown('e')}
+            />
+            {/* biome-ignore lint/a11y/useSemanticElements: pointer-drag resize handle; <hr> cannot carry the pointer-capture drag styling */}
+            <div
+              class="sc-resize-handle absolute left-0 top-0 bottom-0"
+              role="separator"
+              aria-orientation="vertical"
+              aria-valuenow={getPanelChrome(props.id).w}
+              tabIndex={0}
+              title="Drag to resize width"
+              onPointerDown={onFloatResizePointerDown('w')}
+            />
+            <Show when={props.id !== 'editor'}>
+              {/* biome-ignore lint/a11y/useSemanticElements: pointer-drag resize handle; <hr> cannot carry the pointer-capture drag styling */}
+              <div
+                class="sc-pane-resize-handle absolute left-0 right-3 bottom-0"
+                role="separator"
+                aria-orientation="horizontal"
+                aria-valuenow={getPanelChrome(props.id).h}
+                tabIndex={0}
+                title="Drag to resize"
+                onPointerDown={onFloatResizePointerDown('s')}
+              />
+              {/* biome-ignore lint/a11y/useSemanticElements: pointer-drag resize handle; <hr> cannot carry the pointer-capture drag styling */}
+              <div
+                class="sc-pane-resize-handle absolute left-0 right-0 top-0"
+                role="separator"
+                aria-orientation="horizontal"
+                aria-valuenow={getPanelChrome(props.id).h}
+                tabIndex={0}
+                title="Drag to resize"
+                onPointerDown={onFloatResizePointerDown('n')}
+              />
+              <div
+                class="axis-panel-resize"
+                title="Resize"
+                onPointerDown={onFloatResizePointerDown('se')}
+              />
+            </Show>
+          </Show>
+        </div>
       </Portal>
     </Show>
   );
@@ -1471,8 +1460,12 @@ export const PanelDragOverlay: Component = () => {
     <Show when={preview()}>
       {(p) => (
         <div class="axis-dock-overlay" aria-hidden="true">
-          <div class={`axis-dock-zone axis-dock-zone-left ${p().zone === 'left' ? 'is-hot' : ''}`} />
-          <div class={`axis-dock-zone axis-dock-zone-right ${p().zone === 'right' ? 'is-hot' : ''}`} />
+          <div
+            class={`axis-dock-zone axis-dock-zone-left ${p().zone === 'left' ? 'is-hot' : ''}`}
+          />
+          <div
+            class={`axis-dock-zone axis-dock-zone-right ${p().zone === 'right' ? 'is-hot' : ''}`}
+          />
           <div
             class={`axis-dock-zone axis-dock-zone-bottom ${p().zone === 'bottom' ? 'is-hot' : ''}`}
           />
@@ -1549,7 +1542,9 @@ function openCompanionWindow(id: PanelId, title: string) {
     // APIs (`textContent`, `doc.title`), never `doc.write` interpolation.
     const doc = w.document;
     doc.open();
-    doc.write('<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"></head><body></body></html>');
+    doc.write(
+      '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"></head><body></body></html>',
+    );
     doc.close();
     doc.title = `AXIS · ${title}`;
     const style = doc.createElement('style');

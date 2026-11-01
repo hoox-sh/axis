@@ -72,6 +72,8 @@ export interface ModalProps {
   headerActions?: JSX.Element;
   /** Focus the first focusable element when the dialog opens. Default `true`. */
   autoFocus?: boolean;
+  /** Element to restore focus to when the dialog closes. */
+  returnElement?: HTMLElement | null;
   /** `aria-label` of the close button. Default `Close`. */
   closeLabel?: string;
   /** `data-testid` of the close button. */
@@ -154,7 +156,10 @@ function ModalShell(props: ModalProps) {
         ref={(el) => {
           if (!el) return;
           // Tab cycles inside the dialog; dispose restores prior focus on close.
-          const dispose = installFocusTrap(el, { autoFocus: props.autoFocus !== false });
+          const dispose = installFocusTrap(el, {
+            autoFocus: props.autoFocus !== false,
+            returnElement: props.returnElement,
+          });
           onCleanup(dispose);
           props.onDialogRef?.(el);
         }}

@@ -15,6 +15,61 @@ _Generated/updated: 2026-11-01 · 880 commits · describe-tag: `v2.26.0`_
 
 ## [Unreleased]
 
+### Added
+
+- **Performance & architecture audit roadmap** (`docs/architecture/perf-audit-2026-11.mdx`). Documents the baseline test health (4708 pass / 0 fail), the strongest remaining architecture/performance gaps (coarse `store.bars` reactivity, dense `ChartHost` effects, main-thread engine JSON parse, overlay rewrite cost, live-tick path thrash, UI theming/animation inconsistencies), and a 6-phase plan to reach world-class responsiveness.
+
+- **Phase 0 performance telemetry helpers** (`src/perf/telemetry.ts`). Adds `perfMark`, `perfMeasure`, `perfMeasureSync`, `perfMeasureAsync`, and `setPerfEnabled` for dev-only `performance.mark`/`measure` instrumentation around the hot paths.
+
+- **Narrow bar-plane store** (`src/stores/bars.ts`). Introduces `barPlane` (`bars`, `tip`, `length`, `gen`) for fine-grained OHLCV reads that do not drag the monolithic `store.bars` array through every reactive subscriber. Wired into `loadBars`, `appendBar`, `restoreSlotBarsToActivePlane`, and `flushLiveFrame`. The plane tip is cloned on full-window updates to keep the new store isolated from the app-store proxies.
+
+- **`bun check` as the canonical typecheck alias**. Root, worker, and CLI typecheck scripts now all use `bun check`; `packages/cli/tsconfig.json` replaced the deprecated `baseUrl` with a `paths` wildcard so the CLI typecheck passes again.
+
+### Changed
+
+- **Vendored Pyodide PYNE wheel bumped to `pynescript-0.6.29`.** Built from the sister `pynescript` tree (`scripts/sync-pyne-wheel.sh`); hard-coded `/vendor/` paths in `src/engines/catalog.ts`, `src/workers/pyodide-runtime.ts`, and `tests/pyodide-worker.test.ts` updated; editor builtins catalog re-synced from PYNE `builtin_metadata.json` (941 entries). Brings strategy next-bar market fills, `na`/`fixnan` parity, SAR incremental fix, and the TradingView loop-args SMA call-site overwrite into the offline Pyodide engine. Self-hosted Pyodide runtime stays on **0.29.5** (latest full CDN release).
+
+- **Phase 1 reactivity migration for the hottest `store.bars` UI readers.** Migrated `App.tsx` (document title), `StatusBar.tsx`, `Topbar.tsx`, `PricePanel.tsx`, `DataViewPanel.tsx`, `QuotePanel.tsx`, `VolumeProfileOverlay.tsx`, `TimePanel.tsx`, `CurrentPriceCard.tsx`, `HpoPanel.tsx`, and `BarReplayControls.tsx` to read from `barPlane` signals instead of `store.bars`. The document-title effect is now also rAF-throttled so rapid ticks do not churn `document.title`.
+
+- **Instrumented the main paint and parse hot paths.** Wrapped `setDataToChart` (`src/chart/manager-access.ts`) with `perfMeasureSync('axis:setDataToChart', …)` and `parseEngineJson` (`src/engines/json-sanitize.ts`) with `perfMeasureSync('axis:parseEngineJson', …)`, plus `perfMark('axis:loadBars:setStore')` and `perfMark('axis:appendBar:store')`. This gives a baseline before incremental `series.update`/Worker deserialization work.
+
+### Added
+
+- **Phase 2 overlay identical-paint caches.** `src/chart/compare-overlay.ts`, `src/chart/onchain-overlay.ts`, and `src/chart/onchain-events.ts` now cache the last applied data and skip redundant `series.setData` / marker-plugin rebuilds when ChartHost re-runs for unrelated signals (`chartDataGen` bumps, label preferences, etc.).
+- **Reactive ranging signal in ChartHost.** `src/chart/ChartHost.tsx` exposes a poll-driven `isRanging` signal from `PaneManager.isRanging()`. Compare, on-chain scalar, and on-chain event effects suppress full overlay rewrites while the user is panning/zooming and flush the latest state once the gesture ends.
+
+### Changed
+
+- **Phase 2 data-plane and paint-path reductions.** `setBarPlaneAppend` (`src/stores/bars.ts`) avoids copying the entire 4.5k-bar window on every live tick; `setDataToChart` (`src/chart/manager-access.ts`) now skips volume `setData` when the candle series paint is skipped for an unchanged window. Validation remains **4708 pass / 10 skip / 0 fail**.
+
+### Added
+
+- **Phase 3 off-thread engine JSON parser.** New `parseEngineJsonAsync` (`src/engines/json-sanitize.ts`) and `src/engines/json-parse-worker.ts` move `JSON.parse` of engine responses above 256 KB into a dedicated module Worker. Wired into `live-sessions.ts`, `engine-ws.ts`, `catalog.ts` (REST `/run`), `batch.ts`, and the Pyodide result path so the main thread no longer blocks on multi-megabyte series payloads.
+- **Phase 3 typed-result contract.** The Pyodide result path now normalizes through `normalizeEngineResult` (`src/indicators/run-helpers.ts`) so REST, WebSocket, and local engines all present the same `NormalizedRunResult` shape to the apply pipeline.
+- **Phase 3 in-memory result cache.** New `src/indicators/run-cache.ts` memoizes successful non-live runs keyed by `(engineId, scriptId, scriptHash, inputs, config, barsGen, barsLength, libraries)`. Bounded at 16 entries / 30 s TTL, clones values on store and retrieve, and auto-disabled in tests to avoid cross-test pollution. Wired into `src/indicators/runner.ts`.
+
+### Changed
+
+- **Phase 3 engine-boundary wiring.** `src/engines/live-sessions.ts`, `src/engines/engine-ws.ts`, `src/engines/catalog.ts`, and `src/engines/batch.ts` now use `parseEngineJsonAsync` for large payloads while keeping small 413-peek / status parses synchronous. Validation remains **4708 pass / 10 skip / 0 fail**.
+
+### Fixed
+
+- **Adding an indicator no longer shows "Run superseded".** Catalog adds and applied-script runs ignore the global run epoch, and live overlay ticks no longer bump it. A later live delta cannot cancel the first paint.
+
+- **SMA / catalog add store commit survived a live epoch bump.** `updateIndicatorStore`, overlay build, and drawings still used raw `isRunEpochCurrent`, so a tip tick after `skipEditorDraft` could return `superseded: true` and skip `addIndicator` even though `runEpochInvalidates` said keep going. Those stages now use `runEpochInvalidates`; the status bar never shows "Run superseded".
+
+- **Live overlay SMA/Donchian vs candles.** A 1–8 bar stream shortfall no longer head-pads (that shifted Donchian onto newer candles). The last finite value is held forward instead. `appendBar` also extends idle overlay tips onto the new candle so a released SMA keeps covering the forming bar.
+
+- **Painted chart no longer keeps multi-bar internal holes after Dataset complete / live ticks.** `expandCachedSeriesToNow` used to return on a current tip without `fillInternalGaps`, so a live append that jumped closed slots (e.g. 23 missing 1m bars) stayed blank while venue REST still had them. Expand, background catch-up, and live jump detection now REST-fill those holes and repaint the window.
+
+- **Released overlay scripts rejoin the live wire.** A sticky `message: 'released'` after `setScriptStatus(id, 'live')` kept multiplex treating the sub as gone; duplicate PYNE idle/released acks after `release()` overwrote degraded backoff and looped. Status clears the message on live, duplicate release acks are ignored, and an idle/released ack kicks `scheduleLiveRerun` immediately.
+
+### Added
+
+- **Phase 4 UX polish.** Shared `Spinner`, theme tokens on `ChartScaleControls`, safe-area / motion CSS variables, coarse-pointer topbar targets, compositor-only drawing-rail fade, hover-slide gated on `prefersReducedMotion`, and `installFocusTrap` `returnElement` plus aria-hidden sibling hiding (retries on a microtask so Solid refs that fire before insert still hide the background).
+
+- **Phase 5 quality gates.** `bun run perf:audit` (`scripts/perf-audit.mjs`) runs typecheck, hot-path unit tests, and `AXIS_BENCH=1` benches, then writes `reports/perf-audit.json`. `--full` also runs the unit suite and Playwright `@smoke`. CI gains a dedicated **Firehose budget** job (`bun run test:bench`, 120 s wall). ADR-017 (narrow bar plane) and ADR-018 (off-thread engine JSON parse + typed result contract) are recorded in `docs/architecture/adrs.mdx`.
+
 ## [2.27.0] — 2026-11-01
 
 ### Changed

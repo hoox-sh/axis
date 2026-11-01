@@ -7,7 +7,7 @@ tags: [bench, code, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-19T23:38:00Z
+  at: 2026-11-01T18:07:47Z
 sources:
   - id: tree
     resource: "tests/bench"
@@ -21,7 +21,7 @@ okf_lock: generated
 * `append-bar-firehose.bench.test.ts`
 * `dataset-write.bench.test.ts`
 * `fixtures-scale.ts` — BENCH_HISTORY_BARS, BENCH_TICK_COUNT, makeScaleBars, nextFirehoseBar
-* `metrics.ts` — BenchSample, FIREHOSE_SOFT_BUDGET_MS, formatSample, measureOps, nowMs
+* `metrics.ts` — BENCH_JSON_PREFIX, BenchSample, FIREHOSE_SOFT_BUDGET_MS, formatSample, formatSampleJson, measureOps, nowMs, parseBenchJsonLines
 
 # Packages
 
@@ -31,3 +31,8 @@ okf_lock: generated
 
 * [src/data](/code/src/data.md)
 * [src/store](/code/src/store.md)
+
+# Used by
+
+* [scripts](/code/scripts.md)
+* [tests](/code/tests.md)
