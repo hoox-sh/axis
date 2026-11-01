@@ -56,6 +56,8 @@ _Generated/updated: 2026-11-01 · 880 commits · describe-tag: `v2.26.0`_
 
 - **Adding an indicator no longer shows "Run superseded".** Catalog adds and applied-script runs ignore the global run epoch, and live overlay ticks no longer bump it. A later live delta cannot cancel the first paint.
 
+- **SMA / catalog add store commit survived a live epoch bump.** `updateIndicatorStore`, overlay build, and drawings still used raw `isRunEpochCurrent`, so a tip tick after `skipEditorDraft` could return `superseded: true` and skip `addIndicator` even though `runEpochInvalidates` said keep going. Those stages now use `runEpochInvalidates`; the status bar never shows "Run superseded".
+
 - **Live overlay SMA/Donchian vs candles.** A 1–8 bar stream shortfall no longer head-pads (that shifted Donchian onto newer candles). The last finite value is held forward instead. `appendBar` also extends idle overlay tips onto the new candle so a released SMA keeps covering the forming bar.
 
 - **Painted chart no longer keeps multi-bar internal holes after Dataset complete / live ticks.** `expandCachedSeriesToNow` used to return on a current tip without `fillInternalGaps`, so a live append that jumped closed slots (e.g. 23 missing 1m bars) stayed blank while venue REST still had them. Expand, background catch-up, and live jump detection now REST-fill those holes and repaint the window.

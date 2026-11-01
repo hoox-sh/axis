@@ -1052,9 +1052,9 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
     ) {
       setRunCache(cacheKey, result);
     }
-    // Superseded by a newer *editor* Run — keep payload; chart indicators still apply.
+    // Replaced editor Run — keep payload; never toast "Run superseded".
     if (runEpochInvalidates(epoch, opts, opts.indicatorId)) {
-      finishInteractiveStatus(epoch, silent, 'ready', 'Run superseded');
+      finishInteractiveStatus(epoch, silent, 'ready', 'Ready');
       return {
         ...result,
         series: result.series || {},
@@ -1103,7 +1103,7 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
       };
     }
     if (runEpochInvalidates(epoch, opts, opts.indicatorId)) {
-      finishInteractiveStatus(epoch, silent, 'ready', 'Run superseded');
+      finishInteractiveStatus(epoch, silent, 'ready', 'Ready');
       return {
         ...result,
         series: result.series || {},
@@ -1148,9 +1148,9 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
   } catch (err: unknown) {
     const ms = performance.now() - t0;
     recordRunLatency(ms);
-    // Superseded mid-flight: quiet return (winner owns status bar)
+    // Replaced mid-flight: quiet return (winner owns status bar)
     if (runEpochInvalidates(epoch, opts, opts.indicatorId)) {
-      finishInteractiveStatus(epoch, silent, 'ready', 'Run superseded');
+      finishInteractiveStatus(epoch, silent, 'ready', 'Ready');
       return {
         status: 'error',
         plots: [],
@@ -1458,6 +1458,8 @@ async function runAndApplyInner(
     seriesMap,
     userPlotColors,
     scriptName,
+    opts,
+    indicatorId,
   });
   if ('superseded' in overlayBuilt && overlayBuilt.superseded) {
     return {
@@ -1547,7 +1549,7 @@ async function runAndApplyInner(
     else if (store.status !== 'error') setStatus('error', `Chart apply failed: ${msg}`);
   }
 
-  applyDrawings({ epoch, indicatorId, result, script, bars, overlay, paneId, silent });
+  applyDrawings({ epoch, indicatorId, result, script, bars, overlay, paneId, silent, opts });
   if (
     !updateIndicatorStore({
       epoch,

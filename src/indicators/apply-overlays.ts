@@ -31,11 +31,11 @@ import type { RunResult } from './runner';
 import { appendLog } from '../store';
 import { PLOT_PALETTE } from '../chart/series-factory';
 import { resolvePineColor } from '../results/pine-color';
-import { lineDataHasSample, isRunEpochCurrent } from './run-helpers';
+import { lineDataHasSample, runEpochInvalidates } from './run-helpers';
 // NOTE: single documented cycle — runner.ts owns the series-window helpers
 // and imports this stage module for orchestration (see apply-context.ts).
 // All cross-uses happen inside function bodies at call time.
-import { alignSeriesToTimes, tailAlignSeriesToWindow } from './runner';
+import { alignSeriesToTimes, tailAlignSeriesToWindow, type RunOptions } from './runner';
 import {
   lineSeriesToOverlayData,
   ohlcSeriesToBarData,
@@ -86,6 +86,9 @@ export interface OverlayBuildContext {
   seriesMap: Record<string, unknown[] | (number | null)[]>;
   userPlotColors: Record<string, { color: string; custom?: boolean; width?: number; visible?: boolean }>;
   scriptName: string;
+  /** Chart-add / live-tick opts so a live epoch bump cannot abort SMA. */
+  opts?: RunOptions;
+  indicatorId?: string | null;
 }
 
 export type OverlayBuildOutcome =
@@ -134,6 +137,8 @@ export function buildOverlayPayloads(ctx: OverlayBuildContext): OverlayBuildOutc
     seriesMap,
     userPlotColors,
     scriptName,
+    opts,
+    indicatorId,
   } = ctx;
   const overlayLines: OverlayLine[] = [];
   // Prefer named `series` + `meta.plot_meta` (PYNE modern). Top-level `plots[]`
@@ -143,8 +148,8 @@ export function buildOverlayPayloads(ctx: OverlayBuildContext): OverlayBuildOutc
   if (seriesEntries.length > 0) {
     let colorIdx = 0;
     for (const [k, arr] of seriesEntries) {
-      // Large multi-plot payloads: bail early if a newer run won
-      if (!isRunEpochCurrent(epoch)) {
+      // Large multi-plot payloads: bail early if a newer *editor* Run won
+      if (runEpochInvalidates(epoch, opts, indicatorId)) {
         return { superseded: true };
       }
       const meta = plotMeta[k] || {};
@@ -243,7 +248,7 @@ export function buildOverlayPayloads(ctx: OverlayBuildContext): OverlayBuildOutc
   {
     let ohlcColorIdx = overlayLines.length;
     for (const { key, values, meta } of split.ohlc) {
-      if (!isRunEpochCurrent(epoch)) {
+      if (runEpochInvalidates(epoch, opts, indicatorId)) {
         return { superseded: true };
       }
       if (!plotDisplayHas(meta?.display, PLOT_DISPLAY.pane)) continue;

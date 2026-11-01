@@ -234,6 +234,42 @@ describe('runAndApply concurrent supersession', () => {
     expect(store.statusMessage).not.toMatch(/superseded/i);
   });
 
+  it('catalog add still commits the script card after a live epoch bump', async () => {
+    // Headless runs skip chart paint when getManager() is null; exercise the
+    // store stage directly so a live bump cannot drop addIndicator.
+    const { updateIndicatorStore } = await import('../src/indicators/apply-store');
+    beginRunEpoch();
+    const epoch = 0; // stale vs current
+    const ok = updateIndicatorStore({
+      epoch,
+      result: {
+        status: 'success',
+        plots: SAMPLE_BARS.map(() => 1),
+        series: { sma: SAMPLE_BARS.map(() => 1) },
+        events: [],
+        meta: { overlay: true, script_name: 'SMA' },
+      },
+      silent: false,
+      indicatorId: undefined,
+      opts: { skipEditorDraft: true, openResults: false },
+      script: '//@version=5\nindicator("SMA")\nplot(close)',
+      paneId: 'price',
+      overlay: true,
+      existing: undefined,
+      overlayLines: [],
+      overlayOhlc: [],
+      split: { lines: [], ohlc: [], bgcolors: [], barcolors: [], fills: [] } as never,
+      ohlcvTimes: SAMPLE_BARS.map((b) => b.time),
+      seriesMap: { sma: SAMPLE_BARS.map(() => 1) },
+      plotMeta: { sma: { title: 'SMA', kind: 'plot' } },
+      seriesEntries: [['sma', SAMPLE_BARS.map(() => 1)]],
+      scriptName: 'SMA',
+      bars: SAMPLE_BARS,
+    });
+    expect(ok).toBe(true);
+    expect(store.scripts.some((s) => s.name === 'SMA')).toBe(true);
+  });
+
   it('applied indicator id is not invalidated by a stale epoch', () => {
     beginRunEpoch();
     const stale = 0;

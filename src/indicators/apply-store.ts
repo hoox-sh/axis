@@ -81,15 +81,17 @@ export interface StoreUpdateContext {
 
 // NOTE: single documented cycle — runner.ts owns `nonemptyBag` /
 // `withAxisSource` and imports this stage module for orchestration.
-import { formatRunError, isRunEpochCurrent } from './run-helpers';
+import { formatRunError, runEpochInvalidates } from './run-helpers';
 import { reportUiError } from '../ui/boot-errors';
 // NOTE: single documented cycle — runner.ts owns `nonemptyBag` /
 // `withAxisSource` and imports this stage module for orchestration.
 import { nonemptyBag, withAxisSource } from './runner';
 
 export function updateIndicatorStore(ctx: StoreUpdateContext): boolean {
-  // Final epoch gate before store mutations (indicator list / series cache)
-  if (!isRunEpochCurrent(ctx.epoch)) return false;
+  // Final epoch gate before store mutations (indicator list / series cache).
+  // Chart adds (skipEditorDraft / indicatorId) must still commit after a live
+  // bump — a raw isRunEpochCurrent check cancelled SMA adds as superseded.
+  if (runEpochInvalidates(ctx.epoch, ctx.opts, ctx.indicatorId)) return false;
 
   // Capture engine-exported inputs into lastRun meta for Script Settings
   const engineInputs =
@@ -169,7 +171,10 @@ export function updateIndicatorStore(ctx: StoreUpdateContext): boolean {
       // Also re-own strategy trade markers so remove(id) clears long/short labels.
       try {
         const mgr = getManager();
-        if (mgr?.getPane?.(ctx.paneId) && isRunEpochCurrent(ctx.epoch)) {
+        if (
+          mgr?.getPane?.(ctx.paneId) &&
+          !runEpochInvalidates(ctx.epoch, ctx.opts, ctx.indicatorId)
+        ) {
           mgr.removeOverlaysForOwner?.(ctx.paneId, EDITOR_RUN_KEY, { keepMarkers: true });
           mgr.syncOverlayLines?.(ctx.paneId, ctx.overlayLines, { ownerId: newId });
           if (typeof mgr.syncOverlayOhlc === 'function') {

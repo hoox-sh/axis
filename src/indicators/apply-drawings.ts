@@ -35,8 +35,8 @@ import {
   normalizeScriptDrawings,
   resolveDrawingLimits,
 } from '../chart/pyne-drawings';
-import { isRunEpochCurrent } from './run-helpers';
-import type { RunResult } from './runner';
+import { runEpochInvalidates } from './run-helpers';
+import type { RunOptions, RunResult } from './runner';
 
 export interface DrawingsApplyContext {
   epoch: number;
@@ -47,6 +47,7 @@ export interface DrawingsApplyContext {
   overlay: boolean;
   paneId: string;
   silent: boolean;
+  opts?: RunOptions;
 }
 
 /** Applied script is still present and visible (hide/detach mid-flight). */
@@ -59,8 +60,11 @@ export function appliedScriptStillOnChart(indicatorId?: string): boolean {
 export function applyDrawings(ctx: DrawingsApplyContext): void {
   // Pine drawings: atomic replace (no clear→empty→set flash).
   // GC trims each type to indicator()/strategy() max_*_count (default 50).
-  // Skip when superseded so a stale run cannot wipe fresher drawings.
-  if (isRunEpochCurrent(ctx.epoch) && appliedScriptStillOnChart(ctx.indicatorId)) {
+  // Skip when a newer *editor* Run won — chart adds keep drawing after live bumps.
+  if (
+    !runEpochInvalidates(ctx.epoch, ctx.opts, ctx.indicatorId) &&
+    appliedScriptStillOnChart(ctx.indicatorId)
+  ) {
     try {
       const drawings = Array.isArray((ctx.result as RunResult & { drawings?: unknown[] }).drawings)
         ? (ctx.result as RunResult & { drawings?: unknown[] }).drawings
