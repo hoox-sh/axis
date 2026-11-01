@@ -21,6 +21,8 @@ import { setStore, setActivePlugin, clearLogs, store, setLastRun } from '../src/
 import {
   runScript,
   runAndApply,
+  beginRunEpoch,
+  runEpochInvalidates,
   resolveInputPrecedence,
   resolveStrategyPrecedence,
   _resetRunEpochForTests,
@@ -197,6 +199,48 @@ describe('runAndApply concurrent supersession', () => {
     expect(r1.meta?.superseded).toBe(true);
     // lastRun must still be the newer run
     expect(store.lastRun?.meta?.script_name).toBe('b');
+  });
+
+  it('catalog add is not superseded when a later live epoch bumps', async () => {
+    let releaseSlow: (() => void) | null = null;
+    const slowGate = new Promise<void>((resolve) => {
+      releaseSlow = resolve;
+    });
+    restoreFetch = mockFetch(async () => {
+      await slowGate;
+      return jsonResponse({
+        status: 'success',
+        plots: SAMPLE_BARS.map(() => 1),
+        series: { sma: SAMPLE_BARS.map(() => 1) },
+        events: [],
+        meta: { overlay: true },
+      });
+    });
+
+    const add = runAndApply('//@version=5\nindicator("SMA")\nplot(close)', undefined, {
+      openResults: false,
+      silent: false,
+      skipEditorDraft: true,
+    });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(store.status).toBe('running');
+    // Live overlay paint / multiplex used to beginRunEpoch here.
+    beginRunEpoch();
+    releaseSlow!();
+    const r = await add;
+    expect(r.meta?.superseded).not.toBe(true);
+    expect(r.status).toBe('success');
+    expect(store.status).not.toBe('running');
+    expect(store.statusMessage).not.toMatch(/superseded/i);
+  });
+
+  it('applied indicator id is not invalidated by a stale epoch', () => {
+    beginRunEpoch();
+    const stale = 0;
+    expect(runEpochInvalidates(stale, {}, 'id_1')).toBe(false);
+    expect(runEpochInvalidates(stale, { skipEditorDraft: true })).toBe(false);
+    expect(runEpochInvalidates(stale, { liveTick: true })).toBe(false);
+    expect(runEpochInvalidates(stale, { silent: true })).toBe(true);
   });
 
   it('silent live re-run defers while interactive Run is in flight (MTF-safe)', async () => {

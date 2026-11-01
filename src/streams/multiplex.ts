@@ -63,7 +63,7 @@ import {
 import { setDataToChart } from '../chart/manager-access';
 import { appendLiveBar } from '../chart/live-append';
 import { isReplayActive, stopReplaySession } from '../chart/bar-replay';
-import { isInteractiveRunInFlight, runAndApply, beginRunEpoch } from '../indicators/runner';
+import { isInteractiveRunInFlight, runAndApply, currentRunEpoch } from '../indicators/runner';
 import { isStudyActive } from '../optimize/guard';
 import { groupIndicatorsByPlotDepLevel, mapWithConcurrencyLimit } from '../results/plot-sources';
 import { detectScriptKind } from '../indicators/script-meta';
@@ -1204,7 +1204,14 @@ function scheduleRerun(opts?: { immediate?: boolean }) {
       // supersedes the whole cycle, as before). Producers of plot sources
       // run in earlier levels; independent scripts inside a level run
       // together, bounded.
-      const batch = beginRunEpoch();
+      // Do not bump the global run epoch: that cancelled in-flight catalog
+      // adds ("Run superseded") and skipped their first paint. Share the
+      // current generation so members still apply together.
+      if (isInteractiveRunInFlight() || isStudyActive()) {
+        if (!store.live.needsRerun) setStore('live', 'needsRerun', true);
+        return;
+      }
+      const batch = currentRunEpoch();
       const levels = groupIndicatorsByPlotDepLevel(store.scripts.filter(isLiveRerunScript));
       for (const level of levels) {
         if (liveEpoch !== epochAtSchedule || !store.live.active) break;

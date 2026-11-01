@@ -114,6 +114,7 @@ import {
   formatRunError,
   isInteractiveRunInFlight,
   isRunEpochCurrent,
+  runEpochInvalidates,
   lineDataHasSample,
   normalizeEngineResult,
   ownsRunStatus,
@@ -474,6 +475,7 @@ export {
   formatRunError,
   isInteractiveRunInFlight,
   isRunEpochCurrent,
+  runEpochInvalidates,
   lineDataHasSample,
   normalizeEngineResult,
   normalizeSeriesMap,
@@ -501,9 +503,11 @@ function finishInteractiveStatus(
     releaseRunStatus(epoch ?? null);
     return;
   }
-  // Superseded by a newer interactive Run: only clear if we still own Running…
+  // Epoch moved without a newer interactive claim (live overlay paint used
+  // to beginRunEpoch). If we still own Running…, finish with our own
+  // message — do not rewrite it as "Run superseded".
   if (ownsRunStatus(epoch) && store.status === 'running') {
-    setStatus('ready', 'Run superseded');
+    setStatus(next, message);
     releaseRunStatus(epoch);
   }
 }
@@ -1048,8 +1052,8 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
     ) {
       setRunCache(cacheKey, result);
     }
-    // Superseded by a newer run — keep payload; clear stuck Running… if we own it
-    if (epoch != null && !isRunEpochCurrent(epoch)) {
+    // Superseded by a newer *editor* Run — keep payload; chart indicators still apply.
+    if (runEpochInvalidates(epoch, opts, opts.indicatorId)) {
       finishInteractiveStatus(epoch, silent, 'ready', 'Run superseded');
       return {
         ...result,
@@ -1070,7 +1074,7 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
       const msg = formatRunError(result.error || 'Engine error');
       result.error = msg;
       // Superseded: still return payload but do not clobber winner status bar
-      if (epoch != null && !isRunEpochCurrent(epoch)) {
+      if (runEpochInvalidates(epoch, opts, opts.indicatorId)) {
         finishInteractiveStatus(epoch, silent, 'error', msg);
         return {
           ...result,
@@ -1098,7 +1102,7 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
         meta: { ...result.meta, ms },
       };
     }
-    if (epoch != null && !isRunEpochCurrent(epoch)) {
+    if (runEpochInvalidates(epoch, opts, opts.indicatorId)) {
       finishInteractiveStatus(epoch, silent, 'ready', 'Run superseded');
       return {
         ...result,
@@ -1145,7 +1149,7 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
     const ms = performance.now() - t0;
     recordRunLatency(ms);
     // Superseded mid-flight: quiet return (winner owns status bar)
-    if (epoch != null && !isRunEpochCurrent(epoch)) {
+    if (runEpochInvalidates(epoch, opts, opts.indicatorId)) {
       finishInteractiveStatus(epoch, silent, 'ready', 'Run superseded');
       return {
         status: 'error',
@@ -1231,13 +1235,16 @@ export async function runAndApply(
     }
   }
 
-  // When an interactive run is already in flight (e.g. adding a second
-  // indicator while the first is still being evaluated), reuse the current
-  // epoch instead of bumping it. Bumping would supersede the in-flight run
-  // and mark it "superseded" before it ever paints. Sharing the epoch lets
-  // both runs complete and paint without clobbering each other.
-  const epoch =
-    !silent && isInteractiveRunInFlight() ? currentRunEpoch() : (opts.epoch ?? beginRunEpoch());
+  // Chart indicators (applied card / catalog add) never bump the global
+  // epoch — a live tick or a sibling add must not cancel their apply.
+  // Interactive editor Runs still share the current epoch when one is
+  // already in flight, otherwise they begin a new generation.
+  const chartInd = !!indicatorId || !!opts.skipEditorDraft;
+  const epoch = chartInd
+    ? (opts.epoch ?? currentRunEpoch())
+    : !silent && isInteractiveRunInFlight()
+      ? currentRunEpoch()
+      : (opts.epoch ?? beginRunEpoch());
 
   try {
     const result = await runAndApplyInner(script, indicatorId, opts, epoch, silent, openResults);
@@ -1256,7 +1263,7 @@ export async function runAndApply(
     } else {
       finishInteractiveStatus(epoch, silent, 'error', msg);
     }
-    const superseded = !isRunEpochCurrent(epoch);
+    const superseded = runEpochInvalidates(epoch, opts, indicatorId);
     return {
       status: 'error',
       plots: [],
@@ -1290,6 +1297,7 @@ async function runAndApplyInner(
     ? opts.precomputedResult
     : await runScript(script, {
         ...opts,
+        indicatorId: opts.indicatorId ?? indicatorId,
         bars,
         inputs,
         strategyProps,
@@ -1301,8 +1309,9 @@ async function runAndApplyInner(
       });
   const result = normalizeRunExtras(raw);
 
-  // Stale completion — never clobber newer lastRun / chart
-  if (!isRunEpochCurrent(epoch)) {
+  // Stale editor Run — never clobber newer lastRun / chart. Applied
+  // indicators keep going (live ticks must not cancel a catalog add).
+  if (runEpochInvalidates(epoch, { ...opts, silent }, indicatorId)) {
     return {
       ...result,
       meta: { ...result.meta, superseded: true },
@@ -1356,7 +1365,7 @@ async function runAndApplyInner(
   if (!manager) return result;
 
   // Re-check before chart mutation (manager work can be slow)
-  if (!isRunEpochCurrent(epoch)) {
+  if (runEpochInvalidates(epoch, { ...opts, silent }, indicatorId)) {
     return {
       ...result,
       meta: { ...result.meta, superseded: true },
@@ -1457,7 +1466,7 @@ async function runAndApplyInner(
     };
   }
   // Stale after building large overlay payloads — skip LWC mutations
-  if (!isRunEpochCurrent(epoch)) {
+  if (runEpochInvalidates(epoch, { ...opts, silent }, indicatorId)) {
     return {
       ...result,
       meta: { ...result.meta, superseded: true },
@@ -1484,7 +1493,7 @@ async function runAndApplyInner(
 
   // Chart series mutations isolated — LWC throws / disposed panes must not reject
   try {
-    if (!isRunEpochCurrent(epoch)) {
+    if (runEpochInvalidates(epoch, { ...opts, silent }, indicatorId)) {
       return {
         ...result,
         meta: { ...result.meta, superseded: true },

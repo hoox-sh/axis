@@ -47,7 +47,7 @@ import { applyPlotsAndMarkers } from './apply-mutations';
 import { buildOverlayPayloads, type OverlayLine, type OverlayOhlc } from './apply-overlays';
 import { ensureApplyPane } from './apply-pane';
 import { updateIndicatorStore } from './apply-store';
-import { beginRunEpoch, formatRunError, isRunEpochCurrent } from './run-helpers';
+import { currentRunEpoch, formatRunError, isRunEpochCurrent } from './run-helpers';
 import type { RunOptions, RunResult } from './runner';
 
 export type ApplyLiveOpts = {
@@ -292,7 +292,9 @@ export function applyPrecomputedChart(
 ): RunResult {
   const silent = opts.silent !== false;
   const liveTick = opts.liveTick !== false;
-  const epoch = beginRunEpoch();
+  // Live ticks must not bump the global run epoch — that cancelled in-flight
+  // catalog adds with "Run superseded" and skipped their first paint.
+  const epoch = currentRunEpoch();
   const runOpts: RunOptions = {
     silent,
     liveTick,
@@ -314,7 +316,7 @@ export function applyPrecomputedChart(
   const formingTip = liveTick && execCtx === 'tip';
   const id = cacheKey(indicatorId);
 
-  if (!isRunEpochCurrent(epoch)) {
+  if (!liveTick && !isRunEpochCurrent(epoch)) {
     return { ...result, meta: { ...result.meta, superseded: true } };
   }
 
@@ -351,7 +353,7 @@ export function applyPrecomputedChart(
   const manager = resolveManager();
   if (!manager) return result;
 
-  if (!isRunEpochCurrent(epoch)) {
+  if (!liveTick && !isRunEpochCurrent(epoch)) {
     return { ...result, meta: { ...result.meta, superseded: true } };
   }
 
@@ -517,7 +519,7 @@ export function applyPrecomputedChart(
   if ('superseded' in overlayBuilt && overlayBuilt.superseded) {
     return { ...result, meta: { ...result.meta, superseded: true } };
   }
-  if (!isRunEpochCurrent(epoch)) {
+  if (!liveTick && !isRunEpochCurrent(epoch)) {
     return { ...result, meta: { ...result.meta, superseded: true } };
   }
   const { overlayLines, overlayOhlc } = overlayBuilt as {
@@ -531,7 +533,7 @@ export function applyPrecomputedChart(
   }
 
   try {
-    if (!isRunEpochCurrent(epoch)) {
+    if (!liveTick && !isRunEpochCurrent(epoch)) {
       return { ...result, meta: { ...result.meta, superseded: true } };
     }
     if (!manager.getPane(paneId)) {

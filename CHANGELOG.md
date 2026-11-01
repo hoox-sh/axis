@@ -52,6 +52,8 @@ _Generated/updated: 2026-11-01 · 880 commits · describe-tag: `v2.26.0`_
 
 ### Fixed
 
+- **Adding an indicator no longer shows "Run superseded".** Catalog adds and applied-script runs ignore the global run epoch, and live overlay ticks no longer bump it. A later live delta cannot cancel the first paint.
+
 - **Live overlay SMA/Donchian vs candles.** A 1–8 bar stream shortfall no longer head-pads (that shifted Donchian onto newer candles). The last finite value is held forward instead. `appendBar` also extends idle overlay tips onto the new candle so a released SMA keeps covering the forming bar.
 
 ### Added
