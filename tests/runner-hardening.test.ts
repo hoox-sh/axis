@@ -42,6 +42,8 @@ beforeEach(() => {
   _resetRunEpochForTests();
   setStore('bars', SAMPLE_BARS);
   setStore('endpoint', 'http://run.test:5002');
+  // These suites mock REST /run; keep the WS-first default from hijacking them.
+  setStore('pluginsConfig', { 'engine:server': { preferWs: false } });
   setStore('scripts', []);
   setStore('resultsPanel', { open: false, height: 220 });
   setStore('resultsFocusId', null);
@@ -226,20 +228,18 @@ describe('runAndApply concurrent supersession', () => {
     });
 
     // Interactive Run shows Running… and claims status ownership
-    const interactive = runAndApply(
-      '//@version=5\nindicator("a")\nplot(1)',
-      undefined,
-      { openResults: false, silent: false },
-    );
+    const interactive = runAndApply('//@version=5\nindicator("a")\nplot(1)', undefined, {
+      openResults: false,
+      silent: false,
+    });
     await new Promise((r) => setTimeout(r, 10));
     expect(store.status).toBe('running');
 
     // Live tick while interactive is still running: must NOT supersede (MTF RSI)
-    const live = await runAndApply(
-      '//@version=5\nindicator("b")\nplot(2)',
-      undefined,
-      { openResults: false, silent: true },
-    );
+    const live = await runAndApply('//@version=5\nindicator("b")\nplot(2)', undefined, {
+      openResults: false,
+      silent: true,
+    });
     expect(live.meta?.deferred).toBe(true);
     expect(store.live.needsRerun).toBe(true);
     // Interactive still owns the engine
@@ -276,18 +276,14 @@ describe('removeIndicator clears stuck running', () => {
       });
     });
 
-    const id = addIndicator(
-      'slow',
-      '//@version=5\nindicator("s")\nplot(1)',
-      'price',
-      { p: { color: '#fff' } },
-    );
+    const id = addIndicator('slow', '//@version=5\nindicator("s")\nplot(1)', 'price', {
+      p: { color: '#fff' },
+    });
 
-    const p = runAndApply(
-      '//@version=5\nindicator("s")\nplot(1)',
-      id,
-      { openResults: false, silent: false },
-    );
+    const p = runAndApply('//@version=5\nindicator("s")\nplot(1)', id, {
+      openResults: false,
+      silent: false,
+    });
     await new Promise((r) => setTimeout(r, 10));
     expect(store.status).toBe('running');
 
@@ -346,7 +342,8 @@ describe('runAndApply hidden script gate', () => {
 
 describe('runScript strategyProps bag', () => {
   it('explicit empty bag does not merge leftover editor props', async () => {
-    const src = '//@version=6\nstrategy("T", initial_capital=1000)\nstrategy.entry("L", strategy.long)';
+    const src =
+      '//@version=6\nstrategy("T", initial_capital=1000)\nstrategy.entry("L", strategy.long)';
     setStore('editorStrategyProps', { initial_capital: 99999, leverage: 10 });
     let sent = '';
     restoreFetch = mockFetch(async (_input, init) => {
@@ -365,7 +362,8 @@ describe('runScript strategyProps bag', () => {
   });
 
   it('isolate without a bag does not fall back to editorStrategyProps', async () => {
-    const src = '//@version=6\nstrategy("T", initial_capital=1000)\nstrategy.entry("L", strategy.long)';
+    const src =
+      '//@version=6\nstrategy("T", initial_capital=1000)\nstrategy.entry("L", strategy.long)';
     setStore('editorStrategyProps', { initial_capital: 42 });
     let sent = '';
     restoreFetch = mockFetch(async (_input, init) => {
@@ -468,9 +466,9 @@ describe('input/strategy precedence resolvers (single source of truth)', () => {
   });
 
   it('strategy props: empty explicit wins only when asked', () => {
-    expect(
-      resolveStrategyPrecedence({}, { s: 1 }, { s: 2 }, { emptyExplicitWins: true }),
-    ).toEqual({});
+    expect(resolveStrategyPrecedence({}, { s: 1 }, { s: 2 }, { emptyExplicitWins: true })).toEqual(
+      {},
+    );
     expect(resolveStrategyPrecedence({}, { s: 1 }, { s: 2 }, {})).toEqual({ s: 1 });
     expect(
       resolveStrategyPrecedence(undefined, undefined, { s: 2 }, { allowEditorDraft: true }),

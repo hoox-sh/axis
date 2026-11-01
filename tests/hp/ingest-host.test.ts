@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { setStore } from '../../src/store';
 import { Redesign2WsClient } from '../../src/engine/ws-client';
 import { StreamLiveWire, type WireClient, type WireHandlers } from '../../src/engine/live-wire';
 import { decodeInbound, IngestCursorTable } from '../../src/hp/workers/ingest-core';
@@ -176,11 +177,17 @@ const nativeJsonParse = JSON.parse.bind(JSON);
  * Spy `JSON.parse` only while the fake worker posts to the host. Decode of
  * the socket payload already ran in {@link FakeIngest.push}.
  */
-function spyParseOnHost(transport: IngestWorkerTransport): { calls: string[]; restore: () => void } {
+function spyParseOnHost(transport: IngestWorkerTransport): {
+  calls: string[];
+  restore: () => void;
+} {
   const origOnmessage = transport.onmessage;
   const calls: string[] = [];
   transport.onmessage = (ev) => {
-    JSON.parse = ((text: string, reviver?: (this: unknown, key: string, value: unknown) => unknown) => {
+    JSON.parse = ((
+      text: string,
+      reviver?: (this: unknown, key: string, value: unknown) => unknown,
+    ) => {
       calls.push(text);
       return nativeJsonParse(text, reviver);
     }) as typeof JSON.parse;
@@ -203,6 +210,12 @@ afterEach(() => {
   JSON.parse = nativeJsonParse;
   setIngestWorkerFactory(null);
   resetEngineTransport();
+});
+
+beforeEach(() => {
+  // Bun shares module state across files; a leaked chart window would make
+  // `barsForScript` resume the script with another suite's bars.
+  setStore('bars', []);
 });
 
 describe('shouldAuthBlock', () => {
@@ -540,17 +553,13 @@ describe('IngestHostClient over a fake ingest port', () => {
       onSeriesDelta: () => {},
       onCloseVerified: () => {},
     };
-    const wire = new StreamLiveWire(
-      client as unknown as WireClient,
-      handlers,
-      (async () => ({
-        status: 'success',
-        plots: [],
-        series: {},
-        events: [],
-        meta: {},
-      })) as never,
-    );
+    const wire = new StreamLiveWire(client as unknown as WireClient, handlers, (async () => ({
+      status: 'success',
+      plots: [],
+      series: {},
+      events: [],
+      meta: {},
+    })) as never);
     try {
       const series = wire.ensureSeries(SUB, {
         exchange: 'binance',

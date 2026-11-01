@@ -28,13 +28,7 @@ import { _resetSourceRegistrationFlag } from '../src/sources/catalog';
 import { _resetStreamRegistrationFlag } from '../src/streams/catalog';
 import { _resetEngineRegistrationFlag } from '../src/engines/catalog';
 import { _resetStorageRegistrationFlag } from '../src/storage/catalog';
-import {
-  clearLogs,
-  setActivePlugin,
-  setEditorInputValues,
-  setStore,
-  store,
-} from '../src/store';
+import { clearLogs, setActivePlugin, setEditorInputValues, setStore, store } from '../src/store';
 import { SAMPLE_BARS } from './fixtures/bars';
 import { setManager } from '../src/chart/manager-access';
 
@@ -105,7 +99,14 @@ describe('BUILTIN_SCRIPTS catalog', () => {
     expect(builtinCategoryLabel('drawing')).toBe('Drawings');
     const draw = getBuiltinScript('drawings');
     expect(draw?.overlay).toBe(true);
-    for (const token of ['line.new', 'linefill.new', 'box.new', 'label.new', 'polyline.new', 'table.new']) {
+    for (const token of [
+      'line.new',
+      'linefill.new',
+      'box.new',
+      'label.new',
+      'polyline.new',
+      'table.new',
+    ]) {
       expect(draw?.code).toContain(token);
     }
   });
@@ -194,6 +195,8 @@ describe('applyBuiltinScript skips editor draft', () => {
     clearLogs();
     setStore('bars', SAMPLE_BARS);
     setStore('endpoint', 'http://run.test:5002');
+    // This suite mocks REST /run; keep the WS-first default from hijacking it.
+    setStore('pluginsConfig', { 'engine:server': { preferWs: false } });
     setStore('scripts', []);
     setStore('resultsPanel', { open: false, height: 220 });
     setActivePlugin('engine', 'server');

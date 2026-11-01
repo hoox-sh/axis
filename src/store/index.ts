@@ -518,13 +518,13 @@ export function clampHistoryBars(n: unknown): number {
  * window caps what the engine sees — and, since the chart and the engine share
  * one window, what the chart paints.
  *
- * The ceiling is {@link HISTORY_BARS_MAX} so the setting and the hard safety
- * rail are the same number: a window above the rail could never be painted,
- * and the chart would silently collapse on the first live tick.
+ * The ceiling is {@link ROLLING_WINDOW_MAX} so the setting, the UI bounds and
+ * the engine free-tier cap are the same number. Direct store writes may still
+ * reach {@link HISTORY_BARS_MAX}; {@link chartWindowLimit} is the hard rail.
  */
 export const ROLLING_WINDOW_DEFAULT = 4000; // stay < 5000 engine free-tier cap
 export const ROLLING_WINDOW_MIN = 200;
-export const ROLLING_WINDOW_MAX = HISTORY_BARS_MAX;
+export const ROLLING_WINDOW_MAX = 4500; // stay < 5000 engine free-tier cap
 
 /** Clamp a rolling-window value. `0`/absent → the default; negative → default. */
 export function clampRollingWindowBars(n: unknown): number {
@@ -532,7 +532,7 @@ export function clampRollingWindowBars(n: unknown): number {
   if (!Number.isFinite(v)) return ROLLING_WINDOW_DEFAULT;
   const r = Math.round(v);
   if (r <= 0) return ROLLING_WINDOW_DEFAULT;
-  return Math.min(4500, Math.max(ROLLING_WINDOW_MIN, r));
+  return Math.min(ROLLING_WINDOW_MAX, Math.max(ROLLING_WINDOW_MIN, r));
 }
 
 /** Bounds for the durable watchlist drawer width (D8 — was lower-bounded only). */

@@ -198,7 +198,7 @@ Pine-aware symbol navigation runs **locally** from one symbol index (`src/editor
 | Rename symbol | `F2` | — |
 | Occurrence highlight | automatic | cursor move / click |
 
-Definition resolves a parameter or local inside the enclosing function before a script-level name, so `f(n)` and `g(n)` stay distinct. References use the same scope, which keeps a parameter rename inside its function. Rename refuses builtins and builtin namespaces (`ta`, `strategy`), Pine keywords, invalid identifiers, a name already declared in the same scope, and `type` / `enum` members (a field name is shared by every value of its type).
+Definition resolves a parameter or local inside the enclosing function before a script-level name, so `f(n)` and `g(n)` stay distinct. Every occurrence is resolved to the declaration it actually names, so references, highlight and rename skip shadowed uses instead of merging scopes. `obj.field` resolves through the receiver's declared (or `Type.new()`-inferred) type; when the receiver has no type information and several types share the field name, the member is left unresolved rather than jumping to the wrong type. Call named arguments (`qty = qty`) are not treated as variable writes. Rename refuses builtins and builtin namespaces (`ta`, `strategy`), Pine keywords, invalid identifiers, `type` / `enum` members (a field name is shared by every value of its type), and a new name that is declared or referenced in any scope the rename touches.
 
 The same actions are in the command palette (*Go to Definition*, *Find References*, *Rename Symbol*). Browsers may reserve `F12` for devtools — use the palette or `Alt`-click there.
 

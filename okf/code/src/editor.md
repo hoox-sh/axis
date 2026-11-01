@@ -7,7 +7,7 @@ tags: [code, editor]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-31T22:37:50Z
+  at: 2026-10-31T22:59:45Z
 sources:
   - id: tree
     resource: "src/editor"
@@ -57,7 +57,7 @@ okf_lock: generated
 * `pyne-language.ts` — PineHighlightState, PineToken, advancePineLineState, defaultPineHighlightState, pineOffsetInLiteral, pyneParser, pyneScript, tokenizePine
 * `pyne-lsp-client.ts` — LSP_COMPLETION_TIMEOUT_MS, LSP_COOLDOWN_MS, LSP_DIAGNOSTICS_TIMEOUT_MS, LSP_HOVER_TIMEOUT_MS, RemoteCompletionItem, RemoteDiagnostic, RemoteDiagnosticsResult, RemoteHover, _resetRemoteLspCooldownForTests, fetchRemoteCompletion, fetchRemoteDiagnostics, fetchRemoteHover
 * `pyne-lsp.ts` — BuiltinMeta, COMPLETION_STYLE_ENUMS, appendInlineMarkdown, buildParamHintTooltip, completeCallParams, completeNamedArgEnum, enumsMatchingPrefixes, escapeDismissEditorOverlay, filterStyleEnums, looksLikeMarkdown, lookupBuiltin, lookupBuiltinMember
-* `symbol-index.ts` — RenamePlan, ScopeRange, SymbolDecl, SymbolIndex, SymbolKind, SymbolRef, buildSymbolIndex, definitionOf, isBuiltinName, isInLiteral, planRename, referencesOf
+* `symbol-index.ts` — RenamePlan, ScopeRange, SymbolDecl, SymbolIndex, SymbolKind, SymbolRef, buildSymbolIndex, definitionOf, isBuiltinName, planRename, referencesOf, scopeAt
 * `symbol-nav.ts` — applyRename, findReferences, goToDefinition, goToDefinitionAt, indexFor, occurrenceDecorations, startRename, symbolNavExtension
 * `tabbed-editor.tsx` — TabbedEditor, countDocStats, cursorLineCol
 

@@ -1,17 +1,12 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import {
-  Redesign2WsClient,
-  endpointToRedesign2WsUrl,
-} from '../../src/engine/ws-client';
+import { Redesign2WsClient, endpointToRedesign2WsUrl } from '../../src/engine/ws-client';
 
 describe('redesign2 websocket transport', () => {
   test('maps an HTTP endpoint to the pinned /ws/live URL', () => {
     expect(endpointToRedesign2WsUrl('https://pynescript.online/api')).toBe(
       'wss://pynescript.online/ws/live',
     );
-    expect(endpointToRedesign2WsUrl('http://127.0.0.1:5002')).toBe(
-      'ws://127.0.0.1:5002/ws/live',
-    );
+    expect(endpointToRedesign2WsUrl('http://127.0.0.1:5002')).toBe('ws://127.0.0.1:5002/ws/live');
     expect(endpointToRedesign2WsUrl('https://pynescript.online', 'pn_secret')).toBe(
       'wss://pynescript.online/ws/live?api_key=pn_secret',
     );
@@ -193,7 +188,7 @@ describe('redesign2 socket ownership', () => {
     await first;
     ws1.push({
       type: 'error',
-      payload: { code: 'unauthorized', message: 'bad token', retryable: false },
+      payload: { code: 'forbidden', message: 'bad token', retryable: false },
     });
     ws1.emitClose();
     await new Promise((r) => setTimeout(r, 30));
@@ -224,7 +219,12 @@ describe('redesign2 socket ownership', () => {
     const origSetTimeout = globalThis.setTimeout;
     let queued: (() => void) | null = null;
     globalThis.setTimeout = ((fn: TimerHandler, ms?: number, ...args: unknown[]) => {
-      if (typeof fn === 'function' && typeof ms === 'number' && ms <= delayMs && ms >= delayMs * 0.8) {
+      if (
+        typeof fn === 'function' &&
+        typeof ms === 'number' &&
+        ms <= delayMs &&
+        ms >= delayMs * 0.8
+      ) {
         queued = fn as () => void;
         return origSetTimeout(() => {}, 1_000_000);
       }

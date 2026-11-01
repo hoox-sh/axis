@@ -278,11 +278,15 @@ describe('MCP bridge key rotation', () => {
     current.fire('open');
 
     // A late frame on the rotated-out socket is dropped: no reply, no activity.
+    // The socket already sent its `hello` on open — only new frames matter.
+    const staleBefore = stale.sent.length;
     stale.fire('message', {
       data: JSON.stringify({ type: 'invoke', id: 'stale-1', capability: 'drawings.list' }),
     });
     await new Promise((r) => setTimeout(r, 10));
-    expect(stale.sent).toHaveLength(0);
+    expect(stale.sent).toHaveLength(staleBefore);
+    const staleFrames = stale.sent.map((s) => JSON.parse(s) as Record<string, unknown>);
+    expect(staleFrames.some((f) => f.id === 'stale-1')).toBe(false);
     expect(mcpBridgeState().lastCapability).not.toBe('drawings.list');
 
     // The current socket still answers on itself.

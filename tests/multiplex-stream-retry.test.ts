@@ -28,6 +28,17 @@ mock.module('../src/streams/stream-live', () => ({
   streamDriveSeries: async () => {},
   streamStop: () => {},
   StreamFallbackError,
+  // Keep the module surface complete for `multiplex.ts` (and later files that
+  // share Bun's process-wide module mock).
+  mergeEngineSnapshot: (chartBars: Array<{ time: number }>, snapshot: Array<{ time: number }>) => {
+    if (!snapshot.length) return chartBars;
+    const byTime = new Map<number, { time: number }>();
+    for (const b of chartBars) if (b && Number.isFinite(b.time)) byTime.set(b.time, b);
+    for (const b of snapshot) {
+      if (b && Number.isFinite(b.time) && !byTime.has(b.time)) byTime.set(b.time, b);
+    }
+    return [...byTime.values()].sort((a, b) => a.time - b.time);
+  },
 }));
 
 const {
@@ -48,11 +59,13 @@ const { setStore, store, setScriptStatus } = await import('../src/store');
 const { registry } = await import('../src/plugins/registry');
 const { ensureBuiltins, _resetBootstrapFlag } = await import('../src/plugins/bootstrap');
 const { _resetSourceRegistrationFlag } = await import('../src/sources/catalog');
-const { _resetStreamRegistrationFlag, registerDynamicStream } = await import(
-  '../src/streams/catalog'
-);
-const { _resetEngineRegistrationFlag, _setCachedEngineCapabilitiesForTests, DEFAULT_ENGINE_CAPABILITIES } =
-  await import('../src/engines/catalog');
+const { _resetStreamRegistrationFlag, registerDynamicStream } =
+  await import('../src/streams/catalog');
+const {
+  _resetEngineRegistrationFlag,
+  _setCachedEngineCapabilitiesForTests,
+  DEFAULT_ENGINE_CAPABILITIES,
+} = await import('../src/engines/catalog');
 const { _resetStorageRegistrationFlag } = await import('../src/storage/catalog');
 const { setActivePlugin } = await import('../src/store');
 

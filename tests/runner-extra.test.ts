@@ -34,6 +34,8 @@ beforeEach(() => {
   clearLogs();
   setStore('bars', SAMPLE_BARS);
   setStore('endpoint', 'http://run.test:5002');
+  // These suites mock REST /run; keep the WS-first default from hijacking them.
+  setStore('pluginsConfig', { 'engine:server': { preferWs: false } });
   setStore('scripts', []);
   setStore('resultsPanel', { open: false, height: 220 });
   setActivePlugin('engine', 'server');
@@ -68,9 +70,7 @@ describe('runAndApply', () => {
   });
 
   it('returns error without adding indicator', async () => {
-    restoreFetch = mockFetch(async () =>
-      jsonResponse({ status: 'error', message: 'nope' }, 500),
-    );
+    restoreFetch = mockFetch(async () => jsonResponse({ status: 'error', message: 'nope' }, 500));
     const before = store.scripts.length;
     const r = await runAndApply('bad', undefined, { openResults: false });
     expect(r.status).toBe('error');
@@ -80,9 +80,7 @@ describe('runAndApply', () => {
 
 describe('probeEndpoint', () => {
   it('ok on healthy json', async () => {
-    restoreFetch = mockFetch(async () =>
-      jsonResponse({ status: 'ok', endpoints: ['/run'] }),
-    );
+    restoreFetch = mockFetch(async () => jsonResponse({ status: 'ok', endpoints: ['/run'] }));
     const r = await probeEndpoint('http://run.test:5002');
     expect(r.ok).toBe(true);
   });

@@ -27,14 +27,12 @@ import {
   appendBar,
   chartWindowLimit,
   loadBars,
+  ROLLING_WINDOW_DEFAULT,
   setStore,
   store,
 } from '../src/store';
 import type { Bar } from '../src/store/types';
-import {
-  _resetSyncSampleForTests,
-  closedBarHash,
-} from '../src/chart/v1/invariants';
+import { _resetSyncSampleForTests, closedBarHash } from '../src/chart/v1/invariants';
 
 function bar(t: number, close = 100, extra: Partial<Bar> = {}): Bar {
   return { time: t, open: close, high: close + 1, low: close - 1, close, volume: 1, ...extra };
@@ -213,11 +211,11 @@ describe('chart window helpers', () => {
     // The persisted setting clamps 0 to the default, so an unbounded chart
     // window is never reachable from the UI.
     setStore('rollingWindowBars', 0);
-    expect(chartWindowLimit()).toBe(10_000);
+    expect(chartWindowLimit()).toBe(ROLLING_WINDOW_DEFAULT);
   });
 
   it('falls back to the default for junk', () => {
     setStore('rollingWindowBars', Number.NaN);
-    expect(chartWindowLimit()).toBe(10_000);
+    expect(chartWindowLimit()).toBe(ROLLING_WINDOW_DEFAULT);
   });
 });

@@ -33,18 +33,19 @@ describe('heavy-data thresholds', () => {
     expect(isVeryHeavyBarLoad(VERY_HEAVY_BARS_THRESHOLD - 1)).toBe(false);
   });
 
-  it('enables conflation for mid and precompute for heavy', () => {
+  it('keeps conflation off and precomputes for heavy', () => {
     const small = heavyTimeScaleOptions(100);
     expect(small.enableConflation).toBe(false);
     expect(small.precomputeConflationOnInit).toBe(false);
-    expect(small.minBarSpacing).toBe(0.5);
+    expect(small.minBarSpacing).toBe(0.001);
 
     const mid = heavyTimeScaleOptions(CONFLATION_BARS_THRESHOLD);
-    expect(mid.enableConflation).toBe(true);
+    expect(mid.enableConflation).toBe(false);
     expect(mid.precomputeConflationOnInit).toBe(false);
+    expect(mid.minBarSpacing).toBe(0.001);
 
     const heavy = heavyTimeScaleOptions(HEAVY_BARS_THRESHOLD);
-    expect(heavy.enableConflation).toBe(true);
+    expect(heavy.enableConflation).toBe(false);
     expect(heavy.precomputeConflationOnInit).toBe(true);
     expect(heavy.conflationThresholdFactor).toBe(1);
     expect(heavy.minBarSpacing).toBe(0.001);

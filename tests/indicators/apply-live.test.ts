@@ -52,6 +52,8 @@ const stubManager = {
 describe('applyPrecomputedChart', () => {
   beforeEach(() => {
     _clearLiveTipCachesForTests();
+    // Bun shares module state across test files — pin the flag this suite asserts.
+    store.debugPinsEnabled = false;
   });
 
   test('returns the result in this task (no thenable) when there is no chart', () => {
@@ -184,22 +186,29 @@ describe('applyPrecomputedChart', () => {
     try {
       // Seed a run slot so the second tip can skip setLastRun.
       const seed = tipResult({ a: [1, 2, 3] }, times);
-      applyPrecomputedChart(script, id, seed, bars, { silent: true, liveTick: true }, {
-        getManager: () => stubManager,
-        alignApplySeries: alignSpy,
-        buildOverlayPayloads: buildSpy,
-        setLastRun: ((..._args: unknown[]) => {
-          lastRunCalls.push(1);
-          return null;
-        }) as never,
-        updateIndicatorStore: (() => {
-          storeCalls.push(1);
-          return true;
-        }) as never,
-        applyDrawings: (() => {
-          drawingCalls.push(1);
-        }) as never,
-      });
+      applyPrecomputedChart(
+        script,
+        id,
+        seed,
+        bars,
+        { silent: true, liveTick: true },
+        {
+          getManager: () => stubManager,
+          alignApplySeries: alignSpy,
+          buildOverlayPayloads: buildSpy,
+          setLastRun: ((..._args: unknown[]) => {
+            lastRunCalls.push(1);
+            return null;
+          }) as never,
+          updateIndicatorStore: (() => {
+            storeCalls.push(1);
+            return true;
+          }) as never,
+          applyDrawings: (() => {
+            drawingCalls.push(1);
+          }) as never,
+        },
+      );
       expect(alignCalls.length).toBe(1);
       expect(buildCalls.length).toBe(1);
       // Tip with indicatorId skips store + drawings (no drawings field).
@@ -220,22 +229,29 @@ describe('applyPrecomputedChart', () => {
       lastRunCalls.length = 0;
 
       const tip2 = tipResult({ a: [1, 2, 9] }, times);
-      applyPrecomputedChart(script, id, tip2, bars, { silent: true, liveTick: true }, {
-        getManager: () => stubManager,
-        alignApplySeries: alignSpy,
-        buildOverlayPayloads: buildSpy,
-        setLastRun: ((..._args: unknown[]) => {
-          lastRunCalls.push(1);
-          return null;
-        }) as never,
-        updateIndicatorStore: (() => {
-          storeCalls.push(1);
-          return true;
-        }) as never,
-        applyDrawings: (() => {
-          drawingCalls.push(1);
-        }) as never,
-      });
+      applyPrecomputedChart(
+        script,
+        id,
+        tip2,
+        bars,
+        { silent: true, liveTick: true },
+        {
+          getManager: () => stubManager,
+          alignApplySeries: alignSpy,
+          buildOverlayPayloads: buildSpy,
+          setLastRun: ((..._args: unknown[]) => {
+            lastRunCalls.push(1);
+            return null;
+          }) as never,
+          updateIndicatorStore: (() => {
+            storeCalls.push(1);
+            return true;
+          }) as never,
+          applyDrawings: (() => {
+            drawingCalls.push(1);
+          }) as never,
+        },
+      );
 
       expect(alignCalls.length).toBe(0);
       expect(buildCalls.length).toBe(0);
@@ -330,12 +346,19 @@ describe('applyPrecomputedChart', () => {
         ...tipResult({ a: [1, 3] }, times),
         drawings: [],
       } as RunResult;
-      applyPrecomputedChart(script, id, withEmpty, bars, { silent: true, liveTick: true }, {
-        getManager: () => stubManager,
-        applyDrawings: ((ctx: { result: RunResult }) => {
-          drawingCalls.push((ctx.result as { drawings?: unknown }).drawings);
-        }) as never,
-      });
+      applyPrecomputedChart(
+        script,
+        id,
+        withEmpty,
+        bars,
+        { silent: true, liveTick: true },
+        {
+          getManager: () => stubManager,
+          applyDrawings: ((ctx: { result: RunResult }) => {
+            drawingCalls.push((ctx.result as { drawings?: unknown }).drawings);
+          }) as never,
+        },
+      );
       expect(drawingCalls).toEqual([[]]);
     } finally {
       removeIndicator(id);
@@ -358,13 +381,20 @@ describe('applyPrecomputedChart', () => {
 
     try {
       const seed = tipResult({ a: [1, 2, 3] }, times);
-      applyPrecomputedChart(script, id, seed, bars, { silent: true, liveTick: true }, {
-        getManager: () => mgr,
-        alignApplySeries: ((...args: Parameters<typeof alignApplySeries>) => {
-          alignCalls.push(1);
-          return alignApplySeries(...args);
-        }) as typeof alignApplySeries,
-      });
+      applyPrecomputedChart(
+        script,
+        id,
+        seed,
+        bars,
+        { silent: true, liveTick: true },
+        {
+          getManager: () => mgr,
+          alignApplySeries: ((...args: Parameters<typeof alignApplySeries>) => {
+            alignCalls.push(1);
+            return alignApplySeries(...args);
+          }) as typeof alignApplySeries,
+        },
+      );
       expect(alignCalls.length).toBe(1);
 
       (store as { runResults: Record<string, unknown> }).runResults = {
@@ -429,7 +459,8 @@ describe('applyPrecomputedChart', () => {
         rows: Array<{ data: Array<{ open: number; high: number; low: number; close: number }> }>,
       ) => {
         const last = rows[0]?.data[rows[0]!.data.length - 1];
-        if (last) ohlcSync.push({ open: last.open, high: last.high, low: last.low, close: last.close });
+        if (last)
+          ohlcSync.push({ open: last.open, high: last.high, low: last.low, close: last.close });
       },
     } as never;
 
@@ -439,10 +470,17 @@ describe('applyPrecomputedChart', () => {
     }) as typeof alignApplySeries;
 
     try {
-      applyPrecomputedChart(script, id, seed, bars, { silent: true, liveTick: true }, {
-        getManager: () => mgr,
-        alignApplySeries: alignSpy,
-      });
+      applyPrecomputedChart(
+        script,
+        id,
+        seed,
+        bars,
+        { silent: true, liveTick: true },
+        {
+          getManager: () => mgr,
+          alignApplySeries: alignSpy,
+        },
+      );
       expect(alignCalls.length).toBe(1);
 
       (store as { runResults: Record<string, unknown> }).runResults = {
@@ -458,10 +496,17 @@ describe('applyPrecomputedChart', () => {
           candle: [candle[0], candle[1], { open: 2.5, high: 4, low: 2, close: 3.5 }],
         },
       } as RunResult;
-      applyPrecomputedChart(script, id, tip2, bars, { silent: true, liveTick: true }, {
-        getManager: () => mgr,
-        alignApplySeries: alignSpy,
-      });
+      applyPrecomputedChart(
+        script,
+        id,
+        tip2,
+        bars,
+        { silent: true, liveTick: true },
+        {
+          getManager: () => mgr,
+          alignApplySeries: alignSpy,
+        },
+      );
       expect(alignCalls.length).toBe(0);
       expect(ohlcSync.length).toBeGreaterThanOrEqual(1);
       expect(ohlcSync[ohlcSync.length - 1]).toEqual({

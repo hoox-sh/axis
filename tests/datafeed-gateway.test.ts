@@ -22,7 +22,7 @@ describe('gatewayBase', () => {
 
   it('builds pyne URL from default endpoint', () => {
     const base = gatewayBase('pyne');
-    expect(base).toBe('http://127.0.0.1:5002/datafeed');
+    expect(base).toBe('https://pynescript.online/datafeed');
   });
 
   it('builds pyne URL from custom endpoint', () => {
@@ -37,7 +37,7 @@ describe('gatewayBase', () => {
 
   it('auto falls back to pyne when sidecar not probed', () => {
     const base = gatewayBase('auto');
-    expect(base).toBe('http://127.0.0.1:5002/datafeed');
+    expect(base).toBe('https://pynescript.online/datafeed');
   });
 });
 
@@ -75,11 +75,11 @@ describe('gatewayBase remote-page resolution (hardened VPS)', () => {
     );
   });
 
-  it('pyne on loopback page keeps loopback default', () => {
+  it('pyne on loopback page uses the Pro API default', () => {
     expect(gatewayBase('pyne', undefined, 'http://localhost:3000')).toBe(
-      'http://127.0.0.1:5002/datafeed',
+      'https://pynescript.online/datafeed',
     );
-    expect(gatewayBase('pyne', undefined, undefined)).toBe('http://127.0.0.1:5002/datafeed');
+    expect(gatewayBase('pyne', undefined, undefined)).toBe('https://pynescript.online/datafeed');
   });
 
   it('explicit endpoint wins over remote-page resolution', () => {
@@ -236,21 +236,15 @@ describe('gatewayBase edge cases', () => {
   });
 
   it('falls back to product origin for invalid page origins', () => {
-    // invalid URL → not remote → loopback default
-    expect(gatewayBase('pyne', undefined, 'not-a-url')).toBe(
-      'http://127.0.0.1:5002/datafeed',
-    );
+    // invalid URL → not remote → Pro API default
+    expect(gatewayBase('pyne', undefined, 'not-a-url')).toBe('https://pynescript.online/datafeed');
     // auto with explicit endpoint on invalid origin
     expect(gatewayBase('auto', 'http://h:1', 'not-a-url')).toBe('http://h:1/datafeed');
   });
 
   it('auto resolves explicit endpoint on remote pages', () => {
-    expect(gatewayBase('auto', 'http://h:1', 'https://axis.hoox.sh')).toBe(
-      'http://h:1/datafeed',
-    );
-    expect(gatewayBase('auto', undefined, 'not-a-url')).toBe(
-      'http://127.0.0.1:5002/datafeed',
-    );
+    expect(gatewayBase('auto', 'http://h:1', 'https://axis.hoox.sh')).toBe('http://h:1/datafeed');
+    expect(gatewayBase('auto', undefined, 'not-a-url')).toBe('https://pynescript.online/datafeed');
   });
 
   it('isRemotePageOrigin covers ipv6 loopbacks and empty', () => {
@@ -348,8 +342,8 @@ describe('gatewayWs', () => {
       }
     };
     try {
-      gatewayWs('pyne', '/ws', undefined, 'http://localhost:3000');
-      expect(seen[0]).toContain('ws://127.0.0.1:5002/datafeed/ws');
+      gatewayWs('pyne', '/ws', 'http://myhost:9999', 'http://localhost:3000');
+      expect(seen[0]).toContain('ws://myhost:9999/datafeed/ws');
       gatewayWs('pyne', '/ws', undefined, 'https://axis.hoox.sh');
       expect(seen[1]).toContain('wss://pynescript.online/datafeed/ws');
     } finally {

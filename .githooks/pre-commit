@@ -6,7 +6,11 @@
 
 cd "$(git rev-parse --show-toplevel)" || exit 1
 
-files=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.(js|jsx|ts|tsx|json|jsonc|css|graphql)$' || true)
+# Biome's files.includes excludes these trees; passing an ignored JSON file to
+# `biome check` exits 1 ("No files were processed") even with
+# --no-errors-on-unmatched, which used to break every release commit that
+# stages public/version.json or src-tauri/tauri.conf.json.
+files=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.(js|jsx|ts|tsx|json|jsonc|css|graphql)$' | grep -vE '^(brand|public|vendor|src-tauri)/' || true)
 if [ -n "$files" ]; then
   echo "Running biome check on staged files…"
   # shellcheck disable=SC2086

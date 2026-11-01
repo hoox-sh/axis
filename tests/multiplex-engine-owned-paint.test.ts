@@ -17,10 +17,7 @@ import { mockFetch, jsonResponse } from './helpers/mock-fetch';
 import { registry } from '../src/plugins/registry';
 import { ensureBuiltins, _resetBootstrapFlag } from '../src/plugins/bootstrap';
 import { _resetSourceRegistrationFlag } from '../src/sources/catalog';
-import {
-  _resetStreamRegistrationFlag,
-  registerDynamicStream,
-} from '../src/streams/catalog';
+import { _resetStreamRegistrationFlag, registerDynamicStream } from '../src/streams/catalog';
 import {
   _resetEngineRegistrationFlag,
   _setCachedEngineCapabilitiesForTests,
@@ -43,11 +40,7 @@ import type { Bar } from '../src/store/types';
 
 const ENDPOINT = 'http://pro.test';
 
-async function waitFor(
-  pred: () => boolean,
-  timeoutMs: number,
-  stepMs = 20,
-): Promise<boolean> {
+async function waitFor(pred: () => boolean, timeoutMs: number, stepMs = 20): Promise<boolean> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     if (pred()) return true;
@@ -70,8 +63,13 @@ beforeEach(() => {
   _resetMultiplexForTests();
   _resetDataSessionMemo();
   _resetChartDataSessionForTests();
-  setStore('bars', SAMPLE_BARS.map((b) => ({ ...b })));
+  setStore(
+    'bars',
+    SAMPLE_BARS.map((b) => ({ ...b })),
+  );
   setStore('endpoint', ENDPOINT);
+  // These tests mock the REST data-session routes; WS-first would bypass them.
+  setStore('pluginsConfig', { 'engine:server': { preferWs: false } });
   setStore('source', 'binance-rest');
   setStore('symbol', 'BTCUSDT');
   setStore('interval', '1h');
@@ -224,7 +222,7 @@ describe('engine-owned live paint', () => {
     expect(barsGets).toBe(0);
   });
 
-  it('updates only the forming tip in place (no full setData per tick)', async () => {
+  it('keeps venue OHLC on a forming tip (no full setData per tick)', async () => {
     const last = SAMPLE_BARS[SAMPLE_BARS.length - 1]!;
     const revisedClose = last.close + 7;
     const engineBars: Bar[] = SAMPLE_BARS.map((b) => ({ ...b }));
@@ -233,6 +231,7 @@ describe('engine-owned live paint', () => {
       high: revisedClose + 1,
       close: revisedClose,
     };
+    let barsGets = 0;
 
     restoreFetch = mockFetch(async (input, init) => {
       const url = new URL(String(input));
@@ -249,6 +248,7 @@ describe('engine-owned live paint', () => {
         });
       }
       if (method === 'GET' && url.pathname === '/data/series/bars') {
+        barsGets += 1;
         return jsonResponse({ status: 'success', bars: engineBars });
       }
       return jsonResponse({ status: 'error', code: 'NOT_FOUND' }, 404);
@@ -279,11 +279,10 @@ describe('engine-owned live paint', () => {
     const before = store.bars;
     startLive('eo-tip-stream', 'BTCUSDT', '1h');
 
-    const painted = await waitFor(
-      () => store.bars[store.bars.length - 1]!.close === revisedClose,
-      4000,
-    );
+    const painted = await waitFor(() => barsGets > 0, 4000);
     expect(painted).toBe(true);
+    // The engine may not overwrite the venue's forming OHLC.
+    expect(store.bars[store.bars.length - 1]!.close).toBe(last.close);
     // Same window: length unchanged and the store array updated in place
     // (`appendBar` path-set) rather than replaced via `setBarsQuiet`.
     expect(store.bars.length).toBe(SAMPLE_BARS.length);
@@ -555,7 +554,12 @@ describe('engine-owned live paint', () => {
         return jsonResponse({ status: 'success', session_id: 'chart1', cache: 'hit' });
       }
       if (method === 'POST' && url.pathname === '/data/session/chart1/tick') {
-        return jsonResponse({ status: 'success', session_id: 'chart1', appended: 0, forming: true });
+        return jsonResponse({
+          status: 'success',
+          session_id: 'chart1',
+          appended: 0,
+          forming: true,
+        });
       }
       if (method === 'GET' && url.pathname === '/data/series/bars') {
         return jsonResponse({ status: 'success', bars: frozen });
@@ -604,7 +608,8 @@ describe('engine-owned live paint', () => {
     expect(store.live.needsRerun).toBe(false);
     // …and the frozen series is repaired in the background.
     const repaired = await waitFor(
-      () => calls.includes('POST /data/series/provide') || calls.includes('POST /data/series/fetch'),
+      () =>
+        calls.includes('POST /data/series/provide') || calls.includes('POST /data/series/fetch'),
       2000,
     );
     expect(repaired).toBe(true);
@@ -695,7 +700,8 @@ describe('engine-owned live paint', () => {
     expect(store.bars[store.bars.length - 1]!.time).toBe(last.time + 7200);
     // Reported + repaired in the background all the same.
     const repaired = await waitFor(
-      () => calls.includes('POST /data/series/provide') || calls.includes('POST /data/series/fetch'),
+      () =>
+        calls.includes('POST /data/series/provide') || calls.includes('POST /data/series/fetch'),
       5000,
     );
     expect(repaired).toBe(true);

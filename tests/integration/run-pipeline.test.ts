@@ -34,6 +34,8 @@ beforeEach(() => {
   clearLogs();
   setStore('bars', SAMPLE_BARS);
   setStore('endpoint', 'http://run.test:5002');
+  // This suite mocks REST /run; keep the WS-first default from hijacking it.
+  setStore('pluginsConfig', { 'engine:server': { preferWs: false } });
   setActivePlugin('engine', 'server');
 });
 

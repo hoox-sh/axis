@@ -45,13 +45,10 @@ function json(data: unknown, status = 200): { body: unknown; status: number } {
 
 /** Fresh single-use Response from mock payload parts. */
 function jsonResponse(parts: { body?: unknown; status?: number }): Response {
-  return new Response(
-    parts.body === undefined ? '' : JSON.stringify(parts.body),
-    {
-      status: parts.status ?? 200,
-      headers: { 'Content-Type': 'application/json' },
-    },
-  );
+  return new Response(parts.body === undefined ? '' : JSON.stringify(parts.body), {
+    status: parts.status ?? 200,
+    headers: { 'Content-Type': 'application/json' },
+  });
 }
 
 type MockPayload = { body?: unknown; status?: number } | ((url: string) => Response);
@@ -94,12 +91,12 @@ describe('isOAuthProxyBase', () => {
   });
 
   it('accepts same-origin when provided', () => {
-    expect(
-      isOAuthProxyBase('https://app.example', { sameOrigin: 'https://app.example' }),
-    ).toBe(true);
-    expect(
-      isOAuthProxyBase('https://other.example', { sameOrigin: 'https://app.example' }),
-    ).toBe(false);
+    expect(isOAuthProxyBase('https://app.example', { sameOrigin: 'https://app.example' })).toBe(
+      true,
+    );
+    expect(isOAuthProxyBase('https://other.example', { sameOrigin: 'https://app.example' })).toBe(
+      false,
+    );
   });
 
   it('accepts pyne/pine worker hosts and product domains', () => {
@@ -132,9 +129,7 @@ describe('isOAuthProxyBase', () => {
 
 describe('resolveOAuthProxyBase', () => {
   it('keeps explicit endpoint', () => {
-    expect(resolveOAuthProxyBase('http://162.254.38.194:5002/')).toBe(
-      'http://162.254.38.194:5002',
-    );
+    expect(resolveOAuthProxyBase('http://162.254.38.194:5002/')).toBe('http://162.254.38.194:5002');
   });
 
   it('defaults to local wrangler without window', () => {
@@ -151,9 +146,9 @@ describe('resolveOAuthProxyBase', () => {
 
   it('prefers Pro API on static VPS shell origins (:8080/:8081)', () => {
     setWindowOrigin('http://192.168.1.10:8080');
-    expect(resolveOAuthProxyBase()).toBe('http://127.0.0.1:5002');
+    expect(resolveOAuthProxyBase()).toBe('https://pynescript.online');
     setWindowOrigin('http://192.168.1.10:8081');
-    expect(resolveOAuthProxyBase()).toBe('http://127.0.0.1:5002');
+    expect(resolveOAuthProxyBase()).toBe('https://pynescript.online');
     setWindowOrigin(undefined);
   });
 
@@ -183,18 +178,18 @@ describe('sanitizeVerificationUri', () => {
   });
 
   it('allows www.github.com and http github URIs', () => {
-    expect(
-      sanitizeVerificationUri('https://www.github.com/login/device', 'github'),
-    ).toContain('github.com');
-    expect(
-      sanitizeVerificationUri('http://github.com/login/device', 'github'),
-    ).toContain('github.com');
+    expect(sanitizeVerificationUri('https://www.github.com/login/device', 'github')).toContain(
+      'github.com',
+    );
+    expect(sanitizeVerificationUri('http://github.com/login/device', 'github')).toContain(
+      'github.com',
+    );
   });
 
   it('allows gitlab subdomains, rejects random hosts', () => {
-    expect(
-      sanitizeVerificationUri('https://foo.gitlab.com/oauth/authorize', 'gitlab'),
-    ).toContain('gitlab.com');
+    expect(sanitizeVerificationUri('https://foo.gitlab.com/oauth/authorize', 'gitlab')).toContain(
+      'gitlab.com',
+    );
     expect(sanitizeVerificationUri('https://evil.example/phish', 'gitlab')).toBeNull();
     expect(sanitizeVerificationUri('ftp://gitlab.com/x', 'gitlab')).toBeNull();
   });
@@ -219,19 +214,20 @@ describe('startDeviceFlow proxy trust', () => {
   });
 
   it('sanitizes evil verification_uri from trusted proxy', async () => {
-    globalThis.fetch = mock(async () =>
-      new Response(
-        JSON.stringify({
-          status: 'success',
-          device_code: 'd',
-          user_code: 'U-CODE',
-          verification_uri: 'https://evil.example/phish',
-          verification_uri_complete: 'https://evil.example/phish?user_code=U',
-          expires_in: 900,
-          interval: 5,
-        }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      ),
+    globalThis.fetch = mock(
+      async () =>
+        new Response(
+          JSON.stringify({
+            status: 'success',
+            device_code: 'd',
+            user_code: 'U-CODE',
+            verification_uri: 'https://evil.example/phish',
+            verification_uri_complete: 'https://evil.example/phish?user_code=U',
+            expires_in: 900,
+            interval: 5,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
     ) as unknown as typeof fetch;
 
     const started = await startDeviceFlow({
@@ -334,9 +330,7 @@ describe('git-oauth proxy errors', () => {
   });
 
   it('maps NO_CLIENT_ID to client-id hint', async () => {
-    mockFetchSequence([
-      json({ code: 'NO_CLIENT_ID', message: 'missing client id' }, 400),
-    ]);
+    mockFetchSequence([json({ code: 'NO_CLIENT_ID', message: 'missing client id' }, 400)]);
     await expect(
       startDeviceFlow({
         provider: 'github',
@@ -369,9 +363,7 @@ describe('git-oauth proxy errors', () => {
 
 describe('pollDeviceFlow', () => {
   it('returns success token with metadata', async () => {
-    mockFetchSequence([
-      json({ access_token: 'tok-123', token_type: 'bearer', scope: 'repo' }),
-    ]);
+    mockFetchSequence([json({ access_token: 'tok-123', token_type: 'bearer', scope: 'repo' })]);
     const r = await pollDeviceFlow({
       provider: 'github',
       deviceCode: 'dc-1',
@@ -482,9 +474,7 @@ describe('waitForDeviceToken', () => {
   });
 
   it('throws terminal error with description', async () => {
-    mockFetchSequence([
-      json({ error: 'access_denied', error_description: 'user denied access' }),
-    ]);
+    mockFetchSequence([json({ error: 'access_denied', error_description: 'user denied access' })]);
     await expect(
       waitForDeviceToken({
         provider: 'github',

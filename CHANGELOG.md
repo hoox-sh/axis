@@ -9,11 +9,13 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-10-31 · 876 commits · describe-tag: `v2.25.3`_
+_Generated/updated: 2026-11-01 · 880 commits · describe-tag: `v2.26.0`_
 
 ---
 
 ## [Unreleased]
+
+## [2.27.0] — 2026-11-01
 
 ### Changed
 
@@ -23,7 +25,7 @@ _Generated/updated: 2026-10-31 · 876 commits · describe-tag: `v2.25.3`_
 
 ### Added
 
-- **Pine symbol navigation: definition, references, rename, occurrence highlight.** One local index (`src/editor/symbol-index.ts`) parses functions / methods, parameters, `type` and `enum` bodies, variables (incl. `var` / `varip` and tuple destructuring), loop bindings and `import … as alias`, then answers all four features without a Pro API round trip — so they work in Pyodide and offline. `F12` (or `Alt`-click) jumps to the declaration, `Shift-F12` lists every reference in a CodeMirror panel, `F2` renames the declaration plus its references, and the cursor symbol is highlighted automatically. Scope is indentation-based like Pine, so `f(n)` and `g(n)` resolve separately and a parameter rename stays inside its function. Rename refuses builtins, builtin namespaces, keywords, invalid identifiers, same-scope collisions, and `type` / `enum` members. Also in the command palette.
+- **Pine symbol navigation: definition, references, rename, occurrence highlight.** One local index (`src/editor/symbol-index.ts`) parses functions / methods, parameters, `type` and `enum` bodies, variables (incl. `var` / `varip` and tuple destructuring), loop bindings and `import … as alias`, then answers all four features without a Pro API round trip — so they work in Pyodide and offline. `F12` (or `Alt`-click) jumps to the declaration, `Shift-F12` lists every reference in a CodeMirror panel, `F2` renames the declaration plus its references, and the cursor symbol is highlighted automatically. Scope is indentation-based like Pine, so `f(n)` and `g(n)` resolve separately and a parameter rename stays inside its function. Rename refuses builtins, builtin namespaces, keywords, invalid identifiers, names that would collide or shadow in an affected scope, and `type` / `enum` members. Also in the command palette.
 
 - **Offline PYNE lint parity: `W002` and `W104`.** `localPreevaluate` now warns on a pre-v5 `//@version` pragma (`W002`) and on kwargs Pine v6 removed (`W104`) — `when=` on `strategy.*` order calls and `transp=` on drawing / plot calls (`plot*`, `fill`, `bgcolor`, `barcolor`, `hline`, `line.*`, `box.*`, `label.*`, `table.*`, `polyline.*`, `linefill.*`). `color.new` / `color()` keep a valid `transp` and are never flagged. Previously these came only from `POST /lsp/diagnostics`, so Pyodide / offline mode missed them. New setting `preevalV6Kwargs` (default on) with a Settings → Editor toggle; `preevalVersionWarn` now covers both `W001` and `W002`.
 
@@ -52,6 +54,12 @@ _Generated/updated: 2026-10-31 · 876 commits · describe-tag: `v2.25.3`_
 - **Pine hover/autocomplete refreshed against PYNE 0.6.25.** `src/editor/data/pyne-builtins.json` re-synced from `pyne` (`builtin_metadata.json`, 88 improved docs incl. `line.fill` / `linefill.new`). Library annotation cards now render the description **verbatim as Markdown** (headings, code fences, blockquotes, tables, links, images, italic/strikethrough and two-space line breaks), matching PYNE's hover. `//@description` on `library` shows a library card. Card sections use PYNE's `**Fields:**` / `**Parameters:**` / `**Returns:**` shape with `- \`name\`: desc` bullets.
 
 ### Fixed
+
+- **Rolling-window bounds now match the 4,500-bar engine cap.** `ROLLING_WINDOW_MAX` was still `HISTORY_BARS_MAX` (100,000) while `clampRollingWindowBars` silently capped at 4,500, so Settings and the status-bar editor advertised a range the store would never accept. The constant is now 4,500 and the clamp uses it; the default stays 4,000.
+
+- **Test suite isolation: `bun run test` and the coverage gate run each file with `--isolate`.** Bun's process-wide `mock.module` / store state let `multiplex-stream-retry`'s partial `stream-live` mock leak into later suites (and stale chart/store state into others). Updated the affected suites for intentional behavior changes: Pro API default endpoints, WS-first engine runs (REST tests pin `preferWs: false`), conflation-off chart options, venue OHLC ownership on forming tips, MCP bridge `hello` frames, and removed coverage for retired `sanitizeSeriesDataForSetData` / `_setV1FrameScheduler`.
+
+- **Symbol navigation hardening: named arguments, shadowing, block comments, member types.** Call named arguments (`qty = qty`) are no longer indexed as variable writes or declarations, so renaming a same-named variable cannot corrupt a call. References and rename resolve each occurrence to its declaration, keeping a script-level `f` and a parameter `f` apart, and rename rejects a new name that would shadow a reference in an affected scope. `obj.field` resolves through the receiver's declared (or `Type.new()`-inferred) type; `type` / `enum` members with trailing comments are indexed, commented-out declarations are ignored, fields with defaults are indexed once, numeric literal tails (`1e10`, `0xFF`) are no longer indexed as identifiers, and a cursor at EOF in the last function stays inside that function.
 
 - **Shortcuts help no longer steals typing keys.** `app.show-shortcuts` was bound to bare `Shift-?` / `Shift-/`, so typing `/` (Shift+7 on many layouts) or `?` opened the shortcuts overlay — the editor could not type `//`. The binding now requires a real modifier (`Alt-Shift-?` / `Alt-Shift-/`) and is skipped while focus is inside an editor/input/dialog.
 
@@ -2152,12 +2160,16 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-10 (395 commits)
+### 2026-10 (399 commits)
 
 #### Features
 
+- `9fc67af4` (2026-10-31) — feat(editor): Pine symbol navigation (definition, references, rename, highlight)
+- `c5e67961` (2026-10-31) — feat(editor): PYNE 0.6.28 wheel + offline W002/W104 lint parity
 - `319d3399` (2026-10-31) — feat(editor): refresh Pine LSP/hover against PYNE 0.6.25
 - `ed8992a3` (2026-10-31) — feat(mcp): add tab switch for multi-tab MCP sessions
 - `8ca2ca2a` (2026-10-27) — feat(chart): mark previous tip closed when a new bar arrives
@@ -2237,6 +2249,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `3c929f2a` (2026-10-31) — fix(cli): align default PYNE URL test and bump CLI to 0.3.6
 - `9355de14` (2026-10-31) — fix(shortcuts): require Alt+Shift for help, not bare Shift
 - `c7218f32` (2026-10-31) — fix(mcp): restore ticket minting on GET ?issue=ticket
 - `a67325ee` (2026-10-31) — fix(mcp): route /api/mcp/bridge sub-paths to bridge DO
@@ -2538,6 +2551,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Chores
 
+- `59bf3145` (2026-10-31) — chore(release): AXIS 2.26.0
 - `d86eaf03` (2026-10-31) — chore(pyodide): vendor pynescript 0.6.26 wheel (#4)
 - `60c8e57b` (2026-10-31) — chore(pyodide): vendor pynescript 0.6.25 wheel (#3)
 - `05f625fc` (2026-10-21) — chore(tooling): project references, compaction, destructive-git guard rails

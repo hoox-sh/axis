@@ -63,11 +63,11 @@ describe('clampRollingWindowBars', () => {
 
   it('passes through an in-range value, rounded', () => {
     expect(clampRollingWindowBars(1234.6)).toBe(1235);
-    expect(clampRollingWindowBars('20000')).toBe(20_000);
+    expect(clampRollingWindowBars('3000')).toBe(3000);
   });
 
-  it('defaults to 10,000', () => {
-    expect(ROLLING_WINDOW_DEFAULT).toBe(10_000);
+  it('defaults to 4,000', () => {
+    expect(ROLLING_WINDOW_DEFAULT).toBe(4000);
   });
 });
 
