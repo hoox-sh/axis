@@ -27,6 +27,8 @@ _Generated/updated: 2026-11-01 · 880 commits · describe-tag: `v2.26.0`_
 
 ### Changed
 
+- **Vendored Pyodide PYNE wheel bumped to `pynescript-0.6.29`.** Built from the sister `pynescript` tree (`scripts/sync-pyne-wheel.sh`); hard-coded `/vendor/` paths in `src/engines/catalog.ts`, `src/workers/pyodide-runtime.ts`, and `tests/pyodide-worker.test.ts` updated; editor builtins catalog re-synced from PYNE `builtin_metadata.json` (941 entries). Brings strategy next-bar market fills, `na`/`fixnan` parity, SAR incremental fix, and the TradingView loop-args SMA call-site overwrite into the offline Pyodide engine. Self-hosted Pyodide runtime stays on **0.29.5** (latest full CDN release).
+
 - **Phase 1 reactivity migration for the hottest `store.bars` UI readers.** Migrated `App.tsx` (document title), `StatusBar.tsx`, `Topbar.tsx`, `PricePanel.tsx`, `DataViewPanel.tsx`, `QuotePanel.tsx`, `VolumeProfileOverlay.tsx`, `TimePanel.tsx`, `CurrentPriceCard.tsx`, `HpoPanel.tsx`, and `BarReplayControls.tsx` to read from `barPlane` signals instead of `store.bars`. The document-title effect is now also rAF-throttled so rapid ticks do not churn `document.title`.
 
 - **Instrumented the main paint and parse hot paths.** Wrapped `setDataToChart` (`src/chart/manager-access.ts`) with `perfMeasureSync('axis:setDataToChart', …)` and `parseEngineJson` (`src/engines/json-sanitize.ts`) with `perfMeasureSync('axis:parseEngineJson', …)`, plus `perfMark('axis:loadBars:setStore')` and `perfMark('axis:appendBar:store')`. This gives a baseline before incremental `series.update`/Worker deserialization work.
