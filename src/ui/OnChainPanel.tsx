@@ -30,7 +30,15 @@
  * beyond calling existing load + attach helpers.
  */
 
-import { type Component, For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
+import {
+  type Component,
+  For,
+  Show,
+  createEffect,
+  createMemo,
+  createSignal,
+  onCleanup,
+} from 'solid-js';
 import {
   isPanelOpen,
   persist,
@@ -57,16 +65,8 @@ import {
   dismissOnchainJob,
   type OnchainJob,
 } from '../onchain/jobs';
-import {
-  seriesToCsv,
-  eventsToCsv,
-  downloadTextFile,
-} from '../onchain/export';
-import {
-  POPULAR_TVL_PROTOCOLS,
-  DEX_NETWORK_PRESETS,
-  attachPopularTvl,
-} from '../onchain/presets';
+import { seriesToCsv, eventsToCsv, downloadTextFile } from '../onchain/export';
+import { POPULAR_TVL_PROTOCOLS, DEX_NETWORK_PRESETS, attachPopularTvl } from '../onchain/presets';
 import {
   isWorkerLlamaProxy,
   isWorkerGeckoProxy,
@@ -74,14 +74,12 @@ import {
   resolveGeckoTerminalBaseUrl,
 } from '../onchain/proxy';
 import { kickOnchainHealthProbe } from '../onchain/health';
-import {
-  searchGeckoPools,
-  type GeckoPoolSearchHit,
-} from '../onchain/geckoterminal';
+import { searchGeckoPools, type GeckoPoolSearchHit } from '../onchain/geckoterminal';
 import { loadSymbolData } from '../data/load-symbol';
 import { getSource } from '../sources/catalog';
 import { defaultStreamForSource } from '../streams/catalog';
 import { Icons } from './icons';
+import { Spinner } from './Spinner';
 import { FloatableShell } from './panels/FloatableShell';
 
 /** Historical source id for GeckoTerminal pool OHLCV. */
@@ -165,11 +163,7 @@ function exportSeriesCsv(): void {
   }));
   const csv = seriesToCsv(payload);
   const stamp = new Date().toISOString().slice(0, 10);
-  downloadTextFile(
-    `axis-onchain-series-${stamp}.csv`,
-    csv,
-    'text/csv;charset=utf-8',
-  );
+  downloadTextFile(`axis-onchain-series-${stamp}.csv`, csv, 'text/csv;charset=utf-8');
 }
 
 function exportEventsCsv(): void {
@@ -183,15 +177,13 @@ function exportEventsCsv(): void {
     })),
   );
   const stamp = new Date().toISOString().slice(0, 10);
-  downloadTextFile(
-    `axis-onchain-events-${stamp}.csv`,
-    csv,
-    'text/csv;charset=utf-8',
-  );
+  downloadTextFile(`axis-onchain-events-${stamp}.csv`, csv, 'text/csv;charset=utf-8');
 }
 
 function buildPoolSymbol(network: string, address: string): string {
-  const net = String(network || 'eth').trim().toLowerCase();
+  const net = String(network || 'eth')
+    .trim()
+    .toLowerCase();
   const addr = normalizePoolAddress(address, net);
   return `${net}:${addr}`;
 }
@@ -318,9 +310,7 @@ export const OnChainPanel: Component = () => {
           }.`,
         );
       } else if (result.failed.length) {
-        setAttachError(
-          result.failed[0]?.error || 'Failed to attach popular TVL presets.',
-        );
+        setAttachError(result.failed[0]?.error || 'Failed to attach popular TVL presets.');
       } else {
         setActionMsg('No popular protocols attached (cap or empty).');
       }
@@ -406,9 +396,7 @@ export const OnChainPanel: Component = () => {
   const pickPool = (hit: GeckoPoolSearchHit) => {
     const net = String(hit.network || '').toLowerCase();
     if (net && DEX_NETWORK_PRESETS.some((n) => n.id === net || n.gecko === net)) {
-      const preset = DEX_NETWORK_PRESETS.find(
-        (n) => n.id === net || n.gecko === net,
-      );
+      const preset = DEX_NETWORK_PRESETS.find((n) => n.id === net || n.gecko === net);
       if (preset) setDexNetwork(preset.id as DexNetworkId);
     }
     setPoolAddress(hit.address);
@@ -498,9 +486,9 @@ export const OnChainPanel: Component = () => {
       <FloatableShell id="onchain" testId="axis-onchain">
         <div class="flex-1 overflow-y-auto min-h-0 flex flex-col gap-2 text-[12px]">
           <p class="text-muted m-0 leading-snug">
-            On-chain data plane: <strong>TVL</strong> overlays, <strong>DEX</strong> pool
-            OHLCV on the main chart, and <strong>Events</strong> from attached series.
-            Protocol TVL is <strong>not</strong> CEX price.
+            On-chain data plane: <strong>TVL</strong> overlays, <strong>DEX</strong> pool OHLCV on
+            the main chart, and <strong>Events</strong> from attached series. Protocol TVL is{' '}
+            <strong>not</strong> CEX price.
           </p>
 
           <div
@@ -540,9 +528,7 @@ export const OnChainPanel: Component = () => {
 
               <div class="flex flex-col gap-1.5" data-testid="axis-onchain-popular">
                 <div class="flex items-center justify-between gap-2">
-                  <span class="text-muted text-[0.72rem] uppercase tracking-wide">
-                    Popular
-                  </span>
+                  <span class="text-muted text-[0.72rem] uppercase tracking-wide">Popular</span>
                   <button
                     type="button"
                     class="sc-btn sc-btn-ghost sc-btn-sm"
@@ -552,7 +538,7 @@ export const OnChainPanel: Component = () => {
                     title="Attach the first 5 popular DefiLlama TVL presets"
                   >
                     <Show when={popularBusy()} fallback={<Icons.layers />}>
-                      <Icons.loader class="animate-spin" />
+                      <Spinner />
                     </Show>
                     <span>{popularBusy() ? 'Attaching…' : 'Attach top 5'}</span>
                   </button>
@@ -577,11 +563,7 @@ export const OnChainPanel: Component = () => {
                           disabled={attached() || attachingSlug() === p.slug || popularBusy()}
                           onClick={() => void onAttachPopularSlug(p.slug, p.name)}
                           data-testid={`axis-onchain-popular-${p.slug}`}
-                          title={
-                            attached()
-                              ? `${p.name} already attached`
-                              : `Attach ${p.name} TVL`
-                          }
+                          title={attached() ? `${p.name} already attached` : `Attach ${p.name} TVL`}
                         >
                           {attachingSlug() === p.slug ? '…' : p.name}
                         </button>
@@ -608,8 +590,11 @@ export const OnChainPanel: Component = () => {
               </label>
 
               <Show when={onchainManagerState.searchLoading}>
-                <div class="axis-empty-state text-[12px] text-text-dim flex items-center gap-1.5" role="status">
-                  <Icons.loader class="animate-spin" />
+                <div
+                  class="axis-empty-state text-[12px] text-text-dim flex items-center gap-1.5"
+                  role="status"
+                >
+                  <Spinner />
                   <span>Searching…</span>
                 </div>
               </Show>
@@ -640,7 +625,9 @@ export const OnChainPanel: Component = () => {
                 when={onchainManagerState.searchResults.length}
                 fallback={
                   <Show when={query().trim() && !onchainManagerState.searchLoading}>
-                    <div class="axis-empty-state text-[12px] text-text-dim py-1">No protocols match.</div>
+                    <div class="axis-empty-state text-[12px] text-text-dim py-1">
+                      No protocols match.
+                    </div>
                   </Show>
                 }
               >
@@ -690,15 +677,13 @@ export const OnChainPanel: Component = () => {
                     <button
                       type="button"
                       class="sc-btn sc-btn-ghost sc-btn-sm"
-                      disabled={
-                        refreshBusy() || !onchainManagerState.series.length
-                      }
+                      disabled={refreshBusy() || !onchainManagerState.series.length}
                       onClick={() => void onRefreshAll()}
                       data-testid="axis-onchain-refresh-all"
                       title="Re-fetch all attached DefiLlama TVL series"
                     >
                       <Show when={refreshBusy()} fallback={<Icons.refresh />}>
-                        <Icons.loader class="animate-spin" />
+                        <Spinner />
                       </Show>
                       <span>{refreshBusy() ? 'Refreshing…' : 'Refresh all'}</span>
                     </button>
@@ -733,20 +718,16 @@ export const OnChainPanel: Component = () => {
                       <div
                         class="axis-list-row flex items-center gap-1.5 h-8 px-1 border-b border-border-soft"
                         data-testid={`axis-onchain-series-${s.id}`}
-                        title={
-                          [
-                            s.provenance?.provider
-                              ? `${s.provenance.provider}${
-                                  s.provenance.queryId
-                                    ? ` · ${s.provenance.queryId}`
-                                    : ''
-                                }`
-                              : s.provider,
-                            s.finality,
-                          ]
-                            .filter(Boolean)
-                            .join(' · ')
-                        }
+                        title={[
+                          s.provenance?.provider
+                            ? `${s.provenance.provider}${
+                                s.provenance.queryId ? ` · ${s.provenance.queryId}` : ''
+                              }`
+                            : s.provider,
+                          s.finality,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
                       >
                         <label
                           class="sc-btn sc-btn-ghost px-1 shrink-0 cursor-pointer"
@@ -756,15 +737,15 @@ export const OnChainPanel: Component = () => {
                             type="checkbox"
                             class="sr-only"
                             checked={s.visible}
-                            onChange={(e) =>
-                              setOnchainSeriesVisible(s.id, e.currentTarget.checked)
-                            }
+                            onChange={(e) => setOnchainSeriesVisible(s.id, e.currentTarget.checked)}
                             data-testid={`axis-onchain-visible-${s.id}`}
                           />
                           {s.visible ? <Icons.eye size={14} /> : <Icons.eyeOff size={14} />}
                         </label>
                         <div class="min-w-0 flex-1">
-                          <div class="font-medium truncate text-[12px] leading-tight">{s.label}</div>
+                          <div class="font-medium truncate text-[12px] leading-tight">
+                            {s.label}
+                          </div>
                           <div class="text-text-faint text-[10px] truncate">
                             {s.provider}
                             {s.lastTvl != null ? ` · ${fmtUsd(s.lastTvl)}` : ''}
@@ -772,7 +753,10 @@ export const OnChainPanel: Component = () => {
                           </div>
                         </div>
                         <Show when={s.error}>
-                          <span class="text-red text-[10px] truncate max-w-[7rem]" title={s.error ?? undefined}>
+                          <span
+                            class="text-red text-[10px] truncate max-w-[7rem]"
+                            title={s.error ?? undefined}
+                          >
                             {s.error}
                           </span>
                         </Show>
@@ -821,15 +805,11 @@ export const OnChainPanel: Component = () => {
 
                 <Show when={onchainJobsState.jobs.length}>
                   <div class="flex flex-col gap-1.5" data-testid="axis-onchain-jobs">
-                    <div class="text-muted text-[0.72rem] uppercase tracking-wide">
-                      Jobs
-                    </div>
+                    <div class="text-muted text-[0.72rem] uppercase tracking-wide">Jobs</div>
                     <For each={onchainJobsState.jobs}>
                       {(job) => {
                         const pct = () =>
-                          Math.round(
-                            Math.max(0, Math.min(1, Number(job.progress) || 0)) * 100,
-                          );
+                          Math.round(Math.max(0, Math.min(1, Number(job.progress) || 0)) * 100);
                         return (
                           <div
                             class="border border-[var(--border)] rounded px-2 py-1.5 flex flex-col gap-1"
@@ -838,18 +818,14 @@ export const OnChainPanel: Component = () => {
                           >
                             <div class="flex items-start justify-between gap-2 min-w-0">
                               <div class="min-w-0">
-                                <div class="font-medium truncate text-[0.78rem]">
-                                  {job.label}
-                                </div>
+                                <div class="font-medium truncate text-[0.78rem]">{job.label}</div>
                                 <div class="text-muted text-[0.68rem] truncate">
                                   {jobStatusLabel(job)}
                                   {job.kind ? ` · ${job.kind}` : ''}
                                 </div>
                               </div>
                               <div class="flex items-center gap-1 shrink-0">
-                                <span class="text-[0.68rem] text-muted tabular-nums">
-                                  {pct()}%
-                                </span>
+                                <span class="text-[0.68rem] text-muted tabular-nums">{pct()}%</span>
                                 <button
                                   type="button"
                                   class="sc-btn sc-btn-ghost sc-btn-sm"
@@ -908,9 +884,7 @@ export const OnChainPanel: Component = () => {
                 Data path:{' '}
                 <Show
                   when={geckoPath().via === 'worker'}
-                  fallback={
-                    <span>direct geckoterminal.com (CORS may fail in browser)</span>
-                  }
+                  fallback={<span>direct geckoterminal.com (CORS may fail in browser)</span>}
                 >
                   <span>Worker proxy</span>
                 </Show>
@@ -936,16 +910,12 @@ export const OnChainPanel: Component = () => {
                   onChange={(e) => setDexNetwork(e.currentTarget.value as DexNetworkId)}
                   data-testid="axis-onchain-dex-network-select"
                 >
-                  <For each={DEX_NETWORKS}>
-                    {(n) => <option value={n.id}>{n.label}</option>}
-                  </For>
+                  <For each={DEX_NETWORKS}>{(n) => <option value={n.id}>{n.label}</option>}</For>
                 </select>
               </label>
 
               <label class="flex flex-col gap-0.5" data-testid="axis-onchain-dex-pool">
-                <span class="text-muted text-[0.72rem] uppercase tracking-wide">
-                  Pool address
-                </span>
+                <span class="text-muted text-[0.72rem] uppercase tracking-wide">Pool address</span>
                 <input
                   type="text"
                   class="sc-input font-mono text-[0.78rem]"
@@ -969,7 +939,7 @@ export const OnChainPanel: Component = () => {
                 title="Set symbol + GeckoTerminal source and load OHLCV"
               >
                 <Show when={dexLoading()} fallback={<Icons.trend />}>
-                  <Icons.loader class="animate-spin" />
+                  <Spinner />
                 </Show>
                 <span>{dexLoading() ? 'Loading…' : 'Load as chart'}</span>
               </button>
@@ -1012,7 +982,7 @@ export const OnChainPanel: Component = () => {
 
                 <Show when={poolSearchLoading()}>
                   <div class="text-muted text-[0.78rem] flex items-center gap-1.5" role="status">
-                    <Icons.loader class="animate-spin" />
+                    <Spinner />
                     <span>Searching pools…</span>
                   </div>
                 </Show>
@@ -1030,12 +1000,10 @@ export const OnChainPanel: Component = () => {
                 <Show
                   when={poolResults().length}
                   fallback={
-                    <Show
-                      when={
-                        poolQuery().trim() && !poolSearchLoading() && !poolSearchError()
-                      }
-                    >
-                      <div class="axis-empty-state text-[12px] text-text-dim py-1">No pools match.</div>
+                    <Show when={poolQuery().trim() && !poolSearchLoading() && !poolSearchError()}>
+                      <div class="axis-empty-state text-[12px] text-text-dim py-1">
+                        No pools match.
+                      </div>
                     </Show>
                   }
                 >
@@ -1085,15 +1053,12 @@ export const OnChainPanel: Component = () => {
               data-testid="axis-onchain-panel-events"
             >
               <p class="text-muted m-0 leading-snug">
-                Detect large day-over-day <strong>TVL</strong> moves on attached DefiLlama
-                series (≥10%). Chart markers update when the events plane is wired.
+                Detect large day-over-day <strong>TVL</strong> moves on attached DefiLlama series
+                (≥10%). Chart markers update when the events plane is wired.
               </p>
 
               <div class="flex items-center justify-between gap-2">
-                <div
-                  class="text-muted text-[0.78rem]"
-                  data-testid="axis-onchain-event-count"
-                >
+                <div class="text-muted text-[0.78rem]" data-testid="axis-onchain-event-count">
                   Events: <strong class="text-text">{eventCount()}</strong>
                   <Show when={onchainManagerState.eventSourceLabel}>
                     {' · '}
@@ -1115,7 +1080,7 @@ export const OnChainPanel: Component = () => {
 
               <Show when={onchainManagerState.eventsLoading}>
                 <div class="text-muted text-[0.78rem] flex items-center gap-1.5" role="status">
-                  <Icons.loader class="animate-spin" />
+                  <Spinner />
                   <span>Scanning TVL spikes…</span>
                 </div>
               </Show>
@@ -1164,9 +1129,7 @@ export const OnChainPanel: Component = () => {
                         <div class="min-w-0 flex-1">
                           <div class="font-medium truncate text-[12px]">{s.label}</div>
                           <div class="text-text-faint text-[10px] truncate">
-                            {s.points?.length
-                              ? `${s.points.length} points`
-                              : 'no points yet'}
+                            {s.points?.length ? `${s.points.length} points` : 'no points yet'}
                             {s.lastTvl != null ? ` · ${fmtUsd(s.lastTvl)}` : ''}
                           </div>
                         </div>
@@ -1187,7 +1150,7 @@ export const OnChainPanel: Component = () => {
                             when={spikeBusyId() === s.id}
                             fallback={<Icons.activity size={14} />}
                           >
-                            <Icons.loader class="animate-spin" size={14} />
+                            <Spinner size={14} />
                           </Show>
                         </button>
                       </div>
@@ -1197,9 +1160,7 @@ export const OnChainPanel: Component = () => {
               </div>
 
               <div class="flex flex-col gap-1" data-testid="axis-onchain-events-list">
-                <div class="text-muted text-[0.72rem] uppercase tracking-wide">
-                  Event list
-                </div>
+                <div class="text-muted text-[0.72rem] uppercase tracking-wide">Event list</div>
                 <Show
                   when={onchainManagerState.events.length}
                   fallback={
@@ -1224,9 +1185,7 @@ export const OnChainPanel: Component = () => {
                           data-testid={`axis-onchain-event-${ev.time}-${ev.type}`}
                         >
                           <div class="flex items-center justify-between gap-2">
-                            <span class="font-medium truncate">
-                              {ev.title || ev.type}
-                            </span>
+                            <span class="font-medium truncate">{ev.title || ev.type}</span>
                             <Show when={pct()}>
                               <span
                                 class={`text-[0.72rem] tabular-nums shrink-0 ${

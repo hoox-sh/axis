@@ -2,7 +2,7 @@
 
 # Concepts
 
-* [Architecture Decision Records](adrs.md) - ADR-001 through ADR-015 for AXIS: registry, AXIS≠engine, Solid+Vite, three built-in engines, configSchema, URL load, storage, CF project id, proxies, DO fan-out, migration, CORS,…
+* [Architecture Decision Records](adrs.md) - ADR-001 through ADR-018 for AXIS: registry, AXIS≠engine, Solid+Vite, engines, plugins, storage, CF ids, proxies, DO fan-out, CORS, results, telemetry, on-chain, provider lock,…
 * [Drawings and plot parity](drawings-parity.md) - Plan to make user drawing tools and Pine plot/drawing outputs match PYNE and render with correct pane, color, geometry, and settings.
 * [Evaluation map](evaluation.md) - How AXIS runs Pine: Flask Pro API, Worker proxy, in-browser Pyodide. AXIS does not import PyneTS and does not place HOOX orders.
 * [Live chart engine](hp-engine.md) - Lightweight Charts paints the chart. One ingest worker owns /ws/live and decodes AXB1. The shared-memory ring and GPU overlay were removed.

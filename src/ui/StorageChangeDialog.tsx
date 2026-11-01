@@ -38,15 +38,9 @@
  * @module ui/StorageChangeDialog
  */
 
-import {
-  For,
-  Show,
-  createSignal,
-  createEffect,
-  onCleanup,
-  type Component,
-} from 'solid-js';
+import { For, Show, createSignal, createEffect, onCleanup, type Component } from 'solid-js';
 import { Icons } from './icons';
+import { Spinner } from './Spinner';
 import { Modal } from './Modal';
 import { copyScriptsBetweenStorages } from '../storage/service';
 import { resolveCloudConfig } from '../storage/cloud-config';
@@ -372,66 +366,69 @@ const StorageChangeDialog: Component<StorageChangeDialogProps> = (props) => {
       }}
       footer={footer}
       headerLead={
-        <Show when={phase() === 'error'} fallback={<Icons.shuffle class="text-accent flex-shrink-0" />}>
+        <Show
+          when={phase() === 'error'}
+          fallback={<Icons.shuffle class="text-accent flex-shrink-0" />}
+        >
           <Icons.alert class="text-red flex-shrink-0" />
         </Show>
       }
     >
-            <p class="text-text-dim leading-relaxed m-0">{bodyDescription()}</p>
+      <p class="text-text-dim leading-relaxed m-0">{bodyDescription()}</p>
 
-            <Show when={phase() === 'idle' && targetNeedsKey()}>
-              <p class="text-red text-[11px] m-0" data-testid="axis-storage-change-need-key">
-                Cloud API key is not set — add the Worker URL and key in Settings before copying.
-              </p>
-            </Show>
+      <Show when={phase() === 'idle' && targetNeedsKey()}>
+        <p class="text-red text-[11px] m-0" data-testid="axis-storage-change-need-key">
+          Cloud API key is not set — add the Worker URL and key in Settings before copying.
+        </p>
+      </Show>
 
-            <Show when={phase() === 'idle'}>
-              <div class="border border-border-soft/80 rounded-[var(--radius-sc)] px-2.5 py-2 bg-bg-base/40 flex flex-col gap-1.5">
-                <div class="flex items-center gap-2 text-[0.85em]">
-                  <Icons.database class="text-text-dim flex-shrink-0" />
-                  <span class="text-text-dim">From</span>
-                  <span class="font-medium text-text truncate">{props.fromEngineLabel}</span>
-                </div>
-                <div class="flex items-center gap-2 text-[0.85em]">
-                  <Icons.arrowRight class="text-accent flex-shrink-0" />
-                  <span class="text-text-dim">To</span>
-                  <span class="font-medium text-text truncate">{props.toEngineLabel}</span>
-                </div>
+      <Show when={phase() === 'idle'}>
+        <div class="border border-border-soft/80 rounded-[var(--radius-sc)] px-2.5 py-2 bg-bg-base/40 flex flex-col gap-1.5">
+          <div class="flex items-center gap-2 text-[0.85em]">
+            <Icons.database class="text-text-dim flex-shrink-0" />
+            <span class="text-text-dim">From</span>
+            <span class="font-medium text-text truncate">{props.fromEngineLabel}</span>
+          </div>
+          <div class="flex items-center gap-2 text-[0.85em]">
+            <Icons.arrowRight class="text-accent flex-shrink-0" />
+            <span class="text-text-dim">To</span>
+            <span class="font-medium text-text truncate">{props.toEngineLabel}</span>
+          </div>
+        </div>
+      </Show>
+
+      <Show when={phase() === 'migrating'}>
+        <div
+          class="flex items-center gap-2 text-[11px] text-text-dim"
+          role="status"
+          aria-live="polite"
+          data-testid="axis-storage-change-progress"
+        >
+          <Spinner class="text-accent" />
+          <span class="font-mono">
+            {progress().current}/{progress().total}
+          </span>
+          <Show when={progress().currentName}>
+            <span class="truncate text-text-faint">— {progress().currentName}</span>
+          </Show>
+        </div>
+      </Show>
+
+      <Show when={phase() === 'error' && failures().length > 0}>
+        <div class="flex flex-col gap-1 max-h-[40vh] overflow-y-auto">
+          <div class="text-[10px] uppercase tracking-wider text-text-dim font-semibold">
+            Failed scripts
+          </div>
+          <For each={failures()}>
+            {(f) => (
+              <div class="border border-red/40 bg-red/5 rounded px-2 py-1 text-[11px]">
+                <div class="font-medium text-text truncate">{f.name}</div>
+                <div class="text-red font-mono truncate">{f.error}</div>
               </div>
-            </Show>
-
-            <Show when={phase() === 'migrating'}>
-              <div
-                class="flex items-center gap-2 text-[11px] text-text-dim"
-                role="status"
-                aria-live="polite"
-                data-testid="axis-storage-change-progress"
-              >
-                <Icons.loader class="animate-spin text-accent" />
-                <span class="font-mono">
-                  {progress().current}/{progress().total}
-                </span>
-                <Show when={progress().currentName}>
-                  <span class="truncate text-text-faint">— {progress().currentName}</span>
-                </Show>
-              </div>
-            </Show>
-
-            <Show when={phase() === 'error' && failures().length > 0}>
-              <div class="flex flex-col gap-1 max-h-[40vh] overflow-y-auto">
-                <div class="text-[10px] uppercase tracking-wider text-text-dim font-semibold">
-                  Failed scripts
-                </div>
-                <For each={failures()}>
-                  {(f) => (
-                    <div class="border border-red/40 bg-red/5 rounded px-2 py-1 text-[11px]">
-                      <div class="font-medium text-text truncate">{f.name}</div>
-                      <div class="text-red font-mono truncate">{f.error}</div>
-                    </div>
-                  )}
-                </For>
-              </div>
-            </Show>
+            )}
+          </For>
+        </div>
+      </Show>
     </Modal>
   );
 };

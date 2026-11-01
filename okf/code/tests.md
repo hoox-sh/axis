@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "tests"
-description: "tests contains alerts-engine.test.ts, alerts-form.test.ts, alerts-format.test.ts, and 315 more files."
+description: "tests contains alerts-engine.test.ts, alerts-form.test.ts, alerts-format.test.ts, and 318 more files."
 resource: "tests"
 tags: [code, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-31T22:37:50Z
+  at: 2026-11-01T18:07:47Z
 sources:
   - id: tree
     resource: "tests"
@@ -199,7 +199,9 @@ okf_lock: generated
 * `panel-icon.test.ts`
 * `panel-manager.test.ts`
 * `parse-bars.test.ts`
+* `perf-audit.test.ts`
 * `persist-boot.test.ts`
+* `phase4-ux-tokens.test.ts`
 * `pine-call-params.test.ts`
 * `pine-color.test.ts`
 * `pine-colors.test.ts`
@@ -267,6 +269,7 @@ okf_lock: generated
 * `shortcuts.test.ts`
 * `signed-fetch.test.ts`
 * `sources-catalog.test.ts`
+* `spinner.test.ts` — Spinner
 * `storage-capabilities.test.ts`
 * `storage-change-prompt.test.ts`
 * `storage-cloud.test.ts`
@@ -386,6 +389,7 @@ okf_lock: generated
 * [src/update](/code/src/update.md)
 * [src/utils](/code/src/utils.md)
 * [src/workers](/code/src/workers.md)
+* [tests/bench](/code/tests/bench.md)
 * [tests/fixtures](/code/tests/fixtures.md)
 * [tests/helpers](/code/tests/helpers.md)
 * [worker/src](/code/worker/src.md)

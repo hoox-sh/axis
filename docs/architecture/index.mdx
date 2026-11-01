@@ -34,6 +34,7 @@ AXIS architecture is the discipline of **separable axes**—price history, live 
 | Plugin contracts | `source \| stream \| engine \| storage \| dataset` (+ reserved component) |
 | Engines | PYNE evaluation (browser Pyodide or remote `/run`) |
 | On-chain plane | Parallel non-OHLCV datasets (TVL, DEX, events) via Worker allowlist proxy — [ADR-015](/axis/docs/architecture/adrs#adr-015-on-chain-data-plane) |
+| Bar plane | Fine-grained OHLCV signals (`barPlane`) separate from `store.bars` — [ADR-017](/axis/docs/architecture/adrs#adr-017-narrow-bar-plane) |
 | Optional edge | Cloudflare® Pages + Worker + DO/KV/D1/R2 |
 | Optional desk API | Flask Pro API |
 
@@ -44,7 +45,8 @@ AXIS architecture is the discipline of **separable axes**—price history, live 
 | Page | Contents |
 | --- | --- |
 | [Overview](/axis/docs/architecture/overview) | End-to-end data/control flow |
-| [ADRs](/axis/docs/architecture/adrs) | ADR-001 … ADR-015 |
+| [ADRs](/axis/docs/architecture/adrs) | ADR-001 … ADR-018 |
+| [Perf audit](/axis/docs/architecture/perf-audit-2026-11) | Q4 2026 performance & architecture plan |
 | [Topologies](/axis/docs/architecture/topologies) | Dev, static, edge deploy shapes |
 | [State namespaces](/axis/docs/architecture/state-namespaces) | Keys, migration, hash, IDB |
 | [Drawings and plot parity](/axis/docs/architecture/drawings-parity) | User tools vs Pine plots/drawings vs PYNE export |

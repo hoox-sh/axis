@@ -7,7 +7,7 @@ tags: [code, panels, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-04T22:24:20Z
+  at: 2026-11-01T18:07:47Z
 sources:
   - id: tree
     resource: "src/ui/panels"
@@ -22,7 +22,7 @@ okf_lock: generated
 * `FloatableShell.tsx` — FloatableShell, FloatableShellProps, PanelDragOverlay, getDragPreview, installPanelWindowBridge
 * `dock-layout.ts` — DOCK_HOST_IDS, DOCK_SIDE_MAX_VIEWPORT_FRAC, DOCK_STACK_ORDER, OVERLAY_HOST_IDS, dockColumnWidth, dockHostElement, dockStackCount, dockStackCssOrder, indexInDockStack, isLastInDockStack, overlayDockHostElement, overlayPanelsOnDock
 * `drop-zones.ts` — dropZoneToDock, hitDropZone, skeletonSize
-* `hover-slide.ts` — HOVER_SLIDE_LEAVE_MS, HOVER_SLIDE_PEEK_BOTTOM, HOVER_SLIDE_PEEK_SIDE, clearPanelHoverSlideExpanded, getHoverSlideExpandedMap, hoverSlideLayoutSize, hoverSlidePeekForDock, isPanelHoverSlideExpanded, setPanelHoverSlideExpanded
+* `hover-slide.ts` — HOVER_SLIDE_LEAVE_MS, HOVER_SLIDE_PEEK_BOTTOM, HOVER_SLIDE_PEEK_SIDE, clearPanelHoverSlideExpanded, getHoverSlideExpandedMap, hoverSlideLayoutSize, hoverSlidePeekForDock, hoverSlideTransition, isPanelHoverSlideExpanded, setPanelHoverSlideExpanded
 * `mobile-sheet.ts` — activeMobileSheet, closeAllMobileSheets, closeMobileSheet, openMobileSheet
 * `panel-manager.ts` — CHART_OVERLAY_BOTTOM_PAD, CHART_OVERLAY_TOP_PAD, ChartOverlayGeometry, DEFAULT_OVERLAY_OPACITY, FIXED_APP_SHELL_PANELS, FLOAT_ONLY_PANELS, OVERLAY_OPACITY_MAX, OVERLAY_OPACITY_MIN, PANEL_IDS, chartOverlayGeometry, clampOverlayOpacity, defaultPanelPosition
 * `types.ts` — DropZone, PANEL_META, PanelChrome, PanelChromeMap, PanelDock, PanelId, defaultPanelChrome, defaultPanelChromeMap, isHoverSlideEligible
@@ -35,6 +35,7 @@ okf_lock: generated
 
 * [src/store](/code/src/store.md)
 * [src/ui](/code/src/ui.md)
+* [src/ui/effects](/code/src/ui/effects.md)
 
 # Used by
 

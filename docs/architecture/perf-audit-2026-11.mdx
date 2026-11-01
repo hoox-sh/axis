@@ -263,7 +263,7 @@ The objective now is to move from "already good" to "absolutely world-class": su
   - `src/engines/batch.ts` (batch `/run/batch` envelope)
 - **Typed-result contract for Pyodide.** The local Pyodide path now runs its result JSON through `parseEngineJson` and lifts it with `normalizeEngineResult` (`src/indicators/run-helpers.ts`) before returning, so REST/WS/Pyodide all present the same `NormalizedRunResult` shape to the apply pipeline.
 - **In-memory result cache keyed by `(scriptId, barsGen, inputs)`.** New `src/indicators/run-cache.ts` memoizes successful non-live runs using a stable fingerprint of engine id, script id/script source hash, resolved inputs, engine config, bar-plane generation, bar window length, and resolved library sources. It is bounded (16 entries, 30 s TTL), clones cached values on store and retrieve to protect apply-stage mutations, and is automatically disabled in test environments to avoid cross-test pollution. Wired into `runScript` in `src/indicators/runner.ts`.
-- **Pyodide streaming.** True chunked/incremental result streaming is still outstanding; the immediate win is that the final large Pyodide JSON string now parses off the main thread. Streaming evaluation remains on the Phase 4/5 backlog.
+- **Pyodide streaming.** True chunked/incremental result streaming is still outstanding; the immediate win is that the final large Pyodide JSON string now parses off the main thread. Streaming evaluation remains on the Phase 5 backlog.
 
 ### Validation after Phase 3
 
@@ -271,6 +271,35 @@ The objective now is to move from "already good" to "absolutely world-class": su
 - `bun run lint` — exits 0.
 - `bun run test:unit` — **4708 pass / 10 skip / 0 fail**.
 
+### Phase 4 — UX / visual polish (landed)
+
+- **Motion + safe-area tokens.** `@theme` now owns `--ui-motion-duration-fast/base/slow` and `--ui-safe-top/bottom/left/right`. Raw `env(safe-area-inset-*)` call sites (mobile chrome, dialog sheets, `FloatableShell` phone geometry) read the tokens. Reduced motion collapses the duration tokens to `0.01ms` on `:root, html` and globally shortens animation/transition duration so `transitionend` still fires.
+- **Drawing rail is compositor-only.** `.axis-draw-rail` fades with `opacity var(--ui-motion-duration-fast)` instead of `max-height` / `max-width`. Hover-slide layout transitions (`width` / `height` / `flex-basis` / `min-width`) go through `hoverSlideTransition()` and are skipped when `prefersReducedMotion()` is true; CSS also sets `transition: none` on `.axis-panel-hover-slide` under reduced motion. Peek/expand still happens, instantly.
+- **Theme tokens on chart scale chrome.** `ChartScaleControls` uses `--color-border`, `--color-accent`, `--color-text(-dim)`, `--color-bg-panel` instead of hard-coded hex.
+- **Shared `Spinner`.** `src/ui/Spinner.tsx` wraps the loader icon with `role="status"`, `aria-busy`, a stable `data-testid="axis-spinner"`, and a default "Loading" label. Wired into IndicatorCard, OnChainPanel, ResultsModal, ScriptSettingsModal, StorageChangeDialog, and SymbolModal. Busy *refresh* glyphs keep `Icons.refresh` + `animate-spin`.
+- **Coarse-pointer topbar targets.** `@media (pointer: coarse)` raises command-bar / module / engine-switch buttons to a 40×40 px minimum with `touch-action: manipulation`.
+- **Modal focus restore + aria-hidden siblings.** `installFocusTrap` accepts `returnElement` and hides ancestor-chain siblings with `aria-hidden="true"` while the trap is active (already-hidden nodes stay hidden; previous values including `false` are restored on dispose). Solid `ref` fires before insert, so the sibling walk retries on a microtask once the dialog is in-tree. `Modal` passes `returnElement` through. Dispose order: unhide, then focus `returnElement` or the previously focused element. Missing `document.body` is a no-op so test doubles keep working.
+
+### Validation after Phase 4
+
+- `bun run typecheck:all` — clean (566 app + 29 worker + 39 CLI files).
+- `bun run lint` — exits 0 (warnings remain; no errors). New `!important` on the global reduced-motion rule is intentional.
+- Phase 4 pins: `tests/spinner.test.ts`, `tests/phase4-ux-tokens.test.ts`, plus extensions of `tests/focus-trap.test.ts`, `tests/ui-modal-shell.test.ts`, `tests/panel-hover-slide.test.ts` — **36 pass**.
+- `bun run test:unit` — **4723 pass / 10 skip / 1 fail**. The failure is `data-source-manager > applyCachedToChart with onlyIfCurrent skips paint for a stale symbol` timing out at 5 s (reproduced in isolation at ~6 s). It does not import Phase 4 UI files; treat it as a pre-existing slow DSM path, not a Phase 4 regression.
+
+### Phase 5 — Continuous quality gates (landed)
+
+- **`bun run perf:audit`.** `scripts/perf-audit.mjs` runs `typecheck`, a hot-path unit slice (`store-append-scale`, `live-append`, `store-live-frame`, `paint-latency`), then `AXIS_BENCH=1 bun test tests/bench/`. It scrapes `AXIS_BENCH {json}` lines from bench stdout and writes `reports/perf-audit.json` (gitignored). `--full` / `bun run perf:audit:full` also runs `test:unit` and Playwright `@smoke`. `--skip-typecheck` / `--skip-bench` exist for iterating on one side.
+- **CI firehose budget.** `.github/workflows/ci.yml` adds a parallel **Firehose budget** job: `bun run test:bench` with `AXIS_BENCH=1`, 10-minute job timeout. The existing `expect(sample.ms).toBeLessThan(FIREHOSE_SOFT_BUDGET_MS)` (120 s) fails the job if the 500k-tick append path regresses into minutes. Dataset linear-merge keeps its 5 s soft budget.
+- **ADR-017 — Narrow bar plane.** `docs/architecture/adrs.mdx` records `barPlane` (`bars` / `tip` / `length` / `gen`), the clone-on-full-write rule, and that `store.bars` stays the engine/eval source during migration.
+- **ADR-018 — Engine result parse + typed contract.** Records the 256 KB Worker parse threshold, `normalizeEngineResult` as the apply envelope, and the bounded run-cache. Chunked Pyodide evaluation stays future work.
+
+### Validation after Phase 5
+
+- `bun run typecheck:all` — clean (566 app + 29 worker + 39 CLI files).
+- Phase 5 pins: `tests/perf-audit.test.ts` — **9 pass**.
+- `bun run perf:audit --skip-typecheck` (this host, 2026-11-01): hot-path unit 441 ms; **appendBar firehose 500k ticks in 19.1 s** (26.1k ops/s, budget 120 s); dataset linear merge 50 pages in 829 ms (budget 5 s). Report: `reports/perf-audit.json`.
+
 ## 9. Next move
 
-Start Phase 4 UX / visual polish: design-system token hardening, `prefers-reduced-motion`, a central focus manager, and responsive refinements. Continue requiring before/after measurements for any new hot-path change and keep the test matrix green.
+The six-phase audit plan is implemented through quality gates. Follow-ups that remain open: chunked Pyodide result streaming, typed-array engine envelopes, a nightly `axis-nightly.yml` if full e2e should stay off PR CI, and shrinking the DSM `applyCachedToChart` timeout. Keep requiring before/after measurements for any new hot-path change.

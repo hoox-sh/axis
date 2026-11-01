@@ -32,6 +32,8 @@
     "test:coverage:gate": "bun run test:coverage && bun scripts/check-coverage.mjs",
     "test:security": "bun test --isolate tests/security/",
     "test:bench": "AXIS_BENCH=1 bun test tests/bench/",
+    "perf:audit": "bun scripts/perf-audit.mjs",
+    "perf:audit:full": "bun scripts/perf-audit.mjs --full",
     "test:e2e": "playwright test",
     "test:e2e:smoke": "playwright test --grep @smoke",
     "test:e2e:critical": "playwright test --grep \"@smoke|@critical\"",

@@ -10,6 +10,9 @@ bun run test:coverage:gate   # coverage + scoped line gate
 bun run test:security        # tests/security/
 bun run test:e2e:smoke       # Playwright @smoke (builds + preview)
 bun run test:all             # coverage gate + security
+bun run test:bench           # AXIS_BENCH=1 firehose (fails over 120s)
+bun run perf:audit           # typecheck + hot-path unit + benches → reports/perf-audit.json
+bun run perf:audit:full      # also full unit + Playwright @smoke
 ```
 
 ## Layout
@@ -37,11 +40,14 @@ bunx playwright install chromium
 bun run test:e2e:smoke       # @smoke only (PR CI)
 bun run test:e2e:critical    # @smoke + @critical
 bun run test:e2e             # all specs
+bun run test:bench           # AXIS_BENCH=1 firehose (fails over 120s)
+bun run perf:audit           # typecheck + hot-path unit + benches, writes reports/perf-audit.json
+bun run perf:audit:full      # also full unit + Playwright @smoke
 ```
 
 - Mocks `/run` and Binance so smoke does not need a live Pro API.
 - Selectors use `data-testid` on topbar / manager (`axis-btn-load`, `axis-manager`, …).
-- CI: `.github/workflows/ci.yml` runs unit + security + Playwright `@smoke` on PR / main. Optional firehose bench: `bun run test:bench` (`AXIS_BENCH=1`).
+- CI: `.github/workflows/ci.yml` runs unit + security + Playwright `@smoke` on PR / main, plus a dedicated **Firehose budget** job (`bun run test:bench`, `AXIS_BENCH=1`, 120 s wall). Local recording: `bun run perf:audit`.
 
 ## Security
 

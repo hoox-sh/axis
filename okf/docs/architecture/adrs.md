@@ -1,13 +1,13 @@
 ---
 type: "Document"
 title: "Architecture Decision Records"
-description: "ADR-001 through ADR-015 for AXIS: registry, AXIS≠engine, Solid+Vite, three built-in engines, configSchema, URL load, storage, CF project id, proxies, DO fan-out, migration, CORS,…"
+description: "ADR-001 through ADR-018 for AXIS: registry, AXIS≠engine, Solid+Vite, engines, plugins, storage, CF ids, proxies, DO fan-out, CORS, results, telemetry, on-chain, provider lock,…"
 resource: "docs/architecture/adrs.mdx"
 tags: [adrs, architecture, doc, docs]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:02:55Z
+  at: 2026-11-01T18:07:47Z
 sources:
   - id: tree
     resource: "docs/architecture/adrs.mdx"
@@ -69,9 +69,11 @@ Repo path `docs/architecture/adrs.mdx`.
 * [src/alerts](/code/src/alerts.md)
 * [src/data](/code/src/data.md)
 * [src/engines](/code/src/engines.md)
+* [src/indicators](/code/src/indicators.md)
 * [src/onchain](/code/src/onchain.md)
 * [src/plugins](/code/src/plugins.md)
 * [src/store](/code/src/store.md)
+* [src/stores](/code/src/stores.md)
 * [src/ui](/code/src/ui.md)
 * [tests](/code/tests.md)
 * [worker/src](/code/worker/src.md)

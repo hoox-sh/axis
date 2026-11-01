@@ -7,9 +7,9 @@
  * Chart canvas sizing is mostly independent of root font-size.
  */
 
-@import "tailwindcss";
-@import "./ui/studio/studio.css";
-@import "./ui/studio/button-designs.css";
+@import 'tailwindcss';
+@import './ui/studio/studio.css';
+@import './ui/studio/button-designs.css';
 
 /* AXIS  — Void pack
    Surfaces: #07080C / #0C0E14 / #10131B · hairline #1C2230
@@ -20,40 +20,40 @@
 
 @theme {
   /* Surfaces */
-  --color-void: #07080C;
-  --color-bg-base: #07080C;
-  --color-bg-panel: #0C0E14;
-  --color-bg-elev: #10131B;
-  --color-bg-hover: #161A24;
+  --color-void: #07080c;
+  --color-bg-base: #07080c;
+  --color-bg-panel: #0c0e14;
+  --color-bg-elev: #10131b;
+  --color-bg-hover: #161a24;
 
   /* Edges */
-  --color-border: #1C2230;
+  --color-border: #1c2230;
   --color-border-soft: #151922;
-  --color-border-focus: color-mix(in oklch, #8B9CFF 65%, transparent);
+  --color-border-focus: color-mix(in oklch, #8b9cff 65%, transparent);
 
   /* Text */
-  --color-text: #E8EAEE;
-  --color-text-dim: #9AA3B2;
-  --color-text-faint: #6B7382;
+  --color-text: #e8eaee;
+  --color-text-dim: #9aa3b2;
+  --color-text-faint: #6b7382;
   /* `text-muted` utility (used across ui/*): secondary copy, same as text-dim.
      Resolves on <html> so [data-theme=light] overrides flow through. */
   --color-muted: var(--color-text-dim);
 
   /* Periwinkle — primary brand accent */
-  --color-accent: #8B9CFF;
-  --color-accent-hover: #7488F0;
+  --color-accent: #8b9cff;
+  --color-accent-hover: #7488f0;
 
   /* Live / positive */
-  --color-accent-2: #3DDC97;
-  --color-green: #3DDC97;
+  --color-accent-2: #3ddc97;
+  --color-green: #3ddc97;
 
   /* Warn / markers */
-  --color-accent-3: #E8B84A;
-  --color-orange: #E8B84A;
-  --color-yellow: #E8B84A;
+  --color-accent-3: #e8b84a;
+  --color-orange: #e8b84a;
+  --color-yellow: #e8b84a;
 
   /* Loss / error */
-  --color-red: #F07178;
+  --color-red: #f07178;
 
   /* Cyan — series builtins in the Pine editor */
   --color-cyan: #6ee7f5;
@@ -62,10 +62,10 @@
   --color-editor-builtin: #6ee7f5;
   --color-editor-lib: #d8b4fe;
   --color-editor-lib-member: #e879f9;
-  --color-editor-type: #E8B84A;
+  --color-editor-type: #e8b84a;
 
   /* Legacy alias (prefer accent) — hex fallback for canvas/JS */
-  --color-purple: #8B9CFF;
+  --color-purple: #8b9cff;
 
   /* Geometry — 4 / 6 / 2 (keep pills/circles as 50% / 999px only) */
   --border-w: 1px;
@@ -120,7 +120,18 @@
   --ui-dialog-footer-gap: 0.6em;
   --ui-dialog-section-gap: 1.15em;
   /* Keyboard focus — thin, no outer halo (inputs use border only) */
-  --ui-focus-ring: 0 0 0 1px color-mix(in oklch, #8B9CFF 40%, transparent);
+  --ui-focus-ring: 0 0 0 1px color-mix(in oklch, #8b9cff 40%, transparent);
+  /* Motion scale — callers read these so one query can disable animation. */
+  --ui-motion-duration-fast: 120ms;
+  --ui-motion-duration-base: 200ms;
+  --ui-motion-duration-slow: 350ms;
+  --ui-motion-enter: translate(var(--axis-panel-enter-x), var(--axis-panel-enter-y));
+  --ui-motion-fade-enter: opacity 0 var(--ui-motion-duration-base) ease-out;
+  /* Safe-area insets — mobile notches / home indicators. */
+  --ui-safe-top: env(safe-area-inset-top, 0px);
+  --ui-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --ui-safe-left: env(safe-area-inset-left, 0px);
+  --ui-safe-right: env(safe-area-inset-right, 0px);
   /* Panel open enter vector — full self-travel from the dock edge
    * (compositor-only; dock classes below override the direction).
    * Tuned by Settings → Theme → Motion (`panel.open`). */
@@ -129,20 +140,20 @@
 
   /* Chart theme bridge — written by applyThemeToDocument (Theme Manager).
      Defaults match void-dark / Pine chart.bg_color · chart.fg_color. */
-  --chart-bg: #07080C;
-  --chart-fg: #E8EAEE;
-  --chart-panel: #0C0E14;
-  --chart-elev: #10131B;
-  --chart-bar-up: #3DDC97;
-  --chart-bar-down: #F07178;
+  --chart-bg: #07080c;
+  --chart-fg: #e8eaee;
+  --chart-panel: #0c0e14;
+  --chart-elev: #10131b;
+  --chart-bar-up: #3ddc97;
+  --chart-bar-down: #f07178;
   --chart-grid-vert: rgba(255, 255, 255, 0.05);
   --chart-grid-horz: rgba(255, 255, 255, 0.05);
-  --chart-scale-border: #1C2230;
-  --chart-scale-text: #9AA3B2;
+  --chart-scale-border: #1c2230;
+  --chart-scale-text: #9aa3b2;
   --chart-crosshair: rgba(139, 156, 255, 0.38);
-  --chart-accent: #8B9CFF;
-  --chart-ui-up: #3DDC97;
-  --chart-ui-down: #F07178;
+  --chart-accent: #8b9cff;
+  --chart-ui-up: #3ddc97;
+  --chart-ui-down: #f07178;
 }
 
 html,
@@ -153,7 +164,7 @@ body {
   overflow: hidden;
   background-color: var(--color-bg-base);
   color: var(--color-text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Ubuntu, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Ubuntu, sans-serif;
   /* Base size is also written inline by applyUiScale for live updates */
   font-size: calc(var(--ui-font-base) * var(--ui-scale));
   line-height: 1.4;
@@ -163,31 +174,51 @@ body {
 }
 
 /* Light theme — soft lift of the same void system */
-[data-theme="light"] {
-  --color-void: #F3F4F8;
-  --color-bg-base: #F3F4F8;
-  --color-bg-panel: #EAEBF1;
-  --color-bg-elev: #E2E4EC;
-  --color-bg-hover: #D8DBE6;
-  --color-border: #C5CAD6;
-  --color-border-soft: #D4D8E2;
-  --color-text: #1A1D26;
-  --color-text-dim: #5C6575;
-  --color-text-faint: #6B7382;
-  --color-accent: #5A6AD4;
-  --color-accent-hover: #4A5AC4;
-  --color-accent-2: #1AA36A;
-  --color-green: #1AA36A;
-  --color-accent-3: #C4922A;
-  --color-orange: #C4922A;
-  --color-yellow: #C4922A;
-  --color-red: #C44750;
-  --color-purple: #5A6AD4;
+[data-theme='light'] {
+  --color-void: #f3f4f8;
+  --color-bg-base: #f3f4f8;
+  --color-bg-panel: #eaebf1;
+  --color-bg-elev: #e2e4ec;
+  --color-bg-hover: #d8dbe6;
+  --color-border: #c5cad6;
+  --color-border-soft: #d4d8e2;
+  --color-text: #1a1d26;
+  --color-text-dim: #5c6575;
+  --color-text-faint: #6b7382;
+  --color-accent: #5a6ad4;
+  --color-accent-hover: #4a5ac4;
+  --color-accent-2: #1aa36a;
+  --color-green: #1aa36a;
+  --color-accent-3: #c4922a;
+  --color-orange: #c4922a;
+  --color-yellow: #c4922a;
+  --color-red: #c44750;
+  --color-purple: #5a6ad4;
   --color-cyan: #0e8aaa;
   --color-editor-builtin: #0e8aaa;
   --color-editor-lib: #7c3aed;
   --color-editor-lib-member: #a21caf;
-  --color-editor-type: #C4922A;
+  --color-editor-type: #c4922a;
+}
+
+/* Reduced motion — respect OS preference globally. Durations collapse to
+ * imperceptible so feature detection / end events still fire; animations
+ * that are purely decorative are also paused. */
+@media (prefers-reduced-motion: reduce) {
+  :root,
+  html {
+    --ui-motion-duration-fast: 0.01ms;
+    --ui-motion-duration-base: 0.01ms;
+    --ui-motion-duration-slow: 0.01ms;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* Scrollbars — void chrome */
@@ -440,7 +471,7 @@ button.sc-btn:focus-visible {
 }
 
 /* ---------- Topbar chrome (command 32 + module 28) ---------- */
-[data-testid="axis-topbar"].axis-topbar,
+[data-testid='axis-topbar'].axis-topbar,
 .axis-topbar {
   display: flex;
   flex-direction: column;
@@ -499,7 +530,7 @@ button.sc-btn:focus-visible {
 }
 
 /* System cluster pins to the trailing edge (command-bar fallback) */
-.axis-command-bar .axis-tb-group[data-tb-group="system"] {
+.axis-command-bar .axis-tb-group[data-tb-group='system'] {
   margin-left: auto;
 }
 .axis-command-trailing {
@@ -543,7 +574,7 @@ button.sc-btn:focus-visible {
 }
 
 /* Taller, softer dividers inside the topbar (e.g. compare sub-sep) */
-[data-testid="axis-topbar"] .sc-sep {
+[data-testid='axis-topbar'] .sc-sep {
   height: 1.65em;
   min-height: 1.65em;
   margin: 0 calc(var(--ui-gap-xs) * 0.75);
@@ -552,17 +583,17 @@ button.sc-btn:focus-visible {
 }
 
 /* Consistent control height + density */
-[data-testid="axis-topbar"] .sc-btn,
-[data-testid="axis-topbar"] .sc-input {
+[data-testid='axis-topbar'] .sc-btn,
+[data-testid='axis-topbar'] .sc-input {
   min-height: var(--ui-control-h);
 }
 
-[data-testid="axis-topbar"] .sc-btn {
+[data-testid='axis-topbar'] .sc-btn {
   gap: 0.4em;
 }
 
 /* Inline sc-label companions (fallback when not using TopbarField) */
-[data-testid="axis-topbar"] .sc-label {
+[data-testid='axis-topbar'] .sc-label {
   margin-bottom: 0;
   flex-shrink: 0;
   line-height: 1;
@@ -570,9 +601,9 @@ button.sc-btn:focus-visible {
 }
 
 /* Brand cluster — match topbar input / control line height; button opens About */
-[data-testid="axis-topbar"] [data-testid="axis-brand"],
-[data-testid="axis-topbar"] .axis-tb-brand,
-[data-testid="axis-topbar"] .axis-tb-brand-btn {
+[data-testid='axis-topbar'] [data-testid='axis-brand'],
+[data-testid='axis-topbar'] .axis-tb-brand,
+[data-testid='axis-topbar'] .axis-tb-brand-btn {
   appearance: none;
   background: transparent;
   border: none;
@@ -589,18 +620,18 @@ button.sc-btn:focus-visible {
   align-self: center;
   display: inline-flex;
 }
-[data-testid="axis-topbar"] .axis-tb-brand-btn:hover .axis-tb-brand-title,
-[data-testid="axis-topbar"] .axis-tb-brand-btn:focus-visible .axis-tb-brand-title {
+[data-testid='axis-topbar'] .axis-tb-brand-btn:hover .axis-tb-brand-title,
+[data-testid='axis-topbar'] .axis-tb-brand-btn:focus-visible .axis-tb-brand-title {
   color: var(--color-accent);
 }
-[data-testid="axis-topbar"] .axis-tb-brand-btn:focus-visible {
+[data-testid='axis-topbar'] .axis-tb-brand-btn:focus-visible {
   outline: 1px solid color-mix(in srgb, var(--color-accent) 55%, transparent);
   outline-offset: 2px;
 }
 
 /* Logo scales with control height (SVG attrs overridden by CSS) */
-[data-testid="axis-topbar"] .axis-tb-brand-logo,
-[data-testid="axis-topbar"] [data-testid="axis-hoox-logo"] {
+[data-testid='axis-topbar'] .axis-tb-brand-logo,
+[data-testid='axis-topbar'] [data-testid='axis-hoox-logo'] {
   width: calc(var(--ui-control-h) * 0.78);
   height: calc(var(--ui-control-h) * 0.78);
   display: block;
@@ -608,7 +639,7 @@ button.sc-btn:focus-visible {
 }
 
 /* Wordmark: line-box = control height so it sits flush with Symbol/Interval */
-[data-testid="axis-topbar"] .axis-tb-brand-title {
+[data-testid='axis-topbar'] .axis-tb-brand-title {
   display: inline-flex;
   align-items: center;
   height: var(--ui-control-h);
@@ -621,7 +652,7 @@ button.sc-btn:focus-visible {
   user-select: none;
 }
 
-[data-testid="axis-topbar"] .axis-tb-brand-sub {
+[data-testid='axis-topbar'] .axis-tb-brand-sub {
   margin-left: 6px;
   font-size: 11px;
   font-weight: 500;
@@ -631,13 +662,13 @@ button.sc-btn:focus-visible {
 }
 
 @media (max-width: 639px) {
-  [data-testid="axis-topbar"] .axis-tb-brand-sub {
+  [data-testid='axis-topbar'] .axis-tb-brand-sub {
     display: none;
   }
 }
 
 /* Primary Run — stronger emphasis in the toolbar */
-[data-testid="axis-topbar"] .sc-btn-primary {
+[data-testid='axis-topbar'] .sc-btn-primary {
   background-color: color-mix(in srgb, var(--color-accent) 26%, var(--color-bg-elev));
   border-color: var(--color-accent);
   color: var(--color-accent);
@@ -723,13 +754,13 @@ button.sc-btn:focus-visible {
   line-height: 1.3;
 }
 
-[data-testid="axis-topbar"] .sc-btn-primary:hover {
+[data-testid='axis-topbar'] .sc-btn-primary:hover {
   background-color: color-mix(in srgb, var(--color-accent-hover) 36%, var(--color-bg-elev));
   border-color: var(--color-accent-hover);
   color: var(--color-accent-hover);
 }
 
-[data-testid="axis-topbar"] .sc-btn-primary:focus-visible {
+[data-testid='axis-topbar'] .sc-btn-primary:focus-visible {
   border-color: var(--color-accent);
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 22%, transparent),
@@ -746,7 +777,7 @@ button.sc-btn:focus-visible {
 
 /* Pressed / on state for panel toggles and mode buttons */
 .sc-btn.is-active,
-.sc-btn[aria-pressed="true"] {
+.sc-btn[aria-pressed='true'] {
   color: var(--color-accent);
   border-color: color-mix(in srgb, var(--color-accent) 50%, var(--color-border));
   background: color-mix(in srgb, var(--color-accent) 14%, var(--color-bg-elev));
@@ -754,14 +785,14 @@ button.sc-btn:focus-visible {
 }
 
 .sc-btn-ghost.is-active,
-.sc-btn-ghost[aria-pressed="true"] {
+.sc-btn-ghost[aria-pressed='true'] {
   border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-border-soft));
 }
 
 .sc-btn.is-active:hover,
-.sc-btn[aria-pressed="true"]:hover,
+.sc-btn[aria-pressed='true']:hover,
 .sc-btn-ghost.is-active:hover,
-.sc-btn-ghost[aria-pressed="true"]:hover {
+.sc-btn-ghost[aria-pressed='true']:hover {
   color: var(--color-accent);
   border-color: color-mix(in srgb, var(--color-accent) 65%, var(--color-border));
   background: color-mix(in srgb, var(--color-accent) 20%, var(--color-bg-hover));
@@ -814,7 +845,7 @@ button.sc-btn:focus-visible {
   background: var(--color-red);
 }
 .axis-live-btn.is-live,
-.axis-live-btn.is-live[aria-pressed="true"] {
+.axis-live-btn.is-live[aria-pressed='true'] {
   color: var(--color-text);
   font-weight: 500;
 }
@@ -823,7 +854,7 @@ button.sc-btn:focus-visible {
   animation: axis-live-pulse 1.6s ease-out infinite;
 }
 .axis-live-btn.is-reconnect,
-.axis-live-btn.is-reconnect[aria-pressed="true"] {
+.axis-live-btn.is-reconnect[aria-pressed='true'] {
   color: var(--color-orange);
   font-weight: 500;
 }
@@ -836,7 +867,7 @@ button.sc-btn:focus-visible {
   background: var(--color-text-faint);
 }
 .axis-live-btn.is-offline,
-.axis-live-btn.is-offline[aria-pressed="true"] {
+.axis-live-btn.is-offline[aria-pressed='true'] {
   color: var(--color-text-faint);
   font-weight: 500;
 }
@@ -877,7 +908,7 @@ button.sc-btn:focus-visible {
 
 /* Bar replay on — primary accent (wins over generic aria-pressed) */
 .sc-btn.is-replay-on,
-.sc-btn.is-replay-on[aria-pressed="true"] {
+.sc-btn.is-replay-on[aria-pressed='true'] {
   color: var(--color-accent);
   border-color: color-mix(in srgb, var(--color-accent) 52%, var(--color-border));
   background: color-mix(in srgb, var(--color-accent) 12%, var(--color-bg-elev));
@@ -885,7 +916,7 @@ button.sc-btn:focus-visible {
 }
 
 .sc-btn.is-replay-on:hover,
-.sc-btn.is-replay-on[aria-pressed="true"]:hover {
+.sc-btn.is-replay-on[aria-pressed='true']:hover {
   color: var(--color-accent);
   border-color: color-mix(in srgb, var(--color-accent) 70%, var(--color-border));
   background: color-mix(in srgb, var(--color-accent) 18%, var(--color-bg-hover));
@@ -1026,7 +1057,7 @@ button.sc-btn:focus-visible {
 
 /* Load / busy — keep height stable, softer wait state */
 .sc-btn.is-loading,
-.sc-btn[aria-busy="true"] {
+.sc-btn[aria-busy='true'] {
   cursor: wait;
   opacity: 0.78;
   color: var(--color-text-dim);
@@ -1035,7 +1066,7 @@ button.sc-btn:focus-visible {
 }
 
 .sc-btn.is-loading:disabled,
-.sc-btn[aria-busy="true"]:disabled {
+.sc-btn[aria-busy='true']:disabled {
   opacity: 0.78;
 }
 
@@ -1143,7 +1174,9 @@ button.sc-btn:focus-visible {
   background-position:
     calc(100% - 0.72em) 55%,
     calc(100% - 0.48em) 55%;
-  background-size: 0.28em 0.28em, 0.28em 0.28em;
+  background-size:
+    0.28em 0.28em,
+    0.28em 0.28em;
   background-repeat: no-repeat;
 }
 
@@ -1155,7 +1188,7 @@ button.sc-btn:focus-visible {
 
 /* Symbol / mono fields */
 .axis-tb-field--mono .axis-tb-field-control {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
   text-transform: uppercase;
   letter-spacing: 0.03em;
   font-variant-numeric: tabular-nums lining-nums;
@@ -1216,12 +1249,12 @@ button.sc-btn:focus-visible {
   outline: none;
 }
 
-[data-testid="axis-topbar"] [data-testid="axis-btn-studio"].axis-tb-studio {
+[data-testid='axis-topbar'] [data-testid='axis-btn-studio'].axis-tb-studio {
   color: var(--color-accent);
 }
 
-[data-testid="axis-topbar"] [data-testid="axis-btn-studio"].axis-tb-studio:hover,
-[data-testid="axis-topbar"] [data-testid="axis-btn-studio"].axis-tb-studio:focus-visible {
+[data-testid='axis-topbar'] [data-testid='axis-btn-studio'].axis-tb-studio:hover,
+[data-testid='axis-topbar'] [data-testid='axis-btn-studio'].axis-tb-studio:focus-visible {
   color: var(--color-accent);
   background: color-mix(in srgb, var(--color-accent) 14%, var(--color-bg-elev));
   border-color: color-mix(in srgb, var(--color-accent) 50%, var(--color-border));
@@ -1229,7 +1262,7 @@ button.sc-btn:focus-visible {
 
 /* Less-critical button captions: hide below sm (icons remain) */
 @media (max-width: 639px) {
-  [data-testid="axis-topbar"] .axis-tb-btn-label {
+  [data-testid='axis-topbar'] .axis-tb-btn-label {
     display: none;
   }
 
@@ -1239,12 +1272,12 @@ button.sc-btn:focus-visible {
     gap: 8px;
   }
 
-  [data-testid="axis-topbar"] .axis-tb-group,
-  [data-testid="axis-topbar"] [data-tb-group] {
+  [data-testid='axis-topbar'] .axis-tb-group,
+  [data-testid='axis-topbar'] [data-tb-group] {
     gap: 4px;
   }
 
-  [data-testid="axis-topbar"] .axis-tb-field {
+  [data-testid='axis-topbar'] .axis-tb-field {
     min-width: 3.75em;
   }
 }
@@ -1292,7 +1325,7 @@ button.sc-btn:focus-visible {
   outline-offset: -1px;
 }
 .axis-module.is-active,
-.axis-module[aria-pressed="true"] {
+.axis-module[aria-pressed='true'] {
   background: color-mix(in srgb, var(--color-accent) 18%, transparent);
   box-shadow: inset 0 -1px 0 var(--color-accent);
   color: var(--color-accent);
@@ -1335,7 +1368,7 @@ button.sc-btn:focus-visible {
   color: var(--color-text);
 }
 .axis-module-util.is-active,
-.axis-module-util[aria-pressed="true"] {
+.axis-module-util[aria-pressed='true'] {
   color: var(--color-accent);
   background: color-mix(in srgb, var(--color-accent) 10%, transparent);
 }
@@ -1477,9 +1510,18 @@ button.axis-status-capsule {
   font-variant-numeric: tabular-nums lining-nums;
 }
 /* Longer prices / more decimals step down so the row never wraps. */
-.axis-wl-big-1 { font-size: 20px; line-height: 1.15; }
-.axis-wl-big-2 { font-size: 16px; line-height: 1.2; }
-.axis-wl-big-3 { font-size: 12.5px; line-height: 1.25; }
+.axis-wl-big-1 {
+  font-size: 20px;
+  line-height: 1.15;
+}
+.axis-wl-big-2 {
+  font-size: 16px;
+  line-height: 1.2;
+}
+.axis-wl-big-3 {
+  font-size: 12.5px;
+  line-height: 1.25;
+}
 .axis-wl-expanded-sub {
   display: flex;
   align-items: baseline;
@@ -1516,7 +1558,9 @@ button.axis-status-capsule {
       transparent
     );
   }
-  to { background-color: transparent; }
+  to {
+    background-color: transparent;
+  }
 }
 @keyframes axis-wl-flash-down {
   from {
@@ -1526,7 +1570,9 @@ button.axis-status-capsule {
       transparent
     );
   }
-  to { background-color: transparent; }
+  to {
+    background-color: transparent;
+  }
 }
 /* Extra widgets: ticker marquee band */
 .axis-extra-ticker {
@@ -1578,7 +1624,7 @@ button.axis-status-capsule {
   animation-play-state: paused;
 }
 /* Marquee direction (Extra menu) — right reverses travel. */
-.axis-extra-ticker[data-ticker-dir="right"] .axis-extra-ticker-track {
+.axis-extra-ticker[data-ticker-dir='right'] .axis-extra-ticker-track {
   animation-direction: reverse;
 }
 /* Explicit toggle — always wins over hover/focus above. */
@@ -1586,8 +1632,12 @@ button.axis-status-capsule {
   animation-play-state: paused;
 }
 @keyframes axis-ticker-scroll {
-  from { transform: translateX(0); }
-  to { transform: translateX(-50%); }
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
 }
 /* Per-part styling: symbol recedes, price carries the weight, change colors.
  * Tabular figures keep live ticks from re-flowing the band mid-scroll. */
@@ -1626,10 +1676,16 @@ button.axis-status-capsule {
   font-size: 0.8em;
   line-height: 1;
 }
-.axis-extra-tick.is-up .axis-extra-tick-change { color: var(--color-accent-2); }
-.axis-extra-tick.is-down .axis-extra-tick-change { color: var(--color-red); }
+.axis-extra-tick.is-up .axis-extra-tick-change {
+  color: var(--color-accent-2);
+}
+.axis-extra-tick.is-down .axis-extra-tick-change {
+  color: var(--color-red);
+}
 /* Waiting on the REST seed / first tick. */
-.axis-extra-tick.is-pending .axis-extra-tick-price { color: var(--color-text-faint); }
+.axis-extra-tick.is-pending .axis-extra-tick-price {
+  color: var(--color-text-faint);
+}
 .axis-extra-tick.is-pinned .axis-extra-tick-sym {
   color: var(--color-text);
   text-decoration: underline;
@@ -1698,7 +1754,9 @@ body.axis-ticker-dragging {
   background: color-mix(in srgb, var(--color-bg-panel) 80%, transparent);
 }
 @media (prefers-reduced-motion: reduce) {
-  .axis-extra-ticker-track { animation: none; }
+  .axis-extra-ticker-track {
+    animation: none;
+  }
 }
 /* Extra menu section wrapper — the divider and padding live on the inner
  * `.axis-extra-menu-row`; adding them here too doubles both. */
@@ -1737,7 +1795,10 @@ body.axis-ticker-dragging {
   padding: 4px 10px;
   font-variant-numeric: tabular-nums;
 }
-.axis-extra-price-value { font-size: 15px; font-weight: 650; }
+.axis-extra-price-value {
+  font-size: 15px;
+  font-weight: 650;
+}
 /* Left name badge on the price card: bar-close countdown (live clock fallback). */
 .axis-extra-price-badge {
   font-size: 10px;
@@ -1750,10 +1811,19 @@ body.axis-ticker-dragging {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.axis-extra-trend-up { color: var(--color-accent-2); }
-.axis-extra-trend-down { color: var(--color-red); }
-.axis-extra-trend-flat { color: var(--color-text-faint, #6b7382); }
-.axis-extra-n { font-size: 10px; opacity: 0.55; }
+.axis-extra-trend-up {
+  color: var(--color-accent-2);
+}
+.axis-extra-trend-down {
+  color: var(--color-red);
+}
+.axis-extra-trend-flat {
+  color: var(--color-text-faint, #6b7382);
+}
+.axis-extra-n {
+  font-size: 10px;
+  opacity: 0.55;
+}
 .axis-extra-alert {
   position: fixed;
   inset: 0;
@@ -1777,15 +1847,32 @@ body.axis-ticker-dragging {
   gap: 4px;
   align-items: center;
 }
-.axis-extra-alert-sym { font-size: 13px; opacity: 0.7; letter-spacing: 0.08em; }
-.axis-extra-alert-price { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.axis-extra-alert-name { font-size: 13px; opacity: 0.85; }
+.axis-extra-alert-sym {
+  font-size: 13px;
+  opacity: 0.7;
+  letter-spacing: 0.08em;
+}
+.axis-extra-alert-price {
+  font-size: 34px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.axis-extra-alert-name {
+  font-size: 13px;
+  opacity: 0.85;
+}
 @keyframes axis-alert-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .axis-extra-alert { animation: none; }
+  .axis-extra-alert {
+    animation: none;
+  }
 }
 /* Extra widgets: menu panel rows (Studio primitives) */
 .axis-extra-menu-head {
@@ -1832,11 +1919,21 @@ body.axis-ticker-dragging {
   border-bottom: 1px solid var(--color-border);
   font-variant-numeric: tabular-nums;
 }
-.axis-quote-label { opacity: 0.6; }
-.axis-quote-value { text-align: right; }
-.axis-quote-up { color: var(--color-accent-2); }
-.axis-quote-down { color: var(--color-red); }
-.axis-quote-flat { color: inherit; }
+.axis-quote-label {
+  opacity: 0.6;
+}
+.axis-quote-value {
+  text-align: right;
+}
+.axis-quote-up {
+  color: var(--color-accent-2);
+}
+.axis-quote-down {
+  color: var(--color-red);
+}
+.axis-quote-flat {
+  color: inherit;
+}
 /* Float-only mini panels (time / price extras): normal width, ~2 rows. */
 .axis-mini-panel {
   display: flex;
@@ -1869,7 +1966,9 @@ body.axis-ticker-dragging {
   font-size: 11px;
   white-space: nowrap;
 }
-.axis-mini-dim { opacity: 0.55; }
+.axis-mini-dim {
+  opacity: 0.55;
+}
 @media (prefers-reduced-motion: reduce) {
   .axis-wl-row.is-flash-up,
   .axis-wl-row.is-flash-down {
@@ -1924,7 +2023,9 @@ body.axis-ticker-dragging {
   background-position:
     calc(100% - 0.55em) 55%,
     calc(100% - 0.32em) 55%;
-  background-size: 0.22em 0.22em, 0.22em 0.22em;
+  background-size:
+    0.22em 0.22em,
+    0.22em 0.22em;
   background-repeat: no-repeat;
   color: var(--color-text);
   font: inherit;
@@ -1979,9 +2080,10 @@ body.axis-ticker-dragging {
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: thin;
-  transition: max-height 160ms ease, max-width 160ms ease, opacity 160ms ease;
+  /* Compositor-only fade — avoid layout cost on collapse/expand. */
+  transition: opacity var(--ui-motion-duration-fast) ease;
 }
-.axis-draw-shell[data-dock="top"] .axis-draw-rail {
+.axis-draw-shell[data-dock='top'] .axis-draw-rail {
   flex-direction: row;
   flex-wrap: wrap;
   align-items: center;
@@ -1999,12 +2101,12 @@ body.axis-ticker-dragging {
   background: var(--color-border-soft);
   flex: 0 0 auto;
 }
-.axis-draw-shell[data-dock="left"] .axis-draw-sep,
-.axis-draw-shell[data-dock="float"] .axis-draw-sep {
+.axis-draw-shell[data-dock='left'] .axis-draw-sep,
+.axis-draw-shell[data-dock='float'] .axis-draw-sep {
   height: 1px;
   margin: 3px 4px;
 }
-.axis-draw-shell[data-dock="top"] .axis-draw-sep {
+.axis-draw-shell[data-dock='top'] .axis-draw-sep {
   width: 1px;
   height: 22px;
   margin: 0 2px;
@@ -2027,7 +2129,7 @@ body.axis-ticker-dragging {
   width: 32px;
   height: 14px;
 }
-.axis-draw-shell[data-dock="top"] .axis-draw-handle {
+.axis-draw-shell[data-dock='top'] .axis-draw-handle {
   width: 14px;
   height: 32px;
 }
@@ -2050,20 +2152,20 @@ body.axis-ticker-dragging {
 }
 .axis-draw-handle:active,
 .axis-draw-style-handle:active,
-.axis-draw-shell[data-dragging="tools"] .axis-draw-handle,
-.axis-draw-stylebar[data-dragging="1"] .axis-draw-style-handle {
+.axis-draw-shell[data-dragging='tools'] .axis-draw-handle,
+.axis-draw-stylebar[data-dragging='1'] .axis-draw-style-handle {
   cursor: grabbing;
 }
-.axis-draw-shell[data-dock="left"] .axis-draw-grip,
-.axis-draw-shell[data-dock="float"] .axis-draw-grip {
+.axis-draw-shell[data-dock='left'] .axis-draw-grip,
+.axis-draw-shell[data-dock='float'] .axis-draw-grip {
   transform: rotate(90deg);
 }
-.axis-draw-shell[data-slide="collapsed"][data-dock="left"] .axis-draw-rail,
-.axis-draw-shell[data-slide="collapsed"][data-dock="float"] .axis-draw-rail {
+.axis-draw-shell[data-slide='collapsed'][data-dock='left'] .axis-draw-rail,
+.axis-draw-shell[data-slide='collapsed'][data-dock='float'] .axis-draw-rail {
   max-height: 22px;
   overflow: hidden;
 }
-.axis-draw-shell[data-slide="collapsed"][data-dock="top"] .axis-draw-rail {
+.axis-draw-shell[data-slide='collapsed'][data-dock='top'] .axis-draw-rail {
   max-width: 28px;
   overflow: hidden;
 }
@@ -2086,7 +2188,7 @@ body.axis-ticker-dragging {
   gap: 2px;
   pointer-events: auto;
 }
-.axis-draw-shell[data-dock="top"] .axis-draw-menu {
+.axis-draw-shell[data-dock='top'] .axis-draw-menu {
   left: 0;
   top: calc(100% + 6px);
 }
@@ -2113,7 +2215,7 @@ body.axis-ticker-dragging {
   background: var(--color-bg-hover);
 }
 .axis-draw-menu button.is-active,
-.axis-draw-menu button[aria-checked="true"] {
+.axis-draw-menu button[aria-checked='true'] {
   color: var(--color-accent);
   background: color-mix(in srgb, var(--color-accent) 12%, transparent);
 }
@@ -2141,7 +2243,7 @@ body.axis-ticker-dragging {
   border-radius: var(--radius-panel);
   box-shadow: var(--ui-shadow-panel);
 }
-.axis-draw-shell[data-dock="top"] [data-drawing-flyout] {
+.axis-draw-shell[data-dock='top'] [data-drawing-flyout] {
   left: 0;
   top: 100%;
   margin-left: 0;
@@ -2169,7 +2271,10 @@ body.axis-ticker-dragging {
   color: var(--color-text-dim);
   cursor: pointer;
   box-sizing: border-box;
-  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+  transition:
+    background 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease;
 }
 .axis-draw-btn svg,
 .axis-draw-glyph {
@@ -2363,7 +2468,9 @@ body.axis-ticker-dragging {
   cursor: pointer;
   flex: 0 0 auto;
   box-sizing: border-box;
-  transition: box-shadow 120ms ease, border-color 120ms ease;
+  transition:
+    box-shadow 120ms ease,
+    border-color 120ms ease;
 }
 .axis-draw-swatch:hover {
   border-color: var(--color-text-faint);
@@ -2375,7 +2482,9 @@ body.axis-ticker-dragging {
 }
 .axis-draw-swatch.is-active {
   border-color: var(--color-accent);
-  box-shadow: inset 0 0 0 1px var(--color-bg-panel), 0 0 0 1px var(--color-accent);
+  box-shadow:
+    inset 0 0 0 1px var(--color-bg-panel),
+    0 0 0 1px var(--color-accent);
 }
 .axis-draw-swatch.is-custom {
   background: conic-gradient(from 45deg, #f23645, #ff9800, #4caf50, #2962ff, #9c27b0, #f23645);
@@ -2404,7 +2513,10 @@ body.axis-ticker-dragging {
   cursor: pointer;
   flex: 0 0 auto;
   box-sizing: border-box;
-  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+  transition:
+    background 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease;
 }
 .axis-draw-chip:hover {
   background: var(--color-bg-hover);
@@ -2439,13 +2551,13 @@ body.axis-ticker-dragging {
   width: 16px;
   border-bottom: 2px solid currentColor;
 }
-.axis-draw-line-preview[data-style="dashed"] {
+.axis-draw-line-preview[data-style='dashed'] {
   border-bottom-style: dashed;
 }
-.axis-draw-line-preview[data-style="dotted"] {
+.axis-draw-line-preview[data-style='dotted'] {
   border-bottom-style: dotted;
 }
-.axis-draw-line-preview[data-style="solid"] {
+.axis-draw-line-preview[data-style='solid'] {
   border-bottom-style: solid;
 }
 .axis-draw-fill {
@@ -2519,7 +2631,7 @@ body.axis-ticker-dragging {
   color: var(--color-text);
   cursor: pointer;
 }
-.axis-draw-check input[type="checkbox"] {
+.axis-draw-check input[type='checkbox'] {
   accent-color: var(--color-accent);
 }
 .axis-draw-levels {
@@ -2622,7 +2734,7 @@ body.axis-ticker-dragging {
   cursor: pointer;
 }
 .axis-scale-seg button.is-active,
-.axis-scale-seg button[aria-pressed="true"] {
+.axis-scale-seg button[aria-pressed='true'] {
   color: var(--color-accent);
   background: color-mix(in srgb, var(--color-accent) 14%, transparent);
 }
@@ -2969,7 +3081,7 @@ body.axis-ticker-dragging {
   color: var(--color-text);
   background: var(--color-bg-hover);
 }
-.sc-chip[aria-pressed="true"],
+.sc-chip[aria-pressed='true'],
 .sc-chip.is-active {
   border-color: var(--color-accent);
   color: var(--color-accent);
@@ -3100,15 +3212,29 @@ body.axis-ticker-dragging {
   overflow: hidden;
   animation: sc-drawer-in 220ms ease-out;
 }
-.sc-drawer--md { --sc-drawer-w: 42rem; }
-.sc-drawer--lg { --sc-drawer-w: 56rem; }
-.sc-drawer--xl { --sc-drawer-w: min(80rem, 96vw); }
+.sc-drawer--md {
+  --sc-drawer-w: 42rem;
+}
+.sc-drawer--lg {
+  --sc-drawer-w: 56rem;
+}
+.sc-drawer--xl {
+  --sc-drawer-w: min(80rem, 96vw);
+}
 @keyframes sc-drawer-in {
-  from { transform: translateX(8%); opacity: 0.4; }
-  to { transform: translateX(0); opacity: 1; }
+  from {
+    transform: translateX(8%);
+    opacity: 0.4;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .sc-drawer { animation: none; }
+  .sc-drawer {
+    animation: none;
+  }
 }
 .sc-drawer-header {
   display: flex;
@@ -3715,8 +3841,12 @@ body.axis-panel-dragging {
 }
 
 /* Side-by-side (2+ left/right): vertical separator between shells */
-.axis-dock-col-left[data-dock-count]:not([data-dock-count='1']) .axis-panel-shell + .axis-panel-shell,
-.axis-dock-col-right[data-dock-count]:not([data-dock-count='1']) .axis-panel-shell + .axis-panel-shell {
+.axis-dock-col-left[data-dock-count]:not([data-dock-count='1'])
+  .axis-panel-shell
+  + .axis-panel-shell,
+.axis-dock-col-right[data-dock-count]:not([data-dock-count='1'])
+  .axis-panel-shell
+  + .axis-panel-shell {
   border-top: none;
   border-left: var(--border-w) solid var(--color-border);
 }
@@ -3941,7 +4071,8 @@ body.axis-panel-dragging {
   margin: 0;
   pointer-events: none;
 }
-.axis-panel-shell.axis-panel-hover-slide.is-hover-collapsed[data-panel-dock='bottom'] .axis-panel-title {
+.axis-panel-shell.axis-panel-hover-slide.is-hover-collapsed[data-panel-dock='bottom']
+  .axis-panel-title {
   max-width: 8em;
   opacity: 0.85;
 }
@@ -3951,6 +4082,11 @@ body.axis-panel-dragging {
 }
 .axis-panel-shell.axis-panel-hover-slide.is-hover-expanded {
   box-shadow: var(--ui-shadow-panel, 0 8px 28px rgba(0, 0, 0, 0.35));
+}
+@media (prefers-reduced-motion: reduce) {
+  .axis-panel-shell.axis-panel-hover-slide {
+    transition: none !important;
+  }
 }
 
 .axis-panel-grip {
@@ -3986,7 +4122,7 @@ body.axis-panel-dragging {
 }
 .axis-panel-menu-btn:hover,
 .axis-panel-menu-btn.is-open,
-.axis-panel-menu-btn[aria-expanded="true"] {
+.axis-panel-menu-btn[aria-expanded='true'] {
   color: var(--color-accent);
   opacity: 1;
 }
@@ -4208,7 +4344,7 @@ body.axis-panel-dragging {
 .axis-pyne-editor .cm-diag-mark-info,
 .cm-editor .cm-diag-mark-info {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='3'%3E%3Cpath d='m0 2.5 l1.5-1.5 1.5 1.5 1.5-1.5 1.5 1.5' stroke='%238b8e9c' fill='none' stroke-width='1.2'/%3E%3C/svg%3E");
-  background-color: rgba(139, 142, 156, 0.10);
+  background-color: rgba(139, 142, 156, 0.1);
   text-decoration: underline wavy #8b8e9c;
   text-underline-offset: 2px;
   box-shadow: inset 0 -2px 0 0 #8b8e9c;
@@ -4274,12 +4410,32 @@ body.axis-panel-dragging {
 .axis-color-check {
   background-color: var(--color-bg-elev);
   background-image:
-    linear-gradient(45deg, color-mix(in srgb, var(--color-text) 16%, transparent) 25%, transparent 25%),
-    linear-gradient(-45deg, color-mix(in srgb, var(--color-text) 16%, transparent) 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, color-mix(in srgb, var(--color-text) 16%, transparent) 75%),
-    linear-gradient(-45deg, transparent 75%, color-mix(in srgb, var(--color-text) 16%, transparent) 75%);
+    linear-gradient(
+      45deg,
+      color-mix(in srgb, var(--color-text) 16%, transparent) 25%,
+      transparent 25%
+    ),
+    linear-gradient(
+      -45deg,
+      color-mix(in srgb, var(--color-text) 16%, transparent) 25%,
+      transparent 25%
+    ),
+    linear-gradient(
+      45deg,
+      transparent 75%,
+      color-mix(in srgb, var(--color-text) 16%, transparent) 75%
+    ),
+    linear-gradient(
+      -45deg,
+      transparent 75%,
+      color-mix(in srgb, var(--color-text) 16%, transparent) 75%
+    );
   background-size: 8px 8px;
-  background-position: 0 0, 0 4px, 4px -4px, -4px 0;
+  background-position:
+    0 0,
+    0 4px,
+    4px -4px,
+    -4px 0;
 }
 .axis-color-swatch {
   position: relative;
@@ -4594,7 +4750,9 @@ body.axis-panel-dragging {
   border: 2px dashed color-mix(in srgb, var(--color-accent) 35%, transparent);
   border-radius: var(--radius-sc);
   opacity: 0.35;
-  transition: opacity 0.12s ease, background 0.12s ease;
+  transition:
+    opacity 0.12s ease,
+    background 0.12s ease;
 }
 .axis-dock-zone.is-hot {
   opacity: 1;
@@ -4678,12 +4836,20 @@ body.axis-panel-dragging {
 }
 
 @keyframes axis-sk-pulse {
-  from { opacity: 0.88; }
-  to { opacity: 1; }
+  from {
+    opacity: 0.88;
+  }
+  to {
+    opacity: 1;
+  }
 }
 @keyframes axis-sk-shimmer {
-  0% { background-position: 100% 0; }
-  100% { background-position: -100% 0; }
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
 }
 
 /* ── Slot symbol · interval chip (ChartWorkspace) ───────────────── */
@@ -4788,7 +4954,7 @@ body.axis-panel-dragging {
   font-weight: 500;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--color-text-dim, #9AA3B2);
+  color: var(--color-text-dim, #9aa3b2);
   max-width: 14em;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -4850,7 +5016,9 @@ body.axis-panel-dragging {
   margin-bottom: 0.15em;
 }
 .axis-alerts-row {
-  transition: border-color 0.12s ease, opacity 0.12s ease;
+  transition:
+    border-color 0.12s ease,
+    opacity 0.12s ease;
 }
 .axis-alerts-row:hover {
   border-color: var(--color-border);
@@ -4905,8 +5073,7 @@ body.axis-panel-dragging {
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding: max(10vh, var(--ui-dialog-margin-y)) var(--ui-dialog-margin)
-    var(--ui-dialog-margin-y);
+  padding: max(10vh, var(--ui-dialog-margin-y)) var(--ui-dialog-margin) var(--ui-dialog-margin-y);
   background: color-mix(in srgb, #000 58%, transparent);
   backdrop-filter: blur(3px);
   -webkit-backdrop-filter: blur(3px);
@@ -5087,7 +5254,7 @@ body.axis-panel-dragging {
   border-radius: var(--radius-sc);
   transition: background-color 0.15s ease;
 }
-.sc-settings-check input[type="checkbox"] {
+.sc-settings-check input[type='checkbox'] {
   margin-top: 0.15em;
   flex-shrink: 0;
 }
@@ -5131,7 +5298,10 @@ body.axis-panel-dragging {
   border-radius: var(--radius-input);
   cursor: pointer;
   flex-shrink: 0;
-  transition: transform 0.12s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.15s ease,
+    border-color 0.15s ease;
 }
 .sc-settings-color-swatch:hover {
   transform: scale(1.04);
@@ -5157,7 +5327,9 @@ body.axis-panel-dragging {
   gap: 0.5em;
 }
 .sc-settings-btn-row .sc-btn {
-  transition: transform 0.1s ease, opacity 0.15s ease;
+  transition:
+    transform 0.1s ease,
+    opacity 0.15s ease;
 }
 .sc-settings-btn-row .sc-btn:hover {
   transform: translateY(-1px);
@@ -5288,10 +5460,10 @@ body.axis-panel-dragging {
 .axis-mheader {
   height: var(--axis-mobile-header-h);
   /* biome-ignore lint/suspicious/noDuplicateProperties: fallback for browsers without env() support */
-  height: calc(var(--axis-mobile-header-h) + env(safe-area-inset-top, 0px));
-  padding-top: env(safe-area-inset-top, 0px);
-  padding-left: env(safe-area-inset-left, 0px);
-  padding-right: env(safe-area-inset-right, 0px);
+  height: calc(var(--axis-mobile-header-h) + var(--ui-safe-top));
+  padding-top: var(--ui-safe-top);
+  padding-left: var(--ui-safe-left);
+  padding-right: var(--ui-safe-right);
   z-index: 70;
 }
 
@@ -5358,10 +5530,10 @@ body.axis-panel-dragging {
 .axis-mtabbar {
   height: var(--axis-mobile-tabbar-h);
   /* biome-ignore lint/suspicious/noDuplicateProperties: fallback for browsers without env() support */
-  height: calc(var(--axis-mobile-tabbar-h) + env(safe-area-inset-bottom, 0px));
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-  padding-left: env(safe-area-inset-left, 0px);
-  padding-right: env(safe-area-inset-right, 0px);
+  height: calc(var(--axis-mobile-tabbar-h) + var(--ui-safe-bottom));
+  padding-bottom: var(--ui-safe-bottom);
+  padding-left: var(--ui-safe-left);
+  padding-right: var(--ui-safe-right);
   z-index: 70;
 }
 
@@ -5396,8 +5568,8 @@ body.axis-panel-dragging {
   position: fixed;
   left: 0;
   right: 0;
-  bottom: calc(var(--axis-mobile-tabbar-h) + env(safe-area-inset-bottom, 0px));
-  top: calc(var(--axis-mobile-header-h) + env(safe-area-inset-top, 0px));
+  bottom: calc(var(--axis-mobile-tabbar-h) + var(--ui-safe-bottom));
+  top: calc(var(--axis-mobile-header-h) + var(--ui-safe-top));
   z-index: 75;
   display: flex;
   flex-direction: column;
@@ -5405,11 +5577,18 @@ body.axis-panel-dragging {
   backdrop-filter: blur(2px);
   -webkit-backdrop-filter: blur(2px);
   animation: axis-moverlay-in 160ms linear;
+  box-sizing: border-box;
+  padding-left: var(--ui-safe-left);
+  padding-right: var(--ui-safe-right);
 }
 
 @keyframes axis-moverlay-in {
-  from { opacity: 0.4; }
-  to { opacity: 1; }
+  from {
+    opacity: 0.4;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .axis-moverlay-head {
@@ -5443,7 +5622,7 @@ body.axis-panel-dragging {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 8px 10px calc(12px + env(safe-area-inset-bottom, 0px));
+  padding: 8px 10px calc(12px + var(--ui-safe-bottom));
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -5520,7 +5699,8 @@ body.axis-panel-dragging {
 @media (max-width: 767px) {
   .sc-dialog-backdrop {
     align-items: flex-end;
-    padding: 10px 0 0;
+    padding: 10px var(--ui-safe-right) 0 var(--ui-safe-left);
+    box-sizing: border-box;
   }
   .sc-dialog {
     width: 100vw;
@@ -5533,7 +5713,7 @@ body.axis-panel-dragging {
     animation: axis-mobile-sheet-in 180ms linear;
   }
   .sc-dialog-footer {
-    padding-bottom: max(var(--ui-dialog-footer-pad-y), env(safe-area-inset-bottom, 0px));
+    padding-bottom: max(var(--ui-dialog-footer-pad-y), var(--ui-safe-bottom));
   }
 }
 
@@ -5551,5 +5731,20 @@ body.axis-panel-dragging {
   .axis-mpanel-row,
   .axis-moverlay-close {
     min-height: 44px;
+  }
+  /* Desktop topbar / module / engine switch buttons also benefit on hybrid
+   * touch laptops and tablets in desktop layout. */
+  .axis-command-bar .sc-btn,
+  .axis-module-bar .sc-btn,
+  .axis-module,
+  .axis-engine-switch-btn {
+    min-width: 40px;
+    min-height: 40px;
+    touch-action: manipulation;
+  }
+  .axis-engine-switch-btn .sc-icon,
+  .axis-module .sc-icon {
+    width: 18px;
+    height: 18px;
   }
 }

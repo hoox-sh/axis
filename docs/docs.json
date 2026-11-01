@@ -86,6 +86,7 @@
               "architecture/overview",
               "architecture/evaluation",
               "architecture/adrs",
+              "architecture/perf-audit-2026-11",
               "architecture/topologies",
               "architecture/state-namespaces",
               "architecture/drawings-parity",

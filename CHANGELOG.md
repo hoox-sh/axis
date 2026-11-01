@@ -50,6 +50,12 @@ _Generated/updated: 2026-11-01 · 880 commits · describe-tag: `v2.26.0`_
 
 - **Phase 3 engine-boundary wiring.** `src/engines/live-sessions.ts`, `src/engines/engine-ws.ts`, `src/engines/catalog.ts`, and `src/engines/batch.ts` now use `parseEngineJsonAsync` for large payloads while keeping small 413-peek / status parses synchronous. Validation remains **4708 pass / 10 skip / 0 fail**.
 
+### Added
+
+- **Phase 4 UX polish.** Shared `Spinner`, theme tokens on `ChartScaleControls`, safe-area / motion CSS variables, coarse-pointer topbar targets, compositor-only drawing-rail fade, hover-slide gated on `prefersReducedMotion`, and `installFocusTrap` `returnElement` plus aria-hidden sibling hiding (retries on a microtask so Solid refs that fire before insert still hide the background).
+
+- **Phase 5 quality gates.** `bun run perf:audit` (`scripts/perf-audit.mjs`) runs typecheck, hot-path unit tests, and `AXIS_BENCH=1` benches, then writes `reports/perf-audit.json`. `--full` also runs the unit suite and Playwright `@smoke`. CI gains a dedicated **Firehose budget** job (`bun run test:bench`, 120 s wall). ADR-017 (narrow bar plane) and ADR-018 (off-thread engine JSON parse + typed result contract) are recorded in `docs/architecture/adrs.mdx`.
+
 ## [2.27.0] — 2026-11-01
 
 ### Changed

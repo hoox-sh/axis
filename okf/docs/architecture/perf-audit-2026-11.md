@@ -7,7 +7,7 @@ tags: [architecture, doc, docs, perf-audit-2026-11]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-01T17:22:22Z
+  at: 2026-11-01T18:07:47Z
 sources:
   - id: tree
     resource: "docs/architecture/perf-audit-2026-11.mdx"
@@ -52,11 +52,16 @@ Repo path `docs/architecture/perf-audit-2026-11.mdx`.
   * Validation after Phase 2
   * Phase 3 — Engine-boundary performance (landed)
   * Validation after Phase 3
+  * Phase 4 — UX / visual polish (landed)
+  * Validation after Phase 4
+  * Phase 5 — Continuous quality gates (landed)
+  * Validation after Phase 5
 * 9. Next move
 
 # Mentions
 
 * [e2e](/code/e2e.md)
+* [scripts](/code/scripts.md)
 * [src](/code/src.md)
 * [src/chart](/code/src/chart.md)
 * [src/data](/code/src/data.md)

@@ -1,8 +1,7 @@
 # Copyright (C) 2024-2026 jango_blockchained
 # SPDX-License-Identifier: AGPL-3.0-only
 
-# AXIS CI — unit + security + Playwright smoke on every PR / main push.
-# Optional firehose bench is not run here (AXIS_BENCH=1 locally / nightly only).
+# AXIS CI — unit + security + Playwright smoke + firehose budget on every PR / main push.
 
 name: CI
 
@@ -117,3 +116,25 @@ jobs:
             test-results/
             playwright-report/
           retention-days: 7
+
+  bench:
+    name: Firehose budget
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.3"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: AXIS_BENCH firehose (fails over 120s wall)
+        run: bun run test:bench
+        env:
+          AXIS_BENCH: "1"
+          CI: true

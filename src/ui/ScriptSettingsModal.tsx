@@ -73,6 +73,7 @@ import { readCachedLibrarySource } from '../storage/library-publish-io';
 import { runAndApply } from '../indicators/runner';
 import type { RunResult } from '../indicators/runner';
 import { Icons } from './icons';
+import { Spinner } from './Spinner';
 
 /** Extra Pine sources that may declare `enum`s imported by the target script. */
 function extraEnumSources(code: string, skipId?: string | null): string[] {
@@ -167,11 +168,12 @@ export const ScriptSettingsModal: Component = () => {
     // Snapshot this script's engine inputs / plot series once at seed.
     // Do not use global lastRun — that may belong to a different indicator.
     // Re-read the editor buffer here: `targetMeta` cannot track localStorage.
-    const code =
-      t.kind === 'editor' ? untrack(() => loadEditorDoc() || t.code) : t.code;
+    const code = t.kind === 'editor' ? untrack(() => loadEditorDoc() || t.code) : t.code;
     const r = untrack(() => runResultForTarget(t.kind, t.id));
     const engineInputs = r?.meta?.inputs ?? (r as { inputs?: unknown } | null)?.inputs;
-    const extraSources = untrack(() => extraEnumSources(code, t.kind === 'indicator' ? t.id : null));
+    const extraSources = untrack(() =>
+      extraEnumSources(code, t.kind === 'indicator' ? t.id : null),
+    );
     const defs = resolveScriptInputs(code, engineInputs, extraSources);
     const seriesSnap = untrack(() => store.indicatorSeries);
     const { options: plotOpts, labels } = sourceOptionsWithPlots(seriesSnap, indicatorId());
@@ -190,8 +192,7 @@ export const ScriptSettingsModal: Component = () => {
     setFields(applyInputOverrides(withPlots, t.values));
 
     strategyUserEdited = new Set();
-    const isStrategy =
-      detectScriptKind(t.code) === 'strategy' || hasStrategyDeclaration(t.code);
+    const isStrategy = detectScriptKind(t.code) === 'strategy' || hasStrategyDeclaration(t.code);
     setShowStrategyTab(isStrategy);
     if (isStrategy) {
       setStrategyFields(resolveStrategyProps(t.code, t.strategyProps));
@@ -247,8 +248,7 @@ export const ScriptSettingsModal: Component = () => {
         if (Number.isFinite(lev) && lev >= 1) {
           const margin = 100 / lev;
           return next.map((f) =>
-            (f.id === 'margin_long' || f.id === 'margin_short') &&
-            !strategyUserEdited.has(f.id)
+            (f.id === 'margin_long' || f.id === 'margin_short') && !strategyUserEdited.has(f.id)
               ? { ...f, value: margin }
               : f,
           );
@@ -282,8 +282,7 @@ export const ScriptSettingsModal: Component = () => {
     const hasBars = Array.isArray(store.bars) && store.bars.length > 0;
     const applied = t.kind === 'indicator' && !!t.id;
     const live = !!store.live?.active;
-    const silentSave =
-      !andRun && hasBars && (applied || live) && !!String(t.code || '').trim();
+    const silentSave = !andRun && hasBars && (applied || live) && !!String(t.code || '').trim();
     if (!andRun && !silentSave) {
       closeScriptSettings();
       return;
@@ -292,8 +291,7 @@ export const ScriptSettingsModal: Component = () => {
     setError('');
     try {
       const id = t.kind === 'indicator' ? t.id : undefined;
-      const code =
-        t.kind === 'editor' ? untrack(() => loadEditorDoc() || t.code) : t.code;
+      const code = t.kind === 'editor' ? untrack(() => loadEditorDoc() || t.code) : t.code;
       await runAndApply(code, id, {
         inputs: overrides,
         strategyProps: stratOverrides,
@@ -316,8 +314,7 @@ export const ScriptSettingsModal: Component = () => {
     }
   };
 
-  const canReset = () =>
-    tab() === 'strategy' ? strategyFields().length > 0 : fields().length > 0;
+  const canReset = () => (tab() === 'strategy' ? strategyFields().length > 0 : fields().length > 0);
 
   return (
     <Modal
@@ -369,7 +366,7 @@ export const ScriptSettingsModal: Component = () => {
             data-testid="axis-script-settings-apply"
           >
             <Show when={busy()} fallback={<Icons.play />}>
-              <Icons.loader class="animate-spin" />
+              <Spinner />
             </Show>
             Apply &amp; run
           </button>
@@ -407,87 +404,79 @@ export const ScriptSettingsModal: Component = () => {
         </Show>
       }
     >
-            <Show when={tab() === 'inputs' || !showStrategyTab()}>
-              <Show
-                when={fields().length > 0}
-                fallback={
-                  <div class="text-[12px] text-text-dim leading-relaxed">
-                    No <code class="text-accent">input.*</code> declarations found in this script.
-                    Add e.g. <code class="text-text-faint">length = input.int(14, "Length")</code>.
-                    <Show when={showStrategyTab()}>
-                      <span>
-                        {' '}
-                        Strategy broker settings are under the{' '}
-                        <strong class="text-text">Properties</strong> tab.
-                      </span>
-                    </Show>
-                  </div>
-                }
-              >
-                <For each={inputLayout()}>
-                  {(section) => (
-                    <section
-                      class="sc-input-group"
-                      data-input-group={section.group}
-                    >
-                      <div class="sc-section-title sc-input-group-title">
-                        {section.group}
-                      </div>
-                      <For each={section.rows}>
-                        {(row) => (
-                          <InputFormRowView
-                            row={row}
-                            allFields={fields()}
-                            optionLabels={sourceLabels()}
-                            onChange={setFieldValue}
-                          />
-                        )}
-                      </For>
-                    </section>
-                  )}
-                </For>
+      <Show when={tab() === 'inputs' || !showStrategyTab()}>
+        <Show
+          when={fields().length > 0}
+          fallback={
+            <div class="text-[12px] text-text-dim leading-relaxed">
+              No <code class="text-accent">input.*</code> declarations found in this script. Add
+              e.g. <code class="text-text-faint">length = input.int(14, "Length")</code>.
+              <Show when={showStrategyTab()}>
+                <span>
+                  {' '}
+                  Strategy broker settings are under the{' '}
+                  <strong class="text-text">Properties</strong> tab.
+                </span>
               </Show>
-            </Show>
+            </div>
+          }
+        >
+          <For each={inputLayout()}>
+            {(section) => (
+              <section class="sc-input-group" data-input-group={section.group}>
+                <div class="sc-section-title sc-input-group-title">{section.group}</div>
+                <For each={section.rows}>
+                  {(row) => (
+                    <InputFormRowView
+                      row={row}
+                      allFields={fields()}
+                      optionLabels={sourceLabels()}
+                      onChange={setFieldValue}
+                    />
+                  )}
+                </For>
+              </section>
+            )}
+          </For>
+        </Show>
+      </Show>
 
-            <Show when={tab() === 'strategy' && showStrategyTab()}>
-              <div
-                role="tabpanel"
-                aria-label="Strategy properties"
-                class="flex flex-col gap-3"
-                data-testid="axis-script-settings-strategy"
-              >
-                <p class="text-[11px] text-text-dim leading-relaxed m-0">
-                  Broker settings for this <code class="text-accent">strategy()</code> —
-                  capital, order size, commission, and leverage / margin. Applied on
-                  run without rewriting your editor buffer. Execution checkboxes are
-                  kept for TV-shaped scripts; PYNE does not implement
-                  calc_on_order_fills / calc_on_every_tick.
-                </p>
-                <For each={strategyGroups()}>
-                  {([group, items]) => (
-                    <div class="flex flex-col gap-2">
-                      <div class="text-[10px] uppercase tracking-wider text-text-dim font-semibold">
-                        {group}
-                      </div>
-                      <For each={items}>
-                        {(field) => (
-                          <StrategyField
-                            field={field}
-                            onChange={(v) => setStrategyFieldValue(field.id, v)}
-                          />
-                        )}
-                      </For>
-                    </div>
+      <Show when={tab() === 'strategy' && showStrategyTab()}>
+        <div
+          role="tabpanel"
+          aria-label="Strategy properties"
+          class="flex flex-col gap-3"
+          data-testid="axis-script-settings-strategy"
+        >
+          <p class="text-[11px] text-text-dim leading-relaxed m-0">
+            Broker settings for this <code class="text-accent">strategy()</code> — capital, order
+            size, commission, and leverage / margin. Applied on run without rewriting your editor
+            buffer. Execution checkboxes are kept for TV-shaped scripts; PYNE does not implement
+            calc_on_order_fills / calc_on_every_tick.
+          </p>
+          <For each={strategyGroups()}>
+            {([group, items]) => (
+              <div class="flex flex-col gap-2">
+                <div class="text-[10px] uppercase tracking-wider text-text-dim font-semibold">
+                  {group}
+                </div>
+                <For each={items}>
+                  {(field) => (
+                    <StrategyField
+                      field={field}
+                      onChange={(v) => setStrategyFieldValue(field.id, v)}
+                    />
                   )}
                 </For>
               </div>
-            </Show>
+            )}
+          </For>
+        </div>
+      </Show>
 
-            <Show when={error()}>
-              <div class="text-[11px] text-red border border-red/40 bg-red/10 px-2 py-1.5">
-                {error()}
-              </div>
-            </Show>
+      <Show when={error()}>
+        <div class="text-[11px] text-red border border-red/40 bg-red/10 px-2 py-1.5">{error()}</div>
+      </Show>
     </Modal>
   );
 };
@@ -558,8 +547,7 @@ const InputField: Component<{
     }
     return opt;
   };
-  const enabled = () =>
-    isInputActive(props.field, props.allFields || [props.field]);
+  const enabled = () => isInputActive(props.field, props.allFields || [props.field]);
   const tip = () => props.field.tooltip || undefined;
   const showTitle = () => Boolean(props.field.title?.trim());
 
@@ -605,17 +593,10 @@ const InputField: Component<{
       aria-disabled={!enabled() || undefined}
     >
       <Show when={showTitle() || tip()}>
-        <label
-          class="sc-field-label text-[11px] text-text-dim"
-          for={id()}
-        >
+        <label class="sc-field-label text-[11px] text-text-dim" for={id()}>
           <span class="sc-field-title">{props.field.title || '\u00a0'}</span>
           <Show when={tip()}>
-            <span
-              class="sc-field-tooltip"
-              title={tip()}
-              data-tooltip={tip()}
-            >
+            <span class="sc-field-tooltip" title={tip()} data-tooltip={tip()}>
               ?
             </span>
           </Show>
@@ -936,11 +917,7 @@ function dirtyStrategyOverrides(
   const keys = new Set([...Object.keys(fromDefs), ...edited]);
   for (const k of keys) {
     if (dropLeverage && k === 'leverage') continue;
-    if (
-      edited.has('leverage') &&
-      (k === 'margin_long' || k === 'margin_short') &&
-      !edited.has(k)
-    ) {
+    if (edited.has('leverage') && (k === 'margin_long' || k === 'margin_short') && !edited.has(k)) {
       continue;
     }
     if (Object.hasOwn(fromDefs, k)) bag[k] = fromDefs[k];

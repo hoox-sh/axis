@@ -94,3 +94,15 @@ export function hoverSlideLayoutSize(
 export function hoverSlidePeekForDock(dock: PanelDock): number {
   return dock === 'bottom' ? HOVER_SLIDE_PEEK_BOTTOM : HOVER_SLIDE_PEEK_SIDE;
 }
+
+/**
+ * Layout CSS transition for hover-slide expand/collapse.
+ * Undefined when hover-slide is off or reduced motion is on (instant peek).
+ */
+export function hoverSlideTransition(
+  opts: { hoverSlide: boolean; reducedMotion: boolean },
+  durationCss: string,
+): string | undefined {
+  if (!opts.hoverSlide || opts.reducedMotion) return undefined;
+  return `width ${durationCss} linear, height ${durationCss} linear, flex-basis ${durationCss} linear, min-width ${durationCss} linear`;
+}

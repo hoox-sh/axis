@@ -96,5 +96,113 @@ describe('installFocusTrap', () => {
       (globalThis as Record<string, unknown>).document = prev;
     }
   });
+
+  it('focuses returnElement on dispose', () => {
+    const focused: string[] = [];
+    const ret = {
+      focus: () => {
+        focused.push('return');
+      },
+    };
+    const prevActive = {
+      focus: () => {
+        focused.push('prev');
+      },
+      addEventListener: () => {},
+    };
+    const prev = (globalThis as Record<string, unknown>).document;
+    (globalThis as Record<string, unknown>).document = {
+      activeElement: prevActive,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      contains: () => true,
+    };
+    try {
+      const root = makeRoot([{ tag: 'button' }]);
+      const dispose = installFocusTrap(root, {
+        autoFocus: false,
+        returnElement: ret as unknown as HTMLElement,
+      });
+      dispose();
+      expect(focused).toEqual(['return']);
+    } finally {
+      (globalThis as Record<string, unknown>).document = prev;
+    }
+  });
+
+  it('sets aria-hidden on siblings while trapped and restores on dispose', () => {
+    type AttrEl = {
+      parentElement: AttrEl | null;
+      children: AttrEl[];
+      getAttribute: (k: string) => string | null;
+      setAttribute: (k: string, v: string) => void;
+      removeAttribute: (k: string) => void;
+      addEventListener: () => void;
+      removeEventListener: () => void;
+      focus: () => void;
+      contains: () => boolean;
+      querySelectorAll: () => unknown[];
+      hasAttribute: () => boolean;
+      tabIndex: number;
+    };
+    const makeEl = (): AttrEl => {
+      const attrs: Record<string, string> = {};
+      return {
+        parentElement: null,
+        children: [],
+        getAttribute: (k) => attrs[k] ?? null,
+        setAttribute: (k, v) => {
+          attrs[k] = v;
+        },
+        removeAttribute: (k) => {
+          delete attrs[k];
+        },
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        focus: () => {},
+        contains: () => true,
+        querySelectorAll: () => [],
+        hasAttribute: () => false,
+        tabIndex: -1,
+      };
+    };
+    const html = makeEl();
+    const body = makeEl();
+    const sibling = makeEl();
+    const alreadyHidden = makeEl();
+    alreadyHidden.setAttribute('aria-hidden', 'true');
+    const previouslyFalse = makeEl();
+    previouslyFalse.setAttribute('aria-hidden', 'false');
+    const root = makeEl();
+    html.children = [body];
+    body.parentElement = html;
+    body.children = [sibling, alreadyHidden, previouslyFalse, root];
+    sibling.parentElement = body;
+    alreadyHidden.parentElement = body;
+    previouslyFalse.parentElement = body;
+    root.parentElement = body;
+
+    const prev = (globalThis as Record<string, unknown>).document;
+    (globalThis as Record<string, unknown>).document = {
+      body,
+      documentElement: html,
+      activeElement: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      contains: () => true,
+    };
+    try {
+      const dispose = installFocusTrap(root as unknown as HTMLElement, { autoFocus: false });
+      expect(sibling.getAttribute('aria-hidden')).toBe('true');
+      expect(alreadyHidden.getAttribute('aria-hidden')).toBe('true');
+      expect(previouslyFalse.getAttribute('aria-hidden')).toBe('true');
+      dispose();
+      expect(sibling.getAttribute('aria-hidden')).toBe(null);
+      expect(alreadyHidden.getAttribute('aria-hidden')).toBe('true');
+      expect(previouslyFalse.getAttribute('aria-hidden')).toBe('false');
+    } finally {
+      (globalThis as Record<string, unknown>).document = prev;
+    }
+  });
 });
 
