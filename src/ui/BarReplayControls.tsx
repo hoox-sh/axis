@@ -34,6 +34,7 @@ import {
   onMount,
 } from 'solid-js';
 import { store } from '../store';
+import type { Bar } from '../store/types';
 import { setDataToChart } from '../chart/manager-access';
 import {
   REPLAY_SPEEDS,
@@ -56,18 +57,19 @@ import {
   type ReplayState,
 } from '../chart/bar-replay';
 import { stopLive } from '../streams/multiplex';
+import { barPlane } from '../stores/bars';
 import { Icons } from './icons';
 
 function applyVisibleToChart(fit = false) {
-  const full = store.bars;
+  const full = barPlane.bars as Bar[];
   if (!full.length) return;
   const vis = getVisibleBars(full);
   setDataToChart(vis, { fit, clearMarkers: false });
 }
 
 function restoreFullChart() {
-  if (store.bars.length) {
-    setDataToChart(store.bars, { fit: false, clearMarkers: false });
+  if (barPlane.length) {
+    setDataToChart(barPlane.bars as Bar[], { fit: false, clearMarkers: false });
   }
 }
 
@@ -79,7 +81,7 @@ function restoreFullChart() {
  * back to pick a start, then Play — or press Play to run from bar 0.
  */
 export function startBarReplay(): boolean {
-  const n = store.bars.length;
+  const n = barPlane.length;
   if (n <= 0) return false;
   if (store.live.active) stopLive();
   // Last bar → all candles stay on screen (not a single first-bar zoom)
@@ -155,7 +157,7 @@ export const BarReplayControls: Component = () => {
   // History reload while replaying: re-clamp length + re-paint prefix
   createEffect(() => {
     const gen = store.chartDataGen;
-    const n = store.bars.length;
+    const n = barPlane.length;
     void gen;
     if (!isReplayActive()) return;
     if (n <= 0) {
@@ -196,7 +198,7 @@ export const BarReplayControls: Component = () => {
   };
 
   const st = () => state();
-  const barsLen = () => store.bars.length;
+  const barsLen = () => barPlane.length;
   const label = () => {
     const n = barsLen();
     if (n <= 0) return '0 / 0';
@@ -274,9 +276,7 @@ export const BarReplayControls: Component = () => {
           onChange={(e) => onSpeed(Number(e.currentTarget.value))}
         >
           <For each={[...REPLAY_SPEEDS]}>
-            {(sp) => (
-              <option value={String(sp)}>{formatReplaySpeedLabel(sp)}</option>
-            )}
+            {(sp) => <option value={String(sp)}>{formatReplaySpeedLabel(sp)}</option>}
           </For>
         </select>
 

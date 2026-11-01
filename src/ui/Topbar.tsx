@@ -60,9 +60,14 @@ import { listEngines, preloadPyodide } from '../engines/catalog';
 import { setUploadedBars, getUploadedFileName } from '../sources/upload-store';
 import { DATA_MANAGER_SOURCE_ID } from '../data/data-manager-source';
 import { dataSourceManagerState } from '../data/data-source-manager';
+import { barPlane } from '../stores/bars';
 import { intervalToSec } from '../data/bars-gaps';
 import { Icons } from './icons';
-import { pwaInstallAvailable, promptPwaInstall, dismissPwaInstallPrompt } from '../pwa/install-prompt';
+import {
+  pwaInstallAvailable,
+  promptPwaInstall,
+  dismissPwaInstallPrompt,
+} from '../pwa/install-prompt';
 import { HooxLogo } from './HooxLogo';
 import { HooxLoader } from './HooxLoader';
 import { ChartLayoutMenu } from './ChartLayoutMenu';
@@ -81,11 +86,7 @@ import { cachedDatasetsOpen, closeCachedDatasets, openCachedDatasets } from './d
 import { SymbolModal } from './SymbolModal';
 import { RunSplitButton } from './RunSplitButton';
 import { openAboutModal } from './AboutModal';
-import {
-  activeCcxtExchange,
-  hasCcxtCredential,
-  subscribeCredentials,
-} from '../data/credentials';
+import { activeCcxtExchange, hasCcxtCredential, subscribeCredentials } from '../data/credentials';
 import {
   asProviderMarket,
   MARKET_LABELS,
@@ -98,10 +99,7 @@ import {
   parseVenueToken,
   venueTokenFromState,
 } from '../data/venue-picker';
-import {
-  toggleBrowserFullscreen,
-  toggleChartOnlyMode,
-} from './presentation';
+import { toggleBrowserFullscreen, toggleChartOnlyMode } from './presentation';
 import { liveBadgeTone, liveBadgeWord, liveIndicatorTitle } from './hud-model';
 import { engineFamilyForText } from '../plugins/engine-family';
 
@@ -183,7 +181,7 @@ export const Topbar: Component<{
       !opts?.force &&
       sym === lastLoadedSymbol &&
       store.interval === lastLoadedInterval &&
-      store.bars.length > 0
+      barPlane.length > 0
     ) {
       return;
     }
@@ -201,9 +199,7 @@ export const Topbar: Component<{
     }
   };
 
-  const venueToken = createMemo(() =>
-    venueTokenFromState(store.source, activeCcxtExchange()),
-  );
+  const venueToken = createMemo(() => venueTokenFromState(store.source, activeCcxtExchange()));
   const venueOptions = createMemo(() =>
     listVenueOptions(
       sources().map((s) => ({ id: s.id, name: s.name })),
@@ -231,9 +227,7 @@ export const Topbar: Component<{
     if (engineFamilyForText(id) === 'pyodide') void preloadPyodide();
   };
 
-  const extraEngines = createMemo(() =>
-    engines().filter((en) => !ENGINE_SWITCH_IDS.has(en.id)),
-  );
+  const extraEngines = createMemo(() => engines().filter((en) => !ENGINE_SWITCH_IDS.has(en.id)));
 
   const onFilePicked = async (e: Event) => {
     const input = e.currentTarget as HTMLInputElement;
@@ -282,7 +276,7 @@ export const Topbar: Component<{
       setStatus('ready', 'Bar replay ended');
       return;
     }
-    if (store.bars.length <= 0) {
+    if (barPlane.length <= 0) {
       setStatus('error', 'Load bars before starting bar replay');
       return;
     }
@@ -312,820 +306,825 @@ export const Topbar: Component<{
   return (
     <header class="axis-topbar" data-testid="axis-topbar">
       <div class="axis-command-bar">
-      {/* ── Identity (click → About) ────────────────────────── */}
-      <Show when={store.topbar.brand}>
-        <button
-          type="button"
-          class="axis-tb-group axis-tb-brand axis-tb-brand-btn"
-          data-tb-group="brand"
-          data-testid="axis-brand"
-          title="About AXIS · HOOX ethos"
-          aria-label="About AXIS"
-          onClick={() => openAboutModal()}
-        >
-          <HooxLogo
-            size="m"
-            class="axis-tb-brand-logo text-text flex-shrink-0"
-            data-testid="axis-hoox-logo"
-          />
-          <div class="axis-tb-brand-title">
-            AXIS
-            <span class="axis-tb-brand-sub">chart</span>
-          </div>
-        </button>
-      </Show>
-
-      {/* ── Market ──────────────────────────────────────────── */}
-      <Show when={store.topbar.market}>
-        <div class="axis-tb-group" data-tb-group="market">
-        <TopbarField
-          label="Venue"
-          variant="select"
-          class="min-w-[8em]"
-          testId="axis-select-source"
-          value={venueToken()}
-          title="Exchange / data venue — native CEX, CCXT long-tail, or local"
-          onChange={(e) => onVenueChange(e.currentTarget.value)}
-        >
-          <optgroup label="CEX">
-            <For each={venueOptions().filter((o) => o.group === 'native')}>
-              {(o) => <option value={o.value}>{o.label}</option>}
-            </For>
-          </optgroup>
-          <optgroup label="CCXT">
-            <For each={venueOptions().filter((o) => o.group === 'ccxt')}>
-              {(o) => <option value={o.value}>{o.label}</option>}
-            </For>
-          </optgroup>
-          <optgroup label="Other">
-            <For each={venueOptions().filter((o) => o.group === 'other' || o.group === 'plugin')}>
-              {(o) => <option value={o.value}>{o.label}</option>}
-            </For>
-          </optgroup>
-        </TopbarField>
-
-        <Show when={marketsForVenue(store.provider?.venue || 'binance').length > 1}>
-          <TopbarField
-            label="Market"
-            variant="select"
-            class="min-w-[6.5em]"
-            testId="axis-select-market"
-            value={asProviderMarket(store.provider?.market)}
-            title="Spot or futures (USDT-M / COIN-M) for this venue"
-            onChange={(e) => {
-              const market = asProviderMarket(e.currentTarget.value);
-              const allowed = marketsForVenue(store.provider?.venue || 'binance');
-              const next: ProviderMarket = allowed.includes(market) ? market : 'spot';
-              setStore('provider', 'market', next);
-              persist();
-              const live = store.live?.active;
-              if (live) stopLive();
-              if (autoloadOn()) void loadHistorical({ force: true });
-              if (live) {
-                const streamId = store.live.streamId || defaultStreamForSource(store.source);
-                startLive(streamId, store.symbol, store.interval);
-              }
-            }}
+        {/* ── Identity (click → About) ────────────────────────── */}
+        <Show when={store.topbar.brand}>
+          <button
+            type="button"
+            class="axis-tb-group axis-tb-brand axis-tb-brand-btn"
+            data-tb-group="brand"
+            data-testid="axis-brand"
+            title="About AXIS · HOOX ethos"
+            aria-label="About AXIS"
+            onClick={() => openAboutModal()}
           >
-            <For each={marketsForVenue(store.provider?.venue || 'binance')}>
-              {(m) => <option value={m}>{MARKET_LABELS[m]}</option>}
-            </For>
-          </TopbarField>
-        </Show>
-
-        <Show when={sourceNeedsSymbol()}>
-          <div data-testid="axis-symbol-control">
-            <TopbarField
-              id="axis-symbol"
-              label="Symbol"
-              class="min-w-[9.5em] axis-tb-field--anchor"
-              mono
-              value={store.symbol}
-              spellcheck={false}
-              autocomplete="off"
-              title="Symbol · click list to browse exchange pairs · Enter to load"
-              onInput={(e) => {
-                setStore('symbol', e.currentTarget.value.toUpperCase());
-              }}
-              onChange={(e) => {
-                // Persist + slot sync only; load on blur / Enter (same as before)
-                const next = e.currentTarget.value.toUpperCase().trim();
-                if (!next) return;
-                setStore('symbol', next);
-                const aid = store.chartLayout?.activeId;
-                if (aid) updateChartSlot(aid, { symbol: next });
-                persist();
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  commitSymbol(e.currentTarget.value, true);
-                } else if (e.key === 'ArrowDown' || (e.key === ' ' && e.ctrlKey)) {
-                  e.preventDefault();
-                  setSymbolModalOpen(true);
-                }
-              }}
-              onBlur={(e) => {
-                commitSymbol(e.currentTarget.value, false);
-              }}
-              trailing={
-                <button
-                  type="button"
-                  class="axis-tb-field-trailing-btn"
-                  data-testid="axis-symbol-browse"
-                  title="Browse symbols for current exchange (source / stream)"
-                  aria-label="Browse symbols"
-                  onClick={() => setSymbolModalOpen(true)}
-                >
-                  <Icons.search size={14} />
-                </button>
-              }
+            <HooxLogo
+              size="m"
+              class="axis-tb-brand-logo text-text flex-shrink-0"
+              data-testid="axis-hoox-logo"
             />
-          </div>
-          <SymbolModal
-            open={symbolModalOpen()}
-            initialQuery={store.symbol}
-            onClose={() => setSymbolModalOpen(false)}
-            onSelect={(sym) => {
-              commitSymbol(sym, true);
-            }}
-          />
+            <div class="axis-tb-brand-title">
+              AXIS
+              <span class="axis-tb-brand-sub">chart</span>
+            </div>
+          </button>
         </Show>
 
-        <Show when={store.source !== 'csv-upload'}>
-          <TopbarField
-            id="axis-interval"
-            label="Interval"
-            variant="select"
-            class="min-w-[4em]"
-            value={store.interval}
-            title="Bar interval · reloads chart"
-            onChange={(e) => {
-              const next = e.currentTarget.value;
-              setStore('interval', next);
-              const aid = store.chartLayout?.activeId;
-              if (aid) updateChartSlot(aid, { interval: next });
-              persist();
-              if (autoloadOn() && store.source !== 'csv-upload') {
-                void loadSymbolData(store.symbol, next, store.source);
-              }
-            }}
-          >
-            <For each={INTERVALS}>{(i) => <option value={i}>{i}</option>}</For>
-          </TopbarField>
-        </Show>
-      </div>
-      </Show>
-
-      {/* ── Chart (type · compare · reload) ─────────────────── */}
-      <Show when={store.topbar.market || store.topbar.data}>
-        <div class="axis-tb-group" data-tb-group="chart">
+        {/* ── Market ──────────────────────────────────────────── */}
         <Show when={store.topbar.market}>
-          <TopbarField
-            id="axis-chart-type"
-            label="Type"
-            variant="select"
-            class="min-w-[5.5em]"
-            testId="axis-select-chart-type"
-            value={store.chartType}
-            title={
-              CHART_TYPES.find((t) => t.id === store.chartType)?.description || 'Price chart style'
-            }
-            onChange={(e) => setChartType(e.currentTarget.value)}
-          >
-            <For each={[...CHART_TYPES]}>
-              {(t) => (
-                <option value={t.id} title={t.description}>
-                  {t.short}
-                </option>
-              )}
-            </For>
-          </TopbarField>
+          <div class="axis-tb-group" data-tb-group="market">
+            <TopbarField
+              label="Venue"
+              variant="select"
+              class="min-w-[8em]"
+              testId="axis-select-source"
+              value={venueToken()}
+              title="Exchange / data venue — native CEX, CCXT long-tail, or local"
+              onChange={(e) => onVenueChange(e.currentTarget.value)}
+            >
+              <optgroup label="CEX">
+                <For each={venueOptions().filter((o) => o.group === 'native')}>
+                  {(o) => <option value={o.value}>{o.label}</option>}
+                </For>
+              </optgroup>
+              <optgroup label="CCXT">
+                <For each={venueOptions().filter((o) => o.group === 'ccxt')}>
+                  {(o) => <option value={o.value}>{o.label}</option>}
+                </For>
+              </optgroup>
+              <optgroup label="Other">
+                <For
+                  each={venueOptions().filter((o) => o.group === 'other' || o.group === 'plugin')}
+                >
+                  {(o) => <option value={o.value}>{o.label}</option>}
+                </For>
+              </optgroup>
+            </TopbarField>
+
+            <Show when={marketsForVenue(store.provider?.venue || 'binance').length > 1}>
+              <TopbarField
+                label="Market"
+                variant="select"
+                class="min-w-[6.5em]"
+                testId="axis-select-market"
+                value={asProviderMarket(store.provider?.market)}
+                title="Spot or futures (USDT-M / COIN-M) for this venue"
+                onChange={(e) => {
+                  const market = asProviderMarket(e.currentTarget.value);
+                  const allowed = marketsForVenue(store.provider?.venue || 'binance');
+                  const next: ProviderMarket = allowed.includes(market) ? market : 'spot';
+                  setStore('provider', 'market', next);
+                  persist();
+                  const live = store.live?.active;
+                  if (live) stopLive();
+                  if (autoloadOn()) void loadHistorical({ force: true });
+                  if (live) {
+                    const streamId = store.live.streamId || defaultStreamForSource(store.source);
+                    startLive(streamId, store.symbol, store.interval);
+                  }
+                }}
+              >
+                <For each={marketsForVenue(store.provider?.venue || 'binance')}>
+                  {(m) => <option value={m}>{MARKET_LABELS[m]}</option>}
+                </For>
+              </TopbarField>
+            </Show>
+
+            <Show when={sourceNeedsSymbol()}>
+              <div data-testid="axis-symbol-control">
+                <TopbarField
+                  id="axis-symbol"
+                  label="Symbol"
+                  class="min-w-[9.5em] axis-tb-field--anchor"
+                  mono
+                  value={store.symbol}
+                  spellcheck={false}
+                  autocomplete="off"
+                  title="Symbol · click list to browse exchange pairs · Enter to load"
+                  onInput={(e) => {
+                    setStore('symbol', e.currentTarget.value.toUpperCase());
+                  }}
+                  onChange={(e) => {
+                    // Persist + slot sync only; load on blur / Enter (same as before)
+                    const next = e.currentTarget.value.toUpperCase().trim();
+                    if (!next) return;
+                    setStore('symbol', next);
+                    const aid = store.chartLayout?.activeId;
+                    if (aid) updateChartSlot(aid, { symbol: next });
+                    persist();
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      commitSymbol(e.currentTarget.value, true);
+                    } else if (e.key === 'ArrowDown' || (e.key === ' ' && e.ctrlKey)) {
+                      e.preventDefault();
+                      setSymbolModalOpen(true);
+                    }
+                  }}
+                  onBlur={(e) => {
+                    commitSymbol(e.currentTarget.value, false);
+                  }}
+                  trailing={
+                    <button
+                      type="button"
+                      class="axis-tb-field-trailing-btn"
+                      data-testid="axis-symbol-browse"
+                      title="Browse symbols for current exchange (source / stream)"
+                      aria-label="Browse symbols"
+                      onClick={() => setSymbolModalOpen(true)}
+                    >
+                      <Icons.search size={14} />
+                    </button>
+                  }
+                />
+              </div>
+              <SymbolModal
+                open={symbolModalOpen()}
+                initialQuery={store.symbol}
+                onClose={() => setSymbolModalOpen(false)}
+                onSelect={(sym) => {
+                  commitSymbol(sym, true);
+                }}
+              />
+            </Show>
+
+            <Show when={store.source !== 'csv-upload'}>
+              <TopbarField
+                id="axis-interval"
+                label="Interval"
+                variant="select"
+                class="min-w-[4em]"
+                value={store.interval}
+                title="Bar interval · reloads chart"
+                onChange={(e) => {
+                  const next = e.currentTarget.value;
+                  setStore('interval', next);
+                  const aid = store.chartLayout?.activeId;
+                  if (aid) updateChartSlot(aid, { interval: next });
+                  persist();
+                  if (autoloadOn() && store.source !== 'csv-upload') {
+                    void loadSymbolData(store.symbol, next, store.source);
+                  }
+                }}
+              >
+                <For each={INTERVALS}>{(i) => <option value={i}>{i}</option>}</For>
+              </TopbarField>
+            </Show>
+          </div>
         </Show>
-        <Show when={store.topbar.data}>
-          <CompareSymbolControl />
-          <button
-            type="button"
-            class={`sc-btn sc-btn-ghost sc-btn-icon ${loading() ? 'is-loading' : ''}`}
-            onClick={() => {
-              const seq = ++loadSeq;
-              setLoading(true);
-              void reloadChart().finally(() => {
-                if (seq === loadSeq) setLoading(false);
-              });
-            }}
-            disabled={loading()}
-            aria-busy={loading() || undefined}
-            data-testid="axis-btn-reload-chart"
-            title="Reload chart — force venue refetch for the current symbol / interval (bypasses dataset cache)"
-            aria-label="Reload chart"
-          >
-            {loading() ? <HooxLoader size="xs" /> : <Icons.refresh />}
-          </button>
-        </Show>
-        </div>
-      </Show>
 
-      {/* ── Data ────────────────────────────────────────────── */}
-      <Show when={store.topbar.data}>
-        <div class="axis-tb-group" data-tb-group="data" data-axis-source={store.source}>
-        <PluginConfigRow
-          onApplied={() => void loadHistorical({ force: true })}
-          hideKeys={venueToken() === 'ccxt:' ? [] : ['exchange']}
-        />
-
-        <Show when={store.source === 'ccxt-rest'}>
-          <CcxtKeyChip onOpen={() => props.onOpenSettings('data')} />
-        </Show>
-
-        <Show when={store.source === 'csv-upload'}>
-          <button
-            type="button"
-            class="sc-btn sc-btn-ghost max-w-[12em]"
-            title={uploadLabel() || 'Upload CSV or JSON OHLCV'}
-            onClick={() => fileInput?.click()}
-          >
-            <Icons.upload />
-            <span class="truncate axis-tb-btn-label">{uploadLabel() || 'Upload…'}</span>
-          </button>
-          <input
-            ref={fileInput}
-            type="file"
-            accept=".csv,.json,text/csv,application/json"
-            class="hidden"
-            onChange={onFilePicked}
-          />
-        </Show>
-
-        <Show when={store.source === DATA_MANAGER_SOURCE_ID}>
-          <button
-            type="button"
-            class="sc-btn sc-btn-ghost max-w-[12em]"
-            title="Browse cached datasets from the Data Source Manager"
-            onClick={() => openCachedDatasets()}
-            data-testid="axis-btn-datasets"
-          >
-            <Icons.datasets />
-            <span class="truncate axis-tb-btn-label">Datasets…</span>
-          </button>
-        </Show>
-
-        <SliceProgressChip />
-
-        <CachedDatasetsModal
-          open={cachedDatasetsOpen()}
-          onClose={() => closeCachedDatasets()}
-        />
-
-        <Show when={!autoloadOn()}>
-          <button
-            type="button"
-            class={`sc-btn sc-btn-primary ${loading() ? 'is-loading' : ''}`}
-            onClick={() => void loadHistorical({ force: true })}
-            disabled={loading()}
-            aria-busy={loading() || undefined}
-            data-testid="axis-btn-load"
-            title={
-              store.source === 'csv-upload'
-                ? 'Reload last uploaded file'
-                : store.source === DATA_MANAGER_SOURCE_ID
-                  ? 'Load bars from Data Manager cache'
-                  : `Load bars from ${store.source}`
-            }
-          >
-            {loading() ? <HooxLoader size="xs" /> : <Icons.download />}
-            <span class="axis-tb-btn-label">{loading() ? 'Loading…' : 'Load'}</span>
-          </button>
-        </Show>
-      </div>
-      </Show>
-
-      {/* ── Engine (switch · Run · Live · Replay) ── */}
-      <Show when={store.topbar.compute}>
-        <div class="axis-tb-group" data-tb-group="compute" data-axis-engine={store.engine}>
-        <div class="relative inline-flex items-stretch">
-        <fieldset
-          class="axis-engine-switch"
-          data-testid="axis-engine-switch"
-          aria-label="Engine"
-        >
-          <For each={ENGINE_SWITCH}>
-            {(eng) => (
+        {/* ── Chart (type · compare · reload) ─────────────────── */}
+        <Show when={store.topbar.market || store.topbar.data}>
+          <div class="axis-tb-group" data-tb-group="chart">
+            <Show when={store.topbar.market}>
+              <TopbarField
+                id="axis-chart-type"
+                label="Type"
+                variant="select"
+                class="min-w-[5.5em]"
+                testId="axis-select-chart-type"
+                value={store.chartType}
+                title={
+                  CHART_TYPES.find((t) => t.id === store.chartType)?.description ||
+                  'Price chart style'
+                }
+                onChange={(e) => setChartType(e.currentTarget.value)}
+              >
+                <For each={[...CHART_TYPES]}>
+                  {(t) => (
+                    <option value={t.id} title={t.description}>
+                      {t.short}
+                    </option>
+                  )}
+                </For>
+              </TopbarField>
+            </Show>
+            <Show when={store.topbar.data}>
+              <CompareSymbolControl />
               <button
                 type="button"
-                class={`axis-engine-switch-btn ${store.engine === eng.id ? 'is-active' : ''}`}
-                data-engine={eng.id}
-                aria-pressed={store.engine === eng.id}
-                title={
-                  eng.id === 'pyodide'
-                    ? 'Client-Side (Pyodide) · first load often 20–30s'
-                    : eng.title
-                }
-                aria-label={eng.title}
-                onClick={() => selectEngine(eng.id)}
+                class={`sc-btn sc-btn-ghost sc-btn-icon ${loading() ? 'is-loading' : ''}`}
+                onClick={() => {
+                  const seq = ++loadSeq;
+                  setLoading(true);
+                  void reloadChart().finally(() => {
+                    if (seq === loadSeq) setLoading(false);
+                  });
+                }}
+                disabled={loading()}
+                aria-busy={loading() || undefined}
+                data-testid="axis-btn-reload-chart"
+                title="Reload chart — force venue refetch for the current symbol / interval (bypasses dataset cache)"
+                aria-label="Reload chart"
               >
-                <EngineSwitchGlyph id={eng.id} />
+                {loading() ? <HooxLoader size="xs" /> : <Icons.refresh />}
               </button>
-            )}
-          </For>
-        </fieldset>
-          <select
-            class="axis-engine-switch-native"
-            data-testid="axis-select-engine"
-            value={store.engine}
-            tabindex={-1}
-            title={
-              engineFamilyForText(store.engine) === 'pyodide'
-                ? 'RUN=browser (Pyodide) · ENG=local — first load often 20–30s. HUD: ENG / RUN / MODE.'
-                : engines().find((en) => en.id === store.engine)?.description ||
-                  'Calculation engine — maps to HUD ENG (local|remote) + RUN (browser|server|worker)'
-            }
-            onChange={(e) => selectEngine(e.currentTarget.value)}
-          >
-            <For each={engines()}>
-              {(en) => (
-                <option value={en.id} title={en.description || en.name}>
-                  {en.name}
-                </option>
-              )}
-            </For>
-          </select>
-        </div>
-        <Show when={extraEngines().length > 0}>
-          <select
-            class="axis-engine-overflow"
-            title="More engines"
-            aria-label="More engines"
-            value={
-              extraEngines().some((en) => en.id === store.engine) ? store.engine : ''
-            }
-            onChange={(e) => {
-              const id = e.currentTarget.value;
-              if (id) selectEngine(id);
-            }}
-          >
-            <option value="" disabled>
-              More
-            </option>
-            <For each={extraEngines()}>
-              {(en) => (
-                <option value={en.id} title={en.description || en.name}>
-                  {en.name}
-                </option>
-              )}
-            </For>
-          </select>
+            </Show>
+          </div>
         </Show>
 
-        <Show
-          when={store.live.streamId !== defaultStreamForSource(store.source)}
-          fallback={null}
-        >
-          <TopbarField
-            label="Stream"
-            variant="select"
-            class="min-w-[7em]"
-            value={store.live.streamId}
-            disabled={store.live.active}
-            title={`Live stream (mismatched vs ${defaultStreamForSource(store.source)} — HUD Fix)`}
-            onChange={(e) => {
-              setActivePlugin('stream', e.currentTarget.value);
-            }}
-          >
-            <For each={streams()}>{(s) => <option value={s.id}>{s.name}</option>}</For>
-          </TopbarField>
+        {/* ── Data ────────────────────────────────────────────── */}
+        <Show when={store.topbar.data}>
+          <div class="axis-tb-group" data-tb-group="data" data-axis-source={store.source}>
+            <PluginConfigRow
+              onApplied={() => void loadHistorical({ force: true })}
+              hideKeys={venueToken() === 'ccxt:' ? [] : ['exchange']}
+            />
+
+            <Show when={store.source === 'ccxt-rest'}>
+              <CcxtKeyChip onOpen={() => props.onOpenSettings('data')} />
+            </Show>
+
+            <Show when={store.source === 'csv-upload'}>
+              <button
+                type="button"
+                class="sc-btn sc-btn-ghost max-w-[12em]"
+                title={uploadLabel() || 'Upload CSV or JSON OHLCV'}
+                onClick={() => fileInput?.click()}
+              >
+                <Icons.upload />
+                <span class="truncate axis-tb-btn-label">{uploadLabel() || 'Upload…'}</span>
+              </button>
+              <input
+                ref={fileInput}
+                type="file"
+                accept=".csv,.json,text/csv,application/json"
+                class="hidden"
+                onChange={onFilePicked}
+              />
+            </Show>
+
+            <Show when={store.source === DATA_MANAGER_SOURCE_ID}>
+              <button
+                type="button"
+                class="sc-btn sc-btn-ghost max-w-[12em]"
+                title="Browse cached datasets from the Data Source Manager"
+                onClick={() => openCachedDatasets()}
+                data-testid="axis-btn-datasets"
+              >
+                <Icons.datasets />
+                <span class="truncate axis-tb-btn-label">Datasets…</span>
+              </button>
+            </Show>
+
+            <SliceProgressChip />
+
+            <CachedDatasetsModal
+              open={cachedDatasetsOpen()}
+              onClose={() => closeCachedDatasets()}
+            />
+
+            <Show when={!autoloadOn()}>
+              <button
+                type="button"
+                class={`sc-btn sc-btn-primary ${loading() ? 'is-loading' : ''}`}
+                onClick={() => void loadHistorical({ force: true })}
+                disabled={loading()}
+                aria-busy={loading() || undefined}
+                data-testid="axis-btn-load"
+                title={
+                  store.source === 'csv-upload'
+                    ? 'Reload last uploaded file'
+                    : store.source === DATA_MANAGER_SOURCE_ID
+                      ? 'Load bars from Data Manager cache'
+                      : `Load bars from ${store.source}`
+                }
+              >
+                {loading() ? <HooxLoader size="xs" /> : <Icons.download />}
+                <span class="axis-tb-btn-label">{loading() ? 'Loading…' : 'Load'}</span>
+              </button>
+            </Show>
+          </div>
         </Show>
 
-        <div class="axis-action-cluster">
-        <RunSplitButton
-          getDoc={() => props.editorRef.getDoc()}
-          ensureSavedForRun={
-            props.editorRef.ensureSavedForRun
-              ? () => props.editorRef.ensureSavedForRun!()
-              : undefined
-          }
-        />
+        {/* ── Engine (switch · Run · Live · Replay) ── */}
+        <Show when={store.topbar.compute}>
+          <div class="axis-tb-group" data-tb-group="compute" data-axis-engine={store.engine}>
+            <div class="relative inline-flex items-stretch">
+              <fieldset
+                class="axis-engine-switch"
+                data-testid="axis-engine-switch"
+                aria-label="Engine"
+              >
+                <For each={ENGINE_SWITCH}>
+                  {(eng) => (
+                    <button
+                      type="button"
+                      class={`axis-engine-switch-btn ${store.engine === eng.id ? 'is-active' : ''}`}
+                      data-engine={eng.id}
+                      aria-pressed={store.engine === eng.id}
+                      title={
+                        eng.id === 'pyodide'
+                          ? 'Client-Side (Pyodide) · first load often 20–30s'
+                          : eng.title
+                      }
+                      aria-label={eng.title}
+                      onClick={() => selectEngine(eng.id)}
+                    >
+                      <EngineSwitchGlyph id={eng.id} />
+                    </button>
+                  )}
+                </For>
+              </fieldset>
+              <select
+                class="axis-engine-switch-native"
+                data-testid="axis-select-engine"
+                value={store.engine}
+                tabindex={-1}
+                title={
+                  engineFamilyForText(store.engine) === 'pyodide'
+                    ? 'RUN=browser (Pyodide) · ENG=local — first load often 20–30s. HUD: ENG / RUN / MODE.'
+                    : engines().find((en) => en.id === store.engine)?.description ||
+                      'Calculation engine — maps to HUD ENG (local|remote) + RUN (browser|server|worker)'
+                }
+                onChange={(e) => selectEngine(e.currentTarget.value)}
+              >
+                <For each={engines()}>
+                  {(en) => (
+                    <option value={en.id} title={en.description || en.name}>
+                      {en.name}
+                    </option>
+                  )}
+                </For>
+              </select>
+            </div>
+            <Show when={extraEngines().length > 0}>
+              <select
+                class="axis-engine-overflow"
+                title="More engines"
+                aria-label="More engines"
+                value={extraEngines().some((en) => en.id === store.engine) ? store.engine : ''}
+                onChange={(e) => {
+                  const id = e.currentTarget.value;
+                  if (id) selectEngine(id);
+                }}
+              >
+                <option value="" disabled>
+                  More
+                </option>
+                <For each={extraEngines()}>
+                  {(en) => (
+                    <option value={en.id} title={en.description || en.name}>
+                      {en.name}
+                    </option>
+                  )}
+                </For>
+              </select>
+            </Show>
 
-        <button
-          type="button"
-          class={`axis-live-btn ${
-            !store.live.active
-              ? 'is-idle'
-              : store.stream.status === 'connected'
-                ? 'is-live'
-                : store.stream.status === 'connecting'
-                  ? 'is-reconnect'
-                  : 'is-offline'
-          }`}
-          onClick={toggleLive}
-          data-testid="axis-btn-live"
-          aria-pressed={store.live.active}
-          title={liveIndicatorTitle({
-            liveActive: store.live.active,
-            streamStatus: store.stream.status,
-            detail: store.telemetry?.stream?.detail,
-            lastEventAt: store.telemetry?.stream?.lastEventAt,
-            now: Date.now(),
-            startHint: `Start live stream (${
-              streams().find((s) => s.id === defaultStreamForSource(store.source))?.name ||
-              defaultStreamForSource(store.source)
-            })`,
-          })}
-        >
-          <span class="axis-live-dot" aria-hidden="true" />
-          <span class="axis-tb-btn-label">
-            {liveBadgeWord(
-              liveBadgeTone({
-                liveActive: store.live.active,
-                streamStatus: store.stream.status,
-              }),
-            )}
-          </span>
-        </button>
+            <Show
+              when={store.live.streamId !== defaultStreamForSource(store.source)}
+              fallback={null}
+            >
+              <TopbarField
+                label="Stream"
+                variant="select"
+                class="min-w-[7em]"
+                value={store.live.streamId}
+                disabled={store.live.active}
+                title={`Live stream (mismatched vs ${defaultStreamForSource(store.source)} — HUD Fix)`}
+                onChange={(e) => {
+                  setActivePlugin('stream', e.currentTarget.value);
+                }}
+              >
+                <For each={streams()}>{(s) => <option value={s.id}>{s.name}</option>}</For>
+              </TopbarField>
+            </Show>
 
-        <button
-          type="button"
-          class={`sc-btn ${replayOn() ? 'is-replay-on' : 'sc-btn-ghost'}`}
-          onClick={toggleReplay}
-          disabled={!replayOn() && store.bars.length <= 0}
-          data-testid="axis-btn-bar-replay"
-          aria-pressed={replayOn()}
-          title={
-            replayOn()
-              ? 'Exit bar replay'
-              : store.bars.length <= 0
-                ? 'Load bars first to start bar replay'
-                : 'Start bar replay over loaded history'
-          }
-        >
-          <Icons.play />
-          <span class="axis-tb-btn-label">Replay</span>
-        </button>
+            <div class="axis-action-cluster">
+              <RunSplitButton
+                getDoc={() => props.editorRef.getDoc()}
+                ensureSavedForRun={
+                  props.editorRef.ensureSavedForRun
+                    ? () => props.editorRef.ensureSavedForRun!()
+                    : undefined
+                }
+              />
+
+              <button
+                type="button"
+                class={`axis-live-btn ${
+                  !store.live.active
+                    ? 'is-idle'
+                    : store.stream.status === 'connected'
+                      ? 'is-live'
+                      : store.stream.status === 'connecting'
+                        ? 'is-reconnect'
+                        : 'is-offline'
+                }`}
+                onClick={toggleLive}
+                data-testid="axis-btn-live"
+                aria-pressed={store.live.active}
+                title={liveIndicatorTitle({
+                  liveActive: store.live.active,
+                  streamStatus: store.stream.status,
+                  detail: store.telemetry?.stream?.detail,
+                  lastEventAt: store.telemetry?.stream?.lastEventAt,
+                  now: Date.now(),
+                  startHint: `Start live stream (${
+                    streams().find((s) => s.id === defaultStreamForSource(store.source))?.name ||
+                    defaultStreamForSource(store.source)
+                  })`,
+                })}
+              >
+                <span class="axis-live-dot" aria-hidden="true" />
+                <span class="axis-tb-btn-label">
+                  {liveBadgeWord(
+                    liveBadgeTone({
+                      liveActive: store.live.active,
+                      streamStatus: store.stream.status,
+                    }),
+                  )}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                class={`sc-btn ${replayOn() ? 'is-replay-on' : 'sc-btn-ghost'}`}
+                onClick={toggleReplay}
+                disabled={!replayOn() && barPlane.length <= 0}
+                data-testid="axis-btn-bar-replay"
+                aria-pressed={replayOn()}
+                title={
+                  replayOn()
+                    ? 'Exit bar replay'
+                    : barPlane.length <= 0
+                      ? 'Load bars first to start bar replay'
+                      : 'Start bar replay over loaded history'
+                }
+              >
+                <Icons.play />
+                <span class="axis-tb-btn-label">Replay</span>
+              </button>
+            </div>
+          </div>
+        </Show>
+
+        {/* ── Layouts ─────────────────────────────────────────── */}
+        <Show when={store.topbar.layout}>
+          <div class="axis-tb-group" data-tb-group="layout">
+            <ChartLayoutMenu />
+          </div>
+        </Show>
+        <div class="axis-command-trailing">
+          <McpHud />
         </div>
-      </div>
-      </Show>
-
-      {/* ── Layouts ─────────────────────────────────────────── */}
-      <Show when={store.topbar.layout}>
-        <div class="axis-tb-group" data-tb-group="layout">
-          <ChartLayoutMenu />
-        </div>
-      </Show>
-      <div class="axis-command-trailing">
-        <McpHud />
-      </div>
       </div>
 
       {/* ── Module bar ──────────────────────────────────────── */}
       <Show when={store.topbar.panels || store.topbar.system}>
         <div class="axis-module-bar">
-        <Show when={store.topbar.panels}>
-        <div class="axis-modules" data-tb-group="panels">
-        <Show when={store.topbar.panelsWatchlist}>
-        <button
-          type="button"
-          class={`axis-module ${isPanelOpen('watchlist') || store.watchlist.open ? 'is-active' : ''}`}
-          onClick={props.onToggleWatchlist}
-          title="Toggle watchlist"
-          aria-label="Watchlist"
-          aria-pressed={isPanelOpen('watchlist') || store.watchlist.open}
-          data-testid="axis-btn-watchlist"
-        >
-          <Icons.watchlist />
-          <span class="axis-tb-btn-label">List</span>
-        </button>
-        </Show>
+          <Show when={store.topbar.panels}>
+            <div class="axis-modules" data-tb-group="panels">
+              <Show when={store.topbar.panelsWatchlist}>
+                <button
+                  type="button"
+                  class={`axis-module ${isPanelOpen('watchlist') || store.watchlist.open ? 'is-active' : ''}`}
+                  onClick={props.onToggleWatchlist}
+                  title="Toggle watchlist"
+                  aria-label="Watchlist"
+                  aria-pressed={isPanelOpen('watchlist') || store.watchlist.open}
+                  data-testid="axis-btn-watchlist"
+                >
+                  <Icons.watchlist />
+                  <span class="axis-tb-btn-label">List</span>
+                </button>
+              </Show>
 
-        <Show when={store.topbar.panelsEditor}>
-        <button
-          type="button"
-          class={`axis-module ${
-            store.editor.open && store.editor.mode === 'docked' ? 'is-active' : ''
-          }`}
-          onClick={props.onToggleEditor}
-          title="Toggle docked editor"
-          aria-label="Editor"
-          aria-pressed={!!(store.editor.open && store.editor.mode === 'docked')}
-          data-testid="axis-btn-editor"
-        >
-          <Icons.editor />
-          <span class="axis-tb-btn-label">Editor</span>
-          {store.editor.mode === 'popout' && (
-            <span class="text-orange ml-0.5 text-[10px]">ext</span>
-          )}
-        </button>
-        </Show>
+              <Show when={store.topbar.panelsEditor}>
+                <button
+                  type="button"
+                  class={`axis-module ${
+                    store.editor.open && store.editor.mode === 'docked' ? 'is-active' : ''
+                  }`}
+                  onClick={props.onToggleEditor}
+                  title="Toggle docked editor"
+                  aria-label="Editor"
+                  aria-pressed={!!(store.editor.open && store.editor.mode === 'docked')}
+                  data-testid="axis-btn-editor"
+                >
+                  <Icons.editor />
+                  <span class="axis-tb-btn-label">Editor</span>
+                  {store.editor.mode === 'popout' && (
+                    <span class="text-orange ml-0.5 text-[10px]">ext</span>
+                  )}
+                </button>
+              </Show>
 
-        <Show when={store.topbar.panelsLibrary}>
-        <button
-          type="button"
-          class={`axis-module ${isPanelOpen('library') ? 'is-active' : ''}`}
-          onClick={() => toggleLibraryPanel()}
-          title="Script library — load / save Pine scripts"
-          aria-label="Library"
-          aria-pressed={isPanelOpen('library')}
-          data-testid="axis-btn-library"
-        >
-          <Icons.library />
-          <span class="axis-tb-btn-label">Library</span>
-        </button>
-        </Show>
+              <Show when={store.topbar.panelsLibrary}>
+                <button
+                  type="button"
+                  class={`axis-module ${isPanelOpen('library') ? 'is-active' : ''}`}
+                  onClick={() => toggleLibraryPanel()}
+                  title="Script library — load / save Pine scripts"
+                  aria-label="Library"
+                  aria-pressed={isPanelOpen('library')}
+                  data-testid="axis-btn-library"
+                >
+                  <Icons.library />
+                  <span class="axis-tb-btn-label">Library</span>
+                </button>
+              </Show>
 
-        <Show when={store.topbar.panelsScripts}>
-        <button
-          type="button"
-          class={`axis-module ${isPanelOpen('indicators') || store.indicatorPanel.open ? 'is-active' : ''}`}
-          onClick={() => toggleIndicatorPanel()}
-          title="Toggle scripts list — applied Pine indicators & strategies"
-          aria-label="Scripts"
-          aria-pressed={isPanelOpen('indicators') || store.indicatorPanel.open}
-          data-testid="axis-btn-indicators"
-        >
-          <Icons.scripts />
-          <span class="axis-tb-btn-label">Scripts</span>
-        </button>
-        </Show>
+              <Show when={store.topbar.panelsScripts}>
+                <button
+                  type="button"
+                  class={`axis-module ${isPanelOpen('indicators') || store.indicatorPanel.open ? 'is-active' : ''}`}
+                  onClick={() => toggleIndicatorPanel()}
+                  title="Toggle scripts list — applied Pine indicators & strategies"
+                  aria-label="Scripts"
+                  aria-pressed={isPanelOpen('indicators') || store.indicatorPanel.open}
+                  data-testid="axis-btn-indicators"
+                >
+                  <Icons.scripts />
+                  <span class="axis-tb-btn-label">Scripts</span>
+                </button>
+              </Show>
 
-        <Show when={store.topbar.panelsLayers}>
-        <button
-          type="button"
-          class={`axis-module ${isPanelOpen('layers') || store.layerPanel.open ? 'is-active' : ''}`}
-          onClick={() => toggleLayerPanel()}
-          title="Layers — left slide-in: panes, scripts, drawings"
-          aria-label="Layers"
-          aria-pressed={isPanelOpen('layers') || store.layerPanel.open}
-          data-testid="axis-btn-layers"
-        >
-          <Icons.layers />
-          <span class="axis-tb-btn-label">Layers</span>
-        </button>
-        </Show>
+              <Show when={store.topbar.panelsLayers}>
+                <button
+                  type="button"
+                  class={`axis-module ${isPanelOpen('layers') || store.layerPanel.open ? 'is-active' : ''}`}
+                  onClick={() => toggleLayerPanel()}
+                  title="Layers — left slide-in: panes, scripts, drawings"
+                  aria-label="Layers"
+                  aria-pressed={isPanelOpen('layers') || store.layerPanel.open}
+                  data-testid="axis-btn-layers"
+                >
+                  <Icons.layers />
+                  <span class="axis-tb-btn-label">Layers</span>
+                </button>
+              </Show>
 
-        <Show when={store.topbar.panelsDsm}>
-        <button
-          type="button"
-          class={`axis-module ${isPanelOpen('datasource') ? 'is-active' : ''}`}
-          onClick={() => toggleDataSourcePanel()}
-          title="Data — Data Source Manager (DSM), background OHLCV backfill"
-          aria-label="Data"
-          aria-pressed={isPanelOpen('datasource')}
-          data-testid="axis-btn-datasource"
-        >
-          <Icons.dataSource />
-          <span class="axis-tb-btn-label">Data</span>
-        </button>
-        </Show>
+              <Show when={store.topbar.panelsDsm}>
+                <button
+                  type="button"
+                  class={`axis-module ${isPanelOpen('datasource') ? 'is-active' : ''}`}
+                  onClick={() => toggleDataSourcePanel()}
+                  title="Data — Data Source Manager (DSM), background OHLCV backfill"
+                  aria-label="Data"
+                  aria-pressed={isPanelOpen('datasource')}
+                  data-testid="axis-btn-datasource"
+                >
+                  <Icons.dataSource />
+                  <span class="axis-tb-btn-label">Data</span>
+                </button>
+              </Show>
 
-        <Show when={store.topbar.panelsOnchain}>
-        <button
-          type="button"
-          class={`axis-module ${isPanelOpen('onchain') ? 'is-active' : ''}`}
-          onClick={() => toggleOnchainPanel()}
-          title="On-Chain — DefiLlama protocol TVL overlays"
-          aria-label="On-Chain"
-          aria-pressed={isPanelOpen('onchain')}
-          data-testid="axis-btn-onchain"
-        >
-          <Icons.onchain />
-          <span class="axis-tb-btn-label">On-Chain</span>
-        </button>
-        </Show>
+              <Show when={store.topbar.panelsOnchain}>
+                <button
+                  type="button"
+                  class={`axis-module ${isPanelOpen('onchain') ? 'is-active' : ''}`}
+                  onClick={() => toggleOnchainPanel()}
+                  title="On-Chain — DefiLlama protocol TVL overlays"
+                  aria-label="On-Chain"
+                  aria-pressed={isPanelOpen('onchain')}
+                  data-testid="axis-btn-onchain"
+                >
+                  <Icons.onchain />
+                  <span class="axis-tb-btn-label">On-Chain</span>
+                </button>
+              </Show>
 
-        <Show when={store.topbar.panelsAlerts}>
-        <button
-          type="button"
-          class={`axis-module ${isPanelOpen('alerts') || store.alertsPanel.open ? 'is-active' : ''}`}
-          onClick={() => toggleAlertsPanel()}
-          title="Price alerts — create, toggle, webhook"
-          aria-label="Alerts"
-          aria-pressed={isPanelOpen('alerts') || store.alertsPanel.open}
-          data-testid="axis-btn-alerts"
-        >
-          <Icons.alerts />
-          <span class="axis-tb-btn-label">Alerts</span>
-        </button>
-        </Show>
+              <Show when={store.topbar.panelsAlerts}>
+                <button
+                  type="button"
+                  class={`axis-module ${isPanelOpen('alerts') || store.alertsPanel.open ? 'is-active' : ''}`}
+                  onClick={() => toggleAlertsPanel()}
+                  title="Price alerts — create, toggle, webhook"
+                  aria-label="Alerts"
+                  aria-pressed={isPanelOpen('alerts') || store.alertsPanel.open}
+                  data-testid="axis-btn-alerts"
+                >
+                  <Icons.alerts />
+                  <span class="axis-tb-btn-label">Alerts</span>
+                </button>
+              </Show>
 
-        <Show when={store.topbar.panelsValues}>
-        <button
-          type="button"
-          class={`axis-module ${isPanelOpen('dataview') || store.dataViewPanel.open ? 'is-active' : ''}`}
-          onClick={() => toggleDataViewPanel()}
-          title="Data window — OHLCV & plot values at crosshair"
-          aria-label="Values"
-          aria-pressed={isPanelOpen('dataview') || store.dataViewPanel.open}
-          data-testid="axis-btn-dataview"
-        >
-          <Icons.dataView />
-          <span class="axis-tb-btn-label">Values</span>
-        </button>
-        <button
-          type="button"
-          class={`axis-module ${isPanelOpen('tables') ? 'is-active' : ''}`}
-          onClick={() => toggleTablesPanel()}
-          title="Tables — Pine tables moved to the bottom panel"
-          aria-label="Tables"
-          aria-pressed={isPanelOpen('tables')}
-          data-testid="axis-btn-tables"
-        >
-          <Icons.barChart />
-          <span class="axis-tb-btn-label">Tables</span>
-        </button>
-        </Show>
+              <Show when={store.topbar.panelsValues}>
+                <button
+                  type="button"
+                  class={`axis-module ${isPanelOpen('dataview') || store.dataViewPanel.open ? 'is-active' : ''}`}
+                  onClick={() => toggleDataViewPanel()}
+                  title="Data window — OHLCV & plot values at crosshair"
+                  aria-label="Values"
+                  aria-pressed={isPanelOpen('dataview') || store.dataViewPanel.open}
+                  data-testid="axis-btn-dataview"
+                >
+                  <Icons.dataView />
+                  <span class="axis-tb-btn-label">Values</span>
+                </button>
+                <button
+                  type="button"
+                  class={`axis-module ${isPanelOpen('tables') ? 'is-active' : ''}`}
+                  onClick={() => toggleTablesPanel()}
+                  title="Tables — Pine tables moved to the bottom panel"
+                  aria-label="Tables"
+                  aria-pressed={isPanelOpen('tables')}
+                  data-testid="axis-btn-tables"
+                >
+                  <Icons.barChart />
+                  <span class="axis-tb-btn-label">Tables</span>
+                </button>
+              </Show>
 
-        <Show when={store.topbar.panelsResults}>
-        <button
-          type="button"
-          class={`axis-module ${store.resultsPanel.open ? 'is-active' : ''}`}
-          title="Results & export"
-          aria-label="Results"
-          data-testid="axis-btn-results"
-          aria-pressed={store.resultsPanel.open}
-          onClick={() => {
-            setStore('resultsPanel', 'open', !store.resultsPanel.open);
-            persist();
-          }}
-        >
-          <Icons.results />
-          <span class="axis-tb-btn-label">Results</span>
-        </button>
-        </Show>
+              <Show when={store.topbar.panelsResults}>
+                <button
+                  type="button"
+                  class={`axis-module ${store.resultsPanel.open ? 'is-active' : ''}`}
+                  title="Results & export"
+                  aria-label="Results"
+                  data-testid="axis-btn-results"
+                  aria-pressed={store.resultsPanel.open}
+                  onClick={() => {
+                    setStore('resultsPanel', 'open', !store.resultsPanel.open);
+                    persist();
+                  }}
+                >
+                  <Icons.results />
+                  <span class="axis-tb-btn-label">Results</span>
+                </button>
+              </Show>
 
-        <Show when={store.topbar.panelsExtra}>
-        <ExtraMenu />
-        </Show>
+              <Show when={store.topbar.panelsExtra}>
+                <ExtraMenu />
+              </Show>
+            </div>
+          </Show>
+
+          <div class="axis-module-trailing">
+            <Show when={store.topbar.panels}>
+              <div class="axis-module-utils">
+                <Show when={store.topbar.panelsSystemLogs}>
+                  <button
+                    type="button"
+                    class={`axis-module-util ${isPanelOpen('logs') ? 'is-active' : ''}`}
+                    title="System logs — app, transport, and boot"
+                    aria-label="System logs"
+                    data-testid="axis-btn-systemlogs"
+                    aria-pressed={isPanelOpen('logs')}
+                    onClick={() => toggleSystemLogsPanel()}
+                  >
+                    <Icons.systemLogs />
+                    <span class="axis-tb-btn-label">Logs</span>
+                  </button>
+                </Show>
+
+                <Show when={store.topbar.panelsStatus}>
+                  <button
+                    type="button"
+                    class={`axis-module-util ${isPanelOpen('statusbar') ? 'is-active' : ''}`}
+                    title="Status — connection HUD and status message"
+                    aria-label="Status"
+                    data-testid="axis-btn-statusbar"
+                    aria-pressed={isPanelOpen('statusbar')}
+                    onClick={() => toggleStatusBarPanel()}
+                  >
+                    <Icons.status />
+                    <span class="axis-tb-btn-label">Status</span>
+                  </button>
+                </Show>
+              </div>
+            </Show>
+
+            <Show when={store.topbar.system}>
+              <div class="axis-tb-group" data-tb-group="system">
+                {/* Hidden hooks — command palette / docs dispatch click(); e2e uses Studio. */}
+                <button
+                  type="button"
+                  hidden
+                  class="sr-only"
+                  tabindex={-1}
+                  data-testid="axis-btn-architecture"
+                  aria-label="Open Architecture"
+                  onClick={() => props.onOpenArchitecture?.()}
+                />
+                <button
+                  type="button"
+                  hidden
+                  class="sr-only"
+                  tabindex={-1}
+                  data-testid="axis-btn-runtimes"
+                  aria-label="Open Runtime"
+                  onClick={() => {
+                    if (props.onOpenRuntime) props.onOpenRuntime();
+                    else props.onOpenWorkers?.();
+                  }}
+                />
+                <button
+                  type="button"
+                  hidden
+                  class="sr-only"
+                  tabindex={-1}
+                  data-testid="axis-btn-settings"
+                  aria-label="Open settings"
+                  onClick={() => props.onOpenSettings()}
+                />
+                <button
+                  type="button"
+                  hidden
+                  class="sr-only"
+                  tabindex={-1}
+                  data-testid="axis-btn-workers"
+                  onClick={() => props.onOpenWorkers?.()}
+                />
+                <button
+                  type="button"
+                  hidden
+                  class="sr-only"
+                  tabindex={-1}
+                  data-testid="axis-btn-plugins"
+                  aria-label="Open Plugins"
+                  onClick={() => props.onOpenPlugins?.()}
+                />
+
+                <Show when={pwaInstallAvailable()}>
+                  <button
+                    type="button"
+                    class="sc-btn sc-btn-ghost"
+                    onClick={() => {
+                      void promptPwaInstall();
+                    }}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      dismissPwaInstallPrompt();
+                    }}
+                    title="Install AXIS as an app (right-click to hide)"
+                    data-testid="axis-btn-pwa-install"
+                    aria-label="Install app"
+                  >
+                    <Icons.download />
+                    <span class="axis-tb-btn-label">Install app</span>
+                  </button>
+                </Show>
+
+                <button
+                  type="button"
+                  class="sc-btn sc-btn-ghost sc-btn-icon"
+                  onClick={toggleTheme}
+                  title={
+                    store.theme === 'dark'
+                      ? 'Switch to light (soft void lift)'
+                      : 'Switch to dark void'
+                  }
+                  aria-label="Toggle color theme"
+                  data-testid="axis-btn-theme"
+                >
+                  {store.theme === 'dark' ? <Icons.sun /> : <Icons.moon />}
+                </button>
+
+                <button
+                  type="button"
+                  class={`sc-btn sc-btn-ghost sc-btn-icon ${store.presentation?.fullscreen ? 'is-active' : ''}`}
+                  onClick={() => void toggleBrowserFullscreen()}
+                  title={
+                    store.presentation?.fullscreen
+                      ? 'Exit fullscreen (F11)'
+                      : 'Fullscreen — fill the display (F11)'
+                  }
+                  aria-pressed={!!store.presentation?.fullscreen}
+                  aria-label="Toggle fullscreen"
+                  data-testid="axis-btn-fullscreen"
+                >
+                  <Icons.fullscreen />
+                </button>
+
+                <button
+                  type="button"
+                  class={`sc-btn sc-btn-ghost sc-btn-icon ${store.presentation?.chartOnly ? 'is-active' : ''}`}
+                  onClick={() => toggleChartOnlyMode()}
+                  title={
+                    store.presentation?.chartOnly
+                      ? 'Exit chart only (Shift+F / Esc)'
+                      : 'Chart only — hide chrome, chart fills the shell (Shift+F)'
+                  }
+                  aria-pressed={!!store.presentation?.chartOnly}
+                  aria-label="Toggle chart-only mode"
+                  data-testid="axis-btn-chart-only"
+                >
+                  {store.presentation?.chartOnly ? <Icons.minimize /> : <Icons.maximize />}
+                </button>
+
+                <ScreenshotMenu />
+
+                <button
+                  type="button"
+                  class="sc-btn sc-btn-ghost sc-btn-icon axis-tb-studio"
+                  onClick={() => {
+                    if (props.onOpenStudio) props.onOpenStudio();
+                    else if (props.onOpenRuntime) props.onOpenRuntime();
+                    else props.onOpenWorkers?.();
+                  }}
+                  title="Studio — Runtime, Wire, Settings, Workers, Plugins"
+                  data-testid="axis-btn-studio"
+                  aria-label="Open Studio"
+                >
+                  <Icons.settings />
+                </button>
+              </div>
+            </Show>
+          </div>
         </div>
-        </Show>
-
-        <div class="axis-module-trailing">
-        <Show when={store.topbar.panels}>
-        <div class="axis-module-utils">
-        <Show when={store.topbar.panelsSystemLogs}>
-        <button
-          type="button"
-          class={`axis-module-util ${isPanelOpen('logs') ? 'is-active' : ''}`}
-          title="System logs — app, transport, and boot"
-          aria-label="System logs"
-          data-testid="axis-btn-systemlogs"
-          aria-pressed={isPanelOpen('logs')}
-          onClick={() => toggleSystemLogsPanel()}
-        >
-          <Icons.systemLogs />
-          <span class="axis-tb-btn-label">Logs</span>
-        </button>
-        </Show>
-
-        <Show when={store.topbar.panelsStatus}>
-        <button
-          type="button"
-          class={`axis-module-util ${isPanelOpen('statusbar') ? 'is-active' : ''}`}
-          title="Status — connection HUD and status message"
-          aria-label="Status"
-          data-testid="axis-btn-statusbar"
-          aria-pressed={isPanelOpen('statusbar')}
-          onClick={() => toggleStatusBarPanel()}
-        >
-          <Icons.status />
-          <span class="axis-tb-btn-label">Status</span>
-        </button>
-        </Show>
-        </div>
-        </Show>
-
-        <Show when={store.topbar.system}>
-        <div class="axis-tb-group" data-tb-group="system">
-        {/* Hidden hooks — command palette / docs dispatch click(); e2e uses Studio. */}
-        <button
-          type="button"
-          hidden
-          class="sr-only"
-          tabindex={-1}
-          data-testid="axis-btn-architecture"
-          aria-label="Open Architecture"
-          onClick={() => props.onOpenArchitecture?.()}
-        />
-        <button
-          type="button"
-          hidden
-          class="sr-only"
-          tabindex={-1}
-          data-testid="axis-btn-runtimes"
-          aria-label="Open Runtime"
-          onClick={() => {
-            if (props.onOpenRuntime) props.onOpenRuntime();
-            else props.onOpenWorkers?.();
-          }}
-        />
-        <button
-          type="button"
-          hidden
-          class="sr-only"
-          tabindex={-1}
-          data-testid="axis-btn-settings"
-          aria-label="Open settings"
-          onClick={() => props.onOpenSettings()}
-        />
-        <button
-          type="button"
-          hidden
-          class="sr-only"
-          tabindex={-1}
-          data-testid="axis-btn-workers"
-          onClick={() => props.onOpenWorkers?.()}
-        />
-        <button
-          type="button"
-          hidden
-          class="sr-only"
-          tabindex={-1}
-          data-testid="axis-btn-plugins"
-          aria-label="Open Plugins"
-          onClick={() => props.onOpenPlugins?.()}
-        />
-
-        <Show when={pwaInstallAvailable()}>
-          <button
-            type="button"
-            class="sc-btn sc-btn-ghost"
-            onClick={() => {
-              void promptPwaInstall();
-            }}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              dismissPwaInstallPrompt();
-            }}
-            title="Install AXIS as an app (right-click to hide)"
-            data-testid="axis-btn-pwa-install"
-            aria-label="Install app"
-          >
-            <Icons.download />
-            <span class="axis-tb-btn-label">Install app</span>
-          </button>
-        </Show>
-
-        <button
-          type="button"
-          class="sc-btn sc-btn-ghost sc-btn-icon"
-          onClick={toggleTheme}
-          title={store.theme === 'dark' ? 'Switch to light (soft void lift)' : 'Switch to dark void'}
-          aria-label="Toggle color theme"
-          data-testid="axis-btn-theme"
-        >
-          {store.theme === 'dark' ? <Icons.sun /> : <Icons.moon />}
-        </button>
-
-        <button
-          type="button"
-          class={`sc-btn sc-btn-ghost sc-btn-icon ${store.presentation?.fullscreen ? 'is-active' : ''}`}
-          onClick={() => void toggleBrowserFullscreen()}
-          title={
-            store.presentation?.fullscreen
-              ? 'Exit fullscreen (F11)'
-              : 'Fullscreen — fill the display (F11)'
-          }
-          aria-pressed={!!store.presentation?.fullscreen}
-          aria-label="Toggle fullscreen"
-          data-testid="axis-btn-fullscreen"
-        >
-          <Icons.fullscreen />
-        </button>
-
-        <button
-          type="button"
-          class={`sc-btn sc-btn-ghost sc-btn-icon ${store.presentation?.chartOnly ? 'is-active' : ''}`}
-          onClick={() => toggleChartOnlyMode()}
-          title={
-            store.presentation?.chartOnly
-              ? 'Exit chart only (Shift+F / Esc)'
-              : 'Chart only — hide chrome, chart fills the shell (Shift+F)'
-          }
-          aria-pressed={!!store.presentation?.chartOnly}
-          aria-label="Toggle chart-only mode"
-          data-testid="axis-btn-chart-only"
-        >
-          {store.presentation?.chartOnly ? <Icons.minimize /> : <Icons.maximize />}
-        </button>
-
-        <ScreenshotMenu />
-
-        <button
-          type="button"
-          class="sc-btn sc-btn-ghost sc-btn-icon axis-tb-studio"
-          onClick={() => {
-            if (props.onOpenStudio) props.onOpenStudio();
-            else if (props.onOpenRuntime) props.onOpenRuntime();
-            else props.onOpenWorkers?.();
-          }}
-          title="Studio — Runtime, Wire, Settings, Workers, Plugins"
-          data-testid="axis-btn-studio"
-          aria-label="Open Studio"
-        >
-          <Icons.settings />
-        </button>
-        </div>
-        </Show>
-        </div>
-      </div>
       </Show>
       {/* Price ticker marquee — full-width band under the module bar (app top), never a module-bar row item. */}
       <Show when={store.extras.ticker.enabled && store.extras.ticker.symbols.length > 0}>

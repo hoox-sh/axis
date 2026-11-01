@@ -135,6 +135,7 @@ import { isTauriShell } from './desktop/is-tauri';
 import { applyThemeToDocument } from './theme';
 import { formatChartTitle } from './ui/document-title';
 import { resolvePriceDecimals } from './chart/price-precision';
+import { barPlane } from './stores/bars';
 import { installPresentationControls, setPresentationRoot } from './ui/presentation';
 import { StorageChangePrompt } from './ui/StorageChangePrompt';
 import { startMcpHost } from './mcp';
@@ -176,20 +177,34 @@ export const App: Component = () => {
   };
 
   // Tab title tracks the last close (live path-updates included).
+  // Read from the narrow bar plane instead of the full store.bars array so
+  // the effect only re-runs on tip/length changes, not every store mutation.
+  let pendingTitle = '';
+  let titleRaf = 0;
+  const flushTitle = () => {
+    titleRaf = 0;
+    if (typeof document !== 'undefined' && document.title !== pendingTitle) {
+      document.title = pendingTitle;
+    }
+  };
   createEffect(() => {
-    const bars = store.bars;
+    const bars = barPlane.bars;
+    const tip = barPlane.tip;
     const n = bars.length;
-    const last = n > 0 ? bars[n - 1] : undefined;
+    const last = tip?.close != null ? tip : n > 0 ? bars[n - 1] : undefined;
     const prev = n > 1 ? bars[n - 2] : undefined;
     const symbol = store.symbol;
-    const title = formatChartTitle({
+    const nextTitle = formatChartTitle({
       symbol,
       price: last?.close,
       prevClose: prev?.close,
       decimals: resolvePriceDecimals(store.priceScaleDecimals, { symbol, bars }),
     });
-    if (typeof document !== 'undefined' && document.title !== title) {
-      document.title = title;
+    pendingTitle = nextTitle;
+    if (!titleRaf && typeof requestAnimationFrame === 'function') {
+      titleRaf = requestAnimationFrame(flushTitle);
+    } else if (!titleRaf) {
+      flushTitle();
     }
   });
 
@@ -218,7 +233,7 @@ export const App: Component = () => {
     // Live stream is on by default (`preferAfterLoad`); Load starts it, and if
     // bars are already in memory we sync immediately. Autoload off + empty
     // bars leaves the chart empty until the user clicks Load.
-    if (!store.bars.length && store.source !== 'csv-upload') {
+    if (!barPlane.length && store.source !== 'csv-upload') {
       if (isAutoloadEnabled()) {
         void loadSymbolData(store.symbol, store.interval, store.source).catch((err: unknown) => {
           reportUiError(err, {

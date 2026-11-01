@@ -46,9 +46,7 @@ export const ONCHAIN_SERIES_PREFIX = 'onchain_';
 
 /** True for scalar overlay keys (excludes the event-marker host series). */
 function isOnchainScalarKey(key: string): boolean {
-  return (
-    key.startsWith(ONCHAIN_SERIES_PREFIX) && key !== ONCHAIN_EVENTS_SERIES_KEY
-  );
+  return key.startsWith(ONCHAIN_SERIES_PREFIX) && key !== ONCHAIN_EVENTS_SERIES_KEY;
 }
 
 /**
@@ -59,6 +57,23 @@ export const ONCHAIN_PRICE_SCALE_ID = 'left';
 
 /** Hard cap — ignore additional lines for chart safety. */
 const MAX_ONCHAIN_LINES = 8;
+
+/**
+ * Last per-key point fingerprints applied per manager. Lets
+ * `applyOnchainOverlays` skip identical `series.setData` calls when the spec
+ * list re-runs for unrelated signals.
+ */
+const appliedOnchainByManager = new WeakMap<PaneManager, Map<string, string>>();
+
+/** Cheap fingerprint of a point series (length + endpoints + midpoint). */
+function fingerprintPoints(pts: Array<{ time: number; value: number }>): string {
+  const n = pts?.length ?? 0;
+  if (!n) return '';
+  const first = pts[0];
+  const last = pts[n - 1];
+  const mid = pts[Math.floor(n / 2)];
+  return `${n}|${first.time}:${first.value}|${mid?.time}:${mid?.value}|${last.time}:${last.value}`;
+}
 
 export type OnchainLineSpec = {
   /** Must be `onchain_*` (normalized if missing prefix). */
@@ -149,10 +164,9 @@ function configureOnchainScale(
  * Skips {@link ONCHAIN_EVENTS_SERIES_KEY} (event-marker host — owned by
  * onchain-events). Does not hide the left scale (compare may still own it).
  */
-export function clearOnchainOverlays(
-  manager: PaneManager | undefined | null,
-): void {
+export function clearOnchainOverlays(manager: PaneManager | undefined | null): void {
   if (!manager) return;
+  appliedOnchainByManager.delete(manager);
   const pane = manager.getPane('price');
   if (!pane) return;
   const keys = Object.keys(pane.series).filter(isOnchainScalarKey);
@@ -208,11 +222,15 @@ export function applyOnchainOverlays(
     return;
   }
 
+  const fpByKey = appliedOnchainByManager.get(manager) ?? new Map<string, string>();
+  appliedOnchainByManager.set(manager, fpByKey);
+
   const want = new Set(specs.map((s) => s.key));
   // Remove scalar series no longer in the desired set (keep event-marker host)
   for (const key of Object.keys(pane.series)) {
     if (!isOnchainScalarKey(key)) continue;
     if (want.has(key)) continue;
+    fpByKey.delete(key);
     const series = pane.series[key];
     if (!series) {
       delete pane.series[key];
@@ -229,25 +247,24 @@ export function applyOnchainOverlays(
   const scaleId = ONCHAIN_PRICE_SCALE_ID;
 
   for (const spec of specs) {
-    const series = ensureOnchainLine(
-      manager,
-      pane,
-      spec.key,
-      spec.title,
-      spec.color,
-      scaleId,
-    );
-    // Finite-only line data — LWC rejects NaN/Infinity
-    const data = spec.points
-      .filter((d) => Number.isFinite(d.time) && Number.isFinite(d.value))
-      .map((d) => ({ time: d.time as UTCTimestamp, value: d.value }));
-    try {
-      series.setData(data);
-      if (spec.visible === false) {
-        series.applyOptions({ visible: false });
-      } else {
-        series.applyOptions({ visible: true });
+    const series = ensureOnchainLine(manager, pane, spec.key, spec.title, spec.color, scaleId);
+    const fp = fingerprintPoints(spec.points);
+    const prevFp = fpByKey.get(spec.key);
+    const dataChanged = prevFp !== fp;
+    if (dataChanged) {
+      fpByKey.set(spec.key, fp);
+      // Finite-only line data — LWC rejects NaN/Infinity
+      const data = spec.points
+        .filter((d) => Number.isFinite(d.time) && Number.isFinite(d.value))
+        .map((d) => ({ time: d.time as UTCTimestamp, value: d.value }));
+      try {
+        series.setData(data);
+      } catch {
+        /* disposed / thrash */
       }
+    }
+    try {
+      series.applyOptions({ visible: spec.visible !== false });
     } catch {
       /* disposed / thrash */
     }

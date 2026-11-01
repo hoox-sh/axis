@@ -7,7 +7,7 @@ tags: [code, extras, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-25T17:55:37Z
+  at: 2026-11-01T17:22:22Z
 sources:
   - id: tree
     resource: "src/ui/extras"
@@ -37,6 +37,7 @@ okf_lock: generated
 * [src/alerts](/code/src/alerts.md)
 * [src/data](/code/src/data.md)
 * [src/store](/code/src/store.md)
+* [src/stores](/code/src/stores.md)
 * [src/ui](/code/src/ui.md)
 * [src/ui/studio](/code/src/ui/studio.md)
 

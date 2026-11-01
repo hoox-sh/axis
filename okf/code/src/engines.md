@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/engines"
-description: "src/engines contains batch.ts, catalog.ts, chart-data-session.ts, and 14 more files."
+description: "src/engines contains batch.ts, catalog.ts, chart-data-session.ts, and 15 more files."
 resource: "src/engines"
 tags: [code, engines]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-25T14:59:58Z
+  at: 2026-11-01T17:22:22Z
 sources:
   - id: tree
     resource: "src/engines"
@@ -24,7 +24,8 @@ okf_lock: generated
 * `data-sessions.ts` — CanonicalSeriesKey, DATA_PROVIDE_CHUNK, DATA_SESSION_RETRY_COOLDOWN_MS, DataSeriesKey, DataSeriesStatus, DataSessionCreateInput, DataSessionCreateResult, DataSessionHandle, DataSessionMiss, DataSessionRunResult, EnsureDataSessionOptions, RunDataSessionOptions
 * `engine-ws.ts` — EngineWsResult, EngineWsRunRequest, _resetEngineWsClients, endpointToRunWsUrl, getEngineWsClient, probeEngineWs
 * `health.ts` — AdvertisedRunMode, CompileReadiness, DEFAULT_ENGINE_HEALTH, EngineCompileHealth, EngineFeatureHealth, EngineHealth, advertisedRunMode, compileReadiness, healthAdvertises, healthFromBody
-* `json-sanitize.ts` — parseEngineJson, sanitizeNonFiniteJson
+* `json-parse-worker.ts`
+* `json-sanitize.ts` — _resetParseEngineJsonForTests, parseEngineJson, parseEngineJsonAsync, sanitizeNonFiniteJson
 * `live-sessions.ts` — LiveSessionHit, LiveSessionKeyFields, LiveSessionModeFields, LiveSessionStatus, LiveSessionStatusResult, LiveSessionTickOpts, LiveSessionVia, SESSION_GROWTH_SLACK, SESSION_RETRY_COOLDOWN_MS, SESSION_STATUS_IDLE_RECONCILE_MS, SESSION_STATUS_MIN_INTERVAL_MS, _liveSessionStateForTests
 * `ownership.ts` — isEngineOwnedLive
 * `prewarm.ts` — MAX_PREWARM_SCRIPTS, PrewarmOptions, PrewarmResult, _resetPrewarmMemoForTests, collectAppliedScriptSources, prewarmAppliedScripts, prewarmEngine
@@ -42,6 +43,7 @@ okf_lock: generated
 * [src/data](/code/src/data.md)
 * [src/engine](/code/src/engine.md)
 * [src/indicators](/code/src/indicators.md)
+* [src/perf](/code/src/perf.md)
 * [src/plugins](/code/src/plugins.md)
 * [src/store](/code/src/store.md)
 * [src/utils](/code/src/utils.md)

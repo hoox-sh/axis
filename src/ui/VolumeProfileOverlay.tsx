@@ -40,6 +40,7 @@ import {
   onMount,
 } from 'solid-js';
 import { store } from '../store';
+import { barPlane } from '../stores/bars';
 import { getManager } from '../chart/manager-access';
 import { barIndexRangeForTimeWindow } from '../chart/heavy-data';
 import {
@@ -154,7 +155,7 @@ export const VolumeProfileOverlay: Component = () => {
 
   createEffect(() => {
     void store.chartDataGen;
-    void store.bars.length;
+    void barPlane.length;
     void volumeProfileEnabled();
     measurePane();
     bump();
@@ -163,7 +164,7 @@ export const VolumeProfileOverlay: Component = () => {
   const layout = createMemo((): VpLayout | null => {
     void tick();
     if (!volumeProfileEnabled()) return null;
-    const bars = store.bars;
+    const bars = barPlane.bars;
     if (!bars.length) return null;
     // Visible-range profile — scanning 45k bars every poll hitchs the UI and
     // is the wrong session anyway (the overlay sits on the current viewport).
@@ -172,11 +173,7 @@ export const VolumeProfileOverlay: Component = () => {
     try {
       const ts = getManager()?.getPane?.('price')?.chart?.timeScale?.();
       const vr = ts?.getVisibleRange?.() as { from?: number; to?: number } | null | undefined;
-      if (
-        vr &&
-        Number.isFinite(vr.from as number) &&
-        Number.isFinite(vr.to as number)
-      ) {
+      if (vr && Number.isFinite(vr.from as number) && Number.isFinite(vr.to as number)) {
         const win = barIndexRangeForTimeWindow(bars, Number(vr.from), Number(vr.to));
         if (win.to > win.from) {
           fromIndex = win.from;
@@ -294,9 +291,7 @@ export const VolumeProfileOverlay: Component = () => {
                 {(b) => {
                   const h = Math.max(1, b.yBot - b.yTop - 0.5);
                   const w =
-                    b.volume > 0
-                      ? Math.max(2, (b.volume / lay().maxVol) * (HIST_WIDTH - 4))
-                      : 0;
+                    b.volume > 0 ? Math.max(2, (b.volume / lay().maxVol) * (HIST_WIDTH - 4)) : 0;
                   const x = HIST_WIDTH - w;
                   // Token-driven via CSS vars so light/void themes recolor the
                   // histogram without re-running this memo.
@@ -345,9 +340,7 @@ export const VolumeProfileOverlay: Component = () => {
                 </div>
                 <div>
                   <span class="text-text-faint">POC</span>{' '}
-                  <span class="text-accent">
-                    {formatVpPrice(lay().profile.poc ?? NaN)}
-                  </span>
+                  <span class="text-accent">{formatVpPrice(lay().profile.poc ?? NaN)}</span>
                 </div>
                 <div>
                   <span class="text-text-faint">VA</span>{' '}
@@ -358,9 +351,7 @@ export const VolumeProfileOverlay: Component = () => {
                 </div>
                 <div>
                   <span class="text-text-faint">Σ</span>{' '}
-                  <span class="text-text">
-                    {formatVpVolume(lay().profile.totalVolume)}
-                  </span>
+                  <span class="text-text">{formatVpVolume(lay().profile.totalVolume)}</span>
                 </div>
               </div>
             </div>

@@ -27,6 +27,7 @@
 
 import { type Component, Show, createEffect, createSignal, onCleanup } from 'solid-js';
 import { store, isPanelOpen } from '../store';
+import { barPlane } from '../stores/bars';
 import { FloatableShell } from './panels/FloatableShell';
 import { formatExtraPrice } from './extras/format';
 import { displayedLastPrice } from './extras/quote';
@@ -58,14 +59,16 @@ export const PricePanel: Component = () => {
 
   const price = () => {
     const tick = store.telemetry?.lastTick;
-    const bars = store.bars;
-    // Live tick is stream-scoped: ignore it when it belongs to a previous
-    // symbol (symbol switch before the first new tick arrives).
+    // Prefer the narrow plane tip — it updates on every live tick without
+    // pulling the full store.bars array into the reactive graph.
+    const tip = barPlane.tip;
     const tickPrice =
-      tick && (tick.symbol === undefined || tick.symbol === store.symbol) && Number.isFinite(tick.price)
+      tick &&
+      (tick.symbol === undefined || tick.symbol === store.symbol) &&
+      Number.isFinite(tick.price)
         ? (tick.price as number)
         : NaN;
-    const last = bars.length ? bars[bars.length - 1]?.close : NaN;
+    const last = tip?.close ?? (barPlane.length ? barPlane.bars[barPlane.length - 1]?.close : NaN);
     return displayedLastPrice({
       tickPrice,
       barClose: Number.isFinite(last) ? (last as number) : NaN,

@@ -27,6 +27,7 @@
 import { type Component, Show } from 'solid-js';
 import { useNow } from '../clock';
 import { store } from '../../store';
+import { barPlane } from '../../stores/bars';
 import { displayedLastPrice } from './quote';
 import { trendOverTicks } from './trend';
 import { formatExtraPrice } from './format';
@@ -53,8 +54,8 @@ export const CurrentPriceCard: Component = () => {
       Number.isFinite(tick.price)
         ? (tick.price as number)
         : NaN;
-    const bars = store.bars;
-    const last = bars.length ? bars[bars.length - 1]?.close : NaN;
+    const tip = barPlane.tip;
+    const last = tip?.close ?? (barPlane.length ? barPlane.bars[barPlane.length - 1]?.close : NaN);
     return displayedLastPrice({
       tickPrice,
       barClose: Number.isFinite(last) ? (last as number) : NaN,
@@ -63,15 +64,14 @@ export const CurrentPriceCard: Component = () => {
   };
   const price = () => livePrice();
   /** Trend head is the live tick when available — the arrow reacts to every tick, not just bar closes. */
-  const trend = () => trendOverTicks(store.bars, store.extras.priceCard.tickLength, livePrice());
+  const trend = () => trendOverTicks(barPlane.bars, store.extras.priceCard.tickLength, livePrice());
   /**
    * Left name badge: remaining time to the current-bar close (dash-prefixed,
    * e.g. `-4:32`); live local clock while no bars are loaded. Tooltip carries
    * local + UTC time.
    */
   const badge = () => {
-    const bars = store.bars;
-    const last = bars.length ? bars[bars.length - 1] : undefined;
+    const last = barPlane.tip ?? (barPlane.length ? barPlane.bars[barPlane.length - 1] : undefined);
     const remaining =
       last && Number.isFinite(last.time)
         ? barCloseRemainingMs(last.time * 1000, store.interval, now())
@@ -85,9 +85,13 @@ export const CurrentPriceCard: Component = () => {
     return { text: formatClockLocal(d), title: tip };
   };
   return (
-    <Show when={store.extras.priceCard.enabled && store.bars.length > 0}>
+    <Show when={store.extras.priceCard.enabled && barPlane.length > 0}>
       <div class="axis-extra-price" data-testid="axis-extra-price">
-        <span class="axis-extra-price-badge" title={badge().title} data-testid="axis-extra-price-badge">
+        <span
+          class="axis-extra-price-badge"
+          title={badge().title}
+          data-testid="axis-extra-price-badge"
+        >
           {badge().text}
         </span>
         <span class="axis-extra-price-value">{formatExtraPrice(price())}</span>

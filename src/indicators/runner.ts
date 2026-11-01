@@ -106,6 +106,7 @@ import type { RunResult as EngineRunResult, PlotSample } from '../plugins/types'
 import { classifyTransport } from '../ui/telemetry';
 import { reportUiError } from '../ui/boot-errors';
 import { isScriptRunBlocked } from '../editor/preevaluate';
+import { barPlane } from '../stores/bars';
 import {
   beginRunEpoch,
   claimRunStatus,
@@ -119,6 +120,14 @@ import {
   releaseRunStatus,
   type NormalizedRunResult,
 } from './run-helpers';
+import {
+  buildRunCacheKey,
+  fingerprintValue,
+  getRunCache,
+  resetRunCache,
+  runCacheEnabled,
+  setRunCache,
+} from './run-cache';
 import { resolveScriptDisplayName } from './run-target';
 import { buildOverlayPayloads, type OverlayLine, type OverlayOhlc } from './apply-overlays';
 import { applyPlotsAndMarkers } from './apply-mutations';
@@ -150,6 +159,11 @@ let ohlcvTimesCache: {
 /** @internal test helper */
 export function _resetOhlcvTimesCacheForTests(): void {
   ohlcvTimesCache = null;
+}
+
+/** @internal test helper */
+export function _resetRunCacheForTests(): void {
+  resetRunCache();
 }
 
 /**
@@ -616,6 +630,11 @@ export interface RunOptions {
   /** Abort in-flight `engine.run` (Cancel on an optimisation study). */
   signal?: AbortSignal;
   /**
+   * When true, skip the in-memory `(scriptId, barsGen, inputs)` result cache.
+   * Useful for cache-busting comparisons and diagnostics.
+   */
+  disableCache?: boolean;
+  /**
    * Bar window override. When set, used instead of `store.bars` so holdout /
    * walk-forward slices do not mutate the chart series.
    */
@@ -910,6 +929,73 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
       /* publish / resolve optional */
     }
     const windowBars = applyRollingWindow(bars);
+
+    // Result memoization. Recompute the key from the resolved inputs so source
+    // ref expansions are part of the fingerprint; bar generation + length keep
+    // the cache invalidating on any data change.
+    let cacheKey: string | null = null;
+    let cacheAllowed = false;
+    if (
+      !isolate &&
+      !opts.liveTick &&
+      !opts.precomputedResult &&
+      !opts.disableCache &&
+      (!opts.signal || !opts.signal.aborted) &&
+      runCacheEnabled()
+    ) {
+      const barGen = barPlane.gen;
+      cacheKey = buildRunCacheKey({
+        engineId: engine.id,
+        engineEndpoint: (engine as { endpoint?: string }).endpoint ?? '',
+        scriptId: indicatorId || EDITOR_RUN_KEY,
+        scriptSource: scriptForEngine,
+        inputs: inputs ?? {},
+        config: config ?? {},
+        barsGen: barGen,
+        barsLength: windowBars.length,
+        librariesKey: fingerprintValue(
+          (engineLibraries ?? []).map((l) => `${l.namespace}/${l.name}/${l.version}`),
+        ),
+        isolate,
+        liveTick: !!opts.liveTick,
+      });
+      const cached = getRunCache(cacheKey);
+      if (cached) {
+        const cacheTransport =
+          cached.meta?.transport === 'ws'
+            ? 'ws'
+            : cached.meta?.transport === 'local'
+              ? 'local'
+              : transport;
+        if (!silent) {
+          setTelemetryPlane('engine', {
+            id: engine.id,
+            name: engine.name,
+            transport,
+            state: 'open',
+            detail: mode,
+            error: null,
+          });
+          setTelemetryState('engine', 'open', {
+            latencyMs: 0,
+            detail: `${mode} · ${cacheTransport} · cache`,
+            error: null,
+            transport: cacheTransport,
+          });
+          finishInteractiveStatus(epoch, silent, 'ready', 'Completed from cache');
+        }
+        return {
+          ...cached,
+          meta: {
+            ...cached.meta,
+            ms: cached.meta?.ms ?? 0,
+            transport: cacheTransport,
+          },
+        };
+      }
+      cacheAllowed = true;
+    }
+
     // Default is WebSocket. Engine-owned REST sessions are only for an
     // explicit preferWs: false. Otherwise the chart window goes over /ws/run.
     const preferWs = (config as { preferWs?: boolean }).preferWs !== false;
@@ -954,6 +1040,14 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
         : null) ?? performance.now() - t0;
     // Normalize first so callers always get stable series/plots shapes
     const result = normalizeEngineResult(rawResult, ms);
+    if (
+      cacheAllowed &&
+      cacheKey &&
+      result.status === 'success' &&
+      result.meta?.executionContext !== 'tip'
+    ) {
+      setRunCache(cacheKey, result);
+    }
     // Superseded by a newer run — keep payload; clear stuck Running… if we own it
     if (epoch != null && !isRunEpochCurrent(epoch)) {
       finishInteractiveStatus(epoch, silent, 'ready', 'Run superseded');

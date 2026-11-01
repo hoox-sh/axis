@@ -162,6 +162,13 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
   let reflowRaf = 0;
   /** Coalesce LWC crosshair → store (Data Window) to one update per frame. */
   const crosshairRaf = createRafCoalescer();
+  /**
+   * Reactive view of whether the user is currently panning/zooming the chart.
+   * `manager.isRanging()` is imperative, so we poll it only when the host is
+   * active. Overlay effects read this signal to suppress full series rewrites
+   * during gestures and flush the latest state once the gesture ends.
+   */
+  const [isRanging, setIsRanging] = createSignal(false);
 
   const slotId = () => props.slotId || 'main';
   const isActive = () => props.active !== false;
@@ -343,11 +350,7 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
       if (isActive()) safePaint(existing, { fit: true }, 'Initial chart paint');
       else if (alive) {
         // Inactive: paint this manager without making it getManager().
-        safePaint(
-          existing,
-          { fit: true, manager, slotId: id },
-          'Inactive slot paint',
-        );
+        safePaint(existing, { fit: true, manager, slotId: id }, 'Inactive slot paint');
       }
     } else if (isActive() && store.bars.length) {
       safePaint(store.bars, { fit: true }, 'Initial chart paint');
@@ -372,10 +375,25 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     window.addEventListener('resize', onWin);
     window.addEventListener('axis-chart-reflow', onWin);
 
+    // Poll the imperative ranging flag at a low cadence and expose it as a
+    // reactive signal. Overlay effects can then suppress full rewrites during
+    // pan/zoom and flush the latest state once the gesture ends.
+    const rangingTimer = setInterval(() => {
+      if (!localManager) return;
+      try {
+        const next = localManager.isRanging();
+        if (next !== isRanging()) setIsRanging(next);
+      } catch {
+        /* ignore */
+      }
+    }, 100);
+
     onCleanup(() => {
       ro?.disconnect();
       window.removeEventListener('resize', onWin);
       window.removeEventListener('axis-chart-reflow', onWin);
+      clearInterval(rangingTimer);
+      setIsRanging(false);
     });
   });
 
@@ -538,11 +556,13 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     void store.bars.length;
     void store.lastValueNamesVisible;
 
+    void isRanging();
     const mgr = localManager || getManager();
     if (!mgr) return;
 
     untrack(() => {
       if (!alive) return;
+      if (isRanging()) return;
       try {
         if (!enabled || !compareSym || !compareBars.length || !store.bars.length) {
           clearCompareOverlay(mgr);
@@ -585,11 +605,13 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     void store.lastValueLabelsVisible;
     void store.lastValueNamesVisible;
 
+    void isRanging();
     const mgr = localManager || getManager();
     if (!mgr) return;
 
     untrack(() => {
       if (!alive) return;
+      if (isRanging()) return;
       try {
         const lines: OnchainLineSpec[] = [];
         for (const att of tracked) {
@@ -645,11 +667,13 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     void store.chartDataGen;
     void store.bars.length;
 
+    void isRanging();
     const mgr = localManager || getManager();
     if (!mgr) return;
 
     untrack(() => {
       if (!alive) return;
+      if (isRanging()) return;
       try {
         if (!events?.length || !eventsVisible) {
           clearOnchainEventMarkers(mgr);

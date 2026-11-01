@@ -44,7 +44,7 @@
 import type { PlotSample, RunResult as EngineRunResult } from '../plugins/types';
 import type { Bar } from '../store/types';
 import { barsForPine } from '../data/parse-bars';
-import { parseEngineJson } from './json-sanitize';
+import { parseEngineJson, parseEngineJsonAsync } from './json-sanitize';
 import { mapEnginePayload, payloadEngineTimes } from './result-mapper';
 import { combineAbortSignals } from '../utils/fetch-timeout';
 
@@ -67,7 +67,10 @@ export const RUN_BATCH_MAX_SCRIPTS = 8;
  * instead of batching only the first {@link RUN_BATCH_MAX_SCRIPTS} and
  * running the rest as singles.
  */
-export function splitBatchScripts<T>(scripts: readonly T[], size: number = RUN_BATCH_MAX_SCRIPTS): T[][] {
+export function splitBatchScripts<T>(
+  scripts: readonly T[],
+  size: number = RUN_BATCH_MAX_SCRIPTS,
+): T[][] {
   const n = Math.max(1, Math.floor(size) || 1);
   const out: T[][] = [];
   for (let i = 0; i < scripts.length; i += n) out.push(scripts.slice(i, i + n));
@@ -234,7 +237,7 @@ export async function runBatch(opts: BatchRunOptions): Promise<BatchRunOutcome |
   const text = await res.text();
   let parsed: Record<string, unknown> | null = null;
   try {
-    const j: unknown = text.trim() ? parseEngineJson(text) : null;
+    const j: unknown = text.trim() ? await parseEngineJsonAsync(text) : null;
     if (isRecord(j)) parsed = j;
   } catch {
     parsed = null;
@@ -264,9 +267,7 @@ export async function runBatch(opts: BatchRunOptions): Promise<BatchRunOutcome |
         id,
         ok: false,
         error:
-          typeof raw.message === 'string' && raw.message
-            ? raw.message
-            : 'script execution failed',
+          typeof raw.message === 'string' && raw.message ? raw.message : 'script execution failed',
       });
       continue;
     }

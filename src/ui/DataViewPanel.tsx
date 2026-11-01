@@ -28,8 +28,10 @@
 
 import { type Component, For, Show, createMemo, untrack } from 'solid-js';
 import { store, isPanelOpen } from '../store';
+import { barPlane } from '../stores/bars';
 import { buildDataViewRows } from '../results/dataview';
 import type { RunResult } from '../indicators/runner';
+import type { Bar } from '../store/types';
 import { onchainManagerState } from '../onchain/manager';
 import { FloatableShell } from './panels/FloatableShell';
 import type { PlotSample } from '../plugins/types';
@@ -46,7 +48,7 @@ export const DataViewPanel: Component = () => {
     // Depend on drawings so place/drag updates refresh values
     void store.drawings;
     void store.chartDataGen;
-    void store.bars.length;
+    void barPlane.length;
     void store.crosshair?.time;
     void store.crosshair?.barIndex;
     // Touch each on-chain field through the store proxy for fine-grained refresh
@@ -64,8 +66,9 @@ export const DataViewPanel: Component = () => {
       loading: s.loading,
       error: s.error,
     }));
-    // Do not track the 45k-bar array identity — length + gen cover reloads.
-    const bars = untrack(() => store.bars);
+    // Read from the narrow bar plane so the memo does not couple to the
+    // monolithic store.bars array.
+    const bars = untrack(() => barPlane.bars as Bar[]);
     return buildDataViewRows({
       bars,
       time: store.crosshair?.time,
@@ -90,7 +93,7 @@ export const DataViewPanel: Component = () => {
       <FloatableShell id="dataview" testId="axis-dataview">
         <div class="flex-1 overflow-y-auto min-h-0 text-[12px]">
           <Show
-            when={store.bars.length > 0}
+            when={barPlane.length > 0}
             fallback={
               <div class="axis-empty-state text-[12px] text-text-dim py-2">
                 No bar under crosshair
@@ -109,38 +112,38 @@ export const DataViewPanel: Component = () => {
               }
             >
               <div>
-            <Section label="Bar">
-              <For each={metaRows()}>{(row) => <Row row={row} />}</For>
-            </Section>
-            <Section label="OHLCV">
-              <For each={ohlcvRows()}>{(row) => <Row row={row} />}</For>
-            </Section>
-            <Show when={seriesRows().length > 0}>
-              <Section label="Plots">
-                <For each={seriesRows()}>{(row) => <Row row={row} />}</For>
-              </Section>
-            </Show>
-            <Show when={drawingRows().length > 0}>
-              <Section label="Drawings">
-                <For each={drawingRows()}>{(row) => <Row row={row} />}</For>
-              </Section>
-            </Show>
-            <Show when={onchainRows().length > 0}>
-              <Section label="On-Chain">
-                <For each={onchainRows()}>{(row) => <Row row={row} />}</For>
-              </Section>
-            </Show>
-            <Show
-              when={
-                seriesRows().length === 0 &&
-                drawingRows().length === 0 &&
-                onchainRows().length === 0
-              }
-            >
-              <div class="axis-empty-state px-2 py-2 text-[12px] text-text-dim">
-                Run a script, place drawings, or attach on-chain series to see values here.
-              </div>
-            </Show>
+                <Section label="Bar">
+                  <For each={metaRows()}>{(row) => <Row row={row} />}</For>
+                </Section>
+                <Section label="OHLCV">
+                  <For each={ohlcvRows()}>{(row) => <Row row={row} />}</For>
+                </Section>
+                <Show when={seriesRows().length > 0}>
+                  <Section label="Plots">
+                    <For each={seriesRows()}>{(row) => <Row row={row} />}</For>
+                  </Section>
+                </Show>
+                <Show when={drawingRows().length > 0}>
+                  <Section label="Drawings">
+                    <For each={drawingRows()}>{(row) => <Row row={row} />}</For>
+                  </Section>
+                </Show>
+                <Show when={onchainRows().length > 0}>
+                  <Section label="On-Chain">
+                    <For each={onchainRows()}>{(row) => <Row row={row} />}</For>
+                  </Section>
+                </Show>
+                <Show
+                  when={
+                    seriesRows().length === 0 &&
+                    drawingRows().length === 0 &&
+                    onchainRows().length === 0
+                  }
+                >
+                  <div class="axis-empty-state px-2 py-2 text-[12px] text-text-dim">
+                    Run a script, place drawings, or attach on-chain series to see values here.
+                  </div>
+                </Show>
               </div>
             </Show>
           </Show>

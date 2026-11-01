@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/indicators"
-description: "src/indicators contains IndicatorCard.tsx, IndicatorPanel.tsx, apply-context.ts, and 14 more files."
+description: "src/indicators contains IndicatorCard.tsx, IndicatorPanel.tsx, apply-context.ts, and 15 more files."
 resource: "src/indicators"
 tags: [code, indicators]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-26T04:05:35Z
+  at: 2026-11-01T17:22:22Z
 sources:
   - id: tree
     resource: "src/indicators"
@@ -30,9 +30,10 @@ okf_lock: generated
 * `apply-strategy.ts` — StrategyApplyContext, StrategyMarkerPlan, applyStrategyMarkers, buildStrategyMarkerPlan
 * `detach.ts` — detachIndicatorFromChart
 * `reapply.ts` — REAPPLY_MAX_CONCURRENT, ReapplyChartScriptsOpts, _resetBatchRouteMemoForTests, _resetReapplyGuardForTests, listReapplicableScripts, reapplyChartScripts
+* `run-cache.ts` — buildRunCacheKey, fingerprintValue, getRunCache, hashString, resetRunCache, runCacheEnabled, setRunCache, setRunCacheOptions
 * `run-helpers.ts` — NormalizedRunResult, _resetRunEpochForTests, beginRunEpoch, claimRunStatus, coercePlotSample, coerceSeriesSample, currentRunEpoch, formatRunError, getRunStatusEpoch, isInteractiveRunInFlight, isRunEpochCurrent, lineDataHasSample
 * `run-target.ts` — EditorRunMode, countChartScriptsForEditor, editorHasChartInstance, extractScriptTitle, findChartScriptForEditor, normalizeScriptSource, pickPreferredScript, resolveScriptDisplayName, runFromEditor
-* `runner.ts` — NormalizedRunResult, RunOptions, RunResult, StrategyPropsPrecedenceOpts, _resetOhlcvTimesCacheForTests, _resetRunEpochForTests, alignSeriesMapToTimes, alignSeriesToTimes, applyRollingWindow, beginRunEpoch, claimRunStatus, coercePlotSample
+* `runner.ts` — NormalizedRunResult, RunOptions, RunResult, StrategyPropsPrecedenceOpts, _resetOhlcvTimesCacheForTests, _resetRunCacheForTests, _resetRunEpochForTests, alignSeriesMapToTimes, alignSeriesToTimes, applyRollingWindow, beginRunEpoch, claimRunStatus
 * `script-meta.ts` — EngineFamily, LastRunStatus, LiveRerunOn, ScriptKind, activeChartContext, cycleLiveRerunOn, detectDeclaredOverlay, detectPineVersion, detectScriptKind, engineFamily, engineFamilyLabel, formatScriptUpdatedAt
 * `visibility.ts` — clearScriptChartOverlays, setScriptChartVisible, toggleScriptChartVisible
 
@@ -54,6 +55,7 @@ okf_lock: generated
 * [src/results](/code/src/results.md)
 * [src/storage](/code/src/storage.md)
 * [src/store](/code/src/store.md)
+* [src/stores](/code/src/stores.md)
 * [src/streams](/code/src/streams.md)
 * [src/ui](/code/src/ui.md)
 * [src/ui/panels](/code/src/ui/panels.md)

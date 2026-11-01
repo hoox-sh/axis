@@ -28,14 +28,22 @@
  * @module engines/json-sanitize
  */
 
+import { perfMeasureAsync, perfMeasureSync } from '../perf/telemetry';
+
+/**
+ * Multi-kilobyte threshold for off-thread parsing. Small payloads stay on the
+ * main thread to avoid worker startup latency; large batches / full windows pay
+ * the serialization cost to keep the UI responsive.
+ */
+const ASYNC_PARSE_THRESHOLD = 256 * 1024;
+
 /**
  * One alternation, applied left-to-right: a complete JSON string literal is
  * matched first and returned verbatim; bare non-finite tokens are replaced.
  * The string branch is unrolled (`[^"\\]*(?:\\.[^"\\]*)*`) to avoid
  * catastrophic backtracking on multi-megabyte payloads.
  */
-const NON_FINITE_OR_STRING =
-  /"[^"\\]*(?:\\.[^"\\]*)*"|-Infinity\b|\bInfinity\b|\bNaN\b/g;
+const NON_FINITE_OR_STRING = /"[^"\\]*(?:\\.[^"\\]*)*"|-Infinity\b|\bInfinity\b|\bNaN\b/g;
 
 /**
  * Replace bare `NaN`, `Infinity` and `-Infinity` tokens with `null`.
@@ -54,5 +62,85 @@ export function sanitizeNonFiniteJson(text: string): string {
  * Throws `SyntaxError` on invalid JSON (same contract as `JSON.parse`).
  */
 export function parseEngineJson(text: string): unknown {
-  return JSON.parse(sanitizeNonFiniteJson(text));
+  return perfMeasureSync('axis:parseEngineJson', () => JSON.parse(sanitizeNonFiniteJson(text)));
+}
+
+// Shared module worker for off-thread parsing. Kept alive across requests to
+// avoid repeated startup cost; recreated if it terminates or errors out.
+let sharedParseWorker: Worker | null = null;
+let sharedParseId = 0;
+const sharedParsePending = new Map<
+  number,
+  { resolve: (value: unknown) => void; reject: (err: Error) => void }
+>();
+
+function getSharedParseWorker(): Worker | null {
+  if (typeof Worker === 'undefined' || typeof import.meta.url === 'undefined') return null;
+  if (!sharedParseWorker) {
+    try {
+      const w = new Worker(new URL('./json-parse-worker.ts', import.meta.url), { type: 'module' });
+      w.onmessage = (event: MessageEvent<{ id?: number; result?: unknown; error?: string }>) => {
+        const { id, result, error } = event.data ?? {};
+        const p = typeof id === 'number' ? sharedParsePending.get(id) : undefined;
+        if (!p || typeof id !== 'number') return;
+        sharedParsePending.delete(id);
+        if (typeof error === 'string') p.reject(new SyntaxError(error));
+        else p.resolve(result);
+      };
+      w.onerror = () => {
+        // Worker runtime error — terminate to force a fresh worker on next call.
+        try {
+          sharedParseWorker?.terminate();
+        } catch {
+          /* ignore */
+        }
+        sharedParseWorker = null;
+      };
+      sharedParseWorker = w;
+    } catch {
+      sharedParseWorker = null;
+    }
+  }
+  return sharedParseWorker;
+}
+
+/**
+ * Asynchronous engine-response parser. Runs {@link JSON.parse} off the main
+ * thread for payloads above the threshold, falling back to the synchronous
+ * {@link parseEngineJson} for small payloads or environments without workers.
+ */
+export function parseEngineJsonAsync(text: string): Promise<unknown> {
+  return perfMeasureAsync('axis:parseEngineJson', async () => {
+    if (!text || text.length < ASYNC_PARSE_THRESHOLD) {
+      return parseEngineJson(text);
+    }
+    const worker = getSharedParseWorker();
+    if (!worker) {
+      return parseEngineJson(text);
+    }
+    const id = ++sharedParseId;
+    return new Promise<unknown>((resolve, reject) => {
+      sharedParsePending.set(id, { resolve, reject });
+      try {
+        worker.postMessage({ id, text });
+      } catch (err) {
+        sharedParsePending.delete(id);
+        reject(err instanceof Error ? err : new Error(String(err)));
+      }
+    });
+  });
+}
+
+/** @internal test helper — terminate shared worker and drop pending parses. */
+export function _resetParseEngineJsonForTests(): void {
+  if (sharedParseWorker) {
+    try {
+      sharedParseWorker.terminate();
+    } catch {
+      /* ignore */
+    }
+  }
+  sharedParseWorker = null;
+  sharedParsePending.clear();
+  sharedParseId = 0;
 }

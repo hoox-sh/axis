@@ -67,7 +67,8 @@ import { barsForPine } from '../data/parse-bars';
 import { store, setTelemetryPlane, setTelemetryState, setStatus, appendLog } from '../store';
 import { registry } from '../plugins/registry';
 import { scriptHasPineAlertCalls } from '../alerts/pine';
-import { parseEngineJson } from './json-sanitize';
+import { parseEngineJson, parseEngineJsonAsync } from './json-sanitize';
+import { normalizeEngineResult } from '../indicators/run-helpers';
 import { healthFromBody, type EngineHealth } from './health';
 import { isAbortLike } from '../utils/errors';
 import { getJson, setJson } from '../utils/storage';
@@ -733,7 +734,8 @@ export const serverEngine: EnginePlugin = {
           throw new SyntaxError('empty body');
         }
         // Python json.dumps can emit bare NaN; shared with the WS path.
-        payload = parseEngineJson(text);
+        // Large payloads parse off the main thread to keep chart interactivity.
+        payload = await parseEngineJsonAsync(text);
         if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
           throw new SyntaxError('expected JSON object');
         }
@@ -1166,20 +1168,24 @@ export const pyodideEngine: EnginePlugin & {
           forwardInputs ? inputBag : undefined,
         );
       }
-      const result = JSON.parse(resultJson) as RunResult & {
-        overlay?: unknown;
-        script_name?: string;
-      };
-      const overlay = normalizeOverlayFlag(result.overlay ?? result.meta?.overlay);
-      const scriptName = result.script_name || result.meta?.script_name || 'plot';
+      // Run the Pyodide JSON string through the same sanitizer/telemetry path
+      // as network engines, and lift it into the canonical NormalizedRunResult
+      // shape so downstream apply stages see one contract regardless of source.
+      const raw = (await parseEngineJsonAsync(resultJson)) as Record<string, unknown>;
+      const localMs = performance.now() - t0;
+      const normalized = normalizeEngineResult(raw, localMs);
+      const overlay = normalizeOverlayFlag(normalized.meta?.overlay);
+      const scriptName = normalized.meta?.script_name
+        ? String(normalized.meta.script_name)
+        : 'plot';
       return {
-        ...result,
-        series: result.series || {},
-        events: result.events || [],
+        ...normalized,
+        series: normalized.series || {},
+        events: normalized.events || [],
         meta: {
-          ...(result.meta || {}),
-          ms: performance.now() - t0,
-          ...(overlay !== undefined ? { overlay } : {}),
+          ...normalized.meta,
+          ms: localMs,
+          overlay,
           script_name: scriptName,
           transport: 'local',
           ...(unsupported.length ? { unsupported } : {}),

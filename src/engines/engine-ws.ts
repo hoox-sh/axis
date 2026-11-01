@@ -39,7 +39,7 @@
  * @module engines/engine-ws
  */
 
-import { parseEngineJson } from './json-sanitize';
+import { parseEngineJson, parseEngineJsonAsync } from './json-sanitize';
 import { BoundedMap } from '../utils/bounded-map';
 
 /** Payload sent on the `/ws/run` socket for one evaluation. */
@@ -263,7 +263,7 @@ class EngineWsClient {
 
       ws.onmessage = (ev) => {
         if (!owns()) return;
-        this.handleMessage(ev?.data);
+        void this.handleMessage(ev?.data);
       };
     });
     this.connectPromise = attempt;
@@ -282,7 +282,7 @@ class EngineWsClient {
    * Engine error frames resolve (not reject) so callers never see an uncaught
    * rejection from a protocol-level error payload.
    */
-  private handleMessage(data: unknown): void {
+  private async handleMessage(data: unknown): Promise<void> {
     let raw: string;
     try {
       if (typeof data === 'string') {
@@ -295,7 +295,7 @@ class EngineWsClient {
       }
       if (!raw || !raw.trim()) return;
       // Same NaN/Infinity normalization as the REST path (string literals kept).
-      const msg = parseEngineJson(raw);
+      const msg = await parseEngineJsonAsync(raw);
       if (!msg || typeof msg !== 'object' || Array.isArray(msg)) return;
       const rec = msg as Record<string, unknown>;
       if (rec.type === 'pong') return;
@@ -347,11 +347,7 @@ class EngineWsClient {
    * has no cancel frame, so the remote evaluation may still finish; its reply
    * is then ignored (no pending entry).
    */
-  run(
-    req: EngineWsRunRequest,
-    timeoutMs: number,
-    signal?: AbortSignal,
-  ): Promise<EngineWsResult> {
+  run(req: EngineWsRunRequest, timeoutMs: number, signal?: AbortSignal): Promise<EngineWsResult> {
     if (this.isDead) {
       return Promise.reject(new Error('WebSocket client marked dead'));
     }

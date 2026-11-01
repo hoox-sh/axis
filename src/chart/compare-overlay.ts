@@ -56,6 +56,16 @@ export const COMPARE_PRICE_SCALE_ID = 'left';
 export type TimedClose = { time: number; close: number };
 export type LinePoint = { time: number; value: number };
 
+/**
+ * Last data refs applied per manager. Lets `applyCompareOverlay` skip an
+ * identical `series.setData` when ChartHost re-runs for unrelated signals
+ * (label prefs, chartDataGen bumps, etc.).
+ */
+const appliedCompareByManager = new WeakMap<
+  PaneManager,
+  { compare: LinePoint[]; mainPercent: LinePoint[] }
+>();
+
 export type CompareMode = 'percent' | 'absolute';
 
 export type AlignedPair = {
@@ -68,9 +78,7 @@ export type AlignedPair = {
  * Map bars (or close series) to timed closes. Skips non-finite closes.
  * Times are left as-is (expected unix seconds).
  */
-export function extractCloses(
-  bars: ReadonlyArray<{ time: number; close: number }>,
-): TimedClose[] {
+export function extractCloses(bars: ReadonlyArray<{ time: number; close: number }>): TimedClose[] {
   const out: TimedClose[] = [];
   for (const b of bars) {
     if (!Number.isFinite(b.time) || !Number.isFinite(b.close)) continue;
@@ -124,7 +132,7 @@ export function toPercentChange(values: ReadonlyArray<number>): number[] {
   if (!values.length) return [];
   const v0 = values[0]!;
   if (!Number.isFinite(v0) || v0 === 0) return [];
-  return values.map((v) => ((v / v0) - 1) * 100);
+  return values.map((v) => (v / v0 - 1) * 100);
 }
 
 /**
@@ -150,8 +158,8 @@ export function normalizeToPercent(
   const main: LinePoint[] = [];
   const compare: LinePoint[] = [];
   for (const row of aligned) {
-    main.push({ time: row.time, value: ((row.main / m0) - 1) * 100 });
-    compare.push({ time: row.time, value: ((row.compare / c0) - 1) * 100 });
+    main.push({ time: row.time, value: (row.main / m0 - 1) * 100 });
+    compare.push({ time: row.time, value: (row.compare / c0 - 1) * 100 });
   }
   return { main, compare, baselineTime: aligned[0]!.time };
 }
@@ -280,6 +288,7 @@ let compareDataMemo: CompareDataMemo | null = null;
 /** Remove compare series keys from the price pane (no-op if missing). */
 export function clearCompareOverlay(manager: PaneManager | undefined | null): void {
   if (!manager) return;
+  appliedCompareByManager.delete(manager);
   const pane = manager.getPane('price');
   if (!pane) return;
   for (const key of [COMPARE_SERIES_KEY, COMPARE_MAIN_PCT_KEY]) {
@@ -392,16 +401,21 @@ export function applyCompareOverlay(
 
   const mode = opts.mode === 'absolute' ? 'absolute' : 'percent';
   const normalizeMain = !!opts.normalizeMain && mode === 'percent';
-  const { compare, mainPercent } = buildCompareSeriesData(
-    opts.mainBars,
-    opts.compareBars,
-    mode,
-    normalizeMain,
-  );
+  const built = buildCompareSeriesData(opts.mainBars, opts.compareBars, mode, normalizeMain);
+  const { compare, mainPercent } = built;
 
   if (!compare.length) {
     clearCompareOverlay(manager);
     return;
+  }
+
+  // Skip the expensive setData calls when the built data is identical to the
+  // last paint. `buildCompareSeriesData` already memoizes; this short-circuits
+  // the LWC write and temporary `{time,value}` array allocation.
+  const applied = appliedCompareByManager.get(manager);
+  const skipData = applied && applied.compare === compare && applied.mainPercent === mainPercent;
+  if (!skipData) {
+    appliedCompareByManager.set(manager, { compare, mainPercent });
   }
 
   const color = opts.color || COMPARE_COLOR;
@@ -409,18 +423,19 @@ export function applyCompareOverlay(
   // Dual %: both % lines share the left scale.
   const scaleId = COMPARE_PRICE_SCALE_ID;
 
-  const title =
-    mode === 'percent' ? `${opts.symbol} %` : opts.symbol;
+  const title = mode === 'percent' ? `${opts.symbol} %` : opts.symbol;
 
   const series = ensureCompareLine(manager, pane, COMPARE_SERIES_KEY, title, color, scaleId);
-  // Finite-only line data — LWC rejects NaN/Infinity
-  const compareData = compare
-    .filter((d) => Number.isFinite(d.time) && Number.isFinite(d.value))
-    .map((d) => ({ time: d.time as UTCTimestamp, value: d.value }));
-  try {
-    series.setData(compareData);
-  } catch {
-    /* disposed / thrash */
+  if (!skipData) {
+    // Finite-only line data — LWC rejects NaN/Infinity
+    const compareData = compare
+      .filter((d) => Number.isFinite(d.time) && Number.isFinite(d.value))
+      .map((d) => ({ time: d.time as UTCTimestamp, value: d.value }));
+    try {
+      series.setData(compareData);
+    } catch {
+      /* disposed / thrash */
+    }
   }
 
   if (normalizeMain && mainPercent.length) {
@@ -432,13 +447,15 @@ export function applyCompareOverlay(
       COMPARE_MAIN_PCT_COLOR,
       scaleId,
     );
-    const mainData = mainPercent
-      .filter((d) => Number.isFinite(d.time) && Number.isFinite(d.value))
-      .map((d) => ({ time: d.time as UTCTimestamp, value: d.value }));
-    try {
-      mainSeries.setData(mainData);
-    } catch {
-      /* disposed / thrash */
+    if (!skipData) {
+      const mainData = mainPercent
+        .filter((d) => Number.isFinite(d.time) && Number.isFinite(d.value))
+        .map((d) => ({ time: d.time as UTCTimestamp, value: d.value }));
+      try {
+        mainSeries.setData(mainData);
+      } catch {
+        /* disposed / thrash */
+      }
     }
   } else {
     const extra = pane.series[COMPARE_MAIN_PCT_KEY];
@@ -471,8 +488,7 @@ export async function fetchCompareBars(
 
   const limit = clampHistoryBars(store.historyBars);
   const configs = store.pluginsConfig || {};
-  const sourceCfg =
-    configs[pluginKey('source', sourceId)] || configs[sourceId] || {};
+  const sourceCfg = configs[pluginKey('source', sourceId)] || configs[sourceId] || {};
 
   const bars = await source.fetchHistorical({
     symbol: sym,

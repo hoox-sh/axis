@@ -58,6 +58,23 @@ export const ONCHAIN_EVENTS_SERIES_KEY = 'onchain_events';
 /** Hard cap — newest events win when over limit. */
 const MAX_ONCHAIN_EVENT_MARKERS = 200;
 
+/**
+ * Last event fingerprint applied per manager. Lets
+ * `applyOnchainEventMarkers` skip a full rebuild when ChartHost re-runs for
+ * unrelated signals with the same event set.
+ */
+const appliedOnchainEventsByManager = new WeakMap<PaneManager, string>();
+
+/** Cheap fingerprint of a sorted event list (length + first/last/mid keys). */
+function fingerprintEvents(events: OnchainEventInput[]): string {
+  const n = events.length;
+  if (!n) return '';
+  const first = events[0];
+  const last = events[n - 1];
+  const mid = events[Math.floor(n / 2)];
+  return `${n}|${first.time}:${first.type ?? ''}:${first.title ?? ''}|${mid?.time ?? ''}:${mid?.type ?? ''}:${mid?.title ?? ''}|${last.time}:${last.type ?? ''}:${last.title ?? ''}`;
+}
+
 export type OnchainEventMarker = {
   time: number;
   position: 'aboveBar' | 'belowBar';
@@ -106,9 +123,7 @@ function colorForEvent(ev: OnchainEventInput): string {
   return VOID.indigo;
 }
 
-function shapeForEvent(
-  ev: OnchainEventInput,
-): OnchainEventMarker['shape'] {
+function shapeForEvent(ev: OnchainEventInput): OnchainEventMarker['shape'] {
   const t = String(ev.type || '').toLowerCase();
   if (
     t.includes('liq') ||
@@ -119,12 +134,7 @@ function shapeForEvent(
   ) {
     return 'arrowDown';
   }
-  if (
-    t.includes('mint') ||
-    t.includes('deposit') ||
-    t.includes('inflow') ||
-    t.includes('long')
-  ) {
+  if (t.includes('mint') || t.includes('deposit') || t.includes('inflow') || t.includes('long')) {
     return 'arrowUp';
   }
   if (t.includes('transfer') || t.includes('swap')) {
@@ -154,9 +164,7 @@ function labelForEvent(ev: OnchainEventInput): string | undefined {
  * Map raw on-chain events to LWC-compatible marker specs.
  * Caps at {@link MAX_ONCHAIN_EVENT_MARKERS} (newest kept).
  */
-export function eventsToMarkers(
-  events: OnchainEventInput[],
-): OnchainEventMarker[] {
+export function eventsToMarkers(events: OnchainEventInput[]): OnchainEventMarker[] {
   if (!events?.length) return [];
 
   const valid: OnchainEventInput[] = [];
@@ -208,20 +216,12 @@ function ensureHostSeries(
   const pane = manager.getPane('price');
   if (!pane) return null;
 
-  const existing = pane.series[ONCHAIN_EVENTS_SERIES_KEY] as
-    | ISeriesApi<'Line'>
-    | undefined;
+  const existing = pane.series[ONCHAIN_EVENTS_SERIES_KEY] as ISeriesApi<'Line'> | undefined;
   if (existing) {
     return { pane, series: existing };
   }
 
-  const series = createLineSeries(
-    pane.chart,
-    '',
-    'rgba(0,0,0,0)',
-    undefined,
-    1,
-  );
+  const series = createLineSeries(pane.chart, '', 'rgba(0,0,0,0)', undefined, 1);
   try {
     series.applyOptions({
       color: 'rgba(0,0,0,0)',
@@ -254,6 +254,13 @@ export function applyOnchainEventMarkers(
     clearOnchainEventMarkers(manager);
     return;
   }
+
+  const fp = fingerprintEvents(events);
+  if (appliedOnchainEventsByManager.get(manager) === fp) {
+    // Event set is identical to the last paint; full rebuild would be a no-op.
+    return;
+  }
+  appliedOnchainEventsByManager.set(manager, fp);
 
   const markers = eventsToMarkers(events);
   if (!markers.length) {
@@ -334,11 +341,10 @@ export function applyOnchainEventMarkers(
  * Remove on-chain event marker host series + plugin from the price pane.
  * Safe no-op when missing. Does not clear strategy / plotshape markers.
  */
-export function clearOnchainEventMarkers(
-  manager: PaneManager | undefined | null,
-): void {
+export function clearOnchainEventMarkers(manager: PaneManager | undefined | null): void {
   if (!manager) return;
   hostByManager.delete(manager);
+  appliedOnchainEventsByManager.delete(manager);
 
   const pane = manager.getPane('price');
   if (!pane) return;
