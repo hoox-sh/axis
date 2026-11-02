@@ -7,7 +7,7 @@ tags: [code, shortcuts, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-21T20:46:56Z
+  at: 2026-11-02T12:12:17Z
 sources:
   - id: tree
     resource: "src/ui/shortcuts"
@@ -29,6 +29,7 @@ okf_lock: generated
 * `pine-snippets.ts` — PINE_SNIPPETS, PineSnippet, getPineSnippet
 * `registry.ts` — DEFAULT_BINDINGS, detectConflicts, getDefaultChord, getDisplay, resolveBinding
 * `runtime.ts` — DispatchRow, buildDispatchTable, dispatchShortcut, fireShortcutById, registerShortcut
+* `title.ts` — shortcutTitle
 * `types.ts` — Chord, ShortcutDef, ShortcutId, ShortcutOverrides, ShortcutRegistryShape
 * `use-record-chord.ts` — RecordChordApi, chordFromEvent, useRecordChord
 

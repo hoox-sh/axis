@@ -101,6 +101,7 @@ import {
 } from '../data/venue-picker';
 import { toggleBrowserFullscreen, toggleChartOnlyMode } from './presentation';
 import { liveBadgeTone, liveBadgeWord, liveIndicatorTitle } from './hud-model';
+import { shortcutTitle } from './shortcuts/title';
 import { engineFamilyForText } from '../plugins/engine-family';
 
 const INTERVALS = [...WATCHLIST_INTERVALS];
@@ -798,7 +799,11 @@ export const Topbar: Component<{
                     store.editor.open && store.editor.mode === 'docked' ? 'is-active' : ''
                   }`}
                   onClick={props.onToggleEditor}
-                  title="Toggle docked editor"
+                  title={shortcutTitle(
+                    'Toggle docked editor',
+                    'app.toggle-editor',
+                    store.shortcuts.overrides,
+                  )}
                   aria-label="Editor"
                   aria-pressed={!!(store.editor.open && store.editor.mode === 'docked')}
                   data-testid="axis-btn-editor"
