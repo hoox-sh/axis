@@ -7,7 +7,7 @@ tags: [code, mobile, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-27T03:35:42Z
+  at: 2026-11-02T12:30:34Z
 sources:
   - id: tree
     resource: "src/ui/mobile"
@@ -19,6 +19,7 @@ okf_lock: generated
 # Files
 
 * `MobileShell.tsx` — MobileChromeProps, MobileHeader, MobileOverlays, MobileTabBar
+* `header-quote.ts` — HeaderQuote, headerQuote
 
 # Packages
 
@@ -32,6 +33,7 @@ okf_lock: generated
 * [src/mcp](/code/src/mcp.md)
 * [src/sources](/code/src/sources.md)
 * [src/store](/code/src/store.md)
+* [src/stores](/code/src/stores.md)
 * [src/streams](/code/src/streams.md)
 * [src/ui](/code/src/ui.md)
 * [src/ui/panels](/code/src/ui/panels.md)
@@ -40,3 +42,4 @@ okf_lock: generated
 # Used by
 
 * [src](/code/src.md)
+* [tests](/code/tests.md)

@@ -64,6 +64,8 @@ import {
 import { DATA_MANAGER_SOURCE_ID } from '../../data/data-manager-source';
 import { startLive, stopLive, defaultStreamForSource } from '../../streams/multiplex';
 import { isReplayActive } from '../../chart/bar-replay';
+import { resolvePriceDecimals } from '../../chart/price-precision';
+import { barPlane } from '../../stores/bars';
 import { exitBarReplay } from '../BarReplayControls';
 import { Icons, PANEL_ICON } from '../icons';
 import { PANEL_META, type PanelId } from '../panels/types';
@@ -79,6 +81,7 @@ import { liveBadgeTone, liveIndicatorTitle } from '../hud-model';
 import { requestMcpConnect } from '../../mcp/host';
 import { mcpBridgeState, onMcpBridge } from '../../mcp/bridge';
 import { mcpNeedsConnect } from '../McpConnectCta';
+import { headerQuote } from './header-quote';
 
 /** Panels surfaced in the mobile Panels sheet (stack order, minus chrome strips). */
 const MOBILE_PANELS: readonly PanelId[] = [
@@ -201,6 +204,19 @@ export const MobileHeader: Component<MobileChromeProps> = (_props) => {
       activeCcxtExchange(),
     ),
   );
+  // Painted close only — same inputs as the tab title. Not store.bars, not a live tick.
+  const quote = createMemo(() => {
+    const bars = barPlane.bars;
+    const tip = barPlane.tip;
+    const n = bars.length;
+    const last = tip?.close != null ? tip : n > 0 ? bars[n - 1] : undefined;
+    const prev = n > 1 ? bars[n - 2] : undefined;
+    return headerQuote({
+      price: last?.close,
+      prevClose: prev?.close,
+      decimals: resolvePriceDecimals(store.priceScaleDecimals, { symbol: store.symbol, bars }),
+    });
+  });
 
   return (
     <>
@@ -227,6 +243,30 @@ export const MobileHeader: Component<MobileChromeProps> = (_props) => {
           <span class="truncate">{store.symbol || '—'}</span>
           <Icons.chevronDown size={12} />
         </button>
+        <Show when={quote()} keyed>
+          {(q) => (
+            <span
+              data-testid="axis-mobile-quote"
+              class="font-mono tabular-nums text-[12px] leading-none flex items-baseline gap-1 min-w-0"
+            >
+              <span class="truncate">{q.price}</span>
+              <Show when={q.change}>
+                <span
+                  style={{
+                    color:
+                      q.tone === 'up'
+                        ? 'var(--color-up)'
+                        : q.tone === 'down'
+                          ? 'var(--color-down)'
+                          : 'var(--color-text-faint)',
+                  }}
+                >
+                  {q.change}
+                </span>
+              </Show>
+            </span>
+          )}
+        </Show>
         <select
           class="axis-minterval"
           data-testid="axis-mobile-interval"

@@ -1,7 +1,7 @@
 ---
 type: "Code Module"
 title: "tests"
-description: "tests contains alerts-engine.test.ts, alerts-form.test.ts, alerts-format.test.ts, and 327 more files."
+description: "tests contains alerts-engine.test.ts, alerts-form.test.ts, alerts-format.test.ts, and 328 more files."
 resource: "tests"
 tags: [code, tests]
 status: stable
@@ -168,6 +168,7 @@ okf_lock: generated
 * `mcp-live.test.ts`
 * `merge-datasets.test.ts`
 * `mexc-http.test.ts`
+* `mobile-header-quote.test.ts`
 * `multiplex-engine-owned-paint.test.ts`
 * `multiplex-heavy-rerun.test.ts`
 * `multiplex-rerun.test.ts`
@@ -392,6 +393,7 @@ okf_lock: generated
 * [src/ui/extras](/code/src/ui/extras.md)
 * [src/ui/layers](/code/src/ui/layers.md)
 * [src/ui/library](/code/src/ui/library.md)
+* [src/ui/mobile](/code/src/ui/mobile.md)
 * [src/ui/panels](/code/src/ui/panels.md)
 * [src/ui/shortcuts](/code/src/ui/shortcuts.md)
 * [src/ui/studio](/code/src/ui/studio.md)
