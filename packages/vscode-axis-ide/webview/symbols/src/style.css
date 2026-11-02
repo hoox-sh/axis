@@ -1,7 +1,7 @@
 /* Copyright (C) 2026 jango_blockchained
  * SPDX-License-Identifier: AGPL-3.0-only
  *
- * Symbols panel — VS Code theme tokens only.
+ * Symbols panel — VS Code theme tokens only. No toolkit.
  */
 
 html,
@@ -13,8 +13,8 @@ body {
   overflow: hidden;
   background: var(--vscode-panel-background, var(--vscode-editor-background));
   color: var(--vscode-foreground);
-  font-family: var(--vscode-font-family);
-  font-size: var(--vscode-font-size);
+  font-family: var(--vscode-font-family, system-ui, sans-serif);
+  font-size: var(--vscode-font-size, 13px);
 }
 
 *,
@@ -46,8 +46,8 @@ body {
   min-height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px 12px 12px;
+  gap: 6px;
+  padding: 8px 10px 10px;
 }
 
 .symbols-header {
@@ -57,39 +57,68 @@ body {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding-bottom: 8px;
+  padding-bottom: 6px;
   background: var(--vscode-panel-background, var(--vscode-editor-background));
+}
+
+.symbols-header__top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 .symbols-title {
   margin: 0;
-  font-size: 13px;
+  flex: none;
+  font-size: 11px;
   font-weight: 600;
-  color: var(--vscode-foreground);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--vscode-descriptionForeground, var(--vscode-foreground));
 }
 
-.symbols-hint,
-.symbols-empty {
+.symbols-count {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  background: var(--vscode-badge-background, #616161);
+  color: var(--vscode-badge-foreground, #fff);
+}
+
+.symbols-hint {
   margin: 0;
   color: var(--vscode-descriptionForeground);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .symbols-search-label {
-  color: var(--vscode-foreground);
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .symbols-search {
   width: 100%;
-  padding: 4px 6px;
+  padding: 3px 6px;
   color: var(--vscode-input-foreground);
   background: var(--vscode-input-background);
-  border: 1px solid var(--vscode-input-border);
+  border: 1px solid var(--vscode-input-border, var(--vscode-panel-border, transparent));
   font: inherit;
+  font-size: 12px;
 }
 
 .symbols-search::placeholder {
-  color: var(--vscode-input-placeholderForeground);
+  color: var(--vscode-input-placeholderForeground, var(--vscode-descriptionForeground));
 }
 
 .symbols-chips {
@@ -100,29 +129,70 @@ body {
 
 .symbols-chip,
 .symbols-insert,
-.symbols-copy {
+.symbols-copy,
+.symbols-recent__btn {
   font: inherit;
   cursor: pointer;
 }
 
 .symbols-chip {
-  padding: 2px 8px;
-  color: var(--vscode-button-secondaryForeground);
-  background: var(--vscode-button-secondaryBackground);
-  border: 1px solid var(--vscode-panel-border);
+  margin: 0;
+  padding: 1px 8px;
+  border: 1px solid var(--vscode-contrastBorder, transparent);
+  border-radius: 999px;
+  color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+  background: var(--vscode-button-secondaryBackground, var(--vscode-toolbar-hoverBackground));
+  font-size: 11px;
 }
 
-.symbols-chip.is-active {
+.symbols-chip.is-active,
+.symbols-chip[aria-pressed='true'] {
   color: var(--vscode-button-foreground);
   background: var(--vscode-button-background);
   border-color: var(--vscode-button-background);
 }
 
+.symbols-recent {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.symbols-recent[hidden] {
+  display: none;
+}
+
+.symbols-recent__label {
+  margin: 0;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.symbols-recent__strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.symbols-recent__btn {
+  min-width: 32px;
+  min-height: 28px;
+  padding: 2px 6px;
+  font-size: 16px;
+  line-height: 1.2;
+  color: var(--vscode-editor-foreground, var(--vscode-foreground));
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, var(--vscode-panel-border, transparent));
+  border-radius: 2px;
+}
+
 .symbols-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(4.5rem, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(auto-fill, minmax(3.5rem, 1fr));
+  gap: 4px;
   margin: 0;
+  align-content: start;
 }
 
 .symbols-item {
@@ -133,28 +203,66 @@ body {
 }
 
 .symbols-insert {
-  min-height: 34px;
-  padding: 2px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 40px;
+  padding: 4px 4px 2px;
   font-size: 18px;
   line-height: 1.2;
-  color: var(--vscode-editor-foreground);
+  color: var(--vscode-editor-foreground, var(--vscode-foreground));
   background: var(--vscode-input-background);
-  border: 1px solid var(--vscode-input-border);
+  border: 1px solid var(--vscode-input-border, var(--vscode-panel-border, transparent));
+  border-radius: 2px;
+}
+
+.symbols-glyph {
+  font-size: 18px;
+  line-height: 1.1;
+}
+
+.symbols-insert:hover {
+  border-color: var(--vscode-focusBorder);
+}
+
+.symbols-name {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  line-height: 1.2;
+  color: var(--vscode-descriptionForeground);
 }
 
 .symbols-copy {
   padding: 0 4px;
-  min-height: 18px;
+  min-height: 20px;
   font-size: 11px;
   color: var(--vscode-textLink-foreground);
-  background: var(--vscode-panel-background, var(--vscode-editor-background));
-  border: 1px solid var(--vscode-panel-border);
+  background: transparent;
+  border: 1px solid var(--vscode-panel-border, transparent);
+  border-radius: 2px;
+}
+
+.symbols-empty {
+  margin: 8px 0 0;
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+}
+
+.symbols-empty[hidden] {
+  display: none;
 }
 
 .symbols-insert:focus-visible,
 .symbols-copy:focus-visible,
 .symbols-chip:focus-visible,
-.symbols-search:focus-visible {
+.symbols-search:focus-visible,
+.symbols-recent__btn:focus-visible {
   outline: 1px solid var(--vscode-focusBorder);
   outline-offset: 1px;
 }

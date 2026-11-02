@@ -19,7 +19,81 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { HOST_TO_VIEW, PROTOCOL_VERSION, VIEW_TO_HOST, encode } from '../protocol';
 import { ResultsFocusStore } from '../run/results-store';
-import { encodeResultsSet, handleResultsWebviewMessage } from './results-messages';
+import {
+  encodeResultsAction,
+  encodeResultsSet,
+  handleResultsWebviewMessage,
+  parseResultsActionMessage,
+} from './results-messages';
+
+describe('parseResultsActionMessage / encodeResultsAction', () => {
+  it('parses copyId with text and focus kinds', () => {
+    expect(parseResultsActionMessage({ type: 'results.action', kind: 'copyId', text: 'run-1' })).toEqual({
+      type: 'results.action',
+      kind: 'copyId',
+      text: 'run-1',
+    });
+    expect(parseResultsActionMessage({ type: 'results.action', kind: 'focusProfiler' })).toEqual({
+      type: 'results.action',
+      kind: 'focusProfiler',
+    });
+    expect(parseResultsActionMessage({ type: 'results.action', kind: 'focusLogs' })).toEqual({
+      type: 'results.action',
+      kind: 'focusLogs',
+    });
+  });
+
+  it('rejects empty copyId, unknown kinds, envelopes, and junk', () => {
+    expect(parseResultsActionMessage({ type: 'results.action', kind: 'copyId', text: '' })).toBeNull();
+    expect(parseResultsActionMessage({ type: 'results.action', kind: 'copyId', text: '   ' })).toBeNull();
+    expect(parseResultsActionMessage({ type: 'results.action', kind: 'copyId' })).toBeNull();
+    expect(parseResultsActionMessage({ type: 'results.action', kind: 'nope' })).toBeNull();
+    expect(parseResultsActionMessage({ type: 'results.copy', text: 'x' })).toBeNull();
+    expect(
+      parseResultsActionMessage({
+        v: PROTOCOL_VERSION,
+        type: 'results.action',
+        kind: 'focusLogs',
+        payload: {},
+        ts: 1,
+      }),
+    ).toBeNull();
+    expect(parseResultsActionMessage(null)).toBeNull();
+    expect(parseResultsActionMessage('results.action')).toBeNull();
+    expect(parseResultsActionMessage([])).toBeNull();
+    expect(() => parseResultsActionMessage(undefined)).not.toThrow();
+  });
+
+  it('encodeResultsAction mirrors local wire shape', () => {
+    expect(encodeResultsAction('copyId', 'run-9')).toEqual({
+      type: 'results.action',
+      kind: 'copyId',
+      text: 'run-9',
+    });
+    expect(encodeResultsAction('focusProfiler')).toEqual({
+      type: 'results.action',
+      kind: 'focusProfiler',
+    });
+    expect(encodeResultsAction('focusLogs')).toEqual({
+      type: 'results.action',
+      kind: 'focusLogs',
+    });
+    expect(encodeResultsAction('copyId')).toEqual({
+      type: 'results.action',
+      kind: 'copyId',
+      text: '',
+    });
+  });
+
+  it('catch path returns null when getters throw', () => {
+    const hostile = {
+      get type() {
+        throw new Error('boom');
+      },
+    };
+    expect(parseResultsActionMessage(hostile)).toBeNull();
+  });
+});
 
 describe('handleResultsWebviewMessage', () => {
   let store: ResultsFocusStore;
@@ -76,6 +150,21 @@ describe('handleResultsWebviewMessage', () => {
     expect(handle.set.payload.focusId).toBe(b);
     // Original focus id still in cache
     expect(store.get(a)).toBeTruthy();
+  });
+
+  it('routes local results.action before protocol decode', () => {
+    const handle = handleResultsWebviewMessage(
+      encodeResultsAction('copyId', 'run-42'),
+      store,
+    );
+    expect(handle.kind).toBe('action');
+    if (handle.kind !== 'action') return;
+    expect(handle.action).toEqual({ type: 'results.action', kind: 'copyId', text: 'run-42' });
+
+    const focus = handleResultsWebviewMessage(encodeResultsAction('focusProfiler'), store);
+    expect(focus.kind).toBe('action');
+    if (focus.kind !== 'action') return;
+    expect(focus.action.kind).toBe('focusProfiler');
   });
 
   it('rejects host→view types and bad envelopes', () => {

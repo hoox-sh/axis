@@ -42,12 +42,17 @@ describe('results CSP HTML builder', () => {
     expect(html).toContain('data-axis-results-kind="results"');
     expect(html).toContain('id="results-root"');
     expect(html).toContain('id="results-status"');
+    expect(html).toContain('id="results-live"');
     expect(html).toContain('aria-live="polite"');
     expect(html).toContain('id="results-card"');
     expect(html).toContain('id="results-rows"');
     expect(html).toContain('id="results-strategy"');
-    expect(html).toContain('Run a Pine Script™ (Ctrl+Enter)');
-    expect(html).not.toContain('id="results-body"');
+    expect(html).toContain('id="results-meta"');
+    expect(html).toContain('id="results-copy-id"');
+    expect(html).toContain('id="results-search"');
+    expect(html).toContain('id="results-kpis"');
+    expect(html).toContain('Run a Pine script with Ctrl/Cmd+Enter');
+    expect(html).toContain('class="results-header"');
     expect(htmlHasInlineScript(html)).toBe(false);
   });
 

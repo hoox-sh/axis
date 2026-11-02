@@ -46,6 +46,15 @@ describe('profiler CSP HTML builder', () => {
     expect(html).toContain('id="profiler-status"');
     expect(html).toContain('id="profiler-bar-fill"');
     expect(html).toContain('id="profiler-engine"');
+    expect(html).toContain('id="profiler-hot-list"');
+    expect(html).toContain('id="profiler-phases-list"');
+    expect(html).toContain('id="profiler-copy"');
+    expect(html).toContain('id="profiler-live"');
+    expect(html).toContain('aria-live="polite"');
+    expect(html).toContain('Hot lines');
+    expect(html).toContain(
+      'Run a script to see timing. Line costs appear when the engine returns per-line profile data.',
+    );
     expect(html).toContain('AXIS Profiler');
     expect(html).toContain('class="vscode-dark"');
     expect(htmlHasInlineScript(html)).toBe(false);

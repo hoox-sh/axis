@@ -18,13 +18,16 @@
 
 /**
  * AXIS Symbols webview. Host posts symbols.set. Click inserts; Shift-click or
- * Copy copies. Status text is local ("Inserted" / "Copied").
+ * Copy copies. Recent inserts persist in webview state via setState.
+ * Status text is local ("Inserted" / "Copied").
  */
 
 import './style.css';
 
 interface VsCodeApi {
   postMessage(message: unknown): void;
+  getState(): unknown;
+  setState(state: unknown): void;
 }
 
 declare function acquireVsCodeApi(): VsCodeApi;
@@ -34,6 +37,10 @@ type SymbolRow = {
   category: string;
   char: string;
   name: string;
+};
+
+type PersistedState = {
+  recent: SymbolRow[];
 };
 
 const CHIPS: ReadonlyArray<{ id: string; label: string }> = [
@@ -46,6 +53,7 @@ const CHIPS: ReadonlyArray<{ id: string; label: string }> = [
 ];
 
 const CATEGORY_IDS = new Set(['arrows', 'shapes', 'box', 'checks', 'stars']);
+const RECENT_MAX = 8;
 
 let disposed = false;
 let apiRef: VsCodeApi | null = null;
@@ -55,11 +63,51 @@ let received = false;
 let catalog: SymbolRow[] = [];
 let query = '';
 let category = '';
+let recent: SymbolRow[] = [];
 
 function canonicalCategory(value: string): string {
   const raw = value.trim().toLowerCase();
   if (raw === '' || raw === 'all') return '';
   return CATEGORY_IDS.has(raw) ? raw : '';
+}
+
+function readPersisted(raw: unknown): SymbolRow[] {
+  try {
+    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return [];
+    const list = (raw as PersistedState).recent;
+    if (!Array.isArray(list)) return [];
+    const out: SymbolRow[] = [];
+    for (const item of list) {
+      const row = readRow(item);
+      if (row) out.push(row);
+      if (out.length >= RECENT_MAX) break;
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+function persistRecent(): void {
+  if (!apiRef || disposed) return;
+  try {
+    apiRef.setState({ recent } satisfies PersistedState);
+  } catch {
+    // host state is optional
+  }
+}
+
+function pushRecent(symbol: SymbolRow): void {
+  const next = recent.filter((row) => row.id !== symbol.id);
+  next.unshift({
+    id: symbol.id,
+    category: symbol.category,
+    char: symbol.char,
+    name: symbol.name,
+  });
+  recent = next.slice(0, RECENT_MAX);
+  persistRecent();
+  renderRecent();
 }
 
 function ensureRoot(): HTMLElement {
@@ -146,6 +194,16 @@ function announce(status: 'Inserted' | 'Copied'): void {
   }, 30);
 }
 
+function findByChar(text: string): SymbolRow | null {
+  for (const symbol of catalog) {
+    if (symbol.char === text) return symbol;
+  }
+  for (const symbol of recent) {
+    if (symbol.char === text) return symbol;
+  }
+  return null;
+}
+
 function act(text: string, copy: boolean): void {
   if (!text || disposed) return;
   if (copy) {
@@ -155,6 +213,8 @@ function act(text: string, copy: boolean): void {
   }
   post({ type: 'symbols.insert', text });
   announce('Inserted');
+  const symbol = findByChar(text);
+  if (symbol) pushRecent(symbol);
 }
 
 function symbolItem(symbol: SymbolRow): HTMLDivElement {
@@ -165,11 +225,22 @@ function symbolItem(symbol: SymbolRow): HTMLDivElement {
   const insert = document.createElement('button');
   insert.type = 'button';
   insert.className = 'symbols-insert';
-  insert.textContent = symbol.char;
   insert.setAttribute('data-action', 'insert');
   insert.setAttribute('data-text', symbol.char);
+  insert.setAttribute('data-id', symbol.id);
   insert.setAttribute('aria-label', `Insert ${symbol.name}`);
   insert.title = `${symbol.name}. Click to insert. Shift-click to copy.`;
+
+  const glyph = document.createElement('span');
+  glyph.className = 'symbols-glyph';
+  glyph.textContent = symbol.char;
+  glyph.setAttribute('aria-hidden', 'true');
+
+  const name = document.createElement('span');
+  name.className = 'symbols-name';
+  name.textContent = symbol.name;
+
+  insert.append(glyph, name);
 
   const copy = document.createElement('button');
   copy.type = 'button';
@@ -178,6 +249,7 @@ function symbolItem(symbol: SymbolRow): HTMLDivElement {
   copy.setAttribute('data-action', 'copy');
   copy.setAttribute('data-text', symbol.char);
   copy.setAttribute('aria-label', `Copy ${symbol.name}`);
+  copy.title = `Copy ${symbol.name}`;
 
   item.append(insert, copy);
   return item;
@@ -194,16 +266,42 @@ function renderChips(): void {
   });
 }
 
+function renderRecent(): void {
+  const section = document.getElementById('symbols-recent');
+  const strip = document.getElementById('symbols-recent-strip');
+  if (!section || !strip) return;
+  section.hidden = recent.length === 0;
+  strip.replaceChildren();
+  for (const symbol of recent) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'symbols-recent__btn';
+    button.textContent = symbol.char;
+    button.title = `${symbol.name}. Click to insert. Shift-click to copy.`;
+    button.setAttribute('aria-label', `Insert ${symbol.name}`);
+    button.setAttribute('data-action', 'insert');
+    button.setAttribute('data-text', symbol.char);
+    button.setAttribute('data-id', symbol.id);
+    strip.append(button);
+  }
+}
+
 function renderGrid(): void {
   const grid = document.getElementById('symbols-grid');
   const empty = document.getElementById('symbols-empty');
+  const count = document.getElementById('symbols-count');
   if (!grid || !empty) return;
   const rows = visibleSymbols();
+  if (count) count.textContent = String(rows.length);
   grid.replaceChildren();
   for (const symbol of rows) grid.append(symbolItem(symbol));
   const showEmpty = rows.length === 0;
   empty.hidden = !showEmpty;
-  if (showEmpty) empty.textContent = received ? 'No symbols match.' : 'Loading symbols…';
+  if (showEmpty) {
+    if (!received) empty.textContent = 'Loading symbols…';
+    else if (query.trim() || category) empty.textContent = 'No symbols match your search.';
+    else empty.textContent = 'No symbols available.';
+  }
 }
 
 function render(): void {
@@ -213,6 +311,7 @@ function render(): void {
     search.value = query;
   }
   renderChips();
+  renderRecent();
   renderGrid();
 }
 
@@ -229,14 +328,24 @@ function ensureShell(): void {
   const header = document.createElement('header');
   header.className = 'symbols-header';
 
+  const top = document.createElement('div');
+  top.className = 'symbols-header__top';
+
   const title = document.createElement('h1');
   title.className = 'symbols-title';
   title.textContent = 'Symbols';
 
+  const count = document.createElement('span');
+  count.id = 'symbols-count';
+  count.className = 'symbols-count';
+  count.textContent = '0';
+
+  top.append(title, count);
+
   const hint = document.createElement('p');
   hint.id = 'symbols-hint';
   hint.className = 'symbols-hint';
-  hint.textContent = 'Click a symbol to insert it at the cursor. Shift-click, or Copy, to copy.';
+  hint.textContent = 'Click to insert. Shift-click or Copy to copy. Hover a glyph for its name.';
 
   const label = document.createElement('label');
   label.className = 'symbols-search-label';
@@ -279,6 +388,31 @@ function ensureShell(): void {
     chips.append(button);
   }
 
+  const recentSection = document.createElement('section');
+  recentSection.id = 'symbols-recent';
+  recentSection.className = 'symbols-recent';
+  recentSection.hidden = true;
+  recentSection.setAttribute('aria-label', 'Recent symbols');
+
+  const recentLabel = document.createElement('p');
+  recentLabel.className = 'symbols-recent__label';
+  recentLabel.textContent = 'Recent';
+
+  const recentStrip = document.createElement('div');
+  recentStrip.id = 'symbols-recent-strip';
+  recentStrip.className = 'symbols-recent__strip';
+  recentStrip.setAttribute('role', 'list');
+  recentStrip.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const button = target.closest('button');
+    if (!(button instanceof HTMLButtonElement) || !recentStrip.contains(button)) return;
+    const text = button.getAttribute('data-text') ?? '';
+    act(text, event.shiftKey);
+  });
+
+  recentSection.append(recentLabel, recentStrip);
+
   const grid = document.createElement('div');
   grid.id = 'symbols-grid';
   grid.className = 'symbols-grid';
@@ -311,7 +445,7 @@ function ensureShell(): void {
   empty.className = 'symbols-empty';
   empty.textContent = 'Loading symbols…';
 
-  header.append(title, hint, label, search, chips);
+  header.append(top, hint, label, search, chips, recentSection);
   shell.append(header, grid, empty);
   root.append(shell);
 }
@@ -330,7 +464,18 @@ function onHostMessage(event: MessageEvent): void {
 }
 
 function main(): void {
-  apiRef = acquireVsCodeApi();
+  try {
+    apiRef = acquireVsCodeApi();
+  } catch {
+    apiRef = null;
+  }
+  if (apiRef) {
+    try {
+      recent = readPersisted(apiRef.getState());
+    } catch {
+      recent = [];
+    }
+  }
   window.addEventListener('message', onHostMessage);
   window.addEventListener(
     'pagehide',

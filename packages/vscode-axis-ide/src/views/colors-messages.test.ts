@@ -18,11 +18,15 @@
 
 import { describe, expect, test } from 'bun:test';
 import {
+  MAX_COLORS_COPY_TEXT,
   NAMED_COLOR_SWATCH,
   PINE_EDITOR_LANGUAGE_IDS,
+  colorKind,
   colorsSetMessage,
   isColorsReady,
+  isColorsRefresh,
   isPineEditorLanguage,
+  parseColorsCopy,
   parseColorsReveal,
   pineSourceLabel,
   scanColors,
@@ -73,12 +77,16 @@ describe('colors messages', () => {
     });
   });
 
-  test('colors.ready and colors.reveal parse without throwing', () => {
+  test('colors.ready, refresh, reveal, and copy parse without throwing', () => {
     expect(isColorsReady({ type: 'colors.ready' })).toBe(true);
     expect(isColorsReady({ type: 'colors.reveal', line: 1 })).toBe(false);
     expect(isColorsReady(null)).toBe(false);
     expect(isColorsReady([])).toBe(false);
     expect(isColorsReady('colors.ready')).toBe(false);
+    expect(isColorsRefresh({ type: 'colors.refresh' })).toBe(true);
+    expect(isColorsRefresh({ type: 'colors.ready' })).toBe(false);
+    expect(isColorsRefresh(null)).toBe(false);
+    expect(isColorsRefresh([])).toBe(false);
     expect(parseColorsReveal({ type: 'colors.reveal', line: 4 })).toEqual({
       type: 'colors.reveal',
       line: 4,
@@ -96,6 +104,15 @@ describe('colors messages', () => {
     expect(parseColorsReveal(null)).toBeNull();
     expect(parseColorsReveal([])).toBeNull();
     expect(parseColorsReveal(undefined)).toBeNull();
+    expect(parseColorsCopy({ type: 'colors.copy', text: '#fff' })).toEqual({
+      type: 'colors.copy',
+      text: '#fff',
+    });
+    expect(parseColorsCopy({ type: 'colors.copy', text: '' })).toBeNull();
+    expect(parseColorsCopy({ type: 'colors.copy', text: 'x'.repeat(MAX_COLORS_COPY_TEXT + 1) })).toBeNull();
+    expect(parseColorsCopy({ type: 'colors.copy', text: 1 })).toBeNull();
+    expect(parseColorsCopy({ type: 'colors.reveal', line: 1 })).toBeNull();
+    expect(parseColorsCopy(null)).toBeNull();
     const hostile = new Proxy(
       {},
       {
@@ -105,7 +122,22 @@ describe('colors messages', () => {
       },
     );
     expect(isColorsReady(hostile)).toBe(false);
+    expect(isColorsRefresh(hostile)).toBe(false);
     expect(parseColorsReveal(hostile)).toBeNull();
+    expect(parseColorsCopy(hostile)).toBeNull();
+  });
+
+  test('colorKind classifies hex, named, and rgb/new', () => {
+    expect(colorKind('#fff')).toBe('hex');
+    expect(colorKind('  #aabbcc  ')).toBe('hex');
+    expect(colorKind('color.red')).toBe('named');
+    expect(colorKind('COLOR.LIME')).toBe('named');
+    expect(colorKind('color.rgb(1, 2, 3)')).toBe('rgb-new');
+    expect(colorKind('color.new(#fff, 10)')).toBe('rgb-new');
+    expect(colorKind('COLOR.NEW(#0f0, 0)')).toBe('rgb-new');
+    expect(colorKind(null)).toBe('named');
+    expect(colorKind(1)).toBe('named');
+    expect(colorKind('')).toBe('named');
   });
 });
 

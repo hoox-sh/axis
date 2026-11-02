@@ -81,22 +81,36 @@ export function buildProfilerWebviewHtml(opts?: ProfilerHtmlOptions | null): str
 </head>
 <body class="${safeClass}" data-axis-profiler-kind="profiler">
   <div id="profiler-root" class="profiler-root" data-axis-profiler-host="1">
-    <header class="profiler-root__header">
-      <h1 class="profiler-root__title">Profiler</h1>
+    <div id="profiler-live" class="profiler-live" aria-live="polite" aria-atomic="true"></div>
+    <header class="profiler-root__header" id="profiler-header">
+      <div class="profiler-root__header-row">
+        <h1 class="profiler-root__title">Profiler</h1>
+        <button type="button" class="profiler-copy" id="profiler-copy" hidden title="Copy run id" aria-label="Copy run id">Copy id</button>
+      </div>
       <p class="profiler-root__focus" id="profiler-focus">No run yet</p>
     </header>
-    <p class="profiler-ms" id="profiler-ms">—<span class="profiler-ms__unit">ms</span></p>
-    <span class="profiler-chip" id="profiler-status" hidden></span>
-    <div class="profiler-bar" id="profiler-bar" hidden aria-hidden="true">
-      <div class="profiler-bar__fill" id="profiler-bar-fill"></div>
+    <div class="profiler-body" id="profiler-body">
+      <p class="profiler-ms" id="profiler-ms">—<span class="profiler-ms__unit">ms</span></p>
+      <span class="profiler-chip" id="profiler-status" hidden></span>
+      <div class="profiler-bar" id="profiler-bar" hidden aria-hidden="true">
+        <div class="profiler-bar__fill" id="profiler-bar-fill"></div>
+      </div>
+      <dl class="profiler-dl" id="profiler-dl" hidden>
+        <dt>engine</dt><dd id="profiler-engine"></dd>
+        <dt>seriesKey</dt><dd id="profiler-series-key"></dd>
+        <dt>plots</dt><dd id="profiler-plots"></dd>
+        <dt>series</dt><dd id="profiler-series"></dd>
+      </dl>
+      <section class="profiler-phases" id="profiler-phases" hidden aria-label="Phases">
+        <h2 class="profiler-section__title">Phases</h2>
+        <ul class="profiler-phases__list" id="profiler-phases-list"></ul>
+      </section>
+      <section class="profiler-hot" id="profiler-hot" hidden aria-label="Hot lines">
+        <h2 class="profiler-section__title">Hot lines</h2>
+        <ul class="profiler-hot__list" id="profiler-hot-list"></ul>
+      </section>
+      <p class="profiler-root__empty" id="profiler-empty">Run a script to see timing. Line costs appear when the engine returns per-line profile data.</p>
     </div>
-    <dl class="profiler-dl" id="profiler-dl" hidden>
-      <dt>engine</dt><dd id="profiler-engine"></dd>
-      <dt>seriesKey</dt><dd id="profiler-series-key"></dd>
-      <dt>plots</dt><dd id="profiler-plots"></dd>
-      <dt>series</dt><dd id="profiler-series"></dd>
-    </dl>
-    <p class="profiler-root__empty" id="profiler-empty">Run a Pine Script™ to see last-run timing here.</p>
   </div>
   <script src="${safeScript}"></script>
 </body>

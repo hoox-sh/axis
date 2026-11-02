@@ -25,7 +25,8 @@
     "wiring": "Call registerColorsPanel(context) from activate after registerProfilerView. registerWebviewViewProvider('axis.colors', provider, { webviewOptions: { retainContextWhenHidden: false } }). Do not edit extension.ts from this agent.",
     "assets": "Vite IIFE AxisColorsWebview writes dist/webview/colors/main.js and main.css (no sourcemap). localResourceRoots is that directory.",
     "csp": "getColorsHtml copies the plugins matrix and adds a script nonce: script-src 'nonce-…' plus cspSource; style-src is cspSource and 'unsafe-inline' (no style nonce); connect-src 'none'.",
-    "protocol": "Host posts local { type: 'colors.set', colors, sourceLabel }. Webview posts { type: 'colors.reveal', line } and { type: 'colors.ready' } so the host can resend after the script loads. Do NOT add colors.set, colors.reveal, or colors.ready to axis.webview.v1 ALL_MESSAGE_TYPES.",
-    "editor": "On resolve, editor change, and document change of the active editor, scan when languageId is pinescript (PYNE) or pine. Otherwise post an empty list with sourceLabel 'No Pine editor'. colors.reveal selects and revealRange's that line in the active Pine editor."
+    "protocol": "Host posts local { type: 'colors.set', colors, sourceLabel }. Webview posts { type: 'colors.reveal', line }, { type: 'colors.ready' }, { type: 'colors.refresh' } (re-scan), and { type: 'colors.copy', text } (host clipboard). Chips All/Hex/Named/rgb-new and the search box filter client-side. Do NOT add these to axis.webview.v1 ALL_MESSAGE_TYPES.",
+    "editor": "On resolve, editor change, document change of the active editor, colors.ready, and colors.refresh, scan when languageId is pinescript (PYNE) or pine. Otherwise post an empty list with sourceLabel 'No Pine editor'. colors.reveal selects and revealRange's that line in the active Pine editor. Sticky header shows count badge, truncated source label, and Refresh.",
+    "ui": "Densified rows with checkerboard swatches (alpha shows through). Primary click / Enter reveals; Copy button or Shift-click copies raw. Arrow keys move the active row when the list is focused."
   }
 }

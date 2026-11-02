@@ -30,6 +30,7 @@
     "coverage": "Add views/symbols-panel.ts to EXCLUDE in scripts/check-coverage.mjs (same reason as views/profiler-panel.ts). Do not edit check-coverage.mjs from this agent. Do not exclude views/symbols-messages.ts or views/symbols-html.ts — they stay on the pure-host 100% line gate.",
     "assets": "Vite IIFE AxisSymbolsWebview writes dist/webview/symbols/main.js and main.css (no sourcemap). Webview localResourceRoots is that directory. CSP is buildSymbolsWebviewHtml: script-src 'nonce-…' plus cspSource; style-src matches plugins (cspSource and 'unsafe-inline', no style nonce); connect-src 'none'.",
     "protocol": "Local only. Host posts { type: 'symbols.set', symbols, query, category } on resolve. View posts { type: 'symbols.insert', text } and { type: 'symbols.copy', text }. Do NOT add these to axis.webview.v1 ALL_MESSAGE_TYPES. The webview sets aria-live to Inserted or Copied itself.",
+    "ui": "Sticky search + category chips with result count badge. Recent strip (last 8 inserts) is webview-local via vscodeApi.setState — not host workspaceState. Hover/title shows the name; click inserts; Shift-click or Copy copies. Larger tap targets; grid auto-fills for short panel height. Empty search shows 'No symbols match your search.'",
     "doNotEditFromSymbolsAgent": "package.json, extension.ts, check-coverage.mjs, and .vscodeignore were left unchanged on purpose."
   }
 }

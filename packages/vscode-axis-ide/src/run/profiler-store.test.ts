@@ -24,7 +24,10 @@ import {
   countPlots,
   countSeries,
   encodeProfilerSet,
+  pickPhases,
+  profileLineCount,
   snapshotFromRun,
+  topHotLines,
   type ProfilerListener,
   type ProfilerSnapshot,
 } from './profiler-store';
@@ -89,6 +92,248 @@ describe('countPlots / countSeries', () => {
   });
 });
 
+describe('topHotLines / pickPhases / profileLineCount', () => {
+  it('returns [] when profile lines are missing or empty (no invented pct)', () => {
+    expect(topHotLines(null)).toEqual([]);
+    expect(topHotLines(undefined)).toEqual([]);
+    expect(topHotLines({})).toEqual([]);
+    expect(topHotLines({ profile: { phases: { parse_ms: 1 } } })).toEqual([]);
+    expect(topHotLines({ profile: { lines: [] } })).toEqual([]);
+    expect(topHotLines({ profile: { total_ms: 40, lines: [] } })).toEqual([]);
+    expect(profileLineCount({ profile: { lines: [] } })).toBe(0);
+    expect(profileLineCount(null)).toBe(0);
+  });
+
+  it('ranks top-N by ms, fills pct from sum or total_ms, prefers lines over line_stats', () => {
+    expect(
+      topHotLines(
+        {
+          profile: {
+            lines: [
+              { line: 10, ms: 25, execs: 1 },
+              { line: 2, ms: 75, execs: 2 },
+              { line: 4, ms: 5, execs: 1 },
+            ],
+          },
+        },
+        2,
+      ),
+    ).toEqual([
+      { line: 2, ms: 75, execs: 2, pct: (75 / 105) * 100 },
+      { line: 10, ms: 25, execs: 1, pct: (25 / 105) * 100 },
+    ]);
+
+    expect(
+      topHotLines({
+        profile: {
+          lines: [
+            { line: 10, ms: 25, execs: 1 },
+            { line: 2, ms: 75, execs: 2 },
+          ],
+        },
+      }),
+    ).toEqual([
+      { line: 2, ms: 75, execs: 2, pct: 75 },
+      { line: 10, ms: 25, execs: 1, pct: 25 },
+    ]);
+
+    expect(
+      topHotLines({
+        profile: {
+          total_ms: 200,
+          line_stats: [
+            { lineno: 3, time: 10, count: 2 },
+            { line_no: 1, time_ms: 40, execs: 1, pct: 7 },
+          ],
+        },
+      }),
+    ).toEqual([
+      { line: 1, ms: 40, execs: 1, pct: 7 },
+      { line: 3, ms: 10, execs: 2, pct: 5 },
+    ]);
+
+    expect(
+      profileLineCount({
+        profile: {
+          lines: [
+            { line: 1, ms: 1 },
+            { line: 1, ms: 2 },
+            { line: 2, ms: 3 },
+          ],
+        },
+      }),
+    ).toBe(2);
+  });
+
+  it('merges duplicate lines, zeros ms-less pct, and swallows hostile rows', () => {
+    expect(
+      topHotLines({
+        profile: {
+          lines: [
+            { line: 5, ms: 10, execs: 1 },
+            { line: 5, ms: 5, execs: 2 },
+            { line: 0, ms: 99 },
+            null,
+            { line: 'x' },
+            { line: 8, ms: 0, execs: 1 },
+          ],
+        },
+      }),
+    ).toEqual([
+      { line: 5, ms: 15, execs: 3, pct: 100 },
+      { line: 8, ms: 0, execs: 1, pct: 0 },
+    ]);
+
+    const hostileProfile = new Proxy(
+      {},
+      {
+        get() {
+          throw new Error('profile');
+        },
+      },
+    );
+    expect(topHotLines({ profile: hostileProfile })).toEqual([]);
+    expect(topHotLines({ get profile() { throw new Error('meta'); } })).toEqual([]);
+
+    const throwingLen = new Proxy([] as unknown[], {
+      get(target, prop, receiver) {
+        if (prop === 'length') throw new Error('len');
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+    expect(topHotLines({ profile: { lines: throwingLen } })).toEqual([]);
+    expect(profileLineCount({ profile: { lines: throwingLen } })).toBe(0);
+    expect(topHotLines({ profile: { lines: [{ line: 1, ms: 1 }] } }, 0)).toEqual([
+      { line: 1, ms: 1, execs: 0, pct: 100 },
+    ]);
+    expect(profileLineCount({ get profile() { throw new Error('p'); } })).toBe(0);
+
+    expect(
+      topHotLines({
+        profile: {
+          get lines() {
+            throw new Error('lines');
+          },
+          line_stats: [{ line: 9, ms: 3, execs: 1 }],
+        },
+      }),
+    ).toEqual([{ line: 9, ms: 3, execs: 1, pct: 100 }]);
+
+    expect(topHotLines({ profile: { lines: 'nope', line_stats: { x: 1 } } })).toEqual([]);
+    expect(topHotLines({ profile: { lines: [null, { line: 0 }] } })).toEqual([]);
+
+    const hostileMs = {
+      line: 2,
+      get ms() {
+        throw new Error('ms');
+      },
+      get time_ms() {
+        throw new Error('time_ms');
+      },
+      get time() {
+        throw new Error('time');
+      },
+      get execs() {
+        throw new Error('execs');
+      },
+      get count() {
+        throw new Error('count');
+      },
+      get pct() {
+        throw new Error('pct');
+      },
+    };
+    expect(topHotLines({ profile: { lines: [hostileMs] } })).toEqual([
+      { line: 2, ms: 0, execs: 0, pct: 0 },
+    ]);
+
+    const hostileLine = {
+      get line() {
+        throw new Error('line');
+      },
+      get line_no() {
+        throw new Error('line_no');
+      },
+      get lineno() {
+        throw new Error('lineno');
+      },
+      ms: 9,
+    };
+    expect(topHotLines({ profile: { lines: [hostileLine] } })).toEqual([]);
+
+    const hostileTotal = {
+      get totalMs() {
+        throw new Error('totalMs');
+      },
+      get total_ms() {
+        throw new Error('total_ms');
+      },
+      lines: [{ line: 1, ms: 4, execs: 1 }],
+    };
+    expect(topHotLines({ profile: hostileTotal })).toEqual([
+      { line: 1, ms: 4, execs: 1, pct: 100 },
+    ]);
+
+    const throwingIndex = new Proxy([{ line: 1, ms: 1 }], {
+      get(target, prop, receiver) {
+        if (prop === '0' || prop === 0) throw new Error('idx');
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+    expect(topHotLines({ profile: { lines: throwingIndex } })).toEqual([]);
+    expect(profileLineCount({ profile: { lines: throwingIndex } })).toBe(0);
+  });
+
+  it('pickPhases reads numeric phase entries and omits empty/hostile', () => {
+    expect(pickPhases({ profile: { phases: { parse_ms: 10, eval_ms: 30 } } })).toEqual([
+      { name: 'parse_ms', ms: 10 },
+      { name: 'eval_ms', ms: 30 },
+    ]);
+    expect(pickPhases({ profile: { phases: { parse_ms: '4', bad: -1, empty: '' } } })).toEqual([
+      { name: 'parse_ms', ms: 4 },
+    ]);
+    expect(pickPhases({ profile: { phases: { '  ': 3, eval_ms: 1 } } })).toEqual([
+      { name: 'eval_ms', ms: 1 },
+    ]);
+    expect(pickPhases({ profile: { phases: {} } })).toBeUndefined();
+    expect(pickPhases({ profile: { phases: null } })).toBeUndefined();
+    expect(pickPhases({ profile: {} })).toBeUndefined();
+    expect(pickPhases(null)).toBeUndefined();
+    expect(
+      pickPhases({
+        profile: {
+          get phases() {
+            throw new Error('phases');
+          },
+        },
+      }),
+    ).toBeUndefined();
+
+    const keysThrow = new Proxy(
+      { eval_ms: 1 },
+      {
+        ownKeys() {
+          throw new Error('keys');
+        },
+        getOwnPropertyDescriptor() {
+          return { enumerable: true, configurable: true };
+        },
+      },
+    );
+    expect(pickPhases({ profile: { phases: keysThrow } })).toBeUndefined();
+
+    const entryThrow = {
+      get parse_ms() {
+        throw new Error('parse');
+      },
+      eval_ms: 5,
+    };
+    expect(pickPhases({ profile: { phases: entryThrow } })).toEqual([
+      { name: 'eval_ms', ms: 5 },
+    ]);
+  });
+});
+
 describe('snapshotFromRun', () => {
   it('maps a success run with meta.ms and counts', () => {
     const snap = snapshotFromRun(
@@ -108,7 +353,36 @@ describe('snapshotFromRun', () => {
       plotCount: 3,
       seriesCount: 2,
       createdAt: 1_700_000_000_000,
+      topLines: [],
+      lineCount: 0,
     });
+  });
+
+  it('fills topLines, lineCount, and phases from meta.profile', () => {
+    const snap = snapshotFromRun(
+      run({
+        meta: {
+          ms: 100,
+          profile: {
+            total_ms: 100,
+            phases: { parse_ms: 8, eval_ms: 92 },
+            lines: [
+              { line: 3, ms: 60, execs: 2 },
+              { line: 1, ms: 40, execs: 1 },
+            ],
+          },
+        },
+      }),
+    );
+    expect(snap?.topLines).toEqual([
+      { line: 3, ms: 60, execs: 2, pct: 60 },
+      { line: 1, ms: 40, execs: 1, pct: 40 },
+    ]);
+    expect(snap?.lineCount).toBe(2);
+    expect(snap?.phases).toEqual([
+      { name: 'parse_ms', ms: 8 },
+      { name: 'eval_ms', ms: 92 },
+    ]);
   });
 
   it('includes trimmed error on error status', () => {
@@ -193,6 +467,8 @@ describe('encodeProfilerSet', () => {
       plotCount: 0,
       seriesCount: 0,
       createdAt: 1,
+      topLines: [],
+      lineCount: 0,
     };
     const env = encodeProfilerSet(snap);
     expect(env.type).toBe('profiler.set');

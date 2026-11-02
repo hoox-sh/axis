@@ -19,10 +19,16 @@
 import { describe, expect, test } from 'bun:test';
 import {
   LOG_ROW_CAP,
+  LOGS_EMPTY,
+  LOGS_FILTERED_EMPTY,
+  MAX_LOG_COPY_TEXT,
   attachLogsStore,
+  countLogLevels,
   encodeLogsSet,
   filterLogs,
+  logsEmptyMessage,
   logsFromRun,
+  matchLogQuery,
   parseLogLine,
   parseLogsWebMessage,
   readLastRun,
@@ -350,6 +356,55 @@ describe('filterLogs', () => {
     ];
     expect(filterLogs(hostileLevel, 'all')).toEqual([]);
   });
+
+  test('filters by message query (case-insensitive substring)', () => {
+    const rows = [
+      row({ level: 'error', message: 'Boom at close' }),
+      row({ level: 'info', message: 'RSI ready' }),
+      row({ level: 'warning', message: 'close gap' }),
+    ];
+    expect(filterLogs(rows, 'all', 'CLOSE').map((r) => r.message)).toEqual([
+      'Boom at close',
+      'close gap',
+    ]);
+    expect(filterLogs(rows, 'error', 'close').map((r) => r.message)).toEqual(['Boom at close']);
+    expect(filterLogs(rows, 'all', 'nope')).toEqual([]);
+    expect(filterLogs(rows, 'all', '   ')).toHaveLength(3);
+    expect(filterLogs(rows, 'all', null)).toHaveLength(3);
+    expect(filterLogs(rows, 'all', 1)).toEqual([]);
+    expect(matchLogQuery('Hello', 'hel')).toBe(true);
+    expect(matchLogQuery('Hello', '')).toBe(true);
+    expect(matchLogQuery('Hello', null)).toBe(true);
+    expect(matchLogQuery('Hello', 1)).toBe(false);
+    expect(matchLogQuery(1, 'a')).toBe(false);
+  });
+});
+
+describe('countLogLevels / logsEmptyMessage', () => {
+  test('counts levels and picks empty copy', () => {
+    const rows = [
+      row({ level: 'error', message: 'e' }),
+      row({ level: 'error', message: 'e2' }),
+      row({ level: 'warning', message: 'w' }),
+      row({ level: 'info', message: 'i' }),
+      row({ level: 'debug', message: 'd' }),
+      { level: 'nope', message: 'x' },
+    ];
+    expect(countLogLevels(rows)).toEqual({
+      all: 5,
+      error: 2,
+      warning: 1,
+      info: 1,
+      debug: 1,
+    });
+    expect(countLogLevels(null)).toEqual({ all: 0, error: 0, warning: 0, info: 0, debug: 0 });
+    expect(countLogLevels('nope')).toEqual({ all: 0, error: 0, warning: 0, info: 0, debug: 0 });
+    expect(logsEmptyMessage(0, 0)).toBe(LOGS_EMPTY);
+    expect(logsEmptyMessage(3, 0)).toBe(LOGS_FILTERED_EMPTY);
+    expect(logsEmptyMessage(3, 2)).toBe('');
+    expect(logsEmptyMessage(-1, 'x')).toBe(LOGS_EMPTY);
+    expect(logsEmptyMessage(2, Number.NaN)).toBe(LOGS_FILTERED_EMPTY);
+  });
 });
 
 describe('encodeLogsSet / parseLogsWebMessage', () => {
@@ -388,7 +443,7 @@ describe('encodeLogsSet / parseLogsWebMessage', () => {
     });
   });
 
-  test('parses reveal, filter, and ready', () => {
+  test('parses reveal, filter, copy, and ready', () => {
     expect(parseLogsWebMessage({ type: 'logs.ready', payload: { line: 1 } })).toEqual({
       type: 'logs.ready',
     });
@@ -416,6 +471,21 @@ describe('encodeLogsSet / parseLogsWebMessage', () => {
     });
     expect(parseLogsWebMessage({ type: 'logs.filter', level: 1 })).toBeNull();
     expect(parseLogsWebMessage({ type: 'logs.filter', level: 'verbose' })).toBeNull();
+    expect(parseLogsWebMessage({ type: 'logs.copy', text: 'hello' })).toEqual({
+      type: 'logs.copy',
+      text: 'hello',
+    });
+    expect(parseLogsWebMessage({ type: 'logs.copy', payload: { text: 'via payload' } })).toEqual({
+      type: 'logs.copy',
+      text: 'via payload',
+    });
+    expect(parseLogsWebMessage({ type: 'logs.copy', text: '' })).toBeNull();
+    expect(parseLogsWebMessage({ type: 'logs.copy', text: 'x'.repeat(MAX_LOG_COPY_TEXT + 1) })).toBeNull();
+    expect(parseLogsWebMessage({ type: 'logs.copy', text: 'x'.repeat(MAX_LOG_COPY_TEXT) })).toEqual({
+      type: 'logs.copy',
+      text: 'x'.repeat(MAX_LOG_COPY_TEXT),
+    });
+    expect(parseLogsWebMessage({ type: 'logs.copy', text: 1 })).toBeNull();
     expect(parseLogsWebMessage({ type: 'nope' })).toBeNull();
     expect(parseLogsWebMessage([])).toBeNull();
     expect(parseLogsWebMessage(null)).toBeNull();

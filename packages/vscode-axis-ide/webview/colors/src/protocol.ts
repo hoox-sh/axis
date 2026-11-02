@@ -19,7 +19,7 @@
 /**
  * Local Colors webview messages. Not part of axis.webview.v1.
  * Host posts `{ type: 'colors.set', colors, sourceLabel }`.
- * Webview posts `colors.ready` and `colors.reveal`.
+ * Webview posts `colors.ready`, `colors.refresh`, `colors.reveal`, and `colors.copy`.
  */
 
 export interface ColorRow {
@@ -34,6 +34,8 @@ export interface ColorsViewState {
   sourceLabel: string;
 }
 
+export type ColorKindFilter = 'all' | 'hex' | 'named' | 'rgb-new';
+
 const SAFE_SWATCH =
   /^(?:#[0-9A-Fa-f]{3}|#[0-9A-Fa-f]{6}|#[0-9A-Fa-f]{8}|rgb\(\d{1,3}, \d{1,3}, \d{1,3}\)|rgba\(\d{1,3}, \d{1,3}, \d{1,3}, (?:0|1|0\.\d{1,3})\))$/;
 
@@ -44,6 +46,14 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 /** True when the swatch is safe to assign to `element.style.backgroundColor`. */
 export function isSafeSwatch(value: string): boolean {
   return SAFE_SWATCH.test(value);
+}
+
+/** Client-side kind chip for a scanned raw literal. */
+export function colorKindOf(raw: string): Exclude<ColorKindFilter, 'all'> {
+  const text = raw.trim();
+  if (text.startsWith('#')) return 'hex';
+  if (/^color\.(rgb|new)\b/i.test(text)) return 'rgb-new';
+  return 'named';
 }
 
 function rowFrom(value: unknown): ColorRow | null {
@@ -75,6 +85,14 @@ export function encodeColorsReady(): { type: 'colors.ready' } {
   return { type: 'colors.ready' };
 }
 
+export function encodeColorsRefresh(): { type: 'colors.refresh' } {
+  return { type: 'colors.refresh' };
+}
+
 export function encodeColorsReveal(line: number): { type: 'colors.reveal'; line: number } {
   return { type: 'colors.reveal', line };
+}
+
+export function encodeColorsCopy(text: string): { type: 'colors.copy'; text: string } {
+  return { type: 'colors.copy', text };
 }

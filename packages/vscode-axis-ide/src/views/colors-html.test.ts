@@ -46,6 +46,13 @@ describe('getColorsHtml', () => {
     expect(html).toContain('data-axis-colors-kind="colors"');
     expect(html).toContain('id="colors-count"');
     expect(html).toContain('id="colors-source"');
+    expect(html).toContain('id="colors-refresh"');
+    expect(html).toContain('id="colors-search"');
+    expect(html).toContain('class="colors-filters"');
+    expect(html).toContain('data-kind="all"');
+    expect(html).toContain('data-kind="hex"');
+    expect(html).toContain('data-kind="named"');
+    expect(html).toContain('data-kind="rgb-new"');
     expect(html).toContain('id="colors-empty"');
     expect(html).toContain('No colors in this script');
     expect(html).toContain('role="status"');

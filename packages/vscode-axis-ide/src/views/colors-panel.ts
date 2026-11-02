@@ -23,6 +23,7 @@ import {
   Selection,
   TextEditorRevealType,
   Uri,
+  env,
   window,
   workspace,
   type ExtensionContext,
@@ -35,7 +36,9 @@ import { getColorsHtml } from './colors-html';
 import {
   colorsSetMessage,
   isColorsReady,
+  isColorsRefresh,
   isPineEditorLanguage,
+  parseColorsCopy,
   parseColorsReveal,
   pineSourceLabel,
   scanColors,
@@ -137,8 +140,13 @@ export class ColorsPanelProvider implements WebviewViewProvider {
 
       webview.onDidReceiveMessage((raw) => {
         try {
-          if (isColorsReady(raw)) {
+          if (isColorsReady(raw) || isColorsRefresh(raw)) {
             this.refresh();
+            return;
+          }
+          const copy = parseColorsCopy(raw);
+          if (copy) {
+            void this.copyText(copy.text);
             return;
           }
           const reveal = parseColorsReveal(raw);
@@ -208,6 +216,18 @@ export class ColorsPanelProvider implements WebviewViewProvider {
     const range = new Range(textLine.range.start, textLine.range.end);
     editor.selection = new Selection(range.start, range.end);
     editor.revealRange(range, TextEditorRevealType.InCenter);
+  }
+
+  private async copyText(text: string): Promise<void> {
+    try {
+      await env.clipboard.writeText(text);
+    } catch {
+      try {
+        void window.showWarningMessage('AXIS: Could not copy the color.');
+      } catch {
+        // window unavailable
+      }
+    }
   }
 }
 

@@ -37,10 +37,10 @@ const FALLBACK_HTML = `<!DOCTYPE html>
   <title>Colors</title>
 </head>
 <body>
-  <div id="colors-root" class="colors-root" data-axis-colors-host="1">
-    <p id="colors-empty" class="colors-root__empty" role="status">No colors in this script</p>
+  <section id="colors-root" class="colors-root" data-axis-colors-host="1">
+    <p id="colors-empty" class="colors-empty" role="status">No colors in this script</p>
     <ul id="colors-list" class="colors-list" aria-label="Colors in this script"></ul>
-  </div>
+  </section>
 </body>
 </html>
 `;
@@ -93,17 +93,28 @@ export function getColorsHtml(opts?: ColorsHtmlOptions | null): string {
   <link rel="stylesheet" href="${safeStyle}" />
 </head>
 <body class="${bodyClass}" data-axis-colors-kind="colors">
-  <div id="colors-root" class="colors-root" data-axis-colors-host="1">
-    <header class="colors-root__header">
-      <h1 class="colors-root__title">Colors</h1>
-      <p class="colors-root__meta">
-        <span id="colors-count" class="colors-count">0 colors</span>
-        <span id="colors-source" class="colors-source"></span>
-      </p>
+  <section id="colors-root" class="colors-root" data-axis-colors-host="1" aria-label="Colors">
+    <header class="colors-header">
+      <div class="colors-header__top">
+        <h1 class="colors-title">Colors</h1>
+        <p class="colors-meta">
+          <span id="colors-count" class="colors-count">0</span>
+          <span id="colors-source" class="colors-source" title=""></span>
+        </p>
+        <button type="button" id="colors-refresh" class="colors-refresh" title="Re-scan the active editor">Refresh</button>
+      </div>
+      <label class="colors-search-label" for="colors-search">Search</label>
+      <input id="colors-search" class="colors-search" type="search" placeholder="Filter by raw text" autocomplete="off" spellcheck="false" aria-label="Filter colors by raw text" />
+      <div class="colors-filters" role="group" aria-label="Color kind filter">
+        <button type="button" class="colors-chip" data-kind="all" aria-pressed="true">All</button>
+        <button type="button" class="colors-chip" data-kind="hex" aria-pressed="false">Hex</button>
+        <button type="button" class="colors-chip" data-kind="named" aria-pressed="false">Named</button>
+        <button type="button" class="colors-chip" data-kind="rgb-new" aria-pressed="false">rgb/new</button>
+      </div>
     </header>
-    <p id="colors-empty" class="colors-root__empty" role="status">No colors in this script</p>
-    <ul id="colors-list" class="colors-list" aria-label="Colors in this script"></ul>
-  </div>
+    <p id="colors-empty" class="colors-empty" role="status">No colors in this script</p>
+    <ul id="colors-list" class="colors-list" aria-label="Colors in this script" tabindex="0"></ul>
+  </section>
   <script nonce="${safeNonce}" src="${safeScript}"></script>
 </body>
 </html>

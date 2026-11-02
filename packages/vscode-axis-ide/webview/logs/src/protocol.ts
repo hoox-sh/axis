@@ -55,6 +55,10 @@ export function encodeLogsReveal(line: number): { type: 'logs.reveal'; line: num
   return { type: 'logs.reveal', line };
 }
 
+export function encodeLogsCopy(text: string): { type: 'logs.copy'; text: string } {
+  return { type: 'logs.copy', text };
+}
+
 export function encodeLogsReady(ts = Date.now()): {
   type: 'logs.ready';
   payload: Record<string, never>;

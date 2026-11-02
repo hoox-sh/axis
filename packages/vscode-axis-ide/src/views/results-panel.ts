@@ -19,6 +19,8 @@
 import { existsSync } from 'node:fs';
 import {
   ColorThemeKind,
+  commands,
+  env,
   type ExtensionContext,
   type Webview,
   type WebviewView,
@@ -29,10 +31,18 @@ import {
 import { logProtocolReject } from '../host/logger';
 import type { ResultsFocusStore } from '../run/results-store';
 import { buildResultsWebviewHtml, type ResultsPanelKind } from './results-html';
-import { encodeResultsSet, handleResultsWebviewMessage } from './results-messages';
+import {
+  encodeResultsSet,
+  handleResultsWebviewMessage,
+  type ResultsActionMessage,
+} from './results-messages';
 
 export const RESULTS_VIEW_ID = 'axis.results';
 export const STRATEGY_VIEW_ID = 'axis.strategy';
+
+/** Contributed WebviewView focus commands (`{viewId}.focus`). */
+const PROFILER_FOCUS_COMMAND = 'axis.profiler.focus';
+const LOGS_FOCUS_COMMAND = 'axis.logs.focus';
 
 function themeBodyClass(kind: ColorThemeKind): string {
   switch (kind) {
@@ -88,6 +98,38 @@ function postSet(webview: Webview, store: ResultsFocusStore): void {
   }
 }
 
+async function applyResultsAction(action: ResultsActionMessage): Promise<void> {
+  try {
+    if (action.kind === 'copyId') {
+      const text = typeof action.text === 'string' ? action.text : '';
+      if (!text.trim()) return;
+      try {
+        await env.clipboard.writeText(text);
+      } catch {
+        // clipboard optional
+      }
+      return;
+    }
+    if (action.kind === 'focusProfiler') {
+      try {
+        await commands.executeCommand(PROFILER_FOCUS_COMMAND);
+      } catch {
+        // view may be unavailable
+      }
+      return;
+    }
+    if (action.kind === 'focusLogs') {
+      try {
+        await commands.executeCommand(LOGS_FOCUS_COMMAND);
+      } catch {
+        // view may be unavailable
+      }
+    }
+  } catch {
+    // never throw into the webview host
+  }
+}
+
 /**
  * Shared WebviewViewProvider for Results and Strategy panels.
  * Posts `results.set` on focus changes and on `results.ready`.
@@ -118,6 +160,10 @@ export class ResultsWebviewViewProvider implements WebviewViewProvider {
       const handle = handleResultsWebviewMessage(raw, this.store);
       if (handle.kind === 'reject') {
         logProtocolReject(handle.error, 'results');
+        return;
+      }
+      if (handle.kind === 'action') {
+        void applyResultsAction(handle.action);
         return;
       }
       if (handle.kind === 'ready' || handle.kind === 'focus') {

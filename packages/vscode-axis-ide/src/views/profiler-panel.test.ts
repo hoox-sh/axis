@@ -121,6 +121,28 @@ class Uri {
   }
 }
 
+class Position {
+  constructor(
+    public line: number,
+    public character: number,
+  ) {}
+}
+
+class Range {
+  constructor(
+    public start: Position,
+    public end: Position,
+  ) {}
+}
+
+class Selection extends Range {
+  constructor(anchor: Position, active: Position) {
+    super(anchor, active);
+  }
+}
+
+const TextEditorRevealType = { InCenter: 2 };
+
 const ColorThemeKind = {
   Light: 1,
   Dark: 2,
@@ -128,9 +150,29 @@ const ColorThemeKind = {
   HighContrastLight: 4,
 };
 
+type GExtra = G & {
+  __axisActiveEditor?: {
+    document: { languageId: string; lineCount: number };
+    selection?: unknown;
+    revealRange?: (range: unknown, type: unknown) => void;
+  } | null;
+  __axisClipboard?: string[];
+  __axisInfoMessages?: string[];
+  __axisClipboardThrow?: boolean;
+  __axisEditorThrow?: boolean;
+};
+
+function gx(): GExtra {
+  return globalThis as GExtra;
+}
+
 const vscodeApi = {
   ColorThemeKind,
   Uri,
+  Position,
+  Range,
+  Selection,
+  TextEditorRevealType,
   EventEmitter,
   TreeItem,
   ThemeIcon,
@@ -140,12 +182,30 @@ const vscodeApi = {
   LanguageModelToolResult,
   MarkdownString,
   McpStdioServerDefinition,
+  env: {
+    clipboard: {
+      async writeText(text: string) {
+        if (gx().__axisClipboardThrow) throw new Error('clipboard');
+        const bucket = gx().__axisClipboard;
+        if (bucket) bucket.push(text);
+      },
+    },
+  },
   window: {
     get activeColorTheme() {
       if (g().__axisThemeThrow) throw new Error('theme');
       return { kind: g().__axisThemeKind ?? ColorThemeKind.Dark };
     },
+    get activeTextEditor() {
+      if (gx().__axisEditorThrow) throw new Error('editor');
+      return gx().__axisActiveEditor ?? undefined;
+    },
     showWarningMessage: (_message: string) => undefined,
+    showInformationMessage: (message: string) => {
+      const bucket = gx().__axisInfoMessages;
+      if (bucket) bucket.push(message);
+      return undefined;
+    },
     createTreeView: () => ({ dispose() {} }),
     registerWebviewViewProvider: (
       id: string,
@@ -190,6 +250,21 @@ mock.module('vscode', () => ({
   },
   get Uri() {
     return vscodeApi.Uri;
+  },
+  get Position() {
+    return vscodeApi.Position;
+  },
+  get Range() {
+    return vscodeApi.Range;
+  },
+  get Selection() {
+    return vscodeApi.Selection;
+  },
+  get TextEditorRevealType() {
+    return vscodeApi.TextEditorRevealType;
+  },
+  get env() {
+    return vscodeApi.env;
   },
   get EventEmitter() {
     return vscodeApi.EventEmitter;
@@ -592,5 +667,69 @@ describe('ProfilerWebviewViewProvider', () => {
     const w = makeWebview();
     provider.resolveWebviewView(w.view as never);
     expect(() => provider.dispose()).not.toThrow();
+  });
+
+  test('profiler.reveal jumps to Pine line; profiler.copy writes clipboard', async () => {
+    const results = new resultsMod.ResultsFocusStore();
+    const withCss = makeAssets(true);
+    const provider = new panel.ProfilerWebviewViewProvider(
+      makeContext(withCss) as never,
+      results,
+    );
+    const w = makeWebview();
+    provider.resolveWebviewView(w.view as never);
+    const handler = w.getHandler();
+
+    gx().__axisInfoMessages = [];
+    gx().__axisActiveEditor = null;
+    handler?.({ type: 'profiler.reveal', line: 4 });
+    expect(gx().__axisInfoMessages?.[0]).toContain('No active Pine');
+
+    const revealed: unknown[] = [];
+    gx().__axisActiveEditor = {
+      document: { languageId: 'pinescript', lineCount: 20 },
+      selection: undefined,
+      revealRange(range, type) {
+        revealed.push({ range, type });
+      },
+    };
+    handler?.({ type: 'profiler.reveal', line: 7 });
+    expect(gx().__axisActiveEditor?.selection).toBeTruthy();
+    expect(revealed).toHaveLength(1);
+
+    gx().__axisActiveEditor = {
+      document: { languageId: 'pine', lineCount: 3 },
+      revealRange(range) {
+        revealed.push(range);
+      },
+    };
+    handler?.({ type: 'profiler.reveal', payload: { line: '99' } });
+    expect(revealed.length).toBeGreaterThan(1);
+
+    handler?.({ type: 'profiler.reveal', line: 0 });
+    handler?.({ type: 'profiler.reveal', line: 1.5 });
+    handler?.({ type: 'profiler.reveal' });
+
+    gx().__axisClipboard = [];
+    handler?.({ type: 'profiler.copy', runId: ' run-42 ' });
+    await Promise.resolve();
+    expect(gx().__axisClipboard).toEqual(['run-42']);
+
+    handler?.({ type: 'profiler.copy', payload: { runId: 'from-payload' } });
+    await Promise.resolve();
+    expect(gx().__axisClipboard?.at(-1)).toBe('from-payload');
+
+    handler?.({ type: 'profiler.copy', runId: '   ' });
+    handler?.({ type: 'profiler.copy', runId: 9 });
+    gx().__axisClipboardThrow = true;
+    expect(() => handler?.({ type: 'profiler.copy', runId: 'x' })).not.toThrow();
+    gx().__axisClipboardThrow = false;
+
+    gx().__axisEditorThrow = true;
+    gx().__axisInfoMessages = [];
+    expect(() => handler?.({ type: 'profiler.reveal', line: 2 })).not.toThrow();
+    expect(gx().__axisInfoMessages?.[0]).toContain('No active Pine');
+    gx().__axisEditorThrow = false;
+    gx().__axisActiveEditor = undefined;
   });
 });

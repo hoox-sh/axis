@@ -48,6 +48,23 @@ export interface ColorsRevealMessage {
   line: number;
 }
 
+/** Webview → host. Re-scan the active editor. */
+export interface ColorsRefreshMessage {
+  type: 'colors.refresh';
+}
+
+/** Webview → host. Copy raw/hex via the host clipboard. */
+export interface ColorsCopyMessage {
+  type: 'colors.copy';
+  text: string;
+}
+
+/** Chip filter kinds used by the Colors webview (client-side). */
+export type ColorKind = 'hex' | 'named' | 'rgb-new';
+
+/** Cap for `colors.copy` text (raw literals stay short). */
+export const MAX_COLORS_COPY_TEXT = 256;
+
 /** CSS / TradingView classic names used by Pine `color.*`. */
 export const NAMED_COLOR_SWATCH: Readonly<Record<string, string>> = {
   red: '#FF0000',
@@ -115,6 +132,27 @@ export function isColorsReady(raw: unknown): boolean {
   }
 }
 
+/** True for `{ type: 'colors.refresh' }`. Never throws. */
+export function isColorsRefresh(raw: unknown): boolean {
+  try {
+    return isPlainObject(raw) && raw.type === 'colors.refresh';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Classify a scanned raw literal for the All / Hex / Named / rgb-new chips.
+ * Non-strings are treated as named. Never throws.
+ */
+export function colorKind(raw: unknown): ColorKind {
+  if (typeof raw !== 'string') return 'named';
+  const text = raw.trim();
+  if (text.startsWith('#')) return 'hex';
+  if (/^color\.(rgb|new)\b/i.test(text)) return 'rgb-new';
+  return 'named';
+}
+
 /**
  * Parse `{ type: 'colors.reveal', line }` (1-based).
  * Returns null for anything else. Never throws.
@@ -125,6 +163,22 @@ export function parseColorsReveal(raw: unknown): ColorsRevealMessage | null {
     const line = raw.line;
     if (typeof line !== 'number' || !Number.isInteger(line) || line < 1) return null;
     return { type: 'colors.reveal', line };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Parse `{ type: 'colors.copy', text }`.
+ * Returns null for anything else. Never throws.
+ */
+export function parseColorsCopy(raw: unknown): ColorsCopyMessage | null {
+  try {
+    if (!isPlainObject(raw) || raw.type !== 'colors.copy') return null;
+    const text = raw.text;
+    if (typeof text !== 'string') return null;
+    if (text.length === 0 || text.length > MAX_COLORS_COPY_TEXT) return null;
+    return { type: 'colors.copy', text };
   } catch {
     return null;
   }

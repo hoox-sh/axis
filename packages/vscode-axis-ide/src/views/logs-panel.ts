@@ -28,6 +28,7 @@ import {
   type Webview,
   type WebviewView,
   type WebviewViewProvider,
+  env,
   window,
 } from 'vscode';
 import { attachLogsStore, encodeLogsSet, parseLogsWebMessage } from './logs-messages';
@@ -39,6 +40,7 @@ export const LOGS_VIEW_ID = 'axis.logs';
 const PINE_LANGUAGE_IDS = new Set(['pinescript', 'pine', 'pyne']);
 
 const NO_EDITOR = 'No active Pine script editor to reveal that line.';
+const COPY_FAILED = 'AXIS: Could not copy the log text.';
 
 function themeBodyClass(kind: ColorThemeKind): string {
   switch (kind) {
@@ -128,6 +130,18 @@ function revealLogLine(line: number): void {
   }
 }
 
+async function copyLogText(text: string): Promise<void> {
+  try {
+    await env.clipboard.writeText(text);
+  } catch {
+    try {
+      void window.showWarningMessage(COPY_FAILED);
+    } catch {
+      // host unavailable
+    }
+  }
+}
+
 /**
  * Panel WebviewViewProvider for script logs (`axis.logs`).
  * Subscribes to ResultsFocusStore the same way as `attachProfiler`.
@@ -157,7 +171,7 @@ export class LogsWebviewViewProvider implements WebviewViewProvider {
       };
 
       webview.onDidReceiveMessage((raw) => {
-        this.onMessage(raw);
+        void this.onMessage(raw);
       });
 
       webviewView.onDidChangeVisibility(() => {
@@ -207,12 +221,16 @@ export class LogsWebviewViewProvider implements WebviewViewProvider {
     }
   }
 
-  private onMessage(raw: unknown): void {
+  private async onMessage(raw: unknown): Promise<void> {
     try {
       const msg = parseLogsWebMessage(raw);
       if (!msg || msg.type === 'logs.filter') return;
       if (msg.type === 'logs.ready') {
         this.post();
+        return;
+      }
+      if (msg.type === 'logs.copy') {
+        await copyLogText(msg.text);
         return;
       }
       revealLogLine(msg.line);

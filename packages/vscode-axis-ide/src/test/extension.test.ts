@@ -129,6 +129,8 @@ const EXPECTED_LM_TOOLS = [
   'axis_run_script',
   'axis_get_results_focus',
   'axis_chart_snapshot_meta',
+  'axis_get_run_logs',
+  'axis_get_profiler',
 ] as const;
 const EXPECTED_PANEL_VIEWS = [
   'axis.results',
@@ -146,6 +148,14 @@ const ACTIVITY_VIEW_ICONS: Record<string, string> = {
   'axis.alerts': 'media/views/alerts.svg',
   'axis.plugins': 'media/views/plugins.svg',
   'axis.workers': 'media/views/workers.svg',
+};
+const PANEL_VIEW_ICONS: Record<string, string> = {
+  'axis.results': 'media/views/results.svg',
+  'axis.strategy': 'media/views/strategy.svg',
+  'axis.profiler': 'media/views/profiler.svg',
+  'axis.colors': 'media/views/colors.svg',
+  'axis.symbols': 'media/views/symbols.svg',
+  'axis.logs': 'media/views/logs.svg',
 };
 const EXPECTED_ACTIVITY_VIEWS = [
   'axis.library',
@@ -290,6 +300,15 @@ suite('AXIS IDE Extension Structure', () => {
     assert.strictEqual(panelViews.find((v) => v.id === 'axis.colors')?.name, 'Colors');
     assert.strictEqual(panelViews.find((v) => v.id === 'axis.symbols')?.name, 'Symbols');
     assert.strictEqual(panelViews.find((v) => v.id === 'axis.logs')?.name, 'Logs');
+    for (const id of EXPECTED_PANEL_VIEWS) {
+      const icon = PANEL_VIEW_ICONS[id];
+      const entry = panelViews.find((v) => v.id === id);
+      assert.strictEqual(entry?.icon, icon, `${id} panel icon`);
+      const iconAbs = path.resolve(__dirname, '../../', icon);
+      assert.ok(fs.existsSync(iconAbs), `panel icon missing on disk: ${icon}`);
+      const svg = fs.readFileSync(iconAbs, 'utf8');
+      assert.ok(svg.includes('#C5C5C5'), `${icon} must use fill #C5C5C5`);
+    }
 
     const sideViews = pkg.contributes?.views?.axis ?? [];
     const sideIds = sideViews.map((v) => v.id);

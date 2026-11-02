@@ -20,6 +20,8 @@ import { describe, expect, test } from 'bun:test';
 import { PROTOCOL_VERSION, decodeHostMessage } from '../../webview/results/src/protocol';
 import {
   escapeHtml,
+  kpiCardsInnerHtml,
+  metaChipsInnerHtml,
   paintResults,
   queryResultsDom,
   resultsCardHtml,
@@ -28,13 +30,23 @@ import {
 } from '../../webview/results/src/render';
 import {
   EMPTY_RUN_HINT,
+  EMPTY_RUN_TITLE,
+  ERROR_RUN_HINT,
   NO_RUN_FOCUSED,
+  NO_STRATEGY_HINT,
   NO_STRATEGY_REPORT,
+  buildMetaChips,
   buildResultsView,
+  countList,
   countPlots,
+  countSeries,
+  filterRows,
+  formatAbsoluteTime,
   formatNumber,
+  formatRelativeTime,
   pickStrategyRows,
   runSummaryRows,
+  splitStrategyKpis,
   statusOf,
   strategyBag,
 } from '../../webview/results/src/state';
@@ -83,7 +95,7 @@ describe('results webview protocol', () => {
 });
 
 describe('results view-model', () => {
-  test('idle empty state uses Ctrl+Enter hint', () => {
+  test('idle empty state uses Ctrl/Cmd+Enter hint', () => {
     const view = buildResultsView('results', {
       lastRun: null,
       strategyReport: null,
@@ -94,28 +106,44 @@ describe('results view-model', () => {
     expect(view.statusLabel).toBe('Idle');
     expect(view.title).toBe('Results');
     expect(view.focusLine).toBe(NO_RUN_FOCUSED);
+    expect(view.emptyTitle).toBe(EMPTY_RUN_TITLE);
     expect(view.emptyMessage).toBe(EMPTY_RUN_HINT);
-    expect(view.emptyMessage).toContain('Ctrl+Enter');
+    expect(view.emptyMessage).toContain('Ctrl/Cmd+Enter');
     expect(view.rows).toEqual([]);
+    expect(view.kpiRows).toEqual([]);
+    expect(view.metaChips).toEqual([]);
     expect(view.showStrategy).toBe(false);
+    expect(view.runId).toBeNull();
   });
 
-  test('success run lists id, script, engine, seriesKey, ms, plot count', () => {
-    const view = buildResultsView('results', {
-      focusId: 'run-3',
-      lastRun: {
-        id: 'run-3',
-        status: 'success',
-        engineId: 'server',
-        seriesKey: 'BINANCE:BTCUSDT:1h',
-        plots: { sma: [1, 2], close: [3] },
-        meta: { script_name: 'My SMA', ms: 12.8 },
+  test('success run lists id, script, engine, seriesKey, ms, plot count + meta chips', () => {
+    const now = 1_700_000_060_000;
+    const view = buildResultsView(
+      'results',
+      {
+        focusId: 'run-3',
+        lastRun: {
+          id: 'run-3',
+          status: 'success',
+          engineId: 'server',
+          seriesKey: 'BINANCE:BTCUSDT:1h',
+          plots: { sma: [1, 2], close: [3] },
+          series: { a: 1, b: 2 },
+          logs: ['l1', 'l2', 'l3'],
+          diagnostics: [{ message: 'd' }],
+          createdAt: 1_700_000_000_000,
+          meta: { script_name: 'My SMA', ms: 12.8 },
+        },
+        strategyReport: null,
       },
-      strategyReport: null,
-    });
+      now,
+    );
     expect(view.empty).toBe(false);
     expect(view.status).toBe('success');
     expect(view.focusLine).toBe('Focus: run-3');
+    expect(view.runId).toBe('run-3');
+    expect(view.relativeTime).toBe('1m ago');
+    expect(view.absoluteTime.length).toBeGreaterThan(0);
     const byKey = Object.fromEntries(view.rows.map((r) => [r.key, r.value]));
     expect(byKey.id).toBe('run-3');
     expect(byKey.script).toBe('My SMA');
@@ -125,9 +153,15 @@ describe('results view-model', () => {
     expect(byKey.plots).toBe('2');
     expect(byKey.error).toBeUndefined();
     expect(view.showStrategy).toBe(false);
+    const chips = Object.fromEntries(view.metaChips.map((c) => [c.key, c.value]));
+    expect(chips.ms).toBe('13');
+    expect(chips.plots).toBe('2');
+    expect(chips.series).toBe('2');
+    expect(chips.logs).toBe('3');
+    expect(chips.diags).toBe('1');
   });
 
-  test('error run adds error row and error badge', () => {
+  test('error run adds error row, error badge, and actionable hint', () => {
     const view = buildResultsView('results', {
       focusId: 'run-e',
       lastRun: {
@@ -143,6 +177,7 @@ describe('results view-model', () => {
     });
     expect(view.status).toBe('error');
     expect(view.statusLabel).toBe('Error');
+    expect(view.emptyMessage).toBe(ERROR_RUN_HINT);
     const err = view.rows.find((r) => r.key === 'error');
     expect(err?.value).toBe('compile failed <boom>');
   });
@@ -174,7 +209,7 @@ describe('results view-model', () => {
     expect(view.rows.find((r) => r.key === 'plots')?.value).toBe('3');
   });
 
-  test('strategy panel lists known keys when report object is present', () => {
+  test('strategy panel lists KPI cards + denser remainder when report present', () => {
     const view = buildResultsView('strategy', {
       focusId: 'run-s',
       lastRun: {
@@ -190,22 +225,25 @@ describe('results view-model', () => {
         trades: 4,
         profitFactor: 1.8,
         maxDD: 0.12,
+        avgWin: 2.5,
+        avgLoss: -1.1,
       },
     });
     expect(view.title).toBe('Strategy');
     expect(view.empty).toBe(false);
     expect(view.showStrategy).toBe(false);
     expect(view.strategyNote).toBeNull();
+    const kpiKeys = view.kpiRows.map((r) => r.key);
+    expect(kpiKeys).toEqual(['netprofit', 'winrate', 'trades', 'profitfactor', 'maxdd']);
+    expect(view.kpiRows.find((r) => r.key === 'winrate')?.value).toBe('50%');
     const byKey = Object.fromEntries(view.rows.map((r) => [r.key, r.value]));
-    expect(byKey.netprofit).toBe('10');
-    expect(byKey.winrate).toBe('50%');
-    expect(byKey.trades).toBe('4');
-    expect(byKey.profitfactor).toBe('1.8');
-    expect(byKey.maxdd).toBe('12%');
+    expect(byKey.netprofit).toBeUndefined();
+    expect(byKey.avgwin).toBe('2.5');
+    expect(byKey.avgloss).toBe('-1.1');
     expect(byKey.id).toBeUndefined();
   });
 
-  test('strategy panel without report reuses results summary + note', () => {
+  test('strategy panel without report reuses results summary + actionable note', () => {
     const view = buildResultsView('strategy', {
       focusId: 'run-2',
       lastRun: {
@@ -220,10 +258,12 @@ describe('results view-model', () => {
     });
     expect(view.title).toBe('Strategy');
     expect(view.showStrategy).toBe(true);
-    expect(view.strategyNote).toBe(NO_STRATEGY_REPORT);
+    expect(view.strategyNote).toContain(NO_STRATEGY_REPORT);
+    expect(view.strategyNote).toContain(NO_STRATEGY_HINT);
     expect(view.rows.find((r) => r.key === 'id')?.value).toBe('run-2');
     expect(view.rows.find((r) => r.key === 'script')?.value).toBe('Ind');
     expect(view.strategyRows).toEqual([]);
+    expect(view.kpiRows).toEqual([]);
   });
 
   test('non-object / hostile payloads never throw and stay idle', () => {
@@ -249,11 +289,18 @@ describe('results view-model', () => {
     expect(statusOf({ status: 'running' })).toBe('idle');
   });
 
-  test('countPlots / formatNumber / strategyBag helpers', () => {
+  test('countPlots / countSeries / countList / formatNumber / strategyBag helpers', () => {
     expect(countPlots(null)).toBe(0);
     expect(countPlots([1, 2])).toBe(2);
     expect(countPlots({ a: 1, b: 2, c: 3 })).toBe(3);
     expect(countPlots('nope')).toBe(0);
+    expect(countSeries(null)).toBe(0);
+    expect(countSeries({ x: 1 })).toBe(1);
+    expect(countSeries([1, 2, 3])).toBe(3);
+    expect(countSeries('x')).toBe(0);
+    expect(countList(['a'])).toBe(1);
+    expect(countList(null)).toBe(0);
+    expect(countList({ a: 1 })).toBe(0);
     expect(formatNumber(12)).toBe('12');
     expect(formatNumber(12.5)).toBe('12.5');
     expect(formatNumber(0.01234)).toContain('0.012');
@@ -265,17 +312,42 @@ describe('results view-model', () => {
     });
   });
 
-  test('pickStrategyRows skips unknown keys and counts trade arrays', () => {
+  test('relative / absolute time helpers', () => {
+    const now = 1_700_000_000_000;
+    expect(formatRelativeTime(0, now)).toBe('');
+    expect(formatRelativeTime(now - 2_000, now)).toBe('just now');
+    expect(formatRelativeTime(now - 12_000, now)).toBe('12s ago');
+    expect(formatRelativeTime(now - 120_000, now)).toBe('2m ago');
+    expect(formatRelativeTime(now - 7_200_000, now)).toBe('2h ago');
+    expect(formatRelativeTime(now - 172_800_000, now)).toBe('2d ago');
+    expect(formatAbsoluteTime(0)).toBe('');
+    expect(formatAbsoluteTime(now).length).toBeGreaterThan(0);
+  });
+
+  test('pickStrategyRows / splitStrategyKpis / filterRows / buildMetaChips', () => {
     expect(pickStrategyRows(null)).toEqual([]);
     expect(pickStrategyRows('x')).toEqual([]);
     const rows = pickStrategyRows({
       trades: [{}, {}],
       foo: 1,
       avgWin: 3.25,
+      netProfit: 9,
     });
     expect(rows.find((r) => r.key === 'trades')?.value).toBe('2');
     expect(rows.find((r) => r.key === 'avgwin')?.value).toBe('3.25');
     expect(rows.some((r) => r.key === 'foo')).toBe(false);
+    const split = splitStrategyKpis(rows);
+    expect(split.kpis.map((r) => r.key)).toContain('netprofit');
+    expect(split.kpis.map((r) => r.key)).toContain('trades');
+    expect(split.rest.map((r) => r.key)).toContain('avgwin');
+    expect(filterRows(rows, 'AVG')).toHaveLength(1);
+    expect(filterRows(rows, '')).toHaveLength(rows.length);
+    expect(buildMetaChips({ plots: [1], logs: ['a'], diagnostics: [] }).map((c) => c.key)).toEqual([
+      'plots',
+      'series',
+      'logs',
+      'diags',
+    ]);
   });
 
   test('runSummaryRows fills dashes for missing fields', () => {
@@ -298,10 +370,21 @@ describe('results render', () => {
     ]);
     expect(html).toContain('data-row="error"');
     expect(html).toContain('is-error');
+    expect(html).toContain('tabindex="0"');
     expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
     expect(html).not.toContain('<script>alert');
     expect(html).toContain('run-&quot;1&quot;');
     expect(escapeHtml('<x>')).toBe('&lt;x&gt;');
+  });
+
+  test('meta chips and KPI cards escape values', () => {
+    expect(metaChipsInnerHtml([{ key: 'ms', label: 'ms', value: '12' }])).toContain('data-chip="ms"');
+    expect(
+      kpiCardsInnerHtml([{ key: 'netprofit', label: 'Net <b>', value: '1<script>' }]),
+    ).toContain('Net &lt;b&gt;');
+    expect(
+      kpiCardsInnerHtml([{ key: 'netprofit', label: 'Net <b>', value: '1<script>' }]),
+    ).toContain('1&lt;script&gt;');
   });
 
   test('resultsCardHtml includes strategy snippet when shown', () => {
@@ -335,33 +418,66 @@ describe('results render', () => {
     expect(html).toContain('Run id');
     expect(html).not.toContain('lastRun');
   });
+
+  test('strategy card html includes KPI block when present', () => {
+    const view = buildResultsView('strategy', {
+      focusId: 'run-1',
+      lastRun: { id: 'run-1', status: 'success', engineId: 'server', seriesKey: 'k' },
+      strategyReport: { netProfit: 5, trades: 2, avgWin: 1 },
+    });
+    const html = resultsCardHtml(view);
+    expect(html).toContain('id="results-kpis"');
+    expect(html).toContain('data-kpi="netprofit"');
+    expect(html).toContain('Avg win');
+  });
 });
 
 describe('paintResults DOM hooks', () => {
-  test('updates status badge, empty, rows, and aria-live node', () => {
+  test('updates status badge, empty, rows, meta, time, and aria-live node', () => {
     const els: Record<string, FakeEl> = {
       title: fakeEl('Results'),
       status: fakeEl('Idle', { 'data-status': 'idle', class: 'results-status results-status--idle' }),
       focus: fakeEl(NO_RUN_FOCUSED),
+      time: fakeEl('', { hidden: true }),
+      meta: fakeEl('', { hidden: true }),
+      copyId: fakeEl('Copy id', { hidden: true }),
+      focusProfiler: fakeEl('Profiler', { hidden: true }),
+      focusLogs: fakeEl('Logs', { hidden: true }),
+      searchWrap: fakeEl('', { hidden: true }),
       card: fakeEl('', { hidden: true }),
+      kpis: fakeEl('', { hidden: true }),
       rows: fakeEl(''),
       strategy: fakeEl('', { hidden: true }),
       strategyTitle: fakeEl('Strategy'),
       strategyEmpty: fakeEl(NO_STRATEGY_REPORT, { hidden: true }),
       strategyRows: fakeEl(''),
-      empty: fakeEl(EMPTY_RUN_HINT),
+      empty: fakeEl('', { hidden: false }),
+      emptyTitle: fakeEl(EMPTY_RUN_TITLE),
+      emptyHint: fakeEl(EMPTY_RUN_HINT),
+      live: fakeEl(''),
     };
     const dom: ResultsDom = {
       title: els.title as unknown as HTMLElement,
       status: els.status as unknown as HTMLElement,
       focus: els.focus as unknown as HTMLElement,
+      time: els.time as unknown as HTMLElement,
+      meta: els.meta as unknown as HTMLElement,
+      copyId: els.copyId as unknown as HTMLElement,
+      focusProfiler: els.focusProfiler as unknown as HTMLElement,
+      focusLogs: els.focusLogs as unknown as HTMLElement,
+      searchWrap: els.searchWrap as unknown as HTMLElement,
+      search: null,
       card: els.card as unknown as HTMLElement,
+      kpis: els.kpis as unknown as HTMLElement,
       rows: els.rows as unknown as HTMLElement,
       strategy: els.strategy as unknown as HTMLElement,
       strategyTitle: els.strategyTitle as unknown as HTMLElement,
       strategyEmpty: els.strategyEmpty as unknown as HTMLElement,
       strategyRows: els.strategyRows as unknown as HTMLElement,
       empty: els.empty as unknown as HTMLElement,
+      emptyTitle: els.emptyTitle as unknown as HTMLElement,
+      emptyHint: els.emptyHint as unknown as HTMLElement,
+      live: els.live as unknown as HTMLElement,
     };
 
     const success = buildResultsView('results', {
@@ -372,6 +488,8 @@ describe('paintResults DOM hooks', () => {
         engineId: 'server',
         seriesKey: 'k',
         plots: [1],
+        logs: ['a'],
+        createdAt: Date.now() - 10_000,
         meta: { script_name: 'A', ms: 5 },
       },
       strategyReport: { netProfit: 2, trades: 1 },
@@ -387,6 +505,15 @@ describe('paintResults DOM hooks', () => {
     expect(els.rows.innerHTML).toContain('run-9');
     expect(els.strategy.hidden).toBe(false);
     expect(els.strategyRows.innerHTML).toContain('Net profit');
+    expect(els.meta.hidden).toBe(false);
+    expect(els.meta.innerHTML).toContain('data-chip="ms"');
+    expect(els.copyId.hidden).toBe(false);
+    expect(els.copyId.getAttribute('data-run-id')).toBe('run-9');
+    expect(els.focusProfiler.hidden).toBe(false);
+    expect(els.focusLogs.hidden).toBe(false);
+    expect(els.searchWrap.hidden).toBe(false);
+    expect(els.time.hidden).toBe(false);
+    expect(els.live.textContent).toContain('Success');
 
     const idle = buildResultsView('results', { lastRun: null, strategyReport: null, focusId: null });
     paintResults(dom, idle);
@@ -394,7 +521,9 @@ describe('paintResults DOM hooks', () => {
     expect(els.status.getAttribute('data-status')).toBe('idle');
     expect(els.empty.hidden).toBe(false);
     expect(els.card.hidden).toBe(true);
-    expect(els.empty.textContent).toBe(EMPTY_RUN_HINT);
+    expect(els.emptyHint.textContent).toBe(EMPTY_RUN_HINT);
+    expect(els.copyId.hidden).toBe(true);
+    expect(els.meta.hidden).toBe(true);
 
     const err = buildResultsView('strategy', {
       focusId: 'run-e',
@@ -406,7 +535,7 @@ describe('paintResults DOM hooks', () => {
     expect(els.status.textContent).toBe('Error');
     expect(els.strategy.hidden).toBe(false);
     expect(els.strategyEmpty.hidden).toBe(false);
-    expect(els.strategyEmpty.textContent).toBe(NO_STRATEGY_REPORT);
+    expect(els.strategyEmpty.textContent).toContain(NO_STRATEGY_REPORT);
     expect(els.rows.innerHTML).toContain('nope');
   });
 
@@ -421,6 +550,7 @@ describe('paintResults DOM hooks', () => {
     const dom = queryResultsDom(root as unknown as ParentNode);
     expect(dom.status).toBe(status as unknown as HTMLElement);
     expect(dom.card).toBeNull();
+    expect(dom.search).toBeNull();
   });
 });
 
@@ -444,6 +574,9 @@ class FakeEl {
   }
   getAttribute(name: string): string | null {
     return this.attrs.get(name) ?? null;
+  }
+  removeAttribute(name: string): void {
+    this.attrs.delete(name);
   }
 }
 

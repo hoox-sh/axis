@@ -18,12 +18,19 @@
 
 /**
  * Pure Results / Strategy presenters (no DOM). Consume `results.set` payload.
+ * Never surfaces secrets — only known summary / strategy field aliases.
  */
 
 export type ResultsKind = 'results' | 'strategy';
 export type ResultsStatus = 'success' | 'error' | 'idle';
 
 export type ResultsRow = {
+  key: string;
+  label: string;
+  value: string;
+};
+
+export type ResultsMetaChip = {
   key: string;
   label: string;
   value: string;
@@ -36,19 +43,41 @@ export type ResultsView = {
   statusLabel: string;
   focusLine: string;
   empty: boolean;
+  emptyTitle: string;
   emptyMessage: string;
-  /** Primary card rows (run summary or strategy stats). */
+  /** Primary card rows (run summary or non-KPI strategy stats). */
   rows: ResultsRow[];
   /** Compact strategy snippet (results panel) or unused. */
   strategyRows: ResultsRow[];
   /** Shown when the strategy panel has no report object. */
   strategyNote: string | null;
   showStrategy: boolean;
+  /** Dense KPI cards (strategy panel when a report exists). */
+  kpiRows: ResultsRow[];
+  runId: string | null;
+  createdAt: number | null;
+  relativeTime: string;
+  absoluteTime: string;
+  metaChips: ResultsMetaChip[];
+  /** Polite live-region text for status / focus changes. */
+  liveMessage: string;
 };
 
-export const EMPTY_RUN_HINT = 'Run a Pine Script™ (Ctrl+Enter)';
-export const NO_STRATEGY_REPORT = 'No strategy report';
+export const EMPTY_RUN_TITLE = 'No run yet';
+export const EMPTY_RUN_HINT = 'Run a Pine script with Ctrl/Cmd+Enter';
+export const NO_STRATEGY_REPORT = 'This run has no strategy report';
+export const NO_STRATEGY_HINT = 'Open a strategy script and run with Ctrl/Cmd+Enter';
 export const NO_RUN_FOCUSED = 'No run focused';
+export const ERROR_RUN_HINT = 'Fix the error and re-run with Ctrl/Cmd+Enter';
+
+/** Primary strategy KPIs shown as dense cards. */
+export const STRATEGY_KPI_IDS: readonly string[] = [
+  'netprofit',
+  'winrate',
+  'trades',
+  'profitfactor',
+  'maxdd',
+];
 
 const STATUS_LABEL: Record<ResultsStatus, string> = {
   idle: 'Idle',
@@ -177,10 +206,37 @@ export function pickStrategyRows(report: unknown): ResultsRow[] {
   return rows;
 }
 
+/** Split strategy rows into KPI cards vs denser table remainder. */
+export function splitStrategyKpis(rows: ResultsRow[]): { kpis: ResultsRow[]; rest: ResultsRow[] } {
+  const kpiSet = new Set(STRATEGY_KPI_IDS);
+  const kpis: ResultsRow[] = [];
+  const rest: ResultsRow[] = [];
+  for (const row of rows) {
+    if (kpiSet.has(row.key)) kpis.push(row);
+    else rest.push(row);
+  }
+  // Preserve STRATEGY_KPI_IDS order for cards.
+  kpis.sort((a, b) => STRATEGY_KPI_IDS.indexOf(a.key) - STRATEGY_KPI_IDS.indexOf(b.key));
+  return { kpis, rest };
+}
+
 export function countPlots(plots: unknown): number {
   if (plots == null) return 0;
   if (Array.isArray(plots)) return plots.length;
   if (typeof plots === 'object') return Object.keys(plots as object).length;
+  return 0;
+}
+
+export function countSeries(series: unknown): number {
+  if (series == null) return 0;
+  if (Array.isArray(series)) return series.length;
+  if (typeof series === 'object') return Object.keys(series as object).length;
+  return 0;
+}
+
+export function countList(value: unknown): number {
+  if (value == null) return 0;
+  if (Array.isArray(value)) return value.length;
   return 0;
 }
 
@@ -218,6 +274,40 @@ function msOf(lastRun: Record<string, unknown>, meta: Record<string, unknown>): 
   return asFiniteNumber(read(lastRun, 'ms'));
 }
 
+function createdAtOf(lastRun: Record<string, unknown>, meta: Record<string, unknown>): number | null {
+  const candidates = [
+    asFiniteNumber(read(lastRun, 'createdAt')),
+    asFiniteNumber(read(lastRun, 'at')),
+    asFiniteNumber(read(meta, 'createdAt')),
+    asFiniteNumber(read(meta, 'at')),
+  ];
+  for (const n of candidates) {
+    if (n != null && n > 0) return n;
+  }
+  return null;
+}
+
+/** Relative age for sticky header (never throws). */
+export function formatRelativeTime(ms: number, now = Date.now()): string {
+  if (!Number.isFinite(ms) || ms <= 0) return '';
+  const d = now - ms;
+  if (!Number.isFinite(d)) return '';
+  if (d < 5_000) return 'just now';
+  if (d < 60_000) return `${Math.max(1, Math.round(d / 1000))}s ago`;
+  if (d < 3_600_000) return `${Math.round(d / 60_000)}m ago`;
+  if (d < 86_400_000) return `${Math.round(d / 3_600_000)}h ago`;
+  return `${Math.round(d / 86_400_000)}d ago`;
+}
+
+export function formatAbsoluteTime(ms: number): string {
+  if (!Number.isFinite(ms) || ms <= 0) return '';
+  try {
+    return new Date(ms).toLocaleString();
+  } catch {
+    return String(ms);
+  }
+}
+
 export function statusOf(lastRun: Record<string, unknown> | null): ResultsStatus {
   if (!lastRun) return 'idle';
   const status = asString(read(lastRun, 'status'));
@@ -248,6 +338,31 @@ export function runSummaryRows(lastRun: Record<string, unknown>): ResultsRow[] {
   return rows;
 }
 
+export function buildMetaChips(lastRun: Record<string, unknown>): ResultsMetaChip[] {
+  const meta = metaOf(lastRun);
+  const ms = msOf(lastRun, meta);
+  const plots = countPlots(read(lastRun, 'plots'));
+  const series = countSeries(read(lastRun, 'series'));
+  const logs = countList(read(lastRun, 'logs'));
+  const diags = countList(read(lastRun, 'diagnostics'));
+  const chips: ResultsMetaChip[] = [];
+  if (ms != null) chips.push({ key: 'ms', label: 'ms', value: String(Math.round(ms)) });
+  chips.push({ key: 'plots', label: 'plots', value: String(plots) });
+  chips.push({ key: 'series', label: 'series', value: String(series) });
+  chips.push({ key: 'logs', label: 'logs', value: String(logs) });
+  chips.push({ key: 'diags', label: 'diags', value: String(diags) });
+  return chips;
+}
+
+/** Case-insensitive filter over label/value (local UI only). */
+export function filterRows(rows: ResultsRow[], query: string): ResultsRow[] {
+  const q = String(query ?? '').trim().toLowerCase();
+  if (!q) return rows;
+  return rows.filter(
+    (row) => row.label.toLowerCase().includes(q) || row.value.toLowerCase().includes(q) || row.key.toLowerCase().includes(q),
+  );
+}
+
 function idleView(kind: ResultsKind, focusLine: string): ResultsView {
   return {
     kind,
@@ -256,11 +371,19 @@ function idleView(kind: ResultsKind, focusLine: string): ResultsView {
     statusLabel: STATUS_LABEL.idle,
     focusLine,
     empty: true,
+    emptyTitle: EMPTY_RUN_TITLE,
     emptyMessage: EMPTY_RUN_HINT,
     rows: [],
     strategyRows: [],
     strategyNote: null,
     showStrategy: false,
+    kpiRows: [],
+    runId: null,
+    createdAt: null,
+    relativeTime: '',
+    absoluteTime: '',
+    metaChips: [],
+    liveMessage: 'Idle — no run focused',
   };
 }
 
@@ -272,7 +395,7 @@ function focusLineOf(focusId: unknown): string {
 }
 
 /** Build the Results / Strategy card model from a `results.set` payload. Never throws. */
-export function buildResultsView(kind: ResultsKind, payload: unknown): ResultsView {
+export function buildResultsView(kind: ResultsKind, payload: unknown, now = Date.now()): ResultsView {
   try {
     const rec = isPlainObject(payload) ? payload : {};
     const focusLine = focusLineOf(read(rec, 'focusId'));
@@ -289,9 +412,18 @@ export function buildResultsView(kind: ResultsKind, payload: unknown): ResultsVi
     const status = statusOf(lastRun);
     const summary = runSummaryRows(lastRun);
     const title = kind === 'strategy' ? 'Strategy' : 'Results';
+    const meta = metaOf(lastRun);
+    const runId = asString(read(lastRun, 'id')) ?? null;
+    const createdAt = createdAtOf(lastRun, meta);
+    const relativeTime = createdAt != null ? formatRelativeTime(createdAt, now) : '';
+    const absoluteTime = createdAt != null ? formatAbsoluteTime(createdAt) : '';
+    const metaChips = buildMetaChips(lastRun);
+    const emptyMessage = status === 'error' ? ERROR_RUN_HINT : EMPTY_RUN_HINT;
+    const liveMessage = `${STATUS_LABEL[status]}${runId ? ` — ${runId}` : ''}`;
 
     if (kind === 'strategy') {
       if (hasReportObject && strategyRows.length > 0) {
+        const { kpis, rest } = splitStrategyKpis(strategyRows);
         return {
           kind,
           title,
@@ -299,11 +431,20 @@ export function buildResultsView(kind: ResultsKind, payload: unknown): ResultsVi
           statusLabel: STATUS_LABEL[status],
           focusLine,
           empty: false,
-          emptyMessage: EMPTY_RUN_HINT,
-          rows: strategyRows,
+          emptyTitle: EMPTY_RUN_TITLE,
+          emptyMessage,
+          // KPI cards take primary metrics; denser table shows the remainder (or all if none match).
+          rows: kpis.length > 0 ? rest : strategyRows,
           strategyRows: [],
           strategyNote: null,
           showStrategy: false,
+          kpiRows: kpis,
+          runId,
+          createdAt,
+          relativeTime,
+          absoluteTime,
+          metaChips,
+          liveMessage,
         };
       }
       return {
@@ -313,11 +454,19 @@ export function buildResultsView(kind: ResultsKind, payload: unknown): ResultsVi
         statusLabel: STATUS_LABEL[status],
         focusLine,
         empty: false,
-        emptyMessage: EMPTY_RUN_HINT,
+        emptyTitle: EMPTY_RUN_TITLE,
+        emptyMessage,
         rows: summary,
         strategyRows: [],
-        strategyNote: NO_STRATEGY_REPORT,
+        strategyNote: `${NO_STRATEGY_REPORT}. ${NO_STRATEGY_HINT}`,
         showStrategy: true,
+        kpiRows: [],
+        runId,
+        createdAt,
+        relativeTime,
+        absoluteTime,
+        metaChips,
+        liveMessage,
       };
     }
 
@@ -328,11 +477,19 @@ export function buildResultsView(kind: ResultsKind, payload: unknown): ResultsVi
       statusLabel: STATUS_LABEL[status],
       focusLine,
       empty: false,
-      emptyMessage: EMPTY_RUN_HINT,
+      emptyTitle: EMPTY_RUN_TITLE,
+      emptyMessage,
       rows: summary,
       strategyRows,
       strategyNote: null,
       showStrategy: strategyRows.length > 0,
+      kpiRows: [],
+      runId,
+      createdAt,
+      relativeTime,
+      absoluteTime,
+      metaChips,
+      liveMessage,
     };
   } catch {
     return idleView(kind === 'strategy' ? 'strategy' : 'results', NO_RUN_FOCUSED);

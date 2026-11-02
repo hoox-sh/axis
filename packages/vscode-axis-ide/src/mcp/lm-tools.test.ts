@@ -225,7 +225,13 @@ describe('LM contributes fragment', () => {
     const fragPath = join(import.meta.dir, 'lm-tools-contributes.fragment.json');
     const frag = JSON.parse(readFileSync(fragPath, 'utf8')) as {
       contributes: {
-        languageModelTools: Array<{ name: string; toolReferenceName?: string }>;
+        languageModelTools: Array<{
+          name: string;
+          toolReferenceName?: string;
+          userDescription?: string;
+          icon?: string;
+          tags?: string[];
+        }>;
       };
     };
     const names = frag.contributes.languageModelTools.map((t) => t.name);
@@ -233,12 +239,25 @@ describe('LM contributes fragment', () => {
       lmTools.LM_TOOL_NAMES.runScript,
       lmTools.LM_TOOL_NAMES.getResultsFocus,
       lmTools.LM_TOOL_NAMES.chartSnapshotMeta,
+      lmTools.LM_TOOL_NAMES.getRunLogs,
+      lmTools.LM_TOOL_NAMES.getProfiler,
     ]);
-    expect(
-      frag.contributes.languageModelTools.find(
-        (t) => t.name === 'axis_chart_snapshot_meta',
-      )?.toolReferenceName,
-    ).toBe('axis_chart_meta');
+    const byName = Object.fromEntries(
+      frag.contributes.languageModelTools.map((t) => [t.name, t]),
+    );
+    expect(byName.axis_run_script?.toolReferenceName).toBe('axisRun');
+    expect(byName.axis_get_results_focus?.toolReferenceName).toBe('axisResults');
+    expect(byName.axis_chart_snapshot_meta?.toolReferenceName).toBe('axisChart');
+    expect(byName.axis_get_run_logs?.toolReferenceName).toBe('axisLogs');
+    expect(byName.axis_get_profiler?.toolReferenceName).toBe('axisProfiler');
+    expect(byName.axis_run_script?.icon).toBe('$(play)');
+    expect(byName.axis_get_run_logs?.icon).toBe('$(output)');
+    expect(byName.axis_get_profiler?.icon).toBe('$(dashboard)');
+    for (const t of frag.contributes.languageModelTools) {
+      expect(t.userDescription).toBeTruthy();
+      expect(t.tags).toContain('axis');
+      expect(t.tags).toContain('copilot');
+    }
   });
 });
 
@@ -268,6 +287,8 @@ describe('summarizeRunRecord / summarizeMeta', () => {
     expect(summary!.plotKeys).toEqual([]);
     expect(summary!.seriesKeys).toEqual(['SMA', 'close']);
     expect(summary!.hasStrategyReport).toBe(true);
+    expect(summary!.logCount).toBe(0);
+    expect(summary!.diagnosticCount).toBe(0);
     expect(summary!.meta).toEqual({
       ms: 12.5,
       transport: 'rest',
@@ -298,6 +319,90 @@ describe('summarizeRunRecord / summarizeMeta', () => {
     expect(summary!.plotCount).toBe(2);
     expect(summary!.plotKeys).toEqual(['ema', 'rsi']);
     expect(lmTools.payloadLeaksSecret(JSON.stringify(summary))).toBe(false);
+  });
+
+  test('derives log/diagnostic counts and profile hot lines (max 5)', () => {
+    const summary = lmTools.summarizeRunRecord({
+      id: 'run-prof',
+      status: 'success',
+      focus: true,
+      seriesKey: 'k',
+      engineId: 'server',
+      logs: ['a', 'b', { message: 'c' }],
+      diagnostics: [{ message: 'warn', severity: 'warning' }],
+      meta: {
+        ms: 9,
+        code: 0,
+        script_name: 'Demo',
+        profile: {
+          total_ms: 100,
+          phases: { parse_ms: 10, eval_ms: 90 },
+          lines: [
+            { line: 1, ms: 40 },
+            { line: 2, ms: 30, pct: 30 },
+            { line: 3, ms: 20 },
+            { line: 4, ms: 5 },
+            { line: 5, ms: 3 },
+            { line: 6, ms: 2 },
+            { line: 7, ms: 0 },
+          ],
+        },
+      },
+      createdAt: 2,
+    });
+    expect(summary!.logCount).toBe(3);
+    expect(summary!.diagnosticCount).toBe(1);
+    expect(summary!.profileMs).toBe(100);
+    expect(summary!.profileLineCount).toBe(7);
+    expect(summary!.hotLines).toHaveLength(5);
+    expect(summary!.hotLines![0]).toEqual({ line: 1, ms: 40, pct: 40 });
+    expect(summary!.hotLines![1]).toEqual({ line: 2, ms: 30, pct: 30 });
+    expect(summary!.meta?.script_name).toBe('Demo');
+    expect(summary!.meta?.code).toBe(0);
+    expect(summary!.meta?.profileMs).toBe(100);
+    expect(summary!.meta?.phases).toEqual({ parse_ms: 10, eval_ms: 90 });
+    expect(JSON.stringify(summary!.meta)).not.toContain('"lines"');
+  });
+
+  test('empty profile lines → profileLineCount 0 and hotLines []; never invents', () => {
+    const emptyLines = lmTools.summarizeRunRecord({
+      id: 'run-empty-prof',
+      status: 'success',
+      focus: true,
+      seriesKey: 'k',
+      engineId: 'server',
+      meta: { profile: { totalMs: 12, lines: [] } },
+      createdAt: 3,
+    });
+    expect(emptyLines!.profileMs).toBe(12);
+    expect(emptyLines!.profileLineCount).toBe(0);
+    expect(emptyLines!.hotLines).toEqual([]);
+
+    const noLines = lmTools.summarizeRunRecord({
+      id: 'run-phase-only',
+      status: 'success',
+      focus: true,
+      seriesKey: 'k',
+      engineId: 'server',
+      meta: { profile: { total_ms: 8, phases: { eval_ms: 8 } } },
+      createdAt: 4,
+    });
+    expect(noLines!.profileMs).toBe(8);
+    expect(noLines!.profileLineCount).toBeUndefined();
+    expect(noLines!.hotLines).toBeUndefined();
+
+    expect(
+      lmTools.summarizeRunRecord({
+        id: 'run-no-arrays',
+        status: 'success',
+        focus: true,
+        seriesKey: 'k',
+        engineId: 'server',
+        logs: 'not-array' as unknown as unknown[],
+        diagnostics: { message: 'x' } as unknown as unknown[],
+        createdAt: 5,
+      })!.logCount,
+    ).toBe(0);
   });
 });
 
@@ -391,6 +496,16 @@ describe('axis_run_script', () => {
 });
 
 describe('axis_get_results_focus', () => {
+  test('prepareInvocation has message without confirmation', async () => {
+    const tool = lmTools.createGetResultsFocusTool(makeDeps());
+    const prepared = await tool.prepareInvocation?.(
+      { input: {} },
+      fakeToken(),
+    );
+    expect(prepared?.invocationMessage).toBe('Read AXIS results focus');
+    expect(prepared?.confirmationMessages).toBeUndefined();
+  });
+
   test('returns focus id + summary, not newest when they differ', async () => {
     const store = new ResultsFocusStore();
     const focusId = store.publish({
@@ -440,6 +555,16 @@ describe('axis_get_results_focus', () => {
 });
 
 describe('axis_chart_snapshot_meta', () => {
+  test('prepareInvocation has message without confirmation', async () => {
+    const tool = lmTools.createChartSnapshotMetaTool(makeDeps());
+    const prepared = await tool.prepareInvocation?.(
+      { input: {} },
+      fakeToken(),
+    );
+    expect(prepared?.invocationMessage).toBe('Read AXIS chart meta');
+    expect(prepared?.confirmationMessages).toBeUndefined();
+  });
+
   test('returns meta from deps without bars', async () => {
     const tool = lmTools.createChartSnapshotMetaTool(makeDeps());
     const result = await tool.invoke(
@@ -491,8 +616,174 @@ describe('axis_chart_snapshot_meta', () => {
   });
 });
 
+describe('axis_get_run_logs', () => {
+  test('prepareInvocation has message without confirmation', async () => {
+    const tool = lmTools.createGetRunLogsTool(makeDeps());
+    const prepared = await tool.prepareInvocation?.(
+      { input: {} },
+      fakeToken(),
+    );
+    expect(prepared?.invocationMessage).toBe('Read AXIS run logs');
+    expect(prepared?.confirmationMessages).toBeUndefined();
+  });
+
+  test('empty lastRun → null ids and empty rows', async () => {
+    const tool = lmTools.createGetRunLogsTool(makeDeps());
+    const result = await tool.invoke(
+      { input: {}, toolInvocationToken: undefined },
+      fakeToken(),
+    );
+    const body = parseToolText(result as { content: unknown[] }) as LmMod['RunLogsLmPayload'];
+    expect(body).toEqual({
+      runId: null,
+      status: null,
+      total: 0,
+      rows: [],
+    });
+  });
+
+  test('returns capped scrubbed rows from lastRun sources', async () => {
+    const store = new ResultsFocusStore();
+    store.publish({
+      status: 'error',
+      focus: true,
+      seriesKey: 'k',
+      engineId: 'server',
+      logs: [
+        'info line',
+        { level: 'warning', message: 'watch', line: 4 },
+        { msg: `Bearer ${PRO_KEY}`, severity: 'error', lineno: 9 },
+      ],
+      diagnostics: [{ message: 'diag', severity: 'warning', line: 2 }],
+      error: `boom worker=${WORKER_KEY}`,
+      meta: { logs: ['from-meta'] },
+    });
+    const tool = lmTools.createGetRunLogsTool(makeDeps({ results: store }));
+    const result = await tool.invoke(
+      { input: {}, toolInvocationToken: undefined },
+      fakeToken(),
+    );
+    const body = parseToolText(result as { content: unknown[] }) as LmMod['RunLogsLmPayload'];
+    expect(body.runId).toBeTruthy();
+    expect(body.status).toBe('error');
+    expect(body.total).toBeGreaterThanOrEqual(4);
+    expect(body.rows.length).toBe(body.total);
+    expect(body.rows.length).toBeLessThanOrEqual(40);
+    expect(body.rows.some((r) => r.message === 'info line')).toBe(true);
+    expect(body.rows.some((r) => r.message === 'from-meta')).toBe(true);
+    expect(body.rows.some((r) => r.line === 4 && r.level === 'warning')).toBe(true);
+    const json = JSON.stringify(body);
+    expect(json).not.toContain(PRO_KEY);
+    expect(json).not.toContain(WORKER_KEY);
+    expect(lmTools.payloadLeaksSecret(json)).toBe(false);
+  });
+
+  test('caps at 40 rows', () => {
+    const rows = lmTools.extractLogsForLm({
+      logs: Array.from({ length: 60 }, (_, i) => `line-${i}`),
+    });
+    expect(rows).toHaveLength(40);
+  });
+});
+
+describe('axis_get_profiler', () => {
+  test('prepareInvocation has message without confirmation', async () => {
+    const tool = lmTools.createGetProfilerTool(makeDeps());
+    const prepared = await tool.prepareInvocation?.(
+      { input: {} },
+      fakeToken(),
+    );
+    expect(prepared?.invocationMessage).toBe('Read AXIS profiler summary');
+    expect(prepared?.confirmationMessages).toBeUndefined();
+  });
+
+  test('empty lastRun → null ids / zero counts', async () => {
+    const tool = lmTools.createGetProfilerTool(makeDeps());
+    const result = await tool.invoke(
+      { input: {}, toolInvocationToken: undefined },
+      fakeToken(),
+    );
+    const body = parseToolText(result as { content: unknown[] }) as LmMod['ProfilerLmPayload'];
+    expect(body).toEqual({
+      runId: null,
+      ms: 0,
+      status: null,
+      engineId: null,
+      plotCount: 0,
+      seriesCount: 0,
+    });
+  });
+
+  test('returns profile summary + hotLines from lastRun', async () => {
+    const store = new ResultsFocusStore();
+    store.publish({
+      status: 'success',
+      focus: true,
+      seriesKey: 'k',
+      engineId: 'server',
+      plots: { a: [1], b: [2] },
+      series: { SMA: [1, 2], close: [3] },
+      meta: {
+        ms: 42,
+        profile: {
+          totalMs: 50,
+          phases: { eval_ms: 50 },
+          line_stats: [
+            { line: 10, ms: 25 },
+            { line: 11, time_ms: 15 },
+            { lineno: 12, time: 10 },
+          ],
+        },
+      },
+    });
+    const tool = lmTools.createGetProfilerTool(makeDeps({ results: store }));
+    const result = await tool.invoke(
+      { input: {}, toolInvocationToken: undefined },
+      fakeToken(),
+    );
+    const body = parseToolText(result as { content: unknown[] }) as LmMod['ProfilerLmPayload'];
+    expect(body.runId).toBeTruthy();
+    expect(body.ms).toBe(42);
+    expect(body.status).toBe('success');
+    expect(body.engineId).toBe('server');
+    expect(body.plotCount).toBe(2);
+    expect(body.seriesCount).toBe(2);
+    expect(body.profileMs).toBe(50);
+    expect(body.profileLineCount).toBe(3);
+    expect(body.hotLines).toEqual([
+      { line: 10, ms: 25, pct: 50 },
+      { line: 11, ms: 15, pct: 30 },
+      { line: 12, ms: 10, pct: 20 },
+    ]);
+    expect(body.phases).toEqual({ eval_ms: 50 });
+  });
+
+  test('scrubs secrets from profiler error', async () => {
+    const store = new ResultsFocusStore();
+    store.publish({
+      status: 'error',
+      focus: true,
+      seriesKey: 'k',
+      engineId: 'server',
+      error: `fail Bearer ${PRO_KEY}`,
+      meta: { profile: { total_ms: 1, lines: [] } },
+    });
+    const tool = lmTools.createGetProfilerTool(makeDeps({ results: store }));
+    const result = await tool.invoke(
+      { input: {}, toolInvocationToken: undefined },
+      fakeToken(),
+    );
+    const body = parseToolText(result as { content: unknown[] }) as LmMod['ProfilerLmPayload'];
+    expect(body.error).toBeDefined();
+    expect(body.error).not.toContain(PRO_KEY);
+    expect(body.profileLineCount).toBe(0);
+    expect(body.hotLines).toEqual([]);
+    expect(lmTools.payloadLeaksSecret(JSON.stringify(body))).toBe(false);
+  });
+});
+
 describe('registerLmTools', () => {
-  test('registers all three tool names', () => {
+  test('registers all five tool names', () => {
     const subscriptions: Array<{ dispose(): void }> = [];
     const context = {
       subscriptions,
@@ -501,12 +792,14 @@ describe('registerLmTools', () => {
     expect(registeredTools.map((t) => t.name).sort()).toEqual(
       [
         lmTools.LM_TOOL_NAMES.chartSnapshotMeta,
+        lmTools.LM_TOOL_NAMES.getProfiler,
         lmTools.LM_TOOL_NAMES.getResultsFocus,
+        lmTools.LM_TOOL_NAMES.getRunLogs,
         lmTools.LM_TOOL_NAMES.runScript,
       ].sort(),
     );
-    expect(disposables).toHaveLength(3);
-    expect(subscriptions).toHaveLength(3);
+    expect(disposables).toHaveLength(5);
+    expect(subscriptions).toHaveLength(5);
   });
 });
 
@@ -654,5 +947,156 @@ describe('LM tool edge / catch paths', () => {
       scriptIds?: string[];
     };
     expect(oddBody.scriptIds).toEqual([]);
+  });
+});
+
+describe('summarizeProfile / extractLogsForLm edge coverage', () => {
+  test('summarizeProfile parses string numbers, skips bad rows, scrubs phase strings', () => {
+    const summary = lmTools.summarizeProfile({
+      total_ms: ' 80.5 ',
+      lines: [
+        { line: '3', ms: '10', pct: '12.5' },
+        { line_no: 4, time_ms: 20 },
+        { lineno: 5, time: -1 },
+        { line: 6 },
+        null,
+        { line: 0, ms: 5 },
+        'skip',
+      ],
+      phases: {
+        parse_ms: 1,
+        note: `Bearer ${PRO_KEY}`,
+        ok: true,
+        empty: null,
+        nested: { x: 1 },
+      },
+    });
+    expect(summary.profileMs).toBe(80.5);
+    expect(summary.profileLineCount).toBe(7);
+    expect(summary.hotLines?.some((h) => h.line === 3 && h.pct === 12.5)).toBe(true);
+    expect(summary.hotLines?.some((h) => h.line === 4 && h.ms === 20)).toBe(true);
+    expect(summary.hotLines?.some((h) => h.line === 6 && h.ms === 0)).toBe(true);
+    expect(summary.hotLines?.every((h) => h.line !== 5)).toBe(true);
+    expect(summary.phases?.parse_ms).toBe(1);
+    expect(summary.phases?.ok).toBe(true);
+    expect(summary.phases?.empty).toBeNull();
+    expect(summary.phases?.note).toBeDefined();
+    expect(String(summary.phases?.note)).not.toContain(PRO_KEY);
+    expect(summary.phases?.nested).toBeUndefined();
+  });
+
+  test('summarizeProfile empty string total and empty object', () => {
+    expect(lmTools.summarizeProfile(null)).toEqual({});
+    expect(lmTools.summarizeProfile([])).toEqual({});
+    expect(lmTools.summarizeProfile({ total_ms: '   ', lines: [] })).toEqual({
+      profileLineCount: 0,
+      hotLines: [],
+    });
+  });
+
+  test('extractLogsForLm covers number levels, number messages, line_no, hostile meta', () => {
+    const rows = lmTools.extractLogsForLm({
+      logs: [
+        { level: 0, message: 'e0', line_no: 11 },
+        { severity: 1, msg: 'w1', lineno: 12 },
+        { level: 2, text: 'i2' },
+        { level: 3, message: 'd3' },
+        { level: 9, message: 'fallback' },
+        42,
+        { message: `Bearer ${PRO_KEY}`, line: 7 },
+      ],
+      meta: {
+        get logs() {
+          throw new Error('meta.logs boom');
+        },
+        diagnostics: { message: 'solo-diag', severity: 'error' },
+      },
+      diagnostics: 'plain-diag',
+      error: 99,
+    });
+    expect(rows.some((r) => r.level === 'error' && r.line === 11)).toBe(true);
+    expect(rows.some((r) => r.level === 'warning' && r.line === 12)).toBe(true);
+    expect(rows.some((r) => r.level === 'info' && r.message === 'i2')).toBe(true);
+    expect(rows.some((r) => r.level === 'debug' && r.message === 'd3')).toBe(true);
+    expect(rows.some((r) => r.message === 'fallback' && r.level === 'info')).toBe(true);
+    expect(rows.some((r) => r.message === '42')).toBe(true);
+    expect(rows.some((r) => r.message === 'solo-diag')).toBe(true);
+    expect(rows.some((r) => r.message === 'plain-diag')).toBe(true);
+    expect(rows.some((r) => r.message === '99' && r.level === 'error')).toBe(true);
+    expect(JSON.stringify(rows)).not.toContain(PRO_KEY);
+  });
+
+  test('buildProfilerPayload counts array series and uses meta.ms', () => {
+    const payload = lmTools.buildProfilerPayload({
+      id: 'run-arr',
+      status: 'success',
+      focus: true,
+      seriesKey: 'k',
+      engineId: 'server',
+      plots: [1, 2],
+      series: [9, 8, 7] as never,
+      meta: { ms: 33, profile: { totalMs: 10, lines: [{ line: 1, ms: 10 }] } },
+      createdAt: 1,
+    });
+    expect(payload.seriesCount).toBe(3);
+    expect(payload.plotCount).toBe(2);
+    expect(payload.ms).toBe(33);
+    expect(payload.profileMs).toBe(10);
+    expect(payload.hotLines?.[0]?.line).toBe(1);
+
+    const noMeta = lmTools.buildProfilerPayload({
+      id: 'run-bare',
+      status: 'success',
+      focus: true,
+      seriesKey: 'k',
+      engineId: 'server',
+      createdAt: 1,
+    });
+    expect(noMeta.ms).toBe(0);
+    expect(noMeta.profileMs).toBeUndefined();
+
+    const arrayMeta = lmTools.buildProfilerPayload({
+      id: 'run-arr-meta',
+      status: 'success',
+      focus: true,
+      seriesKey: 'k',
+      engineId: 'server',
+      meta: [1, 2, 3] as never,
+      createdAt: 1,
+    });
+    expect(arrayMeta.ms).toBe(0);
+  });
+
+  test('get_run_logs and get_profiler catch when getLastRun throws', async () => {
+    const boom = makeDeps({
+      results: {
+        getResultsFocusId: () => null,
+        getNewestRunId: () => null,
+        getLastRun: () => {
+          throw new Error(`leak ${PRO_KEY}`);
+        },
+      },
+    });
+    const logsTool = lmTools.createGetRunLogsTool(boom);
+    const logsBody = parseToolText(
+      (await logsTool.invoke(
+        { input: {}, toolInvocationToken: undefined },
+        fakeToken(),
+      )) as { content: unknown[] },
+    ) as { error?: string; rows?: unknown[] };
+    expect(logsBody.rows).toEqual([]);
+    expect(logsBody.error).toBeDefined();
+    expect(logsBody.error).not.toContain(PRO_KEY);
+
+    const profTool = lmTools.createGetProfilerTool(boom);
+    const profBody = parseToolText(
+      (await profTool.invoke(
+        { input: {}, toolInvocationToken: undefined },
+        fakeToken(),
+      )) as { content: unknown[] },
+    ) as { error?: string; plotCount?: number };
+    expect(profBody.plotCount).toBe(0);
+    expect(profBody.error).toBeDefined();
+    expect(profBody.error).not.toContain(PRO_KEY);
   });
 });

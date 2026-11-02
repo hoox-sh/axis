@@ -34,17 +34,76 @@ export type ResultsMessageHandle =
   | { kind: 'reject'; error: ProtocolError }
   | { kind: 'ignore' }
   | { kind: 'ready'; set: AxisEnvelope<ResultsSetPayload> }
-  | { kind: 'focus'; runId: string; set: AxisEnvelope<ResultsSetPayload> };
+  | { kind: 'focus'; runId: string; set: AxisEnvelope<ResultsSetPayload> }
+  | { kind: 'action'; action: ResultsActionMessage };
+
+/** Local (not axis.webview.v1) Results panel actions. */
+export const RESULTS_ACTION_KINDS = ['copyId', 'focusProfiler', 'focusLogs'] as const;
+export type ResultsActionKind = (typeof RESULTS_ACTION_KINDS)[number];
+
+export type ResultsActionMessage = {
+  type: 'results.action';
+  kind: ResultsActionKind;
+  /** Copy payload for `copyId` (run id text). */
+  text?: string;
+};
+
+const ACTION_KIND_SET: ReadonlySet<string> = new Set(RESULTS_ACTION_KINDS);
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+/**
+ * Parse a local Results webview → host action (not axis.webview.v1).
+ * Never throws. Returns null when the message is not a results.action.
+ */
+export function parseResultsActionMessage(raw: unknown): ResultsActionMessage | null {
+  try {
+    if (!isPlainObject(raw)) return null;
+    if (raw.type !== 'results.action') return null;
+    // Reject accidental axis.webview.v1 envelopes that reuse the type string.
+    if ('v' in raw) return null;
+    const kindRaw = raw.kind;
+    if (typeof kindRaw !== 'string' || !ACTION_KIND_SET.has(kindRaw)) return null;
+    const kind = kindRaw as ResultsActionKind;
+    if (kind === 'copyId') {
+      const text = typeof raw.text === 'string' ? raw.text : '';
+      if (!text.trim()) return null;
+      return { type: 'results.action', kind, text };
+    }
+    return { type: 'results.action', kind };
+  } catch {
+    return null;
+  }
+}
+
+/** Encode a local `results.action` for the webview (tests / helpers). */
+export function encodeResultsAction(
+  kind: ResultsActionKind,
+  text?: string,
+): ResultsActionMessage {
+  if (kind === 'copyId') {
+    return { type: 'results.action', kind, text: String(text ?? '') };
+  }
+  return { type: 'results.action', kind };
+}
 
 /**
  * Handle one untrusted Results/Strategy webview → host message.
- * Never throws. Accepts `results.ready` and `results.focus`; rejects host→view types.
+ * Never throws. Accepts local `results.action`, plus `results.ready` / `results.focus`;
+ * rejects host→view types.
  */
 export function handleResultsWebviewMessage(
   raw: unknown,
   store: Pick<ResultsFocusStore, 'getResultsSetPayload' | 'focusResults'>,
 ): ResultsMessageHandle {
   try {
+    const action = parseResultsActionMessage(raw);
+    if (action) {
+      return { kind: 'action', action };
+    }
+
     const decoded = decode(raw);
     if (!decoded.ok) {
       return { kind: 'reject', error: decoded.error };

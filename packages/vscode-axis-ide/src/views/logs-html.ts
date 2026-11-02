@@ -17,6 +17,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { escapeHtmlAttr, htmlHasInlineScript } from '../editors/chart-html';
+import { LOGS_EMPTY } from './logs-messages';
 
 /** Inputs for Logs panel webview HTML (URIs already asWebviewUri). */
 export interface LogsHtmlOptions {
@@ -69,6 +70,7 @@ export function buildLogsWebviewHtml(opts?: LogsHtmlOptions | null): string {
     const safeScript = escapeHtmlAttr(scriptUri);
     const safeStyle = escapeHtmlAttr(styleUri);
     const safeClass = bodyClass.replace(/[^a-zA-Z0-9_-]/g, '');
+    const emptyCopy = escapeHtmlAttr(LOGS_EMPTY);
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -80,23 +82,34 @@ export function buildLogsWebviewHtml(opts?: LogsHtmlOptions | null): string {
   <link rel="stylesheet" href="${safeStyle}" />
 </head>
 <body class="${safeClass}" data-axis-logs-kind="logs">
+  <div id="logs-live" class="logs-live" role="status" aria-live="polite" aria-atomic="true"></div>
   <section id="logs-root" class="logs-root" data-axis-logs-host="1" aria-label="Script logs">
     <header class="logs-header">
-      <h1 class="logs-title">Logs</h1>
-      <p class="logs-meta">
-        <span id="logs-run">No run</span>
-        <span id="logs-status"></span>
-        <span id="logs-count">0</span>
-      </p>
-      <div class="logs-filters" role="group" aria-label="Log level filter">
-        <button type="button" class="logs-chip" data-level="all" aria-pressed="true">All</button>
-        <button type="button" class="logs-chip" data-level="error" aria-pressed="false">Error</button>
-        <button type="button" class="logs-chip" data-level="warning" aria-pressed="false">Warning</button>
-        <button type="button" class="logs-chip" data-level="info" aria-pressed="false">Info</button>
+      <div class="logs-header__top">
+        <h1 class="logs-title">Logs</h1>
+        <div class="logs-run-wrap">
+          <span id="logs-run" class="logs-run" title="Run id">No run</span>
+          <button type="button" id="logs-run-copy" class="logs-run-copy" hidden title="Copy run id" aria-label="Copy run id">Copy</button>
+        </div>
+        <span id="logs-status" class="logs-status" data-status="" hidden></span>
+        <span id="logs-count" class="logs-count" aria-live="polite">0 / 0</span>
+      </div>
+      <div class="logs-toolbar">
+        <div class="logs-filters" role="group" aria-label="Log level filter">
+          <button type="button" class="logs-chip" data-level="all" aria-pressed="true">All <span class="logs-chip-count" data-count-for="all">0</span></button>
+          <button type="button" class="logs-chip" data-level="error" aria-pressed="false">Error <span class="logs-chip-count" data-count-for="error">0</span></button>
+          <button type="button" class="logs-chip" data-level="warning" aria-pressed="false">Warning <span class="logs-chip-count" data-count-for="warning">0</span></button>
+          <button type="button" class="logs-chip" data-level="info" aria-pressed="false">Info <span class="logs-chip-count" data-count-for="info">0</span></button>
+          <button type="button" class="logs-chip" data-level="debug" aria-pressed="false">Debug <span class="logs-chip-count" data-count-for="debug">0</span></button>
+        </div>
+        <label class="logs-search-wrap" for="logs-search">
+          <span class="logs-search-label">Search</span>
+          <input id="logs-search" class="logs-search" type="search" name="logs-search" placeholder="Filter messages" aria-label="Filter log messages" autocomplete="off" spellcheck="false" />
+        </label>
       </div>
     </header>
-    <p id="logs-empty" class="logs-empty">No log lines for the last run</p>
-    <ol id="logs-list" class="logs-list"></ol>
+    <p id="logs-empty" class="logs-empty">${emptyCopy}</p>
+    <ol id="logs-list" class="logs-list" tabindex="0" role="listbox" aria-label="Log lines" aria-activedescendant=""></ol>
   </section>
   <script src="${safeScript}"></script>
 </body>

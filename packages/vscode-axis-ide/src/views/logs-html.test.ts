@@ -40,15 +40,23 @@ describe('logs CSP HTML builder', () => {
     expect(html).toContain('data-axis-logs-kind="logs"');
     expect(html).toContain('id="logs-root"');
     expect(html).toContain('id="logs-run"');
+    expect(html).toContain('id="logs-run-copy"');
+    expect(html).toContain('id="logs-status"');
     expect(html).toContain('id="logs-count"');
+    expect(html).toContain('id="logs-search"');
+    expect(html).toContain('id="logs-live"');
+    expect(html).toContain('aria-live="polite"');
     expect(html).toContain('aria-label="Log level filter"');
-    expect(html).toContain('>All</button>');
-    expect(html).toContain('>Error</button>');
-    expect(html).toContain('>Warning</button>');
-    expect(html).toContain('>Info</button>');
+    expect(html).toContain('data-level="all"');
+    expect(html).toContain('data-level="error"');
+    expect(html).toContain('data-level="warning"');
+    expect(html).toContain('data-level="info"');
+    expect(html).toContain('data-level="debug"');
+    expect(html).toContain('data-count-for="all"');
     expect(html).toContain('No log lines for the last run');
     expect(html).toContain('AXIS Logs');
     expect(html).toContain('class="vscode-dark"');
+    expect(html).toContain('class="logs-header"');
     expect(htmlHasInlineScript(html)).toBe(false);
   });
 

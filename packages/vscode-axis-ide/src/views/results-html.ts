@@ -57,7 +57,6 @@ export function buildResultsWebviewHtml(opts: ResultsHtmlOptions): string {
   const safeStyle = escapeHtmlAttr(styleUri);
   const safeClass = bodyClass.replace(/[^a-zA-Z0-9_-]/g, '');
   const title = kind === 'strategy' ? 'AXIS Strategy' : 'AXIS Results';
-
   const heading = kind === 'strategy' ? 'Strategy' : 'Results';
 
   return `<!DOCTYPE html>
@@ -71,22 +70,41 @@ export function buildResultsWebviewHtml(opts: ResultsHtmlOptions): string {
 </head>
 <body class="${safeClass}" data-axis-results-kind="${kind}">
   <div id="results-root" class="results-root" data-axis-results-host="1" data-kind="${kind}">
-    <header class="results-root__header">
-      <div class="results-root__title-row">
-        <h1 class="results-root__title" id="results-title">${heading}</h1>
-        <span class="results-status results-status--idle" id="results-status" data-status="idle" role="status" aria-live="polite" aria-atomic="true" aria-label="Status: Idle">Idle</span>
+    <div id="results-live" class="results-live" aria-live="polite" aria-atomic="true"></div>
+    <header class="results-header" id="results-header">
+      <div class="results-header__sticky">
+        <div class="results-header__top">
+          <h1 class="results-header__title" id="results-title">${heading}</h1>
+          <span class="results-status results-status--idle" id="results-status" data-status="idle" role="status" aria-live="polite" aria-atomic="true" aria-label="Status: Idle">Idle</span>
+          <span class="results-time" id="results-time" hidden></span>
+          <div class="results-actions">
+            <button type="button" class="results-icon-btn" id="results-copy-id" data-action="copyId" hidden title="Copy run id" aria-label="Copy run id">Copy id</button>
+            <button type="button" class="results-icon-btn" id="results-focus-profiler" data-action="focusProfiler" hidden title="Open Profiler" aria-label="Open Profiler">Profiler</button>
+            <button type="button" class="results-icon-btn" id="results-focus-logs" data-action="focusLogs" hidden title="Open Logs" aria-label="Open Logs">Logs</button>
+          </div>
+        </div>
+        <div class="results-meta" id="results-meta" hidden></div>
+        <p class="results-header__focus" id="results-focus">No run focused</p>
+        <div class="results-search-wrap" id="results-search-wrap" hidden>
+          <input class="results-search" id="results-search" type="search" placeholder="Filter rows (/)" aria-label="Filter rows" autocomplete="off" spellcheck="false" />
+        </div>
       </div>
-      <p class="results-root__focus" id="results-focus">No run focused</p>
     </header>
-    <section class="results-card" id="results-card" hidden>
-      <dl class="results-rows" id="results-rows"></dl>
-      <div class="results-strategy" id="results-strategy" hidden>
-        <h2 class="results-strategy__title" id="results-strategy-title">Strategy</h2>
-        <p class="results-strategy__empty" id="results-strategy-empty" hidden>No strategy report</p>
-        <dl class="results-rows results-rows--strategy" id="results-strategy-rows"></dl>
+    <div class="results-body">
+      <section class="results-card" id="results-card" hidden>
+        <div class="results-kpis" id="results-kpis" hidden></div>
+        <dl class="results-rows" id="results-rows"></dl>
+        <div class="results-strategy" id="results-strategy" hidden>
+          <h2 class="results-strategy__title" id="results-strategy-title">Strategy</h2>
+          <p class="results-strategy__empty" id="results-strategy-empty" hidden>This run has no strategy report</p>
+          <dl class="results-rows results-rows--strategy" id="results-strategy-rows"></dl>
+        </div>
+      </section>
+      <div class="results-empty" id="results-empty">
+        <p class="results-empty__title" id="results-empty-title">No run yet</p>
+        <p class="results-empty__hint" id="results-empty-hint">Run a Pine script with Ctrl/Cmd+Enter</p>
       </div>
-    </section>
-    <p class="results-root__empty" id="results-empty">Run a Pine Script™ (Ctrl+Enter)</p>
+    </div>
   </div>
   <script src="${safeScript}"></script>
 </body>

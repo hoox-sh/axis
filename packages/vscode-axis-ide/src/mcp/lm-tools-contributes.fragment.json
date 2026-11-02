@@ -4,53 +4,89 @@
       {
         "name": "axis_run_script",
         "displayName": "AXIS Run Script",
-        "modelDescription": "Run the active Pine/PYNE script through AXIS IDE orchestration and return lastRun summary (not full plot arrays).",
-        "toolReferenceName": "axis_run_script",
+        "userDescription": "Run the active Pine/PYNE script through AXIS IDE.",
+        "modelDescription": "Run the active Pine/PYNE buffer through AXIS IDE orchestration and return a lastRun summary (status, plotCount, seriesKeys, logCount, diagnosticCount, optional profileMs/hotLines). Use when the user asks to execute, compile, or interpret the open Pine script, or to refresh chart/results after edits. Do NOT use for reading prior run logs (axis_get_run_logs), profiler hot lines (axis_get_profiler), chart symbol/interval (axis_chart_snapshot_meta), or results focus ids without running. Returns summaries only — never full plot/series arrays, never API keys. Requires an active Pine buffer and configured AXIS engine/chart.",
+        "toolReferenceName": "axisRun",
         "canBeReferencedInPrompt": true,
+        "icon": "$(play)",
         "inputSchema": {
           "type": "object",
           "properties": {
             "mode": {
               "type": "string",
-              "enum": ["auto", "interpret", "compile"]
+              "enum": ["auto", "interpret", "compile"],
+              "description": "Execution mode. auto picks interpret vs compile; interpret runs without compile; compile builds then runs."
             },
             "focus": {
               "type": "boolean",
-              "default": true
+              "default": true,
+              "description": "When true (default), publish the run as the focused results entry shown in the Results panel."
             }
           }
         },
-        "tags": ["axis", "pyne"]
+        "tags": ["axis", "pyne", "copilot"]
       },
       {
         "name": "axis_get_results_focus",
         "displayName": "AXIS Results Focus",
-        "modelDescription": "Return resultsFocusId, newestRunId, and lastRun summary for the AXIS IDE session.",
-        "toolReferenceName": "axis_get_results_focus",
+        "userDescription": "Read the focused / newest AXIS run summary.",
+        "modelDescription": "Return resultsFocusId, newestRunId, and lastRunSummary for the AXIS IDE session (plot/series counts and keys, logCount, diagnosticCount, optional profileMs/hotLines — not full arrays). Use when inspecting the latest or focused run outcome without re-running. Do NOT use to execute a script (axis_run_script), fetch runtime log lines (axis_get_run_logs), or get chart symbol/interval (axis_chart_snapshot_meta). Summaries only — no secrets, no plot payloads. Empty session returns null ids/summary.",
+        "toolReferenceName": "axisResults",
         "canBeReferencedInPrompt": true,
+        "icon": "$(list-tree)",
         "inputSchema": {
           "type": "object",
           "properties": {}
         },
-        "tags": ["axis"]
+        "tags": ["axis", "copilot"]
       },
       {
         "name": "axis_chart_snapshot_meta",
         "displayName": "AXIS Chart Meta",
-        "modelDescription": "Return seriesKey, interval, script ids, live status for the active AXIS chart document.",
-        "toolReferenceName": "axis_chart_meta",
+        "userDescription": "Read seriesKey, interval, and live status for the active AXIS chart.",
+        "modelDescription": "Return seriesKey, interval, optional symbol/exchange/market, scriptIds, and live status for the active AXIS chart document. Use when choosing symbol/timeframe context or checking whether live mode is on. Do NOT use for run results, logs, profiler timings, or plot data. Never returns bars or secrets. Soft-fails when no AXIS chart document is active.",
+        "toolReferenceName": "axisChart",
         "canBeReferencedInPrompt": true,
+        "icon": "$(graph)",
         "inputSchema": {
           "type": "object",
           "properties": {}
         },
-        "tags": ["axis", "chart"]
+        "tags": ["axis", "chart", "copilot"]
+      },
+      {
+        "name": "axis_get_run_logs",
+        "displayName": "AXIS Run Logs",
+        "userDescription": "Read capped runtime logs and diagnostics from the last AXIS run.",
+        "modelDescription": "Return { runId, status, total, rows: { level, message, line }[] } from the last focused AXIS run. Sources match the Logs panel (logs, meta.logs, diagnostics, meta.diagnostics, error). Cap 40 rows; messages are secret-scrubbed. Use when debugging Pine runtime logs, warnings, or compile/runtime errors after a run. Do NOT use for full plot/series data (use axis_get_results_focus / axis_run_script summaries), chart meta, or profiler hot lines (axis_get_profiler). Empty lastRun returns null ids and empty rows.",
+        "toolReferenceName": "axisLogs",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(output)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        },
+        "tags": ["axis", "logs", "copilot"]
+      },
+      {
+        "name": "axis_get_profiler",
+        "displayName": "AXIS Profiler",
+        "userDescription": "Read last-run timing and top hot lines from the AXIS profiler.",
+        "modelDescription": "Return { runId, ms, status, engineId, plotCount, seriesCount, profileMs, profileLineCount, hotLines (max 5), phases? } from the last AXIS run and meta.profile. Use when optimizing Pine script performance or asking which lines are slow. Do NOT use for full log text (axis_get_run_logs), plot arrays, or to run a script. Never invents profile lines; empty/missing profile omits or zeros line stats. Secrets scrubbed from error strings.",
+        "toolReferenceName": "axisProfiler",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(dashboard)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        },
+        "tags": ["axis", "profiler", "copilot"]
       }
     ]
   },
   "notes": {
     "merge": "Merge contributes.languageModelTools into package.json. Call registerLmTools(context, deps) from activate (extension.ts owned by wiring agent). Do not put languageModelTools in mcp-contributes.fragment.json.",
-    "secrets": "Tools return summaries only — never SecretStorage keys, never full plot/series arrays. axis_run_script uses prepareInvocation confirmation.",
+    "secrets": "Tools return summaries only — never SecretStorage keys, never full plot/series arrays. axis_run_script uses prepareInvocation confirmation; read-only tools omit confirmationMessages.",
     "deps": "Wiring binds runScript → active-editor orchestrator path, results → ResultsFocusStore, getChartSnapshotMeta → active chart doc + live HUD."
   }
 }

@@ -21,7 +21,10 @@ import {
   PROTOCOL_VERSION,
   barWidthPct,
   decodeHostMessage,
+  encodeProfilerCopy,
   encodeProfilerReady,
+  encodeProfilerReveal,
+  formatPctChip,
   snapshotFromPayload,
 } from '../../webview/profiler/src/protocol';
 
@@ -33,6 +36,12 @@ describe('profiler webview protocol', () => {
     expect(msg.payload).toEqual({});
     expect(msg.ts).toBe(7);
     expect(encodeProfilerReady().type).toBe('profiler.ready');
+  });
+
+  test('encodeProfilerReveal / encodeProfilerCopy are local (not axis.webview.v1)', () => {
+    expect(encodeProfilerReveal(4)).toEqual({ type: 'profiler.reveal', line: 4 });
+    expect(encodeProfilerCopy('run-1')).toEqual({ type: 'profiler.copy', runId: 'run-1' });
+    expect('v' in encodeProfilerReveal(1)).toBe(false);
   });
 
   test('decodeHostMessage accepts profiler.set and results.set', () => {
@@ -80,6 +89,16 @@ describe('profiler webview protocol', () => {
         seriesCount: 2,
         createdAt: 9,
         error: '  ',
+        topLines: [
+          { line: 4, ms: 8, execs: 2, pct: 40 },
+          { line: 0, ms: 1, execs: 1, pct: 1 },
+        ],
+        lineCount: 5,
+        phases: [
+          { name: 'parse_ms', ms: 2 },
+          { name: '', ms: 1 },
+          { name: 'eval_ms', ms: 10 },
+        ],
       }),
     ).toEqual({
       runId: 'run-1',
@@ -90,6 +109,12 @@ describe('profiler webview protocol', () => {
       plotCount: 3,
       seriesCount: 2,
       createdAt: 9,
+      topLines: [{ line: 4, ms: 8, execs: 2, pct: 40 }],
+      lineCount: 5,
+      phases: [
+        { name: 'parse_ms', ms: 2 },
+        { name: 'eval_ms', ms: 10 },
+      ],
     });
     const derived = snapshotFromPayload({
       lastRun: {
@@ -110,6 +135,8 @@ describe('profiler webview protocol', () => {
       plotCount: 4,
       seriesCount: 1,
       error: 'nope',
+      topLines: [],
+      lineCount: 0,
     });
     expect(snapshotFromPayload({ plots: { x: 1 } })).toBeNull();
     expect(snapshotFromPayload({ lastRun: 'nope' })).toBeNull();
@@ -131,7 +158,7 @@ describe('profiler webview protocol', () => {
     ).toBe(0);
   });
 
-  test('barWidthPct is min(100%, ms/1000*100)', () => {
+  test('barWidthPct is min(100%, ms/1000*100); formatPctChip matches chips', () => {
     expect(barWidthPct(undefined)).toBe(0);
     expect(barWidthPct(-10)).toBe(0);
     expect(barWidthPct(Number.NaN)).toBe(0);
@@ -139,6 +166,10 @@ describe('profiler webview protocol', () => {
     expect(barWidthPct(500)).toBe(50);
     expect(barWidthPct(1000)).toBe(100);
     expect(barWidthPct(2500)).toBe(100);
+    expect(formatPctChip(0)).toBe('0%');
+    expect(formatPctChip(0.05)).toBe('<0.1%');
+    expect(formatPctChip(1.2)).toBe('1.2%');
+    expect(formatPctChip(12.4)).toBe('12%');
   });
 });
 

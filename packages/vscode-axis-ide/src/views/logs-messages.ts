@@ -25,9 +25,23 @@
 /** Hard cap so a hostile payload cannot flood the webview. */
 export const LOG_ROW_CAP = 200;
 
+/** Cap for `logs.copy` text posted from the webview. */
+export const MAX_LOG_COPY_TEXT = 8192;
+
+export const LOGS_EMPTY = 'No log lines for the last run';
+export const LOGS_FILTERED_EMPTY = 'No log lines match the current filter';
+
 export type LogLevel = 'error' | 'warning' | 'info' | 'debug';
 
 export type LogFilter = LogLevel | 'all';
+
+export type LogLevelCounts = {
+  all: number;
+  error: number;
+  warning: number;
+  info: number;
+  debug: number;
+};
 
 export type LogRow = {
   level: LogLevel;
@@ -46,7 +60,8 @@ export type LogsSetMessage = {
 export type LogsWebMessage =
   | { type: 'logs.ready' }
   | { type: 'logs.reveal'; line: number }
-  | { type: 'logs.filter'; level: LogFilter };
+  | { type: 'logs.filter'; level: LogFilter }
+  | { type: 'logs.copy'; text: string };
 
 const LEVEL_BY_NAME: Record<string, LogLevel> = {
   error: 'error',
@@ -363,8 +378,21 @@ function coerceExistingRow(value: unknown): LogRow | null {
   };
 }
 
-/** Keep rows of one level, or every row when `level` is `'all'`. Caps at 200. */
-export function filterLogs(rows: unknown, level: unknown): LogRow[] {
+/** Case-insensitive substring match on a message. Empty query matches all. */
+export function matchLogQuery(message: unknown, query: unknown): boolean {
+  if (typeof message !== 'string') return false;
+  if (query == null) return true;
+  if (typeof query !== 'string') return false;
+  const needle = query.trim().toLowerCase();
+  if (!needle) return true;
+  return message.toLowerCase().includes(needle);
+}
+
+/**
+ * Keep rows of one level (or every row when `level` is `'all'`), then optionally
+ * filter by message substring. Caps at 200. Never throws.
+ */
+export function filterLogs(rows: unknown, level: unknown, query?: unknown): LogRow[] {
   const key = normalizeFilter(level);
   if (key == null) return [];
   if (!Array.isArray(rows)) return [];
@@ -373,9 +401,35 @@ export function filterLogs(rows: unknown, level: unknown): LogRow[] {
   for (let i = 0; i < count; i++) {
     const row = coerceExistingRow(safeIndex(rows, i));
     if (!row) continue;
-    if (key === 'all' || row.level === key) out.push(row);
+    if (key !== 'all' && row.level !== key) continue;
+    if (!matchLogQuery(row.message, query)) continue;
+    out.push(row);
   }
   return out;
+}
+
+/** Per-level counts for filter chips. Never throws. */
+export function countLogLevels(rows: unknown): LogLevelCounts {
+  const counts: LogLevelCounts = { all: 0, error: 0, warning: 0, info: 0, debug: 0 };
+  if (!Array.isArray(rows)) return counts;
+  const count = safeLength(rows);
+  for (let i = 0; i < count; i++) {
+    const row = coerceExistingRow(safeIndex(rows, i));
+    if (!row) continue;
+    counts.all += 1;
+    counts[row.level] += 1;
+  }
+  return counts;
+}
+
+/** Distinct empty-state copy for no rows vs filtered-out rows. */
+export function logsEmptyMessage(total: unknown, visible: unknown): string {
+  const t = typeof total === 'number' && Number.isFinite(total) ? Math.max(0, Math.trunc(total)) : 0;
+  const v =
+    typeof visible === 'number' && Number.isFinite(visible) ? Math.max(0, Math.trunc(visible)) : 0;
+  if (t <= 0) return LOGS_EMPTY;
+  if (v <= 0) return LOGS_FILTERED_EMPTY;
+  return '';
 }
 
 function readRunId(record: unknown): string | null {
@@ -404,7 +458,7 @@ function messageBag(raw: Record<string, unknown>): Record<string, unknown> {
   return isRecord(payload) ? payload : raw;
 }
 
-/** Webview → host. `logs.filter` is optional; the view filters locally. */
+/** Webview → host. Filter is local; copy uses the host clipboard. */
 export function parseLogsWebMessage(raw: unknown): LogsWebMessage | null {
   if (!isRecord(raw)) return null;
   const type = readProp(raw, 'type');
@@ -419,6 +473,12 @@ export function parseLogsWebMessage(raw: unknown): LogsWebMessage | null {
     const level = normalizeFilter(readProp(bag, 'level'));
     if (level == null) return null;
     return { type: 'logs.filter', level };
+  }
+  if (type === 'logs.copy') {
+    const text = readProp(bag, 'text');
+    if (typeof text !== 'string') return null;
+    if (text.length === 0 || text.length > MAX_LOG_COPY_TEXT) return null;
+    return { type: 'logs.copy', text };
   }
   return null;
 }
