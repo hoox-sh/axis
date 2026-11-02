@@ -44,6 +44,7 @@ import { PyneTableHud } from './PyneTableHud';
 import { ChartScaleControls } from './ChartScaleControls';
 import { ChartSettingsPanel } from '../ui/ChartSettingsPanel';
 import { chartSettingsOpen, setChartSettingsOpen } from '../ui/chart-settings-state';
+import { OnchainLegend } from '../ui/OnchainLegend';
 import { VolumeProfileOverlay } from '../ui/VolumeProfileOverlay';
 import {
   store,
@@ -809,6 +810,9 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
         data-axis-panes
       />
       <ChartContextMenu host={contextHost()} slotId={slotId()} />
+      <Show when={isActive() && !store.presentation?.chartOnly}>
+        <OnchainLegend />
+      </Show>
       <Show when={isActive() && bars().length > 0 && !store.presentation?.chartOnly}>
         <DrawingToolbar />
         <VolumeProfileOverlay />

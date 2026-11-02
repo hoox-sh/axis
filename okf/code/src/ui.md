@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/ui"
-description: "src/ui contains AboutModal.tsx, AlertsPanel.tsx, BarReplayControls.tsx, and 85 more files."
+description: "src/ui contains AboutModal.tsx, AlertsPanel.tsx, BarReplayControls.tsx, and 86 more files."
 resource: "src/ui"
 tags: [code, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-02T12:05:42Z
+  at: 2026-11-02T12:33:01Z
 sources:
   - id: tree
     resource: "src/ui"
@@ -45,6 +45,7 @@ okf_lock: generated
 * `McpHud.tsx` — MCP_ACTIVITY_WINDOW_MS, McpHud
 * `Modal.tsx` — Modal, ModalProps
 * `OnChainPanel.tsx` — OnChainPanel
+* `OnchainLegend.tsx` — OnchainLegend
 * `PluginConfigRow.tsx` — PluginConfigRow, PluginConfigRowProps
 * `Popover.tsx` — Popover, PopoverProps
 * `PricePanel.tsx` — PricePanel

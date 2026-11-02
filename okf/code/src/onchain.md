@@ -7,7 +7,7 @@ tags: [code, onchain]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-10T20:32:38Z
+  at: 2026-11-02T12:33:01Z
 sources:
   - id: tree
     resource: "src/onchain"
@@ -30,6 +30,7 @@ okf_lock: generated
 * `index.ts` — AttachDefiLlamaArg, AttachPopularTvlResult, BUILTIN_DATASETS, BuildTvlSpikeEventsOpts, CheckOnchainProxyHealthOpts, DEFAULT_ONCHAIN_WORKER_BASE, DEFAULT_TVL_SPIKE_THRESHOLD_PCT, DEFILLAMA_DATASET_ID, DEFILLAMA_DEFAULT_BASE, DEFILLAMA_PROVIDER_ID, DEFILLAMA_RAISES_UNLOCKS_NOTE, DEX_NETWORK_PRESETS
 * `jobs.ts` — OnchainJob, OnchainJobStatus, _resetOnchainJobsForTests, _setAttachTvlForTests, cancelOnchainJob, dismissOnchainJob, listOnchainJobs, onchainJobsState, refreshAllAttachedTvl, refreshAttachment
 * `keys.ts` — instrumentCacheKey, seriesSeriesKey
+* `legend.ts` — OnchainLegendEntry, onchainLegendEntries
 * `manager.ts` — AttachDefiLlamaArg, DefiLlamaProtocolHit, MAX_ONCHAIN_SERIES, OnchainJob, OnchainJobStatus, OnchainManagerState, OnchainSeriesRow, ProtocolSearchHit, _resetOnchainJobsForTests, _resetOnchainManagerState, _seedOnchainAttachmentsForTests, _setAttachTvlForTests
 * `presets.ts` — AttachPopularTvlResult, DEX_NETWORK_PRESETS, POPULAR_TVL_PROTOCOLS, attachPopularTvl
 * `proxy.ts` — DEFAULT_ONCHAIN_WORKER_BASE, ONCHAIN_GECKO_PROXY_PATH, ONCHAIN_LLAMA_PROXY_PATH, isWorkerGeckoProxy, isWorkerLlamaProxy, looksLikeOnchainWorkerEndpoint, normalizeEndpointBase, resolveDefiLlamaBaseUrl, resolveGeckoTerminalBaseUrl, resolveOnchainWorkerBase
