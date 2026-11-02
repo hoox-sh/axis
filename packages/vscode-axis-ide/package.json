@@ -51,6 +51,9 @@
   "activationEvents": [
     "onCommand:axis.showRunOutput",
     "onCommand:axis.openChart",
+    "onCommand:axis.secrets.setWorkerKey",
+    "onCommand:axis.secrets.setProKey",
+    "onCommand:axis.secrets.clear",
     "workspaceContains:**/*.axis.json",
     "workspaceContains:**/*.pyne",
     "workspaceContains:**/*.pine",
@@ -69,6 +72,21 @@
       {
         "command": "axis.openChart",
         "title": "Open Chart",
+        "category": "AXIS"
+      },
+      {
+        "command": "axis.secrets.setWorkerKey",
+        "title": "Set Worker API Key",
+        "category": "AXIS"
+      },
+      {
+        "command": "axis.secrets.setProKey",
+        "title": "Set Pro API Key",
+        "category": "AXIS"
+      },
+      {
+        "command": "axis.secrets.clear",
+        "title": "Clear Stored Secrets",
         "category": "AXIS"
       }
     ],

@@ -15,16 +15,17 @@ Part of the **[HOOX](https://hoox.sh) open trading stack**. Sister products: **[
 
 ## Status
 
-This is the **0.1.0** scaffold plus the **`axis.webview.v1`** protocol module:
+This is the **0.1.0** scaffold plus the **`axis.webview.v1`** protocol module and **SecretStorage** keys:
 
-- Activation without `onStartupFinished` (workspace globs + P0 commands)
+- Activation without `onStartupFinished` (workspace globs + commands)
 - Output channel **AXIS Run** (`AXIS: Show Run Output`)
-- Status bar item (`axis.ide.status`)
+- Status bar item (`axis.ide.status`) with Worker/Pro key **set/missing** marks (never values)
 - Stub **AXIS: Open Chart** (custom editor lands in a later release)
 - Optional setting `axis.telemetry.offline` (default `true`)
 - Typed host↔webview envelope codecs under `src/protocol/` (coverage-gated)
+- Worker (`pn_…`) / Pro (`pyn_…`) keys via `axis.secrets.*` → `ExtensionContext.secrets` only
 
-Chart custom editor, secrets, MCP provider, and webviews ship later.
+Chart custom editor, MCP provider, and webviews ship later.
 
 ## Build layout
 
@@ -42,18 +43,25 @@ Chart custom editor, secrets, MCP provider, and webviews ship later.
 
 Activates on P0 commands and when the workspace contains AXIS/Pine sources. Pine globs intentionally match the PYNE language extension list: `*.pyne`, `*.pine`, `*.pinev5`, `*.pinev6`, `*.pinescript`, plus `*.axis.json`.
 
-## Commands (P0)
+## Commands
 
 | Command | Id |
 | --- | --- |
 | AXIS: Show Run Output | `axis.showRunOutput` |
 | AXIS: Open Chart | `axis.openChart` (stub) |
+| AXIS: Set Worker API Key | `axis.secrets.setWorkerKey` |
+| AXIS: Set Pro API Key | `axis.secrets.setProKey` |
+| AXIS: Clear Stored Secrets | `axis.secrets.clear` (Worker + Pro) |
 
-## Settings (P0)
+Worker keys must match `/^pn_[a-f0-9]{48}$/`. Pro keys require `pyn_` + 20–508 `[A-Za-z0-9_-]`. Empty input clears that slot. Keys are **never** `contributes.configuration` properties (no `axis.worker.apiKey` / `axis.pro.apiKey` settings).
+
+## Settings
 
 | Setting | Default | Notes |
 | --- | --- | --- |
 | `axis.telemetry.offline` | `true` | Keep product telemetry off |
+
+Secrets are **not** settings — use the `axis.secrets.*` commands above.
 
 ## Develop
 

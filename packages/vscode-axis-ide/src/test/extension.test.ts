@@ -44,9 +44,17 @@ const pkg = JSON.parse(fs.readFileSync(PACKAGE_PATH, 'utf8')) as {
   };
 };
 
-/** Exact P0 inventory — expand only when package.json contributes grow. */
-const EXPECTED_COMMANDS = ['axis.showRunOutput', 'axis.openChart'] as const;
+/** Exact contribute inventory — expand only when package.json contributes grow (KD-14). */
+const EXPECTED_COMMANDS = [
+  'axis.showRunOutput',
+  'axis.openChart',
+  'axis.secrets.setWorkerKey',
+  'axis.secrets.setProKey',
+  'axis.secrets.clear',
+] as const;
 const EXPECTED_SETTINGS = ['axis.telemetry.offline'] as const;
+/** Must never appear as contributes.configuration — SecretStorage only (KD-8). */
+const FORBIDDEN_SETTINGS = ['axis.worker.apiKey', 'axis.pro.apiKey'] as const;
 const EXPECTED_WORKSPACE_CONTAINS = [
   'workspaceContains:**/*.axis.json',
   'workspaceContains:**/*.pyne',
@@ -96,7 +104,7 @@ suite('AXIS IDE Extension Structure', () => {
     }
   });
 
-  test('contributes only P0 commands', () => {
+  test('contributes expected commands (KD-14 inventory)', () => {
     const commandIds = (pkg.contributes?.commands ?? []).map((c) => c.command);
     for (const id of EXPECTED_COMMANDS) {
       assert.ok(commandIds.includes(id), `Missing command: ${id}`);
@@ -104,11 +112,11 @@ suite('AXIS IDE Extension Structure', () => {
     assert.deepStrictEqual(
       [...commandIds].sort(),
       [...EXPECTED_COMMANDS].sort(),
-      'P0 command inventory drifted — update test when intentionally expanding contributes',
+      'command inventory drifted — update test when intentionally expanding contributes',
     );
   });
 
-  test('contributes only P0 settings (optional telemetry)', () => {
+  test('contributes only allowed settings (no SecretStorage keys as config)', () => {
     const configuration = Array.isArray(pkg.contributes?.configuration)
       ? pkg.contributes.configuration
       : pkg.contributes?.configuration
@@ -118,10 +126,16 @@ suite('AXIS IDE Extension Structure', () => {
     for (const key of EXPECTED_SETTINGS) {
       assert.ok(settings.includes(key), `Missing setting: ${key}`);
     }
+    for (const key of FORBIDDEN_SETTINGS) {
+      assert.ok(
+        !settings.includes(key),
+        `${key} must not be a configuration property — use axis.secrets.* → SecretStorage`,
+      );
+    }
     assert.deepStrictEqual(
       [...settings].sort(),
       [...EXPECTED_SETTINGS].sort(),
-      'P0 setting inventory drifted',
+      'setting inventory drifted',
     );
   });
 
@@ -137,7 +151,7 @@ suite('AXIS IDE Extension Structure', () => {
 });
 
 suite('AXIS IDE Extension Activation', () => {
-  test('activates and registers P0 commands', async () => {
+  test('activates and registers commands including axis.secrets.*', async () => {
     const ext = vscode.extensions.getExtension('hoox-sh.axis-ide');
     assert.ok(ext, 'hoox-sh.axis-ide should load under extensionDevelopmentPath');
     await ext.activate();

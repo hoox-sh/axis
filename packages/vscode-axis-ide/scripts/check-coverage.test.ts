@@ -24,6 +24,7 @@ import {
   BASELINE,
   evaluateCoverage,
   excluded,
+  INCLUDE,
   parseMinPercent,
   runCli,
   TARGET_HOST,
@@ -36,6 +37,14 @@ function lcovFile(path: string, lines: Array<[number, number]>): string {
 }
 
 describe('check-coverage helpers', () => {
+  test('INCLUDE lists pure-host dirs including src/secrets/', () => {
+    expect(INCLUDE).toContain('src/protocol/');
+    expect(INCLUDE).toContain('src/host/');
+    expect(INCLUDE).toContain('src/secrets/');
+    expect(INCLUDE).toContain('src/run/');
+    expect(INCLUDE).toContain('src/live/');
+  });
+
   test('EXCLUDE matches relative out/ dist/ vendor/ paths', () => {
     expect(excluded('out/extension.js')).toBe(true);
     expect(excluded('dist/webview/main.js')).toBe(true);
