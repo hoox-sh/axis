@@ -6,6 +6,8 @@
 
 html,
 body {
+  border: 0;
+  outline: 0;
   margin: 0;
   padding: 0;
   width: 100%;
@@ -52,7 +54,7 @@ body {
   z-index: 2;
   padding: 8px 10px 6px;
   background: var(--vscode-panel-background, var(--vscode-editor-background));
-  border-bottom: 1px solid var(--vscode-panel-border, var(--vscode-widget-border, transparent));
+  /* pane edge: VS Code view chrome already draws the outer border */
 }
 
 .results-header__sticky {
@@ -249,7 +251,7 @@ body {
   flex-direction: column;
   gap: 8px;
   padding: 8px 10px;
-  border: 1px solid var(--vscode-panel-border, var(--vscode-widget-border, transparent));
+  border: 0;
   border-radius: 3px;
   background: var(--vscode-editor-background, var(--vscode-panel-background));
 }
@@ -266,7 +268,7 @@ body {
   gap: 2px;
   min-width: 0;
   padding: 6px 8px;
-  border: 1px solid var(--vscode-widget-border, transparent);
+  border: 0;
   border-radius: 3px;
   background: var(--vscode-panel-background, var(--vscode-editorWidget-background));
 }

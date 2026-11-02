@@ -137,6 +137,7 @@ export function createChartPainter(host: HTMLElement): ChartPainter {
         vertLines: { color: 'rgba(128,128,128,0.15)' },
         horzLines: { color: 'rgba(128,128,128,0.15)' },
       },
+      leftPriceScale: { borderVisible: false, visible: false },
       rightPriceScale: { borderVisible: false },
       timeScale: { borderVisible: false },
     });

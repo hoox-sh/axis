@@ -6,6 +6,8 @@
 
 html,
 body {
+  border: 0;
+  outline: 0;
   margin: 0;
   padding: 0;
   width: 100%;
@@ -34,7 +36,7 @@ body {
 .watchlist-header {
   flex: 0 0 auto;
   padding: 8px 12px;
-  border-bottom: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.35));
+  /* pane edge: VS Code view chrome already draws the outer border */
   background: var(--vscode-editor-background, #1e1e1e);
 }
 

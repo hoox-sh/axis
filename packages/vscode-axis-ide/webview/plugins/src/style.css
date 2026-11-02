@@ -6,6 +6,8 @@
 
 html,
 body {
+  border: 0;
+  outline: 0;
   margin: 0;
   padding: 0;
   width: 100%;
@@ -39,7 +41,7 @@ body {
   z-index: 3;
   padding: 8px 12px 8px;
   background: var(--vscode-editor-background, #1e1e1e);
-  border-bottom: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.35));
+  /* pane edge: VS Code view chrome already draws the outer border */
 }
 
 .plugins-header__sticky {
@@ -340,7 +342,7 @@ body {
   flex-direction: column;
   gap: 6px;
   padding: 8px 8px 8px 10px;
-  border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.35));
+  border: 0;
   border-radius: 4px;
   background: var(--vscode-editor-background, #1e1e1e);
 }
