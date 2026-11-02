@@ -89,6 +89,34 @@ export type InstalledPluginMeta = {
 export const EMPTY_PLUGINS_V1: readonly InstalledPluginMeta[] = [];
 
 /**
+ * `workspaceState` key for the per-kind active plugin id map.
+ * Installed plugin metadata stays in `globalState` (`axis.plugins.v1`).
+ */
+export const ACTIVE_PLUGINS_WORKSPACE_STATE_KEY = 'axis.plugins.active.v1';
+
+/**
+ * Per-kind active plugin ids. `dataset` / `component` are optional.
+ * Forbidden in stored JSON: `apiKey`, `password`, `token`, `secret`, Bearer
+ * strings — those live only in SecretStorage.
+ */
+export type ActivePluginsV1 = {
+  source?: string;
+  stream?: string;
+  engine?: string;
+  storage?: string;
+  dataset?: string;
+  component?: string;
+};
+
+/** Defaults when workspaceState is missing or hostile. */
+export const DEFAULT_ACTIVE_PLUGINS_V1: ActivePluginsV1 = {
+  source: 'binance-rest',
+  stream: 'binance-ws',
+  engine: 'server',
+  storage: 'local',
+};
+
+/**
  * Minimal Memento surface so unit tests inject a Map without loading `vscode`.
  * Extension wiring binds `context.globalState` (get/update).
  */
@@ -96,3 +124,6 @@ export type GlobalStateHelpers = {
   get<T>(key: string): T | undefined;
   update(key: string, value: unknown): Thenable<void> | void | Promise<void>;
 };
+
+/** Same get/update surface as {@link GlobalStateHelpers} for `workspaceState`. */
+export type WorkspaceStateHelpers = GlobalStateHelpers;

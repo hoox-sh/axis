@@ -118,6 +118,7 @@ export const COMMANDS = {
   liveStart: LIVE_COMMANDS.liveStart,
   liveStop: LIVE_COMMANDS.liveStop,
   workersProbeAll: 'axis.workers.probeAll',
+  pluginsActivate: 'axis.plugins.activate',
   alertsAdd: ALERTS_ADD_COMMAND,
   alertsRemove: ALERTS_REMOVE_COMMAND,
   watchlistAdd: WATCHLIST_COMMANDS.add,

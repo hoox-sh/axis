@@ -71,6 +71,7 @@ const EXPECTED_COMMANDS = [
   'axis.liveStart',
   'axis.liveStop',
   'axis.workers.probeAll',
+  'axis.plugins.activate',
   'axis.alerts.add',
   'axis.alerts.remove',
   'axis.watchlist.add',
@@ -128,9 +129,23 @@ const EXPECTED_ACTIVITY_VIEWS = [
   'axis.indicators',
   'axis.watchlist',
   'axis.alerts',
-  'axis.plugins',
+  'axis.plugins.source',
+  'axis.plugins.stream',
+  'axis.plugins.engine',
+  'axis.plugins.storage',
+  'axis.plugins.dataset',
+  'axis.plugins.component',
   'axis.workers',
 ] as const;
+const EXPECTED_PLUGIN_KIND_VIEWS = [
+  'axis.plugins.source',
+  'axis.plugins.stream',
+  'axis.plugins.engine',
+  'axis.plugins.storage',
+  'axis.plugins.dataset',
+  'axis.plugins.component',
+] as const;
+const ACTIVITY_ICON = 'media/axis-activity.svg';
 const EXPECTED_KEYBINDINGS = [
   {
     command: 'axis.runScript',
@@ -209,17 +224,26 @@ suite('AXIS IDE Extension Structure', () => {
     }
   });
 
-  test('contributes panel + activity views (results/strategy/library/layers/indicators/watchlist/alerts/plugins/workers)', () => {
+  test('contributes panel + activity views (results/strategy/library/layers/indicators/watchlist/alerts/plugin-kinds/workers)', () => {
     const panelContainers = pkg.contributes?.viewsContainers?.panel ?? [];
     const axisPanel = panelContainers.find((c) => c.id === 'axis-panel');
     assert.ok(axisPanel, 'missing viewsContainers.panel axis-panel');
     assert.strictEqual(axisPanel?.title, 'AXIS');
+    assert.strictEqual(axisPanel?.icon, ACTIVITY_ICON);
 
     const activity = pkg.contributes?.viewsContainers?.activitybar ?? [];
+    const axisBar = activity.find((c) => c.id === 'axis');
+    assert.ok(axisBar, 'missing viewsContainers.activitybar axis (merged from trees fragment)');
+    assert.strictEqual(axisBar?.icon, ACTIVITY_ICON);
+
+    const iconAbs = path.resolve(__dirname, '../../', ACTIVITY_ICON);
+    assert.ok(fs.existsSync(iconAbs), `activity icon missing on disk: ${ACTIVITY_ICON}`);
+    const svg = fs.readFileSync(iconAbs, 'utf8');
     assert.ok(
-      activity.some((c) => c.id === 'axis'),
-      'missing viewsContainers.activitybar axis (merged from trees fragment)',
+      svg.includes('m 1024.04,675.876'),
+      'activity icon must keep the HOOX geometric path',
     );
+    assert.ok(svg.includes('aria-label="HOOX"'), 'activity icon must label HOOX');
 
     const panelViews = pkg.contributes?.views?.['axis-panel'] ?? [];
     const panelIds = panelViews.map((v) => v.id);
@@ -231,16 +255,18 @@ suite('AXIS IDE Extension Structure', () => {
 
     const sideViews = pkg.contributes?.views?.axis ?? [];
     const sideIds = sideViews.map((v) => v.id);
-    for (const id of EXPECTED_ACTIVITY_VIEWS) {
-      assert.ok(sideIds.includes(id), `missing activity view ${id}`);
-    }
+    assert.ok(!sideIds.includes('axis.plugins'), 'lumped axis.plugins view must be gone');
     assert.deepStrictEqual(
-      [...sideIds].sort(),
-      [...EXPECTED_ACTIVITY_VIEWS].sort(),
-      'activity view inventory drifted — update test when intentionally expanding contributes',
+      sideIds,
+      [...EXPECTED_ACTIVITY_VIEWS],
+      'activity view inventory/order drifted — update test when intentionally expanding contributes',
     );
 
     const activation = pkg.activationEvents ?? [];
+    assert.ok(
+      !activation.includes('onView:axis.plugins'),
+      'activationEvents must not include lumped onView:axis.plugins',
+    );
     assert.ok(
       activation.includes('onView:axis.results'),
       'activationEvents should include onView:axis.results',
@@ -249,9 +275,15 @@ suite('AXIS IDE Extension Structure', () => {
       activation.includes('onView:axis.strategy'),
       'activationEvents should include onView:axis.strategy',
     );
+    for (const id of EXPECTED_PLUGIN_KIND_VIEWS) {
+      assert.ok(
+        activation.includes(`onView:${id}`),
+        `activationEvents should include onView:${id}`,
+      );
+    }
     assert.ok(
-      activation.includes('onView:axis.plugins'),
-      'activationEvents should include onView:axis.plugins',
+      activation.includes('onCommand:axis.plugins.activate'),
+      'activationEvents should include onCommand:axis.plugins.activate',
     );
     assert.ok(
       activation.includes('onView:axis.workers'),

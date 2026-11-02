@@ -1,0 +1,42 @@
+{
+  "activationEvents": [
+    "onView:axis.plugins.source",
+    "onView:axis.plugins.stream",
+    "onView:axis.plugins.engine",
+    "onView:axis.plugins.storage",
+    "onView:axis.plugins.dataset",
+    "onView:axis.plugins.component",
+    "onCommand:axis.plugins.activate"
+  ],
+  "contributes": {
+    "views": {
+      "axis": [
+        { "id": "axis.plugins.source", "name": "Sources" },
+        { "id": "axis.plugins.stream", "name": "Streams" },
+        { "id": "axis.plugins.engine", "name": "Engines" },
+        { "id": "axis.plugins.storage", "name": "Storage" },
+        { "id": "axis.plugins.dataset", "name": "Datasets" },
+        { "id": "axis.plugins.component", "name": "Components" }
+      ]
+    },
+    "commands": [
+      {
+        "command": "axis.plugins.activate",
+        "title": "Activate Plugin",
+        "category": "AXIS"
+      }
+    ]
+  },
+  "notes": {
+    "replace": "Replace the single `axis.plugins` view in package.json contributes.views.axis with these six kind views. Keep `axis.workers`. Do not leave `axis.plugins` contributed — VS Code warns on uncontributed view ids, and plumbing no longer createTreeView('axis.plugins') from registerPluginsAndWorkers.",
+    "keepWorkers": "axis.workers stays in contributes.views.axis (see plugins-workers-contributes.fragment.json).",
+    "overviewTree": "PluginsTreeProvider / registerPluginsTreeView remain exported for unit tests only. registerPluginsAndWorkers must not createTreeView('axis.plugins').",
+    "activationEvents": "Add the six onView:axis.plugins.* events and onCommand:axis.plugins.activate. Remove onView:axis.plugins once that view id is dropped.",
+    "workspaceState": {
+      "key": "axis.plugins.active.v1",
+      "shape": "{ source?: string; stream?: string; engine?: string; storage?: string; dataset?: string; component?: string }",
+      "defaults": "{ source: 'binance-rest', stream: 'binance-ws', engine: 'server', storage: 'local' }",
+      "secrets": "Never store apiKey/password/token/secret fields; SecretStorage only."
+    }
+  }
+}

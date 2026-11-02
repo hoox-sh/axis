@@ -73,6 +73,8 @@ export const EXCLUDE = [
   'views/watchlist.ts',
   'plugins/index.ts',
   'plugins/tree.ts',
+  // Per-kind TreeView shims (`axis.plugins.*`) — electron / feature-agent tests.
+  'plugins/views/',
 ];
 
 export function normalize(file) {

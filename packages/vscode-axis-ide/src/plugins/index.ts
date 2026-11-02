@@ -30,11 +30,31 @@ import {
   type WorkersTreeProvider,
 } from '../views/workers';
 import {
+  createMemoryWorkspaceState,
+  isActivePlugin,
+  parseActivePluginsV1,
+  readActivePlugins,
+  workspaceStateFromContext,
+  writeActivePlugin,
+} from './active';
+import { registerActivatePluginCommand } from './activate-command';
+import {
   BUILTIN_ENGINE_IDS,
   BUILTIN_SOURCE_IDS,
   BUILTIN_PLUGIN_DESCRIPTORS,
   builtinIdsForKind,
 } from './builtins';
+import {
+  ACTIVATE_PLUGIN_COMMAND,
+  PLUGIN_KIND_VIEW_IDS,
+  type KindViewDeps,
+  type PluginKindViewId,
+} from './kind-tree-model';
+import {
+  bindKindViewDeps,
+  callKindViewRefresh,
+  registerPluginKindViews,
+} from './kind-views';
 import {
   createMemoryGlobalState,
   parsePluginsV1,
@@ -58,13 +78,17 @@ import {
   pluginsRootChildren,
 } from './tree-model';
 import {
+  ACTIVE_PLUGINS_WORKSPACE_STATE_KEY,
+  DEFAULT_ACTIVE_PLUGINS_V1,
   EMPTY_PLUGINS_V1,
   PLUGINS_GLOBAL_STATE_KEY,
   PLUGIN_KINDS,
+  type ActivePluginsV1,
   type GlobalStateHelpers,
   type InstalledPluginMeta,
   type PluginDescriptor,
   type PluginKind,
+  type WorkspaceStateHelpers,
   pluginKey,
 } from './types';
 
@@ -75,8 +99,12 @@ export type RegisterPluginsAndWorkersResult = {
 };
 
 /**
- * Register Plugins + Workers TreeViews, ensure builtins, bind `axis.plugins.v1`
- * helpers, and register `axis.workers.probeAll` (never-throw).
+ * Register per-kind plugin TreeViews + Workers, ensure builtins, bind
+ * `axis.plugins.v1` / `axis.plugins.active.v1`, and register
+ * `axis.workers.probeAll` + `axis.plugins.activate` (never-throw).
+ *
+ * Does not createTreeView('axis.plugins') — that view id is replaced by the
+ * six kind views. PluginsTreeProvider stays exported for unit tests.
  *
  * Does not edit package.json / extension.ts — callers wire activate separately.
  */
@@ -86,11 +114,15 @@ export function registerPluginsAndWorkers(
 ): RegisterPluginsAndWorkersResult {
   const registry = ensureBuiltinsRegistered(getHostPluginRegistry());
 
-  // Touch persist API so wiring can round-trip metadata (no secrets).
   readPluginsV1(globalStateHelpers);
+  const workspaceHelpers = workspaceStateFromContext(context);
+  readActivePlugins(workspaceHelpers);
 
-  const pluginsProvider = registerPluginsTreeView(context, registry);
+  const pluginsProvider = new PluginsTreeProvider(registry);
   const workersProvider = registerWorkersTreeView(context);
+
+  const refreshAll = registerPluginKindViews(context, registry, workspaceHelpers);
+  registerActivatePluginCommand(context, workspaceHelpers, refreshAll);
 
   const probeCmd = commands.registerCommand(PROBE_ALL_COMMAND, async () => {
     return runProbeAllCommand(workersProvider);
@@ -101,16 +133,25 @@ export function registerPluginsAndWorkers(
 }
 
 export {
+  ACTIVATE_PLUGIN_COMMAND,
+  ACTIVE_PLUGINS_WORKSPACE_STATE_KEY,
   BUILTIN_ENGINE_IDS,
   BUILTIN_SOURCE_IDS,
   BUILTIN_PLUGIN_DESCRIPTORS,
+  DEFAULT_ACTIVE_PLUGINS_V1,
+  bindKindViewDeps,
+  callKindViewRefresh,
   builtinIdsForKind,
   createMemoryGlobalState,
+  createMemoryWorkspaceState,
   EMPTY_PLUGINS_V1,
   ensureBuiltinsRegistered,
   getHostPluginRegistry,
   HostPluginRegistry,
+  isActivePlugin,
+  parseActivePluginsV1,
   parsePluginsV1,
+  PLUGIN_KIND_VIEW_IDS,
   PLUGINS_GLOBAL_STATE_KEY,
   PLUGINS_VIEW_ID,
   PLUGIN_KINDS,
@@ -118,15 +159,25 @@ export {
   PluginsTreeProvider,
   pluginsKindChildren,
   pluginsRootChildren,
+  readActivePlugins,
   readPluginsV1,
+  registerActivatePluginCommand,
+  registerPluginKindViews,
+  registerPluginsTreeView,
   sanitizeInstalledPluginMeta,
+  workspaceStateFromContext,
+  writeActivePlugin,
   writePluginsV1,
   _resetHostPluginRegistryForTests,
 };
 
 export type {
+  ActivePluginsV1,
   GlobalStateHelpers,
   InstalledPluginMeta,
+  KindViewDeps,
   PluginDescriptor,
   PluginKind,
+  PluginKindViewId,
+  WorkspaceStateHelpers,
 };

@@ -55,10 +55,15 @@
     "onView:axis.library",
     "onView:axis.layers",
     "onView:axis.indicators",
-    "onView:axis.plugins",
     "onView:axis.workers",
     "onView:axis.alerts",
     "onView:axis.watchlist",
+    "onView:axis.plugins.source",
+    "onView:axis.plugins.stream",
+    "onView:axis.plugins.engine",
+    "onView:axis.plugins.storage",
+    "onView:axis.plugins.dataset",
+    "onView:axis.plugins.component",
     "onCommand:axis.showRunOutput",
     "onCommand:axis.openChart",
     "onCommand:axis.runScript",
@@ -71,6 +76,7 @@
     "onCommand:axis.liveStart",
     "onCommand:axis.liveStop",
     "onCommand:axis.workers.probeAll",
+    "onCommand:axis.plugins.activate",
     "onCommand:axis.alerts.add",
     "onCommand:axis.alerts.remove",
     "onCommand:axis.watchlist.add",
@@ -125,8 +131,28 @@
           "name": "Alerts"
         },
         {
-          "id": "axis.plugins",
-          "name": "Plugins"
+          "id": "axis.plugins.source",
+          "name": "Sources"
+        },
+        {
+          "id": "axis.plugins.stream",
+          "name": "Streams"
+        },
+        {
+          "id": "axis.plugins.engine",
+          "name": "Engines"
+        },
+        {
+          "id": "axis.plugins.storage",
+          "name": "Storage"
+        },
+        {
+          "id": "axis.plugins.dataset",
+          "name": "Datasets"
+        },
+        {
+          "id": "axis.plugins.component",
+          "name": "Components"
         },
         {
           "id": "axis.workers",
@@ -222,6 +248,11 @@
         "category": "AXIS"
       },
       {
+        "command": "axis.plugins.activate",
+        "title": "Activate Plugin",
+        "category": "AXIS"
+      },
+      {
         "command": "axis.alerts.add",
         "title": "Add Alert",
         "category": "AXIS"
@@ -295,6 +326,10 @@
         },
         {
           "command": "axis.chart.drawing.trendline"
+        },
+        {
+          "command": "axis.plugins.activate",
+          "when": "false"
         }
       ],
       "view/title": [
@@ -318,6 +353,10 @@
         {
           "command": "axis.watchlist.remove",
           "when": "view == axis.watchlist && viewItem == axis.watchlist.symbol"
+        },
+        {
+          "command": "axis.plugins.activate",
+          "when": "view =~ /axis.plugins.(source|stream|engine|storage|dataset|component)/"
         }
       ]
     },
