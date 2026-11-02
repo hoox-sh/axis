@@ -7,7 +7,7 @@ tags: [chart, code]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-01T17:22:22Z
+  at: 2026-11-02T12:17:08Z
 sources:
   - id: tree
     resource: "src/chart"
@@ -36,6 +36,7 @@ okf_lock: generated
 * `heavy-data.ts` — CONFLATION_BARS_THRESHOLD, HEAVY_BARS_THRESHOLD, MAX_CHART_MARKERS, VERY_HEAVY_BARS_THRESHOLD, barIndexAtTimeBinary, barIndexRangeForTimeWindow, capNewest, createRafCoalescer, heavyTimeScaleOptions, indexRangeForSortedTimes, isHeavyBarLoad, isVeryHeavyBarLoad
 * `keymap-actions.ts` — applyChartGrid, cancelDraft, deleteSelectedDrawing, panChartBy, resetChartZoom, selectDrawingTool, toggleCrosshair, toggleMagnet, zoomChartBy
 * `last-value-labels.ts` — lastValueNamesOn, seriesLabelTitle
+* `layout-glyph.ts` — LayoutGlyphCell, layoutCells, matchingSavedLayoutName
 * `layout-recipes.ts` — LAYOUT_RECIPES, LayoutRecipe, LayoutRecipeSeed, LayoutRecipeSlotSpec, MAJOR_SYMBOLS, applyLayoutRecipe, findLayoutRecipe, recipeToLayout, resolveRecipeSlots
 * `layout.ts` — CHART_GRID_MODES, ChartGridMode, ChartLayoutState, ChartSlot, SavedChartLayout, createChartSlot, defaultChartLayout, findSlot, gridClassForMode, isChartGridMode, normalizeChartLayout, slotCountForMode
 * `line-break-primitive.ts` — LineBreakOverlayPoint, LineBreakPrimitive, LineBreakPrimitiveOpts, lineBreakPointsSig

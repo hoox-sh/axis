@@ -34,6 +34,7 @@ import {
   isPanelOpen,
 } from '../store';
 import { CHART_GRID_MODES, type ChartGridMode } from '../chart/layout';
+import { layoutCells, matchingSavedLayoutName } from '../chart/layout-glyph';
 import {
   LAYOUT_RECIPES,
   applyLayoutRecipe,
@@ -43,6 +44,15 @@ import { Icons } from './icons';
 import { Popover } from './Popover';
 import { loadSymbolData } from '../data/load-symbol';
 import { getSlotBars } from '../chart/chart-registry';
+import { getDisplay } from './shortcuts/registry';
+import type { ShortcutId } from './shortcuts/types';
+
+const GRID_SHORTCUT_ID: Record<ChartGridMode, ShortcutId> = {
+  '1': 'chart.layout-1',
+  '2h': 'chart.layout-2h',
+  '2v': 'chart.layout-2v',
+  '4': 'chart.layout-4',
+};
 
 /** Compact topbar control for multi-chart layouts and named snapshots. */
 export const ChartLayoutMenu: Component = () => {
@@ -78,6 +88,11 @@ export const ChartLayoutMenu: Component = () => {
     return 'custom';
   };
   const saved = () => store.savedLayouts || [];
+  const matchedName = () => matchingSavedLayoutName(saved(), store.chartLayout);
+  const gridTitle = (id: ChartGridMode, hint: string) => {
+    const display = getDisplay(GRID_SHORTCUT_ID[id], store.shortcuts.overrides);
+    return display ? `${hint} · ${display}` : hint;
+  };
 
   const pickMode = (m: ChartGridMode) => {
     setChartGridMode(m);
@@ -127,7 +142,30 @@ export const ChartLayoutMenu: Component = () => {
       >
         <Icons.layers />
         <span class="hidden sm:inline">Layouts</span>
+        <svg
+          viewBox="0 0 14 14"
+          width="14"
+          height="14"
+          aria-hidden="true"
+          data-testid="axis-layout-glyph"
+        >
+          <For each={layoutCells(mode())}>
+            {(cell) => (
+              <rect x={cell.x} y={cell.y} width={cell.w} height={cell.h} fill="currentColor" />
+            )}
+          </For>
+        </svg>
         <span class="font-mono text-[10px] opacity-80 ml-0.5">{mode()}</span>
+        <Show when={matchedName()}>
+          {(name) => (
+            <span
+              class="font-mono text-[10px] opacity-80 max-w-[7rem] truncate"
+              data-testid="axis-layout-saved-match"
+            >
+              {name()}
+            </span>
+          )}
+        </Show>
       </button>
 
       <Popover
@@ -183,7 +221,7 @@ export const ChartLayoutMenu: Component = () => {
                   class={`sc-btn py-2 text-[11px] font-mono ${
                     mode() === m.id ? 'border-accent text-accent bg-accent/10' : ''
                   }`}
-                  title={m.hint}
+                  title={gridTitle(m.id, m.hint)}
                   data-testid={`axis-layout-mode-${m.id}`}
                   onClick={() => pickMode(m.id)}
                 >
