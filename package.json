@@ -61,7 +61,10 @@
     "okf:check": "bun scripts/okf/cli.ts enrich --check",
     "okf:lint": "bun scripts/okf/cli.ts lint",
     "okf:query": "bun scripts/okf/cli.ts query",
-    "okf:context": "bun scripts/okf/cli.ts context"
+    "okf:context": "bun scripts/okf/cli.ts context",
+    "vscode:ide:compile": "bun run --cwd packages/vscode-axis-ide compile",
+    "vscode:ide:test": "bun run --cwd packages/vscode-axis-ide test",
+    "vscode:ide:package": "bun run --cwd packages/vscode-axis-ide package"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.18.0",
