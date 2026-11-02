@@ -50,10 +50,16 @@
   ],
   "activationEvents": [
     "onCustomEditor:axis.chart",
+    "onView:axis.results",
+    "onView:axis.strategy",
+    "onView:axis.library",
+    "onView:axis.layers",
+    "onView:axis.indicators",
     "onCommand:axis.showRunOutput",
     "onCommand:axis.openChart",
     "onCommand:axis.runScript",
     "onCommand:axis.runScriptSilent",
+    "onCommand:axis.focusResults",
     "onCommand:axis.secrets.setWorkerKey",
     "onCommand:axis.secrets.setProKey",
     "onCommand:axis.secrets.clear",
@@ -66,6 +72,52 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "axis",
+          "title": "AXIS",
+          "icon": "media/axis-activity.svg"
+        }
+      ],
+      "panel": [
+        {
+          "id": "axis-panel",
+          "title": "AXIS",
+          "icon": "media/axis-activity.svg"
+        }
+      ]
+    },
+    "views": {
+      "axis": [
+        {
+          "id": "axis.library",
+          "name": "Library"
+        },
+        {
+          "id": "axis.layers",
+          "name": "Layers"
+        },
+        {
+          "id": "axis.indicators",
+          "name": "Scripts"
+        }
+      ],
+      "axis-panel": [
+        {
+          "type": "webview",
+          "id": "axis.results",
+          "name": "Results",
+          "retainContextWhenHidden": false
+        },
+        {
+          "type": "webview",
+          "id": "axis.strategy",
+          "name": "Strategy",
+          "retainContextWhenHidden": false
+        }
+      ]
+    },
     "customEditors": [
       {
         "viewType": "axis.chart",
@@ -97,6 +149,11 @@
       {
         "command": "axis.runScriptSilent",
         "title": "Run Script (Silent)",
+        "category": "AXIS"
+      },
+      {
+        "command": "axis.focusResults",
+        "title": "Focus Results",
         "category": "AXIS"
       },
       {
@@ -192,9 +249,11 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile:webview": "vite build --config webview/chart/vite.config.ts",
+    "compile:webview:chart": "vite build --config webview/chart/vite.config.ts",
+    "compile:webview:results": "vite build --config webview/results/vite.config.ts",
+    "compile:webview": "npm run compile:webview:chart && npm run compile:webview:results",
     "compile": "node esbuild.host.mjs && npm run compile:webview",
-    "check": "tsc -p ./ --noEmit && tsc -p webview/chart/tsconfig.json --noEmit",
+    "check": "tsc -p ./ --noEmit && tsc -p webview/chart/tsconfig.json --noEmit && tsc -p webview/results/tsconfig.json --noEmit",
     "watch": "node esbuild.host.mjs --watch",
     "watch:webview": "vite build --config webview/chart/vite.config.ts --watch",
     "watch:all": "npm run watch & npm run watch:webview",

@@ -23,19 +23,22 @@ This is the **0.1.0** scaffold with protocol, SecretStorage, **`axis.chart`**, H
 - **AXIS Chart** custom editor on `*.axis.json` (CSP webview + bundled Lightweight Charts; mock or datafeed `chart.full`)
 - **AXIS: Open Chart** opens or creates a sibling `*.axis.json` beside the active Pine file (editor title menu; existing files are not rewritten)
 - **AXIS: Run Script** (`Ctrl/Cmd+Enter`) → Pro `/run` on mock bars (default) or HistoryClient venue bars when `axis.chart.useMockBars` is false; paints `chart.full` candles or `axis-run` diagnostics; Silent variant skips Results focus / error toasts
+- **Results / Strategy** panel WebviewViews (`axis.results` / `axis.strategy`) with §7.1 focus rules; **AXIS: Focus Results** retargets the open run
+- Activity-bar TreeViews: Library / Layers / Scripts (no watchlist yet)
 - Settings: `axis.telemetry.offline`, `axis.engine.id` (`server` only for now), `axis.engine.endpoint` (loopback by default; remote needs `axis.engine.allowRemoteEndpoint`), `axis.chart.useMockBars` / `historyBars`, `axis.datafeed.url`
 - Plot/drawing overlays from engine results are carried on `chart.full.plots` but **webview plot paint is deferred** (candles only in PR-06)
 - Typed host↔webview envelope codecs under `src/protocol/` (coverage-gated)
 - Worker (`pn_…`) / Pro (`pyn_…`) keys via `axis.secrets.*` → `ExtensionContext.secrets` only
 
-MCP provider, plot overlays, and Results webviews ship later.
+MCP provider and plot overlays ship later.
 
 ## Build layout
 
 | Artifact | Path | Notes |
 | --- | --- | --- |
 | Extension host bundle | **`out/extension.js`** | Produced by `esbuild.host.mjs` (PYNE parity). **Do not move the host entry to `dist/`.** |
-| Chart webview assets | **`dist/webview/chart/`** | Vite build (`compile:webview`); CSP HTML is host-generated. |
+| Chart webview assets | **`dist/webview/chart/`** | Vite build (`compile:webview:chart`); CSP HTML is host-generated. |
+| Results webview assets | **`dist/webview/results/`** | Shared Results/Strategy Vite bundle (`compile:webview:results`). |
 
 ## Requirements
 

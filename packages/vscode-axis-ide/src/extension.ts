@@ -70,6 +70,10 @@ import {
   type RunDiagnostic,
   type RunDeps,
 } from './run';
+import { RESULTS_VIEW_ID, registerResultsView } from './views/results';
+import { registerStrategyView } from './views/strategy';
+import type { ResultsWebviewViewProvider } from './views/results-panel';
+import { registerAxisTreeViews } from './views/trees';
 
 /** Keep in sync with package.json contributes.commands (grow with KD-14). */
 export const COMMANDS = {
@@ -77,6 +81,7 @@ export const COMMANDS = {
   openChart: 'axis.openChart',
   runScript: 'axis.runScript',
   runScriptSilent: 'axis.runScriptSilent',
+  focusResults: 'axis.focusResults',
   setWorkerKey: 'axis.secrets.setWorkerKey',
   setProKey: 'axis.secrets.setProKey',
   clearSecrets: 'axis.secrets.clear',
@@ -92,6 +97,8 @@ let secrets: AxisSecretStorage | undefined;
 let runDiagnostics: DiagnosticCollection | undefined;
 let orchestrator: RunOrchestrator | undefined;
 let resultsStore: ResultsFocusStore | undefined;
+let resultsProvider: ResultsWebviewViewProvider | undefined;
+let strategyProvider: ResultsWebviewViewProvider | undefined;
 /** Aborts the previous command-level run when a new one starts. */
 let commandAbort: AbortController | undefined;
 /** Set in deactivate so any late work skips after shutdown. */
@@ -432,6 +439,38 @@ async function promptAndClearSecrets(): Promise<string | undefined> {
  * `axis.chart` resolves. Existing siblings are not rewritten. Returns the chart
  * URI string or an error message. Never awaits UI dismissal (tests/CI).
  */
+/**
+ * Focus the Results panel (§7.1). Optional `runId` retargets `resultsFocusId`
+ * and posts `results.set`. Shows the Results WebviewView when possible.
+ */
+async function focusResultsCommand(runId?: string): Promise<string | undefined> {
+  if (deactivated) return undefined;
+  try {
+    if (!resultsStore) {
+      const err = 'AXIS: Focus Results is not ready (activate incomplete).';
+      void window.showErrorMessage(err);
+      return err;
+    }
+    if (typeof runId === 'string' && runId.trim()) {
+      resultsStore.focusResults(runId.trim());
+    }
+    // Reveal contributed view — VS Code registers `{viewId}.focus`.
+    try {
+      await commands.executeCommand(`${RESULTS_VIEW_ID}.focus`);
+    } catch {
+      resultsProvider?.reveal();
+    }
+    strategyProvider?.reveal();
+    const focusId = resultsStore.getResultsFocusId();
+    return focusId ?? 'ok';
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    const err = scrubSecrets(`AXIS: Focus Results failed: ${message}`);
+    void window.showErrorMessage(err);
+    return err;
+  }
+}
+
 async function openChartCommand(): Promise<string | undefined> {
   if (deactivated) return undefined;
   try {
@@ -511,6 +550,9 @@ export function activate(context: ExtensionContext): void {
   secrets = new AxisSecretStorage(context.secrets);
   orchestrator = new RunOrchestrator();
   resultsStore = new ResultsFocusStore();
+  resultsProvider = registerResultsView(context, resultsStore);
+  strategyProvider = registerStrategyView(context, resultsStore);
+  registerAxisTreeViews(context);
 
   runOutput = window.createOutputChannel(RUN_OUTPUT_CHANNEL_NAME);
   context.subscriptions.push(runOutput);
@@ -547,6 +589,9 @@ export function activate(context: ExtensionContext): void {
     commands.registerCommand(COMMANDS.openChart, () => openChartCommand()),
     commands.registerCommand(COMMANDS.runScript, () => runScriptCommand(true)),
     commands.registerCommand(COMMANDS.runScriptSilent, () => runScriptCommand(false)),
+    commands.registerCommand(COMMANDS.focusResults, (runId?: string) =>
+      focusResultsCommand(runId),
+    ),
     commands.registerCommand(COMMANDS.setWorkerKey, () => promptAndSetWorkerKey()),
     commands.registerCommand(COMMANDS.setProKey, () => promptAndSetProKey()),
     commands.registerCommand(COMMANDS.clearSecrets, () => promptAndClearSecrets()),
@@ -581,4 +626,6 @@ export function deactivate(): void {
   runDiagnostics = undefined;
   orchestrator = undefined;
   resultsStore = undefined;
+  resultsProvider = undefined;
+  strategyProvider = undefined;
 }

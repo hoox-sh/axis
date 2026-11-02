@@ -43,6 +43,14 @@ const pkg = JSON.parse(fs.readFileSync(PACKAGE_PATH, 'utf8')) as {
       selector?: Array<{ filenamePattern: string }>;
       priority?: string;
     }>;
+    viewsContainers?: {
+      panel?: Array<{ id: string; title?: string; icon?: string }>;
+      activitybar?: Array<{ id: string; title?: string; icon?: string }>;
+    };
+    views?: Record<
+      string,
+      Array<{ id: string; name?: string; type?: string }>
+    >;
     configuration?:
       | Array<{ properties: Record<string, unknown> }>
       | { properties: Record<string, unknown> };
@@ -55,6 +63,7 @@ const EXPECTED_COMMANDS = [
   'axis.openChart',
   'axis.runScript',
   'axis.runScriptSilent',
+  'axis.focusResults',
   'axis.secrets.setWorkerKey',
   'axis.secrets.setProKey',
   'axis.secrets.clear',
@@ -84,7 +93,12 @@ const ALLOWED_CONTRIBUTE_KEYS = new Set([
   'customEditors',
   'menus',
   'keybindings',
+  'viewsContainers',
+  'views',
 ]);
+const EXPECTED_PANEL_VIEWS = ['axis.results', 'axis.strategy'] as const;
+/** Watchlist is PR-08b — must not appear until that task. */
+const FORBIDDEN_VIEWS = ['axis.watchlist'] as const;
 const EXPECTED_KEYBINDINGS = [
   {
     command: 'axis.runScript',
@@ -161,9 +175,48 @@ suite('AXIS IDE Extension Structure', () => {
         `${expected.viewType} selector must be exactly ${expected.filenamePattern}`,
       );
     }
+  });
+
+  test('contributes panel + activity views (results/strategy/library/layers/indicators; no watchlist)', () => {
+    const panelContainers = pkg.contributes?.viewsContainers?.panel ?? [];
+    const axisPanel = panelContainers.find((c) => c.id === 'axis-panel');
+    assert.ok(axisPanel, 'missing viewsContainers.panel axis-panel');
+    assert.strictEqual(axisPanel?.title, 'AXIS');
+
+    const activity = pkg.contributes?.viewsContainers?.activitybar ?? [];
     assert.ok(
-      !('views' in (pkg.contributes ?? {})),
-      'views must not land before their PR (no premature watchlist/results)',
+      activity.some((c) => c.id === 'axis'),
+      'missing viewsContainers.activitybar axis (merged from trees fragment)',
+    );
+
+    const panelViews = pkg.contributes?.views?.['axis-panel'] ?? [];
+    const panelIds = panelViews.map((v) => v.id);
+    for (const id of EXPECTED_PANEL_VIEWS) {
+      assert.ok(panelIds.includes(id), `missing panel view ${id}`);
+      const entry = panelViews.find((v) => v.id === id);
+      assert.strictEqual(entry?.type, 'webview', `${id} must be type webview`);
+    }
+
+    const sideViews = pkg.contributes?.views?.axis ?? [];
+    const sideIds = sideViews.map((v) => v.id);
+    for (const id of ['axis.library', 'axis.layers', 'axis.indicators'] as const) {
+      assert.ok(sideIds.includes(id), `missing activity view ${id}`);
+    }
+
+    const allViewIds = Object.values(pkg.contributes?.views ?? {}).flatMap((list) =>
+      list.map((v) => v.id),
+    );
+    for (const id of FORBIDDEN_VIEWS) {
+      assert.ok(!allViewIds.includes(id), `${id} must be absent from contributes.views`);
+    }
+    const activation = pkg.activationEvents ?? [];
+    assert.ok(
+      activation.includes('onView:axis.results'),
+      'activationEvents should include onView:axis.results',
+    );
+    assert.ok(
+      activation.includes('onView:axis.strategy'),
+      'activationEvents should include onView:axis.strategy',
     );
   });
 
@@ -202,12 +255,12 @@ suite('AXIS IDE Extension Structure', () => {
     );
   });
 
-  test('contributes keys are only commands + configuration + customEditors + menus + keybindings', () => {
+  test('contributes keys stay on the allowlist (incl. views / viewsContainers)', () => {
     const keys = Object.keys(pkg.contributes ?? {});
     for (const key of keys) {
       assert.ok(
         ALLOWED_CONTRIBUTE_KEYS.has(key),
-        `unexpected contributes.${key} — allowed: commands/configuration/customEditors/menus/keybindings`,
+        `unexpected contributes.${key} — allowed: ${[...ALLOWED_CONTRIBUTE_KEYS].join('/')}`,
       );
     }
   });

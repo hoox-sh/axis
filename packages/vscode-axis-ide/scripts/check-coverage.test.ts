@@ -37,22 +37,25 @@ function lcovFile(path: string, lines: Array<[number, number]>): string {
 }
 
 describe('check-coverage helpers', () => {
-  test('INCLUDE lists live pure-host dirs (protocol/host/secrets/editors/run) + live placeholder', () => {
+  test('INCLUDE lists live pure-host dirs (protocol/host/secrets/editors/run/views) + live placeholder', () => {
     expect(INCLUDE).toContain('src/protocol/');
     expect(INCLUDE).toContain('src/host/');
     expect(INCLUDE).toContain('src/secrets/');
     expect(INCLUDE).toContain('src/editors/');
     expect(INCLUDE).toContain('src/run/');
+    expect(INCLUDE).toContain('src/views/');
     expect(INCLUDE).toContain('src/live/');
   });
 
-  test('EXCLUDE matches relative out/ dist/ vendor/ paths and chart-editor shim', () => {
+  test('EXCLUDE matches relative out/ dist/ vendor/ paths and VS Code shims', () => {
     expect(excluded('out/extension.js')).toBe(true);
     expect(excluded('dist/webview/main.js')).toBe(true);
     expect(excluded('webview/vendor/lwc.js')).toBe(true);
     expect(excluded('src/protocol/codec.ts')).toBe(false);
     expect(excluded('src/editors/chart-editor.ts')).toBe(true);
     expect(excluded('src/editors/chart-document.ts')).toBe(false);
+    expect(excluded('src/views/results-panel.ts')).toBe(true);
+    expect(excluded('src/views/results-html.ts')).toBe(false);
   });
 
   test('parseMinPercent rejects NaN and out-of-range', () => {

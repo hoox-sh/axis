@@ -32,7 +32,7 @@ export const PROTOCOL_MIN = 100;
 
 /**
  * Pure-host INCLUDE — paths under these prefixes contribute to the BASELINE.
- * `src/protocol|host|secrets|editors|run` are live; `src/live/` is listed so
+ * `src/protocol|host|secrets|editors|run|views` are live; `src/live/` is listed so
  * future live-bridge files join the gate automatically when they appear on disk.
  */
 export const INCLUDE = [
@@ -41,6 +41,7 @@ export const INCLUDE = [
   'src/secrets/',
   'src/editors/',
   'src/run/',
+  'src/views/',
   'src/live/',
 ];
 
@@ -56,8 +57,15 @@ export const EXCLUDE = [
   'dist/',
   'out/',
   'lightweight-charts',
-  // VS Code API shim — covered by electron; pure helpers live beside it.
+  // VS Code API shims — covered by electron; pure helpers live beside them.
   'editors/chart-editor.ts',
+  'views/results-panel.ts',
+  'views/results.ts',
+  'views/strategy.ts',
+  'views/trees.ts',
+  'views/library.ts',
+  'views/layers.ts',
+  'views/indicators.ts',
 ];
 
 export function normalize(file) {

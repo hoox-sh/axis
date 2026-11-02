@@ -60,6 +60,12 @@ export {
 } from './orchestrator';
 export {
   ResultsFocusStore,
+  copyRunRecord,
+  pickStrategyReport,
+  type PublishInput,
+  type ResultsFocusChangeReason,
+  type ResultsFocusListener,
+  type ResultsFocusSnapshot,
   type RunResultRecord,
 } from './results-store';
 export {
