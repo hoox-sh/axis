@@ -20,15 +20,19 @@
 /**
  * Drawing-toolbar shared constants.
  *
- * Single source of truth for rail geometry, icon optics, and shortcuts so
+ * Single source of truth for rail geometry and icon optics so
  * `DrawingToolbar` and its extracted subcomponents stay pixel-consistent.
- * Does not mount UI or touch the chart layer.
+ * Tool-title chords come from the shortcut registry. Does not mount UI
+ * or touch the chart layer.
  *
  * @module chart/drawings/toolbar/shortcuts
  */
 
 import { DRAWING_COLORS } from '../../drawing-types';
 import type { DrawingLineStyle, DrawingToolId } from '../../drawing-types';
+import type { Platform } from '../../../ui/shortcuts/keys';
+import { getDisplay } from '../../../ui/shortcuts/registry';
+import type { ShortcutId, ShortcutOverrides } from '../../../ui/shortcuts/types';
 
 /** Rail grid — matches `.axis-draw-tool` / `.axis-draw-btn` in `src/index.css`. */
 export const RAIL_BUTTON_PX = 32;
@@ -59,20 +63,30 @@ export const COLOR_PRESETS = [
 export const LINE_STYLES: DrawingLineStyle[] = ['solid', 'dashed', 'dotted'];
 
 /**
- * Chart-scope chords already in the shortcut registry — do not invent new ones.
- * Kept here so rail, flyout, and settings share one map.
+ * Drawing tools that share a chart-scope shortcut. The selection cursor is
+ * omitted: Q is `chart.tool-crosshair`, not this tool.
  */
-export const TOOL_SHORTCUT: Partial<Record<DrawingToolId, string>> = {
-  cursor: 'Q',
-  eraser: 'E',
-  measure: 'M',
-  trend: 'L',
-  fib: 'F',
-  rect: 'R',
-  text: 'T',
-  hline: 'H',
-  brush: 'X',
+const TOOL_BINDING: Partial<Record<DrawingToolId, ShortcutId>> = {
+  eraser: 'chart.tool-eraser',
+  measure: 'chart.tool-measure',
+  trend: 'chart.tool-trend',
+  fib: 'chart.tool-fib',
+  rect: 'chart.tool-rect',
+  text: 'chart.tool-text',
+  hline: 'chart.tool-hline',
+  brush: 'chart.tool-brush',
 };
+
+/** Registry display for a drawing tool, or `''` when unbound or cleared. */
+export function toolChord(
+  id: DrawingToolId,
+  overrides: ShortcutOverrides = {},
+  platform?: Platform,
+): string {
+  const shortcutId = TOOL_BINDING[id];
+  if (!shortcutId) return '';
+  return getDisplay(shortcutId, overrides, platform);
+}
 
 export function titleWithShortcut(name: string, shortcut?: string): string {
   return shortcut ? `${name} (${shortcut})` : name;

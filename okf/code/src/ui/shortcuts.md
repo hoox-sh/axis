@@ -7,7 +7,7 @@ tags: [code, shortcuts, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-02T12:12:17Z
+  at: 2026-11-02T12:29:54Z
 sources:
   - id: tree
     resource: "src/ui/shortcuts"
@@ -47,6 +47,8 @@ okf_lock: generated
 # Used by
 
 * [src](/code/src.md)
+* [src/chart](/code/src/chart.md)
+* [src/chart/drawings/toolbar](/code/src/chart/drawings/toolbar.md)
 * [src/editor](/code/src/editor.md)
 * [src/mcp](/code/src/mcp.md)
 * [src/store](/code/src/store.md)

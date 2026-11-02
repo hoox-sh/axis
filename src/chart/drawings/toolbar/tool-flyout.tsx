@@ -27,10 +27,11 @@
  */
 
 import { type Component, For, onMount } from 'solid-js';
+import { store } from '../../../store';
 import type { DrawingToolId } from '../../drawing-types';
 import { toolLabel } from '../../drawing-types';
 import { DrawingToolIcon } from '../tool-icons';
-import { TOOL_ICON_PX, TOOL_ICON_STROKE, TOOL_SHORTCUT, titleWithShortcut } from './shortcuts';
+import { TOOL_ICON_PX, TOOL_ICON_STROKE, titleWithShortcut, toolChord } from './shortcuts';
 
 export const ToolFlyout: Component<{
   tools: DrawingToolId[];
@@ -92,7 +93,7 @@ export const ToolFlyout: Component<{
             aria-checked={props.activeId === tid}
             class="axis-draw-flyout-item"
             classList={{ 'is-active': props.activeId === tid }}
-            title={titleWithShortcut(toolLabel(tid), TOOL_SHORTCUT[tid])}
+            title={titleWithShortcut(toolLabel(tid), toolChord(tid, store.shortcuts.overrides))}
             onClick={() => props.onSelect(tid)}
           >
             <DrawingToolIcon id={tid} size={TOOL_ICON_PX} strokeWidth={TOOL_ICON_STROKE} />

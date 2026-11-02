@@ -7,7 +7,7 @@ tags: [chart, code, drawings, toolbar]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-05T22:18:26Z
+  at: 2026-11-02T12:29:54Z
 sources:
   - id: tree
     resource: "src/chart/drawings/toolbar"
@@ -20,7 +20,7 @@ okf_lock: generated
 
 * `chrome.ts` — DOCK_LEFT_PX, DOCK_TOP_PX, STYLEBAR_GAP_PX, ToolbarDock, autoStylebarPos, clampToHost, finitePx, sanitizeToolbarDock, snapToolbarDock
 * `dock-menu.tsx` — DockMenu
-* `shortcuts.ts` — COLOR_PRESETS, DRAG_SLOP_PX, GRIP_ICON_PX, GRIP_ICON_STROKE, LINE_STYLES, NUDGE_LARGE_PX, NUDGE_PX, RAIL_BUTTON_PX, TOOL_ICON_PX, TOOL_ICON_STROKE, TOOL_SHORTCUT, UTILITY_ICON_PX
+* `shortcuts.ts` — COLOR_PRESETS, DRAG_SLOP_PX, GRIP_ICON_PX, GRIP_ICON_STROKE, LINE_STYLES, NUDGE_LARGE_PX, NUDGE_PX, RAIL_BUTTON_PX, TOOL_ICON_PX, TOOL_ICON_STROKE, UTILITY_ICON_PX, UTILITY_ICON_STROKE
 * `style-controls.tsx` — ColorSwatch, LineStyleChip, StyleDivider, StyleDividerThin, SwatchRow, ToggleChip, WidthChip
 * `tool-button.tsx` — RailBadge, RailSeparator, ToolCaret, ToolRailButton
 * `tool-flyout.tsx` — ToolFlyout
@@ -34,6 +34,8 @@ okf_lock: generated
 
 * [src/chart](/code/src/chart.md)
 * [src/chart/drawings](/code/src/chart/drawings.md)
+* [src/store](/code/src/store.md)
+* [src/ui/shortcuts](/code/src/ui/shortcuts.md)
 
 # Used by
 

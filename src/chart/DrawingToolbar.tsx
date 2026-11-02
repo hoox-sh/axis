@@ -52,6 +52,7 @@ import {
 import type { Drawing, DrawingKind, DrawingToolId } from './drawing-types';
 import { toolLabel, resolveDrawingStyle } from './drawing-types';
 import { Icons } from '../ui/icons';
+import { getDisplay } from '../ui/shortcuts/registry';
 import { DrawingToolIcon } from './drawings/tool-icons';
 import { levelSwatches } from './drawings/level-palette';
 import {
@@ -63,10 +64,10 @@ import {
   NUDGE_PX,
   TOOL_ICON_PX,
   TOOL_ICON_STROKE,
-  TOOL_SHORTCUT,
   UTILITY_ICON_PX,
   UTILITY_ICON_STROKE,
   titleWithShortcut,
+  toolChord,
 } from './drawings/toolbar/shortcuts';
 import { createToolbarDrag, nudgeDelta } from './drawings/toolbar/use-toolbar-drag';
 import { RailBadge, RailSeparator, ToolCaret, ToolRailButton } from './drawings/toolbar/tool-button';
@@ -728,7 +729,10 @@ export const DrawingToolbar: Component = () => {
                 data-open={g.flyout && openGroup() === g.id ? '1' : undefined}
               >
                 <ToolRailButton
-                  title={titleWithShortcut(toolLabel(primaryId()), TOOL_SHORTCUT[primaryId()])}
+                  title={titleWithShortcut(
+                    toolLabel(primaryId()),
+                    toolChord(primaryId(), store.shortcuts.overrides),
+                  )}
                   label={toolLabel(primaryId())}
                   active={isActive()}
                   onSelect={() => selectTool(primaryId())}
@@ -762,7 +766,10 @@ export const DrawingToolbar: Component = () => {
         <RailSeparator />
 
         <ToolRailButton
-          title={`Magnet: ${store.drawingUi.magnet} (W)`}
+          title={titleWithShortcut(
+            `Magnet: ${store.drawingUi.magnet}`,
+            getDisplay('chart.tool-magnet', store.shortcuts.overrides),
+          )}
           label={`Magnet snap: ${store.drawingUi.magnet}`}
           active={store.drawingUi.magnet !== 'off'}
           onSelect={() => {
@@ -844,7 +851,10 @@ export const DrawingToolbar: Component = () => {
           <Icons.copy size={UTILITY_ICON_PX} strokeWidth={UTILITY_ICON_STROKE} />
         </ToolRailButton>
         <ToolRailButton
-          title="Delete selected (Delete)"
+          title={titleWithShortcut(
+            'Delete selected',
+            getDisplay('chart.delete-selected', store.shortcuts.overrides),
+          )}
           label="Delete selected drawing"
           disabled={!store.selectedDrawingId}
           onSelect={() => getActiveDrawingLayer()?.deleteSelected()}
