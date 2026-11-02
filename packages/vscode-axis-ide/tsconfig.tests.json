@@ -5,6 +5,11 @@
     "rootDir": "./src",
     "outDir": "./out"
   },
-  "include": ["src/test/**/*", "src/semver.ts", "src/constants.ts"],
+  "include": [
+    "src/test/**/*",
+    "src/semver.ts",
+    "src/constants.ts",
+    "src/editors/chart-document.ts"
+  ],
   "exclude": ["node_modules", "out"]
 }

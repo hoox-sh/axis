@@ -24,6 +24,7 @@ import {
   OPEN_CHART_UNAVAILABLE_MESSAGE,
   RUN_OUTPUT_CHANNEL_NAME,
 } from '../constants';
+import { CHART_VIEW_TYPE } from '../editors/chart-document';
 import { isVersionOlderThan } from '../semver';
 
 const PACKAGE_PATH = path.resolve(__dirname, '../../package.json');
@@ -38,6 +39,12 @@ const pkg = JSON.parse(fs.readFileSync(PACKAGE_PATH, 'utf8')) as {
   extensionDependencies?: string[];
   contributes?: Record<string, unknown> & {
     commands?: Array<{ command: string }>;
+    customEditors?: Array<{
+      viewType: string;
+      displayName?: string;
+      selector?: Array<{ filenamePattern: string }>;
+      priority?: string;
+    }>;
     configuration?:
       | Array<{ properties: Record<string, unknown> }>
       | { properties: Record<string, unknown> };
@@ -63,7 +70,15 @@ const EXPECTED_WORKSPACE_CONTAINS = [
   'workspaceContains:**/*.pinev6',
   'workspaceContains:**/*.pinescript',
 ] as const;
-const ALLOWED_CONTRIBUTE_KEYS = new Set(['commands', 'configuration']);
+const ALLOWED_CONTRIBUTE_KEYS = new Set(['commands', 'configuration', 'customEditors']);
+const EXPECTED_CUSTOM_EDITORS = [
+  {
+    viewType: CHART_VIEW_TYPE,
+    displayName: 'AXIS Chart',
+    filenamePattern: '*.axis.json',
+    priority: 'default',
+  },
+] as const;
 
 const PYNE_EXT_ID = 'hoox-sh.pyne';
 const PYNE_RECOMMENDED_MIN = '0.5.4';
@@ -90,9 +105,13 @@ suite('AXIS IDE Extension Structure', () => {
     }
   });
 
-  test('activationEvents: no onStartupFinished; onCommand + workspaceContains', () => {
+  test('activationEvents: no onStartupFinished; onCommand + onCustomEditor + workspaceContains', () => {
     const events = pkg.activationEvents ?? [];
     assert.ok(!events.includes('onStartupFinished'), 'must not use onStartupFinished');
+    assert.ok(
+      events.includes(`onCustomEditor:${CHART_VIEW_TYPE}`),
+      `missing onCustomEditor:${CHART_VIEW_TYPE}`,
+    );
     for (const id of EXPECTED_COMMANDS) {
       assert.ok(
         events.includes(`onCommand:${id}`),
@@ -102,6 +121,28 @@ suite('AXIS IDE Extension Structure', () => {
     for (const glob of EXPECTED_WORKSPACE_CONTAINS) {
       assert.ok(events.includes(glob), `missing activationEvent ${glob}`);
     }
+  });
+
+  test('contributes customEditors axis.chart for *.axis.json (KD-4)', () => {
+    assert.strictEqual(CHART_VIEW_TYPE, 'axis.chart');
+    const editors = pkg.contributes?.customEditors ?? [];
+    assert.strictEqual(editors.length, EXPECTED_CUSTOM_EDITORS.length);
+    for (const expected of EXPECTED_CUSTOM_EDITORS) {
+      const found = editors.find((e) => e.viewType === expected.viewType);
+      assert.ok(found, `missing customEditor ${expected.viewType}`);
+      assert.strictEqual(found?.displayName, expected.displayName);
+      assert.strictEqual(found?.priority, 'default');
+      const patterns = (found?.selector ?? []).map((s) => s.filenamePattern);
+      assert.deepStrictEqual(
+        patterns,
+        [expected.filenamePattern],
+        `${expected.viewType} selector must be exactly ${expected.filenamePattern}`,
+      );
+    }
+    assert.ok(
+      !('views' in (pkg.contributes ?? {})),
+      'views must not land before their PR (no premature watchlist/results)',
+    );
   });
 
   test('contributes expected commands (KD-14 inventory)', () => {
@@ -139,12 +180,12 @@ suite('AXIS IDE Extension Structure', () => {
     );
   });
 
-  test('contributes keys are only commands + configuration', () => {
+  test('contributes keys are only commands + configuration + customEditors', () => {
     const keys = Object.keys(pkg.contributes ?? {});
     for (const key of keys) {
       assert.ok(
         ALLOWED_CONTRIBUTE_KEYS.has(key),
-        `unexpected contributes.${key} — P0 allows only commands/configuration`,
+        `unexpected contributes.${key} — allowed: commands/configuration/customEditors`,
       );
     }
   });

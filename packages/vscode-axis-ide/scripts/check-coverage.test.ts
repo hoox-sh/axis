@@ -37,19 +37,22 @@ function lcovFile(path: string, lines: Array<[number, number]>): string {
 }
 
 describe('check-coverage helpers', () => {
-  test('INCLUDE lists pure-host dirs including src/secrets/', () => {
+  test('INCLUDE lists pure-host dirs including src/secrets/ and src/editors/', () => {
     expect(INCLUDE).toContain('src/protocol/');
     expect(INCLUDE).toContain('src/host/');
     expect(INCLUDE).toContain('src/secrets/');
+    expect(INCLUDE).toContain('src/editors/');
     expect(INCLUDE).toContain('src/run/');
     expect(INCLUDE).toContain('src/live/');
   });
 
-  test('EXCLUDE matches relative out/ dist/ vendor/ paths', () => {
+  test('EXCLUDE matches relative out/ dist/ vendor/ paths and chart-editor shim', () => {
     expect(excluded('out/extension.js')).toBe(true);
     expect(excluded('dist/webview/main.js')).toBe(true);
     expect(excluded('webview/vendor/lwc.js')).toBe(true);
     expect(excluded('src/protocol/codec.ts')).toBe(false);
+    expect(excluded('src/editors/chart-editor.ts')).toBe(true);
+    expect(excluded('src/editors/chart-document.ts')).toBe(false);
   });
 
   test('parseMinPercent rejects NaN and out-of-range', () => {

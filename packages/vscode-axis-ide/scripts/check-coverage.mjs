@@ -38,6 +38,7 @@ export const INCLUDE = [
   'src/protocol/',
   'src/host/',
   'src/secrets/',
+  'src/editors/',
   'src/run/',
   'src/live/',
 ];
@@ -54,6 +55,8 @@ export const EXCLUDE = [
   'dist/',
   'out/',
   'lightweight-charts',
+  // VS Code API shim — covered by electron; pure helpers live beside it.
+  'editors/chart-editor.ts',
 ];
 
 export function normalize(file) {

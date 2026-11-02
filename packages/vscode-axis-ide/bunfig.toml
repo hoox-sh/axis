@@ -8,6 +8,8 @@
 pathIgnorePatterns = [
   "src/test/**",
   "out/**",
+  "dist/**",
+  "webview/**",
   "coverage/**",
   "node_modules/**",
 ]

@@ -1,23 +1,41 @@
+# Ignore everything by default, then allowlist runtime artifacts.
 .vscode/**
 .vscode-test/**
 src/**
+webview/**
 node_modules/**
 .git/**
 .gitignore
 **/*.ts
+**/*.tsx
 **/*.map
-out/**
-!out/extension.js
+*.map
 tsconfig.json
 tsconfig.tests.json
 esbuild.host.mjs
 .vscodeignore
 package-lock.json
 bun.lock
-src/**/*.test.ts
+bunfig.toml
 **/*.vsix
 **/*.md
 !README.md
 **/.DS_Store
 test-fixtures/**
+fixtures/**
+coverage/**
+scripts/**
 
+# Host bundle (esbuild) — only the entry, not other out/ leftovers.
+out/**
+!out/extension.js
+
+# Chart webview runtime — nested whitelist (gitignore style) so only main.js/css ship.
+# Do not un-ignore the chart directory wholesale (that pulls in *.map).
+dist/**
+!dist/webview/
+dist/webview/**
+!dist/webview/chart/
+dist/webview/chart/**
+!dist/webview/chart/main.js
+!dist/webview/chart/main.css

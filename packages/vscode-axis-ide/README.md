@@ -15,24 +15,25 @@ Part of the **[HOOX](https://hoox.sh) open trading stack**. Sister products: **[
 
 ## Status
 
-This is the **0.1.0** scaffold plus the **`axis.webview.v1`** protocol module and **SecretStorage** keys:
+This is the **0.1.0** scaffold with protocol, SecretStorage, and the **`axis.chart`** custom editor shell:
 
-- Activation without `onStartupFinished` (workspace globs + commands)
+- Activation without `onStartupFinished` (workspace globs + commands + `onCustomEditor:axis.chart`)
 - Output channel **AXIS Run** (`AXIS: Show Run Output`)
 - Status bar item (`axis.ide.status`) with Worker/Pro key **set/missing** marks (never values)
-- Stub **AXIS: Open Chart** (custom editor lands in a later release)
+- **AXIS Chart** custom editor on `*.axis.json` (CSP webview shell; LWC paint next)
+- Stub **AXIS: Open Chart** (sibling file create lands next)
 - Optional setting `axis.telemetry.offline` (default `true`)
 - Typed host↔webview envelope codecs under `src/protocol/` (coverage-gated)
 - Worker (`pn_…`) / Pro (`pyn_…`) keys via `axis.secrets.*` → `ExtensionContext.secrets` only
 
-Chart custom editor, MCP provider, and webviews ship later.
+MCP provider and Results webviews ship later.
 
 ## Build layout
 
 | Artifact | Path | Notes |
 | --- | --- | --- |
 | Extension host bundle | **`out/extension.js`** | Produced by `esbuild.host.mjs` (PYNE parity). **Do not move the host entry to `dist/`.** |
-| Future webview assets | `dist/webview/` (planned) | Chart/results browser bundles only — separate from the host `main`. |
+| Chart webview assets | **`dist/webview/chart/`** | Vite build (`compile:webview`); CSP HTML is host-generated. |
 
 ## Requirements
 
@@ -69,8 +70,11 @@ Use **`bun run --cwd <pkg> <script>`** (flag after `run`). On current Bun, `bun 
 
 ```bash
 bun install --cwd packages/vscode-axis-ide   # or npm install
-bun run --cwd packages/vscode-axis-ide compile
-bun run --cwd packages/vscode-axis-ide test:unit            # bun:test (protocol, logger, semver, coverage script)
+bun run --cwd packages/vscode-axis-ide compile              # host esbuild + chart Vite webview
+bun run --cwd packages/vscode-axis-ide compile:webview      # Vite → dist/webview/chart only
+bun run --cwd packages/vscode-axis-ide check                # tsc host + webview/chart
+bun run --cwd packages/vscode-axis-ide watch:webview        # Vite watch (pair with watch)
+bun run --cwd packages/vscode-axis-ide test:unit            # bun:test (protocol, editors, secrets, coverage script)
 bun run --cwd packages/vscode-axis-ide test:coverage        # unit + lcov under coverage/
 bun run --cwd packages/vscode-axis-ide test:coverage:gate   # coverage + BASELINE/protocol ratchet
 bun run --cwd packages/vscode-axis-ide test                 # @vscode/test-electron

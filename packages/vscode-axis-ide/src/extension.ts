@@ -36,6 +36,7 @@ import {
   OPEN_CHART_UNAVAILABLE_MESSAGE,
   RUN_OUTPUT_CHANNEL_NAME,
 } from './constants';
+import { registerChartEditorProvider } from './editors/chart-editor';
 import {
   AxisSecretStorage,
   SECRET_STORE_ERROR,
@@ -206,6 +207,7 @@ export function activate(context: ExtensionContext): void {
   statusBar.show();
 
   context.subscriptions.push(
+    registerChartEditorProvider(context),
     commands.registerCommand(COMMANDS.showRunOutput, () => {
       if (deactivated) return;
       runOutput?.show(true);
@@ -214,6 +216,7 @@ export function activate(context: ExtensionContext): void {
     commands.registerCommand(COMMANDS.openChart, () => {
       if (deactivated) return;
       // Do not await — showInformationMessage waits for dismissal and stalls tests/CI.
+      // Sibling *.axis.json create lands in Task 08; keep stub message for now.
       void window.showInformationMessage(OPEN_CHART_UNAVAILABLE_MESSAGE);
       return OPEN_CHART_UNAVAILABLE_MESSAGE;
     }),

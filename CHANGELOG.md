@@ -17,6 +17,8 @@ _Generated/updated: 2026-11-01 · 880 commits · describe-tag: `v2.26.0`_
 
 ### Added
 
+- **VS Code AXIS IDE `axis.chart` CustomEditorProvider + CSP webview shell** (`packages/vscode-axis-ide`). Editable custom editor (not Readonly) for `*.axis.json` (`schema: "axis.chart.v1"`), dirty/save/revert/backup stubs via `CustomDocumentContentChangeEvent`, Vite chart webview under `dist/webview/chart/` with `webview.ready` → `chart.init` handshake over `axis.webview.v1`, and CSP `default-src 'none'` / `script-src ${webview.cspSource}` / `connect-src 'none'` (no inline script; host proxies network). Fixture `fixtures/sample.axis.json`. LWC paint deferred to the next task.
+
 - **VS Code AXIS IDE SecretStorage for Worker/Pro keys** (`packages/vscode-axis-ide`). `src/secrets/` façade over `ExtensionContext.secrets` with slots `axis.secret.cloud.apiKey` (`pn_`) / `axis.secret.engine.server.apiKey` (`pyn_`), validators matching `WORKER_API_KEY_RE` `/^pn_[a-f0-9]{48}$/` and Pro `pyn_` + ≥20 chars, redaction helper, commands `axis.secrets.setWorkerKey` / `setProKey` / `clear` (InputBox password; no `axis.worker.apiKey` / `axis.pro.apiKey` settings), and StatusBar set/missing tooltips. Bun unit tests use an injectable Map store.
 
 - **VS Code AXIS IDE `axis.webview.v1` protocol + coverage ratchet** (`packages/vscode-axis-ide`). Typed envelope codecs for every design §6 chart/results message (`encode` / never-throw `decode`, direction helpers), thin `src/host/logger.ts` (injectable sink, `axis.debug.protocol` gate), 100% protocol unit coverage, and `scripts/check-coverage.mjs` with measured BASELINE **100%** (fail on regression), hard protocol 100%, TARGET_HOST 90 / TARGET_PACKAGE 80 printed only. Scripts: `test:unit`, `test:coverage`, `test:coverage:gate`.

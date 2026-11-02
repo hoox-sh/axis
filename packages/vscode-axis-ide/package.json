@@ -49,6 +49,7 @@
     "strategy"
   ],
   "activationEvents": [
+    "onCustomEditor:axis.chart",
     "onCommand:axis.showRunOutput",
     "onCommand:axis.openChart",
     "onCommand:axis.secrets.setWorkerKey",
@@ -63,6 +64,18 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "customEditors": [
+      {
+        "viewType": "axis.chart",
+        "displayName": "AXIS Chart",
+        "selector": [
+          {
+            "filenamePattern": "*.axis.json"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
     "commands": [
       {
         "command": "axis.showRunOutput",
@@ -105,9 +118,12 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "node esbuild.host.mjs",
-    "check": "tsc -p ./ --noEmit",
+    "compile:webview": "vite build --config webview/chart/vite.config.ts",
+    "compile": "node esbuild.host.mjs && npm run compile:webview",
+    "check": "tsc -p ./ --noEmit && tsc -p webview/chart/tsconfig.json --noEmit",
     "watch": "node esbuild.host.mjs --watch",
+    "watch:webview": "vite build --config webview/chart/vite.config.ts --watch",
+    "watch:all": "npm run watch & npm run watch:webview",
     "compile-tests": "tsc -p tsconfig.tests.json",
     "package": "node -e \"const v=require('./package.json').version; require('child_process').execSync('npx --yes @vscode/vsce package --no-dependencies --no-git-tag-version --out axis-ide-'+v+'.vsix',{stdio:'inherit'})\"",
     "test:unit": "bun test",
@@ -123,6 +139,7 @@
     "@vscode/vsce": "^3.3.2",
     "esbuild": "^0.25.1",
     "mocha": "^11.1.0",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.2",
+    "vite": "^6.2.0"
   }
 }
