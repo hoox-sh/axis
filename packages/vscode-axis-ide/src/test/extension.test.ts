@@ -408,9 +408,9 @@ suite('AXIS IDE Extension Activation', () => {
     assert.strictEqual(result, RUN_NO_PINE_MESSAGE);
   });
 
-  test('default axis.chart.useMockBars is true', () => {
+  test('default axis.chart.useMockBars is false (HistoryClient dogfood)', () => {
     const config = vscode.workspace.getConfiguration('axis.chart');
-    assert.strictEqual(config.get('useMockBars'), true);
+    assert.strictEqual(config.get('useMockBars'), false);
   });
 
   test('default axis.datafeed.url is loopback :5003', () => {
@@ -439,6 +439,40 @@ suite('AXIS IDE Extension Activation', () => {
     const meta = entry?.[1] as { scope?: string; default?: boolean };
     assert.strictEqual(meta.scope, 'application');
     assert.strictEqual(meta.default, false);
+  });
+
+  test('axis.mcp.command / allowNpx are application-scoped (not workspace)', () => {
+    const configuration = Array.isArray(pkg.contributes?.configuration)
+      ? pkg.contributes.configuration
+      : pkg.contributes?.configuration
+        ? [pkg.contributes.configuration]
+        : [];
+    const props = configuration.flatMap((group) =>
+      Object.entries(group.properties ?? {}),
+    );
+    for (const key of ['axis.mcp.command', 'axis.mcp.allowNpx'] as const) {
+      const entry = props.find(([k]) => k === key);
+      assert.ok(entry, `missing ${key}`);
+      const meta = entry?.[1] as { scope?: string };
+      assert.strictEqual(meta.scope, 'application', `${key} must be application-scoped`);
+    }
+  });
+
+  test('axis.mcp.command / allowNpx are application-scoped (not workspace)', () => {
+    const configuration = Array.isArray(pkg.contributes?.configuration)
+      ? pkg.contributes.configuration
+      : pkg.contributes?.configuration
+        ? [pkg.contributes.configuration]
+        : [];
+    const props = configuration.flatMap((group) =>
+      Object.entries(group.properties ?? {}),
+    );
+    for (const key of ['axis.mcp.command', 'axis.mcp.allowNpx'] as const) {
+      const entry = props.find(([k]) => k === key);
+      assert.ok(entry, `missing ${key}`);
+      const meta = entry?.[1] as { scope?: string };
+      assert.strictEqual(meta.scope, 'application', `${key} must be application-scoped`);
+    }
   });
 
   test('default axis.telemetry.offline is true', () => {

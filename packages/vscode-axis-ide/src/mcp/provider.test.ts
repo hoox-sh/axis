@@ -24,11 +24,24 @@ const registeredCommands: Array<{
   command: string;
   cb: (...args: unknown[]) => unknown;
 }> = [];
-const registeredProviders: Array<{ id: string; provider: unknown }> = [];
+const registeredProviders: Array<{
+  id: string;
+  provider: {
+    provideMcpServerDefinitions: () => Promise<unknown[]>;
+    resolveMcpServerDefinition: (server: unknown) => Promise<unknown>;
+  };
+}> = [];
 const warnings: Array<{ message: string; items: string[] }> = [];
 const executed: string[] = [];
 const openedDocs: Array<{ content: string; language: string }> = [];
 let warningChoice: string | undefined;
+const workspaceBag: Record<string, unknown> = {
+  'mcp.stdio': true,
+  'mcp.command': '',
+  'mcp.allowNpx': false,
+  'worker.url': 'https://worker.axis.hoox.sh',
+};
+let workerSectionUrl: string | undefined = 'https://worker.axis.hoox.sh';
 
 mock.module('vscode', () => {
   class McpStdioServerDefinition {
@@ -114,24 +127,20 @@ mock.module('vscode', () => {
     },
     workspace: {
       getConfiguration(section?: string) {
-        const bag: Record<string, unknown> = {
-          'mcp.stdio': true,
-          'mcp.command': '',
-          'mcp.allowNpx': false,
-          'worker.url': 'https://worker.axis.hoox.sh',
-        };
         if (section === 'axis.worker') {
           return {
             get<T>(key: string, def?: T): T | undefined {
-              if (key === 'url') return 'https://worker.axis.hoox.sh' as T;
+              if (key === 'url') {
+                return (workerSectionUrl as T | undefined) ?? def;
+              }
               return def;
             },
           };
         }
         return {
           get<T>(key: string, def?: T): T | undefined {
-            if (Object.prototype.hasOwnProperty.call(bag, key)) {
-              return bag[key] as T;
+            if (Object.hasOwn(workspaceBag, key)) {
+              return workspaceBag[key] as T;
             }
             return def;
           },
@@ -159,6 +168,11 @@ beforeEach(() => {
   executed.length = 0;
   openedDocs.length = 0;
   warningChoice = undefined;
+  workspaceBag['mcp.stdio'] = true;
+  workspaceBag['mcp.command'] = '';
+  workspaceBag['mcp.allowNpx'] = false;
+  workspaceBag['worker.url'] = 'https://worker.axis.hoox.sh';
+  workerSectionUrl = 'https://worker.axis.hoox.sh';
   provider.resetMcpSoftFailWarningForTests();
 });
 
@@ -402,5 +416,119 @@ describe('registerMcpProvider', () => {
       true,
     );
     expect(subscriptions.length).toBeGreaterThanOrEqual(2);
+  });
+
+  test('wired provide uses workspace config, secrets, and default stdio definition', async () => {
+    // Override command so PATH `axis` cannot shadow the fixture.
+    workspaceBag['mcp.command'] = '/opt/axis-from-test';
+    workspaceBag['worker.url'] = '';
+    workerSectionUrl = 'https://worker.axis.hoox.sh/';
+    const secrets = new Map<string, string>([
+      ['axis.secret.cloud.apiKey', KEY],
+    ]);
+    provider.registerMcpProvider({
+      secrets: {
+        get: async (k: string) => secrets.get(k),
+      },
+      subscriptions: [],
+    } as never);
+
+    const entry = registeredProviders.find((p) => p.id === provider.MCP_PROVIDER_ID);
+    expect(entry).toBeDefined();
+    if (!entry) return;
+    const defs = await entry.provider.provideMcpServerDefinitions();
+    expect(defs).toHaveLength(1);
+    const def = defs[0] as {
+      label: string;
+      command: string;
+      args: string[];
+      env: Record<string, string>;
+    };
+    expect(def.command).toBe('/opt/axis-from-test');
+    expect(def.env.AXIS_API_KEY).toBe(KEY);
+    expect(def.args).toContain('https://worker.axis.hoox.sh');
+    const resolved = await entry.provider.resolveMcpServerDefinition(def);
+    expect(resolved).toBe(def);
+
+    const show = registeredCommands.find((c) => c.command === provider.MCP_COMMANDS.showConfig);
+    expect(show).toBeDefined();
+    if (!show) return;
+    await show.cb();
+    expect(openedDocs.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test('wired provide: secrets throw → definition without AXIS_API_KEY; stdio off → empty', async () => {
+    workspaceBag['mcp.command'] = '/opt/axis-from-test';
+    provider.registerMcpProvider({
+      secrets: {
+        get: async () => {
+          throw new Error('vault');
+        },
+      },
+      subscriptions: [],
+    } as never);
+    const entry = registeredProviders.find((p) => p.id === provider.MCP_PROVIDER_ID);
+    expect(entry).toBeDefined();
+    if (!entry) return;
+    const defs = await entry.provider.provideMcpServerDefinitions();
+    expect(defs).toHaveLength(1);
+    const def = defs[0] as { env: Record<string, string> };
+    expect(def.env.AXIS_API_KEY).toBeUndefined();
+
+    workspaceBag['mcp.stdio'] = false;
+    const empty = await entry.provider.provideMcpServerDefinitions();
+    expect(empty).toEqual([]);
+  });
+
+  test('showMcpConfigSnippet without url reads workspace worker.url', async () => {
+    workspaceBag['worker.url'] = 'https://worker.axis.hoox.sh';
+    const text = await provider.showMcpConfigSnippet();
+    expect(text).toContain('https://worker.axis.hoox.sh');
+    expect(openedDocs).toHaveLength(1);
+  });
+
+  test('defaultCreateStdioDefinition path when factory omitted', async () => {
+    const defs = await provider.provideAxisMcpServerDefinitions({
+      cfg: reader({ allowNpx: true }),
+      getWorkerKey: async () => KEY,
+      which: async () => null,
+      // omit createStdioDefinition → real McpStdioServerDefinition mock
+    });
+    expect(defs).toHaveLength(1);
+    const def = defs[0] as { command: string; args: string[]; env: Record<string, string> };
+    expect(def.command).toBe('npx');
+    expect(def.env.AXIS_API_KEY).toBe(KEY);
+  });
+
+  test('default soft-fail UI (window.showWarningMessage) when ui omitted', async () => {
+    warningChoice = provider.MCP_SOFT_FAIL_ACTION;
+    const defs = await provider.provideAxisMcpServerDefinitions({
+      cfg: reader({ allowNpx: false }),
+      getWorkerKey: async () => KEY,
+      which: async () => null,
+      // omit ui → defaultSoftFailUi (+ executeCommand on action)
+    });
+    expect(defs).toEqual([]);
+    expect(warnings.length).toBeGreaterThanOrEqual(1);
+    expect(warnings[0]?.message).toBe(provider.MCP_SOFT_FAIL_MESSAGE);
+    await Bun.sleep(0);
+    expect(executed).toContain(provider.MCP_COMMANDS.showConfig);
+  });
+
+  test('refuses definition when stdio args contain --key (defense)', async () => {
+    const defs = await provider.provideAxisMcpServerDefinitions({
+      cfg: reader({ allowNpx: true }),
+      getWorkerKey: async () => KEY,
+      which: async () => null,
+      buildStdioArgs: () => ['mcp', '--key', KEY],
+    });
+    expect(defs).toEqual([]);
+  });
+
+  test('readAxisConfig falls back to DEFAULT when worker urls empty', async () => {
+    workspaceBag['worker.url'] = '   ';
+    workerSectionUrl = '  ';
+    const text = await provider.showMcpConfigSnippet();
+    expect(text).toContain('https://worker.axis.hoox.sh');
   });
 });

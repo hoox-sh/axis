@@ -33,8 +33,12 @@ import { createLiveResumeStub, type LiveResumeStub, type LiveResumeStubDeps } fr
 export type LiveChartNotify = (message: ChartNotifyMessage) => void;
 
 export type LiveChartFanoutDeps = {
-  /** Canonical series key for chart-bus filtering. */
-  seriesKey: string;
+  /**
+   * Canonical series key for chart-bus filtering.
+   * Prefer a getter bound to the active chart session so live frames are not
+   * dropped when activate-time seriesKey was empty.
+   */
+  seriesKey: string | (() => string);
   /** Override notify (defaults to chart-bus `notifyChart`). */
   notify?: LiveChartNotify;
   output?: LiveOutput;
@@ -44,6 +48,7 @@ export type LiveChartFanoutDeps = {
   /**
    * When true (default), frames whose extracted seriesKey differs from
    * `seriesKey` are ignored. Status frames always pass.
+   * When the resolved seriesKey is empty, the frame key is used (bus retain).
    */
   filterSeriesKey?: boolean;
 };
@@ -89,9 +94,19 @@ export function createLiveChartFanout(deps: LiveChartFanoutDeps): LiveChartFanou
   let lastSeq = 0;
   let barCount = 0;
 
+  function configuredKey(): string {
+    try {
+      const raw = typeof deps.seriesKey === 'function' ? deps.seriesKey() : deps.seriesKey;
+      return String(raw ?? '');
+    } catch {
+      return '';
+    }
+  }
+
   function resolveKey(frameKey: string | undefined): string | null {
-    const configured = String(deps.seriesKey ?? '');
-    if (!configured) return null;
+    const configured = configuredKey();
+    // No active session key — keep frame key so chart-bus can retain for replay.
+    if (!configured) return frameKey || null;
     if (!frameKey) return configured;
     if (!filter) return frameKey;
     return frameKey === configured ? configured : null;
@@ -195,7 +210,7 @@ export function createLiveChartFanout(deps: LiveChartFanoutDeps): LiveChartFanou
   return {
     onFrame,
     handleRequestReload() {
-      void resume.resume('request-reload', `series=${deps.seriesKey}`);
+      void resume.resume('request-reload', `series=${configuredKey()}`);
     },
     lastSeq: () => lastSeq,
     barCount: () => barCount,

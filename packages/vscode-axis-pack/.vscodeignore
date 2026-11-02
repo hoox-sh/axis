@@ -9,5 +9,5 @@ package-lock.json
 **/*.fragment.json
 **/*WIRING*
 **/*wiring*
-# Maintainer publish guide — repo-only (README.md still ships).
+# Maintainer publish guide — repo-only (README.md + NOTICE + LICENSE still ship).
 PUBLISH.md

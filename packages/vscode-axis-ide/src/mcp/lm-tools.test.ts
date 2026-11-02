@@ -469,3 +469,132 @@ describe('normalizeRunMode / payloadLeaksSecret', () => {
     expect(lmTools.payloadLeaksSecret('{"plotCount":3}')).toBe(false);
   });
 });
+
+describe('LM tool edge / catch paths', () => {
+  test('summarizeMeta keeps boolean/null on allowlisted keys; series array / scalar plots', () => {
+    const summary = lmTools.summarizeRunRecord({
+      id: 'run-edge',
+      status: 'success',
+      focus: true,
+      seriesKey: 'k',
+      engineId: 'server',
+      series: [1, 2, 3] as unknown as Record<string, unknown>,
+      plots: 'not-plots' as unknown as unknown[],
+      meta: {
+        ms: null,
+        transport: true,
+        skip: { nested: 1 },
+      },
+      createdAt: 1,
+    });
+    expect(summary).not.toBeNull();
+    if (!summary) return;
+    expect(summary.seriesKeys).toEqual([]);
+    expect(summary.plotCount).toBe(0);
+    expect(summary.meta).toEqual({ ms: null, transport: true });
+  });
+
+  test('runScript invoke catch + secret-looking payload refused', async () => {
+    const tool = lmTools.createRunScriptTool(
+      makeDeps({
+        runScript: async () => {
+          throw new Error(`boom ${WORKER_KEY}`);
+        },
+      }),
+    );
+    const result = await tool.invoke(
+      { input: { mode: 'auto', focus: true }, toolInvocationToken: undefined },
+      fakeToken(),
+    );
+    const body = parseToolText(result as { content: unknown[] }) as {
+      ok?: boolean;
+      error?: string;
+    };
+    expect(body.ok).toBe(false);
+    expect(body.error).not.toContain(WORKER_KEY);
+
+    const leaky = lmTools.createRunScriptTool(
+      makeDeps({
+        runScript: async () =>
+          ({
+            ok: true,
+            mode: 'auto',
+            focus: true,
+            // Force a secret-shaped field through JSON so textResult refuses.
+            debugKey: WORKER_KEY,
+          }) as never,
+      }),
+    );
+    const refused = await leaky.invoke(
+      { input: {}, toolInvocationToken: undefined },
+      fakeToken(),
+    );
+    const refusedBody = parseToolText(refused as { content: unknown[] }) as {
+      ok?: boolean;
+      error?: string;
+    };
+    expect(refusedBody.ok).toBe(false);
+    expect(refusedBody.error).toMatch(/refused|secrets/i);
+  });
+
+  test('getResultsFocus + chart meta catch paths; non-array scriptIds', async () => {
+    const focusTool = lmTools.createGetResultsFocusTool(
+      makeDeps({
+        results: {
+          getFocusId: () => {
+            throw new Error(`focus ${PRO_KEY}`);
+          },
+          getNewestRunId: () => null,
+          getLastRun: () => null,
+        } as never,
+      }),
+    );
+    const focusResult = await focusTool.invoke(
+      { input: {}, toolInvocationToken: undefined },
+      fakeToken(),
+    );
+    const focusBody = parseToolText(focusResult as { content: unknown[] }) as {
+      error?: string;
+    };
+    expect(focusBody.error).toBeDefined();
+    expect(focusBody.error).not.toContain(PRO_KEY);
+
+    const metaTool = lmTools.createChartSnapshotMetaTool(
+      makeDeps({
+        getChartSnapshotMeta: () => {
+          throw new Error('meta boom');
+        },
+      }),
+    );
+    const metaResult = await metaTool.invoke(
+      { input: {}, toolInvocationToken: undefined },
+      fakeToken(),
+    );
+    const metaBody = parseToolText(metaResult as { content: unknown[] }) as {
+      ok?: boolean;
+      error?: string;
+    };
+    expect(metaBody.ok).toBe(false);
+    expect(metaBody.error).toMatch(/meta/i);
+
+    const oddIds = lmTools.createChartSnapshotMetaTool(
+      makeDeps({
+        getChartSnapshotMeta: () =>
+          ({
+            seriesKey: 'k',
+            interval: '1m',
+            scriptIds: 'not-array' as unknown as string[],
+            live: 'off',
+          }),
+      }),
+    );
+    const oddResult = await oddIds.invoke(
+      { input: {}, toolInvocationToken: undefined },
+      fakeToken(),
+    );
+    const oddBody = parseToolText(oddResult as { content: unknown[] }) as {
+      scriptIds?: string[];
+    };
+    expect(oddBody.scriptIds).toEqual([]);
+  });
+});

@@ -43,7 +43,8 @@ export type ChartMessageHandle =
       full: AxisEnvelope<ChartFullPayload>;
     }
   | { kind: 'setTool'; tool: string }
-  | { kind: 'commit'; drawing: CommittedTrendlineDrawing };
+  | { kind: 'commit'; drawing: CommittedTrendlineDrawing }
+  | { kind: 'requestReload' };
 
 /**
  * VS Code theme CSS variables the chart shell inherits from the webview host.
@@ -91,8 +92,8 @@ export interface ChartHandshakeSession {
 /**
  * Handle one untrusted webview → host message for the chart editor.
  * Never throws. Accepts `webview.ready` (view=chart) and replies with `chart.init`
- * (+ `chart.full`). Handles `drawing.setTool` / `drawing.commit`. Rejects
- * host→view types and bad envelopes.
+ * (+ `chart.full`). Handles `drawing.setTool` / `drawing.commit` /
+ * `chart.requestReload`. Rejects host→view types and bad envelopes.
  *
  * `getSession` is invoked only after a valid ready so callers rebuild from the
  * live document + settings instead of closing over resolve-time snapshots.
@@ -132,6 +133,9 @@ export function handleChartWebviewMessage(
         };
       }
       return { kind: 'commit', drawing };
+    }
+    if (decoded.envelope.type === VIEW_TO_HOST.ChartRequestReload) {
+      return { kind: 'requestReload' };
     }
     if (decoded.envelope.type !== VIEW_TO_HOST.WebviewReady) {
       return { kind: 'ignore' };

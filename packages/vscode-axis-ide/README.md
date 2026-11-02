@@ -22,7 +22,7 @@ This is the **0.1.0** scaffold with protocol, SecretStorage, **`axis.chart`**, H
 - Status bar item (`axis.ide.status`) with Worker/Pro key **set/missing** marks (never values)
 - **AXIS Chart** custom editor on `*.axis.json` (CSP webview + bundled Lightweight Charts; mock or datafeed `chart.full`)
 - **AXIS: Open Chart** opens or creates a sibling `*.axis.json` beside the active Pine file (editor title menu; existing files are not rewritten)
-- **AXIS: Run Script** (`Ctrl/Cmd+Enter`) → Pro `/run` on mock bars (default) or HistoryClient venue bars when `axis.chart.useMockBars` is false; paints `chart.full` candles or `axis-run` diagnostics; Silent variant skips Results focus / error toasts
+- **AXIS: Run Script** (`Ctrl/Cmd+Enter`) → Pro `/run` on HistoryClient venue bars (default) or mock bars when `axis.chart.useMockBars` is true; paints `chart.full` candles or `axis-run` diagnostics; Silent variant skips Results focus / error toasts
 - **Results / Strategy** panel WebviewViews (`axis.results` / `axis.strategy`) with §7.1 focus rules; **AXIS: Focus Results** retargets the open run
 - Activity-bar TreeViews: Library / Layers / Scripts (no watchlist yet)
 - Settings: `axis.telemetry.offline`, `axis.engine.id` (`server` only for now), `axis.engine.endpoint` (loopback by default; remote needs `axis.engine.allowRemoteEndpoint`), `axis.chart.useMockBars` / `historyBars`, `axis.datafeed.url`
@@ -86,11 +86,11 @@ Keys live only in `ExtensionContext.secrets` (VS Code SecretStorage):
 | `axis.engine.endpoint` | `http://127.0.0.1:5002` | Pro base URL (no `/run` suffix); loopback unless remote allowed |
 | `axis.engine.allowRemoteEndpoint` | `false` | Opt-in before sending Bearer off-machine (**application** scope — workspace cannot enable) |
 | `axis.engine.allowPyodide` | `false` | Opt-in chart CSP widen for optional Pyodide calculator (`wasm-unsafe-eval` + `worker-src blob:`). Bars-in only; **Wasm assets not shipped** in this VSIX (version lock `0.29.5`) |
-| `axis.chart.useMockBars` | `true` | Mock/fixture bars for chart + run (safe default). Set **false** for real history via datafeed |
+| `axis.chart.useMockBars` | `false` | Opt-in mock/fixture bars for chart + run. Default **false** uses real history via datafeed |
 | `axis.chart.historyBars` | `1500` | Default history window (clamped ≤20000) |
 | `axis.datafeed.url` | `http://127.0.0.1:5003` | Local axis-datafeed base (`GET /datafeed/ohlcv`); remote needs `axis.engine.allowRemoteEndpoint` |
 
-**Real history:** start `@hoox-sh/axis-datafeed` on `:5003`, set `axis.chart.useMockBars` to `false`. Chart clears then paints fetched bars (`chart.full` seq above handshake); runs fail clearly if fetch fails (no empty `/run` body, no silent mock).
+**Real history (default):** start `@hoox-sh/axis-datafeed` on `:5003`. Chart clears then paints fetched bars (`chart.full` seq above handshake); runs fail clearly if fetch fails (no empty `/run` body, no silent mock). Set `axis.chart.useMockBars` to **true** only for offline/fixture dogfood.
 
 Secrets are **not** settings — use the `axis.secrets.*` commands above.
 

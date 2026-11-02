@@ -272,17 +272,18 @@ interface ChartHostSettings {
 
 /** Read chart + datafeed settings (never throws). */
 function readChartHostSettings(): ChartHostSettings {
-  let useMockBars = true;
+  let useMockBars = false;
   let historyBarsSetting: number | undefined;
   let datafeedUrl = DEFAULT_DATAFEED_URL;
   let allowRemote = false;
   try {
     const cfg = workspace.getConfiguration('axis.chart');
-    useMockBars = cfg.get<boolean>('useMockBars', true) !== false;
+    // Mock bars are opt-in; HistoryClient is the dogfood default.
+    useMockBars = cfg.get<boolean>('useMockBars', false) === true;
     const hb = cfg.get<number>('historyBars');
     if (typeof hb === 'number' && Number.isFinite(hb)) historyBarsSetting = hb;
   } catch {
-    useMockBars = true;
+    useMockBars = false;
   }
   try {
     const df = workspace.getConfiguration('axis.datafeed');
@@ -420,8 +421,13 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
     { seriesKey: string; historyAbort?: AbortController }
   >();
   private readonly busSub: { dispose(): void };
+  private readonly onRequestReload: (() => void) | undefined;
 
-  constructor(private readonly context: ExtensionContext) {
+  constructor(
+    private readonly context: ExtensionContext,
+    opts?: ChartEditorProviderOptions,
+  ) {
+    this.onRequestReload = opts?.onRequestReload;
     this.busSub = subscribeChartNotify((message) => {
       for (const [panel, meta] of [...this.openPanels]) {
         try {
@@ -436,6 +442,10 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
           if (message.type === 'chart.full') {
             void panel.webview.postMessage(
               encode(HOST_TO_VIEW.ChartFull, message.payload),
+            );
+          } else if (message.type === 'chart.delta') {
+            void panel.webview.postMessage(
+              encode(HOST_TO_VIEW.ChartDelta, message.payload),
             );
           } else if (message.type === 'host.run.status') {
             void panel.webview.postMessage(
@@ -591,6 +601,14 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
         // MVP: webview owns tool chrome; host ack is a no-op (TreeView tools later).
         return;
       }
+      if (result.kind === 'requestReload') {
+        try {
+          this.onRequestReload?.();
+        } catch {
+          // resume stub must not tear down the editor
+        }
+        return;
+      }
       if (result.kind === 'commit') {
         if (disposed) return;
         try {
@@ -687,10 +705,16 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
 }
 
 /** Register `axis.chart` CustomEditorProvider (editable, not Readonly). */
+export type ChartEditorProviderOptions = {
+  /** Host handler for webview `chart.requestReload` (live resume / remint). */
+  onRequestReload?: () => void;
+};
+
 export function registerChartEditorProvider(
   context: ExtensionContext,
+  opts?: ChartEditorProviderOptions,
 ): { dispose(): void } {
-  const provider = new AxisChartEditorProvider(context);
+  const provider = new AxisChartEditorProvider(context, opts);
   const registration = window.registerCustomEditorProvider(CHART_VIEW_TYPE, provider, {
     webviewOptions: { retainContextWhenHidden: false },
     supportsMultipleEditorsPerDocument: true,

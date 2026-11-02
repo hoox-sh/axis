@@ -239,7 +239,7 @@ function readEngineSettings(): {
   let endpoint = DEFAULT_ENGINE_ENDPOINT;
   let allowRemote = false;
   let historyBarsSetting: number | undefined;
-  let useMockBars = true;
+  let useMockBars = false;
   let datafeedUrl = DEFAULT_DATAFEED_URL;
   try {
     const engineCfg = workspace.getConfiguration('axis.engine');
@@ -256,7 +256,8 @@ function readEngineSettings(): {
     const chartCfg = workspace.getConfiguration('axis.chart');
     const hb = chartCfg.get<number>('historyBars');
     if (typeof hb === 'number' && Number.isFinite(hb)) historyBarsSetting = hb;
-    useMockBars = chartCfg.get<boolean>('useMockBars', true) !== false;
+    // Mock bars are opt-in; HistoryClient is the dogfood default.
+    useMockBars = chartCfg.get<boolean>('useMockBars', false) === true;
   } catch {
     // keep defaults
   }
@@ -807,6 +808,7 @@ export function activate(context: ExtensionContext): void {
   liveStatusBar.show();
 
   const liveSettings = readLiveSettings();
+  const engineSettingsForLive = readEngineSettings();
   const secretStore = secrets;
   // Holder so fan-out can close over the bridge after construction.
   let onFrame: LiveFrameHandler = () => {};
@@ -819,6 +821,8 @@ export function activate(context: ExtensionContext): void {
     },
     workerUrl: liveSettings.workerUrl,
     liveEnabled: liveSettings.liveEnabled,
+    // Application-scoped remote opt-in — workspace cannot point mint at attacker hosts.
+    allowRemoteWorker: engineSettingsForLive.allowRemote,
     output: {
       appendLine(line: string) {
         runOutput?.appendLine(scrubSecrets(line));
@@ -833,8 +837,8 @@ export function activate(context: ExtensionContext): void {
   });
   liveBridge = bridge;
   const fanout = createLiveChartFanout({
-    seriesKey: '',
-    filterSeriesKey: false,
+    seriesKey: () => getChartSnapshotMeta()?.seriesKey ?? '',
+    filterSeriesKey: true,
     output: {
       appendLine(line: string) {
         runOutput?.appendLine(scrubSecrets(line));
@@ -862,7 +866,9 @@ export function activate(context: ExtensionContext): void {
   });
 
   context.subscriptions.push(
-    registerChartEditorProvider(context),
+    registerChartEditorProvider(context, {
+      onRequestReload: () => fanout.handleRequestReload(),
+    }),
     commands.registerCommand(COMMANDS.showRunOutput, () => {
       if (deactivated) return;
       runOutput?.show(true);

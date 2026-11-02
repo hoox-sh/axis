@@ -44,6 +44,7 @@ export const INCLUDE = [
   'src/views/',
   'src/live/',
   'src/plugins/',
+  'src/mcp/',
 ];
 
 /** Unanchored substrings so relative SF paths like `out/x` still match. */

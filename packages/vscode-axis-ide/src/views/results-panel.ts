@@ -112,15 +112,8 @@ export class ResultsWebviewViewProvider implements WebviewViewProvider {
       ],
     };
 
-    try {
-      webview.html = getResultsHtml(webview, this.context.extensionUri, this.kind);
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      webview.html = `<!DOCTYPE html><html><body><p>${message.replace(/[<>&]/g, '')}</p></body></html>`;
-      return;
-    }
-
-    // Listener before any ready reply — host may respond synchronously.
+    // Register message handler BEFORE assigning html — webview may post ready
+    // synchronously (same posture as the chart CustomEditor path).
     webview.onDidReceiveMessage((raw) => {
       const handle = handleResultsWebviewMessage(raw, this.store);
       if (handle.kind === 'reject') {
@@ -149,6 +142,13 @@ export class ResultsWebviewViewProvider implements WebviewViewProvider {
       this.unsub = undefined;
       if (this.view === webviewView) this.view = undefined;
     });
+
+    try {
+      webview.html = getResultsHtml(webview, this.context.extensionUri, this.kind);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      webview.html = `<!DOCTYPE html><html><body><p>${message.replace(/[<>&]/g, '')}</p></body></html>`;
+    }
   }
 
   /** Reveal the panel if resolved (best-effort). */

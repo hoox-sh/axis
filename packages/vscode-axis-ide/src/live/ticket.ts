@@ -131,18 +131,31 @@ export function shouldUseLiveProxy(opts: {
 }
 
 /**
- * Normalize `axis.worker.url`. Remote is allowed by default (product default is
- * the cloud Worker); callers may pass `allowRemote: false` for strict loopback.
+ * Normalize `axis.worker.url` before minting with Bearer.
+ * Always allows loopback and looks-like-Worker hosts (product default cloud
+ * Worker). Other remotes require `allowRemote: true` (application-scoped
+ * `axis.engine.allowRemoteEndpoint`) so a workspace setting cannot exfiltrate
+ * the Worker key to an attacker host.
  */
 export function checkWorkerUrl(
   raw: string | undefined | null,
   opts?: { allowRemote?: boolean },
 ): EndpointCheck {
-  return checkHttpBaseUrl(raw, {
-    allowRemote: opts?.allowRemote !== false,
+  const base = checkHttpBaseUrl(raw, {
+    allowRemote: true,
     defaultUrl: DEFAULT_WORKER_URL,
     label: 'worker',
   });
+  if (!base.ok) return base;
+  if (opts?.allowRemote === true) return base;
+  if (loopbackHost(base.endpoint) || looksLikeWorkerEndpoint(base.endpoint)) {
+    return base;
+  }
+  return {
+    ok: false,
+    error:
+      'AXIS worker URL must be loopback or a known AXIS Worker host unless axis.engine.allowRemoteEndpoint is enabled.',
+  };
 }
 
 /** `https://worker…/api/ws/live` — ticket issue and the upgrade path. */

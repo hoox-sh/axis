@@ -26,5 +26,7 @@ Root alias (when wired): `bun run vscode:pack:package`.
 
 ## License
 
-GNU Affero General Public License **version 3 only** (SPDX: `AGPL-3.0-only`). See [LICENSE](./LICENSE).
-No “or later” option — AGPL-3.0-only.
+GNU Affero General Public License **version 3 only** (SPDX: `AGPL-3.0-only`). See [LICENSE](./LICENSE) and [NOTICE](./NOTICE).
+No “or later” option for this pack or for **AXIS IDE** (`hoox-sh.axis-ide`).
+
+**KD-3:** pack member **PYNE** (`hoox-sh.pyne`) remains **AGPL-3.0-or-later**. Do not treat pack/IDE AGPL-3.0-only as applying to PYNE, and do not relicense PYNE as AGPL-3.0-only.

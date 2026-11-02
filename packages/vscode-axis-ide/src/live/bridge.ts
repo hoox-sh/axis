@@ -92,8 +92,9 @@ export interface LiveSessionBridgeDeps {
   /** `axis.live.enabled` — start() no-ops when false. */
   liveEnabled: boolean;
   /**
-   * When false, worker URL must be loopback (strict). Default true so the
-   * product default cloud Worker works without `allowRemoteEndpoint`.
+   * When true, arbitrary remote worker URLs are allowed (application-scoped
+   * `axis.engine.allowRemoteEndpoint`). Loopback and looks-like-Worker hosts
+   * always pass; default false blocks workspace exfil to attacker hosts.
    */
   allowRemoteWorker?: boolean;
   fetchImpl?: FetchLike;
@@ -187,6 +188,8 @@ export class LiveSessionBridge {
   /**
    * Mint a ticket and open the live WebSocket.
    * Remints on every start (TTL 60s). Does not put `pn_` on the URL.
+   * Generation is captured before any await so stop()/deactivate mid-mint
+   * cannot open a socket after cancel.
    */
   async start(): Promise<LiveStartResult> {
     if (!this.deps.liveEnabled) {
@@ -194,6 +197,7 @@ export class LiveSessionBridge {
     }
 
     this.stopSocketOnly();
+    const gen = ++this.generation;
     this.connecting = true;
     this.connected = false;
     this.errored = false;
@@ -201,12 +205,14 @@ export class LiveSessionBridge {
     this.emitStatus();
 
     const gated = checkWorkerUrl(this.deps.workerUrl, {
-      allowRemote: this.deps.allowRemoteWorker !== false,
+      allowRemote: this.deps.allowRemoteWorker === true,
     });
     if (!gated.ok) {
-      this.connecting = false;
-      this.errored = true;
-      this.emitStatus();
+      if (gen === this.generation) {
+        this.connecting = false;
+        this.errored = true;
+        this.emitStatus();
+      }
       return { ok: false, error: gated.error };
     }
 
@@ -215,6 +221,9 @@ export class LiveSessionBridge {
       apiKey = await this.deps.secrets.getWorkerKey();
     } catch {
       apiKey = undefined;
+    }
+    if (gen !== this.generation) {
+      return { ok: false, error: 'AXIS live start cancelled.' };
     }
     if (!apiKey) {
       this.connecting = false;
@@ -234,12 +243,19 @@ export class LiveSessionBridge {
         { fetchImpl: this.deps.fetchImpl },
       );
     } catch (err) {
+      if (gen !== this.generation) {
+        return { ok: false, error: 'AXIS live start cancelled.' };
+      }
       this.connecting = false;
       this.errored = true;
       this.emitStatus();
       const message = err instanceof Error ? err.message : String(err);
       this.log(`live mint failed: ${message}`);
       return { ok: false, error: scrubSecrets(message) };
+    }
+
+    if (gen !== this.generation) {
+      return { ok: false, error: 'AXIS live start cancelled.' };
     }
 
     const buildUrl = this.deps.buildWsUrl ?? workerLiveWsUrl;
@@ -260,16 +276,27 @@ export class LiveSessionBridge {
       return { ok: false, error: 'WebSocket implementation unavailable' };
     }
 
-    const gen = ++this.generation;
     let socket: LiveWebSocket;
     try {
       socket = new WS(wsUrl);
     } catch (err) {
+      if (gen !== this.generation) {
+        return { ok: false, error: 'AXIS live start cancelled.' };
+      }
       this.connecting = false;
       this.errored = true;
       this.emitStatus();
       const message = err instanceof Error ? err.message : String(err);
       return { ok: false, error: scrubSecrets(message) };
+    }
+
+    if (gen !== this.generation) {
+      try {
+        socket.close();
+      } catch {
+        // ignore
+      }
+      return { ok: false, error: 'AXIS live start cancelled.' };
     }
 
     this.ws = socket;

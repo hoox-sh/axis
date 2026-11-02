@@ -122,4 +122,10 @@ describe('defaultWhich', () => {
       await defaultWhich('axis-cli-definitely-not-installed-xyz'),
     ).toBeNull();
   });
+
+  test('returns absolute path for a command on PATH', async () => {
+    const path = await defaultWhich('ls');
+    expect(path).toBeTruthy();
+    expect(path?.startsWith('/')).toBe(true);
+  });
 });

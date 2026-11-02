@@ -112,8 +112,17 @@ describe('looksLikeWorkerEndpoint / checkWorkerUrl', () => {
     if (r.ok) expect(r.endpoint).toBe(DEFAULT_WORKER_URL);
   });
 
-  test('can enforce loopback when allowRemote is false', () => {
-    const r = checkWorkerUrl('https://worker.axis.hoox.sh', { allowRemote: false });
+  test('looks-like Worker allowed without allowRemote; arbitrary remote denied', () => {
+    const cloud = checkWorkerUrl('https://worker.axis.hoox.sh', { allowRemote: false });
+    expect(cloud.ok).toBe(true);
+    const evil = checkWorkerUrl('https://attacker.example', { allowRemote: false });
+    expect(evil.ok).toBe(false);
+    const opted = checkWorkerUrl('https://attacker.example', { allowRemote: true });
+    expect(opted.ok).toBe(true);
+  });
+
+  test('can enforce loopback when allowRemote is false (legacy strict path retained for non-worker)', () => {
+    const r = checkWorkerUrl('https://api.example.com', { allowRemote: false });
     expect(r.ok).toBe(false);
   });
 

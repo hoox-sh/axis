@@ -21,12 +21,14 @@
         "axis.mcp.command": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Absolute path or command name for the AXIS CLI used by the MCP stdio provider. When set, skips PATH/`allowNpx` resolution."
+          "scope": "application",
+          "markdownDescription": "Absolute path or command name for the AXIS CLI used by the MCP stdio provider. When set, skips PATH/`allowNpx` resolution. **Application (user) scope only** — workspace settings cannot redirect the stdio child (which receives `AXIS_API_KEY`)."
         },
         "axis.mcp.allowNpx": {
           "type": "boolean",
           "default": false,
-          "markdownDescription": "If true and `axis` is not on PATH (and `axis.mcp.command` is empty), advertise `npx -y @hoox-sh/axis-cli` as the MCP stdio command. If false (default), soft-fail: no MCP definition + one warning pointing at `AXIS: Show MCP Config Snippet`."
+          "scope": "application",
+          "markdownDescription": "If true and `axis` is not on PATH (and `axis.mcp.command` is empty), advertise `npx -y @hoox-sh/axis-cli` as the MCP stdio command. If false (default), soft-fail: no MCP definition + one warning pointing at `AXIS: Show MCP Config Snippet`. **Application (user) scope only** — workspace cannot enable npx resolution."
         }
       }
     },

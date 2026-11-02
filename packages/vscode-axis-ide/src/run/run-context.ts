@@ -46,7 +46,7 @@ export interface RunContextSettings {
   historyBarsSetting?: number;
   engineId?: string;
   endpoint?: string;
-  /** `axis.chart.useMockBars` — default true. */
+  /** `axis.chart.useMockBars` — product default false; omitted here keeps mock for callers without settings. */
   useMockBars?: boolean;
   /** `axis.datafeed.url`. */
   datafeedUrl?: string;

@@ -216,10 +216,118 @@ describe('LiveSessionBridge', () => {
     expect(bridge.getHudState()).toBe('degraded'); // errored + disconnected
   });
 
-  test('strict allowRemoteWorker=false rejects cloud Worker URL', async () => {
-    const { bridge } = makeBridge({ allowRemoteWorker: false });
-    const r = await bridge.start();
+  test('known cloud Worker allowed without allowRemoteWorker; evil host rejected', async () => {
+    const cloud = makeBridge({ allowRemoteWorker: false });
+    const ok = await cloud.bridge.start();
+    expect(ok.ok).toBe(true);
+
+    const evil = makeBridge({
+      allowRemoteWorker: false,
+      workerUrl: 'https://attacker.example',
+    });
+    const denied = await evil.bridge.start();
+    expect(denied.ok).toBe(false);
+    if (!denied.ok) expect(denied.error).toMatch(/allowRemoteEndpoint|known AXIS Worker/i);
+  });
+
+  test('stop during mint await cancels before WebSocket open', async () => {
+    let releaseKey: (() => void) | undefined;
+    const keyGate = new Promise<string>((resolve) => {
+      releaseKey = () => resolve(KEY);
+    });
+    const { bridge } = makeBridge({
+      secrets: { getWorkerKey: async () => keyGate },
+    });
+    const pending = bridge.start();
+    bridge.stop();
+    releaseKey?.();
+    const r = await pending;
     expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/cancelled/i);
+    expect(MockWebSocket.instances).toHaveLength(0);
+  });
+
+  test('stop during mint HTTP failure / success / WS construct cancels', async () => {
+    let releaseFail: (() => void) | undefined;
+    let inFailMint = false;
+    const failGate = new Promise<void>((resolve) => {
+      releaseFail = () => resolve();
+    });
+    const midFail = makeBridge({
+      fetchImpl: async () => {
+        inFailMint = true;
+        await failGate;
+        throw new Error('mint boom');
+      },
+    });
+    const pFail = midFail.bridge.start();
+    for (let i = 0; i < 20 && !inFailMint; i += 1) await Bun.sleep(0);
+    expect(inFailMint).toBe(true);
+    midFail.bridge.stop();
+    releaseFail?.();
+    const rFail = await pFail;
+    expect(rFail.ok).toBe(false);
+    if (!rFail.ok) expect(rFail.error).toMatch(/cancelled/i);
+
+    let releaseOk: (() => void) | undefined;
+    let inOkMint = false;
+    const okGate = new Promise<void>((resolve) => {
+      releaseOk = () => resolve();
+    });
+    const midOk = makeBridge({
+      fetchImpl: async () => {
+        inOkMint = true;
+        await okGate;
+        return jsonOk({ status: 'success', ticket: TICKET, expiresIn: 60 });
+      },
+    });
+    const pOk = midOk.bridge.start();
+    for (let i = 0; i < 20 && !inOkMint; i += 1) await Bun.sleep(0);
+    expect(inOkMint).toBe(true);
+    midOk.bridge.stop();
+    releaseOk?.();
+    const rOk = await pOk;
+    expect(rOk.ok).toBe(false);
+    if (!rOk.ok) expect(rOk.error).toMatch(/cancelled/i);
+    expect(MockWebSocket.instances).toHaveLength(0);
+
+    const duringConstruct = makeBridge({
+      WebSocketImpl: class implements LiveWebSocket {
+        readonly url: string;
+        readyState = 0;
+        onopen = null;
+        onmessage = null;
+        onerror = null;
+        onclose = null;
+        constructor(url: string) {
+          this.url = url;
+          duringConstruct.bridge.stop();
+          throw new Error('construct after stop');
+        }
+        send(): void {}
+        close(): void {
+          throw new Error('close fail');
+        }
+      },
+    });
+    const rConstruct = await duringConstruct.bridge.start();
+    expect(rConstruct.ok).toBe(false);
+    if (!rConstruct.ok) expect(rConstruct.error).toMatch(/cancelled/i);
+
+    const afterConstruct = makeBridge({
+      WebSocketImpl: class extends MockWebSocket {
+        constructor(url: string) {
+          super(url);
+          afterConstruct.bridge.stop();
+        }
+        close(): void {
+          throw new Error('close fail');
+        }
+      },
+    });
+    const rAfter = await afterConstruct.bridge.start();
+    expect(rAfter.ok).toBe(false);
+    if (!rAfter.ok) expect(rAfter.error).toMatch(/cancelled/i);
   });
 
   test('prepareLiveConnectUrl rejects unsafe URLs', () => {

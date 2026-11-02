@@ -236,7 +236,7 @@ describe('createLiveChartFanout', () => {
     ).not.toThrow();
   });
 
-  test('close before full / close seq gap resume; empty seriesKey ignored', async () => {
+  test('close before full / close seq gap resume; empty seriesKey uses frame key', async () => {
     const resumes: string[] = [];
     const resume = createLiveResumeStub({
       remintOnResume: false,
@@ -273,8 +273,41 @@ describe('createLiveChartFanout', () => {
       seriesKey: '',
       notify: (m) => seen.push(m),
     });
+    // No configured key and no frame key → still dropped.
     empty.onFrame({ type: 'full', seq: 1, payload: { bars: [bar(1)] } });
     expect(seen).toHaveLength(1);
+    // Empty configured + frame id → bus retains under frame key.
+    empty.onFrame({
+      type: 'full',
+      seq: 1,
+      id: `series:${KEY}`,
+      payload: { bars: [bar(1)] },
+    });
+    expect(seen).toHaveLength(2);
+    expect(seen[1]?.seriesKey).toBe(KEY);
+
+    const fromGetter = createLiveChartFanout({
+      seriesKey: () => KEY,
+      notify: (m) => seen.push(m),
+    });
+    fromGetter.onFrame({ type: 'full', seq: 1, payload: { bars: [bar(2)] } });
+    expect(seen).toHaveLength(3);
+    expect(seen[2]?.seriesKey).toBe(KEY);
+
+    const throwing = createLiveChartFanout({
+      seriesKey: () => {
+        throw new Error('session gone');
+      },
+      notify: (m) => seen.push(m),
+    });
+    throwing.onFrame({
+      type: 'full',
+      seq: 1,
+      id: `series:${KEY}`,
+      payload: { bars: [bar(3)] },
+    });
+    expect(seen).toHaveLength(4);
+    expect(seen[3]?.seriesKey).toBe(KEY);
 
     const loose = createLiveChartFanout({
       seriesKey: KEY,
@@ -287,7 +320,7 @@ describe('createLiveChartFanout', () => {
       id: 'series:other|spot|AAA/BBB|1m',
       payload: { bars: [bar(1)] },
     });
-    expect(seen).toHaveLength(2);
-    expect(seen[1]?.seriesKey).toBe('other|spot|AAA/BBB|1m');
+    expect(seen).toHaveLength(5);
+    expect(seen[4]?.seriesKey).toBe('other|spot|AAA/BBB|1m');
   });
 });

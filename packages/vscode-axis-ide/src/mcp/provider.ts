@@ -174,6 +174,11 @@ export type ProvideMcpDefinitionsDeps = {
     args: string[],
     env: Record<string, string>,
   ) => McpServerDefinition;
+  /** Test seam — override stdio argv builder (defense check for `--key`). */
+  buildStdioArgs?: (
+    resolved: AxisCliResolution,
+    workerUrl: string,
+  ) => string[];
 };
 
 function readAxisConfig(): McpConfigReader {
@@ -243,7 +248,8 @@ export async function provideAxisMcpServerDefinitions(
   }
 
   const workerUrl = cfg.workerUrl();
-  const args = buildMcpStdioArgs(resolved, workerUrl);
+  const buildArgs = deps.buildStdioArgs ?? buildMcpStdioArgs;
+  const args = buildArgs(resolved, workerUrl);
   if (stdioArgsContainKeyFlag(args)) {
     // Defensive: never advertise a definition that puts the key on argv.
     return [];

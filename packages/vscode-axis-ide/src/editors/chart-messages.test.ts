@@ -120,6 +120,12 @@ describe('chart webview message handler', () => {
     expect(result.kind).toBe('ignore');
   });
 
+  test('chart.requestReload → requestReload kind', () => {
+    const reload = encode(VIEW_TO_HOST.ChartRequestReload, {});
+    const result = handleChartWebviewMessage(reload, session);
+    expect(result.kind).toBe('requestReload');
+  });
+
   test('catches encode failures when init stub is invalid', () => {
     const ready = encode(VIEW_TO_HOST.WebviewReady, {
       view: 'chart',
