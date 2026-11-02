@@ -13,7 +13,9 @@
 
 /* AXIS  — Void pack
    Surfaces: #07080C / #0C0E14 / #10131B · hairline #1C2230
-   Accent: periwinkle #8B9CFF · live #3DDC97 · warn #E8B84A · danger #F07178
+   Accent: periwinkle #8B9CFF · up #3DDC97 · warn #E8B84A · down #F07178
+   Semantic aliases follow the theme: --color-up/down/warning/info
+   Type: --font-sans for chrome · --font-mono for symbols, HUD, kbd
    Radii: input 4 · panel 6 · chip 2 (pills/circles 999px/50% for true dots only)
    Borders: 1px hairline
 */
@@ -67,6 +69,12 @@
   /* Legacy alias (prefer accent) — hex fallback for canvas/JS */
   --color-purple: #8b9cff;
 
+  /* Chrome vs figures. Prices stay on --font-sans + tabular-nums.
+     Market semantics (--color-up/down/warning/info) live on :root, not here:
+     @theme resolves var() to a hex and would freeze the light theme. */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Ubuntu, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+
   /* Geometry — 4 / 6 / 2 (keep pills/circles as 50% / 999px only) */
   --border-w: 1px;
   --border-w-input: 1px;
@@ -86,6 +94,12 @@
 }
 
 :root {
+  /* Live aliases. Kept off @theme so light-theme overrides of green/red still flow. */
+  --color-up: var(--color-green);
+  --color-down: var(--color-red);
+  --color-warning: var(--color-accent-3);
+  --color-info: var(--color-cyan);
+
   /* Density — set by applyUiScale(); 1 = default */
   --ui-scale: 1;
   --ui-font-base: 13px;
@@ -164,7 +178,7 @@ body {
   overflow: hidden;
   background-color: var(--color-bg-base);
   color: var(--color-text);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Ubuntu, sans-serif;
+  font-family: var(--font-sans);
   /* Base size is also written inline by applyUiScale for live updates */
   font-size: calc(var(--ui-font-base) * var(--ui-scale));
   line-height: 1.4;
@@ -185,6 +199,7 @@ body {
   --color-text: #1a1d26;
   --color-text-dim: #5c6575;
   --color-text-faint: #6b7382;
+  --color-border-focus: color-mix(in oklch, #5a6ad4 55%, transparent);
   --color-accent: #5a6ad4;
   --color-accent-hover: #4a5ac4;
   --color-accent-2: #1aa36a;
@@ -352,7 +367,7 @@ button.sc-btn:focus-visible {
 
 /* Keyboard shortcut chip (Shortcuts modal + Settings → Keyboard) */
 .sc-kbd {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 0.72em;
   color: var(--color-text-dim);
   border: 1px solid var(--color-border-soft);
@@ -522,11 +537,25 @@ button.sc-btn:focus-visible {
   min-width: 0;
 }
 
+/* Short centered hairline — full-height rules read as boxes between groups. */
 .axis-command-bar .axis-tb-group + .axis-tb-group,
 .axis-command-bar [data-tb-group] + [data-tb-group] {
   margin-left: 0;
   padding-left: 12px;
-  border-left: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent);
+  border-left: none;
+  position: relative;
+}
+.axis-command-bar .axis-tb-group + .axis-tb-group::before,
+.axis-command-bar [data-tb-group] + [data-tb-group]::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 1px;
+  height: 16px;
+  margin-top: -8px;
+  background: color-mix(in srgb, var(--color-border) 88%, var(--color-text-faint));
+  pointer-events: none;
 }
 
 /* System cluster pins to the trailing edge (command-bar fallback) */
@@ -564,7 +593,19 @@ button.sc-btn:focus-visible {
   gap: 2px;
   height: 28px;
   padding-left: 8px;
-  border-left: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent);
+  border-left: none;
+  position: relative;
+}
+.axis-module-trailing .axis-tb-group[data-tb-group='system']::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 1px;
+  height: 14px;
+  margin-top: -7px;
+  background: color-mix(in srgb, var(--color-border) 88%, var(--color-text-faint));
+  pointer-events: none;
 }
 .axis-module-trailing .sc-btn-icon {
   min-height: 28px;
@@ -1188,7 +1229,7 @@ button.sc-btn:focus-visible {
 
 /* Symbol / mono fields */
 .axis-tb-field--mono .axis-tb-field-control {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-family: var(--font-mono);
   text-transform: uppercase;
   letter-spacing: 0.03em;
   font-variant-numeric: tabular-nums lining-nums;
@@ -1403,7 +1444,7 @@ button.sc-btn:focus-visible {
   background: var(--color-bg-elev);
   border: 1px solid var(--color-border);
   color: var(--color-text);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 500;
   line-height: 1;
@@ -1448,7 +1489,7 @@ button.axis-status-capsule {
   min-height: 18px;
   padding: 0 6px;
   font-size: 10px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
 }
 .axis-live-dot--reconnect {
   animation: axis-reconnect-breathe 1.6s ease-out infinite;
@@ -3337,7 +3378,8 @@ body.axis-ticker-dragging {
   border-radius: var(--radius-panel);
 }
 
-/* Vertical resize handle between panels */
+/* Vertical resize handle between panels.
+   Hit target stays 6px; the resting mark is a 1px hairline. */
 .sc-resize-handle {
   width: 6px;
   margin-left: -3px;
@@ -3349,9 +3391,29 @@ body.axis-ticker-dragging {
   touch-action: none;
   border-radius: var(--radius-sc);
 }
+.sc-resize-handle:not(.absolute) {
+  position: relative;
+}
+.sc-resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  margin-left: -0.5px;
+  background: var(--color-border);
+  opacity: 0.9;
+  pointer-events: none;
+}
 .sc-resize-handle:hover,
 .sc-resize-handle:active {
-  background: color-mix(in srgb, var(--color-accent) 45%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 16%, transparent);
+}
+.sc-resize-handle:hover::after,
+.sc-resize-handle:active::after {
+  background: var(--color-accent);
+  opacity: 1;
 }
 /* Right-edge handle sits inside left panels — center the hit strip on the border */
 .sc-resize-handle.absolute {
@@ -4087,6 +4149,13 @@ body.axis-panel-dragging {
   .axis-panel-shell.axis-panel-hover-slide {
     transition: none !important;
   }
+}
+
+.axis-panel-title {
+  font-size: var(--ui-title);
+  font-weight: 600;
+  letter-spacing: 0.015em;
+  color: var(--color-text);
 }
 
 .axis-panel-grip {
@@ -5108,7 +5177,7 @@ body.axis-panel-dragging {
   color: var(--color-text-faint);
 }
 .axis-cmd-palette-kbd {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 0.72em;
   color: var(--color-text-faint);
   border: 1px solid var(--color-border);
@@ -5154,27 +5223,34 @@ body.axis-panel-dragging {
   border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-border));
   color: var(--color-text);
 }
+.axis-cmd-palette-item.is-active {
+  box-shadow: inset 2px 0 0 var(--color-accent);
+}
 .axis-cmd-palette-item-main {
   display: flex;
-  flex-direction: column;
-  gap: 0.1em;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 0.65em;
   min-width: 0;
 }
 .axis-cmd-palette-item-title {
   font-size: 0.92em;
   font-weight: 500;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .axis-cmd-palette-item-cat {
-  font-size: 0.72em;
+  font-size: 0.75em;
   color: var(--color-text-faint);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .axis-cmd-palette-item-shortcut {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 0.72em;
   color: var(--color-text-dim);
   border: 1px solid var(--color-border-soft);
@@ -5194,7 +5270,7 @@ body.axis-panel-dragging {
   flex-shrink: 0;
 }
 .axis-cmd-palette-footer kbd {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-chip);
   padding: 0 0.3em;
