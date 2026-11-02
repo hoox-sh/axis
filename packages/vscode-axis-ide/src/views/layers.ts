@@ -24,6 +24,8 @@ export type LayersTreeNode = {
   label: string;
   /** Section roots are collapsible; leaf placeholders are not. */
   collapsible: boolean;
+  /** Item count on section roots, e.g. `(0)`. */
+  description?: string;
 };
 
 export const LAYERS_VIEW_ID = 'axis.layers';
@@ -43,15 +45,55 @@ export const LAYER_SECTION_ORDER = [
 export type LayerSectionTitle = (typeof LAYER_SECTION_ORDER)[number];
 
 const SECTION_EMPTY_LABEL: Record<LayerSectionTitle, string> = {
-  Scripts: 'No scripts',
-  Panes: 'No panes',
-  Overlays: 'No overlays',
-  'On-chain': 'No on-chain',
-  Drawings: 'No drawings',
+  Scripts: 'Apply a builtin',
+  Panes: 'No panes yet',
+  Overlays: 'No overlays yet',
+  'On-chain': 'No on-chain yet',
+  Drawings: 'No drawings yet',
 };
 
 function sectionId(title: LayerSectionTitle): string {
   return `layers.section.${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+}
+
+/** Defensive ThemeIcon — Bun vscode mocks may omit the constructor. */
+function tryThemeIcon(id: string): vscode.ThemeIcon | undefined {
+  try {
+    const Ctor = (
+      vscode as { ThemeIcon?: new (iconId: string) => vscode.ThemeIcon }
+    ).ThemeIcon;
+    if (typeof Ctor === 'function') return new Ctor(id);
+  } catch {
+    /* mock without ThemeIcon */
+  }
+  return undefined;
+}
+
+/** Untrusted markdown tooltip (no theme icons). */
+function tryMarkdownTooltip(lines: readonly string[]): vscode.MarkdownString | string {
+  const value = lines.filter((line) => line.length > 0).join('\n');
+  try {
+    const Ctor = (
+      vscode as { MarkdownString?: new (value?: string) => vscode.MarkdownString }
+    ).MarkdownString;
+    if (typeof Ctor === 'function') {
+      const md = new Ctor(value);
+      try {
+        md.supportThemeIcons = false;
+      } catch {
+        /* mock */
+      }
+      try {
+        md.isTrusted = false;
+      } catch {
+        /* mock */
+      }
+      return md;
+    }
+  } catch {
+    /* mock without MarkdownString */
+  }
+  return value;
 }
 
 /** Root children: empty section shells in PWA order. */
@@ -60,6 +102,7 @@ export function layersRootChildren(): LayersTreeNode[] {
     id: sectionId(title),
     label: title,
     collapsible: true,
+    description: '(0)',
   }));
 }
 
@@ -85,6 +128,12 @@ export class LayersTreeProvider implements vscode.TreeDataProvider<LayersTreeNod
     const item = new vscode.TreeItem(element.label, state);
     item.id = element.id;
     item.contextValue = element.collapsible ? 'axis.layers.section' : 'axis.layers.empty';
+    if (element.collapsible) {
+      item.description = element.description ?? '(0)';
+    }
+    const icon = tryThemeIcon(element.collapsible ? 'layers' : 'circle-slash');
+    if (icon) item.iconPath = icon;
+    item.tooltip = tryMarkdownTooltip(['kind: layers', `id: ${element.id}`]);
     return item;
   }
 

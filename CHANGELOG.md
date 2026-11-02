@@ -23,6 +23,8 @@ _Generated/updated: 2026-11-01 · 880 commits · describe-tag: `v2.26.0`_
 
 ### Added
 
+- **VS Code AXIS IDE view polish + Profiler panel** (`packages/vscode-axis-ide`). View polish (icons, tooltips, micro-feedback); Profiler panel `axis.profiler`.
+
 - **VS Code AXIS IDE PYNE marketplace icon, view context menus, on-save run** (`packages/vscode-axis-ide`). `media/icon.png` matches `hoox-sh.pyne`. Right-click menus on editor/explorer/tree views/plugins webview. Setting `axis.run.onSave`: `off` | `evaluate` | `run`.
 
 - **VS Code AXIS IDE chart beside Pine, no TV logo, script plots overlay** (`packages/vscode-axis-ide`). `axis.openChart` / Run open `axis.chart` in `ViewColumn.Beside` (preview off). Lightweight Charts `attributionLogo` off. `chart.full.plots` / `series` paint as line overlays.

@@ -58,6 +58,8 @@ export function buildResultsWebviewHtml(opts: ResultsHtmlOptions): string {
   const safeClass = bodyClass.replace(/[^a-zA-Z0-9_-]/g, '');
   const title = kind === 'strategy' ? 'AXIS Strategy' : 'AXIS Results';
 
+  const heading = kind === 'strategy' ? 'Strategy' : 'Results';
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -70,11 +72,21 @@ export function buildResultsWebviewHtml(opts: ResultsHtmlOptions): string {
 <body class="${safeClass}" data-axis-results-kind="${kind}">
   <div id="results-root" class="results-root" data-axis-results-host="1" data-kind="${kind}">
     <header class="results-root__header">
-      <h1 class="results-root__title">${kind === 'strategy' ? 'Strategy' : 'Results'}</h1>
+      <div class="results-root__title-row">
+        <h1 class="results-root__title" id="results-title">${heading}</h1>
+        <span class="results-status results-status--idle" id="results-status" data-status="idle" role="status" aria-live="polite" aria-atomic="true" aria-label="Status: Idle">Idle</span>
+      </div>
       <p class="results-root__focus" id="results-focus">No run focused</p>
     </header>
-    <pre class="results-root__body" id="results-body" hidden></pre>
-    <p class="results-root__empty" id="results-empty">Run a Pine Script™ to see results here.</p>
+    <section class="results-card" id="results-card" hidden>
+      <dl class="results-rows" id="results-rows"></dl>
+      <div class="results-strategy" id="results-strategy" hidden>
+        <h2 class="results-strategy__title" id="results-strategy-title">Strategy</h2>
+        <p class="results-strategy__empty" id="results-strategy-empty" hidden>No strategy report</p>
+        <dl class="results-rows results-rows--strategy" id="results-strategy-rows"></dl>
+      </div>
+    </section>
+    <p class="results-root__empty" id="results-empty">Run a Pine Script™ (Ctrl+Enter)</p>
   </div>
   <script src="${safeScript}"></script>
 </body>

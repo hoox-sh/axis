@@ -378,6 +378,18 @@ describe('plugins status bar helpers', () => {
     expect(
       bar.formatPluginsStatusText({ source: 'okx-rest', engine: 'pyne-worker' }),
     ).toBe('$(plug) okx·pyne');
+    expect(
+      bar.formatPluginsStatusText(DEFAULT_ACTIVE_PLUGINS_V1, { flash: true }),
+    ).toBe('$(check) binance·server');
+    expect(
+      bar.formatPluginsStatusText({ source: 'okx-rest', engine: 'pyne-worker' }, {
+        flash: true,
+      }),
+    ).toBe('$(check) okx·pyne');
+    expect(bar.formatPluginsStatusText(undefined, { flash: true })).toBe(
+      '$(check) —·—',
+    );
+    expect(bar.PLUGINS_STATUS_FLASH_MS).toBe(1200);
     const hostile = {
       get source(): string {
         throw new Error('source');
@@ -385,6 +397,18 @@ describe('plugins status bar helpers', () => {
       engine: 'server',
     };
     expect(bar.formatPluginsStatusText(hostile)).toBe('$(plug) —·server');
+    expect(bar.formatPluginsStatusText(hostile, { flash: true })).toBe(
+      '$(check) —·server',
+    );
+    const hostileOpts = {
+      get flash(): boolean {
+        throw new Error('flash');
+      },
+    };
+    expect(() => bar.formatPluginsStatusText(DEFAULT_ACTIVE_PLUGINS_V1, hostileOpts)).not.toThrow();
+    expect(bar.formatPluginsStatusText(DEFAULT_ACTIVE_PLUGINS_V1, hostileOpts)).toBe(
+      '$(plug) binance·server',
+    );
   });
 
   test('markdown tooltip lists active ids and never embeds secrets', () => {
@@ -494,6 +518,54 @@ describe('registerPluginsStatusBar', () => {
     expect((item?.tooltip as MarkdownString).value).toContain('okx-rest');
   });
 
+  test('flash refresh shows check then reverts after 1.2s', async () => {
+    g().__axisStatusBarItems = [];
+    g().__axisCommandHandlers = new Map();
+    const mem = createMemoryWorkspaceState();
+    const registry = ensureBuiltinsRegistered(new HostPluginRegistry());
+    bar.registerPluginsStatusBar(fakeContext() as never, mem, registry);
+    const item = lastItem();
+    const pending: Array<{ fn: () => void; ms: number; id: number }> = [];
+    let nextId = 1;
+    const origSet = globalThis.setTimeout;
+    const origClear = globalThis.clearTimeout;
+    globalThis.setTimeout = ((fn: () => void, ms?: number) => {
+      const id = nextId++;
+      pending.push({ fn, ms: ms ?? 0, id });
+      return id as unknown as ReturnType<typeof setTimeout>;
+    }) as typeof setTimeout;
+    globalThis.clearTimeout = ((handle?: ReturnType<typeof setTimeout>) => {
+      const id = Number(handle);
+      const idx = pending.findIndex((t) => t.id === id);
+      if (idx >= 0) pending.splice(idx, 1);
+    }) as typeof clearTimeout;
+    try {
+      const { runActivatePluginCommand } = await import('./activate-command');
+      await runActivatePluginCommand(
+        mem,
+        { kind: 'source', id: 'okx-rest' },
+        () => bar.refreshPluginsStatusBar({ flash: true }),
+      );
+      expect(item?.text).toBe('$(check) okx·server');
+      expect(pending).toHaveLength(1);
+      expect(pending[0]?.ms).toBe(bar.PLUGINS_STATUS_FLASH_MS);
+      // A second flash must clearTimeout the first timer.
+      await runActivatePluginCommand(
+        mem,
+        { kind: 'engine', id: 'pyodide' },
+        () => bar.refreshPluginsStatusBar({ flash: true }),
+      );
+      expect(item?.text).toBe('$(check) okx·pyodide');
+      expect(pending).toHaveLength(1);
+      pending[0]?.fn();
+      expect(item?.text).toBe('$(plug) okx·pyodide');
+      expect(() => bar._resetPluginsStatusBarForTests()).not.toThrow();
+    } finally {
+      globalThis.setTimeout = origSet;
+      globalThis.clearTimeout = origClear;
+    }
+  });
+
   test('switching source from the menu writes active', async () => {
     g().__axisStatusBarItems = [];
     g().__axisCommandHandlers = new Map();
@@ -511,9 +583,27 @@ describe('registerPluginsStatusBar', () => {
     };
     const handler = g().__axisCommandHandlers?.get(bar.PLUGINS_STATUS_MENU_COMMAND);
     expect(typeof handler).toBe('function');
-    await handler?.();
-    expect(readActivePlugins(mem).source).toBe('okx-rest');
-    expect(lastItem()?.text).toBe('$(plug) okx·server');
+    const pending: Array<{ fn: () => void; ms: number }> = [];
+    const origSet = globalThis.setTimeout;
+    const origClear = globalThis.clearTimeout;
+    globalThis.setTimeout = ((fn: () => void, ms?: number) => {
+      pending.push({ fn, ms: ms ?? 0 });
+      return pending.length as unknown as ReturnType<typeof setTimeout>;
+    }) as typeof setTimeout;
+    globalThis.clearTimeout = (() => {
+      pending.length = 0;
+    }) as typeof clearTimeout;
+    try {
+      await handler?.();
+      expect(readActivePlugins(mem).source).toBe('okx-rest');
+      expect(lastItem()?.text).toBe('$(check) okx·server');
+      expect(pending[0]?.ms).toBe(bar.PLUGINS_STATUS_FLASH_MS);
+      pending[0]?.fn();
+      expect(lastItem()?.text).toBe('$(plug) okx·server');
+    } finally {
+      globalThis.setTimeout = origSet;
+      globalThis.clearTimeout = origClear;
+    }
     expect(g().__axisQuickPickCalls?.length).toBe(2);
     const mainOpts = g().__axisQuickPickCalls?.[0]?.options as {
       canPickMany?: boolean;

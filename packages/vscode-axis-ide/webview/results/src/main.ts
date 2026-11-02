@@ -17,11 +17,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * AXIS Results / Strategy webview: results.ready → results.set render.
+ * AXIS Results / Strategy webview: results.ready → results.set card render.
  */
 
 import './style.css';
 import { decodeHostMessage, PROTOCOL_VERSION } from './protocol';
+import { paintResults, queryResultsDom } from './render';
+import { buildResultsView, type ResultsKind } from './state';
 
 interface VsCodeApi {
   postMessage(message: unknown): void;
@@ -32,8 +34,9 @@ interface VsCodeApi {
 declare function acquireVsCodeApi(): VsCodeApi;
 
 let disposed = false;
+let dom: ReturnType<typeof queryResultsDom> | null = null;
 
-function panelKind(): 'results' | 'strategy' {
+function panelKind(): ResultsKind {
   const raw = document.body?.getAttribute('data-axis-results-kind');
   return raw === 'strategy' ? 'strategy' : 'results';
 }
@@ -48,80 +51,11 @@ function postReady(api: VsCodeApi): void {
   });
 }
 
-function safeJson(value: unknown): string {
-  try {
-    return JSON.stringify(value, null, 2) ?? 'null';
-  } catch {
-    return String(value);
-  }
-}
-
-function summarizeLastRun(lastRun: unknown): string {
-  if (lastRun == null) return 'No run focused';
-  if (typeof lastRun !== 'object' || Array.isArray(lastRun)) {
-    return safeJson(lastRun);
-  }
-  const r = lastRun as Record<string, unknown>;
-  const meta =
-    r.meta && typeof r.meta === 'object' && !Array.isArray(r.meta)
-      ? (r.meta as Record<string, unknown>)
-      : {};
-  const name = typeof meta.script_name === 'string' ? meta.script_name : undefined;
-  const ms = typeof meta.ms === 'number' ? meta.ms : undefined;
-  const status = typeof r.status === 'string' ? r.status : 'unknown';
-  const id = typeof r.id === 'string' ? r.id : undefined;
-  const parts = [
-    id ? `id=${id}` : null,
-    `status=${status}`,
-    name ? `script=${name}` : null,
-    ms != null ? `ms=${Math.round(ms)}` : null,
-    typeof r.error === 'string' && r.error ? `error=${r.error}` : null,
-  ].filter(Boolean);
-  return parts.join(' · ');
-}
-
 function applyResultsSet(payload: Record<string, unknown>): void {
   if (disposed) return;
-  const focusEl = document.getElementById('results-focus');
-  const bodyEl = document.getElementById('results-body');
-  const emptyEl = document.getElementById('results-empty');
-  const focusId = payload.focusId;
-  const lastRun = payload.lastRun;
-  const strategyReport = payload.strategyReport;
-  const kind = panelKind();
-
-  if (focusEl) {
-    focusEl.textContent =
-      focusId == null || focusId === ''
-        ? 'No run focused'
-        : `Focus: ${String(focusId)} — ${summarizeLastRun(lastRun)}`;
-  }
-
-  const content =
-    kind === 'strategy'
-      ? strategyReport != null
-        ? safeJson(strategyReport)
-        : lastRun != null
-          ? safeJson({
-              note: 'No strategyReport on this run',
-              lastRun,
-            })
-          : null
-      : lastRun != null
-        ? safeJson(lastRun)
-        : null;
-
-  if (bodyEl && emptyEl) {
-    if (content == null) {
-      bodyEl.hidden = true;
-      bodyEl.textContent = '';
-      emptyEl.hidden = false;
-    } else {
-      bodyEl.hidden = false;
-      bodyEl.textContent = content;
-      emptyEl.hidden = true;
-    }
-  }
+  const view = buildResultsView(panelKind(), payload);
+  if (!dom) dom = queryResultsDom(document);
+  paintResults(dom, view);
 }
 
 function onHostMessage(event: MessageEvent): void {
@@ -135,6 +69,7 @@ function onHostMessage(event: MessageEvent): void {
 
 function main(): void {
   const api = acquireVsCodeApi();
+  dom = queryResultsDom(document);
   window.addEventListener('message', onHostMessage);
   window.addEventListener(
     'pagehide',

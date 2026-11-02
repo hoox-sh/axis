@@ -60,6 +60,17 @@ export {
   type RunSecrets,
 } from './orchestrator';
 export {
+  ProfilerStore,
+  attachProfiler,
+  countPlots,
+  countSeries,
+  encodeProfilerSet,
+  snapshotFromRun,
+  type ProfilerListener,
+  type ProfilerRunInput,
+  type ProfilerSnapshot,
+} from './profiler-store';
+export {
   ResultsFocusStore,
   copyRunRecord,
   pickStrategyReport,

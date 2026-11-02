@@ -25,9 +25,17 @@ mock.module('vscode', () => {
     id?: string;
     description?: string;
     contextValue?: string;
+    tooltip?: unknown;
+    iconPath?: unknown;
     constructor(label: string, collapsibleState = 0) {
       this.label = label;
       this.collapsibleState = collapsibleState;
+    }
+  }
+  class ThemeIcon {
+    id: string;
+    constructor(id: string) {
+      this.id = id;
     }
   }
   class EventEmitter {
@@ -48,6 +56,8 @@ mock.module('vscode', () => {
   }
   class MarkdownString {
     value: string;
+    isTrusted = false;
+    supportThemeIcons = false;
     constructor(value = '') {
       this.value = value;
     }
@@ -101,6 +111,7 @@ mock.module('vscode', () => {
   return {
     QuickPickItemKind: { Separator: -1, Default: 0 },
     TreeItem,
+    ThemeIcon,
     TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
     EventEmitter,
     StatusBarAlignment: { Left: 1, Right: 2 },
@@ -233,5 +244,96 @@ describe('axis.workers.probeAll offline', () => {
     );
     expect(workers.WORKERS_VIEW_ID).toBe('axis.workers');
     expect(workers.PROBE_ALL_COMMAND).toBe('axis.workers.probeAll');
+  });
+
+  test('getTreeItem uses server-environment/vm icons and endpoint tooltip', () => {
+    workers._setLastWorkersSnapshotForTests(null);
+    const provider = new workers.WorkersTreeProvider();
+    const nodes = provider.getChildren();
+    const http = nodes.find((n) => n.workerId === 'pyne-pro');
+    const wasm = nodes.find((n) => n.workerId === 'pyodide');
+    expect(http).toBeDefined();
+    expect(wasm).toBeDefined();
+    const httpItem = provider.getTreeItem(http!);
+    const wasmItem = provider.getTreeItem(wasm!);
+    expect(httpItem.contextValue).toBe('axis.workers.entry');
+    expect((httpItem.iconPath as { id?: string } | undefined)?.id).toBe(
+      'server-environment',
+    );
+    expect((wasmItem.iconPath as { id?: string } | undefined)?.id).toBe('vm');
+    const tip = httpItem.tooltip as {
+      value: string;
+      isTrusted: boolean;
+      supportThemeIcons: boolean;
+    };
+    expect(tip.value).toContain('kind: worker');
+    expect(tip.value).toContain('id: pyne-pro');
+    expect(tip.value).toContain('endpoint: http://127.0.0.1:5002');
+    expect(tip.isTrusted).toBe(false);
+    expect(tip.supportThemeIcons).toBe(false);
+  });
+
+  test('description shows last probe status when present', () => {
+    const checkedAt = Date.now();
+    const results = workers.listWorkerCatalog().map((e) => {
+      if (e.id === 'pyne-pro') {
+        return {
+          id: e.id,
+          status: 'healthy' as const,
+          latencyMs: 12,
+          detail: 'ok',
+          endpoint: e.defaultEndpoint,
+          checkedAt,
+          error: null,
+        };
+      }
+      if (e.id === 'axis-worker') {
+        return {
+          id: e.id,
+          status: 'down' as const,
+          latencyMs: 80,
+          detail: 'ECONNREFUSED',
+          endpoint: e.defaultEndpoint,
+          checkedAt,
+          error: 'ECONNREFUSED',
+        };
+      }
+      return {
+        id: e.id,
+        status: 'unknown' as const,
+        latencyMs: null,
+        detail: '',
+        endpoint: e.defaultEndpoint,
+        checkedAt,
+        error: null,
+      };
+    });
+    workers._setLastWorkersSnapshotForTests({
+      results,
+      healthy: 1,
+      degraded: 0,
+      down: 1,
+      unknown: results.length - 2,
+      checkedAt,
+    });
+    const roots = workers.workersRootChildren();
+    expect(roots.find((n) => n.workerId === 'pyne-pro')?.description).toBe(
+      'ok 12ms',
+    );
+    expect(roots.find((n) => n.workerId === 'axis-worker')?.description).toBe(
+      'down',
+    );
+    expect(workers.formatWorkerProbeDescription(undefined)).toBeUndefined();
+    expect(
+      workers.formatWorkerProbeDescription({
+        id: 'pyne-pro',
+        status: 'healthy',
+        latencyMs: null,
+        detail: 'ok',
+        endpoint: '',
+        checkedAt,
+        error: null,
+      }),
+    ).toBe('ok');
   });
 });

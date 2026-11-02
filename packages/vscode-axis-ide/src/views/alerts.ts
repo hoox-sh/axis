@@ -166,12 +166,14 @@ export type AlertTreeNode = {
   description?: string;
   alertId?: string;
   empty?: boolean;
+  enabled?: boolean;
+  condition?: string;
 };
 
 /** Root children for the Alerts tree (empty placeholder when none). */
 export function alertsRootChildren(alerts: readonly AlertEntry[]): AlertTreeNode[] {
   if (!alerts.length) {
-    return [{ id: 'alerts.empty', label: 'No alerts yet', empty: true }];
+    return [{ id: 'alerts.empty', label: 'Add an alert', empty: true }];
   }
   return alerts.map((a) => ({
     id: `alert:${a.id}`,
@@ -182,7 +184,49 @@ export function alertsRootChildren(alerts: readonly AlertEntry[]): AlertTreeNode
         ? `disabled · ${a.condition}`
         : 'disabled',
     alertId: a.id,
+    enabled: a.enabled,
+    condition: a.condition,
   }));
+}
+
+/** Defensive ThemeIcon — Bun vscode mocks may omit the constructor. */
+function tryThemeIcon(id: string): vscode.ThemeIcon | undefined {
+  try {
+    const Ctor = (
+      vscode as { ThemeIcon?: new (iconId: string) => vscode.ThemeIcon }
+    ).ThemeIcon;
+    if (typeof Ctor === 'function') return new Ctor(id);
+  } catch {
+    /* mock without ThemeIcon */
+  }
+  return undefined;
+}
+
+/** Untrusted markdown tooltip (no theme icons). */
+function tryMarkdownTooltip(lines: readonly string[]): vscode.MarkdownString | string {
+  const value = lines.filter((line) => line.length > 0).join('\n');
+  try {
+    const Ctor = (
+      vscode as { MarkdownString?: new (value?: string) => vscode.MarkdownString }
+    ).MarkdownString;
+    if (typeof Ctor === 'function') {
+      const md = new Ctor(value);
+      try {
+        md.supportThemeIcons = false;
+      } catch {
+        /* mock */
+      }
+      try {
+        md.isTrusted = false;
+      } catch {
+        /* mock */
+      }
+      return md;
+    }
+  } catch {
+    /* mock without MarkdownString */
+  }
+  return value;
 }
 
 /**
@@ -248,6 +292,15 @@ export class AlertsTreeProvider
     item.contextValue = element.empty
       ? 'axis.alerts.empty'
       : 'axis.alerts.entry';
+    const iconId =
+      !element.empty && element.enabled === false ? 'bell-slash' : 'bell';
+    const icon = tryThemeIcon(iconId);
+    if (icon) item.iconPath = icon;
+    item.tooltip = tryMarkdownTooltip([
+      'kind: alert',
+      `id: ${element.alertId ?? element.id}`,
+      element.condition ? `condition: ${element.condition}` : '',
+    ]);
     return item;
   }
 

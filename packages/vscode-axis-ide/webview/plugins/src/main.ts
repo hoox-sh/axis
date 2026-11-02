@@ -31,6 +31,10 @@ import {
 } from './protocol';
 import { renderPluginsView } from './render';
 import {
+  ACTIVATE_FLASH_MS,
+  COPY_FLASH_MS,
+  applyActivateFlash,
+  applyCopiedFlash,
   applyPluginsHostMessage,
   initialPluginsState,
   setKindTab,
@@ -52,6 +56,13 @@ let apiRef: VsCodeApi | null = null;
 let state: PluginsViewState = initialPluginsState();
 let root: HTMLElement | null = null;
 
+type FlashKey = { kind: string; id: string };
+
+let copyFlashKey: FlashKey | null = null;
+let copyFlashTimer: ReturnType<typeof setTimeout> | null = null;
+let activateFlashKey: FlashKey | null = null;
+let activateFlashTimer: ReturnType<typeof setTimeout> | null = null;
+
 function persistTab(api: VsCodeApi, tab: KindTab): void {
   try {
     api.setState({ tab });
@@ -60,9 +71,80 @@ function persistTab(api: VsCodeApi, tab: KindTab): void {
   }
 }
 
+function liveEl(): HTMLElement | null {
+  const el = root?.querySelector('#plugins-live');
+  return el instanceof HTMLElement ? el : null;
+}
+
+function copyButton(kind: string, id: string): HTMLButtonElement | null {
+  if (!root) return null;
+  try {
+    const el = root.querySelector(
+      `[data-action="copy-id"][data-kind="${CSS.escape(kind)}"][data-id="${CSS.escape(id)}"]`,
+    );
+    return el instanceof HTMLButtonElement ? el : null;
+  } catch {
+    return null;
+  }
+}
+
+function cardEl(kind: string, id: string): HTMLElement | null {
+  if (!root) return null;
+  try {
+    const el = root.querySelector(
+      `article.plugin-card[data-kind="${CSS.escape(kind)}"][data-id="${CSS.escape(id)}"]`,
+    );
+    return el instanceof HTMLElement ? el : null;
+  } catch {
+    return null;
+  }
+}
+
+function restoreFlashes(): void {
+  if (copyFlashKey) {
+    applyCopiedFlash(copyButton(copyFlashKey.kind, copyFlashKey.id), liveEl(), true);
+  }
+  if (activateFlashKey) {
+    applyActivateFlash(cardEl(activateFlashKey.kind, activateFlashKey.id), true);
+  }
+}
+
+function startCopyFlash(button: HTMLButtonElement): void {
+  const kind = button.getAttribute('data-kind') ?? '';
+  const id = button.getAttribute('data-id') ?? '';
+  if (copyFlashKey && (copyFlashKey.kind !== kind || copyFlashKey.id !== id)) {
+    applyCopiedFlash(copyButton(copyFlashKey.kind, copyFlashKey.id), null, false);
+  }
+  copyFlashKey = { kind, id };
+  applyCopiedFlash(button, liveEl(), true);
+  if (copyFlashTimer) clearTimeout(copyFlashTimer);
+  copyFlashTimer = setTimeout(() => {
+    copyFlashTimer = null;
+    const key = copyFlashKey;
+    copyFlashKey = null;
+    if (!disposed && key) applyCopiedFlash(copyButton(key.kind, key.id), liveEl(), false);
+  }, COPY_FLASH_MS);
+}
+
+function startActivateFlash(kind: string, id: string): void {
+  if (activateFlashKey) {
+    applyActivateFlash(cardEl(activateFlashKey.kind, activateFlashKey.id), false);
+  }
+  activateFlashKey = { kind, id };
+  applyActivateFlash(cardEl(kind, id), true);
+  if (activateFlashTimer) clearTimeout(activateFlashTimer);
+  activateFlashTimer = setTimeout(() => {
+    activateFlashTimer = null;
+    const key = activateFlashKey;
+    activateFlashKey = null;
+    if (!disposed && key) applyActivateFlash(cardEl(key.kind, key.id), false);
+  }, ACTIVATE_FLASH_MS);
+}
+
 function paint(): void {
   if (disposed || !root) return;
   renderPluginsView(root, state);
+  restoreFlashes();
 }
 
 function postReady(api: VsCodeApi): void {
@@ -160,11 +242,15 @@ function onClick(event: Event): void {
   const copy = target.closest('[data-action="copy-id"]');
   if (copy instanceof HTMLButtonElement) {
     copyPluginId(copy.getAttribute('data-id') ?? '');
+    startCopyFlash(copy);
     return;
   }
   const activate = target.closest('[data-action="activate"]');
   if (activate instanceof HTMLButtonElement && !activate.disabled) {
-    postActivate(activate.getAttribute('data-kind') ?? '', activate.getAttribute('data-id') ?? '');
+    const kind = activate.getAttribute('data-kind') ?? '';
+    const id = activate.getAttribute('data-id') ?? '';
+    postActivate(kind, id);
+    startActivateFlash(kind, id);
   }
 }
 
@@ -254,6 +340,12 @@ function main(): void {
       disposed = true;
       apiRef = null;
       root = null;
+      copyFlashKey = null;
+      activateFlashKey = null;
+      if (copyFlashTimer) clearTimeout(copyFlashTimer);
+      if (activateFlashTimer) clearTimeout(activateFlashTimer);
+      copyFlashTimer = null;
+      activateFlashTimer = null;
     },
     { once: true },
   );

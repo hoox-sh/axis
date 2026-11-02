@@ -53,6 +53,7 @@ const pkg = JSON.parse(fs.readFileSync(PACKAGE_PATH, 'utf8')) as {
         id: string;
         name?: string;
         type?: string;
+        icon?: string;
         retainContextWhenHidden?: boolean;
       }>
     >;
@@ -129,7 +130,16 @@ const EXPECTED_LM_TOOLS = [
   'axis_get_results_focus',
   'axis_chart_snapshot_meta',
 ] as const;
-const EXPECTED_PANEL_VIEWS = ['axis.results', 'axis.strategy'] as const;
+const EXPECTED_PANEL_VIEWS = ['axis.results', 'axis.strategy', 'axis.profiler'] as const;
+const ACTIVITY_VIEW_ICONS: Record<string, string> = {
+  'axis.library': 'media/views/library.svg',
+  'axis.layers': 'media/views/layers.svg',
+  'axis.indicators': 'media/views/scripts.svg',
+  'axis.watchlist': 'media/views/watchlist.svg',
+  'axis.alerts': 'media/views/alerts.svg',
+  'axis.plugins': 'media/views/plugins.svg',
+  'axis.workers': 'media/views/workers.svg',
+};
 const EXPECTED_ACTIVITY_VIEWS = [
   'axis.library',
   'axis.layers',
@@ -231,7 +241,7 @@ suite('AXIS IDE Extension Structure', () => {
     }
   });
 
-  test('contributes panel + activity views (results/strategy/library/layers/indicators/watchlist/alerts/plugins/workers)', () => {
+  test('contributes panel + activity views (results/strategy/profiler/library/layers/indicators/watchlist/alerts/plugins/workers)', () => {
     const panelContainers = pkg.contributes?.viewsContainers?.panel ?? [];
     const axisPanel = panelContainers.find((c) => c.id === 'axis-panel');
     assert.ok(axisPanel, 'missing viewsContainers.panel axis-panel');
@@ -254,11 +264,22 @@ suite('AXIS IDE Extension Structure', () => {
 
     const panelViews = pkg.contributes?.views?.['axis-panel'] ?? [];
     const panelIds = panelViews.map((v) => v.id);
+    assert.deepStrictEqual(
+      panelIds,
+      [...EXPECTED_PANEL_VIEWS],
+      'panel view inventory/order drifted — update test when intentionally expanding contributes',
+    );
     for (const id of EXPECTED_PANEL_VIEWS) {
-      assert.ok(panelIds.includes(id), `missing panel view ${id}`);
       const entry = panelViews.find((v) => v.id === id);
       assert.strictEqual(entry?.type, 'webview', `${id} must be type webview`);
+      assert.strictEqual(
+        entry?.retainContextWhenHidden,
+        false,
+        `${id} must not retainContextWhenHidden`,
+      );
     }
+    const profilerView = panelViews.find((v) => v.id === 'axis.profiler');
+    assert.strictEqual(profilerView?.name, 'Profiler');
 
     const sideViews = pkg.contributes?.views?.axis ?? [];
     const sideIds = sideViews.map((v) => v.id);
@@ -274,6 +295,16 @@ suite('AXIS IDE Extension Structure', () => {
       true,
       'axis.plugins must retainContextWhenHidden',
     );
+    for (const v of sideViews) {
+      const icon = ACTIVITY_VIEW_ICONS[v.id];
+      if (!icon) continue;
+      assert.strictEqual(v.icon, icon, `${v.id} icon path`);
+      const viewIconAbs = path.resolve(__dirname, '../../', icon);
+      assert.ok(fs.existsSync(viewIconAbs), `activity view icon missing on disk: ${icon}`);
+      const viewSvg = fs.readFileSync(viewIconAbs, 'utf8');
+      assert.ok(viewSvg.includes('#C5C5C5'), `${icon} must use fill #C5C5C5`);
+      assert.ok(!/animat/i.test(viewSvg), `${icon} must not animate`);
+    }
     for (const id of FORBIDDEN_PLUGIN_KIND_VIEWS) {
       assert.ok(!sideIds.includes(id), `split plugin TreeView ${id} must be gone`);
     }
@@ -290,6 +321,10 @@ suite('AXIS IDE Extension Structure', () => {
     assert.ok(
       activation.includes('onView:axis.strategy'),
       'activationEvents should include onView:axis.strategy',
+    );
+    assert.ok(
+      activation.includes('onView:axis.profiler'),
+      'activationEvents should include onView:axis.profiler',
     );
     for (const id of FORBIDDEN_PLUGIN_KIND_VIEWS) {
       assert.ok(

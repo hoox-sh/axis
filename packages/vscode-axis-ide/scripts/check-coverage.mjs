@@ -62,6 +62,7 @@ export const EXCLUDE = [
   // VS Code API shims — covered by electron; pure helpers live beside them.
   'editors/chart-editor.ts',
   'views/results-panel.ts',
+  'views/profiler-panel.ts',
   'views/results.ts',
   'views/strategy.ts',
   'views/trees.ts',

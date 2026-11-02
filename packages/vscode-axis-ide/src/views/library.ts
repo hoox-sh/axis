@@ -26,9 +26,49 @@ export type LibraryTreeNode = {
 
 export const LIBRARY_VIEW_ID = 'axis.library';
 
+/** Defensive ThemeIcon — Bun vscode mocks may omit the constructor. */
+function tryThemeIcon(id: string): vscode.ThemeIcon | undefined {
+  try {
+    const Ctor = (
+      vscode as { ThemeIcon?: new (iconId: string) => vscode.ThemeIcon }
+    ).ThemeIcon;
+    if (typeof Ctor === 'function') return new Ctor(id);
+  } catch {
+    /* mock without ThemeIcon */
+  }
+  return undefined;
+}
+
+/** Untrusted markdown tooltip (no theme icons). */
+function tryMarkdownTooltip(lines: readonly string[]): vscode.MarkdownString | string {
+  const value = lines.filter((line) => line.length > 0).join('\n');
+  try {
+    const Ctor = (
+      vscode as { MarkdownString?: new (value?: string) => vscode.MarkdownString }
+    ).MarkdownString;
+    if (typeof Ctor === 'function') {
+      const md = new Ctor(value);
+      try {
+        md.supportThemeIcons = false;
+      } catch {
+        /* mock */
+      }
+      try {
+        md.isTrusted = false;
+      } catch {
+        /* mock */
+      }
+      return md;
+    }
+  } catch {
+    /* mock without MarkdownString */
+  }
+  return value;
+}
+
 /** Empty-library placeholder (personal + builtin catalog land later). */
 export function libraryRootChildren(): LibraryTreeNode[] {
-  return [{ id: 'library.empty', label: 'No scripts yet' }];
+  return [{ id: 'library.empty', label: 'Apply a builtin' }];
 }
 
 /** MVP Script Library TreeDataProvider — empty placeholder only. */
@@ -37,6 +77,9 @@ export class LibraryTreeProvider implements vscode.TreeDataProvider<LibraryTreeN
     const item = new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.None);
     item.id = element.id;
     item.contextValue = 'axis.library.empty';
+    const icon = tryThemeIcon('book');
+    if (icon) item.iconPath = icon;
+    item.tooltip = tryMarkdownTooltip(['kind: library', `id: ${element.id}`]);
     return item;
   }
 

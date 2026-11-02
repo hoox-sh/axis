@@ -26,9 +26,49 @@ export type IndicatorsTreeNode = {
 
 export const INDICATORS_VIEW_ID = 'axis.indicators';
 
+/** Defensive ThemeIcon — Bun vscode mocks may omit the constructor. */
+function tryThemeIcon(id: string): vscode.ThemeIcon | undefined {
+  try {
+    const Ctor = (
+      vscode as { ThemeIcon?: new (iconId: string) => vscode.ThemeIcon }
+    ).ThemeIcon;
+    if (typeof Ctor === 'function') return new Ctor(id);
+  } catch {
+    /* mock without ThemeIcon */
+  }
+  return undefined;
+}
+
+/** Untrusted markdown tooltip (no theme icons). */
+function tryMarkdownTooltip(lines: readonly string[]): vscode.MarkdownString | string {
+  const value = lines.filter((line) => line.length > 0).join('\n');
+  try {
+    const Ctor = (
+      vscode as { MarkdownString?: new (value?: string) => vscode.MarkdownString }
+    ).MarkdownString;
+    if (typeof Ctor === 'function') {
+      const md = new Ctor(value);
+      try {
+        md.supportThemeIcons = false;
+      } catch {
+        /* mock */
+      }
+      try {
+        md.isTrusted = false;
+      } catch {
+        /* mock */
+      }
+      return md;
+    }
+  } catch {
+    /* mock without MarkdownString */
+  }
+  return value;
+}
+
 /** Empty applied-scripts placeholder (chart instances land with apply/run). */
 export function indicatorsRootChildren(): IndicatorsTreeNode[] {
-  return [{ id: 'indicators.empty', label: 'No indicators' }];
+  return [{ id: 'indicators.empty', label: 'Apply a builtin' }];
 }
 
 /** MVP Scripts TreeDataProvider — empty placeholder only. */
@@ -37,6 +77,9 @@ export class IndicatorsTreeProvider implements vscode.TreeDataProvider<Indicator
     const item = new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.None);
     item.id = element.id;
     item.contextValue = 'axis.indicators.empty';
+    const icon = tryThemeIcon('graph');
+    if (icon) item.iconPath = icon;
+    item.tooltip = tryMarkdownTooltip(['kind: indicators', `id: ${element.id}`]);
     return item;
   }
 

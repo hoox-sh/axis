@@ -147,6 +147,109 @@ export function emptyFilterMessage(query: unknown): string {
   return `No plugins match "${q}".`;
 }
 
+export const COPY_FLASH_MS = 1200;
+export const ACTIVATE_FLASH_MS = 400;
+export const COPY_ID_LABEL = 'Copy id';
+export const COPIED_LABEL = 'Copied';
+export const ACTIVATE_FLASH_CLASS = 'is-flash';
+
+export type CopyFlash = {
+  label: string;
+  title: string;
+  live: string;
+  ms: number;
+};
+
+export type FilterCount = {
+  filtered: number;
+  total: number;
+};
+
+function finiteCount(n: unknown): number {
+  return typeof n === 'number' && Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
+}
+
+/** Visible cards (tab + query) over catalog size. */
+export function filterCount(state: PluginsViewState | null | undefined): FilterCount {
+  try {
+    const plugins = state && Array.isArray(state.plugins) ? state.plugins : [];
+    const total = plugins.length;
+    const tab = state && isKindTab(state.tab) ? state.tab : 'all';
+    const query = state && typeof state.query === 'string' ? state.query : '';
+    const filtered = filterPluginsByQuery(filterPluginsByTab(plugins, tab), query).length;
+    return { filtered, total };
+  } catch {
+    return { filtered: 0, total: 0 };
+  }
+}
+
+export function formatFilterCount(count: { filtered?: unknown; total?: unknown } | null | undefined): string {
+  return `${finiteCount(count?.filtered)} / ${finiteCount(count?.total)}`;
+}
+
+export function formatFilterCountAria(
+  count: { filtered?: unknown; total?: unknown } | null | undefined,
+): string {
+  return `${finiteCount(count?.filtered)} of ${finiteCount(count?.total)} plugins`;
+}
+
+export function copiedFlash(on: boolean): CopyFlash {
+  if (on) {
+    return { label: COPIED_LABEL, title: COPIED_LABEL, live: COPIED_LABEL, ms: COPY_FLASH_MS };
+  }
+  return { label: COPY_ID_LABEL, title: COPY_ID_LABEL, live: '', ms: COPY_FLASH_MS };
+}
+
+export type FlashTextTarget = {
+  textContent: string | null;
+  title?: string;
+  setAttribute?: (name: string, value: string) => void;
+};
+
+/** Copy-id micro-feedback: button label + polite live region. Never throws. */
+export function applyCopiedFlash(
+  button: FlashTextTarget | null | undefined,
+  live: FlashTextTarget | null | undefined,
+  on: boolean,
+): CopyFlash {
+  const flash = copiedFlash(on === true);
+  try {
+    if (button) {
+      button.textContent = flash.label;
+      button.title = flash.title;
+      if (typeof button.setAttribute === 'function') {
+        button.setAttribute('title', flash.title);
+      }
+    }
+    if (live) live.textContent = flash.live;
+  } catch {
+    // hostile targets
+  }
+  return flash;
+}
+
+export type ClassListLike = {
+  add: (token: string) => void;
+  remove: (token: string) => void;
+};
+
+/** Activate micro-feedback: `is-flash` class for `ACTIVATE_FLASH_MS`. Never throws. */
+export function applyActivateFlash(
+  card: { classList?: ClassListLike } | null | undefined,
+  on: boolean,
+): { className: string; ms: number } {
+  const className = on === true ? ACTIVATE_FLASH_CLASS : '';
+  try {
+    if (card?.classList) {
+      if (on === true) card.classList.add(ACTIVATE_FLASH_CLASS);
+      else card.classList.remove(ACTIVATE_FLASH_CLASS);
+    }
+  } catch {
+    // hostile targets
+  }
+  return { className, ms: ACTIVATE_FLASH_MS };
+}
+
 /**
  * Apply one decoded host message. Unknown types and hostile payloads leave
  * state unchanged (never throw).

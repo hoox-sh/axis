@@ -41,6 +41,13 @@ describe('results CSP HTML builder', () => {
     expect(html).toContain("default-src 'none'");
     expect(html).toContain('data-axis-results-kind="results"');
     expect(html).toContain('id="results-root"');
+    expect(html).toContain('id="results-status"');
+    expect(html).toContain('aria-live="polite"');
+    expect(html).toContain('id="results-card"');
+    expect(html).toContain('id="results-rows"');
+    expect(html).toContain('id="results-strategy"');
+    expect(html).toContain('Run a Pine Script™ (Ctrl+Enter)');
+    expect(html).not.toContain('id="results-body"');
     expect(htmlHasInlineScript(html)).toBe(false);
   });
 
@@ -54,6 +61,8 @@ describe('results CSP HTML builder', () => {
     });
     expect(html).toContain('data-axis-results-kind="strategy"');
     expect(html).toContain('AXIS Strategy');
+    expect(html).toContain('id="results-title">Strategy<');
+    expect(html).toContain('aria-live="polite"');
     expect(html).toContain("connect-src 'none'");
     expect(htmlHasInlineScript(html)).toBe(false);
   });

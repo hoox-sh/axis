@@ -146,6 +146,21 @@ function ensureOverlay(): DrawingOverlay | null {
   return overlay;
 }
 
+const RUN_STATUS_PULSE = new Set(['ok', 'error', 'plugins']);
+
+function renderPlotCount(plots: ChartViewState['plots']): void {
+  const el = document.getElementById('chart-plot-count');
+  if (!el) return;
+  const n = Array.isArray(plots) ? plots.length : 0;
+  if (n > 0) {
+    el.hidden = false;
+    el.textContent = `plots ${n}`;
+  } else {
+    el.hidden = true;
+    el.textContent = '';
+  }
+}
+
 function renderPluginChips(plugins: ChartViewState['plugins']): void {
   const root = document.getElementById('chart-plugins');
   if (!root) return;
@@ -162,6 +177,21 @@ function renderPluginChips(plugins: ChartViewState['plugins']): void {
     el.dataset.kind = chip.kind;
     el.textContent = `${chip.prefix} ${chip.id}`;
     root.appendChild(el);
+  }
+}
+
+function applyRunStatus(raw: unknown): void {
+  const shell = document.getElementById('chart-shell');
+  if (!shell) return;
+  const status = typeof raw === 'string' ? raw.trim() : '';
+  if (!RUN_STATUS_PULSE.has(status)) return;
+  try {
+    // Retrigger the 300ms pulse when the same status repeats.
+    shell.removeAttribute('data-run-status');
+    void shell.getBoundingClientRect();
+    shell.setAttribute('data-run-status', status);
+  } catch {
+    // detached / hostile DOM
   }
 }
 
@@ -195,7 +225,11 @@ function onHostMessage(event: MessageEvent): void {
   p?.apply(state);
   ensureOverlay();
   redrawOverlay();
+  renderPlotCount(state.plots);
   renderPluginChips(state.plugins);
+  if (decoded.type === 'host.run.status') {
+    applyRunStatus(decoded.payload.state);
+  }
 }
 
 function onToolbarClick(event: Event): void {

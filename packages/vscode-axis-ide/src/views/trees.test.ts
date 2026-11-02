@@ -23,10 +23,19 @@ mock.module('vscode', () => {
     label: string;
     collapsibleState: number;
     id?: string;
+    description?: string;
     contextValue?: string;
+    tooltip?: unknown;
+    iconPath?: unknown;
     constructor(label: string, collapsibleState = 0) {
       this.label = label;
       this.collapsibleState = collapsibleState;
+    }
+  }
+  class ThemeIcon {
+    id: string;
+    constructor(id: string) {
+      this.id = id;
     }
   }
   class EventEmitter {
@@ -47,6 +56,8 @@ mock.module('vscode', () => {
   }
   class MarkdownString {
     value: string;
+    isTrusted = false;
+    supportThemeIcons = false;
     constructor(value = '') {
       this.value = value;
     }
@@ -100,6 +111,7 @@ mock.module('vscode', () => {
   return {
     QuickPickItemKind: { Separator: -1, Default: 0 },
     TreeItem,
+    ThemeIcon,
     TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
     EventEmitter,
     StatusBarAlignment: { Left: 1, Right: 2 },
@@ -171,20 +183,39 @@ beforeAll(async () => {
   indicators = await import('./indicators');
 });
 
+function tooltipValue(item: { tooltip?: unknown }): string {
+  const t = item.tooltip;
+  if (typeof t === 'string') return t;
+  if (t && typeof t === 'object' && 'value' in t) {
+    return String((t as { value: unknown }).value);
+  }
+  return '';
+}
+
+function iconId(item: { iconPath?: unknown }): string | undefined {
+  const icon = item.iconPath;
+  if (icon && typeof icon === 'object' && 'id' in icon) {
+    return String((icon as { id: unknown }).id);
+  }
+  return undefined;
+}
+
 describe('empty TreeDataProvider getChildren', () => {
-  test('library root shows No scripts yet', () => {
+  test('library root shows Apply a builtin', () => {
     const provider = new library.LibraryTreeProvider();
     const roots = provider.getChildren();
-    expect(roots.map((n) => n.label)).toEqual(['No scripts yet']);
-    expect(library.libraryRootChildren().map((n) => n.label)).toEqual(['No scripts yet']);
+    expect(roots.map((n) => n.label)).toEqual(['Apply a builtin']);
+    expect(library.libraryRootChildren().map((n) => n.label)).toEqual(['Apply a builtin']);
     expect(provider.getChildren(roots[0])).toEqual([]);
   });
 
-  test('indicators root shows No indicators', () => {
+  test('indicators root shows Apply a builtin', () => {
     const provider = new indicators.IndicatorsTreeProvider();
     const roots = provider.getChildren();
-    expect(roots.map((n) => n.label)).toEqual(['No indicators']);
-    expect(indicators.indicatorsRootChildren().map((n) => n.label)).toEqual(['No indicators']);
+    expect(roots.map((n) => n.label)).toEqual(['Apply a builtin']);
+    expect(indicators.indicatorsRootChildren().map((n) => n.label)).toEqual([
+      'Apply a builtin',
+    ]);
     expect(provider.getChildren(roots[0])).toEqual([]);
   });
 
@@ -210,7 +241,7 @@ describe('empty TreeDataProvider getChildren', () => {
     expect(scripts).toBeDefined();
     if (!scripts) throw new Error('expected Scripts section');
     const underScripts = provider.getChildren(scripts);
-    expect(underScripts.map((n) => n.label)).toEqual(['No scripts']);
+    expect(underScripts.map((n) => n.label)).toEqual(['Apply a builtin']);
     expect(provider.getChildren(underScripts[0])).toEqual([]);
   });
 
@@ -224,5 +255,48 @@ describe('empty TreeDataProvider getChildren', () => {
       layers.LAYERS_VIEW_ID,
       indicators.INDICATORS_VIEW_ID,
     ]).not.toContain('axis.watchlist');
+  });
+});
+
+describe('TreeItem polish (icons, tooltips, descriptions)', () => {
+  test('library empty uses book icon and untrusted tooltip', () => {
+    const provider = new library.LibraryTreeProvider();
+    const node = provider.getChildren()[0]!;
+    const item = provider.getTreeItem(node);
+    expect(item.contextValue).toBe('axis.library.empty');
+    expect(iconId(item)).toBe('book');
+    const tip = item.tooltip as {
+      value: string;
+      isTrusted: boolean;
+      supportThemeIcons: boolean;
+    };
+    expect(tooltipValue(item)).toContain('kind: library');
+    expect(tooltipValue(item)).toContain('library.empty');
+    expect(tip.isTrusted).toBe(false);
+    expect(tip.supportThemeIcons).toBe(false);
+  });
+
+  test('indicators empty uses graph icon', () => {
+    const provider = new indicators.IndicatorsTreeProvider();
+    const item = provider.getTreeItem(provider.getChildren()[0]!);
+    expect(item.contextValue).toBe('axis.indicators.empty');
+    expect(iconId(item)).toBe('graph');
+    expect(tooltipValue(item)).toContain('kind: indicators');
+  });
+
+  test('layers section roots show (0) and layers icon; empty uses circle-slash', () => {
+    const provider = new layers.LayersTreeProvider();
+    const scripts = provider.getChildren()[0]!;
+    const section = provider.getTreeItem(scripts);
+    expect(section.contextValue).toBe('axis.layers.section');
+    expect(section.description).toBe('(0)');
+    expect(iconId(section)).toBe('layers');
+    expect(tooltipValue(section)).toContain('kind: layers');
+    expect(tooltipValue(section)).toContain(scripts.id);
+
+    const empty = provider.getChildren(scripts)[0]!;
+    const emptyItem = provider.getTreeItem(empty);
+    expect(emptyItem.contextValue).toBe('axis.layers.empty');
+    expect(iconId(emptyItem)).toBe('circle-slash');
   });
 });

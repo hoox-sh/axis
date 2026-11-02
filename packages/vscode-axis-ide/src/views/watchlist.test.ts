@@ -34,11 +34,19 @@ mock.module('vscode', () => {
     label: string;
     collapsibleState: number;
     id?: string;
+    description?: string;
     contextValue?: string;
-    tooltip?: string;
+    tooltip?: unknown;
+    iconPath?: unknown;
     constructor(label: string, collapsibleState = 0) {
       this.label = label;
       this.collapsibleState = collapsibleState;
+    }
+  }
+  class ThemeIcon {
+    id: string;
+    constructor(id: string) {
+      this.id = id;
     }
   }
   class EventEmitter {
@@ -59,6 +67,8 @@ mock.module('vscode', () => {
   }
   class MarkdownString {
     value: string;
+    isTrusted = false;
+    supportThemeIcons = false;
     constructor(value = '') {
       this.value = value;
     }
@@ -112,6 +122,7 @@ mock.module('vscode', () => {
   return {
     QuickPickItemKind: { Separator: -1, Default: 0 },
     TreeItem,
+    ThemeIcon,
     TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
     EventEmitter,
     StatusBarAlignment: { Left: 1, Right: 2 },
@@ -260,8 +271,20 @@ describe('watchlist persist + CRUD', () => {
 describe('watchlist tree + status label', () => {
   test('empty root placeholder; symbols as leaves', () => {
     expect(wl.watchlistRootChildren(wl.EMPTY_WATCHLIST_V1).map((n) => n.label)).toEqual([
-      'No symbols yet',
+      'Add a symbol',
     ]);
+    const emptyProvider = new wl.WatchlistTreeProvider(wl.EMPTY_WATCHLIST_V1);
+    const emptyItem = emptyProvider.getTreeItem(emptyProvider.getChildren()[0]!);
+    expect(emptyItem.contextValue).toBe('axis.watchlist.empty');
+    const emptyTip = emptyItem.tooltip as {
+      value: string;
+      isTrusted: boolean;
+      supportThemeIcons: boolean;
+    };
+    expect(emptyTip.value).toContain('kind: watchlist');
+    expect(emptyTip.isTrusted).toBe(false);
+    expect(emptyTip.supportThemeIcons).toBe(false);
+
     const provider = new wl.WatchlistTreeProvider({
       symbols: ['BTCUSDT', 'ETHUSDT'],
       selected: 'ETHUSDT',
@@ -269,8 +292,15 @@ describe('watchlist tree + status label', () => {
     const roots = provider.getChildren();
     expect(roots.map((n) => n.label)).toEqual(['BTCUSDT', 'ETHUSDT']);
     expect(roots.map((n) => n.kind)).toEqual(['symbol', 'symbol']);
+    expect(roots[0]?.description).toBe('100.00');
     const item = provider.getTreeItem(roots[0]!);
     expect(item.contextValue).toBe('axis.watchlist.symbol');
+    expect((item.iconPath as { id?: string } | undefined)?.id).toBe('symbol-numeric');
+    expect(item.description).toBe('100.00');
+    const tip = item.tooltip as { value: string };
+    expect(tip.value).toContain('kind: watchlist');
+    expect(tip.value).toContain('watchlist.symbol.BTCUSDT');
+    expect(tip.value).toContain('quote: 100.00');
   });
 
   test('formatWatchlistQuoteStatus uses displayedLastPrice semantics', () => {
@@ -336,7 +366,7 @@ describe('registerWatchlist + fragment', () => {
       },
     });
 
-    expect(result.provider.getChildren().map((n) => n.label)).toEqual(['No symbols yet']);
+    expect(result.provider.getChildren().map((n) => n.label)).toEqual(['Add a symbol']);
     expect(registered.map((r) => r.command).sort()).toEqual([
       wl.WATCHLIST_COMMANDS.add,
       wl.WATCHLIST_COMMANDS.remove,

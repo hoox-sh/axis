@@ -51,8 +51,14 @@ describe('chart CSP HTML builder', () => {
     expect(html).toContain('id="chart-host"');
     expect(html).toContain('id="chart-toolbar"');
     expect(html).toContain('id="tool-trendline"');
+    expect(html).toContain('title="Trendline"');
+    expect(html).toContain('id="chart-mark"');
+    expect(html).toContain('id="chart-hud"');
+    expect(html).toContain('id="chart-plot-count"');
     expect(html).toContain('id="chart-plugins"');
     expect(html).toContain('class="chart-plugins"');
+    expect(html).toContain('aria-hidden="true"');
+    expect(html.toLowerCase()).not.toContain('tradingview');
     expect(html).toContain('id="drawing-overlay"');
     expect(html).toContain('class="vscode-dark"');
     expect(htmlHasInlineScript(html)).toBe(false);

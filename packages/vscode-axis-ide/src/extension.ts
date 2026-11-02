@@ -107,6 +107,7 @@ import {
 } from './mcp/lm-tools';
 import { MCP_COMMANDS, registerMcpProvider } from './mcp/provider';
 import { ALERTS_ADD_COMMAND, ALERTS_REMOVE_COMMAND, registerAlertsView } from './views/alerts';
+import { registerProfilerView } from './views/profiler';
 import { RESULTS_VIEW_ID, registerResultsView } from './views/results';
 import { registerStrategyView } from './views/strategy';
 import type { ResultsWebviewViewProvider } from './views/results-panel';
@@ -838,6 +839,7 @@ export function activate(context: ExtensionContext): void {
   resultsStore = new ResultsFocusStore();
   resultsProvider = registerResultsView(context, resultsStore);
   strategyProvider = registerStrategyView(context, resultsStore);
+  registerProfilerView(context, resultsStore);
   registerAxisTreeViews(context);
   registerAlertsView(context);
   registerWatchlist(context);

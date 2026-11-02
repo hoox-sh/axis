@@ -74,6 +74,7 @@ export type WatchlistTreeNode = {
   label: string;
   kind: 'empty' | 'symbol';
   symbol?: string;
+  description?: string;
 };
 
 /** Optional quote source — default is a deterministic mock placeholder. */
@@ -243,18 +244,76 @@ export function formatWatchlistQuoteStatus(opts: {
   }
 }
 
+function quoteDescription(symbol: string, feed?: QuoteFeed): string | undefined {
+  try {
+    const quotes = feed ?? createMockQuoteFeed();
+    const quote = quotes.getQuote(symbol);
+    if (!quote) return undefined;
+    return formatQuotePrice(resolveDisplayedQuotePrice(quote));
+  } catch {
+    return undefined;
+  }
+}
+
 /** Root children for the TreeView (empty placeholder or symbol rows). */
-export function watchlistRootChildren(state: WatchlistV1): WatchlistTreeNode[] {
+export function watchlistRootChildren(
+  state: WatchlistV1,
+  feed?: QuoteFeed,
+): WatchlistTreeNode[] {
   const clean = parseWatchlistV1(state);
   if (clean.symbols.length === 0) {
-    return [{ id: 'watchlist.empty', label: 'No symbols yet', kind: 'empty' }];
+    return [{ id: 'watchlist.empty', label: 'Add a symbol', kind: 'empty' }];
   }
-  return clean.symbols.map((symbol) => ({
-    id: `watchlist.symbol.${symbol}`,
-    label: symbol,
-    kind: 'symbol' as const,
-    symbol,
-  }));
+  return clean.symbols.map((symbol) => {
+    const description = quoteDescription(symbol, feed);
+    return {
+      id: `watchlist.symbol.${symbol}`,
+      label: symbol,
+      kind: 'symbol' as const,
+      symbol,
+      ...(description ? { description } : {}),
+    };
+  });
+}
+
+/** Defensive ThemeIcon — Bun vscode mocks may omit the constructor. */
+function tryThemeIcon(id: string): vscode.ThemeIcon | undefined {
+  try {
+    const Ctor = (
+      vscode as { ThemeIcon?: new (iconId: string) => vscode.ThemeIcon }
+    ).ThemeIcon;
+    if (typeof Ctor === 'function') return new Ctor(id);
+  } catch {
+    /* mock without ThemeIcon */
+  }
+  return undefined;
+}
+
+/** Untrusted markdown tooltip (no theme icons). */
+function tryMarkdownTooltip(lines: readonly string[]): vscode.MarkdownString | string {
+  const value = lines.filter((line) => line.length > 0).join('\n');
+  try {
+    const Ctor = (
+      vscode as { MarkdownString?: new (value?: string) => vscode.MarkdownString }
+    ).MarkdownString;
+    if (typeof Ctor === 'function') {
+      const md = new Ctor(value);
+      try {
+        md.supportThemeIcons = false;
+      } catch {
+        /* mock */
+      }
+      try {
+        md.isTrusted = false;
+      } catch {
+        /* mock */
+      }
+      return md;
+    }
+  } catch {
+    /* mock without MarkdownString */
+  }
+  return value;
 }
 
 /**
@@ -295,9 +354,11 @@ export class WatchlistTreeProvider implements vscode.TreeDataProvider<WatchlistT
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
   private state: WatchlistV1;
+  private feed: QuoteFeed;
 
-  constructor(initial?: WatchlistV1) {
+  constructor(initial?: WatchlistV1, feed?: QuoteFeed) {
     this.state = parseWatchlistV1(initial ?? EMPTY_WATCHLIST_V1);
+    this.feed = feed ?? createMockQuoteFeed();
   }
 
   getState(): WatchlistV1 {
@@ -306,6 +367,11 @@ export class WatchlistTreeProvider implements vscode.TreeDataProvider<WatchlistT
 
   setState(next: WatchlistV1): void {
     this.state = parseWatchlistV1(next);
+    this._onDidChangeTreeData.fire(undefined);
+  }
+
+  setQuoteFeed(feed: QuoteFeed): void {
+    this.feed = feed;
     this._onDidChangeTreeData.fire(undefined);
   }
 
@@ -324,18 +390,26 @@ export class WatchlistTreeProvider implements vscode.TreeDataProvider<WatchlistT
       collapsible && typeof collapsible.None === 'number' ? collapsible.None : 0;
     const item = new vscode.TreeItem(element.label, none);
     item.id = element.id;
+    item.description = element.description;
     if (element.kind === 'symbol' && element.symbol) {
       item.contextValue = 'axis.watchlist.symbol';
-      item.tooltip = element.symbol;
+      const icon = tryThemeIcon('symbol-numeric');
+      if (icon) item.iconPath = icon;
+      item.tooltip = tryMarkdownTooltip([
+        'kind: watchlist',
+        `id: ${element.id}`,
+        element.description ? `quote: ${element.description}` : '',
+      ]);
     } else {
       item.contextValue = 'axis.watchlist.empty';
+      item.tooltip = tryMarkdownTooltip(['kind: watchlist', `id: ${element.id}`]);
     }
     return item;
   }
 
   getChildren(element?: WatchlistTreeNode): WatchlistTreeNode[] {
     if (element) return [];
-    return watchlistRootChildren(this.state);
+    return watchlistRootChildren(this.state, this.feed);
   }
 }
 
@@ -429,7 +503,7 @@ export function registerWatchlist(
   let usingMockFeed = opts?.quoteFeed == null;
 
   const initial = readWatchlistV1(helpers);
-  const provider = new WatchlistTreeProvider(initial);
+  const provider = new WatchlistTreeProvider(initial, quoteFeed);
 
   const view = vscode.window.createTreeView(WATCHLIST_VIEW_ID, {
     treeDataProvider: provider,
@@ -544,6 +618,7 @@ export function registerWatchlist(
     setQuoteFeed(feed: QuoteFeed) {
       quoteFeed = feed;
       usingMockFeed = false;
+      provider.setQuoteFeed(feed);
       refreshStatusBar();
     },
   };

@@ -443,24 +443,73 @@ export function _setLastWorkersSnapshotForTests(
   lastSnapshot = snap;
 }
 
+/** Compact probe badge: `ok 12ms` / `down` / status. */
+export function formatWorkerProbeDescription(
+  result: WorkerProbeResult | undefined,
+): string | undefined {
+  if (!result) return undefined;
+  if (result.status === 'healthy') {
+    return result.latencyMs == null ? 'ok' : `ok ${result.latencyMs}ms`;
+  }
+  if (result.status === 'down') return 'down';
+  return result.status;
+}
+
+function workerCodicon(entry: WorkerCatalogEntry | undefined): string {
+  if (!entry) return 'server-environment';
+  return entry.probe === 'http-health' ? 'server-environment' : 'vm';
+}
+
+/** Defensive ThemeIcon — Bun vscode mocks may omit the constructor. */
+function tryThemeIcon(id: string): vscode.ThemeIcon | undefined {
+  try {
+    const Ctor = (
+      vscode as { ThemeIcon?: new (iconId: string) => vscode.ThemeIcon }
+    ).ThemeIcon;
+    if (typeof Ctor === 'function') return new Ctor(id);
+  } catch {
+    /* mock without ThemeIcon */
+  }
+  return undefined;
+}
+
+/** Untrusted markdown tooltip (no theme icons). */
+function tryMarkdownTooltip(lines: readonly string[]): vscode.MarkdownString | string {
+  const value = lines.filter((line) => line.length > 0).join('\n');
+  try {
+    const Ctor = (
+      vscode as { MarkdownString?: new (value?: string) => vscode.MarkdownString }
+    ).MarkdownString;
+    if (typeof Ctor === 'function') {
+      const md = new Ctor(value);
+      try {
+        md.supportThemeIcons = false;
+      } catch {
+        /* mock */
+      }
+      try {
+        md.isTrusted = false;
+      } catch {
+        /* mock */
+      }
+      return md;
+    }
+  } catch {
+    /* mock without MarkdownString */
+  }
+  return value;
+}
+
 export function workersRootChildren(
   snap: WorkersOverviewSnapshot | null = lastSnapshot,
 ): WorkerTreeNode[] {
   return listWorkerCatalog().map((e) => {
     const result = snap?.results.find((r) => r.id === e.id);
-    const status = result?.status ?? 'unknown';
-    const badge =
-      status === 'healthy'
-        ? 'healthy'
-        : status === 'down'
-          ? 'down'
-          : status === 'skipped'
-            ? 'skipped'
-            : status;
+    const probe = formatWorkerProbeDescription(result);
     return {
       id: `worker:${e.id}`,
       label: e.name,
-      description: `${badge} — ${e.summary}`,
+      description: probe ?? e.summary,
       workerId: e.id,
     };
   });
@@ -486,6 +535,18 @@ export class WorkersTreeProvider
     item.id = element.id;
     item.description = element.description;
     item.contextValue = 'axis.workers.entry';
+    const entry = element.workerId
+      ? getWorkerCatalogEntry(element.workerId)
+      : undefined;
+    const icon = tryThemeIcon(workerCodicon(entry));
+    if (icon) item.iconPath = icon;
+    const result = lastSnapshot?.results.find((r) => r.id === element.workerId);
+    const endpoint = result?.endpoint || entry?.defaultEndpoint || '';
+    item.tooltip = tryMarkdownTooltip([
+      'kind: worker',
+      `id: ${element.workerId ?? element.id}`,
+      endpoint ? `endpoint: ${endpoint}` : '',
+    ]);
     return item;
   }
 

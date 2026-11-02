@@ -154,7 +154,7 @@ export function registerPluginsAndWorkers(
   registerActivatePluginCommand(context, workspaceHelpers, () => {
     refreshAll();
     pluginsWebview.postState();
-    refreshPluginsStatusBar();
+    refreshPluginsStatusBar({ flash: true });
     notifyActivePlugins(readActivePlugins(workspaceHelpers));
   });
   registerPluginsStatusBar(context, workspaceHelpers, registry, () => {

@@ -25,7 +25,10 @@ import {
   EMPTY_KIND_COPY,
   activeChips,
   emptyFilterMessage,
+  filterCount,
   formatActiveStatus,
+  formatFilterCount,
+  formatFilterCountAria,
   isPluginActive,
   KIND_LABELS,
   KIND_MARKS,
@@ -39,6 +42,30 @@ import {
   type PluginsViewState,
 } from './state';
 import type { KindTab, PluginCard, PluginKind } from './protocol';
+
+/** 16×16 geometric kind marks (inline; `currentColor` follows VS Code tokens). */
+const KIND_ICON_INNER: Record<PluginKind, string> = {
+  source:
+    '<path fill="currentColor" d="M7.25 1.5h1.5v2.5H11v8H8.75v2.5h-1.5V12H5V4h2.25z"/>',
+  stream:
+    '<path fill="currentColor" d="M1 7.25h2.7l1.55-3.7 2.55 8.15 1.7-4.45H15v1.5h-4.65l-1.35 3.5-2.7-8.6-1.7 4.1H1z"/>',
+  engine:
+    '<path fill="currentColor" fill-rule="evenodd" d="M7.2 1.2h1.6v2.3l1.35.55 1.15-1.15 1.13 1.13-1.15 1.15.55 1.35H14.8v1.6h-2.3l-.55 1.35 1.15 1.15-1.13 1.13-1.15-1.15-.55 1.35v2.3H7.2v-2.3l-1.35-.55-1.15 1.15-1.13-1.13 1.15-1.15L3.17 9.4H1.2V7.8h2.3l.55-1.35-1.15-1.15L4.03 4.17l1.15 1.15.55-1.35zM10.05 8A2.05 2.05 0 1 1 5.95 8 2.05 2.05 0 1 1 10.05 8z"/>',
+  storage: [
+    '<ellipse cx="8" cy="3.7" rx="5" ry="1.85" fill="none" stroke="currentColor" stroke-width="1.25"/>',
+    '<path fill="none" stroke="currentColor" stroke-width="1.25" d="M3 3.7v8.4a5 1.85 0 0 0 10 0V3.7"/>',
+  ].join(''),
+  dataset:
+    '<path fill="currentColor" d="M8 1.35 13.55 4.55v6.9L8 14.65 2.45 11.45v-6.9z"/>',
+  component:
+    '<path fill="currentColor" d="M6.15 1.4h3.7v3.5h3.75v3.7H9.85v3.75H6.15V8.6H2.4V4.9h3.75z"/>',
+};
+
+export function kindIconSvg(kind: PluginKind): string {
+  const inner = KIND_ICON_INNER[kind];
+  if (!inner) return '';
+  return `<svg class="plugins-kind-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false" data-kind-icon="${kind}">${inner}</svg>`;
+}
 
 export function escapeHtml(value: string): string {
   return String(value ?? '')
@@ -67,7 +94,7 @@ function factsHtml(card: PluginCard): string {
 
 function kindMarkHtml(tab: KindTab): string {
   if (tab === 'all') return '';
-  return `<span class="plugins-kind-mark" aria-hidden="true">${escapeHtml(KIND_MARKS[tab])}</span>`;
+  return `<span class="plugins-kind-mark" aria-hidden="true">${kindIconSvg(tab)}<span class="plugins-kind-mark__text">${escapeHtml(KIND_MARKS[tab])}</span></span>`;
 }
 
 function cardHtml(card: PluginCard, state: PluginsViewState): string {
@@ -79,6 +106,7 @@ function cardHtml(card: PluginCard, state: PluginsViewState): string {
     ? `<p class="plugin-card__desc">${escapeHtml(card.description)}</p>`
     : '';
   const activateLabel = active ? 'Active' : 'Activate';
+  const activateTitle = active ? 'Already active' : 'Activate';
   const disabled = active ? ' disabled' : '';
   const activeClass = active ? ' is-active' : '';
   const nameId = `plugin-${card.kind}-${card.id}`.replace(/[^a-zA-Z0-9_-]/g, '-');
@@ -93,6 +121,7 @@ function cardHtml(card: PluginCard, state: PluginsViewState): string {
   return `<article class="plugin-card${activeClass}" tabindex="0" data-kind="${kindAttr}" data-id="${idAttr}" data-vscode-context="${vscodeCtx}" aria-labelledby="${nameId}">
   <header class="plugin-card__head">
     <div class="plugin-card__titles">
+      ${kindIconSvg(card.kind)}
       <h3 class="plugin-card__name" id="${nameId}">${escapeHtml(card.name)}</h3>
       <code class="plugin-card__id" title="${idAttr}">${idAttr}</code>
     </div>
@@ -102,7 +131,7 @@ function cardHtml(card: PluginCard, state: PluginsViewState): string {
   ${factsHtml(card)}
   <div class="plugin-card__actions">
     <button type="button" class="plugin-card__copy" data-action="copy-id" data-kind="${kindAttr}" data-id="${idAttr}" aria-label="Copy id ${idAttr}" title="Copy id">Copy id</button>
-    <button type="button" class="plugin-card__activate" data-action="activate" data-kind="${kindAttr}" data-id="${idAttr}"${disabled}>${activateLabel}</button>
+    <button type="button" class="plugin-card__activate" data-action="activate" data-kind="${kindAttr}" data-id="${idAttr}" title="${activateTitle}"${disabled}>${activateLabel}</button>
   </div>
 </article>`;
 }
@@ -135,14 +164,14 @@ function tabsHtml(tab: PluginsViewState['tab']): string {
   const buttons = KIND_TABS.map((id) => {
     const selected = id === tab;
     const label = KIND_LABELS[id];
-    return `<button type="button" role="tab" id="tab-${id}" class="plugins-tabs__tab" data-tab="${id}" aria-label="${escapeHtml(label)}" aria-selected="${selected ? 'true' : 'false'}" tabindex="${selected ? '0' : '-1'}">${kindMarkHtml(id)}<span class="plugins-tabs__text">${escapeHtml(label)}</span></button>`;
+    return `<button type="button" role="tab" id="tab-${id}" class="plugins-tabs__tab" data-tab="${id}" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}" aria-selected="${selected ? 'true' : 'false'}" tabindex="${selected ? '0' : '-1'}">${kindMarkHtml(id)}<span class="plugins-tabs__text">${escapeHtml(label)}</span></button>`;
   }).join('');
   return `<div class="plugins-tabs" role="tablist" aria-label="Plugin kinds">${buttons}</div>`;
 }
 
 function chipHtml(chip: ActiveChip): string {
   const label = KIND_LABELS[chip.tab];
-  return `<button type="button" role="listitem" id="chip-${chip.kind}" class="plugins-chip" data-tab="${chip.tab}" data-chip="1" aria-label="Show ${escapeHtml(label)}, ${escapeHtml(chip.id)}"><span class="plugins-chip__mark" aria-hidden="true">${escapeHtml(chip.chip)}</span><span class="plugins-chip__id">${escapeHtml(chip.id)}</span></button>`;
+  return `<button type="button" role="listitem" id="chip-${chip.kind}" class="plugins-chip" data-tab="${chip.tab}" data-chip="1" title="${escapeHtml(label)}: ${escapeHtml(chip.id)}" aria-label="Show ${escapeHtml(label)}, ${escapeHtml(chip.id)}"><span class="plugins-chip__mark" aria-hidden="true">${escapeHtml(chip.chip)}</span><span class="plugins-chip__id">${escapeHtml(chip.id)}</span></button>`;
 }
 
 function chipsHtml(state: PluginsViewState): string {
@@ -156,8 +185,15 @@ function chipsHtml(state: PluginsViewState): string {
 
 function searchHtml(query: string): string {
   return `<div class="plugins-search-wrap" role="search">
-    <input id="plugins-search" class="plugins-search" type="search" name="plugins-search" value="${escapeHtml(query)}" placeholder="Filter plugins" aria-label="Filter plugins by name, id, or description" autocomplete="off" spellcheck="false" />
+    <input id="plugins-search" class="plugins-search" type="search" name="plugins-search" value="${escapeHtml(query)}" placeholder="Filter plugins" aria-label="Filter plugins by name, id, or description" title="Filter plugins" autocomplete="off" spellcheck="false" />
   </div>`;
+}
+
+function headerMetaHtml(state: PluginsViewState): string {
+  const count = filterCount(state);
+  const text = escapeHtml(formatFilterCount(count));
+  const label = escapeHtml(formatFilterCountAria(count));
+  return `<span class="plugins-header__meta" id="plugins-count" title="${label}" aria-label="${label}">${text}</span>`;
 }
 
 export function pluginsViewHtml(state: PluginsViewState): string {
@@ -174,10 +210,14 @@ export function pluginsViewHtml(state: PluginsViewState): string {
       ? `<p class="plugins-empty plugins-empty--waiting">Waiting for host catalog…</p>`
       : '';
   return `<div class="plugins-shell" data-axis-plugins-host="1">
+  <div id="plugins-live" class="plugins-live" aria-live="polite" aria-atomic="true"></div>
   <header class="plugins-header">
     <div class="plugins-header__sticky">
       <div class="plugins-header__top">
-        <h1 class="plugins-title">Plugins</h1>
+        <div class="plugins-header__brand">
+          <h1 class="plugins-title">Plugins</h1>
+          ${headerMetaHtml(state)}
+        </div>
         ${searchHtml(state.query)}
       </div>
       ${tabsHtml(state.tab)}

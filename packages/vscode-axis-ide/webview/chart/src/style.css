@@ -35,6 +35,15 @@ body {
   background: var(--vscode-editorWidget-background, transparent);
 }
 
+.chart-toolbar__mark {
+  flex: 0 0 12px;
+  width: 12px;
+  height: 12px;
+  display: block;
+  color: var(--vscode-descriptionForeground, var(--vscode-editor-foreground, #cccccc));
+  pointer-events: none;
+}
+
 .chart-toolbar__btn {
   appearance: none;
   margin: 0;
@@ -70,6 +79,10 @@ body {
 
 .chart-plugins[hidden] {
   display: none;
+}
+
+#chart-hud.chart-plugins > .chart-plugins {
+  margin-left: 0;
 }
 
 .chart-plugins__chip {
@@ -146,4 +159,27 @@ body {
 .drawing-overlay__draft {
   fill: var(--vscode-charts-orange, #ce9178);
   stroke: none;
+}
+
+@keyframes axis-run-pulse {
+  0% {
+    box-shadow: inset 0 0 0 0 transparent;
+  }
+  40% {
+    box-shadow: inset 0 0 0 2px var(--axis-run-pulse-color, transparent);
+  }
+  100% {
+    box-shadow: inset 0 0 0 0 transparent;
+  }
+}
+
+.chart-shell[data-run-status='ok'],
+.chart-shell[data-run-status='plugins'] {
+  --axis-run-pulse-color: var(--vscode-focusBorder, #007acc);
+  animation: axis-run-pulse 300ms ease-out;
+}
+
+.chart-shell[data-run-status='error'] {
+  --axis-run-pulse-color: var(--vscode-errorForeground, #f14c4c);
+  animation: axis-run-pulse 300ms ease-out;
 }

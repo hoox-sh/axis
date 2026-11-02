@@ -25,9 +25,17 @@ mock.module('vscode', () => {
     id?: string;
     description?: string;
     contextValue?: string;
+    tooltip?: unknown;
+    iconPath?: unknown;
     constructor(label: string, collapsibleState = 0) {
       this.label = label;
       this.collapsibleState = collapsibleState;
+    }
+  }
+  class ThemeIcon {
+    id: string;
+    constructor(id: string) {
+      this.id = id;
     }
   }
   class EventEmitter {
@@ -48,6 +56,8 @@ mock.module('vscode', () => {
   }
   class MarkdownString {
     value: string;
+    isTrusted = false;
+    supportThemeIcons = false;
     constructor(value = '') {
       this.value = value;
     }
@@ -101,6 +111,7 @@ mock.module('vscode', () => {
   return {
     QuickPickItemKind: { Separator: -1, Default: 0 },
     TreeItem,
+    ThemeIcon,
     TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
     EventEmitter,
     StatusBarAlignment: { Left: 1, Right: 2 },
@@ -244,11 +255,14 @@ describe('AlertsTreeProvider + command flows', () => {
     const mem = alerts.createMemoryWorkspaceState();
     const provider = new alerts.AlertsTreeProvider(mem);
     const empty = provider.getChildren();
-    expect(empty.map((n) => n.label)).toEqual(['No alerts yet']);
+    expect(empty.map((n) => n.label)).toEqual(['Add an alert']);
     expect(alerts.alertsRootChildren([]).map((n) => n.label)).toEqual([
-      'No alerts yet',
+      'Add an alert',
     ]);
     expect(provider.getChildren(empty[0])).toEqual([]);
+    const emptyItem = provider.getTreeItem(empty[0]!);
+    expect(emptyItem.contextValue).toBe('axis.alerts.empty');
+    expect((emptyItem.iconPath as { id?: string } | undefined)?.id).toBe('bell');
 
     await alerts.addAlert(mem, {
       id: 'n1',
@@ -263,6 +277,30 @@ describe('AlertsTreeProvider + command flows', () => {
     const item = provider.getTreeItem(roots[0]!);
     expect(item.label).toBe('Notify');
     expect(item.contextValue).toBe('axis.alerts.entry');
+    expect((item.iconPath as { id?: string } | undefined)?.id).toBe('bell');
+    const tip = item.tooltip as {
+      value: string;
+      isTrusted: boolean;
+      supportThemeIcons: boolean;
+    };
+    expect(tip.value).toContain('kind: alert');
+    expect(tip.value).toContain('id: n1');
+    expect(tip.value).toContain('condition: price_cross');
+    expect(tip.isTrusted).toBe(false);
+    expect(tip.supportThemeIcons).toBe(false);
+  });
+
+  test('disabled alert uses bell-slash', async () => {
+    const mem = alerts.createMemoryWorkspaceState();
+    await alerts.addAlert(mem, {
+      id: 'off',
+      title: 'Quiet',
+      enabled: false,
+    });
+    const provider = new alerts.AlertsTreeProvider(mem);
+    const item = provider.getTreeItem(provider.getChildren()[0]!);
+    expect(item.contextValue).toBe('axis.alerts.entry');
+    expect((item.iconPath as { id?: string } | undefined)?.id).toBe('bell-slash');
   });
 
   test('runAddAlertCommand / runRemoveAlertCommand with mock UI', async () => {

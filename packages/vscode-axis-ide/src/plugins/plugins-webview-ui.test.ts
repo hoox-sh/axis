@@ -24,17 +24,28 @@ import {
   encodePluginsReady,
   normalizePluginCard,
 } from '../../webview/plugins/src/protocol';
-import { pluginsViewHtml } from '../../webview/plugins/src/render';
+import { kindIconSvg, pluginsViewHtml } from '../../webview/plugins/src/render';
 import {
+  ACTIVATE_FLASH_CLASS,
+  ACTIVATE_FLASH_MS,
+  COPY_FLASH_MS,
+  COPY_ID_LABEL,
+  COPIED_LABEL,
   KIND_CHIP_LABELS,
   KIND_MARKS,
   PYODIDE_FLAG_WARNING,
   activeChips,
+  applyActivateFlash,
+  applyCopiedFlash,
   applyPluginsHostMessage,
+  copiedFlash,
   emptyFilterMessage,
+  filterCount,
   filterPluginsByQuery,
   filterPluginsByTab,
   formatActiveStatus,
+  formatFilterCount,
+  formatFilterCountAria,
   initialPluginsState,
   isPluginActive,
   isPyodideFlagOff,
@@ -419,5 +430,170 @@ describe('plugins webview active badge logic', () => {
     expect(isPyodideFlagOff(ungated, { allowPyodide: false })).toBe(true);
     expect(isPyodideFlagOff(ungated, { allowPyodide: true })).toBe(false);
     expect(isPyodideFlagOff(ungated, {})).toBe(false);
+  });
+});
+
+describe('plugins webview copied flash helper', () => {
+  test('copiedFlash labels, live text, and 1.2s duration', () => {
+    expect(COPY_FLASH_MS).toBe(1200);
+    expect(copiedFlash(true)).toEqual({
+      label: COPIED_LABEL,
+      title: COPIED_LABEL,
+      live: COPIED_LABEL,
+      ms: 1200,
+    });
+    expect(copiedFlash(false)).toEqual({
+      label: COPY_ID_LABEL,
+      title: COPY_ID_LABEL,
+      live: '',
+      ms: 1200,
+    });
+    expect(COPIED_LABEL).toBe('Copied');
+    expect(COPY_ID_LABEL).toBe('Copy id');
+  });
+
+  test('applyCopiedFlash mutates button + aria-live target; never throws', () => {
+    const attrs: string[] = [];
+    const button = {
+      textContent: COPY_ID_LABEL,
+      title: COPY_ID_LABEL,
+      setAttribute(name: string, value: string) {
+        attrs.push(`${name}=${value}`);
+        this.title = value;
+      },
+    };
+    const live = { textContent: '' };
+    expect(applyCopiedFlash(button, live, true)).toMatchObject({
+      label: 'Copied',
+      live: 'Copied',
+      ms: COPY_FLASH_MS,
+    });
+    expect(button.textContent).toBe('Copied');
+    expect(button.title).toBe('Copied');
+    expect(live.textContent).toBe('Copied');
+    expect(attrs).toContain('title=Copied');
+
+    applyCopiedFlash(button, live, false);
+    expect(button.textContent).toBe('Copy id');
+    expect(live.textContent).toBe('');
+
+    expect(() => applyCopiedFlash(null, null, true)).not.toThrow();
+    expect(() => applyCopiedFlash(undefined, undefined, false)).not.toThrow();
+    const hostile = {
+      textContent: '',
+      setAttribute() {
+        throw new Error('nope');
+      },
+    };
+    expect(applyCopiedFlash(hostile, null, true).label).toBe('Copied');
+  });
+
+  test('applyActivateFlash toggles is-flash for 400ms', () => {
+    const tokens = new Set<string>();
+    const card = {
+      classList: {
+        add: (c: string) => {
+          tokens.add(c);
+        },
+        remove: (c: string) => {
+          tokens.delete(c);
+        },
+      },
+    };
+    expect(ACTIVATE_FLASH_MS).toBe(400);
+    expect(applyActivateFlash(card, true)).toEqual({ className: ACTIVATE_FLASH_CLASS, ms: 400 });
+    expect(tokens.has('is-flash')).toBe(true);
+    expect(applyActivateFlash(card, false)).toEqual({ className: '', ms: 400 });
+    expect(tokens.has('is-flash')).toBe(false);
+    expect(applyActivateFlash(null, true).className).toBe('is-flash');
+    expect(applyActivateFlash({ classList: undefined }, true).ms).toBe(400);
+    const boom = {
+      classList: {
+        add() {
+          throw new Error('nope');
+        },
+        remove() {
+          throw new Error('nope');
+        },
+      },
+    };
+    expect(() => applyActivateFlash(boom, true)).not.toThrow();
+  });
+});
+
+describe('plugins webview filter count + kind svg', () => {
+  const cards = samplePlugins.map((p) => normalizePluginCard(p)).filter((c) => c !== null);
+
+  function readyState(partial: Partial<PluginsViewState> = {}): PluginsViewState {
+    return {
+      ...initialPluginsState(),
+      ready: true,
+      plugins: cards,
+      active: { source: 'binance-rest', engine: 'server', stream: 'binance-ws', storage: 'local' },
+      ...partial,
+    };
+  }
+
+  test('filter count: filtered / total (tab + query)', () => {
+    expect(filterCount(readyState())).toEqual({ filtered: 5, total: 5 });
+    expect(filterCount(readyState({ query: 'pyodide' }))).toEqual({ filtered: 1, total: 5 });
+    expect(filterCount(readyState({ tab: 'source' }))).toEqual({ filtered: 2, total: 5 });
+    expect(filterCount(readyState({ tab: 'source', query: 'custom' }))).toEqual({
+      filtered: 1,
+      total: 5,
+    });
+    expect(filterCount(readyState({ tab: 'dataset' }))).toEqual({ filtered: 0, total: 5 });
+    expect(filterCount(initialPluginsState())).toEqual({ filtered: 0, total: 0 });
+    expect(filterCount(null)).toEqual({ filtered: 0, total: 0 });
+    expect(filterCount(undefined)).toEqual({ filtered: 0, total: 0 });
+    expect(filterCount({ ...readyState(), plugins: { length: 2 } as unknown as PluginCard[] })).toEqual({
+      filtered: 0,
+      total: 0,
+    });
+
+    expect(formatFilterCount({ filtered: 1, total: 5 })).toBe('1 / 5');
+    expect(formatFilterCount(null)).toBe('0 / 0');
+    expect(formatFilterCount({ filtered: Number.NaN, total: -3 })).toBe('0 / 0');
+    expect(formatFilterCountAria({ filtered: 3, total: 5 })).toBe('3 of 5 plugins');
+    expect(formatFilterCountAria(undefined)).toBe('0 of 0 plugins');
+
+    const html = pluginsViewHtml(readyState());
+    expect(html).toContain('id="plugins-count"');
+    expect(html).toContain('5 / 5');
+    expect(html).toContain('aria-label="5 of 5 plugins"');
+
+    const filtered = pluginsViewHtml(readyState({ query: 'pyodide' }));
+    expect(filtered).toContain('>1 / 5<');
+    expect(filtered).toContain('aria-label="1 of 5 plugins"');
+
+    const sourced = pluginsViewHtml(readyState({ tab: 'source' }));
+    expect(sourced).toContain('>2 / 5<');
+  });
+
+  test('svg present in HTML: kind icons in tabs and cards', () => {
+    const html = pluginsViewHtml(readyState());
+    expect(html).toContain('viewBox="0 0 16 16"');
+    expect(html).toContain('class="plugins-kind-icon"');
+    expect(html).toContain('aria-live="polite"');
+    expect(html).toContain('id="plugins-live"');
+    expect(html).toContain('title="Copy id"');
+    expect(html).toContain('title="Activate"');
+    expect(html).toContain('title="Already active"');
+
+    for (const kind of ['source', 'stream', 'engine', 'storage', 'dataset', 'component'] as const) {
+      expect(html).toContain(`data-kind-icon="${kind}"`);
+      const icon = kindIconSvg(kind);
+      expect(icon).toContain('viewBox="0 0 16 16"');
+      expect(icon).toContain(`data-kind-icon="${kind}"`);
+      expect(icon).toContain('currentColor');
+      expect(html).toContain(icon);
+    }
+
+    expect(html).toContain('data-kind-icon="source"');
+    expect(html.match(/data-kind-icon="source"/g)?.length).toBeGreaterThanOrEqual(2);
+
+    const idle = pluginsViewHtml(initialPluginsState());
+    expect(idle).toContain('data-kind-icon="engine"');
+    expect(idle).toContain('>0 / 0<');
   });
 });

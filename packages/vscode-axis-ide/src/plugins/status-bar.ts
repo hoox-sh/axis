@@ -33,6 +33,8 @@ export const PLUGINS_STATUS_MENU_COMMAND = 'axis.plugins.statusMenu';
 export const PLUGINS_STATUS_BAR_ID = 'axis.ide.plugins';
 export const PLUGINS_STATUS_BAR_NAME = 'AXIS Plugins';
 export const PLUGINS_STATUS_BAR_PRIORITY = 98;
+/** How long `$(check)` stays on the StatusBar after a successful activate/switch. */
+export const PLUGINS_STATUS_FLASH_MS = 1200;
 
 /** Stable QuickPick action ids (tests + command dispatch). */
 export const PLUGINS_STATUS_MENU_IDS = {
@@ -66,6 +68,7 @@ type StatusBarSession = {
 };
 
 let session: StatusBarSession | undefined;
+let flashTimer: ReturnType<typeof setTimeout> | undefined;
 
 const SWITCH_KINDS = ['source', 'stream', 'engine', 'storage'] as const;
 
@@ -123,15 +126,40 @@ export function compactPluginId(id: string | undefined | null): string {
   }
 }
 
-/** Compact StatusBar text: `$(plug) src·eng`. Never embeds secrets. */
-export function formatPluginsStatusText(active: ActivePluginsV1 | undefined): string {
+export type FormatPluginsStatusTextOptions = {
+  /** When true, use `$(check)` instead of `$(plug)` (activate/switch flash). */
+  flash?: boolean;
+};
+
+/** Compact StatusBar text: `$(plug) src·eng` (or `$(check)` while flashing). Never embeds secrets. */
+export function formatPluginsStatusText(
+  active: ActivePluginsV1 | undefined,
+  opts?: FormatPluginsStatusTextOptions,
+): string {
+  let flash = false;
+  try {
+    flash = opts?.flash === true;
+  } catch {
+    flash = false;
+  }
   try {
     const src = compactPluginId(readKindId(active, 'source'));
     const eng = compactPluginId(readKindId(active, 'engine'));
-    return `$(plug) ${src}·${eng}`;
+    return `${flash ? '$(check)' : '$(plug)'} ${src}·${eng}`;
   } catch {
-    return '$(plug) —·—';
+    return flash ? '$(check) —·—' : '$(plug) —·—';
   }
+}
+
+function clearFlashTimer(): void {
+  try {
+    if (flashTimer !== undefined) {
+      clearTimeout(flashTimer);
+    }
+  } catch {
+    // ignore
+  }
+  flashTimer = undefined;
 }
 
 /**
@@ -313,13 +341,49 @@ function applyTooltip(item: StatusBarItem, active: ActivePluginsV1): void {
   }
 }
 
+export type RefreshPluginsStatusBarOptions = {
+  /** Briefly show `$(check) src·eng` then revert after {@link PLUGINS_STATUS_FLASH_MS}. */
+  flash?: boolean;
+};
+
 /** Refresh StatusBar text/tooltip from workspaceState. Never throws. */
-export function refreshPluginsStatusBar(): void {
+export function refreshPluginsStatusBar(opts?: RefreshPluginsStatusBarOptions): void {
   try {
     if (!session) return;
     const active = readActivePlugins(session.helpers);
-    session.item.text = formatPluginsStatusText(active);
+    let flash = false;
+    try {
+      flash = opts?.flash === true;
+    } catch {
+      flash = false;
+    }
+    clearFlashTimer();
+    try {
+      session.item.text = formatPluginsStatusText(active, { flash });
+    } catch {
+      // disposed
+    }
     applyTooltip(session.item, active);
+    if (flash) {
+      try {
+        flashTimer = setTimeout(() => {
+          flashTimer = undefined;
+          try {
+            if (!session) return;
+            const latest = readActivePlugins(session.helpers);
+            session.item.text = formatPluginsStatusText(latest);
+          } catch {
+            // never throw from timer
+          }
+        }, PLUGINS_STATUS_FLASH_MS);
+      } catch {
+        try {
+          session.item.text = formatPluginsStatusText(active);
+        } catch {
+          // disposed
+        }
+      }
+    }
     try {
       session.item.show();
     } catch {
@@ -440,7 +504,7 @@ async function switchKind(kind: PluginKind): Promise<void> {
     const helpers = session.helpers;
     const onChanged = session.onChanged;
     await runActivatePluginCommand(helpers, { kind, id }, async () => {
-      refreshPluginsStatusBar();
+      refreshPluginsStatusBar({ flash: true });
       if (onChanged) {
         try {
           await onChanged();
@@ -526,6 +590,7 @@ async function runPluginsStatusMenu(): Promise<void> {
 
 /** @internal Reset module session for unit tests. */
 export function _resetPluginsStatusBarForTests(): void {
+  clearFlashTimer();
   try {
     session?.item.dispose();
   } catch {
