@@ -234,10 +234,15 @@ export class AlertsTreeProvider
   }
 
   getTreeItem(element: AlertTreeNode): vscode.TreeItem {
-    const item = new vscode.TreeItem(
-      element.label,
-      vscode.TreeItemCollapsibleState.None,
-    );
+    // Defensive: Bun mock.module is global — last vscode mock may omit CollapsibleState.
+    const collapsible = (
+      vscode as {
+        TreeItemCollapsibleState?: { None?: number };
+      }
+    ).TreeItemCollapsibleState;
+    const none =
+      collapsible && typeof collapsible.None === 'number' ? collapsible.None : 0;
+    const item = new vscode.TreeItem(element.label, none);
     item.id = element.id;
     item.description = element.description;
     item.contextValue = element.empty

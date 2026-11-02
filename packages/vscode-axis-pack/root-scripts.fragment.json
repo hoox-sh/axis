@@ -1,0 +1,4 @@
+{
+  "_note": "Wiring fragment — merge into root package.json scripts. Do not edit packages/vscode-axis-ide/package.json for this pack.",
+  "vscode:pack:package": "bun run --cwd packages/vscode-axis-pack package"
+}

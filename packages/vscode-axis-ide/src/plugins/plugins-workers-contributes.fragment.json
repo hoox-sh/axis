@@ -36,6 +36,11 @@
   },
   "notes": {
     "merge": "Merge views into contributes.views.axis alongside library/layers/indicators. Merge commands + activationEvents into package.json when wiring Task 17 into activate (extension.ts owns final contributes).",
+    "settingsAlreadyInPackageJson": [
+      "axis.plugins.allowUrlInstall",
+      "axis.engine.allowPyodide"
+    ],
+    "allowPyodide": "Already contributed in package.json (default false). Fragment documents merge intent only — do not duplicate the property. Task 27: version lock LOCAL_PYODIDE_VERSION 0.29.5 in src/host/pyodide-profile.ts; chart CSP widen via buildChartCspDirectives when flag on; Wasm assets not shipped in VSIX.",
     "globalState": {
       "key": "axis.plugins.v1",
       "shape": "InstalledPluginMeta[] — { url, id, name, kind, description? }",

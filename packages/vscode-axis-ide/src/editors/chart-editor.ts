@@ -55,6 +55,7 @@ import {
   serializeChartDocument,
 } from './chart-document';
 import { appendDrawingToDoc } from './chart-drawings';
+import { isPyodideAllowed } from '../host/pyodide-profile';
 import { buildChartWebviewHtml } from './chart-html';
 import { handleChartWebviewMessage } from './chart-messages';
 
@@ -238,6 +239,17 @@ function assertChartAssets(extensionUri: Uri): void {
   }
 }
 
+/** Read `axis.engine.allowPyodide` (default false; never throws). */
+function readAllowPyodide(): boolean {
+  try {
+    return isPyodideAllowed(
+      workspace.getConfiguration('axis.engine').get<boolean>('allowPyodide', false),
+    );
+  } catch {
+    return false;
+  }
+}
+
 function getChartHtml(webview: Webview, extensionUri: Uri): string {
   assertChartAssets(extensionUri);
   const script = webview.asWebviewUri(chartAssetPath(extensionUri, 'main.js'));
@@ -247,6 +259,7 @@ function getChartHtml(webview: Webview, extensionUri: Uri): string {
     scriptUri: script.toString(),
     styleUri: style.toString(),
     bodyClass: themeBodyClass(window.activeColorTheme.kind),
+    allowPyodide: readAllowPyodide(),
   });
 }
 

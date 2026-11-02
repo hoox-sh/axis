@@ -76,6 +76,7 @@
     "onCommand:axis.watchlist.add",
     "onCommand:axis.watchlist.remove",
     "onCommand:axis.chart.drawing.trendline",
+    "onCommand:axis.mcp.showConfig",
     "workspaceContains:**/*.axis.json",
     "workspaceContains:**/*.pyne",
     "workspaceContains:**/*.pine",
@@ -244,6 +245,11 @@
         "command": "axis.chart.drawing.trendline",
         "title": "Drawing: Trendline",
         "category": "AXIS Chart"
+      },
+      {
+        "command": "axis.mcp.showConfig",
+        "title": "Show MCP Config Snippet",
+        "category": "AXIS"
       }
     ],
     "keybindings": [
@@ -377,8 +383,76 @@
             "type": "boolean",
             "default": false,
             "description": "Allow installing plugins from remote URLs (default off)."
+          },
+          "axis.mcp.stdio": {
+            "type": "boolean",
+            "default": true,
+            "description": "Advertise axis mcp stdio server via McpServerDefinitionProvider."
+          },
+          "axis.mcp.command": {
+            "type": "string",
+            "default": "",
+            "markdownDescription": "Absolute path or command name for the AXIS CLI used by the MCP stdio provider. When set, skips PATH/`allowNpx` resolution."
+          },
+          "axis.mcp.allowNpx": {
+            "type": "boolean",
+            "default": false,
+            "markdownDescription": "If true and `axis` is not on PATH (and `axis.mcp.command` is empty), advertise `npx -y @hoox-sh/axis-cli` as the MCP stdio command. If false (default), soft-fail: no MCP definition + one warning pointing at `AXIS: Show MCP Config Snippet`."
           }
         }
+      }
+    ],
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "axis.mcp",
+        "label": "AXIS MCP"
+      }
+    ],
+    "languageModelTools": [
+      {
+        "name": "axis_run_script",
+        "displayName": "AXIS Run Script",
+        "modelDescription": "Run the active Pine/PYNE script through AXIS IDE orchestration and return lastRun summary (not full plot arrays).",
+        "toolReferenceName": "axis_run_script",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": ["auto", "interpret", "compile"]
+            },
+            "focus": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        },
+        "tags": ["axis", "pyne"]
+      },
+      {
+        "name": "axis_get_results_focus",
+        "displayName": "AXIS Results Focus",
+        "modelDescription": "Return resultsFocusId, newestRunId, and lastRun summary for the AXIS IDE session.",
+        "toolReferenceName": "axis_get_results_focus",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        },
+        "tags": ["axis"]
+      },
+      {
+        "name": "axis_chart_snapshot_meta",
+        "displayName": "AXIS Chart Meta",
+        "modelDescription": "Return seriesKey, interval, script ids, live status for the active AXIS chart document.",
+        "toolReferenceName": "axis_chart_meta",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        },
+        "tags": ["axis", "chart"]
       }
     ]
   },

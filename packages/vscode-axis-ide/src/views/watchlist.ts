@@ -314,10 +314,15 @@ export class WatchlistTreeProvider implements vscode.TreeDataProvider<WatchlistT
   }
 
   getTreeItem(element: WatchlistTreeNode): vscode.TreeItem {
-    const item = new vscode.TreeItem(
-      element.label,
-      vscode.TreeItemCollapsibleState.None,
-    );
+    // Defensive: Bun mock.module is global — last vscode mock may omit CollapsibleState.
+    const collapsible = (
+      vscode as {
+        TreeItemCollapsibleState?: { None?: number };
+      }
+    ).TreeItemCollapsibleState;
+    const none =
+      collapsible && typeof collapsible.None === 'number' ? collapsible.None : 0;
+    const item = new vscode.TreeItem(element.label, none);
     item.id = element.id;
     if (element.kind === 'symbol' && element.symbol) {
       item.contextValue = 'axis.watchlist.symbol';

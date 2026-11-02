@@ -17,7 +17,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { describe, expect, test } from 'bun:test';
-import { buildChartWebviewHtml, escapeHtmlAttr, htmlHasInlineScript } from './chart-html';
+import {
+  buildChartCspDirectives,
+  buildChartWebviewHtml,
+  escapeHtmlAttr,
+  htmlHasInlineScript,
+} from './chart-html';
 
 const CSP_SOURCE = 'https://csp.example.vscode-webview.test';
 
@@ -33,6 +38,8 @@ describe('chart CSP HTML builder', () => {
     expect(html).toContain(`script-src ${CSP_SOURCE}`);
     expect(html).not.toContain("script-src 'unsafe-inline'");
     expect(html).not.toContain('script-src *');
+    expect(html).not.toContain("'wasm-unsafe-eval'");
+    expect(html).not.toContain('worker-src');
     expect(html).toContain(`style-src ${CSP_SOURCE} 'unsafe-inline'`);
     expect(html).toContain(`img-src ${CSP_SOURCE} data: blob:`);
     expect(html).toContain("default-src 'none'");
@@ -48,6 +55,42 @@ describe('chart CSP HTML builder', () => {
     expect(html).toContain('class="vscode-dark"');
     expect(htmlHasInlineScript(html)).toBe(false);
     expect(html.includes('<script>')).toBe(false);
+  });
+
+  test('default CSP directives omit Pyodide widen', () => {
+    const csp = buildChartCspDirectives(CSP_SOURCE).join('; ');
+    expect(csp).toBe(
+      [
+        "default-src 'none'",
+        "base-uri 'none'",
+        "form-action 'none'",
+        `script-src ${CSP_SOURCE}`,
+        `style-src ${CSP_SOURCE} 'unsafe-inline'`,
+        `img-src ${CSP_SOURCE} data: blob:`,
+        "connect-src 'none'",
+      ].join('; '),
+    );
+    expect(csp).not.toContain('wasm-unsafe-eval');
+    expect(csp).not.toContain('worker-src');
+  });
+
+  test('allowPyodide widens script-src and adds worker-src blob:', () => {
+    const directives = buildChartCspDirectives(CSP_SOURCE, true);
+    const csp = directives.join('; ');
+    expect(csp).toContain(`script-src ${CSP_SOURCE} 'wasm-unsafe-eval'`);
+    expect(csp).toContain(`worker-src blob: ${CSP_SOURCE}`);
+    expect(csp).toContain("connect-src 'none'");
+
+    const html = buildChartWebviewHtml({
+      cspSource: CSP_SOURCE,
+      scriptUri: `${CSP_SOURCE}/main.js`,
+      styleUri: `${CSP_SOURCE}/main.css`,
+      bodyClass: 'vscode-dark',
+      allowPyodide: true,
+    });
+    expect(html).toContain(`script-src ${CSP_SOURCE} 'wasm-unsafe-eval'`);
+    expect(html).toContain(`worker-src blob: ${CSP_SOURCE}`);
+    expect(htmlHasInlineScript(html)).toBe(false);
   });
 
   test('escapes URI attribute characters', () => {

@@ -1,0 +1,13 @@
+.vscode/**
+.git/**
+.gitignore
+node_modules/**
+**/*.vsix
+**/.DS_Store
+bun.lock
+package-lock.json
+**/*.fragment.json
+**/*WIRING*
+**/*wiring*
+# Maintainer publish guide — repo-only (README.md still ships).
+PUBLISH.md

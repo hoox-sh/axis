@@ -21,6 +21,9 @@ bunfig.toml
 **/*.vsix
 **/*.md
 !README.md
+# Package root legal files (NOTICE has no extension; keep explicit).
+!NOTICE
+!LICENSE
 **/.DS_Store
 test-fixtures/**
 fixtures/**

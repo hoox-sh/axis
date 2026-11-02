@@ -24,6 +24,11 @@ export interface ChartHtmlOptions {
   styleUri: string;
   /** VS Code theme body class (`vscode-dark` / `vscode-light` / high-contrast variants). */
   bodyClass: string;
+  /**
+   * When true, widen chart CSP for optional Pyodide (`axis.engine.allowPyodide`).
+   * Default false — paint-only matrix unchanged. See `docs/csp-matrix.md`.
+   */
+  allowPyodide?: boolean;
 }
 
 /** Escape a value for use inside a double-quoted HTML attribute. */
@@ -36,6 +41,31 @@ export function escapeHtmlAttr(value: string): string {
 }
 
 /**
+ * Chart CSP directives (KD-6). Default paint-only; optional Pyodide widen adds
+ * `'wasm-unsafe-eval'` + `worker-src blob: ${cspSource}` when `allowPyodide`.
+ */
+export function buildChartCspDirectives(cspSource: string, allowPyodide = false): string[] {
+  const src = String(cspSource ?? '');
+  const scriptSrc = allowPyodide
+    ? `script-src ${src} 'wasm-unsafe-eval'`
+    : `script-src ${src}`;
+  const directives = [
+    "default-src 'none'",
+    "base-uri 'none'",
+    "form-action 'none'",
+    scriptSrc,
+    `style-src ${src} 'unsafe-inline'`,
+    // blob: reserved for canvas/LWC exports (design CSP matrix).
+    `img-src ${src} data: blob:`,
+    "connect-src 'none'",
+  ];
+  if (allowPyodide) {
+    directives.push(`worker-src blob: ${src}`);
+  }
+  return directives;
+}
+
+/**
  * Build CSP + HTML for the chart custom editor webview.
  * No inline scripts (KD-6 / design CSP matrix). Styles may use 'unsafe-inline' for theme vars.
  */
@@ -44,17 +74,9 @@ export function buildChartWebviewHtml(opts: ChartHtmlOptions): string {
   const scriptUri = String(opts.scriptUri ?? '');
   const styleUri = String(opts.styleUri ?? '');
   const bodyClass = String(opts.bodyClass ?? 'vscode-dark');
+  const allowPyodide = opts.allowPyodide === true;
 
-  const csp = [
-    "default-src 'none'",
-    "base-uri 'none'",
-    "form-action 'none'",
-    `script-src ${cspSource}`,
-    `style-src ${cspSource} 'unsafe-inline'`,
-    // blob: reserved for future canvas/LWC exports (design CSP matrix).
-    `img-src ${cspSource} data: blob:`,
-    "connect-src 'none'",
-  ].join('; ');
+  const csp = buildChartCspDirectives(cspSource, allowPyodide).join('; ');
 
   const safeCsp = escapeHtmlAttr(csp);
   const safeScript = escapeHtmlAttr(scriptUri);

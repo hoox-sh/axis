@@ -76,6 +76,7 @@ const EXPECTED_COMMANDS = [
   'axis.watchlist.add',
   'axis.watchlist.remove',
   'axis.chart.drawing.trendline',
+  'axis.mcp.showConfig',
 ] as const;
 const EXPECTED_SETTINGS = [
   'axis.telemetry.offline',
@@ -89,6 +90,9 @@ const EXPECTED_SETTINGS = [
   'axis.worker.url',
   'axis.live.enabled',
   'axis.plugins.allowUrlInstall',
+  'axis.mcp.stdio',
+  'axis.mcp.command',
+  'axis.mcp.allowNpx',
 ] as const;
 /** Must never appear as contributes.configuration — SecretStorage only (KD-8). */
 const FORBIDDEN_SETTINGS = ['axis.worker.apiKey', 'axis.pro.apiKey'] as const;
@@ -108,7 +112,15 @@ const ALLOWED_CONTRIBUTE_KEYS = new Set([
   'keybindings',
   'viewsContainers',
   'views',
+  'mcpServerDefinitionProviders',
+  'languageModelTools',
 ]);
+const EXPECTED_MCP_PROVIDERS = [{ id: 'axis.mcp', label: 'AXIS MCP' }] as const;
+const EXPECTED_LM_TOOLS = [
+  'axis_run_script',
+  'axis_get_results_focus',
+  'axis_chart_snapshot_meta',
+] as const;
 const EXPECTED_PANEL_VIEWS = ['axis.results', 'axis.strategy'] as const;
 const EXPECTED_ACTIVITY_VIEWS = [
   'axis.library',
@@ -335,6 +347,35 @@ suite('AXIS IDE Extension Structure', () => {
     const silent = palette.find((e) => e.command === 'axis.runScriptSilent');
     assert.ok(silent, 'commandPalette must contribute axis.runScriptSilent');
     assert.strictEqual(silent?.when, 'editorLangId == pinescript');
+  });
+
+  test('contributes MCP provider + languageModelTools (KD-9 / Task 21–22)', () => {
+    const providers = (
+      pkg.contributes as {
+        mcpServerDefinitionProviders?: Array<{ id: string; label?: string }>;
+      }
+    )?.mcpServerDefinitionProviders ?? [];
+    assert.strictEqual(providers.length, EXPECTED_MCP_PROVIDERS.length);
+    for (const expected of EXPECTED_MCP_PROVIDERS) {
+      const found = providers.find((p) => p.id === expected.id);
+      assert.ok(found, `missing mcpServerDefinitionProvider ${expected.id}`);
+      assert.strictEqual(found?.label, expected.label);
+    }
+
+    const tools = (
+      pkg.contributes as {
+        languageModelTools?: Array<{ name: string }>;
+      }
+    )?.languageModelTools ?? [];
+    const names = tools.map((t) => t.name);
+    for (const id of EXPECTED_LM_TOOLS) {
+      assert.ok(names.includes(id), `missing languageModelTool ${id}`);
+    }
+    assert.deepStrictEqual(
+      [...names].sort(),
+      [...EXPECTED_LM_TOOLS].sort(),
+      'languageModelTools inventory drifted',
+    );
   });
 });
 

@@ -61,7 +61,21 @@ Activates on P0 commands and when the workspace contains AXIS/Pine sources. Pine
 | AXIS: Set Pro API Key | `axis.secrets.setProKey` |
 | AXIS: Clear Stored Secrets | `axis.secrets.clear` (Worker + Pro) |
 
-Worker keys must match `/^pn_[a-f0-9]{48}$/`. Pro keys require `pyn_` + 20–508 `[A-Za-z0-9_-]`. Empty input clears that slot. Keys are **never** `contributes.configuration` properties (no `axis.worker.apiKey` / `axis.pro.apiKey` settings). Run requires a Pro key in SecretStorage (no plaintext PYNE settings fallback).
+### SecretStorage UX (`axis.secrets.*`)
+
+Keys live only in `ExtensionContext.secrets` (VS Code SecretStorage):
+
+| Slot | Prefix / shape | Commands |
+| --- | --- | --- |
+| Worker API key | `/^pn_[a-f0-9]{48}$/` | `axis.secrets.setWorkerKey` |
+| Pro API key | `pyn_` + 20–508 `[A-Za-z0-9_-]` | `axis.secrets.setProKey` |
+| Both | — | `axis.secrets.clear` (confirm; deletes Worker + Pro) |
+
+- Set flows use `showInputBox({ password: true })`; invalid input is rejected **before** store.
+- Empty input on a set command clears that slot.
+- Status bar shows Worker/Pro **set/missing** only — never key material.
+- Keys are **never** `contributes.configuration` properties (no `axis.worker.apiKey` / `axis.pro.apiKey`).
+- Run / live paths read SecretStorage only (no plaintext PYNE settings import — Q5).
 
 ## Settings
 
@@ -71,6 +85,7 @@ Worker keys must match `/^pn_[a-f0-9]{48}$/`. Pro keys require `pyn_` + 20–508
 | `axis.engine.id` | `server` | Pro `/run` only in this release |
 | `axis.engine.endpoint` | `http://127.0.0.1:5002` | Pro base URL (no `/run` suffix); loopback unless remote allowed |
 | `axis.engine.allowRemoteEndpoint` | `false` | Opt-in before sending Bearer off-machine (**application** scope — workspace cannot enable) |
+| `axis.engine.allowPyodide` | `false` | Opt-in chart CSP widen for optional Pyodide calculator (`wasm-unsafe-eval` + `worker-src blob:`). Bars-in only; **Wasm assets not shipped** in this VSIX (version lock `0.29.5`) |
 | `axis.chart.useMockBars` | `true` | Mock/fixture bars for chart + run (safe default). Set **false** for real history via datafeed |
 | `axis.chart.historyBars` | `1500` | Default history window (clamped ≤20000) |
 | `axis.datafeed.url` | `http://127.0.0.1:5003` | Local axis-datafeed base (`GET /datafeed/ohlcv`); remote needs `axis.engine.allowRemoteEndpoint` |
@@ -78,6 +93,26 @@ Worker keys must match `/^pn_[a-f0-9]{48}$/`. Pro keys require `pyn_` + 20–508
 **Real history:** start `@hoox-sh/axis-datafeed` on `:5003`, set `axis.chart.useMockBars` to `false`. Chart clears then paints fetched bars (`chart.full` seq above handshake); runs fail clearly if fetch fails (no empty `/run` body, no silent mock).
 
 Secrets are **not** settings — use the `axis.secrets.*` commands above.
+
+## Webview CSP
+
+Chart and Results/Strategy webviews share a paint-only CSP (host proxies network):
+
+| Directive | Value |
+| --- | --- |
+| `default-src` | `'none'` |
+| `script-src` | `${webview.cspSource}` (no inline script) |
+| `style-src` | `${webview.cspSource} 'unsafe-inline'` |
+| `img-src` | `${webview.cspSource} data: blob:` |
+| `connect-src` | `'none'` |
+
+When **`axis.engine.allowPyodide`** is enabled (default **false**), the **chart**
+webview only adds `'wasm-unsafe-eval'` to `script-src` and
+`worker-src blob: ${webview.cspSource}` (helper `buildChartCspDirectives`).
+Results/Strategy stay paint-only. Pyodide remains a bars-in calculator stub
+(`LOCAL_PYODIDE_VERSION = '0.29.5'`); multi-MB Wasm is not packaged in the VSIX yet.
+
+Full matrix vs the AXIS PWA and the Pyodide enable path: [docs/csp-matrix.md](./docs/csp-matrix.md). Do not change runtime CSP without updating that doc.
 
 ## Develop
 
@@ -102,4 +137,4 @@ Electron tests need `hoox-sh.pyne` installed into the downloaded VS Code. By def
 
 ## License
 
-GNU Affero General Public License **version 3 only** (SPDX: `AGPL-3.0-only`). See [LICENSE](./LICENSE) and the AXIS root `NOTICE`.
+GNU Affero General Public License **version 3 only** (SPDX: `AGPL-3.0-only`). See [LICENSE](./LICENSE) and package [NOTICE](./NOTICE) (lists **TradingView Lightweight Charts™** Apache-2.0 and other third-party). File headers must not say “or later”. Sister extension `hoox-sh.pyne` remains AGPL-3.0-or-later — do not relicense it.

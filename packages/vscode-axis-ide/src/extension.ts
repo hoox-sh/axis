@@ -24,9 +24,11 @@
  */
 
 import {
+  type CancellationToken,
   type DiagnosticCollection,
   type ExtensionContext,
   type OutputChannel,
+  type TextDocument,
   Diagnostic,
   DiagnosticSeverity,
   Position,
@@ -42,6 +44,10 @@ import {
 } from 'vscode';
 import { RUN_NO_PINE_MESSAGE, RUN_OUTPUT_CHANNEL_NAME } from './constants';
 import { registerChartEditorProvider } from './editors/chart-editor';
+import {
+  type AxisChartDocV1,
+  parseChartDocument,
+} from './editors/chart-document';
 import { registerApplyBuiltin, APPLY_BUILTIN_COMMAND } from './host/apply-builtin';
 import {
   OPEN_CHART_NO_PINE_MESSAGE,
@@ -50,6 +56,7 @@ import {
   planSiblingChartOpen,
   siblingAxisJsonPath,
 } from './host/open-chart';
+import { buildSeriesKey } from './host/series-key';
 import {
   AxisSecretStorage,
   SECRET_STORE_ERROR,
@@ -70,6 +77,7 @@ import {
   scrubSecrets,
   type RunDiagnostic,
   type RunDeps,
+  type RunMode,
 } from './run';
 import {
   DEFAULT_WORKER_URL,
@@ -83,6 +91,12 @@ import {
 } from './live';
 import { DRAWING_TOOL_TRENDLINE } from './editors/chart-drawings';
 import { registerPluginsAndWorkers } from './plugins';
+import {
+  type ChartSnapshotMeta,
+  type LmRunScriptResult,
+  registerLmTools,
+} from './mcp/lm-tools';
+import { MCP_COMMANDS, registerMcpProvider } from './mcp/provider';
 import { ALERTS_ADD_COMMAND, ALERTS_REMOVE_COMMAND, registerAlertsView } from './views/alerts';
 import { RESULTS_VIEW_ID, registerResultsView } from './views/results';
 import { registerStrategyView } from './views/strategy';
@@ -109,6 +123,7 @@ export const COMMANDS = {
   watchlistAdd: WATCHLIST_COMMANDS.add,
   watchlistRemove: WATCHLIST_COMMANDS.remove,
   drawingTrendline: 'axis.chart.drawing.trendline',
+  mcpShowConfig: MCP_COMMANDS.showConfig,
 } as const;
 
 export { RUN_NO_PINE_MESSAGE };
@@ -255,24 +270,112 @@ function readEngineSettings(): {
   return { engineId, endpoint, allowRemote, historyBarsSetting, useMockBars, datafeedUrl };
 }
 
+/** Extract script ids from chart doc.scripts (string or {id|scriptId|name}). */
+function scriptIdsFromDoc(scripts: unknown[]): string[] {
+  const out: string[] = [];
+  try {
+    for (const entry of scripts) {
+      if (typeof entry === 'string') {
+        const t = entry.trim();
+        if (t) out.push(t);
+        continue;
+      }
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+      const bag = entry as Record<string, unknown>;
+      const raw = bag.id ?? bag.scriptId ?? bag.name;
+      if (typeof raw === 'string' && raw.trim()) out.push(raw.trim());
+    }
+  } catch {
+    // hostile scripts array
+  }
+  return out;
+}
+
+function isAxisJsonPath(name: string): boolean {
+  return /\.axis\.json$/i.test(name);
+}
+
+/** Prefer active / visible / open `*.axis.json` TextDocument → parsed chart doc. */
+function findActiveAxisChartDoc(): AxisChartDocV1 | null {
+  try {
+    const seen = new Set<string>();
+    const candidates: TextDocument[] = [];
+    const push = (doc: TextDocument | undefined): void => {
+      if (!doc) return;
+      const key = doc.uri.toString();
+      if (seen.has(key)) return;
+      seen.add(key);
+      candidates.push(doc);
+    };
+    push(window.activeTextEditor?.document);
+    for (const ed of window.visibleTextEditors) push(ed.document);
+    for (const doc of workspace.textDocuments) push(doc);
+    for (const doc of candidates) {
+      const name = doc.fileName || doc.uri.fsPath || doc.uri.path || '';
+      if (!isAxisJsonPath(name)) continue;
+      const parsed = parseChartDocument(doc.getText());
+      if (parsed.ok) return parsed.doc;
+    }
+  } catch {
+    // hostile editors / docs
+  }
+  return null;
+}
+
+function getChartSnapshotMeta(): ChartSnapshotMeta | null {
+  const doc = findActiveAxisChartDoc();
+  if (!doc) return null;
+  const seriesKey = buildSeriesKey(doc);
+  const live = liveBridge?.getHudState() ?? 'off';
+  const meta: ChartSnapshotMeta = {
+    seriesKey,
+    interval: doc.interval || '1m',
+    scriptIds: scriptIdsFromDoc(doc.scripts),
+    live,
+  };
+  if (doc.symbol) meta.symbol = doc.symbol;
+  if (doc.exchange) meta.exchange = doc.exchange;
+  if (doc.market) meta.market = doc.market;
+  return meta;
+}
+
 /**
  * Run the active Pine buffer against Pro `/run`.
  * Uses mock bars when `axis.chart.useMockBars` is true; otherwise HistoryClient.
  * `focus` selects §7.1 Results focus rules. Returns a short status string.
  */
 async function runScriptCommand(focus: boolean): Promise<string | undefined> {
-  if (deactivated) return undefined;
+  const result = await runScriptCore({ mode: 'auto', focus, showErrors: focus });
+  if (result.ok) return result.runId ? `ok:${result.runId}` : 'ok';
+  if (result.reason === 'stale') return 'stale';
+  if (result.reason === 'aborted') return 'aborted';
+  return result.error;
+}
+
+/**
+ * Shared run path for commands + LM tools. Summaries only at the LM boundary.
+ */
+async function runScriptCore(opts: {
+  mode: RunMode;
+  focus: boolean;
+  showErrors: boolean;
+  token?: CancellationToken;
+}): Promise<LmRunScriptResult> {
+  const { mode, focus, showErrors } = opts;
+  if (deactivated) {
+    return { ok: false, mode, focus, error: 'AXIS IDE deactivated' };
+  }
   try {
     const editor = window.activeTextEditor;
     const doc = editor?.document;
     if (!doc || doc.languageId !== PINE_LANGUAGE_ID) {
-      void window.showErrorMessage(RUN_NO_PINE_MESSAGE);
-      return RUN_NO_PINE_MESSAGE;
+      if (showErrors) void window.showErrorMessage(RUN_NO_PINE_MESSAGE);
+      return { ok: false, mode, focus, error: RUN_NO_PINE_MESSAGE };
     }
     if (!secrets || !orchestrator || !resultsStore || !runOutput) {
       const err = 'AXIS: Run Script is not ready (activate incomplete).';
-      void window.showErrorMessage(err);
-      return err;
+      if (showErrors) void window.showErrorMessage(err);
+      return { ok: false, mode, focus, error: err };
     }
     const secretStore = secrets;
     const runOrch = orchestrator;
@@ -282,7 +385,9 @@ async function runScriptCommand(focus: boolean): Promise<string | undefined> {
     const script = doc.getText();
     const pinePath = doc.uri.scheme === 'file' ? doc.uri.fsPath : '';
     const chartJson = pinePath ? await readSiblingChartJson(pinePath) : null;
-    if (deactivated) return undefined;
+    if (deactivated) {
+      return { ok: false, mode, focus, reason: 'aborted', error: 'aborted' };
+    }
 
     const settings = readEngineSettings();
     const endpointCheck = checkEngineEndpoint(settings.endpoint, {
@@ -291,11 +396,30 @@ async function runScriptCommand(focus: boolean): Promise<string | undefined> {
     if (!endpointCheck.ok) {
       const err = scrubSecrets(endpointCheck.error);
       output.appendLine(err);
-      if (focus) void window.showErrorMessage(err);
-      return err;
+      if (showErrors) void window.showErrorMessage(err);
+      return { ok: false, mode, focus, error: err };
     }
 
     const signal = beginCommandAbort();
+    const token = opts.token;
+    if (token) {
+      if (token.isCancellationRequested) {
+        try {
+          commandAbort?.abort();
+        } catch {
+          // ignore
+        }
+        return { ok: false, mode, focus, reason: 'aborted', error: 'aborted' };
+      }
+      token.onCancellationRequested(() => {
+        try {
+          commandAbort?.abort();
+        } catch {
+          // ignore
+        }
+      });
+    }
+
     const resolved = await resolveRunContext(chartJson, {
       historyBarsSetting: settings.historyBarsSetting,
       engineId: settings.engineId,
@@ -305,14 +429,18 @@ async function runScriptCommand(focus: boolean): Promise<string | undefined> {
       allowRemote: settings.allowRemote,
       signal,
     });
-    if (deactivated) return undefined;
+    if (deactivated) {
+      return { ok: false, mode, focus, reason: 'aborted', error: 'aborted' };
+    }
     if (!resolved.ok) {
       const err = scrubSecrets(resolved.error);
       output.appendLine(err);
-      if (focus) void window.showErrorMessage(err);
-      return err;
+      if (showErrors) void window.showErrorMessage(err);
+      return { ok: false, mode, focus, error: err };
     }
     const ctx = resolved.ctx;
+    // LM may override mode; command path keeps resolveRunContext default ('auto').
+    const runMode: RunMode = mode || ctx.mode || 'auto';
 
     const deps: RunDeps = {
       secrets: {
@@ -337,7 +465,7 @@ async function runScriptCommand(focus: boolean): Promise<string | undefined> {
       {
         script,
         uri: doc.uri.toString(),
-        mode: ctx.mode,
+        mode: runMode,
         focus,
         bars: ctx.bars,
         seriesKey: ctx.seriesKey,
@@ -347,23 +475,48 @@ async function runScriptCommand(focus: boolean): Promise<string | undefined> {
       },
       deps,
     );
-    if (deactivated) return undefined;
+    if (deactivated) {
+      return { ok: false, mode: runMode, focus, reason: 'aborted', error: 'aborted' };
+    }
 
     if (outcome.ok) {
-      return `ok:${outcome.runId}`;
+      return {
+        ok: true,
+        mode: runMode,
+        focus,
+        epoch: outcome.epoch,
+        runId: outcome.runId,
+      };
     }
-    if (outcome.reason === 'stale') return 'stale';
-    if (outcome.reason === 'aborted') return 'aborted';
+    if (outcome.reason === 'stale') {
+      return { ok: false, mode: runMode, focus, reason: 'stale', epoch: outcome.epoch };
+    }
+    if (outcome.reason === 'aborted') {
+      return {
+        ok: false,
+        mode: runMode,
+        focus,
+        reason: 'aborted',
+        epoch: outcome.epoch,
+        error: 'aborted',
+      };
+    }
     const err = scrubSecrets(outcome.error || 'AXIS run failed');
-    // Toast only for focused user runs — silent path stays quiet.
-    if (focus) void window.showErrorMessage(err);
-    return err;
+    if (showErrors) void window.showErrorMessage(err);
+    return {
+      ok: false,
+      mode: runMode,
+      focus,
+      reason: 'error',
+      epoch: outcome.epoch,
+      error: err,
+    };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     const err = scrubSecrets(`AXIS: Run Script failed: ${message}`);
     runOutput?.appendLine(err);
-    if (focus) void window.showErrorMessage(err);
-    return err;
+    if (showErrors) void window.showErrorMessage(err);
+    return { ok: false, mode, focus, error: err };
   }
 }
 function warnIfPyneBelowRecommended(): void {
@@ -618,6 +771,7 @@ export function activate(context: ExtensionContext): void {
     get: <T>(key: string) => context.globalState.get<T>(key),
     update: (key, value) => context.globalState.update(key, value),
   });
+  registerMcpProvider(context);
 
   runOutput = window.createOutputChannel(RUN_OUTPUT_CHANNEL_NAME);
   context.subscriptions.push(runOutput);
@@ -698,6 +852,14 @@ export function activate(context: ExtensionContext): void {
   });
   onFrame = fanout.onFrame;
   applyLiveHud(bridge.getStatusLabel());
+
+  const focusStoreForLm = resultsStore;
+  registerLmTools(context, {
+    runScript: ({ mode, focus, token }) =>
+      runScriptCore({ mode, focus, showErrors: false, token }),
+    results: focusStoreForLm,
+    getChartSnapshotMeta,
+  });
 
   context.subscriptions.push(
     registerChartEditorProvider(context),

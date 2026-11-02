@@ -1,0 +1,45 @@
+{
+  "activationEvents": [
+    "onCommand:axis.mcp.showConfig"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "axis.mcp.showConfig",
+        "title": "Show MCP Config Snippet",
+        "category": "AXIS"
+      }
+    ],
+    "configuration": {
+      "title": "AXIS IDE MCP",
+      "properties": {
+        "axis.mcp.stdio": {
+          "type": "boolean",
+          "default": true,
+          "description": "Advertise axis mcp stdio server via McpServerDefinitionProvider."
+        },
+        "axis.mcp.command": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Absolute path or command name for the AXIS CLI used by the MCP stdio provider. When set, skips PATH/`allowNpx` resolution."
+        },
+        "axis.mcp.allowNpx": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "If true and `axis` is not on PATH (and `axis.mcp.command` is empty), advertise `npx -y @hoox-sh/axis-cli` as the MCP stdio command. If false (default), soft-fail: no MCP definition + one warning pointing at `AXIS: Show MCP Config Snippet`."
+        }
+      }
+    },
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "axis.mcp",
+        "label": "AXIS MCP"
+      }
+    ]
+  },
+  "notes": {
+    "merge": "Merge commands + configuration.properties + mcpServerDefinitionProviders + onCommand:axis.mcp.showConfig activation into package.json. Call registerMcpProvider(context) from activate (extension.ts owned by wiring agent). Do not contribute languageModelTools here — Task 22 / lm-tools.ts.",
+    "resolution": "KD-9: axis.mcp.command → which axis → allowNpx? npx -y @hoox-sh/axis-cli : null. Soft-fail returns empty defs + warning + Show MCP Config action.",
+    "secrets": "Stdio child env AXIS_API_KEY from SecretStorage cloudApiKey only — never --key argv. Worker URL from axis.worker.url (default https://worker.axis.hoox.sh)."
+  }
+}

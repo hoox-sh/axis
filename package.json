@@ -65,7 +65,8 @@
     "vscode:ide:compile": "bun run --cwd packages/vscode-axis-ide compile",
     "vscode:ide:test": "bun run --cwd packages/vscode-axis-ide test",
     "vscode:ide:test:coverage:gate": "bun run --cwd packages/vscode-axis-ide test:coverage:gate",
-    "vscode:ide:package": "bun run --cwd packages/vscode-axis-ide package"
+    "vscode:ide:package": "bun run --cwd packages/vscode-axis-ide package",
+    "vscode:pack:package": "bun run --cwd packages/vscode-axis-pack package"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.18.0",

@@ -1,0 +1,56 @@
+{
+  "contributes": {
+    "languageModelTools": [
+      {
+        "name": "axis_run_script",
+        "displayName": "AXIS Run Script",
+        "modelDescription": "Run the active Pine/PYNE script through AXIS IDE orchestration and return lastRun summary (not full plot arrays).",
+        "toolReferenceName": "axis_run_script",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": ["auto", "interpret", "compile"]
+            },
+            "focus": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        },
+        "tags": ["axis", "pyne"]
+      },
+      {
+        "name": "axis_get_results_focus",
+        "displayName": "AXIS Results Focus",
+        "modelDescription": "Return resultsFocusId, newestRunId, and lastRun summary for the AXIS IDE session.",
+        "toolReferenceName": "axis_get_results_focus",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        },
+        "tags": ["axis"]
+      },
+      {
+        "name": "axis_chart_snapshot_meta",
+        "displayName": "AXIS Chart Meta",
+        "modelDescription": "Return seriesKey, interval, script ids, live status for the active AXIS chart document.",
+        "toolReferenceName": "axis_chart_meta",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        },
+        "tags": ["axis", "chart"]
+      }
+    ]
+  },
+  "notes": {
+    "merge": "Merge contributes.languageModelTools into package.json. Call registerLmTools(context, deps) from activate (extension.ts owned by wiring agent). Do not put languageModelTools in mcp-contributes.fragment.json.",
+    "secrets": "Tools return summaries only — never SecretStorage keys, never full plot/series arrays. axis_run_script uses prepareInvocation confirmation.",
+    "deps": "Wiring binds runScript → active-editor orchestrator path, results → ResultsFocusStore, getChartSnapshotMeta → active chart doc + live HUD."
+  }
+}
