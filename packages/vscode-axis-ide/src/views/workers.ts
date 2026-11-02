@@ -600,11 +600,17 @@ export async function runProbeAllCommand(
   }
 }
 
-/** Register Workers TreeView (command registration is owned by index / wiring). */
+/**
+ * Register Workers TreeView (command registration is owned by index / wiring).
+ * `{ tree: false }` returns the provider without `createTreeView` so a
+ * WebviewView can own `axis.workers` while probe commands stay registered.
+ */
 export function registerWorkersTreeView(
   context: vscode.ExtensionContext,
+  opts?: { tree?: boolean },
 ): WorkersTreeProvider {
   const provider = new WorkersTreeProvider();
+  if (opts?.tree === false) return provider;
   const view = vscode.window.createTreeView(WORKERS_VIEW_ID, {
     treeDataProvider: provider,
     showCollapseAll: false,

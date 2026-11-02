@@ -123,7 +123,11 @@ mock.module('vscode', () => {
     McpStdioServerDefinition,
     window: {
       activeColorTheme: { kind: ColorThemeKind.Dark },
-      createTreeView: () => ({ dispose() {} }),
+      createTreeView: (id: string) => {
+        const bag = globalThis as { __workersTreeViews?: string[] };
+        (bag.__workersTreeViews ??= []).push(id);
+        return { dispose() {} };
+      },
       registerWebviewViewProvider: () => ({ dispose() {} }),
       showWarningMessage: () => undefined,
       createStatusBarItem: () => ({
@@ -335,5 +339,24 @@ describe('axis.workers.probeAll offline', () => {
         error: null,
       }),
     ).toBe('ok');
+  });
+
+  test('registerWorkersTreeView skips createTreeView when tree is false', () => {
+    const bag = globalThis as { __workersTreeViews?: string[] };
+    bag.__workersTreeViews = [];
+    const skipped = workers.registerWorkersTreeView(
+      { subscriptions: [] } as never,
+      { tree: false },
+    );
+    expect(skipped).toBeInstanceOf(workers.WorkersTreeProvider);
+    expect(bag.__workersTreeViews).toEqual([]);
+    const shown = workers.registerWorkersTreeView({ subscriptions: [] } as never);
+    expect(shown).toBeInstanceOf(workers.WorkersTreeProvider);
+    expect(bag.__workersTreeViews).toEqual([workers.WORKERS_VIEW_ID]);
+    workers.registerWorkersTreeView({ subscriptions: [] } as never, { tree: true });
+    expect(bag.__workersTreeViews).toEqual([
+      workers.WORKERS_VIEW_ID,
+      workers.WORKERS_VIEW_ID,
+    ]);
   });
 });

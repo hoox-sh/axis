@@ -455,7 +455,8 @@ export type RegisterAlertsViewResult = {
 };
 
 /**
- * Register Alerts TreeView + `axis.alerts.add` / `axis.alerts.remove`.
+ * Register `axis.alerts.add` / `axis.alerts.remove`.
+ * Creates the Alerts TreeView unless `opts.tree === false` (webview studio owns the view id).
  * Does not edit package.json / extension.ts — merge the contributes fragment separately.
  */
 export function registerAlertsView(
@@ -463,16 +464,22 @@ export function registerAlertsView(
   opts?: {
     state?: WorkspaceStateHelpers;
     ui?: AlertsUi;
+    /** Default true. False skips createTreeView so a WebviewView can use `axis.alerts`. */
+    tree?: boolean;
   },
 ): RegisterAlertsViewResult {
   const state = opts?.state ?? workspaceStateFromContext(context);
   const ui = opts?.ui ?? defaultAlertsUi();
   const provider = new AlertsTreeProvider(state);
 
-  const view = vscode.window.createTreeView(ALERTS_VIEW_ID, {
-    treeDataProvider: provider,
-    showCollapseAll: false,
-  });
+  // Tree first, then commands — a createTreeView throw must not register commands (historical order).
+  if (opts?.tree !== false) {
+    const view = vscode.window.createTreeView(ALERTS_VIEW_ID, {
+      treeDataProvider: provider,
+      showCollapseAll: false,
+    });
+    context.subscriptions.push(view);
+  }
 
   const addCmd = vscode.commands.registerCommand(ALERTS_ADD_COMMAND, () =>
     runAddAlertCommand(state, ui, provider),
@@ -482,6 +489,6 @@ export function registerAlertsView(
     () => runRemoveAlertCommand(state, ui, provider),
   );
 
-  context.subscriptions.push(view, addCmd, removeCmd);
+  context.subscriptions.push(addCmd, removeCmd);
   return { provider, state };
 }

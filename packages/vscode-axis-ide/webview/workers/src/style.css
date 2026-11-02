@@ -1,0 +1,164 @@
+/* Copyright (C) 2026 jango_blockchained
+ * SPDX-License-Identifier: AGPL-3.0-only
+ *
+ * Workers studio styles. Theme tokens only.
+ */
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+  color: var(--vscode-sideBar-foreground, var(--vscode-editor-foreground));
+  font-family: var(--vscode-font-family, system-ui, sans-serif);
+  font-size: var(--vscode-font-size, 13px);
+}
+
+.workers-root {
+  box-sizing: border-box;
+  height: 100%;
+  padding: 10px 12px;
+  overflow: auto;
+}
+
+.workers-root__header {
+  margin-bottom: 10px;
+}
+
+.workers-root__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.workers-mark {
+  flex: 0 0 auto;
+  color: var(--vscode-foreground);
+}
+
+.workers-phase,
+.workers-counts,
+.workers-live {
+  margin: 0 0 6px;
+  font-size: 12px;
+}
+
+.workers-phase,
+.workers-counts {
+  color: var(--vscode-descriptionForeground);
+}
+
+.workers-live {
+  min-height: 1.2em;
+  color: var(--vscode-foreground);
+}
+
+.workers-btn {
+  margin: 0 0 8px;
+  padding: 2px 8px;
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 2px;
+  background: var(--vscode-button-secondaryBackground, var(--vscode-button-background));
+  color: var(--vscode-button-secondaryForeground, var(--vscode-button-foreground));
+  font: inherit;
+  cursor: pointer;
+}
+
+.workers-btn:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 1px;
+}
+
+.workers-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.workers-card {
+  margin: 0;
+  padding: 8px;
+  border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
+  border-radius: 4px;
+  background: var(--vscode-editorWidget-background, transparent);
+}
+
+.workers-card__name {
+  margin: 0 0 2px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.workers-card__id,
+.workers-card__summary,
+.workers-card__meta {
+  margin: 0 0 4px;
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+  word-break: break-word;
+}
+
+.workers-card__id,
+.workers-card__endpoint {
+  font-family: var(--vscode-editor-font-family, ui-monospace, monospace);
+}
+
+.workers-card__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.workers-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+}
+
+.workers-pill__dot {
+  width: 8px;
+  height: 8px;
+}
+
+.workers-pill--healthy {
+  background: var(--vscode-testing-iconPassed);
+  color: var(--vscode-editor-background);
+}
+
+.workers-pill--degraded {
+  background: var(--vscode-editorWarning-foreground);
+  color: var(--vscode-editor-background);
+}
+
+.workers-pill--down {
+  background: var(--vscode-testing-iconFailed);
+  color: var(--vscode-editor-foreground);
+}
+
+.workers-pill--unknown,
+.workers-pill--idle,
+.workers-pill--skipped {
+  background: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+}
+
+.workers-empty {
+  margin: 8px 0 0;
+  color: var(--vscode-disabledForeground);
+}

@@ -29,6 +29,7 @@ import {
   runProbeAllCommand,
   type WorkersTreeProvider,
 } from '../views/workers';
+import { registerWorkersStudio } from '../views/workers-panel';
 import {
   PLUGINS_WEBVIEW_VIEW_ID,
   PluginsWebviewViewProvider,
@@ -139,7 +140,8 @@ export function registerPluginsAndWorkers(
   readActivePlugins(workspaceHelpers);
 
   const pluginsProvider = new PluginsTreeProvider(registry);
-  const workersProvider = registerWorkersTreeView(context);
+  const workersStudio = registerWorkersStudio(context);
+  const workersProvider = registerWorkersTreeView(context, { tree: false });
 
   const refreshAll = registerPluginKindViews(context, registry, workspaceHelpers);
   const pluginsWebview = registerPluginsWebviewView(
@@ -164,7 +166,13 @@ export function registerPluginsAndWorkers(
   });
 
   const probeCmd = commands.registerCommand(PROBE_ALL_COMMAND, async () => {
-    return runProbeAllCommand(workersProvider);
+    const snap = await runProbeAllCommand(workersProvider);
+    try {
+      workersStudio.postSnapshot(snap);
+    } catch {
+      /* webview may be hidden */
+    }
+    return snap;
   });
   context.subscriptions.push(probeCmd);
 

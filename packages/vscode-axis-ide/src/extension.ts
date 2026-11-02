@@ -106,13 +106,17 @@ import {
   registerLmTools,
 } from './mcp/lm-tools';
 import { MCP_COMMANDS, registerMcpProvider } from './mcp/provider';
-import { ALERTS_ADD_COMMAND, ALERTS_REMOVE_COMMAND, registerAlertsView } from './views/alerts';
+import { ALERTS_ADD_COMMAND, ALERTS_REMOVE_COMMAND } from './views/alerts';
+import { registerAlertsStudio } from './views/alerts-panel';
+import { registerLayersStudio } from './views/layers-panel';
+import { registerLibraryStudio } from './views/library-panel';
 import { registerProfilerView } from './views/profiler';
 import { RESULTS_VIEW_ID, registerResultsView } from './views/results';
 import { registerStrategyView } from './views/strategy';
 import type { ResultsWebviewViewProvider } from './views/results-panel';
-import { registerAxisTreeViews } from './views/trees';
+import { registerScriptsStudio } from './views/scripts-panel';
 import { WATCHLIST_COMMANDS, registerWatchlist } from './views/watchlist';
+import { registerWatchlistStudio } from './views/watchlist-panel';
 
 /** Keep in sync with package.json contributes.commands (grow with KD-14). */
 export const COMMANDS = {
@@ -840,9 +844,23 @@ export function activate(context: ExtensionContext): void {
   resultsProvider = registerResultsView(context, resultsStore);
   strategyProvider = registerStrategyView(context, resultsStore);
   registerProfilerView(context, resultsStore);
-  registerAxisTreeViews(context);
-  registerAlertsView(context);
-  registerWatchlist(context);
+  registerLibraryStudio(context);
+  registerLayersStudio(context);
+  registerScriptsStudio(context, resultsStore);
+  registerAlertsStudio(context);
+  let watchlistStudio: { postSnapshot: () => void } | undefined;
+  const watchlist = registerWatchlist(context, {
+    tree: false,
+    onPersisted: () => {
+      watchlistStudio?.postSnapshot();
+    },
+  });
+  watchlistStudio = registerWatchlistStudio(context, {
+    onPersisted(state) {
+      watchlist.provider.setState(state);
+      watchlist.refreshStatusBar();
+    },
+  });
   registerApplyBuiltin(context);
   pluginWorkspace = workspaceStateFromContext(context);
   registerPluginsAndWorkers(context, {

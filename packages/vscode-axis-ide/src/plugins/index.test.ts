@@ -119,6 +119,13 @@ type G = {
   __axisCommandHandlers?: Map<string, (...args: unknown[]) => unknown>;
 };
 
+class ThemeIcon {
+  id: string;
+  constructor(id: string) {
+    this.id = id;
+  }
+}
+
 class DefaultUri {
   fsPath: string;
   constructor(fsPath: string) {
@@ -149,6 +156,7 @@ function g(): G {
 
 const vscodeApi = {
   TreeItem: DefaultTreeItem,
+  ThemeIcon,
   TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
   EventEmitter: DefaultEventEmitter,
   LanguageModelTextPart,
@@ -230,6 +238,9 @@ mock.module('vscode', () => ({
   McpStdioServerDefinition,
   get TreeItem() {
     return vscodeApi.TreeItem;
+  },
+  get ThemeIcon() {
+    return vscodeApi.ThemeIcon;
   },
   get TreeItemCollapsibleState() {
     return vscodeApi.TreeItemCollapsibleState;
@@ -329,7 +340,10 @@ describe('plugins index exports', () => {
     expect(result.pluginsProvider).toBeInstanceOf(idx.PluginsTreeProvider);
     expect(result.pluginsWebview).toBeInstanceOf(idx.PluginsWebviewViewProvider);
     expect(treeViews.some((v) => v.id === 'axis.plugins')).toBe(false);
-    expect(treeViews.some((v) => v.id === 'axis.workers')).toBe(true);
+    expect(treeViews.some((v) => v.id === 'axis.workers')).toBe(false);
+    expect(
+      g().__axisWebviewRegistrations?.some((v) => v.id === 'axis.workers'),
+    ).toBe(true);
     expect(treeViews.some((v) => v.id === 'axis.plugins.source')).toBe(false);
     expect(
       g().__axisWebviewRegistrations?.some((v) => v.id === 'axis.plugins'),

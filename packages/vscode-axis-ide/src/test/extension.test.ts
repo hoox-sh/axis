@@ -288,13 +288,15 @@ suite('AXIS IDE Extension Structure', () => {
       [...EXPECTED_ACTIVITY_VIEWS],
       'activity view inventory/order drifted — update test when intentionally expanding contributes',
     );
-    const pluginsView = sideViews.find((v) => v.id === 'axis.plugins');
-    assert.strictEqual(pluginsView?.type, 'webview', 'axis.plugins must be type webview');
-    assert.strictEqual(
-      pluginsView?.retainContextWhenHidden,
-      true,
-      'axis.plugins must retainContextWhenHidden',
-    );
+    for (const id of EXPECTED_ACTIVITY_VIEWS) {
+      const entry = sideViews.find((v) => v.id === id);
+      assert.strictEqual(entry?.type, 'webview', `${id} must be type webview`);
+      assert.strictEqual(
+        entry?.retainContextWhenHidden,
+        true,
+        `${id} must retainContextWhenHidden`,
+      );
+    }
     for (const v of sideViews) {
       const icon = ACTIVITY_VIEW_ICONS[v.id];
       if (!icon) continue;

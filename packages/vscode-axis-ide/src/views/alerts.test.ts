@@ -123,7 +123,11 @@ mock.module('vscode', () => {
     McpStdioServerDefinition,
     window: {
       activeColorTheme: { kind: ColorThemeKind.Dark },
-      createTreeView: () => ({ dispose() {} }),
+      createTreeView: () => {
+        const g = globalThis as { __axisAlertsTrees?: number };
+        g.__axisAlertsTrees = (g.__axisAlertsTrees ?? 0) + 1;
+        return { dispose() {} };
+      },
       registerWebviewViewProvider: () => ({ dispose() {} }),
       showInputBox: async () => undefined,
       showQuickPick: async () => undefined,
@@ -137,7 +141,12 @@ mock.module('vscode', () => {
       }),
     },
     commands: {
-      registerCommand: () => ({ dispose() {} }),
+      registerCommand: (command?: string) => {
+        const g = globalThis as { __axisAlertsCmds?: string[] };
+        if (!g.__axisAlertsCmds) g.__axisAlertsCmds = [];
+        if (typeof command === 'string') g.__axisAlertsCmds.push(command);
+        return { dispose() {} };
+      },
     },
     workspace: {
       getConfiguration(section?: string) {
@@ -361,5 +370,29 @@ describe('AlertsTreeProvider + command flows', () => {
     };
     expect(await alerts.runAddAlertCommand(mem, ui2)).toBeNull();
     expect(alerts.readAlertsV1(mem)).toEqual([]);
+  });
+
+  test('tree option defaults on; tree:false skips createTreeView and still registers commands', () => {
+    const g = globalThis as { __axisAlertsTrees?: number; __axisAlertsCmds?: string[] };
+    g.__axisAlertsTrees = 0;
+    g.__axisAlertsCmds = [];
+    const mem = alerts.createMemoryWorkspaceState();
+    const ctx = {
+      subscriptions: [] as { dispose(): void }[],
+      workspaceState: mem,
+    };
+    alerts.registerAlertsView(ctx as never, { state: mem });
+    alerts.registerAlertsView(ctx as never, { state: mem, tree: true });
+    alerts.registerAlertsView(ctx as never, { state: mem, tree: false });
+    expect(g.__axisAlertsTrees).toBe(2);
+    expect(g.__axisAlertsCmds).toEqual([
+      'axis.alerts.add',
+      'axis.alerts.remove',
+      'axis.alerts.add',
+      'axis.alerts.remove',
+      'axis.alerts.add',
+      'axis.alerts.remove',
+    ]);
+    expect(ctx.subscriptions).toHaveLength(8);
   });
 });

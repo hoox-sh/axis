@@ -1,0 +1,31 @@
+{
+  "view": {
+    "type": "webview",
+    "id": "axis.library",
+    "name": "Library",
+    "icon": "media/views/library.svg",
+    "retainContextWhenHidden": true
+  },
+  "scripts": {
+    "compile:webview:library": "vite build --config webview/library/vite.config.ts",
+    "compile:webview": "npm run compile:webview:chart && npm run compile:webview:results && npm run compile:webview:plugins && npm run compile:webview:profiler && npm run compile:webview:library",
+    "check": "tsc -p ./ --noEmit && tsc -p webview/chart/tsconfig.json --noEmit && tsc -p webview/results/tsconfig.json --noEmit && tsc -p webview/plugins/tsconfig.json --noEmit && tsc -p webview/profiler/tsconfig.json --noEmit && tsc -p webview/library/tsconfig.json --noEmit"
+  },
+  "vscodeignore": [
+    "!dist/webview/library/",
+    "dist/webview/library/**",
+    "!dist/webview/library/main.js",
+    "!dist/webview/library/main.css"
+  ],
+  "coverageExclude": "views/library-panel.ts",
+  "notes": {
+    "packageJson": "Replace the existing contributes.views.axis entry whose id is axis.library (do not add a second Library view). Set type to webview, retainContextWhenHidden true, keep name Library and icon media/views/library.svg. Add scripts.compile:webview:library. Append && npm run compile:webview:library to the existing compile:webview script. Append && tsc -p webview/library/tsconfig.json --noEmit to the existing check script. Paste the script strings from this fragment.",
+    "vscodeignore": "After the profiler whitelist, add the four library lines from vscodeignore in this fragment, in that order: un-ignore the directory, ignore its contents, then un-ignore main.js and main.css. Same pattern as dist/webview/profiler/.",
+    "coverage": "In scripts/check-coverage.mjs EXCLUDE, add 'views/library-panel.ts' beside views/profiler-panel.ts. The panel is a vscode shim. Do not exclude library-messages.ts or library-html.ts.",
+    "wiring": "In src/views/trees.ts registerAxisTreeViews, call registerLibraryStudio(context) from ./library-panel INSTEAD OF window.createTreeView for LIBRARY_VIEW_ID. Leave the layers and indicators createTreeView calls unchanged. Push only the layers and indicators tree disposables (registerLibraryStudio subscribes itself). Do not edit extension.ts. Do not delete LibraryTreeProvider, LIBRARY_VIEW_ID, or libraryRootChildren — src/views/trees.test.ts still constructs the tree provider. Do not call createTreeView('axis.library').",
+    "apply": "library-panel.ts already applies the clicked id. It calls runApplyBuiltin with a one-entry script list and a UI whose showQuickPick returns that entry (no QuickPick) and openUntitledPine uses workspace.openTextDocument. On success it shows an information message naming the script title. Missing ids fall back to executeCommand('axis.applyBuiltin') plus an information message. Do not replace that with a bare axis.applyBuiltin call.",
+    "menus": "view/title axis.applyBuiltin when view == axis.library can stay. view/item/context when viewItem == axis.library.empty will not fire (webview has no tree items). Leave it so existing contributes tests keep passing unless a test starts requiring a tree.",
+    "assets": "Vite IIFE AxisLibraryWebview writes dist/webview/library/main.js and main.css (no sourcemap). Webview localResourceRoots is that directory. CSP is libraryStudioHtml: script-src 'nonce-…' plus cspSource; style-src matches plugins (cspSource and 'unsafe-inline', no style nonce).",
+    "doNotEditFromLibraryAgent": "package.json, extension.ts, trees.ts, library.ts, check-coverage.mjs, and .vscodeignore were left unchanged on purpose."
+  }
+}

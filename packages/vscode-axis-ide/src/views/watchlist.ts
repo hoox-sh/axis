@@ -484,14 +484,19 @@ export type RegisterWatchlistResult = {
 };
 
 /**
- * Register Watchlist TreeView, add/remove commands, and quote StatusBarItem.
- * Wiring agent calls from `activate` and merges the contributes fragment.
+ * Register Watchlist commands, quote StatusBarItem, and (by default) the TreeView.
+ * Pass `{ tree: false }` when `registerWatchlistStudio` owns view id `axis.watchlist`.
+ * Omitted `tree` stays true so existing callers keep `createTreeView`.
  */
 export function registerWatchlist(
   context: vscode.ExtensionContext,
   opts?: {
     ui?: WatchlistUi;
     quoteFeed?: QuoteFeed;
+    /** When false, skip `createTreeView` for `axis.watchlist`. Default true. */
+    tree?: boolean;
+    /** Palette add/remove/select. Studio uses this to repaint. */
+    onPersisted?: (state: WatchlistV1) => void;
   },
 ): RegisterWatchlistResult {
   const helpers: WorkspaceStateHelpers = {
@@ -504,11 +509,8 @@ export function registerWatchlist(
 
   const initial = readWatchlistV1(helpers);
   const provider = new WatchlistTreeProvider(initial, quoteFeed);
-
-  const view = vscode.window.createTreeView(WATCHLIST_VIEW_ID, {
-    treeDataProvider: provider,
-    showCollapseAll: false,
-  });
+  /** Only assigned when `opts.tree !== false` (default). Studio wiring passes false. */
+  let view: vscode.TreeView<WatchlistTreeNode> | undefined;
 
   // StatusBarAlignment may be absent when another Bun test's vscode mock wins.
   const alignLeft =
@@ -546,18 +548,29 @@ export function registerWatchlist(
     provider.setState(next);
     await writeWatchlistV1(helpers, next);
     refreshStatusBar();
+    try {
+      opts?.onPersisted?.(next);
+    } catch {
+      /* studio refresh is best-effort */
+    }
   };
 
-  view.onDidChangeSelection((e) => {
-    try {
-      const node = e.selection[0];
-      if (!node || node.kind !== 'symbol' || !node.symbol) return;
-      const next = selectWatchlistSymbol(provider.getState(), node.symbol);
-      void persist(next);
-    } catch {
-      /* ignore selection failures */
-    }
-  });
+  if (opts?.tree !== false) {
+    view = vscode.window.createTreeView(WATCHLIST_VIEW_ID, {
+      treeDataProvider: provider,
+      showCollapseAll: false,
+    });
+    view.onDidChangeSelection((e) => {
+      try {
+        const node = e.selection[0];
+        if (!node || node.kind !== 'symbol' || !node.symbol) return;
+        const next = selectWatchlistSymbol(provider.getState(), node.symbol);
+        void persist(next);
+      } catch {
+        /* ignore selection failures */
+      }
+    });
+  }
 
   const addCmd = vscode.commands.registerCommand(
     WATCHLIST_COMMANDS.add,
@@ -609,7 +622,8 @@ export function registerWatchlist(
     },
   );
 
-  context.subscriptions.push(view, statusBar, addCmd, removeCmd);
+  if (view) context.subscriptions.push(view, statusBar, addCmd, removeCmd);
+  else context.subscriptions.push(statusBar, addCmd, removeCmd);
   refreshStatusBar();
 
   return {
