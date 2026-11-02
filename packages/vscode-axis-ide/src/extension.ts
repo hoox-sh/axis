@@ -70,6 +70,7 @@ import {
 import { isVersionOlderThan } from './semver';
 import { DEFAULT_DATAFEED_URL } from './host/history-client';
 import { setLogSink } from './host/logger';
+import { parseRunOnSave, type RunOnSaveMode } from './host/run-on-save';
 import {
   DEFAULT_ENGINE_ENDPOINT,
   ResultsFocusStore,
@@ -156,6 +157,14 @@ let commandAbort: AbortController | undefined;
 let deactivated = false;
 /** workspaceState helpers for active plugin engine id (run path). */
 let pluginWorkspace: WorkspaceStateHelpers | undefined;
+
+function readRunOnSaveMode(): RunOnSaveMode {
+  try {
+    return parseRunOnSave(workspace.getConfiguration('axis.run').get('onSave'));
+  } catch {
+    return 'off';
+  }
+}
 
 function readActiveEngineId(): string | undefined {
   try {
@@ -367,6 +376,30 @@ function getChartSnapshotMeta(): ChartSnapshotMeta | null {
  * Uses mock bars when `axis.chart.useMockBars` is true; otherwise HistoryClient.
  * `focus` selects §7.1 Results focus rules. Returns a short status string.
  */
+async function handlePineDocumentSave(doc: TextDocument): Promise<void> {
+  if (deactivated || !doc) return;
+  const langOk = doc.languageId === PINE_LANGUAGE_ID;
+  const pathOk = doc.uri.scheme === 'file' && isPineFilePath(doc.uri.fsPath);
+  if (!langOk && !pathOk) return;
+  const mode = readRunOnSaveMode();
+  if (mode === 'off') return;
+  if (mode === 'evaluate') {
+    await runScriptCore({
+      mode: 'interpret',
+      focus: false,
+      showErrors: false,
+      document: doc,
+    });
+    return;
+  }
+  await runScriptCore({
+    mode: 'auto',
+    focus: true,
+    showErrors: false,
+    document: doc,
+  });
+}
+
 async function runScriptCommand(focus: boolean): Promise<string | undefined> {
   const result = await runScriptCore({ mode: 'auto', focus, showErrors: focus });
   if (result.ok) return result.runId ? `ok:${result.runId}` : 'ok';
@@ -383,15 +416,15 @@ async function runScriptCore(opts: {
   focus: boolean;
   showErrors: boolean;
   token?: CancellationToken;
+  document?: TextDocument;
 }): Promise<LmRunScriptResult> {
   const { mode, focus, showErrors } = opts;
   if (deactivated) {
     return { ok: false, mode, focus, error: 'AXIS IDE deactivated' };
   }
   try {
-    const editor = window.activeTextEditor;
-    const doc = editor?.document;
-    if (!doc || doc.languageId !== PINE_LANGUAGE_ID) {
+    const doc = opts.document ?? window.activeTextEditor?.document;
+    if (!doc || (doc.languageId !== PINE_LANGUAGE_ID && !(doc.uri.scheme === 'file' && isPineFilePath(doc.uri.fsPath)))) {
       if (showErrors) void window.showErrorMessage(RUN_NO_PINE_MESSAGE);
       return { ok: false, mode, focus, error: RUN_NO_PINE_MESSAGE };
     }
@@ -932,6 +965,12 @@ export function activate(context: ExtensionContext): void {
       );
     }),
     ...registerLiveCommands(commands, bridge),
+  );
+
+  context.subscriptions.push(
+    workspace.onDidSaveTextDocument((doc) => {
+      void handlePineDocumentSave(doc);
+    }),
   );
 
   // Sync check — avoid deferred timers that can outlive deactivate.

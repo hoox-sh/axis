@@ -84,7 +84,13 @@ function cardHtml(card: PluginCard, state: PluginsViewState): string {
   const nameId = `plugin-${card.kind}-${card.id}`.replace(/[^a-zA-Z0-9_-]/g, '-');
   const kindAttr = escapeHtml(card.kind);
   const idAttr = escapeHtml(card.id);
-  return `<article class="plugin-card${activeClass}" tabindex="0" data-kind="${kindAttr}" data-id="${idAttr}" aria-labelledby="${nameId}">
+  const vscodeCtx = escapeHtml(
+    JSON.stringify({
+      webviewSection: 'plugin-card',
+      preventDefaultContextMenuItems: true,
+    }),
+  );
+  return `<article class="plugin-card${activeClass}" tabindex="0" data-kind="${kindAttr}" data-id="${idAttr}" data-vscode-context="${vscodeCtx}" aria-labelledby="${nameId}">
   <header class="plugin-card__head">
     <div class="plugin-card__titles">
       <h3 class="plugin-card__name" id="${nameId}">${escapeHtml(card.name)}</h3>

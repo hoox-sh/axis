@@ -92,6 +92,7 @@ const EXPECTED_SETTINGS = [
   'axis.engine.allowRemoteEndpoint',
   'axis.engine.allowPyodide',
   'axis.chart.historyBars',
+  'axis.run.onSave',
   'axis.chart.useMockBars',
   'axis.datafeed.url',
   'axis.worker.url',
@@ -178,6 +179,11 @@ suite('AXIS IDE Extension Structure', () => {
     assert.ok(
       fs.existsSync(path.resolve(__dirname, '../../', pkg.icon)),
       `icon missing on disk: ${pkg.icon}`,
+    );
+    const iconBytes = fs.statSync(path.resolve(__dirname, '../../', pkg.icon));
+    assert.ok(
+      iconBytes.size >= 20_000,
+      'marketplace icon should match PYNE media/icon.png (HOOX mark, ~38KB)',
     );
   });
 
@@ -386,6 +392,38 @@ suite('AXIS IDE Extension Structure', () => {
     assert.strictEqual(run?.when, 'resourceLangId == pinescript');
   });
 
+  test('context menus cover editor, explorer, views, and plugins webview', () => {
+    const menus = (
+      pkg.contributes as {
+        menus?: Record<string, Array<{ command: string; when?: string }>>;
+      }
+    )?.menus;
+    const editorCtx = menus?.['editor/context'] ?? [];
+    assert.ok(
+      editorCtx.some((e) => e.command === 'axis.runScript' && e.when === 'editorLangId == pinescript'),
+      'editor/context runScript',
+    );
+    const explorer = menus?.['explorer/context'] ?? [];
+    assert.ok(
+      explorer.some((e) => e.command === 'axis.openChart' && e.when === 'resourceLangId == pinescript'),
+      'explorer/context openChart',
+    );
+    const titles = menus?.['view/title'] ?? [];
+    assert.ok(titles.some((e) => e.command === 'axis.workers.probeAll' && (e.when ?? '').includes('axis.workers')));
+    assert.ok(titles.some((e) => e.command === 'axis.plugins.statusMenu' && (e.when ?? '').includes('axis.plugins')));
+    assert.ok(titles.some((e) => e.command === 'axis.focusResults'));
+    const items = menus?.['view/item/context'] ?? [];
+    assert.ok(items.some((e) => e.command === 'axis.alerts.remove'));
+    assert.ok(items.some((e) => e.command === 'axis.workers.probeAll'));
+    const web = menus?.['webview/context'] ?? [];
+    assert.ok(
+      web.some(
+        (e) =>
+          e.command === 'axis.plugins.statusMenu' && (e.when ?? '').includes("webviewId == 'axis.plugins'"),
+      ),
+    );
+  });
+
   test('commandPalette includes axis.runScriptSilent for pinescript', () => {
     const menus = (pkg.contributes as { menus?: Record<string, Array<{ command: string; when?: string }>> })
       ?.menus;
@@ -467,6 +505,24 @@ suite('AXIS IDE Extension Activation', () => {
   test('axis.runScript without active Pine returns clear error (no await UI)', async () => {
     const result = await vscode.commands.executeCommand('axis.runScript');
     assert.strictEqual(result, RUN_NO_PINE_MESSAGE);
+  });
+
+  test('default axis.run.onSave is off with evaluate|run enum', () => {
+    const config = vscode.workspace.getConfiguration('axis.run');
+    assert.strictEqual(config.get('onSave'), 'off');
+    const configuration = Array.isArray(pkg.contributes?.configuration)
+      ? pkg.contributes.configuration
+      : pkg.contributes?.configuration
+        ? [pkg.contributes.configuration]
+        : [];
+    const props = configuration.flatMap((group) =>
+      Object.entries(group.properties ?? {}),
+    );
+    const entry = props.find(([key]) => key === 'axis.run.onSave');
+    assert.ok(entry, 'missing axis.run.onSave');
+    const meta = entry?.[1] as { enum?: string[]; default?: string };
+    assert.deepStrictEqual(meta.enum, ['off', 'evaluate', 'run']);
+    assert.strictEqual(meta.default, 'off');
   });
 
   test('default axis.chart.useMockBars is false (HistoryClient dogfood)', () => {

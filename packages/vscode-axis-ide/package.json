@@ -173,12 +173,14 @@
       {
         "command": "axis.openChart",
         "title": "Open Chart",
-        "category": "AXIS"
+        "category": "AXIS",
+        "icon": "$(graph)"
       },
       {
         "command": "axis.runScript",
         "title": "Run Script",
-        "category": "AXIS"
+        "category": "AXIS",
+        "icon": "$(play)"
       },
       {
         "command": "axis.runScriptSilent",
@@ -188,7 +190,8 @@
       {
         "command": "axis.focusResults",
         "title": "Focus Results",
-        "category": "AXIS"
+        "category": "AXIS",
+        "icon": "$(graph-line)"
       },
       {
         "command": "axis.secrets.setWorkerKey",
@@ -208,7 +211,8 @@
       {
         "command": "axis.applyBuiltin",
         "title": "Apply Builtin Script",
-        "category": "AXIS"
+        "category": "AXIS",
+        "icon": "$(file-code)"
       },
       {
         "command": "axis.liveStart",
@@ -223,7 +227,8 @@
       {
         "command": "axis.workers.probeAll",
         "title": "Probe Workers",
-        "category": "AXIS"
+        "category": "AXIS",
+        "icon": "$(debug-disconnect)"
       },
       {
         "command": "axis.plugins.activate",
@@ -233,27 +238,32 @@
       {
         "command": "axis.plugins.statusMenu",
         "title": "Plugin Menu",
-        "category": "AXIS"
+        "category": "AXIS",
+        "icon": "$(plug)"
       },
       {
         "command": "axis.alerts.add",
         "title": "Add Alert",
-        "category": "AXIS"
+        "category": "AXIS",
+        "icon": "$(bell)"
       },
       {
         "command": "axis.alerts.remove",
         "title": "Remove Alert",
-        "category": "AXIS"
+        "category": "AXIS",
+        "icon": "$(trash)"
       },
       {
         "command": "axis.watchlist.add",
         "title": "Add Symbol to Watchlist",
-        "category": "AXIS"
+        "category": "AXIS",
+        "icon": "$(add)"
       },
       {
         "command": "axis.watchlist.remove",
         "title": "Remove Symbol from Watchlist",
-        "category": "AXIS"
+        "category": "AXIS",
+        "icon": "$(trash)"
       },
       {
         "command": "axis.chart.drawing.trendline",
@@ -285,6 +295,30 @@
           "command": "axis.runScript",
           "when": "resourceLangId == pinescript",
           "group": "navigation@2"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "axis.runScript",
+          "when": "editorLangId == pinescript",
+          "group": "axis@1"
+        },
+        {
+          "command": "axis.openChart",
+          "when": "editorLangId == pinescript",
+          "group": "axis@2"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "axis.openChart",
+          "when": "resourceLangId == pinescript",
+          "group": "axis@1"
+        },
+        {
+          "command": "axis.runScript",
+          "when": "resourceLangId == pinescript",
+          "group": "axis@2"
         }
       ],
       "commandPalette": [
@@ -320,6 +354,11 @@
       ],
       "view/title": [
         {
+          "command": "axis.applyBuiltin",
+          "when": "view == axis.library || view == axis.indicators",
+          "group": "navigation@1"
+        },
+        {
           "command": "axis.alerts.add",
           "when": "view == axis.alerts",
           "group": "navigation"
@@ -333,12 +372,62 @@
           "command": "axis.watchlist.add",
           "when": "view == axis.watchlist",
           "group": "navigation"
+        },
+        {
+          "command": "axis.plugins.statusMenu",
+          "when": "view == axis.plugins",
+          "group": "navigation"
+        },
+        {
+          "command": "axis.workers.probeAll",
+          "when": "view == axis.workers",
+          "group": "navigation"
+        },
+        {
+          "command": "axis.focusResults",
+          "when": "view == axis.results || view == axis.strategy",
+          "group": "navigation"
         }
       ],
       "view/item/context": [
         {
+          "command": "axis.applyBuiltin",
+          "when": "view == axis.library && viewItem == axis.library.empty",
+          "group": "inline"
+        },
+        {
+          "command": "axis.applyBuiltin",
+          "when": "view == axis.indicators && viewItem == axis.indicators.empty",
+          "group": "inline"
+        },
+        {
           "command": "axis.watchlist.remove",
           "when": "view == axis.watchlist && viewItem == axis.watchlist.symbol"
+        },
+        {
+          "command": "axis.alerts.remove",
+          "when": "view == axis.alerts && viewItem == axis.alerts.entry"
+        },
+        {
+          "command": "axis.workers.probeAll",
+          "when": "view == axis.workers && viewItem == axis.workers.entry"
+        }
+      ],
+      "webview/context": [
+        {
+          "command": "axis.plugins.statusMenu",
+          "when": "webviewId == 'axis.plugins'",
+          "group": "axis@1"
+        },
+        {
+          "command": "axis.openChart",
+          "when": "webviewId == 'axis.plugins'",
+          "group": "axis@2"
+        },
+        {
+          "command": "axis.runScript",
+          "when": "webviewId == 'axis.plugins'",
+          "group": "axis@3"
         }
       ]
     },
@@ -379,6 +468,12 @@
             "minimum": 50,
             "maximum": 20000,
             "markdownDescription": "Default OHLCV history window for new chart sessions and when the document omits a positive `historyBars`. Counts are clamped to **20000** (same as this maximum)."
+          },
+          "axis.run.onSave": {
+            "type": "string",
+            "enum": ["off", "evaluate", "run"],
+            "default": "off",
+            "markdownDescription": "After saving a Pine Script™ file: **off** (default), **evaluate** (silent interpret, no Results steal), or **run** (full Run Script with chart paint)."
           },
           "axis.chart.useMockBars": {
             "type": "boolean",
