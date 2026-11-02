@@ -17,8 +17,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Minimal host→chart notify bus so RunOrchestrator can paint open panels
- * without importing the custom editor module (keeps unit tests vscode-free).
+ * Minimal host→chart notify bus so RunOrchestrator / live fan-out can paint
+ * open panels without importing the custom editor module (keeps unit tests
+ * vscode-free).
  *
  * `seriesKey` lets the editor filter panels so a run for one chart does not
  * overwrite another open `*.axis.json` webview.
@@ -26,9 +27,16 @@
  * Last successful `chart.full` per seriesKey is retained so a panel that
  * opens / re-handshakes after a run can replay the paint (retainContextWhenHidden
  * is false — hide→show would otherwise wipe run overlays back to mock-only).
+ *
+ * Live `chart.delta` fans out the same way; deltas are not retained for replay
+ * (gap → chart.requestReload / host resume remints a fresh full).
  */
 
-import type { ChartFullPayload, HostRunStatusPayload } from '../protocol';
+import type {
+  ChartDeltaPayload,
+  ChartFullPayload,
+  HostRunStatusPayload,
+} from '../protocol';
 
 export type ChartFullNotify = {
   type: 'chart.full';
@@ -36,8 +44,15 @@ export type ChartFullNotify = {
   seriesKey: string;
 };
 
+export type ChartDeltaNotify = {
+  type: 'chart.delta';
+  payload: ChartDeltaPayload;
+  seriesKey: string;
+};
+
 export type ChartNotifyMessage =
   | ChartFullNotify
+  | ChartDeltaNotify
   | { type: 'host.run.status'; payload: HostRunStatusPayload; seriesKey?: string };
 
 export type ChartNotifyHandler = (message: ChartNotifyMessage) => void;

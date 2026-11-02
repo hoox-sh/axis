@@ -17,13 +17,18 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * AXIS chart webview (PR-05): ready handshake → chart.init + chart.full paint.
+ * AXIS chart webview: ready handshake → chart.init / chart.full / chart.delta.
+ * Seq gap on delta → post chart.requestReload (host resume stub).
  */
 
 import './style.css';
 import { createChartPainter, type ChartPainter } from './paint';
 import { decodeHostMessage, PROTOCOL_VERSION } from './protocol';
-import { initialChartState, reduceChartMessage, type ChartViewState } from './state';
+import {
+  applyChartHostMessage,
+  initialChartState,
+  type ChartViewState,
+} from './state';
 
 interface VsCodeApi {
   postMessage(message: unknown): void;
@@ -36,6 +41,7 @@ declare function acquireVsCodeApi(): VsCodeApi;
 let disposed = false;
 let state: ChartViewState = initialChartState();
 let painter: ChartPainter | null = null;
+let apiRef: VsCodeApi | null = null;
 
 function postReady(api: VsCodeApi): void {
   if (disposed) return;
@@ -44,10 +50,24 @@ function postReady(api: VsCodeApi): void {
     type: 'webview.ready',
     payload: {
       view: 'chart',
-      capabilities: ['chart-shell', 'chart-full'],
+      capabilities: ['chart-shell', 'chart-full', 'chart-delta'],
     },
     ts: Date.now(),
   });
+}
+
+function postRequestReload(api: VsCodeApi): void {
+  if (disposed) return;
+  try {
+    api.postMessage({
+      v: PROTOCOL_VERSION,
+      type: 'chart.requestReload',
+      payload: {},
+      ts: Date.now(),
+    });
+  } catch {
+    // host may be gone
+  }
 }
 
 function ensurePainter(): ChartPainter | null {
@@ -66,7 +86,11 @@ function onHostMessage(event: MessageEvent): void {
     // Drop unexpected / malformed host traffic (wrong direction, bad envelope).
     return;
   }
-  state = reduceChartMessage(state, decoded.type, decoded.payload);
+  const outcome = applyChartHostMessage(state, decoded.type, decoded.payload);
+  state = outcome.state;
+  if (outcome.requestReload && apiRef) {
+    postRequestReload(apiRef);
+  }
   if (disposed) return;
   const p = ensurePainter();
   if (disposed) return;
@@ -75,6 +99,7 @@ function onHostMessage(event: MessageEvent): void {
 
 function main(): void {
   const api = acquireVsCodeApi();
+  apiRef = api;
   // Listener before ready — host may reply synchronously after postMessage.
   window.addEventListener('message', onHostMessage);
   window.addEventListener(
@@ -87,6 +112,7 @@ function main(): void {
         // ignore
       }
       painter = null;
+      apiRef = null;
     },
     { once: true },
   );

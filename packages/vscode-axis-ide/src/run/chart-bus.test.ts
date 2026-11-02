@@ -102,4 +102,17 @@ describe('chart-bus', () => {
     expect(getLastChartFull('missing')).toBeUndefined();
     expect(getLastChartFull('')).toBeUndefined();
   });
+
+  test('fans out chart.delta without retaining for replay', () => {
+    const seen: ChartNotifyMessage[] = [];
+    subscribeChartNotify((m) => seen.push(m));
+    notifyChart({
+      type: 'chart.delta',
+      payload: { baseIndex: 1, tail: [{ time: 2 }], seq: 3 },
+      seriesKey: 'a|b|C|1m',
+    });
+    expect(seen).toHaveLength(1);
+    expect(seen[0]?.type).toBe('chart.delta');
+    expect(getLastChartFull('a|b|C|1m')).toBeUndefined();
+  });
 });

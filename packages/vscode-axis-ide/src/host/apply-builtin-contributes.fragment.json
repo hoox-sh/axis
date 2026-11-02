@@ -1,0 +1,19 @@
+{
+  "activationEvents": [
+    "onCommand:axis.applyBuiltin"
+  ],
+  "commands": [
+    {
+      "command": "axis.applyBuiltin",
+      "title": "Apply Builtin Script",
+      "category": "AXIS"
+    }
+  ],
+  "menus": {
+    "commandPalette": [
+      {
+        "command": "axis.applyBuiltin"
+      }
+    ]
+  }
+}

@@ -67,15 +67,23 @@ const EXPECTED_COMMANDS = [
   'axis.secrets.setWorkerKey',
   'axis.secrets.setProKey',
   'axis.secrets.clear',
+  'axis.applyBuiltin',
+  'axis.liveStart',
+  'axis.liveStop',
+  'axis.workers.probeAll',
 ] as const;
 const EXPECTED_SETTINGS = [
   'axis.telemetry.offline',
   'axis.engine.id',
   'axis.engine.endpoint',
   'axis.engine.allowRemoteEndpoint',
+  'axis.engine.allowPyodide',
   'axis.chart.historyBars',
   'axis.chart.useMockBars',
   'axis.datafeed.url',
+  'axis.worker.url',
+  'axis.live.enabled',
+  'axis.plugins.allowUrlInstall',
 ] as const;
 /** Must never appear as contributes.configuration — SecretStorage only (KD-8). */
 const FORBIDDEN_SETTINGS = ['axis.worker.apiKey', 'axis.pro.apiKey'] as const;
@@ -97,6 +105,13 @@ const ALLOWED_CONTRIBUTE_KEYS = new Set([
   'views',
 ]);
 const EXPECTED_PANEL_VIEWS = ['axis.results', 'axis.strategy'] as const;
+const EXPECTED_ACTIVITY_VIEWS = [
+  'axis.library',
+  'axis.layers',
+  'axis.indicators',
+  'axis.plugins',
+  'axis.workers',
+] as const;
 /** Watchlist is PR-08b — must not appear until that task. */
 const FORBIDDEN_VIEWS = ['axis.watchlist'] as const;
 const EXPECTED_KEYBINDINGS = [
@@ -177,7 +192,7 @@ suite('AXIS IDE Extension Structure', () => {
     }
   });
 
-  test('contributes panel + activity views (results/strategy/library/layers/indicators; no watchlist)', () => {
+  test('contributes panel + activity views (results/strategy/library/layers/indicators/plugins/workers; no watchlist)', () => {
     const panelContainers = pkg.contributes?.viewsContainers?.panel ?? [];
     const axisPanel = panelContainers.find((c) => c.id === 'axis-panel');
     assert.ok(axisPanel, 'missing viewsContainers.panel axis-panel');
@@ -199,9 +214,14 @@ suite('AXIS IDE Extension Structure', () => {
 
     const sideViews = pkg.contributes?.views?.axis ?? [];
     const sideIds = sideViews.map((v) => v.id);
-    for (const id of ['axis.library', 'axis.layers', 'axis.indicators'] as const) {
+    for (const id of EXPECTED_ACTIVITY_VIEWS) {
       assert.ok(sideIds.includes(id), `missing activity view ${id}`);
     }
+    assert.deepStrictEqual(
+      [...sideIds].sort(),
+      [...EXPECTED_ACTIVITY_VIEWS].sort(),
+      'activity view inventory drifted — update test when intentionally expanding contributes',
+    );
 
     const allViewIds = Object.values(pkg.contributes?.views ?? {}).flatMap((list) =>
       list.map((v) => v.id),
@@ -217,6 +237,14 @@ suite('AXIS IDE Extension Structure', () => {
     assert.ok(
       activation.includes('onView:axis.strategy'),
       'activationEvents should include onView:axis.strategy',
+    );
+    assert.ok(
+      activation.includes('onView:axis.plugins'),
+      'activationEvents should include onView:axis.plugins',
+    );
+    assert.ok(
+      activation.includes('onView:axis.workers'),
+      'activationEvents should include onView:axis.workers',
     );
   });
 

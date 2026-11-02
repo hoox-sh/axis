@@ -42,6 +42,7 @@ import {
 } from 'vscode';
 import { RUN_NO_PINE_MESSAGE, RUN_OUTPUT_CHANNEL_NAME } from './constants';
 import { registerChartEditorProvider } from './editors/chart-editor';
+import { registerApplyBuiltin, APPLY_BUILTIN_COMMAND } from './host/apply-builtin';
 import {
   OPEN_CHART_NO_PINE_MESSAGE,
   PINE_LANGUAGE_ID,
@@ -70,6 +71,17 @@ import {
   type RunDiagnostic,
   type RunDeps,
 } from './run';
+import {
+  DEFAULT_WORKER_URL,
+  LIVE_COMMANDS,
+  createLiveChartFanout,
+  createLiveSessionBridge,
+  formatLiveStatus,
+  registerLiveCommands,
+  type LiveFrameHandler,
+  type LiveSessionBridge,
+} from './live';
+import { registerPluginsAndWorkers } from './plugins';
 import { RESULTS_VIEW_ID, registerResultsView } from './views/results';
 import { registerStrategyView } from './views/strategy';
 import type { ResultsWebviewViewProvider } from './views/results-panel';
@@ -85,6 +97,10 @@ export const COMMANDS = {
   setWorkerKey: 'axis.secrets.setWorkerKey',
   setProKey: 'axis.secrets.setProKey',
   clearSecrets: 'axis.secrets.clear',
+  applyBuiltin: APPLY_BUILTIN_COMMAND,
+  liveStart: LIVE_COMMANDS.liveStart,
+  liveStop: LIVE_COMMANDS.liveStop,
+  workersProbeAll: 'axis.workers.probeAll',
 } as const;
 
 export { RUN_NO_PINE_MESSAGE };
@@ -93,16 +109,47 @@ const PYNE_RECOMMENDED_MIN = '0.5.4';
 
 let runOutput: OutputChannel | undefined;
 let statusBar: StatusBarItem | undefined;
+let liveStatusBar: StatusBarItem | undefined;
 let secrets: AxisSecretStorage | undefined;
 let runDiagnostics: DiagnosticCollection | undefined;
 let orchestrator: RunOrchestrator | undefined;
 let resultsStore: ResultsFocusStore | undefined;
 let resultsProvider: ResultsWebviewViewProvider | undefined;
 let strategyProvider: ResultsWebviewViewProvider | undefined;
+let liveBridge: LiveSessionBridge | undefined;
 /** Aborts the previous command-level run when a new one starts. */
 let commandAbort: AbortController | undefined;
 /** Set in deactivate so any late work skips after shutdown. */
 let deactivated = false;
+
+function readLiveSettings(): { workerUrl: string; liveEnabled: boolean } {
+  let workerUrl = DEFAULT_WORKER_URL;
+  let liveEnabled = true;
+  try {
+    const workerCfg = workspace.getConfiguration('axis.worker');
+    const url = workerCfg.get<string>('url');
+    if (typeof url === 'string' && url.trim()) workerUrl = url.trim();
+  } catch {
+    // keep default
+  }
+  try {
+    const liveCfg = workspace.getConfiguration('axis.live');
+    liveEnabled = liveCfg.get<boolean>('enabled', true) !== false;
+  } catch {
+    // keep default
+  }
+  return { workerUrl, liveEnabled };
+}
+
+function applyLiveHud(label: { text: string; tooltip: string }): void {
+  if (deactivated || !liveStatusBar) return;
+  try {
+    liveStatusBar.text = label.text;
+    liveStatusBar.tooltip = label.tooltip;
+  } catch {
+    // disposed
+  }
+}
 
 function severityOf(s: RunDiagnostic['severity']): DiagnosticSeverity {
   if (s === 'warning') return DiagnosticSeverity.Warning;
@@ -219,6 +266,10 @@ async function runScriptCommand(focus: boolean): Promise<string | undefined> {
       void window.showErrorMessage(err);
       return err;
     }
+    const secretStore = secrets;
+    const runOrch = orchestrator;
+    const focusStore = resultsStore;
+    const output = runOutput;
 
     const script = doc.getText();
     const pinePath = doc.uri.scheme === 'file' ? doc.uri.fsPath : '';
@@ -231,7 +282,7 @@ async function runScriptCommand(focus: boolean): Promise<string | undefined> {
     });
     if (!endpointCheck.ok) {
       const err = scrubSecrets(endpointCheck.error);
-      runOutput.appendLine(err);
+      output.appendLine(err);
       if (focus) void window.showErrorMessage(err);
       return err;
     }
@@ -249,20 +300,19 @@ async function runScriptCommand(focus: boolean): Promise<string | undefined> {
     if (deactivated) return undefined;
     if (!resolved.ok) {
       const err = scrubSecrets(resolved.error);
-      runOutput.appendLine(err);
+      output.appendLine(err);
       if (focus) void window.showErrorMessage(err);
       return err;
     }
     const ctx = resolved.ctx;
 
-    const output = runOutput;
     const deps: RunDeps = {
       secrets: {
-        getProKey: () => secrets!.getProKey(),
+        getProKey: () => secretStore.getProKey(),
       },
       endpoint: endpointCheck.endpoint,
       bus: { notifyChart },
-      results: resultsStore,
+      results: focusStore,
       output: {
         appendLine(line: string) {
           output.appendLine(scrubSecrets(line));
@@ -275,7 +325,7 @@ async function runScriptCommand(focus: boolean): Promise<string | undefined> {
       },
     };
 
-    const outcome = await orchestrator.run(
+    const outcome = await runOrch.run(
       {
         script,
         uri: doc.uri.toString(),
@@ -553,6 +603,11 @@ export function activate(context: ExtensionContext): void {
   resultsProvider = registerResultsView(context, resultsStore);
   strategyProvider = registerStrategyView(context, resultsStore);
   registerAxisTreeViews(context);
+  registerApplyBuiltin(context);
+  registerPluginsAndWorkers(context, {
+    get: <T>(key: string) => context.globalState.get<T>(key),
+    update: (key, value) => context.globalState.update(key, value),
+  });
 
   runOutput = window.createOutputChannel(RUN_OUTPUT_CHANNEL_NAME);
   context.subscriptions.push(runOutput);
@@ -579,6 +634,61 @@ export function activate(context: ExtensionContext): void {
   context.subscriptions.push(statusBar);
   statusBar.show();
 
+  liveStatusBar = window.createStatusBarItem('axis.ide.live', StatusBarAlignment.Left, 99);
+  liveStatusBar.name = 'AXIS Live';
+  liveStatusBar.command = COMMANDS.liveStart;
+  context.subscriptions.push(liveStatusBar);
+  const offHud = formatLiveStatus('off');
+  applyLiveHud(offHud);
+  liveStatusBar.show();
+
+  const liveSettings = readLiveSettings();
+  const secretStore = secrets;
+  // Holder so fan-out can close over the bridge after construction.
+  let onFrame: LiveFrameHandler = () => {};
+  const bridge = createLiveSessionBridge({
+    secrets: {
+      getWorkerKey: async () => {
+        if (!secretStore) return undefined;
+        return secretStore.getWorkerKey();
+      },
+    },
+    workerUrl: liveSettings.workerUrl,
+    liveEnabled: liveSettings.liveEnabled,
+    output: {
+      appendLine(line: string) {
+        runOutput?.appendLine(scrubSecrets(line));
+      },
+    },
+    onFrame: (frame) => {
+      onFrame(frame);
+    },
+    onStatus: (_state, label) => {
+      applyLiveHud(label);
+    },
+  });
+  liveBridge = bridge;
+  const fanout = createLiveChartFanout({
+    seriesKey: '',
+    filterSeriesKey: false,
+    output: {
+      appendLine(line: string) {
+        runOutput?.appendLine(scrubSecrets(line));
+      },
+    },
+    resumeDeps: {
+      output: {
+        appendLine(line: string) {
+          runOutput?.appendLine(scrubSecrets(line));
+        },
+      },
+      markDegraded: (reason) => bridge.markDegraded(reason),
+      remint: () => bridge.start(),
+    },
+  });
+  onFrame = fanout.onFrame;
+  applyLiveHud(bridge.getStatusLabel());
+
   context.subscriptions.push(
     registerChartEditorProvider(context),
     commands.registerCommand(COMMANDS.showRunOutput, () => {
@@ -595,6 +705,7 @@ export function activate(context: ExtensionContext): void {
     commands.registerCommand(COMMANDS.setWorkerKey, () => promptAndSetWorkerKey()),
     commands.registerCommand(COMMANDS.setProKey, () => promptAndSetProKey()),
     commands.registerCommand(COMMANDS.clearSecrets, () => promptAndClearSecrets()),
+    ...registerLiveCommands(commands, bridge),
   );
 
   // Sync check — avoid deferred timers that can outlive deactivate.
@@ -615,6 +726,12 @@ export function deactivate(): void {
   }
   commandAbort = undefined;
   try {
+    liveBridge?.stop();
+  } catch {
+    // ignore
+  }
+  liveBridge = undefined;
+  try {
     orchestrator?.abortAll();
   } catch {
     // ignore
@@ -622,6 +739,7 @@ export function deactivate(): void {
   setLogSink(null);
   runOutput = undefined;
   statusBar = undefined;
+  liveStatusBar = undefined;
   secrets = undefined;
   runDiagnostics = undefined;
   orchestrator = undefined;

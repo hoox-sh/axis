@@ -43,6 +43,7 @@ export const INCLUDE = [
   'src/run/',
   'src/views/',
   'src/live/',
+  'src/plugins/',
 ];
 
 /** Unanchored substrings so relative SF paths like `out/x` still match. */
@@ -66,6 +67,9 @@ export const EXCLUDE = [
   'views/library.ts',
   'views/layers.ts',
   'views/indicators.ts',
+  'views/workers.ts',
+  'plugins/index.ts',
+  'plugins/tree.ts',
 ];
 
 export function normalize(file) {

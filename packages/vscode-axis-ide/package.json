@@ -55,6 +55,8 @@
     "onView:axis.library",
     "onView:axis.layers",
     "onView:axis.indicators",
+    "onView:axis.plugins",
+    "onView:axis.workers",
     "onCommand:axis.showRunOutput",
     "onCommand:axis.openChart",
     "onCommand:axis.runScript",
@@ -63,6 +65,10 @@
     "onCommand:axis.secrets.setWorkerKey",
     "onCommand:axis.secrets.setProKey",
     "onCommand:axis.secrets.clear",
+    "onCommand:axis.applyBuiltin",
+    "onCommand:axis.liveStart",
+    "onCommand:axis.liveStop",
+    "onCommand:axis.workers.probeAll",
     "workspaceContains:**/*.axis.json",
     "workspaceContains:**/*.pyne",
     "workspaceContains:**/*.pine",
@@ -101,6 +107,14 @@
         {
           "id": "axis.indicators",
           "name": "Scripts"
+        },
+        {
+          "id": "axis.plugins",
+          "name": "Plugins"
+        },
+        {
+          "id": "axis.workers",
+          "name": "Workers"
         }
       ],
       "axis-panel": [
@@ -170,6 +184,26 @@
         "command": "axis.secrets.clear",
         "title": "Clear Stored Secrets",
         "category": "AXIS"
+      },
+      {
+        "command": "axis.applyBuiltin",
+        "title": "Apply Builtin Script",
+        "category": "AXIS"
+      },
+      {
+        "command": "axis.liveStart",
+        "title": "Start Live",
+        "category": "AXIS"
+      },
+      {
+        "command": "axis.liveStop",
+        "title": "Stop Live",
+        "category": "AXIS"
+      },
+      {
+        "command": "axis.workers.probeAll",
+        "title": "Probe Workers",
+        "category": "AXIS"
       }
     ],
     "keybindings": [
@@ -197,6 +231,9 @@
         {
           "command": "axis.runScriptSilent",
           "when": "editorLangId == pinescript"
+        },
+        {
+          "command": "axis.applyBuiltin"
         }
       ]
     },
@@ -226,6 +263,11 @@
             "scope": "application",
             "markdownDescription": "When false (default), `axis.engine.endpoint` must be loopback (`127.0.0.1` / `localhost` / `::1`) so the Pro Bearer key is not sent off-machine. **Application (user) scope only** — workspace settings cannot enable remote endpoints. Opt in only for trusted remote Pro hosts."
           },
+          "axis.engine.allowPyodide": {
+            "type": "boolean",
+            "default": false,
+            "description": "Allow the optional Pyodide calculator engine (webview assets; default off)."
+          },
           "axis.chart.historyBars": {
             "type": "number",
             "default": 1500,
@@ -242,6 +284,21 @@
             "type": "string",
             "default": "http://127.0.0.1:5003",
             "markdownDescription": "Base URL for the local `@hoox-sh/axis-datafeed` sidecar (`GET /datafeed/ohlcv`). Defaults to loopback `:5003`. Remote URLs require `#axis.engine.allowRemoteEndpoint#` (same posture as the Pro engine endpoint)."
+          },
+          "axis.worker.url": {
+            "type": "string",
+            "default": "https://worker.axis.hoox.sh",
+            "markdownDescription": "AXIS Worker origin for live ticket mint (`GET /api/ws/live?issue=ticket`) and WS upgrade (`/api/ws/live?ticket=`). Never put `pn_` keys in settings — use SecretStorage."
+          },
+          "axis.live.enabled": {
+            "type": "boolean",
+            "default": true,
+            "markdownDescription": "When false, `axis.liveStart` is a no-op and the live StatusBar stays off."
+          },
+          "axis.plugins.allowUrlInstall": {
+            "type": "boolean",
+            "default": false,
+            "description": "Allow installing plugins from remote URLs (default off)."
           }
         }
       }

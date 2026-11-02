@@ -21,6 +21,7 @@ export {
   notifyChart,
   resetChartBusForTests,
   subscribeChartNotify,
+  type ChartDeltaNotify,
   type ChartFullNotify,
   type ChartNotifyHandler,
   type ChartNotifyMessage,

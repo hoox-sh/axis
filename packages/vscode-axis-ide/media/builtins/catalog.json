@@ -1,0 +1,1816 @@
+{
+  "schema": "axis.builtins.v1",
+  "source": "src/indicators/builtins",
+  "generatedAt": "2026-11-02",
+  "count": 111,
+  "scripts": [
+    {
+      "id": "sma",
+      "title": "AXIS SMA",
+      "shorttitle": "SMA",
+      "description": "Simple moving average of source",
+      "category": "moving-average",
+      "categoryLabel": "Moving averages",
+      "kind": "indicator",
+      "overlay": true,
+      "covers": "Simple moving average",
+      "tags": [
+        "ma",
+        "sma",
+        "overlay"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS SMA\", shorttitle=\"SMA\", overlay=true)\nlen = input.int(20, \"Length\", minval=1)\nsrc = input.source(close, \"Source\")\nout = ta.sma(src, len)\nplot(out, \"SMA\", color=#6366f1, linewidth=2)\n"
+    },
+    {
+      "id": "ema",
+      "title": "AXIS EMA",
+      "shorttitle": "EMA",
+      "description": "Exponential moving average of source",
+      "category": "moving-average",
+      "categoryLabel": "Moving averages",
+      "kind": "indicator",
+      "overlay": true,
+      "covers": "Exponential moving average",
+      "tags": [
+        "ma",
+        "ema",
+        "overlay"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS EMA\", shorttitle=\"EMA\", overlay=true)\nlen = input.int(20, \"Length\", minval=1)\nsrc = input.source(close, \"Source\")\nout = ta.ema(src, len)\nplot(out, \"EMA\", color=#6366f1, linewidth=2)\n"
+    },
+    {
+      "id": "wma",
+      "title": "AXIS WMA",
+      "shorttitle": "WMA",
+      "description": "Linear-weighted moving average",
+      "category": "moving-average",
+      "categoryLabel": "Moving averages",
+      "kind": "indicator",
+      "overlay": true,
+      "covers": "Weighted moving average",
+      "tags": [
+        "ma",
+        "wma",
+        "overlay"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS WMA\", shorttitle=\"WMA\", overlay=true)\nlen = input.int(20, \"Length\", minval=1)\nsrc = input.source(close, \"Source\")\nout = ta.wma(src, len)\nplot(out, \"WMA\", color=#6366f1, linewidth=2)\n"
+    },
+    {
+      "id": "rma",
+      "title": "AXIS RMA",
+      "shorttitle": "RMA",
+      "description": "Wilder / smoothed moving average (RMA)",
+      "category": "moving-average",
+      "categoryLabel": "Moving averages",
+      "kind": "indicator",
+      "overlay": true,
+      "covers": "Smoothed moving average (Wilder RMA)",
+      "tags": [
+        "ma",
+        "rma",
+        "smma",
+        "overlay"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS RMA\", shorttitle=\"RMA\", overlay=true)\nlen = input.int(20, \"Length\", minval=1)\nsrc = input.source(close, \"Source\")\nout = ta.rma(src, len)\nplot(out, \"RMA\", color=#6366f1, linewidth=2)\n"
+    },
+    {
+      "id": "vwma",
+      "title": "AXIS VWMA",
+      "shorttitle": "VWMA",
+      "description": "Volume-weighted moving average",
+      "category": "moving-average",
+      "categoryLabel": "Moving averages",
+      "kind": "indicator",
+      "overlay": true,
+      "covers": "Volume-weighted moving average",
+      "tags": [
+        "ma",
+        "vwma",
+        "volume",
+        "overlay"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS VWMA\", shorttitle=\"VWMA\", overlay=true)\nlen = input.int(20, \"Length\", minval=1)\nsrc = input.source(close, \"Source\")\nout = ta.vwma(src, len)\nplot(out, \"VWMA\", color=#6366f1, linewidth=2)\n"
+    },
+    {
+      "id": "hma",
+      "title": "AXIS Hull MA",
+      "shorttitle": "HMA",
+      "description": "Hull moving average",
+      "category": "moving-average",
+      "categoryLabel": "Moving averages",
+      "kind": "indicator",
+      "overlay": true,
+      "covers": "Hull moving average",
+      "tags": [
+        "ma",
+        "hma",
+        "overlay"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Hull MA\", shorttitle=\"HMA\", overlay=true)\nlen = input.int(20, \"Length\", minval=1)\nsrc = input.source(close, \"Source\")\nout = ta.hma(src, len)\nplot(out, \"HMA\", color=#6366f1, linewidth=2)\n"
+    },
+    {
+      "id": "dema",
+      "title": "AXIS DEMA",
+      "shorttitle": "DEMA",
+      "description": "Double exponential moving average",
+      "category": "moving-average",
+      "categoryLabel": "Moving averages",
+      "kind": "indicator",
+      "overlay": true,
+      "covers": "Double exponential moving average",
+      "tags": [
+        "ma",
+        "dema",
+        "overlay"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS DEMA\", shorttitle=\"DEMA\", overlay=true)\nlen = input.int(20, \"Length\", minval=1)\nsrc = input.source(close, \"Source\")\nout = ta.dema(src, len)\nplot(out, \"DEMA\", color=#6366f1, linewidth=2)\n"
+    },
+    {
+      "id": "tema",
+      "title": "AXIS TEMA",
+      "shorttitle": "TEMA",
+      "description": "Triple exponential moving average",
+      "category": "moving-average",
+      "categoryLabel": "Moving averages",
+      "kind": "indicator",
+      "overlay": true,
+      "covers": "Triple exponential moving average",
+      "tags": [
+        "ma",
+        "tema",
+        "overlay"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS TEMA\", shorttitle=\"TEMA\", overlay=true)\nlen = input.int(20, \"Length\", minval=1)\nsrc = input.source(close, \"Source\")\nout = ta.tema(src, len)\nplot(out, \"TEMA\", color=#6366f1, linewidth=2)\n"
+    },
+    {
+      "id": "alma",
+      "title": "AXIS ALMA",
+      "shorttitle": "ALMA",
+      "description": "Arnaud Legoux moving average",
+      "category": "moving-average",
+      "categoryLabel": "Moving averages",
+      "kind": "indicator",
+      "overlay": true,
+      "covers": "Arnaud Legoux moving average",
+      "tags": [
+        "ma",
+        "alma",
+        "overlay"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS ALMA\", shorttitle=\"ALMA\", overlay=true)\nlen = input.int(9, \"Length\", minval=1)\noffset = input.float(0.85, \"Offset\", minval=0.0, maxval=1.0, step=0.05)\nsigma = input.float(6.0, \"Sigma\", minval=0.1, step=0.1)\nsrc = input.source(close, \"Source\")\nout = ta.alma(src, len, offset, sigma)\nplot(out, \"ALMA\", color=#6366f1, linewidth=2)\n"
+    },
+    {
+      "id": "kama",
+      "title": "AXIS KAMA",
+      "shorttitle": "KAMA",
+      "description": "Kaufman adaptive moving average",
+      "category": "moving-average",
+      "categoryLabel": "Moving averages",
+      "kind": "indicator",
+      "overlay": true,
+      "covers": "Kaufman adaptive moving average",
+      "tags": [
+        "ma",
+        "kama",
+        "overlay"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS KAMA\", shorttitle=\"KAMA\", overlay=true)\nlen = input.int(10, \"Length\", minval=1)\nfast = input.int(2, \"Fast\", minval=1)\nslow = input.int(30, \"Slow\", minval=1)\nsrc = input.source(close, \"Source\")\nout = ta.kama(src, len, fast, slow)\nplot(out, \"KAMA\", color=#6366f1, linewidth=2)\n"
+    },
+    {
+      "id": "lsma",
+      "title": "AXIS LSMA",
+      "shorttitle": "LSMA",
+      "description": "Least-squares (linear regression) moving average",
+      "category": "moving-average",
+      "categoryLabel": "Moving averages",
+      "kind": "indicator",
+      "overlay": true,
+      "covers": "Least-squares moving average",
+      "tags": [
+        "ma",
+        "linreg",
+        "lsma",
+        "overlay"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS LSMA\", shorttitle=\"LSMA\", overlay=true)\nlen = input.int(25, \"Length\", minval=1)\nsrc = input.source(close, \"Source\")\nout = ta.linreg(src, len, 0)\nplot(out, \"LSMA\", color=#6366f1, linewidth=2)\n"
+    },
+    {
+      "id": "median",
+      "title": "AXIS Median",
+      "shorttitle": "MED",
+      "description": "Rolling median of source",
+      "category": "moving-average",
+      "categoryLabel": "Moving averages",
+      "kind": "indicator",
+      "overlay": true,
+      "covers": "Rolling median",
+      "tags": [
+        "ma",
+        "median",
+        "overlay"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Median\", shorttitle=\"MED\", overlay=true)\nlen = input.int(20, \"Length\", minval=1)\nsrc = input.source(close, \"Source\")\nout = ta.median(src, len)\nplot(out, \"Median\", color=#6366f1, linewidth=2)\n"
+    },
+    {
+      "id": "swma",
+      "title": "AXIS SWMA",
+      "shorttitle": "SWMA",
+      "description": "Symmetrically weighted moving average",
+      "category": "moving-average",
+      "categoryLabel": "Moving averages",
+      "kind": "indicator",
+      "overlay": true,
+      "covers": "Symmetrically weighted moving average",
+      "tags": [
+        "ma",
+        "swma",
+        "overlay"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS SWMA\", shorttitle=\"SWMA\", overlay=true)\nsrc = input.source(close, \"Source\")\nout = ta.swma(src)\nplot(out, \"SWMA\", color=#6366f1, linewidth=2)\n"
+    },
+    {
+      "id": "mcginley",
+      "title": "AXIS McGinley",
+      "shorttitle": "MD",
+      "description": "McGinley Dynamic (public recursive formula)",
+      "category": "moving-average",
+      "categoryLabel": "Moving averages",
+      "kind": "indicator",
+      "overlay": true,
+      "covers": "McGinley Dynamic",
+      "tags": [
+        "ma",
+        "mcginley",
+        "overlay"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS McGinley\", shorttitle=\"MD\", overlay=true)\nlen = input.int(12, \"Length\", minval=1)\nsrc = input.source(close, \"Source\")\nvar float md = na\nfloat ratio = na(md) or md == 0.0 ? 1.0 : src / md\nfloat k = len * math.pow(ratio, 4)\nmd := na(md) ? src : md + (src - md) / k\nplot(md, \"McGinley\", color=#22d3ee, linewidth=2)\n"
+    },
+    {
+      "id": "ma-ribbon",
+      "title": "AXIS MA Ribbon",
+      "shorttitle": "Ribbon",
+      "description": "Four EMAs as a trend ribbon",
+      "category": "moving-average",
+      "categoryLabel": "Moving averages",
+      "kind": "indicator",
+      "overlay": true,
+      "covers": "Moving-average ribbon",
+      "tags": [
+        "ma",
+        "ema",
+        "ribbon",
+        "overlay"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS MA Ribbon\", shorttitle=\"Ribbon\", overlay=true)\nsrc = input.source(close, \"Source\")\nl1 = input.int(8, \"EMA 1\", minval=1)\nl2 = input.int(13, \"EMA 2\", minval=1)\nl3 = input.int(21, \"EMA 3\", minval=1)\nl4 = input.int(34, \"EMA 4\", minval=1)\ne1 = ta.ema(src, l1)\ne2 = ta.ema(src, l2)\ne3 = ta.ema(src, l3)\ne4 = ta.ema(src, l4)\np1 = plot(e1, \"EMA 8\", color=#22d3ee)\np2 = plot(e2, \"EMA 13\", color=#6366f1)\np3 = plot(e3, \"EMA 21\", color=#fbbf24)\np4 = plot(e4, \"EMA 34\", color=#fb7185)\nfill(p1, p2, color=color.new(#22d3ee, 88))\nfill(p3, p4, color=color.new(#fb7185, 90))\n"
+    },
+    {
+      "id": "envelope",
+      "title": "AXIS Envelope",
+      "shorttitle": "Env",
+      "description": "Percent envelope around an SMA",
+      "category": "moving-average",
+      "categoryLabel": "Moving averages",
+      "kind": "indicator",
+      "overlay": true,
+      "covers": "Moving-average envelope",
+      "tags": [
+        "ma",
+        "envelope",
+        "overlay"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Envelope\", shorttitle=\"Env\", overlay=true)\nlen = input.int(20, \"Length\", minval=1)\npct = input.float(2.5, \"Percent\", minval=0.1, step=0.1)\nsrc = input.source(close, \"Source\")\nbasis = ta.sma(src, len)\nk = pct / 100.0\nupper = basis * (1.0 + k)\nlower = basis * (1.0 - k)\nplot(basis, \"Basis\", color=#6366f1)\nu = plot(upper, \"Upper\", color=#22d3ee)\nl = plot(lower, \"Lower\", color=#22d3ee)\nfill(u, l, color=color.new(#6366f1, 92))\n"
+    },
+    {
+      "id": "ma-cross",
+      "title": "AXIS MA Cross",
+      "shorttitle": "MA X",
+      "description": "Fast / slow SMA with cross markers",
+      "category": "moving-average",
+      "categoryLabel": "Moving averages",
+      "kind": "indicator",
+      "overlay": true,
+      "covers": "Moving-average crossover (study)",
+      "tags": [
+        "ma",
+        "cross",
+        "overlay"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS MA Cross\", shorttitle=\"MA X\", overlay=true)\nfastLen = input.int(9, \"Fast\", minval=1)\nslowLen = input.int(21, \"Slow\", minval=1)\nsrc = input.source(close, \"Source\")\nfast = ta.sma(src, fastLen)\nslow = ta.sma(src, slowLen)\nplot(fast, \"Fast\", color=#22d3ee)\nplot(slow, \"Slow\", color=#fbbf24)\nbull = ta.crossover(fast, slow)\nbear = ta.crossunder(fast, slow)\nplotshape(bull, \"Up\", shape.triangleup, location.belowbar, #34d399, size=size.tiny)\nplotshape(bear, \"Down\", shape.triangledown, location.abovebar, #fb7185, size=size.tiny)\n"
+    },
+    {
+      "id": "bb",
+      "title": "AXIS Bollinger",
+      "shorttitle": "BB",
+      "description": "SMA ± standard-deviation bands",
+      "category": "channel",
+      "categoryLabel": "Channels",
+      "kind": "indicator",
+      "overlay": true,
+      "covers": "Bollinger Bands",
+      "tags": [
+        "bb",
+        "volatility",
+        "overlay"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Bollinger\", shorttitle=\"BB\", overlay=true)\nlen = input.int(20, \"Length\", minval=1)\nmult = input.float(2.0, \"StdDev\", minval=0.1, step=0.1)\nsrc = input.source(close, \"Source\")\nbasis = ta.sma(src, len)\ndev = mult * ta.stdev(src, len)\nupper = basis + dev\nlower = basis - dev\nplot(basis, \"Basis\", color=#6366f1)\nu = plot(upper, \"Upper\", color=#22d3ee)\nl = plot(lower, \"Lower\", color=#22d3ee)\nfill(u, l, color=color.new(#6366f1, 90), title=\"Band\")\n"
+    },
+    {
+      "id": "bb-pct",
+      "title": "AXIS Bollinger %B",
+      "shorttitle": "%B",
+      "description": "Position of source inside Bollinger Bands",
+      "category": "channel",
+      "categoryLabel": "Channels",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Bollinger %B",
+      "tags": [
+        "bb",
+        "percent-b",
+        "oscillator"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Bollinger %B\", shorttitle=\"%B\", overlay=false)\nlen = input.int(20, \"Length\", minval=1)\nmult = input.float(2.0, \"StdDev\", minval=0.1, step=0.1)\nsrc = input.source(close, \"Source\")\nbasis = ta.sma(src, len)\ndev = mult * ta.stdev(src, len)\nupper = basis + dev\nlower = basis - dev\npctB = upper == lower ? na : (src - lower) / (upper - lower)\nplot(pctB, \"%B\", color=#6366f1, linewidth=2)\nhline(1.0, \"Upper\", color=#fb7185, linestyle=hline.style_dashed)\nhline(0.0, \"Lower\", color=#34d399, linestyle=hline.style_dashed)\nhline(0.5, \"Mid\", color=#94a3b8, linestyle=hline.style_dotted)\n"
+    },
+    {
+      "id": "bb-width",
+      "title": "AXIS Bollinger Width",
+      "shorttitle": "BBW",
+      "description": "(upper − lower) / basis",
+      "category": "channel",
+      "categoryLabel": "Channels",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Bollinger Bandwidth",
+      "tags": [
+        "bb",
+        "width",
+        "volatility"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Bollinger Width\", shorttitle=\"BBW\", overlay=false)\nlen = input.int(20, \"Length\", minval=1)\nmult = input.float(2.0, \"StdDev\", minval=0.1, step=0.1)\nsrc = input.source(close, \"Source\")\nbasis = ta.sma(src, len)\ndev = mult * ta.stdev(src, len)\nbw = basis == 0 ? na : (2.0 * dev) / basis\nplot(bw, \"Width\", color=#22d3ee, linewidth=2)\n"
+    },
+    {
+      "id": "keltner",
+      "title": "AXIS Keltner",
+      "shorttitle": "KC",
+      "description": "EMA ± ATR multiple",
+      "category": "channel",
+      "categoryLabel": "Channels",
+      "kind": "indicator",
+      "overlay": true,
+      "covers": "Keltner Channels",
+      "tags": [
+        "keltner",
+        "atr",
+        "overlay"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Keltner\", shorttitle=\"KC\", overlay=true)\nlen = input.int(20, \"EMA Length\", minval=1)\natrLen = input.int(10, \"ATR Length\", minval=1)\nmult = input.float(2.0, \"ATR mult\", minval=0.1, step=0.1)\nsrc = input.source(close, \"Source\")\nbasis = ta.ema(src, len)\nrng = ta.atr(atrLen) * mult\nupper = basis + rng\nlower = basis - rng\nplot(basis, \"Basis\", color=#6366f1)\nu = plot(upper, \"Upper\", color=#fbbf24)\nl = plot(lower, \"Lower\", color=#fbbf24)\nfill(u, l, color=color.new(#fbbf24, 92))\n"
+    },
+    {
+      "id": "donchian",
+      "title": "AXIS Donchian",
+      "shorttitle": "DC",
+      "description": "N-bar high / low channel",
+      "category": "channel",
+      "categoryLabel": "Channels",
+      "kind": "indicator",
+      "overlay": true,
+      "covers": "Donchian Channels",
+      "tags": [
+        "donchian",
+        "breakout",
+        "overlay"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Donchian\", shorttitle=\"DC\", overlay=true)\nlen = input.int(20, \"Length\", minval=1)\nupper = ta.highest(high, len)\nlower = ta.lowest(low, len)\nmid = (upper + lower) / 2.0\nu = plot(upper, \"Upper\", color=#22d3ee)\nl = plot(lower, \"Lower\", color=#22d3ee)\nplot(mid, \"Mid\", color=#94a3b8, style=plot.style_stepline)\nfill(u, l, color=color.new(#22d3ee, 92))\n"
+    },
+    {
+      "id": "linreg-channel",
+      "title": "AXIS LinReg Channel",
+      "shorttitle": "LRC",
+      "description": "Linear regression ± residual deviation",
+      "category": "channel",
+      "categoryLabel": "Channels",
+      "kind": "indicator",
+      "overlay": true,
+      "covers": "Linear regression channel",
+      "tags": [
+        "linreg",
+        "channel",
+        "overlay"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS LinReg Channel\", shorttitle=\"LRC\", overlay=true)\nlen = input.int(50, \"Length\", minval=2)\nmult = input.float(2.0, \"Dev mult\", minval=0.1, step=0.1)\nsrc = input.source(close, \"Source\")\nbasis = ta.linreg(src, len, 0)\ndev = ta.stdev(src - basis, len) * mult\nupper = basis + dev\nlower = basis - dev\nplot(basis, \"LinReg\", color=#6366f1)\nu = plot(upper, \"Upper\", color=#fb7185)\nl = plot(lower, \"Lower\", color=#34d399)\nfill(u, l, color=color.new(#6366f1, 92))\n"
+    },
+    {
+      "id": "linreg-curve",
+      "title": "AXIS LinReg Curve",
+      "shorttitle": "LR",
+      "description": "Linear regression value of source",
+      "category": "channel",
+      "categoryLabel": "Channels",
+      "kind": "indicator",
+      "overlay": true,
+      "covers": "Linear regression curve",
+      "tags": [
+        "linreg",
+        "overlay"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS LinReg Curve\", shorttitle=\"LR\", overlay=true)\nlen = input.int(25, \"Length\", minval=1)\nsrc = input.source(close, \"Source\")\nout = ta.linreg(src, len, 0)\nplot(out, \"LinReg\", color=#fbbf24, linewidth=2)\n"
+    },
+    {
+      "id": "bbtrend",
+      "title": "AXIS BB Trend",
+      "shorttitle": "BBT",
+      "description": "Short vs long Bollinger width (public difference)",
+      "category": "channel",
+      "categoryLabel": "Channels",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Bollinger trend (short vs long width)",
+      "tags": [
+        "bb",
+        "trend",
+        "oscillator"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS BB Trend\", shorttitle=\"BBT\", overlay=false)\nshortLen = input.int(20, \"Short\", minval=1)\nlongLen = input.int(50, \"Long\", minval=2)\nmult = input.float(2.0, \"StdDev\", minval=0.1, step=0.1)\nsrc = input.source(close, \"Source\")\nsDev = ta.stdev(src, shortLen) * mult\nlDev = ta.stdev(src, longLen) * mult\nbbt = 2.0 * (sDev - lDev)\nplot(bbt, \"BB Trend\", style=plot.style_columns, color=bbt >= 0 ? #34d399 : #fb7185)\nhline(0, \"Zero\", color=#94a3b8)\n"
+    },
+    {
+      "id": "rsi",
+      "title": "AXIS RSI",
+      "shorttitle": "RSI",
+      "description": "Relative Strength Index with OB/OS lines",
+      "category": "oscillator",
+      "categoryLabel": "Oscillators",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Relative Strength Index",
+      "tags": [
+        "rsi",
+        "momentum"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS RSI\", shorttitle=\"RSI\", overlay=false)\nlen = input.int(14, \"Length\", minval=1)\nob = input.float(70, \"Overbought\")\nos = input.float(30, \"Oversold\")\nsrc = input.source(close, \"Source\")\nr = ta.rsi(src, len)\nplot(r, \"RSI\", color=#6366f1, linewidth=2)\nhline(ob, \"OB\", color=#fb7185, linestyle=hline.style_dashed)\nhline(os, \"OS\", color=#34d399, linestyle=hline.style_dashed)\nhline(50, \"Mid\", color=#94a3b8, linestyle=hline.style_dotted)\nbgcolor(r > ob ? color.new(#fb7185, 90) : r < os ? color.new(#34d399, 90) : na)\n"
+    },
+    {
+      "id": "stoch",
+      "title": "AXIS Stochastic",
+      "shorttitle": "Stoch",
+      "description": "Slow stochastic %K / %D",
+      "category": "oscillator",
+      "categoryLabel": "Oscillators",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Stochastic oscillator",
+      "tags": [
+        "stoch",
+        "momentum"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Stochastic\", shorttitle=\"Stoch\", overlay=false)\nkLen = input.int(14, \"K length\", minval=1)\nkSmooth = input.int(3, \"K smooth\", minval=1)\ndSmooth = input.int(3, \"D smooth\", minval=1)\nob = input.float(80, \"Overbought\")\nos = input.float(20, \"Oversold\")\nk = ta.sma(ta.stoch(close, high, low, kLen), kSmooth)\nd = ta.sma(k, dSmooth)\nplot(k, \"%K\", color=#6366f1)\nplot(d, \"%D\", color=#fbbf24)\nhline(ob, \"OB\", color=#fb7185, linestyle=hline.style_dashed)\nhline(os, \"OS\", color=#34d399, linestyle=hline.style_dashed)\n"
+    },
+    {
+      "id": "stoch-rsi",
+      "title": "AXIS Stoch RSI",
+      "shorttitle": "StochRSI",
+      "description": "Stochastic of RSI",
+      "category": "oscillator",
+      "categoryLabel": "Oscillators",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Stochastic RSI",
+      "tags": [
+        "stoch",
+        "rsi"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Stoch RSI\", shorttitle=\"StochRSI\", overlay=false)\nrsiLen = input.int(14, \"RSI length\", minval=1)\nstochLen = input.int(14, \"Stoch length\", minval=1)\nkSmooth = input.int(3, \"K\", minval=1)\ndSmooth = input.int(3, \"D\", minval=1)\nr = ta.rsi(close, rsiLen)\nk = ta.sma(ta.stoch(r, r, r, stochLen), kSmooth)\nd = ta.sma(k, dSmooth)\nplot(k, \"%K\", color=#6366f1)\nplot(d, \"%D\", color=#fbbf24)\nhline(80, \"OB\", color=#fb7185, linestyle=hline.style_dashed)\nhline(20, \"OS\", color=#34d399, linestyle=hline.style_dashed)\n"
+    },
+    {
+      "id": "macd",
+      "title": "AXIS MACD",
+      "shorttitle": "MACD",
+      "description": "MACD, signal, and histogram",
+      "category": "oscillator",
+      "categoryLabel": "Oscillators",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "MACD",
+      "tags": [
+        "macd",
+        "momentum"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS MACD\", shorttitle=\"MACD\", overlay=false)\nfastLen = input.int(12, \"Fast\", minval=1)\nslowLen = input.int(26, \"Slow\", minval=1)\nsigLen = input.int(9, \"Signal\", minval=1)\nsrc = input.source(close, \"Source\")\n[macdLine, signalLine, hist] = ta.macd(src, fastLen, slowLen, sigLen)\nplot(hist, \"Hist\", style=plot.style_columns, color=hist >= 0 ? #34d399 : #fb7185)\nplot(macdLine, \"MACD\", color=#6366f1)\nplot(signalLine, \"Signal\", color=#fbbf24)\nhline(0, \"Zero\", color=#94a3b8)\n"
+    },
+    {
+      "id": "cci",
+      "title": "AXIS CCI",
+      "shorttitle": "CCI",
+      "description": "Commodity Channel Index",
+      "category": "oscillator",
+      "categoryLabel": "Oscillators",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Commodity Channel Index",
+      "tags": [
+        "cci",
+        "momentum"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS CCI\", shorttitle=\"CCI\", overlay=false)\nlen = input.int(20, \"Length\", minval=1)\nsrc = input.source(hlc3, \"Source\")\nc = ta.cci(src, len)\nplot(c, \"CCI\", color=#6366f1, linewidth=2)\nhline(100, \"+100\", color=#fb7185, linestyle=hline.style_dashed)\nhline(-100, \"-100\", color=#34d399, linestyle=hline.style_dashed)\nhline(0, \"Zero\", color=#94a3b8)\n"
+    },
+    {
+      "id": "mom",
+      "title": "AXIS Momentum",
+      "shorttitle": "MOM",
+      "description": "Price momentum (close − close[n])",
+      "category": "oscillator",
+      "categoryLabel": "Oscillators",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Momentum",
+      "tags": [
+        "momentum"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Momentum\", shorttitle=\"MOM\", overlay=false)\nlen = input.int(10, \"Length\", minval=1)\nsrc = input.source(close, \"Source\")\nm = ta.mom(src, len)\nplot(m, \"Mom\", color=#22d3ee, linewidth=2)\nhline(0, \"Zero\", color=#94a3b8)\n"
+    },
+    {
+      "id": "roc",
+      "title": "AXIS ROC",
+      "shorttitle": "ROC",
+      "description": "Rate of change (%)",
+      "category": "oscillator",
+      "categoryLabel": "Oscillators",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Rate of change",
+      "tags": [
+        "roc",
+        "momentum"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS ROC\", shorttitle=\"ROC\", overlay=false)\nlen = input.int(9, \"Length\", minval=1)\nsrc = input.source(close, \"Source\")\nr = ta.roc(src, len)\nplot(r, \"ROC\", color=#6366f1, linewidth=2)\nhline(0, \"Zero\", color=#94a3b8)\n"
+    },
+    {
+      "id": "willr",
+      "title": "AXIS Williams %R",
+      "shorttitle": "%R",
+      "description": "Williams percent range",
+      "category": "oscillator",
+      "categoryLabel": "Oscillators",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Williams %R",
+      "tags": [
+        "williams",
+        "percent-r"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Williams %R\", shorttitle=\"%R\", overlay=false)\nlen = input.int(14, \"Length\", minval=1)\nw = ta.willr(len)\nplot(w, \"%R\", color=#fbbf24, linewidth=2)\nhline(-20, \"OB\", color=#fb7185, linestyle=hline.style_dashed)\nhline(-80, \"OS\", color=#34d399, linestyle=hline.style_dashed)\n"
+    },
+    {
+      "id": "ao",
+      "title": "AXIS Awesome",
+      "shorttitle": "AO",
+      "description": "Awesome Oscillator (SMA 5 − SMA 34 of hl2)",
+      "category": "oscillator",
+      "categoryLabel": "Oscillators",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Awesome Oscillator",
+      "tags": [
+        "ao",
+        "momentum"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Awesome\", shorttitle=\"AO\", overlay=false)\nfast = input.int(5, \"Fast\", minval=1)\nslow = input.int(34, \"Slow\", minval=1)\nao = ta.sma(hl2, fast) - ta.sma(hl2, slow)\nplot(ao, \"AO\", style=plot.style_columns, color=ao >= 0 ? #34d399 : #fb7185)\nhline(0, \"Zero\", color=#94a3b8)\n"
+    },
+    {
+      "id": "uo",
+      "title": "AXIS Ultimate",
+      "shorttitle": "UO",
+      "description": "Ultimate Oscillator",
+      "category": "oscillator",
+      "categoryLabel": "Oscillators",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Ultimate Oscillator",
+      "tags": [
+        "uo",
+        "momentum"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Ultimate\", shorttitle=\"UO\", overlay=false)\ns7 = input.int(7, \"Short\", minval=1)\ns14 = input.int(14, \"Mid\", minval=1)\ns28 = input.int(28, \"Long\", minval=1)\n// Williams UO: buying pressure / true range, weighted 4:2:1.\nprev = close[1]\nbp = close - math.min(low, prev)\ntrRange = math.max(high, prev) - math.min(low, prev)\naFast = math.sum(bp, s7) / math.sum(trRange, s7)\naMid = math.sum(bp, s14) / math.sum(trRange, s14)\naSlow = math.sum(bp, s28) / math.sum(trRange, s28)\nu = 100.0 * (4.0 * aFast + 2.0 * aMid + aSlow) / 7.0\nplot(u, \"UO\", color=#6366f1, linewidth=2)\nhline(70, \"OB\", color=#fb7185, linestyle=hline.style_dashed)\nhline(30, \"OS\", color=#34d399, linestyle=hline.style_dashed)\n"
+    },
+    {
+      "id": "trix",
+      "title": "AXIS TRIX",
+      "shorttitle": "TRIX",
+      "description": "Triple-smoothed EMA rate of change",
+      "category": "oscillator",
+      "categoryLabel": "Oscillators",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "TRIX",
+      "tags": [
+        "trix",
+        "momentum"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS TRIX\", shorttitle=\"TRIX\", overlay=false)\nlen = input.int(18, \"Length\", minval=1)\nsig = input.int(9, \"Signal\", minval=1)\nsrc = input.source(close, \"Source\")\ne1 = ta.ema(src, len)\ne2 = ta.ema(e1, len)\ne3 = ta.ema(e2, len)\ntrix = e3[1] == 0 ? na : 100.0 * (e3 - e3[1]) / e3[1]\nsignal = ta.ema(trix, sig)\nplot(trix, \"TRIX\", color=#6366f1)\nplot(signal, \"Signal\", color=#fbbf24)\nhline(0, \"Zero\", color=#94a3b8)\n"
+    },
+    {
+      "id": "tsi",
+      "title": "AXIS TSI",
+      "shorttitle": "TSI",
+      "description": "True Strength Index",
+      "category": "oscillator",
+      "categoryLabel": "Oscillators",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "True Strength Index",
+      "tags": [
+        "tsi",
+        "momentum"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS TSI\", shorttitle=\"TSI\", overlay=false)\nlongLen = input.int(25, \"Long\", minval=1)\nshortLen = input.int(13, \"Short\", minval=1)\nsigLen = input.int(7, \"Signal\", minval=1)\nsrc = input.source(close, \"Source\")\nt = ta.tsi(src, shortLen, longLen)\ns = ta.ema(t, sigLen)\nplot(t, \"TSI\", color=#6366f1)\nplot(s, \"Signal\", color=#fbbf24)\nhline(0, \"Zero\", color=#94a3b8)\n"
+    },
+    {
+      "id": "cmo",
+      "title": "AXIS CMO",
+      "shorttitle": "CMO",
+      "description": "Chande Momentum Oscillator",
+      "category": "oscillator",
+      "categoryLabel": "Oscillators",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Chande Momentum Oscillator",
+      "tags": [
+        "cmo",
+        "momentum"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS CMO\", shorttitle=\"CMO\", overlay=false)\nlen = input.int(14, \"Length\", minval=1)\nsrc = input.source(close, \"Source\")\nc = ta.cmo(src, len)\nplot(c, \"CMO\", color=#22d3ee, linewidth=2)\nhline(50, \"OB\", color=#fb7185, linestyle=hline.style_dashed)\nhline(-50, \"OS\", color=#34d399, linestyle=hline.style_dashed)\nhline(0, \"Zero\", color=#94a3b8)\n"
+    },
+    {
+      "id": "fisher",
+      "title": "AXIS Fisher",
+      "shorttitle": "Fish",
+      "description": "Fisher Transform of a normalized high/low range",
+      "category": "oscillator",
+      "categoryLabel": "Oscillators",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Fisher Transform",
+      "tags": [
+        "fisher",
+        "momentum"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Fisher\", shorttitle=\"Fish\", overlay=false)\nlen = input.int(10, \"Length\", minval=1)\nsrc = hl2\nhi = ta.highest(src, len)\nlo = ta.lowest(src, len)\nraw = hi == lo ? 0.0 : 2.0 * ((src - lo) / (hi - lo) - 0.5)\nvar float value = 0.0\nvalue := 0.33 * raw + 0.67 * nz(value[1])\nvalue := math.max(-0.999, math.min(0.999, value))\nvar float fish = 0.0\nfish := 0.5 * math.log((1.0 + value) / (1.0 - value)) + 0.5 * nz(fish[1])\nplot(fish, \"Fisher\", color=#6366f1)\nplot(fish[1], \"Trigger\", color=#fbbf24)\nhline(0, \"Zero\", color=#94a3b8)\n"
+    },
+    {
+      "id": "coppock",
+      "title": "AXIS Coppock",
+      "shorttitle": "COP",
+      "description": "WMA of two ROC terms",
+      "category": "oscillator",
+      "categoryLabel": "Oscillators",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Coppock Curve",
+      "tags": [
+        "coppock",
+        "roc"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Coppock\", shorttitle=\"COP\", overlay=false)\nwmaLen = input.int(10, \"WMA\", minval=1)\nrocLong = input.int(14, \"ROC long\", minval=1)\nrocShort = input.int(11, \"ROC short\", minval=1)\nsrc = input.source(close, \"Source\")\nc = ta.wma(ta.roc(src, rocLong) + ta.roc(src, rocShort), wmaLen)\nplot(c, \"Coppock\", color=#6366f1, linewidth=2)\nhline(0, \"Zero\", color=#94a3b8)\n"
+    },
+    {
+      "id": "kst",
+      "title": "AXIS KST",
+      "shorttitle": "KST",
+      "description": "Know Sure Thing (weighted ROC sum)",
+      "category": "oscillator",
+      "categoryLabel": "Oscillators",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Know Sure Thing",
+      "tags": [
+        "kst",
+        "roc"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS KST\", shorttitle=\"KST\", overlay=false)\nr1 = ta.roc(close, 10)\nr2 = ta.roc(close, 15)\nr3 = ta.roc(close, 20)\nr4 = ta.roc(close, 30)\nkst = ta.sma(r1, 10) + 2.0 * ta.sma(r2, 10) + 3.0 * ta.sma(r3, 10) + 4.0 * ta.sma(r4, 15)\nsig = ta.sma(kst, 9)\nplot(kst, \"KST\", color=#6366f1)\nplot(sig, \"Signal\", color=#fbbf24)\nhline(0, \"Zero\", color=#94a3b8)\n"
+    },
+    {
+      "id": "rvi",
+      "title": "AXIS RVI",
+      "shorttitle": "RVI",
+      "description": "Relative Vigor Index",
+      "category": "oscillator",
+      "categoryLabel": "Oscillators",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Relative Vigor Index",
+      "tags": [
+        "rvi",
+        "momentum"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS RVI\", shorttitle=\"RVI\", overlay=false)\nlen = input.int(10, \"Length\", minval=1)\nnum = ta.swma(close - open)\nden = ta.swma(high - low)\nrvi = ta.sma(den == 0 ? na : num / den, len)\nsig = ta.swma(rvi)\nplot(rvi, \"RVI\", color=#6366f1)\nplot(sig, \"Signal\", color=#fbbf24)\nhline(0, \"Zero\", color=#94a3b8)\n"
+    },
+    {
+      "id": "rvi-vol",
+      "title": "AXIS Rel Vol",
+      "shorttitle": "RVol",
+      "description": "Dorsey Relative Volatility Index (RMA of stdev on up vs down days)",
+      "category": "oscillator",
+      "categoryLabel": "Oscillators",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Relative Volatility Index",
+      "tags": [
+        "rvi",
+        "volatility"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Rel Vol\", shorttitle=\"RVol\", overlay=false)\nstdevLen = input.int(10, \"Stdev\", minval=1)\nrsiLen = input.int(14, \"RSI\", minval=1)\nsd = ta.stdev(close, stdevLen)\nup = close > close[1] ? sd : 0.0\ndn = close < close[1] ? sd : 0.0\nu = ta.rma(up, rsiLen)\nd = ta.rma(dn, rsiLen)\nr = (u + d) == 0 ? na : 100.0 * u / (u + d)\nplot(r, \"RVI\", color=#22d3ee, linewidth=2)\nhline(50, \"Mid\", color=#94a3b8)\n"
+    },
+    {
+      "id": "dpo",
+      "title": "AXIS DPO",
+      "shorttitle": "DPO",
+      "description": "Detrended price oscillator",
+      "category": "oscillator",
+      "categoryLabel": "Oscillators",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Detrended Price Oscillator",
+      "tags": [
+        "dpo"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS DPO\", shorttitle=\"DPO\", overlay=false)\nlen = input.int(21, \"Length\", minval=1)\nsrc = input.source(close, \"Source\")\nbars = math.floor(len / 2) + 1\ndpo = src[bars] - ta.sma(src, len)\nplot(dpo, \"DPO\", color=#6366f1)\nhline(0, \"Zero\", color=#94a3b8)\n"
+    },
+    {
+      "id": "ppo",
+      "title": "AXIS PPO",
+      "shorttitle": "PPO",
+      "description": "Percentage price oscillator",
+      "category": "oscillator",
+      "categoryLabel": "Oscillators",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Percentage Price Oscillator",
+      "tags": [
+        "ppo",
+        "macd"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS PPO\", shorttitle=\"PPO\", overlay=false)\nfastLen = input.int(12, \"Fast\", minval=1)\nslowLen = input.int(26, \"Slow\", minval=1)\nsigLen = input.int(9, \"Signal\", minval=1)\nsrc = input.source(close, \"Source\")\nfast = ta.ema(src, fastLen)\nslow = ta.ema(src, slowLen)\nppo = slow == 0 ? na : 100.0 * (fast - slow) / slow\nsig = ta.ema(ppo, sigLen)\nhist = ppo - sig\nplot(hist, \"Hist\", style=plot.style_columns, color=hist >= 0 ? #34d399 : #fb7185)\nplot(ppo, \"PPO\", color=#6366f1)\nplot(sig, \"Signal\", color=#fbbf24)\nhline(0, \"Zero\", color=#94a3b8)\n"
+    },
+    {
+      "id": "pvo",
+      "title": "AXIS PVO",
+      "shorttitle": "PVO",
+      "description": "Percentage volume oscillator",
+      "category": "oscillator",
+      "categoryLabel": "Oscillators",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Percentage Volume Oscillator",
+      "tags": [
+        "pvo",
+        "volume"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS PVO\", shorttitle=\"PVO\", overlay=false)\nfastLen = input.int(12, \"Fast\", minval=1)\nslowLen = input.int(26, \"Slow\", minval=1)\nsigLen = input.int(9, \"Signal\", minval=1)\nfast = ta.ema(volume, fastLen)\nslow = ta.ema(volume, slowLen)\npvo = slow == 0 ? na : 100.0 * (fast - slow) / slow\nsig = ta.ema(pvo, sigLen)\nplot(pvo, \"PVO\", color=#6366f1)\nplot(sig, \"Signal\", color=#fbbf24)\nhline(0, \"Zero\", color=#94a3b8)\n"
+    },
+    {
+      "id": "bop",
+      "title": "AXIS BOP",
+      "shorttitle": "BOP",
+      "description": "Balance of Power",
+      "category": "oscillator",
+      "categoryLabel": "Oscillators",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Balance of Power",
+      "tags": [
+        "bop"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS BOP\", shorttitle=\"BOP\", overlay=false)\nlen = input.int(14, \"Smooth\", minval=1)\nraw = high == low ? 0.0 : (close - open) / (high - low)\nb = ta.sma(raw, len)\nplot(b, \"BOP\", style=plot.style_columns, color=b >= 0 ? #34d399 : #fb7185)\nhline(0, \"Zero\", color=#94a3b8)\n"
+    },
+    {
+      "id": "bull-bear",
+      "title": "AXIS Bull Bear",
+      "shorttitle": "BBP",
+      "description": "Elder bull / bear power",
+      "category": "oscillator",
+      "categoryLabel": "Oscillators",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Bull Bear Power",
+      "tags": [
+        "elder",
+        "power"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Bull Bear\", shorttitle=\"BBP\", overlay=false)\nlen = input.int(13, \"EMA\", minval=1)\ne = ta.ema(close, len)\nbull = high - e\nbear = low - e\nplot(bull, \"Bull\", color=#34d399, style=plot.style_histogram)\nplot(bear, \"Bear\", color=#fb7185, style=plot.style_histogram)\nhline(0, \"Zero\", color=#94a3b8)\n"
+    },
+    {
+      "id": "connors-rsi",
+      "title": "AXIS Connors RSI",
+      "shorttitle": "CRSI",
+      "description": "Mean of RSI, streak RSI, and ROC percentile",
+      "category": "oscillator",
+      "categoryLabel": "Oscillators",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Connors RSI",
+      "tags": [
+        "rsi",
+        "connors"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Connors RSI\", shorttitle=\"CRSI\", overlay=false)\nrsiLen = input.int(3, \"RSI\", minval=1)\nstreakLen = input.int(2, \"Streak RSI\", minval=1)\nprankLen = input.int(100, \"Percentile\", minval=2)\nr = ta.rsi(close, rsiLen)\nvar float streak = 0.0\nstreak := close > close[1] ? nz(streak[1]) > 0 ? nz(streak[1]) + 1.0 : 1.0 : close < close[1] ? nz(streak[1]) < 0 ? nz(streak[1]) - 1.0 : -1.0 : 0.0\nsr = ta.rsi(streak, streakLen)\nchg = ta.change(close)\nint beats = 0\nfor i = 1 to prankLen\n    if not na(chg[i]) and chg >= chg[i]\n        beats += 1\nprank = 100.0 * beats / prankLen\ncrsi = (r + sr + prank) / 3.0\nplot(crsi, \"CRSI\", color=#6366f1, linewidth=2)\nhline(70, \"OB\", color=#fb7185, linestyle=hline.style_dashed)\nhline(30, \"OS\", color=#34d399, linestyle=hline.style_dashed)\n"
+    },
+    {
+      "id": "smi",
+      "title": "AXIS SMI",
+      "shorttitle": "SMI",
+      "description": "Stochastic Momentum Index",
+      "category": "oscillator",
+      "categoryLabel": "Oscillators",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Stochastic Momentum Index",
+      "tags": [
+        "smi",
+        "stoch"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS SMI\", shorttitle=\"SMI\", overlay=false)\nlen = input.int(10, \"Length\", minval=1)\nsmooth = input.int(3, \"Smooth\", minval=1)\nsigLen = input.int(3, \"Signal\", minval=1)\nll = ta.lowest(low, len)\nhh = ta.highest(high, len)\ndiff = close - (hh + ll) / 2.0\nrge = hh - ll\navgRel = ta.ema(ta.ema(diff, smooth), smooth)\navgRge = ta.ema(ta.ema(rge, smooth), smooth)\nsmi = avgRge == 0 ? na : 200.0 * avgRel / avgRge\nsig = ta.ema(smi, sigLen)\nplot(smi, \"SMI\", color=#6366f1)\nplot(sig, \"Signal\", color=#fbbf24)\nhline(40, \"OB\", color=#fb7185, linestyle=hline.style_dashed)\nhline(-40, \"OS\", color=#34d399, linestyle=hline.style_dashed)\nhline(0, \"Zero\", color=#94a3b8)\n"
+    },
+    {
+      "id": "woodies-cci",
+      "title": "AXIS Woodie CCI",
+      "shorttitle": "WCCI",
+      "description": "CCI plus a faster CCI",
+      "category": "oscillator",
+      "categoryLabel": "Oscillators",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Woodie CCI",
+      "tags": [
+        "cci",
+        "woodie"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Woodie CCI\", shorttitle=\"WCCI\", overlay=false)\nlen = input.int(14, \"CCI\", minval=1)\nturbo = input.int(6, \"Turbo\", minval=1)\nsrc = hlc3\nc = ta.cci(src, len)\nt = ta.cci(src, turbo)\nplot(c, \"CCI\", color=#6366f1)\nplot(t, \"Turbo\", color=#fbbf24)\nhline(100, \"+100\", color=#fb7185, linestyle=hline.style_dashed)\nhline(-100, \"-100\", color=#34d399, linestyle=hline.style_dashed)\nhline(0, \"Zero\", color=#94a3b8)\n"
+    },
+    {
+      "id": "rci",
+      "title": "AXIS RCI",
+      "shorttitle": "RCI",
+      "description": "Rank correlation index",
+      "category": "oscillator",
+      "categoryLabel": "Oscillators",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Rank Correlation Index",
+      "tags": [
+        "rci"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS RCI\", shorttitle=\"RCI\", overlay=false)\nlen = input.int(9, \"Length\", minval=2)\nsrc = input.source(close, \"Source\")\nr = ta.rci(src, len)\nplot(r, \"RCI\", color=#22d3ee, linewidth=2)\nhline(80, \"OB\", color=#fb7185, linestyle=hline.style_dashed)\nhline(-80, \"OS\", color=#34d399, linestyle=hline.style_dashed)\nhline(0, \"Zero\", color=#94a3b8)\n"
+    },
+    {
+      "id": "ulcer",
+      "title": "AXIS Ulcer",
+      "shorttitle": "UI",
+      "description": "Ulcer Index (drawdown RMS)",
+      "category": "oscillator",
+      "categoryLabel": "Oscillators",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Ulcer Index",
+      "tags": [
+        "ulcer",
+        "risk"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Ulcer\", shorttitle=\"UI\", overlay=false)\nlen = input.int(14, \"Length\", minval=1)\nsrc = input.source(close, \"Source\")\npeak = ta.highest(src, len)\ndd = peak == 0 ? 0.0 : 100.0 * (src - peak) / peak\nui = math.sqrt(ta.sma(dd * dd, len))\nplot(ui, \"Ulcer\", color=#fb7185, linewidth=2)\n"
+    },
+    {
+      "id": "mass-index",
+      "title": "AXIS Mass Index",
+      "shorttitle": "Mass",
+      "description": "Sum of EMA(high−low) / double EMA",
+      "category": "oscillator",
+      "categoryLabel": "Oscillators",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Mass Index",
+      "tags": [
+        "mass",
+        "volatility"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Mass Index\", shorttitle=\"Mass\", overlay=false)\nemaLen = input.int(9, \"EMA\", minval=1)\nsumLen = input.int(25, \"Sum\", minval=1)\nhl = high - low\ne1 = ta.ema(hl, emaLen)\ne2 = ta.ema(e1, emaLen)\nratio = e2 == 0 ? na : e1 / e2\nmass = ta.sum(ratio, sumLen)\nplot(mass, \"Mass\", color=#6366f1, linewidth=2)\nhline(27, \"Bulge\", color=#fbbf24, linestyle=hline.style_dashed)\n"
+    },
+    {
+      "id": "choppiness",
+      "title": "AXIS Choppiness",
+      "shorttitle": "CHOP",
+      "description": "Choppiness Index",
+      "category": "oscillator",
+      "categoryLabel": "Oscillators",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Choppiness Index",
+      "tags": [
+        "chop",
+        "trend"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Choppiness\", shorttitle=\"CHOP\", overlay=false)\nlen = input.int(14, \"Length\", minval=2)\natrSum = ta.sum(ta.tr(true), len)\nspan = ta.highest(high, len) - ta.lowest(low, len)\nchop = span == 0 ? na : 100.0 * math.log(atrSum / span) / math.log(len)\nplot(chop, \"CHOP\", color=#22d3ee, linewidth=2)\nhline(61.8, \"Chop\", color=#fbbf24, linestyle=hline.style_dashed)\nhline(38.2, \"Trend\", color=#34d399, linestyle=hline.style_dashed)\n"
+    },
+    {
+      "id": "trend-strength",
+      "title": "AXIS Trend Strength",
+      "shorttitle": "TSI2",
+      "description": "ADX-style trend strength (ta.adx)",
+      "category": "oscillator",
+      "categoryLabel": "Oscillators",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Trend Strength Index (ADX)",
+      "tags": [
+        "adx",
+        "trend"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Trend Strength\", shorttitle=\"TSI2\", overlay=false)\nlen = input.int(14, \"Length\", minval=1)\na = ta.adx(len)\nplot(a, \"ADX\", color=#6366f1, linewidth=2)\nhline(25, \"Trend on\", color=#fbbf24, linestyle=hline.style_dashed)\n"
+    },
+    {
+      "id": "supertrend",
+      "title": "AXIS Supertrend",
+      "shorttitle": "ST",
+      "description": "ATR Supertrend (mid ± factor · ATR)",
+      "category": "trend",
+      "categoryLabel": "Trend",
+      "kind": "indicator",
+      "overlay": true,
+      "covers": "Supertrend",
+      "tags": [
+        "supertrend",
+        "atr",
+        "overlay"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Supertrend\", shorttitle=\"ST\", overlay=true)\natrLen = input.int(10, \"ATR length\", minval=1)\nfactor = input.float(3.0, \"Factor\", minval=0.1, step=0.1)\n[st, dirRaw] = ta.supertrend(factor, atrLen)\nbull = dirRaw < 0\nbear = dirRaw > 0\nplot(bull ? st : na, \"ST Up\", color=#34d399, linewidth=2, style=plot.style_linebr)\nplot(bear ? st : na, \"ST Down\", color=#fb7185, linewidth=2, style=plot.style_linebr)\nplotshape(bull and not bull[1], \"Flip up\", shape.triangleup, location.belowbar, #34d399, size=size.small)\nplotshape(bear and not bear[1], \"Flip down\", shape.triangledown, location.abovebar, #fb7185, size=size.small)\n"
+    },
+    {
+      "id": "adx",
+      "title": "AXIS ADX",
+      "shorttitle": "ADX",
+      "description": "Average Directional Index",
+      "category": "trend",
+      "categoryLabel": "Trend",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Average Directional Index",
+      "tags": [
+        "adx",
+        "dmi"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS ADX\", shorttitle=\"ADX\", overlay=false)\nlen = input.int(14, \"DI length\", minval=1)\nsmooth = input.int(14, \"ADX smooth\", minval=1)\na = ta.adx(len, smooth)\nplot(a, \"ADX\", color=#6366f1, linewidth=2)\nhline(25, \"Trend\", color=#fbbf24, linestyle=hline.style_dashed)\n"
+    },
+    {
+      "id": "dmi",
+      "title": "AXIS DMI",
+      "shorttitle": "DMI",
+      "description": "+DI / −DI / ADX",
+      "category": "trend",
+      "categoryLabel": "Trend",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Directional Movement Index",
+      "tags": [
+        "dmi",
+        "adx"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS DMI\", shorttitle=\"DMI\", overlay=false)\nlen = input.int(14, \"DI length\", minval=1)\nsmooth = input.int(14, \"ADX smooth\", minval=1)\n[plusDi, minusDi, adx] = ta.dmi(len, smooth)\nplot(plusDi, \"+DI\", color=#34d399)\nplot(minusDi, \"-DI\", color=#fb7185)\nplot(adx, \"ADX\", color=#6366f1, linewidth=2)\nhline(25, \"Trend\", color=#94a3b8, linestyle=hline.style_dotted)\n"
+    },
+    {
+      "id": "aroon",
+      "title": "AXIS Aroon",
+      "shorttitle": "Aroon",
+      "description": "Aroon up / down",
+      "category": "trend",
+      "categoryLabel": "Trend",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Aroon",
+      "tags": [
+        "aroon"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Aroon\", shorttitle=\"Aroon\", overlay=false)\nlen = input.int(14, \"Length\", minval=1)\n[dn, up] = ta.aroon(len)\nplot(up, \"Up\", color=#34d399)\nplot(dn, \"Down\", color=#fb7185)\n"
+    },
+    {
+      "id": "aroon-osc",
+      "title": "AXIS Aroon Osc",
+      "shorttitle": "AroonOsc",
+      "description": "Aroon up − Aroon down",
+      "category": "trend",
+      "categoryLabel": "Trend",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Aroon Oscillator",
+      "tags": [
+        "aroon"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Aroon Osc\", shorttitle=\"AroonOsc\", overlay=false)\nlen = input.int(14, \"Length\", minval=1)\n[dn, up] = ta.aroon(len)\nosc = up - dn\nplot(osc, \"Aroon Osc\", color=#6366f1, linewidth=2)\nhline(0, \"Zero\", color=#94a3b8)\n"
+    },
+    {
+      "id": "sar",
+      "title": "AXIS SAR",
+      "shorttitle": "SAR",
+      "description": "Parabolic SAR",
+      "category": "trend",
+      "categoryLabel": "Trend",
+      "kind": "indicator",
+      "overlay": true,
+      "covers": "Parabolic SAR",
+      "tags": [
+        "sar",
+        "overlay"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS SAR\", shorttitle=\"SAR\", overlay=true)\nstart = input.float(0.02, \"Start\", minval=0.001, step=0.01)\ninc = input.float(0.02, \"Increment\", minval=0.001, step=0.01)\nmaxAf = input.float(0.2, \"Max\", minval=0.01, step=0.01)\ns = ta.sar(start, inc, maxAf)\nplot(s, \"SAR\", color=#fbbf24, style=plot.style_cross, linewidth=2)\n"
+    },
+    {
+      "id": "vortex",
+      "title": "AXIS Vortex",
+      "shorttitle": "VI",
+      "description": "Vortex Indicator (+VI / −VI)",
+      "category": "trend",
+      "categoryLabel": "Trend",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Vortex Indicator",
+      "tags": [
+        "vortex"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Vortex\", shorttitle=\"VI\", overlay=false)\nlen = input.int(14, \"Length\", minval=1)\nvmp = math.abs(high - low[1])\nvmm = math.abs(low - high[1])\nstr = ta.atr(1)\nplusVi = ta.sum(vmp, len) / ta.sum(str, len)\nminusVi = ta.sum(vmm, len) / ta.sum(str, len)\nplot(plusVi, \"+VI\", color=#34d399)\nplot(minusVi, \"-VI\", color=#fb7185)\n"
+    },
+    {
+      "id": "ichimoku",
+      "title": "AXIS Ichimoku",
+      "shorttitle": "Ichimoku",
+      "description": "Conversion, base, spans, lagging line",
+      "category": "trend",
+      "categoryLabel": "Trend",
+      "kind": "indicator",
+      "overlay": true,
+      "covers": "Ichimoku Cloud",
+      "tags": [
+        "ichimoku",
+        "overlay"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Ichimoku\", shorttitle=\"Ichimoku\", overlay=true)\nconvLen = input.int(9, \"Conversion\", minval=1)\nbaseLen = input.int(26, \"Base\", minval=1)\nspanBLen = input.int(52, \"Span B\", minval=1)\ndisplace = input.int(26, \"Displacement\", minval=1)\nmid(len) =>\n    (ta.highest(high, len) + ta.lowest(low, len)) / 2.0\nconversion = mid(convLen)\nbase = mid(baseLen)\nspanA = (conversion + base) / 2.0\nspanB = mid(spanBLen)\nplot(conversion, \"Conversion\", color=#22d3ee)\nplot(base, \"Base\", color=#fbbf24)\npA = plot(spanA, \"Span A\", offset=displace, color=#34d399)\npB = plot(spanB, \"Span B\", offset=displace, color=#fb7185)\nfill(pA, pB, color=spanA > spanB ? color.new(#34d399, 85) : color.new(#fb7185, 85), title=\"Cloud\")\nplot(close, \"Lagging\", offset=-displace, color=#94a3b8)\n"
+    },
+    {
+      "id": "chande-kroll",
+      "title": "AXIS Chande Kroll",
+      "shorttitle": "CKS",
+      "description": "Chande Kroll stop (ATR trailing extremes)",
+      "category": "trend",
+      "categoryLabel": "Trend",
+      "kind": "indicator",
+      "overlay": true,
+      "covers": "Chande Kroll Stop",
+      "tags": [
+        "stop",
+        "atr",
+        "overlay"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Chande Kroll\", shorttitle=\"CKS\", overlay=true)\np = input.int(10, \"Period\", minval=1)\nq = input.int(9, \"Stop period\", minval=1)\nx = input.float(1.0, \"ATR mult\", minval=0.1, step=0.1)\natr = ta.atr(p)\nfirstHigh = ta.highest(high, p) - x * atr\nfirstLow = ta.lowest(low, p) + x * atr\nstopShort = ta.highest(firstHigh, q)\nstopLong = ta.lowest(firstLow, q)\nplot(stopLong, \"Long stop\", color=#34d399)\nplot(stopShort, \"Short stop\", color=#fb7185)\n"
+    },
+    {
+      "id": "chandelier",
+      "title": "AXIS Chandelier",
+      "shorttitle": "CE",
+      "description": "Chandelier exit (highest/lowest ± ATR)",
+      "category": "trend",
+      "categoryLabel": "Trend",
+      "kind": "indicator",
+      "overlay": true,
+      "covers": "Chandelier Exit",
+      "tags": [
+        "chandelier",
+        "atr",
+        "overlay"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Chandelier\", shorttitle=\"CE\", overlay=true)\nlen = input.int(22, \"Length\", minval=1)\nmult = input.float(3.0, \"ATR mult\", minval=0.1, step=0.1)\natr = ta.atr(len)\nlongStop = ta.highest(high, len) - atr * mult\nshortStop = ta.lowest(low, len) + atr * mult\nplot(longStop, \"Long exit\", color=#34d399)\nplot(shortStop, \"Short exit\", color=#fb7185)\n"
+    },
+    {
+      "id": "vol-stop",
+      "title": "AXIS Vol Stop",
+      "shorttitle": "VStop",
+      "description": "ATR trailing stop around close",
+      "category": "trend",
+      "categoryLabel": "Trend",
+      "kind": "indicator",
+      "overlay": true,
+      "covers": "Volatility Stop",
+      "tags": [
+        "atr",
+        "stop",
+        "overlay"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Vol Stop\", shorttitle=\"VStop\", overlay=true)\nlen = input.int(20, \"ATR\", minval=1)\nmult = input.float(2.0, \"Mult\", minval=0.1, step=0.1)\natr = ta.atr(len)\nup = close - atr * mult\ndn = close + atr * mult\nvar float stop = na\nvar int dir = 1\nstop := na(stop) ? up : dir == 1 ? math.max(up, nz(stop)) : math.min(dn, nz(stop))\nif dir == 1 and close < stop\n    dir := -1\n    stop := dn\nelse if dir == -1 and close > stop\n    dir := 1\n    stop := up\nplot(dir == 1 ? stop : na, \"Long stop\", color=#34d399, style=plot.style_linebr, linewidth=2)\nplot(dir == -1 ? stop : na, \"Short stop\", color=#fb7185, style=plot.style_linebr, linewidth=2)\n"
+    },
+    {
+      "id": "alligator",
+      "title": "AXIS Alligator",
+      "shorttitle": "Gator",
+      "description": "Three smoothed MAs of median price (jaw / teeth / lips)",
+      "category": "trend",
+      "categoryLabel": "Trend",
+      "kind": "indicator",
+      "overlay": true,
+      "covers": "Williams Alligator",
+      "tags": [
+        "alligator",
+        "overlay"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Alligator\", shorttitle=\"Gator\", overlay=true)\njawLen = input.int(13, \"Jaw\", minval=1)\nteethLen = input.int(8, \"Teeth\", minval=1)\nlipsLen = input.int(5, \"Lips\", minval=1)\njawOff = input.int(8, \"Jaw offset\")\nteethOff = input.int(5, \"Teeth offset\")\nlipsOff = input.int(3, \"Lips offset\")\nsrc = hl2\njaw = ta.rma(src, jawLen)\nteeth = ta.rma(src, teethLen)\nlips = ta.rma(src, lipsLen)\nplot(jaw, \"Jaw\", offset=jawOff, color=#6366f1)\nplot(teeth, \"Teeth\", offset=teethOff, color=#fb7185)\nplot(lips, \"Lips\", offset=lipsOff, color=#34d399)\n"
+    },
+    {
+      "id": "fractals",
+      "title": "AXIS Fractals",
+      "shorttitle": "Frac",
+      "description": "5-bar Williams fractals",
+      "category": "trend",
+      "categoryLabel": "Trend",
+      "kind": "indicator",
+      "overlay": true,
+      "covers": "Williams Fractals",
+      "tags": [
+        "fractal",
+        "overlay"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Fractals\", shorttitle=\"Frac\", overlay=true)\nup = high[2] > high[1] and high[2] > high[0] and high[2] > high[3] and high[2] > high[4]\ndn = low[2] < low[1] and low[2] < low[0] and low[2] < low[3] and low[2] < low[4]\nplotshape(up, \"Up fractal\", shape.triangledown, location.abovebar, #fb7185, offset=-2, size=size.tiny)\nplotshape(dn, \"Down fractal\", shape.triangleup, location.belowbar, #34d399, offset=-2, size=size.tiny)\n"
+    },
+    {
+      "id": "zigzag",
+      "title": "AXIS ZigZag",
+      "shorttitle": "ZZ",
+      "description": "Percent-reversal zigzag of close",
+      "category": "trend",
+      "categoryLabel": "Trend",
+      "kind": "indicator",
+      "overlay": true,
+      "covers": "ZigZag",
+      "tags": [
+        "zigzag",
+        "overlay"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS ZigZag\", shorttitle=\"ZZ\", overlay=true)\ndev = input.float(5.0, \"Reversal %\", minval=0.1, step=0.1)\nsrc = input.source(close, \"Source\")\nvar float pivot = na\nvar int dir = 0\n// Plot only confirmed pivots (na elsewhere) so linebr connects swings.\n// The last bar also plots the live extreme, otherwise a rally never\n// leaves the previous confirmed pivot.\nfloat point = na\nfloat thresh = nz(pivot) * dev / 100.0\nif na(pivot)\n    pivot := src\n    point := src\nelse if dir >= 0\n    if src > pivot\n        pivot := src\n    else if src <= pivot - thresh\n        point := pivot\n        dir := -1\n        pivot := src\nelse\n    if src < pivot\n        pivot := src\n    else if src >= pivot + thresh\n        point := pivot\n        dir := 1\n        pivot := src\nif barstate.islast\n    point := pivot\nplot(point, \"ZigZag\", color=#fbbf24, linewidth=2, style=plot.style_linebr)\n"
+    },
+    {
+      "id": "volume",
+      "title": "AXIS Volume",
+      "shorttitle": "Vol",
+      "description": "Volume columns vs SMA",
+      "category": "volume",
+      "categoryLabel": "Volume",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Volume",
+      "tags": [
+        "volume"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Volume\", shorttitle=\"Vol\", overlay=false)\nlen = input.int(20, \"MA\", minval=1)\nup = close >= open\nplot(volume, \"Volume\", style=plot.style_columns, color=up ? #34d399 : #fb7185)\nplot(ta.sma(volume, len), \"Vol MA\", color=#fbbf24)\n"
+    },
+    {
+      "id": "obv",
+      "title": "AXIS OBV",
+      "shorttitle": "OBV",
+      "description": "On-balance volume",
+      "category": "volume",
+      "categoryLabel": "Volume",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "On-Balance Volume",
+      "tags": [
+        "obv",
+        "volume"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS OBV\", shorttitle=\"OBV\", overlay=false)\no = ta.obv\nplot(o, \"OBV\", color=#6366f1, linewidth=2)\n"
+    },
+    {
+      "id": "vwap",
+      "title": "AXIS VWAP",
+      "shorttitle": "VWAP",
+      "description": "Volume-weighted average price",
+      "category": "volume",
+      "categoryLabel": "Volume",
+      "kind": "indicator",
+      "overlay": true,
+      "covers": "VWAP",
+      "tags": [
+        "vwap",
+        "overlay"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS VWAP\", shorttitle=\"VWAP\", overlay=true)\nsrc = input.source(hlc3, \"Source\")\nv = ta.vwap(src, timeframe.change(\"D\"))\nplot(v, \"VWAP\", color=#fbbf24, linewidth=2)\n"
+    },
+    {
+      "id": "vwap-bands",
+      "title": "AXIS VWAP Bands",
+      "shorttitle": "VWAP σ",
+      "description": "VWAP ± rolling stdev of (source − VWAP)",
+      "category": "volume",
+      "categoryLabel": "Volume",
+      "kind": "indicator",
+      "overlay": true,
+      "covers": "VWAP standard-deviation bands",
+      "tags": [
+        "vwap",
+        "bands",
+        "overlay"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS VWAP Bands\", shorttitle=\"VWAP σ\", overlay=true)\nsrc = input.source(hlc3, \"Source\")\nn1 = input.float(1.0, \"Band 1\", minval=0.1, step=0.1)\nn2 = input.float(2.0, \"Band 2\", minval=0.1, step=0.1)\nanchor = timeframe.change(\"D\")\n[basis, u1v, l1v] = ta.vwap(src, anchor, n1)\n[mid2, u2v, l2v] = ta.vwap(src, anchor, n2)\nplot(basis, \"VWAP\", color=#fbbf24, linewidth=2)\nu1 = plot(u1v, \"Upper1\", color=#22d3ee)\nl1 = plot(l1v, \"Lower1\", color=#22d3ee)\nplot(u2v, \"Upper2\", color=color.new(#22d3ee, 40))\nplot(l2v, \"Lower2\", color=color.new(#22d3ee, 40))\nfill(u1, l1, color=color.new(#fbbf24, 92))\n"
+    },
+    {
+      "id": "twap",
+      "title": "AXIS TWAP",
+      "shorttitle": "TWAP",
+      "description": "Session time-weighted average of hlc3",
+      "category": "volume",
+      "categoryLabel": "Volume",
+      "kind": "indicator",
+      "overlay": true,
+      "covers": "Time-weighted average price",
+      "tags": [
+        "twap",
+        "overlay"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS TWAP\", shorttitle=\"TWAP\", overlay=true)\nsrc = input.source(hlc3, \"Source\")\nnewSess = timeframe.change(\"D\")\nvar float acc = 0.0\nvar int n = 0\nif newSess\n    acc := src\n    n := 1\nelse\n    acc += src\n    n += 1\ntw = n == 0 ? na : acc / n\nplot(tw, \"TWAP\", color=#22d3ee, linewidth=2)\n"
+    },
+    {
+      "id": "cmf",
+      "title": "AXIS CMF",
+      "shorttitle": "CMF",
+      "description": "Chaikin Money Flow",
+      "category": "volume",
+      "categoryLabel": "Volume",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Chaikin Money Flow",
+      "tags": [
+        "cmf",
+        "volume"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS CMF\", shorttitle=\"CMF\", overlay=false)\nlen = input.int(20, \"Length\", minval=1)\nc = ta.cmf(len)\nplot(c, \"CMF\", color=#6366f1, linewidth=2)\nhline(0, \"Zero\", color=#94a3b8)\n"
+    },
+    {
+      "id": "chaikin-osc",
+      "title": "AXIS Chaikin Osc",
+      "shorttitle": "CHO",
+      "description": "EMA difference of accumulation/distribution",
+      "category": "volume",
+      "categoryLabel": "Volume",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Chaikin Oscillator",
+      "tags": [
+        "chaikin",
+        "volume"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Chaikin Osc\", shorttitle=\"CHO\", overlay=false)\nfast = input.int(3, \"Fast\", minval=1)\nslow = input.int(10, \"Slow\", minval=1)\nad = ta.accdist\ncho = ta.ema(ad, fast) - ta.ema(ad, slow)\nplot(cho, \"CHO\", color=#22d3ee, linewidth=2)\nhline(0, \"Zero\", color=#94a3b8)\n"
+    },
+    {
+      "id": "mfi",
+      "title": "AXIS MFI",
+      "shorttitle": "MFI",
+      "description": "Money Flow Index",
+      "category": "volume",
+      "categoryLabel": "Volume",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Money Flow Index",
+      "tags": [
+        "mfi",
+        "volume"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS MFI\", shorttitle=\"MFI\", overlay=false)\nlen = input.int(14, \"Length\", minval=1)\nm = ta.mfi(len)\nplot(m, \"MFI\", color=#6366f1, linewidth=2)\nhline(80, \"OB\", color=#fb7185, linestyle=hline.style_dashed)\nhline(20, \"OS\", color=#34d399, linestyle=hline.style_dashed)\n"
+    },
+    {
+      "id": "ad",
+      "title": "AXIS A/D",
+      "shorttitle": "AD",
+      "description": "Accumulation / Distribution",
+      "category": "volume",
+      "categoryLabel": "Volume",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Accumulation/Distribution",
+      "tags": [
+        "ad",
+        "volume"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS A/D\", shorttitle=\"AD\", overlay=false)\na = ta.accdist\nplot(a, \"A/D\", color=#6366f1, linewidth=2)\n"
+    },
+    {
+      "id": "emv",
+      "title": "AXIS EMV",
+      "shorttitle": "EMV",
+      "description": "Ease of Movement",
+      "category": "volume",
+      "categoryLabel": "Volume",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Ease of Movement",
+      "tags": [
+        "emv",
+        "volume"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS EMV\", shorttitle=\"EMV\", overlay=false)\nlen = input.int(14, \"Length\", minval=1)\ne = ta.emv(len)\nplot(e, \"EMV\", color=#fbbf24, linewidth=2)\nhline(0, \"Zero\", color=#94a3b8)\n"
+    },
+    {
+      "id": "efi",
+      "title": "AXIS Force",
+      "shorttitle": "EFI",
+      "description": "Elder Force Index",
+      "category": "volume",
+      "categoryLabel": "Volume",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Elder Force Index",
+      "tags": [
+        "elder",
+        "force",
+        "volume"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Force\", shorttitle=\"EFI\", overlay=false)\nlen = input.int(13, \"EMA\", minval=1)\nraw = ta.change(close) * volume\nf = ta.ema(raw, len)\nplot(f, \"Force\", color=#6366f1)\nhline(0, \"Zero\", color=#94a3b8)\n"
+    },
+    {
+      "id": "klinger",
+      "title": "AXIS Klinger",
+      "shorttitle": "KO",
+      "description": "Klinger Oscillator",
+      "category": "volume",
+      "categoryLabel": "Volume",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Klinger Oscillator",
+      "tags": [
+        "klinger",
+        "volume"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Klinger\", shorttitle=\"KO\", overlay=false)\nfast = input.int(34, \"Fast\", minval=1)\nslow = input.int(55, \"Slow\", minval=1)\nsig = input.int(13, \"Signal\", minval=1)\n// Signed volume force (public idea: volume × HLC trend), EMA difference.\ntrend = hlc3 >= nz(hlc3[1]) ? 1.0 : -1.0\nsv = volume * trend\nk = ta.ema(sv, fast) - ta.ema(sv, slow)\ns = ta.ema(k, sig)\nplot(k, \"KO\", color=#6366f1)\nplot(s, \"Signal\", color=#fbbf24)\nhline(0, \"Zero\", color=#94a3b8)\n"
+    },
+    {
+      "id": "nvi",
+      "title": "AXIS NVI",
+      "shorttitle": "NVI",
+      "description": "Negative Volume Index",
+      "category": "volume",
+      "categoryLabel": "Volume",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Negative Volume Index",
+      "tags": [
+        "nvi",
+        "volume"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS NVI\", shorttitle=\"NVI\", overlay=false)\nn = ta.nvi\nplot(n, \"NVI\", color=#22d3ee, linewidth=2)\nplot(ta.ema(n, 255), \"EMA\", color=#fbbf24)\n"
+    },
+    {
+      "id": "pvi",
+      "title": "AXIS PVI",
+      "shorttitle": "PVI",
+      "description": "Positive Volume Index",
+      "category": "volume",
+      "categoryLabel": "Volume",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Positive Volume Index",
+      "tags": [
+        "pvi",
+        "volume"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS PVI\", shorttitle=\"PVI\", overlay=false)\np = ta.pvi\nplot(p, \"PVI\", color=#6366f1, linewidth=2)\nplot(ta.ema(p, 255), \"EMA\", color=#fbbf24)\n"
+    },
+    {
+      "id": "net-volume",
+      "title": "AXIS Net Volume",
+      "shorttitle": "NetVol",
+      "description": "Cumulative signed volume (close vs prior close)",
+      "category": "volume",
+      "categoryLabel": "Volume",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Net Volume",
+      "tags": [
+        "volume",
+        "net"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Net Volume\", shorttitle=\"NetVol\", overlay=false)\nsigned = close > close[1] ? volume : close < close[1] ? -volume : 0.0\nnv = ta.cum(signed)\nplot(nv, \"Net vol\", color=#6366f1, linewidth=2)\n"
+    },
+    {
+      "id": "pvt",
+      "title": "AXIS PVT",
+      "shorttitle": "PVT",
+      "description": "Price-volume trend",
+      "category": "volume",
+      "categoryLabel": "Volume",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Price Volume Trend",
+      "tags": [
+        "pvt",
+        "volume"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS PVT\", shorttitle=\"PVT\", overlay=false)\np = ta.pvt\nplot(p, \"PVT\", color=#22d3ee, linewidth=2)\n"
+    },
+    {
+      "id": "atr",
+      "title": "AXIS ATR",
+      "shorttitle": "ATR",
+      "description": "Average True Range and ATR%",
+      "category": "volatility",
+      "categoryLabel": "Volatility",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Average True Range",
+      "tags": [
+        "atr",
+        "volatility"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS ATR\", shorttitle=\"ATR\", overlay=false)\nlen = input.int(14, \"Length\", minval=1)\na = ta.atr(len)\natrPct = close == 0 ? na : a / close * 100.0\nplot(a, \"ATR\", color=#6366f1, linewidth=2)\nplot(atrPct, \"ATR%\", color=#22d3ee)\n"
+    },
+    {
+      "id": "true-range",
+      "title": "AXIS True Range",
+      "shorttitle": "TR",
+      "description": "Per-bar true range",
+      "category": "volatility",
+      "categoryLabel": "Volatility",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "True Range",
+      "tags": [
+        "tr",
+        "volatility"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS True Range\", shorttitle=\"TR\", overlay=false)\ntr = ta.tr(true)\nplot(tr, \"TR\", color=#fbbf24, style=plot.style_columns)\n"
+    },
+    {
+      "id": "hist-vol",
+      "title": "AXIS Hist Vol",
+      "shorttitle": "HV",
+      "description": "Annualized log-return standard deviation",
+      "category": "volatility",
+      "categoryLabel": "Volatility",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Historical Volatility",
+      "tags": [
+        "hv",
+        "volatility"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Hist Vol\", shorttitle=\"HV\", overlay=false)\nlen = input.int(20, \"Length\", minval=2)\nann = input.float(365.0, \"Periods / year\", minval=1)\nsrc = input.source(close, \"Source\")\nret = math.log(src / src[1])\nhv = ta.stdev(ret, len) * math.sqrt(ann) * 100.0\nplot(hv, \"HV %\", color=#fb7185, linewidth=2)\n"
+    },
+    {
+      "id": "adr",
+      "title": "AXIS Avg Range",
+      "shorttitle": "ADR",
+      "description": "SMA of high − low (average range)",
+      "category": "volatility",
+      "categoryLabel": "Volatility",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Average Daily Range (same-TF range SMA)",
+      "tags": [
+        "adr",
+        "range"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Avg Range\", shorttitle=\"ADR\", overlay=false)\nlen = input.int(14, \"Length\", minval=1)\nrng = high - low\navg = ta.sma(rng, len)\nplot(rng, \"Range\", color=#94a3b8, style=plot.style_columns)\nplot(avg, \"Avg range\", color=#6366f1, linewidth=2)\n"
+    },
+    {
+      "id": "pivot-standard",
+      "title": "AXIS Floor Pivots",
+      "shorttitle": "Pivots",
+      "description": "Classic floor pivots from the prior completed day",
+      "category": "pivot",
+      "categoryLabel": "Pivots",
+      "kind": "indicator",
+      "overlay": true,
+      "covers": "Pivot Points (standard / floor)",
+      "tags": [
+        "pivot",
+        "overlay"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Floor Pivots\", shorttitle=\"Pivots\", overlay=true)\nnewDay = timeframe.change(\"D\")\nvar float yHigh = na\nvar float yLow = na\nvar float yClose = na\nvar float dHigh = high\nvar float dLow = low\nif newDay\n    yHigh := dHigh\n    yLow := dLow\n    yClose := close[1]\n    dHigh := high\n    dLow := low\nelse\n    dHigh := math.max(dHigh, high)\n    dLow := math.min(dLow, low)\npp = (yHigh + yLow + yClose) / 3.0\nr1 = 2.0 * pp - yLow\ns1 = 2.0 * pp - yHigh\nr2 = pp + (yHigh - yLow)\ns2 = pp - (yHigh - yLow)\nplot(pp, \"PP\", color=#6366f1, linewidth=2)\nplot(r1, \"R1\", color=#fb7185)\nplot(r2, \"R2\", color=color.new(#fb7185, 30))\nplot(s1, \"S1\", color=#34d399)\nplot(s2, \"S2\", color=color.new(#34d399, 30))\n"
+    },
+    {
+      "id": "pivot-hl",
+      "title": "AXIS Pivot HL",
+      "shorttitle": "PHL",
+      "description": "Confirmed pivot highs and lows",
+      "category": "pivot",
+      "categoryLabel": "Pivots",
+      "kind": "indicator",
+      "overlay": true,
+      "covers": "Pivot Points High/Low",
+      "tags": [
+        "pivot",
+        "overlay"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Pivot HL\", shorttitle=\"PHL\", overlay=true)\nleft = input.int(5, \"Left bars\", minval=1)\nright = input.int(5, \"Right bars\", minval=1)\nph = ta.pivothigh(high, left, right)\npl = ta.pivotlow(low, left, right)\nplot(ph, \"Pivot high\", color=#fb7185, style=plot.style_circles, linewidth=2, offset=-right)\nplot(pl, \"Pivot low\", color=#34d399, style=plot.style_circles, linewidth=2, offset=-right)\n"
+    },
+    {
+      "id": "correlation",
+      "title": "AXIS Correlation",
+      "shorttitle": "Corr",
+      "description": "Rolling correlation of close vs volume",
+      "category": "oscillator",
+      "categoryLabel": "Oscillators",
+      "kind": "indicator",
+      "overlay": false,
+      "covers": "Correlation coefficient (close vs volume)",
+      "tags": [
+        "correlation"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Correlation\", shorttitle=\"Corr\", overlay=false)\nlen = input.int(20, \"Length\", minval=2)\nc = ta.correlation(close, volume, len)\nplot(c, \"Corr\", color=#6366f1, linewidth=2)\nhline(0, \"Zero\", color=#94a3b8)\nhline(1, \"+1\", color=#34d399, linestyle=hline.style_dotted)\nhline(-1, \"-1\", color=#fb7185, linestyle=hline.style_dotted)\n"
+    },
+    {
+      "id": "sessions",
+      "title": "AXIS Sessions",
+      "shorttitle": "Sess",
+      "description": "Background highlight for a session window",
+      "category": "session",
+      "categoryLabel": "Session",
+      "kind": "indicator",
+      "overlay": true,
+      "covers": "Trading session highlight",
+      "tags": [
+        "session",
+        "overlay"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Sessions\", shorttitle=\"Sess\", overlay=true)\nsess = input.session(\"0930-1600\", \"Session\")\ntz = input.string(\"America/New_York\", \"Timezone\")\n// PYNE time() ignores session args — compare clock in tz instead.\nhhmm = hour(time, tz) * 100 + minute(time, tz)\nstart = str.tonumber(str.substring(sess, 0, 4))\nstop = str.tonumber(str.substring(sess, 5, 9))\nwrap = not na(start) and not na(stop) and stop <= start\ninSess = na(start) or na(stop) ? false : wrap ? hhmm >= start or hhmm < stop : hhmm >= start and hhmm < stop\nbgcolor(inSess ? color.new(#6366f1, 92) : na, title=\"Session\")\n"
+    },
+    {
+      "id": "drawings",
+      "title": "AXIS Drawings",
+      "shorttitle": "Draw",
+      "description": "Label, line, linefill, box, polyline, and table on one overlay",
+      "category": "drawing",
+      "categoryLabel": "Drawings",
+      "kind": "indicator",
+      "overlay": true,
+      "covers": "Pine drawings",
+      "tags": [
+        "drawing",
+        "label",
+        "line",
+        "linefill",
+        "box",
+        "polyline",
+        "table",
+        "overlay"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nindicator(\"AXIS Drawings\", shorttitle=\"Draw\", overlay=true, max_lines_count=20, max_labels_count=20, max_boxes_count=20, max_polylines_count=10)\nvar line hi = na\nvar line lo = na\nvar linefill band = na\nvar box bx = na\nvar label tag = na\nvar polyline path = na\nvar table board = na\n\n// Series calls stay outside the last-bar block. Objects born at bar_index 0\n// sit off the left edge of a long history.\ntop = ta.highest(high, 16)\nbot = ta.lowest(low, 16)\nmid = (top + bot) / 2\nif barstate.islast\n    left = bar_index - 16\n    if not na(hi)\n        line.delete(hi)\n    if not na(lo)\n        line.delete(lo)\n    if not na(band)\n        linefill.delete(band)\n    if not na(bx)\n        box.delete(bx)\n    if not na(tag)\n        label.delete(tag)\n    if not na(path)\n        polyline.delete(path)\n    hi := line.new(left, top, bar_index, top, color = color.yellow, width = 3)\n    lo := line.new(left, bot, bar_index, bot, color = color.purple, width = 3)\n    band := linefill.new(hi, lo, color = color.new(color.yellow, 80))\n    bx := box.new(\n         bar_index - 12,\n         top,\n         bar_index - 6,\n         mid,\n         border_color = color.aqua,\n         border_width = 2,\n         bgcolor = color.new(color.aqua, 70))\n    tag := label.new(\n         bar_index,\n         top,\n         \"Label\",\n         style = label.style_label_down,\n         color = color.blue,\n         textcolor = color.white,\n         size = size.large)\n    path := polyline.new(\n         array.from(\n             chart.point.from_index(bar_index - 14, bot),\n             chart.point.from_index(bar_index - 8, top),\n             chart.point.from_index(bar_index - 2, mid)),\n         false,\n         xloc.bar_index,\n         color.fuchsia,\n         width = 3)\n    if na(board)\n        board := table.new(position.top_right, 2, 6, bgcolor = color.new(#0c0e14, 10))\n        table.cell(board, 0, 0, \"Drawing\")\n        table.cell(board, 1, 0, \"Sample\")\n        table.cell(board, 0, 1, \"Line\")\n        table.cell(board, 1, 1, \"hi / lo\")\n        table.cell(board, 0, 2, \"Linefill\")\n        table.cell(board, 1, 2, \"band\")\n        table.cell(board, 0, 3, \"Box\")\n        table.cell(board, 1, 3, \"range\")\n        table.cell(board, 0, 4, \"Label\")\n        table.cell(board, 1, 4, \"tag\")\n        table.cell(board, 0, 5, \"Polyline\")\n        table.cell(board, 1, 5, \"path\")\n\nplot(close, \"Close\", display = display.none)\n"
+    },
+    {
+      "id": "strat-ma-cross",
+      "title": "AXIS SMA Cross Strat",
+      "shorttitle": "SMA X",
+      "description": "Long on fast/slow SMA cross",
+      "category": "strategy",
+      "categoryLabel": "Strategies",
+      "kind": "strategy",
+      "overlay": true,
+      "covers": "SMA crossover strategy",
+      "tags": [
+        "strategy",
+        "sma",
+        "cross"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nstrategy(\"AXIS SMA Cross Strat\", overlay=true, initial_capital=100000,\n     default_qty_type=strategy.percent_of_equity, default_qty_value=10)\nfastLen = input.int(9, \"Fast\", minval=1)\nslowLen = input.int(21, \"Slow\", minval=1)\nsrc = input.source(close, \"Source\")\nfast = ta.sma(src, fastLen)\nslow = ta.sma(src, slowLen)\nif ta.crossover(fast, slow)\n    strategy.entry(\"Long\", strategy.long)\nif ta.crossunder(fast, slow)\n    strategy.close(\"Long\")\nplot(fast, \"Fast\", color=#22d3ee)\nplot(slow, \"Slow\", color=#fbbf24)\n"
+    },
+    {
+      "id": "strat-macd",
+      "title": "AXIS MACD Strat",
+      "shorttitle": "MACD X",
+      "description": "Long on MACD / signal cross",
+      "category": "strategy",
+      "categoryLabel": "Strategies",
+      "kind": "strategy",
+      "overlay": true,
+      "covers": "MACD crossover strategy",
+      "tags": [
+        "strategy",
+        "macd"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nstrategy(\"AXIS MACD Strat\", overlay=true, initial_capital=100000,\n     default_qty_type=strategy.percent_of_equity, default_qty_value=10)\nfastLen = input.int(12, \"Fast\")\nslowLen = input.int(26, \"Slow\")\nsigLen = input.int(9, \"Signal\")\n[macdLine, signalLine, hist] = ta.macd(close, fastLen, slowLen, sigLen)\nif ta.crossover(macdLine, signalLine)\n    strategy.entry(\"Long\", strategy.long)\nif ta.crossunder(macdLine, signalLine)\n    strategy.close(\"Long\")\nplot(hist, \"Hist\", display=display.data_window)\n"
+    },
+    {
+      "id": "strat-rsi",
+      "title": "AXIS RSI Strat",
+      "shorttitle": "RSI MR",
+      "description": "Long when RSI exits oversold",
+      "category": "strategy",
+      "categoryLabel": "Strategies",
+      "kind": "strategy",
+      "overlay": false,
+      "covers": "RSI mean-reversion strategy",
+      "tags": [
+        "strategy",
+        "rsi"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nstrategy(\"AXIS RSI Strat\", overlay=false, initial_capital=100000,\n     default_qty_type=strategy.percent_of_equity, default_qty_value=10)\nlen = input.int(14, \"RSI\", minval=2)\nos = input.float(30, \"Oversold\")\nob = input.float(70, \"Overbought\")\nr = ta.rsi(close, len)\nif ta.crossover(r, os)\n    strategy.entry(\"Long\", strategy.long)\nif ta.crossunder(r, ob)\n    strategy.close(\"Long\")\nplot(r, \"RSI\", color=#6366f1)\nhline(os, \"OS\", color=#34d399)\nhline(ob, \"OB\", color=#fb7185)\n"
+    },
+    {
+      "id": "strat-bb",
+      "title": "AXIS BB Bounce Strat",
+      "shorttitle": "BB Bounce",
+      "description": "Fade the lower band; exit at basis",
+      "category": "strategy",
+      "categoryLabel": "Strategies",
+      "kind": "strategy",
+      "overlay": true,
+      "covers": "Bollinger bounce strategy",
+      "tags": [
+        "strategy",
+        "bb"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nstrategy(\"AXIS BB Bounce Strat\", overlay=true, initial_capital=100000,\n     default_qty_type=strategy.percent_of_equity, default_qty_value=10)\nlen = input.int(20, \"Length\")\nmult = input.float(2.0, \"StdDev\", step=0.1)\nbasis = ta.sma(close, len)\ndev = mult * ta.stdev(close, len)\nupper = basis + dev\nlower = basis - dev\nif ta.crossover(close, lower)\n    strategy.entry(\"Long\", strategy.long)\nif close > basis and strategy.position_size > 0\n    strategy.close(\"Long\")\nplot(basis, \"Basis\", color=#6366f1)\nplot(upper, \"Upper\", color=#22d3ee)\nplot(lower, \"Lower\", color=#22d3ee)\n"
+    },
+    {
+      "id": "strat-supertrend",
+      "title": "AXIS Supertrend Strat",
+      "shorttitle": "ST Follow",
+      "description": "Flip with Supertrend direction",
+      "category": "strategy",
+      "categoryLabel": "Strategies",
+      "kind": "strategy",
+      "overlay": true,
+      "covers": "Supertrend follow strategy",
+      "tags": [
+        "strategy",
+        "supertrend"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nstrategy(\"AXIS Supertrend Strat\", overlay=true, initial_capital=100000,\n     default_qty_type=strategy.percent_of_equity, default_qty_value=10)\natrLen = input.int(10, \"ATR\")\nfactor = input.float(3.0, \"Factor\", step=0.1)\n[st, dir] = ta.supertrend(factor, atrLen)\nbull = dir < 0\nbear = dir > 0\nif bull and not bull[1]\n    strategy.entry(\"Long\", strategy.long)\nif bear and not bear[1]\n    strategy.close(\"Long\")\nplot(bull ? st : na, \"ST Up\", color=#34d399, linewidth=2, style=plot.style_linebr)\nplot(bear ? st : na, \"ST Down\", color=#fb7185, linewidth=2, style=plot.style_linebr)\n"
+    },
+    {
+      "id": "strat-sar",
+      "title": "AXIS SAR Strat",
+      "shorttitle": "SAR Flip",
+      "description": "Flip long/flat on SAR vs close",
+      "category": "strategy",
+      "categoryLabel": "Strategies",
+      "kind": "strategy",
+      "overlay": true,
+      "covers": "Parabolic SAR strategy",
+      "tags": [
+        "strategy",
+        "sar"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nstrategy(\"AXIS SAR Strat\", overlay=true, initial_capital=100000,\n     default_qty_type=strategy.percent_of_equity, default_qty_value=10)\nstart = input.float(0.02, \"Start\", step=0.01)\ninc = input.float(0.02, \"Increment\", step=0.01)\nmaxAf = input.float(0.2, \"Max\", step=0.01)\ns = ta.sar(start, inc, maxAf)\nif ta.crossover(close, s)\n    strategy.entry(\"Long\", strategy.long)\nif ta.crossunder(close, s)\n    strategy.close(\"Long\")\nplot(s, \"SAR\", color=#fbbf24, style=plot.style_cross)\n"
+    },
+    {
+      "id": "strat-keltner",
+      "title": "AXIS Keltner Strat",
+      "shorttitle": "KC Break",
+      "description": "Long on close through upper Keltner",
+      "category": "strategy",
+      "categoryLabel": "Strategies",
+      "kind": "strategy",
+      "overlay": true,
+      "covers": "Keltner breakout strategy",
+      "tags": [
+        "strategy",
+        "keltner"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nstrategy(\"AXIS Keltner Strat\", overlay=true, initial_capital=100000,\n     default_qty_type=strategy.percent_of_equity, default_qty_value=10)\nlen = input.int(20, \"EMA\")\natrLen = input.int(10, \"ATR\")\nmult = input.float(2.0, \"Mult\", step=0.1)\nbasis = ta.ema(close, len)\nrng = ta.atr(atrLen) * mult\nupper = basis + rng\nlower = basis - rng\nif ta.crossover(close, upper)\n    strategy.entry(\"Long\", strategy.long)\nif ta.crossunder(close, lower)\n    strategy.close(\"Long\")\nplot(basis, \"Basis\", color=#6366f1)\nplot(upper, \"Upper\", color=#fbbf24)\nplot(lower, \"Lower\", color=#fbbf24)\n"
+    },
+    {
+      "id": "strat-donchian",
+      "title": "AXIS Donchian Strat",
+      "shorttitle": "DC Break",
+      "description": "Break prior Donchian high; exit mid",
+      "category": "strategy",
+      "categoryLabel": "Strategies",
+      "kind": "strategy",
+      "overlay": true,
+      "covers": "Donchian / channel breakout strategy",
+      "tags": [
+        "strategy",
+        "donchian"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nstrategy(\"AXIS Donchian Strat\", overlay=true, initial_capital=100000,\n     default_qty_type=strategy.percent_of_equity, default_qty_value=10)\nlen = input.int(20, \"Length\", minval=2)\nupper = ta.highest(high, len)\nlower = ta.lowest(low, len)\nmid = (upper + lower) / 2.0\nif ta.crossover(close, upper[1])\n    strategy.entry(\"Long\", strategy.long)\nif ta.crossunder(close, mid)\n    strategy.close(\"Long\")\nplot(upper, \"Upper\", color=#22d3ee)\nplot(lower, \"Lower\", color=#22d3ee)\nplot(mid, \"Mid\", color=#94a3b8)\n"
+    },
+    {
+      "id": "strat-momentum",
+      "title": "AXIS Momentum Strat",
+      "shorttitle": "MOM X",
+      "description": "Long while momentum is positive",
+      "category": "strategy",
+      "categoryLabel": "Strategies",
+      "kind": "strategy",
+      "overlay": true,
+      "covers": "Momentum strategy",
+      "tags": [
+        "strategy",
+        "momentum"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nstrategy(\"AXIS Momentum Strat\", overlay=true, initial_capital=100000,\n     default_qty_type=strategy.percent_of_equity, default_qty_value=10)\nlen = input.int(10, \"Length\", minval=1)\nm = ta.mom(close, len)\nif ta.crossover(m, 0)\n    strategy.entry(\"Long\", strategy.long)\nif ta.crossunder(m, 0)\n    strategy.close(\"Long\")\n"
+    },
+    {
+      "id": "strat-stoch",
+      "title": "AXIS Stoch Strat",
+      "shorttitle": "Stoch X",
+      "description": "%K/%D cross in oversold",
+      "category": "strategy",
+      "categoryLabel": "Strategies",
+      "kind": "strategy",
+      "overlay": false,
+      "covers": "Stochastic crossover strategy",
+      "tags": [
+        "strategy",
+        "stoch"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nstrategy(\"AXIS Stoch Strat\", overlay=false, initial_capital=100000,\n     default_qty_type=strategy.percent_of_equity, default_qty_value=10)\nkLen = input.int(14, \"K\")\nkSmooth = input.int(3, \"K smooth\")\ndSmooth = input.int(3, \"D\")\nos = input.float(20, \"Oversold\")\nob = input.float(80, \"Overbought\")\nk = ta.sma(ta.stoch(close, high, low, kLen), kSmooth)\nd = ta.sma(k, dSmooth)\nif ta.crossover(k, d) and k < os\n    strategy.entry(\"Long\", strategy.long)\nif ta.crossunder(k, d) and k > ob\n    strategy.close(\"Long\")\nplot(k, \"%K\", color=#6366f1)\nplot(d, \"%D\", color=#fbbf24)\n"
+    },
+    {
+      "id": "strat-bar-updown",
+      "title": "AXIS Bar Up/Down Strat",
+      "shorttitle": "Bar UD",
+      "description": "Long on bull bar; exit on bear bar",
+      "category": "strategy",
+      "categoryLabel": "Strategies",
+      "kind": "strategy",
+      "overlay": true,
+      "covers": "Bar up/down strategy",
+      "tags": [
+        "strategy",
+        "price-action"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nstrategy(\"AXIS Bar Up/Down Strat\", overlay=true, initial_capital=100000,\n     default_qty_type=strategy.percent_of_equity, default_qty_value=10)\nif close > open\n    strategy.entry(\"Long\", strategy.long)\nif close < open\n    strategy.close(\"Long\")\n"
+    },
+    {
+      "id": "strat-consecutive",
+      "title": "AXIS Consecutive Strat",
+      "shorttitle": "N Up",
+      "description": "Long after N consecutive up closes",
+      "category": "strategy",
+      "categoryLabel": "Strategies",
+      "kind": "strategy",
+      "overlay": true,
+      "covers": "Consecutive up/down strategy",
+      "tags": [
+        "strategy",
+        "price-action"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nstrategy(\"AXIS Consecutive Strat\", overlay=true, initial_capital=100000,\n     default_qty_type=strategy.percent_of_equity, default_qty_value=10)\nn = input.int(3, \"Closes\", minval=1)\nup = close > close[1]\ndn = close < close[1]\nups = 0\ndns = 0\nfor i = 0 to n - 1\n    if up[i]\n        ups += 1\n    if dn[i]\n        dns += 1\nif ups == n\n    strategy.entry(\"Long\", strategy.long)\nif dns == n\n    strategy.close(\"Long\")\n"
+    },
+    {
+      "id": "strat-inside",
+      "title": "AXIS Inside Bar Strat",
+      "shorttitle": "Inside",
+      "description": "Long break of an inside bar high",
+      "category": "strategy",
+      "categoryLabel": "Strategies",
+      "kind": "strategy",
+      "overlay": true,
+      "covers": "Inside bar strategy",
+      "tags": [
+        "strategy",
+        "price-action"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nstrategy(\"AXIS Inside Bar Strat\", overlay=true, initial_capital=100000,\n     default_qty_type=strategy.percent_of_equity, default_qty_value=10)\ninside = high < high[1] and low > low[1]\nif inside[1] and close > high[1]\n    strategy.entry(\"Long\", strategy.long)\nif strategy.position_size > 0 and close < low[1]\n    strategy.close(\"Long\")\n"
+    },
+    {
+      "id": "strat-outside",
+      "title": "AXIS Outside Bar Strat",
+      "shorttitle": "Outside",
+      "description": "Fade a bearish outside bar",
+      "category": "strategy",
+      "categoryLabel": "Strategies",
+      "kind": "strategy",
+      "overlay": true,
+      "covers": "Outside bar strategy",
+      "tags": [
+        "strategy",
+        "price-action"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nstrategy(\"AXIS Outside Bar Strat\", overlay=true, initial_capital=100000,\n     default_qty_type=strategy.percent_of_equity, default_qty_value=10)\noutside = high > high[1] and low < low[1]\nbearOut = outside and close < open\nif bearOut\n    strategy.entry(\"Long\", strategy.long)\nif strategy.position_size > 0 and close > high[1]\n    strategy.close(\"Long\")\n"
+    },
+    {
+      "id": "strat-pivot-rev",
+      "title": "AXIS Pivot Reversal Strat",
+      "shorttitle": "Piv Rev",
+      "description": "Long a confirmed pivot low",
+      "category": "strategy",
+      "categoryLabel": "Strategies",
+      "kind": "strategy",
+      "overlay": true,
+      "covers": "Pivot reversal strategy",
+      "tags": [
+        "strategy",
+        "pivot"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nstrategy(\"AXIS Pivot Reversal Strat\", overlay=true, initial_capital=100000,\n     default_qty_type=strategy.percent_of_equity, default_qty_value=10)\nleft = input.int(3, \"Left\", minval=1)\nright = input.int(3, \"Right\", minval=1)\npl = ta.pivotlow(low, left, right)\nvar float lastPl = na\nif not na(pl)\n    lastPl := pl\n    strategy.entry(\"Long\", strategy.long)\nif strategy.position_size > 0 and not na(lastPl) and close < lastPl\n    strategy.close(\"Long\")\n"
+    },
+    {
+      "id": "strat-atr-exp",
+      "title": "AXIS ATR Expansion Strat",
+      "shorttitle": "ATR Exp",
+      "description": "Long when range expands vs ATR and close is strong",
+      "category": "strategy",
+      "categoryLabel": "Strategies",
+      "kind": "strategy",
+      "overlay": true,
+      "covers": "Volatility expansion close strategy",
+      "tags": [
+        "strategy",
+        "atr"
+      ],
+      "code": "//@version=6\n// AXIS first-party built-in. Original source — not a TradingView® template.\nstrategy(\"AXIS ATR Expansion Strat\", overlay=true, initial_capital=100000,\n     default_qty_type=strategy.percent_of_equity, default_qty_value=10)\nlen = input.int(14, \"ATR\", minval=1)\nmult = input.float(1.5, \"Range / ATR\", step=0.1)\natr = ta.atr(len)\nwide = (high - low) > atr * mult\nstrong = close > open and close > (high + low) / 2.0\nif wide and strong\n    strategy.entry(\"Long\", strategy.long)\nif ta.crossunder(close, ta.ema(close, 20))\n    strategy.close(\"Long\")\n"
+    }
+  ]
+}

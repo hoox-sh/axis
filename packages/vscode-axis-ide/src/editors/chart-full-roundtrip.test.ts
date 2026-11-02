@@ -22,7 +22,10 @@ import { handleChartWebviewMessage } from './chart-messages';
 import { buildChartSession } from '../host/chart-session';
 import { HOST_TO_VIEW, VIEW_TO_HOST, decode, encode } from '../protocol';
 import {
+  applyChartHostMessage,
+  classifyDeltaSeq,
   initialChartState,
+  mergeBarTail,
   normalizeBars,
   reduceChartMessage,
 } from '../../webview/chart/src/state';
@@ -155,5 +158,120 @@ describe('chart.full encode → decode → reducer apply', () => {
   test('reducer ignores unknown types', () => {
     const state = reduceChartMessage(initialChartState(), 'nope', {});
     expect(state).toEqual(initialChartState());
+  });
+});
+
+describe('chart.delta merge + seq gap → requestReload', () => {
+  const b = (t: number) => ({
+    time: t,
+    open: 1,
+    high: 2,
+    low: 0.5,
+    close: 1.5,
+    volume: 1,
+  });
+
+  test('continuous delta merges tail at baseIndex', () => {
+    let state = initialChartState();
+    state = reduceChartMessage(state, 'chart.full', {
+      bars: [b(1), b(2), b(3)],
+      seq: 10,
+    });
+    const tip = applyChartHostMessage(state, 'chart.delta', {
+      baseIndex: 2,
+      tail: [{ ...b(3), close: 1.8 }],
+      seq: 11,
+    });
+    expect(tip.requestReload).toBe(false);
+    expect(tip.state.seq).toBe(11);
+    expect(tip.state.bars).toHaveLength(3);
+    expect(tip.state.bars[2]?.close).toBe(1.8);
+
+    const append = applyChartHostMessage(tip.state, 'chart.delta', {
+      baseIndex: 3,
+      tail: [b(4)],
+      seq: 12,
+    });
+    expect(append.requestReload).toBe(false);
+    expect(append.state.bars).toHaveLength(4);
+    expect(append.state.bars[3]?.time).toBe(4);
+  });
+
+  test('seq gap and delta-before-full set requestReload; duplicate no-ops', () => {
+    let state = initialChartState();
+    const before = applyChartHostMessage(state, 'chart.delta', {
+      baseIndex: 0,
+      tail: [b(1)],
+      seq: 1,
+    });
+    expect(before.requestReload).toBe(true);
+    expect(before.state.bars).toEqual([]);
+
+    state = reduceChartMessage(state, 'chart.full', { bars: [b(1)], seq: 5 });
+    const gap = applyChartHostMessage(state, 'chart.delta', {
+      baseIndex: 0,
+      tail: [b(9)],
+      seq: 9,
+    });
+    expect(gap.requestReload).toBe(true);
+    expect(gap.state.seq).toBe(5);
+
+    const dup = applyChartHostMessage(state, 'chart.delta', {
+      baseIndex: 0,
+      tail: [b(1)],
+      seq: 5,
+    });
+    expect(dup.requestReload).toBe(false);
+    expect(dup.state).toEqual(state);
+  });
+
+  test('unsafe baseIndex / malformed delta handling', () => {
+    let state = reduceChartMessage(initialChartState(), 'chart.full', {
+      bars: [b(1)],
+      seq: 1,
+    });
+    const badBase = applyChartHostMessage(state, 'chart.delta', {
+      baseIndex: 5,
+      tail: [b(2)],
+      seq: 2,
+    });
+    expect(badBase.requestReload).toBe(true);
+
+    const malformed = applyChartHostMessage(state, 'chart.delta', { seq: 2 });
+    expect(malformed.requestReload).toBe(false);
+    expect(malformed.state).toEqual(state);
+
+    expect(classifyDeltaSeq(1, 2)).toBe('continuous');
+    expect(classifyDeltaSeq(1, 1)).toBe('duplicate');
+    expect(classifyDeltaSeq(1, 3)).toBe('gap');
+    expect(classifyDeltaSeq(0, 1)).toBe('gap');
+    expect(mergeBarTail([b(1)], 0, [b(9)])).toEqual([b(9)]);
+    expect(mergeBarTail([b(1)], -1, [b(9)])).toBeNull();
+  });
+
+  test('chart.delta encode → decode → reducer apply', () => {
+    const env = encode(HOST_TO_VIEW.ChartDelta, {
+      baseIndex: 1,
+      tail: [b(2)],
+      seq: 2,
+      plots: { x: [1] },
+    });
+    const decoded = decode(env);
+    expect(decoded.ok).toBe(true);
+    if (!decoded.ok) return;
+
+    const state = reduceChartMessage(initialChartState(), 'chart.full', {
+      bars: [b(1), b(2)],
+      seq: 1,
+    });
+    const out = applyChartHostMessage(
+      state,
+      decoded.envelope.type,
+      decoded.envelope.payload as Record<string, unknown>,
+    );
+    expect(out.requestReload).toBe(false);
+    expect(out.state.seq).toBe(2);
+    expect(out.state.bars).toHaveLength(2);
+    expect(out.state.bars[1]?.time).toBe(2);
   });
 });

@@ -1,0 +1,29 @@
+{
+  "commands": [
+    {
+      "command": "axis.liveStart",
+      "title": "Start Live",
+      "category": "AXIS"
+    },
+    {
+      "command": "axis.liveStop",
+      "title": "Stop Live",
+      "category": "AXIS"
+    }
+  ],
+  "configuration": {
+    "title": "AXIS IDE Live",
+    "properties": {
+      "axis.worker.url": {
+        "type": "string",
+        "default": "https://worker.axis.hoox.sh",
+        "markdownDescription": "AXIS Worker origin for live ticket mint (`GET /api/ws/live?issue=ticket`) and WS upgrade (`/api/ws/live?ticket=`). Never put `pn_` keys in settings — use SecretStorage."
+      },
+      "axis.live.enabled": {
+        "type": "boolean",
+        "default": true,
+        "markdownDescription": "When false, `axis.liveStart` is a no-op and the live StatusBar stays off."
+      }
+    }
+  }
+}
