@@ -25,11 +25,19 @@ _Generated/updated: 2026-11-01 · 880 commits · describe-tag: `v2.26.0`_
 
 ### Fixed
 
+- **Drawing-tool titles follow the shortcut registry.** Rail, flyout, magnet, and delete hints use the real chord, and a cleared override drops the hint. The selection cursor no longer shows Q (that key toggles the crosshair).
+
 - **Live `/ws/live` inbox no longer storms full snapshots.** Applied frames skip the inbox (closes used to fill the cap of 32 and `resume` every ~32 bars). Overflow resume is backoff-gated and not cleared by every full. Script sliding fulls paint as tip deltas (same as series). A resume/reconnect full that restarts seq at 1 is accepted, so the series sub and a sticky `replay unavailable` chip recover.
 
 - **Pyodide numpy SRI failures on axis.hoox.sh.** `loadPackage('numpy')` for compile/auto fetched `/pyodide/v0.29.5/numpy-*.whl`, which was never vendored; Cloudflare Pages SPA-fallback returned `index.html` (200 `text/html`) and Pyodide’s integrity check failed with a different hash every retry. Vendored the lock-matched numpy 2.2.5 wheel (~2.8 MB), extended `scripts/fetch-pyodide.sh` to pull numpy with micropip, and added `public/_redirects` so missing `/pyodide/*` / `/vendor/*` / `/assets/*` / `/plugins/*` return 404 instead of the app shell.
 
 ### Added
+
+- **On-chart on-chain legend.** Visible attached series show in the chart corner (up to six) with a color swatch and the last value. Hidden series stay off the legend. No extra fetch.
+
+- **Mobile header last price.** The phone header shows the painted close and the signed percent versus the previous bar, using `--color-up` / `--color-down`. No extra quote.
+
+- **Data window close tone.** Close is colored `--color-up` or `--color-down` against the previous bar. A flat print and the first bar stay neutral. Open, High, Low, and Volume stay neutral.
 
 - **Layout glyph and matching saved name.** The layouts button draws the current 1 / 2H / 2V / 4 grid. When a saved layout matches the live slots, its name is shown. Grid hints include the Alt-1…Alt-4 chords.
 
