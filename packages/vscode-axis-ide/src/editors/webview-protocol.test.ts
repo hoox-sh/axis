@@ -33,6 +33,7 @@ describe('chart webview host-message decode', () => {
         cssVars: { '--x': '1' },
         seriesKey: 'a|b|c|1m',
         panes: [{ id: 'price', kind: 'price' }],
+        plugins: { source: 'binance-rest' },
         extra: 'drop-me',
       },
       ts: 1,
@@ -43,6 +44,7 @@ describe('chart webview host-message decode', () => {
       expect(fields.theme).toBe('void');
       expect(fields.seriesKey).toBe('a|b|c|1m');
       expect(fields.cssVars).toEqual({ '--x': '1' });
+      expect(fields.plugins).toEqual({ source: 'binance-rest' });
       expect((fields as { extra?: unknown }).extra).toBeUndefined();
     }
   });

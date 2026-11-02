@@ -27,7 +27,7 @@ import {
   defaultChartCssVars,
 } from '../editors/chart-messages';
 import type { AxisChartDocV1 } from '../editors/chart-document';
-import type { ChartFullPayload, ChartInitPayload } from '../protocol';
+import type { ChartFullPayload, ChartInitPayload, ChartPluginsPayload } from '../protocol';
 import {
   MOCK_BARS_DEFAULT,
   clampMockBarCount,
@@ -78,6 +78,8 @@ export interface ChartSessionOptions {
   cssVars?: Record<string, string>;
   /** Override seq for tests (default {@link CHART_HANDSHAKE_SEQ}). */
   seq?: number;
+  /** Active plugins copied onto `chart.init` (HUD chips). */
+  plugins?: ChartPluginsPayload;
 }
 
 export interface ChartSessionSnapshot {
@@ -100,6 +102,7 @@ export function buildChartSession(opts: ChartSessionOptions): ChartSessionSnapsh
     seriesKey,
     cssVars: opts.cssVars ?? defaultChartCssVars(),
     drawings,
+    ...(opts.plugins !== undefined ? { plugins: opts.plugins } : {}),
   });
   const seq =
     typeof opts.seq === 'number' && Number.isFinite(opts.seq)

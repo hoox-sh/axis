@@ -27,6 +27,8 @@ import {
   initialChartState,
   mergeBarTail,
   normalizeBars,
+  pickChartPlugins,
+  pluginChipSpecs,
   reduceChartMessage,
 } from '../../webview/chart/src/state';
 
@@ -158,6 +160,94 @@ describe('chart.full encode → decode → reducer apply', () => {
   test('reducer ignores unknown types', () => {
     const state = reduceChartMessage(initialChartState(), 'nope', {});
     expect(state).toEqual(initialChartState());
+  });
+
+  test('chart.init stores plugins; host.run.status updates plugins and keeps bars', () => {
+    let state = initialChartState();
+    state = reduceChartMessage(state, 'chart.init', {
+      theme: 'void',
+      seriesKey: 'binance|spot|BTC/USDT|1m',
+      panes: [],
+      cssVars: {},
+      plugins: { source: 'binance-rest', engine: 'server', extra: 'drop' },
+    });
+    expect(state.plugins).toEqual({ source: 'binance-rest', engine: 'server' });
+    expect(state.bars).toEqual([]);
+
+    state = reduceChartMessage(state, 'chart.full', {
+      bars: [{ time: 1, open: 1, high: 2, low: 0.5, close: 1.5, volume: 1 }],
+      seq: 1,
+    });
+    expect(state.bars).toHaveLength(1);
+    const barsBefore = state.bars;
+
+    const status = applyChartHostMessage(state, 'host.run.status', {
+      epoch: 0,
+      state: 'plugins',
+      plugins: { source: 'okx-rest', stream: 'binance-ws', engine: 'pyodide', storage: 'local' },
+    });
+    expect(status.requestReload).toBe(false);
+    expect(status.state.bars).toBe(barsBefore);
+    expect(status.state.seq).toBe(1);
+    expect(status.state.plugins).toEqual({
+      source: 'okx-rest',
+      stream: 'binance-ws',
+      engine: 'pyodide',
+      storage: 'local',
+    });
+
+    const noPlugins = applyChartHostMessage(status.state, 'host.run.status', {
+      epoch: 1,
+      state: 'running',
+    });
+    expect(noPlugins.state.plugins).toEqual(status.state.plugins);
+    expect(noPlugins.state.bars).toBe(status.state.bars);
+
+    const badPlugins = applyChartHostMessage(status.state, 'host.run.status', {
+      epoch: 2,
+      state: 'plugins',
+      plugins: ['x'],
+    });
+    expect(badPlugins.state.plugins).toEqual(status.state.plugins);
+
+    expect(pluginChipSpecs(status.state.plugins)).toEqual([
+      { kind: 'source', prefix: 'src', id: 'okx-rest' },
+      { kind: 'stream', prefix: 'stm', id: 'binance-ws' },
+      { kind: 'engine', prefix: 'eng', id: 'pyodide' },
+      { kind: 'storage', prefix: 'sto', id: 'local' },
+    ]);
+    expect(pluginChipSpecs(undefined)).toEqual([]);
+    expect(pluginChipSpecs({})).toEqual([]);
+    expect(pluginChipSpecs({ source: '  ' })).toEqual([]);
+    expect(pickChartPlugins(['x'])).toBeUndefined();
+    expect(pickChartPlugins(null)).toBeUndefined();
+    expect(pickChartPlugins({ source: 'mexc-rest', stream: 1 })).toEqual({ source: 'mexc-rest' });
+
+    const reinit = reduceChartMessage(status.state, 'chart.init', {
+      theme: 'void',
+      seriesKey: 'x',
+      panes: [],
+      cssVars: {},
+    });
+    expect(reinit.plugins).toEqual(status.state.plugins);
+    expect(reinit.bars).toEqual([]);
+
+    const emptyPlugins = reduceChartMessage(reinit, 'chart.init', {
+      theme: 'void',
+      seriesKey: 'x',
+      panes: [],
+      cssVars: {},
+      plugins: {},
+    });
+    expect(emptyPlugins.plugins).toEqual({});
+
+    const hostile: Record<string, unknown> = { epoch: 0, state: 'plugins' };
+    Object.defineProperty(hostile, 'plugins', {
+      get() {
+        throw new Error('boom-plugins');
+      },
+    });
+    expect(() => applyChartHostMessage(status.state, 'host.run.status', hostile)).not.toThrow();
   });
 });
 

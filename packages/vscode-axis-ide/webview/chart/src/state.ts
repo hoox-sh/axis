@@ -40,6 +40,13 @@ export interface UserDrawing {
   points: [{ time: number; price: number }, { time: number; price: number }];
 }
 
+export interface ChartPlugins {
+  source?: string;
+  stream?: string;
+  engine?: string;
+  storage?: string;
+}
+
 export interface ChartViewState {
   seriesKey: string;
   theme: string;
@@ -49,6 +56,8 @@ export interface ChartViewState {
   drawings: UserDrawing[];
   seq: number;
   ready: boolean;
+  /** Active plugin ids (HUD chips); omitted until chart.init / host.run.status. */
+  plugins?: ChartPlugins;
 }
 
 /** Outcome of one host message — gap sets `requestReload`. */
@@ -198,6 +207,49 @@ export function classifyDeltaSeq(
   return 'gap';
 }
 
+const PLUGIN_CHIP_ORDER = [
+  ['source', 'src'],
+  ['stream', 'stm'],
+  ['engine', 'eng'],
+  ['storage', 'sto'],
+] as const;
+
+/** Normalize plugin ids; unknown keys ignored. Arrays / non-objects → undefined. */
+export function pickChartPlugins(raw: unknown): ChartPlugins | undefined {
+  if (!isPlainObject(raw)) return undefined;
+  const out: ChartPlugins = {};
+  for (const [key] of PLUGIN_CHIP_ORDER) {
+    const v = raw[key];
+    if (typeof v !== 'string') continue;
+    const trimmed = v.trim();
+    if (trimmed) out[key] = trimmed;
+  }
+  return out;
+}
+
+/** Chip specs for the toolbar strip; empty ids omitted. */
+export function pluginChipSpecs(
+  plugins: ChartPlugins | undefined,
+): Array<{
+  kind: (typeof PLUGIN_CHIP_ORDER)[number][0];
+  prefix: (typeof PLUGIN_CHIP_ORDER)[number][1];
+  id: string;
+}> {
+  if (!plugins) return [];
+  const out: Array<{
+    kind: (typeof PLUGIN_CHIP_ORDER)[number][0];
+    prefix: (typeof PLUGIN_CHIP_ORDER)[number][1];
+    id: string;
+  }> = [];
+  for (const [kind, prefix] of PLUGIN_CHIP_ORDER) {
+    const id = plugins[kind];
+    if (typeof id === 'string' && id.trim()) {
+      out.push({ kind, prefix, id: id.trim() });
+    }
+  }
+  return out;
+}
+
 function applyDelta(
   state: ChartViewState,
   payload: Record<string, unknown>,
@@ -242,19 +294,24 @@ export function applyChartHostMessage(
     if (type === 'chart.init') {
       const drawings =
         'drawings' in payload ? normalizeUserDrawings(payload.drawings) : [];
+      const next: ChartViewState = {
+        ...state,
+        ready: true,
+        // Clear prior series on re-init; chart.full (possibly empty) follows.
+        bars: [],
+        seq: 0,
+        drawings,
+        theme: typeof payload.theme === 'string' ? payload.theme : state.theme,
+        seriesKey:
+          typeof payload.seriesKey === 'string' ? payload.seriesKey : state.seriesKey,
+        panes: 'panes' in payload ? payload.panes : state.panes,
+      };
+      if ('plugins' in payload) {
+        const plugins = pickChartPlugins(payload.plugins);
+        if (plugins) next.plugins = plugins;
+      }
       return {
-        state: {
-          ...state,
-          ready: true,
-          // Clear prior series on re-init; chart.full (possibly empty) follows.
-          bars: [],
-          seq: 0,
-          drawings,
-          theme: typeof payload.theme === 'string' ? payload.theme : state.theme,
-          seriesKey:
-            typeof payload.seriesKey === 'string' ? payload.seriesKey : state.seriesKey,
-          panes: 'panes' in payload ? payload.panes : state.panes,
-        },
+        state: next,
         requestReload: false,
       };
     }
@@ -273,6 +330,16 @@ export function applyChartHostMessage(
     }
     if (type === 'chart.delta') {
       return applyDelta(state, payload);
+    }
+    if (type === 'host.run.status') {
+      if (!('plugins' in payload)) {
+        return { state, requestReload: false };
+      }
+      const plugins = pickChartPlugins(payload.plugins);
+      if (!plugins) {
+        return { state, requestReload: false };
+      }
+      return { state: { ...state, plugins }, requestReload: false };
     }
     return { state, requestReload: false };
   } catch {

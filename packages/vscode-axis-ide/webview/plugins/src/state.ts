@@ -25,6 +25,7 @@ import {
   KIND_TABS,
   PLUGIN_KINDS,
   isKindTab,
+  isPluginKind,
   normalizeActive,
   normalizeFlags,
   normalizePlugins,
@@ -47,6 +48,35 @@ export const KIND_LABELS: Record<KindTab, string> = {
   storage: 'Storage',
   dataset: 'Datasets',
   component: 'Components',
+};
+
+/** Compact marks for tabs / section headers (codicon-free). */
+export const KIND_MARKS: Record<KindTab, string> = {
+  all: 'All',
+  source: 'Src',
+  stream: 'Stm',
+  engine: 'Eng',
+  storage: 'Sto',
+  dataset: 'Ds',
+  component: 'Cmp',
+};
+
+/** Lowercase chip prefixes (click `src binance-rest` → Sources). */
+export const KIND_CHIP_LABELS: Record<PluginKind, string> = {
+  source: 'src',
+  stream: 'stm',
+  engine: 'eng',
+  storage: 'stor',
+  dataset: 'ds',
+  component: 'cmp',
+};
+
+export type ActiveChip = {
+  kind: PluginKind;
+  tab: PluginKind;
+  mark: string;
+  chip: string;
+  id: string;
 };
 
 export const KIND_ROLE_FALLBACK: Record<PluginKind, string> = {
@@ -77,6 +107,7 @@ export type ExtraFact = { key: string; value: string };
 export type PluginsViewState = {
   ready: boolean;
   tab: KindTab;
+  query: string;
   plugins: PluginCard[];
   active: ActivePluginsMap;
   flags: PluginsFlags;
@@ -86,6 +117,7 @@ export function initialPluginsState(tab: KindTab = 'all'): PluginsViewState {
   return {
     ready: false,
     tab: isKindTab(tab) ? tab : 'all',
+    query: '',
     plugins: [],
     active: {},
     flags: {},
@@ -95,6 +127,24 @@ export function initialPluginsState(tab: KindTab = 'all'): PluginsViewState {
 export function setKindTab(state: PluginsViewState, tab: unknown): PluginsViewState {
   if (!isKindTab(tab) || tab === state.tab) return state;
   return { ...state, tab };
+}
+
+/** Local search string (host protocol is unchanged). Non-strings become empty. */
+export function setSearchQuery(state: PluginsViewState, query: unknown): PluginsViewState {
+  const next = typeof query === 'string' ? query : '';
+  if (next === state.query) return state;
+  return { ...state, query: next };
+}
+
+/** Map an active-chip kind (or `data-tab`) onto the kind tab. */
+export function tabFromChip(raw: unknown): KindTab | null {
+  return isPluginKind(raw) ? raw : null;
+}
+
+export function emptyFilterMessage(query: unknown): string {
+  const q = typeof query === 'string' ? query.trim() : '';
+  if (!q) return '';
+  return `No plugins match "${q}".`;
 }
 
 /**
@@ -139,6 +189,27 @@ export function filterPluginsByTab(plugins: PluginCard[], tab: KindTab): PluginC
   return plugins.filter((p) => p.kind === tab);
 }
 
+/** Empty / whitespace query matches every card (name, id, description). */
+export function pluginMatchesQuery(card: PluginCard, query: unknown): boolean {
+  const q = typeof query === 'string' ? query.trim().toLowerCase() : '';
+  if (!q) return true;
+  const name = typeof card.name === 'string' ? card.name : '';
+  const id = typeof card.id === 'string' ? card.id : '';
+  const description = typeof card.description === 'string' ? card.description : '';
+  return (
+    name.toLowerCase().includes(q) ||
+    id.toLowerCase().includes(q) ||
+    description.toLowerCase().includes(q)
+  );
+}
+
+export function filterPluginsByQuery(plugins: PluginCard[], query: unknown): PluginCard[] {
+  if (!Array.isArray(plugins)) return [];
+  const q = typeof query === 'string' ? query : '';
+  if (!q.trim()) return plugins.slice();
+  return plugins.filter((p) => pluginMatchesQuery(p, q));
+}
+
 export function kindsToRender(tab: KindTab): readonly PluginKind[] {
   if (tab === 'all') return PLUGIN_KINDS;
   return [tab];
@@ -146,6 +217,28 @@ export function kindsToRender(tab: KindTab): readonly PluginKind[] {
 
 export function pluginsForKind(plugins: PluginCard[], kind: PluginKind): PluginCard[] {
   return plugins.filter((p) => p.kind === kind);
+}
+
+export function visiblePluginsForKind(state: PluginsViewState, kind: PluginKind): PluginCard[] {
+  return filterPluginsByQuery(pluginsForKind(state.plugins, kind), state.query);
+}
+
+export function activeChips(active: ActivePluginsMap): ActiveChip[] {
+  const out: ActiveChip[] = [];
+  for (const kind of PLUGIN_KINDS) {
+    const id = active[kind];
+    if (typeof id !== 'string') continue;
+    const trimmed = id.trim();
+    if (!trimmed) continue;
+    out.push({
+      kind,
+      tab: kind,
+      mark: KIND_MARKS[kind],
+      chip: KIND_CHIP_LABELS[kind],
+      id: trimmed,
+    });
+  }
+  return out;
 }
 
 export function isPluginActive(card: PluginCard, active: ActivePluginsMap): boolean {

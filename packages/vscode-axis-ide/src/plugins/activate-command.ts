@@ -23,7 +23,8 @@
 
 import type { Disposable, ExtensionContext } from 'vscode';
 import { commands, window } from 'vscode';
-import { isActivePlugin, writeActivePlugin, type WorkspaceStateHelpers } from './active';
+import { isActivePlugin, readActivePlugins, writeActivePlugin, type WorkspaceStateHelpers } from './active';
+import { notifyActivePlugins } from './events';
 import { ACTIVATE_PLUGIN_COMMAND } from './kind-tree-model';
 import { PLUGIN_KINDS, type PluginKind } from './types';
 
@@ -80,6 +81,7 @@ export async function runActivatePluginCommand(
     warn('AXIS: Could not activate plugin.');
     return false;
   }
+  notifyActivePlugins(readActivePlugins(helpers));
   if (onChanged) {
     try {
       await onChanged();

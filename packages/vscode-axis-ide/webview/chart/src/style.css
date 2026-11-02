@@ -57,6 +57,35 @@ body {
   color: var(--vscode-button-foreground, #fff);
 }
 
+.chart-plugins {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--vscode-descriptionForeground, var(--vscode-editor-foreground, #cccccc));
+}
+
+.chart-plugins[hidden] {
+  display: none;
+}
+
+.chart-plugins__chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 14em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 1px 6px;
+  border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
+  border-radius: 2px;
+  background: var(--vscode-badge-background, rgba(128, 128, 128, 0.18));
+  color: var(--vscode-badge-foreground, inherit);
+}
+
 .chart-stage {
   position: relative;
   flex: 1 1 auto;

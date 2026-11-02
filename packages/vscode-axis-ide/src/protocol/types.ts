@@ -103,6 +103,14 @@ export const HOST_TO_VIEW_TYPES: ReadonlySet<string> = new Set(Object.values(HOS
 export const VIEW_TO_HOST_TYPES: ReadonlySet<string> = new Set(Object.values(VIEW_TO_HOST));
 export const KNOWN_TYPES: ReadonlySet<string> = new Set(ALL_MESSAGE_TYPES);
 
+/** Active plugin ids on the chart HUD (source/stream/engine/storage). Additive. */
+export interface ChartPluginsPayload {
+  source?: string;
+  stream?: string;
+  engine?: string;
+  storage?: string;
+}
+
 export interface ChartInitPayload {
   theme: unknown;
   cssVars: unknown;
@@ -110,6 +118,8 @@ export interface ChartInitPayload {
   panes: unknown;
   /** User drawings from `*.axis.json` (MVP trendlines); optional on the wire. */
   drawings?: unknown;
+  /** Active plugins; omitted is backward compatible. */
+  plugins?: ChartPluginsPayload;
 }
 
 export interface ChartFullPayload {
@@ -138,6 +148,8 @@ export interface HostRunStatusPayload {
   epoch: number;
   state: string;
   message?: string;
+  /** Live HUD plugin chips; extra fields besides this stay allowed. */
+  plugins?: ChartPluginsPayload;
 }
 
 export interface HostErrorPayload {

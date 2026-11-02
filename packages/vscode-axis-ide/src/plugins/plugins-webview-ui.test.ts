@@ -24,17 +24,29 @@ import {
   encodePluginsReady,
   normalizePluginCard,
 } from '../../webview/plugins/src/protocol';
+import { pluginsViewHtml } from '../../webview/plugins/src/render';
 import {
+  KIND_CHIP_LABELS,
+  KIND_MARKS,
   PYODIDE_FLAG_WARNING,
+  activeChips,
   applyPluginsHostMessage,
+  emptyFilterMessage,
+  filterPluginsByQuery,
   filterPluginsByTab,
   formatActiveStatus,
   initialPluginsState,
   isPluginActive,
   isPyodideFlagOff,
   pluginBadges,
+  pluginMatchesQuery,
   setKindTab,
+  setSearchQuery,
+  tabFromChip,
+  visiblePluginsForKind,
+  type PluginsViewState,
 } from '../../webview/plugins/src/state';
+import type { PluginCard } from '../../webview/plugins/src/protocol';
 
 const samplePlugins = [
   {
@@ -192,6 +204,179 @@ describe('plugins webview tab filter + state', () => {
       active: { source: 'x' },
     });
     expect(next).toEqual(start);
+  });
+});
+
+describe('plugins webview search + chips', () => {
+  const cards = samplePlugins.map((p) => normalizePluginCard(p)).filter((c) => c !== null);
+
+  function readyState(partial: Partial<PluginsViewState> = {}): PluginsViewState {
+    return {
+      ...initialPluginsState(),
+      ready: true,
+      plugins: cards,
+      active: { source: 'binance-rest', engine: 'server', stream: 'binance-ws', storage: 'local' },
+      ...partial,
+    };
+  }
+
+  test('filter by query: empty = all; name / id / description; case-insensitive', () => {
+    expect(filterPluginsByQuery(cards, '').map((c) => c.id)).toEqual(cards.map((c) => c.id));
+    expect(filterPluginsByQuery(cards, '   ').length).toBe(cards.length);
+    expect(filterPluginsByQuery(cards, null).length).toBe(cards.length);
+    expect(filterPluginsByQuery(cards, 'BINANCE').map((c) => c.id)).toEqual(['binance-rest', 'binance-ws']);
+    expect(filterPluginsByQuery(cards, 'custom-src').map((c) => c.id)).toEqual(['custom-src']);
+    expect(filterPluginsByQuery(cards, 'Venue REST').map((c) => c.id)).toEqual(['binance-rest']);
+    expect(filterPluginsByQuery(cards, 'no-such-plugin')).toEqual([]);
+    expect(filterPluginsByQuery(cards, 'stream').map((c) => c.id)).toEqual([]);
+    expect(filterPluginsByQuery({ length: 1 } as unknown as PluginCard[], 'x')).toEqual([]);
+
+    const copy = cards.slice();
+    const filtered = filterPluginsByQuery(cards, '');
+    filtered.pop();
+    expect(cards.length).toBe(copy.length);
+
+    const rest = cards.find((c) => c.id === 'binance-rest');
+    if (!rest) throw new Error('fixture');
+    expect(pluginMatchesQuery(rest, '')).toBe(true);
+    expect(pluginMatchesQuery(rest, '  ')).toBe(true);
+    expect(pluginMatchesQuery(rest, 1)).toBe(true);
+    expect(pluginMatchesQuery(rest, 'klines')).toBe(true);
+    expect(pluginMatchesQuery(rest, 'binance-rest')).toBe(true);
+    expect(pluginMatchesQuery(rest, 'Binance REST')).toBe(true);
+    expect(pluginMatchesQuery(rest, 'nope')).toBe(false);
+
+    const weird = { id: 1, name: 2, description: 3, kind: 'source', builtIn: true, extra: {} } as unknown as PluginCard;
+    expect(pluginMatchesQuery(weird, 'x')).toBe(false);
+
+    const state = setSearchQuery(readyState(), 'pyodide');
+    expect(visiblePluginsForKind(state, 'engine').map((c) => c.id)).toEqual(['pyodide']);
+    expect(visiblePluginsForKind(state, 'source')).toEqual([]);
+    expect(visiblePluginsForKind(setSearchQuery(state, ''), 'source').map((c) => c.id)).toEqual([
+      'binance-rest',
+      'custom-src',
+    ]);
+  });
+
+  test('setSearchQuery is local, identity-stable, and survives plugins.init', () => {
+    const start = initialPluginsState();
+    expect(setSearchQuery(start, '').query).toBe('');
+    expect(setSearchQuery(start, '')).toBe(start);
+    expect(setSearchQuery(start, 12).query).toBe('');
+    expect(setSearchQuery(start, null)).toBe(start);
+
+    const typed = setSearchQuery(start, 'Pyodide');
+    expect(typed).not.toBe(start);
+    expect(typed.query).toBe('Pyodide');
+    expect(setSearchQuery(typed, 'Pyodide')).toBe(typed);
+
+    const init = decodeHostMessage({
+      type: 'plugins.init',
+      plugins: samplePlugins,
+      active: { source: 'binance-rest' },
+    });
+    expect(init.ok).toBe(true);
+    if (!init.ok) return;
+    const next = applyPluginsHostMessage(typed, init.type, init.payload);
+    expect(next.query).toBe('Pyodide');
+    expect(next.plugins.length).toBe(5);
+  });
+
+  test('chip → tab: active chip kind selects that kind tab', () => {
+    expect(KIND_MARKS).toEqual({
+      all: 'All',
+      source: 'Src',
+      stream: 'Stm',
+      engine: 'Eng',
+      storage: 'Sto',
+      dataset: 'Ds',
+      component: 'Cmp',
+    });
+    expect(KIND_CHIP_LABELS.source).toBe('src');
+    expect(KIND_CHIP_LABELS.storage).toBe('stor');
+
+    expect(tabFromChip('source')).toBe('source');
+    expect(tabFromChip('all')).toBeNull();
+    expect(tabFromChip('nope')).toBeNull();
+    expect(tabFromChip(null)).toBeNull();
+    expect(tabFromChip(1)).toBeNull();
+
+    expect(activeChips({})).toEqual([]);
+    expect(activeChips({ source: '  ', engine: '' })).toEqual([]);
+    expect(activeChips({ source: undefined })).toEqual([]);
+
+    const chips = activeChips({
+      source: 'binance-rest',
+      engine: ' server ',
+      stream: 'binance-ws',
+      storage: 'local',
+      dataset: 'onchain',
+      component: 'slot',
+    });
+    expect(chips.map((c) => c.chip)).toEqual(['src', 'stm', 'eng', 'stor', 'ds', 'cmp']);
+    expect(chips[0]).toEqual({
+      kind: 'source',
+      tab: 'source',
+      mark: 'Src',
+      chip: 'src',
+      id: 'binance-rest',
+    });
+
+    const jumped = setKindTab(initialPluginsState(), tabFromChip(chips[0]?.kind));
+    expect(jumped.tab).toBe('source');
+    expect(setKindTab(jumped, tabFromChip('engine')).tab).toBe('engine');
+  });
+
+  test('emptyFilterMessage', () => {
+    expect(emptyFilterMessage('')).toBe('');
+    expect(emptyFilterMessage('  ')).toBe('');
+    expect(emptyFilterMessage(null)).toBe('');
+    expect(emptyFilterMessage(1)).toBe('');
+    expect(emptyFilterMessage('pyodide')).toBe('No plugins match "pyodide".');
+  });
+
+  test('pluginsViewHtml: search, kind marks, chips jump via data-tab, copy-id', () => {
+    const html = pluginsViewHtml(readyState());
+    expect(html).toContain('id="plugins-search"');
+    expect(html).toContain('type="search"');
+    expect(html).toContain('aria-label="Filter plugins by name, id, or description"');
+    expect(html).toContain('aria-label="Sources"');
+    expect(html).toContain('>Src<');
+    expect(html).toContain('>Stm<');
+    expect(html).toContain('>Eng<');
+    expect(html).toContain('>Sto<');
+    expect(html).toContain('>Ds<');
+    expect(html).toContain('>Cmp<');
+    expect(html).toContain('data-action="copy-id"');
+    expect(html).toContain('Copy id');
+    expect(html).toContain('class="plugins-chip"');
+    expect(html).toContain('id="chip-source"');
+    expect(html).toMatch(/data-tab="source"/);
+    expect(html).toContain('binance-rest');
+    expect(html).toContain('>src<');
+    expect(html).toContain('aria-label="Show Sources, binance-rest"');
+
+    const filtered = pluginsViewHtml(readyState({ query: 'pyodide' }));
+    expect(filtered).toContain('value="pyodide"');
+    expect(filtered).toContain('data-id="pyodide"');
+    expect(filtered).not.toContain('data-id="binance-rest"');
+    expect(filtered).not.toContain('data-kind="source"');
+
+    const none = pluginsViewHtml(readyState({ query: 'no-such-plugin' }));
+    expect(none).toContain('No plugins match &quot;no-such-plugin&quot;.');
+
+    const escaped = pluginsViewHtml(readyState({ query: '"<x>"' }));
+    expect(escaped).toContain('value="&quot;&lt;x&gt;&quot;"');
+
+    const engineMiss = pluginsViewHtml(readyState({ tab: 'engine', query: 'binance' }));
+    expect(engineMiss).toContain('No plugins match &quot;binance&quot;.');
+    expect(engineMiss).toContain('data-kind="engine"');
+    expect(engineMiss).not.toContain('data-id="binance-rest"');
+
+    const idle = pluginsViewHtml(initialPluginsState());
+    expect(idle).toContain('Waiting for host catalog');
+    expect(idle).toContain('id="plugins-search"');
+    expect(idle).not.toContain('class="plugins-chip"');
   });
 });
 

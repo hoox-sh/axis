@@ -77,6 +77,7 @@ const EXPECTED_COMMANDS = [
   'axis.liveStop',
   'axis.workers.probeAll',
   'axis.plugins.activate',
+  'axis.plugins.statusMenu',
   'axis.alerts.add',
   'axis.alerts.remove',
   'axis.watchlist.add',
@@ -295,6 +296,10 @@ suite('AXIS IDE Extension Structure', () => {
       'activationEvents should include onCommand:axis.plugins.activate',
     );
     assert.ok(
+      activation.includes('onCommand:axis.plugins.statusMenu'),
+      'activationEvents should include onCommand:axis.plugins.statusMenu',
+    );
+    assert.ok(
       activation.includes('onView:axis.workers'),
       'activationEvents should include onView:axis.workers',
     );
@@ -388,6 +393,21 @@ suite('AXIS IDE Extension Structure', () => {
     const silent = palette.find((e) => e.command === 'axis.runScriptSilent');
     assert.ok(silent, 'commandPalette must contribute axis.runScriptSilent');
     assert.strictEqual(silent?.when, 'editorLangId == pinescript');
+  });
+
+  test('commandPalette shows axis.plugins.statusMenu (not when:false)', () => {
+    const menus = (pkg.contributes as { menus?: Record<string, Array<{ command: string; when?: string }>> })
+      ?.menus;
+    const palette = menus?.commandPalette ?? [];
+    const hiddenActivate = palette.find((e) => e.command === 'axis.plugins.activate');
+    assert.ok(hiddenActivate, 'commandPalette must contribute axis.plugins.activate');
+    assert.strictEqual(hiddenActivate?.when, 'false');
+    const statusMenu = palette.find((e) => e.command === 'axis.plugins.statusMenu');
+    assert.ok(statusMenu, 'commandPalette must contribute axis.plugins.statusMenu');
+    assert.ok(
+      statusMenu?.when !== 'false',
+      'axis.plugins.statusMenu must stay visible in the command palette',
+    );
   });
 
   test('contributes MCP provider + languageModelTools (KD-9 / Task 21–22)', () => {

@@ -72,6 +72,7 @@
     "onCommand:axis.liveStop",
     "onCommand:axis.workers.probeAll",
     "onCommand:axis.plugins.activate",
+    "onCommand:axis.plugins.statusMenu",
     "onCommand:axis.alerts.add",
     "onCommand:axis.alerts.remove",
     "onCommand:axis.watchlist.add",
@@ -230,6 +231,11 @@
         "category": "AXIS"
       },
       {
+        "command": "axis.plugins.statusMenu",
+        "title": "Plugin Menu",
+        "category": "AXIS"
+      },
+      {
         "command": "axis.alerts.add",
         "title": "Add Alert",
         "category": "AXIS"
@@ -307,6 +313,9 @@
         {
           "command": "axis.plugins.activate",
           "when": "false"
+        },
+        {
+          "command": "axis.plugins.statusMenu"
         }
       ],
       "view/title": [

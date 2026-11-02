@@ -47,7 +47,14 @@ import {
 } from '../host/history-client';
 import { logError, logProtocolReject, logWarn } from '../host/logger';
 import { encode, HOST_TO_VIEW } from '../protocol';
-import { getLastChartFull, subscribeChartNotify } from '../run/chart-bus';
+import { getLastChartFull, notifyChart, subscribeChartNotify } from '../run/chart-bus';
+import { readActivePlugins, workspaceStateFromContext } from '../plugins/active';
+import {
+  chartPluginsFromActive,
+  subscribeActivePlugins,
+  type ChartPluginIds,
+} from '../plugins/events';
+import type { ActivePluginsV1 } from '../plugins/types';
 import {
   type AxisChartDocV1,
   CHART_VIEW_TYPE,
@@ -302,13 +309,22 @@ function readChartHostSettings(): ChartHostSettings {
   return { useMockBars, historyBarsSetting, datafeedUrl, allowRemote };
 }
 
+function pluginsForContext(context: ExtensionContext): ChartPluginIds | undefined {
+  try {
+    return chartPluginsFromActive(readActivePlugins(workspaceStateFromContext(context)));
+  } catch {
+    return undefined;
+  }
+}
+
 /** Read chart settings + document into a fresh session (no stale init closure). */
-function sessionForDocument(document: AxisChartDocument) {
+function sessionForDocument(document: AxisChartDocument, context: ExtensionContext) {
   const settings = readChartHostSettings();
   return buildChartSession({
     doc: document.documentData,
     useMockBars: settings.useMockBars,
     historyBarsSetting: settings.historyBarsSetting,
+    plugins: pluginsForContext(context),
   });
 }
 
@@ -418,9 +434,15 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
   /** Strong refs + seriesKey so run-bus can filter which panels receive paint. */
   private readonly openPanels = new Map<
     WebviewPanel,
-    { seriesKey: string; historyAbort?: AbortController }
+    {
+      seriesKey: string;
+      historyAbort?: AbortController;
+      document?: AxisChartDocument;
+    }
   >();
   private readonly busSub: { dispose(): void };
+  private readonly pluginsSub: { dispose(): void };
+  private lastSourceId = '';
   private readonly onRequestReload: (() => void) | undefined;
 
   constructor(
@@ -457,10 +479,62 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
         }
       }
     });
+    try {
+      this.lastSourceId = pluginsForContext(context)?.source ?? '';
+    } catch {
+      this.lastSourceId = '';
+    }
+    this.pluginsSub = subscribeActivePlugins((active) => {
+      this.onActivePluginsChanged(active);
+    });
+  }
+
+  private onActivePluginsChanged(active: ActivePluginsV1): void {
+    const plugins = chartPluginsFromActive(active);
+    const sourceChanged = this.lastSourceId !== (plugins.source ?? '');
+    this.lastSourceId = plugins.source ?? '';
+    const keys = new Set<string>();
+    for (const meta of this.openPanels.values()) {
+      if (meta.seriesKey) keys.add(meta.seriesKey);
+    }
+    const payload = { epoch: 0, state: 'plugins', plugins };
+    if (keys.size === 0) {
+      try {
+        notifyChart({ type: 'host.run.status', payload });
+      } catch {
+        // bus never-throw
+      }
+    } else {
+      for (const seriesKey of keys) {
+        try {
+          notifyChart({ type: 'host.run.status', payload, seriesKey });
+        } catch {
+          // bus never-throw
+        }
+      }
+    }
+    // Source change rebuilds handshake (init clears then full) so the new source paints.
+    // Stream change is HUD-only; live bridge already reads active stream from settings.
+    if (sourceChanged) this.rebuildOpenCharts();
+  }
+
+  private rebuildOpenCharts(): void {
+    for (const [panel, meta] of [...this.openPanels]) {
+      const document = meta.document;
+      if (!document) continue;
+      const session = sessionForDocument(document, this.context);
+      const signal = this.beginHistoryFetch(panel, session.seriesKey);
+      postHandshake(panel.webview, session, {
+        document,
+        signal,
+        isDisposed: () => !this.openPanels.has(panel),
+      });
+    }
   }
 
   dispose(): void {
     this.busSub.dispose();
+    this.pluginsSub.dispose();
     for (const meta of this.openPanels.values()) {
       try {
         meta.historyAbort?.abort();
@@ -482,6 +556,7 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
     this.openPanels.set(panel, {
       seriesKey: seriesKey ?? prev?.seriesKey ?? '',
       historyAbort: ac,
+      document: prev?.document,
     });
     return ac.signal;
   }
@@ -501,6 +576,7 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
     this.openPanels.set(panel, {
       seriesKey,
       historyAbort: prev?.historyAbort,
+      document,
     });
   }
 
@@ -519,7 +595,7 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
   private refreshPanels(document: AxisChartDocument): void {
     const set = this.panels.get(document);
     if (!set) return;
-    const session = sessionForDocument(document);
+    const session = sessionForDocument(document, this.context);
     for (const panel of set) {
       const signal = this.beginHistoryFetch(panel, session.seriesKey);
       postHandshake(panel.webview, session, {
@@ -568,14 +644,15 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
     // Rebuild session on every ready (hide→show re-posts; must not close over resolve-time snapshot).
     const msgSub = webviewPanel.webview.onDidReceiveMessage((raw) => {
       if (disposed) return;
-      let session = sessionForDocument(document);
+      let session = sessionForDocument(document, this.context);
       const result = handleChartWebviewMessage(raw, () => {
-        session = sessionForDocument(document);
+        session = sessionForDocument(document, this.context);
         // Keep bus filter in sync when handshake rebuilds the seriesKey.
         const prev = this.openPanels.get(webviewPanel);
         this.openPanels.set(webviewPanel, {
           seriesKey: session.seriesKey,
           historyAbort: prev?.historyAbort,
+          document,
         });
         return { init: session.init, full: session.full };
       });
@@ -648,7 +725,7 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
       }
     });
 
-    const sessionKey = sessionForDocument(document).seriesKey;
+    const sessionKey = sessionForDocument(document, this.context).seriesKey;
     this.trackPanel(document, webviewPanel, sessionKey);
 
     try {

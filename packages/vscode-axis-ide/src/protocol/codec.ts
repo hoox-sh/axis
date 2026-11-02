@@ -49,6 +49,31 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
+const CHART_PLUGIN_KEYS = ['source', 'stream', 'engine', 'storage'] as const;
+
+/**
+ * Optional `plugins` object: plain object required when present; unknown keys
+ * ignored; missing is OK. Arrays / non-objects rejected.
+ */
+function normalizeChartPlugins(
+  raw: unknown,
+  label: string,
+): { error: ProtocolError } | { error: null; plugins: Record<string, string> } {
+  if (!isPlainObject(raw)) {
+    return {
+      error: err(PROTOCOL_ERROR_CODES.BAD_PAYLOAD, `${label} must be an object`),
+    };
+  }
+  const plugins: Record<string, string> = {};
+  for (const key of CHART_PLUGIN_KEYS) {
+    const v = raw[key];
+    if (typeof v !== 'string') continue;
+    const trimmed = v.trim();
+    if (trimmed) plugins[key] = trimmed;
+  }
+  return { error: null, plugins };
+}
+
 function requireEmptyObject(type: MessageType, payload: unknown): ProtocolError | null {
   if (!isPlainObject(payload)) {
     return err(PROTOCOL_ERROR_CODES.BAD_PAYLOAD, `${type} payload must be an object`);
@@ -82,6 +107,11 @@ function validatePayload(
             'chart.init requires theme, cssVars, seriesKey, panes',
           ),
         };
+      }
+      if (payload.plugins !== undefined) {
+        const plugins = normalizeChartPlugins(payload.plugins, 'chart.init.plugins');
+        if (plugins.error) return { error: plugins.error };
+        return { error: null, payload: { ...payload, plugins: plugins.plugins } };
       }
       return { error: null, payload };
     }
@@ -153,6 +183,11 @@ function validatePayload(
             'host.run.status.message must be a string when present',
           ),
         };
+      }
+      if (payload.plugins !== undefined) {
+        const plugins = normalizeChartPlugins(payload.plugins, 'host.run.status.plugins');
+        if (plugins.error) return { error: plugins.error };
+        return { error: null, payload: { ...payload, plugins: plugins.plugins } };
       }
       return { error: null, payload };
     }

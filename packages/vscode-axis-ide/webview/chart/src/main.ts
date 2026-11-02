@@ -35,6 +35,7 @@ import { decodeHostMessage, PROTOCOL_VERSION } from './protocol';
 import {
   applyChartHostMessage,
   initialChartState,
+  pluginChipSpecs,
   type ChartViewState,
   type UserDrawing,
 } from './state';
@@ -145,6 +146,25 @@ function ensureOverlay(): DrawingOverlay | null {
   return overlay;
 }
 
+function renderPluginChips(plugins: ChartViewState['plugins']): void {
+  const root = document.getElementById('chart-plugins');
+  if (!root) return;
+  const chips = pluginChipSpecs(plugins);
+  root.replaceChildren();
+  if (chips.length === 0) {
+    root.hidden = true;
+    return;
+  }
+  root.hidden = false;
+  for (const chip of chips) {
+    const el = document.createElement('span');
+    el.className = 'chart-plugins__chip';
+    el.dataset.kind = chip.kind;
+    el.textContent = `${chip.prefix} ${chip.id}`;
+    root.appendChild(el);
+  }
+}
+
 function syncToolButton(): void {
   const btn = document.getElementById('tool-trendline');
   if (!btn) return;
@@ -175,6 +195,7 @@ function onHostMessage(event: MessageEvent): void {
   p?.apply(state);
   ensureOverlay();
   redrawOverlay();
+  renderPluginChips(state.plugins);
 }
 
 function onToolbarClick(event: Event): void {

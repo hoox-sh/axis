@@ -101,6 +101,7 @@ mock.module('vscode', () => {
     HighContrastLight: 4,
   };
   return {
+    QuickPickItemKind: { Separator: -1, Default: 0 },
     McpStdioServerDefinition,
     LanguageModelTextPart,
     LanguageModelToolResult,

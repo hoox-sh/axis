@@ -73,6 +73,8 @@ export const EXCLUDE = [
   'views/watchlist.ts',
   'plugins/index.ts',
   'plugins/tree.ts',
+  // StatusBarItem shim — electron / sibling feature-agent tests.
+  'plugins/status-bar.ts',
   // Per-kind TreeView shims (`axis.plugins.*`) — electron / feature-agent tests.
   'plugins/views/',
 ];

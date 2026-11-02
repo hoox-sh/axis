@@ -44,6 +44,14 @@ import {
 } from './active';
 import { registerActivatePluginCommand } from './activate-command';
 import {
+  chartPluginsFromActive,
+  notifyActivePlugins,
+  resetActivePluginsEventsForTests,
+  subscribeActivePlugins,
+  type ActivePluginsListener,
+  type ChartPluginIds,
+} from './events';
+import {
   BUILTIN_ENGINE_IDS,
   BUILTIN_SOURCE_IDS,
   BUILTIN_PLUGIN_DESCRIPTORS,
@@ -73,6 +81,11 @@ import {
   ensureBuiltinsRegistered,
   getHostPluginRegistry,
 } from './registry';
+import {
+  PLUGINS_STATUS_MENU_COMMAND,
+  refreshPluginsStatusBar,
+  registerPluginsStatusBar,
+} from './status-bar';
 import {
   PluginsTreeProvider,
   registerPluginsTreeView,
@@ -107,7 +120,8 @@ export type RegisterPluginsAndWorkersResult = {
 /**
  * Register Plugins WebviewView + Workers, ensure builtins, bind
  * `axis.plugins.v1` / `axis.plugins.active.v1`, and register
- * `axis.workers.probeAll` + `axis.plugins.activate` (never-throw).
+ * `axis.workers.probeAll` + `axis.plugins.activate` + StatusBar
+ * `axis.plugins.statusMenu` (never-throw).
  *
  * Does not createTreeView for `axis.plugins` or the six kind views.
  * PluginsTreeProvider / kind TreeView classes stay exported for unit tests.
@@ -132,11 +146,21 @@ export function registerPluginsAndWorkers(
     context,
     registry,
     workspaceHelpers,
-    refreshAll,
+    () => {
+      refreshAll();
+      refreshPluginsStatusBar();
+    },
   );
   registerActivatePluginCommand(context, workspaceHelpers, () => {
     refreshAll();
     pluginsWebview.postState();
+    refreshPluginsStatusBar();
+    notifyActivePlugins(readActivePlugins(workspaceHelpers));
+  });
+  registerPluginsStatusBar(context, workspaceHelpers, registry, () => {
+    refreshAll();
+    pluginsWebview.postState();
+    notifyActivePlugins(readActivePlugins(workspaceHelpers));
   });
 
   const probeCmd = commands.registerCommand(PROBE_ALL_COMMAND, async () => {
@@ -157,6 +181,7 @@ export {
   bindKindViewDeps,
   callKindViewRefresh,
   builtinIdsForKind,
+  chartPluginsFromActive,
   createMemoryGlobalState,
   createMemoryWorkspaceState,
   EMPTY_PLUGINS_V1,
@@ -164,10 +189,12 @@ export {
   getHostPluginRegistry,
   HostPluginRegistry,
   isActivePlugin,
+  notifyActivePlugins,
   parseActivePluginsV1,
   parsePluginsV1,
   PLUGIN_KIND_VIEW_IDS,
   PLUGINS_GLOBAL_STATE_KEY,
+  PLUGINS_STATUS_MENU_COMMAND,
   PLUGINS_VIEW_ID,
   PLUGINS_WEBVIEW_VIEW_ID,
   PluginsWebviewViewProvider,
@@ -178,11 +205,15 @@ export {
   pluginsRootChildren,
   readActivePlugins,
   readPluginsV1,
+  refreshPluginsStatusBar,
+  resetActivePluginsEventsForTests,
   registerActivatePluginCommand,
   registerPluginKindViews,
+  registerPluginsStatusBar,
   registerPluginsTreeView,
   registerPluginsWebviewView,
   sanitizeInstalledPluginMeta,
+  subscribeActivePlugins,
   workspaceStateFromContext,
   writeActivePlugin,
   writePluginsV1,
@@ -190,7 +221,9 @@ export {
 };
 
 export type {
+  ActivePluginsListener,
   ActivePluginsV1,
+  ChartPluginIds,
   GlobalStateHelpers,
   InstalledPluginMeta,
   KindViewDeps,

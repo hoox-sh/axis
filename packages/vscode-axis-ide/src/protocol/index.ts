@@ -34,6 +34,7 @@ export {
   type ChartDrawingApplyPayload,
   type ChartFullPayload,
   type ChartInitPayload,
+  type ChartPluginsPayload,
   type ChartRequestReloadPayload,
   type ChartThemePayload,
   type ChartViewportPayload,

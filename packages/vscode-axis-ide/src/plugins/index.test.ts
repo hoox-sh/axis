@@ -223,6 +223,7 @@ const vscodeApi = {
 };
 
 mock.module('vscode', () => ({
+  QuickPickItemKind: { Separator: -1, Default: 0 },
   LanguageModelTextPart,
   LanguageModelToolResult,
   MarkdownString,
@@ -293,6 +294,9 @@ describe('plugins index exports', () => {
     expect(typeof idx.parsePluginsV1).toBe('function');
     expect(typeof idx.readActivePlugins).toBe('function');
     expect(typeof idx.writeActivePlugin).toBe('function');
+    expect(typeof idx.subscribeActivePlugins).toBe('function');
+    expect(typeof idx.notifyActivePlugins).toBe('function');
+    expect(typeof idx.chartPluginsFromActive).toBe('function');
     expect(typeof idx.isActivePlugin).toBe('function');
     expect(idx.ACTIVATE_PLUGIN_COMMAND).toBe('axis.plugins.activate');
     expect(idx.PLUGIN_KIND_VIEW_IDS.source).toBe('axis.plugins.source');

@@ -110,6 +110,7 @@ mock.module('vscode', () => {
     HighContrastLight: 4,
   };
   return {
+    QuickPickItemKind: { Separator: -1, Default: 0 },
     TreeItem,
     TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
     EventEmitter,

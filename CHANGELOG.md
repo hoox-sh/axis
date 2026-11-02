@@ -23,6 +23,8 @@ _Generated/updated: 2026-11-01 · 880 commits · describe-tag: `v2.26.0`_
 
 ### Added
 
+- **VS Code AXIS IDE plugins studio polish** (`packages/vscode-axis-ide`). Plugins studio polish (search, chips, copy id); status-bar plugin menu; chart HUD follows active source/stream/engine/storage.
+
 - **VS Code AXIS IDE per-kind plugin views + HOOX activity icon** (`packages/vscode-axis-ide`). Activity Bar replaces lumped `axis.plugins` with `axis.plugins.{source,stream,engine,storage,dataset,component}` (then `axis.workers`); command `axis.plugins.activate` (tree context; hidden from palette); HOOX monochrome mark at `media/axis-activity.svg`. Persist key `axis.plugins.v1` unchanged.
 
 - **VS Code AXIS IDE MCP + LM tools, extension pack, CI, NOTICE/PUBLISH, Pyodide flag (Tasks 21–27)** (`packages/vscode-axis-ide` + `packages/vscode-axis-pack`). MCP stdio provider `axis.mcp` soft-fails unless `axis.mcp.command` / PATH `axis` / `axis.mcp.allowNpx`; `axis.mcp.showConfig` snippet; SecretStorage `AXIS_API_KEY` env only (never `--key`). Language model tools `axis_run_script` (prepareInvocation confirm) / `axis_get_results_focus` / `axis_chart_snapshot_meta` return summaries only. Pack `hoox-sh.axis` (`extensionPack: hoox-sh.pyne + hoox-sh.axis-ide`); root script `vscode:pack:package`. GHA `.github/workflows/vscode-axis-ide.yml` (coverage gate + electron + VSIX artifact). NOTICE (LWC Apache-2.0 + fancy-canvas MIT), PUBLISH.md (vsce/ovsx dry-run; IDE then pack). Optional `axis.engine.allowPyodide` (default false) + chart CSP widen stub (`wasm-unsafe-eval` / `worker-src blob:`) locked to Pyodide **0.29.5** (Wasm assets not shipped).

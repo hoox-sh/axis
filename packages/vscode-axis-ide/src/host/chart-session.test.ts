@@ -124,6 +124,24 @@ describe('chart session', () => {
     }
   });
 
+  test('buildChartSession copies plugins onto init', () => {
+    const session = buildChartSession({
+      doc: defaultChartDocument(),
+      useMockBars: false,
+      plugins: { source: 'binance-rest', stream: 'binance-ws' },
+    });
+    expect(session.init.plugins).toEqual({ source: 'binance-rest', stream: 'binance-ws' });
+    const env = encode(HOST_TO_VIEW.ChartInit, session.init);
+    const decoded = decode(env);
+    expect(decoded.ok).toBe(true);
+    if (decoded.ok) {
+      expect((decoded.envelope.payload as { plugins?: unknown }).plugins).toEqual({
+        source: 'binance-rest',
+        stream: 'binance-ws',
+      });
+    }
+  });
+
   test('useMockBars false posts empty chart.full to clear series', () => {
     const session = buildChartSession({
       doc: defaultChartDocument(),

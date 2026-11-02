@@ -45,6 +45,8 @@ import type { RunMode } from './orchestrator';
 export interface RunContextSettings {
   historyBarsSetting?: number;
   engineId?: string;
+  /** Active plugin engine id when `engineId` is omitted/empty. Default `'server'`. */
+  activeEngineId?: string;
   endpoint?: string;
   /** `axis.chart.useMockBars` — product default false; omitted here keeps mock for callers without settings. */
   useMockBars?: boolean;
@@ -108,6 +110,7 @@ export async function resolveRunContext(
     const useMockBars = settings?.useMockBars !== false;
     const engineId =
       (settings?.engineId && settings.engineId.trim()) ||
+      (settings?.activeEngineId && settings.activeEngineId.trim()) ||
       (doc.engine && doc.engine.trim()) ||
       'server';
     const endpoint =

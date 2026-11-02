@@ -25,6 +25,7 @@ import {
   type AxisEnvelope,
   type ChartFullPayload,
   type ChartInitPayload,
+  type ChartPluginsPayload,
   type ProtocolError,
   type WebviewReadyPayload,
 } from '../protocol';
@@ -66,6 +67,26 @@ export function defaultChartCssVars(): Record<string, string> {
   return out;
 }
 
+const PLUGIN_HUD_KEYS = ['source', 'stream', 'engine', 'storage'] as const;
+
+/** Copy known plugin id strings; arrays / non-objects dropped. */
+export function copyChartPlugins(
+  raw: ChartInitPayload['plugins'] | undefined,
+): ChartPluginsPayload | undefined {
+  if (raw === undefined || raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    return undefined;
+  }
+  const rec = raw as Record<string, unknown>;
+  const out: ChartPluginsPayload = {};
+  for (const key of PLUGIN_HUD_KEYS) {
+    const v = rec[key];
+    if (typeof v !== 'string') continue;
+    const trimmed = v.trim();
+    if (trimmed) out[key] = trimmed;
+  }
+  return out;
+}
+
 /**
  * Build `chart.init` (theme / cssVars / seriesKey / panes — bars go on chart.full).
  */
@@ -78,6 +99,10 @@ export function buildChartInitStub(partial?: Partial<ChartInitPayload>): ChartIn
   };
   if ('drawings' in (partial ?? {}) && partial) {
     init.drawings = partial.drawings;
+  }
+  if (partial && partial.plugins !== undefined) {
+    const plugins = copyChartPlugins(partial.plugins);
+    if (plugins) init.plugins = plugins;
   }
   return init;
 }

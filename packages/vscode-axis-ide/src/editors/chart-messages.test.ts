@@ -21,6 +21,7 @@ import { HOST_TO_VIEW, PROTOCOL_VERSION, VIEW_TO_HOST, encode } from '../protoco
 import {
   buildChartInitStub,
   CHART_INIT_CSS_VAR_KEYS,
+  copyChartPlugins,
   defaultChartCssVars,
   handleChartWebviewMessage,
 } from './chart-messages';
@@ -45,6 +46,30 @@ describe('chart webview message handler', () => {
     expect(Object.keys(defaultChartCssVars())).toEqual([...CHART_INIT_CSS_VAR_KEYS]);
   });
 
+  test('buildChartInitStub copies plugins object and drops arrays', () => {
+    const withPlugins = buildChartInitStub({
+      plugins: {
+        source: 'okx-rest',
+        stream: 'binance-ws',
+        engine: 'server',
+        storage: 'local',
+        extra: 'drop',
+      } as never,
+    });
+    expect(withPlugins.plugins).toEqual({
+      source: 'okx-rest',
+      stream: 'binance-ws',
+      engine: 'server',
+      storage: 'local',
+    });
+    expect(buildChartInitStub().plugins).toBeUndefined();
+    expect(buildChartInitStub({ plugins: ['x'] as never }).plugins).toBeUndefined();
+    expect(copyChartPlugins(undefined)).toBeUndefined();
+    expect(copyChartPlugins(null as never)).toBeUndefined();
+    expect(copyChartPlugins(1 as never)).toBeUndefined();
+    expect(copyChartPlugins({ source: '  ', stream: 1 as never })).toEqual({});
+  });
+
   const session = { init, full: { bars: [], seq: 1 } };
 
   test('accepts webview.ready for chart and replies chart.init + chart.full', () => {
@@ -61,6 +86,7 @@ describe('chart webview message handler', () => {
       expect(result.envelope.payload.theme).toBe('void');
       expect(result.envelope.payload.panes).toEqual([{ id: 'price', kind: 'price' }]);
       expect(result.envelope.payload.cssVars).toEqual({ '--axis-bg': '#050505' });
+      expect(result.envelope.payload.plugins).toBeUndefined();
       expect(result.full).toBeDefined();
       expect(result.full.type).toBe(HOST_TO_VIEW.ChartFull);
       const fullPayload = result.full.payload as { bars: unknown[] };
@@ -144,6 +170,27 @@ describe('chart webview message handler', () => {
     if (result.kind === 'reject') {
       expect(result.error.code).toBe('BAD_ENVELOPE');
       expect(result.error.message).toContain('chart message handler failed');
+    }
+  });
+
+  test('handshake init includes plugins from session', () => {
+    const ready = encode(VIEW_TO_HOST.WebviewReady, {
+      view: 'chart',
+      capabilities: [],
+    });
+    const result = handleChartWebviewMessage(ready, {
+      init: buildChartInitStub({
+        seriesKey: 'binance|spot|BTC/USDT|1m',
+        plugins: { source: 'okx-rest', storage: 'local' },
+      }),
+      full: { bars: [], seq: 1 },
+    });
+    expect(result.kind).toBe('init');
+    if (result.kind === 'init') {
+      expect(result.envelope.payload.plugins).toEqual({
+        source: 'okx-rest',
+        storage: 'local',
+      });
     }
   });
 

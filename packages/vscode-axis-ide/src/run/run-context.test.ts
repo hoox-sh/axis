@@ -52,6 +52,30 @@ describe('resolveRunContext', () => {
     expect(result.ctx.doc.symbol).toBe('ETH/USDT');
   });
 
+  test('uses activeEngineId when engineId omitted', async () => {
+    const result = await resolveRunContext(null, { activeEngineId: 'pyodide' });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.ctx.engineId).toBe('pyodide');
+    expect(result.ctx.useMockBars).toBe(true);
+  });
+
+  test('engineId wins over activeEngineId; empty engineId falls through', async () => {
+    const win = await resolveRunContext(null, {
+      engineId: 'server',
+      activeEngineId: 'pyodide',
+    });
+    expect(win.ok).toBe(true);
+    if (win.ok) expect(win.ctx.engineId).toBe('server');
+
+    const empty = await resolveRunContext(null, {
+      engineId: '  ',
+      activeEngineId: 'pyodide',
+    });
+    expect(empty.ok).toBe(true);
+    if (empty.ok) expect(empty.ctx.engineId).toBe('pyodide');
+  });
+
   test('uses settings engineId/endpoint when provided', async () => {
     const result = await resolveRunContext(null, {
       engineId: 'server',

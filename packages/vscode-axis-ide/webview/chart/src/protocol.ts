@@ -81,6 +81,7 @@ export function pickChartInitFields(payload: Record<string, unknown>): {
   seriesKey: string;
   panes: unknown;
   drawings?: unknown;
+  plugins?: unknown;
 } {
   const out: {
     theme: unknown;
@@ -88,6 +89,7 @@ export function pickChartInitFields(payload: Record<string, unknown>): {
     seriesKey: string;
     panes: unknown;
     drawings?: unknown;
+    plugins?: unknown;
   } = {
     theme: payload.theme,
     cssVars: payload.cssVars,
@@ -95,5 +97,6 @@ export function pickChartInitFields(payload: Record<string, unknown>): {
     panes: payload.panes,
   };
   if ('drawings' in payload) out.drawings = payload.drawings;
+  if ('plugins' in payload) out.plugins = payload.plugins;
   return out;
 }

@@ -90,7 +90,12 @@ import {
   type LiveSessionBridge,
 } from './live';
 import { DRAWING_TOOL_TRENDLINE } from './editors/chart-drawings';
-import { registerPluginsAndWorkers } from './plugins';
+import {
+  readActivePlugins,
+  registerPluginsAndWorkers,
+  workspaceStateFromContext,
+  type WorkspaceStateHelpers,
+} from './plugins';
 import {
   type ChartSnapshotMeta,
   type LmRunScriptResult,
@@ -119,6 +124,7 @@ export const COMMANDS = {
   liveStop: LIVE_COMMANDS.liveStop,
   workersProbeAll: 'axis.workers.probeAll',
   pluginsActivate: 'axis.plugins.activate',
+  pluginsStatusMenu: 'axis.plugins.statusMenu',
   alertsAdd: ALERTS_ADD_COMMAND,
   alertsRemove: ALERTS_REMOVE_COMMAND,
   watchlistAdd: WATCHLIST_COMMANDS.add,
@@ -145,6 +151,18 @@ let liveBridge: LiveSessionBridge | undefined;
 let commandAbort: AbortController | undefined;
 /** Set in deactivate so any late work skips after shutdown. */
 let deactivated = false;
+/** workspaceState helpers for active plugin engine id (run path). */
+let pluginWorkspace: WorkspaceStateHelpers | undefined;
+
+function readActiveEngineId(): string | undefined {
+  try {
+    if (!pluginWorkspace) return undefined;
+    const engine = readActivePlugins(pluginWorkspace).engine;
+    return typeof engine === 'string' && engine.trim() ? engine.trim() : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 function readLiveSettings(): { workerUrl: string; liveEnabled: boolean } {
   let workerUrl = DEFAULT_WORKER_URL;
@@ -425,6 +443,7 @@ async function runScriptCore(opts: {
     const resolved = await resolveRunContext(chartJson, {
       historyBarsSetting: settings.historyBarsSetting,
       engineId: settings.engineId,
+      activeEngineId: readActiveEngineId(),
       endpoint: endpointCheck.endpoint,
       useMockBars: settings.useMockBars,
       datafeedUrl: settings.datafeedUrl,
@@ -769,6 +788,7 @@ export function activate(context: ExtensionContext): void {
   registerAlertsView(context);
   registerWatchlist(context);
   registerApplyBuiltin(context);
+  pluginWorkspace = workspaceStateFromContext(context);
   registerPluginsAndWorkers(context, {
     get: <T>(key: string) => context.globalState.get<T>(key),
     update: (key, value) => context.globalState.update(key, value),
@@ -916,6 +936,7 @@ export function deactivate(): void {
     // ignore
   }
   liveBridge = undefined;
+  pluginWorkspace = undefined;
   try {
     orchestrator?.abortAll();
   } catch {

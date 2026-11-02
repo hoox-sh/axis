@@ -189,6 +189,7 @@ const vscodeApi = {
 };
 
 mock.module('vscode', () => ({
+  QuickPickItemKind: { Separator: -1, Default: 0 },
   LanguageModelTextPart,
   LanguageModelToolResult,
   MarkdownString,

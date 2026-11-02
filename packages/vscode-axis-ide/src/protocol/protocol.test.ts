@@ -158,6 +158,134 @@ describe('axis.webview.v1 protocol', () => {
     expect(decode(env).ok).toBe(true);
   });
 
+  test('chart.init plugins object is ok; unknown keys stripped', () => {
+    const env = encode(HOST_TO_VIEW.ChartInit, {
+      theme: 'dark',
+      cssVars: {},
+      seriesKey: 'binance|spot|BTC/USDT|1m',
+      panes: [],
+      plugins: {
+        source: 'okx-rest',
+        stream: 'binance-ws',
+        engine: 'server',
+        storage: 'local',
+      },
+    });
+    expect(env.payload.plugins).toEqual({
+      source: 'okx-rest',
+      stream: 'binance-ws',
+      engine: 'server',
+      storage: 'local',
+    });
+    const decoded = decode(env);
+    expect(decoded.ok).toBe(true);
+    if (decoded.ok) {
+      expect((decoded.envelope.payload as { plugins?: unknown }).plugins).toEqual({
+        source: 'okx-rest',
+        stream: 'binance-ws',
+        engine: 'server',
+        storage: 'local',
+      });
+    }
+
+    const stripped = decode({
+      v: 1,
+      type: HOST_TO_VIEW.ChartInit,
+      payload: {
+        theme: 'dark',
+        cssVars: {},
+        seriesKey: 'x',
+        panes: [],
+        plugins: { source: 'binance-rest', extra: 'drop', stream: 1, engine: '  ', dataset: 'x' },
+      },
+      ts: 1,
+    });
+    expect(stripped.ok).toBe(true);
+    if (stripped.ok) {
+      expect((stripped.envelope.payload as { plugins?: unknown }).plugins).toEqual({
+        source: 'binance-rest',
+      });
+    }
+  });
+
+  test('chart.init plugins array is rejected', () => {
+    const r = decode({
+      v: 1,
+      type: HOST_TO_VIEW.ChartInit,
+      payload: {
+        theme: 'dark',
+        cssVars: {},
+        seriesKey: 'x',
+        panes: [],
+        plugins: ['binance-rest'],
+      },
+      ts: 1,
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.code).toBe(PROTOCOL_ERROR_CODES.BAD_PAYLOAD);
+      expect(r.error.message.toLowerCase()).toContain('plugins');
+    }
+    expect(() =>
+      encode(HOST_TO_VIEW.ChartInit, {
+        theme: 'dark',
+        cssVars: {},
+        seriesKey: 'x',
+        panes: [],
+        plugins: ['binance-rest'] as never,
+      }),
+    ).toThrow(/plugins/);
+  });
+
+  test('host.run.status plugins object is ok; array rejected', () => {
+    const env = encode(HOST_TO_VIEW.HostRunStatus, {
+      epoch: 0,
+      state: 'plugins',
+      plugins: { engine: 'pyodide' },
+    });
+    expect(env.payload.plugins).toEqual({ engine: 'pyodide' });
+    expect(decode(env).ok).toBe(true);
+
+    const extra = decode({
+      v: 1,
+      type: HOST_TO_VIEW.HostRunStatus,
+      payload: { epoch: 1, state: 'plugins', extra: true, plugins: { source: 'okx-rest' } },
+      ts: 1,
+    });
+    expect(extra.ok).toBe(true);
+    if (extra.ok) {
+      const p = extra.envelope.payload as { extra?: unknown; plugins?: unknown };
+      expect(p.extra).toBe(true);
+      expect(p.plugins).toEqual({ source: 'okx-rest' });
+    }
+
+    const bad = decode({
+      v: 1,
+      type: HOST_TO_VIEW.HostRunStatus,
+      payload: { epoch: 1, state: 'plugins', plugins: null },
+      ts: 1,
+    });
+    expect(bad.ok).toBe(false);
+    if (!bad.ok) {
+      expect(bad.error.code).toBe(PROTOCOL_ERROR_CODES.BAD_PAYLOAD);
+      expect(bad.error.message.toLowerCase()).toContain('plugins');
+    }
+    expect(() =>
+      encode(HOST_TO_VIEW.HostRunStatus, {
+        epoch: 1,
+        state: 'plugins',
+        plugins: [] as never,
+      }),
+    ).toThrow(/plugins/);
+
+    const empty = encode(HOST_TO_VIEW.HostRunStatus, {
+      epoch: 2,
+      state: 'plugins',
+      plugins: {},
+    });
+    expect(empty.payload.plugins).toEqual({});
+  });
+
   test('webview.ready defaults capabilities to [] when omitted', () => {
     const env = encode(VIEW_TO_HOST.WebviewReady, { view: 'results' });
     expect(env.payload).toEqual({ view: 'results', capabilities: [] });
@@ -302,6 +430,11 @@ describe('decode reject paths', () => {
         payload: { seriesKey: 'x', theme: 1, cssVars: 1 },
         tip: 'panes',
       },
+      {
+        type: HOST_TO_VIEW.ChartInit,
+        payload: { theme: 1, cssVars: 1, seriesKey: 'x', panes: 1, plugins: [] },
+        tip: 'plugins',
+      },
       { type: HOST_TO_VIEW.ChartFull, payload: [], tip: 'object' },
       { type: HOST_TO_VIEW.ChartFull, payload: { bars: [] }, tip: 'seq' },
       { type: HOST_TO_VIEW.ChartFull, payload: { seq: 1 }, tip: 'bars' },
@@ -335,6 +468,11 @@ describe('decode reject paths', () => {
         type: HOST_TO_VIEW.HostRunStatus,
         payload: { epoch: 1, state: 'a', message: 3 },
         tip: 'message',
+      },
+      {
+        type: HOST_TO_VIEW.HostRunStatus,
+        payload: { epoch: 1, state: 'a', plugins: [] },
+        tip: 'plugins',
       },
       { type: HOST_TO_VIEW.HostError, payload: null, tip: 'object' },
       { type: HOST_TO_VIEW.HostError, payload: { code: 1, message: 'm' }, tip: 'code' },
