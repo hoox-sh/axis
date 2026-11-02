@@ -29,7 +29,9 @@ export {
   BAD_ENDPOINT_SCHEME,
   REMOTE_ENDPOINT_DENIED,
   checkEngineEndpoint,
+  checkHttpBaseUrl,
   type EndpointCheck,
+  type HttpBaseUrlOptions,
 } from './endpoint';
 export {
   DEFAULT_ENGINE_ENDPOINT,
@@ -63,6 +65,7 @@ export {
 export {
   resolveRunContext,
   type ResolvedRunContext,
+  type ResolveRunContextResult,
   type RunContextSettings,
 } from './run-context';
 export { scrubSecrets } from './scrub';

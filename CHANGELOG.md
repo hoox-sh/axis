@@ -21,6 +21,8 @@ _Generated/updated: 2026-11-01 · 880 commits · describe-tag: `v2.26.0`_
 
 ### Added
 
+- **VS Code AXIS IDE HistoryClient + canonical seriesKey (PR-06b)** (`packages/vscode-axis-ide`). Host `src/host/history-client.ts` fetches `GET {axis.datafeed.url}/datafeed/ohlcv` (default `http://127.0.0.1:5003`, loopback-gated like the engine endpoint) with injectable `fetch`; `src/host/series-key.ts` builds `exchange|market|SYMBOL|interval` with pair-form via a compact majors catalog (`BTCUSDT` → `BTC/USDT`). When `axis.chart.useMockBars` is false, chart handshake clears then paints fetched bars at seq above handshake (`host.error` + OutputChannel on failure — no silent mock); runs fetch the same window and fail clearly instead of POSTing empty data. Setting `axis.datafeed.url` contributed; mock default stays **true** until dogfood flips it.
+
 - **VS Code AXIS IDE RunOrchestrator + `axis.runScript` (mock bars)** (`packages/vscode-axis-ide`). Host `src/run/` posts Pro `POST {axis.engine.endpoint}/run` with SecretStorage `pyn_…` Bearer (no plaintext settings fallback), monotonic epoch drop for stale completions, OutputChannel **AXIS Run** start/end/drop, DiagnosticCollection `axis-run`, and `chart.full` paint (mock bars + plots) via a chart notify bus. Commands `axis.runScript` / `axis.runScriptSilent` with Ctrl/Cmd+Enter keybinding and editor title menu when `editorLangId == pinescript`. Settings `axis.engine.id` (default `server`) and `axis.engine.endpoint` (default `http://127.0.0.1:5002`). In-memory Results focus stub for §7.1. No HistoryClient / venue bars yet.
 
 ### Fixed

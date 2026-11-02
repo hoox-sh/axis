@@ -57,6 +57,8 @@ import {
   validateWorkerKey,
 } from './secrets';
 import { isVersionOlderThan } from './semver';
+import { DEFAULT_DATAFEED_URL } from './host/history-client';
+import { setLogSink } from './host/logger';
 import {
   DEFAULT_ENGINE_ENDPOINT,
   ResultsFocusStore,
@@ -153,17 +155,22 @@ function readEngineSettings(): {
   endpoint: string;
   allowRemote: boolean;
   historyBarsSetting?: number;
+  useMockBars: boolean;
+  datafeedUrl: string;
 } {
   let engineId = 'server';
   let endpoint = DEFAULT_ENGINE_ENDPOINT;
   let allowRemote = false;
   let historyBarsSetting: number | undefined;
+  let useMockBars = true;
+  let datafeedUrl = DEFAULT_DATAFEED_URL;
   try {
     const engineCfg = workspace.getConfiguration('axis.engine');
     const id = engineCfg.get<string>('id');
     if (typeof id === 'string' && id.trim()) engineId = id.trim();
     const ep = engineCfg.get<string>('endpoint');
     if (typeof ep === 'string' && ep.trim()) endpoint = ep.trim();
+    // Application-scoped opt-in — workspace must not redirect authenticated calls.
     allowRemote = engineCfg.get<boolean>('allowRemoteEndpoint', false) === true;
   } catch {
     // keep defaults
@@ -172,14 +179,23 @@ function readEngineSettings(): {
     const chartCfg = workspace.getConfiguration('axis.chart');
     const hb = chartCfg.get<number>('historyBars');
     if (typeof hb === 'number' && Number.isFinite(hb)) historyBarsSetting = hb;
+    useMockBars = chartCfg.get<boolean>('useMockBars', true) !== false;
   } catch {
     // keep defaults
   }
-  return { engineId, endpoint, allowRemote, historyBarsSetting };
+  try {
+    const dfCfg = workspace.getConfiguration('axis.datafeed');
+    const url = dfCfg.get<string>('url');
+    if (typeof url === 'string' && url.trim()) datafeedUrl = url.trim();
+  } catch {
+    // keep defaults
+  }
+  return { engineId, endpoint, allowRemote, historyBarsSetting, useMockBars, datafeedUrl };
 }
 
 /**
- * Run the active Pine buffer against Pro `/run` with mock bars.
+ * Run the active Pine buffer against Pro `/run`.
+ * Uses mock bars when `axis.chart.useMockBars` is true; otherwise HistoryClient.
  * `focus` selects §7.1 Results focus rules. Returns a short status string.
  */
 async function runScriptCommand(focus: boolean): Promise<string | undefined> {
@@ -213,14 +229,25 @@ async function runScriptCommand(focus: boolean): Promise<string | undefined> {
       return err;
     }
 
-    // Runs always use mock bars until HistoryClient (ignore useMockBars:false).
-    const ctx = resolveRunContext(chartJson, {
+    const signal = beginCommandAbort();
+    const resolved = await resolveRunContext(chartJson, {
       historyBarsSetting: settings.historyBarsSetting,
       engineId: settings.engineId,
       endpoint: endpointCheck.endpoint,
+      useMockBars: settings.useMockBars,
+      datafeedUrl: settings.datafeedUrl,
+      allowRemote: settings.allowRemote,
+      signal,
     });
+    if (deactivated) return undefined;
+    if (!resolved.ok) {
+      const err = scrubSecrets(resolved.error);
+      runOutput.appendLine(err);
+      if (focus) void window.showErrorMessage(err);
+      return err;
+    }
+    const ctx = resolved.ctx;
 
-    const signal = beginCommandAbort();
     const output = runOutput;
     const deps: RunDeps = {
       secrets: {
@@ -487,6 +514,17 @@ export function activate(context: ExtensionContext): void {
 
   runOutput = window.createOutputChannel(RUN_OUTPUT_CHANNEL_NAME);
   context.subscriptions.push(runOutput);
+  // Bridge host logger (history failures, etc.) into AXIS Run OutputChannel.
+  setLogSink((level, message) => {
+    const line = `[${level}] ${message}`;
+    try {
+      runOutput?.appendLine(scrubSecrets(line));
+    } catch {
+      // disposed
+    }
+    if (level === 'error') console.error(`[axis] ${message}`);
+    else if (level === 'warn') console.warn(`[axis] ${message}`);
+  });
 
   runDiagnostics = languages.createDiagnosticCollection('axis-run');
   context.subscriptions.push(runDiagnostics);
@@ -536,6 +574,7 @@ export function deactivate(): void {
   } catch {
     // ignore
   }
+  setLogSink(null);
   runOutput = undefined;
   statusBar = undefined;
   secrets = undefined;

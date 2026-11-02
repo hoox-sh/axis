@@ -21,6 +21,7 @@ import {
   BAD_ENDPOINT_SCHEME,
   REMOTE_ENDPOINT_DENIED,
   checkEngineEndpoint,
+  checkHttpBaseUrl,
 } from './endpoint';
 
 describe('checkEngineEndpoint', () => {
@@ -67,5 +68,29 @@ describe('checkEngineEndpoint', () => {
     const r = checkEngineEndpoint(hostile as unknown as string);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toMatch(/failed|boom/i);
+  });
+
+  test('checkHttpBaseUrl gates datafeed-style URLs', () => {
+    const denied = checkHttpBaseUrl('https://feed.example.com', {
+      defaultUrl: 'http://127.0.0.1:5003',
+      label: 'datafeed',
+    });
+    expect(denied.ok).toBe(false);
+    const ok = checkHttpBaseUrl('https://feed.example.com', {
+      defaultUrl: 'http://127.0.0.1:5003',
+      label: 'datafeed',
+      allowRemote: true,
+    });
+    expect(ok.ok).toBe(true);
+    if (ok.ok) expect(ok.endpoint).toBe('https://feed.example.com');
+  });
+
+  test('checkHttpBaseUrl rejects non-http schemes for non-engine labels', () => {
+    const r = checkHttpBaseUrl('file:///tmp/feed', {
+      defaultUrl: 'http://127.0.0.1:5003',
+      label: 'datafeed',
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/http: or https:/i);
   });
 });

@@ -15,20 +15,20 @@ Part of the **[HOOX](https://hoox.sh) open trading stack**. Sister products: **[
 
 ## Status
 
-This is the **0.1.0** scaffold with protocol, SecretStorage, **`axis.chart`**, mock bars paint, Open Chart, and Run:
+This is the **0.1.0** scaffold with protocol, SecretStorage, **`axis.chart`**, HistoryClient, Open Chart, and Run:
 
 - Activation without `onStartupFinished` (workspace globs + commands + `onCustomEditor:axis.chart`)
 - Output channel **AXIS Run** (`AXIS: Show Run Output`)
 - Status bar item (`axis.ide.status`) with Worker/Pro key **set/missing** marks (never values)
-- **AXIS Chart** custom editor on `*.axis.json` (CSP webview + bundled Lightweight Charts; mock `chart.full`)
+- **AXIS Chart** custom editor on `*.axis.json` (CSP webview + bundled Lightweight Charts; mock or datafeed `chart.full`)
 - **AXIS: Open Chart** opens or creates a sibling `*.axis.json` beside the active Pine file (editor title menu; existing files are not rewritten)
-- **AXIS: Run Script** (`Ctrl/Cmd+Enter`) → Pro `/run` on **mock bars** (always, until HistoryClient); paints `chart.full` candles or `axis-run` diagnostics; Silent variant skips Results focus / error toasts
-- Settings: `axis.telemetry.offline`, `axis.engine.id` (`server` only for now), `axis.engine.endpoint` (loopback by default; remote needs `axis.engine.allowRemoteEndpoint`), `axis.chart.useMockBars` / `historyBars`
+- **AXIS: Run Script** (`Ctrl/Cmd+Enter`) → Pro `/run` on mock bars (default) or HistoryClient venue bars when `axis.chart.useMockBars` is false; paints `chart.full` candles or `axis-run` diagnostics; Silent variant skips Results focus / error toasts
+- Settings: `axis.telemetry.offline`, `axis.engine.id` (`server` only for now), `axis.engine.endpoint` (loopback by default; remote needs `axis.engine.allowRemoteEndpoint`), `axis.chart.useMockBars` / `historyBars`, `axis.datafeed.url`
 - Plot/drawing overlays from engine results are carried on `chart.full.plots` but **webview plot paint is deferred** (candles only in PR-06)
 - Typed host↔webview envelope codecs under `src/protocol/` (coverage-gated)
 - Worker (`pn_…`) / Pro (`pyn_…`) keys via `axis.secrets.*` → `ExtensionContext.secrets` only
 
-MCP provider, HistoryClient venue bars, plot overlays, and Results webviews ship later.
+MCP provider, plot overlays, and Results webviews ship later.
 
 ## Build layout
 
@@ -68,8 +68,11 @@ Worker keys must match `/^pn_[a-f0-9]{48}$/`. Pro keys require `pyn_` + 20–508
 | `axis.engine.id` | `server` | Pro `/run` only in this release |
 | `axis.engine.endpoint` | `http://127.0.0.1:5002` | Pro base URL (no `/run` suffix); loopback unless remote allowed |
 | `axis.engine.allowRemoteEndpoint` | `false` | Opt-in before sending Bearer off-machine (**application** scope — workspace cannot enable) |
-| `axis.chart.useMockBars` | `true` | Chart session mock; **runs always mock** until HistoryClient |
-| `axis.chart.historyBars` | `1500` | Default mock window (clamped ≤20000) |
+| `axis.chart.useMockBars` | `true` | Mock/fixture bars for chart + run (safe default). Set **false** for real history via datafeed |
+| `axis.chart.historyBars` | `1500` | Default history window (clamped ≤20000) |
+| `axis.datafeed.url` | `http://127.0.0.1:5003` | Local axis-datafeed base (`GET /datafeed/ohlcv`); remote needs `axis.engine.allowRemoteEndpoint` |
+
+**Real history:** start `@hoox-sh/axis-datafeed` on `:5003`, set `axis.chart.useMockBars` to `false`. Chart clears then paints fetched bars (`chart.full` seq above handshake); runs fail clearly if fetch fails (no empty `/run` body, no silent mock).
 
 Secrets are **not** settings — use the `axis.secrets.*` commands above.
 

@@ -179,7 +179,12 @@
           "axis.chart.useMockBars": {
             "type": "boolean",
             "default": true,
-            "markdownDescription": "When true, chart sessions use deterministic mock/fixture bars (P1 default). When false, host still posts an empty `chart.full` to clear the series. **Runs always use mock bars** until HistoryClient (Task 11), regardless of this setting."
+            "markdownDescription": "When true (default), chart sessions and runs use deterministic mock/fixture bars. Set **false** to fetch real OHLCV from `axis.datafeed.url` (local axis-datafeed sidecar, default `http://127.0.0.1:5003`). On history failure the chart clears + `host.error`; runs fail with a clear error (no empty `/run` POST, no silent mock fallback)."
+          },
+          "axis.datafeed.url": {
+            "type": "string",
+            "default": "http://127.0.0.1:5003",
+            "markdownDescription": "Base URL for the local `@hoox-sh/axis-datafeed` sidecar (`GET /datafeed/ohlcv`). Defaults to loopback `:5003`. Remote URLs require `#axis.engine.allowRemoteEndpoint#` (same posture as the Pro engine endpoint)."
           }
         }
       }

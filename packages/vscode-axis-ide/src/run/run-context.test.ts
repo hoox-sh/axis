@@ -17,19 +17,24 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { describe, expect, test } from 'bun:test';
+import { CHART_HISTORY_SEQ } from '../host/chart-session';
+import type { HistoryFetchLike } from '../host/history-client';
 import { resolveRunContext } from './run-context';
 
 describe('resolveRunContext', () => {
-  test('defaults when no chart JSON (doc historyBars wins over setting)', () => {
-    const ctx = resolveRunContext(null, { historyBarsSetting: 50 });
-    expect(ctx.bars.length).toBe(1500);
-    expect(ctx.engineId).toBe('server');
-    expect(ctx.endpoint).toContain('127.0.0.1');
-    expect(ctx.seriesKey).toContain('|');
-    expect(ctx.seq).toBe(1);
+  test('defaults when no chart JSON (doc historyBars wins over setting)', async () => {
+    const result = await resolveRunContext(null, { historyBarsSetting: 50 });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.ctx.bars.length).toBe(1500);
+    expect(result.ctx.engineId).toBe('server');
+    expect(result.ctx.endpoint).toContain('127.0.0.1');
+    expect(result.ctx.seriesKey).toContain('|');
+    expect(result.ctx.seq).toBe(1);
+    expect(result.ctx.useMockBars).toBe(true);
   });
 
-  test('reads sibling chart doc fields and always yields mock bars', () => {
+  test('reads sibling chart doc fields and yields mock bars when useMockBars true', async () => {
     const json = JSON.stringify({
       schema: 'axis.chart.v1',
       symbol: 'ETH/USDT',
@@ -39,41 +44,144 @@ describe('resolveRunContext', () => {
       historyBars: 80,
       engine: 'server',
     });
-    const ctx = resolveRunContext(json);
-    expect(ctx.bars.length).toBe(80);
-    expect(ctx.seriesKey).toBe('binance|spot|ETH/USDT|5m');
-    expect(ctx.doc.symbol).toBe('ETH/USDT');
+    const result = await resolveRunContext(json);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.ctx.bars.length).toBe(80);
+    expect(result.ctx.seriesKey).toBe('binance|spot|ETH/USDT|5m');
+    expect(result.ctx.doc.symbol).toBe('ETH/USDT');
   });
 
-  test('uses settings engineId/endpoint when provided', () => {
-    const ctx = resolveRunContext(null, {
+  test('uses settings engineId/endpoint when provided', async () => {
+    const result = await resolveRunContext(null, {
       engineId: 'server',
       endpoint: 'http://127.0.0.1:5002',
     });
-    expect(ctx.engineId).toBe('server');
-    expect(ctx.endpoint).toBe('http://127.0.0.1:5002');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.ctx.engineId).toBe('server');
+    expect(result.ctx.endpoint).toBe('http://127.0.0.1:5002');
   });
 
-  test('falls back to server when doc.engine is empty', () => {
+  test('falls back to server when doc.engine is empty', async () => {
     const json = JSON.stringify({
       schema: 'axis.chart.v1',
       engine: '',
       historyBars: 60,
     });
-    const ctx = resolveRunContext(json, { engineId: '  ' });
-    expect(ctx.engineId).toBe('server');
-    expect(ctx.bars.length).toBe(60);
+    const result = await resolveRunContext(json, { engineId: '  ' });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.ctx.engineId).toBe('server');
+    expect(result.ctx.bars.length).toBe(60);
   });
 
-  test('catch path returns defaults on hostile settings', () => {
+  test('catch path returns mock defaults on hostile settings when mock on', async () => {
     const settings = {};
     Object.defineProperty(settings, 'historyBarsSetting', {
       get() {
         throw new Error('hostile');
       },
     });
-    const ctx = resolveRunContext(null, settings as { historyBarsSetting?: number });
-    expect(ctx.engineId).toBe('server');
-    expect(ctx.bars.length).toBeGreaterThan(0);
+    const result = await resolveRunContext(null, settings as { historyBarsSetting?: number });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.ctx.engineId).toBe('server');
+    expect(result.ctx.bars.length).toBeGreaterThan(0);
+  });
+
+  test('useMockBars false fetches history and sets history seq', async () => {
+    const fetchImpl: HistoryFetchLike = async () => ({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify([
+          {
+            time: 1_700_000_000,
+            open: 1,
+            high: 2,
+            low: 0.5,
+            close: 1.5,
+            volume: 9,
+          },
+        ]),
+    });
+    const json = JSON.stringify({
+      schema: 'axis.chart.v1',
+      symbol: 'BTCUSDT',
+      exchange: 'binance',
+      interval: '1m',
+      historyBars: 10,
+    });
+    const result = await resolveRunContext(json, {
+      useMockBars: false,
+      fetchImpl,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.ctx.useMockBars).toBe(false);
+    expect(result.ctx.bars).toHaveLength(1);
+    expect(result.ctx.seriesKey).toBe('binance|spot|BTC/USDT|1m');
+    expect(result.ctx.seq).toBe(CHART_HISTORY_SEQ);
+  });
+
+  test('useMockBars false fails the run context on history error (no empty POST)', async () => {
+    const fetchImpl: HistoryFetchLike = async () => ({
+      ok: false,
+      status: 502,
+      text: async () => JSON.stringify({ error: 'down' }),
+    });
+    const result = await resolveRunContext(
+      JSON.stringify({
+        schema: 'axis.chart.v1',
+        symbol: 'ETH/USDT',
+        exchange: 'binance',
+        interval: '1m',
+      }),
+      { useMockBars: false, fetchImpl },
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toMatch(/HTTP 502|down/);
+  });
+
+  test('useMockBars false fails when datafeed returns empty bars', async () => {
+    const fetchImpl: HistoryFetchLike = async () => ({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify([]),
+    });
+    const result = await resolveRunContext(
+      JSON.stringify({
+        schema: 'axis.chart.v1',
+        symbol: 'ETH/USDT',
+        exchange: 'binance',
+        interval: '1m',
+      }),
+      { useMockBars: false, fetchImpl },
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toMatch(/no bars/i);
+  });
+
+  test('useMockBars false catch path returns error (no mock fallback)', async () => {
+    const settings = {
+      useMockBars: false,
+      get historyBarsSetting(): number {
+        throw new Error('hostile-mock-off');
+      },
+    };
+    const result = await resolveRunContext(
+      JSON.stringify({
+        schema: 'axis.chart.v1',
+        symbol: 'ETH/USDT',
+        exchange: 'binance',
+      }),
+      settings as { useMockBars?: boolean; historyBarsSetting?: number },
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toMatch(/hostile-mock-off|run context failed/);
   });
 });

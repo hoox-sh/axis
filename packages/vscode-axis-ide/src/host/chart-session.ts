@@ -17,8 +17,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Chart session snapshot for the custom editor handshake (PR-05).
- * Builds `chart.init` + `chart.full` (mock bars or empty clear) — no venue fetch.
+ * Chart session snapshot for the custom editor handshake (PR-05 / PR-06b).
+ * Builds `chart.init` + `chart.full` (mock bars or empty clear).
+ * Real venue bars are fetched asynchronously via HistoryClient when mock is off.
  */
 
 import {
@@ -33,35 +34,19 @@ import {
   generateMockBars,
   type OhlcvBar,
 } from './mock-bars';
+import {
+  buildSeriesKey,
+  type SeriesKeyFields,
+} from './series-key';
 
-/** Fields needed to form `exchange|market|SYMBOL|interval`. */
-export interface SeriesKeyFields {
-  exchange: string;
-  market: string;
-  symbol: string;
-  interval: string;
-}
+export type { SeriesKeyFields };
+export { buildSeriesKey };
 
-/**
- * Canonical series key: `exchange|market|SYMBOL|interval`
- * (lower exchange/market, UPPER symbol, verbatim interval).
- * Pair-form catalog mapping (`BTCUSDT` → `BTC/USDT`) lands with HistoryClient (Task 11).
- */
-export function buildSeriesKey(fields: SeriesKeyFields): string {
-  const exchange = String(fields.exchange ?? '')
-    .trim()
-    .toLowerCase();
-  const market =
-    String(fields.market ?? '')
-      .trim()
-      .toLowerCase() || 'spot';
-  // Uppercase now; load-form→pair-form needs the market catalog (deferred Task 11).
-  const symbol = String(fields.symbol ?? '')
-    .trim()
-    .toUpperCase();
-  const interval = String(fields.interval ?? '').trim() || '1m';
-  return `${exchange}|${market}|${symbol}|${interval}`;
-}
+/** Handshake `chart.full.seq` (mock or empty clear). History paint uses +1. */
+export const CHART_HANDSHAKE_SEQ = 1;
+
+/** `chart.full.seq` after a successful HistoryClient paint (above handshake). */
+export const CHART_HISTORY_SEQ = CHART_HANDSHAKE_SEQ + 1;
 
 /**
  * Resolve mock bar count: explicit positive doc.historyBars → else setting → else default.
@@ -86,12 +71,12 @@ export function resolveMockBarCount(
 
 export interface ChartSessionOptions {
   doc: AxisChartDocV1;
-  /** When true (default), generate mock bars. When false, still post empty chart.full to clear. */
+  /** When true (default), generate mock bars. When false, post empty chart.full to clear. */
   useMockBars?: boolean;
   /** `axis.chart.historyBars` setting (used when doc count is unset/non-positive). */
   historyBarsSetting?: number;
   cssVars?: Record<string, string>;
-  /** Override seq for tests (default 1). */
+  /** Override seq for tests (default {@link CHART_HANDSHAKE_SEQ}). */
   seq?: number;
 }
 
@@ -114,7 +99,10 @@ export function buildChartSession(opts: ChartSessionOptions): ChartSessionSnapsh
     seriesKey,
     cssVars: opts.cssVars ?? defaultChartCssVars(),
   });
-  const seq = typeof opts.seq === 'number' && Number.isFinite(opts.seq) ? opts.seq : 1;
+  const seq =
+    typeof opts.seq === 'number' && Number.isFinite(opts.seq)
+      ? opts.seq
+      : CHART_HANDSHAKE_SEQ;
 
   if (!useMockBars) {
     const full: ChartFullPayload = { bars: [], seq };

@@ -27,7 +27,7 @@ import {
 import { MOCK_BARS_CAP, intervalToSeconds } from './mock-bars';
 
 describe('chart session', () => {
-  test('buildSeriesKey normalizes exchange|market|SYMBOL|interval (uppercase symbol)', () => {
+  test('buildSeriesKey normalizes exchange|market|SYMBOL|interval (pair-form)', () => {
     expect(
       buildSeriesKey({
         exchange: 'Binance',
@@ -36,6 +36,14 @@ describe('chart session', () => {
         interval: '1m',
       }),
     ).toBe('binance|spot|BTC/USDT|1m');
+    expect(
+      buildSeriesKey({
+        exchange: 'binance',
+        market: 'spot',
+        symbol: 'BTCUSDT',
+        interval: '5m',
+      }),
+    ).toBe('binance|spot|BTC/USDT|5m');
     expect(
       buildSeriesKey({
         exchange: 'coinbase',

@@ -36,8 +36,16 @@ import {
   window,
   workspace,
 } from 'vscode';
-import { buildChartSession } from '../host/chart-session';
-import { logProtocolReject, logWarn } from '../host/logger';
+import {
+  CHART_HISTORY_SEQ,
+  buildChartSession,
+  resolveMockBarCount,
+} from '../host/chart-session';
+import {
+  DEFAULT_DATAFEED_URL,
+  fetchHistorical,
+} from '../host/history-client';
+import { logError, logProtocolReject, logWarn } from '../host/logger';
 import { encode, HOST_TO_VIEW } from '../protocol';
 import { getLastChartFull, subscribeChartNotify } from '../run/chart-bus';
 import {
@@ -241,47 +249,144 @@ function getChartHtml(webview: Webview, extensionUri: Uri): string {
   });
 }
 
-/** Read chart settings + document into a fresh session (no stale init closure). */
-function sessionForDocument(document: AxisChartDocument) {
-  const cfg = workspace.getConfiguration('axis.chart');
+interface ChartHostSettings {
+  useMockBars: boolean;
+  historyBarsSetting?: number;
+  datafeedUrl: string;
+  allowRemote: boolean;
+}
+
+/** Read chart + datafeed settings (never throws). */
+function readChartHostSettings(): ChartHostSettings {
   let useMockBars = true;
   let historyBarsSetting: number | undefined;
+  let datafeedUrl = DEFAULT_DATAFEED_URL;
+  let allowRemote = false;
   try {
+    const cfg = workspace.getConfiguration('axis.chart');
     useMockBars = cfg.get<boolean>('useMockBars', true) !== false;
     const hb = cfg.get<number>('historyBars');
     if (typeof hb === 'number' && Number.isFinite(hb)) historyBarsSetting = hb;
   } catch {
     useMockBars = true;
   }
+  try {
+    const df = workspace.getConfiguration('axis.datafeed');
+    const url = df.get<string>('url');
+    if (typeof url === 'string' && url.trim()) datafeedUrl = url.trim();
+  } catch {
+    // keep default
+  }
+  try {
+    allowRemote =
+      workspace.getConfiguration('axis.engine').get<boolean>('allowRemoteEndpoint', false) ===
+      true;
+  } catch {
+    allowRemote = false;
+  }
+  return { useMockBars, historyBarsSetting, datafeedUrl, allowRemote };
+}
+
+/** Read chart settings + document into a fresh session (no stale init closure). */
+function sessionForDocument(document: AxisChartDocument) {
+  const settings = readChartHostSettings();
   return buildChartSession({
     doc: document.documentData,
-    useMockBars,
-    historyBarsSetting,
+    useMockBars: settings.useMockBars,
+    historyBarsSetting: settings.historyBarsSetting,
   });
+}
+
+/** Post cached run chart.full so hide→show / late open keeps paint. */
+function replayLastRunFull(webview: Webview, seriesKey: string): void {
+  try {
+    const last = getLastChartFull(seriesKey);
+    if (!last || last.type !== 'chart.full') return;
+    void webview.postMessage(encode(HOST_TO_VIEW.ChartFull, last.payload));
+  } catch {
+    // panel may be disposing
+  }
+}
+
+/**
+ * After handshake empty clear, fetch venue bars and post chart.full at history seq.
+ * On failure: host.error + log — leave empty clear (do not silently mock).
+ */
+async function paintHistoryAfterHandshake(
+  webview: Webview,
+  document: AxisChartDocument,
+  seriesKey: string,
+  signal: AbortSignal,
+  isDisposed: () => boolean,
+): Promise<void> {
+  const settings = readChartHostSettings();
+  if (settings.useMockBars) return;
+  const doc = document.documentData;
+  const limit = resolveMockBarCount(doc.historyBars, settings.historyBarsSetting);
+  const history = await fetchHistorical({
+    exchange: doc.exchange || 'binance',
+    symbol: doc.symbol,
+    timeframe: doc.interval || '1m',
+    limit,
+    baseUrl: settings.datafeedUrl,
+    allowRemote: settings.allowRemote,
+    signal,
+  });
+  if (isDisposed() || signal.aborted) return;
+  if (!history.ok) {
+    const message = history.error;
+    logError(message);
+    try {
+      void webview.postMessage(
+        encode(HOST_TO_VIEW.HostError, { code: 'HISTORY_FETCH', message }),
+      );
+    } catch {
+      // disposing
+    }
+    return;
+  }
+  try {
+    void webview.postMessage(
+      encode(HOST_TO_VIEW.ChartFull, {
+        bars: history.bars,
+        seq: CHART_HISTORY_SEQ,
+      }),
+    );
+    // Replay run paint only after history so a lower history seq cannot clobber it.
+    if (!isDisposed()) replayLastRunFull(webview, seriesKey);
+  } catch {
+    // panel may be disposing
+  }
 }
 
 function postHandshake(
   webview: Webview,
   session: ReturnType<typeof sessionForDocument>,
+  opts?: {
+    document?: AxisChartDocument;
+    signal?: AbortSignal;
+    isDisposed?: () => boolean;
+  },
 ): void {
   try {
     void webview.postMessage(encode(HOST_TO_VIEW.ChartInit, session.init));
     if (session.full) {
       void webview.postMessage(encode(HOST_TO_VIEW.ChartFull, session.full));
     }
-    // Replay last run paint for this seriesKey (seq > handshake) if present.
-    replayLastRunFull(webview, session.seriesKey);
-  } catch {
-    // panel may be disposing
-  }
-}
-
-/** Post cached run chart.full after handshake so hide→show / late open keeps paint. */
-function replayLastRunFull(webview: Webview, seriesKey: string): void {
-  try {
-    const last = getLastChartFull(seriesKey);
-    if (!last || last.type !== 'chart.full') return;
-    void webview.postMessage(encode(HOST_TO_VIEW.ChartFull, last.payload));
+    if (session.useMockBars) {
+      replayLastRunFull(webview, session.seriesKey);
+      return;
+    }
+    // Mock off: clear already posted; fetch history then replay run (if any).
+    if (opts?.document && opts.signal && opts.isDisposed) {
+      void paintHistoryAfterHandshake(
+        webview,
+        opts.document,
+        session.seriesKey,
+        opts.signal,
+        opts.isDisposed,
+      );
+    }
   } catch {
     // panel may be disposing
   }
@@ -296,7 +401,10 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
   /** Open webview panels per document — refresh on revert without re-dirty. */
   private readonly panels = new WeakMap<AxisChartDocument, Set<WebviewPanel>>();
   /** Strong refs + seriesKey so run-bus can filter which panels receive paint. */
-  private readonly openPanels = new Map<WebviewPanel, { seriesKey: string }>();
+  private readonly openPanels = new Map<
+    WebviewPanel,
+    { seriesKey: string; historyAbort?: AbortController }
+  >();
   private readonly busSub: { dispose(): void };
 
   constructor(private readonly context: ExtensionContext) {
@@ -329,7 +437,29 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
 
   dispose(): void {
     this.busSub.dispose();
+    for (const meta of this.openPanels.values()) {
+      try {
+        meta.historyAbort?.abort();
+      } catch {
+        // ignore
+      }
+    }
     this.openPanels.clear();
+  }
+
+  private beginHistoryFetch(panel: WebviewPanel, seriesKey?: string): AbortSignal {
+    const prev = this.openPanels.get(panel);
+    try {
+      prev?.historyAbort?.abort();
+    } catch {
+      // ignore
+    }
+    const ac = new AbortController();
+    this.openPanels.set(panel, {
+      seriesKey: seriesKey ?? prev?.seriesKey ?? '',
+      historyAbort: ac,
+    });
+    return ac.signal;
   }
 
   private trackPanel(
@@ -343,12 +473,22 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
       this.panels.set(document, set);
     }
     set.add(panel);
-    this.openPanels.set(panel, { seriesKey });
+    const prev = this.openPanels.get(panel);
+    this.openPanels.set(panel, {
+      seriesKey,
+      historyAbort: prev?.historyAbort,
+    });
   }
 
   private untrackPanel(document: AxisChartDocument, panel: WebviewPanel): void {
     const set = this.panels.get(document);
     if (set) set.delete(panel);
+    const meta = this.openPanels.get(panel);
+    try {
+      meta?.historyAbort?.abort();
+    } catch {
+      // ignore
+    }
     this.openPanels.delete(panel);
   }
 
@@ -357,8 +497,12 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
     if (!set) return;
     const session = sessionForDocument(document);
     for (const panel of set) {
-      this.openPanels.set(panel, { seriesKey: session.seriesKey });
-      postHandshake(panel.webview, session);
+      const signal = this.beginHistoryFetch(panel, session.seriesKey);
+      postHandshake(panel.webview, session, {
+        document,
+        signal,
+        isDisposed: () => !this.openPanels.has(panel),
+      });
     }
   }
 
@@ -400,10 +544,15 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
     // Rebuild session on every ready (hide→show re-posts; must not close over resolve-time snapshot).
     const msgSub = webviewPanel.webview.onDidReceiveMessage((raw) => {
       if (disposed) return;
+      let session = sessionForDocument(document);
       const result = handleChartWebviewMessage(raw, () => {
-        const session = sessionForDocument(document);
+        session = sessionForDocument(document);
         // Keep bus filter in sync when handshake rebuilds the seriesKey.
-        this.openPanels.set(webviewPanel, { seriesKey: session.seriesKey });
+        const prev = this.openPanels.get(webviewPanel);
+        this.openPanels.set(webviewPanel, {
+          seriesKey: session.seriesKey,
+          historyAbort: prev?.historyAbort,
+        });
         return { init: session.init, full: session.full };
       });
       if (disposed) return;
@@ -431,12 +580,20 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
           if (result.full && !disposed) {
             void webviewPanel.webview.postMessage(result.full);
           }
-          // After handshake, replay last run full for this series (if any).
-          if (!disposed) {
-            const key =
-              this.openPanels.get(webviewPanel)?.seriesKey ??
-              sessionForDocument(document).seriesKey;
+          if (disposed) return;
+          const key =
+            this.openPanels.get(webviewPanel)?.seriesKey ?? session.seriesKey;
+          if (session.useMockBars) {
             replayLastRunFull(webviewPanel.webview, key);
+          } else {
+            const signal = this.beginHistoryFetch(webviewPanel, key);
+            void paintHistoryAfterHandshake(
+              webviewPanel.webview,
+              document,
+              key,
+              signal,
+              () => disposed || !this.openPanels.has(webviewPanel),
+            );
           }
         } catch {
           // panel may be disposing

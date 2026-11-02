@@ -66,6 +66,7 @@ const EXPECTED_SETTINGS = [
   'axis.engine.allowRemoteEndpoint',
   'axis.chart.historyBars',
   'axis.chart.useMockBars',
+  'axis.datafeed.url',
 ] as const;
 /** Must never appear as contributes.configuration — SecretStorage only (KD-8). */
 const FORBIDDEN_SETTINGS = ['axis.worker.apiKey', 'axis.pro.apiKey'] as const;
@@ -281,6 +282,11 @@ suite('AXIS IDE Extension Activation', () => {
   test('default axis.chart.useMockBars is true', () => {
     const config = vscode.workspace.getConfiguration('axis.chart');
     assert.strictEqual(config.get('useMockBars'), true);
+  });
+
+  test('default axis.datafeed.url is loopback :5003', () => {
+    const config = vscode.workspace.getConfiguration('axis.datafeed');
+    assert.strictEqual(config.get('url'), 'http://127.0.0.1:5003');
   });
 
   test('default axis.engine.id / endpoint / allowRemoteEndpoint', () => {
