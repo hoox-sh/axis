@@ -103,6 +103,15 @@
         "category": "AXIS"
       }
     ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "axis.openChart",
+          "when": "resourceLangId == pinescript",
+          "group": "navigation@1"
+        }
+      ]
+    },
     "configuration": [
       {
         "title": "AXIS IDE",
@@ -111,6 +120,18 @@
             "type": "boolean",
             "default": true,
             "description": "Keep product telemetry off by default in IDE."
+          },
+          "axis.chart.historyBars": {
+            "type": "number",
+            "default": 1500,
+            "minimum": 50,
+            "maximum": 20000,
+            "markdownDescription": "Default OHLCV history window for new chart sessions and when the document omits a positive `historyBars`. Counts are clamped to **20000** (same as this maximum)."
+          },
+          "axis.chart.useMockBars": {
+            "type": "boolean",
+            "default": true,
+            "markdownDescription": "When true, chart sessions use deterministic mock/fixture bars (P1 default). When false, host still posts an empty `chart.full` to clear the series. Venue history lands with HistoryClient later."
           }
         }
       }
@@ -130,6 +151,9 @@
     "test:coverage": "bun test --coverage --coverage-reporter=lcov --coverage-reporter=text --coverage-dir=coverage",
     "test:coverage:gate": "bun run test:coverage && bun scripts/check-coverage.mjs",
     "test": "npm run compile-tests && npm run compile && node out/test/runTest.js"
+  },
+  "dependencies": {
+    "lightweight-charts": "^5.2.0"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",

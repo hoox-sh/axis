@@ -19,9 +19,5 @@
 /** OutputChannel name for AXIS run logs (command return value / tests). */
 export const RUN_OUTPUT_CHANNEL_NAME = 'AXIS Run';
 
-/**
- * `axis.openChart` stub copy until Task 08 sibling `*.axis.json` create.
- * Custom editor `axis.chart` already opens existing `*.axis.json` files.
- */
-export const OPEN_CHART_UNAVAILABLE_MESSAGE =
-  'Open or create a *.axis.json chart workspace (AXIS: Open Chart will create a sibling file beside Pine in a later release).';
+/** Re-export — electron tests + command return value when no Pine buffer. */
+export { OPEN_CHART_NO_PINE_MESSAGE } from './host/open-chart';

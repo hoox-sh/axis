@@ -20,11 +20,9 @@ import * as assert from 'node:assert';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import {
-  OPEN_CHART_UNAVAILABLE_MESSAGE,
-  RUN_OUTPUT_CHANNEL_NAME,
-} from '../constants';
+import { RUN_OUTPUT_CHANNEL_NAME } from '../constants';
 import { CHART_VIEW_TYPE } from '../editors/chart-document';
+import { OPEN_CHART_NO_PINE_MESSAGE } from '../host/open-chart';
 import { isVersionOlderThan } from '../semver';
 
 const PACKAGE_PATH = path.resolve(__dirname, '../../package.json');
@@ -59,7 +57,11 @@ const EXPECTED_COMMANDS = [
   'axis.secrets.setProKey',
   'axis.secrets.clear',
 ] as const;
-const EXPECTED_SETTINGS = ['axis.telemetry.offline'] as const;
+const EXPECTED_SETTINGS = [
+  'axis.telemetry.offline',
+  'axis.chart.historyBars',
+  'axis.chart.useMockBars',
+] as const;
 /** Must never appear as contributes.configuration — SecretStorage only (KD-8). */
 const FORBIDDEN_SETTINGS = ['axis.worker.apiKey', 'axis.pro.apiKey'] as const;
 const EXPECTED_WORKSPACE_CONTAINS = [
@@ -70,7 +72,12 @@ const EXPECTED_WORKSPACE_CONTAINS = [
   'workspaceContains:**/*.pinev6',
   'workspaceContains:**/*.pinescript',
 ] as const;
-const ALLOWED_CONTRIBUTE_KEYS = new Set(['commands', 'configuration', 'customEditors']);
+const ALLOWED_CONTRIBUTE_KEYS = new Set([
+  'commands',
+  'configuration',
+  'customEditors',
+  'menus',
+]);
 const EXPECTED_CUSTOM_EDITORS = [
   {
     viewType: CHART_VIEW_TYPE,
@@ -180,14 +187,23 @@ suite('AXIS IDE Extension Structure', () => {
     );
   });
 
-  test('contributes keys are only commands + configuration + customEditors', () => {
+  test('contributes keys are only commands + configuration + customEditors + menus', () => {
     const keys = Object.keys(pkg.contributes ?? {});
     for (const key of keys) {
       assert.ok(
         ALLOWED_CONTRIBUTE_KEYS.has(key),
-        `unexpected contributes.${key} — allowed: commands/configuration/customEditors`,
+        `unexpected contributes.${key} — allowed: commands/configuration/customEditors/menus`,
       );
     }
+  });
+
+  test('editor/title menu includes axis.openChart for pinescript', () => {
+    const menus = (pkg.contributes as { menus?: Record<string, Array<{ command: string; when?: string }>> })
+      ?.menus;
+    const title = menus?.['editor/title'] ?? [];
+    const open = title.find((e) => e.command === 'axis.openChart');
+    assert.ok(open, 'editor/title must contribute axis.openChart');
+    assert.strictEqual(open?.when, 'resourceLangId == pinescript');
   });
 });
 
@@ -209,9 +225,15 @@ suite('AXIS IDE Extension Activation', () => {
     assert.strictEqual(result, RUN_OUTPUT_CHANNEL_NAME);
   });
 
-  test('axis.openChart stub returns product message without awaiting UI', async () => {
+  test('axis.openChart without active Pine returns clear error (no await UI)', async () => {
+    // No Pine buffer in the default electron workspace — expect the no-Pine path.
     const result = await vscode.commands.executeCommand('axis.openChart');
-    assert.strictEqual(result, OPEN_CHART_UNAVAILABLE_MESSAGE);
+    assert.strictEqual(result, OPEN_CHART_NO_PINE_MESSAGE);
+  });
+
+  test('default axis.chart.useMockBars is true', () => {
+    const config = vscode.workspace.getConfiguration('axis.chart');
+    assert.strictEqual(config.get('useMockBars'), true);
   });
 
   test('default axis.telemetry.offline is true', () => {

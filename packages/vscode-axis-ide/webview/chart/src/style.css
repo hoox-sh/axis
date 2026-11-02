@@ -1,7 +1,7 @@
 /* Copyright (C) 2026 jango_blockchained
  * SPDX-License-Identifier: AGPL-3.0-only
  *
- * Chart webview shell styles. LWC paint lands in Task 07 — keep #chart-host as the mount root.
+ * Chart webview styles — #chart-host is the Lightweight Charts mount root.
  */
 
 html,
@@ -19,21 +19,29 @@ body {
 
 .chart-host {
   box-sizing: border-box;
+  position: relative;
   width: 100%;
   height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  /* Mount point for Lightweight Charts (Task 07). */
+  display: block;
 }
 
 .chart-host__placeholder {
   margin: 0;
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   opacity: 0.55;
   letter-spacing: 0.02em;
   user-select: none;
+  pointer-events: none;
 }
 
 .chart-host[data-axis-init='1'] .chart-host__placeholder {
   opacity: 0.35;
+}
+
+.chart-host[data-axis-paint='lwc'] .chart-host__placeholder {
+  display: none;
 }

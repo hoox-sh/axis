@@ -15,14 +15,14 @@ Part of the **[HOOX](https://hoox.sh) open trading stack**. Sister products: **[
 
 ## Status
 
-This is the **0.1.0** scaffold with protocol, SecretStorage, and the **`axis.chart`** custom editor shell:
+This is the **0.1.0** scaffold with protocol, SecretStorage, **`axis.chart`**, mock bars paint, and Open Chart:
 
 - Activation without `onStartupFinished` (workspace globs + commands + `onCustomEditor:axis.chart`)
 - Output channel **AXIS Run** (`AXIS: Show Run Output`)
 - Status bar item (`axis.ide.status`) with Worker/Pro key **set/missing** marks (never values)
-- **AXIS Chart** custom editor on `*.axis.json` (CSP webview shell; LWC paint next)
-- Stub **AXIS: Open Chart** (sibling file create lands next)
-- Optional setting `axis.telemetry.offline` (default `true`)
+- **AXIS Chart** custom editor on `*.axis.json` (CSP webview + bundled Lightweight Charts; mock `chart.full`)
+- **AXIS: Open Chart** opens or creates a sibling `*.axis.json` beside the active Pine file (editor title menu; existing files are not rewritten)
+- Settings: `axis.telemetry.offline` (default `true`), `axis.chart.useMockBars` (default `true`), `axis.chart.historyBars` (default `1500`)
 - Typed host↔webview envelope codecs under `src/protocol/` (coverage-gated)
 - Worker (`pn_…`) / Pro (`pyn_…`) keys via `axis.secrets.*` → `ExtensionContext.secrets` only
 
@@ -49,7 +49,7 @@ Activates on P0 commands and when the workspace contains AXIS/Pine sources. Pine
 | Command | Id |
 | --- | --- |
 | AXIS: Show Run Output | `axis.showRunOutput` |
-| AXIS: Open Chart | `axis.openChart` (stub) |
+| AXIS: Open Chart | `axis.openChart` (open/create sibling `*.axis.json`) |
 | AXIS: Set Worker API Key | `axis.secrets.setWorkerKey` |
 | AXIS: Set Pro API Key | `axis.secrets.setProKey` |
 | AXIS: Clear Stored Secrets | `axis.secrets.clear` (Worker + Pro) |

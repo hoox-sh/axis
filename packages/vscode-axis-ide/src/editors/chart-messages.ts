@@ -23,6 +23,7 @@ import {
   decode,
   encode,
   type AxisEnvelope,
+  type ChartFullPayload,
   type ChartInitPayload,
   type ProtocolError,
   type WebviewReadyPayload,
@@ -31,12 +32,17 @@ import {
 export type ChartMessageHandle =
   | { kind: 'reject'; error: ProtocolError }
   | { kind: 'ignore' }
-  | { kind: 'init'; envelope: AxisEnvelope<ChartInitPayload> };
+  | {
+      kind: 'init';
+      envelope: AxisEnvelope<ChartInitPayload>;
+      /** Always posted after init (empty bars clears prior series). */
+      full: AxisEnvelope<ChartFullPayload>;
+    };
 
 /**
  * VS Code theme CSS variables the chart shell inherits from the webview host.
  * Values are empty placeholders — the iframe already resolves `var(--vscode-*)`;
- * AXIS chart theme tokens land with Task 07 paint. Body class remains the kind bridge.
+ * AXIS chart theme tokens land with paint. Body class remains the kind bridge.
  */
 export const CHART_INIT_CSS_VAR_KEYS = [
   '--vscode-editor-background',
@@ -54,7 +60,7 @@ export function defaultChartCssVars(): Record<string, string> {
 }
 
 /**
- * Build the PR-04 `chart.init` stub (theme / cssVars / seriesKey / panes — no bars).
+ * Build `chart.init` (theme / cssVars / seriesKey / panes — bars go on chart.full).
  */
 export function buildChartInitStub(partial?: Partial<ChartInitPayload>): ChartInitPayload {
   return {
@@ -65,14 +71,24 @@ export function buildChartInitStub(partial?: Partial<ChartInitPayload>): ChartIn
   };
 }
 
+/** Session slice needed after webview.ready — rebuilt per message (no stale init). */
+export interface ChartHandshakeSession {
+  init: ChartInitPayload;
+  /** Always post chart.full (empty bars clears prior series when mock is off). */
+  full: ChartFullPayload;
+}
+
 /**
  * Handle one untrusted webview → host message for the chart editor.
- * Never throws. Accepts `webview.ready` (view=chart) and replies with `chart.init`.
- * Rejects host→view types (wrong direction) and bad envelopes.
+ * Never throws. Accepts `webview.ready` (view=chart) and replies with `chart.init`
+ * (+ optional `chart.full`). Rejects host→view types and bad envelopes.
+ *
+ * `getSession` is invoked only after a valid ready so callers rebuild from the
+ * live document + settings instead of closing over resolve-time snapshots.
  */
 export function handleChartWebviewMessage(
   raw: unknown,
-  init: ChartInitPayload,
+  getSession: ChartHandshakeSession | (() => ChartHandshakeSession),
 ): ChartMessageHandle {
   try {
     const decoded = decode(raw);
@@ -101,8 +117,10 @@ export function handleChartWebviewMessage(
         },
       };
     }
-    const envelope = encode(HOST_TO_VIEW.ChartInit, init);
-    return { kind: 'init', envelope };
+    const session = typeof getSession === 'function' ? getSession() : getSession;
+    const envelope = encode(HOST_TO_VIEW.ChartInit, session.init);
+    const full = encode(HOST_TO_VIEW.ChartFull, session.full);
+    return { kind: 'init', envelope, full };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     return {

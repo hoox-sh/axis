@@ -9,7 +9,13 @@
     "noEmit": true,
     "isolatedModules": true,
     "resolveJsonModule": true,
-    "types": []
+    "types": [],
+    "paths": {
+      "lightweight-charts": [
+        "../../node_modules/lightweight-charts/dist/typings.d.ts",
+        "../../../../node_modules/lightweight-charts/dist/typings.d.ts"
+      ]
+    }
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules"]

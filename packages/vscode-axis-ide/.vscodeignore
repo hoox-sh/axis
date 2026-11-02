@@ -1,4 +1,5 @@
 # Ignore everything by default, then allowlist runtime artifacts.
+# node_modules is excluded — lightweight-charts is Vite-bundled into dist/webview/chart/main.js only.
 .vscode/**
 .vscode-test/**
 src/**

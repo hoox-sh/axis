@@ -22,8 +22,11 @@ export const CHART_VIEW_TYPE = 'axis.chart';
 /** Chart workspace document schema id (design §5). */
 export const CHART_SCHEMA = 'axis.chart.v1';
 
-/** Minimum historyBars after coerce (0 allowed for empty sessions). */
-export const HISTORY_BARS_MIN = 0;
+/**
+ * Minimum historyBars after coerce. Values ≤0 normalize to the schema default
+ * (not 0) so empty/negative windows fall through to setting resolution cleanly.
+ */
+export const HISTORY_BARS_MIN = 1;
 
 export interface AxisChartPaneV1 {
   id: string;
@@ -80,8 +83,9 @@ function asString(value: unknown, fallback: string): string {
 
 function asHistoryBars(value: unknown, fallback: number): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
-  // Coerce negatives to 0 — never persist a negative window.
-  return value < HISTORY_BARS_MIN ? HISTORY_BARS_MIN : Math.floor(value);
+  // ≤0 / sub-min → schema default (fallback), never persist an empty/negative window.
+  const n = Math.floor(value);
+  return n < HISTORY_BARS_MIN ? fallback : n;
 }
 
 function asArray(value: unknown, fallback: unknown[]): unknown[] {

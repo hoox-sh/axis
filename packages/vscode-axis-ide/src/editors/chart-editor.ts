@@ -36,8 +36,9 @@ import {
   window,
   workspace,
 } from 'vscode';
+import { buildChartSession } from '../host/chart-session';
 import { logProtocolReject, logWarn } from '../host/logger';
-import { encode, HOST_TO_VIEW, type ChartInitPayload } from '../protocol';
+import { encode, HOST_TO_VIEW } from '../protocol';
 import {
   type AxisChartDocV1,
   CHART_VIEW_TYPE,
@@ -45,7 +46,7 @@ import {
   serializeChartDocument,
 } from './chart-document';
 import { buildChartWebviewHtml } from './chart-html';
-import { buildChartInitStub, handleChartWebviewMessage } from './chart-messages';
+import { handleChartWebviewMessage } from './chart-messages';
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
@@ -239,12 +240,37 @@ function getChartHtml(webview: Webview, extensionUri: Uri): string {
   });
 }
 
-function buildInitForDocument(document: AxisChartDocument): ChartInitPayload {
-  return buildChartInitStub({
-    theme: document.documentData.theme,
-    panes: document.documentData.panes,
-    seriesKey: '',
+/** Read chart settings + document into a fresh session (no stale init closure). */
+function sessionForDocument(document: AxisChartDocument) {
+  const cfg = workspace.getConfiguration('axis.chart');
+  let useMockBars = true;
+  let historyBarsSetting: number | undefined;
+  try {
+    useMockBars = cfg.get<boolean>('useMockBars', true) !== false;
+    const hb = cfg.get<number>('historyBars');
+    if (typeof hb === 'number' && Number.isFinite(hb)) historyBarsSetting = hb;
+  } catch {
+    useMockBars = true;
+  }
+  return buildChartSession({
+    doc: document.documentData,
+    useMockBars,
+    historyBarsSetting,
   });
+}
+
+function postHandshake(
+  webview: Webview,
+  session: ReturnType<typeof sessionForDocument>,
+): void {
+  try {
+    void webview.postMessage(encode(HOST_TO_VIEW.ChartInit, session.init));
+    if (session.full) {
+      void webview.postMessage(encode(HOST_TO_VIEW.ChartFull, session.full));
+    }
+  } catch {
+    // panel may be disposing
+  }
 }
 
 class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument> {
@@ -276,14 +302,9 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
   private refreshPanels(document: AxisChartDocument): void {
     const set = this.panels.get(document);
     if (!set) return;
-    const init = buildInitForDocument(document);
-    const envelope = encode(HOST_TO_VIEW.ChartInit, init);
+    const session = sessionForDocument(document);
     for (const panel of set) {
-      try {
-        void panel.webview.postMessage(envelope);
-      } catch {
-        // panel may be disposing
-      }
+      postHandshake(panel.webview, session);
     }
   }
 
@@ -322,11 +343,13 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
     };
 
     // Register message handler BEFORE assigning html — webview posts ready synchronously.
-    // Rebuild init on every message (hide→show re-posts ready; must not close over resolve-time snapshot).
+    // Rebuild session on every ready (hide→show re-posts; must not close over resolve-time snapshot).
     const msgSub = webviewPanel.webview.onDidReceiveMessage((raw) => {
       if (disposed) return;
-      const init = buildInitForDocument(document);
-      const result = handleChartWebviewMessage(raw, init);
+      const result = handleChartWebviewMessage(raw, () => {
+        const session = sessionForDocument(document);
+        return { init: session.init, full: session.full };
+      });
       if (disposed) return;
       if (result.kind === 'reject') {
         let typeHint: string | undefined;
@@ -347,7 +370,14 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
       }
       if (result.kind === 'init') {
         if (disposed) return;
-        void webviewPanel.webview.postMessage(result.envelope);
+        try {
+          void webviewPanel.webview.postMessage(result.envelope);
+          if (result.full && !disposed) {
+            void webviewPanel.webview.postMessage(result.full);
+          }
+        } catch {
+          // panel may be disposing
+        }
       }
     });
 

@@ -28,15 +28,20 @@ import {
   type OutputChannel,
   StatusBarAlignment,
   type StatusBarItem,
+  Uri,
   commands,
   extensions,
   window,
+  workspace,
 } from 'vscode';
-import {
-  OPEN_CHART_UNAVAILABLE_MESSAGE,
-  RUN_OUTPUT_CHANNEL_NAME,
-} from './constants';
+import { RUN_OUTPUT_CHANNEL_NAME } from './constants';
 import { registerChartEditorProvider } from './editors/chart-editor';
+import {
+  OPEN_CHART_NO_PINE_MESSAGE,
+  PINE_LANGUAGE_ID,
+  isPineFilePath,
+  planSiblingChartOpen,
+} from './host/open-chart';
 import {
   AxisSecretStorage,
   SECRET_STORE_ERROR,
@@ -190,6 +195,84 @@ async function promptAndClearSecrets(): Promise<string | undefined> {
   }
 }
 
+/**
+ * Open or create a sibling `*.axis.json` beside the active Pine buffer so
+ * `axis.chart` resolves. Existing siblings are not rewritten. Returns the chart
+ * URI string or an error message. Never awaits UI dismissal (tests/CI).
+ */
+async function openChartCommand(): Promise<string | undefined> {
+  if (deactivated) return undefined;
+  try {
+    const editor = window.activeTextEditor;
+    const doc = editor?.document;
+    const fsPath = doc?.uri?.fsPath ?? '';
+    const langOk = doc?.languageId === PINE_LANGUAGE_ID;
+    const pathOk = isPineFilePath(fsPath);
+    if (doc?.uri.scheme !== 'file' || (!langOk && !pathOk)) {
+      void window.showErrorMessage(OPEN_CHART_NO_PINE_MESSAGE);
+      return OPEN_CHART_NO_PINE_MESSAGE;
+    }
+
+    const pineFileName =
+      doc.uri.path.split('/').pop() ||
+      doc.fileName.split(/[/\\]/).pop() ||
+      'script.pyne';
+
+    // Probe sibling path first via planner (validates Pine suffix).
+    const probe = planSiblingChartOpen({
+      pinePath: fsPath,
+      pineFileName,
+      siblingExists: true,
+    });
+    if (!probe.ok) {
+      void window.showErrorMessage(probe.error);
+      return probe.error;
+    }
+
+    const siblingUri = Uri.file(probe.siblingPath);
+    let exists = false;
+    try {
+      await workspace.fs.stat(siblingUri);
+      exists = true;
+    } catch {
+      exists = false;
+    }
+    if (deactivated) return undefined;
+
+    let historyBarsSetting: number | undefined;
+    try {
+      const hb = workspace.getConfiguration('axis.chart').get<number>('historyBars');
+      if (typeof hb === 'number' && Number.isFinite(hb)) historyBarsSetting = hb;
+    } catch {
+      historyBarsSetting = undefined;
+    }
+
+    const plan = planSiblingChartOpen({
+      pinePath: fsPath,
+      pineFileName,
+      siblingExists: exists,
+      historyBarsSetting,
+    });
+    if (!plan.ok) {
+      void window.showErrorMessage(plan.error);
+      return plan.error;
+    }
+    if (plan.writeBytes) {
+      await workspace.fs.writeFile(siblingUri, plan.writeBytes);
+    }
+    if (deactivated) return undefined;
+
+    // Prefer vscode.open so the custom editor selector for *.axis.json resolves.
+    await commands.executeCommand('vscode.open', siblingUri);
+    return siblingUri.toString();
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    const err = `AXIS: Open Chart failed: ${message}`;
+    void window.showErrorMessage(err);
+    return err;
+  }
+}
+
 export function activate(context: ExtensionContext): void {
   deactivated = false;
 
@@ -213,13 +296,7 @@ export function activate(context: ExtensionContext): void {
       runOutput?.show(true);
       return RUN_OUTPUT_CHANNEL_NAME;
     }),
-    commands.registerCommand(COMMANDS.openChart, () => {
-      if (deactivated) return;
-      // Do not await — showInformationMessage waits for dismissal and stalls tests/CI.
-      // Sibling *.axis.json create lands in Task 08; keep stub message for now.
-      void window.showInformationMessage(OPEN_CHART_UNAVAILABLE_MESSAGE);
-      return OPEN_CHART_UNAVAILABLE_MESSAGE;
-    }),
+    commands.registerCommand(COMMANDS.openChart, () => openChartCommand()),
     commands.registerCommand(COMMANDS.setWorkerKey, () => promptAndSetWorkerKey()),
     commands.registerCommand(COMMANDS.setProKey, () => promptAndSetProKey()),
     commands.registerCommand(COMMANDS.clearSecrets, () => promptAndClearSecrets()),

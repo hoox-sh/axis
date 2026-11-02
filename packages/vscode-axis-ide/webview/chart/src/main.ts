@@ -17,12 +17,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * AXIS chart webview shell (PR-04).
- * Posts webview.ready; decodes chart.init stub. LWC paint lands in Task 07.
+ * AXIS chart webview (PR-05): ready handshake → chart.init + chart.full paint.
  */
 
 import './style.css';
-import { decodeHostMessage, pickChartInitFields, PROTOCOL_VERSION } from './protocol';
+import { createChartPainter, type ChartPainter } from './paint';
+import { decodeHostMessage, PROTOCOL_VERSION } from './protocol';
+import { initialChartState, reduceChartMessage, type ChartViewState } from './state';
 
 interface VsCodeApi {
   postMessage(message: unknown): void;
@@ -33,6 +34,8 @@ interface VsCodeApi {
 declare function acquireVsCodeApi(): VsCodeApi;
 
 let disposed = false;
+let state: ChartViewState = initialChartState();
+let painter: ChartPainter | null = null;
 
 function postReady(api: VsCodeApi): void {
   if (disposed) return;
@@ -41,26 +44,19 @@ function postReady(api: VsCodeApi): void {
     type: 'webview.ready',
     payload: {
       view: 'chart',
-      capabilities: ['chart-shell'],
+      capabilities: ['chart-shell', 'chart-full'],
     },
     ts: Date.now(),
   });
 }
 
-function applyChartInit(payload: Record<string, unknown>): void {
-  const fields = pickChartInitFields(payload);
+function ensurePainter(): ChartPainter | null {
+  if (disposed) return null;
+  if (painter) return painter;
   const host = document.getElementById('chart-host');
-  if (!host) return;
-  host.setAttribute('data-axis-init', '1');
-  if (typeof fields.theme === 'string' && fields.theme.length > 0) {
-    host.setAttribute('data-axis-theme', fields.theme);
-  }
-  if (fields.seriesKey) {
-    host.setAttribute('data-axis-series', fields.seriesKey);
-  }
-  // cssVars / panes reserved for Task 07 LWC theme + pane layout.
-  void fields.cssVars;
-  void fields.panes;
+  if (!host) return null;
+  painter = createChartPainter(host);
+  return painter;
 }
 
 function onHostMessage(event: MessageEvent): void {
@@ -70,21 +66,31 @@ function onHostMessage(event: MessageEvent): void {
     // Drop unexpected / malformed host traffic (wrong direction, bad envelope).
     return;
   }
-  if (decoded.type === 'chart.init') {
-    applyChartInit(decoded.payload);
-  }
+  state = reduceChartMessage(state, decoded.type, decoded.payload);
+  if (disposed) return;
+  const p = ensurePainter();
+  if (disposed) return;
+  p?.apply(state);
 }
 
 function main(): void {
   const api = acquireVsCodeApi();
+  // Listener before ready — host may reply synchronously after postMessage.
   window.addEventListener('message', onHostMessage);
   window.addEventListener(
     'pagehide',
     () => {
       disposed = true;
+      try {
+        painter?.dispose();
+      } catch {
+        // ignore
+      }
+      painter = null;
     },
     { once: true },
   );
+  ensurePainter();
   postReady(api);
 }
 

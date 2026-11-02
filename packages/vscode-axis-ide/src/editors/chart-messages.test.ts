@@ -45,12 +45,14 @@ describe('chart webview message handler', () => {
     expect(Object.keys(defaultChartCssVars())).toEqual([...CHART_INIT_CSS_VAR_KEYS]);
   });
 
-  test('accepts webview.ready for chart and replies chart.init', () => {
+  const session = { init, full: { bars: [], seq: 1 } };
+
+  test('accepts webview.ready for chart and replies chart.init + chart.full', () => {
     const ready = encode(VIEW_TO_HOST.WebviewReady, {
       view: 'chart',
       capabilities: ['chart-shell'],
     });
-    const result = handleChartWebviewMessage(ready, init);
+    const result = handleChartWebviewMessage(ready, session);
     expect(result.kind).toBe('init');
     if (result.kind === 'init') {
       expect(result.envelope.type).toBe(HOST_TO_VIEW.ChartInit);
@@ -59,11 +61,15 @@ describe('chart webview message handler', () => {
       expect(result.envelope.payload.theme).toBe('void');
       expect(result.envelope.payload.panes).toEqual([{ id: 'price', kind: 'price' }]);
       expect(result.envelope.payload.cssVars).toEqual({ '--axis-bg': '#050505' });
+      expect(result.full).toBeDefined();
+      expect(result.full.type).toBe(HOST_TO_VIEW.ChartFull);
+      const fullPayload = result.full.payload as { bars: unknown[] };
+      expect(fullPayload.bars).toEqual([]);
     }
   });
 
   test('rejects bad envelopes with BAD_ codes', () => {
-    const bad = handleChartWebviewMessage({ v: 99, type: 'webview.ready' }, init);
+    const bad = handleChartWebviewMessage({ v: 99, type: 'webview.ready' }, session);
     expect(bad.kind).toBe('reject');
     if (bad.kind === 'reject') {
       expect(bad.error.code).toBe('BAD_VERSION');
@@ -71,14 +77,14 @@ describe('chart webview message handler', () => {
 
     const unknown = handleChartWebviewMessage(
       { v: 1, type: 'nope', payload: {}, ts: 1 },
-      init,
+      session,
     );
     expect(unknown.kind).toBe('reject');
     if (unknown.kind === 'reject') {
       expect(unknown.error.code).toBe('UNKNOWN_TYPE');
     }
 
-    const notObject = handleChartWebviewMessage(null, init);
+    const notObject = handleChartWebviewMessage(null, session);
     expect(notObject.kind).toBe('reject');
     if (notObject.kind === 'reject') {
       expect(notObject.error.code).toBe('BAD_ENVELOPE');
@@ -90,7 +96,7 @@ describe('chart webview message handler', () => {
       view: 'results',
       capabilities: [],
     });
-    const result = handleChartWebviewMessage(ready, init);
+    const result = handleChartWebviewMessage(ready, session);
     expect(result.kind).toBe('reject');
     if (result.kind === 'reject') {
       expect(result.error.code).toBe('BAD_PAYLOAD');
@@ -100,7 +106,7 @@ describe('chart webview message handler', () => {
 
   test('rejects host→view types sent from the webview (wrong direction)', () => {
     const spoof = encode(HOST_TO_VIEW.ChartInit, init);
-    const result = handleChartWebviewMessage(spoof, init);
+    const result = handleChartWebviewMessage(spoof, session);
     expect(result.kind).toBe('reject');
     if (result.kind === 'reject') {
       expect(result.error.code).toBe('BAD_TYPE');
@@ -110,7 +116,7 @@ describe('chart webview message handler', () => {
 
   test('ignores non-ready view→host types', () => {
     const viewport = encode(VIEW_TO_HOST.ChartViewport, { from: 1, to: 2 });
-    const result = handleChartWebviewMessage(viewport, init);
+    const result = handleChartWebviewMessage(viewport, session);
     expect(result.kind).toBe('ignore');
   });
 
@@ -120,15 +126,40 @@ describe('chart webview message handler', () => {
       capabilities: [],
     });
     const result = handleChartWebviewMessage(ready, {
-      theme: 'void',
-      seriesKey: 1 as unknown as string,
-      cssVars: {},
-      panes: [],
+      init: {
+        theme: 'void',
+        seriesKey: 1 as unknown as string,
+        cssVars: {},
+        panes: [],
+      },
+      full: { bars: [], seq: 1 },
     });
     expect(result.kind).toBe('reject');
     if (result.kind === 'reject') {
       expect(result.error.code).toBe('BAD_ENVELOPE');
       expect(result.error.message).toContain('chart message handler failed');
+    }
+  });
+
+  test('rebuilds session via getter (no stale init)', () => {
+    let calls = 0;
+    const ready = encode(VIEW_TO_HOST.WebviewReady, {
+      view: 'chart',
+      capabilities: [],
+    });
+    const result = handleChartWebviewMessage(ready, () => {
+      calls += 1;
+      return {
+        init: buildChartInitStub({ seriesKey: `key-${calls}` }),
+        full: { bars: [{ time: 1, open: 1, high: 1, low: 1, close: 1, volume: 1 }], seq: 1 },
+      };
+    });
+    expect(calls).toBe(1);
+    expect(result.kind).toBe('init');
+    if (result.kind === 'init') {
+      expect(result.envelope.payload.seriesKey).toBe('key-1');
+      expect(result.full).toBeDefined();
+      expect(result.full.type).toBe(HOST_TO_VIEW.ChartFull);
     }
   });
 });

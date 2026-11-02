@@ -91,13 +91,16 @@ describe('chart document helpers', () => {
     expect(doc.exchange).toBe('');
   });
 
-  test('normalize coerces unknown schema and negative historyBars', () => {
+  test('normalize coerces unknown schema and non-positive historyBars to default', () => {
     const doc = normalizeChartDocument({
       schema: 'axis.chart.v0',
       historyBars: -12,
     });
     expect(doc.schema).toBe(CHART_SCHEMA);
-    expect(doc.historyBars).toBe(0);
+    expect(doc.historyBars).toBe(1500);
+
+    const zero = normalizeChartDocument({ historyBars: 0 });
+    expect(zero.historyBars).toBe(1500);
   });
 
   test('serialize round-trips through parse', () => {
