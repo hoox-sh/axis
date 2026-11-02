@@ -178,7 +178,11 @@ const GAP_RESYNC_BACKOFF_MS = [0, 500, 1_500, 4_000, 10_000] as const;
  * A hidden tab must not replay every tick it missed.
  */
 export const HIDDEN_WAKE_MS = 50;
-/** Per-subscription inbox. Extra forming tips are dropped; closes and snapshots stay. */
+/**
+ * Per-subscription inbox for snapshot waiters only. Live frames are applied
+ * via `routeFrame` and must not accumulate here — 32 closes used to
+ * `resume` → PYNE full-snapshot at kline rate.
+ */
 const INBOX_CAP = 32;
 
 function historyBarsOf(meta: Record<string, unknown> | undefined): number {
@@ -384,8 +388,12 @@ export class StreamLiveWire {
   >();
   /** In-flight script paint drain. A later push waits, then paints the newest payload. */
   private readonly paintTail = new Map<string, Promise<void>>();
-  /** Inbox could not drop a tip. One snapshot until the next full. */
+  /** Inbox could not drop a tip. One snapshot until recovery succeeds. */
   private readonly inboxOverflowPending = new Set<string>();
+  /** Last overflow-resume wall time per sub (backoff). */
+  private readonly inboxOverflowAt = new Map<string, number>();
+  /** Overflow-resume attempts since the last successful recovery. */
+  private readonly inboxOverflowAttempts = new Map<string, number>();
   /** `history_bars` the script subscription was created with. */
   private readonly scriptDepth = new Map<string, number>();
   /** Inbox for frames that arrive before their waiter (one TCP segment can
@@ -530,6 +538,7 @@ export class StreamLiveWire {
 
   private resumeFromHold(subId: string): void {
     v1Count('resync');
+    this.holdUntilFull.add(subId);
     this.handlers.onStatus(subId, 'degraded', { message: 'resyncing' });
     const bars = this.seriesBars.get(subId) ?? this.scriptCtx.get(subId)?.bars ?? [];
     const seq = this.appliedSeq.get(subId) ?? 0;
@@ -764,20 +773,22 @@ export class StreamLiveWire {
   }
 
   /**
-   * Keep the inbox bounded for snapshot waiters. Live forming tips are
-   * already applied via `routeFrame` — skip enqueueing them once the sub
-   * has an applied seq and no waiter (stops `droppedTip` from counting
-   * every same-slot replace). While awaiting a snapshot, at most one
-   * forming tip per sub (latest wins, not counted as a drop). A `close`,
-   * `full`, `error`, or non-forming delta stays. Cap overflow of those
-   * resumes once; only a spliced forming tip under the cap counts as a drop.
+   * Inbox is for snapshot waiters only. Live frames already go through
+   * `routeFrame` — skip enqueue once the sub is live (closes used to fill
+   * the cap of 32 and `resume` at kline rate). `appliedSeq` is also set by
+   * forming deltas *before* the snapshot, so "live" here is "no waiter and
+   * no in-flight subscribe". While waiting, at most one forming tip per sub
+   * (latest wins). Extra closes/deltas over the cap are dropped so a long
+   * history wait cannot resume. Only a spliced forming tip counts as a drop.
+   *
+   * Do not discard the inbox from `routeFrame`: `notifyInboxWaiters` clears
+   * waiters before `awaitFull` drains, and a same-turn burst would delete
+   * the snapshot the waiter still needs.
    */
   private enqueueInbox(frame: WireFrame): void {
     const id = frame.id;
     if (!id) return;
-    if (this.isDroppableTip(frame) && this.appliedSeq.has(id) && !this.inboxWaiters.has(id)) {
-      return;
-    }
+    if (!this.inboxNeeded(id)) return;
     const queue = this.inbox.get(id) ?? [];
     if (this.isDroppableTip(frame)) {
       const tipAt = queue.findIndex((item) => this.isDroppableTip(item));
@@ -790,25 +801,37 @@ export class StreamLiveWire {
     queue.push(frame);
     let overflow = false;
     while (queue.length > INBOX_CAP) {
-      const dropAt = queue.findIndex((item) => this.isDroppableTip(item));
+      const dropAt = queue.findIndex(
+        (item) => this.isDroppableTip(item) || item.type === 'close' || item.type === 'delta',
+      );
       if (dropAt < 0) {
         overflow = true;
         break;
       }
-      queue.splice(dropAt, 1);
-      v1Count('droppedTip');
+      const dropped = queue.splice(dropAt, 1)[0];
+      if (dropped && this.isDroppableTip(dropped)) v1Count('droppedTip');
     }
     this.inbox.set(id, queue);
     if (overflow) this.forceInboxSnapshot(id);
   }
 
   /**
-   * The inbox is over the cap and every frame left is a close, a snapshot,
-   * or a confirmed delta. Those stay. One resume asks for a fresh snapshot.
+   * The inbox is over the cap and every remaining frame is a snapshot or
+   * error. Waiters already expect a full — do not resume. Live overflow
+   * (should be rare after skip-enqueue) resumes once, then backs off.
    */
   private forceInboxSnapshot(subId: string): void {
-    if (this.inboxOverflowPending.has(subId)) return;
+    if (this.inboxNeeded(subId)) return;
+    const now = Date.now();
+    const attempts = this.inboxOverflowAttempts.get(subId) ?? 0;
+    const lastAt = this.inboxOverflowAt.get(subId) ?? 0;
+    const backoff =
+      GAP_RESYNC_BACKOFF_MS[Math.min(attempts, GAP_RESYNC_BACKOFF_MS.length - 1)] ?? 10_000;
+    if (attempts > 0 && now - lastAt < backoff) return;
     this.inboxOverflowPending.add(subId);
+    this.holdUntilFull.add(subId);
+    this.inboxOverflowAt.set(subId, now);
+    this.inboxOverflowAttempts.set(subId, attempts + 1);
     this.handlers.onStatus(subId, 'degraded', { message: 'inbox full — resyncing' });
     const bars = this.seriesBars.get(subId) ?? this.scriptCtx.get(subId)?.bars ?? [];
     const seq = this.appliedSeq.get(subId) ?? 0;
@@ -822,6 +845,30 @@ export class StreamLiveWire {
     } catch {
       /* the socket may still be opening */
     }
+  }
+
+  /** Resume / overflow / axis-resub fulls may restart seq at 1. */
+  private isRecoveryFull(subId: string): boolean {
+    return (
+      this.holdUntilFull.has(subId) ||
+      this.inboxOverflowPending.has(subId) ||
+      this.axisResubPending.has(subId)
+    );
+  }
+
+  /** Snapshot waiters still need the inbox — even after a forming delta set `appliedSeq`. */
+  private inboxNeeded(id: string): boolean {
+    return (
+      this.inboxWaiters.has(id) ||
+      this.seriesInflight.has(id) ||
+      this.pendingScriptSubscribe.has(id)
+    );
+  }
+
+  /** Drop leftover waiter frames once `awaitFull` consumed the snapshot. */
+  private discardLiveInbox(subId: string): void {
+    if (!subId || this.inboxWaiters.has(subId)) return;
+    this.inbox.delete(subId);
   }
 
   private isDroppableTip(frame: WireFrame): boolean {
@@ -889,6 +936,7 @@ export class StreamLiveWire {
       if (!bars.length) this.fail('empty-snapshot', 'series snapshot held no bars');
       this.appliedSeq.set(subId, typeof full.seq === 'number' ? full.seq : 0);
       this.seriesBars.set(subId, bars);
+      this.discardLiveInbox(subId);
       this.handlers.onStatus(subId, 'live');
       engineDebug('wire.series.snapshot', {
         subId,
@@ -951,8 +999,7 @@ export class StreamLiveWire {
       this.paintLatest.delete(input.subId);
       this.paintTail.delete(input.subId);
       this.holdUntilFull.delete(input.subId);
-      this.gapResyncAt.delete(input.subId);
-      this.gapResyncAttempts.delete(input.subId);
+      this.clearGapResync(input.subId);
       this.inbox.delete(input.subId);
       applier = undefined;
       try {
@@ -1024,6 +1071,7 @@ export class StreamLiveWire {
         const fallbackTimes = this.scriptCtx.get(input.subId)?.bars.map((b) => b.time) ?? null;
         applier.applyFull(scriptFullForApplier(payload, full.seq, fallbackTimes));
         this.appliedSeq.set(input.subId, typeof full.seq === 'number' ? full.seq : 0);
+        this.discardLiveInbox(input.subId);
         this.handlers.onStatus(input.subId, 'live');
       } catch (e) {
         // Drop half-state so the next streamEvalScript can subscribe cleanly.
@@ -1074,7 +1122,6 @@ export class StreamLiveWire {
       }
       if (frame.type === 'full' && frame.id) {
         this.heldLive.delete(frame.id);
-        this.inboxOverflowPending.delete(frame.id);
       }
       this.rememberClosedUpto(frame);
       if (frame.type === 'status' && frame.id) {
@@ -1286,6 +1333,9 @@ export class StreamLiveWire {
     // A transient fail must not keep rejecting ensureSeries after a healthy open.
     this.coolUntil = 0;
     for (const [subId, seq] of this.appliedSeq) {
+      // PYNE resume emits a full that may restart seq at 1 — hold until it
+      // lands so the rewind gate cannot drop it (series sub frozen at 11211).
+      this.holdUntilFull.add(subId);
       const bars = this.seriesBars.get(subId) ?? this.scriptCtx.get(subId)?.bars ?? [];
       try {
         this.client.resumeSubscription(
@@ -1314,11 +1364,12 @@ export class StreamLiveWire {
     const seq = typeof frame.seq === 'number' ? frame.seq : null;
     const prevSeq = this.appliedSeq.get(subId);
     if (frame.type === 'full') {
-      const recovering = this.holdUntilFull.has(subId);
-      this.holdUntilFull.delete(subId);
+      const recovering = this.isRecoveryFull(subId);
       // Do NOT clearGapResync on every full — that reset backoff and let a
       // gap→resync→full loop run at ~6 Hz (debug log: 228 series.full / ~40s).
-      if (seq != null && prevSeq != null && seq < prevSeq) return;
+      // A resume full may restart seq at 1; drop only a late snapshot.
+      if (seq != null && prevSeq != null && seq < prevSeq && !recovering) return;
+      this.holdUntilFull.delete(subId);
       if (!bars.length) return;
       this.seriesBars.set(subId, bars);
       this.appliedSeq.set(subId, seq ?? prevSeq ?? 0);
@@ -1547,21 +1598,25 @@ export class StreamLiveWire {
     const wasLive = this.appliedSeq.has(subId);
     if (frame.type === 'full') {
       const seq = typeof frame.seq === 'number' ? frame.seq : null;
-      const waitingFull = this.holdUntilFull.has(subId);
+      const recovering = this.isRecoveryFull(subId);
       // A snapshot that left before a newer delta must not paint over it —
       // unless we asked for a fresh full after a gap (seq may restart at 1).
-      if (wasLive && !waitingFull && seq != null && seq < applier.lastSeq) return;
+      if (wasLive && !recovering && seq != null && seq < applier.lastSeq) return;
       this.holdUntilFull.delete(subId);
       this.axisResubPending.delete(subId);
-      this.clearGapResync(subId);
+      // Sliding fulls must not reset gap backoff (the series 6 Hz storm).
+      const sliding = wasLive && !recovering;
+      if (!sliding) this.clearGapResync(subId);
       const fallbackTimes = this.scriptCtx.get(subId)?.bars.map((b) => b.time) ?? null;
       applier.applyFull(scriptFullForApplier(payload, frame.seq, fallbackTimes));
       if (typeof frame.seq === 'number') this.appliedSeq.set(subId, frame.seq);
       this.handlers.onStatus(subId, 'live');
       // First subscribe paints from evalScript; gap recovery paints here.
-      if (wasLive || waitingFull) {
+      // Subsequent sliding fulls are tip-equivalent (same as series) so
+      // apply-bridge keeps liveTick instead of a 4k-bar stream-full setData.
+      if (wasLive || recovering) {
         const cached = applier.cached;
-        if (cached) this.applyScriptPush(subId, cached, 'stream-full');
+        if (cached) this.applyScriptPush(subId, cached, sliding ? 'stream-delta' : 'stream-full');
       }
       return;
     }
@@ -1705,6 +1760,9 @@ export class StreamLiveWire {
   private clearGapResync(subId: string): void {
     this.gapResyncAt.delete(subId);
     this.gapResyncAttempts.delete(subId);
+    this.inboxOverflowPending.delete(subId);
+    this.inboxOverflowAt.delete(subId);
+    this.inboxOverflowAttempts.delete(subId);
   }
 
   /**
@@ -1918,6 +1976,8 @@ export class StreamLiveWire {
     this.inbox.clear();
     this.inboxWaiters.clear();
     this.inboxOverflowPending.clear();
+    this.inboxOverflowAt.clear();
+    this.inboxOverflowAttempts.clear();
     this.failures = 0;
     this.coolUntil = 0;
     this.clearHidden();
@@ -1944,6 +2004,9 @@ export class StreamLiveWire {
     this.axisResubPending.clear();
     this.gapResyncAt.clear();
     this.gapResyncAttempts.clear();
+    this.inboxOverflowPending.clear();
+    this.inboxOverflowAt.clear();
+    this.inboxOverflowAttempts.clear();
     this.cancelSeriesScriptKick();
     this.clearHidden();
     try {

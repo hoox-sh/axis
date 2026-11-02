@@ -21,6 +21,8 @@ _Generated/updated: 2026-11-01 · 880 commits · describe-tag: `v2.26.0`_
 
 ### Fixed
 
+- **Live `/ws/live` inbox no longer storms full snapshots.** Applied frames skip the inbox (closes used to fill the cap of 32 and `resume` every ~32 bars). Overflow resume is backoff-gated and not cleared by every full. Script sliding fulls paint as tip deltas (same as series). A resume/reconnect full that restarts seq at 1 is accepted, so the series sub and a sticky `replay unavailable` chip recover.
+
 - **Pyodide numpy SRI failures on axis.hoox.sh.** `loadPackage('numpy')` for compile/auto fetched `/pyodide/v0.29.5/numpy-*.whl`, which was never vendored; Cloudflare Pages SPA-fallback returned `index.html` (200 `text/html`) and Pyodide’s integrity check failed with a different hash every retry. Vendored the lock-matched numpy 2.2.5 wheel (~2.8 MB), extended `scripts/fetch-pyodide.sh` to pull numpy with micropip, and added `public/_redirects` so missing `/pyodide/*` / `/vendor/*` / `/assets/*` / `/plugins/*` return 404 instead of the app shell.
 
 ### Added

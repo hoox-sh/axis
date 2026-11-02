@@ -779,8 +779,7 @@ describe('live-wire P1 series + study push', () => {
     });
     const bars = await p;
     expect(bars.length).toBeGreaterThan(0);
-    const queued = h.wire.inboxDepth('series:k');
-    expect(queued).toBeLessThanOrEqual(32);
+    expect(h.wire.inboxDepth('series:k')).toBe(0);
   });
 
   test('live forming tips skip the inbox and do not inflate droppedTip', async () => {
@@ -813,7 +812,7 @@ describe('live-wire P1 series + study push', () => {
     expect(h.seriesDelta.length).toBe(50);
   });
 
-  test('a queue of closes is kept and resumes once', async () => {
+  test('live closes skip the inbox and do not resume', async () => {
     const h = makeHarness();
     const p = h.wire.ensureSeries('series:k', {});
     await tick();
@@ -829,29 +828,32 @@ describe('live-wire P1 series + study push', () => {
         payload: { index: 0, time: 100, ohlcv: { open: 1, high: 1, low: 1, close: 1, volume: 1 } },
       });
     }
-    expect(h.wire.inboxDepth('series:k')).toBe(40);
-    expect(h.resumes).toHaveLength(1);
-    expect(h.resumes[0]?.id).toBe('series:k');
-    expect(h.statuses.at(-1)).toMatchObject({ sub: 'series:k', status: 'degraded' });
-    h.emit({
-      type: 'close',
-      id: 'series:k',
-      seq: 80,
-      payload: { index: 0, time: 100, ohlcv: { open: 1, high: 1, low: 1, close: 1, volume: 1 } },
-    });
-    expect(h.resumes).toHaveLength(1);
-    h.emit({ type: 'full', id: 'series:k', seq: 90, payload: { count: 1, bars: BARS } });
+    expect(h.wire.inboxDepth('series:k')).toBe(0);
+    expect(h.resumes).toEqual([]);
+    expect(h.closes).toHaveLength(40);
+    expect(h.wire.snapshotState().subs[0]?.seq).toBe(1);
+  });
+
+  test('a waiter drops extra closes under the cap and still delivers the snapshot', async () => {
+    const h = makeHarness();
+    const p = h.wire.ensureSeries('series:k', {});
     await tick();
-    h.resumes.length = 0;
+    await tick();
     for (let i = 0; i < 40; i++) {
       h.emit({
         type: 'close',
         id: 'series:k',
-        seq: 100 + i,
+        seq: i + 1,
         payload: { index: 0, time: 100, ohlcv: { open: 1, high: 1, low: 1, close: 1, volume: 1 } },
       });
     }
-    expect(h.resumes).toHaveLength(1);
+    expect(h.wire.inboxDepth('series:k')).toBeLessThanOrEqual(32);
+    expect(h.resumes).toEqual([]);
+    h.emit({ type: 'full', id: 'series:k', seq: 50, payload: { count: 1, bars: BARS } });
+    const bars = await p;
+    expect(bars.length).toBeGreaterThan(0);
+    expect(h.wire.inboxDepth('series:k')).toBe(0);
+    expect(h.resumes).toEqual([]);
   });
 
   test('snapshot, ticks, close, gap, then replay paint as one generation each', async () => {
@@ -1037,6 +1039,64 @@ describe('live-wire P1 series + study push', () => {
     expect(h.wire.snapshotState().subs[0]?.seq).toBe(4);
   });
 
+  test('a resume full that restarts seq paints instead of dropping', async () => {
+    const h = makeHarness();
+    const p = h.wire.ensureSeries('series:k', {});
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: 'series:k',
+      sessionId: 'ses',
+      seq: 11211,
+      payload: { count: 1, bars: BARS },
+    });
+    await p;
+    h.fireReconnect();
+    expect(h.resumes).toHaveLength(1);
+    const restarted: Bar[] = [{ time: 200, open: 2, high: 2, low: 2, close: 2, volume: 2 }];
+    h.emit({
+      type: 'full',
+      id: 'series:k',
+      sessionId: 'ses',
+      seq: 1,
+      payload: { count: 1, bars: restarted },
+    });
+    expect(h.seriesFull).toEqual([BARS, restarted]);
+    expect(h.wire.snapshotState().subs[0]?.seq).toBe(1);
+    expect(h.statuses.at(-1)).toMatchObject({ sub: 'series:k', status: 'live' });
+  });
+
+  test('a live script sliding full paints as a tip delta', async () => {
+    const h = makeHarness();
+    const first = h.wire.evalScript({
+      subId: 's-1',
+      script: 'indicator() {}',
+      meta: {},
+      bars: BARS,
+    });
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 5,
+      payload: { count: 1, plots: [[1]], series: { a: [1] } },
+    });
+    await first;
+    h.emit({
+      type: 'full',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 6,
+      payload: { count: 1, plots: [[2]], series: { a: [2] } },
+    });
+    await tick();
+    expect(h.applied).toEqual([{ via: 'stream-full' }, { via: 'stream-delta' }]);
+    expect(h.wire.snapshotState().subs[0]?.seq).toBe(6);
+  });
+
   test('script delta applies through the bridge without a re-subscribe', async () => {
     const h = makeHarness();
     const first = h.wire.evalScript({
@@ -1119,8 +1179,8 @@ describe('live-wire P1 series + study push', () => {
       payload: { count: 1, plots: [[10]], series: { a: [10] } },
     });
     await tick();
-    expect(h.applied.filter((a) => a.via === 'stream-full')).toHaveLength(2);
-    expect(h.applied.at(-1)).toEqual({ via: 'stream-full' });
+    expect(h.applied.filter((a) => a.via === 'stream-full')).toHaveLength(1);
+    expect(h.applied.at(-1)).toEqual({ via: 'stream-delta' });
     expect(h.wire.snapshotState().subs[0]?.seq).toBe(10);
     h.emit({
       type: 'delta',
