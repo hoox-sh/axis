@@ -45,6 +45,7 @@ https://pyne-agent-worker.cryptolinx.workers.dev/plugin/axis-pine-agent.js
 4. Set **API key** if required.
 5. Prefer **v6** / **strategy** or **indicator** when you know the target style.
 6. In **Workers Manager → PYNE Agent**, pick a **Persona** (`auto` detects per message): `pine` writes scripts, `axis` answers anything about the app and can change it for you (theme, layout, runs), `trader` does market analysis and risk coaching.
+7. Optionally set **PYNE backend** (`auto` / `pro` / `local` / `worker` / `container` / `none`) for where parse/lint/eval run. Plugin **0.1.8** always orchestrates (full tool loop).
 
 AXIS migrates a previously saved remote plugin URL to `/plugins/axis-pine-agent.js` on restore.
 

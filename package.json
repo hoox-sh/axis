@@ -11,6 +11,7 @@
     "dev:datafeed": "bun packages/datafeed/src/index.ts",
     "build": "bun scripts/sync-versions.mjs && vite build",
     "sync:versions": "bun scripts/sync-versions.mjs",
+    "sync:pyne-agent-plugin": "bash scripts/sync-pyne-agent-plugin.sh",
     "preview": "vite preview",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",

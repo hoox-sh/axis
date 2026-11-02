@@ -191,6 +191,15 @@ describe('loadPluginFromUrl', () => {
     removePlugin('pyne-agent', 'component');
   });
 
+  it('ships PYNE Agent plugin 0.1.8 with orchestrate + pyneBackend', async () => {
+    const src = await Bun.file(new URL('../public/plugins/axis-pine-agent.js', import.meta.url)).text();
+    expect(src).toContain('const PLUGIN_UI_VERSION = "0.1.8"');
+    expect(src).toContain('version: "0.1.8"');
+    expect(src).toContain('orchestrate: true');
+    expect(src).toContain('pyne_backend: live.pyneBackend');
+    expect(src).toContain('pyneBackend:');
+  });
+
   it('pyne-agent plugin prefers live getConfig over the mount snapshot', async () => {
     const src = await Bun.file(new URL('../public/plugins/axis-pine-agent.js', import.meta.url)).text();
     expect(src).toContain('cfg({ ...(config || {}), ...(api?.getConfig?.() || {}) })');

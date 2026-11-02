@@ -21,7 +21,8 @@ description: "Install the pyne-agent-worker AXIS component plugin — natural-la
 | **Plugin module** | AXIS ships `/plugins/axis-pine-agent.js`; remote `GET /plugin/axis-pine-agent.js` on the agent Worker |
 | **API** | `POST /v1/chat` |
 | **Standalone** | Workers AI™ only — **no** pyne-worker / HOOX mesh required |
-| **Optional** | pyne-worker validate→retry when configured |
+| **Optional** | pyne-worker **0.10.0+** staged parse→lint→eval (`/ast/*` + `/run`) when configured |
+| **Plugin** | **0.1.8** (orchestrate + `pyneBackend`) |
 
 _Pine Script™ and TradingView® are trademarks of TradingView®, Inc. Cloudflare® is a registered trademark of Cloudflare®, Inc. Independent project — not affiliated with TradingView®, Inc. or Cloudflare®, Inc._
 
@@ -64,7 +65,10 @@ https://pyne-agent-worker.cryptolinx.workers.dev/plugin/axis-pine-agent.js
 | `apiKey` | Worker `API_KEY` (optional in open local mode) |
 | `pineVersion` | `auto` \| `v5` \| `v6` |
 | `style` | `auto` \| `indicator` \| `strategy` \| `library` |
-| `persona` | `auto` \| `pine` (coder) \| `axis` (app guide + operator — changes the app via MCP) \| `trader` (market analysis, risk, psychology). Set in **Workers Manager → PYNE Agent**. |
+| `persona` | `auto` \| `pine` (coder) \| `axis` (app guide + operator — changes the app via MCP) \| `trader` (market analysis, risk, psychology) |
+| `pyneBackend` | `auto` \| `pro` \| `local` \| `worker` \| `container` \| `none` — named PYNE host for parse/lint/eval (kind only, never a URL) |
+
+Plugin **0.1.8** always POSTs `orchestrate: true` (Grandmaster tool loop). Sync the vendored same-origin copy with `bun run sync:pyne-agent-plugin` from the AXIS repo.
 
 4. Open the agent from the **manager tab** / **topbar** action, **Workers Manager → Install/Configure**, or the floating **PYNE Agent** button when mounted.
 
@@ -79,7 +83,7 @@ See also: [Dynamic loader](/axis/docs/plugins/dynamic-loader), [Plugin examples]
 | Mode | Config | Behavior |
 | --- | --- | --- |
 | **Standalone** (default) | No `PYNE_SERVICE` / `PYNE_WORKER_URL` on the worker | Chat + optional RAG; `validation.skipped` |
-| **HOOX-enhanced** | Optional pyne-worker binding or URL | generate → `POST /run` → fix retries |
+| **HOOX-enhanced** | Agent `PYNE_SERVICE` / `PYNE_WORKER_URL` → pyne-worker **0.10.0+** | staged parse → lint → eval (`/ast/*` + `/run`) |
 
 AXIS users who only want natural-language script authoring never need to deploy pyne-worker.
 

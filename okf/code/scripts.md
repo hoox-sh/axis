@@ -7,7 +7,7 @@ tags: [code, scripts]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-01T18:07:47Z
+  at: 2026-11-02T05:13:24Z
 sources:
   - id: tree
     resource: "scripts"
@@ -33,6 +33,7 @@ okf_lock: generated
 # Other files
 
 * `fetch-pyodide.sh`
+* `sync-pyne-agent-plugin.sh`
 * `sync-pyne-builtins.sh`
 * `sync-pyne-wheel.sh`
 

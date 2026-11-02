@@ -883,6 +883,31 @@ export function WorkersPage(props: {
                           <option value="trader">trader</option>
                         </StudioSelect>
                       </StudioField>
+                      <StudioField
+                        label="PYNE backend"
+                        for="axis-pyne-agent-backend"
+                        hint="Where parse/lint/eval run on the agent Worker. auto = first configured host. Plugin 0.1.8 always sends orchestrate:true."
+                      >
+                        <StudioSelect
+                          id="axis-pyne-agent-backend"
+                          testId="axis-pyne-agent-backend"
+                          value={String(
+                            ((store.pluginsConfig?.[pluginKey('component', 'pyne-agent')] || {}) as Record<string, unknown>)
+                              .pyneBackend || 'auto',
+                          )}
+                          onChange={(v) => {
+                            writePluginField(pluginKey('component', 'pyne-agent'), 'pyneBackend', v);
+                            void persist();
+                          }}
+                        >
+                          <option value="auto">auto</option>
+                          <option value="pro">pro (pynescript.online)</option>
+                          <option value="local">local Flask</option>
+                          <option value="worker">edge pyne-worker</option>
+                          <option value="container">Cloudflare Container</option>
+                          <option value="none">none</option>
+                        </StudioSelect>
+                      </StudioField>
                     </StudioSection>
                   </Show>
 

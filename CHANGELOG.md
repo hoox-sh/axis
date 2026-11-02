@@ -15,6 +15,10 @@ _Generated/updated: 2026-11-01 · 880 commits · describe-tag: `v2.26.0`_
 
 ## [Unreleased]
 
+### Changed
+
+- **PYNE Agent plugin 0.1.8** vendored at `/plugins/axis-pine-agent.js` (sync from `hoox-sh/pyne-agent-worker`). Always sends `orchestrate: true` and a named `pyne_backend` kind; Workers Manager → PYNE Agent gains a **PYNE backend** select (`auto` / `pro` / `local` / `worker` / `container` / `none`). Install/sync helper: `bun run sync:pyne-agent-plugin` (`scripts/sync-pyne-agent-plugin.sh`).
+
 ### Fixed
 
 - **Pyodide numpy SRI failures on axis.hoox.sh.** `loadPackage('numpy')` for compile/auto fetched `/pyodide/v0.29.5/numpy-*.whl`, which was never vendored; Cloudflare Pages SPA-fallback returned `index.html` (200 `text/html`) and Pyodide’s integrity check failed with a different hash every retry. Vendored the lock-matched numpy 2.2.5 wheel (~2.8 MB), extended `scripts/fetch-pyodide.sh` to pull numpy with micropip, and added `public/_redirects` so missing `/pyodide/*` / `/vendor/*` / `/assets/*` / `/plugins/*` return 404 instead of the app shell.

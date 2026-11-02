@@ -40,6 +40,14 @@ const CHAT_TIMEOUT_MS = 180000;
  * Plugin config. A non-http(s) endpoint becomes "" so the API key is never
  * sent to a relative or unexpected origin.
  */
+const PYNE_BACKENDS = ["auto", "pro", "local", "worker", "container", "none"];
+
+/** Named PYNE host. Request sends a kind, never a URL. */
+function normalizePyneBackend(raw) {
+  const s = String(raw || "").trim().toLowerCase();
+  return PYNE_BACKENDS.includes(s) ? s : "auto";
+}
+
 function cfg(config) {
   const c = config || {};
   return {
@@ -48,6 +56,25 @@ function cfg(config) {
     pineVersion: String(c.pineVersion || c.pine_version || "auto").trim() || "auto",
     style: String(c.style || "auto").trim() || "auto",
     persona: String(c.persona || "auto").trim() || "auto",
+    pyneBackend: normalizePyneBackend(c.pyneBackend || c.pyne_backend),
+  };
+}
+
+/**
+ * POST /v1/chat body. Plugin 0.1.8 always orchestrates; pyne_backend is a kind.
+ * @param {ReturnType<typeof cfg>} live
+ * @param {string} text
+ * @param {string | null} [sessionId]
+ */
+function buildChatBody(live, text, sessionId) {
+  return {
+    message: text,
+    session_id: sessionId || undefined,
+    pine_version: live.pineVersion,
+    style: live.style,
+    persona: live.persona,
+    pyne_backend: live.pyneBackend,
+    orchestrate: true,
   };
 }
 
@@ -86,7 +113,7 @@ async function agentFetch(endpoint, apiKey, path, init = {}, hostFetch) {
   return data;
 }
 
-const PLUGIN_UI_VERSION = "0.1.7";
+const PLUGIN_UI_VERSION = "0.1.8";
 
 function injectStyles() {
   const id = "pyne-agent-styles";
@@ -105,37 +132,85 @@ function injectStyles() {
     .pyne-agent-root {
       display: flex; flex-direction: column; height: 100%; min-height: 320px;
       font-family: ui-sans-serif, system-ui, sans-serif;
-      color: var(--color-text, #e8eaed);
-      background: var(--color-bg-panel, #0f1419);
-      border: 1px solid var(--color-border, #2a3441);
-      border-radius: var(--radius-input, 3px);
+      font-size: var(--ui-font-base, 13px);
+      color: var(--color-text, #e8eaee);
+      background: var(--color-bg-panel, #0c0e14);
+      border: 1px solid var(--color-border, #1c2230);
+      border-radius: var(--radius-panel, 6px);
       overflow: hidden;
-      box-shadow: var(--ui-shadow-panel, 0 12px 40px rgba(0,0,0,0.45));
+      box-shadow: var(--ui-shadow-dialog, 0 20px 56px rgba(0,0,0,0.62));
+    }
+    .pyne-agent-root::before {
+      content: "";
+      display: block;
+      height: 2px;
+      flex-shrink: 0;
+      background: linear-gradient(90deg, var(--color-accent, #8b9cff), color-mix(in srgb, var(--color-accent, #8b9cff) 20%, transparent));
     }
     .pyne-agent-header {
-      padding: 8px 10px; border-bottom: 1px solid var(--color-border-soft, #2a3441);
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--color-border-soft, #151922);
       display: flex; align-items: center; justify-content: space-between; gap: 8px;
-      background: var(--color-bg-elev, #151b23);
+      background: var(--color-bg-elev, #10131b);
       flex-shrink: 0;
+      min-height: var(--ui-topbar-min-h, 32px);
+    }
+    .pyne-agent-brand {
+      display: flex; align-items: center; gap: 8px; min-width: 0;
+    }
+    .pyne-agent-mark {
+      width: 16px; height: 16px; flex-shrink: 0;
+      background: linear-gradient(135deg, var(--color-accent, #8b9cff) 0%, color-mix(in srgb, var(--color-accent, #8b9cff) 35%, var(--color-bg-elev, #10131b)) 100%);
+      clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+      box-shadow: 0 0 10px color-mix(in srgb, var(--color-accent, #8b9cff) 35%, transparent);
     }
     .pyne-agent-header.is-draggable {
       cursor: grab; user-select: none; touch-action: none;
     }
     .pyne-agent-header.is-draggable:active { cursor: grabbing; }
     .pyne-agent-header h3 {
-      margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.02em;
-      color: var(--color-text, #e8eaed);
+      margin: 0; font-size: var(--ui-label, 11px); font-weight: 650; letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--color-text, #e8eaee);
     }
-    .pyne-agent-header small { color: var(--color-text-dim, #8b98a5); font-size: 10px; }
+    .pyne-agent-header small { color: var(--color-text-dim, #9aa3b2); font-size: 10px; display: block; margin-top: 1px; }
+    .pyne-agent-meta {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+      padding: 6px 12px;
+      border-bottom: 1px solid var(--color-border-soft, #151922);
+      background: color-mix(in srgb, var(--color-bg-elev, #10131b) 70%, var(--color-bg-base, #07080c));
+      flex-shrink: 0;
+    }
+    .pyne-agent-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      height: 18px; padding: 0 7px;
+      font-size: 10px; font-weight: 600; letter-spacing: 0.02em;
+      color: var(--color-text-dim, #9aa3b2);
+      background: var(--color-bg-hover, #161a24);
+      border: 1px solid var(--color-border, #1c2230);
+      border-radius: 999px;
+      line-height: 1;
+      max-width: 42%;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .pyne-agent-chip.is-on {
+      color: var(--color-accent, #8b9cff);
+      border-color: color-mix(in srgb, var(--color-accent, #8b9cff) 45%, var(--color-border, #1c2230));
+      background: color-mix(in srgb, var(--color-accent, #8b9cff) 12%, var(--color-bg-elev, #10131b));
+    }
+    .pyne-agent-chip kbd {
+      font: inherit; font-weight: 650; color: inherit;
+    }
     .pyne-agent-status {
       display: inline-flex; align-items: center; gap: 5px;
-      color: var(--color-text-dim, #8b98a5); font-size: 10px;
+      color: var(--color-text-dim, #9aa3b2); font-size: 10px;
       min-height: 1.2em;
-      max-width: 46%;
+      margin-left: auto;
+      max-width: 52%;
       overflow: hidden;
     }
     .pyne-agent-status.is-thinking {
-      color: var(--color-accent, #5b7cfa);
+      color: var(--color-accent, #8b9cff);
     }
     .pyne-agent-status-label {
       line-height: 1;
@@ -152,7 +227,7 @@ function injectStyles() {
     .pyne-agent-status.is-thinking .pyne-agent-status-dots { display: inline-flex; }
     .pyne-agent-status-dots span {
       width: 4px; height: 4px; border-radius: 50%;
-      background: var(--color-accent, #5b7cfa);
+      background: var(--color-accent, #8b9cff);
       opacity: 0.35;
       animation: pyne-agent-bounce 1.05s ease-in-out infinite;
     }
@@ -183,40 +258,42 @@ function injectStyles() {
       display: inline-flex; align-items: center; justify-content: center;
       width: 1.65em; height: 1.65em; padding: 0;
       background: transparent;
-      color: var(--color-text-dim, #8b98a5);
+      color: var(--color-text-dim, #9aa3b2);
       border: 1px solid transparent;
-      border-radius: var(--radius-input, 3px);
+      border-radius: var(--radius-input, 4px);
       font-size: 14px; line-height: 1; cursor: pointer;
     }
     .pyne-agent-header-btn:hover {
-      color: var(--color-text, #e8eaed);
+      color: var(--color-text, #e8eaee);
       background: var(--color-bg-hover, #22232e);
       border-color: var(--color-border-soft, #252730);
     }
     .pyne-agent-header-btn:focus-visible {
       outline: none;
-      border-color: var(--color-accent, #5b7cfa);
+      border-color: var(--color-accent, #8b9cff);
     }
     .pyne-agent-msgs {
       flex: 1; overflow: auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px;
       min-height: 0;
     }
     .pyne-agent-msg {
-      max-width: 96%; padding: 8px 10px; border-radius: var(--radius-input, 3px);
+      max-width: 96%; padding: 8px 10px; border-radius: var(--radius-input, 4px);
       font-size: 12px; line-height: 1.5;
       word-break: break-word;
     }
     .pyne-agent-msg.user {
       align-self: flex-end;
       white-space: pre-wrap;
-      background: color-mix(in srgb, var(--color-accent, #2563eb) 28%, var(--color-bg-elev, #1d4f7c));
-      color: var(--color-text, #e8eaed);
+      background: color-mix(in srgb, var(--color-accent, #8b9cff) 22%, var(--color-bg-elev, #10131b));
+      border: 1px solid color-mix(in srgb, var(--color-accent, #8b9cff) 35%, transparent);
+      color: var(--color-text, #e8eaee);
     }
     .pyne-agent-msg.assistant {
       align-self: stretch;
       max-width: 100%;
-      background: var(--color-bg-elev, #1a222c);
-      border: 1px solid var(--color-border-soft, #2a3441);
+      background: var(--color-bg-elev, #10131b);
+      border: 1px solid var(--color-border-soft, #151922);
+      border-left: 2px solid color-mix(in srgb, var(--color-accent, #8b9cff) 55%, var(--color-border, #1c2230));
     }
     .pyne-agent-msg.error {
       align-self: stretch;
@@ -242,7 +319,7 @@ function injectStyles() {
     .pyne-agent-codebox {
       margin: 8px 0 0;
       border: 1px solid var(--color-border, #3a3d4a);
-      border-radius: var(--radius-input, 3px);
+      border-radius: var(--radius-input, 4px);
       background: var(--color-bg-base, #0a0b10);
       overflow: hidden;
     }
@@ -250,7 +327,7 @@ function injectStyles() {
     .pyne-agent-codebox-bar {
       display: flex; align-items: center; justify-content: space-between; gap: 6px;
       padding: 4px 8px;
-      background: color-mix(in srgb, var(--color-bg-elev, #171821) 80%, var(--color-bg-base, #0a0b10));
+      background: color-mix(in srgb, var(--color-bg-elev, #10131b) 80%, var(--color-bg-base, #0a0b10));
       border-bottom: 1px solid var(--color-border-soft, #252730);
       font-size: 10px;
       color: var(--color-text-dim, #8b8e9c);
@@ -260,7 +337,7 @@ function injectStyles() {
       font-weight: 600;
       letter-spacing: 0.04em;
       text-transform: uppercase;
-      color: var(--color-accent, #5b7cfa);
+      color: var(--color-accent, #8b9cff);
     }
     .pyne-agent-codebox pre {
       margin: 0;
@@ -285,34 +362,34 @@ function injectStyles() {
       display: flex; flex-wrap: wrap; gap: 4px;
       padding: 6px 8px;
       border-top: 1px solid var(--color-border-soft, #252730);
-      background: var(--color-bg-elev, #171821);
+      background: var(--color-bg-elev, #10131b);
     }
     .pyne-agent-codebox-actions button {
       background: var(--color-bg-hover, #22232e);
-      color: var(--color-text, #e8eaed);
+      color: var(--color-text, #e8eaee);
       border: 1px solid var(--color-border, #3a4a5c);
-      border-radius: var(--radius-input, 3px);
+      border-radius: var(--radius-input, 4px);
       padding: 3px 8px; font-size: 10.5px; font-weight: 500; cursor: pointer;
       line-height: 1.3;
     }
     .pyne-agent-codebox-actions button:hover {
-      border-color: var(--color-accent, #5b7cfa);
-      color: var(--color-accent, #5b7cfa);
+      border-color: var(--color-accent, #8b9cff);
+      color: var(--color-accent, #8b9cff);
     }
     .pyne-agent-codebox-actions button:focus-visible,
     .pyne-agent-form button[type="submit"]:focus-visible {
       outline: none;
-      border-color: var(--color-accent, #5b7cfa);
+      border-color: var(--color-accent, #8b9cff);
     }
     .pyne-agent-codebox-actions button.is-primary {
-      background: color-mix(in srgb, var(--color-accent, #5b7cfa) 18%, var(--color-bg-elev, #171821));
-      border-color: var(--color-accent, #5b7cfa);
-      color: var(--color-accent, #5b7cfa);
+      background: color-mix(in srgb, var(--color-accent, #8b9cff) 18%, var(--color-bg-elev, #10131b));
+      border-color: var(--color-accent, #8b9cff);
+      color: var(--color-accent, #8b9cff);
     }
     .pyne-agent-codebox-actions button.is-primary:hover {
-      background: color-mix(in srgb, var(--color-accent-hover, #4a6ae8) 28%, var(--color-bg-elev, #171821));
-      border-color: var(--color-accent-hover, #4a6ae8);
-      color: var(--color-accent-hover, #4a6ae8);
+      background: color-mix(in srgb, var(--color-accent-hover, #7488f0) 28%, var(--color-bg-elev, #10131b));
+      border-color: var(--color-accent-hover, #7488f0);
+      color: var(--color-accent-hover, #7488f0);
     }
     .pyne-agent-inline-code {
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -323,83 +400,101 @@ function injectStyles() {
       border: 1px solid var(--color-border-soft, #252730);
     }
     .pyne-agent-form {
-      display: flex; gap: 8px; padding: 8px 10px;
-      border-top: 1px solid var(--color-border-soft, #2a3441);
-      background: var(--color-bg-elev, #151b23);
+      display: flex; flex-direction: column; gap: 6px; padding: 8px 12px 6px;
+      border-top: 1px solid var(--color-border-soft, #151922);
+      background: var(--color-bg-elev, #10131b);
       flex-shrink: 0;
     }
     .pyne-agent-form textarea {
-      flex: 1; resize: none; min-height: 52px; max-height: 140px;
-      background: var(--color-bg-base, #0b0f14);
-      color: var(--color-text, #e8eaed);
-      border: 1px solid var(--color-border, #2a3441);
-      border-radius: var(--radius-input, 3px);
-      padding: 7px 8px; font: inherit; font-size: 12px;
+      flex: 1; resize: none; min-height: 52px; max-height: 140px; width: 100%;
+      background: var(--color-bg-base, #07080c);
+      color: var(--color-text, #e8eaee);
+      border: 1px solid var(--color-border, #1c2230);
+      border-radius: var(--radius-input, 4px);
+      padding: 8px 10px; font: inherit; font-size: 12px;
     }
     .pyne-agent-form textarea:focus {
       outline: none;
-      border-color: var(--color-accent, #5b7cfa);
+      border-color: var(--color-accent, #8b9cff);
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent, #8b9cff) 35%, transparent);
+    }
+    .pyne-agent-composer-bar {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    }
+    .pyne-agent-hint {
+      font-size: 10px; color: var(--color-text-faint, #6b7382);
+      letter-spacing: 0.02em;
     }
     .pyne-agent-form button[type="submit"] {
-      align-self: flex-end;
-      background: color-mix(in srgb, var(--color-accent, #2563eb) 22%, var(--color-bg-elev, #171821));
-      color: var(--color-accent, #5b7cfa);
-      border: 1px solid var(--color-accent, #5b7cfa);
-      border-radius: var(--radius-input, 3px);
-      padding: 6px 10px; font-weight: 600; font-size: 11px; cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      min-height: var(--ui-control-h, 28px);
+      background: color-mix(in srgb, var(--color-accent, #8b9cff) 18%, var(--color-bg-elev, #10131b));
+      color: var(--color-accent, #8b9cff);
+      border: 1px solid var(--color-accent, #8b9cff);
+      border-radius: var(--radius-input, 4px);
+      padding: 0 12px; font-weight: 650; font-size: 11px; cursor: pointer;
+      letter-spacing: 0.02em;
     }
     .pyne-agent-form button[type="submit"]:hover {
-      background: color-mix(in srgb, var(--color-accent-hover, #4a6ae8) 32%, var(--color-bg-elev, #171821));
-      border-color: var(--color-accent-hover, #4a6ae8);
-      color: var(--color-accent-hover, #4a6ae8);
+      background: color-mix(in srgb, var(--color-accent-hover, #7488f0) 28%, var(--color-bg-elev, #10131b));
+      border-color: var(--color-accent-hover, #7488f0);
+      color: var(--color-accent-hover, #7488f0);
     }
     .pyne-agent-form button:disabled { opacity: 0.5; cursor: not-allowed; }
     .pyne-agent-legal {
-      font-size: 10px; color: var(--color-text-dim, #8b98a5);
-      padding: 0 10px 6px; flex-shrink: 0;
-      line-height: 1.35;
+      font-size: 9px; color: var(--color-text-faint, #6b7382);
+      padding: 0 12px 8px; flex-shrink: 0;
+      line-height: 1.4;
+    }
+    @media (max-width: 420px) {
+      .pyne-agent-status { max-width: 38%; }
+      .pyne-agent-form textarea { min-height: 64px; font-size: 16px; }
+      .pyne-agent-form button[type="submit"] { min-height: 36px; min-width: 72px; }
+      .pyne-agent-chip { max-width: 48%; }
+      .pyne-agent-legal { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
     }
 
-    /* Compact launcher — theme accent, standard radius, above bottom chrome */
+    /* Compact launcher — AXIS void accent, control-height, above bottom chrome */
     .pyne-agent-launch {
       position: fixed;
       z-index: 90;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      gap: 4px;
-      height: var(--ui-control-h, 2em);
-      min-height: 1.65em;
-      padding: 0 0.65em;
-      font-size: 11px;
-      font-weight: 600;
+      gap: 6px;
+      height: var(--ui-control-h, 28px);
+      min-height: 28px;
+      padding: 0 10px;
+      font-size: var(--ui-label, 11px);
+      font-weight: 650;
       line-height: 1;
-      letter-spacing: 0.01em;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
       cursor: pointer;
-      color: var(--color-accent, #5b7cfa);
-      background: color-mix(in srgb, var(--color-accent, #5b7cfa) 18%, var(--color-bg-elev, #171821));
-      border: 1px solid var(--color-accent, #5b7cfa);
-      border-radius: var(--radius-input, 3px);
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+      color: var(--color-accent, #8b9cff);
+      background: color-mix(in srgb, var(--color-accent, #8b9cff) 16%, var(--color-bg-elev, #10131b));
+      border: 1px solid var(--color-accent, #8b9cff);
+      border-radius: var(--radius-input, 4px);
+      box-shadow: var(--ui-shadow-panel, 0 8px 28px rgba(0, 0, 0, 0.48));
       transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
     }
     .pyne-agent-launch:hover {
-      background: color-mix(in srgb, var(--color-accent-hover, #4a6ae8) 28%, var(--color-bg-elev, #171821));
-      border-color: var(--color-accent-hover, #4a6ae8);
-      color: var(--color-accent-hover, #4a6ae8);
+      background: color-mix(in srgb, var(--color-accent-hover, #7488f0) 28%, var(--color-bg-elev, #10131b));
+      border-color: var(--color-accent-hover, #7488f0);
+      color: var(--color-accent-hover, #7488f0);
     }
     .pyne-agent-launch:focus-visible {
       outline: none;
-      border-color: var(--color-accent, #5b7cfa);
-      box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent, #5b7cfa) 40%, transparent);
+      border-color: var(--color-accent, #8b9cff);
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent, #8b9cff) 40%, transparent);
     }
     .pyne-agent-launch[aria-expanded="true"] {
-      background: color-mix(in srgb, var(--color-accent, #5b7cfa) 28%, var(--color-bg-elev, #171821));
+      background: color-mix(in srgb, var(--color-accent, #8b9cff) 28%, var(--color-bg-elev, #10131b));
     }
     .pyne-agent-launch-dot {
-      width: 5px; height: 5px; border-radius: 50%;
-      background: var(--color-accent, #5b7cfa);
-      flex-shrink: 0;
+      width: 8px; height: 8px; flex-shrink: 0;
+      background: var(--color-accent, #8b9cff);
+      clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
     }
 
     /* Floating modal shell (default position — not an AXIS panel) */
@@ -416,6 +511,7 @@ function injectStyles() {
       flex: 1;
       min-height: 0;
       height: 100%;
+      border-radius: var(--radius-panel, 6px);
     }
     .pyne-agent-resize {
       position: absolute;
@@ -439,7 +535,7 @@ function injectStyles() {
       opacity: 0.85;
     }
     .pyne-agent-resize:hover::after {
-      border-color: var(--color-accent, #5b7cfa);
+      border-color: var(--color-accent, #8b9cff);
     }
   `;
 }
@@ -778,6 +874,23 @@ function shortModel(model) {
   return tail.length > 18 ? `${tail.slice(0, 16)}…` : tail;
 }
 
+function shortBackend(raw) {
+  const s = String(raw || "").toLowerCase();
+  if (s === "pyne-worker" || s === "worker") return "worker";
+  if (s === "pyne-pro" || s === "pro") return "pro";
+  if (s === "pyne-local" || s === "local") return "local";
+  if (s === "pyne-container" || s === "container") return "container";
+  if (s === "axis-mcp" || s === "axis") return "axis";
+  if (s === "heuristic") return "lint";
+  if (s === "none") return "";
+  return s && s !== "auto" ? s : "";
+}
+
+function chipLabel(kind, value) {
+  const v = String(value || "auto");
+  return `${kind} ${v}`;
+}
+
 function deliveryStatus(result) {
   if (result === "inserted") return "Added to editor";
   if (result === "opened") return "Opened in a new tab";
@@ -948,15 +1061,14 @@ function mountChat(el, api, config, opts = {}) {
   root.className = "pyne-agent-root";
   root.innerHTML = `
     <div class="pyne-agent-header${opts.floating ? " is-draggable" : ""}" data-header>
-      <div>
-        <h3>PYNE Agent</h3>
-        <small>Cloudflare® Workers AI™ · v${PLUGIN_UI_VERSION}</small>
+      <div class="pyne-agent-brand">
+        <span class="pyne-agent-mark" aria-hidden="true"></span>
+        <div>
+          <h3>PYNE Agent</h3>
+          <small>Cloudflare® Workers AI™ · v${PLUGIN_UI_VERSION}</small>
+        </div>
       </div>
       <div class="pyne-agent-header-actions">
-        <small class="pyne-agent-status" data-status role="status" aria-live="polite">
-          <span class="pyne-agent-status-label">ready</span>
-          <span class="pyne-agent-status-dots" aria-hidden="true"><span></span><span></span><span></span></span>
-        </small>
         ${
           opts.onClose
             ? `<button type="button" class="pyne-agent-header-btn" data-close title="Close" aria-label="Close PYNE Agent">×</button>`
@@ -964,10 +1076,22 @@ function mountChat(el, api, config, opts = {}) {
         }
       </div>
     </div>
+    <div class="pyne-agent-meta" data-meta>
+      <span class="pyne-agent-chip" data-chip-persona>${chipLabel("persona", "auto")}</span>
+      <span class="pyne-agent-chip" data-chip-backend>${chipLabel("backend", "auto")}</span>
+      <span class="pyne-agent-chip is-on" title="Plugin always sends orchestrate:true">orchestrate</span>
+      <small class="pyne-agent-status" data-status role="status" aria-live="polite">
+        <span class="pyne-agent-status-label">ready</span>
+        <span class="pyne-agent-status-dots" aria-hidden="true"><span></span><span></span><span></span></span>
+      </small>
+    </div>
     <div class="pyne-agent-msgs" data-msgs aria-live="polite"></div>
     <form class="pyne-agent-form" data-form>
       <textarea data-input aria-label="Message" placeholder="Ask in natural language… e.g. RSI divergence strategy with ATR stops (v6)"></textarea>
-      <button type="submit" data-send title="Send (Ctrl+Enter)">Send</button>
+      <div class="pyne-agent-composer-bar">
+        <span class="pyne-agent-hint">Ctrl+Enter</span>
+        <button type="submit" data-send title="Send (Ctrl+Enter)">Send</button>
+      </div>
     </form>
     <div class="pyne-agent-legal">
       Pine Script™ and TradingView® are trademarks of TradingView, Inc.
@@ -984,6 +1108,18 @@ function mountChat(el, api, config, opts = {}) {
   const status = root.querySelector("[data-status]");
   const statusLabel = status?.querySelector(".pyne-agent-status-label");
   const closeBtn = root.querySelector("[data-close]");
+  const chipPersona = root.querySelector("[data-chip-persona]");
+  const chipBackend = root.querySelector("[data-chip-backend]");
+
+  function liveCfg() {
+    return cfg({ ...(config || {}), ...(api?.getConfig?.() || {}) });
+  }
+
+  function paintMeta(live) {
+    if (chipPersona) chipPersona.textContent = chipLabel("persona", live.persona);
+    if (chipBackend) chipBackend.textContent = chipLabel("backend", live.pyneBackend);
+  }
+  paintMeta(liveCfg());
 
   if (closeBtn && opts.onClose) {
     closeBtn.addEventListener("click", (ev) => {
@@ -1163,7 +1299,7 @@ function mountChat(el, api, config, opts = {}) {
 
   addMsg(
     "assistant",
-    "Hi — describe the indicator or strategy you want in plain language. I use a private PYNE knowledge base (v5/v6 docs + open corpus) on Cloudflare®. I do not ship TradingView® built-in sources."
+    "Hi — describe the indicator or strategy in plain language. I write Pine Script™ v6 for PYNE / AXIS, parse-lint-eval on the backend you pick (auto, Pro, local, worker, container). Private knowledge base on Cloudflare®. I do not ship TradingView® built-in sources."
   );
 
   form.addEventListener("submit", async (ev) => {
@@ -1173,7 +1309,8 @@ function mountChat(el, api, config, opts = {}) {
     if (!text) return;
 
     const merged = { ...(config || {}), ...(api?.getConfig?.() || {}) };
-    const live = cfg({ ...(config || {}), ...(api?.getConfig?.() || {}) });
+    const live = liveCfg();
+    paintMeta(live);
     if (!live.endpoint) {
       addMsg("assistant", explainEndpoint(merged.endpoint), { error: true });
       return;
@@ -1197,13 +1334,7 @@ function mountChat(el, api, config, opts = {}) {
         {
           method: "POST",
           signal: ac.signal,
-          body: JSON.stringify({
-            message: text,
-            session_id: sessionId || undefined,
-            pine_version: live.pineVersion,
-            style: live.style,
-            persona: live.persona,
-          }),
+          body: JSON.stringify(buildChatBody(live, text, sessionId)),
         },
         api?.host?.fetch
       );
@@ -1214,8 +1345,15 @@ function mountChat(el, api, config, opts = {}) {
       const body = presented.text || (pine ? "" : "(empty)");
       addMsg("assistant", body, { pine: pine || null });
       const model = data.model ? String(data.model) : "";
-      const label = presented.status || (model ? `ok · ${shortModel(model)}` : "ok");
-      const title = [model, presented.detail].filter(Boolean).join(" — ");
+      const last = data.validation && typeof data.validation === "object" ? data.validation.last : null;
+      const backend = shortBackend(
+        (last && typeof last === "object" && last.backend) || data.validation?.backend
+      );
+      const bits = [presented.status || "ok", shortModel(model), backend].filter(Boolean);
+      const label = bits.join(" · ");
+      const title = [model, backend && `backend ${backend}`, presented.detail]
+        .filter(Boolean)
+        .join(" — ");
       setStatus(label, title);
     } catch (e) {
       if (!alive) return;
@@ -1412,9 +1550,9 @@ const plugin = {
   id: "pyne-agent",
   name: "PYNE Agent",
   kind: "component",
-  version: "0.1.7",
+  version: "0.1.8",
   description:
-    "Natural-language PYNE script authoring via Cloudflare® Workers AI™ and a private Vectorize™ knowledge base (v5/v6 docs + open corpus). AXIS sister plugin for HOOX / PYNE.",
+    "Natural-language PYNE script authoring via Cloudflare® Workers AI™ and a private Vectorize™ knowledge base (v5/v6 docs + open corpus). Always orchestrates; selectable PYNE backend (auto / Pro / local / worker / container). AXIS sister plugin for HOOX / PYNE.",
   builtIn: false,
   capabilities: {
     needsNetwork: true,
@@ -1453,6 +1591,14 @@ const plugin = {
       label: "Persona",
       description: "Pine coder, AXIS operator (changes the app via MCP), or trader",
       options: ["auto", "pine", "axis", "trader"],
+    },
+    pyneBackend: {
+      type: "select",
+      default: "auto",
+      label: "PYNE backend",
+      description:
+        "Where parse/lint/eval run. auto = first configured host. Kinds only — not a URL.",
+      options: ["auto", "pro", "local", "worker", "container", "none"],
     },
   },
   slots: ["manager-tab", "topbar-action", "settings-section"],
@@ -1542,4 +1688,9 @@ export {
   presentReply,
   stripValidationNotes,
   describeChatError,
+  normalizePyneBackend,
+  buildChatBody,
+  shortBackend,
+  PYNE_BACKENDS,
+  PLUGIN_UI_VERSION,
 };
