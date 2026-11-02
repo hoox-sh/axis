@@ -1,11 +1,6 @@
 {
   "activationEvents": [
-    "onView:axis.plugins.source",
-    "onView:axis.plugins.stream",
-    "onView:axis.plugins.engine",
-    "onView:axis.plugins.storage",
-    "onView:axis.plugins.dataset",
-    "onView:axis.plugins.component",
+    "onView:axis.plugins",
     "onView:axis.workers",
     "onCommand:axis.plugins.activate",
     "onCommand:axis.workers.probeAll"
@@ -13,12 +8,12 @@
   "contributes": {
     "views": {
       "axis": [
-        { "id": "axis.plugins.source", "name": "Sources" },
-        { "id": "axis.plugins.stream", "name": "Streams" },
-        { "id": "axis.plugins.engine", "name": "Engines" },
-        { "id": "axis.plugins.storage", "name": "Storage" },
-        { "id": "axis.plugins.dataset", "name": "Datasets" },
-        { "id": "axis.plugins.component", "name": "Components" },
+        {
+          "type": "webview",
+          "id": "axis.plugins",
+          "name": "Plugins",
+          "retainContextWhenHidden": true
+        },
         { "id": "axis.workers", "name": "Workers" }
       ]
     },
@@ -37,12 +32,6 @@
     "menus": {
       "commandPalette": [
         { "command": "axis.plugins.activate", "when": "false" }
-      ],
-      "view/item/context": [
-        {
-          "command": "axis.plugins.activate",
-          "when": "view =~ /axis.plugins.(source|stream|engine|storage|dataset|component)/"
-        }
       ]
     },
     "configuration": {
@@ -62,7 +51,7 @@
     }
   },
   "notes": {
-    "merge": "Lumped axis.plugins TreeView is replaced by per-kind views (source/stream/engine/storage/dataset/component) plus axis.workers. Merge views into contributes.views.axis after library/layers/indicators/watchlist/alerts. Do not reintroduce id axis.plugins. Settings already in package.json — do not duplicate.",
+    "merge": "Split axis.plugins.{source,stream,engine,storage,dataset,component} TreeViews are replaced by a single Plugins WebviewView (axis.plugins, type webview, retainContextWhenHidden true) plus axis.workers. Merge views into contributes.views.axis after library/layers/indicators/watchlist/alerts. Settings already in package.json — do not duplicate. Command axis.plugins.activate stays (palette when:false); webview uses postMessage.",
     "settingsAlreadyInPackageJson": [
       "axis.plugins.allowUrlInstall",
       "axis.engine.allowPyodide"

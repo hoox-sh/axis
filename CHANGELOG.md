@@ -17,6 +17,8 @@ _Generated/updated: 2026-11-01 · 880 commits · describe-tag: `v2.26.0`_
 
 ### Changed
 
+- **VS Code AXIS IDE Plugins WebviewView** (`packages/vscode-axis-ide`). Replaces split plugin TreeViews (`axis.plugins.{source,stream,engine,storage,dataset,component}`) with a single detailed Plugins WebviewView (`axis.plugins`, `type: webview`, `retainContextWhenHidden: true`) using VS Code theme tokens (not webview-ui-toolkit). Activity order: library → layers → indicators → watchlist → alerts → plugins → workers. Command `axis.plugins.activate` remains (palette `when: false`).
+
 - **PYNE Agent plugin 0.1.8** vendored at `/plugins/axis-pine-agent.js` (sync from `hoox-sh/pyne-agent-worker`). Always sends `orchestrate: true` and a named `pyne_backend` kind; Workers Manager → PYNE Agent gains a **PYNE backend** select (`auto` / `pro` / `local` / `worker` / `container` / `none`). Install/sync helper: `bun run sync:pyne-agent-plugin` (`scripts/sync-pyne-agent-plugin.sh`).
 
 ### Added

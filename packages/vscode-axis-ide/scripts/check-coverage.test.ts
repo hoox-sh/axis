@@ -65,6 +65,8 @@ describe('check-coverage helpers', () => {
     expect(excluded('src/plugins/views/dataset.ts')).toBe(true);
     expect(excluded('src/plugins/views/source.ts')).toBe(true);
     expect(excluded('src/plugins/registry.ts')).toBe(false);
+    expect(excluded('src/plugins/plugins-panel.ts')).toBe(false);
+    expect(excluded('src/plugins/plugins-html.ts')).toBe(false);
   });
 
   test('parseMinPercent rejects NaN and out-of-range', () => {

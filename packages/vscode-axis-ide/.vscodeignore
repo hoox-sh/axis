@@ -47,3 +47,7 @@ dist/webview/chart/**
 dist/webview/results/**
 !dist/webview/results/main.js
 !dist/webview/results/main.css
+!dist/webview/plugins/
+dist/webview/plugins/**
+!dist/webview/plugins/main.js
+!dist/webview/plugins/main.css

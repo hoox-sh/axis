@@ -58,12 +58,7 @@
     "onView:axis.workers",
     "onView:axis.alerts",
     "onView:axis.watchlist",
-    "onView:axis.plugins.source",
-    "onView:axis.plugins.stream",
-    "onView:axis.plugins.engine",
-    "onView:axis.plugins.storage",
-    "onView:axis.plugins.dataset",
-    "onView:axis.plugins.component",
+    "onView:axis.plugins",
     "onCommand:axis.showRunOutput",
     "onCommand:axis.openChart",
     "onCommand:axis.runScript",
@@ -131,28 +126,10 @@
           "name": "Alerts"
         },
         {
-          "id": "axis.plugins.source",
-          "name": "Sources"
-        },
-        {
-          "id": "axis.plugins.stream",
-          "name": "Streams"
-        },
-        {
-          "id": "axis.plugins.engine",
-          "name": "Engines"
-        },
-        {
-          "id": "axis.plugins.storage",
-          "name": "Storage"
-        },
-        {
-          "id": "axis.plugins.dataset",
-          "name": "Datasets"
-        },
-        {
-          "id": "axis.plugins.component",
-          "name": "Components"
+          "type": "webview",
+          "id": "axis.plugins",
+          "name": "Plugins",
+          "retainContextWhenHidden": true
         },
         {
           "id": "axis.workers",
@@ -353,10 +330,6 @@
         {
           "command": "axis.watchlist.remove",
           "when": "view == axis.watchlist && viewItem == axis.watchlist.symbol"
-        },
-        {
-          "command": "axis.plugins.activate",
-          "when": "view =~ /axis.plugins.(source|stream|engine|storage|dataset|component)/"
         }
       ]
     },
@@ -501,9 +474,10 @@
     "vscode:prepublish": "npm run compile",
     "compile:webview:chart": "vite build --config webview/chart/vite.config.ts",
     "compile:webview:results": "vite build --config webview/results/vite.config.ts",
-    "compile:webview": "npm run compile:webview:chart && npm run compile:webview:results",
+    "compile:webview:plugins": "vite build --config webview/plugins/vite.config.ts",
+    "compile:webview": "npm run compile:webview:chart && npm run compile:webview:results && npm run compile:webview:plugins",
     "compile": "node esbuild.host.mjs && npm run compile:webview",
-    "check": "tsc -p ./ --noEmit && tsc -p webview/chart/tsconfig.json --noEmit && tsc -p webview/results/tsconfig.json --noEmit",
+    "check": "tsc -p ./ --noEmit && tsc -p webview/chart/tsconfig.json --noEmit && tsc -p webview/results/tsconfig.json --noEmit && tsc -p webview/plugins/tsconfig.json --noEmit",
     "watch": "node esbuild.host.mjs --watch",
     "watch:webview": "vite build --config webview/chart/vite.config.ts --watch",
     "watch:all": "npm run watch & npm run watch:webview",

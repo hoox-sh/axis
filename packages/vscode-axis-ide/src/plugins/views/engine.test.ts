@@ -60,36 +60,126 @@ mock.module('vscode', () => {
     event = () => ({ dispose() {} });
     fire(_v?: unknown) {}
   }
+  class LanguageModelTextPart {
+    value: string;
+    constructor(value: string) {
+      this.value = value;
+    }
+  }
+  class LanguageModelToolResult {
+    content: unknown[];
+    constructor(content: unknown[]) {
+      this.content = content;
+    }
+  }
+  class MarkdownString {
+    value: string;
+    constructor(value = '') {
+      this.value = value;
+    }
+  }
+  class McpStdioServerDefinition {
+    label: string;
+    command: string;
+    args: string[];
+    env: Record<string, string | number | null>;
+    constructor(
+      label: string,
+      command: string,
+      args: string[] = [],
+      env: Record<string, string | number | null> = {},
+    ) {
+      this.label = label;
+      this.command = command;
+      this.args = args;
+      this.env = env;
+    }
+  }
+  class Uri {
+    fsPath: string;
+    constructor(fsPath: string) {
+      this.fsPath = fsPath;
+    }
+    static file(p: string) {
+      return new Uri(p);
+    }
+    static joinPath(base: { fsPath?: string }, ...parts: string[]) {
+      const root = base?.fsPath ?? '';
+      if (root === '/throw-fs') {
+        return {
+          get fsPath(): string {
+            throw new Error('fsPath');
+          },
+        };
+      }
+      return new Uri([root, ...parts].filter(Boolean).join('/'));
+    }
+    toString() {
+      return `file://${this.fsPath}`;
+    }
+  }
+  const ColorThemeKind = {
+    Light: 1,
+    Dark: 2,
+    HighContrast: 3,
+    HighContrastLight: 4,
+  };
   return {
     TreeItem,
     TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
     EventEmitter,
+    StatusBarAlignment: { Left: 1, Right: 2 },
+    ColorThemeKind,
+    Uri,
+    LanguageModelTextPart,
+    LanguageModelToolResult,
+    MarkdownString,
+    McpStdioServerDefinition,
     window: {
-      createTreeView(id: string, options: { showCollapseAll?: boolean }) {
+      activeColorTheme: { kind: ColorThemeKind.Dark },
+      createTreeView(id: string, options?: { showCollapseAll?: boolean }) {
         const bucket = g().__axisPluginKindTreeViews;
         if (bucket) {
-          bucket.push({ id, showCollapseAll: options.showCollapseAll });
+          bucket.push({ id, showCollapseAll: options?.showCollapseAll });
         }
         return { dispose() {} };
       },
+      registerWebviewViewProvider: () => ({ dispose() {} }),
+      showWarningMessage: () => undefined,
+      createStatusBarItem: () => ({
+        text: '',
+        tooltip: '',
+        show() {},
+        dispose() {},
+      }),
     },
     commands: {
       registerCommand: () => ({ dispose() {} }),
     },
     workspace: {
-      getConfiguration(section: string) {
+      getConfiguration(section?: string) {
         if (g().__axisEngineCfgThrow === true) {
           throw new Error('cfg');
         }
         return {
-          get(key: string) {
+          get(key: string, def?: unknown) {
             if (section === 'axis.engine' && key === 'allowPyodide') {
               return g().__axisAllowPyodide;
             }
-            return undefined;
+            if (section === 'axis.live' && key === 'enabled') {
+              return (globalThis as { __axisLiveEnabled?: unknown }).__axisLiveEnabled;
+            }
+            if (section === 'axis.plugins' && key === 'allowUrlInstall') {
+              return (globalThis as { __axisAllowUrlInstall?: unknown }).__axisAllowUrlInstall;
+            }
+            return def;
           },
         };
       },
+    },
+    lm: {
+      registerMcpServerDefinitionProvider: () => ({ dispose() {} }),
+      registerTool: () => ({ dispose() {} }),
     },
   };
 });

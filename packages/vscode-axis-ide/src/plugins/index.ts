@@ -30,6 +30,11 @@ import {
   type WorkersTreeProvider,
 } from '../views/workers';
 import {
+  PLUGINS_WEBVIEW_VIEW_ID,
+  PluginsWebviewViewProvider,
+  registerPluginsWebviewView,
+} from './plugins-panel';
+import {
   createMemoryWorkspaceState,
   isActivePlugin,
   parseActivePluginsV1,
@@ -96,15 +101,16 @@ export type RegisterPluginsAndWorkersResult = {
   registry: HostPluginRegistry;
   pluginsProvider: PluginsTreeProvider;
   workersProvider: WorkersTreeProvider;
+  pluginsWebview: PluginsWebviewViewProvider;
 };
 
 /**
- * Register per-kind plugin TreeViews + Workers, ensure builtins, bind
+ * Register Plugins WebviewView + Workers, ensure builtins, bind
  * `axis.plugins.v1` / `axis.plugins.active.v1`, and register
  * `axis.workers.probeAll` + `axis.plugins.activate` (never-throw).
  *
- * Does not createTreeView('axis.plugins') — that view id is replaced by the
- * six kind views. PluginsTreeProvider stays exported for unit tests.
+ * Does not createTreeView for `axis.plugins` or the six kind views.
+ * PluginsTreeProvider / kind TreeView classes stay exported for unit tests.
  *
  * Does not edit package.json / extension.ts — callers wire activate separately.
  */
@@ -122,14 +128,23 @@ export function registerPluginsAndWorkers(
   const workersProvider = registerWorkersTreeView(context);
 
   const refreshAll = registerPluginKindViews(context, registry, workspaceHelpers);
-  registerActivatePluginCommand(context, workspaceHelpers, refreshAll);
+  const pluginsWebview = registerPluginsWebviewView(
+    context,
+    registry,
+    workspaceHelpers,
+    refreshAll,
+  );
+  registerActivatePluginCommand(context, workspaceHelpers, () => {
+    refreshAll();
+    pluginsWebview.postState();
+  });
 
   const probeCmd = commands.registerCommand(PROBE_ALL_COMMAND, async () => {
     return runProbeAllCommand(workersProvider);
   });
   context.subscriptions.push(probeCmd);
 
-  return { registry, pluginsProvider, workersProvider };
+  return { registry, pluginsProvider, workersProvider, pluginsWebview };
 }
 
 export {
@@ -154,6 +169,8 @@ export {
   PLUGIN_KIND_VIEW_IDS,
   PLUGINS_GLOBAL_STATE_KEY,
   PLUGINS_VIEW_ID,
+  PLUGINS_WEBVIEW_VIEW_ID,
+  PluginsWebviewViewProvider,
   PLUGIN_KINDS,
   pluginKey,
   PluginsTreeProvider,
@@ -164,6 +181,7 @@ export {
   registerActivatePluginCommand,
   registerPluginKindViews,
   registerPluginsTreeView,
+  registerPluginsWebviewView,
   sanitizeInstalledPluginMeta,
   workspaceStateFromContext,
   writeActivePlugin,

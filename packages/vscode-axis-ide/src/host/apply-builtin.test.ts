@@ -44,11 +44,81 @@ mock.module('vscode', () => {
     event = () => ({ dispose() {} });
     fire(_v?: unknown) {}
   }
+  class LanguageModelTextPart {
+    value: string;
+    constructor(value: string) {
+      this.value = value;
+    }
+  }
+  class LanguageModelToolResult {
+    content: unknown[];
+    constructor(content: unknown[]) {
+      this.content = content;
+    }
+  }
+  class MarkdownString {
+    value: string;
+    constructor(value = '') {
+      this.value = value;
+    }
+  }
+  class McpStdioServerDefinition {
+    label: string;
+    command: string;
+    args: string[];
+    env: Record<string, string | number | null>;
+    constructor(
+      label: string,
+      command: string,
+      args: string[] = [],
+      env: Record<string, string | number | null> = {},
+    ) {
+      this.label = label;
+      this.command = command;
+      this.args = args;
+      this.env = env;
+    }
+  }
+  class Uri {
+    fsPath: string;
+    constructor(fsPath: string) {
+      this.fsPath = fsPath;
+    }
+    static file(p: string) {
+      return new Uri(p);
+    }
+    static joinPath(base: { fsPath?: string }, ...parts: string[]) {
+      const root = base?.fsPath ?? '';
+      if (root === '/throw-fs') {
+        return {
+          get fsPath(): string {
+            throw new Error('fsPath');
+          },
+        };
+      }
+      return new Uri([root, ...parts].filter(Boolean).join('/'));
+    }
+    toString() {
+      return `file://${this.fsPath}`;
+    }
+  }
+  const ColorThemeKind = {
+    Light: 1,
+    Dark: 2,
+    HighContrast: 3,
+    HighContrastLight: 4,
+  };
   return {
     TreeItem,
     EventEmitter,
     StatusBarAlignment: { Left: 1, Right: 2 },
     TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+    ColorThemeKind,
+    Uri,
+    LanguageModelTextPart,
+    LanguageModelToolResult,
+    MarkdownString,
+    McpStdioServerDefinition,
     commands: {
       registerCommand(command: string, cb: (...args: unknown[]) => unknown) {
         registered.push({ command, cb });
@@ -56,6 +126,7 @@ mock.module('vscode', () => {
       },
     },
     window: {
+      activeColorTheme: { kind: ColorThemeKind.Dark },
       showQuickPick: async (items: unknown[]) => {
         if (typeof quickPickResult === 'function') {
           return (quickPickResult as (items: unknown[]) => unknown)(items);
@@ -66,6 +137,8 @@ mock.module('vscode', () => {
       showErrorMessage: (m: string) => {
         errors.push(m);
       },
+      showWarningMessage: () => undefined,
+      registerWebviewViewProvider: () => ({ dispose() {} }),
       createTreeView: () => ({
         dispose() {},
         onDidChangeSelection: () => ({ dispose() {} }),
@@ -80,10 +153,33 @@ mock.module('vscode', () => {
       }),
     },
     workspace: {
+      getConfiguration(section?: string) {
+        const gg = globalThis as {
+          __axisEngineCfgThrow?: boolean;
+          __axisAllowPyodide?: unknown;
+          __axisLiveEnabled?: unknown;
+          __axisAllowUrlInstall?: unknown;
+        };
+        if (gg.__axisEngineCfgThrow === true) throw new Error('cfg');
+        return {
+          get(key: string, def?: unknown) {
+            if (section === 'axis.engine' && key === 'allowPyodide') return gg.__axisAllowPyodide;
+            if (section === 'axis.live' && key === 'enabled') return gg.__axisLiveEnabled;
+            if (section === 'axis.plugins' && key === 'allowUrlInstall') {
+              return gg.__axisAllowUrlInstall;
+            }
+            return def;
+          },
+        };
+      },
       openTextDocument: async (opts: { content: string; language: string }) => {
         opened.push(opts);
         return { languageId: opts.language, getText: () => opts.content };
       },
+    },
+    lm: {
+      registerMcpServerDefinitionProvider: () => ({ dispose() {} }),
+      registerTool: () => ({ dispose() {} }),
     },
   };
 });

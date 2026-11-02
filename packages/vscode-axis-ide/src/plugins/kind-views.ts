@@ -17,20 +17,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Register the six per-kind plugin TreeViews.
- * Feature agents own `./views/{source,stream,engine,storage,dataset,component}`.
+ * Kind-view helpers. Per-kind TreeView classes stay on disk for unit tests;
+ * `registerPluginKindViews` does not createTreeView — `axis.plugins` is a webview.
  */
 
 import type { ExtensionContext } from 'vscode';
 import { isActivePlugin, writeActivePlugin, type WorkspaceStateHelpers } from './active';
 import type { KindViewDeps } from './kind-tree-model';
 import type { HostPluginRegistry } from './registry';
-import { registerComponentPluginsView } from './views/component';
-import { registerDatasetPluginsView } from './views/dataset';
-import { registerEnginePluginsView } from './views/engine';
-import { registerSourcePluginsView } from './views/source';
-import { registerStoragePluginsView } from './views/storage';
-import { registerStreamPluginsView } from './views/stream';
 
 export function bindKindViewDeps(helpers: WorkspaceStateHelpers): KindViewDeps {
   return {
@@ -74,23 +68,17 @@ export function callKindViewRefresh(provider: unknown): void {
   }
 }
 
+/**
+ * Kind TreeViews are not registered — `axis.plugins` is a WebviewView.
+ * Returns a no-op refresh so activate plumbing can still call it.
+ */
 export function registerPluginKindViews(
-  context: ExtensionContext,
-  registry: HostPluginRegistry,
+  _context: ExtensionContext,
+  _registry: HostPluginRegistry,
   workspaceStateHelpers: WorkspaceStateHelpers,
 ): () => void {
-  const deps = bindKindViewDeps(workspaceStateHelpers);
-  const providers = [
-    safeCallKindViewRegistrar(registerSourcePluginsView, context, registry, deps),
-    safeCallKindViewRegistrar(registerStreamPluginsView, context, registry, deps),
-    safeCallKindViewRegistrar(registerEnginePluginsView, context, registry, deps),
-    safeCallKindViewRegistrar(registerStoragePluginsView, context, registry, deps),
-    safeCallKindViewRegistrar(registerDatasetPluginsView, context, registry, deps),
-    safeCallKindViewRegistrar(registerComponentPluginsView, context, registry, deps),
-  ];
+  bindKindViewDeps(workspaceStateHelpers);
   return function refreshAll() {
-    for (const provider of providers) {
-      callKindViewRefresh(provider);
-    }
+    // no TreeViews to refresh
   };
 }

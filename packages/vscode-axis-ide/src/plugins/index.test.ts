@@ -110,7 +110,38 @@ type G = {
   __axisPluginKindTreeViews?: Array<{ id: string; showCollapseAll?: boolean }>;
   __axisAllowPyodide?: unknown;
   __axisEngineCfgThrow?: boolean;
+  __axisLiveEnabled?: unknown;
+  __axisAllowUrlInstall?: unknown;
+  __axisWebviewRegistrations?: Array<{
+    id: string;
+    options?: { webviewOptions?: { retainContextWhenHidden?: boolean } };
+  }>;
+  __axisCommandHandlers?: Map<string, (...args: unknown[]) => unknown>;
 };
+
+class DefaultUri {
+  fsPath: string;
+  constructor(fsPath: string) {
+    this.fsPath = fsPath;
+  }
+  static file(p: string) {
+    return new DefaultUri(p);
+  }
+  static joinPath(base: { fsPath?: string }, ...parts: string[]) {
+    const root = base?.fsPath ?? '';
+    if (root === '/throw-fs') {
+      return {
+        get fsPath(): string {
+          throw new Error('fsPath');
+        },
+      };
+    }
+    return new DefaultUri([root, ...parts].filter(Boolean).join('/'));
+  }
+  toString() {
+    return this.fsPath;
+  }
+}
 
 function g(): G {
   return globalThis as G;
@@ -125,13 +156,25 @@ const vscodeApi = {
   MarkdownString,
   McpStdioServerDefinition,
   StatusBarAlignment: { Left: 1, Right: 2 },
+  ColorThemeKind: { Light: 1, Dark: 2, HighContrast: 3, HighContrastLight: 4 },
+  Uri: DefaultUri,
   window: {
+    activeColorTheme: { kind: 2 },
     createTreeView: (id: string, options?: { showCollapseAll?: boolean }) => {
       treeViews.push({ id });
       const bucket = g().__axisPluginKindTreeViews;
       if (bucket) {
         bucket.push({ id, showCollapseAll: options ? options.showCollapseAll : undefined });
       }
+      return { dispose() {} };
+    },
+    registerWebviewViewProvider: (
+      id: string,
+      _provider: unknown,
+      options?: { webviewOptions?: { retainContextWhenHidden?: boolean } },
+    ) => {
+      const bucket = g().__axisWebviewRegistrations;
+      if (bucket) bucket.push({ id, options });
       return { dispose() {} };
     },
     showWarningMessage: (_message: string) => undefined,
@@ -144,7 +187,11 @@ const vscodeApi = {
     }),
   },
   commands: {
-    registerCommand: () => ({ dispose() {} }),
+    registerCommand: (id: string, fn: (...args: unknown[]) => unknown) => {
+      const bucket = g().__axisCommandHandlers;
+      if (bucket) bucket.set(id, fn);
+      return { dispose() {} };
+    },
     executeCommand: async () => undefined,
   },
   workspace: {
@@ -156,6 +203,12 @@ const vscodeApi = {
         get(key: string, def?: unknown) {
           if (section === 'axis.engine' && key === 'allowPyodide') {
             return g().__axisAllowPyodide;
+          }
+          if (section === 'axis.live' && key === 'enabled') {
+            return g().__axisLiveEnabled;
+          }
+          if (section === 'axis.plugins' && key === 'allowUrlInstall') {
+            return g().__axisAllowUrlInstall;
           }
           return def;
         },
@@ -185,6 +238,12 @@ mock.module('vscode', () => ({
   },
   get StatusBarAlignment() {
     return vscodeApi.StatusBarAlignment;
+  },
+  get ColorThemeKind() {
+    return vscodeApi.ColorThemeKind;
+  },
+  get Uri() {
+    return vscodeApi.Uri;
   },
   get window() {
     return vscodeApi.window;
@@ -237,9 +296,11 @@ describe('plugins index exports', () => {
     expect(typeof idx.isActivePlugin).toBe('function');
     expect(idx.ACTIVATE_PLUGIN_COMMAND).toBe('axis.plugins.activate');
     expect(idx.PLUGIN_KIND_VIEW_IDS.source).toBe('axis.plugins.source');
+    expect(idx.PLUGINS_WEBVIEW_VIEW_ID).toBe('axis.plugins');
     expect(typeof idx.registerPluginKindViews).toBe('function');
     expect(typeof idx.registerActivatePluginCommand).toBe('function');
     expect(typeof idx.registerPluginsTreeView).toBe('function');
+    expect(typeof idx.registerPluginsWebviewView).toBe('function');
   });
 
   test('registerPluginsAndWorkers does not createTreeView axis.plugins', async () => {
@@ -250,53 +311,54 @@ describe('plugins index exports', () => {
         : new Error('plugins index failed to load');
     }
     treeViews.length = 0;
+    g().__axisWebviewRegistrations = [];
+    g().__axisCommandHandlers = new Map();
     const result = idx.registerPluginsAndWorkers(
       {
         subscriptions: [],
         workspaceState: idx.createMemoryWorkspaceState(),
+        extensionUri: new DefaultUri('/tmp/axis-ide'),
       } as never,
       idx.createMemoryGlobalState(),
     );
     expect(result.registry).toBeInstanceOf(idx.HostPluginRegistry);
     expect(result.pluginsProvider).toBeInstanceOf(idx.PluginsTreeProvider);
+    expect(result.pluginsWebview).toBeInstanceOf(idx.PluginsWebviewViewProvider);
     expect(treeViews.some((v) => v.id === 'axis.plugins')).toBe(false);
     expect(treeViews.some((v) => v.id === 'axis.workers')).toBe(true);
-    expect(treeViews.some((v) => v.id === 'axis.plugins.source')).toBe(true);
+    expect(treeViews.some((v) => v.id === 'axis.plugins.source')).toBe(false);
+    expect(
+      g().__axisWebviewRegistrations?.some((v) => v.id === 'axis.plugins'),
+    ).toBe(true);
+    expect(
+      g().__axisWebviewRegistrations?.find((v) => v.id === 'axis.plugins')
+        ?.options?.webviewOptions?.retainContextWhenHidden,
+    ).toBe(true);
+    const activate = g().__axisCommandHandlers?.get('axis.plugins.activate');
+    expect(typeof activate).toBe('function');
+    await activate?.({ kind: 'source', id: 'okx-rest' });
+    expect(g().__axisCommandHandlers?.has('axis.workers.probeAll')).toBe(true);
   });
 
-  test('activate onChanged refreshAll hits provider.refresh', async () => {
+  test('activate onChanged refreshAll is never-throw without kind trees', async () => {
     if (!idx) {
       if (!viewModulesExist()) return;
       throw loadError instanceof Error
         ? loadError
         : new Error('plugins index failed to load');
     }
-    const source = await import('./views/source');
     const cmd = await import('./activate-command');
-    let hits = 0;
-    const proto = source.SourcePluginsTreeProvider.prototype;
-    const orig = proto.refresh;
-    proto.refresh = function (this: unknown) {
-      hits += 1;
-      orig.call(this);
-    };
-    try {
-      const mem = idx.createMemoryWorkspaceState();
-      const refreshAll = idx.registerPluginKindViews(
-        { subscriptions: [] } as never,
-        new idx.HostPluginRegistry(),
-        mem,
-      );
-      hits = 0;
-      const ok = await cmd.runActivatePluginCommand(
-        mem,
-        { kind: 'source', id: 'okx-rest' },
-        refreshAll,
-      );
-      expect(ok).toBe(true);
-      expect(hits).toBeGreaterThan(0);
-    } finally {
-      proto.refresh = orig;
-    }
+    const mem = idx.createMemoryWorkspaceState();
+    const refreshAll = idx.registerPluginKindViews(
+      { subscriptions: [] } as never,
+      new idx.HostPluginRegistry(),
+      mem,
+    );
+    const ok = await cmd.runActivatePluginCommand(
+      mem,
+      { kind: 'source', id: 'okx-rest' },
+      refreshAll,
+    );
+    expect(ok).toBe(true);
   });
 });

@@ -54,36 +54,145 @@ class DefaultEventEmitter {
   fire(_v?: unknown) {}
 }
 
-const vscodeApi: {
-  TreeItem: unknown;
-  TreeItemCollapsibleState: unknown;
-  EventEmitter: unknown;
-  window: {
-    createTreeView: (
-      id: string,
-      opts?: { showCollapseAll?: boolean },
-    ) => { dispose(): void };
-  };
-  commands: { registerCommand: () => { dispose(): void } };
-} = {
+class LanguageModelTextPart {
+  value: string;
+  constructor(value: string) {
+    this.value = value;
+  }
+}
+
+class LanguageModelToolResult {
+  content: unknown[];
+  constructor(content: unknown[]) {
+    this.content = content;
+  }
+}
+
+class MarkdownString {
+  value: string;
+  constructor(value = '') {
+    this.value = value;
+  }
+}
+
+class McpStdioServerDefinition {
+  label: string;
+  command: string;
+  args: string[];
+  env: Record<string, string | number | null>;
+  constructor(
+    label: string,
+    command: string,
+    args: string[] = [],
+    env: Record<string, string | number | null> = {},
+  ) {
+    this.label = label;
+    this.command = command;
+    this.args = args;
+    this.env = env;
+  }
+}
+
+class DefaultUri {
+  fsPath: string;
+  constructor(fsPath: string) {
+    this.fsPath = fsPath;
+  }
+  static file(p: string) {
+    return new DefaultUri(p);
+  }
+  static joinPath(base: { fsPath?: string }, ...parts: string[]) {
+    const root = base?.fsPath ?? '';
+    if (root === '/throw-fs') {
+      return {
+        get fsPath(): string {
+          throw new Error('fsPath');
+        },
+      };
+    }
+    return new DefaultUri([root, ...parts].filter(Boolean).join('/'));
+  }
+  toString() {
+    return `file://${this.fsPath}`;
+  }
+}
+
+const ColorThemeKind = {
+  Light: 1,
+  Dark: 2,
+  HighContrast: 3,
+  HighContrastLight: 4,
+};
+
+const vscodeApi = {
   TreeItem: DefaultTreeItem,
   TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
   EventEmitter: DefaultEventEmitter,
+  StatusBarAlignment: { Left: 1, Right: 2 },
+  ColorThemeKind,
+  Uri: DefaultUri,
+  LanguageModelTextPart,
+  LanguageModelToolResult,
+  MarkdownString,
+  McpStdioServerDefinition,
   window: {
+    activeColorTheme: { kind: ColorThemeKind.Dark },
     createTreeView: (id: string, opts?: { showCollapseAll?: boolean }) => {
       treeViews.push({
         id,
         showCollapseAll: opts ? opts.showCollapseAll : undefined,
       });
+      const bucket = (globalThis as { __axisPluginKindTreeViews?: Array<{ id: string }> })
+        .__axisPluginKindTreeViews;
+      if (bucket) bucket.push({ id, showCollapseAll: opts?.showCollapseAll });
       return { dispose() {} };
     },
+    registerWebviewViewProvider: () => ({ dispose() {} }),
+    showWarningMessage: () => undefined,
+    createStatusBarItem: () => ({
+      text: '',
+      tooltip: '',
+      show() {},
+      dispose() {},
+    }),
   },
   commands: {
     registerCommand: () => ({ dispose() {} }),
   },
+  workspace: {
+    getConfiguration(section?: string) {
+      const gg = globalThis as {
+        __axisEngineCfgThrow?: boolean;
+        __axisAllowPyodide?: unknown;
+        __axisLiveEnabled?: unknown;
+        __axisAllowUrlInstall?: unknown;
+      };
+      if (gg.__axisEngineCfgThrow === true) throw new Error('cfg');
+      return {
+        get(key: string, def?: unknown) {
+          if (section === 'axis.engine' && key === 'allowPyodide') {
+            return gg.__axisAllowPyodide;
+          }
+          if (section === 'axis.live' && key === 'enabled') return gg.__axisLiveEnabled;
+          if (section === 'axis.plugins' && key === 'allowUrlInstall') {
+            return gg.__axisAllowUrlInstall;
+          }
+          return def;
+        },
+      };
+    },
+  },
+  lm: {
+    registerMcpServerDefinitionProvider: () => ({ dispose() {} }),
+    registerTool: () => ({ dispose() {} }),
+  },
 };
 
 mock.module('vscode', () => ({
+  LanguageModelTextPart,
+  LanguageModelToolResult,
+  MarkdownString,
+  McpStdioServerDefinition,
   get TreeItem() {
     return vscodeApi.TreeItem;
   },
@@ -93,11 +202,26 @@ mock.module('vscode', () => ({
   get EventEmitter() {
     return vscodeApi.EventEmitter;
   },
+  get StatusBarAlignment() {
+    return vscodeApi.StatusBarAlignment;
+  },
+  get ColorThemeKind() {
+    return vscodeApi.ColorThemeKind;
+  },
+  get Uri() {
+    return vscodeApi.Uri;
+  },
   get window() {
     return vscodeApi.window;
   },
   get commands() {
     return vscodeApi.commands;
+  },
+  get workspace() {
+    return vscodeApi.workspace;
+  },
+  get lm() {
+    return vscodeApi.lm;
   },
 }));
 

@@ -96,7 +96,33 @@ type G = {
   __axisPluginKindTreeViews?: Array<{ id: string; showCollapseAll?: boolean }>;
   __axisAllowPyodide?: unknown;
   __axisEngineCfgThrow?: boolean;
+  __axisLiveEnabled?: unknown;
+  __axisAllowUrlInstall?: unknown;
 };
+
+class DefaultUri {
+  fsPath: string;
+  constructor(fsPath: string) {
+    this.fsPath = fsPath;
+  }
+  static file(p: string) {
+    return new DefaultUri(p);
+  }
+  static joinPath(base: { fsPath?: string }, ...parts: string[]) {
+    const root = base?.fsPath ?? '';
+    if (root === '/throw-fs') {
+      return {
+        get fsPath(): string {
+          throw new Error('fsPath');
+        },
+      };
+    }
+    return new DefaultUri([root, ...parts].filter(Boolean).join('/'));
+  }
+  toString() {
+    return this.fsPath;
+  }
+}
 
 function g(): G {
   return globalThis as G;
@@ -111,7 +137,10 @@ const vscodeApi = {
   MarkdownString,
   McpStdioServerDefinition,
   StatusBarAlignment: { Left: 1, Right: 2 },
+  ColorThemeKind: { Light: 1, Dark: 2, HighContrast: 3, HighContrastLight: 4 },
+  Uri: DefaultUri,
   window: {
+    activeColorTheme: { kind: 2 },
     createTreeView: (id: string, options?: { showCollapseAll?: boolean }) => {
       const bucket = g().__axisPluginKindTreeViews;
       if (bucket) {
@@ -119,6 +148,7 @@ const vscodeApi = {
       }
       return { dispose() {} };
     },
+    registerWebviewViewProvider: () => ({ dispose() {} }),
     showInputBox: async () => undefined,
     showQuickPick: async () => undefined,
     showInformationMessage: () => undefined,
@@ -156,6 +186,12 @@ const vscodeApi = {
           if (section === 'axis.engine' && key === 'allowPyodide') {
             return g().__axisAllowPyodide;
           }
+          if (section === 'axis.live' && key === 'enabled') {
+            return g().__axisLiveEnabled;
+          }
+          if (section === 'axis.plugins' && key === 'allowUrlInstall') {
+            return g().__axisAllowUrlInstall;
+          }
           return def;
         },
       };
@@ -184,6 +220,12 @@ mock.module('vscode', () => ({
   },
   get StatusBarAlignment() {
     return vscodeApi.StatusBarAlignment;
+  },
+  get ColorThemeKind() {
+    return vscodeApi.ColorThemeKind;
+  },
+  get Uri() {
+    return vscodeApi.Uri;
   },
   get window() {
     return vscodeApi.window;

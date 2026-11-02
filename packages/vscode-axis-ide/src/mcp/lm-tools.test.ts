@@ -71,6 +71,35 @@ mock.module('vscode', () => {
     event = () => ({ dispose() {} });
     fire(_v?: unknown) {}
   }
+  class Uri {
+    fsPath: string;
+    constructor(fsPath: string) {
+      this.fsPath = fsPath;
+    }
+    static file(p: string) {
+      return new Uri(p);
+    }
+    static joinPath(base: { fsPath?: string }, ...parts: string[]) {
+      const root = base?.fsPath ?? '';
+      if (root === '/throw-fs') {
+        return {
+          get fsPath(): string {
+            throw new Error('fsPath');
+          },
+        };
+      }
+      return new Uri([root, ...parts].filter(Boolean).join('/'));
+    }
+    toString() {
+      return `file://${this.fsPath}`;
+    }
+  }
+  const ColorThemeKind = {
+    Light: 1,
+    Dark: 2,
+    HighContrast: 3,
+    HighContrastLight: 4,
+  };
   return {
     McpStdioServerDefinition,
     LanguageModelTextPart,
@@ -79,6 +108,9 @@ mock.module('vscode', () => {
     TreeItem,
     TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
     EventEmitter,
+    StatusBarAlignment: { Left: 1, Right: 2 },
+    ColorThemeKind,
+    Uri,
     commands: {
       registerCommand() {
         return { dispose() {} };
@@ -86,12 +118,37 @@ mock.module('vscode', () => {
       executeCommand: async () => undefined,
     },
     window: {
+      activeColorTheme: { kind: ColorThemeKind.Dark },
       showWarningMessage: async () => undefined,
       showTextDocument: async () => ({}),
+      createTreeView: () => ({ dispose() {} }),
+      registerWebviewViewProvider: () => ({ dispose() {} }),
+      createStatusBarItem: () => ({
+        text: '',
+        tooltip: '',
+        show() {},
+        dispose() {},
+      }),
     },
     workspace: {
-      getConfiguration() {
-        return { get: () => undefined };
+      getConfiguration(section?: string) {
+        const gg = globalThis as {
+          __axisEngineCfgThrow?: boolean;
+          __axisAllowPyodide?: unknown;
+          __axisLiveEnabled?: unknown;
+          __axisAllowUrlInstall?: unknown;
+        };
+        if (gg.__axisEngineCfgThrow === true) throw new Error('cfg');
+        return {
+          get(key: string, def?: unknown) {
+            if (section === 'axis.engine' && key === 'allowPyodide') return gg.__axisAllowPyodide;
+            if (section === 'axis.live' && key === 'enabled') return gg.__axisLiveEnabled;
+            if (section === 'axis.plugins' && key === 'allowUrlInstall') {
+              return gg.__axisAllowUrlInstall;
+            }
+            return def;
+          },
+        };
       },
       openTextDocument: async () => ({ getText: () => '' }),
     },

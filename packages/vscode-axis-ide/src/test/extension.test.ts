@@ -49,7 +49,12 @@ const pkg = JSON.parse(fs.readFileSync(PACKAGE_PATH, 'utf8')) as {
     };
     views?: Record<
       string,
-      Array<{ id: string; name?: string; type?: string }>
+      Array<{
+        id: string;
+        name?: string;
+        type?: string;
+        retainContextWhenHidden?: boolean;
+      }>
     >;
     configuration?:
       | Array<{ properties: Record<string, unknown> }>
@@ -129,15 +134,10 @@ const EXPECTED_ACTIVITY_VIEWS = [
   'axis.indicators',
   'axis.watchlist',
   'axis.alerts',
-  'axis.plugins.source',
-  'axis.plugins.stream',
-  'axis.plugins.engine',
-  'axis.plugins.storage',
-  'axis.plugins.dataset',
-  'axis.plugins.component',
+  'axis.plugins',
   'axis.workers',
 ] as const;
-const EXPECTED_PLUGIN_KIND_VIEWS = [
+const FORBIDDEN_PLUGIN_KIND_VIEWS = [
   'axis.plugins.source',
   'axis.plugins.stream',
   'axis.plugins.engine',
@@ -224,7 +224,7 @@ suite('AXIS IDE Extension Structure', () => {
     }
   });
 
-  test('contributes panel + activity views (results/strategy/library/layers/indicators/watchlist/alerts/plugin-kinds/workers)', () => {
+  test('contributes panel + activity views (results/strategy/library/layers/indicators/watchlist/alerts/plugins/workers)', () => {
     const panelContainers = pkg.contributes?.viewsContainers?.panel ?? [];
     const axisPanel = panelContainers.find((c) => c.id === 'axis-panel');
     assert.ok(axisPanel, 'missing viewsContainers.panel axis-panel');
@@ -255,17 +255,26 @@ suite('AXIS IDE Extension Structure', () => {
 
     const sideViews = pkg.contributes?.views?.axis ?? [];
     const sideIds = sideViews.map((v) => v.id);
-    assert.ok(!sideIds.includes('axis.plugins'), 'lumped axis.plugins view must be gone');
     assert.deepStrictEqual(
       sideIds,
       [...EXPECTED_ACTIVITY_VIEWS],
       'activity view inventory/order drifted — update test when intentionally expanding contributes',
     );
+    const pluginsView = sideViews.find((v) => v.id === 'axis.plugins');
+    assert.strictEqual(pluginsView?.type, 'webview', 'axis.plugins must be type webview');
+    assert.strictEqual(
+      pluginsView?.retainContextWhenHidden,
+      true,
+      'axis.plugins must retainContextWhenHidden',
+    );
+    for (const id of FORBIDDEN_PLUGIN_KIND_VIEWS) {
+      assert.ok(!sideIds.includes(id), `split plugin TreeView ${id} must be gone`);
+    }
 
     const activation = pkg.activationEvents ?? [];
     assert.ok(
-      !activation.includes('onView:axis.plugins'),
-      'activationEvents must not include lumped onView:axis.plugins',
+      activation.includes('onView:axis.plugins'),
+      'activationEvents should include onView:axis.plugins',
     );
     assert.ok(
       activation.includes('onView:axis.results'),
@@ -275,10 +284,10 @@ suite('AXIS IDE Extension Structure', () => {
       activation.includes('onView:axis.strategy'),
       'activationEvents should include onView:axis.strategy',
     );
-    for (const id of EXPECTED_PLUGIN_KIND_VIEWS) {
+    for (const id of FORBIDDEN_PLUGIN_KIND_VIEWS) {
       assert.ok(
-        activation.includes(`onView:${id}`),
-        `activationEvents should include onView:${id}`,
+        !activation.includes(`onView:${id}`),
+        `activationEvents must not include onView:${id}`,
       );
     }
     assert.ok(

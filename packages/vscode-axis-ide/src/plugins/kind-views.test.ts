@@ -107,7 +107,33 @@ type G = {
   __axisPluginKindTreeViews?: Array<{ id: string; showCollapseAll?: boolean }>;
   __axisAllowPyodide?: unknown;
   __axisEngineCfgThrow?: boolean;
+  __axisLiveEnabled?: unknown;
+  __axisAllowUrlInstall?: unknown;
 };
+
+class DefaultUri {
+  fsPath: string;
+  constructor(fsPath: string) {
+    this.fsPath = fsPath;
+  }
+  static file(p: string) {
+    return new DefaultUri(p);
+  }
+  static joinPath(base: { fsPath?: string }, ...parts: string[]) {
+    const root = base?.fsPath ?? '';
+    if (root === '/throw-fs') {
+      return {
+        get fsPath(): string {
+          throw new Error('fsPath');
+        },
+      };
+    }
+    return new DefaultUri([root, ...parts].filter(Boolean).join('/'));
+  }
+  toString() {
+    return this.fsPath;
+  }
+}
 
 function g(): G {
   return globalThis as G;
@@ -122,7 +148,10 @@ const vscodeApi = {
   MarkdownString,
   McpStdioServerDefinition,
   StatusBarAlignment: { Left: 1, Right: 2 },
+  ColorThemeKind: { Light: 1, Dark: 2, HighContrast: 3, HighContrastLight: 4 },
+  Uri: DefaultUri,
   window: {
+    activeColorTheme: { kind: 2 },
     createTreeView: (id: string, options?: { showCollapseAll?: boolean }) => {
       treeViews.push({ id });
       const bucket = g().__axisPluginKindTreeViews;
@@ -131,6 +160,7 @@ const vscodeApi = {
       }
       return { dispose() {} };
     },
+    registerWebviewViewProvider: () => ({ dispose() {} }),
     showWarningMessage: (_message: string) => undefined,
     showTextDocument: async () => ({}),
     createStatusBarItem: () => ({
@@ -153,6 +183,12 @@ const vscodeApi = {
         get(key: string, def?: unknown) {
           if (section === 'axis.engine' && key === 'allowPyodide') {
             return g().__axisAllowPyodide;
+          }
+          if (section === 'axis.live' && key === 'enabled') {
+            return g().__axisLiveEnabled;
+          }
+          if (section === 'axis.plugins' && key === 'allowUrlInstall') {
+            return g().__axisAllowUrlInstall;
           }
           return def;
         },
@@ -183,6 +219,12 @@ mock.module('vscode', () => ({
   get StatusBarAlignment() {
     return vscodeApi.StatusBarAlignment;
   },
+  get ColorThemeKind() {
+    return vscodeApi.ColorThemeKind;
+  },
+  get Uri() {
+    return vscodeApi.Uri;
+  },
   get window() {
     return vscodeApi.window;
   },
@@ -211,7 +253,7 @@ beforeAll(async () => {
 });
 
 describe('registerPluginKindViews', () => {
-  test('binds active.ts deps and registers six kind views', async () => {
+  test('binds active.ts deps and does not createTreeView for kind views', async () => {
     if (!kindViews) {
       if (!viewModulesExist()) {
         expect(viewModulesExist()).toBe(false);
@@ -231,16 +273,35 @@ describe('registerPluginKindViews', () => {
       mem,
     );
     expect(typeof refreshAll).toBe('function');
-    expect(treeViews.map((v) => v.id).sort()).toEqual(
-      Object.values(PLUGIN_KIND_VIEW_IDS).slice().sort(),
-    );
-    expect(ctx.subscriptions.length).toBeGreaterThanOrEqual(6);
+    expect(treeViews).toEqual([]);
     expect(() => refreshAll()).not.toThrow();
 
     const deps = kindViews.bindKindViewDeps(mem);
     expect(deps.isActive('source', 'binance-rest')).toBe(true);
     await deps.onActivate('source', 'okx-rest');
     expect(isActivePlugin(mem, 'source', 'okx-rest')).toBe(true);
+  });
+
+  test('contributes fragment documents axis.plugins webview merge', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const fragment = JSON.parse(
+      readFileSync(join(import.meta.dir, 'kind-views-contributes.fragment.json'), 'utf8'),
+    ) as {
+      activationEvents: string[];
+      contributes: { views: { axis: Array<{ id: string; type?: string }> } };
+    };
+    expect(fragment.activationEvents).toContain('onView:axis.plugins');
+    expect(fragment.contributes.views.axis).toEqual([
+      expect.objectContaining({
+        id: 'axis.plugins',
+        type: 'webview',
+      }),
+    ]);
+    expect(
+      fragment.contributes.views.axis.some((v) => v.id === 'axis.plugins.source'),
+    ).toBe(false);
+    void PLUGIN_KIND_VIEW_IDS;
   });
 
   test('safeCallKindViewRegistrar swallows registrar throws', async () => {
@@ -299,32 +360,20 @@ describe('registerPluginKindViews', () => {
     expect(n).toBe(1);
   });
 
-  test('refreshAll invokes provider.refresh after register', async () => {
+  test('refreshAll is a no-op after skipping kind TreeViews', async () => {
     if (!kindViews) {
       if (!viewModulesExist()) return;
       throw loadError instanceof Error
         ? loadError
         : new Error('kind-views failed to load');
     }
-    const source = await import('./views/source');
-    let hits = 0;
-    const proto = source.SourcePluginsTreeProvider.prototype;
-    const orig = proto.refresh;
-    proto.refresh = function (this: unknown) {
-      hits += 1;
-      orig.call(this);
-    };
-    try {
-      const refreshAll = kindViews.registerPluginKindViews(
-        { subscriptions: [] } as never,
-        new HostPluginRegistry(),
-        createMemoryWorkspaceState(),
-      );
-      hits = 0;
-      expect(() => refreshAll()).not.toThrow();
-      expect(hits).toBeGreaterThan(0);
-    } finally {
-      proto.refresh = orig;
-    }
+    treeViews.length = 0;
+    const refreshAll = kindViews.registerPluginKindViews(
+      { subscriptions: [] } as never,
+      new HostPluginRegistry(),
+      createMemoryWorkspaceState(),
+    );
+    expect(() => refreshAll()).not.toThrow();
+    expect(treeViews).toEqual([]);
   });
 });
