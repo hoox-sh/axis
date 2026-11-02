@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/ui"
-description: "src/ui contains AboutModal.tsx, AlertsPanel.tsx, BarReplayControls.tsx, and 84 more files."
+description: "src/ui contains AboutModal.tsx, AlertsPanel.tsx, BarReplayControls.tsx, and 85 more files."
 resource: "src/ui"
 tags: [code, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-02T11:54:16Z
+  at: 2026-11-02T12:05:42Z
 sources:
   - id: tree
     resource: "src/ui"
@@ -105,6 +105,7 @@ okf_lock: generated
 * `ui-scale.ts` — UI_SCALE_PRESETS, formatUiScalePct
 * `use-event-listener.ts` — attachEventListener, useEventListener
 * `watchlist-row.ts` — bigPriceSizeClass
+* `watchlist-spark.ts` — SPARK_LIMIT, SPARK_MIN_INTERVAL_MS, noteSparkPrice, resetWatchlistSparks, seedSpark, sparkPath, sparkSeries
 
 # Packages
 

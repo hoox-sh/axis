@@ -2033,6 +2033,37 @@ body.axis-ticker-dragging {
   top: 50%;
   transform: translateY(-50%);
 }
+/* Spark sits under the symbol. 48×10 fits the 28px row; LAST and CHG stay put. */
+.axis-wl-sym {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  min-width: 0;
+  line-height: 1.05;
+}
+.axis-wl-spark {
+  display: block;
+  flex-shrink: 0;
+  overflow: visible;
+}
+.axis-wl-spark path {
+  fill: none;
+  stroke: var(--color-text-faint);
+  stroke-width: 1.25;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.axis-wl-spark.is-up path {
+  stroke: var(--color-up, var(--color-accent-2));
+}
+.axis-wl-spark.is-down path {
+  stroke: var(--color-down, var(--color-red));
+}
+.axis-wl-expanded-sub .axis-wl-spark {
+  margin-left: auto;
+}
+
 .axis-wl-change-up {
   color: var(--color-accent-2);
   font-variant-numeric: tabular-nums lining-nums;

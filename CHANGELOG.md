@@ -29,6 +29,8 @@ _Generated/updated: 2026-11-01 · 880 commits · describe-tag: `v2.26.0`_
 
 ### Added
 
+- **Watchlist session sparkline.** Each compact row draws a 48×10 spark under the symbol from the 24h open to the last price, then extends it with live prints (24 samples, tip updates inside 1.5s). No extra quote request. The stroke uses `--color-up` / `--color-down`. The expanded row shows a 72×16 spark on the detail line. LAST and CHG stay in their columns.
+
 - **Symbol picker recents and favorites.** The symbol modal stores a per-venue recent list (8) and favorite list (24) at `pynescript.axis.symbol-picks.v1` (CCXT scopes by exchange). Favorites and recents show as chips until the search query changes. A star on each row toggles a favorite without selecting the symbol. Picking a symbol records it as recent.
 
 - **Performance & architecture audit roadmap** (`docs/architecture/perf-audit-2026-11.mdx`). Documents the baseline test health (4708 pass / 0 fail), the strongest remaining architecture/performance gaps (coarse `store.bars` reactivity, dense `ChartHost` effects, main-thread engine JSON parse, overlay rewrite cost, live-tick path thrash, UI theming/animation inconsistencies), and a 6-phase plan to reach world-class responsiveness.

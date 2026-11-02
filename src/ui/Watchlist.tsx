@@ -59,6 +59,7 @@ import {
   Show,
 } from 'solid-js';
 import { effectEnabled, effectMs, prefersReducedMotion, setEffectEnabled } from './effects';
+import { noteSparkPrice, seedSpark, sparkPath } from './watchlist-spark';
 import { Portal } from 'solid-js/web';
 import {
   store,
@@ -130,6 +131,12 @@ function fmtChange(n?: number): string {
   return `${sign}${Math.abs(n).toFixed(2)}%`;
 }
 
+function sameSpark(a: number[], b: number[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
 /** 24h open when known; else previous from last × %; else undefined. */
 function closeOf(tick?: WatchTicker): number | undefined {
   if (!tick) return undefined;
@@ -154,11 +161,15 @@ const WatchlistRow: Component<{
   onExpand: (sym: string) => void;
 }> = (props) => {
   const [flash, setFlash] = createSignal<'up' | 'down' | ''>('');
+  const [spark, setSpark] = createSignal<number[]>([]);
   let lastPrice: number | undefined;
   createEffect(() => {
     const p = props.tick?.price;
     const ms = effectMs('watchlist.tick');
     if (p == null || !Number.isFinite(p)) return;
+    seedSpark(props.sym, closeOf(props.tick), p);
+    const next = noteSparkPrice(props.sym, p);
+    setSpark((prev) => (sameSpark(prev, next) ? prev : next));
     if (lastPrice != null && p !== lastPrice && ms > 0) {
       setFlash(p > lastPrice ? 'up' : 'down');
       const id = window.setTimeout(() => setFlash(''), ms);
@@ -236,6 +247,28 @@ const WatchlistRow: Component<{
 
   const priceText = () => fmtPrice(props.tick?.price);
 
+  const sparkSvg = (width: number, height: number) => {
+    const d = sparkPath(spark(), width, height);
+    if (!d) return null;
+    const change = ch();
+    return (
+      <svg
+        class="axis-wl-spark"
+        classList={{
+          'is-up': change != null && change >= 0,
+          'is-down': change != null && change < 0,
+        }}
+        viewBox={`0 0 ${width} ${height}`}
+        width={width}
+        height={height}
+        aria-hidden="true"
+        data-testid={`axis-watchlist-spark-${props.sym}`}
+      >
+        <path d={d} />
+      </svg>
+    );
+  };
+
   return (
     // biome-ignore lint/a11y/useSemanticElements: row contains nested buttons; wrapping in <button> would be invalid HTML
     <div
@@ -260,11 +293,14 @@ const WatchlistRow: Component<{
         when={props.expanded}
         fallback={
           <>
-            <span class={`font-semibold truncate ${props.active ? 'text-accent' : 'text-text'}`}>
-              {props.sym.replace(/USDT$/i, '').replace(/USD$/i, '')}
-              <span class="text-text-faint font-normal text-[10px]">
-                {/USDT$/i.test(props.sym) ? 'USDT' : /USD$/i.test(props.sym) ? 'USD' : ''}
+            <span class="axis-wl-sym">
+              <span class={`font-semibold truncate ${props.active ? 'text-accent' : 'text-text'}`}>
+                {props.sym.replace(/USDT$/i, '').replace(/USD$/i, '')}
+                <span class="text-text-faint font-normal text-[10px]">
+                  {/USDT$/i.test(props.sym) ? 'USDT' : /USD$/i.test(props.sym) ? 'USD' : ''}
+                </span>
               </span>
+              {sparkSvg(48, 10)}
             </span>
             <span class="font-mono text-[12px] font-medium text-text text-right tabular-nums lining-nums min-w-[4.75rem]">
               {priceText()}
@@ -310,6 +346,7 @@ const WatchlistRow: Component<{
             >
               Prev {fmtPrice(closeOf(props.tick))}
             </span>
+            {sparkSvg(72, 16)}
           </div>
         </div>
       </Show>
