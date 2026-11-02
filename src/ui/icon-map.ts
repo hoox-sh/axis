@@ -90,6 +90,7 @@
  * | studio | AppWindow | Studio overlay |
  * | book / cable / barChart | BookOpen / Cable / BarChart3 | Docs / wire / stats |
  * | activity | Activity | Generic pulse (non-panel) |
+ * | favorite | Star | Symbol favorite |
  *
  * @module ui/icon-map
  */
@@ -191,6 +192,7 @@ export const ICON_MAP = {
   cable: 'Cable',
   barChart: 'BarChart3',
   activity: 'Activity',
+  favorite: 'Star',
 } as const;
 
 export type IconName = keyof typeof ICON_MAP;

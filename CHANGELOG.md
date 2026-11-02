@@ -29,6 +29,8 @@ _Generated/updated: 2026-11-01 · 880 commits · describe-tag: `v2.26.0`_
 
 ### Added
 
+- **Symbol picker recents and favorites.** The symbol modal stores a per-venue recent list (8) and favorite list (24) at `pynescript.axis.symbol-picks.v1` (CCXT scopes by exchange). Favorites and recents show as chips until the search query changes. A star on each row toggles a favorite without selecting the symbol. Picking a symbol records it as recent.
+
 - **Performance & architecture audit roadmap** (`docs/architecture/perf-audit-2026-11.mdx`). Documents the baseline test health (4708 pass / 0 fail), the strongest remaining architecture/performance gaps (coarse `store.bars` reactivity, dense `ChartHost` effects, main-thread engine JSON parse, overlay rewrite cost, live-tick path thrash, UI theming/animation inconsistencies), and a 6-phase plan to reach world-class responsiveness.
 
 - **Phase 0 performance telemetry helpers** (`src/perf/telemetry.ts`). Adds `perfMark`, `perfMeasure`, `perfMeasureSync`, `perfMeasureAsync`, and `setPerfEnabled` for dev-only `performance.mark`/`measure` instrumentation around the hot paths.

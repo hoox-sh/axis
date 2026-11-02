@@ -5134,6 +5134,110 @@ body.axis-panel-dragging {
   accent-color: var(--color-accent, #939fff);
 }
 
+/* ── Symbol picker: favorites + recents ──────────────────────────── */
+.axis-symbol-picks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.axis-symbol-pick-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+.axis-symbol-pick-label {
+  flex: 0 0 4.75rem;
+  padding-top: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+}
+.axis-symbol-pick-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+  max-height: 52px;
+  overflow: auto;
+}
+.axis-symbol-pick {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-chip);
+  background: var(--color-bg-elev);
+  color: var(--color-text);
+}
+.axis-symbol-pick-sym {
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  padding: 0 2px 0 8px;
+  cursor: pointer;
+}
+.axis-symbol-row {
+  display: flex;
+  align-items: stretch;
+}
+.axis-symbol-row:hover,
+.axis-symbol-row.is-active {
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+}
+.axis-symbol-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 4px 6px 12px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.axis-symbol-star {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin: 3px 6px 3px 0;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--color-text-faint);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.axis-symbol-pick .axis-symbol-star {
+  width: 18px;
+  height: 18px;
+  margin: 0 2px 0 0;
+}
+.axis-symbol-star:hover,
+.axis-symbol-star:focus-visible,
+.axis-symbol-star.is-on {
+  color: var(--color-accent);
+}
+.axis-symbol-star:focus-visible,
+.axis-symbol-pick-sym:focus-visible,
+.axis-symbol-row-main:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--color-accent) 60%, transparent);
+  outline-offset: -1px;
+}
+
 /* ── Command palette (⌘K / Ctrl+K) ───────────────────────────────── */
 .axis-cmd-palette-backdrop {
   position: fixed;

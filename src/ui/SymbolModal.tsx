@@ -45,6 +45,16 @@ import { activeCcxtExchange, activeCcxtGateway } from '../data/credentials';
 import { Modal } from './Modal';
 import { Icons } from './icons';
 import { Spinner } from './Spinner';
+import {
+  emptySymbolPicks,
+  loadSymbolPicks,
+  rememberSymbol,
+  saveSymbolPicks,
+  symbolPicksScope,
+  toggleFavorite,
+  visibleSymbolPicks,
+  type SymbolPicks,
+} from './symbol-picks';
 
 export type SymbolModalProps = {
   open: boolean;
@@ -65,6 +75,8 @@ export const SymbolModal: Component<SymbolModalProps> = (props) => {
   const [error, setError] = createSignal('');
   const [meta, setMeta] = createSignal('');
   const [active, setActive] = createSignal(0);
+  const [picks, setPicks] = createSignal<SymbolPicks>(emptySymbolPicks());
+  const [seed, setSeed] = createSignal('');
   let searchRef: HTMLInputElement | undefined;
   let abort: AbortController | undefined;
 
@@ -83,13 +95,34 @@ export const SymbolModal: Component<SymbolModalProps> = (props) => {
   // Seed search + focus when the modal opens (not on every source change)
   createEffect(() => {
     if (!props.open) return;
-    setQuery((props.initialQuery || store.symbol || '').toUpperCase());
+    const initial = (props.initialQuery || store.symbol || '').toUpperCase();
+    setQuery(initial);
+    setSeed(initial);
     setQuote('ALL');
     setActive(0);
     setError('');
     queueMicrotask(() => searchRef?.focus());
     requestAnimationFrame(() => searchRef?.select());
   });
+
+  const ccxtExchangeId = () =>
+    store.source === 'ccxt-rest' || store.live?.streamId === 'ccxt-ws' ? activeCcxtExchange() : '';
+
+  const picksScope = () => symbolPicksScope(venue(), ccxtExchangeId());
+
+  const writePicks = (next: SymbolPicks) => {
+    setPicks(next);
+    saveSymbolPicks(picksScope(), next);
+  };
+
+  const showPicks = () => {
+    const q = query().trim();
+    return q === '' || q === seed();
+  };
+
+  const chips = createMemo(() => (showPicks() ? visibleSymbolPicks(picks()) : emptySymbolPicks()));
+
+  const isFavorite = (sym: string) => picks().favorites.includes(sym);
 
   // Preload instrument list for venue (source → stream)
   createEffect(() => {
@@ -102,6 +135,7 @@ export const SymbolModal: Component<SymbolModalProps> = (props) => {
         : '';
     setVenue(v);
     setVenueName(ccxtExchange ? `${ccxtExchange} (CCXT)` : venueLabel(v));
+    setPicks(loadSymbolPicks(symbolPicksScope(v, ccxtExchange)));
     setMeta('');
 
     abort?.abort();
@@ -148,8 +182,15 @@ export const SymbolModal: Component<SymbolModalProps> = (props) => {
     const ccxt = store.source === 'ccxt-rest' || store.live?.streamId === 'ccxt-ws';
     const next = ccxt ? raw : raw.replace(/[^A-Z0-9:._-]/g, '');
     if (!next) return;
+    writePicks(rememberSymbol(picks(), next));
     props.onSelect(next);
     props.onClose();
+  };
+
+  const onToggleFavorite = (sym: string, e: MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    writePicks(toggleFavorite(picks(), sym));
   };
 
   const pickActive = () => {
@@ -287,6 +328,72 @@ export const SymbolModal: Component<SymbolModalProps> = (props) => {
         </For>
       </div>
 
+      <Show when={chips().favorites.length > 0 || chips().recent.length > 0}>
+        <div class="axis-symbol-picks" data-testid="axis-symbol-picks">
+          <Show when={chips().favorites.length > 0}>
+            <div class="axis-symbol-pick-row">
+              <span class="axis-symbol-pick-label">Favorites</span>
+              <div class="axis-symbol-pick-chips">
+                <For each={chips().favorites}>
+                  {(sym) => (
+                    <span class="axis-symbol-pick">
+                      <button
+                        type="button"
+                        class="axis-symbol-pick-sym"
+                        data-testid={`axis-symbol-pick-fav-${sym}`}
+                        onClick={() => pick(sym)}
+                      >
+                        {sym}
+                      </button>
+                      <button
+                        type="button"
+                        class="axis-symbol-star is-on"
+                        aria-pressed="true"
+                        aria-label={`Remove ${sym} from favorites`}
+                        data-testid={`axis-symbol-pick-unfav-${sym}`}
+                        onClick={(e) => onToggleFavorite(sym, e)}
+                      >
+                        <Icons.favorite size={11} fill="currentColor" />
+                      </button>
+                    </span>
+                  )}
+                </For>
+              </div>
+            </div>
+          </Show>
+          <Show when={chips().recent.length > 0}>
+            <div class="axis-symbol-pick-row">
+              <span class="axis-symbol-pick-label">Recent</span>
+              <div class="axis-symbol-pick-chips">
+                <For each={chips().recent}>
+                  {(sym) => (
+                    <span class="axis-symbol-pick">
+                      <button
+                        type="button"
+                        class="axis-symbol-pick-sym"
+                        data-testid={`axis-symbol-pick-recent-${sym}`}
+                        onClick={() => pick(sym)}
+                      >
+                        {sym}
+                      </button>
+                      <button
+                        type="button"
+                        class="axis-symbol-star"
+                        aria-pressed="false"
+                        aria-label={`Add ${sym} to favorites`}
+                        onClick={(e) => onToggleFavorite(sym, e)}
+                      >
+                        <Icons.favorite size={11} fill="none" />
+                      </button>
+                    </span>
+                  )}
+                </For>
+              </div>
+            </div>
+          </Show>
+        </div>
+      </Show>
+
       <div
         class="flex-1 min-h-[200px] overflow-y-auto border border-border/40 rounded bg-card/30"
         data-testid="axis-symbol-modal-list"
@@ -312,19 +419,38 @@ export const SymbolModal: Component<SymbolModalProps> = (props) => {
           <ul class="divide-y divide-border/25">
             <For each={filtered()}>
               {(row, i) => (
-                <li>
+                <li
+                  class="axis-symbol-row"
+                  classList={{ 'is-active': active() === i() }}
+                  onMouseEnter={() => setActive(i())}
+                >
                   <button
                     type="button"
                     role="option"
                     aria-selected={active() === i()}
-                    class={`w-full flex items-center justify-between gap-2 px-3 py-2 text-left hover:bg-accent/10 ${
-                      active() === i() ? 'bg-accent/15' : ''
-                    }`}
-                    onMouseEnter={() => setActive(i())}
+                    class="axis-symbol-row-main"
                     onClick={() => pick(row.symbol)}
                   >
                     <span class="font-mono font-medium text-text text-[0.92em]">{row.symbol}</span>
                     <span class="text-muted text-[0.8em] font-mono truncate">{row.display}</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="axis-symbol-star"
+                    classList={{ 'is-on': isFavorite(row.symbol) }}
+                    aria-pressed={isFavorite(row.symbol)}
+                    aria-label={
+                      isFavorite(row.symbol)
+                        ? `Remove ${row.symbol} from favorites`
+                        : `Add ${row.symbol} to favorites`
+                    }
+                    data-testid={`axis-symbol-star-${row.symbol}`}
+                    onClick={(e) => onToggleFavorite(row.symbol, e)}
+                  >
+                    <Icons.favorite
+                      size={12}
+                      fill={isFavorite(row.symbol) ? 'currentColor' : 'none'}
+                    />
                   </button>
                 </li>
               )}

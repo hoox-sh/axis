@@ -110,6 +110,7 @@ import {
   Smile,
   Square,
   SquareArrowOutUpRight,
+  Star,
   Sun,
   Table2,
   Terminal,
@@ -251,6 +252,7 @@ export const Icons = {
   cable: withDefaults(Cable),
   barChart: withDefaults(BarChart3),
   activity: withDefaults(Activity),
+  favorite: withDefaults(Star),
 
   // ── Legacy aliases (same glyph as canonical key) ──────────────────────
   /** @deprecated use Icons.watchlist */
