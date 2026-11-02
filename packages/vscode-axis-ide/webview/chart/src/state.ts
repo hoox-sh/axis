@@ -47,6 +47,12 @@ export interface ChartPlugins {
   storage?: string;
 }
 
+/** One overlay line aligned to candle times (Pine `plot` / named `series`). */
+export type ChartPlotLine = {
+  id: string;
+  values: (number | null)[];
+};
+
 export interface ChartViewState {
   seriesKey: string;
   theme: string;
@@ -54,6 +60,8 @@ export interface ChartViewState {
   bars: ChartBar[];
   /** User drawings from chart.init / user-shaped chart.full batches. */
   drawings: UserDrawing[];
+  /** Script plots from `chart.full` (painted as LWC line overlays). */
+  plots: ChartPlotLine[];
   seq: number;
   ready: boolean;
   /** Active plugin ids (HUD chips); omitted until chart.init / host.run.status. */
@@ -74,6 +82,7 @@ export function initialChartState(): ChartViewState {
     panes: null,
     bars: [],
     drawings: [],
+    plots: [],
     seq: 0,
     ready: false,
   };
@@ -85,6 +94,77 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 function num(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function sampleToNumber(raw: unknown): number | null {
+  if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+  if (isPlainObject(raw)) {
+    return num(raw.value) ?? num(raw.v) ?? num(raw.close);
+  }
+  return null;
+}
+
+function numericColumn(raw: unknown): (number | null)[] | null {
+  if (!Array.isArray(raw)) return null;
+  const values = raw.map(sampleToNumber);
+  if (!values.some((v) => v !== null)) return null;
+  return values;
+}
+
+/**
+ * Flatten engine `plots` / `series` into overlay lines (never throws).
+ * Accepts a number[], list of columns, or `{ name: number[] }` maps.
+ */
+export function normalizePlotLines(plots: unknown, series?: unknown): ChartPlotLine[] {
+  try {
+    const out: ChartPlotLine[] = [];
+    const seen = new Set<string>();
+    const push = (id: string, values: (number | null)[]): void => {
+      const key = id.trim() || `plot${out.length}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({ id: key, values });
+    };
+    if (Array.isArray(plots)) {
+      const asColumn = numericColumn(plots);
+      const looksNested = plots.some((p) => Array.isArray(p) || isPlainObject(p));
+      if (asColumn && !looksNested) {
+        push('plot', asColumn);
+      } else {
+        plots.forEach((entry, i) => {
+          if (Array.isArray(entry)) {
+            const col = numericColumn(entry);
+            if (col) push(`plot${i}`, col);
+            return;
+          }
+          if (isPlainObject(entry)) {
+            const id =
+              typeof entry.id === 'string'
+                ? entry.id
+                : typeof entry.title === 'string'
+                  ? entry.title
+                  : `plot${i}`;
+            const col = numericColumn(entry.values ?? entry.data ?? entry.y);
+            if (col) push(id, col);
+          }
+        });
+      }
+    } else if (isPlainObject(plots)) {
+      for (const [key, value] of Object.entries(plots)) {
+        const col = numericColumn(value);
+        if (col) push(key, col);
+      }
+    }
+    if (isPlainObject(series)) {
+      for (const [key, value] of Object.entries(series)) {
+        const col = numericColumn(value);
+        if (col) push(key, col);
+      }
+    }
+    return out;
+  } catch {
+    return [];
+  }
 }
 
 function normalizeDrawingPoint(raw: unknown): { time: number; price: number } | null {
@@ -299,6 +379,7 @@ export function applyChartHostMessage(
         ready: true,
         // Clear prior series on re-init; chart.full (possibly empty) follows.
         bars: [],
+        plots: [],
         seq: 0,
         drawings,
         theme: typeof payload.theme === 'string' ? payload.theme : state.theme,
@@ -320,6 +401,7 @@ export function applyChartHostMessage(
       const next: ChartViewState = {
         ...state,
         bars: normalizeBars(payload.bars),
+        plots: normalizePlotLines(payload.plots, payload.series),
         seq: seq === null ? state.seq : seq,
       };
       // Only replace user drawings when the batch is user-tool shaped.

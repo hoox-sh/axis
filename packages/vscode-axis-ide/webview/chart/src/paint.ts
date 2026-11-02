@@ -24,12 +24,35 @@
 import {
   CandlestickSeries,
   ColorType,
+  LineSeries,
   createChart,
   type IChartApi,
   type ISeriesApi,
   type UTCTimestamp,
 } from 'lightweight-charts';
-import type { ChartBar, ChartViewState } from './state';
+import type { ChartBar, ChartPlotLine, ChartViewState } from './state';
+
+const PLOT_COLORS = [
+  '#22d3ee',
+  '#fbbf24',
+  '#a78bfa',
+  '#34d399',
+  '#fb7185',
+  '#60a5fa',
+];
+
+/** Layout options — TradingView attribution logo off (VSIX NOTICE already ships). */
+export function chartLayoutOptions(): {
+  background: { type: ColorType; color: string };
+  textColor: string;
+  attributionLogo: false;
+} {
+  return {
+    background: { type: ColorType.Solid, color: 'transparent' },
+    textColor: 'var(--vscode-editor-foreground, #e0e0e0)',
+    attributionLogo: false,
+  };
+}
 
 export interface ChartPainter {
   apply(state: ChartViewState): void;
@@ -52,6 +75,46 @@ function toCandleData(bars: ChartBar[]) {
   }));
 }
 
+function applyPlotOverlays(
+  chart: IChartApi,
+  bag: Map<string, ISeriesApi<'Line'>>,
+  bars: ChartBar[],
+  plots: ChartPlotLine[],
+): void {
+  const keep = new Set(plots.map((p) => p.id));
+  for (const [id, line] of [...bag]) {
+    if (keep.has(id)) continue;
+    try {
+      chart.removeSeries(line);
+    } catch {
+      // already gone
+    }
+    bag.delete(id);
+  }
+  plots.forEach((plot, index) => {
+    let line = bag.get(plot.id);
+    if (!line) {
+      line = chart.addSeries(LineSeries, {
+        color: PLOT_COLORS[index % PLOT_COLORS.length],
+        lineWidth: 2,
+        priceLineVisible: false,
+        lastValueVisible: true,
+        title: plot.id,
+      });
+      bag.set(plot.id, line);
+    }
+    const data: Array<{ time: UTCTimestamp; value: number }> = [];
+    const n = Math.min(bars.length, plot.values.length);
+    for (let i = 0; i < n; i++) {
+      const bar = bars[i];
+      const value = plot.values[i];
+      if (!bar || value === null || !Number.isFinite(value)) continue;
+      data.push({ time: bar.time as UTCTimestamp, value });
+    }
+    line.setData(data);
+  });
+}
+
 /**
  * Mount an LWC candlestick chart on `host`. Safe to call once per webview life.
  * Falls back to a data-attribute stub when createChart throws (tests / no canvas).
@@ -60,6 +123,7 @@ export function createChartPainter(host: HTMLElement): ChartPainter {
   let disposed = false;
   let chart: IChartApi | null = null;
   let series: ISeriesApi<'Candlestick'> | null = null;
+  const plotSeries = new Map<string, ISeriesApi<'Line'>>();
   let lastSeq = -1;
   let resizeObserver: ResizeObserver | null = null;
 
@@ -68,10 +132,7 @@ export function createChartPainter(host: HTMLElement): ChartPainter {
   try {
     chart = createChart(host, {
       autoSize: true,
-      layout: {
-        background: { type: ColorType.Solid, color: 'transparent' },
-        textColor: 'var(--vscode-editor-foreground, #e0e0e0)',
-      },
+      layout: chartLayoutOptions(),
       grid: {
         vertLines: { color: 'rgba(128,128,128,0.15)' },
         horzLines: { color: 'rgba(128,128,128,0.15)' },
@@ -133,6 +194,7 @@ export function createChartPainter(host: HTMLElement): ChartPainter {
       host.setAttribute('data-axis-bar-count', String(state.bars.length));
       host.setAttribute('data-axis-seq', String(state.seq));
       host.setAttribute('data-axis-drawing-count', String(state.drawings.length));
+      host.setAttribute('data-axis-plot-count', String(state.plots.length));
 
       if (!series || !chart) {
         // Stub path — reducer already applied; attributes prove the round-trip.
@@ -149,6 +211,7 @@ export function createChartPainter(host: HTMLElement): ChartPainter {
       lastSeq = state.seq;
       try {
         series.setData(toCandleData(state.bars));
+        applyPlotOverlays(chart, plotSeries, state.bars, state.plots);
         if (state.bars.length > 0) {
           chart.timeScale().fitContent();
         }
@@ -183,6 +246,7 @@ export function createChartPainter(host: HTMLElement): ChartPainter {
         // ignore
       }
       resizeObserver = null;
+      plotSeries.clear();
       try {
         chart?.remove();
       } catch {

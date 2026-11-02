@@ -125,6 +125,8 @@ export interface ChartInitPayload {
 export interface ChartFullPayload {
   bars: unknown;
   plots?: unknown;
+  /** Named engine series (same overlay path as plots). */
+  series?: unknown;
   drawings?: unknown;
   seq: number;
 }

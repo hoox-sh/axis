@@ -36,6 +36,7 @@ import {
   StatusBarAlignment,
   type StatusBarItem,
   Uri,
+  ViewColumn,
   commands,
   extensions,
   languages,
@@ -46,6 +47,7 @@ import { RUN_NO_PINE_MESSAGE, RUN_OUTPUT_CHANNEL_NAME } from './constants';
 import { registerChartEditorProvider } from './editors/chart-editor';
 import {
   type AxisChartDocV1,
+  CHART_VIEW_TYPE,
   parseChartDocument,
 } from './editors/chart-document';
 import { registerApplyBuiltin, APPLY_BUILTIN_COMMAND } from './host/apply-builtin';
@@ -53,6 +55,7 @@ import {
   OPEN_CHART_NO_PINE_MESSAGE,
   PINE_LANGUAGE_ID,
   isPineFilePath,
+  openChartEditorOptions,
   planSiblingChartOpen,
   siblingAxisJsonPath,
 } from './host/open-chart';
@@ -404,6 +407,13 @@ async function runScriptCore(opts: {
 
     const script = doc.getText();
     const pinePath = doc.uri.scheme === 'file' ? doc.uri.fsPath : '';
+    if (pinePath) {
+      try {
+        await ensureSiblingChartBeside(pinePath, doc, true);
+      } catch {
+        // run still proceeds — chart-bus replays last full when the panel attaches
+      }
+    }
     const chartJson = pinePath ? await readSiblingChartJson(pinePath) : null;
     if (deactivated) {
       return { ok: false, mode, focus, reason: 'aborted', error: 'aborted' };
@@ -703,6 +713,66 @@ async function focusResultsCommand(runId?: string): Promise<string | undefined> 
   }
 }
 
+async function revealChartBeside(uri: Uri, preserveFocus: boolean): Promise<void> {
+  const opts = openChartEditorOptions(preserveFocus);
+  try {
+    await commands.executeCommand('vscode.openWith', uri, CHART_VIEW_TYPE, opts);
+    return;
+  } catch {
+    // fall through to vscode.open
+  }
+  await commands.executeCommand('vscode.open', uri, {
+    viewColumn: ViewColumn.Beside,
+    preview: opts.preview,
+    preserveFocus: opts.preserveFocus,
+  });
+}
+
+async function ensureSiblingChartBeside(
+  pinePath: string,
+  doc: TextDocument,
+  preserveFocus: boolean,
+): Promise<void> {
+  const pineFileName =
+    doc.uri.path.split('/').pop() ||
+    doc.fileName.split(/[/\\]/).pop() ||
+    'script.pyne';
+  const probe = planSiblingChartOpen({
+    pinePath,
+    pineFileName,
+    siblingExists: true,
+  });
+  if (!probe.ok) return;
+  const siblingUri = Uri.file(probe.siblingPath);
+  let exists = false;
+  try {
+    await workspace.fs.stat(siblingUri);
+    exists = true;
+  } catch {
+    exists = false;
+  }
+  if (deactivated) return;
+  let historyBarsSetting: number | undefined;
+  try {
+    const hb = workspace.getConfiguration('axis.chart').get<number>('historyBars');
+    if (typeof hb === 'number' && Number.isFinite(hb)) historyBarsSetting = hb;
+  } catch {
+    historyBarsSetting = undefined;
+  }
+  const plan = planSiblingChartOpen({
+    pinePath,
+    pineFileName,
+    siblingExists: exists,
+    historyBarsSetting,
+  });
+  if (!plan.ok) return;
+  if (plan.writeBytes) {
+    await workspace.fs.writeFile(siblingUri, plan.writeBytes);
+  }
+  if (deactivated) return;
+  await revealChartBeside(siblingUri, preserveFocus);
+}
+
 async function openChartCommand(): Promise<string | undefined> {
   if (deactivated) return undefined;
   try {
@@ -716,58 +786,9 @@ async function openChartCommand(): Promise<string | undefined> {
       return OPEN_CHART_NO_PINE_MESSAGE;
     }
 
-    const pineFileName =
-      doc.uri.path.split('/').pop() ||
-      doc.fileName.split(/[/\\]/).pop() ||
-      'script.pyne';
-
-    // Probe sibling path first via planner (validates Pine suffix).
-    const probe = planSiblingChartOpen({
-      pinePath: fsPath,
-      pineFileName,
-      siblingExists: true,
-    });
-    if (!probe.ok) {
-      void window.showErrorMessage(probe.error);
-      return probe.error;
-    }
-
-    const siblingUri = Uri.file(probe.siblingPath);
-    let exists = false;
-    try {
-      await workspace.fs.stat(siblingUri);
-      exists = true;
-    } catch {
-      exists = false;
-    }
-    if (deactivated) return undefined;
-
-    let historyBarsSetting: number | undefined;
-    try {
-      const hb = workspace.getConfiguration('axis.chart').get<number>('historyBars');
-      if (typeof hb === 'number' && Number.isFinite(hb)) historyBarsSetting = hb;
-    } catch {
-      historyBarsSetting = undefined;
-    }
-
-    const plan = planSiblingChartOpen({
-      pinePath: fsPath,
-      pineFileName,
-      siblingExists: exists,
-      historyBarsSetting,
-    });
-    if (!plan.ok) {
-      void window.showErrorMessage(plan.error);
-      return plan.error;
-    }
-    if (plan.writeBytes) {
-      await workspace.fs.writeFile(siblingUri, plan.writeBytes);
-    }
-    if (deactivated) return undefined;
-
-    // Prefer vscode.open so the custom editor selector for *.axis.json resolves.
-    await commands.executeCommand('vscode.open', siblingUri);
-    return siblingUri.toString();
+    await ensureSiblingChartBeside(fsPath, doc, false);
+    const sibling = siblingAxisJsonPath(fsPath);
+    return sibling ? Uri.file(sibling).toString() : undefined;
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     const err = `AXIS: Open Chart failed: ${message}`;

@@ -42,6 +42,22 @@ export const PINE_FILE_SUFFIXES = [
 export const OPEN_CHART_NO_PINE_MESSAGE =
   'AXIS: Open Chart needs an active Pine Script™ file (.pyne / .pine). Open a script, then run the command again.';
 
+/** `vscode.ViewColumn.Beside` — keep the Pine editor visible in the current group. */
+export const OPEN_CHART_VIEW_COLUMN_BESIDE = -2;
+
+/** Show options for `vscode.open` / `vscode.openWith` (preview off so the chart stays). */
+export function openChartEditorOptions(preserveFocus = false): {
+  viewColumn: number;
+  preview: boolean;
+  preserveFocus: boolean;
+} {
+  return {
+    viewColumn: OPEN_CHART_VIEW_COLUMN_BESIDE,
+    preview: false,
+    preserveFocus: preserveFocus === true,
+  };
+}
+
 export interface SiblingChartOptions {
   /** Copied from `axis.chart.historyBars` so the setting wins on new siblings. */
   historyBars?: number;

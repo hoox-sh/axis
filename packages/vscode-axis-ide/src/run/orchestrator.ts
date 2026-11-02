@@ -306,6 +306,7 @@ export class RunOrchestrator {
       const full: ChartFullPayload = {
         bars: req.bars,
         plots: result.plots,
+        series: result.series,
         drawings: result.drawings,
         seq: nextSeq,
       };

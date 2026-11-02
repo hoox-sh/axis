@@ -23,6 +23,8 @@ _Generated/updated: 2026-11-01 · 880 commits · describe-tag: `v2.26.0`_
 
 ### Added
 
+- **VS Code AXIS IDE chart beside Pine, no TV logo, script plots overlay** (`packages/vscode-axis-ide`). `axis.openChart` / Run open `axis.chart` in `ViewColumn.Beside` (preview off). Lightweight Charts `attributionLogo` off. `chart.full.plots` / `series` paint as line overlays.
+
 - **VS Code AXIS IDE plugins studio polish** (`packages/vscode-axis-ide`). Plugins studio polish (search, chips, copy id); status-bar plugin menu; chart HUD follows active source/stream/engine/storage.
 
 - **VS Code AXIS IDE per-kind plugin views + HOOX activity icon** (`packages/vscode-axis-ide`). Activity Bar replaces lumped `axis.plugins` with `axis.plugins.{source,stream,engine,storage,dataset,component}` (then `axis.workers`); command `axis.plugins.activate` (tree context; hidden from palette); HOOX monochrome mark at `media/axis-activity.svg`. Persist key `axis.plugins.v1` unchanged.

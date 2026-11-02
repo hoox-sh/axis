@@ -19,14 +19,26 @@
 import { describe, expect, test } from 'bun:test';
 import { CHART_SCHEMA, parseChartDocument } from '../editors/chart-document';
 import {
+  OPEN_CHART_VIEW_COLUMN_BESIDE,
   defaultChartDocumentForPine,
   isPineFilePath,
+  openChartEditorOptions,
   planSiblingChartOpen,
   serializeSiblingChartDocument,
   siblingAxisJsonPath,
 } from './open-chart';
 
 describe('openChart sibling helper', () => {
+  test('openChartEditorOptions uses Beside and disables preview', () => {
+    expect(OPEN_CHART_VIEW_COLUMN_BESIDE).toBe(-2);
+    expect(openChartEditorOptions()).toEqual({
+      viewColumn: -2,
+      preview: false,
+      preserveFocus: false,
+    });
+    expect(openChartEditorOptions(true).preserveFocus).toBe(true);
+  });
+
   test('isPineFilePath accepts known suffixes', () => {
     expect(isPineFilePath('/w/rsi.pyne')).toBe(true);
     expect(isPineFilePath('/w/x.PINE')).toBe(true);

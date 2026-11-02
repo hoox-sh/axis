@@ -21,12 +21,14 @@ import { defaultChartDocument } from './chart-document';
 import { handleChartWebviewMessage } from './chart-messages';
 import { buildChartSession } from '../host/chart-session';
 import { HOST_TO_VIEW, VIEW_TO_HOST, decode, encode } from '../protocol';
+import { chartLayoutOptions } from '../../webview/chart/src/paint';
 import {
   applyChartHostMessage,
   classifyDeltaSeq,
   initialChartState,
   mergeBarTail,
   normalizeBars,
+  normalizePlotLines,
   pickChartPlugins,
   pluginChipSpecs,
   reduceChartMessage,
@@ -337,6 +339,30 @@ describe('chart.delta merge + seq gap → requestReload', () => {
     expect(classifyDeltaSeq(0, 1)).toBe('gap');
     expect(mergeBarTail([b(1)], 0, [b(9)])).toEqual([b(9)]);
     expect(mergeBarTail([b(1)], -1, [b(9)])).toBeNull();
+  });
+
+  test('chart.full plots become overlay lines aligned to bars', () => {
+    const init = reduceChartMessage(initialChartState(), 'chart.init', {
+      theme: 'void',
+      seriesKey: 'binance|spot|BTC/USDT|1m',
+      panes: [],
+      cssVars: {},
+    });
+    expect(init.plots).toEqual([]);
+    const withPlots = reduceChartMessage(init, 'chart.full', {
+      bars: [b(1), b(2), b(3)],
+      plots: { sma: [10, 11, 12], ema: [9, null, 11] },
+      seq: 2,
+    });
+    expect(withPlots.plots).toEqual([
+      { id: 'sma', values: [10, 11, 12] },
+      { id: 'ema', values: [9, null, 11] },
+    ]);
+    expect(normalizePlotLines([1, 2, 3])).toEqual([{ id: 'plot', values: [1, 2, 3] }]);
+    expect(normalizePlotLines(undefined, { rsi: [30, 40] })).toEqual([
+      { id: 'rsi', values: [30, 40] },
+    ]);
+    expect(chartLayoutOptions().attributionLogo).toBe(false);
   });
 
   test('chart.delta encode → decode → reducer apply', () => {
