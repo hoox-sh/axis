@@ -73,6 +73,7 @@ import {
   type AlertKind,
   type OnchainAlertDirection,
 } from '../alerts';
+import { alertRowTone } from '../alerts/row-tone';
 import { Icons } from './icons';
 import { FloatableShell } from './panels/FloatableShell';
 import { announce } from './sr-announce';
@@ -846,9 +847,17 @@ export const AlertsPanel: Component = () => {
             >
               <div class="flex flex-col gap-0.5">
                 <For each={filtered()}>
-                  {(a) => (
+                  {(a) => {
+                    const tone = alertRowTone(a);
+                    return (
                     <div
-                      class={`axis-alerts-row axis-list-row flex items-start gap-1.5 px-2 min-h-8 py-1 border-b ${
+                      class={`axis-alerts-row axis-list-row flex items-start gap-1.5 px-2 min-h-8 py-1 border-b border-l-2 ${
+                        tone === 'fired'
+                          ? 'border-l-[var(--color-up)]'
+                          : tone === 'armed'
+                            ? 'border-l-[var(--color-accent)]'
+                            : 'border-l-transparent'
+                      } ${
                         a.enabled
                           ? 'bg-bg-elev border-border-soft'
                           : 'bg-bg-hover border-border-soft opacity-70'
@@ -856,6 +865,7 @@ export const AlertsPanel: Component = () => {
                       data-testid="axis-alerts-row"
                       data-alert-id={a.id}
                       data-enabled={a.enabled ? '1' : '0'}
+                      data-tone={tone}
                     >
                       <button
                         type="button"
@@ -928,7 +938,8 @@ export const AlertsPanel: Component = () => {
                         </button>
                       </div>
                     </div>
-                  )}
+                    );
+                  }}
                 </For>
               </div>
             </Show>

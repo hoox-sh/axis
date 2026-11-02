@@ -7,7 +7,7 @@ tags: [alerts, code]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-10T20:32:38Z
+  at: 2026-11-02T12:13:08Z
 sources:
   - id: tree
     resource: "src/alerts"
@@ -26,6 +26,7 @@ okf_lock: generated
 * `indicator.ts` — IndicatorSeriesLike, PINE_COMPARE_OPS, PineCompareOp, PlotSampleLike, lastNumericSample, listPlotKeys, plotSampleKey, plotSamplesFromCache, prevNumericSample
 * `pine-bridge.ts` — EvaluatePineAlertsOpts, evaluatePineAlertsFromRun, notifyPineAlertsFromRun
 * `pine.ts` — PINE_ALERT_CALL_RE, PineAlertEvalContext, PineAlertEvent, PineAlertFired, PineAlertSource, collectPineAlertEvents, evaluatePineAlertEventsPure, eventMatchesPineAlert, isPineScriptAlert, listPineAlertTitles, parsePineAlertConditions, parsePineAlertEvents
+* `row-tone.ts` — AlertRowTone, RECENT_FIRE_MS, alertRowTone
 * `storage.ts` — ALERTS_STORAGE_KEY, _setMemoryAlertsForTests, clearAlertsStorage, lastAlertsPersistError, loadAlerts, parseAlert, parseAlertsBlob, removeAlert, saveAlerts, subscribeAlerts, upsertAlert
 * `tick.ts` — LiveBarStreamCtx, evaluateLiveAlerts, liveBarMatchesChart, noteLiveBarForAlerts
 * `types.ts` — Alert, AlertCreateInput, AlertKind, AlertParams, AlertUpdatePatch, AlertsStoreV1, EvaluateBar, EvaluateContext, L2WebhookPayload, PlotSampleRef, WebhookPayload
