@@ -36,7 +36,7 @@ import type { PlotSample } from '../plugins/types';
  * Drawing geometry types re-export from `chart/drawing-types`.
  */
 
-/** Account / deployment tier. Gates Pro-only features (HPO walk-forward, …). */
+/** Account / deployment tier. Gates Pro-only features. */
 export type AccountTier = 'free' | 'pro' | 'self-hosted';
 
 /** Single OHLCV bar. `time` is Unix seconds (Lightweight Charts convention). */
@@ -600,8 +600,8 @@ export interface AppState {
    */
   resultsAutoOpen: boolean;
   /**
-   * Account / deployment tier. `free` (default) gates Pro-only features such as
-   * HPO walk-forward validation; `pro` and `self-hosted` unlock them. Persisted.
+   * Account / deployment tier. `free` is the default; `pro` and `self-hosted`
+   * unlock Pro-only features. Persisted.
    */
   tier: AccountTier;
   /** System log drawer (collapsed by default) */

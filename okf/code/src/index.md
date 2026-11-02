@@ -14,7 +14,6 @@
 * [src/indicators](indicators.md) - src/indicators contains IndicatorCard.tsx, IndicatorPanel.tsx, apply-context.ts, and 15 more files.
 * [src/mcp](mcp.md) - AXIS in-app MCP host — capabilities, snapshot, Worker bridge.
 * [src/onchain](onchain.md) - Public entry for the AXIS on-chain data plane (Phase 1–3 light).
-* [src/optimize](optimize.md) - src/optimize contains client.ts, guard.ts, index.ts, and 2 more files.
 * [src/perf](perf.md) - Minimal performance telemetry for Phase 0 measurement.
 * [src/plugins](plugins.md) - Public entry for the AXIS plugin system.
 * [src/pwa](pwa.md) - src/pwa contains close-guard.ts, install-prompt.ts, register-sw.ts.
@@ -27,7 +26,7 @@
 * [src/streams](streams.md) - src/streams contains catalog.ts, multiplex.ts, reconnect-ws.ts, and 2 more files.
 * [src/sw](sw.md) - Pure service-worker strategy helpers (unit-testable).
 * [src/theme](theme.md) - AXIS Theme Manager — public API.
-* [src/ui](ui.md) - src/ui contains AboutModal.tsx, AlertsPanel.tsx, BarReplayControls.tsx, and 83 more files.
+* [src/ui](ui.md) - src/ui contains AboutModal.tsx, AlertsPanel.tsx, BarReplayControls.tsx, and 82 more files.
 * [src/update](update.md) - App update manager — polls the deployed /version.json and surfaces new releases as a banner + notification with a hard-reload action.
 * [src/utils](utils.md) - src/utils contains bounded-map.ts, emitter.ts, errors.ts, and 4 more files.
 * [src/workers](workers.md) - AXIS workers catalog + health probes (Workers Manager).
@@ -39,4 +38,4 @@
 * [engine](engine/) - Redesign2 engine module barrel.
 * [hp](hp/) - What remains of the old HP tree: the AXB1 codec and the Pine execution context.
 * [indicators](indicators/) - src/indicators contains IndicatorCard.tsx, IndicatorPanel.tsx, apply-context.ts, and 15 more files.
-* [ui](ui/) - src/ui contains AboutModal.tsx, AlertsPanel.tsx, BarReplayControls.tsx, and 83 more files.
+* [ui](ui/) - src/ui contains AboutModal.tsx, AlertsPanel.tsx, BarReplayControls.tsx, and 82 more files.

@@ -21,8 +21,8 @@
  * Register all **built-in** plugins with the unified registry.
  *
  * Idempotent: safe to call from app boot, plugin loader, and active resolvers.
- * Covers sources, streams, engines, storages, on-chain datasets, and the
- * built-in HPO component (not dynamic URL plugins).
+ * Covers sources, streams, engines, storages, and on-chain datasets
+ * (not dynamic URL plugins).
  *
  * @module plugins/bootstrap
  */
@@ -48,8 +48,6 @@ import {
   ensureOnchainDatasetsRegistered,
   _resetOnchainDatasetRegistrationFlag,
 } from '../onchain/catalog';
-import { _resetHpoRegistrationFlag, ensureHpoRegistered } from './hpo';
-
 let done = false;
 
 function builtinsHealthy(): boolean {
@@ -67,7 +65,6 @@ function resetCatalogFlags(): void {
   _resetEngineRegistrationFlag();
   _resetStorageRegistrationFlag();
   _resetOnchainDatasetRegistrationFlag();
-  _resetHpoRegistrationFlag();
 }
 
 /**
@@ -85,7 +82,6 @@ export function ensureBuiltins(): void {
   ensureEnginesRegistered();
   ensureStoragesRegistered();
   ensureOnchainDatasetsRegistered();
-  ensureHpoRegistered();
   done = true;
 }
 

@@ -135,6 +135,72 @@ describe('mapEngineResponse', () => {
     expect(r.error).toContain('invalid');
   });
 
+  test('copies logs (capped, truncated) and profile without inventing line stats', () => {
+    const long = `L${'y'.repeat(2000)}`;
+    const logs: unknown[] = Array.from({ length: 201 }, (_, i) => (i === 0 ? long : `line-${i}`));
+    logs[2] = { message: 'obj', n: 1 };
+    const profile = { total_ms: 9, lines: [{ line: 3, ms: 1 }] };
+    const r = mapEngineResponse(
+      {
+        status: 'success',
+        plots: [1],
+        series: { close: [1] },
+        events: [],
+        drawings: [{ id: 'd' }],
+        logs,
+        log: ['ignored-because-logs-wins'],
+        profile,
+        meta: { profile: { other: true } },
+      },
+      { ms: 12 },
+    );
+    expect(r.logs).toHaveLength(200);
+    expect(typeof (r.logs as unknown[])[0]).toBe('string');
+    expect(((r.logs as string[])[0] ?? '').length).toBe(2000);
+    expect((r.logs as unknown[])[1]).toBe('line-1');
+    expect((r.logs as unknown[])[199]).toBe('line-199');
+    expect(r.meta).toEqual({ ms: 12, transport: 'rest', profile });
+    expect(r.meta.profile).toBe(profile);
+    expect(r.drawings).toEqual([{ id: 'd' }]);
+    expect(r.plots).toEqual([1]);
+    expect(mapEngineResponse({ status: 'ok' }).logs).toBeUndefined();
+    expect(mapEngineResponse({ status: 'ok' }).meta.profile).toBeUndefined();
+  });
+
+  test('falls back to log array and meta.profile; ignores non-objects', () => {
+    const fromLog = mapEngineResponse({
+      status: 'error',
+      message: 'bad',
+      logs: 'not-an-array',
+      log: ['only-log', 5, { text: 'keep' }],
+      profile: ['not-plain'],
+      meta: { profile: { fn: 'ma' } },
+    });
+    expect(fromLog.status).toBe('error');
+    expect(fromLog.error).toBe('bad');
+    expect(fromLog.logs).toEqual(['only-log', 5, { text: 'keep' }]);
+    expect(fromLog.meta.profile).toEqual({ fn: 'ma' });
+
+    const noProfile = mapEngineResponse({
+      status: 'ok',
+      profile: null,
+      meta: ['nope'],
+      log: 'nope',
+    });
+    expect(noProfile.logs).toBeUndefined();
+    expect(noProfile.meta.profile).toBeUndefined();
+
+    const nestedMiss = mapEngineResponse({
+      status: 'ok',
+      profile: 'x',
+      meta: { profile: 'nope' },
+    });
+    expect(nestedMiss.meta.profile).toBeUndefined();
+
+    const emptyLogs = mapEngineResponse({ status: 'ok', logs: [], log: ['hidden'] });
+    expect(emptyLogs.logs).toEqual([]);
+  });
+
   test('never throws when status getter throws', () => {
     const raw: Record<string, unknown> = {};
     Object.defineProperty(raw, 'status', {

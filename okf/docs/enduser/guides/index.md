@@ -6,7 +6,6 @@
 * [Built-in scripts](builtin-scripts.md) - Original AXIS studies you can apply from the Scripts panel — not third-party chart-host templates.
 * [Data Source Manager](data-source-manager.md) - Background multi-page OHLCV backfill to a past date, dataset validation, and gap fills — without blocking the chart.
 * [Drawings](drawings.md) - Interactive chart annotations in AXIS—tools, persistence, and how they differ from Pine script drawings.
-* [Hyperparameter Optimisation](hyperparameter-optimisation.md) - Search strategy input. values over N trials (TPE / random / grid) with holdout or walk-forward. Strategies only.
 * [Manager and settings](manager-and-settings.md) - Runtime, Workers, Plugins, Wire, and Settings — how AXIS chrome is split.
 * [MCP (agents)](mcp.md) - Connect Claude, Cursor, Grok, or Inspector to AXIS so an agent can load symbols, edit Pine, run scripts, and read results.
 * [On-Chain data](on-chain.md) - DefiLlama protocol TVL, GeckoTerminal DEX pool OHLCV, and derived TVL spike events — not a wallet, not CEX-only price.

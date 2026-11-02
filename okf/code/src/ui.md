@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/ui"
-description: "src/ui contains AboutModal.tsx, AlertsPanel.tsx, BarReplayControls.tsx, and 83 more files."
+description: "src/ui contains AboutModal.tsx, AlertsPanel.tsx, BarReplayControls.tsx, and 82 more files."
 resource: "src/ui"
 tags: [code, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-01T18:07:47Z
+  at: 2026-11-02T17:28:56Z
 sources:
   - id: tree
     resource: "src/ui"
@@ -38,7 +38,6 @@ okf_lock: generated
 * `Field.tsx` — ScField
 * `HooxLoader.tsx` — HooxLoader, HooxLoaderL, HooxLoaderM, HooxLoaderProps, HooxLoaderXs
 * `HooxLogo.tsx` — HooxLogo, HooxLogoPaths, HooxLogoProps, HooxLogoSize, resolveLogoSize
-* `HpoPanel.tsx` — HpoPanel
 * `LayerPanel.tsx` — LayerPanel
 * `MaintenancePage.tsx` — MaintenancePage
 * `McpConnectCta.tsx` — McpConnectCta, mcpNeedsConnect
@@ -123,7 +122,6 @@ okf_lock: generated
 * [src/indicators/builtins](/code/src/indicators/builtins.md)
 * [src/mcp](/code/src/mcp.md)
 * [src/onchain](/code/src/onchain.md)
-* [src/optimize](/code/src/optimize.md)
 * [src/plugins](/code/src/plugins.md)
 * [src/pwa](/code/src/pwa.md)
 * [src/results](/code/src/results.md)

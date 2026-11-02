@@ -79,3 +79,15 @@ dist/webview/alerts/**
 dist/webview/workers/**
 !dist/webview/workers/main.js
 !dist/webview/workers/main.css
+!dist/webview/colors/
+dist/webview/colors/**
+!dist/webview/colors/main.js
+!dist/webview/colors/main.css
+!dist/webview/symbols/
+dist/webview/symbols/**
+!dist/webview/symbols/main.js
+!dist/webview/symbols/main.css
+!dist/webview/logs/
+dist/webview/logs/**
+!dist/webview/logs/main.js
+!dist/webview/logs/main.css

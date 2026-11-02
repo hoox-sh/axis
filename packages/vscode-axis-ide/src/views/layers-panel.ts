@@ -34,6 +34,7 @@ import {
   workspace,
 } from 'vscode';
 import { CHART_VIEW_TYPE, parseChartDocument } from '../editors/chart-document';
+import { getChartLiveDoc, mergeChartDoc, subscribeChartLiveDoc } from '../editors/chart-live-doc';
 import { LAYERS_VIEW_ID } from './layers';
 import { buildLayersWebviewHtml } from './layers-html';
 import {
@@ -137,6 +138,9 @@ function findOpenChartUri(): Uri | null {
         if (uri) return uri;
       }
     }
+    for (const editor of window.visibleTextEditors ?? []) {
+      if (isChartDocument(editor?.document)) return editor.document.uri;
+    }
     for (const doc of workspace.textDocuments ?? []) {
       if (isChartDocument(doc)) return doc.uri;
     }
@@ -222,13 +226,27 @@ function inputFromChartText(text: string): LayersSnapshotInput {
   return { chartOpen: true, doc };
 }
 
+function asDocRecord(value: unknown): Record<string, unknown> | null {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
 async function readLayersInput(): Promise<LayersSnapshotInput> {
   try {
     const uri = findOpenChartUri();
     if (!uri) return { chartOpen: false };
+    const live = getChartLiveDoc(uri.toString());
     const text = await readChartText(uri);
-    if (text == null) return { chartOpen: true };
-    return inputFromChartText(text);
+    if (text == null) {
+      if (!live) return { chartOpen: true };
+      const doc = mergeChartDoc(null, live);
+      return doc ? { chartOpen: true, doc } : { chartOpen: true };
+    }
+    const parsed = inputFromChartText(text);
+    if (!live) return parsed;
+    const doc = mergeChartDoc(asDocRecord(parsed.doc), live);
+    if (!doc) return parsed;
+    return { chartOpen: true, doc };
   } catch {
     return { chartOpen: false };
   }
@@ -378,6 +396,7 @@ function subscribe(context: ExtensionContext, provider: LayersStudioProvider): v
         // ignore
       }
     }),
+    { dispose: subscribeChartLiveDoc(() => bump()) },
   );
   try {
     context.subscriptions.push(window.tabGroups.onDidChangeTabs(() => bump()));

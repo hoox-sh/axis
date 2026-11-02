@@ -8,7 +8,7 @@
  *
  * `runAndApplyInner` always forwards the bars it evaluated, so the runner
  * must forward `liveTick` to the engine when those bars ARE the chart series
- * (same reference) and withhold it for private windows (HPO slices).
+ * (same reference) and withhold it for private bar windows.
  * A reference-identity bug here silently downgraded every live tick to a
  * full WS/REST re-run (the session client never saw a call).
  */
@@ -162,7 +162,7 @@ describe('runAndApply liveTick session routing', () => {
     expect(calls.some((c) => c.includes('/run'))).toBe(false);
   });
 
-  it('withholds liveTick for private bar windows (HPO slices use /run)', async () => {
+  it('withholds liveTick for private bar windows (slices use /run)', async () => {
     const slice = store.bars.slice(-3);
     const r = await runAndApply(SCRIPT, undefined, {
       silent: true,

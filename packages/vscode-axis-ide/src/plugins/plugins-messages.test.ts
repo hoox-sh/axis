@@ -89,7 +89,7 @@ describe('plugins-messages', () => {
     expect(extraForPluginCard('dataset', 'defillama-tvl', off).role).toBe(
       PLUGIN_KIND_ROLES.dataset,
     );
-    expect(extraForPluginCard('component', 'hyperparameter-optimisation', off).role).toBe(
+    expect(extraForPluginCard('component', 'example-slot', off).role).toBe(
       PLUGIN_KIND_ROLES.component,
     );
     expect(extraForPluginCard('nope' as never, 'x', off).role).toBe('');

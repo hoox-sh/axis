@@ -57,6 +57,13 @@ describe('check-coverage helpers', () => {
     expect(excluded('src/editors/chart-document.ts')).toBe(false);
     expect(excluded('src/views/results-panel.ts')).toBe(true);
     expect(excluded('src/views/profiler-panel.ts')).toBe(true);
+    expect(excluded('src/views/colors-panel.ts')).toBe(true);
+    expect(excluded('src/views/symbols-panel.ts')).toBe(true);
+    expect(excluded('src/views/logs-panel.ts')).toBe(true);
+    expect(excluded('src/host/profiler-decorations.ts')).toBe(true);
+    expect(excluded('src/host/inline-debug-decorations.ts')).toBe(true);
+    expect(excluded('src/host/profile-lines.ts')).toBe(false);
+    expect(excluded('src/host/inline-debug.ts')).toBe(false);
     expect(excluded('src/views/profiler.ts')).toBe(false);
     expect(excluded('src/run/profiler-store.ts')).toBe(false);
     expect(excluded('src/views/results-html.ts')).toBe(false);

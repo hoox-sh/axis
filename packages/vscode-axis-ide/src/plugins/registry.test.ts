@@ -60,9 +60,7 @@ describe('host plugin registry builtins', () => {
     expect(a.listBuiltinIds('stream').length).toBeGreaterThan(0);
     expect(a.listBuiltinIds('storage')).toEqual(['local', 'cloud', 'git']);
     expect(a.listBuiltinIds('dataset')).toEqual(['defillama-tvl']);
-    expect(a.listBuiltinIds('component')).toEqual([
-      'hyperparameter-optimisation',
-    ]);
+    expect(a.listBuiltinIds('component')).toEqual([]);
     expect(a.listAll().length).toBe(
       BUILTIN_ENGINE_IDS.length +
         BUILTIN_SOURCE_IDS.length +

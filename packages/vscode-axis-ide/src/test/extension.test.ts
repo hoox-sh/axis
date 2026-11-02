@@ -130,7 +130,14 @@ const EXPECTED_LM_TOOLS = [
   'axis_get_results_focus',
   'axis_chart_snapshot_meta',
 ] as const;
-const EXPECTED_PANEL_VIEWS = ['axis.results', 'axis.strategy', 'axis.profiler'] as const;
+const EXPECTED_PANEL_VIEWS = [
+  'axis.results',
+  'axis.strategy',
+  'axis.profiler',
+  'axis.colors',
+  'axis.symbols',
+  'axis.logs',
+] as const;
 const ACTIVITY_VIEW_ICONS: Record<string, string> = {
   'axis.library': 'media/views/library.svg',
   'axis.layers': 'media/views/layers.svg',
@@ -280,6 +287,9 @@ suite('AXIS IDE Extension Structure', () => {
     }
     const profilerView = panelViews.find((v) => v.id === 'axis.profiler');
     assert.strictEqual(profilerView?.name, 'Profiler');
+    assert.strictEqual(panelViews.find((v) => v.id === 'axis.colors')?.name, 'Colors');
+    assert.strictEqual(panelViews.find((v) => v.id === 'axis.symbols')?.name, 'Symbols');
+    assert.strictEqual(panelViews.find((v) => v.id === 'axis.logs')?.name, 'Logs');
 
     const sideViews = pkg.contributes?.views?.axis ?? [];
     const sideIds = sideViews.map((v) => v.id);
@@ -327,6 +337,18 @@ suite('AXIS IDE Extension Structure', () => {
     assert.ok(
       activation.includes('onView:axis.profiler'),
       'activationEvents should include onView:axis.profiler',
+    );
+    assert.ok(
+      activation.includes('onView:axis.colors'),
+      'activationEvents should include onView:axis.colors',
+    );
+    assert.ok(
+      activation.includes('onView:axis.symbols'),
+      'activationEvents should include onView:axis.symbols',
+    );
+    assert.ok(
+      activation.includes('onView:axis.logs'),
+      'activationEvents should include onView:axis.logs',
     );
     for (const id of FORBIDDEN_PLUGIN_KIND_VIEWS) {
       assert.ok(

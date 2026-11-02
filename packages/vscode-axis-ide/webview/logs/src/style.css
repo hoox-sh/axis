@@ -1,0 +1,162 @@
+/* Copyright (C) 2026 jango_blockchained
+ * SPDX-License-Identifier: AGPL-3.0-only
+ *
+ * Logs panel — VS Code theme tokens only. No toolkit.
+ */
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--vscode-panel-background, var(--vscode-editor-background));
+  color: var(--vscode-panel-foreground, var(--vscode-editor-foreground));
+  font-family: var(--vscode-font-family, system-ui, sans-serif);
+  font-size: var(--vscode-font-size, 13px);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+.logs-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding: 8px 10px 10px;
+}
+
+.logs-header {
+  flex: 0 0 auto;
+  margin-bottom: 8px;
+}
+
+.logs-title {
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--vscode-descriptionForeground, var(--vscode-foreground));
+}
+
+.logs-meta {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  margin: 0 0 6px;
+  font-family: var(--vscode-editor-font-family, ui-monospace, monospace);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+#logs-run {
+  color: var(--vscode-foreground);
+}
+
+#logs-status,
+#logs-count {
+  color: var(--vscode-descriptionForeground, var(--vscode-foreground));
+}
+
+.logs-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.logs-chip {
+  margin: 0;
+  padding: 1px 8px;
+  border: 1px solid var(--vscode-contrastBorder, transparent);
+  border-radius: 999px;
+  background: var(--vscode-button-secondaryBackground, var(--vscode-toolbar-hoverBackground));
+  color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.logs-chip[aria-pressed='true'] {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+}
+
+.logs-empty {
+  margin: 8px 0 0;
+  color: var(--vscode-descriptionForeground, var(--vscode-foreground));
+}
+
+.logs-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+  font-family: var(--vscode-editor-font-family, ui-monospace, monospace);
+  font-size: 12px;
+}
+
+.logs-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 0;
+  padding: 3px 2px;
+  border-bottom: 1px solid var(--vscode-panel-border, var(--vscode-widget-border, transparent));
+}
+
+.logs-level {
+  flex: 0 0 4.5rem;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.logs-msg {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.logs-row--error {
+  color: var(--vscode-errorForeground);
+}
+
+.logs-row--warning {
+  color: var(--vscode-editorWarning-foreground);
+}
+
+.logs-row--info {
+  color: var(--vscode-editorInfo-foreground);
+}
+
+.logs-row--debug {
+  color: var(--vscode-descriptionForeground, var(--vscode-foreground));
+}
+
+.logs-line {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--vscode-textLink-foreground);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.logs-time {
+  flex: 0 0 auto;
+  color: var(--vscode-descriptionForeground, var(--vscode-foreground));
+}

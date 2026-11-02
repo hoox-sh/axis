@@ -7,7 +7,7 @@ tags: [code, plugins]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-21T19:16:17Z
+  at: 2026-11-02T17:28:56Z
 sources:
   - id: tree
     resource: "src/plugins"
@@ -24,7 +24,6 @@ okf_lock: generated
 * `example-cf-do-stream.js`
 * `example-coingecko-source.js`
 * `example-tiny-pyne-engine.js`
-* `hpo.ts` — HPO_PLUGIN_ID, _resetHpoRegistrationFlag, ensureHpoRegistered, hpoPlugin
 * `index.ts` — PLUGINS_KEY, PluginRegistry, ensureBuiltins, exportLibraryJson, getActiveEngine, getActiveEngineConfig, getActiveEngineId, getActiveProvider, getActiveSource, getActiveSourceConfig, getActiveSourceId, getActiveStorage
 * `loader.ts` — DEFAULT_PYNE_AGENT_ENDPOINT, DEFAULT_PYNE_AGENT_PLUGIN_URL, DEFAULT_REMOTE_PLUGIN_HOSTS, InstalledPlugin, LEGACY_PYNE_AGENT_PLUGIN_URL, PLUGINS_KEY, assertPluginRemoteAllowed, assertSafePluginUrl, getInstalledPlugins, isRemoteHttpPluginUrl, loadPluginFromUrl, migratePyneAgentPluginUrl
 * `registry.ts` — PluginRegistry, registry
@@ -60,7 +59,6 @@ okf_lock: generated
 * [src/indicators](/code/src/indicators.md)
 * [src/mcp](/code/src/mcp.md)
 * [src/onchain](/code/src/onchain.md)
-* [src/optimize](/code/src/optimize.md)
 * [src/results](/code/src/results.md)
 * [src/sources](/code/src/sources.md)
 * [src/storage](/code/src/storage.md)

@@ -1,0 +1,160 @@
+/* Copyright (C) 2026 jango_blockchained
+ * SPDX-License-Identifier: AGPL-3.0-only
+ *
+ * Symbols panel — VS Code theme tokens only.
+ */
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--vscode-panel-background, var(--vscode-editor-background));
+  color: var(--vscode-foreground);
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+.symbols-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.symbols-root {
+  height: 100%;
+  overflow: auto;
+  background: var(--vscode-panel-background, var(--vscode-editor-background));
+  color: var(--vscode-foreground);
+}
+
+.symbols-shell {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 12px;
+}
+
+.symbols-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 8px;
+  background: var(--vscode-panel-background, var(--vscode-editor-background));
+}
+
+.symbols-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--vscode-foreground);
+}
+
+.symbols-hint,
+.symbols-empty {
+  margin: 0;
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+}
+
+.symbols-search-label {
+  color: var(--vscode-foreground);
+}
+
+.symbols-search {
+  width: 100%;
+  padding: 4px 6px;
+  color: var(--vscode-input-foreground);
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border);
+  font: inherit;
+}
+
+.symbols-search::placeholder {
+  color: var(--vscode-input-placeholderForeground);
+}
+
+.symbols-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.symbols-chip,
+.symbols-insert,
+.symbols-copy {
+  font: inherit;
+  cursor: pointer;
+}
+
+.symbols-chip {
+  padding: 2px 8px;
+  color: var(--vscode-button-secondaryForeground);
+  background: var(--vscode-button-secondaryBackground);
+  border: 1px solid var(--vscode-panel-border);
+}
+
+.symbols-chip.is-active {
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-button-background);
+  border-color: var(--vscode-button-background);
+}
+
+.symbols-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(4.5rem, 1fr));
+  gap: 6px;
+  margin: 0;
+}
+
+.symbols-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.symbols-insert {
+  min-height: 34px;
+  padding: 2px 4px;
+  font-size: 18px;
+  line-height: 1.2;
+  color: var(--vscode-editor-foreground);
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border);
+}
+
+.symbols-copy {
+  padding: 0 4px;
+  min-height: 18px;
+  font-size: 11px;
+  color: var(--vscode-textLink-foreground);
+  background: var(--vscode-panel-background, var(--vscode-editor-background));
+  border: 1px solid var(--vscode-panel-border);
+}
+
+.symbols-insert:focus-visible,
+.symbols-copy:focus-visible,
+.symbols-chip:focus-visible,
+.symbols-search:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 1px;
+}

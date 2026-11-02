@@ -86,8 +86,8 @@ export function resolveRunContext(
       { allowEditorDraft: !indicatorId },
     ) ?? {};
   // Capture the exact bars the engine will evaluate so the resulting series
-  // align 1:1 with the time axis we build below. A live tick or an HPO
-  // holdout slice must not desync series from bars (see getOhlcvTimesForApply).
+  // align 1:1 with the time axis we build below. A live tick or a private
+  // bar slice must not desync series from bars (see getOhlcvTimesForApply).
   const bars = (
     Array.isArray(opts.bars) && opts.bars.length ? opts.bars : store.bars || []
   ) as Bar[];

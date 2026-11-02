@@ -36,6 +36,10 @@ export interface RunResultRecord {
   error?: string;
   plots?: unknown;
   series?: Record<string, unknown>;
+  /** Engine log lines (capped upstream). Arrays are shallow-copied on publish focus. */
+  logs?: unknown;
+  /** Engine diagnostics carried with the run (not the Problems panel). */
+  diagnostics?: unknown;
   meta?: Record<string, unknown>;
   /** Optional strategy summary (also readable from meta.strategyReport). */
   strategyReport?: unknown;
@@ -78,6 +82,8 @@ export function copyRunRecord(record: RunResultRecord): RunResultRecord {
     ...record,
     series: record.series ? { ...record.series } : record.series,
     meta: record.meta ? { ...record.meta } : record.meta,
+    ...(Array.isArray(record.logs) ? { logs: record.logs.slice() } : {}),
+    ...(Array.isArray(record.diagnostics) ? { diagnostics: record.diagnostics.slice() } : {}),
   };
 }
 

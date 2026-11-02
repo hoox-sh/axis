@@ -498,7 +498,7 @@ describe('PluginsWebviewViewProvider', () => {
     expect(pyodide?.extra?.flagOff).toBe(true);
     expect(storage?.extra?.role).toBe('Script library backend');
     expect(dataset?.extra?.role).toBe('On-chain dataset');
-    expect(component?.extra?.role).toBe('Host contribution (no Solid mount)');
+    expect(component).toBeUndefined();
 
     await handler?.({ type: 'plugins.activate', kind: 'source', id: 'okx-rest' });
     expect(refreshes).toBe(1);

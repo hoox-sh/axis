@@ -122,6 +122,35 @@ function toRunDiagnostics(items: EngineCompileDiagnostic[]): RunDiagnostic[] {
   }));
 }
 
+const SCRUB_ENTRY_FIELDS = ['message', 'text', 'msg'] as const;
+
+/** Redact secrets on string entries and on message/text/msg string fields. */
+function scrubRunEntry(entry: unknown): unknown {
+  if (typeof entry === 'string') return scrubSecrets(entry);
+  if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) return entry;
+  const src = entry as Record<string, unknown>;
+  let copy: Record<string, unknown> | undefined;
+  for (const key of SCRUB_ENTRY_FIELDS) {
+    const field = src[key];
+    if (typeof field !== 'string') continue;
+    const scrubbed = scrubSecrets(field);
+    if (scrubbed === field) continue;
+    if (!copy) copy = { ...src };
+    copy[key] = scrubbed;
+  }
+  return copy ?? entry;
+}
+
+/** Scrub a logs/diagnostics array. Non-arrays pass through unchanged. */
+function scrubRunPayload(value: unknown): unknown {
+  if (!Array.isArray(value)) return value;
+  return value.map((entry) => scrubRunEntry(entry));
+}
+
+function publishedMeta(result: EngineRunResult, ms: number): Record<string, unknown> {
+  return { ...result.meta, ms, profile: result.meta.profile };
+}
+
 function combineSignals(a?: AbortSignal, b?: AbortSignal): AbortSignal | undefined {
   if (!a && !b) return undefined;
   if (a && !b) return a;
@@ -283,7 +312,9 @@ export class RunOrchestrator {
           error: scrubbedError,
           plots: result.plots,
           series: result.series,
-          meta: { ...result.meta, ms },
+          logs: scrubRunPayload(result.logs),
+          diagnostics: scrubRunPayload(result.diagnostics),
+          meta: publishedMeta(result, ms),
         });
         safeLog(
           deps.output,
@@ -323,7 +354,9 @@ export class RunOrchestrator {
         engineId: req.engineId,
         plots: result.plots,
         series: result.series,
-        meta: { ...result.meta, ms },
+        logs: scrubRunPayload(result.logs),
+        diagnostics: scrubRunPayload(result.diagnostics),
+        meta: publishedMeta(result, ms),
       });
 
       safeLog(deps.output, `run ok epoch=${my} ms=${Math.round(ms)} runId=${runId} seq=${nextSeq}`);

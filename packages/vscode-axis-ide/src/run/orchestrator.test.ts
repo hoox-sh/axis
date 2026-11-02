@@ -165,6 +165,72 @@ describe('RunOrchestrator', () => {
     expect(lines.some((l) => l.includes('run ok'))).toBe(true);
   });
 
+  test('success publish keeps drawings, profile, and scrubbed logs/diagnostics', async () => {
+    const orch = new RunOrchestrator();
+    const profile = { total_ms: 4, lines: [{ line: 1, ms: 2 }] };
+    const { deps, charts, results } = makeDeps({
+      fetchImpl: mockFetch(() => ({
+        ok: true,
+        status: 200,
+        body: JSON.stringify({
+          status: 'success',
+          plots: [9],
+          series: { plot_0: [9] },
+          drawings: [{ id: 'd1' }],
+          profile,
+          logs: [
+            `leak Bearer ${PRO_KEY}`,
+            'plain line',
+            {
+              message: `m ${PRO_KEY}`,
+              text: 'clean text',
+              msg: 'Bearer abc.def',
+              extra: 1,
+            },
+            { message: 3, text: false, msg: null, keep: true },
+            null,
+            ['nested'],
+            7,
+          ],
+          errors: [{ message: `diag ${PRO_KEY}`, text: 'ok', line: 4, severity: 'warning' }],
+        }),
+      })),
+    });
+
+    const outcome = await orch.run(baseReq(), deps);
+    expect(outcome.ok).toBe(true);
+    const full = charts.find((m) => m.type === 'chart.full');
+    expect(full?.type).toBe('chart.full');
+    if (full?.type === 'chart.full') {
+      expect(full.payload.drawings).toEqual([{ id: 'd1' }]);
+      expect(full.payload.plots).toEqual([9]);
+    }
+    const last = results.getLastRun();
+    expect(last?.status).toBe('success');
+    expect(last?.meta?.profile).toEqual(profile);
+    expect(typeof last?.meta?.ms).toBe('number');
+    expect(last?.plots).toEqual([9]);
+    expect(last?.series).toEqual({ plot_0: [9] });
+    const publishedLogs = last?.logs as unknown[];
+    expect(publishedLogs[0]).toBe('leak Bearer ****');
+    expect(publishedLogs[1]).toBe('plain line');
+    expect(publishedLogs[2]).toEqual({
+      message: 'm pyn_****…6789',
+      text: 'clean text',
+      msg: 'Bearer ****',
+      extra: 1,
+    });
+    expect(publishedLogs[3]).toEqual({ message: 3, text: false, msg: null, keep: true });
+    expect(publishedLogs[4]).toBeNull();
+    expect(publishedLogs[5]).toEqual(['nested']);
+    expect(publishedLogs[6]).toBe(7);
+    const diags = last?.diagnostics as Array<{ message: string; line?: number; severity?: string }>;
+    expect(diags[0]?.message).toBe('diag pyn_****…6789');
+    expect(diags[0]?.line).toBe(4);
+    expect(diags[0]?.severity).toBe('warning');
+    expect(JSON.stringify(last)).not.toContain(PRO_KEY);
+  });
+
   test('HTTP error: sets diagnostics for URI; never paints chart.full', async () => {
     const orch = new RunOrchestrator();
     const { deps, charts, lines, diagnostics, results } = makeDeps({
@@ -191,6 +257,40 @@ describe('RunOrchestrator', () => {
     expect(diag?.items[0]?.message).toBe('unexpected token');
     expect(results.getNewestRunId()).toBeTruthy();
     expect(lines.some((l) => l.includes('run error'))).toBe(true);
+  });
+
+  test('error publish scrubs log fallback and meta.profile', async () => {
+    const orch = new RunOrchestrator();
+    const { deps, charts, results } = makeDeps({
+      fetchImpl: mockFetch(() => ({
+        ok: false,
+        status: 400,
+        body: JSON.stringify({
+          status: 'error',
+          message: `bad ${PRO_KEY}`,
+          logs: { not: 'array' },
+          log: [`see ${PRO_KEY}`, { message: 'clean', text: `pn_${'ab'.repeat(8)}` }],
+          profile: [1, 2],
+          meta: { profile: { fn: 'f' } },
+          errors: [{ message: 'syntax', msg: `Bearer ${PRO_KEY}` }],
+        }),
+      })),
+    });
+    const outcome = await orch.run(baseReq(), deps);
+    expect(outcome.ok).toBe(false);
+    expect(charts.some((m) => m.type === 'chart.full')).toBe(false);
+    const last = results.getLastRun();
+    expect(last?.status).toBe('error');
+    expect(last?.error ?? '').not.toContain(PRO_KEY);
+    expect(last?.meta?.profile).toEqual({ fn: 'f' });
+    expect(last?.logs).toEqual([
+      'see pyn_****…6789',
+      { message: 'clean', text: 'pn_****…abab' },
+    ]);
+    const diags = last?.diagnostics as Array<{ message: string; severity?: string }>;
+    expect(diags[0]?.message).toBe('syntax');
+    expect(diags[0]?.severity).toBe('error');
+    expect(JSON.stringify(last)).not.toContain(PRO_KEY);
   });
 
   test('stale epoch: later run wins; earlier completion is dropped', async () => {

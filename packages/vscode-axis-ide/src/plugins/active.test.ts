@@ -71,12 +71,8 @@ describe('axis.plugins.active.v1 persist', () => {
     expect(await writeActivePlugin(mem, 'dataset', 'defillama-tvl')).toBe(true);
     expect(readActivePlugins(mem).dataset).toBe('defillama-tvl');
     expect(readActivePlugins(mem).component).toBeUndefined();
-    expect(await writeActivePlugin(mem, 'component', 'hyperparameter-optimisation')).toBe(
-      true,
-    );
-    expect(isActivePlugin(mem, 'component', 'hyperparameter-optimisation')).toBe(
-      true,
-    );
+    expect(await writeActivePlugin(mem, 'component', 'example-slot')).toBe(true);
+    expect(isActivePlugin(mem, 'component', 'example-slot')).toBe(true);
   });
 
   test('unknown kinds ignored; stored unknown keys dropped', async () => {

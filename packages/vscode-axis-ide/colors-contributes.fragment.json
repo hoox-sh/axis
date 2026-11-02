@@ -1,0 +1,31 @@
+{
+  "activationEvents": ["onView:axis.colors"],
+  "views": {
+    "axis-panel": [
+      {
+        "type": "webview",
+        "id": "axis.colors",
+        "name": "Colors",
+        "retainContextWhenHidden": false
+      }
+    ]
+  },
+  "register": "registerColorsPanel(context) in extension.ts after registerProfilerView",
+  "coverageExclude": ["views/colors-panel.ts"],
+  "compile": "compile:webview:colors vite build --config webview/colors/vite.config.ts",
+  "vscodeignore": ["dist/webview/colors/main.js", "dist/webview/colors/main.css"],
+  "check": "Append && tsc -p webview/colors/tsconfig.json --noEmit to scripts.check. Do not edit package.json from this agent. Full script after append: tsc -p ./ --noEmit && tsc -p webview/chart/tsconfig.json --noEmit && tsc -p webview/results/tsconfig.json --noEmit && tsc -p webview/plugins/tsconfig.json --noEmit && tsc -p webview/profiler/tsconfig.json --noEmit && tsc -p webview/library/tsconfig.json --noEmit && tsc -p webview/layers/tsconfig.json --noEmit && tsc -p webview/scripts/tsconfig.json --noEmit && tsc -p webview/watchlist/tsconfig.json --noEmit && tsc -p webview/alerts/tsconfig.json --noEmit && tsc -p webview/workers/tsconfig.json --noEmit && tsc -p webview/colors/tsconfig.json --noEmit",
+  "notes": {
+    "order": "Insert the axis.colors webview in contributes.views.axis-panel AFTER the existing axis.profiler entry. Do not add a second Colors view.",
+    "activation": "Add onView:axis.colors to activationEvents.",
+    "compileWebview": "Add scripts.compile:webview:colors = vite build --config webview/colors/vite.config.ts and append && npm run compile:webview:colors to scripts.compile:webview.",
+    "check": "Append && tsc -p webview/colors/tsconfig.json --noEmit to scripts.check (webview/colors is not wired until package.json is merged).",
+    "vscodeignoreNest": "dist/** is ignored. After the workers whitelist add four lines, profiler-style: !dist/webview/colors/ then dist/webview/colors/** then !dist/webview/colors/main.js and !dist/webview/colors/main.css. The vscodeignore array above is the two runtime files that must ship.",
+    "coverage": "In scripts/check-coverage.mjs EXCLUDE, add views/colors-panel.ts beside views/profiler-panel.ts. Do not exclude views/colors-messages.ts or views/colors-html.ts (pure, 100% lines).",
+    "wiring": "Call registerColorsPanel(context) from activate after registerProfilerView. registerWebviewViewProvider('axis.colors', provider, { webviewOptions: { retainContextWhenHidden: false } }). Do not edit extension.ts from this agent.",
+    "assets": "Vite IIFE AxisColorsWebview writes dist/webview/colors/main.js and main.css (no sourcemap). localResourceRoots is that directory.",
+    "csp": "getColorsHtml copies the plugins matrix and adds a script nonce: script-src 'nonce-…' plus cspSource; style-src is cspSource and 'unsafe-inline' (no style nonce); connect-src 'none'.",
+    "protocol": "Host posts local { type: 'colors.set', colors, sourceLabel }. Webview posts { type: 'colors.reveal', line } and { type: 'colors.ready' } so the host can resend after the script loads. Do NOT add colors.set, colors.reveal, or colors.ready to axis.webview.v1 ALL_MESSAGE_TYPES.",
+    "editor": "On resolve, editor change, and document change of the active editor, scan when languageId is pinescript (PYNE) or pine. Otherwise post an empty list with sourceLabel 'No Pine editor'. colors.reveal selects and revealRange's that line in the active Pine editor."
+  }
+}

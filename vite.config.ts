@@ -89,7 +89,6 @@ export default defineConfig({
     },
     proxy: {
       '/run': 'http://localhost:5002',
-      '/optimize': 'http://localhost:5002',
     },
   },
   preview: {

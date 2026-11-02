@@ -70,8 +70,11 @@ export interface EngineRunResult {
   code?: string;
   httpStatus?: number;
   diagnostics: EngineCompileDiagnostic[];
+  /** Capped engine log lines from `logs` or `log` (strings may be truncated). */
+  logs?: unknown;
   raw?: unknown;
-  meta: { ms?: number; transport: 'rest' };
+  /** `profile` is set only when the engine sent a plain object — never invented. */
+  meta: { ms?: number; transport: 'rest'; profile?: unknown; [key: string]: unknown };
 }
 
 export const MISSING_ENDPOINT_ERROR =
@@ -118,6 +121,26 @@ function coerceSeriesMap(raw: unknown): Record<string, unknown> {
     if (Array.isArray(value)) out[key] = value;
   }
   return out;
+}
+
+const MAX_LOG_LINES = 200;
+const MAX_LOG_CHARS = 2000;
+
+/** `logs` array, else `log` array. Cap length; clip oversized string lines. */
+function coerceLogs(raw: Record<string, unknown>): unknown[] | undefined {
+  const source = Array.isArray(raw.logs) ? raw.logs : Array.isArray(raw.log) ? raw.log : undefined;
+  if (!source) return undefined;
+  return source.slice(0, MAX_LOG_LINES).map((item) => {
+    if (typeof item !== 'string' || item.length <= MAX_LOG_CHARS) return item;
+    return item.slice(0, MAX_LOG_CHARS);
+  });
+}
+
+/** Plain `profile`, else plain `meta.profile`. No synthetic line stats. */
+function readProfile(raw: Record<string, unknown>): unknown {
+  if (isPlainObject(raw.profile)) return raw.profile;
+  if (isPlainObject(raw.meta) && isPlainObject(raw.meta.profile)) return raw.meta.profile;
+  return undefined;
 }
 
 function coerceDiagnostics(raw: unknown, fallbackMessage?: string): EngineCompileDiagnostic[] {
@@ -207,6 +230,8 @@ export function mapEngineResponse(
     const series = coerceSeriesMap(raw.series);
     const events = Array.isArray(raw.events) ? raw.events : [];
     const code = typeof raw.code === 'string' ? raw.code : undefined;
+    const logs = coerceLogs(raw);
+    const profile = readProfile(raw);
 
     const result: EngineRunResult = {
       status,
@@ -218,6 +243,8 @@ export function mapEngineResponse(
       meta: { ms, transport: 'rest' },
       httpStatus,
     };
+    if (logs !== undefined) result.logs = logs;
+    if (profile !== undefined) result.meta.profile = profile;
     if (status === 'error') {
       result.error = message || code || `HTTP ${httpStatus ?? 'error'}`;
       if (code) result.code = code;

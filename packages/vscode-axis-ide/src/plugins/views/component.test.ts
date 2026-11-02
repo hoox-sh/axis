@@ -216,7 +216,7 @@ describe('axis.plugins.component TreeView', () => {
     ).toBe(true);
   });
 
-  test('builtin row: hyperparameter-optimisation', () => {
+  test('builtin catalog renders an empty component list', () => {
     const reg = registryMod.ensureBuiltinsRegistered(
       new registryMod.HostPluginRegistry(),
     );
@@ -224,29 +224,8 @@ describe('axis.plugins.component TreeView', () => {
       reg,
       emptyDeps(),
     );
-    const rows = provider.getChildren();
-    const builtin = rows.find(
-      (r) => r.pluginId === 'hyperparameter-optimisation',
-    );
-    expect(builtin).toBeDefined();
-    if (!builtin) return;
-    expect(builtin.name).toBe('Hyperparameter Optimisation');
-    expect(builtin.builtIn).toBe(true);
-
-    const item = provider.getTreeItem(builtin);
-    expect(item.label).toBe('Hyperparameter Optimisation');
-    expect(item.description).toBe('hyperparameter-optimisation');
-    expect(item.contextValue).toBe('axis.plugins.component.builtin');
-    expect(
-      String(item.tooltip).startsWith('Host contribution (no Solid mount)'),
-    ).toBe(true);
-    expect(item.command).toEqual({
-      command: 'axis.plugins.activate',
-      title: 'Activate plugin',
-      arguments: [
-        { kind: 'component', id: 'hyperparameter-optimisation' },
-      ],
-    });
+    expect(provider.getChildren()).toEqual([]);
+    expect(provider.getChildren(undefined)).toEqual([]);
   });
 
   test('dynamic row gets (dynamic) description and .dynamic contextValue', () => {
@@ -283,23 +262,26 @@ describe('axis.plugins.component TreeView', () => {
     const reg = registryMod.ensureBuiltinsRegistered(
       new registryMod.HostPluginRegistry(),
     );
+    reg.register({
+      id: 'pyne-agent',
+      name: 'PYNE Agent',
+      kind: 'component',
+    });
     const provider = new component.ComponentPluginsTreeProvider(
       reg,
       emptyDeps({
         isActive(kind, id) {
-          return kind === 'component' && id === 'hyperparameter-optimisation';
+          return kind === 'component' && id === 'pyne-agent';
         },
       }),
     );
     const rows = provider.getChildren();
-    const builtin = rows.find(
-      (r) => r.pluginId === 'hyperparameter-optimisation',
-    );
-    expect(builtin).toBeDefined();
-    if (!builtin) return;
-    const item = provider.getTreeItem(builtin);
-    expect(item.label).toBe('Hyperparameter Optimisation');
-    expect(item.description).toBe('● hyperparameter-optimisation');
+    const row = rows.find((r) => r.pluginId === 'pyne-agent');
+    expect(row).toBeDefined();
+    if (!row) return;
+    const item = provider.getTreeItem(row);
+    expect(item.label).toBe('PYNE Agent');
+    expect(item.description).toBe('● pyne-agent (dynamic)');
     expect(item.contextValue).toBe('axis.plugins.component.active');
   });
 

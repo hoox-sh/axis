@@ -205,4 +205,81 @@ describe('pickStrategyReport / copyRunRecord', () => {
     expect(copy.series).not.toBe(src.series);
     expect(copy.meta).not.toBe(src.meta);
   });
+
+  it('slices log and diagnostic arrays and leaves non-arrays in place', () => {
+    const logs = ['a', { message: 'b' }];
+    const diagnostics = [{ message: 'e', line: 1 }];
+    const plots = [1];
+    const strategyReport = { net: 1 };
+    const profile = { lines: [{ line: 1 }] };
+    const src = {
+      id: 'r',
+      status: 'success' as const,
+      focus: true,
+      seriesKey: 'k',
+      engineId: 'server',
+      createdAt: 1,
+      plots,
+      series: { close: [1] },
+      logs,
+      diagnostics,
+      strategyReport,
+      meta: { ms: 4, profile },
+    };
+    const copy = copyRunRecord(src);
+    expect(copy.logs).toEqual(logs);
+    expect(copy.logs).not.toBe(logs);
+    expect(copy.diagnostics).toEqual(diagnostics);
+    expect(copy.diagnostics).not.toBe(diagnostics);
+    expect(copy.plots).toBe(plots);
+    expect(copy.series).not.toBe(src.series);
+    expect(copy.series).toEqual(src.series);
+    expect(copy.strategyReport).toBe(strategyReport);
+    expect(copy.meta).not.toBe(src.meta);
+    expect(copy.meta?.profile).toBe(profile);
+    logs.push('z');
+    (diagnostics as unknown[]).push({ message: 'more' });
+    expect(copy.logs).toHaveLength(2);
+    expect(copy.diagnostics).toHaveLength(1);
+
+    const scalar = copyRunRecord({ ...src, logs: 'raw-text', diagnostics: { message: 'obj' } });
+    expect(scalar.logs).toBe('raw-text');
+    expect(scalar.diagnostics).toEqual({ message: 'obj' });
+  });
+});
+
+describe('publish logs and profile', () => {
+  it('publish preserves logs, diagnostics, and meta.profile', () => {
+    const store = new ResultsFocusStore();
+    const logs = ['line', { message: 'm' }];
+    const diagnostics = [{ message: 'd', severity: 'warning' }];
+    const profile = { total_ms: 3 };
+    const id = store.publish({
+      status: 'success',
+      focus: true,
+      seriesKey: 'binance|spot|BTCUSDT|1m',
+      engineId: 'server',
+      plots: [9],
+      series: { close: [1] },
+      logs,
+      diagnostics,
+      strategyReport: { net: 2 },
+      meta: { ms: 7, profile, script_name: 'A' },
+    });
+    const last = store.getLastRun();
+    expect(store.get(id)?.logs).toBe(logs);
+    expect(last?.logs).toEqual(logs);
+    expect(last?.logs).not.toBe(logs);
+    expect(last?.diagnostics).toEqual(diagnostics);
+    expect(last?.diagnostics).not.toBe(diagnostics);
+    expect(last?.meta?.profile).toEqual(profile);
+    expect(last?.meta?.ms).toBe(7);
+    expect(last?.plots).toEqual([9]);
+    expect(last?.series).toEqual({ close: [1] });
+    expect(last?.strategyReport).toEqual({ net: 2 });
+    expect(store.getResultsSetPayload().lastRun).toMatchObject({
+      logs: ['line', { message: 'm' }],
+      meta: { profile },
+    });
+  });
 });

@@ -62,6 +62,7 @@ import {
   serializeChartDocument,
 } from './chart-document';
 import { appendDrawingToDoc } from './chart-drawings';
+import { setChartLiveDoc } from './chart-live-doc';
 import { isPyodideAllowed } from '../host/pyodide-profile';
 import { buildChartWebviewHtml } from './chart-html';
 import { handleChartWebviewMessage } from './chart-messages';
@@ -328,6 +329,22 @@ function sessionForDocument(document: AxisChartDocument, context: ExtensionConte
   });
 }
 
+/** Publish in-memory chart fields so Layers can see unsaved drawings. */
+function publishLiveChartDoc(document: AxisChartDocument): void {
+  const next = document.documentData;
+  const live: {
+    drawings?: unknown;
+    scripts?: unknown;
+    panes?: unknown;
+    overlays?: unknown;
+  } = {};
+  if ('drawings' in next) live.drawings = next.drawings;
+  if ('scripts' in next) live.scripts = next.scripts;
+  if ('panes' in next) live.panes = next.panes;
+  if ('overlays' in next) live.overlays = (next as { overlays?: unknown }).overlays;
+  setChartLiveDoc(document.uri.toString(), live);
+}
+
 /** Post cached run chart.full so hide→show / late open keeps paint. */
 function replayLastRunFull(webview: Webview, seriesKey: string): void {
   try {
@@ -400,6 +417,7 @@ function postHandshake(
   },
 ): void {
   try {
+    if (opts?.document) publishLiveChartDoc(opts.document);
     void webview.postMessage(encode(HOST_TO_VIEW.ChartInit, session.init));
     if (session.full) {
       void webview.postMessage(encode(HOST_TO_VIEW.ChartFull, session.full));
@@ -691,6 +709,7 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
         try {
           const next = appendDrawingToDoc(document.documentData, result.drawing);
           document.update(next);
+          publishLiveChartDoc(document);
         } catch (e) {
           const message = e instanceof Error ? e.message : String(e);
           logError(`drawing.commit failed: ${message}`);
@@ -700,6 +719,7 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
       if (result.kind === 'init') {
         if (disposed) return;
         try {
+          publishLiveChartDoc(document);
           void webviewPanel.webview.postMessage(result.envelope);
           if (result.full && !disposed) {
             void webviewPanel.webview.postMessage(result.full);

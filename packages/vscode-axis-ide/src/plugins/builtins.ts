@@ -21,7 +21,7 @@
  *
  * Sources: `src/engines/catalog.ts`, `src/sources/catalog.ts`,
  * `src/streams/catalog.ts`, `src/storage/catalog.ts`, `src/onchain/catalog.ts`,
- * `src/plugins/hpo.ts` / `src/plugins/types.ts` kinds.
+ * `src/plugins/types.ts` kinds.
  */
 
 import type { PluginDescriptor, PluginKind } from './types';
@@ -62,8 +62,8 @@ export const BUILTIN_STORAGE_IDS = ['local', 'cloud', 'git'] as const;
 /** Builtin on-chain datasets (`src/onchain/catalog.ts`). */
 export const BUILTIN_DATASET_IDS = ['defillama-tvl'] as const;
 
-/** Builtin component plugins (`src/plugins/hpo.ts`). */
-export const BUILTIN_COMPONENT_IDS = ['hyperparameter-optimisation'] as const;
+/** Builtin component plugins. None ship in-tree; dynamic URL installs still use this kind. */
+export const BUILTIN_COMPONENT_IDS = [] as const;
 
 function desc(
   kind: PluginKind,
@@ -106,13 +106,6 @@ export const BUILTIN_PLUGIN_DESCRIPTORS: readonly PluginDescriptor[] = [
   desc('storage', 'git', 'Git'),
 
   desc('dataset', 'defillama-tvl', 'DefiLlama TVL'),
-
-  desc(
-    'component',
-    'hyperparameter-optimisation',
-    'Hyperparameter Optimisation',
-    'TreeView / WebviewView contribution only (no Solid mount)',
-  ),
 ];
 
 /** Builtin ids for one kind. */

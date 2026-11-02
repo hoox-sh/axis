@@ -474,7 +474,7 @@ async function captureStills(page: Page) {
     await chrome(page);
   });
 
-  await section('results / strategy / HPO', async () => {
+  await section('results / strategy', async () => {
     await dismissOverlays(page);
     await setEditorDoc(page, STRATEGY);
     await runScript(page);
@@ -492,12 +492,6 @@ async function captureStills(page: Page) {
       await page.waitForTimeout(250);
       await shot(page, 'app/results-strategy.png', page.getByTestId('axis-results-body'));
       await shot(page, 'app/results-equity.png', page.getByTestId('axis-results-body'));
-    }
-    const opt = page.getByTestId('axis-results-tab-optimise');
-    if (await opt.count()) {
-      await opt.click({ force: true });
-      await page.waitForTimeout(400);
-      await shot(page, 'app/hpo.png', page.getByTestId('axis-results-body'));
     }
     await closeResults(page);
   });

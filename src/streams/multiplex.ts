@@ -65,7 +65,6 @@ import { setDataToChart } from '../chart/manager-access';
 import { appendLiveBar } from '../chart/live-append';
 import { isReplayActive, stopReplaySession } from '../chart/bar-replay';
 import { isInteractiveRunInFlight, runAndApply, currentRunEpoch } from '../indicators/runner';
-import { isStudyActive } from '../optimize/guard';
 import { groupIndicatorsByPlotDepLevel, mapWithConcurrencyLimit } from '../results/plot-sources';
 import { detectScriptKind } from '../indicators/script-meta';
 import { getStream, listStreams, defaultStreamForSource, type StreamPlugin } from './catalog';
@@ -1239,7 +1238,7 @@ function scheduleRerun(opts?: { immediate?: boolean }) {
   if (!store.bars?.length) return;
   if (!store.scripts.some(isLiveRerunScript)) return;
   // Interactive Run owns the engine — mark dirty and wait (do not beginRunEpoch)
-  if (isInteractiveRunInFlight() || isStudyActive()) {
+  if (isInteractiveRunInFlight()) {
     if (!store.live.needsRerun) setStore('live', 'needsRerun', true);
     return;
   }
@@ -1261,7 +1260,7 @@ function scheduleRerun(opts?: { immediate?: boolean }) {
       return;
     }
     // Interactive may have started during the debounce window
-    if (isInteractiveRunInFlight() || isStudyActive()) {
+    if (isInteractiveRunInFlight()) {
       if (!store.live.needsRerun) setStore('live', 'needsRerun', true);
       return;
     }
@@ -1278,7 +1277,7 @@ function scheduleRerun(opts?: { immediate?: boolean }) {
         /* failed paint still leaves the last good bars for evaluation */
       }
       if (liveEpoch !== epochAtSchedule || !store.live.active) return;
-      if (isInteractiveRunInFlight() || isStudyActive()) {
+      if (isInteractiveRunInFlight()) {
         if (!store.live.needsRerun) setStore('live', 'needsRerun', true);
         return;
       }
@@ -1315,7 +1314,7 @@ function scheduleRerun(opts?: { immediate?: boolean }) {
       // Do not bump the global run epoch: that cancelled in-flight catalog
       // adds ("Run superseded") and skipped their first paint. Share the
       // current generation so members still apply together.
-      if (isInteractiveRunInFlight() || isStudyActive()) {
+      if (isInteractiveRunInFlight()) {
         if (!store.live.needsRerun) setStore('live', 'needsRerun', true);
         return;
       }
@@ -1323,13 +1322,13 @@ function scheduleRerun(opts?: { immediate?: boolean }) {
       const levels = groupIndicatorsByPlotDepLevel(store.scripts.filter(isLiveRerunScript));
       for (const level of levels) {
         if (liveEpoch !== epochAtSchedule || !store.live.active) break;
-        if (isInteractiveRunInFlight() || isStudyActive()) {
+        if (isInteractiveRunInFlight()) {
           if (!store.live.needsRerun) setStore('live', 'needsRerun', true);
           break;
         }
         await mapWithConcurrencyLimit(level, LIVE_RERUN_MAX_CONCURRENT, async (ind) => {
           if (liveEpoch !== epochAtSchedule || !store.live.active) return;
-          if (isInteractiveRunInFlight() || isStudyActive()) {
+          if (isInteractiveRunInFlight()) {
             if (!store.live.needsRerun) setStore('live', 'needsRerun', true);
             return;
           }
@@ -1375,8 +1374,7 @@ function scheduleRerun(opts?: { immediate?: boolean }) {
         if (
           store.live.active &&
           store.live.needsRerun &&
-          !isInteractiveRunInFlight() &&
-          !isStudyActive()
+          !isInteractiveRunInFlight()
         ) {
           scheduleRerun();
         }
