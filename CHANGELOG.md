@@ -17,6 +17,8 @@ _Generated/updated: 2026-11-01 · 880 commits · describe-tag: `v2.26.0`_
 
 ### Changed
 
+- **Equity curve market colors.** The zero line uses `--color-border`. The curve, fill, and drawdown use `--color-up` and `--color-down`. Axis labels use `--font-mono`.
+
 - **Shell chrome hairlines and market color aliases.** Command-bar groups use a short centered rule instead of a full-height divider. Vertical resize handles keep a 1px resting mark. `--color-up`, `--color-down`, `--color-warning`, and `--color-info` follow the theme greens, reds, amber, and cyan (including light). `--font-sans` / `--font-mono` name the chrome and figure stacks. Command palette rows put the category beside the title, with a 2px accent bar on the active row.
 
 - **PYNE Agent plugin 0.1.8** vendored at `/plugins/axis-pine-agent.js` (sync from `hoox-sh/pyne-agent-worker`). Always sends `orchestrate: true` and a named `pyne_backend` kind; Workers Manager → PYNE Agent gains a **PYNE backend** select (`auto` / `pro` / `local` / `worker` / `container` / `none`). Install/sync helper: `bun run sync:pyne-agent-plugin` (`scripts/sync-pyne-agent-plugin.sh`).
@@ -28,6 +30,12 @@ _Generated/updated: 2026-11-01 · 880 commits · describe-tag: `v2.26.0`_
 - **Pyodide numpy SRI failures on axis.hoox.sh.** `loadPackage('numpy')` for compile/auto fetched `/pyodide/v0.29.5/numpy-*.whl`, which was never vendored; Cloudflare Pages SPA-fallback returned `index.html` (200 `text/html`) and Pyodide’s integrity check failed with a different hash every retry. Vendored the lock-matched numpy 2.2.5 wheel (~2.8 MB), extended `scripts/fetch-pyodide.sh` to pull numpy with micropip, and added `public/_redirects` so missing `/pyodide/*` / `/vendor/*` / `/assets/*` / `/plugins/*` return 404 instead of the app shell.
 
 ### Added
+
+- **Layout glyph and matching saved name.** The layouts button draws the current 1 / 2H / 2V / 4 grid. When a saved layout matches the live slots, its name is shown. Grid hints include the Alt-1…Alt-4 chords.
+
+- **Alert row tone.** Enabled rows that fired within 15 minutes get an up-color edge. Armed rows use the accent edge. Disabled stays faint and wins over a recent fire.
+
+- **Editor shortcut on the topbar title.** The docked-editor button title appends the registry chord (`Mod-\`, formatted for the platform). Other topbar titles stay prose.
 
 - **Watchlist session sparkline.** Each compact row draws a 48×10 spark under the symbol from the 24h open to the last price, then extends it with live prints (24 samples, tip updates inside 1.5s). No extra quote request. The stroke uses `--color-up` / `--color-down`. The expanded row shows a 72×16 spark on the detail line. LAST and CHG stay in their columns.
 
