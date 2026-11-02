@@ -92,7 +92,9 @@
     "watch": "node esbuild.host.mjs --watch",
     "compile-tests": "tsc -p tsconfig.tests.json",
     "package": "node -e \"const v=require('./package.json').version; require('child_process').execSync('npx --yes @vscode/vsce package --no-dependencies --no-git-tag-version --out axis-ide-'+v+'.vsix',{stdio:'inherit'})\"",
-    "test:unit": "bun test src/semver.test.ts",
+    "test:unit": "bun test",
+    "test:coverage": "bun test --coverage --coverage-reporter=lcov --coverage-reporter=text --coverage-dir=coverage",
+    "test:coverage:gate": "bun run test:coverage && bun scripts/check-coverage.mjs",
     "test": "npm run compile-tests && npm run compile && node out/test/runTest.js"
   },
   "devDependencies": {

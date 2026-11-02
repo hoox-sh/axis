@@ -15,15 +15,16 @@ Part of the **[HOOX](https://hoox.sh) open trading stack**. Sister products: **[
 
 ## Status
 
-This is the **0.1.0** scaffold:
+This is the **0.1.0** scaffold plus the **`axis.webview.v1`** protocol module:
 
 - Activation without `onStartupFinished` (workspace globs + P0 commands)
 - Output channel **AXIS Run** (`AXIS: Show Run Output`)
 - Status bar item (`axis.ide.status`)
 - Stub **AXIS: Open Chart** (custom editor lands in a later release)
 - Optional setting `axis.telemetry.offline` (default `true`)
+- Typed host↔webview envelope codecs under `src/protocol/` (coverage-gated)
 
-Chart custom editor, secrets, protocol, MCP provider, and webviews ship later.
+Chart custom editor, secrets, MCP provider, and webviews ship later.
 
 ## Build layout
 
@@ -61,12 +62,14 @@ Use **`bun run --cwd <pkg> <script>`** (flag after `run`). On current Bun, `bun 
 ```bash
 bun install --cwd packages/vscode-axis-ide   # or npm install
 bun run --cwd packages/vscode-axis-ide compile
-bun run --cwd packages/vscode-axis-ide test:unit   # bun:test (semver helper)
-bun run --cwd packages/vscode-axis-ide test        # @vscode/test-electron
-bun run --cwd packages/vscode-axis-ide package     # → axis-ide-0.1.0.vsix (runs vscode:prepublish → compile)
+bun run --cwd packages/vscode-axis-ide test:unit            # bun:test (protocol, logger, semver, coverage script)
+bun run --cwd packages/vscode-axis-ide test:coverage        # unit + lcov under coverage/
+bun run --cwd packages/vscode-axis-ide test:coverage:gate   # coverage + BASELINE/protocol ratchet
+bun run --cwd packages/vscode-axis-ide test                 # @vscode/test-electron
+bun run --cwd packages/vscode-axis-ide package              # → axis-ide-0.1.0.vsix (runs vscode:prepublish → compile)
 ```
 
-Root aliases: `bun run vscode:ide:compile` / `vscode:ide:test` / `vscode:ide:package`.
+Root aliases: `bun run vscode:ide:compile` / `vscode:ide:test` / `vscode:ide:test:coverage:gate` / `vscode:ide:package`.
 
 Electron tests need `hoox-sh.pyne` installed into the downloaded VS Code. By default the harness globs `pyne-vscode-*.vsix` from a sibling `pynescript` / `pyne` checkout. Override with `AXIS_IDE_PYNE_VSIX=/path/to/pyne-vscode-….vsix`. In CI (`CI` / `GITHUB_ACTIONS`), a missing or failed install **hard-fails**.
 

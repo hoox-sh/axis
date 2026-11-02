@@ -1,0 +1,13 @@
+# Copyright (C) 2026 jango_blockchained
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+# Bun test config for packages/vscode-axis-ide.
+# Electron/mocha harness under src/test must not run under bun test.
+
+[test]
+pathIgnorePatterns = [
+  "src/test/**",
+  "out/**",
+  "coverage/**",
+  "node_modules/**",
+]

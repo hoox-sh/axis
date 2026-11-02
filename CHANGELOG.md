@@ -17,6 +17,8 @@ _Generated/updated: 2026-11-01 · 880 commits · describe-tag: `v2.26.0`_
 
 ### Added
 
+- **VS Code AXIS IDE `axis.webview.v1` protocol + coverage ratchet** (`packages/vscode-axis-ide`). Typed envelope codecs for every design §6 chart/results message (`encode` / never-throw `decode`, direction helpers), thin `src/host/logger.ts` (injectable sink, `axis.debug.protocol` gate), 100% protocol unit coverage, and `scripts/check-coverage.mjs` with measured BASELINE **100%** (fail on regression), hard protocol 100%, TARGET_HOST 90 / TARGET_PACKAGE 80 printed only. Scripts: `test:unit`, `test:coverage`, `test:coverage:gate`.
+
 - **VS Code AXIS IDE scaffold** (`packages/vscode-axis-ide`, marketplace id `hoox-sh.axis-ide` `0.1.0`). Sibling package (not a workspace member) with esbuild host bundle, AGPL-3.0-only headers, P0 commands (`axis.showRunOutput`, stub `axis.openChart`), `axis.telemetry.offline`, and electron + Bun unit test harness. Root scripts: `vscode:ide:compile` / `vscode:ide:test` / `vscode:ide:package`. Chart custom editor and webviews still land in later work.
 
 ### Fixed
