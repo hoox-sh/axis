@@ -163,7 +163,13 @@ const Section: Component<{ label: string; children: any }> = (props) => (
 );
 
 const Row: Component<{
-  row: { key: string; label: string; value: string; color?: string };
+  row: {
+    key: string;
+    label: string;
+    value: string;
+    color?: string;
+    tone?: 'up' | 'down' | 'flat';
+  };
 }> = (props) => (
   <div class="axis-list-row flex items-center justify-between gap-2 h-8 px-2 hover:bg-bg-hover/60">
     <span class="flex items-center gap-1.5 text-text-dim min-w-0 truncate">
@@ -175,6 +181,15 @@ const Row: Component<{
       </Show>
       {props.row.label}
     </span>
-    <span class="font-mono text-text tabular-nums flex-shrink-0">{props.row.value}</span>
+    <span
+      class="font-mono text-text tabular-nums flex-shrink-0"
+      style={
+        props.row.tone === 'up' || props.row.tone === 'down'
+          ? { color: props.row.tone === 'up' ? 'var(--color-up)' : 'var(--color-down)' }
+          : undefined
+      }
+    >
+      {props.row.value}
+    </span>
   </div>
 );

@@ -47,6 +47,8 @@ export interface DataViewRow {
   label: string;
   value: string;
   color?: string;
+  /** Close vs the previous bar. Omitted when it cannot be decided. */
+  tone?: 'up' | 'down' | 'flat';
   group: 'ohlcv' | 'series' | 'drawings' | 'onchain' | 'meta';
 }
 
@@ -463,6 +465,16 @@ function inferBarPeriod(bars: Bar[], idx: number): number {
   return d > 0 && Number.isFinite(d) ? d : 60;
 }
 
+/** Up, down, or flat versus the previous close. Absent without a finite pair. */
+function closeTone(bars: Bar[], idx: number, close: number): DataViewRow['tone'] {
+  if (idx <= 0) return undefined;
+  const prevClose = bars[idx - 1]?.close;
+  if (!Number.isFinite(prevClose) || !Number.isFinite(close)) return undefined;
+  if (close > prevClose) return 'up';
+  if (close < prevClose) return 'down';
+  return 'flat';
+}
+
 /**
  * Build ordered Data Window rows for the given bar.
  */
@@ -487,6 +499,7 @@ export function buildDataViewRows(opts: BuildDataViewOpts): DataViewRow[] {
       ? Number(opts.barPeriod)
       : inferBarPeriod(bars, idx);
 
+  const tone = closeTone(bars, idx, bar.close);
   const rows: DataViewRow[] = [
     {
       key: 'symbol',
@@ -515,7 +528,13 @@ export function buildDataViewRows(opts: BuildDataViewOpts): DataViewRow[] {
     { key: 'open', label: 'Open', value: fmtNum(bar.open), group: 'ohlcv' },
     { key: 'high', label: 'High', value: fmtNum(bar.high), group: 'ohlcv' },
     { key: 'low', label: 'Low', value: fmtNum(bar.low), group: 'ohlcv' },
-    { key: 'close', label: 'Close', value: fmtNum(bar.close), group: 'ohlcv' },
+    {
+      key: 'close',
+      label: 'Close',
+      value: fmtNum(bar.close),
+      group: 'ohlcv',
+      ...(tone ? { tone } : {}),
+    },
     {
       key: 'volume',
       label: 'Volume',
