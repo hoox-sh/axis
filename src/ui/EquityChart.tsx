@@ -149,12 +149,12 @@ export const EquityChart: Component<{ steps: EquityStep[] }> = (props) => {
       >
         <defs>
           <linearGradient id="ax-equity-fill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="var(--color-accent-2)" stop-opacity="0.34" />
-            <stop offset="100%" stop-color="var(--color-accent-2)" stop-opacity="0.02" />
+            <stop offset="0%" stop-color="var(--color-up)" stop-opacity="0.34" />
+            <stop offset="100%" stop-color="var(--color-up)" stop-opacity="0.02" />
           </linearGradient>
           <linearGradient id="ax-equity-fill-neg" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="var(--color-red)" stop-opacity="0.30" />
-            <stop offset="100%" stop-color="var(--color-red)" stop-opacity="0.02" />
+            <stop offset="0%" stop-color="var(--color-down)" stop-opacity="0.30" />
+            <stop offset="100%" stop-color="var(--color-down)" stop-opacity="0.02" />
           </linearGradient>
         </defs>
 

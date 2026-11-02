@@ -1,7 +1,7 @@
 ---
 type: "Code Module"
 title: "tests"
-description: "tests contains alerts-engine.test.ts, alerts-form.test.ts, alerts-format.test.ts, and 323 more files."
+description: "tests contains alerts-engine.test.ts, alerts-form.test.ts, alerts-format.test.ts, and 324 more files."
 resource: "tests"
 tags: [code, tests]
 status: stable
@@ -125,6 +125,7 @@ okf_lock: generated
 * `engine-ws.test.ts`
 * `engines-catalog.test.ts`
 * `engines-live-sessions.test.ts`
+* `equity-tokens.test.ts`
 * `error-share.test.ts`
 * `expand-cache.test.ts`
 * `extras-alert-subscribe.test.ts`

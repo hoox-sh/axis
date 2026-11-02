@@ -1537,7 +1537,7 @@ span.ax-json-twist {
   stroke-width: 1;
 }
 .ax-equity-zero {
-  stroke: var(--color-text-faint);
+  stroke: var(--color-border);
   stroke-width: 1;
   stroke-dasharray: 3 3;
   opacity: 0.7;
@@ -1545,20 +1545,20 @@ span.ax-json-twist {
 .ax-equity-axis {
   fill: var(--color-text-faint);
   font-size: 11px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
 }
 .ax-equity-dd {
-  fill: var(--color-red);
+  fill: var(--color-down);
   opacity: 0.12;
 }
 .ax-equity-line-pos {
-  stroke: var(--color-accent-2);
+  stroke: var(--color-up);
   stroke-width: 2;
   stroke-linejoin: round;
   stroke-linecap: round;
 }
 .ax-equity-line-neg {
-  stroke: var(--color-red);
+  stroke: var(--color-down);
   stroke-width: 2;
   stroke-linejoin: round;
   stroke-linecap: round;
@@ -1594,11 +1594,11 @@ span.ax-json-twist {
 }
 .ax-equity-tip-val {
   color: var(--color-text);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
 .ax-equity-tip-dd {
-  color: var(--color-red);
+  color: var(--color-down);
 }
 
 /* Events list badges */
