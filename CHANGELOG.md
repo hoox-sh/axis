@@ -15,9 +15,17 @@ _Generated/updated: 2026-11-01 · 880 commits · describe-tag: `v2.26.0`_
 
 ## [Unreleased]
 
+### Changed
+
+- **PYNE Agent plugin 0.1.8** vendored at `/plugins/axis-pine-agent.js` (sync from `hoox-sh/pyne-agent-worker`). Always sends `orchestrate: true` and a named `pyne_backend` kind; Workers Manager → PYNE Agent gains a **PYNE backend** select (`auto` / `pro` / `local` / `worker` / `container` / `none`). Install/sync helper: `bun run sync:pyne-agent-plugin` (`scripts/sync-pyne-agent-plugin.sh`).
+
 ### Added
 
-- **VS Code AXIS IDE Pro `/run` adapter, chart notify bus, and results focus store** (`packages/vscode-axis-ide`). `postEngineRun` POSTs `{ script, data, mode, symbol }` to `{endpoint}/run` with an injectable fetch (chart bars in unix seconds are sent as Pine milliseconds; API key stays on the `Authorization` header and is not logged). `notifyChart` fans `chart.full` and `host.run.status` out without importing the custom editor. `ResultsFocusStore` keeps newest vs focus ids in memory until the Results view lands. Not wired to a Run command yet.
+- **VS Code AXIS IDE RunOrchestrator + `axis.runScript` (mock bars)** (`packages/vscode-axis-ide`). Host `src/run/` posts Pro `POST {axis.engine.endpoint}/run` with SecretStorage `pyn_…` Bearer (no plaintext settings fallback), monotonic epoch drop for stale completions, OutputChannel **AXIS Run** start/end/drop, DiagnosticCollection `axis-run`, and `chart.full` paint (mock bars + plots) via a chart notify bus. Commands `axis.runScript` / `axis.runScriptSilent` with Ctrl/Cmd+Enter keybinding and editor title menu when `editorLangId == pinescript`. Settings `axis.engine.id` (default `server`) and `axis.engine.endpoint` (default `http://127.0.0.1:5002`). In-memory Results focus stub for §7.1. No HistoryClient / venue bars yet.
+
+### Fixed
+
+- **VS Code AXIS IDE Run path hardening (PR-06 review).** Run `chart.full` seq is seeded above handshake (`baseSeq+1`) so the webview painter applies; chart-bus filters by `seriesKey`; diagnostics clear only the run URI; `scrubSecrets` strips `pyn_`/`pn_`/Bearer from OutputChannel/Problems/toasts; engine endpoint defaults to loopback unless `axis.engine.allowRemoteEndpoint`; AbortControllers abort prior `/run` on supersede and deactivate; runs always force mock bars until HistoryClient; engine id enum is `server`-only for this release.
 
 - **VS Code AXIS IDE mock bars + `chart.full` paint + `axis.openChart`** (`packages/vscode-axis-ide`). Host `chart-session` / deterministic mock OHLCV (`{ time, open, high, low, close, volume }`, seriesKey `exchange|market|SYMBOL|interval`) posts `chart.init` then `chart.full` after `webview.ready` (`useMockBars` default true; mock-off still posts empty full to clear). New sibling docs copy `axis.chart.historyBars` (clamped to 20000). Webview reducer/LWC apply full snapshots. `axis.openChart` opens or creates sibling `*.axis.json` beside the active Pine buffer (existing not rewritten) with editor/title menu for `pinescript`. No venue/`fetchHistorical`.
 

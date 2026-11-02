@@ -20,7 +20,7 @@ import * as assert from 'node:assert';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { RUN_OUTPUT_CHANNEL_NAME } from '../constants';
+import { RUN_NO_PINE_MESSAGE, RUN_OUTPUT_CHANNEL_NAME } from '../constants';
 import { CHART_VIEW_TYPE } from '../editors/chart-document';
 import { OPEN_CHART_NO_PINE_MESSAGE } from '../host/open-chart';
 import { isVersionOlderThan } from '../semver';
@@ -53,12 +53,17 @@ const pkg = JSON.parse(fs.readFileSync(PACKAGE_PATH, 'utf8')) as {
 const EXPECTED_COMMANDS = [
   'axis.showRunOutput',
   'axis.openChart',
+  'axis.runScript',
+  'axis.runScriptSilent',
   'axis.secrets.setWorkerKey',
   'axis.secrets.setProKey',
   'axis.secrets.clear',
 ] as const;
 const EXPECTED_SETTINGS = [
   'axis.telemetry.offline',
+  'axis.engine.id',
+  'axis.engine.endpoint',
+  'axis.engine.allowRemoteEndpoint',
   'axis.chart.historyBars',
   'axis.chart.useMockBars',
 ] as const;
@@ -77,7 +82,16 @@ const ALLOWED_CONTRIBUTE_KEYS = new Set([
   'configuration',
   'customEditors',
   'menus',
+  'keybindings',
 ]);
+const EXPECTED_KEYBINDINGS = [
+  {
+    command: 'axis.runScript',
+    key: 'ctrl+enter',
+    mac: 'cmd+enter',
+    when: 'editorTextFocus && editorLangId == pinescript',
+  },
+] as const;
 const EXPECTED_CUSTOM_EDITORS = [
   {
     viewType: CHART_VIEW_TYPE,
@@ -187,23 +201,51 @@ suite('AXIS IDE Extension Structure', () => {
     );
   });
 
-  test('contributes keys are only commands + configuration + customEditors + menus', () => {
+  test('contributes keys are only commands + configuration + customEditors + menus + keybindings', () => {
     const keys = Object.keys(pkg.contributes ?? {});
     for (const key of keys) {
       assert.ok(
         ALLOWED_CONTRIBUTE_KEYS.has(key),
-        `unexpected contributes.${key} — allowed: commands/configuration/customEditors/menus`,
+        `unexpected contributes.${key} — allowed: commands/configuration/customEditors/menus/keybindings`,
       );
     }
   });
 
-  test('editor/title menu includes axis.openChart for pinescript', () => {
+  test('keybinding ctrl/cmd+enter → axis.runScript for pinescript', () => {
+    const keybindings = (
+      pkg.contributes as {
+        keybindings?: Array<{ command: string; key?: string; mac?: string; when?: string }>;
+      }
+    )?.keybindings ?? [];
+    assert.strictEqual(keybindings.length, EXPECTED_KEYBINDINGS.length);
+    for (const expected of EXPECTED_KEYBINDINGS) {
+      const found = keybindings.find((k) => k.command === expected.command);
+      assert.ok(found, `missing keybinding for ${expected.command}`);
+      assert.strictEqual(found?.key, expected.key);
+      assert.strictEqual(found?.mac, expected.mac);
+      assert.strictEqual(found?.when, expected.when);
+    }
+  });
+
+  test('editor/title menu includes openChart + runScript for pinescript', () => {
     const menus = (pkg.contributes as { menus?: Record<string, Array<{ command: string; when?: string }>> })
       ?.menus;
     const title = menus?.['editor/title'] ?? [];
     const open = title.find((e) => e.command === 'axis.openChart');
     assert.ok(open, 'editor/title must contribute axis.openChart');
     assert.strictEqual(open?.when, 'resourceLangId == pinescript');
+    const run = title.find((e) => e.command === 'axis.runScript');
+    assert.ok(run, 'editor/title must contribute axis.runScript');
+    assert.strictEqual(run?.when, 'resourceLangId == pinescript');
+  });
+
+  test('commandPalette includes axis.runScriptSilent for pinescript', () => {
+    const menus = (pkg.contributes as { menus?: Record<string, Array<{ command: string; when?: string }>> })
+      ?.menus;
+    const palette = menus?.commandPalette ?? [];
+    const silent = palette.find((e) => e.command === 'axis.runScriptSilent');
+    assert.ok(silent, 'commandPalette must contribute axis.runScriptSilent');
+    assert.strictEqual(silent?.when, 'editorLangId == pinescript');
   });
 });
 
@@ -231,9 +273,37 @@ suite('AXIS IDE Extension Activation', () => {
     assert.strictEqual(result, OPEN_CHART_NO_PINE_MESSAGE);
   });
 
+  test('axis.runScript without active Pine returns clear error (no await UI)', async () => {
+    const result = await vscode.commands.executeCommand('axis.runScript');
+    assert.strictEqual(result, RUN_NO_PINE_MESSAGE);
+  });
+
   test('default axis.chart.useMockBars is true', () => {
     const config = vscode.workspace.getConfiguration('axis.chart');
     assert.strictEqual(config.get('useMockBars'), true);
+  });
+
+  test('default axis.engine.id / endpoint / allowRemoteEndpoint', () => {
+    const config = vscode.workspace.getConfiguration('axis.engine');
+    assert.strictEqual(config.get('id'), 'server');
+    assert.strictEqual(config.get('endpoint'), 'http://127.0.0.1:5002');
+    assert.strictEqual(config.get('allowRemoteEndpoint'), false);
+  });
+
+  test('axis.engine.allowRemoteEndpoint is application-scoped (not workspace)', () => {
+    const configuration = Array.isArray(pkg.contributes?.configuration)
+      ? pkg.contributes.configuration
+      : pkg.contributes?.configuration
+        ? [pkg.contributes.configuration]
+        : [];
+    const props = configuration.flatMap((group) =>
+      Object.entries(group.properties ?? {}),
+    );
+    const entry = props.find(([key]) => key === 'axis.engine.allowRemoteEndpoint');
+    assert.ok(entry, 'missing axis.engine.allowRemoteEndpoint');
+    const meta = entry?.[1] as { scope?: string; default?: boolean };
+    assert.strictEqual(meta.scope, 'application');
+    assert.strictEqual(meta.default, false);
   });
 
   test('default axis.telemetry.offline is true', () => {

@@ -31,8 +31,9 @@ export const TARGET_PACKAGE = 80;
 export const PROTOCOL_MIN = 100;
 
 /**
- * Pure-host INCLUDE — only paths that exist today contribute; placeholders for
- * secrets/run/live remain listed so future files join the gate automatically.
+ * Pure-host INCLUDE — paths under these prefixes contribute to the BASELINE.
+ * `src/protocol|host|secrets|editors|run` are live; `src/live/` is listed so
+ * future live-bridge files join the gate automatically when they appear on disk.
  */
 export const INCLUDE = [
   'src/protocol/',

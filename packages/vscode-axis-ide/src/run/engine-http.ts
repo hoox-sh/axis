@@ -77,6 +77,9 @@ export interface EngineRunResult {
 export const MISSING_ENDPOINT_ERROR =
   'AXIS engine endpoint is empty. Set axis.engine.endpoint (e.g. http://127.0.0.1:5002).';
 
+export const MISSING_API_KEY_ERROR =
+  'AXIS Pro API key required for POST /run (SecretStorage pyn_…).';
+
 export const DEFAULT_ENGINE_ENDPOINT = 'http://127.0.0.1:5002';
 
 /** Chart bars store unix seconds; Pine `time` expects milliseconds. */
@@ -238,13 +241,10 @@ export function mapEngineResponse(
 
 /**
  * POST `{endpoint}/run` with script + bars. Never logs the API key.
- * Callers must supply `apiKey` when the host requires Pro auth.
+ * Requires a non-empty `apiKey` (fail-closed — no anonymous Pro calls).
  */
 export async function postEngineRun(req: EngineHttpRequest): Promise<EngineRunResult> {
-  const t0 =
-    typeof performance !== 'undefined' && typeof performance.now === 'function'
-      ? performance.now()
-      : Date.now();
+  const t0 = Date.now();
   try {
     const endpoint = trimEndpoint(req.endpoint);
     if (!endpoint) {
@@ -259,6 +259,19 @@ export async function postEngineRun(req: EngineHttpRequest): Promise<EngineRunRe
       };
     }
 
+    const key = typeof req.apiKey === 'string' ? req.apiKey.trim() : '';
+    if (!key) {
+      return {
+        status: 'error',
+        plots: [],
+        series: {},
+        events: [],
+        error: MISSING_API_KEY_ERROR,
+        diagnostics: [{ message: MISSING_API_KEY_ERROR, severity: 'error' }],
+        meta: { transport: 'rest' },
+      };
+    }
+
     const fetchImpl = req.fetchImpl ?? globalThis.fetch.bind(globalThis);
     const url = `${endpoint}/run`;
     const body = {
@@ -267,11 +280,10 @@ export async function postEngineRun(req: EngineHttpRequest): Promise<EngineRunRe
       mode: req.mode || 'auto',
       symbol: (req.symbol && String(req.symbol).trim()) || 'CHART',
     };
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    const key = typeof req.apiKey === 'string' ? req.apiKey.trim() : '';
-    if (key) {
-      headers.Authorization = `Bearer ${key}`;
-    }
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${key}`,
+    };
 
     const res = await fetchImpl(url, {
       method: 'POST',
@@ -281,10 +293,7 @@ export async function postEngineRun(req: EngineHttpRequest): Promise<EngineRunRe
     });
 
     const text = await res.text();
-    const ms =
-      (typeof performance !== 'undefined' && typeof performance.now === 'function'
-        ? performance.now()
-        : Date.now()) - t0;
+    const ms = Date.now() - t0;
 
     let parsed: unknown;
     try {
@@ -317,10 +326,7 @@ export async function postEngineRun(req: EngineHttpRequest): Promise<EngineRunRe
     }
     return mapped;
   } catch (e) {
-    const ms =
-      (typeof performance !== 'undefined' && typeof performance.now === 'function'
-        ? performance.now()
-        : Date.now()) - t0;
+    const ms = Date.now() - t0;
     const msg = e instanceof Error ? e.message : String(e);
     const aborted =
       (e instanceof Error && e.name === 'AbortError') || /aborted/i.test(msg);

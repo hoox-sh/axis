@@ -39,6 +39,7 @@ import {
 import { buildChartSession } from '../host/chart-session';
 import { logProtocolReject, logWarn } from '../host/logger';
 import { encode, HOST_TO_VIEW } from '../protocol';
+import { getLastChartFull, subscribeChartNotify } from '../run/chart-bus';
 import {
   type AxisChartDocV1,
   CHART_VIEW_TYPE,
@@ -268,6 +269,19 @@ function postHandshake(
     if (session.full) {
       void webview.postMessage(encode(HOST_TO_VIEW.ChartFull, session.full));
     }
+    // Replay last run paint for this seriesKey (seq > handshake) if present.
+    replayLastRunFull(webview, session.seriesKey);
+  } catch {
+    // panel may be disposing
+  }
+}
+
+/** Post cached run chart.full after handshake so hide→show / late open keeps paint. */
+function replayLastRunFull(webview: Webview, seriesKey: string): void {
+  try {
+    const last = getLastChartFull(seriesKey);
+    if (!last || last.type !== 'chart.full') return;
+    void webview.postMessage(encode(HOST_TO_VIEW.ChartFull, last.payload));
   } catch {
     // panel may be disposing
   }
@@ -281,22 +295,61 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
 
   /** Open webview panels per document — refresh on revert without re-dirty. */
   private readonly panels = new WeakMap<AxisChartDocument, Set<WebviewPanel>>();
+  /** Strong refs + seriesKey so run-bus can filter which panels receive paint. */
+  private readonly openPanels = new Map<WebviewPanel, { seriesKey: string }>();
+  private readonly busSub: { dispose(): void };
 
-  constructor(private readonly context: ExtensionContext) {}
+  constructor(private readonly context: ExtensionContext) {
+    this.busSub = subscribeChartNotify((message) => {
+      for (const [panel, meta] of [...this.openPanels]) {
+        try {
+          // Filter by seriesKey when present so one run does not overwrite another chart.
+          if (
+            message.seriesKey &&
+            meta.seriesKey &&
+            message.seriesKey !== meta.seriesKey
+          ) {
+            continue;
+          }
+          if (message.type === 'chart.full') {
+            void panel.webview.postMessage(
+              encode(HOST_TO_VIEW.ChartFull, message.payload),
+            );
+          } else if (message.type === 'host.run.status') {
+            void panel.webview.postMessage(
+              encode(HOST_TO_VIEW.HostRunStatus, message.payload),
+            );
+          }
+        } catch {
+          // panel may be disposing
+        }
+      }
+    });
+  }
 
-  private trackPanel(document: AxisChartDocument, panel: WebviewPanel): void {
+  dispose(): void {
+    this.busSub.dispose();
+    this.openPanels.clear();
+  }
+
+  private trackPanel(
+    document: AxisChartDocument,
+    panel: WebviewPanel,
+    seriesKey: string,
+  ): void {
     let set = this.panels.get(document);
     if (!set) {
       set = new Set();
       this.panels.set(document, set);
     }
     set.add(panel);
+    this.openPanels.set(panel, { seriesKey });
   }
 
   private untrackPanel(document: AxisChartDocument, panel: WebviewPanel): void {
     const set = this.panels.get(document);
-    if (!set) return;
-    set.delete(panel);
+    if (set) set.delete(panel);
+    this.openPanels.delete(panel);
   }
 
   private refreshPanels(document: AxisChartDocument): void {
@@ -304,6 +357,7 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
     if (!set) return;
     const session = sessionForDocument(document);
     for (const panel of set) {
+      this.openPanels.set(panel, { seriesKey: session.seriesKey });
       postHandshake(panel.webview, session);
     }
   }
@@ -348,6 +402,8 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
       if (disposed) return;
       const result = handleChartWebviewMessage(raw, () => {
         const session = sessionForDocument(document);
+        // Keep bus filter in sync when handshake rebuilds the seriesKey.
+        this.openPanels.set(webviewPanel, { seriesKey: session.seriesKey });
         return { init: session.init, full: session.full };
       });
       if (disposed) return;
@@ -375,13 +431,21 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
           if (result.full && !disposed) {
             void webviewPanel.webview.postMessage(result.full);
           }
+          // After handshake, replay last run full for this series (if any).
+          if (!disposed) {
+            const key =
+              this.openPanels.get(webviewPanel)?.seriesKey ??
+              sessionForDocument(document).seriesKey;
+            replayLastRunFull(webviewPanel.webview, key);
+          }
         } catch {
           // panel may be disposing
         }
       }
     });
 
-    this.trackPanel(document, webviewPanel);
+    const sessionKey = sessionForDocument(document).seriesKey;
+    this.trackPanel(document, webviewPanel, sessionKey);
 
     try {
       webviewPanel.webview.html = getChartHtml(
@@ -441,8 +505,14 @@ export function registerChartEditorProvider(
   context: ExtensionContext,
 ): { dispose(): void } {
   const provider = new AxisChartEditorProvider(context);
-  return window.registerCustomEditorProvider(CHART_VIEW_TYPE, provider, {
+  const registration = window.registerCustomEditorProvider(CHART_VIEW_TYPE, provider, {
     webviewOptions: { retainContextWhenHidden: false },
     supportsMultipleEditorsPerDocument: true,
   });
+  return {
+    dispose() {
+      registration.dispose();
+      provider.dispose();
+    },
+  };
 }

@@ -19,5 +19,9 @@
 /** OutputChannel name for AXIS run logs (command return value / tests). */
 export const RUN_OUTPUT_CHANNEL_NAME = 'AXIS Run';
 
+/** Command return when Run Script has no active Pine editor. */
+export const RUN_NO_PINE_MESSAGE =
+  'AXIS: Run Script needs an active Pine Script™ editor (.pyne / .pine).';
+
 /** Re-export — electron tests + command return value when no Pine buffer. */
 export { OPEN_CHART_NO_PINE_MESSAGE } from './host/open-chart';

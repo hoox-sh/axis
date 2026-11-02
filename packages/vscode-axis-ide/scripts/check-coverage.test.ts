@@ -37,7 +37,7 @@ function lcovFile(path: string, lines: Array<[number, number]>): string {
 }
 
 describe('check-coverage helpers', () => {
-  test('INCLUDE lists pure-host dirs including src/secrets/ and src/editors/', () => {
+  test('INCLUDE lists live pure-host dirs (protocol/host/secrets/editors/run) + live placeholder', () => {
     expect(INCLUDE).toContain('src/protocol/');
     expect(INCLUDE).toContain('src/host/');
     expect(INCLUDE).toContain('src/secrets/');

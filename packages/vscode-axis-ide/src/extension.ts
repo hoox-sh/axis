@@ -24,23 +24,30 @@
  */
 
 import {
+  type DiagnosticCollection,
   type ExtensionContext,
   type OutputChannel,
+  Diagnostic,
+  DiagnosticSeverity,
+  Position,
+  Range,
   StatusBarAlignment,
   type StatusBarItem,
   Uri,
   commands,
   extensions,
+  languages,
   window,
   workspace,
 } from 'vscode';
-import { RUN_OUTPUT_CHANNEL_NAME } from './constants';
+import { RUN_NO_PINE_MESSAGE, RUN_OUTPUT_CHANNEL_NAME } from './constants';
 import { registerChartEditorProvider } from './editors/chart-editor';
 import {
   OPEN_CHART_NO_PINE_MESSAGE,
   PINE_LANGUAGE_ID,
   isPineFilePath,
   planSiblingChartOpen,
+  siblingAxisJsonPath,
 } from './host/open-chart';
 import {
   AxisSecretStorage,
@@ -50,25 +57,223 @@ import {
   validateWorkerKey,
 } from './secrets';
 import { isVersionOlderThan } from './semver';
+import {
+  DEFAULT_ENGINE_ENDPOINT,
+  ResultsFocusStore,
+  RunOrchestrator,
+  checkEngineEndpoint,
+  notifyChart,
+  resolveRunContext,
+  scrubSecrets,
+  type RunDiagnostic,
+  type RunDeps,
+} from './run';
 
 /** Keep in sync with package.json contributes.commands (grow with KD-14). */
 export const COMMANDS = {
   showRunOutput: 'axis.showRunOutput',
   openChart: 'axis.openChart',
+  runScript: 'axis.runScript',
+  runScriptSilent: 'axis.runScriptSilent',
   setWorkerKey: 'axis.secrets.setWorkerKey',
   setProKey: 'axis.secrets.setProKey',
   clearSecrets: 'axis.secrets.clear',
 } as const;
 
+export { RUN_NO_PINE_MESSAGE };
 const PYNE_EXT_ID = 'hoox-sh.pyne';
 const PYNE_RECOMMENDED_MIN = '0.5.4';
 
 let runOutput: OutputChannel | undefined;
 let statusBar: StatusBarItem | undefined;
 let secrets: AxisSecretStorage | undefined;
+let runDiagnostics: DiagnosticCollection | undefined;
+let orchestrator: RunOrchestrator | undefined;
+let resultsStore: ResultsFocusStore | undefined;
+/** Aborts the previous command-level run when a new one starts. */
+let commandAbort: AbortController | undefined;
 /** Set in deactivate so any late work skips after shutdown. */
 let deactivated = false;
 
+function severityOf(s: RunDiagnostic['severity']): DiagnosticSeverity {
+  if (s === 'warning') return DiagnosticSeverity.Warning;
+  if (s === 'info') return DiagnosticSeverity.Information;
+  return DiagnosticSeverity.Error;
+}
+
+function applyRunDiagnostics(
+  collection: DiagnosticCollection | undefined,
+  uri: string | undefined,
+  items: RunDiagnostic[],
+): void {
+  if (!collection) return;
+  try {
+    if (!uri) return;
+    const target = Uri.parse(uri);
+    const diags = items.map((item) => {
+      const line = Math.max(0, (item.line ?? 1) - 1);
+      const col = Math.max(0, item.column ?? 0);
+      const range = new Range(new Position(line, col), new Position(line, col + 1));
+      return new Diagnostic(
+        range,
+        scrubSecrets(item.message),
+        severityOf(item.severity),
+      );
+    });
+    // Empty items clears only this URI — never wipe the whole collection.
+    collection.set(target, diags);
+  } catch {
+    // hostile uri / disposed collection
+  }
+}
+
+function beginCommandAbort(): AbortSignal {
+  try {
+    commandAbort?.abort();
+  } catch {
+    // ignore
+  }
+  commandAbort = new AbortController();
+  return commandAbort.signal;
+}
+
+async function readSiblingChartJson(pineFsPath: string): Promise<string | null> {
+  try {
+    const sibling = siblingAxisJsonPath(pineFsPath);
+    if (!sibling) return null;
+    const bytes = await workspace.fs.readFile(Uri.file(sibling));
+    return new TextDecoder().decode(bytes);
+  } catch {
+    return null;
+  }
+}
+
+function readEngineSettings(): {
+  engineId: string;
+  endpoint: string;
+  allowRemote: boolean;
+  historyBarsSetting?: number;
+} {
+  let engineId = 'server';
+  let endpoint = DEFAULT_ENGINE_ENDPOINT;
+  let allowRemote = false;
+  let historyBarsSetting: number | undefined;
+  try {
+    const engineCfg = workspace.getConfiguration('axis.engine');
+    const id = engineCfg.get<string>('id');
+    if (typeof id === 'string' && id.trim()) engineId = id.trim();
+    const ep = engineCfg.get<string>('endpoint');
+    if (typeof ep === 'string' && ep.trim()) endpoint = ep.trim();
+    allowRemote = engineCfg.get<boolean>('allowRemoteEndpoint', false) === true;
+  } catch {
+    // keep defaults
+  }
+  try {
+    const chartCfg = workspace.getConfiguration('axis.chart');
+    const hb = chartCfg.get<number>('historyBars');
+    if (typeof hb === 'number' && Number.isFinite(hb)) historyBarsSetting = hb;
+  } catch {
+    // keep defaults
+  }
+  return { engineId, endpoint, allowRemote, historyBarsSetting };
+}
+
+/**
+ * Run the active Pine buffer against Pro `/run` with mock bars.
+ * `focus` selects §7.1 Results focus rules. Returns a short status string.
+ */
+async function runScriptCommand(focus: boolean): Promise<string | undefined> {
+  if (deactivated) return undefined;
+  try {
+    const editor = window.activeTextEditor;
+    const doc = editor?.document;
+    if (!doc || doc.languageId !== PINE_LANGUAGE_ID) {
+      void window.showErrorMessage(RUN_NO_PINE_MESSAGE);
+      return RUN_NO_PINE_MESSAGE;
+    }
+    if (!secrets || !orchestrator || !resultsStore || !runOutput) {
+      const err = 'AXIS: Run Script is not ready (activate incomplete).';
+      void window.showErrorMessage(err);
+      return err;
+    }
+
+    const script = doc.getText();
+    const pinePath = doc.uri.scheme === 'file' ? doc.uri.fsPath : '';
+    const chartJson = pinePath ? await readSiblingChartJson(pinePath) : null;
+    if (deactivated) return undefined;
+
+    const settings = readEngineSettings();
+    const endpointCheck = checkEngineEndpoint(settings.endpoint, {
+      allowRemote: settings.allowRemote,
+    });
+    if (!endpointCheck.ok) {
+      const err = scrubSecrets(endpointCheck.error);
+      runOutput.appendLine(err);
+      if (focus) void window.showErrorMessage(err);
+      return err;
+    }
+
+    // Runs always use mock bars until HistoryClient (ignore useMockBars:false).
+    const ctx = resolveRunContext(chartJson, {
+      historyBarsSetting: settings.historyBarsSetting,
+      engineId: settings.engineId,
+      endpoint: endpointCheck.endpoint,
+    });
+
+    const signal = beginCommandAbort();
+    const output = runOutput;
+    const deps: RunDeps = {
+      secrets: {
+        getProKey: () => secrets!.getProKey(),
+      },
+      endpoint: endpointCheck.endpoint,
+      bus: { notifyChart },
+      results: resultsStore,
+      output: {
+        appendLine(line: string) {
+          output.appendLine(scrubSecrets(line));
+        },
+      },
+      diagnostics: {
+        set: (uri, items) => {
+          applyRunDiagnostics(runDiagnostics, uri, items);
+        },
+      },
+    };
+
+    const outcome = await orchestrator.run(
+      {
+        script,
+        uri: doc.uri.toString(),
+        mode: ctx.mode,
+        focus,
+        bars: ctx.bars,
+        seriesKey: ctx.seriesKey,
+        engineId: ctx.engineId,
+        baseSeq: ctx.seq,
+        signal,
+      },
+      deps,
+    );
+    if (deactivated) return undefined;
+
+    if (outcome.ok) {
+      return `ok:${outcome.runId}`;
+    }
+    if (outcome.reason === 'stale') return 'stale';
+    if (outcome.reason === 'aborted') return 'aborted';
+    const err = scrubSecrets(outcome.error || 'AXIS run failed');
+    // Toast only for focused user runs — silent path stays quiet.
+    if (focus) void window.showErrorMessage(err);
+    return err;
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    const err = scrubSecrets(`AXIS: Run Script failed: ${message}`);
+    runOutput?.appendLine(err);
+    if (focus) void window.showErrorMessage(err);
+    return err;
+  }
+}
 function warnIfPyneBelowRecommended(): void {
   if (deactivated) return;
   const pyne = extensions.getExtension(PYNE_EXT_ID);
@@ -277,9 +482,14 @@ export function activate(context: ExtensionContext): void {
   deactivated = false;
 
   secrets = new AxisSecretStorage(context.secrets);
+  orchestrator = new RunOrchestrator();
+  resultsStore = new ResultsFocusStore();
 
   runOutput = window.createOutputChannel(RUN_OUTPUT_CHANNEL_NAME);
   context.subscriptions.push(runOutput);
+
+  runDiagnostics = languages.createDiagnosticCollection('axis-run');
+  context.subscriptions.push(runDiagnostics);
 
   statusBar = window.createStatusBarItem('axis.ide.status', StatusBarAlignment.Left, 100);
   statusBar.name = 'AXIS IDE';
@@ -297,6 +507,8 @@ export function activate(context: ExtensionContext): void {
       return RUN_OUTPUT_CHANNEL_NAME;
     }),
     commands.registerCommand(COMMANDS.openChart, () => openChartCommand()),
+    commands.registerCommand(COMMANDS.runScript, () => runScriptCommand(true)),
+    commands.registerCommand(COMMANDS.runScriptSilent, () => runScriptCommand(false)),
     commands.registerCommand(COMMANDS.setWorkerKey, () => promptAndSetWorkerKey()),
     commands.registerCommand(COMMANDS.setProKey, () => promptAndSetProKey()),
     commands.registerCommand(COMMANDS.clearSecrets, () => promptAndClearSecrets()),
@@ -313,7 +525,21 @@ export function activate(context: ExtensionContext): void {
 
 export function deactivate(): void {
   deactivated = true;
+  try {
+    commandAbort?.abort();
+  } catch {
+    // ignore
+  }
+  commandAbort = undefined;
+  try {
+    orchestrator?.abortAll();
+  } catch {
+    // ignore
+  }
   runOutput = undefined;
   statusBar = undefined;
   secrets = undefined;
+  runDiagnostics = undefined;
+  orchestrator = undefined;
+  resultsStore = undefined;
 }

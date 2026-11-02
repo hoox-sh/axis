@@ -52,6 +52,8 @@
     "onCustomEditor:axis.chart",
     "onCommand:axis.showRunOutput",
     "onCommand:axis.openChart",
+    "onCommand:axis.runScript",
+    "onCommand:axis.runScriptSilent",
     "onCommand:axis.secrets.setWorkerKey",
     "onCommand:axis.secrets.setProKey",
     "onCommand:axis.secrets.clear",
@@ -88,6 +90,16 @@
         "category": "AXIS"
       },
       {
+        "command": "axis.runScript",
+        "title": "Run Script",
+        "category": "AXIS"
+      },
+      {
+        "command": "axis.runScriptSilent",
+        "title": "Run Script (Silent)",
+        "category": "AXIS"
+      },
+      {
         "command": "axis.secrets.setWorkerKey",
         "title": "Set Worker API Key",
         "category": "AXIS"
@@ -103,12 +115,31 @@
         "category": "AXIS"
       }
     ],
+    "keybindings": [
+      {
+        "command": "axis.runScript",
+        "key": "ctrl+enter",
+        "mac": "cmd+enter",
+        "when": "editorTextFocus && editorLangId == pinescript"
+      }
+    ],
     "menus": {
       "editor/title": [
         {
           "command": "axis.openChart",
           "when": "resourceLangId == pinescript",
           "group": "navigation@1"
+        },
+        {
+          "command": "axis.runScript",
+          "when": "resourceLangId == pinescript",
+          "group": "navigation@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "axis.runScriptSilent",
+          "when": "editorLangId == pinescript"
         }
       ]
     },
@@ -121,6 +152,23 @@
             "default": true,
             "description": "Keep product telemetry off by default in IDE."
           },
+          "axis.engine.id": {
+            "type": "string",
+            "default": "server",
+            "enum": ["server"],
+            "markdownDescription": "Active calculation engine id. PR-06 supports **`server`** (Pro `/run`) only; `pyne-worker` lands in a later task."
+          },
+          "axis.engine.endpoint": {
+            "type": "string",
+            "default": "http://127.0.0.1:5002",
+            "markdownDescription": "PYNE Pro / engine base URL (no `/run` suffix). Defaults to loopback. Remote URLs require `#axis.engine.allowRemoteEndpoint#`."
+          },
+          "axis.engine.allowRemoteEndpoint": {
+            "type": "boolean",
+            "default": false,
+            "scope": "application",
+            "markdownDescription": "When false (default), `axis.engine.endpoint` must be loopback (`127.0.0.1` / `localhost` / `::1`) so the Pro Bearer key is not sent off-machine. **Application (user) scope only** — workspace settings cannot enable remote endpoints. Opt in only for trusted remote Pro hosts."
+          },
           "axis.chart.historyBars": {
             "type": "number",
             "default": 1500,
@@ -131,7 +179,7 @@
           "axis.chart.useMockBars": {
             "type": "boolean",
             "default": true,
-            "markdownDescription": "When true, chart sessions use deterministic mock/fixture bars (P1 default). When false, host still posts an empty `chart.full` to clear the series. Venue history lands with HistoryClient later."
+            "markdownDescription": "When true, chart sessions use deterministic mock/fixture bars (P1 default). When false, host still posts an empty `chart.full` to clear the series. **Runs always use mock bars** until HistoryClient (Task 11), regardless of this setting."
           }
         }
       }
