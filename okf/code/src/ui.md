@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/ui"
-description: "src/ui contains AboutModal.tsx, AlertsPanel.tsx, BarReplayControls.tsx, and 86 more files."
+description: "src/ui contains AboutModal.tsx, AgentPanel.tsx, AlertsPanel.tsx, and 87 more files."
 resource: "src/ui"
 tags: [code, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-02T12:33:01Z
+  at: 2026-11-02T16:20:31Z
 sources:
   - id: tree
     resource: "src/ui"
@@ -19,6 +19,7 @@ okf_lock: generated
 # Files
 
 * `AboutModal.tsx` — AboutModal, closeAboutModal, isAboutModalOpen, openAboutModal
+* `AgentPanel.tsx` — AgentPanel
 * `AlertsPanel.tsx` — AlertsPanel
 * `BarReplayControls.tsx` — BarReplayControls, exitBarReplay, startBarReplay
 * `CachedDatasetsModal.tsx` — CachedDatasetsModal, CachedDatasetsModalProps

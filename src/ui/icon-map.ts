@@ -91,6 +91,7 @@
  * | book / cable / barChart | BookOpen / Cable / BarChart3 | Docs / wire / stats |
  * | activity | Activity | Generic pulse (non-panel) |
  * | favorite | Star | Symbol favorite |
+ * | agent | Bot | PYNE Agent panel |
  *
  * @module ui/icon-map
  */
@@ -193,6 +194,7 @@ export const ICON_MAP = {
   barChart: 'BarChart3',
   activity: 'Activity',
   favorite: 'Star',
+  agent: 'Bot',
 } as const;
 
 export type IconName = keyof typeof ICON_MAP;
@@ -226,6 +228,7 @@ export const PANEL_ICON: Record<PanelId, IconName> = {
   datasource: 'dataSource',
   onchain: 'onchain',
   quote: 'trend',
+  agent: 'agent',
   time: 'clock',
   price: 'activity',
 };

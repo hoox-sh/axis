@@ -17,7 +17,11 @@ _Generated/updated: 2026-11-01 · 880 commits · describe-tag: `v2.26.0`_
 
 ### Changed
 
+- **PYNE Agent is an Agent panel.** The bottom-right Agent launcher and floating chat are gone. Plugin 0.1.9 fills the Agent dock panel. The module bar has an **AI** button next to the other panel toggles (Settings → Topbar can hide it). Command palette “Toggle Agent”, Extras, and mobile Panels still open it. Closing the panel aborts the chat request.
+
 - **Equity curve market colors.** The zero line uses `--color-border`. The curve, fill, and drawdown use `--color-up` and `--color-down`. Axis labels use `--font-mono`.
+
+- **VS Code AXIS IDE Plugins WebviewView** (`packages/vscode-axis-ide`). Replaces split plugin TreeViews (`axis.plugins.{source,stream,engine,storage,dataset,component}`) with a single detailed Plugins WebviewView (`axis.plugins`, `type: webview`, `retainContextWhenHidden: true`) using VS Code theme tokens (not webview-ui-toolkit). Activity order: library → layers → indicators → watchlist → alerts → plugins → workers. Command `axis.plugins.activate` remains (palette `when: false`).
 
 - **Shell chrome hairlines and market color aliases.** Command-bar groups use a short centered rule instead of a full-height divider. Vertical resize handles keep a 1px resting mark. `--color-up`, `--color-down`, `--color-warning`, and `--color-info` follow the theme greens, reds, amber, and cyan (including light). `--font-sans` / `--font-mono` name the chrome and figure stacks. Command palette rows put the category beside the title, with a 2px accent bar on the active row.
 

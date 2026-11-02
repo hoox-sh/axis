@@ -592,7 +592,7 @@ export interface DatasetPlugin extends PluginBase {
 
 export interface ComponentPlugin extends PluginBase {
   kind: 'component';
-  slots: Array<'manager-tab' | 'results-tab' | 'topbar-action' | 'settings-section'>;
+  slots: Array<'manager-tab' | 'results-tab' | 'topbar-action' | 'settings-section' | 'panel'>;
   mount(slot: string, el: HTMLElement, api: Record<string, unknown>): () => void;
 }
 

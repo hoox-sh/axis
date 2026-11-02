@@ -33,6 +33,8 @@ describe('extras store', () => {
   it('hydrates extras + panelsExtra from persisted bags, clamps garbage', () => {
     const t = hydrateTopbar({ panelsExtra: false });
     expect(t.panelsExtra).toBe(false);
+    expect(hydrateTopbar({}).panelsAi).toBe(true);
+    expect(hydrateTopbar({ panelsAi: false }).panelsAi).toBe(false);
     const parsed = parsePersistedState(
       JSON.stringify({ extras: { priceCard: { enabled: true, tickLength: 500 } } }),
     );

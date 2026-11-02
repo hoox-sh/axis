@@ -886,7 +886,7 @@ export function WorkersPage(props: {
                       <StudioField
                         label="PYNE backend"
                         for="axis-pyne-agent-backend"
-                        hint="Where parse/lint/eval run on the agent Worker. auto = first configured host. Plugin 0.1.8 always sends orchestrate:true."
+                        hint="Where parse/lint/eval run on the agent Worker. auto = first configured host. Plugin 0.1.9 always sends orchestrate:true."
                       >
                         <StudioSelect
                           id="axis-pyne-agent-backend"

@@ -72,6 +72,7 @@ export interface CommandActions {
   toggleLibrary?: () => void;
   toggleDataSource?: () => void;
   toggleOnchain?: () => void;
+  toggleAgent?: () => void;
   /** Open on-chain panel (e.g. TVL mode; panel mode is local UI state). */
   openOnchain?: () => void;
   /** Detach all on-chain chart series attachments. */
@@ -336,6 +337,12 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
     title: 'Toggle Tables',
     category: 'panels',
     keywords: ['tables', 'pine table', 'bottom panel', 'table.new', 'table.cell'],
+  },
+  {
+    id: 'panel.agent',
+    title: 'Toggle Agent',
+    category: 'panels',
+    keywords: ['pyne', 'agent', 'pine', 'chat', 'nl', 'assistant'],
   },
   {
     id: 'panel.alerts',
@@ -1031,6 +1038,7 @@ export function buildDefaultCommands(actions: CommandActions): CommandDef[] {
   if (actions.toggleTables) byId.set('panel.tables', actions.toggleTables);
   if (actions.toggleStatusBar) byId.set('panel.statusbar', actions.toggleStatusBar);
   if (actions.toggleAlerts) byId.set('panel.alerts', actions.toggleAlerts);
+  if (actions.toggleAgent) byId.set('panel.agent', actions.toggleAgent);
   if (actions.toggleLibrary) byId.set('panel.library', actions.toggleLibrary);
   if (actions.toggleDataSource) byId.set('panel.datasource', actions.toggleDataSource);
   if (actions.toggleOnchain) byId.set('panel.onchain', actions.toggleOnchain);

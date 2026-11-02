@@ -94,6 +94,7 @@ const MOBILE_PANELS: readonly PanelId[] = [
   'datasource',
   'onchain',
   'quote',
+  'agent',
 ] as const;
 
 export interface MobileChromeProps {

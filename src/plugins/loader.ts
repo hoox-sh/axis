@@ -539,7 +539,7 @@ export async function loadPluginFromUrl(url: string): Promise<InstalledPlugin> {
       const component = p as unknown as ComponentPlugin;
       registry.registerComponent(component);
       seedPyneAgentConfig(id, href);
-      // Phase-2 host may not mount slots yet — call init so floating UI can attach.
+      // init is status-only. The Agent panel mounts the chat when it opens.
       if (typeof component.init === 'function') {
         try {
           await component.init({

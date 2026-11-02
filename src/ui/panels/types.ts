@@ -41,6 +41,7 @@ export type PanelId =
   | 'datasource'
   | 'onchain'
   | 'quote'
+  | 'agent'
   | 'time'
   | 'price';
 
@@ -249,6 +250,16 @@ export const PANEL_META: Record<
     defaultX: 940,
     defaultY: 56,
   },
+  agent: {
+    title: 'Agent',
+    defaultDock: 'right',
+    minW: 1,
+    minH: 1,
+    defaultW: 360,
+    defaultH: 520,
+    defaultX: 880,
+    defaultY: 56,
+  },
   /** Float-only compact panels (see FLOAT_ONLY_PANELS): normal width, ~2 rows. */
   time: {
     title: 'Time',
@@ -414,6 +425,14 @@ export function defaultPanelChromeMap(): PanelChromeMap {
       w: 280,
       x: PANEL_META.quote.defaultX,
       y: PANEL_META.quote.defaultY,
+    }),
+    agent: defaultPanelChrome('agent', {
+      open: false,
+      dock: 'right',
+      w: 360,
+      h: 520,
+      x: PANEL_META.agent.defaultX,
+      y: PANEL_META.agent.defaultY,
     }),
     time: defaultPanelChrome('time', {
       open: false,

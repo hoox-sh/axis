@@ -42,6 +42,7 @@ import {
   toggleTablesPanel,
   toggleLayerPanel,
   toggleAlertsPanel,
+  toggleAgentPanel,
   updateChartSlot,
   isPanelOpen,
   toggleLibraryPanel,
@@ -903,6 +904,21 @@ export const Topbar: Component<{
                 >
                   <Icons.alerts />
                   <span class="axis-tb-btn-label">Alerts</span>
+                </button>
+              </Show>
+
+              <Show when={store.topbar.panelsAi}>
+                <button
+                  type="button"
+                  class={`axis-module ${isPanelOpen('agent') ? 'is-active' : ''}`}
+                  onClick={() => toggleAgentPanel()}
+                  title="AI — PYNE Agent chat"
+                  aria-label="AI"
+                  aria-pressed={isPanelOpen('agent')}
+                  data-testid="axis-btn-ai"
+                >
+                  <Icons.agent />
+                  <span class="axis-tb-btn-label">AI</span>
                 </button>
               </Show>
 

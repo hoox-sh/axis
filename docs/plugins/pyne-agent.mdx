@@ -22,7 +22,7 @@ description: "Install the pyne-agent-worker AXIS component plugin — natural-la
 | **API** | `POST /v1/chat` |
 | **Standalone** | Workers AI™ only — **no** pyne-worker / HOOX mesh required |
 | **Optional** | pyne-worker **0.10.0+** staged parse→lint→eval (`/ast/*` + `/run`) when configured |
-| **Plugin** | **0.1.8** (orchestrate + `pyneBackend`) |
+| **Plugin** | **0.1.9** (Agent panel, orchestrate + `pyneBackend`) |
 
 _Pine Script™ and TradingView® are trademarks of TradingView®, Inc. Cloudflare® is a registered trademark of Cloudflare®, Inc. Independent project — not affiliated with TradingView®, Inc. or Cloudflare®, Inc._
 
@@ -68,9 +68,9 @@ https://pyne-agent-worker.cryptolinx.workers.dev/plugin/axis-pine-agent.js
 | `persona` | `auto` \| `pine` (coder) \| `axis` (app guide + operator — changes the app via MCP) \| `trader` (market analysis, risk, psychology) |
 | `pyneBackend` | `auto` \| `pro` \| `local` \| `worker` \| `container` \| `none` — named PYNE host for parse/lint/eval (kind only, never a URL) |
 
-Plugin **0.1.8** always POSTs `orchestrate: true` (Grandmaster tool loop). Sync the vendored same-origin copy with `bun run sync:pyne-agent-plugin` from the AXIS repo.
+Plugin **0.1.9** always POSTs `orchestrate: true` (Grandmaster tool loop). Sync the vendored same-origin copy with `bun run sync:pyne-agent-plugin` from the AXIS repo.
 
-4. Open the agent from the **manager tab** / **topbar** action, **Workers Manager → Install/Configure**, or the floating **PYNE Agent** button when mounted.
+4. Open the **Agent** panel from the module-bar **AI** button. Command palette “Toggle Agent”, Extras, and the mobile Panels sheet do the same. The plugin fills the panel body. AXIS owns the title, dock, and close.
 
 **Component URL load is enabled** (AXIS 2.0.x): `loadPluginFromUrl` accepts `kind: 'component'`, registers via `registry.registerComponent`, and runs optional `init({ getConfig })`.
 

@@ -870,6 +870,8 @@ export interface TopbarSettings {
   panelsDsm: boolean;
   panelsOnchain: boolean;
   panelsAlerts: boolean;
+  /** PYNE Agent chat (module-bar AI button). */
+  panelsAi: boolean;
   panelsValues: boolean;
   panelsResults: boolean;
   panelsExtra: boolean;

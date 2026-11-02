@@ -172,6 +172,12 @@ const TOPBAR_PANELS: TopbarToggle[] = [
     label: 'Alerts',
     hint: 'Price and script alerts.',
   },
+  {
+    key: 'panelsAi',
+    id: 'topbar-panels-ai',
+    label: 'AI',
+    hint: 'PYNE Agent chat panel.',
+  },
   { key: 'panelsValues', id: 'topbar-panels-values', label: 'Values', hint: 'Data window.' },
   {
     key: 'panelsResults',

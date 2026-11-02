@@ -400,6 +400,20 @@ export const ExtraMenu: Component = () => {
               </div>
             </div>
 
+            {/* ── PYNE Agent panel ── */}
+            <div class="axis-extra-menu-section">
+              <div class="axis-extra-menu-row">
+                <StudioToggle
+                  id="axis-extra-agent-toggle"
+                  checked={isPanelOpen('agent')}
+                  label="Agent panel"
+                  hint="Right dock · PYNE Agent chat"
+                  testId="axis-extra-agent-toggle"
+                  onChange={(v) => setPanelOpen('agent', v)}
+                />
+              </div>
+            </div>
+
             {/* ── Quote panel ── */}
             <div class="axis-extra-menu-section">
               <div class="axis-extra-menu-row">

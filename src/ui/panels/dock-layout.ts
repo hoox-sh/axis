@@ -60,6 +60,7 @@ export const DOCK_STACK_ORDER: readonly PanelId[] = [
   'datasource',
   'onchain',
   'quote',
+  'agent',
   'time',
   'price',
   'editor',

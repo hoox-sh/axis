@@ -807,6 +807,7 @@ export const DEFAULTS: AppState = {
     panelsDsm: true,
     panelsOnchain: true,
     panelsAlerts: true,
+    panelsAi: true,
     panelsValues: true,
     panelsResults: true,
     panelsExtra: true,
@@ -1522,6 +1523,7 @@ export function hydrateTopbar(raw: unknown): TopbarSettings {
     panelsDsm: bool('panelsDsm'),
     panelsOnchain: bool('panelsOnchain'),
     panelsAlerts: bool('panelsAlerts'),
+    panelsAi: bool('panelsAi'),
     panelsValues: bool('panelsValues'),
     panelsResults: bool('panelsResults'),
     panelsExtra: bool('panelsExtra'),
@@ -4479,6 +4481,16 @@ export function toggleOnchainPanel() {
   setPanelOpen('onchain', !isPanelOpen('onchain'));
 }
 
+/** Open/close the PYNE Agent panel. */
+export function setAgentPanelOpen(open: boolean) {
+  setPanelOpen('agent', open);
+}
+
+/** Toggle the PYNE Agent panel. */
+export function toggleAgentPanel() {
+  setPanelOpen('agent', !isPanelOpen('agent'));
+}
+
 /** Persist last on-chain protocol slug (search/use recall). */
 export function setOnchainLastProtocolSlug(slug: string) {
   setStore('onchain', 'lastProtocolSlug', typeof slug === 'string' ? slug : '');
@@ -4772,6 +4784,7 @@ export function isPanelOpen(id: PanelId): boolean {
     case 'datasource':
     case 'onchain':
     case 'quote':
+    case 'agent':
     case 'time':
     case 'price':
       // Chrome-only (no legacy flat flag)
@@ -4828,6 +4841,7 @@ const DOCK_STACK_IDS: PanelId[] = [
   'datasource',
   'onchain',
   'quote',
+  'agent',
   'editor',
   'logs',
   'scriptlogs',

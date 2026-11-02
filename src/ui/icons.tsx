@@ -37,6 +37,7 @@ import {
   ArrowUpRight,
   BarChart3,
   Bell,
+  Bot,
   BookOpen,
   Boxes,
   BringToFront,
@@ -253,6 +254,7 @@ export const Icons = {
   barChart: withDefaults(BarChart3),
   activity: withDefaults(Activity),
   favorite: withDefaults(Star),
+  agent: withDefaults(Bot),
 
   // ── Legacy aliases (same glyph as canonical key) ──────────────────────
   /** @deprecated use Icons.watchlist */

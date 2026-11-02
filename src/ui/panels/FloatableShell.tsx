@@ -1350,10 +1350,12 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
           </div>
 
           <div
-            class="flex-1 min-h-0 overflow-auto axis-panel-body"
+            class={`flex-1 min-h-0 axis-panel-body ${
+              props.id === 'agent' ? 'overflow-hidden flex flex-col' : 'overflow-auto'
+            }`}
             classList={{
               'is-hover-hidden': hoverCollapsed(),
-              'p-3': props.id !== 'editor' && props.id !== 'watchlist',
+              'p-3': props.id !== 'editor' && props.id !== 'watchlist' && props.id !== 'agent',
             }}
             aria-hidden={hoverCollapsed() || undefined}
           >

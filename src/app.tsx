@@ -62,6 +62,7 @@ import { ResultsModal } from './ui/ResultsModal';
 import { SystemLogs } from './ui/SystemLogs';
 import { DataViewPanel } from './ui/DataViewPanel';
 import { TablesPanel } from './ui/TablesPanel';
+import { AgentPanel } from './ui/AgentPanel';
 import { QuotePanel } from './ui/QuotePanel';
 import { TimePanel } from './ui/TimePanel';
 import { PricePanel } from './ui/PricePanel';
@@ -583,6 +584,7 @@ export const App: Component = () => {
       <DataViewPanel />
       <TablesPanel />
       <QuotePanel />
+      <AgentPanel />
       <TimePanel />
       <PricePanel />
       <IndicatorPanel />
