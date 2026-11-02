@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Download a minimal self-hosted Pyodide bundle into public/pyodide/v<version>/
-# Usage: ./scripts/fetch-pyodide.sh [0.26.2]
+# Includes micropip (+deps) for wheel install and numpy for compile/auto mode.
+# Usage: ./scripts/fetch-pyodide.sh [0.29.5]
 set -euo pipefail
-VERSION="${1:-0.26.2}"
+VERSION="${1:-0.29.5}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DEST="$ROOT/public/pyodide/v${VERSION}"
 BASE="https://cdn.jsdelivr.net/pyodide/v${VERSION}/full"
@@ -17,7 +18,9 @@ import hashlib, json, sys, urllib.request
 from pathlib import Path
 version = sys.argv[1]
 lock = json.loads(Path("pyodide-lock.json").read_text())
-need = {"micropip"}
+# micropip: install pynescript/antlr from /vendor. numpy: compile/auto path
+# (loadPackage('numpy') hits this self-hosted index; missing → SPA HTML + SRI fail).
+need = {"micropip", "numpy"}
 changed = True
 while changed:
     changed = False

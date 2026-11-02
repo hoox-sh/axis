@@ -15,6 +15,10 @@ _Generated/updated: 2026-11-01 · 880 commits · describe-tag: `v2.26.0`_
 
 ## [Unreleased]
 
+### Fixed
+
+- **Pyodide numpy SRI failures on axis.hoox.sh.** `loadPackage('numpy')` for compile/auto fetched `/pyodide/v0.29.5/numpy-*.whl`, which was never vendored; Cloudflare Pages SPA-fallback returned `index.html` (200 `text/html`) and Pyodide’s integrity check failed with a different hash every retry. Vendored the lock-matched numpy 2.2.5 wheel (~2.8 MB), extended `scripts/fetch-pyodide.sh` to pull numpy with micropip, and added `public/_redirects` so missing `/pyodide/*` / `/vendor/*` / `/assets/*` / `/plugins/*` return 404 instead of the app shell.
+
 ### Added
 
 - **Performance & architecture audit roadmap** (`docs/architecture/perf-audit-2026-11.mdx`). Documents the baseline test health (4708 pass / 0 fail), the strongest remaining architecture/performance gaps (coarse `store.bars` reactivity, dense `ChartHost` effects, main-thread engine JSON parse, overlay rewrite cost, live-tick path thrash, UI theming/animation inconsistencies), and a 6-phase plan to reach world-class responsiveness.

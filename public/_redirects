@@ -1,0 +1,15 @@
+# Copyright (C) 2024-2026 jango_blockchained
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+# Cloudflare Pages routing. Static files always win over these rules; the
+# rules below only apply when no asset exists at the path.
+#
+# Asset trees must 404 when missing — never SPA-fallback to index.html.
+# A missing .whl served as HTML breaks Pyodide SRI (integrity) checks.
+/pyodide/*  /404.html  404
+/vendor/*   /404.html  404
+/assets/*   /404.html  404
+/plugins/*  /404.html  404
+
+# Client-side routes → app shell
+/*    /index.html   200
