@@ -68,6 +68,8 @@ export const EXCLUDE = [
   'views/layers.ts',
   'views/indicators.ts',
   'views/workers.ts',
+  'views/alerts.ts',
+  'views/watchlist.ts',
   'plugins/index.ts',
   'plugins/tree.ts',
 ];

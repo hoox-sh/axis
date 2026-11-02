@@ -71,8 +71,16 @@ export function buildChartWebviewHtml(opts: ChartHtmlOptions): string {
   <link rel="stylesheet" href="${safeStyle}" />
 </head>
 <body class="${safeClass}">
-  <div id="chart-host" class="chart-host" data-axis-chart-host="1" role="presentation">
-    <p class="chart-host__placeholder">AXIS chart host</p>
+  <div id="chart-shell" class="chart-shell" data-axis-chart-shell="1">
+    <div id="chart-toolbar" class="chart-toolbar" role="toolbar" aria-label="Drawing tools">
+      <button type="button" id="tool-trendline" class="chart-toolbar__btn" data-tool="trendline" aria-pressed="false" title="Trendline">Trendline</button>
+    </div>
+    <div id="chart-stage" class="chart-stage">
+      <div id="chart-host" class="chart-host" data-axis-chart-host="1" role="presentation">
+        <p class="chart-host__placeholder">AXIS chart host</p>
+      </div>
+      <svg id="drawing-overlay" class="drawing-overlay" aria-hidden="true"></svg>
+    </div>
   </div>
   <script src="${safeScript}"></script>
 </body>

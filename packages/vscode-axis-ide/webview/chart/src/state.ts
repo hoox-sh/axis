@@ -33,11 +33,20 @@ export interface ChartBar {
   volume?: number;
 }
 
+/** MVP user trendline (mirrors host CommittedTrendlineDrawing). */
+export interface UserDrawing {
+  id: string;
+  tool: 'trendline';
+  points: [{ time: number; price: number }, { time: number; price: number }];
+}
+
 export interface ChartViewState {
   seriesKey: string;
   theme: string;
   panes: unknown;
   bars: ChartBar[];
+  /** User drawings from chart.init / user-shaped chart.full batches. */
+  drawings: UserDrawing[];
   seq: number;
   ready: boolean;
 }
@@ -55,6 +64,7 @@ export function initialChartState(): ChartViewState {
     theme: '',
     panes: null,
     bars: [],
+    drawings: [],
     seq: 0,
     ready: false,
   };
@@ -66,6 +76,50 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 function num(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function normalizeDrawingPoint(raw: unknown): { time: number; price: number } | null {
+  if (!isPlainObject(raw)) return null;
+  const time = num(raw.time) ?? num(raw.t);
+  const price = num(raw.price) ?? num(raw.p);
+  if (time === null || price === null) return null;
+  return { time, price };
+}
+
+/**
+ * True when a drawings batch is user-tool shaped (empty or every entry has `tool`).
+ * Script/engine batches omit `tool` and must not wipe user drawings.
+ */
+export function isUserDrawingBatch(raw: unknown): boolean {
+  if (!Array.isArray(raw)) return false;
+  if (raw.length === 0) return true;
+  for (const entry of raw) {
+    if (!isPlainObject(entry) || typeof entry.tool !== 'string') return false;
+  }
+  return true;
+}
+
+/** Keep only valid MVP trendlines. */
+export function normalizeUserDrawings(raw: unknown): UserDrawing[] {
+  try {
+    if (!Array.isArray(raw)) return [];
+    const out: UserDrawing[] = [];
+    for (const entry of raw) {
+      if (!isPlainObject(entry)) continue;
+      const id = typeof entry.id === 'string' ? entry.id.trim() : '';
+      const tool = typeof entry.tool === 'string' ? entry.tool.trim() : '';
+      if (!id || tool !== 'trendline' || !Array.isArray(entry.points) || entry.points.length < 2) {
+        continue;
+      }
+      const a = normalizeDrawingPoint(entry.points[0]);
+      const b = normalizeDrawingPoint(entry.points[1]);
+      if (!a || !b) continue;
+      out.push({ id, tool: 'trendline', points: [a, b] });
+    }
+    return out;
+  } catch {
+    return [];
+  }
 }
 
 /** Normalize one bar; returns null when OHLC/time are unusable. */
@@ -186,6 +240,8 @@ export function applyChartHostMessage(
 ): ChartReduceOutcome {
   try {
     if (type === 'chart.init') {
+      const drawings =
+        'drawings' in payload ? normalizeUserDrawings(payload.drawings) : [];
       return {
         state: {
           ...state,
@@ -193,6 +249,7 @@ export function applyChartHostMessage(
           // Clear prior series on re-init; chart.full (possibly empty) follows.
           bars: [],
           seq: 0,
+          drawings,
           theme: typeof payload.theme === 'string' ? payload.theme : state.theme,
           seriesKey:
             typeof payload.seriesKey === 'string' ? payload.seriesKey : state.seriesKey,
@@ -203,14 +260,16 @@ export function applyChartHostMessage(
     }
     if (type === 'chart.full') {
       const seq = num(payload.seq);
-      return {
-        state: {
-          ...state,
-          bars: normalizeBars(payload.bars),
-          seq: seq === null ? state.seq : seq,
-        },
-        requestReload: false,
+      const next: ChartViewState = {
+        ...state,
+        bars: normalizeBars(payload.bars),
+        seq: seq === null ? state.seq : seq,
       };
+      // Only replace user drawings when the batch is user-tool shaped.
+      if ('drawings' in payload && isUserDrawingBatch(payload.drawings)) {
+        next.drawings = normalizeUserDrawings(payload.drawings);
+      }
+      return { state: next, requestReload: false };
     }
     if (type === 'chart.delta') {
       return applyDelta(state, payload);

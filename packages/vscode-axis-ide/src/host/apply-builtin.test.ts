@@ -28,7 +28,27 @@ let quickPickResult: unknown = undefined;
 const errors: string[] = [];
 
 mock.module('vscode', () => {
+  class TreeItem {
+    label: string;
+    collapsibleState: number;
+    id?: string;
+    description?: string;
+    contextValue?: string;
+    tooltip?: string;
+    constructor(label: string, collapsibleState = 0) {
+      this.label = label;
+      this.collapsibleState = collapsibleState;
+    }
+  }
+  class EventEmitter {
+    event = () => ({ dispose() {} });
+    fire(_v?: unknown) {}
+  }
   return {
+    TreeItem,
+    EventEmitter,
+    StatusBarAlignment: { Left: 1, Right: 2 },
+    TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
     commands: {
       registerCommand(command: string, cb: (...args: unknown[]) => unknown) {
         registered.push({ command, cb });
@@ -46,6 +66,18 @@ mock.module('vscode', () => {
       showErrorMessage: (m: string) => {
         errors.push(m);
       },
+      createTreeView: () => ({
+        dispose() {},
+        onDidChangeSelection: () => ({ dispose() {} }),
+      }),
+      createStatusBarItem: () => ({
+        text: '',
+        tooltip: '',
+        name: '',
+        command: '',
+        show() {},
+        dispose() {},
+      }),
     },
     workspace: {
       openTextDocument: async (opts: { content: string; language: string }) => {

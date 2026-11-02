@@ -80,11 +80,20 @@ export function pickChartInitFields(payload: Record<string, unknown>): {
   cssVars: unknown;
   seriesKey: string;
   panes: unknown;
+  drawings?: unknown;
 } {
-  return {
+  const out: {
+    theme: unknown;
+    cssVars: unknown;
+    seriesKey: string;
+    panes: unknown;
+    drawings?: unknown;
+  } = {
     theme: payload.theme,
     cssVars: payload.cssVars,
     seriesKey: typeof payload.seriesKey === 'string' ? payload.seriesKey : '',
     panes: payload.panes,
   };
+  if ('drawings' in payload) out.drawings = payload.drawings;
+  return out;
 }

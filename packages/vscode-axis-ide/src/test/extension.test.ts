@@ -71,6 +71,11 @@ const EXPECTED_COMMANDS = [
   'axis.liveStart',
   'axis.liveStop',
   'axis.workers.probeAll',
+  'axis.alerts.add',
+  'axis.alerts.remove',
+  'axis.watchlist.add',
+  'axis.watchlist.remove',
+  'axis.chart.drawing.trendline',
 ] as const;
 const EXPECTED_SETTINGS = [
   'axis.telemetry.offline',
@@ -109,11 +114,11 @@ const EXPECTED_ACTIVITY_VIEWS = [
   'axis.library',
   'axis.layers',
   'axis.indicators',
+  'axis.watchlist',
+  'axis.alerts',
   'axis.plugins',
   'axis.workers',
 ] as const;
-/** Watchlist is PR-08b — must not appear until that task. */
-const FORBIDDEN_VIEWS = ['axis.watchlist'] as const;
 const EXPECTED_KEYBINDINGS = [
   {
     command: 'axis.runScript',
@@ -192,7 +197,7 @@ suite('AXIS IDE Extension Structure', () => {
     }
   });
 
-  test('contributes panel + activity views (results/strategy/library/layers/indicators/plugins/workers; no watchlist)', () => {
+  test('contributes panel + activity views (results/strategy/library/layers/indicators/watchlist/alerts/plugins/workers)', () => {
     const panelContainers = pkg.contributes?.viewsContainers?.panel ?? [];
     const axisPanel = panelContainers.find((c) => c.id === 'axis-panel');
     assert.ok(axisPanel, 'missing viewsContainers.panel axis-panel');
@@ -223,12 +228,6 @@ suite('AXIS IDE Extension Structure', () => {
       'activity view inventory drifted — update test when intentionally expanding contributes',
     );
 
-    const allViewIds = Object.values(pkg.contributes?.views ?? {}).flatMap((list) =>
-      list.map((v) => v.id),
-    );
-    for (const id of FORBIDDEN_VIEWS) {
-      assert.ok(!allViewIds.includes(id), `${id} must be absent from contributes.views`);
-    }
     const activation = pkg.activationEvents ?? [];
     assert.ok(
       activation.includes('onView:axis.results'),
@@ -245,6 +244,14 @@ suite('AXIS IDE Extension Structure', () => {
     assert.ok(
       activation.includes('onView:axis.workers'),
       'activationEvents should include onView:axis.workers',
+    );
+    assert.ok(
+      activation.includes('onView:axis.watchlist'),
+      'activationEvents should include onView:axis.watchlist',
+    );
+    assert.ok(
+      activation.includes('onView:axis.alerts'),
+      'activationEvents should include onView:axis.alerts',
     );
   });
 

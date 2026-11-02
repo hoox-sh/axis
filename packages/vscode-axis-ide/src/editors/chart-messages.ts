@@ -28,6 +28,10 @@ import {
   type ProtocolError,
   type WebviewReadyPayload,
 } from '../protocol';
+import {
+  type CommittedTrendlineDrawing,
+  normalizeCommittedDrawing,
+} from './chart-drawings';
 
 export type ChartMessageHandle =
   | { kind: 'reject'; error: ProtocolError }
@@ -37,7 +41,9 @@ export type ChartMessageHandle =
       envelope: AxisEnvelope<ChartInitPayload>;
       /** Always posted after init (empty bars clears prior series). */
       full: AxisEnvelope<ChartFullPayload>;
-    };
+    }
+  | { kind: 'setTool'; tool: string }
+  | { kind: 'commit'; drawing: CommittedTrendlineDrawing };
 
 /**
  * VS Code theme CSS variables the chart shell inherits from the webview host.
@@ -63,12 +69,16 @@ export function defaultChartCssVars(): Record<string, string> {
  * Build `chart.init` (theme / cssVars / seriesKey / panes — bars go on chart.full).
  */
 export function buildChartInitStub(partial?: Partial<ChartInitPayload>): ChartInitPayload {
-  return {
+  const init: ChartInitPayload = {
     theme: partial?.theme ?? 'void',
     cssVars: partial?.cssVars ?? defaultChartCssVars(),
     seriesKey: typeof partial?.seriesKey === 'string' ? partial.seriesKey : '',
     panes: partial?.panes ?? [{ id: 'price', kind: 'price' }],
   };
+  if ('drawings' in (partial ?? {}) && partial) {
+    init.drawings = partial.drawings;
+  }
+  return init;
 }
 
 /** Session slice needed after webview.ready — rebuilt per message (no stale init). */
@@ -81,7 +91,8 @@ export interface ChartHandshakeSession {
 /**
  * Handle one untrusted webview → host message for the chart editor.
  * Never throws. Accepts `webview.ready` (view=chart) and replies with `chart.init`
- * (+ optional `chart.full`). Rejects host→view types and bad envelopes.
+ * (+ `chart.full`). Handles `drawing.setTool` / `drawing.commit`. Rejects
+ * host→view types and bad envelopes.
  *
  * `getSession` is invoked only after a valid ready so callers rebuild from the
  * live document + settings instead of closing over resolve-time snapshots.
@@ -103,6 +114,24 @@ export function handleChartWebviewMessage(
           message: `chart webview must not send host→view type "${decoded.envelope.type}"`,
         },
       };
+    }
+    if (decoded.envelope.type === VIEW_TO_HOST.DrawingSetTool) {
+      const payload = decoded.envelope.payload as { tool: string };
+      return { kind: 'setTool', tool: payload.tool };
+    }
+    if (decoded.envelope.type === VIEW_TO_HOST.DrawingCommit) {
+      const drawing = normalizeCommittedDrawing(decoded.envelope.payload);
+      if (!drawing) {
+        return {
+          kind: 'reject',
+          error: {
+            code: 'BAD_PAYLOAD',
+            message:
+              'drawing.commit requires id, tool "trendline", and two {time,price} points',
+          },
+        };
+      }
+      return { kind: 'commit', drawing };
     }
     if (decoded.envelope.type !== VIEW_TO_HOST.WebviewReady) {
       return { kind: 'ignore' };

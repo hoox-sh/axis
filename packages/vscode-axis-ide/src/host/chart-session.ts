@@ -93,11 +93,13 @@ export interface ChartSessionSnapshot {
 export function buildChartSession(opts: ChartSessionOptions): ChartSessionSnapshot {
   const useMockBars = opts.useMockBars !== false;
   const seriesKey = buildSeriesKey(opts.doc);
+  const drawings = Array.isArray(opts.doc.drawings) ? opts.doc.drawings : [];
   const init = buildChartInitStub({
     theme: opts.doc.theme,
     panes: opts.doc.panes,
     seriesKey,
     cssVars: opts.cssVars ?? defaultChartCssVars(),
+    drawings,
   });
   const seq =
     typeof opts.seq === 'number' && Number.isFinite(opts.seq)
@@ -105,7 +107,7 @@ export function buildChartSession(opts: ChartSessionOptions): ChartSessionSnapsh
       : CHART_HANDSHAKE_SEQ;
 
   if (!useMockBars) {
-    const full: ChartFullPayload = { bars: [], seq };
+    const full: ChartFullPayload = { bars: [], drawings, seq };
     return { seriesKey, init, full, bars: [], useMockBars: false };
   }
 
@@ -115,6 +117,6 @@ export function buildChartSession(opts: ChartSessionOptions): ChartSessionSnapsh
     interval: opts.doc.interval || '1m',
     seed: seriesKey,
   });
-  const full: ChartFullPayload = { bars, seq };
+  const full: ChartFullPayload = { bars, drawings, seq };
   return { seriesKey, init, full, bars, useMockBars: true };
 }

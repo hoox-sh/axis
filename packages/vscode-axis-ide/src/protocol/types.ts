@@ -108,6 +108,8 @@ export interface ChartInitPayload {
   cssVars: unknown;
   seriesKey: string;
   panes: unknown;
+  /** User drawings from `*.axis.json` (MVP trendlines); optional on the wire. */
+  drawings?: unknown;
 }
 
 export interface ChartFullPayload {

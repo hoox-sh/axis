@@ -40,7 +40,10 @@ export {
   libraryRootChildren,
 } from './library';
 
-/** Register Library / Layers / Scripts TreeViews (no watchlist — PR-08b / task 20). */
+/**
+ * Register Library / Layers / Scripts TreeViews.
+ * Watchlist + Alerts register via `registerWatchlist` / `registerAlertsView`.
+ */
 export function registerAxisTreeViews(context: vscode.ExtensionContext): void {
   const library = window.createTreeView(LIBRARY_VIEW_ID, {
     treeDataProvider: new LibraryTreeProvider(),

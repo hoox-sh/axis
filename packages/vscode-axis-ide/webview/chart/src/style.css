@@ -1,7 +1,7 @@
 /* Copyright (C) 2026 jango_blockchained
  * SPDX-License-Identifier: AGPL-3.0-only
  *
- * Chart webview styles — #chart-host is the Lightweight Charts mount root.
+ * Chart webview styles — shell + toolbar + LWC host + SVG drawing overlay.
  */
 
 html,
@@ -17,11 +17,57 @@ body {
   font-size: var(--vscode-font-size, 13px);
 }
 
-.chart-host {
+.chart-shell {
   box-sizing: border-box;
-  position: relative;
+  display: flex;
+  flex-direction: column;
   width: 100%;
   height: 100%;
+}
+
+.chart-toolbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
+  background: var(--vscode-editorWidget-background, transparent);
+}
+
+.chart-toolbar__btn {
+  appearance: none;
+  margin: 0;
+  padding: 3px 8px;
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 3px;
+  background: var(--vscode-button-secondaryBackground, rgba(128, 128, 128, 0.2));
+  color: var(--vscode-button-secondaryForeground, inherit);
+  font: inherit;
+  cursor: pointer;
+}
+
+.chart-toolbar__btn:hover {
+  background: var(--vscode-button-secondaryHoverBackground, rgba(128, 128, 128, 0.35));
+}
+
+.chart-toolbar__btn.is-active,
+.chart-toolbar__btn[aria-pressed='true'] {
+  background: var(--vscode-button-background, #0e639c);
+  color: var(--vscode-button-foreground, #fff);
+}
+
+.chart-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+}
+
+.chart-host {
+  box-sizing: border-box;
+  position: absolute;
+  inset: 0;
   display: block;
 }
 
@@ -44,4 +90,31 @@ body {
 
 .chart-host[data-axis-paint='lwc'] .chart-host__placeholder {
   display: none;
+}
+
+.drawing-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 2;
+}
+
+.chart-shell[data-axis-tool='trendline'] .drawing-overlay {
+  /* Clicks hit the stage/host; overlay stays non-interactive for pan. */
+  pointer-events: none;
+}
+
+.drawing-overlay__line {
+  stroke: var(--vscode-charts-orange, #ce9178);
+  stroke-width: 1.5;
+  fill: none;
+  vector-effect: non-scaling-stroke;
+}
+
+.drawing-overlay__draft {
+  fill: var(--vscode-charts-orange, #ce9178);
+  stroke: none;
 }

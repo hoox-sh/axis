@@ -81,11 +81,14 @@ import {
   type LiveFrameHandler,
   type LiveSessionBridge,
 } from './live';
+import { DRAWING_TOOL_TRENDLINE } from './editors/chart-drawings';
 import { registerPluginsAndWorkers } from './plugins';
+import { ALERTS_ADD_COMMAND, ALERTS_REMOVE_COMMAND, registerAlertsView } from './views/alerts';
 import { RESULTS_VIEW_ID, registerResultsView } from './views/results';
 import { registerStrategyView } from './views/strategy';
 import type { ResultsWebviewViewProvider } from './views/results-panel';
 import { registerAxisTreeViews } from './views/trees';
+import { WATCHLIST_COMMANDS, registerWatchlist } from './views/watchlist';
 
 /** Keep in sync with package.json contributes.commands (grow with KD-14). */
 export const COMMANDS = {
@@ -101,6 +104,11 @@ export const COMMANDS = {
   liveStart: LIVE_COMMANDS.liveStart,
   liveStop: LIVE_COMMANDS.liveStop,
   workersProbeAll: 'axis.workers.probeAll',
+  alertsAdd: ALERTS_ADD_COMMAND,
+  alertsRemove: ALERTS_REMOVE_COMMAND,
+  watchlistAdd: WATCHLIST_COMMANDS.add,
+  watchlistRemove: WATCHLIST_COMMANDS.remove,
+  drawingTrendline: 'axis.chart.drawing.trendline',
 } as const;
 
 export { RUN_NO_PINE_MESSAGE };
@@ -603,6 +611,8 @@ export function activate(context: ExtensionContext): void {
   resultsProvider = registerResultsView(context, resultsStore);
   strategyProvider = registerStrategyView(context, resultsStore);
   registerAxisTreeViews(context);
+  registerAlertsView(context);
+  registerWatchlist(context);
   registerApplyBuiltin(context);
   registerPluginsAndWorkers(context, {
     get: <T>(key: string) => context.globalState.get<T>(key),
@@ -705,6 +715,12 @@ export function activate(context: ExtensionContext): void {
     commands.registerCommand(COMMANDS.setWorkerKey, () => promptAndSetWorkerKey()),
     commands.registerCommand(COMMANDS.setProKey, () => promptAndSetProKey()),
     commands.registerCommand(COMMANDS.clearSecrets, () => promptAndClearSecrets()),
+    // Webview owns Trendline chrome; palette entry documents the in-chart tool.
+    commands.registerCommand(COMMANDS.drawingTrendline, () => {
+      void window.showInformationMessage(
+        `AXIS: Use the chart toolbar Trendline tool (${DRAWING_TOOL_TRENDLINE}).`,
+      );
+    }),
     ...registerLiveCommands(commands, bridge),
   );
 

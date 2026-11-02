@@ -58,6 +58,8 @@ describe('check-coverage helpers', () => {
     expect(excluded('src/views/results-panel.ts')).toBe(true);
     expect(excluded('src/views/results-html.ts')).toBe(false);
     expect(excluded('src/views/workers.ts')).toBe(true);
+    expect(excluded('src/views/alerts.ts')).toBe(true);
+    expect(excluded('src/views/watchlist.ts')).toBe(true);
     expect(excluded('src/plugins/index.ts')).toBe(true);
     expect(excluded('src/plugins/tree.ts')).toBe(true);
     expect(excluded('src/plugins/registry.ts')).toBe(false);

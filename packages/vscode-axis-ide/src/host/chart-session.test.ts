@@ -131,7 +131,8 @@ describe('chart session', () => {
       seq: 3,
     });
     expect(session.bars).toEqual([]);
-    expect(session.full).toEqual({ bars: [], seq: 3 });
+    expect(session.full).toEqual({ bars: [], drawings: [], seq: 3 });
+    expect(session.init.drawings).toEqual([]);
   });
 
   test('mock bars use unix-second steps matching interval', () => {

@@ -34,6 +34,12 @@ import type { ChartBar, ChartViewState } from './state';
 export interface ChartPainter {
   apply(state: ChartViewState): void;
   dispose(): void;
+  /** LWC chart API when paint mounted; null on stub path. */
+  getChart(): IChartApi | null;
+  /** Candlestick series when paint mounted; null on stub path. */
+  getSeries(): ISeriesApi<'Candlestick'> | null;
+  /** Subscribe to visible-range changes (overlay redraw). Returns disposer. */
+  onVisibleRangeChange(cb: () => void): () => void;
 }
 
 function toCandleData(bars: ChartBar[]) {
@@ -100,6 +106,24 @@ export function createChartPainter(host: HTMLElement): ChartPainter {
     host.setAttribute('data-axis-paint', 'stub');
   }
 
+  const rangeListeners = new Set<() => void>();
+  const onRange = (): void => {
+    for (const cb of [...rangeListeners]) {
+      try {
+        cb();
+      } catch {
+        // ignore listener errors
+      }
+    }
+  };
+  if (chart) {
+    try {
+      chart.timeScale().subscribeVisibleLogicalRangeChange(onRange);
+    } catch {
+      // stub / hostile
+    }
+  }
+
   return {
     apply(state: ChartViewState): void {
       if (disposed) return;
@@ -108,6 +132,7 @@ export function createChartPainter(host: HTMLElement): ChartPainter {
       if (state.seriesKey) host.setAttribute('data-axis-series', state.seriesKey);
       host.setAttribute('data-axis-bar-count', String(state.bars.length));
       host.setAttribute('data-axis-seq', String(state.seq));
+      host.setAttribute('data-axis-drawing-count', String(state.drawings.length));
 
       if (!series || !chart) {
         // Stub path — reducer already applied; attributes prove the round-trip.
@@ -131,9 +156,27 @@ export function createChartPainter(host: HTMLElement): ChartPainter {
         // hostile / detached
       }
     },
+    getChart(): IChartApi | null {
+      return disposed ? null : chart;
+    },
+    getSeries(): ISeriesApi<'Candlestick'> | null {
+      return disposed ? null : series;
+    },
+    onVisibleRangeChange(cb: () => void): () => void {
+      rangeListeners.add(cb);
+      return () => {
+        rangeListeners.delete(cb);
+      };
+    },
     dispose(): void {
       if (disposed) return;
       disposed = true;
+      rangeListeners.clear();
+      try {
+        chart?.timeScale().unsubscribeVisibleLogicalRangeChange(onRange);
+      } catch {
+        // ignore
+      }
       try {
         resizeObserver?.disconnect();
       } catch {

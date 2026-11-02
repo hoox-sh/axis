@@ -57,6 +57,8 @@
     "onView:axis.indicators",
     "onView:axis.plugins",
     "onView:axis.workers",
+    "onView:axis.alerts",
+    "onView:axis.watchlist",
     "onCommand:axis.showRunOutput",
     "onCommand:axis.openChart",
     "onCommand:axis.runScript",
@@ -69,6 +71,11 @@
     "onCommand:axis.liveStart",
     "onCommand:axis.liveStop",
     "onCommand:axis.workers.probeAll",
+    "onCommand:axis.alerts.add",
+    "onCommand:axis.alerts.remove",
+    "onCommand:axis.watchlist.add",
+    "onCommand:axis.watchlist.remove",
+    "onCommand:axis.chart.drawing.trendline",
     "workspaceContains:**/*.axis.json",
     "workspaceContains:**/*.pyne",
     "workspaceContains:**/*.pine",
@@ -107,6 +114,14 @@
         {
           "id": "axis.indicators",
           "name": "Scripts"
+        },
+        {
+          "id": "axis.watchlist",
+          "name": "Watchlist"
+        },
+        {
+          "id": "axis.alerts",
+          "name": "Alerts"
         },
         {
           "id": "axis.plugins",
@@ -204,6 +219,31 @@
         "command": "axis.workers.probeAll",
         "title": "Probe Workers",
         "category": "AXIS"
+      },
+      {
+        "command": "axis.alerts.add",
+        "title": "Add Alert",
+        "category": "AXIS"
+      },
+      {
+        "command": "axis.alerts.remove",
+        "title": "Remove Alert",
+        "category": "AXIS"
+      },
+      {
+        "command": "axis.watchlist.add",
+        "title": "Add Symbol to Watchlist",
+        "category": "AXIS"
+      },
+      {
+        "command": "axis.watchlist.remove",
+        "title": "Remove Symbol from Watchlist",
+        "category": "AXIS"
+      },
+      {
+        "command": "axis.chart.drawing.trendline",
+        "title": "Drawing: Trendline",
+        "category": "AXIS Chart"
       }
     ],
     "keybindings": [
@@ -234,6 +274,44 @@
         },
         {
           "command": "axis.applyBuiltin"
+        },
+        {
+          "command": "axis.alerts.add"
+        },
+        {
+          "command": "axis.alerts.remove"
+        },
+        {
+          "command": "axis.watchlist.add"
+        },
+        {
+          "command": "axis.watchlist.remove"
+        },
+        {
+          "command": "axis.chart.drawing.trendline"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "axis.alerts.add",
+          "when": "view == axis.alerts",
+          "group": "navigation"
+        },
+        {
+          "command": "axis.alerts.remove",
+          "when": "view == axis.alerts",
+          "group": "navigation"
+        },
+        {
+          "command": "axis.watchlist.add",
+          "when": "view == axis.watchlist",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "axis.watchlist.remove",
+          "when": "view == axis.watchlist && viewItem == axis.watchlist.symbol"
         }
       ]
     },

@@ -54,6 +54,7 @@ import {
   parseChartDocument,
   serializeChartDocument,
 } from './chart-document';
+import { appendDrawingToDoc } from './chart-drawings';
 import { buildChartWebviewHtml } from './chart-html';
 import { handleChartWebviewMessage } from './chart-messages';
 
@@ -571,6 +572,21 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
           typeHint = undefined;
         }
         logProtocolReject(result.error, typeHint);
+        return;
+      }
+      if (result.kind === 'setTool') {
+        // MVP: webview owns tool chrome; host ack is a no-op (TreeView tools later).
+        return;
+      }
+      if (result.kind === 'commit') {
+        if (disposed) return;
+        try {
+          const next = appendDrawingToDoc(document.documentData, result.drawing);
+          document.update(next);
+        } catch (e) {
+          const message = e instanceof Error ? e.message : String(e);
+          logError(`drawing.commit failed: ${message}`);
+        }
         return;
       }
       if (result.kind === 'init') {

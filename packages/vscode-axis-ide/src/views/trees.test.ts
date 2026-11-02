@@ -29,11 +29,31 @@ mock.module('vscode', () => {
       this.collapsibleState = collapsibleState;
     }
   }
+  class EventEmitter {
+    event = () => ({ dispose() {} });
+    fire(_v?: unknown) {}
+  }
   return {
     TreeItem,
     TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+    EventEmitter,
+    StatusBarAlignment: { Left: 1, Right: 2 },
     window: {
-      createTreeView: () => ({ dispose() {} }),
+      createTreeView: () => ({
+        dispose() {},
+        onDidChangeSelection: () => ({ dispose() {} }),
+      }),
+      createStatusBarItem: () => ({
+        text: '',
+        tooltip: '',
+        name: '',
+        command: '',
+        show() {},
+        dispose() {},
+      }),
+    },
+    commands: {
+      registerCommand: () => ({ dispose() {} }),
     },
   };
 });
@@ -95,10 +115,11 @@ describe('empty TreeDataProvider getChildren', () => {
     expect(provider.getChildren(underScripts[0])).toEqual([]);
   });
 
-  test('view ids match contributes fragment (no watchlist)', () => {
+  test('library/layers/indicators view ids stay distinct from watchlist', () => {
     expect(library.LIBRARY_VIEW_ID).toBe('axis.library');
     expect(layers.LAYERS_VIEW_ID).toBe('axis.layers');
     expect(indicators.INDICATORS_VIEW_ID).toBe('axis.indicators');
+    // Watchlist is contributed + registered separately (Task 20), not via trees.ts.
     expect([
       library.LIBRARY_VIEW_ID,
       layers.LAYERS_VIEW_ID,
