@@ -53,6 +53,7 @@ import {
   type GatewayMode,
 } from './plugin-config';
 import { TopbarField } from './TopbarField';
+import { StudioEmpty, StudioToggle } from './studio';
 
 const EXCHANGE_FIELD = 'exchange';
 
@@ -277,11 +278,12 @@ export function PluginConfigRow(props: PluginConfigRowProps) {
     <Show
       when={f.type !== 'boolean'}
       fallback={
-        <input
+        <StudioToggle
           id={fieldId(key)}
-          type="checkbox"
           checked={Boolean(readFieldValue(key))}
-          onChange={(e) => applyField(key, e.currentTarget.checked)}
+          label={f.label || key}
+          hint={f.description}
+          onChange={(v) => applyField(key, v)}
         />
       }
     >
@@ -318,22 +320,37 @@ export function PluginConfigRow(props: PluginConfigRowProps) {
   );
 
   return (
-    <Show when={fields().length > 0}>
+    <Show
+      when={fields().length > 0}
+      fallback={
+        <Show when={stacked()}>
+          <StudioEmpty>
+            No advanced fields for the active source/stream. Switch source in the topbar or open
+            Plugins.
+          </StudioEmpty>
+        </Show>
+      }
+    >
       <Show
         when={!stacked()}
         fallback={
           <div class="ax-token-grid" data-testid="axis-cfg-plugins-settings">
             <For each={fields()}>
               {([key, f]) => (
-                <div class="ax-field">
-                  <label class="ax-label" for={fieldId(key)}>
-                    {f.label || key}
-                  </label>
-                  {renderControl(key, f)}
-                  <Show when={f.description}>
-                    <p class="ax-hint">{f.description}</p>
-                  </Show>
-                </div>
+                <Show
+                  when={f.type !== 'boolean'}
+                  fallback={renderControl(key, f)}
+                >
+                  <div class="ax-field">
+                    <label class="ax-label" for={fieldId(key)}>
+                      {f.label || key}
+                    </label>
+                    {renderControl(key, f)}
+                    <Show when={f.description}>
+                      <p class="ax-hint">{f.description}</p>
+                    </Show>
+                  </div>
+                </Show>
               )}
             </For>
           </div>

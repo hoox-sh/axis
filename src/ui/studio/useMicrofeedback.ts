@@ -12,7 +12,7 @@
  *              the ambient layer so the button itself stays quiet.
  *
  * Controlled or fire-and-forget:
- *   const fb = useMicrofeedback();
+ *   const fb = useMicrofeedback({ afterSuccess: close });
  *   <AppButton feedback={fb.state()} onClick={() => fb.run(save)} />
  *
  * @module ui/studio/useMicrofeedback
@@ -24,8 +24,14 @@ import type { FeedbackState } from './AppButton';
 export function useMicrofeedback(options?: {
   successHoldMs?: number;
   errorHoldMs?: number;
+  /** Fires when the action resolves successfully (start of success hold). */
   onSuccess?: () => void;
+  /** Fires when the action rejects (start of error hold). */
   onError?: (err: unknown) => void;
+  /** Fires when the success hold ends and the button returns to idle. */
+  afterSuccess?: () => void;
+  /** Fires when the error hold ends and the button returns to idle. */
+  afterError?: () => void;
 }) {
   const successHold = options?.successHoldMs ?? 900;
   const errorHold = options?.errorHoldMs ?? 900;
@@ -36,10 +42,14 @@ export function useMicrofeedback(options?: {
     if (timer) clearTimeout(timer);
   });
 
-  const settle = (next: FeedbackState, hold: number) => {
+  const settle = (next: Exclude<FeedbackState, 'idle' | 'loading'>, hold: number) => {
     setState(next);
     if (timer) clearTimeout(timer);
-    timer = setTimeout(() => setState('idle'), hold);
+    timer = setTimeout(() => {
+      setState('idle');
+      if (next === 'success') options?.afterSuccess?.();
+      else options?.afterError?.();
+    }, hold);
   };
 
   /** Wrap an async action with loading → success/error feedback. */

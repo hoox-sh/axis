@@ -8,7 +8,15 @@
  */
 
 import { For, Show, createSignal } from 'solid-js';
-import { StudioButton, StudioField, StudioHint, StudioSection, StudioToggle } from '../studio';
+import {
+  AppButton,
+  StudioField,
+  StudioHint,
+  StudioSection,
+  StudioStatus,
+  StudioToggle,
+  useMicrofeedback,
+} from '../studio';
 import {
   effectActive,
   effectDirty,
@@ -29,6 +37,7 @@ function slug(id: string): string {
 function EffectBlock(props: { def: EffectDef }) {
   const id = () => slug(props.def.id);
   const [dir, setDir] = createSignal<'up' | 'down' | ''>('');
+  const resetFb = useMicrofeedback({ successHoldMs: 700 });
   let frame = 0;
 
   const play = (next: 'up' | 'down') => {
@@ -112,24 +121,41 @@ function EffectBlock(props: { def: EffectDef }) {
 
       <Show when={props.def.preview}>
         <div class="ax-toolbar">
-          <StudioButton
+          <AppButton
+            design="soft"
+            tone="ghost"
+            size="sm"
             testId={`axis-fx-${id()}-play-up`}
             disabled={!effectActive(props.def.id)}
             onClick={() => play('up')}
           >
             Play up
-          </StudioButton>
-          <StudioButton
+          </AppButton>
+          <AppButton
+            design="soft"
+            tone="ghost"
+            size="sm"
             testId={`axis-fx-${id()}-play-down`}
             disabled={!effectActive(props.def.id)}
             onClick={() => play('down')}
           >
             Play down
-          </StudioButton>
+          </AppButton>
           <Show when={effectDirty(props.def.id)}>
-            <StudioButton testId={`axis-fx-${id()}-reset`} onClick={() => resetEffect(props.def.id)}>
+            <AppButton
+              design="soft"
+              tone="ghost"
+              size="sm"
+              testId={`axis-fx-${id()}-reset`}
+              feedback={resetFb.state()}
+              onClick={() =>
+                void resetFb.run(async () => {
+                  resetEffect(props.def.id);
+                })
+              }
+            >
               Reset
-            </StudioButton>
+            </AppButton>
           </Show>
         </div>
       </Show>
@@ -142,13 +168,18 @@ export function EffectsPanel() {
   return (
     <StudioSection
       title="Motion"
-      lead="Short chrome flashes. Each effect can be tuned here, and later parts of the app register the same way."
+      lead="Short chrome flashes. Tune each effect here; later surfaces register the same way."
       testId="axis-fx-panel"
+      headerEnd={
+        <StudioStatus
+          status={prefersReducedMotion() ? 'degraded' : 'healthy'}
+          label={prefersReducedMotion() ? 'Reduced motion' : 'Motion on'}
+        />
+      }
     >
       <Show when={prefersReducedMotion()}>
         <StudioHint>
-          Reduced motion is on in the browser. Flashes stay off until that changes. The sliders
-          still save.
+          Browser reduced-motion is on. Flashes stay off; slider values still save.
         </StudioHint>
       </Show>
       <div class="flex flex-col gap-4">

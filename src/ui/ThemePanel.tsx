@@ -37,7 +37,7 @@ import {
   type ThemeTokenValue,
 } from '../theme';
 import {
-  StudioButton,
+  AppButton,
   StudioChip,
   StudioColorInput,
   StudioField,
@@ -45,6 +45,7 @@ import {
   StudioInput,
   StudioSection,
   StudioToggle,
+  useMicrofeedback,
 } from './studio';
 import { BarColorLibrary, SavedThemeLibrary } from './ThemeLibrary';
 
@@ -77,90 +78,118 @@ export const ThemePanel = (props: ThemePanelProps) => {
 
   const activePresetId = () => themeState().presetId;
   const overrideCount = () => Object.keys(themeState().overrides || {}).length;
+  const activePresetLabel = () => {
+    const id = activePresetId();
+    if (id === 'custom') return 'Custom';
+    return presets().find((p) => p.id === id)?.name ?? id;
+  };
+
+  const resetFb = useMicrofeedback({ successHoldMs: 700 });
 
   return (
     <div
-      class={`ax-stack ${props.compact ? 'ax-stack--compact' : ''}`}
+      class={`ax-split ${props.compact ? 'ax-stack--compact' : ''}`}
       data-testid="axis-theme-panel"
     >
-      {/* ── Presets ─────────────────────────────────────────────── */}
-      <StudioSection
-        title="Presets"
-        lead="Switch the base palette. Any edit after that becomes a Custom override."
-      >
-        {/* biome-ignore lint/a11y/useSemanticElements: fieldset would inject UA border/padding styles into the chip row */}
-        <div class="ax-chip-row" role="group" aria-label="Chart theme presets">
-          <For each={presets()}>
-            {(p) => (
-              <StudioChip
-                pressed={activePresetId() === p.id}
-                title={p.description || p.name}
-                onClick={() => setChartThemePreset(p.id)}
-              >
-                {p.name}
-              </StudioChip>
-            )}
-          </For>
-          <Show when={activePresetId() === 'custom'}>
-            <StudioChip pressed>Custom</StudioChip>
-          </Show>
-        </div>
-        <div class="ax-inline ax-mt">
-          <StudioButton
-            variant="ghost"
-            testId="axis-theme-reset"
-            title="Clear overrides and restore the active named preset"
-            onClick={() => resetChartTheme()}
-          >
-            Reset to preset
-          </StudioButton>
-          <Show when={overrideCount() > 0}>
-            <StudioHint>{overrideCount()} override{overrideCount() === 1 ? '' : 's'}</StudioHint>
-          </Show>
-        </div>
-        <StudioHint>
-          Pine host colors: <code class="ax-mono">chart.bg_color</code> /{' '}
-          <code class="ax-mono">chart.fg_color</code> · aliases{' '}
-          <code class="ax-mono">chart.color_background</code>,{' '}
-          <code class="ax-mono">chart.color_foreground</code>
-        </StudioHint>
-      </StudioSection>
-
-      <StudioSection
-        title="Saved themes"
-        lead="Name the current chart colors and keep them. Each theme includes its bar coloring."
-      >
-        <SavedThemeLibrary />
-      </StudioSection>
-
-      {/* ── Token groups ────────────────────────────────────────── */}
-      <For each={groups()}>
-        {(group) => (
-          <StudioSection
-            title={group.label}
-            lead={
-              group.id === 'bar'
-                ? 'Body, border, and wick. The bar coloring can be saved on its own and is stored inside the selected theme.'
-                : group.description
-            }
-          >
-            <Show when={group.id === 'bar'}>
-              <BarColorLibrary />
+      {/* ── Left: presets + library ──────────────────────────────── */}
+      <div class="ax-split-col">
+        <StudioSection
+          title="Presets"
+          lead="Base palette for the chart. Edits after a pick become Custom overrides."
+          headerEnd={
+            <>
+              <span class="ax-chip ax-chip--tag" data-testid="axis-theme-active-preset">
+                {activePresetLabel()}
+              </span>
+              <Show when={overrideCount() > 0}>
+                <span class="ax-chip ax-chip--tag" data-testid="axis-theme-override-count">
+                  {overrideCount()} override{overrideCount() === 1 ? '' : 's'}
+                </span>
+              </Show>
+            </>
+          }
+        >
+          {/* biome-ignore lint/a11y/useSemanticElements: fieldset would inject UA border/padding styles into the chip row */}
+          <div class="ax-chip-row" role="group" aria-label="Chart theme presets">
+            <For each={presets()}>
+              {(p) => (
+                <StudioChip
+                  pressed={activePresetId() === p.id}
+                  title={p.description || p.name}
+                  onClick={() => setChartThemePreset(p.id)}
+                >
+                  {p.name}
+                </StudioChip>
+              )}
+            </For>
+            <Show when={activePresetId() === 'custom'}>
+              <StudioChip pressed>Custom</StudioChip>
             </Show>
-            <div class="ax-token-grid">
-              <For each={group.defs}>
-                {(def) => (
-                  <TokenField
-                    def={def}
-                    value={tokens()[def.key] ?? def.default}
-                    onChange={(v) => setChartThemeToken(def.key, v)}
-                  />
-                )}
-              </For>
-            </div>
-          </StudioSection>
-        )}
-      </For>
+          </div>
+          <div class="ax-toolbar">
+            <AppButton
+              design="soft"
+              tone="ghost"
+              size="sm"
+              testId="axis-theme-reset"
+              feedback={resetFb.state()}
+              title="Clear overrides and restore Void Dark or Void Light from the shell theme"
+              disabled={overrideCount() === 0 && activePresetId() !== 'custom'}
+              onClick={() =>
+                void resetFb.run(async () => {
+                  resetChartTheme();
+                })
+              }
+            >
+              Reset to preset
+            </AppButton>
+          </div>
+          <StudioHint>
+            Pine host colors: <code class="ax-mono">chart.bg_color</code> /{' '}
+            <code class="ax-mono">chart.fg_color</code>
+          </StudioHint>
+        </StudioSection>
+
+        <StudioSection
+          title="Saved themes"
+          lead="Name the live chart colors. Each save embeds the current bar coloring."
+        >
+          <SavedThemeLibrary />
+        </StudioSection>
+      </div>
+
+      {/* ── Right: token groups ──────────────────────────────────── */}
+      <div class="ax-split-col">
+        <For each={groups()}>
+          {(group) => (
+            <StudioSection
+              title={group.label}
+              lead={
+                group.id === 'bar'
+                  ? 'Body, border, and wick. Save a bar palette on its own; it also embeds in the selected theme.'
+                  : group.id === 'chart'
+                    ? 'Canvas colors. Pine aliases: chart.color_background / chart.color_foreground.'
+                    : group.description
+              }
+            >
+              <Show when={group.id === 'bar'}>
+                <BarColorLibrary />
+              </Show>
+              <div class="ax-token-grid">
+                <For each={group.defs}>
+                  {(def) => (
+                    <TokenField
+                      def={def}
+                      value={tokens()[def.key] ?? def.default}
+                      onChange={(v) => setChartThemeToken(def.key, v)}
+                    />
+                  )}
+                </For>
+              </div>
+            </StudioSection>
+          )}
+        </For>
+      </div>
     </div>
   );
 };

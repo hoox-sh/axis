@@ -177,6 +177,7 @@ export const Playground: StoryObj = {
             <strong>Do</strong>
             One feedback owner per action (the hook <em>or</em> the parent, never
             both). Hold success 900ms so the eye lands, then release to idle.
+            Use <code>afterSuccess</code> for close/navigate after the hold.
           </div>
           <div class="axd-dont">
             <strong>Don't</strong>

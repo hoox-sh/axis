@@ -7,7 +7,7 @@ tags: [code, studio, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-12T12:21:16Z
+  at: 2026-11-03T12:43:16Z
 sources:
   - id: tree
     resource: "src/ui/studio"
@@ -30,7 +30,7 @@ okf_lock: generated
 * `StudioJson.tsx` — StudioJson
 * `StudioSection.tsx` — StudioSection
 * `StudioTabs.tsx` — StudioTabs
-* `index.ts` — AppPage, AppPageHeader, AppPageProps, STUDIO_PAGES, STUDIO_PAGE_BY_ID, SettingsTabId, StudioButton, StudioButtonVariant, StudioCard, StudioChip, StudioCode, StudioColorInput
+* `index.ts` — AppButton, AppPage, AppPageHeader, AppPageProps, ButtonDesign, ButtonShape, ButtonSize, ButtonTone, FeedbackState, STUDIO_PAGES, STUDIO_PAGE_BY_ID, SettingsTabId
 * `json-tree.ts` — JSON_EXPAND_MAX, JSON_PAGE, JsonKind, childCount, childEntries, childPath, collectOpenPaths, formatPrimitive, isContainer, jsonKind, jsonStats, keyMatches
 * `pages.ts` — STUDIO_PAGES, STUDIO_PAGE_BY_ID, StudioPageMeta, studioPageMeta
 * `types.ts` — AppPageProps, SettingsTabId, StudioPageId, isSettingsTabId, isStudioPageId

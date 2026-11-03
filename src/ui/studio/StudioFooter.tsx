@@ -11,13 +11,17 @@
 import type { JSX } from 'solid-js';
 import { Show } from 'solid-js';
 
-export function StudioFooter(props: { status?: JSX.Element; children: JSX.Element }) {
+export function StudioFooter(props: {
+  status?: JSX.Element;
+  testId?: string;
+  children: JSX.Element;
+}) {
   return (
-    <footer class="ax-page-footer">
-      <Show when={props.status}>
+    <footer class="ax-page-footer" data-testid={props.testId}>
+      <Show when={props.status} fallback={<span class="ax-page-footer-spacer" aria-hidden="true" />}>
         <p class="ax-page-footer-status">{props.status}</p>
       </Show>
-      {props.children}
+      <div class="ax-page-footer-actions">{props.children}</div>
     </footer>
   );
 }

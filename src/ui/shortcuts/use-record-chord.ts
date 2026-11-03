@@ -30,12 +30,29 @@
 import { createSignal, onCleanup } from 'solid-js';
 import { detectPlatform, normalizeEventKey } from './keys';
 
+/** DOM key names that are modifiers only — never a chord payload by themselves. */
+const MODIFIER_ONLY_KEYS = new Set([
+  'Control',
+  'Shift',
+  'Alt',
+  'Meta',
+  'AltGraph',
+  'OS',
+  'Hyper',
+  'Super',
+]);
+
 /**
  * Convert a real KeyboardEvent into a canonical chord string the registry
  * understands. The platform primary modifier is recorded as `Mod` (⌘ on mac,
  * Ctrl elsewhere) so overrides stay platform-abstract like DEFAULT_BINDINGS.
+ *
+ * Modifier-only keydowns (Ctrl / Shift / Alt / Meta alone) return `''` so the
+ * recorder waits for the real key. Without this, Ctrl+K would capture
+ * `Mod-Control` on the Control keydown and crash `parseChord` / Settings.
  */
 export function chordFromEvent(e: Pick<KeyboardEvent, 'key' | 'code' | 'ctrlKey' | 'metaKey' | 'altKey' | 'shiftKey'>): string {
+  if (MODIFIER_ONLY_KEYS.has(e.key)) return '';
   const p = detectPlatform();
   const mods: string[] = [];
   if (e.metaKey) mods.push(p === 'mac' ? 'Mod' : 'Meta');
@@ -43,7 +60,7 @@ export function chordFromEvent(e: Pick<KeyboardEvent, 'key' | 'code' | 'ctrlKey'
   if (e.altKey) mods.push('Alt');
   if (e.shiftKey) mods.push('Shift');
   const key = normalizeEventKey(e.key, e.code);
-  if (!key) return '';
+  if (!key || MODIFIER_ONLY_KEYS.has(key)) return '';
   // Canonical display casing: single chars uppercase (Mod-K), named keys as-is.
   const display = key.length === 1 ? key.toUpperCase() : key;
   return [...mods, display].join('-');

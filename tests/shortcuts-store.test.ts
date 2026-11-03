@@ -25,6 +25,12 @@ describe('shortcuts store slice', () => {
     expect(store.shortcuts.overrides['app.save']).toBe('Mod-Shift-S');
   });
 
+  it('rejects modifier-only chords without mutating state', () => {
+    resetShortcuts();
+    setShortcutOverride('app.save', 'Mod-Control');
+    expect(store.shortcuts.overrides['app.save']).toBeUndefined();
+  });
+
   it('setShortcutOverride with null clears the entry', () => {
     setShortcutOverride('app.save', null);
     expect(store.shortcuts.overrides['app.save']).toBeNull();

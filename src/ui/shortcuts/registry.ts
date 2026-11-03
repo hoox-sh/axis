@@ -174,7 +174,13 @@ export function detectConflicts(
   for (const def of bindings) {
     const chord = resolveBinding(def, overrides);
     if (!chord) continue;
-    const norm = normalizeChord(chord);
+    let norm: string;
+    try {
+      norm = normalizeChord(chord);
+    } catch {
+      // Skip corrupt persisted overrides (e.g. modifier-only "Mod-Control").
+      continue;
+    }
     const list = groups.get(norm) ?? [];
     list.push(def.id);
     groups.set(norm, list);
@@ -196,5 +202,9 @@ export function getDisplay(
   if (!def) return '';
   const chord = resolveBinding(def, overrides);
   if (!chord) return '';
-  return formatChord(chord, { platform });
+  try {
+    return formatChord(chord, { platform });
+  } catch {
+    return chord;
+  }
 }

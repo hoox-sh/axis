@@ -17,6 +17,10 @@ _Generated/updated: 2026-11-01 · 880 commits · describe-tag: `v2.26.0`_
 
 ### Changed
 
+- **Studio Settings polish.** Shared studio primitives (`AppButton` + `useMicrofeedback`, section chips/status, live-apply footers) across General, Data, Editor, Theme, Topbar, Keyboard, and Notifications. Keyboard recorder ignores modifier-only keydowns (`Mod-Control` no longer crashes Settings); Restore deletes the override key; scope filters and conflict chips are live. Notifications folds browser-alert permission into Settings alongside toasts/flood control.
+
+### Changed
+
 - **PYNE Agent is an Agent panel.** The bottom-right Agent launcher and floating chat are gone. Plugin 0.1.9 fills the Agent dock panel. The module bar has an **AI** button next to the other panel toggles (Settings → Topbar can hide it). Command palette “Toggle Agent”, Extras, and mobile Panels still open it. Closing the panel aborts the chat request.
 
 - **Equity curve market colors.** The zero line uses `--color-border`. The curve, fill, and drawdown use `--color-up` and `--color-down`. Axis labels use `--font-mono`.

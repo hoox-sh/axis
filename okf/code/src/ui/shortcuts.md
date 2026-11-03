@@ -7,7 +7,7 @@ tags: [code, shortcuts, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-02T12:29:54Z
+  at: 2026-11-03T12:43:16Z
 sources:
   - id: tree
     resource: "src/ui/shortcuts"
@@ -35,7 +35,7 @@ okf_lock: generated
 
 # Packages
 
-`solid-js`
+`solid-js`, `solid-js/store`
 
 # Depends on
 

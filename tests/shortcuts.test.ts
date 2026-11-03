@@ -278,4 +278,75 @@ describe('useRecordChord', () => {
       restoreWindow();
     }
   });
+
+  it('ignores modifier-only keydowns and waits for the real key', async () => {
+    installWindowStub();
+    try {
+      const { useRecordChord, chordFromEvent } = await import('../src/ui/shortcuts/use-record-chord');
+      expect(
+        chordFromEvent({
+          key: 'Control',
+          code: 'ControlLeft',
+          ctrlKey: true,
+          metaKey: false,
+          altKey: false,
+          shiftKey: false,
+        }),
+      ).toBe('');
+      expect(
+        chordFromEvent({
+          key: 'Shift',
+          code: 'ShiftLeft',
+          ctrlKey: false,
+          metaKey: false,
+          altKey: false,
+          shiftKey: true,
+        }),
+      ).toBe('');
+
+      let recorded = '';
+      const api = useRecordChord((chord) => {
+        recorded = chord;
+      });
+      api.start();
+      fire({
+        key: 'Control',
+        code: 'ControlLeft',
+        ctrlKey: true,
+        metaKey: false,
+        altKey: false,
+        shiftKey: false,
+        preventDefault() {},
+        stopPropagation() {},
+        stopImmediatePropagation() {},
+      } as Partial<KeyboardEvent>);
+      expect(recorded).toBe('');
+      expect(api.recording()).toBe(true);
+      fire({
+        key: 'z',
+        code: 'KeyZ',
+        ctrlKey: true,
+        metaKey: false,
+        altKey: false,
+        shiftKey: true,
+        preventDefault() {},
+        stopPropagation() {},
+        stopImmediatePropagation() {},
+      } as Partial<KeyboardEvent>);
+      expect(recorded).toBe('Mod-Shift-Z');
+      expect(api.recording()).toBe(false);
+    } finally {
+      restoreWindow();
+    }
+  });
+});
+
+describe('detectConflicts with corrupt overrides', () => {
+  it('skips modifier-only override chords instead of throwing', () => {
+    const bindings: ShortcutDef[] = [
+      { id: 'chart.zoom-in', chord: 'I', description: 'Zoom in', scope: 'chart' },
+    ];
+    const map = detectConflicts(bindings, { 'chart.zoom-in': 'Mod-Control' });
+    expect(map.size).toBe(0);
+  });
 });

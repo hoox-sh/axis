@@ -37,6 +37,7 @@ export function StudioCard(props: {
       <button
         type="button"
         class={className()}
+        classList={{ 'is-on': !!props.selected }}
         onClick={props.onClick}
         data-testid={props.testId}
         aria-pressed={!!props.selected}
@@ -63,6 +64,7 @@ export function StudioStat(props: { label: string; value: JSX.Element; testId?: 
 
 export function StudioChip(props: {
   pressed?: boolean;
+  disabled?: boolean;
   onClick?: () => void;
   testId?: string;
   title?: string;
@@ -71,13 +73,21 @@ export function StudioChip(props: {
   return (
     <button
       type="button"
-      class={`ax-chip${props.pressed ? ' is-on' : ''}`}
+      class="ax-chip"
+      classList={{
+        'is-on': !!props.pressed,
+        'is-disabled': !!props.disabled,
+      }}
       aria-pressed={!!props.pressed}
-      onClick={props.onClick}
+      disabled={props.disabled}
+      onClick={() => {
+        if (props.disabled) return;
+        props.onClick?.();
+      }}
       data-testid={props.testId}
       title={props.title}
     >
-      {props.children}
+      <span class="ax-chip-label">{props.children}</span>
     </button>
   );
 }
@@ -108,7 +118,11 @@ export function StudioStatus(props: { status: StudioHealth; label?: string }) {
   // in flight); the class string in JSX was reactive but the word was not,
   // so cards showed a green/red dot next to a frozen "Unknown".
   return (
-    <span class={`ax-status ax-status--${props.status}`}>
+    <span
+      class="ax-status"
+      classList={{ [`ax-status--${props.status}`]: true }}
+      data-status={props.status}
+    >
       {studioHealthLabel(props.status, props.label)}
     </span>
   );

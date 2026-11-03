@@ -31,6 +31,7 @@ import {
   type JSX,
   For,
   Show,
+  createEffect,
   createMemo,
   createSignal,
   onCleanup,
@@ -141,6 +142,20 @@ export const AlertsPanel: Component = () => {
     const unsub = subscribeAlerts(refresh);
     onCleanup(unsub);
   });
+
+  // Keep the chip in sync when Settings → Notifications grants/denies permission.
+  createEffect(() => {
+    if (isPanelOpen('alerts') || store.alertsPanel.open) {
+      setNotifPerm(notificationPermission());
+    }
+  });
+  if (typeof document !== 'undefined') {
+    const onVis = () => {
+      if (document.visibilityState === 'visible') setNotifPerm(notificationPermission());
+    };
+    document.addEventListener('visibilitychange', onVis);
+    onCleanup(() => document.removeEventListener('visibilitychange', onVis));
+  }
 
   const chartDrawings = createMemo(() =>
     drawingsForSymbol(store.drawings, store.symbol, { includeUntagged: true }).filter(

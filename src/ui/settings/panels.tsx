@@ -33,13 +33,15 @@ import {
   getEditorIntel,
 } from '../../store';
 import {
-  StudioButton,
+  AppButton,
   StudioField,
   StudioHint,
   StudioInput,
   StudioSection,
   StudioSelect,
+  StudioStatus,
   StudioToggle,
+  useMicrofeedback,
 } from '../studio';
 import {
   INTEL_HOVER_MS_MAX,
@@ -107,7 +109,11 @@ export const ExchangeCredentialsPanel: Component = () => {
   const [passphrase, setPassphrase] = createSignal('');
   const [uid, setUid] = createSignal('');
   const [msg, setMsg] = createSignal('');
+  const [msgTone, setMsgTone] = createSignal<'err' | 'ok' | 'info'>('err');
   const [rev, setRev] = createSignal(0);
+  const saveFb = useMicrofeedback({ successHoldMs: 700, errorHoldMs: 1100 });
+  const removeFb = useMicrofeedback({ successHoldMs: 700, errorHoldMs: 1100 });
+  const testFb = useMicrofeedback({ successHoldMs: 800, errorHoldMs: 1100 });
 
   const unsub = cred.subscribeCredentials(() => setRev((n) => n + 1));
   onCleanup(unsub);
@@ -133,6 +139,15 @@ export const ExchangeCredentialsPanel: Component = () => {
     kind() === 'ccxt' ? ccxtNeedsPassword(ccxtExchange()) : venueNeedsPassphrase(venue()),
   );
 
+  const sessionLabel = () => {
+    if (!hasSaved()) return 'No key';
+    if (kind() === 'ccxt') {
+      const ex = normalizeCcxtExchangeId(ccxtExchange()) || 'ccxt';
+      return `Saved · ${ex}`;
+    }
+    return `Saved · ${venue()}`;
+  };
+
   const clearSecrets = () => {
     setApiKey('');
     setSecret('');
@@ -152,19 +167,25 @@ export const ExchangeCredentialsPanel: Component = () => {
     const sec = secret().trim();
     const pass = passphrase().trim();
     if (!key || !sec) {
-      setMsg('API key and secret are required');
-      return;
+      const err = 'API key and secret are required';
+      setMsgTone('err');
+      setMsg(err);
+      throw new Error(err);
     }
     if (needsPass() && !pass) {
-      setMsg('Passphrase is required for this venue');
-      return;
+      const err = 'Passphrase is required for this venue';
+      setMsgTone('err');
+      setMsg(err);
+      throw new Error(err);
     }
     try {
       if (kind() === 'ccxt') {
         const ex = normalizeCcxtExchangeId(ccxtExchange());
         if (!ex) {
-          setMsg('Set the CCXT exchange id (topbar or above) first');
-          return;
+          const err = 'Set the CCXT exchange id first';
+          setMsgTone('err');
+          setMsg(err);
+          throw new Error(err);
         }
         cred.putCcxtCredential({
           exchange: ex,
@@ -180,7 +201,8 @@ export const ExchangeCredentialsPanel: Component = () => {
         }
         await bindCcxtSession(activeCcxtGateway(), ex);
         clearSecrets();
-        setMsg('');
+        setMsgTone('ok');
+        setMsg(`CCXT key bound for ${ex} · session only`);
         setStatus('ready', `CCXT key saved · ${ex} · session only`);
         return;
       }
@@ -192,10 +214,14 @@ export const ExchangeCredentialsPanel: Component = () => {
         passphrase: needsPass() ? pass : undefined,
       });
       clearSecrets();
-      setMsg('');
+      setMsgTone('ok');
+      setMsg(`Key saved for ${v} · session only`);
       setStatus('ready', `Exchange key saved · ${v} · session only`);
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : 'Save failed');
+      const text = err instanceof Error ? err.message : 'Save failed';
+      setMsgTone('err');
+      setMsg(text);
+      throw err instanceof Error ? err : new Error(text);
     }
   };
 
@@ -203,8 +229,10 @@ export const ExchangeCredentialsPanel: Component = () => {
     const row = meta();
     const id = row?.id;
     if (!id) {
-      setMsg('No saved key for this venue');
-      return;
+      const err = 'No saved key for this venue';
+      setMsgTone('err');
+      setMsg(err);
+      throw new Error(err);
     }
     cred.deleteCredential(id);
     if (kind() === 'ccxt') {
@@ -212,19 +240,19 @@ export const ExchangeCredentialsPanel: Component = () => {
       if (ex) await unbindCcxtSession(activeCcxtGateway(), ex);
     }
     clearSecrets();
-    setMsg('');
+    setMsgTone('info');
+    setMsg('Key removed from this session');
     setStatus('ready', `Exchange key removed · ${kind() === 'ccxt' ? ccxtExchange() : venue()}`);
   };
-
-  const [testing, setTesting] = createSignal(false);
 
   const onTestKey = async () => {
     const v = venue();
     if (!hasSignedCreds(v as VenueId)) {
-      setMsg('Save a key first, then test');
-      return;
+      const err = 'Save a key first, then test';
+      setMsgTone('err');
+      setMsg(err);
+      throw new Error(err);
     }
-    setTesting(true);
     setMsg('');
     try {
       await fetchSignedJson({
@@ -233,33 +261,36 @@ export const ExchangeCredentialsPanel: Component = () => {
         query: { symbol: 'BTCUSDT', interval: '1d', limit: 1 },
         skipWorkerProxy: true,
       });
-      setMsg('');
+      setMsgTone('ok');
+      setMsg(`${v} verified · signed fetch OK`);
       setStatus('ready', `${v} key verified · signed fetch OK`);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (/401|403/.test(msg)) {
-        setMsg(`Key rejected (${v}): ${msg}`);
-      } else if (/CORS|network|fetch/i.test(msg)) {
-        setMsg(`Network/CORS error — key may be valid but direct fetch blocked`);
-      } else {
-        setMsg(`Test failed: ${msg}`);
-      }
-    } finally {
-      setTesting(false);
+      const raw = err instanceof Error ? err.message : String(err);
+      let text: string;
+      if (/401|403/.test(raw)) text = `Key rejected (${v}): ${raw}`;
+      else if (/CORS|network|fetch/i.test(raw))
+        text = `Network/CORS error — key may be valid but direct fetch blocked`;
+      else text = `Test failed: ${raw}`;
+      setMsgTone('err');
+      setMsg(text);
+      throw new Error(text);
     }
   };
 
   return (
     <StudioSection
       title="Exchange API keys"
-      lead={
-        <span data-testid="axis-exchange-session-note">
-          Saved in this session only (not written to disk). AXIS never puts key, secret, or
-          passphrase into localStorage. Native CEX keys sign in the browser; CCXT keys are
-          posted to the datafeed session (handle on later requests, never the secret in the URL).
-        </span>
+      lead="Session vault only — never written to disk or localStorage."
+      testId="axis-settings-exchange-keys"
+      headerEnd={
+        <StudioStatus status={hasSaved() ? 'healthy' : 'idle'} label={sessionLabel()} />
       }
     >
+      <p class="ax-hint" data-testid="axis-exchange-session-note">
+        Native CEX keys sign in the browser. CCXT keys bind a datafeed session handle — the secret
+        never appears in URLs.
+      </p>
+
       <div class="ax-token-grid">
         <StudioField label="Key type" for="axis-exchange-key-kind">
           <StudioSelect
@@ -272,15 +303,19 @@ export const ExchangeCredentialsPanel: Component = () => {
               setMsg('');
             }}
           >
-            <option value="native">Native CEX (Binance, OKX, Bybit, Coinbase, Kraken)</option>
-            <option value="ccxt">CCXT gateway (long-tail exchange)</option>
+            <option value="native">Native CEX</option>
+            <option value="ccxt">CCXT gateway</option>
           </StudioSelect>
         </StudioField>
 
         <Show
           when={kind() === 'ccxt'}
           fallback={
-            <StudioField label="Venue" for="axis-exchange-venue">
+            <StudioField
+              label="Venue"
+              for="axis-exchange-venue"
+              hint="Binance, OKX, Bybit, Coinbase, Kraken…"
+            >
               <StudioSelect
                 id="axis-exchange-venue"
                 testId="axis-exchange-venue"
@@ -294,7 +329,11 @@ export const ExchangeCredentialsPanel: Component = () => {
             </StudioField>
           }
         >
-          <StudioField label="CCXT exchange id" for="axis-exchange-ccxt-id">
+          <StudioField
+            label="CCXT exchange id"
+            for="axis-exchange-ccxt-id"
+            hint="Lowercase id from the gateway list (bybit, bitget, mexc…)."
+          >
             <StudioInput
               id="axis-exchange-ccxt-id"
               mono
@@ -311,7 +350,7 @@ export const ExchangeCredentialsPanel: Component = () => {
         <StudioField
           label="API key"
           for="axis-exchange-api-key"
-          hint={meta()?.hasKey && !apiKey() ? 'saved' : undefined}
+          hint={meta()?.hasKey && !apiKey() ? 'saved in session' : undefined}
         >
           <StudioInput
             id="axis-exchange-api-key"
@@ -329,7 +368,7 @@ export const ExchangeCredentialsPanel: Component = () => {
         <StudioField
           label="Secret"
           for="axis-exchange-secret"
-          hint={meta()?.hasSecret && !secret() ? 'saved · ••••••••' : undefined}
+          hint={meta()?.hasSecret && !secret() ? 'saved in session' : undefined}
         >
           <StudioInput
             id="axis-exchange-secret"
@@ -348,7 +387,7 @@ export const ExchangeCredentialsPanel: Component = () => {
           <StudioField
             label="Passphrase"
             for="axis-exchange-passphrase"
-            hint={meta()?.hasPassphrase && !passphrase() ? 'saved' : undefined}
+            hint={meta()?.hasPassphrase && !passphrase() ? 'saved in session' : undefined}
           >
             <StudioInput
               id="axis-exchange-passphrase"
@@ -365,14 +404,18 @@ export const ExchangeCredentialsPanel: Component = () => {
         </Show>
 
         <Show when={kind() === 'ccxt'}>
-          <StudioField label="UID (optional)" for="axis-exchange-uid">
+          <StudioField
+            label="UID (optional)"
+            for="axis-exchange-uid"
+            hint="Required by some venues (e.g. BitMEX)."
+          >
             <StudioInput
               id="axis-exchange-uid"
               mono
               testId="axis-exchange-uid"
               value={uid()}
               onInput={setUid}
-              placeholder="Some venues (e.g. BitMEX) require a uid"
+              placeholder="uid"
               spellcheck={false}
               autocomplete="off"
             />
@@ -380,34 +423,65 @@ export const ExchangeCredentialsPanel: Component = () => {
         </Show>
       </div>
 
-      <div class="ax-inline">
-        <StudioButton variant="primary" testId="axis-exchange-key-save" onClick={onSave}>
-          <Icons.check />
+      <div class="ax-toolbar">
+        <AppButton
+          design="soft"
+          tone="primary"
+          size="sm"
+          testId="axis-exchange-key-save"
+          feedback={saveFb.state()}
+          icon={<Icons.check />}
+          onClick={() => void saveFb.run(onSave)}
+        >
           Save
-        </StudioButton>
-        <StudioButton
-          testId="axis-exchange-key-remove"
-          disabled={!hasSaved()}
-          onClick={onRemove}
-        >
-          <Icons.trash />
-          Remove
-        </StudioButton>
-        <StudioButton
+        </AppButton>
+        <AppButton
+          design="soft"
+          tone="ghost"
+          size="sm"
           testId="axis-exchange-key-test"
-          disabled={!hasSaved() || testing() || kind() === 'ccxt'}
-          title={kind() === 'ccxt' ? 'CCXT keys are verified on the next Load / Live' : undefined}
-          onClick={onTestKey}
+          feedback={testFb.state()}
+          disabled={!hasSaved() || kind() === 'ccxt'}
+          title={
+            kind() === 'ccxt' ? 'CCXT keys are verified on the next Load / Live' : 'Signed REST probe'
+          }
+          onClick={() => void testFb.run(onTestKey)}
         >
-          {testing() ? 'Testing…' : 'Test key'}
-        </StudioButton>
+          Test key
+        </AppButton>
+        <AppButton
+          design="soft"
+          tone="danger"
+          size="sm"
+          testId="axis-exchange-key-remove"
+          feedback={removeFb.state()}
+          disabled={!hasSaved()}
+          icon={<Icons.trash />}
+          onClick={() => void removeFb.run(onRemove)}
+        >
+          Remove
+        </AppButton>
       </div>
+
       <Show when={msg()}>
-        <p class="ax-error">{msg()}</p>
+        <p
+          class={
+            msgTone() === 'ok'
+              ? 'ax-hint ax-hint--accent'
+              : msgTone() === 'info'
+                ? 'ax-hint'
+                : 'ax-error'
+          }
+          role={msgTone() === 'err' ? 'alert' : 'status'}
+          data-testid="axis-exchange-key-msg"
+        >
+          {msg()}
+        </p>
       </Show>
+
       <StudioHint>
-        Public REST/WebSocket needs no key. CCXT keys raise rate limits / unlock private
-        adapters on the gateway; they are bound on Save and sent as a session handle.
+        Public REST / WebSocket needs no key. Private endpoints and higher rate limits need a saved
+        key for this session.
       </StudioHint>
     </StudioSection>
   );
@@ -480,346 +554,396 @@ function IntelNum(props: {
   );
 }
 
+function countIntelFlags(intel: EditorIntelSettings): { on: number; total: number } {
+  let on = 0;
+  let total = 0;
+  for (const value of Object.values(intel)) {
+    if (typeof value !== 'boolean') continue;
+    total += 1;
+    if (value) on += 1;
+  }
+  return { on, total };
+}
+
 /** Live-applied editor intelligence (lint / hover / complete / marks). */
 export const EditorIntelPanel: Component = () => {
   const intel = () => getEditorIntel();
   const set = (partial: Partial<EditorIntelSettings>) => patchEditorIntel(partial);
+  const resetFb = useMicrofeedback({ successHoldMs: 700 });
+  const flags = () => countIntelFlags(intel());
 
   return (
-    <div class="ax-split-col">
+    <div class="ax-stack" data-testid="axis-settings-editor-intel">
       <StudioSection
         title="Editor intelligence"
-        lead="Pre-eval, hover cards, completions, underlines, and inline chips. Changes apply immediately."
+        lead="Pre-eval, hover, completions, underlines, and inline chips. Live apply."
+        testId="axis-settings-editor-chrome"
+        headerEnd={
+          <>
+            <span class="ax-chip ax-chip--tag" data-testid="axis-intel-flags-count">
+              {flags().on}/{flags().total}
+            </span>
+            <StudioStatus
+              status={intel().preevalEnabled ? 'healthy' : 'idle'}
+              label={intel().preevalEnabled ? 'Pre-eval on' : 'Pre-eval off'}
+            />
+            <StudioStatus
+              status={intel().remoteLspEnabled ? 'healthy' : 'idle'}
+              label={intel().remoteLspEnabled ? 'Remote LSP' : 'Local only'}
+            />
+          </>
+        }
       >
         <IntelCheck
           id="axis-intel-feature-bar"
           label="Language Feature Bar"
-          hint="Chip row above the editor status strip: hover / signature / complete / lint / marks / chips / remote. Click toggles a feature, long-press opens its settings."
+          hint="Chip row above the editor status strip. Click toggles a feature; long-press opens its settings."
           checked={store.editorFeatureBarEnabled}
           onChange={(v) => setEditorFeatureBarEnabled(v)}
         />
         <div class="ax-toolbar">
-          <StudioButton
-            variant="ghost"
+          <AppButton
+            design="soft"
+            tone="ghost"
+            size="sm"
             testId="axis-settings-editor-reset"
-            onClick={() => resetEditorIntel()}
+            feedback={resetFb.state()}
+            title="Restore factory editor-intelligence defaults"
+            onClick={() =>
+              void resetFb.run(async () => {
+                resetEditorIntel();
+              })
+            }
           >
             Reset defaults
-          </StudioButton>
+          </AppButton>
         </div>
+        <StudioHint>
+          Backend URL for remote LSP lives on Runtime. Problems keep the last marks while typing
+          unless “Clear marks while typing” is on.
+        </StudioHint>
       </StudioSection>
 
       <div class="ax-catalog-grid">
-      <StudioSection title="Pre-eval / lint">
-        <div class="ax-toggle-grid">
-        <IntelCheck
-          id="axis-intel-preeval"
-          label="Enable pre-eval"
-          hint="Parse/lint after idle, Save, and Run. Off skips all static checks."
-          checked={intel().preevalEnabled}
-          onChange={(v) => set({ preevalEnabled: v })}
-        />
-        <IntelCheck
-          id="axis-intel-preeval-local"
-          label="Local structural checks"
-          hint="Brackets, strings, missing indicator()/strategy()/library()."
-          checked={intel().preevalLocal}
-          onChange={(v) => set({ preevalLocal: v })}
-        />
-        <IntelCheck
-          id="axis-intel-preeval-remote"
-          label="Remote Pro API diagnostics"
-          hint="POST /lsp/diagnostics when Backend URL is set (merged with local)."
-          checked={intel().preevalRemote}
-          onChange={(v) => set({ preevalRemote: v })}
-        />
-        <IntelCheck
-          id="axis-intel-preeval-typos"
-          label="Unknown builtin / typo hints"
-          hint="plt() → plot, strategy.etry → strategy.entry (violet, non-blocking)."
-          checked={intel().preevalTypos}
-          onChange={(v) => set({ preevalTypos: v })}
-        />
-        <IntelCheck
-          id="axis-intel-preeval-version"
-          label="Warn if //@version is missing"
-          checked={intel().preevalVersionWarn}
-          hint="Suggests //@version=6 at the top of the script."
-          onChange={(v) => set({ preevalVersionWarn: v })}
-        />
-        <IntelCheck
-          id="axis-intel-preeval-study"
-          label="Warn on study()"
-          hint="Pine v3 name — use indicator() or strategy()."
-          checked={intel().preevalStudyWarn}
-          onChange={(v) => set({ preevalStudyWarn: v })}
-        />
-        <IntelCheck
-          id="axis-intel-preeval-security"
-          label="Warn on bare security()"
-          hint="Prefer request.security (v4+)."
-          checked={intel().preevalSecurityWarn}
-          onChange={(v) => set({ preevalSecurityWarn: v })}
-        />
-        <IntelCheck
-          id="axis-intel-preeval-dup"
-          label="Warn on duplicate declarations"
-          hint="Only one indicator() / strategy() / library() per script."
-          checked={intel().preevalDuplicateDecl}
-          onChange={(v) => set({ preevalDuplicateDecl: v })}
-        />
-        <IntelCheck
-          id="axis-intel-preeval-v6-kwargs"
-          label="Warn on v6-removed kwargs"
-          hint="strategy.* when= and drawing/plot transp= are ignored in v6 (PYNE W104)."
-          checked={intel().preevalV6Kwargs}
-          onChange={(v) => set({ preevalV6Kwargs: v })}
-        />
-        <IntelCheck
-          id="axis-intel-preeval-block"
-          label="Block Run on errors"
-          hint="Severity error disables Run. Typos and warnings never block."
-          checked={intel().preevalBlockRun}
-          onChange={(v) => set({ preevalBlockRun: v })}
-        />
-        <IntelCheck
-          id="axis-intel-preeval-clear"
-          label="Clear marks while typing"
-          hint="On: hide underlines and Problems until idle. Off (default): keep the last list until the next check lands."
-          checked={intel().preevalClearOnEdit}
-          onChange={(v) => set({ preevalClearOnEdit: v })}
-        />
-        </div>
-        <IntelNum
-          id="axis-intel-idle-ms"
-          label="Idle delay"
-          hint="Quiet time after the last keystroke before lint runs"
-          value={intel().preevalIdleMs}
-          min={INTEL_IDLE_MS_MIN}
-          max={INTEL_IDLE_MS_MAX}
-          suffix=" ms"
-          onChange={(v) => set({ preevalIdleMs: v })}
-        />
-        <IntelNum
-          id="axis-intel-tab-ms"
-          label="Tab-switch delay"
-          hint="Lint shortly after switching editor tabs"
-          value={intel().preevalTabSwitchMs}
-          min={INTEL_TAB_SWITCH_MS_MIN}
-          max={INTEL_TAB_SWITCH_MS_MAX}
-          suffix=" ms"
-          onChange={(v) => set({ preevalTabSwitchMs: v })}
-        />
-      </StudioSection>
+        <StudioSection
+          title="Pre-eval / lint"
+          lead="Idle / Save / Run static checks. Local first; remote merges when Backend URL is set."
+        >
+          <div class="ax-toggle-grid">
+            <IntelCheck
+              id="axis-intel-preeval"
+              label="Enable pre-eval"
+              hint="Parse/lint after idle, Save, and Run. Off skips all static checks."
+              checked={intel().preevalEnabled}
+              onChange={(v) => set({ preevalEnabled: v })}
+            />
+            <IntelCheck
+              id="axis-intel-preeval-local"
+              label="Local structural checks"
+              hint="Brackets, strings, missing indicator()/strategy()/library()."
+              checked={intel().preevalLocal}
+              onChange={(v) => set({ preevalLocal: v })}
+            />
+            <IntelCheck
+              id="axis-intel-preeval-remote"
+              label="Remote Pro API diagnostics"
+              hint="POST /lsp/diagnostics when Backend URL is set (merged with local)."
+              checked={intel().preevalRemote}
+              onChange={(v) => set({ preevalRemote: v })}
+            />
+            <IntelCheck
+              id="axis-intel-preeval-typos"
+              label="Unknown builtin / typo hints"
+              hint="plt() → plot, strategy.etry → strategy.entry (violet, non-blocking)."
+              checked={intel().preevalTypos}
+              onChange={(v) => set({ preevalTypos: v })}
+            />
+            <IntelCheck
+              id="axis-intel-preeval-version"
+              label="Warn if //@version is missing"
+              checked={intel().preevalVersionWarn}
+              hint="Suggests //@version=6 at the top of the script."
+              onChange={(v) => set({ preevalVersionWarn: v })}
+            />
+            <IntelCheck
+              id="axis-intel-preeval-study"
+              label="Warn on study()"
+              hint="Pine v3 name — use indicator() or strategy()."
+              checked={intel().preevalStudyWarn}
+              onChange={(v) => set({ preevalStudyWarn: v })}
+            />
+            <IntelCheck
+              id="axis-intel-preeval-security"
+              label="Warn on bare security()"
+              hint="Prefer request.security (v4+)."
+              checked={intel().preevalSecurityWarn}
+              onChange={(v) => set({ preevalSecurityWarn: v })}
+            />
+            <IntelCheck
+              id="axis-intel-preeval-dup"
+              label="Warn on duplicate declarations"
+              hint="Only one indicator() / strategy() / library() per script."
+              checked={intel().preevalDuplicateDecl}
+              onChange={(v) => set({ preevalDuplicateDecl: v })}
+            />
+            <IntelCheck
+              id="axis-intel-preeval-v6-kwargs"
+              label="Warn on v6-removed kwargs"
+              hint="strategy.* when= and drawing/plot transp= are ignored in v6 (PYNE W104)."
+              checked={intel().preevalV6Kwargs}
+              onChange={(v) => set({ preevalV6Kwargs: v })}
+            />
+            <IntelCheck
+              id="axis-intel-preeval-block"
+              label="Block Run on errors"
+              hint="Severity error disables Run. Typos and warnings never block."
+              checked={intel().preevalBlockRun}
+              onChange={(v) => set({ preevalBlockRun: v })}
+            />
+            <IntelCheck
+              id="axis-intel-preeval-clear"
+              label="Clear marks while typing"
+              hint="On: hide underlines and Problems until idle. Off (default): keep the last list until the next check lands."
+              checked={intel().preevalClearOnEdit}
+              onChange={(v) => set({ preevalClearOnEdit: v })}
+            />
+          </div>
+          <IntelNum
+            id="axis-intel-idle-ms"
+            label="Idle delay"
+            hint="Quiet time after the last keystroke before lint runs"
+            value={intel().preevalIdleMs}
+            min={INTEL_IDLE_MS_MIN}
+            max={INTEL_IDLE_MS_MAX}
+            suffix=" ms"
+            onChange={(v) => set({ preevalIdleMs: v })}
+          />
+          <IntelNum
+            id="axis-intel-tab-ms"
+            label="Tab-switch delay"
+            hint="Lint shortly after switching editor tabs"
+            value={intel().preevalTabSwitchMs}
+            min={INTEL_TAB_SWITCH_MS_MIN}
+            max={INTEL_TAB_SWITCH_MS_MAX}
+            suffix=" ms"
+            onChange={(v) => set({ preevalTabSwitchMs: v })}
+          />
+        </StudioSection>
 
-      <StudioSection title="Error marking">
-        <div class="ax-toggle-grid">
-        <IntelCheck
-          id="axis-intel-underlines"
-          label="Underlines + line tint"
-          hint="Wavy/dotted marks in the buffer."
-          checked={intel().diagUnderlines}
-          onChange={(v) => set({ diagUnderlines: v })}
-        />
-        <IntelCheck
-          id="axis-intel-gutter"
-          label="Gutter markers"
-          hint="● / ▲ / ✦ in the left gutter."
-          checked={intel().diagGutter}
-          onChange={(v) => set({ diagGutter: v })}
-        />
-        <IntelCheck
-          id="axis-intel-diag-hover"
-          label="Diagnostic hover"
-          hint="Tooltip when the cursor rests on a mark."
-          checked={intel().diagHover}
-          onChange={(v) => set({ diagHover: v })}
-        />
-        <IntelCheck
-          id="axis-intel-err"
-          label="Show errors"
-          checked={intel().diagErrors}
-          hint="Blocking parse / structural errors."
-          onChange={(v) => set({ diagErrors: v })}
-        />
-        <IntelCheck
-          id="axis-intel-warn"
-          label="Show warnings"
-          checked={intel().diagWarnings}
-          hint="study(), missing version, bare security()."
-          onChange={(v) => set({ diagWarnings: v })}
-        />
-        <IntelCheck
-          id="axis-intel-typo"
-          label="Show typos"
-          checked={intel().diagTypos}
-          hint="Unknown builtin members (violet)."
-          onChange={(v) => set({ diagTypos: v })}
-        />
-        <IntelCheck
-          id="axis-intel-info"
-          label="Show info"
-          checked={intel().diagInfo}
-          hint="Hints and informational engine notes."
-          onChange={(v) => set({ diagInfo: v })}
-        />
-        </div>
-      </StudioSection>
+        <StudioSection title="Error marking" lead="How diagnostics paint in the buffer and gutter.">
+          <div class="ax-toggle-grid">
+            <IntelCheck
+              id="axis-intel-underlines"
+              label="Underlines + line tint"
+              hint="Wavy/dotted marks in the buffer."
+              checked={intel().diagUnderlines}
+              onChange={(v) => set({ diagUnderlines: v })}
+            />
+            <IntelCheck
+              id="axis-intel-gutter"
+              label="Gutter markers"
+              hint="● / ▲ / ✦ in the left gutter."
+              checked={intel().diagGutter}
+              onChange={(v) => set({ diagGutter: v })}
+            />
+            <IntelCheck
+              id="axis-intel-diag-hover"
+              label="Diagnostic hover"
+              hint="Tooltip when the cursor rests on a mark."
+              checked={intel().diagHover}
+              onChange={(v) => set({ diagHover: v })}
+            />
+            <IntelCheck
+              id="axis-intel-err"
+              label="Show errors"
+              checked={intel().diagErrors}
+              hint="Blocking parse / structural errors."
+              onChange={(v) => set({ diagErrors: v })}
+            />
+            <IntelCheck
+              id="axis-intel-warn"
+              label="Show warnings"
+              checked={intel().diagWarnings}
+              hint="study(), missing version, bare security()."
+              onChange={(v) => set({ diagWarnings: v })}
+            />
+            <IntelCheck
+              id="axis-intel-typo"
+              label="Show typos"
+              checked={intel().diagTypos}
+              hint="Unknown builtin members (violet)."
+              onChange={(v) => set({ diagTypos: v })}
+            />
+            <IntelCheck
+              id="axis-intel-info"
+              label="Show info"
+              checked={intel().diagInfo}
+              hint="Hints and informational engine notes."
+              onChange={(v) => set({ diagInfo: v })}
+            />
+          </div>
+        </StudioSection>
 
-      <StudioSection title="Hover cards & hints">
-        <div class="ax-toggle-grid">
-        <IntelCheck
-          id="axis-intel-hover"
-          label="Builtin / symbol hover cards"
-          hint="Docs for ta.sma, plot, input.*, user annotations."
-          checked={intel().hoverEnabled}
-          onChange={(v) => set({ hoverEnabled: v })}
-        />
-        <IntelCheck
-          id="axis-intel-hover-remote"
-          label="Remote hover"
-          hint="Ask Pro API /lsp/hover when local catalog has no card."
-          checked={intel().hoverRemote}
-          onChange={(v) => set({ hoverRemote: v })}
-        />
-        <IntelCheck
-          id="axis-intel-sig"
-          label="Signature / param checklist"
-          hint="In-call hint lists every parameter (used / current / unused)."
-          checked={intel().signatureHints}
-          onChange={(v) => set({ signatureHints: v })}
-        />
-        </div>
-        <IntelNum
-          id="axis-intel-hover-ms"
-          label="Hover delay"
-          hint="How long to rest the pointer before a card opens"
-          value={intel().hoverTimeMs}
-          min={INTEL_HOVER_MS_MIN}
-          max={INTEL_HOVER_MS_MAX}
-          step={25}
-          suffix=" ms"
-          onChange={(v) => set({ hoverTimeMs: v })}
-        />
-      </StudioSection>
+        <StudioSection title="Hover cards & hints" lead="Docs and in-call parameter checklist.">
+          <div class="ax-toggle-grid">
+            <IntelCheck
+              id="axis-intel-hover"
+              label="Builtin / symbol hover cards"
+              hint="Docs for ta.sma, plot, input.*, user annotations."
+              checked={intel().hoverEnabled}
+              onChange={(v) => set({ hoverEnabled: v })}
+            />
+            <IntelCheck
+              id="axis-intel-hover-remote"
+              label="Remote hover"
+              hint="Ask Pro API /lsp/hover when local catalog has no card."
+              checked={intel().hoverRemote}
+              onChange={(v) => set({ hoverRemote: v })}
+            />
+            <IntelCheck
+              id="axis-intel-sig"
+              label="Signature / param checklist"
+              hint="In-call hint lists every parameter (used / current / unused)."
+              checked={intel().signatureHints}
+              onChange={(v) => set({ signatureHints: v })}
+            />
+          </div>
+          <IntelNum
+            id="axis-intel-hover-ms"
+            label="Hover delay"
+            hint="How long to rest the pointer before a card opens"
+            value={intel().hoverTimeMs}
+            min={INTEL_HOVER_MS_MIN}
+            max={INTEL_HOVER_MS_MAX}
+            step={25}
+            suffix=" ms"
+            onChange={(v) => set({ hoverTimeMs: v })}
+          />
+        </StudioSection>
 
-      <StudioSection title="Suggestions / autocomplete">
-        <div class="ax-toggle-grid">
-        <IntelCheck
-          id="axis-intel-ac"
-          label="Enable completions"
-          hint="Typing + ⌘/Ctrl-Space. Off removes the list entirely."
-          checked={intel().autocompleteEnabled}
-          onChange={(v) => set({ autocompleteEnabled: v })}
-        />
-        <IntelCheck
-          id="axis-intel-ac-type"
-          label="Activate while typing"
-          hint="Off = only open on ⌘/Ctrl-Space."
-          checked={intel().activateOnTyping}
-          onChange={(v) => set({ activateOnTyping: v })}
-        />
-        <IntelCheck
-          id="axis-intel-ac-params"
-          label="Named parameter suggestions"
-          hint="After ( or , offer remaining title= / minval= args."
-          checked={intel().paramCompletions}
-          onChange={(v) => set({ paramCompletions: v })}
-        />
-        <IntelCheck
-          id="axis-intel-ac-enums"
-          label="Enum value lists"
-          hint="plot.style_*, shape.*, size.*, location.*, color.* after name=."
-          checked={intel().enumCompletions}
-          onChange={(v) => set({ enumCompletions: v })}
-        />
-        <IntelCheck
-          id="axis-intel-ac-remote"
-          label="Remote completions"
-          hint="Merge Pro API /lsp/completion when local has no hit."
-          checked={intel().remoteCompletions}
-          onChange={(v) => set({ remoteCompletions: v })}
-        />
-        </div>
-        <IntelNum
-          id="axis-intel-ac-max"
-          label="Max rendered options"
-          hint="Cap the suggestion popup"
-          value={intel().maxRenderedOptions}
-          min={INTEL_MAX_OPTIONS_MIN}
-          max={INTEL_MAX_OPTIONS_MAX}
-          step={8}
-          onChange={(v) => set({ maxRenderedOptions: v })}
-        />
-      </StudioSection>
+        <StudioSection
+          title="Suggestions / autocomplete"
+          lead="Typing + ⌘/Ctrl-Space. Named params and enum lists."
+        >
+          <div class="ax-toggle-grid">
+            <IntelCheck
+              id="axis-intel-ac"
+              label="Enable completions"
+              hint="Typing + ⌘/Ctrl-Space. Off removes the list entirely."
+              checked={intel().autocompleteEnabled}
+              onChange={(v) => set({ autocompleteEnabled: v })}
+            />
+            <IntelCheck
+              id="axis-intel-ac-type"
+              label="Activate while typing"
+              hint="Off = only open on ⌘/Ctrl-Space."
+              checked={intel().activateOnTyping}
+              onChange={(v) => set({ activateOnTyping: v })}
+            />
+            <IntelCheck
+              id="axis-intel-ac-params"
+              label="Named parameter suggestions"
+              hint="After ( or , offer remaining title= / minval= args."
+              checked={intel().paramCompletions}
+              onChange={(v) => set({ paramCompletions: v })}
+            />
+            <IntelCheck
+              id="axis-intel-ac-enums"
+              label="Enum value lists"
+              hint="plot.style_*, shape.*, size.*, location.*, color.* after name=."
+              checked={intel().enumCompletions}
+              onChange={(v) => set({ enumCompletions: v })}
+            />
+            <IntelCheck
+              id="axis-intel-ac-remote"
+              label="Remote completions"
+              hint="Merge Pro API /lsp/completion when local has no hit."
+              checked={intel().remoteCompletions}
+              onChange={(v) => set({ remoteCompletions: v })}
+            />
+          </div>
+          <IntelNum
+            id="axis-intel-ac-max"
+            label="Max rendered options"
+            hint="Cap the suggestion popup"
+            value={intel().maxRenderedOptions}
+            min={INTEL_MAX_OPTIONS_MIN}
+            max={INTEL_MAX_OPTIONS_MAX}
+            step={8}
+            onChange={(v) => set({ maxRenderedOptions: v })}
+          />
+        </StudioSection>
 
-      <StudioSection title="Remote LSP timings">
-        <IntelCheck
-          id="axis-intel-remote-master"
-          label="Use remote LSP"
-          hint="Master switch for hover / complete / diagnostics against Backend URL."
-          checked={intel().remoteLspEnabled}
-          onChange={(v) => set({ remoteLspEnabled: v })}
-        />
-        <div class="ax-token-grid">
-        <IntelNum
-          id="axis-intel-to-hover"
-          label="Hover timeout"
-          hint="Give up on /lsp/hover and show local (or nothing)"
-          value={intel().hoverTimeoutMs}
-          min={INTEL_TIMEOUT_MS_MIN}
-          max={INTEL_TIMEOUT_MS_MAX}
-          suffix=" ms"
-          onChange={(v) => set({ hoverTimeoutMs: v })}
-        />
-        <IntelNum
-          id="axis-intel-to-ac"
-          label="Completion timeout"
-          hint="Give up on /lsp/completion"
-          value={intel().completionTimeoutMs}
-          min={INTEL_TIMEOUT_MS_MIN}
-          max={INTEL_TIMEOUT_MS_MAX}
-          suffix=" ms"
-          onChange={(v) => set({ completionTimeoutMs: v })}
-        />
-        <IntelNum
-          id="axis-intel-to-diag"
-          label="Diagnostics timeout"
-          hint="Local marks already show; this only waits for remote parse"
-          value={intel().diagnosticsTimeoutMs}
-          min={INTEL_TIMEOUT_MS_MIN}
-          max={INTEL_TIMEOUT_MS_MAX}
-          suffix=" ms"
-          onChange={(v) => set({ diagnosticsTimeoutMs: v })}
-        />
-        </div>
-      </StudioSection>
+        <StudioSection
+          title="Remote LSP timings"
+          lead="Timeouts against Backend URL. Local marks still show while remote waits."
+        >
+          <IntelCheck
+            id="axis-intel-remote-master"
+            label="Use remote LSP"
+            hint="Master switch for hover / complete / diagnostics against Backend URL."
+            checked={intel().remoteLspEnabled}
+            onChange={(v) => set({ remoteLspEnabled: v })}
+          />
+          <div class="ax-token-grid">
+            <IntelNum
+              id="axis-intel-to-hover"
+              label="Hover timeout"
+              hint="Give up on /lsp/hover and show local (or nothing)"
+              value={intel().hoverTimeoutMs}
+              min={INTEL_TIMEOUT_MS_MIN}
+              max={INTEL_TIMEOUT_MS_MAX}
+              suffix=" ms"
+              onChange={(v) => set({ hoverTimeoutMs: v })}
+            />
+            <IntelNum
+              id="axis-intel-to-ac"
+              label="Completion timeout"
+              hint="Give up on /lsp/completion"
+              value={intel().completionTimeoutMs}
+              min={INTEL_TIMEOUT_MS_MIN}
+              max={INTEL_TIMEOUT_MS_MAX}
+              suffix=" ms"
+              onChange={(v) => set({ completionTimeoutMs: v })}
+            />
+            <IntelNum
+              id="axis-intel-to-diag"
+              label="Diagnostics timeout"
+              hint="Local marks already show; this only waits for remote parse"
+              value={intel().diagnosticsTimeoutMs}
+              min={INTEL_TIMEOUT_MS_MIN}
+              max={INTEL_TIMEOUT_MS_MAX}
+              suffix=" ms"
+              onChange={(v) => set({ diagnosticsTimeoutMs: v })}
+            />
+          </div>
+        </StudioSection>
 
-      <StudioSection title="Inline markers">
-        <div class="ax-toggle-grid">
-        <IntelCheck
-          id="axis-intel-color-chips"
-          label="Color chips"
-          hint="Swatches before hex / color.* tokens."
-          checked={intel().colorChips}
-          onChange={(v) => set({ colorChips: v })}
-        />
-        <IntelCheck
-          id="axis-intel-inline-chips"
-          label="Debug chips (end of line)"
-          hint="Also requires the editor Debug toggle. Last-run logs / errors."
-          checked={intel().inlineChips}
-          onChange={(v) => set({ inlineChips: v })}
-        />
-        <IntelCheck
-          id="axis-intel-pin-gutter"
-          label="Debug pin gutter"
-          hint="Also requires chart Pins. Lines with bar_index / time."
-          checked={intel().inlinePinGutter}
-          onChange={(v) => set({ inlinePinGutter: v })}
-        />
-        </div>
-      </StudioSection>
+        <StudioSection title="Inline markers" lead="Color swatches and debug end-of-line chips.">
+          <div class="ax-toggle-grid">
+            <IntelCheck
+              id="axis-intel-color-chips"
+              label="Color chips"
+              hint="Swatches before hex / color.* tokens."
+              checked={intel().colorChips}
+              onChange={(v) => set({ colorChips: v })}
+            />
+            <IntelCheck
+              id="axis-intel-inline-chips"
+              label="Debug chips (end of line)"
+              hint="Also requires the editor Debug toggle. Last-run logs / errors."
+              checked={intel().inlineChips}
+              onChange={(v) => set({ inlineChips: v })}
+            />
+            <IntelCheck
+              id="axis-intel-pin-gutter"
+              label="Debug pin gutter"
+              hint="Also requires chart Pins. Lines with bar_index / time."
+              checked={intel().inlinePinGutter}
+              onChange={(v) => set({ inlinePinGutter: v })}
+            />
+          </div>
+        </StudioSection>
       </div>
     </div>
   );

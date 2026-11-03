@@ -35,12 +35,13 @@ import {
   type SavedCustomTheme,
 } from '../theme';
 import {
-  StudioButton,
+  AppButton,
   StudioEmpty,
   StudioHint,
   StudioInput,
   StudioList,
   StudioRow,
+  useMicrofeedback,
 } from './studio';
 
 function Swatches(props: { up: string; down: string }) {
@@ -67,11 +68,12 @@ export function SavedThemeLibrary() {
   const [renameError, setRenameError] = createSignal('');
   const themes = () => store.savedChartThemes || [];
   const live = createMemo(() => store.chartTheme || defaultChartThemeState());
+  const saveFb = useMicrofeedback({ successHoldMs: 700, errorHoldMs: 1100 });
 
   const dirty = (theme: SavedCustomTheme) =>
     !themesEqual(serializeTheme(live()), serializeTheme(theme.theme));
 
-  const onSave = () => {
+  const onSave = async () => {
     saveCustomTheme(name());
     setName('');
   };
@@ -102,7 +104,7 @@ export function SavedThemeLibrary() {
         class="ax-inline"
         onSubmit={(e) => {
           e.preventDefault();
-          onSave();
+          void saveFb.run(onSave);
         }}
       >
         <StudioInput
@@ -112,17 +114,19 @@ export function SavedThemeLibrary() {
           autocomplete="off"
           onInput={setName}
         />
-        <StudioButton variant="primary" type="submit" testId="axis-theme-save">
+        <AppButton
+          design="soft"
+          tone="primary"
+          size="sm"
+          type="submit"
+          testId="axis-theme-save"
+          feedback={saveFb.state()}
+        >
           Save theme
-        </StudioButton>
+        </AppButton>
       </form>
-      <StudioHint>
-        A matching name replaces that theme. The save includes the bar coloring on the chart.
-      </StudioHint>
-      <Show
-        when={themes().length > 0}
-        fallback={<StudioEmpty>No saved themes yet.</StudioEmpty>}
-      >
+      <StudioHint>Matching name replaces that theme. Bar coloring is included.</StudioHint>
+      <Show when={themes().length > 0} fallback={<StudioEmpty>No saved themes yet.</StudioEmpty>}>
         <StudioList class="ax-list--entity">
           <For each={themes()}>
             {(theme) => {
@@ -160,18 +164,20 @@ export function SavedThemeLibrary() {
                             testId={`axis-theme-rename-input-${theme.id}`}
                             onInput={setDraft}
                           />
-                          <StudioButton variant="primary" type="submit" class="ax-btn--compact">
+                          <AppButton design="soft" tone="primary" size="sm" type="submit">
                             Save
-                          </StudioButton>
-                          <StudioButton
-                            class="ax-btn--compact"
+                          </AppButton>
+                          <AppButton
+                            design="soft"
+                            tone="ghost"
+                            size="sm"
                             onClick={() => {
                               setRenamingId(null);
                               setRenameError('');
                             }}
                           >
                             Cancel
-                          </StudioButton>
+                          </AppButton>
                         </form>
                         <Show when={renameError()}>
                           <p class="ax-error">{renameError()}</p>
@@ -180,9 +186,10 @@ export function SavedThemeLibrary() {
                     </div>
                     <Show when={renamingId() !== theme.id}>
                       <div class="ax-entity-actions ax-theme-actions">
-                        <StudioButton
-                          variant={active() && !dirty(theme) ? 'ghost' : 'primary'}
-                          class="ax-btn--compact"
+                        <AppButton
+                          design="soft"
+                          tone={active() && !dirty(theme) ? 'ghost' : 'primary'}
+                          size="sm"
                           disabled={active() && !dirty(theme)}
                           testId={`axis-theme-apply-${theme.id}`}
                           title={
@@ -190,33 +197,44 @@ export function SavedThemeLibrary() {
                               ? 'Restore this theme, including its bar coloring'
                               : 'Apply this theme'
                           }
-                          onClick={() => applyCustomTheme(theme.id)}
+                          onClick={async () => {
+                            applyCustomTheme(theme.id);
+                          }}
                         >
                           {active() && !dirty(theme) ? 'Applied' : 'Apply'}
-                        </StudioButton>
-                        <StudioButton
-                          class="ax-btn--compact"
+                        </AppButton>
+                        <AppButton
+                          design="soft"
+                          tone="ghost"
+                          size="sm"
                           testId={`axis-theme-update-${theme.id}`}
                           title="Store the current chart, including its bar coloring, in this theme"
-                          onClick={() => updateCustomTheme(theme.id)}
+                          onClick={async () => {
+                            updateCustomTheme(theme.id);
+                          }}
                         >
                           Update
-                        </StudioButton>
-                        <StudioButton
-                          class="ax-btn--compact"
+                        </AppButton>
+                        <AppButton
+                          design="soft"
+                          tone="ghost"
+                          size="sm"
                           testId={`axis-theme-rename-${theme.id}`}
                           onClick={() => startRename(theme)}
                         >
                           Rename
-                        </StudioButton>
-                        <StudioButton
-                          variant="danger"
-                          class="ax-btn--compact"
+                        </AppButton>
+                        <AppButton
+                          design="soft"
+                          tone="danger"
+                          size="sm"
                           testId={`axis-theme-delete-${theme.id}`}
-                          onClick={() => deleteCustomTheme(theme.id)}
+                          onClick={async () => {
+                            deleteCustomTheme(theme.id);
+                          }}
                         >
                           Delete
-                        </StudioButton>
+                        </AppButton>
                       </div>
                     </Show>
                   </div>
@@ -238,14 +256,16 @@ export function BarColorLibrary() {
   const [renameError, setRenameError] = createSignal('');
   const bars = () => store.savedBarThemes || [];
   const live = createMemo(() => store.chartTheme || defaultChartThemeState());
-  const activeTheme = createMemo(() =>
-    (store.savedChartThemes || []).find((theme) => theme.id === store.activeSavedThemeId) ?? null,
+  const activeTheme = createMemo(
+    () =>
+      (store.savedChartThemes || []).find((theme) => theme.id === store.activeSavedThemeId) ?? null,
   );
+  const saveFb = useMicrofeedback({ successHoldMs: 700, errorHoldMs: 1100 });
 
   const inUse = (bar: BarColorTheme) =>
     store.activeBarThemeId === bar.id && barTokensEqual(barTokensFromState(live()), bar.tokens);
 
-  const onSave = () => {
+  const onSave = async () => {
     saveBarColorTheme(name());
     setName('');
   };
@@ -270,14 +290,14 @@ export function BarColorLibrary() {
         when={activeTheme()}
         fallback={
           <StudioHint>
-            No saved theme is selected. A bar coloring saved here can be put inside a theme later.
+            No saved theme selected. A bar palette saved here can be linked into a theme later.
           </StudioHint>
         }
       >
         {(theme) => (
           <StudioHint>
-            Bar coloring inside {theme().name}: {theme().barTheme.name}. Saving or using a palette
-            stores it in that theme. Updating a palette rewrites every theme that uses it.
+            Linked in {theme().name}: {theme().barTheme.name}. Use writes into that theme; Update
+            rewrites every theme that points here.
           </StudioHint>
         )}
       </Show>
@@ -285,7 +305,7 @@ export function BarColorLibrary() {
         class="ax-inline"
         onSubmit={(e) => {
           e.preventDefault();
-          onSave();
+          void saveFb.run(onSave);
         }}
       >
         <StudioInput
@@ -295,9 +315,16 @@ export function BarColorLibrary() {
           autocomplete="off"
           onInput={setName}
         />
-        <StudioButton variant="primary" type="submit" testId="axis-bar-theme-save">
+        <AppButton
+          design="soft"
+          tone="primary"
+          size="sm"
+          type="submit"
+          testId="axis-bar-theme-save"
+          feedback={saveFb.state()}
+        >
           Save bar colors
-        </StudioButton>
+        </AppButton>
       </form>
       <Show
         when={bars().length > 0}
@@ -349,18 +376,20 @@ export function BarColorLibrary() {
                             testId={`axis-bar-theme-rename-input-${bar.id}`}
                             onInput={setDraft}
                           />
-                          <StudioButton variant="primary" type="submit" class="ax-btn--compact">
+                          <AppButton design="soft" tone="primary" size="sm" type="submit">
                             Save
-                          </StudioButton>
-                          <StudioButton
-                            class="ax-btn--compact"
+                          </AppButton>
+                          <AppButton
+                            design="soft"
+                            tone="ghost"
+                            size="sm"
                             onClick={() => {
                               setRenamingId(null);
                               setRenameError('');
                             }}
                           >
                             Cancel
-                          </StudioButton>
+                          </AppButton>
                         </form>
                         <Show when={renameError()}>
                           <p class="ax-error">{renameError()}</p>
@@ -369,26 +398,35 @@ export function BarColorLibrary() {
                     </div>
                     <Show when={renamingId() !== bar.id}>
                       <div class="ax-entity-actions ax-theme-actions">
-                        <StudioButton
-                          variant={inUse(bar) ? 'ghost' : 'primary'}
-                          class="ax-btn--compact"
+                        <AppButton
+                          design="soft"
+                          tone={inUse(bar) ? 'ghost' : 'primary'}
+                          size="sm"
                           disabled={inUse(bar)}
                           testId={`axis-bar-theme-use-${bar.id}`}
                           title={useTitle()}
-                          onClick={() => applyBarColorTheme(bar.id)}
+                          onClick={async () => {
+                            applyBarColorTheme(bar.id);
+                          }}
                         >
                           {inUse(bar) ? 'In use' : 'Use'}
-                        </StudioButton>
-                        <StudioButton
-                          class="ax-btn--compact"
+                        </AppButton>
+                        <AppButton
+                          design="soft"
+                          tone="ghost"
+                          size="sm"
                           testId={`axis-bar-theme-update-${bar.id}`}
                           title="Replace this bar coloring with the current bars, including inside themes that use it"
-                          onClick={() => updateBarColorTheme(bar.id)}
+                          onClick={async () => {
+                            updateBarColorTheme(bar.id);
+                          }}
                         >
                           Update
-                        </StudioButton>
-                        <StudioButton
-                          class="ax-btn--compact"
+                        </AppButton>
+                        <AppButton
+                          design="soft"
+                          tone="ghost"
+                          size="sm"
                           testId={`axis-bar-theme-rename-${bar.id}`}
                           onClick={() => {
                             setRenamingId(bar.id);
@@ -397,15 +435,18 @@ export function BarColorLibrary() {
                           }}
                         >
                           Rename
-                        </StudioButton>
-                        <StudioButton
-                          variant="danger"
-                          class="ax-btn--compact"
+                        </AppButton>
+                        <AppButton
+                          design="soft"
+                          tone="danger"
+                          size="sm"
                           testId={`axis-bar-theme-delete-${bar.id}`}
-                          onClick={() => deleteBarColorTheme(bar.id)}
+                          onClick={async () => {
+                            deleteBarColorTheme(bar.id);
+                          }}
                         >
                           Delete
-                        </StudioButton>
+                        </AppButton>
                       </div>
                     </Show>
                   </div>

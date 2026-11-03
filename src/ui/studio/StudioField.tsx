@@ -9,7 +9,7 @@
  */
 
 import type { JSX } from 'solid-js';
-import { Show } from 'solid-js';
+import { Show, createUniqueId } from 'solid-js';
 
 export function StudioHint(props: { class?: string; children: JSX.Element }) {
   return <p class={`ax-hint${props.class ? ` ${props.class}` : ''}`}>{props.children}</p>;
@@ -23,8 +23,17 @@ export function StudioField(props: {
   testId?: string;
   children: JSX.Element;
 }) {
+  const uid = createUniqueId();
+  const hintId = () => (props.hint ? `${uid}-hint` : undefined);
+  const errorId = () => (props.error ? `${uid}-error` : undefined);
+
   return (
-    <div class="ax-field" data-testid={props.testId}>
+    <div
+      class="ax-field"
+      classList={{ 'is-invalid': !!props.error }}
+      data-testid={props.testId}
+      data-invalid={props.error ? 'true' : undefined}
+    >
       <Show when={props.label}>
         <label class="ax-label" for={props.for}>
           {props.label}
@@ -32,10 +41,14 @@ export function StudioField(props: {
       </Show>
       {props.children}
       <Show when={props.hint}>
-        <p class="ax-hint">{props.hint}</p>
+        <p class="ax-hint" id={hintId()}>
+          {props.hint}
+        </p>
       </Show>
       <Show when={props.error}>
-        <p class="ax-error">{props.error}</p>
+        <p class="ax-error" id={errorId()} role="alert">
+          {props.error}
+        </p>
       </Show>
     </div>
   );
@@ -48,6 +61,7 @@ export function StudioInput(props: {
   placeholder?: string;
   mono?: boolean;
   disabled?: boolean;
+  invalid?: boolean;
   testId?: string;
   autocomplete?: string;
   spellcheck?: boolean;
@@ -62,10 +76,15 @@ export function StudioInput(props: {
     <input
       id={props.id}
       type={props.type || 'text'}
-      class={`ax-input${props.mono ? ' ax-input--mono' : ''}`}
+      class="ax-input"
+      classList={{
+        'ax-input--mono': !!props.mono,
+        'is-invalid': !!props.invalid,
+      }}
       value={props.value ?? ''}
       placeholder={props.placeholder}
       disabled={props.disabled}
+      aria-invalid={props.invalid ? true : undefined}
       data-testid={props.testId}
       autocomplete={props.autocomplete}
       spellcheck={props.spellcheck}
@@ -83,6 +102,7 @@ export function StudioSelect(props: {
   id?: string;
   value?: string;
   disabled?: boolean;
+  invalid?: boolean;
   testId?: string;
   onChange?: (value: string) => void;
   children: JSX.Element;
@@ -91,8 +111,10 @@ export function StudioSelect(props: {
     <select
       id={props.id}
       class="ax-input ax-select"
+      classList={{ 'is-invalid': !!props.invalid }}
       value={props.value}
       disabled={props.disabled}
+      aria-invalid={props.invalid ? true : undefined}
       data-testid={props.testId}
       onChange={(e) => props.onChange?.(e.currentTarget.value)}
     >
@@ -110,17 +132,29 @@ export function StudioToggle(props: {
   disabled?: boolean;
   onChange: (checked: boolean) => void;
 }) {
+  const autoId = createUniqueId();
+  const inputId = () => props.id || autoId;
+
   return (
-    <label class="ax-toggle" for={props.id}>
+    <label
+      class="ax-toggle"
+      classList={{
+        'is-checked': props.checked,
+        'is-disabled': !!props.disabled,
+      }}
+      for={inputId()}
+    >
       <input
-        id={props.id}
+        id={inputId()}
         type="checkbox"
+        role="switch"
         checked={props.checked}
         disabled={props.disabled}
+        aria-checked={props.checked}
         data-testid={props.testId}
         onChange={(e) => props.onChange(e.currentTarget.checked)}
       />
-      <span>
+      <span class="ax-toggle-copy">
         <span class="ax-toggle-title">{props.label}</span>
         <Show when={props.hint}>
           <span class="ax-toggle-hint">{props.hint}</span>

@@ -7,7 +7,7 @@ tags: [code, stories]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-12T12:21:16Z
+  at: 2026-11-03T12:43:16Z
 sources:
   - id: tree
     resource: "src/stories"
@@ -31,9 +31,9 @@ okf_lock: generated
 * `StatusBar.stories.tsx` — EmptyState
 * `StudioButton.stories.tsx` — Danger, Disabled, Ghost, Primary
 * `StudioDisplay.stories.tsx` — Card, Chips, Empty, Stats, Statuses
-* `StudioField.stories.tsx` — Color, Hint, Input, Select, Toggle
+* `StudioField.stories.tsx` — Color, Hint, Input, Invalid, Select, SwitchGrid, Toggle
 * `StudioJson.stories.tsx` — Header, Json
-* `StudioPage.stories.tsx` — Footer, Section, Tabs
+* `StudioPage.stories.tsx` — Buttons, Footer, Section, Tabs
 * `SystemLogs.stories.tsx` — Empty, Seeded
 * `ThemePanel.stories.tsx` — Compact, Defaults
 * `ThemeTokens.stories.tsx` — Buttons, Palette

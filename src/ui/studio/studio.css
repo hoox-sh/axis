@@ -295,12 +295,26 @@
   flex-direction: column;
   gap: 1.15rem;
 }
+.ax-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem 1.25rem;
+  min-width: 0;
+}
 .ax-section-title {
   margin: 0;
   font-size: var(--ax-section);
-  font-weight: 550;
+  font-weight: 600;
   letter-spacing: -0.02em;
   color: var(--color-text);
+  min-width: 0;
+}
+.ax-section-head-end {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
 }
 .ax-section-lead {
   margin: 0;
@@ -583,6 +597,7 @@
 
 /* ── Controls ────────────────────────────────────────────────────── */
 .ax-btn {
+  --ax-ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -597,9 +612,30 @@
   letter-spacing: -0.01em;
   cursor: pointer;
   border-radius: var(--radius-surface);
-  transition: background-color 150ms ease-out, border-color 150ms ease-out,
-    color 150ms ease-out, box-shadow 150ms ease-out, transform 120ms ease-out,
-    opacity 150ms ease-out;
+  transition:
+    background-color var(--ui-motion-duration-fast, 120ms) var(--ax-ease-out),
+    border-color var(--ui-motion-duration-fast, 120ms) var(--ax-ease-out),
+    color var(--ui-motion-duration-fast, 120ms) var(--ax-ease-out),
+    box-shadow var(--ui-motion-duration-fast, 120ms) var(--ax-ease-out),
+    transform var(--ui-motion-duration-fast, 120ms) var(--ax-ease-out),
+    opacity var(--ui-motion-duration-fast, 120ms) var(--ax-ease-out);
+}
+.ax-btn-label {
+  display: inline-flex;
+  align-items: center;
+  gap: inherit;
+}
+.ax-btn-spin {
+  width: 0.9rem;
+  height: 0.9rem;
+  border: 2px solid color-mix(in srgb, currentColor 28%, transparent);
+  border-top-color: currentColor;
+  border-radius: 999px;
+  flex-shrink: 0;
+  animation: ax-spin var(--ui-motion-duration-slow, 350ms) linear infinite;
+}
+@keyframes ax-spin {
+  to { transform: rotate(360deg); }
 }
 .ax-btn:hover:not(:disabled) {
   background: var(--color-bg-hover);
@@ -611,11 +647,18 @@
 .ax-btn:focus-visible {
   outline: none;
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 20%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 22%, transparent);
 }
-.ax-btn:disabled {
+.ax-btn:disabled,
+.ax-btn[aria-disabled="true"] {
   opacity: 0.45;
   cursor: not-allowed;
+}
+.ax-btn.is-loading {
+  cursor: progress;
+}
+.ax-btn.is-loading .ax-btn-label > svg {
+  display: none;
 }
 .ax-btn--primary {
   background: var(--color-accent);
@@ -640,6 +683,10 @@
 .ax-btn--danger {
   border-color: color-mix(in srgb, var(--color-red) 50%, var(--color-border));
   color: var(--color-red);
+}
+.ax-btn--danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-red) 10%, transparent);
+  border-color: var(--color-red);
 }
 .ax-btn--icon {
   min-width: var(--ax-control-h);
@@ -673,6 +720,9 @@
   flex-direction: column;
   gap: 0.55rem;
 }
+.ax-field.is-invalid .ax-label {
+  color: var(--color-red);
+}
 .ax-label {
   margin: 0;
   font-size: var(--ax-kicker);
@@ -694,17 +744,44 @@ textarea.ax-input {
   border-radius: var(--radius-input);
   font-size: 1.05rem;
   font-family: inherit;
+  transition:
+    border-color var(--ui-motion-duration-fast, 120ms) ease-out,
+    box-shadow var(--ui-motion-duration-fast, 120ms) ease-out,
+    background-color var(--ui-motion-duration-fast, 120ms) ease-out;
 }
 .ax-input.ax-input--mono,
 textarea.ax-input.ax-input--mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.98rem;
 }
+.ax-input:hover:not(:disabled):not(:focus):not(:focus-visible),
+.ax-select:hover:not(:disabled):not(:focus-visible) {
+  border-color: color-mix(in srgb, var(--color-border) 55%, var(--color-text-dim));
+}
 .ax-input:focus,
 .ax-input:focus-visible,
 .ax-select:focus-visible {
   outline: none;
   border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 18%, transparent);
+}
+.ax-input:disabled,
+.ax-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.ax-input.is-invalid,
+.ax-select.is-invalid,
+.ax-field.is-invalid .ax-input,
+.ax-field.is-invalid .ax-select {
+  border-color: color-mix(in srgb, var(--color-red) 70%, var(--color-border));
+}
+.ax-input.is-invalid:focus-visible,
+.ax-select.is-invalid:focus-visible,
+.ax-field.is-invalid .ax-input:focus-visible,
+.ax-field.is-invalid .ax-select:focus-visible {
+  border-color: var(--color-red);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-red) 20%, transparent);
 }
 .ax-hint {
   margin: 0;
@@ -722,28 +799,96 @@ textarea.ax-input.ax-input--mono {
   line-height: 1.45;
   color: var(--color-red);
 }
+
+/* Switch-styled toggle — keeps native checkbox for a11y + form semantics. */
 .ax-toggle {
+  --ax-toggle-w: 2.35rem;
+  --ax-toggle-h: 1.3rem;
+  --ax-toggle-pad: 0.14rem;
   display: flex;
   align-items: flex-start;
   gap: 0.85rem;
   cursor: pointer;
+  border-radius: var(--radius-surface);
+  outline: none;
+  transition: background-color var(--ui-motion-duration-fast, 120ms) ease-out;
+}
+.ax-toggle:hover:not(.is-disabled) .ax-toggle-title {
+  color: var(--color-text);
+}
+.ax-toggle.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .ax-toggle input {
-  width: 1.15rem;
-  height: 1.15rem;
-  margin-top: 0.3rem;
-  accent-color: var(--color-accent);
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  width: var(--ax-toggle-w);
+  height: var(--ax-toggle-h);
+  margin: 0.2rem 0 0;
   flex-shrink: 0;
+  border-radius: 999px;
+  border: var(--border-w) solid var(--color-border);
+  background: var(--color-bg-elev);
+  cursor: inherit;
+  transition:
+    background-color var(--ui-motion-duration-fast, 120ms) cubic-bezier(0.2, 0.8, 0.2, 1),
+    border-color var(--ui-motion-duration-fast, 120ms) cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow var(--ui-motion-duration-fast, 120ms) ease-out;
+}
+.ax-toggle input::after {
+  content: "";
+  position: absolute;
+  top: var(--ax-toggle-pad);
+  left: var(--ax-toggle-pad);
+  width: calc(var(--ax-toggle-h) - (var(--ax-toggle-pad) * 2) - 2px);
+  height: calc(var(--ax-toggle-h) - (var(--ax-toggle-pad) * 2) - 2px);
+  border-radius: 999px;
+  background: var(--color-text-dim);
+  box-shadow: 0 1px 2px color-mix(in srgb, #000 35%, transparent);
+  transition:
+    transform var(--ui-motion-duration-fast, 120ms) cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color var(--ui-motion-duration-fast, 120ms) ease-out;
+}
+.ax-toggle input:checked,
+.ax-toggle.is-checked input {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+.ax-toggle input:checked::after,
+.ax-toggle.is-checked input::after {
+  background: var(--color-bg-base);
+  transform: translateX(calc(var(--ax-toggle-w) - var(--ax-toggle-h)));
+}
+.ax-toggle input:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 22%, transparent);
+}
+.ax-toggle:hover:not(.is-disabled) input:not(:checked) {
+  border-color: color-mix(in srgb, var(--color-border) 45%, var(--color-text-dim));
+}
+.ax-toggle:active:not(.is-disabled) input::after {
+  width: calc(var(--ax-toggle-h) - (var(--ax-toggle-pad) * 2) - 2px + 0.12rem);
+}
+.ax-toggle-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+  padding-top: 0.05rem;
 }
 .ax-toggle-title {
   display: block;
   font-size: var(--ax-body);
   color: var(--color-text);
   font-weight: 500;
+  line-height: 1.35;
+  transition: color var(--ui-motion-duration-fast, 120ms) ease-out;
 }
 .ax-toggle-hint {
   display: block;
-  margin-top: 0.25rem;
+  margin-top: 0;
   font-size: var(--ax-hint);
   line-height: 1.5;
   color: var(--color-text-dim);
@@ -753,6 +898,9 @@ textarea.ax-input.ax-input--mono {
   width: 100%;
   accent-color: var(--color-accent);
   height: 1.5rem;
+}
+.ax-range:focus-visible {
+  outline: none;
 }
 
 /* ── Color field (one control: picker swatch + text) ──────────── */
@@ -941,8 +1089,17 @@ button.ax-card[aria-pressed="true"] {
   font-weight: 500;
   cursor: pointer;
   border-radius: 999px;
-  transition: background-color 150ms ease-out, border-color 150ms ease-out,
-    color 150ms ease-out, transform 120ms ease-out;
+  transition:
+    background-color var(--ui-motion-duration-fast, 120ms) ease-out,
+    border-color var(--ui-motion-duration-fast, 120ms) ease-out,
+    color var(--ui-motion-duration-fast, 120ms) ease-out,
+    transform var(--ui-motion-duration-fast, 120ms) cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow var(--ui-motion-duration-fast, 120ms) ease-out;
+}
+.ax-chip-label {
+  display: inline-flex;
+  align-items: center;
+  gap: inherit;
 }
 span.ax-chip,
 .ax-chip--tag {
@@ -955,18 +1112,23 @@ span.ax-chip,
   cursor: default;
   pointer-events: none;
 }
-.ax-chip:hover,
-.ax-chip:focus-visible {
+.ax-chip:hover:not(:disabled),
+.ax-chip:focus-visible:not(:disabled) {
   color: var(--color-text);
   border-color: var(--color-border);
   background: var(--color-bg-hover);
   outline: none;
 }
-.ax-chip:active {
-  transform: scale(0.98);
+.ax-chip:active:not(:disabled) {
+  transform: scale(0.97);
 }
 .ax-chip:focus-visible {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 20%, transparent);
+}
+.ax-chip:disabled,
+.ax-chip.is-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 .ax-chip.is-on,
 .ax-chip[aria-pressed="true"],
@@ -975,6 +1137,12 @@ span.ax-chip,
   color: var(--color-accent);
   background: color-mix(in srgb, var(--color-accent) 12%, transparent);
   font-weight: 600;
+}
+.ax-chip.is-on:hover:not(:disabled),
+.ax-chip[aria-pressed="true"]:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
 }
 .ax-status {
   display: inline-flex;
@@ -993,6 +1161,10 @@ span.ax-chip,
   letter-spacing: 0.02em;
   line-height: 1.2;
   border: var(--border-w) solid var(--color-border);
+  transition:
+    color var(--ui-motion-duration-fast, 120ms) ease-out,
+    border-color var(--ui-motion-duration-fast, 120ms) ease-out,
+    background-color var(--ui-motion-duration-fast, 120ms) ease-out;
 }
 .ax-status::before {
   content: "";
@@ -1252,20 +1424,15 @@ span.ax-json-twist {
   font-weight: 550;
   cursor: pointer;
   margin-bottom: calc(-1 * var(--border-w));
-  transition: color 150ms ease-out;
+  transition:
+    color var(--ui-motion-duration-fast, 120ms) ease-out,
+    background-color var(--ui-motion-duration-fast, 120ms) ease-out;
 }
-.ax-tab:hover,
-.ax-tab:focus-visible {
-  color: var(--color-text);
-  outline: none;
+.ax-tab-label {
+  position: relative;
+  z-index: 1;
 }
-.ax-tab:focus-visible {
-  box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--color-accent) 55%, transparent);
-}
-.ax-tab[aria-selected="true"] {
-  color: var(--color-text);
-}
-.ax-tab[aria-selected="true"]::after {
+.ax-tab::after {
   content: "";
   position: absolute;
   left: 0.85rem;
@@ -1273,6 +1440,36 @@ span.ax-json-twist {
   bottom: 0;
   height: 2px;
   background: var(--color-accent);
+  transform: scaleX(0);
+  transform-origin: center;
+  opacity: 0;
+  transition:
+    transform var(--ui-motion-duration-base, 200ms) cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity var(--ui-motion-duration-fast, 120ms) ease-out;
+}
+.ax-tab:hover,
+.ax-tab:focus-visible {
+  color: var(--color-text);
+  outline: none;
+}
+.ax-tab:hover:not([aria-selected="true"]) {
+  background: color-mix(in srgb, var(--color-bg-hover) 70%, transparent);
+}
+.ax-tab:active:not([aria-selected="true"]) {
+  color: var(--color-text);
+}
+.ax-tab:focus-visible {
+  box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--color-accent) 55%, transparent);
+}
+.ax-tab[aria-selected="true"],
+.ax-tab.is-active {
+  color: var(--color-text);
+  font-weight: 600;
+}
+.ax-tab[aria-selected="true"]::after,
+.ax-tab.is-active::after {
+  transform: scaleX(1);
+  opacity: 1;
 }
 .ax-page-footer {
   display: flex;
@@ -1283,13 +1480,22 @@ span.ax-json-twist {
   background: var(--color-bg-panel);
   flex-shrink: 0;
 }
-.ax-page-footer-status {
+.ax-page-footer-status,
+.ax-page-footer-spacer {
   flex: 1;
   min-width: 0;
   margin: 0;
+}
+.ax-page-footer-status {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: var(--ax-mono);
   color: var(--color-text-faint);
+}
+.ax-page-footer-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-shrink: 0;
 }
 
 /* ── Wire ────────────────────────────────────────────────────────── */
@@ -2094,6 +2300,25 @@ span.ax-json-twist {
 .ax-toggle-grid--3 {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
+@media (pointer: coarse) {
+  .ax-toggle {
+    min-height: 2.75rem;
+    padding: 0.35rem 0.15rem;
+  }
+  .ax-toggle input {
+    --ax-toggle-w: 2.6rem;
+    --ax-toggle-h: 1.45rem;
+    margin-top: 0.35rem;
+  }
+  .ax-chip {
+    min-height: 2.5rem;
+    padding: 0.45rem 0.95rem;
+  }
+  .ax-tab {
+    min-height: 3.25rem;
+    padding: 0.85rem 1.15rem;
+  }
+}
 .ax-token-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2288,13 +2513,36 @@ span.ax-json-twist {
   button.ax-card,
   .ax-chip,
   .ax-tab,
+  .ax-tab::after,
+  .ax-toggle,
+  .ax-toggle input,
+  .ax-toggle input::after,
+  .ax-toggle-title,
+  .ax-input,
+  .ax-select,
+  .ax-status,
   .ax-view-switch-btn,
   .ax-page-rail-item {
     transition: none;
   }
+  .ax-btn-spin {
+    animation: none;
+    border-top-color: color-mix(in srgb, currentColor 28%, transparent);
+    opacity: 0.7;
+  }
   .ax-btn:active:not(:disabled),
   button.ax-card:active,
-  .ax-chip:active {
+  .ax-chip:active:not(:disabled),
+  .ax-toggle:active:not(.is-disabled) input::after {
     transform: none;
+  }
+  .ax-toggle input:checked::after,
+  .ax-toggle.is-checked input::after {
+    transition: none;
+  }
+  .ax-tab[aria-selected="true"]::after,
+  .ax-tab.is-active::after {
+    transform: none;
+    opacity: 1;
   }
 }

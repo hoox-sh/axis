@@ -8,7 +8,7 @@
  * @module ui/studio/StudioTabs
  */
 
-import { For } from 'solid-js';
+import { For, createMemo } from 'solid-js';
 
 export function StudioTabs<T extends string>(props: {
   tabs: Array<{ id: T; label: string; hint?: string }>;
@@ -18,6 +18,8 @@ export function StudioTabs<T extends string>(props: {
   idPrefix: string;
   testId?: string;
 }) {
+  const ids = createMemo(() => props.tabs.map((t) => t.id));
+
   const focusTab = (id: T) => {
     props.onChange(id);
     queueMicrotask(() => {
@@ -26,17 +28,17 @@ export function StudioTabs<T extends string>(props: {
   };
 
   const onKeyDown = (e: KeyboardEvent) => {
-    const ids = props.tabs.map((t) => t.id);
-    const current = ids.indexOf(props.value);
+    const list = ids();
+    const current = list.indexOf(props.value);
     if (current < 0) return;
     let next = current;
-    if (e.key === 'ArrowRight') next = (current + 1) % ids.length;
-    else if (e.key === 'ArrowLeft') next = (current - 1 + ids.length) % ids.length;
+    if (e.key === 'ArrowRight') next = (current + 1) % list.length;
+    else if (e.key === 'ArrowLeft') next = (current - 1 + list.length) % list.length;
     else if (e.key === 'Home') next = 0;
-    else if (e.key === 'End') next = ids.length - 1;
+    else if (e.key === 'End') next = list.length - 1;
     else return;
     e.preventDefault();
-    const id = ids[next];
+    const id = list[next];
     if (id !== undefined && id !== props.value) focusTab(id);
   };
 
@@ -50,22 +52,29 @@ export function StudioTabs<T extends string>(props: {
       onKeyDown={onKeyDown}
     >
       <For each={props.tabs}>
-        {(t) => (
-          <button
-            type="button"
-            role="tab"
-            id={`${props.idPrefix}-tab-${t.id}`}
-            aria-selected={props.value === t.id}
-            aria-controls={`${props.idPrefix}-panel-${t.id}`}
-            tabIndex={props.value === t.id ? 0 : -1}
-            data-testid={`${props.idPrefix}-tab-${t.id}`}
-            class="ax-tab"
-            title={t.hint}
-            onClick={() => props.onChange(t.id)}
-          >
-            {t.label}
-          </button>
-        )}
+        {(t) => {
+          const selected = () => props.value === t.id;
+          return (
+            <button
+              type="button"
+              role="tab"
+              id={`${props.idPrefix}-tab-${t.id}`}
+              aria-selected={selected()}
+              aria-controls={`${props.idPrefix}-panel-${t.id}`}
+              tabIndex={selected() ? 0 : -1}
+              data-testid={`${props.idPrefix}-tab-${t.id}`}
+              data-state={selected() ? 'active' : 'inactive'}
+              class="ax-tab"
+              classList={{ 'is-active': selected() }}
+              title={t.hint}
+              onClick={() => {
+                if (!selected()) props.onChange(t.id);
+              }}
+            >
+              <span class="ax-tab-label">{t.label}</span>
+            </button>
+          );
+        }}
       </For>
     </div>
   );

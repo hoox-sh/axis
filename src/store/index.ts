@@ -70,6 +70,7 @@ import type {
   WatchlistState,
 } from './types';
 import type { ShortcutOverrides } from '../ui/shortcuts/types';
+import { normalizeChord } from '../ui/shortcuts/keys';
 import {
   DEFAULT_EDITOR_INTEL,
   EDITOR_INTEL_REV,
@@ -4600,6 +4601,14 @@ export function toggleEditorRulerEnabled() {
 
 /** Set a keyboard shortcut override (chord string) or clear it (`null`). */
 export function setShortcutOverride(id: string, chord: string | null): void {
+  if (chord != null) {
+    try {
+      // Canonicalize + reject modifier-only / empty chords before persist.
+      chord = normalizeChord(chord);
+    } catch {
+      return;
+    }
+  }
   setStore('shortcuts', 'overrides', id, chord);
   persist();
 }

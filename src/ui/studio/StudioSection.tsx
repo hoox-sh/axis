@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Titled studio block with optional lead copy.
+ * Titled studio block with optional lead copy and header actions.
  *
  * @module ui/studio/StudioSection
  */
@@ -14,13 +14,24 @@ import { Show } from 'solid-js';
 export function StudioSection(props: {
   title?: string;
   lead?: JSX.Element;
+  /** Optional trailing control(s) on the title row (probe, refresh, etc.). */
+  headerEnd?: JSX.Element;
   testId?: string;
   children: JSX.Element;
 }) {
+  const hasHead = () => !!(props.title || props.headerEnd);
+
   return (
     <section class="ax-section" data-testid={props.testId}>
-      <Show when={props.title}>
-        <h3 class="ax-section-title">{props.title}</h3>
+      <Show when={hasHead()}>
+        <div class="ax-section-head">
+          <Show when={props.title}>
+            <h3 class="ax-section-title">{props.title}</h3>
+          </Show>
+          <Show when={props.headerEnd}>
+            <div class="ax-section-head-end">{props.headerEnd}</div>
+          </Show>
+        </div>
       </Show>
       <Show when={props.lead}>
         <p class="ax-section-lead">{props.lead}</p>
