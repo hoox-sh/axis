@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "tests"
-description: "tests contains alerts-engine.test.ts, alerts-form.test.ts, alerts-format.test.ts, and 333 more files."
+description: "tests contains alerts-engine.test.ts, alerts-form.test.ts, alerts-format.test.ts, and 331 more files."
 resource: "tests"
 tags: [code, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-03T11:00:21Z
+  at: 2026-11-03T13:08:32Z
 sources:
   - id: tree
     resource: "tests"
@@ -149,7 +149,6 @@ okf_lock: generated
 * `git-oauth.test.ts`
 * `heavy-data.test.ts`
 * `hoox-logo.test.ts`
-* `hpo-plugin.test.ts`
 * `hud-model.test.ts`
 * `icons-map.test.ts`
 * `import-pyne-files.test.ts`
@@ -199,7 +198,6 @@ okf_lock: generated
 * `onchain-presets.test.ts`
 * `onchain-proxy.test.ts`
 * `open-script-source.test.ts`
-* `optimize-space.test.ts`
 * `overlay-sync.test.ts`
 * `paint-latency.test.ts`
 * `palette-bridge.test.ts`
@@ -381,7 +379,6 @@ okf_lock: generated
 * [src/indicators/builtins](/code/src/indicators/builtins.md)
 * [src/mcp](/code/src/mcp.md)
 * [src/onchain](/code/src/onchain.md)
-* [src/optimize](/code/src/optimize.md)
 * [src/plugins](/code/src/plugins.md)
 * [src/pwa](/code/src/pwa.md)
 * [src/results](/code/src/results.md)

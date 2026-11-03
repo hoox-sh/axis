@@ -314,10 +314,6 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
       },
       openArchitecture: () => props.onOpenArchitecture?.(),
       openScriptSettings: () => openScriptSettings(null),
-      openOptimise: () => {
-        setStore('resultsPanel', 'open', true);
-        window.dispatchEvent(new CustomEvent('axis-results-tab', { detail: { tab: 'optimise' } }));
-      },
       openAbout: () => openAboutModal(),
       resetUiLayout: () => resetUiLayout(),
       toggleFullscreen: () => void toggleBrowserFullscreen(),

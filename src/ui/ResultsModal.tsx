@@ -20,8 +20,8 @@
 /**
  * AXIS results — fullscreen studio overlay.
  *
- * Replaces the docked Results panel. Seven restyled subpages (Events,
- * Strategy, Optimise, Plots, Metrics, Raw, Saved) share one studio canvas
+ * Replaces the docked Results panel. Six restyled subpages (Events,
+ * Strategy, Plots, Metrics, Raw, Saved) share one studio canvas
  * bound to `store.lastRun` / `runResults`. Opens when
  * `store.resultsPanel.open` is set (auto for strategies, Topbar toggle,
  * command palette).
@@ -65,7 +65,6 @@ import {
 } from './studio';
 import { StrategyReport } from './StrategyReport';
 import { ScriptRunSelect } from './ScriptRunSelect';
-import { HpoPanel } from './HpoPanel';
 import { copyToClipboard } from './clipboard';
 import { installFocusTrap } from './focus-trap';
 import {
@@ -79,14 +78,13 @@ import {
 import { getActiveStorageId } from '../plugins/active';
 import { MAX_RESULTS_PER_SCRIPT } from '../storage/local';
 
-type TabId = 'events' | 'strategy' | 'optimise' | 'plots' | 'metrics' | 'raw' | 'saved';
+type TabId = 'events' | 'strategy' | 'plots' | 'metrics' | 'raw' | 'saved';
 
 type EventsView = 'stream' | 'positions';
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'events', label: 'Events' },
   { id: 'strategy', label: 'Strategy' },
-  { id: 'optimise', label: 'Optimise' },
   { id: 'plots', label: 'Plots' },
   { id: 'metrics', label: 'Metrics' },
   { id: 'raw', label: 'Raw' },
@@ -97,7 +95,6 @@ function isResultsTab(v: unknown): v is TabId {
   return (
     v === 'events' ||
     v === 'strategy' ||
-    v === 'optimise' ||
     v === 'plots' ||
     v === 'metrics' ||
     v === 'raw' ||
@@ -689,8 +686,8 @@ export const ResultsModal: Component = () => {
             <div class="ax-page-body">
               <div class="ax-page-stack">
                 <div class="ax-page-canvas" data-testid="axis-results-body">
-                  {/* Empty / error states — skip Optimise / Saved, which have their own empty copy. */}
-                  <Show when={!result() && tab() !== 'optimise' && tab() !== 'saved'}>
+                  {/* Empty / error states — skip Saved, which has its own empty copy. */}
+                  <Show when={!result() && tab() !== 'saved'}>
                     <div class="ax-empty axis-empty-state">Run a script to populate results.</div>
                   </Show>
                   <Show when={result()?.status === 'error'}>
@@ -986,11 +983,6 @@ export const ResultsModal: Component = () => {
                         reapplyTradeMarkers();
                       }}
                     />
-                  </Show>
-
-                  {/* Optimise */}
-                  <Show when={tab() === 'optimise'}>
-                    <HpoPanel />
                   </Show>
 
                   {/* Plots */}

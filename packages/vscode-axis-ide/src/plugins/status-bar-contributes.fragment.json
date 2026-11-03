@@ -1,0 +1,31 @@
+{
+  "activationEvents": [
+    "onCommand:axis.plugins.statusMenu"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "axis.plugins.statusMenu",
+        "title": "Plugins Status Menu",
+        "category": "AXIS"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        { "command": "axis.plugins.statusMenu" }
+      ]
+    }
+  },
+  "notes": {
+    "merge": "Add axis.plugins.statusMenu to contributes.commands, contributes.menus.commandPalette, and activationEvents. StatusBar item id axis.ide.plugins is created in registerPluginsStatusBar (Left, priority 98, name AXIS Plugins, command axis.plugins.statusMenu) — VS Code has no contributes.statusBar; do not declare the item in package.json. registerPluginsAndWorkers already calls registerPluginsStatusBar. Do not put secrets in tooltip/text.",
+    "statusBar": {
+      "id": "axis.ide.plugins",
+      "alignment": "Left",
+      "priority": 98,
+      "name": "AXIS Plugins",
+      "command": "axis.plugins.statusMenu",
+      "icon": "$(plug)",
+      "popup": "window.showQuickPick (canPickMany false) — VS Code cannot anchor a menu on a StatusBar item"
+    }
+  }
+}

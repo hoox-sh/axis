@@ -1,0 +1,12 @@
+{
+  "activationEvents": ["onView:axis.plugins.dataset", "onView:axis.plugins.component"],
+  "contributes": {
+    "views": {
+      "axis": [
+        { "id": "axis.plugins.dataset", "name": "Datasets" },
+        { "id": "axis.plugins.component", "name": "Components" }
+      ]
+    }
+  },
+  "notes": { "merge": "Wiring merges into contributes.views.axis. axis.plugins.activate owned by plumbing.", "owner": "dataset+component feature agent" }
+}

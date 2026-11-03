@@ -7,7 +7,7 @@ tags: [doc, docs, enduser, reference]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-12T23:06:14Z
+  at: 2026-11-02T17:28:56Z
 sources:
   - id: tree
     resource: "docs/enduser/reference/faq.mdx"
@@ -44,7 +44,6 @@ Repo path `docs/enduser/reference/faq.mdx`.
   * What is Debug vs Pins?
   * Multi-chart, Compare, Replay, Alerts?
   * Why are Scripts next to the Editor?
-  * Can AXIS tune strategy inputs?
   * How do I download years of history?
 * Ops
   * What is pynescript-axis?

@@ -224,7 +224,7 @@ The objective now is to move from "already good" to "absolutely world-class": su
 - Migrated the highest-frequency UI readers from `store.bars` / `store.bars.length` to `barPlane`:
   - Shell chrome: `App.tsx` (document title, rAF-throttled), `StatusBar.tsx`, `Topbar.tsx`.
   - Float/overlay panels: `PricePanel.tsx`, `DataViewPanel.tsx`, `QuotePanel.tsx`, `VolumeProfileOverlay.tsx`, `TimePanel.tsx`.
-  - Extras/modals: `CurrentPriceCard.tsx`, `HpoPanel.tsx`, `BarReplayControls.tsx`.
+  - Extras/modals: `CurrentPriceCard.tsx`, `BarReplayControls.tsx`.
 - `store.bars` remains the canonical source for engine evaluation, legacy components, and `ChartHost`'s full paint path during this migration. Phase 2 will decide whether to move the paint path to the plane or to the slot cache.
 
 ### Tooling updates

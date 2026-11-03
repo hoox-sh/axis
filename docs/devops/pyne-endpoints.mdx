@@ -34,7 +34,6 @@ runner surface read. Nothing is ever inferred from the service name.
 | `POST /data/series/provide`, `/data/series/fetch` | `src/engines/data-sessions.ts` | Cache-miss broker (local upload, then engine fetch). |
 | `POST /run/batch` | `src/engines/batch.ts` | ≥2 eligible reapplied indicators; 8-script cap. |
 | `POST /compile/prewarm` | `src/engines/prewarm.ts`, `axis prewarm` | Builtins and/or applied scripts. |
-| `POST /optimize` | `src/optimize/client.ts` | Falls back to the in-app random study. |
 | `POST /lsp/completion`, `/hover`, `/diagnostics`, `/convert` | `src/editor/pyne-lsp-client.ts` | `/lsp/preevaluate` is an alias of `/diagnostics`. |
 | `GET /datafeed/ohlcv`, `/markets`, `/health` | `src/data/gateway.ts` | Gateway mode `pyne` / `auto`. |
 | `WS /datafeed/watch` | `src/streams/catalog.ts` (`ccxt-ws`) | |
@@ -53,6 +52,7 @@ runner surface read. Nothing is ever inferred from the service name.
 | `GET /scripts`, `GET /scripts/{id}`, `DELETE /scripts/{id}` | Job listing and lifecycle already flow through `GET /cron/jobs` (which carries the cron state AXIS renders); a separate read path would be a second source of truth. Deletion is left to the CLI/host rather than a destructive button in the charting UI. |
 | `POST /run/batch` with per-script inputs | The batch body has no per-script `inputs`, so scripts with resolved `input.*` overrides stay on the single-run path. |
 | Compile-mode runs over sessions / data sessions | Sessions always evaluate in interpret; AXIS records the backend-reported mode and never silently switches a compiled series. |
+| `POST /optimize` | AXIS does not call pyne hyperparameter search. |
 
 ## Readiness contract
 

@@ -1,0 +1,65 @@
+AXIS IDE — NOTICE
+==================
+
+Copyright (c) 2026 HOOX · AXIS · hoox-sh
+https://github.com/hoox-sh/axis
+Package: packages/vscode-axis-ide (extension id hoox-sh.axis-ide)
+
+License
+-------
+This package is licensed under the GNU Affero General Public License
+**version 3 only** (SPDX: AGPL-3.0-only).
+
+Full text: LICENSE (this package) and the AXIS monorepo root LICENSE.
+
+There is no AGPL version 4. Do not use AGPL-3.0-or-later for AXIS IDE.
+(The sister extension hoox-sh.pyne remains AGPL-3.0-or-later; do not relicense it.)
+
+Source files should carry:
+  SPDX-License-Identifier: AGPL-3.0-only
+Header text must say “version 3 of the License only” — never “or later”.
+
+This VSIX NOTICE is assembled for the IDE package (design Q6 / KD-3) even if
+the monorepo root NOTICE lags on third-party charting attributions.
+
+Third-party software
+--------------------
+The chart webview bundles the following (Vite → dist/webview/chart/main.js).
+Host `fetch` / WebSocket stay in the extension host; webview CSP is paint-only
+(`connect-src 'none'`). Runtime copies of full license texts live under
+node_modules during build; Apache-2.0 / MIT terms apply to redistributed object
+code as required by those licenses.
+
+### TradingView Lightweight Charts™
+
+- Package: lightweight-charts (npm)
+- Version (lock): 5.2.x
+- License: Apache License 2.0 (SPDX: Apache-2.0)
+- Copyright: TradingView, Inc.
+- Homepage: https://www.tradingview.com/lightweight-charts/
+- Source: https://github.com/tradingview/lightweight-charts
+
+Lightweight Charts is an Apache-2.0 HTML5 canvas library. AXIS IDE is an
+independent product and is **not** affiliated with, endorsed by, or sponsored
+by TradingView, Inc. Using Lightweight Charts does not grant rights to the
+TradingView Charting Library / Advanced Charts (separate commercial license).
+
+### fancy-canvas
+
+- Package: fancy-canvas (npm; dependency of lightweight-charts)
+- Version: 2.1.0
+- License: MIT (SPDX: MIT)
+- Author: TradingView contributors (smakarov@tradingview.com)
+- Bundled transitively with Lightweight Charts into the chart webview asset.
+
+First-party builtins
+--------------------
+Offline builtin catalog under media/builtins/ is original first-party Pine
+source derived for AXIS. It is not a TradingView® template corpus and must not
+be replaced with scraped third-party scripts.
+
+Third-party marks
+-----------------
+Pine Script™ and TradingView® are trademarks of TradingView, Inc.
+Cloudflare® is a registered trademark of Cloudflare, Inc.
+VS Code® is a trademark of Microsoft Corporation.

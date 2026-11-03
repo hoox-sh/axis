@@ -1,0 +1,20 @@
+{
+  "schema": "axis.chart.v1",
+  "symbol": "BTC/USDT",
+  "exchange": "binance",
+  "market": "spot",
+  "interval": "1m",
+  "historyBars": 1500,
+  "chartType": "candles",
+  "theme": "void",
+  "panes": [
+    {
+      "id": "price",
+      "kind": "price"
+    }
+  ],
+  "scripts": [],
+  "drawings": [],
+  "engine": "server",
+  "source": "binance"
+}

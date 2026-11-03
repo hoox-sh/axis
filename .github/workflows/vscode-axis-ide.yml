@@ -1,0 +1,127 @@
+# Copyright (C) 2024-2026 jango_blockchained
+# SPDX-License-Identifier: AGPL-3.0-only
+
+# AXIS IDE (packages/vscode-axis-ide) — Bun unit + coverage BASELINE gate,
+# @vscode/test-electron (xvfb on Linux), and VSIX packaging.
+#
+# Triggers:
+#   - push to main / version tags (v* / ide-v*)
+#   - PRs that touch the package or this workflow
+#   - workflow_dispatch (manual dry-run)
+#
+# Package job uploads axis-ide-*.vsix on main, tags, and dispatch only.
+# Electron needs hoox-sh.pyne; CI downloads a pinned Open VSX build into
+# AXIS_IDE_PYNE_VSIX (runTest.ts hard-fails in CI without it).
+
+name: VS Code AXIS IDE
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*', 'ide-v*']
+  pull_request:
+    paths:
+      - 'packages/vscode-axis-ide/**'
+      - '.github/workflows/vscode-axis-ide.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: vscode-axis-ide-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Pin PYNE Language Support for reproducible electron installs (Open VSX).
+  # Bump when raising the recommended floor in packages/vscode-axis-ide/README.md.
+  PYNE_VSIX_VERSION: '0.5.5'
+
+jobs:
+  test:
+    name: Unit + coverage gate + electron
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.3'
+
+      # package scripts shell out to node / npm (esbuild, vite, vsce, runTest).
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        working-directory: packages/vscode-axis-ide
+        run: bun install --frozen-lockfile
+
+      - name: Unit tests + BASELINE coverage gate
+        run: bun run --cwd packages/vscode-axis-ide test:coverage:gate
+
+      - name: Install xvfb (electron on Linux)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+
+      - name: Download hoox-sh.pyne VSIX (Open VSX)
+        id: pyne
+        env:
+          VER: ${{ env.PYNE_VSIX_VERSION }}
+        run: |
+          set -euo pipefail
+          OUT="${RUNNER_TEMP}/hoox-sh.pyne-${VER}.vsix"
+          URL="https://open-vsx.org/api/hoox-sh/pyne/${VER}/file/hoox-sh.pyne-${VER}.vsix"
+          curl -fsSL --retry 3 --retry-delay 2 -o "$OUT" "$URL"
+          test -s "$OUT"
+          echo "path=${OUT}" >> "$GITHUB_OUTPUT"
+          ls -la "$OUT"
+
+      - name: Electron tests (xvfb-run)
+        env:
+          CI: 'true'
+          AXIS_IDE_PYNE_VSIX: ${{ steps.pyne.outputs.path }}
+        run: xvfb-run -a bun run --cwd packages/vscode-axis-ide test
+
+  package:
+    name: Package VSIX
+    needs: [test]
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.ref == 'refs/heads/main' ||
+      startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.3'
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        working-directory: packages/vscode-axis-ide
+        run: bun install --frozen-lockfile
+
+      - name: Build VSIX
+        run: bun run --cwd packages/vscode-axis-ide package
+
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: axis-ide-${{ github.sha }}
+          path: packages/vscode-axis-ide/axis-ide-*.vsix
+          if-no-files-found: error
+          retention-days: 14

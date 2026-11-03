@@ -1,0 +1,12 @@
+{
+  "activationEvents": ["onView:axis.plugins.engine", "onView:axis.plugins.storage"],
+  "contributes": {
+    "views": {
+      "axis": [
+        { "id": "axis.plugins.engine", "name": "Engines" },
+        { "id": "axis.plugins.storage", "name": "Storage" }
+      ]
+    }
+  },
+  "notes": { "merge": "Wiring merges into contributes.views.axis. Command axis.plugins.activate is owned by plumbing.", "owner": "engine+storage feature agent" }
+}

@@ -1,0 +1,31 @@
+AXIS Trading Pack — NOTICE
+==========================
+
+Copyright (c) 2026 HOOX · AXIS · hoox-sh
+https://github.com/hoox-sh/axis
+Package: packages/vscode-axis-pack (extension pack id hoox-sh.axis)
+
+License
+-------
+This extension pack is licensed under the GNU Affero General Public License
+**version 3 only** (SPDX: AGPL-3.0-only).
+
+Full text: LICENSE (this package) and the AXIS monorepo root LICENSE.
+
+There is no AGPL version 4. Do not use AGPL-3.0-or-later for this pack.
+
+Pack members
+------------
+Installing this pack pulls in:
+
+- **hoox-sh.axis-ide** (AXIS IDE) — AGPL-3.0-only. See that extension's
+  NOTICE / LICENSE for Lightweight Charts™ and other third-party attributions.
+- **hoox-sh.pyne** (PYNE Language Support) — AGPL-3.0-**or-later**. PYNE's
+  license choice differs from this pack and from AXIS IDE (KD-3). Do not
+  relicense PYNE as AGPL-3.0-only, and do not treat pack/IDE AGPL-3.0-only as
+  applying to PYNE source.
+
+Third-party marks
+-----------------
+Pine Script™ and TradingView® are trademarks of TradingView, Inc.
+VS Code® is a trademark of Microsoft Corporation.

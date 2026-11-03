@@ -156,7 +156,6 @@ describe('DEFAULT_COMMAND_SPECS', () => {
       'action.focus-symbol',
       'action.architecture',
       'action.studio',
-      'action.optimise-strategy',
       'action.settings-editor',
       'action.screenshot',
       'action.screenshot-copy',

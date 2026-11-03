@@ -1,0 +1,34 @@
+{
+  "activationEvents": [
+    "onView:axis.alerts",
+    "onCommand:axis.alerts.add",
+    "onCommand:axis.alerts.remove"
+  ],
+  "scripts": {
+    "compile:webview:alerts": "vite build --config webview/alerts/vite.config.ts",
+    "compile:webview": "npm run compile:webview:chart && npm run compile:webview:results && npm run compile:webview:plugins && npm run compile:webview:profiler && npm run compile:webview:alerts",
+    "check": "tsc -p ./ --noEmit && tsc -p webview/chart/tsconfig.json --noEmit && tsc -p webview/results/tsconfig.json --noEmit && tsc -p webview/plugins/tsconfig.json --noEmit && tsc -p webview/profiler/tsconfig.json --noEmit && tsc -p webview/alerts/tsconfig.json --noEmit"
+  },
+  "contributes": {
+    "views": {
+      "axis": [
+        {
+          "type": "webview",
+          "id": "axis.alerts",
+          "name": "Alerts",
+          "icon": "media/views/alerts.svg",
+          "retainContextWhenHidden": true
+        }
+      ]
+    }
+  },
+  "notes": {
+    "merge": "Do not edit this fragment into package.json from the alerts feature agent. Replace the existing contributes.views.axis entry id axis.alerts (keep name Alerts and icon media/views/alerts.svg) with type webview and retainContextWhenHidden true. Same id — do not add a second alerts view. activationEvents onView:axis.alerts and onCommand:axis.alerts.add / axis.alerts.remove are already present; do not duplicate them. Keep commands axis.alerts.add and axis.alerts.remove. Keep view/title menus and the view/item/context axis.alerts.remove entry (src/test/extension.test.ts asserts that command is contributed). Webview rows are not tree items; Remove in the webview does not use viewItem.",
+    "wiring": "In extension.ts replace registerAlertsView(context) with registerAlertsStudio(context) from ./views/alerts-panel. Do not also call registerAlertsView — registerAlertsStudio calls registerAlertsView(context, { tree: false }), which still registers axis.alerts.add and axis.alerts.remove once and does not createTreeView. window.registerWebviewViewProvider('axis.alerts', provider, { webviewOptions: { retainContextWhenHidden: true } }). Calling both registerAlertsView() and registerAlertsStudio() double-registers the commands and fights over the view id.",
+    "assets": "Webview loads dist/webview/alerts/main.js + main.css (Vite IIFE AxisAlertsWebview, outDir dist/webview/alerts, clone of profiler). Add compile:webview:alerts and append it to compile:webview. Append tsc -p webview/alerts/tsconfig.json --noEmit to the check script.",
+    "vscodeignore": "Whitelist like profiler, after the profiler block: !dist/webview/alerts/ then dist/webview/alerts/** then !dist/webview/alerts/main.js and !dist/webview/alerts/main.css.",
+    "coverage": "Add 'views/alerts-panel.ts' to EXCLUDE in scripts/check-coverage.mjs (next to views/profiler-panel.ts). Do not EXCLUDE views/alerts-studio-model.ts or views/alerts-html.ts — they stay on the pure-host 100% line gate. views/alerts.ts is already excluded.",
+    "storage": "workspaceState key axis.alerts.v1 unchanged. Shape AlertEntry[] — { id, title, condition?, enabled }. Panel imports readAlertsV1, writeAlertsV1, sanitizeAlertEntry, addAlert, and removeAlert from views/alerts.ts. Toggle is new: read the list, flip enabled, writeAlertsV1. Not the full PWA alert engine.",
+    "protocol": "Webview → host: {type:'alerts.ready'}, {type:'alerts.add', title, condition?}, {type:'alerts.toggle', id}, {type:'alerts.remove', id}. Host → webview: {type:'alerts.set', payload: AlertsSnapshot} and {type:'alerts.flash', text}. Snapshot is { total, enabled, summary, entries } where summary is 'N alerts, M enabled'. Empty title flashes 'Title required' and does not add. Remove flashes 'Removed'. These messages are local to the alerts studio — do not add them to axis.webview.v1."
+  }
+}

@@ -391,7 +391,7 @@ export function alignSeriesMapToTimes(
  * Reuses the prior array when chartDataGen + length + last time are unchanged.
  *
  * Pass `barsInput` (the exact bars the engine evaluated) to keep a series
- * aligned to its own time axis — e.g. an HPO holdout / walk-forward slice that
+ * aligned to its own time axis — e.g. a private bar slice that
  * is NOT `store.bars`. Only a genuinely different axis takes the override path;
  * when `barsInput` is `store.bars` itself (the common case) the cache is reused.
  */
@@ -627,11 +627,11 @@ export interface RunOptions {
    */
   epoch?: number;
   /**
-   * Headless evaluation (HPO trials). Skips epoch, status bar, and engine HUD.
+   * Headless evaluation. Skips epoch, status bar, and engine HUD.
    * Does not write `lastRun`. Implies `silent` + `claimEpoch: false`.
    */
   isolate?: boolean;
-  /** Abort in-flight `engine.run` (Cancel on an optimisation study). */
+  /** Abort in-flight `engine.run`. */
   signal?: AbortSignal;
   /**
    * When true, skip the in-memory `(scriptId, barsGen, inputs)` result cache.
@@ -639,8 +639,8 @@ export interface RunOptions {
    */
   disableCache?: boolean;
   /**
-   * Bar window override. When set, used instead of `store.bars` so holdout /
-   * walk-forward slices do not mutate the chart series.
+   * Bar window override. When set, used instead of `store.bars` so a private
+   * slice does not mutate the chart series.
    */
   bars?: import('../store/types').Bar[];
   /**
@@ -663,7 +663,7 @@ export interface RunOptions {
    * Set by callers that evaluated several scripts in one `POST /run/batch`
    * round-trip (`src/engines/batch.ts`): the normal apply path (panes,
    * overlays, drawings, alerts, lastRun) runs unchanged, only the evaluation is
-   * skipped. Never set for isolate / HPO / walk-forward runs.
+   * skipped. Never set for isolate runs or a private bar window.
    */
   precomputedResult?: RunResult;
 }
@@ -1022,13 +1022,13 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
             },
           }
         : {}),
-      // Honour caller abort (HPO cancel). Interactive runs still omit a parent
+      // Honour caller abort. Interactive runs still omit a parent
       // timer so WS→REST fallback is not killed mid-flight.
       signal: isolate ? opts.signal : undefined,
       // Genuine live tick over the chart series: remote engines with live
       // sessions (PYNE 0.6.9+) may answer O(delta). `runAndApply` strips this
       // flag for private bar windows, so by the time it arrives here it always
-      // means the live chart series (never an HPO holdout / walk-forward).
+      // means the live chart series (never a private bar window).
       // Isolate studies keep the full path.
       ...(opts.liveTick === true && !isolate
         ? {

@@ -455,7 +455,7 @@ Conceptual model
 Interface surface
 | Path | Implementation | Notes |
 | --- | --- | --- |
-| Engine server | src/engines/catalog.ts | Prefer WS ws(s)://{endpoint}/ws/run (preferWs default true), else POST {endpoint}/run?mode= with { script, data, mode, inputs?, profiler?, libraries? }. Modes interpret \| compile \| auto. Timeout scales with bar count (45–180s). Default endpoint http://localhost:5002. Strategy HPO uses POST {endpoint}/optimize. Live sessions (Pro API 0.6.9+, interpret only): genuine live ticks (EngineOpts.liveTick) go through src/engines/live-sessions.ts — POST /session, /tick (O(1)), /append (O(delta)) — with silent fallback to the full run on any miss. Only engaged for interpret runs: the configured mode must be interpret, or the backend must have reported interpret for the last full run of the same script (auto). Scripts whose inputs hold expanded input.source series stay on /run — a session freezes its inputs at create. |
+| Engine server | src/engines/catalog.ts | Prefer WS ws(s)://{endpoint}/ws/run (preferWs default true), else POST {endpoint}/run?mode= with { script, data, mode, inputs?, profiler?, libraries? }. Modes interpret \| compile \| auto. Timeout scales with bar count (45–180s). Default endpoint http://localhost:5002. Live sessions (Pro API 0.6.9+, interpret only): genuine live ticks (EngineOpts.liveTick) go through src/engines/live-sessions.ts — POST /session, /tick (O(1)), /append (O(delta)) — with silent fallback to the full run on any miss. Only engaged for interpret runs: the configured mode must be interpret, or the backend must have reported interpret for the last full run of the same script (auto). Scripts whose inputs hold expanded input.source series stay on /run — a session freezes its inputs at create. |
 | Engine pyodide | same file | Self-hosted Pyodide 0.29.5 (/pyodide/v0.29.5/, Python 3.13), wheels /vendor/pynescript-0.6.12-py3-none-any.whl + antlr4_python3_runtime-4.13.2, runtime /pyodide/pynescript_runtime.py. Numba is not in Wasm; compile / auto is object-mode. Cold load ~20–30s. |
 | AXIS Worker /api/run | worker/src/runtime.ts | PYODIDE_IN_WORKER=enabled scaffold; else proxy EXTERNAL_BACKEND/run; else 503 NO_BACKEND. Caps: 512 KiB script, 50k bars, 30 req/min/IP, 60s upstream. |
 | Engine pyne-worker | src/engines/catalog.ts | Built-in (builtIn: true). POST /run to the HOOX edge worker. Default origin https://pyne-worker.cryptolinx.workers.dev. Distinct from engine server and from the AXIS Worker (worker-axis). |
@@ -2161,7 +2161,6 @@ Used
 | POST /data/series/provide, /data/series/fetch | src/engines/data-sessions.ts | Cache-miss broker (local upload, then engine fetch). |
 | POST /run/batch | src/engines/batch.ts | ≥2 eligible reapplied indicators; 8-script cap. |
 | POST /compile/prewarm | src/engines/prewarm.ts, axis prewarm | Builtins and/or applied scripts. |
-| POST /optimize | src/optimize/client.ts | Falls back to the in-app random study. |
 | POST /lsp/completion, /hover, /diagnostics, /convert | src/editor/pyne-lsp-client.ts | /lsp/preevaluate is an alias of /diagnostics. |
 | GET /datafeed/ohlcv, /markets, /health | src/data/gateway.ts | Gateway mode pyne / auto. |
 | WS /datafeed/watch | src/streams/catalog.ts (ccxt-ws) | |
@@ -3089,56 +3088,6 @@ See also
 AXIS — charting
 Strategy and results
 ---
-FILE: docs/enduser/guides/hyperparameter-optimisation.mdx
-Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
-This file is part of AXIS.
-SPDX-License-Identifier: AGPL-3.0-only
----
-title: "Hyperparameter Optimisation"
-description: "Search strategy input. values over N trials (TPE / random / grid) with holdout or walk-forward. Strategies only."
----
-Hyperparameter Optimisation
-AXIS can search Pine Script™ input. values on a strategy() script and apply the best assignment for this symbol and bar window.
-The search engine is pyne (POST /optimize / pynescript.optimize). AXIS is the plugin UI. Pyodide and engines without /optimize fall back to an isolated local loop (random only).
-This is not a live trading optimiser and not a Pine builtin. Best-on-sample is not a guarantee out of sample.
-Holdout is the default for a reason. In-sample-only search overfits. Winners on one symbol or timeframe often fail on another.
-Open it
-Open a script that declares strategy(). Load history. A first Run is optional but helps engine-exported inputs appear.
-Results drawer → Optimise, or command palette Optimise strategy. Indicators and libraries show a one-line disabled reason.
-Tick the input.int / float / bool / enum fields to search. Numeric fields need min and max (minval/maxval from the script, or typed in the table). Source, color, timeframe, symbol, session, and text stay at their current Script Settings values.
-Set trials, sampler, objective, and validation. Start runs the study. Cancel aborts the in-flight engine call. Trials do not paint the chart.
-Apply best merges the winner into Script Inputs (other inputs stay). Apply + re-run also runs the winner so the Strategy tab matches. Export the trial table as CSV.
-Study controls
-| Control | Default | Notes |
-| --- | --- | --- |
-| Trials | 30 | Hard cap 200 |
-| Sampler | auto | Random if N&lt;20, else TPE (TPE needs pyne /optimize) |
-| Objective | composite | Also net PnL, profit factor, Calmar-like |
-| Validation | holdout 30% | Walk-forward or in-sample (warned) |
-| Min trades | 5 | Fewer closed trades → trial rejected |
-Grid is offered when the cartesian product fits the trial budget. On Pyodide (no /optimize) the UI falls back to random and says so.
-Validation
-| Mode | What happens |
-| --- | --- |
-| Holdout (default) | Sampler sees the first ~70% of bars. Every trial is also scored on the last ~30%. Ranking prefers out-of-sample. |
-| Walk-forward | Rolling train/test windows. Engine runs ≈ N × folds (capped at 400). |
-| In-sample | One run on all bars. Warned in the UI. |
-Train and test are bar slices, not trade filters on a full-sample run.
-Engines
-| Engine | Path |
-| --- | --- |
-| server (Pro API) | POST {endpoint}/optimize — parse-cached interpret loop, TPE / random / grid |
-| Pyodide / missing /optimize | Isolated runScript — random only |
-Same-origin VPS / Docker must proxy /optimize to Flask (same as /run). Otherwise AXIS falls back to the slow client loop.
-Overfitting
-Prefer holdout. Treat in-sample net profit as a search score, not a live forecast.
-Composite + min-trades rejects lottery-ticket parameter sets with 1–2 fills.
-Apply + re-run on a later date range or another symbol before trusting a winner.
-See also
-Strategy and results
-pyne POST /optimize
-pyne CLI optimize
----
 FILE: docs/enduser/guides/manager-and-settings.mdx
 Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 This file is part of axis.
@@ -3722,9 +3671,8 @@ Research panels
 | Still | What |
 | --- | --- |
 | results-drawer.png | Strategy results overlay |
-| results-tabs.png | Events / Strategy / Optimise / … |
+| results-tabs.png | Events / Strategy / Plots / … |
 | results-strategy.png | Closed trades + equity |
-| hpo.png | Hyperparameter search |
 | data-source-manager.png | Background backfill |
 | onchain-tvl.png | DefiLlama TVL overlay |
 | onchain-panel.png | On-Chain panel (TVL) |
@@ -3918,7 +3866,6 @@ Results drawer tabs
 | --- | --- |
 | Events | Chronological normalized stream (kind, time, price, id, dir) with a Stream / Open⇄Close view switcher — the Open⇄Close view groups events into pyramiding-aware position cycles (avg-entry parity with the pyne broker, per-fill P&L, jump-to-bar) |
 | Strategy | Single column: stats → equity → closed trades below, with return %, bars-held, and fill-count detail |
-| Optimise | Strategy-only input.* search — Hyperparameter Optimisation |
 | Plots | Series inventory (points, last value) |
 | Metrics | Runtime, status, engine, source, bars, high-level stats |
 | Raw | Pretty-printed JSON for support / diffs |
@@ -4136,7 +4083,7 @@ Interface surface
 | Watchlist | Quick symbol switch + quote poll |
 | Chart | lightweight-charts panes, drawings, trade markers, on-chain overlays, price-scale decimals |
 | Editor | CodeMirror 6 Pine Script™ document (docked / popout) |
-| Results | Events, Strategy, Optimise, Plots, Metrics, Raw + export |
+| Results | Events, Strategy, Plots, Metrics, Raw + export |
 | On-Chain | DefiLlama TVL, GeckoTerminal DEX, spike events, export / refresh |
 | Manager | Plugin catalog, URL install (incl. component / PYNE Agent), Script Library |
 | Workers Manager | Backend health probes, presets, install helpers |
@@ -4246,8 +4193,6 @@ Alerts: local price alerts panel (webhook optional)
 UI detail: UI shell, Charting.
 Why are Scripts next to the Editor?
 Left/right docks with multiple open panels lay out side-by-side (row), so the Scripts panel can sit left of Editor on the right strip. Bottom dock still stacks. (Internal panel id is still indicators for saved layouts.)
-Can AXIS tune strategy inputs?
-Yes — Results → Optimise, or command palette Optimise strategy. Strategies only. pyne POST /optimize runs TPE / random / grid with holdout by default; Pyodide falls back to a local random loop. See Hyperparameter Optimisation.
 How do I download years of history?
 Topbar Load is one venue page. Open the Data panel (Data Source Manager) to backfill in the background to a past date, validate completeness, and fill gaps — see Data Source Manager.
 Ops
@@ -4354,8 +4299,6 @@ Results
 | Closed trade | Paired entry/exit with PnL in the viewer. |
 | Equity curve | Cumulative PnL series derived from trades/events. |
 | Scriptlogs | Floatable panel of Pine log. from last run (not System Logs). |
-| Optimise | Results tab that searches strategy() input. values over N trials (pyne /optimize or isolated client fallback). |
-| HPO | Hyperparameter optimisation — not a Pine builtin. |
 Persistence
 | Term | Definition |
 | --- | --- |
@@ -5307,7 +5250,7 @@ Built-in inventory (quick)
 | Engines | server, pyne-worker, pyodide |
 | Storage | local, cloud, git |
 | Datasets | defillama-tvl |
-| Components | hyperparameter-optimisation (Results → Optimise) |
+| Components | none built in (dynamic URL installs only) |
 Defaults when selection is missing (active.ts): source binance-rest, stream binance-ws, engine server, storage local.
 Invariants
 1. AXIS ≠ engine — the UI never ships a private Pine runtime; engines are plugins.

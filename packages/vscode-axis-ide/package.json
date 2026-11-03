@@ -1,0 +1,731 @@
+{
+  "name": "axis-ide",
+  "displayName": "AXIS IDE",
+  "description": "AXIS chart IDE for VS Code — run Pine Script™ beside the editor with charts, results, and live sessions. Depends on PYNE Language Support (hoox-sh.pyne). Part of the HOOX open trading stack. Unofficial — not affiliated with TradingView, Inc.",
+  "version": "0.1.0",
+  "publisher": "hoox-sh",
+  "license": "AGPL-3.0-only",
+  "author": {
+    "name": "jango_blockchained",
+    "url": "https://hoox.sh"
+  },
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#050505",
+    "theme": "dark"
+  },
+  "homepage": "https://hoox.sh/axis",
+  "qna": "https://github.com/hoox-sh/axis/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hoox-sh/axis.git",
+    "directory": "packages/vscode-axis-ide"
+  },
+  "bugs": {
+    "url": "https://github.com/hoox-sh/axis/issues"
+  },
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "extensionKind": [
+    "workspace"
+  ],
+  "extensionDependencies": [
+    "hoox-sh.pyne"
+  ],
+  "categories": [
+    "Other",
+    "Visualization"
+  ],
+  "keywords": [
+    "axis",
+    "hoox",
+    "pyne",
+    "pinescript",
+    "pine script",
+    "charting",
+    "trading",
+    "indicators",
+    "strategy"
+  ],
+  "activationEvents": [
+    "onCustomEditor:axis.chart",
+    "onView:axis.results",
+    "onView:axis.strategy",
+    "onView:axis.profiler",
+    "onView:axis.colors",
+    "onView:axis.symbols",
+    "onView:axis.logs",
+    "onView:axis.library",
+    "onView:axis.layers",
+    "onView:axis.indicators",
+    "onView:axis.workers",
+    "onView:axis.alerts",
+    "onView:axis.watchlist",
+    "onView:axis.plugins",
+    "onCommand:axis.showRunOutput",
+    "onCommand:axis.openChart",
+    "onCommand:axis.runScript",
+    "onCommand:axis.runScriptSilent",
+    "onCommand:axis.focusResults",
+    "onCommand:axis.secrets.setWorkerKey",
+    "onCommand:axis.secrets.setProKey",
+    "onCommand:axis.secrets.clear",
+    "onCommand:axis.applyBuiltin",
+    "onCommand:axis.liveStart",
+    "onCommand:axis.liveStop",
+    "onCommand:axis.workers.probeAll",
+    "onCommand:axis.plugins.activate",
+    "onCommand:axis.plugins.statusMenu",
+    "onCommand:axis.alerts.add",
+    "onCommand:axis.alerts.remove",
+    "onCommand:axis.watchlist.add",
+    "onCommand:axis.watchlist.remove",
+    "onCommand:axis.chart.drawing.trendline",
+    "onCommand:axis.mcp.showConfig",
+    "workspaceContains:**/*.axis.json",
+    "workspaceContains:**/*.pyne",
+    "workspaceContains:**/*.pine",
+    "workspaceContains:**/*.pinev5",
+    "workspaceContains:**/*.pinev6",
+    "workspaceContains:**/*.pinescript"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "axis",
+          "title": "AXIS",
+          "icon": "media/axis-activity.svg"
+        }
+      ],
+      "panel": [
+        {
+          "id": "axis-panel",
+          "title": "AXIS",
+          "icon": "media/axis-activity.svg"
+        }
+      ]
+    },
+    "views": {
+      "axis": [
+        {
+          "type": "webview",
+          "id": "axis.library",
+          "name": "Library",
+          "icon": "media/views/library.svg",
+          "retainContextWhenHidden": true
+        },
+        {
+          "type": "webview",
+          "id": "axis.layers",
+          "name": "Layers",
+          "icon": "media/views/layers.svg",
+          "retainContextWhenHidden": true
+        },
+        {
+          "type": "webview",
+          "id": "axis.indicators",
+          "name": "Scripts",
+          "icon": "media/views/scripts.svg",
+          "retainContextWhenHidden": true
+        },
+        {
+          "type": "webview",
+          "id": "axis.watchlist",
+          "name": "Watchlist",
+          "icon": "media/views/watchlist.svg",
+          "retainContextWhenHidden": true
+        },
+        {
+          "type": "webview",
+          "id": "axis.alerts",
+          "name": "Alerts",
+          "icon": "media/views/alerts.svg",
+          "retainContextWhenHidden": true
+        },
+        {
+          "type": "webview",
+          "id": "axis.plugins",
+          "name": "Plugins",
+          "icon": "media/views/plugins.svg",
+          "retainContextWhenHidden": true
+        },
+        {
+          "type": "webview",
+          "id": "axis.workers",
+          "name": "Workers",
+          "icon": "media/views/workers.svg",
+          "retainContextWhenHidden": true
+        }
+      ],
+      "axis-panel": [
+        {
+          "type": "webview",
+          "id": "axis.results",
+          "name": "Results",
+          "icon": "media/views/results.svg",
+          "retainContextWhenHidden": false
+        },
+        {
+          "type": "webview",
+          "id": "axis.strategy",
+          "name": "Strategy",
+          "icon": "media/views/strategy.svg",
+          "retainContextWhenHidden": false
+        },
+        {
+          "type": "webview",
+          "id": "axis.profiler",
+          "name": "Profiler",
+          "icon": "media/views/profiler.svg",
+          "retainContextWhenHidden": false
+        },
+        {
+          "type": "webview",
+          "id": "axis.colors",
+          "name": "Colors",
+          "icon": "media/views/colors.svg",
+          "retainContextWhenHidden": false
+        },
+        {
+          "type": "webview",
+          "id": "axis.symbols",
+          "name": "Symbols",
+          "icon": "media/views/symbols.svg",
+          "retainContextWhenHidden": false
+        },
+        {
+          "type": "webview",
+          "id": "axis.logs",
+          "name": "Logs",
+          "icon": "media/views/logs.svg",
+          "retainContextWhenHidden": false
+        }
+      ]
+    },
+    "customEditors": [
+      {
+        "viewType": "axis.chart",
+        "displayName": "AXIS Chart",
+        "selector": [
+          {
+            "filenamePattern": "*.axis.json"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "commands": [
+      {
+        "command": "axis.showRunOutput",
+        "title": "Show Run Output",
+        "category": "AXIS"
+      },
+      {
+        "command": "axis.openChart",
+        "title": "Open Chart",
+        "category": "AXIS",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "axis.runScript",
+        "title": "Run Script",
+        "category": "AXIS",
+        "icon": "$(play)"
+      },
+      {
+        "command": "axis.runScriptSilent",
+        "title": "Run Script (Silent)",
+        "category": "AXIS"
+      },
+      {
+        "command": "axis.focusResults",
+        "title": "Focus Results",
+        "category": "AXIS",
+        "icon": "$(graph-line)"
+      },
+      {
+        "command": "axis.secrets.setWorkerKey",
+        "title": "Set Worker API Key",
+        "category": "AXIS"
+      },
+      {
+        "command": "axis.secrets.setProKey",
+        "title": "Set Pro API Key",
+        "category": "AXIS"
+      },
+      {
+        "command": "axis.secrets.clear",
+        "title": "Clear Stored Secrets",
+        "category": "AXIS"
+      },
+      {
+        "command": "axis.applyBuiltin",
+        "title": "Apply Builtin Script",
+        "category": "AXIS",
+        "icon": "$(file-code)"
+      },
+      {
+        "command": "axis.liveStart",
+        "title": "Start Live",
+        "category": "AXIS"
+      },
+      {
+        "command": "axis.liveStop",
+        "title": "Stop Live",
+        "category": "AXIS"
+      },
+      {
+        "command": "axis.workers.probeAll",
+        "title": "Probe Workers",
+        "category": "AXIS",
+        "icon": "$(debug-disconnect)"
+      },
+      {
+        "command": "axis.plugins.activate",
+        "title": "Activate Plugin",
+        "category": "AXIS"
+      },
+      {
+        "command": "axis.plugins.statusMenu",
+        "title": "Plugin Menu",
+        "category": "AXIS",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "axis.alerts.add",
+        "title": "Add Alert",
+        "category": "AXIS",
+        "icon": "$(bell)"
+      },
+      {
+        "command": "axis.alerts.remove",
+        "title": "Remove Alert",
+        "category": "AXIS",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "axis.watchlist.add",
+        "title": "Add Symbol to Watchlist",
+        "category": "AXIS",
+        "icon": "$(add)"
+      },
+      {
+        "command": "axis.watchlist.remove",
+        "title": "Remove Symbol from Watchlist",
+        "category": "AXIS",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "axis.chart.drawing.trendline",
+        "title": "Drawing: Trendline",
+        "category": "AXIS Chart"
+      },
+      {
+        "command": "axis.mcp.showConfig",
+        "title": "Show MCP Config Snippet",
+        "category": "AXIS"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "axis.runScript",
+        "key": "ctrl+enter",
+        "mac": "cmd+enter",
+        "when": "editorTextFocus && editorLangId == pinescript"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "axis.openChart",
+          "when": "resourceLangId == pinescript",
+          "group": "navigation@1"
+        },
+        {
+          "command": "axis.runScript",
+          "when": "resourceLangId == pinescript",
+          "group": "navigation@2"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "axis.runScript",
+          "when": "editorLangId == pinescript",
+          "group": "axis@1"
+        },
+        {
+          "command": "axis.openChart",
+          "when": "editorLangId == pinescript",
+          "group": "axis@2"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "axis.openChart",
+          "when": "resourceLangId == pinescript",
+          "group": "axis@1"
+        },
+        {
+          "command": "axis.runScript",
+          "when": "resourceLangId == pinescript",
+          "group": "axis@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "axis.runScriptSilent",
+          "when": "editorLangId == pinescript"
+        },
+        {
+          "command": "axis.applyBuiltin"
+        },
+        {
+          "command": "axis.alerts.add"
+        },
+        {
+          "command": "axis.alerts.remove"
+        },
+        {
+          "command": "axis.watchlist.add"
+        },
+        {
+          "command": "axis.watchlist.remove"
+        },
+        {
+          "command": "axis.chart.drawing.trendline"
+        },
+        {
+          "command": "axis.plugins.activate",
+          "when": "false"
+        },
+        {
+          "command": "axis.plugins.statusMenu"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "axis.applyBuiltin",
+          "when": "view == axis.library || view == axis.indicators",
+          "group": "navigation@1"
+        },
+        {
+          "command": "axis.alerts.add",
+          "when": "view == axis.alerts",
+          "group": "navigation"
+        },
+        {
+          "command": "axis.alerts.remove",
+          "when": "view == axis.alerts",
+          "group": "navigation"
+        },
+        {
+          "command": "axis.watchlist.add",
+          "when": "view == axis.watchlist",
+          "group": "navigation"
+        },
+        {
+          "command": "axis.plugins.statusMenu",
+          "when": "view == axis.plugins",
+          "group": "navigation"
+        },
+        {
+          "command": "axis.workers.probeAll",
+          "when": "view == axis.workers",
+          "group": "navigation"
+        },
+        {
+          "command": "axis.focusResults",
+          "when": "view == axis.results || view == axis.strategy",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "axis.applyBuiltin",
+          "when": "view == axis.library && viewItem == axis.library.empty",
+          "group": "inline"
+        },
+        {
+          "command": "axis.applyBuiltin",
+          "when": "view == axis.indicators && viewItem == axis.indicators.empty",
+          "group": "inline"
+        },
+        {
+          "command": "axis.watchlist.remove",
+          "when": "view == axis.watchlist && viewItem == axis.watchlist.symbol"
+        },
+        {
+          "command": "axis.alerts.remove",
+          "when": "view == axis.alerts && viewItem == axis.alerts.entry"
+        },
+        {
+          "command": "axis.workers.probeAll",
+          "when": "view == axis.workers && viewItem == axis.workers.entry"
+        }
+      ],
+      "webview/context": [
+        {
+          "command": "axis.plugins.statusMenu",
+          "when": "webviewId == 'axis.plugins'",
+          "group": "axis@1"
+        },
+        {
+          "command": "axis.openChart",
+          "when": "webviewId == 'axis.plugins'",
+          "group": "axis@2"
+        },
+        {
+          "command": "axis.runScript",
+          "when": "webviewId == 'axis.plugins'",
+          "group": "axis@3"
+        }
+      ]
+    },
+    "configuration": [
+      {
+        "title": "AXIS IDE",
+        "properties": {
+          "axis.telemetry.offline": {
+            "type": "boolean",
+            "default": true,
+            "description": "Keep product telemetry off by default in IDE."
+          },
+          "axis.engine.id": {
+            "type": "string",
+            "default": "server",
+            "enum": ["server"],
+            "markdownDescription": "Active calculation engine id. PR-06 supports **`server`** (Pro `/run`) only; `pyne-worker` lands in a later task."
+          },
+          "axis.engine.endpoint": {
+            "type": "string",
+            "default": "http://127.0.0.1:5002",
+            "markdownDescription": "PYNE Pro / engine base URL (no `/run` suffix). Defaults to loopback. Remote URLs require `#axis.engine.allowRemoteEndpoint#`."
+          },
+          "axis.engine.allowRemoteEndpoint": {
+            "type": "boolean",
+            "default": false,
+            "scope": "application",
+            "markdownDescription": "When false (default), `axis.engine.endpoint` must be loopback (`127.0.0.1` / `localhost` / `::1`) so the Pro Bearer key is not sent off-machine. **Application (user) scope only** — workspace settings cannot enable remote endpoints. Opt in only for trusted remote Pro hosts."
+          },
+          "axis.engine.allowPyodide": {
+            "type": "boolean",
+            "default": false,
+            "description": "Allow the optional Pyodide calculator engine (webview assets; default off)."
+          },
+          "axis.chart.historyBars": {
+            "type": "number",
+            "default": 1500,
+            "minimum": 50,
+            "maximum": 20000,
+            "markdownDescription": "Default OHLCV history window for new chart sessions and when the document omits a positive `historyBars`. Counts are clamped to **20000** (same as this maximum)."
+          },
+          "axis.run.onSave": {
+            "type": "string",
+            "enum": ["off", "evaluate", "run"],
+            "default": "off",
+            "markdownDescription": "After saving a Pine Script™ file: **off** (default), **evaluate** (silent interpret, no Results steal), or **run** (full Run Script with chart paint)."
+          },
+          "axis.chart.useMockBars": {
+            "type": "boolean",
+            "default": false,
+            "markdownDescription": "When true, chart sessions and runs use deterministic mock/fixture bars (opt-in). Default **false** fetches real OHLCV from `axis.datafeed.url` (local axis-datafeed sidecar, default `http://127.0.0.1:5003`). On history failure the chart clears + `host.error`; runs fail with a clear error (no empty `/run` POST, no silent mock fallback)."
+          },
+          "axis.datafeed.url": {
+            "type": "string",
+            "default": "http://127.0.0.1:5003",
+            "markdownDescription": "Base URL for the local `@hoox-sh/axis-datafeed` sidecar (`GET /datafeed/ohlcv`). Defaults to loopback `:5003`. Remote URLs require `#axis.engine.allowRemoteEndpoint#` (same posture as the Pro engine endpoint)."
+          },
+          "axis.worker.url": {
+            "type": "string",
+            "default": "https://worker.axis.hoox.sh",
+            "markdownDescription": "AXIS Worker origin for live ticket mint (`GET /api/ws/live?issue=ticket`) and WS upgrade (`/api/ws/live?ticket=`). Loopback and known AXIS Worker hosts are allowed; other remotes require `#axis.engine.allowRemoteEndpoint#`. Never put `pn_` keys in settings — use SecretStorage."
+          },
+          "axis.live.enabled": {
+            "type": "boolean",
+            "default": true,
+            "markdownDescription": "When false, `axis.liveStart` is a no-op and the live StatusBar stays off."
+          },
+          "axis.plugins.allowUrlInstall": {
+            "type": "boolean",
+            "default": false,
+            "description": "Allow installing plugins from remote URLs (default off)."
+          },
+          "axis.mcp.stdio": {
+            "type": "boolean",
+            "default": true,
+            "description": "Advertise axis mcp stdio server via McpServerDefinitionProvider."
+          },
+          "axis.mcp.command": {
+            "type": "string",
+            "default": "",
+            "scope": "application",
+            "markdownDescription": "Absolute path or command name for the AXIS CLI used by the MCP stdio provider. When set, skips PATH/`allowNpx` resolution. **Application (user) scope only** — workspace settings cannot redirect the stdio child (which receives `AXIS_API_KEY`)."
+          },
+          "axis.mcp.allowNpx": {
+            "type": "boolean",
+            "default": false,
+            "scope": "application",
+            "markdownDescription": "If true and `axis` is not on PATH (and `axis.mcp.command` is empty), advertise `npx -y @hoox-sh/axis-cli` as the MCP stdio command. If false (default), soft-fail: no MCP definition + one warning pointing at `AXIS: Show MCP Config Snippet`. **Application (user) scope only** — workspace cannot enable npx resolution."
+          }
+        }
+      }
+    ],
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "axis.mcp",
+        "label": "AXIS MCP"
+      }
+    ],
+    "languageModelTools": [
+      {
+        "name": "axis_run_script",
+        "displayName": "AXIS Run Script",
+        "userDescription": "Run the active Pine/PYNE script through AXIS IDE.",
+        "modelDescription": "Run the active Pine/PYNE buffer through AXIS IDE orchestration and return a lastRun summary (status, plotCount, seriesKeys, logCount, diagnosticCount, optional profileMs/hotLines). Use when the user asks to execute, compile, or interpret the open Pine script, or to refresh chart/results after edits. Do NOT use for reading prior run logs (axis_get_run_logs), profiler hot lines (axis_get_profiler), chart symbol/interval (axis_chart_snapshot_meta), or results focus ids without running. Returns summaries only — never full plot/series arrays, never API keys. Requires an active Pine buffer and configured AXIS engine/chart.",
+        "toolReferenceName": "axisRun",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(play)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "auto",
+                "interpret",
+                "compile"
+              ],
+              "description": "Execution mode. auto picks interpret vs compile; interpret runs without compile; compile builds then runs."
+            },
+            "focus": {
+              "type": "boolean",
+              "default": true,
+              "description": "When true (default), publish the run as the focused results entry shown in the Results panel."
+            }
+          }
+        },
+        "tags": [
+          "axis",
+          "pyne",
+          "copilot"
+        ]
+      },
+      {
+        "name": "axis_get_results_focus",
+        "displayName": "AXIS Results Focus",
+        "userDescription": "Read the focused / newest AXIS run summary.",
+        "modelDescription": "Return resultsFocusId, newestRunId, and lastRunSummary for the AXIS IDE session (plot/series counts and keys, logCount, diagnosticCount, optional profileMs/hotLines — not full arrays). Use when inspecting the latest or focused run outcome without re-running. Do NOT use to execute a script (axis_run_script), fetch runtime log lines (axis_get_run_logs), or get chart symbol/interval (axis_chart_snapshot_meta). Summaries only — no secrets, no plot payloads. Empty session returns null ids/summary.",
+        "toolReferenceName": "axisResults",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(list-tree)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        },
+        "tags": [
+          "axis",
+          "copilot"
+        ]
+      },
+      {
+        "name": "axis_chart_snapshot_meta",
+        "displayName": "AXIS Chart Meta",
+        "userDescription": "Read seriesKey, interval, and live status for the active AXIS chart.",
+        "modelDescription": "Return seriesKey, interval, optional symbol/exchange/market, scriptIds, and live status for the active AXIS chart document. Use when choosing symbol/timeframe context or checking whether live mode is on. Do NOT use for run results, logs, profiler timings, or plot data. Never returns bars or secrets. Soft-fails when no AXIS chart document is active.",
+        "toolReferenceName": "axisChart",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(graph)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        },
+        "tags": [
+          "axis",
+          "chart",
+          "copilot"
+        ]
+      },
+      {
+        "name": "axis_get_run_logs",
+        "displayName": "AXIS Run Logs",
+        "userDescription": "Read capped runtime logs and diagnostics from the last AXIS run.",
+        "modelDescription": "Return { runId, status, total, rows: { level, message, line }[] } from the last focused AXIS run. Sources match the Logs panel (logs, meta.logs, diagnostics, meta.diagnostics, error). Cap 40 rows; messages are secret-scrubbed. Use when debugging Pine runtime logs, warnings, or compile/runtime errors after a run. Do NOT use for full plot/series data (use axis_get_results_focus / axis_run_script summaries), chart meta, or profiler hot lines (axis_get_profiler). Empty lastRun returns null ids and empty rows.",
+        "toolReferenceName": "axisLogs",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(output)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        },
+        "tags": [
+          "axis",
+          "logs",
+          "copilot"
+        ]
+      },
+      {
+        "name": "axis_get_profiler",
+        "displayName": "AXIS Profiler",
+        "userDescription": "Read last-run timing and top hot lines from the AXIS profiler.",
+        "modelDescription": "Return { runId, ms, status, engineId, plotCount, seriesCount, profileMs, profileLineCount, hotLines (max 5), phases? } from the last AXIS run and meta.profile. Use when optimizing Pine script performance or asking which lines are slow. Do NOT use for full log text (axis_get_run_logs), plot arrays, or to run a script. Never invents profile lines; empty/missing profile omits or zeros line stats. Secrets scrubbed from error strings.",
+        "toolReferenceName": "axisProfiler",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(dashboard)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        },
+        "tags": [
+          "axis",
+          "profiler",
+          "copilot"
+        ]
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile:webview:chart": "vite build --config webview/chart/vite.config.ts",
+    "compile:webview:results": "vite build --config webview/results/vite.config.ts",
+    "compile:webview:plugins": "vite build --config webview/plugins/vite.config.ts",
+    "compile:webview:profiler": "vite build --config webview/profiler/vite.config.ts",
+    "compile:webview:library": "vite build --config webview/library/vite.config.ts",
+    "compile:webview:layers": "vite build --config webview/layers/vite.config.ts",
+    "compile:webview:scripts": "vite build --config webview/scripts/vite.config.ts",
+    "compile:webview:watchlist": "vite build --config webview/watchlist/vite.config.ts",
+    "compile:webview:alerts": "vite build --config webview/alerts/vite.config.ts",
+    "compile:webview:workers": "vite build --config webview/workers/vite.config.ts",
+    "compile:webview:colors": "vite build --config webview/colors/vite.config.ts",
+    "compile:webview:symbols": "vite build --config webview/symbols/vite.config.ts",
+    "compile:webview:logs": "vite build --config webview/logs/vite.config.ts",
+    "compile:webview": "npm run compile:webview:chart && npm run compile:webview:results && npm run compile:webview:plugins && npm run compile:webview:profiler && npm run compile:webview:library && npm run compile:webview:layers && npm run compile:webview:scripts && npm run compile:webview:watchlist && npm run compile:webview:alerts && npm run compile:webview:workers && npm run compile:webview:colors && npm run compile:webview:symbols && npm run compile:webview:logs",
+    "compile": "node esbuild.host.mjs && npm run compile:webview",
+    "check": "tsc -p ./ --noEmit && tsc -p webview/chart/tsconfig.json --noEmit && tsc -p webview/results/tsconfig.json --noEmit && tsc -p webview/plugins/tsconfig.json --noEmit && tsc -p webview/profiler/tsconfig.json --noEmit && tsc -p webview/library/tsconfig.json --noEmit && tsc -p webview/layers/tsconfig.json --noEmit && tsc -p webview/scripts/tsconfig.json --noEmit && tsc -p webview/watchlist/tsconfig.json --noEmit && tsc -p webview/alerts/tsconfig.json --noEmit && tsc -p webview/workers/tsconfig.json --noEmit && tsc -p webview/colors/tsconfig.json --noEmit && tsc -p webview/symbols/tsconfig.json --noEmit && tsc -p webview/logs/tsconfig.json --noEmit",
+    "watch": "node esbuild.host.mjs --watch",
+    "watch:webview": "vite build --config webview/chart/vite.config.ts --watch",
+    "watch:all": "npm run watch & npm run watch:webview",
+    "compile-tests": "tsc -p tsconfig.tests.json",
+    "package": "node -e \"const v=require('./package.json').version; require('child_process').execSync('npx --yes @vscode/vsce package --no-dependencies --no-git-tag-version --out axis-ide-'+v+'.vsix',{stdio:'inherit'})\"",
+    "test:unit": "bun test",
+    "test:coverage": "bun test --coverage --coverage-reporter=lcov --coverage-reporter=text --coverage-dir=coverage",
+    "test:coverage:gate": "bun run test:coverage && bun scripts/check-coverage.mjs",
+    "test": "npm run compile-tests && npm run compile && node out/test/runTest.js"
+  },
+  "dependencies": {
+    "lightweight-charts": "^5.2.0"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^22.13.10",
+    "@types/vscode": "^1.95.0",
+    "@vscode/test-electron": "^2.4.1",
+    "@vscode/vsce": "^3.3.2",
+    "esbuild": "^0.25.1",
+    "mocha": "^11.1.0",
+    "typescript": "^5.8.2",
+    "vite": "^6.2.0"
+  }
+}

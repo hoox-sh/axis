@@ -77,7 +77,7 @@ paint.
   tail-align: deltas carry `{base_index, count, tail_len}` plus a monotonic
   `seq`, merge through `resolveSessionPayload`, and advance the `closed_upto`
   watermark — see [engine stream](/playbooks/engine-stream.md).
-* A private bar window (HPO holdout, walk-forward) must never take the live path:
+* A private bar window must never take the live path:
   no session fast path, no tip-only apply. The runner records chart-vs-private
   window *once, up front* because `store.bars` can be replaced between capture and
   evaluation (progressive slices, live appends) — reference identity checked later

@@ -1,0 +1,41 @@
+{
+  "activationEvents": [
+    "onView:axis.watchlist",
+    "onCommand:axis.watchlist.add",
+    "onCommand:axis.watchlist.remove"
+  ],
+  "scripts": {
+    "compile:webview:watchlist": "vite build --config webview/watchlist/vite.config.ts",
+    "compile:webview": "npm run compile:webview:chart && npm run compile:webview:results && npm run compile:webview:plugins && npm run compile:webview:profiler && npm run compile:webview:watchlist",
+    "check": "tsc -p ./ --noEmit && tsc -p webview/chart/tsconfig.json --noEmit && tsc -p webview/results/tsconfig.json --noEmit && tsc -p webview/plugins/tsconfig.json --noEmit && tsc -p webview/profiler/tsconfig.json --noEmit && tsc -p webview/watchlist/tsconfig.json --noEmit"
+  },
+  "contributes": {
+    "views": {
+      "axis": [
+        {
+          "type": "webview",
+          "id": "axis.watchlist",
+          "name": "Watchlist",
+          "icon": "media/views/watchlist.svg",
+          "retainContextWhenHidden": true
+        }
+      ]
+    }
+  },
+  "notes": {
+    "merge": "Replace the existing contributes.views.axis entry for id axis.watchlist (tree) with this webview entry. Same id, same container (axis activity bar), icon media/views/watchlist.svg, type webview, retainContextWhenHidden true. Do not add a second watchlist view. Keep existing axis.watchlist.add / axis.watchlist.remove commands, menus, and activationEvents — this fragment does not re-declare commands. Do not edit package.json from this agent.",
+    "wiring": "extension.ts must keep registerWatchlist for commands + the axis.watchlist.quote status bar AND call registerWatchlistStudio. registerWatchlist always called createTreeView(axis.watchlist). That fights a webview with the same id. Pass { tree: false } (optional arg, default true so current callers and watchlist.test.ts stay valid). Do not register the TreeView anywhere else. registerWatchlistStudio does not register add/remove commands.",
+    "example": "const wl = registerWatchlist(context, { tree: false }); const studio = registerWatchlistStudio(context, { onPersisted(state) { wl.provider.setState(state); wl.refreshStatusBar(); } });",
+    "statusBar": "refreshStatusBar is a field on the object registerWatchlist returns. It is not a module-level export, and it reads provider.getState() — not workspaceState. Studio writes axis.watchlist.v1 via read/write/add/remove/select directly (the typed symbol, not executeCommand('axis.watchlist.add')). Wiring must provider.setState then refreshStatusBar inside onPersisted or the status bar stays stale. No new export was added to watchlist.ts. Do not call axis.watchlist.add from the studio; that command opens an input box and would add a second symbol.",
+    "paletteDrift": "Palette add/remove still mutate the provider and workspaceState inside registerWatchlist and do not push the webview. After those commands, call studio.postSnapshot() if the studio should catch up. setQuoteFeed on the studio (mock defaults false) must be paired with wl.setQuoteFeed when a live feed arrives. Until then the studio uses createMockQuoteFeed semantics: formatted close 100 and a placeholder badge. It does not pretend a live tick arrived.",
+    "assets": "Webview loads dist/webview/watchlist/main.js + main.css (Vite IIFE name AxisWatchlistWebview, clone of webview/profiler). Add compile:webview:watchlist and append it to compile:webview. Append tsc -p webview/watchlist/tsconfig.json --noEmit to check.",
+    "vscodeignore": "Nested whitelist beside profiler (do not edit .vscodeignore from this agent): !dist/webview/watchlist/ then dist/webview/watchlist/** then !dist/webview/watchlist/main.js and !dist/webview/watchlist/main.css.",
+    "coverage": "Add views/watchlist-panel.ts to EXCLUDE in scripts/check-coverage.mjs (same reason as views/profiler-panel.ts). Do not edit check-coverage.mjs from this agent. views/watchlist.ts is already excluded. Pure model + HTML are in the gate.",
+    "protocol": "Webview posts { type: 'watchlist.ready' }, { type: 'watchlist.add', symbol }, { type: 'watchlist.remove', symbol }, { type: 'watchlist.select', symbol }. Host posts { type: 'watchlist.snapshot', snapshot }. Not part of axis.webview.v1 ALL_MESSAGE_TYPES. Invalid symbols are rejected in the webview (aria-live 'Could not add') and by parseWatchlistStudioMessage (never throws).",
+    "tree": "src/views/watchlist.ts TreeView provider, commands, and tests stay. The studio is what wiring registers for the view id instead of the tree.",
+    "workspaceState": {
+      "key": "axis.watchlist.v1",
+      "shape": "{ symbols: string[], selected: string | null }"
+    }
+  }
+}
