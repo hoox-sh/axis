@@ -27,7 +27,15 @@ _Generated/updated: 2026-11-01 · 880 commits · describe-tag: `v2.26.0`_
 
 - **PYNE Agent plugin 0.1.8** vendored at `/plugins/axis-pine-agent.js` (sync from `hoox-sh/pyne-agent-worker`). Always sends `orchestrate: true` and a named `pyne_backend` kind; Workers Manager → PYNE Agent gains a **PYNE backend** select (`auto` / `pro` / `local` / `worker` / `container` / `none`). Install/sync helper: `bun run sync:pyne-agent-plugin` (`scripts/sync-pyne-agent-plugin.sh`).
 
+### Added
+
+- **Chart Generation Readiness (PR-A–D).** Symbol/interval/source loads claim a generation and show the full-chart `HooxLoader` splash until OHLCV is painted and visible scripts have been reapplied. Splash caption shows `k/n` scripts as each id settles. Binding-engine drops old data/live sessions and `/ws/live` before scripts; live venue/engine paints stay gated until reveal arms generation G. MCP `chart.get` and `chart.lag` expose a `readiness` strip (`generation`, `phase`, script settle, `livePaintAllowed`). Modules: `src/chart/readiness.ts`, `src/chart/engine-bind.ts`.
+
 ### Fixed
+
+- **Docked panel double hairlines.** Side/bottom shells drop every edge so the dock column owns the shared border; absolute panel-edge resize handles no longer draw a second `::after` mark on that edge.
+
+- **Live stuck on calculator / Degraded scripts.** `startLive` warms `/health` capabilities so `live_stream` flips the stream route without waiting for the Scripts panel. When `/ws/live` already owns the series subscription, venue ticks no longer dual-write `POST /data/session/.../tick` (WS deltas own the tip; REST drive remains freeze recovery only).
 
 - **Drawing-tool titles follow the shortcut registry.** Rail, flyout, magnet, and delete hints use the real chord, and a cleared override drops the hint. The selection cursor no longer shows Q (that key toggles the crosshair).
 

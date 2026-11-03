@@ -108,11 +108,23 @@ afterEach(() => {
 });
 
 describe('stream-path engine-series drive', () => {
-  it('ticks the chart data session on a venue flush', async () => {
+  it('REST-drives the chart data session when /ws/live has no series sub yet', async () => {
+    // Freeze recovery: no open series subscription → REST tick is allowed.
+    // Happy path (open + subscribed) skips REST — see streamDriveSeries.
     const last = SAMPLE_BARS[SAMPLE_BARS.length - 1]!;
     restoreFetch = mockFetch(async (input, init) => {
       const url = new URL(String(input));
       const method = String(init?.method || 'GET').toUpperCase();
+      if (method === 'GET' && url.pathname === '/health') {
+        return jsonResponse({
+          status: 'healthy',
+          features: {
+            live_stream: true,
+            data_session: true,
+            live_modes: ['every-tick', 'bar-close'],
+          },
+        });
+      }
       if (method === 'POST' && url.pathname === '/data/session') {
         sessionCalls += 1;
         return jsonResponse({ status: 'success', session_id: 'drive1', cache: 'hit' });

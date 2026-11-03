@@ -50,7 +50,8 @@ export const APP_CAPABILITIES: readonly CapabilitySpec[] = [
   {
     id: 'chart.get',
     domain: 'chart',
-    description: 'Symbol, interval, type, layout + bar summary',
+    description:
+      'Symbol, interval, type, layout + bar summary + chart generation readiness',
     mutates: false,
   },
   {
@@ -63,7 +64,7 @@ export const APP_CAPABILITIES: readonly CapabilitySpec[] = [
     id: 'chart.lag',
     domain: 'chart',
     description:
-      'Lag ledger: chart vs venue clock vs engine series + verdict; v1 tick/paint plus transport and layout flags',
+      'Lag ledger: chart vs venue clock vs engine series + verdict; readiness; v1 tick/paint plus transport and layout flags',
     mutates: false,
   },
   {

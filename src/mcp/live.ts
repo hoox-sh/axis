@@ -48,6 +48,7 @@ import {
 } from '../streams/stream-live';
 import { chartWindowLimit, store } from '../store';
 import type { Bar } from '../store/types';
+import { chartReadinessSnapshot } from '../chart/readiness';
 import { McpInvokeError } from './protocol';
 import { barSummary, boundedBarRows } from './snapshot';
 
@@ -386,6 +387,7 @@ export async function chartLagView(p: Record<string, unknown>): Promise<Record<s
     now: { ms: nowMs, sec: now },
     interval,
     stepSec,
+    readiness: chartReadinessSnapshot(),
     chart: {
       count: bars.length,
       lastTime: chartLast || null,

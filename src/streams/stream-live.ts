@@ -73,6 +73,7 @@ import {
   store,
 } from '../store';
 import { appendLiveBar } from '../chart/live-append';
+import { isLivePaintAllowed } from '../chart/readiness';
 import type { Bar } from '../store/types';
 import type { Indicator } from '../store/types';
 import { BoundedMap } from '../utils/bounded-map';
@@ -351,6 +352,8 @@ function buildWireAt(endpoint: string, authToken: string | undefined): StreamLiv
         // setData the window (5k hitch) or fill the tail with stub OHLC
         // that shows as gaps. Replica stays on the wire for scripts.
         if (streamRouteActive() && store.bars.length) return;
+        // Pre-reveal / foreign generation — do not mutate the chart (PR-C).
+        if (!isLivePaintAllowed()) return;
         if (!engineSeriesPaintable(bars)) return;
         // The chart window is the single authority — an engine snapshot that
         // carries more bars than the window is trimmed before it is painted.
@@ -368,6 +371,7 @@ function buildWireAt(endpoint: string, authToken: string | undefined): StreamLiv
         // Same-slot worker tips overwrite venue candles (tiny-volume dojis /
         // disconnected opens). Venue stream owns the price series.
         if (streamRouteActive()) return;
+        if (!isLivePaintAllowed()) return;
         if (!engineSeriesPaintable(bars)) return;
         // Ticks never rewrite the window (P3): only a snapshot/repair uses
         // setData. Same-slot or next-slot tips path-set through appendLiveBar.
@@ -701,6 +705,19 @@ export async function streamDriveSeries(marketNow = 0): Promise<void> {
     interval: store.interval || '',
   };
   try {
+    // When /ws/live already owns the series sub, PYNE pushes forming deltas on
+    // the socket. A REST POST /data/session/.../tick on every venue bar doubles
+    // the plane (DevTools "tick spam") and fights the wire. Only REST-drive
+    // when the wire is missing, closed, cooled down, or not yet subscribed —
+    // that is the freeze-recovery path, not the happy path.
+    try {
+      if (wire && !wire.cooledDown && wire.isSubscribed(seriesSubId())) {
+        const st = wire.snapshotState();
+        if (st.open) return;
+      }
+    } catch {
+      /* fall through to REST drive */
+    }
     const outcome = await driveEngineSeries({
       endpoint,
       apiKey,

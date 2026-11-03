@@ -7,7 +7,7 @@ tags: [chart, code]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-02T12:29:54Z
+  at: 2026-11-03T11:00:21Z
 sources:
   - id: tree
     resource: "src/chart"
@@ -33,6 +33,7 @@ okf_lock: generated
 * `crosshair-sync.ts`
 * `drawing-layer.ts` — DrawingChangeHandler, DrawingLayer, SelectionChangeHandler, StylePrefs, ToolChangeHandler, fibPrices, fillBandRunBounds, getActiveDrawingLayer, linefillQuadCorners, plotFillsSignature, shiftDrawing
 * `drawing-types.ts` — DRAWING_COLORS, Drawing, DrawingBase, DrawingKind, DrawingLineStyle, DrawingToolId, FIB_EXT_LEVELS, FIB_LEVELS, HLineDrawing, MultiPointDrawing, Point, TextDrawing
+* `engine-bind.ts` — BindChartEngineResult, bindChartEngineForGeneration
 * `heavy-data.ts` — CONFLATION_BARS_THRESHOLD, HEAVY_BARS_THRESHOLD, MAX_CHART_MARKERS, VERY_HEAVY_BARS_THRESHOLD, barIndexAtTimeBinary, barIndexRangeForTimeWindow, capNewest, createRafCoalescer, heavyTimeScaleOptions, indexRangeForSortedTimes, isHeavyBarLoad, isVeryHeavyBarLoad
 * `keymap-actions.ts` — applyChartGrid, cancelDraft, deleteSelectedDrawing, panChartBy, resetChartZoom, selectDrawingTool, toggleCrosshair, toggleMagnet, zoomChartBy
 * `last-value-labels.ts` — lastValueNamesOn, seriesLabelTitle
@@ -51,6 +52,7 @@ okf_lock: generated
 * `plot-rect.ts` — ChartPlotRect, PlotRectChart, PlotRectHost, measureChartPlotRect
 * `price-precision.ts` — PRICE_SCALE_DECIMALS_MAX, PRICE_SCALE_DECIMALS_MIN, PriceFormatOpts, PriceScaleDecimalsMode, clampPriceDecimals, countSignificantDecimals, cyclePriceScaleDecimalsMode, decimalsFromMagnitude, detectDecimalsFromBars, detectDecimalsFromSymbol, formatPriceWithDecimals, normalizePriceScaleDecimalsMode
 * `pyne-drawings.ts` — DEFAULT_DRAWING_LIMITS, DrawingLimits, ScriptDrawing, YLOC_PAD_PX, alignDrawingTimeToBars, clampScriptDrawingTimes, clampTimeToLastBar, dedupeScriptLabelsAtSameTime, garbageCollectScriptDrawings, labelBubbleLayout, labelFontSizePx, normalizeExtend
+* `readiness.ts` — ChartReadinessPhase, ChartReadinessState, _resetChartReadinessForTests, beginChartReadiness, chartLiveArmedGeneration, chartReadinessSnapshot, chartReadinessStillCurrent, failChartReadiness, getChartReadiness, isChartReadinessBlocking, isChartReady, isLivePaintAllowed
 * `screenshot.ts` — DEFAULT_SCREENSHOT_OPTIONS, ScreenshotOptions, ScreenshotScale, ScreenshotScope, canvasToBlob, captureScreenshot, copyBlob, copyScreenshot, downloadBlob, downloadScreenshot, loadScreenshotOptions, saveScreenshotOptions
 * `series-factory.ts` — PANE_RESIZE_LAYOUT, PLOT_PALETTE, RIGHT_PRICE_SCALE_WIDTH, SERIES_STACK_BGCOLOR, SERIES_STACK_OVERLAY, SERIES_STACK_PRICE, TV, VOID, colorWithAlpha, createAreaSeries, createBarSeries, createBaseChart
 * `series-sanitize.ts` — PaintedCandleRange, clampPointsToPaintedRange, extendPaintedRange, filterValidCandleRows, looksLikeOhlcData, notePaintedCandleRange, projectToCandleAxis, rangeFromSeriesData, resetPaintedCandleRangeForTests
@@ -70,6 +72,7 @@ okf_lock: generated
 * [src/chart/v1](/code/src/chart/v1.md)
 * [src/data](/code/src/data.md)
 * [src/editor](/code/src/editor.md)
+* [src/engines](/code/src/engines.md)
 * [src/indicators](/code/src/indicators.md)
 * [src/onchain](/code/src/onchain.md)
 * [src/perf](/code/src/perf.md)

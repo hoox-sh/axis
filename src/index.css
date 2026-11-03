@@ -2879,6 +2879,8 @@ body.axis-ticker-dragging {
   align-items: center;
   justify-content: center;
   padding: 24px;
+  /* Cover the previous series during generation settle (symbol change). */
+  background: var(--color-bg-base);
   pointer-events: none;
   text-align: center;
 }
@@ -3410,7 +3412,9 @@ body.axis-ticker-dragging {
 }
 
 /* Vertical resize handle between panels.
-   Hit target stays 6px; the resting mark is a 1px hairline. */
+   Hit target stays 6px; the resting mark is a 1px hairline on flow
+   (non-absolute) handles only. Absolute panel-edge handles sit on the
+   dock-column border — a ::after there doubles the hairline. */
 .sc-resize-handle {
   width: 6px;
   margin-left: -3px;
@@ -3425,7 +3429,7 @@ body.axis-ticker-dragging {
 .sc-resize-handle:not(.absolute) {
   position: relative;
 }
-.sc-resize-handle::after {
+.sc-resize-handle:not(.absolute)::after {
   content: '';
   position: absolute;
   top: 0;
@@ -3441,8 +3445,8 @@ body.axis-ticker-dragging {
 .sc-resize-handle:active {
   background: color-mix(in srgb, var(--color-accent) 16%, transparent);
 }
-.sc-resize-handle:hover::after,
-.sc-resize-handle:active::after {
+.sc-resize-handle:not(.absolute):hover::after,
+.sc-resize-handle:not(.absolute):active::after {
   background: var(--color-accent);
   opacity: 1;
 }
@@ -3901,11 +3905,12 @@ body.axis-panel-dragging {
   --axis-panel-enter-y: var(--axis-fx-panel-open-slide, 100%);
 }
 
+/* Docked shells drop every side — the dock column owns the shared edge
+ * (right for left col, left for right col, top for bottom). Keeping the
+ * panel’s inner border stacked a second hairline on that edge. */
 .axis-panel-dock-left {
   flex-shrink: 0;
-  border-top: none;
-  border-bottom: none;
-  border-left: none;
+  border: none;
   border-radius: 0;
   z-index: 10;
   position: relative;
@@ -3913,33 +3918,27 @@ body.axis-panel-dragging {
 
 .axis-panel-dock-right {
   flex-shrink: 0;
-  border-top: none;
-  border-bottom: none;
-  border-right: none;
+  border: none;
   border-radius: 0;
   z-index: 10;
   position: relative;
 }
 
-/* Side panels share a column — no double outer border on the strip edge */
-.axis-dock-col > .axis-panel-dock-left,
-.axis-dock-col > .axis-panel-dock-right {
-  border-left: none;
-  border-right: none;
+/* Portal wrappers sit between the column and the shell (display:contents),
+ * so use a descendant selector — a child combinator never matched. */
+.axis-dock-col .axis-panel-dock-left,
+.axis-dock-col .axis-panel-dock-right {
+  border: none;
 }
 
-/* Vertical stack (bottom dock / single-column): separator between shells */
-.axis-dock-col-bottom .axis-panel-shell + .axis-panel-shell {
+/* Vertical stack (bottom dock): separator between portal-wrapped shells */
+.axis-dock-col-bottom > * + * .axis-panel-shell {
   border-top: var(--border-w) solid var(--color-border);
 }
 
-/* Side-by-side (2+ left/right): vertical separator between shells */
-.axis-dock-col-left[data-dock-count]:not([data-dock-count='1'])
-  .axis-panel-shell
-  + .axis-panel-shell,
-.axis-dock-col-right[data-dock-count]:not([data-dock-count='1'])
-  .axis-panel-shell
-  + .axis-panel-shell {
+/* Side-by-side (2+ left/right): vertical separator between portal-wrapped shells */
+.axis-dock-col-left[data-dock-count]:not([data-dock-count='1']) > * + * .axis-panel-shell,
+.axis-dock-col-right[data-dock-count]:not([data-dock-count='1']) > * + * .axis-panel-shell {
   border-top: none;
   border-left: var(--border-w) solid var(--color-border);
 }
@@ -4098,9 +4097,7 @@ body.axis-panel-dragging {
 
 .axis-panel-dock-bottom {
   flex-shrink: 0;
-  border-left: none;
-  border-right: none;
-  border-bottom: none;
+  border: none;
   border-radius: 0;
   width: 100%;
   position: relative;
@@ -4117,7 +4114,8 @@ body.axis-panel-dragging {
   margin: 0;
   z-index: 40;
 }
-/* Hide decorative mid-line on panel edge handles (used for chart panes) */
+/* Absolute panel-edge handles share the dock-column hairline — no ::after mark */
+.axis-panel-shell > .sc-resize-handle.absolute::after,
 .axis-panel-shell > .sc-pane-resize-handle.absolute::after {
   display: none;
 }

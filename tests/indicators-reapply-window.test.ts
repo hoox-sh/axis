@@ -29,7 +29,7 @@ import {
 import { _resetStorageRegistrationFlag } from '../src/storage/catalog';
 import { _resetDataSessionMemo } from '../src/engines/data-sessions';
 import { reconcile } from 'solid-js/store';
-import { setStore, setActivePlugin, addIndicator, clearLogs } from '../src/store';
+import { store, setStore, setActivePlugin, addIndicator, clearLogs } from '../src/store';
 import {
   reapplyChartScripts,
   _resetReapplyGuardForTests,
@@ -138,5 +138,29 @@ describe('reapplyChartScripts window dedupe', () => {
       setStore('bars', [bar(1000 + i * 60), bar(1000 + (i + 1) * 60)]);
       expect(await reapplyChartScripts()).toBe(1);
     }
+  });
+
+  it('force bypasses the window dedupe for chart readiness', async () => {
+    addIndicator('A', 'indicator("A")\nplot(close)', 'price', {});
+    expect(await reapplyChartScripts()).toBe(1);
+    const after = calls;
+    expect(await reapplyChartScripts({ force: true })).toBe(1);
+    expect(calls).toBeGreaterThan(after);
+  });
+
+  it('onSettled fires once per script id (ok or fail)', async () => {
+    addIndicator('A', 'indicator("A")\nplot(close)', 'price', {});
+    addIndicator('B', 'indicator("B")\nplot(open)', 'price', {});
+    const seen: Array<{ id: string; ok: boolean }> = [];
+    expect(
+      await reapplyChartScripts({
+        force: true,
+        onSettled: (id, ok) => seen.push({ id, ok }),
+      }),
+    ).toBe(2);
+    expect(seen.map((s) => s.id).sort()).toEqual(
+      [...store.scripts.map((s) => s.id)].sort(),
+    );
+    expect(seen.every((s) => s.ok)).toBe(true);
   });
 });

@@ -388,6 +388,7 @@ export async function invokeCapability(
     }
 
     case 'chart.get': {
+      const { chartReadinessSnapshot } = await import('../chart/readiness');
       return {
         symbol: store.symbol,
         interval: store.interval,
@@ -398,6 +399,7 @@ export async function invokeCapability(
         live: store.live,
         // F23: summaries only — no full buildAppSnapshot for a bar strip.
         bars: barSummary(store.bars || []),
+        readiness: chartReadinessSnapshot(),
       };
     }
     case 'chart.set': {

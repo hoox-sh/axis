@@ -47,6 +47,9 @@ const PRO_HEALTH = {
     script_runner_scheduler: false,
     live_modes: ['every-tick', 'bar-close'],
     data_session: true,
+    // Matches live pynescript.online — without this AXIS stays on calculator
+    // (REST tick + /run) and scripts show Degraded · venue+REST.
+    live_stream: true,
   },
   compile: {
     has_numba: true,
@@ -158,6 +161,7 @@ describe('healthFromBody', () => {
     expect(caps.dataSession).toBe(true);
     expect(caps.ownsData).toBe(true);
     expect(caps.liveModes).toEqual(['every-tick', 'bar-close']);
+    expect(caps.liveStream).toBe(true);
   });
 });
 

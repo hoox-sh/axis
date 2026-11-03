@@ -669,7 +669,8 @@ const dataSessionMemo = new Map<string, DataSessionMemo>();
  * @returns how many memo entries were dropped.
  */
 export function invalidateDataSessions(endpoint: string, key: DataSeriesKey): number {
-  const prefix = `${String(endpoint || '').replace(/\/$/, '')}|`;
+  const ep = String(endpoint || '').replace(/\/$/, '');
+  const prefix = `${ep}|`;
   const suffix = `|${seriesKeyString(key)}`;
   let dropped = 0;
   for (const memoKey of [...dataSessionMemo.keys()]) {
@@ -678,6 +679,11 @@ export function invalidateDataSessions(endpoint: string, key: DataSeriesKey): nu
       dropped += 1;
     }
   }
+  // Provisioning memo is keyed endpoint|series (no owner). Drop it so the
+  // next chart generation cannot skip upload/fetch on a stale fill hint.
+  const provisionKey = seriesProvisionMemoKey(ep, key);
+  if (seriesProvisionMemo.delete(provisionKey)) dropped += 1;
+  seriesProvisionInflight.delete(provisionKey);
   return dropped;
 }
 
@@ -828,6 +834,16 @@ export function _getSeriesProvisionForTests(
   key: DataSeriesKey,
 ): SeriesProvision | null {
   return seriesProvisionMemo.get(seriesProvisionMemoKey(endpoint, key)) ?? null;
+}
+
+/** @internal test helper — plant a series provision entry for invalidate tests. */
+export function _noteSeriesProvisionForTests(
+  endpoint: string,
+  key: DataSeriesKey,
+  historyBars: number,
+  via: 'local' | 'fetch' = 'local',
+): void {
+  noteSeriesProvisioned(seriesProvisionMemoKey(endpoint, key), historyBars, via);
 }
 
 /** Outcome of a {@link repairStaleEngineSeries} attempt. */

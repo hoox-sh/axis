@@ -72,7 +72,9 @@ import { getStream, listStreams, defaultStreamForSource, type StreamPlugin } fro
 import { noteDataManagerLiveBar } from '../data/expand-cache';
 import { intervalToSec } from '../data/bars-gaps';
 import { isEngineOwnedLive } from '../engines/ownership';
-import { liveRerunModeForEngine } from '../engines/catalog';
+import { getEngineCapabilities, liveRerunModeForEngine } from '../engines/catalog';
+import { routeEngineRun } from '../engine/router';
+import { isLivePaintAllowed } from '../chart/readiness';
 import {
   streamEvalScript,
   streamRouteActive,
@@ -642,6 +644,8 @@ export function startLive(
       // so a fallback closure must never reach past it for initialization.
       const stepSec = intervalToSec(iv);
       const appendVenueBars = (bars: Bar[]) => {
+        // Chart readiness: drop foreign / pre-reveal generations (PR-C).
+        if (!isLivePaintAllowed()) return;
         let shouldRerun = false;
         let jumped = false;
         for (const bar of bars) {
@@ -724,6 +728,7 @@ export function startLive(
       // engine's store, paint the engine's bars (so candles and indicators
       // align), then rerun indicators — each ticks its own engine session.
       if (isEngineOwnedLive()) {
+        if (!isLivePaintAllowed()) return;
         paintEngineOwned(ordered);
         return;
       }
@@ -1141,6 +1146,19 @@ export function startLive(
   } catch {
     /* catch-up is best-effort */
   }
+
+  // Capabilities usually warm when Scripts mounts. Live can start first, and
+  // getCachedEngineCapabilities() then defaults to liveStream:false → calculator
+  // (REST/WS /run every tick, Degraded overlays). Probe /health here so the
+  // stream route flips on as soon as PYNE advertises live_stream.
+  void getEngineCapabilities()
+    .then((caps) => {
+      if (liveEpoch !== epoch || !store.live.active) return;
+      if (routeEngineRun(caps).useStream) scheduleRerun({ immediate: true });
+    })
+    .catch(() => {
+      /* default caps keep the calculator path until Scripts/health warms */
+    });
 
   // Visible chart scripts start immediately — do not wait for the first venue
   // tick or a manual Run. On the stream path, flush with no debounce so every

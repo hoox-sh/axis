@@ -58,6 +58,10 @@ import {
 import { loadSymbolData } from '../data/load-symbol';
 import { HooxLoader } from '../ui/HooxLoader';
 import {
+  getChartReadiness,
+  isChartReadinessBlocking,
+} from './readiness';
+import {
   DATA_PLANE_DOCS_URL,
   classifyDataPlaneNotice,
   type DataPlaneActionId,
@@ -212,7 +216,22 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     return getSlotBars(id);
   });
 
-  const emptyHint = createMemo(() => {
+  /**
+   * Full-chart splash: generation readiness blocks even when bars exist (symbol
+   * change must not flash the previous series). Empty-chart notices stay for
+   * idle / error when readiness is already ready.
+   */
+  const bootHint = createMemo(() => {
+    if (isActive() && isChartReadinessBlocking()) {
+      const r = getChartReadiness();
+      return {
+        title: r.title || (r.phase === 'error' ? 'Chart failed to load' : 'Loading market data'),
+        sentence: r.sentence || '',
+        action: null as DataPlaneActionId | null,
+        actionLabel: '',
+        loading: r.phase !== 'error',
+      };
+    }
     if (bars().length > 0) return null;
     if (isActive() && (store.status === 'loading' || store.status === 'running')) {
       return {
@@ -240,6 +259,10 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     });
     return { ...notice, loading: false };
   });
+
+  const chartInteractive = createMemo(
+    () => bars().length > 0 && !isChartReadinessBlocking(),
+  );
 
   const runNoticeAction = (action: DataPlaneActionId) => {
     const sym = props.symbol || store.symbol;
@@ -810,10 +833,10 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
         data-axis-panes
       />
       <ChartContextMenu host={contextHost()} slotId={slotId()} />
-      <Show when={isActive() && !store.presentation?.chartOnly}>
+      <Show when={isActive() && chartInteractive() && !store.presentation?.chartOnly}>
         <OnchainLegend />
       </Show>
-      <Show when={isActive() && bars().length > 0 && !store.presentation?.chartOnly}>
+      <Show when={isActive() && chartInteractive() && !store.presentation?.chartOnly}>
         <DrawingToolbar />
         <VolumeProfileOverlay />
         <ChartScaleControls />
@@ -826,10 +849,10 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
           </div>
         </Show>
       </Show>
-      <Show when={isActive() && bars().length > 0}>
+      <Show when={isActive() && chartInteractive()}>
         <PyneTableHud />
       </Show>
-      <Show when={emptyHint()}>
+      <Show when={bootHint()}>
         {(hint) => (
           <div class="axis-chart-boot" data-testid="axis-chart-boot">
             <div class="axis-chart-boot-cluster">
@@ -838,7 +861,12 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
               </Show>
               <div
                 class="axis-chart-boot-title"
-                data-tone={isActive() && store.status === 'error' ? 'error' : 'idle'}
+                data-tone={
+                  (isActive() && store.status === 'error') ||
+                  getChartReadiness().phase === 'error'
+                    ? 'error'
+                    : 'idle'
+                }
               >
                 {hint().title}
               </div>

@@ -40,8 +40,24 @@ describe('shell hairlines', () => {
     expect(css).toMatch(/\[data-tb-group\] \+ \[data-tb-group\]::before \{[^}]*height: 16px/s);
   });
 
-  it('draws a resting mark on vertical resize handles', () => {
-    expect(css).toContain('.sc-resize-handle::after');
+  it('draws a resting mark on flow resize handles only', () => {
+    expect(css).toContain('.sc-resize-handle:not(.absolute)::after');
     expect(css).toContain('.sc-resize-handle:not(.absolute)');
+    // Absolute panel-edge handles sit on the dock-column border — no second mark
+    expect(css).toContain(
+      '.axis-panel-shell > .sc-resize-handle.absolute::after',
+    );
+  });
+
+  it('lets the dock column own the shared edge (no panel double border)', () => {
+    expect(css).toMatch(
+      /\.axis-panel-dock-left \{[^}]*border:\s*none/s,
+    );
+    expect(css).toMatch(
+      /\.axis-panel-dock-right \{[^}]*border:\s*none/s,
+    );
+    expect(css).toMatch(
+      /\.axis-panel-dock-bottom \{[^}]*border:\s*none/s,
+    );
   });
 });

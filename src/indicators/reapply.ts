@@ -98,6 +98,17 @@ export type ReapplyChartScriptsOpts = {
   ids?: string[];
   /** Log failures to console (default true). */
   logErrors?: boolean;
+  /**
+   * Skip the bar-window dedupe. Chart readiness after a symbol/interval load
+   * must always re-evaluate even when the window identity collides.
+   */
+  force?: boolean;
+  /**
+   * Called once per script after apply finishes (ok or fail). Used by chart
+   * readiness to advance the splash `k/n` caption. Not called when the whole
+   * pass is skipped (no bars / in-flight / superseded before the loop).
+   */
+  onSettled?: (indicatorId: string, ok: boolean) => void;
 };
 
 /**
@@ -264,8 +275,9 @@ export async function reapplyChartScripts(
     // The window *identity* is compared (not just its length): a rolling
     // window slides with a constant length, so a length-only check skipped
     // every reapply after the first and left the indicators stale.
+    // Chart readiness passes `force` so a new generation always re-runs.
     const windowId = barWindowIdentity();
-    if (windowId && windowId === lastReapplyWindow) return 0;
+    if (!opts?.force && windowId && windowId === lastReapplyWindow) return 0;
 
     const { runAndApply, currentRunEpoch, isInteractiveRunInFlight } = await import('./runner');
     if (isInteractiveRunInFlight()) return 0;
@@ -282,8 +294,16 @@ export async function reapplyChartScripts(
         /* ignore */
       }
     };
+    const notifySettled = (id: string, ok: boolean): void => {
+      try {
+        opts?.onSettled?.(id, ok);
+      } catch {
+        /* readiness caption must not break the pass */
+      }
+    };
     const runOne = async (ind: Indicator): Promise<boolean> => {
       if (!still()) return false;
+      let ok = false;
       try {
         const result = await runAndApply(ind.code, ind.id, {
           silent: true,
@@ -293,13 +313,17 @@ export async function reapplyChartScripts(
           epoch,
           ...(batched?.has(ind.id) ? { precomputedResult: batched.get(ind.id) } : {}),
         });
-        if (result && result.status !== 'error') return true;
-        if (result?.status === 'error') warn(ind, result.error || 'error');
-        return false;
+        if (result && result.status !== 'error') {
+          ok = true;
+        } else if (result?.status === 'error') {
+          warn(ind, result.error || 'error');
+        }
       } catch (err: unknown) {
         warn(ind, err instanceof Error ? err.message : err);
-        return false;
       }
+      // Failures still settle — one broken script must not trap the splash.
+      if (still()) notifySettled(ind.id, ok);
+      return ok;
     };
     let ok = 0;
     // Producers of plot sources (cross-indicator input.source) run in earlier

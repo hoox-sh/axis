@@ -46,6 +46,15 @@ import {
   setTelemetryState,
 } from '../store';
 import { getManager, setDataToChart } from '../chart/manager-access';
+import {
+  _resetChartReadinessForTests,
+  beginChartReadiness,
+  failChartReadiness,
+  noteChartScriptSettled,
+  revealChart,
+  setChartReadinessPhase,
+  settleAllChartScripts,
+} from '../chart/readiness';
 import { getSource, sourcePageLimit } from '../sources/catalog';
 import { providerDatasetLock } from './provider';
 import { getUploadedFileName } from '../sources/upload-store';
@@ -63,6 +72,58 @@ import { fillBarsTowardNow, fillInternalGaps } from './expand-cache';
 import { errMessage } from '../utils/errors';
 
 export { exchangeForSource, normalizeLoadSymbol };
+
+/**
+ * After OHLCV for generation G is on the chart: apply scripts (if any), then
+ * reveal. Live restart stays the caller's job so engine-owned / DSM / venue
+ * paths keep their existing order.
+ *
+ * Per-script `onSettled` advances the splash `k/n` caption; `settleAll` fills
+ * any ids skipped when the pass was superseded mid-loop so the overlay cannot
+ * trap on one slow or failed script.
+ */
+async function settleReadinessAfterBars(
+  gen: number,
+  stillCurrent: () => boolean,
+  identity: { symbol: string; interval: string; source: string },
+): Promise<void> {
+  if (!stillCurrent()) return;
+  // PR-C: drop old engine sessions / wire before scripts evaluate on G.
+  try {
+    const { bindChartEngineForGeneration } = await import('../chart/engine-bind');
+    if (stillCurrent()) await bindChartEngineForGeneration(gen, identity);
+  } catch {
+    /* bind is best-effort — scripts + reveal still proceed */
+  }
+  if (!stillCurrent()) return;
+  try {
+    const { listReapplicableScripts, reapplyChartScripts } = await import(
+      '../indicators/reapply'
+    );
+    const scripts = listReapplicableScripts();
+    const n = scripts.length;
+    if (n > 0 && stillCurrent()) {
+      setChartReadinessPhase(gen, 'applying-scripts', { scriptsTotal: n });
+      try {
+        if (stillCurrent()) {
+          await reapplyChartScripts({
+            stillCurrent,
+            force: true,
+            onSettled: (id, _ok) => {
+              if (stillCurrent()) noteChartScriptSettled(gen, id);
+            },
+          });
+        }
+      } catch {
+        /* per-script failures still settle — do not trap the overlay */
+      }
+      if (stillCurrent()) settleAllChartScripts(gen);
+    }
+  } catch {
+    /* reapply import / list failure — still reveal so the chart is usable */
+  }
+  if (stillCurrent()) revealChart(gen);
+}
 
 /**
  * Monotonic generation for in-flight history loads.
@@ -84,6 +145,7 @@ export function _resetLoadGeneration(): void {
     /* ignore */
   }
   loadAbort = null;
+  _resetChartReadinessForTests();
 }
 
 /** @internal test helper — current race token */
@@ -165,6 +227,7 @@ export async function loadSymbolData(
 
   // Claim this load as the newest; abort prior network + ignore stale completions.
   const gen = ++loadGeneration;
+  beginChartReadiness(gen, { symbol: sym, interval: iv, source: srcId });
   try {
     loadAbort?.abort();
   } catch {
@@ -177,6 +240,7 @@ export async function loadSymbolData(
   if (!source) {
     // Unknown source: only surface if we are still the active request
     if (gen === loadGeneration) {
+      failChartReadiness(gen, 'Unknown data source.');
       setStatus('error', `Unknown source: ${srcId}`);
       setTelemetryState('source', 'error', { error: `Unknown source: ${srcId}` });
     }
@@ -185,6 +249,7 @@ export async function loadSymbolData(
 
   if (!sym) {
     if (gen === loadGeneration) {
+      failChartReadiness(gen, 'Symbol required.');
       setStatus('error', 'Symbol required');
       setTelemetryState('source', 'error', { error: 'Symbol required' });
     }
@@ -265,14 +330,7 @@ export async function loadSymbolData(
             source: 'data',
           });
           announce(`Loaded ${bars.length} bars ${sym} ${iv}`);
-          if (stillCurrent()) {
-            try {
-              const { reapplyChartScripts } = await import('../indicators/reapply');
-              await reapplyChartScripts({ stillCurrent });
-            } catch {
-              /* re-run optional — user can re-run manually */
-            }
-          }
+          await settleReadinessAfterBars(gen, stillCurrent, { symbol: sym, interval: iv, source: srcId });
           if (restartLiveAfter && stillCurrent()) {
             const streamId = store.live.streamId || defaultStreamForSource(srcId);
             try {
@@ -338,14 +396,7 @@ export async function loadSymbolData(
         // Guarded by stillCurrent — a stale background job must not overwrite
         // the status of a newer load (or a newer error).
         void ensureDatasetComplete(sym, iv, srcId, { stillCurrent });
-        if (stillCurrent()) {
-          try {
-            const { reapplyChartScripts } = await import('../indicators/reapply');
-            await reapplyChartScripts({ stillCurrent });
-          } catch {
-            /* re-run optional */
-          }
-        }
+        await settleReadinessAfterBars(gen, stillCurrent, { symbol: sym, interval: iv, source: srcId });
         if (restartLiveAfter && stillCurrent()) {
           const streamId = store.live.streamId || defaultStreamForSource(srcId);
           try {
@@ -552,6 +603,9 @@ export async function loadSymbolData(
     });
     announce(`Loaded ${painted.length} bars ${sym} ${iv}`);
 
+    // Scripts settle under the splash, then reveal, then live (G-tagged).
+    await settleReadinessAfterBars(gen, stillCurrent, { symbol: sym, interval: iv, source: srcId });
+
     // Restart / auto-start live on the new ticker after a full history paint
     if (restartLiveAfter) {
       const streamId = store.live.streamId || defaultStreamForSource(srcId);
@@ -562,16 +616,6 @@ export async function loadSymbolData(
         }
       } catch {
         /* ignore live restart failures */
-      }
-    }
-
-    // Re-apply visible indicators/strategies on the new OHLCV (silent)
-    if (stillCurrent()) {
-      try {
-        const { reapplyChartScripts } = await import('../indicators/reapply');
-        await reapplyChartScripts({ stillCurrent });
-      } catch {
-        /* re-run optional — user can re-run manually */
       }
     }
 
@@ -612,14 +656,7 @@ export async function loadSymbolData(
         );
         announce(`Offline cached ${view.length} bars ${sym} ${iv}`);
         // Do not auto-start live on offline cache (no reliable venue stream)
-        if (stillCurrent()) {
-          try {
-            const { reapplyChartScripts } = await import('../indicators/reapply');
-            await reapplyChartScripts({ stillCurrent });
-          } catch {
-            /* re-run optional */
-          }
-        }
+        await settleReadinessAfterBars(gen, stillCurrent, { symbol: sym, interval: iv, source: srcId });
         return stillCurrent();
       }
     } catch {
@@ -634,6 +671,7 @@ export async function loadSymbolData(
     });
     const sentence = loadErrorSentence(msg);
     // Chart notice + status row carry the failure. Raw text stays on telemetry.
+    failChartReadiness(gen, sentence);
     setStatus('error', sentence, { toast: false, source: 'data' });
     announceError(sentence);
     return false;
