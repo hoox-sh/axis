@@ -39,6 +39,8 @@ export type { PositionView, StreamEventView, PositionFill, PositionCloseFill } f
 export interface BuildPositionViewsOptions {
   /** Fill model: `close` (default) or `next_open` (slippage → next bar open). */
   fillMode?: 'close' | 'next_open';
+  /** Bar axis of the run that produced the events (see `results/window-axis`). */
+  axis?: import('./window-axis').RunWindowAxis | null;
 }
 
 /**

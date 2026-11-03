@@ -42,6 +42,7 @@ import { applyPrecomputedChart } from '../indicators/apply-live';
 import { engineDebug } from '../debug';
 import type { RunResult } from '../plugins/types';
 import type { Bar } from '../store/types';
+import { axisStamp, windowAxisFromBars } from '../results/window-axis';
 import { store } from '../store';
 
 export type StreamVia = 'stream-full' | 'stream-delta';
@@ -99,9 +100,23 @@ type RunAndApplyFn = (
 /**
  * Convert a merged stream `full` payload into a runner-ready `RunResult`.
  * Pure — safe to unit test without a chart.
+ *
+ * @param bars - Exact bar window the payload was evaluated over. Used to stamp
+ *   the run's window axis (`results/window-axis`) so an index-only event or a
+ *   `xloc.bar_index` drawing from the stream can be anchored to absolute time.
  */
-export function streamFullToPrecomputed(full: StreamFullPayload, via: StreamVia): RunResult {
+export function streamFullToPrecomputed(
+  full: StreamFullPayload,
+  via: StreamVia,
+  bars?: Bar[] | null,
+): RunResult {
   const plots = Array.isArray(full.plots) ? (full.plots as (number | null)[]) : [];
+  // Prefer the engine's own axis when it shipped one (`bar_times`), else the
+  // chart window the caller evaluated over.
+  const engineTimes = Array.isArray(full.bar_times) ? (full.bar_times as number[]) : null;
+  const axis = engineTimes?.length
+    ? windowAxisFromBars(engineTimes.map((time) => ({ time })))
+    : windowAxisFromBars(bars ?? null);
   return {
     status: 'success',
     plots,
@@ -111,6 +126,7 @@ export function streamFullToPrecomputed(full: StreamFullPayload, via: StreamVia)
     ...(full.bar_times ? { bar_times: full.bar_times } : {}),
     meta: {
       ...(full.meta ?? {}),
+      ...axisStamp(axis),
       sessionVia: via,
       count: full.count,
       executionContext: resolveStreamExecutionContext(full, via),
@@ -127,7 +143,7 @@ export function applyStreamDelta(
   input: ApplyStreamInput,
   deps?: { applyChart?: typeof applyPrecomputedChart },
 ): RunResult {
-  const precomputedResult = streamFullToPrecomputed(input.full, input.via);
+  const precomputedResult = streamFullToPrecomputed(input.full, input.via, input.bars);
   // Tip deltas reuse the cached descriptors; avoid a store walk every tick.
   const ctx = precomputedResult.meta?.executionContext;
   const prevInputs = previousRunInputs(input.indicatorId, {
@@ -160,7 +176,7 @@ export async function applyStreamPayload(
     liveTick: input.via === 'stream-delta',
     context: input.full.executionContext ?? null,
   });
-  const precomputedResult = streamFullToPrecomputed(input.full, input.via);
+  const precomputedResult = streamFullToPrecomputed(input.full, input.via, input.bars);
   // The socket payload carries the values, not the run's metadata. Keep the
   // input descriptors of the script's last full run: the Results panel and
   // the Script Settings modal read them from the run (the socket payload has

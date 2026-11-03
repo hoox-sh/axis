@@ -35,6 +35,25 @@ describe('redesign2 apply bridge (F-16)', () => {
     expect((result as unknown as { bar_times: number[] }).bar_times).toEqual([100, 200]);
   });
 
+  test('stamps the evaluated window axis so bar_index stays anchorable', () => {
+    const t0 = 1_700_000_000;
+    const result = streamFullToPrecomputed(
+      { plots: [], count: 3, bar_times: [t0, t0 + 60, t0 + 120] },
+      'stream-full',
+    );
+    expect(result.meta?.windowT0).toBe(t0);
+    expect(result.meta?.windowSpan).toBe(60);
+    expect(result.meta?.windowCount).toBe(3);
+  });
+
+  test('falls back to the chart window when the engine ships no axis', () => {
+    const bars = [{ time: 1_700_000_000 }, { time: 1_700_003_600 }];
+    const result = streamFullToPrecomputed({ count: 2 }, 'stream-delta', bars as never);
+    expect(result.meta?.windowT0).toBe(1_700_000_000);
+    expect(result.meta?.windowSpan).toBe(3_600);
+    expect(result.meta?.windowCount).toBe(2);
+  });
+
   test('defaults missing plots/series/events to empty', () => {
     const result = streamFullToPrecomputed({ count: 0 }, 'stream-delta');
     expect(result.plots).toEqual([]);

@@ -78,8 +78,7 @@ import {
   applyDebugPinsToChart,
 } from '../chart/manager-access';
 import { PLOT_PALETTE } from '../chart/series-factory';
-import { normalizeStrategyEvents, eventsToMarkers } from '../results/events';
-import { buildStrategyReport } from '../results/strategy';
+import { axisStamp, windowAxisFromBars } from '../results/window-axis';
 import {
   bgcolorSeriesToHistogramData,
   barcolorSeriesToMap,
@@ -1042,8 +1041,14 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
       (typeof rawResult?.meta?.ms === 'number' && Number.isFinite(rawResult.meta.ms)
         ? rawResult.meta.ms
         : null) ?? performance.now() - t0;
+    // The evaluated window's axis: `bar_index` in the payload is relative to
+    // *this* window, and the chart window slides on every new candle. Stamp it
+    // on the result and use it to resolve index-only events at ingestion — see
+    // `results/window-axis`.
+    const windowAxis = restSession ? null : windowAxisFromBars(windowBars);
     // Normalize first so callers always get stable series/plots shapes
-    const result = normalizeEngineResult(rawResult, ms);
+    const result = normalizeEngineResult(rawResult, ms, windowAxis);
+    if (windowAxis) result.meta = { ...(result.meta || {}), ...axisStamp(windowAxis) };
     if (
       cacheAllowed &&
       cacheKey &&

@@ -19,6 +19,8 @@ import { _resetEngineRegistrationFlag } from '../../src/engines/catalog';
 import { _resetStorageRegistrationFlag } from '../../src/storage/catalog';
 import { setStore, setActivePlugin, clearLogs } from '../../src/store';
 import { runScript } from '../../src/indicators/runner';
+import { buildStrategyReport } from '../../src/results/strategy';
+import { windowAxisFromMeta } from '../../src/results/window-axis';
 import { SAMPLE_BARS } from '../fixtures/bars';
 
 let restoreFetch: (() => void) | null = null;
@@ -68,5 +70,51 @@ describe('run pipeline', () => {
     const r = await runScript('bad', { silent: true });
     expect(r.status).toBe('error');
     expect(r.error).toMatch(/parse error|HTTP/);
+  });
+
+  it('stamps the evaluated window axis on the result meta', async () => {
+    restoreFetch = mockFetch(async () =>
+      jsonResponse({
+        status: 'success',
+        plots: [],
+        series: {},
+        events: [],
+        meta: { script_name: 'demo', overlay: true },
+      }),
+    );
+    const r = await runScript('//@version=6\nindicator("t")\nplot(close)', { silent: true });
+    // `bar_index` in the payload is relative to *this* window — the stamp is
+    // what lets every consumer resolve it after the chart window slides.
+    const axis = windowAxisFromMeta(r.meta);
+    expect(axis).not.toBeNull();
+    expect(axis!.t0).toBe(SAMPLE_BARS[0]!.time);
+    expect(axis!.count).toBe(SAMPLE_BARS.length);
+    expect(axis!.span).toBe(86_400);
+  });
+
+  it('resolves bar_index-only strategy events through the stamped axis', async () => {
+    restoreFetch = mockFetch(async () =>
+      jsonResponse({
+        status: 'success',
+        plots: [],
+        series: {},
+        events: [
+          { kind: 'entry', id: 'L', direction: 'long', qty: 2, bar_index: 1 },
+          { kind: 'close', id: 'L', direction: 'long', qty: 2, bar_index: 2 },
+        ],
+        meta: { script_name: 'strat', script_type: 'strategy', overlay: false },
+      }),
+    );
+    const r = await runScript('//@version=6\nstrategy("s")', { silent: true });
+    const axis = windowAxisFromMeta(r.meta);
+    const rep = buildStrategyReport(r.events as never[], SAMPLE_BARS as never, {
+      fillMode: 'close',
+      axis,
+    });
+    // Both events carry no time at all — only the window index. The axis is
+    // the sole thing that maps index 1/2 onto the bars the engine evaluated.
+    expect(rep.trades).toHaveLength(1);
+    expect(rep.trades[0]!.entry).toBe(SAMPLE_BARS[1]!.close);
+    expect(rep.trades[0]!.exit).toBe(SAMPLE_BARS[2]!.close);
   });
 });

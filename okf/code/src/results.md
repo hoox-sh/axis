@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/results"
-description: "src/results contains dataview.ts, debug-pins.ts, events.ts, and 10 more files."
+description: "src/results contains dataview.ts, debug-pins.ts, events.ts, and 11 more files."
 resource: "src/results"
 tags: [code, results]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-02T17:28:56Z
+  at: 2026-11-03T21:03:08Z
 sources:
   - id: tree
     resource: "src/results"
@@ -31,6 +31,7 @@ okf_lock: generated
 * `script-inputs.ts` — DEFAULT_SOURCE_OPTIONS, InputFormGroup, InputFormRow, PineEnumDef, PineEnumMember, ScriptInputDef, ScriptInputType, applyInputOverrides, collectImportAliases, collectPineEnumsFromSources, collectStringConsts, findLhsIdent
 * `strategy-props.ts` — COMMISSION_TYPE_OPTIONS, QTY_TYPE_OPTIONS, STRATEGY_PROP_CATALOG, StrategyPropDef, StrategyPropType, applyStrategyOverrides, applyStrategyPropsToSource, findStrategyCall, hasStrategyDeclaration, normalizeStrategyEnum, parseStrategyDeclaration, resolveStrategyProps
 * `strategy.ts` — BuildStrategyReportOptions, ClosedTrade, EquityStep, PositionCloseFill, PositionFill, PositionView, StrategyEvent, StrategyStats, StrategyStatsSnapshot, StrategyWalk, StreamEventView, SvgPolylineResult
+* `window-axis.ts` — RunWindowAxis, WINDOW_AXIS_KEYS, axisStamp, barIndexForTime, looksLikeBarIndex, timeForBarIndex, windowAxisFromBars, windowAxisFromMeta
 
 # Depends on
 
@@ -43,9 +44,12 @@ okf_lock: generated
 
 * [src/chart](/code/src/chart.md)
 * [src/editor](/code/src/editor.md)
+* [src/engine](/code/src/engine.md)
+* [src/engines](/code/src/engines.md)
 * [src/indicators](/code/src/indicators.md)
 * [src/store](/code/src/store.md)
 * [src/streams](/code/src/streams.md)
 * [src/ui](/code/src/ui.md)
 * [tests](/code/tests.md)
 * [tests/engine](/code/tests/engine.md)
+* [tests/integration](/code/tests/integration.md)

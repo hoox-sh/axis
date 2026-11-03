@@ -35,6 +35,7 @@ import {
   normalizeScriptDrawings,
   resolveDrawingLimits,
 } from '../chart/pyne-drawings';
+import { windowAxisFromMeta } from '../results/window-axis';
 import { runEpochInvalidates } from './run-helpers';
 import type { RunOptions, RunResult } from './runner';
 
@@ -76,7 +77,13 @@ export function applyDrawings(ctx: DrawingsApplyContext): void {
           (ctx.result.meta as Record<string, unknown> | undefined) ?? null,
         );
         const barSample = ctx.bars.length ? Number(ctx.bars[ctx.bars.length - 1]!.time) : null;
-        const normalized = normalizeScriptDrawings(drawings, barSample);
+        // `xloc.bar_index` anchors are window-relative — convert them with the
+        // run's own axis so the geometry stops sliding with the chart window.
+        const normalized = normalizeScriptDrawings(
+          drawings,
+          barSample,
+          windowAxisFromMeta(ctx.result.meta),
+        );
         const kept = garbageCollectScriptDrawings(normalized, limits);
         // Non-ctx.overlay scripts: force_overlay → price pane; rest → indicator pane Y
         let keptCount = 0;
@@ -85,17 +92,25 @@ export function applyDrawings(ctx: DrawingsApplyContext): void {
           const onPane = kept.filter((d) => !d.forceOverlay);
           const paneLayer = ensureScriptPaneLayer(ctx.paneId);
           if (paneLayer) {
-            keptCount = priceLayer?.setScriptDrawings(onPrice, limits, ctx.indicatorId ?? EDITOR_RUN_KEY) ?? 0;
-            keptCount += paneLayer.setScriptDrawings(onPane, limits, ctx.indicatorId ?? EDITOR_RUN_KEY);
+            keptCount =
+              priceLayer?.setScriptDrawings(onPrice, limits, ctx.indicatorId ?? EDITOR_RUN_KEY) ??
+              0;
+            keptCount += paneLayer.setScriptDrawings(
+              onPane,
+              limits,
+              ctx.indicatorId ?? EDITOR_RUN_KEY,
+            );
           } else {
             // No sub-pane layer — everything goes to the price pane. One call:
             // the layer replaces the owner's drawings, so a second call with a
             // different list would drop the first one (and the count was
             // overwritten rather than added).
-            keptCount = priceLayer?.setScriptDrawings(kept, limits, ctx.indicatorId ?? EDITOR_RUN_KEY) ?? 0;
+            keptCount =
+              priceLayer?.setScriptDrawings(kept, limits, ctx.indicatorId ?? EDITOR_RUN_KEY) ?? 0;
           }
         } else {
-          keptCount = priceLayer?.setScriptDrawings(kept, limits, ctx.indicatorId ?? EDITOR_RUN_KEY) ?? 0;
+          keptCount =
+            priceLayer?.setScriptDrawings(kept, limits, ctx.indicatorId ?? EDITOR_RUN_KEY) ?? 0;
         }
         if (!ctx.silent) {
           const dropped = normalized.length - kept.length;
@@ -107,17 +122,17 @@ export function applyDrawings(ctx: DrawingsApplyContext): void {
             );
           } else if (normalized.length === 0) {
             const sample = drawings[0] as Record<string, unknown> | undefined;
-            const keys = sample && typeof sample === 'object' ? Object.keys(sample).slice(0, 12).join(',') : '';
+            const keys =
+              sample && typeof sample === 'object'
+                ? Object.keys(sample).slice(0, 12).join(',')
+                : '';
             appendLog(
               'warn',
               `Pine drawings: ${drawings.length} raw object(s) dropped by normalize (need type/kind + coords; sample keys: ${keys || '—'})`,
               'drawings',
             );
           } else {
-            const paneNote =
-              !ctx.overlay && ctx.paneId !== 'price'
-                ? ` · pane=${ctx.paneId}`
-                : '';
+            const paneNote = !ctx.overlay && ctx.paneId !== 'price' ? ` · pane=${ctx.paneId}` : '';
             appendLog(
               'ok',
               dropped > 0
@@ -135,7 +150,9 @@ export function applyDrawings(ctx: DrawingsApplyContext): void {
         priceLayer?.clearScriptDrawings(ctx.indicatorId ?? EDITOR_RUN_KEY);
         if (!ctx.overlay && ctx.paneId !== 'price') {
           try {
-            ensureScriptPaneLayer(ctx.paneId)?.clearScriptDrawings(ctx.indicatorId ?? EDITOR_RUN_KEY);
+            ensureScriptPaneLayer(ctx.paneId)?.clearScriptDrawings(
+              ctx.indicatorId ?? EDITOR_RUN_KEY,
+            );
           } catch {
             /* optional */
           }

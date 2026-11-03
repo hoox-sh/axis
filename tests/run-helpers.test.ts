@@ -214,6 +214,21 @@ describe('normalizeSeriesMap / plots / events', () => {
     expect(ev[1]!.type).toBe('close');
   });
 
+  it('anchors an index-only event through the run window axis', () => {
+    // `bar_index` is window-relative: 3 means "the 4th bar of the window the
+    // engine evaluated", not "the 4th bar of whatever the chart shows now".
+    const axis = { t0: 1_700_000_000, span: 60, count: 500, uniform: true };
+    const ev = normalizeEventsArray(
+      [{ kind: 'entry', id: 'L', direction: 'long', qty: 1, bar_index: 3 }],
+      axis,
+    );
+    expect(ev).toHaveLength(1);
+    expect(ev[0]!.time).toBe(1_700_000_180);
+    expect(ev[0]!.bar_time).toBe(1_700_000_180);
+    // Without an axis an index cannot be anchored — dropped, as before.
+    expect(normalizeEventsArray([{ kind: 'entry', bar_index: 3 }])).toHaveLength(0);
+  });
+
   it('normalizeEngineResult preserves pyne strategy events for markers/report', () => {
     const r = normalizeEngineResult({
       status: 'success',

@@ -44,6 +44,7 @@ import {
 import { Icons } from './icons';
 import type { RunResult } from '../indicators/runner';
 import { buildStrategyReport, formatMoney } from '../results/strategy';
+import { windowAxisFromMeta } from '../results/window-axis';
 import { barPlane } from '../stores/bars';
 import { ConnectionHud } from './ConnectionHud';
 import { HooxLoader } from './HooxLoader';
@@ -138,6 +139,8 @@ export const StatusBar: Component = () => {
     const bars = untrack(() => store.bars);
     const rep = buildStrategyReport(r.events as never[], bars, {
       fillMode: store.strategyUi?.slippageNextOpen ? 'next_open' : 'close',
+      // Window-relative `bar_index` belongs to the run that produced it.
+      axis: windowAxisFromMeta(r.meta),
     });
     if (!rep.stats.trades) return null;
     return rep.stats;

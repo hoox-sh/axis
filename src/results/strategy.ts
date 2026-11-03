@@ -41,11 +41,8 @@
  */
 
 import type { Bar } from '../store/types';
-import {
-  normalizeStrategyEvents,
-  resolveExitMatchId,
-  type StrategyFillMode,
-} from './events';
+import { normalizeStrategyEvents, resolveExitMatchId, type StrategyFillMode } from './events';
+import type { RunWindowAxis } from './window-axis';
 
 /** Loose event shape accepted before normalization. */
 export interface StrategyEvent {
@@ -210,7 +207,9 @@ export function strategyStatsSnapshot(stats: StrategyStats): StrategyStatsSnapsh
     wins: stats.wins,
     losses: stats.losses,
     winRate: stats.winRate,
-    profitFactor: Number.isFinite(stats.profitFactor) ? Number(stats.profitFactor.toFixed(4)) : null,
+    profitFactor: Number.isFinite(stats.profitFactor)
+      ? Number(stats.profitFactor.toFixed(4))
+      : null,
     totalPnl: Number(stats.totalPnl.toFixed(6)),
     returnPct: Number((stats.returnPct ?? 0).toFixed(6)),
     maxDD: Number(stats.maxDD.toFixed(6)),
@@ -226,6 +225,12 @@ export interface BuildStrategyReportOptions {
    * next bar open). Applied when `bars` are provided.
    */
   fillMode?: StrategyFillMode;
+  /**
+   * Bar axis of the run that produced the events ({@link RunWindowAxis}).
+   * Needed when an event carries only `bar_index` — the chart window slides,
+   * so the index is only meaningful inside the window the engine evaluated.
+   */
+  axis?: RunWindowAxis | null;
 }
 
 function emptyStats(): StrategyStats {
@@ -252,7 +257,11 @@ function toBarEpoch(t: number): number {
  * Bars held between entry and exit (bisect over loaded bar times).
  * Returns undefined when bars/times cannot resolve both edges.
  */
-function barsBetween(bars: Bar[] | undefined, entryTime: number, exitTime: number): number | undefined {
+function barsBetween(
+  bars: Bar[] | undefined,
+  entryTime: number,
+  exitTime: number,
+): number | undefined {
   if (!bars?.length || !Number.isFinite(entryTime) || !Number.isFinite(exitTime)) return undefined;
   const et = toBarEpoch(entryTime);
   const xt = toBarEpoch(exitTime);
@@ -312,6 +321,7 @@ export function walkStrategyEvents(
     bars,
     includeOrders: true,
     fillMode: opts.fillMode ?? 'close',
+    axis: opts.axis ?? null,
   });
   // Same-bar order must follow engine emission order (stable by original index).
   // Pyne reverses emit close(old) then entry(new). Re-ranking entry before close
@@ -478,8 +488,7 @@ export function walkStrategyEvents(
       kind === 'closelong' ||
       kind === 'closeshort'
     ) {
-      const isCloseAll =
-        kind === 'close_all' || kind.includes('close_all') || kind === 'closeall';
+      const isCloseAll = kind === 'close_all' || kind.includes('close_all') || kind === 'closeall';
       const engineProfit = (ev as Record<string, unknown>).profit;
       if (isCloseAll) {
         // strategy.close_all — flatten every open at this bar

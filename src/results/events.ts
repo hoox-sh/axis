@@ -48,6 +48,7 @@
 
 import type { Bar } from '../store/types';
 import type { StrategyEvent } from './strategy';
+import { type RunWindowAxis, looksLikeBarIndex, timeForBarIndex } from './window-axis';
 
 export interface NormalizeOptions {
   /** OHLCV bars for price lookup when event.ohlc is empty */
@@ -62,6 +63,14 @@ export interface NormalizeOptions {
    * When `next_open` (slippage), entry/exit move to the **next** bar’s open.
    */
   fillMode?: StrategyFillMode;
+  /**
+   * Bar axis of the run that produced the events ({@link RunWindowAxis}).
+   *
+   * `bar_index` is window-relative and the chart window slides, so a bare
+   * index can only be resolved against the window the engine evaluated. When
+   * omitted, the index falls back to the live bar array (legacy behavior).
+   */
+  axis?: RunWindowAxis | null;
 }
 
 /**
@@ -112,12 +121,7 @@ function barCloseAt(
     if (byTime && Number.isFinite(byTime.close)) return byTime.close;
   }
   // No usable time — the index is the only anchor left.
-  if (
-    barIndex != null &&
-    Number.isFinite(barIndex) &&
-    barIndex >= 0 &&
-    barIndex < bars.length
-  ) {
+  if (barIndex != null && Number.isFinite(barIndex) && barIndex >= 0 && barIndex < bars.length) {
     const c = bars[barIndex]!.close;
     if (Number.isFinite(c)) return c;
   }
@@ -231,8 +235,7 @@ export function normalizeStrategyEvent(
   const dir = String(r.dir ?? r.direction ?? '').toLowerCase() || undefined;
   const price = resolvePrice(r, opts.bars);
 
-  const fromEntry =
-    r.from_entry ?? r.fromEntry ?? r.entry_id ?? r.entryId ?? undefined;
+  const fromEntry = r.from_entry ?? r.fromEntry ?? r.entry_id ?? r.entryId ?? undefined;
   const qty =
     typeof r.qty === 'number' && Number.isFinite(r.qty)
       ? r.qty
@@ -265,10 +268,7 @@ export function normalizeStrategyEvent(
  */
 export function isNoFillCloseEvent(ev: StrategyEvent | Record<string, unknown>): boolean {
   const kind = String(
-    (ev as StrategyEvent).type ||
-      (ev as StrategyEvent).kind ||
-      (ev as StrategyEvent).event ||
-      '',
+    (ev as StrategyEvent).type || (ev as StrategyEvent).kind || (ev as StrategyEvent).event || '',
   ).toLowerCase();
   const isCloseOrExit =
     kind.includes('close') ||
@@ -302,7 +302,7 @@ export function normalizeStrategyEvents(
   }
   const mode = opts.fillMode ?? 'close';
   if (opts.bars?.length && (mode === 'close' || mode === 'next_open')) {
-    return applyStrategyFills(out, opts.bars, mode);
+    return applyStrategyFills(out, opts.bars, mode, opts.axis);
   }
   return out;
 }
@@ -316,10 +316,19 @@ export function normalizeStrategyEvents(
  * at a different bar in the current series — every fill would land one bar
  * early and the PnL would be computed from the wrong bars.
  *
+ * When the event carries no usable time, a stamped run axis
+ * ({@link RunWindowAxis}) converts `bar_index` to an absolute time first, so
+ * the index is still read in the window that produced it. Only a run without
+ * an axis falls back to indexing the live bar array.
+ *
  * Nearest-bar fallback only when within 2× median bar span (avoids snapping
  * unrelated times onto bar 0 and wiping OHLC-derived prices).
  */
-export function signalBarIndex(ev: StrategyEvent, bars: Bar[]): number | null {
+export function signalBarIndex(
+  ev: StrategyEvent,
+  bars: Bar[],
+  axis?: RunWindowAxis | null,
+): number | null {
   if (!bars.length) return null;
   const t = timeOfEvent(ev);
   if (t != null && Number.isFinite(t) && t !== 0) {
@@ -327,6 +336,16 @@ export function signalBarIndex(ev: StrategyEvent, bars: Bar[]): number | null {
     const exact = bars.findIndex((b) => b.time === aligned);
     if (exact >= 0) return exact;
   }
+  // Window-relative index → absolute time → current array position.
+  const axisTime = timeForBarIndex(axis, ev.bar_index);
+  if (axisTime != null) {
+    const exact = bars.findIndex((b) => b.time === axisTime);
+    if (exact >= 0) return exact;
+  }
+  // With a stamped axis, a valid window index that is not in the current
+  // series means the bar has already left the window — do **not** reuse the
+  // number as a position in a different window.
+  if (axis && looksLikeBarIndex(ev.bar_index, axis)) return null;
   if (
     ev.bar_index != null &&
     Number.isFinite(ev.bar_index) &&
@@ -374,6 +393,7 @@ export function applyStrategyFills(
   events: StrategyEvent[],
   bars: Bar[],
   mode: StrategyFillMode = 'close',
+  axis?: RunWindowAxis | null,
 ): StrategyEvent[] {
   if (!events.length || !bars.length) return events;
   return events.map((ev) => {
@@ -381,9 +401,13 @@ export function applyStrategyFills(
     if (!isFillKind(kind)) return ev;
     if (isNoFillCloseEvent(ev)) return ev;
 
-    const idx = signalBarIndex(ev, bars);
+    const idx = signalBarIndex(ev, bars, axis);
     if (idx == null) return ev;
     const signal = bars[idx]!;
+    // `bar_index` below is the **fill bar's position in this array** — a display
+    // convenience for the current render. The durable anchor is `time`: the
+    // window slides, so anything that outlives the run must read `time` (or
+    // resolve a raw index through the run axis), never this number.
 
     if (mode === 'next_open' && idx + 1 < bars.length) {
       const next = bars[idx + 1]!;
@@ -454,8 +478,7 @@ function timeOfEvent(ev: StrategyEvent): number | undefined {
 /** Entry id to match on exit/close: prefer from_entry / entry_id (strategy.exit). */
 export function resolveExitMatchId(ev: StrategyEvent): string {
   const r = ev as Record<string, unknown>;
-  const from =
-    r.from_entry ?? r.fromEntry ?? r.entry_id ?? r.entryId ?? r.from_id ?? r.fromId;
+  const from = r.from_entry ?? r.fromEntry ?? r.entry_id ?? r.entryId ?? r.from_id ?? r.fromId;
   if (from != null && String(from).length) return String(from);
   if (ev.id != null && String(ev.id).length) return String(ev.id);
   return '_default';
@@ -659,7 +682,8 @@ export function eventsToMarkers(
 
   // Keep all markers (incl. same-bar entry+exit); sort ascending for LWC
   return markers.sort(
-    (a, b) => a.time - b.time || a.position.localeCompare(b.position) || a.text.localeCompare(b.text),
+    (a, b) =>
+      a.time - b.time || a.position.localeCompare(b.position) || a.text.localeCompare(b.text),
   );
 }
 

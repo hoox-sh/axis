@@ -47,6 +47,7 @@ import {
   sanitizeStrokeColor,
 } from './drawings/tools/safe';
 import { resolvePineColor } from '../results/pine-color';
+import { type RunWindowAxis, looksLikeBarIndex, timeForBarIndex } from '../results/window-axis';
 
 /**
  * Resolve Pine color forms (`color.red`, `color.new(…)`) to CSS before SVG
@@ -167,7 +168,9 @@ function coerceLimit(raw: unknown, key: keyof DrawingLimits): number | undefined
  * Read `max_*_count` kwargs from Pine source (`indicator` / `strategy`).
  * Best-effort regex — engine meta is preferred when available.
  */
-export function parseDrawingLimitsFromScript(source: string | null | undefined): Partial<DrawingLimits> {
+export function parseDrawingLimitsFromScript(
+  source: string | null | undefined,
+): Partial<DrawingLimits> {
   if (!source || typeof source !== 'string') return {};
   const out: Partial<DrawingLimits> = {};
   const keys: Array<keyof DrawingLimits> = [
@@ -252,9 +255,18 @@ export function garbageCollectScriptDrawings(
   }
 
   const caps: Record<ScriptDrawing['type'], number> = {
-    line: clampLimit('max_lines_count', limits?.max_lines_count ?? DEFAULT_DRAWING_LIMITS.max_lines_count),
-    label: clampLimit('max_labels_count', limits?.max_labels_count ?? DEFAULT_DRAWING_LIMITS.max_labels_count),
-    box: clampLimit('max_boxes_count', limits?.max_boxes_count ?? DEFAULT_DRAWING_LIMITS.max_boxes_count),
+    line: clampLimit(
+      'max_lines_count',
+      limits?.max_lines_count ?? DEFAULT_DRAWING_LIMITS.max_lines_count,
+    ),
+    label: clampLimit(
+      'max_labels_count',
+      limits?.max_labels_count ?? DEFAULT_DRAWING_LIMITS.max_labels_count,
+    ),
+    box: clampLimit(
+      'max_boxes_count',
+      limits?.max_boxes_count ?? DEFAULT_DRAWING_LIMITS.max_boxes_count,
+    ),
     polyline: clampLimit(
       'max_polylines_count',
       limits?.max_polylines_count ?? DEFAULT_DRAWING_LIMITS.max_polylines_count,
@@ -408,12 +420,7 @@ export function normalizeLabelStyle(raw: unknown, fallback = 'label_center'): st
     return `label_${s}`;
   }
   // Corner aliases without label_ prefix
-  if (
-    s === 'lower_left' ||
-    s === 'lower_right' ||
-    s === 'upper_left' ||
-    s === 'upper_right'
-  ) {
+  if (s === 'lower_left' || s === 'lower_right' || s === 'upper_left' || s === 'upper_right') {
     return `label_${s}`;
   }
   return s || fallback;
@@ -506,7 +513,12 @@ export function labelBubbleLayout(
     const rectY = ay + g;
     return { rectX, rectY, textX: ax, textY: textYIn(rectY), textAnchor: 'middle' };
   }
-  if (st === 'label_left' || st === 'left' || st === 'label_lower_left' || st === 'label_upper_left') {
+  if (
+    st === 'label_left' ||
+    st === 'left' ||
+    st === 'label_lower_left' ||
+    st === 'label_upper_left'
+  ) {
     const rectX = ax - tw - g;
     let rectY = ay - th / 2;
     if (st.includes('upper')) rectY = ay - th - g;
@@ -519,7 +531,12 @@ export function labelBubbleLayout(
       textAnchor: 'end',
     };
   }
-  if (st === 'label_right' || st === 'right' || st === 'label_lower_right' || st === 'label_upper_right') {
+  if (
+    st === 'label_right' ||
+    st === 'right' ||
+    st === 'label_lower_right' ||
+    st === 'label_upper_right'
+  ) {
     const rectX = ax + g;
     let rectY = ay - th / 2;
     if (st.includes('upper')) rectY = ay - th - g;
@@ -569,10 +586,7 @@ export function scriptPaintClampsToLastBar(
  * @param t - Drawing time (unix seconds) or bar index
  * @param lastBarTime - Last series bar time (unix seconds); null skips clamp
  */
-export function clampTimeToLastBar(
-  t: number,
-  lastBarTime: number | null | undefined,
-): number {
+export function clampTimeToLastBar(t: number, lastBarTime: number | null | undefined): number {
   const lastOk = lastBarTime != null && Number.isFinite(lastBarTime);
   // Non-finite anchors cannot map in LWC — snap to last bar when known, else 0.
   if (!Number.isFinite(t)) return lastOk ? (lastBarTime as number) : 0;
@@ -595,10 +609,7 @@ export function clampTimeToLastBar(
  * @param t - Drawing time, or a bar index
  * @param barSample - One chart bar time (usually the last bar); null skips
  */
-export function alignDrawingTimeToBars(
-  t: number,
-  barSample: number | null | undefined,
-): number {
+export function alignDrawingTimeToBars(t: number, barSample: number | null | undefined): number {
   if (!Number.isFinite(t) || barSample == null || !Number.isFinite(barSample)) return t;
   // Chart seconds, Pine milliseconds.
   if (barSample < 1e12 && t > 1e12) return Math.floor(t / 1000);
@@ -655,13 +666,7 @@ export function clampScriptDrawingTimes(
       }
       if (ptsChanged) points = nextPts;
     }
-    if (
-      t1 === d.t1 &&
-      t2 === d.t2 &&
-      t3 === d.t3 &&
-      t4 === d.t4 &&
-      points === d.points
-    ) {
+    if (t1 === d.t1 && t2 === d.t2 && t3 === d.t3 && t4 === d.t4 && points === d.points) {
       out.push(d);
       continue;
     }
@@ -724,6 +729,13 @@ export function dedupeScriptLabelsAtSameTime(drawings: ScriptDrawing[]): ScriptD
  * Normalize mixed interpret/compile drawing payloads into {@link ScriptDrawing}[].
  * Skips non-geometry kinds (bgcolor, plotshape, table, …).
  *
+ * **`xloc.bar_index` anchors are converted to absolute times here** when the
+ * caller passes the run's window axis: a small integer (`0 ≤ x < axis.count`)
+ * is a window-relative Pine index, and the chart window slides on every new
+ * candle, so keeping the number would slide the drawing with it. Converting at
+ * the ingestion boundary makes the geometry time-anchored — the AXIS equivalent
+ * of Pine's `xloc.bar_time` (see `results/window-axis`).
+ *
  * Applies language hard caps mid-pass and at the end so a hostile/huge engine
  * payload cannot allocate unboundedly before caller GC. Callers may still apply
  * tighter declaration limits via {@link garbageCollectScriptDrawings}.
@@ -731,10 +743,18 @@ export function dedupeScriptLabelsAtSameTime(drawings: ScriptDrawing[]): ScriptD
 export function normalizeScriptDrawings(
   raw: unknown[] | undefined | null,
   barSample?: number | null,
+  axis?: RunWindowAxis | null,
 ): ScriptDrawing[] {
   if (!Array.isArray(raw) || !raw.length) return [];
-  const align = (t: number | null): number | null =>
-    t == null ? null : alignDrawingTimeToBars(t, barSample);
+  const align = (t: number | null): number | null => {
+    if (t == null) return null;
+    // Window-relative Pine index → absolute bar time in the run's window.
+    if (axis && looksLikeBarIndex(t, axis)) {
+      const time = timeForBarIndex(axis, t);
+      if (time != null) return time;
+    }
+    return alignDrawingTimeToBars(t, barSample);
+  };
   let out: ScriptDrawing[] = [];
   let i = 0;
   for (const item of raw) {
@@ -743,7 +763,9 @@ export function normalizeScriptDrawings(
     // Cap type/kind string work — refuse absurd keys.
     const typeRaw = r.type ?? r.kind;
     if (typeRaw != null && typeof typeRaw === 'string' && typeRaw.length > 64) continue;
-    const type = String(typeRaw || '').toLowerCase().replace(/^drawing\./, '');
+    const type = String(typeRaw || '')
+      .toLowerCase()
+      .replace(/^drawing\./, '');
 
     if (!type || NON_GEOMETRY.has(type)) continue;
 
@@ -863,10 +885,7 @@ export function normalizeScriptDrawings(
         if (t2 == null || p2 == null || t3 == null || p3 == null || t4 == null || p4 == null) {
           continue;
         }
-        const fillColor = pineStrokeColor(
-          r.bgcolor ?? r.color,
-          'rgba(147,159,255,0.15)',
-        );
+        const fillColor = pineStrokeColor(r.bgcolor ?? r.color, 'rgba(147,159,255,0.15)');
         out.push({
           id: `pine_linefill_${i++}`,
           type: 'linefill',

@@ -30,6 +30,7 @@
 import type { RunResult as EngineRunResult } from '../plugins/types';
 import { isAbortLike, isTimeoutLike } from '../utils/errors';
 import { normalizeBarTime } from '../data/parse-bars';
+import { type RunWindowAxis, timeForBarIndex } from '../results/window-axis';
 
 /** Engine result with `series` / `plots` / `events` always present. */
 export type NormalizedRunResult = EngineRunResult & {
@@ -121,18 +122,14 @@ export function seriesValuesToLineData(
 }
 
 /** True when line data has at least one finite sample value. */
-export function lineDataHasSample(
-  data: ReadonlyArray<{ time: number; value?: number }>,
-): boolean {
+export function lineDataHasSample(data: ReadonlyArray<{ time: number; value?: number }>): boolean {
   return data.some((d) => d.value != null && Number.isFinite(d.value));
 }
 
 // ── Engine payload normalization ────────────────────────────────────
 
 /** Ensure series values are `(number|null)[]`; drop non-array entries. */
-export function normalizeSeriesMap(
-  series: unknown,
-): Record<string, (number | string | null)[]> {
+export function normalizeSeriesMap(series: unknown): Record<string, (number | string | null)[]> {
   if (!series || typeof series !== 'object' || Array.isArray(series)) return {};
   const out: Record<string, (number | string | null)[]> = {};
   for (const [key, raw] of Object.entries(series as Record<string, unknown>)) {
@@ -157,9 +154,16 @@ export function normalizePlotsArray(plots: unknown): (number | null)[] {
  * Pyne / Pro API strategy payloads use **`bar_time`** (not `time`). Dropping
  * those would empty Results, strategy markers, and the tester report.
  * Accept either field; always surface a finite unix-seconds `time` for LWC.
+ *
+ * A payload that carries only `bar_index` (no `time` / `bar_time`) is resolved
+ * through the run's window axis — the index is window-relative and the chart
+ * window slides, so this is the only place where the mapping is still exact
+ * (see `results/window-axis`). Without an axis such events are dropped, as
+ * before: an index with no window cannot be anchored.
  */
 export function normalizeEventsArray(
   events: unknown,
+  axis?: RunWindowAxis | null,
 ): NonNullable<EngineRunResult['events']> {
   if (!Array.isArray(events)) return [];
   const out: NonNullable<EngineRunResult['events']> = [];
@@ -167,9 +171,12 @@ export function normalizeEventsArray(
     if (!e || typeof e !== 'object') continue;
     const rec = e as Record<string, unknown>;
     // Prefer explicit `time`, then parity `bar_time` (pyne StrategyEvent).
-    const time = normalizeBarTime(
-      rec.time != null && rec.time !== '' ? rec.time : rec.bar_time,
-    );
+    let time = normalizeBarTime(rec.time != null && rec.time !== '' ? rec.time : rec.bar_time);
+    // Index-only event: convert at the ingestion boundary, while the run's
+    // window is still known.
+    if (time == null) {
+      time = timeForBarIndex(axis, rec.bar_index ?? rec.barIndex);
+    }
     if (time == null) continue;
     const kindOrType =
       rec.type != null && String(rec.type).length
@@ -198,7 +205,11 @@ export function normalizeEventsArray(
  * Lift loose engine / fetch payloads into a stable {@link NormalizedRunResult}.
  * Never throws. Missing fields become empty containers; error status preserved.
  */
-export function normalizeEngineResult(raw: unknown, ms?: number): NormalizedRunResult {
+export function normalizeEngineResult(
+  raw: unknown,
+  ms?: number,
+  axis?: RunWindowAxis | null,
+): NormalizedRunResult {
   if (!raw || typeof raw !== 'object') {
     return {
       status: 'error',
@@ -214,8 +225,7 @@ export function normalizeEngineResult(raw: unknown, ms?: number): NormalizedRunR
   // (never downgrade a successful run just because a non-fatal warning landed in
   // `error` / `message`). Missing status infers from error/message; any other
   // status string is treated as success (we have a payload to apply).
-  const explicitError =
-    r.status === 'error' || r.status === 'failed' || r.ok === false;
+  const explicitError = r.status === 'error' || r.status === 'failed' || r.ok === false;
   const explicitSuccess = r.status === 'success' || r.status === 'ok';
   const status: 'success' | 'error' = explicitError
     ? 'error'
@@ -229,7 +239,7 @@ export function normalizeEngineResult(raw: unknown, ms?: number): NormalizedRunR
 
   const series = normalizeSeriesMap(r.series);
   const plots = normalizePlotsArray(r.plots);
-  const events = normalizeEventsArray(r.events);
+  const events = normalizeEventsArray(r.events, axis);
 
   const metaRaw =
     r.meta && typeof r.meta === 'object' && !Array.isArray(r.meta)
@@ -252,9 +262,7 @@ export function normalizeEngineResult(raw: unknown, ms?: number): NormalizedRunR
   }
 
   const errorMsg =
-    status === 'error'
-      ? formatRunError(r.error ?? r.message ?? 'Engine error')
-      : undefined;
+    status === 'error' ? formatRunError(r.error ?? r.message ?? 'Engine error') : undefined;
 
   const result: NormalizedRunResult = {
     status,
@@ -324,9 +332,7 @@ export function formatRunError(err: unknown): string {
       : 'Run cancelled';
   }
   if (
-    /the operation was aborted due to timeout|signal timed out|timeouterror|timed?\s*out/i.test(
-      msg,
-    )
+    /the operation was aborted due to timeout|signal timed out|timeouterror|timed?\s*out/i.test(msg)
   ) {
     return 'Engine timed out — try fewer bars, or check that the backend is reachable';
   }

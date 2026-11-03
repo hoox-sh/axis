@@ -52,6 +52,7 @@ import {
 import { PLOT_PALETTE } from '../chart/series-factory';
 import { plotDisplayHas, PLOT_DISPLAY } from '../results/plot-visuals';
 import { normalizeStrategyEvents, eventsToMarkers } from '../results/events';
+import { windowAxisFromMeta } from '../results/window-axis';
 import { resolvePineColor } from '../results/pine-color';
 import type { RunOptions, RunResult } from './runner';
 import type { OverlayLine, OverlayOhlc } from './apply-overlays';
@@ -67,7 +68,13 @@ export interface StoreUpdateContext {
   script: string;
   paneId: string;
   overlay: boolean;
-  existing: { plots?: Record<string, { color: string; custom?: boolean }>; inputValues?: Record<string, unknown>; strategyProps?: Record<string, unknown> } | undefined;
+  existing:
+    | {
+        plots?: Record<string, { color: string; custom?: boolean }>;
+        inputValues?: Record<string, unknown>;
+        strategyProps?: Record<string, unknown>;
+      }
+    | undefined;
   overlayLines: OverlayLine[];
   overlayOhlc: OverlayOhlc[];
   split: ReturnType<typeof splitSeriesByKind>;
@@ -94,9 +101,7 @@ export function updateIndicatorStore(ctx: StoreUpdateContext): boolean {
   if (runEpochInvalidates(ctx.epoch, ctx.opts, ctx.indicatorId)) return false;
 
   // Capture engine-exported inputs into lastRun meta for Script Settings
-  const engineInputs =
-    (ctx.result as { inputs?: unknown }).inputs ??
-    ctx.result.meta?.inputs;
+  const engineInputs = (ctx.result as { inputs?: unknown }).inputs ?? ctx.result.meta?.inputs;
   if (engineInputs && ctx.result.meta) {
     ctx.result.meta = { ...ctx.result.meta, inputs: engineInputs };
   }
@@ -125,9 +130,7 @@ export function updateIndicatorStore(ctx: StoreUpdateContext): boolean {
           plots[k] = {
             // Persist resolved CSS only — raw Pine tokens are invalid in
             // the card swatch and would shadow later runs as overrides.
-            color:
-              resolvePineColor(meta?.color) ??
-              PLOT_PALETTE[colorIdx % PLOT_PALETTE.length],
+            color: resolvePineColor(meta?.color) ?? PLOT_PALETTE[colorIdx % PLOT_PALETTE.length],
           };
           colorIdx += 1;
         }
@@ -140,9 +143,7 @@ export function updateIndicatorStore(ctx: StoreUpdateContext): boolean {
         (ctx.opts.skipEditorDraft ? undefined : nonemptyBag(store.editorInputValues));
       const savedStrategyProps =
         nonemptyBag(ctx.opts.strategyProps) ??
-        (ctx.opts.skipEditorDraft
-          ? undefined
-          : nonemptyBag(store.editorStrategyProps));
+        (ctx.opts.skipEditorDraft ? undefined : nonemptyBag(store.editorStrategyProps));
       const newId = addIndicator(
         ctx.scriptName,
         ctx.script,
@@ -224,6 +225,8 @@ export function updateIndicatorStore(ctx: StoreUpdateContext): boolean {
                 bars: store.bars || [],
                 includeOrders: false,
                 fillMode,
+                // The run's own window axis — never the live array (slides).
+                axis: windowAxisFromMeta(ctx.result.meta),
               });
               const markers = eventsToMarkers(normalized, {
                 invertLabels: !!store.strategyUi?.invertTradeLabels,
@@ -271,16 +274,13 @@ export function updateIndicatorStore(ctx: StoreUpdateContext): boolean {
         }
       }
       const savedInputs = nonemptyBag(ctx.opts.inputs) ?? ctx.existing?.inputValues;
-      const savedStrategyProps =
-        nonemptyBag(ctx.opts.strategyProps) ?? ctx.existing?.strategyProps;
+      const savedStrategyProps = nonemptyBag(ctx.opts.strategyProps) ?? ctx.existing?.strategyProps;
       updateIndicator(ctx.indicatorId, {
         name: ctx.scriptName,
         code: ctx.script,
         paneId: ctx.paneId,
         plots,
-        ...(savedInputs && Object.keys(savedInputs).length
-          ? { inputValues: savedInputs }
-          : {}),
+        ...(savedInputs && Object.keys(savedInputs).length ? { inputValues: savedInputs } : {}),
         ...(savedStrategyProps && Object.keys(savedStrategyProps).length
           ? { strategyProps: savedStrategyProps }
           : {}),

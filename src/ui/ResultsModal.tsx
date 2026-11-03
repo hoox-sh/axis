@@ -52,6 +52,7 @@ import {
 } from '../results/strategy';
 import { buildPositionViews, type PositionView, type StreamEventView } from '../results/positions';
 import { eventsToMarkers, normalizeStrategyEvents } from '../results/events';
+import { windowAxisFromMeta } from '../results/window-axis';
 import { getManager } from '../chart/manager-access';
 import { Icons } from './icons';
 import { Spinner } from './Spinner';
@@ -278,6 +279,7 @@ export const ResultsModal: Component = () => {
     const bars = untrack(() => store.bars || []);
     return buildStrategyReport((r.events || []) as StrategyEvent[], bars, {
       fillMode: fillMode(),
+      axis: windowAxisFromMeta(r.meta),
     });
   });
 
@@ -291,6 +293,7 @@ export const ResultsModal: Component = () => {
       bars,
       includeOrders: true,
       fillMode: fillMode(),
+      axis: windowAxisFromMeta(r.meta),
     });
   });
 
@@ -306,6 +309,7 @@ export const ResultsModal: Component = () => {
     const bars = untrack(() => store.bars || []);
     return buildPositionViews((r.events || []) as StrategyEvent[], bars, {
       fillMode: fillMode(),
+      axis: windowAxisFromMeta(r.meta),
     });
   });
 
@@ -327,6 +331,7 @@ export const ResultsModal: Component = () => {
       bars: store.bars || [],
       includeOrders: false,
       fillMode: fillMode(),
+      axis: windowAxisFromMeta(r.meta),
     });
     const markers = eventsToMarkers(normalized, {
       invertLabels: !!store.strategyUi?.invertTradeLabels,

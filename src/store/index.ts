@@ -161,6 +161,7 @@ import {
   strategyStatsSnapshot,
   type StrategyStatsSnapshot,
 } from '../results/strategy';
+import { windowAxisFromMeta } from '../results/window-axis';
 import {
   normalizePriceScaleDecimalsMode,
   type PriceScaleDecimalsMode,
@@ -2563,7 +2564,13 @@ function computeResultStatsSnapshot(result: unknown): StrategyStatsSnapshot | un
   try {
     const events = (result as { events?: unknown } | null | undefined)?.events;
     if (!Array.isArray(events) || events.length === 0) return undefined;
-    const rep = buildStrategyReport(events as never);
+    // Stats are derived from the same run payload, so resolve `bar_index`
+    // against that run's window axis (no bars here — the axis carries the
+    // time mapping, and events normally ship absolute times anyway).
+    const meta = (result as { meta?: unknown } | null | undefined)?.meta;
+    const rep = buildStrategyReport(events as never, undefined, {
+      axis: windowAxisFromMeta(meta),
+    });
     if (!rep.trades.length) return undefined;
     return strategyStatsSnapshot(rep.stats);
   } catch {
@@ -4204,8 +4211,7 @@ export function deleteBarColorTheme(id: string) {
  * The selected chart theme stores that coloring as its own.
  */
 export function applyBarColorTheme(id: string): boolean {
-  const bar =
-    (store.savedBarThemes || []).find((item) => item.id === id) || getBuiltinBarTheme(id);
+  const bar = (store.savedBarThemes || []).find((item) => item.id === id) || getBuiltinBarTheme(id);
   if (!bar) return false;
   const painted = withBarColorTheme(
     store.chartTheme || defaultChartThemeState(),

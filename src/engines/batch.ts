@@ -46,6 +46,7 @@ import type { Bar } from '../store/types';
 import { barsForPine } from '../data/parse-bars';
 import { parseEngineJson, parseEngineJsonAsync } from './json-sanitize';
 import { mapEnginePayload, payloadEngineTimes } from './result-mapper';
+import { axisStamp, windowAxisFromBars } from '../results/window-axis';
 import { combineAbortSignals } from '../utils/fetch-timeout';
 
 /**
@@ -255,6 +256,11 @@ export async function runBatch(opts: BatchRunOptions): Promise<BatchRunOutcome |
   const byId = new Map<string, BatchEntry>();
   // One wall time for the whole batch — every script shared the same pass.
   const ms = performance.now() - t0;
+  // The evaluated window's axis: `bar_index` is window-relative and the chart
+  // window slides, so each entry's events/drawings must resolve against the
+  // window this batch actually sent (newest `clampedBars` after a 413 retry).
+  const sentBars = (clampedBars > 0 ? pineBars.slice(-clampedBars) : pineBars) as Bar[];
+  const windowAxis = windowAxisFromBars(sentBars);
   // Envelope-level axis applies to every entry when per-script payloads carry
   // none (batch responses vary by backend version).
   const envelopeTimes = payloadEngineTimes(parsed);
@@ -272,6 +278,9 @@ export async function runBatch(opts: BatchRunOptions): Promise<BatchRunOutcome |
       continue;
     }
     const result = mapEntryResult(raw, ms);
+    // Stamp the batch window so index-only events can be anchored (the apply
+    // path re-derives fills/markers from them). Harmless when unused.
+    result.meta = { ...result.meta, ...axisStamp(windowAxis) };
     if (clampedBars > 0 || envelopeTimes || payloadEngineTimes(raw)) {
       // The engine evaluated only the newest `clampedBars` — the apply path
       // tail-aligns (or time-joins via `engineTimes`) the shorter series to

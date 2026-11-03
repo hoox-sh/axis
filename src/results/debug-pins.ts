@@ -27,11 +27,13 @@
  */
 
 import { normalizePyneLogs, type PyneLogEntry, type PyneLogLevel } from './pyne-logs';
+import { parseSourceLine, type InlineDebugAnnotation, type InlineDebugLevel } from './inline-debug';
 import {
-  parseSourceLine,
-  type InlineDebugAnnotation,
-  type InlineDebugLevel,
-} from './inline-debug';
+  type RunWindowAxis,
+  looksLikeBarIndex,
+  timeForBarIndex,
+  windowAxisFromMeta,
+} from './window-axis';
 import type { TradeMarker } from './events';
 
 /** One chart pin derived from a log / inline-debug annotation. */
@@ -73,6 +75,15 @@ export type DebugPinSource =
 export interface PinsFromDebugOptions {
   /** OHLCV bars (unix seconds) — used to resolve barIndex → time. */
   bars?: ReadonlyArray<{ time: number }> | null;
+  /**
+   * Bar axis of the run that produced the logs (`results/window-axis`).
+   *
+   * Pine `bar_index` in a log is window-relative, and the chart window slides
+   * on every new candle. With an axis the index is converted to absolute time
+   * inside the window that produced it; without one it falls back to indexing
+   * the live bars (legacy behavior, drifts after a slide).
+   */
+  axis?: RunWindowAxis | null;
   /** Cap markers to avoid flooding the chart (default 80). */
   maxPins?: number;
   /**
@@ -193,6 +204,7 @@ export function normalizePinTime(raw: number | null | undefined): number | null 
 export function resolveDebugPinTarget(
   pin: Pick<DebugPin, 'time' | 'barIndex'>,
   bars?: ReadonlyArray<{ time: number }> | null,
+  axis?: RunWindowAxis | null,
 ): { time: number | null; barIndex: number | null } {
   let time = normalizePinTime(pin.time ?? null);
   let barIndex =
@@ -200,8 +212,23 @@ export function resolveDebugPinTarget(
 
   if (bars?.length) {
     if (time == null && barIndex != null) {
-      const b = bars[barIndex];
-      if (b && Number.isFinite(b.time)) time = b.time;
+      // Window-relative index → absolute time in the run that produced it.
+      // The live array only resolves a bare index when no axis is stamped.
+      const axisTime = timeForBarIndex(axis, barIndex);
+      if (axisTime != null) {
+        time = axisTime;
+        // Keep the absolute time even when the bar has slid out of the chart
+        // window; only the array position is dropped in that case.
+        const at = bars.findIndex((b) => b.time === axisTime);
+        barIndex = at >= 0 ? at : null;
+      } else if (axis && looksLikeBarIndex(barIndex, axis)) {
+        // Valid window index that is no longer in the series: do not reuse the
+        // number as a position in a different window.
+        barIndex = null;
+      } else {
+        const b = bars[barIndex];
+        if (b && Number.isFinite(b.time)) time = b.time;
+      }
     }
     if (barIndex == null && time != null) {
       const exact = bars.findIndex((b) => b.time === time);
@@ -272,8 +299,7 @@ export function pinsFromDebugEntries(
   const bars = options.bars ?? null;
   const includeLineOnly = !!options.includeLineOnly;
 
-  const rank = (l: string) =>
-    l === 'error' ? 0 : l === 'warning' ? 1 : l === 'debug' ? 2 : 3;
+  const rank = (l: string) => (l === 'error' ? 0 : l === 'warning' ? 1 : l === 'debug' ? 2 : 3);
 
   const out: DebugPin[] = [];
   for (const entry of entries) {
@@ -290,7 +316,7 @@ export function pinsFromDebugEntries(
     if (barIndex == null && time == null && !includeLineOnly) continue;
     if (barIndex == null && time == null && line == null) continue;
 
-    const resolved = resolveDebugPinTarget({ time, barIndex }, bars);
+    const resolved = resolveDebugPinTarget({ time, barIndex }, bars, options.axis);
     const pin: DebugPin = {
       time: resolved.time,
       barIndex: resolved.barIndex,
@@ -363,12 +389,18 @@ export function pinsFromDebugEntries(
 export function debugPinsToMarkers(
   pins: ReadonlyArray<DebugPin> | null | undefined,
   bars?: ReadonlyArray<{ time: number }> | null,
+  axis?: RunWindowAxis | null,
 ): TradeMarker[] {
   if (!pins?.length) return [];
+  // Marker times must exist on the series axis — an off-axis time makes LWC
+  // throw and the whole marker plugin gets cleared. A pin whose bar slid out of
+  // the window (or a wall-clock `timenow`) is therefore skipped, not snapped.
+  const onAxis = bars?.length ? new Set(bars.map((b) => b.time)) : null;
   const markers: TradeMarker[] = [];
   for (const p of pins) {
-    const { time } = resolveDebugPinTarget(p, bars);
+    const { time } = resolveDebugPinTarget(p, bars, axis);
     if (time == null || !Number.isFinite(time)) continue;
+    if (onAxis && !onAxis.has(time)) continue;
     const level = String(p.level || 'info');
     const color = LEVEL_COLOR[level] ?? LEVEL_COLOR.info!;
     const text = (p.label || '·').slice(0, 16);
@@ -406,7 +438,13 @@ export function pinsFromLastRun(
     sources.push(...options.annotations);
   }
 
-  return pinsFromDebugEntries(sources, options);
+  // Pins come from this run's logs, so `bar_index` means this run's window.
+  // Derive the axis from the payload unless the caller pinned one explicitly.
+  const axis =
+    options.axis ??
+    windowAxisFromMeta((lastRun as { meta?: unknown } | null | undefined)?.meta ?? null);
+
+  return pinsFromDebugEntries(sources, { ...options, axis });
 }
 
 /** Count chart-pinable entries in a last-run payload (for editor tool status). */

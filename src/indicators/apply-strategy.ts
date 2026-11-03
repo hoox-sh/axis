@@ -27,12 +27,9 @@
  */
 
 import { appendLog, setStore, store, EDITOR_RUN_KEY } from '../store';
-import {
-  normalizeStrategyEvents,
-  eventsToMarkers,
-  type TradeMarker,
-} from '../results/events';
+import { normalizeStrategyEvents, eventsToMarkers, type TradeMarker } from '../results/events';
 import { buildStrategyReport } from '../results/strategy';
+import { windowAxisFromMeta } from '../results/window-axis';
 import type { PaneManager } from '../chart/pane-manager';
 import type { Bar } from '../store/types';
 import type { RunResult } from './runner';
@@ -65,16 +62,11 @@ export type StrategyMarkerPlan = {
   report: ReturnType<typeof buildStrategyReport> | null;
 };
 
-function scriptLooksLikeStrategy(
-  scriptType: string,
-  events: readonly unknown[],
-): boolean {
+function scriptLooksLikeStrategy(scriptType: string, events: readonly unknown[]): boolean {
   if (scriptType === 'strategy') return true;
   return events.some((e) => {
     const k = String(
-      (e as { kind?: string; type?: string }).kind ||
-        (e as { type?: string }).type ||
-        '',
+      (e as { kind?: string; type?: string }).kind || (e as { type?: string }).type || '',
     ).toLowerCase();
     return k.includes('entry') || k.includes('exit') || k.includes('close') || k === 'order';
   });
@@ -103,10 +95,14 @@ export function buildStrategyMarkerPlan(
     };
   }
   const fillMode = store.strategyUi?.slippageNextOpen ? 'next_open' : 'close';
+  // Resolve `bar_index` against the run's own window, not the live array: the
+  // chart window slides on every new candle (see `results/window-axis`).
+  const axis = windowAxisFromMeta(ctx.result.meta);
   const normalized = normalizeStrategyEvents(events, {
     bars,
     includeOrders: false,
     fillMode,
+    axis,
   });
   const markers = eventsToMarkers(normalized, {
     invertLabels: !!store.strategyUi?.invertTradeLabels,
@@ -119,7 +115,7 @@ export function buildStrategyMarkerPlan(
     markers,
     merge: !!ctx.silent,
     normalizedLength: normalized.length,
-    report: buildStrategyReport(events, bars, { fillMode }),
+    report: buildStrategyReport(events, bars, { fillMode, axis }),
   };
 }
 
@@ -137,9 +133,7 @@ function logStrategyPlan(ctx: StrategyApplyContext, plan: StrategyMarkerPlan): v
     try {
       setStore('resultsPanel', 'open', true);
       if (typeof window !== 'undefined') {
-        window.dispatchEvent(
-          new CustomEvent('axis-results-tab', { detail: { tab: 'strategy' } }),
-        );
+        window.dispatchEvent(new CustomEvent('axis-results-tab', { detail: { tab: 'strategy' } }));
       }
     } catch {
       /* optional UI hook */
@@ -156,10 +150,7 @@ function logStrategyPlan(ctx: StrategyApplyContext, plan: StrategyMarkerPlan): v
   }
 }
 
-export function applyStrategyMarkers(
-  ctx: StrategyApplyContext,
-  plan?: StrategyMarkerPlan,
-): void {
+export function applyStrategyMarkers(ctx: StrategyApplyContext, plan?: StrategyMarkerPlan): void {
   // Strategy: trade markers on price pane + report stats.
   // Equity curve is rendered in Results → Strategy only (no main-chart equity pane).
   const built = plan ?? buildStrategyMarkerPlan(ctx);

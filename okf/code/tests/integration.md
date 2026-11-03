@@ -7,7 +7,7 @@ tags: [code, integration, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-16T18:28:43Z
+  at: 2026-11-03T21:03:08Z
 sources:
   - id: tree
     resource: "tests/integration"
@@ -40,6 +40,7 @@ okf_lock: generated
 * [src/indicators](/code/src/indicators.md)
 * [src/onchain](/code/src/onchain.md)
 * [src/plugins](/code/src/plugins.md)
+* [src/results](/code/src/results.md)
 * [src/sources](/code/src/sources.md)
 * [src/storage](/code/src/storage.md)
 * [src/store](/code/src/store.md)
