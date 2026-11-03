@@ -18,7 +18,8 @@ _Generated/updated: 2026-11-01 · 880 commits · describe-tag: `v2.26.0`_
 ### Added
 
 - **Multi-chart grids 6 (3×2) and 8 (4×2).** Layout menu, command palette, Alt-6 / Alt-8, and glyph cells. Growing the grid hydrates empty sibling slots without clobbering the focused OHLCV plane. While Live is on, up to seven secondary venue streams tick inactive markets into their slot caches.
-- **Footprint model + binary row pack (A1.3 foundation).** `FootprintBar` / `FootprintRow` aligned with Pine v6 / PYNE shapes, OHLCV approximation helper (`source: 'approx'`), Float32 pack/unpack for delta transport, and pure paint-cell geometry. Overlay UI and real tick feeds still follow.
+- **Footprint model + binary row pack (A1.3 foundation).** `FootprintBar` / `FootprintRow` aligned with Pine v6 / PYNE shapes, OHLCV approximation helper (`source: 'approx'`), Float32 pack/unpack for delta transport, and pure paint-cell geometry.
+- **Footprint overlay UI (A1.3.2).** Layers → Footprint paints per-candle buy/sell cells on the price pane from the OHLCV estimate (visible bars, capped). Badge marks `OHLCV est.` until a real feed (P1.1), plus the densest row count and the last bar's delta arrow. Rows are sized to each candle's on-screen pixel height (`numTicksForPixelHeight`) and capped on narrow bars, so cells stay inside the bar instead of spilling over neighbours; each cell mutes the candle underneath and leaves a hairline row gap so the split reads even when the cell hue matches the bar. The buy/sell split follows where the candle closed inside its range (a red candle closing near its high still reads as buying) rather than colour alone. Pan/zoom repaints immediately via the time-scale visible-range subscription; a per-bar layout cache keeps keyed `<For>` from rebuilding every cell on each 400 ms poll. Covered by `tests/footprint.test.ts` and a Playwright smoke (`e2e/footprint.spec.ts`).
 
 ### Fixed
 

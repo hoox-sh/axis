@@ -46,6 +46,7 @@ import { ChartSettingsPanel } from '../ui/ChartSettingsPanel';
 import { chartSettingsOpen, setChartSettingsOpen } from '../ui/chart-settings-state';
 import { OnchainLegend } from '../ui/OnchainLegend';
 import { VolumeProfileOverlay } from '../ui/VolumeProfileOverlay';
+import { FootprintOverlay } from '../ui/FootprintOverlay';
 import {
   store,
   setCrosshair,
@@ -838,6 +839,7 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
       <Show when={isActive() && chartInteractive() && !store.presentation?.chartOnly}>
         <DrawingToolbar />
         <VolumeProfileOverlay />
+        <FootprintOverlay />
         <ChartScaleControls />
         <Show when={chartSettingsOpen()}>
           <div

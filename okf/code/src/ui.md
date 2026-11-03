@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/ui"
-description: "src/ui contains AboutModal.tsx, AgentPanel.tsx, AlertsPanel.tsx, and 86 more files."
+description: "src/ui contains AboutModal.tsx, AgentPanel.tsx, AlertsPanel.tsx, and 87 more files."
 resource: "src/ui"
 tags: [code, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-03T13:08:32Z
+  at: 2026-11-03T21:39:14Z
 sources:
   - id: tree
     resource: "src/ui"
@@ -37,6 +37,7 @@ okf_lock: generated
 * `ErrorFallback.tsx` — ErrorFallback, ErrorFallbackProps, errorFallback
 * `ErrorShareToast.tsx` — ErrorShareToast
 * `Field.tsx` — ScField
+* `FootprintOverlay.tsx` — FootprintOverlay
 * `HooxLoader.tsx` — HooxLoader, HooxLoaderL, HooxLoaderM, HooxLoaderProps, HooxLoaderXs
 * `HooxLogo.tsx` — HooxLogo, HooxLogoPaths, HooxLogoProps, HooxLogoSize, resolveLogoSize
 * `LayerPanel.tsx` — LayerPanel

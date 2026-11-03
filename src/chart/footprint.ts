@@ -23,10 +23,30 @@
  * Shape mirrors PYNE / Pine v6 `request.footprint` (`VolumeRow` / `Footprint`).
  * True institutional footprints need tick or exchange footprint feeds — until
  * that provider exists, {@link approximateFootprintFromOhlcv} is an honest
- * estimate (close-split buy/sell), never presented as tick-accurate.
+ * estimate (volume triangle-weighted toward the print, buy/sell split from the
+ * close's position inside the bar's range), never presented as tick-accurate.
+ *
+ * {@link numTicksForPixelHeight} sizes rows to the candle's on-screen height so
+ * cells stay inside the bar; {@link footprintPaintCells} is the pure geometry
+ * the overlay renders.
+ *
+ * Overlay toggle: {@link footprintEnabled} (Layers panel + FootprintOverlay).
  *
  * @module chart/footprint
  */
+
+import { createSignal } from 'solid-js';
+
+/** UI toggle — shared by Layers panel and FootprintOverlay. */
+const [footprintEnabled, setFootprintEnabled] = createSignal(false);
+
+export { footprintEnabled, setFootprintEnabled };
+
+export function toggleFootprintEnabled(): boolean {
+  const next = !footprintEnabled();
+  setFootprintEnabled(next);
+  return next;
+}
 
 /** One price level inside a footprint bar (Pine v6 VolumeRow). */
 export interface FootprintRow {
@@ -86,8 +106,12 @@ function clampInt(n: number, lo: number, hi: number): number {
 
 /**
  * Build a footprint estimate from one OHLCV bar.
- * Volume is split across [low, high] by bin overlap; buy vs sell follows
- * candle direction (close ≥ open → more buy). Not tick-accurate.
+ *
+ * Volume is split across `[low, high]` by a triangle weight around `close`
+ * (the print), then the **buy/sell split** follows where the candle closed
+ * inside its range plus a small direction nudge — a close near the high reads
+ * as buying, a close near the low as selling, regardless of candle colour.
+ * This is an OHLCV estimate, not tick data: `source` stays `'approx'`.
  */
 export function approximateFootprintFromOhlcv(
   bar: Ohlcv,
@@ -110,53 +134,68 @@ export function approximateFootprintFromOhlcv(
 
   const range = high - low;
   const step = range > 0 ? range / numTicks : Math.max(Math.abs(close) * 1e-6, 1e-8);
-  const bull = close >= open;
-  const buyShare = bull ? 0.62 : 0.38;
+  // Where the candle closed inside its own range (0 = low, 1 = high).
+  const closePos = range > 0 ? Math.min(1, Math.max(0, (close - low) / range)) : 0.5;
+  const dirNudge = close >= open ? 0.06 : -0.06;
+  const buyShare = Math.min(0.85, Math.max(0.15, 0.5 + (closePos - 0.5) * 0.7 + dirNudge));
+
+  // 1) Triangle weight toward the print, normalized once over the whole bar.
+  const weights: number[] = [];
+  let weightSum = 0;
+  for (let i = 0; i < numTicks; i++) {
+    const downPrice = low + i * step;
+    const upPrice = i === numTicks - 1 ? high : low + (i + 1) * step;
+    const mid = (downPrice + upPrice) / 2;
+    const dist = range > 0 ? Math.abs(mid - close) / range : 0;
+    const weight = Math.max(0.05, 1 - dist);
+    weights.push(weight);
+    weightSum += weight;
+  }
+  const scale = weightSum > 0 ? vol / weightSum : 0;
 
   const rows: FootprintRow[] = [];
   for (let i = 0; i < numTicks; i++) {
     const downPrice = low + i * step;
     const upPrice = i === numTicks - 1 ? high : low + (i + 1) * step;
-    // Triangle weight toward close: more volume near the print.
-    const mid = (downPrice + upPrice) / 2;
-    const dist = range > 0 ? Math.abs(mid - close) / range : 0;
-    const weight = Math.max(0.05, 1 - dist);
-    const slice = vol * (weight / /* normalize later */ 1);
+    const slice = (weights[i] ?? 0) * scale;
+    const buyVolume = slice * buyShare;
+    const sellVolume = slice * (1 - buyShare);
+    const delta = buyVolume - sellVolume;
+    const peak = Math.max(buyVolume, sellVolume);
     rows.push({
       upPrice,
       downPrice,
-      buyVolume: slice * buyShare,
-      sellVolume: slice * (1 - buyShare),
-      delta: 0,
-      isImbalance: false,
+      buyVolume,
+      sellVolume,
+      delta,
+      isImbalance: peak > 0 && Math.abs(delta) / peak >= imbalanceRatio,
       isPoc: false,
       isVah: false,
       isVal: false,
     });
   }
 
-  const weightSum = rows.reduce((s, r) => s + r.buyVolume + r.sellVolume, 0) || 1;
-  const scale = vol / weightSum;
-  for (const r of rows) {
-    r.buyVolume *= scale;
-    r.sellVolume *= scale;
-    r.delta = r.buyVolume - r.sellVolume;
-    const peak = Math.max(r.buyVolume, r.sellVolume);
-    r.isImbalance = peak > 0 && Math.abs(r.delta) / peak >= imbalanceRatio;
-  }
-
+  // 2) POC = heaviest row; ties resolve to the row nearest the print (close).
   let pocIndex = 0;
   let pocVol = -1;
+  const rowMid = (i: number): number => {
+    const r = rows[i];
+    return r ? (r.upPrice + r.downPrice) / 2 : close;
+  };
   for (let i = 0; i < rows.length; i++) {
-    const t = rows[i]!.buyVolume + rows[i]!.sellVolume;
-    if (t > pocVol) {
-      pocVol = t;
+    const r = rows[i]!;
+    const total = r.buyVolume + r.sellVolume;
+    if (total > pocVol + 1e-12) {
+      pocVol = total;
       pocIndex = i;
+    } else if (Math.abs(total - pocVol) <= 1e-12) {
+      if (Math.abs(rowMid(i) - close) < Math.abs(rowMid(pocIndex) - close)) pocIndex = i;
     }
   }
   if (rows[pocIndex]) rows[pocIndex]!.isPoc = true;
 
-  // Value area ~vaPercentage around POC (classic adjacent expansion).
+  // 3) Value area ~vaPercentage around POC (classic adjacent expansion; ties
+  //    prefer the upper side, matching the volume-profile implementation).
   const target = (vol * vaPercentage) / 100;
   let lo = pocIndex;
   let hi = pocIndex;
@@ -220,20 +259,13 @@ export function packFootprintRows(rows: readonly FootprintRow[]): {
     floats[o + 1] = r.upPrice;
     floats[o + 2] = r.buyVolume;
     floats[o + 3] = r.sellVolume;
-    flags[i] =
-      (r.isImbalance ? 1 : 0) |
-      (r.isPoc ? 2 : 0) |
-      (r.isVah ? 4 : 0) |
-      (r.isVal ? 8 : 0);
+    flags[i] = (r.isImbalance ? 1 : 0) | (r.isPoc ? 2 : 0) | (r.isVah ? 4 : 0) | (r.isVal ? 8 : 0);
   }
   return { floats, flags };
 }
 
 /** Inverse of {@link packFootprintRows}. */
-export function unpackFootprintRows(
-  floats: Float32Array,
-  flags: Uint8Array,
-): FootprintRow[] {
+export function unpackFootprintRows(floats: Float32Array, flags: Uint8Array): FootprintRow[] {
   const n = Math.min(flags.length, Math.floor(floats.length / FLOATS_PER_ROW));
   const rows: FootprintRow[] = [];
   for (let i = 0; i < n; i++) {
@@ -257,12 +289,41 @@ export function unpackFootprintRows(
 }
 
 /**
+ * Row count that fits a candle's on-screen pixel height.
+ *
+ * Painting a fixed 16 rows into a 6 px body forces every cell to a 1 px
+ * minimum, so the footprint spills past the candle and over its neighbours.
+ * One row per ~2 px keeps rows legible and inside the bar; the caller clamps
+ * the result to its own budget (`opts.max`).
+ */
+export function numTicksForPixelHeight(
+  pixelHeight: number,
+  opts?: { min?: number; max?: number; pxPerRow?: number },
+): number {
+  const min = clampInt(opts?.min ?? 3, 1, 256);
+  const max = Math.max(min, clampInt(opts?.max ?? 24, 1, 256));
+  const pxPerRow = Number.isFinite(opts?.pxPerRow) ? Math.max(1, Number(opts?.pxPerRow)) : 2;
+  if (!Number.isFinite(pixelHeight) || pixelHeight <= 0) return min;
+  return clampInt(Math.round(pixelHeight / pxPerRow), min, max);
+}
+
+/**
  * Layout hints for a canvas painter (x = bar slot, y = price → pixel via caller).
  * Pure geometry — no DOM.
+ *
+ * `gap` leaves a hairline between adjacent price rows: without it a footprint
+ * whose cells share a hue (buy cells over a green candle) reads as one solid
+ * block instead of distinguishable rows.
  */
 export function footprintPaintCells(
   fp: FootprintBar,
-  opts: { barLeft: number; barWidth: number; priceToY: (price: number) => number },
+  opts: {
+    barLeft: number;
+    barWidth: number;
+    priceToY: (price: number) => number;
+    /** Vertical gap between rows in px (default 0.6, clamped 0–2). */
+    gap?: number;
+  },
 ): Array<{
   x: number;
   y: number;
@@ -283,16 +344,17 @@ export function footprintPaintCells(
   }> = [];
   const midX = opts.barLeft + opts.barWidth / 2;
   const half = Math.max(1, opts.barWidth / 2 - 1);
+  const gap = Number.isFinite(opts.gap) ? Math.max(0, Math.min(2, Number(opts.gap))) : 0.6;
   for (const row of fp.rows) {
     const yTop = opts.priceToY(row.upPrice);
     const yBot = opts.priceToY(row.downPrice);
-    const y = Math.min(yTop, yBot);
-    const h = Math.max(1, Math.abs(yBot - yTop));
+    const top = Math.min(yTop, yBot);
+    const rawH = Math.abs(yBot - yTop);
     cells.push({
       x: midX - half,
-      y,
+      y: top + gap / 2,
       w: half * 2,
-      h,
+      h: Math.max(1, rawH - gap),
       buy: row.buyVolume,
       sell: row.sellVolume,
       poc: row.isPoc,

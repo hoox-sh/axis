@@ -46,10 +46,8 @@ import {
   getActiveDrawingLayer,
   visibleDrawingsForActiveSymbol,
 } from '../chart/manager-access';
-import {
-  volumeProfileEnabled,
-  toggleVolumeProfileEnabled,
-} from '../chart/volume-profile';
+import { volumeProfileEnabled, toggleVolumeProfileEnabled } from '../chart/volume-profile';
+import { footprintEnabled, toggleFootprintEnabled } from '../chart/footprint';
 import {
   onchainManagerState,
   setOnchainSeriesVisible,
@@ -93,16 +91,12 @@ export const LayerPanel: Component = () => {
   });
 
   /** Drawings for the active chart symbol (plus untagged legacy). */
-  const symbolDrawings = createMemo(() =>
-    visibleDrawingsForActiveSymbol(store.symbol),
-  );
+  const symbolDrawings = createMemo(() => visibleDrawingsForActiveSymbol(store.symbol));
   const filteredDrawings = createMemo(() =>
     symbolDrawings().filter((d) => drawingMatchesQuery(d, drawingQuery())),
   );
   const onchainCount = createMemo(
-    () =>
-      onchainManagerState.series.length +
-      (onchainManagerState.events.length > 0 ? 1 : 0),
+    () => onchainManagerState.series.length + (onchainManagerState.events.length > 0 ? 1 : 0),
   );
 
   // A filter typed for the previous ticker should not hide the next symbol's rows.
@@ -267,9 +261,7 @@ export const LayerPanel: Component = () => {
     if (
       mode === 'replace' &&
       visible.length &&
-      !confirm(
-        `Replace ${visible.length} drawing(s) for ${store.symbol} with "${tpl.name}"?`,
-      )
+      !confirm(`Replace ${visible.length} drawing(s) for ${store.symbol} with "${tpl.name}"?`)
     ) {
       return;
     }
@@ -277,12 +269,9 @@ export const LayerPanel: Component = () => {
     // other symbols keep their drawings.
     const applied = applyTemplateDrawings(visible, tpl, mode) as Drawing[];
     const stamped = tagDrawingsSymbol(applied, store.symbol) as Drawing[];
-    const next = mergeLayerDrawingsForSymbol(
-      store.drawings,
-      store.symbol,
-      stamped,
-      { includeUntagged: true },
-    ) as Drawing[];
+    const next = mergeLayerDrawingsForSymbol(store.drawings, store.symbol, stamped, {
+      includeUntagged: true,
+    }) as Drawing[];
     setDrawings(next);
     setSelectedDrawingId(null);
     syncLayerDrawings(visibleDrawingsForActiveSymbol(store.symbol));
@@ -385,14 +374,20 @@ export const LayerPanel: Component = () => {
               visible={volumeProfileEnabled()}
               onToggle={() => toggleVolumeProfileEnabled()}
             />
+            <LayerRow
+              label="Footprint"
+              sub="OHLCV estimate · per candle"
+              visible={footprintEnabled()}
+              onToggle={() => toggleFootprintEnabled()}
+              testId="axis-layers-footprint"
+            />
           </LayerSection>
 
           <LayerSection title="On-chain" count={onchainCount()}>
             <div data-testid="axis-layers-onchain" class="flex flex-col gap-0.5">
               <Show
                 when={
-                  onchainManagerState.series.length > 0 ||
-                  onchainManagerState.events.length > 0
+                  onchainManagerState.series.length > 0 || onchainManagerState.events.length > 0
                 }
                 fallback={<LayerEmpty>No on-chain series</LayerEmpty>}
               >
@@ -402,9 +397,7 @@ export const LayerPanel: Component = () => {
                       label={s.label || s.key || s.id}
                       sub={onchainSeriesSub(s)}
                       visible={s.visible !== false}
-                      onToggle={() =>
-                        setOnchainSeriesVisible(s.id, s.visible === false)
-                      }
+                      onToggle={() => setOnchainSeriesVisible(s.id, s.visible === false)}
                       onRemove={() => detachOnchainSeries(s.id)}
                       testId={`axis-layers-onchain-series-${s.id}`}
                       removeTitle="Detach series"
@@ -422,9 +415,7 @@ export const LayerPanel: Component = () => {
                     }
                     visible={onchainManagerState.eventsVisible !== false}
                     onToggle={() =>
-                      setOnchainEventsVisible(
-                        onchainManagerState.eventsVisible === false,
-                      )
+                      setOnchainEventsVisible(onchainManagerState.eventsVisible === false)
                     }
                     testId="axis-layers-onchain-events"
                   />
