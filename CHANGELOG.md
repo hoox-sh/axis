@@ -18,6 +18,7 @@ _Generated/updated: 2026-11-01 · 880 commits · describe-tag: `v2.26.0`_
 ### Added
 
 - **Multi-chart grids 6 (3×2) and 8 (4×2).** Layout menu, command palette, Alt-6 / Alt-8, and glyph cells. Growing the grid hydrates empty sibling slots without clobbering the focused OHLCV plane. While Live is on, up to seven secondary venue streams tick inactive markets into their slot caches.
+- **Footprint model + binary row pack (A1.3 foundation).** `FootprintBar` / `FootprintRow` aligned with Pine v6 / PYNE shapes, OHLCV approximation helper (`source: 'approx'`), Float32 pack/unpack for delta transport, and pure paint-cell geometry. Overlay UI and real tick feeds still follow.
 
 ### Fixed
 
