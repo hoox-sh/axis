@@ -44,6 +44,8 @@ import {
   toggleIndicator,
   setIndicatorColor,
   setIndicatorPlotWidth,
+  setIndicatorPlotLineStyle,
+  setIndicatorPlotDisplay,
   setIndicatorPlotVisible,
   setIndicatorSeries,
   addPane,
@@ -435,7 +437,9 @@ describe('bars and indicators', () => {
   });
 
   it('setIndicatorPlotWidth clamps 1-4 and updates plot', () => {
-    const id = addIndicator('EMA', 'plot(close)', 'price', { EMA: { color: '#f00', custom: true } });
+    const id = addIndicator('EMA', 'plot(close)', 'price', {
+      EMA: { color: '#f00', custom: true },
+    });
     setIndicatorPlotWidth(id, 'EMA', 3);
     expect(store.scripts.find((s) => s.id === id)?.plots.EMA.width).toBe(3);
     // Clamp above 4
@@ -454,8 +458,53 @@ describe('bars and indicators', () => {
     removeIndicator(id);
   });
 
+  it('setIndicatorPlotLineStyle sets and clears the panel override', () => {
+    const id = addIndicator('EMA', 'plot(close)', 'price', {
+      EMA: { color: '#f00', width: 2, custom: true, pine: { linestyle: 'dashed' } },
+    });
+    setIndicatorPlotLineStyle(id, 'EMA', 'dotted');
+    let plot = store.scripts.find((s) => s.id === id)?.plots.EMA;
+    expect(plot?.linestyle).toBe('dotted');
+    // Pine declaration is kept for the reset hint
+    expect(plot?.pine?.linestyle).toBe('dashed');
+    // Width/color untouched
+    expect(plot?.width).toBe(2);
+    expect(plot?.color).toBe('#f00');
+    // null clears the override (falls back to Pine)
+    setIndicatorPlotLineStyle(id, 'EMA', null);
+    plot = store.scripts.find((s) => s.id === id)?.plots.EMA;
+    expect(plot?.linestyle).toBeUndefined();
+    expect(plot?.pine?.linestyle).toBe('dashed');
+    removeIndicator(id);
+  });
+
+  it('setIndicatorPlotDisplay stores a mask and clears back to Pine', () => {
+    const id = addIndicator('RSI', 'plot(close)', 'price', {
+      RSI: { color: '#0f0', custom: true, pine: { display: 15 } },
+    });
+    // pane | data_window, no price scale
+    setIndicatorPlotDisplay(id, 'RSI', 3);
+    let plot = store.scripts.find((s) => s.id === id)?.plots.RSI;
+    expect(plot?.display).toBe(3);
+    expect(plot?.pine?.display).toBe(15);
+    // Non-finite is ignored (keeps the previous mask)
+    setIndicatorPlotDisplay(id, 'RSI', Number.NaN);
+    plot = store.scripts.find((s) => s.id === id)?.plots.RSI;
+    expect(plot?.display).toBeUndefined();
+    // Negative masks clamp to 0 (hidden)
+    setIndicatorPlotDisplay(id, 'RSI', -5);
+    plot = store.scripts.find((s) => s.id === id)?.plots.RSI;
+    expect(plot?.display).toBe(0);
+    setIndicatorPlotDisplay(id, 'RSI', null);
+    plot = store.scripts.find((s) => s.id === id)?.plots.RSI;
+    expect(plot?.display).toBeUndefined();
+    removeIndicator(id);
+  });
+
   it('setIndicatorPlotVisible toggles plot visibility', () => {
-    const id = addIndicator('MACD', 'plot(close)', 'price', { MACD: { color: '#0f0', width: 2, custom: true } });
+    const id = addIndicator('MACD', 'plot(close)', 'price', {
+      MACD: { color: '#0f0', width: 2, custom: true },
+    });
     // Default visible
     expect(store.scripts.find((s) => s.id === id)?.plots.MACD.visible).toBeUndefined();
     // Hide
@@ -595,7 +644,9 @@ describe('layout helpers', () => {
     expect(store.activeBarThemeId).toBe(mint.id);
 
     const rose = saveBarColorTheme('Rose');
-    expect(store.savedChartThemes.find((theme) => theme.id === night.id)?.barTheme.refId).toBe(rose.id);
+    expect(store.savedChartThemes.find((theme) => theme.id === night.id)?.barTheme.refId).toBe(
+      rose.id,
+    );
     const day = saveCustomTheme('Day');
     expect(day.barTheme.refId).toBe(rose.id);
 
@@ -621,7 +672,9 @@ describe('layout helpers', () => {
     expect(parsed?.savedChartThemes?.map((theme) => theme.name).sort()).toEqual(['Day', 'Night']);
     expect(parsed?.savedBarThemes?.some((bar) => bar.name === 'Mint')).toBe(true);
     expect(parsed?.savedBarThemes?.some((bar) => bar.name === 'Rose')).toBe(false);
-    expect(parsed?.savedChartThemes?.find((theme) => theme.name === 'Night')?.barTheme.name).toBe('Rose');
+    expect(parsed?.savedChartThemes?.find((theme) => theme.name === 'Night')?.barTheme.name).toBe(
+      'Rose',
+    );
   });
 
   it('chart grid mode and saved layouts', () => {
@@ -1214,7 +1267,9 @@ describe('addIndicator / removeIndicator edge cases', () => {
 describe('pineTablesLocation (September 2026 bottom tables)', () => {
   it('hydrates only chart/bottom values', async () => {
     const { hydratePineTablesLocation } = await import('../src/store/index');
-    expect(hydratePineTablesLocation({ a: 'bottom', b: 'chart', c: 'elsewhere', '': 'bottom' })).toEqual({
+    expect(
+      hydratePineTablesLocation({ a: 'bottom', b: 'chart', c: 'elsewhere', '': 'bottom' }),
+    ).toEqual({
       a: 'bottom',
       b: 'chart',
     });

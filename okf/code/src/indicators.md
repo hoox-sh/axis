@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/indicators"
-description: "src/indicators contains IndicatorCard.tsx, IndicatorPanel.tsx, apply-context.ts, and 15 more files."
+description: "src/indicators contains IndicatorCard.tsx, IndicatorPanel.tsx, apply-context.ts, and 16 more files."
 resource: "src/indicators"
 tags: [code, indicators]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-02T17:28:56Z
+  at: 2026-11-03T23:34:06Z
 sources:
   - id: tree
     resource: "src/indicators"
@@ -29,6 +29,7 @@ okf_lock: generated
 * `apply-store.ts` — StoreUpdateContext, updateIndicatorStore
 * `apply-strategy.ts` — StrategyApplyContext, StrategyMarkerPlan, applyStrategyMarkers, buildStrategyMarkerPlan
 * `detach.ts` — detachIndicatorFromChart
+* `plot-prefs.ts` — PANEL_DISPLAY_MASK, PLOT_LINE_STYLES, PLOT_LINE_STYLE_LABELS, PlotLineStyle, PlotPrefs, effectivePlotDisplay, effectivePlotLineStyle, effectivePlotWidth, formatPlotDisplay, formatPlotDisplayCompact, hasDisplayOverride, normalizePlotLineStyle
 * `reapply.ts` — REAPPLY_MAX_CONCURRENT, ReapplyChartScriptsOpts, _resetBatchRouteMemoForTests, _resetReapplyGuardForTests, listReapplicableScripts, reapplyChartScripts
 * `run-cache.ts` — buildRunCacheKey, fingerprintValue, getRunCache, hashString, resetRunCache, runCacheEnabled, setRunCache, setRunCacheOptions
 * `run-helpers.ts` — NormalizedRunResult, _resetRunEpochForTests, beginRunEpoch, claimRunStatus, coercePlotSample, coerceSeriesSample, currentRunEpoch, formatRunError, getRunStatusEpoch, isInteractiveRunInFlight, isRunEpochCurrent, lineDataHasSample

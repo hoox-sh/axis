@@ -28,10 +28,21 @@
  * @module indicators/IndicatorCard
  */
 
-import { type Component, For, Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
+import {
+  type Component,
+  For,
+  Show,
+  createEffect,
+  createMemo,
+  createSignal,
+  onCleanup,
+  onMount,
+} from 'solid-js';
 import type { Indicator } from '../store/types';
 import {
   setIndicatorColor,
+  setIndicatorPlotDisplay,
+  setIndicatorPlotLineStyle,
   setIndicatorPlotWidth,
   setIndicatorPlotVisible,
   openScriptSettings,
@@ -44,6 +55,21 @@ import {
 import { getManager } from '../chart/manager-access';
 import { toggleScriptChartVisible } from './visibility';
 import { PLOT_PALETTE } from '../chart/series-factory';
+import {
+  PLOT_LINE_STYLES,
+  PLOT_LINE_STYLE_LABELS,
+  effectivePlotDisplay,
+  effectivePlotLineStyle,
+  effectivePlotWidth,
+  formatPlotDisplay,
+  formatPlotDisplayCompact,
+  hasDisplayOverride,
+  pinePlotDisplay,
+  plotDisplayTargets,
+  togglePlotDisplayBit,
+  type PlotLineStyle,
+} from './plot-prefs';
+import { PLOT_DISPLAY } from '../results/plot-visuals';
 import { Icons } from '../ui/icons';
 import { Spinner } from '../ui/Spinner';
 import {
@@ -113,11 +139,80 @@ const MetaBadge: Component<{
   );
 };
 
+/** Small inline preview of a line type (panel picker + row glyph). */
+const PlotStyleGlyph: Component<{ style: PlotLineStyle; width?: number }> = (props) => {
+  const w = () => props.width ?? 14;
+  const dash = () =>
+    props.style === 'dotted'
+      ? '0.6 2'
+      : props.style === 'dashed'
+        ? '3 2'
+        : props.style === 'large_dashed'
+          ? '5 2.5'
+          : undefined;
+  return (
+    <svg width={w()} height={8} aria-hidden="true" class="flex-shrink-0">
+      <line
+        x1={0}
+        y1={4}
+        x2={w()}
+        y2={4}
+        stroke="currentColor"
+        stroke-width={1.5}
+        stroke-linecap="round"
+        stroke-dasharray={dash()}
+      />
+    </svg>
+  );
+};
+
+/** One toggle row in the `display.*` popover. */
+const DisplayTargetToggle: Component<{
+  label: string;
+  active: boolean;
+  bit: number;
+  onToggle: (bit: number) => void;
+}> = (props) => (
+  <button
+    type="button"
+    aria-pressed={props.active}
+    class={`flex items-center gap-1.5 px-1 py-0.5 text-[10px] text-left rounded-[var(--radius-chip)] ${
+      props.active ? 'text-text' : 'text-text-faint hover:text-text'
+    } hover:bg-bg`}
+    onClick={() => props.onToggle(props.bit)}
+    data-display-target={props.label.toLowerCase().replace(/\s+/g, '-')}
+  >
+    <span
+      class={`inline-flex items-center justify-center w-3 h-3 border rounded-[2px] ${
+        props.active ? 'border-accent bg-accent/20 text-accent' : 'border-border'
+      }`}
+    >
+      {props.active ? '✓' : ''}
+    </span>
+    {props.label}
+  </button>
+);
+
+/** Which plot's style / display popover is open (module-level so a store
+ * update — which re-creates the card — does not close it). One at a time. */
+const [plotStylePopover, setPlotStylePopover] = createSignal<{
+  id: string;
+  plot: string;
+} | null>(null);
+const [plotDisplayPopover, setPlotDisplayPopover] = createSignal<{
+  id: string;
+  plot: string;
+} | null>(null);
+
 /** Card for one entry in `store.scripts`. */
 export const IndicatorCard: Component<Props> = (props) => {
   const [editingColor, setEditingColor] = createSignal<string | null>(null);
   const [busy, setBusy] = createSignal(false);
   const colorPopoverRef = createSignal<HTMLDivElement | null>(null);
+  const stylePopoverRef = createSignal<HTMLDivElement | null>(null);
+  const displayPopoverRef = createSignal<HTMLDivElement | null>(null);
+  let styleTriggerEl: HTMLButtonElement | undefined;
+  let displayTriggerEl: HTMLButtonElement | undefined;
 
   const kind = createMemo(() => detectScriptKind(props.indicator.code));
   const declaredOverlay = createMemo(() => detectDeclaredOverlay(props.indicator.code));
@@ -219,6 +314,31 @@ export const IndicatorCard: Component<Props> = (props) => {
     manager.setOverlayLineWidth(props.indicator.paneId, plotName, width);
   };
 
+  const changeLineStyle = (plotName: string, style: PlotLineStyle | null) => {
+    setIndicatorPlotLineStyle(props.indicator.id, plotName, style);
+    setPlotStylePopover(null);
+    const manager = getManager();
+    if (!manager) return;
+    manager.setOverlayLineStyle?.(props.indicator.paneId, plotName, style);
+  };
+
+  const changeDisplay = (plotName: string, next: number | null) => {
+    setIndicatorPlotDisplay(props.indicator.id, plotName, next);
+    const manager = getManager();
+    if (!manager) return;
+    const plot = props.indicator.plots[plotName];
+    manager.setOverlayLineDisplay?.(
+      props.indicator.paneId,
+      plotName,
+      next != null ? next : effectivePlotDisplay({ ...plot, display: undefined }),
+    );
+  };
+
+  const toggleDisplayTarget = (plotName: string, bit: number) => {
+    const plot = props.indicator.plots[plotName];
+    changeDisplay(plotName, togglePlotDisplayBit(plot, bit));
+  };
+
   const togglePlotVisible = (plotName: string, visible: boolean) => {
     setIndicatorPlotVisible(props.indicator.id, plotName, visible);
     const manager = getManager();
@@ -226,9 +346,9 @@ export const IndicatorCard: Component<Props> = (props) => {
     manager.setOverlayLineVisible?.(props.indicator.paneId, plotName, visible);
   };
 
-  // Color popover outside click handling
-  onMount(() => {
-    if (!colorPopoverRef[0]()) return;
+  // Color popover — dismiss on outside click (registered while open).
+  createEffect(() => {
+    if (editingColor() == null) return;
     const dispose = dismissOnOutside({
       inside: () => [
         colorPopoverRef[0](),
@@ -237,6 +357,32 @@ export const IndicatorCard: Component<Props> = (props) => {
         ) as HTMLElement | null,
       ],
       onDismiss: () => setEditingColor(null),
+    });
+    onCleanup(dispose);
+  });
+
+  // Line-type / display popovers — one at a time across all cards.
+  const styleOpen = () => {
+    const cur = plotStylePopover();
+    return cur != null && cur.id === props.indicator.id;
+  };
+  const displayOpen = () => {
+    const cur = plotDisplayPopover();
+    return cur != null && cur.id === props.indicator.id;
+  };
+  createEffect(() => {
+    if (!styleOpen()) return;
+    const dispose = dismissOnOutside({
+      inside: () => [stylePopoverRef[0](), styleTriggerEl],
+      onDismiss: () => setPlotStylePopover(null),
+    });
+    onCleanup(dispose);
+  });
+  createEffect(() => {
+    if (!displayOpen()) return;
+    const dispose = dismissOnOutside({
+      inside: () => [displayPopoverRef[0](), displayTriggerEl],
+      onDismiss: () => setPlotDisplayPopover(null),
     });
     onCleanup(dispose);
   });
@@ -409,8 +555,14 @@ export const IndicatorCard: Component<Props> = (props) => {
           <For each={Object.entries(props.indicator.plots)}>
             {([name, plot]) => {
               const plotColor = plot.color;
-              const plotWidth = plot.width ?? 2;
+              // Default width is 1 (Pine plot lines are 1 px). Using 2 here made
+              // the first “+” jump the label from 1 → 3.
+              const plotWidth = effectivePlotWidth(plot);
               const plotVisible = plot.visible !== false;
+              const lineStyle = effectivePlotLineStyle(plot);
+              const displayBits = effectivePlotDisplay(plot);
+              const displayTargets = plotDisplayTargets(displayBits);
+              const pineDisplay = pinePlotDisplay(plot);
               return (
                 <div class="flex items-center gap-2 text-[11px] text-text-dim">
                   <button
@@ -433,8 +585,12 @@ export const IndicatorCard: Component<Props> = (props) => {
                     >
                       <Icons.minus size={9} />
                     </button>
-                    <span class="font-mono w-5 text-center text-text">
-                      {plot.width == null ? '1' : String(plotWidth)}
+                    <span
+                      class="font-mono w-5 text-center text-text"
+                      data-testid="axis-plot-width"
+                      data-width={plotWidth}
+                    >
+                      {plotWidth}
                     </span>
                     <button
                       type="button"
@@ -446,6 +602,58 @@ export const IndicatorCard: Component<Props> = (props) => {
                       <Icons.plus size={9} />
                     </button>
                   </div>
+                  {/* Line type (AXIS platform override — Pine plot() has no line style) */}
+                  <button
+                    type="button"
+                    ref={(el) => {
+                      styleTriggerEl = el;
+                    }}
+                    class="inline-flex items-center justify-center w-5 h-5 text-text-faint hover:text-accent border border-transparent hover:border-border/60 bg-transparent rounded-[var(--radius-chip)]"
+                    title={`Line type for "${name}" — ${
+                      lineStyle ? PLOT_LINE_STYLE_LABELS[lineStyle] : 'Solid'
+                    }${plot.linestyle ? '' : ' (follows script)'}. AXIS override: Pine plot() lines are solid.`}
+                    aria-label={`Line type for ${name}`}
+                    data-style-trigger={props.indicator.id}
+                    onClick={() => {
+                      setPlotDisplayPopover(null);
+                      setEditingColor(null);
+                      const cur = plotStylePopover();
+                      setPlotStylePopover(
+                        cur?.id === props.indicator.id && cur?.plot === name
+                          ? null
+                          : { id: props.indicator.id, plot: name },
+                      );
+                    }}
+                  >
+                    <PlotStyleGlyph style={lineStyle ?? 'solid'} />
+                  </button>
+                  {/* display.* targets (Pine `plot(..., display=)` + override) */}
+                  <button
+                    type="button"
+                    ref={(el) => {
+                      displayTriggerEl = el;
+                    }}
+                    class="inline-flex items-center justify-center w-5 h-5 text-text-faint hover:text-accent border border-transparent hover:border-border/60 bg-transparent rounded-[var(--radius-chip)]"
+                    title={`Display for "${name}" — ${formatPlotDisplay(displayBits)}${
+                      hasDisplayOverride(plot) ? ' (panel override)' : ' (from script)'
+                    }`}
+                    aria-label={`Display targets for ${name}`}
+                    data-display-trigger={props.indicator.id}
+                    onClick={() => {
+                      setPlotStylePopover(null);
+                      setEditingColor(null);
+                      const cur = plotDisplayPopover();
+                      setPlotDisplayPopover(
+                        cur?.id === props.indicator.id && cur?.plot === name
+                          ? null
+                          : { id: props.indicator.id, plot: name },
+                      );
+                    }}
+                  >
+                    <span class="font-mono text-[8px] leading-none" data-testid="axis-plot-display">
+                      {formatPlotDisplayCompact(displayBits)}
+                    </span>
+                  </button>
                   {/* Visibility toggle */}
                   <button
                     type="button"
@@ -456,6 +664,85 @@ export const IndicatorCard: Component<Props> = (props) => {
                   >
                     {plotVisible ? <Icons.eye size={10} /> : <Icons.eyeOff size={10} />}
                   </button>
+                  {/* Line-type popover */}
+                  <Show when={styleOpen() && plotStylePopover()?.plot === name}>
+                    <div
+                      ref={stylePopoverRef[1]}
+                      class="absolute z-20 flex flex-col gap-0.5 ml-auto px-1 py-1 bg-bg-elev border border-border rounded-[var(--radius-chip)] shadow-lg"
+                      data-testid="axis-plot-style-popover"
+                    >
+                      <For each={PLOT_LINE_STYLES}>
+                        {(style) => (
+                          <button
+                            type="button"
+                            class={`flex items-center gap-1.5 px-1 py-0.5 text-[10px] text-left rounded-[var(--radius-chip)] ${
+                              (lineStyle ?? 'solid') === style
+                                ? 'text-accent bg-accent/10'
+                                : 'text-text-dim hover:text-text hover:bg-bg'
+                            }`}
+                            onClick={() => changeLineStyle(name, style)}
+                            data-line-style={style}
+                          >
+                            <PlotStyleGlyph style={style} width={22} />
+                            {PLOT_LINE_STYLE_LABELS[style]}
+                          </button>
+                        )}
+                      </For>
+                      <button
+                        type="button"
+                        class="px-1 py-0.5 text-[9px] text-text-faint hover:text-accent text-left"
+                        onClick={() => changeLineStyle(name, null)}
+                        data-line-style="reset"
+                        disabled={plot.linestyle == null}
+                      >
+                        Follow script
+                      </button>
+                    </div>
+                  </Show>
+                  {/* Display popover */}
+                  <Show when={displayOpen() && plotDisplayPopover()?.plot === name}>
+                    <div
+                      ref={displayPopoverRef[1]}
+                      class="absolute z-20 flex flex-col gap-0.5 ml-auto px-1 py-1 bg-bg-elev border border-border rounded-[var(--radius-chip)] shadow-lg"
+                      data-testid="axis-plot-display-popover"
+                    >
+                      <DisplayTargetToggle
+                        label="Pane"
+                        active={displayTargets.pane}
+                        bit={PLOT_DISPLAY.pane}
+                        onToggle={(bit) => toggleDisplayTarget(name, bit)}
+                      />
+                      <DisplayTargetToggle
+                        label="Data window"
+                        active={displayTargets.dataWindow}
+                        bit={PLOT_DISPLAY.data_window}
+                        onToggle={(bit) => toggleDisplayTarget(name, bit)}
+                      />
+                      <DisplayTargetToggle
+                        label="Price scale"
+                        active={displayTargets.priceScale}
+                        bit={PLOT_DISPLAY.price_scale}
+                        onToggle={(bit) => toggleDisplayTarget(name, bit)}
+                      />
+                      <div class="flex items-center justify-between gap-2 px-1 pt-0.5 border-t border-border/40">
+                        <span
+                          class="text-[8px] font-mono text-text-faint"
+                          title="Declared in the script"
+                        >
+                          Pine: {pineDisplay != null ? formatPlotDisplay(pineDisplay) : 'all'}
+                        </span>
+                        <button
+                          type="button"
+                          class="text-[9px] text-text-faint hover:text-accent disabled:opacity-40"
+                          onClick={() => changeDisplay(name, null)}
+                          disabled={!hasDisplayOverride(plot)}
+                          data-display-action="reset"
+                        >
+                          Reset
+                        </button>
+                      </div>
+                    </div>
+                  </Show>
                   {/* Color popover */}
                   <Show when={editingColor() === name}>
                     <div

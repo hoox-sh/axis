@@ -9,21 +9,14 @@
 
 import { type Component, For, Show, createSignal, type JSX } from 'solid-js';
 import type { ScriptMeta, ScriptVersion } from '../../plugins/types';
-import {
-  listScriptVersions,
-  readScriptVersion,
-  restoreScriptVersion,
-} from '../../storage/service';
+import { listScriptVersions, readScriptVersion, restoreScriptVersion } from '../../storage/service';
 import {
   formatScriptUpdatedAt,
   scriptKindLabel,
   scriptKindShort,
   type ScriptKind,
 } from '../../indicators/script-meta';
-import {
-  builtinCategoryLabel,
-  type BuiltinScript,
-} from '../../indicators/builtins';
+import { builtinCategoryLabel, type BuiltinScript } from '../../indicators/builtins';
 import { appendLog, setStatus } from '../../store';
 import { Icons } from '../icons';
 import { HooxLoader } from '../HooxLoader';
@@ -70,8 +63,7 @@ export const LibraryScriptCard: Component<{
   const updatedAbs = () =>
     props.item.updatedAt ? new Date(props.item.updatedAt).toLocaleString() : '';
   const updatedRel = () => formatScriptUpdatedAt(props.item.updatedAt);
-  const versionLabel = () =>
-    props.item.pineVersion ? `v${props.item.pineVersion}` : '';
+  const versionLabel = () => (props.item.pineVersion ? `v${props.item.pineVersion}` : '');
   const revLabel = () => shortRev(props.item.revision);
 
   const loadHistory = async () => {
@@ -114,11 +106,7 @@ export const LibraryScriptCard: Component<{
       });
       setStatus('ready', `Loaded ${doc.name} @ ${v.shortSha} (not pushed)`);
       announce(`Loaded ${doc.name} at ${v.shortSha} into the editor`);
-      appendLog(
-        'info',
-        `Loaded "${doc.name}" at ${v.shortSha} into editor`,
-        'library',
-      );
+      appendLog('info', `Loaded "${doc.name}" at ${v.shortSha} into editor`, 'library');
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setHistoryErr(msg);
@@ -268,9 +256,7 @@ export const LibraryScriptCard: Component<{
           data-testid="axis-library-history-panel"
         >
           <div class="flex items-center justify-between gap-2">
-            <span class="text-[9px] uppercase tracking-wider text-text-dim">
-              Version history
-            </span>
+            <span class="text-[9px] uppercase tracking-wider text-text-dim">Version history</span>
             <button
               type="button"
               class="sc-btn sc-btn-ghost text-[9px] px-1 py-0.5 inline-flex items-center gap-1"
@@ -309,7 +295,10 @@ export const LibraryScriptCard: Component<{
                       <span class="text-accent" title={v.sha}>
                         {v.shortSha}
                       </span>
-                      <span class="text-text-faint" title={new Date(v.committedAt).toLocaleString()}>
+                      <span
+                        class="text-text-faint"
+                        title={new Date(v.committedAt).toLocaleString()}
+                      >
                         {formatScriptUpdatedAt(v.committedAt)}
                       </span>
                       <Show when={v.author}>
@@ -360,6 +349,8 @@ export const BuiltinScriptCard: Component<{
   busy?: boolean;
   /** This card is the one currently applying (others may be disabled via `busy`). */
   applying?: boolean;
+  /** A chart script with this title is already applied (Apply re-runs it). */
+  applied?: boolean;
   onApply: () => void;
   onEdit: () => void;
 }> = (props) => (
@@ -368,6 +359,7 @@ export const BuiltinScriptCard: Component<{
     data-testid="axis-library-builtin-card"
     data-builtin-id={props.item.id}
     data-script-kind={props.item.kind}
+    data-applied={props.applied ? 'true' : undefined}
   >
     <div class="flex items-start gap-2">
       <div class="flex-1 min-w-0">
@@ -386,9 +378,23 @@ export const BuiltinScriptCard: Component<{
           <MetaChip class="border-border/50 text-text-dim" testId="axis-library-builtin-category">
             {builtinCategoryLabel(props.item.category)}
           </MetaChip>
-          <Show when={props.item.overlay}>
-            <MetaChip class="border-border/40 text-text-faint" title="Plots on the price chart">
-              overlay
+          <MetaChip
+            class="border-border/40 text-text-faint"
+            title={
+              props.item.overlay
+                ? 'Plots on the price chart (overlay=true)'
+                : 'Plots in its own sub-pane (overlay=false)'
+            }
+          >
+            {props.item.overlay ? 'overlay' : 'pane'}
+          </MetaChip>
+          <Show when={props.applied}>
+            <MetaChip
+              class="border-accent/40 text-accent"
+              title="Already on the chart — Apply re-runs it with fresh bars"
+              testId="axis-library-builtin-applied"
+            >
+              applied
             </MetaChip>
           </Show>
         </div>

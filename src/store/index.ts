@@ -3532,6 +3532,50 @@ export function setIndicatorPlotVisible(id: string, plotName: string, visible: b
 }
 
 /**
+ * Set (or clear, with `null`) a plot's panel line-type override.
+ *
+ * Pine `plot()` has no line-style argument — this is an AXIS platform
+ * preference; the script's declared style (when the engine ships
+ * `plot_meta.linestyle`) is the fallback. See `indicators/plot-prefs`.
+ */
+export function setIndicatorPlotLineStyle(id: string, plotName: string, linestyle: string | null) {
+  setStore('scripts', (s) =>
+    s.map((ind) => {
+      if (ind.id !== id) return ind;
+      const prev = ind.plots[plotName];
+      if (!prev) return ind;
+      const next = { ...prev };
+      if (linestyle) next.linestyle = linestyle;
+      else delete next.linestyle;
+      return { ...ind, plots: { ...ind.plots, [plotName]: next } };
+    }),
+  );
+  persist();
+}
+
+/**
+ * Set (or clear, with `null`) a plot's `display.*` override bitmask.
+ *
+ * Overrides the script's `plot(..., display=)` declaration for the pane,
+ * Data Window, and price-scale targets. See `indicators/plot-prefs`.
+ */
+export function setIndicatorPlotDisplay(id: string, plotName: string, display: number | null) {
+  setStore('scripts', (s) =>
+    s.map((ind) => {
+      if (ind.id !== id) return ind;
+      const prev = ind.plots[plotName];
+      if (!prev) return ind;
+      const next = { ...prev };
+      if (display != null && Number.isFinite(display))
+        next.display = Math.max(0, Math.trunc(display));
+      else delete next.display;
+      return { ...ind, plots: { ...ind.plots, [plotName]: next } };
+    }),
+  );
+  persist();
+}
+
+/**
  * Append a chart pane and return its id.
  * Pass `opts.id` for a stable id (e.g. shared `'indicator'` sub-pane).
  * If that id already exists, updates label/height and returns it.

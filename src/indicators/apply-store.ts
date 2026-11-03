@@ -53,6 +53,7 @@ import { PLOT_PALETTE } from '../chart/series-factory';
 import { plotDisplayHas, PLOT_DISPLAY } from '../results/plot-visuals';
 import { normalizeStrategyEvents, eventsToMarkers } from '../results/events';
 import { windowAxisFromMeta } from '../results/window-axis';
+import { pinePlotMeta } from './plot-prefs';
 import { resolvePineColor } from '../results/pine-color';
 import type { RunOptions, RunResult } from './runner';
 import type { OverlayLine, OverlayOhlc } from './apply-overlays';
@@ -122,15 +123,22 @@ export function updateIndicatorStore(ctx: StoreUpdateContext): boolean {
 
   try {
     if (ctx.indicatorId === undefined) {
-      const plots: Record<string, { color: string }> = {};
+      const plots: Record<
+        string,
+        { color: string; pine?: { linestyle?: string; display?: number; linewidth?: number } }
+      > = {};
       let colorIdx = 0;
       if (ctx.seriesEntries.length) {
         for (const [k] of ctx.seriesEntries) {
           const meta = ctx.plotMeta[k];
+          const pine = pinePlotMeta(meta);
           plots[k] = {
             // Persist resolved CSS only — raw Pine tokens are invalid in
             // the card swatch and would shadow later runs as overrides.
             color: resolvePineColor(meta?.color) ?? PLOT_PALETTE[colorIdx % PLOT_PALETTE.length],
+            // Declared plot style (display / linestyle / linewidth) — the
+            // panel shows it and offers “reset to Pine”.
+            ...(pine ? { pine } : {}),
           };
           colorIdx += 1;
         }
@@ -253,7 +261,18 @@ export function updateIndicatorStore(ctx: StoreUpdateContext): boolean {
       // Re-run replace: refresh source / name / pane. Explicit panel picks
       // (custom) survive; auto-persisted colors refresh from the fresh run
       // so ctx.script color edits take effect instead of sticking forever.
-      const plots: Record<string, { color: string; custom?: boolean }> = {
+      const plots: Record<
+        string,
+        {
+          color: string;
+          custom?: boolean;
+          width?: number;
+          visible?: boolean;
+          linestyle?: string;
+          display?: number;
+          pine?: { linestyle?: string; display?: number; linewidth?: number };
+        }
+      > = {
         ...(ctx.existing?.plots || {}),
       };
       let colorIdx = 0;
@@ -266,9 +285,12 @@ export function updateIndicatorStore(ctx: StoreUpdateContext): boolean {
           // resolvable plot_meta.color — otherwise keep the stored color
           // so a reapply can't wipe script colors to the palette.
           const resolvedColor = resolvePineColor(meta?.color);
+          const pine = pinePlotMeta(meta);
           plots[k] = {
             ...plots[k],
             ...(resolvedColor != null ? { color: resolvedColor } : {}),
+            // Refresh the declared style; panel overrides live beside it.
+            ...(pine ? { pine } : {}),
           };
           colorIdx += 1;
         }

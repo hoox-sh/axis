@@ -64,24 +64,14 @@ import {
   promptStorageChange,
 } from '../storage/service';
 import { importPyneFiles, isPyneFileName } from '../storage/import-pyne-files';
-import {
-  listPublishedLibraries,
-  publishLibrary,
-} from '../storage/library-publish-io';
+import { listPublishedLibraries, publishLibrary } from '../storage/library-publish-io';
 import {
   formatImportSnippet,
   parseLibraryDeclaration,
   type PublishedIndex,
 } from '../storage/library-publish';
 import { listStorages } from '../storage/catalog';
-import {
-  store,
-  setStore,
-  persist,
-  appendLog,
-  setStatus,
-  isPanelOpen,
-} from '../store';
+import { store, setStore, persist, appendLog, setStatus, isPanelOpen } from '../store';
 import { getActiveStorageId } from '../plugins/active';
 import { pluginKey } from '../plugins/types';
 import { DEFAULT_GIT_CONFIG, type GitConfig } from '../storage/git-config';
@@ -184,9 +174,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
   const [gitBasePath, setGitBasePath] = createSignal(g0.basePath);
   const [gitApiBase, setGitApiBase] = createSignal(g0.apiBaseUrl);
   /** Optional public OAuth App client id (when Worker env not set). */
-  const [gitOAuthClientId, setGitOAuthClientId] = createSignal(
-    String(g0.oauthClientId || ''),
-  );
+  const [gitOAuthClientId, setGitOAuthClientId] = createSignal(String(g0.oauthClientId || ''));
   const [showGitAdvanced, setShowGitAdvanced] = createSignal(false);
   const [oauthBusy, setOauthBusy] = createSignal(false);
   const [oauthUserCode, setOauthUserCode] = createSignal('');
@@ -233,8 +221,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
   const oauthWorkerBase = () => {
     const cloud = cloudCfg().endpoint.replace(/\/$/, '');
     const engine = String(store.endpoint || '').replace(/\/$/, '');
-    const sameOrigin =
-      typeof window !== 'undefined' ? window.location.origin : '';
+    const sameOrigin = typeof window !== 'undefined' ? window.location.origin : '';
     for (const candidate of [cloud, engine, sameOrigin]) {
       if (!candidate) continue;
       if (isOAuthProxyBase(candidate, { sameOrigin })) {
@@ -318,22 +305,18 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
     }
     return groups;
   });
-  const builtinCount = createMemo(() =>
-    builtinGroups().reduce((n, g) => n + g.items.length, 0),
-  );
+  const builtinCount = createMemo(() => builtinGroups().reduce((n, g) => n + g.items.length, 0));
+  /** Chart scripts by title — powers the “applied” chip on builtin cards. */
+  const appliedTitles = createMemo(() => new Set(store.scripts.map((s) => s.name)));
   const otherCatalog = createMemo(() => {
     const q = query().trim();
     if (!q) return null;
     if (tab() === 'builtin') {
       const n = filterPersonalScripts(items(), q, 'all').length;
-      return n > 0
-        ? { next: 'personal' as const, label: `${n} in Personal` }
-        : null;
+      return n > 0 ? { next: 'personal' as const, label: `${n} in Personal` } : null;
     }
     const n = filterBuiltinScripts(q).length;
-    return n > 0
-      ? { next: 'builtin' as const, label: `${n} built-in${n === 1 ? '' : 's'}` }
-      : null;
+    return n > 0 ? { next: 'builtin' as const, label: `${n} built-in${n === 1 ? '' : 's'}` } : null;
   });
 
   const onSave = async () => {
@@ -474,9 +457,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
     setError('');
     try {
       const pineFiles = files.filter((f) => isPyneFileName(f.name));
-      const jsonFiles = files.filter(
-        (f) => !isPyneFileName(f.name) && /\.json$/i.test(f.name),
-      );
+      const jsonFiles = files.filter((f) => !isPyneFileName(f.name) && /\.json$/i.test(f.name));
       let total = 0;
       if (pineFiles.length) {
         const result = await importPyneFiles(pineFiles);
@@ -519,9 +500,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
       basePath: gitBasePath().trim() || 'pyne-library',
       autoPush: true,
       commitMessageTemplate: DEFAULT_GIT_CONFIG.commitMessageTemplate,
-      ...(gitOAuthClientId().trim()
-        ? { oauthClientId: gitOAuthClientId().trim() }
-        : {}),
+      ...(gitOAuthClientId().trim() ? { oauthClientId: gitOAuthClientId().trim() } : {}),
     } as GitConfig);
     void refresh();
   };
@@ -560,12 +539,9 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
       });
       if (ac.signal.aborted) return;
       setOauthUserCode(started.user_code);
-      const verifyRaw =
-        started.verification_uri_complete || started.verification_uri;
+      const verifyRaw = started.verification_uri_complete || started.verification_uri;
       // startDeviceFlow already sanitizes; belt-and-suspenders for open/href
-      const verifySafe =
-        sanitizeVerificationUri(verifyRaw, provider) ||
-        started.verification_uri;
+      const verifySafe = sanitizeVerificationUri(verifyRaw, provider) || started.verification_uri;
       setOauthVerifyUri(verifySafe);
       setOauthHint('Approve access in the browser, then return here.');
       // Open verification page for the user (allowlisted hosts only)
@@ -734,6 +710,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
                           item={b}
                           busy={!!applyingBuiltin() || busy()}
                           applying={applyingBuiltin() === b.id}
+                          applied={appliedTitles().has(b.title)}
                           onApply={() => void onApplyBuiltin(b)}
                           onEdit={() => onEditBuiltin(b)}
                         />
@@ -860,7 +837,9 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
               void onSave();
             }}
           >
-            <div class="text-[10px] text-text-dim uppercase tracking-wider">Save current editor</div>
+            <div class="text-[10px] text-text-dim uppercase tracking-wider">
+              Save current editor
+            </div>
             <ScField label="Script name">
               <input
                 class="sc-input"
@@ -892,7 +871,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
               class="sc-btn sc-btn-ghost inline-flex items-center gap-1 justify-center"
               disabled={busy()}
               onClick={() => void onPublish()}
-              title='Publish library() as the next version folder (1, 2, 3, …) — importable as import ns/Name/ver'
+              title="Publish library() as the next version folder (1, 2, 3, …) — importable as import ns/Name/ver"
               data-testid="axis-library-publish"
             >
               Publish library
@@ -950,9 +929,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
 
           <Show when={published().length > 0}>
             <section class="flex flex-col gap-1" aria-label="Published libraries">
-              <h3 class="sc-section-title m-0">
-                Published ({published().length})
-              </h3>
+              <h3 class="sc-section-title m-0">Published ({published().length})</h3>
               <ul class="m-0 p-0 list-none flex flex-col gap-1">
                 <For each={published()}>
                   {(p) => (
@@ -1082,4 +1059,3 @@ export const LibraryPanel: Component<ScriptLibraryPanelProps> = (props) => (
     </FloatableShell>
   </Show>
 );
-

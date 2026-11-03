@@ -2541,6 +2541,100 @@ export class PaneManager {
     return ok;
   }
 
+  /**
+   * Apply a panel line-type override to an overlay series (no re-run).
+   *
+   * Pine `plot()` has no line-style argument, so this is an AXIS platform
+   * preference (see `indicators/plot-prefs`). Histogram/columns ignore it.
+   */
+  setOverlayLineStyle(
+    paneId: string,
+    plotName: string,
+    linestyle: string | null,
+    ownerId?: string,
+  ): boolean {
+    const pane = this.panes.get(paneId);
+    if (!pane) return false;
+    const lineStyle = mapLineStyle(linestyle ?? 'solid');
+    let ok = false;
+    const keys: string[] = [];
+    if (ownerId) keys.push(makeOverlayLineKey(plotName, ownerId));
+    keys.push(`overlay_${plotName}`);
+    const apply = (series: ISeriesApi<any>) => {
+      const kind = this.overlaySeriesKinds.get(`${paneId}:${keys[0]}`) ?? null;
+      // Histograms / columns / markers do not take a line style.
+      if (kind && (isHistogramSeriesKind(kind) || isPointMarkerSeriesKind(kind))) return;
+      try {
+        series.applyOptions({ lineStyle });
+        ok = true;
+      } catch {
+        /* ignore */
+      }
+    };
+    for (const key of keys) {
+      const series = pane.series[key];
+      if (series) apply(series);
+    }
+    if (!ok) {
+      const suffix = `__${plotName}`;
+      for (const [key, series] of Object.entries(pane.series)) {
+        if (!series || !key.startsWith('overlay_') || !key.endsWith(suffix)) continue;
+        apply(series);
+      }
+    }
+    return ok;
+  }
+
+  /**
+   * Apply a panel `display.*` override to an overlay series (no re-run).
+   *
+   * Mirrors {@link plotLabelOptions}: pane bit → series visibility,
+   * price_scale → last-value label, status_line → series title.
+   */
+  setOverlayLineDisplay(
+    paneId: string,
+    plotName: string,
+    display: number,
+    ownerId?: string,
+  ): boolean {
+    const pane = this.panes.get(paneId);
+    if (!pane) return false;
+    const bits = parsePlotDisplay(display);
+    let ok = false;
+    const keys: string[] = [];
+    if (ownerId) keys.push(makeOverlayLineKey(plotName, ownerId));
+    keys.push(`overlay_${plotName}`);
+    const apply = (series: ISeriesApi<any>) => {
+      try {
+        series.applyOptions({
+          visible: (bits & PLOT_DISPLAY.pane) !== 0,
+          lastValueVisible:
+            this.lastValueLabelsVisible &&
+            (bits & PLOT_DISPLAY.price_scale) === PLOT_DISPLAY.price_scale,
+          title:
+            (bits & PLOT_DISPLAY.status_line) === PLOT_DISPLAY.status_line
+              ? this.displaySeriesTitle(plotName)
+              : '',
+        });
+        ok = true;
+      } catch {
+        /* ignore */
+      }
+    };
+    for (const key of keys) {
+      const series = pane.series[key];
+      if (series) apply(series);
+    }
+    if (!ok) {
+      const suffix = `__${plotName}`;
+      for (const [key, series] of Object.entries(pane.series)) {
+        if (!series || !key.startsWith('overlay_') || !key.endsWith(suffix)) continue;
+        apply(series);
+      }
+    }
+    return ok;
+  }
+
   /** Show/hide an overlay series by plot name (owner-scoped or bare). */
   setOverlayLineVisible(
     paneId: string,
@@ -2935,9 +3029,7 @@ export class PaneManager {
         const metaKey = this.overlayMetaKey(paneId, key);
         const prev = this.overlayDataMeta.get(metaKey) ?? this.overlayDataMeta.get(key);
         if (!prev || time <= prev.lastTime) continue;
-        const row = Number.isFinite(prev.lastVal)
-          ? { time, value: prev.lastVal }
-          : { time };
+        const row = Number.isFinite(prev.lastVal) ? { time, value: prev.lastVal } : { time };
         if (!safeUpdate(series, row)) continue;
         this.overlayDataMeta.set(metaKey, {
           len: prev.len + 1,

@@ -85,8 +85,24 @@ export interface Indicator {
   /** Plot name → stroke color for series paint.
    * `custom` marks an explicit panel pick (IndicatorCard) which survives
    * re-runs; auto-persisted script/palette colors refresh from fresh runs.
-   * `width` is the line width (1-4), `visible` toggles the plot. */
-  plots: Record<string, { color: string; custom?: boolean; width?: number; visible?: boolean }>;
+   * `width` is the line width (1-4), `visible` toggles the plot.
+   * `linestyle` / `display` are **panel overrides** (AXIS): `linestyle` is a
+   * platform line-type (Pine `plot()` has no line-style argument),
+   * `display` is a `display.*` bitmask overriding the script's declaration.
+   * `pine` keeps the last run's declared values so the panel can show
+   * “Pine: …” and offer a reset. */
+  plots: Record<
+    string,
+    {
+      color: string;
+      custom?: boolean;
+      width?: number;
+      visible?: boolean;
+      linestyle?: string;
+      display?: number;
+      pine?: { linestyle?: string; display?: number; linewidth?: number };
+    }
+  >;
   /** Last-known input values keyed by title (Script Settings) */
   inputValues?: Record<string, unknown>;
   /**
@@ -122,13 +138,7 @@ export interface LogEntry {
  * `source` to user-facing prefs. Keep this list small and stable.
  */
 export type NotificationCategory =
-  | 'run'
-  | 'data'
-  | 'stream'
-  | 'engine'
-  | 'scripts'
-  | 'workspace'
-  | 'system';
+  'run' | 'data' | 'stream' | 'engine' | 'scripts' | 'workspace' | 'system';
 
 /** One transient toast (ephemeral — never persisted). */
 export interface ToastEntry {

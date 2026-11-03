@@ -39,11 +39,13 @@ import { alignSeriesToTimes, tailAlignSeriesToWindow, type RunOptions } from './
 import {
   lineSeriesToOverlayData,
   ohlcSeriesToBarData,
+  parsePlotDisplay,
   plotDisplayHas,
   PLOT_DISPLAY,
   type splitSeriesByKind,
   type PlotMetaEntry,
 } from '../results/plot-visuals';
+import { normalizePlotLineStyle } from './plot-prefs';
 
 export interface OverlayLine {
   name: string;
@@ -84,7 +86,17 @@ export interface OverlayBuildContext {
   resultTimes: number[] | null;
   chartWindowBars: number;
   seriesMap: Record<string, unknown[] | (number | null)[]>;
-  userPlotColors: Record<string, { color: string; custom?: boolean; width?: number; visible?: boolean }>;
+  userPlotColors: Record<
+    string,
+    {
+      color: string;
+      custom?: boolean;
+      width?: number;
+      visible?: boolean;
+      linestyle?: string;
+      display?: number;
+    }
+  >;
   scriptName: string;
   /** Chart-add / live-tick opts so a live epoch bump cannot abort SMA. */
   opts?: RunOptions;
@@ -158,9 +170,7 @@ export function buildOverlayPayloads(ctx: OverlayBuildContext): OverlayBuildOutc
       const data = toLineData(ohlcvTimes, arr);
       // hline may still apply with price-only meta even if series is sparse
       let price: number | undefined =
-        meta?.price != null && Number.isFinite(Number(meta.price))
-          ? Number(meta.price)
-          : undefined;
+        meta?.price != null && Number.isFinite(Number(meta.price)) ? Number(meta.price) : undefined;
       if (price == null && isHline && data.length) {
         const first = data.find((d) => d.value != null && Number.isFinite(d.value));
         if (first?.value != null) price = first.value;
@@ -172,8 +182,13 @@ export function buildOverlayPayloads(ctx: OverlayBuildContext): OverlayBuildOutc
       colorIdx += 1;
       // Need at least one real sample (or hline price); pure-whitespace series skip
       if (!lineDataHasSample(data) && !(isHline && price != null)) continue;
-      // display.data_window / display.none: keep series for Data Window, skip pane
-      if (!plotDisplayHas(meta?.display, PLOT_DISPLAY.pane)) continue;
+      // display.data_window / display.none: keep series for Data Window, skip
+      // pane. Panel override (`plots[name].display`) wins over the declaration.
+      const displayBits =
+        userPlotColors[k]?.display != null
+          ? parsePlotDisplay(userPlotColors[k]?.display)
+          : parsePlotDisplay(meta?.display);
+      if ((displayBits & PLOT_DISPLAY.pane) === 0) continue;
       // Skip if user explicitly hid this plot
       if (userPlotColors[k]?.visible === false) continue;
       // Precedence: explicit panel pick (custom) → Pine plot color → stored
@@ -183,14 +198,11 @@ export function buildOverlayPayloads(ctx: OverlayBuildContext): OverlayBuildOutc
       // falling to the palette and overwriting them.
       const customColor = userPlotColors[k]?.custom ? userPlotColors[k].color : undefined;
       const storedColor = userPlotColors[k]?.color;
-      const color = pickOverlayColor(
-        customColor,
-        meta?.color ?? storedColor,
-        paletteColor,
-      );
+      const color = pickOverlayColor(customColor, meta?.color ?? storedColor, paletteColor);
       // Prefer panel width override → Pine plot linewidth → default (1)
       const userWidth = userPlotColors[k]?.width;
-      const linewidth = userWidth != null ? userWidth : (meta?.linewidth != null ? Number(meta.linewidth) : 1);
+      const linewidth =
+        userWidth != null ? userWidth : meta?.linewidth != null ? Number(meta.linewidth) : 1;
       overlayLines.push({
         name: k,
         data,
@@ -198,13 +210,16 @@ export function buildOverlayPayloads(ctx: OverlayBuildContext): OverlayBuildOutc
         linewidth,
         kind: isHline ? 'hline' : 'plot',
         price,
-        linestyle: meta?.linestyle ? String(meta.linestyle) : undefined,
+        // Panel line-type override → declared `linestyle` → solid.
+        linestyle:
+          normalizePlotLineStyle(userPlotColors[k]?.linestyle) ??
+          (meta?.linestyle ? String(meta.linestyle) : undefined),
         style: meta?.style != null ? String(meta.style) : null,
         histbase:
           meta?.histbase != null && Number.isFinite(Number(meta.histbase))
             ? Number(meta.histbase)
             : undefined,
-        display: (meta?.display as string | number | null | undefined) ?? null,
+        display: displayBits,
       });
     }
   } else if (Array.isArray(result.plots) && result.plots.length) {
@@ -237,7 +252,14 @@ export function buildOverlayPayloads(ctx: OverlayBuildContext): OverlayBuildOutc
             PLOT_PALETTE[0],
           ),
           linewidth:
-            userWidth != null ? userWidth : (meta?.linewidth != null ? Number(meta.linewidth) : 1),
+            userWidth != null ? userWidth : meta?.linewidth != null ? Number(meta.linewidth) : 1,
+          linestyle:
+            normalizePlotLineStyle(userEntry?.linestyle) ??
+            (meta?.linestyle ? String(meta.linestyle) : undefined),
+          display:
+            userEntry?.display != null
+              ? parsePlotDisplay(userEntry.display)
+              : parsePlotDisplay(meta?.display),
         });
       }
     }
@@ -251,7 +273,12 @@ export function buildOverlayPayloads(ctx: OverlayBuildContext): OverlayBuildOutc
       if (runEpochInvalidates(epoch, opts, indicatorId)) {
         return { superseded: true };
       }
-      if (!plotDisplayHas(meta?.display, PLOT_DISPLAY.pane)) continue;
+      // Panel display override wins over the declared mask (same rule as lines).
+      const ohlcDisplay =
+        userPlotColors[key]?.display != null
+          ? parsePlotDisplay(userPlotColors[key]?.display)
+          : parsePlotDisplay(meta?.display);
+      if ((ohlcDisplay & PLOT_DISPLAY.pane) === 0) continue;
       // Skip if user explicitly hid this plot
       if (userPlotColors[key]?.visible === false) continue;
       const data = ohlcSeriesToBarData(ohlcvTimes, values, seriesMap, meta);
