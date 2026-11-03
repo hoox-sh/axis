@@ -26,6 +26,7 @@
 import { ColorType, type IChartApi, type ISeriesApi, type LineWidth } from 'lightweight-charts';
 import { pineColorMap } from './catalog';
 import { resolveTokens } from './resolve';
+import { syntaxPackForPreset } from './syntax-packs';
 import type {
   ApplyChartThemeOpts,
   ApplySeriesThemeOpts,
@@ -123,6 +124,69 @@ function ensureContrast(color: string, bg: string, text: string, min: number): s
   return rgbToCss(t);
 }
 
+/** Max-min channel span in 0..1 — proxy for chroma on sRGB hex. */
+function rgbChroma(c: RGB): number {
+  return (Math.max(c.r, c.g, c.b) - Math.min(c.r, c.g, c.b)) / 255;
+}
+
+function colorDistance(a: RGB, b: RGB): number {
+  const dr = a.r - b.r;
+  const dg = a.g - b.g;
+  const db = a.b - b.b;
+  return Math.sqrt(dr * dr + dg * dg + db * db) / 441.67; // ≈0..1
+}
+
+/**
+ * Quiet surface edge: mix panel (fallback bg) toward fg ~15%.
+ * Used when `scale.border` is high-chroma or near the accent.
+ */
+export function quietEdgeColor(
+  panel: string,
+  bg: string,
+  fg: string,
+  amount = 0.15,
+): string {
+  const surface = toRgb(panel) || toRgb(bg);
+  const text = toRgb(fg);
+  if (!surface || !text) {
+    return `color-mix(in srgb, ${panel || bg} ${Math.round((1 - amount) * 100)}%, ${fg} ${Math.round(amount * 100)}%)`;
+  }
+  return rgbToCss(mixRgb(surface, text, amount));
+}
+
+/**
+ * True when a border hex is “loud” — high chroma or close to the accent.
+ * Unparseable values (rgba / color-mix) are treated as quiet.
+ */
+export function isLoudBorder(border: string, accent: string): boolean {
+  const b = toRgb(border);
+  if (!b) return false;
+  if (rgbChroma(b) >= 0.28) return true;
+  const a = toRgb(accent);
+  if (a && colorDistance(b, a) <= 0.22) return true;
+  return false;
+}
+
+/**
+ * Soften loud / accent-near `scale.border` into a quiet surface edge.
+ * UI chrome and chart separators both use the quiet edge when loud;
+ * otherwise the authored border is kept.
+ */
+export function resolveChromeBorder(args: {
+  scaleBorder: string;
+  panel: string;
+  bg: string;
+  fg: string;
+  accent: string;
+}): { border: string; soft: string; softened: boolean; chartBorder: string } {
+  const quiet = quietEdgeColor(args.panel, args.bg, args.fg, 0.15);
+  const softened = isLoudBorder(args.scaleBorder, args.accent);
+  const border = softened ? quiet : args.scaleBorder;
+  const soft = `color-mix(in srgb, ${border} 55%, ${args.bg} 45%)`;
+  const chartBorder = softened ? quiet : args.scaleBorder;
+  return { border, soft, softened, chartBorder };
+}
+
 /**
  * Map resolved theme tokens → full product chrome CSS variables
  * (`--color-*` used by Tailwind / index.css) so presets recolor the whole UI.
@@ -131,24 +195,31 @@ export function buildChromeCssVars(
   tokens: ThemeTokens,
   base: 'dark' | 'light',
 ): Record<string, string> {
-  const bg = tok(tokens, 'chart.bg_color', base === 'light' ? '#F3F4F8' : '#07080C');
-  const panel = tok(tokens, 'chart.panel', base === 'light' ? '#EAEBF1' : '#0C0E14');
-  const elev = tok(tokens, 'chart.elev', base === 'light' ? '#E2E4EC' : '#10131B');
-  const fg = tok(tokens, 'chart.fg_color', base === 'light' ? '#1A1D26' : '#E8EAEE');
-  const border = tok(tokens, 'scale.border', base === 'light' ? '#C5CAD6' : '#1C2230');
-  const accent = tok(tokens, 'ui.accent', base === 'light' ? '#5A6AD4' : '#8B9CFF');
+  const bg = tok(tokens, 'chart.bg_color', base === 'light' ? '#F3F4F8' : '#030304');
+  const panel = tok(tokens, 'chart.panel', base === 'light' ? '#EAEBF1' : '#0A0B10');
+  const elev = tok(tokens, 'chart.elev', base === 'light' ? '#E2E4EC' : '#0C0E14');
+  const fg = tok(tokens, 'chart.fg_color', base === 'light' ? '#1A1D26' : '#EEEEEE');
+  const scaleBorder = tok(tokens, 'scale.border', base === 'light' ? '#C5CAD6' : '#1C2230');
+  const accent = tok(tokens, 'ui.accent', base === 'light' ? '#5A6AD4' : '#939FFF');
   const up = tok(tokens, 'ui.up', tok(tokens, 'bar.up.color', '#3DDC97'));
   const down = tok(tokens, 'ui.down', tok(tokens, 'bar.down.color', '#F07178'));
+  const edges = resolveChromeBorder({
+    scaleBorder,
+    panel,
+    bg,
+    fg,
+    accent,
+  });
 
   // Primary body text: prefer slightly brighter than chart.fg for dark chrome
   const text =
     base === 'light'
       ? fg
-      : tok(tokens, 'chart.fg_color', '#E8EAEE');
+      : tok(tokens, 'chart.fg_color', '#EEEEEE');
 
   // Secondary labels: presets drive these via `scale.text`; enforce a contrast
   // floor so subdued presets (Graphite / mono) stay legible in the app chrome.
-  const dim = ensureContrast(tok(tokens, 'scale.text', base === 'light' ? '#5C6575' : '#9AA3B2'), bg, text, 4);
+  const dim = ensureContrast(tok(tokens, 'scale.text', base === 'light' ? '#5C6575' : '#9D9EA3'), bg, text, 4);
   // Faint labels: mix *away from* the surface (darken on light, lighten on
   // dark) — the old single-direction mix washed light themes out further.
   const faintRaw = (() => {
@@ -160,7 +231,7 @@ export function buildChromeCssVars(
   })();
   const faint = ensureContrast(faintRaw, base === 'light' ? bg : panel, text, 3.2);
 
-  const mixBlack = base === 'light' ? '#07080C' : '#000000';
+  const mixBlack = base === 'light' ? '#030304' : '#000000';
   const mixWhite = base === 'light' ? '#ffffff' : '#ffffff';
 
   return {
@@ -171,9 +242,9 @@ export function buildChromeCssVars(
     '--color-bg-elev': elev,
     '--color-bg-hover': `color-mix(in srgb, ${elev} 72%, ${text} 28%)`,
 
-    // Edges
-    '--color-border': border,
-    '--color-border-soft': `color-mix(in srgb, ${border} 55%, ${bg} 45%)`,
+    // Edges — quiet when scale.border is loud/near accent
+    '--color-border': edges.border,
+    '--color-border-soft': edges.soft,
     '--color-border-focus': `color-mix(in srgb, ${accent} 65%, transparent)`,
 
     // Text
@@ -271,6 +342,16 @@ export function applyThemeToDocument(
     }
   }
 
+  // Editor syntax pack overrides (brand packs mirror VS Code tokenColors)
+  const syntax = syntaxPackForPreset(state?.presetId, tokens, base);
+  for (const [cssVar, value] of Object.entries(syntax)) {
+    try {
+      root.style.setProperty(cssVar, value);
+    } catch {
+      /* ignore */
+    }
+  }
+
   // Pine aliases as data attributes for tooling / pyne host bridge
   try {
     const pine = pineColorMap(tokens);
@@ -292,11 +373,21 @@ export function buildChartOptionsFromTokens(
   const gridOn = tokens['grid.visible'] !== false;
   const gridVert = gridOn ? String(tokens['grid.vert'] ?? 'transparent') : 'transparent';
   const gridHorz = gridOn ? String(tokens['grid.horz'] ?? 'transparent') : 'transparent';
-  const bg = String(tokens['chart.bg_color'] ?? '#07080C');
-  const fg = String(tokens['scale.text'] ?? tokens['chart.fg_color'] ?? '#9AA3B2');
-  const border = String(tokens['scale.border'] ?? '#1C2230');
-  const cross = String(tokens['crosshair.color'] ?? 'rgba(139, 156, 255, 0.38)');
-  const labelBg = String(tokens['crosshair.label_bg'] ?? tokens['chart.elev'] ?? '#10131B');
+  const bg = String(tokens['chart.bg_color'] ?? '#030304');
+  const panel = String(tokens['chart.panel'] ?? '#0A0B10');
+  const chartFg = String(tokens['chart.fg_color'] ?? '#EEEEEE');
+  const fg = String(tokens['scale.text'] ?? chartFg);
+  const scaleBorder = String(tokens['scale.border'] ?? '#1C2230');
+  const accent = String(tokens['ui.accent'] ?? '#939FFF');
+  const border = resolveChromeBorder({
+    scaleBorder,
+    panel,
+    bg,
+    fg: chartFg,
+    accent,
+  }).chartBorder;
+  const cross = String(tokens['crosshair.color'] ?? 'rgba(147, 159, 255, 0.38)');
+  const labelBg = String(tokens['crosshair.label_bg'] ?? tokens['chart.elev'] ?? '#0C0E14');
 
   return {
     layout: {
@@ -366,9 +457,21 @@ export function applyThemeToChart(
   }
   if (opts.applyPriceScale !== false) {
     try {
+      const bg = String(tokens['chart.bg_color'] ?? '#030304');
+      const panel = String(tokens['chart.panel'] ?? '#0A0B10');
+      const chartFg = String(tokens['chart.fg_color'] ?? '#EEEEEE');
+      const scaleBorder = String(tokens['scale.border'] ?? '#1C2230');
+      const accent = String(tokens['ui.accent'] ?? '#939FFF');
+      const border = resolveChromeBorder({
+        scaleBorder,
+        panel,
+        bg,
+        fg: chartFg,
+        accent,
+      }).chartBorder;
       chart.priceScale('right').applyOptions({
-        borderColor: String(tokens['scale.border'] ?? '#1C2230'),
-        textColor: String(tokens['scale.text'] ?? '#9AA3B2'),
+        borderColor: border,
+        textColor: String(tokens['scale.text'] ?? '#9D9EA3'),
       });
     } catch {
       /* ignore */
@@ -543,17 +646,17 @@ export function tokensToVoidLike(tokens: ThemeTokens): {
   orange: string;
 } {
   return {
-    bg: String(tokens['chart.bg_color'] ?? '#07080C'),
-    panel: String(tokens['chart.panel'] ?? '#0C0E14'),
-    elev: String(tokens['chart.elev'] ?? '#10131B'),
-    grid: String(tokens['grid.vert'] ?? 'rgba(139, 156, 255, 0.07)'),
-    text: String(tokens['chart.fg_color'] ?? '#E8EAEE'),
-    textDim: String(tokens['scale.text'] ?? '#9AA3B2'),
+    bg: String(tokens['chart.bg_color'] ?? '#030304'),
+    panel: String(tokens['chart.panel'] ?? '#0A0B10'),
+    elev: String(tokens['chart.elev'] ?? '#0C0E14'),
+    grid: String(tokens['grid.vert'] ?? 'rgba(147, 159, 255, 0.07)'),
+    text: String(tokens['chart.fg_color'] ?? '#EEEEEE'),
+    textDim: String(tokens['scale.text'] ?? '#9D9EA3'),
     up: String(tokens['bar.up.color'] ?? '#3DDC97'),
     down: String(tokens['bar.down.color'] ?? '#F07178'),
     border: String(tokens['scale.border'] ?? '#1C2230'),
-    indigo: String(tokens['ui.accent'] ?? '#8B9CFF'),
-    indigoSoft: String(tokens['crosshair.color'] ?? 'rgba(139, 156, 255, 0.38)'),
+    indigo: String(tokens['ui.accent'] ?? '#939FFF'),
+    indigoSoft: String(tokens['crosshair.color'] ?? 'rgba(147, 159, 255, 0.38)'),
     green: String(tokens['ui.up'] ?? tokens['bar.up.color'] ?? '#3DDC97'),
     orange: '#e8a03a',
   };

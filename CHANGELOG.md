@@ -17,6 +17,8 @@ _Generated/updated: 2026-11-01 · 880 commits · describe-tag: `v2.26.0`_
 
 ### Changed
 
+- **Theme refine (brand packs + shortlist).** Chart presets lead with AXIS Void (`void-dark`, alias `axis`), PYNE Volt (`volt`, alias `pyne`), and HOOX Signal (`signal`, alias `hoox`) matching the pynescript VS Code themes. Community catalog culled to Ayu / Tokyo Night / Nord / One Dark / Rosé Pine with muted `scale.border` edges. Chrome softens loud/accent borders; brand syntax packs drive editor CSS vars; builtin candle packs appear in the Theme library beside saved bar themes.
+
 - **Studio Settings polish.** Shared studio primitives (`AppButton` + `useMicrofeedback`, section chips/status, live-apply footers) across General, Data, Editor, Theme, Topbar, Keyboard, and Notifications. Keyboard recorder ignores modifier-only keydowns (`Mod-Control` no longer crashes Settings); Restore deletes the override key; scope filters and conflict chips are live. Notifications folds browser-alert permission into Settings alongside toasts/flood control.
 
 ### Changed

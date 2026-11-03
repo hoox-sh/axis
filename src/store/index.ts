@@ -142,6 +142,7 @@ import {
   detachBarThemeRef,
   hydrateBarColorThemes,
   hydrateSavedChartThemes,
+  getBuiltinBarTheme,
   MAX_BAR_THEMES,
   MAX_SAVED_THEMES,
   newThemeId,
@@ -4167,7 +4168,8 @@ export function deleteBarColorTheme(id: string) {
  * The selected chart theme stores that coloring as its own.
  */
 export function applyBarColorTheme(id: string): boolean {
-  const bar = (store.savedBarThemes || []).find((item) => item.id === id);
+  const bar =
+    (store.savedBarThemes || []).find((item) => item.id === id) || getBuiltinBarTheme(id);
   if (!bar) return false;
   const painted = withBarColorTheme(
     store.chartTheme || defaultChartThemeState(),

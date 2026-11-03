@@ -21,6 +21,7 @@ import {
   PRESET_VOID_DARK,
   PRESET_VOID_LIGHT,
   THEME_PRESETS,
+  COMMUNITY_PRESETS,
   getPreset,
   listPresets,
   defaultChartThemeState,
@@ -38,6 +39,7 @@ import {
   serializeTheme,
   allTokenKeys,
   applyThemeToDocument,
+  buildChromeCssVars,
   buildChartOptionsFromTokens,
   applyThemeToChart,
   buildCandleSeriesOptions,
@@ -49,6 +51,12 @@ import {
   volumeColors,
   tokensToVoidLike,
   pineHostColors,
+  isLoudBorder,
+  resolveChromeBorder,
+  syntaxPackForPreset,
+  BUILTIN_BAR_THEMES,
+  builtinBarThemeId,
+  getBuiltinBarTheme,
   ThemeManager,
   getThemeManager,
 } from '../src/theme';
@@ -112,23 +120,36 @@ describe('theme catalog', () => {
 });
 
 describe('theme presets', () => {
-  it('listPresets includes curated presets plus vendored community themes', () => {
+  it('listPresets includes brand packs, boutique, and community shortlist', () => {
     const list = listPresets();
     expect(list.length).toBe(THEME_PRESETS.length);
     expect(list.length).toBeGreaterThanOrEqual(10);
     const ids = list.map((p) => p.id);
+    expect(ids.slice(0, 4)).toEqual(['void-dark', 'volt', 'signal', 'void-light']);
     expect(ids).toContain('void-dark');
+    expect(ids).toContain('volt');
+    expect(ids).toContain('signal');
     expect(ids).toContain('obsidian');
     expect(ids).toContain('porcelain');
-    // Vendored community palettes (hoox-themes) are registered too.
-    expect(ids).toContain('dracula');
-    expect(ids).toContain('catppuccin-mocha');
+    // Community shortlist (Ayu / Tokyo / Nord / One Dark / Rosé Pine)
+    expect(ids).toContain('ayu-dark');
+    expect(ids).toContain('nord');
+    expect(ids).toContain('tokyo-night');
+    expect(ids).toContain('one-dark');
+    expect(ids).toContain('rose-pine');
+    expect(ids).not.toContain('dracula');
+    expect(ids).not.toContain('catppuccin-mocha');
     // No neon high-contrast preset
     expect(ids).not.toContain('high-contrast');
   });
 
-  it("getPreset('void-dark') / unknown falls back", () => {
+  it("getPreset aliases axis/pyne/hoox and unknown falls back", () => {
     expect(getPreset('void-dark').id).toBe('void-dark');
+    expect(getPreset('axis').id).toBe('void-dark');
+    expect(getPreset('volt').id).toBe('volt');
+    expect(getPreset('pyne').id).toBe('volt');
+    expect(getPreset('signal').id).toBe('signal');
+    expect(getPreset('hoox').id).toBe('signal');
     expect(getPreset(undefined).id).toBe('void-dark');
     expect(getPreset(null).id).toBe('void-dark');
     expect(getPreset('does-not-exist').id).toBe('void-dark');
@@ -140,6 +161,15 @@ describe('theme presets', () => {
     expect(PRESET_VOID_LIGHT.tokens['chart.bg_color']).not.toBe(
       PRESET_VOID_DARK.tokens['chart.bg_color'],
     );
+  });
+
+  it('AXIS Void / PYNE Volt / HOOX Signal match brand surfaces', () => {
+    expect(PRESET_VOID_DARK.tokens['chart.bg_color']).toBe('#030304');
+    expect(PRESET_VOID_DARK.tokens['ui.accent']).toBe('#939FFF');
+    expect(getPreset('volt').tokens['chart.bg_color']).toBe('#030302');
+    expect(getPreset('volt').tokens['ui.accent']).toBe('#B7EF09');
+    expect(getPreset('signal').tokens['chart.bg_color']).toBe('#030303');
+    expect(getPreset('signal').tokens['ui.accent']).toBe('#FE6A00');
   });
 
   it('named presets are unique and fully tokenized', () => {
@@ -579,5 +609,107 @@ describe('component groups', () => {
     for (const d of THEME_TOKEN_DEFS) {
       expect(groupIds.has(d.group)).toBe(true);
     }
+  });
+});
+
+describe('community shortlist', () => {
+  it('keeps only Ayu / Tokyo Night / Nord / One Dark / Rosé Pine', () => {
+    expect(COMMUNITY_PRESETS).toHaveLength(9);
+    expect(COMMUNITY_PRESETS.map((p) => p.id)).toEqual([
+      'ayu-dark',
+      'ayu-mirage',
+      'ayu-light',
+      'tokyo-night',
+      'tokyo-night-storm',
+      'nord',
+      'one-dark',
+      'rose-pine',
+      'rose-pine-moon',
+    ]);
+  });
+
+  it('kept community scale.border values are muted (not accent/neon)', () => {
+    for (const p of COMMUNITY_PRESETS) {
+      const border = String(p.tokens['scale.border']);
+      const accent = String(p.tokens['ui.accent']);
+      expect(isLoudBorder(border, accent)).toBe(false);
+    }
+  });
+});
+
+describe('chrome border hardening', () => {
+  it('detects accent-as-border as loud and softens it', () => {
+    expect(isLoudBorder('#61afef', '#61afef')).toBe(true);
+    expect(isLoudBorder('#9ccfd8', '#9ccfd8')).toBe(true);
+    expect(isLoudBorder('#1C2230', '#939FFF')).toBe(false);
+
+    const loud = resolveChromeBorder({
+      scaleBorder: '#61afef',
+      panel: '#21252b',
+      bg: '#282c34',
+      fg: '#abb2bf',
+      accent: '#61afef',
+    });
+    expect(loud.softened).toBe(true);
+    expect(loud.border).not.toBe('#61afef');
+    expect(loud.chartBorder).not.toBe('#61afef');
+    expect(isLoudBorder(loud.border, '#61afef')).toBe(false);
+  });
+
+  it('buildChromeCssVars softens loud borders for --color-border', () => {
+    const tokens = {
+      ...catalogDefaults(),
+      'scale.border': '#61afef',
+      'ui.accent': '#61afef',
+      'chart.bg_color': '#282c34',
+      'chart.panel': '#21252b',
+      'chart.fg_color': '#abb2bf',
+    };
+    const chrome = buildChromeCssVars(tokens, 'dark');
+    expect(chrome['--color-border']).not.toBe('#61afef');
+  });
+});
+
+describe('syntax packs', () => {
+  it('brand packs mirror VS Code token colors', () => {
+    const voidPack = syntaxPackForPreset('void-dark', catalogDefaults(), 'dark');
+    expect(voidPack['--color-accent']).toBe('#939FFF');
+    expect(voidPack['--color-accent-2']).toBe('#BCC3F7');
+    expect(voidPack['--color-editor-type']).toBe('#CACEF5');
+
+    const voltPack = syntaxPackForPreset('volt', getPreset('volt').tokens, 'dark');
+    expect(voltPack['--color-accent']).toBe('#B7EF09');
+    expect(voltPack['--color-accent-2']).toBe('#D0EF70');
+
+    const signalPack = syntaxPackForPreset('signal', getPreset('signal').tokens, 'dark');
+    expect(signalPack['--color-accent']).toBe('#FE6A00');
+    expect(signalPack['--color-accent-2']).toBe('#F7A56B');
+  });
+
+  it('applyThemeToDocument applies brand syntax overrides', () => {
+    applyThemeToDocument(withPreset('void-dark'));
+    const root = document.documentElement;
+    expect(root.style.getPropertyValue('--color-accent')).toBe('#939FFF');
+    expect(root.style.getPropertyValue('--color-editor-builtin')).toBe('#9D9EA3');
+    expect(root.style.getPropertyValue('--color-editor-type')).toBe('#CACEF5');
+
+    applyThemeToDocument(withPreset('volt'));
+    expect(root.style.getPropertyValue('--color-accent')).toBe('#B7EF09');
+    expect(root.style.getPropertyValue('--color-accent-2')).toBe('#D0EF70');
+  });
+});
+
+describe('builtin bar packs', () => {
+  it('exposes one builtin candle pack per THEME_PRESETS entry', () => {
+    expect(BUILTIN_BAR_THEMES.length).toBe(THEME_PRESETS.length);
+    for (const preset of THEME_PRESETS) {
+      const bar = getBuiltinBarTheme(builtinBarThemeId(preset.id));
+      expect(bar).not.toBeNull();
+      expect(bar!.tokens['bar.up.color']).toBe(preset.tokens['bar.up.color']);
+      expect(bar!.tokens['bar.down.color']).toBe(preset.tokens['bar.down.color']);
+    }
+    expect(getBuiltinBarTheme('builtin:void-dark')?.name).toMatch(/AXIS Void/i);
+    expect(getBuiltinBarTheme('builtin:volt')?.name).toMatch(/PYNE Volt/i);
+    expect(getBuiltinBarTheme('builtin:signal')?.name).toMatch(/HOOX Signal/i);
   });
 });

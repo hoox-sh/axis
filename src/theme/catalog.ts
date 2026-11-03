@@ -49,7 +49,7 @@ export const TOKEN_ALIASES: Record<string, string> = {
 };
 
 /**
- * Full token catalog. Defaults match AXIS void-dark (VOID palette).
+ * Full token catalog. Defaults match AXIS Void (void-dark / hoox.sh/axis).
  * Order within a group is the UI field order.
  */
 export const THEME_TOKEN_DEFS: readonly ThemeTokenDef[] = [
@@ -61,7 +61,7 @@ export const THEME_TOKEN_DEFS: readonly ThemeTokenDef[] = [
     description: 'Chart canvas background (Pine: chart.bg_color)',
     type: 'color',
     pine: 'chart.bg_color',
-    default: '#07080C',
+    default: '#030304',
   },
   {
     key: 'chart.fg_color',
@@ -70,7 +70,7 @@ export const THEME_TOKEN_DEFS: readonly ThemeTokenDef[] = [
     description: 'Chart text / foreground (Pine: chart.fg_color)',
     type: 'color',
     pine: 'chart.fg_color',
-    default: '#E8EAEE',
+    default: '#EEEEEE',
   },
   {
     key: 'chart.panel',
@@ -78,7 +78,7 @@ export const THEME_TOKEN_DEFS: readonly ThemeTokenDef[] = [
     label: 'Panel',
     description: 'Elevated panel surface behind overlays',
     type: 'color',
-    default: '#0C0E14',
+    default: '#0A0B10',
   },
   {
     key: 'chart.elev',
@@ -86,7 +86,7 @@ export const THEME_TOKEN_DEFS: readonly ThemeTokenDef[] = [
     label: 'Elevated',
     description: 'Crosshair label / tooltip surface',
     type: 'color',
-    default: '#10131B',
+    default: '#0C0E14',
   },
 
   // ── Bars / candles ────────────────────────────────────────────────────
@@ -112,7 +112,7 @@ export const THEME_TOKEN_DEFS: readonly ThemeTokenDef[] = [
     label: 'Up wick',
     description: 'Rising candle wick',
     type: 'color',
-    default: '#3DDC97',
+    default: '#36C286',
   },
   {
     key: 'bar.down.color',
@@ -136,7 +136,7 @@ export const THEME_TOKEN_DEFS: readonly ThemeTokenDef[] = [
     label: 'Down wick',
     description: 'Falling candle wick',
     type: 'color',
-    default: '#F07178',
+    default: '#D3646A',
   },
   {
     key: 'bar.body_fill',
@@ -210,7 +210,7 @@ export const THEME_TOKEN_DEFS: readonly ThemeTokenDef[] = [
     group: 'scale',
     label: 'Scale text',
     type: 'color',
-    default: '#9AA3B2',
+    default: '#9D9EA3',
   },
 
   // ── Crosshair ─────────────────────────────────────────────────────────
@@ -219,14 +219,14 @@ export const THEME_TOKEN_DEFS: readonly ThemeTokenDef[] = [
     group: 'crosshair',
     label: 'Crosshair',
     type: 'color',
-    default: 'rgba(139, 156, 255, 0.38)',
+    default: 'rgba(147, 159, 255, 0.38)',
   },
   {
     key: 'crosshair.label_bg',
     group: 'crosshair',
     label: 'Crosshair label',
     type: 'color',
-    default: '#10131B',
+    default: '#0C0E14',
   },
 
   // ── Volume ────────────────────────────────────────────────────────────
@@ -251,7 +251,7 @@ export const THEME_TOKEN_DEFS: readonly ThemeTokenDef[] = [
     group: 'line',
     label: 'Line color',
     type: 'color',
-    default: '#8B9CFF',
+    default: '#939FFF',
   },
   {
     key: 'line.width',
@@ -268,21 +268,21 @@ export const THEME_TOKEN_DEFS: readonly ThemeTokenDef[] = [
     group: 'area',
     label: 'Area line',
     type: 'color',
-    default: '#8B9CFF',
+    default: '#939FFF',
   },
   {
     key: 'area.top',
     group: 'area',
     label: 'Area top fill',
     type: 'color',
-    default: 'rgba(139, 156, 255, 0.28)',
+    default: 'rgba(147, 159, 255, 0.28)',
   },
   {
     key: 'area.bottom',
     group: 'area',
     label: 'Area bottom fill',
     type: 'color',
-    default: 'rgba(139, 156, 255, 0.02)',
+    default: 'rgba(147, 159, 255, 0.02)',
   },
 
   // ── Baseline series ───────────────────────────────────────────────────
@@ -334,9 +334,9 @@ export const THEME_TOKEN_DEFS: readonly ThemeTokenDef[] = [
     key: 'ui.accent',
     group: 'ui',
     label: 'Accent',
-    description: 'Brand accent (void indigo)',
+    description: 'Brand accent (AXIS Void indigo)',
     type: 'color',
-    default: '#8B9CFF',
+    default: '#939FFF',
   },
   {
     key: 'ui.up',
@@ -407,8 +407,8 @@ export function catalogDefaults(): ThemeTokens {
  * Used when exposing host colors to engines / docs.
  */
 export function pineColorMap(tokens: ThemeTokens): Record<string, string> {
-  const bg = String(tokens['chart.bg_color'] ?? '#07080C');
-  const fg = String(tokens['chart.fg_color'] ?? '#E8EAEE');
+  const bg = String(tokens['chart.bg_color'] ?? '#030304');
+  const fg = String(tokens['chart.fg_color'] ?? '#EEEEEE');
   return {
     'chart.bg_color': bg,
     'chart.fg_color': fg,

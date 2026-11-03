@@ -26,9 +26,11 @@ import {
   updateCustomTheme,
 } from '../store';
 import {
+  BUILTIN_BAR_THEMES,
   barTokensEqual,
   barTokensFromState,
   defaultChartThemeState,
+  isBuiltinBarThemeId,
   serializeTheme,
   themesEqual,
   type BarColorTheme,
@@ -248,13 +250,136 @@ export function SavedThemeLibrary() {
   );
 }
 
+function BarThemeRow(props: {
+  bar: BarColorTheme;
+  builtin?: boolean;
+  inUse: boolean;
+  users: number;
+  useTitle: string;
+  renamingId: string | null;
+  draft: string;
+  renameError: string;
+  onUse: () => void;
+  onUpdate?: () => void;
+  onRenameStart?: () => void;
+  onRenameSave?: () => void;
+  onRenameCancel?: () => void;
+  onRenameDraft?: (v: string) => void;
+  onDelete?: () => void;
+}) {
+  const swatch = () => barSwatches(props.bar.tokens);
+  return (
+    <StudioRow testId={`axis-bar-theme-${props.bar.id}`}>
+      <div class="ax-entity">
+        <div class="ax-entity-body">
+          <Show
+            when={!props.builtin && props.renamingId === props.bar.id}
+            fallback={
+              <div class="ax-entity-head">
+                <span class="ax-card-title">{props.bar.name}</span>
+                <Swatches up={swatch().up} down={swatch().down} />
+                <Show when={props.builtin}>
+                  <span class="ax-card-kicker">Built-in</span>
+                </Show>
+                <Show when={props.inUse}>
+                  <span class="ax-cap ax-cap--active">In use</span>
+                </Show>
+                <Show when={props.users > 0}>
+                  <span class="ax-card-kicker">
+                    In {props.users} theme{props.users === 1 ? '' : 's'}
+                  </span>
+                </Show>
+              </div>
+            }
+          >
+            <form
+              class="ax-inline ax-theme-rename"
+              onSubmit={(e) => {
+                e.preventDefault();
+                props.onRenameSave?.();
+              }}
+            >
+              <StudioInput
+                value={props.draft}
+                testId={`axis-bar-theme-rename-input-${props.bar.id}`}
+                onInput={(v) => props.onRenameDraft?.(v)}
+              />
+              <AppButton design="soft" tone="primary" size="sm" type="submit">
+                Save
+              </AppButton>
+              <AppButton design="soft" tone="ghost" size="sm" onClick={() => props.onRenameCancel?.()}>
+                Cancel
+              </AppButton>
+            </form>
+            <Show when={props.renameError}>
+              <p class="ax-error">{props.renameError}</p>
+            </Show>
+          </Show>
+        </div>
+        <Show when={props.builtin || props.renamingId !== props.bar.id}>
+          <div class="ax-entity-actions ax-theme-actions">
+            <AppButton
+              design="soft"
+              tone={props.inUse ? 'ghost' : 'primary'}
+              size="sm"
+              disabled={props.inUse}
+              testId={`axis-bar-theme-use-${props.bar.id}`}
+              title={props.useTitle}
+              onClick={async () => {
+                props.onUse();
+              }}
+            >
+              {props.inUse ? 'In use' : 'Use'}
+            </AppButton>
+            <Show when={!props.builtin}>
+              <AppButton
+                design="soft"
+                tone="ghost"
+                size="sm"
+                testId={`axis-bar-theme-update-${props.bar.id}`}
+                title="Replace this bar coloring with the current bars, including inside themes that use it"
+                onClick={async () => {
+                  props.onUpdate?.();
+                }}
+              >
+                Update
+              </AppButton>
+              <AppButton
+                design="soft"
+                tone="ghost"
+                size="sm"
+                testId={`axis-bar-theme-rename-${props.bar.id}`}
+                onClick={() => props.onRenameStart?.()}
+              >
+                Rename
+              </AppButton>
+              <AppButton
+                design="soft"
+                tone="danger"
+                size="sm"
+                testId={`axis-bar-theme-delete-${props.bar.id}`}
+                onClick={async () => {
+                  props.onDelete?.();
+                }}
+              >
+                Delete
+              </AppButton>
+            </Show>
+          </div>
+        </Show>
+      </div>
+    </StudioRow>
+  );
+}
+
 /** Bar coloring library. The selected chart theme keeps the one you apply. */
 export function BarColorLibrary() {
   const [name, setName] = createSignal('');
   const [renamingId, setRenamingId] = createSignal<string | null>(null);
   const [draft, setDraft] = createSignal('');
   const [renameError, setRenameError] = createSignal('');
-  const bars = () => store.savedBarThemes || [];
+  const savedBars = () => store.savedBarThemes || [];
+  const builtins = () => BUILTIN_BAR_THEMES as BarColorTheme[];
   const live = createMemo(() => store.chartTheme || defaultChartThemeState());
   const activeTheme = createMemo(
     () =>
@@ -265,12 +390,21 @@ export function BarColorLibrary() {
   const inUse = (bar: BarColorTheme) =>
     store.activeBarThemeId === bar.id && barTokensEqual(barTokensFromState(live()), bar.tokens);
 
+  const useTitleFor = (bar: BarColorTheme) => {
+    const selected = activeTheme();
+    return selected ? `Use these bars in ${selected.name}` : 'Use these bars on the chart';
+  };
+
+  const usersOf = (bar: BarColorTheme) =>
+    (store.savedChartThemes || []).filter((theme) => theme.barTheme.refId === bar.id).length;
+
   const onSave = async () => {
     saveBarColorTheme(name());
     setName('');
   };
 
   const commitRename = (id: string) => {
+    if (isBuiltinBarThemeId(id)) return;
     const result = renameBarColorTheme(id, draft());
     if (result === 'duplicate') {
       setRenameError('That name is already used.');
@@ -290,7 +424,7 @@ export function BarColorLibrary() {
         when={activeTheme()}
         fallback={
           <StudioHint>
-            No saved theme selected. A bar palette saved here can be linked into a theme later.
+            No saved theme selected. Built-in candle packs and saved palettes can be applied anytime.
           </StudioHint>
         }
       >
@@ -326,133 +460,62 @@ export function BarColorLibrary() {
           Save bar colors
         </AppButton>
       </form>
+      <StudioList class="ax-list--entity">
+        <For each={builtins()}>
+          {(bar) => (
+            <BarThemeRow
+              bar={bar}
+              builtin
+              inUse={inUse(bar)}
+              users={usersOf(bar)}
+              useTitle={useTitleFor(bar)}
+              renamingId={renamingId()}
+              draft={draft()}
+              renameError={renameError()}
+              onUse={() => {
+                applyBarColorTheme(bar.id);
+              }}
+            />
+          )}
+        </For>
+      </StudioList>
       <Show
-        when={bars().length > 0}
+        when={savedBars().length > 0}
         fallback={<StudioEmpty>No saved bar colorings yet.</StudioEmpty>}
       >
         <StudioList class="ax-list--entity">
-          <For each={bars()}>
-            {(bar) => {
-              const swatch = () => barSwatches(bar.tokens);
-              const useTitle = () => {
-                const selected = activeTheme();
-                return selected
-                  ? `Use these bars in ${selected.name}`
-                  : 'Use these bars on the chart';
-              };
-              const users = () =>
-                (store.savedChartThemes || []).filter((theme) => theme.barTheme.refId === bar.id)
-                  .length;
-              return (
-                <StudioRow testId={`axis-bar-theme-${bar.id}`}>
-                  <div class="ax-entity">
-                    <div class="ax-entity-body">
-                      <Show
-                        when={renamingId() === bar.id}
-                        fallback={
-                          <div class="ax-entity-head">
-                            <span class="ax-card-title">{bar.name}</span>
-                            <Swatches up={swatch().up} down={swatch().down} />
-                            <Show when={inUse(bar)}>
-                              <span class="ax-cap ax-cap--active">In use</span>
-                            </Show>
-                            <Show when={users() > 0}>
-                              <span class="ax-card-kicker">
-                                In {users()} theme{users() === 1 ? '' : 's'}
-                              </span>
-                            </Show>
-                          </div>
-                        }
-                      >
-                        <form
-                          class="ax-inline ax-theme-rename"
-                          onSubmit={(e) => {
-                            e.preventDefault();
-                            commitRename(bar.id);
-                          }}
-                        >
-                          <StudioInput
-                            value={draft()}
-                            testId={`axis-bar-theme-rename-input-${bar.id}`}
-                            onInput={setDraft}
-                          />
-                          <AppButton design="soft" tone="primary" size="sm" type="submit">
-                            Save
-                          </AppButton>
-                          <AppButton
-                            design="soft"
-                            tone="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setRenamingId(null);
-                              setRenameError('');
-                            }}
-                          >
-                            Cancel
-                          </AppButton>
-                        </form>
-                        <Show when={renameError()}>
-                          <p class="ax-error">{renameError()}</p>
-                        </Show>
-                      </Show>
-                    </div>
-                    <Show when={renamingId() !== bar.id}>
-                      <div class="ax-entity-actions ax-theme-actions">
-                        <AppButton
-                          design="soft"
-                          tone={inUse(bar) ? 'ghost' : 'primary'}
-                          size="sm"
-                          disabled={inUse(bar)}
-                          testId={`axis-bar-theme-use-${bar.id}`}
-                          title={useTitle()}
-                          onClick={async () => {
-                            applyBarColorTheme(bar.id);
-                          }}
-                        >
-                          {inUse(bar) ? 'In use' : 'Use'}
-                        </AppButton>
-                        <AppButton
-                          design="soft"
-                          tone="ghost"
-                          size="sm"
-                          testId={`axis-bar-theme-update-${bar.id}`}
-                          title="Replace this bar coloring with the current bars, including inside themes that use it"
-                          onClick={async () => {
-                            updateBarColorTheme(bar.id);
-                          }}
-                        >
-                          Update
-                        </AppButton>
-                        <AppButton
-                          design="soft"
-                          tone="ghost"
-                          size="sm"
-                          testId={`axis-bar-theme-rename-${bar.id}`}
-                          onClick={() => {
-                            setRenamingId(bar.id);
-                            setDraft(bar.name);
-                            setRenameError('');
-                          }}
-                        >
-                          Rename
-                        </AppButton>
-                        <AppButton
-                          design="soft"
-                          tone="danger"
-                          size="sm"
-                          testId={`axis-bar-theme-delete-${bar.id}`}
-                          onClick={async () => {
-                            deleteBarColorTheme(bar.id);
-                          }}
-                        >
-                          Delete
-                        </AppButton>
-                      </div>
-                    </Show>
-                  </div>
-                </StudioRow>
-              );
-            }}
+          <For each={savedBars()}>
+            {(bar) => (
+              <BarThemeRow
+                bar={bar}
+                inUse={inUse(bar)}
+                users={usersOf(bar)}
+                useTitle={useTitleFor(bar)}
+                renamingId={renamingId()}
+                draft={draft()}
+                renameError={renameError()}
+                onUse={() => {
+                  applyBarColorTheme(bar.id);
+                }}
+                onUpdate={() => {
+                  updateBarColorTheme(bar.id);
+                }}
+                onRenameStart={() => {
+                  setRenamingId(bar.id);
+                  setDraft(bar.name);
+                  setRenameError('');
+                }}
+                onRenameSave={() => commitRename(bar.id)}
+                onRenameCancel={() => {
+                  setRenamingId(null);
+                  setRenameError('');
+                }}
+                onRenameDraft={setDraft}
+                onDelete={() => {
+                  deleteBarColorTheme(bar.id);
+                }}
+              />
+            )}
           </For>
         </StudioList>
       </Show>

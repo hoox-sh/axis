@@ -477,9 +477,21 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
   },
   {
     id: 'theme.void-dark',
-    title: 'Theme: Void Dark',
+    title: 'Theme: AXIS Void',
     category: 'theme',
-    keywords: ['void', 'dark', 'preset', 'chart.bg_color'],
+    keywords: ['void', 'axis', 'dark', 'preset', 'chart.bg_color', 'hoox'],
+  },
+  {
+    id: 'theme.volt',
+    title: 'Theme: PYNE Volt',
+    category: 'theme',
+    keywords: ['volt', 'pyne', 'lime', 'preset', 'chart.bg_color'],
+  },
+  {
+    id: 'theme.signal',
+    title: 'Theme: HOOX Signal',
+    category: 'theme',
+    keywords: ['signal', 'hoox', 'orange', 'preset', 'chart.bg_color'],
   },
   {
     id: 'theme.void-light',
@@ -1091,6 +1103,8 @@ export function buildDefaultCommands(actions: CommandActions): CommandDef[] {
   }
   if (actions.setChartThemePreset) {
     byId.set('theme.void-dark', () => actions.setChartThemePreset?.('void-dark'));
+    byId.set('theme.volt', () => actions.setChartThemePreset?.('volt'));
+    byId.set('theme.signal', () => actions.setChartThemePreset?.('signal'));
     byId.set('theme.void-light', () => actions.setChartThemePreset?.('void-light'));
     byId.set('theme.classic', () => actions.setChartThemePreset?.('classic'));
     byId.set('theme.mono', () => actions.setChartThemePreset?.('mono'));

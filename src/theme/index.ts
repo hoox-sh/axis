@@ -59,6 +59,8 @@ export {
 export {
   PRESET_VOID_DARK,
   PRESET_VOID_LIGHT,
+  PRESET_VOLT,
+  PRESET_SIGNAL,
   PRESET_CLASSIC,
   PRESET_MONO,
   PRESET_OBSIDIAN,
@@ -106,7 +108,24 @@ export {
   volumeColors,
   tokensToVoidLike,
   pineHostColors,
+  quietEdgeColor,
+  isLoudBorder,
+  resolveChromeBorder,
 } from './apply';
+
+export {
+  syntaxPackForPreset,
+  deriveSyntaxPack,
+  type SyntaxPack,
+} from './syntax-packs';
+
+export {
+  BUILTIN_BAR_THEMES,
+  builtinBarThemeId,
+  getBuiltinBarTheme,
+  isBuiltinBarThemeId,
+  resolveBarColorTheme,
+} from './bar-packs';
 
 export { ThemeManager, getThemeManager, resetThemeManagerForTests } from './manager';
 

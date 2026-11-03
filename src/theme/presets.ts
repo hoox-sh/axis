@@ -18,11 +18,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Built-in chart theme presets — high-end, session-friendly palettes.
+ * Built-in chart theme presets — brand packs + boutique + community shortlist.
  *
- * Design goals: soft surface hierarchy (bg → panel → elev), restrained
- * candle chroma, whisper grids, no neon / pure-black high-contrast tricks.
- * Ten curated presets for optimal long-session charting.
+ * Brand trio mirrors VS Code themes in pynescript:
+ * void-dark (AXIS) · volt (PYNE) · signal (HOOX).
  *
  * @module theme/presets
  */
@@ -37,13 +36,25 @@ function withTokens(patch: ThemeTokens): ThemeTokens {
   return { ...catalogDefaults(), ...patch };
 }
 
-// ── Foundations ──────────────────────────────────────────────────────────
+/** Slightly darken a hex body color for wicks (fallback = input). */
+function wickOf(hex: string, amount = 0.12): string {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return hex;
+  const n = parseInt(m[1]!, 16);
+  const r = (n >> 16) & 0xff;
+  const g = (n >> 8) & 0xff;
+  const b = n & 0xff;
+  const d = (c: number) => Math.max(0, Math.round(c * (1 - amount)));
+  return `#${[d(r), d(g), d(b)].map((c) => c.toString(16).padStart(2, '0')).join('')}`;
+}
 
-/** Default AXIS void-dark (matches VOID in series-factory). */
+// ── Brand packs ──────────────────────────────────────────────────────────
+
+/** AXIS Void — matches VS Code `axis-void-color-theme` / hoox.sh/axis. */
 export const PRESET_VOID_DARK: ThemePreset = {
   id: 'void-dark',
-  name: 'Void Dark',
-  description: 'Signature void indigo canvas · balanced for all-day use',
+  name: 'AXIS Void',
+  description: 'AXIS Void · hoox.sh/axis',
   base: 'dark',
   tokens: catalogDefaults(),
 };
@@ -86,6 +97,88 @@ export const PRESET_VOID_LIGHT: ThemePreset = {
     'ui.accent': '#5a6ad4',
     'ui.up': '#2e9e58',
     'ui.down': '#c44538',
+  }),
+};
+
+/** PYNE Volt — matches VS Code `pyne-volt-color-theme` / rich_theme.py. */
+export const PRESET_VOLT: ThemePreset = {
+  id: 'volt',
+  name: 'PYNE Volt',
+  description: 'PYNE Volt · hoox.sh/pyne',
+  base: 'dark',
+  tokens: withTokens({
+    'chart.bg_color': '#030302',
+    'chart.fg_color': '#EEEEEE',
+    'chart.panel': '#0B0B09',
+    'chart.elev': '#0C0C0A',
+    'bar.up.color': '#9BBD32',
+    'bar.up.border': '#9BBD32',
+    'bar.up.wick': wickOf('#9BBD32'),
+    'bar.down.color': '#E2726B',
+    'bar.down.border': '#E2726B',
+    'bar.down.wick': wickOf('#E2726B'),
+    'grid.vert': 'rgba(158, 159, 152, 0.08)',
+    'grid.horz': 'rgba(158, 159, 152, 0.08)',
+    'scale.border': '#1D1E1A',
+    'scale.text': '#9E9F98',
+    'crosshair.color': 'rgba(183, 239, 9, 0.32)',
+    'crosshair.label_bg': '#0C0C0A',
+    'volume.up': 'rgba(155, 189, 50, 0.40)',
+    'volume.down': 'rgba(226, 114, 107, 0.40)',
+    'line.color': '#B7EF09',
+    'area.line': '#B7EF09',
+    'area.top': 'rgba(183, 239, 9, 0.22)',
+    'area.bottom': 'rgba(183, 239, 9, 0.02)',
+    'baseline.top_line': '#9BBD32',
+    'baseline.bottom_line': '#E2726B',
+    'baseline.top_fill1': 'rgba(155, 189, 50, 0.22)',
+    'baseline.top_fill2': 'rgba(155, 189, 50, 0.04)',
+    'baseline.bottom_fill1': 'rgba(226, 114, 107, 0.04)',
+    'baseline.bottom_fill2': 'rgba(226, 114, 107, 0.22)',
+    'ui.accent': '#B7EF09',
+    'ui.up': '#9BBD32',
+    'ui.down': '#E2726B',
+  }),
+};
+
+/** HOOX Signal — matches VS Code `hoox-signal-color-theme`. */
+export const PRESET_SIGNAL: ThemePreset = {
+  id: 'signal',
+  name: 'HOOX Signal',
+  description: 'HOOX Signal · hoox.sh',
+  base: 'dark',
+  tokens: withTokens({
+    'chart.bg_color': '#030303',
+    'chart.fg_color': '#EEEEEE',
+    'chart.panel': '#0B0B0B',
+    'chart.elev': '#101010',
+    'bar.up.color': '#3A9E6A',
+    'bar.up.border': '#3A9E6A',
+    'bar.up.wick': wickOf('#3A9E6A'),
+    'bar.down.color': '#D45A4A',
+    'bar.down.border': '#D45A4A',
+    'bar.down.wick': wickOf('#D45A4A'),
+    'grid.vert': 'rgba(134, 134, 134, 0.08)',
+    'grid.horz': 'rgba(134, 134, 134, 0.08)',
+    'scale.border': '#161616',
+    'scale.text': '#868686',
+    'crosshair.color': 'rgba(254, 106, 0, 0.34)',
+    'crosshair.label_bg': '#101010',
+    'volume.up': 'rgba(58, 158, 106, 0.40)',
+    'volume.down': 'rgba(212, 90, 74, 0.40)',
+    'line.color': '#FE6A00',
+    'area.line': '#FE6A00',
+    'area.top': 'rgba(254, 106, 0, 0.22)',
+    'area.bottom': 'rgba(254, 106, 0, 0.02)',
+    'baseline.top_line': '#3A9E6A',
+    'baseline.bottom_line': '#D45A4A',
+    'baseline.top_fill1': 'rgba(58, 158, 106, 0.22)',
+    'baseline.top_fill2': 'rgba(58, 158, 106, 0.04)',
+    'baseline.bottom_fill1': 'rgba(212, 90, 74, 0.04)',
+    'baseline.bottom_fill2': 'rgba(212, 90, 74, 0.22)',
+    'ui.accent': '#FE6A00',
+    'ui.up': '#3A9E6A',
+    'ui.down': '#D45A4A',
   }),
 };
 
@@ -425,11 +518,12 @@ export const PRESET_PARCHMENT: ThemePreset = {
 
 /**
  * All built-in presets in UI order.
- * Foundations first, then the dark boutique, light boutique, and finally the
- * vendored community palettes (hoox-themes).
+ * Brand first (void / volt / signal / void-light), then boutique, then community.
  */
 export const THEME_PRESETS: readonly ThemePreset[] = [
   PRESET_VOID_DARK,
+  PRESET_VOLT,
+  PRESET_SIGNAL,
   PRESET_VOID_LIGHT,
   PRESET_CLASSIC,
   PRESET_MONO,
@@ -444,13 +538,16 @@ export const THEME_PRESETS: readonly ThemePreset[] = [
 
 const BY_ID = new Map(THEME_PRESETS.map((p) => [p.id, p]));
 
-/** Legacy id aliases → current presets (workspace / older localStorage). */
+/** Legacy / brand alias ids → current presets (workspace / older localStorage). */
 const LEGACY_IDS: Record<string, string> = {
   'high-contrast': 'classic',
   aurora: 'dusk',
   'nord-mist': 'graphite',
   'ink-ember': 'pacific',
   silk: 'porcelain',
+  axis: 'void-dark',
+  pyne: 'volt',
+  hoox: 'signal',
 };
 
 export function getPreset(id: string | undefined | null): ThemePreset {
