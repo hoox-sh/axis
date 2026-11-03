@@ -7,7 +7,7 @@ tags: [code, data]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-27T11:51:28Z
+  at: 2026-11-03T16:04:19Z
 sources:
   - id: tree
     resource: "src/data"
@@ -24,12 +24,12 @@ okf_lock: generated
 * `binance-http.ts` — BINANCE_INVERSE_REST_HOSTS, BINANCE_LINEAR_REST_HOSTS, BINANCE_REST_HOSTS, BinanceFetchOpts, BinanceRestPath, DEFAULT_MARKET_WORKER_BASE, binanceKlineWsUrls, binanceTickerWsUrls, fetchBinanceJson, resolveMarketWorkerBase
 * `ccxt-session.ts` — bindCcxtSession, unbindCcxtSession
 * `credentials.ts` — CREDENTIALS_MEMORY_ONLY, CredentialMeta, ExchangeCredential, activeCcxtExchange, activeCcxtGateway, ccxtCredentialId, clearCredentials, deleteCredential, getCcxtCredential, getCredential, getCredentialForVenue, hasCcxtCredential
-* `data-manager-source.ts` — DATA_MANAGER_SOURCE_ID, DataManagerSelection, ResolvedCacheSeries, clearDataManagerSelection, dataManagerCacheKey, dataManagerLabel, getDataManagerSelection, resolveDataManagerBars, setDataManagerSelection
+* `data-manager-source.ts` — DATA_MANAGER_SOURCE_ID, DataManagerSelection, ResolvedCacheSeries, clearDataManagerSelection, dataManagerCacheKey, dataManagerLabel, getDataManagerSelection, resolveDataManagerBars, resolveDataManagerVenueSource, setDataManagerSelection
 * `data-source-manager.ts` — DSM_MAX_BARS_PER_JOB, DSM_MAX_PAGES, DataSourceJob, DataSourceJobPhase, DataSourceJobStatus, StartBackfillOpts, _resetDataSourceManagerForTests, _waitForJob, applyCachedToChart, applyChartWindow, applyJobToChart, cancelBackfill
 * `dataset-sinks.ts` — DatasetSink, PERSISTENCE_MODES, PersistenceMode, SinkErrorListener, _resetDatasetSinksForTests, datasetKey, flushDatasetSinks, localSink, onSinkError, remoteSink, removeDatasetFromAllSinks, sessionSink
 * `dataset-store.ts` — DatasetMeta, PutResult, _drainDatasetWritesForTests, _resetDatasetStoreForTests, awaitPendingCopies, flushDatasets, getDataset, getMergePolicy, getPersistenceMode, keyFor, listMemoryDatasets, peekDataset
 * `dataset-validate.ts` — ClassifyOpts, DatasetReport, GapClassification, RepairResult, RepairStats, ValidateOpts, VenueClass, classifyGaps, findClassifiedGaps, repairBars, validateDataset, venueClassForSourceCaps
-* `dsm-orchestrator.ts` — DatasetFirstResult, _resetDsmOrchestratorForTests, announceDatasetPaint, chartDisplayCap, ensureDatasetComplete, paintDataset, repaintViewForTests, seedDatasetFromBars, sliceForChart, startProgressiveStream, stopProgressiveRepaint
+* `dsm-orchestrator.ts` — DatasetFirstResult, _resetDsmOrchestratorForTests, announceDatasetPaint, chartDisplayCap, coldStartDataset, ensureDatasetComplete, paintDataset, repaintViewForTests, seedDatasetFromBars, sliceForChart, startProgressiveStream, stopProgressiveRepaint
 * `engine-flush.ts` — EngineFlushResult, collectEngineSeriesKeys, flushEngineSeries, flushLocalAndEngine, knownEngineSeriesKeys
 * `expand-cache.ts` — ExpandCacheResult, _flushDataManagerLiveBarForTests, canExpandFromSource, expandCachedSeriesToNow, fillBarsTowardNow, fillInternalGaps, noteDataManagerLiveBar
 * `gateway.ts` — DATAFEED_DEFAULT_PORT, GatewayMode, GatewaySessionBody, gatewayBase, gatewayDeleteSession, gatewayFetch, gatewayPutSession, gatewayWs, isRemotePageOrigin, probeSidecar
@@ -38,7 +38,7 @@ okf_lock: generated
 * `merge-datasets.ts` — BarConflict, CONFLICT_ABS_FLOOR, DEFAULT_CONFLICT_TOLERANCE, MergePolicy, MergeResult, barsConflict, isSortedUnique, mergeSortedSeries, mergeWithConflictPolicy
 * `mexc-http.ts` — DEFAULT_MARKET_WORKER_BASE, MEXC_REST_HOSTS, MexcFetchOpts, MexcRestPath, fetchMexcJson, resolveMarketWorkerBase
 * `parse-bars.ts` — barTimeToPineMs, barsForPine, normalizeBarTime, normalizeHistoricalBars, parseOhlcvFile, parseOhlcvText, repairOhlc, sanitizeBar, sanitizeStreamBar, toUnixSeconds
-* `provider.ts` — DEFAULT_PROVIDER, MARKET_LABELS, ProviderAuthMode, ProviderGateway, ProviderMarket, ProviderSession, ProviderVenue, asProviderMarket, buildProviderSession, defaultStreamForSource, formatProviderLabel, hydrateProviderSession
+* `provider.ts` — DEFAULT_PROVIDER, MARKET_LABELS, ProviderAuthMode, ProviderGateway, ProviderMarket, ProviderSession, ProviderVenue, asProviderMarket, buildProviderSession, defaultSourceForStream, defaultStreamForSource, formatProviderLabel
 * `signed-fetch.ts` — SignedFetchOpts, fetchSignedJson, hasSignedCreds
 * `symbol-catalog.ts` — FALLBACK_MAJORS, SymbolCatalogResult, SymbolEntry, SymbolVenue, compactPair, filterSymbols, listQuotes, loadSymbolCatalog, resolveSymbolVenue, venueLabel
 * `symbol-exchange.ts` — exchangeForSource, normalizeLoadSymbol

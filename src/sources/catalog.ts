@@ -558,8 +558,11 @@ export const dataManagerSource: SourcePlugin = {
   async fetchHistorical({ symbol, interval, signal }) {
     const resolved = await resolveDataManagerBars(symbol, interval);
     if (!resolved?.bars?.length) {
+      // Chart loads go through load-symbol → coldStartDataset (auto DSM).
+      // Direct callers still get a clear miss — do not instruct a manual
+      // Dataset manager open as the only path.
       throw new Error(
-        'No cached dataset for this symbol. Open Data Source Manager → Dataset manager, or run a backfill first.',
+        'No cached dataset for this symbol yet. DSM will auto-backfill on chart load.',
       );
     }
     void dataManagerLabel(resolved);

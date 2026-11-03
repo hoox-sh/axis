@@ -60,10 +60,18 @@ import {
   venueClassForSourceCaps,
 } from './dataset-validate';
 import { intervalToSec } from './bars-gaps';
-import { startBackfill } from './data-source-manager';
+import {
+  getDataSourceJobs,
+  startBackfill,
+} from './data-source-manager';
 import { exchangeForSource } from './symbol-exchange';
 import { providerDatasetLock } from './provider';
 import { getSource } from '../sources/catalog';
+import {
+  DATA_MANAGER_SOURCE_ID,
+  resolveDataManagerVenueSource,
+  setDataManagerSelection,
+} from './data-manager-source';
 import { announce } from '../ui/sr-announce';
 
 function chartLock(): { market: string; authMode: string } {
@@ -343,6 +351,115 @@ export function startProgressiveStream(
 }
 
 /**
+ * Cold-start a dataset when Data Manager (or any source) has no cache:
+ * enqueue a DSM walk to Settings → Historical bars, paint as soon as the
+ * rolling window is covered, and keep filling in the background.
+ *
+ * Resolves once the chart has at least the rolling-window bar count (or the
+ * job finishes earlier with whatever the venue returned).
+ */
+export async function coldStartDataset(
+  symbol: string,
+  interval: string,
+  sourceId: string,
+  opts?: {
+    stillCurrent?: () => boolean;
+    signal?: AbortSignal;
+  },
+): Promise<{ jobId: string; painted: number } | null> {
+  const sym = String(symbol || '').trim();
+  const iv = String(interval || store.interval || '1d');
+  let srcId = String(sourceId || store.source || '');
+  if (!sym) return null;
+
+  if (srcId === DATA_MANAGER_SOURCE_ID) {
+    srcId = resolveDataManagerVenueSource();
+    try {
+      setDataManagerSelection(srcId, sym, iv);
+    } catch {
+      /* selection stick is best-effort */
+    }
+  }
+  if (!getSource(srcId) || srcId === DATA_MANAGER_SOURCE_ID) return null;
+
+  const step = intervalToSec(iv);
+  const nowSec = Math.floor(Date.now() / 1000);
+  const historyBars = Math.max(1, clampHistoryBars(store.historyBars));
+  const chartCap = Math.max(1, chartWindowLimit());
+  const targetToSec = nowSec;
+  const targetFromSec = nowSec - historyBars * step;
+
+  startProgressiveStream(sym, iv, srcId);
+  const jobId = startBackfill({
+    sourceId: srcId,
+    symbol: sym,
+    interval: iv,
+    targetFromSec,
+    targetToSec,
+    applyWhenComplete: true,
+  });
+
+  setStatus('loading', `DSM backfilling ${sym} ${iv} · chart at ${chartCap}, dataset to ${historyBars}`);
+
+  const stillCurrent = opts?.stillCurrent;
+  const signal = opts?.signal;
+  const started = Date.now();
+  const MAX_WAIT_MS = 90_000;
+  const POLL_MS = 120;
+
+  while (Date.now() - started < MAX_WAIT_MS) {
+    if (stillCurrent && !stillCurrent()) return { jobId, painted: 0 };
+    if (signal?.aborted) return { jobId, painted: 0 };
+
+    let bars: Bar[] = [];
+    try {
+      bars = peekDataset(srcId, sym, iv, chartLock()) || [];
+      if (!bars.length) bars = await getDataset(srcId, sym, iv, chartLock());
+    } catch {
+      bars = [];
+    }
+    if (bars.length >= chartCap) {
+      const view = await paintDataset(sym, iv, srcId, {
+        stillCurrent,
+        bars,
+      });
+      return { jobId, painted: view?.length ?? sliceForChart(bars).length };
+    }
+
+    const job = getDataSourceJobs().find((j) => j.id === jobId);
+    if (
+      job &&
+      (job.status === 'complete' ||
+        job.status === 'cancelled' ||
+        job.status === 'error')
+    ) {
+      if (bars.length) {
+        const view = await paintDataset(sym, iv, srcId, {
+          stillCurrent,
+          bars,
+        });
+        return { jobId, painted: view?.length ?? sliceForChart(bars).length };
+      }
+      return { jobId, painted: 0 };
+    }
+
+    await new Promise<void>((resolve) => setTimeout(resolve, POLL_MS));
+  }
+
+  // Timeout: paint whatever landed so the chart is not left empty.
+  try {
+    const bars = await getDataset(srcId, sym, iv, chartLock());
+    if (bars.length) {
+      const view = await paintDataset(sym, iv, srcId, { stillCurrent, bars });
+      return { jobId, painted: view?.length ?? sliceForChart(bars).length };
+    }
+  } catch {
+    /* ignore */
+  }
+  return { jobId, painted: 0 };
+}
+
+/**
  * Validate the dataset for [now − historyBars, now] and auto-complete it in
  * the background: sliced backfill job for fillable gaps (existing DSM job
  * engine). Legitimate closures (weekends / maintenance) are never chased.
@@ -383,13 +500,15 @@ export async function ensureDatasetComplete(
     }
     if (!raw.length) {
       // Empty cache — still hustle: start a walk-back so first pages land.
+      // Apply once the rolling window is covered; the job keeps walking to
+      // historyBars in the background.
       result.jobId = startBackfill({
         sourceId: srcId,
         symbol: sym,
         interval: iv,
         targetFromSec,
         targetToSec,
-        applyWhenComplete: false,
+        applyWhenComplete: true,
       });
       return result;
     }

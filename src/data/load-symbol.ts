@@ -350,10 +350,142 @@ export async function loadSymbolData(
     }
   }
 
+  // ── Data Manager: resolve the venue dataset key (never `data-manager|…`) ──
+  // Empty cache auto-starts DSM: paint at the rolling window, keep filling to
+  // Settings → Historical bars in the background. Never surface "No cached
+  // dataset" for a cold symbol switch.
+  if (srcId === 'data-manager') {
+    try {
+      const {
+        paintDataset,
+        ensureDatasetComplete,
+        announceDatasetPaint,
+        coldStartDataset,
+      } = await import('./dsm-orchestrator');
+      const {
+        resolveDataManagerBars,
+        resolveDataManagerVenueSource,
+        setDataManagerSelection,
+        DATA_MANAGER_SOURCE_ID,
+      } = await import('./data-manager-source');
+
+      let venueSrc = resolveDataManagerVenueSource();
+      let cached: Bar[] = [];
+      if (opts?.preferDataset !== false) {
+        try {
+          const resolved = await resolveDataManagerBars(sym, iv);
+          if (resolved?.bars?.length) {
+            venueSrc = resolved.sourceId || venueSrc;
+            cached = resolved.bars;
+            try {
+              setDataManagerSelection(
+                venueSrc,
+                resolved.symbol || sym,
+                resolved.interval || iv,
+              );
+            } catch {
+              /* selection stick is best-effort */
+            }
+          }
+        } catch {
+          cached = [];
+        }
+      }
+      if (!stillCurrent()) return false;
+
+      if (cached.length) {
+        const filled = await closeTailToNow(cached, venueSrc, sym, iv, signal);
+        if (!stillCurrent()) return false;
+        if (filled.length && filled.length !== cached.length) {
+          try {
+            const { putDatasetBars } = await import('./dataset-store');
+            await putDatasetBars(venueSrc, sym, iv, filled, chartLock());
+          } catch {
+            /* persist is best-effort */
+          }
+        }
+        const painted = await paintDataset(sym, iv, venueSrc, {
+          stillCurrent,
+          bars: filled.length ? filled : cached,
+        });
+        if (painted?.length) {
+          if (!stillCurrent()) return false;
+          const bars = painted;
+          const ms = performance.now() - t0;
+          setTelemetryState('source', 'open', {
+            latencyMs: ms,
+            detail: `${bars.length} bars · ${label} (dataset)`,
+            error: null,
+          });
+          announceDatasetPaint(bars, sym, iv);
+          void ensureDatasetComplete(sym, iv, venueSrc, { stillCurrent });
+          await settleReadinessAfterBars(gen, stillCurrent, {
+            symbol: sym,
+            interval: iv,
+            source: DATA_MANAGER_SOURCE_ID,
+          });
+          if (restartLiveAfter && stillCurrent()) {
+            const streamId =
+              store.live.streamId || defaultStreamForSource(DATA_MANAGER_SOURCE_ID);
+            try {
+              const { startLive } = await import('../streams/multiplex');
+              if (stillCurrent()) startLive(streamId, sym, iv);
+            } catch {
+              /* ignore live restart failures */
+            }
+          }
+          return stillCurrent();
+        }
+      }
+
+      // Cold cache (or Reload with empty cache): DSM walk → apply at rolling
+      // window → continue to historyBars in background.
+      const cold = await coldStartDataset(sym, iv, venueSrc, {
+        stillCurrent,
+        signal,
+      });
+      if (!stillCurrent()) return false;
+      if (cold && cold.painted > 0) {
+        const ms = performance.now() - t0;
+        setTelemetryState('source', 'open', {
+          latencyMs: ms,
+          detail: `${cold.painted} bars · ${label} (DSM)`,
+          error: null,
+        });
+        setStatus(
+          'ready',
+          `Loaded ${cold.painted} bars · DSM filling to ${clampHistoryBars(store.historyBars)}`,
+          { toast: false, source: 'dsm' },
+        );
+        announce(`Loaded ${cold.painted} bars ${sym} ${iv}`);
+        await settleReadinessAfterBars(gen, stillCurrent, {
+          symbol: sym,
+          interval: iv,
+          source: DATA_MANAGER_SOURCE_ID,
+        });
+        if (restartLiveAfter && stillCurrent()) {
+          const streamId =
+            store.live.streamId || defaultStreamForSource(DATA_MANAGER_SOURCE_ID);
+          try {
+            const { startLive } = await import('../streams/multiplex');
+            if (stillCurrent()) startLive(streamId, sym, iv);
+          } catch {
+            /* ignore live restart failures */
+          }
+        }
+        return stillCurrent();
+      }
+      // DSM returned nothing — fall through to a hard error below rather than
+      // the old "Open Dataset manager" dead-end.
+    } catch (dsmErr: unknown) {
+      console.warn('[load-symbol] data-manager load failed; falling through', dsmErr);
+    }
+  }
+
   // ── DSM-first: paint from the dataset store, complete in background ──
   // Best-effort: any failure (import / IDB / repair) falls through to the
   // direct venue fetch below instead of rejecting into an unhandled error.
-  if (opts?.preferDataset !== false && srcId !== 'csv-upload') {
+  if (opts?.preferDataset !== false && srcId !== 'csv-upload' && srcId !== 'data-manager') {
     try {
       const { paintDataset, ensureDatasetComplete, announceDatasetPaint } = await import(
         './dsm-orchestrator'
@@ -414,6 +546,15 @@ export async function loadSymbolData(
   }
 
   try {
+    // Data Manager never fetches itself — cold-start above is the path. If it
+    // produced no bars (venue down / aborted), fail cleanly without the old
+    // "Open Dataset manager" dead-end.
+    if (srcId === 'data-manager') {
+      throw new Error(
+        'Dataset backfill returned no bars yet. Check the Data panel job or try Reload.',
+      );
+    }
+
     // Dataset target (Settings → Historical bars) wins over per-source plugin
     // config. Venues cap a single response (e.g. Binance 1000), so walk back
     // page-by-page until the target is covered — a single first page is what
@@ -629,7 +770,18 @@ export async function loadSymbolData(
     // rolling window; the full cache stays in the dataset store.
     try {
       const { getDataset } = await import('./dataset-store');
-      const cached = await getDataset(srcId, sym, iv, chartLock());
+      let cached: Bar[] = [];
+      if (srcId === 'data-manager') {
+        try {
+          const { resolveDataManagerBars } = await import('./data-manager-source');
+          const resolved = await resolveDataManagerBars(sym, iv);
+          cached = resolved?.bars ?? [];
+        } catch {
+          cached = [];
+        }
+      } else {
+        cached = await getDataset(srcId, sym, iv, chartLock());
+      }
       if (cached.length && stillCurrent()) {
         const cap = chartWindowLimit();
         const view = cached.length > cap ? cached.slice(cached.length - cap) : cached;

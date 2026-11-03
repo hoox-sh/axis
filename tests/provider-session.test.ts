@@ -73,6 +73,14 @@ describe('resolveProviderVenue / pairing', () => {
       'bybit',
     );
   });
+
+  it('defaultSourceForStream pairs first-party streams', async () => {
+    const { defaultSourceForStream } = await import('../src/data/provider');
+    expect(defaultSourceForStream('binance-ws')).toBe('binance-rest');
+    expect(defaultSourceForStream('okx-ws')).toBe('okx-rest');
+    expect(defaultSourceForStream('mock-poll')).toBe('binance-rest');
+    expect(defaultSourceForStream('')).toBe('binance-rest');
+  });
 });
 
 describe('session hydrate / persist', () => {

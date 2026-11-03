@@ -89,6 +89,25 @@ describe('data-manager source', () => {
     ).rejects.toThrow(/No cached dataset/);
   });
 
+  it('resolveDataManagerVenueSource follows stream then defaults to binance-rest', async () => {
+    const { resolveDataManagerVenueSource } = await import(
+      '../src/data/data-manager-source'
+    );
+    const { setStore } = await import('../src/store');
+    clearDataManagerSelection();
+    setStore('live', {
+      active: false,
+      needsRerun: false,
+      lastBarTime: 0,
+      streamId: 'okx-ws',
+      preferAfterLoad: false,
+      rerunOn: 'every-tick',
+    });
+    expect(resolveDataManagerVenueSource()).toBe('okx-rest');
+    setDataManagerSelection('bybit-rest', 'ETHUSDT', '1m');
+    expect(resolveDataManagerVenueSource()).toBe('bybit-rest');
+  });
+
   it('fetchHistorical returns cached bars', async () => {
     // Use mock-walk so expand-to-now does not hit a real venue network
     const now = Math.floor(Date.now() / 1000);

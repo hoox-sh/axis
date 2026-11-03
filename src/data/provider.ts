@@ -257,6 +257,26 @@ const SOURCE_STREAM: Record<string, string> = {
   'ccxt-rest': 'ccxt-ws',
 };
 
+const STREAM_SOURCE: Record<string, string> = {
+  'binance-ws': 'binance-rest',
+  'okx-ws': 'okx-rest',
+  'bybit-ws': 'bybit-rest',
+  'coinbase-ws': 'coinbase-rest',
+  'kraken-ws': 'kraken-rest',
+  'mexc-ws': 'mexc-rest',
+  'ccxt-ws': 'ccxt-rest',
+};
+
+/**
+ * Matching historical source for a live stream (inverse of
+ * {@link defaultStreamForSource} for first-party pairs).
+ */
+export function defaultSourceForStream(streamId: string): string {
+  const id = String(streamId || '').trim();
+  if (!id || id === OFFLINE_STREAM) return 'binance-rest';
+  return STREAM_SOURCE[id] || 'binance-rest';
+}
+
 /**
  * Matching live stream for a historical source.
  *

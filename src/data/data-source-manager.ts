@@ -140,6 +140,11 @@ interface InternalJob extends DataSourceJob {
   /** AXIS provider lock captured when the job was created. */
   market: string;
   authMode: string;
+  /**
+   * True after the first mid-job paint once {@link chartWindowLimit} bars are
+   * cached. The walk still continues up to the historical-bar target.
+   */
+  appliedRollingWindow: boolean;
 }
 
 function jobLock(j: { market?: string; authMode?: string }): { market: string; authMode: string } {
@@ -404,7 +409,21 @@ function makeJob(
     venueDead: false,
     market: lock.market,
     authMode: lock.authMode,
+    appliedRollingWindow: false,
   };
+}
+
+/**
+ * Paint the chart as soon as the rolling window is covered, while the job
+ * keeps walking toward the historical-bar target in the background.
+ */
+function maybeApplyRollingWindow(j: InternalJob): void {
+  if (!j.applyWhenComplete || j.appliedRollingWindow) return;
+  if (j.abort.signal.aborted) return;
+  const need = chartWindowLimit();
+  if (!(j.barsFetched >= need && j.barsFetched > 0)) return;
+  j.appliedRollingWindow = true;
+  void applyJobToChart(j.id, null, { onlyIfCurrent: true });
 }
 
 function enqueueJob(internal: InternalJob): string {
@@ -445,6 +464,9 @@ export function startBackfill(opts: StartBackfillOpts = {}): string {
     }
 
     // Data Manager is a cache reader — remap to the selected venue when known.
+    // Cold chart loads resolve the venue first (stream pair / selection) and
+    // pass that id in; a bare `data-manager` job without selection stays
+    // cache-only via deliverCacheOnlyJob.
     if (sourceId === DATA_MANAGER_SOURCE_ID) {
       try {
         const sel = getDataManagerSelection();
@@ -734,6 +756,7 @@ async function fetchWalkPage(
         j.newestSec = merged.bars[merged.bars.length - 1]!.time;
         j.updatedAt = Date.now();
         syncJob(j);
+        maybeApplyRollingWindow(j);
       }
     } catch (err: unknown) {
       // Cache write failure should not kill the job mid-page — keep going with page data
@@ -745,6 +768,7 @@ async function fetchWalkPage(
       j.barsFetched = Math.max(j.barsFetched, pageBars.length);
       j.updatedAt = Date.now();
       syncJob(j);
+      maybeApplyRollingWindow(j);
     }
   }
   return { rawOldest, pageBars };

@@ -27,6 +27,7 @@
  */
 
 import type { Bar } from '../store/types';
+import { store } from '../store';
 import {
   barsCacheKey,
   listCachedSeries,
@@ -36,7 +37,7 @@ import {
   type BarsCacheMeta,
 } from './bars-cache';
 import { getDataset } from './dataset-store';
-import { providerDatasetLock } from './provider';
+import { defaultSourceForStream, providerDatasetLock } from './provider';
 import { repairBars } from './dataset-validate';
 
 /** Source plugin id registered in the sources catalog. */
@@ -90,6 +91,26 @@ export function clearDataManagerSelection(): void {
 
 export function getDataManagerSelection(): DataManagerSelection | null {
   return selection ? { ...selection } : null;
+}
+
+/**
+ * Resolve the underlying venue REST source for Data Manager auto-backfill.
+ *
+ * Order: explicit Dataset manager selection → live stream's paired REST →
+ * `binance-rest`.
+ */
+export function resolveDataManagerVenueSource(): string {
+  const sel = selection?.sourceId ? String(selection.sourceId).trim() : '';
+  if (
+    sel &&
+    sel !== DATA_MANAGER_SOURCE_ID &&
+    sel !== 'csv-upload' &&
+    sel !== 'mock-walk'
+  ) {
+    return sel;
+  }
+  const streamId = String(store.live?.streamId || store.activePlugins?.stream || '').trim();
+  return defaultSourceForStream(streamId);
 }
 
 export interface ResolvedCacheSeries {
