@@ -68,6 +68,7 @@ import { isInteractiveRunInFlight, runAndApply, currentRunEpoch } from '../indic
 import { groupIndicatorsByPlotDepLevel, mapWithConcurrencyLimit } from '../results/plot-sources';
 import { detectScriptKind } from '../indicators/script-meta';
 import { getStream, listStreams, defaultStreamForSource, type StreamPlugin } from './catalog';
+import { stopSlotLiveMux, syncSlotLiveMux } from './slot-live-mux';
 import { noteDataManagerLiveBar } from '../data/expand-cache';
 import { intervalToSec } from '../data/bars-gaps';
 import { isEngineOwnedLive } from '../engines/ownership';
@@ -1165,6 +1166,13 @@ export function startLive(
   scheduleRerun({ immediate: streamRouteActive() });
   // Successful repair schedules its own rerun after merging filled bars.
   void repairLiveInternalGaps(epoch);
+
+  // Inactive multi-chart slots: secondary venue sockets (A1.2.2).
+  try {
+    if (liveEpoch === epoch && store.live.active) syncSlotLiveMux({ streamId: id });
+  } catch {
+    /* mux optional */
+  }
 }
 
 /**
@@ -1191,6 +1199,12 @@ export function stopLive(opts?: StopLiveOpts) {
     setTelemetryState('stream', 'closed', { error: null });
   }
   // reason === 'restart': startLive overwrites status/telemetry immediately after
+
+  try {
+    stopSlotLiveMux();
+  } catch {
+    /* mux optional */
+  }
 
   // Null before invoke so nested stopLive / onError re-entry is a no-op
   const stop = currentStop;

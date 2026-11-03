@@ -15,6 +15,14 @@ _Generated/updated: 2026-11-01 · 880 commits · describe-tag: `v2.26.0`_
 
 ## [Unreleased]
 
+### Added
+
+- **Multi-chart grids 6 (3×2) and 8 (4×2).** Layout menu, command palette, Alt-6 / Alt-8, and glyph cells. Growing the grid hydrates empty sibling slots without clobbering the focused OHLCV plane. While Live is on, up to seven secondary venue streams tick inactive markets into their slot caches.
+
+### Fixed
+
+- **Data Manager empty-cache loads auto-start DSM.** With chart source `data-manager`, a symbol that has no cached dataset (e.g. ETHUSDT after BTC) no longer stops on “No cached dataset…”. AXIS resolves the venue from Dataset selection → live stream pair (`binance-ws` → `binance-rest`) → Binance REST, starts a background backfill to Settings → Historical bars, paints once the rolling window is covered, and keeps filling in the background. Mid-job `applyWhenComplete` paints at the rolling-window threshold; progressive DSM repaints continue afterward.
+
 ### Changed
 
 - **Theme refine (brand packs + shortlist).** Chart presets lead with AXIS Void (`void-dark`, alias `axis`), PYNE Volt (`volt`, alias `pyne`), and HOOX Signal (`signal`, alias `hoox`) matching the pynescript VS Code themes. Community catalog culled to Ayu / Tokyo Night / Nord / One Dark / Rosé Pine with muted `scale.border` edges. Chrome softens loud/accent borders; brand syntax packs drive editor CSS vars; builtin candle packs appear in the Theme library beside saved bar themes.

@@ -381,10 +381,9 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
       setSlotBars(id, store.bars, false);
     }
 
-    // Inactive empty slots stay on the empty hint until focused — clicking a
-    // cell focuses it and auto-loads its symbol via `axis-slot-activate`.
-    // (Never prefetch here: loadSymbolData writes the ACTIVE plane, so a
-    // sibling fetch would overwrite the focused chart's history.)
+    // Inactive empty slots stay on the empty hint until
+    // {@link hydrateEmptyChartSlots} (grid grow) or focus/`axis-slot-activate`
+    // fills them. Do not call `loadSymbolData` here — it writes the ACTIVE plane.
 
     let ro: ResizeObserver | undefined;
     if (hostEl && typeof ResizeObserver !== 'undefined') {

@@ -96,7 +96,7 @@ export interface CommandActions {
   openEditorSettings?: () => void;
   /** Open Settings on the Notifications (toasts / flood control) tab. */
   openNotificationSettings?: () => void;
-  setChartGridMode: (mode: '1' | '2h' | '2v' | '4') => void;
+  setChartGridMode: (mode: '1' | '2h' | '2v' | '4' | '6' | '8') => void;
   runScript: () => void | Promise<void>;
   focusSymbol: () => void;
   loadSymbol?: () => void | Promise<void>;
@@ -585,6 +585,18 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
     category: 'chart',
     keywords: ['4', 'four', 'grid', 'multi'],
   },
+  {
+    id: 'chart.grid.6',
+    title: 'Chart Layout: 3×2',
+    category: 'chart',
+    keywords: ['6', 'six', 'grid', 'multi', '3x2'],
+  },
+  {
+    id: 'chart.grid.8',
+    title: 'Chart Layout: 4×2',
+    category: 'chart',
+    keywords: ['8', 'eight', 'grid', 'multi', '4x2'],
+  },
   // Actions
   {
     id: 'action.run',
@@ -1025,6 +1037,8 @@ export function buildDefaultCommands(actions: CommandActions): CommandDef[] {
     ['chart.grid.2h', () => actions.setChartGridMode('2h')],
     ['chart.grid.2v', () => actions.setChartGridMode('2v')],
     ['chart.grid.4', () => actions.setChartGridMode('4')],
+    ['chart.grid.6', () => actions.setChartGridMode('6')],
+    ['chart.grid.8', () => actions.setChartGridMode('8')],
     ['action.run', () => void actions.runScript()],
     ['action.focus-symbol', actions.focusSymbol],
   ]);

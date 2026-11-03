@@ -70,6 +70,10 @@ export function layoutCells(mode: ChartGridMode): ReadonlyArray<LayoutGlyphCell>
       return cellsFor(1, 2);
     case '4':
       return cellsFor(2, 2);
+    case '6':
+      return cellsFor(3, 2);
+    case '8':
+      return cellsFor(4, 2);
   }
 }
 

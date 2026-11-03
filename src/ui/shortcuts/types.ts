@@ -66,6 +66,8 @@ export type ShortcutId =
   | 'chart.layout-2h'
   | 'chart.layout-2v'
   | 'chart.layout-4'
+  | 'chart.layout-6'
+  | 'chart.layout-8'
   | 'panel.focus-editor'
   | 'panel.focus-chart'
   | 'palette.insert-snippet'

@@ -18,7 +18,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Chart layout menu — grid mode (1 / 2H / 2V / 4), one-click recipes, named save/load.
+ * Chart layout menu — grid mode (1 / 2H / 2V / 4 / 6 / 8), one-click recipes, named save/load.
  *
  * @module ui/ChartLayoutMenu
  */
@@ -52,6 +52,8 @@ const GRID_SHORTCUT_ID: Record<ChartGridMode, ShortcutId> = {
   '2h': 'chart.layout-2h',
   '2v': 'chart.layout-2v',
   '4': 'chart.layout-4',
+  '6': 'chart.layout-6',
+  '8': 'chart.layout-8',
 };
 
 /** Compact topbar control for multi-chart layouts and named snapshots. */
@@ -212,7 +214,7 @@ export const ChartLayoutMenu: Component = () => {
           <div class="text-[10px] uppercase tracking-wider text-text-faint font-semibold px-0.5">
             Grid
           </div>
-          <div class="grid grid-cols-4 gap-1">
+          <div class="grid grid-cols-3 gap-1 sm:grid-cols-6">
             <For each={[...CHART_GRID_MODES]}>
               {(m) => (
                 <button

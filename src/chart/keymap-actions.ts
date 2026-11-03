@@ -133,7 +133,7 @@ export function selectDrawingTool(tool: DrawingToolId): void {
 }
 
 /** Apply a chart grid layout. */
-export function applyChartGrid(mode: '1' | '2h' | '2v' | '4'): void {
+export function applyChartGrid(mode: '1' | '2h' | '2v' | '4' | '6' | '8'): void {
   chartDebug('action.grid', { mode });
   setChartGridMode(mode);
 }

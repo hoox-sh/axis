@@ -7,7 +7,7 @@ tags: [chart, code]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-03T11:00:21Z
+  at: 2026-11-03T16:04:26Z
 sources:
   - id: tree
     resource: "src/chart"
@@ -35,6 +35,7 @@ okf_lock: generated
 * `drawing-types.ts` — DRAWING_COLORS, Drawing, DrawingBase, DrawingKind, DrawingLineStyle, DrawingToolId, FIB_EXT_LEVELS, FIB_LEVELS, HLineDrawing, MultiPointDrawing, Point, TextDrawing
 * `engine-bind.ts` — BindChartEngineResult, bindChartEngineForGeneration
 * `heavy-data.ts` — CONFLATION_BARS_THRESHOLD, HEAVY_BARS_THRESHOLD, MAX_CHART_MARKERS, VERY_HEAVY_BARS_THRESHOLD, barIndexAtTimeBinary, barIndexRangeForTimeWindow, capNewest, createRafCoalescer, heavyTimeScaleOptions, indexRangeForSortedTimes, isHeavyBarLoad, isVeryHeavyBarLoad
+* `hydrate-slots.ts` — _resetHydrateSlotsForTests, hydrateEmptyChartSlots
 * `keymap-actions.ts` — applyChartGrid, cancelDraft, deleteSelectedDrawing, panChartBy, resetChartZoom, selectDrawingTool, toggleCrosshair, toggleMagnet, zoomChartBy
 * `last-value-labels.ts` — lastValueNamesOn, seriesLabelTitle
 * `layout-glyph.ts` — LayoutGlyphCell, layoutCells, matchingSavedLayoutName
@@ -56,6 +57,7 @@ okf_lock: generated
 * `screenshot.ts` — DEFAULT_SCREENSHOT_OPTIONS, ScreenshotOptions, ScreenshotScale, ScreenshotScope, canvasToBlob, captureScreenshot, copyBlob, copyScreenshot, downloadBlob, downloadScreenshot, loadScreenshotOptions, saveScreenshotOptions
 * `series-factory.ts` — PANE_RESIZE_LAYOUT, PLOT_PALETTE, RIGHT_PRICE_SCALE_WIDTH, SERIES_STACK_BGCOLOR, SERIES_STACK_OVERLAY, SERIES_STACK_PRICE, TV, VOID, colorWithAlpha, createAreaSeries, createBarSeries, createBaseChart
 * `series-sanitize.ts` — PaintedCandleRange, clampPointsToPaintedRange, extendPaintedRange, filterValidCandleRows, looksLikeOhlcData, notePaintedCandleRange, projectToCandleAxis, rangeFromSeriesData, resetPaintedCandleRangeForTests
+* `slot-live-append.ts` — appendSlotLiveBar, applyBarToSeries
 * `volume-profile.ts` — DEFAULT_VALUE_AREA_PCT, DEFAULT_VP_ROWS, VolumeDistribution, VolumeProfileBin, VolumeProfileOptions, VolumeProfileResult, VpBar, computeVolumeProfile, expandValueArea, formatVpPrice, formatVpVolume, priceToBinIndex
 
 # Packages

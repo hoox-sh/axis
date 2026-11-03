@@ -19,7 +19,7 @@
 
 /**
  * Multi-chart workspace — grid of {@link ChartHost} slots driven by
- * `store.chartLayout` (1 / 2H / 2V / 4). Active slot gets drawings/HUD tools.
+ * `store.chartLayout` (1 / 2H / 2V / 4 / 6 / 8). Active slot gets drawings/HUD tools.
  *
  * @module chart/ChartWorkspace
  */

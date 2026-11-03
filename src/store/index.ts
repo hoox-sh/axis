@@ -2981,9 +2981,16 @@ export function setActiveChartSlot(slotId: string) {
   emitWindowEvent('axis-chart-reflow');
   // Auto-load history when focusing an empty slot
   emitWindowEvent('axis-slot-activate', { slotId });
+  if (switched && store.live.active) {
+    void import('../streams/slot-live-mux')
+      .then((m) => m.syncSlotLiveMux())
+      .catch(() => {
+        /* best effort */
+      });
+  }
 }
 
-/** Change grid arrangement (1 / 2H / 2V / 4); preserves existing slots when possible. */
+/** Change grid arrangement (1 / 2H / 2V / 4 / 6 / 8); preserves existing slots when possible. */
 export function setChartGridMode(mode: ChartGridMode) {
   ensureChartLayout();
   const prev = store.chartLayout;
@@ -3010,6 +3017,21 @@ export function setChartGridMode(mode: ChartGridMode) {
   setStore('chartType', normalizeChartType(active.chartType));
   persist();
   emitWindowEvent('axis-chart-reflow');
+  // Prefetch empty siblings without clobbering the active OHLCV / live plane.
+  if (next.slots.length > 1) {
+    void import('../chart/hydrate-slots')
+      .then((m) => m.hydrateEmptyChartSlots())
+      .catch(() => {
+        /* best effort */
+      });
+  }
+  if (store.live.active) {
+    void import('../streams/slot-live-mux')
+      .then((m) => m.syncSlotLiveMux())
+      .catch(() => {
+        /* best effort */
+      });
+  }
 }
 
 /** Update one slot's market fields (and flat store when it's active). */
@@ -3035,6 +3057,13 @@ export function updateChartSlot(
     if (patch.chartType != null) setStore('chartType', normalizeChartType(patch.chartType));
   }
   persist();
+  if (store.live.active && (patch.symbol != null || patch.interval != null)) {
+    void import('../streams/slot-live-mux')
+      .then((m) => m.syncSlotLiveMux())
+      .catch(() => {
+        /* best effort */
+      });
+  }
 }
 
 /** Snapshot current grid (+ optional chrome) into savedLayouts. */
@@ -3117,6 +3146,13 @@ export function loadChartLayout(id: string): boolean {
   persist();
   appendLog('ok', `Layout loaded · ${found.name}`, 'layout', { toast: true });
   emitWindowEvent('axis-chart-reflow');
+  if (next.slots.length > 1) {
+    void import('../chart/hydrate-slots')
+      .then((m) => m.hydrateEmptyChartSlots())
+      .catch(() => {
+        /* best effort */
+      });
+  }
   return true;
 }
 

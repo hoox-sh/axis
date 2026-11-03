@@ -21,7 +21,9 @@ describe('chart layout helpers', () => {
     expect(slotCountForMode('2h')).toBe(2);
     expect(slotCountForMode('2v')).toBe(2);
     expect(slotCountForMode('4')).toBe(4);
-    expect(CHART_GRID_MODES).toHaveLength(4);
+    expect(slotCountForMode('6')).toBe(6);
+    expect(slotCountForMode('8')).toBe(8);
+    expect(CHART_GRID_MODES).toHaveLength(6);
   });
 
   it('defaultChartLayout is single BTCUSDT cell', () => {
@@ -39,6 +41,19 @@ describe('chart layout helpers', () => {
     expect(four.slots[0]!.symbol).toBe('SOLUSDT');
     expect(four.slots[0]!.id).toBe(one.slots[0]!.id);
     expect(four.mode).toBe('4');
+  });
+
+  it('normalize grows to 6 and 8 with distinct default symbols', () => {
+    const one = defaultChartLayout({ symbol: 'BTCUSDT', interval: '15m' });
+    const six = normalizeChartLayout({ mode: '6', activeId: one.activeId, slots: one.slots });
+    expect(six.slots).toHaveLength(6);
+    expect(six.mode).toBe('6');
+    expect(new Set(six.slots.map((s) => s.symbol)).size).toBe(6);
+
+    const eight = normalizeChartLayout({ mode: '8', activeId: one.activeId, slots: one.slots });
+    expect(eight.slots).toHaveLength(8);
+    expect(eight.mode).toBe('8');
+    expect(new Set(eight.slots.map((s) => s.symbol)).size).toBe(8);
   });
 
   it('normalize shrinks and keeps active when possible', () => {
@@ -65,5 +80,7 @@ describe('chart layout helpers', () => {
     expect(gridClassForMode('2h')).toContain('grid-cols-2');
     expect(gridClassForMode('2v')).toContain('grid-rows-2');
     expect(gridClassForMode('4')).toContain('grid-cols-2');
+    expect(gridClassForMode('6')).toBe('grid-cols-3 grid-rows-2');
+    expect(gridClassForMode('8')).toBe('grid-cols-4 grid-rows-2');
   });
 });

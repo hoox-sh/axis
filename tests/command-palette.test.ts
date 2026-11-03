@@ -152,6 +152,8 @@ describe('DEFAULT_COMMAND_SPECS', () => {
       'chart.grid.2h',
       'chart.grid.2v',
       'chart.grid.4',
+      'chart.grid.6',
+      'chart.grid.8',
       'action.run',
       'action.focus-symbol',
       'action.architecture',

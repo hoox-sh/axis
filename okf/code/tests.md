@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "tests"
-description: "tests contains alerts-engine.test.ts, alerts-form.test.ts, alerts-format.test.ts, and 332 more files."
+description: "tests contains alerts-engine.test.ts, alerts-form.test.ts, alerts-format.test.ts, and 335 more files."
 resource: "tests"
 tags: [code, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-03T16:04:19Z
+  at: 2026-11-03T16:04:26Z
 sources:
   - id: tree
     resource: "tests"
@@ -151,6 +151,7 @@ okf_lock: generated
 * `heavy-data.test.ts`
 * `hoox-logo.test.ts`
 * `hud-model.test.ts`
+* `hydrate-slots.test.ts`
 * `icons-map.test.ts`
 * `import-pyne-files.test.ts`
 * `indicators-reapply-window.test.ts`
@@ -280,6 +281,8 @@ okf_lock: generated
 * `shortcuts-store.test.ts`
 * `shortcuts.test.ts`
 * `signed-fetch.test.ts`
+* `slot-live-append.test.ts`
+* `slot-live-mux.test.ts`
 * `sources-catalog.test.ts`
 * `spinner.test.ts` — Spinner
 * `storage-capabilities.test.ts`

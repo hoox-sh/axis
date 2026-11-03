@@ -137,6 +137,8 @@ export const DEFAULT_BINDINGS: readonly ShortcutDef[] = [
   { id: 'chart.layout-2h', chord: 'Alt-2', description: 'Two charts (horizontal)', scope: 'chart' },
   { id: 'chart.layout-2v', chord: 'Alt-3', description: 'Two charts (vertical)', scope: 'chart' },
   { id: 'chart.layout-4', chord: 'Alt-4', description: 'Four chart layout', scope: 'chart' },
+  { id: 'chart.layout-6', chord: 'Alt-6', description: 'Six chart layout (3×2)', scope: 'chart' },
+  { id: 'chart.layout-8', chord: 'Alt-8', description: 'Eight chart layout (4×2)', scope: 'chart' },
 
   // --- Panel focus ---
   { id: 'panel.focus-editor', chord: 'Mod-0', description: 'Focus editor', scope: 'app' },

@@ -32,7 +32,7 @@ import type { PanelChromeMap } from '../ui/panels/types';
 import type { Pane } from '../store/types';
 
 /** Grid arrangement of chart slots (TradingView-style). */
-export type ChartGridMode = '1' | '2h' | '2v' | '4';
+export type ChartGridMode = '1' | '2h' | '2v' | '4' | '6' | '8';
 
 /** One chart cell in the workspace grid. */
 export interface ChartSlot {
@@ -78,16 +78,22 @@ export const CHART_GRID_MODES: readonly {
   { id: '2h', label: '2H', hint: 'Two charts side by side', cells: 2 },
   { id: '2v', label: '2V', hint: 'Two charts stacked', cells: 2 },
   { id: '4', label: '4', hint: '2×2 chart grid', cells: 4 },
+  { id: '6', label: '6', hint: '3×2 chart grid', cells: 6 },
+  { id: '8', label: '8', hint: '4×2 chart grid', cells: 8 },
 ] as const;
 
 export function slotCountForMode(mode: ChartGridMode): number {
+  if (mode === '8') return 8;
+  if (mode === '6') return 6;
   if (mode === '4') return 4;
   if (mode === '2h' || mode === '2v') return 2;
   return 1;
 }
 
 export function isChartGridMode(v: unknown): v is ChartGridMode {
-  return v === '1' || v === '2h' || v === '2v' || v === '4';
+  return (
+    v === '1' || v === '2h' || v === '2v' || v === '4' || v === '6' || v === '8'
+  );
 }
 
 function newSlotId(): string {
@@ -164,7 +170,16 @@ export function normalizeChartLayout(
       );
     } else {
       // New cells: slight symbol variety from seed watchlist-like defaults
-      const alts = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT'];
+      const alts = [
+        'BTCUSDT',
+        'ETHUSDT',
+        'SOLUSDT',
+        'BNBUSDT',
+        'XRPUSDT',
+        'ADAUSDT',
+        'DOGEUSDT',
+        'AVAXUSDT',
+      ];
       slots.push(
         createChartSlot(
           {
@@ -196,6 +211,10 @@ export function gridClassForMode(mode: ChartGridMode): string {
       return 'grid-cols-1 grid-rows-2';
     case '4':
       return 'grid-cols-2 grid-rows-2';
+    case '6':
+      return 'grid-cols-3 grid-rows-2';
+    case '8':
+      return 'grid-cols-4 grid-rows-2';
     default:
       return 'grid-cols-1 grid-rows-1';
   }

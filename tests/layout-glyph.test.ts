@@ -58,7 +58,12 @@ describe('layoutCells', () => {
     expect(Math.min(...xs)).toBeLessThan(Math.max(...xs));
     expect(Math.min(...ys)).toBeLessThan(Math.max(...ys));
 
-    for (const cell of [...side, ...stack, ...quad]) {
+    const six = layoutCells('6');
+    expect(six).toHaveLength(6);
+    const eight = layoutCells('8');
+    expect(eight).toHaveLength(8);
+
+    for (const cell of [...side, ...stack, ...quad, ...six, ...eight]) {
       expect(cell.w).toBeGreaterThan(0);
       expect(cell.h).toBeGreaterThan(0);
       expect(cell.x).toBeGreaterThanOrEqual(0);

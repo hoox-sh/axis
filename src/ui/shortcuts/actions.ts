@@ -126,8 +126,10 @@ registerShortcut('chart.tool-brush', () => selectDrawingTool('brush'));
 registerShortcut('chart.delete-selected', () => deleteSelectedDrawing());
 registerShortcut('chart.cancel-draft', () => emit('axis-drawing-cancel-draft'));
 
-// Grid layouts (Alt-1..4).
+// Grid layouts (Alt-1..4, Alt-6, Alt-8).
 registerShortcut('chart.layout-1', () => applyChartGrid('1'));
 registerShortcut('chart.layout-2h', () => applyChartGrid('2h'));
 registerShortcut('chart.layout-2v', () => applyChartGrid('2v'));
 registerShortcut('chart.layout-4', () => applyChartGrid('4'));
+registerShortcut('chart.layout-6', () => applyChartGrid('6'));
+registerShortcut('chart.layout-8', () => applyChartGrid('8'));
