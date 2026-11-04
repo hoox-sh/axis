@@ -24,6 +24,7 @@ import {
   useContext,
 } from 'solid-js';
 import { Icons } from '../icons';
+import { stepNativeInput } from './step-input';
 
 export type StudioFieldContextValue = {
   hintId?: string;
@@ -241,16 +242,12 @@ export function StudioInput(props: {
   const bump = (direction: 1 | -1) => {
     const el = inputEl;
     if (!el) return;
-    try {
-      if (direction > 0) el.stepUp();
-      else el.stepDown();
-    } catch {
-      return;
-    }
-    const value = el.value;
+    const value = stepNativeInput(el, direction);
+    if (value == null) return;
+    // The native step already dispatched `input` + `change`, which the
+    // handlers above forward to `onInput` / `onChange` exactly once. Calling
+    // the props here as well fired every stepper click twice.
     setLive(value);
-    props.onInput?.(value);
-    props.onChange?.(value);
   };
 
   const copy = async () => {
