@@ -57,6 +57,7 @@ import {
   overridesFromDefs,
   layoutInputRows,
   isInputActive,
+  sameInputValue,
   type InputFormRow,
   type ScriptInputDef,
 } from '../results/script-inputs';
@@ -74,7 +75,10 @@ import { runAndApply } from '../indicators/runner';
 import type { RunResult } from '../indicators/runner';
 import { Icons } from './icons';
 import { Spinner } from './Spinner';
+import { useEventListener } from './use-event-listener';
 import { StudioInput } from './studio';
+import { copyToClipboard } from './clipboard';
+import { readCollapsedGroups, toggleCollapsedGroup } from './script-settings/prefs';
 
 /** Extra Pine sources that may declare `enum`s imported by the target script. */
 function extraEnumSources(code: string, skipId?: string | null): string[] {
@@ -123,6 +127,37 @@ export const ScriptSettingsModal: Component = () => {
   const [error, setError] = createSignal('');
   /** Labels for cross-indicator plot options (value → display). */
   const [sourceLabels, setSourceLabels] = createSignal<Record<string, string>>({});
+  /** Search across input labels / ids / types (`/` focuses, `Esc` clears). */
+  const [query, setQuery] = createSignal('');
+  /** Collapsed Pine `group=` sections (persisted via `axis.settings.collapsed`). */
+  const [collapsedGroups, setCollapsedGroups] = createSignal<string[]>(readCollapsedGroups());
+  const [copied, setCopied] = createSignal(false);
+  let copyTimer: ReturnType<typeof setTimeout> | undefined;
+
+  onCleanup(() => {
+    if (copyTimer) clearTimeout(copyTimer);
+  });
+
+  // `/` focuses the search while the modal is open (skips field inputs).
+  const onSlash = (e: KeyboardEvent) => {
+    if (!open()) return;
+    if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
+    const target = e.target as HTMLElement | null;
+    if (
+      target &&
+      (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
+    ) {
+      return;
+    }
+    e.preventDefault();
+    const el = document.querySelector<HTMLInputElement>(
+      '[data-testid="axis-script-settings-search"]',
+    );
+    el?.focus();
+  };
+  // Lifetime-of-component listener; `onSlash` guards on the open state, and
+  // Escape stays owned by the shared Modal shell.
+  useEventListener<KeyboardEvent>(window, 'keydown', onSlash);
 
   /**
    * Seed key for the open session: only re-build field list when the modal
@@ -205,6 +240,7 @@ export const ScriptSettingsModal: Component = () => {
       setTab('inputs');
     }
     setError('');
+    setQuery('');
   };
 
   // Seed only on open / target change (not on every store tick)
@@ -221,6 +257,52 @@ export const ScriptSettingsModal: Component = () => {
 
   /** Pine `group` + `inline` layout (declaration order). */
   const inputLayout = createMemo(() => layoutInputRows(fields()));
+
+  /** Field ids whose value differs from the Pine declaration default. */
+  const changedIds = createMemo(() => {
+    const set = new Set<string>();
+    for (const f of fields()) {
+      if (!sameInputValue(f.value ?? f.default, f.default)) set.add(f.id);
+    }
+    return set;
+  });
+
+  const changedCount = () => changedIds().size;
+
+  const inputCount = () => fields().length;
+
+  const matchesQuery = (f: ScriptInputDef, q: string) => {
+    const hay = `${f.title} ${f.id} ${f.type}`.toLowerCase();
+    return hay.includes(q);
+  };
+
+  /** Layout filtered by the search (an inline row stays when any field matches). */
+  const visibleLayout = createMemo(() => {
+    const q = query().trim().toLowerCase();
+    if (!q) return inputLayout();
+    return inputLayout()
+      .map((section) => {
+        const rows = section.rows.filter((row) =>
+          row.kind === 'inline'
+            ? row.fields.some((f) => matchesQuery(f, q))
+            : matchesQuery(row.field, q),
+        );
+        return { ...section, rows };
+      })
+      .filter((section) => section.rows.length > 0);
+  });
+
+  /** Copy every input as `Label = value` lines (a shareable snapshot). */
+  const onCopyInputs = () => {
+    const lines = fields().map((f) => `${f.title || f.id} = ${String(f.value ?? f.default ?? '')}`);
+    if (!lines.length) return;
+    void copyToClipboard(lines.join('\n')).then((ok) => {
+      if (!ok) return;
+      setCopied(true);
+      if (copyTimer) clearTimeout(copyTimer);
+      copyTimer = setTimeout(() => setCopied(false), 1200);
+    });
+  };
 
   const strategyGroups = createMemo(() => {
     const map = new Map<string, StrategyPropDef[]>();
@@ -374,35 +456,71 @@ export const ScriptSettingsModal: Component = () => {
         </>
       }
       aboveBody={
-        <Show when={showStrategyTab()}>
-          <div
-            class="sc-chip-row px-4 pt-2"
-            role="tablist"
-            aria-label="Script settings tabs"
-            data-testid="axis-script-settings-tabs"
-          >
+        <div class="ss-top px-4 pt-2" data-testid="axis-script-settings-top">
+          <div class="flex items-center gap-1.5">
+            <StudioInput
+              class="ss-search flex-1"
+              icon={<Icons.search size={12} />}
+              kbd="/"
+              placeholder="Filter inputs"
+              ariaLabel="Filter script inputs"
+              value={query()}
+              onInput={(v) => setQuery(v)}
+              onEscape={() => {
+                setQuery('');
+                document
+                  .querySelector<HTMLInputElement>('[data-testid="axis-script-settings-search"]')
+                  ?.blur();
+              }}
+              testId="axis-script-settings-search"
+            />
             <button
               type="button"
-              role="tab"
-              aria-selected={tab() === 'inputs'}
-              class={`sc-chip ${tab() === 'inputs' ? 'is-active' : ''}`}
-              onClick={() => setTab('inputs')}
-              data-testid="axis-script-settings-tab-inputs"
+              class={`sc-btn sc-btn-ghost ${copied() ? 'ss-copied' : ''}`}
+              title="Copy all input values"
+              aria-label="Copy all input values"
+              onClick={onCopyInputs}
+              disabled={fields().length === 0 || busy()}
             >
-              Inputs
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={tab() === 'strategy'}
-              class={`sc-chip ${tab() === 'strategy' ? 'is-active' : ''}`}
-              onClick={() => setTab('strategy')}
-              data-testid="axis-script-settings-tab-strategy"
-            >
-              Properties
+              <Show when={copied()} fallback={<Icons.copy size={12} />}>
+                <Icons.check size={12} />
+              </Show>
             </button>
           </div>
-        </Show>
+          <Show when={inputCount() > 0}>
+            <div class="text-[10px] text-text-faint" data-testid="axis-script-settings-summary">
+              {inputCount()} input{inputCount() === 1 ? '' : 's'}
+              <Show when={changedCount() > 0}>
+                {' '}
+                · <span class="text-[color:var(--color-warning)]">{changedCount()} changed</span>
+              </Show>
+            </div>
+          </Show>
+          <Show when={showStrategyTab()}>
+            <div class="sc-chip-row" role="tablist" aria-label="Script settings tabs">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab() === 'inputs'}
+                class={`sc-chip ${tab() === 'inputs' ? 'is-active' : ''}`}
+                onClick={() => setTab('inputs')}
+                data-testid="axis-script-settings-tab-inputs"
+              >
+                Inputs
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab() === 'strategy'}
+                class={`sc-chip ${tab() === 'strategy' ? 'is-active' : ''}`}
+                onClick={() => setTab('strategy')}
+                data-testid="axis-script-settings-tab-strategy"
+              >
+                Properties
+              </button>
+            </div>
+          </Show>
+        </div>
       }
     >
       <Show when={tab() === 'inputs' || !showStrategyTab()}>
@@ -422,23 +540,37 @@ export const ScriptSettingsModal: Component = () => {
             </div>
           }
         >
-          <For each={inputLayout()}>
-            {(section) => (
-              <section class="sc-input-group" data-input-group={section.group}>
-                <div class="sc-section-title sc-input-group-title">{section.group}</div>
-                <For each={section.rows}>
-                  {(row) => (
-                    <InputFormRowView
-                      row={row}
-                      allFields={fields()}
-                      optionLabels={sourceLabels()}
-                      onChange={setFieldValue}
-                    />
-                  )}
-                </For>
-              </section>
-            )}
-          </For>
+          <Show
+            when={visibleLayout().length > 0}
+            fallback={
+              <div class="ss-nomatch" data-testid="axis-script-settings-nomatch">
+                <Icons.search size={14} />
+                <span>
+                  No inputs match <strong class="text-text">“{query()}”</strong>
+                </span>
+                <button type="button" class="sc-btn sc-btn-ghost" onClick={() => setQuery('')}>
+                  Clear filter
+                </button>
+              </div>
+            }
+          >
+            <For each={visibleLayout()}>
+              {(section) => (
+                <GroupSection
+                  group={section.group}
+                  rows={section.rows}
+                  allFields={fields()}
+                  optionLabels={sourceLabels()}
+                  changedIds={changedIds()}
+                  collapsed={collapsedGroups().includes(section.group)}
+                  onToggle={() =>
+                    setCollapsedGroups(toggleCollapsedGroup(section.group, collapsedGroups()))
+                  }
+                  onChange={setFieldValue}
+                />
+              )}
+            </For>
+          </Show>
         </Show>
       </Show>
 
@@ -482,13 +614,84 @@ export const ScriptSettingsModal: Component = () => {
   );
 };
 
+/** One collapsible Pine `group=` section with live counts and a changed rail. */
+const GroupSection: Component<{
+  group: string;
+  rows: InputFormRow[];
+  allFields: ScriptInputDef[];
+  optionLabels: Record<string, string>;
+  changedIds: ReadonlySet<string>;
+  collapsed: boolean;
+  onToggle: () => void;
+  onChange: (id: string, v: unknown) => void;
+}> = (props) => {
+  const changed = () =>
+    props.rows.reduce(
+      (n, row) =>
+        n +
+        (row.kind === 'inline'
+          ? row.fields.filter((f) => props.changedIds.has(f.id)).length
+          : props.changedIds.has(row.field.id)
+            ? 1
+            : 0),
+      0,
+    );
+  const count = () =>
+    props.rows.reduce((n, row) => n + (row.kind === 'inline' ? row.fields.length : 1), 0);
+  return (
+    <section
+      class="ss-group"
+      data-input-group={props.group}
+      data-collapsed={props.collapsed}
+      data-modified={changed() > 0}
+    >
+      <button
+        type="button"
+        class="ss-group-head"
+        aria-expanded={!props.collapsed}
+        onClick={() => props.onToggle()}
+        data-testid={`axis-script-settings-group-${props.group}`}
+      >
+        <span class="ss-group-chevron">
+          <Icons.chevronDown size={11} />
+        </span>
+        <span class="ss-group-title">{props.group}</span>
+        <span class="ss-group-count">
+          <Show when={changed() > 0}>
+            <span class="ss-group-changed">{changed()} changed</span>
+          </Show>
+          <span>{count()}</span>
+        </span>
+      </button>
+      <Show when={!props.collapsed}>
+        <div class="ss-group-body">
+          <For each={props.rows}>
+            {(row) => (
+              <InputFormRowView
+                row={row}
+                allFields={props.allFields}
+                optionLabels={props.optionLabels}
+                changedIds={props.changedIds}
+                onChange={props.onChange}
+              />
+            )}
+          </For>
+        </div>
+      </Show>
+    </section>
+  );
+};
+
 /** Renders one layout row (single field or Pine `inline=` cluster). */
 const InputFormRowView: Component<{
   row: InputFormRow;
   allFields: ScriptInputDef[];
   optionLabels: Record<string, string>;
+  changedIds: ReadonlySet<string>;
   onChange: (id: string, v: unknown) => void;
 }> = (props) => {
+  const changed = (f: ScriptInputDef) => props.changedIds.has(f.id);
+  const reset = (f: ScriptInputDef) => props.onChange(f.id, f.default);
   return (
     <Show
       when={props.row.kind === 'inline' ? props.row : false}
@@ -499,6 +702,8 @@ const InputFormRowView: Component<{
               field={field()}
               allFields={props.allFields}
               optionLabels={props.optionLabels}
+              modified={changed(field())}
+              onReset={() => reset(field())}
               onChange={(v) => props.onChange(field().id, v)}
             />
           )}
@@ -514,6 +719,8 @@ const InputFormRowView: Component<{
                 allFields={props.allFields}
                 compact
                 optionLabels={props.optionLabels}
+                modified={changed(field)}
+                onReset={() => reset(field)}
                 onChange={(v) => props.onChange(field.id, v)}
               />
             )}
@@ -533,6 +740,10 @@ const InputField: Component<{
   compact?: boolean;
   /** Optional display labels for option values (cross-indicator sources). */
   optionLabels?: Record<string, string>;
+  /** Value differs from the Pine default (amber dot + reset affordance). */
+  modified?: boolean;
+  /** Restore the Pine declaration default. */
+  onReset?: () => void;
 }> = (props) => {
   const id = () => `axis-in-${props.field.id}`;
   const t = () => props.field.type;
@@ -588,14 +799,34 @@ const InputField: Component<{
       aria-disabled={!enabled() || undefined}
     >
       <Show when={showTitle() || tip()}>
-        <label class="sc-field-label text-[11px] text-text-dim" for={id()}>
-          <span class="sc-field-title">{props.field.title || '\u00a0'}</span>
-          <Show when={tip()}>
-            <span class="sc-field-tooltip" title={tip()} data-tooltip={tip()}>
-              ?
-            </span>
+        <div class="ss-field-row">
+          <Show when={props.modified}>
+            <span
+              class="ss-field-modified"
+              title="Changed from the Pine default"
+              data-testid={`axis-in-modified-${props.field.id}`}
+            />
           </Show>
-        </label>
+          <label class="sc-field-label text-[11px] text-text-dim" for={id()}>
+            <span class="sc-field-title">{props.field.title || '\u00a0'}</span>
+            <Show when={tip()}>
+              <span class="sc-field-tooltip" title={tip()} data-tooltip={tip()}>
+                ?
+              </span>
+            </Show>
+          </label>
+          <Show when={props.modified && props.onReset}>
+            <button
+              type="button"
+              class="ss-field-reset"
+              title={`Reset ${props.field.title || 'input'} to Pine default`}
+              aria-label={`Reset ${props.field.title || props.field.id} to Pine default`}
+              onClick={() => props.onReset?.()}
+            >
+              <Icons.refresh size={11} />
+            </button>
+          </Show>
+        </div>
       </Show>
       <Show when={t() === 'bool'}>
         <label

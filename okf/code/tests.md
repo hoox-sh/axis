@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "tests"
-description: "tests contains alerts-engine.test.ts, alerts-form.test.ts, alerts-format.test.ts, and 347 more files."
+description: "tests contains alerts-engine.test.ts, alerts-form.test.ts, alerts-format.test.ts, and 348 more files."
 resource: "tests"
 tags: [code, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-04T22:58:58Z
+  at: 2026-11-04T23:38:00Z
 sources:
   - id: tree
     resource: "tests"
@@ -274,6 +274,7 @@ okf_lock: generated
 * `screenshot.test.ts`
 * `script-inputs.test.ts` — Calculation, Easing, Frequency, StartOn
 * `script-meta.test.ts`
+* `script-settings-ui.test.ts`
 * `scripts-sync-versions.test.ts`
 * `series-drive.test.ts`
 * `series-factory.test.ts`
@@ -413,6 +414,7 @@ okf_lock: generated
 * [src/ui/library](/code/src/ui/library.md)
 * [src/ui/mobile](/code/src/ui/mobile.md)
 * [src/ui/panels](/code/src/ui/panels.md)
+* [src/ui/script-settings](/code/src/ui/script-settings.md)
 * [src/ui/shortcuts](/code/src/ui/shortcuts.md)
 * [src/ui/studio](/code/src/ui/studio.md)
 * [src/update](/code/src/update.md)

@@ -13,6 +13,7 @@
 * [src/ui/panels](panels.md) - src/ui/panels contains DockColumn.tsx, FloatableShell.tsx, dock-layout.ts, and 5 more files.
 * [src/ui/plugins](plugins.md) - Plugins studio canvas — the plugin catalog.
 * [src/ui/runtime](runtime.md) - Runtime studio canvas — active engine, endpoint, exec mode, health.
+* [src/ui/script-settings](script-settings.md) - Script Settings modal preferences — which Pine group= sections the user collapsed.
 * [src/ui/settings](settings.md) - Settings studio canvas — product chrome.
 * [src/ui/shortcuts](shortcuts.md) - Public API for the keyboard shortcut system.
 * [src/ui/studio](studio.md) - Single studio overlay host.

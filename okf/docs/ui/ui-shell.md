@@ -7,7 +7,7 @@ tags: [doc, docs, ui, ui-shell]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-04T22:06:28Z
+  at: 2026-11-04T23:38:00Z
 sources:
   - id: tree
     resource: "docs/ui/ui-shell.mdx"
@@ -30,6 +30,7 @@ Repo path `docs/ui/ui-shell.mdx`.
   * Keyboard shortcuts
   * Alerts panel
   * Data window panel
+  * Script settings (Inputs)
   * Workspace snapshots
   * Panel docks (side-by-side)
 * Mobile shell (phones / tablets)

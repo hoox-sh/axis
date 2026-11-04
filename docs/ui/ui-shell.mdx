@@ -138,6 +138,15 @@ Dockable **Data Window** (`DataViewPanel.tsx` + `results/dataview.ts`) reads the
 - **Copy** any row from its hover icon, or **copy all** as TSV from the header.
 - Sections collapse from their heading and show live counts; the header reports the visible value count.
 
+### Script settings (Inputs)
+
+The **Script settings** modal (`ScriptSettingsModal.tsx`) edits Pine `input.*` values and `strategy()` Properties for an applied script or the editor document.
+
+- **Filter** (`/` focuses, `Esc` clears) narrows groups by input label, id, or type; an empty result offers a **Clear filter** CTA. A copy button snapshots every input as `Label = value` lines.
+- **Summary** — `N inputs · M changed`, where *changed* counts values that differ from the Pine declaration default.
+- **Collapsible groups** — each Pine `group=` section folds from its heading with live counts (`M changed · N`); collapsed groups persist in `localStorage` (`axis.settings.collapsed`) across scripts, and groups holding changed values carry an amber rail.
+- **Per-field reset** — modified fields show an amber dot and a hover **↺** that restores the Pine default; the footer **Reset** still resets the whole tab.
+
 ### Workspace snapshots
 
 `storage/workspace-snapshot.ts` + optional chrome menus capture layout/plugin prefs for restore (distinct from OHLCV — bars still re-fetch on Load).

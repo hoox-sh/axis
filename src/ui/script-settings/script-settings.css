@@ -1,0 +1,162 @@
+/**
+ * Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
+ * SPDX-License-Identifier: AGPL-3.0-only
+ *
+ * Script Settings modal — search, collapsible Pine groups, and
+ * modified-state chrome. Companion to src/ui/ScriptSettingsModal.tsx.
+ */
+
+/* ── Top row: search + tabs ─────────────────────────────────────── */
+.ss-top {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ── Collapsible Pine group ─────────────────────────────────────── */
+.ss-group {
+  border: 1px solid var(--color-border-soft);
+  border-radius: 6px;
+  background: var(--color-bg-elev);
+  overflow: hidden;
+}
+.ss-group + .ss-group {
+  margin-top: 8px;
+}
+.ss-group-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 24px;
+  padding: 3px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-dim);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: left;
+  cursor: pointer;
+}
+.ss-group-head:hover {
+  color: var(--color-text);
+  background: var(--color-bg-hover);
+}
+.ss-group-head:focus-visible {
+  outline: 1px solid var(--color-accent);
+  outline-offset: -1px;
+}
+.ss-group-chevron {
+  display: inline-flex;
+  flex: none;
+  color: var(--color-text-faint);
+  transition: transform 120ms ease;
+}
+.ss-group[data-collapsed='true'] .ss-group-chevron {
+  transform: rotate(-90deg);
+}
+/* Groups containing user-edited values carry a warning rail */
+.ss-group[data-modified='true'] .ss-group-head::before {
+  content: '';
+  width: 3px;
+  align-self: stretch;
+  border-radius: 2px;
+  margin-right: 3px;
+  background: var(--color-warning);
+}
+.ss-group-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ss-group-count {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--color-text-faint);
+  white-space: nowrap;
+}
+.ss-group-changed {
+  color: var(--color-warning);
+}
+.ss-group-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 2px 8px 8px;
+}
+
+/* ── Field label row: modified dot + per-field reset ────────────── */
+.ss-field-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.ss-field-modified {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--color-warning);
+}
+.ss-field-reset {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex: none;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-faint);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 100ms ease,
+    color 100ms ease,
+    background 100ms ease;
+}
+.ss-field-row:hover .ss-field-reset,
+.ss-field-reset:focus-visible {
+  opacity: 1;
+}
+.ss-field-reset:hover {
+  color: var(--color-text);
+  background: var(--color-bg-hover);
+}
+.ss-field-reset:focus-visible {
+  outline: 1px solid var(--color-accent);
+  opacity: 1;
+}
+.ss-field-row .sc-field-label {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+
+/* ── Copy-values flash ──────────────────────────────────────────── */
+.ss-copied {
+  color: var(--color-up) !important;
+}
+
+/* ── No-match state ─────────────────────────────────────────────── */
+.ss-nomatch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 20px 12px;
+  color: var(--color-text-dim);
+  font-size: 12px;
+  text-align: center;
+}

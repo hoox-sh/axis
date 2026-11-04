@@ -7,7 +7,7 @@ tags: [code, utils]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-04T15:15:00Z
+  at: 2026-11-04T23:38:00Z
 sources:
   - id: tree
     resource: "src/utils"
@@ -51,6 +51,7 @@ okf_lock: generated
 * [src/ui/effects](/code/src/ui/effects.md)
 * [src/ui/layers](/code/src/ui/layers.md)
 * [src/ui/library](/code/src/ui/library.md)
+* [src/ui/script-settings](/code/src/ui/script-settings.md)
 * [src/update](/code/src/update.md)
 * [src/workers](/code/src/workers.md)
 * [tests](/code/tests.md)
