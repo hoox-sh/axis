@@ -128,6 +128,16 @@ Dockable **Alerts** (`src/alerts/*` + `AlertsPanel.tsx`): local-first book for *
 - **Filters + bulk** — All / Price / Drawing / Indicator / On-chain chips carry live counts; the list menu enables all, disables all, or deletes all (confirm).
 - Editing reuses the composer and preserves the alert's enabled state; deleting asks for confirmation. Formatting helpers (`formatLastFiredRelative`) live in `alerts/format.ts`.
 
+### Data window panel
+
+Dockable **Data Window** (`DataViewPanel.tsx` + `results/dataview.ts`) reads the bar under the crosshair and lists **Bar** (symbol / interval / UTC time / index), **OHLCV** (plus a **Change** row vs the previous close), **Plots** (respecting `display.data_window`), **Drawings** active at that time, and visible **On-chain** series.
+
+- **Pin** freezes the inspected bar so it survives the pointer leaving the chart; **prev/next** step one bar at a time (from the pin or the last hovered bar).
+- **Inspect last bar** fills the empty state when nothing is hovered.
+- **Filter values** (`/` focuses it, `Esc` clears) narrows every group by label or value.
+- **Copy** any row from its hover icon, or **copy all** as TSV from the header.
+- Sections collapse from their heading and show live counts; the header reports the visible value count.
+
 ### Workspace snapshots
 
 `storage/workspace-snapshot.ts` + optional chrome menus capture layout/plugin prefs for restore (distinct from OHLCV — bars still re-fetch on Load).
