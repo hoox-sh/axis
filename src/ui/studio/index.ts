@@ -17,22 +17,20 @@ export { AppPageHeader } from './AppPageHeader';
 export { StudioButton } from './StudioButton';
 export type { StudioButtonVariant } from './StudioButton';
 export { AppButton } from './AppButton';
-export type {
-  ButtonDesign,
-  ButtonTone,
-  ButtonSize,
-  ButtonShape,
-  FeedbackState,
-} from './AppButton';
+export type { ButtonDesign, ButtonTone, ButtonSize, ButtonShape, FeedbackState } from './AppButton';
 export { useMicrofeedback } from './useMicrofeedback';
 export {
   StudioField,
+  StudioFieldContext,
   StudioInput,
   StudioSelect,
   StudioToggle,
   StudioHint,
 } from './StudioField';
+export type { StudioFieldContextValue } from './StudioField';
 export { StudioColorInput } from './StudioColorInput';
+export { StudioRange } from './StudioRange';
+export { StudioTextarea } from './StudioTextarea';
 export { StudioSection } from './StudioSection';
 export {
   StudioCard,

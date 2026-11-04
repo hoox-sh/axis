@@ -53,7 +53,7 @@ import {
   type GatewayMode,
 } from './plugin-config';
 import { TopbarField } from './TopbarField';
-import { StudioEmpty, StudioToggle } from './studio';
+import { StudioEmpty, StudioInput, StudioSelect, StudioToggle } from './studio';
 
 const EXCHANGE_FIELD = 'exchange';
 
@@ -91,11 +91,7 @@ export function PluginConfigRow(props: PluginConfigRowProps) {
       out.push({ kind: 'source', id: src.id, schema: src.configSchema! });
     }
     const stm = getActiveStream();
-    if (
-      stm &&
-      !out.some((t) => t.id === stm.id) &&
-      hasVisibleFields(stm.configSchema)
-    ) {
+    if (stm && !out.some((t) => t.id === stm.id) && hasVisibleFields(stm.configSchema)) {
       out.push({ kind: 'stream', id: stm.id, schema: stm.configSchema! });
     }
     return out;
@@ -290,31 +286,31 @@ export function PluginConfigRow(props: PluginConfigRowProps) {
       <Show
         when={isSelectField(key, f)}
         fallback={
-          <input
+          <StudioInput
             id={fieldId(key)}
             type={f.type === 'password' ? 'password' : f.type === 'number' ? 'number' : 'text'}
-            class="ax-input ax-input--mono"
+            mono
             min={f.min}
             max={f.max}
             step={f.step}
             placeholder={key === EXCHANGE_FIELD ? exchangeLoadingLabel() : f.placeholder}
             value={displayValue(key, f)}
-            onInput={(e) => onTextInput(key, f, e.currentTarget.value)}
-            onBlur={(e) => onTextCommit(key, f, e.currentTarget.value)}
+            onInput={(value) => onTextInput(key, f, value)}
+            onBlur={(value) => onTextCommit(key, f, value)}
             onKeyDown={(e) => onTextKeyDown(key, f, e)}
             title={fieldTitle(key, f)}
+            clearable
           />
         }
       >
-        <select
+        <StudioSelect
           id={fieldId(key)}
-          class="ax-input ax-select ax-input--mono"
           value={String(readFieldValue(key) ?? '')}
-          onChange={(e) => applyField(key, e.currentTarget.value)}
+          onChange={(value) => applyField(key, value)}
           title={fieldTitle(key, f)}
         >
           {selectOptions(key, f)}
-        </select>
+        </StudioSelect>
       </Show>
     </Show>
   );
@@ -337,10 +333,7 @@ export function PluginConfigRow(props: PluginConfigRowProps) {
           <div class="ax-token-grid" data-testid="axis-cfg-plugins-settings">
             <For each={fields()}>
               {([key, f]) => (
-                <Show
-                  when={f.type !== 'boolean'}
-                  fallback={renderControl(key, f)}
-                >
+                <Show when={f.type !== 'boolean'} fallback={renderControl(key, f)}>
                   <div class="ax-field">
                     <label class="ax-label" for={fieldId(key)}>
                       {f.label || key}
@@ -361,9 +354,7 @@ export function PluginConfigRow(props: PluginConfigRowProps) {
           data-testid="axis-cfg-plugins"
           title="Shared source/stream settings · history applies on Load/Reload or when a select/checkbox changes · live applies on Live toggle · advanced options in Settings"
         >
-          <For each={fields()}>
-            {([key, f]) => renderInlineField(key, f)}
-          </For>
+          <For each={fields()}>{([key, f]) => renderInlineField(key, f)}</For>
         </div>
       </Show>
     </Show>

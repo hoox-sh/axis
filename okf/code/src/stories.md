@@ -7,7 +7,7 @@ tags: [code, stories]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-03T12:43:16Z
+  at: 2026-11-04T01:36:08Z
 sources:
   - id: tree
     resource: "src/stories"
@@ -32,6 +32,7 @@ okf_lock: generated
 * `StudioButton.stories.tsx` — Danger, Disabled, Ghost, Primary
 * `StudioDisplay.stories.tsx` — Card, Chips, Empty, Stats, Statuses
 * `StudioField.stories.tsx` — Color, Hint, Input, Invalid, Select, SwitchGrid, Toggle
+* `StudioInputs.stories.tsx` — Color, Contract, KeyboardAndA11y, Overview, Playground, RangeAndTextarea, SelectAndToggle, SmartInput, States, Validation
 * `StudioJson.stories.tsx` — Header, Json
 * `StudioPage.stories.tsx` — Buttons, Footer, Section, Tabs
 * `SystemLogs.stories.tsx` — Empty, Seeded

@@ -13,7 +13,11 @@
 
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import { persist, setStatus, store } from '../../store';
-import { DEFAULT_PYNE_AGENT_ENDPOINT, loadPluginFromUrl, getInstalledPlugins } from '../../plugins/loader';
+import {
+  DEFAULT_PYNE_AGENT_ENDPOINT,
+  loadPluginFromUrl,
+  getInstalledPlugins,
+} from '../../plugins/loader';
 import { pluginKey } from '../../plugins/types';
 import { writePluginField } from '../plugin-config';
 import { AGENT_API_KEY_SLOT, getAgentApiKey, putSecret } from '../../storage/vault';
@@ -49,6 +53,7 @@ import {
   StudioField,
   StudioFooter,
   StudioHint,
+  StudioInput,
   StudioSelect,
   StudioList,
   StudioRow,
@@ -198,9 +203,7 @@ export function WorkersPage(props: {
           healthy: results.filter((x) => x.status === 'healthy').length,
           degraded: results.filter((x) => x.status === 'degraded').length,
           down: results.filter((x) => x.status === 'down').length,
-          unknown: results.filter((x) =>
-            ['unknown', 'idle', 'skipped'].includes(x.status),
-          ).length,
+          unknown: results.filter((x) => ['unknown', 'idle', 'skipped'].includes(x.status)).length,
           checkedAt: Date.now(),
         };
       });
@@ -473,7 +476,9 @@ export function WorkersPage(props: {
           <p class="ax-error">{probeError()}</p>
         </Show>
         <Show when={probing() && !snap()}>
-          <StudioHint>Probing backends — the panel is ready; results fill in as each responds.</StudioHint>
+          <StudioHint>
+            Probing backends — the panel is ready; results fill in as each responds.
+          </StudioHint>
         </Show>
         <Show when={actionMsg()}>
           <StudioHint>{actionMsg()}</StudioHint>
@@ -484,461 +489,497 @@ export function WorkersPage(props: {
 
         <div class="ax-deck">
           <div class="ax-deck-pane">
-          <StudioSection
-            title="Inventory"
-            lead="Each card is a way AXIS can run Pine or fetch data. Click one to inspect health, features, and install steps."
-          >
-            <StudioToggle
-              id="axis-workers-optional"
-              checked={showOptional()}
-              onChange={setShowOptional}
-              label="Show optional workers"
-              hint="PYNE Agent and edge eval are optional — they do not replace the calculation backend."
-            />
-            <div class="ax-grid ax-grid--2" aria-busy={!snap()}>
-              <Show
-                when={snap()}
-                fallback={
-                  <For each={[0, 1, 2, 3, 4, 5]}>
-                    {(_n) => (
-                      <div class="ax-skel" data-testid="axis-worker-skel" aria-hidden="true">
-                        <div class="ax-skel-line ax-skel-line--title" />
-                        <div class="ax-skel-line ax-skel-line--meta" />
-                      </div>
-                    )}
-                  </For>
-                }
-              >
-                <For each={catalog()}>
-                  {(w) => {
-                    const r = () => resultFor(snap(), w.id);
-                    const st = () => toStudioHealth(r()?.status);
-                    return (
-                      <StudioCard
-                        kicker={kindLabel(w.kind)}
-                        title={w.name}
-                        selected={selectedId() === w.id}
-                        onClick={() => setSelectedId(w.id)}
-                        testId={`axis-worker-card-${w.id}`}
-                      >
-                        <StudioStatus status={st()} />
-                        <StudioHint>
-                          {r()?.latencyMs != null ? `${r()?.latencyMs}ms · ` : ''}
-                          last probe {relativeTime(r()?.checkedAt)}
-                          <Show when={r()?.isActiveBackend}> · backend</Show>
-                          <Show when={r()?.isActiveEngine}> · engine</Show>
-                        </StudioHint>
-                      </StudioCard>
-                    );
-                  }}
-                </For>
-              </Show>
-            </div>
-          </StudioSection>
-
-          <StudioSection title="Related" lead="The contract catalog lives next door — not nested here.">
-            <StudioCard
-              kicker="Catalog"
-              title="Open Plugins"
-              testId="axis-workers-goto-plugins"
-              onClick={openPlugins}
+            <StudioSection
+              title="Inventory"
+              lead="Each card is a way AXIS can run Pine or fetch data. Click one to inspect health, features, and install steps."
             >
-              <StudioHint>
-                Sources, streams, engines, storage, and the script library. Compose them on Wire.
-              </StudioHint>
-            </StudioCard>
-          </StudioSection>
+              <StudioToggle
+                id="axis-workers-optional"
+                checked={showOptional()}
+                onChange={setShowOptional}
+                label="Show optional workers"
+                hint="PYNE Agent and edge eval are optional — they do not replace the calculation backend."
+              />
+              <div class="ax-grid ax-grid--2" aria-busy={!snap()}>
+                <Show
+                  when={snap()}
+                  fallback={
+                    <For each={[0, 1, 2, 3, 4, 5]}>
+                      {(_n) => (
+                        <div class="ax-skel" data-testid="axis-worker-skel" aria-hidden="true">
+                          <div class="ax-skel-line ax-skel-line--title" />
+                          <div class="ax-skel-line ax-skel-line--meta" />
+                        </div>
+                      )}
+                    </For>
+                  }
+                >
+                  <For each={catalog()}>
+                    {(w) => {
+                      const r = () => resultFor(snap(), w.id);
+                      const st = () => toStudioHealth(r()?.status);
+                      return (
+                        <StudioCard
+                          kicker={kindLabel(w.kind)}
+                          title={w.name}
+                          selected={selectedId() === w.id}
+                          onClick={() => setSelectedId(w.id)}
+                          testId={`axis-worker-card-${w.id}`}
+                        >
+                          <StudioStatus status={st()} />
+                          <StudioHint>
+                            {r()?.latencyMs != null ? `${r()?.latencyMs}ms · ` : ''}
+                            last probe {relativeTime(r()?.checkedAt)}
+                            <Show when={r()?.isActiveBackend}> · backend</Show>
+                            <Show when={r()?.isActiveEngine}> · engine</Show>
+                          </StudioHint>
+                        </StudioCard>
+                      );
+                    }}
+                  </For>
+                </Show>
+              </div>
+            </StudioSection>
+
+            <StudioSection
+              title="Related"
+              lead="The contract catalog lives next door — not nested here."
+            >
+              <StudioCard
+                kicker="Catalog"
+                title="Open Plugins"
+                testId="axis-workers-goto-plugins"
+                onClick={openPlugins}
+              >
+                <StudioHint>
+                  Sources, streams, engines, storage, and the script library. Compose them on Wire.
+                </StudioHint>
+              </StudioCard>
+            </StudioSection>
           </div>
 
           <div class="ax-deck-pane ax-deck-pane--inspect">
-          <Show when={!snap()}>
-            <div class="ax-skel" data-testid="axis-worker-skel-inspect" aria-hidden="true">
-              <div class="ax-skel-line ax-skel-line--title" />
-              <div class="ax-skel-line ax-skel-line--meta" />
-              <div class="ax-skel-line" />
-              <div class="ax-skel-line ax-skel-line--meta" />
-            </div>
-          </Show>
-          <Show when={snap() && selected()} fallback={<Show when={snap()}><StudioHint>Select a worker.</StudioHint></Show>}>
-            {(w) => {
-              const r = () => selectedResult();
-              const features = () => Object.entries(r()?.features || {});
-              return (
-                <div class="ax-section">
-                  <StudioSection title={w().name} lead={w().description}>
-                    <div class="ax-grid ax-grid--3">
-                      <StudioStat
-                        label="Status"
-                        value={<StudioStatus status={toStudioHealth(r()?.status)} />}
-                      />
-                      <StudioStat
-                        label="Latency"
-                        value={r()?.latencyMs != null ? `${r()?.latencyMs}ms` : '—'}
-                      />
-                      <StudioStat label="Kind" value={kindLabel(w().kind)} />
-                    </div>
-                    <StudioHint>{w().usage}</StudioHint>
-                    <StudioField label="Endpoint">
-                      <StudioCode>{r()?.endpoint || w().defaultEndpoint || '(none)'}</StudioCode>
-                    </StudioField>
-                    <StudioField label="Probe">
-                      <StudioCode>{r()?.detail || 'Not probed yet'}</StudioCode>
-                    </StudioField>
-                    <Show when={r()?.readiness && r()?.readiness !== 'unknown'}>
-                      <StudioField
-                        label="Compile"
-                        hint="Numba / IR-cache readiness reported by the backend /health."
-                      >
-                        <StudioCode>
-                          {r()?.readiness === 'warm'
-                            ? 'warm — builtins / host already prewarmed'
-                            : r()?.readiness === 'cold'
-                              ? 'cold — first compile pays Numba JIT (prewarm available)'
-                              : 'unavailable — no Numba; compile runs in object mode'}
-                          {r()?.compile?.diskCacheEnabled
-                            ? ` · disk cache${r()?.compile?.irEntries != null ? ` (${r()?.compile?.irEntries} IR)` : ''}`
-                            : ' · no disk cache'}
-                        </StudioCode>
+            <Show when={!snap()}>
+              <div class="ax-skel" data-testid="axis-worker-skel-inspect" aria-hidden="true">
+                <div class="ax-skel-line ax-skel-line--title" />
+                <div class="ax-skel-line ax-skel-line--meta" />
+                <div class="ax-skel-line" />
+                <div class="ax-skel-line ax-skel-line--meta" />
+              </div>
+            </Show>
+            <Show
+              when={snap() && selected()}
+              fallback={
+                <Show when={snap()}>
+                  <StudioHint>Select a worker.</StudioHint>
+                </Show>
+              }
+            >
+              {(w) => {
+                const r = () => selectedResult();
+                const features = () => Object.entries(r()?.features || {});
+                return (
+                  <div class="ax-section">
+                    <StudioSection title={w().name} lead={w().description}>
+                      <div class="ax-grid ax-grid--3">
+                        <StudioStat
+                          label="Status"
+                          value={<StudioStatus status={toStudioHealth(r()?.status)} />}
+                        />
+                        <StudioStat
+                          label="Latency"
+                          value={r()?.latencyMs != null ? `${r()?.latencyMs}ms` : '—'}
+                        />
+                        <StudioStat label="Kind" value={kindLabel(w().kind)} />
+                      </div>
+                      <StudioHint>{w().usage}</StudioHint>
+                      <StudioField label="Endpoint">
+                        <StudioCode>{r()?.endpoint || w().defaultEndpoint || '(none)'}</StudioCode>
                       </StudioField>
-                    </Show>
-                    <Show when={r()?.features?.free_tier_limits === true}>
-                      <StudioField label="Free-tier guards">
-                        <StudioCode>
-                          enabled — unauthenticated /run is rate/bounds limited; set an API key for
-                          full runs
-                        </StudioCode>
+                      <StudioField label="Probe">
+                        <StudioCode>{r()?.detail || 'Not probed yet'}</StudioCode>
                       </StudioField>
-                    </Show>
-                    <div class="ax-inline">
-                      <StudioButton
-                        variant="ghost"
-                        disabled={probing()}
-                        onClick={() => void refreshOne(w().id)}
-                      >
-                        {probing() ? <HooxLoader size="xs" /> : <Icons.refresh />}
-                        Re-probe
-                      </StudioButton>
-                      <Show when={w().id === 'pyne-pro' && r()?.status === 'healthy'}>
-                        <StudioButton
-                          variant="ghost"
-                          testId="axis-worker-prewarm"
-                          disabled={!!busyAction() || !canPrewarmBackend()}
-                          title={
-                            canPrewarmBackend()
-                              ? 'Pay Numba JIT / IR-cache cost now so the next Run is fast'
-                              : 'This backend does not advertise /compile/prewarm'
-                          }
-                          onClick={() => void prewarmBackend()}
+                      <Show when={r()?.readiness && r()?.readiness !== 'unknown'}>
+                        <StudioField
+                          label="Compile"
+                          hint="Numba / IR-cache readiness reported by the backend /health."
                         >
-                          {busyAction() === 'prewarm' ? (
-                            <HooxLoader size="xs" />
-                          ) : (
-                            <Icons.zap />
-                          )}
-                          Warm compiler
-                        </StudioButton>
+                          <StudioCode>
+                            {r()?.readiness === 'warm'
+                              ? 'warm — builtins / host already prewarmed'
+                              : r()?.readiness === 'cold'
+                                ? 'cold — first compile pays Numba JIT (prewarm available)'
+                                : 'unavailable — no Numba; compile runs in object mode'}
+                            {r()?.compile?.diskCacheEnabled
+                              ? ` · disk cache${r()?.compile?.irEntries != null ? ` (${r()?.compile?.irEntries} IR)` : ''}`
+                              : ' · no disk cache'}
+                          </StudioCode>
+                        </StudioField>
                       </Show>
-                      <Show when={w().defaultEndpoint}>
-                        <StudioButton
-                          variant="ghost"
-                          onClick={() => void copy(w().defaultEndpoint, `ep-${w().id}`)}
-                        >
-                          <Icons.copy />
-                          {copied() === `ep-${w().id}` ? 'Copied' : 'Copy URL'}
-                        </StudioButton>
+                      <Show when={r()?.features?.free_tier_limits === true}>
+                        <StudioField label="Free-tier guards">
+                          <StudioCode>
+                            enabled — unauthenticated /run is rate/bounds limited; set an API key
+                            for full runs
+                          </StudioCode>
+                        </StudioField>
                       </Show>
-                    </div>
-                  </StudioSection>
-
-                  <Show when={features().length}>
-                    <StudioSection title="Features" lead="Flags from the last successful probe.">
-                      <StudioList class="ax-list--dense">
-                        <For each={features()}>
-                          {([k, v]) => (
-                            <StudioRow>
-                              <span>{k}</span>
-                              <span>{String(v)}</span>
-                            </StudioRow>
-                          )}
-                        </For>
-                      </StudioList>
-                    </StudioSection>
-                  </Show>
-
-                  <Show when={w().id === 'pyne-pro' && runnerAvailable()}>
-                    <StudioSection
-                      title="Hosted runner"
-                      lead="Backend cron jobs (PYNE_RUNNER=1). Toggling or ticking needs the host's ADMIN_TOKEN when one is set."
-                    >
                       <div class="ax-inline">
                         <StudioButton
                           variant="ghost"
-                          testId="axis-runner-load"
-                          disabled={jobsBusy()}
-                          onClick={() => void loadJobs()}
+                          disabled={probing()}
+                          onClick={() => void refreshOne(w().id)}
                         >
-                          {jobsBusy() ? <HooxLoader size="xs" /> : <Icons.refresh />}
-                          Load jobs
+                          {probing() ? <HooxLoader size="xs" /> : <Icons.refresh />}
+                          Re-probe
                         </StudioButton>
-                        <StudioButton
-                          variant="ghost"
-                          testId="axis-runner-deploy"
-                          disabled={jobsBusy()}
-                          title="Register the newest applied chart script as a hosted job"
-                          onClick={() => void deployActiveScript()}
-                        >
-                          <Icons.upload />
-                          Deploy active script
-                        </StudioButton>
+                        <Show when={w().id === 'pyne-pro' && r()?.status === 'healthy'}>
+                          <StudioButton
+                            variant="ghost"
+                            testId="axis-worker-prewarm"
+                            disabled={!!busyAction() || !canPrewarmBackend()}
+                            title={
+                              canPrewarmBackend()
+                                ? 'Pay Numba JIT / IR-cache cost now so the next Run is fast'
+                                : 'This backend does not advertise /compile/prewarm'
+                            }
+                            onClick={() => void prewarmBackend()}
+                          >
+                            {busyAction() === 'prewarm' ? <HooxLoader size="xs" /> : <Icons.zap />}
+                            Warm compiler
+                          </StudioButton>
+                        </Show>
+                        <Show when={w().defaultEndpoint}>
+                          <StudioButton
+                            variant="ghost"
+                            onClick={() => void copy(w().defaultEndpoint, `ep-${w().id}`)}
+                          >
+                            <Icons.copy />
+                            {copied() === `ep-${w().id}` ? 'Copied' : 'Copy URL'}
+                          </StudioButton>
+                        </Show>
                       </div>
-                      <Show when={jobsErr()}>
-                        <StudioCode>{jobsErr()}</StudioCode>
-                      </Show>
-                      <Show when={jobs().length}>
+                    </StudioSection>
+
+                    <Show when={features().length}>
+                      <StudioSection title="Features" lead="Flags from the last successful probe.">
                         <StudioList class="ax-list--dense">
-                          <For each={jobs()}>
-                            {(job) => (
+                          <For each={features()}>
+                            {([k, v]) => (
                               <StudioRow>
-                                <span>
-                                  {job.name || job.id} · {job.symbol || '—'} {job.timeframe || ''}
-                                </span>
-                                <span class="ax-inline">
-                                  <StudioToggle
-                                    id={`axis-runner-enabled-${job.id}`}
-                                    checked={job.enabled !== false}
-                                    onChange={() => void toggleJob(job)}
-                                    label=""
-                                  />
-                                  <StudioButton
-                                    variant="ghost"
-                                    disabled={jobsBusy()}
-                                    title="Tick this script now"
-                                    onClick={() => void runJob(job)}
-                                  >
-                                    <Icons.play />
-                                    Run now
-                                  </StudioButton>
-                                </span>
+                                <span>{k}</span>
+                                <span>{String(v)}</span>
                               </StudioRow>
                             )}
                           </For>
                         </StudioList>
-                      </Show>
-                    </StudioSection>
-                  </Show>
+                      </StudioSection>
+                    </Show>
 
-                  <Show when={w().capabilities.length}>
-                    <StudioSection title="Capabilities">
-                      <StudioHint>{w().capabilities.join(' · ')}</StudioHint>
-                    </StudioSection>
-                  </Show>
-
-                  <StudioSection
-                    title="Activate"
-                    lead="Selecting a worker here writes the Runtime engine and endpoint."
-                  >
-                    <Show when={w().canUseAsBackend && (w().defaultEndpoint || w().localEndpoint)}>
-                      <StudioButton
-                        variant="primary"
-                        disabled={!!busyAction()}
-                        onClick={() =>
-                          setBackend(
-                            w().defaultEndpoint || w().localEndpoint || '',
-                            w().name,
-                            w().id,
-                          )
-                        }
+                    <Show when={w().id === 'pyne-pro' && runnerAvailable()}>
+                      <StudioSection
+                        title="Hosted runner"
+                        lead="Backend cron jobs (PYNE_RUNNER=1). Toggling or ticking needs the host's ADMIN_TOKEN when one is set."
                       >
-                        Use as calculation backend
-                      </StudioButton>
-                    </Show>
-                    <Show when={w().localEndpoint && w().localEndpoint !== w().defaultEndpoint}>
-                      <StudioButton
-                        variant="ghost"
-                        disabled={!!busyAction()}
-                        onClick={() =>
-                          setBackend(w().localEndpoint ?? '', `${w().name} (local)`, w().id)
-                        }
-                      >
-                        Use local endpoint
-                      </StudioButton>
-                    </Show>
-                    <Show when={w().canUseAsEngine && w().id === 'pyodide'}>
-                      <StudioButton
-                        variant="primary"
-                        disabled={!!busyAction()}
-                        onClick={() => void usePyodide()}
-                      >
-                        {busyAction() === 'pyodide' ? <HooxLoader size="xs" /> : <Icons.play />}
-                        Use as engine + preload
-                      </StudioButton>
-                    </Show>
-                    <Show when={w().canUseAsEngine && w().id === 'pyne-worker'}>
-                      <StudioButton
-                        variant="primary"
-                        disabled={!!busyAction()}
-                        onClick={() =>
-                          setBackend(
-                            w().defaultEndpoint ||
-                              'https://pyne-worker.cryptolinx.workers.dev',
-                            w().name,
-                            'pyne-worker',
-                          )
-                        }
-                      >
-                        <Icons.play />
-                        Use pyne-worker engine
-                      </StudioButton>
-                    </Show>
-                    <Show when={w().pluginUrl}>
-                      <StudioButton
-                        variant="primary"
-                        disabled={!!busyAction()}
-                        onClick={() => void installAgent()}
-                      >
-                        {busyAction() === 'agent' ? (
-                          <HooxLoader size="xs" />
-                        ) : (
-                          <Icons.download />
-                        )}
-                        {agentInstalled() ? 'Re-install agent plugin' : 'Install agent plugin'}
-                      </StudioButton>
-                    </Show>
-                    <Show when={w().docsPath || w().homepage}>
-                      <StudioHint>
-                        <Show when={w().docsPath}>Docs {w().docsPath}</Show>
-                        <Show when={w().homepage}>
-                          {' '}
-                          <a href={w().homepage} target="_blank" rel="noopener noreferrer">
-                            {w().homepage}
-                          </a>
+                        <div class="ax-inline">
+                          <StudioButton
+                            variant="ghost"
+                            testId="axis-runner-load"
+                            disabled={jobsBusy()}
+                            onClick={() => void loadJobs()}
+                          >
+                            {jobsBusy() ? <HooxLoader size="xs" /> : <Icons.refresh />}
+                            Load jobs
+                          </StudioButton>
+                          <StudioButton
+                            variant="ghost"
+                            testId="axis-runner-deploy"
+                            disabled={jobsBusy()}
+                            title="Register the newest applied chart script as a hosted job"
+                            onClick={() => void deployActiveScript()}
+                          >
+                            <Icons.upload />
+                            Deploy active script
+                          </StudioButton>
+                        </div>
+                        <Show when={jobsErr()}>
+                          <StudioCode>{jobsErr()}</StudioCode>
                         </Show>
-                      </StudioHint>
-                    </Show>
-                  </StudioSection>
-
-                  <Show when={w().id === 'pyne-agent'}>
-                    <StudioSection
-                      title="Agent endpoint"
-                      lead="The plugin chats with this pyne-agent-worker origin (POST /v1/chat). Empty = the 'Set plugin config: endpoint' error. Production default is prefilled; point it at local wrangler dev when self-hosting the sister repo."
-                    >
-                      <StudioField
-                        label="Agent worker URL (no trailing slash)"
-                        hint="e.g. https://pyne-agent-worker.cryptolinx.workers.dev — or http://127.0.0.1:8787 for local wrangler dev"
-                      >
-                        <input
-                          class="ax-input ax-input--mono"
-                          data-testid="axis-pyne-agent-endpoint"
-                          placeholder={w().defaultEndpoint || 'https://pyne-agent-worker.cryptolinx.workers.dev'}
-                          value={String(
-                            ((store.pluginsConfig?.[pluginKey('component', 'pyne-agent')] || {}) as Record<string, unknown>).endpoint ||
-                              (store.pluginsConfig?.['pyne-agent'] as Record<string, unknown> | undefined)?.endpoint ||
-                              '',
-                          )}
-                          onInput={(e) => {
-                            writePluginField(pluginKey('component', 'pyne-agent'), 'endpoint', e.currentTarget.value.trim().replace(/\/+$/, ''));
-                            void persist();
-                          }}
-                        />
-                      </StudioField>
-                      <StudioField
-                        label="API key (optional)"
-                        hint="Must match the worker API_KEY secret; leave empty for local open mode"
-                      >
-                        <input
-                          type="password"
-                          class="ax-input ax-input--mono"
-                          data-testid="axis-pyne-agent-apikey"
-                          placeholder="optional in local open mode"
-                          value={getAgentApiKey(store.pluginsConfig)}
-                          onInput={(e) => {
-                            // Session vault first (stripped from durable persist);
-                            // the bag keeps a session-compat copy like cloud keys.
-                            putSecret(AGENT_API_KEY_SLOT, e.currentTarget.value);
-                            writePluginField(pluginKey('component', 'pyne-agent'), 'apiKey', e.currentTarget.value);
-                            void persist();
-                          }}
-                        />
-                      </StudioField>
-                      <StudioField
-                        label="Persona"
-                        for="axis-pyne-agent-persona"
-                        hint="auto detects per message. pine writes scripts; axis can change the app via MCP; trader is market/risk."
-                      >
-                        <StudioSelect
-                          id="axis-pyne-agent-persona"
-                          testId="axis-pyne-agent-persona"
-                          value={String(
-                            ((store.pluginsConfig?.[pluginKey('component', 'pyne-agent')] || {}) as Record<string, unknown>)
-                              .persona || 'auto',
-                          )}
-                          onChange={(v) => {
-                            writePluginField(pluginKey('component', 'pyne-agent'), 'persona', v);
-                            void persist();
-                          }}
-                        >
-                          <option value="auto">auto</option>
-                          <option value="pine">pine</option>
-                          <option value="axis">axis</option>
-                          <option value="trader">trader</option>
-                        </StudioSelect>
-                      </StudioField>
-                      <StudioField
-                        label="PYNE backend"
-                        for="axis-pyne-agent-backend"
-                        hint="Where parse/lint/eval run on the agent Worker. auto = first configured host. Plugin 0.1.9 always sends orchestrate:true."
-                      >
-                        <StudioSelect
-                          id="axis-pyne-agent-backend"
-                          testId="axis-pyne-agent-backend"
-                          value={String(
-                            ((store.pluginsConfig?.[pluginKey('component', 'pyne-agent')] || {}) as Record<string, unknown>)
-                              .pyneBackend || 'auto',
-                          )}
-                          onChange={(v) => {
-                            writePluginField(pluginKey('component', 'pyne-agent'), 'pyneBackend', v);
-                            void persist();
-                          }}
-                        >
-                          <option value="auto">auto</option>
-                          <option value="pro">pro (pynescript.online)</option>
-                          <option value="local">local Flask</option>
-                          <option value="worker">edge pyne-worker</option>
-                          <option value="container">Cloudflare Container</option>
-                          <option value="none">none</option>
-                        </StudioSelect>
-                      </StudioField>
-                    </StudioSection>
-                  </Show>
-
-                  <For each={w().install}>
-                    {(step, i) => (
-                      <StudioSection title={`${i() + 1}. ${step.title}`} lead={step.detail}>
-                        <Show when={step.command}>
-                          <div class="ax-inline">
-                            <StudioCode>{step.command}</StudioCode>
-                            <StudioButton
-                              variant="ghost"
-                              class="ax-btn--icon"
-                              title="Copy"
-                              ariaLabel="Copy command"
-                              onClick={() => void copy(step.command!, `step-${w().id}-${i()}`)}
-                            >
-                              {copied() === `step-${w().id}-${i()}` ? (
-                                <Icons.check />
-                              ) : (
-                                <Icons.copy />
+                        <Show when={jobs().length}>
+                          <StudioList class="ax-list--dense">
+                            <For each={jobs()}>
+                              {(job) => (
+                                <StudioRow>
+                                  <span>
+                                    {job.name || job.id} · {job.symbol || '—'} {job.timeframe || ''}
+                                  </span>
+                                  <span class="ax-inline">
+                                    <StudioToggle
+                                      id={`axis-runner-enabled-${job.id}`}
+                                      checked={job.enabled !== false}
+                                      onChange={() => void toggleJob(job)}
+                                      label=""
+                                    />
+                                    <StudioButton
+                                      variant="ghost"
+                                      disabled={jobsBusy()}
+                                      title="Tick this script now"
+                                      onClick={() => void runJob(job)}
+                                    >
+                                      <Icons.play />
+                                      Run now
+                                    </StudioButton>
+                                  </span>
+                                </StudioRow>
                               )}
-                            </StudioButton>
-                          </div>
+                            </For>
+                          </StudioList>
                         </Show>
                       </StudioSection>
-                    )}
-                  </For>
-                </div>
-              );
-            }}
-          </Show>
+                    </Show>
+
+                    <Show when={w().capabilities.length}>
+                      <StudioSection title="Capabilities">
+                        <StudioHint>{w().capabilities.join(' · ')}</StudioHint>
+                      </StudioSection>
+                    </Show>
+
+                    <StudioSection
+                      title="Activate"
+                      lead="Selecting a worker here writes the Runtime engine and endpoint."
+                    >
+                      <Show
+                        when={w().canUseAsBackend && (w().defaultEndpoint || w().localEndpoint)}
+                      >
+                        <StudioButton
+                          variant="primary"
+                          disabled={!!busyAction()}
+                          onClick={() =>
+                            setBackend(
+                              w().defaultEndpoint || w().localEndpoint || '',
+                              w().name,
+                              w().id,
+                            )
+                          }
+                        >
+                          Use as calculation backend
+                        </StudioButton>
+                      </Show>
+                      <Show when={w().localEndpoint && w().localEndpoint !== w().defaultEndpoint}>
+                        <StudioButton
+                          variant="ghost"
+                          disabled={!!busyAction()}
+                          onClick={() =>
+                            setBackend(w().localEndpoint ?? '', `${w().name} (local)`, w().id)
+                          }
+                        >
+                          Use local endpoint
+                        </StudioButton>
+                      </Show>
+                      <Show when={w().canUseAsEngine && w().id === 'pyodide'}>
+                        <StudioButton
+                          variant="primary"
+                          disabled={!!busyAction()}
+                          onClick={() => void usePyodide()}
+                        >
+                          {busyAction() === 'pyodide' ? <HooxLoader size="xs" /> : <Icons.play />}
+                          Use as engine + preload
+                        </StudioButton>
+                      </Show>
+                      <Show when={w().canUseAsEngine && w().id === 'pyne-worker'}>
+                        <StudioButton
+                          variant="primary"
+                          disabled={!!busyAction()}
+                          onClick={() =>
+                            setBackend(
+                              w().defaultEndpoint || 'https://pyne-worker.cryptolinx.workers.dev',
+                              w().name,
+                              'pyne-worker',
+                            )
+                          }
+                        >
+                          <Icons.play />
+                          Use pyne-worker engine
+                        </StudioButton>
+                      </Show>
+                      <Show when={w().pluginUrl}>
+                        <StudioButton
+                          variant="primary"
+                          disabled={!!busyAction()}
+                          onClick={() => void installAgent()}
+                        >
+                          {busyAction() === 'agent' ? <HooxLoader size="xs" /> : <Icons.download />}
+                          {agentInstalled() ? 'Re-install agent plugin' : 'Install agent plugin'}
+                        </StudioButton>
+                      </Show>
+                      <Show when={w().docsPath || w().homepage}>
+                        <StudioHint>
+                          <Show when={w().docsPath}>Docs {w().docsPath}</Show>
+                          <Show when={w().homepage}>
+                            {' '}
+                            <a href={w().homepage} target="_blank" rel="noopener noreferrer">
+                              {w().homepage}
+                            </a>
+                          </Show>
+                        </StudioHint>
+                      </Show>
+                    </StudioSection>
+
+                    <Show when={w().id === 'pyne-agent'}>
+                      <StudioSection
+                        title="Agent endpoint"
+                        lead="The plugin chats with this pyne-agent-worker origin (POST /v1/chat). Empty = the 'Set plugin config: endpoint' error. Production default is prefilled; point it at local wrangler dev when self-hosting the sister repo."
+                      >
+                        <StudioField
+                          label="Agent worker URL (no trailing slash)"
+                          for="axis-pyne-agent-endpoint"
+                          hint="e.g. https://pyne-agent-worker.cryptolinx.workers.dev — or http://127.0.0.1:8787 for local wrangler dev"
+                        >
+                          <StudioInput
+                            id="axis-pyne-agent-endpoint"
+                            mono
+                            icon={<Icons.server />}
+                            testId="axis-pyne-agent-endpoint"
+                            placeholder={
+                              w().defaultEndpoint ||
+                              'https://pyne-agent-worker.cryptolinx.workers.dev'
+                            }
+                            value={String(
+                              (
+                                (store.pluginsConfig?.[pluginKey('component', 'pyne-agent')] ||
+                                  {}) as Record<string, unknown>
+                              ).endpoint ||
+                                (
+                                  store.pluginsConfig?.['pyne-agent'] as
+                                    Record<string, unknown> | undefined
+                                )?.endpoint ||
+                                '',
+                            )}
+                            onInput={(value) => {
+                              writePluginField(
+                                pluginKey('component', 'pyne-agent'),
+                                'endpoint',
+                                value.trim().replace(/\/+$/, ''),
+                              );
+                              void persist();
+                            }}
+                            copyable
+                            clearable
+                          />
+                        </StudioField>
+                        <StudioField
+                          label="API key (optional)"
+                          for="axis-pyne-agent-apikey"
+                          hint="Must match the worker API_KEY secret; leave empty for local open mode"
+                        >
+                          <StudioInput
+                            id="axis-pyne-agent-apikey"
+                            type="password"
+                            mono
+                            testId="axis-pyne-agent-apikey"
+                            placeholder="optional in local open mode"
+                            value={getAgentApiKey(store.pluginsConfig)}
+                            onInput={(value) => {
+                              // Session vault first (stripped from durable persist);
+                              // the bag keeps a session-compat copy like cloud keys.
+                              putSecret(AGENT_API_KEY_SLOT, value);
+                              writePluginField(
+                                pluginKey('component', 'pyne-agent'),
+                                'apiKey',
+                                value,
+                              );
+                              void persist();
+                            }}
+                            reveal
+                          />
+                        </StudioField>
+                        <StudioField
+                          label="Persona"
+                          for="axis-pyne-agent-persona"
+                          hint="auto detects per message. pine writes scripts; axis can change the app via MCP; trader is market/risk."
+                        >
+                          <StudioSelect
+                            id="axis-pyne-agent-persona"
+                            testId="axis-pyne-agent-persona"
+                            value={String(
+                              (
+                                (store.pluginsConfig?.[pluginKey('component', 'pyne-agent')] ||
+                                  {}) as Record<string, unknown>
+                              ).persona || 'auto',
+                            )}
+                            onChange={(v) => {
+                              writePluginField(pluginKey('component', 'pyne-agent'), 'persona', v);
+                              void persist();
+                            }}
+                          >
+                            <option value="auto">auto</option>
+                            <option value="pine">pine</option>
+                            <option value="axis">axis</option>
+                            <option value="trader">trader</option>
+                          </StudioSelect>
+                        </StudioField>
+                        <StudioField
+                          label="PYNE backend"
+                          for="axis-pyne-agent-backend"
+                          hint="Where parse/lint/eval run on the agent Worker. auto = first configured host. Plugin 0.1.9 always sends orchestrate:true."
+                        >
+                          <StudioSelect
+                            id="axis-pyne-agent-backend"
+                            testId="axis-pyne-agent-backend"
+                            value={String(
+                              (
+                                (store.pluginsConfig?.[pluginKey('component', 'pyne-agent')] ||
+                                  {}) as Record<string, unknown>
+                              ).pyneBackend || 'auto',
+                            )}
+                            onChange={(v) => {
+                              writePluginField(
+                                pluginKey('component', 'pyne-agent'),
+                                'pyneBackend',
+                                v,
+                              );
+                              void persist();
+                            }}
+                          >
+                            <option value="auto">auto</option>
+                            <option value="pro">pro (pynescript.online)</option>
+                            <option value="local">local Flask</option>
+                            <option value="worker">edge pyne-worker</option>
+                            <option value="container">Cloudflare Container</option>
+                            <option value="none">none</option>
+                          </StudioSelect>
+                        </StudioField>
+                      </StudioSection>
+                    </Show>
+
+                    <For each={w().install}>
+                      {(step, i) => (
+                        <StudioSection title={`${i() + 1}. ${step.title}`} lead={step.detail}>
+                          <Show when={step.command}>
+                            <div class="ax-inline">
+                              <StudioCode>{step.command}</StudioCode>
+                              <StudioButton
+                                variant="ghost"
+                                class="ax-btn--icon"
+                                title="Copy"
+                                ariaLabel="Copy command"
+                                onClick={() => void copy(step.command!, `step-${w().id}-${i()}`)}
+                              >
+                                {copied() === `step-${w().id}-${i()}` ? (
+                                  <Icons.check />
+                                ) : (
+                                  <Icons.copy />
+                                )}
+                              </StudioButton>
+                            </div>
+                          </Show>
+                        </StudioSection>
+                      )}
+                    </For>
+                  </div>
+                );
+              }}
+            </Show>
           </div>
         </div>
       </div>

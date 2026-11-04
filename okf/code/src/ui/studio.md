@@ -7,7 +7,7 @@ tags: [code, studio, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-03T12:43:16Z
+  at: 2026-11-04T01:36:08Z
 sources:
   - id: tree
     resource: "src/ui/studio"
@@ -24,12 +24,14 @@ okf_lock: generated
 * `StudioButton.tsx` — StudioButton, StudioButtonVariant
 * `StudioColorInput.tsx` — StudioColorInput
 * `StudioDisplay.tsx` — StudioCard, StudioChip, StudioCode, StudioEmpty, StudioHealth, StudioList, StudioRow, StudioStat, StudioStatus, studioHealthLabel
-* `StudioField.tsx` — StudioField, StudioHint, StudioInput, StudioSelect, StudioToggle
+* `StudioField.tsx` — StudioField, StudioFieldContext, StudioFieldContextValue, StudioHint, StudioInput, StudioSelect, StudioToggle
 * `StudioFooter.tsx` — StudioFooter
 * `StudioHost.tsx` — StudioHost
 * `StudioJson.tsx` — StudioJson
+* `StudioRange.tsx` — StudioRange
 * `StudioSection.tsx` — StudioSection
 * `StudioTabs.tsx` — StudioTabs
+* `StudioTextarea.tsx` — StudioTextarea
 * `index.ts` — AppButton, AppPage, AppPageHeader, AppPageProps, ButtonDesign, ButtonShape, ButtonSize, ButtonTone, FeedbackState, STUDIO_PAGES, STUDIO_PAGE_BY_ID, SettingsTabId
 * `json-tree.ts` — JSON_EXPAND_MAX, JSON_PAGE, JsonKind, childCount, childEntries, childPath, collectOpenPaths, formatPrimitive, isContainer, jsonKind, jsonStats, keyMatches
 * `pages.ts` — STUDIO_PAGES, STUDIO_PAGE_BY_ID, StudioPageMeta, studioPageMeta
@@ -39,6 +41,7 @@ okf_lock: generated
 # Other files
 
 * `button-designs.css`
+* `input-designs.css`
 * `studio.css`
 
 # Packages

@@ -1,0 +1,192 @@
+/**
+ * Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
+ * SPDX-License-Identifier: AGPL-3.0-only
+ *
+ * Storybook-only layout helpers for the Studio/Inputs section.
+ * Runtime chrome lives in studio.css; this file never ships to the app shell.
+ */
+
+.axi-demo {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  width: min(1040px, 100%);
+  padding: 30px;
+  color: var(--color-text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+.axi-demo-head h2 {
+  margin: 0 0 6px;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+}
+.axi-demo-head p {
+  margin: 0;
+  max-width: 68ch;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--color-text-dim);
+}
+.axi-grid2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.axi-grid4 {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+@media (max-width: 900px) {
+  .axi-grid2,
+  .axi-grid4 {
+    grid-template-columns: 1fr;
+  }
+}
+.axi-specimen {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.axi-specimen-label {
+  margin: 0;
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+}
+.axi-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg-panel);
+  min-width: 0;
+}
+.axi-panel--elev {
+  background: var(--color-bg-elev);
+}
+.axi-panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.axi-panel-head h3 {
+  margin: 0;
+  font-size: 14px;
+  letter-spacing: -0.01em;
+}
+.axi-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.4rem;
+  padding: 0.1rem 0.45rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+}
+.axi-json {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-bg-elev);
+  color: var(--color-text-dim);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.axi-json strong {
+  color: var(--color-accent);
+  font-weight: 550;
+}
+.axi-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-text-dim);
+}
+.axi-legend--inline {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+}
+.axi-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.axi-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.axi-dot--accent {
+  color: var(--color-accent);
+}
+.axi-dot--ok {
+  color: var(--color-accent-2);
+}
+.axi-dot--err {
+  color: var(--color-red);
+}
+.axi-dot--faint {
+  color: var(--color-text-faint);
+}
+.axi-kbd {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.35rem;
+  padding: 0.1rem 0.36rem;
+  border: 1px solid var(--color-border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--color-bg-elev);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10.5px;
+  color: var(--color-text-dim);
+}
+.axi-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.axi-row--tight {
+  gap: 6px;
+}
+.axi-note {
+  border-left: 2px solid var(--color-accent);
+  padding: 2px 0 2px 12px;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--color-text-dim);
+}
+.axi-note strong {
+  color: var(--color-text);
+}
+.axi-caption {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--color-text-faint);
+}

@@ -11,9 +11,18 @@
  * @module ui/studio/StudioJson
  */
 
-import { For, Show, createContext, createMemo, createSignal, useContext, type Accessor } from 'solid-js';
+import {
+  For,
+  Show,
+  createContext,
+  createMemo,
+  createSignal,
+  useContext,
+  type Accessor,
+} from 'solid-js';
 import { Icons } from '../icons';
 import { copyToClipboard } from '../clipboard';
+import { StudioInput } from './StudioField';
 import {
   JSON_PAGE,
   childCount,
@@ -89,10 +98,7 @@ function JsonNode(props: { keyName: string | null; value: unknown; path: string 
     <Show when={visible()}>
       <div class="ax-json-node" data-kind={kind()}>
         <div class="ax-json-row">
-          <Show
-            when={container()}
-            fallback={<span class="ax-json-twist" aria-hidden="true" />}
-          >
+          <Show when={container()} fallback={<span class="ax-json-twist" aria-hidden="true" />}>
             <button
               type="button"
               class={`ax-json-twist${open() ? ' is-open' : ''}`}
@@ -110,7 +116,12 @@ function JsonNode(props: { keyName: string | null; value: unknown; path: string 
           <Show
             when={container()}
             fallback={
-              <button type="button" class="ax-json-leaf" title="Copy value" onClick={(e) => void copyValue(e)}>
+              <button
+                type="button"
+                class="ax-json-leaf"
+                title="Copy value"
+                onClick={(e) => void copyValue(e)}
+              >
                 <Primitive value={props.value} />
               </button>
             }
@@ -133,11 +144,7 @@ function JsonNode(props: { keyName: string | null; value: unknown; path: string 
               {([k, v]) => <JsonNode keyName={k} value={v} path={childPath(props.path, k)} />}
             </For>
             <Show when={hidden() > 0}>
-              <button
-                type="button"
-                class="ax-json-more"
-                onClick={() => ctx.showMore(props.path)}
-              >
+              <button type="button" class="ax-json-more" onClick={() => ctx.showMore(props.path)}>
                 Show {Math.min(JSON_PAGE, hidden())} more · {hidden()} hidden
               </button>
             </Show>
@@ -219,13 +226,16 @@ export function StudioJson(props: { value: unknown; testId?: string }) {
           </button>
         </div>
         <Show when={mode() === 'tree'}>
-          <input
-            class="ax-input ax-json-search"
+          <StudioInput
+            class="ax-json-search"
             type="search"
+            icon={<Icons.search />}
             placeholder="Filter keys…"
+            ariaLabel="Filter keys"
             value={query()}
-            data-testid="axis-results-raw-filter"
-            onInput={(e) => setQuery(e.currentTarget.value)}
+            testId="axis-results-raw-filter"
+            onInput={setQuery}
+            clearable
           />
           <span class="ax-toolbar-spacer" />
           <button

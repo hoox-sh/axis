@@ -33,7 +33,7 @@
   --ax-drop-shadow: drop-shadow(0 18px 40px rgba(0, 0, 0, 0.5));
 }
 
-[data-theme="light"] {
+[data-theme='light'] {
   --ax-drop-shadow: drop-shadow(0 18px 40px rgba(18, 24, 40, 0.16));
   --ax-shadow-ambient: 0 1px 2px rgba(18, 24, 40, 0.08);
   --ax-shadow-card: 0 1px 2px rgba(18, 24, 40, 0.06), 0 10px 28px rgba(18, 24, 40, 0.08);
@@ -94,16 +94,28 @@
   animation: none;
 }
 @keyframes ax-page-fade {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 @keyframes ax-page-in {
-  from { opacity: 0.55; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0.55;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .ax-page-backdrop,
-  .ax-page { animation: none; }
+  .ax-page {
+    animation: none;
+  }
 }
 
 /* ── Rail ────────────────────────────────────────────────────────── */
@@ -169,10 +181,12 @@
   text-align: left;
   cursor: pointer;
   border-radius: var(--radius-surface);
-  transition: background-color 150ms ease-out, color 150ms ease-out;
+  transition:
+    background-color 150ms ease-out,
+    color 150ms ease-out;
 }
 .ax-page-rail-item::before {
-  content: "";
+  content: '';
   position: absolute;
   left: 0;
   top: 0.45rem;
@@ -384,7 +398,9 @@
   padding: 0.35rem 0.95rem;
   cursor: pointer;
   letter-spacing: -0.01em;
-  transition: background-color 150ms ease-out, color 150ms ease-out;
+  transition:
+    background-color 150ms ease-out,
+    color 150ms ease-out;
 }
 .ax-view-switch-btn + .ax-view-switch-btn {
   border-left: var(--border-w) solid var(--color-border);
@@ -613,7 +629,9 @@
   animation: ax-spin var(--ui-motion-duration-slow, 350ms) linear infinite;
 }
 @keyframes ax-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 .ax-btn:hover:not(:disabled) {
   background: var(--color-bg-hover);
@@ -628,7 +646,7 @@
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 22%, transparent);
 }
 .ax-btn:disabled,
-.ax-btn[aria-disabled="true"] {
+.ax-btn[aria-disabled='true'] {
   opacity: 0.45;
   cursor: not-allowed;
 }
@@ -697,6 +715,46 @@
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
+  min-width: 0;
+}
+.ax-field-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-width: 0;
+}
+.ax-field-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-shrink: 0;
+  min-width: 0;
+}
+.ax-field-counter {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.72rem;
+  line-height: 1;
+  color: var(--color-text-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.ax-field-tag {
+  font-size: 0.6rem;
+  line-height: 1;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--color-text-faint);
+  border: var(--border-w) solid var(--color-border);
+  border-radius: 999px;
+  padding: 0.12rem 0.42rem;
+  white-space: nowrap;
+}
+.ax-field-req {
+  margin-left: 0.18rem;
+  color: var(--color-red);
+  font-weight: 700;
 }
 .ax-field.is-invalid .ax-label {
   color: var(--color-red);
@@ -708,7 +766,17 @@
   text-transform: uppercase;
   font-weight: 600;
   color: var(--color-text-dim);
+  transition: color var(--ui-motion-duration-fast, 120ms) ease-out;
 }
+.ax-field:focus-within > .ax-field-head .ax-label {
+  color: var(--color-accent);
+}
+.ax-field.is-invalid:focus-within > .ax-field-head .ax-label {
+  color: var(--color-red);
+}
+
+/* The native control. Kept standalone for raw `<input class="ax-input">`
+   call sites; the shell below supplies the same chrome when wrapped. */
 .ax-input,
 .ax-select,
 select.ax-input,
@@ -722,15 +790,30 @@ textarea.ax-input {
   border-radius: var(--radius-input);
   font-size: 1.05rem;
   font-family: inherit;
+  line-height: 1.3;
+  caret-color: var(--color-accent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 3%, transparent);
   transition:
     border-color var(--ui-motion-duration-fast, 120ms) ease-out,
     box-shadow var(--ui-motion-duration-fast, 120ms) ease-out,
-    background-color var(--ui-motion-duration-fast, 120ms) ease-out;
+    background-color var(--ui-motion-duration-fast, 120ms) ease-out,
+    color var(--ui-motion-duration-fast, 120ms) ease-out;
 }
 .ax-input.ax-input--mono,
 textarea.ax-input.ax-input--mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.98rem;
+}
+.ax-input::placeholder,
+.ax-select::placeholder,
+.ax-textarea::placeholder {
+  color: var(--color-text-faint);
+  opacity: 0.72;
+}
+.ax-input::selection,
+.ax-textarea::selection {
+  background: color-mix(in srgb, var(--color-accent) 34%, transparent);
+  color: var(--color-text);
 }
 .ax-input:hover:not(:disabled):not(:focus):not(:focus-visible),
 .ax-select:hover:not(:disabled):not(:focus-visible) {
@@ -741,12 +824,19 @@ textarea.ax-input.ax-input--mono {
 .ax-select:focus-visible {
   outline: none;
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 18%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #fff 3%, transparent),
+    0 0 0 3px color-mix(in srgb, var(--color-accent) 18%, transparent);
 }
 .ax-input:disabled,
 .ax-select:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+.ax-input[readonly],
+.ax-select[readonly] {
+  background: color-mix(in srgb, var(--color-bg-elev) 55%, var(--color-bg-panel));
+  cursor: default;
 }
 .ax-input.is-invalid,
 .ax-select.is-invalid,
@@ -761,21 +851,479 @@ textarea.ax-input.ax-input--mono {
   border-color: var(--color-red);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-red) 20%, transparent);
 }
+/* Shells own the edge; the inner native control must not draw a second ring. */
+.ax-field.is-invalid .ax-input-shell > .ax-input--bare:focus-visible,
+.ax-field.is-invalid .ax-select-shell > .ax-select--bare:focus-visible,
+.ax-field.is-invalid .ax-textarea-shell > .ax-textarea:focus-visible {
+  border-color: transparent;
+  box-shadow: none;
+}
+/* Autofill should not paint a browser-yellow rectangle into the terminal. */
+.ax-input:-webkit-autofill,
+.ax-input:-webkit-autofill:hover,
+.ax-input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--color-text);
+  -webkit-box-shadow: 0 0 0 1000px var(--color-bg-elev) inset;
+  caret-color: var(--color-text);
+  transition: background-color 9999s ease-out;
+}
+/* Native number spinners and search cancel buttons fight the custom chrome. */
+.ax-input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+  font-variant-numeric: tabular-nums;
+}
+.ax-input[type='number']::-webkit-outer-spin-button,
+.ax-input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.ax-input[type='search']::-webkit-search-cancel-button,
+.ax-input[type='search']::-webkit-search-decoration {
+  -webkit-appearance: none;
+}
+
+/* ── Input shell — chrome, adornments, actions ───────────────────── */
+.ax-input-shell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: var(--ax-control-h);
+  padding: 0 0.35rem 0 1rem;
+  background: var(--color-bg-elev);
+  border: var(--border-w-input) solid var(--color-border);
+  border-radius: var(--radius-input);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 3%, transparent);
+  transition:
+    border-color var(--ui-motion-duration-fast, 120ms) ease-out,
+    box-shadow var(--ui-motion-duration-fast, 120ms) ease-out,
+    background-color var(--ui-motion-duration-fast, 120ms) ease-out;
+}
+.ax-input-shell:hover:not(.is-disabled):not(:focus-within) {
+  border-color: color-mix(in srgb, var(--color-border) 55%, var(--color-text-dim));
+}
+.ax-input-shell:focus-within {
+  border-color: var(--color-accent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #fff 3%, transparent),
+    0 0 0 3px color-mix(in srgb, var(--color-accent) 18%, transparent);
+}
+.ax-input-shell.is-invalid {
+  border-color: color-mix(in srgb, var(--color-red) 70%, var(--color-border));
+}
+.ax-input-shell.is-invalid:focus-within {
+  border-color: var(--color-red);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-red) 20%, transparent);
+}
+.ax-input-shell.is-loading {
+  border-color: color-mix(in srgb, var(--color-accent) 42%, var(--color-border));
+}
+.ax-field.is-invalid .ax-input-shell {
+  border-color: color-mix(in srgb, var(--color-red) 70%, var(--color-border));
+}
+.ax-field.is-invalid .ax-input-shell:focus-within {
+  border-color: var(--color-red);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-red) 20%, transparent);
+}
+.ax-input-shell.is-valid:not(:focus-within) {
+  border-color: color-mix(in srgb, var(--color-accent-2) 52%, var(--color-border));
+}
+.ax-input-shell.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.ax-input-shell.is-disabled > .ax-input--bare,
+.ax-select-shell.is-disabled > .ax-select--bare,
+.ax-textarea-shell.is-disabled > .ax-textarea {
+  opacity: 1;
+  cursor: not-allowed;
+}
+.ax-input-shell.is-readonly {
+  background: color-mix(in srgb, var(--color-bg-elev) 55%, var(--color-bg-panel));
+}
+.ax-input-shell--number {
+  padding-right: 0;
+}
+.ax-input-shell > .ax-input--bare {
+  flex: 1;
+  min-width: 0;
+  min-height: calc(var(--ax-control-h) - 2px);
+  padding: 0.55rem 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.ax-input-shell > .ax-input--bare:hover,
+.ax-input-shell > .ax-input--bare:focus,
+.ax-input-shell > .ax-input--bare:focus-visible {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  outline: none;
+}
+.ax-input-adorn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--color-text-faint);
+  transition:
+    color var(--ui-motion-duration-fast, 120ms) ease-out,
+    transform var(--ui-motion-duration-base, 200ms) cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.ax-input-adorn svg {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+.ax-input-shell:focus-within .ax-input-adorn--lead {
+  color: var(--color-accent);
+  transform: translateY(-1px);
+}
+.ax-input-prefix,
+.ax-input-suffix {
+  flex-shrink: 0;
+  color: var(--color-text-faint);
+  font-size: 0.9rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+.ax-input-suffix {
+  padding-right: 0.15rem;
+}
+.ax-input-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
+  flex-shrink: 0;
+}
+.ax-input-actions:empty {
+  display: none;
+}
+.ax-input-action {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--color-text-faint);
+  cursor: pointer;
+  transition:
+    color var(--ui-motion-duration-fast, 120ms) ease-out,
+    background-color var(--ui-motion-duration-fast, 120ms) ease-out,
+    transform var(--ui-motion-duration-fast, 120ms) cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity var(--ui-motion-duration-fast, 120ms) ease-out;
+}
+.ax-input-action svg {
+  width: 1rem;
+  height: 1rem;
+}
+.ax-input-action:hover {
+  color: var(--color-text);
+  background: var(--color-bg-hover);
+  transform: scale(1.06);
+}
+.ax-input-action:active {
+  transform: scale(0.9);
+}
+.ax-input-action:focus-visible {
+  outline: none;
+  color: var(--color-text);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 40%, transparent);
+}
+.ax-input-action.is-success {
+  color: var(--color-accent-2);
+}
+.ax-input-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  flex-shrink: 0;
+  animation: ax-input-status-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.ax-input-status svg {
+  width: 1rem;
+  height: 1rem;
+}
+.ax-input-status.is-success {
+  color: var(--color-accent-2);
+}
+.ax-input-status.is-danger {
+  color: var(--color-red);
+}
+.ax-input-spin {
+  width: 0.9rem;
+  height: 0.9rem;
+  border: 2px solid color-mix(in srgb, currentColor 26%, transparent);
+  border-top-color: var(--color-accent);
+  border-radius: 999px;
+  flex-shrink: 0;
+  animation: ax-spin var(--ui-motion-duration-slow, 350ms) linear infinite;
+}
+.ax-input-kbd {
+  flex-shrink: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.7rem;
+  line-height: 1;
+  color: var(--color-text-faint);
+  border: var(--border-w) solid var(--color-border);
+  border-radius: 4px;
+  padding: 0.18rem 0.32rem;
+  opacity: 0.85;
+  transition:
+    opacity var(--ui-motion-duration-fast, 120ms) ease-out,
+    transform var(--ui-motion-duration-fast, 120ms) ease-out;
+}
+.ax-input-shell:focus-within .ax-input-kbd {
+  opacity: 0;
+  transform: translateX(4px);
+}
+.ax-input-count {
+  flex-shrink: 0;
+  padding: 0 0.35rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.72rem;
+  line-height: 1;
+  color: var(--color-text-faint);
+  font-variant-numeric: tabular-nums;
+  transition: color var(--ui-motion-duration-fast, 120ms) ease-out;
+}
+.ax-input-count.is-near {
+  color: var(--color-orange);
+}
+.ax-input-count.is-over {
+  color: var(--color-red);
+}
+.ax-input-stepper {
+  display: flex;
+  flex-direction: column;
+  align-self: stretch;
+  flex-shrink: 0;
+  margin-left: 0.1rem;
+  border-left: var(--border-w) solid var(--color-border);
+}
+.ax-input-step {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  width: 2rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-dim);
+  cursor: pointer;
+  transition:
+    color var(--ui-motion-duration-fast, 120ms) ease-out,
+    background-color var(--ui-motion-duration-fast, 120ms) ease-out;
+}
+.ax-input-step + .ax-input-step {
+  border-top: var(--border-w) solid var(--color-border-soft);
+}
+.ax-input-step svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+.ax-input-step:hover {
+  color: var(--color-text);
+  background: var(--color-bg-hover);
+}
+.ax-input-step:active {
+  background: color-mix(in srgb, var(--color-bg-hover) 70%, var(--color-accent) 30%);
+}
+.ax-input-step:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--color-accent) 40%, transparent);
+}
+
+/* Select shell — native select, custom chevron, same focus language. */
+.ax-select-shell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: var(--ax-control-h);
+  padding-left: 1rem;
+  background: var(--color-bg-elev);
+  border: var(--border-w-input) solid var(--color-border);
+  border-radius: var(--radius-input);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 3%, transparent);
+  transition:
+    border-color var(--ui-motion-duration-fast, 120ms) ease-out,
+    box-shadow var(--ui-motion-duration-fast, 120ms) ease-out,
+    background-color var(--ui-motion-duration-fast, 120ms) ease-out;
+}
+.ax-select-shell:hover:not(.is-disabled):not(:focus-within) {
+  border-color: color-mix(in srgb, var(--color-border) 55%, var(--color-text-dim));
+}
+.ax-select-shell:focus-within {
+  border-color: var(--color-accent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #fff 3%, transparent),
+    0 0 0 3px color-mix(in srgb, var(--color-accent) 18%, transparent);
+}
+.ax-select-shell.is-invalid {
+  border-color: color-mix(in srgb, var(--color-red) 70%, var(--color-border));
+}
+.ax-select-shell.is-invalid:focus-within {
+  border-color: var(--color-red);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-red) 20%, transparent);
+}
+.ax-field.is-invalid .ax-select-shell {
+  border-color: color-mix(in srgb, var(--color-red) 70%, var(--color-border));
+}
+.ax-field.is-invalid .ax-select-shell:focus-within {
+  border-color: var(--color-red);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-red) 20%, transparent);
+}
+.ax-select-shell.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.ax-select-shell > .ax-select--bare {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: 1;
+  min-width: 0;
+  min-height: calc(var(--ax-control-h) - 2px);
+  padding: 0.55rem 2.5rem 0.55rem 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+}
+.ax-select-shell > .ax-select--bare:hover,
+.ax-select-shell > .ax-select--bare:focus,
+.ax-select-shell > .ax-select--bare:focus-visible {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  outline: none;
+}
+.ax-select-shell.has-icon {
+  padding-left: 0.9rem;
+}
+.ax-select-chevron {
+  position: absolute;
+  right: 0.95rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  color: var(--color-text-faint);
+  transition:
+    color var(--ui-motion-duration-fast, 120ms) ease-out,
+    transform var(--ui-motion-duration-base, 200ms) cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.ax-select-chevron svg {
+  width: 1rem;
+  height: 1rem;
+}
+.ax-select-shell:focus-within .ax-select-chevron {
+  color: var(--color-accent);
+}
+.ax-select-shell:active .ax-select-chevron {
+  transform: rotate(180deg);
+}
+/* Raw selects (no shell) get a currentColor chevron from gradients. */
+select.ax-select:not(.ax-select--bare) {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 2.5rem;
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) calc(50% - 2px),
+    calc(100% - 13px) calc(50% - 2px);
+  background-size:
+    5px 5px,
+    5px 5px;
+  background-repeat: no-repeat;
+}
+select.ax-select:not(.ax-select--bare):focus {
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--color-accent) 50%),
+    linear-gradient(135deg, var(--color-accent) 50%, transparent 50%);
+}
+
 .ax-hint {
   margin: 0;
   max-width: 42rem;
   font-size: var(--ax-hint);
   line-height: 1.55;
   color: var(--color-text-dim);
+  transition: color var(--ui-motion-duration-fast, 120ms) ease-out;
 }
 .ax-hint--accent {
   color: var(--color-accent);
 }
-.ax-error {
+.ax-error,
+.ax-success {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.42rem;
   margin: 0;
   font-size: var(--ax-hint);
   line-height: 1.45;
+  animation: ax-msg-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.ax-error {
   color: var(--color-red);
+}
+.ax-success {
+  color: var(--color-accent-2);
+}
+.ax-error-mark,
+.ax-success-mark {
+  display: inline-flex;
+  flex-shrink: 0;
+  margin-top: 0.12rem;
+}
+.ax-error-mark svg,
+.ax-success-mark svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+@keyframes ax-msg-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes ax-input-status-in {
+  from {
+    opacity: 0;
+    transform: scale(0.72);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Inline rows: wrappers participate in the same flex growth as raw inputs. */
+.ax-inline > .ax-input-shell,
+.ax-inline > .ax-select-shell,
+.ax-inline > .ax-textarea-shell {
+  flex: 1;
+  min-width: 0;
 }
 
 /* Switch-styled toggle — keeps native checkbox for a11y + form semantics. */
@@ -790,6 +1338,17 @@ textarea.ax-input.ax-input--mono {
   border-radius: var(--radius-surface);
   outline: none;
   transition: background-color var(--ui-motion-duration-fast, 120ms) ease-out;
+}
+.ax-toggle--sm {
+  --ax-toggle-w: 2rem;
+  --ax-toggle-h: 1.12rem;
+  gap: 0.7rem;
+}
+.ax-toggle--sm .ax-toggle-title {
+  font-size: 0.95rem;
+}
+.ax-toggle--sm .ax-toggle-hint {
+  font-size: 0.86rem;
 }
 .ax-toggle:hover:not(.is-disabled) .ax-toggle-title {
   color: var(--color-text);
@@ -809,34 +1368,44 @@ textarea.ax-input.ax-input--mono {
   border-radius: 999px;
   border: var(--border-w) solid var(--color-border);
   background: var(--color-bg-elev);
+  box-shadow: inset 0 1px 2px color-mix(in srgb, #000 22%, transparent);
   cursor: inherit;
   transition:
-    background-color var(--ui-motion-duration-fast, 120ms) cubic-bezier(0.2, 0.8, 0.2, 1),
-    border-color var(--ui-motion-duration-fast, 120ms) cubic-bezier(0.2, 0.8, 0.2, 1),
-    box-shadow var(--ui-motion-duration-fast, 120ms) ease-out;
+    background-color var(--ui-motion-duration-base, 200ms) cubic-bezier(0.2, 0.8, 0.2, 1),
+    border-color var(--ui-motion-duration-base, 200ms) cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow var(--ui-motion-duration-base, 200ms) ease-out;
 }
 .ax-toggle input::after {
-  content: "";
+  content: '';
   position: absolute;
   top: var(--ax-toggle-pad);
   left: var(--ax-toggle-pad);
   width: calc(var(--ax-toggle-h) - (var(--ax-toggle-pad) * 2) - 2px);
   height: calc(var(--ax-toggle-h) - (var(--ax-toggle-pad) * 2) - 2px);
   border-radius: 999px;
-  background: var(--color-text-dim);
-  box-shadow: 0 1px 2px color-mix(in srgb, #000 35%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, #fff 20%, var(--color-text-dim)),
+    var(--color-text-dim)
+  );
+  box-shadow: 0 1px 3px color-mix(in srgb, #000 38%, transparent);
   transition:
-    transform var(--ui-motion-duration-fast, 120ms) cubic-bezier(0.2, 0.8, 0.2, 1),
-    background-color var(--ui-motion-duration-fast, 120ms) ease-out;
+    transform var(--ui-motion-duration-base, 200ms) cubic-bezier(0.34, 1.56, 0.64, 1),
+    background-color var(--ui-motion-duration-base, 200ms) ease-out,
+    box-shadow var(--ui-motion-duration-base, 200ms) ease-out;
 }
 .ax-toggle input:checked,
 .ax-toggle.is-checked input {
   background: var(--color-accent);
   border-color: var(--color-accent);
+  box-shadow:
+    inset 0 1px 2px color-mix(in srgb, #000 16%, transparent),
+    0 1px 6px color-mix(in srgb, var(--color-accent) 34%, transparent);
 }
 .ax-toggle input:checked::after,
 .ax-toggle.is-checked input::after {
   background: var(--color-bg-base);
+  box-shadow: 0 1px 3px color-mix(in srgb, #000 28%, transparent);
   transform: translateX(calc(var(--ax-toggle-w) - var(--ax-toggle-h)));
 }
 .ax-toggle input:focus-visible {
@@ -847,7 +1416,7 @@ textarea.ax-input.ax-input--mono {
   border-color: color-mix(in srgb, var(--color-border) 45%, var(--color-text-dim));
 }
 .ax-toggle:active:not(.is-disabled) input::after {
-  width: calc(var(--ax-toggle-h) - (var(--ax-toggle-pad) * 2) - 2px + 0.12rem);
+  width: calc(var(--ax-toggle-h) - (var(--ax-toggle-pad) * 2) - 2px + 0.1rem);
 }
 .ax-toggle-copy {
   display: flex;
@@ -872,6 +1441,7 @@ textarea.ax-input.ax-input--mono {
   color: var(--color-text-dim);
 }
 
+/* Raw ranges keep native accent-color; StudioRange adds the filled track. */
 .ax-range {
   width: 100%;
   accent-color: var(--color-accent);
@@ -879,6 +1449,184 @@ textarea.ax-input.ax-input--mono {
 }
 .ax-range:focus-visible {
   outline: none;
+}
+
+/* ── Range shell (StudioRange) ────────────────────────────────── */
+.ax-range-shell {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  width: 100%;
+  min-height: 2.4rem;
+}
+.ax-range-shell .ax-range {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: 1;
+  min-width: 0;
+  height: 1.5rem;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.ax-range-shell .ax-range:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.ax-range-shell .ax-range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  border: var(--border-w) solid var(--color-border-soft);
+  background: linear-gradient(
+    to right,
+    var(--color-accent) 0 var(--ax-range-fill, 0%),
+    color-mix(in srgb, var(--color-bg-elev) 72%, var(--color-border)) var(--ax-range-fill, 0%) 100%
+  );
+}
+.ax-range-shell .ax-range::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  border: var(--border-w) solid var(--color-border-soft);
+  background: color-mix(in srgb, var(--color-bg-elev) 72%, var(--color-border));
+}
+.ax-range-shell .ax-range::-moz-range-progress {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--color-accent);
+}
+.ax-range-shell .ax-range::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 1.05rem;
+  height: 1.05rem;
+  margin-top: -0.36rem;
+  border-radius: 50%;
+  border: 2px solid var(--color-accent);
+  background: var(--color-bg-base);
+  box-shadow: 0 1px 5px color-mix(in srgb, #000 34%, transparent);
+  transition:
+    transform var(--ui-motion-duration-fast, 120ms) cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow var(--ui-motion-duration-fast, 120ms) ease-out;
+}
+.ax-range-shell .ax-range::-moz-range-thumb {
+  width: 1.05rem;
+  height: 1.05rem;
+  border-radius: 50%;
+  border: 2px solid var(--color-accent);
+  background: var(--color-bg-base);
+  box-shadow: 0 1px 5px color-mix(in srgb, #000 34%, transparent);
+}
+.ax-range-shell .ax-range:hover:not(:disabled)::-webkit-slider-thumb {
+  transform: scale(1.12);
+  box-shadow:
+    0 1px 5px color-mix(in srgb, #000 34%, transparent),
+    0 0 0 4px color-mix(in srgb, var(--color-accent) 14%, transparent);
+}
+.ax-range-shell .ax-range:active:not(:disabled)::-webkit-slider-thumb {
+  transform: scale(0.96);
+}
+.ax-range-shell .ax-range:focus-visible::-webkit-slider-thumb {
+  box-shadow:
+    0 1px 5px color-mix(in srgb, #000 34%, transparent),
+    0 0 0 4px color-mix(in srgb, var(--color-accent) 28%, transparent);
+}
+.ax-range-shell .ax-range:focus-visible::-moz-range-thumb {
+  box-shadow:
+    0 1px 5px color-mix(in srgb, #000 34%, transparent),
+    0 0 0 4px color-mix(in srgb, var(--color-accent) 28%, transparent);
+}
+.ax-range-value {
+  min-width: 3.2rem;
+  padding: 0.22rem 0.45rem;
+  border: var(--border-w) solid var(--color-border);
+  border-radius: var(--radius-chip);
+  background: var(--color-bg-elev);
+  color: var(--color-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.8rem;
+  line-height: 1.2;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  transition:
+    color var(--ui-motion-duration-fast, 120ms) ease-out,
+    border-color var(--ui-motion-duration-fast, 120ms) ease-out;
+}
+.ax-range-shell:focus-within .ax-range-value {
+  border-color: color-mix(in srgb, var(--color-accent) 55%, var(--color-border));
+  color: var(--color-accent);
+}
+.ax-range-shell.is-disabled .ax-range-value {
+  opacity: 0.5;
+}
+
+/* ── Textarea shell (StudioTextarea) ───────────────────────────── */
+.ax-textarea-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  width: 100%;
+  padding: 0.6rem 0.75rem 0.5rem 1rem;
+  background: var(--color-bg-elev);
+  border: var(--border-w-input) solid var(--color-border);
+  border-radius: var(--radius-input);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 3%, transparent);
+  transition:
+    border-color var(--ui-motion-duration-fast, 120ms) ease-out,
+    box-shadow var(--ui-motion-duration-fast, 120ms) ease-out;
+}
+.ax-textarea-shell:hover:not(.is-disabled):not(:focus-within) {
+  border-color: color-mix(in srgb, var(--color-border) 55%, var(--color-text-dim));
+}
+.ax-textarea-shell:focus-within {
+  border-color: var(--color-accent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #fff 3%, transparent),
+    0 0 0 3px color-mix(in srgb, var(--color-accent) 18%, transparent);
+}
+.ax-textarea-shell.is-invalid {
+  border-color: color-mix(in srgb, var(--color-red) 70%, var(--color-border));
+}
+.ax-textarea-shell.is-invalid:focus-within {
+  border-color: var(--color-red);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-red) 20%, transparent);
+}
+.ax-field.is-invalid .ax-textarea-shell {
+  border-color: color-mix(in srgb, var(--color-red) 70%, var(--color-border));
+}
+.ax-field.is-invalid .ax-textarea-shell:focus-within {
+  border-color: var(--color-red);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-red) 20%, transparent);
+}
+.ax-textarea-shell.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.ax-textarea-shell > .ax-textarea {
+  min-height: 6rem;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  line-height: 1.55;
+  resize: vertical;
+}
+.ax-textarea-shell.is-autosize > .ax-textarea {
+  min-height: 2.2rem;
+  resize: none;
+  overflow: hidden;
+}
+.ax-textarea-shell > .ax-textarea:hover,
+.ax-textarea-shell > .ax-textarea:focus,
+.ax-textarea-shell > .ax-textarea:focus-visible {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  outline: none;
+}
+.ax-textarea-shell > .ax-input-count {
+  align-self: flex-end;
+  padding: 0;
 }
 
 /* ── Color field (one control: picker swatch + text) ──────────── */
@@ -891,9 +1639,41 @@ textarea.ax-input.ax-input--mono {
   border: var(--border-w-input) solid var(--color-border);
   border-radius: var(--radius-input);
   overflow: hidden;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 3%, transparent);
+  transition:
+    border-color var(--ui-motion-duration-fast, 120ms) ease-out,
+    box-shadow var(--ui-motion-duration-fast, 120ms) ease-out;
+}
+.ax-color-input:hover:not(.is-disabled):not(:focus-within) {
+  border-color: color-mix(in srgb, var(--color-border) 55%, var(--color-text-dim));
 }
 .ax-color-input:focus-within {
   border-color: var(--color-accent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #fff 3%, transparent),
+    0 0 0 3px color-mix(in srgb, var(--color-accent) 18%, transparent);
+}
+.ax-color-input.is-invalid {
+  border-color: color-mix(in srgb, var(--color-red) 70%, var(--color-border));
+}
+.ax-color-input.is-invalid:focus-within {
+  border-color: var(--color-red);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-red) 20%, transparent);
+}
+.ax-field.is-invalid .ax-color-input {
+  border-color: color-mix(in srgb, var(--color-red) 70%, var(--color-border));
+}
+.ax-field.is-invalid .ax-color-input:focus-within {
+  border-color: var(--color-red);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-red) 20%, transparent);
+}
+.ax-color-input.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.ax-color-input.is-disabled .ax-color-input-text {
+  opacity: 1;
+  cursor: not-allowed;
 }
 .ax-color-input-swatch {
   position: relative;
@@ -901,6 +1681,7 @@ textarea.ax-input.ax-input--mono {
   width: var(--ax-control-h);
   min-height: var(--ax-control-h);
   border-right: var(--border-w) solid var(--color-border);
+  overflow: hidden;
   /* Checkerboard shows through translucent fills */
   background-color: #fff;
   background-image:
@@ -909,12 +1690,29 @@ textarea.ax-input.ax-input--mono {
     linear-gradient(45deg, transparent 75%, #c8c8c8 75%),
     linear-gradient(-45deg, transparent 75%, #c8c8c8 75%);
   background-size: 8px 8px;
-  background-position: 0 0, 0 4px, 4px -4px, -4px 0;
+  background-position:
+    0 0,
+    0 4px,
+    4px -4px,
+    -4px 0;
+}
+.ax-color-input-swatch::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #000 18%, transparent);
 }
 .ax-color-input-fill {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  transition:
+    transform var(--ui-motion-duration-base, 200ms) cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color var(--ui-motion-duration-fast, 120ms) ease-out;
+}
+.ax-color-input-swatch:hover .ax-color-input-fill {
+  transform: scale(1.04);
 }
 .ax-color-input-swatch input[type='color'] {
   position: absolute;
@@ -927,18 +1725,50 @@ textarea.ax-input.ax-input--mono {
   opacity: 0;
   cursor: pointer;
 }
+.ax-color-input-swatch input[type='color']:focus-visible {
+  outline: none;
+}
 .ax-color-input-text {
   flex: 1;
   min-width: 0;
-  border: 0 !important;
+  padding-right: 0.35rem;
+  border: 0;
   border-radius: 0;
-  background: var(--color-bg-elev) !important;
+  background: var(--color-bg-elev);
   min-height: var(--ax-control-h);
 }
 .ax-color-input-text:focus,
 .ax-color-input-text:focus-visible {
-  border: 0 !important;
+  border: 0;
   outline: none;
+  box-shadow: none;
+}
+.ax-color-format {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  flex-shrink: 0;
+  margin-right: 0.55rem;
+  padding: 0.14rem 0.42rem;
+  border: var(--border-w) solid var(--color-border);
+  border-radius: 999px;
+  color: var(--color-text-faint);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.64rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  transition:
+    color var(--ui-motion-duration-fast, 120ms) ease-out,
+    border-color var(--ui-motion-duration-fast, 120ms) ease-out;
+}
+.ax-color-input:focus-within .ax-color-format {
+  color: var(--color-accent);
+  border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-border));
+}
+.ax-color-input.is-invalid .ax-color-format {
+  color: var(--color-red);
+  border-color: color-mix(in srgb, var(--color-red) 45%, var(--color-border));
 }
 
 /* ── Stack ─────────────────────────────────────────────────────── */
@@ -978,8 +1808,11 @@ button.ax-card {
   cursor: pointer;
   font: inherit;
   width: 100%;
-  transition: border-color 150ms ease-out, background-color 150ms ease-out,
-    box-shadow 180ms ease-out, transform 120ms ease-out;
+  transition:
+    border-color 150ms ease-out,
+    background-color 150ms ease-out,
+    box-shadow 180ms ease-out,
+    transform 120ms ease-out;
 }
 button.ax-card:hover,
 button.ax-card:focus-visible {
@@ -993,7 +1826,7 @@ button.ax-card:active {
 }
 .ax-card.is-on,
 button.ax-card.is-on,
-button.ax-card[aria-pressed="true"] {
+button.ax-card[aria-pressed='true'] {
   border-color: var(--color-accent);
   background: color-mix(in srgb, var(--color-accent) 8%, var(--color-bg-panel));
 }
@@ -1109,15 +1942,15 @@ span.ax-chip,
   cursor: not-allowed;
 }
 .ax-chip.is-on,
-.ax-chip[aria-pressed="true"],
-.ax-chip[aria-selected="true"] {
+.ax-chip[aria-pressed='true'],
+.ax-chip[aria-selected='true'] {
   border-color: var(--color-accent);
   color: var(--color-accent);
   background: color-mix(in srgb, var(--color-accent) 12%, transparent);
   font-weight: 600;
 }
 .ax-chip.is-on:hover:not(:disabled),
-.ax-chip[aria-pressed="true"]:hover:not(:disabled) {
+.ax-chip[aria-pressed='true']:hover:not(:disabled) {
   background: color-mix(in srgb, var(--color-accent) 18%, transparent);
   border-color: var(--color-accent);
   color: var(--color-accent);
@@ -1145,7 +1978,7 @@ span.ax-chip,
     background-color var(--ui-motion-duration-fast, 120ms) ease-out;
 }
 .ax-status::before {
-  content: "";
+  content: '';
   width: 0.45rem;
   height: 0.45rem;
   border-radius: 50%;
@@ -1249,10 +2082,15 @@ span.ax-chip,
   padding: 0.35rem 0.85rem;
   font-size: 0.92rem;
 }
-.ax-json-search {
+.ax-json-search.ax-input-shell {
   min-height: 2.5rem;
   width: min(22rem, 100%);
-  padding: 0.35rem 0.8rem;
+  padding: 0 0.3rem 0 0.7rem;
+  font-size: 0.95rem;
+}
+.ax-json-search.ax-input-shell > .ax-input--bare {
+  min-height: 2.4rem;
+  padding: 0.2rem 0;
   font-size: 0.95rem;
 }
 .ax-json-stats {
@@ -1380,7 +2218,9 @@ span.ax-json-twist {
   outline: none;
 }
 @media (prefers-reduced-motion: reduce) {
-  .ax-json-twist svg { transition: none; }
+  .ax-json-twist svg {
+    transition: none;
+  }
 }
 
 .ax-tabs {
@@ -1411,7 +2251,7 @@ span.ax-json-twist {
   z-index: 1;
 }
 .ax-tab::after {
-  content: "";
+  content: '';
   position: absolute;
   left: 0.85rem;
   right: 0.85rem;
@@ -1430,21 +2270,21 @@ span.ax-json-twist {
   color: var(--color-text);
   outline: none;
 }
-.ax-tab:hover:not([aria-selected="true"]) {
+.ax-tab:hover:not([aria-selected='true']) {
   background: color-mix(in srgb, var(--color-bg-hover) 70%, transparent);
 }
-.ax-tab:active:not([aria-selected="true"]) {
+.ax-tab:active:not([aria-selected='true']) {
   color: var(--color-text);
 }
 .ax-tab:focus-visible {
   box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--color-accent) 55%, transparent);
 }
-.ax-tab[aria-selected="true"],
+.ax-tab[aria-selected='true'],
 .ax-tab.is-active {
   color: var(--color-text);
   font-weight: 600;
 }
-.ax-tab[aria-selected="true"]::after,
+.ax-tab[aria-selected='true']::after,
 .ax-tab.is-active::after {
   transform: scaleX(1);
   opacity: 1;
@@ -1531,14 +2371,22 @@ span.ax-json-twist {
 }
 /* Grid lives on a behind-layer so the fade never masks recipe text. */
 .ax-wire-col--presets::before {
-  content: "";
+  content: '';
   position: absolute;
   inset: 0;
   z-index: 0;
   pointer-events: none;
   background-image:
-    linear-gradient(to right, color-mix(in srgb, var(--color-border) 12%, transparent) 1px, transparent 1px),
-    linear-gradient(to bottom, color-mix(in srgb, var(--color-border) 12%, transparent) 1px, transparent 1px);
+    linear-gradient(
+      to right,
+      color-mix(in srgb, var(--color-border) 12%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--color-border) 12%, transparent) 1px,
+      transparent 1px
+    );
   background-size: 16px 16px;
   opacity: 0.4;
   mask-image: linear-gradient(to bottom, black 58%, transparent);
@@ -1593,7 +2441,7 @@ span.ax-json-twist {
   cursor: pointer;
 }
 .ax-wire-preset::before {
-  content: "";
+  content: '';
   position: absolute;
   inset: 0 auto 0 0;
   width: 2px;
@@ -1966,11 +2814,18 @@ span.ax-json-twist {
   width: 68%;
 }
 @keyframes ax-skel-pulse {
-  0%, 100% { opacity: 0.4; }
-  50% { opacity: 1; }
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .ax-skel-line { animation: none; }
+  .ax-skel-line {
+    animation: none;
+  }
 }
 
 /* Full-bleed two-column deck (Workers inspector) — no inner scroll */
@@ -2387,15 +3242,36 @@ span.ax-json-twist {
   .ax-toggle-title,
   .ax-input,
   .ax-select,
+  .ax-input-shell,
+  .ax-input-shell > .ax-input--bare,
+  .ax-input-adorn,
+  .ax-input-action,
+  .ax-input-kbd,
+  .ax-input-count,
+  .ax-input-step,
+  .ax-select-shell,
+  .ax-select-chevron,
+  .ax-textarea-shell,
+  .ax-textarea,
+  .ax-range-value,
+  .ax-color-input,
+  .ax-color-input-fill,
+  .ax-color-format,
   .ax-status,
   .ax-view-switch-btn,
   .ax-page-rail-item {
     transition: none;
   }
-  .ax-btn-spin {
+  .ax-btn-spin,
+  .ax-input-spin {
     animation: none;
     border-top-color: color-mix(in srgb, currentColor 28%, transparent);
     opacity: 0.7;
+  }
+  .ax-error,
+  .ax-success,
+  .ax-input-status {
+    animation: none;
   }
   .ax-btn:active:not(:disabled),
   button.ax-card:active,
@@ -2403,11 +3279,20 @@ span.ax-json-twist {
   .ax-toggle:active:not(.is-disabled) input::after {
     transform: none;
   }
+  .ax-input-action:hover,
+  .ax-input-action:active,
+  .ax-input-adorn--lead,
+  .ax-input-kbd,
+  .ax-range-shell .ax-range:hover:not(:disabled)::-webkit-slider-thumb,
+  .ax-range-shell .ax-range:active:not(:disabled)::-webkit-slider-thumb,
+  .ax-color-input-swatch:hover .ax-color-input-fill {
+    transform: none;
+  }
   .ax-toggle input:checked::after,
   .ax-toggle.is-checked input::after {
     transition: none;
   }
-  .ax-tab[aria-selected="true"]::after,
+  .ax-tab[aria-selected='true']::after,
   .ax-tab.is-active::after {
     transform: none;
     opacity: 1;

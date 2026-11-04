@@ -12,6 +12,7 @@ import {
   AppButton,
   StudioField,
   StudioHint,
+  StudioRange,
   StudioSection,
   StudioStatus,
   StudioToggle,
@@ -31,7 +32,10 @@ import {
 import type { EffectDef } from './types';
 
 function slug(id: string): string {
-  return id.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
+  return id
+    .replace(/[^a-z0-9]+/gi, '-')
+    .replace(/^-|-$/g, '')
+    .toLowerCase();
 }
 
 function EffectBlock(props: { def: EffectDef }) {
@@ -89,27 +93,19 @@ function EffectBlock(props: { def: EffectDef }) {
         {(spec) => {
           const value = () => effectParam(props.def.id, spec.id);
           return (
-            <StudioField
-              label={`${spec.label} · ${value()}${spec.unit}`}
-              for={`axis-fx-${id()}-${spec.id}`}
-              hint={spec.hint}
-            >
-              <input
+            <StudioField label={spec.label} for={`axis-fx-${id()}-${spec.id}`} hint={spec.hint}>
+              <StudioRange
                 id={`axis-fx-${id()}-${spec.id}`}
-                class="ax-range"
-                type="range"
                 min={spec.min}
                 max={spec.max}
                 step={spec.step}
                 value={value()}
                 disabled={!effectEnabled(props.def.id)}
-                data-testid={`axis-fx-${id()}-${spec.id}`}
-                aria-valuemin={spec.min}
-                aria-valuemax={spec.max}
-                aria-valuenow={value()}
-                aria-label={spec.label}
-                onInput={(e) => {
-                  setEffectParam(props.def.id, spec.id, Number(e.currentTarget.value));
+                testId={`axis-fx-${id()}-${spec.id}`}
+                ariaLabel={spec.label}
+                format={(v) => `${v}${spec.unit}`}
+                onInput={(v) => {
+                  setEffectParam(props.def.id, spec.id, v);
                   if (!props.def.preview) return;
                   play(spec.id === 'downStrength' ? 'down' : 'up');
                 }}

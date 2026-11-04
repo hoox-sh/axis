@@ -48,11 +48,7 @@ import { EffectsPanel } from '../effects/EffectsPanel';
 import { PluginConfigRow } from '../PluginConfigRow';
 import { listStorages } from '../../storage/catalog';
 import { promptStorageChange } from '../../storage/service';
-import {
-  getActiveSourceId,
-  getActiveStorageId,
-  getActiveStreamId,
-} from '../../plugins/active';
+import { getActiveSourceId, getActiveStorageId, getActiveStreamId } from '../../plugins/active';
 import {
   generateDemoApiKey,
   resolveCloudConfig,
@@ -81,6 +77,7 @@ import {
   StudioFooter,
   StudioHint,
   StudioInput,
+  StudioRange,
   StudioSection,
   StudioSelect,
   StudioStatus,
@@ -89,7 +86,6 @@ import {
   useMicrofeedback,
   type StudioHealth,
 } from '../studio';
-
 
 const SETTINGS_TABS: { id: SettingsTabId; label: string; hint: string }[] = [
   { id: 'general', label: 'General', hint: 'Scale · chart data · live · cloud' },
@@ -589,20 +585,16 @@ export function SettingsPage(props: { onClose: () => void; initialTab?: Settings
                   hint="Live preview of text, icons, and spacing. Save to keep."
                 >
                   <span hidden>{formatUiScalePct(uiScale())}</span>
-                  <input
+                  <StudioRange
                     id="axis-ui-scale"
-                    class="ax-range"
-                    type="range"
                     min={UI_SCALE_MIN}
                     max={UI_SCALE_MAX}
                     step={UI_SCALE_STEP}
                     value={uiScale()}
-                    data-testid="axis-ui-scale"
-                    aria-valuemin={UI_SCALE_MIN}
-                    aria-valuemax={UI_SCALE_MAX}
-                    aria-valuenow={uiScale()}
-                    aria-label="UI scale"
-                    onInput={(e) => previewScale(Number(e.currentTarget.value))}
+                    testId="axis-ui-scale"
+                    ariaLabel="UI scale"
+                    format={formatUiScalePct}
+                    onInput={previewScale}
                   />
                   <div class="ax-chip-row">
                     <For each={UI_SCALE_PRESETS}>
