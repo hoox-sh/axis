@@ -45,6 +45,14 @@
  * `mergeQuote` keeps the last known 24h open. If a WS frame has last but no
  * change %, change is recomputed as `(price − open24h) / open24h × 100`.
  *
+ * ## Reference price (Prev column)
+ *
+ * The Prev column is the **previous daily close** (UTC), fetched once per
+ * symbol per day from daily klines (`data/watchlist-daily.ts`) — a rolling
+ * `open24h` moves on every tick and is only the fallback for venues without
+ * daily klines. When the daily close is known, `Chg` is the change against it
+ * so the row stays internally consistent.
+ *
  * Independent of chart kline streams — see `src/data/watchlist-live.ts`.
  */
 
@@ -76,17 +84,17 @@ import {
 } from '../store';
 import { loadSymbolData } from '../data/load-symbol';
 import { SymbolModal } from './SymbolModal';
-import { fetchWatchlistTickers, sourceSupportsRestPoll, type WatchTicker } from '../data/watchlist-tickers';
-import { startWatchlistQuotes } from '../data/watchlist-live';
 import {
-  createAlert,
-  listAlerts,
-  subscribeAlerts,
-  type AlertKind,
-} from '../alerts';
+  fetchWatchlistTickers,
+  sourceSupportsRestPoll,
+  type WatchTicker,
+} from '../data/watchlist-tickers';
+import { dailyCloseDayKey, fetchDailyCloses } from '../data/watchlist-daily';
+import { startWatchlistQuotes } from '../data/watchlist-live';
+import { createAlert, listAlerts, subscribeAlerts, type AlertKind } from '../alerts';
 import { Icons } from './icons';
 import { dismissOnOutside } from './dismiss-on-outside';
-import { bigPriceSizeClass } from './watchlist-row';
+import { bigPriceSizeClass, formatCompactVolume, rangePercent } from './watchlist-row';
 import { FloatableShell } from './panels/FloatableShell';
 import { announce } from './sr-announce';
 
@@ -137,6 +145,19 @@ function sameSpark(a: number[], b: number[]): boolean {
   return true;
 }
 
+/**
+ * Alert-level text with a sensible precision for the price magnitude
+ * (`187.07`, `1.2345`, `0.000123`) — full float noise (`187.06648788281606`)
+ * is unreadable in a 7-char input.
+ */
+function alertPriceText(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return '';
+  const decimals = n >= 1000 ? 2 : n >= 1 ? 4 : 6;
+  const fixed = n.toFixed(decimals);
+  // Trim trailing zeros but keep at least one decimal when it was added.
+  return fixed.includes('.') ? fixed.replace(/\.?0+$/, '') : fixed;
+}
+
 /** 24h open when known; else previous from last × %; else undefined. */
 function closeOf(tick?: WatchTicker): number | undefined {
   if (!tick) return undefined;
@@ -152,6 +173,8 @@ function closeOf(tick?: WatchTicker): number | undefined {
 const WatchlistRow: Component<{
   sym: string;
   tick?: WatchTicker;
+  /** Previous **daily** close (UTC) when known — stable for the whole day. */
+  prevClose?: number;
   active: boolean;
   alerted: boolean;
   expanded: boolean;
@@ -167,7 +190,7 @@ const WatchlistRow: Component<{
     const p = props.tick?.price;
     const ms = effectMs('watchlist.tick');
     if (p == null || !Number.isFinite(p)) return;
-    seedSpark(props.sym, closeOf(props.tick), p);
+    seedSpark(props.sym, prevPrice(), p);
     const next = noteSparkPrice(props.sym, p);
     setSpark((prev) => (sameSpark(prev, next) ? prev : next));
     if (lastPrice != null && p !== lastPrice && ms > 0) {
@@ -180,7 +203,22 @@ const WatchlistRow: Component<{
     }
     lastPrice = p;
   });
+  /** Reference price: previous daily close when known, else the 24h open. */
+  const prevPrice = () => {
+    const d = props.prevClose;
+    if (d != null && Number.isFinite(d) && d > 0) return d;
+    return closeOf(props.tick);
+  };
+  /**
+   * Change vs the reference price. When a daily close is known the % is the
+   * daily change (matching the Prev column); otherwise the venue's 24h %.
+   */
   const ch = () => {
+    const prev = prevPrice();
+    const px = props.tick?.price;
+    if (prev != null && prev > 0 && px != null && Number.isFinite(px)) {
+      return ((px - prev) / prev) * 100;
+    }
     const n = props.tick?.change;
     return n != null && Number.isFinite(n) ? n : undefined;
   };
@@ -191,16 +229,16 @@ const WatchlistRow: Component<{
         ? 'axis-wl-change-up'
         : 'axis-wl-change-down';
 
-  /** Icon cluster shared by the compact grid cell and the expanded header. */
+  /** Icon cluster shared by the compact overlay and the expanded header. */
   const iconBtns = (alwaysShow: boolean) => {
     const reveal = alwaysShow
       ? 'opacity-100'
       : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100';
     return (
-      <span class="flex items-center justify-end gap-0.5">
+      <span class="flex items-center justify-end gap-1">
         <button
           type="button"
-          class={`w-4 h-4 flex items-center justify-center text-text-faint hover:text-accent focus-visible:opacity-100 ${
+          class={`w-[18px] h-[18px] flex items-center justify-center rounded-[var(--radius-chip)] text-text-faint hover:text-accent hover:bg-bg focus-visible:opacity-100 ${
             props.alerted ? 'text-accent opacity-100' : reveal
           }`}
           title={props.alerted ? `Alerts on ${props.sym}` : `Add alert for ${props.sym}`}
@@ -215,10 +253,14 @@ const WatchlistRow: Component<{
         </button>
         <button
           type="button"
-          class={`w-4 h-4 flex items-center justify-center text-[12px] leading-none font-bold focus-visible:opacity-100 ${
-            props.expanded ? 'text-accent opacity-100' : `text-text-faint hover:text-accent ${reveal}`
+          class={`w-[18px] h-[18px] flex items-center justify-center rounded-[var(--radius-chip)] text-[12px] leading-none font-bold focus-visible:opacity-100 ${
+            props.expanded
+              ? 'text-accent bg-accent/10 opacity-100'
+              : `text-text-faint hover:text-accent hover:bg-bg ${reveal}`
           }`}
-          title={props.expanded ? `Compact view for ${props.sym}` : `Big price view for ${props.sym}`}
+          title={
+            props.expanded ? `Compact view for ${props.sym}` : `Big price view for ${props.sym}`
+          }
           aria-label={`Big price view for ${props.sym}`}
           aria-pressed={props.expanded}
           data-testid={`axis-watchlist-expand-${props.sym}`}
@@ -231,7 +273,7 @@ const WatchlistRow: Component<{
         </button>
         <button
           type="button"
-          class={`w-4 h-4 flex items-center justify-center text-[11px] leading-none text-text-faint hover:text-red focus-visible:opacity-100 ${reveal}`}
+          class={`w-[18px] h-[18px] flex items-center justify-center rounded-[var(--radius-chip)] text-[11px] leading-none text-text-faint hover:text-red hover:bg-bg focus-visible:opacity-100 ${reveal}`}
           title={`Remove ${props.sym}`}
           aria-label={`Remove ${props.sym}`}
           onClick={(e) => {
@@ -246,6 +288,22 @@ const WatchlistRow: Component<{
   };
 
   const priceText = () => fmtPrice(props.tick?.price);
+
+  /** Day range bar (24h low/high) — hidden when the ticker lacks the stats. */
+  const rangeBar = () => {
+    const low = props.tick?.low24h;
+    const high = props.tick?.high24h;
+    const pct = rangePercent(props.tick?.price, low, high);
+    if (pct == null || low == null || high == null) return null;
+    return { low, high, pct };
+  };
+
+  const volumeText = () => {
+    const base = formatCompactVolume(props.tick?.volume24h);
+    const quote = formatCompactVolume(props.tick?.quoteVolume24h);
+    if (base && quote) return `${base} · ${quote}`;
+    return base ?? quote;
+  };
 
   const sparkSvg = (width: number, height: number) => {
     const d = sparkPath(spark(), width, height);
@@ -302,21 +360,29 @@ const WatchlistRow: Component<{
               </span>
               {sparkSvg(48, 10)}
             </span>
-            <span class="font-mono text-[12px] font-medium text-text text-right tabular-nums lining-nums min-w-[4.75rem]">
+            <span class="font-mono text-[12px] font-medium text-text text-right tabular-nums lining-nums min-w-[4.5rem]">
               {priceText()}
             </span>
             <span
-              class={`font-mono text-[11px] text-right tabular-nums lining-nums min-w-[4.6rem] ${chClass()}`}
+              class={`font-mono text-[11px] text-right tabular-nums lining-nums min-w-[4.25rem] ${chClass()}`}
             >
               {fmtChange(ch())}
             </span>
             <span
-              class="font-mono text-[10px] text-text-faint text-right tabular-nums lining-nums min-w-[4.25rem]"
-              title="Previous close"
+              class="font-mono text-[10px] text-text-faint text-right tabular-nums lining-nums min-w-[3.9rem]"
+              title={
+                props.prevClose != null
+                  ? 'Previous daily close (UTC 00:00)'
+                  : 'Previous close (24h open — daily close unavailable)'
+              }
             >
-              {fmtPrice(closeOf(props.tick))}
+              {fmtPrice(prevPrice())}
             </span>
-            {iconBtns(false)}
+            {/* Action cluster overlays the row edge on hover/focus: it must not
+                steal width from the quote columns in a 260px panel. */}
+            <span class="axis-wl-actions" data-testid={`axis-watchlist-actions-${props.sym}`}>
+              {iconBtns(false)}
+            </span>
           </>
         }
       >
@@ -337,17 +403,46 @@ const WatchlistRow: Component<{
                 {/USDT$/i.test(props.sym) ? 'USDT' : /USD$/i.test(props.sym) ? 'USD' : ''}
               </span>
             </span>
-            <span class={`font-mono tabular-nums lining-nums ${chClass()}`}>
-              {fmtChange(ch())}
-            </span>
+            <span class={`font-mono tabular-nums lining-nums ${chClass()}`}>{fmtChange(ch())}</span>
             <span
               class="font-mono text-text-faint tabular-nums lining-nums"
-              title="Previous close"
+              title={
+                props.prevClose != null
+                  ? 'Previous daily close (UTC 00:00)'
+                  : 'Previous close (24h open — daily close unavailable)'
+              }
             >
-              Prev {fmtPrice(closeOf(props.tick))}
+              Prev {fmtPrice(prevPrice())}
             </span>
             {sparkSvg(72, 16)}
           </div>
+          {/* Day range: where the last price sits between the 24h low/high. */}
+          <Show when={rangeBar()}>
+            {(bar) => (
+              <div class="axis-wl-expanded-range" data-testid={`axis-watchlist-range-${props.sym}`}>
+                <span class="axis-wl-range-label" title="24h low">
+                  {fmtPrice(bar().low)}
+                </span>
+                <span
+                  class="axis-wl-range-track"
+                  role="img"
+                  aria-label={`24h range ${fmtPrice(bar().low)} to ${fmtPrice(bar().high)}`}
+                >
+                  <span class="axis-wl-range-fill" style={{ width: `${bar().pct}%` }} />
+                  <span class="axis-wl-range-dot" style={{ left: `${bar().pct}%` }} />
+                </span>
+                <span class="axis-wl-range-label" title="24h high">
+                  {fmtPrice(bar().high)}
+                </span>
+              </div>
+            )}
+          </Show>
+          <Show when={volumeText()}>
+            <div class="axis-wl-expanded-volume" data-testid={`axis-watchlist-volume-${props.sym}`}>
+              <span class="text-text-faint">24h vol</span>
+              <span class="font-mono tabular-nums lining-nums text-text-dim">{volumeText()}</span>
+            </div>
+          </Show>
         </div>
       </Show>
     </div>
@@ -398,6 +493,122 @@ export const Watchlist: Component = () => {
     return set;
   });
 
+  /**
+   * Previous **daily** close per symbol (UTC day boundary).
+   *
+   * Exchange 24h opens roll with every tick, so a “Prev” column built from
+   * them changes continuously. A daily close is fixed for the whole day — the
+   * reference price a watchlist should show. Fetched once per symbol per UTC
+   * day, refreshed when the day rolls over or the panel regains focus.
+   */
+  const [dailyCloses, setDailyCloses] = createSignal<Record<string, number>>({});
+  const [dailyDay, setDailyDay] = createSignal(dailyCloseDayKey());
+
+  onMount(() => {
+    let disposed = false;
+    const load = async () => {
+      const day = dailyCloseDayKey();
+      if (day !== dailyDay()) {
+        setDailyDay(day);
+        setDailyCloses({});
+      }
+      const syms = store.watchlist.symbols;
+      if (!syms.length) return;
+      const closes = await fetchDailyCloses(syms, store.source, Date.now());
+      if (!disposed && Object.keys(closes).length) {
+        setDailyCloses((prev) => ({ ...prev, ...closes }));
+      }
+    };
+    void load();
+    // Day rollover + late symbol additions. Cheap: one day-key compare per tick.
+    const iv = window.setInterval(() => {
+      const day = dailyCloseDayKey();
+      const missing = store.watchlist.symbols.some((s) => dailyCloses()[s] == null);
+      if (day !== dailyDay() || missing) void load();
+    }, 60_000);
+    const onFocus = () => {
+      if (dailyCloseDayKey() !== dailyDay()) void load();
+    };
+    window.addEventListener('focus', onFocus);
+    onCleanup(() => {
+      disposed = true;
+      clearInterval(iv);
+      window.removeEventListener('focus', onFocus);
+    });
+  });
+
+  /** Daily close for a row, when the venue ships daily klines. */
+  const prevCloseFor = (sym: string): number | undefined => {
+    const v = dailyCloses()[sym];
+    return v != null && Number.isFinite(v) && v > 0 ? v : undefined;
+  };
+
+  /** Last price of the symbol the alert pop is open for (context + quick fills). */
+  const alertLastPrice = (): number | undefined => {
+    const sym = alertSym();
+    if (!sym) return undefined;
+    const px = prices()[sym]?.price;
+    return px != null && Number.isFinite(px) && px > 0 ? px : undefined;
+  };
+
+  /** One-tap levels around the last price: last, ±1 %. */
+  const alertQuickFills = createMemo(() => {
+    const last = alertLastPrice();
+    if (last == null) return [];
+    return [
+      {
+        id: 'last',
+        label: 'Last',
+        value: alertPriceText(last),
+        title: `Last price ${fmtPrice(last)}`,
+      },
+      {
+        id: 'up1',
+        label: '+1%',
+        value: alertPriceText(last * 1.01),
+        title: `1% above the last price (${fmtPrice(last * 1.01)})`,
+      },
+      {
+        id: 'down1',
+        label: '−1%',
+        value: alertPriceText(last * 0.99),
+        title: `1% below the last price (${fmtPrice(last * 0.99)})`,
+      },
+    ];
+  });
+
+  const alertValid = (): boolean => {
+    const n = Number(alertPrice());
+    return Number.isFinite(n) && n > 0;
+  };
+
+  /**
+   * Non-blocking warning: an alert that is already satisfied fires on the next
+   * tick (still valid — the user may want exactly that).
+   */
+  const alertHint = (): string => {
+    const last = alertLastPrice();
+    const n = Number(alertPrice());
+    if (last == null || !Number.isFinite(n) || n <= 0) return '';
+    const kind = alertKind();
+    if (kind === 'price_above' && n <= last) {
+      return `Price is already above ${fmtPrice(n)} — it fires on the next tick.`;
+    }
+    if (kind === 'price_below' && n >= last) {
+      return `Price is already below ${fmtPrice(n)} — it fires on the next tick.`;
+    }
+    return '';
+  };
+
+  /** Enabled alerts already attached to the pop's symbol. */
+  const symbolAlertCount = createMemo(() => {
+    void alertsTick();
+    const sym = alertSym();
+    if (!sym) return 0;
+    const key = sym.toUpperCase();
+    return listAlerts().filter((a) => a.enabled && a.symbol.toUpperCase() === key).length;
+  });
+
   onMount(() => {
     const unsub = subscribeAlerts(() => setAlertsTick((n) => n + 1));
     onCleanup(unsub);
@@ -408,6 +619,10 @@ export const Watchlist: Component = () => {
     price: number;
     change?: number;
     open24h?: number;
+    high24h?: number;
+    low24h?: number;
+    volume24h?: number;
+    quoteVolume24h?: number;
     source?: string;
   };
 
@@ -432,6 +647,12 @@ export const Watchlist: Component = () => {
           price: partial.price,
           change,
           open24h,
+          // Keep the day envelope across last-only frames (WS tickers often
+          // send price/change per tick and the stats less often).
+          high24h: partial.high24h ?? old?.high24h,
+          low24h: partial.low24h ?? old?.low24h,
+          volume24h: partial.volume24h ?? old?.volume24h,
+          quoteVolume24h: partial.quoteVolume24h ?? old?.quoteVolume24h,
           source: partial.source ?? old?.source,
           updatedAt: now,
         };
@@ -668,7 +889,7 @@ export const Watchlist: Component = () => {
     placeAlertPop();
     const wasOpen = !!alertSym();
     setAlertKind('price_cross');
-    setAlertPrice(last != null && Number.isFinite(last) ? String(last) : '');
+    setAlertPrice(last != null && Number.isFinite(last) ? alertPriceText(last) : '');
     setAlertError('');
     setAlertSym(sym);
     if (!wasOpen) emitWatchlistAlert(true);
@@ -728,8 +949,7 @@ export const Watchlist: Component = () => {
     return '';
   };
 
-  const cols =
-    'grid grid-cols-[minmax(4.25rem,1fr)_auto_auto_auto_1.75rem] items-center gap-x-1.5 px-2';
+  const cols = 'grid grid-cols-[minmax(3.75rem,1fr)_auto_auto_auto] items-center gap-x-1.5 px-2';
 
   return (
     <Show when={isPanelOpen('watchlist') || store.watchlist.open}>
@@ -856,7 +1076,9 @@ export const Watchlist: Component = () => {
                   ? 'Tick flash on'
                   : 'Tick flash off'
             }
-            aria-label={effectEnabled('watchlist.tick') ? 'Disable tick flash' : 'Enable tick flash'}
+            aria-label={
+              effectEnabled('watchlist.tick') ? 'Disable tick flash' : 'Enable tick flash'
+            }
             data-testid="axis-watchlist-tick-flash"
             onClick={() => setEffectEnabled('watchlist.tick', !effectEnabled('watchlist.tick'))}
           >
@@ -900,18 +1122,26 @@ export const Watchlist: Component = () => {
               aria-hidden="true"
             >
               <span>Sym</span>
-              <span class="text-right min-w-[4.75rem]">Last</span>
-              <span class="text-right min-w-[4.6rem]">Chg</span>
-              <span class="text-right min-w-[4.25rem] text-text-faint" title="Previous close">
+              <span class="text-right min-w-[4.5rem]">Last</span>
+              <span
+                class="text-right min-w-[4.25rem]"
+                title="Change vs the previous daily close (UTC) — 24h % when the venue has no daily klines"
+              >
+                Chg
+              </span>
+              <span
+                class="text-right min-w-[3.9rem] text-text-faint"
+                title="Previous daily close (UTC 00:00) — fixed for the day"
+              >
                 Prev
               </span>
-              <span />
             </div>
             <For each={store.watchlist.symbols}>
               {(sym) => (
                 <WatchlistRow
                   sym={sym}
                   tick={prices()[sym]}
+                  prevClose={prevCloseFor(sym)}
                   active={store.symbol === sym}
                   alerted={alertedSymbols().has(sym.toUpperCase())}
                   expanded={expandedSyms().has(sym.toUpperCase())}
@@ -987,14 +1217,25 @@ export const Watchlist: Component = () => {
                 <span class="text-[10px] uppercase tracking-wider text-text-faint">
                   Alert {sym()}
                 </span>
-                <button
-                  type="button"
-                  class="sc-btn sc-btn-ghost px-1"
-                  aria-label="Close"
-                  onClick={() => closeAlert()}
-                >
-                  <Icons.x size={12} />
-                </button>
+                <span class="flex items-center gap-1.5">
+                  <Show when={alertLastPrice() != null}>
+                    <span
+                      class="font-mono text-[10px] text-text-dim tabular-nums"
+                      title="Last price"
+                      data-testid="axis-watchlist-alert-last"
+                    >
+                      {fmtPrice(alertLastPrice())}
+                    </span>
+                  </Show>
+                  <button
+                    type="button"
+                    class="sc-btn sc-btn-ghost px-1"
+                    aria-label="Close"
+                    onClick={() => closeAlert()}
+                  >
+                    <Icons.x size={12} />
+                  </button>
+                </span>
               </div>
               <div class="flex items-center gap-1 mb-1.5">
                 <For each={ALERT_KIND_OPTS}>
@@ -1005,6 +1246,13 @@ export const Watchlist: Component = () => {
                         alertKind() === opt.id ? 'is-active' : ''
                       }`}
                       aria-pressed={alertKind() === opt.id}
+                      title={
+                        opt.id === 'price_cross'
+                          ? 'Fires when price crosses the level in either direction'
+                          : opt.id === 'price_above'
+                            ? 'Fires once price is above the level'
+                            : 'Fires once price is below the level'
+                      }
                       onClick={() => setAlertKind(opt.id)}
                     >
                       {opt.label}
@@ -1012,11 +1260,29 @@ export const Watchlist: Component = () => {
                   )}
                 </For>
               </div>
+              <div class="flex items-center gap-1 mb-1.5">
+                <For each={alertQuickFills()}>
+                  {(q) => (
+                    <button
+                      type="button"
+                      class="sc-btn sc-btn-ghost text-[10px] px-1.5 h-6 min-h-6 flex-1"
+                      title={q.title}
+                      data-testid={`axis-watchlist-alert-quick-${q.id}`}
+                      onClick={() => setAlertPrice(q.value)}
+                    >
+                      {q.label}
+                    </button>
+                  )}
+                </For>
+              </div>
               <input
-                class="sc-input w-full h-7 min-h-7 text-[11px] font-mono mb-1.5"
+                class="sc-input w-full h-7 min-h-7 text-[11px] font-mono mb-1"
                 inputMode="decimal"
-                placeholder="Price"
+                placeholder={
+                  alertLastPrice() != null ? `Price (last ${fmtPrice(alertLastPrice())})` : 'Price'
+                }
                 value={alertPrice()}
+                aria-label="Alert price"
                 data-testid="axis-watchlist-alert-price"
                 onInput={(e) => setAlertPrice(e.currentTarget.value)}
                 onKeyDown={(e) => {
@@ -1029,17 +1295,42 @@ export const Watchlist: Component = () => {
                   }
                 }}
               />
+              <Show when={alertHint()}>
+                <div
+                  class="text-[10px] text-amber-300/90 mb-1"
+                  data-testid="axis-watchlist-alert-hint"
+                >
+                  {alertHint()}
+                </div>
+              </Show>
               <Show when={alertError()}>
-                <div class="text-[10px] text-red mb-1">{alertError()}</div>
+                <div class="text-[10px] text-red mb-1" role="alert">
+                  {alertError()}
+                </div>
               </Show>
               <button
                 type="button"
                 class="sc-btn sc-btn-primary w-full h-7 min-h-7 text-[11px]"
                 data-testid="axis-watchlist-alert-create"
+                disabled={!alertValid()}
                 onClick={() => commitAlert()}
               >
                 Create alert
               </button>
+              <Show when={symbolAlertCount() > 0}>
+                <button
+                  type="button"
+                  class="mt-1 w-full text-[9px] text-text-faint hover:text-accent text-left"
+                  data-testid="axis-watchlist-alert-manage"
+                  onClick={() => {
+                    closeAlert();
+                    setStore('alertsPanel', 'open', true);
+                  }}
+                >
+                  {symbolAlertCount()} alert{symbolAlertCount() === 1 ? '' : 's'} on {sym()} —
+                  manage
+                </button>
+              </Show>
             </div>
           </Portal>
         )}

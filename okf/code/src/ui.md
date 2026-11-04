@@ -7,7 +7,7 @@ tags: [code, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-03T21:39:14Z
+  at: 2026-11-04T00:13:39Z
 sources:
   - id: tree
     resource: "src/ui"
@@ -106,7 +106,7 @@ okf_lock: generated
 * `telemetry.ts` — classifyTransport, connDotClass, formatLatency, formatTickAge, idlePlane, pushSample, transportLabel
 * `ui-scale.ts` — UI_SCALE_PRESETS, formatUiScalePct
 * `use-event-listener.ts` — attachEventListener, useEventListener
-* `watchlist-row.ts` — bigPriceSizeClass
+* `watchlist-row.ts` — bigPriceSizeClass, formatCompactVolume, rangePercent
 * `watchlist-spark.ts` — SPARK_LIMIT, SPARK_MIN_INTERVAL_MS, noteSparkPrice, resetWatchlistSparks, seedSpark, sparkPath, sparkSeries
 
 # Packages

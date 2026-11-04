@@ -62,6 +62,12 @@ export interface VenueTicker {
   price: number;
   change: number;
   open24h?: number;
+  /** 24h high / low (optional — venues that ship them). */
+  high24h?: number;
+  low24h?: number;
+  /** 24h base / quote volume (optional). */
+  volume24h?: number;
+  quoteVolume24h?: number;
 }
 
 const textEncoder = new TextEncoder();

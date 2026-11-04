@@ -63,6 +63,14 @@ export interface WatchTicker {
   source?: string;
   /** 24h open for local % recompute when WS only sends last. */
   open24h?: number;
+  /** 24h high (expanded row range bar). */
+  high24h?: number;
+  /** 24h low (expanded row range bar). */
+  low24h?: number;
+  /** 24h base volume (e.g. BTC). */
+  volume24h?: number;
+  /** 24h quote volume (e.g. USDT). */
+  quoteVolume24h?: number;
   updatedAt?: number;
 }
 
@@ -75,7 +83,7 @@ export { coinbaseProduct, okxInst, toUsdt };
  * this the REST seed would fetch Binance while the WS mux follows the
  * underlying selection (venue mixing).
  */
-function resolveQuoteSourceId(sourceId: string): string {
+export function resolveQuoteSourceId(sourceId: string): string {
   const id = (sourceId || 'binance-rest').toLowerCase();
   if (id === 'data-manager') {
     try {
@@ -162,6 +170,10 @@ async function fetchBinance(symbols: string[]): Promise<Record<string, WatchTick
     lastPrice: string;
     priceChangePercent: string;
     openPrice?: string;
+    highPrice?: string;
+    lowPrice?: string;
+    volume?: string;
+    quoteVolume?: string;
   }>;
   if (!Array.isArray(data)) throw new Error('binance ticker: unexpected body');
   const next: Record<string, WatchTicker> = {};
@@ -170,10 +182,18 @@ async function fetchBinance(symbols: string[]): Promise<Record<string, WatchTick
     const orig = symbols.find((s) => toUsdt(s) === t.symbol) || t.symbol;
     const price = parseFloat(t.lastPrice);
     const open = t.openPrice != null ? parseFloat(t.openPrice) : NaN;
+    const high = t.highPrice != null ? parseFloat(t.highPrice) : NaN;
+    const low = t.lowPrice != null ? parseFloat(t.lowPrice) : NaN;
+    const vol = t.volume != null ? parseFloat(t.volume) : NaN;
+    const quoteVol = t.quoteVolume != null ? parseFloat(t.quoteVolume) : NaN;
     next[orig] = {
       price,
       change: parseFloat(t.priceChangePercent),
       open24h: Number.isFinite(open) ? open : undefined,
+      high24h: Number.isFinite(high) ? high : undefined,
+      low24h: Number.isFinite(low) ? low : undefined,
+      volume24h: Number.isFinite(vol) ? vol : undefined,
+      quoteVolume24h: Number.isFinite(quoteVol) ? quoteVol : undefined,
       source: 'binance',
     };
   }
@@ -209,6 +229,10 @@ type MexcTickerRow = {
   lastPrice: string;
   priceChangePercent: string;
   openPrice?: string;
+  highPrice?: string;
+  lowPrice?: string;
+  volume?: string;
+  quoteVolume?: string;
 };
 
 function asMexcTickerRows(data: unknown): MexcTickerRow[] {
@@ -222,10 +246,18 @@ function asMexcTickerRows(data: unknown): MexcTickerRow[] {
 function tickerFromMexc(t: MexcTickerRow): WatchTicker {
   const price = parseFloat(t.lastPrice);
   const open = t.openPrice != null ? parseFloat(t.openPrice) : NaN;
+  const high = t.highPrice != null ? parseFloat(t.highPrice) : NaN;
+  const low = t.lowPrice != null ? parseFloat(t.lowPrice) : NaN;
+  const vol = t.volume != null ? parseFloat(t.volume) : NaN;
+  const quoteVol = t.quoteVolume != null ? parseFloat(t.quoteVolume) : NaN;
   return {
     price,
     change: parseFloat(t.priceChangePercent),
     open24h: Number.isFinite(open) ? open : undefined,
+    high24h: Number.isFinite(high) ? high : undefined,
+    low24h: Number.isFinite(low) ? low : undefined,
+    volume24h: Number.isFinite(vol) ? vol : undefined,
+    quoteVolume24h: Number.isFinite(quoteVol) ? quoteVol : undefined,
     source: 'mexc',
   };
 }
@@ -282,7 +314,20 @@ function mockTickers(symbols: string[]): Record<string, WatchTicker> {
     const seed = [...sym].reduce((a, c) => a + c.charCodeAt(0), 0);
     const price = 50 + (seed % 200) + Math.random() * 2;
     const change = (Math.random() - 0.5) * 6;
-    next[sym] = { price, change, source: 'mock' };
+    const open = price / (1 + change / 100);
+    // Synthetic 24h envelope so the expanded row (range bar / volume) can be
+    // exercised without a venue — deterministic around the seeded price.
+    const spread = Math.max(price * 0.02, 0.5);
+    next[sym] = {
+      price,
+      change,
+      open24h: open,
+      high24h: price + spread,
+      low24h: Math.max(0.01, price - spread),
+      volume24h: 5_000 + (seed % 90_000),
+      quoteVolume24h: (5_000 + (seed % 90_000)) * price,
+      source: 'mock',
+    };
   }
   return next;
 }

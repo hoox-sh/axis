@@ -98,16 +98,34 @@ export async function fetchBybitTickers(symbols: string[]): Promise<Record<strin
     'https://api.bybit.com/v5/market/tickers?category=spot',
     'bybit',
   )) as {
-    result?: { list?: Array<{ symbol: string; lastPrice: string; price24hPcnt: string }> };
+    result?: {
+      list?: Array<{
+        symbol: string;
+        lastPrice: string;
+        price24hPcnt: string;
+        highPrice24h?: string;
+        lowPrice24h?: string;
+        volume24h?: string;
+        turnover24h?: string;
+      }>;
+    };
   };
   const bySym = new Map((body.result?.list || []).map((t) => [t.symbol, t]));
   const next: Record<string, VenueTicker> = {};
   for (const sym of symbols) {
     const t = bySym.get(toUsdt(sym));
     if (!t) continue;
+    const high = t.highPrice24h != null ? parseFloat(t.highPrice24h) : NaN;
+    const low = t.lowPrice24h != null ? parseFloat(t.lowPrice24h) : NaN;
+    const vol = t.volume24h != null ? parseFloat(t.volume24h) : NaN;
+    const turnover = t.turnover24h != null ? parseFloat(t.turnover24h) : NaN;
     next[sym] = {
       price: parseFloat(t.lastPrice),
       change: parseFloat(t.price24hPcnt) * 100, // fraction → %
+      high24h: Number.isFinite(high) ? high : undefined,
+      low24h: Number.isFinite(low) ? low : undefined,
+      volume24h: Number.isFinite(vol) ? vol : undefined,
+      quoteVolume24h: Number.isFinite(turnover) ? turnover : undefined,
     };
   }
   return next;

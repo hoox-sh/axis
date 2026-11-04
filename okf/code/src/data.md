@@ -7,7 +7,7 @@ tags: [code, data]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-03T16:04:19Z
+  at: 2026-11-04T00:13:39Z
 sources:
   - id: tree
     resource: "src/data"
@@ -44,8 +44,9 @@ okf_lock: generated
 * `symbol-exchange.ts` — exchangeForSource, normalizeLoadSymbol
 * `symbol-normalize.ts` — normalizeLoadSymbol
 * `venue-picker.ts` — NATIVE_VENUE_SOURCES, OTHER_VENUE_SOURCES, PINNED_CCXT, VenueGroup, VenueOption, applyVenueToken, exchangeIdFromToken, isCcxtVenueToken, listVenueOptions, parseVenueToken, prettyCcxtLabel, venueTokenFromState
+* `watchlist-daily.ts` — KlineTuple, _resetDailyCloseCacheForTests, dailyCloseDayKey, fetchDailyCloses, previousDailyCloseFromKlines, sourceSupportsDailyClose
 * `watchlist-live.ts` — QuoteMuxHandle, QuoteMuxStatus, QuoteUpdate, StartWatchlistQuotesOpts, parseBinanceTickerMessage, startWatchlistQuotes
-* `watchlist-tickers.ts` — WATCHLIST_INTERVALS, WATCHLIST_REFRESH_OPTIONS, WatchTicker, coinbaseProduct, fetchWatchlistTickers, okxInst, sourceSupportsRestPoll, toUsdt
+* `watchlist-tickers.ts` — WATCHLIST_INTERVALS, WATCHLIST_REFRESH_OPTIONS, WatchTicker, coinbaseProduct, fetchWatchlistTickers, okxInst, resolveQuoteSourceId, sourceSupportsRestPoll, toUsdt
 * `worker-origin.ts` — DEFAULT_AXIS_WORKER_BASE, looksLikeOnchainWorkerEndpoint, normalizeEndpointBase
 
 # Packages

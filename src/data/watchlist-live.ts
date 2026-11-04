@@ -69,6 +69,12 @@ export type QuoteUpdate = {
   change?: number;
   /** 24h open — retained so later last-only updates can recompute %. */
   open24h?: number;
+  /** 24h high / low when the venue frame carries them. */
+  high24h?: number;
+  low24h?: number;
+  /** 24h base / quote volume when the venue frame carries them. */
+  volume24h?: number;
+  quoteVolume24h?: number;
   source?: string;
 };
 
@@ -168,10 +174,7 @@ export function startWatchlistQuotes(opts: StartWatchlistQuotesOpts): QuoteMuxHa
 // ── Symbol maps ────────────────────────────────────────────────────
 
 /** Map exchange stream/inst keys → original watchlist symbol strings. */
-function mapOrigByKey(
-  symbols: string[],
-  keyFn: (s: string) => string,
-): Map<string, string> {
+function mapOrigByKey(symbols: string[], keyFn: (s: string) => string): Map<string, string> {
   const m = new Map<string, string>();
   for (const s of symbols) {
     m.set(keyFn(s), s);
@@ -185,10 +188,7 @@ function mapOrigByKey(
  * Binance: one combined stream URL per chunk of `{symbol}@ticker` streams.
  * Payload fields: `c` last, `P` 24h change %, `o` open.
  */
-function startBinanceQuotes(
-  symbols: string[],
-  opts: StartWatchlistQuotesOpts,
-): QuoteMuxHandle {
+function startBinanceQuotes(symbols: string[], opts: StartWatchlistQuotesOpts): QuoteMuxHandle {
   const byStream = mapOrigByKey(symbols, (s) => `${toUsdt(s).toLowerCase()}@ticker`);
   const streams = [...byStream.keys()];
   if (!streams.length) return { stop: () => {} };
@@ -216,6 +216,10 @@ function startBinanceQuotes(
                 c?: string;
                 P?: string;
                 o?: string;
+                h?: string;
+                l?: string;
+                v?: string;
+                q?: string;
               };
             };
             const d = msg.data;
@@ -226,11 +230,19 @@ function startBinanceQuotes(
             if (!Number.isFinite(price)) return;
             const change = d.P != null ? parseFloat(d.P) : undefined;
             const open24h = d.o != null ? parseFloat(d.o) : undefined;
+            const high = d.h != null ? parseFloat(d.h) : undefined;
+            const low = d.l != null ? parseFloat(d.l) : undefined;
+            const vol = d.v != null ? parseFloat(d.v) : undefined;
+            const quoteVol = d.q != null ? parseFloat(d.q) : undefined;
             opts.onQuote({
               symbol: orig,
               price,
               change: Number.isFinite(change!) ? change : undefined,
               open24h: Number.isFinite(open24h!) ? open24h : undefined,
+              high24h: Number.isFinite(high!) ? high : undefined,
+              low24h: Number.isFinite(low!) ? low : undefined,
+              volume24h: Number.isFinite(vol!) ? vol : undefined,
+              quoteVolume24h: Number.isFinite(quoteVol!) ? quoteVol : undefined,
               source: 'binance',
             });
           } catch {
@@ -254,10 +266,7 @@ function startBinanceQuotes(
  * OKX public WS: subscribe channel `tickers` per `instId` (e.g. `BTC-USDT`).
  * Change derived from `open24h` / `sodUtc0` when present.
  */
-function startOkxQuotes(
-  symbols: string[],
-  opts: StartWatchlistQuotesOpts,
-): QuoteMuxHandle {
+function startOkxQuotes(symbols: string[], opts: StartWatchlistQuotesOpts): QuoteMuxHandle {
   const byInst = mapOrigByKey(symbols, okxInst);
   const instIds = [...byInst.keys()];
   const url = 'wss://ws.okx.com:8443/ws/v5/public';
@@ -293,8 +302,7 @@ function startOkxQuotes(
           if (!Number.isFinite(price)) continue;
           const open = parseFloat(t.open24h || t.sodUtc0 || '');
           const open24h = Number.isFinite(open) ? open : undefined;
-          const change =
-            open24h && open24h !== 0 ? ((price - open24h) / open24h) * 100 : undefined;
+          const change = open24h && open24h !== 0 ? ((price - open24h) / open24h) * 100 : undefined;
           opts.onQuote({
             symbol: orig,
             price,
@@ -318,10 +326,7 @@ function startOkxQuotes(
  * Bybit spot public WS: topics `tickers.{USDT_PAIR}`.
  * `price24hPcnt` is fractional; multiply by 100 for display percent.
  */
-function startBybitQuotes(
-  symbols: string[],
-  opts: StartWatchlistQuotesOpts,
-): QuoteMuxHandle {
+function startBybitQuotes(symbols: string[], opts: StartWatchlistQuotesOpts): QuoteMuxHandle {
   const bySym = mapOrigByKey(symbols, toUsdt);
   const keys = [...bySym.keys()];
   const url = 'wss://stream.bybit.com/v5/public/spot';
@@ -387,10 +392,7 @@ function startBybitQuotes(
  * Coinbase Exchange WS: subscribe channel `ticker` for `BASE-USD` product ids.
  * Change from `open_24h` when present.
  */
-function startCoinbaseQuotes(
-  symbols: string[],
-  opts: StartWatchlistQuotesOpts,
-): QuoteMuxHandle {
+function startCoinbaseQuotes(symbols: string[], opts: StartWatchlistQuotesOpts): QuoteMuxHandle {
   const byProduct = mapOrigByKey(symbols, coinbaseProduct);
   const products = [...byProduct.keys()];
   const url = 'wss://ws-feed.exchange.coinbase.com';
@@ -424,8 +426,7 @@ function startCoinbaseQuotes(
         if (!Number.isFinite(price)) return;
         const open = msg.open_24h != null ? parseFloat(msg.open_24h) : NaN;
         const open24h = Number.isFinite(open) ? open : undefined;
-        const change =
-          open24h && open24h !== 0 ? ((price - open24h) / open24h) * 100 : undefined;
+        const change = open24h && open24h !== 0 ? ((price - open24h) / open24h) * 100 : undefined;
         opts.onQuote({
           symbol: orig,
           price,
@@ -445,10 +446,7 @@ function startCoinbaseQuotes(
 // ── Mock synthetic ─────────────────────────────────────────────────
 
 /** Deterministic-ish seed prices with random walk; status mode `mock`. */
-function startMockQuotes(
-  symbols: string[],
-  opts: StartWatchlistQuotesOpts,
-): QuoteMuxHandle {
+function startMockQuotes(symbols: string[], opts: StartWatchlistQuotesOpts): QuoteMuxHandle {
   const state = new Map<string, { price: number; change: number }>();
   for (const sym of symbols) {
     const seed = [...sym].reduce((a, c) => a + c.charCodeAt(0), 0);
@@ -463,10 +461,19 @@ function startMockQuotes(
       const delta = (Math.random() - 0.5) * 0.4;
       cur.price = Math.max(0.01, cur.price + delta);
       cur.change = Math.max(-15, Math.min(15, cur.change + (Math.random() - 0.5) * 0.15));
+      // Synthetic 24h envelope around the current print so the expanded row
+      // (range bar / volume) is exercised without a venue feed.
+      const spread = Math.max(cur.price * 0.02, 0.5);
+      const open = cur.price / (1 + cur.change / 100);
       opts.onQuote({
         symbol: sym,
         price: cur.price,
         change: cur.change,
+        open24h: open,
+        high24h: Math.max(cur.price, open) + spread,
+        low24h: Math.max(0.01, Math.min(cur.price, open) - spread),
+        volume24h: 1_000 + (cur.price % 900),
+        quoteVolume24h: (1_000 + (cur.price % 900)) * cur.price,
         source: 'mock',
       });
     }
@@ -495,7 +502,16 @@ export function parseBinanceTickerMessage(
   try {
     const msg = JSON.parse(raw) as {
       stream?: string;
-      data?: { s?: string; c?: string; P?: string; o?: string };
+      data?: {
+        s?: string;
+        c?: string;
+        P?: string;
+        o?: string;
+        h?: string;
+        l?: string;
+        v?: string;
+        q?: string;
+      };
     };
     const d = msg.data;
     if (!d?.s || d.c == null) return null;
@@ -505,11 +521,19 @@ export function parseBinanceTickerMessage(
     if (!Number.isFinite(price)) return null;
     const change = d.P != null ? parseFloat(d.P) : undefined;
     const open24h = d.o != null ? parseFloat(d.o) : undefined;
+    const high = d.h != null ? parseFloat(d.h) : undefined;
+    const low = d.l != null ? parseFloat(d.l) : undefined;
+    const vol = d.v != null ? parseFloat(d.v) : undefined;
+    const quoteVol = d.q != null ? parseFloat(d.q) : undefined;
     return {
       symbol,
       price,
       change: Number.isFinite(change!) ? change : undefined,
       open24h: Number.isFinite(open24h!) ? open24h : undefined,
+      high24h: Number.isFinite(high!) ? high : undefined,
+      low24h: Number.isFinite(low!) ? low : undefined,
+      volume24h: Number.isFinite(vol!) ? vol : undefined,
+      quoteVolume24h: Number.isFinite(quoteVol!) ? quoteVol : undefined,
       source: 'binance',
     };
   } catch {

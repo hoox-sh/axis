@@ -33,3 +33,34 @@ export function bigPriceSizeClass(formatted: string): string {
   if (len <= 13) return 'axis-wl-big-2';
   return 'axis-wl-big-3';
 }
+
+/**
+ * Where `price` sits inside `[low, high]` as a 0–100 percentage.
+ *
+ * Used by the expanded row's day-range track. Returns `null` when the range is
+ * unusable (missing/non-finite values, `high <= low`), so the UI hides the bar
+ * instead of drawing a misleading position.
+ */
+export function rangePercent(
+  price: number | null | undefined,
+  low: number | null | undefined,
+  high: number | null | undefined,
+): number | null {
+  if (price == null || low == null || high == null) return null;
+  if (![price, low, high].every((n) => Number.isFinite(n))) return null;
+  if (!(high > low)) return null;
+  const pct = ((price - low) / (high - low)) * 100;
+  return Math.max(0, Math.min(100, pct));
+}
+
+/**
+ * Compact volume text (`1.24M`, `812.4k`, `3.10B`). `null` when unknown so the
+ * caller can hide the row.
+ */
+export function formatCompactVolume(value: number | null | undefined, digits = 2): string | null {
+  if (value == null || !Number.isFinite(value) || value < 0) return null;
+  if (value >= 1e9) return `${(value / 1e9).toFixed(digits)}B`;
+  if (value >= 1e6) return `${(value / 1e6).toFixed(digits)}M`;
+  if (value >= 1e3) return `${(value / 1e3).toFixed(1)}k`;
+  return value.toFixed(value < 10 ? 2 : 0);
+}

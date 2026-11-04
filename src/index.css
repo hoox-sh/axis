@@ -2115,13 +2115,107 @@ body.axis-ticker-dragging {
 .axis-wl-alert-pop {
   position: fixed;
   z-index: 200;
-  width: 12.5rem;
+  width: 14.5rem;
   padding: 0.5em;
   background: var(--color-bg-elev);
   border: var(--border-w) solid var(--color-border);
   border-radius: var(--radius-input);
   box-shadow: var(--ui-shadow-panel);
   cursor: default;
+}
+
+/* Action cluster: overlays the row's right edge on hover/focus so the quote
+   columns keep their width in a narrow panel. */
+.axis-wl-actions {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 4px 0 12px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--color-bg-panel) 30%,
+    var(--color-bg-panel) 100%
+  );
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease-out;
+}
+.axis-wl-row:hover .axis-wl-actions,
+.axis-wl-row:focus-within .axis-wl-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+/* Touch devices have no hover — keep the actions reachable. */
+@media (hover: none) {
+  .axis-wl-actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+.axis-wl-row.is-active .axis-wl-actions {
+  background: linear-gradient(
+    to right,
+    transparent,
+    color-mix(in srgb, var(--color-accent) 6%, var(--color-bg-panel)) 30%,
+    color-mix(in srgb, var(--color-accent) 6%, var(--color-bg-panel)) 100%
+  );
+}
+@media (prefers-reduced-motion: reduce) {
+  .axis-wl-actions {
+    transition: none;
+  }
+}
+
+/* Expanded row: 24h range track + volume line (A1 watchlist big view). */
+.axis-wl-expanded-range {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 9.5px;
+  color: var(--color-text-faint);
+  min-width: 0;
+}
+.axis-wl-range-label {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.axis-wl-range-track {
+  position: relative;
+  flex: 1 1 auto;
+  height: 3px;
+  min-width: 24px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-text) 14%, transparent);
+}
+.axis-wl-range-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-accent) 55%, transparent);
+}
+.axis-wl-range-dot {
+  position: absolute;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  margin-left: -2.5px;
+  border-radius: 999px;
+  background: var(--color-accent);
+  transform: translateY(-50%);
+  box-shadow: 0 0 0 1px var(--color-bg-elev);
+}
+.axis-wl-expanded-volume {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 9.5px;
+  min-width: 0;
 }
 
 /* Drawing rail contract (consumed by DrawingToolbar) — 32px grid, 6px radii */

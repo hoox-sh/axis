@@ -112,7 +112,16 @@ export async function fetchOkxTickers(symbols: string[]): Promise<Record<string,
     'https://www.okx.com/api/v5/market/tickers?instType=SPOT',
     'okx',
   )) as {
-    data?: Array<{ instId: string; last: string; sodUtc0?: string; open24h?: string }>;
+    data?: Array<{
+      instId: string;
+      last: string;
+      sodUtc0?: string;
+      open24h?: string;
+      high24h?: string;
+      low24h?: string;
+      vol24h?: string;
+      volCcy24h?: string;
+    }>;
   };
   const byId = new Map((body.data || []).map((t) => [t.instId, t]));
   const next: Record<string, VenueTicker> = {};
@@ -121,10 +130,18 @@ export async function fetchOkxTickers(symbols: string[]): Promise<Record<string,
     if (!t) continue;
     const last = parseFloat(t.last);
     const open = parseFloat(t.open24h || t.sodUtc0 || String(last));
+    const high = t.high24h != null ? parseFloat(t.high24h) : NaN;
+    const low = t.low24h != null ? parseFloat(t.low24h) : NaN;
+    const vol = t.vol24h != null ? parseFloat(t.vol24h) : NaN;
+    const quoteVol = t.volCcy24h != null ? parseFloat(t.volCcy24h) : NaN;
     next[sym] = {
       price: last,
       change: open ? ((last - open) / open) * 100 : 0,
       open24h: Number.isFinite(open) ? open : undefined,
+      high24h: Number.isFinite(high) ? high : undefined,
+      low24h: Number.isFinite(low) ? low : undefined,
+      volume24h: Number.isFinite(vol) ? vol : undefined,
+      quoteVolume24h: Number.isFinite(quoteVol) ? quoteVol : undefined,
     };
   }
   return next;
