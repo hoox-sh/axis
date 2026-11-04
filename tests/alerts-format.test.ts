@@ -10,6 +10,7 @@ import {
   formatAlertCondition,
   formatAlertKind,
   formatLastFired,
+  formatLastFiredRelative,
   ALERT_KINDS,
 } from '../src/alerts/format.ts';
 
@@ -68,6 +69,29 @@ describe('formatLastFired', () => {
     const s = formatLastFired(Date.UTC(2026, 0, 15, 12, 30));
     expect(s).not.toBe('Never');
     expect(s.length).toBeGreaterThan(3);
+  });
+});
+
+describe('formatLastFiredRelative', () => {
+  const now = Date.UTC(2026, 5, 1, 12, 0, 0);
+
+  it('handles never and future timestamps', () => {
+    expect(formatLastFiredRelative(null, now)).toBe('Never');
+    expect(formatLastFiredRelative(undefined, now)).toBe('Never');
+    expect(formatLastFiredRelative(0, now)).toBe('Never');
+    expect(formatLastFiredRelative(now + 60_000, now)).toBe('just now');
+  });
+
+  it('buckets seconds, minutes, hours, and days', () => {
+    expect(formatLastFiredRelative(now - 10_000, now)).toBe('just now');
+    expect(formatLastFiredRelative(now - 4 * 60_000, now)).toBe('4m ago');
+    expect(formatLastFiredRelative(now - 3 * 3_600_000, now)).toBe('3h ago');
+    expect(formatLastFiredRelative(now - 2 * 86_400_000, now)).toBe('2d ago');
+  });
+
+  it('falls back to an absolute date after a month', () => {
+    const old = now - 40 * 86_400_000;
+    expect(formatLastFiredRelative(old, now)).toBe(formatLastFired(old));
   });
 });
 

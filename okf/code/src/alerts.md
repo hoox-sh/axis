@@ -7,7 +7,7 @@ tags: [alerts, code]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-03T12:43:16Z
+  at: 2026-11-04T15:42:40Z
 sources:
   - id: tree
     resource: "src/alerts"
@@ -21,7 +21,7 @@ okf_lock: generated
 * `drawing-levels.ts` — DRAWING_FIB_RATIOS, DrawingLike, drawingAlertLabel, drawingPricesById, pricesFromDrawing
 * `engine.ts` — DEFAULT_ALERT_COOLDOWN_MS, DEFAULT_ONCHAIN_TVL_MIN_ABS_PCT, ONCHAIN_WATERMARK_MAP_KEY, OnchainEvalContext, OnchainEvalEvent, OnchainEvalFired, applyFired, approxEqual, becomesTrue, clearPrevPrices, crossesLevel, evaluateAlerts
 * `form.ts` — AlertFormDraft, AlertFormErr, AlertFormOk, AlertFormResult, OnchainDirection, PctDirection, buildAlertFromDraft, isDrawingKind, isIndicatorKind, isOnchainKind, isPctKind, isPineAlertKind
-* `format.ts` — ALERT_KINDS, ALERT_KIND_GROUPS, alertKindGroup, formatAlertCondition, formatAlertKind, formatLastFired
+* `format.ts` — ALERT_KINDS, ALERT_KIND_GROUPS, alertKindGroup, formatAlertCondition, formatAlertKind, formatLastFired, formatLastFiredRelative
 * `index.ts` — ALERTS_STORAGE_KEY, ALERT_KINDS, ALERT_KIND_GROUPS, Alert, AlertCreateInput, AlertKind, AlertParams, AlertUpdatePatch, AlertsStoreV1, CreateOnchainTvlSpikeAlertInput, DEFAULT_ALERT_COOLDOWN_MS, DEFAULT_ONCHAIN_TVL_MIN_ABS_PCT
 * `indicator.ts` — IndicatorSeriesLike, PINE_COMPARE_OPS, PineCompareOp, PlotSampleLike, lastNumericSample, listPlotKeys, plotSampleKey, plotSamplesFromCache, prevNumericSample
 * `pine-bridge.ts` — EvaluatePineAlertsOpts, evaluatePineAlertsFromRun, notifyPineAlertsFromRun

@@ -56,9 +56,7 @@ export const ALERT_KIND_GROUPS: readonly {
 ] as const;
 
 /** Kinds exposed in the Alerts panel create form. */
-export const ALERT_KINDS: readonly AlertKind[] = ALERT_KIND_GROUPS.flatMap((g) => [
-  ...g.kinds,
-]);
+export const ALERT_KINDS: readonly AlertKind[] = ALERT_KIND_GROUPS.flatMap((g) => [...g.kinds]);
 
 /** Filter bucket for an alert kind (`all` is the list default). */
 export function alertKindGroup(
@@ -82,20 +80,14 @@ function formatNum(n: number): string {
 /**
  * Condition summary for list rows, e.g. `crosses 42,000` or `pct change ±2%`.
  */
-export function formatAlertCondition(
-  alert: Pick<Alert, 'kind' | 'params'>,
-): string {
+export function formatAlertCondition(alert: Pick<Alert, 'kind' | 'params'>): string {
   const params = alert.params || {};
   const kind = alert.kind;
   const label = formatAlertKind(kind);
 
   const priceRaw = params.price;
   const price =
-    typeof priceRaw === 'number'
-      ? priceRaw
-      : typeof priceRaw === 'string'
-        ? Number(priceRaw)
-        : NaN;
+    typeof priceRaw === 'number' ? priceRaw : typeof priceRaw === 'string' ? Number(priceRaw) : NaN;
 
   if (kind === 'price_cross' || kind === 'price_above' || kind === 'price_below') {
     if (Number.isFinite(price)) return `${label} ${formatNum(price)}`;
@@ -105,11 +97,7 @@ export function formatAlertCondition(
   if (kind === 'pct_change') {
     const pctRaw = params.pct;
     const pct =
-      typeof pctRaw === 'number'
-        ? pctRaw
-        : typeof pctRaw === 'string'
-          ? Number(pctRaw)
-          : NaN;
+      typeof pctRaw === 'number' ? pctRaw : typeof pctRaw === 'string' ? Number(pctRaw) : NaN;
     const dir = typeof params.direction === 'string' ? params.direction : 'both';
     const pctStr = Number.isFinite(pct) ? formatNum(pct) : '—';
     if (dir === 'up') return `${label} ≥+${pctStr}%`;
@@ -140,8 +128,7 @@ export function formatAlertCondition(
   }
 
   if (kind === 'pine_alert') {
-    const source =
-      params.source != null ? String(params.source).trim().toLowerCase() : 'any';
+    const source = params.source != null ? String(params.source).trim().toLowerCase() : 'any';
     const title = params.title != null ? String(params.title).trim() : '';
     if (source === 'alertcondition') {
       return title ? `alertcondition · ${title}` : 'alertcondition()';
@@ -155,11 +142,7 @@ export function formatAlertCondition(
   if (kind === 'onchain_tvl_spike' || kind === 'onchain_event') {
     const minRaw = params.minAbsPct;
     const min =
-      typeof minRaw === 'number'
-        ? minRaw
-        : typeof minRaw === 'string'
-          ? Number(minRaw)
-          : 10;
+      typeof minRaw === 'number' ? minRaw : typeof minRaw === 'string' ? Number(minRaw) : 10;
     const minStr = Number.isFinite(min) ? formatNum(min) : '10';
     const dir = typeof params.direction === 'string' ? params.direction : 'both';
     const protocol =
@@ -193,4 +176,27 @@ export function formatLastFired(ts: number | null | undefined): string {
   } catch {
     return '—';
   }
+}
+
+/**
+ * Relative last-fired label for dense rows: `just now`, `4m ago`, `3h ago`,
+ * `2d ago`, then the absolute {@link formatLastFired} date after a month.
+ * `now` is injectable for tests.
+ */
+export function formatLastFiredRelative(
+  ts: number | null | undefined,
+  now = Date.now(),
+): string {
+  if (ts == null || !Number.isFinite(ts) || ts <= 0) return 'Never';
+  const age = now - ts;
+  if (!Number.isFinite(age) || age < 0) return 'just now';
+  const sec = Math.floor(age / 1000);
+  if (sec < 45) return 'just now';
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const days = Math.floor(hr / 24);
+  if (days < 30) return `${days}d ago`;
+  return formatLastFired(ts);
 }

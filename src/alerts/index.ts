@@ -112,6 +112,7 @@ export {
   formatAlertCondition,
   formatAlertKind,
   formatLastFired,
+  formatLastFiredRelative,
 } from './format';
 
 export {

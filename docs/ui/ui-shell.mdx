@@ -122,6 +122,12 @@ Recorder and discovery:
 
 Dockable **Alerts** (`src/alerts/*` + `AlertsPanel.tsx`): local-first book for **price**, **% change**, **drawing touch**, **indicator plots**, **Pine `alert()` / `alertcondition()`**, and on-chain kinds. Delivery: browser Notification, optional HTTPS webhook, optional L2 webhook. Live ticks evaluate price/drawing/plot kinds; strategy/indicator runs evaluate Pine `alert()` events (last bar). Continuous server-side arming is not required for session use.
 
+- **Header** — `/`-focus search across name, symbol, kind, and condition; a notification-permission bell; a `+ New` composer toggle; and a summary (`N alerts · N armed · N fired · N off`).
+- **Composer** — collapsed by default once alerts exist (open when the book is empty). Fields follow the selected kind; **Delivery & cooldown** stays folded unless the alert uses it, and the summary line shows `browser · webhook · L2 · cooldown`.
+- **Rows** — tone rail (armed / recently fired / off), enable dot, kind chip, symbol + condition, interval chip, relative last-fired (`2m ago`), and delivery glyphs. The `···` menu holds **Edit · Duplicate · Copy condition · Test webhook · Delete**; the bell toggles per-alert browser delivery.
+- **Filters + bulk** — All / Price / Drawing / Indicator / On-chain chips carry live counts; the list menu enables all, disables all, or deletes all (confirm).
+- Editing reuses the composer and preserves the alert's enabled state; deleting asks for confirmation. Formatting helpers (`formatLastFiredRelative`) live in `alerts/format.ts`.
+
 ### Workspace snapshots
 
 `storage/workspace-snapshot.ts` + optional chrome menus capture layout/plugin prefs for restore (distinct from OHLCV — bars still re-fetch on Load).
