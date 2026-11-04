@@ -177,11 +177,21 @@ export interface NotificationSettings {
 /** docked = right sidebar; popout = external window/tab owns the editor UI */
 export type EditorMode = 'docked' | 'popout';
 
+/** One folder that groups named watchlists. */
+export interface WatchlistFolder {
+  id: string;
+  name: string;
+  /** Collapsed in the manager tree. */
+  collapsed?: boolean;
+}
+
 /** One named watchlist (symbols persist with the parent {@link WatchlistState}). */
 export interface WatchlistList {
   id: string;
   name: string;
   symbols: string[];
+  /** Folder id, or null/undefined for the root. */
+  folderId?: string | null;
 }
 
 /** Watchlist panel open state, width, named lists, and REST poll interval. */
@@ -194,6 +204,8 @@ export interface WatchlistState {
   refreshSec: number;
   /** Named watchlists. Always ≥1 after hydrate. */
   lists: WatchlistList[];
+  /** Folders that group lists in the manager tree. */
+  folders: WatchlistFolder[];
   /** Active list id (must exist in {@link lists}). */
   activeId: string;
 }

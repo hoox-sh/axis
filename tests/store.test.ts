@@ -92,6 +92,17 @@ import {
   renameWatchlist,
   duplicateWatchlist,
   deleteWatchlist,
+  createWatchlistFolder,
+  renameWatchlistFolder,
+  deleteWatchlistFolder,
+  moveWatchlistToFolder,
+  moveWatchlist,
+  moveWatchlistFolder,
+  setWatchlistFolderCollapsed,
+  moveWatchlistSymbol,
+  moveWatchlistSymbolToList,
+  sortWatchlistSymbols,
+  clearWatchlistSymbols,
   saveEditorDoc,
   loadEditorDoc,
   setDrawingTool,
@@ -149,7 +160,8 @@ function resetStoreBasics() {
     width: 200,
     symbols: ['BTCUSDT'],
     refreshSec: 15,
-    lists: [{ id: 'wl-main', name: 'Main', symbols: ['BTCUSDT'] }],
+    lists: [{ id: 'wl-main', name: 'Main', symbols: ['BTCUSDT'], folderId: null }],
+    folders: [],
     activeId: 'wl-main',
   });
   setStore('status', 'ready');
@@ -612,6 +624,95 @@ describe('layout helpers', () => {
     // last list is protected
     expect(deleteWatchlist(store.watchlist.activeId)).toBe(false);
     expect(store.watchlist.lists.length).toBe(1);
+  });
+
+  it('watchlist folders group, reorder, and dissolve back to the root', () => {
+    const alts = createWatchlist('Alts', ['ETHUSDT']);
+    const majors = createWatchlist('Majors', ['BTCUSDT']);
+    const folderId = createWatchlistFolder('Crypto');
+    expect(store.watchlist.folders.map((f) => f.name)).toContain('Crypto');
+
+    renameWatchlistFolder(folderId, 'Digital');
+    expect(store.watchlist.folders.find((f) => f.id === folderId)!.name).toBe('Digital');
+    setWatchlistFolderCollapsed(folderId, true);
+    expect(store.watchlist.folders.find((f) => f.id === folderId)!.collapsed).toBe(true);
+
+    expect(moveWatchlistToFolder(alts, folderId)).toBe(true);
+    expect(moveWatchlistToFolder(majors, folderId)).toBe(true);
+    expect(store.watchlist.lists.find((l) => l.id === alts)!.folderId).toBe(folderId);
+    expect(store.watchlist.lists.find((l) => l.id === majors)!.folderId).toBe(folderId);
+
+    const before = store.watchlist.lists.map((l) => l.id);
+    expect(moveWatchlist(majors, -1)).toBe(true);
+    const after = store.watchlist.lists.map((l) => l.id);
+    expect(after.indexOf(majors)).toBeLessThan(after.indexOf(alts));
+    expect(after).not.toEqual(before);
+
+    // Moving out of the folder does not disturb the root list.
+    expect(moveWatchlistToFolder(majors, null)).toBe(true);
+    expect(store.watchlist.lists.find((l) => l.id === majors)!.folderId).toBe(null);
+
+    // Deleting a folder keeps its lists and returns them to the root.
+    expect(deleteWatchlistFolder(folderId)).toBe(true);
+    expect(store.watchlist.folders.some((f) => f.id === folderId)).toBe(false);
+    expect(store.watchlist.lists.find((l) => l.id === alts)!.folderId).toBe(null);
+    expect(store.watchlist.lists.some((l) => l.id === alts)).toBe(true);
+
+    expect(moveWatchlistToFolder(alts, 'missing')).toBe(false);
+  });
+
+  it('watchlist folder order can be changed', () => {
+    const a = createWatchlistFolder('A');
+    const b = createWatchlistFolder('B');
+    const before = store.watchlist.folders.map((f) => f.id);
+    expect(moveWatchlistFolder(b, -1)).toBe(true);
+    const after = store.watchlist.folders.map((f) => f.id);
+    expect(after.indexOf(b)).toBeLessThan(after.indexOf(a));
+    expect(after).not.toEqual(before);
+    expect(moveWatchlistFolder(a, -1)).toBe(true);
+    expect(moveWatchlistFolder(a, -1)).toBe(false);
+  });
+
+  it('symbol actions reorder, sort, move between lists, and clear', () => {
+    setActiveWatchlist('wl-main');
+    addWatchlistSymbol('ETHUSDT');
+    addWatchlistSymbol('SOLUSDT');
+    expect(store.watchlist.symbols).toEqual(['BTCUSDT', 'ETHUSDT', 'SOLUSDT']);
+
+    expect(moveWatchlistSymbol('SOLUSDT', -1)).toBe(true);
+    expect(store.watchlist.symbols).toEqual(['BTCUSDT', 'SOLUSDT', 'ETHUSDT']);
+    expect(moveWatchlistSymbol('BTCUSDT', -1)).toBe(false);
+    expect(moveWatchlistSymbol('NOPE', 1)).toBe(false);
+
+    sortWatchlistSymbols();
+    expect(store.watchlist.symbols).toEqual(['BTCUSDT', 'ETHUSDT', 'SOLUSDT']);
+
+    const target = createWatchlist('Target', []);
+    setActiveWatchlist('wl-main');
+    expect(moveWatchlistSymbolToList('ETHUSDT', target)).toBe(true);
+    expect(store.watchlist.symbols).toEqual(['BTCUSDT', 'SOLUSDT']);
+    expect(store.watchlist.lists.find((l) => l.id === target)!.symbols).toEqual(['ETHUSDT']);
+    expect(moveWatchlistSymbolToList('ETHUSDT', target)).toBe(false);
+    expect(moveWatchlistSymbolToList('BTCUSDT', 'wl-main')).toBe(false);
+
+    clearWatchlistSymbols();
+    expect(store.watchlist.symbols).toEqual([]);
+    expect(store.watchlist.lists.find((l) => l.id === 'wl-main')!.symbols).toEqual([]);
+  });
+
+  it('hydrates folders and drops invalid list folder ids', () => {
+    const hydrated = hydrateWatchlistState({
+      activeId: 'a',
+      lists: [
+        { id: 'a', name: 'A', symbols: ['BTCUSDT'], folderId: 'f1' },
+        { id: 'b', name: 'B', symbols: ['ETHUSDT'], folderId: 'missing' },
+      ],
+      folders: [{ id: 'f1', name: 'F', collapsed: true }],
+    });
+    expect(hydrated.folders).toEqual([{ id: 'f1', name: 'F', collapsed: true }]);
+    expect(hydrated.lists.find((l) => l.id === 'a')!.folderId).toBe('f1');
+    expect(hydrated.lists.find((l) => l.id === 'b')!.folderId).toBe(null);
+    expect(hydrated.symbols).toEqual(['BTCUSDT']);
   });
 
   it('theme toggle', () => {

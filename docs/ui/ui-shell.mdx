@@ -35,7 +35,7 @@ The shell is the non-canvas chrome: navigation of axes, market selection, modals
 | Component | Path | Role |
 | --- | --- | --- |
 | Topbar | `ui/Topbar.tsx` | Axes pickers, Load/Run/Live, theme, modals |
-| Watchlist | `ui/Watchlist.tsx` | Symbols, quotes, click-to-load |
+| Watchlist | `ui/Watchlist.tsx` | Symbols, quotes, folders, click-to-load |
 | StatusBar | `ui/StatusBar.tsx` | Status, engine/storage badges, trade snippet |
 | StudioHost | `ui/studio/StudioHost.tsx` | Full-page Runtime / Wire / Settings / Workers / Plugins / Debug |
 | SettingsPage | `ui/settings/SettingsPage.tsx` | Appearance, chart, live, keys, editor, theme |
@@ -153,7 +153,10 @@ See `ui/panels/dock-layout.ts`, `FloatableShell.tsx`.
 
 - Default universe includes majors (`BTCUSDT`, …)
 - Named lists persist (`watchlist.lists` + `activeId`); legacy `symbols`-only state migrates to a **Main** list
-- Create / rename / duplicate / delete lists from the panel header or the panel-icon menu
+- **Folders** group lists (`watchlist.folders`, `list.folderId`). The manager drawer opens from the current-list button: create / rename / reorder / delete folders and lists, move lists between folders, and collapse a folder (persisted)
+- Deleting a folder never deletes its lists — they return to **Ungrouped**
+- **List actions** (`···`): rename, duplicate, move up/down, folder select, delete. Footer: **Sort A–Z** and **Clear** for the active list
+- **Symbol actions** (`···` on a row): move up/down, move to another list, copy symbol, remove. Alerts and the big-price view stay one click away
 - Row bell creates a price alert (cross / above / below) at last
 - Big-price rows (`ui/watchlist-row.ts`): direction tint + optional 24h change
 - `refreshSec` clamped 5–120

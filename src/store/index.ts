@@ -67,6 +67,7 @@ import type {
   TopbarSettings,
   ExtrasState,
   ShortcutSlice,
+  WatchlistFolder,
   WatchlistList,
   WatchlistState,
 } from './types';
@@ -266,7 +267,16 @@ const DEFAULT_WATCHLIST = [
 const DEFAULT_WATCHLIST_ID = 'wl-main';
 
 function cloneWatchlistLists(lists: WatchlistList[]): WatchlistList[] {
-  return lists.map((l) => ({ id: l.id, name: l.name, symbols: [...l.symbols] }));
+  return lists.map((l) => ({
+    id: l.id,
+    name: l.name,
+    symbols: [...l.symbols],
+    folderId: l.folderId ?? null,
+  }));
+}
+
+function cloneWatchlistFolders(folders: WatchlistFolder[]): WatchlistFolder[] {
+  return folders.map((f) => ({ id: f.id, name: f.name, collapsed: !!f.collapsed }));
 }
 
 function cloneWatchlistState(w: WatchlistState): WatchlistState {
@@ -274,6 +284,7 @@ function cloneWatchlistState(w: WatchlistState): WatchlistState {
     ...w,
     symbols: [...w.symbols],
     lists: cloneWatchlistLists(w.lists),
+    folders: cloneWatchlistFolders(w.folders ?? []),
   };
 }
 
@@ -297,7 +308,16 @@ function parseWatchlistList(raw: unknown, fallbackId: string): WatchlistList | n
   const symbols = Array.isArray(o.symbols)
     ? uniqueSymbols(o.symbols.filter((s): s is string => typeof s === 'string'))
     : [];
-  return { id, name, symbols };
+  const folderId = typeof o.folderId === 'string' && o.folderId.trim() ? o.folderId.trim() : null;
+  return { id, name, symbols, folderId };
+}
+
+function parseWatchlistFolder(raw: unknown, fallbackId: string): WatchlistFolder | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const id = typeof o.id === 'string' && o.id.trim() ? o.id.trim() : fallbackId;
+  const name = typeof o.name === 'string' && o.name.trim() ? o.name.trim() : 'Folder';
+  return { id, name, collapsed: o.collapsed === true };
 }
 
 /**
@@ -325,6 +345,23 @@ export function hydrateWatchlistState(raw: unknown): WatchlistState {
     });
   }
 
+  const folders: WatchlistFolder[] = [];
+  const seenFolderIds = new Set<string>();
+  if (Array.isArray(bag.folders)) {
+    bag.folders.forEach((item, i) => {
+      const parsed = parseWatchlistFolder(item, `wf-${i + 1}`);
+      if (!parsed) return;
+      let id = parsed.id;
+      if (seenFolderIds.has(id)) id = `${id}-${i}`;
+      seenFolderIds.add(id);
+      folders.push({ ...parsed, id });
+    });
+  }
+  // Drop references to folders that no longer exist (hand-edited blobs).
+  for (const list of lists) {
+    if (list.folderId && !seenFolderIds.has(list.folderId)) list.folderId = null;
+  }
+
   if (!lists.length) {
     const fromBag = Array.isArray(bag.symbols)
       ? uniqueSymbols(bag.symbols.filter((s): s is string => typeof s === 'string'))
@@ -333,6 +370,7 @@ export function hydrateWatchlistState(raw: unknown): WatchlistState {
       id: DEFAULT_WATCHLIST_ID,
       name: 'Main',
       symbols: fromBag.length ? fromBag : [...DEFAULT_WATCHLIST],
+      folderId: null,
     });
   }
 
@@ -346,6 +384,7 @@ export function hydrateWatchlistState(raw: unknown): WatchlistState {
     width,
     refreshSec,
     lists,
+    folders,
     activeId,
     symbols: [...active.symbols],
   };
@@ -3483,12 +3522,7 @@ export function setBarsQuiet(bars: Bar[]) {
  * longer than it — raise Settings → Historical bars above the Rolling window
  * for TradingView-style extra bars.
  */
-export function loadBars(
-  bars: Bar[],
-  symbol: string,
-  interval: string,
-  exchange: string,
-): Bar[] {
+export function loadBars(bars: Bar[], symbol: string, interval: string, exchange: string): Bar[] {
   // Full load = new anchored dataset. Reset before slicing so a previous
   // grown window cannot leak into the new symbol/timeframe.
   resetChartWindowPlan(bars, interval);
@@ -5557,9 +5591,38 @@ function ensureWatchlistLists(): WatchlistList[] {
       id: store.watchlist.activeId || DEFAULT_WATCHLIST_ID,
       name: 'Main',
       symbols,
+      folderId: null,
     },
   ];
 }
+
+/** Folder list, tolerant of pre-folder persisted payloads. */
+function ensureWatchlistFolders(): WatchlistFolder[] {
+  const folders = store.watchlist.folders;
+  return Array.isArray(folders) ? folders : [];
+}
+
+/** Move one item past its next same-group neighbor. Returns the same array when it cannot move. */
+function moveInGroup<T extends { id: string }>(
+  items: readonly T[],
+  id: string,
+  delta: -1 | 1,
+  sameGroup: (a: T, b: T) => boolean,
+): T[] | null {
+  const i = items.findIndex((item) => item.id === id);
+  if (i < 0) return null;
+  let j = i + delta;
+  while (j >= 0 && j < items.length && !sameGroup(items[i]!, items[j]!)) j += delta;
+  if (j < 0 || j >= items.length) return null;
+  const next = [...items];
+  const tmp = next[i]!;
+  next[i] = next[j]!;
+  next[j] = tmp;
+  return next;
+}
+
+const sameListFolder = (a: WatchlistList, b: WatchlistList): boolean =>
+  (a.folderId ?? null) === (b.folderId ?? null);
 
 function writeActiveWatchlistSymbols(next: string[]) {
   const lists = ensureWatchlistLists();
@@ -5621,13 +5684,24 @@ export function setActiveWatchlist(id: string) {
 /**
  * Create a named watchlist and switch to it.
  * Empty `symbols` starts a blank list; omit to copy nothing.
+ * `folderId` places the list inside a folder (null = root).
  */
-export function createWatchlist(name?: string, symbols?: string[]): string {
+export function createWatchlist(
+  name?: string,
+  symbols?: string[],
+  folderId?: string | null,
+): string {
   const lists = ensureWatchlistLists();
   const id = `wl_${Date.now().toString(36)}_${++idCounter}`;
   const label = (name || '').trim() || nextWatchlistName(lists);
   const nextSymbols = uniqueSymbols(symbols ?? []);
-  const list: WatchlistList = { id, name: label, symbols: nextSymbols };
+  const folder = folderId ? ensureWatchlistFolders().find((f) => f.id === folderId) : null;
+  const list: WatchlistList = {
+    id,
+    name: label,
+    symbols: nextSymbols,
+    folderId: folder?.id ?? null,
+  };
   setStore('watchlist', 'lists', [...lists, list]);
   setStore('watchlist', 'activeId', id);
   setStore('watchlist', 'symbols', [...nextSymbols]);
@@ -5654,7 +5728,7 @@ export function duplicateWatchlist(id?: string): string | null {
   const lists = ensureWatchlistLists();
   const src = lists.find((l) => l.id === (id || store.watchlist.activeId));
   if (!src) return null;
-  return createWatchlist(`${src.name} copy`, src.symbols);
+  return createWatchlist(`${src.name} copy`, src.symbols, src.folderId ?? null);
 }
 
 /**
@@ -5673,6 +5747,172 @@ export function deleteWatchlist(id: string): boolean {
   setStore('watchlist', 'lists', nextLists);
   setStore('watchlist', 'activeId', active.id);
   setStore('watchlist', 'symbols', [...active.symbols]);
+  persist();
+  return true;
+}
+
+/* ── Watchlist folders ───────────────────────────────────────────── */
+
+function nextFolderName(folders: WatchlistFolder[]): string {
+  const used = new Set(folders.map((f) => f.name.toLowerCase()));
+  let n = folders.length + 1;
+  let label = `Folder ${n}`;
+  while (used.has(label.toLowerCase())) {
+    n += 1;
+    label = `Folder ${n}`;
+  }
+  return label;
+}
+
+/** Create a folder for grouping lists. Returns its id. */
+export function createWatchlistFolder(name?: string): string {
+  const folders = ensureWatchlistFolders();
+  const id = `wf_${Date.now().toString(36)}_${++idCounter}`;
+  const label = (name || '').trim() || nextFolderName(folders);
+  setStore('watchlist', 'folders', [...folders, { id, name: label, collapsed: false }]);
+  persist();
+  return id;
+}
+
+/** Rename a folder. Empty names are ignored. */
+export function renameWatchlistFolder(id: string, name: string) {
+  const label = name.trim();
+  if (!label) return;
+  const folders = ensureWatchlistFolders();
+  if (!folders.some((f) => f.id === id)) return;
+  setStore(
+    'watchlist',
+    'folders',
+    folders.map((f) => (f.id === id ? { ...f, name: label } : f)),
+  );
+  persist();
+}
+
+/** Persist a folder's collapsed state in the manager tree. */
+export function setWatchlistFolderCollapsed(id: string, collapsed: boolean) {
+  const folders = ensureWatchlistFolders();
+  if (!folders.some((f) => f.id === id)) return;
+  setStore(
+    'watchlist',
+    'folders',
+    folders.map((f) => (f.id === id ? { ...f, collapsed: !!collapsed } : f)),
+  );
+  persist();
+}
+
+/**
+ * Remove a folder. Its lists move back to the root — lists are never deleted
+ * with a folder.
+ */
+export function deleteWatchlistFolder(id: string): boolean {
+  const folders = ensureWatchlistFolders();
+  if (!folders.some((f) => f.id === id)) return false;
+  const lists = ensureWatchlistLists().map((l) =>
+    (l.folderId ?? null) === id ? { ...l, folderId: null } : l,
+  );
+  setStore(
+    'watchlist',
+    'folders',
+    folders.filter((f) => f.id !== id),
+  );
+  setStore('watchlist', 'lists', lists);
+  persist();
+  return true;
+}
+
+/** Move a list into a folder (`null` = root). */
+export function moveWatchlistToFolder(listId: string, folderId: string | null): boolean {
+  const lists = ensureWatchlistLists();
+  if (!lists.some((l) => l.id === listId)) return false;
+  const target = folderId ? ensureWatchlistFolders().find((f) => f.id === folderId) : null;
+  if (folderId && !target) return false;
+  setStore(
+    'watchlist',
+    'lists',
+    lists.map((l) => (l.id === listId ? { ...l, folderId: target?.id ?? null } : l)),
+  );
+  persist();
+  return true;
+}
+
+/** Reorder a list among its siblings (same folder / root). */
+export function moveWatchlist(listId: string, delta: -1 | 1): boolean {
+  const lists = ensureWatchlistLists();
+  const next = moveInGroup(lists, listId, delta, sameListFolder);
+  if (!next) return false;
+  setStore('watchlist', 'lists', next);
+  persist();
+  return true;
+}
+
+/** Reorder a folder in the manager tree. */
+export function moveWatchlistFolder(folderId: string, delta: -1 | 1): boolean {
+  const folders = ensureWatchlistFolders();
+  const next = moveInGroup(folders, folderId, delta, () => true);
+  if (!next) return false;
+  setStore('watchlist', 'folders', next);
+  persist();
+  return true;
+}
+
+/* ── Watchlist symbol actions ────────────────────────────────────── */
+
+/** Move a symbol up/down inside the active list. */
+export function moveWatchlistSymbol(symbol: string, delta: -1 | 1): boolean {
+  const syms = store.watchlist.symbols.slice();
+  const i = syms.indexOf(symbol);
+  if (i < 0) return false;
+  const j = i + delta;
+  if (j < 0 || j >= syms.length) return false;
+  const tmp = syms[i]!;
+  syms[i] = syms[j]!;
+  syms[j] = tmp;
+  writeActiveWatchlistSymbols(syms);
+  persist();
+  return true;
+}
+
+/** Sort the active list alphabetically. */
+export function sortWatchlistSymbols() {
+  const next = [...store.watchlist.symbols].sort((a, b) => a.localeCompare(b));
+  writeActiveWatchlistSymbols(next);
+  persist();
+}
+
+/** Remove every symbol from the active list. */
+export function clearWatchlistSymbols() {
+  if (!store.watchlist.symbols.length) return;
+  writeActiveWatchlistSymbols([]);
+  persist();
+}
+
+/** Move a symbol from the active list into another list (deduped). */
+export function moveWatchlistSymbolToList(symbol: string, targetListId: string): boolean {
+  const lists = ensureWatchlistLists();
+  const activeId = lists.some((l) => l.id === store.watchlist.activeId)
+    ? store.watchlist.activeId
+    : lists[0]!.id;
+  if (targetListId === activeId) return false;
+  const target = lists.find((l) => l.id === targetListId);
+  if (!target) return false;
+  const sym = symbol.toUpperCase().trim();
+  if (!sym) return false;
+  const active = lists.find((l) => l.id === activeId);
+  if (!active?.symbols.includes(sym)) return false;
+  const nextActive = active.symbols.filter((s) => s !== sym);
+  const nextTarget = uniqueSymbols([...target.symbols, sym]);
+  setStore('watchlist', 'symbols', nextActive);
+  setStore(
+    'watchlist',
+    'lists',
+    lists.map((l) =>
+      l.id === activeId
+        ? { ...l, symbols: nextActive }
+        : l.id === targetListId
+          ? { ...l, symbols: nextTarget }
+          : l,
+    ),
+  );
   persist();
   return true;
 }

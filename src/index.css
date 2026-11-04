@@ -11,6 +11,7 @@
 @import './ui/studio/studio.css';
 @import './ui/studio/button-designs.css';
 @import './ui/library/library.css';
+@import './ui/watchlist/watchlist.css';
 
 /* AXIS  — Void pack
    Surfaces: #07080C / #0C0E14 / #10131B · hairline #1C2230
@@ -2074,43 +2075,10 @@ body.axis-ticker-dragging {
   font-variant-numeric: tabular-nums lining-nums;
 }
 
-.axis-wl-list-select,
 .axis-wl-list-rename {
   text-transform: none;
   letter-spacing: 0.02em;
   font-weight: 600;
-}
-
-.axis-wl-list-select {
-  appearance: none;
-  -webkit-appearance: none;
-  max-width: none;
-  height: 22px;
-  padding: 0 1.15em 0 0.4em;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-chip);
-  background-color: var(--color-bg-elev);
-  background-image:
-    linear-gradient(45deg, transparent 50%, var(--color-text-dim) 50%),
-    linear-gradient(135deg, var(--color-text-dim) 50%, transparent 50%);
-  background-position:
-    calc(100% - 0.55em) 55%,
-    calc(100% - 0.32em) 55%;
-  background-size:
-    0.22em 0.22em,
-    0.22em 0.22em;
-  background-repeat: no-repeat;
-  color: var(--color-text);
-  font: inherit;
-  font-size: 10px;
-  line-height: 20px;
-  cursor: pointer;
-}
-
-.axis-wl-list-select:focus,
-.axis-wl-list-select:focus-visible {
-  outline: none;
-  border-color: var(--color-accent);
 }
 
 .axis-wl-alert-pop {

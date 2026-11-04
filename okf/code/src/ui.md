@@ -7,7 +7,7 @@ tags: [code, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-04T11:47:26Z
+  at: 2026-11-04T13:42:11Z
 sources:
   - id: tree
     resource: "src/ui"
@@ -111,7 +111,7 @@ okf_lock: generated
 
 # Packages
 
-`${item.name}`, `lucide-solid`, `solid-js`, `solid-js/store`, `solid-js/web`
+`${item.name}`, `${name}`, `lucide-solid`, `solid-js`, `solid-js/store`, `solid-js/web`
 
 # Depends on
 

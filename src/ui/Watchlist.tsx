@@ -81,19 +81,28 @@ import {
   renameWatchlist,
   duplicateWatchlist,
   deleteWatchlist,
+  createWatchlistFolder,
+  renameWatchlistFolder,
+  deleteWatchlistFolder,
+  moveWatchlistToFolder,
+  moveWatchlist,
+  moveWatchlistFolder,
+  setWatchlistFolderCollapsed,
+  moveWatchlistSymbol,
+  moveWatchlistSymbolToList,
+  sortWatchlistSymbols,
+  clearWatchlistSymbols,
 } from '../store';
+import type { WatchlistList } from '../store/types';
 import { loadSymbolData } from '../data/load-symbol';
 import { SymbolModal } from './SymbolModal';
+import { copyToClipboard } from './clipboard';
 import {
   fetchWatchlistTickers,
   sourceSupportsRestPoll,
   type WatchTicker,
 } from '../data/watchlist-tickers';
-import {
-  dailyCloseDayKey,
-  dailyCloseSourceKey,
-  fetchDailyCloses,
-} from '../data/watchlist-daily';
+import { dailyCloseDayKey, dailyCloseSourceKey, fetchDailyCloses } from '../data/watchlist-daily';
 import { startWatchlistQuotes } from '../data/watchlist-live';
 import { createAlert, listAlerts, subscribeAlerts, type AlertKind } from '../alerts';
 import { Icons } from './icons';
@@ -182,10 +191,13 @@ const WatchlistRow: Component<{
   active: boolean;
   alerted: boolean;
   expanded: boolean;
+  /** Inline symbol actions strip is open for this row. */
+  moreOpen?: boolean;
   cols: string;
   onSelect: (sym: string) => void;
   onAlert: (sym: string, el: HTMLElement) => void;
   onExpand: (sym: string) => void;
+  onMore: (sym: string) => void;
 }> = (props) => {
   const [flash, setFlash] = createSignal<'up' | 'down' | ''>('');
   const [spark, setSpark] = createSignal<number[]>([]);
@@ -277,15 +289,21 @@ const WatchlistRow: Component<{
         </button>
         <button
           type="button"
-          class={`w-[18px] h-[18px] flex items-center justify-center rounded-[var(--radius-chip)] text-[11px] leading-none text-text-faint hover:text-red hover:bg-bg focus-visible:opacity-100 ${reveal}`}
-          title={`Remove ${props.sym}`}
-          aria-label={`Remove ${props.sym}`}
+          class={`w-[18px] h-[18px] flex items-center justify-center rounded-[var(--radius-chip)] focus-visible:opacity-100 ${
+            props.moreOpen
+              ? 'text-accent bg-accent/10 opacity-100'
+              : `text-text-faint hover:text-accent hover:bg-bg ${reveal}`
+          }`}
+          title={`Actions for ${props.sym}`}
+          aria-label={`Actions for ${props.sym}`}
+          aria-expanded={!!props.moreOpen}
+          data-testid={`axis-watchlist-more-${props.sym}`}
           onClick={(e) => {
             e.stopPropagation();
-            removeWatchlistSymbol(props.sym);
+            props.onMore(props.sym);
           }}
         >
-          ×
+          <Icons.menu size={11} />
         </button>
       </span>
     );
@@ -469,6 +487,18 @@ export const Watchlist: Component = () => {
   const [alertPopPos, setAlertPopPos] = createSignal({ top: 0, left: 0 });
   /** Symbols pinned to the big-price row layout (session-local). */
   const [expandedSyms, setExpandedSyms] = createSignal<Set<string>>(new Set());
+  /** Watchlist manager drawer (folders + list actions). */
+  const [managerOpen, setManagerOpen] = createSignal(false);
+  /** Inline action strip for one manager row: `folder:<id>` / `list:<id>`. */
+  const [managerMenu, setManagerMenu] = createSignal('');
+  /** Inline rename in the manager (folder or list). */
+  const [renameTarget, setRenameTarget] = createSignal<{
+    kind: 'list' | 'folder';
+    id: string;
+  } | null>(null);
+  const [renameDraft, setRenameDraft] = createSignal('');
+  /** Symbol whose action strip is open. */
+  const [symbolActions, setSymbolActions] = createSignal<string | null>(null);
   let alertAnchorEl: HTMLElement | undefined;
   let alertPopEl: HTMLDivElement | undefined;
 
@@ -488,6 +518,12 @@ export const Watchlist: Component = () => {
     const id = store.watchlist.activeId;
     return lists().find((l) => l.id === id) ?? lists()[0];
   });
+  const folders = createMemo(() => store.watchlist.folders ?? []);
+  const listsInFolder = (folderId: string) =>
+    lists().filter((l) => (l.folderId ?? null) === folderId);
+  const rootLists = createMemo(() => lists().filter((l) => !l.folderId));
+  const folderName = (id?: string | null) =>
+    id ? (folders().find((f) => f.id === id)?.name ?? '') : '';
   const alertedSymbols = createMemo(() => {
     void alertsTick();
     const set = new Set<string>();
@@ -847,6 +883,127 @@ export const Watchlist: Component = () => {
     beginRename();
   };
 
+  const newListInFolder = (folderId: string) => {
+    const id = createWatchlist(undefined, [], folderId);
+    setManagerOpen(true);
+    beginManagerRename('list', id);
+    announce('Created watchlist');
+  };
+
+  const onNewFolder = () => {
+    const id = createWatchlistFolder();
+    setManagerOpen(true);
+    beginManagerRename('folder', id);
+    announce('Created folder');
+  };
+
+  const beginManagerRename = (kind: 'list' | 'folder', id: string) => {
+    const name =
+      kind === 'folder'
+        ? (folders().find((f) => f.id === id)?.name ?? '')
+        : (lists().find((l) => l.id === id)?.name ?? '');
+    setRenameTarget({ kind, id });
+    setRenameDraft(name);
+    setManagerMenu('');
+  };
+
+  const commitManagerRename = () => {
+    const target = renameTarget();
+    if (!target) return;
+    if (target.kind === 'folder') renameWatchlistFolder(target.id, renameDraft());
+    else renameWatchlist(target.id, renameDraft());
+    setRenameTarget(null);
+  };
+
+  const cancelManagerRename = () => setRenameTarget(null);
+
+  const isRenaming = (kind: 'list' | 'folder', id: string) =>
+    renameTarget()?.kind === kind && renameTarget()?.id === id;
+
+  const toggleManagerMenu = (key: string) => setManagerMenu((prev) => (prev === key ? '' : key));
+
+  const openList = (id: string) => {
+    setActiveWatchlist(id);
+    setManagerOpen(false);
+    setManagerMenu('');
+    setSymbolActions(null);
+  };
+
+  const duplicateList = (id: string) => {
+    const copy = duplicateWatchlist(id);
+    if (!copy) return;
+    setManagerOpen(true);
+    beginManagerRename('list', copy);
+    announce('Duplicated watchlist');
+  };
+
+  const removeList = (id: string) => {
+    if (!deleteWatchlist(id)) return;
+    setManagerMenu('');
+    announce('Deleted watchlist');
+  };
+
+  const removeFolder = (id: string) => {
+    if (!deleteWatchlistFolder(id)) return;
+    setManagerMenu('');
+    announce('Folder removed — its lists moved to the root');
+  };
+
+  const moveList = (id: string, delta: -1 | 1) => {
+    if (moveWatchlist(id, delta))
+      announce(delta < 0 ? 'Moved watchlist up' : 'Moved watchlist down');
+  };
+
+  const moveFolder = (id: string, delta: -1 | 1) => {
+    if (moveWatchlistFolder(id, delta))
+      announce(delta < 0 ? 'Moved folder up' : 'Moved folder down');
+  };
+
+  const moveListToFolder = (listId: string, folderId: string | null) => {
+    if (!moveWatchlistToFolder(listId, folderId)) return;
+    setManagerMenu('');
+    announce(folderId ? 'Moved watchlist into folder' : 'Moved watchlist to the root');
+  };
+
+  const toggleSymbolActions = (sym: string) =>
+    setSymbolActions((prev) => (prev === sym ? null : sym));
+
+  const onMoveSymbol = (sym: string, delta: -1 | 1) => {
+    if (moveWatchlistSymbol(sym, delta)) announce(`${sym} moved`);
+  };
+
+  const onMoveSymbolToList = (sym: string, targetId: string) => {
+    if (!moveWatchlistSymbolToList(sym, targetId)) return;
+    announce(`Moved ${sym}`);
+    setSymbolActions(null);
+  };
+
+  const onCopySymbol = async (sym: string) => {
+    if (await copyToClipboard(sym)) announce(`Copied ${sym}`);
+  };
+
+  const onRemoveSymbol = (sym: string) => {
+    removeWatchlistSymbol(sym);
+    if (symbolActions() === sym) setSymbolActions(null);
+    announce(`Removed ${sym}`);
+  };
+
+  const onSortSymbols = () => {
+    sortWatchlistSymbols();
+    announce('Sorted the active watchlist');
+  };
+
+  const onClearSymbols = () => {
+    if (!store.watchlist.symbols.length) return;
+    const name = activeList()?.name || 'watchlist';
+    if (typeof window !== 'undefined' && !window.confirm(`Remove every symbol from "${name}"?`)) {
+      return;
+    }
+    clearWatchlistSymbols();
+    setSymbolActions(null);
+    announce(`Cleared ${name}`);
+  };
+
   const placeAlertPop = () => {
     const anchor = alertAnchorEl;
     if (!anchor?.isConnected || typeof window === 'undefined') return;
@@ -959,6 +1116,104 @@ export const Watchlist: Component = () => {
 
   const cols = 'grid grid-cols-[minmax(3.75rem,1fr)_auto_auto_auto] items-center gap-x-1.5 px-2';
 
+  const managerRenameInput = (kind: 'list' | 'folder') => (
+    <input
+      class="sc-input axis-wl-rename-input"
+      value={renameDraft()}
+      aria-label={`Rename ${kind}`}
+      data-testid={`axis-watchlist-rename-${kind}`}
+      onInput={(e) => setRenameDraft(e.currentTarget.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          commitManagerRename();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          e.stopPropagation();
+          cancelManagerRename();
+        }
+      }}
+      onBlur={() => commitManagerRename()}
+      ref={(el) =>
+        queueMicrotask(() => {
+          el.focus();
+          el.select();
+        })
+      }
+    />
+  );
+
+  const listRow = (list: WatchlistList) => {
+    const isActive = () => (store.watchlist.activeId || activeList()?.id) === list.id;
+    const menuKey = `list:${list.id}`;
+    return (
+      <div
+        class="axis-wl-list"
+        classList={{ 'is-on': isActive() }}
+        data-testid={`axis-watchlist-list-row-${list.id}`}
+      >
+        <Show when={!isRenaming('list', list.id)} fallback={managerRenameInput('list')}>
+          <button
+            type="button"
+            class="axis-wl-list-pick"
+            title={`Open ${list.name}`}
+            onClick={() => openList(list.id)}
+          >
+            <span class="axis-wl-list-dot" aria-hidden="true" />
+            <span class="axis-wl-list-name">{list.name}</span>
+            <span class="axis-wl-count">{list.symbols.length}</span>
+          </button>
+        </Show>
+        <button
+          type="button"
+          class="axis-wl-icon-btn"
+          classList={{ 'is-on': managerMenu() === menuKey }}
+          title={`Actions for ${list.name}`}
+          aria-label={`Actions for ${list.name}`}
+          aria-expanded={managerMenu() === menuKey}
+          onClick={() => toggleManagerMenu(menuKey)}
+        >
+          <Icons.menu size={11} />
+        </button>
+        <Show when={managerMenu() === menuKey}>
+          <div class="axis-wl-manager-actions">
+            <button type="button" onClick={() => beginManagerRename('list', list.id)}>
+              <Icons.pencil size={10} /> Rename
+            </button>
+            <button type="button" onClick={() => duplicateList(list.id)}>
+              <Icons.copy size={10} /> Duplicate
+            </button>
+            <button type="button" onClick={() => moveList(list.id, -1)}>
+              <Icons.chevronUp size={10} /> Up
+            </button>
+            <button type="button" onClick={() => moveList(list.id, 1)}>
+              <Icons.chevronDown size={10} /> Down
+            </button>
+            <select
+              class="axis-wl-move-select"
+              aria-label={`Folder for ${list.name}`}
+              value={list.folderId ?? ''}
+              onChange={(e) => moveListToFolder(list.id, e.currentTarget.value || null)}
+            >
+              <option value="">No folder</option>
+              <For each={folders()}>
+                {(folder) => <option value={folder.id}>{folder.name}</option>}
+              </For>
+            </select>
+            <button
+              type="button"
+              class="is-danger"
+              disabled={lists().length <= 1}
+              onClick={() => removeList(list.id)}
+            >
+              <Icons.trash size={10} /> Delete
+            </button>
+          </div>
+        </Show>
+      </div>
+    );
+  };
+
   return (
     <Show when={isPanelOpen('watchlist') || store.watchlist.open}>
       <FloatableShell
@@ -971,11 +1226,31 @@ export const Watchlist: Component = () => {
               type="button"
               role="menuitem"
               class="axis-panel-menu-item"
+              data-testid="axis-watchlist-menu-manage"
+              onClick={() => setManagerOpen(true)}
+            >
+              <Icons.listTree size={14} />
+              <span>Manage watchlists…</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              class="axis-panel-menu-item"
               data-testid="axis-watchlist-menu-new"
               onClick={() => onNewList()}
             >
               <Icons.plus size={14} />
               <span>New watchlist</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              class="axis-panel-menu-item"
+              data-testid="axis-watchlist-menu-new-folder"
+              onClick={() => onNewFolder()}
+            >
+              <Icons.folder size={14} />
+              <span>New folder</span>
             </button>
             <button
               type="button"
@@ -1040,24 +1315,30 @@ export const Watchlist: Component = () => {
               />
             }
           >
-            <select
-              class="axis-wl-list-select flex-1 min-w-0"
-              title="Switch watchlist"
-              aria-label="Watchlist"
+            <button
+              type="button"
+              class="axis-wl-current"
+              classList={{ 'is-open': managerOpen() }}
+              title="Manage watchlists"
+              aria-expanded={managerOpen()}
+              aria-haspopup="true"
               data-testid="axis-watchlist-list"
-              onChange={(e) => setActiveWatchlist(e.currentTarget.value)}
+              onClick={() => setManagerOpen((v) => !v)}
             >
-              <For each={lists()}>
-                {(l) => (
-                  <option
-                    value={l.id}
-                    selected={l.id === (store.watchlist.activeId || activeList()?.id)}
-                  >
-                    {l.name}
-                  </option>
-                )}
-              </For>
-            </select>
+              <Icons.watchlist size={12} />
+              <span class="axis-wl-current-name">
+                <Show when={folderName(activeList()?.folderId)}>
+                  <span class="axis-wl-current-folder">{folderName(activeList()?.folderId)}</span>
+                  <span class="axis-wl-current-sep">/</span>
+                </Show>
+                <span class="axis-wl-current-label">{activeList()?.name ?? 'Watchlist'}</span>
+              </span>
+              <span class="axis-wl-count">{store.watchlist.symbols.length}</span>
+              <Icons.chevronDown
+                size={11}
+                class={`axis-wl-chevron${managerOpen() ? ' is-open' : ''}`}
+              />
+            </button>
           </Show>
           <button
             type="button"
@@ -1118,11 +1399,194 @@ export const Watchlist: Component = () => {
             </span>
           </Show>
         </div>
+
+        <Show when={managerOpen()}>
+          {/* biome-ignore lint/a11y/noStaticElementInteractions: Escape closes the manager drawer; rows own their own controls */}
+          <div
+            class="axis-wl-manager"
+            data-testid="axis-watchlist-manager"
+            onKeyDown={(e) => {
+              if (e.key !== 'Escape') return;
+              e.preventDefault();
+              setManagerOpen(false);
+              setManagerMenu('');
+              cancelManagerRename();
+            }}
+          >
+            <div class="axis-wl-manager-head">
+              <span class="axis-wl-manager-title">
+                <Icons.listTree size={12} /> Watchlists
+              </span>
+              <span class="axis-wl-manager-meta">
+                {lists().length} list{lists().length === 1 ? '' : 's'} · {folders().length} folder
+                {folders().length === 1 ? '' : 's'}
+              </span>
+              <button
+                type="button"
+                class="axis-wl-icon-btn"
+                title="New folder"
+                aria-label="New folder"
+                data-testid="axis-watchlist-new-folder"
+                onClick={onNewFolder}
+              >
+                <Icons.folder size={12} />
+              </button>
+              <button
+                type="button"
+                class="axis-wl-icon-btn"
+                title="Close watchlist manager"
+                aria-label="Close watchlist manager"
+                onClick={() => {
+                  setManagerOpen(false);
+                  setManagerMenu('');
+                  cancelManagerRename();
+                }}
+              >
+                <Icons.x size={12} />
+              </button>
+            </div>
+
+            <div class="axis-wl-manager-body">
+              <For each={folders()}>
+                {(folder) => {
+                  const folderLists = () => listsInFolder(folder.id);
+                  const menuKey = `folder:${folder.id}`;
+                  return (
+                    <div class="axis-wl-folder" data-testid={`axis-watchlist-folder-${folder.id}`}>
+                      <div class="axis-wl-folder-row" classList={{ 'is-open': !folder.collapsed }}>
+                        <button
+                          type="button"
+                          class="axis-wl-folder-toggle"
+                          title={folder.collapsed ? 'Expand folder' : 'Collapse folder'}
+                          aria-label={
+                            folder.collapsed ? `Expand ${folder.name}` : `Collapse ${folder.name}`
+                          }
+                          aria-expanded={!folder.collapsed}
+                          onClick={() => setWatchlistFolderCollapsed(folder.id, !folder.collapsed)}
+                        >
+                          <Icons.chevronDown
+                            size={11}
+                            class={`axis-wl-chevron${folder.collapsed ? '' : ' is-open'}`}
+                          />
+                        </button>
+                        <Icons.folder size={12} class="axis-wl-folder-icon" />
+                        <Show
+                          when={!isRenaming('folder', folder.id)}
+                          fallback={managerRenameInput('folder')}
+                        >
+                          <span class="axis-wl-folder-name">{folder.name}</span>
+                        </Show>
+                        <span class="axis-wl-count">{folderLists().length}</span>
+                        <button
+                          type="button"
+                          class="axis-wl-icon-btn"
+                          title={`New watchlist in ${folder.name}`}
+                          aria-label={`New watchlist in ${folder.name}`}
+                          onClick={() => newListInFolder(folder.id)}
+                        >
+                          <Icons.plus size={11} />
+                        </button>
+                        <button
+                          type="button"
+                          class="axis-wl-icon-btn"
+                          classList={{ 'is-on': managerMenu() === menuKey }}
+                          title={`Actions for ${folder.name}`}
+                          aria-label={`Actions for ${folder.name}`}
+                          aria-expanded={managerMenu() === menuKey}
+                          onClick={() => toggleManagerMenu(menuKey)}
+                        >
+                          <Icons.menu size={11} />
+                        </button>
+                      </div>
+                      <Show when={managerMenu() === menuKey}>
+                        <div class="axis-wl-manager-actions">
+                          <button
+                            type="button"
+                            onClick={() => beginManagerRename('folder', folder.id)}
+                          >
+                            <Icons.pencil size={10} /> Rename
+                          </button>
+                          <button type="button" onClick={() => moveFolder(folder.id, -1)}>
+                            <Icons.chevronUp size={10} /> Up
+                          </button>
+                          <button type="button" onClick={() => moveFolder(folder.id, 1)}>
+                            <Icons.chevronDown size={10} /> Down
+                          </button>
+                          <button
+                            type="button"
+                            class="is-danger"
+                            onClick={() => removeFolder(folder.id)}
+                          >
+                            <Icons.trash size={10} /> Delete
+                          </button>
+                        </div>
+                      </Show>
+                      <Show when={!folder.collapsed}>
+                        <For each={folderLists()}>{(list) => listRow(list)}</For>
+                        <Show when={folderLists().length === 0}>
+                          <div class="axis-wl-manager-empty">No lists in this folder</div>
+                        </Show>
+                      </Show>
+                    </div>
+                  );
+                }}
+              </For>
+
+              <Show when={folders().length > 0 && rootLists().length > 0}>
+                <div class="axis-wl-manager-label">Ungrouped</div>
+              </Show>
+              <For each={rootLists()}>{(list) => listRow(list)}</For>
+            </div>
+
+            <div class="axis-wl-manager-foot">
+              <button type="button" onClick={onNewList}>
+                <Icons.plus size={10} /> New watchlist
+              </button>
+              <button type="button" onClick={onNewFolder}>
+                <Icons.folder size={10} /> New folder
+              </button>
+              <span class="axis-wl-spacer" />
+              <button
+                type="button"
+                title="Sort the active watchlist A–Z"
+                data-testid="axis-watchlist-sort"
+                onClick={onSortSymbols}
+              >
+                <Icons.type size={10} /> Sort
+              </button>
+              <button
+                type="button"
+                class="is-danger"
+                title="Remove every symbol from the active watchlist"
+                data-testid="axis-watchlist-clear"
+                onClick={onClearSymbols}
+              >
+                <Icons.eraser size={10} /> Clear
+              </button>
+            </div>
+          </div>
+        </Show>
+
         <div class="flex-1 overflow-y-auto min-h-0">
           <Show
             when={store.watchlist.symbols.length > 0}
             fallback={
-              <div class="axis-empty-state px-2 py-3 text-[11px] text-text-faint">No symbols</div>
+              <div class="axis-wl-empty" data-testid="axis-watchlist-empty">
+                <span class="axis-wl-empty-icon">
+                  <Icons.watchlist size={17} />
+                </span>
+                <p class="axis-wl-empty-title">
+                  No symbols in {activeList()?.name ?? 'this watchlist'}
+                </p>
+                <p class="axis-wl-empty-sub">Add one below, or browse the venue’s symbols.</p>
+                <button
+                  type="button"
+                  class="sc-btn sc-btn-ghost"
+                  onClick={() => setBrowseOpen(true)}
+                >
+                  <Icons.search size={11} /> Browse symbols
+                </button>
+              </div>
             }
           >
             <div
@@ -1145,19 +1609,76 @@ export const Watchlist: Component = () => {
               </span>
             </div>
             <For each={store.watchlist.symbols}>
-              {(sym) => (
-                <WatchlistRow
-                  sym={sym}
-                  tick={prices()[sym]}
-                  prevClose={prevCloseFor(sym)}
-                  active={store.symbol === sym}
-                  alerted={alertedSymbols().has(sym.toUpperCase())}
-                  expanded={expandedSyms().has(sym.toUpperCase())}
-                  cols={cols}
-                  onSelect={(s) => void select(s)}
-                  onAlert={openAlert}
-                  onExpand={toggleExpanded}
-                />
+              {(sym, index) => (
+                <>
+                  <WatchlistRow
+                    sym={sym}
+                    tick={prices()[sym]}
+                    prevClose={prevCloseFor(sym)}
+                    active={store.symbol === sym}
+                    alerted={alertedSymbols().has(sym.toUpperCase())}
+                    expanded={expandedSyms().has(sym.toUpperCase())}
+                    moreOpen={symbolActions() === sym}
+                    cols={cols}
+                    onSelect={(s) => void select(s)}
+                    onAlert={openAlert}
+                    onExpand={toggleExpanded}
+                    onMore={toggleSymbolActions}
+                  />
+                  <Show when={symbolActions() === sym}>
+                    <div
+                      class="axis-wl-sym-actions"
+                      data-testid={`axis-watchlist-sym-actions-${sym}`}
+                    >
+                      <button
+                        type="button"
+                        disabled={index() === 0}
+                        title="Move up"
+                        onClick={() => onMoveSymbol(sym, -1)}
+                      >
+                        <Icons.chevronUp size={10} /> Up
+                      </button>
+                      <button
+                        type="button"
+                        disabled={index() === store.watchlist.symbols.length - 1}
+                        title="Move down"
+                        onClick={() => onMoveSymbol(sym, 1)}
+                      >
+                        <Icons.chevronDown size={10} /> Down
+                      </button>
+                      <select
+                        class="axis-wl-move-select"
+                        aria-label={`Move ${sym} to another watchlist`}
+                        value=""
+                        onChange={(e) => {
+                          const target = e.currentTarget.value;
+                          e.currentTarget.value = '';
+                          if (target) onMoveSymbolToList(sym, target);
+                        }}
+                      >
+                        <option value="">Move to…</option>
+                        <For each={lists().filter((l) => l.id !== activeList()?.id)}>
+                          {(list) => <option value={list.id}>{list.name}</option>}
+                        </For>
+                      </select>
+                      <button
+                        type="button"
+                        title="Copy symbol"
+                        onClick={() => void onCopySymbol(sym)}
+                      >
+                        <Icons.copy size={10} /> Copy
+                      </button>
+                      <button
+                        type="button"
+                        class="is-danger"
+                        title="Remove from this watchlist"
+                        onClick={() => onRemoveSymbol(sym)}
+                      >
+                        <Icons.trash size={10} /> Remove
+                      </button>
+                    </div>
+                  </Show>
+                </>
               )}
             </For>
           </Show>

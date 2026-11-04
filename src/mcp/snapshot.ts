@@ -15,7 +15,12 @@ import { store, loadEditorDoc, listRunResultOptions } from '../store';
 import { getPanelChrome, isPanelOpen } from '../store';
 import { PANEL_IDS } from '../ui/panels/panel-manager';
 import { registry } from '../plugins/registry';
-import { getActiveEngineId, getActiveSourceId, getActiveStorageId, getActiveStreamId } from '../plugins/active';
+import {
+  getActiveEngineId,
+  getActiveSourceId,
+  getActiveStorageId,
+  getActiveStreamId,
+} from '../plugins/active';
 import { loadAlerts } from '../alerts';
 
 const SECRET_KEY = /(apiKey|secret|passphrase|token|password|authorization|cookie)/i;
@@ -86,7 +91,8 @@ function lastRunSummary(raw: unknown): unknown {
   if (!raw || typeof raw !== 'object') return raw;
   const r = raw as Record<string, unknown>;
   const plots = r.plots;
-  const plotKeys = plots && typeof plots === 'object' ? Object.keys(plots as object).slice(0, 40) : [];
+  const plotKeys =
+    plots && typeof plots === 'object' ? Object.keys(plots as object).slice(0, 40) : [];
   return {
     ok: r.ok ?? r.status ?? null,
     error: r.error ?? r.message ?? null,
@@ -178,11 +184,20 @@ export function buildAppSnapshot(opts: { includeBars?: boolean } = {}): Record<s
       dataset: store.activePlugins?.dataset || '',
     },
     chartLayout: store.chartLayout
-      ? { mode: store.chartLayout.mode, activeId: store.chartLayout.activeId, slotCount: store.chartLayout.slots?.length }
+      ? {
+          mode: store.chartLayout.mode,
+          activeId: store.chartLayout.activeId,
+          slotCount: store.chartLayout.slots?.length,
+        }
       : null,
     chartTheme: store.chartTheme ? { presetId: store.chartTheme.presetId } : null,
     scripts,
-    panes: (store.panes || []).map((p) => ({ id: p.id, type: p.type, visible: p.visible, height: p.height })),
+    panes: (store.panes || []).map((p) => ({
+      id: p.id,
+      type: p.type,
+      visible: p.visible,
+      height: p.height,
+    })),
     editor: {
       open: store.editor?.open ?? false,
       mode: store.editor?.mode ?? 'docked',
@@ -193,7 +208,17 @@ export function buildAppSnapshot(opts: { includeBars?: boolean } = {}): Record<s
       open: store.watchlist?.open ?? false,
       activeId: store.watchlist?.activeId,
       symbols: [...(store.watchlist?.symbols || [])],
-      lists: (store.watchlist?.lists || []).map((l) => ({ id: l.id, name: l.name, count: l.symbols.length })),
+      folders: (store.watchlist?.folders || []).map((f) => ({
+        id: f.id,
+        name: f.name,
+        collapsed: !!f.collapsed,
+      })),
+      lists: (store.watchlist?.lists || []).map((l) => ({
+        id: l.id,
+        name: l.name,
+        count: l.symbols.length,
+        folderId: l.folderId ?? null,
+      })),
     },
     drawings: {
       count: store.drawings?.length ?? 0,
