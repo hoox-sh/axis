@@ -211,6 +211,27 @@ describe('Pine drawings with xloc.bar_index', () => {
     expect(out[0]?.t2).toBe(engineWindow[7]!.time);
   });
 
+  it('converts polyline vertices through the run axis', () => {
+    const out = normalizeScriptDrawings(
+      [
+        {
+          type: 'polyline',
+          points: [
+            { time: 2, price: 101 },
+            { time: 7, price: 104 },
+          ],
+        },
+      ],
+      lastBar,
+      axis,
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0]?.points?.map((p) => p.time)).toEqual([
+      engineWindow[2]!.time,
+      engineWindow[7]!.time,
+    ]);
+  });
+
   it('keeps legacy index anchors when no axis is stamped', () => {
     const out = normalizeScriptDrawings(
       [{ type: 'line', x1: 2, y1: 101, x2: 7, y2: 104 }],

@@ -772,8 +772,10 @@ export function normalizeScriptDrawings(
     // Polylines often only carry `points` (API) or `arg0` (compile fallback) —
     // handle before t1/p1 gate.
     if (type === 'polyline') {
+      // Vertices go through the same run-axis conversion as t1/t2: compile-mode
+      // polylines carry `x`/`index` (window-relative) rather than a time.
       const points = parsePolylinePoints(r.points ?? r.arg0 ?? r.pts).map((p) => ({
-        time: alignDrawingTimeToBars(p.time, barSample),
+        time: align(p.time) ?? p.time,
         price: p.price,
       }));
       if (points.length < 2) continue;
