@@ -2560,8 +2560,10 @@ export class PaneManager {
     const keys: string[] = [];
     if (ownerId) keys.push(makeOverlayLineKey(plotName, ownerId));
     keys.push(`overlay_${plotName}`);
-    const apply = (series: ISeriesApi<any>) => {
-      const kind = this.overlaySeriesKinds.get(`${paneId}:${keys[0]}`) ?? null;
+    const apply = (series: ISeriesApi<any>, key: string) => {
+      // Resolve the kind for the key actually applied: the fallback loop can
+      // touch an owner-scoped series whose key is not `keys[0]`.
+      const kind = this.overlaySeriesKinds.get(`${paneId}:${key}`) ?? null;
       // Histograms / columns / markers do not take a line style.
       if (kind && (isHistogramSeriesKind(kind) || isPointMarkerSeriesKind(kind))) return;
       try {
@@ -2573,13 +2575,13 @@ export class PaneManager {
     };
     for (const key of keys) {
       const series = pane.series[key];
-      if (series) apply(series);
+      if (series) apply(series, key);
     }
     if (!ok) {
       const suffix = `__${plotName}`;
       for (const [key, series] of Object.entries(pane.series)) {
         if (!series || !key.startsWith('overlay_') || !key.endsWith(suffix)) continue;
-        apply(series);
+        apply(series, key);
       }
     }
     return ok;
@@ -2590,12 +2592,17 @@ export class PaneManager {
    *
    * Mirrors {@link plotLabelOptions}: pane bit → series visibility,
    * price_scale → last-value label, status_line → series title.
+   *
+   * `plotVisible` is the plot's eye toggle (`plots[name].visible`): an
+   * eye-hidden plot must stay hidden, so the pane bit can only hide, never
+   * re-show it.
    */
   setOverlayLineDisplay(
     paneId: string,
     plotName: string,
     display: number,
     ownerId?: string,
+    plotVisible = true,
   ): boolean {
     const pane = this.panes.get(paneId);
     if (!pane) return false;
@@ -2607,7 +2614,7 @@ export class PaneManager {
     const apply = (series: ISeriesApi<any>) => {
       try {
         series.applyOptions({
-          visible: (bits & PLOT_DISPLAY.pane) !== 0,
+          visible: plotVisible !== false && (bits & PLOT_DISPLAY.pane) !== 0,
           lastValueVisible:
             this.lastValueLabelsVisible &&
             (bits & PLOT_DISPLAY.price_scale) === PLOT_DISPLAY.price_scale,

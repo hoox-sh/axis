@@ -331,6 +331,8 @@ export const IndicatorCard: Component<Props> = (props) => {
       props.indicator.paneId,
       plotName,
       next != null ? next : effectivePlotDisplay({ ...plot, display: undefined }),
+      undefined,
+      plot.visible !== false,
     );
   };
 

@@ -14,6 +14,7 @@ import { installLightweightChartsMock } from './helpers/mock-lwc';
 import { _resetSyncSampleForTests } from '../src/chart/v1/invariants';
 import { setStore, store } from '../src/store';
 import { PANE_RESIZE_LAYOUT } from '../src/chart/series-factory';
+import { PLOT_DISPLAY } from '../src/results/plot-visuals';
 
 beforeAll(() => {
   installLightweightChartsMock();
@@ -975,6 +976,51 @@ describe('PaneManager', () => {
     expect(pm.setOverlayLineColor('price', 'Fast', '#00ff00', 's1')).toBe(true);
     expect(applied).toEqual({ color: '#00ff00' });
     expect(pm.setOverlayLineColor('price', 'Missing', '#fff')).toBe(false);
+  });
+
+  it('setOverlayLineDisplay never re-shows an eye-hidden plot', () => {
+    const p = pm.createPane('price', 'price', 'Price');
+    let applied: Record<string, unknown> | undefined;
+    p.series['overlay_s1__Fast'] = {
+      applyOptions: (o: Record<string, unknown>) => {
+        applied = o;
+      },
+    } as never;
+    const bits = PLOT_DISPLAY.pane | PLOT_DISPLAY.price_scale;
+
+    expect(pm.setOverlayLineDisplay('price', 'Fast', bits, undefined, false)).toBe(true);
+    expect(applied?.visible).toBe(false);
+
+    expect(pm.setOverlayLineDisplay('price', 'Fast', bits, undefined, true)).toBe(true);
+    expect(applied?.visible).toBe(true);
+
+    // Pane bit off hides regardless of the eye toggle.
+    expect(
+      pm.setOverlayLineDisplay('price', 'Fast', PLOT_DISPLAY.price_scale, undefined, true),
+    ).toBe(true);
+    expect(applied?.visible).toBe(false);
+  });
+
+  it('setOverlayLineStyle skips histogram series for owner-scoped keys', () => {
+    const p = pm.createPane('price', 'price', 'Price');
+    const applied: Array<Record<string, unknown>> = [];
+    p.series['overlay_s1__Vol'] = {
+      applyOptions: (o: Record<string, unknown>) => {
+        applied.push(o);
+      },
+    } as never;
+    const kinds = (
+      pm as unknown as { overlaySeriesKinds: Map<string, string> }
+    ).overlaySeriesKinds;
+
+    kinds.set('price:overlay_s1__Vol', 'histogram');
+    expect(pm.setOverlayLineStyle('price', 'Vol', 'dashed')).toBe(false);
+    expect(applied).toHaveLength(0);
+
+    kinds.set('price:overlay_s1__Vol', 'line');
+    expect(pm.setOverlayLineStyle('price', 'Vol', 'dashed')).toBe(true);
+    expect(applied).toHaveLength(1);
+    expect(applied[0]?.lineStyle).toBeDefined();
   });
 
   it('applyBarColors maps through Heikin-Ashi and honors replay prefix', async () => {
