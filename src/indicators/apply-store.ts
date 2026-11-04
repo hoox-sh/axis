@@ -286,12 +286,16 @@ export function updateIndicatorStore(ctx: StoreUpdateContext): boolean {
           // so a reapply can't wipe script colors to the palette.
           const resolvedColor = resolvePineColor(meta?.color);
           const pine = pinePlotMeta(meta);
-          plots[k] = {
+          const nextPlot = {
             ...plots[k],
             ...(resolvedColor != null ? { color: resolvedColor } : {}),
-            // Refresh the declared style; panel overrides live beside it.
-            ...(pine ? { pine } : {}),
           };
+          // Refresh the declared style; panel overrides live beside it. A run
+          // that declares nothing clears the previous declaration, otherwise the
+          // panel keeps showing a style the script no longer has.
+          if (pine) nextPlot.pine = pine;
+          else delete nextPlot.pine;
+          plots[k] = nextPlot;
           colorIdx += 1;
         }
       }
