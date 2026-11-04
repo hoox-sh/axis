@@ -468,50 +468,71 @@ export const OnChainPanel: Component = () => {
     setEventsMsg('Cleared spike events.');
   };
 
-  const modeTab = (id: PanelMode, label: string) => (
+  const modeTab = (id: PanelMode, label: string, count?: number) => (
     <button
       type="button"
       role="tab"
       aria-selected={mode() === id}
-      class={`sc-chip ${mode() === id ? 'is-active' : ''}`}
+      class="ax-oc-tab"
+      classList={{ 'is-active': mode() === id }}
       onClick={() => setMode(id)}
       data-testid={`axis-onchain-mode-${id}`}
     >
       {label}
+      <Show when={count != null}>
+        <span class="ax-oc-tab-count">{count}</span>
+      </Show>
     </button>
   );
 
   return (
     <Show when={isPanelOpen('onchain')}>
       <FloatableShell id="onchain" testId="axis-onchain">
-        <div class="flex-1 overflow-y-auto min-h-0 flex flex-col gap-2 text-[12px]">
-          <p class="text-muted m-0 leading-snug">
-            On-chain data plane: <strong>TVL</strong> overlays, <strong>DEX</strong> pool OHLCV on
-            the main chart, and <strong>Events</strong> from attached series. Protocol TVL is{' '}
-            <strong>not</strong> CEX price.
-          </p>
-
-          <div
-            class="sc-chip-row"
-            role="tablist"
-            aria-label="On-chain modes"
-            data-testid="axis-onchain-modes"
-          >
-            {modeTab('tvl', 'TVL')}
-            {modeTab('dex', 'DEX')}
-            {modeTab('events', 'Events')}
+        <div class="ax-oc flex flex-col flex-1 min-h-0">
+          <div class="ax-oc-head">
+            <div class="ax-oc-head-row">
+              <span class="ax-oc-kicker">On-chain</span>
+              <span class="ax-oc-summary" data-testid="axis-onchain-summary">
+                <span>{onchainManagerState.series.length} series</span>
+                <span>{eventCount()} events</span>
+              </span>
+              <span class="ax-oc-spacer" />
+              <span
+                class="ax-oc-path-chip"
+                classList={{ 'is-worker': llamaPath().via === 'worker' }}
+                title={llamaPath().base}
+              >
+                {llamaPath().via === 'worker' ? 'worker' : 'direct'}
+              </span>
+            </div>
+            <div
+              class="ax-oc-tabs"
+              role="tablist"
+              aria-label="On-chain modes"
+              data-testid="axis-onchain-modes"
+            >
+              {modeTab('tvl', 'TVL', onchainManagerState.series.length)}
+              {modeTab('dex', 'DEX')}
+              {modeTab('events', 'Events', eventCount())}
+            </div>
+            <p class="ax-oc-note">
+              Protocol TVL is <strong>not</strong> CEX price. DEX mode loads pool OHLCV onto the
+              main chart.
+            </p>
           </div>
+
+          <div class="ax-oc-scroll">
 
           {/* ═══════════════ TVL ═══════════════ */}
           <Show when={mode() === 'tvl'}>
             <div
               role="tabpanel"
               aria-label="Protocol TVL"
-              class="flex flex-col gap-2"
+              class="ax-oc-panel"
               data-testid="axis-onchain-panel-tvl"
             >
               <p
-                class="text-muted m-0 text-[0.72rem] leading-snug break-all"
+                class="ax-oc-pathline"
                 data-testid="axis-onchain-datapath"
                 title={llamaPath().base}
               >
@@ -526,9 +547,9 @@ export const OnChainPanel: Component = () => {
                 <code class="text-[0.7rem] opacity-80">{llamaPath().base}</code>
               </p>
 
-              <div class="flex flex-col gap-1.5" data-testid="axis-onchain-popular">
+              <div class="ax-oc-block" data-testid="axis-onchain-popular">
                 <div class="flex items-center justify-between gap-2">
-                  <span class="text-muted text-[0.72rem] uppercase tracking-wide">Popular</span>
+                  <span class="ax-oc-label">Popular</span>
                   <button
                     type="button"
                     class="sc-btn sc-btn-ghost sc-btn-sm"
@@ -573,8 +594,8 @@ export const OnChainPanel: Component = () => {
                 </div>
               </div>
 
-              <label class="flex flex-col gap-0.5" data-testid="axis-onchain-search">
-                <span class="text-muted text-[0.72rem] uppercase tracking-wide">
+              <label class="ax-oc-field" data-testid="axis-onchain-search">
+                <span class="ax-oc-label">
                   Search protocols
                 </span>
                 <input
@@ -632,7 +653,7 @@ export const OnChainPanel: Component = () => {
                 }
               >
                 <div class="flex flex-col gap-1" data-testid="axis-onchain-results">
-                  <div class="text-muted text-[0.72rem] uppercase tracking-wide">Results</div>
+                  <div class="ax-oc-label">Results</div>
                   <For each={onchainManagerState.searchResults}>
                     {(hit) => {
                       const attached = () =>
@@ -642,7 +663,7 @@ export const OnChainPanel: Component = () => {
                       return (
                         <button
                           type="button"
-                          class="axis-list-row sc-btn sc-btn-ghost w-full justify-start text-left h-8 px-2 rounded"
+                          class="ax-oc-result"
                           disabled={attached() || attachingSlug() === hit.slug}
                           onClick={() => void onAttach(hit)}
                           data-testid={`axis-onchain-result-${hit.slug}`}
@@ -668,9 +689,9 @@ export const OnChainPanel: Component = () => {
                 </div>
               </Show>
 
-              <div class="flex flex-col gap-2" data-testid="axis-onchain-series">
+              <div class="ax-oc-block" data-testid="axis-onchain-series">
                 <div class="flex items-center justify-between gap-2 flex-wrap">
-                  <div class="text-muted text-[0.72rem] uppercase tracking-wide">
+                  <div class="ax-oc-label">
                     Attached series
                   </div>
                   <div class="flex items-center gap-1 flex-wrap">
@@ -716,7 +737,7 @@ export const OnChainPanel: Component = () => {
                   <For each={onchainManagerState.series}>
                     {(s) => (
                       <div
-                        class="axis-list-row flex items-center gap-1.5 h-8 px-1 border-b border-border-soft"
+                        class="ax-oc-series-row"
                         data-testid={`axis-onchain-series-${s.id}`}
                         title={[
                           s.provenance?.provider
@@ -730,7 +751,7 @@ export const OnChainPanel: Component = () => {
                           .join(' · ')}
                       >
                         <label
-                          class="sc-btn sc-btn-ghost px-1 shrink-0 cursor-pointer"
+                          class="ax-oc-eye"
                           title={s.visible ? 'Hide series' : 'Show series'}
                         >
                           <input
@@ -740,34 +761,38 @@ export const OnChainPanel: Component = () => {
                             onChange={(e) => setOnchainSeriesVisible(s.id, e.currentTarget.checked)}
                             data-testid={`axis-onchain-visible-${s.id}`}
                           />
-                          {s.visible ? <Icons.eye size={14} /> : <Icons.eyeOff size={14} />}
+                          {s.visible ? <Icons.eye size={12} /> : <Icons.eyeOff size={12} />}
                         </label>
-                        <div class="min-w-0 flex-1">
-                          <div class="font-medium truncate text-[12px] leading-tight">
+                        <span
+                          class="ax-oc-swatch"
+                          style={{ background: s.color }}
+                          aria-hidden="true"
+                        />
+                        <div class="ax-oc-series-main">
+                          <div class="ax-oc-series-label" title={s.label}>
                             {s.label}
                           </div>
-                          <div class="text-text-faint text-[10px] truncate">
+                          <div class="ax-oc-series-sub">
                             {s.provider}
+                            {s.points?.length ? ` · ${s.points.length} pts` : ''}
                             {s.lastTvl != null ? ` · ${fmtUsd(s.lastTvl)}` : ''}
                             {s.loading ? ' · loading…' : ''}
                           </div>
                         </div>
                         <Show when={s.error}>
-                          <span
-                            class="text-red text-[10px] truncate max-w-[7rem]"
-                            title={s.error ?? undefined}
-                          >
+                          <span class="ax-oc-error" title={s.error ?? undefined}>
                             {s.error}
                           </span>
                         </Show>
                         <button
                           type="button"
-                          class="sc-btn sc-btn-ghost px-1 shrink-0"
+                          class="ax-oc-icon is-danger"
                           onClick={() => detachOnchainSeries(s.id)}
                           title="Detach series"
+                          aria-label={`Detach ${s.label}`}
                           data-testid={`axis-onchain-detach-${s.id}`}
                         >
-                          <Icons.x size={14} />
+                          <Icons.x size={12} />
                         </button>
                       </div>
                     )}
@@ -777,10 +802,10 @@ export const OnChainPanel: Component = () => {
 
               {/* TVL footer: export + jobs */}
               <div
-                class="border-t border-[var(--border)] pt-2 flex flex-col gap-2"
+                class="ax-oc-footer"
                 data-testid="axis-onchain-tvl-footer"
               >
-                <div class="flex flex-wrap gap-1" data-testid="axis-onchain-export">
+                <div class="ax-oc-actions" data-testid="axis-onchain-export">
                   <button
                     type="button"
                     class="sc-btn sc-btn-ghost sc-btn-sm"
@@ -804,15 +829,15 @@ export const OnChainPanel: Component = () => {
                 </div>
 
                 <Show when={onchainJobsState.jobs.length}>
-                  <div class="flex flex-col gap-1.5" data-testid="axis-onchain-jobs">
-                    <div class="text-muted text-[0.72rem] uppercase tracking-wide">Jobs</div>
+                  <div class="ax-oc-block" data-testid="axis-onchain-jobs">
+                    <div class="ax-oc-label">Jobs</div>
                     <For each={onchainJobsState.jobs}>
                       {(job) => {
                         const pct = () =>
                           Math.round(Math.max(0, Math.min(1, Number(job.progress) || 0)) * 100);
                         return (
                           <div
-                            class="border border-[var(--border)] rounded px-2 py-1.5 flex flex-col gap-1"
+                            class="ax-oc-job"
                             data-testid={`axis-onchain-job-${job.id}`}
                             data-status={job.status}
                           >
@@ -867,7 +892,7 @@ export const OnChainPanel: Component = () => {
             <div
               role="tabpanel"
               aria-label="DEX pool OHLCV"
-              class="flex flex-col gap-2"
+              class="ax-oc-panel"
               data-testid="axis-onchain-panel-dex"
             >
               <p class="text-muted m-0 leading-snug">
@@ -877,7 +902,7 @@ export const OnChainPanel: Component = () => {
               </p>
 
               <p
-                class="text-muted m-0 text-[0.72rem] leading-snug break-all"
+                class="ax-oc-pathline"
                 data-testid="axis-onchain-datapath-gecko"
                 title={geckoPath().base}
               >
@@ -902,8 +927,8 @@ export const OnChainPanel: Component = () => {
                 </div>
               </Show>
 
-              <label class="flex flex-col gap-0.5" data-testid="axis-onchain-dex-network">
-                <span class="text-muted text-[0.72rem] uppercase tracking-wide">Network</span>
+              <label class="ax-oc-field" data-testid="axis-onchain-dex-network">
+                <span class="ax-oc-label">Network</span>
                 <select
                   class="sc-input"
                   value={dexNetwork()}
@@ -914,8 +939,8 @@ export const OnChainPanel: Component = () => {
                 </select>
               </label>
 
-              <label class="flex flex-col gap-0.5" data-testid="axis-onchain-dex-pool">
-                <span class="text-muted text-[0.72rem] uppercase tracking-wide">Pool address</span>
+              <label class="ax-oc-field" data-testid="axis-onchain-dex-pool">
+                <span class="ax-oc-label">Pool address</span>
                 <input
                   type="text"
                   class="sc-input font-mono text-[0.78rem]"
@@ -964,8 +989,8 @@ export const OnChainPanel: Component = () => {
               </Show>
 
               <div class="border-t border-[var(--border)] pt-2 flex flex-col gap-2">
-                <label class="flex flex-col gap-0.5" data-testid="axis-onchain-dex-search">
-                  <span class="text-muted text-[0.72rem] uppercase tracking-wide">
+                <label class="ax-oc-field" data-testid="axis-onchain-dex-search">
+                  <span class="ax-oc-label">
                     Search pools
                   </span>
                   <input
@@ -1008,14 +1033,14 @@ export const OnChainPanel: Component = () => {
                   }
                 >
                   <div class="flex flex-col gap-1" data-testid="axis-onchain-dex-results">
-                    <div class="text-muted text-[0.72rem] uppercase tracking-wide">
+                    <div class="ax-oc-label">
                       Pool results
                     </div>
                     <For each={poolResults()}>
                       {(hit) => (
                         <button
                           type="button"
-                          class="axis-list-row sc-btn sc-btn-ghost w-full justify-start text-left h-8 px-2 rounded"
+                          class="ax-oc-result"
                           onClick={() => pickPool(hit)}
                           data-testid={`axis-onchain-dex-result-${hit.address}`}
                           title={`Use pool ${hit.address}`}
@@ -1049,7 +1074,7 @@ export const OnChainPanel: Component = () => {
             <div
               role="tabpanel"
               aria-label="On-chain events"
-              class="flex flex-col gap-2"
+              class="ax-oc-panel"
               data-testid="axis-onchain-panel-events"
             >
               <p class="text-muted m-0 leading-snug">
@@ -1106,7 +1131,7 @@ export const OnChainPanel: Component = () => {
               </Show>
 
               <div class="flex flex-col gap-2" data-testid="axis-onchain-events-series">
-                <div class="text-muted text-[0.72rem] uppercase tracking-wide">
+                <div class="ax-oc-label">
                   Attached TVL series
                 </div>
                 <Show
@@ -1123,19 +1148,26 @@ export const OnChainPanel: Component = () => {
                   <For each={onchainManagerState.series}>
                     {(s) => (
                       <div
-                        class="axis-list-row flex items-center gap-1.5 h-8 px-1 border-b border-border-soft"
+                        class="ax-oc-series-row"
                         data-testid={`axis-onchain-events-series-${s.id}`}
                       >
-                        <div class="min-w-0 flex-1">
-                          <div class="font-medium truncate text-[12px]">{s.label}</div>
-                          <div class="text-text-faint text-[10px] truncate">
+                        <span
+                          class="ax-oc-swatch"
+                          style={{ background: s.color }}
+                          aria-hidden="true"
+                        />
+                        <div class="ax-oc-series-main">
+                          <div class="ax-oc-series-label" title={s.label}>
+                            {s.label}
+                          </div>
+                          <div class="ax-oc-series-sub">
                             {s.points?.length ? `${s.points.length} points` : 'no points yet'}
                             {s.lastTvl != null ? ` · ${fmtUsd(s.lastTvl)}` : ''}
                           </div>
                         </div>
                         <button
                           type="button"
-                          class="sc-btn sc-btn-ghost px-1 shrink-0"
+                          class="ax-oc-icon"
                           disabled={
                             !!s.loading ||
                             spikeBusyId() === s.id ||
@@ -1145,6 +1177,7 @@ export const OnChainPanel: Component = () => {
                           onClick={() => void onShowSpikes(s.id, s.label)}
                           data-testid={`axis-onchain-show-spikes-${s.id}`}
                           title="Detect ≥10% day-over-day TVL spikes"
+                          aria-label={`Show spikes for ${s.label}`}
                         >
                           <Show
                             when={spikeBusyId() === s.id}
@@ -1160,7 +1193,7 @@ export const OnChainPanel: Component = () => {
               </div>
 
               <div class="flex flex-col gap-1" data-testid="axis-onchain-events-list">
-                <div class="text-muted text-[0.72rem] uppercase tracking-wide">Event list</div>
+                <div class="ax-oc-label">Event list</div>
                 <Show
                   when={onchainManagerState.events.length}
                   fallback={
@@ -1181,7 +1214,8 @@ export const OnChainPanel: Component = () => {
                           (ev.payload.pctChange as number) < 0);
                       return (
                         <div
-                          class="border border-[var(--border)] rounded px-2 py-1.5 flex flex-col gap-0.5"
+                          class="ax-oc-event"
+                          classList={{ 'is-drop': isDrop() }}
                           data-testid={`axis-onchain-event-${ev.time}-${ev.type}`}
                         >
                           <div class="flex items-center justify-between gap-2">
@@ -1211,6 +1245,7 @@ export const OnChainPanel: Component = () => {
               </div>
             </div>
           </Show>
+          </div>
         </div>
       </FloatableShell>
     </Show>
