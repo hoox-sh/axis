@@ -956,6 +956,10 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
         config: config ?? {},
         barsGen: barGen,
         barsLength: windowBars.length,
+        // Anchored appends do not bump `barGen` and the engine depth is chunked,
+        // so the window edges are what tell a cached run from a newer slice.
+        barsFirst: windowBars[0]?.time ?? 0,
+        barsLast: windowBars[windowBars.length - 1]?.time ?? 0,
         librariesKey: fingerprintValue(
           (engineLibraries ?? []).map((l) => `${l.namespace}/${l.name}/${l.version}`),
         ),

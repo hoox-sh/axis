@@ -142,8 +142,11 @@ export function fingerprintValue(v: unknown): string {
 /**
  * Build a cache key for the resolved run request.
  *
- * The key intentionally excludes the full bar array contents; generation
- * counters and bar length are enough to invalidate after any data change.
+ * The key intentionally excludes the full bar array contents. Generation
+ * counters + length alone are **not** enough anymore: the anchored live
+ * window appends without bumping `barPlane.gen`, and the engine depth is
+ * chunked in 100-bar steps, so both stay constant for many bars. The window's
+ * first / last bar time pin the actual slice without hashing the array.
  */
 export function buildRunCacheKey(input: {
   engineId: string;
@@ -154,6 +157,10 @@ export function buildRunCacheKey(input: {
   config: Record<string, unknown>;
   barsGen: number;
   barsLength: number;
+  /** Oldest bar time in the evaluated window (unix seconds). */
+  barsFirst?: number;
+  /** Newest bar time in the evaluated window (unix seconds). */
+  barsLast?: number;
   librariesKey?: string;
   isolate?: boolean;
   liveTick?: boolean;
@@ -167,6 +174,8 @@ export function buildRunCacheKey(input: {
     hashString(fingerprintValue(input.config)).toString(36),
     input.barsGen.toString(),
     input.barsLength.toString(),
+    String(input.barsFirst ?? ''),
+    String(input.barsLast ?? ''),
     input.librariesKey ?? '',
     input.isolate ? '1' : '0',
     input.liveTick ? '1' : '0',
