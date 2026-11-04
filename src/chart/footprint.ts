@@ -239,6 +239,47 @@ export function approximateFootprintFromOhlcv(
   };
 }
 
+/**
+ * Cache key for one painted footprint bar.
+ *
+ * The key must cover everything that changes the cells, not just geometry:
+ * the buy/sell split follows where the candle closed inside its range and
+ * the row volumes follow `volume`, so a forming bar whose volume grows
+ * without a ≥1 px price move must still rebuild. Rounded pixel anchors keep
+ * closed bars reusable across polls.
+ */
+export function footprintLayoutKey(
+  bar: {
+    time: number;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume?: number;
+  },
+  geom: {
+    numTicks: number;
+    xCenter: number;
+    barWidth: number;
+    yHigh: number;
+    yLow: number;
+  },
+): string {
+  return [
+    bar.time,
+    geom.numTicks,
+    Math.round(geom.xCenter),
+    Math.round(geom.barWidth),
+    Math.round(geom.yHigh),
+    Math.round(geom.yLow),
+    bar.open,
+    bar.high,
+    bar.low,
+    bar.close,
+    bar.volume ?? 0,
+  ].join('|');
+}
+
 /** Float32 layout per row: down, up, buy, sell (4 floats). Flags in a parallel Uint8. */
 const FLOATS_PER_ROW = 4;
 

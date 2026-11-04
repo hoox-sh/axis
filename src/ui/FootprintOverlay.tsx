@@ -45,6 +45,7 @@ import { barIndexRangeForTimeWindow } from '../chart/heavy-data';
 import {
   approximateFootprintFromOhlcv,
   footprintEnabled,
+  footprintLayoutKey,
   footprintPaintCells,
   numTicksForPixelHeight,
 } from '../chart/footprint';
@@ -298,15 +299,25 @@ export const FootprintOverlay: Component = () => {
       const widthCap = barWidth < 5 ? 8 : barWidth < 8 ? 12 : 24;
       const numTicks = numTicksForPixelHeight(bodyPx, { min: 3, max: widthCap });
 
-      // Cache key: bar identity + the only inputs that change geometry.
-      const key = [
-        bar.time,
-        numTicks,
-        Math.round(xCenter),
-        Math.round(barWidth),
-        Math.round(priceToY(Number(bar.high))),
-        Math.round(priceToY(Number(bar.low))),
-      ].join('|');
+      // Cache key: bar identity + geometry + OHLCV (the split and row
+      // volumes change with the print even when the pixels do not).
+      const key = footprintLayoutKey(
+        {
+          time: bar.time,
+          open: bar.open,
+          high: bar.high,
+          low: bar.low,
+          close: bar.close,
+          volume: bar.volume,
+        },
+        {
+          numTicks,
+          xCenter,
+          barWidth,
+          yHigh: priceToY(Number(bar.high)),
+          yLow: priceToY(Number(bar.low)),
+        },
+      );
       const cached = barCache.get(key);
       if (cached) {
         painted.push(cached);

@@ -5,6 +5,7 @@ import { describe, expect, it } from 'bun:test';
 import {
   approximateFootprintFromOhlcv,
   footprintEnabled,
+  footprintLayoutKey,
   footprintPaintCells,
   numTicksForPixelHeight,
   packFootprintRows,
@@ -188,6 +189,33 @@ describe('footprintPaintCells', () => {
       expect(cells[i]!.y).toBeLessThanOrEqual(cells[i - 1]!.y);
     }
     expect(cells.filter((c) => c.poc)).toHaveLength(1);
+  });
+});
+
+describe('footprintLayoutKey', () => {
+  const geom = { numTicks: 24, xCenter: 100, barWidth: 6, yHigh: 20, yLow: 80 };
+  const bar = { time: 1_700_000_000, open: 100, high: 102, low: 99, close: 101, volume: 10 };
+
+  it('changes when volume changes with identical geometry', () => {
+    const a = footprintLayoutKey(bar, geom);
+    const b = footprintLayoutKey({ ...bar, volume: 11 }, geom);
+    expect(a).not.toBe(b);
+  });
+
+  it('changes when the print moves inside the same pixel range', () => {
+    const a = footprintLayoutKey(bar, geom);
+    const b = footprintLayoutKey({ ...bar, close: 101.5 }, geom);
+    expect(a).not.toBe(b);
+  });
+
+  it('reuses the key for an unchanged bar', () => {
+    expect(footprintLayoutKey(bar, geom)).toBe(footprintLayoutKey({ ...bar }, geom));
+  });
+
+  it('still keys on geometry', () => {
+    const a = footprintLayoutKey(bar, geom);
+    expect(a).not.toBe(footprintLayoutKey(bar, { ...geom, xCenter: 104 }));
+    expect(a).not.toBe(footprintLayoutKey(bar, { ...geom, numTicks: 12 }));
   });
 });
 

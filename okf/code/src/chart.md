@@ -7,7 +7,7 @@ tags: [chart, code]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-03T21:39:14Z
+  at: 2026-11-04T06:12:23Z
 sources:
   - id: tree
     resource: "src/chart"
@@ -34,7 +34,7 @@ okf_lock: generated
 * `drawing-layer.ts` — DrawingChangeHandler, DrawingLayer, SelectionChangeHandler, StylePrefs, ToolChangeHandler, fibPrices, fillBandRunBounds, getActiveDrawingLayer, linefillQuadCorners, plotFillsSignature, shiftDrawing
 * `drawing-types.ts` — DRAWING_COLORS, Drawing, DrawingBase, DrawingKind, DrawingLineStyle, DrawingToolId, FIB_EXT_LEVELS, FIB_LEVELS, HLineDrawing, MultiPointDrawing, Point, TextDrawing
 * `engine-bind.ts` — BindChartEngineResult, bindChartEngineForGeneration
-* `footprint.ts` — FootprintApproxOpts, FootprintBar, FootprintRow, approximateFootprintFromOhlcv, footprintEnabled, footprintPaintCells, numTicksForPixelHeight, packFootprintRows, setFootprintEnabled, toggleFootprintEnabled, unpackFootprintRows
+* `footprint.ts` — FootprintApproxOpts, FootprintBar, FootprintRow, approximateFootprintFromOhlcv, footprintEnabled, footprintLayoutKey, footprintPaintCells, numTicksForPixelHeight, packFootprintRows, setFootprintEnabled, toggleFootprintEnabled, unpackFootprintRows
 * `heavy-data.ts` — CONFLATION_BARS_THRESHOLD, HEAVY_BARS_THRESHOLD, MAX_CHART_MARKERS, VERY_HEAVY_BARS_THRESHOLD, barIndexAtTimeBinary, barIndexRangeForTimeWindow, capNewest, createRafCoalescer, heavyTimeScaleOptions, indexRangeForSortedTimes, isHeavyBarLoad, isVeryHeavyBarLoad
 * `hydrate-slots.ts` — _resetHydrateSlotsForTests, hydrateEmptyChartSlots
 * `keymap-actions.ts` — applyChartGrid, cancelDraft, deleteSelectedDrawing, panChartBy, resetChartZoom, selectDrawingTool, toggleCrosshair, toggleMagnet, zoomChartBy
