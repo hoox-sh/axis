@@ -103,6 +103,7 @@ import {
   moveWatchlistSymbolToList,
   sortWatchlistSymbols,
   clearWatchlistSymbols,
+  moveIndicator,
   saveEditorDoc,
   loadEditorDoc,
   setDrawingTool,
@@ -698,6 +699,23 @@ describe('layout helpers', () => {
     clearWatchlistSymbols();
     expect(store.watchlist.symbols).toEqual([]);
     expect(store.watchlist.lists.find((l) => l.id === 'wl-main')!.symbols).toEqual([]);
+  });
+
+  it('reorders applied scripts', () => {
+    const script = (id: string, name: string) => ({
+      id,
+      name,
+      code: `indicator("${name}")`,
+      paneId: 'price',
+      visible: true,
+      plots: {},
+    });
+    setStore('scripts', [script('a', 'A'), script('b', 'B'), script('c', 'C')]);
+    expect(moveIndicator('a', 1)).toBe(true);
+    expect(store.scripts.map((s) => s.id)).toEqual(['b', 'a', 'c']);
+    expect(moveIndicator('b', -1)).toBe(false);
+    expect(moveIndicator('missing', 1)).toBe(false);
+    expect(store.scripts.map((s) => s.id)).toEqual(['b', 'a', 'c']);
   });
 
   it('hydrates folders and drops invalid list folder ids', () => {

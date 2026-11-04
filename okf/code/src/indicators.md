@@ -7,7 +7,7 @@ tags: [code, indicators]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-03T23:34:06Z
+  at: 2026-11-04T14:55:09Z
 sources:
   - id: tree
     resource: "src/indicators"
@@ -37,6 +37,10 @@ okf_lock: generated
 * `runner.ts` — NormalizedRunResult, RunOptions, RunResult, StrategyPropsPrecedenceOpts, _resetOhlcvTimesCacheForTests, _resetRunCacheForTests, _resetRunEpochForTests, alignSeriesMapToTimes, alignSeriesToTimes, applyRollingWindow, beginRunEpoch, claimRunStatus
 * `script-meta.ts` — EngineFamily, LastRunStatus, LiveRerunOn, ScriptKind, activeChartContext, cycleLiveRerunOn, detectDeclaredOverlay, detectPineVersion, detectScriptKind, engineFamily, engineFamilyLabel, formatScriptUpdatedAt
 * `visibility.ts` — clearScriptChartOverlays, setScriptChartVisible, toggleScriptChartVisible
+
+# Other files
+
+* `scripts.css`
 
 # Packages
 

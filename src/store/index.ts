@@ -3606,6 +3606,25 @@ export function updateIndicator(
   if (found) persist();
 }
 
+/**
+ * Reorder an applied script in the Scripts panel (`-1` up, `1` down).
+ * The panel order is the user's stack order; panes keep their own ids.
+ */
+export function moveIndicator(id: string, delta: -1 | 1): boolean {
+  const list = store.scripts;
+  const i = list.findIndex((s) => s.id === id);
+  if (i < 0) return false;
+  const j = i + delta;
+  if (j < 0 || j >= list.length) return false;
+  const next = [...list];
+  const tmp = next[i]!;
+  next[i] = next[j]!;
+  next[j] = tmp;
+  setStore('scripts', next);
+  persist();
+  return true;
+}
+
 /** Remove an applied indicator from the store (caller should clear chart overlays). */
 export function removeIndicator(id: string) {
   setStore('scripts', (s) => s.filter((ind) => ind.id !== id));

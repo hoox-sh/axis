@@ -484,7 +484,7 @@ export const BuiltinScriptCard: Component<{
             title="Already on the chart — Apply re-runs it with fresh bars"
             data-testid="axis-library-builtin-applied"
           >
-            on chart
+            applied
           </span>
         </Show>
       </div>

@@ -49,6 +49,7 @@ import {
   store,
   setStore,
   setResultsFocusId,
+  moveIndicator,
   persist,
   setStatus,
 } from '../store';
@@ -73,7 +74,6 @@ import { PLOT_DISPLAY } from '../results/plot-visuals';
 import { Icons } from '../ui/icons';
 import { Spinner } from '../ui/Spinner';
 import {
-  activeChartContext,
   cycleLiveRerunOn,
   detectDeclaredOverlay,
   detectScriptKind,
@@ -85,6 +85,7 @@ import {
   liveRerunTitle,
   panePlacementLabel,
 } from './script-meta';
+import { copyToClipboard } from '../ui/clipboard';
 import { dismissOnOutside } from '../ui/dismiss-on-outside';
 
 interface Props {
@@ -222,16 +223,11 @@ export const IndicatorCard: Component<Props> = (props) => {
   /** Engine-owned stream runtime status — present only on the stream path. */
   const streamStatus = createMemo(() => store.live.scriptStatus?.[props.indicator.id]);
   const plotCount = createMemo(() => Object.keys(props.indicator.plots || {}).length);
-
-  const chartCtx = createMemo(() => {
-    const slots = store.chartLayout?.slots?.length ?? 1;
-    return activeChartContext({
-      symbol: store.symbol,
-      interval: store.interval,
-      slotCount: slots,
-      activeSlotId: store.chartLayout?.activeId,
-    });
-  });
+  const [moreOpen, setMoreOpen] = createSignal(false);
+  /** Controls stay open for small studies; long plot lists start compact. */
+  const [plotsOpen, setPlotsOpen] = createSignal(
+    Object.keys(props.indicator.plots || {}).length <= 2,
+  );
 
   const kindTitle = () => {
     switch (kind()) {
@@ -294,6 +290,20 @@ export const IndicatorCard: Component<Props> = (props) => {
   const focusResults = () => {
     setResultsFocusId(props.indicator.id);
     setStore('resultsPanel', 'open', true);
+  };
+
+  const scriptIndex = () => store.scripts.findIndex((s) => s.id === props.indicator.id);
+
+  const move = (delta: -1 | 1) => {
+    if (moveIndicator(props.indicator.id, delta)) {
+      setStatus('ready', delta < 0 ? 'Moved script up' : 'Moved script down');
+    }
+  };
+
+  const copyCode = async () => {
+    if (await copyToClipboard(props.indicator.code ?? '')) {
+      setStatus('ready', `Copied ${props.indicator.name} Pine`);
+    }
   };
 
   const changeColor = (plotName: string, color: string) => {
@@ -391,31 +401,26 @@ export const IndicatorCard: Component<Props> = (props) => {
 
   return (
     <div
-      class="bg-bg-elev border border-border-soft p-2 mb-2 rounded-[var(--radius-chip)] data-[hidden=true]:opacity-55"
+      class="ax-scripts-card"
+      classList={{ 'is-hidden': !props.indicator.visible }}
       data-testid="axis-indicator-card"
       data-hidden={!props.indicator.visible || undefined}
+      data-script-kind={kind()}
     >
-      {/* Title row */}
-      <div class="flex items-start justify-between gap-1 mb-1">
-        <div class="min-w-0 flex-1">
-          <div class="text-xs font-semibold text-text truncate" title={props.indicator.name}>
-            {props.indicator.name}
-          </div>
-          <div
-            class="text-[10px] text-text-faint font-mono truncate mt-0.5"
-            title={chartCtx().title}
-            data-testid="axis-indicator-chart-ctx"
-          >
-            {chartCtx().line}
-            <Show when={plotCount() > 0}>
-              <span class="text-text-dim">
-                {' '}
-                · {plotCount()} plot{plotCount() === 1 ? '' : 's'}
-              </span>
-            </Show>
-          </div>
-        </div>
-        <div class="flex items-center gap-0.5 flex-shrink-0">
+      <span class="ax-scripts-card-rail" aria-hidden="true" />
+      <div class="ax-scripts-card-head">
+        <button
+          type="button"
+          class={`ax-scripts-status is-${runStatus()}`}
+          title={`${lastRunStatusTitle(runStatus())} · click to open Results`}
+          aria-label={lastRunStatusTitle(runStatus())}
+          data-testid="axis-indicator-status"
+          onClick={focusResults}
+        />
+        <span class="ax-scripts-card-name" title={props.indicator.name}>
+          {props.indicator.name}
+        </span>
+        <div class="ax-scripts-card-actions">
           <button
             type="button"
             class={iconBtn}
@@ -453,16 +458,51 @@ export const IndicatorCard: Component<Props> = (props) => {
           </button>
           <button
             type="button"
-            class={`${iconBtn} hover:text-red`}
-            onClick={remove}
-            title="Remove script from chart"
-            aria-label="Remove"
-            data-testid="axis-indicator-remove"
+            class={iconBtn}
+            classList={{ 'text-accent': moreOpen() }}
+            onClick={() => setMoreOpen((v) => !v)}
+            title="More script actions"
+            aria-label="More script actions"
+            aria-expanded={moreOpen()}
+            data-testid="axis-indicator-more"
           >
-            <Icons.trash size={12} />
+            <Icons.menu size={12} />
           </button>
         </div>
       </div>
+      <div class="ax-scripts-card-sub" title={paneTitle()}>
+        {isPricePane(props.indicator) ? 'overlay' : 'pane'}
+        <Show when={plotCount() > 0}>
+          <span class="ax-scripts-card-sub-dim">
+            {' '}
+            · {plotCount()} plot{plotCount() === 1 ? '' : 's'}
+          </span>
+        </Show>
+      </div>
+
+      <Show when={moreOpen()}>
+        <div class="ax-scripts-card-more" data-testid="axis-indicator-more-row">
+          <button type="button" onClick={() => void copyCode()}>
+            <Icons.copy size={10} /> Copy Pine
+          </button>
+          <button type="button" disabled={scriptIndex() <= 0} onClick={() => move(-1)}>
+            <Icons.chevronUp size={10} /> Up
+          </button>
+          <button
+            type="button"
+            disabled={scriptIndex() < 0 || scriptIndex() >= store.scripts.length - 1}
+            onClick={() => move(1)}
+          >
+            <Icons.chevronDown size={10} /> Down
+          </button>
+          <button type="button" onClick={focusResults}>
+            <Icons.results size={10} /> Results
+          </button>
+          <button type="button" class="is-danger" onClick={remove}>
+            <Icons.trash size={10} /> Remove
+          </button>
+        </div>
+      </Show>
 
       {/* Meta badges — icon-only, hover for detail */}
       <div class="flex flex-wrap items-center gap-0.5 mb-1.5" data-testid="axis-indicator-badges">
@@ -509,27 +549,6 @@ export const IndicatorCard: Component<Props> = (props) => {
           )}
         </MetaBadge>
 
-        <MetaBadge
-          title={`${lastRunStatusTitle(runStatus())} · click to open Results`}
-          testId="axis-badge-run"
-          class={
-            runStatus() === 'ok'
-              ? 'text-emerald-400/90 border-emerald-500/30'
-              : runStatus() === 'error'
-                ? 'text-red border-red/40'
-                : 'text-text-faint'
-          }
-          onClick={focusResults}
-        >
-          {runStatus() === 'ok' ? (
-            <Icons.check size={11} />
-          ) : runStatus() === 'error' ? (
-            <Icons.alert size={11} />
-          ) : (
-            <Icons.circle size={8} />
-          )}
-        </MetaBadge>
-
         <Show when={streamStatus()}>
           {(s) => (
             <MetaBadge
@@ -553,221 +572,254 @@ export const IndicatorCard: Component<Props> = (props) => {
 
       {/* Plot colors, width, visibility */}
       <Show when={plotCount() > 0}>
-        <div class="flex flex-col gap-0.5 border-t border-border/30 pt-1.5">
-          <For each={Object.entries(props.indicator.plots)}>
-            {([name, plot]) => {
-              const plotColor = plot.color;
-              // Default width is 1 (Pine plot lines are 1 px). Using 2 here made
-              // the first “+” jump the label from 1 → 3.
-              const plotWidth = effectivePlotWidth(plot);
-              const plotVisible = plot.visible !== false;
-              const lineStyle = effectivePlotLineStyle(plot);
-              const displayBits = effectivePlotDisplay(plot);
-              const displayTargets = plotDisplayTargets(displayBits);
-              const pineDisplay = pinePlotDisplay(plot);
-              return (
-                <div class="flex items-center gap-2 text-[11px] text-text-dim">
-                  <button
-                    type="button"
-                    class="inline-block w-2.5 h-2.5 flex-shrink-0 cursor-pointer border border-border"
-                    style={{ background: plotColor }}
-                    title={`Color for "${name}"`}
-                    data-color-trigger={props.indicator.id}
-                    onClick={() => setEditingColor(editingColor() === name ? null : name)}
-                  />
-                  <span class="truncate font-mono text-[10px] flex-1 min-w-0">{name}</span>
-                  {/* Width buttons */}
-                  <div class="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-text-faint hover:text-text border border-transparent hover:border-border/60 rounded-[var(--radius-chip)]">
-                    <button
-                      type="button"
-                      class="inline-flex items-center justify-center w-5 h-5 text-text-faint hover:text-accent border border-border rounded-[var(--radius-chip)] hover:bg-bg"
-                      title={`Decrease line width for "${name}"`}
-                      onClick={() => changeWidth(name, Math.max(1, plotWidth - 1))}
-                      aria-label={`Decrease line width for ${name}`}
-                    >
-                      <Icons.minus size={9} />
-                    </button>
-                    <span
-                      class="font-mono w-5 text-center text-text"
-                      data-testid="axis-plot-width"
-                      data-width={plotWidth}
-                    >
-                      {plotWidth}
-                    </span>
-                    <button
-                      type="button"
-                      class="inline-flex items-center justify-center w-5 h-5 text-text-faint hover:text-accent border border-border rounded-[var(--radius-chip)] hover:bg-bg"
-                      title={`Increase line width for "${name}"`}
-                      onClick={() => changeWidth(name, Math.min(4, plotWidth + 1))}
-                      aria-label={`Increase line width for ${name}`}
-                    >
-                      <Icons.plus size={9} />
-                    </button>
-                  </div>
-                  {/* Line type (AXIS platform override — Pine plot() has no line style) */}
-                  <button
-                    type="button"
-                    ref={(el) => {
-                      styleTriggerEl = el;
-                    }}
-                    class="inline-flex items-center justify-center w-5 h-5 text-text-faint hover:text-accent border border-transparent hover:border-border/60 bg-transparent rounded-[var(--radius-chip)]"
-                    title={`Line type for "${name}" — ${
-                      lineStyle ? PLOT_LINE_STYLE_LABELS[lineStyle] : 'Solid'
-                    }${plot.linestyle ? '' : ' (follows script)'}. AXIS override: Pine plot() lines are solid.`}
-                    aria-label={`Line type for ${name}`}
-                    data-style-trigger={props.indicator.id}
-                    onClick={() => {
-                      setPlotDisplayPopover(null);
-                      setEditingColor(null);
-                      const cur = plotStylePopover();
-                      setPlotStylePopover(
-                        cur?.id === props.indicator.id && cur?.plot === name
-                          ? null
-                          : { id: props.indicator.id, plot: name },
-                      );
-                    }}
-                  >
-                    <PlotStyleGlyph style={lineStyle ?? 'solid'} />
-                  </button>
-                  {/* display.* targets (Pine `plot(..., display=)` + override) */}
-                  <button
-                    type="button"
-                    ref={(el) => {
-                      displayTriggerEl = el;
-                    }}
-                    class="inline-flex items-center justify-center w-5 h-5 text-text-faint hover:text-accent border border-transparent hover:border-border/60 bg-transparent rounded-[var(--radius-chip)]"
-                    title={`Display for "${name}" — ${formatPlotDisplay(displayBits)}${
-                      hasDisplayOverride(plot) ? ' (panel override)' : ' (from script)'
-                    }`}
-                    aria-label={`Display targets for ${name}`}
-                    data-display-trigger={props.indicator.id}
-                    onClick={() => {
-                      setPlotStylePopover(null);
-                      setEditingColor(null);
-                      const cur = plotDisplayPopover();
-                      setPlotDisplayPopover(
-                        cur?.id === props.indicator.id && cur?.plot === name
-                          ? null
-                          : { id: props.indicator.id, plot: name },
-                      );
-                    }}
-                  >
-                    <span class="font-mono text-[8px] leading-none" data-testid="axis-plot-display">
-                      {formatPlotDisplayCompact(displayBits)}
-                    </span>
-                  </button>
-                  {/* Visibility toggle */}
-                  <button
-                    type="button"
-                    class="inline-flex items-center justify-center w-5 h-5 text-text-faint hover:text-accent border border-transparent hover:border-border/60 bg-transparent rounded-[var(--radius-chip)]"
-                    title={plotVisible ? `Hide "${name}"` : `Show "${name}"`}
-                    onClick={() => togglePlotVisible(name, !plotVisible)}
-                    aria-label={plotVisible ? 'Hide plot' : 'Show plot'}
-                  >
-                    {plotVisible ? <Icons.eye size={10} /> : <Icons.eyeOff size={10} />}
-                  </button>
-                  {/* Line-type popover */}
-                  <Show when={styleOpen() && plotStylePopover()?.plot === name}>
-                    <div
-                      ref={stylePopoverRef[1]}
-                      class="absolute z-20 flex flex-col gap-0.5 ml-auto px-1 py-1 bg-bg-elev border border-border rounded-[var(--radius-chip)] shadow-lg"
-                      data-testid="axis-plot-style-popover"
-                    >
-                      <For each={PLOT_LINE_STYLES}>
-                        {(style) => (
-                          <button
-                            type="button"
-                            class={`flex items-center gap-1.5 px-1 py-0.5 text-[10px] text-left rounded-[var(--radius-chip)] ${
-                              (lineStyle ?? 'solid') === style
-                                ? 'text-accent bg-accent/10'
-                                : 'text-text-dim hover:text-text hover:bg-bg'
-                            }`}
-                            onClick={() => changeLineStyle(name, style)}
-                            data-line-style={style}
-                          >
-                            <PlotStyleGlyph style={style} width={22} />
-                            {PLOT_LINE_STYLE_LABELS[style]}
-                          </button>
-                        )}
-                      </For>
-                      <button
-                        type="button"
-                        class="px-1 py-0.5 text-[9px] text-text-faint hover:text-accent text-left"
-                        onClick={() => changeLineStyle(name, null)}
-                        data-line-style="reset"
-                        disabled={plot.linestyle == null}
-                      >
-                        Follow script
-                      </button>
-                    </div>
-                  </Show>
-                  {/* Display popover */}
-                  <Show when={displayOpen() && plotDisplayPopover()?.plot === name}>
-                    <div
-                      ref={displayPopoverRef[1]}
-                      class="absolute z-20 flex flex-col gap-0.5 ml-auto px-1 py-1 bg-bg-elev border border-border rounded-[var(--radius-chip)] shadow-lg"
-                      data-testid="axis-plot-display-popover"
-                    >
-                      <DisplayTargetToggle
-                        label="Pane"
-                        active={displayTargets.pane}
-                        bit={PLOT_DISPLAY.pane}
-                        onToggle={(bit) => toggleDisplayTarget(name, bit)}
-                      />
-                      <DisplayTargetToggle
-                        label="Data window"
-                        active={displayTargets.dataWindow}
-                        bit={PLOT_DISPLAY.data_window}
-                        onToggle={(bit) => toggleDisplayTarget(name, bit)}
-                      />
-                      <DisplayTargetToggle
-                        label="Price scale"
-                        active={displayTargets.priceScale}
-                        bit={PLOT_DISPLAY.price_scale}
-                        onToggle={(bit) => toggleDisplayTarget(name, bit)}
-                      />
-                      <div class="flex items-center justify-between gap-2 px-1 pt-0.5 border-t border-border/40">
-                        <span
-                          class="text-[8px] font-mono text-text-faint"
-                          title="Declared in the script"
-                        >
-                          Pine: {pineDisplay != null ? formatPlotDisplay(pineDisplay) : 'all'}
-                        </span>
+        <div class="ax-scripts-plots">
+          <button
+            type="button"
+            class="ax-scripts-plots-head"
+            aria-expanded={plotsOpen()}
+            title={plotsOpen() ? 'Collapse plot controls' : 'Expand plot controls'}
+            onClick={() => setPlotsOpen((v) => !v)}
+            data-testid="axis-plots-toggle"
+          >
+            <Icons.chevronDown
+              size={10}
+              class={`ax-scripts-chevron${plotsOpen() ? ' is-open' : ''}`}
+            />
+            <span>Plots</span>
+            <span class="ax-scripts-plot-count">{plotCount()}</span>
+            <span class="ax-scripts-swatches" aria-hidden="true">
+              <For each={Object.values(props.indicator.plots)}>
+                {(plot) => <span class="ax-scripts-swatch" style={{ background: plot.color }} />}
+              </For>
+            </span>
+          </button>
+          <Show when={plotsOpen()}>
+            <div class="ax-scripts-plot-list">
+              <For each={Object.entries(props.indicator.plots)}>
+                {([name, plot]) => {
+                  const plotColor = plot.color;
+                  // Default width is 1 (Pine plot lines are 1 px). Using 2 here made
+                  // the first “+” jump the label from 1 → 3.
+                  const plotWidth = effectivePlotWidth(plot);
+                  const plotVisible = plot.visible !== false;
+                  const lineStyle = effectivePlotLineStyle(plot);
+                  const displayBits = effectivePlotDisplay(plot);
+                  const displayTargets = plotDisplayTargets(displayBits);
+                  const pineDisplay = pinePlotDisplay(plot);
+                  return (
+                    <div class="ax-scripts-plot-row">
+                      <div class="ax-scripts-plot-top">
                         <button
                           type="button"
-                          class="text-[9px] text-text-faint hover:text-accent disabled:opacity-40"
-                          onClick={() => changeDisplay(name, null)}
-                          disabled={!hasDisplayOverride(plot)}
-                          data-display-action="reset"
-                        >
-                          Reset
-                        </button>
+                          class="ax-scripts-plot-swatch"
+                          style={{ background: plotColor }}
+                          title={`Color for "${name}"`}
+                          data-color-trigger={props.indicator.id}
+                          onClick={() => setEditingColor(editingColor() === name ? null : name)}
+                        />
+                        <span class="ax-scripts-plot-name" title={name}>
+                          {name}
+                        </span>
                       </div>
-                    </div>
-                  </Show>
-                  {/* Color popover */}
-                  <Show when={editingColor() === name}>
-                    <div
-                      ref={colorPopoverRef[1]}
-                      class="absolute z-20 flex gap-1 ml-auto flex-wrap px-1 py-1 bg-bg-elev border border-border rounded-[var(--radius-chip)] shadow-lg"
-                    >
-                      <For each={PLOT_PALETTE}>
-                        {(c) => (
+                      <div class="ax-scripts-plot-controls">
+                        {/* Width buttons */}
+                        <div class="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-text-faint hover:text-text border border-transparent hover:border-border/60 rounded-[var(--radius-chip)]">
                           <button
                             type="button"
-                            class="w-3 h-3 cursor-pointer border-2 border-border hover:border-accent"
-                            style={{ background: c }}
-                            title={c}
-                            onClick={() => changeColor(name, c)}
+                            class="inline-flex items-center justify-center w-5 h-5 text-text-faint hover:text-accent border border-border rounded-[var(--radius-chip)] hover:bg-bg"
+                            title={`Decrease line width for "${name}"`}
+                            onClick={() => changeWidth(name, Math.max(1, plotWidth - 1))}
+                            aria-label={`Decrease line width for ${name}`}
+                          >
+                            <Icons.minus size={9} />
+                          </button>
+                          <span
+                            class="font-mono w-5 text-center text-text"
+                            data-testid="axis-plot-width"
+                            data-width={plotWidth}
+                          >
+                            {plotWidth}
+                          </span>
+                          <button
+                            type="button"
+                            class="inline-flex items-center justify-center w-5 h-5 text-text-faint hover:text-accent border border-border rounded-[var(--radius-chip)] hover:bg-bg"
+                            title={`Increase line width for "${name}"`}
+                            onClick={() => changeWidth(name, Math.min(4, plotWidth + 1))}
+                            aria-label={`Increase line width for ${name}`}
+                          >
+                            <Icons.plus size={9} />
+                          </button>
+                        </div>
+                        {/* Line type (AXIS platform override — Pine plot() has no line style) */}
+                        <button
+                          type="button"
+                          ref={(el) => {
+                            styleTriggerEl = el;
+                          }}
+                          class="inline-flex items-center justify-center w-5 h-5 text-text-faint hover:text-accent border border-transparent hover:border-border/60 bg-transparent rounded-[var(--radius-chip)]"
+                          title={`Line type for "${name}" — ${
+                            lineStyle ? PLOT_LINE_STYLE_LABELS[lineStyle] : 'Solid'
+                          }${plot.linestyle ? '' : ' (follows script)'}. AXIS override: Pine plot() lines are solid.`}
+                          aria-label={`Line type for ${name}`}
+                          data-style-trigger={props.indicator.id}
+                          onClick={() => {
+                            setPlotDisplayPopover(null);
+                            setEditingColor(null);
+                            const cur = plotStylePopover();
+                            setPlotStylePopover(
+                              cur?.id === props.indicator.id && cur?.plot === name
+                                ? null
+                                : { id: props.indicator.id, plot: name },
+                            );
+                          }}
+                        >
+                          <PlotStyleGlyph style={lineStyle ?? 'solid'} />
+                        </button>
+                        {/* display.* targets (Pine `plot(..., display=)` + override) */}
+                        <button
+                          type="button"
+                          ref={(el) => {
+                            displayTriggerEl = el;
+                          }}
+                          class="inline-flex items-center justify-center w-5 h-5 text-text-faint hover:text-accent border border-transparent hover:border-border/60 bg-transparent rounded-[var(--radius-chip)]"
+                          title={`Display for "${name}" — ${formatPlotDisplay(displayBits)}${
+                            hasDisplayOverride(plot) ? ' (panel override)' : ' (from script)'
+                          }`}
+                          aria-label={`Display targets for ${name}`}
+                          data-display-trigger={props.indicator.id}
+                          onClick={() => {
+                            setPlotStylePopover(null);
+                            setEditingColor(null);
+                            const cur = plotDisplayPopover();
+                            setPlotDisplayPopover(
+                              cur?.id === props.indicator.id && cur?.plot === name
+                                ? null
+                                : { id: props.indicator.id, plot: name },
+                            );
+                          }}
+                        >
+                          <span
+                            class="font-mono text-[8px] leading-none"
+                            data-testid="axis-plot-display"
+                          >
+                            {formatPlotDisplayCompact(displayBits)}
+                          </span>
+                        </button>
+                        {/* Visibility toggle */}
+                        <button
+                          type="button"
+                          class="inline-flex items-center justify-center w-5 h-5 text-text-faint hover:text-accent border border-transparent hover:border-border/60 bg-transparent rounded-[var(--radius-chip)]"
+                          title={plotVisible ? `Hide "${name}"` : `Show "${name}"`}
+                          onClick={() => togglePlotVisible(name, !plotVisible)}
+                          aria-label={plotVisible ? 'Hide plot' : 'Show plot'}
+                        >
+                          {plotVisible ? <Icons.eye size={10} /> : <Icons.eyeOff size={10} />}
+                        </button>
+                      </div>
+                      {/* Line-type popover */}
+                      <Show when={styleOpen() && plotStylePopover()?.plot === name}>
+                        <div
+                          ref={stylePopoverRef[1]}
+                          class="absolute z-20 flex flex-col gap-0.5 ml-auto px-1 py-1 bg-bg-elev border border-border rounded-[var(--radius-chip)] shadow-lg"
+                          data-testid="axis-plot-style-popover"
+                        >
+                          <For each={PLOT_LINE_STYLES}>
+                            {(style) => (
+                              <button
+                                type="button"
+                                class={`flex items-center gap-1.5 px-1 py-0.5 text-[10px] text-left rounded-[var(--radius-chip)] ${
+                                  (lineStyle ?? 'solid') === style
+                                    ? 'text-accent bg-accent/10'
+                                    : 'text-text-dim hover:text-text hover:bg-bg'
+                                }`}
+                                onClick={() => changeLineStyle(name, style)}
+                                data-line-style={style}
+                              >
+                                <PlotStyleGlyph style={style} width={22} />
+                                {PLOT_LINE_STYLE_LABELS[style]}
+                              </button>
+                            )}
+                          </For>
+                          <button
+                            type="button"
+                            class="px-1 py-0.5 text-[9px] text-text-faint hover:text-accent text-left"
+                            onClick={() => changeLineStyle(name, null)}
+                            data-line-style="reset"
+                            disabled={plot.linestyle == null}
+                          >
+                            Follow script
+                          </button>
+                        </div>
+                      </Show>
+                      {/* Display popover */}
+                      <Show when={displayOpen() && plotDisplayPopover()?.plot === name}>
+                        <div
+                          ref={displayPopoverRef[1]}
+                          class="absolute z-20 flex flex-col gap-0.5 ml-auto px-1 py-1 bg-bg-elev border border-border rounded-[var(--radius-chip)] shadow-lg"
+                          data-testid="axis-plot-display-popover"
+                        >
+                          <DisplayTargetToggle
+                            label="Pane"
+                            active={displayTargets.pane}
+                            bit={PLOT_DISPLAY.pane}
+                            onToggle={(bit) => toggleDisplayTarget(name, bit)}
                           />
-                        )}
-                      </For>
+                          <DisplayTargetToggle
+                            label="Data window"
+                            active={displayTargets.dataWindow}
+                            bit={PLOT_DISPLAY.data_window}
+                            onToggle={(bit) => toggleDisplayTarget(name, bit)}
+                          />
+                          <DisplayTargetToggle
+                            label="Price scale"
+                            active={displayTargets.priceScale}
+                            bit={PLOT_DISPLAY.price_scale}
+                            onToggle={(bit) => toggleDisplayTarget(name, bit)}
+                          />
+                          <div class="flex items-center justify-between gap-2 px-1 pt-0.5 border-t border-border/40">
+                            <span
+                              class="text-[8px] font-mono text-text-faint"
+                              title="Declared in the script"
+                            >
+                              Pine: {pineDisplay != null ? formatPlotDisplay(pineDisplay) : 'all'}
+                            </span>
+                            <button
+                              type="button"
+                              class="text-[9px] text-text-faint hover:text-accent disabled:opacity-40"
+                              onClick={() => changeDisplay(name, null)}
+                              disabled={!hasDisplayOverride(plot)}
+                              data-display-action="reset"
+                            >
+                              Reset
+                            </button>
+                          </div>
+                        </div>
+                      </Show>
+                      {/* Color popover */}
+                      <Show when={editingColor() === name}>
+                        <div
+                          ref={colorPopoverRef[1]}
+                          class="absolute z-20 flex gap-1 ml-auto flex-wrap px-1 py-1 bg-bg-elev border border-border rounded-[var(--radius-chip)] shadow-lg"
+                        >
+                          <For each={PLOT_PALETTE}>
+                            {(c) => (
+                              <button
+                                type="button"
+                                class="w-3 h-3 cursor-pointer border-2 border-border hover:border-accent"
+                                style={{ background: c }}
+                                title={c}
+                                onClick={() => changeColor(name, c)}
+                              />
+                            )}
+                          </For>
+                        </div>
+                      </Show>
                     </div>
-                  </Show>
-                </div>
-              );
-            }}
-          </For>
+                  );
+                }}
+              </For>
+            </div>
+          </Show>
         </div>
       </Show>
     </div>

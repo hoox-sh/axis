@@ -104,6 +104,9 @@ Colors: `plot_meta[k].color` or `PLOT_PALETTE[i]`. Pine Script™ `plot.style_*`
 ### Indicator panel & pane badges
 
 - Side list of `store.scripts` (`Indicator`: id, name, code, paneId, visible, plots)  
+- **Toolbar** — composition chips (source · stream · engine · live policy), `/`-focus search, kind filters (All / Ind / Strat / Err / Hidden), built-in picker, and a bulk menu (**Show all · Hide all · Remove all**)  
+- **Cards** — kind rail, run-status dot (click → Results), visibility / settings / re-run / `···` menu (Copy Pine · Up · Down · Results · Remove)  
+- **Plots** — collapsed automatically for studies with >2 plots; the header keeps color swatches and expands to width / line type / `display.*` / visibility controls  
 - Visibility toggles affect display; re-run is still engine-driven  
 - Chart pane chips mirror settings / load source / eye / re-run / remove (see [Charting](/axis/docs/ui/charting))
 
@@ -126,7 +129,9 @@ Streams may set `live.needsRerun`; multiplex/runner path can call `runAndApply` 
 | Path | Role |
 | --- | --- |
 | `src/indicators/runner.ts` | Pipeline |
-| `src/indicators/IndicatorPanel.tsx` | List UI + built-in picker |
+| `src/indicators/IndicatorPanel.tsx` | List UI + search/filters + built-in picker |
+| `src/indicators/IndicatorCard.tsx` | Applied-script card + plot controls |
+| `src/indicators/scripts.css` | Panel/card design |
 | `src/indicators/builtins/` | Original AXIS built-in Pine catalog |
 | `src/plugins/active.ts` | Active engine/source helpers |
 | `src/engines/catalog.ts` | Built-in engines |

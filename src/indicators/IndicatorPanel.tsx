@@ -27,7 +27,16 @@
  * @module indicators/IndicatorPanel
  */
 
-import { type Component, For, Show, createMemo, createSignal, createResource } from 'solid-js';
+import {
+  type Component,
+  For,
+  Show,
+  createMemo,
+  createResource,
+  createSignal,
+  onCleanup,
+  onMount,
+} from 'solid-js';
 import { store, isPanelOpen, setStore, persist, setStatus } from '../store';
 import { IndicatorCard } from './IndicatorCard';
 import { FloatableShell } from '../ui/panels/FloatableShell';
@@ -39,11 +48,16 @@ import {
 } from './builtins';
 import {
   activeChartContext,
+  detectScriptKind,
   engineFamily,
   engineFamilyLabel,
+  lastRunStatus,
   liveRerunTitle,
 } from './script-meta';
+import { setScriptChartVisible } from './visibility';
 import { getEngineCapabilities } from '../engines/catalog';
+
+type ScriptFilter = 'all' | 'indicator' | 'strategy' | 'errors' | 'hidden';
 
 /** Compact composition chip for the panel header. */
 const CompChip: Component<{
@@ -82,6 +96,110 @@ export const IndicatorPanel: Component = () => {
   const [pickerOpen, setPickerOpen] = createSignal(false);
   const [pickerQuery, setPickerQuery] = createSignal('');
   const pickerHits = createMemo(() => filterBuiltinScripts(pickerQuery()));
+  const [query, setQuery] = createSignal('');
+  const [filter, setFilter] = createSignal<ScriptFilter>('all');
+  const [bulkOpen, setBulkOpen] = createSignal(false);
+  const [helpOpen, setHelpOpen] = createSignal(false);
+  let searchInput: HTMLInputElement | undefined;
+
+  const counts = createMemo(() => {
+    const c = { all: store.scripts.length, indicator: 0, strategy: 0, errors: 0, hidden: 0 };
+    for (const script of store.scripts) {
+      const kind = detectScriptKind(script.code);
+      if (kind === 'indicator') c.indicator += 1;
+      else if (kind === 'strategy') c.strategy += 1;
+      if (lastRunStatus(store.runResults?.[script.id]) === 'error') c.errors += 1;
+      if (!script.visible) c.hidden += 1;
+    }
+    return c;
+  });
+
+  const summary = createMemo(() => {
+    let ok = 0;
+    let err = 0;
+    let plots = 0;
+    for (const script of store.scripts) {
+      const status = lastRunStatus(store.runResults?.[script.id]);
+      if (status === 'ok') ok += 1;
+      else if (status === 'error') err += 1;
+      plots += Object.keys(script.plots || {}).length;
+    }
+    return { ok, err, plots };
+  });
+
+  const visibleScripts = createMemo(() => {
+    const q = query().trim().toLowerCase();
+    const f = filter();
+    return store.scripts.filter((script) => {
+      if (f === 'hidden' && script.visible) return false;
+      if (f === 'errors' && lastRunStatus(store.runResults?.[script.id]) !== 'error') return false;
+      if ((f === 'indicator' || f === 'strategy') && detectScriptKind(script.code) !== f) {
+        return false;
+      }
+      if (!q) return true;
+      // Name + pane only: Pine code contains tokens like `version` whose
+      // substrings would match short queries (`rsi`).
+      return `${script.name} ${script.paneId}`.toLowerCase().includes(q);
+    });
+  });
+
+  const filterChips = createMemo(() => {
+    const c = counts();
+    const chips: { id: ScriptFilter; label: string; n: number }[] = [
+      { id: 'all', label: 'All', n: c.all },
+      { id: 'indicator', label: 'Ind', n: c.indicator },
+      { id: 'strategy', label: 'Strat', n: c.strategy },
+    ];
+    if (c.errors) chips.push({ id: 'errors', label: 'Err', n: c.errors });
+    if (c.hidden) chips.push({ id: 'hidden', label: 'Hidden', n: c.hidden });
+    return chips;
+  });
+
+  const showAll = () => {
+    for (const script of store.scripts) {
+      if (!script.visible) setScriptChartVisible(script.id, true);
+    }
+    setStatus('ready', 'All scripts shown');
+  };
+
+  const hideAll = () => {
+    for (const script of store.scripts) {
+      if (script.visible) setScriptChartVisible(script.id, false);
+    }
+    setStatus('ready', 'All scripts hidden');
+  };
+
+  const removeAll = () => {
+    if (!store.scripts.length) return;
+    if (
+      typeof window !== 'undefined' &&
+      !window.confirm(`Remove all ${store.scripts.length} scripts from the chart?`)
+    ) {
+      return;
+    }
+    void import('./detach').then(({ detachIndicatorFromChart }) => {
+      for (const script of [...store.scripts]) detachIndicatorFromChart(script.id);
+      setStatus('ready', 'Removed all scripts');
+    });
+  };
+
+  const resetFilters = () => {
+    setQuery('');
+    setFilter('all');
+  };
+
+  onMount(() => {
+    // `/` focuses the script search while the panel is mounted.
+    const onSlash = (e: KeyboardEvent) => {
+      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
+      e.preventDefault();
+      searchInput?.focus();
+    };
+    window.addEventListener('keydown', onSlash);
+    onCleanup(() => window.removeEventListener('keydown', onSlash));
+  });
 
   const streamId = () =>
     store.live?.streamId || store.activePlugins?.stream || '—';
@@ -158,25 +276,32 @@ export const IndicatorPanel: Component = () => {
   return (
     <Show when={isPanelOpen('indicators') || store.indicatorPanel.open}>
       <FloatableShell id="indicators" testId="axis-indicators">
-        <div class="flex flex-col flex-1 min-h-0">
-          {/* Global composition — clarifies the many axes */}
-          <div
-            class="flex-shrink-0 border-b border-border/40 px-2 py-1.5 space-y-1"
-            data-testid="axis-scripts-composition"
-          >
-            <div class="flex items-center justify-between gap-1">
-              <div class="text-[9px] uppercase tracking-wider text-text-faint">
-                Composition
-              </div>
-              <div
-                class="text-[9px] font-mono text-text-faint truncate max-w-[55%]"
+        <div class="ax-scripts flex flex-col flex-1 min-h-0">
+          {/* ── Composition + search + filters ─────────────────────── */}
+          <div class="ax-scripts-head flex-shrink-0" data-testid="axis-scripts-composition">
+            <div class="ax-scripts-head-top">
+              <span class="ax-scripts-kicker">Composition</span>
+              <span
+                class="ax-scripts-ctx"
                 title={chartCtx().title}
                 data-testid="axis-scripts-chart-ctx"
               >
                 {chartCtx().line}
-              </div>
+              </span>
+              <button
+                type="button"
+                class="ax-scripts-icon"
+                classList={{ 'is-on': helpOpen() }}
+                title="Badge key"
+                aria-label="Badge key"
+                aria-expanded={helpOpen()}
+                onClick={() => setHelpOpen((v) => !v)}
+              >
+                ?
+              </button>
             </div>
-            <div class="flex flex-wrap gap-0.5">
+
+            <div class="ax-scripts-chips">
               <CompChip
                 label={store.source || 'source'}
                 title={`Historical source: ${store.source} — where OHLCV bars load from`}
@@ -185,10 +310,7 @@ export const IndicatorPanel: Component = () => {
                 label={streamId()}
                 title={`Live stream: ${streamId()} — tick feed when Live is on`}
               />
-              <CompChip
-                label={eng()}
-                title={engineFamilyLabel(engFam(), eng())}
-              />
+              <CompChip label={eng()} title={engineFamilyLabel(engFam(), eng())} />
               <CompChip
                 label={liveChip().label}
                 title={liveChip().title}
@@ -196,35 +318,138 @@ export const IndicatorPanel: Component = () => {
                 onClick={cycleRerun}
               />
             </div>
-            <div class="flex items-center justify-between gap-1 pt-0.5">
+
+            <Show when={helpOpen()}>
+              <div class="ax-scripts-help" data-testid="axis-scripts-help">
+                <span title="Indicator">
+                  <Icons.activity size={9} class="text-accent" /> ind
+                </span>
+                <span title="Strategy">
+                  <Icons.trend size={9} class="text-accent-2" /> strat
+                </span>
+                <span title="Price overlay">
+                  <Icons.layers size={9} /> overlay
+                </span>
+                <span title="Sub-pane">
+                  <Icons.panelBottom size={9} /> pane
+                </span>
+                <span title="Server engine">
+                  <Icons.server size={9} /> srv
+                </span>
+                <span title="Click the live chip or a card clock/zap to switch tick ↔ bar close">
+                  <Icons.zap size={9} />/<Icons.clock size={9} /> policy
+                </span>
+              </div>
+            </Show>
+
+            <div class="ax-scripts-search">
+              <Icons.search size={12} />
+              <input
+                ref={searchInput}
+                type="search"
+                class="ax-scripts-search-input"
+                placeholder="Find scripts…"
+                aria-label="Find applied scripts"
+                data-testid="axis-scripts-search"
+                value={query()}
+                autocomplete="off"
+                spellcheck={false}
+                onInput={(e) => setQuery(e.currentTarget.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape' && query()) {
+                    e.preventDefault();
+                    setQuery('');
+                  }
+                }}
+              />
+              <Show when={query()} fallback={<kbd class="ax-scripts-kbd">/</kbd>}>
+                <button
+                  type="button"
+                  class="ax-scripts-search-clear"
+                  title="Clear search"
+                  aria-label="Clear script search"
+                  onClick={() => {
+                    setQuery('');
+                    searchInput?.focus();
+                  }}
+                >
+                  <Icons.x size={10} />
+                </button>
+              </Show>
+            </div>
+
+            <div class="ax-scripts-filters">
+              <For each={filterChips()}>
+                {(chip) => (
+                  <button
+                    type="button"
+                    class="ax-scripts-filter"
+                    classList={{ 'is-on': filter() === chip.id }}
+                    aria-pressed={filter() === chip.id}
+                    data-testid={`axis-scripts-filter-${chip.id}`}
+                    onClick={() => setFilter(chip.id)}
+                  >
+                    {chip.label}
+                    <span class="ax-scripts-filter-count">{chip.n}</span>
+                  </button>
+                )}
+              </For>
+              <span class="ax-scripts-spacer" />
               <button
                 type="button"
-                class="inline-flex items-center gap-1 px-1.5 py-0.5 border border-border/50 rounded-[var(--radius-chip)] text-[10px] text-text-dim hover:border-accent/50 hover:text-accent"
-                data-testid="axis-scripts-add-builtin"
+                class="ax-scripts-tool"
+                classList={{ 'is-on': pickerOpen() }}
                 title="Add an original AXIS built-in study"
-                onClick={() => setPickerOpen((o) => !o)}
+                data-testid="axis-scripts-add-builtin"
+                onClick={() => setPickerOpen((v) => !v)}
               >
-                <Icons.plus size={10} />
-                Built-in
+                <Icons.plus size={10} /> Built-in
+              </button>
+              <button
+                type="button"
+                class="ax-scripts-tool"
+                classList={{ 'is-on': bulkOpen() }}
+                title="Bulk script actions"
+                aria-label="Bulk script actions"
+                aria-expanded={bulkOpen()}
+                data-testid="axis-scripts-bulk-toggle"
+                onClick={() => setBulkOpen((v) => !v)}
+              >
+                <Icons.menu size={11} />
               </button>
             </div>
+
+            <Show when={bulkOpen()}>
+              <div class="ax-scripts-bulk" data-testid="axis-scripts-bulk">
+                <button type="button" onClick={showAll}>
+                  <Icons.eye size={10} /> Show all
+                </button>
+                <button type="button" onClick={hideAll}>
+                  <Icons.eyeOff size={10} /> Hide all
+                </button>
+                <button type="button" class="is-danger" onClick={removeAll}>
+                  <Icons.trash size={10} /> Remove all
+                </button>
+              </div>
+            </Show>
+
             <Show when={pickerOpen()}>
-              <div class="pt-1 space-y-1" data-testid="axis-builtin-picker">
+              <div class="ax-scripts-picker" data-testid="axis-builtin-picker">
                 <input
                   type="search"
-                  class="w-full bg-bg border border-border/50 rounded-[var(--radius-chip)] px-1.5 py-0.5 text-[11px] text-text outline-none focus:border-accent/50"
+                  class="sc-input h-6 min-h-6 text-[11px]"
                   placeholder="Search built-ins…"
                   value={pickerQuery()}
                   data-testid="axis-builtin-picker-input"
                   spellcheck={false}
                   onInput={(e) => setPickerQuery(e.currentTarget.value)}
                 />
-                <div class="max-h-40 overflow-y-auto space-y-px">
+                <div class="ax-scripts-picker-list">
                   <For each={pickerHits()}>
                     {(script) => (
                       <button
                         type="button"
-                        class="w-full flex items-center justify-between gap-1 px-1 py-0.5 text-left text-[11px] text-text-dim hover:text-accent hover:bg-accent/10 rounded-[var(--radius-chip)]"
+                        class="ax-scripts-picker-row"
                         data-testid={`axis-builtin-pick-${script.id}`}
                         title={script.description}
                         onClick={() => {
@@ -234,7 +459,7 @@ export const IndicatorPanel: Component = () => {
                         }}
                       >
                         <span class="truncate">{script.title}</span>
-                        <span class="shrink-0 font-mono text-[9px] uppercase text-text-faint">
+                        <span class="ax-scripts-picker-cat">
                           {builtinCategoryLabel(script.category)}
                         </span>
                       </button>
@@ -243,55 +468,61 @@ export const IndicatorPanel: Component = () => {
                 </div>
               </div>
             </Show>
-            <div class="flex flex-wrap items-center gap-x-1 gap-y-0.5 text-[9px] text-text-faint">
-              <span class="inline-flex items-center gap-0.5" title="Indicator">
-                <Icons.activity size={9} class="text-accent" /> ind
-              </span>
-              <span class="text-border">·</span>
-              <span class="inline-flex items-center gap-0.5" title="Strategy">
-                <Icons.trend size={9} class="text-accent-2" /> strat
-              </span>
-              <span class="text-border">·</span>
-              <span
-                class="inline-flex items-center gap-0.5"
-                title="Price overlay"
-              >
-                <Icons.layers size={9} /> overlay
-              </span>
-              <span class="text-border">·</span>
-              <span class="inline-flex items-center gap-0.5" title="Sub-pane">
-                <Icons.panelBottom size={9} /> pane
-              </span>
-              <span class="text-border">·</span>
-              <span
-                class="inline-flex items-center gap-0.5"
-                title="Server engine"
-              >
-                <Icons.server size={9} /> srv
-              </span>
-              <span class="text-border">·</span>
-              <span
-                class="inline-flex items-center gap-0.5"
-                title="Click Live chip or card clock/zap to switch tick ↔ bar close"
-              >
-                <Icons.zap size={9} />/
-                <Icons.clock size={9} /> policy
-              </span>
+
+            <div class="ax-scripts-summary" data-testid="axis-scripts-summary">
+              {counts().all} script{counts().all === 1 ? '' : 's'} · {summary().ok} ok ·{' '}
+              {summary().err} err · {summary().plots} plot
+              {summary().plots === 1 ? '' : 's'}
             </div>
           </div>
 
-          <div class="flex-1 overflow-y-auto min-h-0">
+          <div class="flex-1 overflow-y-auto min-h-0 px-2 pb-2 pt-2">
             <Show
               when={store.scripts.length > 0}
               fallback={
-                <div class="axis-empty-state text-[12px] text-text-dim py-2">
-                  No scripts — Add a built-in or run the editor
+                <div class="ax-scripts-empty" data-testid="axis-scripts-empty">
+                  <span class="ax-scripts-empty-icon">
+                    <Icons.scripts size={18} />
+                  </span>
+                  <p class="ax-scripts-empty-title">No scripts yet</p>
+                  <p class="ax-scripts-empty-sub">
+                    Add a first-party built-in, or run Pine from the editor.
+                  </p>
+                  <div class="ax-scripts-empty-actions">
+                    <button
+                      type="button"
+                      class="sc-btn sc-btn-primary ax-scripts-empty-btn"
+                      onClick={() => setPickerOpen(true)}
+                    >
+                      <Icons.plus size={11} /> Add built-in
+                    </button>
+                  </div>
                 </div>
               }
             >
-              <For each={store.scripts}>
-                {(ind) => <IndicatorCard indicator={ind} />}
-              </For>
+              <Show
+                when={visibleScripts().length > 0}
+                fallback={
+                  <div class="ax-scripts-empty" data-testid="axis-scripts-no-match">
+                    <span class="ax-scripts-empty-icon">
+                      <Icons.search size={18} />
+                    </span>
+                    <p class="ax-scripts-empty-title">No scripts match</p>
+                    <p class="ax-scripts-empty-sub">Clear the search or pick another filter.</p>
+                    <button
+                      type="button"
+                      class="sc-btn sc-btn-ghost ax-scripts-empty-btn"
+                      onClick={resetFilters}
+                    >
+                      Reset filters
+                    </button>
+                  </div>
+                }
+              >
+                <For each={visibleScripts()}>
+                  {(ind) => <IndicatorCard indicator={ind} />}
+                </For>
+              </Show>
             </Show>
           </div>
         </div>

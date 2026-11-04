@@ -1,0 +1,595 @@
+/**
+ * Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
+ * SPDX-License-Identifier: AGPL-3.0-only
+ *
+ * Scripts panel — composition/search toolbar, applied-script cards,
+ * kind rails, status dots, and the collapsible plot-control block.
+ */
+
+.ax-scripts {
+  min-width: 0;
+}
+.ax-scripts-head {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 7px 8px 6px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-panel);
+}
+.ax-scripts-head-top {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+.ax-scripts-kicker {
+  flex-shrink: 0;
+  color: var(--color-text-dim);
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+.ax-scripts-ctx {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-faint);
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  text-align: right;
+}
+.ax-scripts-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-text-faint);
+  font: inherit;
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.ax-scripts-icon:hover,
+.ax-scripts-icon.is-on {
+  color: var(--color-accent);
+  border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-border));
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+.ax-scripts-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+.ax-scripts-help {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 6px;
+  padding: 4px 5px;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 5px;
+  background: var(--color-bg-elev);
+  color: var(--color-text-faint);
+  font-size: 8.5px;
+}
+.ax-scripts-help > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* ── Search + filters ───────────────────────────────────────────── */
+.ax-scripts-search {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 5px 0 7px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-bg-elev);
+  color: var(--color-text-faint);
+}
+.ax-scripts-search:focus-within {
+  border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-border));
+  color: var(--color-accent);
+}
+.ax-scripts-search-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 10.5px;
+}
+.ax-scripts-search-input::placeholder {
+  color: var(--color-text-faint);
+}
+.ax-scripts-search-input::-webkit-search-cancel-button {
+  display: none;
+}
+.ax-scripts-kbd {
+  flex-shrink: 0;
+  padding: 2px 4px;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 3px;
+  color: var(--color-text-faint);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  line-height: 1;
+}
+.ax-scripts-search-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--color-text-faint);
+  cursor: pointer;
+}
+.ax-scripts-search-clear:hover {
+  color: var(--color-text);
+  background: var(--color-bg-hover);
+}
+.ax-scripts-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px;
+}
+.ax-scripts-spacer {
+  flex: 1;
+}
+.ax-scripts-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 18px;
+  padding: 0 5px;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-dim);
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.ax-scripts-filter:hover {
+  color: var(--color-text);
+  border-color: var(--color-border);
+  background: color-mix(in srgb, var(--color-text) 4%, transparent);
+}
+.ax-scripts-filter.is-on {
+  color: var(--color-accent);
+  border-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 11%, transparent);
+}
+.ax-scripts-filter-count {
+  opacity: 0.65;
+}
+.ax-scripts-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 18px;
+  padding: 0 5px;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-dim);
+  font: inherit;
+  font-size: 8.5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ax-scripts-tool:hover,
+.ax-scripts-tool.is-on {
+  color: var(--color-accent);
+  border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-border));
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+}
+.ax-scripts-bulk {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding-top: 4px;
+  border-top: 1px dashed color-mix(in srgb, var(--color-border-soft) 75%, transparent);
+}
+.ax-scripts-bulk > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 19px;
+  padding: 0 5px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-dim);
+  font: inherit;
+  font-size: 9px;
+  cursor: pointer;
+}
+.ax-scripts-bulk > button:hover {
+  color: var(--color-text);
+  background: var(--color-bg-hover);
+  border-color: var(--color-border-soft);
+}
+.ax-scripts-bulk > button.is-danger:hover {
+  color: var(--color-red);
+  border-color: color-mix(in srgb, var(--color-red) 35%, transparent);
+  background: color-mix(in srgb, var(--color-red) 9%, transparent);
+}
+.ax-scripts-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-top: 2px;
+}
+.ax-scripts-picker-list {
+  max-height: 10rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.ax-scripts-picker-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  padding: 2px 4px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-dim);
+  font: inherit;
+  font-size: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+.ax-scripts-picker-row:hover {
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 9%, transparent);
+  border-color: color-mix(in srgb, var(--color-accent) 25%, transparent);
+}
+.ax-scripts-picker-cat {
+  flex-shrink: 0;
+  color: var(--color-text-faint);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  text-transform: uppercase;
+}
+.ax-scripts-summary {
+  color: var(--color-text-faint);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.02em;
+}
+
+/* ── Cards ──────────────────────────────────────────────────────── */
+.ax-scripts-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 7px 7px 7px 10px;
+  margin-bottom: 6px;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 8px;
+  background: var(--color-bg-elev);
+  min-width: 0;
+  transition:
+    border-color 130ms ease,
+    background 130ms ease;
+}
+.ax-scripts-card:hover {
+  border-color: color-mix(in srgb, var(--color-accent) 32%, var(--color-border-soft));
+  background: color-mix(in srgb, var(--color-accent) 3%, var(--color-bg-elev));
+}
+.ax-scripts-card.is-hidden {
+  opacity: 0.55;
+}
+.ax-scripts-card-rail {
+  position: absolute;
+  left: 0;
+  top: 7px;
+  bottom: 7px;
+  width: 2px;
+  border-radius: 999px;
+  background: var(--color-border);
+}
+.ax-scripts-card[data-script-kind='indicator'] .ax-scripts-card-rail {
+  background: var(--color-accent);
+}
+.ax-scripts-card[data-script-kind='strategy'] .ax-scripts-card-rail {
+  background: var(--color-accent-2);
+}
+.ax-scripts-card-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+.ax-scripts-status {
+  position: relative;
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+.ax-scripts-status::before {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  border: 1px solid var(--color-text-faint);
+  background: transparent;
+  transition: transform 110ms ease;
+}
+.ax-scripts-status:hover::before {
+  transform: scale(1.25);
+}
+.ax-scripts-status.is-ok::before {
+  border-color: var(--color-accent-2);
+  background: var(--color-accent-2);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--color-accent-2) 60%, transparent);
+}
+.ax-scripts-status.is-error::before {
+  border-color: var(--color-red);
+  background: var(--color-red);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--color-red) 60%, transparent);
+}
+.ax-scripts-card-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.ax-scripts-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex-shrink: 0;
+}
+.ax-scripts-card-sub {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-faint);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  padding-left: 11px;
+}
+.ax-scripts-card-sub-dim {
+  color: var(--color-text-dim);
+}
+.ax-scripts-card-more {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-top: 3px;
+  padding-top: 4px;
+  border-top: 1px dashed color-mix(in srgb, var(--color-border-soft) 75%, transparent);
+}
+.ax-scripts-card-more > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 19px;
+  padding: 0 5px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-dim);
+  font: inherit;
+  font-size: 9px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ax-scripts-card-more > button:hover:not(:disabled) {
+  color: var(--color-text);
+  background: var(--color-bg-hover);
+  border-color: var(--color-border-soft);
+}
+.ax-scripts-card-more > button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.ax-scripts-card-more > button.is-danger:hover:not(:disabled) {
+  color: var(--color-red);
+  border-color: color-mix(in srgb, var(--color-red) 35%, transparent);
+  background: color-mix(in srgb, var(--color-red) 9%, transparent);
+}
+
+/* ── Plot controls ──────────────────────────────────────────────── */
+.ax-scripts-plots {
+  margin-top: 3px;
+  padding-top: 4px;
+  border-top: 1px solid color-mix(in srgb, var(--color-border-soft) 65%, transparent);
+}
+.ax-scripts-plots-head {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-dim);
+  font: inherit;
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.ax-scripts-plots-head:hover {
+  color: var(--color-text);
+}
+.ax-scripts-chevron {
+  flex-shrink: 0;
+  color: var(--color-text-faint);
+  transform: rotate(-90deg);
+  transition: transform 120ms ease;
+}
+.ax-scripts-chevron.is-open {
+  transform: none;
+}
+.ax-scripts-plot-count {
+  padding: 1px 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-border-soft) 65%, transparent);
+  color: var(--color-text-faint);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0;
+}
+.ax-scripts-swatches {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+.ax-scripts-swatch {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--color-bg) 55%, transparent);
+}
+.ax-scripts-plot-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 4px;
+}
+.ax-scripts-plot-row {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 2px 3px;
+  border-radius: 4px;
+}
+.ax-scripts-plot-row:hover {
+  background: color-mix(in srgb, var(--color-text) 3%, transparent);
+}
+.ax-scripts-plot-top {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+.ax-scripts-plot-swatch {
+  flex-shrink: 0;
+  width: 9px;
+  height: 9px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 2px;
+  cursor: pointer;
+}
+.ax-scripts-plot-swatch:hover {
+  border-color: var(--color-accent);
+}
+.ax-scripts-plot-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-dim);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+}
+.ax-scripts-plot-controls {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding-left: 14px;
+  color: var(--color-text-faint);
+}
+
+/* ── Empty states ───────────────────────────────────────────────── */
+.ax-scripts-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 20px 12px;
+  border: 1px dashed color-mix(in srgb, var(--color-border) 80%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--color-bg-elev) 45%, transparent);
+  text-align: center;
+}
+.ax-scripts-empty-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 22%, transparent);
+}
+.ax-scripts-empty-title {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 11px;
+  font-weight: 600;
+}
+.ax-scripts-empty-sub {
+  margin: 0;
+  max-width: 14rem;
+  color: var(--color-text-faint);
+  font-size: 9.5px;
+  line-height: 1.45;
+}
+.ax-scripts-empty-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 2px;
+}
+.ax-scripts-empty-btn {
+  height: 24px;
+  min-height: 24px;
+  font-size: 9.5px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ax-scripts-card,
+  .ax-scripts-chevron {
+    transition: none;
+  }
+}
