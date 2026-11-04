@@ -84,6 +84,31 @@ describe('anchored chart window', () => {
     expect(chartWindowEngineBars()).toBe(BASE);
   });
 
+  it('resets once per grow cycle, never on consecutive bars', () => {
+    let last = tipTime();
+    // Grow to the ceiling.
+    for (let i = 0; i < CEILING - BASE; i++) {
+      last += STEP;
+      expect(appendBar(tick(last))).toBe('appended');
+    }
+    expect(chartWindowLimit()).toBe(CEILING);
+
+    // One reset, then a full grow cycle with no further slide.
+    last += STEP;
+    expect(appendBar(tick(last))).toBe('slid');
+    expect(chartWindowLimit()).toBe(BASE);
+    for (let i = 0; i < CEILING - BASE; i++) {
+      last += STEP;
+      expect(appendBar(tick(last))).toBe('appended');
+    }
+    expect(store.bars).toHaveLength(CEILING);
+
+    // Second reset after the same number of bars, not earlier.
+    last += STEP;
+    expect(appendBar(tick(last))).toBe('slid');
+    expect(store.bars).toHaveLength(BASE);
+  });
+
   it('grows engine depth in 100-bar chunks', () => {
     let last = tipTime();
     last += STEP;

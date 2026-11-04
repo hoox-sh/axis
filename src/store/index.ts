@@ -3374,7 +3374,21 @@ export function chartWindowEngineBars(): number {
   return Math.min(chartWindowPlanCeiling, Math.max(floor, chunked));
 }
 
-/** Grow the anchored window once, or reset it to the period-aligned base. */
+/**
+ * Grow the anchored window once, or reset it to the period-aligned base.
+ *
+ * ## Reset policy at the ceiling
+ *
+ * The ceiling is a hard cap (engine free tier), so a reset **must** drop bars.
+ * When the period boundary is still the window head, the boundary-derived
+ * count equals the current length (== the ceiling) and cannot be kept: the
+ * reset falls back to the base window instead of re-anchoring, because
+ * keeping the full ceiling would make the next append reset again on every
+ * bar. Consequence: the load anchor survives exactly one grow cycle, and a
+ * reset only lands on the period boundary when that boundary sits between
+ * the base window and the cap. `bar_index` therefore shifts once per grow
+ * cycle, not on every candle. Pinned by `tests/anchored-window.test.ts`.
+ */
 export function advanceChartWindowForAppend(
   bars?: readonly Bar[],
   newestSec?: number,
