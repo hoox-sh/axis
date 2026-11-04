@@ -312,10 +312,14 @@ export const serverEngine: EnginePlugin = {
     if (!probe) {
       // Readiness must not outlive the endpoint that reported it.
       cachedEngineHealth = null;
-      return {
-        ...DEFAULT_ENGINE_CAPABILITIES,
-        liveModes: [...DEFAULT_ENGINE_CAPABILITIES.liveModes],
-      };
+      // Reject rather than return defaults: `getEngineCapabilities()` caches
+      // every resolved value, and a failed probe must not downgrade the last
+      // known-good capabilities. Overwriting them flips `isEngineOwnedLive()`
+      // to false, so a transient /health failure mid-session silently moves a
+      // live chart from engine-owned paint to the calculator path (and
+      // re-enables local dataset writes). Callers still get the documented
+      // fallback from `getEngineCapabilities()`.
+      throw new Error('engine capabilities unavailable: /health probe failed');
     }
     // Same fetch, two views: live-mode caps for the runner, readiness/route
     // metadata for the UI (prewarm, runner, preview gating).
