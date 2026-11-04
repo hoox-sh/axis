@@ -3,6 +3,8 @@
 
 import { afterEach, describe, expect, it } from 'bun:test';
 import { applyBarToSeries, appendSlotLiveBar } from '../src/chart/slot-live-append.ts';
+import { chartWindowLimit, loadBars, setStore, store } from '../src/store/index.ts';
+import { makeBars } from './fixtures/bars.ts';
 import {
   getSlotBars,
   removeSlotRuntime,
@@ -58,6 +60,22 @@ describe('applyBarToSeries', () => {
 });
 
 describe('appendSlotLiveBar', () => {
+  it('does not advance the focused chart window plan', () => {
+    const start = 1_700_000_000;
+    setStore('bars', []);
+    setStore('rollingWindowBars', 1000);
+    loadBars(makeBars(1000, start, 60), 'BTCUSDT', '1m', 'binance');
+    expect(chartWindowLimit()).toBe(1000);
+
+    setSlotBars('s1', makeBars(1000, start, 60), false);
+    const r = appendSlotLiveBar('s1', bar(start + 1000 * 60, 101));
+
+    expect(r).toBe('slid');
+    expect(chartWindowLimit()).toBe(1000);
+    expect(store.bars).toHaveLength(1000);
+    expect(getSlotBars('s1')).toHaveLength(1000);
+  });
+
   it('writes slot cache without requiring a PaneManager', () => {
     setSlotBars('s1', [bar(1, 10)], false);
     const r = appendSlotLiveBar('s1', bar(1, 11));

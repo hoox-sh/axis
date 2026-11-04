@@ -28,21 +28,25 @@
 
 import type { Bar } from '../store/types';
 import type { BarAppendResult } from '../store';
-import { advanceChartWindowForAppend, chartWindowLimit } from '../store';
+import { chartWindowLimit } from '../store';
 import { getSlotBars, getSlotManager, setSlotBars } from './chart-registry';
 import { setDataToChart } from './manager-access';
 
 /**
  * Apply one venue tick to an offline series copy (same G0 tip rules as
  * {@link appendBar}, without Solid store writes).
+ *
+ * This path is for **inactive** slots, so it must not advance or reset the
+ * focused chart's window plan (the module-level plan in `store/index`).
+ * It reads the current limit and slides at it; the anchored grow/reset cycle
+ * belongs to the active chart only. A slot that becomes active reloads its
+ * symbol (`axis-slot-activate`), which re-anchors the plan from the dataset.
  */
 export function applyBarToSeries(
   prev: readonly Bar[],
   bar: Bar,
-  limit?: number,
+  limit = chartWindowLimit(),
 ): { bars: Bar[]; result: BarAppendResult } {
-  const anchored = limit == null;
-  const cap = limit ?? chartWindowLimit();
   if (!bar || !Number.isFinite(bar.time)) {
     return { bars: prev.slice() as Bar[], result: 'ignored' };
   }
@@ -77,13 +81,8 @@ export function applyBarToSeries(
   if (n === 0) {
     return { bars: [bar], result: 'appended' };
   }
-  if (n >= cap) {
-    if (anchored && advanceChartWindowForAppend() === 'grow') {
-      closedPrev.push(bar);
-      return { bars: closedPrev, result: 'appended' };
-    }
-    const base = anchored ? chartWindowLimit() : cap;
-    const slid = closedPrev.slice(n - (base - 1));
+  if (n >= limit) {
+    const slid = closedPrev.slice(n - (limit - 1));
     slid.push(bar);
     return { bars: slid, result: 'slid' };
   }
