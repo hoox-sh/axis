@@ -79,8 +79,3 @@ docs/images/.tmp-gif/
 # Local-only agent notes (kept locally, not on GitHub)
 .grok/
 AGENTS.md
-
-# VS Code extension VSIX artifacts
-*.vsix
-!packages/vscode-axis-ide/test-fixtures/**/*.vsix
-packages/vscode-axis-ide/.vscode-test/
