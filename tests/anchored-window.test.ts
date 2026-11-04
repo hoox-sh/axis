@@ -116,6 +116,29 @@ describe('anchored chart window', () => {
     expect(chartWindowEngineBars()).toBe(4600);
   });
 
+  it('anchors the load at the start of the week for intraday charts', () => {
+    const sunday = Date.UTC(2023, 10, 12, 0, 0, 0) / 1000; // Sun 12 Nov 2023 UTC
+    const monday = sunday + 1440 * 60;
+    setStore('bars', []);
+    setStore('rollingWindowBars', 1000);
+    // 2580 one-minute bars -> newest Monday 18:59; Monday 00:00 is 1140 bars back.
+    loadBars(makeBars(2580, sunday, 60), 'BTCUSDT', '1m', 'binance');
+    expect(store.bars).toHaveLength(1140);
+    expect(store.bars[0]?.time).toBe(monday);
+    expect(chartWindowLimit()).toBe(1140);
+    expect(chartWindowEngineBars()).toBe(1140);
+  });
+
+  it('falls back to the base window when the period start is beyond the cap', () => {
+    const sunday = Date.UTC(2023, 10, 12, 0, 0, 0) / 1000;
+    setStore('bars', []);
+    setStore('rollingWindowBars', 1000);
+    // Newest Monday 20:00 -> week start is 1200 bars back, at the ceiling.
+    loadBars(makeBars(2641, sunday, 60), 'BTCUSDT', '1m', 'binance');
+    expect(store.bars).toHaveLength(1000);
+    expect(chartWindowLimit()).toBe(1000);
+  });
+
   it('does not grow small windows (tests / tiny charts keep the slide)', () => {
     setStore('bars', []);
     setStore('rollingWindowBars', 5);

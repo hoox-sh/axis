@@ -42,6 +42,7 @@
 import { batch } from 'solid-js';
 import { createStore, reconcile, unwrap } from 'solid-js/store';
 import { scheduleLiveFrame } from './live-frame';
+import { intervalToSec } from '../data/bars-gaps';
 import type {
   AccountTier,
   AppState,
@@ -3235,10 +3236,11 @@ if (typeof window !== 'undefined') {
  * How many bars the chart may hold (Settings → Rolling window).
  *
  * The chart no longer slides its head on every live candle. It **anchors** the
- * dataset at load, grows to {@link chartWindowCeiling} to keep the first bar
- * (and therefore the first strategy event / `var` initialization) stable, then
- * resets to the base window in one explicit step. This mirrors the stable
- * dataset TradingView gives Pine: `bar_index` stays on a bar until the reset.
+ * dataset at load (TradingView-style: week start for intraday, month start for
+ * daily, year start for weekly/monthly), grows to {@link chartWindowCeiling}
+ * to keep the first bar (and therefore the first strategy event / `var`
+ * initialization) stable, then resets to the period boundary when it fits
+ * inside the cap, otherwise to the base window.
  *
  * `chartWindowEngineBars()` is the chunked depth handed to the engine. It may
  * be a little larger than the visible chart so a live script subscription does
@@ -3252,6 +3254,60 @@ if (typeof window !== 'undefined') {
 let chartWindowPlanBase = 0;
 let chartWindowPlanLimit = 0;
 let chartWindowPlanCeiling = 0;
+let chartWindowPlanAnchor = 0;
+
+/**
+ * TradingView-style period anchor: intraday charts reach back to the start of
+ * the week, daily charts to the start of the month, weekly/monthly charts to
+ * the start of the year. All boundaries are UTC.
+ */
+function chartWindowPeriodStart(intervalSec: number, newestSec: number): number {
+  const d = new Date(newestSec * 1000);
+  if (intervalSec < 86_400) {
+    const day = d.getUTCDay(); // 0 Sun … 6 Sat
+    const daysSinceMonday = (day + 6) % 7;
+    return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - daysSinceMonday) / 1000;
+  }
+  if (intervalSec < 604_800) {
+    return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1) / 1000;
+  }
+  return Date.UTC(d.getUTCFullYear(), 0, 1) / 1000;
+}
+
+/**
+ * How many bars to keep so the oldest bar sits at the period boundary.
+ *
+ * Starts from the configured base window and only extends backwards when the
+ * base start is *after* the period boundary. The result is capped at the
+ * growth ceiling; when the period start is farther back than the cap, the
+ * caller falls back to the base window instead of resetting every bar.
+ */
+function chartWindowAnchorCount(
+  bars: readonly Bar[] | null | undefined,
+  base: number,
+  ceiling: number,
+  newestSec?: number,
+  interval = String(store.interval || '1m'),
+): number {
+  if (!Array.isArray(bars) || !bars.length) return base;
+  const newest = Number(newestSec ?? bars[bars.length - 1]?.time);
+  if (!Number.isFinite(newest) || newest <= 0) return base;
+  const intervalSec = intervalToSec(interval);
+  const periodStart = chartWindowPeriodStart(intervalSec, newest);
+  const baseStart = Math.max(0, bars.length - base);
+  const minStart = Math.max(0, bars.length - ceiling);
+  let periodIndex = -1;
+  for (let i = 0; i < bars.length; i++) {
+    const t = Number(bars[i]?.time);
+    if (Number.isFinite(t) && t >= periodStart) {
+      periodIndex = i;
+      break;
+    }
+  }
+  if (periodIndex < 0 || periodIndex >= baseStart) return base;
+  const count = bars.length - Math.max(periodIndex, minStart);
+  return Math.max(base, Math.min(ceiling, count));
+}
 
 function chartWindowBase(): number {
   const raw = Number(store.rollingWindowBars);
@@ -3271,14 +3327,24 @@ function syncChartWindowPlan(): void {
   chartWindowPlanBase = base;
   chartWindowPlanLimit = base;
   chartWindowPlanCeiling = chartWindowCeilingFor(base);
+  chartWindowPlanAnchor = base;
 }
 
-/** Re-anchor the window at the base setting (full load / symbol change). */
-export function resetChartWindowPlan(): void {
+/** Re-anchor the window at the period boundary (full load / symbol change). */
+export function resetChartWindowPlan(
+  bars?: readonly Bar[],
+  interval = String(store.interval || '1m'),
+): void {
   const base = chartWindowBase();
+  const ceiling = chartWindowCeilingFor(base);
+  const rawAnchor = chartWindowAnchorCount(bars, base, ceiling, undefined, interval);
+  // If the period start is at/behind the cap, keep the base window so the
+  // first new bar can still grow instead of resetting on the very next tick.
+  const anchor = rawAnchor > 0 && rawAnchor < ceiling ? rawAnchor : base;
   chartWindowPlanBase = base;
-  chartWindowPlanLimit = base;
-  chartWindowPlanCeiling = chartWindowCeilingFor(base);
+  chartWindowPlanCeiling = ceiling;
+  chartWindowPlanAnchor = anchor;
+  chartWindowPlanLimit = anchor;
 }
 
 export function chartWindowLimit(): number {
@@ -3302,19 +3368,33 @@ export function chartWindowCeiling(): number {
 export function chartWindowEngineBars(): number {
   syncChartWindowPlan();
   const count = store.bars.length;
-  if (count <= chartWindowPlanBase) return chartWindowPlanBase;
+  const floor = chartWindowPlanAnchor || chartWindowPlanBase;
+  if (count <= floor) return floor;
   const chunked = Math.ceil(count / ROLLING_WINDOW_ENGINE_CHUNK) * ROLLING_WINDOW_ENGINE_CHUNK;
-  return Math.min(chartWindowPlanCeiling, Math.max(chartWindowPlanBase, chunked));
+  return Math.min(chartWindowPlanCeiling, Math.max(floor, chunked));
 }
 
-/** Grow the anchored window once, or reset it to the base window. */
-export function advanceChartWindowForAppend(): 'grow' | 'reset' {
+/** Grow the anchored window once, or reset it to the period-aligned base. */
+export function advanceChartWindowForAppend(
+  bars?: readonly Bar[],
+  newestSec?: number,
+): 'grow' | 'reset' {
   syncChartWindowPlan();
   if (chartWindowPlanLimit < chartWindowPlanCeiling) {
     chartWindowPlanLimit = chartWindowPlanCeiling;
     return 'grow';
   }
-  chartWindowPlanLimit = chartWindowPlanBase;
+  const anchor = chartWindowAnchorCount(
+    bars,
+    chartWindowPlanBase,
+    chartWindowPlanCeiling,
+    newestSec,
+  );
+  // If the period start is at/behind the cap, fall back to the base window
+  // instead of resetting every bar at the ceiling.
+  const next = anchor > 0 && anchor < chartWindowPlanCeiling ? anchor : chartWindowPlanBase;
+  chartWindowPlanAnchor = next;
+  chartWindowPlanLimit = next;
   return 'reset';
 }
 
@@ -3382,7 +3462,7 @@ export function setBarsQuiet(bars: Bar[]) {
 export function loadBars(bars: Bar[], symbol: string, interval: string, exchange: string) {
   // Full load = new anchored dataset. Reset before slicing so a previous
   // grown window cannot leak into the new symbol/timeframe.
-  resetChartWindowPlan();
+  resetChartWindowPlan(bars, interval);
   // The chart window is enforced here, at the mutation boundary: no caller may
   // push the chart past the current anchored window, however it got its bars.
   const view = sliceToChartWindow(bars);
@@ -3882,12 +3962,13 @@ export function appendBar(bar: Bar, via?: 'worker' | 'venue'): BarAppendResult {
   const limit = chartWindowLimit();
   let slide = false;
   if (n > 0 && n >= limit) {
-    const action = advanceChartWindowForAppend();
+    const action = advanceChartWindowForAppend(b, bar.time);
     if (action === 'reset') {
       slide = true;
       chartDebug('window.reset', {
         time: bar.time,
         base: chartWindowPlanBase,
+        anchor: chartWindowPlanAnchor,
         ceiling: chartWindowPlanCeiling,
       });
     } else {
@@ -3904,14 +3985,15 @@ export function appendBar(bar: Bar, via?: 'worker' | 'venue'): BarAppendResult {
   } else if (slide) {
     // The anchored window reached its ceiling: drop the head once and keep the
     // new bar. This is the only point where the dataset start moves, so the
-    // first strategy event stays put for the whole grow cycle.
+    // first strategy event stays put for the whole grow cycle. The new head is
+    // the period boundary when it fits inside the cap, otherwise the base.
     // `unwrap` avoids reading every element through the store proxy — a bar
     // object is wrapped in its own proxy, so slicing the proxy allocates one
     // proxy per bar on every new candle. One copy, not two: the tail is
     // pushed into the sliced array instead of spread into a new one.
-    const base = chartWindowPlanBase;
+    const anchor = chartWindowPlanAnchor;
     const raw = unwrap(b) as Bar[];
-    const next = raw.slice(n - (base - 1));
+    const next = raw.slice(n - (anchor - 1));
     next.push(bar);
     frameTipIndex = null;
     setStore('bars', next);
