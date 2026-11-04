@@ -29,7 +29,11 @@
 import { type Component, For, Show, createMemo, untrack } from 'solid-js';
 import { store, isPanelOpen } from '../store';
 import { barPlane } from '../stores/bars';
-import { buildDataViewRows } from '../results/dataview';
+import {
+  buildDataViewRows,
+  mergePlotDisplayOverrides,
+  type DataViewPlotMeta,
+} from '../results/dataview';
 import type { RunResult } from '../indicators/runner';
 import type { Bar } from '../store/types';
 import { onchainManagerState } from '../onchain/manager';
@@ -41,20 +45,16 @@ export const DataViewPanel: Component = () => {
   const rows = createMemo(() => {
     if (!(isPanelOpen('dataview') || store.dataViewPanel.open)) return [];
     const r = store.lastRun as RunResult | null;
-    const plotMeta = (r?.meta?.plot_meta || {}) as Record<
-      string,
-      { title?: string; color?: string | null; kind?: string; display?: string | number | null }
-    >;
     // Panel `display.*` overrides win over the script's declaration, same rule
     // as the chart apply path — so hiding a plot from the pane also removes it
-    // from the Data Window (and vice versa) without re-running.
+    // from the Data Window (and vice versa) without re-running. Build a copy:
+    // `lastRun.meta.plot_meta` is a read-only store proxy, so assigning into it
+    // is a silent no-op.
     const focusPlots = store.scripts.find((s) => s.id === store.resultsFocusId)?.plots;
-    if (focusPlots) {
-      for (const [name, plot] of Object.entries(focusPlots)) {
-        if (plot?.display == null) continue;
-        plotMeta[name] = { ...(plotMeta[name] || {}), display: plot.display };
-      }
-    }
+    const plotMeta = mergePlotDisplayOverrides(
+      r?.meta?.plot_meta as Record<string, DataViewPlotMeta> | undefined,
+      focusPlots,
+    );
     // Depend on drawings so place/drag updates refresh values
     void store.drawings;
     void store.chartDataGen;

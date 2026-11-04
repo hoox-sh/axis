@@ -116,6 +116,35 @@ export function barIndexAtTime(bars: Bar[], time: number | null | undefined): nu
   return barIndexAtTimeBinary(bars, time);
 }
 
+/** One plot's Data Window metadata (from `lastRun.meta.plot_meta`). */
+export interface DataViewPlotMeta {
+  title?: string;
+  color?: string | null;
+  kind?: string;
+  display?: string | number | null;
+}
+
+/**
+ * Plot meta with the panel's `display.*` overrides applied.
+ *
+ * Pure: returns a new map and never writes into the run payload (which is a
+ * read-only Solid store proxy — assigning into it is a silent no-op). The
+ * chart apply path uses the same precedence: panel override → script
+ * declaration → `display.all`.
+ */
+export function mergePlotDisplayOverrides(
+  plotMeta: Record<string, DataViewPlotMeta> | null | undefined,
+  plots: Record<string, { display?: number | null } | undefined> | null | undefined,
+): Record<string, DataViewPlotMeta> {
+  const out: Record<string, DataViewPlotMeta> = { ...(plotMeta ?? {}) };
+  if (!plots) return out;
+  for (const [name, plot] of Object.entries(plots)) {
+    if (plot?.display == null) continue;
+    out[name] = { ...(out[name] ?? {}), display: plot.display };
+  }
+  return out;
+}
+
 export interface BuildDataViewOpts {
   bars: Bar[];
   /** Crosshair / selected bar time */
@@ -125,10 +154,7 @@ export interface BuildDataViewOpts {
   symbol?: string;
   interval?: string;
   series?: Record<string, (number | null | string | boolean)[] | unknown>;
-  plotMeta?: Record<
-    string,
-    { title?: string; color?: string | null; kind?: string; display?: string | number | null }
-  >;
+  plotMeta?: Record<string, DataViewPlotMeta>;
   /** User drawings (trendlines, hlines, fib, …) evaluated at crosshair time */
   drawings?: Drawing[] | null;
   /**

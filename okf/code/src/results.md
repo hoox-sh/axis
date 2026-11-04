@@ -7,7 +7,7 @@ tags: [code, results]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-03T21:03:08Z
+  at: 2026-11-04T06:12:00Z
 sources:
   - id: tree
     resource: "src/results"
@@ -18,7 +18,7 @@ okf_lock: generated
 
 # Files
 
-* `dataview.ts` — BuildDataViewOpts, DataViewOnchainSeries, DataViewRow, DataViewTimePoint, barIndexAtTime, buildDataViewRows, buildDrawingDataViewRows, buildOnchainDataViewRows, fmtUsdCompact, isTimeOnLineKind, linePriceAtTime, onchainValueAtTime
+* `dataview.ts` — BuildDataViewOpts, DataViewOnchainSeries, DataViewPlotMeta, DataViewRow, DataViewTimePoint, barIndexAtTime, buildDataViewRows, buildDrawingDataViewRows, buildOnchainDataViewRows, fmtUsdCompact, isTimeOnLineKind, linePriceAtTime
 * `debug-pins.ts` — DebugPin, DebugPinSource, PinsFromDebugOptions, countDebugPins, debugPinsToMarkers, normalizePinTime, parseBarIndexFromText, parseTimeFromText, pinsFromDebugEntries, pinsFromLastRun, resolveDebugPinTarget
 * `events.ts` — EventsToMarkersOptions, NormalizeOptions, StrategyFillMode, TradeMarker, alignTimeToBars, applyStrategyFills, buildEquityCurve, eventsToMarkers, formatTradeQty, isNoFillCloseEvent, normalizeStrategyEvent, normalizeStrategyEvents
 * `inline-debug.ts` — InlineDebugAnnotation, InlineDebugLevel, collapseAnnotationsByLine, collectInlineDebugAnnotations, filterPinableAnnotations, isPinableAnnotation, parseSourceLine
