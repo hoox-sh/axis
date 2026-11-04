@@ -2,7 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Shared Layers panel chrome: section, empty state, visibility row.
+ * Shared Layers panel chrome: collapsible section, empty state, layer row.
+ *
+ * Sections collapse from their heading and can host section-level controls
+ * (show/hide all, overflow menu). Rows are dense: visibility first, optional
+ * kind glyph or color swatch, name + subtitle, then hover-revealed actions.
  *
  * @module ui/layers/rows
  */
@@ -12,33 +16,63 @@ import { Icons } from '../icons';
 
 let nextSection = 0;
 
-/** Titled block with an optional count. The heading is the accessible name. */
+/** Titled, collapsible block with an optional count and header actions. */
 export const LayerSection: Component<{
   title: string;
+  /** Total rows in the section. */
   count?: number;
+  /** Rows left after the panel search; renders `matched / count` when lower. */
+  matched?: number;
+  collapsed?: boolean;
+  onToggleCollapsed?: () => void;
+  /** Section-level controls rendered next to the count. */
+  actions?: JSX.Element;
+  testId?: string;
   children: JSX.Element;
 }> = (props) => {
   const headingId = `axis-layer-section-${++nextSection}`;
+  const showCount = () => props.count != null;
   return (
-    <section aria-labelledby={headingId} class="flex flex-col gap-1">
-      <h2
-        id={headingId}
-        class="sc-section-title m-0 px-0.5 flex items-baseline justify-between gap-2"
-      >
-        <span>{props.title}</span>
-        <Show when={props.count != null}>
-          <span class="font-mono font-normal text-text-faint normal-case tracking-normal tabular-nums">
-            {props.count}
+    <section class="ax-layers-section" aria-labelledby={headingId} data-testid={props.testId}>
+      <div class="ax-layers-section-head">
+        <h2 id={headingId} class="ax-layers-section-title">
+          <button
+            type="button"
+            class="ax-layers-section-toggle"
+            aria-expanded={props.collapsed ? 'false' : 'true'}
+            title={props.collapsed ? `Expand ${props.title}` : `Collapse ${props.title}`}
+            onClick={props.onToggleCollapsed}
+            disabled={!props.onToggleCollapsed}
+          >
+            <Icons.chevronDown
+              size={10}
+              class={`ax-layers-chevron${props.collapsed ? '' : ' is-open'}`}
+            />
+            <span>{props.title}</span>
+          </button>
+        </h2>
+        <Show when={showCount()}>
+          <span class="ax-layers-count" title={`${props.count} layer(s)`}>
+            {props.matched != null && props.matched < (props.count ?? 0)
+              ? `${props.matched}/${props.count}`
+              : props.count}
           </span>
         </Show>
-      </h2>
-      <div class="flex flex-col gap-0.5">{props.children}</div>
+        <Show when={props.actions}>
+          <div class="ax-layers-section-actions">{props.actions}</div>
+        </Show>
+      </div>
+      <Show when={!props.collapsed}>
+        <div class="ax-layers-section-body">{props.children}</div>
+      </Show>
     </section>
   );
 };
 
-export const LayerEmpty: Component<{ children: JSX.Element }> = (props) => (
-  <div class="axis-empty-state text-[12px] text-text-dim px-1 py-2">{props.children}</div>
+export const LayerEmpty: Component<{ children: JSX.Element; testId?: string }> = (props) => (
+  <div class="ax-layers-empty" data-testid={props.testId}>
+    {props.children}
+  </div>
 );
 
 /** Show / hide control. Locked rows stay visible and explain why. */
@@ -57,11 +91,8 @@ export const VisibilityToggle: Component<{
   return (
     <button
       type="button"
-      class={`w-5 h-5 min-w-5 flex items-center justify-center border flex-shrink-0 rounded focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-1 focus-visible:outline-accent ${
-        props.visible
-          ? 'border-accent bg-accent/15 text-accent'
-          : 'border-border bg-bg-hover text-text-dim'
-      } ${props.locked ? 'opacity-50 cursor-not-allowed' : ''}`}
+      class="ax-layers-eye"
+      classList={{ 'is-on': props.visible, 'is-locked': props.locked }}
       disabled={props.locked}
       aria-pressed={props.visible}
       aria-label={name()}
@@ -76,58 +107,137 @@ export const VisibilityToggle: Component<{
   );
 };
 
-/** Pane, overlay, script, or on-chain series row. */
+/** Pane, overlay, script, on-chain series, or drawing row. */
 export const LayerRow: Component<{
   label: string;
   sub?: string;
   visible: boolean;
-  locked?: boolean;
+  /** Visibility cannot be changed (the price pane). */
+  visibilityLocked?: boolean;
+  /** Optional leading glyph (script kind, pane type, series). */
+  icon?: JSX.Element;
+  /** Optional color swatch before the label. */
+  swatch?: string;
+  /** Small trailing tag, e.g. `est.`, `locked`, `hidden`. */
+  badge?: string;
+  /** Rendered muted when the layer is currently hidden. */
+  hidden?: boolean;
+  selected?: boolean;
+  /** Makes the name a select-on-chart button. */
+  onSelect?: () => void;
   onToggle: () => void;
   onSettings?: () => void;
+  /** Drawing lock toggle (separate from visibility). */
+  isLocked?: boolean;
+  onToggleLock?: () => void;
   onRemove?: () => void;
   /** Optional root data-testid (e.g. axis-layers-onchain-*). */
   testId?: string;
   /** Tooltip for the remove/detach control. */
   removeTitle?: string;
-}> = (props) => (
-  <div
-    class="axis-list-row flex items-center gap-1.5 h-8 px-1 bg-bg-elev border-b border-border-soft"
-    data-testid={props.testId}
-  >
-    <VisibilityToggle
-      label={props.label}
-      visible={props.visible}
-      locked={props.locked}
-      onToggle={props.onToggle}
-    />
-    <div class="min-w-0 flex-1">
-      <div class="text-text truncate font-medium leading-tight">{props.label}</div>
+}> = (props) => {
+  const main = () => (
+    <>
+      <div class="ax-layers-row-label" title={props.label}>
+        {props.label}
+      </div>
       <Show when={props.sub}>
-        <div class="text-[0.78em] text-text-faint font-mono truncate">{props.sub}</div>
+        <div class="ax-layers-row-sub" title={props.sub}>
+          {props.sub}
+        </div>
       </Show>
+    </>
+  );
+  return (
+    <div
+      class="ax-layers-row"
+      classList={{ 'is-selected': props.selected, 'is-hidden': props.hidden }}
+      data-testid={props.testId}
+      data-hidden={props.hidden || undefined}
+      data-selected={props.selected ? '1' : undefined}
+    >
+      <VisibilityToggle
+        label={props.label}
+        visible={props.visible}
+        locked={props.visibilityLocked}
+        onToggle={props.onToggle}
+      />
+      <Show when={props.swatch}>
+        <span
+          class="ax-layers-swatch"
+          style={{ background: props.swatch }}
+          title={props.swatch}
+          aria-hidden="true"
+        />
+      </Show>
+      <Show when={props.icon}>
+        <span class="ax-layers-glyph" aria-hidden="true">
+          {props.icon}
+        </span>
+      </Show>
+      <Show when={props.onSelect} fallback={<div class="ax-layers-row-main">{main()}</div>}>
+        <button
+          type="button"
+          class="ax-layers-row-main is-button"
+          aria-pressed={props.selected}
+          title="Select on chart"
+          onClick={() => props.onSelect?.()}
+        >
+          {main()}
+        </button>
+      </Show>
+      <Show when={props.badge}>
+        <span class="ax-layers-badge">{props.badge}</span>
+      </Show>
+      <div class="ax-layers-row-actions">
+        <Show when={props.onToggleLock}>
+          <button
+            type="button"
+            class="ax-layers-icon"
+            classList={{ 'is-on': props.isLocked }}
+            title={props.isLocked ? `Unlock ${props.label}` : `Lock ${props.label}`}
+            aria-label={props.isLocked ? `Unlock ${props.label}` : `Lock ${props.label}`}
+            aria-pressed={props.isLocked}
+            onClick={(e) => {
+              e.stopPropagation();
+              props.onToggleLock?.();
+            }}
+          >
+            {props.isLocked ? <Icons.lock size={11} /> : <Icons.unlock size={11} />}
+          </button>
+        </Show>
+        <Show when={props.onSettings}>
+          <button
+            type="button"
+            class="ax-layers-icon"
+            title="Script settings"
+            aria-label={`Settings for ${props.label}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              props.onSettings?.();
+            }}
+          >
+            <Icons.settings size={11} />
+          </button>
+        </Show>
+        <Show when={props.onRemove}>
+          <button
+            type="button"
+            class="ax-layers-icon is-danger"
+            title={props.removeTitle || 'Remove'}
+            aria-label={
+              props.removeTitle ? `${props.removeTitle}: ${props.label}` : `Remove ${props.label}`
+            }
+            data-testid={props.testId ? `${props.testId}-detach` : undefined}
+            onClick={(e) => {
+              e.stopPropagation();
+              props.onRemove?.();
+            }}
+          >
+            <Icons.x size={11} />
+          </button>
+        </Show>
+      </div>
     </div>
-    <Show when={props.onSettings}>
-      <button
-        type="button"
-        class="sc-btn sc-btn-ghost px-1"
-        title="Script settings"
-        aria-label={`Settings for ${props.label}`}
-        onClick={props.onSettings}
-      >
-        <Icons.settings />
-      </button>
-    </Show>
-    <Show when={props.onRemove}>
-      <button
-        type="button"
-        class="sc-btn sc-btn-ghost px-1 text-text-faint hover:text-red"
-        title={props.removeTitle || 'Remove'}
-        aria-label={props.removeTitle ? `${props.removeTitle}: ${props.label}` : `Remove ${props.label}`}
-        data-testid={props.testId ? `${props.testId}-detach` : undefined}
-        onClick={props.onRemove}
-      >
-        <Icons.x />
-      </button>
-    </Show>
-  </div>
-);
+  );
+};

@@ -18,17 +18,26 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Layers panel — panes, indicators, user drawings visibility/management.
+ * Layers panel — panes, scripts, overlays, on-chain series, and user drawings.
  *
- * User drawings are listed individually, selectable (syncs chart selection),
- * hideable per-item, and removable. Visibility toggles hit both store and
- * chart manager / drawing layer.
+ * One search filters every section, sections collapse (persisted), and each
+ * section header carries its own bulk visibility controls. Drawing rows are
+ * selectable, hideable, lockable, and removable; templates live at the bottom.
  *
  * Presentational pieces live under `ui/layers/`. FloatableShell id `layers`.
  * Script settings opens per applied indicator.
  */
 
-import { type Component, For, Show, createEffect, createMemo, createSignal } from 'solid-js';
+import {
+  type Component,
+  For,
+  Show,
+  createEffect,
+  createMemo,
+  createSignal,
+  onCleanup,
+  onMount,
+} from 'solid-js';
 import {
   store,
   isPanelOpen,
@@ -55,7 +64,8 @@ import {
   setOnchainEventsVisible,
 } from '../onchain/manager';
 import { FloatableShell } from './panels/FloatableShell';
-import { toolLabel, type Drawing } from '../chart/drawing-types';
+import { Icons } from './icons';
+import { resolveDrawingStyle, toolLabel, type Drawing } from '../chart/drawing-types';
 import {
   listTemplates,
   saveTemplate,
@@ -79,12 +89,19 @@ import { DrawingList } from './layers/drawings';
 import { drawingMatchesQuery, onchainSeriesSub } from './layers/format';
 import { LayerEmpty, LayerRow, LayerSection } from './layers/rows';
 import { DrawingTemplates } from './layers/templates';
+import { readCollapsedSections, toggleCollapsedSection, type LayerSectionId } from './layers/prefs';
 
 /** Pane / indicator / drawing visibility and remove actions. */
 export const LayerPanel: Component = () => {
   /** Bump to re-read localStorage template catalog. */
   const [tplTick, setTplTick] = createSignal(0);
-  const [drawingQuery, setDrawingQuery] = createSignal('');
+  const [query, setQuery] = createSignal('');
+  const [hiddenOnly, setHiddenOnly] = createSignal(false);
+  const [collapsed, setCollapsed] = createSignal<ReadonlySet<LayerSectionId>>(
+    new Set(readCollapsedSections()),
+  );
+  let searchInput: HTMLInputElement | undefined;
+
   const templates = createMemo(() => {
     void tplTick();
     return listTemplates();
@@ -92,20 +109,96 @@ export const LayerPanel: Component = () => {
 
   /** Drawings for the active chart symbol (plus untagged legacy). */
   const symbolDrawings = createMemo(() => visibleDrawingsForActiveSymbol(store.symbol));
-  const filteredDrawings = createMemo(() =>
-    symbolDrawings().filter((d) => drawingMatchesQuery(d, drawingQuery())),
-  );
   const onchainCount = createMemo(
     () => onchainManagerState.series.length + (onchainManagerState.events.length > 0 ? 1 : 0),
+  );
+  const overlayCount = createMemo(
+    () => Number(volumeProfileEnabled()) + Number(footprintEnabled()),
+  );
+
+  const normalizedQuery = () => query().trim().toLowerCase();
+  const matches = (...parts: (string | null | undefined)[]) => {
+    const q = normalizedQuery();
+    if (!q) return true;
+    return parts.filter(Boolean).join(' ').toLowerCase().includes(q);
+  };
+
+  const filteredScripts = createMemo(() =>
+    store.scripts.filter((s) => (!hiddenOnly() || !s.visible) && matches(s.name, s.paneId)),
+  );
+  const filteredPanes = createMemo(() =>
+    [...store.panes]
+      .sort((a, b) => a.order - b.order)
+      .filter((p) => (!hiddenOnly() || !p.visible) && matches(p.label || p.id, p.id, p.type)),
+  );
+  const filteredOnchain = createMemo(() => ({
+    series: onchainManagerState.series.filter(
+      (s) =>
+        (!hiddenOnly() || s.visible === false) &&
+        matches(s.label || s.key || s.id, onchainSeriesSub(s)),
+    ),
+    events:
+      onchainManagerState.events.length > 0 &&
+      (!hiddenOnly() || onchainManagerState.eventsVisible === false) &&
+      matches('Event markers', onchainManagerState.eventSourceLabel),
+  }));
+  const filteredDrawings = createMemo(() =>
+    symbolDrawings().filter(
+      (d) => (!hiddenOnly() || Boolean(d.meta?.hidden)) && drawingMatchesQuery(d, query()),
+    ),
+  );
+  const filteredTemplates = createMemo(() =>
+    templates().filter((t) => !hiddenOnly() && matches(t.name, t.meta?.symbol, t.meta?.interval)),
+  );
+
+  const hiddenTotal = createMemo(
+    () =>
+      store.scripts.filter((s) => !s.visible).length +
+      store.panes.filter((p) => !p.visible).length +
+      symbolDrawings().filter((d) => d.meta?.hidden).length +
+      onchainManagerState.series.filter((s) => s.visible === false).length,
+  );
+
+  const matchTotal = createMemo(
+    () =>
+      filteredScripts().length +
+      filteredPanes().length +
+      filteredOnchain().series.length +
+      filteredDrawings().length,
   );
 
   // A filter typed for the previous ticker should not hide the next symbol's rows.
   createEffect(() => {
     void store.symbol;
-    setDrawingQuery('');
+    setQuery('');
+    setHiddenOnly(false);
   });
 
+  onMount(() => {
+    // `/` focuses the layer search while the panel is mounted.
+    const onSlash = (e: KeyboardEvent) => {
+      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
+      e.preventDefault();
+      searchInput?.focus();
+    };
+    window.addEventListener('keydown', onSlash);
+    onCleanup(() => window.removeEventListener('keydown', onSlash));
+  });
+
+  const isCollapsed = (id: LayerSectionId) => collapsed().has(id);
+  const toggleSection = (id: LayerSectionId) => {
+    setCollapsed(new Set(toggleCollapsedSection(id, [...collapsed()])));
+  };
+
   const refreshTemplates = () => setTplTick((n) => n + 1);
+
+  const resetFilters = () => {
+    setQuery('');
+    setHiddenOnly(false);
+    searchInput?.focus();
+  };
 
   const togglePane = (id: string, next: boolean) => {
     setPaneVisible(id, next);
@@ -124,6 +217,24 @@ export const LayerPanel: Component = () => {
     });
   };
 
+  const showAllScripts = () => {
+    void import('../indicators/visibility').then(({ setScriptChartVisible }) => {
+      for (const script of store.scripts) {
+        if (!script.visible) setScriptChartVisible(script.id, true);
+      }
+      announce('All scripts shown');
+    });
+  };
+
+  const hideAllScripts = () => {
+    void import('../indicators/visibility').then(({ setScriptChartVisible }) => {
+      for (const script of store.scripts) {
+        if (script.visible) setScriptChartVisible(script.id, false);
+      }
+      announce('All scripts hidden');
+    });
+  };
+
   /** Push the active-symbol list to the layer (never the full multi-symbol store). */
   const syncLayerDrawings = (list: Drawing[]) => {
     const layer = getActiveDrawingLayer();
@@ -134,6 +245,55 @@ export const LayerPanel: Component = () => {
         /* ignore */
       }
     }
+  };
+
+  const setDrawingHidden = (d: Drawing, hidden: boolean) => {
+    const nextMeta = { ...(d.meta || {}), hidden };
+    patchDrawing(d.id, { meta: nextMeta } as Partial<Drawing>);
+    // Layer only paints the active symbol’s drawings
+    syncLayerDrawings(
+      visibleDrawingsForActiveSymbol(store.symbol).map((x) =>
+        x.id === d.id ? ({ ...x, meta: nextMeta } as Drawing) : x,
+      ),
+    );
+    // Re-apply selection paint after hide toggle
+    if (store.selectedDrawingId === d.id) {
+      getActiveDrawingLayer()?.setSelectedId(d.id);
+    }
+  };
+
+  const onToggleDrawingVisible = (d: Drawing) => setDrawingHidden(d, !d.meta?.hidden);
+
+  const showAllDrawings = () => {
+    const visible = symbolDrawings();
+    if (!visible.some((d) => d.meta?.hidden)) return;
+    for (const d of visible) {
+      if (d.meta?.hidden) setDrawingHidden(d, false);
+    }
+    announce(`Shown all drawings for ${store.symbol || 'this symbol'}`);
+  };
+
+  const hideAllDrawings = () => {
+    const visible = symbolDrawings();
+    if (!visible.some((d) => !d.meta?.hidden)) return;
+    for (const d of visible) {
+      if (!d.meta?.hidden) setDrawingHidden(d, true);
+    }
+    announce(`Hidden all drawings for ${store.symbol || 'this symbol'}`);
+  };
+
+  const onToggleDrawingLock = (d: Drawing) => {
+    const locked = !resolveDrawingStyle(d).locked;
+    patchDrawing(d.id, {
+      locked,
+      meta: { ...(d.meta || {}), locked },
+    } as Partial<Drawing>);
+    syncLayerDrawings(
+      visibleDrawingsForActiveSymbol(store.symbol).map((x) =>
+        x.id === d.id ? ({ ...x, locked, meta: { ...(x.meta || {}), locked } } as Drawing) : x,
+      ),
+    );
+    announce(`${locked ? 'Locked' : 'Unlocked'} drawing`);
   };
 
   const onClearDrawings = () => {
@@ -206,22 +366,6 @@ export const LayerPanel: Component = () => {
       } catch {
         /* ignore */
       }
-    }
-  };
-
-  const onToggleDrawingVisible = (d: Drawing) => {
-    const hidden = !d.meta?.hidden;
-    const nextMeta = { ...(d.meta || {}), hidden };
-    patchDrawing(d.id, { meta: nextMeta } as Partial<Drawing>);
-    // Layer only paints the active symbol’s drawings
-    syncLayerDrawings(
-      visibleDrawingsForActiveSymbol(store.symbol).map((x) =>
-        x.id === d.id ? ({ ...x, meta: nextMeta } as Drawing) : x,
-      ),
-    );
-    // Re-apply selection paint after hide toggle
-    if (store.selectedDrawingId === d.id) {
-      getActiveDrawingLayer()?.setSelectedId(d.id);
     }
   };
 
@@ -328,133 +472,331 @@ export const LayerPanel: Component = () => {
   return (
     <Show when={isPanelOpen('layers') || store.layerPanel.open}>
       <FloatableShell id="layers" testId="axis-layers">
-        <div class="flex-1 overflow-y-auto min-h-0 text-[12px] flex flex-col gap-3">
-          <LayerSection title="Scripts" count={store.scripts.length}>
-            <Show
-              when={store.scripts.length > 0}
-              fallback={<LayerEmpty>No scripts on the chart</LayerEmpty>}
-            >
-              <ul class="flex flex-col gap-0.5 m-0 p-0 list-none" aria-label="Chart scripts">
-                <For each={store.scripts}>
-                  {(ind) => (
-                    <li>
-                      <LayerRow
-                        label={ind.name}
-                        sub={ind.paneId}
-                        visible={ind.visible}
-                        onToggle={() => onToggleIndicator(ind.id)}
-                        onSettings={() => openScriptSettings(ind.id)}
-                        onRemove={() => onRemoveIndicator(ind.id, ind.paneId)}
-                      />
-                    </li>
-                  )}
-                </For>
-              </ul>
-            </Show>
-          </LayerSection>
-
-          <LayerSection title="Panes" count={store.panes.length}>
-            <For each={[...store.panes].sort((a, b) => a.order - b.order)}>
-              {(pane) => (
-                <LayerRow
-                  label={pane.label || pane.id}
-                  sub={pane.type}
-                  visible={pane.visible}
-                  onToggle={() => togglePane(pane.id, !pane.visible)}
-                  locked={pane.id === 'price'}
-                />
-              )}
-            </For>
-          </LayerSection>
-
-          <LayerSection title="Overlays">
-            <LayerRow
-              label="Volume profile"
-              sub="OHLCV estimate · fixed range"
-              visible={volumeProfileEnabled()}
-              onToggle={() => toggleVolumeProfileEnabled()}
-            />
-            <LayerRow
-              label="Footprint"
-              sub="OHLCV estimate · per candle"
-              visible={footprintEnabled()}
-              onToggle={() => toggleFootprintEnabled()}
-              testId="axis-layers-footprint"
-            />
-          </LayerSection>
-
-          <LayerSection title="On-chain" count={onchainCount()}>
-            <div data-testid="axis-layers-onchain" class="flex flex-col gap-0.5">
-              <Show
-                when={
-                  onchainManagerState.series.length > 0 || onchainManagerState.events.length > 0
-                }
-                fallback={<LayerEmpty>No on-chain series</LayerEmpty>}
-              >
-                <For each={onchainManagerState.series}>
-                  {(s) => (
-                    <LayerRow
-                      label={s.label || s.key || s.id}
-                      sub={onchainSeriesSub(s)}
-                      visible={s.visible !== false}
-                      onToggle={() => setOnchainSeriesVisible(s.id, s.visible === false)}
-                      onRemove={() => detachOnchainSeries(s.id)}
-                      testId={`axis-layers-onchain-series-${s.id}`}
-                      removeTitle="Detach series"
-                    />
-                  )}
-                </For>
-                <Show when={onchainManagerState.events.length > 0}>
-                  <LayerRow
-                    label="Event markers"
-                    sub={
-                      onchainManagerState.eventSourceLabel ||
-                      `${onchainManagerState.events.length} event${
-                        onchainManagerState.events.length === 1 ? '' : 's'
-                      }`
-                    }
-                    visible={onchainManagerState.eventsVisible !== false}
-                    onToggle={() =>
-                      setOnchainEventsVisible(onchainManagerState.eventsVisible === false)
-                    }
-                    testId="axis-layers-onchain-events"
-                  />
-                </Show>
+        <div class="ax-layers flex flex-col flex-1 min-h-0">
+          {/* ── Search + summary ───────────────────────────────────── */}
+          <div class="ax-layers-head">
+            <div class="ax-layers-search">
+              <Icons.search size={12} />
+              <input
+                ref={searchInput}
+                type="search"
+                class="ax-layers-search-input"
+                placeholder="Find layers…"
+                aria-label="Find layers"
+                data-testid="axis-layers-search"
+                value={query()}
+                autocomplete="off"
+                spellcheck={false}
+                onInput={(e) => setQuery(e.currentTarget.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape' && (query() || hiddenOnly())) {
+                    e.preventDefault();
+                    resetFilters();
+                  }
+                }}
+              />
+              <Show when={query()} fallback={<kbd class="ax-layers-kbd">/</kbd>}>
+                <button
+                  type="button"
+                  class="ax-layers-search-clear"
+                  title="Clear search"
+                  aria-label="Clear layer search"
+                  onClick={resetFilters}
+                >
+                  <Icons.x size={10} />
+                </button>
               </Show>
             </div>
-          </LayerSection>
+            <button
+              type="button"
+              class="ax-layers-icon"
+              classList={{ 'is-on': hiddenOnly() }}
+              title={hiddenOnly() ? 'Show all layers' : 'Show only hidden layers'}
+              aria-label="Show only hidden layers"
+              aria-pressed={hiddenOnly()}
+              data-testid="axis-layers-hidden-only"
+              onClick={() => setHiddenOnly((v) => !v)}
+            >
+              <Icons.eyeOff size={11} />
+            </button>
+          </div>
 
-          <LayerSection title="Drawings" count={symbolDrawings().length}>
-            <DrawingList
-              symbol={store.symbol}
-              drawings={symbolDrawings()}
-              filtered={filteredDrawings()}
-              totalCount={store.drawings.length}
-              selectedId={store.selectedDrawingId}
-              toolName={toolLabel(store.drawingTool)}
-              toolActive={store.drawingTool !== 'cursor'}
-              query={drawingQuery()}
-              onQuery={setDrawingQuery}
-              onDuplicate={onDuplicateDrawings}
-              onKeepSymbol={onKeepThisSymbol}
-              onTagSymbol={onTagWithSymbol}
-              onClear={onClearDrawings}
-              onSelect={onSelectDrawing}
-              onToggleVisible={onToggleDrawingVisible}
-              onRemove={onRemoveDrawing}
-            />
-            <DrawingTemplates
-              symbol={store.symbol}
-              templates={templates()}
-              canSave={symbolDrawings().length > 0}
-              onSave={onSaveTemplate}
-              onImport={(e) => void onImportTemplatesFile(e)}
-              onExportAll={onExportAllTemplates}
-              onLoad={onLoadTemplate}
-              onExport={onExportTemplate}
-              onDelete={onDeleteTemplate}
-            />
-          </LayerSection>
+          <div class="ax-layers-summary" data-testid="axis-layers-summary">
+            <span title="Applied scripts">{store.scripts.length} scripts</span>
+            <span title="Chart panes">{store.panes.length} panes</span>
+            <span title="Drawings for the active symbol">{symbolDrawings().length} drawings</span>
+            <Show when={hiddenTotal() > 0}>
+              <span class="is-warn" title="Hidden layers across this panel">
+                {hiddenTotal()} hidden
+              </span>
+            </Show>
+          </div>
+
+          <Show when={query() || hiddenOnly()}>
+            <div class="ax-layers-filterbar" data-testid="axis-layers-filterbar">
+              <span>
+                {hiddenOnly() ? 'Hidden only' : `“${query().trim()}”`} · {matchTotal()} match
+                {matchTotal() === 1 ? '' : 'es'}
+              </span>
+              <button type="button" onClick={resetFilters}>
+                Reset
+              </button>
+            </div>
+          </Show>
+
+          {/* ── Sections ───────────────────────────────────────────── */}
+          <div class="ax-layers-scroll">
+            <LayerSection
+              title="Scripts"
+              count={store.scripts.length}
+              matched={filteredScripts().length}
+              collapsed={isCollapsed('scripts')}
+              onToggleCollapsed={() => toggleSection('scripts')}
+              testId="axis-layers-section-scripts"
+              actions={
+                <>
+                  <button
+                    type="button"
+                    class="ax-layers-icon"
+                    title="Show all scripts"
+                    aria-label="Show all scripts"
+                    onClick={showAllScripts}
+                  >
+                    <Icons.eye size={10} />
+                  </button>
+                  <button
+                    type="button"
+                    class="ax-layers-icon"
+                    title="Hide all scripts"
+                    aria-label="Hide all scripts"
+                    onClick={hideAllScripts}
+                  >
+                    <Icons.eyeOff size={10} />
+                  </button>
+                </>
+              }
+            >
+              <Show
+                when={filteredScripts().length > 0}
+                fallback={
+                  <LayerEmpty>
+                    {store.scripts.length ? 'No scripts match' : 'No scripts on the chart'}
+                  </LayerEmpty>
+                }
+              >
+                <ul class="ax-layers-list" aria-label="Chart scripts">
+                  <For each={filteredScripts()}>
+                    {(ind) => (
+                      <li>
+                        <LayerRow
+                          label={ind.name}
+                          sub={ind.paneId}
+                          visible={ind.visible}
+                          hidden={!ind.visible}
+                          icon={
+                            /\bstrategy\s*\(/.test(ind.code) ? (
+                              <Icons.trend size={11} />
+                            ) : (
+                              <Icons.activity size={11} />
+                            )
+                          }
+                          onToggle={() => onToggleIndicator(ind.id)}
+                          onSettings={() => openScriptSettings(ind.id)}
+                          onRemove={() => onRemoveIndicator(ind.id, ind.paneId)}
+                          testId={`axis-layers-script-${ind.id}`}
+                        />
+                      </li>
+                    )}
+                  </For>
+                </ul>
+              </Show>
+            </LayerSection>
+
+            <LayerSection
+              title="Panes"
+              count={store.panes.length}
+              matched={filteredPanes().length}
+              collapsed={isCollapsed('panes')}
+              onToggleCollapsed={() => toggleSection('panes')}
+              testId="axis-layers-section-panes"
+            >
+              <Show
+                when={filteredPanes().length > 0}
+                fallback={<LayerEmpty>No panes match</LayerEmpty>}
+              >
+                <ul class="ax-layers-list" aria-label="Chart panes">
+                  <For each={filteredPanes()}>
+                    {(pane) => (
+                      <li>
+                        <LayerRow
+                          label={pane.label || pane.id}
+                          sub={`${pane.type}${pane.height ? ` · ${pane.height}px` : ''}`}
+                          visible={pane.visible}
+                          hidden={!pane.visible}
+                          visibilityLocked={pane.id === 'price'}
+                          icon={<Icons.panelBottom size={11} />}
+                          badge={pane.id === 'price' ? 'locked' : undefined}
+                          onToggle={() => togglePane(pane.id, !pane.visible)}
+                          testId={`axis-layers-pane-${pane.id}`}
+                        />
+                      </li>
+                    )}
+                  </For>
+                </ul>
+              </Show>
+            </LayerSection>
+
+            <LayerSection
+              title="Overlays"
+              count={overlayCount()}
+              collapsed={isCollapsed('overlays')}
+              onToggleCollapsed={() => toggleSection('overlays')}
+              testId="axis-layers-section-overlays"
+            >
+              <LayerRow
+                label="Volume profile"
+                sub="fixed range"
+                badge="est."
+                visible={volumeProfileEnabled()}
+                hidden={!volumeProfileEnabled()}
+                icon={<Icons.barChart size={11} />}
+                onToggle={() => toggleVolumeProfileEnabled()}
+              />
+              <LayerRow
+                label="Footprint"
+                sub="per candle"
+                badge="est."
+                visible={footprintEnabled()}
+                hidden={!footprintEnabled()}
+                icon={<Icons.dataView size={11} />}
+                onToggle={() => toggleFootprintEnabled()}
+                testId="axis-layers-footprint"
+              />
+            </LayerSection>
+
+            <LayerSection
+              title="On-chain"
+              count={onchainCount()}
+              matched={filteredOnchain().series.length + (filteredOnchain().events ? 1 : 0)}
+              collapsed={isCollapsed('onchain')}
+              onToggleCollapsed={() => toggleSection('onchain')}
+              testId="axis-layers-section-onchain"
+            >
+              <div data-testid="axis-layers-onchain">
+                <Show
+                  when={filteredOnchain().series.length > 0 || filteredOnchain().events}
+                  fallback={
+                    <LayerEmpty>
+                      {onchainManagerState.series.length || onchainManagerState.events.length
+                        ? 'No on-chain layers match'
+                        : 'No on-chain series'}
+                    </LayerEmpty>
+                  }
+                >
+                  <ul class="ax-layers-list" aria-label="On-chain series">
+                    <For each={filteredOnchain().series}>
+                      {(s) => (
+                        <li>
+                          <LayerRow
+                            label={s.label || s.key || s.id}
+                            sub={onchainSeriesSub(s)}
+                            visible={s.visible !== false}
+                            hidden={s.visible === false}
+                            icon={<Icons.onchain size={11} />}
+                            onToggle={() => setOnchainSeriesVisible(s.id, s.visible === false)}
+                            onRemove={() => detachOnchainSeries(s.id)}
+                            testId={`axis-layers-onchain-series-${s.id}`}
+                            removeTitle="Detach series"
+                          />
+                        </li>
+                      )}
+                    </For>
+                    <Show when={filteredOnchain().events}>
+                      <li>
+                        <LayerRow
+                          label="Event markers"
+                          sub={
+                            onchainManagerState.eventSourceLabel ||
+                            `${onchainManagerState.events.length} event${
+                              onchainManagerState.events.length === 1 ? '' : 's'
+                            }`
+                          }
+                          visible={onchainManagerState.eventsVisible !== false}
+                          hidden={onchainManagerState.eventsVisible === false}
+                          icon={<Icons.pin size={11} />}
+                          onToggle={() =>
+                            setOnchainEventsVisible(onchainManagerState.eventsVisible === false)
+                          }
+                          testId="axis-layers-onchain-events"
+                        />
+                      </li>
+                    </Show>
+                  </ul>
+                </Show>
+              </div>
+            </LayerSection>
+
+            <LayerSection
+              title="Drawings"
+              count={symbolDrawings().length}
+              matched={filteredDrawings().length}
+              collapsed={isCollapsed('drawings')}
+              onToggleCollapsed={() => toggleSection('drawings')}
+              testId="axis-layers-section-drawings"
+              actions={
+                <>
+                  <button
+                    type="button"
+                    class="ax-layers-icon"
+                    title="Show all drawings"
+                    aria-label="Show all drawings"
+                    onClick={showAllDrawings}
+                  >
+                    <Icons.eye size={10} />
+                  </button>
+                  <button
+                    type="button"
+                    class="ax-layers-icon"
+                    title="Hide all drawings"
+                    aria-label="Hide all drawings"
+                    onClick={hideAllDrawings}
+                  >
+                    <Icons.eyeOff size={10} />
+                  </button>
+                </>
+              }
+            >
+              <DrawingList
+                symbol={store.symbol}
+                drawings={symbolDrawings()}
+                filtered={filteredDrawings()}
+                totalCount={store.drawings.length}
+                selectedId={store.selectedDrawingId}
+                toolName={toolLabel(store.drawingTool)}
+                toolActive={store.drawingTool !== 'cursor'}
+                query={query()}
+                onDuplicate={onDuplicateDrawings}
+                onKeepSymbol={onKeepThisSymbol}
+                onTagSymbol={onTagWithSymbol}
+                onClear={onClearDrawings}
+                onSelect={onSelectDrawing}
+                onToggleVisible={onToggleDrawingVisible}
+                onToggleLock={onToggleDrawingLock}
+                onRemove={onRemoveDrawing}
+              />
+              <DrawingTemplates
+                symbol={store.symbol}
+                templates={filteredTemplates()}
+                canSave={symbolDrawings().length > 0}
+                onSave={onSaveTemplate}
+                onImport={(e) => void onImportTemplatesFile(e)}
+                onExportAll={onExportAllTemplates}
+                onLoad={onLoadTemplate}
+                onExport={onExportTemplate}
+                onDelete={onDeleteTemplate}
+              />
+            </LayerSection>
+          </div>
         </div>
       </FloatableShell>
     </Show>

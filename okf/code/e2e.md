@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "e2e"
-description: "e2e contains charts.ts, colors.spec.ts, critical.spec.ts, and 14 more files."
+description: "e2e contains charts.ts, colors.spec.ts, critical.spec.ts, and 15 more files."
 resource: "e2e"
 tags: [code, e2e]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-04T14:55:09Z
+  at: 2026-11-04T15:15:00Z
 sources:
   - id: tree
     resource: "e2e"
@@ -25,6 +25,7 @@ okf_lock: generated
 * `debug-page.spec.ts`
 * `drawings.spec.ts`
 * `footprint.spec.ts`
+* `layers-panel.spec.ts`
 * `library-panel.spec.ts`
 * `library.spec.ts`
 * `pyne-parity.spec.ts`

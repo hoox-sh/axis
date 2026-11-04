@@ -23,105 +23,100 @@ export const DrawingTemplates: Component<{
   onExport: (id: string) => void;
   onDelete: (id: string, name: string) => void;
 }> = (props) => (
-  <div class="mt-1 pt-2 border-t border-border-soft" data-testid="axis-drawing-templates">
-    <div class="flex items-center justify-between gap-2 px-1 py-0.5 mb-0.5">
-      <span class="text-text-dim">
-        Templates{' '}
-        <span class="text-text-faint font-mono tabular-nums">({props.templates.length})</span>
+  <div class="ax-layers-templates" data-testid="axis-drawing-templates">
+    <div class="ax-layers-templates-bar">
+      <span class="ax-layers-templates-hint" title="Reusable drawing packs stored in this browser">
+        Saved packs
       </span>
-      <div class="flex items-center gap-1">
+      <span class="ax-layers-spacer" />
+      <button
+        type="button"
+        class="ax-layers-icon"
+        disabled={!props.canSave}
+        title={`Save drawings for ${props.symbol || 'this symbol'} as a named template`}
+        aria-label="Save drawings as template"
+        data-testid="axis-tpl-save"
+        onClick={props.onSave}
+      >
+        <Icons.save size={11} />
+      </button>
+      <label class="ax-layers-icon" title="Import template JSON" aria-label="Import template JSON">
+        <Icons.upload size={11} />
+        <input
+          type="file"
+          accept="application/json,.json"
+          class="sr-only"
+          aria-label="Import template JSON"
+          data-testid="axis-tpl-import"
+          onChange={(e) => props.onImport(e)}
+        />
+      </label>
+      <Show when={props.templates.length > 0}>
         <button
           type="button"
-          class="sc-btn sc-btn-ghost px-1.5 text-[0.85em]"
-          disabled={!props.canSave}
-          title={`Save drawings for ${props.symbol || 'this symbol'} as a named template`}
-          data-testid="axis-tpl-save"
-          onClick={props.onSave}
+          class="ax-layers-icon"
+          title="Export all templates as JSON"
+          aria-label="Export all templates"
+          data-testid="axis-tpl-export-all"
+          onClick={props.onExportAll}
         >
-          Save
+          <Icons.download size={11} />
         </button>
-        <label
-          class="sc-btn sc-btn-ghost px-1.5 text-[0.85em] cursor-pointer"
-          title="Import template JSON"
-        >
-          Import
-          <input
-            type="file"
-            accept="application/json,.json"
-            class="sr-only"
-            aria-label="Import template JSON"
-            data-testid="axis-tpl-import"
-            onChange={(e) => props.onImport(e)}
-          />
-        </label>
-        <Show when={props.templates.length > 0}>
-          <button
-            type="button"
-            class="sc-btn sc-btn-ghost px-1.5 text-[0.85em]"
-            title="Export all templates as JSON"
-            data-testid="axis-tpl-export-all"
-            onClick={props.onExportAll}
-          >
-            Export
-          </button>
-        </Show>
-      </div>
+      </Show>
     </div>
-    <Show
-      when={props.templates.length > 0}
-      fallback={<LayerEmpty>No templates</LayerEmpty>}
-    >
-      <ul class="flex flex-col gap-0.5 m-0 p-0 list-none" aria-label="Drawing templates">
+    <Show when={props.templates.length > 0} fallback={<LayerEmpty>No saved templates</LayerEmpty>}>
+      <ul class="ax-layers-list" aria-label="Drawing templates">
         <For each={props.templates}>
           {(t) => (
-            <li
-              class="flex items-center gap-1.5 px-1 py-1 bg-bg-elev border border-border-soft"
-              data-template-id={t.id}
-            >
-              <div class="min-w-0 flex-1">
-                <div class="text-text truncate font-medium leading-tight">{t.name}</div>
-                <div class="text-[0.78em] text-text-faint font-mono truncate">
+            <li class="ax-layers-template" data-template-id={t.id}>
+              <div class="ax-layers-template-main">
+                <div class="ax-layers-row-label" title={t.name}>
+                  {t.name}
+                </div>
+                <div class="ax-layers-row-sub">
                   {t.drawingCount} drawing{t.drawingCount === 1 ? '' : 's'}
                   {t.meta?.symbol ? ` · ${t.meta.symbol}` : ''}
                   {t.meta?.interval ? ` ${t.meta.interval}` : ''}
                 </div>
               </div>
-              <button
-                type="button"
-                class="sc-btn sc-btn-ghost px-1 text-[0.85em]"
-                title="Replace current drawings with this template"
-                aria-label={`Load template ${t.name}`}
-                onClick={() => props.onLoad(t.id, 'replace')}
-              >
-                Load
-              </button>
-              <button
-                type="button"
-                class="sc-btn sc-btn-ghost px-1 text-[0.85em]"
-                title="Merge template drawings into current set"
-                aria-label={`Merge template ${t.name}`}
-                onClick={() => props.onLoad(t.id, 'merge')}
-              >
-                Merge
-              </button>
-              <button
-                type="button"
-                class="sc-btn sc-btn-ghost px-1 text-[0.85em]"
-                title="Export this template as JSON"
-                aria-label={`Export template ${t.name}`}
-                onClick={() => props.onExport(t.id)}
-              >
-                <Icons.download />
-              </button>
-              <button
-                type="button"
-                class="sc-btn sc-btn-ghost px-1 text-text-faint hover:text-red"
-                title="Delete template"
-                aria-label={`Delete template ${t.name}`}
-                onClick={() => props.onDelete(t.id, t.name)}
-              >
-                <Icons.x />
-              </button>
+              <div class="ax-layers-template-actions">
+                <button
+                  type="button"
+                  class="ax-layers-mini-btn"
+                  title="Replace current drawings with this template"
+                  aria-label={`Load template ${t.name}`}
+                  onClick={() => props.onLoad(t.id, 'replace')}
+                >
+                  Load
+                </button>
+                <button
+                  type="button"
+                  class="ax-layers-mini-btn"
+                  title="Merge template drawings into current set"
+                  aria-label={`Merge template ${t.name}`}
+                  onClick={() => props.onLoad(t.id, 'merge')}
+                >
+                  Merge
+                </button>
+                <button
+                  type="button"
+                  class="ax-layers-icon"
+                  title="Export this template as JSON"
+                  aria-label={`Export template ${t.name}`}
+                  onClick={() => props.onExport(t.id)}
+                >
+                  <Icons.download size={10} />
+                </button>
+                <button
+                  type="button"
+                  class="ax-layers-icon is-danger"
+                  title="Delete template"
+                  aria-label={`Delete template ${t.name}`}
+                  onClick={() => props.onDelete(t.id, t.name)}
+                >
+                  <Icons.x size={10} />
+                </button>
+              </div>
             </li>
           )}
         </For>

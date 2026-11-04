@@ -160,6 +160,18 @@ Topbar **Replay** → session over loaded OHLCV (`bar-replay.ts`):
 - **Compare** control: second symbol as % or absolute overlay (`compare-overlay.ts`)  
 - **Volume profile** toggle in Layers → OHLCV approximation histogram (`volume-profile.ts`)
 
+### Layers panel
+
+The Layers panel is the chart’s object manager:
+
+- **One search filters every section** (`/` focuses it, `Esc` clears) — scripts, panes, on-chain series, drawings, and saved template names. A **hidden-only** toggle finds layers that are currently off; the header reports `N scripts · N panes · N drawings · N hidden`.
+- **Sections collapse** (Scripts, Panes, Overlays, On-chain, Drawings) and the choice persists in `localStorage` (`axis.layers.collapsed`).
+- **Scripts** rows show the Pine kind glyph, pane, visibility, script settings, and remove; the section header shows/hides all scripts.
+- **Panes** rows show type + height; the price pane is visibility-locked.
+- **Overlays** toggles volume profile and footprint, both labeled `est.` because they are OHLCV estimates.
+- **Drawings** rows are select-on-chart, hideable, **lockable** (padlock — stops drag/delete on the chart), and removable. The `···` menu holds Duplicate · Keep this symbol · Tag symbol · Clear, and the section header shows/hides all drawings. Saved template packs sit at the bottom with Load / Merge / export / delete.
+- **On-chain** rows toggle series visibility or detach them; event markers get their own row.
+
 ### Pane badges
 
 Each pane’s top-left chip (`pane-badge.ts`): label + script actions when scripts are applied:

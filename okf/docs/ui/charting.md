@@ -7,7 +7,7 @@ tags: [charting, doc, docs, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:02:55Z
+  at: 2026-11-04T15:15:00Z
 sources:
   - id: tree
     resource: "docs/ui/charting.mdx"
@@ -33,6 +33,7 @@ Repo path `docs/ui/charting.mdx`.
   * Multi-chart layouts
   * Bar Replay
   * Compare & volume profile
+  * Layers panel
   * Pane badges
   * Screenshot
   * Drawings toolbar

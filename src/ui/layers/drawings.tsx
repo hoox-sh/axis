@@ -4,196 +4,168 @@
 /**
  * Drawings list inside the Layers panel: active tool, symbol actions, rows.
  *
- * Selection is a real button so it is not nested inside another button.
+ * The panel search owns filtering (`filtered`); this component only renders
+ * the rows plus the symbol-scoped overflow menu.
  *
  * @module ui/layers/drawings
  */
 
-import { type Component, For, Show } from 'solid-js';
+import { type Component, For, Show, createSignal } from 'solid-js';
 import { resolveDrawingStyle, toolLabel, type Drawing } from '../../chart/drawing-types';
 import { Icons } from '../icons';
 import { drawingListLabel } from './format';
-import { LayerEmpty, VisibilityToggle } from './rows';
+import { LayerEmpty, LayerRow } from './rows';
 
 export const DrawingList: Component<{
   symbol: string;
   /** Drawings for the active symbol (unfiltered). */
   drawings: Drawing[];
-  /** Drawings after the search box. */
+  /** Drawings after the panel search. */
   filtered: Drawing[];
   /** Drawings stored for every symbol. */
   totalCount: number;
   selectedId: string | null;
   toolName: string;
   toolActive: boolean;
+  /** Active search text (for the no-match message). */
   query: string;
-  onQuery: (q: string) => void;
   onDuplicate: () => void;
   onKeepSymbol: () => void;
   onTagSymbol: () => void;
   onClear: () => void;
   onSelect: (id: string) => void;
   onToggleVisible: (d: Drawing) => void;
+  onToggleLock: (d: Drawing) => void;
   onRemove: (id: string) => void;
 }> = (props) => {
+  const [menuOpen, setMenuOpen] = createSignal(false);
   const symbolLabel = () => props.symbol || 'Symbol';
+  const hiddenCount = () => props.drawings.filter((d) => d.meta?.hidden).length;
+
+  const runMenu = (fn: () => void) => {
+    setMenuOpen(false);
+    fn();
+  };
+
   return (
-    <div class="flex flex-col gap-1">
-      <div
-        class="flex items-center gap-2 px-1.5 py-1.5 bg-bg-elev border border-border-soft"
-        data-testid="axis-layers-active-tool"
-      >
-        <span class="text-[0.78em] uppercase tracking-wider text-text-faint flex-shrink-0">
-          Tool
-        </span>
+    <div class="ax-layers-drawings">
+      <div class="ax-layers-drawings-bar">
         <span
-          class={`flex-1 truncate font-medium ${
-            props.toolActive ? 'text-accent' : 'text-text-dim'
-          }`}
+          class="ax-layers-tool-chip"
+          classList={{ 'is-active': props.toolActive }}
+          title="Active drawing tool — pick tools from the chart toolbar"
+          data-testid="axis-layers-active-tool"
         >
-          {props.toolName}
+          <Icons.cursor size={10} />
+          <span class="ax-layers-tool-name">{props.toolName}</span>
         </span>
         <Show when={props.selectedId}>
-          <span class="text-[0.78em] font-mono text-accent flex-shrink-0">Selected</span>
+          <span class="ax-layers-selected-chip" title="Selection is synced with the chart">
+            selected
+          </span>
         </Show>
+        <span class="ax-layers-spacer" />
+        <Show when={hiddenCount() > 0}>
+          <span class="ax-layers-badge" title="Hidden drawings stay stored and can be shown again">
+            {hiddenCount()} hidden
+          </span>
+        </Show>
+        <button
+          type="button"
+          class="ax-layers-icon"
+          classList={{ 'is-on': menuOpen() }}
+          title="Drawing actions"
+          aria-label="Drawing actions"
+          aria-expanded={menuOpen()}
+          data-testid="axis-layers-drawings-menu"
+          onClick={() => setMenuOpen((v) => !v)}
+        >
+          <Icons.menu size={11} />
+        </button>
       </div>
 
-      <div class="flex items-center justify-between gap-2 px-1 py-0.5 flex-wrap">
-        <span class="text-text-dim">
-          {symbolLabel()}{' '}
-          <span class="text-text-faint font-mono tabular-nums">
-            ({props.drawings.length}
-            {props.totalCount !== props.drawings.length ? ` / ${props.totalCount}` : ''})
-          </span>
-        </span>
-        <div class="flex items-center gap-1 flex-wrap justify-end">
+      <Show when={menuOpen()}>
+        <div class="ax-layers-menu" data-testid="axis-layers-drawings-menu-row">
           <button
             type="button"
-            class="sc-btn sc-btn-ghost px-1.5 text-[0.85em]"
             disabled={!props.drawings.length}
             title={`Duplicate drawings for ${symbolLabel()} with new IDs`}
             data-testid="axis-layers-duplicate-drawings"
-            onClick={props.onDuplicate}
+            onClick={() => runMenu(props.onDuplicate)}
           >
-            Duplicate
+            <Icons.copy size={10} /> Duplicate
           </button>
           <button
             type="button"
-            class="sc-btn sc-btn-ghost px-1.5 text-[0.85em]"
             disabled={!props.totalCount}
             title={`Keep only drawings for ${symbolLabel()} (untagged kept; other symbols removed)`}
             data-testid="axis-layers-keep-symbol"
-            onClick={props.onKeepSymbol}
+            onClick={() => runMenu(props.onKeepSymbol)}
           >
-            This symbol
+            <Icons.layers size={10} /> Keep this symbol
           </button>
           <button
             type="button"
-            class="sc-btn sc-btn-ghost px-1.5 text-[0.85em]"
             disabled={!props.totalCount}
             title={`Tag all drawings with symbol ${symbolLabel()}`}
             data-testid="axis-layers-tag-symbol"
-            onClick={props.onTagSymbol}
+            onClick={() => runMenu(props.onTagSymbol)}
           >
-            Tag symbol
+            <Icons.pin size={10} /> Tag symbol
           </button>
           <button
             type="button"
-            class="sc-btn sc-btn-ghost px-1.5 text-[0.85em]"
+            class="is-danger"
             disabled={!props.drawings.length}
             title={`Clear drawings for ${symbolLabel()}`}
-            onClick={props.onClear}
+            data-testid="axis-layers-clear-drawings"
+            onClick={() => runMenu(props.onClear)}
           >
-            Clear
+            <Icons.trash size={10} /> Clear
           </button>
         </div>
-      </div>
-
-      <p class="px-1 m-0 text-[0.75em] text-text-faint leading-snug">
-        Drawings are anchored to the chart symbol ({props.symbol || '—'}). Other symbols keep
-        their own drawings. Tag symbol migrates untagged legacy items onto the current ticker.
-      </p>
-
-      <Show when={props.drawings.length > 0}>
-        <input
-          type="search"
-          class="axis-search sc-input h-7"
-          placeholder="Filter drawings…"
-          value={props.query}
-          aria-label="Filter drawings"
-          autocomplete="off"
-          spellcheck={false}
-          data-testid="axis-layers-drawing-search"
-          onInput={(e) => props.onQuery(e.currentTarget.value)}
-        />
       </Show>
 
-      <Show
-        when={props.drawings.length > 0}
-        fallback={<LayerEmpty>No drawings</LayerEmpty>}
-      >
+      <Show when={props.totalCount !== props.drawings.length}>
+        <p class="ax-layers-note">
+          {symbolLabel()} keeps {props.drawings.length} of {props.totalCount} stored drawing
+          {props.totalCount === 1 ? '' : 's'} · other symbols keep their own
+        </p>
+      </Show>
+
+      <Show when={props.drawings.length > 0} fallback={<LayerEmpty>No drawings</LayerEmpty>}>
         <Show
           when={props.filtered.length > 0}
           fallback={
-            <LayerEmpty>No drawings match “{props.query.trim()}”</LayerEmpty>
+            <LayerEmpty>
+              {props.query.trim() ? `No drawings match “${props.query.trim()}”` : 'No drawings'}
+            </LayerEmpty>
           }
         >
-          <ul class="flex flex-col gap-0.5 m-0 p-0 list-none" aria-label="Drawings">
+          <ul class="ax-layers-list" aria-label="Drawings">
             <For each={props.filtered}>
               {(d) => {
                 const label = () => drawingListLabel(d);
                 const selected = () => props.selectedId === d.id;
-                const visible = () => !d.meta?.hidden;
+                const hidden = () => Boolean(d.meta?.hidden);
                 const st = () => resolveDrawingStyle(d);
                 return (
-                  <li
-                    class={`axis-list-row flex items-center gap-1.5 h-8 px-1 border-b ${
-                      selected()
-                        ? 'bg-accent/15 border-accent'
-                        : 'bg-bg-elev border-border-soft'
-                    }`}
-                    data-drawing-id={d.id}
-                    data-selected={selected() ? '1' : '0'}
-                  >
-                    <VisibilityToggle
+                  <li data-drawing-id={d.id} data-selected={selected() ? '1' : '0'}>
+                    <LayerRow
                       label={label()}
-                      visible={visible()}
+                      sub={`${toolLabel(d.kind)}${st().locked ? ' · locked' : ''}`}
+                      visible={!hidden()}
+                      hidden={hidden()}
+                      selected={selected()}
+                      swatch={st().color}
+                      badge={hidden() ? 'hidden' : undefined}
+                      onSelect={() => props.onSelect(d.id)}
                       onToggle={() => props.onToggleVisible(d)}
+                      isLocked={st().locked}
+                      onToggleLock={() => props.onToggleLock(d)}
+                      onRemove={() => props.onRemove(d.id)}
+                      removeTitle="Remove drawing"
                     />
-                    <span
-                      class="w-2.5 h-2.5 rounded-sm flex-shrink-0 border border-border-soft"
-                      style={{ background: st().color }}
-                      title={st().color}
-                      aria-hidden="true"
-                    />
-                    <button
-                      type="button"
-                      class="min-w-0 flex-1 text-left bg-transparent border-0 p-0 cursor-pointer focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
-                      aria-pressed={selected()}
-                      title="Select on chart"
-                      onClick={() => props.onSelect(d.id)}
-                    >
-                      <div
-                        class={`truncate font-medium leading-tight ${
-                          selected() ? 'text-accent' : 'text-text'
-                        }`}
-                      >
-                        {label()}
-                      </div>
-                      <div class="text-[0.78em] text-text-faint font-mono truncate">
-                        {toolLabel(d.kind)}
-                        {st().locked ? ' · locked' : ''}
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      class="sc-btn sc-btn-ghost px-1 text-text-faint hover:text-red"
-                      title="Remove drawing"
-                      aria-label={`Remove ${label()}`}
-                      onClick={() => props.onRemove(d.id)}
-                    >
-                      <Icons.x />
-                    </button>
                   </li>
                 );
               }}
@@ -202,8 +174,8 @@ export const DrawingList: Component<{
         </Show>
       </Show>
 
-      <p class="px-1 m-0 text-[0.78em] text-text-faint">
-        Script drawings refresh on each run (not listed).
+      <p class="ax-layers-note" title="Pine-created drawings are re-painted on every run">
+        Script drawings refresh on each run
       </p>
     </div>
   );

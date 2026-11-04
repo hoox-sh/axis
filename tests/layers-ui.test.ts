@@ -72,3 +72,51 @@ describe('layers format', () => {
     expect(drawingMatchesQuery(d, 'nope')).toBe(false);
   });
 });
+
+class MemoryStorage {
+  store = new Map<string, string>();
+  getItem(k: string) {
+    return this.store.get(k) ?? null;
+  }
+  setItem(k: string, v: string) {
+    this.store.set(k, v);
+  }
+  removeItem(k: string) {
+    this.store.delete(k);
+  }
+  clear() {
+    this.store.clear();
+  }
+}
+
+describe('layers collapse prefs', () => {
+  const withStorage = () => {
+    (globalThis as { localStorage?: MemoryStorage }).localStorage = new MemoryStorage();
+  };
+
+  it('round-trips known section ids and ignores junk', async () => {
+    withStorage();
+    const { LAYERS_COLLAPSED_KEY, readCollapsedSections, writeCollapsedSections } = await import(
+      '../src/ui/layers/prefs'
+    );
+    localStorage.setItem(LAYERS_COLLAPSED_KEY, JSON.stringify(['panes', 'nope', 7, 'panes']));
+    expect(readCollapsedSections()).toEqual(['panes']);
+    expect(writeCollapsedSections(['drawings', 'nope', 'drawings'])).toEqual(['drawings']);
+    expect(readCollapsedSections()).toEqual(['drawings']);
+  });
+
+  it('toggles one section without dropping the others', async () => {
+    withStorage();
+    const { toggleCollapsedSection } = await import('../src/ui/layers/prefs');
+    expect(toggleCollapsedSection('scripts')).toEqual(['scripts']);
+    expect(toggleCollapsedSection('panes', ['scripts'])).toEqual(['scripts', 'panes']);
+    expect(toggleCollapsedSection('scripts', ['scripts', 'panes'])).toEqual(['panes']);
+  });
+
+  it('survives unreadable storage', async () => {
+    withStorage();
+    const { LAYERS_COLLAPSED_KEY, readCollapsedSections } = await import('../src/ui/layers/prefs');
+    localStorage.setItem(LAYERS_COLLAPSED_KEY, '<<<not-json>>>');
+    expect(readCollapsedSections()).toEqual([]);
+  });
+});
