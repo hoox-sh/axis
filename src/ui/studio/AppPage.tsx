@@ -105,6 +105,8 @@ export function AppPage(props: {
                       <Icons.runtimes size={16} />
                     ) : item.id === 'wire' ? (
                       <Icons.architecture size={16} />
+                    ) : item.id === 'data' ? (
+                      <Icons.dataSource size={16} />
                     ) : (
                       <Icons.settings size={16} />
                     )}

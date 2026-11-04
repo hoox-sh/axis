@@ -5,7 +5,9 @@
 import './setup';
 import { describe, expect, it } from 'bun:test';
 import {
+  barCloseAtMs,
   barCloseRemainingMs,
+  barProgress,
   formatClockLocal,
   formatClockUtc,
   formatCountdown,
@@ -64,5 +66,21 @@ describe('formatClockLocal / formatClockUtc', () => {
     expect(formatClockUtc(d)).toBe('03:04:05');
     // Local wall clock — only assert shape (TZ-dependent value).
     expect(formatClockLocal(d)).toMatch(/^\d{2}:\d{2}:\d{2}$/);
+  });
+});
+
+describe('barProgress / barCloseAtMs', () => {
+  it('measures elapsed fraction of the bar', () => {
+    expect(barProgress(0, '1m', 30_000)).toBe(0.5);
+    expect(barProgress(0, '1m', 90_000)).toBe(1);
+    expect(barProgress(0, '1m', -5_000)).toBe(0);
+  });
+  it('returns NaN when unusable', () => {
+    expect(barProgress(undefined, '1m', 0)).toBeNaN();
+    expect(barProgress(0, '1m', Number.NaN)).toBeNaN();
+  });
+  it('computes the close time', () => {
+    expect(barCloseAtMs(0, '1m')).toBe(60_000);
+    expect(barCloseAtMs(undefined, '1m')).toBeNaN();
   });
 });

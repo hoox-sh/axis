@@ -163,7 +163,8 @@ export function StudioInput(props: {
   spellcheck?: boolean;
   min?: number;
   max?: number;
-  step?: number;
+  /** Numeric step, or `'any'` for free-form numbers (prices, percents). */
+  step?: number | 'any';
   inputmode?: 'text' | 'none' | 'search' | 'numeric' | 'url' | 'decimal' | 'email' | 'tel';
   /** Leading adornment (usually an icon). */
   icon?: JSX.Element;
@@ -182,6 +183,8 @@ export function StudioInput(props: {
   /** Character counter; pair with `maxLength`. */
   showCount?: boolean;
   maxLength?: number;
+  /** Dense shell for inline rows (Pine `inline=` clusters, dock panels). */
+  compact?: boolean;
   selectOnFocus?: boolean;
   ariaLabel?: string;
   title?: string;
@@ -265,6 +268,7 @@ export function StudioInput(props: {
       classList={{
         'ax-input-shell--mono': !!props.mono,
         'ax-input-shell--number': props.type === 'number',
+        'ax-shell--compact': !!props.compact,
         'is-invalid': !!props.invalid,
         'is-valid': !!props.valid,
         'is-disabled': !!props.disabled,
@@ -423,6 +427,8 @@ export function StudioSelect(props: {
   invalid?: boolean;
   testId?: string;
   icon?: JSX.Element;
+  /** Dense shell for inline rows (Pine `inline=` clusters, dock panels). */
+  compact?: boolean;
   ariaLabel?: string;
   title?: string;
   class?: string;
@@ -439,6 +445,7 @@ export function StudioSelect(props: {
         'is-invalid': !!props.invalid,
         'is-disabled': !!props.disabled,
         'has-icon': !!props.icon,
+        'ax-shell--compact': !!props.compact,
       }}
     >
       <Show when={props.icon}>

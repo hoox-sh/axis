@@ -65,7 +65,10 @@ test.describe('AXIS smoke @smoke', () => {
   test('opens and closes plugin Manager', async ({ page }) => {
     await page.goto('/');
     await openStudio(page, 'plugins');
-    await expect(page.getByRole('tab', { name: 'Catalog' })).toBeVisible();
+    // No tabs on this page anymore — the catalog is the page, with the
+    // install-from-URL flow inlined at the bottom.
+    await expect(page.getByTestId('axis-plugins-panel-catalog')).toBeVisible();
+    await expect(page.getByTestId('axis-plugins-panel-install')).toBeVisible();
     await page.getByTestId('axis-plugins-close').click();
     await expect(page.getByTestId('axis-manager')).toHaveCount(0);
   });

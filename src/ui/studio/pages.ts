@@ -60,6 +60,18 @@ export const STUDIO_PAGES: StudioPageMeta[] = [
     closeTestId: 'axis-architecture-close',
   },
   {
+    id: 'data',
+    label: 'Data',
+    kicker: 'Data',
+    title: 'Data manager',
+    purpose:
+      'Background OHLCV backfill jobs and the cached dataset inventory — coverage, load, export.',
+    group: 'primary',
+    testId: 'axis-data-page',
+    titleId: 'axis-data-page-title',
+    closeTestId: 'axis-data-page-close',
+  },
+  {
     id: 'workers',
     label: 'Workers',
     kicker: 'Workers',

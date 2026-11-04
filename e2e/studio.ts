@@ -11,12 +11,14 @@
  */
 import { expect, type Page } from '@playwright/test';
 
-export type StudioRailPage = 'runtime' | 'wire' | 'settings' | 'workers' | 'plugins' | 'debug';
+export type StudioRailPage =
+  'runtime' | 'wire' | 'settings' | 'data' | 'workers' | 'plugins' | 'debug';
 
 const PAGE_TEST_ID: Record<StudioRailPage, string> = {
   runtime: 'axis-runtimes-hub',
   wire: 'axis-architecture-modal',
   settings: 'axis-settings',
+  data: 'axis-data-page',
   workers: 'axis-workers-manager',
   plugins: 'axis-manager',
   debug: 'axis-debug-page',

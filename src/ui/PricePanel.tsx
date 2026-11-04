@@ -22,6 +22,9 @@
  * price, 24h change + venue below. Same live-tick scoping and REST change
  * seed as the full {@link QuotePanel} sheet.
  *
+ * The price doubles as a copy button; the header shows the symbol, venue, and
+ * live stream state.
+ *
  * FloatableShell id `price` (`floatOnly` — no layout docks).
  */
 
@@ -29,6 +32,8 @@ import { type Component, Show, createEffect, createSignal, onCleanup } from 'sol
 import { store, isPanelOpen } from '../store';
 import { barPlane } from '../stores/bars';
 import { FloatableShell } from './panels/FloatableShell';
+import { Icons } from './icons';
+import { copyToClipboard } from './clipboard';
 import { formatExtraPrice } from './extras/format';
 import { displayedLastPrice } from './extras/quote';
 import { fetchWatchlistTickers } from '../data/watchlist-tickers';
@@ -36,6 +41,8 @@ import { fetchWatchlistTickers } from '../data/watchlist-tickers';
 /** Float-only price panel (big last price + 24h change). */
 export const PricePanel: Component = () => {
   const [change24h, setChange24h] = createSignal<number | undefined>(undefined);
+  const [copied, setCopied] = createSignal(false);
+  let copyTimer: number | undefined;
 
   // REST seed for the 24h change row (mirrors QuotePanel).
   createEffect(() => {
@@ -55,6 +62,10 @@ export const PricePanel: Component = () => {
       .catch(() => {
         if (!cancelled) setChange24h(undefined);
       });
+  });
+
+  onCleanup(() => {
+    if (copyTimer) window.clearTimeout(copyTimer);
   });
 
   const price = () => {
@@ -92,24 +103,72 @@ export const PricePanel: Component = () => {
       ? store.provider.venue
       : store.exchange;
 
+  const liveState = () => store.telemetry?.stream?.state ?? 'idle';
+  const isLive = () => liveState() === 'open' || liveState() === 'idle';
+
+  const copyPrice = async () => {
+    if (await copyToClipboard(formatExtraPrice(price()))) {
+      setCopied(true);
+      if (copyTimer) window.clearTimeout(copyTimer);
+      copyTimer = window.setTimeout(() => setCopied(false), 1300);
+    }
+  };
+
   return (
     <Show when={isPanelOpen('price')}>
       <FloatableShell id="price" testId="axis-price" floatOnly>
-        <div class="axis-mini-panel">
-          <div class="axis-mini-big" data-testid="axis-price-value">
-            <span class="tabular-nums">{formatExtraPrice(price())}</span>
-          </div>
-          <div class="axis-mini-sub" data-testid="axis-price-sub">
+        <div class="ax-price">
+          <div class="ax-price-top">
+            <span class="ax-price-symbol" title="Chart symbol">
+              {store.symbol}
+            </span>
+            <span class="ax-price-venue" title="Venue">
+              {venue() || '—'}
+            </span>
+            <span class="ax-price-spacer" />
             <span
-              class={`tabular-nums ${
-                change() == null ? '' : (change() ?? 0) >= 0 ? 'axis-quote-up' : 'axis-quote-down'
-              }`}
+              class="ax-price-live"
+              classList={{ 'is-live': isLive() }}
+              title={`Stream state: ${liveState()}`}
             >
-              {changeText()}
+              <span class="ax-price-live-dot" />
+              {liveState()}
             </span>
-            <span class="axis-mini-dim">
-              {store.symbol} · {venue()}
+          </div>
+
+          <button
+            type="button"
+            class="ax-price-value"
+            classList={{
+              'is-up': (change() ?? 0) >= 0 && change() != null,
+              'is-down': (change() ?? 0) < 0,
+              'is-copied': copied(),
+            }}
+            title="Copy price"
+            aria-label={`Copy ${store.symbol} price`}
+            data-testid="axis-price-value"
+            onClick={() => void copyPrice()}
+          >
+            <span class="tabular-nums">{formatExtraPrice(price())}</span>
+            <span class="ax-price-copy" aria-hidden="true">
+              {copied() ? <Icons.check size={11} /> : <Icons.copy size={11} />}
             </span>
+          </button>
+
+          <div class="ax-price-sub" data-testid="axis-price-sub">
+            <span
+              class="ax-price-change"
+              classList={{
+                'is-up': change() != null && (change() ?? 0) >= 0,
+                'is-down': change() != null && (change() ?? 0) < 0,
+              }}
+            >
+              <Show when={change() != null} fallback={<span>—</span>}>
+                <span class="ax-price-arrow">{(change() ?? 0) >= 0 ? '▲' : '▼'}</span>
+                {changeText()}
+              </Show>
+            </span>
+            <span class="ax-price-window">24h</span>
           </div>
         </div>
       </FloatableShell>

@@ -17,6 +17,7 @@ import { SettingsPage } from '../settings/SettingsPage';
 import { WorkersPage } from '../workers/WorkersPage';
 import { PluginsPage } from '../plugins/PluginsPage';
 import { DebugPage } from '../debug/DebugPage';
+import { DsmPage } from '../dsm/DsmPage';
 
 export function StudioHost(props: {
   open: boolean;
@@ -26,8 +27,6 @@ export function StudioHost(props: {
   settingsTab?: SettingsTabId;
   onChanged?: () => void;
   onApplied?: (planName: string) => void;
-  getDoc?: () => string;
-  setDoc?: (doc: string, name?: string, libraryId?: string) => void;
 }) {
   const [overrideTitle, setOverrideTitle] = createSignal<string | undefined>();
   createEffect(() => {
@@ -57,6 +56,9 @@ export function StudioHost(props: {
       <Show when={props.page === 'settings'}>
         <SettingsPage onClose={props.onClose} initialTab={props.settingsTab} />
       </Show>
+      <Show when={props.page === 'data'}>
+        <DsmPage onClose={props.onClose} />
+      </Show>
       <Show when={props.page === 'workers'}>
         <WorkersPage
           onClose={props.onClose}
@@ -69,8 +71,6 @@ export function StudioHost(props: {
           onClose={props.onClose}
           onNavigate={props.onNavigate}
           onChanged={props.onChanged}
-          getDoc={props.getDoc}
-          setDoc={props.setDoc}
         />
       </Show>
       <Show when={props.page === 'debug'}>

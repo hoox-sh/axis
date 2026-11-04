@@ -7,7 +7,7 @@ tags: [doc, docs, enduser, guides]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:02:55Z
+  at: 2026-11-04T22:58:58Z
 sources:
   - id: tree
     resource: "docs/enduser/guides/manager-and-settings.mdx"
@@ -26,8 +26,8 @@ Repo path `docs/enduser/guides/manager-and-settings.mdx`.
 * Conceptual model
 * Plugin Manager
   * Catalog
-  * Install (URL)
-  * Script Library tab
+  * Install from URL (inline)
+  * Script library
 * Runtime vs Workers vs Plugins
 * Workers
   * Catalog items (usage)

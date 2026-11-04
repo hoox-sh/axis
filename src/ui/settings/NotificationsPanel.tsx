@@ -25,11 +25,15 @@
  */
 
 import { For, Show, createSignal, onCleanup, type Component } from 'solid-js';
+import { notificationPermission, requestNotificationPermission } from '../../alerts';
 import {
-  notificationPermission,
-  requestNotificationPermission,
-} from '../../alerts';
-import { store, setStore, persist, clearToasts, DEFAULT_NOTIFICATIONS, setPanelOpen } from '../../store';
+  store,
+  setStore,
+  persist,
+  clearToasts,
+  DEFAULT_NOTIFICATIONS,
+  setPanelOpen,
+} from '../../store';
 import type { LogLevel, NotificationCategory } from '../../store/types';
 import { Icons } from '../icons';
 import {
@@ -176,7 +180,9 @@ export const NotificationsPanel: Component<{ onClose?: () => void }> = (props) =
           title="Browser alerts"
           lead="OS banners when a price / script alert fires. Same grant as Alerts → Notifications."
           testId="axis-settings-browser-alerts"
-          headerEnd={<StudioStatus status={permHealth(notifPerm())} label={permLabel(notifPerm())} />}
+          headerEnd={
+            <StudioStatus status={permHealth(notifPerm())} label={permLabel(notifPerm())} />
+          }
         >
           <StudioHint>
             Toasts below are in-app only. Browser permission is required for the Alerts panel
@@ -315,7 +321,7 @@ export const NotificationsPanel: Component<{ onClose?: () => void }> = (props) =
           testId="axis-settings-notify-flood"
         >
           <StudioField
-            label="Auto-dismiss after (seconds)"
+            label="Auto-dismiss after"
             for="axis-notify-duration"
             hint="Errors stick about twice as long. 1.5–30s."
           >
@@ -323,9 +329,11 @@ export const NotificationsPanel: Component<{ onClose?: () => void }> = (props) =
               id="axis-notify-duration"
               type="number"
               mono
+              selectOnFocus
               min={1.5}
               max={30}
               step={0.5}
+              suffix="s"
               testId="axis-notify-duration"
               value={Math.round((prefs().durationMs || 4000) / 100) / 10}
               onChange={(v) => {
@@ -344,9 +352,11 @@ export const NotificationsPanel: Component<{ onClose?: () => void }> = (props) =
               id="axis-notify-max"
               type="number"
               mono
+              selectOnFocus
               min={1}
               max={6}
               step={1}
+              suffix="toasts"
               testId="axis-notify-max"
               value={prefs().maxVisible ?? 2}
               onChange={(v) => {
@@ -360,17 +370,19 @@ export const NotificationsPanel: Component<{ onClose?: () => void }> = (props) =
             />
           </StudioField>
           <StudioField
-            label="Repeat window (seconds)"
+            label="Repeat window"
             for="axis-notify-dedupe"
-            hint="Same message inside this window bumps ×N instead of stacking. 0 disables."
+            hint="Same message inside this window bumps ×N instead of stacking. 0s disables."
           >
             <StudioInput
               id="axis-notify-dedupe"
               type="number"
               mono
+              selectOnFocus
               min={0}
               max={60}
               step={1}
+              suffix="s"
               testId="axis-notify-dedupe"
               value={Math.round((prefs().dedupeWindowMs ?? 5000) / 1000)}
               onChange={(v) => {

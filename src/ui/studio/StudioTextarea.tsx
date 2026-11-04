@@ -27,6 +27,7 @@ export function StudioTextarea(props: {
   autosize?: boolean;
   testId?: string;
   ariaLabel?: string;
+  class?: string;
   onInput?: (value: string) => void;
   onChange?: (value: string) => void;
   onBlur?: (value: string) => void;
@@ -58,7 +59,7 @@ export function StudioTextarea(props: {
 
   return (
     <div
-      class="ax-textarea-shell"
+      class={`ax-textarea-shell${props.class ? ` ${props.class}` : ''}`}
       classList={{
         'is-invalid': !!props.invalid,
         'is-disabled': !!props.disabled,

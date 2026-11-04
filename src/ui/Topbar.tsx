@@ -859,11 +859,14 @@ export const Topbar: Component<{
               <Show when={store.topbar.panelsDsm}>
                 <button
                   type="button"
-                  class={`axis-module ${isPanelOpen('datasource') ? 'is-active' : ''}`}
-                  onClick={() => toggleDataSourcePanel()}
-                  title="Data — Data Source Manager (DSM), background OHLCV backfill"
+                  class="axis-module"
+                  onClick={() =>
+                    window.dispatchEvent(
+                      new CustomEvent('axis-open-studio', { detail: { page: 'data' } }),
+                    )
+                  }
+                  title="Data — studio Data page: backfill jobs and cached datasets"
                   aria-label="Data"
-                  aria-pressed={isPanelOpen('datasource')}
                   data-testid="axis-btn-datasource"
                 >
                   <Icons.dataSource />

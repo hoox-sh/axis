@@ -1,0 +1,963 @@
+// Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
+/**
+ * Dataset inventory browser — table of cached OHLCV series with filters,
+ * sort, coverage map, load window, delete, CSV export, and backfill-to-now.
+ *
+ * One component, two hosts: the cached-datasets modal and the studio Data
+ * page. State resets on mount (both hosts unmount the browser when their
+ * surface closes), so selection/filters never leak between opens.
+ *
+ * @module ui/dsm/DatasetsBrowser
+ */
+
+import {
+  type Component,
+  For,
+  Match,
+  Show,
+  Switch,
+  createEffect,
+  createMemo,
+  createSignal,
+  onCleanup,
+  onMount,
+} from 'solid-js';
+import type { Bar } from '../../store/types';
+import { setStore, persist, setActivePlugin, store } from '../../store';
+import {
+  countBarsForLoad,
+  getCachedBars,
+  lockFromBarsKey,
+  sliceBarsForLoad,
+  type BarLoadWindow,
+  type BarsCacheMeta,
+} from '../../data/bars-cache';
+import { removeDatasetEverywhere } from '../../data/dataset-store';
+import { buildCoverageMap, type CoverageSegment } from '../../data/bars-gaps';
+import {
+  applyCachedToChart,
+  dateInputToEndSec,
+  pastDateInputToSec,
+  secToDateInput,
+  startBackfill,
+} from '../../data/data-source-manager';
+import { DATA_MANAGER_SOURCE_ID, setDataManagerSelection } from '../../data/data-manager-source';
+import { defaultStreamForSource } from '../../streams/catalog';
+import { Icons } from '../icons';
+import { announce } from '../sr-announce';
+import { CompleteMap } from './CompleteMap';
+import { ScField } from '../Field';
+import { fmtBytes, fmtDuration, fmtMillis, fmtTime, loadWindowSpanLabel } from './format';
+import { listAllDatasetMetas, totalBarsCached } from './datasets-list';
+import { exportBarsCsv } from './export-csv';
+
+/** Rough in-memory size of one bar (6 float64 fields). */
+const BAR_BYTES_EST = 48;
+
+type SortKey = 'updated' | 'bars' | 'symbol' | 'span';
+
+const SORT_OPTIONS: readonly { id: SortKey; label: string }[] = [
+  { id: 'updated', label: 'Updated' },
+  { id: 'bars', label: 'Bars' },
+  { id: 'symbol', label: 'Symbol' },
+  { id: 'span', label: 'Span' },
+];
+
+const LOAD_PRESETS = [
+  { id: 'full', label: 'Full', title: 'Full series in cache' },
+  { id: '30d', label: '30d', title: 'Last 30 days' },
+  { id: '90d', label: '90d', title: 'Last 90 days' },
+  { id: '1k', label: '1k', title: 'Newest 1,000 bars' },
+  { id: '5k', label: '5k', title: 'Newest 5,000 bars' },
+] as const;
+
+type LoadPreset = (typeof LOAD_PRESETS)[number]['id'];
+
+function metaKey(m: BarsCacheMeta): string {
+  return m.key || `${m.sourceId}|${m.symbol}|${m.interval}`;
+}
+
+function parseMaxBars(raw: string): number | null {
+  const t = String(raw || '').trim();
+  if (!t) return null;
+  const n = Number(t);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.min(Math.floor(n), 1_000_000);
+}
+
+function matchesQuery(row: BarsCacheMeta, q: string): boolean {
+  if (!q) return true;
+  const hay = `${row.symbol} ${row.interval} ${row.sourceId} ${row.key}`.toLowerCase();
+  return q
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .every((tok) => hay.includes(tok));
+}
+
+function isTypingTarget(el: EventTarget | null): boolean {
+  if (!el || typeof el !== 'object') return false;
+  const tag = (el as HTMLElement).tagName;
+  return tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA';
+}
+
+function sortRows(list: BarsCacheMeta[], sort: SortKey): BarsCacheMeta[] {
+  return list.slice().sort((a, b) => {
+    switch (sort) {
+      case 'bars':
+        return (b.count || 0) - (a.count || 0);
+      case 'symbol': {
+        const c = a.symbol.localeCompare(b.symbol);
+        return c !== 0 ? c : a.interval.localeCompare(b.interval);
+      }
+      case 'span': {
+        const sa = (a.newestSec ?? 0) - (a.oldestSec ?? 0);
+        const sb = (b.newestSec ?? 0) - (b.oldestSec ?? 0);
+        return sb - sa;
+      }
+      default:
+        return (b.updatedAt || 0) - (a.updatedAt || 0);
+    }
+  });
+}
+
+export interface DatasetsBrowserProps {
+  /** Test-id prefix (modal and page coexist in the DOM). */
+  testIdPrefix?: string;
+  /** Arrow-key row navigation + Escape handling (the modal wants both). */
+  enableKeyboardNav?: boolean;
+  /** Escape with nothing pending: the modal closes, the page does nothing. */
+  onEscape?: () => void;
+  /** Live dataset rows for host-level stats. */
+  onRows?: (rows: BarsCacheMeta[]) => void;
+}
+
+/** Dataset inventory: filter, inspect coverage, load, delete, export. */
+export const DatasetsBrowser: Component<DatasetsBrowserProps> = (props) => {
+  const tid = (suffix: string) => `${props.testIdPrefix ?? 'axis-cached-datasets'}-${suffix}`;
+
+  const [rows, setRows] = createSignal<BarsCacheMeta[]>([]);
+  const [selectedKey, setSelectedKey] = createSignal<string | null>(null);
+  const [bars, setBars] = createSignal<Bar[]>([]);
+  const [loading, setLoading] = createSignal(false);
+  const [busy, setBusy] = createSignal(false);
+  const [error, setError] = createSignal('');
+  const [msg, setMsg] = createSignal('');
+  const [pendingDelete, setPendingDelete] = createSignal(false);
+
+  const [query, setQuery] = createSignal('');
+  const [filterSource, setFilterSource] = createSignal('');
+  const [filterInterval, setFilterInterval] = createSignal('');
+  const [sortKey, setSortKey] = createSignal<SortKey>('updated');
+
+  const [fromDate, setFromDate] = createSignal('');
+  const [toDate, setToDate] = createSignal('');
+  const [maxBars, setMaxBars] = createSignal('');
+
+  let searchEl: HTMLInputElement | undefined;
+
+  const selected = createMemo(() => {
+    const k = selectedKey();
+    if (!k) return null;
+    return rows().find((r) => metaKey(r) === k) ?? null;
+  });
+
+  const sourceOptions = createMemo(() => {
+    const set = new Set(
+      rows()
+        .map((r) => r.sourceId)
+        .filter(Boolean),
+    );
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  });
+
+  const intervalOptions = createMemo(() => {
+    const set = new Set(
+      rows()
+        .map((r) => r.interval)
+        .filter(Boolean),
+    );
+    return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  });
+
+  const filteredRows = createMemo(() => {
+    const q = query().trim();
+    const src = filterSource();
+    const iv = filterInterval();
+    const list = rows().filter((r) => {
+      if (src && r.sourceId !== src) return false;
+      if (iv && r.interval !== iv) return false;
+      if (!matchesQuery(r, q)) return false;
+      return true;
+    });
+    return sortRows(list, sortKey());
+  });
+
+  const totalBars = createMemo(() => totalBarsCached(rows()));
+  const storageEst = createMemo(() => fmtBytes(totalBars() * BAR_BYTES_EST));
+
+  const filtersActive = createMemo(() => !!(query().trim() || filterSource() || filterInterval()));
+
+  const tableState = createMemo(() => {
+    if (loading() && !rows().length) return 'loading' as const;
+    if (!rows().length) return 'empty' as const;
+    if (!filteredRows().length) return 'filtered' as const;
+    return 'rows' as const;
+  });
+
+  const coverage = createMemo(() => {
+    const meta = selected();
+    const b = bars();
+    if (!meta || !b.length) {
+      return {
+        segments: [] as CoverageSegment[],
+        complete: false,
+        barCount: 0,
+        expectedBars: 0,
+        gaps: 0,
+      };
+    }
+    const from = meta.oldestSec ?? b[0]?.time ?? 0;
+    const to = meta.newestSec ?? b[b.length - 1]?.time ?? from;
+    const { segments, report } = buildCoverageMap(b, from, to, meta.interval);
+    return {
+      segments,
+      complete: report.complete,
+      barCount: report.barCount,
+      expectedBars: report.expectedBars,
+      gaps: report.gaps.length,
+    };
+  });
+
+  const loadWindow = createMemo((): BarLoadWindow => {
+    const fromSec = pastDateInputToSec(fromDate());
+    const toSec = dateInputToEndSec(toDate());
+    return {
+      fromSec,
+      toSec,
+      maxBars: parseMaxBars(maxBars()),
+    };
+  });
+
+  const previewCount = createMemo(() => countBarsForLoad(bars(), loadWindow()));
+
+  const previewSpan = createMemo(() => {
+    const meta = selected();
+    const win = loadWindow();
+    return loadWindowSpanLabel({
+      count: previewCount(),
+      interval: meta?.interval || '1d',
+      maxBars: win.maxBars ?? null,
+      fromSec: win.fromSec ?? meta?.oldestSec ?? null,
+      toSec: win.toSec ?? meta?.newestSec ?? null,
+    });
+  });
+
+  const dateBounds = createMemo(() => {
+    const meta = selected();
+    return {
+      min: secToDateInput(meta?.oldestSec ?? null),
+      max: secToDateInput(meta?.newestSec ?? null),
+    };
+  });
+
+  const syncLoadDefaults = (meta: BarsCacheMeta | null) => {
+    if (!meta) {
+      setFromDate('');
+      setToDate('');
+      setMaxBars('');
+      return;
+    }
+    setFromDate(secToDateInput(meta.oldestSec));
+    setToDate(secToDateInput(meta.newestSec));
+    setMaxBars('');
+  };
+
+  const clearFilters = () => {
+    setQuery('');
+    setFilterSource('');
+    setFilterInterval('');
+  };
+
+  const resetLoadWindow = () => {
+    syncLoadDefaults(selected());
+  };
+
+  const refresh = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const merged = await listAllDatasetMetas();
+      setRows(merged);
+      props.onRows?.(merged);
+      const cur = selectedKey();
+      if (cur && !merged.some((r) => metaKey(r) === cur)) {
+        const next = merged[0] ? metaKey(merged[0]) : null;
+        setSelectedKey(next);
+        syncLoadDefaults(merged[0] ?? null);
+      } else if (!cur && merged[0]) {
+        setSelectedKey(metaKey(merged[0]));
+        syncLoadDefaults(merged[0]);
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Both hosts unmount this component when their surface closes, so a mount
+  // is an open: seed the inventory and focus the filter box.
+  onMount(() => {
+    void refresh();
+    queueMicrotask(() => searchEl?.focus());
+  });
+
+  createEffect(() => {
+    const meta = selected();
+    if (!meta) {
+      setBars([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const b = await getCachedBars(
+          meta.sourceId,
+          meta.symbol,
+          meta.interval,
+          lockFromBarsKey(meta.key),
+        );
+        if (!cancelled) setBars(b);
+      } catch {
+        if (!cancelled) setBars([]);
+      }
+    })();
+    onCleanup(() => {
+      cancelled = true;
+    });
+  });
+
+  const selectRow = (row: BarsCacheMeta) => {
+    setSelectedKey(metaKey(row));
+    syncLoadDefaults(row);
+    setPendingDelete(false);
+    setError('');
+    setMsg('');
+  };
+
+  const moveSelection = (dir: 1 | -1) => {
+    const list = filteredRows();
+    if (!list.length) return;
+    const cur = selectedKey();
+    const idx = list.findIndex((r) => metaKey(r) === cur);
+    const next = Math.min(list.length - 1, Math.max(0, (idx < 0 ? 0 : idx) + dir));
+    const row = list[next];
+    if (row && next !== idx) selectRow(row);
+  };
+
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      if (pendingDelete()) {
+        e.preventDefault();
+        e.stopPropagation();
+        setPendingDelete(false);
+        return;
+      }
+      props.onEscape?.();
+      return;
+    }
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Home' && e.key !== 'End') {
+      return;
+    }
+    if (isTypingTarget(e.target)) return;
+    const list = filteredRows();
+    if (!list.length) return;
+    e.preventDefault();
+    const first = list[0];
+    const last = list[list.length - 1];
+    if (e.key === 'Home' && first) selectRow(first);
+    else if (e.key === 'End' && last) selectRow(last);
+    else if (e.key === 'ArrowDown') moveSelection(1);
+    else moveSelection(-1);
+  };
+
+  const onLoad = async () => {
+    const meta = selected();
+    if (!meta) return;
+    setBusy(true);
+    setError('');
+    setMsg('');
+    try {
+      const win = loadWindow();
+      if (win.fromSec != null && win.toSec != null && win.fromSec > win.toSec) {
+        setError('From date must be on or before To date.');
+        return;
+      }
+      const n = countBarsForLoad(bars(), win);
+      if (n <= 0) {
+        setError('No bars in the selected date range / max bars window.');
+        return;
+      }
+
+      setDataManagerSelection(
+        meta.sourceId,
+        meta.symbol,
+        meta.interval,
+        win,
+        lockFromBarsKey(meta.key),
+      );
+      setActivePlugin('source', DATA_MANAGER_SOURCE_ID);
+      const streamId = defaultStreamForSource(DATA_MANAGER_SOURCE_ID);
+      setActivePlugin('stream', streamId);
+      setStore('symbol', meta.symbol);
+      setStore('interval', meta.interval);
+      persist();
+      const rowLock = lockFromBarsKey(meta.key);
+      const ok = await applyCachedToChart(meta.sourceId, meta.symbol, meta.interval, win, rowLock);
+      if (!ok) {
+        setError('Could not load bars onto the chart.');
+        return;
+      }
+      const restartLive = !!store.live.active || !!store.live.preferAfterLoad;
+      if (restartLive) {
+        try {
+          const { startLive } = await import('../../streams/multiplex');
+          startLive(streamId, meta.symbol, meta.interval);
+        } catch {
+          /* live optional */
+        }
+      }
+      const after = await getCachedBars(
+        meta.sourceId,
+        meta.symbol,
+        meta.interval,
+        lockFromBarsKey(meta.key),
+      );
+      const parts = [
+        `Loaded ${meta.symbol} ${meta.interval}`,
+        `${after.length.toLocaleString()} bars in dataset`,
+      ];
+      if (after.length > n) {
+        parts.push(`+${(after.length - n).toLocaleString()} filled to now`);
+      }
+      if (win.maxBars) parts.push(`max ${win.maxBars.toLocaleString()}`);
+      parts.push(`stream ${streamId}`);
+      setMsg(parts.join(' · '));
+      announce(`Loaded ${n} bars ${meta.symbol} ${meta.interval}`);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onDelete = async () => {
+    const meta = selected();
+    if (!meta) return;
+    setBusy(true);
+    setError('');
+    try {
+      // Full delete: bars + metadata, from every sink (session/local/git/worker).
+      await removeDatasetEverywhere(
+        meta.sourceId,
+        meta.symbol,
+        meta.interval,
+        lockFromBarsKey(meta.key),
+      );
+      setMsg('Dataset deleted (bars + metadata).');
+      setPendingDelete(false);
+      announce(`Deleted ${meta.symbol} ${meta.interval} dataset`);
+      await refresh();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** Export the selected load window (or the whole dataset) as CSV. */
+  const onExportCsv = () => {
+    const meta = selected();
+    if (!meta) return;
+    const slice = sliceBarsForLoad(bars(), loadWindow());
+    if (!slice.length) {
+      setError('No bars in the selected window to export.');
+      return;
+    }
+    exportBarsCsv(slice, { symbol: meta.symbol, interval: meta.interval });
+    setMsg(`Exported ${slice.length.toLocaleString()} bars as CSV.`);
+    announce(`Exported ${meta.symbol} ${meta.interval} as CSV`);
+  };
+
+  /** Re-run the backfill walk for this dataset — extend it to now. */
+  const onBackfill = () => {
+    const meta = selected();
+    if (!meta) return;
+    const nowSec = Math.floor(Date.now() / 1000);
+    const from = meta.oldestSec ?? nowSec - 90 * 86_400;
+    startBackfill({
+      sourceId: meta.sourceId,
+      symbol: meta.symbol,
+      interval: meta.interval,
+      targetFromSec: from,
+      targetToSec: nowSec,
+    });
+    setMsg(`Backfilling ${meta.symbol} ${meta.interval} from ${secToDateInput(from)} to now.`);
+    announce(`Backfilling ${meta.symbol} ${meta.interval}`);
+  };
+
+  const applyPreset = (preset: LoadPreset) => {
+    const meta = selected();
+    if (!meta) return;
+    if (preset === 'full') {
+      resetLoadWindow();
+      return;
+    }
+    if (preset === '1k') {
+      setMaxBars('1000');
+      return;
+    }
+    if (preset === '5k') {
+      setMaxBars('5000');
+      return;
+    }
+    const newest = meta.newestSec;
+    if (newest == null) return;
+    const days = preset === '30d' ? 30 : 90;
+    const from = newest - days * 86_400;
+    setFromDate(secToDateInput(Math.max(from, meta.oldestSec ?? from)));
+    setToDate(secToDateInput(newest));
+  };
+
+  const toggleSort = (key: SortKey) => {
+    setSortKey(key);
+  };
+
+  return (
+    /* biome-ignore lint/a11y/noStaticElementInteractions: keyboard nav lives on the list container; rows are focusable children */
+    <div
+      class="flex flex-col gap-3.5 min-h-0"
+      onKeyDown={props.enableKeyboardNav ? onKey : undefined}
+    >
+      <Show when={error()}>
+        <div
+          class="text-[11px] text-red border border-red/40 bg-red/10 px-2 py-1.5 rounded"
+          role="alert"
+        >
+          {error()}
+        </div>
+      </Show>
+      <Show when={msg() && !error()}>
+        <div
+          class="text-[11px] text-green border border-[color-mix(in_srgb,var(--color-green)_35%,transparent)] bg-[color-mix(in_srgb,var(--color-green)_10%,transparent)] px-2 py-1.5 rounded"
+          role="status"
+        >
+          {msg()}
+        </div>
+      </Show>
+
+      <div class="flex flex-wrap items-end gap-2" data-testid={tid('filters')}>
+        <ScField label="Filter" class="min-w-[10rem] flex-1">
+          <input
+            ref={(el) => {
+              searchEl = el;
+            }}
+            type="search"
+            class="sc-input"
+            placeholder="Symbol, source, interval…"
+            value={query()}
+            onInput={(e) => setQuery(e.currentTarget.value)}
+            data-testid={tid('filter-query')}
+            autocomplete="off"
+            spellcheck={false}
+          />
+        </ScField>
+        <ScField label="Source" class="w-[8.5rem]">
+          <select
+            class="sc-input"
+            value={filterSource()}
+            onChange={(e) => setFilterSource(e.currentTarget.value)}
+            data-testid={tid('filter-source')}
+          >
+            <option value="">All sources</option>
+            <For each={sourceOptions()}>{(s) => <option value={s}>{s}</option>}</For>
+          </select>
+        </ScField>
+        <ScField label="Interval" class="w-[6.5rem]">
+          <select
+            class="sc-input"
+            value={filterInterval()}
+            onChange={(e) => setFilterInterval(e.currentTarget.value)}
+            data-testid={tid('filter-interval')}
+          >
+            <option value="">All</option>
+            <For each={intervalOptions()}>{(iv) => <option value={iv}>{iv}</option>}</For>
+          </select>
+        </ScField>
+        <ScField label="Sort" class="w-[7.5rem]">
+          <select
+            class="sc-input"
+            value={sortKey()}
+            onChange={(e) => setSortKey(e.currentTarget.value as SortKey)}
+            data-testid={tid('sort')}
+          >
+            <For each={SORT_OPTIONS}>{(opt) => <option value={opt.id}>{opt.label}</option>}</For>
+          </select>
+        </ScField>
+        <Show when={filtersActive()}>
+          <button
+            type="button"
+            class="sc-btn sc-btn-ghost sc-btn-sm self-end"
+            onClick={clearFilters}
+            title="Clear filters"
+          >
+            Clear
+          </button>
+        </Show>
+        <button
+          type="button"
+          class="sc-btn sc-btn-ghost sc-btn-sm self-end"
+          onClick={() => void refresh()}
+          disabled={loading()}
+          title="Refresh list"
+          aria-label="Refresh dataset list"
+          data-testid={tid('refresh')}
+        >
+          <Icons.refresh />
+        </button>
+      </div>
+
+      <div
+        class="text-[0.7rem] text-muted flex flex-wrap gap-x-3 gap-y-0.5"
+        data-testid={tid('meta')}
+      >
+        <span>
+          {filteredRows().length}
+          {filtersActive() ? ` / ${rows().length}` : ''} dataset
+          {filteredRows().length === 1 ? '' : 's'}
+        </span>
+        <span>{totalBars().toLocaleString()} bars cached</span>
+        <span title={`Rough on-disk estimate at ${BAR_BYTES_EST} bytes per bar`}>
+          ≈{storageEst()} stored
+        </span>
+        <Show when={loading()}>
+          <span>Refreshing…</span>
+        </Show>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] gap-3 min-h-0 flex-1">
+        <div
+          class="border border-border rounded overflow-auto min-h-[12rem] max-h-[min(48vh,380px)]"
+          data-testid={tid('list')}
+        >
+          <Switch>
+            <Match when={tableState() === 'loading'}>
+              <div class="p-3 text-muted text-[0.78rem]">Loading…</div>
+            </Match>
+            <Match when={tableState() === 'empty'}>
+              <div class="p-3 text-muted text-[0.78rem] leading-snug">
+                No downloaded datasets yet. Run a background backfill first.
+              </div>
+            </Match>
+            <Match when={tableState() === 'filtered'}>
+              <div class="p-3 text-muted text-[0.78rem]">
+                No datasets match the current filters.
+              </div>
+            </Match>
+            <Match when={tableState() === 'rows'}>
+              <table class="w-full text-left border-collapse text-[0.78rem]">
+                <thead class="sticky top-0 z-[1] bg-[var(--bg-elevated,var(--color-bg-elevated,var(--bg)))] shadow-[0_1px_0_var(--border)]">
+                  <tr class="text-[0.68rem] uppercase tracking-wide text-muted">
+                    <th class="px-2 py-1.5 font-medium">
+                      <button
+                        type="button"
+                        class="hover:text-text"
+                        onClick={() => toggleSort('symbol')}
+                      >
+                        Symbol{sortKey() === 'symbol' ? ' ▾' : ''}
+                      </button>
+                    </th>
+                    <th class="px-2 py-1.5 font-medium">TF</th>
+                    <th class="px-2 py-1.5 font-medium">Source</th>
+                    <th class="px-2 py-1.5 font-medium text-right">
+                      <button
+                        type="button"
+                        class="hover:text-text"
+                        onClick={() => toggleSort('bars')}
+                      >
+                        Bars{sortKey() === 'bars' ? ' ▾' : ''}
+                      </button>
+                    </th>
+                    <th class="px-2 py-1.5 font-medium">
+                      <button
+                        type="button"
+                        class="hover:text-text"
+                        onClick={() => toggleSort('span')}
+                      >
+                        Span{sortKey() === 'span' ? ' ▾' : ''}
+                      </button>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-border">
+                  <For each={filteredRows()}>
+                    {(row) => {
+                      const k = () => metaKey(row);
+                      const active = () => selectedKey() === k();
+                      return (
+                        <tr
+                          class={`cursor-pointer transition-colors ${
+                            active()
+                              ? 'bg-[color-mix(in_srgb,var(--color-accent)_18%,transparent)]'
+                              : 'hover:bg-[var(--bg-hover,var(--color-bg-hover))]'
+                          }`}
+                          onClick={() => selectRow(row)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              selectRow(row);
+                            }
+                          }}
+                          tabIndex={active() ? 0 : -1}
+                          aria-selected={active()}
+                          data-testid={`axis-cached-dataset-${k()}`}
+                        >
+                          <td class="px-2 py-1.5 font-medium whitespace-nowrap">{row.symbol}</td>
+                          <td class="px-2 py-1.5 text-muted whitespace-nowrap">{row.interval}</td>
+                          <td
+                            class="px-2 py-1.5 text-muted truncate max-w-[8rem]"
+                            title={row.sourceId}
+                          >
+                            {row.sourceId}
+                          </td>
+                          <td class="px-2 py-1.5 text-right tabular-nums whitespace-nowrap">
+                            {row.count.toLocaleString()}
+                          </td>
+                          <td class="px-2 py-1.5 text-muted whitespace-nowrap">
+                            {fmtDuration(row.oldestSec, row.newestSec)}
+                          </td>
+                        </tr>
+                      );
+                    }}
+                  </For>
+                </tbody>
+              </table>
+            </Match>
+          </Switch>
+        </div>
+
+        <div class="border border-border rounded p-2.5 flex flex-col gap-2.5 min-h-[12rem] overflow-y-auto">
+          <Show
+            when={selected()}
+            fallback={
+              <div class="text-muted text-[0.78rem]">
+                Select a dataset to inspect coverage and choose a load window.
+              </div>
+            }
+          >
+            {(meta) => {
+              const cov = () => coverage();
+              return (
+                <>
+                  <div>
+                    <div class="text-[0.88rem] font-semibold">
+                      {meta().symbol} <span class="text-muted font-normal">{meta().interval}</span>
+                    </div>
+                    <div class="text-[0.72rem] text-muted">{meta().sourceId}</div>
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-x-3 gap-y-1 text-[0.75rem]">
+                    <span class="text-muted">Bars</span>
+                    <span class="tabular-nums">{meta().count.toLocaleString()}</span>
+                    <span class="text-muted">Oldest</span>
+                    <span class="tabular-nums">{fmtTime(meta().oldestSec)}</span>
+                    <span class="text-muted">Newest</span>
+                    <span class="tabular-nums">{fmtTime(meta().newestSec)}</span>
+                    <span class="text-muted">Span</span>
+                    <span>{fmtDuration(meta().oldestSec, meta().newestSec)}</span>
+                    <span class="text-muted">Updated</span>
+                    <span class="tabular-nums">{fmtMillis(meta().updatedAt)}</span>
+                    <span class="text-muted">Cache key</span>
+                    <span class="truncate font-mono text-[0.68rem]" title={meta().key}>
+                      {meta().key}
+                    </span>
+                  </div>
+
+                  <CompleteMap
+                    segments={cov().segments}
+                    complete={cov().complete}
+                    barCount={cov().barCount}
+                    expectedBars={cov().expectedBars}
+                    gaps={cov().gaps}
+                  />
+
+                  <div
+                    class="border-t border-border pt-2 flex flex-col gap-2"
+                    data-testid={tid('load-window')}
+                  >
+                    <div class="flex items-center justify-between gap-2">
+                      <div class="text-[0.68rem] uppercase tracking-wide text-muted font-medium">
+                        Load to chart
+                      </div>
+                      {/* biome-ignore lint/a11y/useSemanticElements: chip row; fieldset default styles break the compact toolbar */}
+                      <div class="sc-chip-row" role="group" aria-label="Load window presets">
+                        <For each={LOAD_PRESETS}>
+                          {(p) => (
+                            <button
+                              type="button"
+                              class="sc-chip"
+                              onClick={() => applyPreset(p.id)}
+                              title={p.title}
+                            >
+                              {p.label}
+                            </button>
+                          )}
+                        </For>
+                      </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2">
+                      <ScField label="From (UTC)">
+                        <input
+                          type="date"
+                          class="sc-input"
+                          value={fromDate()}
+                          min={dateBounds().min || undefined}
+                          max={dateBounds().max || undefined}
+                          onInput={(e) => setFromDate(e.currentTarget.value)}
+                          data-testid={tid('from')}
+                        />
+                      </ScField>
+                      <ScField label="To (UTC)">
+                        <input
+                          type="date"
+                          class="sc-input"
+                          value={toDate()}
+                          min={dateBounds().min || undefined}
+                          max={dateBounds().max || undefined}
+                          onInput={(e) => setToDate(e.currentTarget.value)}
+                          data-testid={tid('to')}
+                        />
+                      </ScField>
+                    </div>
+
+                    <ScField label="Max bars (optional)">
+                      <input
+                        type="number"
+                        class="sc-input"
+                        min={1}
+                        step={1}
+                        placeholder="All bars in range"
+                        value={maxBars()}
+                        onInput={(e) => setMaxBars(e.currentTarget.value)}
+                        data-testid={tid('max-bars')}
+                      />
+                    </ScField>
+
+                    <div
+                      class="text-[0.72rem] text-muted leading-snug"
+                      data-testid={tid('preview-count')}
+                    >
+                      Will load{' '}
+                      <strong class="text-text tabular-nums">
+                        {previewCount().toLocaleString()}
+                      </strong>{' '}
+                      bars
+                      <Show when={previewSpan() !== '—'}>
+                        {' · '}
+                        <span class="text-text tabular-nums">{previewSpan()}</span>
+                      </Show>
+                      <span> of {meta().count.toLocaleString()} cached</span>
+                      {previewCount() === 0 ? ' — adjust the range or max bars' : ''}
+                    </div>
+                  </div>
+
+                  {/* ── Per-dataset actions ─────────────────────────────── */}
+                  <div class="border-t border-border pt-2 flex flex-wrap items-center gap-1.5">
+                    <button
+                      type="button"
+                      class="sc-btn sc-btn-primary sc-btn-sm"
+                      disabled={!selected() || busy() || previewCount() <= 0}
+                      onClick={() => void onLoad()}
+                      data-testid={tid('load')}
+                      aria-busy={busy() || undefined}
+                    >
+                      <Icons.download />
+                      <span>
+                        {busy()
+                          ? 'Loading…'
+                          : previewCount() > 0
+                            ? `Load ${previewCount().toLocaleString()} bars`
+                            : 'Load to chart'}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      class="sc-btn sc-btn-ghost sc-btn-sm"
+                      disabled={!selected() || busy() || !bars().length}
+                      onClick={onExportCsv}
+                      data-testid={tid('export-csv')}
+                      title="Export the selected date range / max bars window as CSV"
+                    >
+                      <Icons.download />
+                      <span>Export CSV</span>
+                    </button>
+                    <button
+                      type="button"
+                      class="sc-btn sc-btn-ghost sc-btn-sm"
+                      disabled={!selected() || busy()}
+                      onClick={onBackfill}
+                      data-testid={tid('backfill')}
+                      title="Enqueue a background backfill that extends this dataset to now"
+                    >
+                      <Icons.refresh />
+                      <span>Backfill to now</span>
+                    </button>
+                    <Show
+                      when={pendingDelete()}
+                      fallback={
+                        <button
+                          type="button"
+                          class="sc-btn sc-btn-ghost sc-btn-sm"
+                          disabled={!selected() || busy()}
+                          onClick={() => setPendingDelete(true)}
+                          title="Delete dataset (bars + metadata, all sinks)"
+                        >
+                          <Icons.trash />
+                          <span>Delete</span>
+                        </button>
+                      }
+                    >
+                      <div class="flex items-center gap-1.5 min-w-0">
+                        <span class="text-red text-[0.78rem] truncate">Delete this dataset?</span>
+                        <button
+                          type="button"
+                          class="sc-btn sc-btn-ghost sc-btn-sm"
+                          onClick={() => setPendingDelete(false)}
+                        >
+                          No
+                        </button>
+                        <button
+                          type="button"
+                          class="sc-btn sc-btn-ghost sc-btn-sm text-red"
+                          disabled={busy()}
+                          onClick={() => void onDelete()}
+                        >
+                          Yes, delete
+                        </button>
+                      </div>
+                    </Show>
+                  </div>
+                </>
+              );
+            }}
+          </Show>
+        </div>
+      </div>
+    </div>
+  );
+};

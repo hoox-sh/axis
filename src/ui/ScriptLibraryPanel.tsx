@@ -27,8 +27,7 @@
  *
  * Cards, git/cloud forms, and filters live under `ui/library/`.
  * {@link LibraryPanel} docks the same content in a floatable chrome panel
- * (topbar **Library**). Plugin Manager still embeds {@link ScriptLibraryPanel}
- * content without chrome. Pass `commands` so the docked panel handles
+ * (topbar **Library**). Pass `commands` so the docked panel handles
  * Find across scripts / Recent scripts (the embed must not steal that intent).
  *
  * App-wide drag-and-drop of `.pyne` / `.pine` files is handled in `app.tsx`

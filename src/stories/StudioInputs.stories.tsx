@@ -1124,7 +1124,7 @@ export const Contract: StoryObj = {
               <td>StudioInput</td>
               <td>
                 chrome, icon/prefix/suffix, clear, reveal, copy, stepper, counter, status lane,
-                Enter/Escape
+                compact shell, Enter/Escape
               </td>
             </tr>
             <tr>

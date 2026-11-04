@@ -84,6 +84,7 @@ import { Icons } from './icons';
 import { FloatableShell } from './panels/FloatableShell';
 import { announce } from './sr-announce';
 import { copyToClipboard } from './clipboard';
+import { StudioInput } from './studio';
 
 type FilterId = 'all' | 'price' | 'drawing' | 'indicator' | 'onchain';
 
@@ -689,29 +690,28 @@ export const AlertsPanel: Component = () => {
               </div>
               <form class="ax-alerts-form" onSubmit={onSubmit}>
                 <Field label="Name">
-                  <input
-                    class="sc-input w-full"
+                  <StudioInput
                     type="text"
                     placeholder="Optional label"
                     value={name()}
-                    onInput={(e) => setName(e.currentTarget.value)}
-                    data-testid="axis-alerts-name"
+                    onInput={setName}
+                    testId="axis-alerts-name"
                   />
                 </Field>
 
                 <div class="ax-alerts-grid-2">
                   <Show when={!isOnchainKind(kind())}>
                     <Field label="Symbol">
-                      <input
-                        class="sc-input w-full font-mono"
+                      <StudioInput
+                        mono
                         type="text"
                         value={symbol()}
-                        onInput={(e) => setSymbol(e.currentTarget.value.toUpperCase())}
+                        onInput={(v) => setSymbol(v.toUpperCase())}
                         onFocus={() => {
                           if (!symbol().trim())
                             setSymbol((store.symbol || 'BTCUSDT').toUpperCase());
                         }}
-                        data-testid="axis-alerts-symbol"
+                        testId="axis-alerts-symbol"
                       />
                     </Field>
                   </Show>
@@ -738,15 +738,15 @@ export const AlertsPanel: Component = () => {
                 <Show when={isPriceKind(kind())}>
                   <div class="ax-alerts-with-action">
                     <Field label="Price" class="flex-1">
-                      <input
-                        class="sc-input w-full font-mono"
+                      <StudioInput
+                        mono
                         type="number"
                         step="any"
-                        min="0"
+                        min={0}
                         placeholder="Threshold"
                         value={price()}
-                        onInput={(e) => setPrice(e.currentTarget.value)}
-                        data-testid="axis-alerts-price"
+                        onInput={setPrice}
+                        testId="axis-alerts-price"
                       />
                     </Field>
                     <button
@@ -764,15 +764,16 @@ export const AlertsPanel: Component = () => {
                 <Show when={isPctKind(kind())}>
                   <div class="ax-alerts-grid-2">
                     <Field label="% move">
-                      <input
-                        class="sc-input w-full font-mono"
+                      <StudioInput
+                        mono
                         type="number"
                         step="any"
-                        min="0"
+                        min={0}
                         placeholder="e.g. 2"
+                        suffix="%"
                         value={pct()}
-                        onInput={(e) => setPct(e.currentTarget.value)}
-                        data-testid="axis-alerts-pct"
+                        onInput={setPct}
+                        testId="axis-alerts-pct"
                       />
                     </Field>
                     <Field label="Direction">
@@ -818,28 +819,28 @@ export const AlertsPanel: Component = () => {
                   </Show>
                   <Show when={!chartDrawings().length}>
                     <Field label="Price">
-                      <input
-                        class="sc-input w-full font-mono"
+                      <StudioInput
+                        mono
                         type="number"
                         step="any"
-                        min="0"
+                        min={0}
                         placeholder="Level"
                         value={price()}
-                        onInput={(e) => setPrice(e.currentTarget.value)}
-                        data-testid="axis-alerts-price"
+                        onInput={setPrice}
+                        testId="axis-alerts-price"
                       />
                     </Field>
                   </Show>
                   <Field label="Tolerance">
-                    <input
-                      class="sc-input w-full font-mono"
+                    <StudioInput
+                      mono
                       type="number"
                       step="any"
-                      min="0"
+                      min={0}
                       placeholder="0 (exact)"
                       value={tolerance()}
-                      onInput={(e) => setTolerance(e.currentTarget.value)}
-                      data-testid="axis-alerts-tolerance"
+                      onInput={setTolerance}
+                      testId="axis-alerts-tolerance"
                     />
                   </Field>
                 </Show>
@@ -950,14 +951,14 @@ export const AlertsPanel: Component = () => {
                       </Field>
                       <div class="ax-alerts-with-action">
                         <Field label="Threshold" class="flex-1">
-                          <input
-                            class="sc-input w-full font-mono"
+                          <StudioInput
+                            mono
                             type="number"
                             step="any"
                             placeholder="Value"
                             value={threshold()}
-                            onInput={(e) => setThreshold(e.currentTarget.value)}
-                            data-testid="axis-alerts-threshold"
+                            onInput={setThreshold}
+                            testId="axis-alerts-threshold"
                           />
                         </Field>
                         <button
@@ -977,26 +978,27 @@ export const AlertsPanel: Component = () => {
 
                 <Show when={isOnchainKind(kind())}>
                   <Field label="Protocol id">
-                    <input
-                      class="sc-input w-full font-mono"
+                    <StudioInput
+                      mono
                       type="text"
                       placeholder="e.g. aave"
                       value={protocolId()}
-                      onInput={(e) => setProtocolId(e.currentTarget.value)}
-                      data-testid="axis-alerts-protocol"
+                      onInput={setProtocolId}
+                      testId="axis-alerts-protocol"
                     />
                   </Field>
                   <div class="ax-alerts-grid-2">
                     <Field label="Min |%|">
-                      <input
-                        class="sc-input w-full font-mono"
+                      <StudioInput
+                        mono
                         type="number"
                         step="any"
-                        min="0"
+                        min={0}
                         placeholder={String(DEFAULT_ONCHAIN_TVL_MIN_ABS_PCT)}
+                        suffix="%"
                         value={minAbsPct()}
-                        onInput={(e) => setMinAbsPct(e.currentTarget.value)}
-                        data-testid="axis-alerts-min-abs-pct"
+                        onInput={setMinAbsPct}
+                        testId="axis-alerts-min-abs-pct"
                       />
                     </Field>
                     <Field label="Direction">
@@ -1060,35 +1062,38 @@ export const AlertsPanel: Component = () => {
                       <span class="ax-alerts-check-meta">{store.interval || ''}</span>
                     </label>
                     <Field label="Webhook URL">
-                      <input
-                        class="sc-input w-full font-mono text-[0.9em]"
+                      <StudioInput
+                        mono
                         type="url"
                         placeholder="https://… (optional)"
                         value={webhookUrl()}
-                        onInput={(e) => setWebhookUrl(e.currentTarget.value)}
-                        data-testid="axis-alerts-webhook"
+                        onInput={setWebhookUrl}
+                        copyable
+                        testId="axis-alerts-webhook"
                       />
                     </Field>
                     <Field label="L2 webhook">
-                      <input
-                        class="sc-input w-full font-mono text-[0.9em]"
+                      <StudioInput
+                        mono
                         type="url"
                         placeholder="https://… PYNE/HOOX L2 (optional)"
                         value={l2WebhookUrl()}
-                        onInput={(e) => setL2WebhookUrl(e.currentTarget.value)}
-                        data-testid="axis-alerts-l2"
+                        onInput={setL2WebhookUrl}
+                        copyable
+                        testId="axis-alerts-l2"
                       />
                     </Field>
                     <Field label="Cooldown (sec)">
-                      <input
-                        class="sc-input w-full font-mono"
+                      <StudioInput
+                        mono
                         type="number"
-                        step="1"
-                        min="0"
+                        step={1}
+                        min={0}
                         placeholder="optional"
+                        suffix="s"
                         value={cooldownSec()}
-                        onInput={(e) => setCooldownSec(e.currentTarget.value)}
-                        data-testid="axis-alerts-cooldown"
+                        onInput={setCooldownSec}
+                        testId="axis-alerts-cooldown"
                       />
                     </Field>
                     <div class="ax-alerts-test-row">

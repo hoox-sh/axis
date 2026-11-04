@@ -360,6 +360,7 @@ export const App: Component = () => {
         page === 'workers' ||
         page === 'plugins' ||
         page === 'debug' ||
+        page === 'data' ||
         page === 'settings'
       ) {
         openStudio(page);
@@ -687,15 +688,6 @@ export const App: Component = () => {
               onClose={() => setStudioPage(null)}
               onChanged={() => setCatalogTick((n) => n + 1)}
               onApplied={() => setCatalogTick((n) => n + 1)}
-              getDoc={() => editorRef.getDoc()}
-              setDoc={(doc, name, libraryId) => {
-                const ref = editorRef as {
-                  setDoc?: (d: string) => void;
-                  loadLibraryDoc?: (d: string, n?: string, id?: string) => void;
-                };
-                if (ref.loadLibraryDoc) ref.loadLibraryDoc(doc, name, libraryId);
-                else ref.setDoc?.(doc);
-              }}
             />
           )}
         </Show>

@@ -282,9 +282,7 @@ export const ExchangeCredentialsPanel: Component = () => {
       title="Exchange API keys"
       lead="Session vault only — never written to disk or localStorage."
       testId="axis-settings-exchange-keys"
-      headerEnd={
-        <StudioStatus status={hasSaved() ? 'healthy' : 'idle'} label={sessionLabel()} />
-      }
+      headerEnd={<StudioStatus status={hasSaved() ? 'healthy' : 'idle'} label={sessionLabel()} />}
     >
       <p class="ax-hint" data-testid="axis-exchange-session-note">
         Native CEX keys sign in the browser. CCXT keys bind a datafeed session handle — the secret
@@ -443,7 +441,9 @@ export const ExchangeCredentialsPanel: Component = () => {
           feedback={testFb.state()}
           disabled={!hasSaved() || kind() === 'ccxt'}
           title={
-            kind() === 'ccxt' ? 'CCXT keys are verified on the next Load / Live' : 'Signed REST probe'
+            kind() === 'ccxt'
+              ? 'CCXT keys are verified on the next Load / Live'
+              : 'Signed REST probe'
           }
           onClick={() => void testFb.run(onTestKey)}
         >
@@ -531,20 +531,25 @@ function IntelNum(props: {
     if (clamped !== props.value) props.onChange(clamped);
     setDraft(String(clamped));
   };
+  // Studio input language: the unit rides in the input suffix, never in the
+  // label — the label stays a noun, the field carries the dimension.
+  const unit = () => (props.suffix ? props.suffix.trim() : undefined);
   return (
     <StudioField
-      label={`${props.label} · ${props.value}${props.suffix || ''}`}
+      label={props.label}
       for={props.id}
-      hint={`${props.hint} (${props.min}–${props.max}${props.suffix || ''})`}
+      hint={`${props.hint} (${props.min}–${props.max}${unit() ?? ''}).`}
     >
       <StudioInput
         id={props.id}
         type="number"
         mono
         testId={props.id}
+        selectOnFocus
         min={props.min}
         max={props.max}
         step={props.step ?? 50}
+        suffix={unit()}
         value={draft()}
         onInput={(v) => setDraft(v)}
         onChange={(v) => commit(v)}

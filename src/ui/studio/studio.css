@@ -12,13 +12,13 @@
    legacy SettingsDialog) have sizing tokens even outside `.ax-page`.
    `.ax-page` re-declares these for the full-viewport modal scale. */
 :root {
-  --ax-font: 16px;
-  --ax-title: 2.25rem;
-  --ax-section: 1.25rem;
-  --ax-body: 1.05rem;
-  --ax-hint: 0.95rem;
-  --ax-kicker: 0.72rem;
-  --ax-mono: 0.85rem;
+  --ax-font: 16.75px;
+  --ax-title: 2.29rem;
+  --ax-section: 1.29rem;
+  --ax-body: 1.09rem;
+  --ax-hint: 0.99rem;
+  --ax-kicker: 0.76rem;
+  --ax-mono: 0.89rem;
   --ax-control-h: 3.25rem;
   --ax-gap: 2.25rem;
   --ax-card-pad: 1.15rem 1.25rem;
@@ -54,13 +54,13 @@
   z-index: 1050;
 }
 .ax-page {
-  --ax-font: 16px;
-  --ax-title: 2.25rem;
-  --ax-section: 1.25rem;
-  --ax-body: 1.05rem;
-  --ax-hint: 0.95rem;
-  --ax-kicker: 0.72rem;
-  --ax-mono: 0.85rem;
+  --ax-font: 16.75px;
+  --ax-title: 2.29rem;
+  --ax-section: 1.29rem;
+  --ax-body: 1.09rem;
+  --ax-hint: 0.99rem;
+  --ax-kicker: 0.76rem;
+  --ax-mono: 0.89rem;
   --ax-control-h: 3.25rem;
   --ax-gap: 2.25rem;
   --ax-card-pad: 1.15rem 1.25rem;
@@ -135,14 +135,14 @@
   align-items: baseline;
   gap: 0.55rem;
   padding: 0 1.35rem;
-  font-size: 0.95rem;
+  font-size: 0.99rem;
   font-weight: 650;
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--color-text);
 }
 .ax-page-rail-brand span {
-  font-size: 0.68rem;
+  font-size: 0.72rem;
   letter-spacing: 0.14em;
   font-weight: 500;
   color: var(--color-text-faint);
@@ -175,7 +175,7 @@
   border: 0;
   background: transparent;
   color: var(--color-text-dim);
-  font-size: 0.98rem;
+  font-size: 1.02rem;
   font-weight: 500;
   letter-spacing: -0.01em;
   text-align: left;
@@ -424,7 +424,7 @@
 /* Enriched stream rows: qty / from_entry / pnl columns */
 .ax-event-from {
   color: var(--color-text-faint);
-  font-size: 0.85rem;
+  font-size: 0.89rem;
   max-width: 9rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -433,7 +433,7 @@
 .ax-event-qty {
   color: var(--color-text-dim);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.82rem;
+  font-size: 0.86rem;
   min-width: 5.5rem;
   text-align: right;
 }
@@ -441,7 +441,7 @@
   min-width: 5.5rem;
   text-align: right;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.85rem;
+  font-size: 0.89rem;
   font-weight: 600;
 }
 .ax-event-pnl--none {
@@ -485,7 +485,7 @@
 }
 .ax-pos-id {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.85rem;
+  font-size: 0.89rem;
   color: var(--color-text-dim);
   max-width: 10rem;
   overflow: hidden;
@@ -494,7 +494,7 @@
 }
 .ax-pos-avg {
   color: var(--color-text-dim);
-  font-size: 0.82rem;
+  font-size: 0.86rem;
 }
 .ax-pos-fills {
   list-style: none;
@@ -509,7 +509,7 @@
   gap: 0.75rem;
   padding: 0.22rem 0.35rem;
   border-radius: var(--radius-chip);
-  font-size: 0.85rem;
+  font-size: 0.89rem;
   color: var(--color-text-dim);
   cursor: pointer;
 }
@@ -521,7 +521,7 @@
   width: 8.6rem;
   flex-shrink: 0;
   color: var(--color-text-faint);
-  font-size: 0.8rem;
+  font-size: 0.84rem;
 }
 .ax-pos-fill-pnl {
   margin-left: auto;
@@ -533,7 +533,7 @@
   justify-content: center;
   min-height: 3.2rem;
   color: var(--color-text-faint);
-  font-size: 0.88rem;
+  font-size: 0.92rem;
   border: 1px dashed var(--color-border);
   border-radius: var(--radius-chip);
 }
@@ -544,11 +544,11 @@
   margin-top: 0.4rem;
   padding-top: 0.4rem;
   border-top: var(--border-w) solid var(--color-border-soft, var(--color-border));
-  font-size: 0.85rem;
+  font-size: 0.89rem;
   color: var(--color-text-dim);
 }
 .ax-pos-remaining {
-  font-size: 0.8rem;
+  font-size: 0.84rem;
   color: var(--color-text-faint);
 }
 
@@ -570,7 +570,7 @@
   min-width: 0;
 }
 .ax-saved-stat-k {
-  font-size: 0.66rem;
+  font-size: 0.7rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   font-weight: 600;
@@ -581,7 +581,7 @@
 }
 .ax-saved-stat-v {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.88rem;
+  font-size: 0.92rem;
   font-weight: 600;
   color: var(--color-text);
   white-space: nowrap;
@@ -668,13 +668,24 @@
   color: var(--color-bg-base);
   box-shadow: 0 2px 8px color-mix(in srgb, var(--color-accent) 38%, transparent);
 }
+/* Ghost = secondary, not invisible. A visible hairline + quiet tint at rest
+ * so every secondary action (Export workspace, Download log, Refresh, Copy)
+ * reads as clickable before hover; hover lifts the box 1px and brightens
+ * the edge, press sinks it back. Primary keeps the solid accent fill, so
+ * the CTA still owns the view. */
 .ax-btn--ghost {
-  border-color: transparent;
+  background: color-mix(in srgb, var(--color-text) 4%, transparent);
+  border-color: var(--color-border);
   color: var(--color-text-dim);
 }
 .ax-btn--ghost:hover:not(:disabled) {
   color: var(--color-text);
   background: var(--color-bg-hover);
+  border-color: color-mix(in srgb, var(--color-text-dim) 45%, var(--color-border));
+  transform: translateY(-1px);
+}
+.ax-btn--ghost:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
 }
 .ax-btn--danger {
   border-color: color-mix(in srgb, var(--color-red) 50%, var(--color-border));
@@ -1146,6 +1157,91 @@ textarea.ax-input.ax-input--mono {
   box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--color-accent) 40%, transparent);
 }
 
+/* Stepper flush against the shell's rounded corner: clip the column so a
+ * hovered/pressed step button never paints a square corner over the radius,
+ * and let the divider pick up the accent while the field is focused. */
+.ax-input-stepper {
+  border-radius: 0 calc(var(--radius-input) - 1px) calc(var(--radius-input) - 1px) 0;
+  overflow: hidden;
+}
+.ax-input-shell:focus-within .ax-input-stepper {
+  border-left-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-border));
+}
+
+/* ── Compact density ────────────────────────────────────────────────
+ * The full shell is `var(--ax-control-h)` tall — right for studio pages,
+ * too tall for dense dockable panels (alerts, topbar rows). Adding
+ * `ax-shell--compact` to a StudioInput / StudioSelect keeps the full input
+ * language (icon, suffix, clear/copy, stepper, kbd hint) at panel height. */
+.ax-input-shell.ax-shell--compact,
+.ax-select-shell.ax-shell--compact {
+  min-height: var(--ui-control-h, 1.65rem);
+  gap: 0.3rem;
+  padding-left: 0.5rem;
+}
+.ax-input-shell.ax-shell--compact > .ax-input--bare {
+  min-height: calc(var(--ui-control-h, 1.65rem) - 2px);
+  padding: 0.25rem 0;
+  font-size: 0.95rem;
+}
+.ax-input-shell.ax-shell--compact .ax-input-adorn svg {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+.ax-input-shell.ax-shell--compact .ax-input-prefix,
+.ax-input-shell.ax-shell--compact .ax-input-suffix {
+  font-size: 0.8rem;
+}
+.ax-input-shell.ax-shell--compact .ax-input-action {
+  width: 1.45rem;
+  height: 1.45rem;
+}
+.ax-input-shell.ax-shell--compact .ax-input-action svg {
+  width: 0.8rem;
+  height: 0.8rem;
+}
+.ax-input-shell.ax-shell--compact .ax-input-stepper,
+.ax-select-shell.ax-shell--compact .ax-select-chevron {
+  border-radius: 0 calc(var(--radius-input) - 1px) calc(var(--radius-input) - 1px) 0;
+}
+.ax-input-shell.ax-shell--compact .ax-input-step {
+  width: 1.35rem;
+}
+.ax-input-shell.ax-shell--compact .ax-input-step svg {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+.ax-input-shell.ax-shell--compact .ax-input-kbd {
+  font-size: 0.62rem;
+  padding: 0.12rem 0.24rem;
+}
+.ax-select-shell.ax-shell--compact > .ax-select--bare {
+  min-height: calc(var(--ui-control-h, 1.65rem) - 2px);
+  padding: 0.25rem 1.6rem 0.25rem 0;
+  font-size: 0.95rem;
+}
+.ax-select-shell.ax-shell--compact .ax-select-chevron svg {
+  width: 0.8rem;
+  height: 0.8rem;
+}
+.ax-textarea-shell.ax-shell--compact {
+  padding: 0.35rem 0.45rem 0.35rem 0.75rem;
+}
+.ax-textarea-shell.ax-shell--compact .ax-textarea {
+  font-size: 0.95rem;
+}
+.ax-color-input.ax-shell--compact {
+  min-height: var(--ui-control-h, 1.65rem);
+}
+.ax-color-input.ax-shell--compact .ax-color-input-swatch {
+  width: var(--ui-control-h, 1.65rem);
+  min-height: var(--ui-control-h, 1.65rem);
+}
+.ax-color-input.ax-shell--compact .ax-color-input-text {
+  min-height: var(--ui-control-h, 1.65rem);
+  font-size: 0.95rem;
+}
+
 /* Select shell — native select, custom chevron, same focus language. */
 .ax-select-shell {
   position: relative;
@@ -1345,10 +1441,10 @@ select.ax-select:not(.ax-select--bare):focus {
   gap: 0.7rem;
 }
 .ax-toggle--sm .ax-toggle-title {
-  font-size: 0.95rem;
+  font-size: 0.99rem;
 }
 .ax-toggle--sm .ax-toggle-hint {
-  font-size: 0.86rem;
+  font-size: 0.9rem;
 }
 .ax-toggle:hover:not(.is-disabled) .ax-toggle-title {
   color: var(--color-text);
@@ -1839,14 +1935,14 @@ button.ax-card[aria-pressed='true'] {
 }
 .ax-card-title {
   margin: 0;
-  font-size: 1.1rem;
+  font-size: 1.14rem;
   font-weight: 550;
   letter-spacing: -0.02em;
   line-height: 1.25;
 }
 .ax-card > .ax-hint {
   max-width: none;
-  font-size: 0.88rem;
+  font-size: 0.92rem;
   line-height: 1.45;
 }
 .ax-stat {
@@ -1871,7 +1967,7 @@ button.ax-card[aria-pressed='true'] {
 .ax-stat-value {
   display: flex;
   align-items: center;
-  font-size: 1.35rem;
+  font-size: 1.39rem;
   font-weight: 550;
   letter-spacing: -0.03em;
   color: var(--color-text);
@@ -1967,7 +2063,7 @@ span.ax-chip,
   min-height: 1.7rem;
   padding: 0.15rem 0.7rem;
   border-radius: 999px;
-  font-size: 0.82rem;
+  font-size: 0.86rem;
   font-weight: 600;
   letter-spacing: 0.02em;
   line-height: 1.2;
@@ -2032,7 +2128,7 @@ span.ax-chip,
   padding: 0.5rem 0;
   align-items: baseline;
   gap: 1rem;
-  font-size: 0.95rem;
+  font-size: 0.99rem;
 }
 .ax-list--dense .ax-row > span:first-child {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -2468,7 +2564,7 @@ span.ax-json-twist {
   gap: 0.75rem;
 }
 .ax-wire-preset-name {
-  font-size: 1.05rem;
+  font-size: 1.09rem;
   font-weight: 550;
   color: var(--color-text);
 }
@@ -2613,7 +2709,7 @@ span.ax-json-twist {
   border: var(--border-w) solid var(--color-border);
   border-radius: var(--radius-surface);
   padding: 0.5rem 0.7rem;
-  font-size: 0.85rem;
+  font-size: 0.89rem;
   min-width: 9rem;
   box-shadow: 0 8px 24px color-mix(in srgb, #000 40%, transparent);
   z-index: 2;
@@ -2666,7 +2762,7 @@ span.ax-json-twist {
   border-radius: var(--radius-chip);
   background: var(--color-bg-elev);
   color: var(--color-text-dim);
-  font-size: 0.82rem;
+  font-size: 0.86rem;
   font-weight: 550;
   letter-spacing: -0.01em;
   text-transform: capitalize;
@@ -2678,7 +2774,7 @@ span.ax-json-twist {
   min-height: 1.6rem;
   padding: 0.1rem 0.6rem;
   border-radius: var(--radius-chip);
-  font-size: 0.82rem;
+  font-size: 0.86rem;
   font-weight: 600;
   letter-spacing: 0.02em;
 }
@@ -2713,7 +2809,7 @@ span.ax-json-twist {
   gap: 1rem;
 }
 .ax-plot-meta {
-  font-size: 0.85rem;
+  font-size: 0.89rem;
   color: var(--color-text-faint);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
@@ -2742,7 +2838,7 @@ span.ax-json-twist {
   gap: 0.75rem;
 }
 .ax-metrics-script {
-  font-size: 0.95rem;
+  font-size: 0.99rem;
   color: var(--color-text-dim);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
@@ -2758,7 +2854,7 @@ span.ax-json-twist {
   flex-shrink: 0;
 }
 .ax-results-autotoggle .ax-toggle-title {
-  font-size: 0.92rem;
+  font-size: 0.96rem;
   font-weight: 500;
   color: var(--color-text-dim);
   letter-spacing: -0.01em;
@@ -2919,7 +3015,7 @@ span.ax-json-twist {
   border: var(--border-w) solid var(--color-border);
   border-radius: 3px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.7rem;
+  font-size: 0.74rem;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -3218,7 +3314,7 @@ span.ax-json-twist {
     height: 2px;
   }
   .ax-page-title {
-    font-size: 1.7rem;
+    font-size: 1.74rem;
   }
   .ax-page-header,
   .ax-tabs,
@@ -3274,6 +3370,8 @@ span.ax-json-twist {
     animation: none;
   }
   .ax-btn:active:not(:disabled),
+  .ax-btn--ghost:hover:not(:disabled),
+  .ax-btn--ghost:active:not(:disabled),
   button.ax-card:active,
   .ax-chip:active:not(:disabled),
   .ax-toggle:active:not(.is-disabled) input::after {
@@ -3316,7 +3414,7 @@ span.ax-json-twist {
   padding: 0.5rem 0.8rem;
   border-bottom: var(--border-w) solid var(--color-border);
   background: color-mix(in srgb, var(--color-bg-panel) 82%, var(--color-bg-elev));
-  font-size: 0.72rem;
+  font-size: 0.76rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--color-text-dim);
@@ -3331,7 +3429,7 @@ span.ax-json-twist {
   color: var(--color-text);
 }
 .ax-debug-live-note {
-  font-size: 0.68rem;
+  font-size: 0.72rem;
   text-transform: none;
   letter-spacing: 0;
   color: var(--color-text-faint);
@@ -3344,7 +3442,7 @@ span.ax-json-twist {
   overflow: auto;
   overscroll-behavior: contain;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.72rem;
+  font-size: 0.76rem;
   line-height: 1.6;
   background: var(--color-bg-base);
 }
@@ -3364,7 +3462,7 @@ span.ax-json-twist {
   white-space: nowrap;
 }
 .ax-debug-scope {
-  font-size: 0.64rem;
+  font-size: 0.68rem;
   letter-spacing: 0.07em;
   text-transform: uppercase;
   white-space: nowrap;

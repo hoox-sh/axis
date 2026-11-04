@@ -74,6 +74,7 @@ import { runAndApply } from '../indicators/runner';
 import type { RunResult } from '../indicators/runner';
 import { Icons } from './icons';
 import { Spinner } from './Spinner';
+import { StudioInput } from './studio';
 
 /** Extra Pine sources that may declare `enum`s imported by the target script. */
 function extraEnumSources(code: string, skipId?: string | null): string[] {
@@ -565,12 +566,6 @@ const InputField: Component<{
     if (!textFocused()) setTextDraft(null);
   });
 
-  const numDisplay = () => {
-    if (numFocused() && numDraft() != null) return numDraft()!;
-    const v = val();
-    return v == null ? '' : String(v);
-  };
-
   const textDisplay = () => {
     if (textFocused() && textDraft() != null) return textDraft()!;
     return String(val() ?? '');
@@ -618,36 +613,24 @@ const InputField: Component<{
         </label>
       </Show>
       <Show when={t() === 'int' || t() === 'float' || t() === 'price'}>
-        <input
+        <StudioInput
           id={id()}
           type="number"
-          class="sc-input w-full"
-          value={numDisplay()}
+          mono
+          compact={props.compact}
+          value={val() == null ? '' : String(val())}
           min={props.field.min ?? undefined}
           max={props.field.max ?? undefined}
           step={props.field.step ?? (t() === 'int' ? 1 : 'any')}
           disabled={!enabled()}
-          onFocus={(e) => {
-            setNumFocused(true);
-            setNumDraft(e.currentTarget.value);
-          }}
-          onInput={(e) => {
-            if (!enabled()) return;
-            setNumDraft(e.currentTarget.value);
-          }}
-          onChange={(e) => {
-            if (enabled()) commitNumber(e.currentTarget.value);
-          }}
-          onBlur={(e) => {
-            if (enabled()) commitNumber(e.currentTarget.value);
+          ariaLabel={props.field.title || undefined}
+          onChange={(v) => enabled() && commitNumber(v)}
+          onBlur={(v) => {
+            if (enabled()) commitNumber(v);
             setNumFocused(false);
             setNumDraft(null);
           }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.currentTarget.blur();
-            }
-          }}
+          onEnter={(v) => enabled() && commitNumber(v)}
         />
       </Show>
       <Show when={t() === 'color'}>
@@ -662,20 +645,19 @@ const InputField: Component<{
               if (enabled()) props.onChange(e.currentTarget.value);
             }}
           />
-          <input
-            type="text"
-            class="sc-input flex-1 font-mono text-[11px]"
+          <StudioInput
+            class="flex-1"
+            mono
             value={textDisplay()}
             disabled={!enabled()}
-            onFocus={(e) => {
-              setTextFocused(true);
-              setTextDraft(e.currentTarget.value);
-            }}
-            onInput={(e) => {
+            clearable={false}
+            ariaLabel={`${props.field.title || 'Color'} hex value`}
+            onInput={(v) => {
               if (!enabled()) return;
-              setTextDraft(e.currentTarget.value);
-              props.onChange(e.currentTarget.value);
+              setTextDraft(v);
+              props.onChange(v);
             }}
+            onFocus={() => setTextFocused(true)}
             onBlur={() => {
               setTextFocused(false);
               setTextDraft(null);
@@ -719,21 +701,20 @@ const InputField: Component<{
         <Show
           when={t() === 'text'}
           fallback={
-            <input
+            <StudioInput
               id={id()}
-              type="text"
-              class="sc-input w-full"
-              value={textDisplay()}
+              mono={t() !== 'string'}
+              compact={props.compact}
+              value={String(val() ?? '')}
+              placeholder={t() === 'timeframe' ? 'e.g. 1D / 240' : undefined}
               disabled={!enabled()}
-              onFocus={(e) => {
-                setTextFocused(true);
-                setTextDraft(e.currentTarget.value);
-              }}
-              onInput={(e) => {
+              ariaLabel={props.field.title || undefined}
+              onInput={(v) => {
                 if (!enabled()) return;
-                setTextDraft(e.currentTarget.value);
-                props.onChange(e.currentTarget.value);
+                setTextDraft(v);
+                props.onChange(v);
               }}
+              onFocus={() => setTextFocused(true)}
               onBlur={() => {
                 setTextFocused(false);
                 setTextDraft(null);
@@ -774,6 +755,21 @@ const StrategyField: Component<{
   const id = () => `axis-sp-${props.field.id}`;
   const t = () => props.field.type;
   const val = () => props.field.value ?? props.field.default;
+
+  /** Unit lives in the suffix, not the label (Storybook guidance). */
+  const suffix = () => {
+    switch (props.field.id) {
+      case 'margin_long':
+      case 'margin_short':
+        return '%';
+      case 'leverage':
+        return '×';
+      case 'slippage':
+        return 'ticks';
+      default:
+        return undefined;
+    }
+  };
 
   const [numDraft, setNumDraft] = createSignal<string | null>(null);
   const [textDraft, setTextDraft] = createSignal<string | null>(null);
@@ -836,34 +832,28 @@ const StrategyField: Component<{
         </label>
       </Show>
       <Show when={t() === 'int' || t() === 'float'}>
-        <input
+        <StudioInput
           id={id()}
           type="number"
-          class="sc-input w-full"
+          mono
           value={numDisplay()}
           min={props.field.min ?? undefined}
           max={props.field.max ?? undefined}
           step={props.field.step ?? (t() === 'int' ? 1 : 'any')}
-          onFocus={(e) => {
-            setNumFocused(true);
-            setNumDraft(e.currentTarget.value);
+          suffix={suffix()}
+          ariaLabel={props.field.title || undefined}
+          onInput={(v) => {
+            setNumDraft(v);
+            const n = t() === 'int' ? parseInt(v, 10) : parseFloat(v);
+            if (v.trim() !== '' && Number.isFinite(n)) props.onChange(n);
           }}
-          onInput={(e) => {
-            const raw = e.currentTarget.value;
-            setNumDraft(raw);
-            if (raw.trim() === '') return;
-            const n = t() === 'int' ? parseInt(raw, 10) : parseFloat(raw);
-            if (Number.isFinite(n)) props.onChange(n);
-          }}
-          onChange={(e) => commitNumber(e.currentTarget.value)}
-          onBlur={(e) => {
-            commitNumber(e.currentTarget.value);
+          onChange={(v) => commitNumber(v)}
+          onBlur={(v) => {
+            commitNumber(v);
             setNumFocused(false);
             setNumDraft(null);
           }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') e.currentTarget.blur();
-          }}
+          onEnter={(v) => commitNumber(v)}
         />
       </Show>
       <Show when={t() === 'enum' && props.field.options?.length}>
@@ -879,19 +869,15 @@ const StrategyField: Component<{
         </select>
       </Show>
       <Show when={t() === 'string'}>
-        <input
+        <StudioInput
           id={id()}
-          type="text"
-          class="sc-input w-full"
           value={textDisplay()}
-          onFocus={(e) => {
-            setTextFocused(true);
-            setTextDraft(e.currentTarget.value);
+          ariaLabel={props.field.title || undefined}
+          onInput={(v) => {
+            setTextDraft(v);
+            props.onChange(v);
           }}
-          onInput={(e) => {
-            setTextDraft(e.currentTarget.value);
-            props.onChange(e.currentTarget.value);
-          }}
+          onFocus={() => setTextFocused(true)}
           onBlur={() => {
             setTextFocused(false);
             setTextDraft(null);

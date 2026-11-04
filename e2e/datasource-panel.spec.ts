@@ -13,8 +13,12 @@ import { loadMockBars, stubAppNetwork } from './charts';
 
 async function openPanel(page: import('@playwright/test').Page) {
   await page.getByTestId('axis-topbar').waitFor({ state: 'visible', timeout: 30_000 });
-  const btn = page.getByTestId('axis-btn-datasource');
-  if ((await btn.getAttribute('aria-pressed')) !== 'true') await btn.click();
+  // The Topbar Data button now opens the studio Data page; the floatable
+  // panel is reached through the command palette (Mod-K → "Toggle Data").
+  const mod = process.platform === 'darwin' ? 'Meta' : 'Control';
+  await page.keyboard.press(`${mod}+k`);
+  await page.getByTestId('axis-command-palette-input').fill('dsm');
+  await page.getByTestId('axis-cmd-panel.datasource').click();
   await expect(page.getByTestId('axis-datasource').first()).toBeVisible();
 }
 

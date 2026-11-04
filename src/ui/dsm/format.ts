@@ -101,6 +101,21 @@ export function fmtBarsAsSpan(bars: number, interval: string): string {
 }
 
 /**
+ * Byte count → short human label (`1.2 MB`). Input is bytes, not bits.
+ * Purely an estimate for display; storage sinks never round-trip through it.
+ */
+export function fmtBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '—';
+  if (bytes < 1024) return `${Math.round(bytes)} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb >= 100 ? Math.round(kb) : kb.toFixed(1)} KB`;
+  const mb = kb / 1024;
+  if (mb < 1024) return `${mb >= 100 ? Math.round(mb) : mb.toFixed(1)} MB`;
+  const gb = mb / 1024;
+  return `${gb.toFixed(1)} GB`;
+}
+
+/**
  * Span label for a dataset load window.
  * A max-bars cap uses bar count × timeframe. An open window uses the clock range.
  */

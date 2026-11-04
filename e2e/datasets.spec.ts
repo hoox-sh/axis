@@ -57,10 +57,15 @@ async function seedDataset(page: Page): Promise<void> {
   });
 }
 
+/** Open the studio Data page's dataset inventory. */
 async function openDatasetManager(page: Page): Promise<void> {
-  await page.getByTestId('axis-btn-datasource').click();
-  await page.getByTestId('axis-datasource-open-datasets').click();
-  await expect(page.getByTestId('axis-cached-datasets-modal')).toBeVisible();
+  await page.getByTestId('axis-btn-studio').click();
+  const rail = page.getByTestId('axis-studio-rail-data');
+  await expect(rail).toBeVisible({ timeout: 15_000 });
+  await rail.click();
+  await expect(page.getByTestId('axis-data-page')).toBeVisible();
+  await page.getByTestId('axis-data-page-tab-datasets').click();
+  await expect(page.getByTestId('axis-data-datasets-section')).toBeVisible();
 }
 
 test('dataset manager delete removes bars + metadata', async ({ page }) => {
@@ -73,7 +78,7 @@ test('dataset manager delete removes bars + metadata', async ({ page }) => {
   await expect(row).toBeVisible();
 
   // Load it so the dataset-store memory mirror holds the metadata row.
-  await page.getByTestId('axis-cached-datasets-load').click();
+  await page.getByTestId('axis-data-datasets-load').click();
   await page.waitForTimeout(1500);
 
   await page.getByRole('button', { name: /^Delete$/ }).click();

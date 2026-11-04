@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/ui/plugins"
-description: "Plugins studio canvas — catalog / install / library."
+description: "Plugins studio canvas — the plugin catalog."
 resource: "src/ui/plugins"
 tags: [code, plugins, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:02:55Z
+  at: 2026-11-04T22:58:58Z
 sources:
   - id: tree
     resource: "src/ui/plugins"

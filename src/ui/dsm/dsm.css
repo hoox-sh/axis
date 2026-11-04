@@ -370,6 +370,13 @@
   font-variant-numeric: tabular-nums;
   line-height: 1.5;
 }
+.ax-dsm-jobs-batch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  justify-content: flex-end;
+}
 .ax-dsm-jobs-filters {
   display: flex;
   flex-direction: column;

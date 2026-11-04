@@ -7,7 +7,7 @@ tags: [code, extras, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-04T22:53:29Z
+  at: 2026-11-04T22:58:58Z
 sources:
   - id: tree
     resource: "src/ui/extras"
@@ -25,7 +25,7 @@ okf_lock: generated
 * `format.ts` — TickerQuote, TickerRow, buildTickerRows, formatExtraPrice, formatTickerRow
 * `quote.ts` — QuoteInput, QuoteRow, QuoteStats, buildQuoteRows, displayedLastPrice, formatCompactVolume, formatTickTime, quoteStats, streamAllowsLivePrice
 * `state.ts` — TICKER_DEFAULTS, TickerOptionDefaults, anyExtraEnabled, defaultTickerSymbols, resetTickerOptions
-* `timebadge.ts` — barCloseRemainingMs, formatClockLocal, formatClockUtc, formatCountdown, intervalToMs
+* `timebadge.ts` — barCloseAtMs, barCloseRemainingMs, barProgress, formatClockLocal, formatClockUtc, formatCountdown, intervalToMs
 * `trend.ts` — TickTrend, trendOverTicks
 
 # Packages

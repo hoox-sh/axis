@@ -7,7 +7,7 @@ tags: [code]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-04T09:17:36Z
+  at: 2026-11-04T22:58:58Z
 sources:
   - id: tree
     resource: "src"
@@ -70,7 +70,6 @@ okf_lock: generated
 * [src/store](/code/src/store.md)
 * [src/ui](/code/src/ui.md)
 * [src/ui/debug](/code/src/ui/debug.md)
-* [src/ui/settings](/code/src/ui/settings.md)
 * [src/update](/code/src/update.md)
 * [tests](/code/tests.md)
 

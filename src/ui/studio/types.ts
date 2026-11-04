@@ -5,14 +5,16 @@
 /**
  * Studio page identifiers and shared overlay props.
  *
- * Runtime / Wire / Settings are primary studio pages (topbar **Studio**,
- * then the overlay rail). Workers / Plugins are catalog pages on the same
- * rail, command palette, or Runtime cards. They are not tabs inside Runtime.
+ * Runtime / Wire / Settings / Data are primary studio pages (topbar
+ * **Studio**, then the overlay rail). Workers / Plugins are catalog pages on
+ * the same rail, command palette, or Runtime cards. They are not tabs inside
+ * Runtime.
  *
  * @module ui/studio/types
  */
 
-export type StudioPageId = 'runtime' | 'wire' | 'settings' | 'workers' | 'plugins' | 'debug';
+export type StudioPageId =
+  'runtime' | 'wire' | 'settings' | 'data' | 'workers' | 'plugins' | 'debug';
 
 export type SettingsTabId =
   'general' | 'data' | 'editor' | 'theme' | 'topbar' | 'keyboard' | 'notifications';
@@ -22,6 +24,7 @@ export function isStudioPageId(v: unknown): v is StudioPageId {
     v === 'runtime' ||
     v === 'wire' ||
     v === 'settings' ||
+    v === 'data' ||
     v === 'workers' ||
     v === 'plugins' ||
     v === 'debug'

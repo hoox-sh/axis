@@ -48,7 +48,6 @@ import { windowAxisFromMeta } from '../results/window-axis';
 import { barPlane } from '../stores/bars';
 import { ConnectionHud } from './ConnectionHud';
 import { HooxLoader } from './HooxLoader';
-import { openCachedDatasets } from './datasets-open';
 import { peekDataset, subscribeDatasets } from '../data/dataset-store';
 import { providerDatasetLock } from '../data/provider';
 import { formatBarCount } from './bar-count';
@@ -221,9 +220,13 @@ export const StatusBar: Component = () => {
             <button
               type="button"
               class="hover:text-accent tabular-nums"
-              title="Bars in the Data Source Manager dataset — click to open the Dataset manager"
+              title="Bars in the Data Source Manager dataset — click to open the studio Data page"
               data-testid="axis-statusbar-dataset"
-              onClick={() => openCachedDatasets()}
+              onClick={() =>
+                window.dispatchEvent(
+                  new CustomEvent('axis-open-studio', { detail: { page: 'data' } }),
+                )
+              }
             >
               · dataset {formatBarCount(datasetBars())}
             </button>

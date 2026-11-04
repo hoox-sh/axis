@@ -3,7 +3,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Plugins studio canvas — catalog / install / library. Sibling of Runtime.
+ * Plugins studio canvas — the plugin catalog. Sibling of Runtime.
+ *
+ * One page, no tabs: the kind-filtered catalog, the inline Install-from-URL
+ * flow with its example cards and the installed-URLs list, plus the sibling
+ * cross-links. Slot cardinality is explicit per section: sources, streams,
+ * engines, and storage are single active slots; components register many.
  *
  * @module ui/plugins/PluginsPage
  */
@@ -30,7 +35,6 @@ import {
 import { registry } from '../../plugins/registry';
 import { persist, setActivePlugin, store } from '../../store';
 import type { PluginBase } from '../../plugins/types';
-import { ScriptLibraryPanel } from '../ScriptLibraryPanel';
 import { CapabilityBadges, engineOptionLabel } from '../plugin-badges';
 import { HooxLoader } from '../HooxLoader';
 import { Icons } from '../icons';
@@ -48,17 +52,9 @@ import {
   StudioRow,
   StudioSection,
   StudioStat,
-  StudioTabs,
 } from '../studio';
 
-type TabId = 'catalog' | 'install' | 'library';
 type KindFilter = 'all' | 'source' | 'stream' | 'engine' | 'storage';
-
-const PLUGIN_TABS: { id: TabId; label: string; hint: string }[] = [
-  { id: 'catalog', label: 'Catalog', hint: 'Built-in and installed plugins' },
-  { id: 'install', label: 'Install', hint: 'Load an ES module from URL' },
-  { id: 'library', label: 'Script Library', hint: 'Save and load Pine scripts' },
-];
 
 const KIND_CHIPS: { id: KindFilter; label: string }[] = [
   { id: 'all', label: 'All' },
@@ -80,14 +76,27 @@ const EXAMPLES = [
   },
 ];
 
+/** Section header badge copy for slot cardinality. */
+const SINGLE_SLOT_BADGE = 'Single slot · one active';
+const MULTI_SLOT_BADGE = 'Multi-slot · many';
+
+function SlotBadge(props: { kind: string; label: string; title: string }) {
+  return (
+    <span
+      class="ax-chip ax-chip--tag"
+      data-testid={`axis-plugins-slot-${props.kind}`}
+      title={props.title}
+    >
+      {props.label}
+    </span>
+  );
+}
+
 export function PluginsPage(props: {
   onClose: () => void;
   onNavigate?: (id: StudioPageId) => void;
   onChanged?: () => void;
-  getDoc?: () => string;
-  setDoc?: (doc: string, name?: string, libraryId?: string) => void;
 }) {
-  const [tab, setTab] = createSignal<TabId>('catalog');
   const [kindFilter, setKindFilter] = createSignal<KindFilter>('all');
   const [url, setUrl] = createSignal('');
   const [busy, setBusy] = createSignal(false);
@@ -150,25 +159,25 @@ export function PluginsPage(props: {
       {
         kind: 'source',
         title: 'Sources',
-        lead: 'Historical OHLCV used by Load.',
+        lead: 'Historical OHLCV used by Load. One active source — Use swaps the slot.',
         items: sources(),
       },
       {
         kind: 'stream',
         title: 'Streams',
-        lead: 'Live bars while the multiplex is running.',
+        lead: 'Live bars while the multiplex is running. One active stream at a time.',
         items: streams(),
       },
       {
         kind: 'engine',
         title: 'Engines',
-        lead: 'Which runtime evaluates Pine. Activate here; configure on Runtime.',
+        lead: 'Which runtime evaluates Pine. One active engine; configure it on Runtime.',
         items: engines(),
       },
       {
         kind: 'storage',
         title: 'Storage',
-        lead: 'Script library backend.',
+        lead: 'Script library backend. One active storage; switching copies the library.',
         items: storages(),
       },
     ];
@@ -246,273 +255,93 @@ export function PluginsPage(props: {
 
   return (
     <div class="ax-page-stack">
-      <StudioTabs
-        tabs={PLUGIN_TABS}
-        value={tab()}
-        onChange={setTab}
-        ariaLabel="Plugin sections"
-        idPrefix="axis-plugins"
-        testId="axis-plugins-tabs"
-      />
-      <div class="ax-page-canvas">
-        <Show when={tab() === 'catalog'}>
-          <div
-            id="axis-plugins-panel-catalog"
-            role="tabpanel"
-            aria-labelledby="axis-plugins-tab-catalog"
-            class="ax-split-col"
-          >
-            <div class="ax-grid ax-grid--4">
-              <StudioStat label="Source" value={activeName(sources(), activeSourceId())} />
-              <StudioStat label="Stream" value={activeName(streams(), activeStreamId())} />
-              <StudioStat label="Engine" value={activeName(engines(), activeEngineId())} />
-              <StudioStat label="Storage" value={activeName(storages(), activeStorageId())} />
-            </div>
+      <div class="ax-page-canvas" data-testid="axis-plugins-panel-catalog">
+        <div class="ax-grid ax-grid--4">
+          <StudioStat label="Source" value={activeName(sources(), activeSourceId())} />
+          <StudioStat label="Stream" value={activeName(streams(), activeStreamId())} />
+          <StudioStat label="Engine" value={activeName(engines(), activeEngineId())} />
+          <StudioStat label="Storage" value={activeName(storages(), activeStorageId())} />
+        </div>
 
-            <StudioSection
-              title="Kind"
-              lead="Narrow the catalog. Use a row to make it the active source, stream, engine, or storage."
-            >
-              <div class="ax-chip-row">
-                <For each={KIND_CHIPS}>
-                  {(chip) => (
-                    <StudioChip pressed={kindFilter() === chip.id} onClick={() => setKindFilter(chip.id)}>
-                      {chip.label}
-                    </StudioChip>
-                  )}
-                </For>
-              </div>
-              <StudioHint>
-                {sources().length} sources · {streams().length} streams · {engines().length} engines ·{' '}
-                {storages().length} storage
-              </StudioHint>
-            </StudioSection>
-
-            <div class="ax-catalog-grid">
-            <For each={catalogSections()}>
-              {(section) => (
-                <StudioSection title={section.title} lead={section.lead}>
-                  <Show
-                    when={section.items.length}
-                    fallback={<StudioEmpty>No {section.title.toLowerCase()} registered.</StudioEmpty>}
-                  >
-                    <StudioList class="ax-list--entity">
-                      <For each={section.items}>
-                        {(p) => {
-                          const kind = section.kind;
-                          const id = p.id;
-                          const active = () => {
-                            tick();
-                            return isRowActive(kind, id);
-                          };
-                          return (
-                            <StudioRow>
-                              <div class="ax-entity">
-                                <div class="ax-entity-body">
-                                  <div class="ax-entity-head">
-                                    <span class="ax-card-title">{p.name}</span>
-                                    <span class="ax-card-kicker">{id}</span>
-                                  </div>
-                                  <CapabilityBadges
-                                    capabilities={p.capabilities}
-                                    builtIn={p.builtIn}
-                                    active={active()}
-                                  />
-                                  <Show when={p.description}>
-                                    <StudioHint>{p.description}</StudioHint>
-                                  </Show>
-                                </div>
-                                <div class="ax-entity-actions">
-                                  <StudioButton
-                                    type="button"
-                                    variant={active() ? 'ghost' : 'primary'}
-                                    disabled={active()}
-                                    testId={`axis-plugin-use-${id}`}
-                                    onClick={() => activate(kind, id)}
-                                    title={active() ? 'Currently active' : `Use ${engineOptionLabel(p)}`}
-                                  >
-                                    {active() ? 'Active' : 'Use'}
-                                  </StudioButton>
-                                </div>
-                              </div>
-                            </StudioRow>
-                          );
-                        }}
-                      </For>
-                    </StudioList>
-                  </Show>
-                </StudioSection>
+        <StudioSection
+          title="Kind"
+          lead="Narrow the catalog. Source, stream, engine, and storage are single slots — a row makes it the active one. Components register side by side."
+        >
+          <div class="ax-chip-row">
+            <For each={KIND_CHIPS}>
+              {(chip) => (
+                <StudioChip
+                  pressed={kindFilter() === chip.id}
+                  onClick={() => setKindFilter(chip.id)}
+                >
+                  {chip.label}
+                </StudioChip>
               )}
             </For>
-            </div>
-
-            <Show when={kindFilter() === 'all' && components().length}>
-              <StudioSection title="Components" lead="Host UI slots registered with the plugin registry.">
-                <StudioList class="ax-list--entity">
-                  <For each={components()}>
-                    {(p) => (
-                      <StudioRow>
-                        <div class="ax-entity">
-                          <div class="ax-entity-body">
-                            <div class="ax-entity-head">
-                              <span class="ax-card-title">{p.name}</span>
-                              <span class="ax-card-kicker">{p.id}</span>
-                            </div>
-                            <Show when={p.description}>
-                              <StudioHint>{p.description}</StudioHint>
-                            </Show>
-                          </div>
-                          <span class="ax-card-kicker">Built-in</span>
-                        </div>
-                      </StudioRow>
-                    )}
-                  </For>
-                </StudioList>
-              </StudioSection>
-            </Show>
-
-            <StudioSection
-              title="Related"
-              lead="Workers and Wire are sibling pages — not tabs on this page."
-            >
-              <div class="ax-grid ax-grid--2">
-                <StudioCard
-                  kicker="Catalog"
-                  title="Workers"
-                  testId="axis-plugins-goto-status"
-                  onClick={() => props.onNavigate?.('workers')}
-                >
-                  <StudioHint>
-                    Probe pyne Pro, the AXIS Worker, Pyodide, and the service worker. Activate one to
-                    become the Runtime.
-                  </StudioHint>
-                </StudioCard>
-                <StudioCard
-                  kicker="Compose"
-                  title="Wire"
-                  onClick={() => props.onNavigate?.('wire')}
-                >
-                  <StudioHint>
-                    Start from a recipe, then swap any source, stream, engine, storage, or dataset slot.
-                  </StudioHint>
-                </StudioCard>
-              </div>
-            </StudioSection>
           </div>
-        </Show>
+          <StudioHint>
+            {sources().length} sources · {streams().length} streams · {engines().length} engines ·{' '}
+            {storages().length} storage · {components().length} component
+            {components().length === 1 ? '' : 's'}
+          </StudioHint>
+        </StudioSection>
 
-        <Show when={tab() === 'install'}>
-          <div
-            id="axis-plugins-panel-install"
-            role="tabpanel"
-            aria-labelledby="axis-plugins-tab-install"
-          >
-            <div class="ax-split">
-              <div class="ax-split-col">
-                <StudioSection
-                  title="Load from URL"
-                  lead="Sources, streams, engines, datasets, and components (e.g. PYNE Agent). After load, source/stream/engine plugins activate and appear in top-bar pickers."
-                >
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      void load();
-                    }}
-                  >
-                    <StudioField
-                      label="ES module URL"
-                      for="axis-plugin-url"
-                      hint="https://…/my-plugin.js or /plugins/example-….js"
-                      error={error() || undefined}
-                    >
-                      <div class="ax-inline">
-                        <StudioInput
-                          id="axis-plugin-url"
-                          mono
-                          value={url()}
-                          onInput={setUrl}
-                          placeholder="https://…/my-plugin.js or /plugins/example-….js"
-                          spellcheck={false}
-                        />
-                        <StudioButton
-                          type="submit"
-                          variant="primary"
-                          disabled={busy() || !url().trim()}
-                        >
-                          {busy() ? <HooxLoader size="xs" /> : <Icons.download />}
-                          Load
-                        </StudioButton>
-                      </div>
-                    </StudioField>
-                  </form>
-                </StudioSection>
-
-                <StudioSection title="Examples" lead="Same-origin modules shipped with AXIS.">
-                  <div class="ax-grid ax-grid--2">
-                    <For each={EXAMPLES}>
-                      {(ex) => (
-                        <StudioCard
-                          kicker={ex.kind}
-                          title={ex.label}
-                          onClick={() => {
-                            setUrl(ex.url);
-                            void load(ex.url);
-                          }}
-                        >
-                          <StudioHint>{ex.url}</StudioHint>
-                        </StudioCard>
-                      )}
-                    </For>
-                  </div>
-                </StudioSection>
-              </div>
-
+        <div class="ax-catalog-grid">
+          <For each={catalogSections()}>
+            {(section) => (
               <StudioSection
-                title="Installed URLs"
-                lead={
-                  installed().length
-                    ? `${installed().length} dynamic plugin${installed().length === 1 ? '' : 's'}. Reloaded from localStorage on the next visit.`
-                    : 'No dynamic plugins yet.'
+                title={section.title}
+                lead={section.lead}
+                headerEnd={
+                  <SlotBadge
+                    kind={section.kind}
+                    label={SINGLE_SLOT_BADGE}
+                    title={`Only one ${section.title.toLowerCase().replace(/s$/, '')} can be active at a time.`}
+                  />
                 }
               >
                 <Show
-                  when={installed().length}
-                  fallback={<StudioEmpty>Load a URL or an example to populate this list.</StudioEmpty>}
+                  when={section.items.length}
+                  fallback={<StudioEmpty>No {section.title.toLowerCase()} registered.</StudioEmpty>}
                 >
                   <StudioList class="ax-list--entity">
-                    <For each={installed()}>
+                    <For each={section.items}>
                       {(p) => {
-                        const kind = p.kind;
+                        const kind = section.kind;
                         const id = p.id;
+                        const active = () => {
+                          tick();
+                          return isRowActive(kind, id);
+                        };
                         return (
                           <StudioRow>
                             <div class="ax-entity">
                               <div class="ax-entity-body">
                                 <div class="ax-entity-head">
                                   <span class="ax-card-title">{p.name}</span>
-                                  <span class="ax-card-kicker">
-                                    {kind} · {id}
-                                  </span>
+                                  <span class="ax-card-kicker">{id}</span>
                                 </div>
-                                <StudioHint>{p.url}</StudioHint>
+                                <CapabilityBadges
+                                  capabilities={p.capabilities}
+                                  builtIn={p.builtIn}
+                                  active={active()}
+                                />
+                                <Show when={p.description}>
+                                  <StudioHint>{p.description}</StudioHint>
+                                </Show>
                               </div>
                               <div class="ax-entity-actions">
                                 <StudioButton
                                   type="button"
-                                  variant="ghost"
+                                  variant={active() ? 'ghost' : 'primary'}
+                                  disabled={active()}
                                   testId={`axis-plugin-use-${id}`}
                                   onClick={() => activate(kind, id)}
+                                  title={
+                                    active() ? 'Currently active' : `Use ${engineOptionLabel(p)}`
+                                  }
                                 >
-                                  Use
-                                </StudioButton>
-                                <StudioButton
-                                  type="button"
-                                  variant="danger"
-                                  ariaLabel="Remove"
-                                  title="Remove"
-                                  onClick={() => removeInstalled(p)}
-                                >
-                                  <Icons.x />
+                                  {active() ? 'Active' : 'Use'}
                                 </StudioButton>
                               </div>
                             </div>
@@ -523,24 +352,196 @@ export function PluginsPage(props: {
                   </StudioList>
                 </Show>
               </StudioSection>
-            </div>
-          </div>
+            )}
+          </For>
+        </div>
+
+        <Show when={kindFilter() === 'all' && components().length}>
+          <StudioSection
+            title="Components"
+            lead="Host UI slots registered with the plugin registry. Many can be registered at once — there is no single active row to pick."
+            headerEnd={
+              <SlotBadge
+                kind="component"
+                label={MULTI_SLOT_BADGE}
+                title="Components register side by side; all registered components stay mounted."
+              />
+            }
+          >
+            <StudioList class="ax-list--entity">
+              <For each={components()}>
+                {(p) => (
+                  <StudioRow>
+                    <div class="ax-entity">
+                      <div class="ax-entity-body">
+                        <div class="ax-entity-head">
+                          <span class="ax-card-title">{p.name}</span>
+                          <span class="ax-card-kicker">{p.id}</span>
+                        </div>
+                        <Show when={p.description}>
+                          <StudioHint>{p.description}</StudioHint>
+                        </Show>
+                      </div>
+                      <span
+                        class="ax-chip ax-chip--tag"
+                        data-testid={`axis-plugin-registered-${p.id}`}
+                        title="Registered with the plugin registry"
+                      >
+                        Registered
+                      </span>
+                    </div>
+                  </StudioRow>
+                )}
+              </For>
+            </StudioList>
+          </StudioSection>
         </Show>
 
-        <Show when={tab() === 'library'}>
-          <div
-            id="axis-plugins-panel-library"
-            role="tabpanel"
-            aria-labelledby="axis-plugins-tab-library"
-          >
+        <div class="ax-split">
+          {/* ── Install from URL, inline on the catalog ─────────────────── */}
+          <div class="ax-split-col">
             <StudioSection
-              title="Script library"
-              lead={`Scripts backend: ${getActiveStorageId()}. Storage is a Wire slot; activate a backend on Catalog.`}
+              title="Install from URL"
+              lead="Load an ES module — source, stream, engine, dataset, or component. Source / stream / engine plugins activate on load and appear in the top-bar pickers."
+              testId="axis-plugins-panel-install"
             >
-              <ScriptLibraryPanel getDoc={props.getDoc} setDoc={props.setDoc} />
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void load();
+                }}
+              >
+                <StudioField
+                  label="ES module URL"
+                  for="axis-plugin-url"
+                  hint="https://…/my-plugin.js or /plugins/example-….js"
+                  error={error() || undefined}
+                >
+                  <div class="ax-inline">
+                    <StudioInput
+                      id="axis-plugin-url"
+                      mono
+                      value={url()}
+                      onInput={setUrl}
+                      placeholder="https://…/my-plugin.js or /plugins/example-….js"
+                      spellcheck={false}
+                    />
+                    <StudioButton
+                      type="submit"
+                      variant="primary"
+                      disabled={busy() || !url().trim()}
+                    >
+                      {busy() ? <HooxLoader size="xs" /> : <Icons.download />}
+                      Load
+                    </StudioButton>
+                  </div>
+                </StudioField>
+              </form>
+              <div class="ax-grid ax-grid--2">
+                <For each={EXAMPLES}>
+                  {(ex) => (
+                    <StudioCard
+                      kicker={ex.kind}
+                      title={ex.label}
+                      onClick={() => {
+                        setUrl(ex.url);
+                        void load(ex.url);
+                      }}
+                    >
+                      <StudioHint>{ex.url}</StudioHint>
+                    </StudioCard>
+                  )}
+                </For>
+              </div>
             </StudioSection>
           </div>
-        </Show>
+
+          {/* ── Installed dynamic plugins ───────────────────────────────── */}
+          <div class="ax-split-col">
+            <StudioSection
+              title="Installed URLs"
+              lead={
+                installed().length
+                  ? `${installed().length} dynamic plugin${installed().length === 1 ? '' : 's'}. Reloaded from localStorage on the next visit.`
+                  : 'No dynamic plugins yet.'
+              }
+            >
+              <Show
+                when={installed().length}
+                fallback={
+                  <StudioEmpty>Load a URL or an example above to populate this list.</StudioEmpty>
+                }
+              >
+                <StudioList class="ax-list--entity">
+                  <For each={installed()}>
+                    {(p) => {
+                      const kind = p.kind;
+                      const id = p.id;
+                      return (
+                        <StudioRow>
+                          <div class="ax-entity">
+                            <div class="ax-entity-body">
+                              <div class="ax-entity-head">
+                                <span class="ax-card-title">{p.name}</span>
+                                <span class="ax-card-kicker">
+                                  {kind} · {id}
+                                </span>
+                              </div>
+                              <StudioHint>{p.url}</StudioHint>
+                            </div>
+                            <div class="ax-entity-actions">
+                              <StudioButton
+                                type="button"
+                                variant="ghost"
+                                testId={`axis-plugin-use-${id}`}
+                                onClick={() => activate(kind, id)}
+                              >
+                                Use
+                              </StudioButton>
+                              <StudioButton
+                                type="button"
+                                variant="danger"
+                                ariaLabel="Remove"
+                                title="Remove"
+                                onClick={() => removeInstalled(p)}
+                              >
+                                <Icons.x />
+                              </StudioButton>
+                            </div>
+                          </div>
+                        </StudioRow>
+                      );
+                    }}
+                  </For>
+                </StudioList>
+              </Show>
+            </StudioSection>
+          </div>
+        </div>
+
+        <StudioSection
+          title="Related"
+          lead="Workers and Wire are sibling pages — not tabs on this page."
+        >
+          <div class="ax-grid ax-grid--2">
+            <StudioCard
+              kicker="Catalog"
+              title="Workers"
+              testId="axis-plugins-goto-status"
+              onClick={() => props.onNavigate?.('workers')}
+            >
+              <StudioHint>
+                Probe pyne Pro, the AXIS Worker, Pyodide, and the service worker. Activate one to
+                become the Runtime.
+              </StudioHint>
+            </StudioCard>
+            <StudioCard kicker="Compose" title="Wire" onClick={() => props.onNavigate?.('wire')}>
+              <StudioHint>
+                Start from a recipe, then swap any source, stream, engine, storage, or dataset slot.
+              </StudioHint>
+            </StudioCard>
+          </div>
+        </StudioSection>
       </div>
       <StudioFooter status={footerStatus()}>
         <StudioButton variant="primary" onClick={done}>

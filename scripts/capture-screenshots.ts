@@ -173,13 +173,15 @@ async function waitBars(page: Page, timeout = 45_000) {
   } catch {
     // Status copy varies; canvas paint is the real gate.
   }
-  await page.waitForFunction(
-    () => {
-      const canvases = [...document.querySelectorAll('canvas')] as HTMLCanvasElement[];
-      return canvases.some((c) => c.width > 200 && c.height > 80);
-    },
-    { timeout: 20_000 },
-  ).catch(() => undefined);
+  await page
+    .waitForFunction(
+      () => {
+        const canvases = [...document.querySelectorAll('canvas')] as HTMLCanvasElement[];
+        return canvases.some((c) => c.width > 200 && c.height > 80);
+      },
+      { timeout: 20_000 },
+    )
+    .catch(() => undefined);
   await page.waitForTimeout(800);
 }
 
@@ -210,14 +212,20 @@ async function runScript(page: Page): Promise<boolean> {
   if (!(await run.count())) return false;
   await run.click();
   try {
-    await page.getByTestId('axis-status-message').filter({ hasText: /success|Ready|ms|applied|error/i }).waitFor({
-      timeout: 40_000,
-    });
+    await page
+      .getByTestId('axis-status-message')
+      .filter({ hasText: /success|Ready|ms|applied|error/i })
+      .waitFor({
+        timeout: 40_000,
+      });
   } catch {
     await page.waitForTimeout(4_000);
   }
   await page.waitForTimeout(1_000);
-  const err = await page.getByTestId('axis-status-message').textContent().catch(() => '');
+  const err = await page
+    .getByTestId('axis-status-message')
+    .textContent()
+    .catch(() => '');
   if (/error|fail/i.test(err || '')) {
     log(`  ! run status: ${err}`);
     return false;
@@ -244,7 +252,10 @@ async function section(name: string, fn: () => Promise<void>) {
   }
 }
 
-async function openStudio(page: Page, rail: 'runtime' | 'wire' | 'settings' | 'workers' | 'plugins') {
+async function openStudio(
+  page: Page,
+  rail: 'runtime' | 'wire' | 'settings' | 'data' | 'workers' | 'plugins',
+) {
   await dismissOverlays(page);
   await page.getByTestId('axis-btn-studio').click();
   await page.getByTestId(`axis-studio-rail-${rail}`).waitFor({ state: 'visible', timeout: 10_000 });
@@ -253,9 +264,12 @@ async function openStudio(page: Page, rail: 'runtime' | 'wire' | 'settings' | 'w
 }
 
 async function closeStudio(page: Page) {
-  const close = page.locator(
-    '[data-testid="axis-runtimes-close"], [data-testid="axis-architecture-close"], [data-testid="axis-settings-close"], [data-testid="axis-workers-close"], [data-testid="axis-plugins-close"]',
-  ).locator('visible=true').first();
+  const close = page
+    .locator(
+      '[data-testid="axis-runtimes-close"], [data-testid="axis-architecture-close"], [data-testid="axis-settings-close"], [data-testid="axis-data-page-close"], [data-testid="axis-workers-close"], [data-testid="axis-plugins-close"]',
+    )
+    .locator('visible=true')
+    .first();
   if (await close.count()) {
     await close.click({ timeout: 4_000 }).catch(() => undefined);
     await page.waitForTimeout(250);
@@ -271,7 +285,10 @@ async function padPng(rel: string, px = 24, color = '#0a0b10') {
   const src = join(OUT, rel);
   if (!(await Bun.file(src).exists())) return;
   const tmp = src.replace(/\.png$/, '.pad.png');
-  const r = Bun.spawnSync(['convert', src, '-bordercolor', color, '-border', `${px}x${px}`, tmp], { stdout: 'pipe', stderr: 'pipe' });
+  const r = Bun.spawnSync(['convert', src, '-bordercolor', color, '-border', `${px}x${px}`, tmp], {
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
   if (r.exitCode === 0) {
     await Bun.write(src, Bun.file(tmp));
     unlinkSync(tmp);
@@ -295,10 +312,26 @@ function ffmpegGif(webm: string, gif: string, width = 1280) {
     stderr: 'pipe',
   });
   const r = Bun.spawnSync(
-    ['ffmpeg', '-y', '-i', webm, '-i', palette, '-lavfi', `${vf}[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=5`, '-loop', '0', gif],
+    [
+      'ffmpeg',
+      '-y',
+      '-i',
+      webm,
+      '-i',
+      palette,
+      '-lavfi',
+      `${vf}[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=5`,
+      '-loop',
+      '0',
+      gif,
+    ],
     { stdout: 'pipe', stderr: 'pipe' },
   );
-  try { unlinkSync(palette); } catch { /* rm -f parity */ }
+  try {
+    unlinkSync(palette);
+  } catch {
+    /* rm -f parity */
+  }
   if (r.exitCode !== 0) throw new Error(r.stderr.toString().slice(-400) || 'ffmpeg gif failed');
 }
 
@@ -362,8 +395,8 @@ async function captureStills(page: Page) {
   });
 
   await section('data source', async () => {
-    await openPanel(page, 'axis-btn-datasource');
-    await shot(page, 'app/data-source-manager.png', page.getByTestId('axis-datasource'));
+    await openStudio(page, 'data');
+    await shot(page, 'app/data-source-manager.png', page.getByTestId('axis-data-page'));
     await dismissOverlays(page);
   });
 
@@ -387,7 +420,11 @@ async function captureStills(page: Page) {
       }
       await shot(page, 'app/drawings-fib.png');
       await shot(page, 'landing/axis-drawings.png');
-      await page.locator('[data-drawing-group="select"] button').first().click({ force: true }).catch(() => undefined);
+      await page
+        .locator('[data-drawing-group="select"] button')
+        .first()
+        .click({ force: true })
+        .catch(() => undefined);
     }
   });
 
@@ -435,10 +472,16 @@ async function captureStills(page: Page) {
     await page.getByTestId('axis-btn-bar-replay').click({ force: true });
     await page.waitForTimeout(400);
     if (await page.getByTestId('axis-bar-replay-controls').count()) {
-      await page.getByTestId('axis-bar-replay-step-back').click({ force: true, clickCount: 6 }).catch(() => undefined);
+      await page
+        .getByTestId('axis-bar-replay-step-back')
+        .click({ force: true, clickCount: 6 })
+        .catch(() => undefined);
       await page.waitForTimeout(200);
       await shot(page, 'app/bar-replay.png');
-      await page.getByTestId('axis-bar-replay-exit').click({ force: true }).catch(() => undefined);
+      await page
+        .getByTestId('axis-bar-replay-exit')
+        .click({ force: true })
+        .catch(() => undefined);
     }
     await page.getByTestId('axis-btn-layouts').click({ force: true });
     await page.waitForTimeout(200);
@@ -448,7 +491,10 @@ async function captureStills(page: Page) {
       await page.waitForTimeout(2_500);
       await shot(page, 'app/chart-layout-2x2.png');
       await page.getByTestId('axis-btn-layouts').click({ force: true });
-      await page.getByTestId('axis-layout-mode-1').click({ force: true }).catch(() => undefined);
+      await page
+        .getByTestId('axis-layout-mode-1')
+        .click({ force: true })
+        .catch(() => undefined);
       await page.waitForTimeout(600);
     } else {
       await page.keyboard.press('Escape');
@@ -465,7 +511,10 @@ async function captureStills(page: Page) {
       await page.waitForTimeout(300);
       await shot(page, 'app/debug-chips.png', page.getByTestId('axis-editor'));
     }
-    await page.getByTestId('axis-btn-scriptlogs-top').click({ force: true }).catch(() => undefined);
+    await page
+      .getByTestId('axis-btn-scriptlogs-top')
+      .click({ force: true })
+      .catch(() => undefined);
     await page.waitForTimeout(300);
     if (await page.getByTestId('axis-scriptlogs').count()) {
       await shot(page, 'app/scriptlogs.png', page.getByTestId('axis-scriptlogs'));
@@ -479,7 +528,12 @@ async function captureStills(page: Page) {
     await setEditorDoc(page, STRATEGY);
     await runScript(page);
     await page.waitForTimeout(800);
-    if (!(await page.getByTestId('axis-results').isVisible().catch(() => false))) {
+    if (
+      !(await page
+        .getByTestId('axis-results')
+        .isVisible()
+        .catch(() => false))
+    ) {
       await page.getByTestId('axis-btn-results').click({ force: true });
       await page.waitForTimeout(400);
     }
@@ -515,11 +569,12 @@ async function captureStills(page: Page) {
     await page.waitForTimeout(400);
     await shot(page, 'studio/plugins.png');
     await shot(page, 'studio/plugins-catalog.png');
-    const installTab = page.getByTestId('axis-plugins-tab-install');
-    if (await installTab.count()) {
-      await installTab.click();
+    // Install-from-URL is inlined on the catalog page now — no install tab.
+    const installSection = page.getByTestId('axis-plugins-panel-install');
+    if (await installSection.count()) {
+      await installSection.scrollIntoViewIfNeeded().catch(() => {});
       await page.waitForTimeout(250);
-      await shot(page, 'studio/plugins-install.png');
+      await shot(page, 'studio/plugins-install.png', installSection);
     }
     await closeStudio(page);
   });
@@ -657,7 +712,10 @@ async function captureGifs(browser: Awaited<ReturnType<typeof chromium.launch>>)
     if (await page.getByTestId('axis-bar-replay-play').count()) {
       await page.getByTestId('axis-bar-replay-play').click();
       await page.waitForTimeout(4_000);
-      await page.getByTestId('axis-bar-replay-exit').click().catch(() => undefined);
+      await page
+        .getByTestId('axis-bar-replay-exit')
+        .click()
+        .catch(() => undefined);
     }
     await page.waitForTimeout(400);
   });
@@ -694,16 +752,27 @@ async function captureCli() {
   // Bun shell for --help (auto-escaped); explicit kill-timer for doctor
   // (neither Bun.spawnSync nor this $ version offers a timeout option).
   const help = await $`bun ${bin} --help`.cwd(ROOT).nothrow().quiet();
-  const doctorProc = Bun.spawn(['bun', bin, 'doctor'], { cwd: ROOT, stdout: 'pipe', stderr: 'pipe' });
-  const doctorTimer = setTimeout(() => { try { doctorProc.kill(); } catch { /* already exited */ } }, 30_000);
+  const doctorProc = Bun.spawn(['bun', bin, 'doctor'], {
+    cwd: ROOT,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const doctorTimer = setTimeout(() => {
+    try {
+      doctorProc.kill();
+    } catch {
+      /* already exited */
+    }
+  }, 30_000);
   const [doctorOut, doctorErr] = await Promise.all([
     new Response(doctorProc.stdout).text(),
     new Response(doctorProc.stderr).text(),
   ]);
   await doctorProc.exited;
   clearTimeout(doctorTimer);
-  const helpText = (help.stdout.toString() || help.stderr.toString() || '').trim() || 'axis --help failed';
-  const doctorText = ((doctorOut || doctorErr || '').trim()) || 'axis doctor failed';
+  const helpText =
+    (help.stdout.toString() || help.stderr.toString() || '').trim() || 'axis --help failed';
+  const doctorText = (doctorOut || doctorErr || '').trim() || 'axis doctor failed';
 
   const htmlFor = (title: string, body: string) => `<!doctype html>
 <html><head><meta charset="utf-8">
@@ -721,11 +790,14 @@ async function captureCli() {
 </div></body></html>`;
 
   function escapeHtml(s: string) {
-    return s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]!));
+    return s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
   }
 
   const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({ viewport: { width: 1100, height: 720 }, deviceScaleFactor: 2 });
+  const context = await browser.newContext({
+    viewport: { width: 1100, height: 720 },
+    deviceScaleFactor: 2,
+  });
   const page = await context.newPage();
   await page.setContent(htmlFor('axis --help', helpText), { waitUntil: 'load' });
   await page.screenshot({ path: join(OUT, 'cli/help.png'), fullPage: true, type: 'png' });
@@ -780,12 +852,36 @@ Viewport desktop ${VIEW_W}×${VIEW_H} @${DPR}x (file ${VIEW_W * DPR}×${VIEW_H *
 Seed: BTCUSDT 1d Binance REST, void dark, SMA Cross / RSI v6.
 No secrets. Chart data is public CEX OHLCV.
 `;
-// Bun.write creates parent dirs — the ensureDir calls below are obsolete.
-  await Bun.write(join(OUT, 'app/MANIFEST.md'), `# App stills\n\n${common}\nFiles:\n${captured.filter((c) => c.startsWith('app/')).map((c) => `- \`${c}\``).join('\n')}\n`);
-  await Bun.write(join(OUT, 'studio/MANIFEST.md'), `# Studio stills\n\n${common}\nFiles:\n${captured.filter((c) => c.startsWith('studio/')).map((c) => `- \`${c}\``).join('\n')}\n`);
-  await Bun.write(join(OUT, 'cli/MANIFEST.md'), `# CLI stills\n\nDark terminal render of AXIS CLI stdout. Not a live TTY recording.\n\n${common}\n`);
-  await Bun.write(join(OUT, 'landing/MANIFEST.md'), `# Landing crops\n\nHero is a full workspace still (no fake browser chrome — landing CSS supplies the CRT frame).\nTiles are locator crops. OG is a 1200×630 composite.\n\n${common}\n`);
-  await Bun.write(join(OUT, 'gifs/MANIFEST.md'), `# GIFs\n\nPlaywright WebM → ffmpeg palette GIF, 8 fps, 1280 wide, loop.\n\n${common}\nFiles:\n${captured.filter((c) => c.startsWith('gifs/')).map((c) => `- \`${c}\``).join('\n')}\n`);
+  // Bun.write creates parent dirs — the ensureDir calls below are obsolete.
+  await Bun.write(
+    join(OUT, 'app/MANIFEST.md'),
+    `# App stills\n\n${common}\nFiles:\n${captured
+      .filter((c) => c.startsWith('app/'))
+      .map((c) => `- \`${c}\``)
+      .join('\n')}\n`,
+  );
+  await Bun.write(
+    join(OUT, 'studio/MANIFEST.md'),
+    `# Studio stills\n\n${common}\nFiles:\n${captured
+      .filter((c) => c.startsWith('studio/'))
+      .map((c) => `- \`${c}\``)
+      .join('\n')}\n`,
+  );
+  await Bun.write(
+    join(OUT, 'cli/MANIFEST.md'),
+    `# CLI stills\n\nDark terminal render of AXIS CLI stdout. Not a live TTY recording.\n\n${common}\n`,
+  );
+  await Bun.write(
+    join(OUT, 'landing/MANIFEST.md'),
+    `# Landing crops\n\nHero is a full workspace still (no fake browser chrome — landing CSS supplies the CRT frame).\nTiles are locator crops. OG is a 1200×630 composite.\n\n${common}\n`,
+  );
+  await Bun.write(
+    join(OUT, 'gifs/MANIFEST.md'),
+    `# GIFs\n\nPlaywright WebM → ffmpeg palette GIF, 8 fps, 1280 wide, loop.\n\n${common}\nFiles:\n${captured
+      .filter((c) => c.startsWith('gifs/'))
+      .map((c) => `- \`${c}\``)
+      .join('\n')}\n`,
+  );
 }
 
 async function main() {

@@ -21,12 +21,7 @@
  */
 
 import { For, Show, createMemo } from 'solid-js';
-import {
-  store,
-  setChartThemePreset,
-  setChartThemeToken,
-  resetChartTheme,
-} from '../store';
+import { store, setChartThemePreset, setChartThemeToken, resetChartTheme } from '../store';
 import {
   THEME_GROUPS,
   tokensForGroup,
@@ -272,6 +267,7 @@ const TokenField = (props: TokenFieldProps) => {
             min={props.def.min}
             max={props.def.max}
             step={props.def.step ?? 1}
+            selectOnFocus
             onInput={(v) => props.onChange(Number(v))}
           />
         </StudioField>

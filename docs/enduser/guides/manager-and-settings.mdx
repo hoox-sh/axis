@@ -36,7 +36,7 @@ Five studio pages share one full-viewport overlay. Runtime is the active calcula
 | --- | --- | --- |
 | **Runtime** | Topbar **Studio** · studio rail · ⌘K “Open Runtime” | Active engine, endpoint, exec mode, probe of *that* backend |
 | **Workers** | Studio rail · ⌘K “Open Workers” · Runtime card | Probe catalog; activate a backend (`endpoint` / engine) |
-| **Plugins** | Studio rail · ⌘K “Open Plugins” · hidden topbar testid | Registry membership, Use, URL install, script library |
+| **Plugins** | Studio rail · ⌘K “Open Plugins” · hidden topbar testid | Registry membership, Use, inline URL install |
 | **Wire** | Topbar **Studio** → Wire rail · ⌘K “Open Architecture” | Compose slots; Apply writes `activePlugins` |
 | **Settings** | Topbar **Studio** → Settings rail · ⌘K “Open Settings” | Appearance, chart, live, MCP bridge, session keys, editor intel, theme |
 
@@ -49,14 +49,12 @@ flowchart TB
   REG[PluginRegistry]
   CAT[Plugins catalog]
   INS[Plugins install]
-  LIB[Script Library]
   RT[Runtime]
   WRK[Workers]
   SET[Settings]
   WIRE[Wire]
   REG --> CAT
   INS -->|loadPluginFromUrl| REG
-  LIB --> STO[Storage plugin]
   RT --> AP[activePlugins + endpoint]
   WRK -->|Use as backend| RT
   CAT -->|Use| AP
@@ -70,7 +68,7 @@ flowchart TB
 
 <img src="/images/studio/plugins-catalog.png" alt="Studio Plugins catalog: sources, streams, engines, storage with Use" />
 
-Lists sources, streams, engines, storages from the unified registry.
+Lists sources, streams, engines, storages from the unified registry. Sources, streams, engines, and storage are **single slots** — one active row per kind, so each section carries a “Single slot · one active” badge and rows flip between **Use** and **Active**. **Components** are **multi-slot**: many register side by side and rows show a **Registered** chip instead of an activate button.
 
 | Action | Effect |
 | --- | --- |
@@ -80,11 +78,11 @@ Lists sources, streams, engines, storages from the unified registry.
 
 Status bar shows active engine id and storage backend after changes.
 
-### Install (URL)
+### Install from URL (inline)
 
-<img src="/images/studio/plugins-install.png" alt="Studio Plugins Install: load an ES module URL or a same-origin example" />
+<img src="/images/studio/plugins-install.png" alt="Studio Plugins install section: load an ES module URL or a same-origin example" />
 
-Paste a module URL exporting a default plugin object (`kind`, `id`, `name`, contract methods). AXIS:
+The install flow lives inline on the catalog page (no separate tab), next to the **Installed URLs** list. Paste a module URL exporting a default plugin object (`kind`, `id`, `name`, contract methods). AXIS:
 
 1. Fetches and validates export
 2. Registers into the TypeScript registry
@@ -106,9 +104,9 @@ https://<pyne-agent-worker>/plugin/axis-pine-agent.js
 
 See [PYNE Agent](/axis/docs/enduser/guides/pyne-agent) and [plugin reference](/axis/docs/plugins/pyne-agent). Works without the HOOX mesh.
 
-### Script Library tab
+### Script library
 
-See [Script library](/axis/docs/enduser/guides/script-library). The Plugins page hosts the panel so library and plugins share one studio surface.
+The Plugins page no longer embeds the Script Library. Use the topbar **Library** panel — see [Script library](/axis/docs/enduser/guides/script-library).
 
 ## Runtime vs Workers vs Plugins
 
@@ -116,7 +114,7 @@ One overlay (`AppPage` in `src/ui/studio/`) with a left rail. Switching rail pag
 
 - **Runtime** — `src/ui/runtime/RuntimePage.tsx` — active engine, endpoint, exec mode.
 - **Workers** — `src/ui/workers/WorkersPage.tsx` — backend inventory and probes.
-- **Plugins** — `src/ui/plugins/PluginsPage.tsx` — catalog / install / library.
+- **Plugins** — `src/ui/plugins/PluginsPage.tsx` — catalog with inline install.
 
 ## Workers
 
@@ -211,7 +209,7 @@ The Connection HUD engine chip shows the selected mode. Save persists via Solid 
 | --- | --- |
 | `src/ui/studio/` | Full-page overlay kit (`ax-*`) |
 | `src/ui/runtime/RuntimePage.tsx` | Active engine / endpoint / mode |
-| `src/ui/plugins/PluginsPage.tsx` | Catalog / install / library |
+| `src/ui/plugins/PluginsPage.tsx` | Catalog + inline install |
 | `src/ui/workers/WorkersPage.tsx` | Backend inventory / probes |
 | `src/ui/settings/SettingsPage.tsx` | Product chrome |
 | `src/ui/wire/WirePage.tsx` | Compose recipes |
@@ -237,7 +235,7 @@ The Connection HUD engine chip shows the selected mode. Save persists via Solid 
 
 **Install example source**
 
-1. Manager → Install → URL to `.../plugins/example-coingecko-source.js` (served origin)
+1. Manager → Install from URL → `.../plugins/example-coingecko-source.js` (served origin)
 2. Catalog → Source appears → Use → Load
 
 ## Failure modes

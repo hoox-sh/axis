@@ -8,6 +8,8 @@
  *
  * Designs:
  *   A `axd-soft`   — Void Soft: calm panel/dialog default (evolution of ax-btn).
+ *                    Ghost keeps a visible hairline + quiet tint so secondary
+ *                    actions read as buttons at rest; hover lifts 1px.
  *   B `axd-signal` — Signal Solid: decisive primary CTA (Run / Add / Save).
  *   C `axd-term`   — Terminal Hairline: dense trading-desk chrome (topbar).
  *
@@ -179,15 +181,23 @@
   border-color: var(--color-accent);
   box-shadow: 0 2px 10px color-mix(in srgb, var(--color-accent) 22%, transparent);
 }
+/* Ghost is the secondary voice, not an invisible one: a visible hairline +
+ * quiet tint at rest so every secondary button reads as clickable before
+ * the pointer ever lands on it. Hover brightens the edge, lifts the fill,
+ * and raises the box 1px; press sinks it via the shared :active scale. */
 .axd-soft.axd-btn--ghost {
-  background: transparent;
-  border-color: transparent;
+  background: color-mix(in srgb, var(--color-text) 4%, transparent);
+  border-color: var(--color-border);
   color: var(--color-text-dim);
 }
 .axd-soft.axd-btn--ghost:hover:not(:disabled, .is-loading) {
   background: var(--color-bg-hover);
-  border-color: var(--color-border-soft);
+  border-color: color-mix(in srgb, var(--color-text-dim) 45%, var(--color-border));
   color: var(--color-text);
+  transform: translateY(-1px);
+}
+.axd-soft.axd-btn--ghost:active:not(:disabled, .is-loading) {
+  transform: translateY(0) scale(0.97);
 }
 .axd-soft.axd-btn--danger {
   background: transparent;
@@ -242,13 +252,14 @@
   transform: scale(0.97);
 }
 .axd-signal.axd-btn--ghost {
-  background: transparent;
+  background: color-mix(in srgb, var(--color-accent) 6%, transparent);
   border-color: color-mix(in srgb, var(--color-accent) 40%, var(--color-border));
   color: var(--color-accent);
 }
 .axd-signal.axd-btn--ghost:hover:not(:disabled, .is-loading) {
   background: color-mix(in srgb, var(--color-accent) 12%, transparent);
   border-color: var(--color-accent);
+  transform: translateY(-1px);
 }
 .axd-signal.axd-btn--danger {
   background: var(--color-red);
@@ -278,7 +289,7 @@
 }
 /* Loading sweep: accent wash travels left → right under the label */
 .axd-signal.is-loading::after {
-  content: "";
+  content: '';
   position: absolute;
   inset: 0;
   background: linear-gradient(
@@ -316,6 +327,7 @@
 }
 .axd-term.axd-btn--ghost {
   border-color: var(--color-border);
+  background: color-mix(in srgb, var(--color-text) 3%, transparent);
   color: var(--color-text-dim);
 }
 .axd-term.axd-btn--ghost:hover:not(:disabled, .is-loading) {
@@ -360,7 +372,7 @@
 }
 .axd-term::before {
   /* corner tick — desk instrument marker */
-  content: "";
+  content: '';
   position: absolute;
   left: 0;
   top: 0;
@@ -381,23 +393,23 @@
  * `active` prop → `.is-active` + aria-pressed. Interval selected,
  * engine on, panel pinned — the control owns an on-state. */
 .axd-btn.is-active,
-.axd-btn[aria-pressed="true"] {
+.axd-btn[aria-pressed='true'] {
   font-weight: 650;
 }
 .axd-soft.is-active,
-.axd-soft[aria-pressed="true"] {
+.axd-soft[aria-pressed='true'] {
   background: color-mix(in srgb, var(--color-accent) 16%, var(--color-bg-elev));
   border-color: color-mix(in srgb, var(--color-accent) 55%, var(--color-border));
   color: var(--color-accent);
 }
 .axd-signal.axd-btn--ghost.is-active,
-.axd-signal.axd-btn--ghost[aria-pressed="true"] {
+.axd-signal.axd-btn--ghost[aria-pressed='true'] {
   background: color-mix(in srgb, var(--color-accent) 14%, transparent);
   border-color: var(--color-accent);
   color: var(--color-accent);
 }
 .axd-term.axd-btn--ghost.is-active,
-.axd-term.axd-btn--ghost[aria-pressed="true"] {
+.axd-term.axd-btn--ghost[aria-pressed='true'] {
   background: color-mix(in srgb, var(--color-accent) 14%, transparent);
   border-color: color-mix(in srgb, var(--color-accent) 55%, var(--color-border));
   color: var(--color-accent);
@@ -501,7 +513,7 @@
 }
 .axd-btn.axd-shape-tab.axd-btn--primary,
 .axd-btn.axd-shape-tab.is-active,
-.axd-btn.axd-shape-tab[aria-pressed="true"] {
+.axd-btn.axd-shape-tab[aria-pressed='true'] {
   background: transparent;
   border-color: transparent;
   color: var(--color-accent);
@@ -511,7 +523,7 @@
   color: var(--color-red);
 }
 .axd-btn.axd-shape-tab.axd-btn--danger.is-active,
-.axd-btn.axd-shape-tab.axd-btn--danger[aria-pressed="true"] {
+.axd-btn.axd-shape-tab.axd-btn--danger[aria-pressed='true'] {
   color: var(--color-red);
   box-shadow: inset 0 -2px 0 var(--color-red);
 }
@@ -565,12 +577,12 @@
   content: none;
 }
 .axd-seg .axd-btn.is-active,
-.axd-seg .axd-btn[aria-pressed="true"] {
+.axd-seg .axd-btn[aria-pressed='true'] {
   background: color-mix(in srgb, var(--color-accent) 16%, transparent);
   color: var(--color-accent);
 }
 .axd-seg .axd-term.is-active,
-.axd-seg .axd-term[aria-pressed="true"] {
+.axd-seg .axd-term[aria-pressed='true'] {
   box-shadow: inset 0 -2px 0 var(--color-accent);
 }
 
@@ -726,7 +738,7 @@
   max-width: 880px;
   padding: 32px;
   color: var(--color-text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 .axd-demo-head h2 {
   margin: 0 0 6px;
@@ -894,13 +906,13 @@
   color: var(--color-red);
 }
 
-[data-theme="light"] .axd-signal.axd-btn--primary {
+[data-theme='light'] .axd-signal.axd-btn--primary {
   color: #fff;
   box-shadow:
     0 1px 2px rgba(18, 24, 40, 0.14),
     0 4px 18px color-mix(in srgb, var(--color-accent) 30%, transparent);
 }
-[data-theme="light"] .axd-signal.axd-btn--primary.is-success {
+[data-theme='light'] .axd-signal.axd-btn--primary.is-success {
   color: #fff;
 }
 
@@ -909,6 +921,11 @@
   .axd-btn:hover:not(:disabled),
   .axd-btn:active:not(:disabled) {
     transition: none;
+    transform: none;
+  }
+  .axd-soft.axd-btn--ghost:hover:not(:disabled, .is-loading),
+  .axd-soft.axd-btn--ghost:active:not(:disabled, .is-loading),
+  .axd-signal.axd-btn--ghost:hover:not(:disabled, .is-loading) {
     transform: none;
   }
   .axd-signal.is-loading::after,

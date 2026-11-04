@@ -61,6 +61,31 @@ export function barCloseRemainingMs(
   return Math.max(0, closeAt - nowMs);
 }
 
+/**
+ * Fraction of the current bar elapsed (0…1). NaN when the open time or
+ * interval is unusable. Used by the Time panel’s progress bar.
+ */
+export function barProgress(
+  barOpenMs: number | undefined,
+  interval: string,
+  nowMs: number,
+): number {
+  if (barOpenMs == null || !Number.isFinite(barOpenMs) || !Number.isFinite(nowMs)) return NaN;
+  const duration = intervalToMs(interval);
+  if (!Number.isFinite(duration) || duration <= 0) return NaN;
+  const elapsed = Math.max(0, nowMs - barOpenMs);
+  return Math.min(1, elapsed / duration);
+}
+
+/** Bar close wall time (ms) from its open time; NaN when unusable. */
+export function barCloseAtMs(
+  barOpenMs: number | undefined,
+  interval: string,
+): number {
+  if (barOpenMs == null || !Number.isFinite(barOpenMs)) return NaN;
+  return barOpenMs + intervalToMs(interval);
+}
+
 /** `ms` → `M:SS` under an hour, `H:MM:SS` beyond. NaN → em dash. */
 export function formatCountdown(ms: number): string {
   if (!Number.isFinite(ms) || ms < 0) return '—';
