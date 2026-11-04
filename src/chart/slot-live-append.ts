@@ -28,7 +28,7 @@
 
 import type { Bar } from '../store/types';
 import type { BarAppendResult } from '../store';
-import { chartWindowLimit } from '../store';
+import { advanceChartWindowForAppend, chartWindowLimit } from '../store';
 import { getSlotBars, getSlotManager, setSlotBars } from './chart-registry';
 import { setDataToChart } from './manager-access';
 
@@ -39,8 +39,10 @@ import { setDataToChart } from './manager-access';
 export function applyBarToSeries(
   prev: readonly Bar[],
   bar: Bar,
-  limit = chartWindowLimit(),
+  limit?: number,
 ): { bars: Bar[]; result: BarAppendResult } {
+  const anchored = limit == null;
+  const cap = limit ?? chartWindowLimit();
   if (!bar || !Number.isFinite(bar.time)) {
     return { bars: prev.slice() as Bar[], result: 'ignored' };
   }
@@ -75,8 +77,13 @@ export function applyBarToSeries(
   if (n === 0) {
     return { bars: [bar], result: 'appended' };
   }
-  if (n >= limit) {
-    const slid = closedPrev.slice(n - (limit - 1));
+  if (n >= cap) {
+    if (anchored && advanceChartWindowForAppend() === 'grow') {
+      closedPrev.push(bar);
+      return { bars: closedPrev, result: 'appended' };
+    }
+    const base = anchored ? chartWindowLimit() : cap;
+    const slid = closedPrev.slice(n - (base - 1));
     slid.push(bar);
     return { bars: slid, result: 'slid' };
   }

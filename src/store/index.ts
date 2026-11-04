@@ -531,6 +531,17 @@ export const ROLLING_WINDOW_DEFAULT = 4000; // stay < 5000 engine free-tier cap
 export const ROLLING_WINDOW_MIN = 200;
 export const ROLLING_WINDOW_MAX = 4500; // stay < 5000 engine free-tier cap
 
+/**
+ * Hard ceiling for the live anchored window. The chart may grow past the
+ * user's base rolling window to keep the dataset start stable, but never past
+ * the engine's free-tier `FREE_MAX_BARS` (5000).
+ */
+export const ROLLING_WINDOW_GROWTH_MAX = 5000;
+/** Below this base the old per-bar slide is cheaper than an anchored window. */
+const ROLLING_WINDOW_GROWTH_MIN_BASE = 1000;
+/** Engine-window growth is chunked so a live subscription resubscribes rarely. */
+const ROLLING_WINDOW_ENGINE_CHUNK = 100;
+
 /** Clamp a rolling-window value. `0`/absent → the default; negative → default. */
 export function clampRollingWindowBars(n: unknown): number {
   const v = typeof n === 'number' ? n : Number(n);
@@ -3223,19 +3234,88 @@ if (typeof window !== 'undefined') {
 /**
  * How many bars the chart may hold (Settings → Rolling window).
  *
- * The single authority for the chart window: the load paths, the live append
- * path and the engine window all read this, so the chart can never hold a
- * different number of bars than the engine was asked to evaluate.
+ * The chart no longer slides its head on every live candle. It **anchors** the
+ * dataset at load, grows to {@link chartWindowCeiling} to keep the first bar
+ * (and therefore the first strategy event / `var` initialization) stable, then
+ * resets to the base window in one explicit step. This mirrors the stable
+ * dataset TradingView gives Pine: `bar_index` stays on a bar until the reset.
+ *
+ * `chartWindowEngineBars()` is the chunked depth handed to the engine. It may
+ * be a little larger than the visible chart so a live script subscription does
+ * not resubscribe on every new bar; the apply path joins by bar time.
  *
  * `0` falls back to the default: the persisted setting is clamped (so `0`
  * never reaches the store from the UI), and an unbounded chart window would
  * let a direct store write grow the series without limit. The engine's own
  * "no cap" escape hatch lives in `applyRollingWindow`.
  */
-export function chartWindowLimit(): number {
+let chartWindowPlanBase = 0;
+let chartWindowPlanLimit = 0;
+let chartWindowPlanCeiling = 0;
+
+function chartWindowBase(): number {
   const raw = Number(store.rollingWindowBars);
   if (!Number.isFinite(raw) || raw <= 0) return ROLLING_WINDOW_DEFAULT;
   return Math.max(1, Math.min(Math.round(raw), HISTORY_BARS_MAX));
+}
+
+function chartWindowCeilingFor(base: number): number {
+  if (base < ROLLING_WINDOW_GROWTH_MIN_BASE) return base;
+  const grown = Math.ceil(base * 1.2);
+  return Math.max(base, Math.min(ROLLING_WINDOW_GROWTH_MAX, grown));
+}
+
+function syncChartWindowPlan(): void {
+  const base = chartWindowBase();
+  if (base === chartWindowPlanBase) return;
+  chartWindowPlanBase = base;
+  chartWindowPlanLimit = base;
+  chartWindowPlanCeiling = chartWindowCeilingFor(base);
+}
+
+/** Re-anchor the window at the base setting (full load / symbol change). */
+export function resetChartWindowPlan(): void {
+  const base = chartWindowBase();
+  chartWindowPlanBase = base;
+  chartWindowPlanLimit = base;
+  chartWindowPlanCeiling = chartWindowCeilingFor(base);
+}
+
+export function chartWindowLimit(): number {
+  syncChartWindowPlan();
+  return chartWindowPlanLimit;
+}
+
+/** Maximum the anchored chart window may grow to before the next reset. */
+export function chartWindowCeiling(): number {
+  syncChartWindowPlan();
+  return chartWindowPlanCeiling;
+}
+
+/**
+ * Engine window depth for the current chart state.
+ *
+ * Grows in {@link ROLLING_WINDOW_ENGINE_CHUNK}-bar steps so the engine
+ * subscription changes at most once per chunk, not on every live bar. It can
+ * be larger than the visible chart; `alignSeriesToTimes` drops the older rows.
+ */
+export function chartWindowEngineBars(): number {
+  syncChartWindowPlan();
+  const count = store.bars.length;
+  if (count <= chartWindowPlanBase) return chartWindowPlanBase;
+  const chunked = Math.ceil(count / ROLLING_WINDOW_ENGINE_CHUNK) * ROLLING_WINDOW_ENGINE_CHUNK;
+  return Math.min(chartWindowPlanCeiling, Math.max(chartWindowPlanBase, chunked));
+}
+
+/** Grow the anchored window once, or reset it to the base window. */
+export function advanceChartWindowForAppend(): 'grow' | 'reset' {
+  syncChartWindowPlan();
+  if (chartWindowPlanLimit < chartWindowPlanCeiling) {
+    chartWindowPlanLimit = chartWindowPlanCeiling;
+    return 'grow';
+  }
+  chartWindowPlanLimit = chartWindowPlanBase;
+  return 'reset';
 }
 
 /**
@@ -3288,7 +3368,7 @@ export function mergeLiveTail(base: readonly Bar[], live: readonly Bar[]): Bar[]
  * Used for DSM progressive slices so ChartHost does not re-fit the viewport.
  *
  * The chart window is enforced here, at the mutation boundary: no caller may
- * push the chart past the Rolling window, however it got its bars.
+ * push the chart past the current anchored window, however it got its bars.
  */
 export function setBarsQuiet(bars: Bar[]) {
   const view = sliceToChartWindow(bars);
@@ -3300,8 +3380,11 @@ export function setBarsQuiet(bars: Bar[]) {
 }
 
 export function loadBars(bars: Bar[], symbol: string, interval: string, exchange: string) {
+  // Full load = new anchored dataset. Reset before slicing so a previous
+  // grown window cannot leak into the new symbol/timeframe.
+  resetChartWindowPlan();
   // The chart window is enforced here, at the mutation boundary: no caller may
-  // push the chart past the Rolling window, however it got its bars.
+  // push the chart past the current anchored window, however it got its bars.
   const view = sliceToChartWindow(bars);
   // One reactive flush for Topbar + ChartHost + StatusBar (not 5 micro-updates)
   batch(() => {
@@ -3797,18 +3880,38 @@ export function appendBar(bar: Bar, via?: 'worker' | 'venue'): BarAppendResult {
   }
 
   const limit = chartWindowLimit();
+  let slide = false;
+  if (n > 0 && n >= limit) {
+    const action = advanceChartWindowForAppend();
+    if (action === 'reset') {
+      slide = true;
+      chartDebug('window.reset', {
+        time: bar.time,
+        base: chartWindowPlanBase,
+        ceiling: chartWindowPlanCeiling,
+      });
+    } else {
+      chartDebug('window.grow', {
+        time: bar.time,
+        limit: chartWindowPlanLimit,
+        ceiling: chartWindowPlanCeiling,
+      });
+    }
+  }
   if (n === 0) {
     setStore('bars', [bar]);
     setBarPlaneAppend(bar, 0);
-  } else if (n >= limit) {
-    // The chart window is at its cap: the head slides, the new bar is the tail.
-    // The paint layer must mirror this with a full setData (see `slid`).
+  } else if (slide) {
+    // The anchored window reached its ceiling: drop the head once and keep the
+    // new bar. This is the only point where the dataset start moves, so the
+    // first strategy event stays put for the whole grow cycle.
     // `unwrap` avoids reading every element through the store proxy — a bar
     // object is wrapped in its own proxy, so slicing the proxy allocates one
     // proxy per bar on every new candle. One copy, not two: the tail is
     // pushed into the sliced array instead of spread into a new one.
+    const base = chartWindowPlanBase;
     const raw = unwrap(b) as Bar[];
-    const next = raw.slice(n - (limit - 1));
+    const next = raw.slice(n - (base - 1));
     next.push(bar);
     frameTipIndex = null;
     setStore('bars', next);
@@ -3825,8 +3928,8 @@ export function appendBar(bar: Bar, via?: 'worker' | 'venue'): BarAppendResult {
     if (slotId) setSlotBars(slotId, next, false);
   } else {
     // Append by index — Solid extends the array without copying prior bars.
-    // Use the targeted plane append so we do not copy the whole 4.5k window
-    // on every live tick. If the plane has drifted (e.g. tests that set
+    // Use the targeted plane append so we do not copy the whole window on
+    // every live tick. If the plane has drifted (e.g. tests that set
     // store.bars directly without loadBars), fall back to a full replace.
     setStore('bars', n, bar);
     if (n === barPlane.length) {
@@ -3843,17 +3946,19 @@ export function appendBar(bar: Bar, via?: 'worker' | 'venue'): BarAppendResult {
   if (!store.live.needsRerun) {
     setStore('live', 'needsRerun', true);
   }
+  const verdict: BarAppendResult = slide ? 'slid' : 'appended';
   chartDebugSample(
     'appendBar',
     {
-      verdict: n >= limit ? 'slid' : 'appended',
+      verdict,
       time: bar.time,
       ohlc: { open: bar.open, high: bar.high, low: bar.low, close: bar.close },
       n: b.length + 1,
+      limit: chartWindowPlanLimit,
     },
     500,
   );
-  return n >= limit ? 'slid' : 'appended';
+  return verdict;
 }
 
 /**

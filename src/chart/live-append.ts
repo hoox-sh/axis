@@ -24,8 +24,8 @@
  *
  * - history behind the tip is immutable (a late tick never rewrites a closed
  *   candle, and a closed tip is never reopened by a forming tick),
- * - the chart window slides its head when a new bar arrives, so the chart
- *   never grows past Settings → Rolling window.
+ * - the chart window anchors at load, grows to its ceiling to keep the first
+ *   bar stable, then resets to Settings → Rolling window in one explicit step.
  *
  * This module owns the **paint** invariant: `store.bars` and the Lightweight
  * Charts series must hold the same bars at all times.

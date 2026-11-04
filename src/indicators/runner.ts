@@ -67,7 +67,7 @@ import {
   setTelemetryPlane,
   setTelemetryState,
   newEntityId,
-  chartWindowLimit,
+  chartWindowEngineBars,
 } from '../store';
 import { resolveInputSourceValues } from '../results/plot-sources';
 import { applyStrategyPropsToSource } from '../results/strategy-props';
@@ -192,7 +192,7 @@ export function applyRollingWindow(
 ): import('../store/types').Bar[] {
   const raw = Number(store.rollingWindowBars);
   if (!Number.isFinite(raw) || raw <= 0) return bars;
-  const limit = chartWindowLimit();
+  const limit = chartWindowEngineBars();
   if (bars.length <= limit) return bars;
   return bars.slice(bars.length - limit);
 }

@@ -20,8 +20,8 @@
  * | `ignored` | none |
  * | `updated` (forming tick, same bar) | update |
  * | `appended` and length === 1 (empty series) | setData |
- * | `appended` otherwise (window not full) | update |
- * | `slid` (cap reached) | setData |
+ * | `appended` otherwise (window not full, or anchored growth) | update |
+ * | `slid` (anchored window reached its ceiling; reset to base) | setData |
  *
  * @module chart/v1/paint-action
  */

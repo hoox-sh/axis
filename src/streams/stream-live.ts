@@ -65,7 +65,7 @@ import {
   appendLog,
   clearFeedStatus,
   clearScriptStatus,
-  chartWindowLimit,
+  chartWindowEngineBars,
   setBarsQuiet,
   setFeedStatus,
   setScriptStatus,
@@ -278,7 +278,8 @@ export function streamWireFingerprint(endpoint?: string, apiKey?: string): strin
 function buildWireForFingerprint(fingerprint: string): StreamLiveWire {
   if (fingerprint === wireFingerprint()) return buildWire();
   const sep = fingerprint.indexOf('\0');
-  const endpoint = (sep >= 0 ? fingerprint.slice(0, sep) : fingerprint) || 'https://pynescript.online';
+  const endpoint =
+    (sep >= 0 ? fingerprint.slice(0, sep) : fingerprint) || 'https://pynescript.online';
   const token = (sep >= 0 ? fingerprint.slice(sep + 1) : '').trim();
   return buildWireAt(endpoint, token || undefined);
 }
@@ -328,11 +329,7 @@ function buildWireAt(endpoint: string, authToken: string | undefined): StreamLiv
           const clearStale =
             status === 'connecting' || status === 'live' || status === 'datafeed-loading';
           const message =
-            extra?.message !== undefined
-              ? extra.message
-              : clearStale
-                ? ''
-                : undefined;
+            extra?.message !== undefined ? extra.message : clearStale ? '' : undefined;
           setScriptStatus(subId, status, message);
           if (status === 'error' && extra?.message) {
             appendLog('error', `Engine script ${subId}: ${extra.message}`, 'stream');
@@ -666,7 +663,7 @@ function scriptMeta(): Record<string, unknown> {
  * script stayed subscribed).
  */
 export function scriptHistoryBars(): number {
-  return Math.max(1, chartWindowLimit());
+  return Math.max(1, chartWindowEngineBars());
 }
 
 /**
@@ -725,7 +722,7 @@ export async function streamDriveSeries(marketNow = 0): Promise<void> {
       marketNow,
       // Same depth the engine-owned path uses, so the drive reuses the
       // existing chart data session instead of re-provisioning it.
-      historyBars: chartWindowLimit(),
+      historyBars: chartWindowEngineBars(),
     });
     // PYNE `stale` means the tick clamped and a hole was filled or remains.
     // The in-memory script session still has the old axis until it is dropped.

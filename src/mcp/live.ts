@@ -46,7 +46,7 @@ import {
   streamSeriesTick,
   streamWireState,
 } from '../streams/stream-live';
-import { chartWindowLimit, store } from '../store';
+import { chartWindowEngineBars, store } from '../store';
 import type { Bar } from '../store/types';
 import { chartReadinessSnapshot } from '../chart/readiness';
 import { McpInvokeError } from './protocol';
@@ -534,9 +534,9 @@ export async function engineTickView(p: Record<string, unknown>): Promise<Record
     key,
     marketNow,
     minGapMs: 0,
-    historyBars: chartWindowLimit(),
+    historyBars: chartWindowEngineBars(),
     tick: async (endpoint, apiKey, k) => {
-      const t = await tickChartDataSession(endpoint, apiKey, k, chartWindowLimit());
+      const t = await tickChartDataSession(endpoint, apiKey, k, chartWindowEngineBars());
       captured.tick = t;
       return t;
     },

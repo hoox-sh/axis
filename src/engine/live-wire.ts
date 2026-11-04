@@ -954,12 +954,16 @@ export class StreamLiveWire {
 
   /** Evaluate a script over the latest merged stream state (no re-run). */
   async evalScript(input: EvalScriptInput): Promise<RunResult> {
+    const sig = inputSignature(input.inputs);
+    const depth = historyBarsOf(input.meta);
     engineDebugSample(
-      'wire.script.eval',
+      'wire.script.paint',
       {
         subId: input.subId,
         indicatorId: input.indicatorId ?? null,
-        bars: input.bars.length,
+        windowBars: input.bars.length,
+        engineBars: depth,
+        mode: this.appliers.has(input.subId) ? 'delta' : 'subscribe',
       },
       1000,
       input.subId,
@@ -977,14 +981,15 @@ export class StreamLiveWire {
     // merged into it) would keep the old ones. Depth *growth* also re-subscribes
     // so a longer window is covered; a 1-bar shrink/flicker must not bounce the
     // sub (that left EMA/Momentum as idle/released while Bollinger stayed up).
-    const sig = inputSignature(input.inputs);
-    const depth = historyBarsOf(input.meta);
     const prevSig = this.scriptInputSig.get(input.subId);
     const prevDepth = this.scriptDepth.get(input.subId);
     let applier = this.appliers.get(input.subId);
     const inputsChanged = prevSig !== undefined && prevSig !== sig;
     const depthGrew = prevDepth !== undefined && depth > prevDepth;
-    const identityChanged = !!applier && (inputsChanged || depthGrew);
+    // A real window reset drops from the grown ceiling back to the base. A
+    // 1-bar shrink is just the tip flicker and must not bounce the sub.
+    const depthShrank = prevDepth !== undefined && depth < prevDepth && prevDepth - depth > 8;
+    const identityChanged = !!applier && (inputsChanged || depthGrew || depthShrank);
     if (identityChanged) {
       engineDebug('wire.script.resubscribe', {
         subId: input.subId,
