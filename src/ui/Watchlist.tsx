@@ -89,7 +89,11 @@ import {
   sourceSupportsRestPoll,
   type WatchTicker,
 } from '../data/watchlist-tickers';
-import { dailyCloseDayKey, fetchDailyCloses } from '../data/watchlist-daily';
+import {
+  dailyCloseDayKey,
+  dailyCloseSourceKey,
+  fetchDailyCloses,
+} from '../data/watchlist-daily';
 import { startWatchlistQuotes } from '../data/watchlist-live';
 import { createAlert, listAlerts, subscribeAlerts, type AlertKind } from '../alerts';
 import { Icons } from './icons';
@@ -503,13 +507,16 @@ export const Watchlist: Component = () => {
    */
   const [dailyCloses, setDailyCloses] = createSignal<Record<string, number>>({});
   const [dailyDay, setDailyDay] = createSignal(dailyCloseDayKey());
+  const [dailySource, setDailySource] = createSignal(dailyCloseSourceKey(store.source));
 
   onMount(() => {
     let disposed = false;
     const load = async () => {
       const day = dailyCloseDayKey();
-      if (day !== dailyDay()) {
+      const source = dailyCloseSourceKey(store.source);
+      if (day !== dailyDay() || source !== dailySource()) {
         setDailyDay(day);
+        setDailySource(source);
         setDailyCloses({});
       }
       const syms = store.watchlist.symbols;
@@ -520,11 +527,12 @@ export const Watchlist: Component = () => {
       }
     };
     void load();
-    // Day rollover + late symbol additions. Cheap: one day-key compare per tick.
+    // Day rollover, source switch, or late symbol additions. Cheap: two compares.
     const iv = window.setInterval(() => {
       const day = dailyCloseDayKey();
+      const source = dailyCloseSourceKey(store.source);
       const missing = store.watchlist.symbols.some((s) => dailyCloses()[s] == null);
-      if (day !== dailyDay() || missing) void load();
+      if (day !== dailyDay() || source !== dailySource() || missing) void load();
     }, 60_000);
     const onFocus = () => {
       if (dailyCloseDayKey() !== dailyDay()) void load();

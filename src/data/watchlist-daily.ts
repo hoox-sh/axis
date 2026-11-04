@@ -74,8 +74,12 @@ export function previousDailyCloseFromKlines(
   return null;
 }
 
-/** Per-source cache: a daily close is valid for the whole UTC day. */
-const cache = new Map<string, { day: string; close: number }>();
+/**
+ * Per-source cache. A daily close is valid for the whole UTC day; a symbol
+ * the venue has no daily kline for is cached as `missing` for the day too, so
+ * the watchlist poll does not re-request it every minute.
+ */
+const cache = new Map<string, { day: string; close?: number; missing?: boolean }>();
 
 /** @internal test helper. */
 export function _resetDailyCloseCacheForTests(): void {
@@ -94,6 +98,16 @@ export function sourceSupportsDailyClose(sourceId: string): boolean {
 }
 
 /**
+ * Epoch for the daily-close state: the resolved quote venue.
+ *
+ * The watchlist clears its `dailyCloses` map when this changes, so a
+ * Binance → OKX switch cannot keep showing the previous venue's closes.
+ */
+export function dailyCloseSourceKey(sourceId: string): string {
+  return resolveQuoteSourceId(sourceId);
+}
+
+/**
  * Previous daily close per symbol.
  *
  * Binance only (`/klines?interval=1d`); every other venue returns `{}` so the
@@ -104,27 +118,34 @@ export async function fetchDailyCloses(
   symbols: readonly string[],
   sourceId: string,
   nowMs: number = Date.now(),
+  deps?: { fetchKlines?: typeof fetchBinanceJson },
 ): Promise<Record<string, number>> {
   const out: Record<string, number> = {};
   if (!symbols.length || !sourceSupportsDailyClose(sourceId)) return out;
   const day = dailyCloseDayKey(nowMs);
   if (!day) return out;
+  const fetchKlines = deps?.fetchKlines ?? fetchBinanceJson;
 
   await Promise.all(
     symbols.map(async (sym) => {
       const key = cacheKey(sourceId, sym);
       const hit = cache.get(key);
       if (hit && hit.day === day) {
-        out[sym] = hit.close;
+        if (hit.close != null) out[sym] = hit.close;
         return;
       }
       try {
-        const rows = (await fetchBinanceJson({
+        const rows = (await fetchKlines({
           path: 'klines',
           query: `symbol=${toUsdt(sym)}&interval=1d&limit=3`,
         })) as KlineTuple[];
         const close = previousDailyCloseFromKlines(rows, nowMs);
-        if (close == null) return;
+        if (close == null) {
+          // No completed candle (invalid symbol / venue gap): cache the miss
+          // for the day instead of retrying on every poll.
+          cache.set(key, { day, missing: true });
+          return;
+        }
         cache.set(key, { day, close });
         out[sym] = close;
       } catch {

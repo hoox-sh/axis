@@ -9,6 +9,8 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import {
   _resetDailyCloseCacheForTests,
   dailyCloseDayKey,
+  dailyCloseSourceKey,
+  fetchDailyCloses,
   previousDailyCloseFromKlines,
   sourceSupportsDailyClose,
   type KlineTuple,
@@ -60,6 +62,48 @@ describe('previousDailyCloseFromKlines', () => {
       kline(T0 + 2 * DAY, 130),
     ];
     expect(previousDailyCloseFromKlines(rows, now)).toBe(130);
+  });
+});
+
+describe('dailyCloseSourceKey', () => {
+  it('follows the resolved quote venue', () => {
+    expect(dailyCloseSourceKey('binance-rest')).toBe('binance-rest');
+    expect(dailyCloseSourceKey('okx-rest')).toBe('okx-rest');
+    expect(dailyCloseSourceKey('data-manager')).toBeTruthy();
+  });
+});
+
+describe('fetchDailyCloses caching', () => {
+  it('caches a symbol with no completed daily candle for the day', async () => {
+    const calls: string[] = [];
+    const fetchKlines = async (args: { query: string }) => {
+      calls.push(args.query);
+      return [] as KlineTuple[];
+    };
+    const now = T0 + 3 * DAY;
+    expect(await fetchDailyCloses(['NOPE'], 'binance-rest', now, { fetchKlines })).toEqual({});
+    expect(calls).toHaveLength(1);
+    // Same day, one minute later: no second request.
+    expect(
+      await fetchDailyCloses(['NOPE'], 'binance-rest', now + 60_000, { fetchKlines }),
+    ).toEqual({});
+    expect(calls).toHaveLength(1);
+  });
+
+  it('caches a resolved close for the day', async () => {
+    const calls: string[] = [];
+    const fetchKlines = async (args: { query: string }) => {
+      calls.push(args.query);
+      return [kline(T0, 100), kline(T0 + DAY, 110)] as KlineTuple[];
+    };
+    const now = T0 + 2 * DAY + 3600_000;
+    expect(await fetchDailyCloses(['BTCUSDT'], 'binance-rest', now, { fetchKlines })).toEqual({
+      BTCUSDT: 110,
+    });
+    expect(
+      await fetchDailyCloses(['BTCUSDT'], 'binance-rest', now + 60_000, { fetchKlines }),
+    ).toEqual({ BTCUSDT: 110 });
+    expect(calls).toHaveLength(1);
   });
 });
 
