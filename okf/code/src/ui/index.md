@@ -3,6 +3,7 @@
 # Concepts
 
 * [src/ui/architecture](architecture.md) - src/ui/architecture contains apply.ts, plan.ts.
+* [src/ui/debug](debug.md) - Studio Debug page — the runtime switch for chart/engine debug logging, log-ring controls, and a formatted live view of the rotating axis.debug.log. ring.
 * [src/ui/dsm](dsm.md) - src/ui/dsm contains CompleteMap.tsx, JobCard.tsx, estimate.ts, and 2 more files.
 * [src/ui/effects](effects.md) - UI effect manager — tuned chrome motion.
 * [src/ui/extras](extras.md) - src/ui/extras contains CurrentPriceCard.tsx, ExtraMenu.tsx, FullscreenAlert.tsx, and 6 more files.

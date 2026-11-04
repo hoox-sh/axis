@@ -3298,3 +3298,119 @@ span.ax-json-twist {
     opacity: 1;
   }
 }
+
+/* ── Debug page live log ─────────────────────────────────────────── */
+.ax-debug-live {
+  display: flex;
+  flex-direction: column;
+  border: var(--border-w) solid var(--color-border);
+  border-radius: var(--radius-surface);
+  background: var(--color-bg-elev);
+  overflow: hidden;
+}
+.ax-debug-live-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0.8rem;
+  border-bottom: var(--border-w) solid var(--color-border);
+  background: color-mix(in srgb, var(--color-bg-panel) 82%, var(--color-bg-elev));
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
+}
+.ax-debug-live-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--color-text);
+}
+.ax-debug-live-note {
+  font-size: 0.68rem;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--color-text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ax-debug-live-list {
+  height: clamp(15rem, 46vh, 38rem);
+  overflow: auto;
+  overscroll-behavior: contain;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.72rem;
+  line-height: 1.6;
+  background: var(--color-bg-base);
+}
+.ax-debug-row {
+  display: grid;
+  grid-template-columns: 6.9rem 4.4rem minmax(6rem, 13rem) minmax(0, 1fr);
+  gap: 0.7rem;
+  padding: 0.12rem 0.8rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 45%, transparent);
+}
+.ax-debug-row:hover {
+  background: color-mix(in srgb, var(--color-accent) 7%, transparent);
+}
+.ax-debug-time {
+  color: var(--color-text-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.ax-debug-scope {
+  font-size: 0.64rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--color-text-faint);
+}
+.ax-debug-scope--chart {
+  color: var(--color-accent);
+}
+.ax-debug-scope--engine {
+  color: var(--color-accent-2);
+}
+.ax-debug-event {
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ax-debug-data {
+  color: var(--color-text-dim);
+  overflow-wrap: anywhere;
+}
+.ax-debug-empty {
+  padding: 1.4rem 1rem;
+  color: var(--color-text-faint);
+  font-size: var(--ax-hint);
+  line-height: 1.55;
+}
+.ax-debug-empty strong {
+  color: var(--color-text);
+  font-weight: 600;
+}
+.ax-debug-filters {
+  align-items: center;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+}
+.ax-debug-search {
+  flex: 1;
+  min-width: 12rem;
+}
+@media (max-width: 48rem) {
+  .ax-debug-row {
+    grid-template-columns: 5.6rem 3.6rem minmax(0, 1fr);
+  }
+  .ax-debug-data {
+    grid-column: 1 / -1;
+    padding-left: 0;
+  }
+}

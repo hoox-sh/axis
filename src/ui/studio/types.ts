@@ -12,13 +12,20 @@
  * @module ui/studio/types
  */
 
-export type StudioPageId = 'runtime' | 'wire' | 'settings' | 'workers' | 'plugins';
+export type StudioPageId = 'runtime' | 'wire' | 'settings' | 'workers' | 'plugins' | 'debug';
 
 export type SettingsTabId =
   'general' | 'data' | 'editor' | 'theme' | 'topbar' | 'keyboard' | 'notifications';
 
 export function isStudioPageId(v: unknown): v is StudioPageId {
-  return v === 'runtime' || v === 'wire' || v === 'settings' || v === 'workers' || v === 'plugins';
+  return (
+    v === 'runtime' ||
+    v === 'wire' ||
+    v === 'settings' ||
+    v === 'workers' ||
+    v === 'plugins' ||
+    v === 'debug'
+  );
 }
 
 export function isSettingsTabId(v: unknown): v is SettingsTabId {

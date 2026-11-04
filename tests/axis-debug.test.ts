@@ -25,7 +25,11 @@ import {
   engineDebug,
   engineDebugSample,
   isAxisDebug,
+  isAxisDebugEnvForced,
+  onAxisDebugChange,
   resetAxisDebugSamples,
+  setAxisDebug,
+  type AxisDebugSource,
 } from '../src/debug';
 import { installMemoryLocalStorage } from './setup';
 
@@ -42,6 +46,11 @@ afterEach(() => {
   else process.env[AXIS_DEBUG_ENV_KEY] = originalAxis;
   if (originalAlias === undefined) delete process.env[AXIS_DEBUG_ENV_ALIAS];
   else process.env[AXIS_DEBUG_ENV_ALIAS] = originalAlias;
+  try {
+    if (typeof localStorage !== 'undefined') localStorage.removeItem(AXIS_DEBUG_STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
   resetAxisDebugSamples();
 });
 
@@ -86,6 +95,56 @@ describe('isAxisDebug', () => {
     mem.removeItem(AXIS_DEBUG_STORAGE_KEY);
     resetAxisDebugSamples();
     expect(isAxisDebug()).toBe(false);
+  });
+});
+
+describe('setAxisDebug (Settings toggle)', () => {
+  it('flips the runtime flag without a rebuild', () => {
+    clearFlags();
+    const mem = installMemoryLocalStorage();
+    resetAxisDebugSamples();
+
+    expect(isAxisDebug()).toBe(false);
+    expect(setAxisDebug(true)).toBe(true);
+    expect(mem.getItem(AXIS_DEBUG_STORAGE_KEY)).toBe('1');
+    expect(isAxisDebug()).toBe(true);
+    expect(axisDebugSource()).toBe('storage');
+    expect(isAxisDebugEnvForced()).toBe(false);
+
+    expect(setAxisDebug(false)).toBe(false);
+    expect(mem.getItem(AXIS_DEBUG_STORAGE_KEY)).toBeNull();
+    expect(isAxisDebug()).toBe(false);
+    expect(axisDebugSource()).toBe('off');
+  });
+
+  it('cannot silence the .env flag', () => {
+    clearFlags();
+    installMemoryLocalStorage();
+    process.env[AXIS_DEBUG_ENV_KEY] = '1';
+    resetAxisDebugSamples();
+
+    expect(isAxisDebugEnvForced()).toBe(true);
+    expect(setAxisDebug(false)).toBe(true);
+    expect(isAxisDebug()).toBe(true);
+    expect(axisDebugSource()).toBe('env');
+  });
+
+  it('notifies subscribers and stops after unsubscribe', () => {
+    clearFlags();
+    installMemoryLocalStorage();
+    resetAxisDebugSamples();
+
+    const seen: Array<[boolean, AxisDebugSource]> = [];
+    const off = onAxisDebugChange((on, source) => seen.push([on, source]));
+    setAxisDebug(true);
+    setAxisDebug(false);
+    off();
+    setAxisDebug(true);
+
+    expect(seen).toEqual([
+      [true, 'storage'],
+      [false, 'off'],
+    ]);
   });
 });
 

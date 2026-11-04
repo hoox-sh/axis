@@ -59,6 +59,16 @@ import { EditorIntelPanel, ExchangeCredentialsPanel } from './panels';
 import { NotificationsPanel } from './NotificationsPanel';
 import { KeyboardSettingsPanel } from '../shortcuts/Settings';
 import {
+  axisDebugLogStats,
+  axisDebugSource,
+  clearAxisDebugLog,
+  downloadAxisDebugLog,
+  isAxisDebug,
+  onAxisDebugChange,
+  setAxisDebug,
+  type AxisDebugSource,
+} from '../../debug';
+import {
   connectMcpBridge,
   disconnectMcpBridge,
   loadMcpPrefs,
@@ -278,6 +288,22 @@ function bridgeDetail(b: McpBridgeState, hasKey: boolean): string {
   return parts.join(' · ');
 }
 
+function debugSourceLabel(source: AxisDebugSource): string {
+  switch (source) {
+    case 'env':
+      return 'Forced by .env';
+    case 'storage':
+      return 'On · this browser';
+    default:
+      return 'Off';
+  }
+}
+
+function formatLogBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  return `${(bytes / 1024).toFixed(1)} KiB`;
+}
+
 function SettingsTabPanel(props: {
   id: SettingsTabId;
   active: SettingsTabId;
@@ -361,6 +387,9 @@ export function SettingsPage(props: { onClose: () => void; initialTab?: Settings
   const [cloudProbeTone, setCloudProbeTone] = createSignal<ProbeTone | ''>('');
   const [datasetFlushMsg, setDatasetFlushMsg] = createSignal('');
   const [datasetFlushTone, setDatasetFlushTone] = createSignal<'ok' | 'err'>('ok');
+  const [debugOn, setDebugOn] = createSignal(isAxisDebug());
+  const [debugSource, setDebugSource] = createSignal<AxisDebugSource>(axisDebugSource());
+  const [debugStats, setDebugStats] = createSignal(axisDebugLogStats());
   const storages = () => listStorages();
   const [tab, setTab] = createSignal<SettingsTabId>(
     isSettingsTabId(props.initialTab) ? props.initialTab : 'general',
@@ -380,10 +409,16 @@ export function SettingsPage(props: { onClose: () => void; initialTab?: Settings
   const topbarResetFb = useMicrofeedback({ successHoldMs: 700 });
 
   const unsubMcp = onMcpBridge((s) => setMcpBridge(s));
+  const unsubDebug = onAxisDebugChange((on, source) => {
+    setDebugOn(on);
+    setDebugSource(source);
+    setDebugStats(axisDebugLogStats());
+  });
   // Scale is a live preview. Leaving the page (Cancel, Escape, rail) puts
   // the document back on the saved value. Save writes the store first.
   onCleanup(() => {
     unsubMcp();
+    unsubDebug();
     applyUiScale(store.uiScale);
   });
 
@@ -860,6 +895,86 @@ export function SettingsPage(props: { onClose: () => void; initialTab?: Settings
                     hint="Telemetry prompt only · nothing uploads automatically."
                   />
                 </div>
+              </StudioSection>
+
+              <StudioSection
+                title="Debug logs"
+                lead="Verbose [axis:chart] / [axis:engine] console lines plus a rotating log ring. Applies immediately — no rebuild or .env edit."
+                testId="axis-settings-debug"
+                headerEnd={
+                  <StudioStatus
+                    status={debugOn() ? 'healthy' : 'idle'}
+                    label={debugSourceLabel(debugSource())}
+                  />
+                }
+              >
+                <StudioToggle
+                  id="axis-debug-logs"
+                  testId="axis-settings-debug-logs"
+                  checked={debugOn()}
+                  disabled={debugSource() === 'env'}
+                  onChange={(v) => setAxisDebug(v)}
+                  label="Enable debug logs"
+                  hint={
+                    debugSource() === 'env'
+                      ? 'VITE_AXIS_DEBUG is set in .env — remove it (and rebuild) to control this toggle here.'
+                      : 'Off by default. Filter DevTools by [axis: and download the ring as a .log file.'
+                  }
+                />
+                <div class="ax-toolbar">
+                  <AppButton
+                    design="soft"
+                    tone="ghost"
+                    size="sm"
+                    testId="axis-settings-open-debug"
+                    icon={<Icons.systemLogs />}
+                    title="Open the Debug page for the live log view"
+                    onClick={() => {
+                      window.dispatchEvent(
+                        new CustomEvent('axis-open-studio', { detail: { page: 'debug' } }),
+                      );
+                    }}
+                  >
+                    Open Debug page
+                  </AppButton>
+                  <AppButton
+                    design="soft"
+                    tone="ghost"
+                    size="sm"
+                    testId="axis-settings-debug-download"
+                    disabled={debugStats().lines === 0}
+                    icon={<Icons.download />}
+                    title="Download the rotating debug log"
+                    onClick={() => {
+                      downloadAxisDebugLog();
+                      setDebugStats(axisDebugLogStats());
+                    }}
+                  >
+                    Download log
+                  </AppButton>
+                  <AppButton
+                    design="soft"
+                    tone="danger"
+                    size="sm"
+                    testId="axis-settings-debug-clear"
+                    disabled={debugStats().lines === 0}
+                    icon={<Icons.trash />}
+                    title="Delete every rotated debug log file"
+                    onClick={() => {
+                      clearAxisDebugLog();
+                      setDebugStats(axisDebugLogStats());
+                    }}
+                  >
+                    Clear log
+                  </AppButton>
+                </div>
+                <StudioHint>
+                  {debugStats().files} file{debugStats().files === 1 ? '' : 's'} ·{' '}
+                  {debugStats().lines} line{debugStats().lines === 1 ? '' : 's'} ·{' '}
+                  {formatLogBytes(debugStats().bytes)} in localStorage (
+                  <code>axis.debug.log.*</code>). Also <code>window.__AXIS_DEBUG__.download()</code>
+                  .
+                </StudioHint>
               </StudioSection>
 
               <StudioSection

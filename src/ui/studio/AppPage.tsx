@@ -83,9 +83,7 @@ export function AppPage(props: {
           }}
         >
           <Show when={meta().aliasTestIds}>
-            <For each={meta().aliasTestIds}>
-              {(id) => <span data-testid={id} hidden />}
-            </For>
+            <For each={meta().aliasTestIds}>{(id) => <span data-testid={id} hidden />}</For>
           </Show>
           <aside class="ax-page-rail" aria-label="Studio">
             <div class="ax-page-rail-brand">
@@ -126,8 +124,10 @@ export function AppPage(props: {
                   >
                     {item.id === 'workers' ? (
                       <Icons.cpu size={16} />
-                    ) : (
+                    ) : item.id === 'plugins' ? (
                       <Icons.library size={16} />
+                    ) : (
+                      <Icons.systemLogs size={16} />
                     )}
                     {item.label}
                   </button>

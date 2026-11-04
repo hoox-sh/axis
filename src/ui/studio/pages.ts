@@ -81,6 +81,18 @@ export const STUDIO_PAGES: StudioPageMeta[] = [
     titleId: 'axis-plugins-title',
     closeTestId: 'axis-plugins-close',
   },
+  {
+    id: 'debug',
+    label: 'Debug',
+    kicker: 'Debug',
+    title: 'Logs & diagnostics',
+    purpose:
+      'Turn chart/engine logging on and read the rotating log ring live — no rebuild or .env edit.',
+    group: 'catalog',
+    testId: 'axis-debug-page',
+    titleId: 'axis-debug-title',
+    closeTestId: 'axis-debug-close',
+  },
 ];
 
 export const STUDIO_PAGE_BY_ID: Record<StudioPageId, StudioPageMeta> = Object.fromEntries(

@@ -116,7 +116,9 @@ Stories live in `src/stories/` (topbar fields, theme tokens, studio primitives, 
 
 ## Debug mode (chart + engine)
 
-Set `VITE_AXIS_DEBUG=1` in `.env` (alias `VITE_DEBUG`) and restart `bun run dev`. The boot banner prints `[axis:debug] chart/engine logging on`. Filter DevTools by `[axis:`.
+Turn it on in the app: **Settings → General → Debug logs**, or open **Studio → Debug** in the left rail for the switch plus a live view of the ring (scope/search filters, pause, follow, copy, download, clear). It is stored as `localStorage.axis.debug` and applies immediately — no rebuild. The boot banner prints `[axis:debug] chart/engine logging on`; toggling mid-session prints it too. Filter DevTools by `[axis:`.
+
+For a build that ships with logging on, set `VITE_AXIS_DEBUG=1` in `.env` (alias `VITE_DEBUG`) and restart `bun run dev`. Vite inlines that flag at build time, and it wins over the Settings toggle (the toggle then shows **Forced by .env**). e2e forces the flag off (`playwright.config.ts`).
 
 | Prefix | What it logs |
 | --- | --- |
@@ -125,9 +127,9 @@ Set `VITE_AXIS_DEBUG=1` in `.env` (alias `VITE_DEBUG`) and restart `bun run dev`
 
 Forming ticks and live deltas log at most about once per second so a live feed cannot freeze the console. Snapshots, window slides, menu actions, and apply aborts always log.
 
-Lines are also written to a rotating localStorage ring (`axis.debug.log.0` is current, `.1`–`.3` previous rotations, 64 KiB each). The oldest file is dropped on rotate. Writes coalesce every 250 ms and flush on tab hide. Download the ring as `axis-debug-*.log` from **System Logs** (download icon while debug is on) or `window.__AXIS_DEBUG__.download()` in DevTools. `window.__AXIS_DEBUG__.read()` / `.clear()` / `.stats()` inspect the ring.
+Lines are also written to a rotating localStorage ring (`axis.debug.log.0` is current, `.1`–`.3` previous rotations, 64 KiB each). The oldest file is dropped on rotate. Writes coalesce every 250 ms and flush on tab hide. Download or clear the ring from **Settings → General → Debug logs**, from **System Logs** (download icon while debug is on), or with `window.__AXIS_DEBUG__.download()` in DevTools. `window.__AXIS_DEBUG__.read()` / `.clear()` / `.stats()` / `.set(true|false)` inspect and flip the runtime flag.
 
-Vite inlines the flag at build time. Optional overlay without a rebuild: `localStorage.setItem('axis.debug','1')` then reload. e2e forces the flag off (`playwright.config.ts`).
+Vite inlines the env flag at build time; the Settings toggle writes `localStorage.axis.debug` instead and needs no reload.
 
 ## Internals — useful paths
 
@@ -136,6 +138,7 @@ Vite inlines the flag at build time. Optional overlay without a rebuild: `localS
 | `src/index.tsx` | App entry |
 | `src/debug.ts` | Debug flag + `[axis:chart]` / `[axis:engine]` logger |
 | `src/debug-log.ts` | Rotating localStorage debug log (`axis.debug.log.*`) |
+| `src/ui/debug/DebugPage.tsx` | Studio **Debug** page (switch + live ring view) |
 | `vite.config.*` | Vite / Solid plugin |
 | `src/engines/catalog.ts` | Default engine endpoint |
 | `worker/wrangler.toml` | Local vars |

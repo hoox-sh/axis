@@ -7,7 +7,7 @@ tags: [devops, doc, docs, local-dev]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-26T00:24:45Z
+  at: 2026-11-04T09:17:36Z
 sources:
   - id: tree
     resource: "docs/devops/local-dev.mdx"
@@ -45,3 +45,4 @@ Repo path `docs/devops/local-dev.mdx`.
 
 * [src](/code/src.md)
 * [src/engines](/code/src/engines.md)
+* [src/ui/debug](/code/src/ui/debug.md)

@@ -11,7 +11,7 @@
  */
 import { expect, type Page } from '@playwright/test';
 
-export type StudioRailPage = 'runtime' | 'wire' | 'settings' | 'workers' | 'plugins';
+export type StudioRailPage = 'runtime' | 'wire' | 'settings' | 'workers' | 'plugins' | 'debug';
 
 const PAGE_TEST_ID: Record<StudioRailPage, string> = {
   runtime: 'axis-runtimes-hub',
@@ -19,6 +19,7 @@ const PAGE_TEST_ID: Record<StudioRailPage, string> = {
   settings: 'axis-settings',
   workers: 'axis-workers-manager',
   plugins: 'axis-manager',
+  debug: 'axis-debug-page',
 };
 
 export async function openStudio(page: Page, rail: StudioRailPage = 'runtime') {

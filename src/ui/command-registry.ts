@@ -110,6 +110,8 @@ export interface CommandActions {
   openWorkers?: () => void;
   /** Open Runtime — active engine / endpoint / health. */
   openRuntime?: () => void;
+  /** Open Debug — runtime logging switch + live log ring. */
+  openDebug?: () => void;
   /** Open the studio overlay (last page, or Runtime). */
   openStudio?: () => void;
   /** Attach this tab to the Worker MCP bridge (Settings if the key is missing). */
@@ -704,6 +706,22 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
     ],
   },
   {
+    id: 'action.debug',
+    title: 'Open Debug Logs',
+    category: 'navigation',
+    keywords: [
+      'debug',
+      'logs',
+      'logging',
+      'chart log',
+      'engine log',
+      'diagnostics',
+      'verbose',
+      'axis.debug',
+      'console',
+    ],
+  },
+  {
     id: 'action.architecture',
     title: 'Open Architecture',
     category: 'navigation',
@@ -1115,6 +1133,7 @@ export function buildDefaultCommands(actions: CommandActions): CommandDef[] {
   if (actions.openStudio) byId.set('action.studio', actions.openStudio);
   if (actions.connectMcp) byId.set('action.connect-mcp', actions.connectMcp);
   if (actions.openRuntime) byId.set('action.runtime', actions.openRuntime);
+  if (actions.openDebug) byId.set('action.debug', actions.openDebug);
   if (actions.openPlugins) byId.set('action.plugins', actions.openPlugins);
   if (actions.openWorkers) byId.set('action.workers', actions.openWorkers);
   if (actions.openArchitecture) byId.set('action.architecture', actions.openArchitecture);

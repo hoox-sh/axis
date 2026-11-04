@@ -89,22 +89,14 @@ import {
 } from '../onchain/manager';
 import { attachPopularTvl } from '../onchain/presets';
 import { kickOnchainHealthProbe } from '../onchain/health';
-import {
-  buildDefaultCommands,
-  filterCommands,
-  type CommandDef,
-} from './command-registry';
+import { buildDefaultCommands, filterCommands, type CommandDef } from './command-registry';
 import {
   toggleBrowserFullscreen,
   toggleChartOnlyMode,
   toggleChartOnlyFullscreen,
 } from './presentation';
 import { openAboutModal } from './AboutModal';
-import {
-  isPaletteOpen,
-  closePalette,
-  getPaletteIntent,
-} from './shortcuts/palette-bridge';
+import { isPaletteOpen, closePalette, getPaletteIntent } from './shortcuts/palette-bridge';
 import { getDisplay } from './shortcuts/registry';
 import { detectPlatform } from './shortcuts/keys';
 import type { ShortcutId } from './shortcuts/types';
@@ -190,6 +182,8 @@ export type CommandPaletteProps = {
   onOpenWorkers?: () => void;
   /** Open Runtime page. */
   onOpenRuntime?: () => void;
+  /** Open Debug page (logging switch + live log ring). */
+  onOpenDebug?: () => void;
   /** Open studio overlay (last page). */
   onOpenStudio?: () => void;
   /** Open Architecture (compose-recipe) modal. */
@@ -207,7 +201,9 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
 
   const commands = createMemo((): CommandDef[] => {
     const host =
-      typeof window !== 'undefined' ? (window as AxisHostWindow) : (undefined as AxisHostWindow | undefined);
+      typeof window !== 'undefined'
+        ? (window as AxisHostWindow)
+        : (undefined as AxisHostWindow | undefined);
 
     return buildDefaultCommands({
       toggleWatchlist: () => setWatchlistOpen(!isPanelOpen('watchlist')),
@@ -296,15 +292,14 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
         }
       },
       openSettings: () => props.onOpenSettings?.(),
-      openThemeSettings: () =>
-        props.onOpenThemeSettings?.() ?? props.onOpenSettings?.(),
-      openEditorSettings: () =>
-        props.onOpenEditorSettings?.() ?? props.onOpenSettings?.(),
+      openThemeSettings: () => props.onOpenThemeSettings?.() ?? props.onOpenSettings?.(),
+      openEditorSettings: () => props.onOpenEditorSettings?.() ?? props.onOpenSettings?.(),
       openNotificationSettings: () =>
         props.onOpenNotificationSettings?.() ?? props.onOpenSettings?.(),
       openPlugins: () => props.onOpenPlugins?.(),
       openWorkers: () => props.onOpenWorkers?.(),
       openRuntime: () => props.onOpenRuntime?.(),
+      openDebug: () => props.onOpenDebug?.(),
       openStudio: () => {
         if (props.onOpenStudio) props.onOpenStudio();
         else props.onOpenRuntime?.();
@@ -324,9 +319,7 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
           .then((m) => m.downloadScreenshot())
           .catch(() => undefined),
       copyScreenshot: () =>
-        void import('../chart/screenshot')
-          .then((m) => m.copyScreenshot())
-          .catch(() => undefined),
+        void import('../chart/screenshot').then((m) => m.copyScreenshot()).catch(() => undefined),
       // Editor power commands
       toggleEditorRuler: () => toggleEditorRulerEnabled(),
       toggleEditorMinimap: () => toggleEditorMinimapEnabled(),
@@ -654,69 +647,72 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
             <Show
               when={builtinPickerOpen()}
               fallback={
-            <Show
-              when={snippetPickerOpen()}
-              fallback={
                 <Show
-                  when={results().length > 0}
+                  when={snippetPickerOpen()}
                   fallback={
-                    <div class="axis-cmd-palette-empty" data-testid="axis-command-palette-empty">
-                      No matching commands
-                    </div>
+                    <Show
+                      when={results().length > 0}
+                      fallback={
+                        <div
+                          class="axis-cmd-palette-empty"
+                          data-testid="axis-command-palette-empty"
+                        >
+                          No matching commands
+                        </div>
+                      }
+                    >
+                      <For each={results()}>
+                        {(cmd, i) => (
+                          <button
+                            type="button"
+                            role="option"
+                            aria-selected={i() === active()}
+                            data-cmd-id={cmd.id}
+                            data-cmd-index={i()}
+                            data-testid={`axis-cmd-${cmd.id}`}
+                            class={`axis-cmd-palette-item ${i() === active() ? 'is-active' : ''}`}
+                            onMouseEnter={() => setActive(i())}
+                            onClick={() => {
+                              setActive(i());
+                              void runCommand(cmd);
+                            }}
+                          >
+                            <span class="axis-cmd-palette-item-main">
+                              <span class="axis-cmd-palette-item-title">{cmd.title}</span>
+                              <Show when={cmd.category}>
+                                <span class="axis-cmd-palette-item-cat">
+                                  {categoryLabel(cmd.category)}
+                                </span>
+                              </Show>
+                            </span>
+                            <Show when={liveShortcutFor(cmd)}>
+                              <kbd class="axis-cmd-palette-item-shortcut">
+                                {liveShortcutFor(cmd)}
+                              </kbd>
+                            </Show>
+                          </button>
+                        )}
+                      </For>
+                    </Show>
                   }
                 >
-                  <For each={results()}>
-                    {(cmd, i) => (
+                  <For each={PINE_SNIPPETS}>
+                    {(snippet) => (
                       <button
                         type="button"
                         role="option"
-                        aria-selected={i() === active()}
-                        data-cmd-id={cmd.id}
-                        data-cmd-index={i()}
-                        data-testid={`axis-cmd-${cmd.id}`}
-                        class={`axis-cmd-palette-item ${i() === active() ? 'is-active' : ''}`}
-                        onMouseEnter={() => setActive(i())}
-                        onClick={() => {
-                          setActive(i());
-                          void runCommand(cmd);
-                        }}
+                        data-testid={`axis-snippet-${snippet.id}`}
+                        class="axis-cmd-palette-item"
+                        onClick={() => runSnippet(snippet)}
                       >
                         <span class="axis-cmd-palette-item-main">
-                          <span class="axis-cmd-palette-item-title">{cmd.title}</span>
-                          <Show when={cmd.category}>
-                            <span class="axis-cmd-palette-item-cat">
-                              {categoryLabel(cmd.category)}
-                            </span>
-                          </Show>
+                          <span class="axis-cmd-palette-item-title">{snippet.title}</span>
+                          <span class="axis-cmd-palette-item-cat">{snippet.description}</span>
                         </span>
-                        <Show when={liveShortcutFor(cmd)}>
-                          <kbd class="axis-cmd-palette-item-shortcut">
-                            {liveShortcutFor(cmd)}
-                          </kbd>
-                        </Show>
                       </button>
                     )}
                   </For>
                 </Show>
-              }
-            >
-              <For each={PINE_SNIPPETS}>
-                {(snippet) => (
-                  <button
-                    type="button"
-                    role="option"
-                    data-testid={`axis-snippet-${snippet.id}`}
-                    class="axis-cmd-palette-item"
-                    onClick={() => runSnippet(snippet)}
-                  >
-                    <span class="axis-cmd-palette-item-main">
-                      <span class="axis-cmd-palette-item-title">{snippet.title}</span>
-                      <span class="axis-cmd-palette-item-cat">{snippet.description}</span>
-                    </span>
-                  </button>
-                )}
-              </For>
-            </Show>
               }
             >
               <Show

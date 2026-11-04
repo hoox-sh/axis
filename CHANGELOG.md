@@ -9,14 +9,19 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-11-01 · 880 commits · describe-tag: `v2.26.0`_
+_Generated/updated: 2026-11-04 · 959 commits · describe-tag: `v2.27.0`_
 
 ---
 
 ## [Unreleased]
 
+_Add release notes here before tagging._
+
+## [2.28.0] — 2026-11-04
+
 ### Added
 
+- **Debug logging is a UI switch, plus a Studio **Debug** page.** Chart/engine logs (`[axis:chart]` / `[axis:engine]` + the rotating `axis.debug.log.*` ring) no longer need `VITE_AXIS_DEBUG` and a restart: **Settings → General → Debug logs** turns them on immediately (`localStorage.axis.debug`), shows the ring size/lines, and can download or clear it. The new **Debug** page on the studio rail (Catalog → Debug, or `Open Debug Logs` in ⌘K) adds a formatted live view — scope chips (chart / engine), text filter, pause, follow-tail, copy, download, and clear — with the env flag reported as **Forced by .env** instead of pretending the toggle can silence it. `window.__AXIS_DEBUG__` gains `.set(on)` and `.enabled()`.
 - **Studio input system v2 + Storybook `Studio/Inputs`.** Every studio control now carries state in its chrome: `StudioInput` gains a shell with leading icon, prefix/suffix, clear, password reveal, copy, character counter, async status lane (spinner / check / alert), numeric stepper, `⌘` hint, Enter/Escape hooks, and the same focus halo as buttons. `StudioField` adds optional/required tags, a label-row counter, success messages, and `aria-describedby` wiring through a field context. `StudioSelect` keeps the native list but gains a currentColor chevron and identical focus/invalid edges. `StudioToggle` gets sm/md sizes and a spring thumb; `StudioColorInput` detects the format (HEX/RGB/RGBA/PINE/NAME), marks unparsable drafts, and supports Enter commit / Escape revert. New `StudioRange` (filled track from one custom property, value chip, `aria-valuetext`) and `StudioTextarea` (autosize, counter) complete the set. Ten new stories cover anatomy, states, smart actions, validation, select/toggle, color, range/textarea, keyboard/a11y, a live playground, and the contract.
 - **Watchlist: big price view + alert mini-modal.** The `!` row action expands a real big view: price, daily change, Prev close, spark, a **24h range bar** (low → high with the last price marked) and 24h volume (`base · quote`). Tickers now carry `high24h` / `low24h` / `volume24h` / `quoteVolume24h` from Binance REST + WS, OKX, Bybit, MEXC, and the mock walk. The alert popover gained the last-price chip, `Last` / `+1%` / `−1%` quick fills, a non-blocking “already above/below — fires on the next tick” hint, an explicit disabled state for invalid input, and a link to manage existing alerts on that symbol.
 - **Scripts panel: plot line type + Pine `display.*` targets.** Each plot row gains a line-type picker (solid / dotted / dashed / large dash) and a `display` control. `display` is the real Pine `plot(..., display=)` mask — the panel shows what the script declared (`Pine: all`), lets you override pane / Data Window / price-scale targets per plot, and resets back to the declaration; the override drives the chart apply, the Data Window, and the price-scale label without a re-run. Line type is explicitly an **AXIS platform override** (Pine `plot()` has no line-style argument), stored beside the script's own declaration and applied live via `setOverlayLineStyle`. Both survive re-runs (`plots[name].linestyle` / `.display`, `plots[name].pine` keeps the declaration). Helpers in `src/indicators/plot-prefs.ts`; covered by `tests/plot-prefs.test.ts`, `tests/store.test.ts`, and `e2e/scripts-plot-prefs.spec.ts`.
@@ -2336,7 +2341,108 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
+
+### 2026-11 (79 commits)
+
+#### Features
+
+- `afb8de3a` (2026-11-04) — feat(live): anchor the window at TradingView period boundaries
+- `3a23406b` (2026-11-04) — feat(live): anchor chart window and chunk engine depth
+- `dabf463e` (2026-11-04) — feat(studio): smart input system v2 with Storybook examples
+- `da76b50d` (2026-11-04) — feat(watchlist): daily-close Prev, big price view, alert modal polish
+- `b321a2fd` (2026-11-04) — feat(scripts): plot line type + display targets; fix width stepper
+- `5d53ded7` (2026-11-03) — feat(chart): footprint overlay (A1.3.2) with estimate-aware cells
+- `69c788d3` (2026-11-03) — feat(chart): footprint model, OHLCV approx, and binary row pack
+- `37246800` (2026-11-03) — feat(chart): multi-grid 6/8 with sibling hydrate and live mux
+- `020f8c02` (2026-11-03) — feat(theme): brand void/volt/signal packs, quiet borders, builtin candles
+- `32b85e01` (2026-11-03) — feat(ui): polish Studio Settings tabs and harden shortcut recorder
+- `f7910387` (2026-11-03) — feat(chart): generation readiness, live stream route, panel hairlines
+- `0bb2330c` (2026-11-02) — feat(vscode-axis-ide): polish AXIS panels and Copilot tool wiring
+- `abc5d27d` (2026-11-02) — feat(vscode-axis-ide): profiler gutter, debug chips, colors symbols logs, drop HPO
+- `0e7c9e98` (2026-11-02) — feat(vscode-axis-ide): sidebar studios for the six activity views
+- `bc2a0b0d` (2026-11-02) — feat(ui): open PYNE Agent from the module-bar AI button
+- `82c4c5fd` (2026-11-02) — feat(vscode-axis-ide): view polish, icons, micro-feedback, profiler
+- `01ff41af` (2026-11-02) — feat(vscode-axis-ide): PYNE icon, view context menus, on-save run
+- `796f2d04` (2026-11-02) — feat(vscode-axis-ide): polish Plugins studio, status menu, chart HUD
+- `196d93b5` (2026-11-02) — feat(ui): color the data-window close against the previous bar
+- `93966632` (2026-11-02) — feat(ui): show the last price on the mobile header
+- `57f664a1` (2026-11-02) — feat(ui): show an on-chart legend for visible on-chain series
+- `28ad1121` (2026-11-02) — feat(vscode-axis-ide): Plugins studio WebviewView with kind cards
+- `3894be8d` (2026-11-02) — feat(ui): show the editor shortcut on its topbar title
+- `0cf7b54f` (2026-11-02) — feat(ui): mark alert rows armed, recently fired, or disabled
+- `da119ab5` (2026-11-02) — feat(ui): show the chart grid as a glyph and name the matching layout
+- `617ee585` (2026-11-02) — feat(ui): draw a session sparkline on watchlist rows
+- `b64b6f53` (2026-11-02) — feat(ui): remember symbol recents and favorites
+- `2cc6d85f` (2026-11-02) — feat(vscode-axis-ide): per-kind plugin views and HOOX activity icon
+- `bfab4397` (2026-11-02) — feat(vscode-axis-ide): MCP/LM tools, pack, CI, NOTICE, Pyodide flag (Tasks 21–27)
+- `546431fe` (2026-11-02) — feat(vscode-axis-ide): MVP drawings, alerts, and watchlist quote (PR-08b/11)
+- `496b9adf` (2026-11-02) — feat(vscode-axis-ide): builtins, live tickets, delta resume, plugins (PR-09/10)
+- `2d3554e6` (2026-11-02) — feat(vscode-axis-ide): Results/Strategy panels + library TreeViews (PR-07/08)
+- `0f1c2947` (2026-11-02) — feat(vscode-axis-ide): HistoryClient + seriesKey datafeed fetch (PR-06b)
+- `260cab8a` (2026-11-02) — feat(vscode-axis-ide): RunOrchestrator + runScript on mock Pro /run (PR-06)
+- `b907f99f` (2026-11-02) — feat(plugin): ship PYNE Agent 0.1.8 + sync install script
+- `a209ba8d` (2026-11-02) — feat(vscode-axis-ide): Pro /run adapter, chart bus, results focus (PR-06)
+- `93b5d393` (2026-11-02) — feat(vscode-axis-ide): mock OHLCV chart.full paint + sibling openChart (PR-05)
+- `5baf7b2f` (2026-11-02) — feat(vscode-axis-ide): axis.chart CustomEditorProvider + CSP webview (PR-04)
+- `63304c23` (2026-11-02) — feat(vscode-axis-ide): SecretStorage for Worker/Pro API keys (PR-03)
+- `d1f246ee` (2026-11-02) — feat(vscode-axis-ide): add axis.webview.v1 protocol and coverage ratchet (PR-02)
+- `461dbed1` (2026-11-02) — feat(vscode-axis-ide): scaffold AXIS IDE extension package (PR-01)
+- `ff8f8155` (2026-11-01) — feat(perf): performance audit Phases 4–5 on development
+- `e9f8d6d9` (2026-11-01) — feat(perf): performance audit Phases 0–3 on development
+
+#### Fixes
+
+- `f99769b6` (2026-11-04) — fix(engines): keep known-good capabilities when /health fails
+- `9b7afec9` (2026-11-04) — fix(ui): fire StudioInput stepper callbacks once
+- `7bcd8781` (2026-11-04) — fix(indicators): invalidate the run cache on live appends
+- `bd2d2c81` (2026-11-04) — fix(watchlist): invalidate daily closes on source change
+- `53fdd063` (2026-11-04) — fix(chart): key the footprint layout cache on OHLCV
+- `367afd6f` (2026-11-04) — fix(indicators): clear stale declared plot meta on re-run
+- `b5425cda` (2026-11-04) — fix(drawings): convert polyline xloc.bar_index through the run axis
+- `51af8bd6` (2026-11-04) — fix(chart): respect hidden plots in overlay display/style setters
+- `900d8aba` (2026-11-04) — fix(ui): apply plot display overrides in the Data Window
+- `03fe4657` (2026-11-04) — fix(chart): scope the live window plan per chart slot
+- `d2d426be` (2026-11-04) — fix(store): pin the at-cap window reset policy
+- `2251637d` (2026-11-04) — fix(store): anchor the live window from untruncated history
+- `838ec465` (2026-11-04) — fix(data): break data-manager-source ↔ store import cycle
+- `518996a1` (2026-11-03) — fix(strategy): anchor bar_index to the run window (stable axis)
+- `1774feef` (2026-11-03) — fix(data): cold-start DSM when Data Manager cache is empty
+- `bdb4c1d8` (2026-11-02) — fix(vscode-axis-ide): drop double pane borders in webviews
+- `2413b647` (2026-11-02) — fix(vscode-axis-ide): hide TV logo, open chart beside, paint plots
+- `59d1752d` (2026-11-02) — fix(ui): take drawing-tool titles from the shortcut registry
+- `5c2cb035` (2026-11-02) — fix(vscode-axis-ide): address finish-review live, MCP, CSP, coverage bugs
+- `99d59e04` (2026-11-02) — fix(engine): stop /ws/live inbox from storming full snapshots
+- `3d26e366` (2026-11-02) — fix(pyodide): vendor numpy wheel and stop SPA HTML for missing assets
+- `76ab605e` (2026-11-01) — fix(indicators): keep catalog SMA adds after live epoch bumps
+- `2c11bab5` (2026-11-01) — fix(data/stream): heal live chart holes and rejoin released overlays
+- `e0a6ed44` (2026-11-01) — fix(indicators): never supersede catalog adds on live ticks
+- `ee2f4f64` (2026-11-01) — fix(chart): keep overlay SMA/Donchian aligned on live ticks
+
+#### Documentation
+
+- `4edddbcd` (2026-11-04) — docs(changelog): review remediation for 1774feef..afb8de3a
+- `82e87c02` (2026-11-02) — docs(changelog): note drawing chords, on-chain legend, mobile price, and close tone
+- `faf8c884` (2026-11-02) — docs(changelog): note the layout, alert, equity, and editor polish
+- `482c9c98` (2026-11-02) — docs(changelog): note Results/Strategy panels and library TreeViews
+
+#### Chores
+
+- `a5c9c4b5` (2026-11-04) — chore: extract AXIS IDE to hoox-sh/axis-ide-vsce
+- `c16dbacd` (2026-11-01) — chore(deps): pyodide PYNE wheel 0.6.29 + builtins sync
+- `d6a3f09d` (2026-11-01) — chore(release): AXIS 2.27.0
+
+#### Style
+
+- `a6b9f6af` (2026-11-02) — style(ui): align the equity curve with market color tokens
+- `7ec70034` (2026-11-02) — style(ui): calm shell hairlines and semantic market colors
+
+#### Other
+
+- `deea38b1` (2026-11-03) — merge(feat/vscode-axis-ide-pr01): land AXIS VS Code IDE on main
+- `d627bee7` (2026-11-01) — merge: development into main
 
 ### 2026-10 (399 commits)
 

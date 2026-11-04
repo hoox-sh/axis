@@ -27,10 +27,18 @@
  * @module ui/SystemLogs
  */
 
-import { type Component, For, Show, createEffect, createMemo, createSignal } from 'solid-js';
+import {
+  type Component,
+  For,
+  Show,
+  createEffect,
+  createMemo,
+  createSignal,
+  onCleanup,
+} from 'solid-js';
 import { store, setStore, persist, clearLogs, isPanelOpen } from '../store';
 import type { LogEntry } from '../store/types';
-import { downloadAxisDebugLog, isAxisDebug } from '../debug';
+import { downloadAxisDebugLog, isAxisDebug, onAxisDebugChange } from '../debug';
 import { Icons } from './icons';
 import { copyToClipboard } from './clipboard';
 
@@ -68,6 +76,9 @@ export const SystemLogs: Component = () => {
   const [copied, setCopied] = createSignal(false);
   const [sourceFilter, setSourceFilter] = createSignal('all');
   const [levelFilter, setLevelFilter] = createSignal('all');
+  /** Settings → Debug logs can flip the flag while this strip is mounted. */
+  const [debugOn, setDebugOn] = createSignal(isAxisDebug());
+  onCleanup(onAxisDebugChange((on) => setDebugOn(on)));
   let listRef: HTMLDivElement | undefined;
 
   /** Expanded body (collapsed shows last line only). */
@@ -87,7 +98,8 @@ export const SystemLogs: Component = () => {
     const src = sourceFilter();
     const lvl = levelFilter();
     return store.logs.filter(
-      (l) => (src === 'all' || (l.source || 'system') === src) && (lvl === 'all' || l.level === lvl),
+      (l) =>
+        (src === 'all' || (l.source || 'system') === src) && (lvl === 'all' || l.level === lvl),
     );
   });
 
@@ -163,11 +175,7 @@ export const SystemLogs: Component = () => {
             type="button"
             class="sc-btn sc-btn-ghost px-1.5 py-0.5 text-[10px] inline-flex items-center gap-1"
             onClick={toggleExpand}
-            title={
-              expanded()
-                ? 'Collapse system logs'
-                : 'Expand system logs'
-            }
+            title={expanded() ? 'Collapse system logs' : 'Expand system logs'}
             aria-expanded={expanded()}
             data-testid="axis-systemlogs-expand"
           >
@@ -176,11 +184,7 @@ export const SystemLogs: Component = () => {
             <span class="text-text-faint font-mono">
               ({filtered() ? `${visible().length}/${store.logs.length}` : store.logs.length})
             </span>
-            {expanded() ? (
-              <Icons.chevronDown size={12} />
-            ) : (
-              <Icons.chevronUp size={12} />
-            )}
+            {expanded() ? <Icons.chevronDown size={12} /> : <Icons.chevronUp size={12} />}
           </button>
 
           <Show when={expanded()}>
@@ -219,10 +223,16 @@ export const SystemLogs: Component = () => {
                 title="Click to expand"
                 onClick={toggleExpand}
               >
-                <span class={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${levelDot(entry().level)}`} />
+                <span
+                  class={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${levelDot(entry().level)}`}
+                />
                 <span class="text-text-faint shrink-0 tabular-nums">{formatTs(entry().ts)}</span>
-                <span class={`shrink-0 uppercase ${levelClass(entry().level)}`}>{entry().level}</span>
-                <span class="text-text-faint shrink-0 truncate max-w-[8ch]">{entry().source || 'system'}</span>
+                <span class={`shrink-0 uppercase ${levelClass(entry().level)}`}>
+                  {entry().level}
+                </span>
+                <span class="text-text-faint shrink-0 truncate max-w-[8ch]">
+                  {entry().source || 'system'}
+                </span>
                 <span class="truncate min-w-0">
                   {entry().message}
                   <Show when={(entry().count || 0) > 1}>
@@ -245,7 +255,7 @@ export const SystemLogs: Component = () => {
             </span>
           </Show>
 
-          <Show when={isAxisDebug()}>
+          <Show when={debugOn()}>
             <button
               type="button"
               class="sc-btn sc-btn-ghost px-1.5 py-0.5"

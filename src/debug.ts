@@ -6,18 +6,19 @@
 /**
  * AXIS debug mode — detailed chart-action and engine logs.
  *
- * Enable with `VITE_AXIS_DEBUG=1` (also `true` / `yes`) in `.env` or the
- * build environment. Alias: `VITE_DEBUG`. Vite inlines the value at build
- * time, so flipping it needs a restart of `bun run dev` / a rebuild.
+ * Two switches, either one turns logging on:
  *
- * Optional runtime overlay (no rebuild): `localStorage.setItem('axis.debug','1')`
- * then reload. The env flag wins when it is on. Existing process env vars
- * outrank `.env` files (same as the maintenance-mode flag).
+ * - **Settings → General → Debug logs** (persisted as `localStorage.axis.debug`,
+ *   no rebuild, takes effect immediately). `setAxisDebug()` writes it.
+ * - `VITE_AXIS_DEBUG=1` (also `true` / `yes`) in `.env` or the build
+ *   environment. Alias: `VITE_DEBUG`. Vite inlines the value at build time, so
+ *   flipping it needs a restart of `bun run dev` / a rebuild. The env flag wins
+ *   when it is on — the UI toggle then shows a locked-on state.
  *
  * Logs go to `console.debug` as `[axis:chart]` / `[axis:engine]` so DevTools
  * can filter them, and to a rotating localStorage ring (`axis.debug.log.0`…
- * `.3`, 64 KiB each). Download the ring as a `.log` from System Logs or
- * `window.__AXIS_DEBUG__.download()`. Forming-tick paths are sampled so a
+ * `.3`, 64 KiB each). Download the ring as a `.log` from System Logs, Settings,
+ * or `window.__AXIS_DEBUG__.download()`. Forming-tick paths are sampled so a
  * live feed cannot freeze the console or blow the quota.
  *
  * @module debug
@@ -32,6 +33,7 @@ import {
   formatAxisDebugLine,
   readAxisDebugLog,
 } from './debug-log';
+import { getItem, setFlag } from './utils/storage';
 
 export {
   AXIS_DEBUG_LOG_FILE_BYTES,
@@ -84,17 +86,8 @@ let storageMemo: boolean | null = null;
 
 function readStorageFlag(): boolean {
   if (storageMemo != null) return storageMemo;
-  try {
-    if (typeof localStorage === 'undefined') {
-      storageMemo = false;
-      return false;
-    }
-    storageMemo = envTruthy(localStorage.getItem(AXIS_DEBUG_STORAGE_KEY));
-    return storageMemo;
-  } catch {
-    storageMemo = false;
-    return false;
-  }
+  storageMemo = envTruthy(getItem(AXIS_DEBUG_STORAGE_KEY));
+  return storageMemo;
 }
 
 /** True when AXIS debug logging is on (env or `localStorage.axis.debug`). */
@@ -103,11 +96,64 @@ export function isAxisDebug(): boolean {
   return readStorageFlag();
 }
 
+/** True when the `.env` flag forces debug on (the UI toggle cannot turn it off). */
+export function isAxisDebugEnvForced(): boolean {
+  return readViteFlag();
+}
+
 /** Which switch turned debug on (env wins). */
 export function axisDebugSource(): AxisDebugSource {
   if (readViteFlag()) return 'env';
   if (readStorageFlag()) return 'storage';
   return 'off';
+}
+
+type AxisDebugListener = (on: boolean, source: AxisDebugSource) => void;
+
+const debugListeners = new Set<AxisDebugListener>();
+
+/**
+ * Subscribe to runtime debug-flag changes (the Settings toggle). Returns an
+ * unsubscribe function. Used so the UI can react without re-reading storage.
+ */
+export function onAxisDebugChange(listener: AxisDebugListener): () => void {
+  debugListeners.add(listener);
+  return () => {
+    debugListeners.delete(listener);
+  };
+}
+
+function notifyAxisDebugChange(): void {
+  const on = isAxisDebug();
+  const source = axisDebugSource();
+  for (const listener of debugListeners) {
+    try {
+      listener(on, source);
+    } catch {
+      /* a broken listener must not break logging */
+    }
+  }
+}
+
+/**
+ * Turn runtime debug logging on or off (Settings → Debug logs).
+ *
+ * Writes `localStorage.axis.debug`. Returns the effective state: when
+ * `VITE_AXIS_DEBUG` is on, turning it off here cannot silence logging, so
+ * `true` comes back and {@link isAxisDebugEnvForced} stays `true`.
+ */
+export function setAxisDebug(on: boolean): boolean {
+  setFlag(AXIS_DEBUG_STORAGE_KEY, on);
+  storageMemo = null;
+  const enabled = isAxisDebug();
+  if (enabled) announceAxisDebug();
+  notifyAxisDebugChange();
+  return enabled;
+}
+
+/** Flip the runtime flag and return the effective state (env can force it on). */
+export function toggleAxisDebug(): boolean {
+  return setAxisDebug(!readStorageFlag());
 }
 
 const lastSample = new Map<string, number>();
@@ -213,6 +259,10 @@ type AxisDebugHook = {
   clear: typeof clearAxisDebugLog;
   download: typeof downloadAxisDebugLog;
   stats: typeof axisDebugLogStats;
+  /** Effective state (env or the Settings toggle). */
+  enabled: () => boolean;
+  /** Same as the Settings toggle — `__AXIS_DEBUG__.set(true)`. */
+  set: (on: boolean) => boolean;
 };
 
 declare global {
@@ -229,17 +279,19 @@ function installDebugHook(): void {
       clear: clearAxisDebugLog,
       download: downloadAxisDebugLog,
       stats: axisDebugLogStats,
+      enabled: isAxisDebug,
+      set: setAxisDebug,
     };
   } catch {
     /* ignore */
   }
 }
 
-/** One-line boot banner. No-op when debug is off. */
+/** Install `window.__AXIS_DEBUG__` and, when debug is on, print the boot banner. */
 export function announceAxisDebug(): void {
+  installDebugHook();
   if (!isAxisDebug()) return;
   const source = axisDebugSource();
-  installDebugHook();
   try {
     console.info(
       `[axis:debug] chart/engine logging on (${source}) — console [axis: + rotating localStorage ${AXIS_DEBUG_LOG_PREFIX}*`,

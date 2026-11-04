@@ -357,6 +357,7 @@ export const App: Component = () => {
         page === 'wire' ||
         page === 'workers' ||
         page === 'plugins' ||
+        page === 'debug' ||
         page === 'settings'
       ) {
         openStudio(page);
@@ -707,6 +708,7 @@ export const App: Component = () => {
           onOpenWorkers={() => openStudio('workers')}
           onOpenArchitecture={() => openStudio('wire')}
           onOpenRuntime={() => openStudio('runtime')}
+          onOpenDebug={() => openStudio('debug')}
           onOpenStudio={openStudioHome}
         />
         {/* About AXIS — logo click / Help → About / command palette */}

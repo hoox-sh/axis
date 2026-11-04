@@ -7,7 +7,7 @@ tags: [code, studio, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-04T06:12:37Z
+  at: 2026-11-04T09:17:36Z
 sources:
   - id: tree
     resource: "src/ui/studio"
@@ -53,6 +53,7 @@ okf_lock: generated
 
 * [src/editor](/code/src/editor.md)
 * [src/ui](/code/src/ui.md)
+* [src/ui/debug](/code/src/ui/debug.md)
 * [src/ui/plugins](/code/src/ui/plugins.md)
 * [src/ui/runtime](/code/src/ui/runtime.md)
 * [src/ui/settings](/code/src/ui/settings.md)
@@ -64,6 +65,7 @@ okf_lock: generated
 * [src](/code/src.md)
 * [src/stories](/code/src/stories.md)
 * [src/ui](/code/src/ui.md)
+* [src/ui/debug](/code/src/ui/debug.md)
 * [src/ui/effects](/code/src/ui/effects.md)
 * [src/ui/extras](/code/src/ui/extras.md)
 * [src/ui/mobile](/code/src/ui/mobile.md)

@@ -16,6 +16,7 @@ import { WirePage } from '../wire/WirePage';
 import { SettingsPage } from '../settings/SettingsPage';
 import { WorkersPage } from '../workers/WorkersPage';
 import { PluginsPage } from '../plugins/PluginsPage';
+import { DebugPage } from '../debug/DebugPage';
 
 export function StudioHost(props: {
   open: boolean;
@@ -71,6 +72,9 @@ export function StudioHost(props: {
           getDoc={props.getDoc}
           setDoc={props.setDoc}
         />
+      </Show>
+      <Show when={props.page === 'debug'}>
+        <DebugPage onClose={props.onClose} />
       </Show>
     </AppPage>
   );
