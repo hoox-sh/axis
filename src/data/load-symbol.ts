@@ -317,19 +317,19 @@ export async function loadSymbolData(
         if (engineBars.length) {
           const bars = await closeTailToNow(engineBars, srcId, sym, iv, signal);
           if (!stillCurrent()) return false;
-          loadBars(bars, sym, iv, exchangeForSource(srcId));
+          const view = loadBars(bars, sym, iv, exchangeForSource(srcId));
           const manager = getManager();
-          if (manager) setDataToChart(bars, { fit: true });
+          if (manager) setDataToChart(view, { fit: true });
           setTelemetryState('source', 'open', {
             latencyMs: performance.now() - t0,
-            detail: `${bars.length} bars · ${label} (engine)`,
+            detail: `${view.length} bars · ${label} (engine)`,
             error: null,
           });
-          setStatus('ready', `Loaded ${bars.length} bars · ${source.name} (engine)`, {
+          setStatus('ready', `Loaded ${view.length} bars · ${source.name} (engine)`, {
             toast: false,
             source: 'data',
           });
-          announce(`Loaded ${bars.length} bars ${sym} ${iv}`);
+          announce(`Loaded ${view.length} bars ${sym} ${iv}`);
           await settleReadinessAfterBars(gen, stillCurrent, { symbol: sym, interval: iv, source: srcId });
           if (restartLiveAfter && stillCurrent()) {
             const streamId = store.live.streamId || defaultStreamForSource(srcId);
@@ -562,7 +562,6 @@ export async function loadSymbolData(
     // page-by-page until the target is covered — a single first page is what
     // left Reload stuck at 1000 bars.
     const target = clampHistoryBars(store.historyBars);
-    const chartCap = chartWindowLimit();
     const pageSize = Math.max(1, sourcePageLimit(srcId));
     const configs = store.pluginsConfig || {};
     const sourceCfg =
@@ -696,14 +695,13 @@ export async function loadSymbolData(
     if (!full.length) {
       throw new Error('Source returned no valid bars (empty / partial OHLCV / bad timestamps)');
     }
-    // Chart shows the rolling window (newest N); the dataset keeps `target`.
-    const painted = full.length > chartCap ? full.slice(full.length - chartCap) : full;
-
+    // The chart window (newest N, period-anchored) is enforced by `loadBars`;
+    // pass the full dataset so the anchor can reach past the base window.
     if (!stillCurrent()) return false;
 
     const exchange = exchangeForSource(srcId);
 
-    loadBars(painted, sym, iv, exchange);
+    const painted = loadBars(full, sym, iv, exchange);
     const manager = getManager();
     if (manager) {
       try {
@@ -785,10 +783,8 @@ export async function loadSymbolData(
         cached = await getDataset(srcId, sym, iv, chartLock());
       }
       if (cached.length && stillCurrent()) {
-        const cap = chartWindowLimit();
-        const view = cached.length > cap ? cached.slice(cached.length - cap) : cached;
         const exchange = exchangeForSource(srcId);
-        loadBars(view, sym, iv, exchange);
+        const view = loadBars(cached, sym, iv, exchange);
         const manager = getManager();
         if (manager) {
           try {

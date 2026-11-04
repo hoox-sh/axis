@@ -7,7 +7,7 @@
  * the ceiling. This is the TV-like alternative to sliding every candle.
  */
 
-import { beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import {
   appendBar,
   chartWindowCeiling,
@@ -18,6 +18,7 @@ import {
   store,
 } from '../src/store';
 import type { Bar } from '../src/store/types';
+import { _resetDsmOrchestratorForTests, paintDataset } from '../src/data/dsm-orchestrator';
 import { makeBars } from './fixtures/bars';
 
 const START = 1_700_000_000;
@@ -149,5 +150,39 @@ describe('anchored chart window', () => {
     last += STEP;
     expect(appendBar(tick(last))).toBe('slid');
     expect(store.bars).toHaveLength(5);
+  });
+});
+
+describe('anchored load through the DSM paint path', () => {
+  afterEach(() => {
+    _resetDsmOrchestratorForTests();
+  });
+
+  it('keeps the period-aligned head when the full dataset is painted', async () => {
+    const sunday = Date.UTC(2023, 10, 12, 0, 0, 0) / 1000; // Sun 12 Nov 2023 UTC
+    const monday = sunday + 1440 * 60;
+    setStore('bars', []);
+    setStore('rollingWindowBars', 1000);
+    // 2580 one-minute bars -> newest Monday 18:59; Monday 00:00 is 1140 bars back.
+    const view = await paintDataset('BTCUSDT', '1m', 'binance-rest', {
+      bars: makeBars(2580, sunday, 60),
+    });
+    expect(view).toHaveLength(1140);
+    expect(store.bars).toHaveLength(1140);
+    expect(store.bars[0]?.time).toBe(monday);
+    expect(chartWindowLimit()).toBe(1140);
+  });
+
+  it('falls back to the base window when the boundary is beyond the cap', async () => {
+    const sunday = Date.UTC(2023, 10, 12, 0, 0, 0) / 1000;
+    setStore('bars', []);
+    setStore('rollingWindowBars', 1000);
+    // Newest Monday 20:00 -> week start is 1200 bars back, at the ceiling.
+    const view = await paintDataset('BTCUSDT', '1m', 'binance-rest', {
+      bars: makeBars(2641, sunday, 60),
+    });
+    expect(view).toHaveLength(1000);
+    expect(store.bars).toHaveLength(1000);
+    expect(chartWindowLimit()).toBe(1000);
   });
 });

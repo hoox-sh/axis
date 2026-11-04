@@ -1337,14 +1337,15 @@ async function applyCachedToChartInner(
     loadWin.maxBars > 0
       ? Math.floor(loadWin.maxBars)
       : null;
-  const chartMax = Math.min(
-    explicit ?? chartWindowLimit(),
-    HISTORY_BARS_MAX,
-  );
-  const painted = bars.length > chartMax ? bars.slice(bars.length - chartMax) : bars;
+  const chartMax = explicit != null ? Math.min(explicit, HISTORY_BARS_MAX) : null;
+  // An explicit maxBars (dataset modal / job apply) bounds the paint. Otherwise
+  // the full dataset goes to `loadBars` so the period anchor can reach past the
+  // base Rolling window; `loadBars` enforces the window either way.
+  const input =
+    chartMax != null && bars.length > chartMax ? bars.slice(bars.length - chartMax) : bars;
 
   const exchange = exchangeForSource(srcId);
-  loadBars(painted, sym, iv, exchange);
+  const painted = loadBars(input, sym, iv, exchange);
   const manager = getManager();
   if (manager) {
     try {
@@ -1388,11 +1389,11 @@ export async function applyChartWindow(nextBars: number): Promise<boolean> {
   const bars = store.bars;
   if (!bars?.length) return false;
   const trimmed = bars.length > next ? bars.slice(bars.length - next) : bars;
-  loadBars(trimmed, sym, iv, store.exchange);
+  const view = loadBars(trimmed, sym, iv, store.exchange);
   const manager = getManager();
   if (manager) {
     try {
-      setDataToChart(trimmed, { fit: false, clearScriptState: false, clearMarkers: false });
+      setDataToChart(view, { fit: false, clearScriptState: false, clearMarkers: false });
     } catch {
       /* paint is best-effort */
     }

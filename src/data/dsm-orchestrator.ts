@@ -171,18 +171,24 @@ function repaintView(datasetBars: Bar[], sym: string, iv: string): Bar[] {
   return sliceToChartWindow(mergeLiveTail(view, live));
 }
 
-/** Paint bars onto chart + store (full refresh semantics). */
-function paintFull(bars: Bar[], sym: string, iv: string, srcId: string): void {
+/**
+ * Paint bars onto chart + store (full refresh semantics).
+ *
+ * `bars` is the **full** dataset; `loadBars` anchors + slices it and returns
+ * the painted window, which is what the chart gets. Returns that view.
+ */
+function paintFull(bars: Bar[], sym: string, iv: string, srcId: string): Bar[] {
   const exchange = exchangeForSource(srcId);
-  loadBars(bars, sym, iv, exchange);
+  const view = loadBars(bars, sym, iv, exchange);
   const manager = getManager();
   if (manager) {
     try {
-      setDataToChart(bars, { fit: true });
+      setDataToChart(view, { fit: true });
     } catch (err) {
       console.error('[dsm-orchestrator] setDataToChart failed:', err);
     }
   }
+  return view;
 }
 
 /** Throttled progressive repaint — extends the chart without viewport reset. */
@@ -311,9 +317,8 @@ export async function paintDataset(
   const { bars } = repairBars(raw, iv);
   if (!bars.length) return null;
 
-  const view = sliceForChart(bars);
+  const view = paintFull(bars, sym, iv, srcId);
   if (!view.length) return null;
-  paintFull(view, sym, iv, srcId);
   lastRepaintSig = `${view.length}|${view[0]?.time ?? 0}|${view[view.length - 1]?.time ?? 0}|${view[view.length - 1]?.close ?? 0}`;
   lastRepaintLen = view.length;
   lastRepaintFirst = view[0]?.time ?? 0;

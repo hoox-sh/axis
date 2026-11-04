@@ -3440,10 +3440,6 @@ export function mergeLiveTail(base: readonly Bar[], live: readonly Bar[]): Bar[]
 }
 
 /**
- * Replace chart history (full load). Bumps `chartDataGen` so ChartHost rebinds series data.
- * Persists symbol/interval/exchange; bars themselves are not written to localStorage.
- */
-/**
  * Update `store.bars` without bumping `chartDataGen` or persisting.
  * Used for DSM progressive slices so ChartHost does not re-fit the viewport.
  *
@@ -3459,7 +3455,26 @@ export function setBarsQuiet(bars: Bar[]) {
   });
 }
 
-export function loadBars(bars: Bar[], symbol: string, interval: string, exchange: string) {
+/**
+ * Replace chart history (full load). Bumps `chartDataGen` so ChartHost
+ * rebinds series data. Persists symbol/interval/exchange; bars themselves
+ * are not written to localStorage.
+ *
+ * Pass the **full** fetched / cached dataset: this is the only place that
+ * knows the anchored window (period boundary → base → growth ceiling) and
+ * slices to it. Returns the painted view so callers hand the chart exactly
+ * the bars the store holds.
+ *
+ * The period anchor can only reach past the base window when the dataset is
+ * longer than it — raise Settings → Historical bars above the Rolling window
+ * for TradingView-style extra bars.
+ */
+export function loadBars(
+  bars: Bar[],
+  symbol: string,
+  interval: string,
+  exchange: string,
+): Bar[] {
   // Full load = new anchored dataset. Reset before slicing so a previous
   // grown window cannot leak into the new symbol/timeframe.
   resetChartWindowPlan(bars, interval);
@@ -3488,6 +3503,7 @@ export function loadBars(bars: Bar[], symbol: string, interval: string, exchange
     }
   });
   persist();
+  return view;
 }
 
 /** Register an applied script on the chart; returns new indicator id. */
