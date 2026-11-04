@@ -185,6 +185,7 @@ Optional floating widgets under the topbar (`ui/extras/`, toggled from the **Ext
 
 - **Current price card** — live tick for the active symbol with trend tint over recent ticks.
 - **Price ticker band** — marquee of watchlist symbols (seamless loop). Options: speed, direction, show 24h change, item spacing, band height, font size, opacity. Draggable when enabled; vertical offset resets from the menu. Symbol seed defaults to the watchlist (capped at 20).
+- **Quote panel** — full quote sheet for the active symbol: a hero price with trend tint and a 24h change chip, a **24h range bar** marking the current price between the day low/high, day-open and 24h-volume tiles, last-bar **O/H/L/C** tiles, and tick-time / venue meta. The header shows the stream state (`open`, `idle`, …) and copies `SYMBOL price change` from the copy button.
 - **Time / Price panels** — float-only clock (`timebadge.ts`: local/UTC + bar-countdown prefix) and big-price readouts docked under the topbar.
 - State persists on `store.extras`; `anyExtraEnabled` drives the menu button state.
 

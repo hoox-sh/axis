@@ -4,7 +4,7 @@
  */
 import './setup';
 import { describe, expect, it } from 'bun:test';
-import { buildQuoteRows, displayedLastPrice } from '../src/ui/extras/quote';
+import { buildQuoteRows, displayedLastPrice, quoteStats } from '../src/ui/extras/quote';
 import { defaultPanelChromeMap, PANEL_META } from '../src/ui/panels/types';
 import { isPanelOpen, setPanelOpen, setStore } from '../src/store';
 
@@ -18,6 +18,31 @@ describe('displayedLastPrice', () => {
     expect(displayedLastPrice({ tickPrice: 110, barClose: 100, streamState: 'connecting' })).toBe(100);
     expect(displayedLastPrice({ tickPrice: 110, barClose: 100, streamState: 'degraded' })).toBe(100);
     expect(displayedLastPrice({ tickPrice: 110, barClose: 100 })).toBe(110);
+  });
+});
+
+describe('quoteStats', () => {
+  it('returns the numbers behind the hero and range bar', () => {
+    const dayStart = Math.floor(Date.UTC(2026, 9, 3) / 1000);
+    const bars = [
+      bar(dayStart + 60, 100, 102, 99, 101, 10),
+      bar(dayStart + 120, 101, 105, 100, 104, 20),
+    ];
+    const stats = quoteStats({
+      symbol: 'BTCUSDT',
+      venue: 'binance',
+      bars,
+      lastPrice: 104,
+      lastTickAt: null,
+      nowMs: Date.UTC(2026, 9, 3, 12, 0, 0),
+    });
+    expect(stats.price).toBe(104);
+    expect(stats.change).toBeCloseTo(4);
+    expect(stats.high24).toBe(105);
+    expect(stats.low24).toBe(99);
+    expect(stats.dayOpen).toBe(100);
+    expect(stats.volume24).toBe(30);
+    expect(stats.trend).toBe('up');
   });
 });
 

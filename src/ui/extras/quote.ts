@@ -85,20 +85,35 @@ export function formatTickTime(at: number | null): string {
   return `${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())} UTC`;
 }
 
-/** Build the quote sheet rows (always the same labels, in order). */
-export function buildQuoteRows(input: QuoteInput): QuoteRow[] {
+/** Numeric snapshot behind the quote sheet (hero, range bar, and rows). */
+export interface QuoteStats {
+  price: number;
+  trend: 'up' | 'down' | 'flat';
+  change: number;
+  high24: number;
+  low24: number;
+  dayOpen: number;
+  volume24: number;
+  last: Bar | null;
+}
+
+/** Compute the quote numbers once; rows and the panel hero share them. */
+export function quoteStats(input: QuoteInput): QuoteStats {
   const bars = Array.isArray(input.bars) ? input.bars : [];
-  const last = bars.length ? bars[bars.length - 1] : null;
+  const last = bars.length ? (bars[bars.length - 1] ?? null) : null;
   const price = Number.isFinite(input.lastPrice)
     ? input.lastPrice
-    : (last && Number.isFinite(last.close) ? (last as Bar).close : NaN);
+    : last && Number.isFinite(last.close)
+      ? last.close
+      : NaN;
   const trend = trendOverTicks(bars, 20);
-  const tone = trend === 'up' ? 'up' : trend === 'down' ? 'down' : 'flat';
 
   const now = new Date(input.nowMs ?? Date.now());
-  const dayStartSec = Math.floor(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) / 1000);
+  const dayStartSec = Math.floor(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) / 1000,
+  );
   const dayBars = bars.filter((b) => b && Number.isFinite(b.time) && b.time >= dayStartSec);
-  const dayOpen = dayBars.length ? dayBars[0]!.open : (last?.open ?? NaN);
+  const dayOpen = dayBars.length ? (dayBars[0]?.open ?? NaN) : (last?.open ?? NaN);
   let high24 = last?.high ?? NaN;
   let low24 = last?.low ?? NaN;
   if (dayBars.length) {
@@ -113,7 +128,7 @@ export function buildQuoteRows(input: QuoteInput): QuoteRow[] {
     if (high24 === -Infinity) high24 = NaN;
     if (low24 === Infinity) low24 = NaN;
   }
-  const vol24 = dayBars.length
+  const volume24 = dayBars.length
     ? dayBars.reduce((a, b) => a + (Number.isFinite(b.volume) ? (b.volume as number) : 0), 0)
     : (last?.volume ?? NaN);
 
@@ -121,24 +136,41 @@ export function buildQuoteRows(input: QuoteInput): QuoteRow[] {
     input.change24h !== undefined && Number.isFinite(input.change24h)
       ? input.change24h
       : Number.isFinite(price) && Number.isFinite(dayOpen) && dayOpen !== 0
-        ? ((price - (dayOpen as number)) / (dayOpen as number)) * 100
+        ? ((price - dayOpen) / dayOpen) * 100
         : NaN;
-  const changeText = Number.isFinite(change)
-    ? `${(change as number) >= 0 ? '+' : ''}${(change as number).toFixed(1)}%`
+
+  return { price, trend, change, high24, low24, dayOpen, volume24, last };
+}
+
+/** Build the quote sheet rows (always the same labels, in order). */
+export function buildQuoteRows(input: QuoteInput): QuoteRow[] {
+  const stats = quoteStats(input);
+  const changeText = Number.isFinite(stats.change)
+    ? `${stats.change >= 0 ? '+' : ''}${stats.change.toFixed(1)}%`
     : '—';
 
-  const ohlc = last
-    ? `${formatExtraPrice(last.open)} / ${formatExtraPrice(last.high)} / ${formatExtraPrice(last.low)} / ${formatExtraPrice(last.close)}`
+  const ohlc = stats.last
+    ? `${formatExtraPrice(stats.last.open)} / ${formatExtraPrice(stats.last.high)} / ${formatExtraPrice(stats.last.low)} / ${formatExtraPrice(stats.last.close)}`
     : '—';
 
   return [
-    { label: 'Price', value: `${formatExtraPrice(price)} ${trend === 'up' ? '▲' : trend === 'down' ? '▼' : '●'}`, tone },
-    { label: '24h Change', value: changeText, tone: Number.isFinite(change) ? ((change as number) >= 0 ? 'up' : 'down') : 'flat' },
-    { label: '24h High', value: formatExtraPrice(high24) },
-    { label: '24h Low', value: formatExtraPrice(low24) },
-    { label: 'Day Open', value: formatExtraPrice(dayOpen) },
+    {
+      label: 'Price',
+      value: `${formatExtraPrice(stats.price)} ${
+        stats.trend === 'up' ? '▲' : stats.trend === 'down' ? '▼' : '●'
+      }`,
+      tone: stats.trend,
+    },
+    {
+      label: '24h Change',
+      value: changeText,
+      tone: Number.isFinite(stats.change) ? (stats.change >= 0 ? 'up' : 'down') : 'flat',
+    },
+    { label: '24h High', value: formatExtraPrice(stats.high24) },
+    { label: '24h Low', value: formatExtraPrice(stats.low24) },
+    { label: 'Day Open', value: formatExtraPrice(stats.dayOpen) },
     { label: 'Last O/H/L/C', value: ohlc },
-    { label: 'Volume 24h', value: formatCompactVolume(vol24) },
+    { label: 'Volume 24h', value: formatCompactVolume(stats.volume24) },
     { label: 'Tick time', value: formatTickTime(input.lastTickAt) },
     { label: 'Venue', value: input.venue || '—' },
   ];
