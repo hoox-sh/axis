@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "tests"
-description: "tests contains alerts-engine.test.ts, alerts-form.test.ts, alerts-format.test.ts, and 340 more files."
+description: "tests contains alerts-engine.test.ts, alerts-form.test.ts, alerts-format.test.ts, and 341 more files."
 resource: "tests"
 tags: [code, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-04T03:05:19Z
+  at: 2026-11-04T06:11:19Z
 sources:
   - id: tree
     resource: "tests"
@@ -177,6 +177,7 @@ okf_lock: generated
 * `merge-datasets.test.ts`
 * `mexc-http.test.ts`
 * `mobile-header-quote.test.ts`
+* `module-init-order.test.ts`
 * `multiplex-engine-owned-paint.test.ts`
 * `multiplex-heavy-rerun.test.ts`
 * `multiplex-rerun.test.ts`
@@ -364,7 +365,7 @@ okf_lock: generated
 
 # Packages
 
-`@codemirror/language`, `@codemirror/state`, `@codemirror/view`, `bun:test`, `lightweight-charts`, `node:child_process`, `node:fs`, `node:os`, `node:path`, `node:url`, `solid-js`, `solid-js/store`
+`@codemirror/language`, `@codemirror/state`, `@codemirror/view`, `\.\.\/store`, `\.\.\/store\/index`, `bun:test`, `lightweight-charts`, `node:child_process`, `node:fs`, `node:os`, `node:path`, `node:url`, `solid-js`, `solid-js/store`
 
 # Depends on
 

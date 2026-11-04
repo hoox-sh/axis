@@ -369,7 +369,9 @@ export async function loadSymbolData(
         DATA_MANAGER_SOURCE_ID,
       } = await import('./data-manager-source');
 
-      let venueSrc = resolveDataManagerVenueSource();
+      let venueSrc = resolveDataManagerVenueSource(
+        store.live?.streamId || store.activePlugins?.stream || '',
+      );
       let cached: Bar[] = [];
       if (opts?.preferDataset !== false) {
         try {

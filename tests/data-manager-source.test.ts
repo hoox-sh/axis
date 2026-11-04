@@ -93,19 +93,11 @@ describe('data-manager source', () => {
     const { resolveDataManagerVenueSource } = await import(
       '../src/data/data-manager-source'
     );
-    const { setStore } = await import('../src/store');
     clearDataManagerSelection();
-    setStore('live', {
-      active: false,
-      needsRerun: false,
-      lastBarTime: 0,
-      streamId: 'okx-ws',
-      preferAfterLoad: false,
-      rerunOn: 'every-tick',
-    });
-    expect(resolveDataManagerVenueSource()).toBe('okx-rest');
+    expect(resolveDataManagerVenueSource('okx-ws')).toBe('okx-rest');
+    expect(resolveDataManagerVenueSource()).toBe('binance-rest');
     setDataManagerSelection('bybit-rest', 'ETHUSDT', '1m');
-    expect(resolveDataManagerVenueSource()).toBe('bybit-rest');
+    expect(resolveDataManagerVenueSource('okx-ws')).toBe('bybit-rest');
   });
 
   it('fetchHistorical returns cached bars', async () => {

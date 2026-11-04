@@ -373,7 +373,9 @@ export async function coldStartDataset(
   if (!sym) return null;
 
   if (srcId === DATA_MANAGER_SOURCE_ID) {
-    srcId = resolveDataManagerVenueSource();
+    srcId = resolveDataManagerVenueSource(
+      store.live?.streamId || store.activePlugins?.stream || '',
+    );
     try {
       setDataManagerSelection(srcId, sym, iv);
     } catch {

@@ -27,7 +27,6 @@
  */
 
 import type { Bar } from '../store/types';
-import { store } from '../store';
 import {
   barsCacheKey,
   listCachedSeries,
@@ -39,9 +38,16 @@ import {
 import { getDataset } from './dataset-store';
 import { defaultSourceForStream, providerDatasetLock } from './provider';
 import { repairBars } from './dataset-validate';
+import { DATA_MANAGER_SOURCE_ID } from './source-ids';
 
-/** Source plugin id registered in the sources catalog. */
-export const DATA_MANAGER_SOURCE_ID = 'data-manager';
+/**
+ * Source plugin id registered in the sources catalog.
+ *
+ * Re-exported from the leaf `data/source-ids` module so module-scope readers
+ * (e.g. `expand-cache`'s offline-source set) never resolve it through this
+ * module while it is still initializing.
+ */
+export { DATA_MANAGER_SOURCE_ID };
 
 export interface DataManagerSelection extends BarLoadWindow {
   sourceId: string;
@@ -96,10 +102,17 @@ export function getDataManagerSelection(): DataManagerSelection | null {
 /**
  * Resolve the underlying venue REST source for Data Manager auto-backfill.
  *
- * Order: explicit Dataset manager selection → live stream's paired REST →
+ * Order: explicit Dataset manager selection → the live stream's paired REST →
  * `binance-rest`.
+ *
+ * The live stream id is a parameter rather than a `store` read: this module is
+ * imported by `expand-cache`, which the store graph loads, so importing the
+ * store here closes an import cycle (see `data/source-ids`). Callers pass
+ * `store.live?.streamId || store.activePlugins?.stream`.
+ *
+ * @param streamId - Live stream plugin id (`okx-ws`, `binance-ws`, …)
  */
-export function resolveDataManagerVenueSource(): string {
+export function resolveDataManagerVenueSource(streamId?: string): string {
   const sel = selection?.sourceId ? String(selection.sourceId).trim() : '';
   if (
     sel &&
@@ -109,8 +122,7 @@ export function resolveDataManagerVenueSource(): string {
   ) {
     return sel;
   }
-  const streamId = String(store.live?.streamId || store.activePlugins?.stream || '').trim();
-  return defaultSourceForStream(streamId);
+  return defaultSourceForStream(String(streamId || '').trim());
 }
 
 export interface ResolvedCacheSeries {

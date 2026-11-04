@@ -64,7 +64,7 @@ beforeEach(async () => {
 
 describe('data-manager cold start', () => {
   it('resolveDataManagerVenueSource follows binance-ws → binance-rest', () => {
-    expect(resolveDataManagerVenueSource()).toBe('binance-rest');
+    expect(resolveDataManagerVenueSource('binance-ws')).toBe('binance-rest');
   });
 
   it('loadSymbolData auto-starts DSM and paints without No cached dataset', async () => {

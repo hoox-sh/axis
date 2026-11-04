@@ -42,10 +42,8 @@ import { findBarGaps, intervalToSec } from './bars-gaps';
 import { errMessage } from '../utils/errors';
 import { BoundedMap } from '../utils/bounded-map';
 import { linkedAbortBudget } from '../utils/fetch-timeout';
-import {
-  DATA_MANAGER_SOURCE_ID,
-  getDataManagerSelection,
-} from './data-manager-source';
+import { getDataManagerSelection } from './data-manager-source';
+import { DATA_MANAGER_SOURCE_ID } from './source-ids';
 
 /** Soft cap on REST pages when closing the gap to now (avoid runaway). */
 const MAX_EXPAND_PAGES = 40;
@@ -101,11 +99,7 @@ const livePendingBars = new BoundedMap<string, PendingLiveBar>(LIVE_PENDING_MEMO
 });
 
 /** Sources that cannot fill a network gap. */
-const OFFLINE_SOURCES = new Set([
-  'csv-upload',
-  'data-manager',
-  DATA_MANAGER_SOURCE_ID,
-]);
+const OFFLINE_SOURCES = new Set(['csv-upload', DATA_MANAGER_SOURCE_ID]);
 
 export interface ExpandCacheResult {
   bars: Bar[];

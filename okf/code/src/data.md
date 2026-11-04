@@ -7,7 +7,7 @@ tags: [code, data]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-04T00:13:39Z
+  at: 2026-11-04T06:11:19Z
 sources:
   - id: tree
     resource: "src/data"
@@ -40,6 +40,7 @@ okf_lock: generated
 * `parse-bars.ts` — barTimeToPineMs, barsForPine, normalizeBarTime, normalizeHistoricalBars, parseOhlcvFile, parseOhlcvText, repairOhlc, sanitizeBar, sanitizeStreamBar, toUnixSeconds
 * `provider.ts` — DEFAULT_PROVIDER, MARKET_LABELS, ProviderAuthMode, ProviderGateway, ProviderMarket, ProviderSession, ProviderVenue, asProviderMarket, buildProviderSession, defaultSourceForStream, defaultStreamForSource, formatProviderLabel
 * `signed-fetch.ts` — SignedFetchOpts, fetchSignedJson, hasSignedCreds
+* `source-ids.ts` — DATA_MANAGER_SOURCE_ID
 * `symbol-catalog.ts` — FALLBACK_MAJORS, SymbolCatalogResult, SymbolEntry, SymbolVenue, compactPair, filterSymbols, listQuotes, loadSymbolCatalog, resolveSymbolVenue, venueLabel
 * `symbol-exchange.ts` — exchangeForSource, normalizeLoadSymbol
 * `symbol-normalize.ts` — normalizeLoadSymbol
