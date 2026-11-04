@@ -2,7 +2,7 @@
 
 # Concepts
 
-* [e2e](e2e.md) - e2e contains charts.ts, colors.spec.ts, critical.spec.ts, and 11 more files.
+* [e2e](e2e.md) - e2e contains charts.ts, colors.spec.ts, critical.spec.ts, and 12 more files.
 * [scripts](scripts.md) - scripts contains audit-graph.py, capture-fix.ts, capture-screenshots.ts, and 8 more files.
 * [src](src.md) - Vite / PWA entry — mounts Solid into app.
 * [tests](tests.md) - tests contains alerts-engine.test.ts, alerts-form.test.ts, alerts-format.test.ts, and 346 more files.

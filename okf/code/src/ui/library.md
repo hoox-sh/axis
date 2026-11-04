@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/ui/library"
-description: "src/ui/library contains CloudForm.tsx, GitForm.tsx, cards.tsx, and 2 more files."
+description: "src/ui/library contains CloudForm.tsx, GitForm.tsx, cards.tsx, and 4 more files."
 resource: "src/ui/library"
 tags: [code, library, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-21T18:24:00Z
+  at: 2026-11-04T11:47:26Z
 sources:
   - id: tree
     resource: "src/ui/library"
@@ -22,7 +22,13 @@ okf_lock: generated
 * `GitForm.tsx` — GitSettingsForm
 * `cards.tsx` — BuiltinScriptCard, LibraryScriptCard
 * `commands.ts` — LibraryCommand, noteLibraryCommand, takeLibraryCommand
-* `format.ts` — SCRIPT_KIND_FILTERS, ScriptKindFilter, ScriptSort, countScriptsByKind, filterPersonalScripts, kindChipClass, scriptKindOf, scriptMatchesQuery, shortRev, sortPersonalScripts, visibleKindFilters
+* `format.ts` — HighlightPart, SCRIPT_KIND_FILTERS, ScriptKindFilter, ScriptSort, countScriptsByKind, filterPersonalScripts, kindChipClass, pinnedFirst, scriptKindOf, scriptMatchesQuery, shortRev, sortPersonalScripts
+* `highlight.tsx` — Highlight
+* `prefs.ts` — LIBRARY_FAVORITES_KEY, LIBRARY_RECENT_KEY, LIBRARY_RECENT_MAX, clearRecentBuiltinIds, noteRecentBuiltinId, readFavoriteIds, readRecentBuiltinIds, toggleFavoriteId, writeFavoriteIds
+
+# Other files
+
+* `library.css`
 
 # Packages
 
@@ -36,6 +42,7 @@ okf_lock: generated
 * [src/storage](/code/src/storage.md)
 * [src/store](/code/src/store.md)
 * [src/ui](/code/src/ui.md)
+* [src/utils](/code/src/utils.md)
 
 # Used by
 

@@ -32,7 +32,7 @@ export function shortRev(rev?: string): string {
 
 export type ScriptKindFilter = 'all' | ScriptKind;
 
-export type ScriptSort = 'stored' | 'recent';
+export type ScriptSort = 'stored' | 'recent' | 'name';
 
 export function scriptKindOf(item: ScriptMeta): ScriptKind {
   return (item.scriptKind as ScriptKind) || 'unknown';
@@ -55,7 +55,10 @@ export function scriptMatchesQuery(item: ScriptMeta, query: string): boolean {
     .filter(Boolean)
     .join(' ')
     .toLowerCase();
-  return q.split(/\s+/).filter(Boolean).every((part) => hay.includes(part));
+  return q
+    .split(/\s+/)
+    .filter(Boolean)
+    .every((part) => hay.includes(part));
 }
 
 export function filterPersonalScripts(
@@ -70,19 +73,31 @@ export function filterPersonalScripts(
 }
 
 /** `stored` keeps the storage plugin's order. `recent` is newest `updatedAt` first. */
-export function sortPersonalScripts(
-  items: readonly ScriptMeta[],
-  mode: ScriptSort,
-): ScriptMeta[] {
+export function sortPersonalScripts(items: readonly ScriptMeta[], mode: ScriptSort): ScriptMeta[] {
+  if (mode === 'name') {
+    return [...items].sort((a, b) => a.name.localeCompare(b.name));
+  }
   if (mode !== 'recent') return [...items];
   return [...items].sort(
     (a, b) => (b.updatedAt || 0) - (a.updatedAt || 0) || a.name.localeCompare(b.name),
   );
 }
 
-export function countScriptsByKind(
-  items: readonly ScriptMeta[],
-): Record<ScriptKindFilter, number> {
+/**
+ * Best-effort title from the editor document: `indicator("X")`,
+ * `strategy(title="X")`, `library("X")` (and legacy `study`). Used to prefill
+ * the save form — never written unless the user saves.
+ */
+export function suggestScriptName(doc: string): string {
+  const source = String(doc ?? '');
+  const match =
+    /^\s*(?:indicator|strategy|library|study)\s*\(\s*(?:title\s*=\s*)?["']([^"'\n]+)["']/m.exec(
+      source,
+    );
+  return match?.[1]?.trim() ?? '';
+}
+
+export function countScriptsByKind(items: readonly ScriptMeta[]): Record<ScriptKindFilter, number> {
   const counts = {
     all: items.length,
     indicator: 0,
@@ -111,4 +126,51 @@ export function visibleKindFilters(
   const filters = [...SCRIPT_KIND_FILTERS];
   if (counts.unknown > 0) filters.push({ id: 'unknown', label: 'Other' });
   return filters.filter((f) => f.id === 'all' || counts[f.id] > 0);
+}
+
+/** Stable partition: pinned ids first, then the existing order. */
+export function pinnedFirst<T extends { id: string }>(
+  items: readonly T[],
+  ids: readonly string[],
+): T[] {
+  if (!ids.length) return [...items];
+  const pinned = new Set(ids);
+  const first: T[] = [];
+  const rest: T[] = [];
+  for (const item of items) {
+    if (pinned.has(item.id)) first.push(item);
+    else rest.push(item);
+  }
+  return [...first, ...rest];
+}
+
+export type HighlightPart = { text: string; match: boolean };
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Split `text` into plain and matching segments for the search query.
+ * Every whitespace-separated term is matched case-insensitively; a query
+ * with no terms returns one plain segment.
+ */
+export function splitHighlight(text: string, query: string): HighlightPart[] {
+  const source = String(text ?? '');
+  const terms = String(query ?? '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (!source || terms.length === 0) return [{ text: source, match: false }];
+
+  const pattern = new RegExp(`(${terms.map(escapeRegExp).join('|')})`, 'gi');
+  const parts: HighlightPart[] = [];
+  let last = 0;
+  for (const match of source.matchAll(pattern)) {
+    const at = match.index ?? 0;
+    if (at > last) parts.push({ text: source.slice(last, at), match: false });
+    parts.push({ text: match[0], match: true });
+    last = at + match[0].length;
+  }
+  if (last < source.length) parts.push({ text: source.slice(last), match: false });
+  return parts.length ? parts : [{ text: source, match: false }];
 }

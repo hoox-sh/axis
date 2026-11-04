@@ -73,6 +73,16 @@ Manager → **Script Library**:
 
 Status line: backend · remote · branch · connected · count.
 
+### Panel conventions
+
+The docked panel is tuned for a 300px column:
+
+- **Search** — `/` focuses it, `Esc` clears it, and every match is highlighted in card titles and descriptions.
+- **Built-in tab** — star a card to pin it into a **Pinned** group; category headers collapse (counts update). Recently applied built-ins appear in a **Recent** strip for one-click re-apply, and an applied script shows an `on chart` chip.
+- **Personal tab** — sort **Recent / Name / Storage**, filter by kind, and pinned scripts float to the top. Each card has **Load**, version **history**, and a **···** row for **Copy Pine**, **Duplicate**, and **Delete**.
+- **Save composer** — prefills the name from the editor's `indicator()` / `strategy()` / `library()` title; description and **Publish library** live under *Description · publish*.
+- **Import / export** — compact icon actions next to the storage picker; both also appear in the Personal empty state.
+
 ### Built-in studies (always in the app)
 
 Original AXIS Pine catalog — apply from **Scripts → Built-in** or ⌘K **Add built-in script…**. Not TradingView® templates. See [Built-in scripts](/axis/docs/enduser/guides/builtin-scripts).
@@ -160,6 +170,10 @@ Token scopes: GitHub `contents:write`; GitLab `api` or `write_repository`.
 | Path | Role |
 | --- | --- |
 | `src/ui/ScriptLibraryPanel.tsx` | UI |
+| `src/ui/library/cards.tsx` | Built-in / personal cards + version history |
+| `src/ui/library/prefs.ts` | Pinned scripts + recent built-ins (localStorage) |
+| `src/ui/library/format.ts` | Search, sort, highlight, name suggestion |
+| `src/ui/library/library.css` | Panel design (command bar, cards, empty states) |
 | `src/storage/service.ts` | Facade |
 | `src/storage/local.ts` | IDB |
 | `src/storage/cloud.ts` | Worker API |

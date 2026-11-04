@@ -4,6 +4,11 @@
 /**
  * Script Library rows: personal scripts (with version history) and built-ins.
  *
+ * Cards are deliberately compact — the panel docks at 300px by default. The
+ * kind-colored rail, hover lift, and icon actions carry the visual hierarchy;
+ * secondary personal actions (copy / duplicate / delete) live behind one
+ * expandable row so the primary **Load** stays obvious.
+ *
  * @module ui/library/cards
  */
 
@@ -22,6 +27,7 @@ import { Icons } from '../icons';
 import { HooxLoader } from '../HooxLoader';
 import { announce } from '../sr-announce';
 import { kindChipClass, scriptKindOf, shortRev } from './format';
+import { Highlight } from './highlight';
 
 function MetaChip(props: {
   class?: string;
@@ -31,12 +37,48 @@ function MetaChip(props: {
 }) {
   return (
     <span
-      class={`inline-flex items-center px-1 py-px border font-mono text-[9px] tracking-wide rounded-[var(--radius-chip)] ${props.class || ''}`}
+      class={`ax-library-chip ${props.class || ''}`}
       title={props.title}
       data-testid={props.testId}
     >
       {props.children}
     </span>
+  );
+}
+
+/** Small square icon action shared by both card kinds. */
+function CardAction(props: {
+  label: string;
+  title: string;
+  testId?: string;
+  disabled?: boolean;
+  tone?: 'default' | 'primary' | 'danger';
+  pressed?: boolean;
+  class?: string;
+  onClick: () => void;
+  children: JSX.Element;
+}) {
+  return (
+    <button
+      type="button"
+      class={`ax-library-action${props.class ? ` ${props.class}` : ''}`}
+      classList={{
+        'is-primary': props.tone === 'primary',
+        'is-danger': props.tone === 'danger',
+        'is-on': !!props.pressed,
+      }}
+      title={props.title}
+      aria-label={props.label}
+      aria-pressed={props.pressed ?? undefined}
+      disabled={props.disabled}
+      onClick={(e) => {
+        e.stopPropagation();
+        props.onClick();
+      }}
+      data-testid={props.testId}
+    >
+      {props.children}
+    </button>
   );
 }
 
@@ -46,14 +88,26 @@ export const LibraryScriptCard: Component<{
   busy?: boolean;
   /** Active storage implements listVersions / readAtRevision. */
   versioning?: boolean;
+  /** Search query for title / description highlighting. */
+  query?: string;
+  /** Pinned in the library panel. */
+  favorite?: boolean;
+  onToggleFavorite?: () => void;
+  /** Currently loaded into the editor (dot on the title row). */
+  active?: boolean;
   onLoad: () => void;
   onDelete: () => void;
+  /** Copy the Pine source to the clipboard. */
+  onCopy?: () => void;
+  /** Clone the script under a new id. */
+  onDuplicate?: () => void;
   /** Load a historical revision into the editor (does not write remote). */
   onLoadVersion?: (doc: { content: string; name: string; libraryId: string }) => void;
   /** After restore (new tip commit) — refresh list / optional editor reload. */
   onRestored?: (meta: ScriptMeta) => void;
 }> = (props) => {
   const [historyOpen, setHistoryOpen] = createSignal(false);
+  const [moreOpen, setMoreOpen] = createSignal(false);
   const [historyBusy, setHistoryBusy] = createSignal(false);
   const [historyErr, setHistoryErr] = createSignal('');
   const [versions, setVersions] = createSignal<ScriptVersion[]>([]);
@@ -144,122 +198,176 @@ export const LibraryScriptCard: Component<{
 
   return (
     <li
-      class="flex flex-col gap-1 border border-border-soft bg-bg-elev px-2 min-h-8 py-1.5 rounded text-left"
+      class="ax-library-card"
+      classList={{ 'is-active': !!props.active }}
       data-testid="axis-library-script-card"
       data-script-kind={kind()}
       data-pine-version={props.item.pineVersion || undefined}
     >
-      <div class="flex items-start gap-2">
-        <div class="flex-1 min-w-0">
-          <div class="text-text font-medium truncate text-[12px]" title={props.item.name}>
-            {props.item.name}
-          </div>
-          <div
-            class="flex flex-wrap items-center gap-1 mt-1"
-            data-testid="axis-library-script-meta"
-          >
-            <MetaChip
-              class={`uppercase ${kindChipClass(kind())}`}
-              title={
-                kind() === 'strategy'
-                  ? 'Pine strategy()'
-                  : kind() === 'library'
-                    ? 'Pine library()'
-                    : kind() === 'indicator'
-                      ? 'Pine indicator()'
-                      : 'Script kind not detected'
-              }
-              testId="axis-library-kind"
-            >
-              {scriptKindShort(kind())}
-              <span class="sr-only"> {scriptKindLabel(kind())}</span>
-            </MetaChip>
-            <Show when={versionLabel()}>
-              <MetaChip
-                class="border-border/50 text-text-dim"
-                title={`Pine //@version=${props.item.pineVersion}`}
-                testId="axis-library-version"
-              >
-                {versionLabel()}
-              </MetaChip>
-            </Show>
-            <Show when={revLabel()}>
-              <MetaChip
-                class="border-border/40 text-text-faint"
-                title={`Revision ${props.item.revision}`}
-                testId="axis-library-git-rev"
-              >
-                {revLabel()}
-              </MetaChip>
-            </Show>
-            <Show when={updatedRel()}>
-              <span
-                class="font-mono text-[9px] text-text-faint truncate"
-                title={updatedAbs() ? `Last updated ${updatedAbs()}` : 'Last updated'}
-                data-testid="axis-library-updated"
-              >
-                · {updatedRel()}
-              </span>
-            </Show>
-          </div>
-          <Show when={props.item.description || props.item.path}>
-            <div
-              class="text-text-faint font-mono text-[9px] truncate mt-0.5"
-              title={props.item.description || props.item.path || props.item.id}
-            >
-              {props.item.description || props.item.path}
-            </div>
+      <span class="ax-library-card-rail" aria-hidden="true" />
+      <div class="ax-library-card-main">
+        <div class="ax-library-card-title-row">
+          <span class="ax-library-card-title" title={props.item.name}>
+            <Highlight text={props.item.name} query={props.query} />
+          </span>
+          <Show when={props.active}>
+            <span class="ax-library-live-dot" title="Loaded in the editor" aria-hidden="true" />
           </Show>
         </div>
+        <div class="ax-library-card-meta" data-testid="axis-library-script-meta">
+          <MetaChip
+            class={`ax-library-chip--kind ${kindChipClass(kind())}`}
+            title={
+              kind() === 'strategy'
+                ? 'Pine strategy()'
+                : kind() === 'library'
+                  ? 'Pine library()'
+                  : kind() === 'indicator'
+                    ? 'Pine indicator()'
+                    : 'Script kind not detected'
+            }
+            testId="axis-library-kind"
+          >
+            {scriptKindShort(kind())}
+            <span class="sr-only"> {scriptKindLabel(kind())}</span>
+          </MetaChip>
+          <Show when={versionLabel()}>
+            <MetaChip
+              class="ax-library-chip--muted"
+              title={`Pine //@version=${props.item.pineVersion}`}
+              testId="axis-library-version"
+            >
+              {versionLabel()}
+            </MetaChip>
+          </Show>
+          <Show when={revLabel()}>
+            <MetaChip
+              class="ax-library-chip--muted"
+              title={`Revision ${props.item.revision}`}
+              testId="axis-library-git-rev"
+            >
+              {revLabel()}
+            </MetaChip>
+          </Show>
+          <Show when={updatedRel()}>
+            <span
+              class="ax-library-updated"
+              title={updatedAbs() ? `Last updated ${updatedAbs()}` : 'Last updated'}
+              data-testid="axis-library-updated"
+            >
+              {updatedRel()}
+            </span>
+          </Show>
+        </div>
+        <Show when={props.item.description || props.item.path}>
+          <div
+            class="ax-library-card-desc"
+            title={props.item.description || props.item.path || props.item.id}
+          >
+            <Highlight text={props.item.description || props.item.path || ''} query={props.query} />
+          </div>
+        </Show>
+        <Show when={props.item.tags?.length}>
+          <div class="ax-library-tags">
+            <For each={(props.item.tags ?? []).slice(0, 3)}>
+              {(tag) => <span class="ax-library-tag">{tag}</span>}
+            </For>
+          </div>
+        </Show>
+      </div>
+      <div class="ax-library-card-actions">
+        <Show when={props.onToggleFavorite}>
+          <CardAction
+            label={props.favorite ? `Unpin ${props.item.name}` : `Pin ${props.item.name}`}
+            title={props.favorite ? 'Unpin from the top of the library' : 'Pin to the top'}
+            pressed={!!props.favorite}
+            class="ax-library-star"
+            onClick={() => props.onToggleFavorite?.()}
+          >
+            <Icons.favorite size={12} />
+          </CardAction>
+        </Show>
         <Show when={props.versioning}>
-          <button
-            type="button"
-            class={`sc-btn sc-btn-ghost sc-btn-icon px-1.5 flex-shrink-0 ${historyOpen() ? 'is-active' : ''}`}
+          <CardAction
+            label={`Version history for ${props.item.name}`}
             title="Version history"
-            aria-pressed={historyOpen()}
-            aria-expanded={historyOpen()}
-            aria-label={`Version history for ${props.item.name}`}
+            pressed={historyOpen()}
             disabled={props.busy}
             onClick={toggleHistory}
-            data-testid="axis-library-history"
+            testId="axis-library-history"
           >
             <Icons.clock size={13} />
-          </button>
+          </CardAction>
         </Show>
-        <button
-          type="button"
-          class="sc-btn sc-btn-ghost px-1.5 text-[10px] flex-shrink-0"
+        <CardAction
+          label={`Load ${props.item.name} into editor`}
           title="Load into editor"
-          aria-label={`Load ${props.item.name} into editor`}
+          tone="primary"
           disabled={props.busy}
           onClick={() => props.onLoad()}
-          data-testid="axis-library-load"
+          testId="axis-library-load"
         >
-          Load
-        </button>
-        <button
-          type="button"
-          class="sc-btn sc-btn-ghost px-1.5 flex-shrink-0"
-          title="Delete"
-          aria-label={`Delete ${props.item.name}`}
-          disabled={props.busy}
-          onClick={() => props.onDelete()}
-          data-testid="axis-library-delete"
-        >
-          <Icons.x size={13} />
-        </button>
+          <Icons.editor size={13} />
+        </CardAction>
+        <Show when={props.onCopy || props.onDuplicate || props.onDelete}>
+          <CardAction
+            label={`More actions for ${props.item.name}`}
+            title="More actions"
+            pressed={moreOpen()}
+            disabled={props.busy}
+            onClick={() => setMoreOpen((v) => !v)}
+            testId="axis-library-more"
+          >
+            <Icons.menu size={13} />
+          </CardAction>
+        </Show>
       </div>
 
-      <Show when={historyOpen() && props.versioning}>
-        <div
-          class="mt-1 border-t border-border/50 pt-1.5 space-y-1"
-          data-testid="axis-library-history-panel"
-        >
-          <div class="flex items-center justify-between gap-2">
-            <span class="text-[9px] uppercase tracking-wider text-text-dim">Version history</span>
+      <Show when={moreOpen()}>
+        <div class="ax-library-more" data-testid="axis-library-more-row">
+          <Show when={props.onCopy}>
             <button
               type="button"
-              class="sc-btn sc-btn-ghost text-[9px] px-1 py-0.5 inline-flex items-center gap-1"
+              class="ax-library-more-btn"
+              disabled={props.busy}
+              onClick={() => props.onCopy?.()}
+              data-testid="axis-library-copy"
+            >
+              <Icons.copy size={11} /> Copy Pine
+            </button>
+          </Show>
+          <Show when={props.onDuplicate}>
+            <button
+              type="button"
+              class="ax-library-more-btn"
+              disabled={props.busy}
+              onClick={() => props.onDuplicate?.()}
+              data-testid="axis-library-duplicate"
+            >
+              <Icons.plus size={11} /> Duplicate
+            </button>
+          </Show>
+          <button
+            type="button"
+            class="ax-library-more-btn is-danger"
+            disabled={props.busy}
+            onClick={() => props.onDelete()}
+            data-testid="axis-library-delete"
+          >
+            <Icons.trash size={11} /> Delete
+          </button>
+        </div>
+      </Show>
+
+      <Show when={historyOpen() && props.versioning}>
+        <div class="ax-library-history" data-testid="axis-library-history-panel">
+          <div class="ax-library-history-head">
+            <span class="ax-library-history-title">
+              <Icons.clock size={11} /> Version history
+            </span>
+            <button
+              type="button"
+              class="ax-library-more-btn"
               disabled={historyBusy()}
               onClick={() => void loadHistory()}
               title="Refresh version list"
@@ -270,50 +378,47 @@ export const LibraryScriptCard: Component<{
             </button>
           </div>
           <Show when={historyErr()}>
-            <p class="text-red font-mono text-[9px] m-0" role="alert">
+            <p class="ax-library-history-error" role="alert">
               {historyErr()}
             </p>
           </Show>
           <Show when={!historyBusy() && versions().length === 0 && !historyErr()}>
-            <p class="text-text-faint text-[9px] m-0">No versions found for this script.</p>
+            <p class="ax-library-history-empty">No versions found for this script.</p>
           </Show>
           <Show when={historyBusy() && versions().length === 0}>
-            <div class="flex items-center gap-1.5 text-text-faint text-[9px] py-1">
+            <div class="ax-library-history-empty">
               <HooxLoader size="xs" /> Loading versions…
             </div>
           </Show>
-          <ul class="flex flex-col gap-0.5 m-0 p-0 list-none">
+          <ul class="ax-library-history-list">
             <For each={versions()}>
               {(v) => (
                 <li
-                  class="flex items-start gap-1.5 px-1 py-1 rounded-[var(--radius-chip)] hover:bg-bg/60"
+                  class="ax-library-history-row"
                   data-testid="axis-library-history-row"
                   data-sha={v.sha}
                 >
-                  <div class="flex-1 min-w-0">
-                    <div class="flex flex-wrap items-center gap-1 font-mono text-[9px]">
-                      <span class="text-accent" title={v.sha}>
+                  <div class="ax-library-history-main">
+                    <div class="ax-library-history-meta">
+                      <span class="ax-library-history-sha" title={v.sha}>
                         {v.shortSha}
                       </span>
-                      <span
-                        class="text-text-faint"
-                        title={new Date(v.committedAt).toLocaleString()}
-                      >
+                      <span title={new Date(v.committedAt).toLocaleString()}>
                         {formatScriptUpdatedAt(v.committedAt)}
                       </span>
                       <Show when={v.author}>
-                        <span class="text-text-faint truncate max-w-[8rem]" title={v.author}>
+                        <span class="ax-library-history-author" title={v.author}>
                           · {v.author}
                         </span>
                       </Show>
                     </div>
-                    <div class="text-[10px] text-text-dim truncate" title={v.message}>
+                    <div class="ax-library-history-msg" title={v.message}>
                       {v.message}
                     </div>
                   </div>
                   <button
                     type="button"
-                    class="sc-btn sc-btn-ghost px-1 py-0.5 text-[9px] flex-shrink-0"
+                    class="ax-library-more-btn"
                     title="Load this revision into the editor (does not write storage)"
                     aria-label={`Open ${props.item.name} at ${v.shortSha}`}
                     disabled={!!actionSha() || props.busy}
@@ -324,7 +429,7 @@ export const LibraryScriptCard: Component<{
                   </button>
                   <button
                     type="button"
-                    class="sc-btn sc-btn-ghost px-1 py-0.5 text-[9px] flex-shrink-0"
+                    class="ax-library-more-btn"
                     title="Restore as the current library version"
                     aria-label={`Restore ${props.item.name} to ${v.shortSha}`}
                     disabled={!!actionSha() || props.busy}
@@ -351,84 +456,96 @@ export const BuiltinScriptCard: Component<{
   applying?: boolean;
   /** A chart script with this title is already applied (Apply re-runs it). */
   applied?: boolean;
+  /** Pinned to the top of the catalog. */
+  favorite?: boolean;
+  onToggleFavorite?: () => void;
+  /** Search query for title / description highlighting. */
+  query?: string;
   onApply: () => void;
   onEdit: () => void;
 }> = (props) => (
   <li
-    class="flex flex-col gap-1 border border-border-soft bg-bg-elev px-2 min-h-8 py-1.5 rounded text-left"
+    class="ax-library-card"
+    classList={{ 'is-applied': !!props.applied }}
     data-testid="axis-library-builtin-card"
     data-builtin-id={props.item.id}
     data-script-kind={props.item.kind}
     data-applied={props.applied ? 'true' : undefined}
   >
-    <div class="flex items-start gap-2">
-      <div class="flex-1 min-w-0">
-        <div class="text-text font-medium truncate text-[12px]" title={props.item.title}>
-          {props.item.title}
-        </div>
-        <div class="flex flex-wrap items-center gap-1 mt-1" data-testid="axis-library-builtin-meta">
-          <MetaChip
-            class={`uppercase ${kindChipClass(props.item.kind)}`}
-            title={props.item.kind === 'strategy' ? 'Pine strategy()' : 'Pine indicator()'}
-            testId="axis-library-builtin-kind"
+    <span class="ax-library-card-rail" aria-hidden="true" />
+    <div class="ax-library-card-main">
+      <div class="ax-library-card-title-row">
+        <span class="ax-library-card-title" title={props.item.title}>
+          <Highlight text={props.item.title} query={props.query} />
+        </span>
+        <Show when={props.applied}>
+          <span
+            class="ax-library-applied"
+            title="Already on the chart — Apply re-runs it with fresh bars"
+            data-testid="axis-library-builtin-applied"
           >
-            {scriptKindShort(props.item.kind)}
-            <span class="sr-only"> {scriptKindLabel(props.item.kind)}</span>
-          </MetaChip>
-          <MetaChip class="border-border/50 text-text-dim" testId="axis-library-builtin-category">
-            {builtinCategoryLabel(props.item.category)}
-          </MetaChip>
-          <MetaChip
-            class="border-border/40 text-text-faint"
-            title={
-              props.item.overlay
-                ? 'Plots on the price chart (overlay=true)'
-                : 'Plots in its own sub-pane (overlay=false)'
-            }
-          >
-            {props.item.overlay ? 'overlay' : 'pane'}
-          </MetaChip>
-          <Show when={props.applied}>
-            <MetaChip
-              class="border-accent/40 text-accent"
-              title="Already on the chart — Apply re-runs it with fresh bars"
-              testId="axis-library-builtin-applied"
-            >
-              applied
-            </MetaChip>
-          </Show>
-        </div>
-        <Show when={props.item.description}>
-          <div
-            class="text-text-faint font-mono text-[9px] truncate mt-0.5"
-            title={props.item.description}
-          >
-            {props.item.description}
-          </div>
+            on chart
+          </span>
         </Show>
       </div>
-      <button
-        type="button"
-        class="sc-btn sc-btn-ghost px-1.5 text-[10px] flex-shrink-0"
+      <div class="ax-library-card-meta" data-testid="axis-library-builtin-meta">
+        <MetaChip
+          class={`ax-library-chip--kind ${kindChipClass(props.item.kind)}`}
+          title={props.item.kind === 'strategy' ? 'Pine strategy()' : 'Pine indicator()'}
+          testId="axis-library-builtin-kind"
+        >
+          {scriptKindShort(props.item.kind)}
+          <span class="sr-only"> {scriptKindLabel(props.item.kind)}</span>
+        </MetaChip>
+        <MetaChip class="ax-library-chip--muted" testId="axis-library-builtin-category">
+          {builtinCategoryLabel(props.item.category)}
+        </MetaChip>
+        <span
+          class="ax-library-updated"
+          title={
+            props.item.overlay
+              ? 'Plots on the price chart (overlay=true)'
+              : 'Plots in its own sub-pane (overlay=false)'
+          }
+        >
+          {props.item.overlay ? 'overlay' : 'pane'}
+        </span>
+      </div>
+      <div class="ax-library-card-desc" title={props.item.description}>
+        <Highlight text={props.item.description} query={props.query} />
+      </div>
+    </div>
+    <div class="ax-library-card-actions">
+      <Show when={props.onToggleFavorite}>
+        <CardAction
+          label={props.favorite ? `Unpin ${props.item.title}` : `Pin ${props.item.title}`}
+          title={props.favorite ? 'Unpin from the top of the catalog' : 'Pin to the top'}
+          pressed={!!props.favorite}
+          class="ax-library-star"
+          onClick={() => props.onToggleFavorite?.()}
+        >
+          <Icons.favorite size={12} />
+        </CardAction>
+      </Show>
+      <CardAction
+        label={`Edit ${props.item.title} in the editor`}
         title="Open in editor (fork into a personal script)"
-        aria-label={`Edit ${props.item.title} in the editor`}
         disabled={props.busy}
         onClick={() => props.onEdit()}
-        data-testid="axis-library-builtin-edit"
+        testId="axis-library-builtin-edit"
       >
-        Edit
-      </button>
-      <button
-        type="button"
-        class="sc-btn sc-btn-ghost px-1.5 text-[10px] flex-shrink-0"
-        title="Run onto the chart now"
-        aria-label={`Apply ${props.item.title} to the chart`}
+        <Icons.pencil size={12} />
+      </CardAction>
+      <CardAction
+        label={`Apply ${props.item.title} to the chart`}
+        title={props.applied ? 'Apply again with fresh bars' : 'Run onto the chart now'}
+        tone="primary"
         disabled={props.busy}
         onClick={() => props.onApply()}
-        data-testid="axis-library-builtin-apply"
+        testId="axis-library-builtin-apply"
       >
-        {props.applying ? '…' : 'Apply'}
-      </button>
+        {props.applying ? <HooxLoader size="xs" /> : <Icons.play size={12} />}
+      </CardAction>
     </div>
   </li>
 );

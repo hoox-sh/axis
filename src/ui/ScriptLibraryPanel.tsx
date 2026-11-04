@@ -88,6 +88,7 @@ import {
   applyBuiltinScript,
   builtinCategoryLabel,
   filterBuiltinScripts,
+  getBuiltinScript,
   listBuiltinCategories,
   type BuiltinScript,
 } from '../indicators/builtins';
@@ -95,18 +96,27 @@ import { Icons } from './icons';
 import { HooxLoader } from './HooxLoader';
 import { FloatableShell } from './panels/FloatableShell';
 import { announce, announceError } from './sr-announce';
+import { copyToClipboard } from './clipboard';
 import { BuiltinScriptCard, LibraryScriptCard } from './library/cards';
 import { CloudSettingsForm } from './library/CloudForm';
 import { takeLibraryCommand, type LibraryCommand } from './library/commands';
-import { ScField } from './Field';
 import {
   countScriptsByKind,
   filterPersonalScripts,
+  pinnedFirst,
   sortPersonalScripts,
+  suggestScriptName,
   visibleKindFilters,
   type ScriptKindFilter,
   type ScriptSort,
 } from './library/format';
+import {
+  clearRecentBuiltinIds,
+  noteRecentBuiltinId,
+  readFavoriteIds,
+  readRecentBuiltinIds,
+  toggleFavoriteId,
+} from './library/prefs';
 import { GitSettingsForm } from './library/GitForm';
 
 function cloudCfg(): { endpoint: string; apiKey: string } {
@@ -119,7 +129,7 @@ function saveCloudCfg(endpoint: string, apiKey: string) {
 
 function gitCfg(): GitConfig {
   const pc = store.pluginsConfig || {};
-  const c = (pc[pluginKey('storage', 'git')] || pc['git'] || {}) as Partial<GitConfig>;
+  const c = (pc[pluginKey('storage', 'git')] || pc.git || {}) as Partial<GitConfig>;
   return { ...DEFAULT_GIT_CONFIG, ...c };
 }
 
@@ -163,6 +173,12 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
   const [statusLine, setStatusLine] = createSignal('');
   const [cloudEndpoint, setCloudEndpoint] = createSignal(cloudCfg().endpoint);
   const [cloudKey, setCloudKey] = createSignal(cloudCfg().apiKey);
+  const [favoriteIds, setFavoriteIds] = createSignal<string[]>(readFavoriteIds());
+  const [recentIds, setRecentIds] = createSignal<string[]>(readRecentBuiltinIds());
+  const [collapsedGroups, setCollapsedGroups] = createSignal<ReadonlySet<string>>(new Set());
+  const [detailsOpen, setDetailsOpen] = createSignal(false);
+  const [activeScriptId, setActiveScriptId] = createSignal('');
+  const [storageConnected, setStorageConnected] = createSignal(true);
 
   const g0 = gitCfg();
   const [gitProvider, setGitProvider] = createSignal<'github' | 'gitlab'>(g0.provider);
@@ -184,6 +200,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
   let oauthAbort: AbortController | null = null;
   let fileInput: HTMLInputElement | undefined;
   let findInput: HTMLInputElement | undefined;
+  let nameInput: HTMLInputElement | undefined;
 
   const runLibraryCommand = (cmd: LibraryCommand) => {
     if (cmd === 'find') {
@@ -201,6 +218,18 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
   };
 
   onMount(() => {
+    // `/` focuses the library search while the panel is mounted. Ignore when
+    // typing in any field so the shortcut never eats a literal slash.
+    const onSlash = (e: KeyboardEvent) => {
+      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
+      e.preventDefault();
+      findInput?.focus();
+    };
+    window.addEventListener('keydown', onSlash);
+    onCleanup(() => window.removeEventListener('keydown', onSlash));
+
     if (!props.commands) return;
     const queued = takeLibraryCommand();
     if (queued) runLibraryCommand(queued);
@@ -251,6 +280,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
         /* published catalog optional */
       }
       const st = await getStorageStatus();
+      setStorageConnected(st.connected !== false);
       const parts = [
         backend(),
         st.remote,
@@ -291,12 +321,18 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
   const kindCounts = createMemo(() => countScriptsByKind(items()));
   const kindFilters = createMemo(() => visibleKindFilters(kindCounts()));
   const personalShown = createMemo(() =>
-    sortPersonalScripts(filterPersonalScripts(items(), query(), kind()), sort()),
+    pinnedFirst(
+      sortPersonalScripts(filterPersonalScripts(items(), query(), kind()), sort()),
+      favoriteIds(),
+    ),
   );
+
+  const favoriteSet = createMemo(() => new Set(favoriteIds()));
+  const isFavorite = (id: string) => favoriteSet().has(id);
 
   /** Built-ins grouped by category in catalog order, filtered by the shared search. */
   const builtinGroups = createMemo(() => {
-    const filtered = filterBuiltinScripts(query());
+    const filtered = filterBuiltinScripts(query()).filter((s) => !favoriteSet().has(s.id));
     const groups: { category: string; label: string; items: BuiltinScript[] }[] = [];
     for (const category of listBuiltinCategories()) {
       const inCat = filtered.filter((s) => s.category === category);
@@ -305,7 +341,21 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
     }
     return groups;
   });
-  const builtinCount = createMemo(() => builtinGroups().reduce((n, g) => n + g.items.length, 0));
+  /** Pinned built-ins get their own group at the top of the catalog. */
+  const pinnedBuiltins = createMemo(() =>
+    filterBuiltinScripts(query()).filter((s) => favoriteSet().has(s.id)),
+  );
+  /** Quick re-apply strip — hidden while searching or when everything is pinned. */
+  const recentBuiltins = createMemo(() => {
+    if (query().trim()) return [];
+    const out: BuiltinScript[] = [];
+    for (const id of recentIds()) {
+      const item = getBuiltinScript(id);
+      if (item && !favoriteSet().has(id)) out.push(item);
+    }
+    return out;
+  });
+  const builtinCount = createMemo(() => filterBuiltinScripts(query()).length);
   /** Chart scripts by title — powers the “applied” chip on builtin cards. */
   const appliedTitles = createMemo(() => new Set(store.scripts.map((s) => s.name)));
   const otherCatalog = createMemo(() => {
@@ -341,6 +391,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
       });
       setName('');
       setDesc('');
+      setActiveScriptId('');
       const msg = isGit() ? `Committed and saved ${n}` : `Saved ${n}`;
       setStatus('ready', isGit() ? `Committed & saved "${n}" to git` : `Saved "${n}"`);
       announce(msg);
@@ -384,6 +435,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
       const doc = await readScript(id);
       props.setDoc?.(doc.content, doc.name, doc.id);
       props.onLoaded?.(doc, doc.content);
+      setActiveScriptId(doc.id);
       setStatus('ready', `Loaded "${doc.name}"`);
       announce(`Loaded ${doc.name}`);
       appendLog('ok', `Loaded library script ${doc.name}`, 'library');
@@ -401,6 +453,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
     setError('');
     try {
       await applyBuiltinScript(b.id);
+      setRecentIds(noteRecentBuiltinId(b.id));
       setStatus('ready', `Applied built-in "${b.title}"`);
       announce(`Applied ${b.title}`);
       appendLog('ok', `Applied built-in script ${b.title}`, 'library');
@@ -415,6 +468,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
 
   const onEditBuiltin = (b: BuiltinScript) => {
     props.setDoc?.(b.code, b.title);
+    setActiveScriptId('');
     setStatus('ready', `Opened built-in "${b.title}" (save to keep it)`);
     announce(`Opened ${b.title} in the editor`);
     appendLog('info', `Opened built-in script ${b.title} in editor`, 'library');
@@ -425,6 +479,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
     setBusy(true);
     try {
       await removeScript(id);
+      if (activeScriptId() === id) setActiveScriptId('');
       announce(`Deleted ${scriptName}`);
       await refresh();
     } catch (e: unknown) {
@@ -432,6 +487,72 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
     } finally {
       setBusy(false);
     }
+  };
+
+  const onToggleFavorite = (id: string) => {
+    setFavoriteIds(toggleFavoriteId(id, favoriteIds()));
+  };
+
+  const onClearRecent = () => {
+    setRecentIds(clearRecentBuiltinIds());
+    announce('Cleared recent built-ins');
+  };
+
+  const toggleGroup = (id: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const onCopyScript = async (item: ScriptMeta) => {
+    try {
+      const doc = await readScript(item.id);
+      if (await copyToClipboard(doc.content)) {
+        setStatus('ready', `Copied Pine from "${item.name}"`);
+        announce(`Copied ${item.name} source`);
+      } else {
+        announceError('Could not copy script');
+      }
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const onDuplicateScript = async (item: ScriptMeta) => {
+    setBusy(true);
+    setError('');
+    try {
+      const doc = await readScript(item.id);
+      const copyName = `${item.name} copy`;
+      await writeScript({
+        id: `s_${Date.now().toString(36)}`,
+        name: copyName,
+        description: item.description,
+        content: doc.content,
+      });
+      setStatus('ready', `Duplicated "${item.name}" as "${copyName}"`);
+      announce(`Created ${copyName}`);
+      await refresh();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** Prefill the save name from the editor's `indicator()` / `strategy()` title. */
+  const onNameFocus = () => {
+    if (name().trim()) return;
+    const suggested = suggestScriptName(props.getDoc?.() ?? '');
+    if (suggested) setName(suggested);
+  };
+
+  const editorLineCount = () => {
+    const doc = props.getDoc?.() ?? '';
+    return doc ? doc.split('\n').length : 0;
   };
 
   const onExport = async () => {
@@ -613,133 +734,263 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
     );
   };
 
+  const builtinCard = (b: BuiltinScript) => (
+    <BuiltinScriptCard
+      item={b}
+      busy={!!applyingBuiltin() || busy()}
+      applying={applyingBuiltin() === b.id}
+      applied={appliedTitles().has(b.title)}
+      favorite={isFavorite(b.id)}
+      onToggleFavorite={() => onToggleFavorite(b.id)}
+      query={query()}
+      onApply={() => void onApplyBuiltin(b)}
+      onEdit={() => onEditBuiltin(b)}
+    />
+  );
+
+  const focusSaveName = () => {
+    queueMicrotask(() => {
+      nameInput?.focus();
+      nameInput?.select();
+    });
+  };
+
   return (
-    <div class="flex flex-col gap-2 text-[12px]" aria-busy={busy()}>
-      <div data-testid="axis-library-find" class="flex flex-col gap-1">
-        <input
-          ref={findInput}
-          type="search"
-          class="axis-search sc-input h-7 min-h-7 text-[11px] placeholder:text-text-faint"
-          placeholder="Find across scripts… (rsi, macd, name)"
-          aria-label="Find across scripts"
-          value={query()}
-          onInput={(e) => setQuery(e.currentTarget.value)}
-          data-testid="axis-library-builtin-search"
-          autocomplete="off"
-          spellcheck={false}
-        />
+    <div class="ax-library flex flex-col gap-2 text-[12px]" aria-busy={busy()}>
+      {/* ── Sticky command bar ─────────────────────────────────────── */}
+      <div class="ax-library-toolbar">
+        <div class="ax-library-search">
+          <Icons.search size={13} />
+          <input
+            ref={findInput}
+            type="search"
+            class="ax-library-search-input"
+            placeholder="Find scripts… (rsi, macd, name)"
+            aria-label="Find across scripts"
+            value={query()}
+            onInput={(e) => setQuery(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape' && query()) {
+                e.preventDefault();
+                setQuery('');
+              }
+            }}
+            data-testid="axis-library-builtin-search"
+            autocomplete="off"
+            spellcheck={false}
+          />
+          <Show when={query()} fallback={<kbd class="ax-library-kbd">/</kbd>}>
+            <button
+              type="button"
+              class="ax-library-search-clear"
+              aria-label="Clear search"
+              title="Clear search (Esc)"
+              onClick={() => {
+                setQuery('');
+                findInput?.focus();
+              }}
+            >
+              <Icons.x size={11} />
+            </button>
+          </Show>
+        </div>
+
+        <div class="ax-library-tabs" role="tablist" aria-label="Script library">
+          <button
+            type="button"
+            id={`${uid}-tab-builtin`}
+            role="tab"
+            aria-selected={tab() === 'builtin'}
+            aria-controls={`${uid}-panel-builtin`}
+            class="ax-library-tab"
+            classList={{ 'is-on': tab() === 'builtin' }}
+            onClick={() => setTab('builtin')}
+            data-testid="axis-library-tab-builtin"
+          >
+            <Icons.library size={12} />
+            Builtin
+            <span class="ax-library-tab-count">
+              {query().trim() ? builtinCount() : BUILTIN_SCRIPTS.length}
+            </span>
+          </button>
+          <button
+            type="button"
+            id={`${uid}-tab-personal`}
+            role="tab"
+            aria-selected={tab() === 'personal'}
+            aria-controls={`${uid}-panel-personal`}
+            class="ax-library-tab"
+            classList={{ 'is-on': tab() === 'personal' }}
+            onClick={() => setTab('personal')}
+            data-testid="axis-library-tab-personal"
+          >
+            <Icons.folder size={12} />
+            Personal
+            <span class="ax-library-tab-count">
+              {query().trim() || kind() !== 'all' ? personalShown().length : items().length}
+            </span>
+          </button>
+        </div>
+
         <Show when={otherCatalog()}>
           {(hint) => (
             <button
               type="button"
-              class="sc-btn sc-btn-ghost self-start text-[10px] h-6 min-h-6 px-1.5"
+              class="ax-library-other"
               onClick={() => setTab(hint().next)}
+              title={`Show the ${hint().next} tab`}
             >
               Also {hint().label}
+              <Icons.arrowRight size={11} />
             </button>
           )}
         </Show>
       </div>
 
-      <div
-        class="flex gap-1 border-b border-border pb-1"
-        role="tablist"
-        aria-label="Script library"
-      >
-        <button
-          type="button"
-          id={`${uid}-tab-builtin`}
-          role="tab"
-          aria-selected={tab() === 'builtin'}
-          aria-controls={`${uid}-panel-builtin`}
-          class={`sc-btn sc-btn-ghost text-[11px] px-2 h-7 min-h-7 ${tab() === 'builtin' ? 'is-active' : ''}`}
-          onClick={() => setTab('builtin')}
-          data-testid="axis-library-tab-builtin"
-        >
-          Builtin ({query().trim() ? builtinCount() : BUILTIN_SCRIPTS.length})
-        </button>
-        <button
-          type="button"
-          id={`${uid}-tab-personal`}
-          role="tab"
-          aria-selected={tab() === 'personal'}
-          aria-controls={`${uid}-panel-personal`}
-          class={`sc-btn sc-btn-ghost text-[11px] px-2 h-7 min-h-7 ${tab() === 'personal' ? 'is-active' : ''}`}
-          onClick={() => setTab('personal')}
-          data-testid="axis-library-tab-personal"
-        >
-          Personal ({query().trim() || kind() !== 'all' ? personalShown().length : items().length})
-        </button>
-      </div>
-
       <Show when={error()}>
-        <p class="text-red font-mono text-[12px] m-0" role="alert">
+        <p class="ax-library-error" role="alert">
           {error()}
         </p>
       </Show>
 
+      {/* ── Builtin ────────────────────────────────────────────────── */}
       <Show when={tab() === 'builtin'}>
         <div
-          class="flex flex-col gap-2"
+          class="ax-library-panel"
           role="tabpanel"
           id={`${uid}-panel-builtin`}
           aria-labelledby={`${uid}-tab-builtin`}
           data-testid="axis-library-builtin-list"
         >
+          <Show when={recentBuiltins().length > 0}>
+            {/* biome-ignore lint/a11y/useSemanticElements: compact recent chip strip; fieldset default styles break the panel toolbar */}
+            <div class="ax-library-recent" role="group" aria-label="Recently applied built-ins">
+              <span class="ax-library-recent-label">
+                <Icons.clock size={10} /> Recent
+              </span>
+              <div class="ax-library-recent-chips">
+                <For each={recentBuiltins()}>
+                  {(b) => (
+                    <button
+                      type="button"
+                      class="ax-library-recent-chip"
+                      title={`Apply ${b.title} again`}
+                      onClick={() => void onApplyBuiltin(b)}
+                    >
+                      <Icons.play size={9} />
+                      {b.title}
+                    </button>
+                  )}
+                </For>
+              </div>
+              <button
+                type="button"
+                class="ax-library-recent-clear"
+                title="Clear recent built-ins"
+                aria-label="Clear recent built-ins"
+                onClick={onClearRecent}
+              >
+                <Icons.x size={10} />
+              </button>
+            </div>
+          </Show>
+
           <Show
             when={builtinCount() > 0}
             fallback={
-              <div class="axis-empty-state text-[12px] text-text-dim py-2">
-                No built-ins match “{query()}”
+              <div class="ax-library-empty">
+                <span class="ax-library-empty-icon">
+                  <Icons.search size={18} />
+                </span>
+                <p class="ax-library-empty-title">No built-ins match “{query()}”</p>
+                <p class="ax-library-empty-sub">
+                  Try a shorter term, a kind (rsi), or a category (volume).
+                </p>
+                <button
+                  type="button"
+                  class="sc-btn sc-btn-ghost ax-library-empty-btn"
+                  onClick={() => setQuery('')}
+                >
+                  Clear search
+                </button>
               </div>
             }
           >
+            <Show when={pinnedBuiltins().length > 0}>
+              <section class="ax-library-group" aria-label="Pinned">
+                <button
+                  type="button"
+                  class="ax-library-group-head"
+                  aria-expanded={!collapsedGroups().has('pinned')}
+                  onClick={() => toggleGroup('pinned')}
+                >
+                  <Icons.chevronDown
+                    size={12}
+                    class={`ax-library-chevron${collapsedGroups().has('pinned') ? '' : ' is-open'}`}
+                  />
+                  <Icons.favorite size={11} class="ax-library-group-star" />
+                  <span class="ax-library-group-title">Pinned</span>
+                  <span class="ax-library-group-count">{pinnedBuiltins().length}</span>
+                </button>
+                <Show when={!collapsedGroups().has('pinned')}>
+                  <ul class="ax-library-list">
+                    <For each={pinnedBuiltins()}>{(b) => builtinCard(b)}</For>
+                  </ul>
+                </Show>
+              </section>
+            </Show>
+
             <For each={builtinGroups()}>
               {(group) => (
-                <section class="flex flex-col gap-1" aria-label={group.label}>
-                  <h3 class="sc-section-title m-0">
-                    {group.label}{' '}
-                    <span class="font-mono font-normal normal-case tracking-normal text-text-faint">
-                      ({group.items.length})
-                    </span>
-                  </h3>
-                  <ul class="flex flex-col gap-1 w-full text-left items-stretch m-0 p-0 list-none">
-                    <For each={group.items}>
-                      {(b) => (
-                        <BuiltinScriptCard
-                          item={b}
-                          busy={!!applyingBuiltin() || busy()}
-                          applying={applyingBuiltin() === b.id}
-                          applied={appliedTitles().has(b.title)}
-                          onApply={() => void onApplyBuiltin(b)}
-                          onEdit={() => onEditBuiltin(b)}
-                        />
-                      )}
-                    </For>
-                  </ul>
+                <section class="ax-library-group" aria-label={group.label}>
+                  <button
+                    type="button"
+                    class="ax-library-group-head"
+                    aria-expanded={!collapsedGroups().has(group.category)}
+                    onClick={() => toggleGroup(group.category)}
+                  >
+                    <Icons.chevronDown
+                      size={12}
+                      class={`ax-library-chevron${
+                        collapsedGroups().has(group.category) ? '' : ' is-open'
+                      }`}
+                    />
+                    <span class="ax-library-group-title">{group.label}</span>
+                    <span class="ax-library-group-count">{group.items.length}</span>
+                  </button>
+                  <Show when={!collapsedGroups().has(group.category)}>
+                    <ul class="ax-library-list">
+                      <For each={group.items}>{(b) => builtinCard(b)}</For>
+                    </ul>
+                  </Show>
                 </section>
               )}
             </For>
           </Show>
-          <p class="m-0 text-[9px] text-text-faint">
-            First-party AXIS originals — <strong>Apply</strong> runs one onto the chart,{' '}
+
+          <p class="ax-library-foot">
+            First-party AXIS originals. <strong>Apply</strong> runs one onto the chart;{' '}
             <strong>Edit</strong> opens its Pine in the editor (then save it under Personal to keep
             a copy).
           </p>
         </div>
       </Show>
 
+      {/* ── Personal ───────────────────────────────────────────────── */}
       <Show when={tab() === 'personal'}>
         <div
-          class="flex flex-col gap-2"
+          class="ax-library-panel"
           role="tabpanel"
           id={`${uid}-panel-personal`}
           aria-labelledby={`${uid}-tab-personal`}
         >
-          <ScField label="Storage backend">
+          <div class="ax-library-storage">
+            <label class="ax-library-storage-label" for={`${uid}-storage`}>
+              Storage
+            </label>
             <select
               id={`${uid}-storage`}
-              class="sc-input"
+              class="sc-input ax-library-select"
               value={backend()}
               onChange={(e) => promptStorageChange(getActiveStorageId(), e.currentTarget.value)}
               title="Where user Pine scripts are stored"
@@ -754,10 +1005,55 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
                 )}
               </For>
             </select>
-          </ScField>
-          <p class="text-text-faint font-mono text-[10px] m-0 -mt-1" role="status">
-            {statusLine() || (busy() ? 'Loading…' : '')}
-          </p>
+            <div class="ax-library-storage-actions">
+              <button
+                type="button"
+                class="ax-library-action"
+                title="Refresh the library"
+                aria-label="Refresh the library"
+                disabled={busy()}
+                onClick={() => void refresh()}
+              >
+                {busy() ? <HooxLoader size="xs" /> : <Icons.refresh size={12} />}
+              </button>
+              <button
+                type="button"
+                class="ax-library-action"
+                title="Export library JSON"
+                aria-label="Export library JSON"
+                onClick={() => void onExport()}
+              >
+                <Icons.download size={12} />
+              </button>
+              <button
+                type="button"
+                class="ax-library-action"
+                title="Import .pyne / .pine files or library JSON"
+                aria-label="Import scripts"
+                onClick={() => fileInput?.click()}
+              >
+                <Icons.upload size={12} />
+              </button>
+              <input
+                ref={fileInput}
+                type="file"
+                accept="application/json,.json,.pyne,.pine,.pinescript,.pinev5,.pinev6,text/plain"
+                multiple
+                class="hidden"
+                aria-label="Import script files"
+                onChange={(e) => void onImportFile(e)}
+              />
+            </div>
+          </div>
+
+          <div class="ax-library-status" role="status">
+            <span
+              class="ax-library-dot"
+              classList={{ 'is-off': !storageConnected() }}
+              aria-hidden="true"
+            />
+            <span class="ax-library-status-text">{statusLine() || (busy() ? 'Loading…' : '')}</span>
+          </div>
 
           <Show when={isCloud()}>
             <CloudSettingsForm
@@ -831,179 +1127,252 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
           </Show>
 
           <form
-            class="border border-border p-2 flex flex-col gap-2 bg-bg-elev rounded-md"
+            class="ax-library-save"
             onSubmit={(e) => {
               e.preventDefault();
               void onSave();
             }}
           >
-            <div class="text-[10px] text-text-dim uppercase tracking-wider">
-              Save current editor
+            <div class="ax-library-save-head">
+              <span class="ax-library-save-title">
+                <Icons.save size={12} /> Save current editor
+              </span>
+              <span class="ax-library-save-lines">{editorLineCount()} lines</span>
             </div>
-            <ScField label="Script name">
+            <div class="ax-library-save-row">
               <input
-                class="sc-input"
-                placeholder="Name"
+                ref={nameInput}
+                class="sc-input ax-library-name"
+                placeholder="Script name"
                 value={name()}
+                onFocus={onNameFocus}
                 onInput={(e) => setName(e.currentTarget.value)}
                 autocomplete="off"
+                aria-label="Script name"
               />
-            </ScField>
-            <ScField label="Description">
+              <button
+                type="submit"
+                class="sc-btn sc-btn-primary ax-library-save-btn"
+                disabled={busy()}
+                data-testid="axis-library-save"
+              >
+                <Icons.save size={12} />
+                {isGit() ? 'Save & commit' : 'Save to library'}
+              </button>
+            </div>
+            <button
+              type="button"
+              class="ax-library-details-toggle"
+              aria-expanded={detailsOpen()}
+              onClick={() => setDetailsOpen((v) => !v)}
+            >
+              {detailsOpen() ? 'Hide details' : 'Description · publish'}
+              <Icons.chevronDown
+                size={11}
+                class={`ax-library-chevron${detailsOpen() ? ' is-open' : ''}`}
+              />
+            </button>
+            <Show when={detailsOpen()}>
               <input
                 class="sc-input"
-                placeholder="Optional"
+                placeholder="Description (optional)"
                 value={desc()}
                 onInput={(e) => setDesc(e.currentTarget.value)}
+                aria-label="Script description"
               />
-            </ScField>
-            <button
-              type="submit"
-              class="sc-btn sc-btn-primary inline-flex items-center gap-1 justify-center"
-              disabled={busy()}
-              data-testid="axis-library-save"
-            >
-              <Icons.save size={13} />
-              {isGit() ? 'Save & commit' : 'Save to library'}
-            </button>
-            <button
-              type="button"
-              class="sc-btn sc-btn-ghost inline-flex items-center gap-1 justify-center"
-              disabled={busy()}
-              onClick={() => void onPublish()}
-              title="Publish library() as the next version folder (1, 2, 3, …) — importable as import ns/Name/ver"
-              data-testid="axis-library-publish"
-            >
-              Publish library
-            </button>
-            <Show when={lastImport()}>
-              <p
-                class="m-0 font-mono text-[10px] text-accent break-all"
-                data-testid="axis-library-import-snippet"
+              <button
+                type="button"
+                class="sc-btn sc-btn-ghost ax-library-publish"
+                disabled={busy()}
+                onClick={() => void onPublish()}
+                title="Publish library() as the next version folder (1, 2, 3, …) — importable as import ns/Name/ver"
+                data-testid="axis-library-publish"
               >
-                {lastImport()}
+                <Icons.upload size={12} />
+                Publish library
+              </button>
+              <Show when={lastImport()}>
+                <p class="ax-library-import" data-testid="axis-library-import-snippet">
+                  {lastImport()}
+                </p>
+              </Show>
+              <p class="ax-library-foot">
+                A successful Run of a <code class="font-mono">library()</code> also auto-publishes
+                the next version (skips if unchanged). Git storage writes{' '}
+                <code class="font-mono">published/ns/Name/N/lib.pyne</code>.
               </p>
             </Show>
-            <p class="m-0 text-[9px] text-text-faint">
-              A successful Run of a <code class="font-mono">library()</code> also auto-publishes the
-              next version (skips if unchanged). Git storage writes
-              <code class="font-mono"> published/ns/Name/N/lib.pyne</code>.
-            </p>
           </form>
 
-          <div class="flex gap-1.5 flex-wrap">
-            <button
-              type="button"
-              class="sc-btn sc-btn-ghost text-[10px] inline-flex items-center gap-1"
-              onClick={() => void refresh()}
-              disabled={busy()}
-            >
-              {busy() ? <HooxLoader size="xs" /> : <Icons.refresh size={12} />}
-              Refresh
-            </button>
-            <button
-              type="button"
-              class="sc-btn sc-btn-ghost text-[10px]"
-              onClick={() => void onExport()}
-            >
-              Export JSON
-            </button>
-            <button
-              type="button"
-              class="sc-btn sc-btn-ghost text-[10px]"
-              onClick={() => fileInput?.click()}
-              title="Import .pyne / .pine files or library JSON"
-            >
-              Import…
-            </button>
-            <input
-              ref={fileInput}
-              type="file"
-              accept="application/json,.json,.pyne,.pine,.pinescript,.pinev5,.pinev6,text/plain"
-              multiple
-              class="hidden"
-              aria-label="Import scripts"
-              onChange={(e) => void onImportFile(e)}
-            />
-          </div>
-
           <Show when={published().length > 0}>
-            <section class="flex flex-col gap-1" aria-label="Published libraries">
-              <h3 class="sc-section-title m-0">Published ({published().length})</h3>
-              <ul class="m-0 p-0 list-none flex flex-col gap-1">
-                <For each={published()}>
-                  {(p) => (
-                    <li class="font-mono text-[10px] text-text-dim border border-border px-2 py-1 flex items-center gap-2">
-                      <span class="min-w-0 flex-1 truncate">
-                        {p.namespace}/{p.name}/{p.version}
-                        <span class="text-text-faint"> · {p.origin}</span>
-                      </span>
-                      <button
-                        type="button"
-                        class="sc-btn sc-btn-ghost px-1 py-0 text-[9px] flex-shrink-0"
-                        aria-label={`Copy import for ${p.namespace}/${p.name}/${p.version}`}
-                        onClick={() => copyImport(formatImportSnippet(p))}
-                      >
-                        <Icons.copy size={11} />
-                        copy import
-                      </button>
-                    </li>
-                  )}
-                </For>
-              </ul>
+            <section class="ax-library-group" aria-label="Published libraries">
+              <button
+                type="button"
+                class="ax-library-group-head"
+                aria-expanded={!collapsedGroups().has('published')}
+                onClick={() => toggleGroup('published')}
+              >
+                <Icons.chevronDown
+                  size={12}
+                  class={`ax-library-chevron${
+                    collapsedGroups().has('published') ? '' : ' is-open'
+                  }`}
+                />
+                <span class="ax-library-group-title">Published</span>
+                <span class="ax-library-group-count">{published().length}</span>
+              </button>
+              <Show when={!collapsedGroups().has('published')}>
+                <ul class="ax-library-published">
+                  <For each={published()}>
+                    {(p) => (
+                      <li class="ax-library-published-row">
+                        <span
+                          class="ax-library-published-name"
+                          title={`${p.namespace}/${p.name}/${p.version}`}
+                        >
+                          {p.namespace}/<strong>{p.name}</strong>/{p.version}
+                          <span class="ax-library-published-origin">{p.origin}</span>
+                        </span>
+                        <button
+                          type="button"
+                          class="ax-library-action"
+                          aria-label={`Copy import for ${p.namespace}/${p.name}/${p.version}`}
+                          title="Copy import statement"
+                          onClick={() => copyImport(formatImportSnippet(p))}
+                        >
+                          <Icons.copy size={11} />
+                        </button>
+                      </li>
+                    )}
+                  </For>
+                </ul>
+              </Show>
             </section>
           </Show>
 
-          <section class="flex flex-col gap-1" aria-label="Personal scripts">
-            <div class="flex items-baseline justify-between gap-2">
-              <h3 class="sc-section-title m-0">Library ({personalShown().length})</h3>
+          <section class="ax-library-group" aria-label="Personal scripts">
+            <div class="ax-library-list-head">
+              <span class="ax-library-group-title">Library</span>
+              <span class="ax-library-group-count">{personalShown().length}</span>
+              <span class="ax-library-spacer" />
+              <Show when={items().length > 0}>
+                {/* biome-ignore lint/a11y/useSemanticElements: compact sort chip row; fieldset default styles break the panel toolbar */}
+                <div class="ax-library-sort" role="group" aria-label="Sort scripts">
+                  <button
+                    type="button"
+                    class="ax-library-sort-btn"
+                    classList={{ 'is-on': sort() === 'recent' }}
+                    aria-pressed={sort() === 'recent'}
+                    data-testid="axis-library-sort-recent"
+                    title="Newest updated first"
+                    onClick={() => setSort('recent')}
+                  >
+                    <Icons.clock size={10} /> Recent
+                  </button>
+                  <button
+                    type="button"
+                    class="ax-library-sort-btn"
+                    classList={{ 'is-on': sort() === 'name' }}
+                    aria-pressed={sort() === 'name'}
+                    data-testid="axis-library-sort-name"
+                    title="Alphabetical by name"
+                    onClick={() => setSort('name')}
+                  >
+                    <Icons.type size={10} /> Name
+                  </button>
+                  <button
+                    type="button"
+                    class="ax-library-sort-btn"
+                    classList={{ 'is-on': sort() === 'stored' }}
+                    aria-pressed={sort() === 'stored'}
+                    data-testid="axis-library-sort-stored"
+                    title="Storage order"
+                    onClick={() => setSort('stored')}
+                  >
+                    <Icons.database size={10} /> Storage
+                  </button>
+                </div>
+              </Show>
             </div>
+
             <Show when={items().length > 0}>
-              {/* biome-ignore lint/a11y/useSemanticElements: chip row; fieldset default styles break the compact toolbar */}
-              <div class="sc-chip-row" role="group" aria-label="Personal library filters">
-                <button
-                  type="button"
-                  class={`sc-chip ${sort() === 'recent' ? 'is-active' : ''}`}
-                  aria-pressed={sort() === 'recent'}
-                  data-testid="axis-library-sort-recent"
-                  onClick={() => setSort((s) => (s === 'recent' ? 'stored' : 'recent'))}
-                >
-                  Recent
-                </button>
+              {/* biome-ignore lint/a11y/useSemanticElements: compact filter chip row; fieldset default styles break the panel toolbar */}
+              <div class="ax-library-filters" role="group" aria-label="Personal library filters">
                 <For each={kindFilters()}>
                   {(f) => (
                     <button
                       type="button"
-                      class={`sc-chip inline-flex items-center gap-1 ${kind() === f.id ? 'is-active' : ''}`}
+                      class="ax-library-filter"
+                      classList={{ 'is-on': kind() === f.id }}
                       aria-pressed={kind() === f.id}
                       data-testid={`axis-library-filter-${f.id}`}
                       onClick={() => setKind(f.id)}
                     >
                       {f.label}
-                      <span class="tabular-nums text-[0.9em] opacity-70">{kindCounts()[f.id]}</span>
+                      <span class="ax-library-filter-count">{kindCounts()[f.id]}</span>
                     </button>
                   )}
                 </For>
               </div>
             </Show>
+
             <Show
               when={items().length > 0}
               fallback={
-                <div class="axis-empty-state text-[12px] text-text-dim py-2">
-                  No scripts yet. Save the editor document, or import a .pyne file.
+                <div class="ax-library-empty">
+                  <span class="ax-library-empty-icon">
+                    <Icons.library size={18} />
+                  </span>
+                  <p class="ax-library-empty-title">No scripts yet</p>
+                  <p class="ax-library-empty-sub">
+                    Save the editor document, or import <code>.pyne</code> / <code>.pine</code>{' '}
+                    files.
+                  </p>
+                  <div class="ax-library-empty-actions">
+                    <button
+                      type="button"
+                      class="sc-btn sc-btn-primary ax-library-empty-btn"
+                      onClick={focusSaveName}
+                      data-testid="axis-library-empty-save"
+                    >
+                      <Icons.save size={12} /> Save current editor
+                    </button>
+                    <button
+                      type="button"
+                      class="sc-btn sc-btn-ghost ax-library-empty-btn"
+                      onClick={() => fileInput?.click()}
+                      data-testid="axis-library-empty-import"
+                    >
+                      <Icons.upload size={12} /> Import…
+                    </button>
+                  </div>
                 </div>
               }
             >
               <Show
                 when={personalShown().length > 0}
                 fallback={
-                  <div class="axis-empty-state text-[12px] text-text-dim py-2">
-                    No scripts match this filter.
+                  <div class="ax-library-empty">
+                    <span class="ax-library-empty-icon">
+                      <Icons.search size={18} />
+                    </span>
+                    <p class="ax-library-empty-title">No scripts match this filter</p>
+                    <p class="ax-library-empty-sub">Clear the search or pick another kind.</p>
+                    <button
+                      type="button"
+                      class="sc-btn sc-btn-ghost ax-library-empty-btn"
+                      onClick={() => {
+                        setQuery('');
+                        setKind('all');
+                      }}
+                    >
+                      Reset filters
+                    </button>
                   </div>
                 }
               >
                 <ul
-                  class="flex flex-col gap-1 w-full text-left items-stretch m-0 p-0 list-none"
+                  class="ax-library-list"
                   data-testid="axis-library-script-list"
                   data-sort={sort()}
                 >
@@ -1013,10 +1382,17 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
                         item={item}
                         busy={busy()}
                         versioning={versioning()}
+                        query={query()}
+                        favorite={isFavorite(item.id)}
+                        onToggleFavorite={() => onToggleFavorite(item.id)}
+                        active={activeScriptId() === item.id}
                         onLoad={() => void onLoad(item.id)}
                         onDelete={() => void onDelete(item.id, item.name)}
+                        onCopy={() => void onCopyScript(item)}
+                        onDuplicate={() => void onDuplicateScript(item)}
                         onLoadVersion={(payload) => {
                           props.setDoc?.(payload.content, payload.name, payload.libraryId);
+                          setActiveScriptId(payload.libraryId);
                           props.onLoaded?.(
                             {
                               id: payload.libraryId,
@@ -1048,14 +1424,12 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
 export const LibraryPanel: Component<ScriptLibraryPanelProps> = (props) => (
   <Show when={isPanelOpen('library')}>
     <FloatableShell id="library" testId="axis-library">
-      <div class="flex-1 overflow-y-auto min-h-0">
-        <ScriptLibraryPanel
-          getDoc={props.getDoc}
-          setDoc={props.setDoc}
-          onLoaded={props.onLoaded}
-          commands
-        />
-      </div>
+      <ScriptLibraryPanel
+        getDoc={props.getDoc}
+        setDoc={props.setDoc}
+        onLoaded={props.onLoaded}
+        commands
+      />
     </FloatableShell>
   </Show>
 );

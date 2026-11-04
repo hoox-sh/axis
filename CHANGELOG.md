@@ -15,7 +15,9 @@ _Generated/updated: 2026-11-04 · 959 commits · describe-tag: `v2.27.0`_
 
 ## [Unreleased]
 
-_Add release notes here before tagging._
+### Changed
+
+- **Script Library panel redesign — command bar, pinned/recent scripts, and a compact personal workspace.** The docked panel now opens with a sticky search + segmented Builtin/Personal tabs (`/` focuses search, `Esc` clears, matches are highlighted). Built-ins can be pinned into a **Pinned** group and reapplied from a **Recent** strip; category headers collapse with live counts, and cards show a kind-colored rail, `on chart` state, and icon actions (Apply / Edit / Pin). Personal scripts get Recent / Name / Storage sorting, kind chips, pinned-first ordering, an `in editor` dot, and a **···** row for Copy Pine / Duplicate / Delete. The save composer is one compact row, prefills the name from the editor's `indicator()` / `strategy()` / `library()` title, and moves description + Publish behind a disclosure; import/export are icon actions next to the storage picker, and empty states carry Save / Import CTAs. New helpers: `src/ui/library/prefs.ts` (localStorage pins + recents), `format.ts` (`suggestScriptName`, `splitHighlight`, `pinnedFirst`, name sort), and `library.css`. Covered by `tests/library-ui.test.ts` and `e2e/library-panel.spec.ts`.
 
 ## [2.28.0] — 2026-11-04
 

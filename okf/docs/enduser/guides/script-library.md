@@ -7,7 +7,7 @@ tags: [doc, docs, enduser, guides]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:02:55Z
+  at: 2026-11-04T11:47:26Z
 sources:
   - id: tree
     resource: "docs/enduser/guides/script-library.mdx"
@@ -25,6 +25,7 @@ Repo path `docs/enduser/guides/script-library.mdx`.
 * Abstract
 * Conceptual model
 * Interface surface
+  * Panel conventions
   * Built-in studies (always in the app)
   * Pine Script™ v6 starter pack
 * Local backend
@@ -43,3 +44,4 @@ Repo path `docs/enduser/guides/script-library.mdx`.
 
 * [src/storage](/code/src/storage.md)
 * [src/ui](/code/src/ui.md)
+* [src/ui/library](/code/src/ui/library.md)
