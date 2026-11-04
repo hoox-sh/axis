@@ -7,7 +7,7 @@ tags: [code, dsm, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-21T18:24:00Z
+  at: 2026-11-04T22:22:50Z
 sources:
   - id: tree
     resource: "src/ui/dsm"
@@ -20,9 +20,13 @@ okf_lock: generated
 
 * `CompleteMap.tsx` — CompleteMap
 * `JobCard.tsx` — JobCard
-* `estimate.ts` — BackfillEstimate, estimateBackfill
+* `estimate.ts` — BACKFILL_PRESETS, BackfillEstimate, dateInputDaysAgo, estimateBackfill, presetDaysForDate
 * `format.ts` — fmtBarsAsSpan, fmtDuration, fmtMillis, fmtSpanSec, fmtTime, loadWindowSpanLabel
 * `jobs.ts` — JOB_FILTERS, JobFilter, JobStatusTone, countJobsByFilter, isActiveJob, jobHasIssue, jobHealthLine, jobMatchesFilter, jobMatchesQuery, jobQuantityLine, jobStatusClass, jobStatusTone
+
+# Other files
+
+* `dsm.css`
 
 # Packages
 

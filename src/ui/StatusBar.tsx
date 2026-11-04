@@ -48,8 +48,7 @@ import { windowAxisFromMeta } from '../results/window-axis';
 import { barPlane } from '../stores/bars';
 import { ConnectionHud } from './ConnectionHud';
 import { HooxLoader } from './HooxLoader';
-import { CachedDatasetsModal } from './CachedDatasetsModal';
-import { cachedDatasetsOpen, closeCachedDatasets, openCachedDatasets } from './datasets-open';
+import { openCachedDatasets } from './datasets-open';
 import { peekDataset, subscribeDatasets } from '../data/dataset-store';
 import { providerDatasetLock } from '../data/provider';
 import { formatBarCount } from './bar-count';
@@ -233,7 +232,6 @@ export const StatusBar: Component = () => {
             · {store.scripts.length} scripts · {store.panes.length} panes
           </span>
         </span>
-        <CachedDatasetsModal open={cachedDatasetsOpen()} onClose={() => closeCachedDatasets()} />
       </div>
     </Show>
   );

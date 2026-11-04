@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "e2e"
-description: "e2e contains alerts-panel.spec.ts, charts.ts, colors.spec.ts, and 17 more files."
+description: "e2e contains alerts-panel.spec.ts, charts.ts, colors.spec.ts, and 18 more files."
 resource: "e2e"
 tags: [code, e2e]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-04T22:06:28Z
+  at: 2026-11-04T22:22:50Z
 sources:
   - id: tree
     resource: "e2e"
@@ -23,6 +23,7 @@ okf_lock: generated
 * `colors.spec.ts`
 * `critical.spec.ts`
 * `datasets.spec.ts`
+* `datasource-panel.spec.ts`
 * `dataview-panel.spec.ts`
 * `debug-page.spec.ts`
 * `drawings.spec.ts`

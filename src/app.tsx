@@ -59,6 +59,8 @@ import { ChartWorkspace } from './chart/ChartWorkspace';
 import { IndicatorPanel } from './indicators/IndicatorPanel';
 import type { SettingsTabId, StudioPageId } from './ui/studio';
 import { ResultsModal } from './ui/ResultsModal';
+import { CachedDatasetsModal } from './ui/CachedDatasetsModal';
+import { cachedDatasetsOpen, closeCachedDatasets } from './ui/datasets-open';
 import { SystemLogs } from './ui/SystemLogs';
 import { DataViewPanel } from './ui/DataViewPanel';
 import { TablesPanel } from './ui/TablesPanel';
@@ -631,6 +633,7 @@ export const App: Component = () => {
         </Show>
       </Suspense>
       <ResultsModal />
+      <CachedDatasetsModal open={cachedDatasetsOpen()} onClose={() => closeCachedDatasets()} />
 
       <Show when={!isPhoneViewport()}>
         <SystemLogs />

@@ -116,3 +116,27 @@ export function estimateBackfill(opts: {
     note,
   };
 }
+
+/** Quick date presets for the “accumulate to” field. */
+export const BACKFILL_PRESETS: readonly { id: string; label: string; days: number }[] = [
+  { id: '30d', label: '30d', days: 30 },
+  { id: '90d', label: '90d', days: 90 },
+  { id: '6m', label: '6m', days: 180 },
+  { id: '1y', label: '1y', days: 365 },
+  { id: '2y', label: '2y', days: 730 },
+] as const;
+
+/** `YYYY-MM-DD` for a UTC date `days` before `nowMs`. */
+export function dateInputDaysAgo(days: number, nowMs = Date.now()): string {
+  const d = new Date(nowMs - Math.max(0, days) * 86_400_000);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Whole UTC days between a `YYYY-MM-DD` input and today; null when invalid. */
+export function presetDaysForDate(input: string, nowMs = Date.now()): number | null {
+  const t = Date.parse(`${input}T00:00:00Z`);
+  if (!Number.isFinite(t)) return null;
+  const now = new Date(nowMs);
+  const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  return Math.round((todayUtc - t) / 86_400_000);
+}

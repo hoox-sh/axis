@@ -3,7 +3,12 @@
 
 import { describe, expect, it } from 'bun:test';
 import { fmtBarsAsSpan, fmtDuration, fmtMillis, fmtTime, loadWindowSpanLabel } from '../src/ui/dsm/format';
-import { estimateBackfill } from '../src/ui/dsm/estimate';
+import {
+  BACKFILL_PRESETS,
+  dateInputDaysAgo,
+  estimateBackfill,
+  presetDaysForDate,
+} from '../src/ui/dsm/estimate';
 import {
   countJobsByFilter,
   jobHealthLine,
@@ -11,6 +16,7 @@ import {
   jobMatchesQuery,
   jobQuantityLine,
   jobStatusTone,
+  jobTotals,
   statusLabel,
   type JobFilter,
 } from '../src/ui/dsm/jobs';
@@ -276,5 +282,38 @@ describe('dsm job filters', () => {
     const ids: JobFilter[] = ['all', 'active', 'done', 'issues'];
     const counts = countJobsByFilter([]);
     for (const id of ids) expect(counts[id]).toBe(0);
+  });
+});
+
+describe('dsm presets', () => {
+  const now = Date.UTC(2026, 5, 15, 12, 0, 0);
+
+  it('lists increasing day presets', () => {
+    expect(BACKFILL_PRESETS.map((p) => p.days)).toEqual([30, 90, 180, 365, 730]);
+  });
+
+  it('formats a UTC date N days ago', () => {
+    expect(dateInputDaysAgo(30, now)).toBe('2026-05-16');
+    expect(dateInputDaysAgo(0, now)).toBe('2026-06-15');
+    expect(dateInputDaysAgo(-5, now)).toBe('2026-06-15');
+  });
+
+  it('round-trips presets through presetDaysForDate', () => {
+    for (const p of BACKFILL_PRESETS) {
+      expect(presetDaysForDate(dateInputDaysAgo(p.days, now), now)).toBe(p.days);
+    }
+    expect(presetDaysForDate('not-a-date', now)).toBeNull();
+  });
+});
+
+describe('jobTotals', () => {
+  it('sums bars/pages and groups states', () => {
+    const totals = jobTotals([
+      job({ id: 'a', status: 'running', barsFetched: 100, pagesFetched: 2 }),
+      job({ id: 'b', status: 'complete', barsFetched: 50, pagesFetched: 1 }),
+      job({ id: 'c', status: 'error', barsFetched: 10, pagesFetched: 1, error: 'nope' }),
+      job({ id: 'd', status: 'paused', barsFetched: 5, pagesFetched: 1 }),
+    ]);
+    expect(totals).toEqual({ bars: 165, pages: 5, active: 2, done: 1, issues: 1 });
   });
 });

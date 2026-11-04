@@ -82,8 +82,7 @@ import { PluginConfigRow } from './PluginConfigRow';
 import { startBarReplay, exitBarReplay } from './BarReplayControls';
 import { isReplayActive, subscribeReplay } from '../chart/bar-replay';
 import { WATCHLIST_INTERVALS } from '../data/watchlist-tickers';
-import { CachedDatasetsModal } from './CachedDatasetsModal';
-import { cachedDatasetsOpen, closeCachedDatasets, openCachedDatasets } from './datasets-open';
+import { openCachedDatasets } from './datasets-open';
 import { SymbolModal } from './SymbolModal';
 import { RunSplitButton } from './RunSplitButton';
 import { openAboutModal } from './AboutModal';
@@ -570,11 +569,6 @@ export const Topbar: Component<{
             </Show>
 
             <SliceProgressChip />
-
-            <CachedDatasetsModal
-              open={cachedDatasetsOpen()}
-              onClose={() => closeCachedDatasets()}
-            />
 
             <Show when={!autoloadOn()}>
               <button

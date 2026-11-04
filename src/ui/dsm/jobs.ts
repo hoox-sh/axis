@@ -147,3 +147,26 @@ export function jobStatusClass(tone: JobStatusTone): string {
       return 'text-muted';
   }
 }
+
+/** Aggregate counters for the panel header (all jobs, not the filtered view). */
+export function jobTotals(jobs: readonly DataSourceJob[]): {
+  bars: number;
+  pages: number;
+  active: number;
+  done: number;
+  issues: number;
+} {
+  let bars = 0;
+  let pages = 0;
+  let active = 0;
+  let done = 0;
+  let issues = 0;
+  for (const job of jobs) {
+    bars += job.barsFetched || 0;
+    pages += job.pagesFetched || 0;
+    if (isActiveJob(job)) active += 1;
+    if (job.status === 'complete' || job.status === 'cancelled') done += 1;
+    if (jobHasIssue(job)) issues += 1;
+  }
+  return { bars, pages, active, done, issues };
+}
