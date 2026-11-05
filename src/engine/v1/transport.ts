@@ -9,7 +9,9 @@
  * The default is `worker`: `/ws/live` decode runs on the existing ingest
  * worker. `axis.engine.transport=json` is the rollback to main-thread parse.
  * The flag does not enable HP or SAB. AXB1 is negotiated when the worker
- * owns the socket. A missing Worker counts one JSON fallback and stays up.
+ * owns the socket. `axis.engine.encoding` selects `axb1` (default) or
+ * `axb1-full`; the latter asks the engine to push script snapshots/deltas
+ * over AXB1 as well. A missing Worker counts one JSON fallback and stays up.
  *
  * @module engine/v1/transport
  */
@@ -18,10 +20,13 @@ import { getItem, removeItem, setItem, storageAvailable } from '../../utils/stor
 import { v1Count } from './metrics';
 
 export type EngineTransport = 'json' | 'worker';
+export type EngineEncoding = 'axb1' | 'axb1-full';
 
 export const ENGINE_TRANSPORT_KEY = 'axis.engine.transport';
+export const ENGINE_ENCODING_KEY = 'axis.engine.encoding';
 
 let memory: EngineTransport = 'worker';
+let memoryEncoding: EngineEncoding = 'axb1';
 let fallbackNoted = false;
 
 /** `json` only when the tab set that value. Anything else is `worker`. */
@@ -37,6 +42,24 @@ export function setEngineTransport(mode: EngineTransport): void {
   else removeItem(ENGINE_TRANSPORT_KEY);
 }
 
+/**
+ * Binary negotiation token. `axb1` is the default (OHLCV + single-bar tips in
+ * binary, script frames in JSON). `axb1-full` additionally pushes script
+ * snapshots/deltas over AXB1. JSON fallback is still accepted at runtime.
+ */
+export function engineEncoding(): EngineEncoding {
+  if (!storageAvailable()) return memoryEncoding;
+  const stored = getItem(ENGINE_ENCODING_KEY);
+  return stored === 'axb1-full' ? 'axb1-full' : 'axb1';
+}
+
+export function setEngineEncoding(encoding: EngineEncoding): void {
+  memoryEncoding = encoding === 'axb1-full' ? 'axb1-full' : 'axb1';
+  if (!storageAvailable()) return;
+  if (memoryEncoding === 'axb1') removeItem(ENGINE_ENCODING_KEY);
+  else setItem(ENGINE_ENCODING_KEY, memoryEncoding);
+}
+
 /** True when this tab asked for the worker. Availability is the caller's job. */
 export function wantsWorkerTransport(): boolean {
   return engineTransport() === 'worker';
@@ -49,9 +72,11 @@ export function noteWorkerTransportFallback(): void {
   v1Count('jsonFallback');
 }
 
-/** Tests: back to the worker default, fallback counter armed again. */
+/** Tests: back to the `worker`/`axb1` defaults, fallback counter armed again. */
 export function resetEngineTransport(): void {
   memory = 'worker';
+  memoryEncoding = 'axb1';
   fallbackNoted = false;
   removeItem(ENGINE_TRANSPORT_KEY);
+  removeItem(ENGINE_ENCODING_KEY);
 }

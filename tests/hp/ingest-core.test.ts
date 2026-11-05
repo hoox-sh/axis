@@ -90,7 +90,12 @@ describe('decodeInbound JSON', () => {
       id: SUB,
       sessionId: 'ses-1',
       seq: 1,
-      payload: { seriesKey: SUB, count: 1, closed_upto: 0, bars: [{ time: 60, open: 1, high: 1, low: 1, close: 1, volume: 1 }] },
+      payload: {
+        seriesKey: SUB,
+        count: 1,
+        closed_upto: 0,
+        bars: [{ time: 60, open: 1, high: 1, low: 1, close: 1, volume: 1 }],
+      },
     });
     const out = decodeInbound(raw, table);
     expect(out.ok).toBe(true);
@@ -306,8 +311,7 @@ describe('decodeInbound AXB1', () => {
     if (!(out.ok && out.kind === 'frames')) throw new Error('expected frames');
     const frame = out.frames[0];
     const payload = frame?.payload as
-      | { bars?: Array<{ time: number; close: number; closed?: boolean }> }
-      | undefined;
+      { bars?: Array<{ time: number; close: number; closed?: boolean }> } | undefined;
     const bar = payload?.bars?.[0];
     expect(bar?.time).toBe(60);
     expect(bar?.close).toBe(101);
@@ -362,11 +366,69 @@ describe('decodeInbound AXB1', () => {
     expect(validateRedesign2Frame(out.frames[0])).toBe(true);
     expect(validateRedesign2Frame(out.frames[1])).toBe(true);
     const payload = out.frames[0]?.payload as
-      | { bars?: Array<{ time: number; closed?: boolean }> }
-      | undefined;
+      { bars?: Array<{ time: number; closed?: boolean }> } | undefined;
     const bars = payload?.bars;
     expect(bars?.[0]).toMatchObject({ time: 60, closed: true });
     expect(bars?.[1]).toMatchObject({ time: 120, closed: false });
+  });
+
+  test('APPEND_BARS emits one delta (all closed bars) then a close', () => {
+    const table = tableWithSub();
+    decodeInbound(
+      encodeFrame({
+        opcode: Axb1Opcode.SNAPSHOT_OHLCV,
+        seq: 1,
+        subIdHash: fnv1a32(SUB),
+        sessionHash: fnv1a32('ses-1'),
+        tsMs: 0n,
+        priceScale: 2,
+        count: 1,
+        closedUpto: 0,
+        hotFromIndex: 0,
+        timeS: [60],
+        open: [100n],
+        high: [100n],
+        low: [100n],
+        close: [100n],
+        volume: [1],
+        flags: [1],
+      }),
+      table,
+    );
+    const out = decodeInbound(
+      encodeFrame({
+        opcode: Axb1Opcode.APPEND_BARS,
+        seq: 2,
+        subIdHash: fnv1a32(SUB),
+        sessionHash: fnv1a32('ses-1'),
+        tsMs: 0n,
+        priceScale: 2,
+        count: 2,
+        closedUpto: 180,
+        closedIndex: 2,
+        timeS: [120, 180],
+        open: [101n, 111n],
+        high: [102n, 112n],
+        low: [99n, 109n],
+        close: [101n, 111n],
+        volume: [2, 3],
+        flags: [1, 1],
+        tip: { mask: 0, flags: 0 },
+      }),
+      table,
+    );
+    expect(out.ok).toBe(true);
+    if (!(out.ok && out.kind === 'frames')) throw new Error('expected frames');
+    expect(out.frames.map((f) => f.type)).toEqual(['delta', 'close']);
+    const delta = out.frames[0]?.payload as
+      { bars?: Array<{ time: number; closed?: boolean }>; tail_len?: number } | undefined;
+    expect(delta?.bars).toHaveLength(2);
+    expect(delta?.bars?.[0]).toMatchObject({ time: 120, closed: true });
+    expect(delta?.bars?.[1]).toMatchObject({ time: 180, closed: true });
+    expect(delta?.tail_len).toBe(2);
+    const close = out.frames[1]?.payload as { index?: number; time?: number } | undefined;
+    expect(close?.index).toBe(2);
+    expect(close?.time).toBe(180);
   });
 
   test('bad magic is not silently treated as JSON if it is not utf8 JSON', () => {
@@ -588,7 +650,14 @@ describe('TipCoalescer', () => {
       id: SUB,
       sessionId: 's',
       seq: close,
-      payload: { forming: true, bars: [{ close }], base_index: 0, count: 1, tail_len: 1, closed_upto: 0 },
+      payload: {
+        forming: true,
+        bars: [{ close }],
+        base_index: 0,
+        count: 1,
+        tail_len: 1,
+        closed_upto: 0,
+      },
     });
     c.push([tip(1)]);
     expect(seen).toEqual([]);
@@ -616,7 +685,14 @@ describe('TipCoalescer', () => {
       id: SUB,
       sessionId: 's',
       seq: close,
-      payload: { forming: true, bars: [{ close }], base_index: 0, count: 1, tail_len: 1, closed_upto: 0 },
+      payload: {
+        forming: true,
+        bars: [{ close }],
+        base_index: 0,
+        count: 1,
+        tail_len: 1,
+        closed_upto: 0,
+      },
     });
     c.push([tip(1), tip(2)]);
     // Under load the fold releases immediately — batch:post is not delayed
@@ -635,7 +711,14 @@ describe('TipCoalescer', () => {
       id: SUB,
       sessionId: 's',
       seq,
-      payload: { forming: true, bars: [{ close }], base_index: 0, count: 1, tail_len: 1, closed_upto: 0 },
+      payload: {
+        forming: true,
+        bars: [{ close }],
+        base_index: 0,
+        count: 1,
+        tail_len: 1,
+        closed_upto: 0,
+      },
     });
     c.push([tip(1, 1)]);
     expect(seen).toEqual([]);
@@ -650,7 +733,11 @@ describe('TipCoalescer', () => {
 
   test('a close flushes the pending tip then the close', () => {
     const seen: Redesign2Frame[][] = [];
-    const c = new TipCoalescer((frames) => seen.push(frames), 16, () => () => {});
+    const c = new TipCoalescer(
+      (frames) => seen.push(frames),
+      16,
+      () => () => {},
+    );
     c.push([
       {
         type: 'delta',
@@ -673,7 +760,11 @@ describe('TipCoalescer', () => {
 
   test('APPEND_BAR flushes the pending tip then the append', () => {
     const seen: Redesign2Frame[][] = [];
-    const c = new TipCoalescer((frames) => seen.push(frames), 16, () => () => {});
+    const c = new TipCoalescer(
+      (frames) => seen.push(frames),
+      16,
+      () => () => {},
+    );
     c.push([
       {
         type: 'delta',
@@ -706,10 +797,10 @@ describe('TipCoalescer', () => {
     ]);
     expect(seen).toHaveLength(1);
     expect(seen[0]?.map((f) => f.type)).toEqual(['delta', 'delta']);
-    const tip = seen[0]?.[0]?.payload as { forming?: boolean; bars?: Array<{ close: number }> } | undefined;
+    const tip = seen[0]?.[0]?.payload as
+      { forming?: boolean; bars?: Array<{ close: number }> } | undefined;
     const append = seen[0]?.[1]?.payload as
-      | { forming?: boolean; bars?: Array<{ closed?: boolean; close: number }> }
-      | undefined;
+      { forming?: boolean; bars?: Array<{ closed?: boolean; close: number }> } | undefined;
     expect(tip?.forming).toBe(true);
     expect(tip?.bars?.[0]?.close).toBe(101);
     expect(append?.forming).toBe(false);
@@ -838,7 +929,14 @@ describe('TipCoalescer', () => {
         id: SUB,
         sessionId: 's',
         seq: 1,
-        payload: { unchanged: true, forming: true, base_index: 0, count: 1, tail_len: 1, closed_upto: 0 },
+        payload: {
+          unchanged: true,
+          forming: true,
+          base_index: 0,
+          count: 1,
+          tail_len: 1,
+          closed_upto: 0,
+        },
       },
     ]);
     // No chain yet — observe only, do not emit a gap keepalive.
@@ -873,7 +971,14 @@ describe('TipCoalescer', () => {
         id: SUB,
         sessionId: 's',
         seq: 3,
-        payload: { unchanged: true, forming: true, base_index: 0, count: 1, tail_len: 1, closed_upto: 0 },
+        payload: {
+          unchanged: true,
+          forming: true,
+          base_index: 0,
+          count: 1,
+          tail_len: 1,
+          closed_upto: 0,
+        },
       },
     ]);
     // Contiguous UNCHANGED flushes the pending tip then forwards (no timer wait).
@@ -915,14 +1020,28 @@ describe('TipCoalescer', () => {
         id: SUB,
         sessionId: 's',
         seq: 5,
-        payload: { unchanged: true, forming: true, base_index: 0, count: 1, tail_len: 1, closed_upto: 0 },
+        payload: {
+          unchanged: true,
+          forming: true,
+          base_index: 0,
+          count: 1,
+          tail_len: 1,
+          closed_upto: 0,
+        },
       },
       {
         type: 'delta',
         id: SUB,
         sessionId: 's',
         seq: 6,
-        payload: { unchanged: true, forming: true, base_index: 0, count: 1, tail_len: 1, closed_upto: 0 },
+        payload: {
+          unchanged: true,
+          forming: true,
+          base_index: 0,
+          count: 1,
+          tail_len: 1,
+          closed_upto: 0,
+        },
       },
       {
         type: 'delta',
@@ -944,7 +1063,8 @@ describe('TipCoalescer', () => {
     expect(seen[1]?.map((f) => f.seq)).toEqual([5, 6]);
     fire?.();
     const tip = seen.at(-1)?.[0];
-    const payload = tip?.payload as { seqAckFrom?: number; bars?: Array<{ close: number }> } | undefined;
+    const payload = tip?.payload as
+      { seqAckFrom?: number; bars?: Array<{ close: number }> } | undefined;
     expect(tip?.seq).toBe(7);
     expect(payload?.bars?.[0]?.close).toBe(1);
     // Cursor already at 6 from forwarded keepalives — continuous, no ack hole.
@@ -989,7 +1109,14 @@ describe('TipCoalescer', () => {
         id: SUB,
         sessionId: 's',
         seq: 6,
-        payload: { unchanged: true, forming: true, base_index: 0, count: 1, tail_len: 1, closed_upto: 0 },
+        payload: {
+          unchanged: true,
+          forming: true,
+          base_index: 0,
+          count: 1,
+          tail_len: 1,
+          closed_upto: 0,
+        },
       },
     ]);
     fire?.();
@@ -997,7 +1124,8 @@ describe('TipCoalescer', () => {
     expect(batch.map((f) => f.type)).toEqual(['close', 'delta', 'delta']);
     const tip = batch[1];
     const keep = batch[2];
-    const tipPayload = tip?.payload as { bars?: Array<{ close: number }>; seqAckFrom?: number } | undefined;
+    const tipPayload = tip?.payload as
+      { bars?: Array<{ close: number }>; seqAckFrom?: number } | undefined;
     const keepPayload = keep?.payload as { unchanged?: boolean } | undefined;
     expect(tip?.seq).toBe(5);
     expect(tipPayload?.bars?.[0]?.close).toBe(2);
@@ -1043,7 +1171,8 @@ describe('TipCoalescer', () => {
     c.push([tip(5, 1), tip(6, 9)]);
     fire?.();
     const released = seen.at(-1)?.[0];
-    const payload = released?.payload as { bars?: Array<{ close: number }>; seqAckFrom?: number } | undefined;
+    const payload = released?.payload as
+      { bars?: Array<{ close: number }>; seqAckFrom?: number } | undefined;
     expect(released?.seq).toBe(6);
     expect(payload?.bars?.[0]?.close).toBe(9);
     expect(payload?.seqAckFrom).toBe(4);
@@ -1073,7 +1202,14 @@ describe('TipCoalescer', () => {
         id: SUB,
         sessionId: 's',
         seq: 6,
-        payload: { unchanged: true, forming: true, base_index: 0, count: 1, tail_len: 1, closed_upto: 0 },
+        payload: {
+          unchanged: true,
+          forming: true,
+          base_index: 0,
+          count: 1,
+          tail_len: 1,
+          closed_upto: 0,
+        },
       },
       {
         type: 'delta',

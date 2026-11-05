@@ -48,6 +48,7 @@ export enum Axb1Opcode {
   ERROR = 0x08,
   UNCHANGED = 0x09,
   JSON_BLOB = 0x0a,
+  APPEND_BARS = 0x0b,
 }
 
 export enum TipMask {

@@ -153,6 +153,23 @@ function toFrame(f: Record<string, unknown>): Axb1Frame {
         ...header,
         json: r.json as string,
       };
+    case 'APPEND_BARS':
+      return {
+        opcode: Axb1Opcode.APPEND_BARS,
+        ...header,
+        priceScale: r.price_scale as number,
+        count: r.count as number,
+        closedUpto: r.closed_upto as number,
+        closedIndex: r.closed_index as number,
+        timeS: r.time_s as number[],
+        open: (r.open as string[]).map(BigInt),
+        high: (r.high as string[]).map(BigInt),
+        low: (r.low as string[]).map(BigInt),
+        close: (r.close as string[]).map(BigInt),
+        volume: r.volume as number[],
+        flags: r.flags as number[],
+        tip: tipOf(r.tip as Record<string, unknown>),
+      };
     default:
       throw new Error(`unknown opcode ${String(f.opcode)}`);
   }
@@ -338,6 +355,34 @@ const specs: Array<{ name: string; frame: Record<string, unknown> }> = [
       session_hash: sessionHash,
       ts_ms: '1760000000950',
       json: '{"drawings":[]}',
+    },
+  },
+  {
+    name: 'append-bars',
+    frame: {
+      opcode: 'APPEND_BARS',
+      seq: 44,
+      sub_id_hash: subHash,
+      session_hash: sessionHash,
+      ts_ms: '1760000060020',
+      price_scale: 8,
+      count: 2,
+      closed_upto: T0,
+      closed_index: 42,
+      time_s: [T0 - 60, T0],
+      open: ['6041900000000', '6042300000000'],
+      high: ['6042400000000', '6042900000000'],
+      low: ['6041800000000', '6042100000000'],
+      close: ['6042300000000', '6042500000000'],
+      volume: [10.5, 1.5],
+      flags: [1, 1],
+      tip: {
+        mask: ['CLOSE', 'VOLUME', 'TIME'],
+        flags: 1,
+        close: '6042550000000',
+        volume: 2.5,
+        time_s: T0 + 60,
+      },
     },
   },
 ];

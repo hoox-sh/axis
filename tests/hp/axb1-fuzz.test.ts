@@ -120,7 +120,7 @@ function ohlcvBars(n: number): {
 
 function randomFrame(): Axb1Frame {
   const h = hdr();
-  const pick = Math.floor(next() * 11);
+  const pick = Math.floor(next() * 12);
   switch (pick) {
     case 0:
       return { opcode: Axb1Opcode.HEARTBEAT, ...h };
@@ -221,6 +221,19 @@ function randomFrame(): Axb1Frame {
         message: ascii(i32range(0, 60)),
         retryable: next() < 0.5,
       };
+    case 10: {
+      const count = i32range(1, 30);
+      return {
+        opcode: Axb1Opcode.APPEND_BARS,
+        ...h,
+        priceScale: i32range(0, 12),
+        count,
+        closedUpto: u32(),
+        closedIndex: u32(),
+        ...ohlcvBars(count),
+        tip: tip(false),
+      };
+    }
     default:
       return {
         opcode: Axb1Opcode.JSON_BLOB,

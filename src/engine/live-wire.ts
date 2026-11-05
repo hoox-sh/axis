@@ -46,7 +46,7 @@ import { readTimeList, scriptDeltaTimeTail, Redesign2DeltaApplier } from './clie
 import { classifySeqGap } from './frames';
 import { v1Count } from './v1/metrics';
 import { commitLiveBatch, runApplyTransaction } from './v1/apply-transaction';
-import { wantsWorkerTransport } from './v1/transport';
+import { engineEncoding, wantsWorkerTransport, type EngineEncoding } from './v1/transport';
 import type { SubscriptionStatus } from '../store/types';
 
 export class StreamFallbackError extends Error {
@@ -133,15 +133,15 @@ export interface EvalScriptInput {
  * Concept §4.2. The main-thread JSON client must not negotiate: it only
  * `JSON.parse`s strings, so a binary reply would be dropped. Absent means JSON.
  */
-function negotiatedEncoding(): 'axb1' | undefined {
-  if (wantsWorkerTransport()) return 'axb1';
+function negotiatedEncoding(): EngineEncoding | undefined {
+  if (wantsWorkerTransport()) return engineEncoding();
   return undefined;
 }
 
 function resumeExtra(
   seq: number,
   closedUpto?: number,
-): { seq: number; closed_upto?: number; encoding?: 'axb1' } {
+): { seq: number; closed_upto?: number; encoding?: EngineEncoding } {
   const encoding = negotiatedEncoding();
   return {
     seq,
@@ -611,7 +611,7 @@ export class StreamLiveWire {
     this.resumeAll();
   }
 
-  private encodingFor(subId: string): 'axb1' | undefined {
+  private encodingFor(subId: string): EngineEncoding | undefined {
     if (this.jsonSubs.has(subId)) return undefined;
     return negotiatedEncoding();
   }
@@ -620,7 +620,7 @@ export class StreamLiveWire {
     subId: string,
     seq: number,
     closedUpto?: number,
-  ): { seq: number; closed_upto?: number; encoding?: 'axb1' } {
+  ): { seq: number; closed_upto?: number; encoding?: EngineEncoding } {
     if (this.jsonSubs.has(subId)) {
       return { seq, ...(closedUpto != null ? { closed_upto: closedUpto } : {}) };
     }

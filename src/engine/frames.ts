@@ -66,12 +66,7 @@ export type DeltaBlock = {
 
 /** Per-subscription lifecycle states (see final/plan.mdx §7). */
 export type SubscriptionStatusCode =
-  | 'datafeed-loading'
-  | 'datafeed-ready'
-  | 'calculating'
-  | 'live'
-  | 'degraded'
-  | 'error';
+  'datafeed-loading' | 'datafeed-ready' | 'calculating' | 'live' | 'degraded' | 'error';
 
 // ---------------------------------------------------------------------------
 // Client → engine frames
@@ -95,8 +90,8 @@ export type Redesign2SubscribeFrame = {
     inputs?: Record<string, unknown>;
     libraries?: unknown;
     mode?: string;
-    /** `'axb1'` negotiates binary frames. Absent means JSON (concept §4.2). */
-    encoding?: 'axb1';
+    /** `'axb1'` or `'axb1-full'` negotiates binary frames. Absent means JSON. */
+    encoding?: 'axb1' | 'axb1-full';
   };
 };
 
@@ -111,7 +106,7 @@ export type Redesign2ResumeFrame = {
     /** Last applied per-subscription `seq`; the resync cursor. */
     seq?: number;
     /** Same negotiation as subscribe. Absent means JSON. */
-    encoding?: 'axb1';
+    encoding?: 'axb1' | 'axb1-full';
   };
 };
 
@@ -529,7 +524,8 @@ export function classifySeqGap(lastSeq: number, seq: number, ackFrom?: number): 
 
 /** Drop a coalescer ack so a network frame cannot suppress gap detection. */
 export function stripSeqAck<T>(frame: T): T {
-  if (!isRecord(frame) || !isRecord(frame.payload) || !('seqAckFrom' in frame.payload)) return frame;
+  if (!isRecord(frame) || !isRecord(frame.payload) || !('seqAckFrom' in frame.payload))
+    return frame;
   const { seqAckFrom: _ack, ...payload } = frame.payload;
   void _ack;
   return { ...frame, payload } as T;

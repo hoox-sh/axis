@@ -15,6 +15,11 @@ _Generated/updated: 2026-11-04 · 959 commits · describe-tag: `v2.27.0`_
 
 ## [Unreleased]
 
+### Added
+
+- **Optional `axis.engine.encoding` flag for all-data AXB1.** `axis.engine.transport=worker` now sends `encoding: 'axb1'` by default. Setting `localStorage.setItem('axis.engine.encoding', 'axb1-full')` (or calling `setEngineEncoding('axb1-full')`) asks PYNE to push script snapshots/deltas over AXB1 (`SNAPSHOT_PLOTS` / `PLOT_TIP`) in addition to the existing OHLCV binary path. The AXIS ingest decoder already understands these opcodes, so no decoder changes are required. JSON fallback is still honored per subscription when a frame shape is unsupported.
+- **New AXB1 `APPEND_BARS` opcode (0x0b) for multi-bar series deltas.** The `encoding: 'axb1-full'` mode now encodes a multi-bar candle delta as a single columnar `APPEND_BARS` envelope (batch cursor + OHLCV columns + optional forming tip) instead of falling back to JSON. The ingest decoder maps it back to one `delta` plus one `close` frame; the encoder, decoder, fuzz, codec round-trip, and the shared PYNE golden-vector suite all pin the new layout.
+
 ### Changed
 
 - **Results — commission model on the strategy report.** The engine nets commission into its own `strategy.closedtrades.profit`, but it never ships the fee to the host, so the host re-derived P&L from raw prices and silently reported **gross** results. The Strategy tab now has a **Commission** control (`%` of notional / cash per order / cash per contract) that charges both legs of every trade, persisted on `store.strategyUi.commission`. Fees flow into net profit, win rate, profit factor, and the equity curve; the stats grid gains **Commission** and **Gross P&L** tiles, and the trades CSV gains a `commission` column. Partial exits bill only their share of the entry fee (pyramiding accumulates it), so a position is never charged twice. New `tests/strategy-commission.test.ts`; `e2e/results-overlay.spec.ts` covers the toggle round-trip.

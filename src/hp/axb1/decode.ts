@@ -60,7 +60,9 @@ function asBytes(raw: ArrayBuffer | ArrayBufferView): Uint8Array {
 export function looksLikeAxb1(raw: ArrayBuffer | ArrayBufferView): boolean {
   const bytes = asBytes(raw);
   if (bytes.byteLength < 4) return false;
-  return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(0, true) === AXB1_MAGIC;
+  return (
+    new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(0, true) === AXB1_MAGIC
+  );
 }
 
 export function decodeEnvelope(raw: ArrayBuffer | ArrayBufferView): Axb1Envelope {
@@ -235,6 +237,43 @@ export function decodeFrame(raw: ArrayBuffer | ArrayBufferView): Axb1Frame | Axb
         low,
         close,
         volume,
+        tip,
+      };
+    }
+    case Axb1Opcode.APPEND_BARS: {
+      const priceScale = r.u8();
+      r.pad(3);
+      assertPriceScale(priceScale);
+      const count = r.u32();
+      const closedUpto = r.u32();
+      const closedIndex = r.u32();
+      const hasTip = r.u32() === 1;
+      const timeS = readN(count, () => r.i32());
+      r.align(8);
+      const payloadAbs = env.payload.byteOffset + r.off;
+      assertI64Aligned(payloadAbs);
+      const open = readN(count, () => r.i64());
+      const high = readN(count, () => r.i64());
+      const low = readN(count, () => r.i64());
+      const close = readN(count, () => r.i64());
+      const volume = readN(count, () => r.f64());
+      const flags = readN(count, () => r.u8());
+      r.align(4);
+      const tip = hasTip ? readTip(r, false) : { mask: 0, flags: 0 };
+      return {
+        opcode: Axb1Opcode.APPEND_BARS,
+        ...h,
+        priceScale,
+        count,
+        closedUpto,
+        closedIndex,
+        timeS,
+        open,
+        high,
+        low,
+        close,
+        volume,
+        flags,
         tip,
       };
     }

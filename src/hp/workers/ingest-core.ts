@@ -498,6 +498,72 @@ function mapAxb1(frame: Axb1Frame | Axb1Unknown, table: IngestCursorTable): Inge
     return { ok: true, kind: 'frames', frames: [delta, closeFrame] };
   }
 
+  if (ax.opcode === Axb1Opcode.APPEND_BARS) {
+    const n = ax.count;
+    const closedBars: CursorBar[] = [];
+    for (let i = 0; i < n; i++) {
+      closedBars.push({
+        time: serverBarSec(ax.timeS[i] ?? 0, 0),
+        open: ticksToPrice(ax.open[i] ?? 0n, ax.priceScale),
+        high: ticksToPrice(ax.high[i] ?? 0n, ax.priceScale),
+        low: ticksToPrice(ax.low[i] ?? 0n, ax.priceScale),
+        close: ticksToPrice(ax.close[i] ?? 0n, ax.priceScale),
+        volume: ax.volume[i] ?? 0,
+        closed: true,
+      });
+    }
+    const lastClosed = closedBars.length ? (closedBars[closedBars.length - 1] as CursorBar) : null;
+    const hasTip = (ax.tip.mask & TipMask.TIME) !== 0;
+    const nextBar = hasTip ? barFromTip(ax.tip, ax.priceScale, lastClosed) : lastClosed;
+    const baseIndex = Math.max(0, cur.count);
+    const nextCount = cur.count + n + (hasTip ? 1 : 0);
+    table.setCursor(id, {
+      count: Math.max(nextCount, 1),
+      closedUpto: ax.closedUpto,
+      sessionId: cur.sessionId,
+      priceScale: ax.priceScale,
+      lastBar: nextBar,
+    });
+    const bars: CursorBar[] = [...closedBars, ...(hasTip && nextBar ? [nextBar] : [])];
+    const delta: Redesign2Frame = {
+      type: 'delta',
+      id,
+      sessionId: cur.sessionId,
+      seq,
+      ts,
+      payload: {
+        base_index: baseIndex,
+        count: Math.max(nextCount, cur.count),
+        tail_len: bars.length,
+        closed_upto: ax.closedUpto,
+        forming: hasTip,
+        bars,
+      },
+    };
+    const frames: Redesign2Frame[] = [delta];
+    if (lastClosed) {
+      frames.push({
+        type: 'close',
+        id,
+        sessionId: cur.sessionId,
+        seq,
+        ts,
+        payload: {
+          index: ax.closedIndex,
+          time: lastClosed.time,
+          ohlcv: {
+            open: lastClosed.open,
+            high: lastClosed.high,
+            low: lastClosed.low,
+            close: lastClosed.close,
+            volume: lastClosed.volume,
+          },
+        },
+      });
+    }
+    return { ok: true, kind: 'frames', frames };
+  }
+
   return { ok: false, kind: 'malformed', reason: `opcode:${opcode}` };
 }
 
@@ -551,7 +617,9 @@ function payloadOf(frame: Redesign2Frame): Record<string, unknown> {
 }
 
 function seqOfFrame(frame: Redesign2Frame): number | null {
-  return 'seq' in frame && typeof frame.seq === 'number' && Number.isFinite(frame.seq) ? frame.seq : null;
+  return 'seq' in frame && typeof frame.seq === 'number' && Number.isFinite(frame.seq)
+    ? frame.seq
+    : null;
 }
 
 type SeqChain = { cursor: number; seenTo: number; broken: boolean };

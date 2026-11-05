@@ -413,7 +413,7 @@ export class Redesign2WsClient {
       libraries?: unknown;
       mode?: string;
       /** Include only when the caller negotiates AXB1. Omit for JSON. */
-      encoding?: 'axb1';
+      encoding?: 'axb1' | 'axb1-full';
     },
   ): void {
     const { encoding, ...rest } = opts ?? {};
@@ -435,7 +435,7 @@ export class Redesign2WsClient {
     id: string,
     count: number,
     lastTime: number,
-    extra?: { closed_upto?: number; seq?: number; encoding?: 'axb1' },
+    extra?: { closed_upto?: number; seq?: number; encoding?: 'axb1' | 'axb1-full' },
   ): void {
     const { encoding, ...rest } = extra ?? {};
     const frame: Redesign2ResumeFrame = {

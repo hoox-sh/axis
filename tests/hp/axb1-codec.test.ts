@@ -317,6 +317,65 @@ describe('AXB1 payloads', () => {
     ).toThrow(/values length/);
   });
 
+  test('APPEND_BARS columnar round-trip with and without a forming tip', () => {
+    const withoutTip: Axb1Frame = {
+      opcode: Axb1Opcode.APPEND_BARS,
+      ...hdr,
+      priceScale: 8,
+      count: 2,
+      closedUpto: 120,
+      closedIndex: 11,
+      timeS: [60, 120],
+      open: [100n, 110n],
+      high: [110n, 120n],
+      low: [90n, 100n],
+      close: [105n, 115n],
+      volume: [1.5, 2.5],
+      flags: [1, 1],
+      tip: { mask: 0, flags: 0 },
+    };
+    expect(decodeFrame(encodeFrame(withoutTip))).toEqual(withoutTip);
+
+    const withTip: Axb1Frame = {
+      opcode: Axb1Opcode.APPEND_BARS,
+      ...hdr,
+      priceScale: 8,
+      count: 2,
+      closedUpto: 120,
+      closedIndex: 11,
+      timeS: [60, 120],
+      open: [100n, 110n],
+      high: [110n, 120n],
+      low: [90n, 100n],
+      close: [105n, 115n],
+      volume: [1.5, 2.5],
+      flags: [1, 1],
+      tip: { mask: TipMask.CLOSE | TipMask.TIME, flags: 1, close: 116n, timeS: 180 },
+    };
+    expect(decodeFrame(encodeFrame(withTip))).toEqual(withTip);
+  });
+
+  test('APPEND_BARS column length mismatch throws', () => {
+    expect(() =>
+      encodeFrame({
+        opcode: Axb1Opcode.APPEND_BARS,
+        ...hdr,
+        priceScale: 8,
+        count: 2,
+        closedUpto: 120,
+        closedIndex: 11,
+        timeS: [60],
+        open: [100n, 110n],
+        high: [110n, 120n],
+        low: [90n, 100n],
+        close: [105n, 115n],
+        volume: [1.5, 2.5],
+        flags: [1, 1],
+        tip: { mask: 0, flags: 0 },
+      }),
+    ).toThrow(/length mismatch/);
+  });
+
   test('APPEND_BAR + PLOT_TIP + STATUS + ERROR + JSON_BLOB round-trip', () => {
     const append: Axb1Frame = {
       opcode: Axb1Opcode.APPEND_BAR,
@@ -509,6 +568,23 @@ function frameFromSpec(raw: Record<string, unknown>): Axb1Frame {
       };
     case 'JSON_BLOB':
       return { opcode: Axb1Opcode.JSON_BLOB, ...header, json: rest.json as string };
+    case 'APPEND_BARS':
+      return {
+        opcode: Axb1Opcode.APPEND_BARS,
+        ...header,
+        priceScale: rest.price_scale as number,
+        count: rest.count as number,
+        closedUpto: rest.closed_upto as number,
+        closedIndex: rest.closed_index as number,
+        timeS: rest.time_s as number[],
+        open: (rest.open as string[]).map((x) => BigInt(x)),
+        high: (rest.high as string[]).map((x) => BigInt(x)),
+        low: (rest.low as string[]).map((x) => BigInt(x)),
+        close: (rest.close as string[]).map((x) => BigInt(x)),
+        volume: rest.volume as number[],
+        flags: rest.flags as number[],
+        tip: tipOf(rest.tip as Record<string, unknown>),
+      };
     default:
       throw new Error(`unknown golden-vector opcode ${String(opcode)}`);
   }

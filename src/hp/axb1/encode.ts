@@ -36,7 +36,13 @@ import {
   ValueKind,
 } from './constants';
 import { assertPriceScale } from './ticks';
-import type { Axb1Frame, Axb1HeaderFields, Axb1OhlcvSnapshot, Axb1PlotColumn, Axb1TipFields } from './types';
+import type {
+  Axb1Frame,
+  Axb1HeaderFields,
+  Axb1OhlcvSnapshot,
+  Axb1PlotColumn,
+  Axb1TipFields,
+} from './types';
 
 function headerOf(frame: Axb1Frame): Axb1HeaderFields {
   return {
@@ -104,7 +110,8 @@ function writeTip(w: BinWriter, tip: Axb1TipFields, requireTime: boolean): void 
     w.i64(tip.close);
   }
   if (mask & TipMask.VOLUME) {
-    if (tip.volume == null || !Number.isFinite(tip.volume)) throw new TypeError('TIP volume missing');
+    if (tip.volume == null || !Number.isFinite(tip.volume))
+      throw new TypeError('TIP volume missing');
     w.f64(tip.volume);
   }
   if (mask & TipMask.TIME) {
@@ -144,7 +151,50 @@ function writeOhlcv(w: BinWriter, snap: Axb1OhlcvSnapshot): void {
   w.padTo4();
 }
 
-function writePlots(w: BinWriter, count: number, closedUpto: number, times: number[] | null, plots: Axb1PlotColumn[]): void {
+function writeAppendBars(
+  w: BinWriter,
+  frame: Axb1Frame & { opcode: Axb1Opcode.APPEND_BARS },
+): void {
+  assertPriceScale(frame.priceScale);
+  const n = frame.count;
+  if (
+    frame.timeS.length !== n ||
+    frame.open.length !== n ||
+    frame.high.length !== n ||
+    frame.low.length !== n ||
+    frame.close.length !== n ||
+    frame.volume.length !== n ||
+    frame.flags.length !== n
+  ) {
+    throw new RangeError('APPEND_BARS column length mismatch');
+  }
+  w.u8(frame.priceScale);
+  w.pad(3);
+  w.u32(n);
+  w.u32(frame.closedUpto);
+  w.u32(frame.closedIndex);
+  const hasTip = (frame.tip.mask & TipMask.TIME) !== 0;
+  w.u32(hasTip ? 1 : 0);
+  for (let i = 0; i < n; i++) w.i32(frame.timeS[i] as number);
+  w.align(8);
+  for (let i = 0; i < n; i++) w.i64(frame.open[i] as bigint);
+  for (let i = 0; i < n; i++) w.i64(frame.high[i] as bigint);
+  for (let i = 0; i < n; i++) w.i64(frame.low[i] as bigint);
+  for (let i = 0; i < n; i++) w.i64(frame.close[i] as bigint);
+  for (let i = 0; i < n; i++) w.f64(frame.volume[i] as number);
+  for (let i = 0; i < n; i++) w.u8(frame.flags[i] as number);
+  w.padTo4();
+  if (hasTip) writeTip(w, frame.tip, false);
+  w.padTo4();
+}
+
+function writePlots(
+  w: BinWriter,
+  count: number,
+  closedUpto: number,
+  times: number[] | null,
+  plots: Axb1PlotColumn[],
+): void {
   w.u32(count);
   w.u32(closedUpto);
   w.u32(plots.length);
@@ -226,6 +276,9 @@ export function encodeFrame(frame: Axb1Frame): Uint8Array {
       writeTip(w, frame.tip, false);
       w.padTo4();
       return wrap(frame.opcode, header, w.finish());
+    case Axb1Opcode.APPEND_BARS:
+      writeAppendBars(w, frame);
+      return wrap(frame.opcode, header, w.finish());
     case Axb1Opcode.PLOT_TIP:
       w.u32(frame.plots.length);
       w.u32(0);
@@ -237,7 +290,8 @@ export function encodeFrame(frame: Axb1Frame): Uint8Array {
           if (p.ticks == null) throw new TypeError('PLOT_TIP ticks missing');
           w.i64(p.ticks);
         } else {
-          if (p.value == null || !Number.isFinite(p.value)) throw new TypeError('PLOT_TIP value missing');
+          if (p.value == null || !Number.isFinite(p.value))
+            throw new TypeError('PLOT_TIP value missing');
           w.f64(p.value);
         }
       }

@@ -100,6 +100,21 @@ export type Axb1Frame =
       tip: Axb1TipFields;
     })
   | (Axb1HeaderFields & {
+      opcode: Axb1Opcode.APPEND_BARS;
+      priceScale: number;
+      count: number;
+      closedUpto: number;
+      closedIndex: number;
+      timeS: number[];
+      open: bigint[];
+      high: bigint[];
+      low: bigint[];
+      close: bigint[];
+      volume: number[];
+      flags: number[];
+      tip: Axb1TipFields;
+    })
+  | (Axb1HeaderFields & {
       opcode: Axb1Opcode.PLOT_TIP;
       plots: Array<{ keyHash: number; kind: ValueKind; ticks?: bigint; value?: number }>;
     })

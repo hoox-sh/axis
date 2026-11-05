@@ -7,8 +7,10 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { Redesign2WsClient } from '../../src/engine/ws-client';
 import { _resetV1Metrics, v1MetricsSnapshot } from '../../src/engine/v1/metrics';
 import {
+  engineEncoding,
   engineTransport,
   resetEngineTransport,
+  setEngineEncoding,
   setEngineTransport,
 } from '../../src/engine/v1/transport';
 import {
@@ -46,6 +48,21 @@ describe('axis.engine.transport', () => {
     expect(engineTransport()).toBe('json');
     setEngineTransport('worker');
     expect(engineTransport()).toBe('worker');
+  });
+
+  test('encoding defaults to axb1 and round-trips axb1-full', () => {
+    expect(engineEncoding()).toBe('axb1');
+    setEngineEncoding('axb1-full');
+    expect(engineEncoding()).toBe('axb1-full');
+    setEngineEncoding('axb1');
+    expect(engineEncoding()).toBe('axb1');
+  });
+
+  test('axb1-full setting is cleared by resetEngineTransport', () => {
+    setEngineEncoding('axb1-full');
+    expect(engineEncoding()).toBe('axb1-full');
+    resetEngineTransport();
+    expect(engineEncoding()).toBe('axb1');
   });
 
   test('explicit json keeps the main-thread client', () => {
@@ -101,7 +118,10 @@ describe('axis.engine.transport', () => {
       const seen: unknown[] = [];
       client.onFrame = (frame) => seen.push(frame);
       const calls: string[] = [];
-      JSON.parse = ((text: string, reviver?: (this: unknown, key: string, value: unknown) => unknown) => {
+      JSON.parse = ((
+        text: string,
+        reviver?: (this: unknown, key: string, value: unknown) => unknown,
+      ) => {
         calls.push(text);
         return nativeJsonParse(text, reviver);
       }) as typeof JSON.parse;
