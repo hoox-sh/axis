@@ -78,13 +78,28 @@ Computed by `buildStrategyReport`:
 
 | Stat | Definition (viewer) |
 | --- | --- |
-| totalPnl | Sum of closed trade PnL (price units) |
+| totalPnl | Sum of closed trade PnL (price units), **net of commission** when a model is set |
 | winRate | % wins among closed trades |
 | profitFactor | Gross profit / gross loss |
 | avgTrade / avgWin / avgLoss | Means over closed set |
-| maxDD | Peak-to-trough on cumulative trade PnL path |
+| maxDrawdown | Peak-to-trough on the cumulative trade PnL path, **in money** (what the UI shows) |
+| maxDD | The same drawdown as a relative ratio, clamped to `[0, 1]` — legacy, not a % of capital |
+| totalCommission / grossPnl | Σ fees charged and PnL before fees (only with a commission model) |
 | wins / losses / trades | Counts |
 
+### Commission
+
+The engine nets commission into its own `strategy.closedtrades.profit`, but that figure never reaches the host, so the report re-derives P&L from prices and is **gross by default**. Turn on **Commission** on the Strategy tab to charge fees:
+
+| Type | Charged per fill |
+| --- | --- |
+| `%` of notional | `\|price × qty\| × value / 100` |
+| Cash / order | flat `value` |
+| Cash / contract | `value × qty` |
+
+Both the entry and the exit leg are charged. Pyramiding accumulates entry fees on the open position; a partial exit bills only its pro-rata share, so a position is never charged twice. Fees flow through net profit, win rate, profit factor, and the equity curve, and the trades CSV gains a `commission` column.
+
+> A percentage **drawdown** needs a capital base, which this report does not model — P&L is in price × qty units. That is why Max DD is shown as money.
 
 Pairing rules: entry-like kinds open by `id`; exit/close kinds match id or sole open trade. Direction flips short PnL. Missing prices drop the event from pairing (with normalization attempting OHLC fill from bars when available).
 
@@ -100,7 +115,7 @@ Pairing rules: entry-like kinds open by `id`; exit/close kinds match id or sole 
 | Export | Content |
 | --- | --- |
 | JSON | Full `lastRun` |
-| CSV | Closed trades (`tradesToCsv`) |
+| CSV | Closed trades (`tradesToCsv`) — adds a `commission` column when a fee model is active |
 | Clipboard | CSV of trades when supported |
 
 Filenames: `axis-run-<ts>.json`, `axis-trades-<ts>.csv`.

@@ -7,7 +7,7 @@ tags: [code, results]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-05T12:39:18Z
+  at: 2026-11-05T12:40:24Z
 sources:
   - id: tree
     resource: "src/results"
@@ -31,7 +31,7 @@ okf_lock: generated
 * `pyne-logs.ts` — PyneLogEntry, PyneLogLevel, filterPyneLogs, normalizePyneLogs, pyneLogsToText
 * `script-inputs.ts` — DEFAULT_SOURCE_OPTIONS, InputFormGroup, InputFormRow, PineEnumDef, PineEnumMember, ScriptInputDef, ScriptInputType, applyInputOverrides, collectImportAliases, collectPineEnumsFromSources, collectStringConsts, findLhsIdent
 * `strategy-props.ts` — COMMISSION_TYPE_OPTIONS, QTY_TYPE_OPTIONS, STRATEGY_PROP_CATALOG, StrategyPropDef, StrategyPropType, applyStrategyOverrides, applyStrategyPropsToSource, findStrategyCall, hasStrategyDeclaration, normalizeStrategyEnum, parseStrategyDeclaration, resolveStrategyProps
-* `strategy.ts` — BuildStrategyReportOptions, ClosedTrade, EquityStep, PositionCloseFill, PositionFill, PositionView, StrategyEvent, StrategyStats, StrategyStatsSnapshot, StrategyWalk, StreamEventView, SvgPolylineResult
+* `strategy.ts` — BuildStrategyReportOptions, ClosedTrade, CommissionModel, EquityStep, PositionCloseFill, PositionFill, PositionView, StrategyEvent, StrategyStats, StrategyStatsSnapshot, StrategyWalk, StreamEventView
 * `window-axis.ts` — RunWindowAxis, WINDOW_AXIS_KEYS, axisStamp, barIndexForTime, looksLikeBarIndex, timeForBarIndex, windowAxisFromBars, windowAxisFromMeta
 
 # Depends on

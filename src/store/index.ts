@@ -554,6 +554,22 @@ export function clampHistoryBars(n: unknown): number {
 }
 
 /**
+ * Validate a persisted strategy commission model. Anything malformed collapses
+ * to `null` (no commission) rather than silently charging a guessed fee.
+ */
+export function readCommissionModel(raw: unknown): AppState['strategyUi']['commission'] {
+  if (!raw || typeof raw !== 'object') return null;
+  const rec = raw as Record<string, unknown>;
+  const type = rec.type;
+  const value = Number(rec.value);
+  if (type !== 'percent' && type !== 'cash_per_order' && type !== 'cash_per_contract') {
+    return null;
+  }
+  if (!Number.isFinite(value) || value <= 0) return null;
+  return { type, value };
+}
+
+/**
  * Rolling window (bars) — how many bars the chart holds and the engine sees.
  *
  * Distinct from {@link AppState.historyBars}, which is how much history to
@@ -675,6 +691,7 @@ export const DEFAULTS: AppState = {
     slippageNextOpen: false,
     invertTradeLabels: false,
     exactOnCandle: true,
+    commission: null,
   },
   symbol: 'BTCUSDT',
   interval: '15m',
@@ -1005,6 +1022,9 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
                 typeof (bag.strategyUi as AppState['strategyUi']).exactOnCandle === 'boolean'
                   ? (bag.strategyUi as AppState['strategyUi']).exactOnCandle
                   : DEFAULTS.strategyUi.exactOnCandle,
+              commission: readCommissionModel(
+                (bag.strategyUi as { commission?: unknown } | undefined)?.commission,
+              ),
             }
           : {}),
       },

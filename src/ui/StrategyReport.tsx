@@ -29,6 +29,7 @@ import {
   formatPct,
   tradesToCsv,
   type ClosedTrade,
+  type CommissionModel,
   type StrategyStats,
 } from '../results/strategy';
 import { Icons } from './icons';
@@ -69,11 +70,14 @@ export type StrategyReportProps = {
   invertTradeLabels?: boolean;
   /** Exact in-bar circle marks on fill candles. */
   exactOnCandle?: boolean;
+  /** Commission model applied to both legs; `null` = gross P&L. */
+  commission?: CommissionModel | null;
   /** Persist strategy UI prefs and re-apply chart markers. */
   onStrategyUiChange?: (patch: {
     slippageNextOpen?: boolean;
     invertTradeLabels?: boolean;
     exactOnCandle?: boolean;
+    commission?: CommissionModel | null;
   }) => void;
 };
 
@@ -99,10 +103,7 @@ export const StrategyReport: Component<StrategyReportProps> = (props) => {
   return (
     <div class="ax-stack ax-stack--compact" data-testid="axis-strategy-report">
       {/* Fill / marker options (apply without re-run) */}
-      <div
-        class="ax-toggle-grid ax-toggle-grid--3"
-        data-testid="axis-strategy-fill-opts"
-      >
+      <div class="ax-toggle-grid ax-toggle-grid--3" data-testid="axis-strategy-fill-opts">
         <label class="ax-toggle" title={fillHint()}>
           <input
             type="checkbox"
@@ -135,14 +136,77 @@ export const StrategyReport: Component<StrategyReportProps> = (props) => {
             type="checkbox"
             checked={props.exactOnCandle !== false}
             data-testid="axis-strategy-exact-marks"
-            onChange={(e) =>
-              props.onStrategyUiChange?.({ exactOnCandle: e.currentTarget.checked })
-            }
+            onChange={(e) => props.onStrategyUiChange?.({ exactOnCandle: e.currentTarget.checked })}
           />
           <span>
             <span class="ax-toggle-title">Exact on candle</span>
           </span>
         </label>
+      </div>
+
+      {/* Commission — charged on both legs of every trade */}
+      <div class="ax-strategy-commission" data-testid="axis-strategy-commission">
+        <label class="ax-toggle" title="Charge commission on entry and exit fills">
+          <input
+            type="checkbox"
+            checked={!!props.commission}
+            data-testid="axis-strategy-commission-on"
+            onChange={(e) =>
+              props.onStrategyUiChange?.({
+                commission: e.currentTarget.checked ? { type: 'percent', value: 0.04 } : null,
+              })
+            }
+          />
+          <span>
+            <span class="ax-toggle-title">Commission</span>
+            <span class="ax-toggle-hint">
+              {props.commission ? 'Charged on entry and exit fills' : 'Off — P&L is gross of fees'}
+            </span>
+          </span>
+        </label>
+        <Show when={props.commission}>
+          {(model) => (
+            <>
+              <select
+                class="ax-strategy-commission-type"
+                aria-label="Commission type"
+                value={model().type}
+                data-testid="axis-strategy-commission-type"
+                onChange={(e) =>
+                  props.onStrategyUiChange?.({
+                    commission: {
+                      type: e.currentTarget.value as CommissionModel['type'],
+                      value: model().value,
+                    },
+                  })
+                }
+              >
+                <option value="percent">% of notional</option>
+                <option value="cash_per_order">Cash / order</option>
+                <option value="cash_per_contract">Cash / contract</option>
+              </select>
+              <input
+                type="number"
+                class="ax-strategy-commission-value"
+                aria-label="Commission value"
+                min="0"
+                step="any"
+                value={model().value}
+                data-testid="axis-strategy-commission-value"
+                onInput={(e) => {
+                  const v = Number(e.currentTarget.value);
+                  props.onStrategyUiChange?.({
+                    commission:
+                      Number.isFinite(v) && v > 0 ? { type: model().type, value: v } : null,
+                  });
+                }}
+              />
+              <span class="ax-strategy-commission-unit">
+                {model().type === 'percent' ? '%' : 'cash'}
+              </span>
+            </>
+          )}
+        </Show>
       </div>
 
       <Show
@@ -161,7 +225,10 @@ export const StrategyReport: Component<StrategyReportProps> = (props) => {
           <div class="ax-grid ax-grid--4" data-testid="axis-strategy-stats">
             <StudioStat label="# Trades" value={String(props.stats.trades)} />
             <StudioStat label="Win rate" value={`${props.stats.winRate.toFixed(1)}%`} />
-            <StudioStat label="Wins / Losses" value={`${props.stats.wins} / ${props.stats.losses}`} />
+            <StudioStat
+              label="Wins / Losses"
+              value={`${props.stats.wins} / ${props.stats.losses}`}
+            />
             <StudioStat
               label="Profit factor"
               value={
@@ -182,19 +249,26 @@ export const StrategyReport: Component<StrategyReportProps> = (props) => {
             />
             <StudioStat
               label="Max DD"
-              value={`${(props.stats.maxDD * 100).toFixed(2)}%`}
+              value={formatMoney(-(props.stats.maxDrawdown ?? 0))}
+              testId="axis-strategy-maxdd"
             />
             <StudioStat label="Avg trade" value={formatMoney(props.stats.avgTrade)} />
             <StudioStat label="Avg win" value={formatMoney(props.stats.avgWin)} />
             <StudioStat label="Avg loss" value={formatMoney(props.stats.avgLoss)} />
-            <StudioStat
-              label="Gross profit"
-              value={formatMoney(props.stats.grossProfit ?? 0)}
-            />
-            <StudioStat
-              label="Gross loss"
-              value={formatMoney(props.stats.grossLoss ?? 0)}
-            />
+            <StudioStat label="Gross profit" value={formatMoney(props.stats.grossProfit ?? 0)} />
+            <StudioStat label="Gross loss" value={formatMoney(props.stats.grossLoss ?? 0)} />
+            <Show when={props.stats.totalCommission != null}>
+              <StudioStat
+                label="Commission"
+                value={formatMoney(-(props.stats.totalCommission ?? 0))}
+                testId="axis-strategy-commission-total"
+              />
+              <StudioStat
+                label="Gross P&L"
+                value={formatMoney(props.stats.grossPnl ?? 0)}
+                testId="axis-strategy-gross-pnl"
+              />
+            </Show>
           </div>
 
           {/* Equity curve */}
@@ -258,11 +332,13 @@ export const StrategyReport: Component<StrategyReportProps> = (props) => {
                         <td>{t.id}</td>
                         <td>{t.dir}</td>
                         <td>
-                          {(t.qty ?? 1) % 1 === 0
-                            ? String(t.qty ?? 1)
-                            : (t.qty ?? 1).toFixed(4)}
+                          {(t.qty ?? 1) % 1 === 0 ? String(t.qty ?? 1) : (t.qty ?? 1).toFixed(4)}
                         </td>
-                        <td title={t.entryFills && t.entryFills > 1 ? 'Pyramided entry fills' : undefined}>
+                        <td
+                          title={
+                            t.entryFills && t.entryFills > 1 ? 'Pyramided entry fills' : undefined
+                          }
+                        >
                           {t.entryFills ?? 1}
                         </td>
                         {/* biome-ignore lint/a11y: data-table cell styled as a jump link; a <button> inside <td> would break the table cell layout */}

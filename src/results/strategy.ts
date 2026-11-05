@@ -86,6 +86,11 @@ export interface ClosedTrade {
   pnl: number;
   /** Fractional move vs entry price (independent of qty). */
   pnlPct: number;
+  /**
+   * Commission charged on this trade, both legs (entry + exit).
+   * Always non-negative; `0` when no commission model is configured.
+   */
+  commission?: number;
   /** Bars held (entry → exit resolved against loaded bars; absent when unknown). */
   barsHeld?: number;
   /** Entry fills that built this trade (pyramiding averages into `entry`). */
@@ -100,7 +105,10 @@ export interface StrategyStats {
   avgTrade: number;
   avgWin: number;
   avgLoss: number;
+  /** Peak-to-trough drawdown as a ratio (relative, not % of equity). */
   maxDD: number;
+  /** Peak-to-trough drawdown in money — the figure the UI shows. */
+  maxDrawdown?: number;
   wins: number;
   losses: number;
   trades: number;
@@ -110,6 +118,10 @@ export interface StrategyStats {
   grossLoss?: number;
   /** Compounded per-trade price return: Π(1 + pnlPct) − 1 (optional). */
   returnPct?: number;
+  /** Σ commission across closed trades (optional — absent when no model). */
+  totalCommission?: number;
+  /** Σ P&L before commission; `totalPnl + totalCommission` (optional). */
+  grossPnl?: number;
 }
 
 /** One entry fill of a position (Open ⇄ Close view, left column). */
@@ -231,6 +243,53 @@ export interface BuildStrategyReportOptions {
    * so the index is only meaningful inside the window the engine evaluated.
    */
   axis?: RunWindowAxis | null;
+  /**
+   * Commission model applied to every fill (entry **and** exit), matching the
+   * Pine `strategy(commission_type=…, commission_value=…)` semantics:
+   *
+   * - `percent` — `value` is a percent of traded notional (`|price × qty| / 100`)
+   * - `cash_per_order` — flat `value` per fill
+   * - `cash_per_contract` — `value × qty` per fill
+   *
+   * The engine nets commission into its own `strategy.closedtrades.profit`, but
+   * never ships the fee to the host, so the host re-derives P&L from prices.
+   * Without this model that re-derivation silently reports gross (fee-free)
+   * results. Absent → no commission (legacy behaviour).
+   */
+  commission?: CommissionModel | null;
+}
+
+/** Fee model for the strategy report. See {@link BuildStrategyReportOptions.commission}. */
+export interface CommissionModel {
+  type: 'percent' | 'cash_per_order' | 'cash_per_contract';
+  /** Percent (e.g. `0.04` = 4 bps) or cash amount, per `type`. */
+  value: number;
+}
+
+/** Commission for one fill. Non-negative; `0` for a missing/invalid model. */
+export function fillCommission(
+  model: CommissionModel | null | undefined,
+  price: number,
+  qty: number,
+): number {
+  if (!model || typeof model !== 'object') return 0;
+  const v = Number(model.value);
+  if (!Number.isFinite(v) || v <= 0) return 0;
+  const p = Number(price);
+  const q = Number(qty);
+  if (!Number.isFinite(q) || q <= 0) return 0;
+  switch (model.type) {
+    case 'cash_per_order':
+      return v;
+    case 'cash_per_contract':
+      return v * q;
+    case 'percent': {
+      if (!Number.isFinite(p)) return 0;
+      return (Math.abs(p) * q * v) / 100;
+    }
+    default:
+      return 0;
+  }
 }
 
 function emptyStats(): StrategyStats {
@@ -242,6 +301,7 @@ function emptyStats(): StrategyStats {
     avgWin: 0,
     avgLoss: 0,
     maxDD: 0,
+    maxDrawdown: 0,
     wins: 0,
     losses: 0,
     trades: 0,
@@ -298,6 +358,8 @@ interface OpenCycle {
   entry: number;
   qty: number;
   fills: PositionFill[];
+  /** Commission already charged on the entry fills of this cycle. */
+  commission: number;
   /** View record being built for this cycle (shared reference). */
   view: PositionView;
 }
@@ -317,6 +379,9 @@ export function walkStrategyEvents(
 ): StrategyWalk {
   const empty: StrategyWalk = { trades: [], stats: emptyStats(), positions: [], stream: [] };
   if (!Array.isArray(events)) return empty;
+  const commissionModel = opts.commission ?? null;
+  /** Every fee charged this walk (entry fills + exit fills). */
+  let commissionCharged = 0;
   const normalized = normalizeStrategyEvents(events, {
     bars,
     includeOrders: true,
@@ -388,6 +453,9 @@ export function walkStrategyEvents(
       cycle.entry = nextQty > 0 ? (cycle.entry * cycle.qty + p * q) / nextQty : p;
       cycle.qty = nextQty;
       cycle.fills.push({ time: t, price: p, qty: q });
+      const addFee = fillCommission(commissionModel, p, q);
+      commissionCharged += addFee;
+      cycle.commission += addFee;
       cycle.view.avgPrice = cycle.entry;
       cycle.view.totalQty = nextQty;
       cycle.view.openQty += q;
@@ -410,6 +478,8 @@ export function walkStrategyEvents(
         exitTime: null,
       };
       positions.push(view);
+      const entryFee = fillCommission(commissionModel, p, q);
+      commissionCharged += entryFee;
       cycle = {
         id,
         cycle: n,
@@ -418,6 +488,7 @@ export function walkStrategyEvents(
         entry: p,
         qty: q,
         fills: view.opens,
+        commission: entryFee,
         view,
       };
       open.set(id, cycle);
@@ -440,7 +511,16 @@ export function walkStrategyEvents(
     engineProfit: unknown,
   ): void => {
     const sign = cycle.dir === 'short' ? -1 : 1;
-    const pnl = closePnl(cycle, p, closeQty, engineProfit);
+    // Commission is charged on both legs. Entry fees were banked on the cycle
+    // as it was built; take the share belonging to this close so a partial
+    // exit does not bill the whole position twice.
+    const qtyBefore = cycle.qty;
+    const entryShare = qtyBefore > 0 ? cycle.commission * Math.min(closeQty / qtyBefore, 1) : 0;
+    const exitCommission = fillCommission(commissionModel, p, closeQty);
+    commissionCharged += exitCommission;
+    const commission = entryShare + exitCommission;
+    cycle.commission = Math.max(0, cycle.commission - entryShare);
+    const pnl = closePnl(cycle, p, closeQty, engineProfit) - commission;
     const priceMove = (p - cycle.entry) * sign;
     const pnlPct = cycle.entry !== 0 ? priceMove / cycle.entry : 0;
     cycle.view.closes.push({ time: t, price: p, qty: closeQty, pnl, pnlPct });
@@ -457,6 +537,7 @@ export function walkStrategyEvents(
       qty: closeQty,
       pnl,
       pnlPct,
+      ...(commissionModel ? { commission } : {}),
       barsHeld: barsBetween(bars, cycle.time, t),
       entryFills: cycle.fills.length,
     });
@@ -545,14 +626,23 @@ export function walkStrategyEvents(
   const avgWin = wins.length ? grossProfit / wins.length : 0;
   const avgLoss = losses.length ? -grossLoss / losses.length : 0;
 
+  // Peak-to-trough drawdown in money. A *percentage* drawdown needs a capital
+  // base, which this report does not model (P&L is in price × qty units), so
+  // the ratio below is only meaningful as a relative figure — the UI shows
+  // `maxDrawdown` (money) and never presents the ratio as a percent of equity.
   let equity = 0;
   let peak = 0;
   let maxDD = 0;
+  let maxDrawdown = 0;
   for (const t of trades) {
     equity += t.pnl;
     if (equity > peak) peak = equity;
-    const dd = (peak - equity) / Math.max(1, Math.abs(peak) + 1);
-    if (dd > maxDD) maxDD = dd;
+    const dd = peak - equity;
+    if (dd > maxDrawdown) maxDrawdown = dd;
+    // Clamped: with no capital base the raw ratio can exceed 1 (a small peak
+    // against a large trough), which is not a drawdown percentage.
+    const ratio = Math.min(1, dd / Math.max(1, Math.abs(peak) + 1));
+    if (ratio > maxDD) maxDD = ratio;
   }
 
   // Compounded per-trade price return (clamped per leg so a single −101% short
@@ -573,12 +663,16 @@ export function walkStrategyEvents(
       avgWin,
       avgLoss,
       maxDD,
+      maxDrawdown,
       wins: wins.length,
       losses: losses.length,
       trades: trades.length,
       grossProfit,
       grossLoss,
       returnPct,
+      ...(commissionModel
+        ? { totalCommission: commissionCharged, grossPnl: totalPnl + commissionCharged }
+        : {}),
     },
     positions,
     stream,
@@ -625,7 +719,10 @@ export function formatNum(n: unknown): string {
 }
 
 export function tradesToCsv(trades: ClosedTrade[]): string {
-  const header = 'id,dir,qty,entry_time,entry,exit_time,exit,pnl,pnl_pct';
+  const withFees = trades.some((t) => t.commission != null);
+  const header = `id,dir,qty,entry_time,entry,exit_time,exit,pnl,pnl_pct${
+    withFees ? ',commission' : ''
+  }`;
   const rows = trades.map((t) =>
     [
       csvCell(t.id),
@@ -637,6 +734,7 @@ export function tradesToCsv(trades: ClosedTrade[]): string {
       t.exit,
       t.pnl,
       t.pnlPct,
+      ...(withFees ? [t.commission ?? 0] : []),
     ].join(','),
   );
   return [header, ...rows].join('\n');

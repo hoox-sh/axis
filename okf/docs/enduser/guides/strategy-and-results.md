@@ -7,7 +7,7 @@ tags: [doc, docs, enduser, guides]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-05T12:39:58Z
+  at: 2026-11-05T12:40:24Z
 sources:
   - id: tree
     resource: "docs/enduser/guides/strategy-and-results.mdx"
@@ -26,6 +26,7 @@ Repo path `docs/enduser/guides/strategy-and-results.mdx`.
 * Conceptual model
 * Results drawer tabs
   * Strategy metrics
+  * Commission
   * Chart coupling
 * Export
 * Interface surface

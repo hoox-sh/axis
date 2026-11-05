@@ -475,6 +475,11 @@ export interface AppState {
      * Default true.
      */
     exactOnCandle: boolean;
+    /**
+     * Commission model applied to every fill in the strategy report.
+     * `null` (default) = gross P&L, matching engine events that carry no fees.
+     */
+    commission: { type: 'percent' | 'cash_per_order' | 'cash_per_contract'; value: number } | null;
   };
   symbol: string;
   interval: string;
