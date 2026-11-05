@@ -33,6 +33,7 @@ import {
   type Component,
   For,
   Show,
+  createEffect,
   createMemo,
   createResource,
   createSignal,
@@ -52,6 +53,16 @@ import {
 } from '../results/strategy';
 import { buildPositionViews, type PositionView, type StreamEventView } from '../results/positions';
 import { eventsToMarkers, normalizeStrategyEvents } from '../results/events';
+import {
+  countEvents,
+  filterEvents,
+  sortSavedRuns,
+  SAVED_SORTS,
+  sparklinePath,
+  summarizeSeries,
+  type EventDirFilter,
+  type SavedSort,
+} from '../results/overlay';
 import { windowAxisFromMeta } from '../results/window-axis';
 import { getManager } from '../chart/manager-access';
 import { Icons } from './icons';
@@ -115,29 +126,9 @@ function downloadText(filename: string, text: string, mime = 'text/plain') {
 
 /** Compact sparkline for a numeric series (used in the Plots subpage). */
 function Sparkline(props: { data: (number | null)[]; positive?: boolean }) {
-  const W = 100;
-  const H = 34;
-  const PAD = 3;
-  const path = () => {
-    const vals = props.data.filter((v): v is number => v != null) as number[];
-    if (vals.length < 2) return '';
-    let min = Math.min(...vals);
-    let max = Math.max(...vals);
-    if (min === max) {
-      min -= 1;
-      max += 1;
-    }
-    const n = vals.length;
-    return vals
-      .map((v, i) => {
-        const x = PAD + (i / (n - 1)) * (W - PAD * 2);
-        const y = PAD + (H - PAD * 2) - ((v - min) / (max - min)) * (H - PAD * 2);
-        return `${i === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
-      })
-      .join(' ');
-  };
+  const path = () => sparklinePath(props.data, { w: 100, h: 34, pad: 3 });
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} class="ax-spark" preserveAspectRatio="none" aria-hidden="true">
+    <svg viewBox="0 0 100 34" class="ax-spark" preserveAspectRatio="none" aria-hidden="true">
       <path d={path()} fill="none" class={props.positive ? 'ax-spark-pos' : 'ax-spark-neg'} />
     </svg>
   );
@@ -276,10 +267,12 @@ export const ResultsModal: Component = () => {
     if (!r) return null;
     void store.chartDataGen;
     void store.strategyUi?.slippageNextOpen;
+    void store.strategyUi?.commission;
     const bars = untrack(() => store.bars || []);
     return buildStrategyReport((r.events || []) as StrategyEvent[], bars, {
       fillMode: fillMode(),
       axis: windowAxisFromMeta(r.meta),
+      commission: store.strategyUi?.commission ?? null,
     });
   });
 
@@ -315,6 +308,30 @@ export const ResultsModal: Component = () => {
 
   const streamEvents = createMemo<StreamEventView[]>(() => positionData()?.stream ?? []);
 
+  // ── Events filters ───────────────────────────────────────────────────
+  const [eventQuery, setEventQuery] = createSignal('');
+  const [eventDir, setEventDir] = createSignal<EventDirFilter>('all');
+  const [eventSide, setEventSide] = createSignal<'all' | 'entries' | 'exits'>('all');
+
+  const eventCounts = createMemo(() => countEvents(streamEvents()));
+
+  const visibleEvents = createMemo(() =>
+    filterEvents(streamEvents(), {
+      query: eventQuery(),
+      dir: eventDir(),
+      closesOnly: eventSide() === 'all' ? null : eventSide() === 'exits',
+    }),
+  );
+
+  const eventFiltersActive = () =>
+    Boolean(eventQuery().trim()) || eventDir() !== 'all' || eventSide() !== 'all';
+
+  const resetEventFilters = () => {
+    setEventQuery('');
+    setEventDir('all');
+    setEventSide('all');
+  };
+
   const jumpToTime = (t: number) => {
     const n = Number(t);
     if (!Number.isFinite(n) || n <= 0) return;
@@ -345,27 +362,6 @@ export const ResultsModal: Component = () => {
     const t = which === 'exit' ? trade.exitTime : trade.entryTime;
     getManager()?.scrollToTime(t);
   }
-
-  const plotSummary = createMemo(() => {
-    const r = result();
-    if (!r) return [] as { name: string; pts: number; last: string }[];
-    const out: { name: string; pts: number; last: string }[] = [];
-    const series = r.series || {};
-    const keys = Object.keys(series).filter((k) => !k.startsWith('__'));
-    if (keys.length) {
-      for (const k of keys) {
-        const arr = series[k] as (number | null)[];
-        const nonNull = arr?.filter((v) => v != null) ?? [];
-        const last = [...(arr || [])].reverse().find((v) => v != null);
-        out.push({ name: k, pts: nonNull.length, last: formatNum(last) });
-      }
-    } else if (r.plots?.length) {
-      const nonNull = r.plots.filter((v) => v != null).length;
-      const last = [...r.plots].reverse().find((v) => v != null);
-      out.push({ name: 'plot_0', pts: nonNull, last: formatNum(last) });
-    }
-    return out;
-  });
 
   const plotSeries = createMemo(() => {
     const r = result();
@@ -412,7 +408,7 @@ export const ResultsModal: Component = () => {
         label: 'Profit factor',
         value: Number.isFinite(rep.stats.profitFactor) ? rep.stats.profitFactor.toFixed(2) : '∞',
       });
-      m.push({ label: 'Max DD', value: `${(rep.stats.maxDD * 100).toFixed(2)}%` });
+      m.push({ label: 'Max DD', value: formatMoney(-(rep.stats.maxDrawdown ?? 0)) });
     }
     if (r.error) m.push({ label: 'Error', value: r.error });
     return m;
@@ -502,6 +498,77 @@ export const ResultsModal: Component = () => {
   });
 
   const reloadSavedRuns = () => setSavedRunsTick((n) => n + 1);
+
+  // ── Saved runs: sort, search, and multi-select ───────────────────────
+  const [savedSort, setSavedSort] = createSignal<SavedSort>('newest');
+  const [savedQuery, setSavedQuery] = createSignal('');
+  const [selectedRuns, setSelectedRuns] = createSignal<Set<string>>(new Set<string>());
+
+  const visibleSavedRuns = createMemo(() => sortSavedRuns(savedRuns(), savedSort(), savedQuery()));
+
+  const runKey = (run: ResultMeta) => `${run.scriptId}\u0000${run.runId}`;
+
+  const isRunSelected = (run: ResultMeta) => selectedRuns().has(runKey(run));
+
+  const toggleRun = (run: ResultMeta) => {
+    setSelectedRuns((prev) => {
+      const next = new Set(prev);
+      const key = runKey(run);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const allVisibleSelected = () => {
+    const rows = visibleSavedRuns();
+    return rows.length > 0 && rows.every((r) => selectedRuns().has(runKey(r)));
+  };
+
+  const toggleSelectAll = () => {
+    if (allVisibleSelected()) {
+      setSelectedRuns(new Set<string>());
+      return;
+    }
+    setSelectedRuns(new Set(visibleSavedRuns().map(runKey)));
+  };
+
+  /** Drop selections that are no longer in the list (after reload/delete). */
+  createEffect(() => {
+    const present = new Set(savedRuns().map(runKey));
+    setSelectedRuns((prev) => {
+      if (!prev.size) return prev;
+      const next = new Set([...prev].filter((k) => present.has(k)));
+      return next.size === prev.size ? prev : next;
+    });
+  });
+
+  const deleteSelectedRuns = async () => {
+    const keys = selectedRuns();
+    if (!keys.size) return;
+    const rows = savedRuns().filter((r) => keys.has(runKey(r)));
+    if (!rows.length) return;
+    const ok =
+      typeof window === 'undefined'
+        ? true
+        : window.confirm(
+            `Delete ${rows.length} saved run${rows.length === 1 ? '' : 's'}? This cannot be undone.`,
+          );
+    if (!ok) return;
+    let failed = 0;
+    for (const run of rows) {
+      try {
+        await removeRunResult(run.scriptId, run.runId);
+      } catch {
+        failed += 1;
+      }
+    }
+    setSelectedRuns(new Set<string>());
+    reloadSavedRuns();
+    if (failed) {
+      appendLog('warn', `Failed to delete ${failed} saved run(s)`, 'library');
+    }
+  };
 
   const restoreSavedRun = async (run: ResultMeta) => {
     if (!supportsRunResults()) return;
@@ -737,100 +804,209 @@ export const ResultsModal: Component = () => {
                             </button>
                           </div>
                           <span class="ax-toolbar-spacer" />
-                          <span class="ax-plot-meta">
-                            {streamEvents().length} event{streamEvents().length === 1 ? '' : 's'}
+                          <span class="ax-plot-meta" data-testid="axis-events-counts">
+                            {visibleEvents().length}
+                            {eventFiltersActive() ? ` / ${streamEvents().length}` : ''} event
+                            {streamEvents().length === 1 ? '' : 's'}
                             {' · '}
                             {positionData()?.positions.length ?? 0} position
                             {(positionData()?.positions.length ?? 0) === 1 ? '' : 's'}
                           </span>
                         </div>
 
+                        <div class="ax-toolbar ax-results-filterbar">
+                          <label class="ax-results-search">
+                            <Icons.search size={12} />
+                            <input
+                              type="search"
+                              class="ax-results-search-input"
+                              placeholder="Filter events…"
+                              aria-label="Filter events"
+                              value={eventQuery()}
+                              onInput={(e) => setEventQuery(e.currentTarget.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Escape' && eventFiltersActive()) {
+                                  e.preventDefault();
+                                  // Keep the overlay open: without this the
+                                  // window-level Escape closes the dialog too.
+                                  e.stopPropagation();
+                                  resetEventFilters();
+                                }
+                              }}
+                              data-testid="axis-events-query"
+                              autocomplete="off"
+                              spellcheck={false}
+                            />
+                          </label>
+                          {/* biome-ignore lint/a11y/useSemanticElements: chip row; fieldset default styles break the compact toolbar */}
+                          <div class="ax-results-chips" role="group" aria-label="Event side">
+                            <button
+                              type="button"
+                              class="ax-results-chip"
+                              classList={{ 'is-on': eventSide() === 'all' }}
+                              aria-pressed={eventSide() === 'all'}
+                              data-testid="axis-events-side-all"
+                              onClick={() => setEventSide('all')}
+                            >
+                              All
+                              <span class="ax-results-chip-n">{eventCounts().all}</span>
+                            </button>
+                            <button
+                              type="button"
+                              class="ax-results-chip"
+                              classList={{ 'is-on': eventSide() === 'entries' }}
+                              aria-pressed={eventSide() === 'entries'}
+                              data-testid="axis-events-side-entries"
+                              onClick={() => setEventSide('entries')}
+                            >
+                              Entries
+                              <span class="ax-results-chip-n">{eventCounts().entries}</span>
+                            </button>
+                            <button
+                              type="button"
+                              class="ax-results-chip"
+                              classList={{ 'is-on': eventSide() === 'exits' }}
+                              aria-pressed={eventSide() === 'exits'}
+                              data-testid="axis-events-side-exits"
+                              onClick={() => setEventSide('exits')}
+                            >
+                              Exits
+                              <span class="ax-results-chip-n">{eventCounts().exits}</span>
+                            </button>
+                          </div>
+                          {/* biome-ignore lint/a11y/useSemanticElements: chip row; fieldset default styles break the compact toolbar */}
+                          <div class="ax-results-chips" role="group" aria-label="Event direction">
+                            <For each={['all', 'long', 'short'] as EventDirFilter[]}>
+                              {(d) => (
+                                <button
+                                  type="button"
+                                  class="ax-results-chip"
+                                  classList={{ 'is-on': eventDir() === d }}
+                                  aria-pressed={eventDir() === d}
+                                  data-testid={`axis-events-dir-${d}`}
+                                  onClick={() => setEventDir(d)}
+                                >
+                                  {d === 'all' ? 'Both' : d}
+                                  <Show when={d !== 'all'}>
+                                    <span class="ax-results-chip-n">
+                                      {d === 'long' ? eventCounts().long : eventCounts().short}
+                                    </span>
+                                  </Show>
+                                </button>
+                              )}
+                            </For>
+                          </div>
+                          <Show when={eventFiltersActive()}>
+                            <button
+                              type="button"
+                              class="ax-results-chip is-reset"
+                              title="Reset event filters"
+                              data-testid="axis-events-reset"
+                              onClick={resetEventFilters}
+                            >
+                              <Icons.x size={10} /> Reset
+                            </button>
+                          </Show>
+                        </div>
+
                         {/* Stream — classic chronological list, enriched */}
                         <Show when={eventsView() === 'stream'}>
-                          <ul class="ax-list ax-event-list" data-testid="axis-events-stream">
-                            <For each={streamEvents()}>
-                              {(ev) => {
-                                const kind = String(ev.type || ev.event || ev.kind || '?');
-                                const dir = String(ev.dir || ev.direction || '');
-                                const dirClass =
-                                  dir.toLowerCase() === 'long'
-                                    ? 'ax-event-dir ax-event-dir--long'
-                                    : dir.toLowerCase() === 'short'
-                                      ? 'ax-event-dir ax-event-dir--short'
-                                      : 'ax-event-dir ax-event-dir--flat';
-                                const isClose =
-                                  kind.toLowerCase().includes('close') ||
-                                  kind.toLowerCase().includes('exit');
-                                const fromEntry =
-                                  typeof ev.from_entry === 'string' ? ev.from_entry : '';
-                                return (
-                                  <li class="ax-row ax-event-row">
-                                    <span class="ax-mono ax-event-time">
-                                      {formatEventTime(ev.time)}
-                                    </span>
-                                    <span class="ax-event-kind">{kind}</span>
-                                    <Show when={dir}>
-                                      <span class={dirClass}>{dir}</span>
-                                    </Show>
-                                    <span
-                                      class="ax-event-id"
-                                      title={`Order id: ${String(ev.id || '')}`}
-                                    >
-                                      {String(ev.id || '')}
-                                    </span>
-                                    <Show when={fromEntry}>
-                                      <span
-                                        class="ax-event-from"
-                                        title={`from_entry: ${fromEntry}`}
-                                      >
-                                        ← {fromEntry}
+                          <Show
+                            when={visibleEvents().length > 0}
+                            fallback={
+                              <div
+                                class="ax-empty axis-empty-state"
+                                data-testid="axis-events-no-match"
+                              >
+                                No events match the current filters.
+                              </div>
+                            }
+                          >
+                            <ul class="ax-list ax-event-list" data-testid="axis-events-stream">
+                              <For each={visibleEvents()}>
+                                {(ev) => {
+                                  const kind = String(ev.type || ev.event || ev.kind || '?');
+                                  const dir = String(ev.dir || ev.direction || '');
+                                  const dirClass =
+                                    dir.toLowerCase() === 'long'
+                                      ? 'ax-event-dir ax-event-dir--long'
+                                      : dir.toLowerCase() === 'short'
+                                        ? 'ax-event-dir ax-event-dir--short'
+                                        : 'ax-event-dir ax-event-dir--flat';
+                                  const isClose =
+                                    kind.toLowerCase().includes('close') ||
+                                    kind.toLowerCase().includes('exit');
+                                  const fromEntry =
+                                    typeof ev.from_entry === 'string' ? ev.from_entry : '';
+                                  return (
+                                    <li class="ax-row ax-event-row">
+                                      <span class="ax-mono ax-event-time">
+                                        {formatEventTime(ev.time)}
                                       </span>
-                                    </Show>
-                                    <Show
-                                      when={isClose}
-                                      fallback={
-                                        <Show
-                                          when={ev.fills != null}
-                                          fallback={<span class="ax-event-qty" />}
+                                      <span class="ax-event-kind">{kind}</span>
+                                      <Show when={dir}>
+                                        <span class={dirClass}>{dir}</span>
+                                      </Show>
+                                      <span
+                                        class="ax-event-id"
+                                        title={`Order id: ${String(ev.id || '')}`}
+                                      >
+                                        {String(ev.id || '')}
+                                      </span>
+                                      <Show when={fromEntry}>
+                                        <span
+                                          class="ax-event-from"
+                                          title={`from_entry: ${fromEntry}`}
                                         >
-                                          <span
-                                            class="ax-event-qty"
-                                            title={`Position qty ${formatFillQty(ev.posQty ?? 0)} · avg ${formatPosPrice(ev.posAvg ?? 0)}`}
+                                          ← {fromEntry}
+                                        </span>
+                                      </Show>
+                                      <Show
+                                        when={isClose}
+                                        fallback={
+                                          <Show
+                                            when={ev.fills != null}
+                                            fallback={<span class="ax-event-qty" />}
                                           >
-                                            #{ev.fills} · ×{formatFillQty(ev.posQty ?? 0)}
-                                          </span>
-                                        </Show>
-                                      }
-                                    >
-                                      <span
-                                        class="ax-event-qty"
-                                        title={`Qty still open after this close: ${formatFillQty(ev.remaining ?? 0)}`}
+                                            <span
+                                              class="ax-event-qty"
+                                              title={`Position qty ${formatFillQty(ev.posQty ?? 0)} · avg ${formatPosPrice(ev.posAvg ?? 0)}`}
+                                            >
+                                              #{ev.fills} · ×{formatFillQty(ev.posQty ?? 0)}
+                                            </span>
+                                          </Show>
+                                        }
                                       >
-                                        left ×{formatFillQty(ev.remaining ?? 0)}
+                                        <span
+                                          class="ax-event-qty"
+                                          title={`Qty still open after this close: ${formatFillQty(ev.remaining ?? 0)}`}
+                                        >
+                                          left ×{formatFillQty(ev.remaining ?? 0)}
+                                        </span>
+                                      </Show>
+                                      <span class="ax-mono ax-event-price">
+                                        {ev.price !== undefined && ev.price !== null
+                                          ? Number(ev.price).toFixed(2)
+                                          : '—'}
                                       </span>
-                                    </Show>
-                                    <span class="ax-mono ax-event-price">
-                                      {ev.price !== undefined && ev.price !== null
-                                        ? Number(ev.price).toFixed(2)
-                                        : '—'}
-                                    </span>
-                                    <Show when={isClose && ev.pnl != null}>
-                                      <span
-                                        class={`ax-event-pnl ${
-                                          (ev.pnl ?? 0) >= 0 ? 'ax-table-pos' : 'ax-table-neg'
-                                        }`}
-                                      >
-                                        {formatMoney(ev.pnl ?? 0)}
-                                      </span>
-                                    </Show>
-                                    <Show when={isClose && ev.pnl == null}>
-                                      <span class="ax-event-pnl ax-event-pnl--none">—</span>
-                                    </Show>
-                                  </li>
-                                );
-                              }}
-                            </For>
-                          </ul>
+                                      <Show when={isClose && ev.pnl != null}>
+                                        <span
+                                          class={`ax-event-pnl ${
+                                            (ev.pnl ?? 0) >= 0 ? 'ax-table-pos' : 'ax-table-neg'
+                                          }`}
+                                        >
+                                          {formatMoney(ev.pnl ?? 0)}
+                                        </span>
+                                      </Show>
+                                      <Show when={isClose && ev.pnl == null}>
+                                        <span class="ax-event-pnl ax-event-pnl--none">—</span>
+                                      </Show>
+                                    </li>
+                                  );
+                                }}
+                              </For>
+                            </ul>
+                          </Show>
                         </Show>
 
                         {/* Open ⇄ Close — per-position two-column grid */}
@@ -983,6 +1159,7 @@ export const ResultsModal: Component = () => {
                       slippageNextOpen={!!store.strategyUi?.slippageNextOpen}
                       invertTradeLabels={!!store.strategyUi?.invertTradeLabels}
                       exactOnCandle={store.strategyUi?.exactOnCandle !== false}
+                      commission={store.strategyUi?.commission ?? null}
                       onStrategyUiChange={(patch) => {
                         setStrategyUi(patch);
                         reapplyTradeMarkers();
@@ -999,20 +1176,43 @@ export const ResultsModal: Component = () => {
                       <div class="ax-grid ax-grid--2">
                         <For each={plotSeries()}>
                           {(p) => {
-                            const vals = p.data.filter((v): v is number => v != null) as number[];
-                            const first = vals[0] ?? 0;
-                            const last = vals[vals.length - 1] ?? 0;
-                            const positive = last >= first;
+                            const s = () => summarizeSeries(p.data);
+                            const positive = () => (s().change ?? 0) >= 0;
                             return (
                               <div class="ax-card ax-plot-card">
                                 <div class="ax-plot-head">
                                   <span class="ax-card-kicker">● {p.name}</span>
                                   <span class="ax-plot-meta">
-                                    {p.data.filter((v) => v != null).length} pts · last{' '}
-                                    {formatNum(last)}
+                                    {s().count} pts · last {formatNum(s().last ?? undefined)}
                                   </span>
                                 </div>
-                                <Sparkline data={p.data} positive={positive} />
+                                <Sparkline data={p.data} positive={positive()} />
+                                <div class="ax-plot-stats">
+                                  <span class="ax-plot-stat">
+                                    <span class="ax-plot-stat-k">min</span>
+                                    {formatNum(s().min ?? undefined)}
+                                  </span>
+                                  <span class="ax-plot-stat">
+                                    <span class="ax-plot-stat-k">max</span>
+                                    {formatNum(s().max ?? undefined)}
+                                  </span>
+                                  <span
+                                    class="ax-plot-stat"
+                                    classList={{
+                                      'ax-table-pos': positive(),
+                                      'ax-table-neg': !positive(),
+                                    }}
+                                  >
+                                    <span class="ax-plot-stat-k">Δ</span>
+                                    <span>
+                                      {s().changePct != null
+                                        ? `${(s().changePct ?? 0) >= 0 ? '+' : ''}${(
+                                            s().changePct ?? 0
+                                          ).toFixed(2)}%`
+                                        : '—'}
+                                    </span>
+                                  </span>{' '}
+                                </div>
                               </div>
                             );
                           }}
@@ -1069,6 +1269,36 @@ export const ResultsModal: Component = () => {
                           <span class="ax-card-kicker">Storage</span>
                           <span class="ax-mono">{storageEngineId()}</span>
                           <span class="ax-toolbar-spacer" />
+                          <Show when={savedRuns().length > 0}>
+                            <label class="ax-results-search">
+                              <Icons.search size={12} />
+                              <input
+                                type="search"
+                                class="ax-results-search-input"
+                                placeholder="Search runs…"
+                                aria-label="Search saved runs"
+                                value={savedQuery()}
+                                onInput={(e) => setSavedQuery(e.currentTarget.value)}
+                                data-testid="axis-results-saved-query"
+                                autocomplete="off"
+                                spellcheck={false}
+                              />
+                            </label>
+                            <label class="ax-results-sort">
+                              <span class="ax-results-sort-label">Sort</span>
+                              <select
+                                class="ax-results-sort-select"
+                                aria-label="Sort saved runs"
+                                value={savedSort()}
+                                onChange={(e) => setSavedSort(e.currentTarget.value as SavedSort)}
+                                data-testid="axis-results-saved-sort"
+                              >
+                                <For each={SAVED_SORTS}>
+                                  {(s) => <option value={s.id}>{s.label}</option>}
+                                </For>
+                              </select>
+                            </label>
+                          </Show>
                           <button
                             type="button"
                             class="ax-btn ax-btn--ghost"
@@ -1082,6 +1312,48 @@ export const ResultsModal: Component = () => {
                             Refresh
                           </button>
                         </div>
+
+                        <Show when={savedRuns().length > 0}>
+                          <div class="ax-toolbar ax-results-selectbar">
+                            <label class="ax-results-selectall">
+                              <input
+                                type="checkbox"
+                                checked={allVisibleSelected()}
+                                ref={(el) => {
+                                  createEffect(() => {
+                                    el.indeterminate =
+                                      selectedRuns().size > 0 && !allVisibleSelected();
+                                  });
+                                }}
+                                onChange={toggleSelectAll}
+                                data-testid="axis-results-saved-selectall"
+                              />
+                              <span>
+                                {selectedRuns().size > 0
+                                  ? `${selectedRuns().size} selected`
+                                  : 'Select all'}
+                              </span>
+                            </label>
+                            <span class="ax-toolbar-spacer" />
+                            <Show when={selectedRuns().size > 0}>
+                              <button
+                                type="button"
+                                class="ax-btn ax-btn--ghost ax-btn--danger"
+                                title="Delete the selected saved runs"
+                                data-testid="axis-results-saved-delete-selected"
+                                onClick={() => void deleteSelectedRuns()}
+                              >
+                                <Icons.trash />
+                                Delete {selectedRuns().size}
+                              </button>
+                            </Show>
+                            <Show when={savedQuery().trim()}>
+                              <span class="ax-plot-meta">
+                                {visibleSavedRuns().length} of {savedRuns().length}
+                              </span>
+                            </Show>
+                          </div>
+                        </Show>
 
                         <Show when={savedRunsResource.loading && savedRuns().length === 0}>
                           <div class="ax-empty">
@@ -1126,14 +1398,36 @@ export const ResultsModal: Component = () => {
                           </div>
                         </Show>
 
-                        <Show when={savedRuns().length > 0}>
+                        <Show when={savedRuns().length > 0 && visibleSavedRuns().length === 0}>
+                          <div
+                            class="ax-empty axis-empty-state"
+                            data-testid="axis-results-saved-no-match"
+                          >
+                            No saved runs match “{savedQuery()}”.
+                          </div>
+                        </Show>
+
+                        <Show when={visibleSavedRuns().length > 0}>
                           <ul class="ax-list ax-list--entity" data-testid="axis-results-saved-list">
-                            <For each={savedRuns()}>
+                            <For each={visibleSavedRuns()}>
                               {(run) => {
                                 const market = savedRunMarket(run);
                                 const stats = readSavedStats(run.stats);
                                 return (
-                                  <li class="ax-row" data-testid="axis-results-saved-row">
+                                  <li
+                                    class="ax-row ax-results-saved-row"
+                                    classList={{ 'is-selected': isRunSelected(run) }}
+                                    data-testid="axis-results-saved-row"
+                                  >
+                                    <label class="ax-results-rowcheck" title="Select this run">
+                                      <input
+                                        type="checkbox"
+                                        checked={isRunSelected(run)}
+                                        onChange={() => toggleRun(run)}
+                                        aria-label={`Select ${run.label || defaultSavedLabel(run)}`}
+                                        data-testid="axis-results-saved-rowcheck"
+                                      />
+                                    </label>
                                     <div class="ax-entity">
                                       <div class="ax-entity-body">
                                         <div class="ax-entity-head">
@@ -1219,9 +1513,16 @@ export const ResultsModal: Component = () => {
                                             </span>
                                             <span class="ax-saved-stat" title="Max drawdown">
                                               <span class="ax-saved-stat-k">Max DD</span>
-                                              <span class="ax-saved-stat-v ax-table-neg">
+                                              <span
+                                                class="ax-saved-stat-v"
+                                                classList={{
+                                                  'ax-table-neg': (stats.maxDD ?? 0) > 0.00005,
+                                                }}
+                                              >
                                                 {stats.maxDD != null
-                                                  ? `−${(stats.maxDD * 100).toFixed(2)}%`
+                                                  ? stats.maxDD > 0.00005
+                                                    ? `−${(stats.maxDD * 100).toFixed(2)}%`
+                                                    : '0.00%'
                                                   : '—'}
                                               </span>
                                             </span>
@@ -1271,7 +1572,11 @@ export const ResultsModal: Component = () => {
                             </For>
                           </ul>
                           <p class="ax-hint">
-                            {savedRuns().length} run{savedRuns().length === 1 ? '' : 's'} · FIFO cap{' '}
+                            {visibleSavedRuns().length}
+                            {visibleSavedRuns().length !== savedRuns().length
+                              ? ` of ${savedRuns().length}`
+                              : ''}{' '}
+                            run{savedRuns().length === 1 ? '' : 's'} · FIFO cap{' '}
                             <span class="ax-mono">{MAX_RESULTS_PER_SCRIPT}</span>
                           </p>
                         </Show>

@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/results"
-description: "src/results contains dataview.ts, debug-pins.ts, events.ts, and 11 more files."
+description: "src/results contains dataview.ts, debug-pins.ts, events.ts, and 12 more files."
 resource: "src/results"
 tags: [code, results]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-04T06:12:00Z
+  at: 2026-11-05T12:39:18Z
 sources:
   - id: tree
     resource: "src/results"
@@ -22,6 +22,7 @@ okf_lock: generated
 * `debug-pins.ts` — DebugPin, DebugPinSource, PinsFromDebugOptions, countDebugPins, debugPinsToMarkers, normalizePinTime, parseBarIndexFromText, parseTimeFromText, pinsFromDebugEntries, pinsFromLastRun, resolveDebugPinTarget
 * `events.ts` — EventsToMarkersOptions, NormalizeOptions, StrategyFillMode, TradeMarker, alignTimeToBars, applyStrategyFills, buildEquityCurve, eventsToMarkers, formatTradeQty, isNoFillCloseEvent, normalizeStrategyEvent, normalizeStrategyEvents
 * `inline-debug.ts` — InlineDebugAnnotation, InlineDebugLevel, collapseAnnotationsByLine, collectInlineDebugAnnotations, filterPinableAnnotations, isPinableAnnotation, parseSourceLine
+* `overlay.ts` — EventDirFilter, EventFilterOptions, SAVED_SORTS, SavedSort, SeriesSummary, countEvents, eventDir, eventSearchText, filterEvents, isCloseEvent, savedRunSearchText, sortSavedRuns
 * `pine-color.ts` — resolvePineColor
 * `plot-sources.ts` — IndicatorSeriesCache, PLOT_SOURCE_PREFIX, PlotSourceOption, formatPlotSourceId, groupIndicatorsByPlotDepLevel, isPlotSourceRef, listPlotSourceOptions, listStorePlotSourceOptions, mapWithConcurrencyLimit, orderIndicatorsByPlotDeps, parsePlotSourceId, resolveInputSourceValues
 * `plot-visuals.ts` — BgcolorBandSpec, LineOverlaySpec, OhlcBarPoint, OhlcOverlaySpec, PLOT_DISPLAY, PlotFillBandSpec, PlotKind, PlotMetaEntry, PlotSeriesKind, SeriesMap, ShapeMarkerSpec, barcolorSeriesToMap

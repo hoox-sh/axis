@@ -64,13 +64,13 @@ flowchart TB
 
 | Tab | Operator value |
 | --- | --- |
-| **Events** | Chronological normalized stream (kind, time, price, id, dir) with a **Stream / Open⇄Close view switcher** — the Open⇄Close view groups events into pyramiding-aware position cycles (avg-entry parity with the pyne broker, per-fill P&L, jump-to-bar) |
-| **Strategy** | Single column: stats → equity → closed trades below, with return %, bars-held, and fill-count detail |
-| **Plots** | Series inventory (points, last value) |
+| **Events** | Chronological normalized stream (kind, time, price, id, dir) with a **Stream / Open⇄Close view switcher** — the Open⇄Close view groups events into pyramiding-aware position cycles (avg-entry parity with the pyne broker, per-fill P&L, jump-to-bar). A filter bar narrows the stream by text (kind / direction / id), by side (**All / Entries / Exits**), and by direction (**Both / long / short**), each chip carrying its count; `Esc` clears the filters without closing the overlay |
+| **Strategy** | Single column: stats → equity → closed trades below, with return %, bars-held, and fill-count detail. A **Commission** control charges both legs of every trade |
+| **Plots** | Series inventory (points, last value, **min / max / Δ%**) with the sparkline breaking on `na` gaps |
 | **Metrics** | Runtime, status, engine, source, bars, high-level stats |
 | **Raw** | Pretty-printed JSON for support / diffs |
 
-Saved runs persist a JSON-safe strategy stats snapshot, so script-library rows show win %, profit factor, return %, max drawdown, and average trade at a glance. A shared walker (`walkStrategyEvents` in `src/results/strategy.ts`, positions in `src/results/positions.ts`) feeds trades, stats, positions, and the events stream.
+Saved runs persist a JSON-safe strategy stats snapshot, so script-library rows show win %, profit factor, return %, max drawdown, and average trade at a glance. The **Saved** tab sorts by newest / oldest / net P&L / win % / trades, searches by label, kind, symbol, or timeframe, and supports per-row selection with a bulk delete. A shared walker (`walkStrategyEvents` in `src/results/strategy.ts`, positions in `src/results/positions.ts`) feeds trades, stats, positions, and the events stream.
 
 ### Strategy metrics
 
@@ -84,6 +84,7 @@ Computed by `buildStrategyReport`:
 | avgTrade / avgWin / avgLoss | Means over closed set |
 | maxDD | Peak-to-trough on cumulative trade PnL path |
 | wins / losses / trades | Counts |
+
 
 Pairing rules: entry-like kinds open by `id`; exit/close kinds match id or sole open trade. Direction flips short PnL. Missing prices drop the event from pairing (with normalization attempting OHLC fill from bars when available).
 

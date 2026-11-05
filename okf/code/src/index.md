@@ -17,7 +17,7 @@
 * [src/perf](perf.md) - Minimal performance telemetry for Phase 0 measurement.
 * [src/plugins](plugins.md) - Public entry for the AXIS plugin system.
 * [src/pwa](pwa.md) - src/pwa contains close-guard.ts, install-prompt.ts, register-sw.ts.
-* [src/results](results.md) - src/results contains dataview.ts, debug-pins.ts, events.ts, and 11 more files.
+* [src/results](results.md) - src/results contains dataview.ts, debug-pins.ts, events.ts, and 12 more files.
 * [src/sources](sources.md) - src/sources contains catalog.ts, upload-store.ts.
 * [src/storage](storage.md) - src/storage contains catalog.ts, cloud-config.ts, cloud.ts, and 15 more files.
 * [src/store](store.md) - AXIS Solid store — createStore hydration, persistence, and mutation helpers.
