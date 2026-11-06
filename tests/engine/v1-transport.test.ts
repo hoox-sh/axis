@@ -50,19 +50,19 @@ describe('axis.engine.transport', () => {
     expect(engineTransport()).toBe('worker');
   });
 
-  test('encoding defaults to axb1 and round-trips axb1-full', () => {
-    expect(engineEncoding()).toBe('axb1');
-    setEngineEncoding('axb1-full');
+  test('encoding defaults to axb1-full and round-trips axb1', () => {
     expect(engineEncoding()).toBe('axb1-full');
     setEngineEncoding('axb1');
     expect(engineEncoding()).toBe('axb1');
-  });
-
-  test('axb1-full setting is cleared by resetEngineTransport', () => {
     setEngineEncoding('axb1-full');
     expect(engineEncoding()).toBe('axb1-full');
-    resetEngineTransport();
+  });
+
+  test('axb1 legacy opt-out is cleared by resetEngineTransport', () => {
+    setEngineEncoding('axb1');
     expect(engineEncoding()).toBe('axb1');
+    resetEngineTransport();
+    expect(engineEncoding()).toBe('axb1-full');
   });
 
   test('explicit json keeps the main-thread client', () => {

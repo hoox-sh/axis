@@ -574,7 +574,7 @@ describe('IngestHostClient over a fake ingest port', () => {
       expect(outbound(first).some((f) => f.type === 'subscribe' && f.id === SUB)).toBe(true);
       expect(outbound(first).find((f) => f.id === SUB)?.payload).toMatchObject({
         kind: 'series',
-        encoding: 'axb1',
+        encoding: 'axb1-full',
       });
       first.push(fullJson(4));
       await series;
@@ -589,7 +589,7 @@ describe('IngestHostClient over a fake ingest port', () => {
       await tick();
       expect(outbound(first).find((f) => f.id === SCRIPT)?.payload).toMatchObject({
         kind: 'script',
-        encoding: 'axb1',
+        encoding: 'axb1-full',
       });
       first.push(scriptFullJson(7));
       await script;
@@ -616,13 +616,13 @@ describe('IngestHostClient over a fake ingest port', () => {
         count: 1,
         last_time: 60,
         seq: 4,
-        encoding: 'axb1',
+        encoding: 'axb1-full',
       });
       expect(resumes.find((f) => f.id === SCRIPT)?.payload).toEqual({
         count: 1,
         last_time: 100,
         seq: 7,
-        encoding: 'axb1',
+        encoding: 'axb1-full',
       });
 
       const nextPayload = fullJson(5);

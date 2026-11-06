@@ -968,7 +968,7 @@ describe('live-wire P1 series + study push', () => {
     const p = h.wire.ensureSeries('series:k', {});
     await tick();
     await tick();
-    expect(h.sent[0]?.opts).toEqual({ encoding: 'axb1' });
+    expect(h.sent[0]?.opts).toEqual({ encoding: 'axb1-full' });
     h.emit({
       type: 'full',
       id: 'series:k',
@@ -2056,11 +2056,11 @@ describe('live-wire P1 series + study push', () => {
     await p;
     h.fireReconnect();
     expect(h.resumes).toEqual([
-      { id: 'series:k', count: 1, lastTime: 100, extra: { seq: 4, encoding: 'axb1' } },
+      { id: 'series:k', count: 1, lastTime: 100, extra: { seq: 4, encoding: 'axb1-full' } },
     ]);
   });
 
-  test('json omits encoding; the worker transport negotiates axb1', async () => {
+  test('json omits encoding; the worker transport negotiates axb1-full', async () => {
     setEngineTransport('json');
 
     const plain = makeHarness();
@@ -2108,12 +2108,12 @@ describe('live-wire P1 series + study push', () => {
     const wSeries = worker.wire.ensureSeries('series:w', {});
     await tick();
     await tick();
-    expect(worker.sent[0]?.opts).toEqual({ encoding: 'axb1' });
+    expect(worker.sent[0]?.opts).toEqual({ encoding: 'axb1-full' });
     worker.emit({ type: 'full', id: 'series:w', seq: 1, payload: { count: 1, bars: BARS } });
     await wSeries;
     worker.fireReconnect();
     expect(worker.resumes).toEqual([
-      { id: 'series:w', count: 1, lastTime: 100, extra: { seq: 1, encoding: 'axb1' } },
+      { id: 'series:w', count: 1, lastTime: 100, extra: { seq: 1, encoding: 'axb1-full' } },
     ]);
     const wScript = worker.wire.evalScript({
       subId: 's-w',
@@ -2125,7 +2125,7 @@ describe('live-wire P1 series + study push', () => {
     await tick();
     expect(worker.sent.find((s) => s.kind === 'subscribe:script')?.opts).toEqual({
       script: 'indicator() {}',
-      encoding: 'axb1',
+      encoding: 'axb1-full',
     });
     worker.emit({
       type: 'full',
@@ -2147,7 +2147,7 @@ describe('live-wire P1 series + study push', () => {
     const workerResub = worker.sent.filter((s) => s.kind === 'subscribe:script').at(-1);
     expect(workerResub?.opts).toEqual({
       script: 'indicator() {}',
-      encoding: 'axb1',
+      encoding: 'axb1-full',
     });
     expect(worker.resumes).toEqual([]);
   });
