@@ -16,6 +16,10 @@
  * @module ui/dismiss-on-outside
  */
 
+/**
+ * Configuration for {@link dismissOnOutside}: the inside test, the dismiss
+ * callback, and whether Escape also closes.
+ */
 export interface DismissOnOutsideOptions {
   /** Elements that count as "inside" (trigger + panel). Evaluated per event. */
   inside: () => ReadonlyArray<Element | null | undefined>;

@@ -15,7 +15,7 @@ export const CompleteMap: Component<{
   barCount: number;
   expectedBars: number;
   gaps: number;
-}> = (props) => {
+}> = (props) : JSX.Element => {
   const summary = () =>
     props.complete
       ? 'Full coverage'

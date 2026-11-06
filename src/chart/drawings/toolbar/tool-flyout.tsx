@@ -33,6 +33,14 @@ import { toolLabel } from '../../drawing-types';
 import { DrawingToolIcon } from '../tool-icons';
 import { TOOL_ICON_PX, TOOL_ICON_STROKE, titleWithShortcut, toolChord } from './shortcuts';
 
+/**
+ * Flyout listing alternate tools for a rail group (roving focus, Escape closes).
+ *
+ * @param props.tools tools in display order
+ * @param props.activeId currently selected tool (focused on mount)
+ * @param props.dockTop render below the rail instead of beside it
+ * @param props.clamp inline style used to keep a tall flyout inside the viewport
+ */
 export const ToolFlyout: Component<{
   tools: DrawingToolId[];
   activeId: DrawingToolId;
@@ -40,7 +48,7 @@ export const ToolFlyout: Component<{
   clamp?: Record<string, string>;
   onSelect: (id: DrawingToolId) => void;
   onClose: () => void;
-}> = (props) => {
+}> = (props): JSX.Element => {
   let listRef: HTMLDivElement | undefined;
 
   onMount(() => {

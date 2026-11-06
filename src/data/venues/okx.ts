@@ -41,11 +41,16 @@ import {
 } from './types';
 import { okxInst, venueFetch } from './spot';
 
+/** OKX v5 REST origin (`/api/v5/…`). */
 export const OKX_BASE = 'https://www.okx.com';
 
 /** Public spot candles path (unsigned). */
 export const OKX_CANDLES_PATH = '/api/v5/market/candles';
 
+/**
+ * OKX private-request credentials: API key, base64 passphrase, and the secret
+ * used for the HMAC. RAM-only, supplied by the session vault.
+ */
 export interface OkxCreds {
   apiKey: string;
   secret: string;
@@ -76,6 +81,13 @@ export async function okxHeaders(
   };
 }
 
+/**
+ * Build a full OKX signed GET: signs `path` (including its query string) with
+ * {@link okxHeaders} and returns the absolute URL plus the `OK-ACCESS-*` headers.
+ *
+ * @param input - Path, query, and vault secrets; `timestampMs` overrides the ISO timestamp.
+ * @throws DOMException when Web Crypto cannot import the secret.
+ */
 export async function signOkx(input: SignInput): Promise<SignedRequest> {
   const queryString = buildQueryString(input.query);
   const requestPath = pathWithQuery(input.path, queryString);

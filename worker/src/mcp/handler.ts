@@ -89,7 +89,8 @@ async function dispatchMethod(ctx: ToolContext, req: JsonRpcRequest): Promise<un
       return { tools: listTools() };
     case 'tools/call': {
       const name = typeof params.name === 'string' ? params.name : '';
-      if (!name) throw Object.assign(new Error('name required'), { rpcCode: JSONRPC_INVALID_PARAMS });
+      if (!name)
+        throw Object.assign(new Error('name required'), { rpcCode: JSONRPC_INVALID_PARAMS });
       return await callTool(ctx, name, params.arguments ?? {});
     }
     case 'resources/list':
@@ -105,7 +106,8 @@ async function dispatchMethod(ctx: ToolContext, req: JsonRpcRequest): Promise<un
       return { prompts: listPrompts() };
     case 'prompts/get': {
       const name = typeof params.name === 'string' ? params.name : '';
-      if (!name) throw Object.assign(new Error('name required'), { rpcCode: JSONRPC_INVALID_PARAMS });
+      if (!name)
+        throw Object.assign(new Error('name required'), { rpcCode: JSONRPC_INVALID_PARAMS });
       return getPrompt(name, params.arguments ?? {});
     }
     case 'logging/setLevel':
@@ -158,6 +160,23 @@ function protectedResource(url: URL): unknown {
   };
 }
 
+/**
+ * Streamable-HTTP MCP transport: discovery, auth, body cap, rate limit, dispatch.
+ *
+ * Stateless by design — no session id, and `DELETE` answers 204 because there is
+ * nothing to tear down. A `GET` with `Accept: text/event-stream` is answered 405 so
+ * clients skip the optional SSE stream instead of parsing discovery JSON as SSE.
+ * JSON-RPC-level failures stay HTTP 200 with an error object; only transport
+ * problems (auth, size, rate) use HTTP status codes.
+ *
+ * @param req - Incoming request; `OPTIONS`, `GET`, `DELETE`, and `POST` are handled.
+ * @param env - Bindings and vars for auth and tool dispatch.
+ * @param origin - Resolved CORS origin.
+ * @param pathname - `/.well-known/oauth-protected-resource`, `/mcp`, or `/mcp/*`.
+ * @param ctx - Entry `ExecutionContext`, forwarded to proxied handlers.
+ * @returns The response, or `null` when the path is not an MCP path so the caller can
+ *   keep dispatching.
+ */
 export async function handleMcp(
   req: Request,
   env: Env,
@@ -235,10 +254,10 @@ export async function handleMcp(
   const rateKey = `mcp:${auth.ctx.userId || 'anon'}`;
   const methodCount = parsed.batch ? parsed.requests.length : 1;
   if (!allowRate(rateKey, MCP_RATE_LIMIT, MCP_RATE_WINDOW_MS, methodCount)) {
-    return new Response(
-      JSON.stringify(errorBody('RATE', 'MCP rate limit exceeded')),
-      { status: 429, headers: jsonHeaders(origin) },
-    );
+    return new Response(JSON.stringify(errorBody('RATE', 'MCP rate limit exceeded')), {
+      status: 429,
+      headers: jsonHeaders(origin),
+    });
   }
 
   const toolCtx: ToolContext = { env, origin, auth: auth.ctx, executionCtx: ctx };

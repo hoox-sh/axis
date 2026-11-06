@@ -295,8 +295,8 @@ export async function loadSymbolData(
   // persistence. The chart reads the engine's bars into memory only.
   if (isEngineOwnedLive()) {
     const cfg = getActiveEngineConfig() || {};
-    const endpoint = String(cfg.endpoint || '');
-    const apiKey = String(cfg.apiKey || '');
+    const endpoint = String(cfg['endpoint'] || '');
+    const apiKey = String(cfg['apiKey'] || '');
     // No engine endpoint configured (e.g. a local-only engine plugin): skip
     // the engine read and fall through to the venue fetch below instead of
     // paying a failed relative-URL fetch on every load.

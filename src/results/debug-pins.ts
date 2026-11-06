@@ -36,7 +36,13 @@ import {
 } from './window-axis';
 import type { TradeMarker } from './events';
 
-/** One chart pin derived from a log / inline-debug annotation. */
+import { finiteNumber } from '../utils/validate';
+
+/**
+ * One chart pin derived from a log / inline-debug annotation: the resolved bar
+ * position (absolute time and/or array index), the source line, severity and
+ * the message the marker was built from.
+ */
 export interface DebugPin {
   /** Unix seconds when known (engine time or resolved from bars[barIndex]). */
   time?: number | null;
@@ -72,6 +78,7 @@ export type DebugPinSource =
       severity?: string;
     };
 
+/** Options controlling which engine debug entries become chart pins. */
 export interface PinsFromDebugOptions {
   /** OHLCV bars (unix seconds) — used to resolve barIndex → time. */
   bars?: ReadonlyArray<{ time: number }> | null;
@@ -106,19 +113,10 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return v != null && typeof v === 'object' && !Array.isArray(v);
 }
 
-function asFiniteNumber(v: unknown): number | null {
-  if (typeof v === 'number' && Number.isFinite(v)) return v;
-  if (typeof v === 'string' && v.trim() !== '') {
-    const n = Number(v);
-    if (Number.isFinite(n)) return n;
-  }
-  return null;
-}
-
 function messageOf(entry: DebugPinSource): string {
   if (!isRecord(entry) && typeof entry !== 'object') return '';
   const e = entry as Record<string, unknown>;
-  const raw = e.message ?? e.msg ?? e.text ?? '';
+  const raw = e['message'] ?? e['msg'] ?? e['text'] ?? '';
   if (raw == null) return '';
   if (typeof raw === 'string') return raw;
   if (typeof raw === 'number' || typeof raw === 'boolean') return String(raw);
@@ -132,7 +130,7 @@ function messageOf(entry: DebugPinSource): string {
 function levelOf(entry: DebugPinSource): InlineDebugLevel {
   if (!isRecord(entry) && typeof entry !== 'object') return 'info';
   const e = entry as Record<string, unknown>;
-  const raw = String(e.level ?? e.severity ?? 'info').toLowerCase();
+  const raw = String(e['level'] ?? e['severity'] ?? 'info').toLowerCase();
   if (raw.includes('err') || raw === 'fatal' || raw === 'critical') return 'error';
   if (raw.includes('warn')) return 'warning';
   if (raw.includes('debug') || raw.includes('trace')) return 'debug';
@@ -255,19 +253,19 @@ export function resolveDebugPinTarget(
 function structuredBarIndex(entry: DebugPinSource): number | null {
   if (!isRecord(entry) && typeof entry !== 'object') return null;
   const e = entry as Record<string, unknown>;
-  return asFiniteNumber(e.barIndex ?? e.bar_index ?? e.bar ?? e.index);
+  return finiteNumber(e['barIndex'] ?? e['bar_index'] ?? e['bar'] ?? e['index']);
 }
 
 function structuredTime(entry: DebugPinSource): number | null {
   if (!isRecord(entry) && typeof entry !== 'object') return null;
   const e = entry as Record<string, unknown>;
-  return asFiniteNumber(e.time ?? e.bar_time ?? e.barTime ?? e.ts);
+  return finiteNumber(e['time'] ?? e['bar_time'] ?? e['barTime'] ?? e['ts']);
 }
 
 function structuredLine(entry: DebugPinSource): number | null {
   if (!isRecord(entry) && typeof entry !== 'object') return null;
   const e = entry as Record<string, unknown>;
-  const n = asFiniteNumber(e.line ?? e.lineNumber ?? e.line_number ?? e.lineno);
+  const n = finiteNumber(e['line'] ?? e['lineNumber'] ?? e['line_number'] ?? e['lineno']);
   if (n != null && n >= 1) return Math.trunc(n);
   return null;
 }
@@ -402,7 +400,7 @@ export function debugPinsToMarkers(
     if (time == null || !Number.isFinite(time)) continue;
     if (onAxis && !onAxis.has(time)) continue;
     const level = String(p.level || 'info');
-    const color = LEVEL_COLOR[level] ?? LEVEL_COLOR.info!;
+    const color = LEVEL_COLOR[level] ?? LEVEL_COLOR['info']!;
     const text = (p.label || '·').slice(0, 16);
     markers.push({
       time,

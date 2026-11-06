@@ -8,15 +8,13 @@
  */
 
 import { message } from '@tauri-apps/plugin-dialog';
-import {
-  importAndOpenPyneSources,
-  type ImportEditorHost,
-} from '../storage/import-pyne-open';
+import { importAndOpenPyneSources, type ImportEditorHost } from '../storage/import-pyne-open';
 import { appendLog, setStatus } from '../store';
 import { isTauriShell } from './is-tauri';
 import { installDesktopMenu } from './menu';
 import { pickPineScriptsFromDisk } from './open-scripts';
 
+/** Editor handle the desktop shell needs to open picked scripts into tabs. */
 export interface DesktopShellOptions {
   editorRef: ImportEditorHost;
 }
@@ -45,9 +43,7 @@ export async function showAboutDialog(): Promise<void> {
 }
 
 /** File → Open Script… — native picker → library + editor tabs. */
-export async function openScriptsFromMenu(
-  editorRef: ImportEditorHost,
-): Promise<void> {
+export async function openScriptsFromMenu(editorRef: ImportEditorHost): Promise<void> {
   if (!isTauriShell()) return;
   try {
     const sources = await pickPineScriptsFromDisk();
@@ -72,9 +68,7 @@ export async function openScriptsFromMenu(
  * Install menu listeners and wire File → Open / Help → About.
  * @returns cleanup function
  */
-export async function installDesktopShell(
-  opts: DesktopShellOptions,
-): Promise<() => void> {
+export async function installDesktopShell(opts: DesktopShellOptions): Promise<() => void> {
   if (!isTauriShell()) return () => {};
 
   return installDesktopMenu({

@@ -42,6 +42,7 @@ import { loadSymbolData } from '../../data/load-symbol';
 import { getUploadedFileName } from '../../sources/upload-store';
 import { derivePlan, toStorePatch, type AxisConfig } from './plan';
 
+/** Outcome of applying a wiring: plan label, the store patch, and follow-up flags. */
 export interface ApplyArchitectureResult {
   planName: string;
   patch: ReturnType<typeof toStorePatch>;
@@ -53,10 +54,7 @@ export interface ApplyArchitectureResult {
  * Apply `config` (measured against `baseId`) to the running AXIS store.
  * Returns the derived plan name and the store-shaped patch for callers/tests.
  */
-export function applyArchitecture(
-  config: AxisConfig,
-  baseId: string,
-): ApplyArchitectureResult {
+export function applyArchitecture(config: AxisConfig, baseId: string): ApplyArchitectureResult {
   const plan = derivePlan(config, baseId);
   const patch = toStorePatch(config);
   const prevSource = store.source;

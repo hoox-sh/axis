@@ -78,8 +78,8 @@ export function resolveOnchainWorkerBase(
   config?: Record<string, unknown> | null,
 ): string {
   const cfgWorker =
-    config && typeof config.workerBase === 'string'
-      ? config.workerBase.trim()
+    config && typeof config['workerBase'] === 'string'
+      ? config['workerBase'].trim()
       : '';
   if (cfgWorker) {
     return normalizeEndpointBase(cfgWorker) || DEFAULT_ONCHAIN_WORKER_BASE;
@@ -105,7 +105,7 @@ function resolveWorkerProxyBase(
   config?: Record<string, unknown> | null,
 ): string {
   const cfgBase =
-    config && typeof config.baseUrl === 'string' ? config.baseUrl.trim() : '';
+    config && typeof config['baseUrl'] === 'string' ? config['baseUrl'].trim() : '';
   if (cfgBase) {
     return cfgBase.replace(/\/+$/, '') || publicFallback;
   }

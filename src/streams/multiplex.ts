@@ -118,8 +118,10 @@ export function effectiveLiveRerunMode(
 }
 
 /** How the live session ended (affects telemetry wipe). */
+/** Why a live session ended; `error` keeps error telemetry, `restart` stays silent. */
 export type StopLiveReason = 'user' | 'error' | 'restart';
 
+/** Options for {@link stopLive}. */
 export type StopLiveOpts = {
   /** `error` keeps stream error telemetry; `restart` is silent (startLive follows). */
   reason?: StopLiveReason;
@@ -182,9 +184,8 @@ async function repairLiveInternalGaps(epoch: number): Promise<void> {
     let sym = String(store.symbol || '');
     let fillIv = iv;
     try {
-      const { getDataManagerSelection, DATA_MANAGER_SOURCE_ID } = await import(
-        '../data/data-manager-source'
-      );
+      const { getDataManagerSelection, DATA_MANAGER_SOURCE_ID } =
+        await import('../data/data-manager-source');
       if (srcId === DATA_MANAGER_SOURCE_ID || srcId === 'data-manager') {
         const sel = getDataManagerSelection();
         if (sel?.sourceId && sel.symbol && sel.interval) {
@@ -353,6 +354,7 @@ let rerunAttemptCount = 0;
  */
 export const SCRIPT_STREAM_RETRY_MS = [1000, 2000, 5000, 10_000, 20_000, 30_000] as const;
 
+/** Per-script stream-eval backoff: earliest allowed retry (epoch ms) and failure count. */
 export type ScriptStreamRetryState = { retryAfter: number; attempts: number };
 
 const scriptStreamRetries = new Map<string, ScriptStreamRetryState>();
@@ -382,7 +384,11 @@ export function isScriptStreamReleased(id: string): boolean {
   const entry = store.live?.scriptStatus?.[id];
   if (!entry) return false;
   if (entry.status === 'idle') return true;
-  if (entry.status === 'live' || entry.status === 'connecting' || entry.status === 'datafeed-loading') {
+  if (
+    entry.status === 'live' ||
+    entry.status === 'connecting' ||
+    entry.status === 'datafeed-loading'
+  ) {
     return false;
   }
   return entry.message === 'released';
@@ -546,7 +552,7 @@ export function startLive(
   streamId: string,
   symbol: string = store.symbol,
   interval: string = store.interval,
-) {
+): void {
   // Tear down prior session (cancels reconnect timers / WS) without log noise
   stopLive({ reason: 'restart' });
 
@@ -669,11 +675,7 @@ export function startLive(
           if (!isEngineOwnedLive()) noteDataManagerLiveBar(bar);
 
           // Tip jump over closed slots — appendBar never backfills.
-          if (
-            lastSeenBarTime > 0 &&
-            stepSec > 0 &&
-            bar.time - lastSeenBarTime > stepSec * 1.5
-          ) {
+          if (lastSeenBarTime > 0 && stepSec > 0 && bar.time - lastSeenBarTime > stepSec * 1.5) {
             jumped = true;
           }
           const timeAdvanced = lastSeenBarTime > 0 && bar.time > lastSeenBarTime;
@@ -759,8 +761,8 @@ export function startLive(
       noteLiveBarForAlerts(b, { symbol: sym, interval: iv });
     }
     const cfg = getActiveEngineConfig() || {};
-    const endpoint = String(cfg.endpoint || '');
-    const apiKey = String(cfg.apiKey || '');
+    const endpoint = String(cfg['endpoint'] || '');
+    const apiKey = String(cfg['apiKey'] || '');
     if (!endpoint) return;
     const key = { exchange: exchangeForSource(store.source), symbol: sym, interval: iv };
     const limit = chartWindowLimit();
@@ -1179,7 +1181,7 @@ export function startLive(
  * Tear down the active stream, clear reconnect timers, and mark live inactive.
  * Safe to call when no stream is running; re-entrant-safe.
  */
-export function stopLive(opts?: StopLiveOpts) {
+export function stopLive(opts?: StopLiveOpts): void {
   const reason: StopLiveReason = opts?.reason ?? 'user';
   const wasActive = store.live.active;
 
@@ -1403,11 +1405,7 @@ function scheduleRerun(opts?: { immediate?: boolean }) {
       if (liveEpoch === epochAtSchedule) {
         rerunInFlight = false;
         // If more ticks arrived or interactive deferred us, schedule again
-        if (
-          store.live.active &&
-          store.live.needsRerun &&
-          !isInteractiveRunInFlight()
-        ) {
+        if (store.live.active && store.live.needsRerun && !isInteractiveRunInFlight()) {
           scheduleRerun();
         }
       }

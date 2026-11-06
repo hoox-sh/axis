@@ -30,6 +30,10 @@ import { chartDebug } from '../debug';
 /** Window event so the [A]/[L] cluster re-reads manager scale flags. */
 export const CHART_SCALE_EVENT = 'axis-chart-scale';
 
+/**
+ * Host callbacks the chart context menu dispatches into.
+ * Script callbacks receive the indicator id parsed from the menu id.
+ */
 export type ChartMenuEnv = {
   resetView: () => void;
   scrollLatest: () => void;

@@ -6,7 +6,7 @@
  * Handlers registered for DrawingLayer paint/hit/create.
  */
 
-import type { Drawing, MultiPointDrawing, Point, TwoPointDrawing } from '../../drawing-types';
+import type { Drawing, MultiPointDrawing, Point } from '../../drawing-types';
 import { channelEdges, distToSegment, extendSegment } from '../geometry';
 import {
   defaultExtendFlags,
@@ -15,15 +15,9 @@ import {
   showPriceOf,
   showStatsOf,
 } from '../tool-settings';
-import { registerToolHandler, type ToolHitCtx, type ToolViewCtx } from './registry';
-import { isFinitePoint, sanitizePoints, sanitizeStrokeColor } from './safe';
+import { registerToolHandler } from './registry';
+import { sanitizePoints, sanitizeStrokeColor, asTwoPoint } from './safe';
 
-function asTwo(d: Drawing, kind?: TwoPointDrawing['kind']): TwoPointDrawing | null {
-  if (kind && d.kind !== kind) return null;
-  if (!('p1' in d) || !('p2' in d) || !d.p1 || !d.p2) return null;
-  if (!isFinitePoint(d.p1) || !isFinitePoint(d.p2)) return null;
-  return d as TwoPointDrawing;
-}
 
 function asMulti(d: Drawing): MultiPointDrawing | null {
   if (d.kind !== 'channel' && d.kind !== 'fibchannel') return null;
@@ -33,7 +27,7 @@ function asMulti(d: Drawing): MultiPointDrawing | null {
 function pointsOf(d: Drawing): Point[] {
   const m = asMulti(d);
   if (m?.points?.length) return sanitizePoints(m.points);
-  const t = asTwo(d);
+  const t = asTwoPoint(d);
   if (t) return [t.p1, t.p2];
   return [];
 }
@@ -61,7 +55,7 @@ registerToolHandler({
     };
   },
   paint(d, ctx) {
-    const t = asTwo(d, 'hray');
+    const t = asTwoPoint(d, 'hray');
     if (!t) return;
     const a = ctx.toXY(t.p1);
     if (!a) return;
@@ -80,7 +74,7 @@ registerToolHandler({
     if (ctx.selected) ctx.circle(a.x, a.y, 5, ctx.stroke, true);
   },
   hit(d, ctx) {
-    const t = asTwo(d, 'hray');
+    const t = asTwoPoint(d, 'hray');
     if (!t) return false;
     const a = ctx.toXY(t.p1);
     if (!a) return false;
@@ -108,7 +102,7 @@ registerToolHandler({
     };
   },
   paint(d, ctx) {
-    const t = asTwo(d, 'infoLine');
+    const t = asTwoPoint(d, 'infoLine');
     if (!t) return;
     const a = ctx.toXY(t.p1);
     const b = ctx.toXY(t.p2);
@@ -146,7 +140,7 @@ registerToolHandler({
     ctx.circle(b.x, b.y, ctx.selected ? 5 : 3, ctx.stroke, ctx.selected);
   },
   hit(d, ctx) {
-    const t = asTwo(d, 'infoLine');
+    const t = asTwoPoint(d, 'infoLine');
     if (!t) return false;
     const a = ctx.toXY(t.p1);
     const b = ctx.toXY(t.p2);
@@ -243,7 +237,3 @@ registerToolHandler({
     }
   },
 });
-
-// silence unused in type-check for hit ctx re-exports
-void 0 as unknown as ToolHitCtx;
-void 0 as unknown as ToolViewCtx;

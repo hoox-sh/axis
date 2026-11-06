@@ -32,6 +32,10 @@
 import { MAX_CHART_MARKERS } from '../chart/heavy-data';
 import { resolvePineColor } from './pine-color';
 
+/**
+ * `plot_meta.kind` token: the Pine plot family the engine reported. Any other
+ * string is kept as-is — an unknown present kind still renders as a line.
+ */
 export type PlotKind =
   | 'plot'
   | 'hline'
@@ -44,6 +48,11 @@ export type PlotKind =
   | 'plotcandle'
   | string;
 
+/**
+ * One plot's `plot_meta` entry: title, color, declared style and `display`
+ * mask, marker text/size, and the fill / OHLC edge titles the chart resolves
+ * against the series map.
+ */
 export interface PlotMetaEntry {
   title?: string;
   color?: string | null;
@@ -92,8 +101,10 @@ export interface PlotMetaEntry {
   display?: string | number | null;
 }
 
+/** Engine series map: plot key → per-bar samples (one array per plot). */
 export type SeriesMap = Record<string, unknown[] | (number | null)[]>;
 
+/** One line overlay payload built from a plot series, ready for the chart. */
 export interface LineOverlaySpec {
   name: string;
   /** `value` omitted = LWC whitespace (keeps time-scale slot for multi-pane align) */
@@ -172,6 +183,7 @@ export function plotDisplayHas(raw: unknown, flag: number): boolean {
   return (parsePlotDisplay(raw) & flag) === flag;
 }
 
+/** One `bgcolor` band: a histogram point per colored bar, `value: 1` = colored. */
 export interface BgcolorBandSpec {
   name: string;
   /** Histogram points: value=1 when colored, color per bar */
@@ -179,6 +191,7 @@ export interface BgcolorBandSpec {
   title?: string;
 }
 
+/** One `plotshape` / `plotchar` / `plotarrow` marker, ready for the chart layer. */
 export interface ShapeMarkerSpec {
   time: number;
   position: 'aboveBar' | 'belowBar' | 'inBar';
@@ -227,16 +240,26 @@ const DEFAULT_SHAPE_COLOR = '#939fff';
 const DEFAULT_BG_COLOR = 'rgba(147, 159, 255, 0.12)';
 const DEFAULT_FILL_COLOR = 'rgba(255, 82, 82, 0.2)';
 
+/**
+ * Lower-case a `plot_meta.kind` token, defaulting a missing or blank one to
+ * `'plot'` so callers can switch on the result directly.
+ *
+ * @param kind - raw kind from plot meta
+ */
 export function normalizePlotKind(kind?: string | null): string {
-  const k = String(kind || 'plot').toLowerCase().trim();
+  const k = String(kind || 'plot')
+    .toLowerCase()
+    .trim();
   return k || 'plot';
 }
 
+/** True for `plot` / `hline` / blank — the kinds drawn as a line series. */
 export function isLinePlotKind(kind?: string | null): boolean {
   const k = normalizePlotKind(kind);
   return k === 'plot' || k === 'hline' || k === '';
 }
 
+/** True for `bgcolor` — per-bar pane background bands, not a line. */
 export function isBgcolorKind(kind?: string | null): boolean {
   return normalizePlotKind(kind) === 'bgcolor';
 }
@@ -246,10 +269,12 @@ export function isBarcolorKind(kind?: string | null): boolean {
   return normalizePlotKind(kind) === 'barcolor';
 }
 
+/** True for `fill` — a band derived from two plot edges, not a line. */
 export function isFillKind(kind?: string | null): boolean {
   return normalizePlotKind(kind) === 'fill';
 }
 
+/** True for `plotshape` / `plotchar` / `plotarrow` — discrete markers. */
 export function isShapeKind(kind?: string | null): boolean {
   const k = normalizePlotKind(kind);
   return k === 'plotshape' || k === 'plotchar' || k === 'plotarrow';
@@ -301,7 +326,7 @@ export function splitSeriesByKind(
     else if (isBarcolorKind(kind)) barcolors.push(entry);
     else if (isShapeKind(kind)) shapes.push(entry);
     else if (isFillKind(kind)) fills.push(entry);
-    else     if (isOhlcPlotKind(kind)) ohlc.push(entry);
+    else if (isOhlcPlotKind(kind)) ohlc.push(entry);
     else {
       // Line plot: explicit 'plot'/'hline' OR any unrecognized kind
       // (histogram / area / columns / stepline / baseline / line / cross / …).
@@ -556,6 +581,13 @@ export function resolvePlotFillBands(
   return out;
 }
 
+/**
+ * Whether a sample counts as "on" for a shape plot: numbers when finite and
+ * non-zero, strings unless empty / `na` / `false` / `0` / `null`, booleans
+ * as themselves, and any other object as `Boolean(v)`.
+ *
+ * @param v - one per-bar sample from a plotshape / plotchar series
+ */
 export function isTruthyPlotValue(v: unknown): boolean {
   if (v == null) return false;
   if (typeof v === 'boolean') return v;
@@ -632,14 +664,7 @@ function stripNs(s: string): string {
  * and presentation tweaks (point markers, line visibility).
  */
 export type PlotSeriesKind =
-  | 'line'
-  | 'stepline'
-  | 'stepline_diamond'
-  | 'histogram'
-  | 'columns'
-  | 'area'
-  | 'circles'
-  | 'cross';
+  'line' | 'stepline' | 'stepline_diamond' | 'histogram' | 'columns' | 'area' | 'circles' | 'cross';
 
 /** True when kind is drawn with LWC `HistogramSeries` (histogram or columns). */
 export function isHistogramSeriesKind(kind?: string | null): boolean {
@@ -677,9 +702,7 @@ export function normalizePlotStyleToken(style?: string | null): string {
  * Accepts: `plot.linestyle_dashed`, `linestyle_dotted`, `style_dashed`,
  * `dashed`, `hline.style_solid`, etc.
  */
-export function normalizeLineStyleToken(
-  linestyle?: string | null,
-): 'solid' | 'dashed' | 'dotted' {
+export function normalizeLineStyleToken(linestyle?: string | null): 'solid' | 'dashed' | 'dotted' {
   let s = String(linestyle || '')
     .toLowerCase()
     .trim();
@@ -787,12 +810,7 @@ export function mapShapeStyle(
   ) {
     return 'arrowDown';
   }
-  if (
-    s.includes('triangleup') ||
-    s.includes('arrowup') ||
-    s === 'labelup' ||
-    s === 'arrowup'
-  ) {
+  if (s.includes('triangleup') || s.includes('arrowup') || s === 'labelup' || s === 'arrowup') {
     return 'arrowUp';
   }
   // LWC has no diamond — square is the closest axis-aligned mark
@@ -1009,14 +1027,14 @@ function isStructuredOhlcCell(v: unknown): boolean {
   if (typeof v === 'object' && !Array.isArray(v)) {
     const o = v as Record<string, unknown>;
     return (
-      o.open != null ||
-      o.o != null ||
-      o.high != null ||
-      o.h != null ||
-      o.low != null ||
-      o.l != null ||
-      o.close != null ||
-      o.c != null
+      o['open'] != null ||
+      o['o'] != null ||
+      o['high'] != null ||
+      o['h'] != null ||
+      o['low'] != null ||
+      o['l'] != null ||
+      o['close'] != null ||
+      o['c'] != null
     );
   }
   return false;
@@ -1048,13 +1066,13 @@ export function parseOhlcCell(
 
   if (typeof v === 'object' && !Array.isArray(v)) {
     const o = v as Record<string, unknown>;
-    const open = asFiniteNumber(o.open ?? o.o ?? o.Open ?? o.O);
-    const high = asFiniteNumber(o.high ?? o.h ?? o.High ?? o.H);
-    const low = asFiniteNumber(o.low ?? o.l ?? o.Low ?? o.L);
-    const close = asFiniteNumber(o.close ?? o.c ?? o.Close ?? o.C);
+    const open = asFiniteNumber(o['open'] ?? o['o'] ?? o['Open'] ?? o['O']);
+    const high = asFiniteNumber(o['high'] ?? o['h'] ?? o['High'] ?? o['H']);
+    const low = asFiniteNumber(o['low'] ?? o['l'] ?? o['Low'] ?? o['L']);
+    const close = asFiniteNumber(o['close'] ?? o['c'] ?? o['Close'] ?? o['C']);
     if (open != null && high != null && low != null && close != null) {
       let color: string | undefined;
-      const rc = resolvePineColor(o.color);
+      const rc = resolvePineColor(o['color']);
       if (rc) color = rc;
       return { open, high, low, close, color };
     }
@@ -1101,11 +1119,7 @@ export function ohlcSeriesToBarData(
   const arr = Array.isArray(values) ? values : [];
   const n = times.length;
   const out: OhlcBarPoint[] = [];
-  const hasSiblings = !!(
-    meta &&
-    (meta.open || meta.high || meta.low || meta.close) &&
-    seriesMap
-  );
+  const hasSiblings = !!(meta && (meta.open || meta.high || meta.low || meta.close) && seriesMap);
 
   for (let i = 0; i < n; i++) {
     const time = asBarTime(times[i]);
@@ -1120,8 +1134,7 @@ export function ohlcSeriesToBarData(
       const open = siblingAt(seriesMap, meta!.open, i);
       const high = siblingAt(seriesMap, meta!.high, i);
       const low = siblingAt(seriesMap, meta!.low, i);
-      const close =
-        siblingAt(seriesMap, meta!.close, i) ?? asFiniteNumber(cell);
+      const close = siblingAt(seriesMap, meta!.close, i) ?? asFiniteNumber(cell);
       if (open != null && high != null && low != null && close != null) {
         ohlc = { open, high, low, close };
       }
@@ -1192,9 +1205,7 @@ export function buildPlotVisuals(
 
   const shapes: ShapeMarkerSpec[] = [];
   for (const { key, values, meta } of split.shapes) {
-    shapes.push(
-      ...shapeSeriesToMarkers(times, values, meta, { idPrefix: key }),
-    );
+    shapes.push(...shapeSeriesToMarkers(times, values, meta, { idPrefix: key }));
   }
   // Stable sort for LWC
   shapes.sort((a, b) => a.time - b.time || (a.id || '').localeCompare(b.id || ''));

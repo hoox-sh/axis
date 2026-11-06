@@ -39,6 +39,7 @@ import { v1Count } from '../../engine/v1/metrics';
 import { noteWorkerTransportFallback, wantsWorkerTransport } from '../../engine/v1/transport';
 import type { HostToIngest, IngestToHost } from './protocol';
 
+/** The subset of the `Worker` surface the ingest host actually uses. */
 export type IngestWorkerTransport = {
   postMessage: (msg: HostToIngest) => void;
   terminate: () => void;
@@ -46,6 +47,7 @@ export type IngestWorkerTransport = {
   onerror: ((ev: ErrorEvent) => void) | null;
 };
 
+/** Spawns an ingest transport; tests inject a loopback one instead of a real Worker. */
 export type IngestWorkerFactory = () => IngestWorkerTransport;
 
 /** Respawns after a dead worker. Then the host stays down until `connect()`. */
@@ -65,6 +67,13 @@ export function setIngestWorkerAvailableForTests(available: boolean | null): voi
   workerAvailableOverride = available;
 }
 
+/**
+ * Whether the off-thread ingest worker can be used. A test override wins;
+ * otherwise an injected factory counts as available, and the runtime probe
+ * requires both `Worker` and `document` (so SSR never spawns one).
+ *
+ * @returns true when {@link createLiveWsClient} may pick the worker transport
+ */
 export function ingestWorkerAvailable(): boolean {
   if (workerAvailableOverride !== null) return workerAvailableOverride;
   if (workerFactory) return true;
@@ -76,9 +85,11 @@ export function ingestWorkerAvailable(): boolean {
 }
 
 function defaultFactory(): IngestWorkerTransport {
+  // A `Worker` already exposes this transport surface; the assertion pins the
+  // message types to the ingest protocol (DOM types them as `any`).
   return new Worker(new URL('./ingest.worker.ts', import.meta.url), {
     type: 'module',
-  }) as unknown as IngestWorkerTransport;
+  }) as IngestWorkerTransport;
 }
 
 /**
@@ -296,7 +307,7 @@ export class IngestHostClient implements WireClient {
       libraries?: unknown;
       mode?: string;
       /** Include only when the caller negotiates AXB1. Omit for JSON. */
-      encoding?: 'axb1';
+      encoding?: 'axb1' | 'axb1-full';
     },
   ): void {
     // Same rule as Redesign2WsClient: absent encoding keeps JSON. A hardcoded
@@ -320,7 +331,7 @@ export class IngestHostClient implements WireClient {
     id: string,
     count: number,
     lastTime: number,
-    extra?: { closed_upto?: number; seq?: number; encoding?: 'axb1' },
+    extra?: { closed_upto?: number; seq?: number; encoding?: 'axb1' | 'axb1-full' },
   ): void {
     const { encoding, ...rest } = extra ?? {};
     this.send({
@@ -357,6 +368,7 @@ export class IngestHostClient implements WireClient {
   }
 }
 
+/** Options for {@link createLiveWsClient}; same shape as the main-thread client's. */
 export type IngestHostOptions = Redesign2WsClientOptions;
 
 /**

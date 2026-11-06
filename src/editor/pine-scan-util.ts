@@ -28,6 +28,7 @@
  * @module editor/pine-scan-util
  */
 
+/** Characters Pine scanners treat as string delimiters (ASCII + curly quotes). */
 export type QuoteChar = '"' | "'" | '\u2018' | '\u2019' | '\u201c' | '\u201d';
 
 const QUOTE_PAIR: Record<string, string> = {
@@ -37,8 +38,14 @@ const QUOTE_PAIR: Record<string, string> = {
   '\u2019': '\u2018',
 };
 
+/**
+ * @param c Single character to test.
+ * @returns True for any {@link QuoteChar} delimiter.
+ */
 export function isQuoteChar(c: string): boolean {
-  return c === '"' || c === "'" || c === '\u2018' || c === '\u2019' || c === '\u201c' || c === '\u201d';
+  return (
+    c === '"' || c === "'" || c === '\u2018' || c === '\u2019' || c === '\u201c' || c === '\u201d'
+  );
 }
 
 /** True when `c` closes a string opened by `opener` (same char or curly pair). */

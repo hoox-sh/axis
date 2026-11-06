@@ -123,39 +123,30 @@ export function normalizeGeckoNetwork(network: string): string {
  *
  * Also accepts Solana-style base58 addresses after `network:` / `network/`.
  */
-export function parseGeckoPoolSymbol(
-  symbol: string,
-  defaultNetwork = 'eth',
-): GeckoPoolRef {
+export function parseGeckoPoolSymbol(symbol: string, defaultNetwork = 'eth'): GeckoPoolRef {
   const raw = String(symbol || '').trim();
   if (!raw) {
-    throw new Error(
-      'GeckoTerminal: symbol is required (e.g. eth:0x… or network/0xPoolAddress)',
-    );
+    throw new Error('GeckoTerminal: symbol is required (e.g. eth:0x… or network/0xPoolAddress)');
   }
 
   // EVM 0x + optional Solana base58 pool addresses
   const addrBody = '0x[a-fA-F0-9]{6,}|[1-9A-HJ-NP-Za-km-z]{32,44}';
 
   // Form 1: network:address [optional name…]
-  const colon = new RegExp(
-    `^([a-zA-Z0-9_-]+)\\s*:\\s*(${addrBody})\\b`,
-  ).exec(raw);
+  const colon = new RegExp(`^([a-zA-Z0-9_-]+)\\s*:\\s*(${addrBody})\\b`).exec(raw);
   if (colon) {
     return {
-      network: normalizeGeckoNetwork(colon[1]),
-      poolAddress: colon[2],
+      network: normalizeGeckoNetwork(colon[1] ?? ''),
+      poolAddress: colon[2] ?? '',
     };
   }
 
   // Form 2: network/address [optional name…]
-  const slash = new RegExp(
-    `^([a-zA-Z0-9_-]+)\\s*/\\s*(${addrBody})\\b`,
-  ).exec(raw);
+  const slash = new RegExp(`^([a-zA-Z0-9_-]+)\\s*/\\s*(${addrBody})\\b`).exec(raw);
   if (slash) {
     return {
-      network: normalizeGeckoNetwork(slash[1]),
-      poolAddress: slash[2],
+      network: normalizeGeckoNetwork(slash[1] ?? ''),
+      poolAddress: slash[2] ?? '',
     };
   }
 
@@ -164,7 +155,7 @@ export function parseGeckoPoolSymbol(
   if (bareEvm) {
     return {
       network: normalizeGeckoNetwork(defaultNetwork),
-      poolAddress: bareEvm[1],
+      poolAddress: bareEvm[1] ?? '',
     };
   }
 
@@ -225,9 +216,7 @@ async function loadGeckoTerminal(): Promise<GeckoTerminalModule> {
     return {
       fetchGeckoPoolOhlcv: fetchFn.bind(mod.default ?? mod),
       searchGeckoPools:
-        typeof searchFn === 'function'
-          ? searchFn.bind(mod.default ?? mod)
-          : undefined,
+        typeof searchFn === 'function' ? searchFn.bind(mod.default ?? mod) : undefined,
     };
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
@@ -239,6 +228,7 @@ async function loadGeckoTerminal(): Promise<GeckoTerminalModule> {
   }
 }
 
+/** Config schema alias used by source plugins (see {@link ConfigSchema}). */
 export type SourceConfigSchema = ConfigSchema;
 /** @deprecated Prefer importing SourcePlugin from plugins/types */
 export type SourcePlugin = UnifiedSourcePlugin;
@@ -249,7 +239,7 @@ function intervalToMs(iv: string): number {
   if (month) return parseInt(month[1]!, 10) * 30 * 86_400_000;
   const m = /^(\d+)([smhdw])$/.exec(raw);
   if (!m) return 86400 * 1000;
-  const n = parseInt(m[1], 10);
+  const n = parseInt(m[1] ?? '', 10);
   const mult: Record<string, number> = {
     s: 1_000,
     m: 60_000,
@@ -257,7 +247,7 @@ function intervalToMs(iv: string): number {
     d: 86_400_000,
     w: 604_800_000,
   };
-  return n * (mult[m[2]] || 86_400_000);
+  return n * (mult[m[2] ?? ''] || 86_400_000);
 }
 
 function resolveConfig(
@@ -302,10 +292,7 @@ function barFromFields(
 }
 
 /** Map array of raw venue rows → valid bars only (order preserved). */
-function mapValidBars(
-  rows: unknown[],
-  mapRow: (row: unknown) => Bar | null,
-): Bar[] {
+function mapValidBars(rows: unknown[], mapRow: (row: unknown) => Bar | null): Bar[] {
   const out: Bar[] = [];
   for (const row of rows) {
     const b = mapRow(row);
@@ -318,12 +305,7 @@ function mapValidBars(
  * Synthetic walk. When `endTimeSec` is set, the newest bar sits at that
  * timestamp (walk-back pagination). Otherwise uses wall-clock now.
  */
-function synthesizeWalk(
-  n: number,
-  interval: string,
-  start: number,
-  endTimeSec?: number,
-): Bar[] {
+function synthesizeWalk(n: number, interval: string, start: number, endTimeSec?: number): Bar[] {
   const step = Math.floor(intervalToMs(interval) / 1000);
   const out: Bar[] = [];
   let price = start;
@@ -389,6 +371,11 @@ export function sourcePageLimit(sourceId: string): number {
   }
 }
 
+/**
+ * Binance spot klines (`GET /api/v3/klines`) with an optional synthetic
+ * fallback. Bars are ascending with unix-second `time`; errors are rethrown
+ * unless the `fallback` config flag is on.
+ */
 export const binanceRest: SourcePlugin = {
   id: 'binance-rest',
   name: 'Binance REST',
@@ -419,13 +406,14 @@ export const binanceRest: SourcePlugin = {
       default: false,
       label: 'Synthesize on failure',
       advanced: true,
-      description: 'Demo only — fake prices. Off by default so a network error cannot look like real data.',
+      description:
+        'Demo only — fake prices. Off by default so a network error cannot look like real data.',
     },
   },
   async fetchHistorical({ symbol, interval, config, startTime, endTime, signal }) {
     const cfg = resolveConfig(this.configSchema, config);
-    const baseUrl = String(cfg.baseUrl || 'https://api.binance.com');
-    const limit = Math.min(1000, Number(cfg.limit) || 500);
+    const baseUrl = String(cfg['baseUrl'] || 'https://api.binance.com');
+    const limit = Math.min(1000, Number(cfg['limit']) || 500);
     const params = new URLSearchParams({
       symbol: String(symbol || '').toUpperCase(),
       interval: String(interval || '1d'),
@@ -450,7 +438,7 @@ export const binanceRest: SourcePlugin = {
       return bars;
     } catch (err: unknown) {
       if (signal?.aborted) throw err;
-      if (!cfg.fallback) throw err;
+      if (!cfg['fallback']) throw err;
       const msg = err instanceof Error ? err.message : String(err);
       console.warn(`[binance-rest] Network error, falling back to synthetic data: ${msg}`);
       return synthesizeWalk(limit || 200, interval, 100, endTime);
@@ -458,6 +446,10 @@ export const binanceRest: SourcePlugin = {
   },
 };
 
+/**
+ * Offline random walk. Deterministic when `seed` is non-zero, otherwise uses
+ * `Math.random`; `startTime` clamps the page so walk-back does not overshoot.
+ */
 export const mockWalk: SourcePlugin = {
   id: 'mock-walk',
   name: 'Mock Walk',
@@ -468,13 +460,21 @@ export const mockWalk: SourcePlugin = {
   configSchema: {
     seed: { type: 'number', default: 0, label: 'Seed (0 = random)' },
     startPrice: { type: 'number', default: 100, label: 'Start price', advanced: true },
-    limit: { type: 'number', default: 500, min: 50, max: 100_000, label: 'Bars', advanced: true, hidden: true },
+    limit: {
+      type: 'number',
+      default: 500,
+      min: 50,
+      max: 100_000,
+      label: 'Bars',
+      advanced: true,
+      hidden: true,
+    },
   },
   async fetchHistorical({ interval, config, endTime, startTime }) {
     const cfg = resolveConfig(this.configSchema, config);
-    const limit = Number(cfg.limit) || 500;
-    const startPrice = Number(cfg.startPrice) || 100;
-    const seed = Number(cfg.seed) || 0;
+    const limit = Number(cfg['limit']) || 500;
+    const startPrice = Number(cfg['startPrice']) || 100;
+    const seed = Number(cfg['seed']) || 0;
     const endSec =
       typeof endTime === 'number' && Number.isFinite(endTime) && endTime > 0
         ? Math.floor(endTime)
@@ -522,6 +522,7 @@ export const mockWalk: SourcePlugin = {
   },
 };
 
+/** Replays the last CSV/JSON upload from {@link upload-store}; throws when none. */
 export const csvUpload: SourcePlugin = {
   id: 'csv-upload',
   name: 'CSV / JSON Upload',
@@ -641,6 +642,10 @@ function bybitInterval(interval: string): string {
   return m[interval] || 'D';
 }
 
+/**
+ * OKX public candlesticks (`/api/v5/market/candles`). OKX answers newest-first,
+ * so the rows are reversed to ascending; `endTime` maps to the `after` cursor.
+ */
 export const okxRest: SourcePlugin = {
   id: 'okx-rest',
   name: 'OKX REST',
@@ -649,11 +654,19 @@ export const okxRest: SourcePlugin = {
   description: 'Public OKX candlesticks (www.okx.com). Symbol like BTCUSDT → BTC-USDT.',
   capabilities: { needsNetwork: true, venue: 'okx', market: 'spot', transport: 'rest' },
   configSchema: {
-    limit: { type: 'number', default: 300, min: 50, max: 300, label: 'Bars', advanced: true, hidden: true },
+    limit: {
+      type: 'number',
+      default: 300,
+      min: 50,
+      max: 300,
+      label: 'Bars',
+      advanced: true,
+      hidden: true,
+    },
   },
   async fetchHistorical({ symbol, interval, config, endTime, signal }) {
     const cfg = resolveConfig(this.configSchema, config);
-    const limit = Math.min(300, Number(cfg.limit) || 300);
+    const limit = Math.min(300, Number(cfg['limit']) || 300);
     const market = asProviderMarket(store.provider?.market);
     const quote = market === 'inverse' ? 'USD' : 'USDT';
     let instId = dashPair(symbol, quote);
@@ -685,6 +698,7 @@ export const okxRest: SourcePlugin = {
   },
 };
 
+/** Bybit v5 spot/linear/inverse klines; newest-first list reversed to ascending. */
 export const bybitRest: SourcePlugin = {
   id: 'bybit-rest',
   name: 'Bybit REST',
@@ -693,11 +707,19 @@ export const bybitRest: SourcePlugin = {
   description: 'Public Bybit v5 spot klines (api.bybit.com).',
   capabilities: { needsNetwork: true, venue: 'bybit', market: 'spot', transport: 'rest' },
   configSchema: {
-    limit: { type: 'number', default: 500, min: 50, max: 1000, label: 'Bars', advanced: true, hidden: true },
+    limit: {
+      type: 'number',
+      default: 500,
+      min: 50,
+      max: 1000,
+      label: 'Bars',
+      advanced: true,
+      hidden: true,
+    },
   },
   async fetchHistorical({ symbol, interval, config, startTime, endTime, signal }) {
     const cfg = resolveConfig(this.configSchema, config);
-    const limit = Math.min(1000, Number(cfg.limit) || 500);
+    const limit = Math.min(1000, Number(cfg['limit']) || 500);
     const sym = symbol.toUpperCase().replace(/[-_/]/g, '');
     const category =
       asProviderMarket(store.provider?.market) === 'linear'
@@ -736,6 +758,10 @@ export const bybitRest: SourcePlugin = {
   },
 };
 
+/**
+ * Coinbase Exchange candles (max ~280 per request). Rows arrive as
+ * `[time, low, high, open, close, volume]` and are re-mapped then sorted ascending.
+ */
 export const coinbaseRest: SourcePlugin = {
   id: 'coinbase-rest',
   name: 'Coinbase REST',
@@ -794,7 +820,9 @@ export const coinbaseRest: SourcePlugin = {
 };
 
 function krakenPair(symbol: string): string {
-  const s = String(symbol || '').toUpperCase().replace(/[-_/]/g, '');
+  const s = String(symbol || '')
+    .toUpperCase()
+    .replace(/[-_/]/g, '');
   let base = s;
   let quote = 'USD';
   if (s.endsWith('USDT')) {
@@ -822,6 +850,10 @@ function krakenIntervalMin(interval: string): number {
   return m[interval] || 1440;
 }
 
+/**
+ * Kraken public OHLC (`/0/public/OHLC`), filtered to the `startTime`/`endTime`
+ * window and trimmed to the newest `limit` bars.
+ */
 export const krakenRest: SourcePlugin = {
   id: 'kraken-rest',
   name: 'Kraken REST',
@@ -830,7 +862,15 @@ export const krakenRest: SourcePlugin = {
   description: 'Public Kraken OHLC (api.kraken.com). BTCUSDT → XBTUSDT.',
   capabilities: { needsNetwork: true, venue: 'kraken', market: 'spot', transport: 'rest' },
   configSchema: {
-    limit: { type: 'number', default: 720, min: 50, max: 720, label: 'Bars', advanced: true, hidden: true },
+    limit: {
+      type: 'number',
+      default: 720,
+      min: 50,
+      max: 720,
+      label: 'Bars',
+      advanced: true,
+      hidden: true,
+    },
   },
   async fetchHistorical({ symbol, interval, config, startTime, endTime, signal }) {
     const cfg = resolveConfig(this.configSchema, config);
@@ -865,7 +905,7 @@ export const krakenRest: SourcePlugin = {
       typeof endTime === 'number' && Number.isFinite(endTime) && endTime > 0
         ? Math.floor(endTime)
         : null;
-    const limit = Math.min(720, Number(cfg.limit) || 720);
+    const limit = Math.min(720, Number(cfg['limit']) || 720);
     const bars = mapValidBars(rows, (row) => {
       if (!Array.isArray(row) || row.length < 6) return null;
       const t = Math.floor(Number(row[0]));
@@ -878,13 +918,13 @@ export const krakenRest: SourcePlugin = {
   },
 };
 
+/** MEXC spot klines (Binance-shaped arrays; `1h` is sent as the venue's `60m`). */
 export const mexcRest: SourcePlugin = {
   id: 'mexc-rest',
   name: 'MEXC REST',
   kind: 'source',
   builtIn: true,
-  description:
-    'Public MEXC spot klines (api.mexc.com). Binance-shaped arrays; 1h is interval 60m.',
+  description: 'Public MEXC spot klines (api.mexc.com). Binance-shaped arrays; 1h is interval 60m.',
   capabilities: { needsNetwork: true, venue: 'mexc', market: 'spot', transport: 'rest' },
   configSchema: {
     limit: {
@@ -899,7 +939,7 @@ export const mexcRest: SourcePlugin = {
   },
   async fetchHistorical({ symbol, interval, config, startTime, endTime, signal }) {
     const cfg = resolveConfig(this.configSchema, config);
-    const limit = Math.min(1000, Number(cfg.limit) || 500);
+    const limit = Math.min(1000, Number(cfg['limit']) || 500);
     const params = new URLSearchParams({
       symbol: mexcSpotSymbol(symbol),
       interval: mexcKlineInterval(interval),
@@ -969,19 +1009,11 @@ export const geckoTerminalOhlcv: SourcePlugin = {
       advanced: true,
     },
   },
-  async fetchHistorical({
-    symbol,
-    interval,
-    limit,
-    endTime,
-    startTime,
-    signal,
-    config,
-  }) {
+  async fetchHistorical({ symbol, interval, limit, endTime, startTime, signal, config }) {
     const cfg = resolveConfig(this.configSchema, config);
-    const defaultNetwork = String(cfg.network || 'eth');
+    const defaultNetwork = String(cfg['network'] || 'eth');
     const { network, poolAddress } = parseGeckoPoolSymbol(symbol, defaultNetwork);
-    const baseUrl = String(cfg.baseUrl ?? '');
+    const baseUrl = String(cfg['baseUrl'] ?? '');
     // Gecko hard max is 1000 candles per request (matches sourcePageLimit).
     const pageLimit =
       typeof limit === 'number' && Number.isFinite(limit) && limit > 0
@@ -1020,8 +1052,8 @@ export const geckoTerminalOhlcv: SourcePlugin = {
       return [];
     }
     const hits = await gecko.searchGeckoPools(q, {
-      baseUrl: String(cfg.baseUrl || '') || undefined,
-      network: String(cfg.network || 'eth'),
+      baseUrl: String(cfg['baseUrl'] || '') || undefined,
+      network: String(cfg['network'] || 'eth'),
       limit: 20,
     });
     if (!Array.isArray(hits)) return [];
@@ -1029,7 +1061,7 @@ export const geckoTerminalOhlcv: SourcePlugin = {
       .map((hit) => {
         if (typeof hit === 'string') return hit.trim();
         if (!hit || typeof hit !== 'object') return '';
-        const network = normalizeGeckoNetwork(hit.network || String(cfg.network || 'eth'));
+        const network = normalizeGeckoNetwork(hit.network || String(cfg['network'] || 'eth'));
         const address = String(hit.address || '').trim();
         if (!address) return '';
         const label = String(hit.name || hit.symbol || '').trim();
@@ -1051,7 +1083,12 @@ export const ccxtRest: SourcePlugin = {
   description: 'Long-tail exchange OHLCV via datafeed gateway (PYNE or sidecar).',
   capabilities: { needsNetwork: true, venue: 'generic', market: 'spot', transport: 'rest' },
   configSchema: {
-    exchange: { type: 'string', default: '', label: 'Exchange ID', description: 'CCXT exchange id (bybit, bitget, ...)' },
+    exchange: {
+      type: 'string',
+      default: '',
+      label: 'Exchange ID',
+      description: 'CCXT exchange id (bybit, bitget, ...)',
+    },
     gateway: {
       type: 'select',
       default: 'auto',
@@ -1065,26 +1102,27 @@ export const ccxtRest: SourcePlugin = {
     const { gatewayFetch } = await import('../data/gateway');
     const { bindCcxtSession } = await import('../data/ccxt-session');
     const cfg = resolveConfig(this.configSchema, config);
-    const exchange = String(cfg.exchange || '').trim();
+    const exchange = String(cfg['exchange'] || '').trim();
     if (!exchange) throw new Error('ccxt-rest: exchange id not configured (source settings)');
-    const gatewayMode = (String(cfg.gateway || 'auto') as 'auto' | 'pyne' | 'sidecar');
+    const gatewayMode = String(cfg['gateway'] || 'auto') as 'auto' | 'pyne' | 'sidecar';
     const cred = await bindCcxtSession(gatewayMode, exchange);
     const params: Record<string, string> = {
       exchange,
       symbol,
       timeframe: interval,
     };
-    if (cred) params.cred = cred;
+    if (cred) params['cred'] = cred;
     // Walk-back contract: endTime is the window's right edge. CCXT pages
     // forward from `since`, so derive since = endTime − limit·tf to fetch
     // the page of bars ending at/before endTime (DSM walk-back convergence).
     if (typeof endTime === 'number' && Number.isFinite(endTime) && endTime > 0) {
       const tfMs = intervalToMs(interval);
-      const pageSize = limit && Number.isFinite(limit) && limit > 0 ? limit : sourcePageLimit(this.id);
+      const pageSize =
+        limit && Number.isFinite(limit) && limit > 0 ? limit : sourcePageLimit(this.id);
       const since = Math.max(0, Math.floor(endTime * 1000 - pageSize * tfMs));
-      params.since = String(since);
+      params['since'] = String(since);
     }
-    if (limit) params.limit = String(limit);
+    if (limit) params['limit'] = String(limit);
     const res = await gatewayFetch(gatewayMode, '/ohlcv', params);
     if (!res.ok) throw new Error(`Gateway ohlcv ${res.status}`);
     const json = await res.json();
@@ -1092,7 +1130,7 @@ export const ccxtRest: SourcePlugin = {
     return mapValidBars(json, (row: unknown) => {
       if (!row || typeof row !== 'object') return null;
       const r = row as Record<string, unknown>;
-      return barFromFields(r.time, r.open, r.high, r.low, r.close, r.volume);
+      return barFromFields(r['time'], r['open'], r['high'], r['low'], r['close'], r['volume']);
     });
   },
 };
@@ -1149,17 +1187,22 @@ export function registerDynamicSource(source: SourcePlugin): void {
   registry.registerSource({ ...source, builtIn: source.builtIn ?? false });
 }
 
+/** Remove a source id from the unified registry. */
 export function unregisterDynamicSource(id: string): void {
   ensureSourcesRegistered();
   registry.unregisterSource(id);
 }
 
+/** Ids of registered sources that are not built-ins (`builtIn` false). */
 export function listDynamicSourceIds(): string[] {
   ensureSourcesRegistered();
-  return registry.listSources().filter((s) => !s.builtIn).map((s) => s.id);
+  return registry
+    .listSources()
+    .filter((s) => !s.builtIn)
+    .map((s) => s.id);
 }
 
 /** @internal test helper */
-export function _resetSourceRegistrationFlag() {
+export function _resetSourceRegistrationFlag(): void {
   registered = false;
 }

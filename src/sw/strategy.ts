@@ -47,6 +47,10 @@ export const SW_VERSION = 'v8';
 /** Isolation headers the classic SW stamps on synthesized HTML (parity with `public/sw.js`). */
 export { HP_ISOLATION_HEADERS } from '../hp/isolation-headers';
 
+/**
+ * Prefix of every cache this worker owns. Activate deletes `axis-*` entries
+ * that are not in the live shell/runtime/pyodide set.
+ */
 export const CACHE_PREFIX = 'axis-';
 
 /**
@@ -74,14 +78,32 @@ export const FETCH_RETRY_ATTEMPTS = 3;
 /** Per-attempt AbortController timeout (ms) for uncached fetches. */
 export const FETCH_RETRY_TIMEOUT_MS = 8000;
 
+/**
+ * Cache name for the precached app shell.
+ *
+ * @param version Cache version, default {@link SW_VERSION}
+ * @returns The `axis-shell-<version>` name
+ */
 export function shellCacheName(version: string = SW_VERSION): string {
   return `${CACHE_PREFIX}shell-${version}`;
 }
 
+/**
+ * Cache name for hashed assets and CDN responses.
+ *
+ * @param version Cache version, default {@link SW_VERSION}
+ * @returns The `axis-runtime-<version>` name
+ */
 export function runtimeCacheName(version: string = SW_VERSION): string {
   return `${CACHE_PREFIX}runtime-${version}`;
 }
 
+/**
+ * Cache name for the engine and wheel payloads (own cap, D15).
+ *
+ * @param version Cache version, default {@link SW_VERSION}
+ * @returns The `axis-pyodide-<version>` name
+ */
 export function pyodideCacheName(version: string = SW_VERSION): string {
   return `${CACHE_PREFIX}pyodide-${version}`;
 }
@@ -91,6 +113,11 @@ export function currentCacheNames(version: string = SW_VERSION): string[] {
   return [shellCacheName(version), runtimeCacheName(version), pyodideCacheName(version)];
 }
 
+/**
+ * @param name Cache name from `CacheStorage.keys()`
+ * @returns true when the cache belongs to AXIS (prefix match), false for
+ *   caches owned by anything else
+ */
 export function isAxisCacheName(name: string): boolean {
   return name.startsWith(CACHE_PREFIX);
 }
@@ -112,21 +139,25 @@ export function runtimeCacheDropCount(
  * Names to delete on activate: axis-* caches that are not the live shell/runtime pair.
  * Leaves unrelated (non-axis) caches alone.
  */
-export function cachesToDelete(
-  existing: readonly string[],
-  keep: readonly string[],
-): string[] {
+export function cachesToDelete(existing: readonly string[], keep: readonly string[]): string[] {
   const keepSet = new Set(keep);
   return existing.filter((n) => isAxisCacheName(n) && !keepSet.has(n));
 }
 
-const CDN_HOST_RE =
-  /(?:^|\.)(esm\.sh|jsdelivr\.net|unpkg\.com|cdnjs\.cloudflare\.com)$/i;
+const CDN_HOST_RE = /(?:^|\.)(esm\.sh|jsdelivr\.net|unpkg\.com|cdnjs\.cloudflare\.com)$/i;
 
+/**
+ * @param host Hostname without port, as parsed from the request URL
+ * @returns true for the allowlisted CDN hosts and their subdomains
+ */
 export function isCdnHost(host: string): boolean {
   return CDN_HOST_RE.test(host);
 }
 
+/**
+ * @param pathname Request pathname (query excluded)
+ * @returns true for `/api` and everything under `/api/`
+ */
 export function isApiPath(pathname: string): boolean {
   return pathname === '/api' || pathname.startsWith('/api/');
 }
@@ -136,13 +167,10 @@ export function isVersionProbe(pathname: string): boolean {
   return pathname === '/version.json' || pathname.endsWith('/version.json');
 }
 
-export type RequestClass =
-  | 'api'
-  | 'navigate'
-  | 'cdn'
-  | 'static'
-  | 'bypass';
+/** Routing bucket the fetch handler switches on. */
+export type RequestClass = 'api' | 'navigate' | 'cdn' | 'static' | 'bypass';
 
+/** Minimal request shape the classifier reads; a real `Request` satisfies it. */
 export type RequestLike = {
   method: string;
   mode?: string;
@@ -176,6 +204,7 @@ export function classifyRequest(
   return 'bypass';
 }
 
+/** Minimal response shape the cache predicates read; a real `Response` satisfies it. */
 export type ResponseLike = {
   ok: boolean;
   status: number;
@@ -207,8 +236,12 @@ export function shouldCacheApiResponse(_res: ResponseLike): boolean {
 
 /** True for same-origin engine/wheel payloads (own cache + cap, D15). */
 export function isPyodidePath(pathname: string): boolean {
-  return pathname === '/pyodide' || pathname.startsWith('/pyodide/') ||
-    pathname === '/vendor' || pathname.startsWith('/vendor/');
+  return (
+    pathname === '/pyodide' ||
+    pathname.startsWith('/pyodide/') ||
+    pathname === '/vendor' ||
+    pathname.startsWith('/vendor/')
+  );
 }
 
 /**
@@ -234,7 +267,10 @@ export function staticStrategy(pathname: string): 'cache-first' | 'network-first
 export function isNoStoreRequest(req: { cache?: string; cacheControl?: string | null }): boolean {
   if (req.cache === 'no-store') return true;
   const cc = String(req.cacheControl || '').toLowerCase();
-  return cc.split(',').map((s) => s.trim()).includes('no-store');
+  return cc
+    .split(',')
+    .map((s) => s.trim())
+    .includes('no-store');
 }
 
 /**

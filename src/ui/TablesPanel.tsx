@@ -36,13 +36,7 @@
  */
 
 import { type Component, For, Show, createMemo, createSignal } from 'solid-js';
-import {
-  isPanelOpen,
-  setPineTablesLocation,
-  setStatus,
-  store,
-  EDITOR_RUN_KEY,
-} from '../store';
+import { isPanelOpen, setPineTablesLocation, setStatus, store, EDITOR_RUN_KEY } from '../store';
 import {
   bottomPanelColumnFractions,
   buildTableGrid,
@@ -66,10 +60,13 @@ function scriptLabel(ownerId: string): string {
 function copyTableAsTsv(tb: PineTable): void {
   const grid = buildTableGrid(tb);
   const tsv = grid
-    .map((row) => row.map((c) => (c?.text ?? '').replace(/\t/g, ' ').replace(/\r?\n/g, ' ')).join('\t'))
+    .map((row) =>
+      row.map((c) => (c?.text ?? '').replace(/\t/g, ' ').replace(/\r?\n/g, ' ')).join('\t'),
+    )
     .join('\n');
   const done = () => setStatus('ready', 'Table copied', { toast: true, source: 'tables' });
-  const fail = () => setStatus('ready', 'Copy failed — select and copy manually', { toast: true, source: 'tables' });
+  const fail = () =>
+    setStatus('ready', 'Copy failed — select and copy manually', { toast: true, source: 'tables' });
   try {
     const p = navigator.clipboard?.writeText(tsv);
     if (p && typeof p.then === 'function') void p.then(done, fail);
@@ -102,11 +99,16 @@ const BottomTableView: Component<{ tb: PineTable; index: number }> = (props) => 
   const grid = () => buildTableGrid(props.tb);
   const fractions = () => bottomPanelColumnFractions(props.tb);
   const coverage = () => mergeCoverage(props.tb);
-  const frame = () => props.tb.frame_color || props.tb.border_color || 'var(--color-border, #3a3d4a)';
+  const frame = () =>
+    props.tb.frame_color || props.tb.border_color || 'var(--color-border, #3a3d4a)';
   const frameW = () => Math.max(1, props.tb.frame_width ?? props.tb.border_width ?? 1);
 
   return (
-    <div class="axis-bottom-table" data-testid="axis-bottom-table" data-owner={props.tb.ownerId || ''}>
+    <div
+      class="axis-bottom-table"
+      data-testid="axis-bottom-table"
+      data-owner={props.tb.ownerId || ''}
+    >
       <div class="mb-1 flex items-center justify-between gap-2">
         <span class="text-[11px] text-text-dim font-mono">
           Table {props.index + 1} · {props.tb.rows}×{props.tb.columns}
@@ -121,14 +123,17 @@ const BottomTableView: Component<{ tb: PineTable; index: number }> = (props) => 
           Copy
         </button>
       </div>
-      <div class="overflow-auto rounded border" style={{ 'border-color': frame(), 'max-height': '100%' }}>
+      <div
+        class="overflow-auto rounded border"
+        style={{ 'border-color': frame(), 'max-height': '100%' }}
+      >
         <table
           aria-label="Pine table (bottom panel)"
           class="border-collapse font-mono"
           style={{
             width: '100%',
             'table-layout': 'fixed',
-            'border': `${frameW()}px solid ${frame()}`,
+            border: `${frameW()}px solid ${frame()}`,
             'background-color': props.tb.bgcolor || 'rgba(17,18,24,0.92)',
             'font-size': '12px',
           }}
@@ -145,7 +150,8 @@ const BottomTableView: Component<{ tb: PineTable; index: number }> = (props) => 
                   <For each={row}>
                     {(cell: PineTableCell | null, ci) => {
                       const key = `${ri()},${ci()}`;
-                      if (coverage().covered.has(key)) return null as unknown as never;
+                      // Covered by a colspan/rowspan above — render no cell.
+                      if (coverage().covered.has(key)) return null;
                       const span = coverage().originSpan.get(key);
                       return (
                         <td
@@ -160,7 +166,7 @@ const BottomTableView: Component<{ tb: PineTable; index: number }> = (props) => 
                             'vertical-align': cellTextVerticalAlign(cell?.text_valign),
                             'font-size': `${labelFontSizePx(cell?.text_size, 12)}px`,
                             'line-height': '1.35',
-                            'border': `1px solid ${frame()}`,
+                            border: `1px solid ${frame()}`,
                             'word-break': 'break-word',
                             'white-space': 'normal',
                             'user-select': 'text',
@@ -183,7 +189,7 @@ const BottomTableView: Component<{ tb: PineTable; index: number }> = (props) => 
 };
 
 /** Bottom Tables panel — one tab per script moved off the chart. */
-export const TablesPanel: Component = () => {
+export const TablesPanel: Component = (): JSX.Element => {
   const [activeOwner, setActiveOwner] = createSignal<string | null>(null);
 
   const visibleTables = createMemo((): PineTable[] => {
@@ -192,9 +198,7 @@ export const TablesPanel: Component = () => {
     void store.lastRun;
     void store.resultsFocusId;
     void store.pineTablesLocation;
-    const scriptIds = (store.scripts || [])
-      .filter((s) => s.visible !== false)
-      .map((s) => s.id);
+    const scriptIds = (store.scripts || []).filter((s) => s.visible !== false).map((s) => s.id);
     return collectVisiblePineTables({
       scriptIds,
       runResults: store.runResults,
@@ -220,7 +224,10 @@ export const TablesPanel: Component = () => {
 
   const moveBack = (ownerId: string) => {
     setPineTablesLocation(ownerId, 'chart');
-    setStatus('ready', `${scriptLabel(ownerId)} tables back on chart`, { toast: false, source: 'tables' });
+    setStatus('ready', `${scriptLabel(ownerId)} tables back on chart`, {
+      toast: false,
+      source: 'tables',
+    });
   };
 
   return (
@@ -230,14 +237,22 @@ export const TablesPanel: Component = () => {
           <Show
             when={groups().length > 0}
             fallback={
-              <div class="axis-empty-state px-3 py-4 text-[12px] text-text-dim" data-testid="axis-tables-empty">
-                No tables in the bottom panel yet. Right-click a script chip (or open its chart menu) and choose
-                “Move tables to bottom”. Tables stay live — move them back with “Move tables to chart”.
+              <div
+                class="axis-empty-state px-3 py-4 text-[12px] text-text-dim"
+                data-testid="axis-tables-empty"
+              >
+                No tables in the bottom panel yet. Right-click a script chip (or open its chart
+                menu) and choose “Move tables to bottom”. Tables stay live — move them back with
+                “Move tables to chart”.
               </div>
             }
           >
             <Show when={groups().length > 1}>
-              <div class="flex flex-shrink-0 items-center gap-1 overflow-x-auto border-b border-border-soft px-2 py-1.5" role="tablist" aria-label="Scripts with bottom tables">
+              <div
+                class="flex flex-shrink-0 items-center gap-1 overflow-x-auto border-b border-border-soft px-2 py-1.5"
+                role="tablist"
+                aria-label="Scripts with bottom tables"
+              >
                 <For each={groups()}>
                   {(g) => (
                     <button
@@ -275,8 +290,13 @@ export const TablesPanel: Component = () => {
                       Move tables to chart
                     </button>
                   </div>
-                  <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-3 pb-3" data-testid="axis-tables-list">
-                    <For each={grp().tables}>{(tb, i) => <BottomTableView tb={tb} index={i()} />}</For>
+                  <div
+                    class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-3 pb-3"
+                    data-testid="axis-tables-list"
+                  >
+                    <For each={grp().tables}>
+                      {(tb, i) => <BottomTableView tb={tb} index={i()} />}
+                    </For>
                   </div>
                 </div>
               )}

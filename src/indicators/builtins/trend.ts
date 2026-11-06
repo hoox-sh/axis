@@ -26,6 +26,10 @@
 import { COL, def, pineIndicator } from './pine';
 import type { BuiltinScript } from './types';
 
+/**
+ * Original AXIS trend studies (`category: 'trend'`): Supertrend, ADX/DMI,
+ * Aroon, Parabolic SAR, Vortex, Ichimoku, trailing stops and ZigZag.
+ */
 export const TREND_BUILTINS: readonly BuiltinScript[] = [
   def({
     id: 'supertrend',

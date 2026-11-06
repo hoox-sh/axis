@@ -9,9 +9,19 @@ import type { Meta, StoryObj } from 'storybook-solidjs-vite';
 import { ThemePanel } from '../ui/ThemePanel';
 const meta: Meta = { title: 'Panels/Theme', tags: ['autodocs'], parameters: { layout: 'padded' } };
 export default meta;
+/** Preset grid plus token editor at default width over the built-in void-dark theme. */
 export const Defaults: StoryObj = {
-  render: () => (<div style={{ width: '560px', 'max-width': '92vw' }}><ThemePanel /></div>),
+  render: () => (
+    <div style={{ width: '560px', 'max-width': '92vw' }}>
+      <ThemePanel />
+    </div>
+  ),
 };
+/** Same theme editor in its compact layout (narrower panel). */
 export const Compact: StoryObj = {
-  render: () => (<div style={{ width: '480px', 'max-width': '92vw' }}><ThemePanel compact /></div>),
+  render: () => (
+    <div style={{ width: '480px', 'max-width': '92vw' }}>
+      <ThemePanel compact />
+    </div>
+  ),
 };

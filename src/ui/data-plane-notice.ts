@@ -10,8 +10,10 @@
  * @module ui/data-plane-notice
  */
 
+/** Palette action a data-plane notice offers: retry, open Data, switch to mock, or docs. */
 export type DataPlaneActionId = 'retry' | 'open-data' | 'use-mock' | 'docs';
 
+/** Copy plus the single action for a classified data-plane failure. */
 export interface DataPlaneNotice {
   title: string;
   sentence: string;
@@ -33,6 +35,16 @@ export function cleanStatusLine(message: string): string {
   return cut.replace(/^(load failed:\s*)/i, '').slice(0, 160);
 }
 
+/**
+ * Turn a raw status/error message into a notice with one recovery action.
+ *
+ * Matches the known failure shapes (HTML instead of JSON, Pyodide cold start,
+ * rate limits, offline) and falls back to a retry notice, so the shell can show
+ * actionable copy instead of a stack trace.
+ *
+ * @param opts - Status line, message, and the symbol/interval for context.
+ * @returns Title, sentence, and the action to offer.
+ */
 export function classifyDataPlaneNotice(opts: {
   status?: string;
   message?: string;
@@ -45,7 +57,10 @@ export function classifyDataPlaneNotice(opts: {
   const iv = (opts.interval || '').trim();
   const where = sym ? `${sym}${iv ? ` ${iv}` : ''}` : '';
 
-  if (/on-?chain/.test(low) && /returned a page|not valid json|<!doctype|<html|unexpected token/.test(low)) {
+  if (
+    /on-?chain/.test(low) &&
+    /returned a page|not valid json|<!doctype|<html|unexpected token/.test(low)
+  ) {
     return {
       title: 'On-chain feed returned a page',
       sentence: 'The proxy sent HTML instead of JSON.',

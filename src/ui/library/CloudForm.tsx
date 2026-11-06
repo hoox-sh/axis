@@ -10,6 +10,13 @@
 import type { Component } from 'solid-js';
 import { ScField } from '../Field';
 
+/**
+ * Settings form for the AXIS cloud storage provider (Worker URL + API key).
+ * Controlled — the parent holds the draft and decides when to test or save.
+ *
+ * @param props - Endpoint/key values plus generate, test, and save callbacks.
+ * @returns The cloud credentials form.
+ */
 export const CloudSettingsForm: Component<{
   endpoint: string;
   apiKey: string;
@@ -18,7 +25,7 @@ export const CloudSettingsForm: Component<{
   onGenerate: () => void;
   onTest: () => void;
   onSave: () => void;
-}> = (props) => (
+}> = (props): JSX.Element => (
   <div class="border border-border p-2 flex flex-col gap-2 bg-bg-elev rounded-md">
     <div class="text-[10px] text-text-dim uppercase tracking-wider">Cloud credentials</div>
     <ScField label="Worker URL">

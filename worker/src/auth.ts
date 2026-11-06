@@ -37,6 +37,7 @@
  */
 
 import type { Env } from './index';
+import { partitionIdFromKey } from './hash';
 
 /** Authenticated caller after a successful {@link requireApiKey}. */
 export interface AuthContext {
@@ -50,12 +51,7 @@ export interface AuthContext {
 
 /** First 32 hex chars of SHA-256(key) — stable user partition without storing secrets. */
 async function hashKey(key: string): Promise<string> {
-  const data = new TextEncoder().encode(key);
-  const digest = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(digest))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')
-    .slice(0, 32);
+  return partitionIdFromKey(key);
 }
 
 /**
@@ -84,6 +80,10 @@ export function extractBearer(req: Request): string {
  */
 export type BearerKind = 'tenant-passthrough' | 'selfhost' | 'none';
 
+/**
+ * Result of {@link classifyBearerToken}: which key family the bearer belongs to, its
+ * prefix, and the trimmed raw token (hash it before persisting — it is never stored).
+ */
 export interface BearerClassification {
   kind: BearerKind;
   /** Key family prefix (`hx_live` | `pn` | `""` when none). */
@@ -120,10 +120,17 @@ export function classifyBearer(req: Request): BearerClassification {
 export async function requireApiKey(
   req: Request,
   env: Env,
-): Promise<{ ok: true; ctx: AuthContext } | { ok: false; status: number; code: string; message: string }> {
+): Promise<
+  { ok: true; ctx: AuthContext } | { ok: false; status: number; code: string; message: string }
+> {
   const key = extractBearer(req);
   if (!key) {
-    return { ok: false, status: 401, code: 'NO_KEY', message: 'Authorization: Bearer <api_key> required' };
+    return {
+      ok: false,
+      status: 401,
+      code: 'NO_KEY',
+      message: 'Authorization: Bearer <api_key> required',
+    };
   }
 
   const kv = env.API_KEYS;

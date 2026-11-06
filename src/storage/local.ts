@@ -380,7 +380,10 @@ function trimBucketToCap(bucket: Map<string, StoredRunResult>, protectedRunId: s
   );
   const over = bucket.size - MAX_RESULTS_PER_SCRIPT;
   for (let i = 0; i < over; i++) {
-    const [runId] = entries[i];
+    const entry = entries[i];
+    // `over <= bucket.size === entries.length`, so the entry always exists.
+    if (!entry) continue;
+    const [runId] = entry;
     if (runId !== protectedRunId) bucket.delete(runId);
   }
 }
@@ -445,6 +448,8 @@ async function idbSaveResult(stored: StoredRunResult): Promise<void> {
     const over = all.length - MAX_RESULTS_PER_SCRIPT;
     for (let i = 0; i < over; i++) {
       const item = all[i];
+      // `over <= all.length`, so the entry is always present.
+      if (!item) continue;
       // Never evict the run we just saved, even when its startedAt is older.
       if (item.meta.runId !== runId) {
         store.delete([item.meta.scriptId, item.meta.runId]);
@@ -731,7 +736,7 @@ async function migrateOnce(): Promise<void> {
 }
 
 /** @internal Reset migration flag (tests). */
-export function _resetLocalMigrationFlag() {
+export function _resetLocalMigrationFlag(): void {
   migrated = false;
 }
 
@@ -885,7 +890,7 @@ export const localStoragePlugin: StoragePlugin = {
  * Also clears the cached `dbPromise` so the next access picks up the bumped
  * schema version.
  */
-export async function _clearLocalLibraryForTests() {
+export async function _clearLocalLibraryForTests(): Promise<void> {
   migrated = false;
   memResultsLoaded = false;
   memVersionsLoaded = false;

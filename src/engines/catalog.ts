@@ -55,13 +55,7 @@
 /** Production HOOX pyne-worker (edge Pine evaluate). */
 export const DEFAULT_PYNE_WORKER_ENDPOINT = 'https://pyne-worker.cryptolinx.workers.dev';
 
-import type {
-  EnginePlugin,
-  PlotSample,
-  RunResult,
-  EngineCapabilities,
-  EngineLiveMode,
-} from '../plugins/types';
+import type { EnginePlugin, RunResult, EngineCapabilities, EngineLiveMode } from '../plugins/types';
 import type { LiveSessionModeFields } from './live-sessions';
 import { barsForPine } from '../data/parse-bars';
 import { store, setTelemetryPlane, setTelemetryState, setStatus, appendLog } from '../store';
@@ -253,24 +247,29 @@ export function capabilitiesFromHealth(body: unknown): EngineCapabilities {
     typeof (body as { features?: unknown }).features === 'object'
       ? (body as { features: Record<string, unknown> }).features
       : {};
-  const rawModes = Array.isArray(features.live_modes) ? features.live_modes : [];
-  const dataSession = features.data_session === true;
+  const rawModes = Array.isArray(features['live_modes']) ? features['live_modes'] : [];
+  const dataSession = features['data_session'] === true;
   // every-tick is only meaningful when the engine owns the feed (data_session).
   const liveModes = LIVE_MODES.filter(
     (m) => rawModes.includes(m) && (m !== 'every-tick' || dataSession),
   );
-  const exchanges = Array.isArray(features.data_exchanges)
-    ? features.data_exchanges.filter((e): e is string => typeof e === 'string')
+  const exchanges = Array.isArray(features['data_exchanges'])
+    ? features['data_exchanges'].filter((e): e is string => typeof e === 'string')
     : undefined;
   return {
     liveModes: liveModes.length ? [...liveModes] : [...DEFAULT_ENGINE_CAPABILITIES.liveModes],
     ownsData: dataSession,
     dataSession,
-    liveStream: features.live_stream === true,
+    liveStream: features['live_stream'] === true,
     ...(exchanges?.length ? { dataExchanges: exchanges } : {}),
   };
 }
 
+/**
+ * The Pro/Flask/Worker adapter: sends the script plus bars to the configured backend,
+ * preferring the persistent `WS /ws/run` channel and falling back to `POST /run`.
+ * Capabilities are discovered from `/health`, so live mode is advertised, not assumed.
+ */
 export const serverEngine: EnginePlugin = {
   id: 'server',
   family: 'server',
@@ -304,10 +303,9 @@ export const serverEngine: EnginePlugin = {
     },
   },
   async getCapabilities() {
-    const endpoint = String(store.endpoint || this.configSchema?.endpoint.default || '').replace(
-      /\/$/,
-      '',
-    );
+    const endpoint = String(
+      store.endpoint || this.configSchema?.['endpoint']?.default || '',
+    ).replace(/\/$/, '');
     const probe = await probeEngineHealth(endpoint);
     if (!probe) {
       // Readiness must not outlive the endpoint that reported it.
@@ -327,10 +325,12 @@ export const serverEngine: EnginePlugin = {
     return probe.capabilities;
   },
   async isReady() {
-    const endpoint = (store.endpoint || (this.configSchema!.endpoint.default as string)).replace(
-      /\/$/,
-      '',
-    );
+    // The server engine's schema always declares `endpoint`; `|| ''` only satisfies the type.
+    const endpoint = (
+      store.endpoint ||
+      (this.configSchema?.['endpoint']?.default as string) ||
+      ''
+    ).replace(/\/$/, '');
     try {
       // Prefer /health: same-origin AXIS hosts serve the SPA on `/`.
       let health: { websocket?: boolean } | null = null;
@@ -389,16 +389,17 @@ export const serverEngine: EnginePlugin = {
     // pluginsConfig.endpoint cannot pin an old backend after Save.
     // Explicit config.endpoint still wins when set (e.g. pyne-worker engine).
     const endpoint = (
-      (config?.endpoint as string) ||
+      (config?.['endpoint'] as string) ||
       store.endpoint ||
-      (this.configSchema!.endpoint.default as string)
+      (this.configSchema?.['endpoint']?.default as string) ||
+      ''
     ).replace(/\/$/, '');
     const cfg = resolveConfig(this.configSchema, { ...(config || {}), endpoint });
-    const modeRaw = String(cfg.mode || 'auto');
-    const profilerOn = cfg.profiler === true;
+    const modeRaw = String(cfg['mode'] || 'auto');
+    const profilerOn = cfg['profiler'] === true;
     const mode = resolveServerRunMode(modeRaw, script, profilerOn);
-    const preferWs = cfg.preferWs !== false;
-    const apiKey = String(cfg.apiKey || '').trim();
+    const preferWs = cfg['preferWs'] !== false;
+    const apiKey = String(cfg['apiKey'] || '').trim();
     const t0 = performance.now();
     // B6: never send the key to a fresh cross-origin backend without consent.
     if (!confirmEngineApiKeyTarget(endpoint, apiKey)) {
@@ -644,7 +645,7 @@ export const serverEngine: EnginePlugin = {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (apiKey) {
       headers['X-API-Key'] = apiKey;
-      headers.Authorization = `Bearer ${apiKey}`;
+      headers['Authorization'] = `Bearer ${apiKey}`;
     }
     try {
       // Never reuse a parent AbortSignal that already fired while WS was tried —
@@ -804,8 +805,9 @@ declare global {
   }
 }
 
-/** Self-hosted Pyodide (public/pyodide/v0.29.5, Python 3.13 — ~12MB, no CDN required). */
+/** Self-hosted Pyodide runtime version shipped under `public/pyodide` (Python 3.13). */
 export const LOCAL_PYODIDE_VERSION = '0.29.5';
+/** Same-origin index path for {@link LOCAL_PYODIDE_VERSION}, used as the default `indexUrl`. */
 export const LOCAL_PYODIDE_INDEX = `/pyodide/v${LOCAL_PYODIDE_VERSION}/`;
 
 /**
@@ -842,7 +844,7 @@ export function resolvePyodideIndexUrl(configured?: string): string {
 
 function pyodidePluginConfig(): Record<string, unknown> {
   const configs = store.pluginsConfig || {};
-  return (configs['engine:pyodide'] || configs.pyodide || {}) as Record<string, unknown>;
+  return (configs['engine:pyodide'] || configs['pyodide'] || {}) as Record<string, unknown>;
 }
 
 /**
@@ -871,7 +873,7 @@ export function prefetchPyodideAssets(indexUrl?: string): void {
     link.href = href;
     link.as = f.endsWith('.wasm') ? 'fetch' : f.endsWith('.js') ? 'script' : 'fetch';
     link.crossOrigin = 'anonymous';
-    link.dataset.axisPyodide = f;
+    link.dataset['axisPyodide'] = f;
     document.head.appendChild(link);
   }
   // Also warm vendor wheels + runtime (same-origin)
@@ -993,6 +995,10 @@ export function _resetPyodideEngineState(): void {
   warnedUnsupportedFields = false;
 }
 
+/**
+ * The in-browser adapter: runs Pine through self-hosted Pyodide (worker-hosted when available,
+ * in-thread as fallback). No network, no engine key — the `local` transport in `RunResult.meta`.
+ */
 export const pyodideEngine: EnginePlugin & {
   /** In-thread runtime (fallback path only). Stays null while the worker owns the runtime. */
   _pyodide: PyodideLike | null;
@@ -1055,7 +1061,7 @@ export const pyodideEngine: EnginePlugin & {
       throw new Error(`${this._failure.message} (retrying in ${waitS}s)`);
     }
     const cfg = resolveConfig(this.configSchema, pyodidePluginConfig());
-    const indexUrl = resolvePyodideIndexUrl(String(cfg.indexUrl || LOCAL_PYODIDE_INDEX));
+    const indexUrl = resolvePyodideIndexUrl(String(cfg['indexUrl'] || LOCAL_PYODIDE_INDEX));
     const origin = typeof location !== 'undefined' ? location.origin : '';
     if (pyodideWorkerAvailable()) {
       // Worker path: the client owns the load promise (shared by concurrent
@@ -1129,7 +1135,7 @@ export const pyodideEngine: EnginePlugin & {
         : pyodideRuntimeAcceptsInputs(runtime);
       const forwardInputs = inputBag !== undefined && acceptsInputs;
       if (inputBag !== undefined && !forwardInputs) unsupported.push('inputs');
-      if (cfg.profiler === true) unsupported.push('profiler');
+      if (cfg['profiler'] === true) unsupported.push('profiler');
       if (unsupported.length && !warnedUnsupportedFields) {
         warnedUnsupportedFields = true;
         appendLog(
@@ -1219,7 +1225,7 @@ export const pyodideEngine: EnginePlugin & {
  * Prefer plugin config, then a store.endpoint that looks like pyne-worker, else production default.
  */
 export function resolvePyneWorkerEndpoint(config?: Record<string, unknown> | null): string {
-  const fromCfg = String(config?.endpoint || '')
+  const fromCfg = String(config?.['endpoint'] || '')
     .trim()
     .replace(/\/$/, '');
   if (fromCfg) return fromCfg;
@@ -1329,7 +1335,7 @@ export const pyneWorkerEngine: EnginePlugin = {
         ...merged,
         endpoint,
         // Default preferWs false unless user explicitly enabled it
-        preferWs: merged.preferWs === true,
+        preferWs: merged['preferWs'] === true,
       },
     });
   },
@@ -1444,6 +1450,10 @@ export async function probeEngineHealth(
   }
 }
 
+/**
+ * Engines available without a plugin install, in registration order: server (Pro/Flask/Worker),
+ * pyne-worker (edge), and pyodide (in-tab).
+ */
 export const BUILTIN_ENGINES: EnginePlugin[] = [serverEngine, pyneWorkerEngine, pyodideEngine];
 
 let registered = false;
@@ -1492,11 +1502,22 @@ export function registerDynamicEngine(engine: EnginePlugin): void {
   registry.registerEngine({ ...engine, builtIn: engine.builtIn ?? false });
 }
 
+/**
+ * Drops a runtime-registered engine so it disappears from the engine picker and `getEngine`.
+ *
+ * @param id Engine id previously passed to `registerDynamicEngine`.
+ * @returns `true` when an engine was removed, `false` when the id was unknown.
+ */
 export function unregisterDynamicEngine(id: string): boolean {
   ensureEnginesRegistered();
   return registry.unregisterEngine(id);
 }
 
+/**
+ * Lists ids of engines registered at runtime (never the built-ins), for plugin management UI.
+ *
+ * @returns Non-built-in engine ids in registration order.
+ */
 export function listDynamicEngineIds(): string[] {
   ensureEnginesRegistered();
   return registry
@@ -1506,6 +1527,6 @@ export function listDynamicEngineIds(): string[] {
 }
 
 /** @internal test helper */
-export function _resetEngineRegistrationFlag() {
+export function _resetEngineRegistrationFlag(): void {
   registered = false;
 }

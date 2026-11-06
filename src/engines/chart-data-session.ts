@@ -155,10 +155,10 @@ export async function tickChartDataSession(
       typeof v === 'boolean' ? v : undefined;
     return {
       ok: true,
-      appended: num(p.appended),
-      forming: bool(p.forming),
-      unchanged: bool(p.unchanged),
-      stale: bool(p.stale),
+      appended: num(p['appended']),
+      forming: bool(p['forming']),
+      unchanged: bool(p['unchanged']),
+      stale: bool(p['stale']),
     };
   }
   if (t.gone && current?.sessionId === sessionId) {

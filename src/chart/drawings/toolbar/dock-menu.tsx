@@ -26,6 +26,13 @@
 import type { Component } from 'solid-js';
 import type { ToolbarDock } from './chrome';
 
+/**
+ * Placement picker for the rail handle: dock left/top, free position, slide.
+ *
+ * @param props.dock current dock used to check the active item
+ * @param props.onDock pick a docked placement
+ * @param props.onFree switch to the floating placement
+ */
 export const DockMenu: Component<{
   dock: ToolbarDock;
   slideChecked: boolean;
@@ -33,7 +40,7 @@ export const DockMenu: Component<{
   onDock: (dock: ToolbarDock) => void;
   onFree: () => void;
   onSlide: (checked: boolean) => void;
-}> = (props) => (
+}> = (props): JSX.Element => (
   <div class="axis-draw-menu" role="menu" aria-label="Drawing toolbar placement">
     <button
       type="button"

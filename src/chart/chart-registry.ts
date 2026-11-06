@@ -34,6 +34,7 @@ import type { PaneManager } from './pane-manager';
 import type { DrawingLayer } from './drawing-layer';
 import type { Bar } from '../store/types';
 
+/** Per-slot chart runtime: imperative manager/layer refs plus reactive bars and paint gen. */
 export interface ChartSlotRuntime {
   manager?: PaneManager;
   drawingLayer?: DrawingLayer;
@@ -73,6 +74,12 @@ function ensureSlot(slotId: string): void {
   }
 }
 
+/**
+ * Snapshot of one slot's runtime.
+ *
+ * @param slotId layout slot id
+ * @returns current refs and bars; creates the slot's store entry on first read
+ */
 export function getSlotRuntime(slotId: string): ChartSlotRuntime {
   ensureSlot(slotId);
   const refs = slotRefs.get(slotId)!;
@@ -85,33 +92,60 @@ export function getSlotRuntime(slotId: string): ChartSlotRuntime {
   };
 }
 
-export function setActiveSlotId(id: string | null) {
+/**
+ * Point legacy helpers / shortcuts at one slot.
+ *
+ * @param id slot id to focus, or `null` when no chart is mounted
+ */
+export function setActiveSlotId(id: string | null): void {
   activeSlotId = id;
 }
 
+/** @returns the focused slot id, or `null` before any chart registers. */
 export function getActiveSlotId(): string | null {
   return activeSlotId;
 }
 
-export function setSlotManager(slotId: string, manager: PaneManager | undefined) {
+/**
+ * Register (or clear) the chart manager for a slot.
+ *
+ * @param slotId layout slot id
+ * @param manager live PaneManager, or `undefined` on teardown
+ */
+export function setSlotManager(slotId: string, manager: PaneManager | undefined): void {
   ensureSlot(slotId);
   slotRefs.get(slotId)!.manager = manager;
 }
 
+/** @returns the slot's PaneManager, or `undefined` when that slot is not mounted. */
 export function getSlotManager(slotId: string): PaneManager | undefined {
   return slotRefs.get(slotId)?.manager;
 }
 
-export function setSlotDrawingLayer(slotId: string, layer: DrawingLayer | undefined) {
+/**
+ * Register (or clear) the drawing layer for a slot.
+ *
+ * @param slotId layout slot id
+ * @param layer live DrawingLayer, or `undefined` on teardown
+ */
+export function setSlotDrawingLayer(slotId: string, layer: DrawingLayer | undefined): void {
   ensureSlot(slotId);
   slotRefs.get(slotId)!.drawingLayer = layer;
 }
 
+/** @returns the slot's DrawingLayer, or `undefined` when that slot is not mounted. */
 export function getSlotDrawingLayer(slotId: string): DrawingLayer | undefined {
   return slotRefs.get(slotId)?.drawingLayer;
 }
 
-export function setSlotBars(slotId: string, bars: Bar[], bumpGen = true) {
+/**
+ * Publish OHLCV for a slot so its ChartHost memo repaints.
+ *
+ * @param slotId layout slot id
+ * @param bars full bar window for that slot
+ * @param bumpGen bump `chartDataGen` to force a full repaint (default true)
+ */
+export function setSlotBars(slotId: string, bars: Bar[], bumpGen = true): void {
   if (slotData[slotId] == null) {
     batch(() => {
       setSlotData(slotId, {
@@ -159,7 +193,7 @@ export function getSlotChartDataGen(slotId: string): number {
 }
 
 /** Dispose manager/layer for a slot (keep bars for quick re-show). */
-export function disposeSlotChart(slotId: string) {
+export function disposeSlotChart(slotId: string): void {
   const refs = slotRefs.get(slotId);
   if (!refs) return;
   const layer = refs.drawingLayer;
@@ -183,7 +217,7 @@ export function disposeSlotChart(slotId: string) {
 }
 
 /** Drop runtime entirely (slot removed from layout). */
-export function removeSlotRuntime(slotId: string) {
+export function removeSlotRuntime(slotId: string): void {
   disposeSlotChart(slotId);
   slotRefs.delete(slotId);
   if (slotData[slotId] != null) {
@@ -205,12 +239,18 @@ export function getActiveManager(): PaneManager | undefined {
   return getSlotManager(activeSlotId);
 }
 
+/** @returns the active slot's DrawingLayer, or `undefined` when no chart is mounted. */
 export function getActiveDrawingLayer(): DrawingLayer | undefined {
   if (!activeSlotId) return undefined;
   return getSlotDrawingLayer(activeSlotId);
 }
 
-export function setActiveDrawingLayer(layer: DrawingLayer | undefined) {
+/**
+ * Attach a drawing layer to the focused slot.
+ *
+ * @param layer layer to register; no-op when no slot is active
+ */
+export function setActiveDrawingLayer(layer: DrawingLayer | undefined): void {
   if (!activeSlotId) return;
   setSlotDrawingLayer(activeSlotId, layer);
 }

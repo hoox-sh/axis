@@ -27,7 +27,9 @@
  * @module ui/watchlist-spark
  */
 
+/** Maximum number of sparkline samples kept per symbol. */
 export const SPARK_LIMIT = 24;
+/** Minimum gap between stored samples; faster prints update the tip in place. */
 export const SPARK_MIN_INTERVAL_MS = 1500;
 
 type SparkSample = { t: number; p: number };
@@ -42,10 +44,19 @@ function pricesOf(buf: SparkSample[] | undefined): number[] {
   return buf ? buf.map((s) => s.p) : [];
 }
 
+/**
+ * Drop every symbol's sparkline buffer (symbol switch / session reset).
+ */
 export function resetWatchlistSparks(): void {
   buffers.clear();
 }
 
+/**
+ * Current sparkline prices for one symbol.
+ *
+ * @param symbol - Symbol as shown in the watchlist; matching is case-insensitive.
+ * @returns Sample prices oldest-first; empty when nothing was recorded.
+ */
 export function sparkSeries(symbol: string): number[] {
   return pricesOf(buffers.get(keyOf(symbol)));
 }
@@ -54,7 +65,12 @@ export function sparkSeries(symbol: string): number[] {
  * Two-point slope from the 24h open to last. No-op once any sample exists,
  * so live prints are not rewritten by a later ticker refresh.
  */
-export function seedSpark(symbol: string, open: number | undefined, last: number, now = Date.now()): void {
+export function seedSpark(
+  symbol: string,
+  open: number | undefined,
+  last: number,
+  now = Date.now(),
+): void {
   const key = keyOf(symbol);
   if (!key || buffers.has(key)) return;
   if (!Number.isFinite(last) || last <= 0) return;

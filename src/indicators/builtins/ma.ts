@@ -33,6 +33,10 @@ out = ${fn}
 plot(out, "${short}", color=${COL.indigo}, linewidth=2)`;
 }
 
+/**
+ * Original AXIS moving averages (`category: 'moving-average'`): SMA … McGinley
+ * plus ribbon, envelope and MA-cross studies, all built through {@link def}.
+ */
 export const MA_BUILTINS: readonly BuiltinScript[] = [
   def({
     id: 'sma',

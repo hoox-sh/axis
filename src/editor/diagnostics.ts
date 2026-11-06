@@ -27,6 +27,8 @@
  * @module editor/diagnostics
  */
 
+import { finiteNumber } from '../utils/validate';
+
 import {
   EditorView,
   Decoration,
@@ -84,14 +86,6 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return v != null && typeof v === 'object' && !Array.isArray(v);
 }
 
-function asFiniteNumber(v: unknown): number | null {
-  if (typeof v === 'number' && Number.isFinite(v)) return v;
-  if (typeof v === 'string' && v.trim() !== '') {
-    const n = Number(v);
-    if (Number.isFinite(n)) return n;
-  }
-  return null;
-}
 
 /**
  * Parse a 1-based source line from free text / engine messages / stack traces.
@@ -120,18 +114,18 @@ export function parseDiagnosticLine(text: string): number | null {
 
 /** Line field from a structured diagnostic / log record. */
 export function lineFromDiagnosticRecord(item: Record<string, unknown>): number | null {
-  const direct = asFiniteNumber(
-    item.line ??
-      item.lineNumber ??
-      item.line_number ??
-      item.lineno ??
-      item.source_line ??
-      item.src_line ??
-      item.row,
+  const direct = finiteNumber(
+    item['line'] ??
+      item['lineNumber'] ??
+      item['line_number'] ??
+      item['lineno'] ??
+      item['source_line'] ??
+      item['src_line'] ??
+      item['row'],
   );
   if (direct != null && direct >= 1) return Math.trunc(direct);
   const msg = String(
-    item.message ?? item.msg ?? item.text ?? item.error ?? item.detail ?? '',
+    item['message'] ?? item['msg'] ?? item['text'] ?? item['error'] ?? item['detail'] ?? '',
   );
   return parseDiagnosticLine(msg);
 }
@@ -232,10 +226,18 @@ export function mapLineToRange(
 }
 
 function normalizeSeverity(raw: unknown): DiagnosticSeverity {
-  const s = String(raw ?? 'error').trim().toLowerCase();
+  const s = String(raw ?? 'error')
+    .trim()
+    .toLowerCase();
   if (s.includes('warn') || s === '1') return 'warning';
   if (s.includes('info') || s.includes('hint') || s.includes('note') || s === '0') return 'info';
-  if (s.includes('err') || s.includes('fatal') || s.includes('critical') || s === '2' || s === '3') {
+  if (
+    s.includes('err') ||
+    s.includes('fatal') ||
+    s.includes('critical') ||
+    s === '2' ||
+    s === '3'
+  ) {
     return 'error';
   }
   // default for unknown: error when it looks serious, else info
@@ -245,7 +247,13 @@ function normalizeSeverity(raw: unknown): DiagnosticSeverity {
 
 function messageFromRecord(item: Record<string, unknown>): string {
   return String(
-    item.message ?? item.msg ?? item.text ?? item.error ?? item.detail ?? item.content ?? '',
+    item['message'] ??
+      item['msg'] ??
+      item['text'] ??
+      item['error'] ??
+      item['detail'] ??
+      item['content'] ??
+      '',
   ).trim();
 }
 
@@ -336,17 +344,17 @@ function recordToPartial(
   if (line == null) return null;
   const message = messageFromRecord(d);
   if (!message) return null;
-  const sevRaw = d.severity ?? d.level ?? d.type ?? fallbackSeverity;
+  const sevRaw = d['severity'] ?? d['level'] ?? d['type'] ?? fallbackSeverity;
   return {
     line,
     severity: normalizeSeverity(sevRaw),
     message,
-    source: String(d.source ?? source),
-    col: asFiniteNumber(d.col ?? d.column ?? d.character ?? d.startColumn),
-    endCol: asFiniteNumber(d.endCol ?? d.endColumn ?? d.end_character),
-    word: d.token != null ? String(d.token) : d.word != null ? String(d.word) : null,
-    from: asFiniteNumber(d.from ?? d.start),
-    to: asFiniteNumber(d.to ?? d.end),
+    source: String(d['source'] ?? source),
+    col: finiteNumber(d['col'] ?? d['column'] ?? d['character'] ?? d['startColumn']),
+    endCol: finiteNumber(d['endCol'] ?? d['endColumn'] ?? d['end_character']),
+    word: d['token'] != null ? String(d['token']) : d['word'] != null ? String(d['word']) : null,
+    from: finiteNumber(d['from'] ?? d['start']),
+    to: finiteNumber(d['to'] ?? d['end']),
   };
 }
 
@@ -360,10 +368,7 @@ function recordToPartial(
  * - `diagnostics` / `meta.diagnostics`
  * - Logs with line / `bar_index` (error & warning levels)
  */
-export function diagnosticsFromLastRun(
-  lastRun: unknown,
-  doc: string,
-): EditorDiagnostic[] {
+export function diagnosticsFromLastRun(lastRun: unknown, doc: string): EditorDiagnostic[] {
   if (lastRun == null) return [];
   const out: EditorDiagnostic[] = [];
   const text = doc ?? '';
@@ -386,9 +391,9 @@ export function diagnosticsFromLastRun(
 
   // ── Structured diagnostics arrays ──────────────────────────────────
   const diagArrays: unknown[] = [];
-  if (Array.isArray(lastRun.diagnostics)) diagArrays.push(...lastRun.diagnostics);
-  if (isRecord(lastRun.meta) && Array.isArray(lastRun.meta.diagnostics)) {
-    diagArrays.push(...lastRun.meta.diagnostics);
+  if (Array.isArray(lastRun['diagnostics'])) diagArrays.push(...lastRun['diagnostics']);
+  if (isRecord(lastRun['meta']) && Array.isArray(lastRun['meta']['diagnostics'])) {
+    diagArrays.push(...lastRun['meta']['diagnostics']);
   }
   for (const item of diagArrays) {
     if (!isRecord(item)) {
@@ -411,9 +416,9 @@ export function diagnosticsFromLastRun(
 
   // ── meta.errors / errors ───────────────────────────────────────────
   const errArrays: unknown[] = [];
-  if (Array.isArray(lastRun.errors)) errArrays.push(...lastRun.errors);
-  if (isRecord(lastRun.meta) && Array.isArray(lastRun.meta.errors)) {
-    errArrays.push(...lastRun.meta.errors);
+  if (Array.isArray(lastRun['errors'])) errArrays.push(...lastRun['errors']);
+  if (isRecord(lastRun['meta']) && Array.isArray(lastRun['meta']['errors'])) {
+    errArrays.push(...lastRun['meta']['errors']);
   }
   for (const item of errArrays) {
     if (typeof item === 'string' && item.trim()) {
@@ -434,13 +439,10 @@ export function diagnosticsFromLastRun(
   }
 
   // ── Top-level engine error ─────────────────────────────────────────
-  const errText = String(
-    lastRun.error ?? lastRun.err ?? lastRun.detail ?? '',
-  ).trim();
-  const msgText =
-    !errText && lastRun.message != null ? String(lastRun.message).trim() : '';
+  const errText = String(lastRun['error'] ?? lastRun['err'] ?? lastRun['detail'] ?? '').trim();
+  const msgText = !errText && lastRun['message'] != null ? String(lastRun['message']).trim() : '';
   const combined = errText || msgText;
-  const status = String(lastRun.status ?? '').toLowerCase();
+  const status = String(lastRun['status'] ?? '').toLowerCase();
   const looksError =
     Boolean(errText) ||
     status === 'error' ||
@@ -448,15 +450,14 @@ export function diagnosticsFromLastRun(
     (combined.length > 0 && /error|fail|exception|syntax/i.test(combined));
 
   if (combined && looksError) {
-    const line =
-      lineFromDiagnosticRecord(lastRun) ?? parseDiagnosticLine(combined);
+    const line = lineFromDiagnosticRecord(lastRun) ?? parseDiagnosticLine(combined);
     if (line != null) {
       pushDiag(out, text, {
         line,
         severity: 'error',
         message: combined.slice(0, 2000),
         source: 'error',
-        col: asFiniteNumber(lastRun.col ?? lastRun.column ?? lastRun.character),
+        col: finiteNumber(lastRun['col'] ?? lastRun['column'] ?? lastRun['character']),
       });
     } else {
       // No line — still surface as line 1 so the badge is useful
@@ -506,12 +507,12 @@ export function diagnosticsFromLastRun(
       const v = lastRun[key];
       if (Array.isArray(v)) rawArrs.push(...v);
     }
-    if (isRecord(lastRun.meta) && Array.isArray(lastRun.meta.logs)) {
-      rawArrs.push(...(lastRun.meta.logs as unknown[]));
+    if (isRecord(lastRun['meta']) && Array.isArray(lastRun['meta']['logs'])) {
+      rawArrs.push(...(lastRun['meta']['logs'] as unknown[]));
     }
     for (const item of rawArrs) {
       if (!isRecord(item)) continue;
-      const sev = normalizeSeverity(item.level ?? item.severity ?? 'info');
+      const sev = normalizeSeverity(item['level'] ?? item['severity'] ?? 'info');
       if (sev === 'info') continue;
       const line = lineFromDiagnosticRecord(item);
       if (line == null) continue;
@@ -522,7 +523,7 @@ export function diagnosticsFromLastRun(
         severity: sev,
         message,
         source: 'log',
-        col: asFiniteNumber(item.col ?? item.column),
+        col: finiteNumber(item['col'] ?? item['column']),
       });
     }
   }
@@ -546,9 +547,7 @@ function severityRank(s: DiagnosticSeverity): number {
 function sortDiagnostics(list: EditorDiagnostic[]): EditorDiagnostic[] {
   return list.sort(
     (a, b) =>
-      a.line - b.line ||
-      severityRank(a.severity) - severityRank(b.severity) ||
-      a.from - b.from,
+      a.line - b.line || severityRank(a.severity) - severityRank(b.severity) || a.from - b.from,
   );
 }
 
@@ -558,12 +557,12 @@ function sortDiagnostics(list: EditorDiagnostic[]): EditorDiagnostic[] {
  */
 export function lastRunScriptSource(lastRun: unknown): string | null {
   if (!isRecord(lastRun)) return null;
-  const meta = isRecord(lastRun.meta) ? lastRun.meta : null;
-  if (meta && typeof meta.axisSource === 'string' && meta.axisSource.length) {
-    return meta.axisSource;
+  const meta = isRecord(lastRun['meta']) ? lastRun['meta'] : null;
+  if (meta && typeof meta['axisSource'] === 'string' && meta['axisSource'].length) {
+    return meta['axisSource'];
   }
-  if (typeof lastRun.script === 'string' && lastRun.script.length) {
-    return lastRun.script;
+  if (typeof lastRun['script'] === 'string' && lastRun['script'].length) {
+    return lastRun['script'];
   }
   return null;
 }
@@ -739,6 +738,7 @@ function buildDecorations(diags: EditorDiagnostic[], doc: Text): DecorationSet {
   return builder.finish();
 }
 
+/** Holds the active diagnostics + decorations; fed by {@link setDiagnosticsData}. */
 export const diagnosticsStateField = StateField.define<DiagnosticsState>({
   create() {
     return emptyState;
@@ -773,11 +773,11 @@ class DiagGutterMarker extends GutterMarker {
     super();
   }
 
-  eq(other: DiagGutterMarker) {
+  override eq(other: DiagGutterMarker) {
     return other.severity === this.severity && other.title === this.title;
   }
 
-  toDOM() {
+  override toDOM() {
     const el = document.createElement('div');
     el.className = `cm-diag-gutter cm-diag-gutter-${this.severity}`;
     el.title = this.title;
@@ -800,10 +800,7 @@ function diagnosticsGutterMarkers(view: EditorView) {
   if (!st?.diags.length || !diagIntel().diagGutter) return builder.finish();
 
   // One marker per line (highest severity), tooltip lists all messages
-  const byLine = new Map<
-    number,
-    { severity: DiagnosticSeverity; messages: string[] }
-  >();
+  const byLine = new Map<number, { severity: DiagnosticSeverity; messages: string[] }>();
   const intel = diagIntel();
   for (const d of st.diags) {
     if (d.line < 1 || d.line > view.state.doc.lines) continue;
@@ -881,8 +878,7 @@ function diagnosticHover(view: EditorView, pos: number): Tooltip | null {
         if (h.severity === 'typo') {
           const note = document.createElement('div');
           note.className = 'cm-diag-tooltip-note cm-diag-tooltip-note-typo';
-          note.textContent =
-            'PYNE autocorrects this on the fly · Run is not blocked';
+          note.textContent = 'PYNE autocorrects this on the fly · Run is not blocked';
           dom.appendChild(note);
         }
       }
@@ -915,110 +911,110 @@ function diagMarkSpec(color: string, wash: string): Record<string, string> {
  */
 export const diagnosticsTheme = Prec.high(
   EditorView.theme({
-  '.cm-diag-mark': {
-    backgroundRepeat: 'repeat-x',
-    backgroundPosition: 'left bottom',
-    backgroundSize: '6px 3px',
-    paddingBottom: '3px',
-  },
-  '.cm-diag-mark-error': diagMarkSpec('#e85d4c', 'rgba(232, 93, 76, 0.12)'),
-  '.cm-diag-mark-warning': diagMarkSpec('#e8a03a', 'rgba(232, 160, 58, 0.12)'),
-  /* Builtin typos — distinct violet, not an error (engine may autocorrect) */
-  '.cm-diag-mark-typo': diagMarkSpec('#c084fc', 'rgba(192, 132, 252, 0.14)'),
-  '.cm-diag-mark-info': diagMarkSpec('#8b8e9c', 'rgba(139, 142, 156, 0.10)'),
-  '.cm-diag-line-error': {
-    backgroundColor: 'rgba(232, 93, 76, 0.07)',
-  },
-  '.cm-diag-line-warning': {
-    backgroundColor: 'rgba(232, 160, 58, 0.06)',
-  },
-  '.cm-diag-line-typo': {
-    backgroundColor: 'rgba(192, 132, 252, 0.07)',
-  },
-  '.cm-diag-line-info': {
-    backgroundColor: 'rgba(139, 142, 156, 0.04)',
-  },
-  /* Hidden until diagnostics exist (profiler-style on-demand column) */
-  '.cm-diag-gutter-col': {
-    display: 'none',
-    minWidth: '0',
-    width: '0',
-  },
-  '&.cm-has-diag-gutter .cm-diag-gutter-col': {
-    display: 'flex',
-    width: '16px',
-    minWidth: '16px',
-  },
-  '.cm-diag-gutter-col .cm-gutterElement': {
-    minWidth: '16px',
-    padding: '0 1px',
-  },
-  '.cm-diag-gutter': {
-    fontSize: '11px',
-    lineHeight: '1.35',
-    textAlign: 'center',
-    width: '100%',
-    minHeight: '14px',
-    padding: '1px 0',
-    opacity: '0.95',
-    cursor: 'default',
-  },
-  '.cm-diag-gutter-error': { color: '#e85d4c', fontWeight: '700' },
-  '.cm-diag-gutter-warning': { color: '#e8a03a', fontWeight: '700' },
-  '.cm-diag-gutter-typo': { color: '#c084fc', fontWeight: '700' },
-  '.cm-diag-gutter-info': { color: '#8b8e9c' },
-  '.cm-diag-tooltip': {
-    fontSize: '11px',
-    fontFamily: 'ui-sans-serif, system-ui, sans-serif',
-    maxWidth: '360px',
-    padding: '6px 8px',
-    borderRadius: '4px',
-    backgroundColor: '#1e1f26',
-    color: '#e8e8ed',
-    border: '1px solid #3a3c48',
-    boxShadow: '0 4px 16px rgba(0,0,0,0.35)',
-    lineHeight: '1.35',
-  },
-  '.cm-diag-tooltip-row': {
-    display: 'flex',
-    flexWrap: 'wrap',
-    alignItems: 'baseline',
-    gap: '6px',
-    marginTop: '2px',
-  },
-  '.cm-diag-tooltip-row:first-child': { marginTop: '0' },
-  '.cm-diag-tooltip-sev': {
-    fontSize: '9px',
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: '0.04em',
-    flexShrink: '0',
-  },
-  '.cm-diag-tooltip-sev-error': { color: '#e85d4c' },
-  '.cm-diag-tooltip-sev-warning': { color: '#e8a03a' },
-  '.cm-diag-tooltip-sev-typo': { color: '#c084fc' },
-  '.cm-diag-tooltip-sev-info': { color: '#8b8e9c' },
-  '.cm-diag-tooltip-msg': {
-    flex: '1 1 auto',
-    minWidth: '0',
-    wordBreak: 'break-word',
-  },
-  '.cm-diag-tooltip-src': {
-    fontSize: '9px',
-    color: '#6b6e7c',
-    flexShrink: '0',
-  },
-  '.cm-diag-tooltip-note': {
-    fontSize: '10px',
-    marginTop: '4px',
-    paddingTop: '4px',
-    borderTop: '1px solid #3a3c48',
-    color: '#a1a1aa',
-    lineHeight: '1.3',
-  },
-  '.cm-diag-tooltip-note-typo': {
-    color: '#d8b4fe',
-  },
+    '.cm-diag-mark': {
+      backgroundRepeat: 'repeat-x',
+      backgroundPosition: 'left bottom',
+      backgroundSize: '6px 3px',
+      paddingBottom: '3px',
+    },
+    '.cm-diag-mark-error': diagMarkSpec('#e85d4c', 'rgba(232, 93, 76, 0.12)'),
+    '.cm-diag-mark-warning': diagMarkSpec('#e8a03a', 'rgba(232, 160, 58, 0.12)'),
+    /* Builtin typos — distinct violet, not an error (engine may autocorrect) */
+    '.cm-diag-mark-typo': diagMarkSpec('#c084fc', 'rgba(192, 132, 252, 0.14)'),
+    '.cm-diag-mark-info': diagMarkSpec('#8b8e9c', 'rgba(139, 142, 156, 0.10)'),
+    '.cm-diag-line-error': {
+      backgroundColor: 'rgba(232, 93, 76, 0.07)',
+    },
+    '.cm-diag-line-warning': {
+      backgroundColor: 'rgba(232, 160, 58, 0.06)',
+    },
+    '.cm-diag-line-typo': {
+      backgroundColor: 'rgba(192, 132, 252, 0.07)',
+    },
+    '.cm-diag-line-info': {
+      backgroundColor: 'rgba(139, 142, 156, 0.04)',
+    },
+    /* Hidden until diagnostics exist (profiler-style on-demand column) */
+    '.cm-diag-gutter-col': {
+      display: 'none',
+      minWidth: '0',
+      width: '0',
+    },
+    '&.cm-has-diag-gutter .cm-diag-gutter-col': {
+      display: 'flex',
+      width: '16px',
+      minWidth: '16px',
+    },
+    '.cm-diag-gutter-col .cm-gutterElement': {
+      minWidth: '16px',
+      padding: '0 1px',
+    },
+    '.cm-diag-gutter': {
+      fontSize: '11px',
+      lineHeight: '1.35',
+      textAlign: 'center',
+      width: '100%',
+      minHeight: '14px',
+      padding: '1px 0',
+      opacity: '0.95',
+      cursor: 'default',
+    },
+    '.cm-diag-gutter-error': { color: '#e85d4c', fontWeight: '700' },
+    '.cm-diag-gutter-warning': { color: '#e8a03a', fontWeight: '700' },
+    '.cm-diag-gutter-typo': { color: '#c084fc', fontWeight: '700' },
+    '.cm-diag-gutter-info': { color: '#8b8e9c' },
+    '.cm-diag-tooltip': {
+      fontSize: '11px',
+      fontFamily: 'ui-sans-serif, system-ui, sans-serif',
+      maxWidth: '360px',
+      padding: '6px 8px',
+      borderRadius: '4px',
+      backgroundColor: '#1e1f26',
+      color: '#e8e8ed',
+      border: '1px solid #3a3c48',
+      boxShadow: '0 4px 16px rgba(0,0,0,0.35)',
+      lineHeight: '1.35',
+    },
+    '.cm-diag-tooltip-row': {
+      display: 'flex',
+      flexWrap: 'wrap',
+      alignItems: 'baseline',
+      gap: '6px',
+      marginTop: '2px',
+    },
+    '.cm-diag-tooltip-row:first-child': { marginTop: '0' },
+    '.cm-diag-tooltip-sev': {
+      fontSize: '9px',
+      fontWeight: '700',
+      textTransform: 'uppercase',
+      letterSpacing: '0.04em',
+      flexShrink: '0',
+    },
+    '.cm-diag-tooltip-sev-error': { color: '#e85d4c' },
+    '.cm-diag-tooltip-sev-warning': { color: '#e8a03a' },
+    '.cm-diag-tooltip-sev-typo': { color: '#c084fc' },
+    '.cm-diag-tooltip-sev-info': { color: '#8b8e9c' },
+    '.cm-diag-tooltip-msg': {
+      flex: '1 1 auto',
+      minWidth: '0',
+      wordBreak: 'break-word',
+    },
+    '.cm-diag-tooltip-src': {
+      fontSize: '9px',
+      color: '#6b6e7c',
+      flexShrink: '0',
+    },
+    '.cm-diag-tooltip-note': {
+      fontSize: '10px',
+      marginTop: '4px',
+      paddingTop: '4px',
+      borderTop: '1px solid #3a3c48',
+      color: '#a1a1aa',
+      lineHeight: '1.3',
+    },
+    '.cm-diag-tooltip-note-typo': {
+      color: '#d8b4fe',
+    },
   }),
 );
 
@@ -1045,15 +1041,11 @@ function diagnosticsSignature(diags: readonly EditorDiagnostic[]): string {
 }
 
 /** Apply or clear diagnostics on a view. */
-export function applyDiagnostics(
-  view: EditorView,
-  diags: EditorDiagnostic[] | null,
-) {
+export function applyDiagnostics(view: EditorView, diags: EditorDiagnostic[] | null): void {
   const next = diags && diags.length ? diags : [];
   const st = view.state.field(diagnosticsStateField, false);
   const intel = diagIntel();
-  const sigMatch =
-    !!st && diagnosticsSignature(st.diags) === diagnosticsSignature(next);
+  const sigMatch = !!st && diagnosticsSignature(st.diags) === diagnosticsSignature(next);
   if (sigMatch) {
     const painted = st.decorations.size > 0;
     const shouldPaint =
@@ -1073,10 +1065,7 @@ export function applyDiagnostics(
  * Select the diagnostic range and scroll it into view (center).
  * Returns false if the range is out of document bounds.
  */
-export function jumpToDiagnostic(
-  view: EditorView,
-  diag: EditorDiagnostic,
-): boolean {
+export function jumpToDiagnostic(view: EditorView, diag: EditorDiagnostic): boolean {
   const len = view.state.doc.length;
   if (diag.from < 0 || diag.from > len) return false;
   const from = Math.min(diag.from, len);
@@ -1090,10 +1079,7 @@ export function jumpToDiagnostic(
 }
 
 /** Jump to the first error (or first diagnostic of any severity). */
-export function jumpToFirstDiagnostic(
-  view: EditorView,
-  diags: EditorDiagnostic[],
-): boolean {
+export function jumpToFirstDiagnostic(view: EditorView, diags: EditorDiagnostic[]): boolean {
   if (!diags.length) return false;
   const first =
     diags.find((d) => d.severity === 'error') ??

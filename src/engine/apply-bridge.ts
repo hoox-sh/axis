@@ -41,12 +41,22 @@ import {
 import { applyPrecomputedChart } from '../indicators/apply-live';
 import { engineDebug } from '../debug';
 import type { RunResult } from '../plugins/types';
+import type { RunOptions } from '../indicators/runner';
 import type { Bar } from '../store/types';
 import { axisStamp, windowAxisFromBars } from '../results/window-axis';
 import { store } from '../store';
 
+/**
+ * Which stream frame produced a payload: a full snapshot or a tail delta. Decides the apply
+ * execution context and whether the run counts as a live tick.
+ */
 export type StreamVia = 'stream-full' | 'stream-delta';
 
+/**
+ * A merged `/ws/live` payload (full snapshot or delta already spliced onto the cache):
+ * plots/series/events plus the engine's bar-time axis and the count that identifies the
+ * session version. Crosses the wire → apply boundary.
+ */
 export interface StreamFullPayload {
   plots?: unknown;
   series?: Record<string, unknown[]>;
@@ -81,6 +91,10 @@ export function resolveStreamExecutionContext(
   return executionContextFromDelta({ forming: full.forming, count: full.count });
 }
 
+/**
+ * One apply request: the script/indicator to attribute the run to, the payload, the path it
+ * arrived by, and the exact chart window it was evaluated over.
+ */
 export interface ApplyStreamInput {
   script: string;
   indicatorId?: string;
@@ -91,10 +105,14 @@ export interface ApplyStreamInput {
   silent?: boolean;
 }
 
+/**
+ * Injected runner entry point — the real `runAndApply` signature, so the
+ * dynamic import below needs no assertion.
+ */
 type RunAndApplyFn = (
   script: string,
   indicatorId: string | undefined,
-  opts: Record<string, unknown>,
+  opts: RunOptions,
 ) => Promise<RunResult>;
 
 /**
@@ -145,7 +163,7 @@ export function applyStreamDelta(
 ): RunResult {
   const precomputedResult = streamFullToPrecomputed(input.full, input.via, input.bars);
   // Tip deltas reuse the cached descriptors; avoid a store walk every tick.
-  const ctx = precomputedResult.meta?.executionContext;
+  const ctx = precomputedResult.meta?.['executionContext'];
   const prevInputs = previousRunInputs(input.indicatorId, {
     refresh: ctx !== 'tip',
   });
@@ -187,11 +205,12 @@ export async function applyStreamPayload(
   if (prevInputs && !precomputedResult.meta?.inputs) {
     precomputedResult.meta = { ...(precomputedResult.meta ?? {}), inputs: prevInputs };
   }
-  const run =
-    deps?.runAndApply ??
-    ((await import('../indicators/runner')).runAndApply as unknown as RunAndApplyFn);
+  const run: RunAndApplyFn =
+    deps?.runAndApply ?? (await import('../indicators/runner')).runAndApply;
   return await run(input.script, input.indicatorId, {
-    precomputedResult,
+    // The runner types `series`/`plots` as always present; `streamFullToPrecomputed`
+    // sets both, so the stream result already matches its precomputed shape.
+    precomputedResult: precomputedResult as RunOptions['precomputedResult'],
     bars: input.bars,
     silent: input.silent ?? true,
     openResults: false,

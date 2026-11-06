@@ -29,18 +29,27 @@
 import { type Component, For } from 'solid-js';
 import type { DrawingLineStyle } from '../../drawing-types';
 
-export const StyleDivider: Component = () => (
+/** Thick vertical separator between style-bar groups. */
+export const StyleDivider: Component = (): JSX.Element => (
   <span class="axis-draw-style-sep" aria-hidden="true" />
 );
-export const StyleDividerThin: Component = () => (
+/** Hairline separator inside a style-bar group. */
+export const StyleDividerThin: Component = (): JSX.Element => (
   <span class="axis-draw-style-sep axis-draw-style-sep-thin" aria-hidden="true" />
 );
 
+/**
+ * One palette swatch button.
+ *
+ * @param props.color CSS color painted as the swatch background
+ * @param props.selected marks the current color (adds `is-active`)
+ * @param props.onPick receives `color` on click
+ */
 export const ColorSwatch: Component<{
   color: string;
   selected: boolean;
   onPick: (color: string) => void;
-}> = (props) => (
+}> = (props): JSX.Element => (
   <button
     type="button"
     class="axis-draw-swatch"
@@ -53,13 +62,21 @@ export const ColorSwatch: Component<{
   />
 );
 
+/**
+ * Palette row: fixed swatches plus a native custom-color input.
+ *
+ * @param props.colors preset colors in display order
+ * @param props.current active color, compared case-insensitively
+ * @param props.customValue initial value for the color input
+ * @param props.onCustom fires with the picked custom color
+ */
 export const SwatchRow: Component<{
   colors: readonly string[];
   current: string;
   onPick: (color: string) => void;
   customValue: string;
   onCustom: (color: string) => void;
-}> = (props) => (
+}> = (props): JSX.Element => (
   <>
     <For each={[...props.colors]}>
       {(c) => (
@@ -81,11 +98,12 @@ export const SwatchRow: Component<{
   </>
 );
 
+/** Line-width chip; `1.5` renders as `1½` to keep the bar compact. */
 export const WidthChip: Component<{
   width: number;
   active: boolean;
   onPick: (w: number) => void;
-}> = (props) => (
+}> = (props): JSX.Element => (
   <button
     type="button"
     class="axis-draw-chip"
@@ -102,11 +120,12 @@ export const WidthChip: Component<{
   </button>
 );
 
+/** Dash-pattern chip with a live stroke preview (`solid` / `dashed` / `dotted`). */
 export const LineStyleChip: Component<{
   style: DrawingLineStyle;
   active: boolean;
   onPick: (s: DrawingLineStyle) => void;
-}> = (props) => (
+}> = (props): JSX.Element => (
   <button
     type="button"
     class="axis-draw-chip is-line"
@@ -116,20 +135,17 @@ export const LineStyleChip: Component<{
     aria-pressed={props.active}
     onClick={() => props.onPick(props.style)}
   >
-    <span
-      class="axis-draw-line-preview"
-      data-style={props.style}
-      aria-hidden="true"
-    />
+    <span class="axis-draw-line-preview" data-style={props.style} aria-hidden="true" />
   </button>
 );
 
+/** On/off chip for boolean style settings (labels, arrow caps, reverse). */
 export const ToggleChip: Component<{
   title: string;
   label: string;
   active: boolean;
   onToggle: () => void;
-}> = (props) => (
+}> = (props): JSX.Element => (
   <button
     type="button"
     class="axis-draw-chip"

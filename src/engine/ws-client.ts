@@ -52,6 +52,10 @@ import {
 import { isFormingTipFrame, sendBufferHeld } from './v1/backpressure';
 import { PendingRequests, ReconnectHandlers, wireStats } from './wire-bookkeeping';
 
+/**
+ * Frame discriminants of the Redesign2 `/ws/live` contract; the client validates every
+ * inbound frame against these before dispatch.
+ */
 export type Redesign2WsFrameType =
   | 'auth'
   | 'auth.ok'
@@ -68,6 +72,10 @@ export type Redesign2WsFrameType =
   | 'pong'
   | 'error';
 
+/**
+ * Loose envelope the client dispatches: `type` plus optional correlation id, session id,
+ * timestamp and an unvalidated `payload` that per-type guards narrow.
+ */
 export interface Redesign2WsFrame {
   type: Redesign2WsFrameType;
   id?: string;
@@ -76,10 +84,18 @@ export interface Redesign2WsFrame {
   payload?: unknown;
 }
 
+/**
+ * Auth frame body sent after `open`; the engine key rides here (or `?api_key=` on a direct
+ * PYNE socket) instead of in the Worker proxy URL.
+ */
 export interface Redesign2WsAuth {
   token?: string;
 }
 
+/**
+ * Construction options for {@link Redesign2WsClient}: the engine endpoint (or Worker live
+ * proxy), auth token, and the connect/heartbeat/reconnect budgets in ms.
+ */
 export interface Redesign2WsClientOptions {
   endpoint: string;
   authToken?: string;
@@ -134,6 +150,12 @@ export function endpointToRedesign2WsUrl(endpoint: string, authToken?: string): 
   return u.toString();
 }
 
+/**
+ * Client for the Redesign2 live plane (`/ws/live` directly, or the Worker proxy at
+ * `/api/ws/live?ticket=`): authenticates, heartbeats, reconnects with backoff, correlates
+ * request/reply frames, and surfaces backpressure instead of dropping the socket. `disconnect()`
+ * stops the socket and fails pending requests; a later `connect()` may reopen it.
+ */
 export class Redesign2WsClient {
   private readonly options: Omit<Required<Redesign2WsClientOptions>, 'authToken' | 'liveProxy'> & {
     authToken?: string;

@@ -232,20 +232,20 @@ export function sanitizeStreamBar(raw: unknown, closed?: boolean): Bar | null {
     if (typeof k === 'string') lower[k.toLowerCase()] = v;
   }
 
-  const time = normalizeBarTime(lower.time ?? lower.timestamp ?? lower.t);
-  const open = num(lower.open ?? lower.o);
-  const high = num(lower.high ?? lower.h);
-  const low = num(lower.low ?? lower.l);
-  const close = num(lower.close ?? lower.c);
+  const time = normalizeBarTime(lower['time'] ?? lower['timestamp'] ?? lower['t']);
+  const open = num(lower['open'] ?? lower['o']);
+  const high = num(lower['high'] ?? lower['h']);
+  const low = num(lower['low'] ?? lower['l']);
+  const close = num(lower['close'] ?? lower['c']);
   if (time == null || open == null || high == null || low == null || close == null) return null;
   chartDebug('sanitizeStreamBar', { verdict: 'pre-repair', time, open, high, low, close });
   const ohlc = repairOhlc(open, high, low, close);
   if (!ohlc) return null;
 
   const bar: Bar = { time, ...ohlc };
-  const volume = num(lower.volume ?? lower.v);
+  const volume = num(lower['volume'] ?? lower['v']);
   if (volume != null && volume >= 0) bar.volume = volume;
-  const isClosed = typeof lower.closed === 'boolean' ? lower.closed : closed;
+  const isClosed = typeof lower['closed'] === 'boolean' ? lower['closed'] : closed;
   if (isClosed !== undefined) bar.closed = isClosed;
   return bar;
 }
@@ -303,20 +303,20 @@ export function sanitizeBar(raw: unknown): Bar | null {
     }
 
     const time = toUnixSeconds(
-      lower.time ?? lower.timestamp ?? lower.date ?? lower.datetime ?? lower.t,
+      lower['time'] ?? lower['timestamp'] ?? lower['date'] ?? lower['datetime'] ?? lower['t'],
     );
-    const open = num(lower.open ?? lower.o);
-    const high = num(lower.high ?? lower.h);
-    const low = num(lower.low ?? lower.l);
-    const close = num(lower.close ?? lower.c);
+    const open = num(lower['open'] ?? lower['o']);
+    const high = num(lower['high'] ?? lower['h']);
+    const low = num(lower['low'] ?? lower['l']);
+    const close = num(lower['close'] ?? lower['c']);
     if (time == null || open == null || high == null || low == null || close == null) return null;
     chartDebug('sanitizeBar', { verdict: 'pre-repair-object', time, open, high, low, close });
     const ohlc = repairOhlc(open, high, low, close);
     if (!ohlc) return null;
-    const volRaw = num(lower.volume ?? lower.vol ?? lower.v);
+    const volRaw = num(lower['volume'] ?? lower['vol'] ?? lower['v']);
     const bar: SanitizedBar = { time, ...ohlc };
     if (volRaw != null && volRaw >= 0) bar.volume = volRaw;
-    if (typeof lower.closed === 'boolean') bar.closed = lower.closed;
+    if (typeof lower['closed'] === 'boolean') bar.closed = lower['closed'];
     markSanitized(bar);
     return bar;
   } catch {
@@ -334,12 +334,12 @@ function coerceBarList(bars: unknown): unknown[] | null {
   if (typeof bars !== 'object') return null;
   try {
     const o = bars as Record<string, unknown>;
-    const nested = o.bars ?? o.data ?? o.candles ?? o.klines ?? o.result;
+    const nested = o['bars'] ?? o['data'] ?? o['candles'] ?? o['klines'] ?? o['result'];
     if (Array.isArray(nested)) return nested;
     // One more level: { result: { list: [...] } } (Bybit-style leftovers)
     if (nested != null && typeof nested === 'object' && !Array.isArray(nested)) {
       const inner = nested as Record<string, unknown>;
-      const list = inner.list ?? inner.bars ?? inner.data;
+      const list = inner['list'] ?? inner['bars'] ?? inner['data'];
       if (Array.isArray(list)) return list;
     }
   } catch {
@@ -398,7 +398,8 @@ function parseCsv(text: string): Bar[] {
     .filter((l) => l.length > 0 && !l.startsWith('#'));
   if (!lines.length) return [];
 
-  const first = lines[0].toLowerCase();
+  // `lines.length` is checked above, so the '' fallback is unreachable.
+  const first = (lines[0] ?? '').toLowerCase();
   const hasHeader =
     first.includes('time') ||
     first.includes('date') ||
@@ -408,13 +409,13 @@ function parseCsv(text: string): Bar[] {
   let headers: string[] | null = null;
   let start = 0;
   if (hasHeader) {
-    headers = splitCsvLine(lines[0]).map((h) => h.trim().toLowerCase());
+    headers = splitCsvLine(lines[0] ?? '').map((h) => h.trim().toLowerCase());
     start = 1;
   }
 
   const bars: Bar[] = [];
   for (let i = start; i < lines.length; i++) {
-    const cells = splitCsvLine(lines[i]);
+    const cells = splitCsvLine(lines[i] ?? '');
     let bar: Bar | null;
     if (headers) {
       const obj: Record<string, unknown> = {};

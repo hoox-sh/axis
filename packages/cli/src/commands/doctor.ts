@@ -5,11 +5,11 @@
  * axis doctor — toolchain + worker config diagnostics
  */
 
-import { existsSync } from "node:fs";
-import { join } from "node:path";
-import type { Command } from "commander";
-import { getPaths } from "../utils/paths.js";
-import { runWrangler, which } from "../utils/run.js";
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import type { Command } from 'commander';
+import { getPaths } from '../utils/paths.js';
+import { runWrangler, which } from '../utils/run.js';
 import {
   getD1DatabaseId,
   getKvBindingId,
@@ -18,23 +18,19 @@ import {
   hasTomlVar,
   isOpenKeysEnabled,
   isPlaceholderId,
-} from "../services/wrangler-toml.js";
-import {
-  defaultWorkerUrl,
-  healthFeatures,
-  probeHealth,
-  probeScripts,
-} from "../services/health.js";
-import { collectPreflight } from "../utils/preflight.js";
-import { theme, icons } from "../utils/theme.js";
-import {
-  ExitCode,
-  printHeader,
-  printJson,
-  wrapAction,
-  type GlobalOpts,
-} from "../utils/format.js";
+} from '../services/wrangler-toml.js';
+import { defaultWorkerUrl, healthFeatures, probeHealth, probeScripts } from '../services/health.js';
+import { collectPreflight } from '../utils/preflight.js';
+import { theme, icons } from '../utils/theme.js';
+import { ExitCode, printHeader, printJson, wrapAction, type GlobalOpts } from '../utils/format.js';
 
+/**
+ * One doctor row — a single fact about the install, its config, or the deployment.
+ *
+ * `required` decides whether a failure makes the whole run exit non-zero; some
+ * checks are only required when an earlier one passed (e.g. `API_KEYS` KV matters
+ * only when D1 is bound).
+ */
 export type DoctorCheck = {
   id: string;
   ok: boolean;
@@ -43,6 +39,19 @@ export type DoctorCheck = {
   detail?: string;
 };
 
+/**
+ * Collects every doctor row: toolchain, repo layout, CLI install, wrangler config,
+ * Cloudflare auth, and optionally the deployed Worker.
+ *
+ * Local probes never throw — a missing binary or unreadable toml becomes a failed
+ * row with a fix hint — so one broken prerequisite cannot hide the rest. Only a
+ * working directory outside an AXIS checkout makes the root lookup throw.
+ *
+ * @param options - `remote` adds `/health`, `/api/scripts`, and D1/KV feature probes
+ *   against `workerUrl` (defaulting to {@link defaultWorkerUrl}).
+ * @returns Rows in display order; callers filter on `required` to decide the exit
+ *   code.
+ */
 export async function collectDoctorChecks(options: {
   remote?: boolean;
   workerUrl?: string;
@@ -50,155 +59,148 @@ export async function collectDoctorChecks(options: {
   const paths = getPaths();
   const checks: DoctorCheck[] = [];
 
-  const bunPath = await which("bun");
+  const bunPath = await which('bun');
   checks.push({
-    id: "bun",
+    id: 'bun',
     ok: Boolean(bunPath),
     required: true,
-    label: "Bun runtime",
-    detail: bunPath ?? "missing — https://bun.sh",
+    label: 'Bun runtime',
+    detail: bunPath ?? 'missing — https://bun.sh',
   });
 
   checks.push({
-    id: "repo",
+    id: 'repo',
     ok: existsSync(paths.packageJson) && existsSync(paths.worker),
     required: true,
-    label: "AXIS repo root",
+    label: 'AXIS repo root',
     detail: paths.root,
   });
 
   // CLI installation self-check (context, engines, version drift vs repo).
   const preflight = await collectPreflight();
   checks.push({
-    id: "cli-install",
+    id: 'cli-install',
     ok: preflight.ok,
     required: false,
-    label: "CLI installation",
+    label: 'CLI installation',
     detail: preflight.ok
       ? preflight.summary
-      : preflight.warnings.join(" · ").replace(/^axis: /, ""),
+      : preflight.warnings.join(' · ').replace(/^axis: /, ''),
   });
 
   checks.push({
-    id: "worker-deps",
+    id: 'worker-deps',
     ok: existsSync(`${paths.worker}/node_modules`),
     required: true,
-    label: "Worker node_modules",
-    detail: existsSync(`${paths.worker}/node_modules`)
-      ? "present"
-      : "run: axis install",
+    label: 'Worker node_modules',
+    detail: existsSync(`${paths.worker}/node_modules`) ? 'present' : 'run: axis install',
   });
 
   const hasToml = existsSync(paths.wranglerToml);
   checks.push({
-    id: "wrangler-toml",
+    id: 'wrangler-toml',
     ok: hasToml,
     required: false,
-    label: "worker/wrangler.toml",
+    label: 'worker/wrangler.toml',
     detail: hasToml
       ? paths.wranglerToml
-      : "missing — expected until you run: axis setup  (copies worker/wrangler.toml.example)",
+      : 'missing — expected until you run: axis setup  (copies worker/wrangler.toml.example)',
   });
 
   if (hasToml) {
     const name = getTomlName(paths.wranglerToml);
     checks.push({
-      id: "worker-name",
-      ok: name === "worker-axis",
+      id: 'worker-name',
+      ok: name === 'worker-axis',
       required: true,
-      label: "Worker project name",
-      detail: name ?? "(unset)",
+      label: 'Worker project name',
+      detail: name ?? '(unset)',
     });
 
     const d1 = getD1DatabaseId(paths.wranglerToml);
-    const d1Ok = Boolean(d1 && !d1.includes("REPLACE"));
+    const d1Ok = Boolean(d1 && !d1.includes('REPLACE'));
     checks.push({
-      id: "d1-id",
+      id: 'd1-id',
       ok: d1Ok,
       required: true,
-      label: "D1 database_id",
-      detail: d1Ok ? d1! : d1 ?? "missing — axis setup d1",
+      label: 'D1 database_id',
+      detail: d1Ok ? d1! : (d1 ?? 'missing — axis setup d1'),
     });
 
-    const gh = getTomlVar(paths.wranglerToml, "GITHUB_OAUTH_CLIENT_ID");
+    const gh = getTomlVar(paths.wranglerToml, 'GITHUB_OAUTH_CLIENT_ID');
     checks.push({
-      id: "github-oauth",
+      id: 'github-oauth',
       ok: Boolean(gh && gh.length > 4),
       required: false,
-      label: "GITHUB_OAUTH_CLIENT_ID",
-      detail: gh
-        ? `${gh.slice(0, 8)}…`
-        : "unset — axis setup oauth --github-client-id <id>",
+      label: 'GITHUB_OAUTH_CLIENT_ID',
+      detail: gh ? `${gh.slice(0, 8)}…` : 'unset — axis setup oauth --github-client-id <id>',
     });
 
-    const allowOpenRaw = getTomlVar(paths.wranglerToml, "ALLOW_OPEN_KEYS");
+    const allowOpenRaw = getTomlVar(paths.wranglerToml, 'ALLOW_OPEN_KEYS');
     const allowOpen = isOpenKeysEnabled(allowOpenRaw);
     checks.push({
-      id: "allow-open-keys",
+      id: 'allow-open-keys',
       ok: !allowOpen,
       // Open keys with D1 bound let any Bearer partition the script library.
       required: d1Ok && allowOpen,
-      label: "ALLOW_OPEN_KEYS prod-safe",
+      label: 'ALLOW_OPEN_KEYS prod-safe',
       detail: allowOpen
         ? `currently "${allowOpenRaw}" (dev open) — set ALLOW_OPEN_KEYS = "" for prod`
-        : allowOpenRaw ?? '(unset — set ALLOW_OPEN_KEYS = "" for prod)',
+        : (allowOpenRaw ?? '(unset — set ALLOW_OPEN_KEYS = "" for prod)'),
     });
 
-    const adminVar = hasTomlVar(paths.wranglerToml, "ADMIN_TOKEN");
+    const adminVar = hasTomlVar(paths.wranglerToml, 'ADMIN_TOKEN');
     checks.push({
-      id: "admin-token-var",
+      id: 'admin-token-var',
       ok: !adminVar,
       required: false,
-      label: "ADMIN_TOKEN not a plaintext [vars]",
+      label: 'ADMIN_TOKEN not a plaintext [vars]',
       detail: adminVar
-        ? "plaintext [vars] ADMIN_TOKEN blocks wrangler secret put (10053) — axis secret put ADMIN_TOKEN"
-        : "ok (set with axis secret put ADMIN_TOKEN)",
+        ? 'plaintext [vars] ADMIN_TOKEN blocks wrangler secret put (10053) — axis secret put ADMIN_TOKEN'
+        : 'ok (set with axis secret put ADMIN_TOKEN)',
     });
 
-    const kvId = getKvBindingId(paths.wranglerToml, "API_KEYS");
+    const kvId = getKvBindingId(paths.wranglerToml, 'API_KEYS');
     const kvOk = Boolean(kvId && !isPlaceholderId(kvId));
     checks.push({
-      id: "api-keys-kv",
+      id: 'api-keys-kv',
       ok: kvOk,
       // D1 bound without API_KEYS KV → /api/scripts 503 API_KEYS_REQUIRED.
       required: d1Ok,
-      label: "API_KEYS KV binding",
+      label: 'API_KEYS KV binding',
       detail: kvOk
         ? String(kvId)
-        : "missing — axis setup kv  (D1 without KV → 503 API_KEYS_REQUIRED)",
+        : 'missing — axis setup kv  (D1 without KV → 503 API_KEYS_REQUIRED)',
     });
   }
 
   checks.push({
-    id: "d1-schema-file",
+    id: 'd1-schema-file',
     ok: existsSync(paths.d1Schema),
     required: true,
-    label: "D1 schema file",
+    label: 'D1 schema file',
     detail: paths.d1Schema,
   });
 
   // Cloudflare auth
   let cfOk = false;
-  let cfDetail = "not checked";
+  let cfDetail = 'not checked';
   try {
-    const r = await runWrangler(paths.worker, ["whoami"], {
+    const r = await runWrangler(paths.worker, ['whoami'], {
       throwOnError: false,
       timeout: 8_000,
     });
     const out = `${r.stdout}\n${r.stderr}`;
-    cfOk =
-      r.code === 0 && !/not (logged in|authenticated)/i.test(out);
-    cfDetail = cfOk
-      ? "authenticated"
-      : "not logged in — CLOUDFLARE_API_TOKEN or wrangler login";
+    cfOk = r.code === 0 && !/not (logged in|authenticated)/i.test(out);
+    cfDetail = cfOk ? 'authenticated' : 'not logged in — CLOUDFLARE_API_TOKEN or wrangler login';
   } catch (e) {
     cfDetail = e instanceof Error ? e.message : String(e);
   }
   checks.push({
-    id: "cloudflare-auth",
+    id: 'cloudflare-auth',
     ok: cfOk,
     required: false,
-    label: "Cloudflare auth",
+    label: 'Cloudflare auth',
     detail: cfDetail,
   });
 
@@ -207,81 +209,92 @@ export async function collectDoctorChecks(options: {
     const health = await probeHealth(url);
     const feats = healthFeatures(health.body);
     checks.push({
-      id: "remote-health",
+      id: 'remote-health',
       ok: health.ok,
       required: false,
-      label: "Remote /health",
+      label: 'Remote /health',
       detail: health.ok
         ? `${url} → healthy`
-        : health.error || `HTTP ${health.status ?? "?"} ${url}`,
+        : health.error || `HTTP ${health.status ?? '?'} ${url}`,
     });
     if (health.ok) {
       checks.push({
-        id: "remote-d1",
+        id: 'remote-d1',
         ok: feats.d1 === true,
         required: false,
-        label: "Remote D1 bound",
+        label: 'Remote D1 bound',
         detail: feats.d1
-          ? "features.d1=true"
-          : "features.d1=false — apply schema: axis setup d1 --remote",
+          ? 'features.d1=true'
+          : 'features.d1=false — apply schema: axis setup d1 --remote',
       });
       checks.push({
-        id: "remote-keys",
+        id: 'remote-keys',
         ok: feats.keys === true,
         required: feats.d1 === true,
-        label: "Remote API_KEYS KV",
+        label: 'Remote API_KEYS KV',
         detail: feats.keys
-          ? "features.keys=true"
-          : "features.keys=false — axis setup kv && axis deploy worker",
+          ? 'features.keys=true'
+          : 'features.keys=false — axis setup kv && axis deploy worker',
       });
       const scripts = await probeScripts(url);
       checks.push({
-        id: "remote-scripts",
+        id: 'remote-scripts',
         ok: scripts.ok,
         required: feats.d1 === true,
-        label: "Remote /api/scripts",
+        label: 'Remote /api/scripts',
         detail: scripts.ok
-          ? "route up (401 NO_KEY without a Bearer — expected)"
-          : scripts.code === "API_KEYS_REQUIRED"
-            ? "503 API_KEYS_REQUIRED — axis setup kv && axis deploy worker"
-            : scripts.error || `HTTP ${scripts.status ?? "?"}`,
+          ? 'route up (401 NO_KEY without a Bearer — expected)'
+          : scripts.code === 'API_KEYS_REQUIRED'
+            ? '503 API_KEYS_REQUIRED — axis setup kv && axis deploy worker'
+            : scripts.error || `HTTP ${scripts.status ?? '?'}`,
       });
     }
   }
 
   // Optional: rust/cargo for Tauri
-  const cargo = await which("cargo");
+  const cargo = await which('cargo');
   checks.push({
-    id: "cargo",
+    id: 'cargo',
     ok: Boolean(cargo),
     required: false,
-    label: "Rust/cargo (desktop)",
-    detail: cargo ?? "optional for axis desktop:dev",
+    label: 'Rust/cargo (desktop)',
+    detail: cargo ?? 'optional for axis desktop:dev',
   });
 
   // pyne sibling hint
-  const pyneSiblings = ["pynescript", "pyne"].map((name) =>
-    join(paths.root, "..", name)
-  );
+  const pyneSiblings = ['pynescript', 'pyne'].map((name) => join(paths.root, '..', name));
   const pyneFound = pyneSiblings.find((p) => existsSync(p));
   checks.push({
-    id: "pyne-sibling",
+    id: 'pyne-sibling',
     ok: Boolean(pyneFound),
     required: false,
-    label: "Sister PYNE repo",
+    label: 'Sister PYNE repo',
     detail: pyneFound
       ? `${pyneFound} · axis prewarm to warm Numba before the first run`
-      : "optional local engine at ../pyne (checkout sometimes named pynescript)",
+      : 'optional local engine at ../pyne (checkout sometimes named pynescript)',
   });
 
   return checks;
 }
 
+/**
+ * Prints the doctor report and exits non-zero when a required check fails.
+ *
+ * Optional failures are shown as warnings and never change the exit code, so CI can
+ * gate on `axis doctor --json` without a missing desktop toolchain failing the build.
+ *
+ * @param opts - Global flags; `json` prints `{ ok, checks, root }` and `quiet` skips
+ *   the header.
+ * @param flags - `remote` also probes the deployment, `workerUrl` overrides the probed
+ *   URL.
+ * @returns Resolves after printing; calls `process.exit` with `ExitCode.ERROR` when
+ *   any required row failed.
+ */
 export async function runDoctor(
   opts: GlobalOpts,
-  flags: { remote?: boolean; workerUrl?: string }
+  flags: { remote?: boolean; workerUrl?: string },
 ): Promise<void> {
-  printHeader("AXIS doctor", opts.quiet);
+  printHeader('AXIS doctor', opts.quiet);
   const checks = await collectDoctorChecks(flags);
 
   if (opts.json) {
@@ -301,44 +314,45 @@ export async function runDoctor(
       : c.required
         ? theme.error(icons.fail)
         : theme.warn(icons.warn);
-    process.stdout.write(
-      `  ${icon} ${c.label.padEnd(28)} ${theme.dim(c.detail ?? "")}\n`
-    );
+    process.stdout.write(`  ${icon} ${c.label.padEnd(28)} ${theme.dim(c.detail ?? '')}\n`);
   }
 
   const hardFail = checks.filter((c) => c.required && !c.ok);
   const soft = checks.filter((c) => !c.required && !c.ok);
-  process.stdout.write("\n");
+  process.stdout.write('\n');
   if (hardFail.length === 0) {
     process.stdout.write(
       `${theme.success(icons.ok)} Required checks passed` +
-        (soft.length ? theme.dim(` (${soft.length} optional warnings)`) : "") +
-        "\n"
+        (soft.length ? theme.dim(` (${soft.length} optional warnings)`) : '') +
+        '\n',
     );
   } else {
     process.stdout.write(
-      `${theme.error(icons.fail)} ${hardFail.length} required check(s) failed\n`
+      `${theme.error(icons.fail)} ${hardFail.length} required check(s) failed\n`,
     );
-    process.stdout.write(
-      `${theme.dim("Hint: axis install && axis setup --prod")}\n`
-    );
+    process.stdout.write(`${theme.dim('Hint: axis install && axis setup --prod')}\n`);
     process.exit(ExitCode.ERROR);
   }
 }
 
+/**
+ * Registers `axis doctor`.
+ *
+ * @param program - Root commander program to attach the command to.
+ */
 export function registerDoctor(program: Command): void {
   program
-    .command("doctor")
-    .description("Diagnose toolchain, wrangler.toml, D1/KV, Cloudflare auth")
-    .option("--remote", "Also probe deployed Worker /health + /api/scripts")
-    .option("--url <url>", "Worker base URL for --remote")
+    .command('doctor')
+    .description('Diagnose toolchain, wrangler.toml, D1/KV, Cloudflare auth')
+    .option('--remote', 'Also probe deployed Worker /health + /api/scripts')
+    .option('--url <url>', 'Worker base URL for --remote')
     .action(async function (this: Command) {
       const opts = this.optsWithGlobals() as GlobalOpts & {
         remote?: boolean;
         url?: string;
       };
-      await wrapAction((g) =>
-        runDoctor(g, { remote: opts.remote, workerUrl: opts.url })
-      ).call(this);
+      await wrapAction((g) => runDoctor(g, { remote: opts.remote, workerUrl: opts.url })).call(
+        this,
+      );
     });
 }

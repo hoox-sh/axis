@@ -56,6 +56,11 @@ import { BoundedMap } from '../utils/bounded-map';
 /** Soft cap on memory-mirrored series (matches bars-cache series cap). */
 const MEMORY_MAX_SERIES = 48;
 
+/**
+ * Summary row for one mirrored dataset: the canonical `key` split back into
+ * source/symbol/interval plus the provider lock, and the cached time bounds.
+ * Crosses the Dataset-manager UI boundary — no bars, only what the list needs.
+ */
 export interface DatasetMeta {
   key: string;
   sourceId: string;
@@ -70,6 +75,11 @@ export interface DatasetMeta {
   authMode?: string;
 }
 
+/**
+ * Outcome of a merge write: the repaired series that is now stored, how many
+ * bars were new, and how many overlapping bars disagreed with the merge policy.
+ * An aborted write (store reset mid-flight) reports empty bars and zero counts.
+ */
 export interface PutResult {
   bars: Bar[];
   added: number;
@@ -199,6 +209,12 @@ export function getMergePolicy(): MergePolicy {
   return mergePolicy;
 }
 
+/**
+ * Set the default conflict policy used when `putDatasetBars` is called without
+ * an explicit `policy`. Applies to later merges only; stored bars are unchanged.
+ *
+ * @param policy - Which side wins when an overlapping bar differs.
+ */
 export function setMergePolicy(policy: MergePolicy): void {
   mergePolicy = policy;
 }
@@ -294,13 +310,19 @@ const writeChains = new Map<string, Promise<unknown>>();
  */
 let generation = 0;
 
-function enqueueWrite<T>(key: string, task: () => Promise<T>): Promise<T> {
+/**
+ * Run a write on its key's chain.
+ *
+ * A write that was queued before a store reset is **dropped**: it must not
+ * resurrect the state the reset just cleared. A dropped write never produced a
+ * value, so it settles with `undefined` — callers that promise a result narrow
+ * it with their own "nothing was written" value.
+ */
+function enqueueWrite<T>(key: string, task: () => Promise<T>): Promise<T | undefined> {
   const prev = writeChains.get(key) ?? Promise.resolve();
   const gen = generation;
-  // A stale write (the store was reset while it waited) is dropped: it must
-  // not resurrect the state the reset just cleared.
-  const run = (): Promise<T> =>
-    gen === generation ? task() : Promise.resolve(undefined as unknown as T);
+  const run = (): Promise<T | undefined> =>
+    gen === generation ? task() : Promise.resolve(undefined);
   const next = prev.then(run, run);
   const settled = next.then(
     () => undefined,
@@ -326,7 +348,12 @@ export async function putDatasetBars(
   opts?: { policy?: MergePolicy; market?: string; authMode?: string },
 ): Promise<PutResult> {
   const key = keyFor(sourceId, symbol, interval, opts);
-  return enqueueWrite(key, () => putDatasetBarsNow(key, sourceId, symbol, interval, bars, opts));
+  // A write dropped by a store reset reports the same empty result the in-task
+  // generation guard returns (`writeAborted`).
+  const result = await enqueueWrite(key, () =>
+    putDatasetBarsNow(key, sourceId, symbol, interval, bars, opts),
+  );
+  return result ?? writeAborted();
 }
 
 function writeAborted(): PutResult {
@@ -420,7 +447,7 @@ export async function replaceDataset(
   opts?: { market?: string; authMode?: string },
 ): Promise<Bar[]> {
   const key = keyFor(sourceId, symbol, interval, opts);
-  return enqueueWrite(key, async () => {
+  const next = await enqueueWrite(key, async () => {
     const gen = generation;
     const { bars: clean } = repairBars(
       bars.filter((b) => b && Number.isFinite(b.time)),
@@ -449,6 +476,8 @@ export async function replaceDataset(
     }
     return clean.slice();
   });
+  // A write dropped by a store reset replaced nothing.
+  return next ?? [];
 }
 
 /** Remove a dataset from memory + sink. */

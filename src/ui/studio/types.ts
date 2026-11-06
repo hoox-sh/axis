@@ -13,12 +13,20 @@
  * @module ui/studio/types
  */
 
+/** Ids of the full-screen studio pages reachable from the topbar Studio rail. */
 export type StudioPageId =
   'runtime' | 'wire' | 'settings' | 'data' | 'workers' | 'plugins' | 'debug';
 
+/** Tab ids inside the Settings page; drives `initialTab` and deep links. */
 export type SettingsTabId =
   'general' | 'data' | 'editor' | 'theme' | 'topbar' | 'keyboard' | 'notifications';
 
+/**
+ * Narrow an untrusted value (URL hash, persisted state) to {@link StudioPageId}.
+ *
+ * @param v - Candidate page id.
+ * @returns `true` when `v` is one of the known studio page ids.
+ */
 export function isStudioPageId(v: unknown): v is StudioPageId {
   return (
     v === 'runtime' ||
@@ -31,6 +39,13 @@ export function isStudioPageId(v: unknown): v is StudioPageId {
   );
 }
 
+/**
+ * Narrow an untrusted value to a Settings tab id so a stale or hand-edited tab
+ * cannot leave the Settings page blank.
+ *
+ * @param v - Candidate tab id.
+ * @returns `true` when `v` is one of the known Settings tabs.
+ */
 export function isSettingsTabId(v: unknown): v is SettingsTabId {
   return (
     v === 'general' ||
@@ -43,6 +58,7 @@ export function isSettingsTabId(v: unknown): v is SettingsTabId {
   );
 }
 
+/** Props the app shell passes to every studio page wrapper (navigation + close). */
 export type AppPageProps = {
   open: boolean;
   page: StudioPageId;

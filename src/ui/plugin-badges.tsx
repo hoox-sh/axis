@@ -38,7 +38,7 @@ export const CapabilityBadges: Component<{
   kind?: string;
   active?: boolean;
   compact?: boolean;
-}> = (props) => {
+}> = (props) : JSX.Element => {
   const keys = () => capabilityKeys(props.capabilities);
   return (
     <span class="ax-cap-row">

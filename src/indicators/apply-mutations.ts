@@ -54,6 +54,11 @@ import {
   type StrategyMarkerPlan,
 } from './apply-strategy';
 
+/**
+ * Inputs for the chart-mutation stage: the pane manager, the resolved
+ * pane/overlay, the built overlay and split payloads, plot meta and series,
+ * bar times, and the owner/silence/forceFull flags that scope every write.
+ */
 export interface ChartMutationContext {
   manager: PaneManager;
   paneId: string;
@@ -85,6 +90,16 @@ export function buildShapeMarkers(
     );
 }
 
+/**
+ * Paint plotshape / plotchar markers under the script's owner id.
+ *
+ * Mutates the chart with one owner-scoped `setShapeMarkers` on the script pane
+ * (`price` for overlay scripts). Called even with an empty list when the run
+ * declared shape plots, so a condition that stopped firing clears its markers.
+ *
+ * @param ctx - manager, owner id, overlay flag, pane id, silence flag, split
+ * @param markers - prebuilt markers from {@link buildShapeMarkers}
+ */
 export function applyShapeMarkers(
   ctx: Pick<
     ChartMutationContext,
@@ -94,17 +109,14 @@ export function applyShapeMarkers(
 ): void {
   const shapeOwner = ctx.indicatorId ?? EDITOR_RUN_KEY;
   if (markers.length || ctx.split.shapes.length) {
-    ctx.manager.setShapeMarkers(
-      markers,
-      shapeOwner,
-      ctx.overlay ? 'price' : ctx.paneId,
-    );
+    ctx.manager.setShapeMarkers(markers, shapeOwner, ctx.overlay ? 'price' : ctx.paneId);
   }
   if (markers.length && !ctx.silent) {
     appendLog('ok', `plotshape: ${markers.length} marker(s)`, 'plot');
   }
 }
 
+/** Inputs for {@link applyPlotsAndMarkers}: the mutation and strategy contexts. */
 export type PlotsAndMarkersInput = {
   mutation: ChartMutationContext;
   strategy: StrategyApplyContext;
@@ -171,6 +183,20 @@ function lastOverlayTimes(ctx: ChartMutationContext): number[] {
   return times;
 }
 
+/**
+ * Paint every non-line artifact for this run and repair pane ownership.
+ *
+ * Mutates the chart: syncs overlay lines and OHLC, bgcolor bands, `fill` bands,
+ * barcolor tints, shape markers (unless `skipShapeMarkers`) and corner badges;
+ * audits plot-length and time-axis parity; and drops this owner's leftover
+ * series from the price pane when the script is not an overlay. Optional manager
+ * features (`syncOverlayOhlc`, `refreshBadges`, `applyBarColors`, …) are
+ * guarded, but the core `syncOverlayLines` / `syncBgcolorBands` calls are not —
+ * callers keep their own try/catch around this stage.
+ *
+ * @param ctx - payloads plus the owner/silence/forceFull flags to paint under
+ * @param sample - sampling hooks for the parity warnings (defaults to DEV)
+ */
 export function applyChartMutations(ctx: ChartMutationContext, sample?: SyncSampleOpts): void {
   const plotLengths: number[] = [];
   for (const column of Object.values(ctx.seriesMap)) {

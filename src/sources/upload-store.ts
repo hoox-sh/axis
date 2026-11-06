@@ -41,7 +41,7 @@ let uploadedBars: Bar[] | null = null;
 let uploadedName: string | null = null;
 
 /** Replace the uploaded series. Empty array clears the stash. */
-export function setUploadedBars(bars: Bar[], fileName?: string) {
+export function setUploadedBars(bars: Bar[], fileName?: string): void {
   uploadedBars = bars.length ? bars : null;
   uploadedName = fileName || null;
 }
@@ -57,7 +57,7 @@ export function getUploadedFileName(): string | null {
 }
 
 /** Drop bars and file name. */
-export function clearUploadedBars() {
+export function clearUploadedBars(): void {
   uploadedBars = null;
   uploadedName = null;
 }

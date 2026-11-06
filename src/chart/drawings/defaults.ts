@@ -24,13 +24,7 @@
  * no chart APIs, and no Pine Script™ plot defaults.
  */
 
-import type {
-  DrawingKind,
-  DrawingStyle,
-  DrawingToolId,
-  PointArity,
-  ToolSpec,
-} from './types';
+import type { DrawingKind, DrawingStyle, DrawingToolId, PointArity, ToolSpec } from './types';
 
 // ── Palette (matches legacy `drawing-types.ts`) ─────────────────────────────
 
@@ -43,6 +37,7 @@ export const DRAWING_COLORS = {
   muted: 'rgba(147, 159, 255, 0.55)',
 } as const;
 
+/** Keys of the drawing palette: `default` / `up` / `down` / `measure` / `muted`. */
 export type DrawingColorKey = keyof typeof DRAWING_COLORS;
 
 // ── Default style ───────────────────────────────────────────────────────────

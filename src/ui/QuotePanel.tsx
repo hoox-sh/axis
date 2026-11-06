@@ -54,7 +54,7 @@ import {
 import { formatExtraPrice } from './extras/format';
 
 /** Full quote sheet dock panel for the current symbol. */
-export const QuotePanel: Component = () => {
+export const QuotePanel: Component = () : JSX.Element => {
   const [change24h, setChange24h] = createSignal<number | undefined>(undefined);
   const [copied, setCopied] = createSignal(false);
   let copyTimer: number | undefined;

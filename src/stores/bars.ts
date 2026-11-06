@@ -38,6 +38,10 @@ import { batch, createRoot } from 'solid-js';
 import { createStore } from 'solid-js/store';
 import type { Bar } from '../store/types';
 
+/**
+ * Shape of the bar plane: the visible window, the forming tip, and the generation
+ * counter that tells consumers a full reload or window slide happened.
+ */
 export interface BarPlaneState {
   bars: Bar[];
   tip: Bar | null;
@@ -139,5 +143,5 @@ function trimWindow(bars: readonly Bar[]): readonly Bar[] {
 }
 
 function lastBar(bars: readonly Bar[]): Bar | null {
-  return bars.length > 0 ? bars[bars.length - 1] : null;
+  return bars.length > 0 ? (bars[bars.length - 1] ?? null) : null;
 }

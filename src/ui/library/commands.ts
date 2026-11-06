@@ -11,10 +11,22 @@
  * @module ui/library/commands
  */
 
+/** Palette intents the library understands: jump to search, or show the recent strip. */
 export type LibraryCommand = 'find' | 'recent';
 
+/** Intent buffered until the panel mounts (the panel is unmounted while closed). */
 let pending: LibraryCommand | null = null;
 
+/**
+ * Record a palette intent and notify any mounted library panel.
+ *
+ * The intent is buffered because the docked panel unmounts while closed: an
+ * event fired in the same turn as "open the panel" would otherwise be lost.
+ * Both the generic `axis-library-command` and the intent-specific
+ * `axis-library-find` / `axis-library-recent` events are dispatched.
+ *
+ * @param cmd - Intent to buffer and broadcast.
+ */
 export function noteLibraryCommand(cmd: LibraryCommand): void {
   pending = cmd;
   if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;

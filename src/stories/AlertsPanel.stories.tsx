@@ -9,6 +9,11 @@ import type { Meta, StoryObj } from 'storybook-solidjs-vite';
 import { AlertsPanel } from '../ui/AlertsPanel';
 const meta: Meta = { title: 'Panels/Alerts', tags: ['autodocs'], parameters: { layout: 'padded' } };
 export default meta;
+/** Empty alert list with the creation form, over default store state. */
 export const Empty: StoryObj = {
-  render: () => (<div style={{ width: '480px', 'max-width': '92vw' }}><AlertsPanel /></div>),
+  render: () => (
+    <div style={{ width: '480px', 'max-width': '92vw' }}>
+      <AlertsPanel />
+    </div>
+  ),
 };

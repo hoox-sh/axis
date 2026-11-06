@@ -30,6 +30,7 @@
 import type { Component } from 'solid-js';
 import { Icons } from './icons';
 
+/** Props for the shared spinner: pixel size, extra classes, and a11y label. */
 export type SpinnerProps = {
   /** Pixel size forwarded to the underlying icon. */
   size?: number;
@@ -39,7 +40,11 @@ export type SpinnerProps = {
   label?: string;
 };
 
-export const Spinner: Component<SpinnerProps> = (props) => (
+/**
+ * Shared loading spinner built on the loader icon; spins via CSS and exposes a
+ * default "Loading" label with `role="status"`.
+ */
+export const Spinner: Component<SpinnerProps> = (props): JSX.Element => (
   <Icons.loader
     class={`animate-spin ${props.class ?? ''}`}
     size={props.size}

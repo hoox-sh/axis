@@ -162,6 +162,7 @@ function liveShortcutFor(cmd: { id: string; shortcut?: string }): string | undef
   return cmd.shortcut;
 }
 
+/** Props the shell passes to the palette: editor access plus every navigation target it can offer. */
 export type CommandPaletteProps = {
   /** Docked editor document accessor for Run Script. */
   editorRef?: {
@@ -191,7 +192,7 @@ export type CommandPaletteProps = {
 };
 
 /** Global ⌘K command search overlay. */
-export const CommandPalette: Component<CommandPaletteProps> = (props) => {
+export const CommandPalette: Component<CommandPaletteProps> = (props): JSX.Element => {
   const [query, setQuery] = createSignal('');
   const [active, setActive] = createSignal(0);
   const [snippetPickerOpen, setSnippetPickerOpen] = createSignal(false);
@@ -416,6 +417,8 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
         const current = store.chartTheme?.presetId || 'void-dark';
         const idx = THEME_PRESETS.findIndex((p) => p.id === current);
         const next = THEME_PRESETS[(idx + 1) % THEME_PRESETS.length];
+        // THEME_PRESETS is non-empty, so the modulo always lands on a preset.
+        if (!next) return;
         setChartThemePreset(next.id);
       },
       saveWorkspaceSnapshot: () => {

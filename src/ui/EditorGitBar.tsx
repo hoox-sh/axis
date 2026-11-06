@@ -40,6 +40,7 @@ import {
 } from '../editor/git-sync';
 import { Icons } from './icons';
 
+/** Props for the editor git bar: live doc/name/id accessors plus push/pull callbacks. */
 export interface EditorGitBarProps {
   /** Current document text (live editor preferred). */
   getDoc: () => string;
@@ -61,7 +62,7 @@ export interface EditorGitBarProps {
 }
 
 /** Pull / push / status controls for the Pine editor chrome. */
-export const EditorGitBar: Component<EditorGitBarProps> = (props) => {
+export const EditorGitBar: Component<EditorGitBarProps> = (props): JSX.Element => {
   const [busy, setBusy] = createSignal(false);
   const [statusMeta, setStatusMeta] = createSignal<GitStatusMeta>({
     storageId: getEditorStorageId(),
@@ -160,9 +161,7 @@ export const EditorGitBar: Component<EditorGitBarProps> = (props) => {
   };
 
   const pullTitle = () =>
-    gitActive()
-      ? 'Pull / refresh library from git'
-      : 'Refresh library list from active storage';
+    gitActive() ? 'Pull / refresh library from git' : 'Refresh library list from active storage';
 
   const pushTitle = () =>
     gitActive()

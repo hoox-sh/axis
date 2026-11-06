@@ -33,11 +33,21 @@ function TabsDemo() {
   );
 }
 
+/** Three-tab strip with a controlled selection and per-tab ids. */
 export const Tabs: StoryObj = { render: () => <TabsDemo /> };
 
+/** Section header variants: lead copy, header-end status, header-end action, no lead. */
 export const Section: StoryObj = {
   render: () => (
-    <div style={{ width: '480px', 'max-width': '90vw', display: 'flex', 'flex-direction': 'column', gap: '24px' }}>
+    <div
+      style={{
+        width: '480px',
+        'max-width': '90vw',
+        display: 'flex',
+        'flex-direction': 'column',
+        gap: '24px',
+      }}
+    >
       <StudioSection title="Notifications" lead="Flood control for toasts and system logs.">
         <p style={{ 'font-size': '12px', opacity: 0.7 }}>Section body content goes here.</p>
       </StudioSection>
@@ -73,7 +83,13 @@ function LoadingButtonsDemo() {
   return (
     <div style={{ display: 'flex', gap: '12px', 'flex-wrap': 'wrap', 'align-items': 'center' }}>
       <StudioButton variant="ghost">Studio ghost</StudioButton>
-      <AppButton design="soft" tone="primary" size="sm" feedback={saveFb.state()} onClick={() => void saveFb.run(() => wait(900))}>
+      <AppButton
+        design="soft"
+        tone="primary"
+        size="sm"
+        feedback={saveFb.state()}
+        onClick={() => void saveFb.run(() => wait(900))}
+      >
         Save
       </AppButton>
       <AppButton
@@ -81,7 +97,9 @@ function LoadingButtonsDemo() {
         tone="danger"
         size="sm"
         feedback={flushFb.state()}
-        onClick={() => void flushFb.run(() => wait(700).then(() => Promise.reject(new Error('demo'))))}
+        onClick={() =>
+          void flushFb.run(() => wait(700).then(() => Promise.reject(new Error('demo'))))
+        }
       >
         Flush
       </AppButton>
@@ -92,8 +110,10 @@ function LoadingButtonsDemo() {
   );
 }
 
+/** Async buttons driven by `useMicrofeedback`: success hold and failure states. */
 export const Buttons: StoryObj = { render: () => <LoadingButtonsDemo /> };
 
+/** Footer with status text plus cancel / saving actions. */
 export const Footer: StoryObj = {
   render: () => {
     const saveFb = useMicrofeedback({ successHoldMs: 550 });

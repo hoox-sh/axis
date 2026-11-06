@@ -32,6 +32,7 @@ import { Axb1Opcode } from '../axb1/constants';
 /** How the next Pine eval may touch historical state. */
 export type ExecutionContext = 'snapshot' | 'tip' | 'append';
 
+/** Narrow an untrusted value to {@link ExecutionContext}. */
 export function isExecutionContext(value: unknown): value is ExecutionContext {
   return value === 'snapshot' || value === 'tip' || value === 'append';
 }

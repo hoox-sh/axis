@@ -22,6 +22,7 @@
 import { setActivePlugin } from '../store';
 import { writePluginField } from '../ui/plugin-config';
 
+/** Long-tail CCXT exchanges surfaced as pinned rows in the Venue picker. */
 export const PINNED_CCXT: readonly string[] = [
   'bitget',
   'kucoin',
@@ -31,6 +32,7 @@ export const PINNED_CCXT: readonly string[] = [
   'bingx',
 ];
 
+/** First-party CEX source plugins, in picker order. The id is the `store.source` value. */
 export const NATIVE_VENUE_SOURCES: readonly { id: string; label: string }[] = [
   { id: 'binance-rest', label: 'Binance' },
   { id: 'okx-rest', label: 'OKX' },
@@ -40,6 +42,7 @@ export const NATIVE_VENUE_SOURCES: readonly { id: string; label: string }[] = [
   { id: 'mexc-rest', label: 'MEXC' },
 ];
 
+/** Non-CEX sources (DEX, mock, upload, cache) shown under their own picker group. */
 export const OTHER_VENUE_SOURCES: readonly { id: string; label: string }[] = [
   { id: 'geckoterminal-ohlcv', label: 'GeckoTerminal' },
   { id: 'mock-walk', label: 'Mock' },
@@ -50,8 +53,10 @@ export const OTHER_VENUE_SOURCES: readonly { id: string; label: string }[] = [
 const NATIVE_IDS = new Set(NATIVE_VENUE_SOURCES.map((v) => v.id));
 const OTHER_IDS = new Set(OTHER_VENUE_SOURCES.map((v) => v.id));
 
+/** Which section of the Venue dropdown an option belongs to. */
 export type VenueGroup = 'native' | 'ccxt' | 'other' | 'plugin';
 
+/** One Venue dropdown entry: the select value, its label, and its group. */
 export type VenueOption = {
   value: string;
   label: string;
@@ -67,13 +72,24 @@ const CCXT_LABEL: Record<string, string> = {
   bingx: 'BingX',
 };
 
+/**
+ * Display label for a CCXT exchange: known ids get their brand spelling, an
+ * unknown id is capitalized, and an empty id renders the `CCXT…` placeholder.
+ * Always suffixed with `(CCXT)` so the gateway path is visible.
+ */
 export function prettyCcxtLabel(id: string): string {
-  const k = String(id || '').trim().toLowerCase();
+  const k = String(id || '')
+    .trim()
+    .toLowerCase();
   if (CCXT_LABEL[k]) return `${CCXT_LABEL[k]} (CCXT)`;
   if (!k) return 'CCXT…';
   return `${k.charAt(0).toUpperCase()}${k.slice(1)} (CCXT)`;
 }
 
+/**
+ * True for any `ccxt:` token, including the catch-all `ccxt:` with no exchange.
+ * Such a token is a picker value only — it must never reach `store.source`.
+ */
 export function isCcxtVenueToken(token: string): boolean {
   return token === 'ccxt:' || token.startsWith('ccxt:');
 }
@@ -85,6 +101,11 @@ export function exchangeIdFromToken(token: string): string | undefined {
   return undefined;
 }
 
+/**
+ * Split a picker token into a source plugin id and, for `ccxt:<id>` tokens, the
+ * exchange. The catch-all `ccxt:` yields `sourceId: 'ccxt-rest'` with an empty
+ * exchange; every other token passes through unchanged.
+ */
 export function parseVenueToken(token: string): { sourceId: string; exchange?: string } {
   const t = String(token || '').trim();
   if (t === 'ccxt:' || t.startsWith('ccxt:')) {
@@ -101,7 +122,9 @@ export function parseVenueToken(token: string): { sourceId: string; exchange?: s
 export function venueTokenFromState(sourceId: string, ccxtExchange: string): string {
   const src = String(sourceId || '').trim();
   if (src !== 'ccxt-rest') return src || 'binance-rest';
-  const ex = String(ccxtExchange || '').trim().toLowerCase();
+  const ex = String(ccxtExchange || '')
+    .trim()
+    .toLowerCase();
   if (!ex) return 'ccxt:';
   if ((PINNED_CCXT as readonly string[]).includes(ex)) return `ccxt:${ex}`;
   return 'ccxt:';
@@ -117,6 +140,14 @@ export function applyVenueToken(token: string): void {
   setActivePlugin('source', sourceId);
 }
 
+/**
+ * Build the dropdown options: native venues, pinned CCXT rows, the current
+ * custom CCXT exchange (unless it is already listed), the catch-all `ccxt:`,
+ * the other sources, and any extra registered plugins not covered above.
+ *
+ * @param extraSources - Registered sources to append as `plugin` rows.
+ * @param currentCcxtExchange - Exchange from the plugin bag, kept selectable.
+ */
 export function listVenueOptions(
   extraSources: Array<{ id: string; name: string }> = [],
   currentCcxtExchange = '',
@@ -129,8 +160,10 @@ export function listVenueOptions(
   for (const id of PINNED_CCXT) {
     out.push({ value: `ccxt:${id}`, label: prettyCcxtLabel(id), group: 'ccxt' });
   }
-  const cur = String(currentCcxtExchange || '').trim().toLowerCase();
-  if (cur && !seen.has(cur) && !(NATIVE_VENUE_SOURCES.some((n) => n.label.toLowerCase() === cur))) {
+  const cur = String(currentCcxtExchange || '')
+    .trim()
+    .toLowerCase();
+  if (cur && !seen.has(cur) && !NATIVE_VENUE_SOURCES.some((n) => n.label.toLowerCase() === cur)) {
     out.push({ value: `ccxt:${cur}`, label: prettyCcxtLabel(cur), group: 'ccxt' });
   }
   out.push({ value: 'ccxt:', label: 'CCXT…', group: 'ccxt' });

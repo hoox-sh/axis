@@ -49,6 +49,7 @@ import { intervalToSec } from './bars-gaps';
 import { getVisibleBars, isReplayActive } from '../chart/bar-replay';
 import { repairBars, validateDataset, venueClassForSourceCaps } from './dataset-validate';
 
+/** A gap between the newest cached bar and the live edge that catch-up may repair. */
 export interface TrailingGap {
   /** True when the chart tail is stale or fillable holes exist. */
   stale: boolean;
@@ -255,8 +256,8 @@ async function runBackgroundRepair(
           engineNewest: null,
           reason: `frozen during background catch-up (${gap.missingBars} bars missing)`,
           repair: {
-            endpoint: String(cfg.endpoint || ''),
-            apiKey: String(cfg.apiKey || ''),
+            endpoint: String(cfg['endpoint'] || ''),
+            apiKey: String(cfg['apiKey'] || ''),
             key: {
               exchange: exchangeForSource(expandSrc),
               market: store.provider?.market || 'spot',

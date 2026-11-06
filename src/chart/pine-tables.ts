@@ -27,6 +27,9 @@
  * @module chart/pine-tables
  */
 
+import { finiteNumber } from '../utils/validate';
+
+/** One `table.cell` payload: grid indices plus text, colors, and align tokens. */
 export interface PineTableCell {
   row: number;
   col: number;
@@ -46,9 +49,15 @@ export interface PineTableCell {
   border_width?: number;
 }
 
+/** Where a script's tables render: over the chart or in the bottom panel. */
 export type PineTableLocation = 'chart' | 'bottom';
+/** Script id → chosen table location. */
 export type PineTablesLocationMap = Record<string, PineTableLocation>;
 
+/**
+ * Normalized `table.new` object: grid size, parsed cells, frame styling, and
+ * merged ranges. `ownerId` links it back to the script that created it.
+ */
 export interface PineTable {
   type: string;
   id?: string | number;
@@ -84,14 +93,6 @@ function asFiniteInt(v: unknown): number | null {
   return null;
 }
 
-function asFiniteNumber(v: unknown): number | null {
-  if (typeof v === 'number' && Number.isFinite(v)) return v;
-  if (typeof v === 'string' && v.trim() !== '') {
-    const n = Number(v);
-    if (Number.isFinite(n)) return n;
-  }
-  return null;
-}
 
 function asText(v: unknown): string {
   if (v == null) return '';
@@ -107,62 +108,62 @@ function asText(v: unknown): string {
 /** True when payload looks like a Pine table drawing. */
 export function isPineTable(d: unknown): d is PineTable {
   if (!isRecord(d)) return false;
-  const t = String(d.type ?? d.kind ?? d.object_type ?? '').toLowerCase();
+  const t = String(d['type'] ?? d['kind'] ?? d['object_type'] ?? '').toLowerCase();
   return t === 'table' || t === 'table.new';
 }
 
 /** Parse one cell from engine payload (tolerant of snake/camel keys). */
 export function parsePineTableCell(raw: unknown): PineTableCell | null {
   if (!isRecord(raw)) return null;
-  const row = asFiniteInt(raw.row ?? raw.r);
-  const col = asFiniteInt(raw.col ?? raw.column ?? raw.c);
+  const row = asFiniteInt(raw['row'] ?? raw['r']);
+  const col = asFiniteInt(raw['col'] ?? raw['column'] ?? raw['c']);
   if (row == null || col == null || row < 0 || col < 0) return null;
-  const widthRaw = raw.width ?? raw.cell_width ?? raw.w;
-  const heightRaw = raw.height ?? raw.cell_height ?? raw.h;
-  const width = asFiniteNumber(widthRaw);
-  const height = asFiniteNumber(heightRaw);
+  const widthRaw = raw['width'] ?? raw['cell_width'] ?? raw['w'];
+  const heightRaw = raw['height'] ?? raw['cell_height'] ?? raw['h'];
+  const width = finiteNumber(widthRaw);
+  const height = finiteNumber(heightRaw);
   return {
     row,
     col,
-    text: asText(raw.text ?? raw.txt ?? raw.value ?? raw.content ?? ''),
+    text: asText(raw['text'] ?? raw['txt'] ?? raw['value'] ?? raw['content'] ?? ''),
     text_color:
-      raw.text_color != null
-        ? String(raw.text_color)
-        : raw.textColor != null
-          ? String(raw.textColor)
+      raw['text_color'] != null
+        ? String(raw['text_color'])
+        : raw['textColor'] != null
+          ? String(raw['textColor'])
           : undefined,
     bgcolor:
-      raw.bgcolor != null
-        ? String(raw.bgcolor)
-        : raw.bg_color != null
-          ? String(raw.bg_color)
+      raw['bgcolor'] != null
+        ? String(raw['bgcolor'])
+        : raw['bg_color'] != null
+          ? String(raw['bg_color'])
           : undefined,
     text_halign:
-      raw.text_halign != null
-        ? String(raw.text_halign)
-        : raw.halign != null
-          ? String(raw.halign)
+      raw['text_halign'] != null
+        ? String(raw['text_halign'])
+        : raw['halign'] != null
+          ? String(raw['halign'])
           : undefined,
     text_valign:
-      raw.text_valign != null
-        ? String(raw.text_valign)
-        : raw.valign != null
-          ? String(raw.valign)
+      raw['text_valign'] != null
+        ? String(raw['text_valign'])
+        : raw['valign'] != null
+          ? String(raw['valign'])
           : undefined,
-    text_size: (raw.text_size ?? raw.textSize ?? raw.size) as string | number | undefined,
+    text_size: (raw['text_size'] ?? raw['textSize'] ?? raw['size']) as string | number | undefined,
     width: width != null && width > 0 ? width : undefined,
     height: height != null && height > 0 ? height : undefined,
     tooltip:
-      raw.tooltip != null && String(raw.tooltip).trim() !== ''
-        ? String(raw.tooltip)
+      raw['tooltip'] != null && String(raw['tooltip']).trim() !== ''
+        ? String(raw['tooltip'])
         : undefined,
     border_color:
-      raw.border_color != null
-        ? String(raw.border_color)
-        : raw.borderColor != null
-          ? String(raw.borderColor)
+      raw['border_color'] != null
+        ? String(raw['border_color'])
+        : raw['borderColor'] != null
+          ? String(raw['borderColor'])
           : undefined,
-    border_width: asFiniteInt(raw.border_width ?? raw.borderWidth) ?? undefined,
+    border_width: asFiniteInt(raw['border_width'] ?? raw['borderWidth']) ?? undefined,
   };
 }
 
@@ -170,17 +171,17 @@ export function parsePineTableCell(raw: unknown): PineTableCell | null {
  * Normalize table dimensions from declared rows/columns **and** cell extents
  * (engine sometimes omits or understates size).
  */
-export function normalizePineTable(
-  raw: unknown,
-  ownerId?: string,
-): PineTable | null {
+export function normalizePineTable(raw: unknown, ownerId?: string): PineTable | null {
   if (!isPineTable(raw)) return null;
-  const r = raw as unknown as Record<string, unknown>;
+  // `isPineTable` already proved this, but the explicit guard narrows to an
+  // index-signature view (`r`) without an `as unknown as` double cast.
+  if (!isRecord(raw)) return null;
+  const r = raw;
   const cells: PineTableCell[] = [];
   const rawCells = Array.isArray(raw.cells)
     ? raw.cells
-    : Array.isArray(r.cells_data)
-      ? (r.cells_data as unknown[])
+    : Array.isArray(r['cells_data'])
+      ? (r['cells_data'] as unknown[])
       : [];
   for (const c of rawCells) {
     const cell = parsePineTableCell(c);
@@ -194,7 +195,7 @@ export function normalizePineTable(
     maxC = Math.max(maxC, c.col);
   }
   let declaredRows = asFiniteInt(raw.rows) ?? 0;
-  let declaredCols = asFiniteInt(raw.columns ?? (raw as { cols?: unknown }).cols) ?? 0;
+  let declaredCols = asFiniteInt(raw.columns ?? r['cols']) ?? 0;
   const cellRows = maxR + 1;
   const cellCols = maxC + 1;
   // Older engines stored Pine's (columns, rows) under the opposite names.
@@ -223,32 +224,30 @@ export function normalizePineTable(
     frame_color:
       raw.frame_color != null
         ? String(raw.frame_color)
-        : r.frameColor != null
-          ? String(r.frameColor)
+        : r['frameColor'] != null
+          ? String(r['frameColor'])
           : undefined,
-    frame_width: asFiniteInt(raw.frame_width ?? r.frameWidth) ?? undefined,
+    frame_width: asFiniteInt(raw.frame_width ?? r['frameWidth']) ?? undefined,
     border_color:
       raw.border_color != null
         ? String(raw.border_color)
-        : r.borderColor != null
-          ? String(r.borderColor)
+        : r['borderColor'] != null
+          ? String(r['borderColor'])
           : undefined,
-    border_width: asFiniteInt(raw.border_width ?? r.borderWidth) ?? undefined,
+    border_width: asFiniteInt(raw.border_width ?? r['borderWidth']) ?? undefined,
     bgcolor:
       raw.bgcolor != null
         ? String(raw.bgcolor)
-        : r.bg_color != null
-          ? String(r.bg_color)
+        : r['bg_color'] != null
+          ? String(r['bg_color'])
           : undefined,
     force_overlay: Boolean(
-      (raw as { force_overlay?: unknown }).force_overlay ??
-        (r.forceOverlay as unknown) ??
-        false,
+      (raw as { force_overlay?: unknown }).force_overlay ?? (r['forceOverlay'] as unknown) ?? false,
     ),
     merged_cells: normalizeMergedCells(
       (raw as { merged_cells?: unknown }).merged_cells ??
         (raw as { mergedCells?: unknown }).mergedCells ??
-        r.merged_cells,
+        r['merged_cells'],
       rows,
       columns,
     ),
@@ -257,15 +256,12 @@ export function normalizePineTable(
 }
 
 /** Extract tables from a single run payload. */
-export function tablesFromRunPayload(
-  payload: unknown,
-  ownerId?: string,
-): PineTable[] {
+export function tablesFromRunPayload(payload: unknown, ownerId?: string): PineTable[] {
   if (!isRecord(payload)) return [];
-  const drawings = Array.isArray(payload.drawings)
-    ? payload.drawings
-    : isRecord(payload.meta) && Array.isArray(payload.meta.drawings)
-      ? payload.meta.drawings
+  const drawings = Array.isArray(payload['drawings'])
+    ? payload['drawings']
+    : isRecord(payload['meta']) && Array.isArray(payload['meta']['drawings'])
+      ? payload['meta']['drawings']
       : [];
   const out: PineTable[] = [];
   for (const d of drawings) {
@@ -278,6 +274,7 @@ export function tablesFromRunPayload(
   return out;
 }
 
+/** Inputs for {@link collectVisiblePineTables}: applied scripts, run cache, editor preview. */
 export type CollectTablesOpts = {
   /** Applied chart script ids (tables for missing ids are dropped). */
   scriptIds: ReadonlyArray<string> | ReadonlySet<string>;
@@ -353,9 +350,7 @@ export function pineTablePositionClass(pos: string | undefined | null): string {
 }
 
 /** Build row×col grid; cells outside bounds are ignored. */
-export function buildTableGrid(
-  tb: PineTable,
-): (PineTableCell | null)[][] {
+export function buildTableGrid(tb: PineTable): (PineTableCell | null)[][] {
   const rows = Math.max(1, tb.rows || 1);
   const cols = Math.max(1, tb.columns || 1);
   const grid: (PineTableCell | null)[][] = Array.from({ length: rows }, () =>
@@ -369,8 +364,16 @@ export function buildTableGrid(
   return grid;
 }
 
+/**
+ * Map a Pine `text_halign` token to a CSS text alignment.
+ *
+ * @param halign `text.align_*` or bare token; anything unrecognized centers
+ * @returns `left`, `right`, or `center`
+ */
 export function cellTextAlign(halign?: string): 'left' | 'right' | 'center' {
-  const h = String(halign || '').toLowerCase().replace('text.', '');
+  const h = String(halign || '')
+    .toLowerCase()
+    .replace('text.', '');
   if (h.includes('left')) return 'left';
   if (h.includes('right')) return 'right';
   return 'center';
@@ -378,7 +381,9 @@ export function cellTextAlign(halign?: string): 'left' | 'right' | 'center' {
 
 /** Map Pine `text_valign` tokens (`text.*`-prefixed or bare) → CSS vertical-align. */
 export function cellTextVerticalAlign(valign?: string): 'top' | 'middle' | 'bottom' {
-  const v = String(valign || '').toLowerCase().replace('text.', '');
+  const v = String(valign || '')
+    .toLowerCase()
+    .replace('text.', '');
   if (v.includes('top')) return 'top';
   if (v.includes('bottom')) return 'bottom';
   return 'middle';

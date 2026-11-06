@@ -26,11 +26,11 @@ function arg(name: string, fallback: string): string {
 }
 
 const ROOT = resolve(import.meta.dir, '..');
-const VIEWPORT = arg('viewport', process.env.AXIS_CAPTURE_VIEWPORT || '1920x1080');
-const [VIEW_W, VIEW_H] = VIEWPORT.split('x').map((n) => Number(n) || 0);
-const DPR = Number(arg('dpr', process.env.AXIS_CAPTURE_DPR || '2')) || 2;
+const VIEWPORT = arg('viewport', process.env['AXIS_CAPTURE_VIEWPORT'] || '1920x1080');
+const [VIEW_W = 1920, VIEW_H = 1080] = VIEWPORT.split('x').map((n) => Number(n) || 0);
+const DPR = Number(arg('dpr', process.env['AXIS_CAPTURE_DPR'] || '2')) || 2;
 const OUT = resolve(ROOT, arg('out', 'docs/images'));
-const URL = process.env.AXIS_CAPTURE_URL || 'https://axis.hoox.sh';
+const URL = process.env['AXIS_CAPTURE_URL'] || 'https://axis.hoox.sh';
 const SKIP_GIFS = process.argv.includes('--skip-gifs');
 const SKIP_CLI = process.argv.includes('--skip-cli');
 const SKIP_MOBILE = process.argv.includes('--skip-mobile');

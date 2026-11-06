@@ -90,7 +90,7 @@ function logsAsText(entries: PyneLogEntry[]): string {
 }
 
 /** Script `log.*` output from the last run, embedded in the editor. */
-export const ScriptLogsPane: Component<{ open: boolean; onClose: () => void }> = (props) => {
+export const ScriptLogsPane: Component<{ open: boolean; onClose: () => void }> = (props) : JSX.Element => {
   const [filter, setFilter] = createSignal<LevelFilter>('all');
   const [copied, setCopied] = createSignal(false);
   let listRef: HTMLDivElement | undefined;

@@ -56,6 +56,7 @@ import {
 } from './script-meta';
 import { setScriptChartVisible } from './visibility';
 import { getEngineCapabilities } from '../engines/catalog';
+import { bindSlashToSearch } from '../ui/focus-search';
 
 type ScriptFilter = 'all' | 'indicator' | 'strategy' | 'errors' | 'hidden';
 
@@ -92,7 +93,7 @@ const CompChip: Component<{
 };
 
 /** Shell + composition strip + list of {@link IndicatorCard}. */
-export const IndicatorPanel: Component = () => {
+export const IndicatorPanel: Component = () : JSX.Element => {
   const [pickerOpen, setPickerOpen] = createSignal(false);
   const [pickerQuery, setPickerQuery] = createSignal('');
   const pickerHits = createMemo(() => filterBuiltinScripts(pickerQuery()));
@@ -188,18 +189,7 @@ export const IndicatorPanel: Component = () => {
     setFilter('all');
   };
 
-  onMount(() => {
-    // `/` focuses the script search while the panel is mounted.
-    const onSlash = (e: KeyboardEvent) => {
-      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
-      const target = e.target as HTMLElement | null;
-      if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
-      e.preventDefault();
-      searchInput?.focus();
-    };
-    window.addEventListener('keydown', onSlash);
-    onCleanup(() => window.removeEventListener('keydown', onSlash));
-  });
+  onMount(() => onCleanup(bindSlashToSearch(() => searchInput)));
 
   const streamId = () =>
     store.live?.streamId || store.activePlugins?.stream || '—';

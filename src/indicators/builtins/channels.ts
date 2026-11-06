@@ -26,6 +26,11 @@
 import { COL, def, pineIndicator } from './pine';
 import type { BuiltinScript } from './types';
 
+/**
+ * Original AXIS channel studies (`category: 'channel'`): Bollinger Bands with
+ * their %/width/BBTrend variants, Keltner, Donchian, and the linear-regression
+ * channel and curve.
+ */
 export const CHANNEL_BUILTINS: readonly BuiltinScript[] = [
   def({
     id: 'bb',

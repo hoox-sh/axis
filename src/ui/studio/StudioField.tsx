@@ -26,11 +26,13 @@ import {
 import { Icons } from '../icons';
 import { stepNativeInput } from './step-input';
 
+/** Ids a {@link StudioField} exposes to its control so hint/error text can be wired via `aria-describedby`. */
 export type StudioFieldContextValue = {
   hintId?: string;
   errorId?: string;
 };
 
+/** Context published by {@link StudioField}; controls read it instead of receiving ids as props. */
 export const StudioFieldContext = createContext<StudioFieldContextValue | undefined>(undefined);
 
 async function writeClipboard(text: string): Promise<boolean> {
@@ -58,10 +60,27 @@ async function writeClipboard(text: string): Promise<boolean> {
   }
 }
 
-export function StudioHint(props: { class?: string; children: JSX.Element }) {
+/**
+ * Muted helper text rendered under a control (`ax-hint`).
+ *
+ * @param props - Optional extra class and the hint copy.
+ * @returns A `<p>` paragraph.
+ */
+export function StudioHint(props: { class?: string; children: JSX.Element }): JSX.Element {
   return <p class={`ax-hint${props.class ? ` ${props.class}` : ''}`}>{props.children}</p>;
 }
 
+/**
+ * Label + hint/error/confirmation wrapper for a single studio control.
+ *
+ * Generates unique ids for the hint and error paragraphs and publishes them
+ * through {@link StudioFieldContext}, so `StudioInput` / `StudioSelect` can set
+ * `aria-describedby` without the caller threading ids. `error` wins over
+ * `success`: the positive line is only rendered when no error is present.
+ *
+ * @param props - Label row extras (optional/required tag, counter, labelEnd), messages, and the control.
+ * @returns A `div.ax-field` with the labelled control and its message stack.
+ */
 export function StudioField(props: {
   label?: JSX.Element;
   for?: string;
@@ -80,7 +99,7 @@ export function StudioField(props: {
   testId?: string;
   class?: string;
   children: JSX.Element;
-}) {
+}): JSX.Element {
   const uid = createUniqueId();
   const hintId = () => (props.hint ? `${uid}-hint` : undefined);
   const errorId = () => (props.error ? `${uid}-error` : undefined);
@@ -145,6 +164,19 @@ export function StudioField(props: {
   );
 }
 
+/**
+ * Text/number input with the full studio shell: leading icon or prefix, suffix,
+ * kbd hint, clear / copy / password-reveal / stepper affordances, and character
+ * counting.
+ *
+ * The visible value is mirrored locally so typing stays responsive while the
+ * owner re-renders; `onInput` fires per keystroke, `onChange` on commit and on
+ * clear, and Enter/Escape are surfaced as `onEnter`/`onEscape`. Number steppers
+ * rely on the native `stepUp`/`stepDown` events, so handlers fire once per step.
+ *
+ * @param props - Value, adornments, validation flags, and input callbacks.
+ * @returns A `div.ax-input-shell` wrapping a bare `<input>` plus its controls.
+ */
 export function StudioInput(props: {
   id?: string;
   type?: string;
@@ -196,7 +228,7 @@ export function StudioInput(props: {
   onEnter?: (value: string) => void;
   onEscape?: (value: string) => void;
   onKeyDown?: (e: KeyboardEvent & { currentTarget: HTMLInputElement }) => void;
-}) {
+}): JSX.Element {
   const field = useContext(StudioFieldContext);
   const [live, setLive] = createSignal(
     props.value === undefined || props.value === null ? '' : String(props.value),
@@ -420,6 +452,14 @@ export function StudioInput(props: {
   );
 }
 
+/**
+ * Native `<select>` dressed in the studio input shell (icon slot, chevron,
+ * invalid/disabled states) so it lines up with {@link StudioInput}. Options are
+ * passed as children; `onChange` receives the selected value string.
+ *
+ * @param props - Selected value, shell flags, and the `<option>` children.
+ * @returns A `div.ax-select-shell` containing the select and chevron.
+ */
 export function StudioSelect(props: {
   id?: string;
   value?: string;
@@ -434,7 +474,7 @@ export function StudioSelect(props: {
   class?: string;
   onChange?: (value: string) => void;
   children: JSX.Element;
-}) {
+}): JSX.Element {
   const field = useContext(StudioFieldContext);
   const describedBy = () => [field?.hintId, field?.errorId].filter(Boolean).join(' ') || undefined;
 
@@ -474,6 +514,14 @@ export function StudioSelect(props: {
   );
 }
 
+/**
+ * Checkbox styled as a switch with a title and optional hint. The whole label
+ * is clickable; `onChange` reports the new checked state and `aria-checked`
+ * mirrors it for assistive tech.
+ *
+ * @param props - Checked state, label/hint copy, size, and change handler.
+ * @returns A `<label>` wrapping a `role="switch"` input and its copy.
+ */
 export function StudioToggle(props: {
   id?: string;
   checked: boolean;
@@ -484,7 +532,7 @@ export function StudioToggle(props: {
   size?: 'sm' | 'md';
   class?: string;
   onChange: (checked: boolean) => void;
-}) {
+}): JSX.Element {
   const autoId = createUniqueId();
   const inputId = () => props.id || autoId;
   const hintId = () => `${autoId}-toggle-hint`;

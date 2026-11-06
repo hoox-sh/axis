@@ -47,7 +47,7 @@ function toggleTickerSymbol(sym: string, on: boolean): void {
 }
 
 /** Module-bar Extra button + dropdown panel. */
-export const ExtraMenu: Component = () => {
+export const ExtraMenu: Component = () : JSX.Element => {
   const [open, setOpen] = createSignal(false);
   let btnEl: HTMLButtonElement | undefined;
 

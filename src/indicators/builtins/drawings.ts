@@ -26,6 +26,10 @@
 import { def, pineIndicator } from './pine';
 import type { BuiltinScript } from './types';
 
+/**
+ * The original AXIS drawing demo (`category: 'drawing'`): one overlay script
+ * that emits line, linefill, box, label, polyline and table objects.
+ */
 export const DRAWING_BUILTINS: readonly BuiltinScript[] = [
   def({
     id: 'drawings',

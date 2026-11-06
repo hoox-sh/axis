@@ -37,7 +37,7 @@ import {
 } from '../update/update-manager';
 
 /** Top-fixed banner for pending app updates. */
-export const UpdateBanner: Component = () => {
+export const UpdateBanner: Component = () : JSX.Element => {
   const [busy, setBusy] = createSignal(false);
   const state = () => getUpdateState();
   const update = () => state().update;

@@ -166,11 +166,11 @@ function defaultSavedLabel(run: ResultMeta): string {
 function savedRunMarket(run: ResultMeta): { symbol: string; timeframe: string } {
   const inputs = run.inputs ?? {};
   const symbol = String(
-    (inputs as Record<string, unknown>).symbol ?? (inputs as Record<string, unknown>).ticker ?? '',
+    (inputs as Record<string, unknown>)['symbol'] ?? (inputs as Record<string, unknown>)['ticker'] ?? '',
   ).trim();
   const timeframe = String(
-    (inputs as Record<string, unknown>).timeframe ??
-      (inputs as Record<string, unknown>).interval ??
+    (inputs as Record<string, unknown>)['timeframe'] ??
+      (inputs as Record<string, unknown>)['interval'] ??
       '',
   ).trim();
   return { symbol, timeframe };
@@ -193,16 +193,16 @@ function readSavedStats(raw: unknown): SavedStatsSummary {
   if (!raw || typeof raw !== 'object') return {};
   const v = raw as Record<string, unknown>;
   const out: SavedStatsSummary = {};
-  if (typeof v.trades === 'number') out.trades = v.trades;
-  if (typeof v.winRate === 'number') out.winRate = v.winRate;
-  if (typeof v.totalPnl === 'number') out.totalPnl = v.totalPnl;
-  if (typeof v.returnPct === 'number') out.returnPct = v.returnPct;
-  if (typeof v.maxDD === 'number') out.maxDD = v.maxDD;
-  if (typeof v.avgTrade === 'number') out.avgTrade = v.avgTrade;
-  if (typeof v.wins === 'number') out.wins = v.wins;
-  if (typeof v.losses === 'number') out.losses = v.losses;
-  if (v.profitFactor === null) out.profitFactor = null;
-  else if (typeof v.profitFactor === 'number') out.profitFactor = v.profitFactor;
+  if (typeof v['trades'] === 'number') out.trades = v['trades'];
+  if (typeof v['winRate'] === 'number') out.winRate = v['winRate'];
+  if (typeof v['totalPnl'] === 'number') out.totalPnl = v['totalPnl'];
+  if (typeof v['returnPct'] === 'number') out.returnPct = v['returnPct'];
+  if (typeof v['maxDD'] === 'number') out.maxDD = v['maxDD'];
+  if (typeof v['avgTrade'] === 'number') out.avgTrade = v['avgTrade'];
+  if (typeof v['wins'] === 'number') out.wins = v['wins'];
+  if (typeof v['losses'] === 'number') out.losses = v['losses'];
+  if (v['profitFactor'] === null) out.profitFactor = null;
+  else if (typeof v['profitFactor'] === 'number') out.profitFactor = v['profitFactor'];
   return out;
 }
 
@@ -241,7 +241,7 @@ function formatPosPrice(n: number): string {
 }
 
 /** Fullscreen results studio overlay. */
-export const ResultsModal: Component = () => {
+export const ResultsModal: Component = () : JSX.Element => {
   const [tab, setTab] = createSignal<TabId>('events');
   const [copied, setCopied] = createSignal(false);
 

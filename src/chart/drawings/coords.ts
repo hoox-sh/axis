@@ -34,7 +34,7 @@
  * - Interpret Pine Script™ plot series directly
  */
 
-import type { IChartApi, ISeriesApi, UTCTimestamp } from 'lightweight-charts';
+import type { IChartApi, ISeriesApi, UTCTimestamp, SeriesType } from 'lightweight-charts';
 
 /**
  * Max bars past the last OHLCV bar for interactive drawings (place + paint).
@@ -232,6 +232,7 @@ export interface CoordContext {
   ): { time: number; price: number } | null;
 }
 
+/** Optional inputs for {@link createCoordContext}: the bar series used to extrapolate future time. */
 export type CreateCoordContextOpts = {
   /** OHLCV (or time-only) series for future-time extrapolation. */
   getBars?: () => readonly TimeBarLike[] | null | undefined;
@@ -244,7 +245,7 @@ export type CreateCoordContextOpts = {
  */
 export function createCoordContext(
   chart: IChartApi,
-  series: ISeriesApi<any>,
+  series: ISeriesApi<SeriesType>,
   getSize: () => ViewSize,
   opts: CreateCoordContextOpts = {},
 ): CoordContext {
@@ -299,10 +300,7 @@ export function createCoordContext(
     }
   };
 
-  const toXY = (p: {
-    time: number;
-    price: number;
-  }): { x: number; y: number } | null => {
+  const toXY = (p: { time: number; price: number }): { x: number; y: number } | null => {
     if (!Number.isFinite(p.time) || !Number.isFinite(p.price)) return null;
     const x = timeToX(p.time);
     const y = priceToY(p.price);
@@ -364,7 +362,7 @@ export function createCoordContext(
         t =
           typeof rawTime === 'number'
             ? rawTime
-            : (rawTime as { timestamp?: number }).timestamp ?? null;
+            : ((rawTime as { timestamp?: number }).timestamp ?? null);
       }
     } catch {
       t = null;

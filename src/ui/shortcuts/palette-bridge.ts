@@ -27,6 +27,7 @@
 
 import { createSignal } from 'solid-js';
 
+/** Which list the palette should show when it opens: commands or built-in scripts. */
 export type PaletteIntent = 'commands' | 'builtins';
 
 const [paletteOpen, setPaletteOpen] = createSignal(false);

@@ -58,8 +58,10 @@ const GLYPH: Record<string, string> = {
   fibext: 'M2.6 12.6 L7.2 8.6 M3.4 10.6 H13.4 M4.2 7.2 H13.4 M5 4 H12',
   fibtime: 'M3.2 3.2 V12.8 M6.8 5.2 V12.8 M10.2 3.2 V12.8 M13.2 6 V11.4',
   fibchannel: 'M2.8 3.6 L13.2 6.2 M2.8 10.6 L13.2 13.2 M4.6 7.6 L8 8.4 M9.4 8.8 L12.2 9.5',
-  fibArc: 'M2.4 13 A5.6 5.6 0 0 0 13.6 13 M4.4 13 A3.6 3.6 0 0 0 11.6 13 M6.2 13 A1.8 1.8 0 0 0 9.8 13',
-  fibWedge: 'M3.4 12.4 H12.4 M3.4 12.4 L10.1 6.4 M3.4 12.4 L11.6 8.7 M12.4 12.4 A9 9 0 0 0 10.1 6.4',
+  fibArc:
+    'M2.4 13 A5.6 5.6 0 0 0 13.6 13 M4.4 13 A3.6 3.6 0 0 0 11.6 13 M6.2 13 A1.8 1.8 0 0 0 9.8 13',
+  fibWedge:
+    'M3.4 12.4 H12.4 M3.4 12.4 L10.1 6.4 M3.4 12.4 L11.6 8.7 M12.4 12.4 A9 9 0 0 0 10.1 6.4',
   fibCircles:
     'M13.2 8 A5.2 5.2 0 1 0 2.8 8 A5.2 5.2 0 1 0 13.2 8 M11.1 8 A3.1 3.1 0 1 0 4.9 8 A3.1 3.1 0 1 0 11.1 8 M9.3 8 A1.3 1.3 0 1 0 6.7 8 A1.3 1.3 0 1 0 9.3 8',
 
@@ -72,14 +74,17 @@ const GLYPH: Record<string, string> = {
   curve: 'M2.6 12 C6.2 4.2 9.6 12.8 13.4 5.2',
   polyline: 'M2.6 10.6 L6.2 4.2 L9.4 9.2 L13.6 3.6',
   path: 'M2.8 12.2 L6.2 6.4 C8.4 3.2 11.4 4.2 13.4 8.8',
-  brush: 'M2.4 9.4 C3.8 6.2 4.6 12 6.4 9.2 C8 6.6 7.6 5 9.2 7.6 C10.6 9.8 11 12.2 12.6 9.4 C13.4 8 13.6 6.2 14 6.6',
+  brush:
+    'M2.4 9.4 C3.8 6.2 4.6 12 6.4 9.2 C8 6.6 7.6 5 9.2 7.6 C10.6 9.8 11 12.2 12.6 9.4 C13.4 8 13.6 6.2 14 6.6',
   highlighter: 'M2.6 9.6 L11.2 4.2 L13.4 7 L4.8 12.4 Z',
   xabcd: 'M2.2 7.2 L5.2 12.4 L8 3.4 L10.8 9.2 L13.8 4.2',
   headShoulders: 'M2.2 11.6 L4.6 6.8 L6.4 10.2 L8 3 L9.6 10.2 L11.4 6.4 L13.8 11.6 M2.4 13 H13.6',
 
   text: 'M4.2 3.4 H11.8 M8 3.4 V12.8',
-  anchoredText: 'M4.6 2.4 H11.4 M8 2.4 V7.8 M9.5 11.4 A1.5 1.5 0 1 0 6.5 11.4 A1.5 1.5 0 1 0 9.5 11.4',
-  priceLabel: 'M2.4 4.8 H9 L13.2 8 L9 11.2 H2.4 Z M5.4 8.9 A0.9 0.9 0 1 0 5.4 7.1 A0.9 0.9 0 1 0 5.4 8.9',
+  anchoredText:
+    'M4.6 2.4 H11.4 M8 2.4 V7.8 M9.5 11.4 A1.5 1.5 0 1 0 6.5 11.4 A1.5 1.5 0 1 0 9.5 11.4',
+  priceLabel:
+    'M2.4 4.8 H9 L13.2 8 L9 11.2 H2.4 Z M5.4 8.9 A0.9 0.9 0 1 0 5.4 7.1 A0.9 0.9 0 1 0 5.4 8.9',
   callout: 'M2.8 2.8 H13.2 V9.2 H8.6 L6 13 L6.4 9.2 H2.8 Z',
   note: 'M3.4 2.6 H9.4 L13 6.2 V13.4 H3.4 Z M9.4 2.6 V6.2 H13 M5.6 8.8 H10.4 M5.6 11.2 H8.8',
   flag: 'M4.2 2.4 V13.6 M4.2 3.2 H11.4 L9.2 5.8 L11.4 8.6 H4.2',
@@ -101,6 +106,13 @@ export function toolIconPath(id: string): string {
   return GLYPH[id] ?? FALLBACK;
 }
 
+/**
+ * Inline SVG glyph for a drawing tool.
+ *
+ * @param props.id tool id; unknown ids fall back to the diamond glyph
+ * @param props.size square size in px (default 16)
+ * @param props.strokeWidth stroke width for outline glyphs (default 1.7)
+ */
 export function DrawingToolIcon(props: {
   id: string;
   size?: number;

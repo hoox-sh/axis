@@ -36,7 +36,7 @@
  * through the module singleton {@link getActiveDrawingLayer}.
  */
 
-import type { IChartApi, ISeriesApi, UTCTimestamp } from 'lightweight-charts';
+import type { IChartApi, ISeriesApi, UTCTimestamp, SeriesType } from 'lightweight-charts';
 import {
   DRAWING_COLORS,
   FIB_LEVELS,
@@ -181,7 +181,7 @@ export class DrawingLayer {
   private host: HTMLElement;
   private chart: IChartApi;
   /** Price series host (candles, bars, line, …) for price ↔ Y conversion. */
-  private series: ISeriesApi<any>;
+  private series: ISeriesApi<SeriesType>;
   private svg: SVGSVGElement;
   /** Pine `fill(plot1,plot2)` bands (under script line/label drawings). */
   private gFill: SVGGElement;
@@ -282,7 +282,7 @@ export class DrawingLayer {
   constructor(
     host: HTMLElement,
     chart: IChartApi,
-    series: ISeriesApi<any>,
+    series: ISeriesApi<SeriesType>,
     opts?: { scriptOnly?: boolean },
   ) {
     this.host = host;
@@ -431,7 +431,7 @@ export class DrawingLayer {
    * Swap the price series used for price ↔ Y (e.g. chart type change).
    * Does not recreate the SVG overlay; re-paints with the new scale host.
    */
-  setSeries(series: ISeriesApi<any>) {
+  setSeries(series: ISeriesApi<SeriesType>) {
     this.series = series;
     this.redraw();
   }
@@ -2962,7 +2962,7 @@ function label(
     'pointer-events': 'none',
   };
   if (outline) {
-    attrs.stroke = '#0a0b10';
+    attrs['stroke'] = '#0a0b10';
     attrs['stroke-width'] = '3';
     attrs['stroke-linejoin'] = 'round';
     attrs['paint-order'] = 'stroke fill';
@@ -2987,7 +2987,14 @@ function shiftPoint(p: Point, dTime: number, dPrice: number): Point {
   return { time: p.time + dTime, price: p.price + dPrice };
 }
 
-/** Body-move: shift every stored anchor (1-pt p1, 2-pt p1/p2, n-pt points[]). */
+/**
+ * Move every stored anchor of a drawing by a time/price delta.
+ *
+ * @param d drawing to shift; unknown kinds fall back to p1/p2/p3 anchors
+ * @param dTime time delta in seconds (or bar-index delta for index-anchored points)
+ * @param dPrice price delta in quote currency
+ * @returns a shifted copy, or `d` itself when a delta or the anchors are non-finite
+ */
 export function shiftDrawing(d: Drawing, dTime: number, dPrice: number): Drawing {
   if (!Number.isFinite(dTime) || !Number.isFinite(dPrice)) return d;
   if (d.kind === 'hline') {

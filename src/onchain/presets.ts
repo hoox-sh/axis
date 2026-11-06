@@ -27,11 +27,7 @@
  */
 
 import { normalizeProtocolSlug } from './adapters';
-import {
-  MAX_ONCHAIN_SERIES,
-  attachDefiLlamaTvl,
-  getOnchainManagerState,
-} from './manager';
+import { MAX_ONCHAIN_SERIES, attachDefiLlamaTvl, getOnchainManagerState } from './manager';
 
 /** Curated high-TVL DefiLlama protocol presets (slug + display name). */
 export const POPULAR_TVL_PROTOCOLS: Array<{ slug: string; name: string }> = [
@@ -68,6 +64,7 @@ export const DEX_NETWORK_PRESETS: Array<{
   { id: 'solana', label: 'Solana', gecko: 'solana' },
 ];
 
+/** Per-preset result of {@link attachPopularTvl}: attached slugs plus per-slug failures. */
 export type AttachPopularTvlResult = {
   ok: string[];
   failed: Array<{ slug: string; error: string }>;
@@ -78,9 +75,7 @@ function alreadyAttachedTvl(slug: string): boolean {
   if (!protocolId) return false;
   const { attachments } = getOnchainManagerState();
   return attachments.some((a) => {
-    const key = normalizeProtocolSlug(
-      a.instrument?.protocolId || a.key || '',
-    );
+    const key = normalizeProtocolSlug(a.instrument?.protocolId || a.key || '');
     const metric = a.instrument?.metric || 'tvl';
     return key === protocolId && metric === 'tvl';
   });
@@ -94,9 +89,7 @@ function alreadyAttachedTvl(slug: string): boolean {
  * same-protocol rows may still refresh). Optional `limit` caps how many
  * presets from the head of {@link POPULAR_TVL_PROTOCOLS} are attempted.
  */
-export async function attachPopularTvl(
-  limit?: number,
-): Promise<AttachPopularTvlResult> {
+export async function attachPopularTvl(limit?: number): Promise<AttachPopularTvlResult> {
   const ok: string[] = [];
   const failed: Array<{ slug: string; error: string }> = [];
 
@@ -110,10 +103,7 @@ export async function attachPopularTvl(
   for (const p of list) {
     const slug = normalizeProtocolSlug(p.slug) || p.slug;
     const { attachments } = getOnchainManagerState();
-    if (
-      attachments.length >= MAX_ONCHAIN_SERIES &&
-      !alreadyAttachedTvl(slug)
-    ) {
+    if (attachments.length >= MAX_ONCHAIN_SERIES && !alreadyAttachedTvl(slug)) {
       break;
     }
 
@@ -122,9 +112,7 @@ export async function attachPopularTvl(
       ok.push(slug);
     } catch (err) {
       const error =
-        err instanceof Error && err.message
-          ? err.message
-          : String(err || 'attach failed');
+        err instanceof Error && err.message ? err.message : String(err || 'attach failed');
       failed.push({ slug, error });
       // Hard stop when the manager rejects further new series.
       if (error.includes('Max on-chain series reached')) {

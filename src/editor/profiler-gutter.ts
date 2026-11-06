@@ -88,7 +88,7 @@ class ProfilerPctMarker extends GutterMarker {
     super();
   }
 
-  eq(other: GutterMarker): boolean {
+  override eq(other: GutterMarker): boolean {
     if (!(other instanceof ProfilerPctMarker)) return false;
     return (
       other.lineNo === this.lineNo &&
@@ -100,7 +100,7 @@ class ProfilerPctMarker extends GutterMarker {
     );
   }
 
-  toDOM(): HTMLElement {
+  override toDOM(): HTMLElement {
     const wrap = document.createElement('span');
     wrap.className = 'cm-profiler-pct' + (this.hot ? ' cm-profiler-hot' : '');
     wrap.title = markerTitle(this.lineNo, this.stat);
@@ -126,14 +126,14 @@ class ProfilerPctMarker extends GutterMarker {
 
 /** Spacer so the gutter keeps a stable width while a profile is active. */
 class ProfilerSpacer extends GutterMarker {
-  toDOM(): HTMLElement {
+  override toDOM(): HTMLElement {
     const el = document.createElement('span');
     el.className = 'cm-profiler-pct cm-profiler-spacer';
     el.textContent = '100%';
     return el;
   }
 
-  eq(other: GutterMarker): boolean {
+  override eq(other: GutterMarker): boolean {
     return other instanceof ProfilerSpacer;
   }
 }
@@ -151,7 +151,10 @@ function buildMarkers(doc: Text, profile: RunProfile | null): RangeSet<GutterMar
   });
   const hotRank = new Map<number, number>();
   for (let i = 0; i < Math.min(3, ranked.length); i++) {
-    hotRank.set(ranked[i][0], i + 1);
+    const entry = ranked[i];
+    // i < ranked.length, so the entry always exists.
+    if (!entry) continue;
+    hotRank.set(entry[0], i + 1);
   }
 
   const builder = new RangeSetBuilder<GutterMarker>();
@@ -162,11 +165,7 @@ function buildMarkers(doc: Text, profile: RunProfile | null): RangeSet<GutterMar
     if (!(stat.ms > 0 || stat.execs > 0 || stat.pct > 0)) continue;
     const line = doc.line(lineNo);
     const rank = hotRank.get(lineNo) ?? 0;
-    builder.add(
-      line.from,
-      line.from,
-      new ProfilerPctMarker(lineNo, stat, rank > 0, rank),
-    );
+    builder.add(line.from, line.from, new ProfilerPctMarker(lineNo, stat, rank > 0, rank));
   }
   return builder.finish();
 }
@@ -298,9 +297,7 @@ export function profilerGutterExtension(): Extension {
       updateSpacer: (spacer) => spacer,
       lineMarkerChange: (update) => {
         if (update.docChanged) return true;
-        return update.transactions.some((tr) =>
-          tr.effects.some((e) => e.is(setProfilerData)),
-        );
+        return update.transactions.some((tr) => tr.effects.some((e) => e.is(setProfilerData)));
       },
     }),
     // Tag editor root so theme can show/hide the gutter column.
@@ -316,10 +313,7 @@ export function profilerGutterExtension(): Extension {
  * Dispatch helper — push profile (or null to clear) into an EditorView.
  * Empty / null profiles clear markers so the gutter hides.
  */
-export function applyProfilerProfile(
-  view: EditorView,
-  profile: RunProfile | null,
-): void {
+export function applyProfilerProfile(view: EditorView, profile: RunProfile | null): void {
   let next: RunProfile | null = null;
   if (profile != null) {
     next = normalizeRunProfile(profile) ?? (profile.lines?.length ? profile : null);

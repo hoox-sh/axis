@@ -18,21 +18,25 @@
  * @module data/ccxt-session
  */
 
-import {
-  ccxtCredentialId,
-  getCcxtCredential,
-} from './credentials';
-import {
-  gatewayDeleteSession,
-  gatewayPutSession,
-  type GatewayMode,
-} from './gateway';
+import { ccxtCredentialId, getCcxtCredential } from './credentials';
+import { gatewayDeleteSession, gatewayPutSession, type GatewayMode } from './gateway';
 
+/**
+ * Send the vault's CCXT key for `exchange` to the gateway so later OHLCV calls
+ * can reference it by id. Best-effort: returns `undefined` when there is no
+ * usable credential or the gateway rejects the bind — public data still works.
+ *
+ * @param mode - Gateway transport to bind against.
+ * @param exchange - CCXT exchange id; trimmed and lowercased.
+ * @returns The vault credential id on success, otherwise `undefined`.
+ */
 export async function bindCcxtSession(
   mode: GatewayMode,
   exchange: string,
 ): Promise<string | undefined> {
-  const ex = String(exchange || '').trim().toLowerCase();
+  const ex = String(exchange || '')
+    .trim()
+    .toLowerCase();
   if (!ex) return undefined;
   const cred = getCcxtCredential(ex);
   if (!cred?.apiKey || !cred.secret) return undefined;
@@ -52,8 +56,17 @@ export async function bindCcxtSession(
   }
 }
 
+/**
+ * Drop the gateway's cached key for `exchange`. No-op for an empty exchange id;
+ * gateway failures are swallowed because the local vault is the source of truth.
+ *
+ * @param mode - Gateway transport to unbind from.
+ * @param exchange - CCXT exchange id; trimmed and lowercased.
+ */
 export async function unbindCcxtSession(mode: GatewayMode, exchange: string): Promise<void> {
-  const ex = String(exchange || '').trim().toLowerCase();
+  const ex = String(exchange || '')
+    .trim()
+    .toLowerCase();
   if (!ex) return;
   await gatewayDeleteSession(mode, ccxtCredentialId(ex));
 }

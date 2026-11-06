@@ -8,16 +8,16 @@
  * with TradingView®; naming follows classic Gann angle ratios only.
  */
 
-import type { Drawing, Point, TwoPointDrawing } from '../../drawing-types';
+import type { Point, TwoPointDrawing } from '../../drawing-types';
 import { distToSegment, extendSegment, nearRectEdge } from '../geometry';
 import { resolveLevelPaint } from '../level-palette';
-import { registerToolHandler, type ToolHitCtx, type ToolViewCtx } from './registry';
+import { registerToolHandler } from './registry';
 import {
   clampOpacity,
   clampStrokeWidth,
-  isFinitePoint,
   sanitizePoints,
   sanitizeStrokeColor,
+  asTwoPoint,
 } from './safe';
 
 /** Classic Gann angle ratios (time × price) relative to the 1×1 baseline. */
@@ -34,12 +34,6 @@ const GANN_RATIOS: readonly { t: number; p: number; label: string }[] = [
 /** Internal grid fractions for Gann box (excludes outer 0/1 edges). */
 const BOX_GRID = [0.25, 0.5, 0.75] as const;
 
-function asTwo(d: Drawing, kind?: TwoPointDrawing['kind']): TwoPointDrawing | null {
-  if (kind && d.kind !== kind) return null;
-  if (!('p1' in d) || !('p2' in d) || !d.p1 || !d.p2) return null;
-  if (!isFinitePoint(d.p1) || !isFinitePoint(d.p2)) return null;
-  return d as TwoPointDrawing;
-}
 
 function twoPoint(
   kind: 'gannFan' | 'gannBox' | 'gannSquare',
@@ -101,7 +95,7 @@ registerToolHandler({
     return twoPoint('gannFan', points, color);
   },
   paint(d, ctx) {
-    const t = asTwo(d, 'gannFan');
+    const t = asTwoPoint(d, 'gannFan');
     if (!t) return;
     const a = ctx.toXY(t.p1);
     const b = ctx.toXY(t.p2);
@@ -137,7 +131,7 @@ registerToolHandler({
     }
   },
   hit(d, ctx) {
-    const t = asTwo(d, 'gannFan');
+    const t = asTwoPoint(d, 'gannFan');
     if (!t) return false;
     const a = ctx.toXY(t.p1);
     const b = ctx.toXY(t.p2);
@@ -191,7 +185,7 @@ registerToolHandler({
     return twoPoint('gannBox', points, color, { fillOpacity: 0.08 });
   },
   paint(d, ctx) {
-    const t = asTwo(d, 'gannBox');
+    const t = asTwoPoint(d, 'gannBox');
     if (!t) return;
     const a = ctx.toXY(t.p1);
     const b = ctx.toXY(t.p2);
@@ -240,7 +234,7 @@ registerToolHandler({
     }
   },
   hit(d, ctx) {
-    const t = asTwo(d, 'gannBox');
+    const t = asTwoPoint(d, 'gannBox');
     if (!t) return false;
     const a = ctx.toXY(t.p1);
     const b = ctx.toXY(t.p2);
@@ -303,7 +297,12 @@ function squarePixelCorners(
   };
 }
 
-function squareEdges(c: { x1: number; y1: number; x2: number; y2: number }): [
+function squareEdges(c: {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}): [
   [number, number, number, number],
   [number, number, number, number],
   [number, number, number, number],
@@ -330,7 +329,7 @@ registerToolHandler({
     return twoPoint('gannSquare', points, color, { fillOpacity: 0.06 });
   },
   paint(d, ctx) {
-    const t = asTwo(d, 'gannSquare');
+    const t = asTwoPoint(d, 'gannSquare');
     if (!t) return;
     const a = ctx.toXY(t.p1);
     const b = ctx.toXY(t.p2);
@@ -366,8 +365,24 @@ registerToolHandler({
       ...(ctx.dash ? { 'stroke-dasharray': ctx.dash } : {}),
     });
     // Diagonals
-    ctx.line(sq.x1, sq.y1, sq.x2, sq.y2, resolveLevelPaint(t, 'diagA', ctx.stroke), Math.max(1, sw - 0.25), '3 3');
-    ctx.line(sq.x2, sq.y1, sq.x1, sq.y2, resolveLevelPaint(t, 'diagB', ctx.stroke), Math.max(1, sw - 0.25), '3 3');
+    ctx.line(
+      sq.x1,
+      sq.y1,
+      sq.x2,
+      sq.y2,
+      resolveLevelPaint(t, 'diagA', ctx.stroke),
+      Math.max(1, sw - 0.25),
+      '3 3',
+    );
+    ctx.line(
+      sq.x2,
+      sq.y1,
+      sq.x1,
+      sq.y2,
+      resolveLevelPaint(t, 'diagB', ctx.stroke),
+      Math.max(1, sw - 0.25),
+      '3 3',
+    );
     if (ctx.selected) {
       ctx.circle(a.x, a.y, 5, ctx.stroke, true);
       // Far corner of the square (pixel-sized)
@@ -375,7 +390,7 @@ registerToolHandler({
     }
   },
   hit(d, ctx) {
-    const t = asTwo(d, 'gannSquare');
+    const t = asTwoPoint(d, 'gannSquare');
     if (!t) return false;
     const a = ctx.toXY(t.p1);
     const b = ctx.toXY(t.p2);
@@ -410,7 +425,3 @@ registerToolHandler({
     ctx.line(sq.x2, sq.y1, sq.x1, sq.y2, ctx.stroke, 1, '4 4');
   },
 });
-
-// Keep type imports live for TS unused checks in some configs
-void 0 as unknown as ToolHitCtx;
-void 0 as unknown as ToolViewCtx;

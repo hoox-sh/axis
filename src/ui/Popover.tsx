@@ -65,7 +65,7 @@ const OFFSET = 4;
  * Rendered only while `open` — the outside-dismiss listeners and the
  * reposition listeners exist for exactly as long as the popover does.
  */
-export function Popover(props: PopoverProps) {
+export function Popover(props: PopoverProps): JSX.Element {
   return (
     <Show when={props.open}>
       <PopoverShell {...props} />

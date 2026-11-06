@@ -48,6 +48,9 @@
 
 import type { Env } from './index';
 import { classifyBearerToken, extractBearer, requireApiKey } from './auth';
+import { sha256Hex } from './hash';
+
+export { sha256Hex };
 
 /** Positive verify cache TTL (KV + entry `exp`). */
 export const VERIFY_POSITIVE_TTL_S = 60;
@@ -80,8 +83,21 @@ export interface TenantUsageUnits {
   runs?: number;
 }
 
+/**
+ * Opaque plan limits returned by console verify (`null` when the console sent none).
+ *
+ * Passed through unvalidated: this worker does not enforce limits locally, it only
+ * forwards them to callers.
+ */
 export type VerifyLimits = Record<string, unknown> | null;
 
+/**
+ * Positive verify verdict: the key is valid and holds `scopes`.
+ *
+ * `keyHash` / `keyHash16` are derived from the presented key and are the only form
+ * that may be stored or sent onward; `degraded` marks a verdict that came from the
+ * legacy auth path because the console was unreachable.
+ */
 export interface VerifySuccess {
   ok: true;
   tid: string;
@@ -96,12 +112,22 @@ export interface VerifySuccess {
   cached?: boolean;
 }
 
+/**
+ * Stable failure codes for tenant verify, mapped to HTTP status by
+ * {@link verifyFailureHttp}.
+ *
+ * `VERIFY_UNAVAILABLE` is the only one callers may treat as "retryable/degradable";
+ * the rest are final verdicts for the presented key.
+ */
 export type VerifyFailureCode =
-  | 'INVALID_KEY'
-  | 'ENTITLEMENT_REQUIRED'
-  | 'RATE_LIMITED'
-  | 'VERIFY_UNAVAILABLE';
+  'INVALID_KEY' | 'ENTITLEMENT_REQUIRED' | 'RATE_LIMITED' | 'VERIFY_UNAVAILABLE';
 
+/**
+ * Negative verify verdict.
+ *
+ * `status` is the intended HTTP status and `error` the client-safe message;
+ * `retryAfter` is set only for `RATE_LIMITED`.
+ */
 export interface VerifyFailure {
   ok: false;
   code: VerifyFailureCode;
@@ -110,8 +136,21 @@ export interface VerifyFailure {
   retryAfter?: number;
 }
 
+/**
+ * Outcome of {@link verifyTenant} — check `ok` before reading tenant fields.
+ *
+ * Success carries the console tenant id and scopes; failure carries the code and
+ * status to answer with.
+ */
 export type VerifyResult = VerifySuccess | VerifyFailure;
 
+/**
+ * Cached verify verdict, stored in L1 memory and in `TENANT_KEYS` KV.
+ *
+ * `exp` is epoch **seconds**, so entries survive JSON round-trips unchanged;
+ * `invalid` marks a negative cache hit, and `entitlementRequired` is L1-only because
+ * the key itself stays valid for other scopes.
+ */
 export interface VerifyCacheEntry {
   tid: string;
   plan: string;
@@ -125,21 +164,16 @@ export interface VerifyCacheEntry {
   entitlementRequired?: boolean;
 }
 
+/** Injectable `fetch` signature so verify/flush can run without network in tests. */
 export type VerifyFetchFn = (url: string, init?: RequestInit) => Promise<Response>;
 
+/** Options for {@link verifyTenant} and {@link gateTenantKey}. */
 export interface VerifyOptions {
   /** Override for tests (defaults to global fetch — no network in unit tests). */
   fetchFn?: VerifyFetchFn;
 }
 
 /** SHA-256 hex via Workers `crypto.subtle`. Never applied to log output. */
-export async function sha256Hex(input: string): Promise<string> {
-  const data = new TextEncoder().encode(input);
-  const digest = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(digest))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-}
 
 /** Safe log reference: hash prefix only — never the raw key. */
 export function keyRef(hashHex: string): string {
@@ -169,8 +203,7 @@ function l1GetEntry(key: string, nowMs: number): VerifyCacheEntry | null {
 function l1Set(key: string, value: VerifyCacheEntry): void {
   // Cap L1 residency at L1_TTL_MS regardless of the KV TTL carried by exp.
   const capSec = Math.floor(Date.now() / 1000) + Math.floor(L1_TTL_MS / 1000);
-  const capped: VerifyCacheEntry =
-    value.exp > capSec ? { ...value, exp: capSec } : value;
+  const capped: VerifyCacheEntry = value.exp > capSec ? { ...value, exp: capSec } : value;
   if (l1.has(key)) l1.delete(key);
   l1.set(key, capped);
   while (l1.size > L1_MAX_ENTRIES) {
@@ -193,9 +226,7 @@ function asCacheEntry(raw: unknown, nowSec: number): VerifyCacheEntry | null {
     return { tid: '', plan: '', scopes: [], limits: null, exp: o['exp'] as number, invalid: true };
   }
   if (!Array.isArray(o['scopes'])) return null;
-  const scopes = (o['scopes'] as unknown[]).filter(
-    (s): s is string => typeof s === 'string',
-  );
+  const scopes = (o['scopes'] as unknown[]).filter((s): s is string => typeof s === 'string');
   const tid = typeof o['tid'] === 'string' ? (o['tid'] as string) : 'unknown';
   const plan = typeof o['plan'] === 'string' ? (o['plan'] as string) : 'unknown';
   const limits =
@@ -205,7 +236,12 @@ function asCacheEntry(raw: unknown, nowSec: number): VerifyCacheEntry | null {
   return { tid, plan, scopes, limits, exp: o['exp'] as number };
 }
 
-async function kvPut(env: Env, key: string, entry: VerifyCacheEntry, ttlSec: number): Promise<void> {
+async function kvPut(
+  env: Env,
+  key: string,
+  entry: VerifyCacheEntry,
+  ttlSec: number,
+): Promise<void> {
   try {
     await env.TENANT_KEYS?.put(key, JSON.stringify(entry), {
       expirationTtl: ttlSec,
@@ -274,8 +310,14 @@ export async function verifyTenant(
     if (hit.invalid) return invalidFailure();
     if (!hit.scopes.includes(scope)) return entitlementFailure(scope);
     return {
-      ok: true, tid: hit.tid, plan: hit.plan, scopes: hit.scopes, limits: hit.limits,
-      keyHash: hash, keyHash16: hash16, cached: true,
+      ok: true,
+      tid: hit.tid,
+      plan: hit.plan,
+      scopes: hit.scopes,
+      limits: hit.limits,
+      keyHash: hash,
+      keyHash16: hash16,
+      cached: true,
     };
   }
 
@@ -289,8 +331,14 @@ export async function verifyTenant(
         if (entry.invalid) return invalidFailure();
         if (!entry.scopes.includes(scope)) return entitlementFailure(scope);
         return {
-          ok: true, tid: entry.tid, plan: entry.plan, scopes: entry.scopes, limits: entry.limits,
-          keyHash: hash, keyHash16: hash16, cached: true,
+          ok: true,
+          tid: entry.tid,
+          plan: entry.plan,
+          scopes: entry.scopes,
+          limits: entry.limits,
+          keyHash: hash,
+          keyHash16: hash16,
+          cached: true,
         };
       }
     } catch {
@@ -316,7 +364,9 @@ export async function verifyTenant(
       },
       // Bound the console round trip — an unreachable console must degrade
       // fast, never pin the isolate (A11).
-      ...(typeof AbortSignal.timeout === 'function' ? { signal: AbortSignal.timeout(VERIFY_TIMEOUT_MS) } : {}),
+      ...(typeof AbortSignal.timeout === 'function'
+        ? { signal: AbortSignal.timeout(VERIFY_TIMEOUT_MS) }
+        : {}),
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -328,8 +378,12 @@ export async function verifyTenant(
 
   if (res.status === 401) {
     const entry: VerifyCacheEntry = {
-      tid: '', plan: '', scopes: [], limits: null,
-      exp: nowSec + VERIFY_NEGATIVE_TTL_S, invalid: true,
+      tid: '',
+      plan: '',
+      scopes: [],
+      limits: null,
+      exp: nowSec + VERIFY_NEGATIVE_TTL_S,
+      invalid: true,
     };
     l1Set(cacheKey, entry);
     await kvPut(env, cacheKey, entry, VERIFY_NEGATIVE_TTL_S);
@@ -340,8 +394,12 @@ export async function verifyTenant(
     // Key valid, required scope missing. Cache the verdict in L1 only
     // (the key itself is valid for other scopes — never KV-negative it).
     l1Set(scopedKey, {
-      tid: '', plan: '', scopes: [], limits: null,
-      exp: nowSec + VERIFY_POSITIVE_TTL_S, entitlementRequired: true,
+      tid: '',
+      plan: '',
+      scopes: [],
+      limits: null,
+      exp: nowSec + VERIFY_POSITIVE_TTL_S,
+      entitlementRequired: true,
     });
     return entitlementFailure(scope);
   }
@@ -350,7 +408,10 @@ export async function verifyTenant(
     const rawRetry = res.headers.get('Retry-After');
     const parsed = rawRetry !== null ? Number(rawRetry) : NaN;
     const failure: VerifyFailure = {
-      ok: false, code: 'RATE_LIMITED', status: 429, error: 'Rate limited — retry shortly',
+      ok: false,
+      code: 'RATE_LIMITED',
+      status: 429,
+      error: 'Rate limited — retry shortly',
     };
     if (Number.isFinite(parsed) && parsed >= 0) failure.retryAfter = parsed;
     return failure;
@@ -385,23 +446,29 @@ export async function verifyTenant(
         : 'unknown';
   const plan = typeof body['plan'] === 'string' ? (body['plan'] as string) : 'unknown';
   const limits =
-    body['limits'] !== null &&
-    body['limits'] !== undefined &&
-    typeof body['limits'] === 'object'
+    body['limits'] !== null && body['limits'] !== undefined && typeof body['limits'] === 'object'
       ? (body['limits'] as Record<string, unknown>)
       : null;
 
   // Client-side scope enforcement (console may ignore `?scope=`).
   if (!scopes.includes(scope)) {
     l1Set(scopedKey, {
-      tid, plan, scopes, limits,
-      exp: nowSec + VERIFY_POSITIVE_TTL_S, entitlementRequired: true,
+      tid,
+      plan,
+      scopes,
+      limits,
+      exp: nowSec + VERIFY_POSITIVE_TTL_S,
+      entitlementRequired: true,
     });
     return entitlementFailure(scope);
   }
 
   const entry: VerifyCacheEntry = {
-    tid, plan, scopes, limits, exp: nowSec + VERIFY_POSITIVE_TTL_S,
+    tid,
+    plan,
+    scopes,
+    limits,
+    exp: nowSec + VERIFY_POSITIVE_TTL_S,
   };
   l1Set(cacheKey, entry);
   await kvPut(env, cacheKey, entry, VERIFY_POSITIVE_TTL_S);
@@ -416,6 +483,15 @@ export interface TenantHttpError {
   retryAfter?: number;
 }
 
+/**
+ * Converts a verify failure into the HTTP answer a route should send.
+ *
+ * Only `RATE_LIMITED` with a `retryAfter` keeps the header; every other code passes
+ * its status and message through unchanged.
+ *
+ * @param f - Failure from {@link verifyTenant}.
+ * @returns Status, stable `code`, client-safe `message`, and optional `retryAfter`.
+ */
 export function verifyFailureHttp(f: VerifyFailure): TenantHttpError {
   if (f.code === 'RATE_LIMITED' && f.retryAfter !== undefined) {
     return { status: 429, code: f.code, message: f.error, retryAfter: f.retryAfter };
@@ -423,6 +499,13 @@ export function verifyFailureHttp(f: VerifyFailure): TenantHttpError {
   return { status: f.status, code: f.code, message: f.error };
 }
 
+/**
+ * Gate verdict allowing the request through.
+ *
+ * `userId` is the DO partition id (key-hash shard when verified live, legacy
+ * `userId` when degraded); `tid` is `''` in degraded mode, which also disables
+ * metering.
+ */
 export interface TenantAllow {
   decision: 'allow';
   /** DO partition id: key-hash shard (verify-ok) or legacy `userId` (degraded). */
@@ -434,6 +517,7 @@ export interface TenantAllow {
   keyHash16: string;
 }
 
+/** Gate verdict rejecting the request; `retryAfter` accompanies a 429. */
 export interface TenantDeny {
   decision: 'deny';
   status: number;
@@ -442,6 +526,7 @@ export interface TenantDeny {
   retryAfter?: number;
 }
 
+/** Result of {@link gateTenantKey}: `null` means "not a tenant key, use legacy auth". */
 export type TenantGate = TenantAllow | TenantDeny;
 
 /**
@@ -464,16 +549,23 @@ export async function gateTenantKey(
   const v = await verifyTenant(env, token, scope, opts);
   if (v.ok) {
     return {
-      decision: 'allow', userId: v.keyHash.slice(0, 32), tid: v.tid,
-      degraded: v.degraded === true, keyHash: v.keyHash, keyHash16: v.keyHash16,
+      decision: 'allow',
+      userId: v.keyHash.slice(0, 32),
+      tid: v.tid,
+      degraded: v.degraded === true,
+      keyHash: v.keyHash,
+      keyHash16: v.keyHash16,
     };
   }
   if (v.code !== 'VERIFY_UNAVAILABLE') {
     const http = verifyFailureHttp(v);
     if (http.retryAfter !== undefined) {
       return {
-        decision: 'deny', status: http.status, code: http.code,
-        message: http.message, retryAfter: http.retryAfter,
+        decision: 'deny',
+        status: http.status,
+        code: http.code,
+        message: http.message,
+        retryAfter: http.retryAfter,
       };
     }
     return { decision: 'deny', status: http.status, code: http.code, message: http.message };
@@ -481,8 +573,12 @@ export async function gateTenantKey(
   const legacy = await requireApiKey(req, env);
   if (legacy.ok) {
     return {
-      decision: 'allow', userId: legacy.ctx.userId, tid: '',
-      degraded: true, keyHash: '', keyHash16: '',
+      decision: 'allow',
+      userId: legacy.ctx.userId,
+      tid: '',
+      degraded: true,
+      keyHash: '',
+      keyHash16: '',
     };
   }
   const http = verifyFailureHttp(v);
@@ -491,6 +587,12 @@ export async function gateTenantKey(
 
 // ── Usage metering ────────────────────────────────────────────────
 
+/**
+ * One metered action, in the shape `POST {CONSOLE_URL}/api/v1/usage` expects.
+ *
+ * `idem` makes a replayed flush a no-op at the console; `day` is the UTC date the
+ * event was queued.
+ */
 export interface TenantUsageEvent {
   tid: string;
   scope: string;
@@ -500,6 +602,12 @@ export interface TenantUsageEvent {
   day?: string;
 }
 
+/**
+ * Input to {@link queueUsage}.
+ *
+ * A missing/zero `units` is normalized to `{ runs: 1 }`; a `tid` of `unknown` drops
+ * the event instead of queueing it.
+ */
 export interface QueueTenantUsageInput {
   tid: string;
   scope: TenantScope | string;
@@ -511,6 +619,7 @@ export interface QueueTenantUsageInput {
   service?: string;
 }
 
+/** Options for {@link flushUsage}. */
 export interface FlushUsageOpts {
   /** Override for tests (defaults to global fetch). */
   fetchFn?: VerifyFetchFn;
@@ -597,9 +706,8 @@ function resolveServiceAuth(env: Env, authToken?: string): string {
   const explicit = String(authToken ?? '').trim();
   if (explicit) return explicit;
   try {
-    const fromEnv = String(
-      (env as unknown as { USAGE_SERVICE_KEY?: unknown }).USAGE_SERVICE_KEY ?? '',
-    ).trim();
+    // `USAGE_SERVICE_KEY` is declared on `Env` (optional) — no bridge cast needed.
+    const fromEnv = String(env.USAGE_SERVICE_KEY ?? '').trim();
     if (fromEnv) return fromEnv;
   } catch {
     /* ignore */
@@ -620,7 +728,9 @@ export async function flushUsage(
 ): Promise<number> {
   try {
     if (usageQueue.length === 0) return 0;
-    const base = String(env.CONSOLE_URL ?? '').trim().replace(/\/+$/, '');
+    const base = String(env.CONSOLE_URL ?? '')
+      .trim()
+      .replace(/\/+$/, '');
     if (!base) {
       // No console: lossy-drop the queue (same as transport failure below) so
       // an unconfigured deploy can never wedge the isolate at USAGE_QUEUE_MAX.

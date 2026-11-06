@@ -34,6 +34,12 @@ import type { PaneManager } from '../chart/pane-manager';
 import type { Bar } from '../store/types';
 import type { RunResult } from './runner';
 
+/**
+ * Inputs for {@link buildStrategyMarkerPlan} and {@link applyStrategyMarkers}:
+ * the pane manager, the run result, its script type, the silence flag, the
+ * owner id, and the exact bars the engine evaluated (`bar_index` is relative to
+ * that window).
+ */
 export interface StrategyApplyContext {
   manager: PaneManager;
   result: RunResult;
@@ -150,6 +156,19 @@ function logStrategyPlan(ctx: StrategyApplyContext, plan: StrategyMarkerPlan): v
   }
 }
 
+/**
+ * Paint this run's strategy trade markers and log the report summary.
+ *
+ * Owner-scoped `setTradeMarkers`, so removing the script clears only its own
+ * labels; silent live re-runs merge instead of replacing, which keeps prior
+ * entry/exit labels across forming ticks. An interactive run with zero events
+ * clears the owner's markers and warns when the script is a strategy; a silent
+ * run never clears, so it cannot wipe a sibling script's markers. When closed
+ * trades exist it also opens the Results drawer on the Strategy tab.
+ *
+ * @param ctx - manager, run result, script type, silent flag, owner, bars
+ * @param plan - prebuilt plan; rebuilt here when omitted (its throw propagates)
+ */
 export function applyStrategyMarkers(ctx: StrategyApplyContext, plan?: StrategyMarkerPlan): void {
   // Strategy: trade markers on price pane + report stats.
   // Equity curve is rendered in Results → Strategy only (no main-chart equity pane).

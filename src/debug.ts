@@ -59,10 +59,13 @@ export const AXIS_DEBUG_STORAGE_KEY = 'axis.debug';
 /** Forming-tick / live-delta sample interval (ms). */
 export const AXIS_DEBUG_TICK_SAMPLE_MS = 1000;
 
+/** Log channel: `chart` actions vs `engine` / live-wire events. */
 export type AxisDebugScope = 'chart' | 'engine';
 
+/** Structured payload attached to one debug event (console + rotating log ring). */
 export type AxisDebugData = Record<string, unknown>;
 
+/** Which switch turned debug on; `env` outranks `storage`, `off` means neither. */
 export type AxisDebugSource = 'env' | 'storage' | 'off';
 
 function envTruthy(raw: unknown): boolean {

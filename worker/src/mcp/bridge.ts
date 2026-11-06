@@ -23,6 +23,16 @@ export const BRIDGE_TICKET_TTL_MS = 30_000;
 const BRIDGE_MAX_BODY_BYTES = 1_048_576;
 const TICKET_KEY_PREFIX = 'tkt:';
 
+/**
+ * Splits a bridge ticket into its parts.
+ *
+ * The ticket is `<userId>.<nonce>`, both 32 hex chars. `userId` selects the DO
+ * partition; only the nonce is forwarded, and the DO consumes it once so a replayed
+ * URL cannot open a second socket.
+ *
+ * @param ticket - Raw `?ticket=` value from the WebSocket URL.
+ * @returns The parsed pair, or `null` when the shape does not match.
+ */
 export function parseBridgeTicket(ticket: string): { userId: string; nonce: string } | null {
   const m = /^([a-f0-9]{32})\.([a-f0-9]{32})$/.exec(ticket.trim());
   const userId = m?.[1];
@@ -31,6 +41,12 @@ export function parseBridgeTicket(ticket: string): { userId: string; nonce: stri
   return { userId, nonce };
 }
 
+/**
+ * Builds a bridge ticket for the `/ws` upgrade.
+ *
+ * @param userId - 32-hex key partition the ticket is scoped to.
+ * @param nonce - 32-hex single-use value the DO keeps until it expires.
+ */
 export function formatBridgeTicket(userId: string, nonce: string): string {
   return `${userId}.${nonce}`;
 }
@@ -80,7 +96,11 @@ function pickInvokeSocket(sockets: WebSocket[]): WebSocket | null {
 }
 
 /**
- * Per-user MCP bridge. Bind as `MCP_BRIDGE` / class `McpBridgeDO`.
+ * One connected PWA tab, as reported in its `hello` frame.
+ *
+ * `symbol` / `interval` / `chartType` are the tab's view state (nullable because a tab
+ * may attach before a chart exists); `attachedAt` is when the bridge accepted the
+ * socket.
  */
 export interface TabInfo {
   tabId: string;
@@ -90,6 +110,13 @@ export interface TabInfo {
   attachedAt: number;
 }
 
+/**
+ * Per-user MCP bridge Durable Object — bind as `MCP_BRIDGE` / class `McpBridgeDO`.
+ *
+ * Holds the PWA control-plane sockets for one API key so app-plane tools can reach a
+ * connected tab. Invokes are routed to the newest attached tab unless a tab has been
+ * selected, and only the socket an invoke was sent to may settle it.
+ */
 export class McpBridgeDO {
   private readonly state: DurableObjectState;
   private readonly pending = new Map<string, Pending>();

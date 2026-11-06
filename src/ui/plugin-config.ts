@@ -32,6 +32,7 @@ import type { ConfigSchema } from '../plugins/types';
 import { pluginKey } from '../plugins/types';
 import { setStore, store } from '../store';
 
+/** Datafeed gateway flavor used when listing CCXT exchanges. */
 export type GatewayMode = 'auto' | 'pyne' | 'sidecar';
 
 /** A plugin that contributes config fields (source or stream). */

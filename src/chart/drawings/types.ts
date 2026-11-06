@@ -171,14 +171,7 @@ export interface ToolSpec {
  * Hit-target id for move/resize.
  * `body` moves the whole drawing; `price` is hline; `p1`/`p2`/`p3`/`pN` are anchors.
  */
-export type HandleId =
-  | 'body'
-  | 'price'
-  | 'p1'
-  | 'p2'
-  | 'p3'
-  | `p${number}`
-  | string;
+export type HandleId = 'body' | 'price' | 'p1' | 'p2' | 'p3' | `p${number}` | string;
 
 /** Interactive control point exposed for hit-testing and drag. */
 export interface Handle {
@@ -232,17 +225,12 @@ export type MagnetMode = 'off' | 'weak' | 'strong';
  * Legacy kinds only — mirrors `drawing-types.ts` `DrawingKind`.
  * Used by migration helpers and stored-data loaders.
  */
-export type LegacyDrawingKind =
-  | 'hline'
-  | 'trend'
-  | 'ray'
-  | 'rect'
-  | 'fib'
-  | 'measure'
-  | 'text';
+export type LegacyDrawingKind = 'hline' | 'trend' | 'ray' | 'rect' | 'fib' | 'measure' | 'text';
 
+/** Legacy tool id: `cursor` plus the pre-unified drawing kinds. */
 export type LegacyDrawingToolId = 'cursor' | LegacyDrawingKind;
 
+/** Shared legacy drawing fields: id, kind, flat stroke color, optional label. */
 export interface LegacyDrawingBase {
   id: string;
   kind: LegacyDrawingKind;
@@ -275,10 +263,7 @@ export interface LegacyTextDrawing extends LegacyDrawingBase {
  * Discriminated union matching the old `Drawing` type from `drawing-types.ts`.
  * Prefer unified {@link Drawing} for new code.
  */
-export type LegacyDrawing =
-  | LegacyHLineDrawing
-  | LegacyTwoPointDrawing
-  | LegacyTextDrawing;
+export type LegacyDrawing = LegacyHLineDrawing | LegacyTwoPointDrawing | LegacyTextDrawing;
 
 /** @deprecated Use {@link LegacyHLineDrawing} — kept for migration naming. */
 export type HLineDrawing = LegacyHLineDrawing;
@@ -291,5 +276,7 @@ export type TextDrawing = LegacyTextDrawing;
  * Type-guard / migration helper contracts (implementations live in later slices).
  */
 export type IsLegacyDrawing = (value: unknown) => value is LegacyDrawing;
+/** Convert a legacy drawing into the unified {@link Drawing} shape. */
 export type MigrateLegacyDrawing = (legacy: LegacyDrawing) => Drawing;
+/** True when a value is already a unified {@link Drawing}. */
 export type IsUnifiedDrawing = (value: unknown) => value is Drawing;

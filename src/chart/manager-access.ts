@@ -31,19 +31,13 @@ import { DrawingLayer } from './drawing-layer';
 import { createPriceSeries, createVolumeSeries } from './series-factory';
 import {
   mapBarsToPriceData,
-  isOhlcChartType,
   normalizeChartType,
   resetHeikinAshiCache,
   resetHaCacheHolder,
   lastBarDirection,
   type ChartType,
 } from './chart-type';
-import {
-  heavyTimeScaleOptions,
-  isHeavyBarLoad,
-  isVeryHeavyBarLoad,
-  mapBarsToVolumeData,
-} from './heavy-data';
+import { heavyTimeScaleOptions, isHeavyBarLoad, isVeryHeavyBarLoad } from './heavy-data';
 import { notePaintedCandleRange, filterValidCandleRows } from './series-sanitize';
 import {
   formatPriceWithDecimals,
@@ -212,7 +206,13 @@ export function getManager(): PaneManager | undefined {
   return manager;
 }
 
-export function setManager(m: PaneManager | undefined, slotId?: string) {
+/**
+ * Register the active chart manager and mirror it into the slot registry.
+ *
+ * @param m live PaneManager, or `undefined` on teardown
+ * @param slotId slot to register under; defaults to the active slot id
+ */
+export function setManager(m: PaneManager | undefined, slotId?: string): void {
   const id = slotId || getActiveSlotId();
   if (id) setSlotManager(id, m);
   // Keep legacy pointer on active slot for tests / single-chart
@@ -296,7 +296,7 @@ export function ensureScriptPaneLayer(paneId: string): DrawingLayer | undefined 
 }
 
 /** Hide/show user + Pine drawings on the price layer and every script pane. */
-export function setHideDrawingsAll(on: boolean) {
+export function setHideDrawingsAll(on: boolean): void {
   getDrawingLayer()?.setHideDrawings(on);
   for (const layer of scriptPaneLayers.values()) {
     try {
@@ -308,7 +308,7 @@ export function setHideDrawingsAll(on: boolean) {
 }
 
 /** Drop script-only layers (history reload / pane destroy). */
-export function clearScriptPaneLayers() {
+export function clearScriptPaneLayers(): void {
   for (const layer of scriptPaneLayers.values()) {
     try {
       layer.destroy();
@@ -320,7 +320,7 @@ export function clearScriptPaneLayers() {
 }
 
 /** Drop one script-only layer when its sub-pane is destroyed. */
-export function clearScriptPaneLayer(paneId: string) {
+export function clearScriptPaneLayer(paneId: string): void {
   if (!paneId) return;
   const layer = scriptPaneLayers.get(paneId);
   if (!layer) return;
@@ -333,7 +333,7 @@ export function clearScriptPaneLayer(paneId: string) {
 }
 
 /** Replace or clear the module-local layer ref (e.g. on chart teardown). */
-export function setDrawingLayer(layer: DrawingLayer | undefined, slotId?: string) {
+export function setDrawingLayer(layer: DrawingLayer | undefined, slotId?: string): void {
   const id = slotId || getActiveSlotId();
   if (id) setSlotDrawingLayer(id, layer);
   if (!id || id === getActiveSlotId()) {
@@ -426,6 +426,7 @@ function ensureDrawingLayer() {
   }
 }
 
+/** Knobs for {@link setDataToChart}: fit, script-state clearing, and paint target. */
 export type SetDataToChartOpts = {
   /** Reset viewport to fit all bars (full loads only; never live ticks). Default true. */
   fit?: boolean;
@@ -650,8 +651,18 @@ function writeLogicalRange(
   }
 }
 
-export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
-  return perfMeasureSync('axis:setDataToChart', () => {
+/**
+ * Paint OHLCV into the price and volume panes, then refresh price-scale
+ * decimals, last-value labels, and the per-symbol drawing layer.
+ *
+ * Skips the LWC write when the paint signature is unchanged, and never throws
+ * (failures are reported through `reportUiError`).
+ *
+ * @param bars full bar window for the target chart (unix seconds, quote currency)
+ * @param opts paint target and clearing knobs; `fit` defaults to true
+ */
+export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}): void {
+  perfMeasureSync('axis:setDataToChart', () => {
     const active = getManager();
     const mgr = opts.manager ?? active;
     if (!mgr) return;
@@ -806,11 +817,7 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
             const t = Number(row?.time);
             if (Number.isFinite(t)) nextCandleTimes.add(t);
           }
-          const prepare = (
-            mgr as unknown as {
-              prepareCoPaintedForCandleTimes?: (times: ReadonlySet<number>) => void;
-            }
-          ).prepareCoPaintedForCandleTimes;
+          const prepare = mgr.prepareCoPaintedForCandleTimes;
           if (typeof prepare === 'function') prepare.call(mgr, nextCandleTimes);
           pricePane.series['candle'].setData(cleanData as never);
           writeLogicalRange(pricePane.chart, keepRange);
@@ -823,15 +830,7 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
               const t = Number(row?.time);
               if (Number.isFinite(t)) candleTimes.push(t);
             }
-            const perChart = (
-              mgr as unknown as {
-                notePaintedCandleRange?: (
-                  first: number,
-                  last: number,
-                  times?: readonly number[],
-                ) => void;
-              }
-            ).notePaintedCandleRange;
+            const perChart = mgr.notePaintedCandleRange;
             if (typeof perChart === 'function') {
               perChart.call(mgr, firstT, lastT, candleTimes);
             } else {
@@ -966,7 +965,7 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
  * Apply or clear debug-pin markers on the active chart from `store.lastRun`.
  * No-op when manager is missing; clears markers when disabled or empty.
  */
-export function applyDebugPinsToChart(enabled?: boolean) {
+export function applyDebugPinsToChart(enabled?: boolean): void {
   const mgr = getManager();
   if (!mgr) return;
   try {
@@ -995,7 +994,7 @@ export function applyDebugPinsToChart(enabled?: boolean) {
  * Jump chart + Data Window crosshair to a debug pin / log bar.
  * Resolves barIndex ↔ time via `store.bars` when one side is missing.
  */
-export function jumpToDebugPin(pin: Pick<DebugPin, 'time' | 'barIndex'> | null | undefined) {
+export function jumpToDebugPin(pin: Pick<DebugPin, 'time' | 'barIndex'> | null | undefined): void {
   if (pin == null) return;
   const { time, barIndex } = resolveDebugPinTarget(pin, store.bars);
   setCrosshair(time, barIndex);

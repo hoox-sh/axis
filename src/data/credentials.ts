@@ -39,6 +39,10 @@ import { createEmitter } from '../utils/emitter';
 /** True: vault is RAM-only. Phase 1.5: Tauri keychain / AES-GCM wrap. */
 export const CREDENTIALS_MEMORY_ONLY = true;
 
+/**
+ * One entry in the RAM-only credential vault. Never persisted — secrets stay in
+ * this process and are cloned on every read so callers cannot mutate the vault.
+ */
 export type ExchangeCredential = {
   id: string; // `venue:binance` or `ccxt:bybit`
   venue: ProviderVenue;
@@ -51,6 +55,10 @@ export type ExchangeCredential = {
   label?: string;
 };
 
+/**
+ * Secret-free projection of a vault entry for UI lists: presence flags only, so
+ * a settings panel can show "configured" without ever holding the key material.
+ */
 export type CredentialMeta = {
   id: string;
   venue: ProviderVenue;
@@ -69,6 +77,12 @@ export function ccxtCredentialId(exchange: string): string {
     .toLowerCase()}`;
 }
 
+/**
+ * True when `id` names a CCXT-gateway entry (`ccxt:` prefix plus a non-empty
+ * exchange). Such entries bypass the one-credential-per-venue rule.
+ *
+ * @param id - Vault id, e.g. `ccxt:bybit`.
+ */
 export function isCcxtCredentialId(id: string): boolean {
   return id.startsWith('ccxt:') && id.length > 5;
 }
@@ -117,12 +131,17 @@ function notify(): void {
   credentialsEmitter.emit();
 }
 
+/**
+ * Exchange id configured on the CCXT source/stream plugin bag, lowercased.
+ * Returns `''` when neither bag names one (or the store is unavailable) —
+ * callers must treat empty as "no CCXT venue selected".
+ */
 export function activeCcxtExchange(): string {
   try {
     const bags = store.pluginsConfig || {};
     const src = bags['source:ccxt-rest'] as Record<string, unknown> | undefined;
     const stm = bags['stream:ccxt-ws'] as Record<string, unknown> | undefined;
-    const ex = String(src?.exchange || stm?.exchange || '')
+    const ex = String(src?.['exchange'] || stm?.['exchange'] || '')
       .trim()
       .toLowerCase();
     return ex;
@@ -131,12 +150,16 @@ export function activeCcxtExchange(): string {
   }
 }
 
+/**
+ * Gateway configured for the CCXT plugins. Any value other than `pyne` or
+ * `sidecar` — including a missing bag — collapses to `auto`.
+ */
 export function activeCcxtGateway(): 'auto' | 'pyne' | 'sidecar' {
   try {
     const bags = store.pluginsConfig || {};
     const src = bags['source:ccxt-rest'] as Record<string, unknown> | undefined;
     const stm = bags['stream:ccxt-ws'] as Record<string, unknown> | undefined;
-    const g = String(src?.gateway || stm?.gateway || 'auto');
+    const g = String(src?.['gateway'] || stm?.['gateway'] || 'auto');
     return g === 'pyne' || g === 'sidecar' ? g : 'auto';
   } catch {
     return 'auto';
@@ -178,6 +201,15 @@ function syncStoreOnDelete(id: string): void {
   applyProviderVaultAuth(undefined, false);
 }
 
+/**
+ * Store a credential in the RAM vault and return a clone of what was stored.
+ * A non-CCXT id replaces the venue's previous entry (v1 keeps one per venue);
+ * when the active chart provider is that venue, the store is flipped to
+ * vault-auth and subscribers are notified. Secrets are never written to disk.
+ *
+ * @param input - Credential fields; `id` defaults to `venue:<venue>`.
+ * @returns A clone, safe for the caller to keep.
+ */
 export function putCredential(
   input: Omit<ExchangeCredential, 'id'> & { id?: string },
 ): ExchangeCredential {
@@ -207,6 +239,13 @@ export function putCredential(
   return cloneCred(cred);
 }
 
+/**
+ * Store a CCXT-gateway credential under `ccxt:<exchange>` with venue
+ * `generic`, so several exchanges can be configured side by side.
+ *
+ * @param input - Exchange id plus secrets; the id is trimmed and lowercased.
+ * @throws Error when the exchange id is empty.
+ */
 export function putCcxtCredential(input: {
   exchange: string;
   apiKey: string;
@@ -231,25 +270,50 @@ export function putCcxtCredential(input: {
   });
 }
 
+/**
+ * CCXT credential for `exchange` (case-insensitive), or `undefined` when none
+ * is stored. The returned object is a clone.
+ */
 export function getCcxtCredential(exchange: string): ExchangeCredential | undefined {
   return getCredential(ccxtCredentialId(exchange));
 }
 
+/**
+ * True when a CCXT credential exists for `exchange` **and** carries both an API
+ * key and a secret — presence alone is not enough to sign a request.
+ */
 export function hasCcxtCredential(exchange: string): boolean {
   const c = getCcxtCredential(exchange);
   return !!(c && c.apiKey && c.secret);
 }
 
+/**
+ * Clone of the vault entry for `id`, or `undefined` when the id is unknown.
+ * Mutating the result cannot corrupt the vault.
+ *
+ * @param id - Vault id (`venue:<venue>` or `ccxt:<exchange>`).
+ */
 export function getCredential(id: string): ExchangeCredential | undefined {
   const c = vault.get(id);
   return c ? cloneCred(c) : undefined;
 }
 
+/**
+ * Clone of the venue's current credential, or `undefined`. Only the venue index
+ * is consulted — CCXT entries are reached through {@link getCcxtCredential}.
+ */
 export function getCredentialForVenue(venue: ProviderVenue): ExchangeCredential | undefined {
   const id = byVenue.get(venue);
   return id ? getCredential(id) : undefined;
 }
 
+/**
+ * Drop a vault entry and clear the store's vault-auth flag if the chart was
+ * using it. Notifies subscribers.
+ *
+ * @param id - Vault id to remove.
+ * @returns `false` when the id was not present (nothing changed).
+ */
 export function deleteCredential(id: string): boolean {
   const cred = vault.get(id);
   if (!cred) return false;
@@ -260,15 +324,27 @@ export function deleteCredential(id: string): boolean {
   return true;
 }
 
+/**
+ * Secret-free metadata for every stored credential — the only list form that is
+ * safe to render or export. Flags show which fields are present, not their value.
+ */
 export function listCredentialMeta(): CredentialMeta[] {
   return [...vault.values()].map(toMeta);
 }
 
+/**
+ * True when the venue index points at a vault entry. Says nothing about the
+ * key/secret being non-empty — use {@link hasSignedCreds} for that.
+ */
 export function hasCredentialForVenue(venue: ProviderVenue): boolean {
   const id = byVenue.get(venue);
   return !!(id && vault.has(id));
 }
 
+/**
+ * Wipe the whole vault and the venue index, clear any vault-auth flag on the
+ * store, and notify subscribers. RAM only — there is no durable copy to erase.
+ */
 export function clearCredentials(): void {
   const ids = [...vault.keys()];
   vault.clear();
@@ -277,6 +353,12 @@ export function clearCredentials(): void {
   notify();
 }
 
+/**
+ * Listen for vault mutations (put / delete / clear).
+ *
+ * @param cb - Called with no arguments after each change.
+ * @returns Unsubscribe function.
+ */
 export function subscribeCredentials(cb: () => void): () => void {
   return credentialsEmitter.on(cb);
 }

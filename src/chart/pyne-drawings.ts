@@ -218,12 +218,12 @@ export function resolveDrawingLimits(
     // Prefer top-level meta, then nested declaration/kwargs blobs if present.
     const direct = coerceLimit(meta[key], key);
     if (direct != null) return direct;
-    const decl = meta.declaration;
+    const decl = meta['declaration'];
     if (decl && typeof decl === 'object') {
       const d = decl as Record<string, unknown>;
       const fromDecl = coerceLimit(d[key], key);
       if (fromDecl != null) return fromDecl;
-      const kw = d.kwargs;
+      const kw = d['kwargs'];
       if (kw && typeof kw === 'object') {
         const fromKw = coerceLimit((kw as Record<string, unknown>)[key], key);
         if (fromKw != null) return fromKw;
@@ -337,8 +337,8 @@ function parsePolylinePoints(raw: unknown): Array<{ time: number; price: number 
     if (!p || typeof p !== 'object') continue;
     const pr = p as Record<string, unknown>;
     // Interpret: time/t · Compile ChartPoint: x/index · price/p/y
-    const t = num(pr.time ?? pr.t ?? pr.x ?? pr.index);
-    const price = num(pr.price ?? pr.p ?? pr.y);
+    const t = num(pr['time'] ?? pr['t'] ?? pr['x'] ?? pr['index']);
+    const price = num(pr['price'] ?? pr['p'] ?? pr['y']);
     if (t == null || price == null) continue;
     points.push({ time: t, price });
     // Cap anchors so a single polyline cannot explode SVG path cost.
@@ -442,6 +442,13 @@ export function normalizeYloc(raw: unknown, fallback = 'price'): string {
 /** Pixel Y delta so above/below-bar labels sit off the wick (SVG Y down). */
 export const YLOC_PAD_PX = 8;
 
+/**
+ * Vertical pixel nudge for a label anchored to a bar.
+ *
+ * @param yloc Pine `yloc.*` token, with or without the `yloc.` prefix
+ * @returns -{@link YLOC_PAD_PX} for `abovebar`, +{@link YLOC_PAD_PX} for `belowbar`,
+ *   else 0 (SVG Y grows downward)
+ */
 export function ylocPixelOffset(yloc: string | undefined | null): number {
   const y = (yloc || 'price').toLowerCase().replace(/^yloc\./, '');
   if (y === 'abovebar') return -YLOC_PAD_PX;
@@ -761,7 +768,7 @@ export function normalizeScriptDrawings(
     if (!item || typeof item !== 'object') continue;
     const r = item as Record<string, unknown>;
     // Cap type/kind string work — refuse absurd keys.
-    const typeRaw = r.type ?? r.kind;
+    const typeRaw = r['type'] ?? r['kind'];
     if (typeRaw != null && typeof typeRaw === 'string' && typeRaw.length > 64) continue;
     const type = String(typeRaw || '')
       .toLowerCase()
@@ -774,7 +781,7 @@ export function normalizeScriptDrawings(
     if (type === 'polyline') {
       // Vertices go through the same run-axis conversion as t1/t2: compile-mode
       // polylines carry `x`/`index` (window-relative) rather than a time.
-      const points = parsePolylinePoints(r.points ?? r.arg0 ?? r.pts).map((p) => ({
+      const points = parsePolylinePoints(r['points'] ?? r['arg0'] ?? r['pts']).map((p) => ({
         time: align(p.time) ?? p.time,
         price: p.price,
       }));
@@ -786,44 +793,44 @@ export function normalizeScriptDrawings(
         p1: points[0]!.price,
         t2: points[points.length - 1]!.time,
         p2: points[points.length - 1]!.price,
-        color: pineStrokeColor(r.color, '#939fff'),
-        width: clampWidth(r.width, 1),
-        style: normalizeLineStyle(r.style, 'solid'),
-        closed: Boolean(r.closed),
+        color: pineStrokeColor(r['color'], '#939fff'),
+        width: clampWidth(r['width'], 1),
+        style: normalizeLineStyle(r['style'], 'solid'),
+        closed: Boolean(r['closed']),
         points,
         bgcolor: pineStrokeColor(
-          r.fill_color ?? r.fillColor ?? r.bgcolor,
+          r['fill_color'] ?? r['fillColor'] ?? r['bgcolor'],
           'rgba(147,159,255,0.06)',
         ),
-        forceOverlay: Boolean(r.force_overlay ?? r.forceOverlay),
+        forceOverlay: Boolean(r['force_overlay'] ?? r['forceOverlay']),
       });
     } else if (type === 'hline' || type === 'horizontalline' || type === 'horizontal_line') {
       // Compile-mode hline: price-only → full-width horizontal line.
-      const price = num(r.price ?? r.p1 ?? r.y ?? r.y1);
+      const price = num(r['price'] ?? r['p1'] ?? r['y'] ?? r['y1']);
       if (price == null) continue;
       out.push({
         id: `pine_hline_${i++}`,
         type: 'line',
-        t1: align(num(r.t1 ?? r.x1 ?? r.bar)) ?? 0,
+        t1: align(num(r['t1'] ?? r['x1'] ?? r['bar'])) ?? 0,
         p1: price,
-        t2: align(num(r.t2 ?? r.x2)) ?? 1,
+        t2: align(num(r['t2'] ?? r['x2'])) ?? 1,
         p2: price,
-        color: pineStrokeColor(r.color, '#787B86'),
-        width: clampWidth(r.width, 1),
+        color: pineStrokeColor(r['color'], '#787B86'),
+        width: clampWidth(r['width'], 1),
         // Pine hline() uses `linestyle=` kwarg; drawings may carry either `style` or `linestyle`.
-        style: normalizeLineStyle(r.style ?? r.linestyle, 'solid'),
-        extend: normalizeExtend(r.extend, 'right'),
-        text: sanitizeDrawingText(r.title ?? r.text, DRAWING_TEXT_MAX),
+        style: normalizeLineStyle(r['style'] ?? r['linestyle'], 'solid'),
+        extend: normalizeExtend(r['extend'], 'right'),
+        text: sanitizeDrawingText(r['title'] ?? r['text'], DRAWING_TEXT_MAX),
       });
     } else {
       // Time/index: API t1/time · compile x1/left/x · bar index fallback
-      const t1 = align(num(r.t1 ?? r.time ?? r.x1 ?? r.left ?? r.x ?? r.bar));
-      const p1 = num(r.p1 ?? r.price ?? r.y1 ?? r.top ?? r.y);
+      const t1 = align(num(r['t1'] ?? r['time'] ?? r['x1'] ?? r['left'] ?? r['x'] ?? r['bar']));
+      const p1 = num(r['p1'] ?? r['price'] ?? r['y1'] ?? r['top'] ?? r['y']);
       if (t1 == null || p1 == null) continue;
 
       if (type === 'line' || type === 'trend' || type === 'ray' || type === 'segment') {
-        const t2 = align(num(r.t2 ?? r.x2 ?? r.right));
-        const p2 = num(r.p2 ?? r.y2 ?? r.bottom);
+        const t2 = align(num(r['t2'] ?? r['x2'] ?? r['right']));
+        const p2 = num(r['p2'] ?? r['y2'] ?? r['bottom']);
         if (t2 == null || p2 == null) continue;
         const extendDefault = type === 'ray' ? 'right' : 'none';
         out.push({
@@ -833,15 +840,15 @@ export function normalizeScriptDrawings(
           p1,
           t2,
           p2,
-          color: pineStrokeColor(r.color, '#939fff'),
-          width: clampWidth(r.width, 1),
-          style: normalizeLineStyle(r.style, 'solid'),
-          extend: normalizeExtend(r.extend, extendDefault),
-          forceOverlay: Boolean(r.force_overlay ?? r.forceOverlay),
+          color: pineStrokeColor(r['color'], '#939fff'),
+          width: clampWidth(r['width'], 1),
+          style: normalizeLineStyle(r['style'], 'solid'),
+          extend: normalizeExtend(r['extend'], extendDefault),
+          forceOverlay: Boolean(r['force_overlay'] ?? r['forceOverlay']),
         });
       } else if (type === 'box' || type === 'rect' || type === 'rectangle') {
-        const t2 = align(num(r.t2 ?? r.x2 ?? r.right));
-        const p2 = num(r.p2 ?? r.y2 ?? r.bottom);
+        const t2 = align(num(r['t2'] ?? r['x2'] ?? r['right']));
+        const p2 = num(r['p2'] ?? r['y2'] ?? r['bottom']);
         if (t2 == null || p2 == null) continue;
         out.push({
           id: `pine_box_${i++}`,
@@ -850,44 +857,44 @@ export function normalizeScriptDrawings(
           p1,
           t2,
           p2,
-          color: pineStrokeColor(r.color ?? r.border_color, '#939fff'),
-          bgcolor: pineStrokeColor(r.bgcolor, 'rgba(147,159,255,0.08)'),
-          width: clampWidth(r.width ?? r.border_width, 1),
-          text: sanitizeDrawingText(r.text, DRAWING_TEXT_MAX),
-          forceOverlay: Boolean(r.force_overlay ?? r.forceOverlay),
+          color: pineStrokeColor(r['color'] ?? r['border_color'], '#939fff'),
+          bgcolor: pineStrokeColor(r['bgcolor'], 'rgba(147,159,255,0.08)'),
+          width: clampWidth(r['width'] ?? r['border_width'], 1),
+          text: sanitizeDrawingText(r['text'], DRAWING_TEXT_MAX),
+          forceOverlay: Boolean(r['force_overlay'] ?? r['forceOverlay']),
         });
       } else if (type === 'label' || type === 'text') {
-        const sizeRaw = r.size ?? r.text_size ?? r.textSize;
+        const sizeRaw = r['size'] ?? r['text_size'] ?? r['textSize'];
         out.push({
           id: `pine_label_${i++}`,
           type: 'label',
           t1,
           p1,
-          color: pineStrokeColor(r.color, '#939fff'),
-          textcolor: pineStrokeColor(r.textcolor ?? r.text_color, '#eceef4'),
-          text: sanitizeDrawingText(r.text, DRAWING_TEXT_MAX),
-          style: normalizeLabelStyle(r.style, 'label_center'),
-          yloc: normalizeYloc(r.yloc, 'price'),
+          color: pineStrokeColor(r['color'], '#939fff'),
+          textcolor: pineStrokeColor(r['textcolor'] ?? r['text_color'], '#eceef4'),
+          text: sanitizeDrawingText(r['text'], DRAWING_TEXT_MAX),
+          style: normalizeLabelStyle(r['style'], 'label_center'),
+          yloc: normalizeYloc(r['yloc'], 'price'),
           size:
             sizeRaw == null || sizeRaw === ''
               ? undefined
               : typeof sizeRaw === 'number'
                 ? sizeRaw
                 : String(sizeRaw),
-          forceOverlay: Boolean(r.force_overlay ?? r.forceOverlay),
+          forceOverlay: Boolean(r['force_overlay'] ?? r['forceOverlay']),
         });
       } else if (type === 'linefill' || type === 'line_fill') {
         // pyne export: line1 (t1/p1→t2/p2) + line2 (t3/p3→t4/p4)
-        const t2 = align(num(r.t2 ?? r.x2));
-        const p2 = num(r.p2 ?? r.y2);
-        const t3 = align(num(r.t3 ?? r.x3));
-        const p3 = num(r.p3 ?? r.y3);
-        const t4 = align(num(r.t4 ?? r.x4));
-        const p4 = num(r.p4 ?? r.y4);
+        const t2 = align(num(r['t2'] ?? r['x2']));
+        const p2 = num(r['p2'] ?? r['y2']);
+        const t3 = align(num(r['t3'] ?? r['x3']));
+        const p3 = num(r['p3'] ?? r['y3']);
+        const t4 = align(num(r['t4'] ?? r['x4']));
+        const p4 = num(r['p4'] ?? r['y4']);
         if (t2 == null || p2 == null || t3 == null || p3 == null || t4 == null || p4 == null) {
           continue;
         }
-        const fillColor = pineStrokeColor(r.bgcolor ?? r.color, 'rgba(147,159,255,0.15)');
+        const fillColor = pineStrokeColor(r['bgcolor'] ?? r['color'], 'rgba(147,159,255,0.15)');
         out.push({
           id: `pine_linefill_${i++}`,
           type: 'linefill',
@@ -901,7 +908,7 @@ export function normalizeScriptDrawings(
           p4,
           color: fillColor,
           bgcolor: fillColor,
-          forceOverlay: Boolean(r.force_overlay ?? r.forceOverlay),
+          forceOverlay: Boolean(r['force_overlay'] ?? r['forceOverlay']),
         });
       }
     }

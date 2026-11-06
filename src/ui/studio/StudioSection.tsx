@@ -11,6 +11,14 @@
 import type { JSX } from 'solid-js';
 import { Show } from 'solid-js';
 
+/**
+ * Titled block that groups studio controls under a heading, optional lead copy,
+ * and trailing header actions. The header row is omitted entirely when neither
+ * `title` nor `headerEnd` is supplied.
+ *
+ * @param props - Heading, lead copy, header-end slot, test id, and body content.
+ * @returns A `<section class="ax-section">` wrapper.
+ */
 export function StudioSection(props: {
   title?: string;
   lead?: JSX.Element;
@@ -18,7 +26,7 @@ export function StudioSection(props: {
   headerEnd?: JSX.Element;
   testId?: string;
   children: JSX.Element;
-}) {
+}): JSX.Element {
   const hasHead = () => !!(props.title || props.headerEnd);
 
   return (

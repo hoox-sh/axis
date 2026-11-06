@@ -38,7 +38,7 @@
  * @module ui/StorageChangeDialog
  */
 
-import { For, Show, createSignal, createEffect, onCleanup, type Component } from 'solid-js';
+import { For, Show, createSignal, createEffect, type Component } from 'solid-js';
 import { Icons } from './icons';
 import { Spinner } from './Spinner';
 import { Modal } from './Modal';

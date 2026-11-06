@@ -44,6 +44,7 @@ import {
 } from './studio';
 import { BarColorLibrary, SavedThemeLibrary } from './ThemeLibrary';
 
+/** Props for the theme editor: `compact` tightens spacing for the Settings embed. */
 export interface ThemePanelProps {
   /** Compact spacing for Settings embed. */
   compact?: boolean;
@@ -61,7 +62,7 @@ function tokenTestId(key: string): string {
 }
 
 /** Full chart theme editor (presets + grouped tokens). */
-export const ThemePanel = (props: ThemePanelProps) => {
+export const ThemePanel = (props: ThemePanelProps): JSX.Element => {
   const themeState = createMemo(() => store.chartTheme || defaultChartThemeState());
   const tokens = createMemo(() => resolveTokens(themeState()));
   const presets = createMemo(() => listPresets());

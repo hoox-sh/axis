@@ -59,7 +59,7 @@ function labelFor(id: string): string {
  * itself stays inert (`open === false`) when no call site has requested a
  * change.
  */
-export const StorageChangePrompt: Component = () => {
+export const StorageChangePrompt: Component = () : JSX.Element => {
   return (
     <Show when={getPendingStorageChange()}>
       {(changeAccessor) => {

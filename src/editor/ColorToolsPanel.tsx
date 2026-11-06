@@ -54,6 +54,7 @@ import {
   transpToAlpha,
 } from './pine-colors';
 
+/** Props for {@link ColorToolsPanel}; the host owns document writes and selection. */
 export type ColorToolsPanelProps = {
   /** Current editor document (reactive). */
   doc: string;
@@ -93,13 +94,11 @@ function toColorInputValue(hex6: string): string {
 }
 
 function chipCss(chip: UniqueColorChip): string {
-  return toCssRgba(
-    rgbaFromChannels(chip.r, chip.g, chip.b, transpToAlpha(chip.transp)),
-  );
+  return toCssRgba(rgbaFromChannels(chip.r, chip.g, chip.b, transpToAlpha(chip.transp)));
 }
 
 /** Color chips + editor + formats for the Pine editor. */
-export const ColorToolsPanel: Component<ColorToolsPanelProps> = (props) => {
+export const ColorToolsPanel: Component<ColorToolsPanelProps> = (props): JSX.Element => {
   const hits = createMemo(() => scanPineColors(props.doc || ''));
   const chips = createMemo(() => uniqueColorChips(hits()));
 
@@ -129,10 +128,7 @@ export const ColorToolsPanel: Component<ColorToolsPanelProps> = (props) => {
   };
 
   const seedFromChip = (chip: UniqueColorChip) => {
-    seedFromRgba(
-      rgbaFromChannels(chip.r, chip.g, chip.b, transpToAlpha(chip.transp)),
-      chip.first,
-    );
+    seedFromRgba(rgbaFromChannels(chip.r, chip.g, chip.b, transpToAlpha(chip.transp)), chip.first);
     setOutStyle(styleFromColorKind(chip.first.kind));
   };
 
@@ -193,7 +189,8 @@ export const ColorToolsPanel: Component<ColorToolsPanelProps> = (props) => {
     const list = chips();
     if (!list.length) return;
     let next = index;
-    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = Math.min(list.length - 1, index + 1);
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown')
+      next = Math.min(list.length - 1, index + 1);
     else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = Math.max(0, index - 1);
     else if (e.key === 'Enter' || e.key === ' ') {
       const cur = list[index];
@@ -229,8 +226,7 @@ export const ColorToolsPanel: Component<ColorToolsPanelProps> = (props) => {
     if (!chip) return null;
     return (
       hits().find(
-        (h) =>
-          h.r === chip.r && h.g === chip.g && h.b === chip.b && h.transp === chip.transp,
+        (h) => h.r === chip.r && h.g === chip.g && h.b === chip.b && h.transp === chip.transp,
       ) ?? null
     );
   };
@@ -247,8 +243,7 @@ export const ColorToolsPanel: Component<ColorToolsPanelProps> = (props) => {
     let next: string;
     if (all && chip) {
       const matches = hits().filter(
-        (h) =>
-          h.r === chip.r && h.g === chip.g && h.b === chip.b && h.transp === chip.transp,
+        (h) => h.r === chip.r && h.g === chip.g && h.b === chip.b && h.transp === chip.transp,
       );
       next = replaceAllColorHits(doc, matches, text);
       flash(`Replaced ${matches.length} × ${text}`);
@@ -411,7 +406,8 @@ export const ColorToolsPanel: Component<ColorToolsPanelProps> = (props) => {
                   aria-label="Transparency 0–100"
                   onInput={(e) => {
                     const n = Number(e.currentTarget.value);
-                    if (Number.isFinite(n)) setDraftTransp(Math.max(0, Math.min(100, Math.round(n))));
+                    if (Number.isFinite(n))
+                      setDraftTransp(Math.max(0, Math.min(100, Math.round(n))));
                   }}
                 />
               </div>
@@ -431,11 +427,7 @@ export const ColorToolsPanel: Component<ColorToolsPanelProps> = (props) => {
                         }`}
                         aria-pressed={outStyle() === opt.id}
                         aria-disabled={namedOff()}
-                        title={
-                          namedOff()
-                            ? 'No exact Pine named color for this RGB'
-                            : opt.hint
-                        }
+                        title={namedOff() ? 'No exact Pine named color for this RGB' : opt.hint}
                         disabled={namedOff()}
                         onClick={() => setOutStyle(opt.id)}
                       >

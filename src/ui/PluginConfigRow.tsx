@@ -57,6 +57,7 @@ import { StudioEmpty, StudioInput, StudioSelect, StudioToggle } from './studio';
 
 const EXCHANGE_FIELD = 'exchange';
 
+/** Props for the config field group: apply hook, advanced visibility, layout, and hidden keys. */
 export interface PluginConfigRowProps {
   /** Called after a committed field change (e.g. re-fetch historical bars). */
   onApplied?: () => void;
@@ -72,7 +73,16 @@ function parseFieldValue(f: FieldSchema, raw: string): unknown {
   return f.type === 'number' ? Number(raw) : raw;
 }
 
-export function PluginConfigRow(props: PluginConfigRowProps) {
+/**
+ * Schema-driven editor for the active source/stream config fields, in inline
+ * (topbar) or stacked (Settings) layout. Writes go through `writePluginField`,
+ * so a first-ever write still creates the plugin's config bag; `onApplied` fires
+ * after a committed change so the shell can refetch bars.
+ *
+ * @param props - Layout/visibility options and the post-apply callback.
+ * @returns The rendered fields, or nothing when the plugin declares none.
+ */
+export function PluginConfigRow(props: PluginConfigRowProps): JSX.Element {
   const stacked = () => props.layout === 'stacked';
   const layoutName = () => (stacked() ? 'stacked' : 'inline');
   const fieldId = (key: string) => `axis-cfg-${layoutName()}-${key}`;

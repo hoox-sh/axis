@@ -88,7 +88,12 @@ const MAX_VISIBLE_BARS = 80;
 /** Reuse budget for the per-bar layout cache (≈ several screens of bars). */
 const BAR_CACHE_MAX = 1024;
 
-export const FootprintOverlay: Component = () => {
+/**
+ * Per-candle footprint cells drawn over the active price pane, aligned to the
+ * chart's plot rect. Reads the current bars and renders nothing when the
+ * footprint toggle is off.
+ */
+export const FootprintOverlay: Component = (): JSX.Element => {
   const [tick, setTick] = createSignal(0);
   const [paneBox, setPaneBox] = createSignal<{
     top: number;

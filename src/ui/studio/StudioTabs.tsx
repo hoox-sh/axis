@@ -10,6 +10,13 @@
 
 import { For, createMemo } from 'solid-js';
 
+/**
+ * Underline tab strip for in-page sections (Settings, Plugins) with roving
+ * focus: Arrow/Home/End move selection and focus the newly selected tab.
+ *
+ * @param props - Tab list, selected id, change handler, a11y label, and DOM id prefix.
+ * @returns A `role="tablist"` element with one `role="tab"` button per entry.
+ */
 export function StudioTabs<T extends string>(props: {
   tabs: Array<{ id: T; label: string; hint?: string }>;
   value: T;
@@ -17,7 +24,7 @@ export function StudioTabs<T extends string>(props: {
   ariaLabel: string;
   idPrefix: string;
   testId?: string;
-}) {
+}): JSX.Element {
   const ids = createMemo(() => props.tabs.map((t) => t.id));
 
   const focusTab = (id: T) => {

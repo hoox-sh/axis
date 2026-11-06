@@ -33,8 +33,13 @@
  * @module engine/bar-close-verify
  */
 
+/**
+ * Verdict for a closed bar: `match` (identical OHLCV), `mismatch` (repair the engine copy),
+ * or `unknown` (a side was non-finite, so nothing can be proven).
+ */
 export type VerificationResult = 'match' | 'mismatch' | 'unknown';
 
+/** A closed bar's five values, as the engine and the venue each report them. */
 export interface ClosedOhlcv {
   open: number;
   high: number;
@@ -43,6 +48,10 @@ export interface ClosedOhlcv {
   volume: number;
 }
 
+/**
+ * Venue lookup key for re-verifying one closed bar: the canonical series key plus the bar's
+ * open time in unix seconds.
+ */
 export interface VerifyRequest {
   seriesKey: string;
   time: number;
@@ -70,6 +79,10 @@ export function verifyRequestFor(seriesKey: string, time: number): VerifyRequest
   return { seriesKey, time };
 }
 
+/**
+ * Single-flight guard for bar-close verification: a second `begin()` before `finish()` throws,
+ * so two venue checks for the same close cannot interleave and both report.
+ */
 export class Redesign2BarCloseVerifier {
   private pending = false;
 

@@ -98,6 +98,7 @@
 
 import type { PanelId } from './panels/types';
 
+/** Canonical intent → Lucide component-name table; every key is a product concept, not a Lucide filename. */
 export const ICON_MAP = {
   play: 'Play',
   settings: 'Settings',
@@ -197,6 +198,7 @@ export const ICON_MAP = {
   agent: 'Bot',
 } as const;
 
+/** Key of {@link ICON_MAP} — the type of every `Icons.<name>` entry. */
 export type IconName = keyof typeof ICON_MAP;
 
 /**

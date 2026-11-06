@@ -45,6 +45,7 @@ import {
   type IChartApi,
   type ISeriesApi,
   type LineWidth,
+  type SeriesType,
 } from 'lightweight-charts';
 import {
   isHistogramSeriesKind,
@@ -67,9 +68,17 @@ import {
 
 /** LWC `setSeriesOrder`: bgcolor under price, overlay plots above candles. */
 export const SERIES_STACK_BGCOLOR = 0;
+/** Stack order for the main price series (candles / bars / line). */
 export const SERIES_STACK_PRICE = 1;
+/** Stack order for overlay plots so they paint above the candles. */
 export const SERIES_STACK_OVERLAY = 2;
 
+/**
+ * Apply an LWC series stack order, tolerating mocks / older builds.
+ *
+ * @param series LWC series handle (duck-typed)
+ * @param order z-order constant from this module; lower paints first
+ */
 export function setSeriesStackOrder(series: unknown, order: number): void {
   try {
     const s = series as { setSeriesOrder?: (n: number) => void };
@@ -133,6 +142,21 @@ export const PLOT_PALETTE = [
 ];
 
 /**
+ * Palette colour for a plot slot.
+ *
+ * Wraps `index` into {@link PLOT_PALETTE} so callers never index out of range;
+ * the trailing fallback is unreachable and only makes the return type total
+ * under `noUncheckedIndexedAccess`.
+ *
+ * @param index Plot slot counter (any integer, negative values wrap).
+ * @returns Hex colour string from the AXIS void-theme plot palette.
+ */
+export function plotColorAt(index: number): string {
+  const size = PLOT_PALETTE.length;
+  return PLOT_PALETTE[((index % size) + size) % size] ?? '#8B9CFF';
+}
+
+/**
  * Fixed right price-scale width shared by every pane so plot areas share the
  * same right edge (price labels, 0–100 indicators, volume, equity).
  */
@@ -150,7 +174,21 @@ function activeTokens(): ThemeTokens {
 /**
  * VOID-compatible palette from the active theme (for callers that need live colors).
  */
-export function getActiveChartPalette() {
+export function getActiveChartPalette(): {
+  bg: string;
+  panel: string;
+  elev: string;
+  grid: string;
+  text: string;
+  textDim: string;
+  up: string;
+  down: string;
+  border: string;
+  indigo: string;
+  indigoSoft: string;
+  green: string;
+  orange: string;
+} {
   return getThemeManager().getVoidLike();
 }
 
@@ -361,8 +399,8 @@ function withCandleVisualDefaults(
   opts: Record<string, unknown>,
   hollow: boolean,
 ): Record<string, unknown> {
-  const up = String(opts.upColor ?? VOID.up);
-  const down = String(opts.downColor ?? VOID.down);
+  const up = String(opts['upColor'] ?? VOID.up);
+  const down = String(opts['downColor'] ?? VOID.down);
   const isClear = (c: string) =>
     c === 'rgba(0,0,0,0)' || c === 'transparent' || c === 'rgba(0, 0, 0, 0)';
   return {
@@ -520,7 +558,7 @@ export function createPriceSeries(
   chart: IChartApi,
   type: ChartType,
   paneIndex?: number,
-): ISeriesApi<any> {
+): ISeriesApi<SeriesType> {
   switch (type) {
     case 'hollow':
       return createHollowCandleSeries(chart, paneIndex);

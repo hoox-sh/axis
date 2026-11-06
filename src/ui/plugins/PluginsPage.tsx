@@ -92,11 +92,19 @@ function SlotBadge(props: { kind: string; label: string; title: string }) {
   );
 }
 
+/**
+ * Plugins studio page: installed plugin list, URL install, and per-plugin config
+ * rows. Re-reads the registry on mount and after each install/remove so the
+ * catalog and the topbar pickers stay in sync.
+ *
+ * @param props - Close/navigate handlers and a change notification for the shell.
+ * @returns The plugins page body.
+ */
 export function PluginsPage(props: {
   onClose: () => void;
   onNavigate?: (id: StudioPageId) => void;
   onChanged?: () => void;
-}) {
+}): JSX.Element {
   const [kindFilter, setKindFilter] = createSignal<KindFilter>('all');
   const [url, setUrl] = createSignal('');
   const [busy, setBusy] = createSignal(false);

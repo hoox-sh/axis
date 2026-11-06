@@ -124,6 +124,7 @@ function sortRows(list: BarsCacheMeta[], sort: SortKey): BarsCacheMeta[] {
   });
 }
 
+/** Options for embedding the dataset browser in a panel or the Data page. */
 export interface DatasetsBrowserProps {
   /** Test-id prefix (modal and page coexist in the DOM). */
   testIdPrefix?: string;
@@ -136,7 +137,7 @@ export interface DatasetsBrowserProps {
 }
 
 /** Dataset inventory: filter, inspect coverage, load, delete, export. */
-export const DatasetsBrowser: Component<DatasetsBrowserProps> = (props) => {
+export const DatasetsBrowser: Component<DatasetsBrowserProps> = (props): JSX.Element => {
   const tid = (suffix: string) => `${props.testIdPrefix ?? 'axis-cached-datasets'}-${suffix}`;
 
   const [rows, setRows] = createSignal<BarsCacheMeta[]>([]);

@@ -37,12 +37,15 @@ import {
   type IPrimitivePaneView,
   type SeriesAttachedParameter,
   type Time,
+  type SeriesType,
 } from 'lightweight-charts';
 import { splitOverlayLineSegments } from '../results/plot-visuals';
 import { colorWithAlpha } from './series-factory';
 
+/** One overlay sample: UTC seconds + value. Missing `value` is Pine `na` and breaks the stroke. */
 export type LineBreakOverlayPoint = { time: number; value?: number };
 
+/** Stroke style for the primitive plus the `*br` variant flags it must emulate. */
 export type LineBreakPrimitiveOpts = {
   color: string;
   lineWidth: number;
@@ -130,7 +133,10 @@ function strokeSegment(
 class LineBreakRenderer implements IPrimitivePaneRenderer {
   constructor(private readonly owner: LineBreakPrimitive) {}
 
-  draw(target: unknown, utils?: { setLineStyle: (ctx: CanvasRenderingContext2D, s: LineStyle) => void }): void {
+  draw(
+    target: unknown,
+    utils?: { setLineStyle: (ctx: CanvasRenderingContext2D, s: LineStyle) => void },
+  ): void {
     const media = target as MediaTarget | null;
     if (!media || typeof media.useMediaCoordinateSpace !== 'function') return;
     const chart = this.owner.chart();
@@ -263,7 +269,7 @@ export class LineBreakPrimitive implements ISeriesPrimitive<Time> {
   private _segments: { time: number; value: number }[][] = [];
   private _pointsSig = '';
   private _chart: IChartApi | null = null;
-  private _series: ISeriesApi<any> | null = null;
+  private _series: ISeriesApi<SeriesType> | null = null;
   private _requestUpdate: (() => void) | null = null;
   private readonly _paneViews: IPrimitivePaneView[];
 
@@ -310,7 +316,7 @@ export class LineBreakPrimitive implements ISeriesPrimitive<Time> {
     return this._chart;
   }
 
-  series(): ISeriesApi<any> | null {
+  series(): ISeriesApi<SeriesType> | null {
     return this._series;
   }
 

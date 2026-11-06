@@ -49,18 +49,11 @@ import {
   shouldUseRemoteLsp,
   type RemoteDiagnostic,
 } from './pyne-lsp-client';
-import type {
-  DiagnosticSeverity,
-  EditorDiagnostic,
-} from './diagnostics';
+import type { DiagnosticSeverity, EditorDiagnostic } from './diagnostics';
 import { setPreEval, store } from '../store';
 import builtinsJson from './data/pyne-builtins.json';
 import { PINE_BUILTIN_VARS, PINE_ENUM_PATHS } from './pine-enums';
-import {
-  DEFAULT_PREEVAL_IDLE_MS,
-  readEditorIntel,
-  type EditorIntelSettings,
-} from './editor-intel';
+import { DEFAULT_PREEVAL_IDLE_MS, readEditorIntel, type EditorIntelSettings } from './editor-intel';
 import {
   parseSignatureParams,
   resolveCallSignature,
@@ -281,6 +274,7 @@ const BARE_CALL_SKIP = new Set([
   'point',
 ]);
 
+/** A `module.member` reference with its 1-based line and 0-based columns. */
 export type DottedRef = {
   /** Full path e.g. strategy.etry */
   path: string;
@@ -501,8 +495,7 @@ const USER_FN_RE =
 const USER_FN_LEAD_RE =
   /^\s*(?:export\s+)?(?:method\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*\(([^;]*)\)\s*=>/;
 const IMPORT_AS_RE = /\bimport\s+\S+\s+as\s+([A-Za-z_][A-Za-z0-9_]*)/g;
-const TUPLE_ASSIGN_RE =
-  /^\s*(?:export\s+)?(?:varip|var)?\s*\[([^\]]+)\]\s*=/;
+const TUPLE_ASSIGN_RE = /^\s*(?:export\s+)?(?:varip|var)?\s*\[([^\]]+)\]\s*=/;
 const FOR_TUPLE_RE = /^\s*for\s+(?:var\s+)?\[([^\]]+)\]\s+in\b/;
 const FOR_IN_RE = /^\s*for\s+(?:var\s+)?([A-Za-z_]\w*)\s+in\b/;
 const FOR_RANGE_RE = /^\s*for\s+(?:var\s+)?([A-Za-z_]\w*)\s*=\s*\S+\s+to\b/;
@@ -514,7 +507,12 @@ const ENUM_MEMBER_LINE_RE = /^\s*([A-Za-z_]\w*)\s*(?:=.*)?$/;
 const TYPE_FIELD_LINE_RE =
   /^\s+(?:(?:series|simple|const)\s+)?[A-Za-z_][\w.]*(?:\s*<[^=<>]*(?:<[^=<>]*>[^=<>]*)*>)?(?:\[\])?\s+([A-Za-z_]\w*)\s*(?:=.*)?$/;
 
-function addFnParams(paramsRaw: string, into: Set<string>, fnMap: Map<string, string[]>, fnName: string): void {
+function addFnParams(
+  paramsRaw: string,
+  into: Set<string>,
+  fnMap: Map<string, string[]>,
+  fnName: string,
+): void {
   const parsed = parseSignatureParams(`fn(${paramsRaw})`);
   const names: string[] = [];
   for (const p of parsed) {
@@ -773,10 +771,7 @@ function isUserBinding(path: string, user: Set<string>): boolean {
  * Also lints named arguments (`coltor=`) and uses of declared vars (`lenght`).
  */
 export function checkUnknownBuiltinMembers(source: string): EditorDiagnostic[] {
-  const refs = [
-    ...scanBuiltinMemberRefs(source),
-    ...scanBareCallRefs(source),
-  ];
+  const refs = [...scanBuiltinMemberRefs(source), ...scanBareCallRefs(source)];
   const decl = collectUserDeclarationMap(source);
   const user = decl.names;
   const out: EditorDiagnostic[] = [];
@@ -817,16 +812,13 @@ function isGenericParamName(name: string): boolean {
 }
 
 function usableParamNames(params: readonly { name: string; rest?: boolean }[]): string[] {
-  return params
-    .filter((p) => !p.rest && p.name && !isGenericParamName(p.name))
-    .map((p) => p.name);
+  return params.filter((p) => !p.rest && p.name && !isGenericParamName(p.name)).map((p) => p.name);
 }
 
 function builtinSigExtra(name: string): ResolveCallSigOpts | undefined {
   const json = builtinsJson as Record<string, Record<string, unknown>>;
   const entry =
-    json[name] ||
-    json[name.includes('.') ? name.slice(name.lastIndexOf('.') + 1) : `ta.${name}`];
+    json[name] || json[name.includes('.') ? name.slice(name.lastIndexOf('.') + 1) : `ta.${name}`];
   if (!entry || typeof entry !== 'object') return undefined;
   const str = (k: string) => (typeof entry[k] === 'string' ? (entry[k] as string) : undefined);
   return {
@@ -837,10 +829,7 @@ function builtinSigExtra(name: string): ResolveCallSigOpts | undefined {
   };
 }
 
-function signatureParamNames(
-  callName: string,
-  userFns: Map<string, string[]>,
-): string[] {
+function signatureParamNames(callName: string, userFns: Map<string, string[]>): string[] {
   const extra = builtinSigExtra(callName);
   const sig = resolveCallSignature(callName, extra);
   const fromSig = sig ? usableParamNames(sig.params) : [];
@@ -861,13 +850,8 @@ function offsetToLineCol(doc: string, offset: number): { line: number; col: numb
   return { line, col: offset - (offs[line - 1] ?? 0) };
 }
 
-function diagAtOffset(
-  doc: string,
-  from: number,
-  to: number,
-  message: string,
-): EditorDiagnostic {
-  const { line, col } = offsetToLineCol(doc, from);
+function diagAtOffset(doc: string, from: number, to: number, message: string): EditorDiagnostic {
+  const { line } = offsetToLineCol(doc, from);
   return {
     from,
     to: Math.max(from, to),
@@ -970,12 +954,16 @@ export function scanIdentRefs(source: string): IdentRef[] {
         const start = i;
         i += 1;
         while (i < line.length && /[A-Za-z0-9_]/.test(line[i]!)) i += 1;
-        const prev = start > 0 ? line[start - 1] : '';
+        const prev = start > 0 ? (line[start - 1] ?? '') : '';
         if (prev === '.') {
           continue;
         }
         // Hex color literal — skip alpha/digit tail after `#` (e.g. `#22d3ee`)
-        if (prev >= '0' && prev <= '9' || prev >= 'a' && prev <= 'f' || prev >= 'A' && prev <= 'F') {
+        if (
+          (prev >= '0' && prev <= '9') ||
+          (prev >= 'a' && prev <= 'f') ||
+          (prev >= 'A' && prev <= 'F')
+        ) {
           let k = start - 1;
           while (k > 0 && /[\da-fA-F]/.test(line[k]!)) k -= 1;
           if (line[k] === '#') continue;
@@ -1031,12 +1019,7 @@ export function checkUnknownUserIdents(
     if (used.has(key)) continue;
     used.add(key);
     out.push(
-      diagAtOffset(
-        source,
-        ref.from,
-        ref.to,
-        `Unknown \`${ref.name}\` — did you mean \`${hint}\`?`,
-      ),
+      diagAtOffset(source, ref.from, ref.to, `Unknown \`${ref.name}\` — did you mean \`${hint}\`?`),
     );
   }
   return out;
@@ -1080,6 +1063,7 @@ function dedupeDiagnostics(list: EditorDiagnostic[]): EditorDiagnostic[] {
   return out;
 }
 
+/** Combined local + remote lint result for one document version. */
 export type PreevalResult = {
   diagnostics: EditorDiagnostic[];
   hasErrors: boolean;
@@ -1123,7 +1107,11 @@ export function rangeFromLineCols(
     const elNext = offs[el] ?? doc.length;
     const elLen = Math.max(0, elNext - elStart - (doc[elNext - 1] === '\n' ? 1 : 0));
     to = elStart + Math.max(0, Math.min(endCol0, elLen));
-    if (to <= from) to = Math.min(from + 1, elNext > elStart ? elNext - (doc[elNext - 1] === '\n' ? 1 : 0) : from + 1);
+    if (to <= from)
+      to = Math.min(
+        from + 1,
+        elNext > elStart ? elNext - (doc[elNext - 1] === '\n' ? 1 : 0) : from + 1,
+      );
   } else {
     // Highlight rest of line (at least one char when possible)
     to = lineStart + lineLen;
@@ -1537,12 +1525,9 @@ export function remoteToEditorDiagnostics(
     if (isRemoteStyleNoise(r)) continue;
     const line = typeof r.line === 'number' && r.line > 0 ? r.line : 1;
     const col = typeof r.character === 'number' && r.character >= 0 ? r.character : 0;
-    const endLine =
-      typeof r.endLine === 'number' && r.endLine > 0 ? r.endLine : undefined;
+    const endLine = typeof r.endLine === 'number' && r.endLine > 0 ? r.endLine : undefined;
     const endCol =
-      typeof r.endCharacter === 'number' && r.endCharacter >= 0
-        ? r.endCharacter
-        : undefined;
+      typeof r.endCharacter === 'number' && r.endCharacter >= 0 ? r.endCharacter : undefined;
     const msg = String(r.message || '').trim();
     if (!msg) continue;
     const code = r.code ? `[${r.code}] ` : '';
@@ -1586,6 +1571,7 @@ export function mergePreevalDiagnostics(
   return dedupeDiagnostics([...remote, ...keptLocal]);
 }
 
+/** True when any diagnostic has `severity: 'error'` (gates Run). */
 export function hasErrorDiagnostics(diags: readonly EditorDiagnostic[]): boolean {
   return diags.some((d) => d.severity === 'error');
 }
@@ -1648,12 +1634,7 @@ export function cancelPreeval(): void {
 export function clearPreevalOnEdit(source: string): void {
   lastSource = source;
   const pe = store.preEval;
-  if (
-    pe &&
-    !pe.pending &&
-    !pe.hasErrors &&
-    (!pe.diagnostics || pe.diagnostics.length === 0)
-  ) {
+  if (pe && !pe.pending && !pe.hasErrors && (!pe.diagnostics || pe.diagnostics.length === 0)) {
     // Still cancel any in-flight timer/request from a prior check
     cancelPreeval();
     return;
@@ -1676,10 +1657,7 @@ export function clearPreevalOnEdit(source: string): void {
  *
  * Save / Run should still call {@link runPreevalNow} for an immediate gate.
  */
-export function schedulePreeval(
-  source: string,
-  debounceMs?: number,
-): void {
+export function schedulePreeval(source: string, debounceMs?: number): void {
   const cfg = intel();
   if (!cfg.preevalEnabled) {
     lastSource = source;
@@ -1716,10 +1694,7 @@ export function schedulePreeval(
   // make a fixed typo look fresh until the next idle pass.
   if (cfg.preevalClearOnEdit) {
     const alreadyClear =
-      pe &&
-      !pe.pending &&
-      !pe.hasErrors &&
-      (!pe.diagnostics || pe.diagnostics.length === 0);
+      pe && !pe.pending && !pe.hasErrors && (!pe.diagnostics || pe.diagnostics.length === 0);
     if (!alreadyClear) {
       setPreEval({
         diagnostics: [],
@@ -1737,10 +1712,7 @@ export function schedulePreeval(
     }
   }
 
-  const delay = Math.max(
-    0,
-    Number(debounceMs ?? cfg.preevalIdleMs ?? PREEVAL_IDLE_MS) || 0,
-  );
+  const delay = Math.max(0, Number(debounceMs ?? cfg.preevalIdleMs ?? PREEVAL_IDLE_MS) || 0);
   timer = setTimeout(() => {
     timer = null;
     // Ignore if a newer keystroke updated lastSource

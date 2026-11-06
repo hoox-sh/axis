@@ -60,10 +60,18 @@ export interface HostedJobCronState {
   [k: string]: unknown;
 }
 
+/**
+ * A hosted script plus the cron state `GET /cron/jobs` attaches; the runner list view renders
+ * one row per entry.
+ */
 export interface HostedJob extends HostedScript {
   cron?: HostedJobCronState | null;
 }
 
+/**
+ * Per-call target and budget for a runner route: endpoint/key/admin token default to the
+ * active engine config, and `timeoutMs` / `signal` bound the request.
+ */
 export interface RunnerCallOptions {
   endpoint?: string;
   /** Pro API key (`X-API-Key` + Bearer). */
@@ -74,6 +82,10 @@ export interface RunnerCallOptions {
   timeoutMs?: number;
 }
 
+/**
+ * Typed runner reply: runner routes never throw, so `unavailable` (host lacks the feature)
+ * stays distinct from a real `error`.
+ */
 export interface RunnerResult<T> {
   ok: boolean;
   data: T | null;
@@ -92,13 +104,15 @@ export function runnerAvailable(): boolean {
   return getCachedEngineHealth()?.features?.scriptRunner === true;
 }
 
-function target(opts: RunnerCallOptions): { endpoint: string; headers: Record<string, string> } | string {
+function target(
+  opts: RunnerCallOptions,
+): { endpoint: string; headers: Record<string, string> } | string {
   const cfg = getActiveEngineConfig() || {};
-  const endpoint = String(opts.endpoint ?? cfg.endpoint ?? '')
+  const endpoint = String(opts.endpoint ?? cfg['endpoint'] ?? '')
     .trim()
     .replace(/\/$/, '');
   if (!endpoint) return 'No backend endpoint — select the server engine and set a URL';
-  const apiKey = String(opts.apiKey ?? cfg.apiKey ?? '').trim();
+  const apiKey = String(opts.apiKey ?? cfg['apiKey'] ?? '').trim();
   const adminToken = String(opts.adminToken ?? '').trim();
   if (apiKey && !confirmEngineApiKeyTarget(endpoint, apiKey)) {
     return 'API key withheld for unconfirmed engine origin';
@@ -106,7 +120,7 @@ function target(opts: RunnerCallOptions): { endpoint: string; headers: Record<st
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (apiKey) {
     headers['X-API-Key'] = apiKey;
-    headers.Authorization = `Bearer ${apiKey}`;
+    headers['Authorization'] = `Bearer ${apiKey}`;
   }
   if (adminToken) headers['X-Admin-Token'] = adminToken;
   return { endpoint, headers };
@@ -144,18 +158,18 @@ async function call<T>(
         data: null,
         unavailable: true,
         error:
-          typeof payload?.message === 'string' && payload.message
-            ? payload.message
+          typeof payload?.['message'] === 'string' && payload['message']
+            ? payload['message']
             : 'Hosted runner is not enabled on this backend',
       };
     }
     if (res.status === 401 || res.status === 403) {
       return { ok: false, data: null, unavailable: false, error: 'Runner access denied' };
     }
-    if (!res.ok || payload?.status === 'error') {
+    if (!res.ok || payload?.['status'] === 'error') {
       const message =
-        typeof payload?.message === 'string' && payload.message
-          ? payload.message
+        typeof payload?.['message'] === 'string' && payload['message']
+          ? payload['message']
           : `Runner request failed (HTTP ${res.status})`;
       return { ok: false, data: null, unavailable: false, error: message };
     }
@@ -170,9 +184,11 @@ async function call<T>(
 }
 
 /** `GET /cron/jobs` — hosted scripts with their cron state. */
-export async function listHostedJobs(opts: RunnerCallOptions = {}): Promise<RunnerResult<HostedJob[]>> {
+export async function listHostedJobs(
+  opts: RunnerCallOptions = {},
+): Promise<RunnerResult<HostedJob[]>> {
   return call('/cron/jobs', 'GET', undefined, opts, (payload) => {
-    const jobs = Array.isArray(payload.jobs) ? payload.jobs : [];
+    const jobs = Array.isArray(payload['jobs']) ? payload['jobs'] : [];
     return jobs.filter((j): j is HostedJob => !!j && typeof j === 'object') as HostedJob[];
   });
 }
@@ -183,12 +199,8 @@ export async function setHostedJobEnabled(
   enabled: boolean,
   opts: RunnerCallOptions = {},
 ): Promise<RunnerResult<number>> {
-  return call(
-    '/cron/jobs',
-    'PUT',
-    { jobs: [{ script_id: scriptId, enabled }] },
-    opts,
-    (payload) => (typeof payload.count === 'number' ? payload.count : 0),
+  return call('/cron/jobs', 'PUT', { jobs: [{ script_id: scriptId, enabled }] }, opts, (payload) =>
+    typeof payload['count'] === 'number' ? payload['count'] : 0,
   );
 }
 
@@ -236,17 +248,17 @@ export async function deployHostedScript(
     return { ok: false, data: null, unavailable: false, error: 'id and script are required' };
   }
   const body: Record<string, unknown> = { id: input.id, script: input.script };
-  if (input.name) body.name = input.name;
-  if (input.symbol) body.symbol = input.symbol;
-  if (input.timeframe) body.timeframe = input.timeframe;
-  if (input.mode) body.mode = input.mode;
-  if (input.enabled !== undefined) body.enabled = input.enabled;
-  if (input.dataSource) body.data_source = input.dataSource;
-  if (input.webhookUrl) body.webhook_url = input.webhookUrl;
-  if (input.inputs && Object.keys(input.inputs).length) body.inputs = input.inputs;
+  if (input.name) body['name'] = input.name;
+  if (input.symbol) body['symbol'] = input.symbol;
+  if (input.timeframe) body['timeframe'] = input.timeframe;
+  if (input.mode) body['mode'] = input.mode;
+  if (input.enabled !== undefined) body['enabled'] = input.enabled;
+  if (input.dataSource) body['data_source'] = input.dataSource;
+  if (input.webhookUrl) body['webhook_url'] = input.webhookUrl;
+  if (input.inputs && Object.keys(input.inputs).length) body['inputs'] = input.inputs;
 
   return call('/scripts', 'POST', body, opts, (payload) => {
-    const script = payload.script;
+    const script = payload['script'];
     return script && typeof script === 'object' ? (script as HostedScript) : null;
   });
 }

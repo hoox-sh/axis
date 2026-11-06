@@ -16,6 +16,7 @@
 
 import { getFlag, removeItem, setItem } from './storage';
 
+/** The two localStorage keys behind a {@link FlagPair}: the opt-in and the kill switch. */
 export interface FlagPairOptions {
   /** Tab-local opt-in key (`'1'` = on). */
   enabledKey: string;
@@ -23,6 +24,10 @@ export interface FlagPairOptions {
   disabledKey: string;
 }
 
+/**
+ * A kill-switch-guarded feature flag: enabled only when opted in and not opted out,
+ * with in-memory fallbacks for runtimes without `localStorage`.
+ */
 export interface FlagPair {
   /** True when opted in and the kill switch is off. */
   isEnabled(): boolean;

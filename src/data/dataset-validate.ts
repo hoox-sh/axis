@@ -48,12 +48,15 @@ import {
 export type VenueClass = '24/7' | 'sessions';
 
 /** Resolve calendar class from a source plugin's capabilities (default 24/7). */
-export function venueClassForSourceCaps(
-  caps?: { calendar?: VenueClass } | null,
-): VenueClass {
+export function venueClassForSourceCaps(caps?: { calendar?: VenueClass } | null): VenueClass {
   return caps?.calendar === 'sessions' ? 'sessions' : '24/7';
 }
 
+/**
+ * Counters describing what `repairBars` changed in a series: corrupt rows
+ * dropped, duplicate open times collapsed, timestamps snapped to the grid, and
+ * whether the input was out of order. Surfaced in the DSM validation report.
+ */
 export interface RepairStats {
   /** Bars dropped entirely (corrupt / unsalvageable). */
   removed: number;
@@ -65,6 +68,10 @@ export interface RepairStats {
   reordered: number;
 }
 
+/**
+ * Repaired series plus the stats that explain the repair. `bars` is always a
+ * fresh sorted/deduped array, even when the input was already clean.
+ */
 export interface RepairResult {
   bars: Bar[];
   stats: RepairStats;
@@ -219,6 +226,11 @@ function snapToDominantPhase(bars: Bar[], step: number): number {
   return snapped;
 }
 
+/**
+ * Gap buckets split by cause: `fillable` holes the venue should have data for,
+ * and `legitimate` closures (weekends for session venues, maintenance windows)
+ * that must not be chased. Consumed by the DSM gap-fill loop.
+ */
 export interface GapClassification {
   /** Gaps the venue should be able to fill — chase these. */
   fillable: BarGap[];
@@ -226,6 +238,10 @@ export interface GapClassification {
   legitimate: BarGap[];
 }
 
+/**
+ * Inputs that decide what counts as a legitimate gap. Omit it for 24/7 crypto
+ * sources — then only declared maintenance windows are excused.
+ */
 export interface ClassifyOpts {
   /** Venue calendar class. Default `'24/7'` (crypto — weekends are fillable). */
   venueClass?: VenueClass;
@@ -315,6 +331,10 @@ export interface DatasetReport {
   coverage: CoverageReport;
 }
 
+/**
+ * Validation knobs: the gap classification options plus the multiplier that
+ * widens the tolerance before a hole is reported as a gap.
+ */
 export interface ValidateOpts extends ClassifyOpts {
   /** Gap factor forwarded to {@link findBarGaps}. */
   gapFactor?: number;

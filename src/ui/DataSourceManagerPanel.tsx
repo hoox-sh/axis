@@ -40,7 +40,7 @@ import { DsmJobsList } from './dsm/DsmJobsList';
 import { jobTotals } from './dsm/jobs';
 
 /** Dockable / floatable Data Source Manager. */
-export const DataSourceManagerPanel: Component = () => {
+export const DataSourceManagerPanel: Component = () : JSX.Element => {
   const [formOpen, setFormOpen] = createSignal(dataSourceManagerState.jobs.length === 0);
   const [formMsg, setFormMsg] = createSignal('');
 

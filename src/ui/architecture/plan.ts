@@ -37,8 +37,10 @@ import { listStorages } from '../../storage/catalog';
 import { listDatasets } from '../../onchain/catalog';
 import type { ActivePlugins } from '../../store/types';
 
+/** The five pluggable slots a plan wires together. */
 export type SlotKind = 'source' | 'stream' | 'engine' | 'storage' | 'dataset';
 
+/** Catalog entry as the Wire page sees it: identity, description, and capability flags. */
 export interface AxisPlugin {
   id: string;
   name: string;
@@ -47,6 +49,7 @@ export interface AxisPlugin {
   capabilities: PluginCapabilities;
 }
 
+/** Presentation metadata for one slot: label, contract, role, and optionality. */
 export interface SlotMeta {
   kind: SlotKind;
   label: string;
@@ -57,6 +60,7 @@ export interface SlotMeta {
   optional: boolean;
 }
 
+/** Slot rows rendered by the Wire page, in pipeline order. */
 export const SLOTS: SlotMeta[] = [
   {
     kind: 'source',
@@ -98,6 +102,7 @@ export const SLOTS: SlotMeta[] = [
 /** A wiring of every slot. `null` means the optional slot is switched off. */
 export type AxisConfig = Record<SlotKind, string | null>;
 
+/** A named recipe: a full wiring plus the copy shown on its card. */
 export interface Predefinition {
   id: string;
   name: string;
@@ -172,8 +177,10 @@ export const PREDEFINITIONS: Predefinition[] = [
   },
 ];
 
+/** How a slot diverged from the base recipe: slot turned on, off, or replaced. */
 export type DriftKind = 'added' | 'removed' | 'swapped';
 
+/** One slot-level difference between the current wiring and its base recipe. */
 export interface SlotDrift {
   kind: SlotKind;
   label: string;
@@ -182,6 +189,7 @@ export interface SlotDrift {
   to: AxisPlugin | null;
 }
 
+/** Derived view of a wiring: base recipe, drift list, plan name, and capability requirements. */
 export interface PlanState {
   base: Predefinition;
   pristine: boolean;
@@ -233,20 +241,46 @@ export function pluginsFor(kind: SlotKind): AxisPlugin[] {
   return raw.map(asPlugin).filter((p): p is AxisPlugin => p !== null);
 }
 
+/**
+ * Look up one plugin in the live catalog for a slot.
+ *
+ * @param kind - Slot to search.
+ * @param id - Plugin id, or `null` for an empty optional slot.
+ * @returns The catalog entry, or `null` when the slot is empty or the id is unknown.
+ */
 export function getPlugin(kind: SlotKind, id: string | null): AxisPlugin | null {
   if (!id) return null;
   return pluginsFor(kind).find((p) => p.id === id) ?? null;
 }
 
+/**
+ * Find a recipe by id.
+ *
+ * @param id - Predefinition id such as `offline-lab`.
+ * @returns The recipe, or `null` when unknown.
+ */
 export function findPredefinition(id: string): Predefinition | null {
   return PREDEFINITIONS.find((p) => p.id === id) ?? null;
 }
 
+/**
+ * Compare two wirings slot by slot.
+ *
+ * @param a - First wiring.
+ * @param b - Second wiring.
+ * @returns `true` when every {@link SlotKind} selects the same id (including nulls).
+ */
 export function configsEqual(a: AxisConfig, b: AxisConfig): boolean {
   return SLOTS.every((s) => a[s.kind] === b[s.kind]);
 }
 
 /** Exact predefinition match for a wiring, if one exists. */
+/**
+ * Whether a wiring already is one of the shipped recipes.
+ *
+ * @param config - Current wiring.
+ * @returns The exact-match recipe, or `null` for a custom plan.
+ */
 export function matchPredefinition(config: AxisConfig): Predefinition | null {
   return PREDEFINITIONS.find((p) => configsEqual(p.config, config)) ?? null;
 }
@@ -334,7 +368,19 @@ export function derivePlan(config: AxisConfig, baseId: string): PlanState {
  * The patch AXIS commits on Apply — flat `source` / `engine` / `live.streamId`
  * plus `activePlugins` ids (not a `kind:id → true` map).
  */
-export function toStorePatch(config: AxisConfig) {
+export function toStorePatch(config: AxisConfig): {
+  source: string | null;
+  engine: string | null;
+  live: { streamId: string | null; enabled: boolean };
+  activePlugins: {
+    source: string;
+    stream: string;
+    engine: string;
+    storage: string;
+    dataset: string;
+  };
+  keys: Record<string, true>;
+} {
   const active: Record<string, true> = {};
   for (const slot of SLOTS) {
     const id = config[slot.kind];

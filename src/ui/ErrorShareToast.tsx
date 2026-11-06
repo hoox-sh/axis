@@ -33,7 +33,7 @@ import {
 } from './error-share';
 
 /** Fixed bottom toast: Share / Dismiss for the pending diagnostic offer. */
-export const ErrorShareToast: Component = () => {
+export const ErrorShareToast: Component = () : JSX.Element => {
   const [busy, setBusy] = createSignal(false);
   const offer = () => store.errorShareOffer as ErrorShareOffer | null;
 

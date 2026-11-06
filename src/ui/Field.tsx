@@ -10,7 +10,7 @@ import type { JSX } from 'solid-js';
  * and the Script Library forms all render the same markup, so they all use
  * this one.
  */
-export function ScField(props: { label: string; class?: string; children: JSX.Element }) {
+export function ScField(props: { label: string; class?: string; children: JSX.Element }): JSX.Element {
   return (
     // biome-ignore lint/a11y/noLabelWithoutControl: the control is passed as children
     <label class={`sc-field min-w-0 ${props.class || ''}`}>

@@ -86,6 +86,10 @@ export type QuoteMuxHandle = {
   stop: () => void;
 };
 
+/**
+ * Inputs for {@link startWatchlistQuotes}: which source/symbols to quote and
+ * the callbacks the panel supplies. Returning `stop` is the caller's job.
+ */
 export type StartWatchlistQuotesOpts = {
   /** Active chart/history source id (e.g. `binance-rest`, `okx-…`). */
   sourceId: string;

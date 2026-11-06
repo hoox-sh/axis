@@ -6,8 +6,13 @@ import type { Meta, StoryObj } from 'storybook-solidjs-vite';
 import { onCleanup, onMount } from 'solid-js';
 import { appendLog, clearLogs } from '../store';
 import { SystemLogs } from '../ui/SystemLogs';
-const meta: Meta = { title: 'Panels/SystemLogs', tags: ['autodocs'], parameters: { layout: 'padded' } };
+const meta: Meta = {
+  title: 'Panels/SystemLogs',
+  tags: ['autodocs'],
+  parameters: { layout: 'padded' },
+};
 export default meta;
+/** Three seeded log lines (ok / warn / error) from different sources. */
 export const Seeded: StoryObj = {
   render: () => {
     onMount(() => {
@@ -16,9 +21,18 @@ export const Seeded: StoryObj = {
       appendLog('error', 'WS reconnect attempt 2', 'stream');
     });
     onCleanup(() => clearLogs());
-    return (<div style={{ width: '640px', 'max-width': '94vw' }}><SystemLogs /></div>);
+    return (
+      <div style={{ width: '640px', 'max-width': '94vw' }}>
+        <SystemLogs />
+      </div>
+    );
   },
 };
+/** Log panel with an empty store. */
 export const Empty: StoryObj = {
-  render: () => (<div style={{ width: '640px', 'max-width': '94vw' }}><SystemLogs /></div>),
+  render: () => (
+    <div style={{ width: '640px', 'max-width': '94vw' }}>
+      <SystemLogs />
+    </div>
+  ),
 };

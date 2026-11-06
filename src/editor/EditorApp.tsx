@@ -41,7 +41,7 @@ import { runPreevalNow } from './preevaluate';
 import { UpdateBanner } from '../ui/UpdateBanner';
 
 /** Pop-out / new-tab editor shell; does not host the chart. */
-export const EditorApp: Component = () => {
+export const EditorApp: Component = () : JSX.Element => {
   const [runStatus, setRunStatus] = createSignal('');
   const editorRef: { getDoc: () => string; setDoc?: (doc: string) => void } = {
     getDoc: () => '',

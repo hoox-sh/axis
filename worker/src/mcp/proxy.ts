@@ -17,6 +17,12 @@ import { ROUTES, matchRoute } from '../routes';
 
 const INTERNAL_ORIGIN = 'https://axis.internal';
 
+/**
+ * One Worker request an MCP tool wants performed on the caller's behalf.
+ *
+ * `bearer` is always set: the tool re-enters this Worker as the same user, so no tool
+ * can act with more authority than the MCP request itself had.
+ */
 export interface ProxyCall {
   method: string;
   path: string;
@@ -27,6 +33,12 @@ export interface ProxyCall {
   bearer: string;
 }
 
+/**
+ * Buffered outcome of a proxied call.
+ *
+ * `body` is parsed JSON when possible and the raw text otherwise (an HTML error page
+ * from an upstream still reaches the caller), or `null` for an empty body.
+ */
 export interface ProxyResult {
   ok: boolean;
   status: number;

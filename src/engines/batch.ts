@@ -81,12 +81,20 @@ export function splitBatchScripts<T>(
 /** Generous budget: N scripts share one compile/interpret pass over the window. */
 const DEFAULT_TIMEOUT_MS = 180_000;
 
+/**
+ * One script in a batch request; `id` is echoed back per result so the caller can match the
+ * reply to an applied indicator.
+ */
 export interface BatchScript {
   /** Caller-stable id echoed back per result (an applied indicator id). */
   id: string;
   script: string;
 }
 
+/**
+ * One `POST /run/batch` call: the shared OHLCV window plus up to
+ * {@link RUN_BATCH_MAX_SCRIPTS} scripts evaluated over it in a single backend pass.
+ */
 export interface BatchRunOptions {
   endpoint: string;
   apiKey?: string;
@@ -101,6 +109,10 @@ export interface BatchRunOptions {
   timeoutMs?: number;
 }
 
+/**
+ * Per-script outcome of a batch: either a normalized `RunResult` or the backend's failure
+ * reason, keyed by the request `id`.
+ */
 export interface BatchEntry {
   id: string;
   ok: boolean;
@@ -110,6 +122,10 @@ export interface BatchEntry {
   error?: string;
 }
 
+/**
+ * Envelope-level batch reply: entries in request order, `allOk`, the backend's data source,
+ * and an `error` only for failures that are not attributable to one script.
+ */
 export interface BatchRunOutcome {
   entries: BatchEntry[];
   /** Every requested script produced a usable result. */
@@ -132,7 +148,7 @@ function mapEntryResult(payload: Record<string, unknown>, ms: number): BatchRunR
   return mapEnginePayload(payload, {
     transport: 'rest',
     ms,
-    mode: payload.mode as string | undefined,
+    mode: payload['mode'] as string | undefined,
     batch: true,
     overlay: 'boolean-only',
   }) as BatchRunResult;
@@ -166,7 +182,7 @@ export async function runBatch(opts: BatchRunOptions): Promise<BatchRunOutcome |
   const apiKey = String(opts.apiKey || '').trim();
   if (apiKey) {
     headers['X-API-Key'] = apiKey;
-    headers.Authorization = `Bearer ${apiKey}`;
+    headers['Authorization'] = `Bearer ${apiKey}`;
   }
 
   const pineBars = barsForPine(opts.bars as Bar[]);
@@ -246,13 +262,15 @@ export async function runBatch(opts: BatchRunOptions): Promise<BatchRunOutcome |
   if (!parsed) {
     return { entries: [], allOk: false, dataSource: null, error: `HTTP ${res.status}` };
   }
-  if (!res.ok || parsed.status === 'error') {
+  if (!res.ok || parsed['status'] === 'error') {
     const message =
-      typeof parsed.message === 'string' && parsed.message ? parsed.message : `HTTP ${res.status}`;
+      typeof parsed['message'] === 'string' && parsed['message']
+        ? parsed['message']
+        : `HTTP ${res.status}`;
     return { entries: [], allOk: false, dataSource: null, error: message };
   }
 
-  const rawResults = Array.isArray(parsed.results) ? parsed.results : [];
+  const rawResults = Array.isArray(parsed['results']) ? parsed['results'] : [];
   const byId = new Map<string, BatchEntry>();
   // One wall time for the whole batch — every script shared the same pass.
   const ms = performance.now() - t0;
@@ -266,14 +284,16 @@ export async function runBatch(opts: BatchRunOptions): Promise<BatchRunOutcome |
   const envelopeTimes = payloadEngineTimes(parsed);
   for (const raw of rawResults) {
     if (!isRecord(raw)) continue;
-    const id = typeof raw.id === 'string' && raw.id ? raw.id : '';
+    const id = typeof raw['id'] === 'string' && raw['id'] ? raw['id'] : '';
     if (!id) continue;
-    if (raw.status === 'error') {
+    if (raw['status'] === 'error') {
       byId.set(id, {
         id,
         ok: false,
         error:
-          typeof raw.message === 'string' && raw.message ? raw.message : 'script execution failed',
+          typeof raw['message'] === 'string' && raw['message']
+            ? raw['message']
+            : 'script execution failed',
       });
       continue;
     }
@@ -302,7 +322,7 @@ export async function runBatch(opts: BatchRunOptions): Promise<BatchRunOutcome |
   return {
     entries,
     allOk: entries.every((e) => e.ok),
-    dataSource: typeof parsed.data_source === 'string' ? parsed.data_source : null,
+    dataSource: typeof parsed['data_source'] === 'string' ? parsed['data_source'] : null,
     error: null,
   };
 }

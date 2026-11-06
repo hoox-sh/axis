@@ -85,6 +85,7 @@ import { FloatableShell } from './panels/FloatableShell';
 import { announce } from './sr-announce';
 import { copyToClipboard } from './clipboard';
 import { StudioInput } from './studio';
+import { bindSlashToSearch } from './focus-search';
 
 type FilterId = 'all' | 'price' | 'drawing' | 'indicator' | 'onchain';
 
@@ -113,7 +114,7 @@ function Field(props: { label: string; class?: string; children: JSX.Element }) 
 }
 
 /** Dockable alerts list + create/edit form. */
-export const AlertsPanel: Component = () => {
+export const AlertsPanel: Component = () : JSX.Element => {
   const [items, setItems] = createSignal<Alert[]>(listAlerts());
   const refresh = () => setItems(listAlerts());
 
@@ -161,15 +162,7 @@ export const AlertsPanel: Component = () => {
     onCleanup(() => window.clearInterval(tick));
 
     // `/` focuses the alert search while the panel is mounted.
-    const onSlash = (e: KeyboardEvent) => {
-      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
-      const target = e.target as HTMLElement | null;
-      if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
-      e.preventDefault();
-      searchInput?.focus();
-    };
-    window.addEventListener('keydown', onSlash);
-    onCleanup(() => window.removeEventListener('keydown', onSlash));
+    onCleanup(bindSlashToSearch(() => searchInput));
   });
 
   // Keep the chip in sync when Settings → Notifications grants/denies permission.
@@ -350,27 +343,27 @@ export const AlertsPanel: Component = () => {
       setKind(alert.kind);
       const p = alert.params || {};
       if (isPriceKind(alert.kind)) {
-        if (p.price != null) setPrice(String(p.price));
+        if (p['price'] != null) setPrice(String(p['price']));
       } else if (isPctKind(alert.kind)) {
-        if (p.pct != null) setPct(String(p.pct));
-        if (p.direction === 'up' || p.direction === 'down') setPctDirection(p.direction);
+        if (p['pct'] != null) setPct(String(p['pct']));
+        if (p['direction'] === 'up' || p['direction'] === 'down') setPctDirection(p['direction']);
       } else if (isDrawingKind(alert.kind)) {
-        if (p.drawingId != null) setDrawingId(String(p.drawingId));
-        if (p.price != null) setPrice(String(p.price));
-        if (p.tolerance != null) setTolerance(String(p.tolerance));
+        if (p['drawingId'] != null) setDrawingId(String(p['drawingId']));
+        if (p['price'] != null) setPrice(String(p['price']));
+        if (p['tolerance'] != null) setTolerance(String(p['tolerance']));
       } else if (isPineAlertKind(alert.kind)) {
-        if (p.indicatorId != null) setIndicatorId(String(p.indicatorId));
-        if (p.source === 'alert' || p.source === 'alertcondition') setPineSource(p.source);
-        if (p.title != null) setPineTitle(String(p.title));
+        if (p['indicatorId'] != null) setIndicatorId(String(p['indicatorId']));
+        if (p['source'] === 'alert' || p['source'] === 'alertcondition') setPineSource(p['source']);
+        if (p['title'] != null) setPineTitle(String(p['title']));
       } else if (isPlotConditionKind(alert.kind)) {
-        if (p.indicatorId != null) setIndicatorId(String(p.indicatorId));
-        if (p.plotKey != null) setPlotKey(String(p.plotKey));
-        if (typeof p.op === 'string') setOp(p.op as (typeof PINE_COMPARE_OPS)[number]);
-        if (p.threshold != null) setThreshold(String(p.threshold));
+        if (p['indicatorId'] != null) setIndicatorId(String(p['indicatorId']));
+        if (p['plotKey'] != null) setPlotKey(String(p['plotKey']));
+        if (typeof p['op'] === 'string') setOp(p['op'] as (typeof PINE_COMPARE_OPS)[number]);
+        if (p['threshold'] != null) setThreshold(String(p['threshold']));
       } else if (isOnchainKind(alert.kind)) {
-        if (p.protocolId != null) setProtocolId(String(p.protocolId));
-        if (p.minAbsPct != null) setMinAbsPct(String(p.minAbsPct));
-        if (p.direction === 'up' || p.direction === 'down') setDirection(p.direction);
+        if (p['protocolId'] != null) setProtocolId(String(p['protocolId']));
+        if (p['minAbsPct'] != null) setMinAbsPct(String(p['minAbsPct']));
+        if (p['direction'] === 'up' || p['direction'] === 'down') setDirection(p['direction']);
       }
       setBindInterval(Boolean(alert.interval));
       setWebhookUrl(alert.webhookUrl || '');

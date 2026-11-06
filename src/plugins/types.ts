@@ -44,13 +44,7 @@ import type { LogLevel } from '../store/types';
 import type { DatasetFetchOpts, OnchainDataset, OnchainInstrument } from '../onchain/types';
 
 /** Discriminant for registry maps and Settings UI. */
-export type PluginKind =
-  | 'source'
-  | 'stream'
-  | 'engine'
-  | 'storage'
-  | 'dataset'
-  | 'component';
+export type PluginKind = 'source' | 'stream' | 'engine' | 'storage' | 'dataset' | 'component';
 
 /** One settings field in a plugin `configSchema`. */
 export interface FieldSchema {
@@ -208,7 +202,11 @@ export interface StreamOpts {
   lastBar?: Bar | null;
   onBar: (b: Bar) => void;
   onError: (e: Error) => void;
-  onStatus: (s: { state: 'open' | 'closed' | 'reconnecting' | string; url?: string; detail?: string }) => void;
+  onStatus: (s: {
+    state: 'open' | 'closed' | 'reconnecting' | string;
+    url?: string;
+    detail?: string;
+  }) => void;
 }
 
 /** Live OHLCV (or synthetic) feed. */
@@ -221,17 +219,16 @@ export interface StreamPlugin extends PluginBase {
 // --- Engine ---
 
 /**
- * Unified Pine evaluation result (server WS/REST, Pyodide, dynamic engines).
- *
- * Success payloads typically include `series` (named plots), optional
- * `events` (strategy), `drawings` (line/box/label), and `meta.plot_meta`.
- */
-/**
  * Per-bar plot sample: numbers for value plots, CSS color strings for
  * `bgcolor` / `barcolor` series, `null` = na.
  */
 export type PlotSample = number | string | null;
 
+/**
+ * Engine-neutral Pine run payload: status, per-bar plot series, strategy
+ * events, drawings, logs and engine meta. Every engine family normalizes to
+ * this shape before the runner or chart touches it.
+ */
 export interface RunResult {
   status: 'success' | 'error';
   plots: (number | null)[];
@@ -287,6 +284,11 @@ export interface EngineLibrarySource {
   source: string;
 }
 
+/**
+ * Arguments to {@link EnginePlugin.run}: script source, the OHLCV window,
+ * Pine input overrides, and optional live-session identity. `signal` aborts
+ * the round trip when the runner supersedes the run.
+ */
 export interface EngineOpts {
   script: string;
   bars: Bar[];
@@ -330,8 +332,14 @@ export interface EngineDataSessionRequest {
   historyBars: number;
 }
 
+/** Live re-run modes an engine can feed: every tick, or only on bar close. */
 export type EngineLiveMode = 'every-tick' | 'bar-close';
 
+/**
+ * What an engine advertises about its live behaviour. The router reads this to
+ * decide between calculator mode, engine-owned data and the push plane — an
+ * absent flag always means the more conservative path.
+ */
 export interface EngineCapabilities {
   /** Live re-run modes this engine can feed (subset of EngineLiveMode). */
   liveModes: EngineLiveMode[];
@@ -354,10 +362,6 @@ export interface EngineCapabilities {
 }
 
 /**
- * Pine calculation backend.
- * `run` should never throw for script errors — return `status: 'error'`.
- */
-/**
  * Engine family — the behavioural class of an engine, independent of its id.
  *
  * The id is a user-facing name; the family is what the code branches on.
@@ -371,6 +375,11 @@ export interface EngineCapabilities {
  */
 export type EngineFamily = 'server' | 'pyodide' | 'worker' | 'dynamic';
 
+/**
+ * Pine calculation backend. `run` must not throw for script errors — it
+ * returns `status: 'error'` so the runner can surface the message; only
+ * transport failures reject.
+ */
 export interface EnginePlugin extends PluginBase {
   kind: 'engine';
   /** The behavioural class of this engine. */
@@ -425,6 +434,7 @@ export interface StoredRunResult {
 
 // --- Storage (PR2 — interface reserved) ---
 
+/** Listing row for one script: everything a library card renders without the body. */
 export interface ScriptMeta {
   id: string;
   name: string;
@@ -447,6 +457,7 @@ export interface ScriptMeta {
   pineVersion?: string;
 }
 
+/** A script plus its body, as read and written by a {@link StoragePlugin}. */
 export interface ScriptDocument extends ScriptMeta {
   content: string;
 }
@@ -470,6 +481,7 @@ export interface ScriptVersion {
   url?: string;
 }
 
+/** Outcome of a push/pull/both sync, including the per-script conflicts to resolve. */
 export interface SyncResult {
   ok: boolean;
   message?: string;
@@ -477,6 +489,7 @@ export interface SyncResult {
   conflicts?: Array<{ id: string; localRev?: string; remoteRev?: string }>;
 }
 
+/** Connection-HUD state for a storage backend: reachable, dirty, last sync. */
 export interface StorageStatus {
   connected: boolean;
   dirty?: boolean;
@@ -486,13 +499,21 @@ export interface StorageStatus {
   error?: string;
 }
 
+/**
+ * Script library backend. Only `list` / `read` / `write` / `remove` are
+ * required; drafts, git versioning, sync and saved runs are optional and
+ * callers must feature-detect them (see {@link PluginCapabilities}).
+ */
 export interface StoragePlugin extends PluginBase {
   kind: 'storage';
   list(opts?: { prefix?: string; config?: Record<string, unknown> }): Promise<ScriptMeta[]>;
   read(id: string, config?: Record<string, unknown>): Promise<ScriptDocument>;
   write(doc: ScriptDocument, config?: Record<string, unknown>): Promise<ScriptMeta>;
   remove(id: string, config?: Record<string, unknown>): Promise<void>;
-  saveDraft?(doc: { content: string; name?: string }, config?: Record<string, unknown>): Promise<void>;
+  saveDraft?(
+    doc: { content: string; name?: string },
+    config?: Record<string, unknown>,
+  ): Promise<void>;
   loadDraft?(config?: Record<string, unknown>): Promise<{ content: string; name?: string } | null>;
   sync?(direction: 'push' | 'pull' | 'both', config?: Record<string, unknown>): Promise<SyncResult>;
   getStatus?(config?: Record<string, unknown>): Promise<StorageStatus>;
@@ -590,20 +611,21 @@ export interface DatasetPlugin extends PluginBase {
 
 // --- Component (phase 2 — reserved) ---
 
+/**
+ * UI slot plugin. `mount` receives the host element and returns the unmount
+ * disposer; the plugin owns nothing outside the element it was handed.
+ */
 export interface ComponentPlugin extends PluginBase {
   kind: 'component';
   slots: Array<'manager-tab' | 'results-tab' | 'topbar-action' | 'settings-section' | 'panel'>;
   mount(slot: string, el: HTMLElement, api: Record<string, unknown>): () => void;
 }
 
+/** Union of every plugin kind, for the registry's generic entry points. */
 export type AnyPlugin =
-  | SourcePlugin
-  | StreamPlugin
-  | EnginePlugin
-  | StoragePlugin
-  | DatasetPlugin
-  | ComponentPlugin;
+  SourcePlugin | StreamPlugin | EnginePlugin | StoragePlugin | DatasetPlugin | ComponentPlugin;
 
+/** Listing row for Settings / Manager; `description` is always a string (may be empty). */
 export interface PluginSummaryItem {
   id: string;
   name: string;
@@ -611,6 +633,7 @@ export interface PluginSummaryItem {
   builtIn?: boolean;
 }
 
+/** Per-kind plugin lists for the Settings / Manager overview. */
 export interface RegistrySummary {
   sources: PluginSummaryItem[];
   streams: PluginSummaryItem[];

@@ -25,6 +25,7 @@
  * @module ui/shortcuts/pine-snippets
  */
 
+/** One palette-insertable starter script: stable id, menu copy, and Pine source. */
 export interface PineSnippet {
   id: string;
   title: string;
@@ -118,7 +119,7 @@ plot(vwma, "VWMA", color=color.new(color.purple, 0))
   },
 ];
 
-/** Look up a snippet by id (falls back to the first starter). */
+/** Look up a snippet by id; `undefined` when the id is unknown. */
 export function getPineSnippet(id: string): PineSnippet | undefined {
   return PINE_SNIPPETS.find((s) => s.id === id);
 }

@@ -50,14 +50,9 @@ export const FEATURE_BAR_POLL_MS = 400;
 
 /** Live activity flags — which language features are firing right now. */
 export type FeatureActivityKey =
-  | 'hover'
-  | 'signature'
-  | 'complete'
-  | 'lint'
-  | 'marks'
-  | 'chips'
-  | 'remote';
+  'hover' | 'signature' | 'complete' | 'lint' | 'marks' | 'chips' | 'remote';
 
+/** Per-feature "firing right now" flags keyed by {@link FeatureActivityKey}. */
 export type FeatureActivity = Record<FeatureActivityKey, boolean>;
 
 /** All-quiet snapshot (editor missing, nothing firing). */
@@ -132,6 +127,7 @@ export interface LanguageFeatureGroup {
 
 const CLICK_HINT = 'Click toggles · long-press (or right-click) opens settings';
 
+/** Chips shown in the Language Feature Bar, in display order. */
 export const LANGUAGE_FEATURE_GROUPS: LanguageFeatureGroup[] = [
   {
     id: 'hover',
@@ -140,7 +136,12 @@ export const LANGUAGE_FEATURE_GROUPS: LanguageFeatureGroup[] = [
     masterKey: 'hoverEnabled',
     activityKey: 'hover',
     settings: [
-      { kind: 'toggle', key: 'hoverEnabled', label: 'Hover cards', hint: 'Docs for ta.*, plot, input.*, annotations.' },
+      {
+        kind: 'toggle',
+        key: 'hoverEnabled',
+        label: 'Hover cards',
+        hint: 'Docs for ta.*, plot, input.*, annotations.',
+      },
       {
         kind: 'number',
         key: 'hoverTimeMs',
@@ -151,7 +152,12 @@ export const LANGUAGE_FEATURE_GROUPS: LanguageFeatureGroup[] = [
         step: 25,
         suffix: ' ms',
       },
-      { kind: 'toggle', key: 'hoverRemote', label: 'Remote hover', hint: 'Ask Pro API /lsp/hover when local has no card.' },
+      {
+        kind: 'toggle',
+        key: 'hoverRemote',
+        label: 'Remote hover',
+        hint: 'Ask Pro API /lsp/hover when local has no card.',
+      },
     ],
   },
   {
@@ -176,11 +182,36 @@ export const LANGUAGE_FEATURE_GROUPS: LanguageFeatureGroup[] = [
     masterKey: 'autocompleteEnabled',
     activityKey: 'complete',
     settings: [
-      { kind: 'toggle', key: 'autocompleteEnabled', label: 'Completions', hint: 'Typing + Ctrl/Cmd-Space.' },
-      { kind: 'toggle', key: 'activateOnTyping', label: 'Activate while typing', hint: 'Off = trigger key only.' },
-      { kind: 'toggle', key: 'paramCompletions', label: 'Named parameters', hint: 'Remaining title= / minval= args inside a call.' },
-      { kind: 'toggle', key: 'enumCompletions', label: 'Enum values', hint: 'plot.style_*, shape.*, size.*, location.*, color.*.' },
-      { kind: 'toggle', key: 'remoteCompletions', label: 'Remote completions', hint: 'Merge Pro API /lsp/completion.' },
+      {
+        kind: 'toggle',
+        key: 'autocompleteEnabled',
+        label: 'Completions',
+        hint: 'Typing + Ctrl/Cmd-Space.',
+      },
+      {
+        kind: 'toggle',
+        key: 'activateOnTyping',
+        label: 'Activate while typing',
+        hint: 'Off = trigger key only.',
+      },
+      {
+        kind: 'toggle',
+        key: 'paramCompletions',
+        label: 'Named parameters',
+        hint: 'Remaining title= / minval= args inside a call.',
+      },
+      {
+        kind: 'toggle',
+        key: 'enumCompletions',
+        label: 'Enum values',
+        hint: 'plot.style_*, shape.*, size.*, location.*, color.*.',
+      },
+      {
+        kind: 'toggle',
+        key: 'remoteCompletions',
+        label: 'Remote completions',
+        hint: 'Merge Pro API /lsp/completion.',
+      },
       {
         kind: 'number',
         key: 'maxRenderedOptions',
@@ -199,12 +230,42 @@ export const LANGUAGE_FEATURE_GROUPS: LanguageFeatureGroup[] = [
     masterKey: 'preevalEnabled',
     activityKey: 'lint',
     settings: [
-      { kind: 'toggle', key: 'preevalEnabled', label: 'Pre-eval', hint: 'Parse/lint after idle, Save, and Run.' },
-      { kind: 'toggle', key: 'preevalLocal', label: 'Local checks', hint: 'Brackets, strings, entry point.' },
-      { kind: 'toggle', key: 'preevalRemote', label: 'Remote diagnostics', hint: 'POST /lsp/diagnostics when Backend URL is up.' },
-      { kind: 'toggle', key: 'preevalTypos', label: 'Typo hints', hint: 'Unknown ta.* / bare-call typos.' },
-      { kind: 'toggle', key: 'preevalBlockRun', label: 'Block Run on errors', hint: 'Severity error disables Run.' },
-      { kind: 'toggle', key: 'preevalClearOnEdit', label: 'Clear while typing', hint: 'Hide marks / Problems until idle (default off).' },
+      {
+        kind: 'toggle',
+        key: 'preevalEnabled',
+        label: 'Pre-eval',
+        hint: 'Parse/lint after idle, Save, and Run.',
+      },
+      {
+        kind: 'toggle',
+        key: 'preevalLocal',
+        label: 'Local checks',
+        hint: 'Brackets, strings, entry point.',
+      },
+      {
+        kind: 'toggle',
+        key: 'preevalRemote',
+        label: 'Remote diagnostics',
+        hint: 'POST /lsp/diagnostics when Backend URL is up.',
+      },
+      {
+        kind: 'toggle',
+        key: 'preevalTypos',
+        label: 'Typo hints',
+        hint: 'Unknown ta.* / bare-call typos.',
+      },
+      {
+        kind: 'toggle',
+        key: 'preevalBlockRun',
+        label: 'Block Run on errors',
+        hint: 'Severity error disables Run.',
+      },
+      {
+        kind: 'toggle',
+        key: 'preevalClearOnEdit',
+        label: 'Clear while typing',
+        hint: 'Hide marks / Problems until idle (default off).',
+      },
       {
         kind: 'number',
         key: 'preevalIdleMs',
@@ -234,9 +295,24 @@ export const LANGUAGE_FEATURE_GROUPS: LanguageFeatureGroup[] = [
     masterKey: 'diagUnderlines',
     activityKey: 'marks',
     settings: [
-      { kind: 'toggle', key: 'diagUnderlines', label: 'Underlines + line tint', hint: 'Wavy/dotted marks in the buffer.' },
-      { kind: 'toggle', key: 'diagGutter', label: 'Gutter markers', hint: 'Dots / triangles in the left gutter.' },
-      { kind: 'toggle', key: 'diagHover', label: 'Diagnostic hover', hint: 'Tooltip when resting on a mark.' },
+      {
+        kind: 'toggle',
+        key: 'diagUnderlines',
+        label: 'Underlines + line tint',
+        hint: 'Wavy/dotted marks in the buffer.',
+      },
+      {
+        kind: 'toggle',
+        key: 'diagGutter',
+        label: 'Gutter markers',
+        hint: 'Dots / triangles in the left gutter.',
+      },
+      {
+        kind: 'toggle',
+        key: 'diagHover',
+        label: 'Diagnostic hover',
+        hint: 'Tooltip when resting on a mark.',
+      },
       { kind: 'toggle', key: 'diagErrors', label: 'Show errors' },
       { kind: 'toggle', key: 'diagWarnings', label: 'Show warnings' },
       { kind: 'toggle', key: 'diagTypos', label: 'Show typos' },
@@ -250,9 +326,24 @@ export const LANGUAGE_FEATURE_GROUPS: LanguageFeatureGroup[] = [
     masterKey: 'colorChips',
     activityKey: 'chips',
     settings: [
-      { kind: 'toggle', key: 'colorChips', label: 'Color chips', hint: 'Swatches before hex / color.* tokens.' },
-      { kind: 'toggle', key: 'inlineChips', label: 'Debug chips', hint: 'End-of-line; also needs the editor Debug toggle.' },
-      { kind: 'toggle', key: 'inlinePinGutter', label: 'Pin gutter', hint: 'Also requires chart Pins.' },
+      {
+        kind: 'toggle',
+        key: 'colorChips',
+        label: 'Color chips',
+        hint: 'Swatches before hex / color.* tokens.',
+      },
+      {
+        kind: 'toggle',
+        key: 'inlineChips',
+        label: 'Debug chips',
+        hint: 'End-of-line; also needs the editor Debug toggle.',
+      },
+      {
+        kind: 'toggle',
+        key: 'inlinePinGutter',
+        label: 'Pin gutter',
+        hint: 'Also requires chart Pins.',
+      },
     ],
   },
   {
@@ -262,7 +353,12 @@ export const LANGUAGE_FEATURE_GROUPS: LanguageFeatureGroup[] = [
     masterKey: 'remoteLspEnabled',
     activityKey: 'remote',
     settings: [
-      { kind: 'toggle', key: 'remoteLspEnabled', label: 'Use remote LSP', hint: 'Master for hover / complete / diagnostics.' },
+      {
+        kind: 'toggle',
+        key: 'remoteLspEnabled',
+        label: 'Use remote LSP',
+        hint: 'Master for hover / complete / diagnostics.',
+      },
       {
         kind: 'number',
         key: 'hoverTimeoutMs',
@@ -322,13 +418,10 @@ export function deriveFeatureActivity(input: {
   intel: EditorIntelSettings;
 }): FeatureActivity {
   const { observed, lintPending, diagnosticCount, colorHits, intel } = input;
-  const lint =
-    intel.preevalEnabled && (lintPending || diagnosticCount > 0);
-  const marks =
-    (intel.diagUnderlines || intel.diagGutter) && diagnosticCount > 0;
+  const lint = intel.preevalEnabled && (lintPending || diagnosticCount > 0);
+  const marks = (intel.diagUnderlines || intel.diagGutter) && diagnosticCount > 0;
   const chips = intel.colorChips && colorHits > 0;
-  const remote =
-    intel.remoteLspEnabled && (observed.hover || observed.complete || lint);
+  const remote = intel.remoteLspEnabled && (observed.hover || observed.complete || lint);
   return {
     hover: observed.hover,
     signature: observed.signature,

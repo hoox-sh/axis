@@ -49,6 +49,10 @@ const READ_METHODS = 'GET, OPTIONS';
 /** Mutating routes (scripts PUT/DELETE, OAuth device flow, `/api/run`). */
 const WRITE_METHODS = 'GET, POST, PUT, DELETE, OPTIONS';
 
+/**
+ * Per-call overrides for {@link corsHeaders}; every omitted field falls back to the
+ * read-only defaults, so a route only names what it changes.
+ */
 export interface CorsOptions {
   /** `Access-Control-Allow-Methods`. Defaults to {@link READ_METHODS}. */
   methods?: string;
@@ -117,6 +121,10 @@ export const SCRIPTS_CORS = (origin: string): Record<string, string> =>
 export const API_CORS = (origin: string): Record<string, string> =>
   corsHeaders(origin, { methods: WRITE_METHODS, allowHeaders: FULL_HEADERS });
 
+/**
+ * Options for {@link jsonResponse}: the status, the CORS policy plus origin it should
+ * be applied to, and extra headers merged last so callers can override.
+ */
 export interface JsonOptions {
   status?: number | undefined;
   origin?: string | undefined;
@@ -167,7 +175,8 @@ export function scopedJson(cors: (origin: string) => Record<string, string>): Js
  * For WebSocket-adjacent replies, where the socket is the transport and a
  * preflight would be meaningless.
  */
-export const plainJson: JsonBuilder = (body, status = 200) => jsonResponse(body, { status });
+export const plainJson: JsonBuilder = (body, status = 200): Response =>
+  jsonResponse(body, { status });
 
 /** Canonical error envelope shared by every Worker route. */
 export interface ErrorBody {
@@ -176,6 +185,16 @@ export interface ErrorBody {
   message?: string;
 }
 
+/**
+ * Builds the canonical error envelope without wrapping it in a `Response`.
+ *
+ * `message` is omitted entirely when undefined, so the JSON shape stays stable for
+ * clients that branch on the presence of `message`.
+ *
+ * @param code - Machine-readable code, e.g. `NOT_FOUND`, `RATE_LIMIT`, `NO_KEY`.
+ * @param message - Optional human-readable detail.
+ * @returns `{ status: 'error', code }`, plus `message` when one was supplied.
+ */
 export function errorBody(code: string, message?: string): ErrorBody {
   return message === undefined ? { status: 'error', code } : { status: 'error', code, message };
 }
@@ -189,6 +208,7 @@ export function errorResponse(
   return jsonResponse(errorBody(code, message), { ...opts, status: opts.status ?? 400 });
 }
 
+/** Options for {@link errorResponse}; `status` defaults to 400, not 200. */
 export interface ErrorResponseOptions extends JsonOptions {
   status?: number;
 }
@@ -337,6 +357,12 @@ export async function readCappedText(
 /** Why an upstream call failed. Safe to hand back to a client. */
 export type UpstreamReason = 'network' | 'timeout' | 'redirect';
 
+/**
+ * Buffered upstream reply, as returned by {@link fetchUpstreamJson}.
+ *
+ * `text` is left unparsed so each proxy plane can apply its own JSON policy;
+ * `contentType` defaults to `application/json` when the peer sent no header.
+ */
 export interface UpstreamResult {
   status: number;
   text: string;
@@ -383,6 +409,10 @@ function assertNoRedirect(res: Response): void {
   }
 }
 
+/**
+ * Knobs for {@link fetchUpstreamJson}: the abort budget for the whole call, plus
+ * optional request headers and the verb (reachability probes use `HEAD`).
+ */
 export interface UpstreamFetchOptions {
   /** Abort the whole call (headers + body) after this many ms. */
   timeoutMs: number;

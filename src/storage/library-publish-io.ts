@@ -49,6 +49,10 @@ import {
   type PublishedLibrary,
 } from './library-publish';
 
+/**
+ * Outcome of a publish: the stored record, whether an identical auto-publish
+ * was skipped, whether git accepted the write, and the ready-to-paste import.
+ */
 export interface PublishLibraryResult {
   library: PublishedLibrary;
   skipped: boolean;

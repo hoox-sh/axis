@@ -29,6 +29,18 @@ import type { Platform } from './keys';
 import { getDisplay } from './registry';
 import type { ShortcutId, ShortcutOverrides } from './types';
 
+/**
+ * Append the effective chord to a prose label for tooltips and menu rows.
+ * Returns the label untouched when the id has no binding, the user cleared it,
+ * or the label already contains the formatted chord (avoids `Run · Mod-Enter`
+ * duplication).
+ *
+ * @param label - Human label, e.g. `Run script`.
+ * @param id - Shortcut whose display chord is appended.
+ * @param overrides - Persisted user overrides; defaults to none.
+ * @param platform - Force a platform's glyph set instead of auto-detecting.
+ * @returns `label`, or `label · <chord>` when a chord resolves.
+ */
 export function shortcutTitle(
   label: string,
   id: ShortcutId,

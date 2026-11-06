@@ -145,14 +145,7 @@ const SHOW_STATS_KINDS = kindSet(
   'forecast',
 );
 
-const TEXT_KINDS = kindSet(
-  'text',
-  'anchoredText',
-  'note',
-  'callout',
-  'flag',
-  'priceLabel',
-);
+const TEXT_KINDS = kindSet('text', 'anchoredText', 'note', 'callout', 'flag', 'priceLabel');
 
 const ARROW_KINDS = kindSet('trend', 'ray', 'arrow', 'forecast');
 
@@ -284,6 +277,13 @@ export function settingsForKind(kind: DrawingKind | DrawingToolId): ReadonlySet<
   return out;
 }
 
+/**
+ * Whether the style bar should expose a control for this tool.
+ *
+ * @param kind drawing kind or tool id
+ * @param id setting to test
+ * @returns true when {@link settingsForKind} includes `id`
+ */
 export function hasSetting(kind: DrawingKind | DrawingToolId, id: ToolSettingId): boolean {
   return settingsForKind(kind).has(id);
 }
@@ -371,11 +371,24 @@ export function resolvedPrefsForTool(
   };
 }
 
+/**
+ * Clamp a label font size into the paintable 8–32 px range.
+ *
+ * @param n untrusted stored value
+ * @param fallback used when `n` is not a finite number (default 12)
+ * @returns rounded px size
+ */
 export function clampFontSize(n: unknown, fallback = 12): number {
   const v = typeof n === 'number' && Number.isFinite(n) ? n : fallback;
   return Math.max(8, Math.min(32, Math.round(v)));
 }
 
+/**
+ * Clamp a long/short risk:reward ratio into 0.25–10.
+ *
+ * @param n untrusted stored value
+ * @param fallback used when `n` is not a finite number (default 1)
+ */
 export function clampRiskReward(n: unknown, fallback = 1): number {
   const v = typeof n === 'number' && Number.isFinite(n) ? n : fallback;
   return Math.max(0.25, Math.min(10, v));
@@ -421,37 +434,45 @@ function metaBool(d: MetaBag, key: string, fallback: boolean): boolean {
 /** Fib ratios on a drawing, with kind fallback. */
 export function fibLevelsOf(d: MetaBag): number[] {
   const kind = (d.kind || 'fib') as DrawingKind;
-  return sanitizeFibLevels(d.meta?.fibLevels, defaultFibLevels(kind));
+  return sanitizeFibLevels(d.meta?.['fibLevels'], defaultFibLevels(kind));
 }
 
+/** @returns `meta.reverse` when it is a boolean, else `false`. */
 export function isFibReversed(d: MetaBag): boolean {
   return metaBool(d, 'reverse', false);
 }
 
+/** @returns the `meta.showPrice` toggle, defaulting to `fallback`. */
 export function showPriceOf(d: MetaBag, fallback = true): boolean {
   return metaBool(d, 'showPrice', fallback);
 }
 
+/** @returns the `meta.showPct` toggle, defaulting to `fallback`. */
 export function showPctOf(d: MetaBag, fallback = true): boolean {
   return metaBool(d, 'showPct', fallback);
 }
 
+/** @returns the `meta.showStats` toggle, defaulting to `fallback`. */
 export function showStatsOf(d: MetaBag, fallback = true): boolean {
   return metaBool(d, 'showStats', fallback);
 }
 
+/** @returns label font size in px from `style.fontSize` then `meta.fontSize`, clamped 8–32. */
 export function fontSizeOf(d: MetaBag, fallback = 12): number {
-  return clampFontSize(d.style?.fontSize ?? d.meta?.fontSize, fallback);
+  return clampFontSize(d.style?.fontSize ?? d.meta?.['fontSize'], fallback);
 }
 
+/** @returns the long/short risk:reward from `meta.rr`, clamped to 0.25–10. */
 export function riskRewardOf(d: MetaBag, fallback = 1): number {
-  return clampRiskReward(d.meta?.rr, fallback);
+  return clampRiskReward(d.meta?.['rr'], fallback);
 }
 
+/** @returns the `meta.arrowStart` cap toggle, defaulting to `fallback`. */
 export function arrowStartOf(d: MetaBag, fallback = false): boolean {
   return metaBool(d, 'arrowStart', fallback);
 }
 
+/** @returns the `meta.arrowEnd` cap toggle, defaulting to `fallback`. */
 export function arrowEndOf(d: MetaBag, fallback = false): boolean {
   return metaBool(d, 'arrowEnd', fallback);
 }
@@ -466,6 +487,13 @@ export function positionStopPrice(entry: number, target: number, rr: number): nu
   return entry - reward / ratio;
 }
 
+/**
+ * Resolve a drawing's extend flags to the painter's extend mode.
+ *
+ * @param d drawing bag; `style.extendLeft` / `style.extendRight` win
+ * @param kindDefaults per-kind fallbacks from {@link defaultExtendFlags}
+ * @returns `both` / `left` / `right` / `none`
+ */
 export function extendModeOf(
   d: MetaBag,
   kindDefaults: { extendLeft: boolean; extendRight: boolean },
@@ -483,8 +511,9 @@ export function isTextEditableKind(kind: string): boolean {
   return TEXT_KINDS.has(kind);
 }
 
+/** @returns the visible label: top-level `text` when non-blank, else `meta.text`, else `''`. */
 export function drawingTextOf(d: MetaBag): string {
   if (typeof d.text === 'string' && d.text.trim()) return d.text;
-  if (typeof d.meta?.text === 'string') return d.meta.text;
+  if (typeof d.meta?.['text'] === 'string') return d.meta['text'];
   return '';
 }

@@ -43,7 +43,7 @@ export function resolveLogoSize(size: HooxLogoSize = 'm'): number {
 }
 
 /** Shared geometric paths — order matches landing-page opposite pairs (1↔2, 3↔4) + center. */
-export const HooxLogoPaths: Component<{ class?: string }> = (props) => (
+export const HooxLogoPaths: Component<{ class?: string }> = (props): JSX.Element => (
   <g
     transform="matrix(2.2062294,0,0,2.2117592,-1506.9584,-1032.9513)"
     class={props.class}
@@ -84,6 +84,7 @@ export const HooxLogoPaths: Component<{ class?: string }> = (props) => (
   </g>
 );
 
+/** Props for the brand mark: size, flicker modes, and pass-through SVG attributes. */
 export type HooxLogoProps = {
   size?: HooxLogoSize;
   /** Continuous CRT path flicker (loader mode). */
@@ -164,18 +165,21 @@ function runHoverFlicker(svg: SVGSVGElement, timers: number[]): Promise<void> {
         later(() => setOp(p, 0.85), t0 + DIP);
         later(() => setOp(p, 1), t0 + OFF);
       });
-      later(() => {
-        for (const p of paths) {
-          p.style.opacity = '';
-        }
-        resolve();
-      }, inOrder.length * STAGGER + OFF + 100);
+      later(
+        () => {
+          for (const p of paths) {
+            p.style.opacity = '';
+          }
+          resolve();
+        },
+        inOrder.length * STAGGER + OFF + 100,
+      );
     }, outDone);
   });
 }
 
 /** HOOX geometric SVG mark with optional continuous or hover flicker. */
-export const HooxLogo: Component<HooxLogoProps> = (props) => {
+export const HooxLogo: Component<HooxLogoProps> = (props): JSX.Element => {
   const [local, rest] = splitProps(props, [
     'size',
     'animate',

@@ -49,6 +49,11 @@ import { DATA_MANAGER_SOURCE_ID } from './source-ids';
  */
 export { DATA_MANAGER_SOURCE_ID };
 
+/**
+ * The cache entry the Data Manager source should load next: underlying venue
+ * key plus the optional date-range / max-bars window and provider lock. In
+ * memory only — a reload falls back to best-match resolution.
+ */
 export interface DataManagerSelection extends BarLoadWindow {
   sourceId: string;
   symbol: string;
@@ -80,7 +85,9 @@ export function setDataManagerSelection(
   const normalized = lock !== undefined ? providerDatasetLock(lock) : null;
   selection = {
     sourceId: String(sourceId || '').trim(),
-    symbol: String(symbol || '').trim().toUpperCase(),
+    symbol: String(symbol || '')
+      .trim()
+      .toUpperCase(),
     interval: String(interval || '').trim(),
     fromSec: win.fromSec,
     toSec: win.toSec,
@@ -95,6 +102,7 @@ export function clearDataManagerSelection(): void {
   selection = null;
 }
 
+/** Clone of the current selection, or `null` when none is pinned. */
 export function getDataManagerSelection(): DataManagerSelection | null {
   return selection ? { ...selection } : null;
 }
@@ -114,17 +122,16 @@ export function getDataManagerSelection(): DataManagerSelection | null {
  */
 export function resolveDataManagerVenueSource(streamId?: string): string {
   const sel = selection?.sourceId ? String(selection.sourceId).trim() : '';
-  if (
-    sel &&
-    sel !== DATA_MANAGER_SOURCE_ID &&
-    sel !== 'csv-upload' &&
-    sel !== 'mock-walk'
-  ) {
+  if (sel && sel !== DATA_MANAGER_SOURCE_ID && sel !== 'csv-upload' && sel !== 'mock-walk') {
     return sel;
   }
   return defaultSourceForStream(String(streamId || '').trim());
 }
 
+/**
+ * A resolved cached series: the venue source key it came from, the repaired and
+ * windowed bars, and the cache metadata row when the match came from the index.
+ */
 export interface ResolvedCacheSeries {
   sourceId: string;
   symbol: string;
@@ -156,7 +163,9 @@ export async function resolveDataManagerBars(
   symbol: string,
   interval: string,
 ): Promise<ResolvedCacheSeries | null> {
-  const sym = String(symbol || '').trim().toUpperCase();
+  const sym = String(symbol || '')
+    .trim()
+    .toUpperCase();
   const iv = String(interval || '').trim();
 
   if (selection?.sourceId) {
@@ -195,9 +204,7 @@ export async function resolveDataManagerBars(
     .sort((a, b) => b.count - a.count);
   const pick =
     bySymIv[0] ||
-    all
-      .filter((m) => m.symbol === sym && m.count > 0)
-      .sort((a, b) => b.count - a.count)[0] ||
+    all.filter((m) => m.symbol === sym && m.count > 0).sort((a, b) => b.count - a.count)[0] ||
     null;
 
   if (!pick) return null;

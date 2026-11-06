@@ -35,6 +35,11 @@
 
 import type { Bar } from '../store/types';
 
+/**
+ * How overlapping bars are reconciled: `keep-current` keeps the stored bar,
+ * while `newest-wins` / `prefer-incoming` let the incoming bar replace it
+ * (a closed candle always wins over a forming one).
+ */
 export type MergePolicy = 'newest-wins' | 'keep-current' | 'prefer-incoming';
 
 /**
@@ -50,12 +55,20 @@ export const DEFAULT_CONFLICT_TOLERANCE = 1e-6;
  */
 export const CONFLICT_ABS_FLOOR = 1e-9;
 
+/**
+ * One timestamp where the stored and incoming bars disagree beyond tolerance —
+ * the resolution policy decides which side survives.
+ */
 export interface BarConflict {
   time: number;
   current: Bar;
   incoming: Bar;
 }
 
+/**
+ * Result of a dataset merge: the resolved union, every disagreement found, and
+ * how many bars existed only on the incoming side.
+ */
 export interface MergeResult {
   /** Union of both series, sorted by time, conflicts resolved by policy. */
   bars: Bar[];

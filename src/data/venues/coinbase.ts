@@ -42,8 +42,17 @@ import {
 } from './types';
 import { toUsdt, venueFetch } from './spot';
 
+/** Coinbase Exchange REST origin (`/products`, `/products/<id>/ticker`, …). */
 export const COINBASE_BASE = 'https://api.exchange.coinbase.com';
 
+/**
+ * Build a Coinbase Exchange signed GET: `CB-ACCESS-SIGN` is base64 HMAC-SHA256
+ * over `timestamp + method + requestPath` (seconds timestamp), keyed by the
+ * base64-decoded secret. The passphrase header is always sent, empty if absent.
+ *
+ * @param input - Path, query, and vault secrets; `timestampMs` is floored to seconds.
+ * @throws DOMException when the secret is not valid base64 or Web Crypto rejects it.
+ */
 export async function signCoinbase(input: SignInput): Promise<SignedRequest> {
   const timestamp = String(Math.floor(resolveTimestampMs(input) / 1000));
   const queryString = buildQueryString(input.query);

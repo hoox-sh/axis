@@ -39,7 +39,7 @@
  * @module engines/engine-ws
  */
 
-import { parseEngineJson, parseEngineJsonAsync } from './json-sanitize';
+import { parseEngineJsonAsync } from './json-sanitize';
 import { BoundedMap } from '../utils/bounded-map';
 
 /** Payload sent on the `/ws/run` socket for one evaluation. */
@@ -337,23 +337,23 @@ class EngineWsClient {
       const msg = await parseEngineJsonAsync(raw);
       if (!msg || typeof msg !== 'object' || Array.isArray(msg)) return;
       const rec = msg as Record<string, unknown>;
-      if (rec.type === 'pong') return;
-      const id = rec.id != null ? String(rec.id) : '';
+      if (rec['type'] === 'pong') return;
+      const id = rec['id'] != null ? String(rec['id']) : '';
       const pend = id ? this.pending.get(id) : undefined;
       if (!pend) return;
       clearTimeout(pend.timer);
       this.pending.delete(id);
       try {
         if (
-          rec.type === 'error' ||
-          rec.status === 'error' ||
-          rec.status === 'failed' ||
-          rec.ok === false
+          rec['type'] === 'error' ||
+          rec['status'] === 'error' ||
+          rec['status'] === 'failed' ||
+          rec['ok'] === false
         ) {
           pend.resolve({
             status: 'error',
-            error: String(rec.message || rec.error || 'Engine error'),
-            code: rec.code as string | undefined,
+            error: String(rec['message'] || rec['error'] || 'Engine error'),
+            code: rec['code'] as string | undefined,
             transport: 'ws',
           });
           return;
@@ -452,18 +452,18 @@ class EngineWsClient {
             };
             // Only send symbol when it's a real string (null fails API schema)
             if (typeof req.symbol === 'string' && req.symbol.length) {
-              frame.symbol = req.symbol;
+              frame['symbol'] = req.symbol;
             }
             if (req.inputs && typeof req.inputs === 'object' && Object.keys(req.inputs).length) {
-              frame.inputs = req.inputs;
+              frame['inputs'] = req.inputs;
             }
             if (req.profiler === true) {
-              frame.profiler = true;
+              frame['profiler'] = true;
             }
             // Published library() sources — without these, `import ns/Name/ver`
             // fails on the WS path while the REST path sends them.
             if (Array.isArray(req.libraries) && req.libraries.length) {
-              frame.libraries = req.libraries;
+              frame['libraries'] = req.libraries;
             }
             this.ws.send(JSON.stringify(frame));
           } catch (e) {
@@ -568,12 +568,12 @@ export async function probeEngineWs(endpoint: string, timeoutMs = 4_000): Promis
 }
 
 /** @internal */
-export function _resetEngineWsClients() {
+export function _resetEngineWsClients(): void {
   for (const c of clients.values()) c.close();
   clients.clear();
 }
 
 /** @internal test seam — shrink the `/ws/run` keepalive interval. */
-export function _setWsRunHeartbeatMs(ms: number) {
+export function _setWsRunHeartbeatMs(ms: number): void {
   WS_RUN_HEARTBEAT_MS = ms;
 }

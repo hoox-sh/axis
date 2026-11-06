@@ -22,6 +22,11 @@ import {
   mcpBridgeState,
 } from './bridge';
 
+/**
+ * The `window.__AXIS_MCP__` surface handed to same-origin scripts: read-only capability
+ * invocation plus snapshot/capabilities/bridge introspection. Mutating capabilities are
+ * denied here — authenticated agent traffic goes through the Worker bridge instead.
+ */
 export interface AxisMcpApi {
   invoke: (capability: string, payload?: unknown) => Promise<unknown>;
   snapshot: (opts?: { includeBars?: boolean }) => unknown;
@@ -37,17 +42,32 @@ declare global {
 
 const MCP_PREF_KEY = 'pynescript.axis.mcp.v1';
 
+/**
+ * Persisted MCP preferences for this browser, shared with the bridge through the same
+ * localStorage key so a reconnect decision survives reloads.
+ */
 export type McpPrefs = {
   /** Connect this tab to the Worker MCP bridge when an API key is set. */
   connect: boolean;
 };
 
+/**
+ * Reads MCP preferences, defaulting to connected when nothing has been stored so a fresh
+ * browser attaches to the bridge as soon as a key exists.
+ *
+ * @returns Stored prefs, or `{ connect: true }` when unset or unreadable.
+ */
 export function loadMcpPrefs(): McpPrefs {
   const p = getJson<{ connect?: unknown }>(MCP_PREF_KEY);
   if (!p) return { connect: true };
   return { connect: p.connect !== false };
 }
 
+/**
+ * Persists MCP preferences so the connect choice applies on the next load.
+ *
+ * @param prefs Preferences to store; `connect: false` keeps this tab off the bridge.
+ */
 export function saveMcpPrefs(prefs: McpPrefs): void {
   setJson(MCP_PREF_KEY, prefs);
 }
@@ -82,7 +102,12 @@ export function requestMcpConnect(): void {
   void connectMcpBridge();
 }
 
-/** Install the in-page API and optionally open the Worker control-plane socket. */
+/**
+ * Installs `window.__AXIS_MCP__` and, when prefs allow, opens the Worker bridge socket.
+ *
+ * @param hooks Live editor hooks dispatch uses instead of importing Solid UI.
+ * @returns Teardown that disconnects the bridge and removes the global when it is still ours.
+ */
 export function startMcpHost(hooks: McpHostHooks): () => void {
   setMcpHostHooks(hooks);
   const api: AxisMcpApi = {

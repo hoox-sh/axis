@@ -58,7 +58,7 @@ class ColorChipWidget extends WidgetType {
     super();
   }
 
-  eq(other: ColorChipWidget) {
+  override eq(other: ColorChipWidget) {
     return (
       other.css === this.css &&
       other.title === this.title &&
@@ -121,12 +121,12 @@ class ColorChipWidget extends WidgetType {
     return wrap;
   }
 
-  ignoreEvent() {
+  override ignoreEvent() {
     return true;
   }
 
   /** Chips are atomic UI; don’t expand selection into the widget. */
-  get estimatedHeight() {
+  override get estimatedHeight() {
     return -1;
   }
 }
@@ -153,10 +153,7 @@ export function buildColorChipDecorations(doc: string): DecorationSet {
 function decorationForHit(hit: PineColorHit) {
   const rgba = rgbaFromChannels(hit.r, hit.g, hit.b, transpToAlpha(hit.transp));
   const css = toCssRgba(rgba);
-  const title =
-    hit.transp > 0
-      ? `${hit.text} · transp ${hit.transp}`
-      : hit.text;
+  const title = hit.transp > 0 ? `${hit.text} · transp ${hit.transp}` : hit.text;
   return Decoration.widget({
     widget: new ColorChipWidget(css, title, toHex6(rgba), hit),
     side: -1,
@@ -180,9 +177,7 @@ const colorChipsPlugin = ViewPlugin.fromClass(
         // Rebuild on any doc change; viewport-only changes keep prior set
         // (widgets are absolute offsets — only doc changes invalidate).
         if (update.docChanged) {
-          this.decorations = buildColorChipDecorations(
-            update.state.doc.toString(),
-          );
+          this.decorations = buildColorChipDecorations(update.state.doc.toString());
         }
       }
     }

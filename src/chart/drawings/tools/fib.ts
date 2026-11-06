@@ -9,7 +9,6 @@ import type {
   Drawing,
   MultiPointDrawing,
   Point,
-  TwoPointDrawing,
 } from '../../drawing-types';
 import { channelEdges, distToSegment, fibExtensionPrices, fibPrices } from '../geometry';
 import {
@@ -22,20 +21,14 @@ import {
 } from '../tool-settings';
 import { levelKey, resolveLevelPaint } from '../level-palette';
 import { registerToolHandler } from './registry';
-import { isFinitePoint, sanitizePoints, sanitizeStrokeColor } from './safe';
+import { sanitizePoints, sanitizeStrokeColor, asTwoPoint } from './safe';
 
-function asTwo(d: Drawing, kind?: TwoPointDrawing['kind']): TwoPointDrawing | null {
-  if (kind && d.kind !== kind) return null;
-  if (!('p1' in d) || !('p2' in d) || !d.p1 || !d.p2) return null;
-  if (!isFinitePoint(d.p1) || !isFinitePoint(d.p2)) return null;
-  return d as TwoPointDrawing;
-}
 
 function pts(d: Drawing): Point[] {
   if ('points' in d && Array.isArray((d as MultiPointDrawing).points)) {
     return sanitizePoints((d as MultiPointDrawing).points);
   }
-  const t = asTwo(d);
+  const t = asTwoPoint(d);
   return t ? [t.p1, t.p2] : [];
 }
 
@@ -161,7 +154,7 @@ registerToolHandler({
     };
   },
   paint(d, ctx) {
-    const t = asTwo(d, 'fibtime');
+    const t = asTwoPoint(d, 'fibtime');
     if (!t) return;
     const a = ctx.toXY(t.p1);
     const b = ctx.toXY(t.p2);
@@ -183,7 +176,7 @@ registerToolHandler({
     }
   },
   hit(d, ctx) {
-    const t = asTwo(d, 'fibtime');
+    const t = asTwoPoint(d, 'fibtime');
     if (!t) return false;
     const dt = t.p2.time - t.p1.time || 1;
     for (const lvl of fibLevelsOf(d)) {

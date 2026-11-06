@@ -116,6 +116,7 @@ function SeverityGlyph(props: { severity: DiagnosticSeverity | string }) {
   );
 }
 
+/** Props for the problems list: diagnostics, jump/clear callbacks, and optional controlled height. */
 export interface EditorProblemsProps {
   /**
    * Diagnostics from last run — accepts full {@link EditorDiagnostic}s
@@ -146,7 +147,7 @@ export interface EditorProblemsProps {
  * Click a row to jump + copy; copy icon copies only; empty state shows “No problems”.
  * Drag the top handle to freely resize height.
  */
-export const EditorProblems: Component<EditorProblemsProps> = (props) => {
+export const EditorProblems: Component<EditorProblemsProps> = (props): JSX.Element => {
   const [internalHeight, setInternalHeight] = createSignal(loadStoredHeight());
   const [copiedKey, setCopiedKey] = createSignal<string | null>(null);
   let copiedTimer: ReturnType<typeof setTimeout> | null = null;

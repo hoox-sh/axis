@@ -11,6 +11,14 @@
 import type { JSX } from 'solid-js';
 import { Show } from 'solid-js';
 
+/**
+ * Card container for studio content, with an optional kicker/title. When
+ * `onClick` is supplied it renders as a button with `aria-pressed` reflecting
+ * `selected`, so master-detail grids stay keyboard reachable.
+ *
+ * @param props - Kicker, title, click handler, selected state, and body.
+ * @returns A `<button>` when clickable, otherwise a `<div>`.
+ */
 export function StudioCard(props: {
   kicker?: string;
   title?: string;
@@ -19,7 +27,7 @@ export function StudioCard(props: {
   /** Visual selected state for master-detail grids. */
   selected?: boolean;
   children: JSX.Element;
-}) {
+}): JSX.Element {
   const className = () => `ax-card${props.selected ? ' is-on' : ''}`;
   const inner = (
     <>
@@ -53,7 +61,17 @@ export function StudioCard(props: {
   );
 }
 
-export function StudioStat(props: { label: string; value: JSX.Element; testId?: string }) {
+/**
+ * Label/value pair for compact metric readouts (endpoint, latency, counts).
+ *
+ * @param props - Metric label, already-rendered value node, and test id.
+ * @returns A `div.ax-stat` with label and value spans.
+ */
+export function StudioStat(props: {
+  label: string;
+  value: JSX.Element;
+  testId?: string;
+}): JSX.Element {
   return (
     <div class="ax-stat" data-testid={props.testId}>
       <span class="ax-stat-label">{props.label}</span>
@@ -62,6 +80,13 @@ export function StudioStat(props: { label: string; value: JSX.Element; testId?: 
   );
 }
 
+/**
+ * Pressable filter/status chip. Disabled chips stay focusable-looking but
+ * swallow clicks; `pressed` is exposed via `aria-pressed`.
+ *
+ * @param props - Pressed/disabled flags, click handler, title, and label.
+ * @returns A `<button class="ax-chip">`.
+ */
 export function StudioChip(props: {
   pressed?: boolean;
   disabled?: boolean;
@@ -69,7 +94,7 @@ export function StudioChip(props: {
   testId?: string;
   title?: string;
   children: JSX.Element;
-}) {
+}): JSX.Element {
   return (
     <button
       type="button"
@@ -92,6 +117,7 @@ export function StudioChip(props: {
   );
 }
 
+/** Probe outcome vocabulary shared by Runtime/Wire/Workers status rows. */
 export type StudioHealth = 'healthy' | 'degraded' | 'down' | 'idle' | 'unknown' | 'skipped';
 
 /** Map probe status → visible word. Keep this as a function so Solid re-runs it. */
@@ -113,7 +139,14 @@ export function studioHealthLabel(status: StudioHealth, label?: string): string 
   }
 }
 
-export function StudioStatus(props: { status: StudioHealth; label?: string }) {
+/**
+ * Status pill whose dot color and word both follow `status`. Kept reactive so
+ * an in-flight probe (`unknown`) repaints once the real result arrives.
+ *
+ * @param props - Health status and an optional label override.
+ * @returns A `span.ax-status` with a `data-status` hook for styling/tests.
+ */
+export function StudioStatus(props: { status: StudioHealth; label?: string }): JSX.Element {
   // Do not close over props.status — first paint is often `unknown` (probe
   // in flight); the class string in JSX was reactive but the word was not,
   // so cards showed a green/red dot next to a frozen "Unknown".
@@ -128,11 +161,23 @@ export function StudioStatus(props: { status: StudioHealth; label?: string }) {
   );
 }
 
-export function StudioEmpty(props: { children: JSX.Element }) {
+/**
+ * Muted "nothing here yet" paragraph used when a studio list has no rows.
+ *
+ * @param props - Empty-state copy.
+ * @returns A `p.ax-empty`.
+ */
+export function StudioEmpty(props: { children: JSX.Element }): JSX.Element {
   return <p class="ax-empty">{props.children}</p>;
 }
 
-export function StudioCode(props: { testId?: string; children: JSX.Element }) {
+/**
+ * Monospace preformatted block for payloads and log excerpts.
+ *
+ * @param props - Optional test id and the code content.
+ * @returns A `pre.ax-code` wrapping `<code>`.
+ */
+export function StudioCode(props: { testId?: string; children: JSX.Element }): JSX.Element {
   return (
     <pre class="ax-code" data-testid={props.testId}>
       <code>{props.children}</code>
@@ -140,11 +185,23 @@ export function StudioCode(props: { testId?: string; children: JSX.Element }) {
   );
 }
 
-export function StudioList(props: { class?: string; children: JSX.Element }) {
+/**
+ * Unstyled list shell (`ul.ax-list`) so rows share spacing and separators.
+ *
+ * @param props - Optional extra class and the `<li>` children.
+ * @returns A `ul.ax-list`.
+ */
+export function StudioList(props: { class?: string; children: JSX.Element }): JSX.Element {
   return <ul class={`ax-list${props.class ? ` ${props.class}` : ''}`}>{props.children}</ul>;
 }
 
-export function StudioRow(props: { children: JSX.Element; testId?: string }) {
+/**
+ * List item shell (`li.ax-row`) matching {@link StudioList} spacing.
+ *
+ * @param props - Row content and optional test id.
+ * @returns An `li.ax-row`.
+ */
+export function StudioRow(props: { children: JSX.Element; testId?: string }): JSX.Element {
   return (
     <li class="ax-row" data-testid={props.testId}>
       {props.children}

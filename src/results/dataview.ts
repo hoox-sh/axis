@@ -105,7 +105,10 @@ function fmtTime(t: number): string {
   // ms vs sec
   const ms = t > 1e12 ? t : t * 1000;
   try {
-    return new Date(ms).toISOString().replace('T', ' ').replace(/\.\d+Z$/, ' UTC');
+    return new Date(ms)
+      .toISOString()
+      .replace('T', ' ')
+      .replace(/\.\d+Z$/, ' UTC');
   } catch {
     return String(t);
   }
@@ -145,6 +148,10 @@ export function mergePlotDisplayOverrides(
   return out;
 }
 
+/**
+ * Inputs for {@link buildDataViewRows}: the bars and crosshair position to read,
+ * plus the series, plot meta, drawings and on-chain attachments to show.
+ */
 export interface BuildDataViewOpts {
   bars: Bar[];
   /** Crosshair / selected bar time */
@@ -437,8 +444,7 @@ export function buildOnchainDataViewRows(
     const pts = Array.isArray(s.points) ? s.points : [];
     const pointCount = pts.length;
     const last = lastOnchainValue(s);
-    const at =
-      evalTime != null ? onchainValueAtTime(pts, evalTime) : null;
+    const at = evalTime != null ? onchainValueAtTime(pts, evalTime) : null;
     const display = at != null ? at : last;
     const color = s.color || undefined;
     const finality = (s.finality && String(s.finality)) || 'unknown';
@@ -495,6 +501,7 @@ function inferBarPeriod(bars: Bar[], idx: number): number {
 function closeTone(bars: Bar[], idx: number, close: number): DataViewRow['tone'] {
   if (idx <= 0) return undefined;
   const prevClose = bars[idx - 1]?.close;
+  if (typeof prevClose !== 'number') return undefined;
   if (!Number.isFinite(prevClose) || !Number.isFinite(close)) return undefined;
   if (close > prevClose) return 'up';
   if (close < prevClose) return 'down';
@@ -518,8 +525,7 @@ export function buildDataViewRows(opts: BuildDataViewOpts): DataViewRow[] {
   if (idx >= bars.length) idx = bars.length - 1;
   const bar = bars[idx]!;
   // Prefer explicit crosshair time (may be future / off exact bar) for drawings
-  const evalTime =
-    opts.time != null && Number.isFinite(opts.time) ? Number(opts.time) : bar.time;
+  const evalTime = opts.time != null && Number.isFinite(opts.time) ? Number(opts.time) : bar.time;
   const barPeriod =
     opts.barPeriod != null && Number.isFinite(opts.barPeriod) && opts.barPeriod! > 0
       ? Number(opts.barPeriod)
@@ -602,9 +608,7 @@ export function buildDataViewRows(opts: BuildDataViewOpts): DataViewRow[] {
     });
   }
 
-  rows.push(
-    ...buildDrawingDataViewRows(opts.drawings, evalTime, { barPeriod }),
-  );
+  rows.push(...buildDrawingDataViewRows(opts.drawings, evalTime, { barPeriod }));
 
   rows.push(...buildOnchainDataViewRows(opts.onchainSeries, evalTime));
 

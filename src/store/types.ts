@@ -245,8 +245,11 @@ import type { Drawing, DrawingToolId } from '../chart/drawing-types';
 import type { BarColorTheme, ChartThemeState, SavedCustomTheme } from '../theme';
 import type { ProviderSession } from '../data/provider';
 import type { ShortcutOverrides } from '../ui/shortcuts/types';
+/** Drawing geometry/tool types live in the chart layer; re-exported for store consumers. */
 export type { Drawing, DrawingToolId };
+/** Chart theme state shape (tokens + preset + bar-theme ref). */
 export type { ChartThemeState };
+/** Locked market-data identity persisted with the session. */
 export type { ProviderSession };
 
 /**

@@ -38,6 +38,7 @@ export function scriptHasPineAlertCalls(source: string | null | undefined): bool
   return PINE_ALERT_CALL_RE.test(String(source || ''));
 }
 
+/** Which Pine call produced a firing: `alert()` or a true `alertcondition()`. */
 export type PineAlertSource = 'alert' | 'alertcondition';
 
 /** One firing from `alert()` or a true `alertcondition()`. */
@@ -50,6 +51,7 @@ export type PineAlertEvent = {
   source: PineAlertSource;
 };
 
+/** Run identity an armed `pine_alert` row is matched against. */
 export type PineAlertEvalContext = {
   /** Applied script id this run belongs to (optional match). */
   indicatorId?: string;
@@ -58,6 +60,7 @@ export type PineAlertEvalContext = {
   now?: number;
 };
 
+/** One fire: the alert copy with its advanced watermark plus the matching event. */
 export type PineAlertFired = {
   alert: Alert;
   event: PineAlertEvent;
@@ -99,22 +102,22 @@ function parseOneAlert(raw: unknown): PineAlertEvent | null {
   if (!raw || typeof raw !== 'object') return null;
   const o = raw as Record<string, unknown>;
   const message =
-    o.message != null
-      ? String(o.message)
-      : o.alert_message != null
-        ? String(o.alert_message)
+    o['message'] != null
+      ? String(o['message'])
+      : o['alert_message'] != null
+        ? String(o['alert_message'])
         : '';
-  const title = o.title != null && String(o.title).trim() ? String(o.title) : null;
+  const title = o['title'] != null && String(o['title']).trim() ? String(o['title']) : null;
   if (!message.trim() && !title) return null;
-  const bar = asFiniteInt(o.bar_index ?? o.barIndex);
-  const time = asFiniteInt(o.time ?? o.bar_time ?? o.barTime);
+  const bar = asFiniteInt(o['bar_index'] ?? o['barIndex']);
+  const time = asFiniteInt(o['time'] ?? o['bar_time'] ?? o['barTime']);
   return {
     message: message.trim() || title || 'Alert',
-    freq: o.freq != null ? String(o.freq) : undefined,
+    freq: o['freq'] != null ? String(o['freq']) : undefined,
     bar_index: bar,
     time,
     title,
-    source: asSource(o.source),
+    source: asSource(o['source']),
   };
 }
 
@@ -141,7 +144,7 @@ export function parsePineAlertConditions(raw: unknown): PineAlertEvent[] {
   for (const item of raw) {
     if (!item || typeof item !== 'object') continue;
     const o = item as Record<string, unknown>;
-    if (o.condition !== true && o.condition !== 1) continue;
+    if (o['condition'] !== true && o['condition'] !== 1) continue;
     const ev = parseOneAlert({ ...o, source: 'alertcondition' });
     if (ev) out.push(ev);
   }
@@ -157,14 +160,14 @@ export function pineAlertsFromStrategyEvents(events: unknown): PineAlertEvent[] 
   for (const item of events) {
     if (!item || typeof item !== 'object') continue;
     const o = item as Record<string, unknown>;
-    const msg = o.alert_message ?? o.alertMessage;
+    const msg = o['alert_message'] ?? o['alertMessage'];
     if (msg == null || String(msg).trim() === '') continue;
-    const bar = asFiniteInt(o.bar_index ?? o.barIndex);
-    const time = asFiniteInt(o.time ?? o.bar_time ?? o.barTime);
+    const bar = asFiniteInt(o['bar_index'] ?? o['barIndex']);
+    const time = asFiniteInt(o['time'] ?? o['bar_time'] ?? o['barTime']);
     pushEvent(out, {
       message: String(msg),
       source: 'alert',
-      title: o.id != null ? String(o.id) : null,
+      title: o['id'] != null ? String(o['id']) : null,
       bar_index: bar,
       time,
       freq: 'once_per_bar',
@@ -181,11 +184,9 @@ export function collectPineAlertEvents(result: {
   meta?: Record<string, unknown> | null;
 }): PineAlertEvent[] {
   const fromMetaAlerts =
-    result.meta && typeof result.meta === 'object' ? result.meta.alerts : undefined;
+    result.meta && typeof result.meta === 'object' ? result.meta['alerts'] : undefined;
   const fromMetaCond =
-    result.meta && typeof result.meta === 'object'
-      ? result.meta.alert_conditions
-      : undefined;
+    result.meta && typeof result.meta === 'object' ? result.meta['alert_conditions'] : undefined;
   const fired = [
     ...parsePineAlertEvents(result.alerts ?? fromMetaAlerts),
     ...parsePineAlertConditions(result.alert_conditions ?? fromMetaCond),
@@ -205,7 +206,8 @@ export function collectPineAlertEvents(result: {
 }
 
 function wantSource(alert: Alert): 'alert' | 'alertcondition' | 'any' {
-  const raw = alert.params?.source != null ? String(alert.params.source).trim().toLowerCase() : '';
+  const raw =
+    alert.params?.['source'] != null ? String(alert.params['source']).trim().toLowerCase() : '';
   if (raw === 'alertcondition' || raw === 'alert_condition') return 'alertcondition';
   if (raw === 'any' || raw === '*') return 'any';
   if (raw === 'alert') return 'alert';
@@ -218,10 +220,23 @@ export function isPineScriptAlert(alert: Alert): boolean {
   if (!alert.enabled) return false;
   if (alert.kind === 'pine_alert') return true;
   if (alert.kind !== 'pine_condition') return false;
-  const src = alert.params?.source != null ? String(alert.params.source).trim().toLowerCase() : '';
+  const src =
+    alert.params?.['source'] != null ? String(alert.params['source']).trim().toLowerCase() : '';
   return src === 'alert' || src === 'alertcondition' || src === 'any' || src === '*';
 }
 
+/**
+ * Pure predicate: does one parsed event satisfy an armed Pine script alert?
+ *
+ * Disabled rows and non-Pine kinds never match. A `params.indicatorId` only
+ * narrows the match when the caller also passes one in `ctx`. Cooldown and the
+ * `lastBarIndex` watermark are **not** checked here.
+ *
+ * @param alert Book row to test; must be enabled and Pine-armed
+ * @param event Parsed `alert()` / `alertcondition()` firing from the run
+ * @param ctx Run identity used to match the script and its bar window
+ * @returns true when the source, script id and title filters all pass
+ */
 export function eventMatchesPineAlert(
   alert: Alert,
   event: PineAlertEvent,
@@ -229,12 +244,11 @@ export function eventMatchesPineAlert(
 ): boolean {
   if (!isPineScriptAlert(alert)) return false;
   const wantId =
-    alert.params?.indicatorId != null ? String(alert.params.indicatorId).trim() : '';
+    alert.params?.['indicatorId'] != null ? String(alert.params['indicatorId']).trim() : '';
   if (wantId && ctx.indicatorId && wantId !== ctx.indicatorId) return false;
   const want = wantSource(alert);
   if (want !== 'any' && event.source !== want) return false;
-  const title =
-    alert.params?.title != null ? String(alert.params.title).trim() : '';
+  const title = alert.params?.['title'] != null ? String(alert.params['title']).trim() : '';
   if (title) {
     const evTitle = (event.title || '').trim();
     if (evTitle) {
@@ -247,9 +261,7 @@ export function eventMatchesPineAlert(
 }
 
 function eventBarIndex(event: PineAlertEvent): number | null {
-  return event.bar_index != null && Number.isFinite(event.bar_index)
-    ? event.bar_index
-    : null;
+  return event.bar_index != null && Number.isFinite(event.bar_index) ? event.bar_index : null;
 }
 
 /**

@@ -26,27 +26,10 @@
  */
 
 import type { ScriptDocument, ScriptMeta, ScriptVersion } from '../plugins/types';
-import { metaFromScriptContent } from '../indicators/script-meta';
-import {
-  type GitConfig,
-  GitIndexCorruptError,
-  assertGitConfig,
-  assertSafeRepoPath,
-  formatCommitMessage,
-  indexPath,
-  resolveScriptRepoPath,
-  scriptPath,
-} from './git-config';
+import '../indicators/script-meta';
+import { type GitConfig, GitIndexCorruptError, assertGitConfig, indexPath } from './git-config';
 
-import {
-  forgeList,
-  forgeRead,
-  forgeRemove,
-  forgeWrite,
-  type GitForge,
-  type GitToken,
-  type IndexFile,
-} from './git-forge';
+import { forgeList, forgeRead, forgeRemove, forgeWrite, type GitForge, type IndexFile } from './git-forge';
 
 /** @deprecated Re-exported from {@link module:storage/git-forge}. */
 export type { IndexFile };
@@ -79,7 +62,7 @@ async function gh(
     /* not json */
   }
   if (!res.ok) {
-    const msg = String(json.message || text || `HTTP ${res.status}`);
+    const msg = String(json['message'] || text || `HTTP ${res.status}`);
     let detail = msg;
     if (res.status === 409) {
       detail = `${msg} (conflict — retry with fresh file sha)`;
@@ -125,8 +108,8 @@ export async function githubGetFile(
   try {
     const at = encodeURIComponent(ref || cfg.branch);
     const { json } = await gh(cfg, `${repoPath(cfg, filePath)}?ref=${at}`);
-    if (json.type === 'file' && typeof json.content === 'string') {
-      return { content: b64Decode(String(json.content)), sha: String(json.sha) };
+    if (json['type'] === 'file' && typeof json['content'] === 'string') {
+      return { content: b64Decode(String(json['content'])), sha: String(json['sha']) };
     }
     return null;
   } catch (e: unknown) {
@@ -228,13 +211,13 @@ export async function githubPutFile(
     content: b64Encode(content),
     branch: cfg.branch,
   };
-  if (sha) body.sha = sha;
+  if (sha) body['sha'] = sha;
   const { json } = await gh(cfg, repoPath(cfg, filePath), {
     method: 'PUT',
     body: JSON.stringify(body),
   });
-  const contentObj = json.content as { sha?: string } | undefined;
-  const commitObj = json.commit as { sha?: string } | undefined;
+  const contentObj = json['content'] as { sha?: string } | undefined;
+  const commitObj = json['commit'] as { sha?: string } | undefined;
   return {
     sha: String(contentObj?.sha || ''),
     commitSha: commitObj?.sha,
@@ -370,7 +353,7 @@ export async function githubStatus(cfg: GitConfig): Promise<{
     );
     return {
       connected: true,
-      remote: String(json.full_name || `${cfg.owner}/${cfg.repo}`),
+      remote: String(json['full_name'] || `${cfg.owner}/${cfg.repo}`),
       branch: cfg.branch,
     };
   } catch (e: unknown) {

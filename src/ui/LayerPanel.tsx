@@ -90,9 +90,10 @@ import { drawingMatchesQuery, onchainSeriesSub } from './layers/format';
 import { LayerEmpty, LayerRow, LayerSection } from './layers/rows';
 import { DrawingTemplates } from './layers/templates';
 import { readCollapsedSections, toggleCollapsedSection, type LayerSectionId } from './layers/prefs';
+import { bindSlashToSearch } from './focus-search';
 
 /** Pane / indicator / drawing visibility and remove actions. */
-export const LayerPanel: Component = () => {
+export const LayerPanel: Component = () : JSX.Element => {
   /** Bump to re-read localStorage template catalog. */
   const [tplTick, setTplTick] = createSignal(0);
   const [query, setQuery] = createSignal('');
@@ -174,18 +175,7 @@ export const LayerPanel: Component = () => {
     setHiddenOnly(false);
   });
 
-  onMount(() => {
-    // `/` focuses the layer search while the panel is mounted.
-    const onSlash = (e: KeyboardEvent) => {
-      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
-      const target = e.target as HTMLElement | null;
-      if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
-      e.preventDefault();
-      searchInput?.focus();
-    };
-    window.addEventListener('keydown', onSlash);
-    onCleanup(() => window.removeEventListener('keydown', onSlash));
-  });
+  onMount(() => onCleanup(bindSlashToSearch(() => searchInput)));
 
   const isCollapsed = (id: LayerSectionId) => collapsed().has(id);
   const toggleSection = (id: LayerSectionId) => {

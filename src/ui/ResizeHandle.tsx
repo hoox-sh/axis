@@ -25,6 +25,7 @@
 
 import { type Component, onCleanup } from 'solid-js';
 
+/** Which pointer delta grows the panel: right/left for side docks, up/down for top/bottom. */
 export type ResizeDirection = 'grow-right' | 'grow-left' | 'grow-up' | 'grow-down';
 
 interface Props {
@@ -48,7 +49,7 @@ function isVertical(dir: ResizeDirection): boolean {
  * Drag handle on a panel border. Thin hit strip with void indigo hover.
  * Default min is 1px (border-width only).
  */
-export const ResizeHandle: Component<Props> = (props) => {
+export const ResizeHandle: Component<Props> = (props): JSX.Element => {
   let dragging = false;
   let activePointerId: number | null = null;
   let startPos = 0;

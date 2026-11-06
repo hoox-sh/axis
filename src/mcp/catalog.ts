@@ -11,6 +11,10 @@
 
 import type { CapabilitySpec } from './protocol';
 
+/**
+ * The capability catalog the PWA host advertises to MCP clients: every id accepted by
+ * `invokeCapability`, with its domain and whether it mutates app state.
+ */
 export const APP_CAPABILITIES: readonly CapabilitySpec[] = [
   { id: 'app.capabilities', domain: 'app', description: 'List capability ids', mutates: false },
   {
@@ -50,8 +54,7 @@ export const APP_CAPABILITIES: readonly CapabilitySpec[] = [
   {
     id: 'chart.get',
     domain: 'chart',
-    description:
-      'Symbol, interval, type, layout + bar summary + chart generation readiness',
+    description: 'Symbol, interval, type, layout + bar summary + chart generation readiness',
     mutates: false,
   },
   {
@@ -349,10 +352,21 @@ export const APP_CAPABILITIES: readonly CapabilitySpec[] = [
   { id: 'status.get', domain: 'status', description: 'Status bar + telemetry HUD', mutates: false },
 ];
 
+/**
+ * Looks a capability up by id so dispatch can reject unknown ids and check `mutates`
+ * before touching the store.
+ *
+ * @param id Capability id exactly as advertised, e.g. `app.snapshot` or `engine.tick`.
+ * @returns The catalog entry, or `undefined` when the id is not advertised.
+ */
 export function findCapability(id: string): CapabilitySpec | undefined {
   return APP_CAPABILITIES.find((c) => c.id === id);
 }
 
+/**
+ * The only store paths the `app.set` capability may patch; anything else is rejected with
+ * `PATH_DENIED` so an agent cannot write arbitrary state (or secrets) through the bridge.
+ */
 export const SETTABLE_PATHS = new Set([
   'symbol',
   'interval',

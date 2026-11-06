@@ -16,12 +16,15 @@ function seed() {
   });
   onCleanup(() => clearToasts());
 }
+/** One toast per level (ok / warn / error), pinned bottom-right. */
 export const Levels: StoryObj = {
   render: () => {
     seed();
     return (
       <div style={{ height: '220px' }}>
-        <p style={{ 'font-size': '12px', opacity: 0.6 }}>Toasts pin bottom-right; hover pauses auto-dismiss.</p>
+        <p style={{ 'font-size': '12px', opacity: 0.6 }}>
+          Toasts pin bottom-right; hover pauses auto-dismiss.
+        </p>
         <Toasts />
       </div>
     );

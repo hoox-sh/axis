@@ -5,9 +5,16 @@
  * Resolve the AXIS monorepo root from cwd (or AXIS_ROOT).
  */
 
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 
+/**
+ * Absolute paths to every file the CLI reads or writes, resolved once from the
+ * repo root.
+ *
+ * Callers pass individual paths around instead of re-joining strings, so a moved
+ * schema or wrangler file only has to change here.
+ */
 export type AxisPaths = {
   root: string;
   worker: string;
@@ -20,12 +27,12 @@ export type AxisPaths = {
 };
 
 function isAxisRoot(dir: string): boolean {
-  const pkgPath = join(dir, "package.json");
-  const workerDir = join(dir, "worker");
+  const pkgPath = join(dir, 'package.json');
+  const workerDir = join(dir, 'worker');
   if (!existsSync(pkgPath) || !existsSync(workerDir)) return false;
   try {
-    const pkg = JSON.parse(readFileSync(pkgPath, "utf-8")) as { name?: string };
-    return pkg.name === "axis";
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as { name?: string };
+    return pkg.name === 'axis';
   } catch {
     return false;
   }
@@ -38,7 +45,7 @@ export function findAxisRoot(start: string = process.cwd()): string {
     const abs = resolve(fromEnv);
     if (isAxisRoot(abs)) return abs;
     throw new Error(
-      `AXIS_ROOT=${fromEnv} is not an AXIS repo root (need package.json name "axis" + worker/)`
+      `AXIS_ROOT=${fromEnv} is not an AXIS repo root (need package.json name "axis" + worker/)`,
     );
   }
 
@@ -50,20 +57,28 @@ export function findAxisRoot(start: string = process.cwd()): string {
     dir = parent;
   }
   throw new Error(
-    `Could not find AXIS repo root from ${start}. Run inside the axis clone or set AXIS_ROOT.`
+    `Could not find AXIS repo root from ${start}. Run inside the axis clone or set AXIS_ROOT.`,
   );
 }
 
+/**
+ * Builds the derived path set for a repo root.
+ *
+ * @param root - Absolute repo root; when omitted the root is discovered with
+ *   {@link findAxisRoot}, which throws if none is found.
+ * @returns Absolute paths for the worker dir, wrangler files, D1 schema, `dist/`,
+ *   the CLI package, and the root `package.json`.
+ */
 export function getPaths(root?: string): AxisPaths {
   const r = root ?? findAxisRoot();
   return {
     root: r,
-    worker: join(r, "worker"),
-    wranglerToml: join(r, "worker", "wrangler.toml"),
-    wranglerExample: join(r, "worker", "wrangler.toml.example"),
-    d1Schema: join(r, "worker", "schemas", "scripts.sql"),
-    dist: join(r, "dist"),
-    cli: join(r, "packages", "cli"),
-    packageJson: join(r, "package.json"),
+    worker: join(r, 'worker'),
+    wranglerToml: join(r, 'worker', 'wrangler.toml'),
+    wranglerExample: join(r, 'worker', 'wrangler.toml.example'),
+    d1Schema: join(r, 'worker', 'schemas', 'scripts.sql'),
+    dist: join(r, 'dist'),
+    cli: join(r, 'packages', 'cli'),
+    packageJson: join(r, 'package.json'),
   };
 }

@@ -33,11 +33,9 @@
  * @module editor/pine-format
  */
 
-import {
-  advancePineLineState,
-  defaultPineHighlightState,
-} from './pyne-language';
+import { advancePineLineState, defaultPineHighlightState } from './pyne-language';
 
+/** Knobs for {@link formatPineSource}; both fall back to Pine conventions. */
 export type PineFormatOptions = {
   /** Spaces per indent level (default 4 — Pine convention). */
   indentSize?: number;
@@ -71,15 +69,14 @@ function countLeadingSpaces(line: string): number {
 /**
  * Format Pine source. Pure function — does not touch the editor.
  */
-export function formatPineSource(
-  source: string,
-  opts: PineFormatOptions = {},
-): string {
+export function formatPineSource(source: string, opts: PineFormatOptions = {}): string {
   const indentSize = Math.max(1, Math.min(8, opts.indentSize ?? 4));
   const maxBlank = Math.max(0, Math.min(4, opts.maxBlankLines ?? 1));
   const pad = ' '.repeat(indentSize);
 
-  const raw = String(source ?? '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const raw = String(source ?? '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n');
   const lines = raw.split('\n');
 
   /** Stack of indent levels for open `if` blocks (for else alignment). */
@@ -163,9 +160,6 @@ export function formatPineSource(
 }
 
 /** True when {@link formatPineSource} would change the document. */
-export function pineSourceNeedsFormat(
-  source: string,
-  opts?: PineFormatOptions,
-): boolean {
+export function pineSourceNeedsFormat(source: string, opts?: PineFormatOptions): boolean {
   return formatPineSource(source, opts) !== String(source ?? '');
 }

@@ -9,18 +9,25 @@
  */
 
 import type { JSX } from 'solid-js';
-import { Show } from 'solid-js';
+import 'solid-js';
 import type { StudioPageMeta } from './pages';
 import { Icons } from '../icons';
 import { StudioButton } from './StudioButton';
 
+/**
+ * Studio page header: kicker, display title, purpose line, and the close action.
+ * `title`/`purpose` override the page metadata copy without mutating it.
+ *
+ * @param props - Page metadata plus optional title/purpose overrides and header actions.
+ * @returns A `header.ax-page-header` with the shared close button.
+ */
 export function AppPageHeader(props: {
   meta: StudioPageMeta;
   title?: string;
   purpose?: string;
   headerRight?: JSX.Element;
   onClose: () => void;
-}) {
+}): JSX.Element {
   return (
     <header class="ax-page-header">
       <div>

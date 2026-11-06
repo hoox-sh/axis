@@ -76,6 +76,15 @@ export function coercePlotSample(v: unknown): number | null {
  */
 const CSS_COLOR_RE = /^(#[0-9a-f]{3,8}|rgba?\(|hsla?\(|color\.[a-z]+|color\()/i;
 
+/**
+ * Coerce one series sample for the chart, keeping what a line cannot express.
+ *
+ * Booleans become `1` / `null` so `plotshape` / `plotchar` markers survive a
+ * numeric coercion, CSS and Pine color strings pass through for `bgcolor` /
+ * `barcolor`, and everything else defers to {@link coercePlotSample}.
+ *
+ * @param v - raw per-bar sample from the engine
+ */
 export function coerceSeriesSample(v: unknown): number | string | null {
   // plotshape / plotchar export JSON `true` for a marker and null otherwise.
   // A boolean must stay truthy — coercePlotSample maps every boolean to null,
@@ -171,31 +180,33 @@ export function normalizeEventsArray(
     if (!e || typeof e !== 'object') continue;
     const rec = e as Record<string, unknown>;
     // Prefer explicit `time`, then parity `bar_time` (pyne StrategyEvent).
-    let time = normalizeBarTime(rec.time != null && rec.time !== '' ? rec.time : rec.bar_time);
+    let time = normalizeBarTime(
+      rec['time'] != null && rec['time'] !== '' ? rec['time'] : rec['bar_time'],
+    );
     // Index-only event: convert at the ingestion boundary, while the run's
     // window is still known.
     if (time == null) {
-      time = timeForBarIndex(axis, rec.bar_index ?? rec.barIndex);
+      time = timeForBarIndex(axis, rec['bar_index'] ?? rec['barIndex']);
     }
     if (time == null) continue;
     const kindOrType =
-      rec.type != null && String(rec.type).length
-        ? String(rec.type)
-        : rec.kind != null && String(rec.kind).length
-          ? String(rec.kind)
-          : rec.event != null && String(rec.event).length
-            ? String(rec.event)
+      rec['type'] != null && String(rec['type']).length
+        ? String(rec['type'])
+        : rec['kind'] != null && String(rec['kind']).length
+          ? String(rec['kind'])
+          : rec['event'] != null && String(rec['event']).length
+            ? String(rec['event'])
             : 'unknown';
     out.push({
       ...rec,
       time,
       // Keep bar_time aligned (ms→s) so later normalizers stay consistent
       bar_time:
-        rec.bar_time != null && Number.isFinite(Number(rec.bar_time))
-          ? (normalizeBarTime(rec.bar_time) ?? time)
+        rec['bar_time'] != null && Number.isFinite(Number(rec['bar_time']))
+          ? (normalizeBarTime(rec['bar_time']) ?? time)
           : time,
       type: kindOrType,
-      kind: rec.kind != null && String(rec.kind).length ? String(rec.kind) : kindOrType,
+      kind: rec['kind'] != null && String(rec['kind']).length ? String(rec['kind']) : kindOrType,
     });
   }
   return out;
@@ -225,44 +236,44 @@ export function normalizeEngineResult(
   // (never downgrade a successful run just because a non-fatal warning landed in
   // `error` / `message`). Missing status infers from error/message; any other
   // status string is treated as success (we have a payload to apply).
-  const explicitError = r.status === 'error' || r.status === 'failed' || r.ok === false;
-  const explicitSuccess = r.status === 'success' || r.status === 'ok';
+  const explicitError = r['status'] === 'error' || r['status'] === 'failed' || r['ok'] === false;
+  const explicitSuccess = r['status'] === 'success' || r['status'] === 'ok';
   const status: 'success' | 'error' = explicitError
     ? 'error'
     : explicitSuccess
       ? 'success'
-      : r.status == null
-        ? r.error || r.message
+      : r['status'] == null
+        ? r['error'] || r['message']
           ? 'error'
           : 'success'
         : 'success';
 
-  const series = normalizeSeriesMap(r.series);
-  const plots = normalizePlotsArray(r.plots);
-  const events = normalizeEventsArray(r.events, axis);
+  const series = normalizeSeriesMap(r['series']);
+  const plots = normalizePlotsArray(r['plots']);
+  const events = normalizeEventsArray(r['events'], axis);
 
   const metaRaw =
-    r.meta && typeof r.meta === 'object' && !Array.isArray(r.meta)
-      ? { ...(r.meta as Record<string, unknown>) }
+    r['meta'] && typeof r['meta'] === 'object' && !Array.isArray(r['meta'])
+      ? { ...(r['meta'] as Record<string, unknown>) }
       : {};
   if (ms != null && Number.isFinite(ms)) {
-    metaRaw.ms = typeof metaRaw.ms === 'number' ? metaRaw.ms : ms;
+    metaRaw['ms'] = typeof metaRaw['ms'] === 'number' ? metaRaw['ms'] : ms;
   }
 
   // Lift top-level common fields engines sometimes put outside meta
-  if (r.plot_meta && !metaRaw.plot_meta) metaRaw.plot_meta = r.plot_meta;
-  if (r.script_name != null && metaRaw.script_name == null) {
-    metaRaw.script_name = r.script_name;
+  if (r['plot_meta'] && !metaRaw['plot_meta']) metaRaw['plot_meta'] = r['plot_meta'];
+  if (r['script_name'] != null && metaRaw['script_name'] == null) {
+    metaRaw['script_name'] = r['script_name'];
   }
-  if (r.overlay !== undefined && metaRaw.overlay === undefined) {
-    metaRaw.overlay = r.overlay;
+  if (r['overlay'] !== undefined && metaRaw['overlay'] === undefined) {
+    metaRaw['overlay'] = r['overlay'];
   }
-  if (r.transport != null && metaRaw.transport == null) {
-    metaRaw.transport = r.transport;
+  if (r['transport'] != null && metaRaw['transport'] == null) {
+    metaRaw['transport'] = r['transport'];
   }
 
   const errorMsg =
-    status === 'error' ? formatRunError(r.error ?? r.message ?? 'Engine error') : undefined;
+    status === 'error' ? formatRunError(r['error'] ?? r['message'] ?? 'Engine error') : undefined;
 
   const result: NormalizedRunResult = {
     status,
@@ -274,32 +285,32 @@ export function normalizeEngineResult(
 
   if (errorMsg) result.error = errorMsg;
 
-  if (Array.isArray(r.drawings)) {
-    result.drawings = r.drawings as EngineRunResult['drawings'];
+  if (Array.isArray(r['drawings'])) {
+    result.drawings = r['drawings'] as EngineRunResult['drawings'];
   }
-  if (r.inputs !== undefined) result.inputs = r.inputs;
-  if (Array.isArray(r.logs)) {
-    result.logs = r.logs as EngineRunResult['logs'];
-  } else if (Array.isArray(metaRaw.logs)) {
-    result.logs = metaRaw.logs as EngineRunResult['logs'];
+  if (r['inputs'] !== undefined) result.inputs = r['inputs'];
+  if (Array.isArray(r['logs'])) {
+    result.logs = r['logs'] as EngineRunResult['logs'];
+  } else if (Array.isArray(metaRaw['logs'])) {
+    result.logs = metaRaw['logs'] as EngineRunResult['logs'];
   }
-  if (r.profile && typeof r.profile === 'object') {
-    result.profile = r.profile as Record<string, unknown>;
-  } else if (metaRaw.profile && typeof metaRaw.profile === 'object') {
-    result.profile = metaRaw.profile as Record<string, unknown>;
+  if (r['profile'] && typeof r['profile'] === 'object') {
+    result.profile = r['profile'] as Record<string, unknown>;
+  } else if (metaRaw['profile'] && typeof metaRaw['profile'] === 'object') {
+    result.profile = metaRaw['profile'] as Record<string, unknown>;
   }
-  const alertsRaw = Array.isArray(r.alerts)
-    ? r.alerts
-    : Array.isArray(metaRaw.alerts)
-      ? metaRaw.alerts
+  const alertsRaw = Array.isArray(r['alerts'])
+    ? r['alerts']
+    : Array.isArray(metaRaw['alerts'])
+      ? metaRaw['alerts']
       : null;
   if (alertsRaw) {
     result.alerts = alertsRaw as Array<Record<string, unknown>>;
   }
-  const condRaw = Array.isArray(r.alert_conditions)
-    ? r.alert_conditions
-    : Array.isArray(metaRaw.alert_conditions)
-      ? metaRaw.alert_conditions
+  const condRaw = Array.isArray(r['alert_conditions'])
+    ? r['alert_conditions']
+    : Array.isArray(metaRaw['alert_conditions'])
+      ? metaRaw['alert_conditions']
       : null;
   if (condRaw) {
     result.alert_conditions = condRaw as Array<Record<string, unknown>>;

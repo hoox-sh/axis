@@ -78,11 +78,13 @@ export const BUILTIN_BAR_THEMES: readonly BarColorTheme[] = THEME_PRESETS.map((p
 
 const BY_ID = new Map(BUILTIN_BAR_THEMES.map((bar) => [bar.id, bar]));
 
+/** Builtin candle pack for an id like `builtin:volt`, or null when unknown. */
 export function getBuiltinBarTheme(id: string | null | undefined): BarColorTheme | null {
   if (!id) return null;
   return BY_ID.get(id) ?? null;
 }
 
+/** True for ids minted by {@link builtinBarThemeId} (the `builtin:` prefix). */
 export function isBuiltinBarThemeId(id: string | null | undefined): boolean {
   return typeof id === 'string' && id.startsWith('builtin:');
 }

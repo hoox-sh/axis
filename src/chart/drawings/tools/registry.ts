@@ -47,13 +47,7 @@ export interface ToolViewCtx {
     dash?: string,
     pointerEvents?: string,
   ) => void;
-  circle: (
-    x: number,
-    y: number,
-    r: number,
-    stroke: string,
-    filled: boolean,
-  ) => void;
+  circle: (x: number, y: number, r: number, stroke: string, filled: boolean) => void;
   label: (
     x: number,
     y: number,
@@ -71,6 +65,7 @@ export interface ToolViewCtx {
   barIndexApprox?: (time: number) => number;
 }
 
+/** Pixel-space hit-test context: pointer x/y in CSS px, tolerance, and projections. */
 export interface ToolHitCtx {
   x: number;
   y: number;
@@ -82,8 +77,10 @@ export interface ToolHitCtx {
   height: number;
 }
 
+/** Anchors before commit; `0` is tool-only (eraser), `'n'` finishes on double-click. */
 export type PointArity = 0 | 1 | 2 | 3 | 'n';
 
+/** One drawing tool implementation: paint, hit-test, create, and draft preview. */
 export interface ToolHandler {
   id: DrawingToolId;
   label: string;
@@ -165,10 +162,12 @@ export function registerToolHandler(h: ToolHandler): void {
   });
 }
 
+/** @returns the registered handler for `id`, or `undefined` when the tool has none. */
 export function getToolHandler(id: string): ToolHandler | undefined {
   return handlers.get(id);
 }
 
+/** @returns every registered handler, in registration order. */
 export function listToolHandlers(): ToolHandler[] {
   return Array.from(handlers.values());
 }
@@ -205,6 +204,7 @@ export function toolArity(tool: DrawingToolId): PointArity | 0 {
   return 2;
 }
 
+/** @returns true when the tool needs more than one click (arity 2, 3 or `'n'`). */
 export function toolNeedsMultiClick(tool: DrawingToolId): boolean {
   const a = toolArity(tool);
   return a === 2 || a === 3 || a === 'n';

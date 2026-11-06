@@ -41,16 +41,25 @@ import {
 } from './types';
 import { toUsdt, venueFetch } from './spot';
 
+/** Bybit v5 REST origin (`/v5/…`). */
 export const BYBIT_BASE = 'https://api.bybit.com';
 
 /** Public spot kline path. */
 export const BYBIT_KLINE_PATH = '/v5/market/kline';
 
+/**
+ * Build a Bybit v5 signed GET: `X-BAPI-SIGN` is hex HMAC-SHA256 over
+ * `timestamp + apiKey + recvWindow + queryString`, with `recvWindow` removed
+ * from the query itself and sent as its own header.
+ *
+ * @param input - Path, query, and vault secrets; `timestampMs` overrides `Date.now()`.
+ * @throws DOMException when Web Crypto cannot import the secret.
+ */
 export async function signBybit(input: SignInput): Promise<SignedRequest> {
   const timestamp = String(resolveTimestampMs(input));
-  const recvWindow = String(input.query?.recvWindow ?? DEFAULT_RECV_WINDOW);
+  const recvWindow = String(input.query?.['recvWindow'] ?? DEFAULT_RECV_WINDOW);
   const query: Record<string, string | number | undefined> = { ...input.query };
-  delete query.recvWindow;
+  delete query['recvWindow'];
   const queryString = buildQueryString(query);
   const payload = `${timestamp}${input.apiKey}${recvWindow}${queryString}`;
   const raw = await hmacDigest('SHA-256', encodeUtf8(input.secret), encodeUtf8(payload));

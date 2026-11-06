@@ -245,6 +245,7 @@ export function noteIngestPublish(at: number | undefined, arrivalAt: number = no
   pushStage(transitFloor, Math.max(0, arrivalAt - at));
 }
 
+/** Rolling p50 for the worker publish → main-thread apply stage. */
 export type PaintStageStats = {
   /** Bursts that carried a worker publish stamp. */
   publishedBursts: number;
@@ -266,6 +267,7 @@ function stageP50(values: readonly number[]): number | null {
   return percentile(sorted, 0.5);
 }
 
+/** Rolling tick → frame latency window (all values in ms). */
 export type PaintLatencyStats = {
   /** Samples in the rolling window. */
   n: number;

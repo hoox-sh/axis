@@ -5,10 +5,10 @@
  * axis setup — worker config, D1, API_KEYS KV, OAuth client ids, Artifacts binding, full bootstrap
  */
 
-import { existsSync } from "node:fs";
-import type { Command } from "commander";
-import { getPaths } from "../utils/paths.js";
-import { runWrangler } from "../utils/run.js";
+import { existsSync } from 'node:fs';
+import type { Command } from 'commander';
+import { getPaths } from '../utils/paths.js';
+import { runWrangler } from '../utils/run.js';
 import {
   ensureWranglerToml,
   getArtifactsBinding,
@@ -21,7 +21,7 @@ import {
   hasTomlVar,
   upsertArtifactsBinding,
   upsertKvNamespace,
-} from "../services/wrangler-toml.js";
+} from '../services/wrangler-toml.js';
 import {
   CLIError,
   ExitCode,
@@ -32,32 +32,35 @@ import {
   printWarn,
   wrapAction,
   type GlobalOpts,
-} from "../utils/format.js";
-import { runInstall } from "./install.js";
+} from '../utils/format.js';
+import { runInstall } from './install.js';
 
+/**
+ * Summary of what a full `axis setup` run actually did.
+ *
+ * Fields stay `undefined` when a step was never attempted and become `false` when
+ * it was attempted and failed, so callers can tell "skipped" from "broke".
+ */
 export type SetupResult = {
   steps: string[];
   wranglerCreated?: boolean;
-  d1Applied?: "local" | "remote" | "both" | false;
+  d1Applied?: 'local' | 'remote' | 'both' | false;
   kvBound?: { binding: string; id: string; created: boolean } | false;
   oauthSet?: boolean;
   artifactsBound?: { binding: string; namespace: string; checked: boolean } | false;
 };
 
-const API_KEYS_BINDING = "API_KEYS";
-const USAGE_BINDING = "USAGE";
-const ARTIFACTS_BINDING = "SCRIPT_ARTIFACTS";
-const ARTIFACTS_NAMESPACE = "axis-scripts";
+const API_KEYS_BINDING = 'API_KEYS';
+const USAGE_BINDING = 'USAGE';
+const ARTIFACTS_BINDING = 'SCRIPT_ARTIFACTS';
+const ARTIFACTS_NAMESPACE = 'axis-scripts';
 
 async function setupWorkerToml(opts: GlobalOpts): Promise<boolean> {
   const paths = getPaths();
   const r = ensureWranglerToml(paths.wranglerToml, paths.wranglerExample);
   if (r.created) {
     printOk(`Created ${r.path} from example`, opts.quiet);
-    printWarn(
-      "Edit database_id / ALLOWED_ORIGIN / OAuth ids before production deploy",
-      opts.quiet
-    );
+    printWarn('Edit database_id / ALLOWED_ORIGIN / OAuth ids before production deploy', opts.quiet);
   } else {
     printOk(`wrangler.toml present: ${r.path}`, opts.quiet);
   }
@@ -66,63 +69,59 @@ async function setupWorkerToml(opts: GlobalOpts): Promise<boolean> {
 
 async function setupD1(
   opts: GlobalOpts,
-  flags: { local?: boolean; remote?: boolean; create?: boolean }
-): Promise<"local" | "remote" | "both" | false> {
+  flags: { local?: boolean; remote?: boolean; create?: boolean },
+): Promise<'local' | 'remote' | 'both' | false> {
   const paths = getPaths();
   if (!existsSync(paths.wranglerToml)) {
-    throw new CLIError(
-      "wrangler.toml missing",
-      ExitCode.NOT_FOUND,
-      "Run: axis setup worker"
-    );
+    throw new CLIError('wrangler.toml missing', ExitCode.NOT_FOUND, 'Run: axis setup worker');
   }
   if (!existsSync(paths.d1Schema)) {
     throw new CLIError(`Schema missing: ${paths.d1Schema}`, ExitCode.NOT_FOUND);
   }
 
   const id = getD1DatabaseId(paths.wranglerToml);
-  if (!id || id.includes("REPLACE")) {
+  if (!id || id.includes('REPLACE')) {
     if (flags.create) {
-      printInfo("Creating D1 database pynescript…", opts.quiet);
-      await runWrangler(paths.worker, ["d1", "create", "pynescript"], {
+      printInfo('Creating D1 database pynescript…', opts.quiet);
+      await runWrangler(paths.worker, ['d1', 'create', 'pynescript'], {
         inherit: !opts.quiet,
       });
       printWarn(
-        "Paste the new database_id into worker/wrangler.toml, then re-run: axis setup d1 --remote",
-        opts.quiet
+        'Paste the new database_id into worker/wrangler.toml, then re-run: axis setup d1 --remote',
+        opts.quiet,
       );
       return false;
     }
     throw new CLIError(
-      "D1 database_id is missing or a placeholder",
+      'D1 database_id is missing or a placeholder',
       ExitCode.ERROR,
-      "Set database_id in wrangler.toml or: axis setup d1 --create"
+      'Set database_id in wrangler.toml or: axis setup d1 --create',
     );
   }
 
   const { applyLocal, applyRemote } = d1ApplyPlan(flags);
-  let applied: "local" | "remote" | "both" | false = false;
+  let applied: 'local' | 'remote' | 'both' | false = false;
 
   if (applyLocal) {
-    printInfo("Applying D1 schema (local)…", opts.quiet);
+    printInfo('Applying D1 schema (local)…', opts.quiet);
     await runWrangler(
       paths.worker,
-      ["d1", "execute", "pynescript", "--local", "--file=schemas/scripts.sql"],
-      { inherit: !opts.quiet }
+      ['d1', 'execute', 'pynescript', '--local', '--file=schemas/scripts.sql'],
+      { inherit: !opts.quiet },
     );
-    applied = "local";
-    printOk("Local D1 schema applied", opts.quiet);
+    applied = 'local';
+    printOk('Local D1 schema applied', opts.quiet);
   }
 
   if (applyRemote) {
-    printInfo("Applying D1 schema (remote)…", opts.quiet);
+    printInfo('Applying D1 schema (remote)…', opts.quiet);
     await runWrangler(
       paths.worker,
-      ["d1", "execute", "pynescript", "--remote", "--file=schemas/scripts.sql"],
-      { inherit: !opts.quiet }
+      ['d1', 'execute', 'pynescript', '--remote', '--file=schemas/scripts.sql'],
+      { inherit: !opts.quiet },
     );
-    applied = applied === "local" ? "both" : "remote";
-    printOk("Remote D1 schema applied", opts.quiet);
+    applied = applied === 'local' ? 'both' : 'remote';
+    printOk('Remote D1 schema applied', opts.quiet);
   }
 
   return applied;
@@ -151,17 +150,14 @@ export function kvTitleMatchesBinding(title: string, binding: string): boolean {
   return t === b || t.endsWith(`-${b}`);
 }
 
-async function findExistingKvId(
-  workerDir: string,
-  binding: string
-): Promise<string | undefined> {
-  const listed = await runWrangler(workerDir, ["kv", "namespace", "list"], {
+async function findExistingKvId(workerDir: string, binding: string): Promise<string | undefined> {
+  const listed = await runWrangler(workerDir, ['kv', 'namespace', 'list'], {
     throwOnError: false,
   });
   if (listed.code !== 0) return undefined;
   for (const row of parseKvList(listed.stdout)) {
-    const title = String(row.title || "");
-    const id = String(row.id || "");
+    const title = String(row.title || '');
+    const id = String(row.id || '');
     if (id && kvTitleMatchesBinding(title, binding)) return id;
   }
   return undefined;
@@ -173,15 +169,11 @@ async function findExistingKvId(
  */
 export async function setupKv(
   opts: GlobalOpts,
-  flags: { binding?: string } = {}
+  flags: { binding?: string } = {},
 ): Promise<{ binding: string; id: string; created: boolean }> {
   const paths = getPaths();
   if (!existsSync(paths.wranglerToml)) {
-    throw new CLIError(
-      "wrangler.toml missing",
-      ExitCode.NOT_FOUND,
-      "Run: axis setup worker"
-    );
+    throw new CLIError('wrangler.toml missing', ExitCode.NOT_FOUND, 'Run: axis setup worker');
   }
   const binding = (flags.binding || API_KEYS_BINDING).trim() || API_KEYS_BINDING;
   const existing = getKvBindingId(paths.wranglerToml, binding);
@@ -195,18 +187,16 @@ export async function setupKv(
   let created = false;
   if (!id) {
     printInfo(`Creating KV namespace ${binding}…`, opts.quiet);
-    const createdRun = await runWrangler(
-      paths.worker,
-      ["kv", "namespace", "create", binding],
-      { throwOnError: false }
-    );
+    const createdRun = await runWrangler(paths.worker, ['kv', 'namespace', 'create', binding], {
+      throwOnError: false,
+    });
     const out = `${createdRun.stdout}\n${createdRun.stderr}`;
     id = parseKvNamespaceId(out);
     if (createdRun.code !== 0 || !id) {
       throw new CLIError(
         `Failed to create KV namespace ${binding}`,
         ExitCode.ERROR,
-        out.trim() || "wrangler kv namespace create failed"
+        out.trim() || 'wrangler kv namespace create failed',
       );
     }
     created = true;
@@ -219,7 +209,7 @@ export async function setupKv(
   if (wrote.changed) {
     printOk(`wrangler.toml: bound ${binding}`, opts.quiet);
   }
-  printWarn("Redeploy the Worker so the binding goes live: axis deploy worker", opts.quiet);
+  printWarn('Redeploy the Worker so the binding goes live: axis deploy worker', opts.quiet);
   return { binding, id, created };
 }
 
@@ -231,24 +221,19 @@ export async function setupKv(
  */
 export async function setupArtifacts(
   opts: GlobalOpts,
-  flags: { namespace?: string; binding?: string; skipCheck?: boolean } = {}
+  flags: { namespace?: string; binding?: string; skipCheck?: boolean } = {},
 ): Promise<{ binding: string; namespace: string; checked: boolean }> {
   const paths = getPaths();
   if (!existsSync(paths.wranglerToml)) {
-    throw new CLIError(
-      "wrangler.toml missing",
-      ExitCode.NOT_FOUND,
-      "Run: axis setup worker"
-    );
+    throw new CLIError('wrangler.toml missing', ExitCode.NOT_FOUND, 'Run: axis setup worker');
   }
   const binding = (flags.binding || ARTIFACTS_BINDING).trim() || ARTIFACTS_BINDING;
-  const namespace =
-    (flags.namespace || ARTIFACTS_NAMESPACE).trim() || ARTIFACTS_NAMESPACE;
+  const namespace = (flags.namespace || ARTIFACTS_NAMESPACE).trim() || ARTIFACTS_NAMESPACE;
   if (!isValidArtifactsNamespace(namespace)) {
     throw new CLIError(
       `Invalid Artifacts namespace ${JSON.stringify(namespace)}`,
       ExitCode.INVALID_USAGE,
-      "Use 1-64 chars without whitespace, quotes, or shell metacharacters"
+      'Use 1-64 chars without whitespace, quotes, or shell metacharacters',
     );
   }
 
@@ -262,7 +247,7 @@ export async function setupArtifacts(
         existing
           ? `wrangler.toml: ${binding} namespace ${existing} → ${namespace}`
           : `wrangler.toml: bound ${binding} (namespace ${namespace})`,
-        opts.quiet
+        opts.quiet,
       );
     }
   }
@@ -270,69 +255,68 @@ export async function setupArtifacts(
   let checked = false;
   if (!flags.skipCheck) {
     printInfo(`Checking Artifacts namespace ${namespace}…`, opts.quiet);
-    const probed = await runWrangler(
-      paths.worker,
-      ["artifacts", "namespaces", "get", namespace],
-      { throwOnError: false }
-    );
+    const probed = await runWrangler(paths.worker, ['artifacts', 'namespaces', 'get', namespace], {
+      throwOnError: false,
+    });
     if (probed.code !== 0) {
       const out = `${probed.stdout}\n${probed.stderr}`.trim();
       throw new CLIError(
         `Artifacts namespace ${namespace} not reachable`,
         ExitCode.ERROR,
-        `${out || "wrangler artifacts namespaces get failed"}\nArtifacts is in closed beta — request access, then re-run (or --skip-check to keep the wrangler.toml edit)`
+        `${out || 'wrangler artifacts namespaces get failed'}\nArtifacts is in closed beta — request access, then re-run (or --skip-check to keep the wrangler.toml edit)`,
       );
     }
     printOk(`Artifacts namespace ${namespace} reachable`, opts.quiet);
     checked = true;
   }
 
-  printWarn(
-    "Redeploy the Worker so the binding goes live: axis deploy worker",
-    opts.quiet
-  );
-  printInfo(
-    "Binding types need wrangler >= 4.145.0: npx wrangler types (worker/)",
-    opts.quiet
-  );
+  printWarn('Redeploy the Worker so the binding goes live: axis deploy worker', opts.quiet);
+  printInfo('Binding types need wrangler >= 4.145.0: npx wrangler types (worker/)', opts.quiet);
   return { binding, namespace, checked };
 }
 
+/**
+ * Prints the ordered steps still needed before cloud script storage works.
+ *
+ * Step 2 (redeploy) is omitted in the `after-deploy` phase because the caller just
+ * deployed, and the `ADMIN_TOKEN` line changes wording when a plaintext `[vars]`
+ * stub still blocks `secret put`.
+ *
+ * @param quiet - Suppress all output.
+ * @param phase - `after-kv` (default) or `after-deploy`; controls the redeploy step.
+ */
 export function printCloudStorageNextSteps(
   quiet?: boolean,
-  phase?: "after-kv" | "after-deploy"
+  phase?: 'after-kv' | 'after-deploy',
 ): void {
   const paths = getPaths();
   const tomlCollision =
-    existsSync(paths.wranglerToml) && hasTomlVar(paths.wranglerToml, "ADMIN_TOKEN");
-  printInfo("Cloud script storage — remaining steps:", quiet);
+    existsSync(paths.wranglerToml) && hasTomlVar(paths.wranglerToml, 'ADMIN_TOKEN');
+  printInfo('Cloud script storage — remaining steps:', quiet);
   if (tomlCollision) {
     printInfo(
-      "  1. axis secret put ADMIN_TOKEN   # comments empty [vars] stub, deploys, then sets secret",
-      quiet
+      '  1. axis secret put ADMIN_TOKEN   # comments empty [vars] stub, deploys, then sets secret',
+      quiet,
     );
   } else {
+    printInfo('  1. axis secret put ADMIN_TOKEN   # skip if already a Worker secret', quiet);
+  }
+  if (phase !== 'after-deploy') {
     printInfo(
-      "  1. axis secret put ADMIN_TOKEN   # skip if already a Worker secret",
-      quiet
+      '  2. axis deploy worker            # pick up API_KEYS + drop plaintext ADMIN_TOKEN',
+      quiet,
     );
   }
-  if (phase !== "after-deploy") {
-    printInfo("  2. axis deploy worker            # pick up API_KEYS + drop plaintext ADMIN_TOKEN", quiet);
-  }
-  printInfo(
-    "  3. axis keys create             # --admin-token / AXIS_ADMIN_TOKEN / prompt",
-    quiet
-  );
-  printInfo("  4. axis health --scripts", quiet);
-  printInfo("  5. Paste Worker URL + key in Settings → Script storage", quiet);
+  printInfo('  3. axis keys create             # --admin-token / AXIS_ADMIN_TOKEN / prompt', quiet);
+  printInfo('  4. axis health --scripts', quiet);
+  printInfo('  5. Paste Worker URL + key in Settings → Script storage', quiet);
 }
 
 /** Default is local-only; `--remote` alone is remote-only; both flags apply both. */
-export function d1ApplyPlan(flags: {
-  local?: boolean;
-  remote?: boolean;
-}): { applyLocal: boolean; applyRemote: boolean } {
+export function d1ApplyPlan(flags: { local?: boolean; remote?: boolean }): {
+  applyLocal: boolean;
+  applyRemote: boolean;
+} {
   const applyRemote = Boolean(flags.remote);
   const applyLocal = Boolean(flags.local) || !applyRemote;
   return { applyLocal, applyRemote };
@@ -344,40 +328,31 @@ async function setupOAuth(
     githubClientId?: string;
     gitlabClientId?: string;
     asSecret?: boolean;
-  }
+  },
 ): Promise<boolean> {
   const paths = getPaths();
   if (!existsSync(paths.wranglerToml)) {
-    throw new CLIError(
-      "wrangler.toml missing",
-      ExitCode.NOT_FOUND,
-      "Run: axis setup worker"
-    );
+    throw new CLIError('wrangler.toml missing', ExitCode.NOT_FOUND, 'Run: axis setup worker');
   }
 
   let changed = false;
 
   if (flags.githubClientId) {
     if (flags.asSecret) {
-      printInfo("Setting GITHUB_OAUTH_CLIENT_ID as Worker secret…", opts.quiet);
-      await runWrangler(
-        paths.worker,
-        ["secret", "put", "GITHUB_OAUTH_CLIENT_ID"],
-        { inherit: true, input: flags.githubClientId }
-      );
-      printOk("GITHUB_OAUTH_CLIENT_ID secret set", opts.quiet);
+      printInfo('Setting GITHUB_OAUTH_CLIENT_ID as Worker secret…', opts.quiet);
+      await runWrangler(paths.worker, ['secret', 'put', 'GITHUB_OAUTH_CLIENT_ID'], {
+        inherit: true,
+        input: flags.githubClientId,
+      });
+      printOk('GITHUB_OAUTH_CLIENT_ID secret set', opts.quiet);
       changed = true;
     } else {
-      const r = setTomlVar(
-        paths.wranglerToml,
-        "GITHUB_OAUTH_CLIENT_ID",
-        flags.githubClientId
-      );
+      const r = setTomlVar(paths.wranglerToml, 'GITHUB_OAUTH_CLIENT_ID', flags.githubClientId);
       printOk(
         r.changed
           ? `GITHUB_OAUTH_CLIENT_ID → ${flags.githubClientId}`
-          : "GITHUB_OAUTH_CLIENT_ID already set",
-        opts.quiet
+          : 'GITHUB_OAUTH_CLIENT_ID already set',
+        opts.quiet,
       );
       changed = r.changed || changed;
     }
@@ -385,24 +360,19 @@ async function setupOAuth(
 
   if (flags.gitlabClientId) {
     if (flags.asSecret) {
-      await runWrangler(
-        paths.worker,
-        ["secret", "put", "GITLAB_OAUTH_CLIENT_ID"],
-        { inherit: true, input: flags.gitlabClientId }
-      );
-      printOk("GITLAB_OAUTH_CLIENT_ID secret set", opts.quiet);
+      await runWrangler(paths.worker, ['secret', 'put', 'GITLAB_OAUTH_CLIENT_ID'], {
+        inherit: true,
+        input: flags.gitlabClientId,
+      });
+      printOk('GITLAB_OAUTH_CLIENT_ID secret set', opts.quiet);
       changed = true;
     } else {
-      const r = setTomlVar(
-        paths.wranglerToml,
-        "GITLAB_OAUTH_CLIENT_ID",
-        flags.gitlabClientId
-      );
+      const r = setTomlVar(paths.wranglerToml, 'GITLAB_OAUTH_CLIENT_ID', flags.gitlabClientId);
       printOk(
         r.changed
           ? `GITLAB_OAUTH_CLIENT_ID → ${flags.gitlabClientId}`
-          : "GITLAB_OAUTH_CLIENT_ID already set",
-        opts.quiet
+          : 'GITLAB_OAUTH_CLIENT_ID already set',
+        opts.quiet,
       );
       changed = r.changed || changed;
     }
@@ -410,9 +380,9 @@ async function setupOAuth(
 
   if (!flags.githubClientId && !flags.gitlabClientId) {
     throw new CLIError(
-      "Pass --github-client-id and/or --gitlab-client-id",
+      'Pass --github-client-id and/or --gitlab-client-id',
       ExitCode.INVALID_USAGE,
-      "Example: axis setup oauth --github-client-id Ov23li…"
+      'Example: axis setup oauth --github-client-id Ov23li…',
     );
   }
 
@@ -428,10 +398,28 @@ export function prodBootstrapError(what: string, cause: unknown): CLIError {
   return new CLIError(
     `axis setup --prod: ${what} failed`,
     ExitCode.ERROR,
-    `${detail}\nFix the error above, then re-run: axis setup --prod (prod never falls back to open keys)`
+    `${detail}\nFix the error above, then re-run: axis setup --prod (prod never falls back to open keys)`,
   );
 }
 
+/**
+ * Runs the full bootstrap: install, wrangler.toml, D1, optional KV, optional OAuth.
+ *
+ * `--prod` changes failure handling: `ALLOW_OPEN_KEYS` is cleared first (so a
+ * partial run can never leave open keys behind), remote D1 and `API_KEYS` KV are
+ * forced on, and either failing aborts via {@link prodBootstrapError} instead of
+ * warning. Without `--prod`, D1 and KV failures are warnings so local setup still
+ * finishes.
+ *
+ * @param opts - Global flags; `json` prints `{ ok, ...result }`, `quiet` hides step
+ *   output.
+ * @param flags - `remoteD1` also applies the schema remotely, `kv` binds
+ *   `API_KEYS`, `prod` implies both plus fail-closed behavior, `githubClientId` sets
+ *   the OAuth id, `skipInstall` skips `bun install`.
+ * @returns Which steps ran and their outcomes.
+ * @throws {CLIError} From {@link prodBootstrapError} in prod mode, or when a
+ *   non-optional step (install, wrangler.toml, OAuth) fails.
+ */
 export async function runSetupAll(
   opts: GlobalOpts,
   flags: {
@@ -440,9 +428,9 @@ export async function runSetupAll(
     skipInstall?: boolean;
     kv?: boolean;
     prod?: boolean;
-  }
+  },
 ): Promise<SetupResult> {
-  printHeader("AXIS setup", opts.quiet);
+  printHeader('AXIS setup', opts.quiet);
   const steps: string[] = [];
   const result: SetupResult = { steps };
   const prod = Boolean(flags.prod);
@@ -451,17 +439,17 @@ export async function runSetupAll(
 
   if (!flags.skipInstall) {
     await runInstall(opts);
-    steps.push("install");
+    steps.push('install');
   }
 
   result.wranglerCreated = await setupWorkerToml(opts);
-  steps.push("worker");
+  steps.push('worker');
 
   if (prod) {
     // Fail closed: production never ships open keys. Written before D1/KV so a
     // partial bootstrap cannot leave ALLOW_OPEN_KEYS="1" behind.
-    setTomlVar(getPaths().wranglerToml, "ALLOW_OPEN_KEYS", "");
-    steps.push("allow-open-keys:off");
+    setTomlVar(getPaths().wranglerToml, 'ALLOW_OPEN_KEYS', '');
+    steps.push('allow-open-keys:off');
   }
 
   try {
@@ -469,22 +457,19 @@ export async function runSetupAll(
       local: true,
       remote: remoteD1,
     });
-    steps.push(remoteD1 ? "d1:local+remote" : "d1:local");
+    steps.push(remoteD1 ? 'd1:local+remote' : 'd1:local');
   } catch (e) {
-    if (prod) throw prodBootstrapError("D1 schema", e);
-    printWarn(
-      e instanceof Error ? e.message : String(e),
-      opts.quiet
-    );
+    if (prod) throw prodBootstrapError('D1 schema', e);
+    printWarn(e instanceof Error ? e.message : String(e), opts.quiet);
     result.d1Applied = false;
   }
 
   if (doKv) {
     try {
       result.kvBound = await setupKv(opts, { binding: API_KEYS_BINDING });
-      steps.push("kv:API_KEYS");
+      steps.push('kv:API_KEYS');
     } catch (e) {
-      if (prod) throw prodBootstrapError("API_KEYS KV binding", e);
+      if (prod) throw prodBootstrapError('API_KEYS KV binding', e);
       printWarn(e instanceof Error ? e.message : String(e), opts.quiet);
       result.kvBound = false;
     }
@@ -494,28 +479,36 @@ export async function runSetupAll(
     result.oauthSet = await setupOAuth(opts, {
       githubClientId: flags.githubClientId,
     });
-    steps.push("oauth");
+    steps.push('oauth');
   }
 
-  printOk("Setup finished.", opts.quiet);
+  printOk('Setup finished.', opts.quiet);
   if (doKv || remoteD1) printCloudStorageNextSteps(opts.quiet);
   else {
-    printInfo("Next: axis doctor  ·  Prod cloud storage: axis setup --prod", opts.quiet);
+    printInfo('Next: axis doctor  ·  Prod cloud storage: axis setup --prod', opts.quiet);
   }
 
   if (opts.json) printJson({ ok: true, ...result });
   return result;
 }
 
+/**
+ * Registers `axis setup` plus `worker`, `d1`, `kv`, `oauth`, and `artifacts`.
+ *
+ * Bare `axis setup` runs {@link runSetupAll}; the subcommands re-run one step so a
+ * half-finished bootstrap can be resumed without reinstalling.
+ *
+ * @param program - Root commander program to attach the command group to.
+ */
 export function registerSetup(program: Command): void {
   const setup = program
-    .command("setup")
-    .description("Bootstrap AXIS (deps, wrangler.toml, D1, API_KEYS KV, OAuth)")
-    .option("--remote-d1", "Also apply D1 schema to remote")
-    .option("--kv", "Create and bind API_KEYS KV (required for prod /api/scripts)")
-    .option("--prod", "Production bootstrap: remote D1 + API_KEYS KV")
-    .option("--github-client-id <id>", "Set GITHUB_OAUTH_CLIENT_ID in toml")
-    .option("--skip-install", "Skip bun install")
+    .command('setup')
+    .description('Bootstrap AXIS (deps, wrangler.toml, D1, API_KEYS KV, OAuth)')
+    .option('--remote-d1', 'Also apply D1 schema to remote')
+    .option('--kv', 'Create and bind API_KEYS KV (required for prod /api/scripts)')
+    .option('--prod', 'Production bootstrap: remote D1 + API_KEYS KV')
+    .option('--github-client-id <id>', 'Set GITHUB_OAUTH_CLIENT_ID in toml')
+    .option('--skip-install', 'Skip bun install')
     .action(async function (this: Command) {
       const o = this.optsWithGlobals() as GlobalOpts & {
         remoteD1?: boolean;
@@ -536,22 +529,22 @@ export function registerSetup(program: Command): void {
     });
 
   setup
-    .command("worker")
-    .description("Ensure worker/wrangler.toml exists (copy from example)")
+    .command('worker')
+    .description('Ensure worker/wrangler.toml exists (copy from example)')
     .action(
       wrapAction(async (opts) => {
-        printHeader("AXIS setup worker", opts.quiet);
+        printHeader('AXIS setup worker', opts.quiet);
         const created = await setupWorkerToml(opts);
         if (opts.json) printJson({ ok: true, created });
-      })
+      }),
     );
 
   setup
-    .command("d1")
-    .description("Apply D1 scripts schema (local and/or remote)")
-    .option("--local", "Apply to local D1 (default if neither flag)")
-    .option("--remote", "Apply to remote D1")
-    .option("--create", "wrangler d1 create pynescript if id missing")
+    .command('d1')
+    .description('Apply D1 scripts schema (local and/or remote)')
+    .option('--local', 'Apply to local D1 (default if neither flag)')
+    .option('--remote', 'Apply to remote D1')
+    .option('--create', 'wrangler d1 create pynescript if id missing')
     .action(async function (this: Command) {
       const o = this.optsWithGlobals() as GlobalOpts & {
         local?: boolean;
@@ -559,7 +552,7 @@ export function registerSetup(program: Command): void {
         create?: boolean;
       };
       await wrapAction(async (g) => {
-        printHeader("AXIS setup d1", g.quiet);
+        printHeader('AXIS setup d1', g.quiet);
         const both = !o.local && !o.remote && !o.create;
         const applied = await setupD1(g, {
           local: o.local || both,
@@ -571,17 +564,17 @@ export function registerSetup(program: Command): void {
     });
 
   setup
-    .command("kv")
-    .description("Create and bind API_KEYS KV (prod script library auth)")
-    .option("--binding <name>", "KV binding name", API_KEYS_BINDING)
-    .option("--usage", `Also create/bind ${USAGE_BINDING}`)
+    .command('kv')
+    .description('Create and bind API_KEYS KV (prod script library auth)')
+    .option('--binding <name>', 'KV binding name', API_KEYS_BINDING)
+    .option('--usage', `Also create/bind ${USAGE_BINDING}`)
     .action(async function (this: Command) {
       const o = this.optsWithGlobals() as GlobalOpts & {
         binding?: string;
         usage?: boolean;
       };
       await wrapAction(async (g) => {
-        printHeader("AXIS setup kv", g.quiet);
+        printHeader('AXIS setup kv', g.quiet);
         const bound = await setupKv(g, { binding: o.binding || API_KEYS_BINDING });
         let usage: { binding: string; id: string; created: boolean } | undefined;
         if (o.usage) {
@@ -593,11 +586,11 @@ export function registerSetup(program: Command): void {
     });
 
   setup
-    .command("oauth")
-    .description("Set GitHub/GitLab OAuth App client ids")
-    .option("--github-client-id <id>", "GitHub OAuth App client id")
-    .option("--gitlab-client-id <id>", "GitLab OAuth application id")
-    .option("--secret", "Use wrangler secret put instead of [vars]")
+    .command('oauth')
+    .description('Set GitHub/GitLab OAuth App client ids')
+    .option('--github-client-id <id>', 'GitHub OAuth App client id')
+    .option('--gitlab-client-id <id>', 'GitLab OAuth application id')
+    .option('--secret', 'Use wrangler secret put instead of [vars]')
     .action(async function (this: Command) {
       const o = this.optsWithGlobals() as GlobalOpts & {
         githubClientId?: string;
@@ -605,7 +598,7 @@ export function registerSetup(program: Command): void {
         secret?: boolean;
       };
       await wrapAction(async (g) => {
-        printHeader("AXIS setup oauth", g.quiet);
+        printHeader('AXIS setup oauth', g.quiet);
         const changed = await setupOAuth(g, {
           githubClientId: o.githubClientId,
           gitlabClientId: o.gitlabClientId,
@@ -616,11 +609,11 @@ export function registerSetup(program: Command): void {
     });
 
   setup
-    .command("artifacts")
-    .description("Bind Cloudflare Artifacts for git-native script storage (no GitHub creds)")
-    .option("--namespace <name>", "Artifacts namespace", ARTIFACTS_NAMESPACE)
-    .option("--binding <name>", "Binding name", ARTIFACTS_BINDING)
-    .option("--skip-check", "Only write wrangler.toml, skip namespace reachability check")
+    .command('artifacts')
+    .description('Bind Cloudflare Artifacts for git-native script storage (no GitHub creds)')
+    .option('--namespace <name>', 'Artifacts namespace', ARTIFACTS_NAMESPACE)
+    .option('--binding <name>', 'Binding name', ARTIFACTS_BINDING)
+    .option('--skip-check', 'Only write wrangler.toml, skip namespace reachability check')
     .action(async function (this: Command) {
       const o = this.optsWithGlobals() as GlobalOpts & {
         namespace?: string;
@@ -628,7 +621,7 @@ export function registerSetup(program: Command): void {
         skipCheck?: boolean;
       };
       await wrapAction(async (g) => {
-        printHeader("AXIS setup artifacts", g.quiet);
+        printHeader('AXIS setup artifacts', g.quiet);
         const bound = await setupArtifacts(g, {
           namespace: o.namespace || ARTIFACTS_NAMESPACE,
           binding: o.binding || ARTIFACTS_BINDING,
@@ -637,5 +630,4 @@ export function registerSetup(program: Command): void {
         if (g.json) printJson({ ok: true, artifacts: bound });
       }).call(this);
     });
-
 }

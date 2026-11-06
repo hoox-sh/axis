@@ -58,12 +58,15 @@ export interface PyodideRunRequest {
   inputs?: Record<string, unknown>;
 }
 
+/** Either a `load` (boot the runtime) or a `run` (evaluate one script) request. */
 export type PyodideWorkerRequest = PyodideLoadRequest | PyodideRunRequest;
 
 /** Request body without the routing `id` (the client assigns ids). */
 export type PyodideLoadBody = Omit<PyodideLoadRequest, 'id'>;
+/** Run payload without the routing `id` or the literal `type` (the client adds both). */
 export type PyodideRunBody = Omit<PyodideRunRequest, 'id' | 'type'>;
 
+/** Reply carrying the request `id`: runtime ready, result JSON, or formatted error. */
 export type PyodideWorkerResponse =
   | { id: number; type: 'loaded'; acceptsInputs: boolean }
   /**

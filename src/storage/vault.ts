@@ -370,7 +370,7 @@ export function getEngineApiKey(pluginsConfig: unknown, engineId: string): strin
     );
   }
   const bag = bagOf(pluginsConfig, id) || bagOf(pluginsConfig, `engine:${id}`);
-  const raw = bag?.apiKey;
+  const raw = bag?.['apiKey'];
   return typeof raw === 'string' ? raw.trim() : '';
 }
 

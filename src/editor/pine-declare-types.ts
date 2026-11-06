@@ -31,10 +31,7 @@
  * @module editor/pine-declare-types
  */
 
-import {
-  advancePineLineState,
-  defaultPineHighlightState,
-} from './pyne-language';
+import { advancePineLineState, defaultPineHighlightState } from './pyne-language';
 
 /** Pine type qualifier (TV type1). */
 export type PineType1 = 'series' | 'simple' | 'const';
@@ -44,16 +41,7 @@ export type PineType1 = 'series' | 'simple' | 'const';
  * UDTs / collections are left alone (need explicit author types).
  */
 export type PineType2 =
-  | 'int'
-  | 'float'
-  | 'bool'
-  | 'string'
-  | 'color'
-  | 'label'
-  | 'line'
-  | 'box'
-  | 'table'
-  | 'polyline';
+  'int' | 'float' | 'bool' | 'string' | 'color' | 'label' | 'line' | 'box' | 'table' | 'polyline';
 
 const TYPE1 = new Set<string>(['series', 'simple', 'const']);
 const TYPE2 = new Set<string>([
@@ -115,6 +103,7 @@ const RESERVED = new Set([
   ...TYPE2,
 ]);
 
+/** Knobs for {@link addMissingTypeDeclarations}. */
 export type DeclareTypesOptions = {
   /** Plot / series names from last run — force `series float` when name matches. */
   seriesNames?: Iterable<string> | null;
@@ -124,6 +113,7 @@ export type DeclareTypesOptions = {
   addType2?: boolean;
 };
 
+/** One rewritten declaration line (before/after plus the inferred qualifiers). */
 export type TypeDeclareEdit = {
   /** 1-based line number */
   line: number;
@@ -134,6 +124,7 @@ export type TypeDeclareEdit = {
   type2: PineType2 | null;
 };
 
+/** Rewritten source plus the edits that produced it. */
 export type DeclareTypesResult = {
   source: string;
   changed: number;
@@ -203,10 +194,7 @@ export function inferType2(rhs: string): PineType2 | null {
   if (/^(?:ta\.)?(?:crossover|crossunder|cross|rising|falling)\s*\(/i.test(s)) {
     return 'bool';
   }
-  if (
-    /(?:==|!=|<=|>=|<|>)/.test(s) &&
-    !/[+\-*/%]/.test(s.replace(/"[^"]*"|'[^']*'/g, ''))
-  ) {
+  if (/(?:==|!=|<=|>=|<|>)/.test(s) && !/[+\-*/%]/.test(s.replace(/"[^"]*"|'[^']*'/g, ''))) {
     return 'bool';
   }
   if (/^\s*not\s+/i.test(s) || /\b(and|or)\b/i.test(s)) {
@@ -367,11 +355,7 @@ export function buildTypePrefix(
   return { type1, type2, prefix: parts.join(' ') };
 }
 
-function rebuildLine(
-  hit: AssignHit,
-  type1: PineType1 | null,
-  type2: string | null,
-): string {
+function rebuildLine(hit: AssignHit, type1: PineType1 | null, type2: string | null): string {
   const parts: string[] = [];
   if (hit.exportKw) parts.push('export');
   if (hit.mode) parts.push(hit.mode);
@@ -389,7 +373,9 @@ export function addMissingTypeDeclarations(
   source: string,
   opts: DeclareTypesOptions = {},
 ): DeclareTypesResult {
-  const raw = String(source ?? '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const raw = String(source ?? '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n');
   if (!raw) return { source: raw, changed: 0, edits: [] };
 
   const seriesSet = new Set<string>();
@@ -429,7 +415,10 @@ export function addMissingTypeDeclarations(
       continue;
     }
     // Function definitions: name(...) =>
-    if (/^[A-Za-z_][\w]*\s*\([^)]*\)\s*=>/.test(trimmed) || /^export\s+/.test(trimmed) && /=>/.test(trimmed)) {
+    if (
+      /^[A-Za-z_][\w]*\s*\([^)]*\)\s*=>/.test(trimmed) ||
+      (/^export\s+/.test(trimmed) && /=>/.test(trimmed))
+    ) {
       out.push(line);
       continue;
     }
@@ -487,9 +476,6 @@ export function addMissingTypeDeclarations(
 }
 
 /** True when {@link addMissingTypeDeclarations} would change the document. */
-export function wouldAddTypeDeclarations(
-  source: string,
-  opts: DeclareTypesOptions = {},
-): boolean {
+export function wouldAddTypeDeclarations(source: string, opts: DeclareTypesOptions = {}): boolean {
   return addMissingTypeDeclarations(source, opts).changed > 0;
 }

@@ -29,9 +29,12 @@ import { getJson, setJson } from '../utils/storage';
 import { getManager } from './manager-access';
 import { getThemeManager } from '../theme';
 
+/** Which pane canvases a capture includes: price pane, all panes, or the workspace. */
 export type ScreenshotScope = 'price' | 'panes' | 'workspace';
+/** Device-pixel multiplier applied to the output canvas. */
 export type ScreenshotScale = 1 | 2;
 
+/** Capture settings, persisted between sessions. */
 export interface ScreenshotOptions {
   scope: ScreenshotScope;
   scale: ScreenshotScale;
@@ -39,6 +42,7 @@ export interface ScreenshotOptions {
   includeWatermark: boolean;
 }
 
+/** Defaults when nothing is stored: all panes, 2×, drawings and watermark on. */
 export const DEFAULT_SCREENSHOT_OPTIONS: ScreenshotOptions = {
   scope: 'panes',
   scale: 2,
@@ -49,6 +53,7 @@ export const DEFAULT_SCREENSHOT_OPTIONS: ScreenshotOptions = {
 const PREFS_KEY = 'pynescript.axis.screenshot';
 const PANE_GAP = 2;
 
+/** @returns stored capture options, each field validated; defaults when absent. */
 export function loadScreenshotOptions(): ScreenshotOptions {
   const parsed = getJson<Partial<ScreenshotOptions>>(PREFS_KEY);
   if (!parsed) return { ...DEFAULT_SCREENSHOT_OPTIONS };
@@ -63,10 +68,19 @@ export function loadScreenshotOptions(): ScreenshotOptions {
   };
 }
 
+/** Persist capture options. @param opts full options bag (no partial merge). */
 export function saveScreenshotOptions(opts: ScreenshotOptions): void {
   setJson(PREFS_KEY, opts);
 }
 
+/**
+ * Download name for a capture.
+ *
+ * @param symbol ticker; unsafe characters become `_`
+ * @param interval timeframe token
+ * @param at timestamp rendered in UTC as `YYYYMMDD-HHmm`
+ * @returns `axis-<symbol>-<interval>-<stamp>.png`
+ */
 export function screenshotFilename(
   symbol: string,
   interval: string,
@@ -79,6 +93,12 @@ export function screenshotFilename(
   return `axis-${sym}-${tf}-${stamp}.png`;
 }
 
+/**
+ * One-line capture watermark: `AXIS · symbol · interval · venue · scripts · UTC time`.
+ *
+ * @param input symbol and interval, plus optional venue, script names (max 4),
+ *   and the timestamp to print (defaults to now)
+ */
 export function watermarkText(input: {
   symbol: string;
   interval: string;
@@ -307,6 +327,12 @@ export async function captureScreenshot(
   return stacked;
 }
 
+/**
+ * Encode a canvas as a PNG blob.
+ *
+ * @param canvas rendered chart canvas
+ * @returns PNG blob; rejects when the browser cannot encode
+ */
 export function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) => {
     if (typeof canvas.toBlob !== 'function') {
@@ -328,6 +354,12 @@ export function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
   });
 }
 
+/**
+ * Trigger a browser download for a blob.
+ *
+ * @param blob payload to save
+ * @param filename suggested name; no-op outside a DOM
+ */
 export function downloadBlob(blob: Blob, filename: string): void {
   if (typeof document === 'undefined') return;
   const url = URL.createObjectURL(blob);
@@ -341,6 +373,12 @@ export function downloadBlob(blob: Blob, filename: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 2_000);
 }
 
+/**
+ * Write a PNG to the clipboard.
+ *
+ * @param blob PNG payload
+ * @returns true when the clipboard write succeeded; false when the API is missing or blocked
+ */
 export async function copyBlob(blob: Blob): Promise<boolean> {
   try {
     const clip = navigator.clipboard as Clipboard & {
@@ -356,6 +394,12 @@ export async function copyBlob(blob: Blob): Promise<boolean> {
   }
 }
 
+/**
+ * Capture the chart, encode it, and save it as a file.
+ *
+ * @param opts capture settings (defaults to the stored options)
+ * @throws when there is no chart to capture (no bars loaded)
+ */
 export async function downloadScreenshot(
   opts: ScreenshotOptions = loadScreenshotOptions(),
 ): Promise<void> {
@@ -365,6 +409,13 @@ export async function downloadScreenshot(
   setStatus('ready', 'Screenshot saved', { toast: true, source: 'screenshot' });
 }
 
+/**
+ * Capture the chart and copy it to the clipboard, falling back to a download
+ * when the clipboard API is unavailable.
+ *
+ * @param opts capture settings (defaults to the stored options)
+ * @throws when there is no chart to capture (no bars loaded)
+ */
 export async function copyScreenshot(
   opts: ScreenshotOptions = loadScreenshotOptions(),
 ): Promise<void> {

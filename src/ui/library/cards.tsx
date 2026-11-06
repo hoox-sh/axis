@@ -105,7 +105,7 @@ export const LibraryScriptCard: Component<{
   onLoadVersion?: (doc: { content: string; name: string; libraryId: string }) => void;
   /** After restore (new tip commit) — refresh list / optional editor reload. */
   onRestored?: (meta: ScriptMeta) => void;
-}> = (props) => {
+}> = (props): JSX.Element => {
   const [historyOpen, setHistoryOpen] = createSignal(false);
   const [moreOpen, setMoreOpen] = createSignal(false);
   const [historyBusy, setHistoryBusy] = createSignal(false);
@@ -449,6 +449,14 @@ export const LibraryScriptCard: Component<{
 };
 
 /** One built-in catalog row — title, kind, category, Apply (chart) / Edit (editor). */
+/**
+ * One built-in catalog row: title, kind/category chips, favorite toggle, and
+ * Apply (chart) / Edit (editor) actions. `applied` marks a script already on the
+ * chart, where Apply re-runs it against fresh bars instead of adding a copy.
+ *
+ * @param props - Catalog entry, busy/applied/favorite state, and action callbacks.
+ * @returns An `li.ax-library-card`.
+ */
 export const BuiltinScriptCard: Component<{
   item: BuiltinScript;
   busy?: boolean;
@@ -463,7 +471,7 @@ export const BuiltinScriptCard: Component<{
   query?: string;
   onApply: () => void;
   onEdit: () => void;
-}> = (props) => (
+}> = (props): JSX.Element => (
   <li
     class="ax-library-card"
     classList={{ 'is-applied': !!props.applied }}

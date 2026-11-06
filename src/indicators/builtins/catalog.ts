@@ -72,6 +72,12 @@ export function listBuiltinCategories(): BuiltinCategory[] {
   return out;
 }
 
+/**
+ * Catalog rows for one category chip, in catalog order.
+ *
+ * @param category - category returned by {@link listBuiltinCategories}
+ * @returns the matching built-ins; an empty array when the category is unused
+ */
 export function builtinsInCategory(category: BuiltinCategory): BuiltinScript[] {
   return BUILTIN_SCRIPTS.filter((s) => s.category === category);
 }

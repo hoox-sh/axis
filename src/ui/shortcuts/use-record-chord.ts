@@ -51,7 +51,9 @@ const MODIFIER_ONLY_KEYS = new Set([
  * recorder waits for the real key. Without this, Ctrl+K would capture
  * `Mod-Control` on the Control keydown and crash `parseChord` / Settings.
  */
-export function chordFromEvent(e: Pick<KeyboardEvent, 'key' | 'code' | 'ctrlKey' | 'metaKey' | 'altKey' | 'shiftKey'>): string {
+export function chordFromEvent(
+  e: Pick<KeyboardEvent, 'key' | 'code' | 'ctrlKey' | 'metaKey' | 'altKey' | 'shiftKey'>,
+): string {
   if (MODIFIER_ONLY_KEYS.has(e.key)) return '';
   const p = detectPlatform();
   const mods: string[] = [];
@@ -66,6 +68,7 @@ export function chordFromEvent(e: Pick<KeyboardEvent, 'key' | 'code' | 'ctrlKey'
   return [...mods, display].join('-');
 }
 
+/** Handle returned by {@link useRecordChord}: recording state plus start/stop controls. */
 export interface RecordChordApi {
   /** True while waiting for the next keydown. */
   recording: () => boolean;

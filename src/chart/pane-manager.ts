@@ -46,9 +46,12 @@ import {
   type IPriceLine,
   type ISeriesApi,
   type ISeriesMarkersPluginApi,
+  type LineWidth,
   type MouseEventParams,
   type SeriesMarker,
   type UTCTimestamp,
+  type SeriesType,
+  type Time,
 } from 'lightweight-charts';
 import { chartDebug } from '../debug';
 import { SlotChart } from './v1/chart-host';
@@ -64,7 +67,7 @@ import {
   createPlotBarOverlaySeries,
   createPlotCandleOverlaySeries,
   colorWithAlpha,
-  PLOT_PALETTE,
+  plotColorAt,
   RIGHT_PRICE_SCALE_WIDTH,
   SERIES_STACK_PRICE,
   VOID,
@@ -86,7 +89,6 @@ import {
   lastBarDirection,
   normalizeChartType,
   createHaCacheHolder,
-  isOhlcChartType,
   resetHeikinAshiCache,
   resetHaCacheHolder,
   type ChartType,
@@ -348,7 +350,23 @@ export function isFiniteOhlcBar(bar: {
 }
 
 /** setData that never throws (disposed series / NaN leftovers / mock thrash). */
-function safeSetData(series: ISeriesApi<any> | null | undefined, data: unknown): boolean {
+/**
+ * Clamp an arbitrary panel width to lightweight-charts' `LineWidth` union.
+ *
+ * Every caller feeds a 1-4 UI value, so the clamp is the only transform that
+ * matters; out-of-range and non-finite inputs collapse to `1` (the previous
+ * `as 1 | 2 | 3 | 4` casts passed the raw number through and relied on the
+ * chart to ignore it).
+ *
+ * @param width Requested width in px (any number).
+ * @returns A valid `LineWidth` (1, 2, 3 or 4).
+ */
+function clampLineWidth(width: number): LineWidth {
+  const n = Math.max(1, Math.min(4, Math.round(width)));
+  return n === 2 ? 2 : n === 3 ? 3 : n === 4 ? 4 : 1;
+}
+
+function safeSetData(series: ISeriesApi<SeriesType> | null | undefined, data: unknown): boolean {
   if (!series) return false;
   try {
     series.setData(repairSeriesPayload(data) as never);
@@ -372,7 +390,7 @@ function repairSeriesPayload(data: unknown): unknown {
 }
 
 /** series.update that never throws. */
-function safeUpdate(series: ISeriesApi<any> | null | undefined, point: unknown): boolean {
+function safeUpdate(series: ISeriesApi<SeriesType> | null | undefined, point: unknown): boolean {
   if (!series) return false;
   try {
     series.update(point as never);
@@ -407,7 +425,7 @@ type SeriesApplyMeta = { len: number; lastTime: number; lastVal: number };
  * are what push `panFrame` max past the G2 50 ms budget.
  */
 function applySeriesDataSmart(
-  series: ISeriesApi<any>,
+  series: ISeriesApi<SeriesType>,
   mapped: Array<{ time: number }>,
   metaKey: string,
   metaMap: Map<string, SeriesApplyMeta>,
@@ -480,7 +498,7 @@ function applySeriesDataSmart(
  *   module-global range.
  */
 function applyOverlayLineDataSmart(
-  series: ISeriesApi<any>,
+  series: ISeriesApi<SeriesType>,
   data: OverlayPoint[],
   metaKey: string,
   metaMap: Map<string, SeriesApplyMeta>,
@@ -550,7 +568,7 @@ function applyOverlayLineDataSmart(
 /** removeSeries that never throws; caller still deletes map keys. */
 function safeRemoveSeries(
   chart: IChartApi | null | undefined,
-  series: ISeriesApi<any> | null | undefined,
+  series: ISeriesApi<SeriesType> | null | undefined,
 ): void {
   if (!chart || !series) return;
   try {
@@ -565,9 +583,9 @@ export interface ManagedPane {
   id: string;
   type: string;
   chart: IChartApi;
-  series: Record<string, ISeriesApi<any>>;
+  series: Record<string, ISeriesApi<SeriesType>>;
   /** Pine hline() price lines keyed by name (attached to a host series) */
-  priceLines: Record<string, { line: IPriceLine; host: ISeriesApi<any> }>;
+  priceLines: Record<string, { line: IPriceLine; host: ISeriesApi<SeriesType> }>;
   visible: boolean;
   label: string;
   resizeObserver: ResizeObserver | null;
@@ -595,9 +613,8 @@ export class PaneManager {
   private container: HTMLElement;
   /** Slot / host id for unique pane DOM ids (empty = legacy `pane-price`). */
   private hostKey: string;
-  private suppressSync = false;
   /** LWC v5 markers plugin attached to the price candle series */
-  private candleMarkers: ISeriesMarkersPluginApi<any> | null = null;
+  private candleMarkers: ISeriesMarkersPluginApi<Time> | null = null;
   /** Strategy entry/exit markers (merged with shape markers) */
   private tradeMarkerList: SeriesMarker<UTCTimestamp>[] = [];
   /**
@@ -606,8 +623,6 @@ export class PaneManager {
    * shapes. Flattened into {@link tradeMarkerList}.
    */
   private tradeMarkersByOwner = new Map<string, SeriesMarker<UTCTimestamp>[]>();
-  /** plotshape / plotchar markers (merged with trade markers) */
-  private shapeMarkerList: SeriesMarker<UTCTimestamp>[] = [];
   /**
    * Owner-scoped shape markers (script id → list) so multi-script runs do not
    * wipe each other’s plotshape markers. Flattened into {@link shapeMarkerList}.
@@ -616,7 +631,7 @@ export class PaneManager {
   /** Script pane for plotshape (`price` or `ind_*`). Missing → price. */
   private shapePaneByOwner = new Map<string, string>();
   /** LWC markers plugin on non-price panes (first overlay series). */
-  private paneShapePlugins = new Map<string, ISeriesMarkersPluginApi<any>>();
+  private paneShapePlugins = new Map<string, ISeriesMarkersPluginApi<Time>>();
   /** Inline-debug / Pine log bar pins (merged with trade + shape markers) */
   private debugPinMarkerList: SeriesMarker<UTCTimestamp>[] = [];
   /**
@@ -647,8 +662,6 @@ export class PaneManager {
   private crosshairRaf = createRafCoalescer();
   /** Coalesce time-scale sync so pan/zoom does not fan out to every pane per event. */
   private timeSyncRaf = createRafCoalescer();
-  /** Latest logical range waiting for the time-sync rAF. */
-  private pendingTimeRange: { from: number; to: number } | null = null;
   /** Coalesce ResizeObserver → applyOptions to one pass per animation frame. */
   private resizeRaf = createRafCoalescer();
   /** Pane ids that need a measured resize on the next rAF flush. */
@@ -658,7 +671,7 @@ export class PaneManager {
     | ((data: {
         time: number | null;
         point: { x: number; y: number } | null;
-        seriesData: Map<ISeriesApi<any>, unknown>;
+        seriesData: Map<ISeriesApi<SeriesType>, unknown>;
       }) => void)
     | null = null;
   /** Guard re-entrant crosshair setCrosshairPosition loops */
@@ -1116,8 +1129,8 @@ export class PaneManager {
     const div = document.createElement('div');
     div.id = this.paneDomId(id);
     div.className = 'relative';
-    div.dataset.paneId = id;
-    div.dataset.paneType = type;
+    div.dataset['paneId'] = id;
+    div.dataset['paneType'] = type;
 
     let chart: IChartApi;
     let resizeObserver: ResizeObserver | null = null;
@@ -1227,8 +1240,8 @@ export class PaneManager {
     const row = this.slot?.element(id);
     const host = row ? panePlotHost(row) : fallback;
     if (host.dataset) {
-      host.dataset.axisPaneChrome = id;
-      host.dataset.paneType = type;
+      host.dataset['axisPaneChrome'] = id;
+      host.dataset['paneType'] = type;
     }
     mountPaneBadge(host, id, type, label);
   }
@@ -1432,7 +1445,6 @@ export class PaneManager {
       }
     }
     this.timeSyncUnsubs = [];
-    this.pendingTimeRange = null;
     this.timeSyncRaf.cancel();
     const price = this.panes.get('price') ?? this.getAllPanes()[0];
     if (price) this.watchLeftEdge(price.chart);
@@ -1647,7 +1659,6 @@ export class PaneManager {
     for (const list of this.shapeMarkersByOwner.values()) {
       for (const m of list) out.push(m);
     }
-    this.shapeMarkerList = out;
   }
 
   /**
@@ -1730,9 +1741,9 @@ export class PaneManager {
       if ('open' in row) {
         const c = this.barColorByTime.get(Number((pt as { time: number }).time));
         if (c) {
-          row.color = c;
-          row.borderColor = c;
-          row.wickColor = c;
+          row['color'] = c;
+          row['borderColor'] = c;
+          row['wickColor'] = c;
           tinted += 1;
         }
       }
@@ -1841,7 +1852,7 @@ export class PaneManager {
   }
 
   /** First overlay line/area/hist/OHLC series on a pane (plotshape host). */
-  private markerHostSeries(pane: ManagedPane | undefined): ISeriesApi<any> | null {
+  private markerHostSeries(pane: ManagedPane | undefined): ISeriesApi<SeriesType> | null {
     if (!pane) return null;
     const keys = Object.keys(pane.series);
     const overlay = keys.find((k) => k.startsWith('overlay_') || k.startsWith(OVERLAY_OHLC_PREFIX));
@@ -1931,12 +1942,7 @@ export class PaneManager {
         if (coord == null) {
           // Time outside current data — center on the nearest bar index.
           if (fallbackLogical) {
-            this.suppressSync = true;
-            try {
-              ts.setVisibleLogicalRange(fallbackLogical);
-            } finally {
-              this.suppressSync = false;
-            }
+            ts.setVisibleLogicalRange(fallbackLogical);
           } else {
             ts.setVisibleRange({
               from: (time - 86400 * 14) as UTCTimestamp,
@@ -1947,15 +1953,10 @@ export class PaneManager {
         }
         const logical = ts.coordinateToLogical(coord);
         if (logical == null) continue;
-        this.suppressSync = true;
-        try {
-          ts.setVisibleLogicalRange({
-            from: logical - half,
-            to: logical + half,
-          });
-        } finally {
-          this.suppressSync = false;
-        }
+        ts.setVisibleLogicalRange({
+          from: logical - half,
+          to: logical + half,
+        });
       } catch {
         /* ignore per-pane failures */
       }
@@ -2038,7 +2039,7 @@ export class PaneManager {
     onMove: (data: {
       time: number | null;
       point: { x: number; y: number } | null;
-      seriesData: Map<ISeriesApi<any>, unknown>;
+      seriesData: Map<ISeriesApi<SeriesType>, unknown>;
     }) => void,
   ) {
     this.crosshairOnMove = onMove;
@@ -2102,7 +2103,7 @@ export class PaneManager {
         this.crosshairOnMove?.({
           time: typeof param.time === 'number' ? param.time : null,
           point: param.point,
-          seriesData: param.seriesData as Map<ISeriesApi<any>, unknown>,
+          seriesData: param.seriesData as Map<ISeriesApi<SeriesType>, unknown>,
         });
       };
 
@@ -2309,16 +2310,16 @@ export class PaneManager {
     if (breakStyle) {
       const opts: Record<string, unknown> = { lineVisible: false };
       if (seriesKind === 'area') {
-        opts.topColor = 'rgba(0,0,0,0)';
-        opts.bottomColor = 'rgba(0,0,0,0)';
+        opts['topColor'] = 'rgba(0,0,0,0)';
+        opts['bottomColor'] = 'rgba(0,0,0,0)';
       }
       return opts;
     }
     if (seriesKind === 'cross') return {};
     const opts: Record<string, unknown> = { lineVisible: true };
     if (seriesKind === 'area' && color) {
-      opts.topColor = colorWithAlpha(color, 0.28);
-      opts.bottomColor = colorWithAlpha(color, 0.02);
+      opts['topColor'] = colorWithAlpha(color, 0.28);
+      opts['bottomColor'] = colorWithAlpha(color, 0.02);
     }
     return opts;
   }
@@ -2331,7 +2332,7 @@ export class PaneManager {
    * detach) the other's primitive.
    */
   private dropLineBreak(
-    series: ISeriesApi<any> | null | undefined,
+    series: ISeriesApi<SeriesType> | null | undefined,
     paneId: string,
     key: string,
   ): void {
@@ -2353,7 +2354,7 @@ export class PaneManager {
    * Detach when the style is a spanning line so LWC can connect through `na`.
    */
   private syncLineBreakPrimitive(
-    series: ISeriesApi<any>,
+    series: ISeriesApi<SeriesType>,
     paneId: string,
     key: string,
     line: OverlayLineSpec,
@@ -2508,7 +2509,7 @@ export class PaneManager {
       const series = pane.series[key];
       if (series) {
         try {
-          series.applyOptions({ lineWidth: Math.max(1, Math.min(4, Math.round(width))) });
+          series.applyOptions({ lineWidth: clampLineWidth(width) });
           ok = true;
         } catch {
           /* ignore */
@@ -2520,7 +2521,7 @@ export class PaneManager {
       for (const [key, series] of Object.entries(pane.series)) {
         if (!series || !key.startsWith('overlay_') || !key.endsWith(suffix)) continue;
         try {
-          series.applyOptions({ lineWidth: Math.max(1, Math.min(4, Math.round(width))) });
+          series.applyOptions({ lineWidth: clampLineWidth(width) });
           ok = true;
         } catch {
           /* ignore */
@@ -2531,7 +2532,7 @@ export class PaneManager {
     if (pl?.line) {
       try {
         pl.line.applyOptions({
-          lineWidth: Math.max(1, Math.min(4, Math.round(width))) as 1 | 2 | 3 | 4,
+          lineWidth: clampLineWidth(width),
         });
         ok = true;
       } catch {
@@ -2560,7 +2561,7 @@ export class PaneManager {
     const keys: string[] = [];
     if (ownerId) keys.push(makeOverlayLineKey(plotName, ownerId));
     keys.push(`overlay_${plotName}`);
-    const apply = (series: ISeriesApi<any>, key: string) => {
+    const apply = (series: ISeriesApi<SeriesType>, key: string) => {
       // Resolve the kind for the key actually applied: the fallback loop can
       // touch an owner-scoped series whose key is not `keys[0]`.
       const kind = this.overlaySeriesKinds.get(`${paneId}:${key}`) ?? null;
@@ -2611,7 +2612,7 @@ export class PaneManager {
     const keys: string[] = [];
     if (ownerId) keys.push(makeOverlayLineKey(plotName, ownerId));
     keys.push(`overlay_${plotName}`);
-    const apply = (series: ISeriesApi<any>) => {
+    const apply = (series: ISeriesApi<SeriesType>) => {
       try {
         series.applyOptions({
           visible: plotVisible !== false && (bits & PLOT_DISPLAY.pane) !== 0,
@@ -2848,10 +2849,15 @@ export class PaneManager {
     // Heavy 10k+ loads skip the double resize+fit (main-thread tax).
     const barN = store.bars?.length ?? 0;
     if (barN >= 10_000) return;
-    const raf =
+    // Non-browser fallback: the handle is never cancelled (one-shot pass), so a
+    // plain `setTimeout` plus a sentinel id is enough and needs no numeric cast.
+    const raf: (cb: FrameRequestCallback) => number =
       typeof requestAnimationFrame === 'function'
         ? requestAnimationFrame
-        : (cb: FrameRequestCallback) => setTimeout(cb, 0) as unknown as number;
+        : (cb) => {
+            setTimeout(cb, 0);
+            return 0;
+          };
     raf(run);
   }
 
@@ -3052,7 +3058,7 @@ export class PaneManager {
    * Returns true when the point was painted (finite time + valid OHLC/value).
    */
   private applyCandlePoint(
-    series: ISeriesApi<any>,
+    series: ISeriesApi<SeriesType>,
     point: { time: number } & (
       { open: number; high: number; low: number; close: number } | { value: number }
     ),
@@ -3088,7 +3094,7 @@ export class PaneManager {
    * point; line/area use store history or the single tick).
    */
   private applyPriceLineTint(
-    series: ISeriesApi<any>,
+    series: ISeriesApi<SeriesType>,
     chartType: ChartType,
     point:
       | ({ time: number } & (
@@ -3166,7 +3172,7 @@ export class PaneManager {
       holder?: HaCacheHolder | null;
     } = {},
   ): void {
-    const { fit = true, clearMarkers = false, keepRange = null, holder } = opts;
+    const { fit = true, keepRange = null, holder } = opts;
     const pricePane = this.panes.get('price');
     if (!pricePane?.series['candle']) {
       chartDebug('setCandleData', {
@@ -3206,11 +3212,7 @@ export class PaneManager {
         const t = Number(row?.time);
         if (Number.isFinite(t)) nextCandleTimes.add(t);
       }
-      const prepare = (
-        this as unknown as {
-          prepareCoPaintedForCandleTimes?: (times: ReadonlySet<number>) => void;
-        }
-      ).prepareCoPaintedForCandleTimes;
+      const prepare = this.prepareCoPaintedForCandleTimes;
       if (typeof prepare === 'function') prepare.call(this, nextCandleTimes);
       pricePane.series['candle'].setData(cleanData as never);
       chartDebug('setCandleData', {
@@ -3232,15 +3234,7 @@ export class PaneManager {
           const t = Number(row?.time);
           if (Number.isFinite(t)) candleTimes.push(t);
         }
-        const perChart = (
-          this as unknown as {
-            notePaintedCandleRange?: (
-              first: number,
-              last: number,
-              times?: readonly number[],
-            ) => void;
-          }
-        ).notePaintedCandleRange;
+        const perChart = this.notePaintedCandleRange;
         if (typeof perChart === 'function') {
           perChart.call(this, firstT, lastT, candleTimes);
         } else {
@@ -3366,10 +3360,12 @@ export class PaneManager {
     }
     for (const name of Object.keys(pane.priceLines)) {
       const pl = pane.priceLines[name];
-      try {
-        pl.host.removePriceLine(pl.line);
-      } catch {
-        /* ignore */
+      if (pl) {
+        try {
+          pl.host.removePriceLine(pl.line);
+        } catch {
+          /* ignore */
+        }
       }
       delete pane.priceLines[name];
       this.forgetLastValueTitle(paneId, name, 'priceLine');
@@ -3410,10 +3406,12 @@ export class PaneManager {
     for (const name of Object.keys(pane.priceLines)) {
       if (!name.startsWith(plPrefix)) continue;
       const pl = pane.priceLines[name];
-      try {
-        pl.host.removePriceLine(pl.line);
-      } catch {
-        /* ignore */
+      if (pl) {
+        try {
+          pl.host.removePriceLine(pl.line);
+        } catch {
+          /* ignore */
+        }
       }
       delete pane.priceLines[name];
       this.forgetLastValueTitle(paneId, name, 'priceLine');
@@ -3499,10 +3497,12 @@ export class PaneManager {
       for (const name of Object.keys(pane.priceLines)) {
         if (name.startsWith(plPrefix)) continue;
         const pl = pane.priceLines[name];
-        try {
-          pl.host.removePriceLine(pl.line);
-        } catch {
-          /* ignore */
+        if (pl) {
+          try {
+            pl.host.removePriceLine(pl.line);
+          } catch {
+            /* ignore */
+          }
         }
         delete pane.priceLines[name];
       }
@@ -3510,9 +3510,9 @@ export class PaneManager {
   }
 
   /** Prefer candle, else first non-overlay series, else any series (for createPriceLine host). */
-  private priceLineHost(pane: ManagedPane): ISeriesApi<any> | null {
+  private priceLineHost(pane: ManagedPane): ISeriesApi<SeriesType> | null {
     if (pane.series['candle']) return pane.series['candle'];
-    let helperFirst: ISeriesApi<any> | null = null;
+    let helperFirst: ISeriesApi<SeriesType> | null = null;
     for (const [k, s] of Object.entries(pane.series)) {
       // Helper underlays (Pine bgcolor histograms) live on their own hidden
       // price scale — hosting hlines there maps them far off-viewport. TV
@@ -3589,10 +3589,12 @@ export class PaneManager {
       if (!ownerId && name.includes('__')) continue;
       if (!wantPrice.has(name)) {
         const pl = pane.priceLines[name];
-        try {
-          pl.host.removePriceLine(pl.line);
-        } catch {
-          /* ignore */
+        if (pl) {
+          try {
+            pl.host.removePriceLine(pl.line);
+          } catch {
+            /* ignore */
+          }
         }
         delete pane.priceLines[name];
       }
@@ -3642,28 +3644,28 @@ export class PaneManager {
           this.rememberSeriesTitle(paneId, key, line.name);
           if (line.color) {
             if (seriesKind === 'area') {
-              opts.lineColor = line.color;
+              opts['lineColor'] = line.color;
               // keep prior fill if color is non-hex; series-factory sets fills on create
             } else if (isPointMarkerSeriesKind(seriesKind)) {
-              opts.crosshairMarkerBackgroundColor = line.color;
+              opts['crosshairMarkerBackgroundColor'] = line.color;
               // cross / stepline_diamond use solid series color for markers;
               // circles keep a faint hairline (re-apply alpha on color updates)
               if (seriesKind === 'circles') {
                 /* hairline alpha set at create; marker tint only here */
               } else {
-                opts.color = line.color;
+                opts['color'] = line.color;
               }
             } else {
-              opts.color = line.color;
+              opts['color'] = line.color;
             }
           }
-          if (lw != null && !histFamily) opts.lineWidth = lw;
+          if (lw != null && !histFamily) opts['lineWidth'] = lw;
           // plot.linestyle_* on Line / Area / marker hairline (not hist/columns)
           if (!histFamily && line.linestyle) {
-            opts.lineStyle = mapLineStyle(line.linestyle);
+            opts['lineStyle'] = mapLineStyle(line.linestyle);
           }
           if (histFamily) {
-            opts.base =
+            opts['base'] =
               line.histbase != null && Number.isFinite(Number(line.histbase))
                 ? Number(line.histbase)
                 : 0;
@@ -3684,7 +3686,7 @@ export class PaneManager {
         );
       } else {
         try {
-          const c = line.color || PLOT_PALETTE[colorIdx % PLOT_PALETTE.length];
+          const c = line.color || plotColorAt(colorIdx);
           const series = createPlotOverlaySeries(
             pane.chart,
             line.name,
@@ -3748,7 +3750,7 @@ export class PaneManager {
       }
       if (price == null || !Number.isFinite(price)) continue;
 
-      const c = line.color || PLOT_PALETTE[colorIdx % PLOT_PALETTE.length];
+      const c = line.color || plotColorAt(colorIdx);
       const lw = Math.max(1, Math.min(4, Math.round(line.linewidth ?? 1))) as 1 | 2 | 3 | 4;
       const host = this.priceLineHost(pane);
       const plKey = plName(line.name);
@@ -3874,7 +3876,7 @@ export class PaneManager {
       try {
         existing.applyOptions({
           color,
-          lineWidth,
+          lineWidth: clampLineWidth(lineWidth),
           lastValueVisible: labels.lastValueVisible,
           title: labels.title,
         });
@@ -3911,7 +3913,7 @@ export class PaneManager {
     const pane = this.panes.get(paneId);
     if (!pane) return;
     const overlayCount = Object.keys(pane.series).filter((k) => k.startsWith('overlay_')).length;
-    const c = color || PLOT_PALETTE[overlayCount % PLOT_PALETTE.length];
+    const c = color || plotColorAt(overlayCount);
     const mapped = data
       .filter((d) => Number.isFinite(d.time) && Number.isFinite(d.value))
       .map((d) => ({ time: d.time as UTCTimestamp, value: d.value }));
@@ -4018,7 +4020,7 @@ export class PaneManager {
         this.deleteOverlayMeta(paneId, key);
       }
 
-      const c = spec.color || PLOT_PALETTE[colorIdx % PLOT_PALETTE.length];
+      const c = spec.color || plotColorAt(colorIdx);
       const seriesNow = pane.series[key];
       if (seriesNow) {
         applySeriesDataSmart(
@@ -4037,15 +4039,15 @@ export class PaneManager {
           this.rememberSeriesTitle(paneId, key, spec.name);
           if (spec.color) {
             if (seriesKind === 'plotcandle') {
-              opts.upColor = c;
-              opts.downColor = c;
-              opts.borderUpColor = c;
-              opts.borderDownColor = c;
-              opts.wickUpColor = c;
-              opts.wickDownColor = c;
+              opts['upColor'] = c;
+              opts['downColor'] = c;
+              opts['borderUpColor'] = c;
+              opts['borderDownColor'] = c;
+              opts['wickUpColor'] = c;
+              opts['wickDownColor'] = c;
             } else {
-              opts.upColor = c;
-              opts.downColor = c;
+              opts['upColor'] = c;
+              opts['downColor'] = c;
             }
           }
           seriesNow.applyOptions(opts);
@@ -4256,13 +4258,11 @@ export class PaneManager {
   dispose() {
     this.crosshairRaf.cancel();
     this.timeSyncRaf.cancel();
-    this.pendingTimeRange = null;
     this.resizeRaf.cancel();
     this.pendingResizePaneIds.clear();
     this.candleMarkers = null;
     this.tradeMarkerList = [];
     this.tradeMarkersByOwner.clear();
-    this.shapeMarkerList = [];
     this.shapeMarkersByOwner.clear();
     this.debugPinMarkerList = [];
     this.crosshairOnMove = null;

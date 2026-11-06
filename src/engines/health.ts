@@ -118,30 +118,30 @@ function num(v: unknown): number | null {
 function parseCompile(raw: unknown): EngineCompileHealth | null {
   if (!isRecord(raw)) return null;
   return {
-    hasNumba: bool(raw.has_numba),
-    builtinsWarmed: bool(raw.builtins_warmed),
-    prewarmEnabled: bool(raw.prewarm_enabled),
-    hostPrewarmed: bool(raw.host_prewarmed),
-    diskCacheEnabled: bool(raw.disk_cache_enabled),
-    diskCacheDir: str(raw.disk_cache_dir),
-    sourceEntries: num(raw.source_entries),
-    irEntries: num(raw.ir_entries),
-    defaultMode: str(raw.default_mode),
+    hasNumba: bool(raw['has_numba']),
+    builtinsWarmed: bool(raw['builtins_warmed']),
+    prewarmEnabled: bool(raw['prewarm_enabled']),
+    hostPrewarmed: bool(raw['host_prewarmed']),
+    diskCacheEnabled: bool(raw['disk_cache_enabled']),
+    diskCacheDir: str(raw['disk_cache_dir']),
+    sourceEntries: num(raw['source_entries']),
+    irEntries: num(raw['ir_entries']),
+    defaultMode: str(raw['default_mode']),
   };
 }
 
 function parseFeatures(raw: unknown): EngineFeatureHealth | null {
   if (!isRecord(raw)) return null;
   return {
-    warmCompile: bool(raw.warm_compile),
-    optimize: bool(raw.optimize),
-    alerts: bool(raw.alerts),
-    alertWebhooks: bool(raw.alert_webhooks),
-    alertWebhookDefault: bool(raw.alert_webhook_default),
-    defaultRunMode: str(raw.default_run_mode),
-    freeTierLimits: bool(raw.free_tier_limits),
-    scriptRunner: bool(raw.script_runner),
-    scriptRunnerScheduler: bool(raw.script_runner_scheduler),
+    warmCompile: bool(raw['warm_compile']),
+    optimize: bool(raw['optimize']),
+    alerts: bool(raw['alerts']),
+    alertWebhooks: bool(raw['alert_webhooks']),
+    alertWebhookDefault: bool(raw['alert_webhook_default']),
+    defaultRunMode: str(raw['default_run_mode']),
+    freeTierLimits: bool(raw['free_tier_limits']),
+    scriptRunner: bool(raw['script_runner']),
+    scriptRunnerScheduler: bool(raw['script_runner_scheduler']),
   };
 }
 
@@ -157,12 +157,12 @@ function parseEndpoints(raw: unknown): string[] {
 export function healthFromBody(body: unknown): EngineHealth {
   if (!isRecord(body)) return { ...DEFAULT_ENGINE_HEALTH };
   return {
-    service: str(body.service),
-    version: str(body.version),
-    websocket: bool(body.websocket),
-    compile: parseCompile(body.compile),
-    features: parseFeatures(body.features),
-    endpoints: parseEndpoints(body.endpoints),
+    service: str(body['service']),
+    version: str(body['version']),
+    websocket: bool(body['websocket']),
+    compile: parseCompile(body['compile']),
+    features: parseFeatures(body['features']),
+    endpoints: parseEndpoints(body['endpoints']),
   };
 }
 
@@ -184,7 +184,9 @@ export type AdvertisedRunMode = 'interpret' | 'compile' | 'auto';
  */
 export function advertisedRunMode(health: EngineHealth | null): AdvertisedRunMode | null {
   const raw = health?.compile?.defaultMode ?? health?.features?.defaultRunMode ?? null;
-  const mode = String(raw || '').trim().toLowerCase();
+  const mode = String(raw || '')
+    .trim()
+    .toLowerCase();
   return mode === 'interpret' || mode === 'compile' || mode === 'auto' ? mode : null;
 }
 
@@ -198,6 +200,14 @@ export function advertisedRunMode(health: EngineHealth | null): AdvertisedRunMod
  */
 export type CompileReadiness = 'warm' | 'cold' | 'unavailable' | 'unknown';
 
+/**
+ * Collapses the parsed `compile` section into the single badge the Runtime form shows, so
+ * the UI does not have to re-derive warm/cold from four booleans.
+ *
+ * @param health Parsed `/health`, or `null` before the first probe.
+ * @returns `unknown` when unprobed, `unavailable` without Numba, `warm` when kernels or the
+ * host were prewarmed, otherwise `cold`.
+ */
 export function compileReadiness(health: EngineHealth | null): CompileReadiness {
   if (!health?.compile) return 'unknown';
   const c = health.compile;

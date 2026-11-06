@@ -471,7 +471,12 @@ const WatchlistRow: Component<{
   );
 };
 
-export const Watchlist: Component = () => {
+/**
+ * Watchlist dock panel: add/remove symbols, live quotes with sparkline, and the
+ * expanded day-range row. Owns its own ticker subscription and keeps the
+ * persisted symbol list in the store.
+ */
+export const Watchlist: Component = (): JSX.Element => {
   const [prices, setPrices] = createSignal<Record<string, WatchTicker>>({});
   const [addValue, setAddValue] = createSignal('');
   const [browseOpen, setBrowseOpen] = createSignal(false);

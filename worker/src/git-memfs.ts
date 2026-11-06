@@ -22,7 +22,8 @@ function fsError(code: string, path: string): Error {
   return err;
 }
 
-class MemoryStats {  constructor(private readonly entry: Entry) {}
+class MemoryStats {
+  constructor(private readonly entry: Entry) {}
 
   get size(): number {
     return this.entry.kind === 'file' ? this.entry.data.byteLength : 0;
@@ -54,6 +55,15 @@ class MemoryStats {  constructor(private readonly entry: Entry) {}
   }
 }
 
+/**
+ * In-memory filesystem that satisfies the `isomorphic-git` FS contract.
+ *
+ * Backs short-lived clone/commit working trees inside the Worker, which has no local
+ * disk. Paths are normalized (`..`, `.`, duplicate slashes) and every method throws
+ * Node-style errors carrying a `code` (`ENOENT`, `ENOTDIR`, `EISDIR`, `ENOTEMPTY`,
+ * `EINVAL`) because isomorphic-git branches on them. Contents are dropped when the
+ * instance is garbage-collected — nothing is persisted.
+ */
 export class MemoryFS {
   private readonly encoder = new TextEncoder();
   private readonly decoder = new TextDecoder();
@@ -139,7 +149,10 @@ export class MemoryFS {
     this.requireDir(this.parent(target)).children.add(this.basename(target));
   }
 
-  async readFile(path: string, options?: string | { encoding?: string }): Promise<Uint8Array | string> {
+  async readFile(
+    path: string,
+    options?: string | { encoding?: string },
+  ): Promise<Uint8Array | string> {
     const entry = this.requireEntry(path);
     if (entry.kind !== 'file') throw fsError('EISDIR', path);
     const encoding = typeof options === 'string' ? options : options?.encoding;

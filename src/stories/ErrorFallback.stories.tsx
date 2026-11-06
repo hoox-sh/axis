@@ -9,6 +9,7 @@ import { ErrorFallback } from '../ui/ErrorFallback';
 const meta: Meta = { title: 'Chrome/ErrorFallback', tags: ['autodocs'] };
 export default meta;
 
+/** Full-page fallback for an Error instance (e.g. lost WebGL context). */
 export const Page: StoryObj = {
   render: () => (
     <div style={{ width: '480px', 'max-width': '90vw' }}>
@@ -17,6 +18,7 @@ export const Page: StoryObj = {
   ),
 };
 
+/** Inline fallback for a plain message string inside a panel. */
 export const Inline: StoryObj = {
   render: () => (
     <div style={{ width: '360px' }}>

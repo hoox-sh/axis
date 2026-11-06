@@ -57,7 +57,7 @@ const GRID_SHORTCUT_ID: Record<ChartGridMode, ShortcutId> = {
 };
 
 /** Compact topbar control for multi-chart layouts and named snapshots. */
-export const ChartLayoutMenu: Component = () => {
+export const ChartLayoutMenu: Component = () : JSX.Element => {
   const [open, setOpen] = createSignal(false);
   const [saveName, setSaveName] = createSignal('');
   let btnEl: HTMLButtonElement | undefined;

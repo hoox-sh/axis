@@ -60,8 +60,10 @@ export interface DrawingSyncLike {
   time?: number;
 }
 
+/** How {@link mergeDrawings} combines lists: replace outright, or append with id remap. */
 export type MergeDrawingsMode = 'replace' | 'append';
 
+/** Id factory and optional symbol stamp applied to each clone. */
 export interface CloneDrawingsOptions {
   /** Stamp or overwrite `meta.symbol` on each clone (uppercased). */
   symbol?: string;
@@ -69,6 +71,7 @@ export interface CloneDrawingsOptions {
   idFactory?: () => string;
 }
 
+/** Whether untagged (pre-anchoring) drawings count as visible for the symbol. */
 export interface DrawingsForSymbolOptions {
   /**
    * When true, drawings with no `meta.symbol` are included (global / untagged).
@@ -77,6 +80,7 @@ export interface DrawingsForSymbolOptions {
   includeUntagged?: boolean;
 }
 
+/** Deltas applied to cloned geometry: `dTime` in seconds, `dPrice` in quote currency. */
 export interface OffsetDrawingOptions {
   dTime?: number;
   dPrice?: number;

@@ -28,11 +28,7 @@
  * @module storage/workspace-snapshot
  */
 
-import {
-  DEFAULT_CHART_TYPE,
-  normalizeChartType,
-  type ChartType,
-} from '../chart/chart-type';
+import { DEFAULT_CHART_TYPE, normalizeChartType, type ChartType } from '../chart/chart-type';
 import {
   normalizeChartLayout,
   type ChartLayoutState,
@@ -66,6 +62,7 @@ export const EDITOR_PREFS_KEYS = [
   'editorMode',
 ] as const;
 
+/** One of the durable editor flags carried by a workspace snapshot. */
 export type EditorPrefsKey = (typeof EDITOR_PREFS_KEYS)[number];
 
 /** Panel chrome fields included in a workspace export (geometry + dock). */
@@ -118,7 +115,11 @@ export interface WorkspaceSnapshot {
   panes?: Pane[];
 
   drawings?: Drawing[];
-  drawingPrefs?: DrawingPrefs;
+  /**
+   * Drawing tool defaults. Snapshots (and older exports) may carry only the
+   * fields that changed — the applier merges them over the live prefs.
+   */
+  drawingPrefs?: Partial<DrawingPrefs>;
   drawingUi?: Partial<DrawingUi>;
 
   /** Subset of panel chrome (open / dock / geometry). */
@@ -161,6 +162,10 @@ export type WorkspaceSnapshotSource = {
   bars?: Bar[];
 };
 
+/**
+ * Build-time switches: whether to embed OHLCV bars (large) and saved layouts,
+ * plus an optional label and fixed `createdAt` for reproducible exports.
+ */
 export interface BuildWorkspaceSnapshotOptions {
   /** When true, copy OHLCV bars into the snapshot (can be huge). Default false. */
   includeBars?: boolean;
@@ -186,7 +191,7 @@ export interface WorkspaceSnapshotApplyFields {
   savedLayouts?: SavedChartLayout[];
   panes?: Pane[];
   drawings?: Drawing[];
-  drawingPrefs?: DrawingPrefs;
+  drawingPrefs?: Partial<DrawingPrefs>;
   drawingUi?: Partial<DrawingUi>;
   panelChrome?: Partial<Record<PanelId, PanelChromeSnapshot>>;
   theme?: 'dark' | 'light';
@@ -213,6 +218,11 @@ export interface WorkspaceSnapshotSetters {
   applyUiScale?(scale: number): void;
 }
 
+/**
+ * Thrown when workspace JSON is empty, not JSON, the wrong kind, or a version
+ * newer than {@link WORKSPACE_SNAPSHOT_VERSION}. Raised before any setter runs,
+ * so a failed import cannot wipe live state.
+ */
 export class WorkspaceSnapshotParseError extends Error {
   constructor(message: string) {
     super(message);
@@ -270,7 +280,8 @@ function snapshotScripts(scripts: Indicator[] | undefined): ScriptSnapshotMeta[]
 function snapshotEditorPrefs(src: WorkspaceSnapshotSource): EditorPrefsSnapshot {
   const prefs: EditorPrefsSnapshot = {};
   if (typeof src.profilerEnabled === 'boolean') prefs.profilerEnabled = src.profilerEnabled;
-  if (typeof src.inlineDebugEnabled === 'boolean') prefs.inlineDebugEnabled = src.inlineDebugEnabled;
+  if (typeof src.inlineDebugEnabled === 'boolean')
+    prefs.inlineDebugEnabled = src.inlineDebugEnabled;
   if (src.editor && typeof src.editor === 'object') {
     if (typeof src.editor.open === 'boolean') prefs.editorOpen = src.editor.open;
     if (typeof src.editor.width === 'number' && Number.isFinite(src.editor.width)) {
@@ -412,14 +423,14 @@ export function parseSnapshotJson(text: string): WorkspaceSnapshot {
   }
 
   // Accept kind missing only when version is present (forward-compat soft)
-  const kind = raw.kind;
+  const kind = raw['kind'];
   if (kind != null && kind !== WORKSPACE_SNAPSHOT_KIND) {
     throw new WorkspaceSnapshotParseError(
       `Unsupported snapshot kind: ${String(kind)} (expected ${WORKSPACE_SNAPSHOT_KIND})`,
     );
   }
 
-  const version = Number(raw.version);
+  const version = Number(raw['version']);
   if (!Number.isFinite(version) || version < 1) {
     throw new WorkspaceSnapshotParseError('Missing or invalid snapshot version');
   }
@@ -432,13 +443,13 @@ export function parseSnapshotJson(text: string): WorkspaceSnapshot {
   const symbol = requireString(raw, 'symbol', 'BTCUSDT').toUpperCase();
   const interval = requireString(raw, 'interval', '15m');
   const exchange = requireString(raw, 'exchange', 'binance');
-  const chartType = normalizeChartType(raw.chartType);
+  const chartType = normalizeChartType(raw['chartType']);
 
   let createdAt: string;
-  if (typeof raw.createdAt === 'string' && raw.createdAt) {
-    createdAt = raw.createdAt;
-  } else if (typeof raw.createdAt === 'number' && Number.isFinite(raw.createdAt)) {
-    createdAt = new Date(raw.createdAt).toISOString();
+  if (typeof raw['createdAt'] === 'string' && raw['createdAt']) {
+    createdAt = raw['createdAt'];
+  } else if (typeof raw['createdAt'] === 'number' && Number.isFinite(raw['createdAt'])) {
+    createdAt = new Date(raw['createdAt']).toISOString();
   } else {
     createdAt = new Date().toISOString();
   }
@@ -453,17 +464,20 @@ export function parseSnapshotJson(text: string): WorkspaceSnapshot {
     chartType,
   };
 
-  if (typeof raw.name === 'string' && raw.name.trim()) {
-    snap.name = raw.name.trim();
+  if (typeof raw['name'] === 'string' && raw['name'].trim()) {
+    snap.name = raw['name'].trim();
   }
 
-  if (typeof raw.historyBars === 'number' && Number.isFinite(raw.historyBars)) {
-    snap.historyBars = Math.round(raw.historyBars);
+  if (typeof raw['historyBars'] === 'number' && Number.isFinite(raw['historyBars'])) {
+    snap.historyBars = Math.round(raw['historyBars']);
   }
 
-  if (isRecord(raw.chartLayout) || (raw.chartLayout && typeof raw.chartLayout === 'object')) {
+  if (
+    isRecord(raw['chartLayout']) ||
+    (raw['chartLayout'] && typeof raw['chartLayout'] === 'object')
+  ) {
     try {
-      snap.chartLayout = normalizeChartLayout(raw.chartLayout as ChartLayoutState, {
+      snap.chartLayout = normalizeChartLayout(raw['chartLayout'] as ChartLayoutState, {
         symbol,
         interval,
         exchange,
@@ -474,101 +488,104 @@ export function parseSnapshotJson(text: string): WorkspaceSnapshot {
     }
   }
 
-  if (Array.isArray(raw.savedLayouts)) {
-    snap.savedLayouts = (raw.savedLayouts as SavedChartLayout[])
+  if (Array.isArray(raw['savedLayouts'])) {
+    snap.savedLayouts = (raw['savedLayouts'] as SavedChartLayout[])
       .filter((l) => l && typeof l === 'object' && typeof (l as SavedChartLayout).id === 'string')
       .slice(0, 40);
   }
 
-  if (Array.isArray(raw.panes)) {
-    snap.panes = raw.panes as Pane[];
+  if (Array.isArray(raw['panes'])) {
+    snap.panes = raw['panes'] as Pane[];
   }
 
-  if (Array.isArray(raw.drawings)) {
-    snap.drawings = normalizeUserDrawings(raw.drawings) as Drawing[];
+  if (Array.isArray(raw['drawings'])) {
+    snap.drawings = normalizeUserDrawings(raw['drawings']) as Drawing[];
   }
 
-  if (isRecord(raw.drawingPrefs)) {
-    snap.drawingPrefs = raw.drawingPrefs as unknown as DrawingPrefs;
+  if (isRecord(raw['drawingPrefs'])) {
+    // Snapshot prefs are a partial patch: the applier merges them over the live
+    // prefs, so only the fields actually present are asserted here.
+    snap.drawingPrefs = raw['drawingPrefs'] as Partial<DrawingPrefs>;
   }
 
-  if (isRecord(raw.drawingUi)) {
-    snap.drawingUi = raw.drawingUi as Partial<DrawingUi>;
+  if (isRecord(raw['drawingUi'])) {
+    snap.drawingUi = raw['drawingUi'] as Partial<DrawingUi>;
   }
 
-  if (isRecord(raw.panelChrome)) {
+  if (isRecord(raw['panelChrome'])) {
     const chrome: Partial<Record<PanelId, PanelChromeSnapshot>> = {};
     for (const id of PANEL_IDS) {
-      const p = raw.panelChrome[id];
+      const p = raw['panelChrome'][id];
       if (!isRecord(p)) continue;
       chrome[id] = {
-        open: !!p.open,
-        dock: (typeof p.dock === 'string' ? p.dock : PANEL_META[id].defaultDock) as PanelDock,
-        x: Number(p.x) || 0,
-        y: Number(p.y) || 0,
-        w: Number(p.w) || PANEL_META[id].defaultW,
-        h: Number(p.h) || PANEL_META[id].defaultH,
-        z: Number(p.z) || 20,
-        hoverSlide: !!p.hoverSlide,
-        chartOverlay: !!p.chartOverlay,
+        open: !!p['open'],
+        dock: (typeof p['dock'] === 'string' ? p['dock'] : PANEL_META[id].defaultDock) as PanelDock,
+        x: Number(p['x']) || 0,
+        y: Number(p['y']) || 0,
+        w: Number(p['w']) || PANEL_META[id].defaultW,
+        h: Number(p['h']) || PANEL_META[id].defaultH,
+        z: Number(p['z']) || 20,
+        hoverSlide: !!p['hoverSlide'],
+        chartOverlay: !!p['chartOverlay'],
         overlayOpacity:
-          typeof p.overlayOpacity === 'number' && Number.isFinite(p.overlayOpacity)
-            ? p.overlayOpacity
+          typeof p['overlayOpacity'] === 'number' && Number.isFinite(p['overlayOpacity'])
+            ? p['overlayOpacity']
             : 0.75,
       };
     }
     snap.panelChrome = chrome;
   }
 
-  if (raw.theme === 'dark' || raw.theme === 'light') {
-    snap.theme = raw.theme;
+  if (raw['theme'] === 'dark' || raw['theme'] === 'light') {
+    snap.theme = raw['theme'];
   }
 
-  if (typeof raw.uiScale === 'number' && Number.isFinite(raw.uiScale)) {
-    snap.uiScale = raw.uiScale;
+  if (typeof raw['uiScale'] === 'number' && Number.isFinite(raw['uiScale'])) {
+    snap.uiScale = raw['uiScale'];
   }
 
-  if (isRecord(raw.editorPrefs)) {
-    const ep = raw.editorPrefs;
+  if (isRecord(raw['editorPrefs'])) {
+    const ep = raw['editorPrefs'];
     const prefs: EditorPrefsSnapshot = {};
-    if (typeof ep.profilerEnabled === 'boolean') prefs.profilerEnabled = ep.profilerEnabled;
-    if (typeof ep.inlineDebugEnabled === 'boolean') prefs.inlineDebugEnabled = ep.inlineDebugEnabled;
-    if (typeof ep.editorOpen === 'boolean') prefs.editorOpen = ep.editorOpen;
-    if (typeof ep.editorWidth === 'number' && Number.isFinite(ep.editorWidth)) {
-      prefs.editorWidth = ep.editorWidth;
+    if (typeof ep['profilerEnabled'] === 'boolean') prefs.profilerEnabled = ep['profilerEnabled'];
+    if (typeof ep['inlineDebugEnabled'] === 'boolean')
+      prefs.inlineDebugEnabled = ep['inlineDebugEnabled'];
+    if (typeof ep['editorOpen'] === 'boolean') prefs.editorOpen = ep['editorOpen'];
+    if (typeof ep['editorWidth'] === 'number' && Number.isFinite(ep['editorWidth'])) {
+      prefs.editorWidth = ep['editorWidth'];
     }
-    if (ep.editorMode === 'docked' || ep.editorMode === 'popout') {
-      prefs.editorMode = ep.editorMode;
+    if (ep['editorMode'] === 'docked' || ep['editorMode'] === 'popout') {
+      prefs.editorMode = ep['editorMode'];
     }
     if (Object.keys(prefs).length) snap.editorPrefs = prefs;
   }
 
-  if (Array.isArray(raw.scripts)) {
-    snap.scripts = (raw.scripts as unknown[]).map((s, i) => {
+  if (Array.isArray(raw['scripts'])) {
+    snap.scripts = (raw['scripts'] as unknown[]).map((s, i) => {
       if (!isRecord(s)) {
         throw new WorkspaceSnapshotParseError(`Invalid scripts[${i}]`);
       }
       return {
-        id: typeof s.id === 'string' ? s.id : `script_${i}`,
-        name: typeof s.name === 'string' ? s.name : 'Script',
-        code: typeof s.code === 'string' ? s.code : '',
-        paneId: typeof s.paneId === 'string' ? s.paneId : 'price',
-        visible: s.visible !== false,
-        plots: isRecord(s.plots) ? (s.plots as ScriptSnapshotMeta['plots']) : {},
-        inputValues: isRecord(s.inputValues)
-          ? (s.inputValues as Record<string, unknown>)
+        id: typeof s['id'] === 'string' ? s['id'] : `script_${i}`,
+        name: typeof s['name'] === 'string' ? s['name'] : 'Script',
+        code: typeof s['code'] === 'string' ? s['code'] : '',
+        paneId: typeof s['paneId'] === 'string' ? s['paneId'] : 'price',
+        visible: s['visible'] !== false,
+        plots: isRecord(s['plots']) ? (s['plots'] as ScriptSnapshotMeta['plots']) : {},
+        inputValues: isRecord(s['inputValues'])
+          ? (s['inputValues'] as Record<string, unknown>)
           : undefined,
       };
     });
   }
 
-  if (raw.includeBars === true && Array.isArray(raw.bars)) {
+  if (raw['includeBars'] === true && Array.isArray(raw['bars'])) {
     snap.includeBars = true;
-    snap.bars = raw.bars as Bar[];
-  } else if (Array.isArray(raw.bars) && raw.bars.length) {
+    snap.bars = raw['bars'] as Bar[];
+  } else if (Array.isArray(raw['bars']) && raw['bars'].length) {
     // Bars present without flag — still accept but mark includeBars
     snap.includeBars = true;
-    snap.bars = raw.bars as Bar[];
+    snap.bars = raw['bars'] as Bar[];
   } else {
     snap.includeBars = false;
   }
@@ -661,10 +678,7 @@ export function applyWorkspaceSnapshot(
  * Trigger a browser download of the snapshot as pretty-printed JSON.
  * No-ops safely when `document` is unavailable (SSR / tests).
  */
-export function downloadSnapshot(
-  snap: WorkspaceSnapshot,
-  filename = 'axis-workspace.json',
-): void {
+export function downloadSnapshot(snap: WorkspaceSnapshot, filename = 'axis-workspace.json'): void {
   const text = JSON.stringify(snap, null, 2);
   if (typeof document === 'undefined') return;
   const safeName = (filename || 'axis-workspace.json').replace(/[^\w.-]+/g, '_');

@@ -101,6 +101,11 @@ const livePendingBars = new BoundedMap<string, PendingLiveBar>(LIVE_PENDING_MEMO
 /** Sources that cannot fill a network gap. */
 const OFFLINE_SOURCES = new Set(['csv-upload', DATA_MANAGER_SOURCE_ID]);
 
+/**
+ * Outcome of an expand pass: the series after merging (never the input array),
+ * the approximate new-bar count, whether a network walk ran, and the last fetch
+ * error when the cache was still returned despite a failed expand.
+ */
 export interface ExpandCacheResult {
   bars: Bar[];
   /** Bars newly merged from the venue (approx; includes last-bar refresh). */
@@ -359,11 +364,7 @@ export async function expandCachedSeriesToNow(
   if (!source?.fetchHistorical) {
     return { bars, added: 0, expanded: false };
   }
-  if (
-    source.capabilities?.offline &&
-    !source.capabilities?.needsNetwork &&
-    srcId !== 'mock-walk'
-  ) {
+  if (source.capabilities?.offline && !source.capabilities?.needsNetwork && srcId !== 'mock-walk') {
     return { bars, added: 0, expanded: false };
   }
 
@@ -526,7 +527,10 @@ export function noteDataManagerLiveBar(bar: Bar): void {
   const clean = sanitizeBar(bar);
   if (!clean) return;
   // Only when chart source is Data Manager (or selection is active with that source)
-  if (store.source !== DATA_MANAGER_SOURCE_ID && store.activePlugins?.source !== DATA_MANAGER_SOURCE_ID) {
+  if (
+    store.source !== DATA_MANAGER_SOURCE_ID &&
+    store.activePlugins?.source !== DATA_MANAGER_SOURCE_ID
+  ) {
     return;
   }
   const sel = getDataManagerSelection();

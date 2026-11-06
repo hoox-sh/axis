@@ -28,13 +28,17 @@
 
 import { getJson, setJson } from '../utils/storage';
 
+/** `localStorage` key holding every scope's recents and favorites. */
 export const SYMBOL_PICKS_KEY = 'pynescript.axis.symbol-picks.v1';
 
+/** How many recent symbols a scope keeps. */
 export const SYMBOL_RECENT_LIMIT = 8;
+/** How many favorites a scope keeps. */
 export const SYMBOL_FAVORITE_LIMIT = 24;
 
 const SYMBOL_RE = /^[A-Z0-9:._/-]{1,64}$/;
 
+/** One scope's picker lists: recent symbols (newest first) and starred favorites. */
 export type SymbolPicks = {
   recent: string[];
   favorites: string[];
@@ -71,10 +75,17 @@ function sanitizeList(raw: unknown, limit: number): string[] {
   return out;
 }
 
+/** Empty picker state, used when a scope has nothing stored yet. */
 export function emptySymbolPicks(): SymbolPicks {
   return { recent: [], favorites: [] };
 }
 
+/**
+ * Read one scope's picks, dropping invalid or duplicate symbols.
+ *
+ * @param scope - Value from {@link symbolPicksScope}.
+ * @returns Sanitized lists; empty lists when the scope was never saved.
+ */
 export function loadSymbolPicks(scope: string): SymbolPicks {
   const all = getJson<PicksBlob>(SYMBOL_PICKS_KEY);
   const slot = all?.[scope];
@@ -85,6 +96,13 @@ export function loadSymbolPicks(scope: string): SymbolPicks {
   };
 }
 
+/**
+ * Persist one scope's picks alongside every other scope.
+ *
+ * @param scope - Value from {@link symbolPicksScope}.
+ * @param picks - Lists to store; sanitized and capped before writing.
+ * @returns `true` when storage accepted the write.
+ */
 export function saveSymbolPicks(scope: string, picks: SymbolPicks): boolean {
   const all = getJson<PicksBlob>(SYMBOL_PICKS_KEY) ?? {};
   all[scope] = {

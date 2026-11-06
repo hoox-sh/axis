@@ -32,11 +32,15 @@ import { errMessage, isAbortError } from '../utils/errors';
 import { fetchWithTimeout } from '../utils/fetch-timeout';
 import { normalizeBarTime as toUnixSeconds } from '../data/parse-bars';
 
+/** Provider id for DefiLlama datasets and cache keys. */
 export const DEFILLAMA_PROVIDER_ID = 'defillama';
+
+/** Public DefiLlama API root, used when no Worker proxy base is configured. */
 export const DEFILLAMA_DEFAULT_BASE = 'https://api.llama.fi';
 
 const PROTOCOLS_TTL_MS = 10 * 60 * 1000;
 
+/** Search row from the DefiLlama `/protocols` list (10 min cache). */
 export interface DefiLlamaProtocolSummary {
   slug: string;
   name: string;
@@ -66,9 +70,9 @@ export function parseDefiLlamaTvlHistory(raw: unknown): TimePoint[] {
   for (const entry of raw) {
     if (!entry || typeof entry !== 'object') continue;
     const rec = entry as Record<string, unknown>;
-    const time = toUnixSeconds(rec.date);
+    const time = toUnixSeconds(rec['date']);
     const value = Number(
-      rec.totalLiquidityUSD ?? rec.tvl ?? rec.totalLiquidity ?? rec.value,
+      rec['totalLiquidityUSD'] ?? rec['tvl'] ?? rec['totalLiquidity'] ?? rec['value'],
     );
     if (time == null || !Number.isFinite(value)) continue;
     out.push({ time, value });
@@ -89,7 +93,9 @@ export function parseDefiLlamaTvlHistory(raw: unknown): TimePoint[] {
 }
 
 function resolveBaseUrl(baseUrl?: string): string {
-  const b = String(baseUrl || DEFILLAMA_DEFAULT_BASE).trim().replace(/\/+$/, '');
+  const b = String(baseUrl || DEFILLAMA_DEFAULT_BASE)
+    .trim()
+    .replace(/\/+$/, '');
   return b || DEFILLAMA_DEFAULT_BASE;
 }
 
@@ -144,9 +150,7 @@ export async function fetchDefiLlamaProtocolTvl(
 
   if (!res.ok) {
     const hint = trimmed ? ` — ${trimmed.slice(0, 160)}` : '';
-    throw new Error(
-      `DefiLlama: HTTP ${res.status} for protocol "${normalized}"${hint}`,
-    );
+    throw new Error(`DefiLlama: HTTP ${res.status} for protocol "${normalized}"${hint}`);
   }
 
   if (looksHtml || !trimmed) {
@@ -172,7 +176,7 @@ export async function fetchDefiLlamaProtocolTvl(
   }
 
   const body = json as Record<string, unknown>;
-  const points = parseDefiLlamaTvlHistory(body.tvl);
+  const points = parseDefiLlamaTvlHistory(body['tvl']);
   if (!points.length) {
     throw new Error(
       `DefiLlama: empty TVL history for protocol "${normalized}" (no usable tvl points)`,
@@ -180,12 +184,10 @@ export async function fetchDefiLlamaProtocolTvl(
   }
 
   const name =
-    typeof body.name === 'string' && body.name.trim()
-      ? body.name.trim()
-      : normalized;
+    typeof body['name'] === 'string' && body['name'].trim() ? body['name'].trim() : normalized;
   const protocolSlug =
-    typeof body.slug === 'string' && body.slug.trim()
-      ? normalizeProtocolSlug(body.slug)
+    typeof body['slug'] === 'string' && body['slug'].trim()
+      ? normalizeProtocolSlug(body['slug'])
       : normalized;
 
   const asOf = nowSec();
@@ -313,24 +315,23 @@ function parseProtocolsList(raw: unknown): DefiLlamaProtocolSummary[] {
     if (!entry || typeof entry !== 'object') continue;
     const rec = entry as Record<string, unknown>;
     const slugRaw =
-      typeof rec.slug === 'string'
-        ? rec.slug
-        : typeof rec.name === 'string'
-          ? rec.name
+      typeof rec['slug'] === 'string'
+        ? rec['slug']
+        : typeof rec['name'] === 'string'
+          ? rec['name']
           : '';
     const slug = normalizeProtocolSlug(slugRaw);
     if (!slug) continue;
-    const name =
-      typeof rec.name === 'string' && rec.name.trim() ? rec.name.trim() : slug;
-    const tvl = Number(rec.tvl);
+    const name = typeof rec['name'] === 'string' && rec['name'].trim() ? rec['name'].trim() : slug;
+    const tvl = Number(rec['tvl']);
     const summary: DefiLlamaProtocolSummary = {
       slug,
       name,
       tvl: Number.isFinite(tvl) ? tvl : undefined,
     };
-    if (typeof rec.category === 'string') summary.category = rec.category;
-    if (Array.isArray(rec.chains)) {
-      summary.chains = rec.chains.filter((c): c is string => typeof c === 'string');
+    if (typeof rec['category'] === 'string') summary.category = rec['category'];
+    if (Array.isArray(rec['chains'])) {
+      summary.chains = rec['chains'].filter((c): c is string => typeof c === 'string');
     }
     out.push(summary);
   }

@@ -40,6 +40,7 @@
 
 import { StreamLanguage, type StreamParser, type StringStream } from '@codemirror/language';
 
+/** Streaming highlight state carried between Pine lines by the StreamLanguage parser. */
 export type PineHighlightState = {
   inBlockComment: boolean;
   /** Unclosed quote — string continues on the next line (`"` / `'` / `"""` / `'''`). */
@@ -64,6 +65,10 @@ export type PineHighlightState = {
   userTypes: string[];
 };
 
+/**
+ * Fresh stream-parser state for the start of a buffer (no open string/comment,
+ * no pending import or type context).
+ */
 export function defaultPineHighlightState(): PineHighlightState {
   return {
     inBlockComment: false,
@@ -124,17 +129,7 @@ const CONTROL = new Set([
   'not',
 ]);
 
-const DEFS = new Set([
-  'var',
-  'varip',
-  'export',
-  'import',
-  'type',
-  'method',
-  'enum',
-  'as',
-  'const',
-]);
+const DEFS = new Set(['var', 'varip', 'export', 'import', 'type', 'method', 'enum', 'as', 'const']);
 
 const TYPES = new Set([
   'int',
@@ -531,6 +526,7 @@ export const pyneScript = StreamLanguage.define(pyneParser);
 /** Raw stream parser (exported for tests that drive lines with shared state). */
 export { pyneParser };
 
+/** One emitted token: its text plus the highlight class (null = unstyled). */
 export type PineToken = { text: string; type: string | null };
 
 /**
@@ -540,7 +536,9 @@ export type PineToken = { text: string; type: string | null };
 export function tokenizePine(source: string): PineToken[] {
   const state: PineHighlightState = defaultPineHighlightState();
   const out: PineToken[] = [];
-  const lines = String(source ?? '').replace(/\r\n/g, '\n').split('\n');
+  const lines = String(source ?? '')
+    .replace(/\r\n/g, '\n')
+    .split('\n');
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i] ?? '';
     const stream = makeLineStream(line);
@@ -578,10 +576,7 @@ export function pineOffsetInLiteral(
 }
 
 /** Scan state after consuming `line` (used by the formatter). */
-export function advancePineLineState(
-  line: string,
-  state: PineHighlightState,
-): PineHighlightState {
+export function advancePineLineState(line: string, state: PineHighlightState): PineHighlightState {
   const next: PineHighlightState = {
     ...defaultPineHighlightState(),
     ...state,
@@ -623,12 +618,7 @@ function makeLineStream(line: string): MiniStream {
     eat: (m: string | RegExp | ((ch: string) => boolean)) => {
       const ch = line[pos];
       if (ch == null) return undefined;
-      const ok =
-        typeof m === 'string'
-          ? ch === m
-          : typeof m === 'function'
-            ? m(ch)
-            : m.test(ch);
+      const ok = typeof m === 'string' ? ch === m : typeof m === 'function' ? m(ch) : m.test(ch);
       if (ok) {
         pos += 1;
         return ch;
@@ -644,12 +634,7 @@ function makeLineStream(line: string): MiniStream {
       const start = pos;
       while (pos < line.length) {
         const ch = line[pos]!;
-        const ok =
-          typeof m === 'string'
-            ? ch === m
-            : typeof m === 'function'
-              ? m(ch)
-              : m.test(ch);
+        const ok = typeof m === 'string' ? ch === m : typeof m === 'function' ? m(ch) : m.test(ch);
         if (!ok) break;
         pos += 1;
       }

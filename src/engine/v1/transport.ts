@@ -19,10 +19,14 @@
 import { getItem, removeItem, setItem, storageAvailable } from '../../utils/storage';
 import { v1Count } from './metrics';
 
+/** Which transport the tab uses for engine data: worker (AXB1 over the socket) or plain JSON. */
 export type EngineTransport = 'json' | 'worker';
+/** Binary encoding negotiated with the worker: `axb1-full` (default) or legacy `axb1`. */
 export type EngineEncoding = 'axb1' | 'axb1-full';
 
+/** localStorage key holding the transport opt-out; absent means `worker`. */
 export const ENGINE_TRANSPORT_KEY = 'axis.engine.transport';
+/** localStorage key holding the encoding opt-out; absent means `axb1-full`. */
 export const ENGINE_ENCODING_KEY = 'axis.engine.encoding';
 
 let memory: EngineTransport = 'worker';
@@ -35,6 +39,16 @@ export function engineTransport(): EngineTransport {
   return getItem(ENGINE_TRANSPORT_KEY) === 'json' ? 'json' : 'worker';
 }
 
+/**
+ * Persists the transport choice; `worker` is the default, so it removes the key instead of
+ * writing one. Storage-unavailable tabs keep the value in memory only.
+ *
+ * @param mode Transport to use; anything other than `json` is stored as `worker`.
+ * @example Roll a tab back to plain JSON after an AXB1 decode problem:
+ * ```ts
+ * setEngineTransport('json');
+ * ```
+ */
 export function setEngineTransport(mode: EngineTransport): void {
   memory = mode === 'json' ? 'json' : 'worker';
   if (!storageAvailable()) return;
@@ -54,6 +68,12 @@ export function engineEncoding(): EngineEncoding {
   return stored === 'axb1' ? 'axb1' : 'axb1-full';
 }
 
+/**
+ * Persists the encoding choice; `axb1-full` is the default, so it removes the key. The JSON
+ * fallback stays available at runtime for shapes the engine cannot encode losslessly.
+ *
+ * @param encoding `axb1` to opt out of multi-bar/full AXB1, `axb1-full` for the default.
+ */
 export function setEngineEncoding(encoding: EngineEncoding): void {
   memoryEncoding = encoding === 'axb1' ? 'axb1' : 'axb1-full';
   if (!storageAvailable()) return;

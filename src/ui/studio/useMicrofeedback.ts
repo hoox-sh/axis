@@ -19,8 +19,20 @@
  */
 
 import { createSignal, onCleanup } from 'solid-js';
+import type { Accessor } from 'solid-js';
 import type { FeedbackState } from './AppButton';
 
+/**
+ * Drive the contact → process → outcome feedback cycle for one async action.
+ *
+ * `run` refuses to start while already loading, sets `loading`, then holds
+ * `success` or `error` for the configured window before returning to `idle`.
+ * A rejection is swallowed (returns `undefined`) after `onError` runs, so
+ * callers get fire-and-forget semantics; the timer is cleared on cleanup.
+ *
+ * @param options - Hold durations and success/error lifecycle callbacks.
+ * @returns `state` accessor, `run` wrapper, `reset`, and the raw `settle`.
+ */
 export function useMicrofeedback(options?: {
   successHoldMs?: number;
   errorHoldMs?: number;
@@ -32,7 +44,12 @@ export function useMicrofeedback(options?: {
   afterSuccess?: () => void;
   /** Fires when the error hold ends and the button returns to idle. */
   afterError?: () => void;
-}) {
+}): {
+  state: Accessor<FeedbackState>;
+  run: <T>(fn: () => Promise<T>) => Promise<T | undefined>;
+  reset: () => void;
+  settle: (next: Exclude<FeedbackState, 'idle' | 'loading'>, hold: number) => void;
+} {
   const successHold = options?.successHoldMs ?? 900;
   const errorHold = options?.errorHoldMs ?? 900;
   const [state, setState] = createSignal<FeedbackState>('idle');

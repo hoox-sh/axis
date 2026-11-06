@@ -65,6 +65,10 @@ export interface CanonicalSeriesKey {
   interval: string;
 }
 
+/**
+ * `GET /data/series` reply: how much of a series the engine store holds and how fresh it is,
+ * with unix-second bounds (`null` when the engine reported none).
+ */
 export interface DataSeriesStatus {
   key: string;
   count: number;
@@ -73,12 +77,20 @@ export interface DataSeriesStatus {
   updatedAt: number | null;
 }
 
+/**
+ * Shortfall reported when the engine store cannot serve a session yet: the canonical key
+ * plus the bar counts it has versus needs.
+ */
 export interface DataSessionMiss {
   key: string;
   have: number;
   need: number;
 }
 
+/**
+ * A created engine data session: its id, the first evaluated payload, and how the series was
+ * filled beforehand (`none`, uploaded from local bars, or fetched by the engine).
+ */
 export interface DataSessionHandle {
   sessionId: string;
   payload: Record<string, unknown>;
@@ -86,6 +98,10 @@ export interface DataSessionHandle {
   provisioned: 'none' | 'local' | 'fetch';
 }
 
+/**
+ * Discriminated result of a session create: success with the handle payload, a shortfall the
+ * caller can fill, or a transport/envelope error.
+ */
 export type DataSessionCreateResult =
   | { ok: true; sessionId: string; payload: Record<string, unknown> }
   | { ok: false; miss: DataSessionMiss }
@@ -103,6 +119,14 @@ export function canonicalSeriesKey(k: DataSeriesKey): CanonicalSeriesKey {
   };
 }
 
+/**
+ * Canonical `exchange|market|SYMBOL|interval` string for a series key, used as the engine
+ * store's identity and as a memo key inside AXIS.
+ *
+ * @param k Raw series key; exchange is lowercased, symbol pair-formed, market defaults to
+ * `spot`.
+ * @returns The canonical key string.
+ */
 export function seriesKeyString(k: DataSeriesKey): string {
   const c = canonicalSeriesKey(k);
   return `${c.exchange}|${c.market}|${c.symbol}|${c.interval}`;
@@ -154,7 +178,7 @@ function authHeaders(apiKey: string, json: boolean): Record<string, string> {
   if (json) h['Content-Type'] = 'application/json';
   if (apiKey) {
     h['X-API-Key'] = apiKey;
-    h.Authorization = `Bearer ${apiKey}`;
+    h['Authorization'] = `Bearer ${apiKey}`;
   }
   return h;
 }
@@ -191,7 +215,7 @@ async function call(
 }
 
 function errorMessage(r: DataCallResult, fallback: string): string {
-  const msg = r.body.message ?? r.body.error;
+  const msg = r.body['message'] ?? r.body['error'];
   return typeof msg === 'string' && msg ? msg : `${fallback} (HTTP ${r.status})`;
 }
 
@@ -215,11 +239,11 @@ export async function getDataSeriesStatus(
   );
   if (!r.ok) throw new Error(errorMessage(r, 'series status failed'));
   return {
-    key: typeof r.body.key === 'string' ? r.body.key : seriesKeyString(key),
-    count: num(r.body.count) ?? 0,
-    oldest: num(r.body.oldest),
-    newest: num(r.body.newest),
-    updatedAt: num(r.body.updated_at),
+    key: typeof r.body['key'] === 'string' ? r.body['key'] : seriesKeyString(key),
+    count: num(r.body['count']) ?? 0,
+    oldest: num(r.body['oldest']),
+    newest: num(r.body['newest']),
+    updatedAt: num(r.body['updated_at']),
   };
 }
 
@@ -258,9 +282,9 @@ export async function provideDataSeries(
       signal,
     );
     if (!r.ok) throw new Error(errorMessage(r, 'series provide failed'));
-    added += num(r.body.added) ?? 0;
-    updated += num(r.body.updated) ?? 0;
-    count = num(r.body.count) ?? count;
+    added += num(r.body['added']) ?? 0;
+    updated += num(r.body['updated']) ?? 0;
+    count = num(r.body['count']) ?? count;
   }
   return { added, updated, count };
 }
@@ -281,7 +305,7 @@ export async function fetchDataSeries(
     signal,
   );
   if (!r.ok) throw new Error(errorMessage(r, 'series fetch failed'));
-  return { fetched: num(r.body.fetched) ?? 0, count: num(r.body.count) ?? 0 };
+  return { fetched: num(r.body['fetched']) ?? 0, count: num(r.body['count']) ?? 0 };
 }
 
 /**
@@ -308,7 +332,7 @@ export async function deleteDataSeries(
     signal,
   );
   if (!r.ok) throw new Error(errorMessage(r, 'series delete failed'));
-  return { removed: num(r.body.removed) ?? 0 };
+  return { removed: num(r.body['removed']) ?? 0 };
 }
 
 /** `GET /data/series/bars` — newest window for chart paint (caller keeps it in memory only).
@@ -334,10 +358,14 @@ export async function getDataSeriesBars(
     signal,
   );
   if (!r.ok) throw new Error(errorMessage(r, 'series bars failed'));
-  const raw = Array.isArray(r.body.bars) ? r.body.bars : [];
+  const raw = Array.isArray(r.body['bars']) ? r.body['bars'] : [];
   return normalizeHistoricalBars(raw);
 }
 
+/**
+ * Input for `POST /data/session`: the series to provision, its depth, and the script the
+ * engine should evaluate over it.
+ */
 export interface DataSessionCreateInput {
   key: DataSeriesKey;
   historyBars: number;
@@ -368,18 +396,18 @@ export async function createDataSession(
     ...(input.profiler ? { profiler: true } : {}),
   };
   const r = await call(endpoint, '/data/session', { method: 'POST', body }, apiKey, signal);
-  if (r.status === 409 && r.body.code === 'DATA_MISS') {
+  if (r.status === 409 && r.body['code'] === 'DATA_MISS') {
     return {
       ok: false,
       miss: {
-        key: typeof r.body.key === 'string' ? r.body.key : seriesKeyString(input.key),
-        have: num(r.body.have) ?? 0,
-        need: num(r.body.need) ?? input.historyBars,
+        key: typeof r.body['key'] === 'string' ? r.body['key'] : seriesKeyString(input.key),
+        have: num(r.body['have']) ?? 0,
+        need: num(r.body['need']) ?? input.historyBars,
       },
     };
   }
-  const sessionId = r.body.session_id;
-  if (!r.ok || typeof sessionId !== 'string' || !sessionId || r.body.status === 'error') {
+  const sessionId = r.body['session_id'];
+  if (!r.ok || typeof sessionId !== 'string' || !sessionId || r.body['status'] === 'error') {
     return { ok: false, error: errorMessage(r, 'data session create failed') };
   }
   return { ok: true, sessionId, payload: r.body };
@@ -428,7 +456,7 @@ export async function tickDataSession(
       apiKey,
       signal,
     );
-    if (!r.ok || r.body.status === 'error') {
+    if (!r.ok || r.body['status'] === 'error') {
       const code = (r.body as { code?: unknown }).code;
       if (wantDelta && i === 0 && code === 'UNKNOWN_FIELDS') {
         noDeltaEndpoints.add(endpoint);
@@ -445,6 +473,10 @@ export async function tickDataSession(
   return { ok: false, error: 'data session tick failed', gone: false };
 }
 
+/**
+ * Everything needed to get a usable session for one series: the create input plus the target
+ * endpoint/key and an injectable local-bar source for provisioning.
+ */
 export interface EnsureDataSessionOptions extends DataSessionCreateInput {
   endpoint: string;
   apiKey: string;
@@ -560,6 +592,13 @@ async function defaultLocalBars(key: DataSeriesKey): Promise<readonly Bar[]> {
  *
  * Only identity and script leave the browser; bars travel only in step 2, and
  * only when the Data Manager already holds them.
+ *
+ * @param opts Series identity, requested depth, script, and the engine endpoint/key to
+ * create the session against.
+ * @returns The session handle plus how its series was provisioned (`none` when the engine
+ * already held enough bars).
+ * @throws {Error} When the create fails with a transport/envelope error, or when the series
+ * is still short after provisioning (never loops).
  */
 export async function ensureDataSession(
   opts: EnsureDataSessionOptions,
@@ -1024,6 +1063,11 @@ export async function releaseDataSession(
   }
 }
 
+/**
+ * Result of a session-evaluated run: the engine payload with the path taken
+ * (`data-session-create` / `data-session-tick`) and how the series was provisioned, or an
+ * error the caller surfaces as a failed run.
+ */
 export type DataSessionRunResult =
   | {
       ok: true;
@@ -1034,6 +1078,10 @@ export type DataSessionRunResult =
     }
   | { ok: false; error: string };
 
+/**
+ * One engine-owned-series run: the request window, the script, the owning script instance,
+ * and whether this is a live tick (re-tick the existing session) or a fresh evaluation.
+ */
 export interface RunDataSessionOptions {
   endpoint: string;
   apiKey: string;

@@ -35,6 +35,7 @@ import {
   type PineSymbolCategory,
 } from './pine-symbols';
 
+/** Props for {@link SymbolEmojiManager}; the host owns the editor insertion. */
 export type SymbolEmojiManagerProps = {
   /** Insert at the CodeMirror cursor (replaces the selection). */
   onInsert: (text: string) => boolean;
@@ -53,7 +54,7 @@ function payload(sym: PineSymbol, mode: InsertMode): string {
 }
 
 /** Searchable catalog under the Pine editor (Colors-panel sibling). */
-export const SymbolEmojiManager: Component<SymbolEmojiManagerProps> = (props) => {
+export const SymbolEmojiManager: Component<SymbolEmojiManagerProps> = (props): JSX.Element => {
   const [query, setQuery] = createSignal('');
   const [category, setCategory] = createSignal<PineSymbolCategory | 'all'>('all');
   const [monoOnly, setMonoOnly] = createSignal(false);
@@ -122,11 +123,7 @@ export const SymbolEmojiManager: Component<SymbolEmojiManagerProps> = (props) =>
           </select>
         </div>
 
-        <div
-          class="flex flex-wrap gap-1"
-          role="tablist"
-          aria-label="Symbol categories"
-        >
+        <div class="flex flex-wrap gap-1" role="tablist" aria-label="Symbol categories">
           <button
             type="button"
             role="tab"
@@ -181,9 +178,7 @@ export const SymbolEmojiManager: Component<SymbolEmojiManagerProps> = (props) =>
                   }}
                 >
                   <span
-                    class={`leading-none ${
-                      sym.monoSafe ? 'font-mono text-[15px]' : 'text-[14px]'
-                    }`}
+                    class={`leading-none ${sym.monoSafe ? 'font-mono text-[15px]' : 'text-[14px]'}`}
                   >
                     {preview}
                   </span>

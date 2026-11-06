@@ -26,17 +26,8 @@
  *   and **Add built-in script…** (catalog picker)
  */
 
-import {
-  type Component,
-  Show,
-  createMemo,
-  createSignal,
-} from 'solid-js';
-import {
-  store,
-  setStatus,
-  isScriptRunBlockedByPreEval,
-} from '../store';
+import { type Component, Show, createMemo, createSignal } from 'solid-js';
+import { store, setStatus, isScriptRunBlockedByPreEval } from '../store';
 import { runPreevalNow } from '../editor/preevaluate';
 import {
   countChartScriptsForEditor,
@@ -48,6 +39,14 @@ import { Icons } from './icons';
 import { Popover } from './Popover';
 import { openBuiltinPicker } from './shortcuts/palette-bridge';
 
+/**
+ * Split Run button: primary action runs the editor script, the caret opens the
+ * run-target menu (re-run chart script, insert built-in). The label reflects
+ * pre-eval state, and the action is blocked while pre-eval has not passed.
+ *
+ * @param props - Live document accessor, optional save-before-run hook, and chrome options.
+ * @returns The split button group.
+ */
 export const RunSplitButton: Component<{
   getDoc: () => string;
   /**
@@ -59,14 +58,12 @@ export const RunSplitButton: Component<{
   class?: string;
   /** Compact ghost chrome for the editor header strip. */
   compact?: boolean;
-}> = (props) => {
+}> = (props): JSX.Element => {
   const [menuOpen, setMenuOpen] = createSignal(false);
   let rootEl: HTMLDivElement | undefined;
 
   /** Prefer pre-eval source (reactive) so the label tracks editor edits. */
-  const editorSource = createMemo(
-    () => store.preEval?.source || props.getDoc() || '',
-  );
+  const editorSource = createMemo(() => store.preEval?.source || props.getDoc() || '');
 
   const runBlocked = () => isScriptRunBlockedByPreEval();
   const isRunning = () => store.status === 'running';
@@ -131,7 +128,7 @@ export const RunSplitButton: Component<{
       doc = saved.doc || doc;
     }
     if (!doc.trim()) return;
-    const pe = await runPreevalNow(doc);
+    await runPreevalNow(doc);
     if (isScriptRunBlockedByPreEval()) return;
     closeMenu();
     try {
@@ -165,9 +162,7 @@ export const RunSplitButton: Component<{
         type="button"
         class={`sc-btn axis-run-main ${
           props.compact ? 'sc-btn-ghost axis-editor-tool-btn' : 'sc-btn-primary'
-        } ${isRunning() ? 'is-active' : ''} ${
-          runBlocked() ? 'opacity-50 cursor-not-allowed' : ''
-        }`}
+        } ${isRunning() ? 'is-active' : ''} ${runBlocked() ? 'opacity-50 cursor-not-allowed' : ''}`}
         onClick={() => void gateAndRun('auto')}
         data-testid={ids().main}
         aria-busy={isRunning()}
@@ -176,11 +171,7 @@ export const RunSplitButton: Component<{
       >
         {props.compact ? (
           <span class="axis-editor-tool-icon" aria-hidden="true">
-            {isRunning() || runBlocked() ? (
-              <Icons.play size={14} />
-            ) : (
-              <Icons.plus size={14} />
-            )}
+            {isRunning() || runBlocked() ? <Icons.play size={14} /> : <Icons.plus size={14} />}
           </span>
         ) : isRunning() || runBlocked() ? (
           <Icons.play />
@@ -225,35 +216,35 @@ export const RunSplitButton: Component<{
         label="Add options"
         testId={ids().menu}
       >
-          <Show when={hasInstance() && !runBlocked()}>
-            <button
-              type="button"
-              role="menuitem"
-              class="axis-run-menu-item"
-              data-testid={ids().instance}
-              onClick={() => void gateAndRun('new')}
-            >
-              <span class="axis-run-menu-title">Add another instance</span>
-              <span class="axis-run-menu-hint">
-                {instanceCount() === 1
-                  ? 'Keep the current one; add a 2nd copy'
-                  : `${instanceCount()} on chart — add another`}
-              </span>
-            </button>
-          </Show>
+        <Show when={hasInstance() && !runBlocked()}>
           <button
             type="button"
             role="menuitem"
             class="axis-run-menu-item"
-            data-testid={ids().builtin}
-            onClick={() => {
-              closeMenu();
-              openBuiltinPicker();
-            }}
+            data-testid={ids().instance}
+            onClick={() => void gateAndRun('new')}
           >
-            <span class="axis-run-menu-title">Add built-in script…</span>
-            <span class="axis-run-menu-hint">RSI, MACD, VWAP, Supertrend, …</span>
+            <span class="axis-run-menu-title">Add another instance</span>
+            <span class="axis-run-menu-hint">
+              {instanceCount() === 1
+                ? 'Keep the current one; add a 2nd copy'
+                : `${instanceCount()} on chart — add another`}
+            </span>
           </button>
+        </Show>
+        <button
+          type="button"
+          role="menuitem"
+          class="axis-run-menu-item"
+          data-testid={ids().builtin}
+          onClick={() => {
+            closeMenu();
+            openBuiltinPicker();
+          }}
+        >
+          <span class="axis-run-menu-title">Add built-in script…</span>
+          <span class="axis-run-menu-hint">RSI, MACD, VWAP, Supertrend, …</span>
+        </button>
       </Popover>
     </div>
   );

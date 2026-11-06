@@ -15,6 +15,7 @@
  * @module chart/v1/invariants
  */
 
+/** One OHLC row for hashing; `closed === false` marks a forming tip that is excluded. */
 export type ClosedBar = {
   time: number;
   open: number;
@@ -35,6 +36,7 @@ function finite(value: number | null): value is number {
 /** Logical-range from/to are bar indices; treat sub-bar float noise as equal. */
 const LOGICAL_RANGE_EPS = 1e-6;
 
+/** Visible logical range in bar indices (floats allowed; sub-bar noise is ignored). */
 export type LogicalRange = { from: number; to: number };
 
 /** Greatest abs gap of `from`/`to`. Null if either range is missing. */
@@ -80,6 +82,10 @@ export function plotOverhang(barCount: number, lengths: readonly number[]): numb
   return over;
 }
 
+/**
+ * Sampling + warn channel for the invariant notes.
+ * `dev` forces every warning; otherwise prod samples ~1 in 32.
+ */
 export type SyncSampleOpts = {
   dev?: boolean;
   rand?: number;
@@ -96,12 +102,7 @@ function shouldSample(opts?: SyncSampleOpts): boolean {
   return dev || rand < 1 / 32;
 }
 
-function emitSample(
-  key: string,
-  seen: Set<string>,
-  message: string,
-  opts?: SyncSampleOpts,
-): void {
+function emitSample(key: string, seen: Set<string>, message: string, opts?: SyncSampleOpts): void {
   if (seen.has(key)) return;
   seen.add(key);
   const warn = opts?.warn ?? ((text: string) => console.warn(text));
@@ -152,14 +153,10 @@ export function noteSeriesPastTip(
   const past = seriesPastTip(priceLast, times);
   if (past == null) return;
   if (!shouldSample(opts)) return;
-  emitSample(
-    String(past),
-    pastTipWarned,
-    `[axis] series time ${past} is past the price tip`,
-    opts,
-  );
+  emitSample(String(past), pastTipWarned, `[axis] series time ${past} is past the price tip`, opts);
 }
 
+/** @internal Test helper — forget every dedupe set so the same warning can fire again. */
 export function _resetSyncSampleForTests(): void {
   syncWarned.clear();
   pastTipWarned.clear();
@@ -179,12 +176,7 @@ export function noteLogicalRangeSkew(
   const skew = logicalRangeSkew(price, pane);
   if (skew == null || skew <= 0) return;
   if (!shouldSample(opts)) return;
-  emitSample(
-    String(skew),
-    rangeSkewWarned,
-    '[axis] pane logical range skews the price axis',
-    opts,
-  );
+  emitSample(String(skew), rangeSkewWarned, '[axis] pane logical range skews the price axis', opts);
 }
 
 const closedWarned = new Set<string>();
@@ -194,7 +186,12 @@ export function closedOhlcChanged(
   prev: { open: number; high: number; low: number; close: number },
   next: { open: number; high: number; low: number; close: number },
 ): boolean {
-  return prev.open !== next.open || prev.high !== next.high || prev.low !== next.low || prev.close !== next.close;
+  return (
+    prev.open !== next.open ||
+    prev.high !== next.high ||
+    prev.low !== next.low ||
+    prev.close !== next.close
+  );
 }
 
 /** Dev warns every rewritten close. Prod samples about 1 in 32, once per bar time. */
@@ -229,5 +226,7 @@ export function closedBarHash(bars: readonly ClosedBar[], n = 8): string {
     window.push(bar);
   }
   window.reverse();
-  return window.map((bar) => `${bar.time}:${bar.open}:${bar.high}:${bar.low}:${bar.close}`).join('|');
+  return window
+    .map((bar) => `${bar.time}:${bar.open}:${bar.high}:${bar.low}:${bar.close}`)
+    .join('|');
 }

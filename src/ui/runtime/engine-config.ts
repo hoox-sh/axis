@@ -18,8 +18,10 @@ import { pluginKey } from '../../plugins/types';
 import { engineFamilyForId } from '../../plugins/engine-family';
 import { getEngineApiKey, setEngineApiKey } from '../../storage/vault';
 
+/** Execution strategy for a server engine: AST interpreter, compiled path, or compile-then-fallback. */
 export type EngineExecMode = 'interpret' | 'compile' | 'auto';
 
+/** Select options for {@link EngineExecMode}, in preferred order. */
 export const EXEC_MODE_OPTIONS: { value: EngineExecMode; label: string; hint: string }[] = [
   {
     value: 'interpret',
@@ -38,6 +40,13 @@ export const EXEC_MODE_OPTIONS: { value: EngineExecMode; label: string; hint: st
   },
 ];
 
+/**
+ * Coerce a persisted or form value to a known exec mode.
+ *
+ * @param raw - Untrusted value from storage or an input.
+ * @param fallback - Mode to use when `raw` is not one of the three modes.
+ * @returns A valid {@link EngineExecMode}.
+ */
 export function normalizeExecMode(
   raw: unknown,
   fallback: EngineExecMode = 'interpret',
@@ -47,6 +56,14 @@ export function normalizeExecMode(
   return fallback;
 }
 
+/**
+ * Read one engine's plugin config, preferring the `pluginKey` entry and falling
+ * back to the legacy bare id. The API key is stripped from the durable payload,
+ * so the session vault is merged back in for direct readers.
+ *
+ * @param engineId - Engine id from the catalog.
+ * @returns A shallow copy when a vault key is merged, otherwise the stored object.
+ */
 export function readEnginePluginConfig(engineId: string): Record<string, unknown> {
   const pc = store.pluginsConfig || {};
   const cfg = (pc[pluginKey('engine', engineId)] || pc[engineId] || {}) as Record<string, unknown>;
@@ -54,7 +71,7 @@ export function readEnginePluginConfig(engineId: string): Record<string, unknown
   // readers never see an empty key after a reload.
   try {
     const vaultKey = getEngineApiKey(store.pluginsConfig, engineId);
-    if (vaultKey && String(cfg.apiKey || '').trim() !== vaultKey) {
+    if (vaultKey && String(cfg['apiKey'] || '').trim() !== vaultKey) {
       return { ...cfg, apiKey: vaultKey };
     }
   } catch {
@@ -63,26 +80,53 @@ export function readEnginePluginConfig(engineId: string): Record<string, unknown
   return cfg;
 }
 
+/**
+ * Whether the engine needs an endpoint URL (every server family, or any schema
+ * that declares an `endpoint` field).
+ *
+ * @param engineId - Engine id from the catalog.
+ * @returns `true` when the Runtime form should show the endpoint input.
+ */
 export function engineNeedsEndpoint(engineId: string): boolean {
   const e = getEngine(engineId);
-  return e?.family === 'server' || !!e?.configSchema?.endpoint;
+  return e?.family === 'server' || !!e?.configSchema?.['endpoint'];
 }
 
+/**
+ * Whether the engine exposes an exec-mode choice: all server/worker/Pyodide
+ * families, plus any schema with a select-style `mode` field.
+ *
+ * @param engineId - Engine id from the catalog.
+ * @returns `true` when the mode select should render.
+ */
 export function engineHasExecMode(engineId: string): boolean {
   const family = engineFamilyForId(engineId);
   if (family === 'server' || family === 'pyodide' || family === 'worker') return true;
   const schema = getEngine(engineId)?.configSchema;
-  if (!schema?.mode) return false;
-  return schema.mode.type === 'select' || Array.isArray(schema.mode.options);
+  if (!schema?.['mode']) return false;
+  return schema['mode'].type === 'select' || Array.isArray(schema['mode'].options);
 }
 
+/**
+ * Whether the engine can prefer a WebSocket transport (server family, or a
+ * boolean `preferWs` schema field).
+ *
+ * @param engineId - Engine id from the catalog.
+ * @returns `true` when the prefer-WS toggle should render.
+ */
 export function engineHasPreferWs(engineId: string): boolean {
   if (engineFamilyForId(engineId) === 'server') return true;
-  return getEngine(engineId)?.configSchema?.preferWs?.type === 'boolean';
+  return getEngine(engineId)?.configSchema?.['preferWs']?.type === 'boolean';
 }
 
+/**
+ * Whether the engine stores an API key (schema declares a string `apiKey`).
+ *
+ * @param engineId - Engine id from the catalog.
+ * @returns `true` when the API-key field should render.
+ */
 export function engineHasApiKey(engineId: string): boolean {
-  return getEngine(engineId)?.configSchema?.apiKey?.type === 'string';
+  return getEngine(engineId)?.configSchema?.['apiKey']?.type === 'string';
 }
 
 /**
@@ -98,13 +142,23 @@ export function engineHasAutoPrewarm(engineId: string): boolean {
 /** Plugin-config key holding the auto-prewarm opt-in. */
 export const AUTO_PREWARM_FIELD = 'autoPrewarm';
 
-export function execModeOptionsFor(engineId: string) {
-  const opts = getEngine(engineId)?.configSchema?.mode?.options;
+/**
+ * Exec-mode options narrowed to what the engine's schema accepts, falling back
+ * to the full list when the schema declares none or none match.
+ *
+ * @param engineId - Engine id from the catalog.
+ * @returns Options to render in the mode select.
+ */
+export function execModeOptionsFor(
+  engineId: string,
+): { value: EngineExecMode; label: string; hint: string }[] {
+  const opts = getEngine(engineId)?.configSchema?.['mode']?.options;
   if (!opts?.length) return EXEC_MODE_OPTIONS;
   const filtered = EXEC_MODE_OPTIONS.filter((o) => opts.includes(o.value));
   return filtered.length ? filtered : EXEC_MODE_OPTIONS;
 }
 
+/** Form payload for {@link saveEngineConfig}; fields are written only when the engine supports them. */
 export type SaveEngineConfigInput = {
   engine: string;
   endpoint?: string;
@@ -136,10 +190,10 @@ export function saveEngineConfig(input: SaveEngineConfigInput): void {
     const key = pluginKey('engine', engine);
     const prev = readEnginePluginConfig(engine);
     const nextCfg: Record<string, unknown> = { ...prev };
-    if (writeEndpoint) nextCfg.endpoint = String(input.endpoint || '').trim();
-    if (writeExecMode) nextCfg.mode = input.mode;
-    if (writePreferWs) nextCfg.preferWs = input.preferWs;
-    if (writeApiKey) nextCfg.apiKey = String(input.apiKey || '').trim();
+    if (writeEndpoint) nextCfg['endpoint'] = String(input.endpoint || '').trim();
+    if (writeExecMode) nextCfg['mode'] = input.mode;
+    if (writePreferWs) nextCfg['preferWs'] = input.preferWs;
+    if (writeApiKey) nextCfg['apiKey'] = String(input.apiKey || '').trim();
     if (writeAutoPrewarm) nextCfg[AUTO_PREWARM_FIELD] = !!input.autoPrewarm;
     setStore('pluginsConfig', key, reconcile(nextCfg));
   }
@@ -150,8 +204,5 @@ export function saveEngineConfig(input: SaveEngineConfigInput): void {
 
   flushPersist();
   const modePart = writeExecMode ? ` · mode=${input.mode}` : '';
-  setStatus(
-    'ready',
-    input.statusMessage || `Runtime saved · engine=${engine}${modePart}`,
-  );
+  setStatus('ready', input.statusMessage || `Runtime saved · engine=${engine}${modePart}`);
 }

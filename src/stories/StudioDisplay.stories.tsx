@@ -4,7 +4,13 @@
  */
 
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
-import { StudioCard, StudioChip, StudioEmpty, StudioStat, StudioStatus } from '../ui/studio/StudioDisplay';
+import {
+  StudioCard,
+  StudioChip,
+  StudioEmpty,
+  StudioStat,
+  StudioStatus,
+} from '../ui/studio/StudioDisplay';
 
 const meta: Meta = {
   title: 'Studio/Display',
@@ -13,6 +19,7 @@ const meta: Meta = {
 
 export default meta;
 
+/** Chart-theme card with kicker, plus a selectable card for master-detail grids. */
 export const Card: StoryObj = {
   render: () => (
     <div style={{ display: 'flex', 'flex-direction': 'column', gap: '12px', width: '320px' }}>
@@ -28,6 +35,7 @@ export const Card: StoryObj = {
   ),
 };
 
+/** Label/value stat pairs. */
 export const Stats: StoryObj = {
   render: () => (
     <div style={{ display: 'flex', gap: '12px' }}>
@@ -37,6 +45,7 @@ export const Stats: StoryObj = {
   ),
 };
 
+/** Chips with one pressed (selected) state. */
 export const Chips: StoryObj = {
   render: () => (
     <div style={{ display: 'flex', gap: '8px' }}>
@@ -47,6 +56,7 @@ export const Chips: StoryObj = {
   ),
 };
 
+/** Every health status: healthy, degraded, down, idle, unknown. */
 export const Statuses: StoryObj = {
   render: () => (
     <div style={{ display: 'flex', gap: '8px', 'flex-wrap': 'wrap' }}>
@@ -59,6 +69,7 @@ export const Statuses: StoryObj = {
   ),
 };
 
+/** Empty-state placeholder with its message. */
 export const Empty: StoryObj = {
   render: () => <StudioEmpty>No saved themes yet.</StudioEmpty>,
 };

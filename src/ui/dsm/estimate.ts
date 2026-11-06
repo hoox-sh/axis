@@ -11,6 +11,7 @@
 import { expectedBarsInSpan } from '../../data/bars-gaps';
 import { fmtBarsAsSpan, fmtDuration } from './format';
 
+/** Pre-flight numbers for a backfill: requested window vs what one job will walk. */
 export interface BackfillEstimate {
   /** False when the date is missing or not finite. */
   valid: boolean;
@@ -78,7 +79,11 @@ export function estimateBackfill(opts: {
     return emptyEstimate(false, '', pageLimit);
   }
   if (opts.fromSec > opts.nowSec) {
-    return emptyEstimate(true, 'That date is ahead of now. Pick a UTC date in the past.', pageLimit);
+    return emptyEstimate(
+      true,
+      'That date is ahead of now. Pick a UTC date in the past.',
+      pageLimit,
+    );
   }
 
   const bars = expectedBarsInSpan(opts.fromSec, opts.nowSec, interval);

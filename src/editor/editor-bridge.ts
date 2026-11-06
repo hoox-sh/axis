@@ -82,7 +82,7 @@ export function bridgeSubscribe(handler: Handler): () => void {
 }
 
 /** Publish on the AXIS editor channel. */
-export function bridgePublish(msg: BridgeMessage) {
+export function bridgePublish(msg: BridgeMessage): void {
   const ch = ensureChannel();
   ch?.postMessage(msg);
   // Also mirror doc to localStorage for late joiners
@@ -97,7 +97,7 @@ export function readSharedDoc(): string {
 }
 
 /** Persist doc to localStorage and broadcast a `doc` message. */
-export function writeSharedDoc(doc: string) {
+export function writeSharedDoc(doc: string): void {
   setItem(EDITOR_DOC_KEY, doc);
   bridgePublish({ type: 'doc', doc });
 }

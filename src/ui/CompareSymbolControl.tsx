@@ -48,7 +48,7 @@ import { TopbarField } from './TopbarField';
  * Compact compare-symbol chrome for the workspace top bar.
  * Hidden for sources that have no per-symbol history (csv-upload).
  */
-export const CompareSymbolControl: Component = () => {
+export const CompareSymbolControl: Component = () : JSX.Element => {
   let lastFetched = '';
 
   const canCompare = () =>

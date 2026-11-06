@@ -7,6 +7,14 @@ import { Icons } from '../icons';
 import { fmtDuration, fmtTime } from './format';
 import { jobHealthLine, jobQuantityLine, jobStatusTone, statusLabel } from './jobs';
 
+/**
+ * One backfill job row: progress, status chip, quantity/health lines, and the
+ * pause/resume/cancel/apply/dismiss actions appropriate to its state. Notes stay
+ * muted while the job is still running so the numbers read first.
+ *
+ * @param props - Job snapshot plus the action callbacks owned by the list.
+ * @returns The job card markup.
+ */
 export const JobCard: Component<{
   job: DataSourceJob;
   applying: boolean;
@@ -15,7 +23,7 @@ export const JobCard: Component<{
   onCancel: () => void;
   onApply: () => void;
   onDismiss: () => void;
-}> = (props) => {
+}> = (props): JSX.Element => {
   const pct = () => Math.round(jobProgress(props.job) * 100);
   const tone = () => jobStatusTone(props.job);
   const label = () => statusLabel(props.job);

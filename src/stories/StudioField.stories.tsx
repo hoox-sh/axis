@@ -17,6 +17,7 @@ import {
 const meta: Meta = { title: 'Studio/Field', tags: ['autodocs'], parameters: { layout: 'padded' } };
 export default meta;
 
+/** Text inputs in normal, invalid (with error copy), and disabled states. */
 export const Input: StoryObj = {
   render: () => (
     <div style={{ display: 'flex', 'flex-direction': 'column', gap: '12px', width: '320px' }}>
@@ -33,6 +34,7 @@ export const Input: StoryObj = {
   ),
 };
 
+/** Invalid input and select, each rendering its error message. */
 export const Invalid: StoryObj = {
   render: () => (
     <div style={{ display: 'flex', 'flex-direction': 'column', gap: '12px', width: '320px' }}>
@@ -52,6 +54,7 @@ export const Invalid: StoryObj = {
   ),
 };
 
+/** Select variant inside a labeled field. */
 export const Select: StoryObj = {
   render: () => (
     <div style={{ width: '320px' }}>
@@ -83,13 +86,21 @@ function ToggleDemo() {
         hint="Toast flood control stays in the Notifications tab."
         onChange={setNotes}
       />
-      <StudioToggle checked disabled label="Locked" hint="Disabled switch stays dimmed." onChange={() => {}} />
+      <StudioToggle
+        checked
+        disabled
+        label="Locked"
+        hint="Disabled switch stays dimmed."
+        onChange={() => {}}
+      />
     </div>
   );
 }
 
+/** Controlled toggles with hint copy plus a disabled switch. */
 export const Toggle: StoryObj = { render: () => <ToggleDemo /> };
 
+/** Four toggles in the `ax-toggle-grid` two-column layout. */
 export const SwitchGrid: StoryObj = {
   name: 'Switch grid',
   render: () => {
@@ -118,10 +129,12 @@ export const SwitchGrid: StoryObj = {
   },
 };
 
+/** Standalone hint line, as rendered under a field. */
 export const Hint: StoryObj = {
   render: () => <StudioHint>Saving or using a palette stores it in that theme.</StudioHint>,
 };
 
+/** Color input accepting hex, a Pine color token, and `rgb()` forms. */
 export const Color: StoryObj = {
   render: () => (
     <div style={{ display: 'flex', 'flex-direction': 'column', gap: '8px', width: '320px' }}>

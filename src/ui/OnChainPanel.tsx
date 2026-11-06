@@ -112,7 +112,7 @@ function fmtEventTime(sec: number): string {
 }
 
 function fmtEventPct(ev: { payload?: Record<string, unknown> }): string {
-  const raw = ev.payload?.pctChange;
+  const raw = ev.payload?.['pctChange'];
   const n = typeof raw === 'number' ? raw : Number(raw);
   if (!Number.isFinite(n)) return '';
   const sign = n > 0 ? '+' : '';
@@ -201,7 +201,7 @@ function geckoDataPath(): DataPathInfo {
 }
 
 /** Dockable / floatable On-Chain multi-mode manager. */
-export const OnChainPanel: Component = () => {
+export const OnChainPanel: Component = () : JSX.Element => {
   const [mode, setMode] = createSignal<PanelMode>('tvl');
 
   // Probe Worker on-chain proxy when the panel opens (non-blocking HUD plane).
@@ -1210,8 +1210,8 @@ export const OnChainPanel: Component = () => {
                       const pct = () => fmtEventPct(ev);
                       const isDrop = () =>
                         String(ev.type || '').includes('drop') ||
-                        (typeof ev.payload?.pctChange === 'number' &&
-                          (ev.payload.pctChange as number) < 0);
+                        (typeof ev.payload?.['pctChange'] === 'number' &&
+                          (ev.payload['pctChange'] as number) < 0);
                       return (
                         <div
                           class="ax-oc-event"

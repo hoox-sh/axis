@@ -109,7 +109,7 @@ export interface ModalProps {
  * Rendered only while `open` is true — the Escape listener and the focus trap
  * exist for exactly as long as the dialog does.
  */
-export function Modal(props: ModalProps) {
+export function Modal(props: ModalProps): JSX.Element {
   return (
     <Show when={props.open}>
       <ModalShell {...props} />

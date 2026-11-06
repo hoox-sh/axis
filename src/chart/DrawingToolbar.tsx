@@ -193,7 +193,7 @@ function syncLayerFromStore() {
  * Left-rail drawing chrome over the price pane.
  * Mounted by the chart shell; expects `ensureDrawingLayer` to have run for full interactivity.
  */
-export const DrawingToolbar: Component = () => {
+export const DrawingToolbar: Component = () : JSX.Element => {
   const active = () => store.drawingTool;
   /** Which flyout menu is open (`null` = none). */
   const [openGroup, setOpenGroup] = createSignal<ToolGroupId | null>(null);

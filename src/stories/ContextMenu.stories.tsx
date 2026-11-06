@@ -5,7 +5,11 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
 import { ContextMenu } from '../ui/ContextMenu';
 import type { ContextMenuEntry } from '../ui/context-menu';
-const meta: Meta = { title: 'Chrome/ContextMenu', tags: ['autodocs'], parameters: { layout: 'padded' } };
+const meta: Meta = {
+  title: 'Chrome/ContextMenu',
+  tags: ['autodocs'],
+  parameters: { layout: 'padded' },
+};
 export default meta;
 const ITEMS: ContextMenuEntry[] = [
   { type: 'item', id: 'run', label: 'Run script' },
@@ -15,10 +19,26 @@ const ITEMS: ContextMenuEntry[] = [
   { type: 'item', id: 'remove', label: 'Remove', danger: true },
   { type: 'item', id: 'disabled', label: 'Export (no data)', disabled: true },
 ];
+/** Chart context menu with checked, danger and disabled rows plus a separator. */
 export const ChartMenu: StoryObj = {
   render: () => (
-    <div style={{ position: 'relative', width: '320px', height: '260px', border: '1px dashed var(--color-border)', 'border-radius': '6px' }}>
-      <ContextMenu x={24} y={24} label="Chart" items={ITEMS} onClose={() => {}} onSelect={() => {}} />
+    <div
+      style={{
+        position: 'relative',
+        width: '320px',
+        height: '260px',
+        border: '1px dashed var(--color-border)',
+        'border-radius': '6px',
+      }}
+    >
+      <ContextMenu
+        x={24}
+        y={24}
+        label="Chart"
+        items={ITEMS}
+        onClose={() => {}}
+        onSelect={() => {}}
+      />
     </div>
   ),
 };

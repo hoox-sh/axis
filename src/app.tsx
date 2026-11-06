@@ -145,7 +145,7 @@ import { startMcpHost } from './mcp';
 import { engineFamilyForText } from './plugins/engine-family';
 
 /** Primary charting workspace component mounted by `index.tsx`. */
-export const App: Component = () => {
+export const App: Component = () : JSX.Element => {
   const [studioPage, setStudioPage] = createSignal<StudioPageId | null>(null);
   const [settingsTab, setSettingsTab] = createSignal<SettingsTabId>('general');
   const openStudio = (page: StudioPageId) => {

@@ -34,6 +34,10 @@
 import { isStreamEngineDisabled } from './feature-flag';
 import { profileForCapabilities, type EngineProfileCaps } from './policy';
 
+/**
+ * Which plane an evaluation should use, plus the reason so telemetry can explain a fallback
+ * to the legacy calculator path.
+ */
 export interface RouteDecision {
   useStream: boolean;
   reason: 'flag-off' | 'calculator' | 'stream';

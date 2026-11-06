@@ -31,6 +31,11 @@ import { Portal } from 'solid-js/web';
 import { clampMenuPosition, type ContextMenuEntry } from './context-menu';
 import { dismissOnOutside } from './dismiss-on-outside';
 
+/**
+ * Portal-rendered context menu at a pointer position. Clamps itself into the
+ * viewport, closes on outside pointerdown / Escape, and reports the chosen row
+ * id to the caller.
+ */
 export const ContextMenu: Component<{
   x: number;
   y: number;
@@ -38,7 +43,7 @@ export const ContextMenu: Component<{
   items: ContextMenuEntry[];
   onClose: () => void;
   onSelect: (id: string) => void;
-}> = (props) => {
+}> = (props): JSX.Element => {
   let root: HTMLDivElement | undefined;
   const [pos, setPos] = createSignal({ x: props.x, y: props.y });
 
@@ -129,45 +134,45 @@ export const ContextMenu: Component<{
       >
         {/* Dialog shell so the shortcut hub leaves Escape for this menu. */}
         <div role="menu" aria-label={props.label}>
-        <For each={props.items}>
-          {(entry) => {
-            if (entry.type === 'sep') return <hr class="axis-context-sep" />;
-            const onClick = () => {
-              if (entry.disabled) return;
-              props.onSelect(entry.id);
-              props.onClose();
-            };
-            const row = {
-              class: 'axis-context-item',
-              classList: {
-                'is-active': !!entry.checked,
-                'is-danger': !!entry.danger,
-              },
-              disabled: !!entry.disabled,
-              'data-testid': `axis-context-${entry.id}`,
-              onClick,
-            };
-            if (entry.checked == null) {
+          <For each={props.items}>
+            {(entry) => {
+              if (entry.type === 'sep') return <hr class="axis-context-sep" />;
+              const onClick = () => {
+                if (entry.disabled) return;
+                props.onSelect(entry.id);
+                props.onClose();
+              };
+              const row = {
+                class: 'axis-context-item',
+                classList: {
+                  'is-active': !!entry.checked,
+                  'is-danger': !!entry.danger,
+                },
+                disabled: !!entry.disabled,
+                'data-testid': `axis-context-${entry.id}`,
+                onClick,
+              };
+              if (entry.checked == null) {
+                return (
+                  <button type="button" role="menuitem" {...row}>
+                    <span class="axis-context-label">{entry.label}</span>
+                  </button>
+                );
+              }
+              if (entry.id.startsWith('type.')) {
+                return (
+                  <button type="button" role="menuitemradio" aria-checked={entry.checked} {...row}>
+                    <span class="axis-context-label">{entry.label}</span>
+                  </button>
+                );
+              }
               return (
-                <button type="button" role="menuitem" {...row}>
+                <button type="button" role="menuitemcheckbox" aria-checked={entry.checked} {...row}>
                   <span class="axis-context-label">{entry.label}</span>
                 </button>
               );
-            }
-            if (entry.id.startsWith('type.')) {
-              return (
-                <button type="button" role="menuitemradio" aria-checked={entry.checked} {...row}>
-                  <span class="axis-context-label">{entry.label}</span>
-                </button>
-              );
-            }
-            return (
-              <button type="button" role="menuitemcheckbox" aria-checked={entry.checked} {...row}>
-                <span class="axis-context-label">{entry.label}</span>
-              </button>
-            );
-          }}
-        </For>
+            }}
+          </For>
         </div>
       </div>
     </Portal>

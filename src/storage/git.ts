@@ -34,21 +34,21 @@ import type {
   SyncResult,
 } from '../plugins/types';
 import { metaFromScriptContent } from '../indicators/script-meta';
-import {
-  resolveGitConfig,
-  resolveScriptRepoPath,
-  type GitConfig,
-} from './git-config';
+import { resolveGitConfig, resolveScriptRepoPath, type GitConfig } from './git-config';
 import { githubForge } from './git-github';
 import { gitlabForge } from './git-gitlab';
 import { forgeList, forgeRead, forgeRemove, forgeWrite, type GitForge } from './git-forge';
 
-/** Storage plugin `id: git` with configSchema for Provider Manager / Settings. */
 /** The provider half of the git backend for this config. */
 function forgeFor(cfg: GitConfig): GitForge {
   return cfg.provider === 'gitlab' ? gitlabForge : githubForge;
 }
 
+/**
+ * Built-in `git` storage plugin: scripts live as files in a GitHub or GitLab
+ * repo, each Save is a commit, and history is read back per file. Drafts are
+ * deliberately not pushed — the local plugin owns crash recovery.
+ */
 export const gitStoragePlugin: StoragePlugin = {
   id: 'git',
   name: 'Git (GitHub / GitLab)',
@@ -104,9 +104,7 @@ export const gitStoragePlugin: StoragePlugin = {
     const metas = await forgeList(cfg, forgeFor(cfg));
     const prefix = opts?.prefix;
     if (!prefix) return metas;
-    return metas.filter(
-      (m) => m.name.startsWith(prefix) || (m.path && m.path.startsWith(prefix)),
-    );
+    return metas.filter((m) => m.name.startsWith(prefix) || (m.path && m.path.startsWith(prefix)));
   },
 
   async read(id, config) {
@@ -204,8 +202,7 @@ async function findScriptMeta(
   cfg: ReturnType<typeof resolveGitConfig>,
   id: string,
 ): Promise<ScriptMeta | undefined> {
-  const list =
-    await forgeList(cfg, forgeFor(cfg));
+  const list = await forgeList(cfg, forgeFor(cfg));
   return list.find((s) => s.id === id);
 }
 

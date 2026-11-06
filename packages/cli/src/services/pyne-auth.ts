@@ -12,6 +12,12 @@
  * server engine authenticate against.
  */
 
+/**
+ * Result of minting a key on the PYNE calculation host.
+ *
+ * `apiKey` is the only time the plaintext key is available; a failure carries
+ * `error` instead and no key.
+ */
 export type PyneMintResult = {
   ok: boolean;
   apiKey?: string;
@@ -21,6 +27,13 @@ export type PyneMintResult = {
   error?: string;
 };
 
+/**
+ * Counter snapshot from `GET /auth/usage` for one PYNE key.
+ *
+ * Fields are `null` when the host omitted them or sent a non-finite value, so
+ * `0` always means a real zero. `lastUsed` is a host-defined epoch value passed
+ * through unchanged.
+ */
 export type PyneUsageResult = {
   ok: boolean;
   keyId: string | null;
@@ -33,6 +46,12 @@ export type PyneUsageResult = {
   error?: string;
 };
 
+/**
+ * Result of `POST /auth/validate` on the PYNE calculation host.
+ *
+ * `active` and `rateLimited` are `true` only when the host sent the literal
+ * `true`; `ok` means the key was accepted, not that it is unthrottled.
+ */
 export type PyneValidateResult = {
   ok: boolean;
   keyId?: string;
@@ -50,11 +69,11 @@ async function pyneFetch(
   path: string,
   init: { method: string; headers?: Record<string, string>; body?: unknown },
 ): Promise<{ status: number; payload: Record<string, unknown> | null } | { error: string }> {
-  const url = `${String(base || "").replace(/\/$/, "")}${path}`;
+  const url = `${String(base || '').replace(/\/$/, '')}${path}`;
   try {
     const res = await fetch(url, {
       method: init.method,
-      headers: { "Content-Type": "application/json", ...(init.headers || {}) },
+      headers: { 'Content-Type': 'application/json', ...(init.headers || {}) },
       ...(init.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
@@ -62,7 +81,7 @@ async function pyneFetch(
     try {
       const text = await res.text();
       const parsed: unknown = text.trim() ? JSON.parse(text) : null;
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
         payload = parsed as Record<string, unknown>;
       }
     } catch {
@@ -75,45 +94,45 @@ async function pyneFetch(
 }
 
 function asNum(v: unknown): number | null {
-  return typeof v === "number" && Number.isFinite(v) ? v : null;
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
 }
 
 /** `POST /auth/create_key` — requires the host's ADMIN_TOKEN header. */
 export async function mintPyneKey(
   base: string,
   adminToken: string,
-  tier = "hobby"
+  tier = 'hobby',
 ): Promise<PyneMintResult> {
   if (!adminToken.trim()) {
-    return { ok: false, error: "Admin token required to mint PYNE keys" };
+    return { ok: false, error: 'Admin token required to mint PYNE keys' };
   }
-  const res = await pyneFetch(base, "/auth/create_key", {
-    method: "POST",
-    headers: { "X-Admin-Token": adminToken },
+  const res = await pyneFetch(base, '/auth/create_key', {
+    method: 'POST',
+    headers: { 'X-Admin-Token': adminToken },
     body: { tier },
   });
-  if ("error" in res) return { ok: false, error: res.error };
+  if ('error' in res) return { ok: false, error: res.error };
   if (res.status === 403) {
     return {
       ok: false,
       status: res.status,
-      error: "Admin token rejected (ADMIN_TOKEN unset on the host is also a 403)",
+      error: 'Admin token rejected (ADMIN_TOKEN unset on the host is also a 403)',
     };
   }
-  if (res.status < 200 || res.status >= 300 || res.payload?.status === "error") {
+  if (res.status < 200 || res.status >= 300 || res.payload?.status === 'error') {
     const message =
-      typeof res.payload?.message === "string" && res.payload.message
+      typeof res.payload?.message === 'string' && res.payload.message
         ? res.payload.message
         : `Mint failed (HTTP ${res.status})`;
     return { ok: false, status: res.status, error: message };
   }
-  const apiKey = typeof res.payload?.api_key === "string" ? res.payload.api_key : "";
-  if (!apiKey) return { ok: false, status: res.status, error: "Backend returned no api_key" };
+  const apiKey = typeof res.payload?.api_key === 'string' ? res.payload.api_key : '';
+  if (!apiKey) return { ok: false, status: res.status, error: 'Backend returned no api_key' };
   return {
     ok: true,
     apiKey,
-    keyId: typeof res.payload?.key_id === "string" ? res.payload.key_id : undefined,
-    tier: typeof res.payload?.tier === "string" ? res.payload.tier : tier,
+    keyId: typeof res.payload?.key_id === 'string' ? res.payload.key_id : undefined,
+    tier: typeof res.payload?.tier === 'string' ? res.payload.tier : tier,
     status: res.status,
   };
 }
@@ -129,21 +148,21 @@ export async function fetchPyneUsage(base: string, apiKey: string): Promise<Pyne
     callsRemaining: null,
     lastUsed: null,
   };
-  if (!apiKey.trim()) return { ...empty, error: "API key required" };
-  const res = await pyneFetch(base, "/auth/usage", {
-    method: "GET",
-    headers: { "X-API-Key": apiKey, Authorization: `Bearer ${apiKey}` },
+  if (!apiKey.trim()) return { ...empty, error: 'API key required' };
+  const res = await pyneFetch(base, '/auth/usage', {
+    method: 'GET',
+    headers: { 'X-API-Key': apiKey, Authorization: `Bearer ${apiKey}` },
   });
-  if ("error" in res) return { ...empty, error: res.error };
+  if ('error' in res) return { ...empty, error: res.error };
   if (res.status === 401 || res.status === 403) {
-    return { ...empty, status: res.status, error: "API key not recognised by this backend" };
+    return { ...empty, status: res.status, error: 'API key not recognised by this backend' };
   }
   if (res.status === 404) {
-    return { ...empty, status: res.status, error: "Backend has no /auth/usage route" };
+    return { ...empty, status: res.status, error: 'Backend has no /auth/usage route' };
   }
-  if (res.status < 200 || res.status >= 300 || !res.payload || res.payload.status === "error") {
+  if (res.status < 200 || res.status >= 300 || !res.payload || res.payload.status === 'error') {
     const message =
-      typeof res.payload?.message === "string" && res.payload.message
+      typeof res.payload?.message === 'string' && res.payload.message
         ? res.payload.message
         : `Usage failed (HTTP ${res.status})`;
     return { ...empty, status: res.status, error: message };
@@ -151,8 +170,8 @@ export async function fetchPyneUsage(base: string, apiKey: string): Promise<Pyne
   const usage = (res.payload.usage || {}) as Record<string, unknown>;
   return {
     ok: true,
-    keyId: typeof res.payload.key_id === "string" ? res.payload.key_id : null,
-    tier: typeof res.payload.tier === "string" ? res.payload.tier : null,
+    keyId: typeof res.payload.key_id === 'string' ? res.payload.key_id : null,
+    tier: typeof res.payload.tier === 'string' ? res.payload.tier : null,
     callsUsed: asNum(usage.calls_used),
     callsLimit: asNum(usage.calls_limit),
     callsRemaining: asNum(usage.calls_remaining),
@@ -168,33 +187,30 @@ export async function fetchPyneUsage(base: string, apiKey: string): Promise<Pyne
  * calculation host's own key store, the one the server engine authenticates
  * against.
  */
-export async function validatePyneKey(
-  base: string,
-  apiKey: string
-): Promise<PyneValidateResult> {
-  if (!apiKey.trim()) return { ok: false, error: "API key required" };
-  const res = await pyneFetch(base, "/auth/validate", {
-    method: "POST",
+export async function validatePyneKey(base: string, apiKey: string): Promise<PyneValidateResult> {
+  if (!apiKey.trim()) return { ok: false, error: 'API key required' };
+  const res = await pyneFetch(base, '/auth/validate', {
+    method: 'POST',
     body: { api_key: apiKey },
   });
-  if ("error" in res) return { ok: false, error: res.error };
+  if ('error' in res) return { ok: false, error: res.error };
   if (res.status === 401) {
-    return { ok: false, status: res.status, error: "Invalid API key" };
+    return { ok: false, status: res.status, error: 'Invalid API key' };
   }
   if (res.status === 404) {
-    return { ok: false, status: res.status, error: "Backend has no /auth/validate route" };
+    return { ok: false, status: res.status, error: 'Backend has no /auth/validate route' };
   }
-  if (res.status < 200 || res.status >= 300 || !res.payload || res.payload.status === "error") {
+  if (res.status < 200 || res.status >= 300 || !res.payload || res.payload.status === 'error') {
     const message =
-      typeof res.payload?.message === "string" && res.payload.message
+      typeof res.payload?.message === 'string' && res.payload.message
         ? res.payload.message
         : `Validate failed (HTTP ${res.status})`;
     return { ok: false, status: res.status, error: message };
   }
   return {
     ok: true,
-    keyId: typeof res.payload.key_id === "string" ? res.payload.key_id : undefined,
-    tier: typeof res.payload.tier === "string" ? res.payload.tier : undefined,
+    keyId: typeof res.payload.key_id === 'string' ? res.payload.key_id : undefined,
+    tier: typeof res.payload.tier === 'string' ? res.payload.tier : undefined,
     active: res.payload.active === true,
     rateLimited: res.payload.rate_limited === true,
     status: res.status,

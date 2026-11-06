@@ -160,7 +160,7 @@ function EffectBlock(props: { def: EffectDef }) {
 }
 
 /** Motion tunes. Live — this tab does not use Save / Cancel. */
-export function EffectsPanel() {
+export function EffectsPanel(): JSX.Element {
   return (
     <StudioSection
       title="Motion"

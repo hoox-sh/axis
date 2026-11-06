@@ -91,106 +91,126 @@ function runAuthRequired(env: Env): boolean {
 
 /** `/api/run` error envelope — permissive CORS so browser callers can read `code`. */
 function jsonError(
-    status: number,
-    code: string,
-    message: string,
-    origin: string,
-    extraHeaders?: Record<string, string>,
+  status: number,
+  code: string,
+  message: string,
+  origin: string,
+  extraHeaders?: Record<string, string>,
 ): Response {
-    return errorResponse(code, message, {
-        status,
-        headers: { 'Access-Control-Allow-Origin': origin, ...(extraHeaders || {}) },
-    });
+  return errorResponse(code, message, {
+    status,
+    headers: { 'Access-Control-Allow-Origin': origin, ...(extraHeaders || {}) },
+  });
 }
 
 /** @internal test helper — clear rate buckets between tests. */
 export function _resetRunRateLimitForTests(): void {
-    _resetRateLimitsForTests();
+  _resetRateLimitsForTests();
 }
 
 /** Client JSON body for `/api/run` (aligned with pyne Pro API). */
 interface RunRequest {
-    script: string;
-    data: Array<{ time: number | string; open: number; high: number; low: number; close: number; volume?: number }>;
-    /** `auto` (the PWA default) normalizes to `interpret` before execution. */
-    mode?: 'interpret' | 'compile' | 'auto';
+  script: string;
+  data: Array<{
+    time: number | string;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume?: number;
+  }>;
+  /** `auto` (the PWA default) normalizes to `interpret` before execution. */
+  mode?: 'interpret' | 'compile' | 'auto';
 }
 
 /** Structural validation only — engines enforce bar shape and script syntax. */
 function validate(body: unknown): { ok: true; value: RunRequest } | { ok: false; err: string } {
-    if (!body || typeof body !== 'object') return { ok: false, err: 'body must be a JSON object' };
-    const b = body as Record<string, unknown>;
-    if (typeof b.script !== 'string' || !b.script.trim()) return { ok: false, err: 'script is required' };
-    if (b.script.length > MAX_SCRIPT_CHARS) {
-        return { ok: false, err: `script exceeds ${MAX_SCRIPT_CHARS} characters` };
-    }
-    if (!Array.isArray(b.data) || b.data.length === 0) return { ok: false, err: 'data must be a non-empty array' };
-    if (b.data.length > MAX_DATA_BARS) {
-        return { ok: false, err: `data exceeds ${MAX_DATA_BARS} bars` };
-    }
-    if (b.mode !== undefined && b.mode !== 'interpret' && b.mode !== 'compile' && b.mode !== 'auto') {
-        return { ok: false, err: 'mode must be "interpret", "compile", or "auto"' };
-    }
-    return { ok: true, value: b as unknown as RunRequest };
+  if (!body || typeof body !== 'object') return { ok: false, err: 'body must be a JSON object' };
+  const b = body as Record<string, unknown>;
+  if (typeof b.script !== 'string' || !b.script.trim())
+    return { ok: false, err: 'script is required' };
+  if (b.script.length > MAX_SCRIPT_CHARS) {
+    return { ok: false, err: `script exceeds ${MAX_SCRIPT_CHARS} characters` };
+  }
+  if (!Array.isArray(b.data) || b.data.length === 0)
+    return { ok: false, err: 'data must be a non-empty array' };
+  if (b.data.length > MAX_DATA_BARS) {
+    return { ok: false, err: `data exceeds ${MAX_DATA_BARS} bars` };
+  }
+  if (b.mode !== undefined && b.mode !== 'interpret' && b.mode !== 'compile' && b.mode !== 'auto') {
+    return { ok: false, err: 'mode must be "interpret", "compile", or "auto"' };
+  }
+  // Extra body fields ride along — the proxy re-serializes this object verbatim.
+  return { ok: true, value: b as RunRequest & Record<string, unknown> };
 }
 
 /** POST JSON body to `${EXTERNAL_BACKEND}/run`, preserving upstream status + body. */
 async function proxyToExternal(
-    bodyText: string,
-    env: Env,
-    origin: string,
-    extraHeaders?: Record<string, string>,
+  bodyText: string,
+  env: Env,
+  origin: string,
+  extraHeaders?: Record<string, string>,
 ): Promise<Response> {
-    const target = env.EXTERNAL_BACKEND?.replace(/\/$/, '');
-    if (!target) {
-        return new Response(
-            JSON.stringify(errorBody('NO_BACKEND', 'No EXTERNAL_BACKEND configured and PYODIDE_IN_WORKER is disabled. ' +
-                    'Set EXTERNAL_BACKEND=<flask-url> OR PYODIDE_IN_WORKER=enabled (and ship the pynescript wheel in R2).')),
-            {
-                status: 503,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Access-Control-Allow-Origin': origin,
-                    ...(extraHeaders || {}),
-                },
-            },
-        );
-    }
-    let upstream: Response;
-    try {
-        upstream = await fetch(`${target}/run`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: bodyText,
-            signal: AbortSignal.timeout(PROXY_TIMEOUT_MS),
-        });
-    } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        const timedOut = /abort|timeout/i.test(msg);
-        return new Response(
-            JSON.stringify(errorBody(timedOut ? 'UPSTREAM_TIMEOUT' : 'UPSTREAM_NETWORK', timedOut
-                    ? `EXTERNAL_BACKEND /run timed out after ${PROXY_TIMEOUT_MS}ms`
-                    : `EXTERNAL_BACKEND /run unreachable: ${msg}`)),
-            {
-                status: 504,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Access-Control-Allow-Origin': origin,
-                    ...(extraHeaders || {}),
-                },
-            },
-        );
-    }
-    const text = await upstream.text();
-    return new Response(text, {
-        status: upstream.status,
+  const target = env.EXTERNAL_BACKEND?.replace(/\/$/, '');
+  if (!target) {
+    return new Response(
+      JSON.stringify(
+        errorBody(
+          'NO_BACKEND',
+          'No EXTERNAL_BACKEND configured and PYODIDE_IN_WORKER is disabled. ' +
+            'Set EXTERNAL_BACKEND=<flask-url> OR PYODIDE_IN_WORKER=enabled (and ship the pynescript wheel in R2).',
+        ),
+      ),
+      {
+        status: 503,
         headers: {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': origin,
-            'Vary': 'Origin',
-            ...(extraHeaders || {}),
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': origin,
+          ...(extraHeaders || {}),
         },
+      },
+    );
+  }
+  let upstream: Response;
+  try {
+    upstream = await fetch(`${target}/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: bodyText,
+      signal: AbortSignal.timeout(PROXY_TIMEOUT_MS),
     });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const timedOut = /abort|timeout/i.test(msg);
+    return new Response(
+      JSON.stringify(
+        errorBody(
+          timedOut ? 'UPSTREAM_TIMEOUT' : 'UPSTREAM_NETWORK',
+          timedOut
+            ? `EXTERNAL_BACKEND /run timed out after ${PROXY_TIMEOUT_MS}ms`
+            : `EXTERNAL_BACKEND /run unreachable: ${msg}`,
+        ),
+      ),
+      {
+        status: 504,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': origin,
+          ...(extraHeaders || {}),
+        },
+      },
+    );
+  }
+  const text = await upstream.text();
+  return new Response(text, {
+    status: upstream.status,
+    headers: {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': origin,
+      Vary: 'Origin',
+      ...(extraHeaders || {}),
+    },
+  });
 }
 
 /**
@@ -198,126 +218,126 @@ async function proxyToExternal(
  * optional usage meter → Pyodide → external proxy fallback.
  */
 export async function handleRun(
-    req: Request,
-    env: Env,
-    origin: string,
-    ctx?: ExecutionContext,
+  req: Request,
+  env: Env,
+  origin: string,
+  ctx?: ExecutionContext,
 ): Promise<Response> {
-    // ── SaaS tenant gate (hx_live_…): live console verify (`axis:run`) + meter.
-    // Non-tenant callers fall through to the legacy auth gate below, unchanged.
-    // A cheap IP pre-limit runs before the gate so console verify is never
-    // reachable past the abuse budget (A11).
-    const ip = clientIp(req);
-    if (!allowRate(`run:pre:${ip}`, RUN_RATE_LIMIT * 2, RUN_RATE_WINDOW_MS)) {
-        return jsonError(
-            429,
-            'RATE_LIMIT',
-            `Too many /api/run requests (max ${RUN_RATE_LIMIT * 2}/${RUN_RATE_WINDOW_MS / 1000}s)`,
-            origin,
-            { 'Retry-After': String(Math.ceil(RUN_RATE_WINDOW_MS / 1000)) },
-        );
-    }
-    let verifyDegraded = false;
-    const gate = await gateTenantKey(env, req, 'axis:run');
+  // ── SaaS tenant gate (hx_live_…): live console verify (`axis:run`) + meter.
+  // Non-tenant callers fall through to the legacy auth gate below, unchanged.
+  // A cheap IP pre-limit runs before the gate so console verify is never
+  // reachable past the abuse budget (A11).
+  const ip = clientIp(req);
+  if (!allowRate(`run:pre:${ip}`, RUN_RATE_LIMIT * 2, RUN_RATE_WINDOW_MS)) {
+    return jsonError(
+      429,
+      'RATE_LIMIT',
+      `Too many /api/run requests (max ${RUN_RATE_LIMIT * 2}/${RUN_RATE_WINDOW_MS / 1000}s)`,
+      origin,
+      { 'Retry-After': String(Math.ceil(RUN_RATE_WINDOW_MS / 1000)) },
+    );
+  }
+  let verifyDegraded = false;
+  const gate = await gateTenantKey(env, req, 'axis:run');
 
-    // ── Auth gate (KV / REQUIRE_RUN_AUTH / backend without open keys) ──
-    let userId: string | null = null;
-    let rawKey: string | null = null;
-    if (gate) {
-        if (gate.decision === 'deny') {
-            return jsonError(
-                gate.status,
-                gate.code,
-                gate.message,
-                origin,
-                gate.retryAfter !== undefined ? { 'Retry-After': String(gate.retryAfter) } : undefined,
-            );
-        }
-        verifyDegraded = gate.degraded;
-        userId = gate.userId;
-        rawKey = extractBearer(req) || null;
-        if (!gate.degraded) meterTenantUsage(env, gate, 'axis:run', { runs: 1 }, ctx);
-    } else if (runAuthRequired(env)) {
-        const auth = await requireApiKey(req, env);
-        if (!auth.ok) {
-            return jsonError(auth.status, auth.code, auth.message, origin);
-        }
-        userId = auth.ctx.userId;
-        rawKey = auth.ctx.key;
-    } else {
-        // Optional bearer for metering / tighter rate bucket when present
-        const header = req.headers.get('Authorization') ?? '';
-        if (header.startsWith('Bearer ')) {
-            rawKey = header.slice(7).trim() || null;
-        }
+  // ── Auth gate (KV / REQUIRE_RUN_AUTH / backend without open keys) ──
+  let userId: string | null = null;
+  let rawKey: string | null = null;
+  if (gate) {
+    if (gate.decision === 'deny') {
+      return jsonError(
+        gate.status,
+        gate.code,
+        gate.message,
+        origin,
+        gate.retryAfter !== undefined ? { 'Retry-After': String(gate.retryAfter) } : undefined,
+      );
     }
+    verifyDegraded = gate.degraded;
+    userId = gate.userId;
+    rawKey = extractBearer(req) || null;
+    if (!gate.degraded) meterTenantUsage(env, gate, 'axis:run', { runs: 1 }, ctx);
+  } else if (runAuthRequired(env)) {
+    const auth = await requireApiKey(req, env);
+    if (!auth.ok) {
+      return jsonError(auth.status, auth.code, auth.message, origin);
+    }
+    userId = auth.ctx.userId;
+    rawKey = auth.ctx.key;
+  } else {
+    // Optional bearer for metering / tighter rate bucket when present
+    const header = req.headers.get('Authorization') ?? '';
+    if (header.startsWith('Bearer ')) {
+      rawKey = header.slice(7).trim() || null;
+    }
+  }
 
-    // Degraded tenant verify (console unreachable, legacy key matched) rides
-    // along on every response below; absent otherwise.
-    const verifyHeaders = verifyDegraded ? { 'X-Hoox-Verify': 'degraded' } : undefined;
+  // Degraded tenant verify (console unreachable, legacy key matched) rides
+  // along on every response below; absent otherwise.
+  const verifyHeaders = verifyDegraded ? { 'X-Hoox-Verify': 'degraded' } : undefined;
 
-    // ── Rate limit (always) ──
-    // Per-key bucket uses the key hash (never a raw-key prefix) so rate keys
-    // stay safe to log; hash failure falls back to the IP bucket.
-    // (`ip` was resolved before the tenant gate for the A11 pre-limit above.)
-    let rateKey = userId ? `run:user:${userId}` : `run:ip:${ip}`;
-    if (!userId && rawKey) {
-        try {
-            rateKey = `run:key:${(await sha256Hex(rawKey)).slice(0, 16)}`;
-        } catch {
-            /* fall back to the IP bucket — rate limiting must not block */
-        }
+  // ── Rate limit (always) ──
+  // Per-key bucket uses the key hash (never a raw-key prefix) so rate keys
+  // stay safe to log; hash failure falls back to the IP bucket.
+  // (`ip` was resolved before the tenant gate for the A11 pre-limit above.)
+  let rateKey = userId ? `run:user:${userId}` : `run:ip:${ip}`;
+  if (!userId && rawKey) {
+    try {
+      rateKey = `run:key:${(await sha256Hex(rawKey)).slice(0, 16)}`;
+    } catch {
+      /* fall back to the IP bucket — rate limiting must not block */
     }
-    if (!allowRate(rateKey, RUN_RATE_LIMIT, RUN_RATE_WINDOW_MS)) {
-        return jsonError(
-            429,
-            'RATE_LIMIT',
-            `Too many /api/run requests (max ${RUN_RATE_LIMIT}/${RUN_RATE_WINDOW_MS / 1000}s)`,
-            origin,
-            { 'Retry-After': String(Math.ceil(RUN_RATE_WINDOW_MS / 1000)), ...(verifyHeaders || {}) },
-        );
-    }
+  }
+  if (!allowRate(rateKey, RUN_RATE_LIMIT, RUN_RATE_WINDOW_MS)) {
+    return jsonError(
+      429,
+      'RATE_LIMIT',
+      `Too many /api/run requests (max ${RUN_RATE_LIMIT}/${RUN_RATE_WINDOW_MS / 1000}s)`,
+      origin,
+      { 'Retry-After': String(Math.ceil(RUN_RATE_WINDOW_MS / 1000)), ...(verifyHeaders || {}) },
+    );
+  }
 
-    const capped = await readCappedJson(req, RUN_MAX_BODY_BYTES);
-    if (!capped.ok) {
-        return jsonError(413, 'PAYLOAD_TOO_LARGE', 'run body too large', origin, verifyHeaders);
-    }
-    const v = validate(capped.value);
-    if (!v.ok) {
-        return jsonError(400, 'BAD_REQUEST', v.err, origin, verifyHeaders);
-    }
-    // `auto` (PWA default) means interpret — normalize before execution/proxy
-    // so the upstream only ever sees a concrete mode.
-    if (v.value.mode === 'auto') v.value.mode = 'interpret';
+  const capped = await readCappedJson(req, RUN_MAX_BODY_BYTES);
+  if (!capped.ok) {
+    return jsonError(413, 'PAYLOAD_TOO_LARGE', 'run body too large', origin, verifyHeaders);
+  }
+  const v = validate(capped.value);
+  if (!v.ok) {
+    return jsonError(400, 'BAD_REQUEST', v.err, origin, verifyHeaders);
+  }
+  // `auto` (PWA default) means interpret — normalize before execution/proxy
+  // so the upstream only ever sees a concrete mode.
+  if (v.value.mode === 'auto') v.value.mode = 'interpret';
 
-    // Best-effort usage meter; failures/unbound KV must not block runs.
-    // Keyed by key-hash prefix — the raw secret never lands in KV (A21).
-    // Best-effort read-modify-write (KV has no atomic incr); lossy by design.
-    if (rawKey && env.USAGE) {
-        try {
-            const keyHash = await sha256Hex(rawKey);
-            const usageKey = `usage:${keyHash.slice(0, 16)}`;
-            const current = parseInt((await env.USAGE.get(usageKey)) ?? '0', 10);
-            await env.USAGE.put(usageKey, String(current + 1), {
-                expirationTtl: 60 * 60 * 24 * 30,
-            });
-        } catch {
-            /* meter must not block */
-        }
+  // Best-effort usage meter; failures/unbound KV must not block runs.
+  // Keyed by key-hash prefix — the raw secret never lands in KV (A21).
+  // Best-effort read-modify-write (KV has no atomic incr); lossy by design.
+  if (rawKey && env.USAGE) {
+    try {
+      const keyHash = await sha256Hex(rawKey);
+      const usageKey = `usage:${keyHash.slice(0, 16)}`;
+      const current = parseInt((await env.USAGE.get(usageKey)) ?? '0', 10);
+      await env.USAGE.put(usageKey, String(current + 1), {
+        expirationTtl: 60 * 60 * 24 * 30,
+      });
+    } catch {
+      /* meter must not block */
     }
+  }
 
-    // 1) In-Worker Python via Pyodide (preferred when enabled).
-    if (env.PYODIDE_IN_WORKER === 'enabled') {
-        const pyResult = await tryRunInWorker(v.value.script, v.value.data, env);
-        if (pyResult) {
-            return jsonResponse(pyResult, {
-                status: 200,
-                headers: { 'Access-Control-Allow-Origin': origin, ...(verifyHeaders || {}) },
-            });
-        }
-        // Fall through to external if Pyodide failed to boot.
+  // 1) In-Worker Python via Pyodide (preferred when enabled).
+  if (env.PYODIDE_IN_WORKER === 'enabled') {
+    const pyResult = await tryRunInWorker(v.value.script, v.value.data, env);
+    if (pyResult) {
+      return jsonResponse(pyResult, {
+        status: 200,
+        headers: { 'Access-Control-Allow-Origin': origin, ...(verifyHeaders || {}) },
+      });
     }
+    // Fall through to external if Pyodide failed to boot.
+  }
 
-    // 2) External backend (re-serialize parsed body — Request body is one-shot).
-    return proxyToExternal(JSON.stringify(v.value), env, origin, verifyHeaders);
+  // 2) External backend (re-serialize parsed body — Request body is one-shot).
+  return proxyToExternal(JSON.stringify(v.value), env, origin, verifyHeaders);
 }

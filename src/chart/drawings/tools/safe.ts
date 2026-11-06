@@ -23,7 +23,7 @@
  * @module chart/drawings/tools/safe
  */
 
-import type { Point } from '../../drawing-types';
+import type { Drawing, Point, TwoPointDrawing } from '../../drawing-types';
 
 /** Max user-facing label length (SVG text / meta). */
 export const DRAWING_TEXT_MAX = 200;
@@ -36,6 +36,36 @@ export function isFinitePoint(p: unknown): p is Point {
   if (!p || typeof p !== 'object') return false;
   const o = p as { time?: unknown; price?: unknown };
   return Number.isFinite(o.time) && Number.isFinite(o.price);
+}
+
+/**
+ * Narrow a drawing to the two-point family.
+ *
+ * Every two-point tool stores `p1`/`p2`; the guard also rejects non-finite
+ * coordinates so hit-testing and painting never run on `NaN`.
+ *
+ * @param d Any drawing.
+ * @param kind Optional exact kind to require (e.g. `'fib'`).
+ * @returns The same drawing narrowed to {@link TwoPointDrawing}, or `null`.
+ */
+export function isTwoPointDrawing(
+  d: Drawing,
+  kind?: TwoPointDrawing['kind'],
+): d is TwoPointDrawing {
+  if (kind && d.kind !== kind) return false;
+  if (!('p1' in d) || !('p2' in d) || !d.p1 || !d.p2) return false;
+  return isFinitePoint(d.p1) && isFinitePoint(d.p2);
+}
+
+/**
+ * Return a drawing as {@link TwoPointDrawing} when it qualifies.
+ *
+ * @param d Any drawing.
+ * @param kind Optional exact kind to require.
+ * @returns The narrowed drawing, or `null` when it is not two-point.
+ */
+export function asTwoPoint(d: Drawing, kind?: TwoPointDrawing['kind']): TwoPointDrawing | null {
+  return isTwoPointDrawing(d, kind) ? d : null;
 }
 
 /** Filter + clamp a point list for create/paint. */

@@ -40,6 +40,10 @@ import {
 } from '../alerts/index';
 import type { EventPoint } from './types';
 
+/**
+ * Inputs for {@link evaluateOnchainEventAlerts}: the evaluation context plus
+ * injectable delivery, fetch, Notification, and clock hooks.
+ */
 export type EvaluateOnchainEventAlertsOpts = OnchainEvalContext &
   Pick<EvaluateAlertsOptions, 'deliver' | 'fetchImpl' | 'NotificationImpl' | 'now'>;
 
@@ -74,11 +78,11 @@ export function toOnchainEvalEvents(
 
 function eventAbsPctOrZero(event: OnchainEvalEvent): number {
   const p = event.payload;
-  if (p && typeof p.absPct === 'number' && Number.isFinite(p.absPct)) {
-    return p.absPct;
+  if (p && typeof p['absPct'] === 'number' && Number.isFinite(p['absPct'])) {
+    return p['absPct'];
   }
-  if (p && typeof p.pctChange === 'number' && Number.isFinite(p.pctChange)) {
-    return Math.abs(p.pctChange);
+  if (p && typeof p['pctChange'] === 'number' && Number.isFinite(p['pctChange'])) {
+    return Math.abs(p['pctChange']);
   }
   return 0;
 }

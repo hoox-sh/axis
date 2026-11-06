@@ -54,6 +54,17 @@ function headerOf(frame: Axb1Frame): Axb1HeaderFields {
   };
 }
 
+/**
+ * Wrap an already-encoded payload in the 32-byte AXB1 envelope.
+ *
+ * The opcode byte is left 0 here — {@link encodeFrame} stamps it.
+ *
+ * @param header Sequence, subscription/session hashes and timestamp to stamp
+ * @param payload Encoded payload; must be 4-byte aligned and under the size cap
+ * @returns The complete envelope bytes
+ * @throws RangeError when the header sets the compressed flag, the payload is
+ *   not a multiple of 4 bytes, or it exceeds {@link AXB1_MAX_PAYLOAD}
+ */
 export function encodeEnvelope(header: Axb1HeaderFields, payload: Uint8Array): Uint8Array {
   const flags = header.hdrFlags ?? 0;
   if (flags & AXB1_HDR_COMPRESSED) {
@@ -230,6 +241,15 @@ function statusCodeByte(code: string): number {
   return i < 0 ? 255 : i;
 }
 
+/**
+ * Encode one frame into a complete AXB1 envelope, payload and header included.
+ *
+ * @param frame Frame to encode; its `opcode` decides the payload layout
+ * @returns The envelope bytes, opcode byte set
+ * @throws RangeError when a column length disagrees with `count`, a string
+ *   field is too long, the price scale is out of range, or the opcode is unknown
+ * @throws TypeError when a member the frame's `mask` promises is missing
+ */
 export function encodeFrame(frame: Axb1Frame): Uint8Array {
   const header = headerOf(frame);
   const w = new BinWriter();

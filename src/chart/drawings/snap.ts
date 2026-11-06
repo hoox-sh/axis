@@ -48,6 +48,7 @@ export interface BarLike {
 /** Price levels on a bar that can attract the pointer. */
 export type SnapTarget = 'open' | 'high' | 'low' | 'close' | 'hl2';
 
+/** Snap configuration: magnet mode, weak-mode pixel tolerance, and attracting levels. */
 export interface SnapOptions {
   mode: MagnetMode;
   /** Pixel tolerance for weak mode (default 10). */
@@ -137,11 +138,7 @@ export function snapToBars(opts: {
     return rawOut;
   }
   // Garbage pointer / chart point — do not invent OHLC snaps
-  if (
-    !Number.isFinite(raw.time) ||
-    !Number.isFinite(raw.price) ||
-    !Number.isFinite(rawXY.y)
-  ) {
+  if (!Number.isFinite(raw.time) || !Number.isFinite(raw.price) || !Number.isFinite(rawXY.y)) {
     return rawOut;
   }
 

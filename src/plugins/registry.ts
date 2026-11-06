@@ -44,7 +44,11 @@ import type {
 } from './types';
 import { createEmitter } from '../utils/emitter';
 
-type Listener = (event: { type: 'registered' | 'unregistered'; kind: PluginKind; id: string }) => void;
+type Listener = (event: {
+  type: 'registered' | 'unregistered';
+  kind: PluginKind;
+  id: string;
+}) => void;
 
 function summarize(p: { id: string; name: string; description?: string; builtIn?: boolean }) {
   return {
@@ -55,6 +59,12 @@ function summarize(p: { id: string; name: string; description?: string; builtIn?
   };
 }
 
+/**
+ * Ordered, per-kind plugin registry — the single place a plugin is looked up
+ * by id. Registration validates the kind's required methods; built-ins cannot
+ * be unregistered unless `allowBuiltIn` is passed. Listeners fire on every
+ * register/unregister so Settings and the Manager can refresh.
+ */
 export class PluginRegistry {
   private _sources = new Map<string, SourcePlugin>();
   private _streams = new Map<string, StreamPlugin>();
@@ -296,7 +306,8 @@ export class PluginRegistry {
     if (!s || typeof s !== 'object') throw new Error('source: not an object');
     if (!s.id || !s.name) throw new Error('source: id and name required');
     if (s.kind !== 'source') throw new Error(`source: kind must be 'source' (got ${s.kind})`);
-    if (typeof s.fetchHistorical !== 'function') throw new Error('source: fetchHistorical() required');
+    if (typeof s.fetchHistorical !== 'function')
+      throw new Error('source: fetchHistorical() required');
   }
 
   private _assertStream(s: StreamPlugin) {

@@ -5,24 +5,18 @@
  * Measure + trading pack — date range, price range, long/short positions.
  */
 
-import { DRAWING_COLORS, type Drawing, type Point, type TwoPointDrawing } from '../../drawing-types';
+import { DRAWING_COLORS, type Drawing, type Point } from '../../drawing-types';
 import { distToSegment, nearRectEdge } from '../geometry';
 import { positionStopPrice, riskRewardOf, showStatsOf } from '../tool-settings';
 import { registerToolHandler } from './registry';
 import {
   clampOpacity,
   clampStrokeWidth,
-  isFinitePoint,
   sanitizePoints,
   sanitizeStrokeColor,
+  asTwoPoint,
 } from './safe';
 
-function asTwo(d: Drawing, kind?: TwoPointDrawing['kind']): TwoPointDrawing | null {
-  if (kind && d.kind !== kind) return null;
-  if (!('p1' in d) || !('p2' in d) || !d.p1 || !d.p2) return null;
-  if (!isFinitePoint(d.p1) || !isFinitePoint(d.p2)) return null;
-  return d as TwoPointDrawing;
-}
 
 // ── Date range (vertical band) ──────────────────────────────────────────────
 
@@ -43,7 +37,7 @@ registerToolHandler({
     };
   },
   paint(d, ctx) {
-    const t = asTwo(d, 'dateRange');
+    const t = asTwoPoint(d, 'dateRange');
     if (!t) return;
     const x1 = ctx.timeToX(t.p1.time);
     const x2 = ctx.timeToX(t.p2.time);
@@ -79,7 +73,7 @@ registerToolHandler({
     }
   },
   hit(d, ctx) {
-    const t = asTwo(d, 'dateRange');
+    const t = asTwoPoint(d, 'dateRange');
     if (!t) return false;
     const x1 = ctx.timeToX(t.p1.time);
     const x2 = ctx.timeToX(t.p2.time);
@@ -109,7 +103,7 @@ registerToolHandler({
     };
   },
   paint(d, ctx) {
-    const t = asTwo(d, 'priceRange');
+    const t = asTwoPoint(d, 'priceRange');
     if (!t) return;
     const y1 = ctx.priceToY(t.p1.price);
     const y2 = ctx.priceToY(t.p2.price);
@@ -145,7 +139,7 @@ registerToolHandler({
     }
   },
   hit(d, ctx) {
-    const t = asTwo(d, 'priceRange');
+    const t = asTwoPoint(d, 'priceRange');
     if (!t) return false;
     const y1 = ctx.priceToY(t.p1.price);
     const y2 = ctx.priceToY(t.p2.price);
@@ -164,7 +158,7 @@ function paintPosition(
   dir: 'long' | 'short',
   kind: 'long' | 'short',
 ) {
-  const t = asTwo(d, kind);
+  const t = asTwoPoint(d, kind);
   if (!t) return;
   const a = ctx.toXY(t.p1);
   const b = ctx.toXY(t.p2);
@@ -233,7 +227,7 @@ function hitPosition(
   ctx: Parameters<NonNullable<import('./registry').ToolHandler['hit']>>[1],
   kind: 'long' | 'short',
 ): boolean {
-  const t = asTwo(d, kind);
+  const t = asTwoPoint(d, kind);
   if (!t) return false;
   const a = ctx.toXY(t.p1);
   const b = ctx.toXY(t.p2);

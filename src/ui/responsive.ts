@@ -35,9 +35,12 @@
 
 import { createSignal } from 'solid-js';
 
+/** Shell layout class derived from the viewport width. */
 export type ViewportMode = 'phone' | 'tablet' | 'desktop';
 
+/** Largest width still treated as `phone` (px, inclusive). */
 export const PHONE_MAX_WIDTH = 767;
+/** Largest width still treated as `tablet` (px, inclusive). */
 export const TABLET_MAX_WIDTH = 1023;
 
 function modeForWidth(width: number): ViewportMode {
@@ -87,13 +90,16 @@ export const viewport = viewportMode;
 /** Reactive `pointer: coarse` (touch-first devices). */
 export const pointerCoarse = coarsePointer;
 
-export const isPhoneViewport = () => viewportMode() === 'phone';
-export const isTabletViewport = () => viewportMode() === 'tablet';
-export const isDesktopViewport = () => viewportMode() === 'desktop';
+/** True on phone widths — the app-style shell (header, tabs, sheets). */
+export const isPhoneViewport = (): boolean => viewportMode() === 'phone';
+/** True on tablet widths — constrained desktop shell with one dock. */
+export const isTabletViewport = (): boolean => viewportMode() === 'tablet';
+/** True on desktop widths — the three-column dock layout. */
+export const isDesktopViewport = (): boolean => viewportMode() === 'desktop';
 /**
  * Tablet left/right docks overlay the chart (in-flow width 0 + negative margin)
  * instead of shrinking it. Phone sheets still win over this.
  */
-export const isTabletSideDockOverlay = () => isTabletViewport();
+export const isTabletSideDockOverlay = (): boolean => isTabletViewport();
 /** True when hover-gated UI should be replaced with tap equivalents. */
-export const isTouchPointer = () => coarsePointer();
+export const isTouchPointer = (): boolean => coarsePointer();

@@ -108,7 +108,7 @@ const DragHandle: Component<{
 );
 
 /** Watchlist price ticker marquee band. */
-export const PriceTicker: Component = () => {
+export const PriceTicker: Component = () : JSX.Element => {
   const [quotes, setQuotes] = createSignal<Record<string, QuoteUpdate>>({});
   const [paused, setPaused] = createSignal(false);
   const [pinned, setPinned] = createSignal<Set<string>>(new Set());

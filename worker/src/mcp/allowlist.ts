@@ -40,10 +40,7 @@ export const ALLOWLIST_EXACT: ReadonlyArray<readonly [string, string]> = [
 ];
 
 /** GET-only path prefixes. */
-export const ALLOWLIST_PREFIX_GET = [
-  '/api/onchain/',
-  '/api/market/',
-] as const;
+export const ALLOWLIST_PREFIX_GET = ['/api/onchain/', '/api/market/'] as const;
 
 /**
  * `/api/scripts/:id`, `/api/scripts/:id/versions`, `/api/scripts/:id/versions/:rev`,
@@ -52,6 +49,12 @@ export const ALLOWLIST_PREFIX_GET = [
  */
 const SCRIPT_ID = /^[A-Za-z0-9._-]{1,80}$/;
 
+/**
+ * Verdict for one attempted MCP `axis_request`.
+ *
+ * `method` and `path` are echoed after normalization so the caller can log what was
+ * actually judged; `reason` is set only on rejection and is safe to show to a client.
+ */
 export interface AllowlistDecision {
   ok: boolean;
   method: string;
@@ -100,7 +103,9 @@ function scriptsAllowed(method: string, path: string): boolean {
  * Query strings are not part of the decision (handlers validate their own keys).
  */
 export function allowWorkerRequest(methodRaw: unknown, pathRaw: unknown): AllowlistDecision {
-  const method = String(methodRaw || 'GET').trim().toUpperCase();
+  const method = String(methodRaw || 'GET')
+    .trim()
+    .toUpperCase();
   const path = normalizePath(String(pathRaw || ''));
   if (!path) {
     return { ok: false, method, path: String(pathRaw || ''), reason: 'invalid path' };

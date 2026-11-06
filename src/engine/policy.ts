@@ -63,6 +63,7 @@ export const DEFAULT_DATA_PLANE_POLICY: Readonly<DataPlanePolicy> = {
 /** How an engine participates in the data plane (final/plan.mdx §5). */
 export type EngineProfile = 'stream' | 'calculator';
 
+/** Capability subset that decides the profile — only the advertised `live_stream` flag. */
 export interface EngineProfileCaps {
   liveStream?: boolean;
 }
@@ -75,9 +76,7 @@ export interface EngineProfileCaps {
  * while health is still loading — fails open to `calculator` (bars-in), so the
  * default flip can never strand the chart without data.
  */
-export function profileForCapabilities(
-  caps: EngineProfileCaps | null | undefined,
-): EngineProfile {
+export function profileForCapabilities(caps: EngineProfileCaps | null | undefined): EngineProfile {
   return caps?.liveStream === true ? 'stream' : 'calculator';
 }
 

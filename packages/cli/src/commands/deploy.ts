@@ -5,22 +5,18 @@
  * axis deploy — Worker and/or Cloudflare Pages
  */
 
-import { existsSync } from "node:fs";
-import type { Command } from "commander";
-import { getPaths } from "../utils/paths.js";
-import { run, runWrangler } from "../utils/run.js";
-import {
-  defaultWorkerUrl,
-  healthFeatures,
-  probeHealth,
-} from "../services/health.js";
+import { existsSync } from 'node:fs';
+import type { Command } from 'commander';
+import { getPaths } from '../utils/paths.js';
+import { run, runWrangler } from '../utils/run.js';
+import { defaultWorkerUrl, healthFeatures, probeHealth } from '../services/health.js';
 import {
   deployOpenKeysViolation,
   getKvBindingId,
   getTomlVar,
   hasD1DbBinding,
-} from "../services/wrangler-toml.js";
-import { applyScriptsSchema, printCloudStorageNextSteps } from "./setup.js";
+} from '../services/wrangler-toml.js';
+import { applyScriptsSchema, printCloudStorageNextSteps } from './setup.js';
 import {
   CLIError,
   ExitCode,
@@ -31,62 +27,77 @@ import {
   printWarn,
   wrapAction,
   type GlobalOpts,
-} from "../utils/format.js";
+} from '../utils/format.js';
 
-const PAGES_PROJECT = "axis";
+const PAGES_PROJECT = 'axis';
 
 /** Last workers.dev URL printed by `wrangler deploy`. */
 export function parseDeployedWorkerUrl(output: string): string | undefined {
   const matches = output.match(/https:\/\/[a-z0-9.-]+\.workers\.dev\/?/gi);
   if (!matches?.length) return undefined;
-  return matches[matches.length - 1].replace(/\/$/, "");
+  return matches[matches.length - 1].replace(/\/$/, '');
 }
 
+/**
+ * Deploys the Worker, applying the remote D1 schema first and health-checking after.
+ *
+ * Two guards run before wrangler: a missing `worker/wrangler.toml` aborts, and
+ * {@link deployOpenKeysViolation} refuses a config where D1 is bound without
+ * `API_KEYS` KV while open keys are on. A schema-apply failure is a warning, not a
+ * hard stop, so a schema problem does not block the code deploy.
+ *
+ * @param opts - Global flags; `json` adds a `{ ok, target, url }` line, `quiet` hides
+ *   the wrangler output.
+ * @param flags - `skipHealth` skips the post-deploy probe, `url` overrides the probed
+ *   URL (otherwise parsed from wrangler output, then {@link defaultWorkerUrl}),
+ *   `skipSchema` skips the remote D1 apply.
+ * @returns The URL that was probed or reported.
+ * @throws {CLIError} When the toml is missing (`ExitCode.NOT_FOUND`), the open-keys
+ *   guard trips, or `wrangler deploy` exits non-zero (with wrangler's stderr as the
+ *   hint).
+ */
 export async function deployWorker(
   opts: GlobalOpts,
-  flags: { skipHealth?: boolean; url?: string; skipSchema?: boolean } = {}
+  flags: { skipHealth?: boolean; url?: string; skipSchema?: boolean } = {},
 ): Promise<{ url?: string }> {
   const paths = getPaths();
   if (!existsSync(paths.wranglerToml)) {
     throw new CLIError(
-      "worker/wrangler.toml missing",
+      'worker/wrangler.toml missing',
       ExitCode.NOT_FOUND,
-      "Run: axis setup worker"
+      'Run: axis setup worker',
     );
   }
 
-  printHeader("AXIS deploy worker", opts.quiet);
+  printHeader('AXIS deploy worker', opts.quiet);
 
   const violation = deployOpenKeysViolation({
     d1Bound: hasD1DbBinding(paths.wranglerToml),
-    apiKeysKvBound: Boolean(getKvBindingId(paths.wranglerToml, "API_KEYS")),
-    allowOpenKeys: getTomlVar(paths.wranglerToml, "ALLOW_OPEN_KEYS"),
+    apiKeysKvBound: Boolean(getKvBindingId(paths.wranglerToml, 'API_KEYS')),
+    allowOpenKeys: getTomlVar(paths.wranglerToml, 'ALLOW_OPEN_KEYS'),
   });
   if (violation) {
     throw new CLIError(
-      "Refusing to deploy: open API keys with D1 and no API_KEYS KV",
+      'Refusing to deploy: open API keys with D1 and no API_KEYS KV',
       ExitCode.ERROR,
-      violation
+      violation,
     );
   }
 
   if (!flags.skipSchema) {
     try {
-      printInfo("Applying remote D1 scripts schema…", opts.quiet);
+      printInfo('Applying remote D1 scripts schema…', opts.quiet);
       await applyScriptsSchema(opts, { remote: true });
     } catch (e) {
-      printWarn(
-        `D1 schema not applied: ${e instanceof Error ? e.message : String(e)}`,
-        opts.quiet
-      );
-      printWarn("Fix with: axis setup d1 --remote", opts.quiet);
+      printWarn(`D1 schema not applied: ${e instanceof Error ? e.message : String(e)}`, opts.quiet);
+      printWarn('Fix with: axis setup d1 --remote', opts.quiet);
     }
   }
 
-  printInfo("wrangler deploy…", opts.quiet);
+  printInfo('wrangler deploy…', opts.quiet);
 
   // Always capture so a failure never re-invokes deploy, and so we can parse the URL.
-  const result = await runWrangler(paths.worker, ["deploy"], {
+  const result = await runWrangler(paths.worker, ['deploy'], {
     inherit: false,
     throwOnError: false,
   });
@@ -95,7 +106,7 @@ export async function deployWorker(
     throw new CLIError(
       `Worker deploy failed (exit ${result.code})`,
       ExitCode.ERROR,
-      result.stderr || result.stdout
+      result.stderr || result.stdout,
     );
   }
 
@@ -105,9 +116,7 @@ export async function deployWorker(
   }
 
   const deployedUrl =
-    flags.url ||
-    parseDeployedWorkerUrl(`${result.stdout}\n${result.stderr}`) ||
-    defaultWorkerUrl();
+    flags.url || parseDeployedWorkerUrl(`${result.stdout}\n${result.stderr}`) || defaultWorkerUrl();
 
   if (!flags.skipHealth) {
     const health = await probeHealth(deployedUrl);
@@ -116,38 +125,50 @@ export async function deployWorker(
       const feats = healthFeatures(health.body);
       if (feats.d1 && !feats.keys) {
         printWarn(
-          "D1 is bound but API_KEYS KV is not — /api/scripts returns 503 API_KEYS_REQUIRED",
-          opts.quiet
+          'D1 is bound but API_KEYS KV is not — /api/scripts returns 503 API_KEYS_REQUIRED',
+          opts.quiet,
         );
-        printWarn("Fix: axis setup kv && axis deploy worker", opts.quiet);
+        printWarn('Fix: axis setup kv && axis deploy worker', opts.quiet);
       }
     } else {
       printWarn(
         `Deployed but health check failed: ${health.error || health.status} (${deployedUrl})`,
-        opts.quiet
+        opts.quiet,
       );
     }
   }
 
-  printOk("Worker deployed", opts.quiet);
+  printOk('Worker deployed', opts.quiet);
   if (opts.json) {
-    printJson({ ok: true, target: "worker", url: deployedUrl });
+    printJson({ ok: true, target: 'worker', url: deployedUrl });
   }
   return { url: deployedUrl };
 }
 
+/**
+ * Builds the Vite app and uploads `dist/` to the `axis` Pages project.
+ *
+ * Exactly one deploy attempt is made — wrangler is never retried through a second
+ * tool, because a half-finished upload would then be duplicated.
+ *
+ * @param opts - Global flags; `json` prints `{ ok, target, project }`, `quiet` hides
+ *   build and upload output.
+ * @throws {CLIError} `dist/ missing after build` when the build produced nothing.
+ * @throws {Error} From {@link run} when the build fails, or from {@link runWrangler}
+ *   when the upload fails.
+ */
 export async function deployPages(opts: GlobalOpts): Promise<void> {
   const paths = getPaths();
-  printHeader("AXIS deploy pages", opts.quiet);
+  printHeader('AXIS deploy pages', opts.quiet);
 
-  printInfo("Building Vite app…", opts.quiet);
-  await run("bun", ["run", "build"], {
+  printInfo('Building Vite app…', opts.quiet);
+  await run('bun', ['run', 'build'], {
     cwd: paths.root,
     inherit: !opts.quiet,
   });
 
   if (!existsSync(paths.dist)) {
-    throw new CLIError("dist/ missing after build", ExitCode.ERROR);
+    throw new CLIError('dist/ missing after build', ExitCode.ERROR);
   }
 
   printInfo(`wrangler pages deploy → ${PAGES_PROJECT}…`, opts.quiet);
@@ -156,31 +177,50 @@ export async function deployPages(opts: GlobalOpts): Promise<void> {
   // (see wranglerCmd). A failed deploy is never retried through a second tool.
   await runWrangler(
     paths.worker,
-    ["pages", "deploy", paths.dist, `--project-name=${PAGES_PROJECT}`],
-    { inherit: !opts.quiet }
+    ['pages', 'deploy', paths.dist, `--project-name=${PAGES_PROJECT}`],
+    { inherit: !opts.quiet },
   );
 
-  printOk("Pages deploy finished", opts.quiet);
-  if (opts.json) printJson({ ok: true, target: "pages", project: PAGES_PROJECT });
+  printOk('Pages deploy finished', opts.quiet);
+  if (opts.json) printJson({ ok: true, target: 'pages', project: PAGES_PROJECT });
 }
 
+/**
+ * Deploys the Worker then Pages, then prints the remaining Cloudflare storage steps.
+ *
+ * Pages is skipped when the Worker deploy throws, so a broken backend never ships a
+ * new frontend against it.
+ *
+ * @param opts - Global flags, forwarded to both deploys.
+ * @param flags - Worker-only options (`skipHealth`, `url`, `skipSchema`); Pages has
+ *   none.
+ * @throws {CLIError} Whatever {@link deployWorker} raises.
+ */
 export async function deployAll(
   opts: GlobalOpts,
-  flags: { skipHealth?: boolean; url?: string; skipSchema?: boolean } = {}
+  flags: { skipHealth?: boolean; url?: string; skipSchema?: boolean } = {},
 ): Promise<void> {
   await deployWorker(opts, flags);
   await deployPages(opts);
-  printOk("Deploy all complete", opts.quiet);
-  printCloudStorageNextSteps(opts.quiet, "after-deploy");
+  printOk('Deploy all complete', opts.quiet);
+  printCloudStorageNextSteps(opts.quiet, 'after-deploy');
 }
 
+/**
+ * Registers `axis deploy` plus `worker`, `pages`, and `all`.
+ *
+ * Bare `axis deploy` behaves like `deploy worker`; the subcommands exist so CI can
+ * ship one target at a time.
+ *
+ * @param program - Root commander program to attach the command group to.
+ */
 export function registerDeploy(program: Command): void {
   const deploy = program
-    .command("deploy")
-    .description("Deploy Worker and/or Cloudflare Pages")
-    .option("--skip-health", "Skip post-deploy /health probe")
-    .option("--skip-schema", "Skip remote D1 schema apply before Worker deploy")
-    .option("--url <url>", "Worker URL for health probe")
+    .command('deploy')
+    .description('Deploy Worker and/or Cloudflare Pages')
+    .option('--skip-health', 'Skip post-deploy /health probe')
+    .option('--skip-schema', 'Skip remote D1 schema apply before Worker deploy')
+    .option('--url <url>', 'Worker URL for health probe')
     .action(async function (this: Command) {
       // default: worker
       const o = this.optsWithGlobals() as GlobalOpts & {
@@ -198,11 +238,11 @@ export function registerDeploy(program: Command): void {
     });
 
   deploy
-    .command("worker")
-    .description("Deploy Cloudflare Worker (worker-axis)")
-    .option("--skip-health", "Skip post-deploy /health probe")
-    .option("--skip-schema", "Skip remote D1 schema apply before Worker deploy")
-    .option("--url <url>", "Worker URL for health probe")
+    .command('worker')
+    .description('Deploy Cloudflare Worker (worker-axis)')
+    .option('--skip-health', 'Skip post-deploy /health probe')
+    .option('--skip-schema', 'Skip remote D1 schema apply before Worker deploy')
+    .option('--url <url>', 'Worker URL for health probe')
     .action(async function (this: Command) {
       const o = this.optsWithGlobals() as GlobalOpts & {
         skipHealth?: boolean;
@@ -219,16 +259,16 @@ export function registerDeploy(program: Command): void {
     });
 
   deploy
-    .command("pages")
-    .description("Build Vite app and deploy Cloudflare Pages")
+    .command('pages')
+    .description('Build Vite app and deploy Cloudflare Pages')
     .action(wrapAction(deployPages));
 
   deploy
-    .command("all")
-    .description("Deploy Worker then Pages (applies D1 schema first)")
-    .option("--skip-health", "Skip post-deploy /health probe")
-    .option("--skip-schema", "Skip remote D1 schema apply")
-    .option("--url <url>", "Worker URL for health probe")
+    .command('all')
+    .description('Deploy Worker then Pages (applies D1 schema first)')
+    .option('--skip-health', 'Skip post-deploy /health probe')
+    .option('--skip-schema', 'Skip remote D1 schema apply')
+    .option('--url <url>', 'Worker URL for health probe')
     .action(async function (this: Command) {
       const o = this.optsWithGlobals() as GlobalOpts & {
         skipHealth?: boolean;

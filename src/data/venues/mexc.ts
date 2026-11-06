@@ -30,6 +30,7 @@ import {
   type SignedRequest,
 } from './types';
 
+/** MEXC public REST origin (`/api/v3/…`). */
 export const MEXC_BASE = 'https://api.mexc.com';
 
 /** Spot klines path (Binance-shaped arrays). */
@@ -76,13 +77,21 @@ export function mexcWsKlineInterval(interval: string): string {
   return m[interval] || 'Day1';
 }
 
+/**
+ * Build a MEXC signed GET: appends `timestamp`, a defaulted `recvWindow`, and a
+ * hex HMAC-SHA256 `signature` over the query string. The API key travels in the
+ * `X-MEXC-APIKEY` header, never in the URL.
+ *
+ * @param input - Path, query, and vault secrets; `timestampMs` overrides `Date.now()`.
+ * @throws DOMException when Web Crypto cannot import the secret.
+ */
 export async function signMexc(input: SignInput): Promise<SignedRequest> {
   const timestamp = resolveTimestampMs(input);
   const params: Record<string, string | number | undefined> = {
     ...input.query,
     timestamp,
   };
-  if (params.recvWindow === undefined) params.recvWindow = DEFAULT_RECV_WINDOW;
+  if (params['recvWindow'] === undefined) params['recvWindow'] = DEFAULT_RECV_WINDOW;
 
   const queryString = buildQueryString(params);
   const raw = await hmacDigest('SHA-256', encodeUtf8(input.secret), encodeUtf8(queryString));

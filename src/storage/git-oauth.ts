@@ -30,6 +30,7 @@
 import type { GitProvider } from './git-config';
 import { engineFamilyForText } from '../plugins/engine-family';
 
+/** Device-authorization start payload, with the user code the user must enter. */
 export type DeviceStartResult = {
   provider: GitProvider;
   device_code: string;
@@ -40,6 +41,10 @@ export type DeviceStartResult = {
   interval: number;
 };
 
+/**
+ * One poll result: either a usable `access_token`, or a `pending` status whose
+ * `error` says whether to keep polling (`authorization_pending`, `slow_down`).
+ */
 export type DevicePollResult =
   | {
       status: 'success';
@@ -55,6 +60,7 @@ export type DevicePollResult =
       interval?: number;
     };
 
+/** Normalized forge profile returned after device flow succeeds. */
 export type GitUserInfo = {
   login: string;
   name?: string;
@@ -70,10 +76,7 @@ export type GitUserInfo = {
  *
  * Never accepts forge hosts (github.com / gitlab.com) as the proxy.
  */
-export function isOAuthProxyBase(
-  endpoint: string,
-  opts?: { sameOrigin?: string },
-): boolean {
+export function isOAuthProxyBase(endpoint: string, opts?: { sameOrigin?: string }): boolean {
   const e = (endpoint || '').trim().toLowerCase();
   if (!e) return false;
   // Forges are never OAuth proxies for AXIS
@@ -143,10 +146,7 @@ export function defaultVerificationUri(provider: GitProvider): string {
  * Allowlist forge verification URLs before `window.open` / anchor href.
  * Returns null when the URI must not be opened (phishing risk).
  */
-export function sanitizeVerificationUri(
-  uri: string,
-  provider: GitProvider,
-): string | null {
+export function sanitizeVerificationUri(uri: string, provider: GitProvider): string | null {
   const raw = String(uri || '').trim();
   if (!raw) return null;
   let u: URL;
@@ -169,9 +169,7 @@ export function sanitizeVerificationUri(
 
 function requireTrustedProxy(base: string): string {
   const sameOrigin =
-    typeof window !== 'undefined' && window.location?.origin
-      ? window.location.origin
-      : undefined;
+    typeof window !== 'undefined' && window.location?.origin ? window.location.origin : undefined;
   if (!isOAuthProxyBase(base, { sameOrigin })) {
     throw new Error(
       `OAuth proxy is not trusted: ${base}. Use AXIS Worker, Pro API (:5002), ` +
@@ -182,9 +180,9 @@ function requireTrustedProxy(base: string): string {
 }
 
 function oauthErrorMessage(data: Record<string, unknown>, status: number, url: string): string {
-  const code = String(data.code || '');
+  const code = String(data['code'] || '');
   const msg = String(
-    data.message || data.error_description || data.error || `HTTP ${status}`,
+    data['message'] || data['error_description'] || data['error'] || `HTTP ${status}`,
   );
   if (code === 'NOT_FOUND' || status === 404 || /not found/i.test(msg)) {
     return (
@@ -203,11 +201,7 @@ function oauthErrorMessage(data: Record<string, unknown>, status: number, url: s
   return msg;
 }
 
-async function postJson<T>(
-  base: string,
-  path: string,
-  body: Record<string, unknown>,
-): Promise<T> {
+async function postJson<T>(base: string, path: string, body: Record<string, unknown>): Promise<T> {
   const url = `${base.replace(/\/$/, '')}${path}`;
   let res: Response;
   try {
@@ -224,7 +218,7 @@ async function postJson<T>(
     );
   }
   const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-  if (!res.ok || data.status === 'error') {
+  if (!res.ok || data['status'] === 'error') {
     throw new Error(oauthErrorMessage(data, res.status, url));
   }
   return data as T;
@@ -257,8 +251,7 @@ export async function startDeviceFlow(opts: {
     ? String(data.verification_uri_complete)
     : undefined;
   const safeUri =
-    sanitizeVerificationUri(rawUri, opts.provider) ||
-    defaultVerificationUri(opts.provider);
+    sanitizeVerificationUri(rawUri, opts.provider) || defaultVerificationUri(opts.provider);
   const safeComplete = rawComplete
     ? sanitizeVerificationUri(rawComplete, opts.provider) || undefined
     : undefined;
@@ -360,9 +353,11 @@ export async function waitForDeviceToken(opts: {
       continue;
     }
     if (TERMINAL_ERRORS.has(err)) {
-      throw new Error(polled.status === 'pending' && polled.error_description
-        ? polled.error_description
-        : `Authorization failed: ${err}`);
+      throw new Error(
+        polled.status === 'pending' && polled.error_description
+          ? polled.error_description
+          : `Authorization failed: ${err}`,
+      );
     }
     // authorization_pending — keep polling
   }

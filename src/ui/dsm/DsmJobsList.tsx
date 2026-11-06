@@ -34,7 +34,9 @@ import {
   jobTotals,
   type JobFilter,
 } from './jobs';
+import { bindSlashToSearch } from '../focus-search';
 
+/** Options for embedding the jobs list: test-id prefix, batch actions, message sink. */
 export interface DsmJobsListProps {
   /** Test-id prefix for the controls (panel and page coexist in the DOM). */
   testIdPrefix?: string;
@@ -44,7 +46,11 @@ export interface DsmJobsListProps {
   onNotify?: (msg: string) => void;
 }
 
-export const DsmJobsList: Component<DsmJobsListProps> = (props) => {
+/**
+ * Backfill job list with filter/search, per-job cards, and batch actions; it reads
+ * the manager store directly, so rows update as pages land.
+ */
+export const DsmJobsList: Component<DsmJobsListProps> = (props): JSX.Element => {
   const tid = (suffix: string) => `${props.testIdPrefix ?? 'axis-datasource'}-${suffix}`;
 
   const [applyingId, setApplyingId] = createSignal<string | null>(null);
@@ -63,15 +69,7 @@ export const DsmJobsList: Component<DsmJobsListProps> = (props) => {
 
   // `/` focuses the job search while this list is mounted.
   onMount(() => {
-    const onSlash = (e: KeyboardEvent) => {
-      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
-      const target = e.target as HTMLElement | null;
-      if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
-      e.preventDefault();
-      searchInput?.focus();
-    };
-    window.addEventListener('keydown', onSlash);
-    onCleanup(() => window.removeEventListener('keydown', onSlash));
+    onCleanup(bindSlashToSearch(() => searchInput));
   });
 
   const filterCounts = createMemo(() => countJobsByFilter(dataSourceManagerState.jobs));

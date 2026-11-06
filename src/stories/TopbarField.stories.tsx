@@ -15,10 +15,12 @@ const meta: Meta<typeof TopbarField> = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+/** Mono text field as used for the topbar symbol. */
 export const SymbolInput: Story = {
   args: { label: 'Symbol', mono: true, value: 'BTCUSDT', placeholder: 'BTCUSDT' },
 };
 
+/** Select variant holding the interval options. */
 export const IntervalSelect: Story = {
   args: { label: 'Interval', variant: 'select', value: '1h' },
   render: () => (
@@ -31,10 +33,12 @@ export const IntervalSelect: Story = {
   ),
 };
 
+/** Read-only static value (venue label). */
 export const Static: Story = {
   args: { label: 'Source', variant: 'static', children: 'Binance · WS' },
 };
 
+/** Disabled text field. */
 export const Disabled: Story = {
   args: { label: 'Symbol', disabled: true, value: 'BTCUSDT' },
 };

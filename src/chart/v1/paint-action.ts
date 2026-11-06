@@ -28,6 +28,7 @@
 
 import type { BarAppendResult } from '../../store';
 
+/** Which Lightweight Charts write a live append needs: skip, `update`, or full `setData`. */
 export type PaintAction = 'none' | 'update' | 'setData';
 
 /** Chart write for one live-append verdict. Snapshot/resync is not a verdict. */

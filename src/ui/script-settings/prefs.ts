@@ -33,11 +33,13 @@ function sanitize(ids: readonly unknown[]): string[] {
   return out;
 }
 
+/** Collapsed Pine `group=` ids read from localStorage; empty when unavailable. */
 export function readCollapsedGroups(): string[] {
   const raw = getJson<unknown>(SCRIPT_SETTINGS_COLLAPSED_KEY);
   return Array.isArray(raw) ? sanitize(raw) : [];
 }
 
+/** Persist collapsed group ids; returns the list that was written. */
 export function writeCollapsedGroups(ids: readonly string[]): string[] {
   const next = sanitize(ids);
   setJson(SCRIPT_SETTINGS_COLLAPSED_KEY, next);

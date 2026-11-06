@@ -106,9 +106,9 @@ function engineConnection(): EngineConnection | null {
   } catch {
     cfg = {};
   }
-  const endpoint = String(cfg.endpoint || '').trim() || String(store.endpoint || '').trim();
+  const endpoint = String(cfg['endpoint'] || '').trim() || String(store.endpoint || '').trim();
   if (!endpoint) return null;
-  return { endpoint, apiKey: String(cfg.apiKey || '') };
+  return { endpoint, apiKey: String(cfg['apiKey'] || '') };
 }
 
 function requireEngineConnection(): EngineConnection {
@@ -135,12 +135,12 @@ function chartSeriesKeyObject(): DataSeriesKey {
 function keyFromPayload(p: Record<string, unknown>): DataSeriesKey {
   const key: DataSeriesKey = {
     exchange:
-      String(p.exchange || store.exchange || 'binance')
+      String(p['exchange'] || store.exchange || 'binance')
         .trim()
         .toLowerCase() || 'binance',
-    market: pyneMarket(p.market || store.provider?.market),
-    symbol: pairFormSymbol(String(p.symbol || store.symbol || '').trim(), FALLBACK_MAJORS),
-    interval: String(p.interval || store.interval || '1m').trim() || '1m',
+    market: pyneMarket(p['market'] || store.provider?.market),
+    symbol: pairFormSymbol(String(p['symbol'] || store.symbol || '').trim(), FALLBACK_MAJORS),
+    interval: String(p['interval'] || store.interval || '1m').trim() || '1m',
   };
   if (!key.symbol) fail('NO_SYMBOL', 'symbol required (payload symbol, or load a chart)');
   return key;
@@ -181,8 +181,9 @@ function chartFeedChip(): Record<string, unknown> | null {
     wanted = '';
   }
   const entries = Object.entries(feeds);
+  const wantedFeed = wanted ? feeds[wanted] : undefined;
   const hit =
-    (wanted && feeds[wanted] ? ([wanted, feeds[wanted]] as const) : null) ||
+    (wanted && wantedFeed ? ([wanted, wantedFeed] as const) : null) ||
     entries.find(([k]) => k.includes(symbol) && k.endsWith(`|${interval}`)) ||
     (entries.length === 1 ? entries[0] : null);
   if (!hit) return null;
@@ -273,8 +274,9 @@ export function chartBarsView(p: Record<string, unknown>): Record<string, unknow
   const bars = (store.bars || []) as Bar[];
   const interval = String(store.interval || '1m');
   const stepSec = Math.max(1, intervalToSec(interval) || 60);
-  const limit = clampInt(p.limit, 1, BAR_VIEW_MAX, 50);
-  const headN = p.head === undefined || p.head === null ? 0 : clampInt(p.head, 1, BAR_VIEW_MAX, 0);
+  const limit = clampInt(p['limit'], 1, BAR_VIEW_MAX, 50);
+  const headN =
+    p['head'] === undefined || p['head'] === null ? 0 : clampInt(p['head'], 1, BAR_VIEW_MAX, 0);
   const now = nowSec();
   const wallSlot = now - (now % stepSec);
   const last = bars.length ? bars[bars.length - 1] : undefined;
@@ -285,7 +287,7 @@ export function chartBarsView(p: Record<string, unknown>): Record<string, unknow
     summary: barSummary(bars),
     tail: boundedBarRows(bars, limit),
     ...(headN ? { head: boundedBarRows(bars.slice(0, headN), headN) } : {}),
-    ...(p.gaps === false ? {} : { gaps: findGaps(bars, stepSec) }),
+    ...(p['gaps'] === false ? {} : { gaps: findGaps(bars, stepSec) }),
     formingBar: last ? { time: last.time, current: last.time === wallSlot } : null,
   };
 }
@@ -357,7 +359,7 @@ export async function chartLagView(p: Record<string, unknown>): Promise<Record<s
   }
 
   let engine: Record<string, unknown>;
-  if (p.engine === false) {
+  if (p['engine'] === false) {
     engine = { skipped: true, reason: 'disabled' };
   } else {
     const conn = engineConnection();
@@ -382,7 +384,7 @@ export async function chartLagView(p: Record<string, unknown>): Promise<Record<s
     }
   }
 
-  const engineNewest = typeof engine.newest === 'number' ? engine.newest : null;
+  const engineNewest = typeof engine['newest'] === 'number' ? engine['newest'] : null;
   return {
     now: { ms: nowMs, sec: now },
     interval,
@@ -450,7 +452,7 @@ export function enginePlaneView(): Record<string, unknown> {
   } catch {
     cfg = {};
   }
-  const endpoint = String(cfg.endpoint || '').trim() || String(store.endpoint || '').trim();
+  const endpoint = String(cfg['endpoint'] || '').trim() || String(store.endpoint || '').trim();
   let caps: unknown = null;
   try {
     caps = getCachedEngineCapabilities();
@@ -461,8 +463,8 @@ export function enginePlaneView(): Record<string, unknown> {
     id: getActiveEngineId(),
     engine: store.engine,
     endpoint: endpoint || null,
-    hasApiKey: Boolean(String(cfg.apiKey || '').trim()),
-    mode: cfg.mode != null && cfg.mode !== '' ? String(cfg.mode) : null,
+    hasApiKey: Boolean(String(cfg['apiKey'] || '').trim()),
+    mode: cfg['mode'] != null && cfg['mode'] !== '' ? String(cfg['mode']) : null,
     configFields: Object.keys(cfg).sort(),
     capabilities: caps,
     route: safeRoute(),
@@ -524,7 +526,7 @@ export async function engineTickView(p: Record<string, unknown>): Promise<Record
   const conn = requireEngineConnection();
   const interval = key.interval;
   const chartLast = newestBarTime(store.bars);
-  const marketNow = Math.max(0, Math.floor(num(p.marketNow) ?? chartLast));
+  const marketNow = Math.max(0, Math.floor(num(p['marketNow']) ?? chartLast));
   const before = await seriesStatusOrNull(conn, key);
   const captured: { tick: SeriesDriveTick | null } = { tick: null };
   const started = Date.now();
@@ -566,7 +568,7 @@ export async function engineRepairView(
   const conn = requireEngineConnection();
   const interval = key.interval;
   const chartLast = newestBarTime(store.bars);
-  const historyBars = num(p.historyBars);
+  const historyBars = num(p['historyBars']);
   const before = await seriesStatusOrNull(conn, key);
   const started = Date.now();
   const result = await repairStaleEngineSeries({
@@ -598,7 +600,7 @@ export async function engineRepairView(
  * what it could not drop.
  */
 export async function engineFlushView(
-  p: Record<string, unknown>,
+  _p: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
   const started = Date.now();
   const flushed = await flushLocalAndEngine();
@@ -661,7 +663,7 @@ export async function streamResetView(
 ): Promise<Record<string, unknown>> {
   const reset = resetStreamWire();
   let resubscribe: Record<string, unknown> = { requested: false, reason: 'disabled' };
-  if (p.resubscribe !== false) {
+  if (p['resubscribe'] !== false) {
     if (!store.live?.active) {
       resubscribe = { requested: false, reason: 'live-off' };
     } else if (!streamRouteActive()) {

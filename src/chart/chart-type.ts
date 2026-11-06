@@ -102,6 +102,12 @@ export function normalizeChartType(raw: unknown): ChartType {
   return DEFAULT_CHART_TYPE;
 }
 
+/**
+ * Catalog entry for a chart style.
+ *
+ * @param id chart type; unknown ids fall back to the first entry (candles)
+ * @returns the matching {@link ChartTypeInfo}
+ */
 export function chartTypeInfo(id: ChartType): ChartTypeInfo {
   return CHART_TYPES.find((t) => t.id === id) ?? CHART_TYPES[0]!;
 }
@@ -173,6 +179,13 @@ function haCandleFrom(
   };
 }
 
+/**
+ * Heikin-Ashi transform of `bars`, seeding the legacy module-global live cache.
+ * Prefer {@link toHeikinAshiInto} with a per-chart holder in multi-chart use.
+ *
+ * @param bars OHLCV source rows; non-finite rows are dropped first
+ * @returns new bars carrying HA open/high/low/close (volume and closed flag kept)
+ */
 export function toHeikinAshi(bars: readonly Bar[]): Bar[] {
   return toHeikinAshiInto(bars, undefined);
 }
@@ -251,6 +264,7 @@ export type ValueDatum = {
   value: number;
 };
 
+/** Row handed to LWC: OHLC for candle/bar types, close-only value for line/area/baseline. */
 export type PriceSeriesDatum = OhlcDatum | ValueDatum;
 
 /** True when a bar is safe for LWC candlestick / line `setData`. */

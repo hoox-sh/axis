@@ -26,13 +26,9 @@
  */
 
 import { type Component, For, Show, createMemo } from 'solid-js';
-import {
-  store,
-  listRunResultOptions,
-  setResultsFocusId,
-  EDITOR_RUN_KEY,
-} from '../store';
+import { store, listRunResultOptions, setResultsFocusId, EDITOR_RUN_KEY } from '../store';
 
+/** Props for the run-result selector: test id, extra class, and compact/studio sizing. */
 export type ScriptRunSelectProps = {
   /** data-testid prefix (default axis-run-select) */
   testId?: string;
@@ -42,7 +38,7 @@ export type ScriptRunSelectProps = {
 };
 
 /** Compact &lt;select&gt; of applied scripts (+ Editor) for run-bound panels. */
-export const ScriptRunSelect: Component<ScriptRunSelectProps> = (props) => {
+export const ScriptRunSelect: Component<ScriptRunSelectProps> = (props): JSX.Element => {
   const testId = () => props.testId || 'axis-run-select';
   const studio = () => props.variant === 'studio';
   const options = createMemo(() => listRunResultOptions());

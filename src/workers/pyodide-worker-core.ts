@@ -38,6 +38,7 @@ import type {
   PyodideWorkerResponse,
 } from './pyodide-protocol';
 
+/** Side-effect seams the worker host supplies: import pyodide.js and post replies. */
 export interface PyodideWorkerCoreDeps {
   /** Import `pyodide.js` from `indexUrl` and return a bare runtime (no wheels yet). */
   importPyodide: (indexUrl: string) => Promise<PyodideLike>;
@@ -100,7 +101,9 @@ export function createPyodideWorkerCore(
         deps.post({ id, type: 'result', resultJson });
         return;
       }
-      throw new Error(`Unknown Pyodide worker request type: ${String((req as { type?: unknown }).type)}`);
+      throw new Error(
+        `Unknown Pyodide worker request type: ${String((req as { type?: unknown }).type)}`,
+      );
     } catch (err: unknown) {
       deps.post({ id, type: 'error', message: formatPyodideBridgeError(err) });
     }

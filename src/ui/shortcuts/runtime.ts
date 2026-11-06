@@ -44,22 +44,19 @@ type Action = (event: KeyboardEvent) => void | Promise<void>;
 const actions = new Map<ShortcutId, Action>();
 
 /**
- * Register the side effect for a shortcut id. Returns a cleanup that restores
- * the previous registration (or removes it if none existed) — safe to call
- * more than once.
- */
-/**
  * Invoke a registered shortcut action by id (MCP / tests — no keyboard event).
  * Returns false when nothing is registered for `id`.
  */
 export function fireShortcutById(id: string): boolean {
   const action = actions.get(id as ShortcutId);
   if (!action) return false;
+  // Synthetic event: actions only read `defaultPrevented` and call the two
+  // cancel helpers, so a full `KeyboardEvent` is not constructed here.
   const fake = {
     preventDefault() {},
     stopPropagation() {},
     defaultPrevented: false,
-  } as unknown as KeyboardEvent;
+  } as KeyboardEvent;
   try {
     void action(fake);
   } catch (err) {
@@ -69,6 +66,16 @@ export function fireShortcutById(id: string): boolean {
   return true;
 }
 
+/**
+ * Bind a side effect to a shortcut id so the dispatcher can run it. Last
+ * registration wins; the returned cleanup restores the previous action (or
+ * clears the slot) only if this registration is still the active one, so
+ * overlapping component mounts cannot clobber each other.
+ *
+ * @param id - Shortcut id from {@link ShortcutId} to bind.
+ * @param action - Callback invoked with the triggering `KeyboardEvent`; may be async.
+ * @returns Cleanup that unregisters this action.
+ */
 export function registerShortcut(id: ShortcutId, action: Action): () => void {
   const prev = actions.get(id);
   actions.set(id, action);

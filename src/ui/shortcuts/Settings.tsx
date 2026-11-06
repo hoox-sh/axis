@@ -57,7 +57,7 @@ const SCOPE_FILTERS: Array<{ id: 'all' | ShortcutDef['scope']; label: string }> 
 ];
 
 /** Settings → Keyboard: record / reset shortcut bindings. */
-export const KeyboardSettingsPanel: Component = () => {
+export const KeyboardSettingsPanel: Component = () : JSX.Element => {
   const overrides = () => store.shortcuts?.overrides ?? {};
   const platform = detectPlatform();
   const [scopeFilter, setScopeFilter] = createSignal<'all' | ShortcutDef['scope']>('all');

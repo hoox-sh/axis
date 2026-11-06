@@ -30,6 +30,7 @@ import { type Component, Show, createSignal } from 'solid-js';
 import { formatErrorMessage } from './boot-errors';
 import { exportErrorDiagnosticNow } from './error-share';
 
+/** Props for the recoverable error surface: the error, reset hook, and display variant. */
 export interface ErrorFallbackProps {
   error: unknown;
   /** Solid ErrorBoundary reset — re-renders children. */
@@ -42,12 +43,11 @@ export interface ErrorFallbackProps {
 }
 
 /** Void-theme recoverable error surface. */
-export const ErrorFallback: Component<ErrorFallbackProps> = (props) => {
+export const ErrorFallback: Component<ErrorFallbackProps> = (props): JSX.Element => {
   const [exporting, setExporting] = createSignal(false);
   const variant = () => props.variant || 'page';
   const title = () =>
-    props.title ||
-    (variant() === 'inline' ? 'Chart failed' : 'Something went wrong');
+    props.title || (variant() === 'inline' ? 'Chart failed' : 'Something went wrong');
   const message = () => formatErrorMessage(props.error);
 
   const reload = () => {
@@ -76,9 +76,7 @@ export const ErrorFallback: Component<ErrorFallbackProps> = (props) => {
         data-source={props.source || undefined}
         role="alert"
       >
-        <div class="text-[11px] tracking-[0.18em] uppercase font-medium text-red">
-          {title()}
-        </div>
+        <div class="text-[11px] tracking-[0.18em] uppercase font-medium text-red">{title()}</div>
         <p class="text-[11px] text-text-dim font-mono text-center max-w-md break-words">
           {message()}
         </p>
@@ -123,16 +121,14 @@ export const ErrorFallback: Component<ErrorFallbackProps> = (props) => {
       data-source={props.source || undefined}
       role="alert"
     >
-      <div class="text-accent text-[10px] tracking-[0.22em] uppercase font-medium">
-        AXIS
-      </div>
+      <div class="text-accent text-[10px] tracking-[0.22em] uppercase font-medium">AXIS</div>
       <div class="text-sm font-medium text-red">{title()}</div>
       <p class="text-[12px] text-text-dim font-mono text-center max-w-lg break-words leading-relaxed">
         {message()}
       </p>
       <p class="text-[11px] text-text-faint text-center max-w-md">
-        The workspace hit an unexpected error. Retry to remount, or reload the
-        page. Share data exports a redacted diagnostic (no bars or scripts).
+        The workspace hit an unexpected error. Retry to remount, or reload the page. Share data
+        exports a redacted diagnostic (no bars or scripts).
       </p>
       <div class="flex items-center gap-2 mt-2 flex-wrap justify-center">
         <Show when={props.reset}>

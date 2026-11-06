@@ -34,11 +34,9 @@
  * `eraser`) are rejected. Does not touch DOM / LWC / Pine plots.
  */
 
-import {
-  DRAWING_COLORS,
-  type DrawingKind,
-  type Point,
-} from '../drawing-types';
+import { finiteNumber } from '../../utils/validate';
+
+import { DRAWING_COLORS, type DrawingKind, type Point } from '../drawing-types';
 import {
   DRAWING_POINTS_MAX,
   DRAWING_TEXT_MAX,
@@ -69,8 +67,10 @@ const POINTS_SCAN_MAX = DRAWING_POINTS_MAX * 4;
 
 // ── Unified model (matches planned ./types) ──────────────────────────────
 
+/** SVG stroke pattern for a persisted drawing. */
 export type DrawingLineStyle = 'solid' | 'dashed' | 'dotted';
 
+/** Paint style of a persisted drawing: color, width, dash, opacity, extend flags. */
 export interface DrawingStyle {
   color: string;
   width: number;
@@ -82,6 +82,7 @@ export interface DrawingStyle {
   fontSize?: number;
 }
 
+/** Free-form drawing metadata; `text` is the visible label for text-like kinds. */
 export interface DrawingMeta {
   text?: string;
   [key: string]: unknown;
@@ -258,20 +259,12 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 }
 
 /** Coerce number | numeric string to a finite number; else null. */
-function asFiniteNumber(v: unknown): number | null {
-  if (typeof v === 'number' && Number.isFinite(v)) return v;
-  if (typeof v === 'string' && v.trim() !== '') {
-    const n = Number(v);
-    if (Number.isFinite(n)) return n;
-  }
-  return null;
-}
 
 /** Parse `{ time, price }` from unknown JSON; both must be finite (rejects NaN/Infinity). */
 function normalizePoint(raw: unknown): Point | null {
   if (!isRecord(raw)) return null;
-  const time = asFiniteNumber(raw.time);
-  const price = asFiniteNumber(raw.price);
+  const time = finiteNumber(raw['time']);
+  const price = finiteNumber(raw['price']);
   if (time == null || price == null) return null;
   return { time, price };
 }
@@ -293,12 +286,9 @@ function minPointsFor(kind: DrawingKind): number {
  * Prefer top-level `text`, then `meta.text` (legacy stores either).
  * Sanitized + length-capped.
  */
-function pickText(
-  raw: Record<string, unknown>,
-  meta: DrawingMeta | undefined,
-): string | undefined {
+function pickText(raw: Record<string, unknown>, meta: DrawingMeta | undefined): string | undefined {
   let candidate: unknown;
-  if (typeof raw.text === 'string' && raw.text.length > 0) candidate = raw.text;
+  if (typeof raw['text'] === 'string' && raw['text'].length > 0) candidate = raw['text'];
   else if (meta && typeof meta.text === 'string' && meta.text.length > 0) {
     candidate = meta.text;
   } else {
@@ -319,25 +309,23 @@ function buildStyle(
   styleRaw: Record<string, unknown> | undefined,
 ): DrawingStyle {
   const colorRaw =
-    (typeof styleRaw?.color === 'string' && styleRaw.color) ||
-    (typeof raw.color === 'string' && raw.color) ||
+    (typeof styleRaw?.['color'] === 'string' && styleRaw['color']) ||
+    (typeof raw['color'] === 'string' && raw['color']) ||
     DEFAULT_COLOR;
   const color = sanitizeStrokeColor(colorRaw, DEFAULT_COLOR);
 
   const width = clampStrokeWidth(
-    asFiniteNumber(styleRaw?.width) ?? asFiniteNumber(raw.width) ?? DEFAULT_WIDTH,
+    finiteNumber(styleRaw?.['width']) ?? finiteNumber(raw['width']) ?? DEFAULT_WIDTH,
     DEFAULT_WIDTH,
   );
 
   const lineStyle =
-    normalizeLineStyle(styleRaw?.lineStyle) ??
-    normalizeLineStyle(raw.lineStyle) ??
+    normalizeLineStyle(styleRaw?.['lineStyle']) ??
+    normalizeLineStyle(raw['lineStyle']) ??
     DEFAULT_LINE_STYLE;
 
   const opacity = clampOpacity(
-    asFiniteNumber(styleRaw?.opacity) ??
-      asFiniteNumber(raw.opacity) ??
-      DEFAULT_OPACITY,
+    finiteNumber(styleRaw?.['opacity']) ?? finiteNumber(raw['opacity']) ?? DEFAULT_OPACITY,
     DEFAULT_OPACITY,
   );
 
@@ -348,7 +336,7 @@ function buildStyle(
     opacity,
   };
 
-  const extRaw = styleRaw?.extendRight ?? raw.extendRight;
+  const extRaw = styleRaw?.['extendRight'] ?? raw['extendRight'];
   if (typeof extRaw === 'boolean') {
     style.extendRight = extRaw;
   } else if (kind === 'ray' || kind === 'hray') {
@@ -357,14 +345,14 @@ function buildStyle(
     style.extendRight = true;
   }
 
-  const extLeftRaw = styleRaw?.extendLeft ?? raw.extendLeft;
+  const extLeftRaw = styleRaw?.['extendLeft'] ?? raw['extendLeft'];
   if (typeof extLeftRaw === 'boolean') {
     style.extendLeft = extLeftRaw;
   } else if (kind === 'extend' || kind === 'channel') {
     style.extendLeft = true;
   }
 
-  const fontRaw = asFiniteNumber(styleRaw?.fontSize) ?? asFiniteNumber(raw.fontSize);
+  const fontRaw = finiteNumber(styleRaw?.['fontSize']) ?? finiteNumber(raw['fontSize']);
   if (fontRaw != null) {
     style.fontSize = Math.max(8, Math.min(32, Math.round(fontRaw)));
   }
@@ -388,11 +376,11 @@ function buildMeta(
   text: string | undefined,
 ): DrawingMeta | undefined {
   const base: DrawingMeta = {};
-  if (isRecord(raw.meta)) {
+  if (isRecord(raw['meta'])) {
     let kept = 0;
     // Object.keys skips non-enumerable; never use Object.assign on untrusted meta
     // (assign can trigger __proto__ pollution on some engines).
-    for (const key of Object.keys(raw.meta)) {
+    for (const key of Object.keys(raw['meta'])) {
       if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
         continue;
       }
@@ -400,22 +388,22 @@ function buildMeta(
       if (key.length === 0 || key.length > META_KEY_MAX || !META_KEY_RE.test(key)) {
         continue;
       }
-      if (key === 'fibLevels' && Array.isArray(raw.meta[key])) {
+      if (key === 'fibLevels' && Array.isArray(raw['meta'][key])) {
         const levels: number[] = [];
-        for (const item of raw.meta[key] as unknown[]) {
-          const n = asFiniteNumber(item);
+        for (const item of raw['meta'][key] as unknown[]) {
+          const n = finiteNumber(item);
           if (n == null) continue;
           levels.push(Math.max(-10, Math.min(20, n)));
           if (levels.length >= 24) break;
         }
         if (levels.length) {
-          base.fibLevels = levels;
+          base['fibLevels'] = levels;
           kept += 1;
           if (kept >= META_KEYS_MAX) break;
         }
         continue;
       }
-      const val = sanitizeMetaScalar(raw.meta[key]);
+      const val = sanitizeMetaScalar(raw['meta'][key]);
       if (val === undefined) continue;
       base[key] = val;
       kept += 1;
@@ -443,19 +431,16 @@ function buildMeta(
  *    - three-point kinds → `p1` + `p2` + `p3`
  *    - multi → `p1` + `p2` (+ optional further via points[])
  */
-function collectPoints(
-  kind: DrawingKind,
-  raw: Record<string, unknown>,
-): Point[] | null {
+function collectPoints(kind: DrawingKind, raw: Record<string, unknown>): Point[] | null {
   const need = minPointsFor(kind);
 
   // Prefer points[] when present and non-empty — filter NaN/Infinity, cap length.
   // Single pass with scan cap: avoid map/filter allocating full huge arrays.
-  if (Array.isArray(raw.points) && raw.points.length > 0) {
+  if (Array.isArray(raw['points']) && raw['points'].length > 0) {
     const pts: Point[] = [];
-    const scanLimit = Math.min(raw.points.length, POINTS_SCAN_MAX);
+    const scanLimit = Math.min(raw['points'].length, POINTS_SCAN_MAX);
     for (let i = 0; i < scanLimit && pts.length < DRAWING_POINTS_MAX; i++) {
-      const p = normalizePoint(raw.points[i]);
+      const p = normalizePoint(raw['points'][i]);
       if (p) pts.push(p);
     }
     if (pts.length >= need) return pts;
@@ -464,8 +449,8 @@ function collectPoints(
 
   if (kind === 'hline') {
     const price =
-      asFiniteNumber(raw.price) ??
-      (isRecord(raw.p1) ? asFiniteNumber(raw.p1.price) : null);
+      finiteNumber(raw['price']) ??
+      (isRecord(raw['p1']) ? finiteNumber(raw['p1']['price']) : null);
     if (price == null) return null;
     // time is unused for hline render; keep a finite placeholder
     return [{ time: 0, price }];
@@ -473,28 +458,28 @@ function collectPoints(
 
   if (kind === 'vline') {
     const time =
-      asFiniteNumber(raw.time) ??
-      (isRecord(raw.p1) ? asFiniteNumber(raw.p1.time) : null);
+      finiteNumber(raw['time']) ??
+      (isRecord(raw['p1']) ? finiteNumber(raw['p1']['time']) : null);
     if (time == null) return null;
     // price unused for vline paint; placeholder for points model
     const price =
-      asFiniteNumber(raw.price) ??
-      (isRecord(raw.p1) ? asFiniteNumber(raw.p1.price) : null) ??
+      finiteNumber(raw['price']) ??
+      (isRecord(raw['p1']) ? finiteNumber(raw['p1']['price']) : null) ??
       0;
     return [{ time, price }];
   }
 
   if (TEXT_LIKE_KINDS.has(kind)) {
-    const p1 = normalizePoint(raw.p1);
+    const p1 = normalizePoint(raw['p1']);
     if (!p1) return null;
     return [p1];
   }
 
   // Multi / three / two-point: assemble from p1, p2, p3…
   const legacy: Point[] = [];
-  const p1 = normalizePoint(raw.p1);
-  const p2 = normalizePoint(raw.p2);
-  const p3 = normalizePoint(raw.p3);
+  const p1 = normalizePoint(raw['p1']);
+  const p2 = normalizePoint(raw['p2']);
+  const p3 = normalizePoint(raw['p3']);
   if (p1) legacy.push(p1);
   if (p2) legacy.push(p2);
   if (p3) legacy.push(p3);
@@ -517,7 +502,7 @@ function collectPoints(
 export function normalizeDrawing(raw: unknown): Drawing | null {
   if (!isRecord(raw)) return null;
 
-  const kindRaw = raw.kind;
+  const kindRaw = raw['kind'];
   if (typeof kindRaw !== 'string' || !VALID_KINDS.has(kindRaw as DrawingKind)) {
     return null;
   }
@@ -526,20 +511,16 @@ export function normalizeDrawing(raw: unknown): Drawing | null {
   const points = collectPoints(kind, raw);
   if (!points) return null;
 
-  let id =
-    typeof raw.id === 'string' && raw.id.length > 0 ? raw.id : genId();
+  let id = typeof raw['id'] === 'string' && raw['id'].length > 0 ? raw['id'] : genId();
   if (id.length > DRAWING_ID_MAX) id = id.slice(0, DRAWING_ID_MAX);
 
-  const styleIn = isRecord(raw.style) ? raw.style : undefined;
+  const styleIn = isRecord(raw['style']) ? raw['style'] : undefined;
   const style = buildStyle(kind, raw, styleIn);
 
-  const metaIn = isRecord(raw.meta) ? (raw.meta as DrawingMeta) : undefined;
+  const metaIn = isRecord(raw['meta']) ? (raw['meta'] as DrawingMeta) : undefined;
   const text = pickText(raw, metaIn);
   // Text-like drawings always carry a label in meta (empty string if absent).
-  const meta = buildMeta(
-    raw,
-    text ?? (TEXT_LIKE_KINDS.has(kind) ? '' : undefined),
-  );
+  const meta = buildMeta(raw, text ?? (TEXT_LIKE_KINDS.has(kind) ? '' : undefined));
 
   const out: Drawing = { id, kind, points, style };
   if (meta) out.meta = meta;
@@ -563,21 +544,21 @@ export function normalizeDrawing(raw: unknown): Drawing | null {
  */
 export function attachLegacyFields(d: Drawing): Drawing {
   const any = d as Drawing & Record<string, unknown>;
-  any.color = d.style.color;
+  any['color'] = d.style.color;
   if (d.kind === 'hline' && d.points[0]) {
-    any.price = d.points[0].price;
+    any['price'] = d.points[0].price;
   } else if (d.kind === 'vline' && d.points[0]) {
-    any.time = d.points[0].time;
+    any['time'] = d.points[0].time;
   } else if (TEXT_LIKE_KINDS.has(d.kind) && d.points[0]) {
-    any.p1 = { ...d.points[0] };
-    any.text = d.meta?.text ?? '';
+    any['p1'] = { ...d.points[0] };
+    any['text'] = d.meta?.text ?? '';
   } else if (d.points.length >= 2) {
-    any.p1 = { ...d.points[0]! };
-    any.p2 = { ...d.points[1]! };
+    any['p1'] = { ...d.points[0]! };
+    any['p2'] = { ...d.points[1]! };
     if (d.points.length >= 3) {
-      any.p3 = { ...d.points[2]! };
+      any['p3'] = { ...d.points[2]! };
     }
-    if (d.meta?.text) any.text = d.meta.text;
+    if (d.meta?.text) any['text'] = d.meta.text;
   }
   return d;
 }

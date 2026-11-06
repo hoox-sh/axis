@@ -17,6 +17,8 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { finiteNumber } from '../utils/validate';
+
 /**
  * Run-profile types + helpers for the Pine editor Profiler gutter.
  *
@@ -38,6 +40,7 @@ export interface ProfileLineStat {
   /** 1-based source line */
   line: number;
   /** Cumulative time spent on this line (milliseconds) */
+
   ms: number;
   /** How many times this line executed */
   execs: number;
@@ -66,17 +69,8 @@ export interface RunProfile {
   runId?: string;
 }
 
-function asFiniteNumber(v: unknown): number | null {
-  if (typeof v === 'number' && Number.isFinite(v)) return v;
-  if (typeof v === 'string' && v.trim() !== '') {
-    const n = Number(v);
-    if (Number.isFinite(n)) return n;
-  }
-  return null;
-}
-
 function asLineNumber(v: unknown): number | null {
-  const n = asFiniteNumber(v);
+  const n = finiteNumber(v);
   if (n == null) return null;
   const line = Math.trunc(n);
   return line >= 1 ? line : null;
@@ -105,16 +99,16 @@ export function normalizeRunProfile(raw: unknown, fallbackTotalMs?: number): Run
   let body: unknown = raw;
   if (typeof raw === 'object' && !Array.isArray(raw)) {
     const o = raw as Record<string, unknown>;
-    if (o.profile != null && typeof o.profile === 'object') body = o.profile;
-    else if (o.runProfile != null && typeof o.runProfile === 'object') body = o.runProfile;
+    if (o['profile'] != null && typeof o['profile'] === 'object') body = o['profile'];
+    else if (o['runProfile'] != null && typeof o['runProfile'] === 'object') body = o['runProfile'];
     else if (
-      o.meta != null &&
-      typeof o.meta === 'object' &&
-      !Array.isArray(o.meta) &&
-      (o.meta as Record<string, unknown>).profile != null &&
-      typeof (o.meta as Record<string, unknown>).profile === 'object'
+      o['meta'] != null &&
+      typeof o['meta'] === 'object' &&
+      !Array.isArray(o['meta']) &&
+      (o['meta'] as Record<string, unknown>)['profile'] != null &&
+      typeof (o['meta'] as Record<string, unknown>)['profile'] === 'object'
     ) {
-      body = (o.meta as Record<string, unknown>).profile;
+      body = (o['meta'] as Record<string, unknown>)['profile'];
     }
   }
 
@@ -129,35 +123,35 @@ export function normalizeRunProfile(raw: unknown, fallbackTotalMs?: number): Run
     lineRows = body;
   } else if (body && typeof body === 'object') {
     const o = body as Record<string, unknown>;
-    const t = asFiniteNumber(o.totalMs ?? o.total_ms ?? o.totalTimeMs ?? o.total_time_ms);
+    const t = finiteNumber(o['totalMs'] ?? o['total_ms'] ?? o['totalTimeMs'] ?? o['total_time_ms']);
     if (t != null && t >= 0) totalMs = t;
-    if (typeof o.runId === 'string') runId = o.runId;
-    else if (typeof o.run_id === 'string') runId = o.run_id;
-    const b = asFiniteNumber(o.bars ?? o.bar_count ?? o.count);
+    if (typeof o['runId'] === 'string') runId = o['runId'];
+    else if (typeof o['run_id'] === 'string') runId = o['run_id'];
+    const b = finiteNumber(o['bars'] ?? o['bar_count'] ?? o['count']);
     if (b != null && b >= 0) bars = Math.trunc(b);
-    if (typeof o.mode === 'string') mode = o.mode;
+    if (typeof o['mode'] === 'string') mode = o['mode'];
 
-    const ph = o.phases;
+    const ph = o['phases'];
     if (ph && typeof ph === 'object' && !Array.isArray(ph)) {
       phases = {};
       for (const [k, v] of Object.entries(ph as Record<string, unknown>)) {
-        const n = asFiniteNumber(v);
+        const n = finiteNumber(v);
         if (n != null) phases[k] = n;
         // accept parse_ms style keys as-is
       }
       // also promote common snake aliases into camel if only snake present
-      const parseMs = asFiniteNumber(
-        (ph as Record<string, unknown>).parse_ms ?? (ph as Record<string, unknown>).parseMs,
+      const parseMs = finiteNumber(
+        (ph as Record<string, unknown>)['parse_ms'] ?? (ph as Record<string, unknown>)['parseMs'],
       );
-      const evalMs = asFiniteNumber(
-        (ph as Record<string, unknown>).eval_ms ?? (ph as Record<string, unknown>).evalMs,
+      const evalMs = finiteNumber(
+        (ph as Record<string, unknown>)['eval_ms'] ?? (ph as Record<string, unknown>)['evalMs'],
       );
-      if (parseMs != null) phases.parse_ms = parseMs;
-      if (evalMs != null) phases.eval_ms = evalMs;
+      if (parseMs != null) phases['parse_ms'] = parseMs;
+      if (evalMs != null) phases['eval_ms'] = evalMs;
       if (!Object.keys(phases).length) phases = undefined;
     }
 
-    const candidates = [o.lines, o.line_stats, o.lineStats, o.stats, o.by_line, o.byLine];
+    const candidates = [o['lines'], o['line_stats'], o['lineStats'], o['stats'], o['by_line'], o['byLine']];
     for (const c of candidates) {
       if (Array.isArray(c)) {
         lineRows = c;
@@ -186,8 +180,8 @@ export function normalizeRunProfile(raw: unknown, fallbackTotalMs?: number): Run
     if (Array.isArray(row)) {
       const line = asLineNumber(row[0]);
       if (line == null) continue;
-      const ms = asFiniteNumber(row[1]) ?? 0;
-      const execs = asFiniteNumber(row[2]) ?? 0;
+      const ms = finiteNumber(row[1]) ?? 0;
+      const execs = finiteNumber(row[2]) ?? 0;
       const prev = byLine.get(line);
       if (prev) {
         prev.ms += Math.max(0, ms);
@@ -199,16 +193,16 @@ export function normalizeRunProfile(raw: unknown, fallbackTotalMs?: number): Run
     }
     if (typeof row !== 'object') continue;
     const r = row as Record<string, unknown>;
-    const line = asLineNumber(r.line ?? r.line_no ?? r.lineNo ?? r.lineno ?? r.ln);
+    const line = asLineNumber(r['line'] ?? r['line_no'] ?? r['lineNo'] ?? r['lineno'] ?? r['ln']);
     if (line == null) continue;
 
     const ms =
-      asFiniteNumber(r.ms ?? r.time_ms ?? r.timeMs ?? r.time ?? r.elapsed_ms ?? r.elapsedMs) ?? 0;
+      finiteNumber(r['ms'] ?? r['time_ms'] ?? r['timeMs'] ?? r['time'] ?? r['elapsed_ms'] ?? r['elapsedMs']) ?? 0;
     const execs =
-      asFiniteNumber(
-        r.execs ?? r.executions ?? r.count ?? r.calls ?? r.n ?? r.exec_count ?? r.execCount,
+      finiteNumber(
+        r['execs'] ?? r['executions'] ?? r['count'] ?? r['calls'] ?? r['n'] ?? r['exec_count'] ?? r['execCount'],
       ) ?? 0;
-    const pctRaw = asFiniteNumber(r.pct ?? r.percent ?? r.percentage ?? r.pct_of_total);
+    const pctRaw = finiteNumber(r['pct'] ?? r['percent'] ?? r['percentage'] ?? r['pct_of_total']);
 
     const prev = byLine.get(line);
     if (prev) {

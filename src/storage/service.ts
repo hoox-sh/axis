@@ -60,8 +60,9 @@ interface StorageChangeRequest {
   to: string;
 }
 
-const [pendingStorageChange, setPendingStorageChange] =
-  createSignal<StorageChangeRequest | null>(null);
+const [pendingStorageChange, setPendingStorageChange] = createSignal<StorageChangeRequest | null>(
+  null,
+);
 
 // Re-export so UI consumers (Results modal "Saved runs" tab, badges) can
 // import the lightweight metadata + payload types from this façade without
@@ -154,6 +155,15 @@ async function runDraftSave(payload: { content: string; name?: string }): Promis
   }
 }
 
+/**
+ * Save the editor draft: always to the local plugin, plus the active backend
+ * when it supports drafts. Calls are serialized and coalesced, so a burst of
+ * keystrokes results in at most one in-flight write plus one trailing write.
+ *
+ * @param content - Draft source text.
+ * @param name - Optional draft name shown in the editor tab.
+ * @returns Promise settling when the queued payloads have been written.
+ */
 export function saveDraft(content: string, name?: string): Promise<void> {
   // Coalesce: only the newest payload matters; a drain already running or
   // queued will pick it up, so overlapping callers share one tail promise.
@@ -286,10 +296,7 @@ export async function listRunResults(scriptId: string): Promise<ResultMeta[]> {
  * when the active one lacks `removeResult` so a run that was written to local
  * (via the `saveRunResult` fallback) can still be cleaned up.
  */
-export async function removeRunResult(
-  scriptId: string,
-  runId: string,
-): Promise<void> {
+export async function removeRunResult(scriptId: string, runId: string): Promise<void> {
   const p = getActiveStoragePlugin();
   if (typeof p?.removeResult === 'function') {
     await p.removeResult(scriptId, runId);
@@ -340,10 +347,7 @@ export async function listScriptVersions(
  * Returns `null` when the active backend does not keep version history.
  * Does not modify the current tip — use {@link writeScript} to restore.
  */
-export async function readScriptVersion(
-  id: string,
-  rev: string,
-): Promise<ScriptDocument | null> {
+export async function readScriptVersion(id: string, rev: string): Promise<ScriptDocument | null> {
   const p = requireActive();
   if (typeof p.readAtRevision !== 'function') return null;
   return p.readAtRevision(id, rev);

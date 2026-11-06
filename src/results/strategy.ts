@@ -231,6 +231,11 @@ export function strategyStatsSnapshot(stats: StrategyStats): StrategyStatsSnapsh
   };
 }
 
+/**
+ * Fill model, run axis and commission model for {@link walkStrategyEvents} and
+ * {@link buildStrategyReport}. Every field is optional: omitting them keeps the
+ * legacy close-fill, axis-less, fee-free behaviour.
+ */
 export interface BuildStrategyReportOptions {
   /**
    * Fill model: `close` (default, signal bar close) or `next_open` (slippage →
@@ -408,7 +413,7 @@ export function walkStrategyEvents(
 
   const eventQty = (ev: StrategyEvent, fallback = 1): number => {
     // Prefer engine-filled qty; explicit 0 is no-fill (already filtered on closes).
-    const raw = (ev as Record<string, unknown>).qty;
+    const raw = (ev as Record<string, unknown>)['qty'];
     if (raw == null || raw === '') return fallback;
     const n = typeof raw === 'number' ? raw : Number(raw);
     if (!Number.isFinite(n) || n === 0) return fallback;
@@ -570,7 +575,7 @@ export function walkStrategyEvents(
       kind === 'closeshort'
     ) {
       const isCloseAll = kind === 'close_all' || kind.includes('close_all') || kind === 'closeall';
-      const engineProfit = (ev as Record<string, unknown>).profit;
+      const engineProfit = (ev as Record<string, unknown>)['profit'];
       if (isCloseAll) {
         // strategy.close_all — flatten every open at this bar
         const cycles = [...open.values()];
@@ -696,11 +701,22 @@ export function buildStrategyReport(
   return { trades: walk.trades, stats: walk.stats };
 }
 
+/**
+ * Format a fractional return as a percentage (`0.1234` → `12.34%`).
+ *
+ * @param n - fraction (not a percent); non-finite renders as an em dash
+ */
 export function formatPct(n: number): string {
   if (!Number.isFinite(n)) return '—';
   return `${(n * 100).toFixed(2)}%`;
 }
 
+/**
+ * Format money PnL with an explicit `+` on gains, keeping 4 / 3 decimals below
+ * 0.01 / 1 so a small crypto size is never rounded to a misleading `+0.00`.
+ *
+ * @param n - money amount; non-finite renders as an em dash
+ */
 export function formatMoney(n: number): string {
   if (!Number.isFinite(n)) return '—';
   const sign = n >= 0 ? '+' : '';
@@ -711,6 +727,12 @@ export function formatMoney(n: number): string {
   return `${sign}${n.toFixed(2)}`;
 }
 
+/**
+ * Format an arbitrary sample for the report: exponential at 1e6 and above,
+ * 2 decimals at 100 and above, else 4.
+ *
+ * @param n - unknown sample; null, undefined and NaN render as an em dash
+ */
 export function formatNum(n: unknown): string {
   if (n === null || n === undefined) return '—';
   if (typeof n !== 'number' || Number.isNaN(n)) return '—';
@@ -718,6 +740,13 @@ export function formatNum(n: unknown): string {
   return n.toFixed(Math.abs(n) >= 100 ? 2 : 4);
 }
 
+/**
+ * Closed trades as CSV for clipboard export. A `commission` column is added
+ * only when at least one trade carries a fee.
+ *
+ * @param trades - report trades in display order
+ * @returns the header line plus one row per trade, newline separated
+ */
 export function tradesToCsv(trades: ClosedTrade[]): string {
   const withFees = trades.some((t) => t.commission != null);
   const header = `id,dir,qty,entry_time,entry,exit_time,exit,pnl,pnl_pct${
@@ -791,6 +820,7 @@ export function buildCumulativeEquity(trades: ClosedTrade[]): EquityStep[] {
   return out;
 }
 
+/** Polyline geometry produced for an SVG equity/price sparkline. */
 export interface SvgPolylineResult {
   /** SVG `points` attribute value for a polyline */
   points: string;

@@ -40,16 +40,18 @@ import {
 } from './pine-tables';
 import { labelFontSizePx } from './pyne-drawings';
 
-export const PyneTableHud: Component = () => {
+/**
+ * Screen-space HUD that paints Pine `table.*` objects for still-applied
+ * scripts, split between chart overlay and bottom panel.
+ */
+export const PyneTableHud: Component = (): JSX.Element => {
   const tables = createMemo((): PineTable[] => {
     void store.scripts;
     void store.runResults;
     void store.lastRun;
     void store.resultsFocusId;
     void store.pineTablesLocation;
-    const scriptIds = (store.scripts || [])
-      .filter((s) => s.visible !== false)
-      .map((s) => s.id);
+    const scriptIds = (store.scripts || []).filter((s) => s.visible !== false).map((s) => s.id);
     const all = collectVisiblePineTables({
       scriptIds,
       runResults: store.runResults,
@@ -58,7 +60,10 @@ export const PyneTableHud: Component = () => {
       lastRunOwnerId: store.resultsFocusId,
     });
     // September 2026 parity: scripts moved to the bottom panel leave the chart.
-    return splitTablesByLocation(all, (store.pineTablesLocation || {}) as Record<string, 'chart' | 'bottom'>).chart;
+    return splitTablesByLocation(
+      all,
+      (store.pineTablesLocation || {}) as Record<string, 'chart' | 'bottom'>,
+    ).chart;
   });
 
   return (
@@ -78,7 +83,7 @@ export const PyneTableHud: Component = () => {
                 aria-label="Pine table"
                 class="border-collapse text-[10px] font-mono shadow-lg"
                 style={{
-                  'border': `${frameW()}px solid ${frame()}`,
+                  border: `${frameW()}px solid ${frame()}`,
                   'background-color': tb.bgcolor || 'rgba(17,18,24,0.92)',
                 }}
               >
@@ -98,7 +103,7 @@ export const PyneTableHud: Component = () => {
                                 'vertical-align': cellTextVerticalAlign(cell?.text_valign),
                                 'font-size': `${labelFontSizePx(cell?.text_size)}px`,
                                 'line-height': '1.2',
-                                'border': `1px solid ${frame()}`,
+                                border: `1px solid ${frame()}`,
                                 'word-break': 'break-word',
                               }}
                             >

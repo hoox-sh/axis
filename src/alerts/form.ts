@@ -29,7 +29,10 @@ import { formatAlertKind } from './format';
 import { PINE_COMPARE_OPS, type PineCompareOp } from './indicator';
 import type { AlertCreateInput, AlertKind, AlertParams } from './types';
 
+/** Direction filter for `pct_change` drafts (`both` = either side of the base). */
 export type PctDirection = 'both' | 'up' | 'down';
+
+/** Direction filter for on-chain TVL drafts; same values as {@link PctDirection}. */
 export type OnchainDirection = 'both' | 'up' | 'down';
 
 /** Draft fields collected by the Alerts panel create form. */
@@ -64,39 +67,54 @@ export type AlertFormDraft = {
   cooldownSec: string;
 };
 
+/** Successful validation: the input is ready for `createAlert`. */
 export type AlertFormOk = { ok: true; input: AlertCreateInput };
+
+/** Validation failure carrying the message the Alerts panel shows under the form. */
 export type AlertFormErr = { ok: false; error: string };
+
+/** Discriminated result of {@link buildAlertFromDraft} — narrow on `ok` first. */
 export type AlertFormResult = AlertFormOk | AlertFormErr;
 
+/** True for the level kinds (`price_cross` / `above` / `below`) that read `draft.price`. */
 export function isPriceKind(k: AlertKind): boolean {
   return k === 'price_cross' || k === 'price_above' || k === 'price_below';
 }
 
+/** True for the on-chain kinds that read `draft.protocolId` and `minAbsPct`. */
 export function isOnchainKind(k: AlertKind): boolean {
   return k === 'onchain_tvl_spike' || k === 'onchain_event';
 }
 
+/** True for `pct_change`, the only kind that reads `draft.pct`. */
 export function isPctKind(k: AlertKind): boolean {
   return k === 'pct_change';
 }
 
+/** True for `drawing_touch`, which needs `draft.drawingId` or explicit price levels. */
 export function isDrawingKind(k: AlertKind): boolean {
   return k === 'drawing_touch';
 }
 
+/** True for both script kinds — plot condition and Pine `alert()` rows. */
 export function isIndicatorKind(k: AlertKind): boolean {
   return k === 'pine_condition' || k === 'pine_alert';
 }
 
+/** True for `pine_alert` only — firings of the script's own `alert()` calls. */
 export function isPineAlertKind(k: AlertKind): boolean {
   return k === 'pine_alert';
 }
 
+/** True for `pine_condition` only — one plot compared against a threshold. */
 export function isPlotConditionKind(k: AlertKind): boolean {
   return k === 'pine_condition';
 }
 
-function parsePositiveNumber(raw: string, label: string): { ok: true; value: number } | AlertFormErr {
+function parsePositiveNumber(
+  raw: string,
+  label: string,
+): { ok: true; value: number } | AlertFormErr {
   const n = Number(raw);
   if (!Number.isFinite(n) || n <= 0) {
     return { ok: false, error: `Enter a valid ${label} greater than 0.` };
@@ -140,9 +158,7 @@ function parseCooldownMs(raw: string): { ok: true; cooldownMs?: number } | Alert
 
 function pineOp(raw: string): PineCompareOp {
   const op = raw.trim();
-  return (PINE_COMPARE_OPS as readonly string[]).includes(op)
-    ? (op as PineCompareOp)
-    : '>';
+  return (PINE_COMPARE_OPS as readonly string[]).includes(op) ? (op as PineCompareOp) : '>';
 }
 
 /**
@@ -181,8 +197,7 @@ export function buildAlertFromDraft(draft: AlertFormDraft): AlertFormResult {
       draft.direction === 'up' || draft.direction === 'down' ? draft.direction : 'both';
     const sym = (draft.symbol.trim() || pid || 'onchain').toLowerCase();
     const dirMark = dir === 'both' ? '±' : dir === 'up' ? '≥+' : '≤−';
-    const name =
-      draft.name.trim() || `${pid} ${formatAlertKind(kind)} ${dirMark}${pct}%`;
+    const name = draft.name.trim() || `${pid} ${formatAlertKind(kind)} ${dirMark}${pct}%`;
     const params: AlertParams = { protocolId: pid, minAbsPct: pct, direction: dir };
     return {
       ok: true,
@@ -207,9 +222,7 @@ export function buildAlertFromDraft(draft: AlertFormDraft): AlertFormResult {
     const pct = parsePositiveNumber(draft.pct, 'percent');
     if (!pct.ok) return pct;
     const dir: PctDirection =
-      draft.pctDirection === 'up' || draft.pctDirection === 'down'
-        ? draft.pctDirection
-        : 'both';
+      draft.pctDirection === 'up' || draft.pctDirection === 'down' ? draft.pctDirection : 'both';
     const dirMark = dir === 'both' ? '±' : dir === 'up' ? '≥+' : '≤−';
     const name = draft.name.trim() || `${sym} ${dirMark}${pct.value}%`;
     return {
@@ -234,7 +247,10 @@ export function buildAlertFromDraft(draft: AlertFormDraft): AlertFormResult {
       prices.push(fallback.value);
     }
     if (prices.length === 0) {
-      return { ok: false, error: 'That drawing has no price levels (vertical lines cannot alert).' };
+      return {
+        ok: false,
+        error: 'That drawing has no price levels (vertical lines cannot alert).',
+      };
     }
     let tolerance = 0;
     if (draft.tolerance.trim()) {
@@ -253,7 +269,7 @@ export function buildAlertFromDraft(draft: AlertFormDraft): AlertFormResult {
       price: firstPrice,
       tolerance,
     };
-    if (draft.drawingId.trim()) params.drawingId = draft.drawingId.trim();
+    if (draft.drawingId.trim()) params['drawingId'] = draft.drawingId.trim();
     return {
       ok: true,
       input: { ...base, name, symbol: sym, kind: 'drawing_touch', params },
@@ -262,8 +278,7 @@ export function buildAlertFromDraft(draft: AlertFormDraft): AlertFormResult {
 
   if (isPineAlertKind(kind)) {
     const sourceRaw = (draft.pineSource || 'any').trim().toLowerCase();
-    const source =
-      sourceRaw === 'alertcondition' || sourceRaw === 'alert' ? sourceRaw : 'any';
+    const source = sourceRaw === 'alertcondition' || sourceRaw === 'alert' ? sourceRaw : 'any';
     const title = (draft.pineTitle || '').trim();
     const indicatorId = draft.indicatorId.trim();
     const indName = draft.indicatorName.trim() || 'script';
@@ -272,8 +287,8 @@ export function buildAlertFromDraft(draft: AlertFormDraft): AlertFormResult {
     else if (source === 'alert') auto += 'alert()';
     else auto += 'alert() / alertcondition()';
     const params: AlertParams = { source };
-    if (indicatorId) params.indicatorId = indicatorId;
-    if (title) params.title = title;
+    if (indicatorId) params['indicatorId'] = indicatorId;
+    if (title) params['title'] = title;
     return {
       ok: true,
       input: {

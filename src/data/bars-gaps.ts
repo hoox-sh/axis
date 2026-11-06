@@ -39,6 +39,11 @@ export interface BarGap {
   missingBars: number;
 }
 
+/**
+ * Completeness report for one window: bars found, expected density, every gap,
+ * and whether the range is covered. Produced by `validateBarCoverage` for the
+ * DSM panel and the coverage map.
+ */
 export interface CoverageReport {
   /** Bars inside [fromSec, toSec] after filter. */
   barCount: number;

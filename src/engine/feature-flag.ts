@@ -53,4 +53,5 @@ export function isStreamEngineDisabled(): boolean {
   return streamFlag.isDisabled();
 }
 
+/** localStorage key of the per-tab stream-engine opt-in, exported for settings/debug tooling. */
 export const STREAM_ENGINE_FLAG_KEY = FLAG_KEY;

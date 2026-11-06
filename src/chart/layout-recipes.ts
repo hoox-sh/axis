@@ -35,12 +35,7 @@ import {
   type ChartLayoutState,
   type ChartSlot,
 } from './layout';
-import {
-  setActiveChartSlot,
-  setChartGridMode,
-  store,
-  updateChartSlot,
-} from '../store';
+import { setActiveChartSlot, setChartGridMode, store, updateChartSlot } from '../store';
 
 /** Optional seed for symbol/interval/exchange when a recipe slot omits them. */
 export interface LayoutRecipeSeed {
@@ -86,7 +81,7 @@ export const LAYOUT_RECIPES: readonly LayoutRecipe[] = [
     label: 'Single focus',
     hint: 'One full-width chart (current symbol)',
     mode: '1',
-    slots: [{ /* seed symbol + interval */ }],
+    slots: [{/* seed symbol + interval */}],
   },
   {
     id: 'scalp-1m-5m',
@@ -128,6 +123,7 @@ export const LAYOUT_RECIPES: readonly LayoutRecipe[] = [
   },
 ] as const;
 
+/** @returns the built-in recipe with `id`, or `undefined` when unknown. */
 export function findLayoutRecipe(id: string): LayoutRecipe | undefined {
   return LAYOUT_RECIPES.find((r) => r.id === id);
 }
@@ -174,10 +170,7 @@ export function resolveRecipeSlots(
  * Pure: build a full {@link ChartLayoutState} from a recipe (new slot ids).
  * Useful for tests and previews; live apply prefers store helpers instead.
  */
-export function recipeToLayout(
-  recipe: LayoutRecipe,
-  seed?: LayoutRecipeSeed,
-): ChartLayoutState {
+export function recipeToLayout(recipe: LayoutRecipe, seed?: LayoutRecipeSeed): ChartLayoutState {
   const resolved = resolveRecipeSlots(recipe, seed);
   const slots: ChartSlot[] = resolved.map((r) =>
     createChartSlot({

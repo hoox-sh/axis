@@ -115,7 +115,7 @@ function runResultForTarget(kind: 'indicator' | 'editor', id: string): RunResult
 type SettingsTab = 'inputs' | 'strategy';
 
 /** Modal form for Pine inputs + strategy properties (editor doc or applied). */
-export const ScriptSettingsModal: Component = () => {
+export const ScriptSettingsModal: Component = () : JSX.Element => {
   const open = () => store.scriptSettings.open;
   const indicatorId = () => store.scriptSettings.indicatorId;
 
@@ -764,7 +764,7 @@ const InputField: Component<{
   const showTitle = () => Boolean(props.field.title?.trim());
 
   // Local drafts so parent re-renders do not clobber caret while focused
-  const [numDraft, setNumDraft] = createSignal<string | null>(null);
+  const [, setNumDraft] = createSignal<string | null>(null);
   const [textDraft, setTextDraft] = createSignal<string | null>(null);
   const [numFocused, setNumFocused] = createSignal(false);
   const [textFocused, setTextFocused] = createSignal(false);

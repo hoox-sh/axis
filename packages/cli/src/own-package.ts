@@ -11,12 +11,24 @@
  * `axis --version`, preflight, and the doctor CLI row work in every mode:
  * bun src → node dist → single-file binary.
  */
-import ownPackageJson from "../package.json";
+import ownPackageJson from '../package.json';
 
+/**
+ * Shape of `@hoox-sh/axis-cli`'s own `package.json`, narrowed to the fields the
+ * CLI reads at runtime.
+ *
+ * Bundled rather than read from disk so it survives `bun build --compile`.
+ */
 export type OwnPackage = {
   version: string;
   engines?: Record<string, string>;
   name?: string;
 };
 
+/**
+ * The CLI's own package metadata, embedded by the bundler at build time.
+ *
+ * Source of `axis --version`, the preflight engine check, and the doctor CLI row —
+ * safe to read in bun, node, and single-file binary modes.
+ */
 export const ownPackage: OwnPackage = ownPackageJson as OwnPackage;

@@ -36,12 +36,22 @@
  * - `POST /api/git/oauth/device/poll`   `{ provider, clientId?, device_code }`
  */
 
-/** Minimal env slice used by OAuth (avoids circular import with index). */
+/**
+ * Env slice for the OAuth relay.
+ *
+ * Declared locally instead of importing `Env` to avoid a circular import with
+ * `index.ts`. When a client id is set here, a body-supplied `clientId` is ignored.
+ */
 export type GitOAuthEnv = {
   GITHUB_OAUTH_CLIENT_ID?: string;
   GITLAB_OAUTH_CLIENT_ID?: string;
 };
 
+/**
+ * Forges this relay can drive.
+ *
+ * Anything unrecognized in a request body falls back to `github`.
+ */
 export type GitOAuthProvider = 'github' | 'gitlab';
 
 const GITHUB_SCOPE = 'repo read:user';
@@ -74,7 +84,10 @@ async function readJsonBody(
   const capped = await readCappedJson(req, OAUTH_MAX_BODY_BYTES);
   if (!capped.ok) return { ok: false };
   const raw = capped.value;
-  return { ok: true, value: raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {} };
+  return {
+    ok: true,
+    value: raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {},
+  };
 }
 
 /**
@@ -239,6 +252,25 @@ async function pollDevice(
 /**
  * Handle `/api/git/oauth/device/start` and `/api/git/oauth/device/poll`.
  */
+/**
+ * Relays GitHub / GitLab device-flow start and poll for the PWA.
+ *
+ * Browser SPAs cannot call the forges directly (no CORS), so the Worker proxies them
+ * under two independent per-IP budgets: 8 starts/min and 60 polls/min. Scopes are
+ * fixed per provider and a client-supplied `scope` is ignored, so the Worker cannot
+ * be used to request broader access. `refresh_token` is stripped from poll responses.
+ *
+ * @param req - Must be `POST`; anything else answers 405.
+ * @param env - Supplies the client id; a body `clientId` is only a fallback when the
+ *   env var is unset (local self-host).
+ * @param origin - Resolved CORS origin.
+ * @param pathname - `/api/git/oauth/device/start` or `.../poll`; the suffix decides
+ *   the action.
+ * @param cors - CORS header set for the response.
+ * @returns JSON for success and every failure (`METHOD`, `RATE_LIMIT`,
+ *   `PAYLOAD_TOO_LARGE`, `NO_CLIENT_ID`, `BAD_REQUEST`, `NOT_FOUND`,
+ *   `OAUTH_UPSTREAM`); never throws.
+ */
 export async function handleGitOAuth(
   req: Request,
   env: GitOAuthEnv,
@@ -273,9 +305,16 @@ export async function handleGitOAuth(
   const clientId = resolveClientId(provider, body, env);
 
   if (!clientId) {
-    return json(errorBody('NO_CLIENT_ID', provider === 'github'
-            ? 'GitHub OAuth client id missing. Set Worker env GITHUB_OAUTH_CLIENT_ID (preferred) or pass clientId only when env is unset (local self-host).'
-            : 'GitLab OAuth application id missing. Set Worker env GITLAB_OAUTH_CLIENT_ID (preferred) or pass clientId only when env is unset.'), 400, origin);
+    return json(
+      errorBody(
+        'NO_CLIENT_ID',
+        provider === 'github'
+          ? 'GitHub OAuth client id missing. Set Worker env GITHUB_OAUTH_CLIENT_ID (preferred) or pass clientId only when env is unset (local self-host).'
+          : 'GitLab OAuth application id missing. Set Worker env GITLAB_OAUTH_CLIENT_ID (preferred) or pass clientId only when env is unset.',
+      ),
+      400,
+      origin,
+    );
   }
 
   try {
@@ -302,6 +341,10 @@ export async function handleGitOAuth(
 
     return json(errorBody('NOT_FOUND', `Unknown oauth path ${pathname}`), 404, origin);
   } catch (err) {
-    return json(errorBody('OAUTH_UPSTREAM', err instanceof Error ? err.message : String(err)), 502, origin);
+    return json(
+      errorBody('OAUTH_UPSTREAM', err instanceof Error ? err.message : String(err)),
+      502,
+      origin,
+    );
   }
 }

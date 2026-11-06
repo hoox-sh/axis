@@ -34,7 +34,14 @@
  * @module datafeed/index
  */
 
-import { fetchOHLCV, fetchMarkets, watchOHLCV, putCredential, deleteCredential, closeAll } from './gateway';
+import {
+  fetchOHLCV,
+  fetchMarkets,
+  watchOHLCV,
+  putCredential,
+  deleteCredential,
+  closeAll,
+} from './gateway';
 import type { SessionBody, WatchStream } from './types';
 // Static import: bun bundles package.json into dist/ and embeds it into
 // `bun build --compile` binaries (same pattern as CLI own-package.ts), so
@@ -95,9 +102,14 @@ const server = Bun.serve<WatchData>({
     maxPayloadLength: 64 * 1024,
     open(ws) {
       const stream = ws.data.stream;
-      if (!stream) { ws.close(1011, 'no stream'); return; }
+      if (!stream) {
+        ws.close(1011, 'no stream');
+        return;
+      }
       let notifyClosed!: () => void;
-      const closedBar = new Promise<null>((res) => { notifyClosed = () => res(null); });
+      const closedBar = new Promise<null>((res) => {
+        notifyClosed = () => res(null);
+      });
       conns.set(ws, { stream, closed: false, notifyClosed });
       (async () => {
         try {
@@ -107,14 +119,20 @@ const server = Bun.serve<WatchData>({
             ws.send(JSON.stringify(bar));
           }
         } catch {
-          try { ws.close(); } catch { /* ignore */ }
+          try {
+            ws.close();
+          } catch {
+            /* ignore */
+          }
         } finally {
           stream.close();
           conns.delete(ws);
         }
       })();
     },
-    message() { /* client messages ignored — this is a broadcast stream */ },
+    message() {
+      /* client messages ignored — this is a broadcast stream */
+    },
     close(ws) {
       const conn = conns.get(ws);
       if (conn && !conn.closed) {
@@ -125,7 +143,7 @@ const server = Bun.serve<WatchData>({
     },
   },
 
-  async fetch(req) {
+  async fetch(req): Promise<Response | undefined> {
     const url = new URL(req.url);
     const path = url.pathname.startsWith('/datafeed/')
       ? url.pathname.slice('/datafeed'.length)
@@ -147,13 +165,17 @@ const server = Bun.serve<WatchData>({
       if (!exchange || !symbol) return err('missing exchange or symbol');
       try {
         const timeframe = url.searchParams.get('timeframe') ?? '1d';
-        const since = url.searchParams.get('since') ? Number(url.searchParams.get('since')) : undefined;
-        const limit = url.searchParams.get('limit') ? Number(url.searchParams.get('limit')) : undefined;
+        const since = url.searchParams.get('since')
+          ? Number(url.searchParams.get('since'))
+          : undefined;
+        const limit = url.searchParams.get('limit')
+          ? Number(url.searchParams.get('limit'))
+          : undefined;
         const credId = url.searchParams.get('cred') ?? undefined;
         const bars = await fetchOHLCV(exchange, symbol, timeframe, since, limit, credId);
         return json(bars);
-      } catch (e: any) {
-        return err(e?.message ?? String(e), 502);
+      } catch (e) {
+        return err(e instanceof Error ? e.message : String(e), 502);
       }
     }
 
@@ -164,8 +186,8 @@ const server = Bun.serve<WatchData>({
       try {
         const markets = await fetchMarkets(exchange);
         return json(markets);
-      } catch (e: any) {
-        return err(e?.message ?? String(e), 502);
+      } catch (e) {
+        return err(e instanceof Error ? e.message : String(e), 502);
       }
     }
 
@@ -209,7 +231,8 @@ const server = Bun.serve<WatchData>({
 
       const upgraded = server.upgrade(req, { data: { stream } });
       if (!upgraded) return err('websocket upgrade failed', 500);
-      return undefined as unknown as Response;
+      // Socket is upgraded — Bun takes over the connection, so no response body.
+      return undefined;
     }
 
     return err('not found', 404);
@@ -221,5 +244,13 @@ console.log(`[datafeed] OHLCV: GET  /datafeed/ohlcv?exchange=&symbol=`);
 console.log(`[datafeed] watch: WS   /datafeed/watch?exchange=&symbol=`);
 console.log(`[datafeed] keys:  POST /datafeed/session`);
 
-process.on('SIGINT', () => { closeAll(); server.stop(); process.exit(0); });
-process.on('SIGTERM', () => { closeAll(); server.stop(); process.exit(0); });
+process.on('SIGINT', () => {
+  closeAll();
+  server.stop();
+  process.exit(0);
+});
+process.on('SIGTERM', () => {
+  closeAll();
+  server.stop();
+  process.exit(0);
+});

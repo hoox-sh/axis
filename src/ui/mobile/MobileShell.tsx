@@ -69,11 +69,7 @@ import { barPlane } from '../../stores/bars';
 import { exitBarReplay } from '../BarReplayControls';
 import { Icons, PANEL_ICON } from '../icons';
 import { PANEL_META, type PanelId } from '../panels/types';
-import {
-  activeMobileSheet,
-  closeAllMobileSheets,
-  openMobileSheet,
-} from '../panels/mobile-sheet';
+import { activeMobileSheet, closeAllMobileSheets, openMobileSheet } from '../panels/mobile-sheet';
 import { SymbolModal } from '../SymbolModal';
 import { openAboutModal } from '../AboutModal';
 import type { StudioPageId } from '../studio';
@@ -97,6 +93,7 @@ const MOBILE_PANELS: readonly PanelId[] = [
   'agent',
 ] as const;
 
+/** Shared props for the three phone chrome mounts (header, tab bar, overlays). */
 export interface MobileChromeProps {
   /** Open studio overlay (last page / home). */
   onOpenStudio: () => void;
@@ -197,7 +194,12 @@ const goChart = () => {
 };
 
 /** Mobile top chrome — replaces the desktop Topbar on phones. */
-export const MobileHeader: Component<MobileChromeProps> = (_props) => {
+/**
+ * Phone top chrome: symbol, venue, interval, and live quote controls that
+ * replace the desktop Topbar. Sheet/drawer state is module-scoped, so this
+ * mount only needs the studio navigation props.
+ */
+export const MobileHeader: Component<MobileChromeProps> = (_props): JSX.Element => {
   const venueToken = () => venueTokenFromState(store.source, activeCcxtExchange());
   const venueOptions = createMemo(() =>
     listVenueOptions(
@@ -285,7 +287,10 @@ export const MobileHeader: Component<MobileChromeProps> = (_props) => {
             'is-idle': !store.live.active,
             'is-live': store.live.active && store.stream.status === 'connected',
             'is-reconnect': store.live.active && store.stream.status === 'connecting',
-            'is-offline': store.live.active && store.stream.status !== 'connected' && store.stream.status !== 'connecting',
+            'is-offline':
+              store.live.active &&
+              store.stream.status !== 'connected' &&
+              store.stream.status !== 'connecting',
           }}
           data-testid="axis-mobile-live"
           title={liveIndicatorTitle({
@@ -379,7 +384,11 @@ export const MobileHeader: Component<MobileChromeProps> = (_props) => {
 };
 
 /** Mobile bottom tab bar — primary navigation. */
-export const MobileTabBar: Component<MobileChromeProps> = (props) => {
+/**
+ * Phone bottom tab bar: chart, list, panels, more, and studio. The chart tab
+ * reads active only when no sheet, drawer, or studio overlay is open.
+ */
+export const MobileTabBar: Component<MobileChromeProps> = (props): JSX.Element => {
   const chartTabActive = () =>
     !activeMobileSheet() && !panelsOpen() && !moreOpen() && !props.studioOpen();
   const listTabActive = () => activeMobileSheet() === 'watchlist' && !moreOpen();
@@ -464,7 +473,12 @@ export const MobileTabBar: Component<MobileChromeProps> = (props) => {
 };
 
 /** Mobile overlay sheets — panels list + More drawer (+ symbol modal host). */
-export const MobileOverlays: Component<MobileChromeProps> = (props) => {
+/**
+ * Phone overlays: the Panels sheet and the More drawer, layered above the
+ * full-screen panel sheets. Subscribes to the MCP bridge so the More drawer can
+ * show live connection state, and unsubscribes on cleanup.
+ */
+export const MobileOverlays: Component<MobileChromeProps> = (props): JSX.Element => {
   const [bridge, setBridge] = createSignal(mcpBridgeState());
   const unsub = onMcpBridge(setBridge);
   onCleanup(unsub);
@@ -472,7 +486,12 @@ export const MobileOverlays: Component<MobileChromeProps> = (props) => {
     <>
       {/* ── Panels sheet (nav overlay above panel sheets) ──── */}
       <Show when={panelsOpen()}>
-        <div class="axis-moverlay" data-testid="axis-mobile-panels" role="dialog" aria-label="Panels">
+        <div
+          class="axis-moverlay"
+          data-testid="axis-mobile-panels"
+          role="dialog"
+          aria-label="Panels"
+        >
           <div class="axis-moverlay-head">
             <span class="axis-moverlay-title">Panels</span>
             <button

@@ -5,24 +5,18 @@
  * Trading / measure extras — forecast projection + combined date×price range.
  */
 
-import { DRAWING_COLORS, type Drawing, type TwoPointDrawing } from '../../drawing-types';
+import { DRAWING_COLORS } from '../../drawing-types';
 import { distToSegment, nearRectEdge } from '../geometry';
 import { arrowEndOf, arrowStartOf, showStatsOf } from '../tool-settings';
-import { registerToolHandler, type ToolHitCtx, type ToolViewCtx } from './registry';
+import { registerToolHandler, type ToolViewCtx } from './registry';
 import {
   clampOpacity,
   clampStrokeWidth,
-  isFinitePoint,
   sanitizePoints,
   sanitizeStrokeColor,
+  asTwoPoint,
 } from './safe';
 
-function asTwo(d: Drawing, kind?: TwoPointDrawing['kind']): TwoPointDrawing | null {
-  if (kind && d.kind !== kind) return null;
-  if (!('p1' in d) || !('p2' in d) || !d.p1 || !d.p2) return null;
-  if (!isFinitePoint(d.p1) || !isFinitePoint(d.p2)) return null;
-  return d as TwoPointDrawing;
-}
 
 /** Triangle arrow head at (x2,y2) pointing from (x1,y1). */
 function paintArrowHead(
@@ -87,7 +81,7 @@ registerToolHandler({
     };
   },
   paint(d, ctx) {
-    const t = asTwo(d, 'forecast');
+    const t = asTwoPoint(d, 'forecast');
     if (!t) return;
     const a = ctx.toXY(t.p1);
     const b = ctx.toXY(t.p2);
@@ -126,7 +120,7 @@ registerToolHandler({
     }
   },
   hit(d, ctx) {
-    const t = asTwo(d, 'forecast');
+    const t = asTwoPoint(d, 'forecast');
     if (!t) return false;
     const a = ctx.toXY(t.p1);
     const b = ctx.toXY(t.p2);
@@ -158,7 +152,7 @@ registerToolHandler({
     };
   },
   paint(d, ctx) {
-    const t = asTwo(d, 'datePriceRange');
+    const t = asTwoPoint(d, 'datePriceRange');
     if (!t) return;
     const a = ctx.toXY(t.p1);
     const b = ctx.toXY(t.p2);
@@ -206,7 +200,7 @@ registerToolHandler({
     }
   },
   hit(d, ctx) {
-    const t = asTwo(d, 'datePriceRange');
+    const t = asTwoPoint(d, 'datePriceRange');
     if (!t) return false;
     const a = ctx.toXY(t.p1);
     const b = ctx.toXY(t.p2);
@@ -216,12 +210,14 @@ registerToolHandler({
     const y1 = Math.min(a.y, b.y);
     const y2 = Math.max(a.y, b.y);
     // Full interior hit (filled box) plus edge tolerance
-    if (ctx.x >= x1 - ctx.tol && ctx.x <= x2 + ctx.tol && ctx.y >= y1 - ctx.tol && ctx.y <= y2 + ctx.tol) {
+    if (
+      ctx.x >= x1 - ctx.tol &&
+      ctx.x <= x2 + ctx.tol &&
+      ctx.y >= y1 - ctx.tol &&
+      ctx.y <= y2 + ctx.tol
+    ) {
       return true;
     }
     return nearRectEdge(ctx.x, ctx.y, x1, y1, x2, y2, ctx.tol);
   },
 });
-
-void 0 as unknown as ToolHitCtx;
-void 0 as unknown as ToolViewCtx;

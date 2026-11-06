@@ -46,13 +46,21 @@ const MARKER_PREFIX = '[axis-script:';
 const MIRROR_AUTHOR = { name: 'AXIS scripts', email: 'scripts@axis.hoox.sh' } as const;
 /** `createToken` TTL bounds for clone credentials (seconds). */
 export const CLONE_TOKEN_MIN_TTL = 60;
+/** Upper bound for a clone credential: 24 h, so a leaked token expires same-day. */
 export const CLONE_TOKEN_MAX_TTL = 24 * 3600;
+/** TTL applied when the caller passes nothing or a non-finite value. */
 export const CLONE_TOKEN_DEFAULT_TTL = 3600;
 
 // --- Minimal structural types for the Artifacts binding ------------------
 // (Declared locally so this module compiles against @cloudflare/workers-types
 // versions that predate the generated `Artifacts` global.)
 
+/**
+ * Repo metadata as the Artifacts binding reports it.
+ *
+ * `remote` is the clone URL handed to clients; `defaultBranch` is optional because
+ * a brand-new repo may not report one yet (callers fall back to `main`).
+ */
 export interface ArtifactsRepoInfo {
   name: string;
   remote: string;
@@ -60,17 +68,31 @@ export interface ArtifactsRepoInfo {
   status?: string;
 }
 
+/** Result of `create()`: repo info plus an initial write token. */
 export interface ArtifactsCreatedRepo extends ArtifactsRepoInfo {
   /** Initial write token: `art_v1_<secret>?expires=<unix_seconds>`. */
   token: string;
 }
 
+/**
+ * `createToken()` result in its object form.
+ *
+ * `expiresAt` may be seconds or milliseconds depending on the binding build —
+ * {@link epochToMs} normalizes it. The string form (`art_v1_…?expires=…`) is handled
+ * by {@link splitTokenSecret} instead.
+ */
 export interface ArtifactsTokenResult {
   plaintext: string;
   expiresAt: number;
   id?: string;
 }
 
+/**
+ * One `log()` entry.
+ *
+ * Field names vary across binding builds (`oid` vs `hash`, `timestamp` vs
+ * `committedAt`), so both are optional and callers coalesce them.
+ */
 export interface ArtifactsCommitMeta {
   oid?: string;
   hash?: string;
@@ -81,6 +103,12 @@ export interface ArtifactsCommitMeta {
   [key: string]: unknown;
 }
 
+/**
+ * Handle returned by `ArtifactsNamespace.get()`.
+ *
+ * Holds binding resources — {@link commitScriptSave} and friends release it through
+ * `Symbol.dispose` when available, so callers should not keep one around.
+ */
 export interface ArtifactsRepoHandle {
   info(): Promise<ArtifactsRepoInfo>;
   createToken(scope: 'read' | 'write', ttl?: number): Promise<ArtifactsTokenResult | string>;
@@ -102,36 +130,81 @@ export interface ArtifactsNamespace {
 
 /** `axis-scripts-<12hex>` — safe repo name derived from the hashed user id. */
 export function userRepoName(userId: string): string {
-  const clean = String(userId || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const clean = String(userId || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
   return `${REPO_PREFIX}${clean.slice(0, 12) || 'default'}`;
 }
 
 /** Script ids are `s_<base36>` plus `_draft`-style locals — keep them path-safe. */
 export function safeScriptId(id: string): string {
-  const clean = String(id || '').replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 80);
+  const clean = String(id || '')
+    .replace(/[^A-Za-z0-9._-]/g, '_')
+    .slice(0, 80);
   return clean || 'untitled';
 }
 
+/**
+ * Repo-relative path of a script's Pine source inside the mirror repo.
+ *
+ * @param id - Script id; sanitized with {@link safeScriptId}.
+ * @returns `scripts/<safe-id>.pine`.
+ */
 export function scriptFilePath(id: string): string {
   return `${SCRIPTS_DIR}/${safeScriptId(id)}.pine`;
 }
 
+/**
+ * Repo-relative path of a script's advisory metadata sidecar.
+ *
+ * @param id - Script id; sanitized with {@link safeScriptId}.
+ * @returns `scripts/<safe-id>.meta.json`.
+ */
 export function scriptMetaPath(id: string): string {
   return `${SCRIPTS_DIR}/${safeScriptId(id)}.meta.json`;
 }
 
+/**
+ * Commit message for a mirror save.
+ *
+ * The `[axis-script:<id>]` marker is what {@link parseScriptMarker} reads back, so
+ * history stays filterable even after the human text is rewritten.
+ *
+ * @param name - Script name; falls back to `script` when empty.
+ * @param id - Script id, embedded sanitized.
+ */
 export function saveCommitMessage(name: string, id: string): string {
   return `Save ${name || 'script'} ${MARKER_PREFIX}${safeScriptId(id)}]`;
 }
 
+/**
+ * Commit message for a mirror delete — same marker plus `[axis-delete]`, which
+ * excludes the commit from restorable history.
+ *
+ * @param name - Script name; falls back to `script` when empty.
+ * @param id - Script id, embedded sanitized.
+ */
 export function deleteCommitMessage(name: string, id: string): string {
   return `Remove ${name || 'script'} ${MARKER_PREFIX}${safeScriptId(id)}] [axis-delete]`;
 }
 
+/**
+ * Commit message for restoring a script from an earlier commit.
+ *
+ * @param name - Script name; falls back to `script` when empty.
+ * @param id - Script id, embedded sanitized.
+ * @param sha - Source commit; abbreviated to 7 chars in the human text.
+ */
 export function restoreCommitMessage(name: string, id: string, sha: string): string {
   return `Restore ${name || 'script'} from ${String(sha).slice(0, 7)} ${MARKER_PREFIX}${safeScriptId(id)}]`;
 }
 
+/**
+ * Machine marker parsed back out of a mirror commit message.
+ *
+ * `deleted` is true when the commit also carries `[axis-delete]`, which callers use
+ * to skip it in history.
+ */
 export interface ScriptMarker {
   id: string;
   deleted: boolean;
@@ -175,13 +248,14 @@ export function epochToMs(ts: number): number {
 
 function releaseHandle(repo: ArtifactsRepoHandle): void {
   try {
-    const disposeKey = (Symbol as unknown as Record<string, symbol | undefined>)['dispose'];
-    if (typeof disposeKey !== 'undefined') {
-      const fn = (repo as unknown as Record<symbol, unknown>)[disposeKey];
-      if (typeof fn === 'function') {
-        (fn as () => void).call(repo);
-        return;
-      }
+    // `Symbol.dispose` is runtime-provided (this lib predates Explicit Resources)
+    // and the binding handle may implement it without declaring it.
+    const disposeKey = (Symbol as { dispose?: symbol }).dispose;
+    if (typeof disposeKey === 'undefined') return;
+    const fn = (repo as ArtifactsRepoHandle & Record<symbol, unknown>)[disposeKey];
+    if (typeof fn === 'function') {
+      fn.call(repo);
+      return;
     }
   } catch {
     /* ignore — handle release is best-effort */
@@ -238,6 +312,13 @@ export async function getUserRepo(
 
 // --- Clone credentials (the no-GitHub-creds path) -------------------------
 
+/**
+ * A clone/pull/push credential for one user's script repo.
+ *
+ * `token` keeps the exact string the binding returned (the `git` extra-header form,
+ * `art_v1_<secret>?expires=<ts>`, or a bare secret), while `secret` is the bare value
+ * to put in a URL. `expiresAt` is always epoch **ms**.
+ */
 export interface CloneCredential {
   remote: string;
   repo: string;
@@ -248,12 +329,39 @@ export interface CloneCredential {
   expiresAt: number;
 }
 
+/**
+ * Coerces a requested clone-token TTL into the binding's allowed range.
+ *
+ * @param ttl - Requested lifetime in seconds; may come straight from a JSON body,
+ *   so any type is accepted.
+ * @returns Whole seconds clamped to
+ *   [{@link CLONE_TOKEN_MIN_TTL}, {@link CLONE_TOKEN_MAX_TTL}], or
+ *   {@link CLONE_TOKEN_DEFAULT_TTL} when `ttl` is not finite.
+ */
 export function clampCloneTtl(ttl: unknown): number {
   const n = Number(ttl);
   if (!Number.isFinite(n)) return CLONE_TOKEN_DEFAULT_TTL;
   return Math.min(CLONE_TOKEN_MAX_TTL, Math.max(CLONE_TOKEN_MIN_TTL, Math.floor(n)));
 }
 
+/**
+ * Mints a repo-scoped credential so a client can `git clone` / push the user's
+ * script repo without GitHub OAuth.
+ *
+ * Creates the repo on first use, then normalizes whichever `createToken` shape the
+ * binding returns (string with `?expires=` or an object) into a
+ * {@link CloneCredential}.
+ *
+ * @param ns - Bound `SCRIPT_ARTIFACTS` namespace.
+ * @param userId - Hashed user partition; selects the repo.
+ * @param scope - `read` for clone/pull, `write` for push; defaults to `read`.
+ * @param ttl - Lifetime in seconds; defaults to {@link CLONE_TOKEN_DEFAULT_TTL}.
+ *   Callers should pass it through {@link clampCloneTtl} when it came from a request.
+ * @returns The credential, with `expiresAt` in epoch ms (falls back to now + `ttl`
+ *   when the binding reported no expiry).
+ * @throws {Error} Whatever the binding raises when the repo cannot be created or a
+ *   token cannot be minted.
+ */
 export async function mintCloneToken(
   ns: ArtifactsNamespace,
   userId: string,
@@ -285,6 +393,12 @@ export async function mintCloneToken(
 
 // --- Version history from git log ------------------------------------------
 
+/**
+ * One history row, projected identically to the D1 `versions` endpoint so callers
+ * can swap backends without reshaping.
+ *
+ * `sha` and `revision` are the same commit id; `shortSha` is its 7-char form.
+ */
 export interface GitScriptVersion {
   sha: string;
   revision: string;
@@ -332,6 +446,12 @@ export async function listScriptHistory(
   return out;
 }
 
+/**
+ * A script's source plus sidecar metadata as of one commit.
+ *
+ * `name` falls back to the sanitized script id when the sidecar is missing or
+ * unparseable — the source is the authoritative part.
+ */
 export interface ScriptAtCommit {
   content: string;
   name: string;
@@ -380,6 +500,7 @@ export async function readScriptAtCommit(
 
 // --- Mirroring writes as git commits ----------------------------------------
 
+/** The script fields mirrored into git — the row as stored, minus timestamps. */
 export interface ScriptSnapshot {
   id: string;
   name: string;
@@ -388,6 +509,11 @@ export interface ScriptSnapshot {
   content: string;
 }
 
+/**
+ * One atomic push: apply `files` on `branch` and commit with `message`.
+ *
+ * A `null` value deletes that path, so save and delete share one code path.
+ */
 export interface TreePushInput {
   remote: string;
   tokenSecret: string;
@@ -398,6 +524,12 @@ export interface TreePushInput {
   author: { name: string; email: string };
 }
 
+/**
+ * The push seam.
+ *
+ * Production uses the isomorphic-git implementation; tests swap in a fake via
+ * {@link _setGitTreePusher} so no network is touched.
+ */
 export interface GitTreePusher {
   pushTree(input: TreePushInput): Promise<{ sha: string }>;
 }
@@ -509,10 +641,7 @@ export async function commitScriptSave(
   }
 
   const credential = await withRepo(ns, repo.name, (r) => r.createToken('write', 600));
-  const initial =
-    typeof credential === 'string'
-      ? credential
-      : String(credential.plaintext || '');
+  const initial = typeof credential === 'string' ? credential : String(credential.plaintext || '');
   const { secret } = splitTokenSecret(initial);
   const { sha } = await treePusher.pushTree({
     remote: repo.remote,

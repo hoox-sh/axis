@@ -142,7 +142,7 @@ const ToastCard: Component<{ toast: ToastEntry }> = (props) => {
 };
 
 /** Fixed toast stack; pointer-events pass through except on cards. */
-export const Toasts: Component = () => {
+export const Toasts: Component = () : JSX.Element => {
   return (
     <Show when={store.toasts.length > 0}>
       <div

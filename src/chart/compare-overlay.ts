@@ -53,7 +53,9 @@ export const COMPARE_MAIN_PCT_COLOR = VOID.indigo;
  */
 export const COMPARE_PRICE_SCALE_ID = 'left';
 
+/** Bar close keyed by UTC seconds — the join key for compare alignment. */
 export type TimedClose = { time: number; close: number };
+/** Line point for LWC: UTC seconds + value (quote currency, or % in percent mode). */
 export type LinePoint = { time: number; value: number };
 
 /**
@@ -66,8 +68,13 @@ const appliedCompareByManager = new WeakMap<
   { compare: LinePoint[]; mainPercent: LinePoint[] }
 >();
 
+/**
+ * `percent` rebases both legs to % from the first common close;
+ * `absolute` plots raw closes on the left scale.
+ */
 export type CompareMode = 'percent' | 'absolute';
 
+/** One timestamp present in both series, with each leg's close. */
 export type AlignedPair = {
   time: number;
   main: number;
@@ -377,6 +384,7 @@ function configureCompareScale(
   }
 }
 
+/** Inputs for {@link applyCompareOverlay}: both bar windows, symbol label, and mode. */
 export type ApplyCompareOpts = {
   mainBars: ReadonlyArray<Bar>;
   compareBars: ReadonlyArray<Bar>;

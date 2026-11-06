@@ -19,9 +19,14 @@
  * @module engine/v1/metrics
  */
 
+/** Hot-path counters for the v1 (worker/AXB1) plane, read by MCP `chart.lag` v1. */
 export type V1Counter =
   'seqGap' | 'resync' | 'droppedTip' | 'jsonFallback' | 'unknownOpcode' | 'longTask';
 
+/**
+ * Snapshot shape of the v1 counters: a plain `counts` record so the values can be serialized
+ * straight into an MCP reply.
+ */
 export type V1Metrics = {
   counts: Record<V1Counter, number>;
 };

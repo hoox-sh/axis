@@ -37,15 +37,15 @@
  * persist drawings (caller maps {@link DraftPayload} into a `Drawing`).
  */
 
-/** Chart time/price anchor used while drafting. */
+/** Chart anchor while drafting: time in seconds + price in quote currency. */
 export interface ChartPoint {
   time: number;
   price: number;
 }
 
 /**
- * Fixed point count, or free-form (`'n'`) finished via `onFinish`.
- * Distinct from UI-facing `RequiredPoints` (`'multi'`) in `defaults.ts`.
+ * Anchors needed before commit: `1`–`3` commit on the Nth click, `'n'` is
+ * open-ended and finishes via `onFinish()`.
  */
 export type ToolArity = 1 | 2 | 3 | 'n';
 

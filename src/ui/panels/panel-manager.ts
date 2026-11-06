@@ -66,10 +66,7 @@ export const PANEL_IDS: readonly PanelId[] = [
  * Fixed app-shell strips — not FloatableShell; chart-overlay / dock reset N/A
  * for portal layout (open flag only).
  */
-export const FIXED_APP_SHELL_PANELS: ReadonlySet<PanelId> = new Set([
-  'logs',
-  'statusbar',
-]);
+export const FIXED_APP_SHELL_PANELS: ReadonlySet<PanelId> = new Set(['logs', 'statusbar']);
 
 /**
  * Panels that may only float — no layout docks. The shell hides dock menu
@@ -143,6 +140,7 @@ export const CHART_OVERLAY_TOP_PAD = 48;
 /** Bottom safe pad (status strip). */
 export const CHART_OVERLAY_BOTTOM_PAD = 36;
 
+/** Pixel rect used for edge overlays and default float placement. */
 export interface ChartOverlayGeometry {
   x: number;
   y: number;

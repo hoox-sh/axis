@@ -33,8 +33,14 @@
 
 import type { ProviderGateway } from './provider';
 
+/**
+ * Transport used for datafeed calls: the provider's own `direct`/`worker`/`pyne`
+ * gateways plus `auto`, which prefers a reachable local sidecar and falls back
+ * to the PYNE gateway. `direct` has no base URL — callers use venue-native fetch.
+ */
 export type GatewayMode = ProviderGateway | 'auto';
 
+/** Default loopback port of the local datafeed sidecar. */
 export const DATAFEED_DEFAULT_PORT = 5003;
 
 /**
@@ -117,7 +123,11 @@ const PROBE_TTL_MS = 30_000;
  *
  * @param pageOrigin - injectable for tests; defaults to `location.origin`
  */
-export function gatewayBase(mode: GatewayMode, endpoint?: string, pageOrigin?: string): string | null {
+export function gatewayBase(
+  mode: GatewayMode,
+  endpoint?: string,
+  pageOrigin?: string,
+): string | null {
   if (mode === 'direct') return null;
   const origin = pageOrigin ?? currentPageOrigin();
   const remote = isRemotePageOrigin(origin);
@@ -213,6 +223,16 @@ export async function gatewayPutSession(
   }
 }
 
+/**
+ * Drop the gateway's cached credentials for `credId`. A `ccxt:` prefix is
+ * stripped to derive the exchange name; failures are swallowed because the
+ * local vault has already removed the key and the gateway may be down.
+ *
+ * @param mode - Gateway transport; `direct` is a no-op.
+ * @param credId - Credential id as stored in the vault (`ccxt:<exchange>` or raw).
+ * @param endpoint - Optional explicit gateway host override.
+ * @param pageOrigin - Injectable page origin for remote-page resolution.
+ */
 export async function gatewayDeleteSession(
   mode: GatewayMode,
   credId: string,

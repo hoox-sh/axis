@@ -27,18 +27,17 @@
  * @module indicators/apply-pane
  */
 
-import {
-  addPane,
-  removePane,
-  newEntityId,
-  store,
-  EDITOR_RUN_KEY,
-} from '../store';
+import { addPane, removePane, newEntityId, store, EDITOR_RUN_KEY } from '../store';
 import type { Indicator } from '../store/types';
 import type { PaneManager } from '../chart/pane-manager';
 import { reportUiError } from '../ui/boot-errors';
 import { clearScriptPaneLayer } from '../chart/manager-access';
 
+/**
+ * Inputs for {@link ensureApplyPane}: the resolved overlay flag, the existing
+ * indicator record (the re-run target), the script id/name, the live pane
+ * manager, and store pane/script snapshots used for orphan detection.
+ */
 export interface PaneSetupContext {
   overlay: boolean;
   existing: Indicator | undefined;
@@ -49,6 +48,19 @@ export interface PaneSetupContext {
   storeScripts: typeof store.scripts;
 }
 
+/**
+ * Ensure the pane this script paints on exists and return its id.
+ *
+ * Mutates the store and the chart: non-overlay scripts get a private
+ * `ind_<scriptId>` sub-pane (a re-run keeps the one it already has), the legacy
+ * shared `indicator` pane is migrated off and destroyed once unused, and empty
+ * orphan panes are dropped together with their manager pane, script layer and
+ * store row. A chart disposed mid-apply is reported through `reportUiError` and
+ * falls back to `price` when that pane still exists.
+ *
+ * @param ctx - overlay flag, existing script, script id/name, manager, store lists
+ * @returns the pane id to paint on — `price` for overlay scripts
+ */
 export function ensureApplyPane(ctx: PaneSetupContext): string {
   const existing = ctx.existing as Indicator | undefined;
   let paneId = 'price';
@@ -60,15 +72,13 @@ export function ensureApplyPane(ctx: PaneSetupContext): string {
     // pane gets a stable `ind_<scriptId>` host so RSI + MACD stack as separate panes.
     const reserved = new Set(['price', 'volume']);
     const legacyShared = 'indicator';
-    if (
-      existing?.paneId &&
-      !reserved.has(existing.paneId) &&
-      existing.paneId !== legacyShared
-    ) {
+    if (existing?.paneId && !reserved.has(existing.paneId) && existing.paneId !== legacyShared) {
       paneId = existing.paneId;
     } else {
       const key = ctx.indicatorId || newEntityId();
-      paneId = `ind_${String(key).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 56)}`;
+      paneId = `ind_${String(key)
+        .replace(/[^a-zA-Z0-9_-]/g, '_')
+        .slice(0, 56)}`;
       if (existing?.paneId === legacyShared) previousSubPane = legacyShared;
     }
     try {
@@ -99,9 +109,7 @@ export function ensureApplyPane(ctx: PaneSetupContext): string {
         }
         // Destroy legacy shared pane when no scripts still reference it
         if (
-          !ctx.storeScripts.some(
-            (s) => s.paneId === previousSubPane && s.id !== ctx.indicatorId,
-          )
+          !ctx.storeScripts.some((s) => s.paneId === previousSubPane && s.id !== ctx.indicatorId)
         ) {
           try {
             ctx.manager.destroyPane(previousSubPane);
@@ -178,11 +186,7 @@ export function ensureApplyPane(ctx: PaneSetupContext): string {
         ctx.manager.removeOverlays(existing.paneId);
       }
       // Destroy empty private sub-pane
-      if (
-        !ctx.storeScripts.some(
-          (s) => s.paneId === existing.paneId && s.id !== ctx.indicatorId,
-        )
-      ) {
+      if (!ctx.storeScripts.some((s) => s.paneId === existing.paneId && s.id !== ctx.indicatorId)) {
         try {
           ctx.manager.destroyPane(existing.paneId);
           clearScriptPaneLayer(existing.paneId);

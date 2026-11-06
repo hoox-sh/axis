@@ -17,8 +17,16 @@ import { createEmitter } from '../utils/emitter';
 import { invokeCapability } from './dispatch';
 import { McpInvokeError, sessionIdFromApiKey } from './protocol';
 
+/**
+ * Lifecycle of the PWA → Worker bridge socket, surfaced in Settings → MCP so the user can
+ * see whether an agent can reach this tab.
+ */
 export type McpBridgeStatus = 'idle' | 'connecting' | 'open' | 'error' | 'closed';
 
+/**
+ * Snapshot of the bridge connection as the UI renders it: connection status, hashed session
+ * id, attached-tab count, and the last invoke the agent sent down this socket.
+ */
 export interface McpBridgeState {
   status: McpBridgeStatus;
   session: string | null;
@@ -59,6 +67,13 @@ const MCP_CONNECT_PREF_KEY = 'pynescript.axis.mcp.v1';
 const ROTATE_DEBOUNCE_MS = 300;
 const BACKOFF_CEILING_ATTEMPT = 5;
 
+/**
+ * Shape check on a pasted Worker key before the bridge mints a ticket, so a truncated paste
+ * shows a settings error instead of a failed WebSocket handshake.
+ *
+ * @param key Candidate key; surrounding whitespace is trimmed before matching `pn_` + 48 hex.
+ * @returns `true` when the key matches the Worker's production key shape.
+ */
 export function isWellFormedWorkerApiKey(key: string): boolean {
   return WORKER_API_KEY_RE.test(key.trim());
 }
@@ -77,10 +92,22 @@ function emit(): void {
   bridgeEmitter.emit({ ...state });
 }
 
+/**
+ * Reads the current bridge state as a copy, so UI subscribers cannot mutate the module's
+ * connection record.
+ *
+ * @returns A shallow copy of the current {@link McpBridgeState}.
+ */
 export function mcpBridgeState(): McpBridgeState {
   return { ...state };
 }
 
+/**
+ * Subscribes to bridge state changes for the Settings → MCP panel.
+ *
+ * @param fn Listener called with a fresh state copy on every status/invoke/tab change.
+ * @returns Unsubscribe function; call it on component cleanup.
+ */
 export function onMcpBridge(fn: (s: McpBridgeState) => void): () => void {
   return bridgeEmitter.on(fn);
 }
@@ -101,7 +128,7 @@ async function handleFrame(raw: string, socket: WebSocket | null): Promise<void>
   } catch {
     return;
   }
-  const type = String(msg.type || '');
+  const type = String(msg['type'] || '');
   if (type === 'ping') {
     try {
       socket?.send(JSON.stringify({ type: 'pong', t: Date.now() }));
@@ -111,7 +138,7 @@ async function handleFrame(raw: string, socket: WebSocket | null): Promise<void>
     return;
   }
   if (type === 'hello-ok') {
-    const tabId = typeof msg.tabId === 'string' ? msg.tabId : null;
+    const tabId = typeof msg['tabId'] === 'string' ? msg['tabId'] : null;
     if (tabId) {
       state = { ...state, tabId };
       emit();
@@ -119,8 +146,8 @@ async function handleFrame(raw: string, socket: WebSocket | null): Promise<void>
     return;
   }
   if (type !== 'invoke') return;
-  const id = String(msg.id || '');
-  const capability = String(msg.capability || '');
+  const id = String(msg['id'] || '');
+  const capability = String(msg['capability'] || '');
   state = { ...state, lastInvokeAt: Date.now(), lastCapability: capability || null };
   emit();
   // F12: reply on the originating socket, not the module-global `ws` — the
@@ -138,7 +165,7 @@ async function handleFrame(raw: string, socket: WebSocket | null): Promise<void>
   try {
     // Bridge frames arrive over the Worker-authenticated session (ticket),
     // so mutating capabilities are allowed here — unlike the in-page host.
-    const result = await invokeCapability(capability, msg.payload, { allowMutations: true });
+    const result = await invokeCapability(capability, msg['payload'], { allowMutations: true });
     appendLog('info', `mcp ${capability || '?'} → ok · ${Date.now() - started}ms`, 'mcp');
     reply({ type: 'result', id, result });
   } catch (err) {
@@ -204,8 +231,11 @@ function stopTabsPoll(): void {
 }
 
 /**
- * Refresh the attached-tab count via `GET /api/mcp/bridge` (Bearer).
- * Transient failures keep the last-known value; callers clear on disconnect.
+ * Polls `GET /api/mcp/bridge` with the stored Bearer key for the attached-tab count.
+ * Transient failures keep the last-known value; callers clear it on disconnect.
+ *
+ * @returns Attached tab count, or the last known value when the call fails or no key is set
+ * (`null` = unknown).
  */
 export async function refreshBridgeTabs(): Promise<number | null> {
   const cfg = resolveCloudConfig();
@@ -290,7 +320,14 @@ async function mintBridgeTicket(cfg: { endpoint: string; apiKey: string }): Prom
   return ticket;
 }
 
-/** Open (or refresh) the control-plane socket using the stored cloud API key. */
+/**
+ * Opens (or refreshes) the control-plane WebSocket `/api/mcp/bridge` using the stored cloud
+ * API key: mints a short-lived ticket over REST, then attaches this tab with a `hello` frame
+ * carrying its tab id and chart context. No-op with an explanatory `idle` state when no key
+ * is configured or the key is malformed; failures schedule a backed-off reconnect.
+ *
+ * @throws Never — connection and ticket failures are recorded in the bridge state instead.
+ */
 export async function connectMcpBridge(): Promise<void> {
   if (!mcpConnectEnabled()) {
     disconnectMcpBridge();
@@ -439,9 +476,10 @@ export async function connectMcpBridge(): Promise<void> {
 }
 
 /**
- * Re-sync the bridge to the stored Worker key.
- * Debounced (~300ms) so Settings keystrokes do not open a socket on the first
- * typed character. Save / generate pass `{ immediate: true }`.
+ * Re-sync the bridge to the stored Worker key. Debounced (~300 ms) so Settings keystrokes do
+ * not open a socket on the first typed character; save/generate pass `immediate` to skip it.
+ *
+ * @param opts `immediate: true` reconnects now, otherwise the reconnect waits ~300 ms.
  */
 export function rotateMcpBridge(opts?: { immediate?: boolean }): void {
   if (rotateTimer) {
@@ -456,6 +494,10 @@ export function rotateMcpBridge(opts?: { immediate?: boolean }): void {
   else rotateTimer = setTimeout(run, ROTATE_DEBOUNCE_MS);
 }
 
+/**
+ * Stops the bridge for good: cancels pending reconnect/rotate timers, closes the socket, and
+ * leaves the state `closed` so no agent invoke can reach this tab.
+ */
 export function disconnectMcpBridge(): void {
   stopped = true;
   connectGen += 1;

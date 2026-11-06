@@ -23,9 +23,16 @@
  * @module onchain/types
  */
 
+/** Payload shape a dataset carries: bars, one/many scalar series, events, or table rows. */
 export type DatasetKind = 'ohlcv' | 'scalar_series' | 'multi_series' | 'events' | 'table';
+
+/** How settled the upstream data is; `unknown` when the provider signals nothing. */
 export type Finality = 'pending' | 'safe' | 'finalized' | 'unknown';
 
+/**
+ * Identity of one on-chain series — chain, protocol or contract address,
+ * metric and facet — as handed to a `DatasetPlugin`.
+ */
 export interface OnchainInstrument {
   chainId: string; // e.g. eip155:1 or "all" for multi-chain protocol metrics
   address?: string;
@@ -35,12 +42,17 @@ export interface OnchainInstrument {
   symbol: string; // human label
 }
 
+/** One scalar sample: unix seconds plus value, with optional per-point metadata. */
 export interface TimePoint {
   time: number; // unix seconds
   value: number;
   meta?: Record<string, number | string | boolean>;
 }
 
+/**
+ * One on-chain event row — a synthetic TVL spike/drop or a provider event.
+ * Feeds chart markers and the `onchain_event` / `onchain_tvl_spike` alerts.
+ */
 export interface EventPoint {
   time: number;
   type: string;
@@ -50,6 +62,11 @@ export interface EventPoint {
   payload?: Record<string, unknown>;
 }
 
+/**
+ * Normalized dataset returned by a `DatasetPlugin`: exactly one of
+ * `bars` / `series` / `points` / `events` / `rows` is populated, alongside the
+ * instrument it describes, its provenance, and how final the data is.
+ */
 export interface OnchainDataset {
   id: string;
   kind: DatasetKind;
@@ -67,6 +84,10 @@ export interface OnchainDataset {
   synthetic?: boolean;
 }
 
+/**
+ * Arguments to `DatasetPlugin.fetchDataset`. Time bounds are unix seconds;
+ * `limit` caps the number of points returned (plugins may ignore it).
+ */
 export interface DatasetFetchOpts {
   instrument: OnchainInstrument;
   resolution?: string;

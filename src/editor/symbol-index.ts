@@ -39,6 +39,7 @@
 import builtinsJson from './data/pyne-builtins.json';
 import { isQuoteChar, type QuoteChar, isQuoteClose } from './pine-scan-util';
 
+/** Declaration kinds the index recognises (drives hover and rename rules). */
 export type SymbolKind =
   'function' | 'method' | 'type' | 'enum' | 'variable' | 'parameter' | 'field' | 'import';
 
@@ -74,6 +75,7 @@ export interface SymbolRef {
   receiverDecl?: SymbolDecl | null;
 }
 
+/** Offset range of one function, type, or enum body. */
 export interface ScopeRange {
   /** Function / type / enum name. */
   name: string;
@@ -83,6 +85,7 @@ export interface ScopeRange {
   to: number;
 }
 
+/** Parsed document: declarations, occurrences, name buckets, and scope ranges. */
 export interface SymbolIndex {
   declarations: SymbolDecl[];
   references: SymbolRef[];
@@ -1031,6 +1034,7 @@ export function isBuiltinName(name: string): boolean {
   return false;
 }
 
+/** Result of {@link planRename}: the edits to apply, or a refusal reason. */
 export type RenamePlan =
   | { ok: true; name: string; edits: Array<{ from: number; to: number }> }
   | { ok: false; reason: string };

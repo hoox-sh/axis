@@ -44,7 +44,7 @@ function formatLegendUsd(value: number | null): string {
 }
 
 /** Up to six visible on-chain series in the chart's top-left corner. */
-export const OnchainLegend: Component = () => {
+export const OnchainLegend: Component = () : JSX.Element => {
   const entries = createMemo(() => onchainLegendEntries(onchainManagerState.series));
   return (
     <Show when={entries().length > 0}>

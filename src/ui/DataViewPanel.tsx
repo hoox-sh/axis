@@ -57,6 +57,7 @@ import { FloatableShell } from './panels/FloatableShell';
 import { Icons } from './icons';
 import { copyToClipboard } from './clipboard';
 import type { PlotSample } from '../plugins/types';
+import { bindSlashToSearch } from './focus-search';
 
 type GroupId = 'bar' | 'ohlcv' | 'plots' | 'drawings' | 'onchain';
 
@@ -89,7 +90,7 @@ function fmtBarTime(t: number | null | undefined): string {
 }
 
 /** Crosshair-synced OHLCV / plot / drawing / on-chain value inspector. */
-export const DataViewPanel: Component = () => {
+export const DataViewPanel: Component = () : JSX.Element => {
   const [pinnedIndex, setPinnedIndex] = createSignal<number | null>(null);
   /** Last bar seen under the crosshair — survives pointer-leave for pin/step. */
   const [lastSeenIndex, setLastSeenIndex] = createSignal<number | null>(null);
@@ -109,15 +110,7 @@ export const DataViewPanel: Component = () => {
 
   onMount(() => {
     // `/` focuses the value search while the panel is mounted.
-    const onSlash = (e: KeyboardEvent) => {
-      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
-      const target = e.target as HTMLElement | null;
-      if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
-      e.preventDefault();
-      searchInput?.focus();
-    };
-    window.addEventListener('keydown', onSlash);
-    onCleanup(() => window.removeEventListener('keydown', onSlash));
+    onCleanup(bindSlashToSearch(() => searchInput));
     onCleanup(() => {
       if (statusTimer) window.clearTimeout(statusTimer);
       if (copyTimer) window.clearTimeout(copyTimer);

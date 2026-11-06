@@ -117,12 +117,21 @@ function engineForWorker(id: WorkerId, endpoint: string): string {
   return 'server';
 }
 
+/**
+ * Workers studio page: catalog + health probes for the calc backends (Pro API,
+ * CF Worker, Pyodide, service worker), with per-worker config and install
+ * actions. The selected worker seeds from `initialWorkerId` and can be deep
+ * linked from Runtime.
+ *
+ * @param props - Close/navigate handlers, change notification, and initial worker.
+ * @returns The workers page body.
+ */
 export function WorkersPage(props: {
   onClose: () => void;
   onNavigate?: (id: StudioPageId) => void;
   onChanged?: () => void;
   initialWorkerId?: WorkerId;
-}) {
+}): JSX.Element {
   const [selectedId, setSelectedId] = createSignal<WorkerId>(props.initialWorkerId || 'pyne-pro');
   const [snap, setSnap] = createSignal<WorkersOverviewSnapshot | null>(null);
   const [probing, setProbing] = createSignal(false);
@@ -353,7 +362,7 @@ export function WorkersPage(props: {
       // before the seeding existed and config is still empty).
       const key = pluginKey('component', 'pyne-agent');
       const prev = (store.pluginsConfig?.[key] || {}) as Record<string, unknown>;
-      if (!prev.endpoint || !String(prev.endpoint).trim()) {
+      if (!prev['endpoint'] || !String(prev['endpoint']).trim()) {
         writePluginField(key, 'endpoint', entry.defaultEndpoint || DEFAULT_PYNE_AGENT_ENDPOINT);
         void persist();
       }
@@ -616,7 +625,7 @@ export function WorkersPage(props: {
                           </StudioCode>
                         </StudioField>
                       </Show>
-                      <Show when={r()?.features?.free_tier_limits === true}>
+                      <Show when={r()?.features?.['free_tier_limits'] === true}>
                         <StudioField label="Free-tier guards">
                           <StudioCode>
                             enabled — unauthenticated /run is rate/bounds limited; set an API key
@@ -848,11 +857,11 @@ export function WorkersPage(props: {
                               (
                                 (store.pluginsConfig?.[pluginKey('component', 'pyne-agent')] ||
                                   {}) as Record<string, unknown>
-                              ).endpoint ||
+                              )['endpoint'] ||
                                 (
                                   store.pluginsConfig?.['pyne-agent'] as
                                     Record<string, unknown> | undefined
-                                )?.endpoint ||
+                                )?.['endpoint'] ||
                                 '',
                             )}
                             onInput={(value) => {
@@ -905,7 +914,7 @@ export function WorkersPage(props: {
                               (
                                 (store.pluginsConfig?.[pluginKey('component', 'pyne-agent')] ||
                                   {}) as Record<string, unknown>
-                              ).persona || 'auto',
+                              )['persona'] || 'auto',
                             )}
                             onChange={(v) => {
                               writePluginField(pluginKey('component', 'pyne-agent'), 'persona', v);
@@ -930,7 +939,7 @@ export function WorkersPage(props: {
                               (
                                 (store.pluginsConfig?.[pluginKey('component', 'pyne-agent')] ||
                                   {}) as Record<string, unknown>
-                              ).pyneBackend || 'auto',
+                              )['pyneBackend'] || 'auto',
                             )}
                             onChange={(v) => {
                               writePluginField(

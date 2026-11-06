@@ -59,6 +59,7 @@ export function eventSearchText(ev: StreamEventView): string {
     .toLowerCase();
 }
 
+/** Filter state applied by {@link filterEvents} (direction, search text, close-only). */
 export interface EventFilterOptions {
   /** Free-text query, matched case-insensitively against kind/dir/id. */
   query?: string;
@@ -117,6 +118,7 @@ export function countEvents(events: readonly StreamEventView[]): {
 /** Sort orders for the saved-runs list. */
 export type SavedSort = 'newest' | 'oldest' | 'pnl' | 'winrate' | 'trades';
 
+/** Sort options for the saved-runs list, in the order the picker shows them. */
 export const SAVED_SORTS: readonly { id: SavedSort; label: string }[] = [
   { id: 'newest', label: 'Newest' },
   { id: 'oldest', label: 'Oldest' },
@@ -134,8 +136,8 @@ function savedNumber(stats: unknown, key: string): number | null {
 /** Search haystack for a saved run: label, kind, symbol, timeframe. */
 export function savedRunSearchText(run: ResultMeta): string {
   const inputs = (run.inputs ?? {}) as Record<string, unknown>;
-  const symbol = String(inputs.symbol ?? inputs.ticker ?? '');
-  const timeframe = String(inputs.timeframe ?? inputs.interval ?? '');
+  const symbol = String(inputs['symbol'] ?? inputs['ticker'] ?? '');
+  const timeframe = String(inputs['timeframe'] ?? inputs['interval'] ?? '');
   return [run.label ?? '', run.scriptKind ?? '', symbol, timeframe].join(' ').toLowerCase();
 }
 
@@ -170,6 +172,7 @@ export function sortSavedRuns(
 
 // ── Series geometry ────────────────────────────────────────────────────────
 
+/** Aggregate of one plotted series: min/max/last plus finite-sample count. */
 export interface SeriesSummary {
   /** Non-null sample count. */
   count: number;

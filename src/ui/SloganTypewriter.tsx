@@ -50,6 +50,7 @@ const DELETE_MS = 35;
 /** Hold a complete phrase before deleting it (landing parity). */
 const HOLD_MS = 2000;
 
+/** Props for the slogan cycler: phrases in play order and an optional extra class. */
 export type SloganTypewriterProps = {
   /** Phrases to cycle in order; `phrases[0]` is the first (static) frame. */
   phrases: readonly string[];
@@ -57,7 +58,7 @@ export type SloganTypewriterProps = {
 };
 
 /** Animated, aria-hidden slogan line (see module doc for the contract). */
-export const SloganTypewriter: Component<SloganTypewriterProps> = (props) => {
+export const SloganTypewriter: Component<SloganTypewriterProps> = (props): JSX.Element => {
   const first = props.phrases[0] ?? '';
   const [text, setText] = createSignal(first);
   /** Longest phrase — sizes the box so the left edge is stable. */

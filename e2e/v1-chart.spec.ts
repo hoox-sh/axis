@@ -127,6 +127,6 @@ test.describe('v1 chart gates @v1', () => {
     expect(frames.length).toBeGreaterThan(0);
     const max = Math.max(...frames);
     // Concept G2 is 50 ms. CI runners starve rAF; keep a slack ceiling there.
-    expect(max).toBeLessThan(process.env.CI ? 250 : 50);
+    expect(max).toBeLessThan(process.env['CI'] ? 250 : 50);
   });
 });

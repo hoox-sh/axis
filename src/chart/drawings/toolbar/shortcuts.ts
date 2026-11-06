@@ -38,19 +38,24 @@ import type { ShortcutId, ShortcutOverrides } from '../../../ui/shortcuts/types'
 export const RAIL_BUTTON_PX = 32;
 /** Optical icon size for tool glyphs (16px box, 1.7 stroke). */
 export const TOOL_ICON_PX = 16;
+/** Stroke width for tool glyphs (tuned for the 16px box). */
 export const TOOL_ICON_STROKE = 1.7;
 /** Utility toggles (magnet / lock / eye) read slightly heavier at small size. */
 export const UTILITY_ICON_PX = 16;
+/** Stroke width for utility toggles. */
 export const UTILITY_ICON_STROKE = 2;
 /** Grip affordance size. */
 export const GRIP_ICON_PX = 14;
+/** Stroke width for the drag grip affordance. */
 export const GRIP_ICON_STROKE = 2.25;
 /** Pointer slop before a press becomes a drag. */
 export const DRAG_SLOP_PX = 4;
 /** Keyboard nudge step (Shift = large). */
 export const NUDGE_PX = 4;
+/** Shift+arrow nudge step, in px. */
 export const NUDGE_LARGE_PX = 16;
 
+/** Swatches offered by the style bar, in display order. */
 export const COLOR_PRESETS = [
   DRAWING_COLORS.default,
   DRAWING_COLORS.up,
@@ -60,6 +65,7 @@ export const COLOR_PRESETS = [
   '#8b8e9c',
 ] as const;
 
+/** Dash patterns offered by the style bar, in display order. */
 export const LINE_STYLES: DrawingLineStyle[] = ['solid', 'dashed', 'dotted'];
 
 /**
@@ -88,6 +94,13 @@ export function toolChord(
   return getDisplay(shortcutId, overrides, platform);
 }
 
+/**
+ * Tooltip text with the tool's key chord appended.
+ *
+ * @param name human tool name
+ * @param shortcut display chord, e.g. `T`; omitted when empty
+ * @returns `name (shortcut)` or `name`
+ */
 export function titleWithShortcut(name: string, shortcut?: string): string {
   return shortcut ? `${name} (${shortcut})` : name;
 }

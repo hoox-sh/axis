@@ -27,8 +27,13 @@
  * @module results/pyne-logs
  */
 
+/** Severity bucket every log normalizes to; `debug` is folded into `info`. */
 export type PyneLogLevel = 'info' | 'warning' | 'error';
 
+/**
+ * One normalized engine log line: synthetic id, level, message, and the
+ * optional source line / bar index / bar time when the engine supplied them.
+ */
 export interface PyneLogEntry {
   id: string;
   level: PyneLogLevel;
@@ -89,7 +94,7 @@ function extractLogArray(raw: unknown): unknown[] {
   }
 
   // Nested under meta
-  const meta = raw.meta;
+  const meta = raw['meta'];
   if (isRecord(meta)) {
     for (const key of ['logs', 'pine_logs', 'pineLogs', 'messages'] as const) {
       const v = meta[key];
@@ -105,8 +110,8 @@ function extractLogArray(raw: unknown): unknown[] {
         const v = inner[key];
         if (Array.isArray(v)) return v;
       }
-      if (isRecord(inner.meta)) {
-        const v = inner.meta.logs;
+      if (isRecord(inner['meta'])) {
+        const v = inner['meta']['logs'];
         if (Array.isArray(v)) return v;
       }
     }
@@ -117,21 +122,25 @@ function extractLogArray(raw: unknown): unknown[] {
 
 function entryFromObject(item: Record<string, unknown>, index: number): PyneLogEntry | null {
   const message = asMessage(
-    item.message ?? item.msg ?? item.text ?? item.content ?? item.body ?? '',
+    item['message'] ?? item['msg'] ?? item['text'] ?? item['content'] ?? item['body'] ?? '',
   );
   // Skip completely empty objects with no message-ish field
-  const hasLevel = item.level != null || item.severity != null || item.type != null;
+  const hasLevel = item['level'] != null || item['severity'] != null || item['type'] != null;
   if (!message && !hasLevel) return null;
 
-  const level = normalizeLevel(item.level ?? item.severity ?? item.type);
+  const level = normalizeLevel(item['level'] ?? item['severity'] ?? item['type']);
   const line = asFiniteNumber(
-    item.line ?? item.lineNumber ?? item.line_number ?? item.lineno ?? item.source_line,
+    item['line'] ??
+      item['lineNumber'] ??
+      item['line_number'] ??
+      item['lineno'] ??
+      item['source_line'],
   );
   const barIndex = asFiniteNumber(
-    item.barIndex ?? item.bar_index ?? item.bar ?? item.index,
+    item['barIndex'] ?? item['bar_index'] ?? item['bar'] ?? item['index'],
   );
-  const time = asFiniteNumber(item.time ?? item.bar_time ?? item.barTime ?? item.ts);
-  const idRaw = item.id ?? item.uid ?? item.key;
+  const time = asFiniteNumber(item['time'] ?? item['bar_time'] ?? item['barTime'] ?? item['ts']);
+  const idRaw = item['id'] ?? item['uid'] ?? item['key'];
   const id = idRaw != null && String(idRaw).length > 0 ? String(idRaw) : `log-${index}`;
 
   return {
@@ -266,7 +275,9 @@ export function pyneLogsToText(entries: PyneLogEntry[]): string {
   if (!entries?.length) return '';
   const lines = ['level\tmessage\tbarIndex\ttime'];
   for (const e of entries) {
-    const msg = String(e.message ?? '').replace(/\t/g, ' ').replace(/\r?\n/g, ' ');
+    const msg = String(e.message ?? '')
+      .replace(/\t/g, ' ')
+      .replace(/\r?\n/g, ' ');
     const bi = e.barIndex == null ? '' : String(e.barIndex);
     const t = e.time == null ? '' : String(e.time);
     lines.push(`${e.level}\t${msg}\t${bi}\t${t}`);

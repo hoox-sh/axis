@@ -26,6 +26,7 @@
  * @module onchain/legend
  */
 
+/** One legend row per visible attachment, in source order. */
 export type OnchainLegendEntry = {
   id: string;
   label: string;

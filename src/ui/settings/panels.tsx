@@ -95,9 +95,11 @@ function activeCcxtGateway(): GatewayMode {
   return g === 'pyne' || g === 'sidecar' ? g : 'auto';
 }
 
-/** Per-venue API key/secret/passphrase — session vault, never persist() secrets. */
-/** Session-only exchange keys. Used by Settings studio page. */
-export const ExchangeCredentialsPanel: Component = () => {
+/**
+ * Per-venue API key/secret/passphrase form. Credentials stay in the session
+ * vault only — they are never written by `persist()`.
+ */
+export const ExchangeCredentialsPanel: Component = (): JSX.Element => {
   const onCcxtSource = () => store.source === 'ccxt-rest' || store.live?.streamId === 'ccxt-ws';
   const [kind, setKind] = createSignal<'native' | 'ccxt'>(onCcxtSource() ? 'ccxt' : 'native');
   const [venue, setVenue] = createSignal<ExchangeCredentialVenue>(
@@ -570,8 +572,12 @@ function countIntelFlags(intel: EditorIntelSettings): { on: number; total: numbe
   return { on, total };
 }
 
-/** Live-applied editor intelligence (lint / hover / complete / marks). */
-export const EditorIntelPanel: Component = () => {
+/**
+ * Live-applied editor intelligence switches (pre-eval, hover, completions,
+ * underlines, inline chips). Each toggle patches the editor-intel settings
+ * immediately — there is no save step.
+ */
+export const EditorIntelPanel: Component = (): JSX.Element => {
   const intel = () => getEditorIntel();
   const set = (partial: Partial<EditorIntelSettings>) => patchEditorIntel(partial);
   const resetFb = useMicrofeedback({ successHoldMs: 700 });

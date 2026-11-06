@@ -29,12 +29,14 @@ import type { Bar } from '../../store/types';
 import { trendOverTicks } from './trend';
 import { formatExtraPrice } from './format';
 
+/** One label/value line of the quote sheet; `tone` colors up/down/flat values. */
 export interface QuoteRow {
   label: string;
   value: string;
   tone?: 'up' | 'down' | 'flat';
 }
 
+/** Inputs for the quote sheet: symbol/venue identity, bars, live tick, and day anchor. */
 export interface QuoteInput {
   symbol: string;
   venue: string;
@@ -73,7 +75,8 @@ export function displayedLastPrice(opts: {
   barClose: number;
   streamState?: string | null;
 }): number {
-  if (streamAllowsLivePrice(opts.streamState) && Number.isFinite(opts.tickPrice)) return opts.tickPrice;
+  if (streamAllowsLivePrice(opts.streamState) && Number.isFinite(opts.tickPrice))
+    return opts.tickPrice;
   return Number.isFinite(opts.barClose) ? opts.barClose : NaN;
 }
 

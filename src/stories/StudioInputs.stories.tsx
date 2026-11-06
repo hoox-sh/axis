@@ -39,6 +39,7 @@ export default meta;
 
 /* ── 1 · Overview ─────────────────────────────────────────────────── */
 
+/** Anatomy of one field: label, control, hint, and message on a shared rhythm. */
 export const Overview: StoryObj = {
   render: () => {
     const [theme, setTheme] = createSignal('Void Dark');
@@ -152,6 +153,7 @@ export const Overview: StoryObj = {
 
 /* ── 2 · States ───────────────────────────────────────────────────── */
 
+/** Default / filled / valid / invalid / loading / read-only / disabled at equal height. */
 export const States: StoryObj = {
   render: () => (
     <div class="axi-demo">
@@ -222,6 +224,7 @@ export const States: StoryObj = {
 
 /* ── 3 · Smart input ──────────────────────────────────────────────── */
 
+/** Symbol / name / quantity / token / secret inputs with the smart trailing slot. */
 export const SmartInput: StoryObj = {
   render: () => {
     const [symbol, setSymbol] = createSignal('BTCUSDT');
@@ -384,6 +387,7 @@ export const SmartInput: StoryObj = {
 
 /* ── 4 · Validation ───────────────────────────────────────────────── */
 
+/** Live validation: touched-email error and a debounced URL check through the status lane. */
 export const Validation: StoryObj = {
   render: () => {
     const [email, setEmail] = createSignal('');
@@ -531,6 +535,7 @@ export const Validation: StoryObj = {
 
 /* ── 5 · Select + toggle ──────────────────────────────────────────── */
 
+/** Select and toggle primitives, including the compact toggle grid. */
 export const SelectAndToggle: StoryObj = {
   render: () => {
     const [brand, setBrand] = createSignal(true);
@@ -641,6 +646,7 @@ export const SelectAndToggle: StoryObj = {
 
 /* ── 6 · Color ────────────────────────────────────────────────────── */
 
+/** Color inputs accepting hex, a Pine color token, `rgb()` and `rgba()` with alpha. */
 export const Color: StoryObj = {
   render: () => {
     const [accent, setAccent] = createSignal('#8B9CFF');
@@ -725,6 +731,7 @@ export const Color: StoryObj = {
 
 /* ── 7 · Range + textarea ─────────────────────────────────────────── */
 
+/** Range sliders with value readouts plus a multi-line textarea. */
 export const RangeAndTextarea: StoryObj = {
   render: () => {
     const [speed, setSpeed] = createSignal(1.5);
@@ -835,6 +842,7 @@ export const RangeAndTextarea: StoryObj = {
 
 /* ── 8 · Keyboard + a11y ──────────────────────────────────────────── */
 
+/** Keyboard and a11y contract: focus order, key handling, and the live region. */
 export const KeyboardAndA11y: StoryObj = {
   render: () => {
     const [value, setValue] = createSignal('');
@@ -922,6 +930,7 @@ export const KeyboardAndA11y: StoryObj = {
 
 /* ── 9 · Playground ───────────────────────────────────────────────── */
 
+/** Interactive playground wiring every input primitive to live state. */
 export const Playground: StoryObj = {
   render: () => {
     const [theme, setTheme] = createSignal('Void Dark');
@@ -1092,6 +1101,7 @@ export const Playground: StoryObj = {
 
 /* ── 10 · Contract ────────────────────────────────────────────────── */
 
+/** Implementation contract: one shell, one native control, one status lane. */
 export const Contract: StoryObj = {
   render: () => (
     <div class="axi-demo">

@@ -21,6 +21,7 @@
 
 import { type QuoteChar, isQuoteChar, isQuoteClose } from './pine-scan-util';
 
+/** One parameter of a Pine call signature. */
 export interface PineParamDef {
   name: string;
   /** Pine type qualifier + type, e.g. `series float`, `const string`. */
@@ -31,6 +32,7 @@ export interface PineParamDef {
   description?: string;
 }
 
+/** Signature metadata used by hints, completions, and hover. */
 export interface PineCallSig {
   name: string;
   params: PineParamDef[];
@@ -39,6 +41,7 @@ export interface PineCallSig {
   example?: string;
 }
 
+/** One argument already written in the call, with its document offsets. */
 export interface CallArg {
   raw: string;
   name?: string;
@@ -46,6 +49,7 @@ export interface CallArg {
   to: number;
 }
 
+/** Parsed call around the cursor: name, arguments, and what is still unused. */
 export interface CallSite {
   name: string;
   openParen: number;
@@ -61,16 +65,7 @@ export interface CallSite {
   argFrom: number;
 }
 
-const CONTROL_CALLS = new Set([
-  'if',
-  'else',
-  'for',
-  'while',
-  'switch',
-  'and',
-  'or',
-  'not',
-]);
+const CONTROL_CALLS = new Set(['if', 'else', 'for', 'while', 'switch', 'and', 'or', 'not']);
 
 /** Compact curated signatures for the calls users type most. */
 const CURATED: Record<string, PineCallSig> = {
@@ -78,21 +73,86 @@ const CURATED: Record<string, PineCallSig> = {
     name: 'plot',
     params: [
       { name: 'series', type: 'series float', description: 'Series of values to display' },
-      { name: 'title', type: 'const string', optional: true, description: 'Plot title in the scale / data window' },
-      { name: 'color', type: 'series color', optional: true, description: 'Plot color (`color.red`, `color.new`, hex)' },
+      {
+        name: 'title',
+        type: 'const string',
+        optional: true,
+        description: 'Plot title in the scale / data window',
+      },
+      {
+        name: 'color',
+        type: 'series color',
+        optional: true,
+        description: 'Plot color (`color.red`, `color.new`, hex)',
+      },
       { name: 'linewidth', type: 'input int', optional: true, description: 'Line width in pixels' },
-      { name: 'style', type: 'input string', optional: true, description: '`plot.style_line`, `plot.style_histogram`, …' },
-      { name: 'trackprice', type: 'input bool', optional: true, description: 'Draw a price line for the last value' },
-      { name: 'histbase', type: 'input int/float', optional: true, description: 'Histogram baseline' },
-      { name: 'offset', type: 'simple int', optional: true, description: 'Bar offset (negative = left)' },
-      { name: 'join', type: 'input bool', optional: true, description: 'Connect histogram / columns' },
-      { name: 'editable', type: 'const bool', optional: true, description: 'Show in Style settings' },
-      { name: 'show_last', type: 'input int', optional: true, description: 'Only draw the last N bars' },
-      { name: 'display', type: 'input string', optional: true, description: '`display.all` / `display.none` / `display.data_window` / `display.pane`' },
-      { name: 'format', type: 'const string', optional: true, description: '`format.price` / `format.percent`' },
+      {
+        name: 'style',
+        type: 'input string',
+        optional: true,
+        description: '`plot.style_line`, `plot.style_histogram`, …',
+      },
+      {
+        name: 'trackprice',
+        type: 'input bool',
+        optional: true,
+        description: 'Draw a price line for the last value',
+      },
+      {
+        name: 'histbase',
+        type: 'input int/float',
+        optional: true,
+        description: 'Histogram baseline',
+      },
+      {
+        name: 'offset',
+        type: 'simple int',
+        optional: true,
+        description: 'Bar offset (negative = left)',
+      },
+      {
+        name: 'join',
+        type: 'input bool',
+        optional: true,
+        description: 'Connect histogram / columns',
+      },
+      {
+        name: 'editable',
+        type: 'const bool',
+        optional: true,
+        description: 'Show in Style settings',
+      },
+      {
+        name: 'show_last',
+        type: 'input int',
+        optional: true,
+        description: 'Only draw the last N bars',
+      },
+      {
+        name: 'display',
+        type: 'input string',
+        optional: true,
+        description: '`display.all` / `display.none` / `display.data_window` / `display.pane`',
+      },
+      {
+        name: 'format',
+        type: 'const string',
+        optional: true,
+        description: '`format.price` / `format.percent`',
+      },
       { name: 'precision', type: 'const int', optional: true, description: 'Decimal places' },
-      { name: 'force_overlay', type: 'const bool', optional: true, description: 'Force onto the price pane' },
-      { name: 'linestyle', type: 'input string', optional: true, description: '`plot.linestyle_solid` / dashed / dotted' },
+      {
+        name: 'force_overlay',
+        type: 'const bool',
+        optional: true,
+        description: 'Force onto the price pane',
+      },
+      {
+        name: 'linestyle',
+        type: 'input string',
+        optional: true,
+        description: '`plot.linestyle_solid` / dashed / dotted',
+      },
     ],
     returns: 'plot',
     description: 'Plot a series on the chart.',
@@ -101,30 +161,69 @@ const CURATED: Record<string, PineCallSig> = {
   plotshape: {
     name: 'plotshape',
     params: [
-      { name: 'series', type: 'series int/bool', description: 'True / nonzero / non-na to draw a shape' },
+      {
+        name: 'series',
+        type: 'series int/bool',
+        description: 'True / nonzero / non-na to draw a shape',
+      },
       { name: 'title', type: 'const string', optional: true, description: 'Shape title' },
-      { name: 'style', type: 'input string', optional: true, description: '`shape.triangleup`, `shape.circle`, …' },
-      { name: 'location', type: 'input string', optional: true, description: '`location.abovebar` / `location.belowbar`' },
+      {
+        name: 'style',
+        type: 'input string',
+        optional: true,
+        description: '`shape.triangleup`, `shape.circle`, …',
+      },
+      {
+        name: 'location',
+        type: 'input string',
+        optional: true,
+        description: '`location.abovebar` / `location.belowbar`',
+      },
       { name: 'color', type: 'series color', optional: true, description: 'Shape color' },
       { name: 'offset', type: 'simple int', optional: true, description: 'Bar offset' },
       { name: 'text', type: 'const string', optional: true, description: 'Optional label text' },
       { name: 'textcolor', type: 'series color', optional: true, description: 'Text color' },
       { name: 'editable', type: 'const bool', optional: true },
-      { name: 'size', type: 'const string', optional: true, description: '`size.tiny` … `size.huge`' },
+      {
+        name: 'size',
+        type: 'const string',
+        optional: true,
+        description: '`size.tiny` … `size.huge`',
+      },
       { name: 'show_last', type: 'input int', optional: true },
       { name: 'display', type: 'input string', optional: true },
-      { name: 'format', type: 'const string', optional: true, description: '`format.price` / `format.percent`' },
+      {
+        name: 'format',
+        type: 'const string',
+        optional: true,
+        description: '`format.price` / `format.percent`',
+      },
       { name: 'precision', type: 'const int', optional: true, description: 'Decimal places' },
-      { name: 'force_overlay', type: 'const bool', optional: true, description: 'Force onto the price pane' },
+      {
+        name: 'force_overlay',
+        type: 'const bool',
+        optional: true,
+        description: 'Force onto the price pane',
+      },
     ],
-    example: 'plotshape(ta.crossover(fast, slow), style=shape.triangleup, location=location.belowbar)',
+    example:
+      'plotshape(ta.crossover(fast, slow), style=shape.triangleup, location=location.belowbar)',
   },
   plotchar: {
     name: 'plotchar',
     params: [
-      { name: 'series', type: 'series int/bool', description: 'True / nonzero / non-na to draw the character' },
+      {
+        name: 'series',
+        type: 'series int/bool',
+        description: 'True / nonzero / non-na to draw the character',
+      },
       { name: 'title', type: 'const string', optional: true },
-      { name: 'char', type: 'const string', optional: true, description: 'Single character, e.g. `"▲"`' },
+      {
+        name: 'char',
+        type: 'const string',
+        optional: true,
+        description: 'Single character, e.g. `"▲"`',
+      },
       { name: 'location', type: 'input string', optional: true },
       { name: 'color', type: 'series color', optional: true },
       { name: 'offset', type: 'simple int', optional: true },
@@ -134,9 +233,19 @@ const CURATED: Record<string, PineCallSig> = {
       { name: 'size', type: 'const string', optional: true },
       { name: 'show_last', type: 'input int', optional: true },
       { name: 'display', type: 'input string', optional: true },
-      { name: 'format', type: 'const string', optional: true, description: '`format.price` / `format.percent`' },
+      {
+        name: 'format',
+        type: 'const string',
+        optional: true,
+        description: '`format.price` / `format.percent`',
+      },
       { name: 'precision', type: 'const int', optional: true, description: 'Decimal places' },
-      { name: 'force_overlay', type: 'const bool', optional: true, description: 'Force onto the price pane' },
+      {
+        name: 'force_overlay',
+        type: 'const bool',
+        optional: true,
+        description: 'Force onto the price pane',
+      },
     ],
     example: 'plotchar(longCond, char="▲", location=location.belowbar, color=color.lime)',
   },
@@ -146,7 +255,12 @@ const CURATED: Record<string, PineCallSig> = {
       { name: 'price', type: 'input int/float', description: 'Horizontal price / level' },
       { name: 'title', type: 'const string', optional: true },
       { name: 'color', type: 'input color', optional: true },
-      { name: 'linestyle', type: 'input string', optional: true, description: '`hline.style_dashed` / `hline.style_dotted`' },
+      {
+        name: 'linestyle',
+        type: 'input string',
+        optional: true,
+        description: '`hline.style_dashed` / `hline.style_dotted`',
+      },
       { name: 'linewidth', type: 'input int', optional: true },
       { name: 'editable', type: 'const bool', optional: true },
       { name: 'display', type: 'input string', optional: true },
@@ -169,22 +283,82 @@ const CURATED: Record<string, PineCallSig> = {
     name: 'indicator',
     params: [
       { name: 'title', type: 'const string', description: 'Script name in the chart legend' },
-      { name: 'shorttitle', type: 'const string', optional: true, description: 'Compact name on the pane' },
-      { name: 'overlay', type: 'const bool', optional: true, description: '`true` = price pane, `false` = own pane' },
-      { name: 'format', type: 'const string', optional: true, description: '`format.price` / `format.percent` / `format.volume`' },
-      { name: 'precision', type: 'const int', optional: true, description: 'Decimal places on the scale' },
-      { name: 'scale', type: 'const string', optional: true, description: '`scale.right` / `scale.left` / `scale.none`' },
-      { name: 'max_bars_back', type: 'const int', optional: true, description: 'History buffer depth' },
-      { name: 'timeframe', type: 'const string', optional: true, description: 'MTF: `"60"`, `"D"`, `timeframe.period`' },
-      { name: 'timeframe_gaps', type: 'const bool', optional: true, description: 'Leave gaps when MTF bars do not align' },
-      { name: 'explicit_plot_zorder', type: 'const bool', optional: true, description: 'Honour plot() call order for z-index' },
+      {
+        name: 'shorttitle',
+        type: 'const string',
+        optional: true,
+        description: 'Compact name on the pane',
+      },
+      {
+        name: 'overlay',
+        type: 'const bool',
+        optional: true,
+        description: '`true` = price pane, `false` = own pane',
+      },
+      {
+        name: 'format',
+        type: 'const string',
+        optional: true,
+        description: '`format.price` / `format.percent` / `format.volume`',
+      },
+      {
+        name: 'precision',
+        type: 'const int',
+        optional: true,
+        description: 'Decimal places on the scale',
+      },
+      {
+        name: 'scale',
+        type: 'const string',
+        optional: true,
+        description: '`scale.right` / `scale.left` / `scale.none`',
+      },
+      {
+        name: 'max_bars_back',
+        type: 'const int',
+        optional: true,
+        description: 'History buffer depth',
+      },
+      {
+        name: 'timeframe',
+        type: 'const string',
+        optional: true,
+        description: 'MTF: `"60"`, `"D"`, `timeframe.period`',
+      },
+      {
+        name: 'timeframe_gaps',
+        type: 'const bool',
+        optional: true,
+        description: 'Leave gaps when MTF bars do not align',
+      },
+      {
+        name: 'explicit_plot_zorder',
+        type: 'const bool',
+        optional: true,
+        description: 'Honour plot() call order for z-index',
+      },
       { name: 'max_lines_count', type: 'const int', optional: true },
       { name: 'max_labels_count', type: 'const int', optional: true },
       { name: 'max_boxes_count', type: 'const int', optional: true },
-      { name: 'calc_bars_count', type: 'const int', optional: true, description: 'Limit calculated bars' },
+      {
+        name: 'calc_bars_count',
+        type: 'const int',
+        optional: true,
+        description: 'Limit calculated bars',
+      },
       { name: 'max_polylines_count', type: 'const int', optional: true },
-      { name: 'dynamic_requests', type: 'const bool', optional: true, description: 'Allow series `request.*` (v6)' },
-      { name: 'behind_chart', type: 'const bool', optional: true, description: 'Draw behind candles (v6)' },
+      {
+        name: 'dynamic_requests',
+        type: 'const bool',
+        optional: true,
+        description: 'Allow series `request.*` (v6)',
+      },
+      {
+        name: 'behind_chart',
+        type: 'const bool',
+        optional: true,
+        description: 'Draw behind candles (v6)',
+      },
     ],
     description: 'Declare an indicator script.',
     example: 'indicator("RSI", shorttitle="RSI", overlay=false)',
@@ -193,25 +367,90 @@ const CURATED: Record<string, PineCallSig> = {
     name: 'strategy',
     params: [
       { name: 'title', type: 'const string', description: 'Script name in the chart legend' },
-      { name: 'shorttitle', type: 'const string', optional: true, description: 'Compact name on the pane' },
-      { name: 'overlay', type: 'const bool', optional: true, description: '`true` = price pane, `false` = own pane' },
-      { name: 'format', type: 'const string', optional: true, description: '`format.price` / `format.percent` / `format.volume`' },
-      { name: 'precision', type: 'const int', optional: true, description: 'Decimal places on the scale' },
-      { name: 'scale', type: 'const string', optional: true, description: '`scale.right` / `scale.left` / `scale.none`' },
-      { name: 'pyramiding', type: 'const int', optional: true, description: 'Max entries in the same direction' },
-      { name: 'calc_on_order_fills', type: 'const bool', optional: true, description: 'Recalculate after intra-bar fills' },
-      { name: 'calc_on_every_tick', type: 'const bool', optional: true, description: 'Recalculate on every realtime tick' },
-      { name: 'max_bars_back', type: 'const int', optional: true, description: 'History buffer depth' },
+      {
+        name: 'shorttitle',
+        type: 'const string',
+        optional: true,
+        description: 'Compact name on the pane',
+      },
+      {
+        name: 'overlay',
+        type: 'const bool',
+        optional: true,
+        description: '`true` = price pane, `false` = own pane',
+      },
+      {
+        name: 'format',
+        type: 'const string',
+        optional: true,
+        description: '`format.price` / `format.percent` / `format.volume`',
+      },
+      {
+        name: 'precision',
+        type: 'const int',
+        optional: true,
+        description: 'Decimal places on the scale',
+      },
+      {
+        name: 'scale',
+        type: 'const string',
+        optional: true,
+        description: '`scale.right` / `scale.left` / `scale.none`',
+      },
+      {
+        name: 'pyramiding',
+        type: 'const int',
+        optional: true,
+        description: 'Max entries in the same direction',
+      },
+      {
+        name: 'calc_on_order_fills',
+        type: 'const bool',
+        optional: true,
+        description: 'Recalculate after intra-bar fills',
+      },
+      {
+        name: 'calc_on_every_tick',
+        type: 'const bool',
+        optional: true,
+        description: 'Recalculate on every realtime tick',
+      },
+      {
+        name: 'max_bars_back',
+        type: 'const int',
+        optional: true,
+        description: 'History buffer depth',
+      },
       { name: 'backtest_fill_limits_assumption', type: 'const int', optional: true },
-      { name: 'default_qty_type', type: 'const string', optional: true, description: '`strategy.fixed` / `strategy.cash` / `strategy.percent_of_equity`' },
-      { name: 'default_qty_value', type: 'const int/float', optional: true, description: 'Default order size' },
+      {
+        name: 'default_qty_type',
+        type: 'const string',
+        optional: true,
+        description: '`strategy.fixed` / `strategy.cash` / `strategy.percent_of_equity`',
+      },
+      {
+        name: 'default_qty_value',
+        type: 'const int/float',
+        optional: true,
+        description: 'Default order size',
+      },
       { name: 'initial_capital', type: 'const int/float', optional: true },
       { name: 'currency', type: 'const string', optional: true, description: '`currency.USD`, …' },
       { name: 'slippage', type: 'const int', optional: true, description: 'Slippage in ticks' },
-      { name: 'commission_type', type: 'const string', optional: true, description: '`strategy.commission.percent`, …' },
+      {
+        name: 'commission_type',
+        type: 'const string',
+        optional: true,
+        description: '`strategy.commission.percent`, …',
+      },
       { name: 'commission_value', type: 'const int/float', optional: true },
       { name: 'process_orders_on_close', type: 'const bool', optional: true },
-      { name: 'close_entries_rule', type: 'const string', optional: true, description: '`"FIFO"` / `"ANY"`' },
+      {
+        name: 'close_entries_rule',
+        type: 'const string',
+        optional: true,
+        description: '`"FIFO"` / `"ANY"`',
+      },
       { name: 'margin_long', type: 'const int/float', optional: true },
       { name: 'margin_short', type: 'const int/float', optional: true },
       { name: 'explicit_plot_zorder', type: 'const bool', optional: true },
@@ -223,19 +462,46 @@ const CURATED: Record<string, PineCallSig> = {
       { name: 'use_bar_magnifier', type: 'const bool', optional: true },
       { name: 'fill_orders_on_standard_ohlc', type: 'const bool', optional: true },
       { name: 'max_polylines_count', type: 'const int', optional: true },
-      { name: 'dynamic_requests', type: 'const bool', optional: true, description: 'Allow series `request.*` (v6)' },
-      { name: 'behind_chart', type: 'const bool', optional: true, description: 'Draw behind candles (v6)' },
-      { name: 'linktoseries', type: 'const bool', optional: true, description: 'AXIS extension — link strategy fills to the active source series (pyne accepts declaration kwargs)' },
+      {
+        name: 'dynamic_requests',
+        type: 'const bool',
+        optional: true,
+        description: 'Allow series `request.*` (v6)',
+      },
+      {
+        name: 'behind_chart',
+        type: 'const bool',
+        optional: true,
+        description: 'Draw behind candles (v6)',
+      },
+      {
+        name: 'linktoseries',
+        type: 'const bool',
+        optional: true,
+        description:
+          'AXIS extension — link strategy fills to the active source series (pyne accepts declaration kwargs)',
+      },
     ],
     description: 'Declare a strategy script.',
-    example: 'strategy("MA Cross", overlay=true, initial_capital=10000, default_qty_type=strategy.percent_of_equity)',
+    example:
+      'strategy("MA Cross", overlay=true, initial_capital=10000, default_qty_type=strategy.percent_of_equity)',
   },
   library: {
     name: 'library',
     params: [
       { name: 'title', type: 'const string', description: 'Library name' },
-      { name: 'overlay', type: 'const bool', optional: true, description: '`true` = price pane when used as overlay' },
-      { name: 'dynamic_requests', type: 'const bool', optional: true, description: 'Allow series `request.*` (v6)' },
+      {
+        name: 'overlay',
+        type: 'const bool',
+        optional: true,
+        description: '`true` = price pane when used as overlay',
+      },
+      {
+        name: 'dynamic_requests',
+        type: 'const bool',
+        optional: true,
+        description: 'Allow series `request.*` (v6)',
+      },
     ],
     description: 'Declare a library script.',
     example: 'library("MyLib", overlay=true)',
@@ -245,11 +511,36 @@ const CURATED: Record<string, PineCallSig> = {
     params: [
       { name: 'defval', description: 'Default value (type is inferred)' },
       { name: 'title', type: 'const string', optional: true, description: 'Settings label' },
-      { name: 'tooltip', type: 'const string', optional: true, description: 'Hover help (`\\n` for line breaks)' },
-      { name: 'inline', type: 'const string', optional: true, description: 'Same string = same Settings row' },
-      { name: 'group', type: 'const string', optional: true, description: 'Settings section heading' },
-      { name: 'confirm', type: 'const bool', optional: true, description: 'Prompt on the chart when added' },
-      { name: 'active', type: 'input bool', optional: true, description: '`true` / `false` or another input ident' },
+      {
+        name: 'tooltip',
+        type: 'const string',
+        optional: true,
+        description: 'Hover help (`\\n` for line breaks)',
+      },
+      {
+        name: 'inline',
+        type: 'const string',
+        optional: true,
+        description: 'Same string = same Settings row',
+      },
+      {
+        name: 'group',
+        type: 'const string',
+        optional: true,
+        description: 'Settings section heading',
+      },
+      {
+        name: 'confirm',
+        type: 'const bool',
+        optional: true,
+        description: 'Prompt on the chart when added',
+      },
+      {
+        name: 'active',
+        type: 'input bool',
+        optional: true,
+        description: '`true` / `false` or another input ident',
+      },
     ],
     returns: 'value',
     description: 'Generic script input (type follows `defval`).',
@@ -263,12 +554,37 @@ const CURATED: Record<string, PineCallSig> = {
       { name: 'minval', type: 'const int', optional: true, description: 'Minimum allowed value' },
       { name: 'maxval', type: 'const int', optional: true, description: 'Maximum allowed value' },
       { name: 'step', type: 'const int', optional: true, description: 'Spinner step' },
-      { name: 'tooltip', type: 'const string', optional: true, description: 'Hover help (`\\n` for line breaks)' },
-      { name: 'inline', type: 'const string', optional: true, description: 'Same string = same Settings row' },
-      { name: 'group', type: 'const string', optional: true, description: 'Settings section heading' },
+      {
+        name: 'tooltip',
+        type: 'const string',
+        optional: true,
+        description: 'Hover help (`\\n` for line breaks)',
+      },
+      {
+        name: 'inline',
+        type: 'const string',
+        optional: true,
+        description: 'Same string = same Settings row',
+      },
+      {
+        name: 'group',
+        type: 'const string',
+        optional: true,
+        description: 'Settings section heading',
+      },
       { name: 'confirm', type: 'const bool', optional: true },
-      { name: 'display', type: 'const string', optional: true, description: '`display.all` / `display.none` / `display.data_window`' },
-      { name: 'active', type: 'input bool', optional: true, description: '`true` / `false` or another input ident' },
+      {
+        name: 'display',
+        type: 'const string',
+        optional: true,
+        description: '`display.all` / `display.none` / `display.data_window`',
+      },
+      {
+        name: 'active',
+        type: 'input bool',
+        optional: true,
+        description: '`true` / `false` or another input ident',
+      },
     ],
     returns: 'input int',
     example: 'len = input.int(14, "Length", minval=1, maxval=200)',
@@ -311,7 +627,12 @@ const CURATED: Record<string, PineCallSig> = {
     params: [
       { name: 'defval', type: 'const string', description: 'Default string' },
       { name: 'title', type: 'const string', optional: true },
-      { name: 'options', type: 'const string[]', optional: true, description: 'Dropdown list, e.g. `["A","B"]`' },
+      {
+        name: 'options',
+        type: 'const string[]',
+        optional: true,
+        description: 'Dropdown list, e.g. `["A","B"]`',
+      },
       { name: 'tooltip', type: 'const string', optional: true },
       { name: 'inline', type: 'const string', optional: true },
       { name: 'group', type: 'const string', optional: true },
@@ -355,9 +676,18 @@ const CURATED: Record<string, PineCallSig> = {
   'input.timeframe': {
     name: 'input.timeframe',
     params: [
-      { name: 'defval', type: 'const string', description: 'Default timeframe (`""`, `"60"`, `"D"`)' },
+      {
+        name: 'defval',
+        type: 'const string',
+        description: 'Default timeframe (`""`, `"60"`, `"D"`)',
+      },
       { name: 'title', type: 'const string', optional: true },
-      { name: 'options', type: 'const string[]', optional: true, description: 'Dropdown list of timeframes' },
+      {
+        name: 'options',
+        type: 'const string[]',
+        optional: true,
+        description: 'Dropdown list of timeframes',
+      },
       { name: 'tooltip', type: 'const string', optional: true },
       { name: 'inline', type: 'const string', optional: true },
       { name: 'group', type: 'const string', optional: true },
@@ -387,7 +717,11 @@ const CURATED: Record<string, PineCallSig> = {
   'ta.sma': {
     name: 'ta.sma',
     params: [
-      { name: 'source', type: 'series float', description: 'Series of values (`close`, a plot, …)' },
+      {
+        name: 'source',
+        type: 'series float',
+        description: 'Series of values (`close`, a plot, …)',
+      },
       { name: 'length', type: 'simple int', description: 'Lookback period (int ≥ 1)' },
     ],
     returns: 'series float',
@@ -497,7 +831,11 @@ const CURATED: Record<string, PineCallSig> = {
     name: 'color.new',
     params: [
       { name: 'color', type: 'series color', description: 'Base color' },
-      { name: 'transp', type: 'series int/float', description: 'Transparency 0 (solid) … 100 (invisible)' },
+      {
+        name: 'transp',
+        type: 'series int/float',
+        description: 'Transparency 0 (solid) … 100 (invisible)',
+      },
     ],
     returns: 'color',
     example: 'color.new(color.teal, 80)',
@@ -517,8 +855,16 @@ const CURATED: Record<string, PineCallSig> = {
     name: 'color.from_gradient',
     params: [
       { name: 'value', type: 'series int/float', description: 'Value to map onto the gradient' },
-      { name: 'bottom_value', type: 'series int/float', description: 'Value that maps to `bottom_color`' },
-      { name: 'top_value', type: 'series int/float', description: 'Value that maps to `top_color`' },
+      {
+        name: 'bottom_value',
+        type: 'series int/float',
+        description: 'Value that maps to `bottom_color`',
+      },
+      {
+        name: 'top_value',
+        type: 'series int/float',
+        description: 'Value that maps to `top_color`',
+      },
       { name: 'bottom_color', type: 'series color', description: 'Color at `bottom_value`' },
       { name: 'top_color', type: 'series color', description: 'Color at `top_value`' },
     ],
@@ -532,15 +878,35 @@ const CURATED: Record<string, PineCallSig> = {
       { name: 'x', type: 'series int', description: 'Bar index or time (`xloc`)' },
       { name: 'y', type: 'series int/float', description: 'Price' },
       { name: 'text', type: 'series string', optional: true },
-      { name: 'xloc', type: 'series string', optional: true, description: '`xloc.bar_index` / `xloc.bar_time`' },
-      { name: 'yloc', type: 'series string', optional: true, description: '`yloc.price` / `yloc.abovebar`' },
+      {
+        name: 'xloc',
+        type: 'series string',
+        optional: true,
+        description: '`xloc.bar_index` / `xloc.bar_time`',
+      },
+      {
+        name: 'yloc',
+        type: 'series string',
+        optional: true,
+        description: '`yloc.price` / `yloc.abovebar`',
+      },
       { name: 'color', type: 'series color', optional: true },
-      { name: 'style', type: 'series string', optional: true, description: '`label.style_label_up`, …' },
+      {
+        name: 'style',
+        type: 'series string',
+        optional: true,
+        description: '`label.style_label_up`, …',
+      },
       { name: 'textcolor', type: 'series color', optional: true },
       { name: 'size', type: 'series string', optional: true },
       { name: 'textalign', type: 'series string', optional: true },
       { name: 'tooltip', type: 'series string', optional: true },
-      { name: 'text_font_family', type: 'series string', optional: true, description: '`font.family_default` / `font.family_monospace`' },
+      {
+        name: 'text_font_family',
+        type: 'series string',
+        optional: true,
+        description: '`font.family_default` / `font.family_monospace`',
+      },
       { name: 'force_overlay', type: 'const bool', optional: true },
       { name: 'text_formatting', type: 'const string', optional: true },
     ],
@@ -554,10 +920,25 @@ const CURATED: Record<string, PineCallSig> = {
       { name: 'y1', type: 'series int/float', description: 'Start price' },
       { name: 'x2', type: 'series int', description: 'End bar / time' },
       { name: 'y2', type: 'series int/float', description: 'End price' },
-      { name: 'xloc', type: 'simple string', optional: true, description: '`xloc.bar_index` / `xloc.bar_time`' },
-      { name: 'extend', type: 'series string', optional: true, description: '`extend.none` / `extend.right`' },
+      {
+        name: 'xloc',
+        type: 'simple string',
+        optional: true,
+        description: '`xloc.bar_index` / `xloc.bar_time`',
+      },
+      {
+        name: 'extend',
+        type: 'series string',
+        optional: true,
+        description: '`extend.none` / `extend.right`',
+      },
       { name: 'color', type: 'series color', optional: true },
-      { name: 'style', type: 'series string', optional: true, description: '`line.style_solid` / dashed' },
+      {
+        name: 'style',
+        type: 'series string',
+        optional: true,
+        description: '`line.style_solid` / dashed',
+      },
       { name: 'width', type: 'series int', optional: true },
       { name: 'force_overlay', type: 'const bool', optional: true },
     ],
@@ -573,9 +954,24 @@ const CURATED: Record<string, PineCallSig> = {
       { name: 'bottom', type: 'series int/float', description: 'Bottom price' },
       { name: 'border_color', type: 'series color', optional: true },
       { name: 'border_width', type: 'series int', optional: true },
-      { name: 'border_style', type: 'series string', optional: true, description: '`line.style_solid` / dashed / dotted' },
-      { name: 'extend', type: 'series string', optional: true, description: '`extend.none` / `extend.right`' },
-      { name: 'xloc', type: 'series string', optional: true, description: '`xloc.bar_index` / `xloc.bar_time`' },
+      {
+        name: 'border_style',
+        type: 'series string',
+        optional: true,
+        description: '`line.style_solid` / dashed / dotted',
+      },
+      {
+        name: 'extend',
+        type: 'series string',
+        optional: true,
+        description: '`extend.none` / `extend.right`',
+      },
+      {
+        name: 'xloc',
+        type: 'series string',
+        optional: true,
+        description: '`xloc.bar_index` / `xloc.bar_time`',
+      },
       { name: 'bgcolor', type: 'series color', optional: true },
       { name: 'text', type: 'series string', optional: true },
       { name: 'text_size', type: 'series string', optional: true },
@@ -616,7 +1012,12 @@ const CURATED: Record<string, PineCallSig> = {
       { name: 'row', type: 'series int', description: '0-based row' },
       { name: 'text', type: 'series string', optional: true },
       { name: 'width', type: 'series int', optional: true, description: 'Cell width as % of pane' },
-      { name: 'height', type: 'series int', optional: true, description: 'Cell height as % of pane' },
+      {
+        name: 'height',
+        type: 'series int',
+        optional: true,
+        description: 'Cell height as % of pane',
+      },
       { name: 'text_color', type: 'series color', optional: true },
       { name: 'text_halign', type: 'series string', optional: true },
       { name: 'text_valign', type: 'series string', optional: true },
@@ -633,12 +1034,21 @@ const CURATED: Record<string, PineCallSig> = {
     name: 'strategy.entry',
     params: [
       { name: 'id', type: 'series string', description: 'Order id' },
-      { name: 'direction', type: 'series strategy_direction', description: '`strategy.long` / `strategy.short`' },
+      {
+        name: 'direction',
+        type: 'series strategy_direction',
+        description: '`strategy.long` / `strategy.short`',
+      },
       { name: 'qty', type: 'series int/float', optional: true },
       { name: 'limit', type: 'series int/float', optional: true },
       { name: 'stop', type: 'series int/float', optional: true },
       { name: 'oca_name', type: 'series string', optional: true },
-      { name: 'oca_type', type: 'const string', optional: true, description: '`strategy.oca.cancel` / `strategy.oca.reduce`' },
+      {
+        name: 'oca_type',
+        type: 'const string',
+        optional: true,
+        description: '`strategy.oca.cancel` / `strategy.oca.reduce`',
+      },
       { name: 'comment', type: 'series string', optional: true },
       { name: 'alert_message', type: 'series string', optional: true },
       { name: 'disable_alert', type: 'series bool', optional: true },
@@ -649,10 +1059,20 @@ const CURATED: Record<string, PineCallSig> = {
     name: 'strategy.exit',
     params: [
       { name: 'id', type: 'series string', description: 'Exit order id' },
-      { name: 'from_entry', type: 'series string', optional: true, description: 'Entry id to exit (all if omitted)' },
+      {
+        name: 'from_entry',
+        type: 'series string',
+        optional: true,
+        description: 'Entry id to exit (all if omitted)',
+      },
       { name: 'qty', type: 'series int/float', optional: true },
       { name: 'qty_percent', type: 'series int/float', optional: true },
-      { name: 'profit', type: 'series int/float', optional: true, description: 'Take-profit in ticks' },
+      {
+        name: 'profit',
+        type: 'series int/float',
+        optional: true,
+        description: 'Take-profit in ticks',
+      },
       { name: 'limit', type: 'series int/float', optional: true, description: 'Take-profit price' },
       { name: 'loss', type: 'series int/float', optional: true, description: 'Stop-loss in ticks' },
       { name: 'stop', type: 'series int/float', optional: true, description: 'Stop-loss price' },
@@ -680,7 +1100,12 @@ const CURATED: Record<string, PineCallSig> = {
       { name: 'qty', type: 'series int/float', optional: true },
       { name: 'qty_percent', type: 'series int/float', optional: true },
       { name: 'alert_message', type: 'series string', optional: true },
-      { name: 'immediately', type: 'series bool', optional: true, description: 'Close on this tick (v5+)' },
+      {
+        name: 'immediately',
+        type: 'series bool',
+        optional: true,
+        description: 'Close on this tick (v5+)',
+      },
       { name: 'disable_alert', type: 'series bool', optional: true },
     ],
     example: 'strategy.close("Long")',
@@ -690,7 +1115,12 @@ const CURATED: Record<string, PineCallSig> = {
     params: [
       { name: 'comment', type: 'series string', optional: true },
       { name: 'alert_message', type: 'series string', optional: true },
-      { name: 'immediately', type: 'series bool', optional: true, description: 'Close on this tick (v5+)' },
+      {
+        name: 'immediately',
+        type: 'series bool',
+        optional: true,
+        description: 'Close on this tick (v5+)',
+      },
       { name: 'disable_alert', type: 'series bool', optional: true },
     ],
     example: 'strategy.close_all()',
@@ -699,12 +1129,21 @@ const CURATED: Record<string, PineCallSig> = {
     name: 'strategy.order',
     params: [
       { name: 'id', type: 'series string', description: 'Order id' },
-      { name: 'direction', type: 'series strategy_direction', description: '`strategy.long` / `strategy.short`' },
+      {
+        name: 'direction',
+        type: 'series strategy_direction',
+        description: '`strategy.long` / `strategy.short`',
+      },
       { name: 'qty', type: 'series int/float', optional: true },
       { name: 'limit', type: 'series int/float', optional: true },
       { name: 'stop', type: 'series int/float', optional: true },
       { name: 'oca_name', type: 'series string', optional: true },
-      { name: 'oca_type', type: 'const string', optional: true, description: '`strategy.oca.cancel` / `strategy.oca.reduce`' },
+      {
+        name: 'oca_type',
+        type: 'const string',
+        optional: true,
+        description: '`strategy.oca.cancel` / `strategy.oca.reduce`',
+      },
       { name: 'comment', type: 'series string', optional: true },
       { name: 'alert_message', type: 'series string', optional: true },
       { name: 'disable_alert', type: 'series bool', optional: true },
@@ -714,13 +1153,36 @@ const CURATED: Record<string, PineCallSig> = {
   'request.security': {
     name: 'request.security',
     params: [
-      { name: 'symbol', type: 'simple string', description: '`syminfo.tickerid` or `"BINANCE:BTCUSDT"`' },
-      { name: 'timeframe', type: 'simple string', description: '`"60"`, `"D"`, `timeframe.period`' },
+      {
+        name: 'symbol',
+        type: 'simple string',
+        description: '`syminfo.tickerid` or `"BINANCE:BTCUSDT"`',
+      },
+      {
+        name: 'timeframe',
+        type: 'simple string',
+        description: '`"60"`, `"D"`, `timeframe.period`',
+      },
       { name: 'expression', description: 'Value to request (`close`, a tuple, …)' },
-      { name: 'gaps', type: 'simple string', optional: true, description: '`barmerge.gaps_off` / `barmerge.gaps_on`' },
-      { name: 'lookahead', type: 'simple string', optional: true, description: '`barmerge.lookahead_off` (default)' },
+      {
+        name: 'gaps',
+        type: 'simple string',
+        optional: true,
+        description: '`barmerge.gaps_off` / `barmerge.gaps_on`',
+      },
+      {
+        name: 'lookahead',
+        type: 'simple string',
+        optional: true,
+        description: '`barmerge.lookahead_off` (default)',
+      },
       { name: 'ignore_invalid_symbol', type: 'simple bool', optional: true },
-      { name: 'currency', type: 'simple string', optional: true, description: '`currency.USD` or `syminfo.currency`' },
+      {
+        name: 'currency',
+        type: 'simple string',
+        optional: true,
+        description: '`currency.USD` or `syminfo.currency`',
+      },
       { name: 'calc_bars_count', type: 'simple int', optional: true },
     ],
     example: 'request.security(syminfo.tickerid, "D", close)',
@@ -728,7 +1190,11 @@ const CURATED: Record<string, PineCallSig> = {
   'request.security_lower_tf': {
     name: 'request.security_lower_tf',
     params: [
-      { name: 'symbol', type: 'simple string', description: '`syminfo.tickerid` or `"BINANCE:BTCUSDT"`' },
+      {
+        name: 'symbol',
+        type: 'simple string',
+        description: '`syminfo.tickerid` or `"BINANCE:BTCUSDT"`',
+      },
       { name: 'timeframe', type: 'simple string', description: 'Lower TF (`"1"`, `"5"`, …)' },
       { name: 'expression', description: 'Value to request (`close`, a tuple, …)' },
       { name: 'ignore_invalid_symbol', type: 'simple bool', optional: true },
@@ -744,7 +1210,12 @@ const CURATED: Record<string, PineCallSig> = {
     name: 'alert',
     params: [
       { name: 'message', type: 'series string', description: 'Alert text' },
-      { name: 'freq', type: 'input string', optional: true, description: '`alert.freq_once_per_bar` / `alert.freq_all`' },
+      {
+        name: 'freq',
+        type: 'input string',
+        optional: true,
+        description: '`alert.freq_once_per_bar` / `alert.freq_all`',
+      },
     ],
     example: 'alert("Cross", alert.freq_once_per_bar)',
   },
@@ -752,7 +1223,12 @@ const CURATED: Record<string, PineCallSig> = {
     name: 'nz',
     params: [
       { name: 'x', description: 'Value that may be `na`' },
-      { name: 'y', optional: true, defaultValue: '0', description: 'Replacement when `x` is `na` (default 0)' },
+      {
+        name: 'y',
+        optional: true,
+        defaultValue: '0',
+        description: 'Replacement when `x` is `na` (default 0)',
+      },
     ],
     example: 'nz(ta.sma(close, 14), close)',
   },
@@ -856,7 +1332,10 @@ export function splitTopLevelParams(inner: string): string[] {
 }
 
 function unwrapSnippet(part: string): string {
-  return part.replace(/\$\{\d+:([^}]*)\}/g, '$1').replace(/\$\d+/g, '').trim();
+  return part
+    .replace(/\$\{\d+:([^}]*)\}/g, '$1')
+    .replace(/\$\d+/g, '')
+    .trim();
 }
 
 function isJunkParamName(name: string): boolean {
@@ -915,7 +1394,10 @@ function enrichParamsFromDocs(params: PineParamDef[], blob: string): PineParamDe
     const colon = new RegExp(`(?:^|[\\n\\r])\\s*${escaped}\\s*:\\s*([^\\n]+)`);
     const c = src.match(colon);
     if (c) {
-      const raw = c[1]!.trim().split(/\s+[—–-]\s+/)[0]!.trim();
+      const raw = c[1]!
+        .trim()
+        .split(/\s+[—–-]\s+/)[0]!
+        .trim();
       const t = raw.replace(/[.,;]+$/, '').trim();
       if (looksLikeTypeString(t)) return { ...p, type: t };
     }
@@ -1052,6 +1534,7 @@ function firstSignatureLine(name: string, text: string): string | null {
   return null;
 }
 
+/** Extra documentation sources merged while resolving a signature. */
 export interface ResolveCallSigOpts {
   documentation?: string;
   detail?: string;
@@ -1062,10 +1545,7 @@ export interface ResolveCallSigOpts {
 }
 
 /** Resolve a call signature: curated → local @param → parsed docs / snippet. */
-export function resolveCallSignature(
-  name: string,
-  extra?: ResolveCallSigOpts,
-): PineCallSig | null {
+export function resolveCallSignature(name: string, extra?: ResolveCallSigOpts): PineCallSig | null {
   const n = String(name || '').trim();
   if (!n) return null;
   const curated = curatedFor(n);
@@ -1095,9 +1575,7 @@ export function resolveCallSignature(
     };
   }
 
-  const blob = [extra?.detail, extra?.brief, extra?.documentation]
-    .filter(Boolean)
-    .join('\n');
+  const blob = [extra?.detail, extra?.brief, extra?.documentation].filter(Boolean).join('\n');
   const line = firstSignatureLine(n, blob);
   let parsed = line ? parseSignatureParams(line) : [];
   if (!parsed.length && extra?.snippet) parsed = parseSignatureParams(extra.snippet);
@@ -1179,7 +1657,8 @@ export function findCallSite(text: string, pos: number): CallSite | null {
     if (c === '(') {
       const name = identBefore(src, i);
       const head = name.includes('.') ? name.slice(0, name.indexOf('.')) : name;
-      const skip = !name || !/^[A-Za-z_]/.test(name) || CONTROL_CALLS.has(name) || CONTROL_CALLS.has(head);
+      const skip =
+        !name || !/^[A-Za-z_]/.test(name) || CONTROL_CALLS.has(name) || CONTROL_CALLS.has(head);
       stack.push({ name, openParen: i, skip });
       continue;
     }
@@ -1342,9 +1821,7 @@ export function classifyParams(
       used = true;
       budget -= 1;
     }
-    const current = typedNameMatches
-      ? p.name === typedName
-      : i === site.cursorArgIndex;
+    const current = typedNameMatches ? p.name === typedName : i === site.cursorArgIndex;
     out.push({ ...p, used, current });
   }
   return out;
@@ -1407,10 +1884,7 @@ export function formatCallHoverMarkdown(sig: PineCallSig): string {
 }
 
 /** Markdown hover for a single parameter. */
-export function formatParamHoverMarkdown(
-  sig: PineCallSig,
-  param: PineParamDef,
-): string {
+export function formatParamHoverMarkdown(sig: PineCallSig, param: PineParamDef): string {
   const parts: string[] = [];
   parts.push('```pinescript\n' + `${sig.name}(…, ${param.name}, …)` + '\n```');
   const bits = [`Parameter \`${param.name}\` of \`${sig.name}\``];

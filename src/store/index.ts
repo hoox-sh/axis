@@ -229,7 +229,7 @@ export function migratePersistedBag(
 export function persistedSchemaVersion(parsed: unknown): number {
   try {
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return 0;
-    const v = (parsed as Record<string, unknown>).schemaVersion;
+    const v = (parsed as Record<string, unknown>)['schemaVersion'];
     return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0;
   } catch {
     return 0;
@@ -303,21 +303,22 @@ function uniqueSymbols(raw: readonly string[]): string[] {
 function parseWatchlistList(raw: unknown, fallbackId: string): WatchlistList | null {
   if (!raw || typeof raw !== 'object') return null;
   const o = raw as Record<string, unknown>;
-  const id = typeof o.id === 'string' && o.id.trim() ? o.id.trim() : fallbackId;
-  const name = typeof o.name === 'string' && o.name.trim() ? o.name.trim() : 'Watchlist';
-  const symbols = Array.isArray(o.symbols)
-    ? uniqueSymbols(o.symbols.filter((s): s is string => typeof s === 'string'))
+  const id = typeof o['id'] === 'string' && o['id'].trim() ? o['id'].trim() : fallbackId;
+  const name = typeof o['name'] === 'string' && o['name'].trim() ? o['name'].trim() : 'Watchlist';
+  const symbols = Array.isArray(o['symbols'])
+    ? uniqueSymbols(o['symbols'].filter((s): s is string => typeof s === 'string'))
     : [];
-  const folderId = typeof o.folderId === 'string' && o.folderId.trim() ? o.folderId.trim() : null;
+  const folderId =
+    typeof o['folderId'] === 'string' && o['folderId'].trim() ? o['folderId'].trim() : null;
   return { id, name, symbols, folderId };
 }
 
 function parseWatchlistFolder(raw: unknown, fallbackId: string): WatchlistFolder | null {
   if (!raw || typeof raw !== 'object') return null;
   const o = raw as Record<string, unknown>;
-  const id = typeof o.id === 'string' && o.id.trim() ? o.id.trim() : fallbackId;
-  const name = typeof o.name === 'string' && o.name.trim() ? o.name.trim() : 'Folder';
-  return { id, name, collapsed: o.collapsed === true };
+  const id = typeof o['id'] === 'string' && o['id'].trim() ? o['id'].trim() : fallbackId;
+  const name = typeof o['name'] === 'string' && o['name'].trim() ? o['name'].trim() : 'Folder';
+  return { id, name, collapsed: o['collapsed'] === true };
 }
 
 /**
@@ -326,16 +327,16 @@ function parseWatchlistFolder(raw: unknown, fallbackId: string): WatchlistFolder
  */
 export function hydrateWatchlistState(raw: unknown): WatchlistState {
   const bag = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
-  const open = typeof bag.open === 'boolean' ? bag.open : true;
+  const open = typeof bag['open'] === 'boolean' ? bag['open'] : true;
   // Drawer width is bounded both ways (D8): absurd values from corrupt or
   // hand-edited blobs cannot push the layout off-screen.
-  const width = clampPanelWidth(bag.width, 280);
-  const refreshSec = Math.min(120, Math.max(5, Number(bag.refreshSec) || 15));
+  const width = clampPanelWidth(bag['width'], 280);
+  const refreshSec = Math.min(120, Math.max(5, Number(bag['refreshSec']) || 15));
 
   const lists: WatchlistList[] = [];
   const seenIds = new Set<string>();
-  if (Array.isArray(bag.lists)) {
-    bag.lists.forEach((item, i) => {
+  if (Array.isArray(bag['lists'])) {
+    bag['lists'].forEach((item, i) => {
       const parsed = parseWatchlistList(item, `wl-${i + 1}`);
       if (!parsed) return;
       let id = parsed.id;
@@ -347,8 +348,8 @@ export function hydrateWatchlistState(raw: unknown): WatchlistState {
 
   const folders: WatchlistFolder[] = [];
   const seenFolderIds = new Set<string>();
-  if (Array.isArray(bag.folders)) {
-    bag.folders.forEach((item, i) => {
+  if (Array.isArray(bag['folders'])) {
+    bag['folders'].forEach((item, i) => {
       const parsed = parseWatchlistFolder(item, `wf-${i + 1}`);
       if (!parsed) return;
       let id = parsed.id;
@@ -363,8 +364,8 @@ export function hydrateWatchlistState(raw: unknown): WatchlistState {
   }
 
   if (!lists.length) {
-    const fromBag = Array.isArray(bag.symbols)
-      ? uniqueSymbols(bag.symbols.filter((s): s is string => typeof s === 'string'))
+    const fromBag = Array.isArray(bag['symbols'])
+      ? uniqueSymbols(bag['symbols'].filter((s): s is string => typeof s === 'string'))
       : [];
     lists.push({
       id: DEFAULT_WATCHLIST_ID,
@@ -375,8 +376,8 @@ export function hydrateWatchlistState(raw: unknown): WatchlistState {
   }
 
   const activeId =
-    typeof bag.activeId === 'string' && lists.some((l) => l.id === bag.activeId)
-      ? bag.activeId
+    typeof bag['activeId'] === 'string' && lists.some((l) => l.id === bag['activeId'])
+      ? bag['activeId']
       : lists[0]!.id;
   const active = lists.find((l) => l.id === activeId) ?? lists[0]!;
   return {
@@ -405,16 +406,18 @@ export function hydrateExtras(raw: unknown): ExtrasState {
   }
   const bag = raw as Record<string, unknown>;
   const pc = (
-    bag.priceCard && typeof bag.priceCard === 'object'
-      ? (bag.priceCard as Record<string, unknown>)
+    bag['priceCard'] && typeof bag['priceCard'] === 'object'
+      ? (bag['priceCard'] as Record<string, unknown>)
       : {}
   ) as Record<string, unknown>;
   const ti = (
-    bag.ticker && typeof bag.ticker === 'object' ? (bag.ticker as Record<string, unknown>) : {}
+    bag['ticker'] && typeof bag['ticker'] === 'object'
+      ? (bag['ticker'] as Record<string, unknown>)
+      : {}
   ) as Record<string, unknown>;
   const ao = (
-    bag.alertOverlay && typeof bag.alertOverlay === 'object'
-      ? (bag.alertOverlay as Record<string, unknown>)
+    bag['alertOverlay'] && typeof bag['alertOverlay'] === 'object'
+      ? (bag['alertOverlay'] as Record<string, unknown>)
       : {}
   ) as Record<string, unknown>;
   const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
@@ -422,55 +425,55 @@ export function hydrateExtras(raw: unknown): ExtrasState {
     typeof v === 'string' && HEX_COLOR_RE.test(v.trim()) ? v.trim() : fallback;
   return {
     priceCard: {
-      enabled: typeof pc.enabled === 'boolean' ? pc.enabled : false,
+      enabled: typeof pc['enabled'] === 'boolean' ? pc['enabled'] : false,
       tickLength:
-        typeof pc.tickLength === 'number' && Number.isFinite(pc.tickLength)
-          ? Math.min(100, Math.max(2, Math.round(pc.tickLength)))
+        typeof pc['tickLength'] === 'number' && Number.isFinite(pc['tickLength'])
+          ? Math.min(100, Math.max(2, Math.round(pc['tickLength'])))
           : 20,
     },
     ticker: {
-      enabled: typeof ti.enabled === 'boolean' ? ti.enabled : false,
-      symbols: Array.isArray(ti.symbols)
+      enabled: typeof ti['enabled'] === 'boolean' ? ti['enabled'] : false,
+      symbols: Array.isArray(ti['symbols'])
         ? [
             ...new Set(
-              ti.symbols
+              ti['symbols']
                 .filter((s): s is string => typeof s === 'string' && !!s.trim())
                 .map((s) => (s as string).trim()),
             ),
           ].slice(0, 20)
         : [],
       speed:
-        typeof ti.speed === 'number' && Number.isFinite(ti.speed)
-          ? Math.min(3, Math.max(0.5, ti.speed))
+        typeof ti['speed'] === 'number' && Number.isFinite(ti['speed'])
+          ? Math.min(3, Math.max(0.5, ti['speed']))
           : 1,
-      direction: ti.direction === 'right' ? 'right' : 'left',
-      showChange: typeof ti.showChange === 'boolean' ? ti.showChange : true,
+      direction: ti['direction'] === 'right' ? 'right' : 'left',
+      showChange: typeof ti['showChange'] === 'boolean' ? ti['showChange'] : true,
       itemSpacing:
-        typeof ti.itemSpacing === 'number' && Number.isFinite(ti.itemSpacing)
-          ? Math.min(3, Math.max(0, ti.itemSpacing))
+        typeof ti['itemSpacing'] === 'number' && Number.isFinite(ti['itemSpacing'])
+          ? Math.min(3, Math.max(0, ti['itemSpacing']))
           : 1.5,
       bandHeight:
-        typeof ti.bandHeight === 'number' && Number.isFinite(ti.bandHeight)
-          ? Math.min(40, Math.max(18, Math.round(ti.bandHeight)))
+        typeof ti['bandHeight'] === 'number' && Number.isFinite(ti['bandHeight'])
+          ? Math.min(40, Math.max(18, Math.round(ti['bandHeight'])))
           : 22,
       fontSize:
-        typeof ti.fontSize === 'number' && Number.isFinite(ti.fontSize)
-          ? Math.min(16, Math.max(10, Math.round(ti.fontSize)))
+        typeof ti['fontSize'] === 'number' && Number.isFinite(ti['fontSize'])
+          ? Math.min(16, Math.max(10, Math.round(ti['fontSize'])))
           : 11,
       opacity:
-        typeof ti.opacity === 'number' && Number.isFinite(ti.opacity)
-          ? Math.min(1, Math.max(0.2, ti.opacity))
+        typeof ti['opacity'] === 'number' && Number.isFinite(ti['opacity'])
+          ? Math.min(1, Math.max(0.2, ti['opacity']))
           : 1,
-      draggable: typeof ti.draggable === 'boolean' ? ti.draggable : true,
+      draggable: typeof ti['draggable'] === 'boolean' ? ti['draggable'] : true,
       offsetY:
-        typeof ti.offsetY === 'number' && Number.isFinite(ti.offsetY)
-          ? Math.min(TICKER_OFFSET_Y_MAX, Math.max(0, Math.round(ti.offsetY)))
+        typeof ti['offsetY'] === 'number' && Number.isFinite(ti['offsetY'])
+          ? Math.min(TICKER_OFFSET_Y_MAX, Math.max(0, Math.round(ti['offsetY'])))
           : 0,
     },
     alertOverlay: {
-      enabled: typeof ao.enabled === 'boolean' ? ao.enabled : false,
-      upColor: color(ao.upColor, '#3DDC97'),
-      downColor: color(ao.downColor, '#F07178'),
+      enabled: typeof ao['enabled'] === 'boolean' ? ao['enabled'] : false,
+      upColor: color(ao['upColor'], '#3DDC97'),
+      downColor: color(ao['downColor'], '#F07178'),
     },
   };
 }
@@ -482,7 +485,9 @@ let persistWriteWarned = false;
 
 /** Default / clamp bounds for {@link AppState.historyBars}. */
 export const HISTORY_BARS_DEFAULT = 4000; // stay < 5000 free-tier engine limit
+/** Lowest history depth the UI will persist. */
 export const HISTORY_BARS_MIN = 50;
+/** Hard ceiling on dataset depth (a 100k-bar backfill). */
 export const HISTORY_BARS_MAX = 100_000;
 
 /**
@@ -493,7 +498,9 @@ export const HISTORY_BARS_MAX = 100_000;
  * by the parse try/catch and the stored key is wiped (full reset on reload).
  */
 export const UI_SCALE_MIN = 0.8;
+/** Densest chrome scale the slider allows. */
 export const UI_SCALE_MAX = 1.3;
+/** Slider increment; values snap to this step before persist. */
 export const UI_SCALE_STEP = 0.05;
 
 /** Valid {@link AppState.datasetPersistence} values. */
@@ -560,8 +567,8 @@ export function clampHistoryBars(n: unknown): number {
 export function readCommissionModel(raw: unknown): AppState['strategyUi']['commission'] {
   if (!raw || typeof raw !== 'object') return null;
   const rec = raw as Record<string, unknown>;
-  const type = rec.type;
-  const value = Number(rec.value);
+  const type = rec['type'];
+  const value = Number(rec['value']);
   if (type !== 'percent' && type !== 'cash_per_order' && type !== 'cash_per_contract') {
     return null;
   }
@@ -584,7 +591,9 @@ export function readCommissionModel(raw: unknown): AppState['strategyUi']['commi
  * reach {@link HISTORY_BARS_MAX}; {@link chartWindowLimit} is the hard rail.
  */
 export const ROLLING_WINDOW_DEFAULT = 4000; // stay < 5000 engine free-tier cap
+/** Smallest rolling window the settings clamp accepts. */
 export const ROLLING_WINDOW_MIN = 200;
+/** Largest base rolling window the settings clamp accepts. */
 export const ROLLING_WINDOW_MAX = 4500; // stay < 5000 engine free-tier cap
 
 /**
@@ -609,6 +618,7 @@ export function clampRollingWindowBars(n: unknown): number {
 
 /** Bounds for the durable watchlist drawer width (D8 — was lower-bounded only). */
 export const WATCHLIST_WIDTH_MIN = 200;
+/** Upper bound that still leaves chart room on a laptop viewport. */
 export const WATCHLIST_WIDTH_MAX = 640;
 
 /** Clamp a persisted drawer/panel width into usable bounds. */
@@ -661,23 +671,28 @@ export function sanitizePersistedPanes(raw: unknown): Pane[] {
   for (const item of raw.slice(0, 12)) {
     if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
     const o = item as Record<string, unknown>;
-    const id = typeof o.id === 'string' && o.id.trim() ? o.id.trim().slice(0, 64) : '';
+    const id = typeof o['id'] === 'string' && o['id'].trim() ? o['id'].trim().slice(0, 64) : '';
     if (!id || seen.has(id)) continue;
     seen.add(id);
     const num = (v: unknown, fallback: number) =>
       typeof v === 'number' && Number.isFinite(v) ? v : fallback;
     out.push({
       id,
-      type: typeof o.type === 'string' ? (o.type as Pane['type']) : 'price',
-      height: Math.min(2000, Math.max(0, num(o.height, 0))),
-      order: Math.min(100, Math.max(0, Math.round(num(o.order, out.length)))),
-      visible: o.visible !== false,
-      label: typeof o.label === 'string' ? o.label.slice(0, 80) : id,
+      type: typeof o['type'] === 'string' ? (o['type'] as Pane['type']) : 'price',
+      height: Math.min(2000, Math.max(0, num(o['height'], 0))),
+      order: Math.min(100, Math.max(0, Math.round(num(o['order'], out.length)))),
+      visible: o['visible'] !== false,
+      label: typeof o['label'] === 'string' ? o['label'].slice(0, 80) : id,
     } as Pane);
   }
   return out.length ? out : DEFAULTS.panes.map((p) => ({ ...p }));
 }
 
+/**
+ * Factory state used by `createStore` before hydration and by every reset
+ * helper. Treat it as read-only: nested objects are cloned on seed because a
+ * path update on a shared node would mutate these defaults.
+ */
 export const DEFAULTS: AppState = {
   schemaVersion: PERSIST_SCHEMA_VERSION,
   bars: [],
@@ -1171,7 +1186,7 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
           (() => {
             const cfg = (bag as { pluginsConfig?: Record<string, unknown> }).pluginsConfig;
             const src = cfg?.['source:ccxt-rest'] as Record<string, unknown> | undefined;
-            return typeof src?.exchange === 'string' ? src.exchange : undefined;
+            return typeof src?.['exchange'] === 'string' ? src['exchange'] : undefined;
           })(),
         ),
       ) as ProviderSession,
@@ -1390,16 +1405,18 @@ export function sanitizePersistedScripts(raw: unknown): Indicator[] {
     const s = raw[i];
     if (!s || typeof s !== 'object') continue;
     const o = s as Record<string, unknown>;
-    const id = typeof o.id === 'string' ? o.id.trim() : '';
-    const code = typeof o.code === 'string' ? o.code : '';
+    const id = typeof o['id'] === 'string' ? o['id'].trim() : '';
+    const code = typeof o['code'] === 'string' ? o['code'] : '';
     if (!id || !code.trim()) continue;
     if (seen.has(id)) continue;
     seen.add(id);
-    const name = typeof o.name === 'string' && o.name.trim() ? o.name.trim() : `Script ${i + 1}`;
-    const paneId = typeof o.paneId === 'string' && o.paneId.trim() ? o.paneId.trim() : 'price';
+    const name =
+      typeof o['name'] === 'string' && o['name'].trim() ? o['name'].trim() : `Script ${i + 1}`;
+    const paneId =
+      typeof o['paneId'] === 'string' && o['paneId'].trim() ? o['paneId'].trim() : 'price';
     const plots: Record<string, { color: string; custom?: boolean }> = {};
-    if (o.plots && typeof o.plots === 'object' && !Array.isArray(o.plots)) {
-      for (const [k, v] of Object.entries(o.plots as Record<string, unknown>)) {
+    if (o['plots'] && typeof o['plots'] === 'object' && !Array.isArray(o['plots'])) {
+      for (const [k, v] of Object.entries(o['plots'] as Record<string, unknown>)) {
         if (v && typeof v === 'object' && typeof (v as { color?: unknown }).color === 'string') {
           const entry: { color: string; custom?: boolean } = {
             color: String((v as { color: string }).color),
@@ -1414,14 +1431,22 @@ export function sanitizePersistedScripts(raw: unknown): Indicator[] {
       name,
       code,
       paneId,
-      visible: o.visible !== false,
+      visible: o['visible'] !== false,
       plots,
     };
-    if (o.inputValues && typeof o.inputValues === 'object' && !Array.isArray(o.inputValues)) {
-      item.inputValues = { ...(o.inputValues as Record<string, unknown>) };
+    if (
+      o['inputValues'] &&
+      typeof o['inputValues'] === 'object' &&
+      !Array.isArray(o['inputValues'])
+    ) {
+      item.inputValues = { ...(o['inputValues'] as Record<string, unknown>) };
     }
-    if (o.strategyProps && typeof o.strategyProps === 'object' && !Array.isArray(o.strategyProps)) {
-      item.strategyProps = { ...(o.strategyProps as Record<string, unknown>) };
+    if (
+      o['strategyProps'] &&
+      typeof o['strategyProps'] === 'object' &&
+      !Array.isArray(o['strategyProps'])
+    ) {
+      item.strategyProps = { ...(o['strategyProps'] as Record<string, unknown>) };
     }
     out.push(item);
   }
@@ -1575,6 +1600,10 @@ function hydrateDrawingPrefs(raw: unknown): AppState['drawingPrefs'] {
   return next;
 }
 
+/**
+ * Restore topbar button visibility. Missing or non-boolean keys hydrate as
+ * `true`, so a new button ships visible without a migration.
+ */
 export function hydrateTopbar(raw: unknown): TopbarSettings {
   const base = { ...DEFAULTS.topbar };
   if (!raw || typeof raw !== 'object') return base;
@@ -1632,13 +1661,13 @@ export function hydrateNotifications(raw: unknown): NotificationSettings {
     enabled: typeof bag.enabled === 'boolean' ? bag.enabled : base.enabled,
     levelMin,
     categories: {
-      run: typeof rawCats.run === 'boolean' ? rawCats.run : true,
-      data: typeof rawCats.data === 'boolean' ? rawCats.data : true,
-      stream: typeof rawCats.stream === 'boolean' ? rawCats.stream : true,
-      engine: typeof rawCats.engine === 'boolean' ? rawCats.engine : true,
-      scripts: typeof rawCats.scripts === 'boolean' ? rawCats.scripts : true,
-      workspace: typeof rawCats.workspace === 'boolean' ? rawCats.workspace : true,
-      system: typeof rawCats.system === 'boolean' ? rawCats.system : true,
+      run: typeof rawCats['run'] === 'boolean' ? rawCats['run'] : true,
+      data: typeof rawCats['data'] === 'boolean' ? rawCats['data'] : true,
+      stream: typeof rawCats['stream'] === 'boolean' ? rawCats['stream'] : true,
+      engine: typeof rawCats['engine'] === 'boolean' ? rawCats['engine'] : true,
+      scripts: typeof rawCats['scripts'] === 'boolean' ? rawCats['scripts'] : true,
+      workspace: typeof rawCats['workspace'] === 'boolean' ? rawCats['workspace'] : true,
+      system: typeof rawCats['system'] === 'boolean' ? rawCats['system'] : true,
     },
     durationMs: num(bag.durationMs, base.durationMs, 1500, 30000),
     maxVisible: num(bag.maxVisible, base.maxVisible, 1, 6),
@@ -1656,10 +1685,10 @@ function mergePanelChrome(
       ? ({ ...(raw as Record<string, unknown>) } as Record<string, unknown>)
       : {};
   // Migrate pre-rename panel id `pinelogs` → `scriptlogs`
-  if (bag.pinelogs && !bag.scriptlogs) {
-    bag.scriptlogs = bag.pinelogs;
+  if (bag['pinelogs'] && !bag['scriptlogs']) {
+    bag['scriptlogs'] = bag['pinelogs'];
   }
-  delete bag.pinelogs;
+  delete bag['pinelogs'];
   const src = bag as Partial<Record<PanelId, Partial<PanelChrome>>>;
   for (const id of Object.keys(base) as PanelId[]) {
     const fromDisk = src[id] || {};
@@ -1706,7 +1735,7 @@ function ccxtExchangeFromBags(): string {
   const bags = store.pluginsConfig || {};
   const src = bags['source:ccxt-rest'] as Record<string, unknown> | undefined;
   const stm = bags['stream:ccxt-ws'] as Record<string, unknown> | undefined;
-  return String(src?.exchange || stm?.exchange || '')
+  return String(src?.['exchange'] || stm?.['exchange'] || '')
     .trim()
     .toLowerCase();
 }
@@ -1750,7 +1779,10 @@ function syncProviderSession(): void {
  * Source changes re-pair the live stream so aggregators cannot mix venues.
  * Persists immediately. Engine switch resets engine telemetry (pyodide shows “connecting”).
  */
-export function setActivePlugin(kind: 'source' | 'stream' | 'engine' | 'storage', id: string) {
+export function setActivePlugin(
+  kind: 'source' | 'stream' | 'engine' | 'storage',
+  id: string,
+): void {
   setStore('activePlugins', kind, id);
   if (kind === 'source') {
     setStore('source', id);
@@ -2095,18 +2127,18 @@ function buildPersistPayload(opts?: { slim?: boolean }): Record<string, unknown>
   };
 
   // Optional layout bags (may be undefined on older sessions)
-  if (s.panelChrome != null) base.panelChrome = unwrap(s.panelChrome);
-  const legacy = s as unknown as Record<string, unknown>;
-  if (legacy.panelWindows != null) base.panelWindows = unwrap(legacy.panelWindows);
-  if (legacy.dockLayout != null) base.dockLayout = unwrap(legacy.dockLayout);
-  if (s.chartLayout != null) base.chartLayout = unwrap(s.chartLayout);
+  if (s.panelChrome != null) base['panelChrome'] = unwrap(s.panelChrome);
+  const legacy = s as typeof s & { panelWindows?: unknown; dockLayout?: unknown };
+  if (legacy['panelWindows'] != null) base['panelWindows'] = unwrap(legacy['panelWindows']);
+  if (legacy['dockLayout'] != null) base['dockLayout'] = unwrap(legacy['dockLayout']);
+  if (s.chartLayout != null) base['chartLayout'] = unwrap(s.chartLayout);
 
   if (opts?.slim) {
-    base.drawings = [];
-    base.savedLayouts = [];
+    base['drawings'] = [];
+    base['savedLayouts'] = [];
   } else {
-    base.drawings = unwrap(s.drawings);
-    base.savedLayouts = unwrap(s.savedLayouts ?? []);
+    base['drawings'] = unwrap(s.drawings);
+    base['savedLayouts'] = unwrap(s.savedLayouts ?? []);
   }
 
   return base;
@@ -2146,7 +2178,7 @@ function trySetItem(key: string, value: string): { ok: true } | { ok: false; err
  * Pending writes are flushed on `beforeunload` / `pagehide` so a tab close
  * does not drop the last debounced mutation.
  */
-export function persist() {
+export function persist(): void {
   if (persistTimer) clearTimeout(persistTimer);
   persistTimer = setTimeout(() => {
     flushPersist();
@@ -2327,6 +2359,10 @@ function appendLogRaw(level: LogLevel, message: string, source = 'system') {
   return entry;
 }
 
+/**
+ * Options for {@link notify}: origin tag, category override, and whether to
+ * skip the toast and only write the system log.
+ */
 export interface NotifyOpts {
   /** Origin tag (same vocabulary as log sources). Default `'system'`. */
   source?: string;
@@ -2373,7 +2409,12 @@ function pushToastEntry(level: LogLevel, message: string, source: string) {
       // Evict oldest lowest-severity toast first (info < ok < warn < error).
       let idx = 0;
       for (let i = 1; i < next.length; i++) {
-        if (LEVEL_RANK[next[i].level] < LEVEL_RANK[next[idx].level]) idx = i;
+        const cand = next[i];
+        const best = next[idx];
+        // Both indices are in bounds (`0 <= idx < i < next.length`), so this
+        // guard is unreachable; it only satisfies `noUncheckedIndexedAccess`.
+        if (!cand || !best) continue;
+        if (LEVEL_RANK[cand.level] < LEVEL_RANK[best.level]) idx = i;
       }
       next.splice(idx, 1);
     }
@@ -2408,7 +2449,7 @@ export function toastGate(
  * `maxVisible` cap. When a toast is suppressed by prefs the system log
  * entry is still written.
  */
-export function notify(level: LogLevel, message: string, opts?: NotifyOpts | string) {
+export function notify(level: LogLevel, message: string, opts?: NotifyOpts | string): void {
   const source = typeof opts === 'string' ? opts : opts?.source || 'system';
   const logOnly = typeof opts === 'object' && !!opts?.logOnly;
   const msg = String(message || '').trim();
@@ -2421,15 +2462,19 @@ export function notify(level: LogLevel, message: string, opts?: NotifyOpts | str
 }
 
 /** Dismiss one toast (auto-dismiss timer or close button). */
-export function dismissToast(id: string) {
+export function dismissToast(id: string): void {
   setStore('toasts', (toasts) => toasts.filter((t) => t.id !== id));
 }
 
 /** Clear all visible toasts (logs are kept). */
-export function clearToasts() {
+export function clearToasts(): void {
   setStore('toasts', []);
 }
 
+/**
+ * Toast routing for {@link appendLog}: `true` forces a toast, `false` /
+ * `'silent'` suppresses it, and the default `'auto'` toasts warn/error only.
+ */
 export interface AppendLogOpts {
   /**
    * - `true`: always raise a toast for this entry (subject to global
@@ -2447,7 +2492,12 @@ export interface AppendLogOpts {
  * warn/error entries also raise a toast by default (flood-controlled via
  * Settings → Notifications); pass `{ toast: false }` for noisy paths.
  */
-export function appendLog(level: LogLevel, message: string, source?: string, opts?: AppendLogOpts) {
+export function appendLog(
+  level: LogLevel,
+  message: string,
+  source?: string,
+  opts?: AppendLogOpts,
+): void {
   const src = source || 'system';
   const mode = opts?.toast ?? 'auto';
   if (mode === true) {
@@ -2462,7 +2512,7 @@ export function appendLog(level: LogLevel, message: string, source?: string, opt
 }
 
 /** Clear in-memory system logs. */
-export function clearLogs() {
+export function clearLogs(): void {
   setStore('logs', []);
 }
 
@@ -2472,6 +2522,10 @@ export function clearLogs() {
  */
 export const EDITOR_RUN_KEY = '__editor__';
 
+/**
+ * Where a run payload goes: which script slot receives it, whether it becomes
+ * the focused run in Results/Script logs, and whether to persist it durably.
+ */
 export type SetLastRunOpts = {
   /**
    * Applied indicator id, or omit / null for the docked editor document
@@ -2753,7 +2807,7 @@ export function setLastRun(result: unknown, opts: SetLastRunOpts = {}): string |
 function isRunResult(value: unknown): value is RunResult {
   if (value == null || typeof value !== 'object') return false;
   const r = value as Record<string, unknown>;
-  return r.status === 'success' || r.status === 'error';
+  return r['status'] === 'success' || r['status'] === 'error';
 }
 
 /**
@@ -2778,7 +2832,7 @@ export function runResultsByStorage(scriptId?: string | null): Record<string, un
  * {@link EDITOR_RUN_KEY}). No-op if the key has no payload yet (still updates
  * focus so a later re-run fills the panel).
  */
-export function setResultsFocusId(id: string | null) {
+export function setResultsFocusId(id: string | null): void {
   const key = id == null || !String(id).trim() ? null : String(id).trim();
   setStore('resultsFocusId', key);
   if (key == null) {
@@ -2861,7 +2915,7 @@ export function setStatus(
   status: AppState['status'],
   message?: string,
   opts?: { toast?: boolean | 'auto' | 'silent'; source?: string },
-) {
+): void {
   setStore('status', status);
   if (message !== undefined) {
     setStore('statusMessage', message);
@@ -2875,7 +2929,7 @@ export function setStatus(
  * Update editor pre-eval state (parse/lint after Save / Run). Ephemeral — not persisted.
  * Used by {@link ../editor/preevaluate} to mark wrong code and gate Run.
  */
-export function setPreEval(next: AppState['preEval']) {
+export function setPreEval(next: AppState['preEval']): void {
   setStore('preEval', next);
 }
 
@@ -2893,7 +2947,7 @@ export function setFeedStatus(
     message?: string;
     verified?: AppState['live']['feeds'][string]['verified'];
   },
-) {
+): void {
   setStore('live', 'feeds', key, {
     key,
     status,
@@ -2906,7 +2960,7 @@ export function setFeedStatus(
 }
 
 /** Drop a feed subscription entry (symbol switch, unsubscribe, release). */
-export function clearFeedStatus(key: string) {
+export function clearFeedStatus(key: string): void {
   if (!(key in store.live.feeds)) return;
   const feeds = { ...store.live.feeds };
   delete feeds[key];
@@ -2923,7 +2977,7 @@ export function setScriptStatus(
   status: AppState['live']['scriptStatus'][string]['status'],
   message?: string,
   verified?: AppState['live']['scriptStatus'][string]['verified'],
-) {
+): void {
   setStore('live', 'scriptStatus', indicatorId, {
     status,
     ...(message !== undefined ? { message } : {}),
@@ -2933,7 +2987,7 @@ export function setScriptStatus(
 }
 
 /** Drop a per-script runtime status entry. */
-export function clearScriptStatus(indicatorId: string) {
+export function clearScriptStatus(indicatorId: string): void {
   if (!(indicatorId in store.live.scriptStatus)) return;
   const scriptStatus = { ...store.live.scriptStatus };
   delete scriptStatus[indicatorId];
@@ -2951,7 +3005,7 @@ export function isScriptRunBlockedByPreEval(): boolean {
 }
 
 /** Persist main price pane chart style (candles, bars, line, Heikin-Ashi, …). */
-export function setChartType(type: ChartType | string) {
+export function setChartType(type: ChartType | string): void {
   const t = normalizeChartType(type);
   setStore('chartType', t);
   // Keep active multi-chart slot in sync
@@ -3042,7 +3096,7 @@ function restoreSlotBarsToActivePlane(slotId: string): void {
 }
 
 /** Focus a grid slot — mirrors symbol/interval/chartType into flat store fields. */
-export function setActiveChartSlot(slotId: string) {
+export function setActiveChartSlot(slotId: string): void {
   ensureChartLayout();
   const layout = store.chartLayout;
   const slot = layout.slots.find((s) => s.id === slotId);
@@ -3069,7 +3123,7 @@ export function setActiveChartSlot(slotId: string) {
 }
 
 /** Change grid arrangement (1 / 2H / 2V / 4 / 6 / 8); preserves existing slots when possible. */
-export function setChartGridMode(mode: ChartGridMode) {
+export function setChartGridMode(mode: ChartGridMode): void {
   ensureChartLayout();
   const prev = store.chartLayout;
   const next = normalizeChartLayout(
@@ -3116,7 +3170,7 @@ export function setChartGridMode(mode: ChartGridMode) {
 export function updateChartSlot(
   slotId: string,
   patch: Partial<{ symbol: string; interval: string; exchange: string; chartType: ChartType }>,
-) {
+): void {
   ensureChartLayout();
   const idx = store.chartLayout.slots.findIndex((s) => s.id === slotId);
   if (idx < 0) return;
@@ -3246,7 +3300,7 @@ function emitWindowEvent(name: string, detail?: Record<string, unknown>) {
 }
 
 /** Delete a saved layout by id. */
-export function deleteChartLayout(id: string) {
+export function deleteChartLayout(id: string): void {
   setStore('savedLayouts', (list) => (list || []).filter((l) => l.id !== id));
   persist();
 }
@@ -3406,6 +3460,10 @@ export function resetChartWindowPlan(
   chartWindowPlanLimit = anchor;
 }
 
+/**
+ * Bars the chart currently paints: the anchored window size after the last
+ * load/grow/reset. Slices and append logic must use this, not `historyBars`.
+ */
 export function chartWindowLimit(): number {
   syncChartWindowPlan();
   return chartWindowPlanLimit;
@@ -3519,7 +3577,7 @@ export function mergeLiveTail(base: readonly Bar[], live: readonly Bar[]): Bar[]
  * The chart window is enforced here, at the mutation boundary: no caller may
  * push the chart past the current anchored window, however it got its bars.
  */
-export function setBarsQuiet(bars: Bar[]) {
+export function setBarsQuiet(bars: Bar[]): void {
   const view = sliceToChartWindow(bars);
   batch(() => {
     setStore('bars', view);
@@ -3582,7 +3640,7 @@ export function addIndicator(
   plots: Record<string, { color: string; custom?: boolean }>,
   inputValues?: Record<string, unknown>,
   strategyProps?: Record<string, unknown>,
-) {
+): string {
   const id = uid();
   setStore('scripts', (s) => [
     ...s,
@@ -3613,7 +3671,7 @@ export function updateIndicator(
       'name' | 'code' | 'paneId' | 'plots' | 'inputValues' | 'strategyProps' | 'visible'
     >
   >,
-) {
+): void {
   if (!id || !patch || !Object.keys(patch).length) return;
   let found = false;
   setStore('scripts', (s) =>
@@ -3646,7 +3704,7 @@ export function moveIndicator(id: string, delta: -1 | 1): boolean {
 }
 
 /** Remove an applied indicator from the store (caller should clear chart overlays). */
-export function removeIndicator(id: string) {
+export function removeIndicator(id: string): void {
   setStore('scripts', (s) => s.filter((ind) => ind.id !== id));
   setStore('indicatorSeries', (cache) => {
     if (!cache || !(id in cache)) return cache;
@@ -3692,7 +3750,7 @@ export function setIndicatorSeries(
     /** Bar times the cached series is aligned to (see the cache type). */
     times?: number[];
   },
-) {
+): void {
   setStore('indicatorSeries', id, {
     name: payload.name,
     series: payload.series,
@@ -3702,7 +3760,7 @@ export function setIndicatorSeries(
 }
 
 /** Toggle indicator visibility (plot paint gated by ChartHost / runner). */
-export function toggleIndicator(id: string) {
+export function toggleIndicator(id: string): void {
   setStore('scripts', (s) =>
     s.map((ind) => (ind.id === id ? { ...ind, visible: !ind.visible } : ind)),
   );
@@ -3750,7 +3808,7 @@ export function setPineTablesLocation(
 }
 
 /** Override a single plot series color for an applied indicator (explicit panel pick). */
-export function setIndicatorColor(id: string, plotName: string, color: string) {
+export function setIndicatorColor(id: string, plotName: string, color: string): void {
   setStore('scripts', (s) =>
     s.map((ind) =>
       ind.id === id
@@ -3765,34 +3823,37 @@ export function setIndicatorColor(id: string, plotName: string, color: string) {
 }
 
 /** Override a single plot series line width (1-4). */
-export function setIndicatorPlotWidth(id: string, plotName: string, width: number) {
+export function setIndicatorPlotWidth(id: string, plotName: string, width: number): void {
   setStore('scripts', (s) =>
-    s.map((ind) =>
-      ind.id === id
-        ? {
-            ...ind,
-            plots: {
-              ...ind.plots,
-              [plotName]: {
-                ...ind.plots[plotName],
-                width: Math.max(1, Math.min(4, Math.round(width))),
-              },
-            },
-          }
-        : ind,
-    ),
+    s.map((ind) => {
+      const prev = ind.plots[plotName];
+      // The panel only offers width control for plots it rendered, so the
+      // entry is always present; the guard just makes the shape total.
+      if (ind.id !== id || !prev) return ind;
+      return {
+        ...ind,
+        plots: {
+          ...ind.plots,
+          [plotName]: {
+            ...prev,
+            width: Math.max(1, Math.min(4, Math.round(width))),
+          },
+        },
+      };
+    }),
   );
   persist();
 }
 
 /** Toggle a single plot series visibility. */
-export function setIndicatorPlotVisible(id: string, plotName: string, visible: boolean) {
+export function setIndicatorPlotVisible(id: string, plotName: string, visible: boolean): void {
   setStore('scripts', (s) =>
-    s.map((ind) =>
-      ind.id === id
-        ? { ...ind, plots: { ...ind.plots, [plotName]: { ...ind.plots[plotName], visible } } }
-        : ind,
-    ),
+    s.map((ind) => {
+      const prev = ind.plots[plotName];
+      // Same as `setIndicatorPlotWidth`: the entry exists for rendered plots.
+      if (ind.id !== id || !prev) return ind;
+      return { ...ind, plots: { ...ind.plots, [plotName]: { ...prev, visible } } };
+    }),
   );
   persist();
 }
@@ -3804,7 +3865,11 @@ export function setIndicatorPlotVisible(id: string, plotName: string, visible: b
  * preference; the script's declared style (when the engine ships
  * `plot_meta.linestyle`) is the fallback. See `indicators/plot-prefs`.
  */
-export function setIndicatorPlotLineStyle(id: string, plotName: string, linestyle: string | null) {
+export function setIndicatorPlotLineStyle(
+  id: string,
+  plotName: string,
+  linestyle: string | null,
+): void {
   setStore('scripts', (s) =>
     s.map((ind) => {
       if (ind.id !== id) return ind;
@@ -3825,7 +3890,11 @@ export function setIndicatorPlotLineStyle(id: string, plotName: string, linestyl
  * Overrides the script's `plot(..., display=)` declaration for the pane,
  * Data Window, and price-scale targets. See `indicators/plot-prefs`.
  */
-export function setIndicatorPlotDisplay(id: string, plotName: string, display: number | null) {
+export function setIndicatorPlotDisplay(
+  id: string,
+  plotName: string,
+  display: number | null,
+): void {
   setStore('scripts', (s) =>
     s.map((ind) => {
       if (ind.id !== id) return ind;
@@ -3873,19 +3942,19 @@ export function addPane(
 }
 
 /** Drop a pane descriptor (caller destroys chart pane if needed). */
-export function removePane(id: string) {
+export function removePane(id: string): void {
   setStore('panes', (p) => p.filter((pane) => pane.id !== id));
   persist();
 }
 
 /** Set pane height in CSS px. */
-export function resizePane(id: string, height: number) {
+export function resizePane(id: string, height: number): void {
   setStore('panes', (p) => p.map((pane) => (pane.id === id ? { ...pane, height } : pane)));
   persist();
 }
 
 /** Reorder panes by id list (sets `order` then sorts). */
-export function reorderPanes(orderedIds: string[]) {
+export function reorderPanes(orderedIds: string[]): void {
   setStore('panes', (p) =>
     p
       .map((pane) => ({ ...pane, order: orderedIds.indexOf(pane.id) }))
@@ -4166,7 +4235,7 @@ function normalizeBarPayload(bar: Bar): Bar {
 }
 
 /** Enable/disable live streaming preference (stream start/stop is elsewhere). */
-export function setLive(active: boolean) {
+export function setLive(active: boolean): void {
   setStore('live', 'active', active);
   persist();
 }
@@ -4183,7 +4252,7 @@ export type TelemetryPlane = keyof Pick<
 export function setTelemetryPlane(
   plane: TelemetryPlane,
   patch: Partial<PlaneTelemetry> & { id?: string; name?: string; transport?: TransportClass },
-) {
+): void {
   const cur =
     store.telemetry?.[plane] ||
     idlePlane(patch.id || String(plane), patch.name || String(plane), patch.transport || 'none');
@@ -4201,12 +4270,12 @@ export function setTelemetryState(
   plane: TelemetryPlane,
   state: ConnState,
   extra?: Partial<PlaneTelemetry>,
-) {
+): void {
   setTelemetryPlane(plane, { state, ...extra, lastEventAt: extra?.lastEventAt ?? Date.now() });
 }
 
 /** Push a run-duration sample and mirror latency onto the engine plane. */
-export function recordRunLatency(ms: number) {
+export function recordRunLatency(ms: number): void {
   if (!Number.isFinite(ms) || ms < 0) return;
   setStore('telemetry', 'runLatencySamples', (s) => pushSample(s || [], ms));
   setTelemetryPlane('engine', { latencyMs: ms, lastEventAt: Date.now() });
@@ -4240,7 +4309,7 @@ function flushLiveFrame(): void {
 }
 
 /** Record last live tick price/time and bump stream `lastEventAt`. */
-export function noteTick(price: number, time: number, symbol: string = store.symbol) {
+export function noteTick(price: number, time: number, symbol: string = store.symbol): void {
   const prevTick = frameTick ?? store.telemetry?.lastTick;
   // Direction is only meaningful within the same symbol stream.
   let dir: 'up' | 'down' | 'flat' = 'flat';
@@ -4254,7 +4323,7 @@ export function noteTick(price: number, time: number, symbol: string = store.sym
 }
 
 /** Flip dark/light theme and update chart theme + `data-theme` on `<html>`. */
-export function toggleTheme() {
+export function toggleTheme(): void {
   const next = store.theme === 'dark' ? 'light' : 'dark';
   setStore('theme', next);
   const presetId = next === 'light' ? 'void-light' : 'void-dark';
@@ -4270,7 +4339,7 @@ export function toggleTheme() {
 }
 
 /** Apply a named chart theme preset (void-dark, void-light, classic, …). */
-export function setChartThemePreset(presetId: string) {
+export function setChartThemePreset(presetId: string): void {
   const chartTheme = withPreset(presetId);
   batch(() => {
     setStore('chartTheme', chartTheme);
@@ -4284,7 +4353,7 @@ export function setChartThemePreset(presetId: string) {
 }
 
 /** Override one chart theme token (supports aliases like chart.bg_color). */
-export function setChartThemeToken(key: string, value: ThemeTokenValue) {
+export function setChartThemeToken(key: string, value: ThemeTokenValue): void {
   const next = withTokenOverride(store.chartTheme || defaultChartThemeState(), key, value);
   const barEdit = getTokenDef(key)?.group === 'bar';
   batch(() => {
@@ -4299,7 +4368,7 @@ export function setChartThemeToken(key: string, value: ThemeTokenValue) {
 }
 
 /** Replace full chart theme state (from picker / import / layout restore). */
-export function setChartThemeState(state: ChartThemeState) {
+export function setChartThemeState(state: ChartThemeState): void {
   const next = hydrateChartTheme(state);
   setStore('chartTheme', next);
   setStore('theme', next.base);
@@ -4309,10 +4378,14 @@ export function setChartThemeState(state: ChartThemeState) {
 }
 
 /** Reset overrides by re-applying the void preset for the current chrome theme. */
-export function resetChartTheme() {
+export function resetChartTheme(): void {
   setChartThemePreset(store.theme === 'light' ? 'void-light' : 'void-dark');
 }
 
+/**
+ * Outcome of a theme-library rename: success, an empty name, a name already
+ * taken by another entry, or an id that no longer exists.
+ */
 export type ThemeLibraryWrite = 'ok' | 'empty' | 'duplicate' | 'missing';
 
 function paintChartTheme(next: ChartThemeState) {
@@ -4388,6 +4461,14 @@ export function updateCustomTheme(id: string): boolean {
   return true;
 }
 
+/**
+ * Rename a saved chart theme, keeping its generated bar-coloring name in sync
+ * when that name was derived from the theme name. Persists on success.
+ *
+ * @param id - Saved theme id.
+ * @param name - New display name; trimmed and length-clamped.
+ * @returns `'empty'`, `'missing'`, `'duplicate'`, or `'ok'`.
+ */
 export function renameCustomTheme(id: string, name: string): ThemeLibraryWrite {
   const trimmed = clampThemeName(name);
   if (!trimmed) return 'empty';
@@ -4417,7 +4498,11 @@ export function renameCustomTheme(id: string, name: string): ThemeLibraryWrite {
   return 'ok';
 }
 
-export function deleteCustomTheme(id: string) {
+/**
+ * Remove a saved chart theme from the library and clear the active-theme id
+ * when it pointed at that entry. The theme's bar coloring is left untouched.
+ */
+export function deleteCustomTheme(id: string): void {
   batch(() => {
     setStore('savedChartThemes', (list) => (list || []).filter((theme) => theme.id !== id));
     if (store.activeSavedThemeId === id) setStore('activeSavedThemeId', null);
@@ -4507,6 +4592,14 @@ export function updateBarColorTheme(id: string): boolean {
   return true;
 }
 
+/**
+ * Rename a standalone bar coloring and propagate the new name into every saved
+ * chart theme that links it. Persists on success.
+ *
+ * @param id - Bar-theme id.
+ * @param name - New display name; trimmed and length-clamped.
+ * @returns `'empty'`, `'missing'`, `'duplicate'`, or `'ok'`.
+ */
 export function renameBarColorTheme(id: string, name: string): ThemeLibraryWrite {
   const trimmed = clampThemeName(name);
   if (!trimmed) return 'empty';
@@ -4530,7 +4623,12 @@ export function renameBarColorTheme(id: string, name: string): ThemeLibraryWrite
   return 'ok';
 }
 
-export function deleteBarColorTheme(id: string) {
+/**
+ * Remove a standalone bar coloring, detach its reference from saved chart
+ * themes, and clear it from the active chart theme. The bar tokens themselves
+ * stay on the chart.
+ */
+export function deleteBarColorTheme(id: string): void {
   batch(() => {
     setStore('savedBarThemes', (list) => (list || []).filter((bar) => bar.id !== id));
     setStore('savedChartThemes', (list) => detachBarThemeRef(list || [], id));
@@ -4579,7 +4677,7 @@ export function clampUiScale(raw: unknown): number {
 }
 
 /** Write CSS custom properties used by chrome density. */
-export function applyUiScale(scale?: number) {
+export function applyUiScale(scale?: number): number {
   const s = clampUiScale(scale ?? store.uiScale ?? 1);
   if (typeof document === 'undefined') return s;
   const root = document.documentElement;
@@ -4593,7 +4691,7 @@ export function applyUiScale(scale?: number) {
 }
 
 /** Persist + apply UI scale (live preview friendly). */
-export function setUiScale(raw: number) {
+export function setUiScale(raw: number): void {
   const s = clampUiScale(raw);
   setStore('uiScale', s);
   applyUiScale(s);
@@ -4713,7 +4811,7 @@ export function resetUiLayout(): void {
 /* ── Layout helpers ─────────────────────────────────────────────── */
 
 /** Clamp and persist docked editor width (px); mirrors panelChrome.editor.w. Min 1px (border). */
-export function setEditorWidth(width: number) {
+export function setEditorWidth(width: number): void {
   const w = Math.min(Math.max(width, 1), Math.floor(window.innerWidth * 0.9));
   setStore('editor', 'width', w);
   ensurePanelChrome();
@@ -4722,7 +4820,7 @@ export function setEditorWidth(width: number) {
 }
 
 /** Clamp and persist watchlist width (px). Min 1px (border). */
-export function setWatchlistWidth(width: number) {
+export function setWatchlistWidth(width: number): void {
   const w = Math.min(Math.max(width, 1), Math.floor(window.innerWidth * 0.9));
   setStore('watchlist', 'width', w);
   ensurePanelChrome();
@@ -4731,7 +4829,7 @@ export function setWatchlistWidth(width: number) {
 }
 
 /** Clamp and persist indicator panel width (px). Min 1px (border). */
-export function setIndicatorWidth(width: number) {
+export function setIndicatorWidth(width: number): void {
   const w = Math.min(Math.max(width, 1), Math.floor(window.innerWidth * 0.9));
   setStore('indicatorPanel', 'width', w);
   ensurePanelChrome();
@@ -4743,7 +4841,7 @@ export function setIndicatorWidth(width: number) {
  * Docked vs popout editor mode. Popout closes docked chrome and sets
  * `panelChrome.editor.dock = 'window'`; docked restores dock=right.
  */
-export function setEditorMode(mode: EditorMode) {
+export function setEditorMode(mode: EditorMode): void {
   setStore('editor', 'mode', mode);
   if (mode === 'popout') {
     setStore('editor', 'open', false);
@@ -4758,132 +4856,132 @@ export function setEditorMode(mode: EditorMode) {
 }
 
 /** Open/close indicators panel (panelChrome + legacy flag). */
-export function setIndicatorPanelOpen(open: boolean) {
+export function setIndicatorPanelOpen(open: boolean): void {
   setPanelOpen('indicators', open);
 }
 
 /** Toggle indicators panel visibility. */
-export function toggleIndicatorPanel() {
+export function toggleIndicatorPanel(): void {
   setPanelOpen('indicators', !isPanelOpen('indicators'));
 }
 
 /** Open/close Data Window panel. */
-export function setDataViewPanelOpen(open: boolean) {
+export function setDataViewPanelOpen(open: boolean): void {
   setPanelOpen('dataview', open);
 }
 
 /** Toggle Data Window panel visibility. */
-export function toggleDataViewPanel() {
+export function toggleDataViewPanel(): void {
   setPanelOpen('dataview', !isPanelOpen('dataview'));
 }
 
 /** Open/close bottom Tables panel (Pine `table.*` in September 2026 mode). */
-export function setTablesPanelOpen(open: boolean) {
+export function setTablesPanelOpen(open: boolean): void {
   setPanelOpen('tables', open);
 }
 
 /** Toggle bottom Tables panel visibility. */
-export function toggleTablesPanel() {
+export function toggleTablesPanel(): void {
   setPanelOpen('tables', !isPanelOpen('tables'));
 }
 
 /** Open/close Layers (drawings) panel — docks left as a slide-in column. */
-export function setLayerPanelOpen(open: boolean) {
+export function setLayerPanelOpen(open: boolean): void {
   setPanelOpen('layers', open);
   if (open) setPanelDock('layers', 'left');
 }
 
 /** Toggle Layers panel — left slide-in when opening. */
-export function toggleLayerPanel() {
+export function toggleLayerPanel(): void {
   const next = !isPanelOpen('layers');
   setPanelOpen('layers', next);
   if (next) setPanelDock('layers', 'left');
 }
 
 /** Open/close Alerts panel. */
-export function setAlertsPanelOpen(open: boolean) {
+export function setAlertsPanelOpen(open: boolean): void {
   setPanelOpen('alerts', open);
 }
 
 /** Toggle Alerts panel visibility. */
-export function toggleAlertsPanel() {
+export function toggleAlertsPanel(): void {
   setPanelOpen('alerts', !isPanelOpen('alerts'));
 }
 
 /** Open/close System Logs panel (app / transport telemetry). */
-export function setSystemLogsPanelOpen(open: boolean) {
+export function setSystemLogsPanelOpen(open: boolean): void {
   setPanelOpen('logs', open);
 }
 
 /** Toggle System Logs panel visibility. */
-export function toggleSystemLogsPanel() {
+export function toggleSystemLogsPanel(): void {
   setPanelOpen('logs', !isPanelOpen('logs'));
 }
 
 /** Open/close Status bar pane (connection HUD + status message). */
-export function setStatusBarPanelOpen(open: boolean) {
+export function setStatusBarPanelOpen(open: boolean): void {
   setPanelOpen('statusbar', open);
 }
 
 /** Toggle Status bar pane visibility. */
-export function toggleStatusBarPanel() {
+export function toggleStatusBarPanel(): void {
   setPanelOpen('statusbar', !isPanelOpen('statusbar'));
 }
 
 /** Open/close Script Library panel. */
-export function setLibraryPanelOpen(open: boolean) {
+export function setLibraryPanelOpen(open: boolean): void {
   setPanelOpen('library', open);
 }
 
 /** Toggle Script Library panel visibility. */
-export function toggleLibraryPanel() {
+export function toggleLibraryPanel(): void {
   setPanelOpen('library', !isPanelOpen('library'));
 }
 
 /** Open/close Data Source Manager panel. */
-export function setDataSourcePanelOpen(open: boolean) {
+export function setDataSourcePanelOpen(open: boolean): void {
   setPanelOpen('datasource', open);
 }
 
 /** Toggle Data Source Manager panel visibility. */
-export function toggleDataSourcePanel() {
+export function toggleDataSourcePanel(): void {
   setPanelOpen('datasource', !isPanelOpen('datasource'));
 }
 
 /** Open/close On-Chain (DefiLlama TVL) panel. */
-export function setOnchainPanelOpen(open: boolean) {
+export function setOnchainPanelOpen(open: boolean): void {
   setPanelOpen('onchain', open);
 }
 
 /** Toggle On-Chain panel visibility. */
-export function toggleOnchainPanel() {
+export function toggleOnchainPanel(): void {
   setPanelOpen('onchain', !isPanelOpen('onchain'));
 }
 
 /** Open/close the PYNE Agent panel. */
-export function setAgentPanelOpen(open: boolean) {
+export function setAgentPanelOpen(open: boolean): void {
   setPanelOpen('agent', open);
 }
 
 /** Toggle the PYNE Agent panel. */
-export function toggleAgentPanel() {
+export function toggleAgentPanel(): void {
   setPanelOpen('agent', !isPanelOpen('agent'));
 }
 
 /** Persist last on-chain protocol slug (search/use recall). */
-export function setOnchainLastProtocolSlug(slug: string) {
+export function setOnchainLastProtocolSlug(slug: string): void {
   setStore('onchain', 'lastProtocolSlug', typeof slug === 'string' ? slug : '');
   persist();
 }
 
 /** Persist last on-chain protocol display name. */
-export function setOnchainLastProtocolName(name: string) {
+export function setOnchainLastProtocolName(name: string): void {
   setStore('onchain', 'lastProtocolName', typeof name === 'string' ? name : '');
   persist();
 }
 
 /** Set last protocol slug + name together (persisted). */
-export function setOnchainLastProtocol(slug: string, name: string) {
+export function setOnchainLastProtocol(slug: string, name: string): void {
   setStore('onchain', {
     lastProtocolSlug: typeof slug === 'string' ? slug : '',
     lastProtocolName: typeof name === 'string' ? name : '',
@@ -4892,19 +4990,19 @@ export function setOnchainLastProtocol(slug: string, name: string) {
 }
 
 /** Enable/disable editor profiler mode (persisted). */
-export function setProfilerEnabled(on: boolean) {
+export function setProfilerEnabled(on: boolean): void {
   setStore('profilerEnabled', !!on);
   persist();
 }
 
 /** Toggle editor profiler mode. */
-export function toggleProfilerEnabled() {
+export function toggleProfilerEnabled(): void {
   setStore('profilerEnabled', !store.profilerEnabled);
   persist();
 }
 
 /** Enable/disable inline debug decorations (persisted). */
-export function setInlineDebugEnabled(on: boolean) {
+export function setInlineDebugEnabled(on: boolean): void {
   setStore('inlineDebugEnabled', !!on);
   persist();
 }
@@ -4913,7 +5011,7 @@ export function setInlineDebugEnabled(on: boolean) {
  * Toggle inline debug mode (end-of-line log/error chips from last run).
  * Surfaces a short status tip so the menu hover how-to is mirrored on toggle.
  */
-export function toggleInlineDebugEnabled() {
+export function toggleInlineDebugEnabled(): void {
   const next = !store.inlineDebugEnabled;
   setStore('inlineDebugEnabled', next);
   persist();
@@ -4935,7 +5033,7 @@ export function toggleInlineDebugEnabled() {
 }
 
 /** Enable/disable chart pins from last-run logs with bar_index/time. */
-export function setDebugPinsEnabled(on: boolean) {
+export function setDebugPinsEnabled(on: boolean): void {
   setStore('debugPinsEnabled', !!on);
   persist();
 }
@@ -4944,7 +5042,7 @@ export function setDebugPinsEnabled(on: boolean) {
  * Toggle chart debug pins (markers on bars referenced by logs + editor 📍 gutter).
  * Alt-P also toggles this (editor overflow menu + global when focus is outside CM).
  */
-export function toggleDebugPinsEnabled() {
+export function toggleDebugPinsEnabled(): void {
   const next = !store.debugPinsEnabled;
   setStore('debugPinsEnabled', next);
   persist();
@@ -4966,13 +5064,13 @@ export function toggleDebugPinsEnabled() {
 }
 
 /** Enable/disable editor column ruler (persisted; default on). */
-export function setEditorRulerEnabled(on: boolean) {
+export function setEditorRulerEnabled(on: boolean): void {
   setStore('editorRulerEnabled', !!on);
   persist();
 }
 
 /** Toggle the 80-column recommended line-length ruler in the Pine editor. */
-export function toggleEditorRulerEnabled() {
+export function toggleEditorRulerEnabled(): void {
   setStore('editorRulerEnabled', !store.editorRulerEnabled);
   persist();
 }
@@ -4998,13 +5096,13 @@ export function resetShortcuts(): void {
 }
 
 /** Enable/disable soft line wrap in the Pine editor (persisted; default on). */
-export function setEditorWrapEnabled(on: boolean) {
+export function setEditorWrapEnabled(on: boolean): void {
   setStore('editorWrapEnabled', !!on);
   persist();
 }
 
 /** Toggle soft line wrap in the Pine editor. */
-export function toggleEditorWrapEnabled() {
+export function toggleEditorWrapEnabled(): void {
   setStore('editorWrapEnabled', !store.editorWrapEnabled);
   persist();
 }
@@ -5021,20 +5119,20 @@ export function normalizeEditorRightRail(raw: unknown): 'off' | 'minimap' | 'out
 export function hydrateEditorRightRail(bag: unknown): 'off' | 'minimap' | 'outline' {
   const rec = bag && typeof bag === 'object' ? (bag as Record<string, unknown>) : {};
   if (
-    rec.editorRightRail === 'minimap' ||
-    rec.editorRightRail === 'outline' ||
-    rec.editorRightRail === 'off'
+    rec['editorRightRail'] === 'minimap' ||
+    rec['editorRightRail'] === 'outline' ||
+    rec['editorRightRail'] === 'off'
   ) {
-    return rec.editorRightRail;
+    return rec['editorRightRail'];
   }
-  if (typeof rec.editorMinimapEnabled === 'boolean') {
-    return rec.editorMinimapEnabled ? 'minimap' : 'off';
+  if (typeof rec['editorMinimapEnabled'] === 'boolean') {
+    return rec['editorMinimapEnabled'] ? 'minimap' : 'off';
   }
   return DEFAULTS.editorRightRail;
 }
 
 /** Set the editor right rail (`off` | `minimap` | `outline`). Persisted. */
-export function setEditorRightRail(mode: 'off' | 'minimap' | 'outline') {
+export function setEditorRightRail(mode: 'off' | 'minimap' | 'outline'): void {
   const next = normalizeEditorRightRail(mode);
   setStore('editorRightRail', next);
   setStore('editorMinimapEnabled', next === 'minimap');
@@ -5042,33 +5140,33 @@ export function setEditorRightRail(mode: 'off' | 'minimap' | 'outline') {
 }
 
 /** Show/hide the interactive minimap (sets rail to minimap or off). */
-export function setEditorMinimapEnabled(on: boolean) {
+export function setEditorMinimapEnabled(on: boolean): void {
   setEditorRightRail(on ? 'minimap' : 'off');
 }
 
 /** Toggle the interactive minimap; turns off the outline when enabling. */
-export function toggleEditorMinimapEnabled() {
+export function toggleEditorMinimapEnabled(): void {
   setEditorRightRail(store.editorRightRail === 'minimap' ? 'off' : 'minimap');
 }
 
 /** Toggle the function/type outline rail; turns off the minimap when enabling. */
-export function toggleEditorOutlineEnabled() {
+export function toggleEditorOutlineEnabled(): void {
   setEditorRightRail(store.editorRightRail === 'outline' ? 'off' : 'outline');
 }
 
 /** Show/hide the function outline rail. */
-export function setEditorOutlineEnabled(on: boolean) {
+export function setEditorOutlineEnabled(on: boolean): void {
   setEditorRightRail(on ? 'outline' : 'off');
 }
 
 /** Show/hide the Language Feature Bar above the editor status strip (persisted; default on). */
-export function setEditorFeatureBarEnabled(on: boolean) {
+export function setEditorFeatureBarEnabled(on: boolean): void {
   setStore('editorFeatureBarEnabled', !!on);
   persist();
 }
 
 /** Toggle the Language Feature Bar above the editor status strip. */
-export function toggleEditorFeatureBarEnabled() {
+export function toggleEditorFeatureBarEnabled(): void {
   setStore('editorFeatureBarEnabled', !store.editorFeatureBarEnabled);
   persist();
 }
@@ -5079,7 +5177,7 @@ export function getEditorIntel(): EditorIntelSettings {
 }
 
 /** Replace the editor intelligence bag and persist. */
-export function setEditorIntel(next: EditorIntelSettings | Record<string, unknown>) {
+export function setEditorIntel(next: EditorIntelSettings | Record<string, unknown>): void {
   setStore('editorIntel', readEditorIntel(next));
   persist();
 }
@@ -5097,7 +5195,7 @@ const PREEVAL_GEN_KEYS: (keyof EditorIntelSettings)[] = [
 ];
 
 /** Merge a partial editor-intel patch and persist. */
-export function patchEditorIntel(partial: Partial<EditorIntelSettings>) {
+export function patchEditorIntel(partial: Partial<EditorIntelSettings>): void {
   const prev = readEditorIntel(store.editorIntel);
   // Always merge the normalized bag — spreading the Solid store proxy can
   // yield `{}` or all-undefined and persist a dead all-off intel bag.
@@ -5125,7 +5223,7 @@ export function patchEditorIntel(partial: Partial<EditorIntelSettings>) {
 }
 
 /** Restore factory editor-intelligence defaults. */
-export function resetEditorIntel() {
+export function resetEditorIntel(): void {
   const prev = readEditorIntel(store.editorIntel);
   setStore('editorIntel', { ...DEFAULT_EDITOR_INTEL });
   persist();
@@ -5202,7 +5300,7 @@ function syncLegacyOpen(id: PanelId, open: boolean) {
 }
 
 /** Open/close a panel; dual-writes panelChrome and legacy flat flags. */
-export function setPanelOpen(id: PanelId, open: boolean) {
+export function setPanelOpen(id: PanelId, open: boolean): void {
   ensurePanelChrome();
   setStore('panelChrome', id, 'open', open);
   syncLegacyOpen(id, open);
@@ -5278,7 +5376,7 @@ function mirrorPanelWidth(id: PanelId, w: number) {
  * set docked. Float/window bump z-index. Side docks keep independent widths
  * (side-by-side strip).
  */
-export function setPanelDock(id: PanelId, dock: PanelDock) {
+export function setPanelDock(id: PanelId, dock: PanelDock): void {
   ensurePanelChrome();
   // Float-only panels (time / price extras) never leave the float window —
   // coerces workspace restores, MCP calls, and stray menu paths.
@@ -5315,7 +5413,7 @@ export function setPanelDock(id: PanelId, dock: PanelDock) {
  * When enabled, the panel collapses to a peek strip and expands on pointer
  * enter / collapses on leave. Preference is persisted on panel chrome.
  */
-export function setPanelHoverSlide(id: PanelId, enabled: boolean) {
+export function setPanelHoverSlide(id: PanelId, enabled: boolean): void {
   ensurePanelChrome();
   const on = !!enabled;
   setStore('panelChrome', id, 'hoverSlide', on);
@@ -5511,7 +5609,7 @@ export function setPanelGeometry(
   id: PanelId,
   geo: Partial<Pick<PanelChrome, 'x' | 'y' | 'w' | 'h'>>,
   opts?: { persist?: boolean },
-) {
+): void {
   ensurePanelChrome();
   if (geo.x != null) setStore('panelChrome', id, 'x', Math.round(geo.x));
   if (geo.y != null) setStore('panelChrome', id, 'y', Math.round(geo.y));
@@ -5528,7 +5626,7 @@ export function setPanelGeometry(
 }
 
 /** Bring a floating panel above peers by incrementing its z. */
-export function bumpPanelZ(id: PanelId) {
+export function bumpPanelZ(id: PanelId): void {
   ensurePanelChrome();
   const maxZ = Math.max(
     20,
@@ -5552,12 +5650,12 @@ function ensurePanelChrome() {
 }
 
 /** Open/close watchlist panel. */
-export function setWatchlistOpen(open: boolean) {
+export function setWatchlistOpen(open: boolean): void {
   setPanelOpen('watchlist', open);
 }
 
 /** Open/close docked editor panel. */
-export function setEditorOpen(open: boolean) {
+export function setEditorOpen(open: boolean): void {
   setPanelOpen('editor', open);
 }
 
@@ -5565,36 +5663,36 @@ export function setEditorOpen(open: boolean) {
  * Open Script Settings modal.
  * @param indicatorId applied indicator id, or `null` for the editor document.
  */
-export function openScriptSettings(indicatorId: string | null = null) {
+export function openScriptSettings(indicatorId: string | null = null): void {
   setStore('scriptSettings', { open: true, indicatorId });
 }
 
 /** Close Script Settings modal (ephemeral — not persisted). */
-export function closeScriptSettings() {
+export function closeScriptSettings(): void {
   setStore('scriptSettings', { open: false, indicatorId: null });
 }
 
 /** Ephemeral — do not persist every crosshair move. */
-export function setCrosshair(time: number | null, barIndex: number | null = null) {
+export function setCrosshair(time: number | null, barIndex: number | null = null): void {
   const cur = store.crosshair;
   if (cur?.time === time && cur?.barIndex === barIndex) return;
   setStore('crosshair', { time, barIndex });
 }
 
 /** Persist price-scale decimal mode (`auto` or 0–8). */
-export function setPriceScaleDecimals(mode: PriceScaleDecimalsMode | unknown) {
+export function setPriceScaleDecimals(mode: PriceScaleDecimalsMode | unknown): void {
   setStore('priceScaleDecimals', normalizePriceScaleDecimalsMode(mode));
   persist();
 }
 
 /** Persist input overrides for the docked editor document (not yet applied). */
-export function setEditorInputValues(values: Record<string, unknown>) {
+export function setEditorInputValues(values: Record<string, unknown>): void {
   setStore('editorInputValues', values);
   persist();
 }
 
 /** Persist input overrides on an applied indicator. */
-export function setIndicatorInputValues(id: string, values: Record<string, unknown>) {
+export function setIndicatorInputValues(id: string, values: Record<string, unknown>): void {
   setStore('scripts', (s) =>
     s.map((ind) => (ind.id === id ? { ...ind, inputValues: { ...values } } : ind)),
   );
@@ -5602,13 +5700,13 @@ export function setIndicatorInputValues(id: string, values: Record<string, unkno
 }
 
 /** Persist Strategy Properties overrides for the docked editor document. */
-export function setEditorStrategyProps(values: Record<string, unknown>) {
+export function setEditorStrategyProps(values: Record<string, unknown>): void {
   setStore('editorStrategyProps', values);
   persist();
 }
 
 /** Persist Strategy Properties overrides on an applied strategy script. */
-export function setIndicatorStrategyProps(id: string, values: Record<string, unknown>) {
+export function setIndicatorStrategyProps(id: string, values: Record<string, unknown>): void {
   setStore('scripts', (s) =>
     s.map((ind) => (ind.id === id ? { ...ind, strategyProps: { ...values } } : ind)),
   );
@@ -5616,7 +5714,7 @@ export function setIndicatorStrategyProps(id: string, values: Record<string, unk
 }
 
 /** Show/hide a chart pane (store only; ChartHost/manager apply visibility). */
-export function setPaneVisible(id: string, visible: boolean) {
+export function setPaneVisible(id: string, visible: boolean): void {
   setStore('panes', (p) => p.map((pane) => (pane.id === id ? { ...pane, visible } : pane)));
   persist();
 }
@@ -5678,7 +5776,7 @@ function writeActiveWatchlistSymbols(next: string[]) {
 }
 
 /** Append a unique uppercase symbol to the active watchlist. */
-export function addWatchlistSymbol(symbol: string) {
+export function addWatchlistSymbol(symbol: string): void {
   const sym = symbol.toUpperCase().trim();
   if (!sym || store.watchlist.symbols.includes(sym)) return;
   writeActiveWatchlistSymbols([...store.watchlist.symbols, sym]);
@@ -5686,13 +5784,13 @@ export function addWatchlistSymbol(symbol: string) {
 }
 
 /** Remove a symbol from the active watchlist. */
-export function removeWatchlistSymbol(symbol: string) {
+export function removeWatchlistSymbol(symbol: string): void {
   writeActiveWatchlistSymbols(store.watchlist.symbols.filter((x) => x !== symbol));
   persist();
 }
 
 /** Watchlist live-quote poll interval (seconds), clamped 5–120. */
-export function setWatchlistRefreshSec(sec: number) {
+export function setWatchlistRefreshSec(sec: number): void {
   const n = Math.min(120, Math.max(5, Math.round(Number(sec) || 15)));
   setStore('watchlist', 'refreshSec', n);
   persist();
@@ -5710,7 +5808,7 @@ function nextWatchlistName(lists: WatchlistList[]): string {
 }
 
 /** Switch the active named watchlist (quotes follow `symbols`). */
-export function setActiveWatchlist(id: string) {
+export function setActiveWatchlist(id: string): void {
   const lists = ensureWatchlistLists();
   const next = lists.find((l) => l.id === id);
   if (!next) return;
@@ -5749,7 +5847,7 @@ export function createWatchlist(
 }
 
 /** Rename a watchlist. Empty names are ignored. */
-export function renameWatchlist(id: string, name: string) {
+export function renameWatchlist(id: string, name: string): void {
   const label = name.trim();
   if (!label) return;
   const lists = ensureWatchlistLists();
@@ -5814,7 +5912,7 @@ export function createWatchlistFolder(name?: string): string {
 }
 
 /** Rename a folder. Empty names are ignored. */
-export function renameWatchlistFolder(id: string, name: string) {
+export function renameWatchlistFolder(id: string, name: string): void {
   const label = name.trim();
   if (!label) return;
   const folders = ensureWatchlistFolders();
@@ -5828,7 +5926,7 @@ export function renameWatchlistFolder(id: string, name: string) {
 }
 
 /** Persist a folder's collapsed state in the manager tree. */
-export function setWatchlistFolderCollapsed(id: string, collapsed: boolean) {
+export function setWatchlistFolderCollapsed(id: string, collapsed: boolean): void {
   const folders = ensureWatchlistFolders();
   if (!folders.some((f) => f.id === id)) return;
   setStore(
@@ -5912,14 +6010,14 @@ export function moveWatchlistSymbol(symbol: string, delta: -1 | 1): boolean {
 }
 
 /** Sort the active list alphabetically. */
-export function sortWatchlistSymbols() {
+export function sortWatchlistSymbols(): void {
   const next = [...store.watchlist.symbols].sort((a, b) => a.localeCompare(b));
   writeActiveWatchlistSymbols(next);
   persist();
 }
 
 /** Remove every symbol from the active list. */
-export function clearWatchlistSymbols() {
+export function clearWatchlistSymbols(): void {
   if (!store.watchlist.symbols.length) return;
   writeActiveWatchlistSymbols([]);
   persist();
@@ -5962,7 +6060,7 @@ export function moveWatchlistSymbolToList(symbol: string, targetListId: string):
  * Enable/disable second-symbol compare. Clearing disables and drops bars.
  * Does not fetch — ChartHost / CompareSymbolControl own loading.
  */
-export function setCompareEnabled(enabled: boolean) {
+export function setCompareEnabled(enabled: boolean): void {
   setStore('compare', 'enabled', !!enabled);
   if (!enabled) {
     setStore('compare', 'bars', []);
@@ -5974,19 +6072,19 @@ export function setCompareEnabled(enabled: boolean) {
 }
 
 /** Update compare ticker (uppercased). Does not auto-fetch. */
-export function setCompareSymbol(symbol: string) {
+export function setCompareSymbol(symbol: string): void {
   setStore('compare', 'symbol', (symbol || '').toUpperCase().trim());
   persist();
 }
 
 /** percent = % from first common bar; absolute = raw close on left scale. */
-export function setCompareMode(mode: 'percent' | 'absolute') {
+export function setCompareMode(mode: 'percent' | 'absolute'): void {
   setStore('compare', 'mode', mode === 'absolute' ? 'absolute' : 'percent');
   persist();
 }
 
 /** Dual-% mode: also paint main closes as percent when mode is percent. */
-export function setCompareNormalizeMain(on: boolean) {
+export function setCompareNormalizeMain(on: boolean): void {
   setStore('compare', 'normalizeMain', !!on);
   persist();
 }
@@ -5995,7 +6093,7 @@ export function setCompareNormalizeMain(on: boolean) {
  * Replace ephemeral compare bars (after fetch). Bumps `compare.gen`.
  * Not persisted.
  */
-export function setCompareBars(bars: Bar[]) {
+export function setCompareBars(bars: Bar[]): void {
   setStore('compare', 'bars', bars);
   setStore('compare', 'loading', false);
   setStore('compare', 'error', null);
@@ -6003,13 +6101,13 @@ export function setCompareBars(bars: Bar[]) {
 }
 
 /** Mark compare fetch in flight / failed. */
-export function setCompareLoadState(state: { loading?: boolean; error?: string | null }) {
+export function setCompareLoadState(state: { loading?: boolean; error?: string | null }): void {
   if (state.loading !== undefined) setStore('compare', 'loading', state.loading);
   if (state.error !== undefined) setStore('compare', 'error', state.error);
 }
 
 /** Clear compare series data without toggling the enabled pref. */
-export function clearCompareBars() {
+export function clearCompareBars(): void {
   setStore('compare', 'bars', []);
   setStore('compare', 'loading', false);
   setStore('compare', 'error', null);
@@ -6017,7 +6115,7 @@ export function clearCompareBars() {
 }
 
 /** Persist editor document body under `EDITOR_DOC_KEY` (separate from app JSON). */
-export function saveEditorDoc(doc: string) {
+export function saveEditorDoc(doc: string): void {
   setItem(EDITOR_DOC_KEY, doc);
 }
 
@@ -6030,7 +6128,7 @@ export function loadEditorDoc(): string {
  * Set the active drawing tool (cursor or place tool).
  * Persisted so the toolbar restores; layer may call this after place when stay-in-mode is off.
  */
-export function setDrawingTool(tool: DrawingToolId) {
+export function setDrawingTool(tool: DrawingToolId): void {
   setStore('drawingTool', tool);
   // tool choice is session-ish; still persist so toolbar restores
   persist();
@@ -6041,7 +6139,7 @@ export function setDrawingTool(tool: DrawingToolId) {
  * Persisted. Does not touch Pine script drawings.
  * Prefer layer `onChange` / symbol-scoped helpers so multi-symbol drawings stay intact.
  */
-export function setDrawings(drawings: Drawing[]) {
+export function setDrawings(drawings: Drawing[]): void {
   setStore('drawings', drawings);
   persist();
 }
@@ -6050,13 +6148,13 @@ export function setDrawings(drawings: Drawing[]) {
  * Empty **all** user drawings and persist.
  * Prefer {@link clearDrawingsForSymbol} for toolbar clear (keeps other symbols).
  */
-export function clearDrawings() {
+export function clearDrawings(): void {
   setStore('drawings', []);
   persist();
 }
 
 /** Merge strategy UI prefs (fill model, marker labels) and persist. */
-export function setStrategyUi(patch: Partial<AppState['strategyUi']>) {
+export function setStrategyUi(patch: Partial<AppState['strategyUi']>): void {
   setStore('strategyUi', {
     ...DEFAULTS.strategyUi,
     ...(store.strategyUi || {}),
@@ -6069,7 +6167,7 @@ export function setStrategyUi(patch: Partial<AppState['strategyUi']>) {
  * Remove drawings for one symbol (and untagged legacy when clearing the active view).
  * Other symbols’ drawings are preserved.
  */
-export function clearDrawingsForSymbol(symbol: string = store.symbol) {
+export function clearDrawingsForSymbol(symbol: string = store.symbol): void {
   const want = String(symbol || '')
     .trim()
     .toUpperCase();
@@ -6100,13 +6198,13 @@ export function clearDrawingsForSymbol(symbol: string = store.symbol) {
  * Sync store drawings from the layer after a layer-owned delete path.
  * Selection is cleared on the layer side; this only writes the remaining list.
  */
-export function deleteSelectedDrawing(current: Drawing[]) {
+export function deleteSelectedDrawing(current: Drawing[]): void {
   setStore('drawings', current);
   persist();
 }
 
 /** Remove one user drawing by id (Layers panel / external). */
-export function deleteDrawing(id: string) {
+export function deleteDrawing(id: string): void {
   setStore(
     'drawings',
     store.drawings.filter((d) => d.id !== id),
@@ -6119,7 +6217,7 @@ export function deleteDrawing(id: string) {
  * Selection for the style bar / hit-test / Layers panel. Ephemeral — not persisted.
  * Wired from layer `onSelectionChange`.
  */
-export function setSelectedDrawingId(id: string | null) {
+export function setSelectedDrawingId(id: string | null): void {
   setStore('selectedDrawingId', id);
 }
 
@@ -6127,7 +6225,7 @@ export function setSelectedDrawingId(id: string | null) {
  * Merge default stroke/fill prefs for new placements (and toolbar when no selection).
  * `byKind` is deep-merged per kind so one tool update does not wipe others.
  */
-export function setDrawingPrefs(patch: Partial<AppState['drawingPrefs']>) {
+export function setDrawingPrefs(patch: Partial<AppState['drawingPrefs']>): void {
   const prev = store.drawingPrefs;
   const next: AppState['drawingPrefs'] = { ...prev, ...patch };
   if (patch.byKind && typeof patch.byKind === 'object') {
@@ -6148,7 +6246,7 @@ export function setDrawingPrefs(patch: Partial<AppState['drawingPrefs']>) {
  * Merge toolbar interaction prefs (magnet, stay-in-mode, lock-all, hide, lastToolByGroup).
  * `lastToolByGroup` is deep-merged so one group update does not wipe others.
  */
-export function setDrawingUi(patch: Partial<AppState['drawingUi']>) {
+export function setDrawingUi(patch: Partial<AppState['drawingUi']>): void {
   const next = { ...store.drawingUi, ...patch };
   if (patch.lastToolByGroup) {
     next.lastToolByGroup = { ...store.drawingUi.lastToolByGroup, ...patch.lastToolByGroup };
@@ -6161,7 +6259,7 @@ export function setDrawingUi(patch: Partial<AppState['drawingUi']>) {
  * Shallow-merge a patch onto one user drawing by id (style bar dual-field updates).
  * Callers should dual-write legacy + `style` when changing paint props (see DrawingToolbar).
  */
-export function patchDrawing(id: string, patch: Partial<Drawing>) {
+export function patchDrawing(id: string, patch: Partial<Drawing>): void {
   setStore(
     'drawings',
     store.drawings.map((d) => (d.id === id ? ({ ...d, ...patch } as Drawing) : d)),

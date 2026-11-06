@@ -30,6 +30,13 @@ export const LEFT_EDGE_MARGIN = 64;
 /** One page. Small enough that the commit is one setData, not a reload. */
 export const LEFT_EDGE_PAGE = 500;
 
+/**
+ * Whether the viewport is close enough to the loaded left edge to page older bars.
+ *
+ * @param range visible logical range in bar indices; `null` means unknown
+ * @param margin bars from index 0 that count as "near" (default {@link LEFT_EDGE_MARGIN})
+ * @returns true when a prefetch should be armed
+ */
 export function nearLeftEdge(
   range: { from: number; to: number } | null | undefined,
   margin = LEFT_EDGE_MARGIN,

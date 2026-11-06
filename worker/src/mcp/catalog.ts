@@ -14,7 +14,10 @@
 
 import type { McpPromptDef, McpResourceDef, McpToolDef } from './protocol';
 
-const object = (properties: Record<string, unknown>, required: string[] = []): Record<string, unknown> => ({
+const object = (
+  properties: Record<string, unknown>,
+  required: string[] = [],
+): Record<string, unknown> => ({
   type: 'object',
   additionalProperties: false,
   properties,
@@ -64,7 +67,8 @@ export const MCP_TOOLS: readonly McpToolDef[] = [
         headers: {
           type: 'object',
           additionalProperties: { type: 'string' },
-          description: 'Extra headers (X-Admin-Token, If-Match, X-Exchange-Key, …). Authorization is injected.',
+          description:
+            'Extra headers (X-Admin-Token, If-Match, X-Exchange-Key, …). Authorization is injected.',
         },
       },
       ['path'],
@@ -105,7 +109,8 @@ export const MCP_TOOLS: readonly McpToolDef[] = [
   {
     name: 'axis_scripts_put',
     plane: 'worker',
-    description: 'Create or upsert a cloud script. Optional If-Match / revision for optimistic concurrency.',
+    description:
+      'Create or upsert a cloud script. Optional If-Match / revision for optimistic concurrency.',
     inputSchema: object(
       {
         id: optStr('Script id; omit on create to mint s_<base36>'),
@@ -230,13 +235,19 @@ export const MCP_TOOLS: readonly McpToolDef[] = [
   {
     name: 'app_session_status',
     plane: 'worker',
-    description: 'Whether a PWA is connected to the MCP bridge for this API key (or an explicit session id).',
+    description:
+      'Whether a PWA is connected to the MCP bridge for this API key (or an explicit session id).',
     inputSchema: object({
       session: optStr('Bridge session id; default is the API-key partition'),
     }),
   },
 ];
 
+/**
+ * Every `axis://` resource this server can read.
+ *
+ * The URIs are the contract: `resources/read` rejects anything not listed here.
+ */
 export const MCP_RESOURCES: readonly McpResourceDef[] = [
   {
     uri: 'axis://health',
@@ -264,10 +275,12 @@ export const MCP_RESOURCES: readonly McpResourceDef[] = [
   },
 ];
 
+/** Guided workflows exposed through `prompts/list` and `prompts/get`. */
 export const MCP_PROMPTS: readonly McpPromptDef[] = [
   {
     name: 'run_script',
-    description: 'Run a Pine script on the current (or supplied) OHLCV and summarize plots / strategy / errors.',
+    description:
+      'Run a Pine script on the current (or supplied) OHLCV and summarize plots / strategy / errors.',
     arguments: [
       { name: 'script', description: 'Pine source', required: true },
       { name: 'symbol', description: 'Symbol if the app should load bars first', required: false },
@@ -276,15 +289,18 @@ export const MCP_PROMPTS: readonly McpPromptDef[] = [
   },
   {
     name: 'debug_last_run',
-    description: 'Inspect the last script run (errors, logs, plots) on a connected PWA or via last /api/run result.',
+    description:
+      'Inspect the last script run (errors, logs, plots) on a connected PWA or via last /api/run result.',
   },
   {
     name: 'analyze_strategy',
-    description: 'Read strategy results (equity, trades, stats) from the connected app and explain them.',
+    description:
+      'Read strategy results (equity, trades, stats) from the connected app and explain them.',
   },
   {
     name: 'load_symbol',
-    description: 'Load a symbol/interval on the connected chart and confirm bar count + last close.',
+    description:
+      'Load a symbol/interval on the connected chart and confirm bar count + last close.',
     arguments: [
       { name: 'symbol', description: 'e.g. BTCUSDT', required: true },
       { name: 'interval', description: 'e.g. 1h', required: false },
@@ -292,18 +308,37 @@ export const MCP_PROMPTS: readonly McpPromptDef[] = [
   },
   {
     name: 'audit_workspace',
-    description: 'Snapshot the connected AXIS workspace (layout, scripts, plugins, alerts) and report what is active.',
+    description:
+      'Snapshot the connected AXIS workspace (layout, scripts, plugins, alerts) and report what is active.',
   },
 ];
 
+/**
+ * Looks a tool up by exact name.
+ *
+ * @param name - Name from a `tools/call` request.
+ * @returns The catalog entry, or `undefined` when the name is unknown.
+ */
 export function findTool(name: string): McpToolDef | undefined {
   return MCP_TOOLS.find((t) => t.name === name);
 }
 
+/**
+ * Looks a prompt up by exact name.
+ *
+ * @param name - Name from a `prompts/get` request.
+ * @returns The catalog entry, or `undefined` when the name is unknown.
+ */
 export function findPrompt(name: string): McpPromptDef | undefined {
   return MCP_PROMPTS.find((p) => p.name === name);
 }
 
+/**
+ * Looks a resource up by exact URI.
+ *
+ * @param uri - URI from a `resources/read` request.
+ * @returns The catalog entry, or `undefined` when the URI is unknown.
+ */
 export function findResource(uri: string): McpResourceDef | undefined {
   return MCP_RESOURCES.find((r) => r.uri === uri);
 }

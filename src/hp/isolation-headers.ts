@@ -43,12 +43,22 @@
  * @module hp/isolation-headers
  */
 
+/** Header name for Cross-Origin-Opener-Policy. */
 export const COOP_HEADER = 'Cross-Origin-Opener-Policy';
+
+/** Header name for Cross-Origin-Embedder-Policy. */
 export const COEP_HEADER = 'Cross-Origin-Embedder-Policy';
+
+/** Header name for Cross-Origin-Resource-Policy. */
 export const CORP_HEADER = 'Cross-Origin-Resource-Policy';
 
+/** COOP value Chromium requires before it sets `crossOriginIsolated`. */
 export const COOP_VALUE = 'same-origin';
+
+/** COEP value that isolates without demanding CORP on third-party subresources. */
 export const COEP_VALUE = 'credentialless';
+
+/** CORP value stamped alongside the isolating pair. */
 export const CORP_VALUE = 'same-origin';
 
 /** Header map for Vite / Bun.serve / SW Response. */

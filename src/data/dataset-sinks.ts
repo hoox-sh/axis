@@ -47,15 +47,20 @@ import {
   type BarsKeyLock,
 } from './bars-cache';
 
+/**
+ * Durable backend for datasets: process memory (`session`), IndexedDB
+ * (`local`), or a remote storage plugin (`git` / `worker`). Chosen in Settings
+ * and migrated by `setPersistenceMode`.
+ */
 export type PersistenceMode = 'session' | 'local' | 'git' | 'worker';
 
-export const PERSISTENCE_MODES: readonly PersistenceMode[] = [
-  'session',
-  'local',
-  'git',
-  'worker',
-];
+/** Display order of the persistence modes in the Settings switch. */
+export const PERSISTENCE_MODES: readonly PersistenceMode[] = ['session', 'local', 'git', 'worker'];
 
+/**
+ * Receives remote sink write failures after retries are exhausted, so the DSM
+ * panel can surface them without the write path throwing.
+ */
 export type SinkErrorListener = (mode: PersistenceMode, key: string, err: unknown) => void;
 
 let sinkErrorListener: SinkErrorListener | null = null;
@@ -121,6 +126,10 @@ export interface DatasetSink {
 
 const sessionSeries = new Map<string, Bar[]>();
 
+/**
+ * In-memory sink: fastest and always available, but everything is lost on
+ * reload. Used when the user picks `session` and as the test baseline.
+ */
 export const sessionSink: DatasetSink = {
   mode: 'session',
   async get(key) {
@@ -153,6 +162,10 @@ function mergeSorted(existing: readonly Bar[], incoming: readonly Bar[]): Bar[] 
 
 // ── local (bars-cache / IndexedDB) ─────────────────────────────────────
 
+/**
+ * Default sink: `bars-cache` in IndexedDB. A failed read throws rather than
+ * returning `null`, so callers can tell "absent" from "unreadable".
+ */
 export const localSink: DatasetSink = {
   mode: 'local',
   async get(key) {

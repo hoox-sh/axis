@@ -65,30 +65,18 @@ import {
 import { setDebugChipClickHandler } from './inline-debug';
 import { jumpToDebugPin } from '../chart/manager-access';
 import { EditorProblems } from '../ui/EditorProblems';
-import {
-  countProblemsBySeverity,
-  shouldAutoOpenProblems,
-} from '../ui/editor-problems';
+import { countProblemsBySeverity, shouldAutoOpenProblems } from '../ui/editor-problems';
 import { EditorGitBar } from '../ui/EditorGitBar';
-import {
-  getEditorStorageId,
-  isGitStorageActive,
-  pullLibrary,
-  pushScript,
-} from './git-sync';
+import { getEditorStorageId, isGitStorageActive, pullLibrary, pushScript } from './git-sync';
 import {
   combineEditorDiagnostics,
   countDiagnostics,
   formatDiagnosticCount,
   type EditorDiagnostic,
 } from './diagnostics';
-import {
-  cancelPreeval,
-  runPreevalNow,
-  schedulePreeval,
-} from './preevaluate';
+import { cancelPreeval, runPreevalNow, schedulePreeval } from './preevaluate';
 import { readEditorIntel } from './editor-intel';
-import { countDocStats, cursorLineCol } from './doc-stats';
+import { countDocStats } from './doc-stats';
 import { ColorToolsPanel } from './ColorToolsPanel';
 import { SymbolEmojiManager } from './SymbolEmojiManager';
 import { ScriptLogsPane } from './ScriptLogsPane';
@@ -159,7 +147,7 @@ const newTab = (name: string, doc: string, libraryId?: string): Tab => ({
 function initialDoc(): string {
   const shared = loadEditorDoc();
   if (shared.trim()) return shared;
-  return store.scripts[0]?.code || DEMOS['rsi-overlay'];
+  return store.scripts[0]?.code || DEMOS['rsi-overlay'] || '';
 }
 
 interface Props {
@@ -184,7 +172,10 @@ const TabMetaBadges = (props: { doc: string; tabName: string }) => {
     return v ? `v${v}` : '–';
   };
   return (
-    <span class="flex items-center gap-1 flex-shrink-0" title={`Script metadata for ${props.tabName}`}>
+    <span
+      class="flex items-center gap-1 flex-shrink-0"
+      title={`Script metadata for ${props.tabName}`}
+    >
       <span
         class="text-[9px] font-semibold text-text-faint bg-bg-hover rounded px-1 py-px leading-tight"
         title={version() === '–' ? 'No //@version= pragma found' : `Pine Script ${version()}`}
@@ -194,7 +185,11 @@ const TabMetaBadges = (props: { doc: string; tabName: string }) => {
       </span>
       <span
         class="text-[9px] font-semibold text-text-faint bg-bg-hover rounded px-1 py-px leading-tight"
-        title={kind() === '–' ? 'No strategy/indicator/library declaration found' : `Script type ${kind()}`}
+        title={
+          kind() === '–'
+            ? 'No strategy/indicator/library declaration found'
+            : `Script type ${kind()}`
+        }
         data-testid="axis-editor-tab-badge-kind"
       >
         {kind()}
@@ -204,7 +199,7 @@ const TabMetaBadges = (props: { doc: string; tabName: string }) => {
 };
 
 /** Multi-tab editor UI with demos, draft autosave, and library integration. */
-export const TabbedEditor: Component<Props> = (props) => {
+export const TabbedEditor: Component<Props> = (props) : JSX.Element => {
   const [tabs, setTabs] = createSignal<Tab[]>([newTab('Script 1', initialDoc())]);
   const [activeTab, setActiveTab] = createSignal(0);
   /** Live CM buffer — tracked so Problems drop the moment the doc diverges. */
@@ -257,11 +252,7 @@ export const TabbedEditor: Component<Props> = (props) => {
     void liveSource();
     void tabs();
     void activeTab();
-    const sourceDoc =
-      liveSource() ||
-      props.editorRef?.getDoc?.() ||
-      tabs()[activeTab()]?.doc ||
-      '';
+    const sourceDoc = liveSource() || props.editorRef?.getDoc?.() || tabs()[activeTab()]?.doc || '';
     const pre = store.preEval?.diagnostics ?? [];
     const preSource = store.preEval?.source ?? '';
     return combineEditorDiagnostics(pre, store.lastRun, sourceDoc, preSource);
@@ -294,9 +285,7 @@ export const TabbedEditor: Component<Props> = (props) => {
   };
 
   /** Active tab source (reactive) — color tools + badge count. */
-  const activeDoc = createMemo(
-    () => props.editorRef?.getDoc?.() || tabs()[activeTab()]?.doc || '',
-  );
+  const activeDoc = createMemo(() => props.editorRef?.getDoc?.() || tabs()[activeTab()]?.doc || '');
   const colorHitCount = createMemo(() => scanPineColors(activeDoc()).length);
 
   /**
@@ -406,7 +395,9 @@ export const TabbedEditor: Component<Props> = (props) => {
       // Don't clobber if user already typed or initial had content from localStorage
       if (current.trim() && current !== DEMOS['rsi-overlay']) return;
       if (loadEditorDoc().trim()) return;
-      setTabs((t) => t.map((tab, i) => (i === 0 ? { ...tab, doc: d.content, name: d.name || tab.name } : tab)));
+      setTabs((t) =>
+        t.map((tab, i) => (i === 0 ? { ...tab, doc: d.content, name: d.name || tab.name } : tab)),
+      );
       props.editorRef?.setDoc?.(d.content);
     });
 
@@ -438,9 +429,7 @@ export const TabbedEditor: Component<Props> = (props) => {
           prev = prev.map((tab, i) => (i === idx ? { ...tab, doc: currentDoc } : tab));
         }
 
-        const newTabs = items.map((d) =>
-          newTab(d.name, d.content, d.libraryId),
-        );
+        const newTabs = items.map((d) => newTab(d.name, d.content, d.libraryId));
 
         const onlyPlaceholder =
           prev.length === 1 &&
@@ -448,8 +437,8 @@ export const TabbedEditor: Component<Props> = (props) => {
           !prev[0]!.dirty &&
           (!prev[0]!.doc.trim() ||
             prev[0]!.doc === DEMOS['rsi-overlay'] ||
-            prev[0]!.doc === DEMOS.macd ||
-            prev[0]!.doc === DEMOS.drawings ||
+            prev[0]!.doc === DEMOS['macd'] ||
+            prev[0]!.doc === DEMOS['drawings'] ||
             prev[0]!.name === 'Script 1');
 
         let nextTabs: Tab[];
@@ -536,9 +525,7 @@ export const TabbedEditor: Component<Props> = (props) => {
         if (raw == null) return;
         const line = Number.parseInt(raw, 10);
         if (!Number.isFinite(line) || line < 1) return;
-        window.dispatchEvent(
-          new CustomEvent('axis-editor-goto-line', { detail: { line } }),
-        );
+        window.dispatchEvent(new CustomEvent('axis-editor-goto-line', { detail: { line } }));
       }
     };
     window.addEventListener('keydown', onShortcutKeyDown);
@@ -583,9 +570,7 @@ export const TabbedEditor: Component<Props> = (props) => {
       if (props.editorRef?.getDoc) {
         const currentDoc = props.editorRef.getDoc();
         const cur = activeTab();
-        snapshot = snapshot.map((tab, i) =>
-          i === cur ? { ...tab, doc: currentDoc } : tab,
-        );
+        snapshot = snapshot.map((tab, i) => (i === cur ? { ...tab, doc: currentDoc } : tab));
       }
       const tab = { ...newTab(name, code), dirty: true };
       const next = [...snapshot, tab];
@@ -625,9 +610,7 @@ export const TabbedEditor: Component<Props> = (props) => {
     if (props.editorRef?.getDoc) {
       const currentDoc = props.editorRef.getDoc();
       const cur = activeTab();
-      snapshot = snapshot.map((tab, i) =>
-        i === cur ? { ...tab, doc: currentDoc } : tab,
-      );
+      snapshot = snapshot.map((tab, i) => (i === cur ? { ...tab, doc: currentDoc } : tab));
     }
     const next = [...snapshot, newTab(`Script ${snapshot.length + 1}`, '')];
     const newIdx = next.length - 1;
@@ -639,9 +622,9 @@ export const TabbedEditor: Component<Props> = (props) => {
   };
 
   const openExample = (id: keyof typeof DEMOS) => {
-    const doc = DEMOS[id];
-    const name =
-      id === 'drawings' ? 'Drawings' : id === 'macd' ? 'MACD' : 'RSI';
+    // Every DEMOS key is defined, so the empty fallback is unreachable.
+    const doc = DEMOS[id] ?? '';
+    const name = id === 'drawings' ? 'Drawings' : id === 'macd' ? 'MACD' : 'RSI';
     let snapshot = tabs();
     if (props.editorRef?.getDoc) {
       const currentDoc = props.editorRef.getDoc();
@@ -654,11 +637,9 @@ export const TabbedEditor: Component<Props> = (props) => {
       !snapshot[0]!.dirty &&
       (!snapshot[0]!.doc.trim() ||
         snapshot[0]!.doc === DEMOS['rsi-overlay'] ||
-        snapshot[0]!.doc === DEMOS.macd ||
-        snapshot[0]!.doc === DEMOS.drawings);
-    const next = onlyPlaceholder
-      ? [newTab(name, doc)]
-      : [...snapshot, newTab(name, doc)];
+        snapshot[0]!.doc === DEMOS['macd'] ||
+        snapshot[0]!.doc === DEMOS['drawings']);
+    const next = onlyPlaceholder ? [newTab(name, doc)] : [...snapshot, newTab(name, doc)];
     const idx = next.length - 1;
     batch(() => {
       setTabs(next);
@@ -678,9 +659,7 @@ export const TabbedEditor: Component<Props> = (props) => {
     let snapshot = list;
     if (props.editorRef?.getDoc) {
       const currentDoc = props.editorRef.getDoc();
-      snapshot = list.map((tab, i) =>
-        i === cur ? { ...tab, doc: currentDoc } : tab,
-      );
+      snapshot = list.map((tab, i) => (i === cur ? { ...tab, doc: currentDoc } : tab));
     }
 
     const newTabs = snapshot.filter((_, i) => i !== idx);
@@ -710,9 +689,7 @@ export const TabbedEditor: Component<Props> = (props) => {
     let snapshot = list;
     if (props.editorRef?.getDoc) {
       const currentDoc = props.editorRef.getDoc();
-      snapshot = list.map((tab, i) =>
-        i === activeTab() ? { ...tab, doc: currentDoc } : tab,
-      );
+      snapshot = list.map((tab, i) => (i === activeTab() ? { ...tab, doc: currentDoc } : tab));
       setTabs(snapshot);
     }
     setActiveTab(idx);
@@ -744,8 +721,7 @@ export const TabbedEditor: Component<Props> = (props) => {
   const activeTabState = () => tabs()[activeTab()];
 
   /** Live doc for the active tab (CM buffer preferred). */
-  const activeDocText = () =>
-    props.editorRef?.getDoc?.() || activeTabState()?.doc || '';
+  const activeDocText = () => props.editorRef?.getDoc?.() || activeTabState()?.doc || '';
 
   /**
    * Unsaved = dirty edits, or never written to the library (`libraryId` missing).
@@ -766,9 +742,7 @@ export const TabbedEditor: Component<Props> = (props) => {
    * saving a background tab never clobbers the visible diagnostics.
    * @returns whether the write succeeded and the document that was saved.
    */
-  const saveTabToLibrary = async (
-    idx: number,
-  ): Promise<{ ok: boolean; doc: string }> => {
+  const saveTabToLibrary = async (idx: number): Promise<{ ok: boolean; doc: string }> => {
     const tab = tabs()[idx];
     const isActive = idx === activeTab();
     const doc = isActive ? activeDocText() : tab?.doc || '';
@@ -778,9 +752,7 @@ export const TabbedEditor: Component<Props> = (props) => {
     }
     if (isActive) {
       // Snapshot CM into tab state so libraryId/dirty updates stay consistent
-      setTabs((t) =>
-        t.map((tb, i) => (i === idx ? { ...tb, doc } : tb)),
-      );
+      setTabs((t) => t.map((tb, i) => (i === idx ? { ...tb, doc } : tb)));
     }
     // Syntax diagnostics after save (editor does not lint while typing)
     const pe = isActive
@@ -871,9 +843,7 @@ export const TabbedEditor: Component<Props> = (props) => {
   const onGitPushSuccess = (meta: { id: string; name: string }, idx = activeTab()) => {
     setTabs((t) =>
       t.map((tb, i) =>
-        i === idx
-          ? { ...tb, dirty: false, libraryId: meta.id, name: meta.name }
-          : tb,
+        i === idx ? { ...tb, dirty: false, libraryId: meta.id, name: meta.name } : tb,
       ),
     );
   };
@@ -989,9 +959,7 @@ export const TabbedEditor: Component<Props> = (props) => {
             }}
           >
             <option value="">Examples</option>
-            <For each={EXAMPLE_MENU}>
-              {(item) => <option value={item.id}>{item.label}</option>}
-            </For>
+            <For each={EXAMPLE_MENU}>{(item) => <option value={item.id}>{item.label}</option>}</For>
           </select>
         </div>
         <div
@@ -1109,7 +1077,11 @@ export const TabbedEditor: Component<Props> = (props) => {
       >
         {/* Stats cluster */}
         <div class="axis-editor-statusbar-stats flex items-center gap-2 text-text-faint min-w-0 overflow-hidden whitespace-nowrap">
-          <span data-testid="axis-editor-cursor" title="Cursor (line : column)" class="flex-shrink-0">
+          <span
+            data-testid="axis-editor-cursor"
+            title="Cursor (line : column)"
+            class="flex-shrink-0"
+          >
             <span class="text-text-dim">
               {cursor().line}:{cursor().col}
             </span>
@@ -1134,9 +1106,7 @@ export const TabbedEditor: Component<Props> = (props) => {
         <div class="axis-editor-statusbar-actions flex items-center gap-0.5 flex-shrink-0">
           <button
             type="button"
-            class={`axis-editor-status-btn ${
-              problemsOpen() ? 'is-active' : ''
-            } ${
+            class={`axis-editor-status-btn ${problemsOpen() ? 'is-active' : ''} ${
               diagCounts().errors > 0
                 ? 'is-error'
                 : diagCounts().warnings > 0
@@ -1201,11 +1171,7 @@ export const TabbedEditor: Component<Props> = (props) => {
             type="button"
             class={`axis-editor-status-btn ${colorsOpen() ? 'is-active' : ''}`}
             data-testid="axis-editor-colors-toggle"
-            title={
-              colorsOpen()
-                ? 'Hide color tools'
-                : 'Colors in script, picker, and formats'
-            }
+            title={colorsOpen() ? 'Hide color tools' : 'Colors in script, picker, and formats'}
             aria-pressed={colorsOpen()}
             aria-expanded={colorsOpen()}
             onClick={() => setColorsOpen((o) => !o)}
@@ -1236,11 +1202,7 @@ export const TabbedEditor: Component<Props> = (props) => {
             type="button"
             class={`axis-editor-status-btn ${logsOpen() ? 'is-active' : ''}`}
             data-testid="axis-editor-logs-toggle"
-            title={
-              logsOpen()
-                ? 'Hide script logs'
-                : 'Show Pine log.* output from the last run'
-            }
+            title={logsOpen() ? 'Hide script logs' : 'Show Pine log.* output from the last run'}
             aria-pressed={logsOpen()}
             aria-expanded={logsOpen()}
             onClick={() => setLogsOpen((o) => !o)}
@@ -1260,15 +1222,9 @@ export const TabbedEditor: Component<Props> = (props) => {
         <div class="axis-editor-statusbar-view flex items-center gap-0.5 flex-shrink-0">
           <button
             type="button"
-            class={`axis-editor-status-btn ${
-              store.editorWrapEnabled ? 'is-active' : ''
-            }`}
+            class={`axis-editor-status-btn ${store.editorWrapEnabled ? 'is-active' : ''}`}
             data-testid="axis-editor-wrap-toggle"
-            title={
-              store.editorWrapEnabled
-                ? 'Soft wrap on'
-                : 'Soft wrap off'
-            }
+            title={store.editorWrapEnabled ? 'Soft wrap on' : 'Soft wrap off'}
             aria-pressed={store.editorWrapEnabled}
             onClick={() => toggleEditorWrapEnabled()}
           >
@@ -1277,15 +1233,9 @@ export const TabbedEditor: Component<Props> = (props) => {
           </button>
           <button
             type="button"
-            class={`axis-editor-status-btn ${
-              store.editorRulerEnabled ? 'is-active' : ''
-            }`}
+            class={`axis-editor-status-btn ${store.editorRulerEnabled ? 'is-active' : ''}`}
             data-testid="axis-editor-ruler-toggle"
-            title={
-              store.editorRulerEnabled
-                ? 'Column ruler on (80 cols)'
-                : 'Show column ruler'
-            }
+            title={store.editorRulerEnabled ? 'Column ruler on (80 cols)' : 'Show column ruler'}
             aria-pressed={store.editorRulerEnabled}
             onClick={() => toggleEditorRulerEnabled()}
           >

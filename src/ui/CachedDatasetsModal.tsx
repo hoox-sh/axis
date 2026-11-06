@@ -33,13 +33,14 @@ import { type Component } from 'solid-js';
 import { Modal } from './Modal';
 import { DatasetsBrowser } from './dsm/DatasetsBrowser';
 
+/** Props for the cached-datasets modal: visibility and close handler. */
 export interface CachedDatasetsModalProps {
   open: boolean;
   onClose: () => void;
 }
 
 /** Modal: browse local OHLCV datasets from the Data Source Manager cache. */
-export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) => {
+export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props): JSX.Element => {
   return (
     <Modal
       open={props.open}

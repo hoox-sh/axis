@@ -51,7 +51,7 @@ function redact(value: unknown, depth = 0): unknown {
 export const MCP_SNAPSHOT_BARS_MAX = 300;
 
 /** Summary strip used when `includeBars` is false (and by `chart.get`). */
-export function barSummary(bars: Array<{ time?: number; close?: number }>) {
+export function barSummary(bars: Array<{ time?: number; close?: number }>): { count: number; firstTime: number | null; lastTime: number | null; lastClose: number | null; } {
   const n = bars.length;
   const first = n ? bars[0] : null;
   const last = n ? bars[n - 1] : null;
@@ -90,16 +90,16 @@ export function boundedBarRows(
 function lastRunSummary(raw: unknown): unknown {
   if (!raw || typeof raw !== 'object') return raw;
   const r = raw as Record<string, unknown>;
-  const plots = r.plots;
+  const plots = r['plots'];
   const plotKeys =
     plots && typeof plots === 'object' ? Object.keys(plots as object).slice(0, 40) : [];
   return {
-    ok: r.ok ?? r.status ?? null,
-    error: r.error ?? r.message ?? null,
+    ok: r['ok'] ?? r['status'] ?? null,
+    error: r['error'] ?? r['message'] ?? null,
     plotKeys,
-    strategy: r.strategy ?? r.stats ?? null,
-    alerts: Array.isArray(r.alerts) ? (r.alerts as unknown[]).length : undefined,
-    logs: Array.isArray(r.logs) ? (r.logs as unknown[]).length : undefined,
+    strategy: r['strategy'] ?? r['stats'] ?? null,
+    alerts: Array.isArray(r['alerts']) ? (r['alerts'] as unknown[]).length : undefined,
+    logs: Array.isArray(r['logs']) ? (r['logs'] as unknown[]).length : undefined,
   };
 }
 
@@ -254,6 +254,6 @@ export function buildAppSnapshot(opts: { includeBars?: boolean } = {}): Record<s
   const redacted = redact(snap) as Record<string, unknown>;
   // F9: bars bypass the generic redact array cap (`[array N]` above 50) —
   // summaries stay summaries, and full bars are bounded newest-last rows.
-  redacted.bars = opts.includeBars ? boundedBarRows(bars) : barSummary(bars);
+  redacted['bars'] = opts.includeBars ? boundedBarRows(bars) : barSummary(bars);
   return redacted;
 }

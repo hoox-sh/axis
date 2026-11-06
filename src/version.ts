@@ -20,10 +20,9 @@ export const BAKED_APP_VERSION: string = '2.28.0';
 /** Running app version: build-time override or baked VERSION. */
 export function appVersion(): string {
   try {
-    const stamped =
-      typeof import.meta !== 'undefined' &&
-      (import.meta as unknown as { env?: Record<string, string | undefined> }).env
-        ?.VITE_APP_VERSION;
+    // ImportMeta.env is typed by vite/client; the cast only covers runtimes
+    // where import.meta exists without an env field (bun tests).
+    const stamped = (import.meta as ImportMeta & { env?: ImportMetaEnv }).env?.['VITE_APP_VERSION'];
     const v = String(stamped || '').trim();
     if (v) return v;
   } catch {

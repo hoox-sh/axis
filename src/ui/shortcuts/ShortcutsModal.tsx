@@ -59,7 +59,7 @@ export function closeShortcutsModal(): void {
 }
 
 /** Read-only help overlay listing every active binding. */
-export const ShortcutsModal: Component = () => {
+export const ShortcutsModal: Component = () : JSX.Element => {
   const close = () => closeShortcutsModal();
 
   onMount(() => {

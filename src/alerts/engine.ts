@@ -255,7 +255,7 @@ export function evaluateOne(
       const base = resolveBasePrice(params, ctx, prevPrice);
       if (base == null || base === 0) return false;
       const changePct = ((price - base) / Math.abs(base)) * 100;
-      const direction = (params.direction as string | undefined) ?? 'both';
+      const direction = (params['direction'] as string | undefined) ?? 'both';
       let condition = false;
       if (direction === 'up') condition = changePct >= pct;
       else if (direction === 'down') condition = changePct <= -pct;
@@ -276,7 +276,7 @@ export function evaluateOne(
       const levels: number[] = [];
       const single = numParam(params, 'price');
       if (single != null) levels.push(single);
-      const multi = params.prices;
+      const multi = params['prices'];
       if (Array.isArray(multi)) {
         for (const p of multi) {
           if (typeof p === 'number' && Number.isFinite(p)) levels.push(p);
@@ -287,8 +287,8 @@ export function evaluateOne(
         }
       }
       const drawingId =
-        params.drawingId != null && String(params.drawingId).trim()
-          ? String(params.drawingId).trim()
+        params['drawingId'] != null && String(params['drawingId']).trim()
+          ? String(params['drawingId']).trim()
           : '';
       if (drawingId && ctx.drawingPricesById) {
         const live = ctx.drawingPricesById[drawingId];
@@ -326,14 +326,14 @@ export function evaluateOne(
     }
     case 'pine_condition': {
       // External runner sets params.condition each tick, or value/op/threshold.
-      if (typeof params.condition === 'boolean') {
-        const nowTrue = params.condition === true;
+      if (typeof params['condition'] === 'boolean') {
+        const nowTrue = params['condition'] === true;
         // Pine conditions are usually edge-set by the runner; fire while true
         // once until cooldown. Without prev state on the boolean, fire when true
         // and not in cooldown (cooldown already checked).
         // Prefer edge via params.prevCondition when provided.
-        if (typeof params.prevCondition === 'boolean') {
-          return becomesTrue(nowTrue, params.prevCondition);
+        if (typeof params['prevCondition'] === 'boolean') {
+          return becomesTrue(nowTrue, params['prevCondition']);
         }
         return nowTrue;
       }
@@ -341,8 +341,8 @@ export function evaluateOne(
       let prevValue = numParam(params, 'prevValue');
       const threshold = numParam(params, 'threshold');
       if (value == null && ctx.plotSamples) {
-        const ind = params.indicatorId != null ? String(params.indicatorId).trim() : '';
-        const plot = params.plotKey != null ? String(params.plotKey).trim() : '';
+        const ind = params['indicatorId'] != null ? String(params['indicatorId']).trim() : '';
+        const plot = params['plotKey'] != null ? String(params['plotKey']).trim() : '';
         if (ind && plot) {
           const sample = ctx.plotSamples[`${ind}:${plot}`];
           if (sample && Number.isFinite(sample.value)) {
@@ -358,7 +358,7 @@ export function evaluateOne(
         }
       }
       if (value == null || threshold == null) return false;
-      const op = String(params.op ?? '>');
+      const op = String(params['op'] ?? '>');
       let nowTrue = false;
       switch (op) {
         case '>':
@@ -478,13 +478,13 @@ export function isOnchainTvlEventType(type: string): boolean {
 export function eventAbsPct(event: OnchainEvalEvent): number | null {
   const p = event.payload;
   if (!p || typeof p !== 'object') return null;
-  const abs = p.absPct;
+  const abs = p['absPct'];
   if (typeof abs === 'number' && Number.isFinite(abs)) return Math.abs(abs);
   if (typeof abs === 'string' && abs.trim() !== '') {
     const n = Number(abs);
     if (Number.isFinite(n)) return Math.abs(n);
   }
-  const pct = p.pctChange;
+  const pct = p['pctChange'];
   if (typeof pct === 'number' && Number.isFinite(pct)) return Math.abs(pct);
   if (typeof pct === 'string' && pct.trim() !== '') {
     const n = Number(pct);
@@ -509,14 +509,14 @@ export function eventMatchesDirection(
   if (dir === 'up') {
     if (type === 'tvl_spike') return true;
     if (type === 'tvl_drop') return false;
-    const pct = event.payload?.pctChange;
+    const pct = event.payload?.['pctChange'];
     if (typeof pct === 'number') return pct >= 0;
     return true;
   }
   if (dir === 'down') {
     if (type === 'tvl_drop') return true;
     if (type === 'tvl_spike') return false;
-    const pct = event.payload?.pctChange;
+    const pct = event.payload?.['pctChange'];
     if (typeof pct === 'number') return pct < 0;
     return true;
   }
@@ -533,13 +533,13 @@ export function eventMatchesProtocol(
   event: OnchainEvalEvent,
   ctx: OnchainEvalContext,
 ): boolean {
-  const want = normalizeId(alert.params?.protocolId != null ? String(alert.params.protocolId) : '');
+  const want = normalizeId(alert.params?.['protocolId'] != null ? String(alert.params['protocolId']) : '');
   if (!want) return true;
   const fromCtx = normalizeId(ctx.protocolId);
   if (fromCtx === want) return true;
   const fromPayload =
-    event.payload && event.payload.protocolId != null
-      ? normalizeId(String(event.payload.protocolId))
+    event.payload && event.payload['protocolId'] != null
+      ? normalizeId(String(event.payload['protocolId']))
       : '';
   return fromPayload === want;
 }
@@ -565,7 +565,7 @@ export function eventMatchesOnchainAlert(
 
   if (alert.kind === 'onchain_tvl_spike') {
     if (!isOnchainTvlEventType(type)) return false;
-    if (!eventMatchesDirection(event, alert.params?.direction as string | undefined)) {
+    if (!eventMatchesDirection(event, alert.params?.['direction'] as string | undefined)) {
       return false;
     }
     const minAbs = numParam(alert.params ?? {}, 'minAbsPct') ?? DEFAULT_ONCHAIN_TVL_MIN_ABS_PCT;
@@ -577,9 +577,9 @@ export function eventMatchesOnchainAlert(
 
   // onchain_event — optional type filter + optional minAbsPct when payload has %
   const wantType =
-    alert.params?.eventType != null ? String(alert.params.eventType).trim().toLowerCase() : '';
+    alert.params?.['eventType'] != null ? String(alert.params['eventType']).trim().toLowerCase() : '';
   if (wantType && type.toLowerCase() !== wantType) return false;
-  if (!eventMatchesDirection(event, alert.params?.direction as string | undefined)) {
+  if (!eventMatchesDirection(event, alert.params?.['direction'] as string | undefined)) {
     return false;
   }
   const minAbs = numParam(alert.params ?? {}, 'minAbsPct');
@@ -621,8 +621,8 @@ export function onchainWatermark(alert: Alert, protocolKey: string): number | nu
 export function onchainEventProtocolKey(event: OnchainEvalEvent, ctx: OnchainEvalContext): string {
   const fromCtx = normalizeId(ctx.protocolId);
   if (fromCtx) return fromCtx;
-  return event.payload && event.payload.protocolId != null
-    ? normalizeId(String(event.payload.protocolId))
+  return event.payload && event.payload['protocolId'] != null
+    ? normalizeId(String(event.payload['protocolId']))
     : '';
 }
 

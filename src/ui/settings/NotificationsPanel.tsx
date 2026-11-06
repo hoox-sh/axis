@@ -124,7 +124,16 @@ function permLabel(perm: BrowserPerm): string {
 
 const touch = () => persist();
 
-export const NotificationsPanel: Component<{ onClose?: () => void }> = (props) => {
+/**
+ * Notification preferences: per-category toggles, browser permission state, and
+ * a permission request action. Category writes persist immediately through
+ * `touch()`; the permission badge re-reads on `visibilitychange` so returning
+ * from browser settings shows the new state without a reload.
+ *
+ * @param props - Optional close handler forwarded to the panel chrome.
+ * @returns The notifications settings form.
+ */
+export const NotificationsPanel: Component<{ onClose?: () => void }> = (props): JSX.Element => {
   const prefs = () => store.notifications || DEFAULT_NOTIFICATIONS;
   const [notifPerm, setNotifPerm] = createSignal<BrowserPerm>(notificationPermission());
   const [grantMsg, setGrantMsg] = createSignal('');

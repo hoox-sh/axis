@@ -372,6 +372,7 @@ export function listAlerts(): Alert[] {
   return loadAlerts();
 }
 
+/** Delivery switches for {@link evaluateAlerts}: webhooks, Notification, clock. */
 export type EvaluateAlertsOptions = {
   /** When false, skip webhook + Notification (still updates lastFiredAt). Default true. */
   deliver?: boolean;
@@ -422,7 +423,7 @@ export async function evaluateAlerts(
   if (Number.isFinite(ctx.price)) {
     for (const a of alerts) {
       if (a.kind !== 'pct_change') continue;
-      const cur = a.params?.basePrice;
+      const cur = a.params?.['basePrice'];
       if (typeof cur === 'number' && Number.isFinite(cur) && cur !== 0) continue;
       if (typeof cur === 'string' && cur.trim() !== '' && Number.isFinite(Number(cur))) continue;
       a.params = { ...a.params, basePrice: ctx.price };

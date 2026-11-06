@@ -108,12 +108,14 @@ const FeatureMenuRow: Component<{ setting: FeatureSetting }> = (props) => {
   );
 };
 
+/** Props for {@link LanguageFeatureBar}; activity is polled from outside Solid. */
 export interface LanguageFeatureBarProps {
   /** Live activity snapshot (polled — tooltips / completion change outside Solid). */
   getActivity: () => FeatureActivity;
 }
 
-export const LanguageFeatureBar: Component<LanguageFeatureBarProps> = (props) => {
+/** Language toolbar: Pine version badge, symbol/function counts, and quick toggles. */
+export const LanguageFeatureBar: Component<LanguageFeatureBarProps> = (props): JSX.Element => {
   const intel = () => getEditorIntel();
   const [openId, setOpenId] = createSignal<string | null>(null);
   const [snapshot, setSnapshot] = createSignal<FeatureActivity>({
@@ -242,6 +244,8 @@ export const LanguageFeatureBar: Component<LanguageFeatureBarProps> = (props) =>
       }
       const first = inputs[0];
       const last = inputs[inputs.length - 1];
+      // inputs.length > 0 was checked above, so both ends always exist.
+      if (!first || !last) return;
       const active = document.activeElement;
       if (e.shiftKey) {
         if (active === first || active === menu) {
@@ -321,9 +325,7 @@ export const LanguageFeatureBar: Component<LanguageFeatureBarProps> = (props) =>
             tabIndex={-1}
           >
             <div class="axis-editor-feature-menu-title">{group().label} settings</div>
-            <For each={group().settings}>
-              {(setting) => <FeatureMenuRow setting={setting} />}
-            </For>
+            <For each={group().settings}>{(setting) => <FeatureMenuRow setting={setting} />}</For>
           </div>
         )}
       </Show>

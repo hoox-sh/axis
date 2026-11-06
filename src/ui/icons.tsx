@@ -128,13 +128,9 @@ import {
   type LucideProps,
 } from 'lucide-solid';
 
-export {
-  ICON_MAP,
-  PANEL_ICON,
-  findDuplicateIconGlyphs,
-  type IconName,
-} from './icon-map';
+export { ICON_MAP, PANEL_ICON, findDuplicateIconGlyphs, type IconName } from './icon-map';
 
+/** Props accepted by every `Icons.*` component: Lucide props plus an extra class. */
 export type IconProps = LucideProps & { class?: string };
 
 const defaults: Partial<LucideProps> = {
@@ -144,13 +140,7 @@ const defaults: Partial<LucideProps> = {
 };
 
 function withDefaults(Icon: Component<LucideProps>): Component<IconProps> {
-  return (props) => (
-    <Icon
-      {...defaults}
-      {...props}
-      class={`sc-icon ${props.class || ''}`.trim()}
-    />
-  );
+  return (props) => <Icon {...defaults} {...props} class={`sc-icon ${props.class || ''}`.trim()} />;
 }
 
 /**
@@ -270,11 +260,17 @@ export const Icons = {
 };
 
 /** Inline icon row helper for buttons */
+/**
+ * Icon plus label in an inline row, for buttons that pair a glyph with text.
+ *
+ * @param props - Icon component, optional label content, and extra class.
+ * @returns A `span` with the icon and label.
+ */
 export function IconLabel(props: {
   icon: Component<IconProps>;
   children?: JSX.Element;
   class?: string;
-}) {
+}): JSX.Element {
   const I = props.icon;
   return (
     <span class={`inline-flex items-center gap-1.5 ${props.class || ''}`}>

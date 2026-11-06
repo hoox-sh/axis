@@ -550,6 +550,7 @@ const LEGACY_IDS: Record<string, string> = {
   hoox: 'signal',
 };
 
+/** Resolve a preset id (legacy aliases included); unknown/empty falls back to void-dark. */
 export function getPreset(id: string | undefined | null): ThemePreset {
   if (id && BY_ID.has(id)) return BY_ID.get(id)!;
   if (id && LEGACY_IDS[id] && BY_ID.has(LEGACY_IDS[id]!)) {
@@ -558,6 +559,7 @@ export function getPreset(id: string | undefined | null): ThemePreset {
   return PRESET_VOID_DARK;
 }
 
+/** Copy of {@link THEME_PRESETS} in UI order (callers may sort/mutate safely). */
 export function listPresets(): ThemePreset[] {
   return [...THEME_PRESETS];
 }

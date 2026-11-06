@@ -28,12 +28,7 @@
  * @module editor/pine-hover-facts
  */
 
-import {
-  inferType1,
-  inferType2,
-  parseAssignLine,
-  type PineType2,
-} from './pine-declare-types';
+import { inferType1, inferType2, parseAssignLine, type PineType2 } from './pine-declare-types';
 
 /** Badge / kind strings consumed by hover tooltips. */
 export type HoverFactKind =
@@ -47,6 +42,7 @@ export type HoverFactKind =
   | 'color'
   | 'parameter';
 
+/** Static language fact rendered by the local hover card. */
 export type HoverFact = {
   name: string;
   kind: HoverFactKind;
@@ -58,8 +54,10 @@ export type HoverFact = {
   example?: string;
 };
 
+/** Kinds of declarations the user-symbol scanner recognises. */
 export type UserSymbolKind = 'variable' | 'input' | 'function' | 'type' | 'enum' | 'parameter';
 
+/** One user declaration found in the buffer, with its snippet and source line. */
 export type UserSymbol = {
   name: string;
   kind: UserSymbolKind;
@@ -75,8 +73,7 @@ export type UserSymbol = {
   line: number;
 };
 
-const FUNC_DECL =
-  /^(?:export\s+)?(?:method\s+)?([A-Za-z_][\w]*)\s*\(([^)]*)\)\s*=>/;
+const FUNC_DECL = /^(?:export\s+)?(?:method\s+)?([A-Za-z_][\w]*)\s*\(([^)]*)\)\s*=>/;
 const TYPE_DECL = /^(?:export\s+)?type\s+([A-Za-z_][\w]*)\b/;
 const ENUM_DECL = /^(?:export\s+)?enum\s+([A-Za-z_][\w]*)\b/;
 
@@ -208,8 +205,16 @@ add(
   'Declare a method on a UDT. The first parameter is `this` (the receiver).',
   'method mag(this Point) =>\n    math.sqrt(this.x * this.x + this.y * this.y)',
 );
-add('keyword', 'and', 'Boolean AND. Short-circuits: the right operand is skipped when the left is `false`.');
-add('keyword', 'or', 'Boolean OR. Short-circuits: the right operand is skipped when the left is `true`.');
+add(
+  'keyword',
+  'and',
+  'Boolean AND. Short-circuits: the right operand is skipped when the left is `false`.',
+);
+add(
+  'keyword',
+  'or',
+  'Boolean OR. Short-circuits: the right operand is skipped when the left is `true`.',
+);
 add('keyword', 'not', 'Boolean NOT. `not cond` is `true` when `cond` is `false`.');
 add('keyword', 'true', 'Boolean literal `true`.');
 add('keyword', 'false', 'Boolean literal `false`.');
@@ -295,7 +300,11 @@ add(
 add('type', 'matrix', 'Collection type `matrix<T>`. Construct with `matrix.new<T>(rows, cols)`.');
 add('type', 'map', 'Collection type `map<K, V>`. Construct with `map.new<K, V>()`.');
 add('type', 'polyline', 'Drawing type for multi-point polylines. Create with `polyline.new(...)`.');
-add('type', 'linefill', 'Fill between two `line` objects. Create with `linefill.new(line1, line2, color)`.');
+add(
+  'type',
+  'linefill',
+  'Fill between two `line` objects. Create with `linefill.new(line1, line2, color)`.',
+);
 add(
   'type',
   'chart.point',
@@ -315,7 +324,12 @@ add(
   'time',
   'UNIX timestamp (milliseconds) of the current bar’s open (`series int`). Bare `time` is also a function that accepts session/timezone args.',
 );
-add('series', 'bar_index', 'Zero-based index of the current bar (`series int`).', 'plot(bar_index)');
+add(
+  'series',
+  'bar_index',
+  'Zero-based index of the current bar (`series int`).',
+  'plot(bar_index)',
+);
 add('series', 'hl2', 'Midpoint `(high + low) / 2` (`series float`).');
 add('series', 'hlc3', 'Typical price `(high + low + close) / 3` (`series float`).');
 add('series', 'ohlc4', 'OHLC average `(open + high + low + close) / 4` (`series float`).');
@@ -338,7 +352,10 @@ addNs(
   'Built-in **module** for **technical** analysis: moving averages, oscillators, and other studies (`ta.sma`, `ta.ema`, `ta.rsi`, …).',
   'plot(ta.sma(close, 14))',
 );
-addNs('math', 'Built-in **module** for mathematics (`math.abs`, `math.max`, `math.round`, `math.sqrt`, …).');
+addNs(
+  'math',
+  'Built-in **module** for mathematics (`math.abs`, `math.max`, `math.round`, `math.sqrt`, …).',
+);
 addNs('str', 'Built-in **module** for strings (`str.tostring`, `str.format`, `str.length`, …).');
 addNs(
   'input',
@@ -358,12 +375,21 @@ addNs(
   'Built-in **module** for colors: named constants (`color.red`), `color.new`, `color.rgb`, and `color.from_gradient`.',
   'plot(close, color = color.teal)',
 );
-addNs('line', 'Built-in **module** for line drawings (`line.new`, `line.set_xy2`, `line.delete`, …).');
-addNs('label', 'Built-in **module** for labels (`label.new`, `label.set_text`, `label.delete`, …).');
+addNs(
+  'line',
+  'Built-in **module** for line drawings (`line.new`, `line.set_xy2`, `line.delete`, …).',
+);
+addNs(
+  'label',
+  'Built-in **module** for labels (`label.new`, `label.set_text`, `label.delete`, …).',
+);
 addNs('box', 'Built-in **module** for boxes (`box.new`, `box.set_bgcolor`, `box.delete`, …).');
 addNs('table', 'Built-in **module** for tables (`table.new`, `table.cell`, `table.delete`, …).');
 addNs('array', 'Built-in **module** for arrays (`array.new<T>`, `array.push`, `array.get`, …).');
-addNs('matrix', 'Built-in **module** for matrices (`matrix.new<T>`, `matrix.get`, `matrix.set`, …).');
+addNs(
+  'matrix',
+  'Built-in **module** for matrices (`matrix.new<T>`, `matrix.get`, `matrix.set`, …).',
+);
 addNs('map', 'Built-in **module** for maps (`map.new<K,V>`, `map.get`, `map.put`, …).');
 addNs(
   'syminfo',
@@ -390,6 +416,7 @@ addNs(
   'Built-in **module** for chart context and `chart.point` constructors (`chart.point.new`, `chart.point.from_index`).',
 );
 
+/** Lookup preference when a name is both a type and a module (`color`, `line`). */
 export type HoverFactLookupOpts = {
   /** Prefer the namespace entry when a name is both a type and a module (`color`, `line`, …). */
   prefer?: 'namespace' | 'type';
@@ -453,6 +480,7 @@ export function hexColorAt(
   return { word: m[0], from, to };
 }
 
+/** True when `word` matches `#rgb` / `#rrggbb` / `#rrggbbaa` (optionally with alpha). */
 export function isHexColorToken(word: string): boolean {
   return HEX_RE.test(word);
 }
@@ -638,8 +666,7 @@ export function scanUserSymbols(source: string): Map<string, UserSymbol> {
     const hit = parseAssignLine(raw);
     if (!hit) continue;
     const isInput = /\binput(?:\.|\s*\()/.test(hit.rhs);
-    const type2: PineType2 | null =
-      (hit.type2 as PineType2 | null) || inferType2(hit.rhs);
+    const type2: PineType2 | null = (hit.type2 as PineType2 | null) || inferType2(hit.rhs);
     const type1 = hit.type1 || inferType1(hit.rhs, type2);
     const typeParts = [hit.mode, type1, type2].filter(Boolean);
     remember(map, {

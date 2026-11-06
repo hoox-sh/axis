@@ -28,6 +28,15 @@
 
 import { PRICE_SCALE_MAX, PRICE_SCALE_MIN } from './constants';
 
+/**
+ * Validate a `price_scale` before any tick math, so a bad scale can never reach the
+ * encoder or decoder.
+ *
+ * @param scale Integer decimals encoded in the int64 tick values.
+ * @returns The same `scale`, so callers can chain the check into an expression.
+ * @throws {RangeError} When `scale` is not an integer within
+ *   [{@link PRICE_SCALE_MIN}, {@link PRICE_SCALE_MAX}].
+ */
 export function assertPriceScale(scale: number): number {
   if (!Number.isInteger(scale) || scale < PRICE_SCALE_MIN || scale > PRICE_SCALE_MAX) {
     throw new RangeError(`price_scale must be an integer ${PRICE_SCALE_MIN}..${PRICE_SCALE_MAX}`);
@@ -79,7 +88,7 @@ export function decimalToTicks(s: string, scale: number): bigint {
   const ten = 10n ** scaleN;
   const whole = BigInt(ip || '0') * ten;
   if (fp.length <= scale) {
-    const frac = BigInt((fp + '0'.repeat(scale - fp.length)) || '0');
+    const frac = BigInt(fp + '0'.repeat(scale - fp.length) || '0');
     return sign * (whole + frac);
   }
   const keep = BigInt(fp.slice(0, scale) || '0');

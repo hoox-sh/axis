@@ -33,6 +33,10 @@
 
 import type { MarketIdentity } from './market-identity';
 
+/**
+ * One broker-side Redesign2 series session: the market it covers, the last cursor sent, and
+ * whether the client already received the full snapshot. Scaffold shape, not the PYNE broker.
+ */
 export interface Redesign2Session {
   id: string;
   identity: MarketIdentity;
@@ -40,6 +44,11 @@ export interface Redesign2Session {
   fullSent: boolean;
 }
 
+/**
+ * SCAFFOLD — NOT PRODUCTION. In-memory model of the Redesign2 session lifecycle
+ * (open / full / delta / cache-miss) used to exercise the apply path before the real PYNE
+ * broker lands; `open` logs a warning on every use.
+ */
 export class Redesign2SessionBroker {
   private readonly sessions = new Map<string, Redesign2Session>();
   private nextId = 1;

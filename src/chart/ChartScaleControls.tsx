@@ -64,7 +64,7 @@ const GUTTER_GAP_PX = 4;
  * [A][L][$][N][T] cluster for the price pane — sits in the plot-area corner
  * (above time scale, left of right price scale).
  */
-export const ChartScaleControls: Component = () => {
+export const ChartScaleControls: Component = () : JSX.Element => {
   const [autoOn, setAutoOn] = createSignal(true);
   const [logOn, setLogOn] = createSignal(false);
   const [labelsOn, setLabelsOn] = createSignal(true);

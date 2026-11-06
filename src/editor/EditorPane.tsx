@@ -85,7 +85,7 @@ interface Props {
 }
 
 /** Side panel or full-window shell for the multi-tab Pine editor. */
-export const EditorPane: Component<Props> = (props) => {
+export const EditorPane: Component<Props> = (props) : JSX.Element => {
   const onRun = async (doc: string, mode: 'auto' | 'new' = 'auto') => {
     if (!doc?.trim()) return;
     try {

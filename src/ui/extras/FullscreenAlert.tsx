@@ -32,25 +32,30 @@ import { subscribeFiredAlerts, type Alert, type FiredAlertEvent } from '../../al
 import { installFocusTrap } from '../focus-trap';
 import { formatExtraPrice } from './format';
 
+/** Flash direction for a fired alert: `up` for above/bullish, `down` for below/bearish. */
 export type AlertDirection = 'up' | 'down';
 
 /** Resolve overlay direction from alert kind + params (pure). */
-export function alertDirection(alert: Pick<Alert, 'kind' | 'params'>, price: number): AlertDirection {
+export function alertDirection(
+  alert: Pick<Alert, 'kind' | 'params'>,
+  price: number,
+): AlertDirection {
   switch (alert.kind) {
     case 'price_above':
       return 'up';
     case 'price_below':
       return 'down';
     case 'pct_change': {
-      const d = typeof alert.params?.direction === 'string' ? alert.params.direction : 'up';
+      const d = typeof alert.params?.['direction'] === 'string' ? alert.params['direction'] : 'up';
       return d === 'down' ? 'down' : 'up';
     }
     default: {
       const num = (v: unknown): number | null => {
-        const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN;
+        const n =
+          typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN;
         return Number.isFinite(n) ? (n as number) : null;
       };
-      const level = num(alert.params?.price) ?? num(alert.params?.threshold);
+      const level = num(alert.params?.['price']) ?? num(alert.params?.['threshold']);
       if (level !== null && Number.isFinite(price)) {
         return price >= level ? 'up' : 'down';
       }
@@ -60,7 +65,7 @@ export function alertDirection(alert: Pick<Alert, 'kind' | 'params'>, price: num
 }
 
 /** Fullscreen alert overlay (mounted at app root). */
-export const FullscreenAlert: Component = () => {
+export const FullscreenAlert: Component = (): JSX.Element => {
   const [event, setEvent] = createSignal<FiredAlertEvent | null>(null);
   let timer: ReturnType<typeof setTimeout> | undefined;
 

@@ -33,8 +33,10 @@
 
 import { type Component, type JSX, Show, splitProps } from 'solid-js';
 
+/** Field kind rendered by {@link TopbarField}: text input, select, or static value. */
 export type TopbarFieldVariant = 'input' | 'select' | 'static';
 
+/** Props for a topbar field: integrated label, control kind, and pass-through attributes. */
 export type TopbarFieldProps = {
   /** Uppercase integrated label text */
   label: string;
@@ -71,7 +73,7 @@ export type TopbarFieldProps = {
  * Integrated-label field for the workspace top bar.
  * Focus ring lives on the shell (`.axis-tb-field:focus-within`).
  */
-export const TopbarField: Component<TopbarFieldProps> = (props) => {
+export const TopbarField: Component<TopbarFieldProps> = (props): JSX.Element => {
   const [local, rest] = splitProps(props, [
     'label',
     'id',

@@ -28,6 +28,7 @@
 
 import { formatPriceWithDecimals } from '../../chart/price-precision';
 
+/** Last price plus signed percent for the phone header; `null` when no price is painted. */
 export type HeaderQuote = {
   price: string;
   change: string | null;

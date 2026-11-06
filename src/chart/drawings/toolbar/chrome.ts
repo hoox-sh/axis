@@ -27,6 +27,7 @@
  * @module chart/drawings/toolbar/chrome
  */
 
+/** Where the tool rail sits: docked left, docked top, or free-floating. */
 export type ToolbarDock = 'left' | 'top' | 'float';
 
 /** Distance from the host's left edge that snaps a drop to the left dock. */

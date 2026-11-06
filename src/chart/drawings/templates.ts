@@ -28,6 +28,8 @@
  * Does **not** mount UI or touch the chart layer — callers wire store + layer.
  */
 
+import { finiteNumber } from '../../utils/validate';
+
 import {
   attachLegacyFields,
   normalizeDrawing,
@@ -128,14 +130,6 @@ function genId(prefix = 'tpl'): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function asFiniteNumber(v: unknown): number | null {
-  if (typeof v === 'number' && Number.isFinite(v)) return v;
-  if (typeof v === 'string' && v.trim() !== '') {
-    const n = Number(v);
-    if (Number.isFinite(n)) return n;
-  }
-  return null;
-}
 
 function asNonEmptyString(v: unknown): string | null {
   if (typeof v === 'string' && v.trim().length > 0) return v.trim();
@@ -167,8 +161,8 @@ export function serializeDrawing(raw: unknown): SerializedDrawing | null {
 
   // Preserve optional extras from the input object when present.
   if (isRecord(raw)) {
-    if (typeof raw.visible === 'boolean') out.visible = raw.visible;
-    const z = asFiniteNumber(raw.zIndex);
+    if (typeof raw['visible'] === 'boolean') out.visible = raw['visible'];
+    const z = finiteNumber(raw['zIndex']);
     if (z != null) out.zIndex = z;
   }
 
@@ -199,9 +193,9 @@ export function deserializeDrawing(raw: unknown): NormalizedDrawing | null {
 
   if (isRecord(raw)) {
     const any = d as NormalizedDrawing & Record<string, unknown>;
-    if (typeof raw.visible === 'boolean') any.visible = raw.visible;
-    const z = asFiniteNumber(raw.zIndex);
-    if (z != null) any.zIndex = z;
+    if (typeof raw['visible'] === 'boolean') any['visible'] = raw['visible'];
+    const z = finiteNumber(raw['zIndex']);
+    if (z != null) any['zIndex'] = z;
   }
 
   return attachLegacyFields(d);
@@ -237,9 +231,9 @@ export function hydrateTemplateDrawings(
 export function parseTemplateMeta(raw: unknown): DrawingTemplateMeta | undefined {
   if (!isRecord(raw)) return undefined;
   const meta: DrawingTemplateMeta = {};
-  const symbol = asNonEmptyString(raw.symbol);
-  const interval = asNonEmptyString(raw.interval);
-  const exchange = asNonEmptyString(raw.exchange);
+  const symbol = asNonEmptyString(raw['symbol']);
+  const interval = asNonEmptyString(raw['interval']);
+  const exchange = asNonEmptyString(raw['exchange']);
   if (symbol) meta.symbol = symbol;
   if (interval) meta.interval = interval;
   if (exchange) meta.exchange = exchange;
@@ -253,17 +247,17 @@ export function parseTemplateMeta(raw: unknown): DrawingTemplateMeta | undefined
 export function parseTemplate(raw: unknown): DrawingTemplate | null {
   if (!isRecord(raw)) return null;
 
-  const name = asNonEmptyString(raw.name);
+  const name = asNonEmptyString(raw['name']);
   if (!name) return null;
 
-  const id = typeof raw.id === 'string' && raw.id.length > 0 ? raw.id : genId('tpl');
+  const id = typeof raw['id'] === 'string' && raw['id'].length > 0 ? raw['id'] : genId('tpl');
 
   const now = Date.now();
-  const createdAt = asFiniteNumber(raw.createdAt) ?? now;
-  const updatedAt = asFiniteNumber(raw.updatedAt) ?? createdAt;
+  const createdAt = finiteNumber(raw['createdAt']) ?? now;
+  const updatedAt = finiteNumber(raw['updatedAt']) ?? createdAt;
 
-  const drawings = serializeDrawings(raw.drawings);
-  const meta = parseTemplateMeta(raw.meta);
+  const drawings = serializeDrawings(raw['drawings']);
+  const meta = parseTemplateMeta(raw['meta']);
 
   const tpl: DrawingTemplate = {
     id,
@@ -309,7 +303,7 @@ export function parseTemplatesStore(raw: unknown): DrawingTemplatesStore {
   if (!isRecord(raw)) {
     return { version: TEMPLATE_VERSION, templates: [] };
   }
-  const list = Array.isArray(raw.templates) ? raw.templates : [];
+  const list = Array.isArray(raw['templates']) ? raw['templates'] : [];
   const templates: DrawingTemplate[] = [];
   for (const item of list) {
     const t = parseTemplate(item);
@@ -491,16 +485,16 @@ export function parseImportPayload(raw: unknown): DrawingTemplate[] {
   }
   if (!isRecord(raw)) return [];
 
-  if (raw.format === TEMPLATE_FORMAT && isRecord(raw.template)) {
-    const t = parseTemplate(raw.template);
+  if (raw['format'] === TEMPLATE_FORMAT && isRecord(raw['template'])) {
+    const t = parseTemplate(raw['template']);
     return t ? [t] : [];
   }
-  if (raw.format === 'axis.drawingTemplates' && Array.isArray(raw.templates)) {
-    return raw.templates.map(parseTemplate).filter(Boolean) as DrawingTemplate[];
+  if (raw['format'] === 'axis.drawingTemplates' && Array.isArray(raw['templates'])) {
+    return raw['templates'].map(parseTemplate).filter(Boolean) as DrawingTemplate[];
   }
 
   // Bare template object
-  if (typeof raw.name === 'string' && Array.isArray(raw.drawings)) {
+  if (typeof raw['name'] === 'string' && Array.isArray(raw['drawings'])) {
     const t = parseTemplate(raw);
     return t ? [t] : [];
   }

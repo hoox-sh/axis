@@ -30,6 +30,10 @@
  * @module engine/market-identity
  */
 
+/**
+ * The four coordinates that identify a market on the engine side; every session and series
+ * memo is keyed from these.
+ */
 export interface MarketIdentity {
   exchange: string;
   market: string;
@@ -37,6 +41,13 @@ export interface MarketIdentity {
   interval: string;
 }
 
+/**
+ * Canonical `exchange|market|SYMBOL|interval` key for a market identity — lowercase exchange
+ * and market, uppercase symbol, verbatim interval, matching the PYNE store key.
+ *
+ * @param id Market identity to serialize; fields are trimmed before normalization.
+ * @returns The canonical key string.
+ */
 export function marketIdentityKey(id: MarketIdentity): string {
   const exchange = id.exchange.trim().toLowerCase();
   const market = id.market.trim().toLowerCase();
@@ -45,6 +56,10 @@ export function marketIdentityKey(id: MarketIdentity): string {
   return `${exchange}|${market}|${symbol}|${interval}`;
 }
 
+/**
+ * Minimal symbol-catalog row used to translate a load-form ticker into its display pair form;
+ * only `symbol` (match key) and `display` (pair form) are consulted.
+ */
 export interface CatalogSymbol {
   symbol: string;
   display: string;
@@ -84,6 +99,13 @@ export function currentSeriesKey(opts: {
   });
 }
 
+/**
+ * Compares two identities by canonical key, so differing casing or pair form still matches.
+ *
+ * @param a First identity.
+ * @param b Second identity.
+ * @returns `true` when both normalize to the same `marketIdentityKey`.
+ */
 export function sameMarketIdentity(a: MarketIdentity, b: MarketIdentity): boolean {
   return marketIdentityKey(a) === marketIdentityKey(b);
 }

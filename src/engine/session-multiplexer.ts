@@ -26,8 +26,13 @@
  * @module engine/session-multiplexer
  */
 
+/** Per-session frame handler; receives the routed payload with no further validation. */
 export type Redesign2SessionHandler = (payload: unknown) => void;
 
+/**
+ * Routes inbound frames to the handler registered for their session id, so concurrent
+ * Redesign2 sessions cannot leak payloads into one another. `register` refuses a duplicate id.
+ */
 export class Redesign2SessionMultiplexer {
   private readonly handlers = new Map<string, Redesign2SessionHandler>();
 

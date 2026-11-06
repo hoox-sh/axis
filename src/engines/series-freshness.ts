@@ -68,7 +68,11 @@ export function newestBarTime(bars: readonly Bar[] | null | undefined): number {
  * Returns 0 when either bound is unknown (nothing to compare) or `later` is not
  * ahead — callers treat 0 as fresh.
  */
-export function stepsBehind(earlier: number | null, later: number | null, interval: string): number {
+export function stepsBehind(
+  earlier: number | null,
+  later: number | null,
+  interval: string,
+): number {
   if (typeof earlier !== 'number' || typeof later !== 'number') return 0;
   if (!Number.isFinite(earlier) || !Number.isFinite(later)) return 0;
   if (earlier <= 0 || later <= 0 || later <= earlier) return 0;
@@ -108,11 +112,6 @@ export function engineWindowBehindChart(
   return seriesBehind(newestBarTime(next), newestBarTime(cur), interval, steps);
 }
 
-/**
- * True when the series lags "now" by more than
- * {@link ENGINE_SERIES_STALE_STEPS} steps — the market (venue trigger clock)
- * has moved on while the engine's series has not.
- */
 /**
  * Slots implied by `[oldest, newest]` that `count` does not cover.
  * Unknown bounds count as no hole — a status read without `oldest` must not
@@ -154,6 +153,17 @@ export function internalGapBars(
   return missing;
 }
 
+/**
+ * True when the series lags "now" by more than {@link ENGINE_SERIES_STALE_STEPS} steps — the
+ * market (venue trigger clock) has moved on while the engine's series has not. Used by the
+ * paint guard to refuse a frozen tail rather than repaint it.
+ *
+ * @param bars Chart or engine bars; the newest finite `time` is the bound (empty = 0).
+ * @param interval Chart interval string accepted by `intervalToSec`, e.g. `1m`.
+ * @param nowSec Reference clock in unix seconds; defaults to the current wall clock.
+ * @param steps Allowed lag in whole interval steps before it counts as stale.
+ * @returns `true` when the newest bar is more than `steps` steps behind `nowSec`.
+ */
 export function seriesBehindNow(
   bars: readonly Bar[] | null | undefined,
   interval: string,

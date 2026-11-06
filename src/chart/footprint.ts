@@ -42,6 +42,11 @@ const [footprintEnabled, setFootprintEnabled] = createSignal(false);
 
 export { footprintEnabled, setFootprintEnabled };
 
+/**
+ * Flip the footprint overlay on the shared module signal.
+ *
+ * @returns the new enabled state, so the Layers panel can label the toggle
+ */
 export function toggleFootprintEnabled(): boolean {
   const next = !footprintEnabled();
   setFootprintEnabled(next);
@@ -81,6 +86,7 @@ export interface FootprintBar {
   source: 'approx' | 'feed';
 }
 
+/** Tuning for {@link approximateFootprintFromOhlcv}: row count, value area, imbalance. */
 export interface FootprintApproxOpts {
   /** Target row count (clamped 4–256). Default 24. */
   numTicks?: number;

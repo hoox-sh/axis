@@ -476,6 +476,10 @@ async function dispatch(
   return res ?? notFoundResponse(url.pathname, { origin, cors: CORS_HEADERS });
 }
 
+/**
+ * Worker module entrypoint — the `fetch` handler plus the Durable Object classes
+ * re-exported above. Wrangler binds this object as the script's default export.
+ */
 export default {
   /**
    * Single `fetch` entry: CORS → dispatch.

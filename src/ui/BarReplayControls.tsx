@@ -101,7 +101,7 @@ export function exitBarReplay(): void {
  * Floating strip when replay is active (bottom-center of chart workspace).
  * Hidden when inactive — Topbar / callers use {@link startBarReplay}.
  */
-export const BarReplayControls: Component = () => {
+export const BarReplayControls: Component = () : JSX.Element => {
   const [state, setState] = createSignal<ReplayState>(getReplayState());
   let timer: ReturnType<typeof setInterval> | undefined;
 

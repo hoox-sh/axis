@@ -30,6 +30,10 @@
 
 import { DRAG_SLOP_PX } from './shortcuts';
 
+/**
+ * Drag lifecycle hooks.
+ * `onLive` gets the live position (or `null` when the drag is cancelled).
+ */
 export interface ToolbarDragCallbacks {
   onLive: (pos: { x: number; y: number } | null) => void;
   onDrop: (moved: boolean) => void;

@@ -22,7 +22,7 @@
  * CSV export. Fed by {@link buildStrategyReport} from `store.lastRun` events.
  */
 
-import { type Component, For, Show, createMemo } from 'solid-js';
+import { type Component, For, Show } from 'solid-js';
 import {
   buildCumulativeEquity,
   formatMoney,
@@ -57,6 +57,7 @@ function downloadText(filename: string, text: string, mime = 'text/plain') {
   URL.revokeObjectURL(url);
 }
 
+/** Props for the strategy tester panel: trades, stats, marker prefs, and jump callback. */
 export type StrategyReportProps = {
   trades: ClosedTrade[];
   stats: StrategyStats;
@@ -82,7 +83,7 @@ export type StrategyReportProps = {
 };
 
 /** Polished strategy tester panel for the Results Strategy tab. */
-export const StrategyReport: Component<StrategyReportProps> = (props) => {
+export const StrategyReport: Component<StrategyReportProps> = (props): JSX.Element => {
   const hasTrades = () => props.trades.length > 0;
 
   const finalEquity = () => {

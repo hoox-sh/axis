@@ -24,7 +24,7 @@ const PAGE_TEST_ID: Record<StudioRailPage, string> = {
   debug: 'axis-debug-page',
 };
 
-export async function openStudio(page: Page, rail: StudioRailPage = 'runtime') {
+export async function openStudio(page: Page, rail: StudioRailPage = 'runtime'): Promise<void> {
   // Wait for boot first: on slow runners the topbar buttons exist but are
   // not actionable until hydration finishes.
   await expect(page.getByTestId('axis-topbar')).toBeVisible({ timeout: 30_000 });
@@ -62,7 +62,7 @@ export async function openStudio(page: Page, rail: StudioRailPage = 'runtime') {
  * do not click the topbar toggle just because the pane has not painted —
  * that closes a still-loading lazy EditorPane.
  */
-export async function openDockedEditor(page: Page) {
+export async function openDockedEditor(page: Page): Promise<void> {
   await expect(page.getByTestId('axis-topbar')).toBeVisible({ timeout: 30_000 });
   const editorBtn = page.getByTestId('axis-btn-editor');
   await expect(editorBtn).toBeVisible();

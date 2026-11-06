@@ -26,6 +26,11 @@
 import { COL, def, pineStrategy } from './pine';
 import type { BuiltinScript } from './types';
 
+/**
+ * Original AXIS strategy built-ins (`category: 'strategy'`, `kind: 'strategy'`):
+ * entry/exit rules wrapped by {@link pineStrategy}, so applying one produces
+ * trade markers and a Strategy report rather than plot lines.
+ */
 export const STRATEGY_BUILTINS: readonly BuiltinScript[] = [
   def({
     id: 'strat-ma-cross',

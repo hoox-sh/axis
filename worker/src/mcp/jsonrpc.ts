@@ -18,12 +18,31 @@ import {
   type JsonRpcResponse,
 } from './protocol';
 
-export function rpcError(id: JsonRpcId, code: number, message: string, data?: unknown): JsonRpcResponse {
+/**
+ * Builds a JSON-RPC error reply.
+ *
+ * @param id - Echo of the request id, or `null` when the id could not be parsed.
+ * @param code - JSON-RPC code (`JSONRPC_PARSE`, `JSONRPC_INVALID_REQUEST`, …).
+ * @param message - Short, client-safe description.
+ * @param data - Optional structured detail; omitted from the payload when undefined.
+ */
+export function rpcError(
+  id: JsonRpcId,
+  code: number,
+  message: string,
+  data?: unknown,
+): JsonRpcResponse {
   const err: JsonRpcError = { code, message };
   if (data !== undefined) err.data = data;
   return { jsonrpc: '2.0', id, error: err };
 }
 
+/**
+ * Builds a JSON-RPC success reply.
+ *
+ * @param id - Echo of the request id.
+ * @param result - Method result; serialized as-is, so it must be JSON-safe.
+ */
 export function rpcResult(id: JsonRpcId, result: unknown): JsonRpcResponse {
   return { jsonrpc: '2.0', id, result };
 }
@@ -43,6 +62,12 @@ function asRequest(raw: unknown): JsonRpcRequest | null {
   return req;
 }
 
+/**
+ * Result of parsing a request body.
+ *
+ * On failure the ready-made error `response` is returned instead of throwing, so the
+ * handler can answer a malformed body without a try/catch.
+ */
 export type ParsedBody =
   | { ok: true; batch: false; request: JsonRpcRequest }
   | { ok: true; batch: true; requests: JsonRpcRequest[] }
@@ -69,7 +94,10 @@ export function parseJsonRpc(raw: unknown): ParsedBody {
     for (const item of raw) {
       const req = asRequest(item);
       if (!req) {
-        return { ok: false, response: rpcError(null, JSONRPC_INVALID_REQUEST, 'invalid batch item') };
+        return {
+          ok: false,
+          response: rpcError(null, JSONRPC_INVALID_REQUEST, 'invalid batch item'),
+        };
       }
       requests.push(req);
     }
@@ -77,11 +105,23 @@ export function parseJsonRpc(raw: unknown): ParsedBody {
   }
   const req = asRequest(raw);
   if (!req) {
-    return { ok: false, response: rpcError(null, JSONRPC_INVALID_REQUEST, 'invalid JSON-RPC request') };
+    return {
+      ok: false,
+      response: rpcError(null, JSONRPC_INVALID_REQUEST, 'invalid JSON-RPC request'),
+    };
   }
   return { ok: true, batch: false, request: req };
 }
 
+/**
+ * Parses raw request text, mapping a JSON syntax error to `-32700`.
+ *
+ * Kept separate from {@link parseJsonRpc} so the MCP plane can distinguish "not
+ * JSON" from "JSON but not a request" when choosing the error code.
+ *
+ * @param text - Raw body, already size-capped by the caller.
+ * @returns The parsed request(s), or a ready error response.
+ */
 export function parseJsonText(text: string): ParsedBody {
   let raw: unknown;
   try {
@@ -92,6 +132,11 @@ export function parseJsonText(text: string): ParsedBody {
   return parseJsonRpc(raw);
 }
 
+/**
+ * True when the request is a notification (no `id`) and so must not be answered.
+ *
+ * @param req - Parsed JSON-RPC request.
+ */
 export function isNotification(req: JsonRpcRequest): boolean {
   return req.id === undefined;
 }

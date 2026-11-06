@@ -70,6 +70,7 @@ export interface PyodideWorkerTransport {
   onmessageerror: ((ev: MessageEvent) => void) | null;
 }
 
+/** Creates the worker transport; injected by tests so no real `Worker` is spawned. */
 export type PyodideWorkerFactory = () => PyodideWorkerTransport;
 
 /** Thrown (and reported as `Aborted`) when a run is cancelled. */
@@ -88,6 +89,7 @@ export class PyodideWorkerError extends Error {
   }
 }
 
+/** What a successful load reports about the runtime now running in the worker. */
 export interface PyodideWorkerLoadInfo {
   /** Whether the loaded `run_script` accepts Script Settings (`inputs`). */
   acceptsInputs: boolean;

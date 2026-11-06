@@ -60,7 +60,9 @@ export function truncateInlineDebugChip(
   message: string,
   maxLen: number = INLINE_DEBUG_CHIP_MAX,
 ): string {
-  const m = String(message ?? '').replace(/\s+/g, ' ').trim();
+  const m = String(message ?? '')
+    .replace(/\s+/g, ' ')
+    .trim();
   if (maxLen <= 0 || m.length <= maxLen) return m;
   if (maxLen <= 1) return '…';
   return `${m.slice(0, maxLen - 1)}…`;
@@ -103,12 +105,12 @@ const FLASH_MS = 700;
 /** Register (or clear with null) the chart jump handler for pin-able chips/gutter. */
 export function setDebugChipClickHandler(
   handler: ((detail: DebugChipClickDetail) => void) | null,
-) {
+): void {
   debugChipClickHandler = handler;
 }
 
 /** Remember the active Pine editor view for flash-on-jump from panels. */
-export function registerDebugEditorView(view: EditorView | null) {
+export function registerDebugEditorView(view: EditorView | null): void {
   registeredDebugEditorView = view;
 }
 
@@ -140,7 +142,7 @@ class InlineDebugWidget extends WidgetType {
     return isPinableAnnotation(this);
   }
 
-  eq(other: InlineDebugWidget) {
+  override eq(other: InlineDebugWidget) {
     return (
       other.level === this.level &&
       other.text === this.text &&
@@ -159,16 +161,14 @@ class InlineDebugWidget extends WidgetType {
     }`;
     span.textContent = this.text;
     // Native tooltip always carries the untruncated message (this.title).
-    span.title = this.pinable
-      ? `${this.title} · click to pin bar on chart`
-      : this.title;
+    span.title = this.pinable ? `${this.title} · click to pin bar on chart` : this.title;
     span.setAttribute('aria-label', this.title);
     if (this.pinable) {
       span.setAttribute('role', 'button');
       span.tabIndex = 0;
-      if (this.barIndex != null) span.dataset.barIndex = String(this.barIndex);
-      if (this.time != null) span.dataset.time = String(this.time);
-      span.dataset.line = String(this.line);
+      if (this.barIndex != null) span.dataset['barIndex'] = String(this.barIndex);
+      if (this.time != null) span.dataset['time'] = String(this.time);
+      span.dataset['line'] = String(this.line);
       const fire = (e: Event) => {
         e.preventDefault();
         e.stopPropagation();
@@ -189,7 +189,7 @@ class InlineDebugWidget extends WidgetType {
   }
 
   /** Let pin-able chips receive click; others stay decoration-only. */
-  ignoreEvent(event: Event) {
+  override ignoreEvent(event: Event) {
     if (!this.pinable) return true;
     const t = event.type;
     return t !== 'mousedown' && t !== 'click' && t !== 'keydown';
@@ -213,7 +213,7 @@ class InlineDebugGutterMarker extends GutterMarker {
     return isPinableAnnotation(this);
   }
 
-  eq(other: InlineDebugGutterMarker) {
+  override eq(other: InlineDebugGutterMarker) {
     return (
       other.level === this.level &&
       other.title === this.title &&
@@ -224,22 +224,19 @@ class InlineDebugGutterMarker extends GutterMarker {
     );
   }
 
-  toDOM() {
+  override toDOM() {
     const el = document.createElement('div');
     el.className = `cm-inline-debug-gutter cm-inline-debug-gutter-${this.level}${
       this.pinable ? ' cm-inline-debug-gutter-pinable' : ''
     }`;
-    el.title = this.pinable
-      ? `${this.title} · click to jump to bar`
-      : this.title;
-    el.textContent =
-      this.level === 'error' ? '!' : this.level === 'warning' ? '!' : '·';
+    el.title = this.pinable ? `${this.title} · click to jump to bar` : this.title;
+    el.textContent = this.level === 'error' ? '!' : this.level === 'warning' ? '!' : '·';
     if (this.pinable) {
       el.setAttribute('role', 'button');
       el.tabIndex = 0;
-      el.dataset.line = String(this.line);
-      if (this.barIndex != null) el.dataset.barIndex = String(this.barIndex);
-      if (this.time != null) el.dataset.time = String(this.time);
+      el.dataset['line'] = String(this.line);
+      if (this.barIndex != null) el.dataset['barIndex'] = String(this.barIndex);
+      if (this.time != null) el.dataset['time'] = String(this.time);
       const fire = (e: Event) => {
         e.preventDefault();
         e.stopPropagation();
@@ -273,7 +270,7 @@ class DebugPinGutterMarker extends GutterMarker {
     super();
   }
 
-  eq(other: DebugPinGutterMarker) {
+  override eq(other: DebugPinGutterMarker) {
     return (
       other.line === this.line &&
       other.level === this.level &&
@@ -284,16 +281,16 @@ class DebugPinGutterMarker extends GutterMarker {
     );
   }
 
-  toDOM() {
+  override toDOM() {
     const el = document.createElement('div');
     el.className = `cm-debug-pin-gutter cm-debug-pin-gutter-${this.level}`;
     el.title = `${this.title} · click to jump to bar`;
     el.textContent = '📍';
     el.setAttribute('role', 'button');
     el.tabIndex = 0;
-    el.dataset.line = String(this.line);
-    if (this.barIndex != null) el.dataset.barIndex = String(this.barIndex);
-    if (this.time != null) el.dataset.time = String(this.time);
+    el.dataset['line'] = String(this.line);
+    if (this.barIndex != null) el.dataset['barIndex'] = String(this.barIndex);
+    if (this.time != null) el.dataset['time'] = String(this.time);
     const fire = (e: Event) => {
       e.preventDefault();
       e.stopPropagation();
@@ -367,6 +364,7 @@ function buildDecorations(anns: InlineDebugAnnotation[], doc: Text): DecorationS
   return builder.finish();
 }
 
+/** Holds inline debug annotations + decorations; fed by {@link setInlineDebugData}. */
 export const inlineDebugStateField = StateField.define<InlineDebugState>({
   create() {
     return emptyState;
@@ -396,6 +394,7 @@ interface DebugPinState {
 
 const emptyPinState: DebugPinState = { anns: [] };
 
+/** Tracks pin-able annotations so the view can flag `cm-debug-pins-active`. */
 export const debugPinStateField = StateField.define<DebugPinState>({
   create() {
     return emptyPinState;
@@ -414,9 +413,7 @@ export const debugPinStateField = StateField.define<DebugPinState>({
   },
   provide: (f) =>
     EditorView.editorAttributes.from(f, (s): { [name: string]: string } =>
-      s.anns.some(isPinableAnnotation)
-        ? { class: 'cm-debug-pins-active' }
-        : { class: '' },
+      s.anns.some(isPinableAnnotation) ? { class: 'cm-debug-pins-active' } : { class: '' },
     ),
 });
 
@@ -430,11 +427,10 @@ const emptyFlash: FlashState = { line: null, decorations: Decoration.none };
 function buildFlashDecorations(lineNo: number | null, doc: Text): DecorationSet {
   if (lineNo == null || lineNo < 1 || lineNo > doc.lines) return Decoration.none;
   const line = doc.line(lineNo);
-  return Decoration.set([
-    Decoration.line({ class: 'cm-debug-pin-flash' }).range(line.from),
-  ]);
+  return Decoration.set([Decoration.line({ class: 'cm-debug-pin-flash' }).range(line.from)]);
 }
 
+/** One-line flash highlight for a jumped-to pin; set by {@link flashDebugPinLineEffect}. */
 export const debugPinFlashField = StateField.define<FlashState>({
   create() {
     return emptyFlash;
@@ -484,14 +480,7 @@ function inlineDebugGutterMarkers(view: EditorView) {
     builder.add(
       line.from,
       line.from,
-      new InlineDebugGutterMarker(
-        a.level,
-        title,
-        a.line,
-        a.barIndex,
-        a.time,
-        a.message,
-      ),
+      new InlineDebugGutterMarker(a.level, title, a.line, a.barIndex, a.time, a.message),
     );
   }
   return builder.finish();
@@ -516,14 +505,7 @@ function debugPinGutterMarkers(view: EditorView) {
     builder.add(
       line.from,
       line.from,
-      new DebugPinGutterMarker(
-        a.line,
-        a.level,
-        title,
-        a.barIndex,
-        a.time,
-        a.message,
-      ),
+      new DebugPinGutterMarker(a.line, a.level, title, a.barIndex, a.time, a.message),
     );
   }
   return builder.finish();
@@ -539,6 +521,7 @@ const debugPinGutterExt = gutter({
   markers: (view) => debugPinGutterMarkers(view),
 });
 
+/** Base theme for end-of-line debug chips and pin gutter markers. */
 export const inlineDebugTheme = EditorView.baseTheme({
   '.cm-inline-debug': {
     fontSize: '11px',
@@ -707,10 +690,7 @@ function inlineDebugSignature(anns: readonly InlineDebugAnnotation[]): string {
 }
 
 /** Apply or clear inline debug annotations on a view. */
-export function applyInlineDebug(
-  view: EditorView,
-  anns: InlineDebugAnnotation[] | null,
-) {
+export function applyInlineDebug(view: EditorView, anns: InlineDebugAnnotation[] | null): void {
   const next = anns && anns.length ? anns : [];
   const st = view.state.field(inlineDebugStateField, false);
   if (st && inlineDebugSignature(st.anns) === inlineDebugSignature(next)) return;
@@ -723,12 +703,8 @@ export function applyInlineDebug(
  * Apply or clear pin gutter markers (lines with bar_index / time).
  * Independent of {@link applyInlineDebug}.
  */
-export function applyDebugPins(
-  view: EditorView,
-  anns: InlineDebugAnnotation[] | null,
-) {
-  const pinable =
-    anns && anns.length ? anns.filter(isPinableAnnotation) : null;
+export function applyDebugPins(view: EditorView, anns: InlineDebugAnnotation[] | null): void {
+  const pinable = anns && anns.length ? anns.filter(isPinableAnnotation) : null;
   view.dispatch({
     effects: setDebugPinData.of(pinable && pinable.length ? pinable : null),
   });
@@ -738,7 +714,7 @@ export function applyDebugPins(
  * Briefly highlight a 1-based source line (`cm-debug-pin-flash`).
  * Uses the given view, or the last {@link registerDebugEditorView} mount.
  */
-export function flashDebugPinLine(line: number, view?: EditorView | null) {
+export function flashDebugPinLine(line: number, view?: EditorView | null): void {
   const v = view ?? registeredDebugEditorView;
   if (!v || !Number.isFinite(line) || line < 1) return;
   const lineNo = Math.trunc(line);

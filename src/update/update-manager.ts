@@ -40,9 +40,12 @@ import { APP_VERSION } from '../version';
 import { announce } from '../ui/sr-announce';
 import { setCloseGuardEnabled } from '../pwa/close-guard';
 import { createThrottle } from '../utils/throttle';
+import { readJsonRecord } from '../utils/validate';
 
+/** Where a detected update came from: the version poll, the service worker, or a manual check. */
 export type UpdateSource = 'version-poll' | 'service-worker' | 'manual';
 
+/** One detected update: the running version, the deployed one, and how it was found. */
 export interface UpdateInfo {
   /** Version this page booted with. */
   currentVersion: string;
@@ -54,8 +57,10 @@ export interface UpdateInfo {
   detectedAt: number;
 }
 
+/** Banner state: nothing to show, an update waiting, or a reload in progress. */
 export type UpdateStatus = 'current' | 'update-available' | 'reloading';
 
+/** Reactive update state read by the banner, the status line and the poller. */
 export interface UpdateState {
   status: UpdateStatus;
   update: UpdateInfo | null;
@@ -121,6 +126,10 @@ function defaultBase(): string {
   return './';
 }
 
+/**
+ * Shape of the served `/version.json`. Both fields are untrusted: the reader
+ * normalizes `version` to a trimmed string and ignores `buildTime`.
+ */
 export interface VersionJson {
   version?: unknown;
   buildTime?: unknown;
@@ -132,8 +141,8 @@ async function fetchDeployedVersion(
 ): Promise<string | null> {
   const res = await fetchImpl(url, { cache: 'no-store' });
   if (!res.ok) return null;
-  const body = (await res.json()) as VersionJson;
-  const v = normalizeVersion(body?.version);
+  const body = await readJsonRecord(res);
+  const v = normalizeVersion(body['version']);
   return v || null;
 }
 
@@ -163,7 +172,10 @@ function notifyUpdateAvailable(info: UpdateInfo, hooks: UpdateNotifyHooks = {}):
   const body = `v${info.currentVersion} → v${info.latestVersion}. Reload to update.`;
   announce(`${title}: ${body}`);
   try {
-    (hooks.setStatus ?? defaultSetStatus)(`Update available: v${info.latestVersion} — reload to update.`, info);
+    (hooks.setStatus ?? defaultSetStatus)(
+      `Update available: v${info.latestVersion} — reload to update.`,
+      info,
+    );
   } catch {
     /* notification must never break the update flow */
   }
@@ -228,6 +240,7 @@ export function dismissUpdate(): void {
   setUpdateState({ ...prev, status: 'current', update: null });
 }
 
+/** Overrides for {@link checkForUpdates}: fetch, URL, running version, notify hooks. */
 export interface CheckForUpdatesOptions {
   fetchImpl?: typeof fetch;
   url?: string;
@@ -240,7 +253,9 @@ export interface CheckForUpdatesOptions {
  * deployed version differs (and records it), else `null`. Never throws —
  * offline / 404 / malformed payloads resolve `null`.
  */
-export async function checkForUpdates(opts: CheckForUpdatesOptions = {}): Promise<UpdateInfo | null> {
+export async function checkForUpdates(
+  opts: CheckForUpdatesOptions = {},
+): Promise<UpdateInfo | null> {
   const running = normalizeVersion(opts.runningVersion ?? APP_VERSION);
   let deployed: string | null = null;
   try {
@@ -262,11 +277,13 @@ export function buildHardReloadUrl(href: string, latestVersion: string): string 
   u.searchParams.set('_axis_v', normalizeVersion(latestVersion) || String(Date.now()));
   // Preserve hash; drop the synthetic localhost origin for relative URLs.
   const out = `${u.pathname}${u.search}${u.hash}`;
-  return href.startsWith('http://') || href.startsWith('https://')
-    ? `${u.origin}${out}`
-    : out;
+  return href.startsWith('http://') || href.startsWith('https://') ? `${u.origin}${out}` : out;
 }
 
+/**
+ * Platform seams for {@link hardReload}. Every member defaults to the browser
+ * global, so tests can drive the reload without a real navigation.
+ */
 export interface ReloadDeps {
   serviceWorker?: {
     getRegistrations?: () => Promise<Array<{ unregister: () => Promise<boolean> }>>;
@@ -331,8 +348,7 @@ export async function hardReload(deps: ReloadDeps = {}): Promise<void> {
       (typeof navigator !== 'undefined' ? navigator.serviceWorker : undefined);
     const regs = await sw?.getRegistrations?.().catch(() => [] as never[]);
     await Promise.all((regs ?? []).map((r) => r.unregister().catch(() => false)));
-    const c =
-      deps.caches ?? (typeof caches !== 'undefined' ? caches : undefined);
+    const c = deps.caches ?? (typeof caches !== 'undefined' ? caches : undefined);
     const keys = await c?.keys?.().catch(() => [] as string[]);
     await Promise.all(
       (keys ?? [])
@@ -386,11 +402,13 @@ export function takeWaitingWorkerActivate(): (() => boolean | void) | null {
   return fn;
 }
 
+/** Handle returned by {@link startUpdatePolling}. */
 export interface PollHandle {
   stop: () => void;
   check: () => Promise<UpdateInfo | null>;
 }
 
+/** Timing and platform seams for {@link startUpdatePolling}. */
 export interface StartPollingOptions {
   intervalMs?: number;
   throttleMs?: number;
@@ -412,8 +430,7 @@ export function startUpdatePolling(opts: StartPollingOptions = {}): PollHandle {
     set: (fn: () => void, ms: number) => setInterval(fn, ms),
     clear: (h: unknown) => clearInterval(h as ReturnType<typeof setInterval>),
   };
-  const check = () =>
-    checkForUpdates({ fetchImpl: opts.fetchImpl, hooks: opts.hooks });
+  const check = () => checkForUpdates({ fetchImpl: opts.fetchImpl, hooks: opts.hooks });
   // Focus + visibility + online all fire per user gesture burst; one check per window.
   const burstThrottle = createThrottle(throttleMs);
   const throttled = () => {
@@ -427,9 +444,8 @@ export function startUpdatePolling(opts: StartPollingOptions = {}): PollHandle {
       /* ignore */
     }
   };
-  const target = opts.target === undefined
-    ? (typeof window !== 'undefined' ? window : null)
-    : opts.target;
+  const target =
+    opts.target === undefined ? (typeof window !== 'undefined' ? window : null) : opts.target;
   try {
     target?.addEventListener('focus', throttled);
     target?.addEventListener('online', throttled);

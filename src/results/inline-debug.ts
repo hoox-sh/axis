@@ -17,6 +17,8 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { finiteNumber } from '../utils/validate';
+
 /**
  * Collect **inline debug annotations** from a script run payload for the
  * CodeMirror editor (end-of-line chips + line highlights).
@@ -32,6 +34,10 @@
 import { normalizePyneLogs, type PyneLogLevel } from './pyne-logs';
 import { parseBarIndexFromText, parseTimeFromText, normalizePinTime } from './debug-pins';
 
+/**
+ * Severity of an inline annotation: a normalized log level plus `debug`, which
+ * the scanners assign to `debug` / `trace` lines.
+ */
 export type InlineDebugLevel = PyneLogLevel | 'debug';
 
 /** One inline annotation bound to a 1-based source line. */
@@ -49,15 +55,6 @@ export interface InlineDebugAnnotation {
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return v != null && typeof v === 'object' && !Array.isArray(v);
-}
-
-function asFiniteNumber(v: unknown): number | null {
-  if (typeof v === 'number' && Number.isFinite(v)) return v;
-  if (typeof v === 'string' && v.trim() !== '') {
-    const n = Number(v);
-    if (Number.isFinite(n)) return n;
-  }
-  return null;
 }
 
 /**
@@ -86,9 +83,7 @@ export function parseSourceLine(text: string): number | null {
 }
 
 /** True when an annotation can pin a chart bar (has bar_index and/or time). */
-export function isPinableAnnotation(
-  a: Pick<InlineDebugAnnotation, 'barIndex' | 'time'>,
-): boolean {
+export function isPinableAnnotation(a: Pick<InlineDebugAnnotation, 'barIndex' | 'time'>): boolean {
   return a.barIndex != null || a.time != null;
 }
 
@@ -104,11 +99,16 @@ export function filterPinableAnnotations(
 }
 
 function lineFromRecord(item: Record<string, unknown>): number | null {
-  const direct = asFiniteNumber(
-    item.line ?? item.lineNumber ?? item.line_number ?? item.lineno ?? item.source_line ?? item.src_line,
+  const direct = finiteNumber(
+    item['line'] ??
+      item['lineNumber'] ??
+      item['line_number'] ??
+      item['lineno'] ??
+      item['source_line'] ??
+      item['src_line'],
   );
   if (direct != null && direct >= 1) return Math.trunc(direct);
-  const msg = String(item.message ?? item.msg ?? item.text ?? item.error ?? '');
+  const msg = String(item['message'] ?? item['msg'] ?? item['text'] ?? item['error'] ?? '');
   return parseSourceLine(msg);
 }
 
@@ -127,8 +127,7 @@ export function collectInlineDebugAnnotations(lastRun: unknown): InlineDebugAnno
   // ── Script logs ────────────────────────────────────────────────────
   const logs = normalizePyneLogs(lastRun);
   for (const e of logs) {
-    const line =
-      e.line != null && e.line >= 1 ? e.line : parseSourceLine(e.message);
+    const line = e.line != null && e.line >= 1 ? e.line : parseSourceLine(e.message);
     // barIndex-only logs belong in Scriptlogs, not inline chips
     if (line == null) continue;
     out.push({
@@ -148,16 +147,18 @@ export function collectInlineDebugAnnotations(lastRun: unknown): InlineDebugAnno
       const v = lastRun[key];
       if (Array.isArray(v)) rawArrs.push(...v);
     }
-    if (isRecord(lastRun.meta) && Array.isArray(lastRun.meta.logs)) {
-      rawArrs.push(...(lastRun.meta.logs as unknown[]));
+    if (isRecord(lastRun['meta']) && Array.isArray(lastRun['meta']['logs'])) {
+      rawArrs.push(...(lastRun['meta']['logs'] as unknown[]));
     }
     for (const item of rawArrs) {
       if (!isRecord(item)) continue;
       const line = lineFromRecord(item);
       if (line == null) continue;
-      const message = String(item.message ?? item.msg ?? item.text ?? item.content ?? '');
-      if (!message && item.level == null) continue;
-      const lvlRaw = String(item.level ?? item.severity ?? 'info').toLowerCase();
+      const message = String(
+        item['message'] ?? item['msg'] ?? item['text'] ?? item['content'] ?? '',
+      );
+      if (!message && item['level'] == null) continue;
+      const lvlRaw = String(item['level'] ?? item['severity'] ?? 'info').toLowerCase();
       let level: InlineDebugLevel = 'info';
       if (lvlRaw.includes('err') || lvlRaw === 'fatal') level = 'error';
       else if (lvlRaw.includes('warn')) level = 'warning';
@@ -169,9 +170,9 @@ export function collectInlineDebugAnnotations(lastRun: unknown): InlineDebugAnno
         level,
         message: message || `(${level})`,
         barIndex:
-          asFiniteNumber(item.barIndex ?? item.bar_index) ?? parseBarIndexFromText(message),
+          finiteNumber(item['barIndex'] ?? item['bar_index']) ?? parseBarIndexFromText(message),
         time:
-          asFiniteNumber(item.time ?? item.bar_time ?? item.barTime ?? item.ts) ??
+          finiteNumber(item['time'] ?? item['bar_time'] ?? item['barTime'] ?? item['ts']) ??
           normalizePinTime(parseTimeFromText(message)),
         source: 'log',
       });
@@ -181,10 +182,13 @@ export function collectInlineDebugAnnotations(lastRun: unknown): InlineDebugAnno
   // ── Top-level error / message ──────────────────────────────────────
   if (isRecord(lastRun)) {
     const errText = String(
-      lastRun.error ?? lastRun.message ?? lastRun.err ?? lastRun.detail ?? '',
+      lastRun['error'] ?? lastRun['message'] ?? lastRun['err'] ?? lastRun['detail'] ?? '',
     ).trim();
-    const status = String(lastRun.status ?? '').toLowerCase();
-    if (errText && (status === 'error' || lastRun.error != null || /error|fail|exception/i.test(errText))) {
+    const status = String(lastRun['status'] ?? '').toLowerCase();
+    if (
+      errText &&
+      (status === 'error' || lastRun['error'] != null || /error|fail|exception/i.test(errText))
+    ) {
       const line = lineFromRecord(lastRun) ?? parseSourceLine(errText);
       if (line != null) {
         out.push({
@@ -197,15 +201,16 @@ export function collectInlineDebugAnnotations(lastRun: unknown): InlineDebugAnno
     }
 
     // diagnostics: [{ line, message, severity }]
-    const diags = lastRun.diagnostics ?? (isRecord(lastRun.meta) ? lastRun.meta.diagnostics : null);
+    const diags =
+      lastRun['diagnostics'] ?? (isRecord(lastRun['meta']) ? lastRun['meta']['diagnostics'] : null);
     if (Array.isArray(diags)) {
       for (const d of diags) {
         if (!isRecord(d)) continue;
         const line = lineFromRecord(d);
         if (line == null) continue;
-        const message = String(d.message ?? d.msg ?? d.text ?? '');
+        const message = String(d['message'] ?? d['msg'] ?? d['text'] ?? '');
         if (!message) continue;
-        const sev = String(d.severity ?? d.level ?? 'info').toLowerCase();
+        const sev = String(d['severity'] ?? d['level'] ?? 'info').toLowerCase();
         let level: InlineDebugLevel = 'info';
         if (sev.includes('err') || sev === 'fatal') level = 'error';
         else if (sev.includes('warn')) level = 'warning';
@@ -223,9 +228,7 @@ export function collectInlineDebugAnnotations(lastRun: unknown): InlineDebugAnno
 }
 
 /** One annotation per line (highest severity wins; messages joined). */
-export function collapseAnnotationsByLine(
-  anns: InlineDebugAnnotation[],
-): InlineDebugAnnotation[] {
+export function collapseAnnotationsByLine(anns: InlineDebugAnnotation[]): InlineDebugAnnotation[] {
   const map = new Map<number, InlineDebugAnnotation>();
   const rank = (l: InlineDebugLevel) =>
     l === 'error' ? 0 : l === 'warning' ? 1 : l === 'debug' ? 2 : 3;
@@ -237,9 +240,7 @@ export function collapseAnnotationsByLine(
     }
     const better = rank(a.level) < rank(prev.level);
     const message =
-      prev.message === a.message
-        ? prev.message
-        : `${prev.message} · ${a.message}`.slice(0, 280);
+      prev.message === a.message ? prev.message : `${prev.message} · ${a.message}`.slice(0, 280);
     map.set(a.line, {
       line: a.line,
       level: better ? a.level : prev.level,

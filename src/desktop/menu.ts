@@ -16,8 +16,10 @@ import { isTauriShell } from './is-tauri';
 /** Event name must match the Rust `app.emit` target. */
 export const AXIS_MENU_EVENT = 'axis-menu';
 
+/** Actions the Rust host emits on {@link AXIS_MENU_EVENT}. */
 export type AxisMenuAction = 'open_script' | 'about';
 
+/** Callbacks the shell wires to each native menu action. */
 export interface DesktopMenuHandlers {
   onOpenScript: () => void | Promise<void>;
   onAbout: () => void | Promise<void>;
@@ -27,9 +29,7 @@ export interface DesktopMenuHandlers {
  * Subscribe to host menu actions. No-op outside Tauri.
  * @returns unsubscribe function
  */
-export async function installDesktopMenu(
-  handlers: DesktopMenuHandlers,
-): Promise<() => void> {
+export async function installDesktopMenu(handlers: DesktopMenuHandlers): Promise<() => void> {
   if (!isTauriShell()) return () => {};
 
   let unlisten: UnlistenFn | undefined;

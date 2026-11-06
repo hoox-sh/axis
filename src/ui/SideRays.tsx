@@ -64,6 +64,7 @@ const ORIGINS: Record<Origin, OriginFrame> = {
   left: { flipX: 1, flipY: 0, side: 1 },
 };
 
+/** Shader props for {@link SideRays}: colors, origin, motion, and quality knobs (all optional). */
 export interface SideRaysProps {
   /** Color of the first layer of rays, on the upper side of the fan. */
   rayColor1?: string;
@@ -231,25 +232,26 @@ void main() {
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value));
 
-const wrapAngle = (angle: number): number =>
-  ((((angle + Math.PI) % TAU) + TAU) % TAU) - Math.PI;
+const wrapAngle = (angle: number): number => ((((angle + Math.PI) % TAU) + TAU) % TAU) - Math.PI;
 
 const parseColor = (value: string): [number, number, number] => {
   const text = String(value || '').trim();
   const hex = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(text);
   if (hex) {
-    const full = hex[1].length === 3 ? hex[1].replace(/./g, (digit) => digit + digit) : hex[1];
-    return [0, 2, 4].map((index) => Number.parseInt(full.slice(index, index + 2), 16) / 255) as [
-      number,
-      number,
-      number,
-    ];
+    // `hex[1]` is guaranteed by the pattern; the fallback only satisfies the
+    // index-signature type and is never reached.
+    const digits = hex[1] ?? '';
+    const full = digits.length === 3 ? digits.replace(/./g, (digit) => digit + digit) : digits;
+    const [r, g, b] = [0, 2, 4].map(
+      (index) => Number.parseInt(full.slice(index, index + 2), 16) / 255,
+    );
+    return [r ?? 1, g ?? 1, b ?? 1];
   }
   const rgb = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/i.exec(text);
   if (rgb) {
-    return [rgb[1], rgb[2], rgb[3]].map((channel) =>
-      clamp(Number.parseFloat(channel) / 255, 0, 1),
-    ) as [number, number, number];
+    const channels = [rgb[1] ?? '0', rgb[2] ?? '0', rgb[3] ?? '0'];
+    const [r, g, b] = channels.map((channel) => clamp(Number.parseFloat(channel) / 255, 0, 1));
+    return [r ?? 0, g ?? 0, b ?? 0];
   }
   return [1, 1, 1];
 };
@@ -262,11 +264,7 @@ const geometryFor = (
   heading: frame.side ? 3.42 : -2.48,
 });
 
-const compile = (
-  gl: WebGL2RenderingContext,
-  type: number,
-  source: string,
-): WebGLShader | null => {
+const compile = (gl: WebGL2RenderingContext, type: number, source: string): WebGLShader | null => {
   const shader = gl.createShader(type);
   if (!shader) return null;
   gl.shaderSource(shader, source);
@@ -279,9 +277,38 @@ const compile = (
   return shader;
 };
 
+/** Every uniform the fragment shader actually reads. */
+const UNIFORM_NAMES = [
+  'uResolution',
+  'uTime',
+  'uColorA',
+  'uColorB',
+  'uBlend',
+  'uIntensity',
+  'uSpread',
+  'uDensity',
+  'uSharpness',
+  'uFalloff',
+  'uGlow',
+  'uSaturation',
+  'uDust',
+  'uOpacity',
+  'uReveal',
+  'uLight',
+  'uFrame',
+  'uAim',
+  'uFocus',
+  'uSway',
+] as const;
+
+type UniformName = (typeof UNIFORM_NAMES)[number];
+
+/** Resolved uniform locations; a `null` location means "optimised out / unused". */
+type UniformMap = Readonly<Record<UniformName, WebGLUniformLocation | null>>;
+
 interface LinkedShader {
   program: WebGLProgram;
-  uniforms: Record<string, WebGLUniformLocation | null>;
+  uniforms: UniformMap;
 }
 
 const link = (gl: WebGL2RenderingContext): LinkedShader | null => {
@@ -303,12 +330,33 @@ const link = (gl: WebGL2RenderingContext): LinkedShader | null => {
     gl.deleteProgram(program);
     return null;
   }
-  const uniforms: Record<string, WebGLUniformLocation | null> = {};
-  const count = gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS);
-  for (let index = 0; index < count; index++) {
-    const info = gl.getActiveUniform(program, index);
-    if (info) uniforms[info.name] = gl.getUniformLocation(program, info.name);
-  }
+  // Explicit lookups keep the map fully typed: `gl.getUniformLocation` returns
+  // `null` for uniforms the compiler optimised away, which every `uniform*`
+  // call treats as a no-op (same as the previous `undefined` entries).
+  const loc = (name: UniformName): WebGLUniformLocation | null =>
+    gl.getUniformLocation(program, name);
+  const uniforms: UniformMap = {
+    uResolution: loc('uResolution'),
+    uTime: loc('uTime'),
+    uColorA: loc('uColorA'),
+    uColorB: loc('uColorB'),
+    uBlend: loc('uBlend'),
+    uIntensity: loc('uIntensity'),
+    uSpread: loc('uSpread'),
+    uDensity: loc('uDensity'),
+    uSharpness: loc('uSharpness'),
+    uFalloff: loc('uFalloff'),
+    uGlow: loc('uGlow'),
+    uSaturation: loc('uSaturation'),
+    uDust: loc('uDust'),
+    uOpacity: loc('uOpacity'),
+    uReveal: loc('uReveal'),
+    uLight: loc('uLight'),
+    uFrame: loc('uFrame'),
+    uAim: loc('uAim'),
+    uFocus: loc('uFocus'),
+    uSway: loc('uSway'),
+  };
   return { program, uniforms };
 };
 
@@ -365,7 +413,7 @@ const DEFAULTS: Required<SideRaysProps> = {
  * Animated light-fan background canvas. See module doc (SolidJS port of
  * React Bits' SideRays — props match the upstream table).
  */
-export const SideRays: Component<SideRaysProps> = (rawProps) => {
+export const SideRays: Component<SideRaysProps> = (rawProps): JSX.Element => {
   const props = mergeProps(DEFAULTS, rawProps);
   let containerEl!: HTMLDivElement;
   let canvasEl!: HTMLCanvasElement;
@@ -468,31 +516,31 @@ export const SideRays: Component<SideRaysProps> = (rawProps) => {
         gl.useProgram(shader.program);
         gl.bindVertexArray(vao);
         const u = shader.uniforms;
-        gl.uniform2f(u.uResolution, canvas.width, canvas.height);
-        gl.uniform1f(u.uTime, time);
-        gl.uniform3f(u.uColorA, s.colorA[0], s.colorA[1], s.colorA[2]);
-        gl.uniform3f(u.uColorB, s.colorB[0], s.colorB[1], s.colorB[2]);
-        gl.uniform1f(u.uBlend, s.blend);
-        gl.uniform1f(u.uIntensity, s.intensity);
-        gl.uniform1f(u.uSpread, s.spread);
-        gl.uniform1f(u.uDensity, s.density);
-        gl.uniform1f(u.uSharpness, s.sharpness);
-        gl.uniform1f(u.uFalloff, s.falloff);
-        gl.uniform1f(u.uGlow, s.glow);
-        gl.uniform1f(u.uSaturation, s.saturation);
-        gl.uniform1f(u.uDust, s.dust);
-        gl.uniform1f(u.uOpacity, s.opacity);
-        gl.uniform1f(u.uReveal, 1 - (1 - reveal) ** 3);
-        gl.uniform1f(u.uLight, s.light ? 1 : 0);
-        gl.uniform3f(u.uFrame, s.frame.flipX, s.frame.flipY, s.frame.side);
-        gl.uniform1f(u.uAim, s.tilt + aim.value);
+        gl.uniform2f(u['uResolution'], canvas.width, canvas.height);
+        gl.uniform1f(u['uTime'], time);
+        gl.uniform3f(u['uColorA'], s.colorA[0], s.colorA[1], s.colorA[2]);
+        gl.uniform3f(u['uColorB'], s.colorB[0], s.colorB[1], s.colorB[2]);
+        gl.uniform1f(u['uBlend'], s.blend);
+        gl.uniform1f(u['uIntensity'], s.intensity);
+        gl.uniform1f(u['uSpread'], s.spread);
+        gl.uniform1f(u['uDensity'], s.density);
+        gl.uniform1f(u['uSharpness'], s.sharpness);
+        gl.uniform1f(u['uFalloff'], s.falloff);
+        gl.uniform1f(u['uGlow'], s.glow);
+        gl.uniform1f(u['uSaturation'], s.saturation);
+        gl.uniform1f(u['uDust'], s.dust);
+        gl.uniform1f(u['uOpacity'], s.opacity);
+        gl.uniform1f(u['uReveal'], 1 - (1 - reveal) ** 3);
+        gl.uniform1f(u['uLight'], s.light ? 1 : 0);
+        gl.uniform3f(u['uFrame'], s.frame.flipX, s.frame.flipY, s.frame.side);
+        gl.uniform1f(u['uAim'], s.tilt + aim.value);
         gl.uniform3f(
-          u.uFocus,
+          u['uFocus'],
           focus.angle,
           Math.max(0.06, s.spread * 0.25),
           focus.strength * 1.4,
         );
-        gl.uniform1f(u.uSway, reduced ? 0 : 1);
+        gl.uniform1f(u['uSway'], reduced ? 0 : 1);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
 
         const settling =

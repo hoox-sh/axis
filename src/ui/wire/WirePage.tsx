@@ -30,20 +30,22 @@ import {
   type SlotKind,
 } from '../architecture/plan';
 import type { StudioPageId } from '../studio/types';
-import {
-  StudioButton,
-  StudioChip,
-  StudioEmpty,
-  StudioFooter,
-  StudioHint,
-} from '../studio';
+import { StudioButton, StudioChip, StudioEmpty, StudioFooter, StudioHint } from '../studio';
 
+/**
+ * Wire studio page: pick a compose recipe, swap any slot, and review the derived
+ * plan (drift, requirements) before applying it to the store. The applied plan
+ * name is pushed up through `onTitle` so the shell header matches.
+ *
+ * @param props - Close/navigate handlers plus applied-plan and title callbacks.
+ * @returns The wire page body.
+ */
 export function WirePage(props: {
   onClose: () => void;
   onNavigate?: (id: StudioPageId) => void;
   onApplied?: (planName: string) => void;
   onTitle?: (title: string) => void;
-}) {
+}): JSX.Element {
   const [baseId, setBaseId] = createSignal(seedBaseId(seedConfig()));
   const [config, setConfig] = createSignal<AxisConfig>(seedConfig());
 
@@ -252,9 +254,7 @@ function SlotRail(props: {
               </div>
               <div>
                 <div class="ax-chip-row">
-                  <h4 class="ax-label">
-                    {slot.label}
-                  </h4>
+                  <h4 class="ax-label">{slot.label}</h4>
                   <span class="ax-card-kicker">{slot.contract}</span>
                   <Show when={slot.optional}>
                     <span class="ax-chip ax-chip--tag">optional</span>
@@ -308,9 +308,7 @@ function SlotRail(props: {
                 >
                   {(plugin) => (
                     <div class="ax-mt">
-                      <p class="ax-hint ax-hint--accent">
-                        {pluginKey(slot.kind, plugin().id)}
-                      </p>
+                      <p class="ax-hint ax-hint--accent">{pluginKey(slot.kind, plugin().id)}</p>
                       <StudioHint>{plugin().description}</StudioHint>
                       <CapabilityBadges
                         capabilities={plugin().capabilities}
@@ -347,9 +345,7 @@ function PlanSummary(props: { config: AxisConfig; plan: PlanState }) {
                   <span class="ax-chip is-on">+{props.plan.added + props.plan.swapped}</span>
                 </Show>
                 <Show when={props.plan.removed > 0}>
-                  <span class="ax-chip ax-chip--danger">
-                    −{props.plan.removed}
-                  </span>
+                  <span class="ax-chip ax-chip--danger">−{props.plan.removed}</span>
                 </Show>
               </span>
             }
@@ -404,9 +400,7 @@ function PlanSummary(props: { config: AxisConfig; plan: PlanState }) {
         <h3 class="ax-section-title">Diff</h3>
         <Show
           when={props.plan.drifts.length > 0}
-          fallback={
-            <StudioEmpty>No changes against {props.plan.base.name}</StudioEmpty>
-          }
+          fallback={<StudioEmpty>No changes against {props.plan.base.name}</StudioEmpty>}
         >
           <ul class="ax-list">
             <For each={props.plan.drifts}>

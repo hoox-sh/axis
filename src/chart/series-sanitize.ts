@@ -110,7 +110,8 @@ export function projectToCandleAxis<T extends { time?: unknown }>(
   if (rows.length === candleTimes.length) {
     let onAxis = true;
     for (let i = 0; i < rows.length; i++) {
-      const t = Number(rows[i] == null ? undefined : rows[i].time);
+      const row = rows[i];
+      const t = Number(row == null ? undefined : row.time);
       if (!Number.isFinite(t) || t !== candleTimes[i]) {
         onAxis = false;
         break;

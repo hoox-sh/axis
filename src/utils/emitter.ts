@@ -26,8 +26,13 @@
  * @module utils/emitter
  */
 
+/** Detach function returned by {@link Emitter.on}; safe to call more than once. */
 export type Unsubscribe = () => void;
 
+/**
+ * Minimal typed pub/sub. Listener errors are isolated, so one bad subscriber
+ * cannot break `emit` or the other listeners.
+ */
 export interface Emitter<TListener extends (...args: never[]) => void> {
   on(listener: TListener): Unsubscribe;
   emit(...args: Parameters<TListener>): void;
@@ -64,6 +69,7 @@ export function createEmitter<TListener extends (...args: never[]) => void>(): E
   };
 }
 
+/** Lazily created process-wide instance with an explicit reset for tests. */
 export interface Singleton<T> {
   get(): T;
   reset(): void;

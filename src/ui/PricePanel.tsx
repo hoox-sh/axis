@@ -39,7 +39,7 @@ import { displayedLastPrice } from './extras/quote';
 import { fetchWatchlistTickers } from '../data/watchlist-tickers';
 
 /** Float-only price panel (big last price + 24h change). */
-export const PricePanel: Component = () => {
+export const PricePanel: Component = () : JSX.Element => {
   const [change24h, setChange24h] = createSignal<number | undefined>(undefined);
   const [copied, setCopied] = createSignal(false);
   let copyTimer: number | undefined;

@@ -27,6 +27,7 @@
  * @module chart/drawings/tools/text-prompt
  */
 
+/** Labels, length limit, and initial value for the in-app drawing text prompt. */
 export interface DrawingTextPromptOptions {
   /** Dialog title / aria-label. */
   title: string;

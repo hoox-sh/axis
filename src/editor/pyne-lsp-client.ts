@@ -120,10 +120,7 @@ export function shouldMarkRemoteLspFailed(callerSignal?: AbortSignal): boolean {
   return !callerSignal?.aborted;
 }
 
-function mergeAbortSignals(
-  a?: AbortSignal,
-  b?: AbortSignal,
-): AbortSignal | undefined {
+function mergeAbortSignals(a?: AbortSignal, b?: AbortSignal): AbortSignal | undefined {
   if (!a && !b) return undefined;
   if (a && !b) return a;
   if (b && !a) return b;
@@ -154,7 +151,9 @@ export async function fetchRemoteCompletion(opts: {
   const base = lspBaseUrl();
   if (!base) return null;
   const timeoutMs =
-    opts.timeoutMs ?? readEditorIntel(store.editorIntel).completionTimeoutMs ?? LSP_COMPLETION_TIMEOUT_MS;
+    opts.timeoutMs ??
+    readEditorIntel(store.editorIntel).completionTimeoutMs ??
+    LSP_COMPLETION_TIMEOUT_MS;
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
   const signal = mergeAbortSignals(opts.signal, timeoutSignal);
   try {
@@ -188,6 +187,16 @@ export async function fetchRemoteCompletion(opts: {
   }
 }
 
+/**
+ * Ask the Pro API for hover docs at `line`/`character`.
+ *
+ * Returns null when remote hover is disabled, no Backend URL is set, the
+ * reply is not OK / has no hover, or the request fails; a 404/501/5xx or a
+ * network failure also starts the remote-LSP cooldown.
+ *
+ * @param opts Source text, 0-based line/character, optional parent signal and budget.
+ * @returns The remote hover payload, or null.
+ */
 export async function fetchRemoteHover(opts: {
   source: string;
   line: number;
@@ -290,7 +299,8 @@ export async function fetchRemoteDiagnostics(opts: {
     if (j.status === 'error' || !Array.isArray(j.diagnostics)) return null;
     markRemoteLspOk();
     return {
-      ok: j.ok !== false && !j.diagnostics.some((d) => String(d.severity).toLowerCase() === 'error'),
+      ok:
+        j.ok !== false && !j.diagnostics.some((d) => String(d.severity).toLowerCase() === 'error'),
       diagnostics: j.diagnostics,
     };
   } catch {

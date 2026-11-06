@@ -35,6 +35,10 @@ import {
 } from './pine';
 import type { Alert } from './types';
 
+/**
+ * Options for {@link evaluatePineAlertsFromRun}: the pure eval context plus the
+ * delivery seams (fetch / Notification) and the price stamped on the payload.
+ */
 export type EvaluatePineAlertsOpts = PineAlertEvalContext & {
   deliver?: boolean;
   fetchImpl?: typeof fetch;
@@ -48,12 +52,15 @@ export type EvaluatePineAlertsOpts = PineAlertEvalContext & {
  * @returns alerts that fired (with updated lastFiredAt / lastBarIndex)
  */
 export async function evaluatePineAlertsFromRun(
-  result: {
-    alerts?: unknown;
-    alert_conditions?: unknown;
-    events?: unknown;
-    meta?: Record<string, unknown> | null;
-  } | null | undefined,
+  result:
+    | {
+        alerts?: unknown;
+        alert_conditions?: unknown;
+        events?: unknown;
+        meta?: Record<string, unknown> | null;
+      }
+    | null
+    | undefined,
   opts: EvaluatePineAlertsOpts = {},
 ): Promise<Alert[]> {
   if (!result) return [];
@@ -82,8 +89,7 @@ export async function evaluatePineAlertsFromRun(
   });
   saveAlerts(updated);
 
-  const price =
-    opts.price != null && Number.isFinite(opts.price) ? opts.price : 0;
+  const price = opts.price != null && Number.isFinite(opts.price) ? opts.price : 0;
 
   if (deliver) {
     await Promise.all(
@@ -104,12 +110,15 @@ export async function evaluatePineAlertsFromRun(
  * Fire-and-forget from the indicator runner. Never throws.
  */
 export function notifyPineAlertsFromRun(
-  result: {
-    alerts?: unknown;
-    alert_conditions?: unknown;
-    events?: unknown;
-    meta?: Record<string, unknown> | null;
-  } | null | undefined,
+  result:
+    | {
+        alerts?: unknown;
+        alert_conditions?: unknown;
+        events?: unknown;
+        meta?: Record<string, unknown> | null;
+      }
+    | null
+    | undefined,
   opts?: EvaluatePineAlertsOpts,
 ): void {
   void evaluatePineAlertsFromRun(result, opts).catch(() => {

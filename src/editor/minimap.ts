@@ -30,12 +30,28 @@ export const MINIMAP_MAX_LINES = 3000;
 export const MINIMAP_MIN_CONTAINER_WIDTH = 520;
 
 /** Fraction helpers shared with tests. */
-export function scrollFraction(scrollTop: number, scrollHeight: number, clientHeight: number): number {
+export function scrollFraction(
+  scrollTop: number,
+  scrollHeight: number,
+  clientHeight: number,
+): number {
   const max = Math.max(1, scrollHeight - clientHeight);
   return Math.min(1, Math.max(0, scrollTop / max));
 }
 
-export function scrollTopForFraction(fraction: number, scrollHeight: number, clientHeight: number): number {
+/**
+ * Inverse of {@link scrollFraction}: scroll offset for a 0–1 document fraction.
+ *
+ * @param fraction Clamped to 0–1.
+ * @param scrollHeight Total scrollable height (px).
+ * @param clientHeight Visible height (px).
+ * @returns Scroll offset in px (0 when nothing overflows).
+ */
+export function scrollTopForFraction(
+  fraction: number,
+  scrollHeight: number,
+  clientHeight: number,
+): number {
   const max = Math.max(0, scrollHeight - clientHeight);
   return Math.min(1, Math.max(0, fraction)) * max;
 }
@@ -130,11 +146,11 @@ export class EditorMinimap {
     const hostWidth = this.host.clientWidth;
     if (hostWidth < MINIMAP_MIN_CONTAINER_WIDTH) {
       this.canvas.style.display = 'none';
-      this.host.dataset.minimap = 'off';
+      this.host.dataset['minimap'] = 'off';
       return;
     }
     this.canvas.style.display = '';
-    this.host.dataset.minimap = 'on';
+    this.host.dataset['minimap'] = 'on';
     const lines = doc.lines;
     const step = Math.max(1, Math.ceil(lines / MINIMAP_MAX_LINES));
     const rows = Math.ceil(lines / step);
@@ -147,7 +163,10 @@ export class EditorMinimap {
     const availH = Math.max(1, this.host.clientHeight || h);
     const scale = Math.min(1, availH / h);
     const drawH = Math.max(1, Math.round(h * scale));
-    if (this.canvas.width !== Math.round(w * dpr) || this.canvas.height !== Math.round(drawH * dpr)) {
+    if (
+      this.canvas.width !== Math.round(w * dpr) ||
+      this.canvas.height !== Math.round(drawH * dpr)
+    ) {
       this.canvas.width = Math.round(w * dpr);
       this.canvas.height = Math.round(drawH * dpr);
       this.canvas.style.height = `${drawH}px`;

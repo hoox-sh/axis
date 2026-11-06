@@ -35,12 +35,9 @@ import {
 } from './defillama';
 import { resolveDefiLlamaBaseUrl } from './proxy';
 import { normalizeProtocolSlug } from './adapters';
-import type {
-  DatasetFetchOpts,
-  OnchainDataset,
-  OnchainInstrument,
-} from './types';
+import type { DatasetFetchOpts, OnchainDataset, OnchainInstrument } from './types';
 
+/** Dataset plugin id for the DefiLlama TVL dataset. */
 export const DEFILLAMA_DATASET_ID = 'defillama-tvl';
 
 /** Local registry mirror — always authoritative for this module's list APIs. */
@@ -92,13 +89,9 @@ export const defillamaTvlDatasetPlugin: DatasetPlugin = {
     const inst = opts?.instrument;
     if (!inst) throw new Error('DefiLlama TVL: instrument is required');
 
-    const slug = normalizeProtocolSlug(
-      inst.protocolId || inst.symbol || inst.address || '',
-    );
+    const slug = normalizeProtocolSlug(inst.protocolId || inst.symbol || inst.address || '');
     if (!slug) {
-      throw new Error(
-        'DefiLlama TVL: instrument.protocolId (or symbol) must be a protocol slug',
-      );
+      throw new Error('DefiLlama TVL: instrument.protocolId (or symbol) must be a protocol slug');
     }
 
     const cfg = opts.config || {};
@@ -119,20 +112,15 @@ export const defillamaTvlDatasetPlugin: DatasetPlugin = {
       (opts.endTime != null && Number.isFinite(opts.endTime))
     ) {
       const start =
-        opts.startTime != null && Number.isFinite(opts.startTime)
-          ? opts.startTime!
-          : -Infinity;
-      const end =
-        opts.endTime != null && Number.isFinite(opts.endTime)
-          ? opts.endTime!
-          : Infinity;
+        opts.startTime != null && Number.isFinite(opts.startTime) ? opts.startTime! : -Infinity;
+      const end = opts.endTime != null && Number.isFinite(opts.endTime) ? opts.endTime! : Infinity;
       if (ds.points) {
         ds.points = ds.points.filter((p) => p.time >= start && p.time <= end);
       }
-      if (ds.series?.tvl) {
+      if (ds.series?.['tvl']) {
         ds.series = {
           ...ds.series,
-          tvl: ds.series.tvl.filter((p) => p.time >= start && p.time <= end),
+          tvl: ds.series['tvl'].filter((p) => p.time >= start && p.time <= end),
         };
       }
     }
@@ -142,10 +130,10 @@ export const defillamaTvlDatasetPlugin: DatasetPlugin = {
       if (ds.points && ds.points.length > n) {
         ds.points = ds.points.slice(ds.points.length - n);
       }
-      if (ds.series?.tvl && ds.series.tvl.length > n) {
+      if (ds.series?.['tvl'] && ds.series['tvl'].length > n) {
         ds.series = {
           ...ds.series,
-          tvl: ds.series.tvl.slice(ds.series.tvl.length - n),
+          tvl: ds.series['tvl'].slice(ds.series['tvl'].length - n),
         };
       }
     }
@@ -166,8 +154,8 @@ export const defillamaTvlDatasetPlugin: DatasetPlugin = {
   ): Promise<OnchainInstrument[]> {
     const baseUrl = resolveDefiLlamaBaseUrl(config || {});
     const limit =
-      typeof config?.limit === 'number' && Number.isFinite(config.limit)
-        ? Math.floor(config.limit as number)
+      typeof config?.['limit'] === 'number' && Number.isFinite(config['limit'])
+        ? Math.floor(config['limit'] as number)
         : 20;
 
     const hits = await searchDefiLlamaProtocols(query, limit, { baseUrl });
@@ -180,6 +168,7 @@ export const defillamaTvlDatasetPlugin: DatasetPlugin = {
   },
 };
 
+/** Every dataset plugin shipped with AXIS; registered by {@link ensureOnchainDatasetsRegistered}. */
 export const BUILTIN_DATASETS: DatasetPlugin[] = [defillamaTvlDatasetPlugin];
 
 /**
@@ -264,10 +253,7 @@ export function registerDynamicDataset(plugin: DatasetPlugin): void {
 }
 
 /** Unregister a dynamic dataset (built-ins blocked unless forced). */
-export function unregisterDynamicDataset(
-  id: string,
-  opts?: { allowBuiltIn?: boolean },
-): boolean {
+export function unregisterDynamicDataset(id: string, opts?: { allowBuiltIn?: boolean }): boolean {
   ensureOnchainDatasetsRegistered();
   const existing = localDatasets.get(id) ?? registry.getDataset?.(id);
   if (!existing) return false;

@@ -30,10 +30,18 @@ export function shortRev(rev?: string): string {
   return rev.length > 10 ? rev.slice(0, 7) : rev;
 }
 
+/** Kind filter for the library list: `all` or one concrete {@link ScriptKind}. */
 export type ScriptKindFilter = 'all' | ScriptKind;
 
+/** Sort modes offered by the library toolbar. */
 export type ScriptSort = 'stored' | 'recent' | 'name';
 
+/**
+ * Script kind with a fallback for metadata written before the field existed.
+ *
+ * @param item - Stored script metadata.
+ * @returns The declared kind, or `unknown`.
+ */
 export function scriptKindOf(item: ScriptMeta): ScriptKind {
   return (item.scriptKind as ScriptKind) || 'unknown';
 }
@@ -61,6 +69,14 @@ export function scriptMatchesQuery(item: ScriptMeta, query: string): boolean {
     .every((part) => hay.includes(part));
 }
 
+/**
+ * Apply the search box and kind filter in one pass.
+ *
+ * @param items - Personal scripts to filter.
+ * @param query - Raw search text; empty matches everything.
+ * @param kind - Kind filter, defaults to `all`.
+ * @returns Matching scripts in their original order.
+ */
 export function filterPersonalScripts(
   items: readonly ScriptMeta[],
   query: string,
@@ -97,6 +113,12 @@ export function suggestScriptName(doc: string): string {
   return match?.[1]?.trim() ?? '';
 }
 
+/**
+ * Count scripts per kind for the filter chips, including `all`.
+ *
+ * @param items - Scripts in the current scope (already query-filtered if desired).
+ * @returns Count keyed by {@link ScriptKindFilter}.
+ */
 export function countScriptsByKind(items: readonly ScriptMeta[]): Record<ScriptKindFilter, number> {
   const counts = {
     all: items.length,
@@ -112,6 +134,7 @@ export function countScriptsByKind(items: readonly ScriptMeta[]): Record<ScriptK
   return counts;
 }
 
+/** Filter chips in canonical order; `unknown` is appended on demand. */
 export const SCRIPT_KIND_FILTERS: { id: ScriptKindFilter; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'indicator', label: 'IND' },
@@ -144,7 +167,9 @@ export function pinnedFirst<T extends { id: string }>(
   return [...first, ...rest];
 }
 
+/** One highlighted segment of a search hit; `match` segments get the accent style. */
 export type HighlightPart = { text: string; match: boolean };
+
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

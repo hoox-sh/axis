@@ -46,7 +46,9 @@ import type {
   ThemeTokens,
 } from './types';
 
+/** Cap on saved custom chart themes; hydration keeps the first N entries. */
 export const MAX_SAVED_THEMES = 40;
+/** Cap on standalone bar colorings; hydration keeps the first N entries. */
 export const MAX_BAR_THEMES = 40;
 const MAX_THEME_NAME = 48;
 
@@ -58,6 +60,12 @@ export function barTokenKeys(): readonly string[] {
   return BAR_KEYS;
 }
 
+/**
+ * Collapse whitespace, trim, and cap a user-entered theme name.
+ *
+ * @param name Raw name from the UI / persisted data.
+ * @returns Cleaned name (possibly empty when the input had no visible text).
+ */
 export function clampThemeName(name: string): string {
   return String(name || '')
     .replace(/\s+/g, ' ')
@@ -65,6 +73,12 @@ export function clampThemeName(name: string): string {
     .slice(0, MAX_THEME_NAME);
 }
 
+/**
+ * Mint a collision-resistant id for a new theme or bar coloring.
+ *
+ * @param prefix `thm` for chart themes, `bar` for bar colorings.
+ * @returns `<prefix>_<base36 time>_<4 random base36 chars>`.
+ */
 export function newThemeId(prefix: 'thm' | 'bar'): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
 }
@@ -103,7 +117,11 @@ export function coerceBarTokenBag(raw: unknown): ThemeTokens {
   return out;
 }
 
-export function barTokensEqual(a: ThemeTokens | null | undefined, b: ThemeTokens | null | undefined): boolean {
+/** Compare two bar token bags on the catalog `bar.*` keys only (null ≈ empty). */
+export function barTokensEqual(
+  a: ThemeTokens | null | undefined,
+  b: ThemeTokens | null | undefined,
+): boolean {
   const left = a || {};
   const right = b || {};
   for (const key of BAR_KEYS) {
@@ -139,6 +157,17 @@ export function withBarColorTheme(
   return { ...next, barThemeId: linked };
 }
 
+/**
+ * Snapshot live theme state as a named custom theme with an embedded bar coloring.
+ *
+ * The library link is kept only when the live `bar.*` tokens still equal the
+ * active library entry; otherwise the previous embedded name is reused and
+ * `refId` becomes null.
+ *
+ * @param args Id/name, live state, library list, active bar id, previous
+ *   embedded coloring (so a tweak keeps its name), and an optional clock.
+ * @returns A `SavedCustomTheme` ready for persistence.
+ */
 export function captureCustomTheme(args: {
   id: string;
   name: string;
@@ -152,7 +181,7 @@ export function captureCustomTheme(args: {
   const name = clampThemeName(args.name) || 'Theme';
   const tokens = barTokensFromState(args.state);
   const linked = args.activeBarThemeId
-    ? args.barThemes.find((bar) => bar.id === args.activeBarThemeId) ?? null
+    ? (args.barThemes.find((bar) => bar.id === args.activeBarThemeId) ?? null)
     : null;
   const linkedOk = linked && barTokensEqual(tokens, linked.tokens) ? linked : null;
   const previous = args.previousBar ?? null;
@@ -191,7 +220,9 @@ export function syncBarThemeIntoCharts(
   themes: readonly SavedCustomTheme[],
   bar: BarColorTheme,
 ): SavedCustomTheme[] {
-  return themes.map((theme) => (theme.barTheme.refId === bar.id ? attachBarTheme(theme, bar) : theme));
+  return themes.map((theme) =>
+    theme.barTheme.refId === bar.id ? attachBarTheme(theme, bar) : theme,
+  );
 }
 
 /** Drop the library link. The theme keeps the colors it already has. */
@@ -216,33 +247,42 @@ function hydrateEmbeddedBar(
 ): EmbeddedBarTheme {
   const bag = raw != null && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
   const fromTheme = barTokensFromState(theme);
-  const patch = coerceBarTokenBag(bag.tokens);
+  const patch = coerceBarTokenBag(bag['tokens']);
   const tokens = { ...fromTheme, ...patch };
-  const name = clampThemeName(typeof bag.name === 'string' ? bag.name : '') || fallbackName;
-  const refId = typeof bag.refId === 'string' && bag.refId.trim() ? bag.refId.trim() : null;
+  const name = clampThemeName(typeof bag['name'] === 'string' ? bag['name'] : '') || fallbackName;
+  const refId =
+    typeof bag['refId'] === 'string' && bag['refId'].trim() ? bag['refId'].trim() : null;
   return { refId, name, tokens };
 }
 
+/** Parse a persisted bar coloring; null when the id or name is missing/invalid. */
 export function hydrateBarColorTheme(raw: unknown): BarColorTheme | null {
   if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const bag = raw as Record<string, unknown>;
-  const id = typeof bag.id === 'string' ? bag.id.trim() : '';
-  const name = clampThemeName(typeof bag.name === 'string' ? bag.name : '');
+  const id = typeof bag['id'] === 'string' ? bag['id'].trim() : '';
+  const name = clampThemeName(typeof bag['name'] === 'string' ? bag['name'] : '');
   if (!id || !name) return null;
-  const tokens = fillBarTokens(coerceBarTokenBag(bag.tokens));
-  const updatedAt = typeof bag.updatedAt === 'number' && Number.isFinite(bag.updatedAt) ? bag.updatedAt : 0;
+  const tokens = fillBarTokens(coerceBarTokenBag(bag['tokens']));
+  const updatedAt =
+    typeof bag['updatedAt'] === 'number' && Number.isFinite(bag['updatedAt'])
+      ? bag['updatedAt']
+      : 0;
   return { id, name, tokens, updatedAt };
 }
 
+/** Parse a persisted custom theme (chart snapshot + embedded bars); null when invalid. */
 export function hydrateSavedCustomTheme(raw: unknown): SavedCustomTheme | null {
   if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const bag = raw as Record<string, unknown>;
-  const id = typeof bag.id === 'string' ? bag.id.trim() : '';
-  const name = clampThemeName(typeof bag.name === 'string' ? bag.name : '');
+  const id = typeof bag['id'] === 'string' ? bag['id'].trim() : '';
+  const name = clampThemeName(typeof bag['name'] === 'string' ? bag['name'] : '');
   if (!id || !name) return null;
-  const theme = hydrateChartTheme(bag.theme);
-  const barTheme = hydrateEmbeddedBar(bag.barTheme, theme, `${name} bars`);
-  const updatedAt = typeof bag.updatedAt === 'number' && Number.isFinite(bag.updatedAt) ? bag.updatedAt : 0;
+  const theme = hydrateChartTheme(bag['theme']);
+  const barTheme = hydrateEmbeddedBar(bag['barTheme'], theme, `${name} bars`);
+  const updatedAt =
+    typeof bag['updatedAt'] === 'number' && Number.isFinite(bag['updatedAt'])
+      ? bag['updatedAt']
+      : 0;
   return {
     id,
     name,
@@ -274,10 +314,12 @@ function takeNamed<T extends { id: string; name: string }>(
   return out;
 }
 
+/** Hydrate bar colorings, dropping invalid entries and duplicate ids/names. */
 export function hydrateBarColorThemes(raw: unknown): BarColorTheme[] {
   return takeNamed(raw, MAX_BAR_THEMES, hydrateBarColorTheme);
 }
 
+/** Hydrate saved chart themes, dropping invalid entries and duplicate ids/names. */
 export function hydrateSavedChartThemes(raw: unknown): SavedCustomTheme[] {
   return takeNamed(raw, MAX_SAVED_THEMES, hydrateSavedCustomTheme);
 }

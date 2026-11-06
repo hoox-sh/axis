@@ -24,8 +24,10 @@
  * @module alerts/indicator
  */
 
+/** One raw plot cell as the engine emits it: number, `na`-style string, or null. */
 export type PlotSampleLike = number | string | null | undefined;
 
+/** Series cache entry for one applied script: named plot arrays plus display titles. */
 export type IndicatorSeriesLike = {
   name?: string;
   series?: Record<string, PlotSampleLike[]>;
@@ -34,6 +36,8 @@ export type IndicatorSeriesLike = {
 
 /** Compare operators offered in the Alerts panel for plot conditions. */
 export const PINE_COMPARE_OPS = ['>', '>=', '<', '<=', '==', '!=', 'cross'] as const;
+
+/** Operator accepted by a `pine_condition` alert's `params.op`; `cross` needs two samples. */
 export type PineCompareOp = (typeof PINE_COMPARE_OPS)[number];
 
 function coerceNumeric(v: PlotSampleLike): number | null {

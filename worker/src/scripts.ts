@@ -251,7 +251,11 @@ async function getVersionD1(
     .first<ScriptVersionRow>();
 }
 
-async function archiveVersion(db: D1Database | undefined, userId: string, row: ScriptRow): Promise<void> {
+async function archiveVersion(
+  db: D1Database | undefined,
+  userId: string,
+  row: ScriptRow,
+): Promise<void> {
   if (db) {
     try {
       await putVersionD1(db, userId, row);
@@ -259,12 +263,14 @@ async function archiveVersion(db: D1Database | undefined, userId: string, row: S
     } catch (err) {
       // Live write already succeeded — never fail the save, but never
       // swallow the archive failure silently either (A20).
-      console.warn(JSON.stringify({
-        type: 'script_version_archive_failed',
-        id: row.id,
-        revision: row.revision,
-        error: err instanceof Error ? err.message : String(err),
-      }));
+      console.warn(
+        JSON.stringify({
+          type: 'script_version_archive_failed',
+          id: row.id,
+          revision: row.revision,
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      );
     }
   } else {
     archiveMemVersion(userId, row);
@@ -320,7 +326,8 @@ async function getD1(db: D1Database, userId: string, id: string): Promise<Script
     .first<ScriptRow>();
 }
 
-async function putD1(db: D1Database, userId: string, row: ScriptRow): Promise<void> {  await db
+async function putD1(db: D1Database, userId: string, row: ScriptRow): Promise<void> {
+  await db
     .prepare(
       `INSERT INTO scripts (user_id, id, name, description, path, content, revision, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -359,11 +366,7 @@ const corsJson: JsonBuilder = scopedJson(SCRIPTS_CORS);
 
 /** 413 envelope shared by the capped body reads below. */
 function tooLarge(origin: string): Response {
-  return corsJson(
-    errorBody('PAYLOAD_TOO_LARGE', 'script body too large'),
-    413,
-    origin,
-  );
+  return corsJson(errorBody('PAYLOAD_TOO_LARGE', 'script body too large'), 413, origin);
 }
 
 /** Bounded `?limit=` for the collection list (default 100, hard cap 500). */
@@ -512,7 +515,10 @@ export async function handleScripts(
     const ns = env.SCRIPT_ARTIFACTS;
     if (!ns) {
       return corsJson(
-        errorBody('GIT_BACKEND_UNAVAILABLE', 'Artifacts script repos not bound. Add [[artifacts]] SCRIPT_ARTIFACTS in wrangler.toml.'),
+        errorBody(
+          'GIT_BACKEND_UNAVAILABLE',
+          'Artifacts script repos not bound. Add [[artifacts]] SCRIPT_ARTIFACTS in wrangler.toml.',
+        ),
         503,
         origin,
       );
@@ -522,7 +528,11 @@ export async function handleScripts(
       return corsJson(
         {
           status: 'success',
-          git: { repo: repo.name, remote: repo.remote, defaultBranch: repo.defaultBranch || 'main' },
+          git: {
+            repo: repo.name,
+            remote: repo.remote,
+            defaultBranch: repo.defaultBranch || 'main',
+          },
         },
         200,
         origin,
@@ -602,7 +612,11 @@ export async function handleScripts(
       else memUser(userId).set(id, row);
       await archiveVersion(db, userId, row);
       await mirrorGit(env, ctx, userId, row);
-      return corsJson({ status: 'success', script: { ...rowToMeta(row), content: row.content } }, 201, origin);
+      return corsJson(
+        { status: 'success', script: { ...rowToMeta(row), content: row.content } },
+        201,
+        origin,
+      );
     }
     return corsJson(errorBody('METHOD', 'GET or POST required'), 405, origin);
   }
@@ -622,11 +636,7 @@ export async function handleScripts(
     if (!capped.ok) return tooLarge(origin);
     const rev = String(((capped.value ?? {}) as { revision?: string }).revision || '');
     if (!rev) {
-      return corsJson(
-        errorBody('VALIDATION', 'revision required'),
-        400,
-        origin,
-      );
+      return corsJson(errorBody('VALIDATION', 'revision required'), 400, origin);
     }
     let found: {
       content: string;
@@ -660,11 +670,7 @@ export async function handleScripts(
       found = (memUserVersions(userId).get(id) || []).find((v) => v.revision === rev) || null;
     }
     if (!found) {
-      return corsJson(
-        errorBody('NOT_FOUND', `version ${rev} not found for ${id}`),
-        404,
-        origin,
-      );
+      return corsJson(errorBody('NOT_FOUND', `version ${rev} not found for ${id}`), 404, origin);
     }
     const now = Date.now();
     let prev: ScriptRow | null = null;
@@ -744,11 +750,7 @@ export async function handleScripts(
         row = (memUserVersions(userId).get(id) || []).find((v) => v.revision === rev) || null;
       }
       if (!row) {
-        return corsJson(
-          errorBody('NOT_FOUND', `version ${rev} not found for ${id}`),
-          404,
-          origin,
-        );
+        return corsJson(errorBody('NOT_FOUND', `version ${rev} not found for ${id}`), 404, origin);
       }
       return corsJson(
         {
@@ -794,11 +796,7 @@ export async function handleScripts(
       // Insertion order is the tie-breaker when two saves share a timestamp.
       rows = [...(memUserVersions(userId).get(id) || [])].reverse();
     }
-    return corsJson(
-      { status: 'success', versions: rows.map(versionMeta) },
-      200,
-      origin,
-    );
+    return corsJson({ status: 'success', versions: rows.map(versionMeta) }, 200, origin);
   }
 
   if (req.method === 'GET') {
@@ -904,8 +902,8 @@ export async function handleScripts(
     const row: ScriptRow = {
       id,
       name: String(body.name || prev?.name || 'Untitled'),
-      description: body.description !== undefined ? body.description : prev?.description ?? null,
-      path: body.path !== undefined ? body.path : prev?.path ?? null,
+      description: body.description !== undefined ? body.description : (prev?.description ?? null),
+      path: body.path !== undefined ? body.path : (prev?.path ?? null),
       content: String(body.content ?? body.script ?? prev?.content ?? ''),
       revision: newRevision(),
       created_at: prev?.created_at || now,
@@ -943,7 +941,7 @@ export async function handleScripts(
 }
 
 /** Test-only: wipe isolate memory backends between cases. */
-export function _clearMemScripts() {
+export function _clearMemScripts(): void {
   memScripts.clear();
   memDrafts.clear();
   memVersions.clear();

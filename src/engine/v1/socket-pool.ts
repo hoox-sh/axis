@@ -21,22 +21,36 @@
 /** Live sockets this tab may hold at once. */
 export const TAB_SOCKET_CAP = 2;
 
+/**
+ * Identity of a pooled socket: endpoint plus auth token, so a key rotation never reuses a
+ * socket opened with the previous credential.
+ *
+ * @param endpoint Engine or Worker base URL the socket targets.
+ * @param token Auth token the socket was opened with (empty for unauthenticated).
+ * @returns Opaque fingerprint used as the pool key.
+ */
 export function socketFingerprint(endpoint: string, token = ''): string {
   return `${endpoint}\0${token}`;
 }
 
+/** A socket already open for the fingerprint, with a reference count. */
 export type SocketPoolLive<T> = {
   status: 'live';
   value: T;
   fingerprint: string;
 };
 
+/**
+ * A slot at the tab cap: nothing is open yet, and `wait` resolves once an evicted or released
+ * socket frees room.
+ */
 export type SocketPoolQueued<T> = {
   status: 'queued';
   fingerprint: string;
   wait: Promise<T>;
 };
 
+/** Either an immediately usable socket or a queued wait for one. */
 export type SocketPoolAcquire<T> = SocketPoolLive<T> | SocketPoolQueued<T>;
 
 type Slot<T> = { value: T; refs: number };
@@ -50,6 +64,11 @@ type Pending<T> = {
   waiters: number;
 };
 
+/**
+ * Reference-counted pool that keeps a tab within {@link TAB_SOCKET_CAP} live sockets:
+ * same-fingerprint acquires share one socket, a holder that switches fingerprints releases
+ * the old pin first, and eviction runs `onEvict` on the socket it drops.
+ */
 export class SocketPool<T> {
   readonly cap: number;
   private readonly live = new Map<string, Slot<T>>();

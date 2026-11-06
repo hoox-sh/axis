@@ -57,7 +57,9 @@ interface IngestWorkerScope {
   onmessage: ((ev: MessageEvent<HostToIngest>) => void) | null;
 }
 
-const scope = self as unknown as IngestWorkerScope;
+// In a dedicated worker `self` *is* this scope; `lib.dom` types it as `Window`,
+// whose `postMessage` signature carries a targetOrigin we never pass.
+const scope = self as IngestWorkerScope;
 const table = new IngestCursorTable();
 
 let ws: WebSocket | null = null;

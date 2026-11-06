@@ -7,8 +7,17 @@
  */
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
 import { StatusBar } from '../ui/StatusBar';
-const meta: Meta = { title: 'Chrome/StatusBar', tags: ['autodocs'], parameters: { layout: 'padded' } };
+const meta: Meta = {
+  title: 'Chrome/StatusBar',
+  tags: ['autodocs'],
+  parameters: { layout: 'padded' },
+};
 export default meta;
+/** Capsules with empty store state (dashes / offline until a session seeds them). */
 export const EmptyState: StoryObj = {
-  render: () => (<div style={{ width: '760px', 'max-width': '94vw' }}><StatusBar /></div>),
+  render: () => (
+    <div style={{ width: '760px', 'max-width': '94vw' }}>
+      <StatusBar />
+    </div>
+  ),
 };

@@ -258,6 +258,7 @@ export function getReplayBarsLength(): number {
   return sessionBarsLength;
 }
 
+/** True while a replay session is active (chart paints a history prefix). */
 export function isReplayActive(): boolean {
   return sessionState.active;
 }

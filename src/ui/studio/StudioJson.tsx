@@ -155,7 +155,18 @@ function JsonNode(props: { keyName: string | null; value: unknown; path: string 
   );
 }
 
-export function StudioJson(props: { value: unknown; testId?: string }) {
+/**
+ * Expandable JSON viewer for engine results (Results → Raw) with a source/tree
+ * toggle, key search, paged children, and expand-all.
+ *
+ * Open paths and page counts live in local state keyed by `$`-rooted paths, so
+ * the tree keeps its shape when the payload object identity changes. Source
+ * mode falls back to `String(value)` when the value is not serializable.
+ *
+ * @param props - Any result value plus an optional test id.
+ * @returns A toolbar + tree (or `<pre>` source) block.
+ */
+export function StudioJson(props: { value: unknown; testId?: string }): JSX.Element {
   const [mode, setMode] = createSignal<'tree' | 'source'>('tree');
   const [query, setQuery] = createSignal('');
   const [expanded, setExpanded] = createSignal<Set<string>>(new Set(['$']));

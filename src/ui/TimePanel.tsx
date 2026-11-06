@@ -48,7 +48,7 @@ function clockTime(ms: number): string {
 }
 
 /** Float-only time panel (candle countdown + clocks). */
-export const TimePanel: Component = () => {
+export const TimePanel: Component = () : JSX.Element => {
   const now = useNow();
 
   const barOpenMs = createMemo(() => {

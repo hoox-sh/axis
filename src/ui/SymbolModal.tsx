@@ -56,6 +56,7 @@ import {
   type SymbolPicks,
 } from './symbol-picks';
 
+/** Props for the symbol picker: visibility, close/select handlers, and initial filter. */
 export type SymbolModalProps = {
   open: boolean;
   onClose: () => void;
@@ -65,7 +66,8 @@ export type SymbolModalProps = {
   initialQuery?: string;
 };
 
-export const SymbolModal: Component<SymbolModalProps> = (props) => {
+/** Symbol picker overlay: filters the active exchange's instruments and reports the pick. */
+export const SymbolModal: Component<SymbolModalProps> = (props): JSX.Element => {
   const [query, setQuery] = createSignal('');
   const [quote, setQuote] = createSignal('ALL');
   const [rows, setRows] = createSignal<SymbolEntry[]>([]);

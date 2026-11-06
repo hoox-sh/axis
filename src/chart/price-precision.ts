@@ -16,7 +16,9 @@ import type { Bar } from '../store/types';
 /** Fixed decimals or auto-detect. */
 export type PriceScaleDecimalsMode = 'auto' | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 
+/** Lower bound of the fixed decimal range the scale control may cycle through. */
 export const PRICE_SCALE_DECIMALS_MIN = 0;
+/** Upper bound of the fixed decimal range the scale control may cycle through. */
 export const PRICE_SCALE_DECIMALS_MAX = 8;
 
 /** LWC `priceFormat` bag for a price series. */
@@ -29,10 +31,7 @@ export type PriceFormatOpts = {
 /** Clamp integer decimals into the supported range. */
 export function clampPriceDecimals(n: number): number {
   if (!Number.isFinite(n)) return 2;
-  return Math.min(
-    PRICE_SCALE_DECIMALS_MAX,
-    Math.max(PRICE_SCALE_DECIMALS_MIN, Math.round(n)),
-  );
+  return Math.min(PRICE_SCALE_DECIMALS_MAX, Math.max(PRICE_SCALE_DECIMALS_MIN, Math.round(n)));
 }
 
 /** Normalize unknown stored values → mode. */
@@ -47,7 +46,9 @@ export function normalizePriceScaleDecimalsMode(raw: unknown): PriceScaleDecimal
 export function countSignificantDecimals(n: number): number {
   if (!Number.isFinite(n)) return 0;
   // Avoid float junk (1.2300000001 → 1.23)
-  const s = Math.abs(n).toFixed(10).replace(/\.?0+$/, '');
+  const s = Math.abs(n)
+    .toFixed(10)
+    .replace(/\.?0+$/, '');
   const i = s.indexOf('.');
   return i < 0 ? 0 : s.length - i - 1;
 }
@@ -115,17 +116,11 @@ export function detectDecimalsFromSymbol(symbol: string): number | null {
   if (['SOL', 'AVAX', 'LINK', 'DOT', 'ATOM', 'UNI', 'LDO', 'NEAR'].includes(base)) {
     return 3;
   }
-  if (
-    ['XRP', 'ADA', 'DOGE', 'TRX', 'MATIC', 'POL', 'XLM', 'ALGO', 'HBAR', 'VET'].includes(
-      base,
-    )
-  ) {
+  if (['XRP', 'ADA', 'DOGE', 'TRX', 'MATIC', 'POL', 'XLM', 'ALGO', 'HBAR', 'VET'].includes(base)) {
     return 4;
   }
   // Micro / meme — many decimals
-  if (
-    ['SHIB', 'PEPE', 'FLOKI', 'BONK', 'SATS', '1000SATS', 'MEME', 'LUNC'].includes(base)
-  ) {
+  if (['SHIB', 'PEPE', 'FLOKI', 'BONK', 'SATS', '1000SATS', 'MEME', 'LUNC'].includes(base)) {
     return 8;
   }
 

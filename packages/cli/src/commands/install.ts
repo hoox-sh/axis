@@ -5,10 +5,10 @@
  * axis install — bun install at repo root, worker/, and packages/cli
  */
 
-import { existsSync } from "node:fs";
-import type { Command } from "commander";
-import { getPaths } from "../utils/paths.js";
-import { run, which } from "../utils/run.js";
+import { existsSync } from 'node:fs';
+import type { Command } from 'commander';
+import { getPaths } from '../utils/paths.js';
+import { run, which } from '../utils/run.js';
 import {
   CLIError,
   ExitCode,
@@ -18,32 +18,44 @@ import {
   printOk,
   wrapAction,
   type GlobalOpts,
-} from "../utils/format.js";
+} from '../utils/format.js';
 
 async function installDeps(dir: string, label: string, quiet?: boolean) {
   printInfo(`Installing ${label}…`, quiet);
-  await run("bun", ["install"], { cwd: dir, inherit: !quiet });
+  await run('bun', ['install'], { cwd: dir, inherit: !quiet });
   printOk(`${label} ready`, quiet);
 }
 
+/**
+ * Installs dependencies for the app, worker, and (when present) CLI package.
+ *
+ * Requires bun and installs each directory separately because they are independent
+ * package roots. Stops at the first failing install.
+ *
+ * @param opts - Global flags; `quiet` silences banners and streams the installs,
+ *   `json` prints `{ ok, installed }` instead of prose.
+ * @throws {CLIError} When bun is not on PATH (`ExitCode.ERROR` with an install
+ *   hint) or a target directory is missing (`ExitCode.NOT_FOUND`).
+ * @throws {Error} From {@link run} when a `bun install` exits non-zero.
+ */
 export async function runInstall(opts: GlobalOpts): Promise<void> {
-  if (!(await which("bun"))) {
+  if (!(await which('bun'))) {
     throw new CLIError(
-      "Bun is required (https://bun.sh).",
+      'Bun is required (https://bun.sh).',
       ExitCode.ERROR,
-      "Install: curl -fsSL https://bun.sh | bash"
+      'Install: curl -fsSL https://bun.sh | bash',
     );
   }
 
   const paths = getPaths();
-  printHeader("AXIS install", opts.quiet);
+  printHeader('AXIS install', opts.quiet);
 
   const targets: { dir: string; label: string }[] = [
-    { dir: paths.root, label: "app (root)" },
-    { dir: paths.worker, label: "worker" },
+    { dir: paths.root, label: 'app (root)' },
+    { dir: paths.worker, label: 'worker' },
   ];
   if (existsSync(paths.cli)) {
-    targets.push({ dir: paths.cli, label: "cli" });
+    targets.push({ dir: paths.cli, label: 'cli' });
   }
 
   for (const t of targets) {
@@ -60,12 +72,17 @@ export async function runInstall(opts: GlobalOpts): Promise<void> {
     });
     return;
   }
-  printOk("Install complete. Next: axis doctor && axis setup", opts.quiet);
+  printOk('Install complete. Next: axis doctor && axis setup', opts.quiet);
 }
 
+/**
+ * Registers `axis install`.
+ *
+ * @param program - Root commander program to attach the command to.
+ */
 export function registerInstall(program: Command): void {
   program
-    .command("install")
-    .description("Install app, worker, and CLI dependencies (bun install)")
+    .command('install')
+    .description('Install app, worker, and CLI dependencies (bun install)')
     .action(wrapAction(runInstall));
 }

@@ -27,6 +27,10 @@ import { setIndicatorPanelOpen, setStatus } from '../../store';
 import { runAndApply, type RunOptions, type RunResult } from '../runner';
 import { getBuiltinScript } from './catalog';
 
+/**
+ * Outcome of {@link applyBuiltinScript}: the normal run payload plus the
+ * catalog id, echoed even when the id is unknown and the run returned an error.
+ */
 export type ApplyBuiltinResult = RunResult & { builtinId: string };
 
 /**

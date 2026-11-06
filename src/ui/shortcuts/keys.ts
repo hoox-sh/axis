@@ -28,6 +28,7 @@
 
 import type { Chord } from './types';
 
+/** Host platform family; selects `Mod` expansion and the glyph set used by {@link formatChord}. */
 export type Platform = 'mac' | 'win' | 'linux';
 
 /** Detect the current platform defensively (no `navigator` in some test envs). */
@@ -77,8 +78,7 @@ export function parseChord(s: string, platform?: Platform): Chord {
   if (!tokens.length) throw new Error(`Invalid chord: ${s} — empty chord`);
 
   const chord: Chord = { key: '', mod: false, shift: false, alt: false, ctrl: false, meta: false };
-  for (let i = 0; i < tokens.length; i++) {
-    const t = tokens[i];
+  for (const [i, t] of tokens.entries()) {
     const lower = t.toLowerCase();
     const isLast = i === tokens.length - 1;
     if (lower === 'mod') {

@@ -24,8 +24,17 @@
 /** How long a firing stays on the "recently fired" edge. */
 export const RECENT_FIRE_MS = 15 * 60 * 1000;
 
+/** Row state the Alerts list paints: disabled, recently fired, or armed. */
 export type AlertRowTone = 'disabled' | 'fired' | 'armed';
 
+/**
+ * Tone for one alert row: `disabled` when not enabled, `fired` while the last
+ * fire is within {@link RECENT_FIRE_MS}, otherwise `armed`.
+ *
+ * @param alert Row fields the tone depends on; `lastFiredAt` is epoch ms
+ * @param now Evaluation clock in epoch ms (injectable for tests)
+ * @returns The tone to render for this row
+ */
 export function alertRowTone(
   alert: { enabled: boolean; lastFiredAt?: number | null },
   now = Date.now(),

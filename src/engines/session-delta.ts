@@ -38,6 +38,12 @@
  * @module engines/session-delta
  */
 
+/**
+ * Validated `delta` block of a PYNE session update: the index the tail starts at, the new
+ * total `count` (the session's version counter), and the tail length. Crosses the engine
+ * response boundary, so every field must be a non-negative integer with `tail_len ===
+ * count - base_index`.
+ */
 export interface SessionDeltaInfo {
   base_index: number;
   count: number;
@@ -55,11 +61,11 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 /** `delta` block of an update payload, or null when absent/malformed. */
 export function readDeltaInfo(payload: unknown): SessionDeltaInfo | null {
   if (!isRecord(payload)) return null;
-  const d = payload.delta;
+  const d = payload['delta'];
   if (!isRecord(d)) return null;
-  const base_index = d.base_index;
-  const count = d.count;
-  const tail_len = d.tail_len;
+  const base_index = d['base_index'];
+  const count = d['count'];
+  const tail_len = d['tail_len'];
   if (!isFiniteInt(base_index) || !isFiniteInt(count) || !isFiniteInt(tail_len)) return null;
   if (base_index < 0 || count < 0 || tail_len <= 0) return null;
   if (tail_len !== count - base_index) return null;
@@ -67,13 +73,13 @@ export function readDeltaInfo(payload: unknown): SessionDeltaInfo | null {
 }
 
 function plotsOf(payload: Record<string, unknown>): unknown[] | null {
-  const p = payload.plots;
+  const p = payload['plots'];
   if (p === undefined) return [];
   return Array.isArray(p) ? p : null;
 }
 
 function seriesOf(payload: Record<string, unknown>): Record<string, unknown[]> | null {
-  const s = payload.series;
+  const s = payload['series'];
   if (s === undefined) return {};
   if (!isRecord(s)) return null;
   for (const v of Object.values(s)) {
@@ -108,9 +114,7 @@ export function resolveSessionPayload(
   const upSeries = seriesOf(update);
   if (upPlots === null || upSeries === null) return null;
   const empty =
-    upPlots.length === 0 &&
-    Object.keys(upSeries).length === 0 &&
-    update.unchanged === true;
+    upPlots.length === 0 && Object.keys(upSeries).length === 0 && update['unchanged'] === true;
   if (empty) {
     return isRecord(cached) ? { ...cached } : null;
   }
@@ -124,7 +128,7 @@ function mergeDelta(
   delta: SessionDeltaInfo,
 ): Record<string, unknown> | null {
   if (!isRecord(cached)) return null;
-  const cachedCount = cached.count;
+  const cachedCount = cached['count'];
   if (!isFiniteInt(cachedCount)) return null;
   if (delta.count < cachedCount || delta.base_index > cachedCount) return null;
   const upPlots = plotsOf(update);
@@ -162,8 +166,10 @@ function mergeDelta(
   // Preserve plot_meta from the cache — deltas don't carry it, but the apply
   // path needs it for plot colors (engine meta colors). Without this, live
   // re-runs would lose the script's plot colors and fall back to palette.
-  const cachedPlotMeta = (cached as Record<string, unknown>).plot_meta;
-  const cachedMetaPlotMeta = ((cached as Record<string, unknown>).meta as Record<string, unknown> | undefined)?.plot_meta;
+  const cachedPlotMeta = (cached as Record<string, unknown>)['plot_meta'];
+  const cachedMetaPlotMeta = (
+    (cached as Record<string, unknown>)['meta'] as Record<string, unknown> | undefined
+  )?.['plot_meta'];
   const { delta: _drop, ...rest } = update;
   void _drop;
   return {
@@ -173,7 +179,14 @@ function mergeDelta(
     count: delta.count,
     ...(mergedTimes ? { times: mergedTimes } : {}),
     ...(cachedPlotMeta ? { plot_meta: cachedPlotMeta } : {}),
-    ...(cachedMetaPlotMeta ? { meta: { ...((cached as Record<string, unknown>).meta as Record<string, unknown>), plot_meta: cachedMetaPlotMeta } } : {}),
+    ...(cachedMetaPlotMeta
+      ? {
+          meta: {
+            ...((cached as Record<string, unknown>)['meta'] as Record<string, unknown>),
+            plot_meta: cachedMetaPlotMeta,
+          },
+        }
+      : {}),
   };
 }
 
@@ -192,11 +205,7 @@ function timesOf(payload: unknown): unknown[] | null {
  * length information (plotless strategies) and stay empty; otherwise the
  * splice must land exactly on `delta.count`.
  */
-function spliceColumn(
-  full: unknown[],
-  tail: unknown[],
-  delta: SessionDeltaInfo,
-): unknown[] | null {
+function spliceColumn(full: unknown[], tail: unknown[], delta: SessionDeltaInfo): unknown[] | null {
   if (full.length === 0 && tail.length === 0) return tail;
   if (tail.length !== delta.tail_len) return null;
   const merged = [...full.slice(0, delta.base_index), ...tail];

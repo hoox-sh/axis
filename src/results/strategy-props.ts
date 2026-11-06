@@ -30,8 +30,13 @@
  * @module results/strategy-props
  */
 
+/** Value kind of one editable `strategy()` property. */
 export type StrategyPropType = 'int' | 'float' | 'bool' | 'string' | 'enum';
 
+/**
+ * One Properties-tab field: a catalog row plus the value resolved from the
+ * declaration and the stored overrides (see {@link resolveStrategyProps}).
+ */
 export interface StrategyPropDef {
   /** Pine kwarg name (`initial_capital`, …) */
   id: string;
@@ -153,8 +158,7 @@ export const STRATEGY_PROP_CATALOG: readonly Omit<StrategyPropDef, 'value'>[] = 
     min: 1,
     step: 0.5,
     group: 'Margin',
-    tooltip:
-      'Buying-power multiplier (pyne extension). Prefer over margin % when set.',
+    tooltip: 'Buying-power multiplier (pyne extension). Prefer over margin % when set.',
   },
   {
     id: 'margin_long',
@@ -280,10 +284,7 @@ function splitTopLevelArgs(inner: string): string[] {
 
 function unquote(s: string): string {
   const t = s.trim();
-  if (
-    (t.startsWith('"') && t.endsWith('"')) ||
-    (t.startsWith("'") && t.endsWith("'"))
-  ) {
+  if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'"))) {
     return t.slice(1, -1);
   }
   return t;
@@ -297,10 +298,7 @@ function parseLiteral(raw: string): unknown {
   if (s === 'na' || s === 'None' || s === 'null') return null;
   if (/^-?\d+$/.test(s)) return Number(s);
   if (/^-?\d+\.\d+([eE][+-]?\d+)?$/.test(s)) return Number(s);
-  if (
-    (s.startsWith('"') && s.endsWith('"')) ||
-    (s.startsWith("'") && s.endsWith("'"))
-  ) {
+  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
     return unquote(s);
   }
   return s;
@@ -338,9 +336,7 @@ export function findStrategyCall(source: string): {
  * Parse named kwargs from the first `strategy(...)` declaration.
  * Positional title/shorttitle/overlay are ignored (not overridable here).
  */
-export function parseStrategyDeclaration(
-  source: string,
-): Record<string, unknown> {
+export function parseStrategyDeclaration(source: string): Record<string, unknown> {
   const call = findStrategyCall(source);
   if (!call) return {};
   const args = splitTopLevelArgs(call.inner);
@@ -398,7 +394,10 @@ export function normalizeStrategyEnum(id: string, value: unknown): unknown {
     return s.startsWith('strategy.') ? s : `strategy.${bare}`;
   }
   if (id === 'commission_type') {
-    const bare = s.replace(/^strategy\.commission\./, '').replace(/^strategy\./, '').toLowerCase();
+    const bare = s
+      .replace(/^strategy\.commission\./, '')
+      .replace(/^strategy\./, '')
+      .toLowerCase();
     if (bare === 'percent' || bare === 'commission.percent') {
       return 'strategy.commission.percent';
     }
@@ -456,20 +455,14 @@ function samePropValue(a: unknown, b: unknown): boolean {
   if (a === b) return true;
   if (a == null && b == null) return true;
   if (typeof a === 'number' && typeof b === 'number') {
-    return (
-      Number.isFinite(a) &&
-      Number.isFinite(b) &&
-      Math.abs(a - b) < PROP_NUM_EPS
-    );
+    return Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) < PROP_NUM_EPS;
   }
   if (typeof a === 'string' && typeof b === 'string') return a === b;
   return false;
 }
 
 /** Persist only values that differ from the declaration (or catalog) default. */
-export function strategyOverridesFromDefs(
-  defs: StrategyPropDef[],
-): Record<string, unknown> {
+export function strategyOverridesFromDefs(defs: StrategyPropDef[]): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const d of defs) {
     const v = d.value !== undefined ? d.value : d.default;
@@ -487,10 +480,7 @@ export function applyStrategyOverrides(
   if (!overrides || !Object.keys(overrides).length) return defs;
   return defs.map((d) => {
     if (overrides[d.id] === undefined || overrides[d.id] === null) return d;
-    const v =
-      d.type === 'enum'
-        ? normalizeStrategyEnum(d.id, overrides[d.id])
-        : overrides[d.id];
+    const v = d.type === 'enum' ? normalizeStrategyEnum(d.id, overrides[d.id]) : overrides[d.id];
     return { ...d, value: v };
   });
 }
@@ -555,10 +545,7 @@ export function applyStrategyPropsToSource(
     kwargs.set(key, formatPineKwarg(key, v).slice(key.length + 1));
   }
 
-  const parts = [
-    ...positionals,
-    ...[...kwargs.entries()].map(([k, raw]) => `${k}=${raw}`),
-  ];
+  const parts = [...positionals, ...[...kwargs.entries()].map(([k, raw]) => `${k}=${raw}`)];
   const rebuilt = `strategy(${parts.join(', ')})`;
   return source.slice(0, call.startIdx) + rebuilt + source.slice(call.closeIdx + 1);
 }

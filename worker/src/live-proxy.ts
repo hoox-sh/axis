@@ -38,13 +38,21 @@
 import { requireApiKey } from './auth';
 import { API_CORS, errorResponse } from './http';
 import type { Env } from './index';
+import { emitLiveMetric, RelayStats } from './live-metrics';
 
 const CORS = API_CORS;
 
+/**
+ * Lifetime of a one-shot live-socket ticket, in seconds.
+ *
+ * Applied as the `API_KEYS` KV TTL and as the in-memory expiry, so a ticket is
+ * unusable ~60 s after issue whether or not KV is bound.
+ */
 export const LIVE_TICKET_TTL_S = 60;
 const TICKET_PREFIX = 'liveticket:';
 const memTickets = new Map<string, { userId: string; exp: number }>();
 
+/** @internal test helper — drop in-memory live tickets between cases. */
 export function _resetLiveTicketsForTests(): void {
   memTickets.clear();
 }
@@ -197,6 +205,11 @@ function relayIncoming(dest: WebSocket, data: unknown): void {
     });
 }
 
+/** Current depth of the in-order send lane for a destination socket. */
+function lanePendingOf(dest: WebSocket): number {
+  return relayLanes.get(dest)?.pending ?? 0;
+}
+
 /**
  * Handle `/api/ws/live` (ticket issue + WS upgrade proxy).
  * Returns null for any other path so the router can fall through.
@@ -277,11 +290,21 @@ export async function handleLiveProxy(
   // Before accept(): compat dates ≥ 2026-03-17 otherwise deliver Blob.
   preferArrayBuffer(srv);
   srv.accept();
+
+  const stats = new RelayStats();
+  try {
+    stats.upstreamHost = new URL(upstreamUrl).host;
+  } catch {
+    /* never log a malformed origin */
+  }
+
   let upstream: WebSocket | null = null;
+  const tUpstreamConnect = Date.now();
   try {
     upstream = new WebSocket(upstreamUrl);
     preferArrayBuffer(upstream);
-  } catch (err) {
+  } catch {
+    stats.finalize('upstream');
     try {
       (server as WebSocket).close(1011, 'upstream unavailable');
     } catch {
@@ -297,6 +320,12 @@ export async function handleLiveProxy(
   const pendingToUpstream: unknown[] = [];
   const PENDING_TO_UP_CAP = 32;
   up.addEventListener('open', () => {
+    stats.upstreamConnectMs = Date.now() - tUpstreamConnect;
+    emitLiveMetric({
+      type: 'live_relay_upstream_open',
+      connect_ms: stats.upstreamConnectMs,
+      upstream_host: stats.upstreamHost,
+    });
     upstreamOpen = true;
     for (const data of pendingToUpstream) {
       relayIncoming(up, data);
@@ -311,7 +340,9 @@ export async function handleLiveProxy(
     }
   });
   up.addEventListener('message', (ev) => {
+    stats.noteFrame('down', ev.data);
     relayIncoming(srv, ev.data);
+    stats.noteLanePending(lanePendingOf(srv));
   });
   const closeUp = (code: number, reason: string) => {
     try {
@@ -321,6 +352,7 @@ export async function handleLiveProxy(
     }
   };
   up.addEventListener('close', () => {
+    stats.finalize('upstream');
     try {
       srv.close(1000, 'upstream closed');
     } catch {
@@ -328,6 +360,7 @@ export async function handleLiveProxy(
     }
   });
   up.addEventListener('error', () => {
+    stats.finalize('upstream');
     try {
       srv.close(1011, 'upstream error');
     } catch {
@@ -335,13 +368,26 @@ export async function handleLiveProxy(
     }
   });
   srv.addEventListener('message', (ev) => {
+    stats.noteFrame('up', ev.data);
     if (!upstreamOpen) {
-      if (pendingToUpstream.length < PENDING_TO_UP_CAP) pendingToUpstream.push(ev.data);
+      if (pendingToUpstream.length < PENDING_TO_UP_CAP) {
+        pendingToUpstream.push(ev.data);
+        stats.notePendingToUpstream(pendingToUpstream.length);
+      } else {
+        stats.droppedToUpstream += 1;
+      }
       return;
     }
     relayIncoming(up, ev.data);
+    stats.noteLanePending(lanePendingOf(up));
   });
-  srv.addEventListener('close', () => closeUp(1000, 'client closed'));
-  srv.addEventListener('error', () => closeUp(1011, 'client error'));
+  srv.addEventListener('close', () => {
+    stats.finalize('client');
+    closeUp(1000, 'client closed');
+  });
+  srv.addEventListener('error', () => {
+    stats.finalize('client');
+    closeUp(1011, 'client error');
+  });
   return new Response(null, { status: 101, webSocket: client });
 }

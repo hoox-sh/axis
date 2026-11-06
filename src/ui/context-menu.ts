@@ -24,7 +24,7 @@
  * @module ui/context-menu
  */
 
-/** One row in a context menu. */
+/** One selectable row in a context menu, with optional checked/danger styling. */
 export type ContextMenuItem = {
   type: 'item';
   id: string;
@@ -35,12 +35,13 @@ export type ContextMenuItem = {
   danger?: boolean;
 };
 
-/** Hairline between groups. */
+/** Non-interactive divider between menu groups. */
 export type ContextMenuSep = {
   type: 'sep';
   id: string;
 };
 
+/** A menu is a flat list of rows and separators in render order. */
 export type ContextMenuEntry = ContextMenuItem | ContextMenuSep;
 
 /**

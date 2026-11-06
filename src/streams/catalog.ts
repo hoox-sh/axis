@@ -93,11 +93,12 @@ function intervalToSec(iv: string): number {
   if (month) return parseInt(month[1]!, 10) * 30 * 86400;
   const m = /^(\d+)([smhdw])$/.exec(raw);
   if (!m) return 86400;
-  const n = parseInt(m[1], 10);
+  const n = parseInt(m[1] ?? '', 10);
   const mult: Record<string, number> = { s: 1, m: 60, h: 3600, d: 86400, w: 604800 };
-  return n * (mult[m[2]] || 86400);
+  return n * (mult[m[2] ?? ''] || 86400);
 }
 
+/** Binance spot kline stream; rotates :9443 → :443 → data-stream on reconnect. */
 export const binanceStream: StreamPlugin = {
   id: 'binance-ws',
   name: 'Binance WebSocket',
@@ -121,7 +122,9 @@ export const binanceStream: StreamPlugin = {
       asProviderMarket(store.provider?.market),
     );
     return openReconnectableWs({
-      url: urls[0] || `wss://stream.binance.com:9443/ws/${String(symbol || '').toLowerCase()}@kline_${wsInterval}`,
+      url:
+        urls[0] ||
+        `wss://stream.binance.com:9443/ws/${String(symbol || '').toLowerCase()}@kline_${wsInterval}`,
       urls,
       onStatus,
       onError,
@@ -473,7 +476,11 @@ export const coinbaseStream: StreamPlugin = {
               if (![ohlcv.open, ohlcv.high, ohlcv.low, ohlcv.close].every(Number.isFinite)) {
                 continue;
               }
-              const mergeVolume = !(seededFromLast && cur && cur.time === Math.floor(startSec / step) * step);
+              const mergeVolume = !(
+                seededFromLast &&
+                cur &&
+                cur.time === Math.floor(startSec / step) * step
+              );
               const prev: Bar | null = cur;
               const prevWasSeed = seededFromLast;
               cur = foldVenueCandle(cur, startSec, ohlcv, step, { mergeVolume });
@@ -626,12 +633,12 @@ export const mexcStream: StreamPlugin = {
           };
           const k = msg?.d?.k || msg?.k;
           if (!k) return;
-          const t = Number(k.t);
-          const open = Number(k.o);
-          const high = Number(k.h);
-          const low = Number(k.l);
-          const close = Number(k.c);
-          const volume = Number(k.v);
+          const t = Number(k['t']);
+          const open = Number(k['o']);
+          const high = Number(k['h']);
+          const low = Number(k['l']);
+          const close = Number(k['c']);
+          const volume = Number(k['v']);
           if (!Number.isFinite(t) || t <= 0) return;
           if (![open, high, low, close].every(Number.isFinite)) return;
           onBar({
@@ -684,41 +691,46 @@ export const ccxtWsStream: StreamPlugin = {
     },
   },
   start({ symbol, interval, onBar, onStatus, onError, config }) {
-    const exchange = String(config?.exchange ?? '').trim();
+    const exchange = String(config?.['exchange'] ?? '').trim();
     if (!exchange) {
       onError?.(new Error('ccxt-ws: exchange id not configured (stream settings)'));
       return () => {};
     }
-    const gateway = String(config?.gateway ?? 'auto') as 'auto' | 'pyne' | 'sidecar';
+    const gateway = String(config?.['gateway'] ?? 'auto') as 'auto' | 'pyne' | 'sidecar';
     let stopped = false;
     let ws: WebSocket | undefined;
-    void import('../data/ccxt-session').then(({ bindCcxtSession }) => bindCcxtSession(gateway, exchange)).then((cred) => {
-      if (stopped) return;
-      const q = new URLSearchParams({
-        exchange,
-        symbol,
-        timeframe: interval,
+    void import('../data/ccxt-session')
+      .then(({ bindCcxtSession }) => bindCcxtSession(gateway, exchange))
+      .then((cred) => {
+        if (stopped) return;
+        const q = new URLSearchParams({
+          exchange,
+          symbol,
+          timeframe: interval,
+        });
+        if (cred) q.set('cred', cred);
+        ws = gatewayWs(gateway, `/watch?${q.toString()}`);
+        ws.onmessage = (ev: MessageEvent) => {
+          try {
+            const frame = JSON.parse(String(ev.data));
+            const bar = sanitizeStreamBar(frame);
+            if (bar) onBar(bar);
+          } catch {
+            /* ignore malformed frames */
+          }
+        };
+        ws.onerror = (ev: Event) => onError?.(new Error(String(ev)));
+        ws.onopen = () => onStatus?.({ state: 'open' });
+        // No auto-reconnect here: report an unexpected drop so Live goes offline
+        // instead of staying green on a dead socket (multiplex keys off `closed`).
+        ws.onclose = () =>
+          onStatus?.(
+            stopped ? { state: 'closed' } : { state: 'closed', detail: 'connection lost' },
+          );
+      })
+      .catch((err: unknown) => {
+        if (!stopped) onError?.(err instanceof Error ? err : new Error(String(err)));
       });
-      if (cred) q.set('cred', cred);
-      ws = gatewayWs(gateway, `/watch?${q.toString()}`);
-      ws.onmessage = (ev: MessageEvent) => {
-        try {
-          const frame = JSON.parse(String(ev.data));
-          const bar = sanitizeStreamBar(frame);
-          if (bar) onBar(bar);
-        } catch {
-          /* ignore malformed frames */
-        }
-      };
-      ws.onerror = (ev: Event) => onError?.(new Error(String(ev)));
-      ws.onopen = () => onStatus?.({ state: 'open' });
-      // No auto-reconnect here: report an unexpected drop so Live goes offline
-      // instead of staying green on a dead socket (multiplex keys off `closed`).
-      ws.onclose = () =>
-        onStatus?.(stopped ? { state: 'closed' } : { state: 'closed', detail: 'connection lost' });
-    }).catch((err: unknown) => {
-      if (!stopped) onError?.(err instanceof Error ? err : new Error(String(err)));
-    });
     return () => {
       stopped = true;
       try {
@@ -730,6 +742,7 @@ export const ccxtWsStream: StreamPlugin = {
   },
 };
 
+/** Every stream plugin shipped with AXIS, in registration order. */
 export const BUILTIN_STREAMS: StreamPlugin[] = [
   binanceStream,
   okxStream,
@@ -778,11 +791,23 @@ export function registerDynamicStream(stream: StreamPlugin): void {
   registry.registerStream(withKind);
 }
 
+/**
+ * Unregister a runtime stream plugin.
+ *
+ * @param id Stream id
+ * @returns true when it was removed; false for unknown ids and for built-ins,
+ *   which the registry refuses to drop
+ */
 export function unregisterDynamicStream(id: string): boolean {
   ensureStreamsRegistered();
   return registry.unregisterStream(id);
 }
 
+/**
+ * Ids of the streams that were installed at runtime (dynamic URL loader).
+ *
+ * @returns Non-built-in stream ids in registration order
+ */
 export function listDynamicStreamIds(): string[] {
   ensureStreamsRegistered();
   return registry
@@ -793,14 +818,11 @@ export function listDynamicStreamIds(): string[] {
 
 /** Pick a sensible stream for the current historical source. */
 export function defaultStreamForSource(sourceId: string): string {
-  const underlying =
-    sourceId === 'data-manager'
-      ? getDataManagerSelection()?.sourceId
-      : undefined;
+  const underlying = sourceId === 'data-manager' ? getDataManagerSelection()?.sourceId : undefined;
   return defaultStreamForSourceId(sourceId, underlying);
 }
 
 /** @internal test helper */
-export function _resetStreamRegistrationFlag() {
+export function _resetStreamRegistrationFlag(): void {
   registered = false;
 }

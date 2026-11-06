@@ -47,7 +47,13 @@ const HIDE_MS = 1200;
 /** Event name emitted by dispatchShortcut on a consumed key. */
 export const SHORTCUT_FIRED_EVENT = 'axis-shortcut-fired';
 
-export const ShortcutFeedback: Component = () => {
+/**
+ * Bottom-center chip that flashes the chord and description of the shortcut
+ * that just fired. Mount once in the app shell; it owns a `window` listener on
+ * {@link SHORTCUT_FIRED_EVENT} and is `pointer-events: none` so it never
+ * steals focus from the palette input.
+ */
+export const ShortcutFeedback: Component = (): JSX.Element => {
   const [visible, setVisible] = createSignal(false);
   const [chord, setChord] = createSignal('');
   const [label, setLabel] = createSignal('');

@@ -26,6 +26,7 @@
 import { type Component, type JSX, Show, splitProps } from 'solid-js';
 import { HooxLogo, type HooxLogoSize, resolveLogoSize } from './HooxLogo';
 
+/** Props for the branded loader: mark size, optional caption, and layout mode. */
 export type HooxLoaderProps = {
   size?: HooxLogoSize;
   /** Optional caption under / beside the mark */
@@ -36,14 +37,13 @@ export type HooxLoaderProps = {
   'data-testid'?: string;
 } & JSX.HTMLAttributes<HTMLSpanElement>;
 
-export const HooxLoader: Component<HooxLoaderProps> = (props) => {
-  const [local, rest] = splitProps(props, [
-    'size',
-    'label',
-    'layout',
-    'class',
-    'data-testid',
-  ]);
+/**
+ * Branded loading indicator: animated mark plus optional caption. Announces
+ * "Loading" (or the label) to assistive tech and defaults to an inline row when
+ * a label is given.
+ */
+export const HooxLoader: Component<HooxLoaderProps> = (props): JSX.Element => {
+  const [local, rest] = splitProps(props, ['size', 'label', 'layout', 'class', 'data-testid']);
   const size = () => local.size ?? 'm';
   const layout = () => local.layout ?? (local.label ? 'inline' : 'icon');
   const px = () => resolveLogoSize(size());
@@ -83,12 +83,15 @@ export const HooxLoader: Component<HooxLoaderProps> = (props) => {
 };
 
 /** Convenience aliases */
-export const HooxLoaderXs: Component<Omit<HooxLoaderProps, 'size'>> = (p) => (
+/** Small loader preset (`size="xs"`); all other props pass through. */
+export const HooxLoaderXs: Component<Omit<HooxLoaderProps, 'size'>> = (p): JSX.Element => (
   <HooxLoader {...p} size="xs" />
 );
-export const HooxLoaderM: Component<Omit<HooxLoaderProps, 'size'>> = (p) => (
+/** Medium loader preset (`size="m"`), the default size. */
+export const HooxLoaderM: Component<Omit<HooxLoaderProps, 'size'>> = (p): JSX.Element => (
   <HooxLoader {...p} size="m" />
 );
-export const HooxLoaderL: Component<Omit<HooxLoaderProps, 'size'>> = (p) => (
+/** Large loader preset (`size="l"`) for full-page boot states. */
+export const HooxLoaderL: Component<Omit<HooxLoaderProps, 'size'>> = (p): JSX.Element => (
   <HooxLoader {...p} size="l" />
 );

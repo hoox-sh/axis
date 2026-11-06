@@ -17,7 +17,12 @@ import {
   getCachedEngineHealth,
   probeEngineHealth,
 } from '../../engines/catalog';
-import { compileReadiness, healthAdvertises, advertisedRunMode, type EngineHealth } from '../../engines/health';
+import {
+  compileReadiness,
+  healthAdvertises,
+  advertisedRunMode,
+  type EngineHealth,
+} from '../../engines/health';
 import { prewarmEngine, prewarmAppliedScripts } from '../../engines/prewarm';
 import { EngineProPanel } from './EngineProPanel';
 import { probeEndpoint } from '../../indicators/runner';
@@ -57,10 +62,18 @@ import {
 } from './engine-config';
 import { getEngineApiKey } from '../../storage/vault';
 
+/**
+ * Runtime studio page: pick an engine, probe its health, and save endpoint /
+ * exec mode / transport / API key / prewarm settings. Form signals are seeded
+ * from the store but only written on save, so probing never mutates config.
+ *
+ * @param props - Navigation and close handlers supplied by the studio shell.
+ * @returns The runtime configuration page body.
+ */
 export function RuntimePage(props: {
   onNavigate: (id: StudioPageId) => void;
   onClose: () => void;
-}) {
+}): JSX.Element {
   const [engine, setEngine] = createSignal(store.engine);
   const [endpoint, setEndpoint] = createSignal(store.endpoint || '');
   const [execMode, setExecMode] = createSignal<EngineExecMode>('interpret');
@@ -92,22 +105,19 @@ export function RuntimePage(props: {
     // Prefer the backend's advertised default when the user never saved one —
     // a host configured for interpret should not open on `auto`.
     const advertised = engineId === 'server' ? advertisedRunMode(getCachedEngineHealth()) : null;
-    const defaultMode = normalizeExecMode(
-      advertised ?? schema?.mode?.default,
-      'interpret',
-    );
-    setExecMode(normalizeExecMode(cfg.mode, defaultMode));
-    if (typeof cfg.preferWs === 'boolean') setPreferWs(cfg.preferWs);
-    else setPreferWs(schema?.preferWs?.default !== false);
+    const defaultMode = normalizeExecMode(advertised ?? schema?.['mode']?.default, 'interpret');
+    setExecMode(normalizeExecMode(cfg['mode'], defaultMode));
+    if (typeof cfg['preferWs'] === 'boolean') setPreferWs(cfg['preferWs']);
+    else setPreferWs(schema?.['preferWs']?.default !== false);
     // The durable payload strips `apiKey` — read the session vault so the field
     // is not empty after a reload (and Save does not wipe the stored key).
-    const bagKey = typeof cfg.apiKey === 'string' ? cfg.apiKey.trim() : '';
+    const bagKey = typeof cfg['apiKey'] === 'string' ? cfg['apiKey'].trim() : '';
     const vaultKey = getEngineApiKey(store.pluginsConfig, engineId);
-    setApiKey(bagKey || vaultKey || String(schema?.apiKey?.default || ''));
+    setApiKey(bagKey || vaultKey || String(schema?.['apiKey']?.default || ''));
     setAutoPrewarm(cfg[AUTO_PREWARM_FIELD] === true);
     if (engineId === 'pyne-worker') {
       const def = String(
-        schema?.endpoint?.default || 'https://pyne-worker.cryptolinx.workers.dev',
+        schema?.['endpoint']?.default || 'https://pyne-worker.cryptolinx.workers.dev',
       ).replace(/\/$/, '');
       const cur = endpoint().trim();
       if (!cur || /127\.0\.0\.1|localhost|:5002/i.test(cur)) setEndpoint(def);
@@ -145,7 +155,7 @@ export function RuntimePage(props: {
     // Compare against the endpoint the engine actually probes (store.endpoint,
     // else the schema default) so a stock install still shows readiness.
     const effective = String(
-      store.endpoint || getEngine('server')?.configSchema?.endpoint?.default || '',
+      store.endpoint || getEngine('server')?.configSchema?.['endpoint']?.default || '',
     )
       .trim()
       .replace(/\/$/, '');
@@ -222,7 +232,11 @@ export function RuntimePage(props: {
     }
   };
 
-  const applyPreset = (ep: string, engineId: string, extra?: { mode?: EngineExecMode; ws?: boolean }) => {
+  const applyPreset = (
+    ep: string,
+    engineId: string,
+    extra?: { mode?: EngineExecMode; ws?: boolean },
+  ) => {
     setEndpoint(ep);
     setEngine(engineId);
     hydrate(engineId);
@@ -261,8 +275,7 @@ export function RuntimePage(props: {
 
   const loopbackWarn = createMemo(() => {
     const ep = endpoint().trim().toLowerCase();
-    const loop =
-      ep.includes('localhost') || ep.includes('127.0.0.1') || ep.includes('0.0.0.0');
+    const loop = ep.includes('localhost') || ep.includes('127.0.0.1') || ep.includes('0.0.0.0');
     const remotePage =
       typeof location !== 'undefined' &&
       location.hostname !== 'localhost' &&
@@ -275,10 +288,7 @@ export function RuntimePage(props: {
       <div class="ax-page-canvas">
         <div class="ax-grid ax-grid--3">
           <StudioStat label="Engine" value={selected()?.name || engine() || '—'} />
-          <StudioStat
-            label="Health"
-            value={<StudioStatus status={health()} />}
-          />
+          <StudioStat label="Health" value={<StudioStatus status={health()} />} />
           <StudioStat label="Catalog match" value={matched()} />
         </div>
 
@@ -406,7 +416,11 @@ export function RuntimePage(props: {
                       placeholder="http://host:5002 or Worker URL"
                       spellcheck={false}
                     />
-                    <StudioButton variant="ghost" disabled={probing()} onClick={() => void testEndpoint()}>
+                    <StudioButton
+                      variant="ghost"
+                      disabled={probing()}
+                      onClick={() => void testEndpoint()}
+                    >
                       {probing() ? <HooxLoader size="xs" /> : <Icons.activity />}
                       Test
                     </StudioButton>
@@ -446,11 +460,9 @@ export function RuntimePage(props: {
                   <StudioChip
                     testId="axis-endpoint-preset-pyne-worker"
                     onClick={() =>
-                      applyPreset(
-                        'https://pyne-worker.cryptolinx.workers.dev',
-                        'pyne-worker',
-                        { ws: false },
-                      )
+                      applyPreset('https://pyne-worker.cryptolinx.workers.dev', 'pyne-worker', {
+                        ws: false,
+                      })
                     }
                   >
                     pyne-worker edge
@@ -484,7 +496,10 @@ export function RuntimePage(props: {
 
             <EngineProPanel engine={engine()} />
 
-            <StudioSection title="Related" lead="Inventory lives next door — not as tabs on this page.">
+            <StudioSection
+              title="Related"
+              lead="Inventory lives next door — not as tabs on this page."
+            >
               <div class="ax-grid ax-grid--2">
                 <StudioCard
                   kicker="Catalog"
@@ -492,8 +507,8 @@ export function RuntimePage(props: {
                   onClick={() => props.onNavigate('workers')}
                 >
                   <StudioHint>
-                    Probe pyne Pro, the AXIS Worker, Pyodide, and the service worker. Activate one to
-                    become this Runtime.
+                    Probe pyne Pro, the AXIS Worker, Pyodide, and the service worker. Activate one
+                    to become this Runtime.
                   </StudioHint>
                 </StudioCard>
                 <StudioCard
@@ -502,7 +517,8 @@ export function RuntimePage(props: {
                   onClick={() => props.onNavigate('plugins')}
                 >
                   <StudioHint>
-                    Sources, streams, engines, storage, and the script library. Compose them on Wire.
+                    Sources, streams, engines, storage, and the script library. Compose them on
+                    Wire.
                   </StudioHint>
                 </StudioCard>
               </div>

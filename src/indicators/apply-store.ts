@@ -33,11 +33,8 @@
 
 import {
   addIndicator,
-  appendLog,
   setIndicatorSeries,
-  setStatus,
   setLastRun,
-  setStore,
   store,
   updateIndicator,
   EDITOR_RUN_KEY,
@@ -49,7 +46,7 @@ import {
   type splitSeriesByKind,
   type PlotMetaEntry,
 } from '../results/plot-visuals';
-import { PLOT_PALETTE } from '../chart/series-factory';
+import { plotColorAt } from '../chart/series-factory';
 import { plotDisplayHas, PLOT_DISPLAY } from '../results/plot-visuals';
 import { normalizeStrategyEvents, eventsToMarkers } from '../results/events';
 import { windowAxisFromMeta } from '../results/window-axis';
@@ -60,6 +57,11 @@ import type { OverlayLine, OverlayOhlc } from './apply-overlays';
 import type { Bar } from '../store/types';
 import type { PlotSample } from '../plugins/types';
 
+/**
+ * Everything apply stage 6 needs: the epoch/owner gate, the run result, the
+ * resolved pane/overlay/name, the built overlay and split payloads, plot meta
+ * and series entries, and the bars/times the series are aligned to.
+ */
 export interface StoreUpdateContext {
   epoch: number;
   result: RunResult;
@@ -89,12 +91,26 @@ export interface StoreUpdateContext {
 
 // NOTE: single documented cycle — runner.ts owns `nonemptyBag` /
 // `withAxisSource` and imports this stage module for orchestration.
-import { formatRunError, runEpochInvalidates } from './run-helpers';
+import { runEpochInvalidates } from './run-helpers';
 import { reportUiError } from '../ui/boot-errors';
 // NOTE: single documented cycle — runner.ts owns `nonemptyBag` /
 // `withAxisSource` and imports this stage module for orchestration.
 import { nonemptyBag, withAxisSource } from './runner';
 
+/**
+ * Commit this run to the store (apply stage 6).
+ *
+ * Captures engine-exported inputs into `lastRun.meta`, caches the line plots
+ * with the bar times they were aligned to (for cross-indicator `input.source`),
+ * then either adds a new indicator — re-owning the `EDITOR_RUN_KEY` run slot,
+ * overlays, markers, drawings and fills under the new id — or updates the
+ * existing one. Panel picks (`custom`) and stored colors survive a re-run while
+ * declared Pine styles refresh. Store/chart failures are reported, not thrown.
+ *
+ * @param ctx - the resolved stage inputs for this run
+ * @returns `false` when a newer editor Run superseded `ctx.epoch` (nothing was
+ *   written); `true` once the store update was attempted
+ */
 export function updateIndicatorStore(ctx: StoreUpdateContext): boolean {
   // Final epoch gate before store mutations (indicator list / series cache).
   // Chart adds (skipEditorDraft / indicatorId) must still commit after a live
@@ -135,7 +151,7 @@ export function updateIndicatorStore(ctx: StoreUpdateContext): boolean {
           plots[k] = {
             // Persist resolved CSS only — raw Pine tokens are invalid in
             // the card swatch and would shadow later runs as overrides.
-            color: resolvePineColor(meta?.color) ?? PLOT_PALETTE[colorIdx % PLOT_PALETTE.length],
+            color: resolvePineColor(meta?.color) ?? plotColorAt(colorIdx),
             // Declared plot style (display / linestyle / linewidth) — the
             // panel shows it and offers “reset to Pine”.
             ...(pine ? { pine } : {}),
@@ -143,7 +159,7 @@ export function updateIndicatorStore(ctx: StoreUpdateContext): boolean {
           colorIdx += 1;
         }
       } else {
-        plots[ctx.scriptName] = { color: PLOT_PALETTE[0] };
+        plots[ctx.scriptName] = { color: plotColorAt(0) };
       }
       // Prefer original ctx.opts/editor overrides (plot refs), not engine-expanded arrays
       const savedInputs =
@@ -286,9 +302,14 @@ export function updateIndicatorStore(ctx: StoreUpdateContext): boolean {
           // so a reapply can't wipe script colors to the palette.
           const resolvedColor = resolvePineColor(meta?.color);
           const pine = pinePlotMeta(meta);
-          const nextPlot = {
-            ...plots[k],
-            ...(resolvedColor != null ? { color: resolvedColor } : {}),
+          const prevPlot = plots[k];
+          const nextPlot: (typeof plots)[string] = {
+            ...prevPlot,
+            // Same precedence as the previous spread: fresh run color, else the
+            // stored one. `plotColorAt` only fills a brand-new plot key (no
+            // stored entry, no resolvable color) — the case the old spread left
+            // without a `color` key at all.
+            color: resolvedColor ?? prevPlot?.color ?? plotColorAt(colorIdx),
           };
           // Refresh the declared style; panel overrides live beside it. A run
           // that declares nothing clears the previous declaration, otherwise the

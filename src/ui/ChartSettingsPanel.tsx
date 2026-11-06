@@ -60,6 +60,7 @@ interface ChamferedCorners {
   bl?: boolean;
 }
 
+/** Props for the floating chart-settings frame: visibility, close hook, and chamfer styling. */
 export interface ChartSettingsPanelProps {
   /** Hide the panel (caller-controlled). Defaults to visible. */
   open?: boolean;
@@ -85,12 +86,13 @@ function buildFramePath(
   c: number,
   corners: ChamferedCorners,
 ): { d: string; accents: string[] } {
-  const spec: Record<Corner, { p1: [number, number]; p2: [number, number]; pc: [number, number] }> = {
-    tl: { p1: [0, c], p2: [c, 0], pc: [0, 0] },
-    tr: { p1: [w - c, 0], p2: [w, c], pc: [w, 0] },
-    br: { p1: [w, h - c], p2: [w - c, h], pc: [w, h] },
-    bl: { p1: [c, h], p2: [0, h - c], pc: [0, h] },
-  };
+  const spec: Record<Corner, { p1: [number, number]; p2: [number, number]; pc: [number, number] }> =
+    {
+      tl: { p1: [0, c], p2: [c, 0], pc: [0, 0] },
+      tr: { p1: [w - c, 0], p2: [w, c], pc: [w, 0] },
+      br: { p1: [w, h - c], p2: [w - c, h], pc: [w, h] },
+      bl: { p1: [c, h], p2: [0, h - c], pc: [0, h] },
+    };
   const pts: [number, number][] = [];
   const accents: string[] = [];
   for (const key of ['tl', 'tr', 'br', 'bl'] as Corner[]) {
@@ -114,13 +116,24 @@ const TOGGLES = [
 
 type ToggleKey = (typeof TOGGLES)[number]['key'];
 
-const MANAGER_APPLY: Record<ToggleKey, (m: NonNullable<ReturnType<typeof getManager>>, on: boolean) => void> = {
+const MANAGER_APPLY: Record<
+  ToggleKey,
+  (m: NonNullable<ReturnType<typeof getManager>>, on: boolean) => void
+> = {
   lastValueLabelsVisible: (m, on) => m.setLastValueLabelsVisible(on),
   lastValueNamesVisible: (m, on) => m.setLastValueNamesVisible(on),
   priceScaleLabelsVisible: (m, on) => m.setPriceScaleLabelsVisible(on),
 };
 
-export const ChartSettingsPanel: Component<ChartSettingsPanelProps> = (props) => {
+/**
+ * Floating chart-settings panel: display toggles (grid, crosshair, labels,
+ * scales) applied live to the chart manager, wrapped in the chamfered frame.
+ * Visibility is caller-controlled through `open`.
+ *
+ * @param props - Open flag, close handler, and frame chamfer options.
+ * @returns The settings panel markup.
+ */
+export const ChartSettingsPanel: Component<ChartSettingsPanelProps> = (props): JSX.Element => {
   const chamfer = () => Math.max(6, props.chamfer ?? 14);
   const corners = () => ({ ...DEFAULT_CORNERS, ...props.corners });
   const uid = createUniqueId();
@@ -239,7 +252,10 @@ export const ChartSettingsPanel: Component<ChartSettingsPanelProps> = (props) =>
             </linearGradient>
             <linearGradient id={`${uid}-sheen`} x1="0" y1="0" x2="1" y2="0">
               <stop offset="0" style={{ 'stop-color': 'var(--color-accent)', 'stop-opacity': 0 }} />
-              <stop offset="0.5" style={{ 'stop-color': 'var(--color-accent)', 'stop-opacity': 0.05 }} />
+              <stop
+                offset="0.5"
+                style={{ 'stop-color': 'var(--color-accent)', 'stop-opacity': 0.05 }}
+              />
               <stop offset="1" style={{ 'stop-color': 'var(--color-accent)', 'stop-opacity': 0 }} />
             </linearGradient>
             <filter id={`${uid}-glow`} x="-60%" y="-60%" width="220%" height="220%">
@@ -335,9 +351,7 @@ export const ChartSettingsPanel: Component<ChartSettingsPanelProps> = (props) =>
               data-testid="axis-chart-settings-interval"
               onChange={(e) => onInterval(e.currentTarget.value)}
             >
-              <For each={WATCHLIST_INTERVALS}>
-                {(iv) => <option value={iv}>{iv}</option>}
-              </For>
+              <For each={WATCHLIST_INTERVALS}>{(iv) => <option value={iv}>{iv}</option>}</For>
             </select>
           </div>
 

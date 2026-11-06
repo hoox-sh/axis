@@ -173,7 +173,7 @@ function injectEnumPath(name: string, meta: BuiltinMeta, modules: Set<string>) {
     if (!TOP_LEVEL.some((t) => t.label === name)) TOP_LEVEL.push(full);
     return;
   }
-  const [mod, ...rest] = name.split('.');
+  const [mod = '', ...rest] = name.split('.');
   const member = rest.join('.');
   modules.add(mod);
   const list = BY_MODULE.get(mod) || [];
@@ -207,7 +207,7 @@ function initIndex() {
       : { ...meta, label: meta.label || name };
     BY_NAME.set(name, m);
     if (name.includes('.')) {
-      const [mod, ...rest] = name.split('.');
+      const [mod = '', ...rest] = name.split('.');
       const member = rest.join('.');
       modules.add(mod);
       const list = BY_MODULE.get(mod) || [];
@@ -589,7 +589,7 @@ export function buildParamHintTooltip(state: EditorState): Tooltip | null {
     create() {
       const dom = document.createElement('div');
       dom.className = 'cm-pine-param-hint';
-      if (current?.name) dom.dataset.current = current.name;
+      if (current?.name) dom.dataset['current'] = current.name;
 
       const sigEl = document.createElement('div');
       sigEl.className = 'cm-pine-param-hint-sig';
@@ -656,6 +656,10 @@ export function buildParamHintTooltip(state: EditorState): Tooltip | null {
   };
 }
 
+/**
+ * Derives the in-call signature hint from the current {@link EditorState} and
+ * exposes it via `showTooltip`; Escape hides it until cursor or doc moves.
+ */
 export const pineParamHintField = StateField.define<Tooltip | null>({
   create: (state) => buildParamHintTooltip(state),
   update(tip, tr) {
@@ -687,7 +691,7 @@ const clearParamHintDismissed = StateEffect.define<undefined>();
  * signature hints), matching Monaco / VS Code muscle memory. Returns false so
  * other Escape consumers run when no overlay is open.
  */
-export const escapeDismissEditorOverlay: Command = (view) => {
+export const escapeDismissEditorOverlay: Command = (view): boolean => {
   const st = view.state;
   if (completionStatus(st) != null) {
     closeCompletion(view);
@@ -793,6 +797,7 @@ export function wordAt(
   return { word, from, to };
 }
 
+/** Exact-name catalog lookup (lazily builds the builtin index on first call). */
 export function lookupBuiltin(name: string): BuiltinMeta | undefined {
   initIndex();
   if (BY_NAME.has(name)) return BY_NAME.get(name);
@@ -1319,7 +1324,7 @@ export function renderHoverMarkdown(root: HTMLElement, md: string): void {
       const pre = document.createElement('pre');
       pre.className =
         lastSection === 'example' ? 'cm-pine-hover-pre cm-pine-hover-example' : 'cm-pine-hover-pre';
-      if (block.lang) pre.dataset.lang = block.lang;
+      if (block.lang) pre.dataset['lang'] = block.lang;
       const code = document.createElement('code');
       code.className = 'cm-pine-hover-code-block';
       code.textContent = block.code;
@@ -1378,7 +1383,7 @@ export function renderHoverMarkdown(root: HTMLElement, md: string): void {
           const h = document.createElement('div');
           h.className = 'cm-pine-hover-heading';
           lastSection = sectionKey(sec[1]!);
-          if (lastSection) h.dataset.section = lastSection.replace(/\s+/g, '-');
+          if (lastSection) h.dataset['section'] = lastSection.replace(/\s+/g, '-');
           appendInlineMarkdown(h, rest[0]!.trim());
           root.appendChild(h);
           continue;
@@ -1466,7 +1471,7 @@ function makeHoverTooltip(
     create() {
       const dom = document.createElement('div');
       dom.className = 'cm-pine-hover';
-      if (badge) dom.dataset.kind = hoverKindAttr(badge);
+      if (badge) dom.dataset['kind'] = hoverKindAttr(badge);
 
       const head = document.createElement('div');
       head.className = 'cm-pine-hover-head';
@@ -1573,6 +1578,15 @@ function hoverFromFact(
   );
 }
 
+/**
+ * Resolve the local hover card for `pos` from the document text alone (no
+ * remote call): signature / parameter help, hex colors, language facts, then
+ * user symbols.
+ *
+ * @param view Minimal view shape (`state.doc` slice + length); an `EditorView` fits.
+ * @param pos Document offset under the cursor.
+ * @returns A markdown tooltip, or null when nothing is known at `pos`.
+ */
 export function pyneHoverLocal(
   view: { state: { doc: { sliceString: (a: number, b: number) => string; length: number } } },
   pos: number,

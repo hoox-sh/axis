@@ -44,6 +44,7 @@ import type {
   WorkersOverviewSnapshot,
 } from './types';
 
+/** Per-probe overrides: base URL, wall-clock budget, and a parent abort signal. */
 export interface ProbeWorkerOpts {
   /** Override base URL (else catalog default / local). */
   endpoint?: string;
@@ -62,15 +63,9 @@ function activeEngineId(): string {
  * (modal close / refresh). Prevents endless “Probing…” when a shared signal
  * has no timeout and a host never responds.
  */
-export function probeAbortSignal(
-  timeoutMs: number,
-  parent?: AbortSignal,
-): AbortSignal {
+export function probeAbortSignal(timeoutMs: number, parent?: AbortSignal): AbortSignal {
   const raw = Number(timeoutMs);
-  const ms =
-    Number.isFinite(raw) && raw > 0
-      ? Math.max(50, Math.floor(raw))
-      : 6000;
+  const ms = Number.isFinite(raw) && raw > 0 ? Math.max(50, Math.floor(raw)) : 6000;
   // Prefer a manual controller + timer — reliable in browser and Bun tests.
   // (AbortSignal.timeout is fine in browsers but some runtimes are flaky.)
   const ctrl = new AbortController();
@@ -123,9 +118,7 @@ function baseResult(
     isActiveEngine = isPyodide;
   } else if (entry.canUseAsBackend && !isPyodide) {
     isActiveEngine =
-      engFamily === 'server' &&
-      !!endpoint &&
-      endpointsMatch(store.endpoint, endpoint);
+      engFamily === 'server' && !!endpoint && endpointsMatch(store.endpoint, endpoint);
   }
   return {
     id: entry.id,
@@ -140,8 +133,7 @@ function baseResult(
     checkedAt: partial.checkedAt ?? Date.now(),
     error: partial.error ?? null,
     isActiveBackend:
-      partial.isActiveBackend ??
-      (!!endpoint && endpointsMatch(store.endpoint, endpoint)),
+      partial.isActiveBackend ?? (!!endpoint && endpointsMatch(store.endpoint, endpoint)),
     isActiveEngine: partial.isActiveEngine ?? isActiveEngine,
   };
 }
@@ -221,11 +213,7 @@ export async function probeWorker(
   let raceTimer: ReturnType<typeof setTimeout> | undefined;
   let onParentAbort: (() => void) | undefined;
   const timedOut: Promise<WorkerProbeResult> = new Promise((resolve) => {
-    const settle = (
-      status: WorkerProbeResult['status'],
-      detail: string,
-      error: string,
-    ): void => {
+    const settle = (status: WorkerProbeResult['status'], detail: string, error: string): void => {
       if (raceTimer !== undefined) {
         clearTimeout(raceTimer);
         raceTimer = undefined;
@@ -235,11 +223,7 @@ export async function probeWorker(
           ? baseResult(entry, {
               status,
               detail,
-              endpoint:
-                opts?.endpoint ||
-                entry.defaultEndpoint ||
-                entry.localEndpoint ||
-                '',
+              endpoint: opts?.endpoint || entry.defaultEndpoint || entry.localEndpoint || '',
               error,
             })
           : {
@@ -353,15 +337,15 @@ async function probeHttpHealthPaths(
 
       const ms = Math.round(performance.now() - t0);
       const service =
-        typeof body.service === 'string'
-          ? body.service
-          : typeof body.name === 'string'
-            ? body.name
+        typeof body['service'] === 'string'
+          ? body['service']
+          : typeof body['name'] === 'string'
+            ? body['name']
             : null;
 
       const features: Record<string, boolean | string | number | null> = {};
-      if (body.features && typeof body.features === 'object') {
-        for (const [k, v] of Object.entries(body.features as Record<string, unknown>)) {
+      if (body['features'] && typeof body['features'] === 'object') {
+        for (const [k, v] of Object.entries(body['features'] as Record<string, unknown>)) {
           if (typeof v === 'boolean' || typeof v === 'string' || typeof v === 'number') {
             features[k] = v;
           } else if (v == null) {
@@ -371,9 +355,9 @@ async function probeHttpHealthPaths(
           }
         }
       }
-      if (typeof body.websocket === 'boolean') features.websocket = body.websocket;
-      if (typeof body.status === 'string') features.status = body.status;
-      if (typeof body.version === 'string') features.version = body.version;
+      if (typeof body['websocket'] === 'boolean') features['websocket'] = body['websocket'];
+      if (typeof body['status'] === 'string') features['status'] = body['status'];
+      if (typeof body['version'] === 'string') features['version'] = body['version'];
 
       // PYNE reports Numba / IR-cache readiness under `compile`; summarise it
       // for the detail pane without duplicating every raw field.
@@ -381,7 +365,7 @@ async function probeHttpHealthPaths(
       const readiness = compileReadiness(engineHealth);
 
       let status: WorkerHealthStatus = 'healthy';
-      const statusStr = String(body.status || '').toLowerCase();
+      const statusStr = String(body['status'] || '').toLowerCase();
       if (statusStr && statusStr !== 'healthy' && statusStr !== 'ok') {
         status = statusStr === 'degraded' ? 'degraded' : 'degraded';
       }
@@ -479,7 +463,7 @@ async function probePyodideInner(
         /* ignore */
       }
     }
-    features.assetOk = res.ok;
+    features['assetOk'] = res.ok;
     const ct = (res.headers.get('content-type') || '').toLowerCase();
     if (ct.includes('text/html')) {
       return baseResult(entry, {
@@ -538,8 +522,8 @@ async function probePyodideInner(
   // Internal warm flag if present
   const py = eng as { _pyodide?: unknown } | undefined;
   const loaded = !!(py && py._pyodide);
-  features.runtimeReady = ready || loaded;
-  features.loaded = loaded;
+  features['runtimeReady'] = ready || loaded;
+  features['loaded'] = loaded;
 
   const ms = Math.round(performance.now() - t0);
   if (ready || loaded) {
@@ -654,8 +638,7 @@ export async function probeAllWorkers(opts?: {
   const results: WorkerProbeResult[] = settled.map((s, i) => {
     if (s.status === 'fulfilled') return s.value;
     const entry = entries[i]!;
-    const msg =
-      s.reason instanceof Error ? s.reason.message : String(s.reason ?? 'probe failed');
+    const msg = s.reason instanceof Error ? s.reason.message : String(s.reason ?? 'probe failed');
     return {
       id: entry.id,
       status: 'down' as const,

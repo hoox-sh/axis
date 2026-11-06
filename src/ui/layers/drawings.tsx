@@ -16,6 +16,15 @@ import { Icons } from '../icons';
 import { drawingListLabel } from './format';
 import { LayerEmpty, LayerRow } from './rows';
 
+/**
+ * Drawing rows for the active symbol with select/visibility/lock/delete
+ * controls, a duplicate/clear menu, and symbol-scope actions
+ * (keep on symbol / tag for symbol). `filtered` is the search-reduced list so
+ * the empty state can distinguish "no drawings" from "no matches".
+ *
+ * @param props - Drawing lists, selection, tool state, and action callbacks.
+ * @returns The drawings section body.
+ */
 export const DrawingList: Component<{
   symbol: string;
   /** Drawings for the active symbol (unfiltered). */
@@ -37,7 +46,7 @@ export const DrawingList: Component<{
   onToggleVisible: (d: Drawing) => void;
   onToggleLock: (d: Drawing) => void;
   onRemove: (id: string) => void;
-}> = (props) => {
+}> = (props): JSX.Element => {
   const [menuOpen, setMenuOpen] = createSignal(false);
   const symbolLabel = () => props.symbol || 'Symbol';
   const hiddenCount = () => props.drawings.filter((d) => d.meta?.hidden).length;

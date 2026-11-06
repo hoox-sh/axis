@@ -11,20 +11,66 @@ const meta: Meta = { title: 'Chrome/Icons', tags: ['autodocs'], parameters: { la
 export default meta;
 
 const KEYS = [
-  'play', 'settings', 'watchlist', 'search', 'save', 'menu', 'refresh', 'copy',
-  'check', 'x', 'database', 'radio', 'plus', 'trash', 'eye', 'eyeOff', 'lock',
-  'unlock', 'palette', 'zap', 'clock', 'alerts', 'results', 'studio', 'activity',
-  'trend', 'layers', 'onchain', 'cpu', 'server',
+  'play',
+  'settings',
+  'watchlist',
+  'search',
+  'save',
+  'menu',
+  'refresh',
+  'copy',
+  'check',
+  'x',
+  'database',
+  'radio',
+  'plus',
+  'trash',
+  'eye',
+  'eyeOff',
+  'lock',
+  'unlock',
+  'palette',
+  'zap',
+  'clock',
+  'alerts',
+  'results',
+  'studio',
+  'activity',
+  'trend',
+  'layers',
+  'onchain',
+  'cpu',
+  'server',
 ] as const;
 
+/** Every `Icons.*` glyph paired with its key name, for visual diffing. */
 export const Gallery: StoryObj = {
   render: () => (
-    <div style={{ display: 'grid', gap: '8px', 'grid-template-columns': 'repeat(auto-fill,minmax(120px,1fr))', width: '720px', 'max-width': '92vw' }}>
+    <div
+      style={{
+        display: 'grid',
+        gap: '8px',
+        'grid-template-columns': 'repeat(auto-fill,minmax(120px,1fr))',
+        width: '720px',
+        'max-width': '92vw',
+      }}
+    >
       <For each={KEYS}>
         {(k) => {
           const I = (Icons as Record<string, typeof Icons.play>)[k];
           return I ? (
-            <div style={{ display: 'flex', 'align-items': 'center', gap: '8px', padding: '8px', border: '1px solid var(--color-border)', 'border-radius': '6px', background: 'var(--color-bg-panel)', 'font-size': '11px' }}>
+            <div
+              style={{
+                display: 'flex',
+                'align-items': 'center',
+                gap: '8px',
+                padding: '8px',
+                border: '1px solid var(--color-border)',
+                'border-radius': '6px',
+                background: 'var(--color-bg-panel)',
+                'font-size': '11px',
+              }}
+            >
               <I />
               <code style={{ opacity: 0.7 }}>{k}</code>
             </div>
@@ -35,6 +81,7 @@ export const Gallery: StoryObj = {
   ),
 };
 
+/** One glyph at 12 / 16 / 24 / 32 px to check optical scaling. */
 export const Sizes: StoryObj = {
   render: () => (
     <div style={{ display: 'flex', 'align-items': 'center', gap: '16px' }}>

@@ -88,6 +88,10 @@ export function _resetBatchRouteMemoForTests(): void {
   batchRouteMissing.clear();
 }
 
+/**
+ * Options for {@link reapplyChartScripts}: cancellation, a subset of script
+ * ids, error logging, a dedupe bypass, and a per-script settle callback.
+ */
 export type ReapplyChartScriptsOpts = {
   /**
    * Abort when a newer load supersedes this one (e.g. load-symbol generation).
@@ -150,38 +154,44 @@ async function runBatchReapply(
 ): Promise<Map<string, BatchRunResult> | null> {
   if (scripts.length < 2) return null;
   // Only scripts without resolved input overrides can share one request.
-  const batchable = scripts.filter((s) => !s.inputValues || Object.keys(s.inputValues).length === 0);
+  const batchable = scripts.filter(
+    (s) => !s.inputValues || Object.keys(s.inputValues).length === 0,
+  );
   if (batchable.length < 2) return null;
   if (!still()) return null;
   const bars = store.bars;
   if (!Array.isArray(bars) || !bars.length) return null;
 
   try {
-    const [{ runBatch, RUN_BATCH_MAX_SCRIPTS, splitBatchScripts }, active, { isEngineOwnedLive }, catalog] =
-      await Promise.all([
-        import('../engines/batch'),
-        import('../plugins/active'),
-        import('../engines/ownership'),
-        import('../engines/catalog'),
-      ]);
+    const [
+      { runBatch, RUN_BATCH_MAX_SCRIPTS, splitBatchScripts },
+      active,
+      { isEngineOwnedLive },
+      catalog,
+    ] = await Promise.all([
+      import('../engines/batch'),
+      import('../plugins/active'),
+      import('../engines/ownership'),
+      import('../engines/catalog'),
+    ]);
     if (isEngineOwnedLive()) return null;
     if (active.getActiveEngine().family !== 'server') return null;
 
     const cfg = active.getActiveEngineConfig() || {};
-    const endpoint = String(cfg.endpoint || store.endpoint || '')
+    const endpoint = String(cfg['endpoint'] || store.endpoint || '')
       .trim()
       .replace(/\/$/, '');
     if (!endpoint) return null;
     // Known-missing route: skip the doomed round-trip, go straight to singles.
     if (batchRouteMissing.has(endpoint)) return null;
-    const apiKey = String(cfg.apiKey || '').trim();
+    const apiKey = String(cfg['apiKey'] || '').trim();
     if (!catalog.confirmEngineApiKeyTarget(endpoint, apiKey)) return null;
 
     // One mode must hold per request: `resolveServerRunMode` downgrades to
     // interpret for profiler / Pine-alert scripts. Mixed bags batch per mode
     // instead of skipping batching entirely.
     const profiler = !!store.profilerEnabled;
-    const modeRaw = String(cfg.mode || 'auto');
+    const modeRaw = String(cfg['mode'] || 'auto');
     const byMode = new Map<string, Indicator[]>();
     for (const s of batchable) {
       const mode = catalog.resolveServerRunMode(modeRaw, s.code, profiler);
@@ -253,9 +263,7 @@ async function runBatchReapply(
  *
  * @returns number of scripts that completed without throw
  */
-export async function reapplyChartScripts(
-  opts?: ReapplyChartScriptsOpts,
-): Promise<number> {
+export async function reapplyChartScripts(opts?: ReapplyChartScriptsOpts): Promise<number> {
   const still = opts?.stillCurrent ?? (() => true);
   if (!still()) return 0;
   // Only one reapply pass at a time — multiple call sites (load-symbol,

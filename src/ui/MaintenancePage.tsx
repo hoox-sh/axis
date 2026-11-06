@@ -92,7 +92,7 @@ const CROSS_TEXTURE = [
 ].join(', ');
 
 /** Full-viewport maintenance screen (mounted by `index.tsx` at boot). */
-export const MaintenancePage: Component = () => (
+export const MaintenancePage: Component = () : JSX.Element => (
   <div
     class="relative h-screen w-screen overflow-hidden bg-bg-base text-text"
     data-testid="axis-maintenance-page"

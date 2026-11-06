@@ -19,10 +19,10 @@ function arg(name: string, fallback: string): string {
 
 const ROOT = resolve(import.meta.dir, '..');
 const VIEWPORT = arg('viewport', '1920x1080');
-const [VIEW_W, VIEW_H] = VIEWPORT.split('x').map((n) => Number(n) || 1920);
+const [VIEW_W = 1920, VIEW_H = 1080] = VIEWPORT.split('x').map((n) => Number(n) || 1920);
 const DPR = Number(arg('dpr', '2')) || 2;
 const OUT = resolve(ROOT, arg('out', 'docs/images'));
-const URL = process.env.AXIS_CAPTURE_URL || 'https://axis.hoox.sh';
+const URL = process.env['AXIS_CAPTURE_URL'] || 'https://axis.hoox.sh';
 
 const RSI = `//@version=6
 indicator("RSI", overlay=false)

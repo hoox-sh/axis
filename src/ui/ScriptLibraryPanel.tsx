@@ -117,6 +117,7 @@ import {
   toggleFavoriteId,
 } from './library/prefs';
 import { GitSettingsForm } from './library/GitForm';
+import { bindSlashToSearch } from './focus-search';
 
 function cloudCfg(): { endpoint: string; apiKey: string } {
   return resolveCloudConfig();
@@ -128,7 +129,7 @@ function saveCloudCfg(endpoint: string, apiKey: string) {
 
 function gitCfg(): GitConfig {
   const pc = store.pluginsConfig || {};
-  const c = (pc[pluginKey('storage', 'git')] || pc.git || {}) as Partial<GitConfig>;
+  const c = (pc[pluginKey('storage', 'git')] || pc['git'] || {}) as Partial<GitConfig>;
   return { ...DEFAULT_GIT_CONFIG, ...c };
 }
 
@@ -138,6 +139,7 @@ function saveGitCfg(cfg: GitConfig) {
 }
 
 /** Optional editor doc bridge and load callback. */
+/** Props for the library browser: editor doc IO and whether to consume palette commands. */
 export interface ScriptLibraryPanelProps {
   getDoc?: () => string;
   /** Load into editor; optional libraryId binds the tab for git push. */
@@ -153,9 +155,12 @@ export interface ScriptLibraryPanelProps {
 
 let nextLibraryPanel = 0;
 
-/** Library browser for Plugin Manager (and any host that supplies doc IO). */
-
-export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) => {
+/**
+ * Library browser body (built-in catalog + personal scripts) usable inside
+ * Plugin Manager or the docked panel. Mounting a second copy without
+ * `commands` avoids stealing buffered Find / Recent intents from the docked one.
+ */
+export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props): JSX.Element => {
   const uid = `axis-lib-${++nextLibraryPanel}`;
   const [tab, setTab] = createSignal<'builtin' | 'personal'>('builtin');
   const [items, setItems] = createSignal<ScriptMeta[]>([]);
@@ -219,15 +224,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
   onMount(() => {
     // `/` focuses the library search while the panel is mounted. Ignore when
     // typing in any field so the shortcut never eats a literal slash.
-    const onSlash = (e: KeyboardEvent) => {
-      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
-      const target = e.target as HTMLElement | null;
-      if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
-      e.preventDefault();
-      findInput?.focus();
-    };
-    window.addEventListener('keydown', onSlash);
-    onCleanup(() => window.removeEventListener('keydown', onSlash));
+    onCleanup(bindSlashToSearch(() => findInput));
 
     if (!props.commands) return;
     const queued = takeLibraryCommand();
@@ -1420,7 +1417,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
  * Same body as Plugin Manager → Script Library, with FloatableShell chrome.
  * This is the only copy that consumes Find / Recent palette commands.
  */
-export const LibraryPanel: Component<ScriptLibraryPanelProps> = (props) => (
+export const LibraryPanel: Component<ScriptLibraryPanelProps> = (props): JSX.Element => (
   <Show when={isPanelOpen('library')}>
     <FloatableShell id="library" testId="axis-library">
       <ScriptLibraryPanel

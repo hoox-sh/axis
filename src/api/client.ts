@@ -81,11 +81,11 @@ export async function readJsonBody(res: Response): Promise<Record<string, unknow
  */
 export async function httpError(res: Response, opts?: { label?: string }): Promise<HttpError> {
   const json = await readJsonBody(res);
-  const bodyMessage = String(json.message ?? json.error ?? '');
+  const bodyMessage = String(json['message'] ?? json['error'] ?? '');
   const label = opts?.label ? `${opts.label} ` : '';
   const message = bodyMessage ? `${label}${bodyMessage}` : `${label}HTTP ${res.status}`;
   return new HttpError(res.status, message, {
-    code: typeof json.code === 'string' ? json.code : '',
+    code: typeof json['code'] === 'string' ? json['code'] : '',
     body: json,
   });
 }

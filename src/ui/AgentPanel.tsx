@@ -64,7 +64,7 @@ const AgentSlot: Component = () => {
 };
 
 /** Right-dock Agent panel. Empty until the PYNE Agent plugin is installed. */
-export const AgentPanel: Component = () => {
+export const AgentPanel: Component = () : JSX.Element => {
   const [ready, setReady] = createSignal(!!registry.getComponent('pyne-agent'));
 
   onMount(() => {

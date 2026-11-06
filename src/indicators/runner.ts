@@ -55,49 +55,23 @@ import {
   store,
   setStore,
   addIndicator,
-  updateIndicator,
-  addPane,
-  removePane,
   setStatus,
   setLastRun,
   EDITOR_RUN_KEY,
-  setIndicatorSeries,
   appendLog,
   recordRunLatency,
   setTelemetryPlane,
   setTelemetryState,
-  newEntityId,
   chartWindowEngineBars,
 } from '../store';
 import { resolveInputSourceValues } from '../results/plot-sources';
 import { applyStrategyPropsToSource } from '../results/strategy-props';
-import {
-  getManager,
-  getDrawingLayer,
-  ensureScriptPaneLayer,
-  applyDebugPinsToChart,
-} from '../chart/manager-access';
-import { PLOT_PALETTE } from '../chart/series-factory';
+import { getManager, applyDebugPinsToChart } from '../chart/manager-access';
+import '../chart/series-factory';
 import { axisStamp, windowAxisFromBars } from '../results/window-axis';
-import {
-  bgcolorSeriesToHistogramData,
-  barcolorSeriesToMap,
-  lineSeriesToOverlayData,
-  ohlcSeriesToBarData,
-  PLOT_DISPLAY,
-  plotDisplayHas,
-  resolvePlotFillBands,
-  shapeSeriesToMarkers,
-  splitSeriesByKind,
-  type PlotMetaEntry,
-} from '../results/plot-visuals';
-import { resolvePineColor } from '../results/pine-color';
-import { getActiveDrawingLayer } from '../chart/drawing-layer';
-import {
-  garbageCollectScriptDrawings,
-  normalizeScriptDrawings,
-  resolveDrawingLimits,
-} from '../chart/pyne-drawings';
+import '../results/pine-color';
+import '../chart/drawing-layer';
+import '../chart/pyne-drawings';
 import { getActiveEngine, getActiveEngineConfig } from '../plugins/active';
 import { isEngineOwnedLive } from '../engines/ownership';
 import { exchangeForSource } from '../data/symbol-exchange';
@@ -114,7 +88,6 @@ import {
   isInteractiveRunInFlight,
   isRunEpochCurrent,
   runEpochInvalidates,
-  lineDataHasSample,
   normalizeEngineResult,
   ownsRunStatus,
   releaseRunStatus,
@@ -257,7 +230,7 @@ function timesFromBars(v: unknown): number[] | null {
     }
     if (b && typeof b === 'object') {
       const rec = b as Record<string, unknown>;
-      raw.push(rec.time ?? rec.t ?? rec.timestamp);
+      raw.push(rec['time'] ?? rec['t'] ?? rec['timestamp']);
     }
   }
   return normalizeTimeList(raw);
@@ -276,23 +249,23 @@ export function extractEngineResultTimes(result: unknown): number[] | null {
   if (!result || typeof result !== 'object') return null;
   const rec = result as Record<string, unknown>;
   const meta =
-    rec.meta && typeof rec.meta === 'object' && !Array.isArray(rec.meta)
-      ? (rec.meta as Record<string, unknown>)
+    rec['meta'] && typeof rec['meta'] === 'object' && !Array.isArray(rec['meta'])
+      ? (rec['meta'] as Record<string, unknown>)
       : null;
   const lists: unknown[] = [
-    meta?.engineTimes,
-    meta?.times,
-    meta?.bar_times,
-    meta?.barTimes,
-    rec.times,
-    rec.bar_times,
-    rec.barTimes,
+    meta?.['engineTimes'],
+    meta?.['times'],
+    meta?.['bar_times'],
+    meta?.['barTimes'],
+    rec['times'],
+    rec['bar_times'],
+    rec['barTimes'],
   ];
   for (const c of lists) {
     const norm = normalizeTimeList(c);
     if (norm) return norm;
   }
-  for (const c of [meta?.bars, rec.bars]) {
+  for (const c of [meta?.['bars'], rec['bars']]) {
     const fromBars = timesFromBars(c);
     if (fromBars) return fromBars;
   }
@@ -562,6 +535,10 @@ export function resolveInputPrecedence(
   );
 }
 
+/**
+ * Flags for {@link resolveStrategyPrecedence}: whether the editor draft may be
+ * used, and whether an empty explicit bag is authoritative.
+ */
 export interface StrategyPropsPrecedenceOpts {
   /** The editor draft may be used as the last resort. */
   allowEditorDraft?: boolean;
@@ -844,7 +821,7 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
       profiler: !!store.profilerEnabled,
     };
     const transport = classifyTransport('engine', engine.id, engine.capabilities);
-    const mode = String(config.mode || 'auto');
+    const mode = String(config['mode'] || 'auto');
     if (!isolate) {
       setTelemetryPlane('engine', {
         id: engine.id,
@@ -1057,7 +1034,7 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
       cacheAllowed &&
       cacheKey &&
       result.status === 'success' &&
-      result.meta?.executionContext !== 'tip'
+      result.meta?.['executionContext'] !== 'tip'
     ) {
       setRunCache(cacheKey, result);
     }
@@ -1446,9 +1423,6 @@ async function runAndApplyInner(
    * multi-pane time sync leaves a permanent gap at the indicator start.
    * Null/NaN/undefined/string "na"/non-finite never produce a numeric value.
    */
-  const toLineData = (arr: (number | null)[] | unknown[]) =>
-    lineSeriesToOverlayData(ohlcvTimes, arr);
-
   // Stable overlay sync: update-in-place when keys match (no remove→blank→add flash)
   // value is optional — omit for LWC whitespace (Pine `na` / warmup)
   // User color overrides from Scripts panel (persisted on the script card)

@@ -10,6 +10,14 @@
 
 import type { EffectDef, EffectParamSpec, EffectTune } from './types';
 
+/**
+ * Clamp a raw value into the spec range and snap it to `step`. Non-finite input
+ * falls back to the spec default; sub-unit steps round to two decimals.
+ *
+ * @param spec - Param spec supplying bounds, step, and default.
+ * @param raw - Requested value.
+ * @returns A value inside `[min, max]` aligned to the step grid.
+ */
 export function clampEffectParam(spec: EffectParamSpec, raw: number): number {
   if (!Number.isFinite(raw)) return spec.default;
   const clamped = Math.min(spec.max, Math.max(spec.min, raw));
@@ -21,10 +29,26 @@ export function clampEffectParam(spec: EffectParamSpec, raw: number): number {
   return Math.min(spec.max, Math.max(spec.min, tidy));
 }
 
+/**
+ * Effective enabled flag, preferring the stored tune over the definition.
+ *
+ * @param def - Effect definition with its registry default.
+ * @param tune - Stored override, if any.
+ * @returns `tune.enabled` when it is a boolean, else `def.enabled`.
+ */
 export function readEnabled(def: EffectDef, tune: EffectTune | undefined): boolean {
   return typeof tune?.enabled === 'boolean' ? tune.enabled : def.enabled;
 }
 
+/**
+ * Effective value of one param: stored override if finite, else the default,
+ * always clamped to the spec.
+ *
+ * @param def - Effect definition owning the param.
+ * @param tune - Stored override, if any.
+ * @param paramId - Param id to read.
+ * @returns The clamped value, or `0` when the param is not declared.
+ */
 export function readParam(def: EffectDef, tune: EffectTune | undefined, paramId: string): number {
   const spec = def.params.find((p) => p.id === paramId);
   if (!spec) return 0;
@@ -66,12 +90,12 @@ export function sanitizeTunes(
     if (!row || typeof row !== 'object' || Array.isArray(row)) continue;
     const rec = row as Record<string, unknown>;
     const tune: EffectTune = {};
-    if (typeof rec.enabled === 'boolean' && rec.enabled !== def.enabled) {
-      tune.enabled = rec.enabled;
+    if (typeof rec['enabled'] === 'boolean' && rec['enabled'] !== def.enabled) {
+      tune.enabled = rec['enabled'];
     }
     const paramsIn =
-      rec.params && typeof rec.params === 'object' && !Array.isArray(rec.params)
-        ? (rec.params as Record<string, unknown>)
+      rec['params'] && typeof rec['params'] === 'object' && !Array.isArray(rec['params'])
+        ? (rec['params'] as Record<string, unknown>)
         : null;
     if (paramsIn) {
       const params: Record<string, number> = {};
@@ -88,6 +112,13 @@ export function sanitizeTunes(
   return out;
 }
 
+/**
+ * Whether a stored tune still differs from the registry defaults.
+ *
+ * @param def - Effect definition with defaults.
+ * @param tune - Stored override, if any.
+ * @returns `true` when `enabled` or any param is overridden.
+ */
 export function tuneIsDirty(def: EffectDef, tune: EffectTune | undefined): boolean {
   if (!tune) return false;
   if (typeof tune.enabled === 'boolean' && tune.enabled !== def.enabled) return true;

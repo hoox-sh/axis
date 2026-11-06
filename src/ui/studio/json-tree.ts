@@ -8,6 +8,7 @@
  * @module ui/studio/json-tree
  */
 
+/** Render bucket for a JSON node; `empty` covers `[]`/`{}` so the tree can label them. */
 export type JsonKind = 'null' | 'bool' | 'number' | 'string' | 'array' | 'object' | 'empty';
 
 /** First page of array/object children before “show more”. */
@@ -15,6 +16,13 @@ export const JSON_PAGE = 32;
 /** Expand-all stops walking arrays larger than this. */
 export const JSON_EXPAND_MAX = 48;
 
+/**
+ * Classify any runtime value for the JSON tree. Arrays/objects with no entries
+ * report `empty` (not `array`/`object`) so the UI can render `[]` / `{}`.
+ *
+ * @param value - Any runtime value, including `undefined`.
+ * @returns The {@link JsonKind} bucket used for styling and expandability.
+ */
 export function jsonKind(value: unknown): JsonKind {
   if (value === null || value === undefined) return 'null';
   if (typeof value === 'boolean') return 'bool';
@@ -27,30 +35,58 @@ export function jsonKind(value: unknown): JsonKind {
   return 'string';
 }
 
+/**
+ * Whether a node can be expanded (non-empty array or object).
+ *
+ * @param value - Any runtime value.
+ * @returns `true` for non-empty arrays and plain objects.
+ */
 export function isContainer(value: unknown): boolean {
   const k = jsonKind(value);
   return k === 'array' || k === 'object';
 }
 
+/**
+ * List a container's children in display order, using array indices as keys so
+ * duplicates and holes still render distinctly.
+ *
+ * @param value - Array or object; primitives yield no entries.
+ * @returns `[key, value]` pairs; empty for non-containers.
+ */
 export function childEntries(value: unknown): Array<[string, unknown]> {
   if (Array.isArray(value)) return value.map((item, i) => [String(i), item]);
   if (value && typeof value === 'object') return Object.entries(value as Record<string, unknown>);
   return [];
 }
 
+/**
+ * Number of children without materializing them (large series stay cheap).
+ *
+ * @param value - Array or object; primitives report `0`.
+ * @returns Array length or own-key count.
+ */
 export function childCount(value: unknown): number {
   if (Array.isArray(value)) return value.length;
   if (value && typeof value === 'object') return Object.keys(value as object).length;
   return 0;
 }
 
+/**
+ * Render a leaf value as text plus its kind. Strings are JSON-quoted; non-finite
+ * numbers and `undefined` are spelled out so they are not mistaken for data.
+ * Serialization failures fall back to `String(value)` instead of throwing.
+ *
+ * @param value - Leaf value to format.
+ * @returns Kind bucket and display text.
+ */
 export function formatPrimitive(value: unknown): { kind: JsonKind; text: string } {
   if (value === null) return { kind: 'null', text: 'null' };
   if (value === undefined) return { kind: 'null', text: 'undefined' };
   if (typeof value === 'boolean') return { kind: 'bool', text: value ? 'true' : 'false' };
   if (typeof value === 'number') {
     if (Number.isNaN(value)) return { kind: 'number', text: 'NaN' };
-    if (!Number.isFinite(value)) return { kind: 'number', text: value > 0 ? 'Infinity' : '-Infinity' };
+    if (!Number.isFinite(value))
+      return { kind: 'number', text: value > 0 ? 'Infinity' : '-Infinity' };
     return { kind: 'number', text: String(value) };
   }
   if (typeof value === 'string') return { kind: 'string', text: JSON.stringify(value) };
@@ -79,6 +115,13 @@ export function previewLabel(value: unknown): string {
   return formatPrimitive(value).text;
 }
 
+/**
+ * Aggregate counts for the tree footer. Walks the whole value, so it is meant
+ * for the current result payload, not for a live 5k-bar series.
+ *
+ * @param value - Root value to measure.
+ * @returns Own-key count, array count, and leaf count.
+ */
 export function jsonStats(value: unknown): { keys: number; arrays: number; values: number } {
   let keys = 0;
   let arrays = 0;
@@ -102,6 +145,13 @@ export function jsonStats(value: unknown): { keys: number; arrays: number; value
   return { keys, arrays, values };
 }
 
+/**
+ * Build a stable path key for open-state tracking (`$` root, `$.a.b` children).
+ *
+ * @param parent - Parent path, `$` for the root.
+ * @param key - Child key or array index.
+ * @returns The child path used as the expansion key.
+ */
 export function childPath(parent: string, key: string): string {
   return parent === '$' ? `$.${key}` : `${parent}.${key}`;
 }
@@ -130,11 +180,27 @@ export function collectOpenPaths(value: unknown, root = '$', maxDepth = 3): stri
   return out;
 }
 
+/**
+ * Case-insensitive key filter. An empty query matches everything so the caller
+ * does not special-case "no search".
+ *
+ * @param key - Object key or array index string.
+ * @param query - Raw search text; empty means match.
+ * @returns `true` when the key contains the query.
+ */
 export function keyMatches(key: string, query: string): boolean {
   if (!query) return true;
   return key.toLowerCase().includes(query.toLowerCase());
 }
 
+/**
+ * Case-insensitive match against a leaf's rendered text. Containers never match
+ * here — they match through {@link subtreeMatches} so a parent stays visible.
+ *
+ * @param value - Leaf value to test.
+ * @param query - Raw search text; empty means match.
+ * @returns `true` when the formatted leaf text contains the query.
+ */
 export function primitiveMatches(value: unknown, query: string): boolean {
   if (!query) return true;
   const k = jsonKind(value);

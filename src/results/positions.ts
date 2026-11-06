@@ -36,6 +36,7 @@ import {
 
 export type { PositionView, StreamEventView, PositionFill, PositionCloseFill } from './strategy';
 
+/** Fill model and run axis for {@link buildPositionViews}. */
 export interface BuildPositionViewsOptions {
   /** Fill model: `close` (default) or `next_open` (slippage → next bar open). */
   fillMode?: 'close' | 'next_open';

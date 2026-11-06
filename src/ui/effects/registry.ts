@@ -108,4 +108,5 @@ export const PANEL_OPEN: EffectDef = {
   ],
 };
 
+/** Built-in effects registered at boot, in the order Settings lists them. */
 export const BUILTIN_EFFECTS: readonly EffectDef[] = [WATCHLIST_TICK, PANEL_OPEN];

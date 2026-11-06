@@ -77,6 +77,7 @@ export function formatErrorStack(err: unknown, frames = 3): string {
     .join(' ← ');
 }
 
+/** Options for {@link reportUiError}: log source, status-bar toggle, throttle, and stack capture. */
 export type ReportUiErrorOpts = {
   /** Log source tag (default `system`). */
   source?: string;

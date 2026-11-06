@@ -43,6 +43,7 @@ import type { Indicator } from '../store/types';
 /** Panel line types (AXIS naming; rendered as LWC `LineStyle`). */
 export const PLOT_LINE_STYLES = ['solid', 'dotted', 'dashed', 'large_dashed'] as const;
 
+/** One panel line type (an AXIS preference, not a Pine `plot()` argument). */
 export type PlotLineStyle = (typeof PLOT_LINE_STYLES)[number];
 
 /** Human labels for the picker. */
@@ -181,6 +182,9 @@ export function pinePlotMeta(
   return Object.keys(out).length ? out : null;
 }
 
-/** Targets the panel can toggle (everything except the status-line bit). */
+/**
+ * `display.*` targets the panel can toggle: pane, data window, price scale.
+ * `status_line` is deliberately excluded so the script keeps what it declared.
+ */
 export const PANEL_DISPLAY_MASK =
   PLOT_DISPLAY.pane | PLOT_DISPLAY.data_window | PLOT_DISPLAY.price_scale;

@@ -38,6 +38,17 @@ function colorFormat(value: string): string {
   return '—';
 }
 
+/**
+ * Color field for Pine color values: swatch picker plus a free-text input that
+ * accepts hex, rgb()/rgba(), hsl()/hsla(), CSS names, and `color.*` enums.
+ *
+ * Text is the source of truth — edits are passed through `onChange` unchanged
+ * while the swatch, format chip, and validity edge are derived from
+ * `parseColorInput`. The local draft resyncs whenever `value` changes.
+ *
+ * @param props - Current text value, change handler, and optional invalid/disabled state.
+ * @returns A swatch + input + format-chip cluster.
+ */
 export function StudioColorInput(props: {
   id?: string;
   value: string;
@@ -46,7 +57,7 @@ export function StudioColorInput(props: {
   placeholder?: string;
   disabled?: boolean;
   invalid?: boolean;
-}) {
+}): JSX.Element {
   const field = useContext(StudioFieldContext);
   const [draft, setDraft] = createSignal(props.value);
   const [focused, setFocused] = createSignal(false);

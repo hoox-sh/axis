@@ -29,7 +29,7 @@ export const LayerSection: Component<{
   actions?: JSX.Element;
   testId?: string;
   children: JSX.Element;
-}> = (props) => {
+}> = (props): JSX.Element => {
   const headingId = `axis-layer-section-${++nextSection}`;
   const showCount = () => props.count != null;
   return (
@@ -69,7 +69,15 @@ export const LayerSection: Component<{
   );
 };
 
-export const LayerEmpty: Component<{ children: JSX.Element; testId?: string }> = (props) => (
+/**
+ * Placeholder rendered when a layer section has no rows (or no search hits).
+ *
+ * @param props - Message content and optional test id.
+ * @returns A `div.ax-layers-empty`.
+ */
+export const LayerEmpty: Component<{ children: JSX.Element; testId?: string }> = (
+  props,
+): JSX.Element => (
   <div class="ax-layers-empty" data-testid={props.testId}>
     {props.children}
   </div>
@@ -81,7 +89,7 @@ export const VisibilityToggle: Component<{
   visible: boolean;
   locked?: boolean;
   onToggle: () => void;
-}> = (props) => {
+}> = (props): JSX.Element => {
   const name = () =>
     props.locked
       ? `${props.label} stays visible`
@@ -135,7 +143,7 @@ export const LayerRow: Component<{
   testId?: string;
   /** Tooltip for the remove/detach control. */
   removeTitle?: string;
-}> = (props) => {
+}> = (props): JSX.Element => {
   const main = () => (
     <>
       <div class="ax-layers-row-label" title={props.label}>

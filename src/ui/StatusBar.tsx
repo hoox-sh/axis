@@ -97,7 +97,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 /** Fixed footer chrome under the workspace (when Status pane is open). */
-export const StatusBar: Component = () => {
+export const StatusBar: Component = () : JSX.Element => {
   const datasetBars = useDatasetBarCount();
   const color = () => STATUS_COLORS[store.status] || 'text-text-dim';
   const [editingChart, setEditingChart] = createSignal(false);

@@ -43,6 +43,7 @@ import {
   type ISeriesApi,
   type ISeriesMarkersPluginApi,
   type SeriesMarker,
+  type Time,
   type UTCTimestamp,
 } from 'lightweight-charts';
 import type { PaneManager } from './pane-manager';
@@ -72,9 +73,15 @@ function fingerprintEvents(events: OnchainEventInput[]): string {
   const first = events[0];
   const last = events[n - 1];
   const mid = events[Math.floor(n / 2)];
+  // `n > 0` above guarantees both ends exist; the guard keeps the types total.
+  if (!first || !last) return '';
   return `${n}|${first.time}:${first.type ?? ''}:${first.title ?? ''}|${mid?.time ?? ''}:${mid?.type ?? ''}:${mid?.title ?? ''}|${last.time}:${last.type ?? ''}:${last.title ?? ''}`;
 }
 
+/**
+ * Marker spec for one on-chain event, ready for the `onchain_events` host series.
+ * `time` is a UTC timestamp in seconds; `text` is the event label, capped at 24 chars.
+ */
 export type OnchainEventMarker = {
   time: number;
   position: 'aboveBar' | 'belowBar';
@@ -94,7 +101,7 @@ export type OnchainEventInput = {
 
 type HostState = {
   series: ISeriesApi<'Line'>;
-  markers: ISeriesMarkersPluginApi<any>;
+  markers: ISeriesMarkersPluginApi<Time>;
 };
 
 /** Per-manager host series + markers plugin (not on the candle). */

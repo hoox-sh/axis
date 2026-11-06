@@ -211,8 +211,8 @@ function reportStaleEngine(reason: string, engineNewest: number | null): void {
     engineNewest,
     reason,
     repair: {
-      endpoint: String(getActiveEngineConfig()?.endpoint || store.endpoint || ''),
-      apiKey: String(getActiveEngineConfig()?.apiKey || ''),
+      endpoint: String(getActiveEngineConfig()?.['endpoint'] || store.endpoint || ''),
+      apiKey: String(getActiveEngineConfig()?.['apiKey'] || ''),
       key: chartSeriesKeyObject(),
       historyBars: engineHistoryBars(),
     },
@@ -264,8 +264,8 @@ const verifiers = new BoundedMap<string, Redesign2BarCloseVerifier>(VERIFIER_MEM
 
 function wireFingerprint(): string {
   const cfg = getActiveEngineConfig();
-  const endpoint = String(cfg?.endpoint || store.endpoint || '');
-  const authToken = String(cfg?.apiKey || '').trim();
+  const endpoint = String(cfg?.['endpoint'] || store.endpoint || '');
+  const authToken = String(cfg?.['apiKey'] || '').trim();
   return socketFingerprint(endpoint, authToken);
 }
 
@@ -286,12 +286,12 @@ function buildWireForFingerprint(fingerprint: string): StreamLiveWire {
 
 function buildWire(): StreamLiveWire {
   const cfg = getActiveEngineConfig();
-  const endpoint = String(cfg?.endpoint || store.endpoint || 'https://pynescript.online');
+  const endpoint = String(cfg?.['endpoint'] || store.endpoint || 'https://pynescript.online');
   // The engine-owned plane authenticates over the socket, not the URL: the
   // server answers UNAUTHORIZED (and AXIS then falls back to REST) unless the
   // first frame is `auth`. Read the key the same way every key-gated REST call
   // does, so a vault-restored key reaches the socket too.
-  const authToken = String(cfg?.apiKey || '').trim() || undefined;
+  const authToken = String(cfg?.['apiKey'] || '').trim() || undefined;
   return buildWireAt(endpoint, authToken);
 }
 
@@ -307,7 +307,9 @@ function buildWireAt(endpoint: string, authToken: string | undefined): StreamLiv
     authToken,
     liveProxy,
   });
-  const client = rawClient as unknown as WireClient;
+  // `StreamLiveWire` drives the worker-capable `WireClient` surface; the JSON
+  // client implements the same transport contract with narrower frame types.
+  const client = rawClient as WireClient;
   return new StreamLiveWire(
     client,
     {
@@ -387,11 +389,11 @@ function buildWireAt(endpoint: string, authToken: string | undefined): StreamLiv
           const key = chartSeriesKey();
           const o = ohlcv ?? {};
           const nums = {
-            open: Number(o.open),
-            high: Number(o.high),
-            low: Number(o.low),
-            close: Number(o.close),
-            volume: Number(o.volume),
+            open: Number(o['open']),
+            high: Number(o['high']),
+            low: Number(o['low']),
+            close: Number(o['close']),
+            volume: Number(o['volume']),
           };
           if (![nums.open, nums.high, nums.low, nums.close, nums.volume].every(Number.isFinite)) {
             setFeedStatus(key, 'degraded', { message: 'unverified close', verified: 'none' });
@@ -649,7 +651,7 @@ function seriesMeta(): Record<string, unknown> {
  */
 function scriptMeta(): Record<string, unknown> {
   const meta = seriesMeta();
-  meta.history_bars = scriptHistoryBars();
+  meta['history_bars'] = scriptHistoryBars();
   return meta;
 }
 
@@ -692,8 +694,8 @@ export function scriptHistoryBars(): number {
  */
 export async function streamDriveSeries(marketNow = 0): Promise<void> {
   const cfg = getActiveEngineConfig() || {};
-  const endpoint = String(cfg.endpoint || '').trim();
-  const apiKey = String(cfg.apiKey || '').trim();
+  const endpoint = String(cfg['endpoint'] || '').trim();
+  const apiKey = String(cfg['apiKey'] || '').trim();
   if (!endpoint || !apiKey) return;
   const key: DataSeriesKey = {
     exchange: chartExchange(),
@@ -750,7 +752,7 @@ export async function streamDriveSeries(marketNow = 0): Promise<void> {
  * only refuses to back-date the chart).
  */
 export async function streamSeriesTick(marketNow = 0): Promise<boolean> {
-  const token = String(getActiveEngineConfig()?.apiKey || '').trim();
+  const token = String(getActiveEngineConfig()?.['apiKey'] || '').trim();
   if (!token) throw new StreamFallbackError('no-auth', 'engine API key missing');
   const w = await getWire();
   const subId = seriesSubId();
@@ -794,7 +796,7 @@ export async function streamSeriesTick(marketNow = 0): Promise<boolean> {
 
 /** Evaluate one script over the latest merged stream state (no re-run). */
 export async function streamEvalScript(ind: Indicator): Promise<void> {
-  const token = String(getActiveEngineConfig()?.apiKey || '').trim();
+  const token = String(getActiveEngineConfig()?.['apiKey'] || '').trim();
   if (!token) throw new StreamFallbackError('no-auth', 'engine API key missing');
   const w = await getWire();
   try {
@@ -859,8 +861,10 @@ export function streamVerifyClose(
   return result;
 }
 
+/** Tier that confirmed a closed bar: venue REST, Worker proxy, engine replica, or none. */
 export type VerifyStrength = 'venue' | 'proxy' | 'engine' | 'none';
 
+/** A closed bar to verify: series identity, bar time, and the engine's own OHLCV. */
 export interface VerifyClosedBarInput {
   /** Canonical series key (for status reporting). */
   seriesKey: string;
@@ -874,6 +878,7 @@ export interface VerifyClosedBarInput {
   signal?: AbortSignal;
 }
 
+/** Verification verdict plus the tier that produced it. */
 export interface VerifyClosedBarOutcome {
   result: 'match' | 'mismatch' | 'unknown';
   verified: VerifyStrength;
@@ -910,7 +915,8 @@ export async function verifyClosedBar(
     if (!Array.isArray(rows)) return null;
     const row = rows.find((r) => Array.isArray(r) && Number(r[0]) === input.time * 1000) ?? rows[0];
     if (!Array.isArray(row) || row.length < 6) return null;
-    const [, o, h, l, c, v] = row.map(Number);
+    const [, o = Number.NaN, h = Number.NaN, l = Number.NaN, c = Number.NaN, v = Number.NaN] =
+      row.map(Number);
     if (![o, h, l, c, v].every(Number.isFinite)) return null;
     return { open: o, high: h, low: l, close: c, volume: v };
   };

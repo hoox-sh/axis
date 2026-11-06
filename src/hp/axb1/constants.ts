@@ -28,6 +28,7 @@
 /** `'AXB1'` as a little-endian uint32 (`41 58 42 31`). */
 export const AXB1_MAGIC = 0x31425841;
 
+/** Envelope format version; the decoder rejects any other value. */
 export const AXB1_VERSION = 1;
 
 /** Envelope size; payload starts here and is 8-byte aligned. */
@@ -36,6 +37,7 @@ export const AXB1_HEADER_BYTES = 32;
 /** Reject payloads larger than this (4 MiB). */
 export const AXB1_MAX_PAYLOAD = 4 * 1024 * 1024;
 
+/** Payload discriminant carried in the envelope's opcode byte. */
 export enum Axb1Opcode {
   HEARTBEAT = 0x00,
   STATUS = 0x01,
@@ -51,6 +53,7 @@ export enum Axb1Opcode {
   APPEND_BARS = 0x0b,
 }
 
+/** Bitmask selecting which forming-tip columns the payload actually carries. */
 export enum TipMask {
   OPEN = 1 << 0,
   HIGH = 1 << 1,
@@ -68,6 +71,7 @@ export const AXB1_HDR_HAS_SUB_ID = 1 << 0;
  * — the flag's job *is* to forbid compression, not to enable it. */
 export const AXB1_HDR_COMPRESSED = 1 << 1;
 
+/** How a plot column encodes its values: int64 price ticks, or float64 unit values. */
 export enum ValueKind {
   PriceTicks = 0,
   UnitFloat64 = 1,
@@ -83,8 +87,14 @@ export const AXB1_STATUS_CODES = [
   'error',
 ] as const;
 
+/** STATUS code strings; the wire carries the array index, or 255 for an unknown code. */
 export type Axb1StatusCode = (typeof AXB1_STATUS_CODES)[number];
 
+/** Lowest accepted `price_scale` (integer decimals encoded in the int64 ticks). */
 export const PRICE_SCALE_MIN = 0;
+
+/** Highest accepted `price_scale`. */
 export const PRICE_SCALE_MAX = 12;
+
+/** `price_scale` used when an encoder/decoder does not carry one. */
 export const PRICE_SCALE_DEFAULT = 8;

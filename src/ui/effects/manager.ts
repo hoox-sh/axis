@@ -28,6 +28,7 @@ import {
 import type { EffectDef, EffectTune } from './types';
 import { getJson, removeItem, setItem, storageAvailable } from '../../utils/storage';
 
+/** `localStorage` key holding the persisted effect tunes. */
 export const UI_EFFECTS_STORAGE_KEY = 'pynescript.axis.ui-effects.v1';
 
 const registry = new Map<string, EffectDef>();
@@ -39,10 +40,21 @@ const [reducedMotion, setReducedMotion] = createSignal(false);
 let installed = false;
 let reducedBound = false;
 
+/**
+ * Every registered effect in registration order (built-ins first).
+ *
+ * @returns Snapshot array; mutating it does not affect the registry.
+ */
 export function listEffects(): readonly EffectDef[] {
   return [...registry.values()];
 }
 
+/**
+ * Look up one effect definition.
+ *
+ * @param id - Effect id such as `watchlist-tick`.
+ * @returns The definition, or `undefined` when nothing is registered under that id.
+ */
 export function getEffect(id: string): EffectDef | undefined {
   return registry.get(id);
 }
@@ -53,10 +65,17 @@ export function registerEffect(def: EffectDef): void {
   if (installed) applyUiEffects();
 }
 
+/** Whether the OS asks for reduced motion; updated live by the media-query listener. */
 export function prefersReducedMotion(): boolean {
   return reducedMotion();
 }
 
+/**
+ * Effective enabled flag for an effect (user tune over registry default).
+ *
+ * @param id - Effect id.
+ * @returns `false` for unknown ids; otherwise the tuned or default value.
+ */
 export function effectEnabled(id: string): boolean {
   const def = registry.get(id);
   if (!def) return false;
@@ -84,12 +103,27 @@ export function effectMs(id: string, paramId = 'durationMs'): number {
   return effectParam(id, paramId);
 }
 
+/**
+ * Whether the stored tune differs from the registry defaults (drives the
+ * "modified" marker / reset affordance in Settings).
+ *
+ * @param id - Effect id.
+ * @returns `false` for unknown ids or when nothing was overridden.
+ */
 export function effectDirty(id: string): boolean {
   const def = registry.get(id);
   if (!def) return false;
   return tuneIsDirty(def, tunes[id]);
 }
 
+/**
+ * Turn an effect on/off. Matching the registry default drops the override
+ * instead of storing it, keeping the persisted tune minimal; CSS variables are
+ * repainted immediately.
+ *
+ * @param id - Effect id.
+ * @param enabled - Desired enabled state.
+ */
 export function setEffectEnabled(id: string, enabled: boolean): void {
   const def = registry.get(id);
   if (!def) return;
@@ -104,6 +138,15 @@ export function setEffectEnabled(id: string, enabled: boolean): void {
   commit();
 }
 
+/**
+ * Tune one numeric param, clamped/snapped by its spec. Values equal to the
+ * default are removed from the stored tune; non-finite input and unknown
+ * effect/param ids are ignored.
+ *
+ * @param id - Effect id.
+ * @param paramId - Param id from the effect's `params`.
+ * @param raw - Requested value before clamping.
+ */
 export function setEffectParam(id: string, paramId: string, raw: number): void {
   const def = registry.get(id);
   const spec = def?.params.find((p) => p.id === paramId);
@@ -125,6 +168,11 @@ export function setEffectParam(id: string, paramId: string, raw: number): void {
   commit();
 }
 
+/**
+ * Drop all overrides for one effect so it returns to registry defaults.
+ *
+ * @param id - Effect id; unknown ids are a no-op.
+ */
 export function resetEffect(id: string): void {
   if (!registry.has(id)) return;
   setTunes(
@@ -136,6 +184,11 @@ export function resetEffect(id: string): void {
 }
 
 /** Write current tunes to CSS custom properties. No-op without a document. */
+/**
+ * Recompute every effect's CSS custom properties from the current tunes and
+ * write them on `document.documentElement`. Disabled effects (or reduced
+ * motion) write zero so a stale class cannot animate.
+ */
 export function applyUiEffects(): void {
   if (typeof document === 'undefined') return;
   const root = document.documentElement;
@@ -147,6 +200,11 @@ export function applyUiEffects(): void {
 }
 
 /** Hydrate saved tunes, follow reduced-motion, and paint CSS variables. */
+/**
+ * Boot the effects system once: hydrate persisted tunes, bind the
+ * reduced-motion media query, and paint the CSS variables. Safe to call
+ * repeatedly — hydration and the listener bind are guarded.
+ */
 export function installUiEffects(): void {
   if (!installed) {
     installed = true;
@@ -199,6 +257,11 @@ function bindReducedMotion(): void {
 }
 
 /** @internal test helper */
+/**
+ * Force the reduced-motion flag (tests cannot emulate the media query).
+ *
+ * @param on - Value to report from {@link prefersReducedMotion}.
+ */
 export function _setReducedMotionForTests(on: boolean): void {
   setReducedMotion(on);
   applyUiEffects();

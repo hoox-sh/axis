@@ -17,6 +17,17 @@ import type { StudioPageId } from './types';
 import { STUDIO_PAGES, studioPageMeta } from './pages';
 import { AppPageHeader } from './AppPageHeader';
 
+/**
+ * Full-viewport studio shell: header, primary/catalog rail, and page canvas.
+ *
+ * In modal mode (default) it installs a focus trap with autofocus and closes on
+ * Escape — unless a chord-recording session owns the key. Non-modal pages opt
+ * out of both so the app behind keeps focus and Escape. The `wire` page renders
+ * flush (no padded canvas) regardless of `flush`.
+ *
+ * @param props - Open flag, active page, navigation/close handlers, and chrome slots.
+ * @returns The backdrop + dialog markup, or nothing when `open` is false.
+ */
 export function AppPage(props: {
   open: boolean;
   page: StudioPageId;
@@ -33,7 +44,7 @@ export function AppPage(props: {
    * Defaults to the modal overlay (all current studio pages).
    */
   modal?: boolean;
-}) {
+}): JSX.Element {
   const meta = () => studioPageMeta(props.page);
   const flush = () => props.flush || props.page === 'wire';
   const modal = () => props.modal ?? true;

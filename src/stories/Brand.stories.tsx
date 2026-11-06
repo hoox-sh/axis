@@ -10,9 +10,12 @@ import { HooxLoader } from '../ui/HooxLoader';
 const meta: Meta = { title: 'Brand/HOOX', tags: ['autodocs'], parameters: { layout: 'padded' } };
 export default meta;
 
+/** HOOX wordmark at xs / m / l. */
 export const LogoSizes: StoryObj = {
   render: () => (
-    <div style={{ display: 'flex', 'align-items': 'center', gap: '16px', color: 'var(--color-text)' }}>
+    <div
+      style={{ display: 'flex', 'align-items': 'center', gap: '16px', color: 'var(--color-text)' }}
+    >
       <HooxLogo size="xs" />
       <HooxLogo size="m" />
       <HooxLogo size="l" />
@@ -20,6 +23,7 @@ export const LogoSizes: StoryObj = {
   ),
 };
 
+/** Loader in icon, inline and stacked layouts. */
 export const Loader: StoryObj = {
   render: () => (
     <div style={{ display: 'flex', 'flex-direction': 'column', gap: '16px' }}>

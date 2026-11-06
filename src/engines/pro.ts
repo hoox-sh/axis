@@ -35,12 +35,17 @@ import { getActiveEngineConfig } from '../plugins/active';
 import { confirmEngineApiKeyTarget } from './catalog';
 import { isAbortLike } from '../utils/errors';
 import { combineAbortSignals } from '../utils/fetch-timeout';
+import { isRecord, readJsonRecord } from '../utils/validate';
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 
 /** Bars sent to the preview endpoints; the backend caps render size anyway. */
 export const PREVIEW_MAX_BARS = 500;
 
+/**
+ * Render options forwarded to `POST /preview/chart` / `POST /preview/indicator`; every field
+ * is optional and omitted keys fall back to the backend's own defaults.
+ */
 export interface PreviewOptions {
   /** `line` (default) or `ohlcv`. */
   type?: 'line' | 'ohlcv';
@@ -50,6 +55,10 @@ export interface PreviewOptions {
   height?: number;
 }
 
+/**
+ * Normalized preview reply: `ok` plus a base64 PNG, or `unavailable` when the host does not
+ * expose the Pro route (403/404/501) — callers hide the action instead of showing an error.
+ */
 export interface PreviewResult {
   ok: boolean;
   /** Base64 PNG payload (no data-URL prefix). */
@@ -61,10 +70,18 @@ export interface PreviewResult {
   error: string | null;
 }
 
+/**
+ * Open-ended `result.summary` block from `/backtest/quick`; PYNE owns the keys, so AXIS
+ * forwards them untouched rather than inventing a schema.
+ */
 export interface BacktestSummary {
   [key: string]: unknown;
 }
 
+/**
+ * Normalized `/backtest/quick` reply — equity curve, trades and summary plus the optional
+ * rendered equity PNG; `unavailable` marks a host without the Pro route.
+ */
 export interface QuickBacktestResult {
   ok: boolean;
   /** Equity curve values, when reported. */
@@ -79,6 +96,10 @@ export interface QuickBacktestResult {
   error: string | null;
 }
 
+/**
+ * Per-call overrides for the Pro REST routes: endpoint and key default to the active engine
+ * config, and `timeoutMs` / `signal` bound the request so a slow host cannot wedge the UI.
+ */
 export interface ProCallOptions {
   endpoint?: string;
   apiKey?: string;
@@ -91,12 +112,14 @@ function failure(error: string, unavailable = false): PreviewResult {
 }
 
 /** Resolve endpoint/key + consent; returns an error string when unusable. */
-function resolveTarget(opts: ProCallOptions): { endpoint: string; headers: Record<string, string> } | string {
+function resolveTarget(
+  opts: ProCallOptions,
+): { endpoint: string; headers: Record<string, string> } | string {
   const cfg = getActiveEngineConfig() || {};
-  const endpoint = String(opts.endpoint ?? cfg.endpoint ?? '')
+  const endpoint = String(opts.endpoint ?? cfg['endpoint'] ?? '')
     .trim()
     .replace(/\/$/, '');
-  const apiKey = String(opts.apiKey ?? cfg.apiKey ?? '').trim();
+  const apiKey = String(opts.apiKey ?? cfg['apiKey'] ?? '').trim();
   if (!endpoint) return 'No backend endpoint — select the server engine and set a URL';
   if (/pyodide/i.test(endpoint)) return 'Pyodide runs in this tab — previews need a server engine';
   if (apiKey && !confirmEngineApiKeyTarget(endpoint, apiKey)) {
@@ -105,7 +128,7 @@ function resolveTarget(opts: ProCallOptions): { endpoint: string; headers: Recor
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (apiKey) {
     headers['X-API-Key'] = apiKey;
-    headers.Authorization = `Bearer ${apiKey}`;
+    headers['Authorization'] = `Bearer ${apiKey}`;
   }
   return { endpoint, headers };
 }
@@ -184,19 +207,19 @@ export async function renderChartPreview(
   if (res.status === 403 || res.status === 404 || res.status === 501) {
     return failure('Preview is not available on this backend (Pro route)', true);
   }
-  if (res.status < 200 || res.status >= 300 || !res.payload || res.payload.status === 'error') {
+  if (res.status < 200 || res.status >= 300 || !res.payload || res.payload['status'] === 'error') {
     const message =
-      typeof res.payload?.message === 'string' && res.payload.message
-        ? res.payload.message
+      typeof res.payload?.['message'] === 'string' && res.payload['message']
+        ? res.payload['message']
         : `Preview failed (HTTP ${res.status})`;
     return failure(message);
   }
-  const meta = (res.payload.meta || {}) as Record<string, unknown>;
+  const meta = (res.payload['meta'] || {}) as Record<string, unknown>;
   return {
     ok: true,
-    chart: typeof res.payload.chart === 'string' ? res.payload.chart : null,
-    bars: typeof meta.bars === 'number' ? meta.bars : series.length,
-    lastValue: typeof meta.last_value === 'number' ? meta.last_value : null,
+    chart: typeof res.payload['chart'] === 'string' ? res.payload['chart'] : null,
+    bars: typeof meta['bars'] === 'number' ? meta['bars'] : series.length,
+    lastValue: typeof meta['last_value'] === 'number' ? meta['last_value'] : null,
     unavailable: false,
     error: null,
   };
@@ -233,19 +256,19 @@ export async function renderIndicatorPreview(
   if (res.status === 403 || res.status === 404 || res.status === 501) {
     return failure('Preview is not available on this backend (Pro route)', true);
   }
-  if (res.status < 200 || res.status >= 300 || !res.payload || res.payload.status === 'error') {
+  if (res.status < 200 || res.status >= 300 || !res.payload || res.payload['status'] === 'error') {
     const message =
-      typeof res.payload?.message === 'string' && res.payload.message
-        ? res.payload.message
+      typeof res.payload?.['message'] === 'string' && res.payload['message']
+        ? res.payload['message']
         : `Preview failed (HTTP ${res.status})`;
     return failure(message);
   }
-  const meta = (res.payload.meta || {}) as Record<string, unknown>;
+  const meta = (res.payload['meta'] || {}) as Record<string, unknown>;
   return {
     ok: true,
-    chart: typeof res.payload.chart === 'string' ? res.payload.chart : null,
-    bars: typeof meta.bars === 'number' ? meta.bars : series.length,
-    lastValue: typeof meta.last_value === 'number' ? meta.last_value : null,
+    chart: typeof res.payload['chart'] === 'string' ? res.payload['chart'] : null,
+    bars: typeof meta['bars'] === 'number' ? meta['bars'] : series.length,
+    lastValue: typeof meta['last_value'] === 'number' ? meta['last_value'] : null,
     unavailable: false,
     error: null,
   };
@@ -307,27 +330,27 @@ export async function runQuickBacktest(
       error: 'Quick backtest is not available on this backend (Pro route)',
     };
   }
-  if (res.status < 200 || res.status >= 300 || !res.payload || res.payload.status === 'error') {
+  if (res.status < 200 || res.status >= 300 || !res.payload || res.payload['status'] === 'error') {
     const message =
-      typeof res.payload?.message === 'string' && res.payload.message
-        ? res.payload.message
+      typeof res.payload?.['message'] === 'string' && res.payload['message']
+        ? res.payload['message']
         : `Backtest failed (HTTP ${res.status})`;
     return { ...empty, error: message };
   }
-  const result = (res.payload.result || {}) as Record<string, unknown>;
-  const meta = (res.payload.meta || {}) as Record<string, unknown>;
+  const result = (res.payload['result'] || {}) as Record<string, unknown>;
+  const meta = (res.payload['meta'] || {}) as Record<string, unknown>;
   return {
     ok: true,
-    equityCurve: Array.isArray(result.equity_curve)
-      ? result.equity_curve.filter((v): v is number => typeof v === 'number')
+    equityCurve: Array.isArray(result['equity_curve'])
+      ? result['equity_curve'].filter((v): v is number => typeof v === 'number')
       : [],
-    trades: Array.isArray(result.trades)
-      ? result.trades.filter((t): t is Record<string, unknown> => !!t && typeof t === 'object')
+    trades: Array.isArray(result['trades'])
+      ? result['trades'].filter((t): t is Record<string, unknown> => !!t && typeof t === 'object')
       : [],
-    summary: (result.summary as BacktestSummary) || {},
-    equityChart: typeof result.equity_chart === 'string' ? result.equity_chart : null,
-    bars: typeof meta.bars === 'number' ? meta.bars : closes.length || null,
-    initialCapital: typeof meta.initial_capital === 'number' ? meta.initial_capital : null,
+    summary: (result['summary'] as BacktestSummary) || {},
+    equityChart: typeof result['equity_chart'] === 'string' ? result['equity_chart'] : null,
+    bars: typeof meta['bars'] === 'number' ? meta['bars'] : closes.length || null,
+    initialCapital: typeof meta['initial_capital'] === 'number' ? meta['initial_capital'] : null,
     unavailable: false,
     error: null,
   };
@@ -383,18 +406,18 @@ export async function fetchUsage(opts: ProCallOptions = {}): Promise<UsageResult
       return { ...empty, error: 'API key not recognised by this backend' };
     }
     if (!res.ok) return { ...empty, error: `Usage failed (HTTP ${res.status})` };
-    const parsed = (await res.json()) as Record<string, unknown>;
-    const usage = (parsed.usage || {}) as Record<string, unknown>;
+    const parsed = await readJsonRecord(res);
+    const usage = isRecord(parsed['usage']) ? parsed['usage'] : {};
     const asNum = (v: unknown): number | null =>
       typeof v === 'number' && Number.isFinite(v) ? v : null;
     return {
       ok: true,
-      keyId: typeof parsed.key_id === 'string' ? parsed.key_id : null,
-      tier: typeof parsed.tier === 'string' ? parsed.tier : null,
-      callsUsed: asNum(usage.calls_used),
-      callsLimit: asNum(usage.calls_limit),
-      callsRemaining: asNum(usage.calls_remaining),
-      lastUsed: asNum(usage.last_used),
+      keyId: typeof parsed['key_id'] === 'string' ? parsed['key_id'] : null,
+      tier: typeof parsed['tier'] === 'string' ? parsed['tier'] : null,
+      callsUsed: asNum(usage['calls_used']),
+      callsLimit: asNum(usage['calls_limit']),
+      callsRemaining: asNum(usage['calls_remaining']),
+      lastUsed: asNum(usage['last_used']),
       unavailable: false,
       error: null,
     };

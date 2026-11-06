@@ -46,14 +46,18 @@ export type ProviderVenue =
   | 'cache'
   | 'generic';
 
+/** Whether the session signs requests (`authenticated`) or reads public endpoints only. */
 export type ProviderAuthMode = 'public' | 'authenticated';
+/** Derivative market of the series; `spot` is the default when unknown. */
 export type ProviderMarket = 'spot' | 'linear' | 'inverse' | 'option';
 
 const MARKET_SET = new Set<ProviderMarket>(['spot', 'linear', 'inverse', 'option']);
 
 /** Normalize a market id; unknown values become spot. */
 export function asProviderMarket(raw: unknown): ProviderMarket {
-  const m = String(raw || '').trim().toLowerCase();
+  const m = String(raw || '')
+    .trim()
+    .toLowerCase();
   if (m === 'swap' || m === 'futures' || m === 'usdt-m' || m === 'usdm') return 'linear';
   // `future` is the PYNE wire name for inverse. Missing / unknown stays spot.
   if (m === 'future' || m === 'coin-m' || m === 'coinm' || m === 'delivery') return 'inverse';
@@ -64,16 +68,20 @@ export function asProviderMarket(raw: unknown): ProviderMarket {
  * Dataset-key lock for a provider. Missing market is spot — the only default.
  * Spot + public then keeps the legacy 3-part key ({@link barsCacheKey}).
  */
-export function providerDatasetLock(
-  provider?: { market?: unknown; authMode?: unknown } | null,
-): { market: string; authMode: string } {
-  const auth = String(provider?.authMode ?? '').trim().toLowerCase();
+export function providerDatasetLock(provider?: { market?: unknown; authMode?: unknown } | null): {
+  market: string;
+  authMode: string;
+} {
+  const auth = String(provider?.authMode ?? '')
+    .trim()
+    .toLowerCase();
   return {
     market: asProviderMarket(provider?.market),
     authMode: auth === 'authenticated' ? 'authenticated' : 'public',
   };
 }
 
+/** Display names for the market selector and status labels. */
 export const MARKET_LABELS: Record<ProviderMarket, string> = {
   spot: 'Spot',
   linear: 'USDT-M',
@@ -102,6 +110,7 @@ export function marketsForVenue(venue: string): ProviderMarket[] {
       return ['spot'];
   }
 }
+/** Transport used to reach the venue: direct REST, the AXIS Worker proxy, PYNE, or the local sidecar. */
 export type ProviderGateway = 'direct' | 'worker' | 'pyne' | 'sidecar';
 
 /**
@@ -121,6 +130,10 @@ export interface ProviderSession {
   gateway: ProviderGateway;
 }
 
+/**
+ * Baseline session used when nothing is persisted: Binance spot, public,
+ * direct transport. Every field is a safe default — no credential is implied.
+ */
 export const DEFAULT_PROVIDER: ProviderSession = {
   id: 'binance',
   sourceId: 'binance-rest',
@@ -151,7 +164,9 @@ export function providerVenueLabel(venue: ProviderVenue): string {
 }
 
 /** Compact HUD / status label, e.g. `Binance spot · public`. */
-export function formatProviderLabel(p: Pick<ProviderSession, 'venue' | 'market' | 'authMode'>): string {
+export function formatProviderLabel(
+  p: Pick<ProviderSession, 'venue' | 'market' | 'authMode'>,
+): string {
   const auth = p.authMode === 'authenticated' ? 'key' : 'public';
   return `${providerVenueLabel(p.venue)} ${p.market} · ${auth}`;
 }
@@ -178,9 +193,7 @@ export function venueFromPluginId(id: string | undefined | null): ProviderVenue 
 }
 
 /** Read `capabilities.venue` when declared. */
-export function venueFromCapabilities(
-  caps?: PluginCapabilities | null,
-): ProviderVenue | null {
+export function venueFromCapabilities(caps?: PluginCapabilities | null): ProviderVenue | null {
   const v = caps?.venue;
   if (
     v === 'binance' ||
@@ -200,10 +213,7 @@ export function venueFromCapabilities(
   return null;
 }
 
-function venueOf(
-  id: string | undefined,
-  caps?: PluginCapabilities | null,
-): ProviderVenue | null {
+function venueOf(id: string | undefined, caps?: PluginCapabilities | null): ProviderVenue | null {
   return venueFromCapabilities(caps) || venueFromPluginId(id);
 }
 
@@ -283,16 +293,9 @@ export function defaultSourceForStream(streamId: string): string {
  * Data Manager: pass the cache row's venue source id as `underlyingSourceId`
  * (same as {@link resolveProviderVenue}).
  */
-export function defaultStreamForSource(
-  sourceId: string,
-  underlyingSourceId?: string,
-): string {
+export function defaultStreamForSource(sourceId: string, underlyingSourceId?: string): string {
   if (sourceId.startsWith('ccxt:')) return 'ccxt-ws';
-  if (
-    sourceId === 'mock-walk' ||
-    sourceId === 'csv-upload' ||
-    sourceId === 'geckoterminal-ohlcv'
-  ) {
+  if (sourceId === 'mock-walk' || sourceId === 'csv-upload' || sourceId === 'geckoterminal-ohlcv') {
     return OFFLINE_STREAM;
   }
   if (sourceId === 'data-manager') {
@@ -315,6 +318,15 @@ export function isSourceStreamPaired(
   return defaultStreamForSource(sourceId, underlyingSourceId) === streamId;
 }
 
+/**
+ * Compose the session for a source/stream pair. The venue comes from
+ * capabilities when declared, otherwise from id matching; CCXT pairs collapse to
+ * `generic` with `id = ccxt:<exchange>` and default to the PYNE gateway.
+ *
+ * @param sourceId - Source plugin id (or `ccxt:<exchange>`).
+ * @param streamId - Live stream plugin id; defaults to the paired stream.
+ * @param opts - Capability bags plus optional auth, credential, gateway, and market.
+ */
 export function buildProviderSession(
   sourceId: string,
   streamId: string,
@@ -333,14 +345,12 @@ export function buildProviderSession(
   const resolvedSource = sourceId.startsWith('ccxt:') ? 'ccxt-rest' : sourceId;
   const venue = resolveProviderVenue(resolvedSource, streamId, opts);
   const market = opts?.market || opts?.sourceCaps?.market || 'spot';
-  const ccxtEx = String(opts?.ccxtExchange || '').trim().toLowerCase();
+  const ccxtEx = String(opts?.ccxtExchange || '')
+    .trim()
+    .toLowerCase();
   const isCcxt = resolvedSource === 'ccxt-rest' || streamId === 'ccxt-ws';
   const id =
-    isCcxt && ccxtEx
-      ? `ccxt:${ccxtEx}`
-      : venue === 'generic'
-        ? resolvedSource || 'generic'
-        : venue;
+    isCcxt && ccxtEx ? `ccxt:${ccxtEx}` : venue === 'generic' ? resolvedSource || 'generic' : venue;
   return {
     id,
     sourceId: resolvedSource,
@@ -364,7 +374,9 @@ export function hydrateProviderSession(
   streamId: string,
   ccxtExchange?: string,
 ): ProviderSession {
-  let ex = String(ccxtExchange || '').trim().toLowerCase();
+  let ex = String(ccxtExchange || '')
+    .trim()
+    .toLowerCase();
   if (!ex && raw && typeof raw === 'object') {
     const id = String((raw as { id?: unknown }).id || '');
     if (id.startsWith('ccxt:') && id.length > 5) ex = id.slice(5);
@@ -372,18 +384,18 @@ export function hydrateProviderSession(
   const base = buildProviderSession(sourceId, streamId, { ccxtExchange: ex || undefined });
   if (!raw || typeof raw !== 'object') return base;
   const bag = raw as Record<string, unknown>;
-  const authMode = AUTH_MODES.includes(bag.authMode as ProviderAuthMode)
-    ? (bag.authMode as ProviderAuthMode)
+  const authMode = AUTH_MODES.includes(bag['authMode'] as ProviderAuthMode)
+    ? (bag['authMode'] as ProviderAuthMode)
     : base.authMode;
-  const market = MARKETS.includes(bag.market as ProviderMarket)
-    ? (bag.market as ProviderMarket)
+  const market = MARKETS.includes(bag['market'] as ProviderMarket)
+    ? (bag['market'] as ProviderMarket)
     : base.market;
-  const gateway = GATEWAYS.includes(bag.gateway as ProviderGateway)
-    ? (bag.gateway as ProviderGateway)
+  const gateway = GATEWAYS.includes(bag['gateway'] as ProviderGateway)
+    ? (bag['gateway'] as ProviderGateway)
     : base.gateway;
   const credentialId =
-    typeof bag.credentialId === 'string' && bag.credentialId.trim()
-      ? bag.credentialId.trim()
+    typeof bag['credentialId'] === 'string' && bag['credentialId'].trim()
+      ? bag['credentialId'].trim()
       : undefined;
   return {
     ...base,
@@ -405,6 +417,6 @@ export function persistProviderSession(p: ProviderSession): Record<string, unkno
     authMode: p.authMode,
     gateway: p.gateway,
   };
-  if (p.credentialId) out.credentialId = p.credentialId;
+  if (p.credentialId) out['credentialId'] = p.credentialId;
   return out;
 }

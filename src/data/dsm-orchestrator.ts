@@ -54,16 +54,9 @@ import {
 } from './dataset-store';
 import { isHeavyBarLoad, isVeryHeavyBarLoad } from '../chart/heavy-data';
 import { getVisibleBars, isReplayActive } from '../chart/bar-replay';
-import {
-  repairBars,
-  validateDataset,
-  venueClassForSourceCaps,
-} from './dataset-validate';
+import { repairBars, validateDataset, venueClassForSourceCaps } from './dataset-validate';
 import { intervalToSec } from './bars-gaps';
-import {
-  getDataSourceJobs,
-  startBackfill,
-} from './data-source-manager';
+import { getDataSourceJobs, startBackfill } from './data-source-manager';
 import { exchangeForSource } from './symbol-exchange';
 import { providerDatasetLock } from './provider';
 import { getSource } from '../sources/catalog';
@@ -89,6 +82,11 @@ function repaintThrottleMs(barCount: number): number {
   return REPAINT_THROTTLE_MS;
 }
 
+/**
+ * Outcome of the cache-first load path: how many bars the initial paint got,
+ * whether they came from the dataset store, the background job id if completion
+ * work was queued, and the gap split the validation pass reported.
+ */
 export interface DatasetFirstResult {
   /** Bars painted from the dataset (0 = nothing cached). */
   painted: number;
@@ -158,7 +156,9 @@ export function sliceForChart(bars: Bar[]): Bar[] {
  */
 function chartHoldsSeries(sym: string, iv: string): boolean {
   if (String(store.interval || '') !== iv) return false;
-  const cur = String(store.symbol || '').trim().toUpperCase();
+  const cur = String(store.symbol || '')
+    .trim()
+    .toUpperCase();
   return !!cur && cur === sym.trim().toUpperCase();
 }
 
@@ -330,11 +330,7 @@ export async function paintDataset(
  * paint. Used after a direct venue load (Reload) so background DSM slices
  * keep extending the chart instead of leaving it stuck at one page.
  */
-export function startProgressiveStream(
-  symbol: string,
-  interval: string,
-  sourceId: string,
-): void {
+export function startProgressiveStream(symbol: string, interval: string, sourceId: string): void {
   const sym = String(symbol || '').trim();
   const iv = String(interval || store.interval || '1d');
   const srcId = String(sourceId || store.source || '');
@@ -406,7 +402,10 @@ export async function coldStartDataset(
     applyWhenComplete: true,
   });
 
-  setStatus('loading', `DSM backfilling ${sym} ${iv} · chart at ${chartCap}, dataset to ${historyBars}`);
+  setStatus(
+    'loading',
+    `DSM backfilling ${sym} ${iv} · chart at ${chartCap}, dataset to ${historyBars}`,
+  );
 
   const stillCurrent = opts?.stillCurrent;
   const signal = opts?.signal;
@@ -436,9 +435,7 @@ export async function coldStartDataset(
     const job = getDataSourceJobs().find((j) => j.id === jobId);
     if (
       job &&
-      (job.status === 'complete' ||
-        job.status === 'cancelled' ||
-        job.status === 'error')
+      (job.status === 'complete' || job.status === 'cancelled' || job.status === 'error')
     ) {
       if (bars.length) {
         const view = await paintDataset(sym, iv, srcId, {
@@ -526,10 +523,8 @@ export async function ensureDatasetComplete(
     result.gapsFillable = report.fillableGaps.length;
     result.gapsLegitimate = report.legitimateGaps.length;
 
-    const newestStale =
-      report.newestSec == null || targetToSec - report.newestSec > step * 1.5;
-    const sparse =
-      report.expectedBars > 0 && report.barCount < report.expectedBars * 0.85;
+    const newestStale = report.newestSec == null || targetToSec - report.newestSec > step * 1.5;
+    const sparse = report.expectedBars > 0 && report.barCount < report.expectedBars * 0.85;
 
     if (report.fillableGaps.length || newestStale || sparse) {
       // Sliced backfill: the job engine walks back page-by-page (auto-slices)
@@ -596,10 +591,6 @@ export function _resetDsmOrchestratorForTests(): void {
 }
 
 /** @internal test helper — the bars a repaint would paint. */
-export function repaintViewForTests(
-  datasetBars: Bar[],
-  sym: string,
-  iv: string,
-): Bar[] {
+export function repaintViewForTests(datasetBars: Bar[], sym: string, iv: string): Bar[] {
   return repaintView(datasetBars, sym, iv);
 }

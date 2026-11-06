@@ -40,7 +40,10 @@ interface ParseResponse {
   error?: string;
 }
 
-const workerSelf = globalThis as unknown as {
+// A dedicated worker's `globalThis` exposes this surface; `lib.dom` types
+// `postMessage` as `Window.postMessage(message, targetOrigin)`, which this scope
+// never calls that way.
+const workerSelf = globalThis as {
   onmessage?: ((event: MessageEvent<ParseMessage>) => void) | null;
   postMessage: (message: ParseResponse) => void;
 };

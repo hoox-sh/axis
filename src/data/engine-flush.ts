@@ -12,17 +12,18 @@
  * @module data/engine-flush
  */
 
-import {
-  deleteDataSeries,
-  seriesKeyString,
-  type DataSeriesKey,
-} from '../engines/data-sessions';
+import { deleteDataSeries, seriesKeyString, type DataSeriesKey } from '../engines/data-sessions';
 import { flushDatasets, listMemoryDatasets } from './dataset-store';
 import { listCachedSeries, lockFromBarsKey } from './bars-cache';
 import { getActiveEngineConfig } from '../plugins/active';
 import { store } from '../store';
 import { exchangeForSource } from './symbol-exchange';
 
+/**
+ * Report from an engine purge: which series keys were attempted, how many bars
+ * the engine dropped, and the keys it refused (older engine, missing creds, or
+ * an IndexedDB listing failure under the `*` sentinel).
+ */
 export interface EngineFlushResult {
   /** Engine series keys the flush asked for. */
   keys: string[];
@@ -63,7 +64,9 @@ function addChartSeries(out: Map<string, DataSeriesKey>): void {
   const interval = String(store.interval || '').trim();
   if (!symbol || !interval) return;
   addSeries(out, {
-    exchange: String(store.exchange || 'binance').trim().toLowerCase(),
+    exchange: String(store.exchange || 'binance')
+      .trim()
+      .toLowerCase(),
     market: store.provider?.market || 'spot',
     symbol,
     interval,
@@ -132,8 +135,8 @@ export async function flushEngineSeries(
   preset?: readonly DataSeriesKey[],
 ): Promise<EngineFlushResult> {
   const cfg = getActiveEngineConfig();
-  const endpoint = String(cfg?.endpoint || store.endpoint || '').trim();
-  const apiKey = String(cfg?.apiKey || '').trim();
+  const endpoint = String(cfg?.['endpoint'] || store.endpoint || '').trim();
+  const apiKey = String(cfg?.['apiKey'] || '').trim();
   let listError: unknown | null = null;
   let keys: DataSeriesKey[];
   if (preset) {

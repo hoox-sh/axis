@@ -43,6 +43,11 @@ export const BARS_CACHE_MAX = 100_000;
 /** Soft cap on distinct series keys held in the in-memory map. */
 export const BARS_CACHE_MAX_SERIES = 48;
 
+/**
+ * IndexedDB row for one series (`bars` object store, keyed by `key`): the full
+ * sorted bar array plus the parts and timestamp needed to rebuild the key and
+ * list it without parsing the bars.
+ */
 export interface BarsCacheRecord {
   key: string;
   sourceId: string;
@@ -73,8 +78,7 @@ export function sliceBarsForLoad(bars: Bar[], window?: BarLoadWindow | null): Ba
   if (!Array.isArray(bars) || !bars.length) return [];
   if (!window) return bars.slice();
 
-  const from =
-    window.fromSec != null && Number.isFinite(window.fromSec) ? window.fromSec : null;
+  const from = window.fromSec != null && Number.isFinite(window.fromSec) ? window.fromSec : null;
   const to = window.toSec != null && Number.isFinite(window.toSec) ? window.toSec : null;
   const max =
     window.maxBars != null && Number.isFinite(window.maxBars) && window.maxBars > 0
@@ -104,8 +108,7 @@ export function countBarsForLoad(bars: Bar[], window?: BarLoadWindow | null): nu
   if (!Array.isArray(bars) || !bars.length) return 0;
   if (!window) return bars.length;
 
-  const from =
-    window.fromSec != null && Number.isFinite(window.fromSec) ? window.fromSec : null;
+  const from = window.fromSec != null && Number.isFinite(window.fromSec) ? window.fromSec : null;
   const to = window.toSec != null && Number.isFinite(window.toSec) ? window.toSec : null;
   const max =
     window.maxBars != null && Number.isFinite(window.maxBars) && window.maxBars > 0
@@ -275,9 +278,7 @@ function capNewest(bars: Bar[], max: number): Bar[] {
 export function mergeAndCap(existing: Bar[], incoming: Bar[], max = BARS_CACHE_MAX): Bar[] {
   const base = Array.isArray(existing) ? existing : [];
   const cap =
-    typeof max === 'number' && Number.isFinite(max) && max > 0
-      ? Math.floor(max)
-      : BARS_CACHE_MAX;
+    typeof max === 'number' && Number.isFinite(max) && max > 0 ? Math.floor(max) : BARS_CACHE_MAX;
 
   if (!Array.isArray(incoming) || !incoming.length) {
     return capNewest(base, cap);
@@ -295,8 +296,7 @@ export function mergeAndCap(existing: Bar[], incoming: Bar[], max = BARS_CACHE_M
       return out;
     }
     if (Number.isFinite(last.time) && b.time > last.time) {
-      const out =
-        base.length >= cap ? base.slice(base.length - (cap - 1)) : base.slice();
+      const out = base.length >= cap ? base.slice(base.length - (cap - 1)) : base.slice();
       out.push(b);
       return out;
     }
@@ -400,7 +400,10 @@ export function flushPendingIdbPuts(): Promise<void> {
   const job = commitIdbBatch(batch, epoch);
   // Chain before the first await so a clear that starts in this gap waits
   // for this batch, including one still blocked on the database open.
-  flushTail = flushTail.then(() => job, () => job);
+  flushTail = flushTail.then(
+    () => job,
+    () => job,
+  );
   return job;
 }
 

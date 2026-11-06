@@ -33,6 +33,10 @@ export function assertI64Aligned(byteOffset: number): void {
   }
 }
 
+/**
+ * Little-endian growable writer. `i64` / `f64` realign to 8 bytes, so a reader
+ * must walk the payload with the same `align()` calls.
+ */
 export class BinWriter {
   private buf: ArrayBuffer;
   private view: DataView;
@@ -132,6 +136,11 @@ export class BinWriter {
   }
 }
 
+/**
+ * Bounds-checked little-endian reader over one payload view. Every read throws
+ * `RangeError('AXB1 payload truncated')` instead of returning garbage, and
+ * `i64` / `f64` verify absolute buffer alignment.
+ */
 export class BinReader {
   readonly view: DataView;
   readonly start: number;

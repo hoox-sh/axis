@@ -35,6 +35,7 @@ import {
 } from './function-outline';
 import { Icons } from '../ui/icons';
 
+/** Props for {@link FunctionOutline}; selection is reported as a 1-based line. */
 export type FunctionOutlineProps = {
   /** Active editor document text. */
   doc: string;
@@ -57,7 +58,7 @@ function entryLabel(e: OutlineEntry): string {
 }
 
 /** Selectable outline of Pine declarations for the editor right rail. */
-export const FunctionOutline: Component<FunctionOutlineProps> = (props) => {
+export const FunctionOutline: Component<FunctionOutlineProps> = (props): JSX.Element => {
   const [filter, setFilter] = createSignal('');
   const entries = createMemo(() => collectFunctionOutline(props.doc || ''));
   const groups = createMemo(() => {
@@ -120,9 +121,7 @@ export const FunctionOutline: Component<FunctionOutlineProps> = (props) => {
               class="px-2 py-3 text-[11px] text-text-faint"
               data-testid="axis-editor-outline-empty"
             >
-              {filter().trim()
-                ? 'No matching symbols'
-                : 'No functions, types, or enums'}
+              {filter().trim() ? 'No matching symbols' : 'No functions, types, or enums'}
             </div>
           }
         >
@@ -157,13 +156,9 @@ export const FunctionOutline: Component<FunctionOutlineProps> = (props) => {
                             >
                               {KIND_GLYPH[item.kind]}
                             </span>
-                            <span class="min-w-0 truncate text-text">
-                              {entryLabel(item)}
-                            </span>
+                            <span class="min-w-0 truncate text-text">{entryLabel(item)}</span>
                             <Show when={item.exported}>
-                              <span class="flex-shrink-0 text-[9px] text-accent/80">
-                                exp
-                              </span>
+                              <span class="flex-shrink-0 text-[9px] text-accent/80">exp</span>
                             </Show>
                             <span class="ml-auto flex-shrink-0 text-[10px] text-text-faint tabular-nums">
                               {item.line}

@@ -26,6 +26,7 @@ import {
   sanitizePoints,
   sanitizeStrokeColor,
   safePrompt,
+  asTwoPoint,
 } from './safe';
 
 /** Cap selection handles on long freehand strokes (DOM thrash guard). */
@@ -42,12 +43,6 @@ function sampleHandleIndices(len: number, max: number): number[] {
   return out;
 }
 
-function asTwo(d: Drawing, kind?: TwoPointDrawing['kind']): TwoPointDrawing | null {
-  if (kind && d.kind !== kind) return null;
-  if (!('p1' in d) || !('p2' in d) || !d.p1 || !d.p2) return null;
-  if (!isFinitePoint(d.p1) || !isFinitePoint(d.p2)) return null;
-  return d as TwoPointDrawing;
-}
 
 function pts(d: Drawing): Point[] {
   if ('points' in d && Array.isArray((d as MultiPointDrawing).points)) {
@@ -110,7 +105,7 @@ registerToolHandler({
     };
   },
   paint(d, ctx) {
-    const t = asTwo(d, 'trendAngle');
+    const t = asTwoPoint(d, 'trendAngle');
     if (!t) return;
     const a = ctx.toXY(t.p1);
     const b = ctx.toXY(t.p2);
@@ -124,7 +119,7 @@ registerToolHandler({
     ctx.circle(b.x, b.y, ctx.selected ? 5 : 3, ctx.stroke, ctx.selected);
   },
   hit(d, ctx) {
-    const t = asTwo(d, 'trendAngle');
+    const t = asTwoPoint(d, 'trendAngle');
     if (!t) return false;
     const a = ctx.toXY(t.p1);
     const b = ctx.toXY(t.p2);
@@ -232,7 +227,7 @@ registerToolHandler({
     };
   },
   paint(d, ctx) {
-    const t = asTwo(d, 'callout');
+    const t = asTwoPoint(d, 'callout');
     if (!t) return;
     const a = ctx.toXY(t.p1);
     const b = ctx.toXY(t.p2);
@@ -263,7 +258,7 @@ registerToolHandler({
     ctx.circle(a.x, a.y, ctx.selected ? 5 : 3, ctx.stroke, true);
   },
   hit(d, ctx) {
-    const t = asTwo(d, 'callout');
+    const t = asTwoPoint(d, 'callout');
     if (!t) return false;
     const a = ctx.toXY(t.p1);
     const b = ctx.toXY(t.p2);

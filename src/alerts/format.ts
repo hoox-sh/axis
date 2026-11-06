@@ -85,7 +85,7 @@ export function formatAlertCondition(alert: Pick<Alert, 'kind' | 'params'>): str
   const kind = alert.kind;
   const label = formatAlertKind(kind);
 
-  const priceRaw = params.price;
+  const priceRaw = params['price'];
   const price =
     typeof priceRaw === 'number' ? priceRaw : typeof priceRaw === 'string' ? Number(priceRaw) : NaN;
 
@@ -95,10 +95,10 @@ export function formatAlertCondition(alert: Pick<Alert, 'kind' | 'params'>): str
   }
 
   if (kind === 'pct_change') {
-    const pctRaw = params.pct;
+    const pctRaw = params['pct'];
     const pct =
       typeof pctRaw === 'number' ? pctRaw : typeof pctRaw === 'string' ? Number(pctRaw) : NaN;
-    const dir = typeof params.direction === 'string' ? params.direction : 'both';
+    const dir = typeof params['direction'] === 'string' ? params['direction'] : 'both';
     const pctStr = Number.isFinite(pct) ? formatNum(pct) : '—';
     if (dir === 'up') return `${label} ≥+${pctStr}%`;
     if (dir === 'down') return `${label} ≤−${pctStr}%`;
@@ -107,29 +107,29 @@ export function formatAlertCondition(alert: Pick<Alert, 'kind' | 'params'>): str
 
   if (kind === 'drawing_touch') {
     if (Number.isFinite(price)) return `${label} @ ${formatNum(price)}`;
-    const prices = params.prices;
+    const prices = params['prices'];
     if (Array.isArray(prices) && prices.length) {
       const first = Number(prices[0]);
       if (Number.isFinite(first)) return `${label} @ ${formatNum(first)}`;
     }
-    if (params.drawingId != null && String(params.drawingId)) {
-      return `${label} · ${String(params.drawingId)}`;
+    if (params['drawingId'] != null && String(params['drawingId'])) {
+      return `${label} · ${String(params['drawingId'])}`;
     }
     return label;
   }
 
   if (kind === 'pine_condition') {
-    const plot = params.plotKey != null ? String(params.plotKey).trim() : '';
-    const op = params.op != null ? String(params.op) : '';
-    const thr = params.threshold;
+    const plot = params['plotKey'] != null ? String(params['plotKey']).trim() : '';
+    const op = params['op'] != null ? String(params['op']) : '';
+    const thr = params['threshold'];
     const head = plot ? `${label} ${plot}` : label;
     if (op && thr != null) return `${head} ${op} ${thr}`;
     return head;
   }
 
   if (kind === 'pine_alert') {
-    const source = params.source != null ? String(params.source).trim().toLowerCase() : 'any';
-    const title = params.title != null ? String(params.title).trim() : '';
+    const source = params['source'] != null ? String(params['source']).trim().toLowerCase() : 'any';
+    const title = params['title'] != null ? String(params['title']).trim() : '';
     if (source === 'alertcondition') {
       return title ? `alertcondition · ${title}` : 'alertcondition()';
     }
@@ -140,22 +140,22 @@ export function formatAlertCondition(alert: Pick<Alert, 'kind' | 'params'>): str
   }
 
   if (kind === 'onchain_tvl_spike' || kind === 'onchain_event') {
-    const minRaw = params.minAbsPct;
+    const minRaw = params['minAbsPct'];
     const min =
       typeof minRaw === 'number' ? minRaw : typeof minRaw === 'string' ? Number(minRaw) : 10;
     const minStr = Number.isFinite(min) ? formatNum(min) : '10';
-    const dir = typeof params.direction === 'string' ? params.direction : 'both';
+    const dir = typeof params['direction'] === 'string' ? params['direction'] : 'both';
     const protocol =
-      params.protocolId != null && String(params.protocolId).trim()
-        ? String(params.protocolId).trim()
+      params['protocolId'] != null && String(params['protocolId']).trim()
+        ? String(params['protocolId']).trim()
         : '';
     let dirLabel = '±';
     if (dir === 'up') dirLabel = '≥+';
     else if (dir === 'down') dirLabel = '≤−';
     const base = `${label} ${dirLabel}${minStr}%`;
     if (protocol) return `${base} · ${protocol}`;
-    if (kind === 'onchain_event' && params.eventType != null) {
-      return `${base} · ${String(params.eventType)}`;
+    if (kind === 'onchain_event' && params['eventType'] != null) {
+      return `${base} · ${String(params['eventType'])}`;
     }
     return base;
   }

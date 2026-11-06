@@ -68,38 +68,38 @@ function notifyAlertsListeners(): void {
 export function parseAlert(raw: unknown): Alert | null {
   if (!raw || typeof raw !== 'object') return null;
   const o = raw as Record<string, unknown>;
-  if (typeof o.id !== 'string' || !o.id) return null;
-  if (typeof o.name !== 'string') return null;
-  if (typeof o.symbol !== 'string') return null;
-  if (typeof o.kind !== 'string') return null;
-  if (typeof o.createdAt !== 'number' || !Number.isFinite(o.createdAt)) return null;
+  if (typeof o['id'] !== 'string' || !o['id']) return null;
+  if (typeof o['name'] !== 'string') return null;
+  if (typeof o['symbol'] !== 'string') return null;
+  if (typeof o['kind'] !== 'string') return null;
+  if (typeof o['createdAt'] !== 'number' || !Number.isFinite(o['createdAt'])) return null;
 
   const params =
-    o.params && typeof o.params === 'object' && !Array.isArray(o.params)
-      ? ({ ...(o.params as Record<string, unknown>) } as Record<string, unknown>)
+    o['params'] && typeof o['params'] === 'object' && !Array.isArray(o['params'])
+      ? ({ ...(o['params'] as Record<string, unknown>) } as Record<string, unknown>)
       : {};
 
   const alert: Alert = {
-    id: o.id,
-    name: o.name,
-    enabled: o.enabled !== false,
-    symbol: o.symbol,
-    kind: o.kind as Alert['kind'],
+    id: o['id'],
+    name: o['name'],
+    enabled: o['enabled'] !== false,
+    symbol: o['symbol'],
+    kind: o['kind'] as Alert['kind'],
     params,
-    createdAt: o.createdAt,
+    createdAt: o['createdAt'],
   };
 
-  if (typeof o.interval === 'string' && o.interval) alert.interval = o.interval;
-  if (typeof o.webhookUrl === 'string' && o.webhookUrl) alert.webhookUrl = o.webhookUrl;
-  if (typeof o.l2WebhookUrl === 'string' && o.l2WebhookUrl) {
-    alert.l2WebhookUrl = o.l2WebhookUrl;
+  if (typeof o['interval'] === 'string' && o['interval']) alert.interval = o['interval'];
+  if (typeof o['webhookUrl'] === 'string' && o['webhookUrl']) alert.webhookUrl = o['webhookUrl'];
+  if (typeof o['l2WebhookUrl'] === 'string' && o['l2WebhookUrl']) {
+    alert.l2WebhookUrl = o['l2WebhookUrl'];
   }
-  if (typeof o.notifyBrowser === 'boolean') alert.notifyBrowser = o.notifyBrowser;
-  if (typeof o.cooldownMs === 'number' && Number.isFinite(o.cooldownMs)) {
-    alert.cooldownMs = o.cooldownMs;
+  if (typeof o['notifyBrowser'] === 'boolean') alert.notifyBrowser = o['notifyBrowser'];
+  if (typeof o['cooldownMs'] === 'number' && Number.isFinite(o['cooldownMs'])) {
+    alert.cooldownMs = o['cooldownMs'];
   }
-  if (typeof o.lastFiredAt === 'number' && Number.isFinite(o.lastFiredAt)) {
-    alert.lastFiredAt = o.lastFiredAt;
+  if (typeof o['lastFiredAt'] === 'number' && Number.isFinite(o['lastFiredAt'])) {
+    alert.lastFiredAt = o['lastFiredAt'];
   }
 
   return alert;

@@ -127,17 +127,17 @@ export function hydrateChartTheme(raw: unknown): ChartThemeState {
   if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) return d;
   const bag = raw as Record<string, unknown>;
   const presetId =
-    typeof bag.presetId === 'string' && bag.presetId.trim()
-      ? bag.presetId.trim()
+    typeof bag['presetId'] === 'string' && bag['presetId'].trim()
+      ? bag['presetId'].trim()
       : d.presetId;
   const base =
-    bag.base === 'light' || bag.base === 'dark'
-      ? bag.base
+    bag['base'] === 'light' || bag['base'] === 'dark'
+      ? bag['base']
       : getPreset(presetId).base;
-  const overrides = normalizeOverrides(bag.overrides ?? bag.tokens);
+  const overrides = normalizeOverrides(bag['overrides'] ?? bag['tokens']);
   const barThemeId =
-    typeof bag.barThemeId === 'string' && bag.barThemeId.trim()
-      ? bag.barThemeId.trim()
+    typeof bag['barThemeId'] === 'string' && bag['barThemeId'].trim()
+      ? bag['barThemeId'].trim()
       : null;
   return { presetId, base, overrides, barThemeId };
 }

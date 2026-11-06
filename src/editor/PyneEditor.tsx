@@ -209,7 +209,7 @@ export function lineWrapExtension(enabled: boolean): Extension {
 }
 
 /** Solid wrapper around a single CodeMirror EditorView instance. */
-export const PyneEditor: Component<Props> = (props) => {
+export const PyneEditor: Component<Props> = (props) : JSX.Element => {
   let containerRef!: HTMLDivElement;
   let view: EditorView | undefined;
   let minimap: EditorMinimap | undefined;
@@ -437,7 +437,7 @@ export const PyneEditor: Component<Props> = (props) => {
     } else if (!enabled && minimap) {
       minimap.destroy();
       minimap = undefined;
-      containerRef.dataset.minimap = 'off';
+      containerRef.dataset['minimap'] = 'off';
     }
     minimap?.schedule();
   };

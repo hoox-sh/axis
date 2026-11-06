@@ -11,8 +11,19 @@
 import type { JSX } from 'solid-js';
 import { Show } from 'solid-js';
 
+/** Tone of the legacy `ax-btn` studio button; defaults to `ghost`. */
 export type StudioButtonVariant = 'primary' | 'ghost' | 'danger';
 
+/**
+ * Compact studio button (`ax-btn`) used inside settings/studio panels.
+ *
+ * Stops click propagation, prevents the default action unless `type` is
+ * `submit`, and suppresses clicks while disabled or loading. Loading keeps the
+ * label in place and sets `aria-busy` instead of swapping content.
+ *
+ * @param props - Variant, busy/disabled flags, click handler, and label content.
+ * @returns A `<button>` with an optional spinner.
+ */
 export function StudioButton(props: {
   variant?: StudioButtonVariant;
   type?: 'button' | 'submit';
@@ -25,7 +36,7 @@ export function StudioButton(props: {
   ariaLabel?: string;
   class?: string;
   children: JSX.Element;
-}) {
+}): JSX.Element {
   const variant = () => props.variant || 'ghost';
   const busy = () => !!props.loading;
   const blocked = () => !!props.disabled || busy();

@@ -40,6 +40,11 @@ import { normalizeBarTime } from '../../data/parse-bars';
 import type { Axb1Frame, Axb1OhlcvSnapshot, Axb1TipFields, Axb1Unknown } from '../axb1/types';
 import { INGEST_TIP_COALESCE_MS } from './protocol';
 
+/**
+ * Outcome of decoding one inbound socket payload. `malformed` and
+ * `unknown-opcode` are values, not throws: the worker keeps the socket up and
+ * reports them so the host can degrade that subscription only.
+ */
 export type IngestDecode =
   | { ok: true; kind: 'pong' }
   | { ok: true; kind: 'frames'; frames: Redesign2Frame[] }
@@ -48,6 +53,10 @@ export type IngestDecode =
 
 export { shouldAuthBlock } from '../../engine/frames';
 
+/**
+ * Per-subscription OHLCV cursor bar. `closed` is set only by append/close
+ * opcodes — a forming tip is never closed.
+ */
 export type CursorBar = {
   time: number;
   open: number;
@@ -628,14 +637,15 @@ type SeqChain = { cursor: number; seenTo: number; broken: boolean };
 function isUnchangedFrame(frame: Redesign2Frame): boolean {
   if (frame.type !== 'delta') return false;
   const payload = payloadOf(frame);
-  if (payload.unchanged !== true) return false;
-  if (payload.bars != null || payload.series != null || payload.plots != null) return false;
+  if (payload['unchanged'] !== true) return false;
+  if (payload['bars'] != null || payload['series'] != null || payload['plots'] != null)
+    return false;
   return true;
 }
 
 function isFormingTip(frame: Redesign2Frame): boolean {
   if (frame.type !== 'delta' || !frame.id || isUnchangedFrame(frame)) return false;
-  return payloadOf(frame).forming === true;
+  return payloadOf(frame)['forming'] === true;
 }
 
 /** Record columns union by key. A non-record (a plot array) is replaced whole. */
@@ -652,9 +662,10 @@ function unionColumns(prev: unknown, next: unknown): unknown {
 function mergeTip(prev: Redesign2Frame, next: Redesign2Frame): Redesign2Frame {
   const pp = payloadOf(prev);
   const np = payloadOf(next);
-  const bars = np.bars !== undefined ? np.bars : pp.bars;
-  const series = np.series !== undefined ? unionColumns(pp.series, np.series) : pp.series;
-  const plots = np.plots !== undefined ? unionColumns(pp.plots, np.plots) : pp.plots;
+  const bars = np['bars'] !== undefined ? np['bars'] : pp['bars'];
+  const series =
+    np['series'] !== undefined ? unionColumns(pp['series'], np['series']) : pp['series'];
+  const plots = np['plots'] !== undefined ? unionColumns(pp['plots'], np['plots']) : pp['plots'];
   const prevSeq = 'seq' in prev && typeof prev.seq === 'number' ? prev.seq : 0;
   const nextSeq = 'seq' in next && typeof next.seq === 'number' ? next.seq : prevSeq;
   return {
@@ -685,6 +696,17 @@ function mergeTip(prev: Redesign2Frame, next: Redesign2Frame): Redesign2Frame {
  * counted as `droppedTip` even though no tip payload was lost. Tip seqs
  * folded into the one frame we keep still ride `seqAckFrom`. A seq we
  * never saw breaks the chain and stays a real gap.
+ */
+/**
+ * Holds forming tip deltas per subscription and flushes them on a timer.
+ *
+ * Within the window OHLC folds (last bar wins) and plot columns union by key;
+ * a second tip for the same id folds and releases immediately, and any non-tip
+ * frame flushes that subscription's pending tip first so ordering survives.
+ *
+ * @param emit Receives the frames to post, already seq-released
+ * @param delayMs Coalescing window; defaults to {@link INGEST_TIP_COALESCE_MS}
+ * @param schedule Timer seam `(fn, ms) => cancel`; injectable for tests
  */
 export class TipCoalescer {
   private readonly pending = new Map<string, Redesign2Frame>();

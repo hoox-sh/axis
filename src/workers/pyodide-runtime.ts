@@ -35,11 +35,7 @@
 export type PyodideLike = {
   loadPackage: (name: string) => Promise<void>;
   pyimport: (name: string) => {
-    install: (
-      url: string,
-      keepGoing?: boolean,
-      deps?: boolean,
-    ) => Promise<void>;
+    install: (url: string, keepGoing?: boolean, deps?: boolean) => Promise<void>;
   };
   runPythonAsync: (code: string) => Promise<void>;
   runPython: (code: string) => unknown;
@@ -50,20 +46,22 @@ export type PyodideLike = {
   };
 };
 
-/**
- * Format a Pyodide bridge failure with the full Python traceback.
- * `err.message` alone is truncated (`…`) by Pyodide's eval_code wrapper —
- * prefer `stack`, which carries the complete `Traceback (most recent call …)`.
- * When the stack is too long, trim the *middle* — the head keeps the
- * `eval_code` frame context and the tail keeps the final Python exception
- * line (`NameError: …`), which is the part that matters.
- */
-
 /** Long-traceback budget: keep the head and the tail, drop the middle frames. */
 const TRACEBACK_KEEP_MAX = 6000;
 const TRACEBACK_KEEP_HEAD = 2000;
 const TRACEBACK_KEEP_TAIL = TRACEBACK_KEEP_MAX - TRACEBACK_KEEP_HEAD;
 
+/**
+ * Format a Pyodide bridge failure with the full Python traceback.
+ *
+ * `err.message` alone is truncated (`…`) by Pyodide's eval_code wrapper, so
+ * `stack` is preferred. Very long tracebacks keep the head (`eval_code` frame
+ * context) and the tail (the final Python exception line), dropping the middle.
+ *
+ * @param err Thrown value from the Pyodide bridge; non-`Error` values are
+ *   stringified.
+ * @returns `stack`/`message` for an `Error`, else `String(err)`.
+ */
 export function formatPyodideBridgeError(err: unknown): string {
   if (err instanceof Error) {
     const stack = typeof err.stack === 'string' ? err.stack.trim() : '';
@@ -145,9 +143,7 @@ export function pyodideRuntimeAcceptsInputs(py: PyodideLike): boolean {
   let ok = false;
   try {
     ok =
-      py.runPython(
-        "'inputs' in __import__('inspect').signature(run_script).parameters",
-      ) === true;
+      py.runPython("'inputs' in __import__('inspect').signature(run_script).parameters") === true;
   } catch {
     ok = false;
   }
@@ -214,7 +210,9 @@ export async function installPynescriptRuntime(py: PyodideLike, origin: string):
   const runtimeUrl = `${origin}/pyodide/pynescript_runtime.py`;
   const runtimeResp = await fetch(runtimeUrl);
   if (!runtimeResp.ok) {
-    throw new Error(`Failed to load pynescript_runtime.py: HTTP ${runtimeResp.status} (${runtimeUrl})`);
+    throw new Error(
+      `Failed to load pynescript_runtime.py: HTTP ${runtimeResp.status} (${runtimeUrl})`,
+    );
   }
   const runtimeCt = runtimeResp.headers.get('content-type') || '';
   const runtimePy = await runtimeResp.text();

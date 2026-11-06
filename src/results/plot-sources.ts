@@ -35,6 +35,11 @@ import type { PlotSample } from '../plugins/types';
 /** Stable prefix for cross-indicator plot refs (not a built-in OHLC name). */
 export const PLOT_SOURCE_PREFIX = 'plot:';
 
+/**
+ * Per-indicator cache of plot series written at apply time, keyed by indicator
+ * id. `times` is the bar axis the values were aligned to, so a consumer can
+ * re-join by time instead of zipping by index across a slid window.
+ */
 export type IndicatorSeriesCache = Record<
   string,
   {
@@ -54,6 +59,7 @@ export type IndicatorSeriesCache = Record<
   }
 >;
 
+/** One `input.source` dropdown entry that points at another indicator's plot. */
 export type PlotSourceOption = {
   /** Value stored in input overrides / select option */
   value: string;
@@ -69,9 +75,7 @@ export function formatPlotSourceId(indicatorId: string, plotKey: string): string
 }
 
 /** Parse a plot source ref; returns null for built-in OHLC names. */
-export function parsePlotSourceId(
-  value: unknown,
-): { indicatorId: string; plotKey: string } | null {
+export function parsePlotSourceId(value: unknown): { indicatorId: string; plotKey: string } | null {
   if (typeof value !== 'string' || !value.startsWith(PLOT_SOURCE_PREFIX)) return null;
   const rest = value.slice(PLOT_SOURCE_PREFIX.length);
   const colon = rest.indexOf(':');
@@ -82,6 +86,10 @@ export function parsePlotSourceId(
   };
 }
 
+/**
+ * True when `value` is a cross-indicator plot ref (`plot:<id>:<key>`) that
+ * {@link parsePlotSourceId} can resolve; built-in OHLC names return false.
+ */
 export function isPlotSourceRef(value: unknown): boolean {
   return parsePlotSourceId(value) != null;
 }
@@ -97,7 +105,7 @@ export function listPlotSourceOptions(
   if (!cache) return [];
   const out: PlotSourceOption[] = [];
   for (const [indId, entry] of Object.entries(cache)) {
-    if (!entry || excludeIndicatorId && indId === excludeIndicatorId) continue;
+    if (!entry || (excludeIndicatorId && indId === excludeIndicatorId)) continue;
     const keys = Object.keys(entry.series || {});
     for (const plotKey of keys) {
       const title = entry.titles?.[plotKey] || plotKey;
@@ -252,9 +260,7 @@ export function groupIndicatorsByPlotDepLevel<
     if (list) list.push(ind);
     else levels.set(d, [ind]);
   }
-  return [...levels.keys()]
-    .sort((a, b) => a - b)
-    .map((k) => levels.get(k)!);
+  return [...levels.keys()].sort((a, b) => a - b).map((k) => levels.get(k)!);
 }
 
 /**

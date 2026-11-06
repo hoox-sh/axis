@@ -63,7 +63,7 @@ function barSwatches(tokens: { [key: string]: string | number | boolean } | unde
 }
 
 /** Name, save, apply, update, rename, and delete named chart themes. */
-export function SavedThemeLibrary() {
+export function SavedThemeLibrary(): JSX.Element {
   const [name, setName] = createSignal('');
   const [renamingId, setRenamingId] = createSignal<string | null>(null);
   const [draft, setDraft] = createSignal('');
@@ -373,7 +373,7 @@ function BarThemeRow(props: {
 }
 
 /** Bar coloring library. The selected chart theme keeps the one you apply. */
-export function BarColorLibrary() {
+export function BarColorLibrary(): JSX.Element {
   const [name, setName] = createSignal('');
   const [renamingId, setRenamingId] = createSignal<string | null>(null);
   const [draft, setDraft] = createSignal('');
@@ -390,7 +390,7 @@ export function BarColorLibrary() {
   const inUse = (bar: BarColorTheme) =>
     store.activeBarThemeId === bar.id && barTokensEqual(barTokensFromState(live()), bar.tokens);
 
-  const useTitleFor = (bar: BarColorTheme) => {
+  const useTitleFor = (_bar: BarColorTheme) => {
     const selected = activeTheme();
     return selected ? `Use these bars in ${selected.name}` : 'Use these bars on the chart';
   };

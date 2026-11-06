@@ -78,7 +78,7 @@ export function coerceWorkerEndpoint(raw: string | undefined | null): string {
 function storedCloudBag(): Record<string, unknown> {
   const pc = store.pluginsConfig || {};
   const bag =
-    pc[pluginKey('storage', 'cloud')] || pc.cloud || pc['storage:cloud'] || {};
+    pc[pluginKey('storage', 'cloud')] || pc['cloud'] || pc['storage:cloud'] || {};
   return bag && typeof bag === 'object' ? (bag as Record<string, unknown>) : {};
 }
 
@@ -94,9 +94,9 @@ function storedCloudBag(): Record<string, unknown> {
 export function resolveCloudConfig(config?: Record<string, unknown>): CloudConfig {
   const saved = storedCloudBag();
   const endpoint = coerceWorkerEndpoint(
-    String(config?.endpoint || saved.endpoint || ''),
+    String(config?.['endpoint'] || saved['endpoint'] || ''),
   );
-  const fromCallSite = String(config?.apiKey || '').trim();
+  const fromCallSite = String(config?.['apiKey'] || '').trim();
   const apiKey = fromCallSite || getCloudApiKey(store.pluginsConfig);
   return { endpoint, apiKey };
 }
@@ -118,7 +118,7 @@ export function writeStoredCloudConfig(endpoint: string, apiKey: string): void {
   if (trimmed) {
     putSecret(CLOUD_API_KEY_SLOT, trimmed);
     // Session-compat copy for legacy readers; stripped on persist.
-    next.apiKey = trimmed;
+    next['apiKey'] = trimmed;
   } else {
     // Clearing the key must also drop the session vault copy — otherwise
     // resolveCloudConfig keeps returning the stale vault secret and live
@@ -126,7 +126,7 @@ export function writeStoredCloudConfig(endpoint: string, apiKey: string): void {
     // NOTE: setStore *merges* bag objects, so `delete` cannot remove the
     // legacy apiKey copy — assign `undefined` (Solid drops such keys).
     forgetSecret(CLOUD_API_KEY_SLOT);
-    next.apiKey = undefined;
+    next['apiKey'] = undefined;
   }
   setStore('pluginsConfig', key, next);
   persist();

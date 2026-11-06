@@ -26,6 +26,10 @@
 import { COL, def, pineIndicator } from './pine';
 import type { BuiltinScript } from './types';
 
+/**
+ * Original AXIS level/session studies (`category: 'pivot'`): floor pivots, H/L
+ * pivots, rolling close-vs-volume correlation, and a session background.
+ */
 export const PIVOT_BUILTINS: readonly BuiltinScript[] = [
   def({
     id: 'pivot-standard',

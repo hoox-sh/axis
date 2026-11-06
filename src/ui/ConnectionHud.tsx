@@ -75,8 +75,8 @@ function useHudSnapshot(): () => HudSnapshot {
     return deriveHud({
       engineId,
       endpoint: store.endpoint || '',
-      modeRaw: cfg.mode,
-      preferWs: cfg.preferWs !== false,
+      modeRaw: cfg['mode'],
+      preferWs: cfg['preferWs'] !== false,
       engineTransport: tel?.transport,
       engineState: tel?.state,
       latencyMs: tel?.latencyMs ?? store.lastRunMs,
@@ -743,7 +743,7 @@ function ComposeChip(props: { snap: () => HudSnapshot }) {
 }
 
 /** Status-bar connection chips + sticky detail panel. */
-export const ConnectionHud: Component = () => {
+export const ConnectionHud: Component = () : JSX.Element => {
   const snap = useHudSnapshot();
   const sticky = useStickyInfo();
   const tel = () => store.telemetry;

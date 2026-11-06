@@ -42,6 +42,7 @@ import {
   onCleanup,
   onMount,
 } from 'solid-js';
+import type { Accessor } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { clampMenuPosition } from '../context-menu';
 import {
@@ -153,7 +154,7 @@ const [dragPreview, setDragPreview] = createSignal<{
 } | null>(null);
 
 /** Reactive accessor for the active panel drag ghost (null when idle). */
-export function getDragPreview() {
+export function getDragPreview(): Accessor<{ id: PanelId; zone: DropZone; x: number; y: number; w: number; h: number; title: string; } | null> {
   return dragPreview;
 }
 
@@ -178,7 +179,7 @@ const DOCK_MENU = [
  * Docked panels portal into `#axis-dock-{left,right,bottom}` so multiple
  * panels on the same side stack **one below the other**.
  */
-export const FloatableShell: Component<FloatableShellProps> = (props) => {
+export const FloatableShell: Component<FloatableShellProps> = (props) : JSX.Element => {
   const meta = () => PANEL_META[props.id];
   const chrome = () => getPanelChrome(props.id);
   const title = () => props.title || meta().title;
@@ -1456,7 +1457,7 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
  * Full-screen dock zone highlights + skeleton ghost while a panel is dragged.
  * Mount once at the App root (above content).
  */
-export const PanelDragOverlay: Component = () => {
+export const PanelDragOverlay: Component = () : JSX.Element => {
   const preview = dragPreview;
   return (
     <Show when={preview()}>
@@ -1621,7 +1622,7 @@ function openCompanionWindow(id: PanelId, title: string) {
  * Listen for `axis-panel-reattach` / `axis-panel-window-closed` postMessages
  * from companion popups. Returns an unsubscribe for `onCleanup`.
  */
-export function installPanelWindowBridge() {
+export function installPanelWindowBridge(): () => void {
   const onMsg = (ev: MessageEvent) => {
     // Same-origin only — companion popups use location.origin as targetOrigin
     if (ev.origin !== window.location.origin) return;

@@ -99,7 +99,8 @@ function parseRows(text: string): DebugRow[] {
       rows.push({ id: id++, time: '', scope: 'raw', event: '', data: line, raw: line });
       continue;
     }
-    const [, iso, scope, event, data] = match;
+    // LINE_RE's first three groups are mandatory; only the trailing data is optional.
+    const [, iso = '', scope = '', event = '', data] = match;
     rows.push({
       id: id++,
       time: iso.slice(11, 23),
@@ -128,7 +129,15 @@ function sourceLabel(source: AxisDebugSource): string {
   }
 }
 
-export function DebugPage(_props: { onClose?: () => void }) {
+/**
+ * Debug studio page: logging switch, level/source filters, and a live ring of
+ * log lines with pause/follow controls. Reads the store log buffer only — it
+ * never starts a second logger.
+ *
+ * @param _props - Unused close hook kept for the studio page signature.
+ * @returns The debug page body.
+ */
+export function DebugPage(_props: { onClose?: () => void }): JSX.Element {
   const [paused, setPaused] = createSignal(false);
   const [follow, setFollow] = createSignal(true);
   const [scope, setScope] = createSignal<ScopeFilter>('all');
@@ -190,7 +199,8 @@ export function DebugPage(_props: { onClose?: () => void }) {
 
   const lastTime = createMemo(() => {
     const rows = allRows();
-    return rows.length ? rows[rows.length - 1].time : '—';
+    const last = rows[rows.length - 1];
+    return last ? last.time : '—';
   });
 
   // Follow the tail unless the user is reading history.

@@ -36,6 +36,7 @@ const STORE = 'datasets';
 /** Soft cap on distinct dataset keys held in cache. */
 export const ONCHAIN_CACHE_MAX_SERIES = 32;
 
+/** One IndexedDB / memory cache entry: key, the dataset, and when it was written. */
 export interface OnchainCacheRecord {
   key: string;
   dataset: OnchainDataset;
@@ -111,14 +112,10 @@ export async function getCachedDataset(key: string): Promise<OnchainDataset | nu
     const db = await openOnchainDb();
     try {
       const tx = db.transaction(STORE, 'readonly');
-      const rec = (await idbReq(tx.objectStore(STORE).get(k))) as
-        | OnchainCacheRecord
-        | undefined;
+      const rec = (await idbReq(tx.objectStore(STORE).get(k))) as OnchainCacheRecord | undefined;
       await idbTxDone(tx);
       if (!rec?.dataset) {
-        return memory.get(k)?.dataset
-          ? structuredCloneSafe(memory.get(k)!.dataset)
-          : null;
+        return memory.get(k)?.dataset ? structuredCloneSafe(memory.get(k)!.dataset) : null;
       }
       // Keep memory warm
       memory.set(k, { key: k, dataset: rec.dataset, updatedAt: Date.now() });
@@ -134,10 +131,7 @@ export async function getCachedDataset(key: string): Promise<OnchainDataset | nu
 }
 
 /** Write a dataset under the given key. Evicts oldest if over cap. */
-export async function putCachedDataset(
-  key: string,
-  dataset: OnchainDataset,
-): Promise<void> {
+export async function putCachedDataset(key: string, dataset: OnchainDataset): Promise<void> {
   const k = String(key || '').trim();
   if (!k || !dataset) return;
 

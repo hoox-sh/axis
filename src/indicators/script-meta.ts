@@ -27,10 +27,13 @@
 import type { Indicator } from '../store/types';
 import { engineFamilyForId } from '../plugins/engine-family';
 
+/** Pine declaration kind detected from source, or `unknown` when none matched. */
 export type ScriptKind = 'indicator' | 'strategy' | 'library' | 'unknown';
 
+/** Cached outcome of a script's last run, for the Scripts card badge. */
 export type LastRunStatus = 'ok' | 'error' | 'none';
 
+/** Engine bucket used by the Scripts card badge and its tooltip. */
 export type EngineFamily = 'server' | 'pyodide' | 'worker' | 'other';
 
 /** Pine declaration kind from source (best-effort). */
@@ -126,13 +129,9 @@ export function metaFromScriptContent(
   const code = String(content ?? '');
   const detected = detectScriptKind(code);
   const scriptKind: ScriptKind =
-    base?.scriptKind && base.scriptKind !== 'unknown'
-      ? base.scriptKind
-      : detected;
+    base?.scriptKind && base.scriptKind !== 'unknown' ? base.scriptKind : detected;
   const pineVersion =
-    (base?.pineVersion && String(base.pineVersion).trim()) ||
-    detectPineVersion(code) ||
-    undefined;
+    (base?.pineVersion && String(base.pineVersion).trim()) || detectPineVersion(code) || undefined;
   return { scriptKind, pineVersion };
 }
 
@@ -142,9 +141,7 @@ export function metaFromScriptContent(
  */
 export function detectDeclaredOverlay(code: string): boolean | null {
   const src = String(code ?? '');
-  const m = src.match(
-    /\b(?:indicator|strategy)\s*\(\s*[^)]*?\boverlay\s*=\s*(true|false)\b/i,
-  );
+  const m = src.match(/\b(?:indicator|strategy)\s*\(\s*[^)]*?\boverlay\s*=\s*(true|false)\b/i);
   if (!m?.[1]) return null;
   return m[1].toLowerCase() === 'true';
 }
@@ -187,6 +184,13 @@ export function engineFamily(engineId: string): EngineFamily {
   return 'other';
 }
 
+/**
+ * Tooltip text for an engine badge: the family plus where Pine actually runs.
+ *
+ * @param fam - bucket from {@link engineFamily}
+ * @param engineId - engine id to echo (falls back to a generic word when empty)
+ * @returns one-line label; never empty
+ */
 export function engineFamilyLabel(fam: EngineFamily, engineId: string): string {
   switch (fam) {
     case 'server':
@@ -213,6 +217,12 @@ export function lastRunStatus(run: unknown): LastRunStatus {
   return 'none';
 }
 
+/**
+ * Tooltip for the last-run badge.
+ *
+ * @param status - value from {@link lastRunStatus}
+ * @returns copy for `ok`, `error`, and the no-result case
+ */
 export function lastRunStatusTitle(status: LastRunStatus): string {
   switch (status) {
     case 'ok':
@@ -224,6 +234,7 @@ export function lastRunStatusTitle(status: LastRunStatus): string {
   }
 }
 
+/** Live re-run policy: re-evaluate on every update or only on closed bars. */
 export type LiveRerunOn = 'every-tick' | 'bar-close';
 
 /** Toggle every-tick ↔ bar-close (global live policy). */
@@ -248,16 +259,12 @@ export function liveRerunTitle(
         ? 'Live is off · policy: bar close (when Live is enabled, re-run only on closed bars)'
         : 'Live is off · policy: every tick (when Live is enabled, re-run on each update)';
   } else if (rerunOn === 'bar-close') {
-    base =
-      'Live re-run on bar close only (venue closed flag or bar time advance) — not every tick';
+    base = 'Live re-run on bar close only (venue closed flag or bar time advance) — not every tick';
   } else {
     base = 'Live re-run on every tick / bar update (can be heavy)';
   }
   if (interactive) {
-    base +=
-      rerunOn === 'bar-close'
-        ? ' · Click → every tick'
-        : ' · Click → bar close only';
+    base += rerunOn === 'bar-close' ? ' · Click → every tick' : ' · Click → bar close only';
   }
   return base;
 }

@@ -41,14 +41,16 @@ interface PyodideWorkerScope {
   onmessage: ((ev: MessageEvent<PyodideWorkerRequest>) => void) | null;
 }
 
-const scope = self as unknown as PyodideWorkerScope;
+// In a dedicated worker `self` *is* this scope; `lib.dom` types it as `Window`,
+// whose `postMessage` carries a targetOrigin we never pass.
+const scope = self as PyodideWorkerScope;
 
 async function importPyodide(indexUrl: string): Promise<PyodideLike> {
   await import(/* @vite-ignore */ `${indexUrl}pyodide.js`);
   // pyodide.js assigns `globalThis.loadPyodide`; read it through a narrow type
   // rather than relying on the Window augmentation declared in engines/catalog.
   const loader = (
-    globalThis as unknown as {
+    globalThis as {
       loadPyodide?: (opts: { indexURL: string }) => Promise<PyodideLike>;
     }
   ).loadPyodide;

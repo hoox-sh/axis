@@ -80,9 +80,9 @@ async function api(
 }
 
 function metaFromRemote(r: Record<string, unknown>): ScriptMeta {
-  const content = r.content != null ? String(r.content) : '';
+  const content = r['content'] != null ? String(r['content']) : '';
   const kindRaw =
-    r.scriptKind != null ? String(r.scriptKind) : r.kind != null ? String(r.kind) : '';
+    r['scriptKind'] != null ? String(r['scriptKind']) : r['kind'] != null ? String(r['kind']) : '';
   const scriptKind =
     kindRaw === 'indicator' ||
     kindRaw === 'strategy' ||
@@ -91,10 +91,10 @@ function metaFromRemote(r: Record<string, unknown>): ScriptMeta {
       ? kindRaw
       : undefined;
   const pineVersion =
-    r.pineVersion != null
-      ? String(r.pineVersion)
-      : r.version != null
-        ? String(r.version)
+    r['pineVersion'] != null
+      ? String(r['pineVersion'])
+      : r['version'] != null
+        ? String(r['version'])
         : undefined;
   const derived = content
     ? metaFromScriptContent(content, { scriptKind, pineVersion })
@@ -103,21 +103,21 @@ function metaFromRemote(r: Record<string, unknown>): ScriptMeta {
         pineVersion,
       };
   return {
-    id: String(r.id),
-    name: String(r.name || 'Untitled'),
-    description: r.description ? String(r.description) : undefined,
-    path: r.path ? String(r.path) : undefined,
-    revision: r.revision ? String(r.revision) : undefined,
-    createdAt: Number(r.createdAt ?? r.created_at ?? Date.now()),
-    updatedAt: Number(r.updatedAt ?? r.updated_at ?? Date.now()),
-    tags: Array.isArray(r.tags) ? (r.tags as string[]) : undefined,
+    id: String(r['id']),
+    name: String(r['name'] || 'Untitled'),
+    description: r['description'] ? String(r['description']) : undefined,
+    path: r['path'] ? String(r['path']) : undefined,
+    revision: r['revision'] ? String(r['revision']) : undefined,
+    createdAt: Number(r['createdAt'] ?? r['created_at'] ?? Date.now()),
+    updatedAt: Number(r['updatedAt'] ?? r['updated_at'] ?? Date.now()),
+    tags: Array.isArray(r['tags']) ? (r['tags'] as string[]) : undefined,
     scriptKind: derived.scriptKind,
     pineVersion: derived.pineVersion,
   };
 }
 
 function docFromRemote(r: Record<string, unknown>): ScriptDocument {
-  const content = String(r.content ?? '');
+  const content = String(r['content'] ?? '');
   return {
     ...metaFromRemote({ ...r, content }),
     content,
@@ -154,7 +154,7 @@ export const cloudStoragePlugin: StoragePlugin = {
 
   async list(opts) {
     const { json } = await api('/api/scripts', { config: opts?.config });
-    const scripts = (json.scripts as Record<string, unknown>[]) || [];
+    const scripts = (json['scripts'] as Record<string, unknown>[]) || [];
     let metas = scripts.map(metaFromRemote);
     const prefix = opts?.prefix;
     if (prefix) {
@@ -170,7 +170,7 @@ export const cloudStoragePlugin: StoragePlugin = {
 
   async read(id, config) {
     const { json } = await api(`/api/scripts/${encodeURIComponent(id)}`, { config });
-    const script = json.script as Record<string, unknown>;
+    const script = json['script'] as Record<string, unknown>;
     if (!script) throw new Error(`Script not found: ${id}`);
     return docFromRemote(script);
   },
@@ -189,7 +189,7 @@ export const cloudStoragePlugin: StoragePlugin = {
       config,
       ifMatch: doc.revision,
     });
-    const script = json.script as Record<string, unknown>;
+    const script = json['script'] as Record<string, unknown>;
     return metaFromRemote(script || { ...doc, revision: doc.revision });
   },
 
@@ -210,7 +210,7 @@ export const cloudStoragePlugin: StoragePlugin = {
 
   async loadDraft(config) {
     const { json } = await api('/api/scripts/_draft', { config });
-    const draft = json.draft as { content?: string; name?: string } | null;
+    const draft = json['draft'] as { content?: string; name?: string } | null;
     if (!draft || draft.content == null) return null;
     return { content: String(draft.content), name: draft.name };
   },
@@ -219,7 +219,7 @@ export const cloudStoragePlugin: StoragePlugin = {
     const { json } = await api(`/api/scripts/${encodeURIComponent(id)}/versions`, {
       config: opts?.config,
     });
-    const rows = (json.versions as Record<string, unknown>[]) || [];
+    const rows = (json['versions'] as Record<string, unknown>[]) || [];
     const limit = Math.min(100, Math.max(1, opts?.limit ?? 40));
     return rows.slice(0, limit).map(versionFromRemote);
   },
@@ -229,7 +229,7 @@ export const cloudStoragePlugin: StoragePlugin = {
       `/api/scripts/${encodeURIComponent(id)}/versions/${encodeURIComponent(rev)}`,
       { config },
     );
-    const script = json.script as Record<string, unknown>;
+    const script = json['script'] as Record<string, unknown>;
     if (!script) throw new Error(`Version not found: ${id}@${rev}`);
     return docFromRemote(script);
   },
@@ -267,15 +267,15 @@ export const cloudStoragePlugin: StoragePlugin = {
 };
 
 function versionFromRemote(r: Record<string, unknown>): ScriptVersion {
-  const sha = String(r.sha || r.revision || '');
-  const committedAt = Number(r.committedAt ?? r.created_at ?? r.createdAt ?? Date.now());
+  const sha = String(r['sha'] || r['revision'] || '');
+  const committedAt = Number(r['committedAt'] ?? r['created_at'] ?? r['createdAt'] ?? Date.now());
   return {
     sha,
-    shortSha: String(r.shortSha || sha.slice(0, 7)),
-    message: String(r.message || `Save ${r.name || 'script'}`),
-    author: r.author ? String(r.author) : undefined,
+    shortSha: String(r['shortSha'] || sha.slice(0, 7)),
+    message: String(r['message'] || `Save ${r['name'] || 'script'}`),
+    author: r['author'] ? String(r['author']) : undefined,
     committedAt: Number.isFinite(committedAt) ? committedAt : Date.now(),
-    url: r.url ? String(r.url) : undefined,
+    url: r['url'] ? String(r['url']) : undefined,
   };
 }
 

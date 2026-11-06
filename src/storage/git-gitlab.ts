@@ -28,24 +28,8 @@
 
 import type { ScriptDocument, ScriptMeta, ScriptVersion } from '../plugins/types';
 import { metaFromScriptContent } from '../indicators/script-meta';
-import {
-  type GitConfig,
-  GitIndexCorruptError,
-  assertGitConfig,
-  assertSafeRepoPath,
-  formatCommitMessage,
-  indexPath,
-  resolveScriptRepoPath,
-  scriptPath,
-} from './git-config';
-import {
-  forgeList,
-  forgeRead,
-  forgeRemove,
-  forgeWrite,
-  type GitForge,
-  type IndexFile,
-} from './git-forge';
+import { type GitConfig, GitIndexCorruptError, assertGitConfig, indexPath, resolveScriptRepoPath } from './git-config';
+import { forgeList, forgeRemove, forgeWrite, type GitForge, type IndexFile } from './git-forge';
 
 function projectRef(cfg: GitConfig): string {
   // Prefer raw group/project; encode once. If already %-encoded, decode first.
@@ -103,7 +87,7 @@ async function gl(
     /* ignore */
   }
   if (!res.ok) {
-    const msg = String(json.message || json.error || text || `HTTP ${res.status}`);
+    const msg = String(json['message'] || json['error'] || text || `HTTP ${res.status}`);
     const err = new Error(`GitLab: ${msg}`) as Error & { status?: number };
     err.status = res.status;
     throw err;
@@ -127,10 +111,10 @@ export async function gitlabGetFile(
   try {
     const at = encodeURIComponent(ref || cfg.branch);
     const { json } = await gl(cfg, `${fileUrl(cfg, filePath)}?ref=${at}`);
-    const encoding = String(json.encoding || 'base64');
-    const raw = String(json.content || '');
+    const encoding = String(json['encoding'] || 'base64');
+    const raw = String(json['content'] || '');
     const content = encoding === 'base64' ? b64Decode(raw) : raw;
-    return { content, blobId: String(json.blob_id || json.commit_id || '') };
+    return { content, blobId: String(json['blob_id'] || json['commit_id'] || '') };
   } catch (e: unknown) {
     if ((e as { status?: number }).status === 404) return null;
     throw e;
@@ -233,7 +217,7 @@ export async function gitlabPutFile(
     method: exists ? 'PUT' : 'POST',
     body: JSON.stringify(body),
   });
-  return { commitId: String(json.commit_id || '') };
+  return { commitId: String(json['commit_id'] || '') };
 }
 
 /** Delete a repository file with a commit message. */
@@ -380,7 +364,7 @@ export async function gitlabStatus(cfg: GitConfig): Promise<{
     const { json } = await gl(cfg, `${cfg.apiBaseUrl}/projects/${projectRef(cfg)}`);
     return {
       connected: true,
-      remote: String(json.path_with_namespace || json.name || cfg.projectId || `${cfg.owner}/${cfg.repo}`),
+      remote: String(json['path_with_namespace'] || json['name'] || cfg.projectId || `${cfg.owner}/${cfg.repo}`),
       branch: cfg.branch,
     };
   } catch (e: unknown) {

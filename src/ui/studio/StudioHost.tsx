@@ -19,6 +19,16 @@ import { PluginsPage } from '../plugins/PluginsPage';
 import { DebugPage } from '../debug/DebugPage';
 import { DsmPage } from '../dsm/DsmPage';
 
+/**
+ * Map the active {@link StudioPageId} to its page component inside one
+ * {@link AppPage} shell, so the overlay chrome is mounted once.
+ *
+ * WirePage pushes its applied-plan title up through `onTitle`; that override is
+ * cleared whenever `page` changes so it cannot leak into the next page.
+ *
+ * @param props - Open flag, active page, navigation/close handlers, and page callbacks.
+ * @returns The shell wrapping the selected page.
+ */
 export function StudioHost(props: {
   open: boolean;
   page: StudioPageId;
@@ -27,7 +37,7 @@ export function StudioHost(props: {
   settingsTab?: SettingsTabId;
   onChanged?: () => void;
   onApplied?: (planName: string) => void;
-}) {
+}): JSX.Element {
   const [overrideTitle, setOverrideTitle] = createSignal<string | undefined>();
   createEffect(() => {
     void props.page;

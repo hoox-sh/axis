@@ -39,7 +39,7 @@ const DATA_TABS: readonly { id: DataTab; label: string; hint: string }[] = [
 ];
 
 /** Studio Data page: backfill jobs + cached dataset inventory. */
-export const DsmPage: Component<{ onClose?: () => void }> = () => {
+export const DsmPage: Component<{ onClose?: () => void }> = () : JSX.Element => {
   const [tab, setTab] = createSignal<DataTab>('jobs');
   const [composerOpen, setComposerOpen] = createSignal(false);
   const [datasetRows, setDatasetRows] = createSignal<BarsCacheMeta[]>([]);

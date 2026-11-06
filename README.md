@@ -9,7 +9,7 @@ An installable open charting PWA: CEX OHLCV, drawings, on-chain overlays, and Pi
 
 AXIS is a Solid + Vite workspace. Historical bars, live streams, and calculation backends are plugins that share one TypeScript contract. Three engines: local PYNE Pro API (`:5002`), a Cloudflare Worker (`POST /api/run`), and in-browser Pyodide (offline). Evaluation never requires a proprietary chart host.
 
-**2.25.3** · CLI [`@hoox-sh/axis-cli`](https://www.npmjs.com/package/@hoox-sh/axis-cli) **0.3.5** · demo [axis.hoox.sh](https://axis.hoox.sh)
+**2.28.0** · CLI [`@hoox-sh/axis-cli`](https://www.npmjs.com/package/@hoox-sh/axis-cli) **0.3.6** · demo [axis.hoox.sh](https://axis.hoox.sh)
 
 <div align="center">
 

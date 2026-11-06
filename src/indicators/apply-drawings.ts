@@ -39,6 +39,11 @@ import { windowAxisFromMeta } from '../results/window-axis';
 import { runEpochInvalidates } from './run-helpers';
 import type { RunOptions, RunResult } from './runner';
 
+/**
+ * Inputs for {@link applyDrawings}: the epoch/owner used by the supersede gate,
+ * the run result carrying `drawings`, the bars that were evaluated, and the
+ * pane the geometry belongs to.
+ */
 export interface DrawingsApplyContext {
   epoch: number;
   indicatorId: string | undefined;
@@ -58,6 +63,19 @@ export function appliedScriptStillOnChart(indicatorId?: string): boolean {
   return !!(applied && applied.visible !== false);
 }
 
+/**
+ * Replace this script's Pine drawings on the chart (apply stage 5).
+ *
+ * Mutates the drawing layers, never the store: `xloc.bar_index` anchors are
+ * resolved through the run's own {@link windowAxisFromMeta} axis, each type is
+ * GC-trimmed to the script's `max_*_count`, `force_overlay` objects go to the
+ * price pane and the rest to the script's own pane, and an explicit empty
+ * `drawings: []` clears the owner's gallery. Skips when a newer editor Run
+ * superseded `ctx.epoch` or the script was hidden/detached mid-flight. Never
+ * throws — a missing drawing layer just means there is nothing to paint.
+ *
+ * @param ctx - epoch, owner id, run result, evaluated bars, overlay flag, pane
+ */
 export function applyDrawings(ctx: DrawingsApplyContext): void {
   // Pine drawings: atomic replace (no clear→empty→set flash).
   // GC trims each type to indicator()/strategy() max_*_count (default 50).

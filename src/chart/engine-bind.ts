@@ -30,10 +30,7 @@ import { pyneMarket } from '../data/provider';
 import { exchangeForSource } from '../data/symbol-exchange';
 import { getActiveEngineConfig } from '../plugins/active';
 import { releaseChartDataSession } from '../engines/chart-data-session';
-import {
-  invalidateDataSessions,
-  type DataSeriesKey,
-} from '../engines/data-sessions';
+import { invalidateDataSessions, type DataSeriesKey } from '../engines/data-sessions';
 import { invalidateLiveSessionsForSeries } from '../engines/live-sessions';
 import {
   chartReadinessStillCurrent,
@@ -41,11 +38,7 @@ import {
   setChartReadinessPhase,
 } from './readiness';
 
-function seriesKey(
-  symbol: string,
-  interval: string,
-  source: string,
-): DataSeriesKey {
+function seriesKey(symbol: string, interval: string, source: string): DataSeriesKey {
   return {
     exchange: exchangeForSource(source || store.source || 'binance-rest'),
     market: pyneMarket(store.provider?.market),
@@ -65,6 +58,10 @@ function sameSeries(
   return norm(a.symbol) === norm(b.symbol) && String(a.interval) === String(b.interval);
 }
 
+/**
+ * What the binding-engine phase actually did for generation G.
+ * Counts are memoized engine sessions dropped for the prior/new series keys.
+ */
 export interface BindChartEngineResult {
   invalidatedData: number;
   invalidatedLive: number;
@@ -111,21 +108,15 @@ export async function bindChartEngineForGeneration(
   }
 
   const cfg = getActiveEngineConfig() || {};
-  const endpoint = String(cfg.endpoint || store.endpoint || '')
+  const endpoint = String(cfg['endpoint'] || store.endpoint || '')
     .trim()
     .replace(/\/$/, '');
   let invalidatedData = 0;
   let invalidatedLive = 0;
   if (endpoint) {
-    const keys: DataSeriesKey[] = [
-      seriesKey(identity.symbol, identity.interval, identity.source),
-    ];
+    const keys: DataSeriesKey[] = [seriesKey(identity.symbol, identity.interval, identity.source)];
     const prior = priorChartReadinessIdentity();
-    if (
-      prior &&
-      (prior.symbol || prior.interval) &&
-      !sameSeries(prior, identity)
-    ) {
+    if (prior && (prior.symbol || prior.interval) && !sameSeries(prior, identity)) {
       keys.push(seriesKey(prior.symbol, prior.interval, prior.source || identity.source));
     }
     for (const key of keys) {
@@ -136,11 +127,7 @@ export async function bindChartEngineForGeneration(
         /* ignore */
       }
       try {
-        invalidatedLive += invalidateLiveSessionsForSeries(
-          endpoint,
-          key.symbol,
-          key.interval,
-        );
+        invalidatedLive += invalidateLiveSessionsForSeries(endpoint, key.symbol, key.interval);
       } catch {
         /* ignore */
       }

@@ -50,7 +50,14 @@ function fmtAxis(v: number): string {
   return `${sign}${a.toFixed(0)}`;
 }
 
-export const EquityChart: Component<{ steps: EquityStep[] }> = (props) => {
+/**
+ * Equity curve for a backtest run: cumulative equity line + area, an underwater
+ * (drawdown-to-peak) band, axes, and a hover crosshair with a tooltip.
+ *
+ * @param props - Equity steps in run order, each with its equity and running peak.
+ * @returns The chart SVG.
+ */
+export const EquityChart: Component<{ steps: EquityStep[] }> = (props): JSX.Element => {
   const [hover, setHover] = createSignal<number | null>(null);
 
   const model = createMemo(() => {
@@ -71,19 +78,23 @@ export const EquityChart: Component<{ steps: EquityStep[] }> = (props) => {
     const linePath = `M ${linePts.join(' L ')}`;
     const areaPath =
       `M ${x(0).toFixed(1)},${y(series[0]!).toFixed(1)} ` +
-      linePts.slice(1).map((p) => `L ${p}`).join(' ') +
+      linePts
+        .slice(1)
+        .map((p) => `L ${p}`)
+        .join(' ') +
       ` L ${x(n - 1).toFixed(1)},${(PAD_T + PLOT_H).toFixed(1)}` +
       ` L ${x(0).toFixed(1)},${(PAD_T + PLOT_H).toFixed(1)} Z`;
 
     // Underwater (drawdown) region: equity up to running peak
     const ddForward = steps.map((s, k) => `${x(k + 1).toFixed(1)},${y(s.equity).toFixed(1)}`);
-    const ddBack = steps
-      .map((s, k) => `${x(k + 1).toFixed(1)},${y(s.peak).toFixed(1)}`)
-      .reverse();
+    const ddBack = steps.map((s, k) => `${x(k + 1).toFixed(1)},${y(s.peak).toFixed(1)}`).reverse();
     const ddPath =
       ddForward.length > 0
         ? `M ${ddForward[0]} ` +
-          ddForward.slice(1).map((p) => `L ${p}`).join(' ') +
+          ddForward
+            .slice(1)
+            .map((p) => `L ${p}`)
+            .join(' ') +
           ' ' +
           ddBack.map((p) => `L ${p}`).join(' ') +
           ' Z'
@@ -92,7 +103,16 @@ export const EquityChart: Component<{ steps: EquityStep[] }> = (props) => {
     const zeroY = min <= 0 && max >= 0 ? y(0) : null;
 
     const yTicks = Array.from({ length: 5 }, (_, k) => min + ((max - min) * k) / 4);
-    const xTickIdx = n <= 1 ? [0] : [0, Math.floor((n - 1) / 4), Math.floor((n - 1) / 2), Math.floor((3 * (n - 1)) / 4), n - 1];
+    const xTickIdx =
+      n <= 1
+        ? [0]
+        : [
+            0,
+            Math.floor((n - 1) / 4),
+            Math.floor((n - 1) / 2),
+            Math.floor((3 * (n - 1)) / 4),
+            n - 1,
+          ];
 
     const final = series[n - 1]!;
     const positive = final >= 0;
@@ -130,7 +150,7 @@ export const EquityChart: Component<{ steps: EquityStep[] }> = (props) => {
       x: m.x(h),
       y: m.y(m.n > 0 ? (h === 0 ? 0 : props.steps[h - 1]!.equity) : 0),
       tradeNo: step ? step.i : 0,
-      equity: h === 0 ? 0 : step?.equity ?? 0,
+      equity: h === 0 ? 0 : (step?.equity ?? 0),
       drawdownPct: step ? step.drawdownPct : 0,
     };
   };
@@ -164,13 +184,7 @@ export const EquityChart: Component<{ steps: EquityStep[] }> = (props) => {
             const yy = model().y(v);
             return (
               <g>
-                <line
-                  x1={PAD_L}
-                  x2={W - PAD_R}
-                  y1={yy}
-                  y2={yy}
-                  class="ax-equity-grid"
-                />
+                <line x1={PAD_L} x2={W - PAD_R} y1={yy} y2={yy} class="ax-equity-grid" />
                 <text x={PAD_L - 8} y={yy + 3} class="ax-equity-axis" text-anchor="end">
                   {fmtAxis(v)}
                 </text>

@@ -12,6 +12,15 @@
 import { Show, createEffect, createSignal, useContext } from 'solid-js';
 import { StudioFieldContext } from './StudioField';
 
+/**
+ * Multiline studio input mirroring {@link StudioInput}'s shell language:
+ * mono/invalid/disabled states, optional autosize growth, and a character
+ * counter. Hint/error ids come from {@link StudioFieldContext} for
+ * `aria-describedby`.
+ *
+ * @param props - Value, rows, autosize/count flags, and input callbacks.
+ * @returns A `textarea.ax-input` wrapper with an optional counter.
+ */
 export function StudioTextarea(props: {
   id?: string;
   value?: string;
@@ -31,7 +40,7 @@ export function StudioTextarea(props: {
   onInput?: (value: string) => void;
   onChange?: (value: string) => void;
   onBlur?: (value: string) => void;
-}) {
+}): JSX.Element {
   const field = useContext(StudioFieldContext);
   const [live, setLive] = createSignal(props.value ?? '');
   let areaEl: HTMLTextAreaElement | undefined;

@@ -39,7 +39,7 @@ import {
 } from './timebadge';
 
 /** Current-price overlay card (chart top-left). Reads store only. */
-export const CurrentPriceCard: Component = () => {
+export const CurrentPriceCard: Component = () : JSX.Element => {
   /** Wall-clock tick so the left time badge counts down live. */
   const now = useNow();
   /**

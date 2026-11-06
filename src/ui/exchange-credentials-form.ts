@@ -37,8 +37,10 @@ export const EXCHANGE_CREDENTIAL_VENUES = [
   'mexc',
 ] as const;
 
+/** Venue ids accepted by the exchange credentials form; also the label map key. */
 export type ExchangeCredentialVenue = (typeof EXCHANGE_CREDENTIAL_VENUES)[number];
 
+/** Display names for the venue select, keyed by {@link ExchangeCredentialVenue}. */
 export const EXCHANGE_CREDENTIAL_VENUE_LABELS: Record<ExchangeCredentialVenue, string> = {
   binance: 'Binance',
   okx: 'OKX',
@@ -48,6 +50,7 @@ export const EXCHANGE_CREDENTIAL_VENUE_LABELS: Record<ExchangeCredentialVenue, s
   mexc: 'MEXC',
 };
 
+/** Draft state of the credential form; secrets stay in memory and are never persisted. */
 export type ExchangeCredentialFormState = {
   venue: ExchangeCredentialVenue;
   apiKey: string;
@@ -56,6 +59,7 @@ export type ExchangeCredentialFormState = {
   label?: string;
 };
 
+/** Blank form seeded on Binance, used to reset the credential fields. */
 export const EMPTY_EXCHANGE_CREDENTIAL_FORM: ExchangeCredentialFormState = {
   venue: 'binance',
   apiKey: '',
@@ -65,7 +69,9 @@ export const EMPTY_EXCHANGE_CREDENTIAL_FORM: ExchangeCredentialFormState = {
 
 /** OKX and Coinbase REST signing require a passphrase in addition to key/secret. */
 export function venueNeedsPassphrase(venue: string): boolean {
-  const v = String(venue || '').trim().toLowerCase();
+  const v = String(venue || '')
+    .trim()
+    .toLowerCase();
   return v === 'okx' || v === 'coinbase';
 }
 
@@ -80,25 +86,61 @@ const CCXT_PASSWORD_EXCHANGES = new Set([
   'kucoinspot',
 ]);
 
+/**
+ * Whether a CCXT exchange id uses the `password` field (passphrase).
+ *
+ * @param exchange - CCXT exchange id, any casing.
+ * @returns `true` for the OKX / Coinbase / KuCoin families.
+ */
 export function ccxtNeedsPassword(exchange: string): boolean {
-  return CCXT_PASSWORD_EXCHANGES.has(String(exchange || '').trim().toLowerCase());
+  return CCXT_PASSWORD_EXCHANGES.has(
+    String(exchange || '')
+      .trim()
+      .toLowerCase(),
+  );
 }
 
+/**
+ * Canonicalize a user-typed CCXT exchange id for vault lookup.
+ *
+ * @param raw - Exchange id as typed or stored.
+ * @returns Trimmed lowercase id (`''` when empty).
+ */
 export function normalizeCcxtExchangeId(raw: string): string {
-  return String(raw || '').trim().toLowerCase();
+  return String(raw || '')
+    .trim()
+    .toLowerCase();
 }
 
+/**
+ * Type guard for a supported venue id.
+ *
+ * @param venue - Candidate venue id (not normalized — pass lowercase).
+ * @returns `true` when the id is one of {@link EXCHANGE_CREDENTIAL_VENUES}.
+ */
 export function isExchangeCredentialVenue(venue: string): venue is ExchangeCredentialVenue {
   return (EXCHANGE_CREDENTIAL_VENUES as readonly string[]).includes(venue);
 }
 
-export function defaultExchangeCredentialVenue(
-  raw?: string | null,
-): ExchangeCredentialVenue {
-  const v = String(raw || '').trim().toLowerCase();
+/**
+ * Resolve the form's initial venue from a stored/source value.
+ *
+ * @param raw - Venue id from the store or a source config.
+ * @returns A supported venue, defaulting to `binance` for unknown/empty input.
+ */
+export function defaultExchangeCredentialVenue(raw?: string | null): ExchangeCredentialVenue {
+  const v = String(raw || '')
+    .trim()
+    .toLowerCase();
   return isExchangeCredentialVenue(v) ? v : 'binance';
 }
 
+/**
+ * Human venue name for labels and messages.
+ *
+ * @param venue - Venue id; unknown ids are echoed back unchanged.
+ * @returns Display label, `Exchange` when the id is empty.
+ */
 export function exchangeVenueLabel(venue: string): string {
   if (isExchangeCredentialVenue(venue)) return EXCHANGE_CREDENTIAL_VENUE_LABELS[venue];
   return venue || 'Exchange';

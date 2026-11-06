@@ -105,7 +105,13 @@ import { isSecureCloudEndpoint } from '../storage/cloud-config';
 import { axisDebugLogStats, clearAxisDebugLog, isAxisDebug, readAxisDebugLog } from '../debug';
 import type { ChartGridMode } from '../chart/layout';
 import type { ChartType } from '../chart/chart-type';
+import { isRecord, readJsonRecord } from '../utils/validate';
 
+/**
+ * Hooks the live app injects so dispatch can read or run the editor without importing Solid
+ * UI at module load; every field is optional except the read path, which falls back to the
+ * persisted editor document.
+ */
 export interface McpHostHooks {
   getEditorDoc: () => string;
   setEditorDoc?: (doc: string) => void;
@@ -114,6 +120,12 @@ export interface McpHostHooks {
 
 let hooks: McpHostHooks = { getEditorDoc: () => loadEditorDoc() };
 
+/**
+ * Merges host hooks over the current set, letting the app supply live editor access without
+ * clearing hooks other callers already registered.
+ *
+ * @param next Subset of {@link McpHostHooks} to override; omitted keys keep their current value.
+ */
 export function setMcpHostHooks(next: Partial<McpHostHooks>): void {
   hooks = { ...hooks, ...next };
 }
@@ -211,8 +223,8 @@ function assertPlaceableKind(kind: unknown): DrawingKind {
 
 function assertDrawingPoint(p: unknown): ChartPoint {
   const r = rec(p);
-  const time = Number(r.time);
-  const price = Number(r.price);
+  const time = Number(r['time']);
+  const price = Number(r['price']);
   if (!Number.isFinite(time) || !Number.isFinite(price)) {
     fail('BAD_POINT', 'Each point needs finite numeric {time, price}');
   }
@@ -278,6 +290,10 @@ function startLiveNow(): void {
   startLive(streamId, store.symbol, store.interval);
 }
 
+/**
+ * Call-site policy for {@link invokeCapability}: the bridge and in-page host disagree on
+ * whether a mutating capability may run, so the decision is passed in rather than inferred.
+ */
 export interface InvokeCapabilityOpts {
   /**
    * Must be true to run capabilities marked `mutates` (F22). The Worker
@@ -289,6 +305,25 @@ export interface InvokeCapabilityOpts {
   allowMutations?: boolean;
 }
 
+/**
+ * Runs one MCP app-plane capability against the live store. `capability` must be advertised
+ * in `APP_CAPABILITIES`; `payload` is untrusted and each branch validates the fields it
+ * reads, so a malformed body fails with a coded error instead of partially mutating state.
+ * The returned value is plain JSON — the bridge serializes it into the invoke response.
+ *
+ * @param capability Capability id, e.g. `app.set`, `chart.get`, `engine.tick`.
+ * @param payload Untrusted capability body; coerced to a record, defaults to `{}`.
+ * @param opts Mutation policy — see {@link InvokeCapabilityOpts}; `allowMutations: false`
+ * makes every `mutates` capability fail.
+ * @returns The capability's JSON-serializable result (an object, snapshot slice, or `null`).
+ * @throws {McpInvokeError} With a stable code such as `UNKNOWN_CAPABILITY`, `PATH_DENIED`,
+ * `MUTATION_DENIED`, `NOT_FOUND`, or `BAD_*` when validation fails. An error thrown deeper in
+ * a capability propagates unchanged; the bridge maps it to `APP_ERROR`.
+ * @example Read-only dispatch from the in-page host:
+ * ```ts
+ * await invokeCapability('chart.get', {}, { allowMutations: false });
+ * ```
+ */
 export async function invokeCapability(
   capability: string,
   payload: unknown = {},
@@ -310,36 +345,36 @@ export async function invokeCapability(
         commands: listPaletteCommandIds(),
       };
     case 'app.snapshot':
-      return buildAppSnapshot({ includeBars: p.includeBars === true });
+      return buildAppSnapshot({ includeBars: p['includeBars'] === true });
     case 'app.get': {
-      const snap = buildAppSnapshot({ includeBars: p.includeBars === true });
-      const path = str(p.path);
+      const snap = buildAppSnapshot({ includeBars: p['includeBars'] === true });
+      const path = str(p['path']);
       return path ? getByPath(snap, path) : snap;
     }
     case 'app.set': {
-      const path = str(p.path);
+      const path = str(p['path']);
       if (!SETTABLE_PATHS.has(path)) fail('PATH_DENIED', `Path not allowlisted: ${path}`);
-      return applySettable(path, p.value);
+      return applySettable(path, p['value']);
     }
     case 'app.command': {
-      const id = str(p.id);
+      const id = str(p['id']);
       if (!id) fail('NO_ID', 'command id required');
       const ok = await runPaletteCommand(id);
       if (!ok) fail('UNKNOWN_COMMAND', `No palette command: ${id}`);
       return { ok: true, id };
     }
     case 'app.shortcut': {
-      const id = str(p.id);
+      const id = str(p['id']);
       if (!id) fail('NO_ID', 'shortcut id required');
       const ok = fireShortcutById(id);
       if (!ok) fail('UNKNOWN_SHORTCUT', `No shortcut action: ${id}`);
       return { ok: true, id };
     }
     case 'app.event': {
-      const name = str(p.name);
+      const name = str(p['name']);
       assertMcpEventName(name);
       if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
-        window.dispatchEvent(new CustomEvent(name, { detail: p.detail }));
+        window.dispatchEvent(new CustomEvent(name, { detail: p['detail'] }));
       }
       return { ok: true, name };
     }
@@ -353,15 +388,16 @@ export async function invokeCapability(
         { timeoutMs: 10_000 },
       );
       if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as {
-          error?: { code?: string; message?: string };
-        };
-        fail(body.error?.code || 'FETCH_FAILED', body.error?.message || `HTTP ${res.status}`);
+        const body = await readJsonRecord(res);
+        const error = isRecord(body['error']) ? body['error'] : {};
+        const code = typeof error['code'] === 'string' ? error['code'] : '';
+        const message = typeof error['message'] === 'string' ? error['message'] : '';
+        fail(code || 'FETCH_FAILED', message || `HTTP ${res.status}`);
       }
       return res.json();
     }
     case 'app.tab.switch': {
-      const tabId = str(p.tabId);
+      const tabId = str(p['tabId']);
       if (!tabId) fail('NO_TAB_ID', 'tabId required');
       const cfg = resolveCloudConfig();
       if (!cfg.apiKey) fail('NO_API_KEY', 'Worker API key not configured');
@@ -379,10 +415,11 @@ export async function invokeCapability(
         { timeoutMs: 10_000 },
       );
       if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as {
-          error?: { code?: string; message?: string };
-        };
-        fail(body.error?.code || 'FETCH_FAILED', body.error?.message || `HTTP ${res.status}`);
+        const body = await readJsonRecord(res);
+        const error = isRecord(body['error']) ? body['error'] : {};
+        const code = typeof error['code'] === 'string' ? error['code'] : '';
+        const message = typeof error['message'] === 'string' ? error['message'] : '';
+        fail(code || 'FETCH_FAILED', message || `HTTP ${res.status}`);
       }
       return res.json();
     }
@@ -403,20 +440,20 @@ export async function invokeCapability(
       };
     }
     case 'chart.set': {
-      if (p.symbol) setStore('symbol', str(p.symbol).toUpperCase());
-      if (p.interval) setStore('interval', str(p.interval));
-      if (p.exchange) setStore('exchange', str(p.exchange));
-      if (p.source) setStore('source', str(p.source));
-      if (p.chartType) setChartType(str(p.chartType) as ChartType);
+      if (p['symbol']) setStore('symbol', str(p['symbol']).toUpperCase());
+      if (p['interval']) setStore('interval', str(p['interval']));
+      if (p['exchange']) setStore('exchange', str(p['exchange']));
+      if (p['source']) setStore('source', str(p['source']));
+      if (p['chartType']) setChartType(str(p['chartType']) as ChartType);
       persist();
       return { symbol: store.symbol, interval: store.interval, chartType: store.chartType };
     }
     case 'chart.load': {
-      const symbol = str(p.symbol || store.symbol).toUpperCase();
-      const interval = str(p.interval || store.interval);
-      const source = str(p.source || store.source);
-      if (p.symbol) setStore('symbol', symbol);
-      if (p.interval) setStore('interval', interval);
+      const symbol = str(p['symbol'] || store.symbol).toUpperCase();
+      const interval = str(p['interval'] || store.interval);
+      const source = str(p['source'] || store.source);
+      if (p['symbol']) setStore('symbol', symbol);
+      if (p['interval']) setStore('interval', interval);
       persist();
       const ok = await loadSymbolData(symbol, interval, source);
       return { ok, symbol: store.symbol, interval: store.interval, bars: store.bars.length };
@@ -426,50 +463,50 @@ export async function invokeCapability(
       return { ok, bars: store.bars.length };
     }
     case 'chart.live': {
-      const on = p.active === undefined ? !store.live.active : Boolean(p.active);
+      const on = p['active'] === undefined ? !store.live.active : Boolean(p['active']);
       if (on) startLiveNow();
       else stopLive();
       setLive(on);
       return { active: store.live.active };
     }
     case 'chart.layout': {
-      const op = str(p.op || (p.mode ? 'grid' : 'get'));
+      const op = str(p['op'] || (p['mode'] ? 'grid' : 'get'));
       if (op === 'get') return store.chartLayout;
-      if (op === 'grid' || p.mode) {
-        setChartGridMode(str(p.mode) as ChartGridMode);
+      if (op === 'grid' || p['mode']) {
+        setChartGridMode(str(p['mode']) as ChartGridMode);
         return store.chartLayout;
       }
-      if (op === 'save') return saveChartLayout(str(p.name || 'Untitled'));
-      if (op === 'load') return { ok: loadChartLayout(str(p.id)) };
+      if (op === 'save') return saveChartLayout(str(p['name'] || 'Untitled'));
+      if (op === 'load') return { ok: loadChartLayout(str(p['id'])) };
       if (op === 'delete') {
-        deleteChartLayout(str(p.id));
+        deleteChartLayout(str(p['id']));
         return { ok: true };
       }
       fail('BAD_OP', `Unknown layout op: ${op}`);
       break;
     }
     case 'chart.theme': {
-      if (p.presetId) setChartThemePreset(str(p.presetId));
+      if (p['presetId']) setChartThemePreset(str(p['presetId']));
       return { presetId: store.chartTheme?.presetId };
     }
     case 'chart.type': {
-      if (p.type) setChartType(str(p.type) as ChartType);
+      if (p['type']) setChartType(str(p['type']) as ChartType);
       return { chartType: store.chartType };
     }
     case 'chart.screenshot': {
       const opts = { ...loadScreenshotOptions() };
-      if (p.scope === 'price' || p.scope === 'panes' || p.scope === 'workspace')
-        opts.scope = p.scope;
-      if (p.scale === 1 || p.scale === 2) opts.scale = p.scale;
+      if (p['scope'] === 'price' || p['scope'] === 'panes' || p['scope'] === 'workspace')
+        opts.scope = p['scope'];
+      if (p['scale'] === 1 || p['scale'] === 2) opts.scale = p['scale'];
       const canvas = await captureScreenshot(opts);
       return canvasPng(canvas);
     }
     case 'chart.zoom': {
-      const op = str(p.op || p.action || 'in');
-      if (op === 'in') zoomChartBy(typeof p.delta === 'number' ? p.delta : 0.2);
-      else if (op === 'out') zoomChartBy(typeof p.delta === 'number' ? p.delta : -0.2);
+      const op = str(p['op'] || p['action'] || 'in');
+      if (op === 'in') zoomChartBy(typeof p['delta'] === 'number' ? p['delta'] : 0.2);
+      else if (op === 'out') zoomChartBy(typeof p['delta'] === 'number' ? p['delta'] : -0.2);
       else if (op === 'reset') resetChartZoom();
-      else if (op === 'pan') panChartBy(typeof p.bars === 'number' ? p.bars : 1);
+      else if (op === 'pan') panChartBy(typeof p['bars'] === 'number' ? p['bars'] : 1);
       else fail('BAD_OP', `Unknown zoom op: ${op}`);
       return { ok: true, op };
     }
@@ -481,15 +518,15 @@ export async function invokeCapability(
     case 'editor.get':
       return { doc: editorDoc(), open: store.editor.open, mode: store.editor.mode };
     case 'editor.set': {
-      const doc = str(p.doc);
+      const doc = str(p['doc']);
       writeEditorDoc(doc);
-      if (p.open !== false) setEditorOpen(true);
+      if (p['open'] !== false) setEditorOpen(true);
       return { chars: doc.length };
     }
     case 'editor.run': {
-      const doc = str(p.doc) || editorDoc();
+      const doc = str(p['doc']) || editorDoc();
       if (!doc.trim()) fail('EMPTY', 'editor document is empty');
-      if (hooks.runEditor && !p.doc) {
+      if (hooks.runEditor && !p['doc']) {
         const result = await hooks.runEditor();
         return { ok: true, result: result ?? store.lastRun };
       }
@@ -515,14 +552,14 @@ export async function invokeCapability(
         codeChars: s.code?.length ?? 0,
       }));
     case 'indicators.add': {
-      const code = str(p.code);
-      const name = str(p.name || 'Script');
+      const code = str(p['code']);
+      const name = str(p['name'] || 'Script');
       if (!code.trim()) fail('EMPTY', 'code required');
-      const id = addIndicator(name, code, str(p.paneId || 'price') || 'price', {});
+      const id = addIndicator(name, code, str(p['paneId'] || 'price') || 'price', {});
       return { id };
     }
     case 'indicators.remove': {
-      const id = str(p.id);
+      const id = str(p['id']);
       if (!id) fail('NO_ID', 'id required');
       if (!store.scripts.some((s) => s.id === id)) fail('NOT_FOUND', `No indicator: ${id}`);
       // Full UI path: clears chart overlays, destroys emptied sub-panes,
@@ -531,18 +568,18 @@ export async function invokeCapability(
       return { ok: true, id };
     }
     case 'indicators.update': {
-      const id = str(p.id);
+      const id = str(p['id']);
       if (!id) fail('NO_ID', 'id required');
       if (!store.scripts.some((s) => s.id === id)) fail('NOT_FOUND', `No indicator: ${id}`);
       const patch: Parameters<typeof updateIndicator>[1] = {};
-      if (p.name !== undefined) patch.name = str(p.name);
-      if (p.code !== undefined) patch.code = str(p.code);
-      if (p.inputValues !== undefined) patch.inputValues = rec(p.inputValues);
+      if (p['name'] !== undefined) patch.name = str(p['name']);
+      if (p['code'] !== undefined) patch.code = str(p['code']);
+      if (p['inputValues'] !== undefined) patch.inputValues = rec(p['inputValues']);
       if (Object.keys(patch).length > 0) updateIndicator(id, patch);
       // Visibility goes through the chart-synced path (clears plots / re-runs).
       // NOTE: code changes do not auto-run — follow with indicators.run.
       let visible: boolean | undefined;
-      if (p.visible !== undefined) visible = setScriptChartVisible(id, Boolean(p.visible));
+      if (p['visible'] !== undefined) visible = setScriptChartVisible(id, Boolean(p['visible']));
       return { ok: true, id, ...(visible !== undefined ? { visible } : {}) };
     }
     case 'indicators.run': {
@@ -559,26 +596,26 @@ export async function invokeCapability(
       return loadAlerts().map(sanitizeAlertForMcp);
     case 'alerts.create': {
       const input: AlertCreateInput = {
-        name: str(p.name || 'Alert'),
-        symbol: str(p.symbol || store.symbol),
-        kind: (str(p.kind || 'price_cross') as AlertKind) || 'price_cross',
-        params: rec(p.params),
+        name: str(p['name'] || 'Alert'),
+        symbol: str(p['symbol'] || store.symbol),
+        kind: (str(p['kind'] || 'price_cross') as AlertKind) || 'price_cross',
+        params: rec(p['params']),
       };
-      if (p.interval) input.interval = str(p.interval);
-      if (p.webhookUrl) input.webhookUrl = str(p.webhookUrl);
-      if (typeof p.enabled === 'boolean') input.enabled = p.enabled;
+      if (p['interval']) input.interval = str(p['interval']);
+      if (p['webhookUrl']) input.webhookUrl = str(p['webhookUrl']);
+      if (typeof p['enabled'] === 'boolean') input.enabled = p['enabled'];
       return sanitizeAlertForMcp(createAlert(input));
     }
     case 'alerts.update': {
-      const id = str(p.id);
+      const id = str(p['id']);
       const existing = loadAlerts().find((a) => a.id === id);
       if (!existing) fail('NOT_FOUND', `alert ${id}`);
-      const next: Alert = { ...existing, ...rec(p.patch), id };
+      const next: Alert = { ...existing, ...rec(p['patch']), id };
       upsertAlert(next);
       return sanitizeAlertForMcp(next);
     }
     case 'alerts.remove': {
-      const id = str(p.id);
+      const id = str(p['id']);
       return { ok: removeAlert(id), id };
     }
 
@@ -589,51 +626,51 @@ export async function invokeCapability(
         lists: store.watchlist.lists,
       };
     case 'watchlist.add': {
-      const symbol = str(p.symbol).toUpperCase();
+      const symbol = str(p['symbol']).toUpperCase();
       if (!symbol) fail('NO_SYMBOL', 'symbol required');
       addWatchlistSymbol(symbol);
       return { symbols: [...store.watchlist.symbols] };
     }
     case 'watchlist.remove': {
-      removeWatchlistSymbol(str(p.symbol).toUpperCase());
+      removeWatchlistSymbol(str(p['symbol']).toUpperCase());
       return { symbols: [...store.watchlist.symbols] };
     }
     case 'watchlist.lists': {
-      const op = str(p.op);
+      const op = str(p['op']);
       if (op === 'create')
         return {
           id: createWatchlist(
-            str(p.name),
-            Array.isArray(p.symbols) ? (p.symbols as string[]) : undefined,
+            str(p['name']),
+            Array.isArray(p['symbols']) ? (p['symbols'] as string[]) : undefined,
           ),
         };
       if (op === 'rename') {
-        renameWatchlist(str(p.id), str(p.name));
+        renameWatchlist(str(p['id']), str(p['name']));
         return { ok: true };
       }
-      if (op === 'delete') return { ok: deleteWatchlist(str(p.id)) };
+      if (op === 'delete') return { ok: deleteWatchlist(str(p['id'])) };
       if (op === 'select') {
-        setActiveWatchlist(str(p.id));
+        setActiveWatchlist(str(p['id']));
         return { activeId: store.watchlist.activeId };
       }
       return { lists: store.watchlist.lists, activeId: store.watchlist.activeId };
     }
 
     case 'library.list':
-      return await listScripts(str(p.prefix) || undefined);
+      return await listScripts(str(p['prefix']) || undefined);
     case 'library.read':
-      return await readScript(str(p.id));
+      return await readScript(str(p['id']));
     case 'library.write': {
       const doc = await writeScript({
-        id: str(p.id) || `s_${Date.now().toString(36)}`,
-        name: str(p.name || 'Untitled'),
-        content: str(p.content),
-        description: p.description != null ? str(p.description) : undefined,
+        id: str(p['id']) || `s_${Date.now().toString(36)}`,
+        name: str(p['name'] || 'Untitled'),
+        content: str(p['content']),
+        description: p['description'] != null ? str(p['description']) : undefined,
       });
       return doc;
     }
     case 'library.remove': {
-      await removeScript(str(p.id));
+      await removeScript(str(p['id']));
       return { ok: true };
     }
 
@@ -645,20 +682,20 @@ export async function invokeCapability(
         strategyUi: store.strategyUi,
       };
     case 'logs.get': {
-      const source = str(p.source);
-      const level = str(p.level);
+      const source = str(p['source']);
+      const level = str(p['level']);
       if (level && !['info', 'ok', 'warn', 'error'].includes(level)) {
         fail('BAD_LEVEL', 'level must be info|ok|warn|error');
       }
       const entries = store.logs.filter(
         (l) => (!source || (l.source || 'system') === source) && (!level || l.level === level),
       );
-      return entries.slice(-(typeof p.limit === 'number' ? p.limit : 50));
+      return entries.slice(-(typeof p['limit'] === 'number' ? p['limit'] : 50));
     }
     case 'logs.debug.get': {
       // Rotating localStorage ring written by axis:chart / axis:engine when
       // VITE_AXIS_DEBUG or localStorage.axis.debug is on.
-      const maxCharsRaw = typeof p.maxChars === 'number' ? p.maxChars : 120_000;
+      const maxCharsRaw = typeof p['maxChars'] === 'number' ? p['maxChars'] : 120_000;
       const maxChars = Math.max(4_000, Math.min(Math.floor(maxCharsRaw), 250_000));
       const stats = axisDebugLogStats();
       const full = readAxisDebugLog();
@@ -674,9 +711,9 @@ export async function invokeCapability(
     }
     case 'logs.append': {
       appendLog(
-        (str(p.level || 'info') as 'info' | 'ok' | 'warn' | 'error') || 'info',
-        str(p.message),
-        str(p.source || 'mcp'),
+        (str(p['level'] || 'info') as 'info' | 'ok' | 'warn' | 'error') || 'info',
+        str(p['message']),
+        str(p['source'] || 'mcp'),
       );
       return { ok: true };
     }
@@ -697,11 +734,12 @@ export async function invokeCapability(
       return out;
     }
     case 'panels.set': {
-      const id = str(p.id);
+      const id = str(p['id']);
       if (!isPanelId(id)) fail('BAD_PANEL', `Unknown panel: ${id}`);
-      if (typeof p.open === 'boolean') setPanelOpen(id, p.open);
-      if (p.dock) setPanelDock(id, str(p.dock) as PanelDock);
-      if (p.chartOnly === true || p.chartOnly === false) setChartOnly(Boolean(p.chartOnly));
+      if (typeof p['open'] === 'boolean') setPanelOpen(id, p['open']);
+      if (p['dock']) setPanelDock(id, str(p['dock']) as PanelDock);
+      if (p['chartOnly'] === true || p['chartOnly'] === false)
+        setChartOnly(Boolean(p['chartOnly']));
       return { id, open: store.panelChrome?.[id]?.open, dock: store.panelChrome?.[id]?.dock };
     }
 
@@ -714,8 +752,8 @@ export async function invokeCapability(
         stream: store.live?.streamId,
       };
     case 'plugins.activate': {
-      const kind = str(p.kind);
-      const id = str(p.id);
+      const kind = str(p['kind']);
+      const id = str(p['id']);
       if (!id) fail('NO_ID', 'plugin id required');
       if (kind !== 'source' && kind !== 'stream' && kind !== 'engine' && kind !== 'storage') {
         fail('BAD_KIND', 'kind must be source|stream|engine|storage');
@@ -731,12 +769,12 @@ export async function invokeCapability(
         uiScale: store.uiScale,
       };
     case 'theme.set': {
-      if (p.theme === 'dark' || p.theme === 'light') {
-        setStore('theme', p.theme);
+      if (p['theme'] === 'dark' || p['theme'] === 'light') {
+        setStore('theme', p['theme']);
         applyThemeToDocument(store.chartTheme);
-      } else if (p.toggle) toggleTheme();
-      if (p.presetId) setChartThemePreset(str(p.presetId));
-      if (typeof p.uiScale === 'number') setUiScale(p.uiScale);
+      } else if (p['toggle']) toggleTheme();
+      if (p['presetId']) setChartThemePreset(str(p['presetId']));
+      if (typeof p['uiScale'] === 'number') setUiScale(p['uiScale']);
       persist();
       return {
         theme: store.theme,
@@ -746,9 +784,9 @@ export async function invokeCapability(
     }
 
     case 'workspace.export':
-      return buildWorkspaceSnapshot(store, { includeBars: p.includeBars === true });
+      return buildWorkspaceSnapshot(store, { includeBars: p['includeBars'] === true });
     case 'workspace.import': {
-      const raw = typeof p.json === 'string' ? p.json : JSON.stringify(p.snapshot ?? p);
+      const raw = typeof p['json'] === 'string' ? p['json'] : JSON.stringify(p['snapshot'] ?? p);
       const snap = parseSnapshotJson(raw);
       applyWorkspaceSnapshot(snap, {
         assign(fields) {
@@ -770,85 +808,86 @@ export async function invokeCapability(
     }
 
     case 'drawings.list': {
-      const symbol = str(p.symbol);
+      const symbol = str(p['symbol']);
       if (symbol) {
         return drawingsForSymbol(store.drawings, symbol, { includeUntagged: true });
       }
       return store.drawings;
     }
     case 'drawings.add': {
-      const kind = assertPlaceableKind(p.kind);
-      const rawPoints = Array.isArray(p.points) ? p.points : [];
+      const kind = assertPlaceableKind(p['kind']);
+      const rawPoints = Array.isArray(p['points']) ? p['points'] : [];
       if (!rawPoints.length) fail('NO_POINTS', 'points (non-empty {time, price}[]) required');
       if (store.drawings.length >= DRAWING_LIST_MAX) {
         fail('LIMIT', `Drawing list is full (${DRAWING_LIST_MAX}) — remove some first`);
       }
-      const symbol = str(p.symbol || store.symbol).toUpperCase();
+      const symbol = str(p['symbol'] || store.symbol).toUpperCase();
       const drawing = normalizeDrawing({
-        id: str(p.id) || newDrawingId(),
+        id: str(p['id']) || newDrawingId(),
         kind,
         points: rawPoints.map(assertDrawingPoint),
-        style: rec(p.style),
-        meta: { ...rec(p.meta), symbol },
+        style: rec(p['style']),
+        meta: { ...rec(p['meta']), symbol },
       });
       if (!drawing) fail('BAD_DRAWING', 'Drawing failed validation (kind/points/style)');
       if (store.drawings.some((d) => d.id === drawing.id)) {
         drawing.id = newDrawingId();
       }
-      // Dual-shaped output (normalize attaches legacy p1/p2/price/color) —
-      // same cast the store hydrate path uses.
-      setDrawings([...store.drawings, drawing as unknown as StoreDrawing]);
+      // Dual-shaped output: `normalizeDrawing` attaches the legacy mirrors
+      // (`color`, `price`/`time`, `p1`/`p2`, `text`) the store's discriminated
+      // `Drawing` union types per kind — same shape the store hydrate path stores.
+      setDrawings([...store.drawings, drawing as StoreDrawing]);
       return { id: drawing.id, kind: drawing.kind, points: drawing.points };
     }
     case 'drawings.update': {
-      const id = str(p.id);
+      const id = str(p['id']);
       if (!id) fail('NO_ID', 'drawing id required');
       const current = store.drawings.find((d) => d.id === id);
       if (!current) fail('NOT_FOUND', `No drawing: ${id}`);
-      const cur = current as unknown as Record<string, unknown>;
-      if (p.kind !== undefined && str(p.kind) !== (cur.kind as string)) {
+      if (p['kind'] !== undefined && str(p['kind']) !== current.kind) {
         fail('KIND_IMMUTABLE', 'Drawing kind cannot change — remove and re-add instead');
       }
-      const raw: Record<string, unknown> = { ...cur, id, kind: cur.kind };
+      const raw: Record<string, unknown> = { ...current, id, kind: current.kind };
       let touched = false;
-      if (p.points !== undefined) {
-        const rawPoints = Array.isArray(p.points) ? p.points : [];
+      if (p['points'] !== undefined) {
+        const rawPoints = Array.isArray(p['points']) ? p['points'] : [];
         if (!rawPoints.length) fail('NO_POINTS', 'points must be a non-empty array');
-        raw.points = rawPoints.map(assertDrawingPoint);
+        raw['points'] = rawPoints.map(assertDrawingPoint);
         touched = true;
       }
-      if (p.style !== undefined) {
-        raw.style = { ...rec(cur.style), ...rec(p.style) };
+      if (p['style'] !== undefined) {
+        raw['style'] = { ...rec(current.style), ...rec(p['style']) };
         touched = true;
       }
-      if (p.meta !== undefined) {
-        raw.meta = { ...rec(cur.meta), ...rec(p.meta) };
+      if (p['meta'] !== undefined) {
+        raw['meta'] = { ...rec(current.meta), ...rec(p['meta']) };
         touched = true;
       }
-      if (p.visible !== undefined) {
-        raw.visible = Boolean(p.visible);
+      if (p['visible'] !== undefined) {
+        raw['visible'] = Boolean(p['visible']);
         touched = true;
       }
       if (!touched) fail('EMPTY_PATCH', 'Nothing to update');
       const merged = normalizeDrawing(raw);
       if (!merged) fail('BAD_DRAWING', 'Updated drawing failed validation');
-      patchDrawing(id, merged as unknown as StoreDrawing);
+      // Same dual shape as `drawings.add` above.
+      patchDrawing(id, merged as StoreDrawing);
       return { id, kind: merged.kind, points: merged.points };
     }
     case 'drawings.remove': {
-      const id = str(p.id);
+      const id = str(p['id']);
       if (!id) fail('NO_ID', 'drawing id required');
       if (!store.drawings.some((d) => d.id === id)) fail('NOT_FOUND', `No drawing: ${id}`);
       deleteDrawing(id);
       return { ok: true, id };
     }
     case 'drawings.clear': {
-      if (p.symbol) clearDrawingsForSymbol(str(p.symbol));
+      if (p['symbol']) clearDrawingsForSymbol(str(p['symbol']));
       else clearDrawings();
       return { count: store.drawings.length };
     }
     case 'drawings.tool': {
-      const tool = str(p.tool || p.id);
+      const tool = str(p['tool'] || p['id']);
       if (!tool) fail('NO_TOOL', 'drawing tool required (e.g. cursor, trend, fib)');
       if (!(ALL_DRAWING_TOOLS as readonly string[]).includes(tool)) {
         fail('BAD_TOOL', `Unknown drawing tool: ${tool}`);
@@ -858,12 +897,12 @@ export async function invokeCapability(
     }
 
     case 'settings.get': {
-      const key = str(p.key);
+      const key = str(p['key']);
       const all = buildSettingsSnapshot();
       return key ? getByPath(all, key) : all;
     }
     case 'settings.set': {
-      const patch = rec(p.settings ?? p.patch ?? payload);
+      const patch = rec(p['settings'] ?? p['patch'] ?? payload);
       const keys = Object.keys(patch);
       if (!keys.length) fail('EMPTY_PATCH', 'settings object required');
       const updated: string[] = [];

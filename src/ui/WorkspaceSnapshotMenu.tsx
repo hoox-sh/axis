@@ -221,7 +221,7 @@ function emitReflow() {
 }
 
 /** Compact export / import row for Settings → Workspace. */
-export const WorkspaceSnapshotMenu: Component = () => {
+export const WorkspaceSnapshotMenu: Component = () : JSX.Element => {
   const [busy, setBusy] = createSignal(false);
   const [msg, setMsg] = createSignal('');
   const [err, setErr] = createSignal('');

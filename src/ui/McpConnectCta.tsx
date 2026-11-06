@@ -14,12 +14,18 @@ import { type Component, Show, createSignal, onCleanup } from 'solid-js';
 import { mcpBridgeState, onMcpBridge, type McpBridgeState } from '../mcp/bridge';
 import { requestMcpConnect } from '../mcp/host';
 
+/**
+ * Whether the MCP bridge still needs an explicit connect action.
+ *
+ * @param status - Current bridge status.
+ * @returns `true` unless the bridge is open or already connecting.
+ */
 export function mcpNeedsConnect(status: McpBridgeState['status']): boolean {
   return status !== 'open' && status !== 'connecting';
 }
 
 /** Primary connect action for the chart boot splash and anywhere else it is mounted. */
-export const McpConnectCta: Component<{ class?: string }> = (props) => {
+export const McpConnectCta: Component<{ class?: string }> = (props): JSX.Element => {
   const [s, setS] = createSignal<McpBridgeState>(mcpBridgeState());
   const unsub = onMcpBridge(setS);
   onCleanup(unsub);

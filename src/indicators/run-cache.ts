@@ -48,12 +48,12 @@ const cache = new Map<string, CacheEntry>();
 
 function isTestEnvironment(): boolean {
   try {
-    if (import.meta.env && import.meta.env.TEST) return true;
+    if (import.meta.env && import.meta.env['TEST']) return true;
   } catch {
     /* import.meta may be unavailable in older runtimes */
   }
   try {
-    if (typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'test') {
+    if (typeof process !== 'undefined' && process.env && process.env['NODE_ENV'] === 'test') {
       return true;
     }
   } catch {

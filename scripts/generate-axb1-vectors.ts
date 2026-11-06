@@ -30,33 +30,33 @@ function maskOf(names: string[]): number {
 
 function tipOf(t: Record<string, unknown>) {
   return {
-    mask: maskOf(t.mask as string[]),
-    flags: t.flags as number,
-    timeS: t.time_s as number | undefined,
-    open: t.open != null ? BigInt(t.open as string) : undefined,
-    high: t.high != null ? BigInt(t.high as string) : undefined,
-    low: t.low != null ? BigInt(t.low as string) : undefined,
-    close: t.close != null ? BigInt(t.close as string) : undefined,
-    volume: t.volume as number | undefined,
+    mask: maskOf(t['mask'] as string[]),
+    flags: t['flags'] as number,
+    timeS: t['time_s'] as number | undefined,
+    open: t['open'] != null ? BigInt(t['open'] as string) : undefined,
+    high: t['high'] != null ? BigInt(t['high'] as string) : undefined,
+    low: t['low'] != null ? BigInt(t['low'] as string) : undefined,
+    close: t['close'] != null ? BigInt(t['close'] as string) : undefined,
+    volume: t['volume'] as number | undefined,
   };
 }
 
 function toFrame(f: Record<string, unknown>): Axb1Frame {
   const header = {
-    seq: f.seq as number,
-    subIdHash: f.sub_id_hash as number,
-    sessionHash: f.session_hash as number,
-    tsMs: BigInt(f.ts_ms as string),
-    hdrFlags: (f.hdr_flags as number) ?? 0,
+    seq: f['seq'] as number,
+    subIdHash: f['sub_id_hash'] as number,
+    sessionHash: f['session_hash'] as number,
+    tsMs: BigInt(f['ts_ms'] as string),
+    hdrFlags: (f['hdr_flags'] as number) ?? 0,
   };
   const r = { ...f };
-  delete r.opcode;
-  delete r.seq;
-  delete r.sub_id_hash;
-  delete r.session_hash;
-  delete r.ts_ms;
-  delete r.hdr_flags;
-  switch (f.opcode) {
+  delete r['opcode'];
+  delete r['seq'];
+  delete r['sub_id_hash'];
+  delete r['session_hash'];
+  delete r['ts_ms'];
+  delete r['hdr_flags'];
+  switch (f['opcode']) {
     case 'HEARTBEAT':
       return { opcode: Axb1Opcode.HEARTBEAT, ...header };
     case 'UNCHANGED':
@@ -65,10 +65,10 @@ function toFrame(f: Record<string, unknown>): Axb1Frame {
       return {
         opcode: Axb1Opcode.STATUS,
         ...header,
-        statusCode: r.status_code as string,
-        detail: r.detail as string,
-        have: r.have as number,
-        need: r.need as number,
+        statusCode: r['status_code'] as string,
+        detail: r['detail'] as string,
+        have: r['have'] as number,
+        need: r['need'] as number,
       };
     case 'TIP_UPDATE':
       return { opcode: Axb1Opcode.TIP_UPDATE, ...header, ...tipOf(r) };
@@ -76,102 +76,102 @@ function toFrame(f: Record<string, unknown>): Axb1Frame {
       return {
         opcode: Axb1Opcode.APPEND_BAR,
         ...header,
-        priceScale: r.price_scale as number,
-        closedIndex: r.closed_index as number,
-        closedTime: r.closed_time as number,
-        open: BigInt(r.open as string),
-        high: BigInt(r.high as string),
-        low: BigInt(r.low as string),
-        close: BigInt(r.close as string),
-        volume: r.volume as number,
-        tip: tipOf(r.tip as Record<string, unknown>),
+        priceScale: r['price_scale'] as number,
+        closedIndex: r['closed_index'] as number,
+        closedTime: r['closed_time'] as number,
+        open: BigInt(r['open'] as string),
+        high: BigInt(r['high'] as string),
+        low: BigInt(r['low'] as string),
+        close: BigInt(r['close'] as string),
+        volume: r['volume'] as number,
+        tip: tipOf(r['tip'] as Record<string, unknown>),
       };
     case 'CLOSE_VERIFY':
       return {
         opcode: Axb1Opcode.CLOSE_VERIFY,
         ...header,
-        index: r.index as number,
-        timeS: r.time_s as number,
-        open: BigInt(r.open as string),
-        high: BigInt(r.high as string),
-        low: BigInt(r.low as string),
-        close: BigInt(r.close as string),
-        volume: r.volume as number,
+        index: r['index'] as number,
+        timeS: r['time_s'] as number,
+        open: BigInt(r['open'] as string),
+        high: BigInt(r['high'] as string),
+        low: BigInt(r['low'] as string),
+        close: BigInt(r['close'] as string),
+        volume: r['volume'] as number,
       };
     case 'PLOT_TIP':
       return {
         opcode: Axb1Opcode.PLOT_TIP,
         ...header,
-        plots: (r.plots as Array<Record<string, unknown>>).map((p) => ({
-          keyHash: p.key_hash as number,
-          kind: p.kind === 'price_ticks' ? ValueKind.PriceTicks : ValueKind.UnitFloat64,
-          ticks: p.ticks != null ? BigInt(p.ticks as string) : undefined,
-          value: p.value as number | undefined,
+        plots: (r['plots'] as Array<Record<string, unknown>>).map((p) => ({
+          keyHash: p['key_hash'] as number,
+          kind: p['kind'] === 'price_ticks' ? ValueKind.PriceTicks : ValueKind.UnitFloat64,
+          ticks: p['ticks'] != null ? BigInt(p['ticks'] as string) : undefined,
+          value: p['value'] as number | undefined,
         })),
       };
     case 'SNAPSHOT_OHLCV':
       return {
         opcode: Axb1Opcode.SNAPSHOT_OHLCV,
         ...header,
-        priceScale: r.price_scale as number,
-        count: r.count as number,
-        closedUpto: r.closed_upto as number,
-        hotFromIndex: r.hot_from_index as number,
-        timeS: r.time_s as number[],
-        open: (r.open as string[]).map(BigInt),
-        high: (r.high as string[]).map(BigInt),
-        low: (r.low as string[]).map(BigInt),
-        close: (r.close as string[]).map(BigInt),
-        volume: r.volume as number[],
-        flags: r.flags as number[],
+        priceScale: r['price_scale'] as number,
+        count: r['count'] as number,
+        closedUpto: r['closed_upto'] as number,
+        hotFromIndex: r['hot_from_index'] as number,
+        timeS: r['time_s'] as number[],
+        open: (r['open'] as string[]).map(BigInt),
+        high: (r['high'] as string[]).map(BigInt),
+        low: (r['low'] as string[]).map(BigInt),
+        close: (r['close'] as string[]).map(BigInt),
+        volume: r['volume'] as number[],
+        flags: r['flags'] as number[],
       };
     case 'SNAPSHOT_PLOTS':
       return {
         opcode: Axb1Opcode.SNAPSHOT_PLOTS,
         ...header,
-        count: r.count as number,
-        closedUpto: r.closed_upto as number,
-        times: r.times as number[] | null,
-        plots: (r.plots as Array<Record<string, unknown>>).map((col) => ({
-          key: col.key as string,
-          kind: col.kind === 'price_ticks' ? ValueKind.PriceTicks : ValueKind.UnitFloat64,
-          ticks: col.ticks != null ? (col.ticks as string[]).map(BigInt) : undefined,
-          values: col.values as number[] | undefined,
+        count: r['count'] as number,
+        closedUpto: r['closed_upto'] as number,
+        times: r['times'] as number[] | null,
+        plots: (r['plots'] as Array<Record<string, unknown>>).map((col) => ({
+          key: col['key'] as string,
+          kind: col['kind'] === 'price_ticks' ? ValueKind.PriceTicks : ValueKind.UnitFloat64,
+          ticks: col['ticks'] != null ? (col['ticks'] as string[]).map(BigInt) : undefined,
+          values: col['values'] as number[] | undefined,
         })),
       };
     case 'ERROR':
       return {
         opcode: Axb1Opcode.ERROR,
         ...header,
-        code: r.code as string,
-        message: r.message as string,
-        retryable: r.retryable as boolean,
+        code: r['code'] as string,
+        message: r['message'] as string,
+        retryable: r['retryable'] as boolean,
       };
     case 'JSON_BLOB':
       return {
         opcode: Axb1Opcode.JSON_BLOB,
         ...header,
-        json: r.json as string,
+        json: r['json'] as string,
       };
     case 'APPEND_BARS':
       return {
         opcode: Axb1Opcode.APPEND_BARS,
         ...header,
-        priceScale: r.price_scale as number,
-        count: r.count as number,
-        closedUpto: r.closed_upto as number,
-        closedIndex: r.closed_index as number,
-        timeS: r.time_s as number[],
-        open: (r.open as string[]).map(BigInt),
-        high: (r.high as string[]).map(BigInt),
-        low: (r.low as string[]).map(BigInt),
-        close: (r.close as string[]).map(BigInt),
-        volume: r.volume as number[],
-        flags: r.flags as number[],
-        tip: tipOf(r.tip as Record<string, unknown>),
+        priceScale: r['price_scale'] as number,
+        count: r['count'] as number,
+        closedUpto: r['closed_upto'] as number,
+        closedIndex: r['closed_index'] as number,
+        timeS: r['time_s'] as number[],
+        open: (r['open'] as string[]).map(BigInt),
+        high: (r['high'] as string[]).map(BigInt),
+        low: (r['low'] as string[]).map(BigInt),
+        close: (r['close'] as string[]).map(BigInt),
+        volume: r['volume'] as number[],
+        flags: r['flags'] as number[],
+        tip: tipOf(r['tip'] as Record<string, unknown>),
       };
     default:
-      throw new Error(`unknown opcode ${String(f.opcode)}`);
+      throw new Error(`unknown opcode ${String(f['opcode'])}`);
   }
 }
 

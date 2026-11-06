@@ -71,12 +71,20 @@ export interface SeriesDriveTick {
   error?: string;
 }
 
+/**
+ * Tick transport used by {@link driveEngineSeries}; the default is `tickChartDataSession`, and
+ * tests inject a stub to avoid engine I/O.
+ */
 export type SeriesDriveTickFn = (
   endpoint: string,
   apiKey: string,
   key: DataSeriesKey,
 ) => Promise<SeriesDriveTick>;
 
+/**
+ * One drive call: the engine target, the series to advance, the venue clock that bypasses the
+ * throttle, and test seams for the clock, gap and tick transport.
+ */
 export interface SeriesDriveOptions {
   endpoint: string;
   apiKey: string;

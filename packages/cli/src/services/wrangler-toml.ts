@@ -5,29 +5,50 @@
  * Minimal wrangler.toml helpers (vars only — no full TOML parser).
  */
 
-import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 
+/**
+ * Creates `wrangler.toml` from the example file when it is missing.
+ *
+ * Setup and deploy both need a real toml; seeding it from
+ * `wrangler.toml.example` keeps a fresh clone deployable without hand-editing.
+ *
+ * @param tomlPath - Destination path, e.g. `worker/wrangler.toml`.
+ * @param examplePath - Template copied when `tomlPath` does not exist.
+ * @returns `created: true` when the file was copied, `false` when it already
+ *   existed, plus the destination path.
+ * @throws {Error} When neither the toml nor the example exists — the clone is
+ *   incomplete.
+ */
 export function ensureWranglerToml(
   tomlPath: string,
-  examplePath: string
+  examplePath: string,
 ): { created: boolean; path: string } {
   if (existsSync(tomlPath)) {
     return { created: false, path: tomlPath };
   }
   if (!existsSync(examplePath)) {
     throw new Error(
-      `Missing ${tomlPath} and no example at ${examplePath}. Clone a full AXIS repo.`
+      `Missing ${tomlPath} and no example at ${examplePath}. Clone a full AXIS repo.`,
     );
   }
   copyFileSync(examplePath, tomlPath);
   return { created: true, path: tomlPath };
 }
 
+/**
+ * Reads the toml as UTF-8 text.
+ *
+ * @param tomlPath - Path to `wrangler.toml`.
+ * @returns File contents, unparsed.
+ * @throws {Error} `wrangler.toml not found: <path>` when it does not exist, so
+ *   callers get one consistent message instead of `ENOENT`.
+ */
 export function readTomlText(tomlPath: string): string {
   if (!existsSync(tomlPath)) {
     throw new Error(`wrangler.toml not found: ${tomlPath}`);
   }
-  return readFileSync(tomlPath, "utf-8");
+  return readFileSync(tomlPath, 'utf-8');
 }
 
 /**
@@ -35,16 +56,16 @@ export function readTomlText(tomlPath: string): string {
  * enable open keys. Anything else — including empty `""` — is off.
  */
 export function isOpenKeysEnabled(value: string | null | undefined): boolean {
-  return /^(1|true|yes)$/i.test(String(value ?? "").trim());
+  return /^(1|true|yes)$/i.test(String(value ?? '').trim());
 }
 
 /** Escape a value for a TOML basic string. Control characters are rejected. */
 export function tomlBasicString(value: string): string {
   // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional — this regex rejects control characters in TOML values
   if (/[\u0000-\u0008\u000a-\u001f\u007f]/.test(value)) {
-    throw new Error("TOML values cannot contain control characters or newlines");
+    throw new Error('TOML values cannot contain control characters or newlines');
   }
-  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+  return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 }
 
 /**
@@ -55,7 +76,7 @@ export function tomlBasicString(value: string): string {
 export function setTomlVar(
   tomlPath: string,
   key: string,
-  value: string
+  value: string,
 ): { changed: boolean; previous?: string } {
   const text = readTomlText(tomlPath);
   const assign = `${key} = ${tomlBasicString(value)}`;
@@ -63,66 +84,70 @@ export function setTomlVar(
   // Active assignment
   const activeRe = new RegExp(
     `^(\\s*)${escapeRegExp(key)}\\s*=\\s*("(?:\\\\.|[^"\\\\])*"|'[^']*'|[^#\\n]*)`,
-    "m"
+    'm',
   );
   const active = text.match(activeRe);
   if (active) {
-    const prev = stripQuotes(active[2]?.trim() ?? "");
+    const prev = stripQuotes(active[2]?.trim() ?? '');
     if (prev === value) return { changed: false, previous: prev };
     const next = text.replace(activeRe, (_m, indent: string) => `${indent}${assign}`);
-    writeFileSync(tomlPath, next, "utf-8");
+    writeFileSync(tomlPath, next, 'utf-8');
     return { changed: true, previous: prev };
   }
 
   // Commented assignment
-  const commentRe = new RegExp(
-    `^(\\s*)#\\s*${escapeRegExp(key)}\\s*=\\s*.*$`,
-    "m"
-  );
+  const commentRe = new RegExp(`^(\\s*)#\\s*${escapeRegExp(key)}\\s*=\\s*.*$`, 'm');
   if (commentRe.test(text)) {
     const next = text.replace(commentRe, (_m, indent: string) => `${indent}${assign}`);
-    writeFileSync(tomlPath, next, "utf-8");
+    writeFileSync(tomlPath, next, 'utf-8');
     return { changed: true };
   }
 
   // Insert after [vars]
   const varsIdx = text.search(/^\[vars\]\s*$/m);
   if (varsIdx >= 0) {
-    const lineEnd = text.indexOf("\n", varsIdx);
+    const lineEnd = text.indexOf('\n', varsIdx);
     const insertAt = lineEnd >= 0 ? lineEnd + 1 : text.length;
-    const next =
-      text.slice(0, insertAt) + assign + "\n" + text.slice(insertAt);
-    writeFileSync(tomlPath, next, "utf-8");
+    const next = text.slice(0, insertAt) + assign + '\n' + text.slice(insertAt);
+    writeFileSync(tomlPath, next, 'utf-8');
     return { changed: true };
   }
 
-  const next = text.endsWith("\n")
+  const next = text.endsWith('\n')
     ? `${text}\n[vars]\n${assign}\n`
     : `${text}\n\n[vars]\n${assign}\n`;
-  writeFileSync(tomlPath, next, "utf-8");
+  writeFileSync(tomlPath, next, 'utf-8');
   return { changed: true };
 }
 
+/**
+ * Reads the active value of a `[vars]` entry.
+ *
+ * Only uncommented assignments are considered, so a commented placeholder still
+ * reads as "unset". Quotes are stripped and escaped quotes decoded.
+ *
+ * @param tomlPath - Path to `wrangler.toml`.
+ * @param key - Variable name, matched literally.
+ * @returns The unquoted value, or `null` when the file, key, or value is missing —
+ *   an empty `KEY = ""` also reads as `null`.
+ */
 export function getTomlVar(tomlPath: string, key: string): string | null {
   if (!existsSync(tomlPath)) return null;
   const text = readTomlText(tomlPath);
   const activeRe = new RegExp(
     `^\\s*${escapeRegExp(key)}\\s*=\\s*("(?:\\\\.|[^"\\\\])*"|'[^']*'|[^#\\n]*)`,
-    "m"
+    'm',
   );
   const m = text.match(activeRe);
   if (!m) return null;
-  return stripQuotes(m[1]?.trim() ?? "") || null;
+  return stripQuotes(m[1]?.trim() ?? '') || null;
 }
 
 /**
  * Uncommented `[[name]]` array-table blocks as key → string maps. Commented
  * example blocks are ignored (same rule as getKvBindingId).
  */
-export function activeArrayTables(
-  tomlPath: string,
-  name: string
-): Array<Record<string, string>> {
+export function activeArrayTables(tomlPath: string, name: string): Array<Record<string, string>> {
   if (!existsSync(tomlPath)) return [];
   const out: Array<Record<string, string>> = [];
   let current: Record<string, string> | null = null;
@@ -147,7 +172,7 @@ export function activeArrayTables(
 
 /** True when an uncommented `[[d1_databases]]` block binds `DB`. */
 export function hasD1DbBinding(tomlPath: string): boolean {
-  return activeArrayTables(tomlPath, "d1_databases").some((b) => b.binding === "DB");
+  return activeArrayTables(tomlPath, 'd1_databases').some((b) => b.binding === 'DB');
 }
 
 /**
@@ -164,15 +189,15 @@ export function deployOpenKeysViolation(input: {
   if (!isOpenKeysEnabled(input.allowOpenKeys)) return null;
   return (
     'ALLOW_OPEN_KEYS is "1"/"yes" while D1 is bound and API_KEYS KV is not — ' +
-    "any Bearer would partition the script library. Set ALLOW_OPEN_KEYS = \"\" " +
-    "and bind KV: axis setup kv"
+    'any Bearer would partition the script library. Set ALLOW_OPEN_KEYS = "" ' +
+    'and bind KV: axis setup kv'
   );
 }
 
 /** True when `KEY = …` is an uncommented assignment (including empty `""`). */
 export function hasTomlVar(tomlPath: string, key: string): boolean {
   if (!existsSync(tomlPath)) return false;
-  const re = new RegExp(`^\\s*${escapeRegExp(key)}\\s*=`, "m");
+  const re = new RegExp(`^\\s*${escapeRegExp(key)}\\s*=`, 'm');
   return re.test(readTomlText(tomlPath));
 }
 
@@ -182,21 +207,29 @@ export function hasTomlVar(tomlPath: string, key: string): boolean {
  */
 export function commentTomlVar(
   tomlPath: string,
-  key: string
+  key: string,
 ): { changed: boolean; previous: string | null } {
   const previous = getTomlVar(tomlPath, key);
   if (!hasTomlVar(tomlPath, key)) return { changed: false, previous };
   const text = readTomlText(tomlPath);
-  const activeRe = new RegExp(`^(\\s*)${escapeRegExp(key)}\\s*=\\s*.*$`, "m");
+  const activeRe = new RegExp(`^(\\s*)${escapeRegExp(key)}\\s*=\\s*.*$`, 'm');
   const next = text.replace(activeRe, (line) => {
-    const indent = line.match(/^\s*/)?.[0] ?? "";
+    const indent = line.match(/^\s*/)?.[0] ?? '';
     return `${indent}# ${line.trim()}  # secret: axis secret put ${key}`;
   });
   if (next === text) return { changed: false, previous };
-  writeFileSync(tomlPath, next, "utf-8");
+  writeFileSync(tomlPath, next, 'utf-8');
   return { changed: true, previous };
 }
 
+/**
+ * Reads the Worker's `name` from the toml.
+ *
+ * Used to confirm which Worker a deploy would target before running wrangler.
+ *
+ * @param tomlPath - Path to `wrangler.toml`.
+ * @returns The double-quoted `name` value, or `null` when absent.
+ */
 export function getTomlName(tomlPath: string): string | null {
   if (!existsSync(tomlPath)) return null;
   const text = readTomlText(tomlPath);
@@ -204,6 +237,17 @@ export function getTomlName(tomlPath: string): string | null {
   return m?.[1] ?? null;
 }
 
+/**
+ * Reads the D1 `database_id` the worker binds as `DB`.
+ *
+ * Prefers a `database_id` inside a `[[d1_databases]]` block whose binding is `DB`;
+ * falls back to the first `database_id` in the file so a single-database toml still
+ * resolves. May return a `REPLACE_…` placeholder — check with
+ * {@link isPlaceholderId}.
+ *
+ * @param tomlPath - Path to `wrangler.toml`.
+ * @returns The id string, or `null` when no `database_id` is present.
+ */
 export function getD1DatabaseId(tomlPath: string): string | null {
   if (!existsSync(tomlPath)) return null;
   const text = readTomlText(tomlPath);
@@ -221,7 +265,7 @@ export function getD1DatabaseId(tomlPath: string): string | null {
 
 /** True for empty / REPLACE_* placeholders (not a real Cloudflare id). */
 export function isPlaceholderId(id: string | null | undefined): boolean {
-  const s = String(id || "").trim();
+  const s = String(id || '').trim();
   return !s || /REPLACE/i.test(s);
 }
 
@@ -233,10 +277,9 @@ export function getKvBindingId(tomlPath: string, binding: string): string | null
   if (!existsSync(tomlPath)) return null;
   const lines = readTomlText(tomlPath).split(/\r?\n/);
   let inBlock = false;
-  let currentBinding = "";
-  let currentId = "";
-  const finish = (): string | null =>
-    currentBinding === binding && currentId ? currentId : null;
+  let currentBinding = '';
+  let currentId = '';
+  const finish = (): string | null => (currentBinding === binding && currentId ? currentId : null);
 
   for (const line of lines) {
     if (/^\s*#/.test(line)) continue;
@@ -244,22 +287,22 @@ export function getKvBindingId(tomlPath: string, binding: string): string | null
       const hit = finish();
       if (hit) return hit;
       inBlock = true;
-      currentBinding = "";
-      currentId = "";
+      currentBinding = '';
+      currentId = '';
       continue;
     }
     if (inBlock && /^\s*\[/.test(line)) {
       const hit = finish();
       if (hit) return hit;
       inBlock = false;
-      currentBinding = "";
-      currentId = "";
+      currentBinding = '';
+      currentId = '';
     }
     if (!inBlock) continue;
     const b = line.match(/^\s*binding\s*=\s*"([^"]+)"/);
-    if (b) currentBinding = b[1] ?? "";
+    if (b) currentBinding = b[1] ?? '';
     const id = line.match(/^\s*id\s*=\s*"([^"]+)"/);
-    if (id) currentId = id[1] ?? "";
+    if (id) currentId = id[1] ?? '';
   }
   return finish();
 }
@@ -285,7 +328,7 @@ function kvBlock(binding: string, id: string): string {
  * characters would break the TOML we write — reject those, nothing more.
  */
 export function isValidArtifactsNamespace(name: string): boolean {
-  const s = String(name || "");
+  const s = String(name || '');
   if (!s || s.length > 64) return false;
   // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional — rejects control characters in namespace names
   if (/[\s"'`\\<>&|;$(){}[\]\u0000-\u001f\u007f]/.test(s)) return false;
@@ -294,7 +337,7 @@ export function isValidArtifactsNamespace(name: string): boolean {
 
 /** Read `namespace` from an uncommented `[[artifacts]]` block with the given binding. */
 export function getArtifactsBinding(tomlPath: string, binding: string): string | null {
-  const blocks = activeArrayTables(tomlPath, "artifacts");
+  const blocks = activeArrayTables(tomlPath, 'artifacts');
   for (const b of blocks) {
     if (b.binding === binding && b.namespace) return b.namespace;
   }
@@ -314,7 +357,7 @@ function artifactsBlock(binding: string, namespace: string): string {
 export function upsertArtifactsBinding(
   tomlPath: string,
   binding: string,
-  namespace: string
+  namespace: string,
 ): { changed: boolean; previous?: string | null } {
   const previous = getArtifactsBinding(tomlPath, binding);
   if (previous === namespace) return { changed: false, previous };
@@ -325,30 +368,27 @@ export function upsertArtifactsBinding(
   // Commented example: # [[artifacts]] / # binding = "…" / # namespace = "…"
   const commented = new RegExp(
     `^#\\s*\\[\\[artifacts\\]\\]\\s*\\n#\\s*binding\\s*=\\s*"${esc}"\\s*\\n#\\s*namespace\\s*=\\s*"[^"]*"\\s*\\n?`,
-    "m"
+    'm',
   );
   if (commented.test(text)) {
     text = text.replace(commented, artifactsBlock(binding, namespace));
-    writeFileSync(tomlPath, text, "utf-8");
+    writeFileSync(tomlPath, text, 'utf-8');
     return { changed: true, previous };
   }
 
   // Active block with this binding — replace namespace only.
   const active = new RegExp(
     `(^\\[\\[artifacts\\]\\]\\s*\\nbinding\\s*=\\s*"${esc}"\\s*\\nnamespace\\s*=\\s*")[^"]*(")`,
-    "m"
+    'm',
   );
   if (active.test(text)) {
-    text = text.replace(
-      active,
-      (_m, pre: string, post: string) => `${pre}${namespace}${post}`
-    );
-    writeFileSync(tomlPath, text, "utf-8");
+    text = text.replace(active, (_m, pre: string, post: string) => `${pre}${namespace}${post}`);
+    writeFileSync(tomlPath, text, 'utf-8');
     return { changed: true, previous };
   }
 
-  if (!text.endsWith("\n")) text += "\n";
-  writeFileSync(tomlPath, `${text}\n${artifactsBlock(binding, namespace)}`, "utf-8");
+  if (!text.endsWith('\n')) text += '\n';
+  writeFileSync(tomlPath, `${text}\n${artifactsBlock(binding, namespace)}`, 'utf-8');
   return { changed: true, previous };
 }
 
@@ -359,7 +399,7 @@ export function upsertArtifactsBinding(
 export function upsertKvNamespace(
   tomlPath: string,
   binding: string,
-  id: string
+  id: string,
 ): { changed: boolean; previous?: string | null } {
   const previous = getKvBindingId(tomlPath, binding);
   if (previous === id) return { changed: false, previous };
@@ -370,22 +410,22 @@ export function upsertKvNamespace(
   // Commented example: # [[kv_namespaces]] / # binding = "API_KEYS" / # id = "…"
   const commented = new RegExp(
     `^#\\s*\\[\\[kv_namespaces\\]\\]\\s*\\n#\\s*binding\\s*=\\s*"${esc}"\\s*\\n#\\s*id\\s*=\\s*"[^"]*"\\s*\\n?`,
-    "m"
+    'm',
   );
   if (commented.test(text)) {
     text = text.replace(commented, kvBlock(binding, id));
-    writeFileSync(tomlPath, text, "utf-8");
+    writeFileSync(tomlPath, text, 'utf-8');
     return { changed: true, previous };
   }
 
   // Active block with this binding — replace id only.
   const active = new RegExp(
     `(^\\[\\[kv_namespaces\\]\\]\\s*\\nbinding\\s*=\\s*"${esc}"\\s*\\nid\\s*=\\s*")[^"]*(")`,
-    "m"
+    'm',
   );
   if (active.test(text)) {
     text = text.replace(active, (_m, pre: string, post: string) => `${pre}${id}${post}`);
-    writeFileSync(tomlPath, text, "utf-8");
+    writeFileSync(tomlPath, text, 'utf-8');
     return { changed: true, previous };
   }
 
@@ -394,17 +434,13 @@ export function upsertKvNamespace(
   const prefix = text.slice(0, insertAt);
   const suffix = text.slice(insertAt);
   const pad =
-    prefix.endsWith("\n\n") || prefix.length === 0
-      ? ""
-      : prefix.endsWith("\n")
-        ? "\n"
-        : "\n\n";
-  writeFileSync(tomlPath, `${prefix}${pad}${kvBlock(binding, id)}${suffix}`, "utf-8");
+    prefix.endsWith('\n\n') || prefix.length === 0 ? '' : prefix.endsWith('\n') ? '\n' : '\n\n';
+  writeFileSync(tomlPath, `${prefix}${pad}${kvBlock(binding, id)}${suffix}`, 'utf-8');
   return { changed: true, previous };
 }
 
 function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function stripQuotes(s: string): string {
@@ -413,7 +449,7 @@ function stripQuotes(s: string): string {
   }
   if (s.startsWith('"') && s.endsWith('"') && s.length >= 2) {
     // Single pass so `\\"` decodes to `\"` (not a quote).
-    return s.slice(1, -1).replace(/\\(["\\])/g, "$1");
+    return s.slice(1, -1).replace(/\\(["\\])/g, '$1');
   }
   return s;
 }

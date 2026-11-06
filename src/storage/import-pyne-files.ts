@@ -55,8 +55,7 @@ const EXPAND_STUB_RE = /^\s*Expand\s*\(\s*(\d+)\s*lines?\s*\)?\s*$/i;
 const FENCE_RE = /^\s*```/;
 
 /** Common TradingView community / docs chrome lines after real pine. */
-const UI_CHROME_RE =
-  /^\s*(Copy(\s+code)?|Copied|Pine\s+Script\s*®?|Share|Open\s+in\s+editor)\s*$/i;
+const UI_CHROME_RE = /^\s*(Copy(\s+code)?|Copied|Pine\s+Script\s*®?|Share|Open\s+in\s+editor)\s*$/i;
 
 /** True when a file name looks like a PYNE / Pine Script™ source file. */
 export function isPyneFileName(name: string): boolean {
@@ -68,11 +67,12 @@ export function isPyneFileName(name: string): boolean {
  * Strips directories and known source extensions (`.pyne`, `.pine`, …).
  */
 export function scriptNameFromFileName(fileName: string): string {
-  const base = String(fileName || '')
-    .replace(/\\/g, '/')
-    .split('/')
-    .pop()
-    ?.trim() || 'Imported';
+  const base =
+    String(fileName || '')
+      .replace(/\\/g, '/')
+      .split('/')
+      .pop()
+      ?.trim() || 'Imported';
   const stripped = base.replace(PINE_EXT, '').trim();
   return stripped || 'Imported';
 }
@@ -99,7 +99,11 @@ export function dataTransferHasPyneFiles(dt: DataTransfer | null | undefined): b
         const file = item.getAsFile?.();
         if (file && isPyneFileName(file.name)) return true;
         // Some browsers only give a generic type during drag — accept Files
-        if (item.type === '' || item.type.startsWith('text/') || item.type === 'application/octet-stream') {
+        if (
+          item.type === '' ||
+          item.type.startsWith('text/') ||
+          item.type === 'application/octet-stream'
+        ) {
           // Can't know extension yet; treat as possible pine if only Files are dragged
           // Caller should still filter on drop.
         }
@@ -190,6 +194,10 @@ export interface ImportedPyneScript {
   warnings?: string[];
 }
 
+/**
+ * Summary of a multi-file import: the scripts written (in file order), per-file
+ * errors, non-fatal warnings, and how many non-Pine files were skipped.
+ */
 export interface ImportPyneResult {
   /** Successfully saved scripts (in file order). */
   imported: ImportedPyneScript[];
@@ -230,9 +238,7 @@ export interface PyneSourceInput {
  * Used by browser File import and the Tauri desktop open flow (paths are
  * already filtered by extension on the host when possible).
  */
-export async function importPyneSources(
-  sources: PyneSourceInput[],
-): Promise<ImportPyneResult> {
+export async function importPyneSources(sources: PyneSourceInput[]): Promise<ImportPyneResult> {
   const all = Array.isArray(sources) ? sources : [];
   const pine = all.filter((s) => s && isPyneFileName(s.name));
   const skipped = all.length - pine.length;
@@ -293,9 +299,7 @@ export async function importPyneSources(
  * @param files - FileList or File array (non-pine entries are skipped)
  * @returns summary of imports / errors / skipped
  */
-export async function importPyneFiles(
-  files: ArrayLike<File> | File[],
-): Promise<ImportPyneResult> {
+export async function importPyneFiles(files: ArrayLike<File> | File[]): Promise<ImportPyneResult> {
   const all = Array.from(files as ArrayLike<File>);
   const sources: PyneSourceInput[] = [];
   const readErrors: string[] = [];

@@ -26,6 +26,11 @@
 import { COL, def, pineIndicator } from './pine';
 import type { BuiltinScript } from './types';
 
+/**
+ * Original AXIS oscillators (`category: 'oscillator'`): RSI, stochastic, MACD,
+ * CCI, momentum family and the rest of the bounded-scale studies. These declare
+ * `overlay=false`, so they open their own sub-pane instead of the price pane.
+ */
 export const OSCILLATOR_BUILTINS: readonly BuiltinScript[] = [
   def({
     id: 'rsi',

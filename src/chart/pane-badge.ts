@@ -73,7 +73,7 @@ function btn(title: string, kind: SvgKind, onClick: () => void, testId?: string)
   b.className = 'axis-pane-badge-btn';
   b.title = title;
   b.setAttribute('aria-label', title);
-  if (testId) b.dataset.testid = testId;
+  if (testId) b.dataset['testid'] = testId;
   b.innerHTML = iconSvg(kind);
   b.addEventListener('pointerdown', (e) => {
     e.stopPropagation();
@@ -174,8 +174,8 @@ export function mountPaneBadge(
       ? 'axis-pane-badge-root is-empty'
       : 'axis-pane-badge-root';
   if (root.dataset) {
-    root.dataset.paneId = paneId;
-    root.dataset.paneType = paneType;
+    root.dataset['paneId'] = paneId;
+    root.dataset['paneType'] = paneType;
   }
 
   if (scripts.length === 0) {
@@ -210,7 +210,7 @@ export function mountPaneBadge(
       chip.style.height = '22px';
       chip.style.background = 'transparent';
       chip.style.boxShadow = 'none';
-      chip.dataset.scriptId = script.id;
+      chip.dataset['scriptId'] = script.id;
       if (!script.visible) chip.classList.add('is-hidden-script');
 
       const name = document.createElement('span');
@@ -308,7 +308,7 @@ function findPaneHost(paneId: string): HTMLElement | null {
 }
 
 /** Update label text on the first chip when there are no scripts. */
-export function setPaneBadgeLabel(paneId: string, label: string) {
+export function setPaneBadgeLabel(paneId: string, label: string): void {
   const el = findPaneHost(paneId);
   if (!el) return;
   const scripts = scriptsOnPane(paneId);
@@ -321,15 +321,15 @@ export function setPaneBadgeLabel(paneId: string, label: string) {
       ? el.querySelector('.axis-pane-badge-name')
       : null;
   if (nameEl) nameEl.textContent = label;
-  else mountPaneBadge(el, paneId, el.dataset?.paneType || 'indicator', label);
+  else mountPaneBadge(el, paneId, el.dataset?.['paneType'] || 'indicator', label);
 }
 
 /** Rebuild badge for one pane from current store.scripts. */
-export function refreshPaneBadge(paneId: string) {
+export function refreshPaneBadge(paneId: string): void {
   const el = findPaneHost(paneId);
   if (!el) return;
   const type =
-    el.dataset?.paneType || store.panes.find((p) => p.id === paneId)?.type || 'indicator';
+    el.dataset?.['paneType'] || store.panes.find((p) => p.id === paneId)?.type || 'indicator';
   let nameText: string | null = null;
   try {
     nameText = el.querySelector?.('.axis-pane-badge-name')?.textContent ?? null;
@@ -342,13 +342,13 @@ export function refreshPaneBadge(paneId: string) {
 }
 
 /** Refresh badges for every pane host currently in the document. */
-export function refreshAllPaneBadges() {
+export function refreshAllPaneBadges(): void {
   if (typeof document === 'undefined' || typeof document.querySelectorAll !== 'function') {
     return;
   }
   const seen = new Set<string>();
   const visit = (el: HTMLElement) => {
-    const id = el.dataset?.axisPaneChrome || el.dataset?.paneId;
+    const id = el.dataset?.['axisPaneChrome'] || el.dataset?.['paneId'];
     if (!id || seen.has(id)) return;
     seen.add(id);
     refreshPaneBadge(id);

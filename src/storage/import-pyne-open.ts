@@ -15,14 +15,20 @@ import { importPyneFiles, importPyneSources, type PyneSourceInput } from './impo
 import { appendLog, setEditorOpen, setStatus } from '../store';
 
 /** Minimal editor surface used when opening imported tabs. */
+/**
+ * The slice of the editor the import flow drives: set the doc, load one library
+ * doc, or open several tabs. All methods are optional — missing ones degrade.
+ */
 export interface ImportEditorHost {
   setDoc?: (doc: string) => void;
   loadLibraryDoc?: (doc: string, name?: string, libraryId?: string) => void;
-  loadLibraryDocs?: (
-    docs: Array<{ content: string; name?: string; libraryId?: string }>,
-  ) => void;
+  loadLibraryDocs?: (docs: Array<{ content: string; name?: string; libraryId?: string }>) => void;
 }
 
+/**
+ * Where the import result should land: the editor handle to open tabs on, and
+ * the wording used when nothing was importable (drag-drop vs File → Open).
+ */
 export interface OpenImportedOptions {
   /** Editor ref (mutated by TabbedEditor on mount). */
   editorRef: ImportEditorHost;
@@ -97,9 +103,7 @@ export function applyImportedPyneResult(
   if (!n && !result.errors.length) {
     setStatus(
       'error',
-      emptyCtx === 'open'
-        ? 'No Pine scripts selected'
-        : 'No Pine scripts found in drop',
+      emptyCtx === 'open' ? 'No Pine scripts selected' : 'No Pine scripts found in drop',
     );
   }
 

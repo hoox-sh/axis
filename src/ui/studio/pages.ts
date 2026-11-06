@@ -10,6 +10,7 @@
 
 import type { StudioPageId } from './types';
 
+/** Rail/nav metadata for one studio page: copy, grouping, and stable test ids. */
 export type StudioPageMeta = {
   id: StudioPageId;
   label: string;
@@ -24,6 +25,7 @@ export type StudioPageMeta = {
   aliasTestIds?: string[];
 };
 
+/** Ordered rail entries — primary pages first, then the Workers/Plugins catalog. */
 export const STUDIO_PAGES: StudioPageMeta[] = [
   {
     id: 'settings',
@@ -107,10 +109,17 @@ export const STUDIO_PAGES: StudioPageMeta[] = [
   },
 ];
 
+/** Index of {@link STUDIO_PAGES} keyed by id, so lookup cannot miss a page. */
 export const STUDIO_PAGE_BY_ID: Record<StudioPageId, StudioPageMeta> = Object.fromEntries(
   STUDIO_PAGES.map((p) => [p.id, p]),
 ) as Record<StudioPageId, StudioPageMeta>;
 
+/**
+ * Metadata for a studio page id.
+ *
+ * @param id - Known page id (type-checked against {@link StudioPageId}).
+ * @returns The matching entry; every id has one, so this never returns undefined.
+ */
 export function studioPageMeta(id: StudioPageId): StudioPageMeta {
   return STUDIO_PAGE_BY_ID[id];
 }

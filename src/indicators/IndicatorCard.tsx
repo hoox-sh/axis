@@ -36,7 +36,6 @@ import {
   createMemo,
   createSignal,
   onCleanup,
-  onMount,
 } from 'solid-js';
 import type { Indicator } from '../store/types';
 import {
@@ -206,7 +205,7 @@ const [plotDisplayPopover, setPlotDisplayPopover] = createSignal<{
 } | null>(null);
 
 /** Card for one entry in `store.scripts`. */
-export const IndicatorCard: Component<Props> = (props) => {
+export const IndicatorCard: Component<Props> = (props) : JSX.Element => {
   const [editingColor, setEditingColor] = createSignal<string | null>(null);
   const [busy, setBusy] = createSignal(false);
   const colorPopoverRef = createSignal<HTMLDivElement | null>(null);
@@ -337,12 +336,15 @@ export const IndicatorCard: Component<Props> = (props) => {
     const manager = getManager();
     if (!manager) return;
     const plot = props.indicator.plots[plotName];
+    // The popover only opens for a rendered series, so `plot` exists; passing
+    // `undefined` through keeps the fallback path total for a stale name.
+    const base = plot ? { ...plot, display: undefined } : undefined;
     manager.setOverlayLineDisplay?.(
       props.indicator.paneId,
       plotName,
-      next != null ? next : effectivePlotDisplay({ ...plot, display: undefined }),
+      next != null ? next : effectivePlotDisplay(base),
       undefined,
-      plot.visible !== false,
+      plot?.visible !== false,
     );
   };
 

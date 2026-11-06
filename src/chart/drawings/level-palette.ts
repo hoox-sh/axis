@@ -133,6 +133,12 @@ const PITCHFORK: ReadonlyArray<{ key: string; label: string; color: string }> = 
 
 const HEX_COLOR = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 
+/**
+ * Whether a drawing kind paints each level in its own classic palette color.
+ *
+ * @param kind drawing kind id
+ * @returns true for fib / Gann / pitchfork kinds with per-level swatches
+ */
 export function isMultiColorKind(kind: string): boolean {
   return MULTI_COLOR_KINDS.has(kind);
 }

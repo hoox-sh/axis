@@ -39,6 +39,7 @@ export const ONCHAIN_HEALTH_PATH = '/api/onchain/health';
 /** Min wall time between full health probes (ms). */
 const PROBE_MIN_INTERVAL_MS = 12_000;
 
+/** Outcome of a Worker on-chain health probe. */
 export interface OnchainProxyHealthResult {
   ok: boolean;
   /** Provider ids advertised by the worker (e.g. `defillama`, `geckoterminal`). */
@@ -47,6 +48,7 @@ export interface OnchainProxyHealthResult {
   detail: string;
 }
 
+/** Options for {@link checkOnchainProxyHealth}; an absent `endpoint` uses the Worker default. */
 export interface CheckOnchainProxyHealthOpts {
   /** Override store.endpoint. */
   endpoint?: string | null;
@@ -121,8 +123,8 @@ export async function checkOnchainProxyHealth(
     }
 
     const rec = body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
-    const status = String(rec.status || '').toLowerCase();
-    const providers = parseProviderIds(rec.providers);
+    const status = String(rec['status'] || '').toLowerCase();
+    const providers = parseProviderIds(rec['providers']);
     // A 2xx alone is not health: the body's own status decides when present
     // (worker/src/onchain.ts reports `status: "healthy"`).
     const healthy = status ? status === 'healthy' || status === 'ok' : true;
@@ -131,16 +133,11 @@ export async function checkOnchainProxyHealth(
       return {
         ok: false,
         providers,
-        detail: status
-          ? `On-chain proxy status: ${status}`
-          : 'On-chain proxy unhealthy',
+        detail: status ? `On-chain proxy status: ${status}` : 'On-chain proxy unhealthy',
       };
     }
 
-    const label =
-      providers.length > 0
-        ? `proxy · ${providers.join('+')}`
-        : 'proxy · healthy';
+    const label = providers.length > 0 ? `proxy · ${providers.join('+')}` : 'proxy · healthy';
 
     return { ok: true, providers, detail: label };
   } catch (err) {
@@ -168,7 +165,9 @@ function parseProviderIds(raw: unknown): string[] {
       })
       .filter(Boolean);
   }
-  return Object.keys(raw as Record<string, unknown>).filter(Boolean).sort();
+  return Object.keys(raw as Record<string, unknown>)
+    .filter(Boolean)
+    .sort();
 }
 
 let probeInFlight: Promise<OnchainProxyHealthResult> | null = null;
@@ -234,18 +233,14 @@ export async function refreshOnchainTelemetry(opts?: {
 
   const run = (async (): Promise<OnchainProxyHealthResult> => {
     const t0 =
-      typeof performance !== 'undefined' && performance.now
-        ? performance.now()
-        : Date.now();
+      typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
     // Pass resolved Worker base (never Pro API SPA host)
     const result = await checkOnchainProxyHealth({
       endpoint: endpoint || undefined,
       signal: opts?.signal,
     });
     const t1 =
-      typeof performance !== 'undefined' && performance.now
-        ? performance.now()
-        : Date.now();
+      typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
     const latencyMs = Math.max(0, Math.round(t1 - t0));
 
     if (result.ok) {

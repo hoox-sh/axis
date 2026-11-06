@@ -49,6 +49,10 @@ import { commitLiveBatch, runApplyTransaction } from './v1/apply-transaction';
 import { engineEncoding, wantsWorkerTransport, type EngineEncoding } from './v1/transport';
 import type { SubscriptionStatus } from '../store/types';
 
+/**
+ * Raised when the live wire cannot serve a subscription, so the caller falls back to the
+ * calculator plane. `reason` is the machine-readable cause carried into telemetry.
+ */
 export class StreamFallbackError extends Error {
   readonly reason: string;
   constructor(reason: string, message?: string) {
@@ -58,6 +62,10 @@ export class StreamFallbackError extends Error {
   }
 }
 
+/**
+ * One `/ws/live` frame as the wire routes it: type, correlation/session ids, `seq` for gap
+ * detection, and an unvalidated `payload` narrowed by the per-type guards in `frames`.
+ */
 export interface WireFrame {
   type: string;
   id?: string;
@@ -67,6 +75,10 @@ export interface WireFrame {
   payload?: Record<string, unknown>;
 }
 
+/**
+ * Transport seam the wire drives: implemented by `Redesign2WsClient` (JSON `/ws/live`) and by
+ * the Worker AXB1 client, which additionally batches frames through `onFrames`.
+ */
 export interface WireClient {
   connect(): Promise<void>;
   disconnect(): void;
@@ -98,6 +110,10 @@ export interface WireClient {
   stats?(): { open: boolean; openedOnce: boolean; reconnectAttempts: number; stopped: boolean };
 }
 
+/**
+ * Callbacks the live plane implements to receive subscription status, series snapshots/deltas,
+ * and bar-close verification results.
+ */
 export interface WireHandlers {
   onStatus(
     subId: string,
@@ -113,6 +129,10 @@ export interface WireHandlers {
   ): void;
 }
 
+/**
+ * A script subscription request: the sub id, Pine source, the indicator it paints, the window
+ * bars, and the resolved `input.*` values the engine must evaluate with.
+ */
 export interface EvalScriptInput {
   subId: string;
   script: string;
@@ -151,7 +171,7 @@ function resumeExtra(
 }
 
 function readClosedUpto(frame: WireFrame): number | null {
-  const n = frame.payload?.closed_upto;
+  const n = frame.payload?.['closed_upto'];
   return typeof n === 'number' && Number.isFinite(n) ? n : null;
 }
 
@@ -176,6 +196,8 @@ const GAP_RESYNC_BACKOFF_MS = [0, 500, 1_500, 4_000, 10_000] as const;
 /**
  * After the tab is shown, fold the queued burst into one decision.
  * A hidden tab must not replay every tick it missed.
+ *
+ * Window in ms: ticks queued while hidden collapse into one apply instead of replaying.
  */
 export const HIDDEN_WAKE_MS = 50;
 /**
@@ -186,7 +208,7 @@ export const HIDDEN_WAKE_MS = 50;
 const INBOX_CAP = 32;
 
 function historyBarsOf(meta: Record<string, unknown> | undefined): number {
-  const n = Number(meta?.history_bars);
+  const n = Number(meta?.['history_bars']);
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
 }
 
@@ -194,10 +216,10 @@ function historyBarsOf(meta: Record<string, unknown> | undefined): number {
 function isAuthPendingSubscribeError(frame: WireFrame): boolean {
   if (frame.type !== 'error') return false;
   const body = (frame.payload ?? {}) as Record<string, unknown>;
-  const code = String(body.code ?? (frame as { code?: unknown }).code ?? '')
+  const code = String(body['code'] ?? (frame as { code?: unknown }).code ?? '')
     .trim()
     .toUpperCase();
-  const message = String(body.message ?? (frame as { message?: unknown }).message ?? '');
+  const message = String(body['message'] ?? (frame as { message?: unknown }).message ?? '');
   if (code === 'UNAUTHORIZED') return true;
   return /authenticate first/i.test(message);
 }
@@ -276,7 +298,7 @@ function isFormingSeriesTip(frame: WireFrame | undefined): boolean {
  * one bar off.
  */
 function scriptColumnCount(payload: Record<string, unknown>): number | null {
-  const series = payload.series;
+  const series = payload['series'];
   if (series && typeof series === 'object' && !Array.isArray(series)) {
     let n = 0;
     for (const value of Object.values(series as Record<string, unknown>)) {
@@ -284,7 +306,7 @@ function scriptColumnCount(payload: Record<string, unknown>): number | null {
     }
     if (n > 0) return n;
   }
-  const plots = payload.plots;
+  const plots = payload['plots'];
   if (Array.isArray(plots) && plots.length > 0) {
     if (Array.isArray(plots[0])) {
       let n = 0;
@@ -317,9 +339,9 @@ function scriptFullForApplier(
   bar_times?: number[];
 } {
   const columns = scriptColumnCount(payload);
-  const declared = Number(payload.count ?? 0);
+  const declared = Number(payload['count'] ?? 0);
   const count = columns && columns > 0 ? columns : declared;
-  const raw = readTimeList(payload.bar_times) ?? readTimeList(payload.times);
+  const raw = readTimeList(payload['bar_times']) ?? readTimeList(payload['times']);
   let times = raw && raw.length === count ? raw : null;
   // Synthesize an axis from the subscribed window so apply can time-join
   // instead of hitting staleNoAxis (engine 20k replica vs 5k chart).
@@ -328,8 +350,8 @@ function scriptFullForApplier(
     else if (fallbackTimes.length > count) times = fallbackTimes.slice(-count);
   }
   return {
-    plots: payload.plots as Record<string, unknown[]> | undefined,
-    series: payload.series as Record<string, unknown[]> | undefined,
+    plots: payload['plots'] as Record<string, unknown[]> | undefined,
+    series: payload['series'] as Record<string, unknown[]> | undefined,
     count,
     ...(typeof seq === 'number' ? { seq } : {}),
     ...(times ? { bar_times: times } : {}),
@@ -342,6 +364,12 @@ function withoutTimeAxis(full: Record<string, unknown>): Record<string, unknown>
   return rest;
 }
 
+/**
+ * Orchestrates the live plane over a {@link WireClient}: subscribes series and scripts,
+ * resumes after reconnect, resyncs on `seq` gaps, folds ticks while the tab is hidden, and
+ * routes payloads into `apply` (full snapshot vs delta). Backpressure holds forming tips
+ * instead of closing the socket.
+ */
 export class StreamLiveWire {
   private failures = 0;
   private coolUntil = 0;
@@ -751,7 +779,7 @@ export class StreamLiveWire {
   private isSeriesFrame(frame: WireFrame): boolean {
     const id = frame.id ?? '';
     const payload = (frame.payload as Record<string, unknown>) ?? {};
-    return payload.bars != null || id.startsWith('series:');
+    return payload['bars'] != null || id.startsWith('series:');
   }
 
   private commitDeltaBatch(series: WireFrame[], scripts: WireFrame[]): void {
@@ -921,9 +949,9 @@ export class StreamLiveWire {
       if (full.type === 'error') {
         const body = (full.payload ?? {}) as Record<string, unknown>;
         const errMsg = String(
-          body.message ?? (full as { message?: unknown }).message ?? 'subscribe failed',
+          body['message'] ?? (full as { message?: unknown }).message ?? 'subscribe failed',
         );
-        const errCode = String(body.code ?? (full as { code?: unknown }).code ?? '');
+        const errCode = String(body['code'] ?? (full as { code?: unknown }).code ?? '');
         this.handlers.onStatus(subId, 'error', {
           message: errCode ? `${errCode}: ${errMsg}` : errMsg,
         });
@@ -932,7 +960,7 @@ export class StreamLiveWire {
       if (full.type !== 'full') {
         this.fail('no-snapshot', `expected full, got ${full.type}`);
       }
-      const bars = toBars((full.payload as Record<string, unknown>)?.bars);
+      const bars = toBars((full.payload as Record<string, unknown>)?.['bars']);
       if (!bars.length) this.fail('empty-snapshot', 'series snapshot held no bars');
       this.appliedSeq.set(subId, typeof full.seq === 'number' ? full.seq : 0);
       this.seriesBars.set(subId, bars);
@@ -1050,9 +1078,9 @@ export class StreamLiveWire {
         if (full.type === 'error' || full.type !== 'full') {
           const body = (full.payload ?? {}) as Record<string, unknown>;
           const errMsg = String(
-            body.message ?? (full as { message?: unknown }).message ?? full.type,
+            body['message'] ?? (full as { message?: unknown }).message ?? full.type,
           );
-          const errCode = String(body.code ?? (full as { code?: unknown }).code ?? '');
+          const errCode = String(body['code'] ?? (full as { code?: unknown }).code ?? '');
           throw new StreamFallbackError(
             'script-subscribe-failed',
             errCode ? `${errCode}: ${errMsg}` : errMsg,
@@ -1143,8 +1171,8 @@ export class StreamLiveWire {
       }
       if (frame.type === 'close' && frame.id) {
         const payload = (frame.payload as Record<string, unknown>) ?? {};
-        const ohlcv = payload.ohlcv as Record<string, number> | undefined;
-        this.handlers.onCloseVerified(Number(payload.time ?? 0), 'unknown', ohlcv);
+        const ohlcv = payload['ohlcv'] as Record<string, number> | undefined;
+        this.handlers.onCloseVerified(Number(payload['time'] ?? 0), 'unknown', ohlcv);
       }
     } catch {
       /* routing must never break the socket */
@@ -1154,8 +1182,8 @@ export class StreamLiveWire {
   private routeStatusFrame(frame: WireFrame): void {
     if (!frame.id) return;
     const payload = (frame.payload as Record<string, unknown>) ?? {};
-    const code = String(payload.code ?? 'live');
-    const message = payload.message as string | undefined;
+    const code = String(payload['code'] ?? 'live');
+    const message = payload['message'] as string | undefined;
     const isReleaseAck = code === 'idle' || message === 'released';
     const isScript = !frame.id.startsWith('series:');
     const hadLocal =
@@ -1175,8 +1203,8 @@ export class StreamLiveWire {
     if (!ignoreReleaseAck && !skipDuplicateRelease) {
       this.handlers.onStatus(frame.id, code as SubscriptionStatus, {
         message,
-        have: typeof payload.have === 'number' ? payload.have : undefined,
-        need: typeof payload.need === 'number' ? payload.need : undefined,
+        have: typeof payload['have'] === 'number' ? payload['have'] : undefined,
+        need: typeof payload['need'] === 'number' ? payload['need'] : undefined,
       });
     }
     // Server released the sub (unsubscribe ack or idle eviction). Drop local
@@ -1290,7 +1318,7 @@ export class StreamLiveWire {
         if (!frame) break;
         if (frame.type === 'status') {
           this.routeStatusFrame(frame);
-          const code = String((frame.payload as Record<string, unknown>)?.code ?? '');
+          const code = String((frame.payload as Record<string, unknown>)?.['code'] ?? '');
           if (code === 'datafeed-loading') {
             deadline = started + LOADING_WAIT_CAP_MS;
           }
@@ -1365,7 +1393,7 @@ export class StreamLiveWire {
   }
 
   private applySeriesPush(subId: string, frame: WireFrame, payload: Record<string, unknown>): void {
-    const bars = toBars(payload.bars);
+    const bars = toBars(payload['bars']);
     const seq = typeof frame.seq === 'number' ? frame.seq : null;
     const prevSeq = this.appliedSeq.get(subId);
     if (frame.type === 'full') {
@@ -1398,7 +1426,8 @@ export class StreamLiveWire {
       return;
     }
     if (this.holdUntilFull.has(subId)) return;
-    const seqAckFrom = typeof payload.seqAckFrom === 'number' ? payload.seqAckFrom : undefined;
+    const seqAckFrom =
+      typeof payload['seqAckFrom'] === 'number' ? payload['seqAckFrom'] : undefined;
     runApplyTransaction({
       seq,
       lastSeq: prevSeq ?? 0,
@@ -1595,7 +1624,7 @@ export class StreamLiveWire {
     const payload = (frame.payload as Record<string, unknown>) ?? {};
     const applier = this.appliers.get(subId);
     if (!applier) {
-      if (payload.bars != null || subId.startsWith('series:')) {
+      if (payload['bars'] != null || subId.startsWith('series:')) {
         this.applySeriesPush(subId, frame, payload);
       }
       return;
@@ -1628,11 +1657,11 @@ export class StreamLiveWire {
     // Stale until the snapshot lands. A delta in between would paint a
     // half-applied generation.
     if (this.holdUntilFull.has(subId)) return;
-    const baseIndex = Number(payload.base_index ?? -1);
-    const count = Number(payload.count ?? -1);
-    const tailLen = Number(payload.tail_len ?? -1);
-    const explicitTimes = readTimeList(payload.times) ?? readTimeList(payload.bar_times);
-    const cachedTimes = readTimeList(applier.cached?.bar_times ?? applier.cached?.times);
+    const baseIndex = Number(payload['base_index'] ?? -1);
+    const count = Number(payload['count'] ?? -1);
+    const tailLen = Number(payload['tail_len'] ?? -1);
+    const explicitTimes = readTimeList(payload['times']) ?? readTimeList(payload['bar_times']);
+    const cachedTimes = readTimeList(applier.cached?.['bar_times'] ?? applier.cached?.['times']);
     const times =
       explicitTimes && explicitTimes.length === tailLen
         ? explicitTimes
@@ -1645,16 +1674,17 @@ export class StreamLiveWire {
     // seq and refuse to paint it; the next delta is continuous with that
     // cursor and must still be allowed to paint.
     const acceptedSeq = applier.lastSeq;
-    const seqAckFrom = typeof payload.seqAckFrom === 'number' ? payload.seqAckFrom : undefined;
+    const seqAckFrom =
+      typeof payload['seqAckFrom'] === 'number' ? payload['seqAckFrom'] : undefined;
     const delta = {
       seq: typeof frame.seq === 'number' ? frame.seq : -1,
       base_index: baseIndex,
       count,
       tail_len: tailLen,
-      plots: payload.plots as Record<string, unknown[]> | undefined,
-      series: payload.series as Record<string, unknown[]> | undefined,
-      forming: payload.forming === true,
-      unchanged: payload.unchanged === true,
+      plots: payload['plots'] as Record<string, unknown[]> | undefined,
+      series: payload['series'] as Record<string, unknown[]> | undefined,
+      forming: payload['forming'] === true,
+      unchanged: payload['unchanged'] === true,
       ...(seqAckFrom != null ? { seqAckFrom } : {}),
       ...(times ? { times } : {}),
     };
@@ -1678,7 +1708,7 @@ export class StreamLiveWire {
         return;
       }
       const cached = applier.cached;
-      if (cached && (cached.bar_times != null || cached.times != null)) {
+      if (cached && (cached['bar_times'] != null || cached['times'] != null)) {
         applier.applyFull(
           withoutTimeAxis(cached) as {
             plots?: Record<string, unknown[]>;
@@ -1726,7 +1756,7 @@ export class StreamLiveWire {
    * guarded downstream.
    */
   private mergedFullLacksAxisForChart(subId: string, full: Record<string, unknown>): boolean {
-    const times = readTimeList(full.bar_times) ?? readTimeList(full.times);
+    const times = readTimeList(full['bar_times']) ?? readTimeList(full['times']);
     if (times?.length) return false;
     const windowLen = this.scriptCtx.get(subId)?.bars.length ?? 0;
     const count = Number((full as { count?: unknown }).count);

@@ -12,6 +12,14 @@ import type { DrawingTemplateSummary, LoadTemplateMode } from '../../chart/drawi
 import { Icons } from '../icons';
 import { LayerEmpty } from './rows';
 
+/**
+ * Saved drawing-pack list for the current symbol: save, import, export-all, and
+ * per-pack load/replace/export/delete. Fully controlled — the parent owns the
+ * template store and the file input.
+ *
+ * @param props - Symbol scope, template summaries, and template action callbacks.
+ * @returns The templates bar plus the pack list.
+ */
 export const DrawingTemplates: Component<{
   symbol: string;
   templates: DrawingTemplateSummary[];
@@ -22,7 +30,7 @@ export const DrawingTemplates: Component<{
   onLoad: (id: string, mode: LoadTemplateMode) => void;
   onExport: (id: string) => void;
   onDelete: (id: string, name: string) => void;
-}> = (props) => (
+}> = (props): JSX.Element => (
   <div class="ax-layers-templates" data-testid="axis-drawing-templates">
     <div class="ax-layers-templates-bar">
       <span class="ax-layers-templates-hint" title="Reusable drawing packs stored in this browser">

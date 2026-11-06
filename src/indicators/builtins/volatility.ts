@@ -26,6 +26,10 @@
 import { COL, def, pineIndicator } from './pine';
 import type { BuiltinScript } from './types';
 
+/**
+ * Original AXIS volatility studies (`category: 'volatility'`): ATR, true range,
+ * historical volatility and ADR, all non-overlay sub-pane plots.
+ */
 export const VOLATILITY_BUILTINS: readonly BuiltinScript[] = [
   def({
     id: 'atr',

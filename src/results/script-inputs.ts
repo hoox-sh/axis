@@ -44,6 +44,7 @@
  * @module results/script-inputs
  */
 
+/** Pine `input.*` kind, as parsed from source or reported by the engine. */
 export type ScriptInputType =
   | 'int'
   | 'float'
@@ -75,11 +76,12 @@ export const DEFAULT_SOURCE_OPTIONS = [
 ] as const;
 
 /** Built-in series tokens accepted as `input.source` defval (case-insensitive). */
-const SOURCE_SERIES_TOKENS = new Set<string>([
-  ...DEFAULT_SOURCE_OPTIONS,
-  'volume',
-]);
+const SOURCE_SERIES_TOKENS = new Set<string>([...DEFAULT_SOURCE_OPTIONS, 'volume']);
 
+/**
+ * One Inputs-tab field: stable id/title, type, default and current value, plus
+ * the Pine layout meta (`group` / `inline` / `tooltip` / `active`) the form uses.
+ */
 export interface ScriptInputDef {
   /** Stable key = title when set, else generated id */
   id: string;
@@ -190,8 +192,7 @@ function coerceSourcePick(v: unknown, fallback: string): string {
 /** Ensure `source` inputs always expose the standard OHLC enum dropdown. */
 function withSourceDefaults(def: ScriptInputDef): ScriptInputDef {
   if (def.type !== 'source') return def;
-  const options =
-    def.options?.length ? def.options : [...DEFAULT_SOURCE_OPTIONS];
+  const options = def.options?.length ? def.options : [...DEFAULT_SOURCE_OPTIONS];
   const fallback = 'close';
   const defaultVal = coerceSourcePick(def.default, fallback);
   const value = coerceSourcePick(
@@ -237,18 +238,10 @@ export function recoverSourceType(def: ScriptInputDef): ScriptInputDef {
   }
 
   // float/int + Source-like title + numeric bar value (classic mis-export)
-  const numericish =
-    isResolvedNumeric(def.default) || isResolvedNumeric(def.value);
+  const numericish = isResolvedNumeric(def.default) || isResolvedNumeric(def.value);
   const scalarType =
-    def.type === 'float' ||
-    def.type === 'int' ||
-    def.type === 'unknown' ||
-    def.type === 'price';
-  if (
-    scalarType &&
-    numericish &&
-    titleLooksLikeSourceSelector(def.title, def.id)
-  ) {
+    def.type === 'float' || def.type === 'int' || def.type === 'unknown' || def.type === 'price';
+  if (scalarType && numericish && titleLooksLikeSourceSelector(def.title, def.id)) {
     return withSourceDefaults({
       ...def,
       type: 'source',
@@ -342,8 +335,7 @@ function stripLineComment(line: string): string {
 }
 
 const ENUM_HEADER_RE = /^(?:export\s+)?enum\s+([A-Za-z_]\w*)\b/;
-const ENUM_MEMBER_RE =
-  /^([A-Za-z_]\w*)(?:\s*=\s*(?:"((?:\\.|[^"\\])*)"|'((?:\\.|[^'\\])*)'))?$/;
+const ENUM_MEMBER_RE = /^([A-Za-z_]\w*)(?:\s*=\s*(?:"((?:\\.|[^"\\])*)"|'((?:\\.|[^'\\])*)'))?$/;
 
 /**
  * Parse user-defined `enum Name` declarations (optional `export`).
@@ -393,9 +385,14 @@ export function mergePineEnums(
   return out;
 }
 
-export function collectPineEnumsFromSources(
-  sources: readonly string[],
-): Map<string, PineEnumDef> {
+/**
+ * Merge `enum` declarations from several sources (a script and its imported
+ * libraries); the first source wins on a name collision.
+ *
+ * @param sources - Pine sources to scan, in precedence order
+ * @returns every parsed enum keyed by its declared name
+ */
+export function collectPineEnumsFromSources(sources: readonly string[]): Map<string, PineEnumDef> {
   const out = new Map<string, PineEnumDef>();
   for (const src of sources) {
     if (!src) continue;
@@ -419,10 +416,7 @@ function isTypeNameLike(ident: string): boolean {
  * Strips library aliases (`m.Easing.linear` → `Easing.linear`) but never
  * built-in namespaces (`strategy.percent_of_equity`).
  */
-export function normalizeEnumToken(
-  raw: unknown,
-  aliases?: ReadonlySet<string>,
-): string {
+export function normalizeEnumToken(raw: unknown, aliases?: ReadonlySet<string>): string {
   if (raw == null) return '';
   const s = String(raw).trim();
   if (!s) return '';
@@ -430,8 +424,7 @@ export function normalizeEnumToken(
   if (parts.length === 3) {
     const [a, t, mem] = parts as [string, string, string];
     const strip =
-      !BUILTIN_ENUM_NS.has(a) &&
-      (aliases?.has(a) || (isImportAliasLike(a) && isTypeNameLike(t)));
+      !BUILTIN_ENUM_NS.has(a) && (aliases?.has(a) || (isImportAliasLike(a) && isTypeNameLike(t)));
     if (strip) return `${t}.${mem}`;
     return s;
   }
@@ -456,10 +449,7 @@ export function splitEnumToken(
   return { type: typeName, member };
 }
 
-function looksLikeUserEnumToken(
-  raw: unknown,
-  aliases?: ReadonlySet<string>,
-): boolean {
+function looksLikeUserEnumToken(raw: unknown, aliases?: ReadonlySet<string>): boolean {
   const parts = String(raw ?? '')
     .trim()
     .split('.');
@@ -469,9 +459,7 @@ function looksLikeUserEnumToken(
   if (parts.length === 3) {
     const [a, t] = parts;
     return (
-      !BUILTIN_ENUM_NS.has(a!) &&
-      (aliases?.has(a!) || isImportAliasLike(a!)) &&
-      isTypeNameLike(t!)
+      !BUILTIN_ENUM_NS.has(a!) && (aliases?.has(a!) || isImportAliasLike(a!)) && isTypeNameLike(t!)
     );
   }
   return false;
@@ -533,9 +521,7 @@ export function recoverEnumType(
   const isEnum = def.type === 'enum' || defLooks || valLooks;
   if (!isEnum) return def;
 
-  const split =
-    splitEnumToken(def.default, aliasSet) ||
-    splitEnumToken(def.value, aliasSet);
+  const split = splitEnumToken(def.default, aliasSet) || splitEnumToken(def.value, aliasSet);
   const inferred = split ? optionsForEnum(split.type, enums) : null;
 
   const rawOpts = def.options?.length
@@ -648,10 +634,7 @@ function splitTopLevelArgs(inner: string): string[] {
 
 function unquote(s: string): string {
   const t = s.trim();
-  if (
-    (t.startsWith('"') && t.endsWith('"')) ||
-    (t.startsWith("'") && t.endsWith("'"))
-  ) {
+  if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'"))) {
     return t.slice(1, -1);
   }
   return t;
@@ -665,10 +648,7 @@ function parseLiteral(raw: string): unknown {
   if (s === 'na' || s === 'None' || s === 'null') return null;
   if (/^-?\d+$/.test(s)) return Number(s);
   if (/^-?\d+\.\d+([eE][+-]?\d+)?$/.test(s)) return Number(s);
-  if (
-    (s.startsWith('"') && s.endsWith('"')) ||
-    (s.startsWith("'") && s.endsWith("'"))
-  ) {
+  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
     return unquote(s);
   }
   // color.red / color.new(...) → keep string token for UI color inputs
@@ -723,11 +703,7 @@ export function findLhsIdent(src: string, callStart: number): string | null {
   const ident = src.slice(i + 1, end + 1);
   if (!/^[A-Za-z_]\w*$/.test(ident)) return null;
   // Reject common type keywords mistaken as names
-  if (
-    /^(int|float|bool|string|color|source|series|simple|const|var|varip)$/i.test(
-      ident,
-    )
-  ) {
+  if (/^(int|float|bool|string|color|source|series|simple|const|var|varip)$/i.test(ident)) {
     return null;
   }
   return ident;
@@ -745,14 +721,9 @@ export function normalizeTooltip(raw: string | null | undefined): string | null 
  * Whether a field should be editable given current form values.
  * Resolves Pine `active=<ident>` against peer {@link ScriptInputDef.varName}.
  */
-export function isInputActive(
-  field: ScriptInputDef,
-  all: readonly ScriptInputDef[],
-): boolean {
+export function isInputActive(field: ScriptInputDef, all: readonly ScriptInputDef[]): boolean {
   if (field.activeRef) {
-    const dep = all.find(
-      (f) => f.varName === field.activeRef || f.id === field.activeRef,
-    );
+    const dep = all.find((f) => f.varName === field.activeRef || f.id === field.activeRef);
     if (dep) {
       const v = dep.value ?? dep.default;
       return !!v;
@@ -767,9 +738,7 @@ export function isInputActive(
  * Layout fields into group → rows, clustering consecutive same-`inline` keys.
  * Matches TradingView Settings: `group` sections, `inline` shared rows.
  */
-export function layoutInputRows(
-  fields: readonly ScriptInputDef[],
-): InputFormGroup[] {
+export function layoutInputRows(fields: readonly ScriptInputDef[]): InputFormGroup[] {
   const groups: InputFormGroup[] = [];
   const groupIndex = new Map<string, number>();
 
@@ -783,7 +752,10 @@ export function layoutInputRows(
   };
 
   // Track open inline clusters per group so non-consecutive same keys don't merge
-  const openInline = new Map<string, { key: string; row: Extract<InputFormRow, { kind: 'inline' }> }>();
+  const openInline = new Map<
+    string,
+    { key: string; row: Extract<InputFormRow, { kind: 'inline' }> }
+  >();
 
   for (const f of fields) {
     const gName = f.group?.trim() || 'Inputs';
@@ -855,10 +827,7 @@ export function collectStringConsts(source: string): Map<string, string> {
 }
 
 /** Resolve a keyword value that may be a quoted string or a string const ident. */
-function resolveStringish(
-  raw: string | undefined,
-  consts: Map<string, string>,
-): string | null {
+function resolveStringish(raw: string | undefined, consts: Map<string, string>): string | null {
   if (raw == null) return null;
   const lit = parseLiteral(raw);
   if (typeof lit === 'string') {
@@ -867,10 +836,7 @@ function resolveStringish(
       return consts.get(lit)!;
     }
     // Quoted string or other token
-    if (
-      (raw.trim().startsWith('"') || raw.trim().startsWith("'")) &&
-      typeof lit === 'string'
-    ) {
+    if ((raw.trim().startsWith('"') || raw.trim().startsWith("'")) && typeof lit === 'string') {
       return lit;
     }
     if (consts.has(String(lit))) return consts.get(String(lit))!;
@@ -949,9 +915,7 @@ export function parseScriptInputs(
     }
 
     if (type === 'string' || type === 'enum' || type === 'source') {
-      options = parseOptions(
-        kw(args, 'options') ?? (type === 'enum' ? pos(args, 2) : undefined),
-      );
+      options = parseOptions(kw(args, 'options') ?? (type === 'enum' ? pos(args, 2) : undefined));
     }
 
     const groupR = kw(args, 'group');
@@ -1007,9 +971,7 @@ export function parseScriptInputs(
     }
 
     const groupVal = groupR ? resolveStringish(groupR, stringConsts) : null;
-    const tooltipVal = tooltipR
-      ? normalizeTooltip(resolveStringish(tooltipR, stringConsts))
-      : null;
+    const tooltipVal = tooltipR ? normalizeTooltip(resolveStringish(tooltipR, stringConsts)) : null;
     const inlineVal = inlineR ? resolveStringish(inlineR, stringConsts) : null;
 
     out.push(
@@ -1053,25 +1015,25 @@ export function normalizeEngineInputs(
     const item = raw[i];
     if (!item || typeof item !== 'object') continue;
     const r = item as Record<string, unknown>;
-    const title = String(r.title ?? r.name ?? r.id ?? `input_${i}`);
-    let id = String(r.id ?? title);
+    const title = String(r['title'] ?? r['name'] ?? r['id'] ?? `input_${i}`);
+    let id = String(r['id'] ?? title);
     let n = 2;
     while (seen.has(id)) id = `${title}_${n++}`;
     seen.add(id);
-    const type = mapType(String(r.type || 'unknown'));
-    let active = r.active !== false;
+    const type = mapType(String(r['type'] || 'unknown'));
+    let active = r['active'] !== false;
     let activeRef: string | null = null;
-    if (typeof r.active === 'string') {
-      const ident = r.active.trim();
+    if (typeof r['active'] === 'string') {
+      const ident = r['active'].trim();
       if (/^[A-Za-z_]\w*$/.test(ident) && ident !== 'true' && ident !== 'false') {
         activeRef = ident;
         active = true;
       }
-    } else if (r.active === false) {
+    } else if (r['active'] === false) {
       active = false;
     }
-    if (r.activeRef != null && String(r.activeRef).trim()) {
-      activeRef = String(r.activeRef).trim();
+    if (r['activeRef'] != null && String(r['activeRef']).trim()) {
+      activeRef = String(r['activeRef']).trim();
     }
     out.push(
       recoverEnumType(
@@ -1079,18 +1041,25 @@ export function normalizeEngineInputs(
           id,
           title,
           type,
-          default: r.default ?? r.defval ?? r.value,
-          value: r.value ?? r.default ?? r.defval,
-          min: r.min != null ? Number(r.min) : r.minval != null ? Number(r.minval) : null,
-          max: r.max != null ? Number(r.max) : r.maxval != null ? Number(r.maxval) : null,
-          step: r.step != null ? Number(r.step) : null,
-          options: Array.isArray(r.options) ? r.options.map(String) : undefined,
-          group: r.group != null ? String(r.group) : null,
-          tooltip: r.tooltip != null ? normalizeTooltip(String(r.tooltip)) : null,
-          inline: r.inline != null ? String(r.inline) : null,
+          default: r['default'] ?? r['defval'] ?? r['value'],
+          value: r['value'] ?? r['default'] ?? r['defval'],
+          min:
+            r['min'] != null ? Number(r['min']) : r['minval'] != null ? Number(r['minval']) : null,
+          max:
+            r['max'] != null ? Number(r['max']) : r['maxval'] != null ? Number(r['maxval']) : null,
+          step: r['step'] != null ? Number(r['step']) : null,
+          options: Array.isArray(r['options']) ? r['options'].map(String) : undefined,
+          group: r['group'] != null ? String(r['group']) : null,
+          tooltip: r['tooltip'] != null ? normalizeTooltip(String(r['tooltip'])) : null,
+          inline: r['inline'] != null ? String(r['inline']) : null,
           active,
           activeRef,
-          varName: r.varName != null ? String(r.varName) : r.name != null ? String(r.name) : null,
+          varName:
+            r['varName'] != null
+              ? String(r['varName'])
+              : r['name'] != null
+                ? String(r['name'])
+                : null,
         }),
         enums,
         aliases,
@@ -1124,8 +1093,7 @@ export function resolveScriptInputs(
     if (!e) return s;
     byTitle.delete(s.title);
     // Prefer non-empty options from either side (engine may omit source enums)
-    const options =
-      e.options?.length ? e.options : s.options?.length ? s.options : undefined;
+    const options = e.options?.length ? e.options : s.options?.length ? s.options : undefined;
 
     // Engine float + script source (or recovered): keep series selector UX.
     // When neither side is already `source`, the third arm of the || is only
@@ -1139,9 +1107,7 @@ export function resolveScriptInputs(
 
     if (
       preferSource &&
-      (eitherIsSource ||
-        isResolvedNumeric(e.value) ||
-        isResolvedNumeric(e.default))
+      (eitherIsSource || isResolvedNumeric(e.value) || isResolvedNumeric(e.default))
     ) {
       const tokenDefault = isSourceSeriesToken(s.default)
         ? String(s.default).toLowerCase()

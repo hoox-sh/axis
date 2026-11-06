@@ -36,12 +36,14 @@ export const AXIS_DEBUG_LOG_FLUSH_MS = 250;
 /** Cap on the JSON payload of one line. */
 export const AXIS_DEBUG_LOG_LINE_DATA = 2048;
 
+/** Minimal key/value store the ring writes through (`utils/storage` in the app). */
 export type RotatingLogStorage = {
   getItem(key: string): string | null;
   setItem(key: string, value: string): boolean;
   removeItem(key: string): void;
 };
 
+/** Construction options for {@link RotatingLogStore}. */
 export type RotatingLogOptions = {
   fileCount: number;
   fileBytes: number;
@@ -53,6 +55,7 @@ export type RotatingLogOptions = {
   cancel?: (id: unknown) => void;
 };
 
+/** Aggregate size of the ring: file count, UTF-16 chars, and non-empty lines. */
 export type AxisDebugLogStats = {
   files: number;
   bytes: number;
@@ -237,6 +240,7 @@ export function setAxisDebugLogStore(store: RotatingLogStore | null): void {
   singleton = store;
 }
 
+/** The process-wide store, created (with its hide-flush listeners) on first use. */
 export function getAxisDebugLogStore(): RotatingLogStore {
   return defaultStore();
 }
@@ -263,27 +267,40 @@ export function formatAxisDebugLine(
   return `${iso} [${scope}] ${event}${extra}\n`;
 }
 
+/**
+ * Download filename for the ring, e.g. `axis-debug-20260101T120000Z.log`.
+ *
+ * @param now Epoch ms used for the timestamp (defaults to the current time).
+ */
 export function axisDebugLogFilename(now: number = Date.now()): string {
-  const stamp = new Date(now).toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
+  const stamp = new Date(now)
+    .toISOString()
+    .replace(/[-:]/g, '')
+    .replace(/\.\d+Z$/, 'Z');
   return `axis-debug-${stamp}.log`;
 }
 
+/** Oldest rotation first, then the current file including unflushed lines. */
 export function readAxisDebugLog(): string {
   return defaultStore().readAll();
 }
 
+/** Write the in-memory current file to storage now (cancels a pending flush). */
 export function flushAxisDebugLog(): void {
   defaultStore().flush();
 }
 
+/** Drop every ring file and the in-memory buffer. */
 export function clearAxisDebugLog(): void {
   defaultStore().clear();
 }
 
+/** File / byte / line totals for the ring (includes unflushed lines). */
 export function axisDebugLogStats(): AxisDebugLogStats {
   return defaultStore().stats();
 }
 
+/** Append one line to the ring; rotates when the current file would overflow. */
 export function appendAxisDebugLine(line: string): void {
   defaultStore().append(line);
 }

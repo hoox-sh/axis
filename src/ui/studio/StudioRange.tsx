@@ -13,6 +13,16 @@
 import type { JSX } from 'solid-js';
 import { Show, createEffect, createSignal } from 'solid-js';
 
+/**
+ * Range slider with a CSS-variable fill and a live value chip.
+ *
+ * The local value mirrors the prop so dragging repaints immediately without
+ * waiting for the owner; `onInput` fires continuously while dragging and
+ * `onChange` on commit. `format` drives both the chip and `aria-valuetext`.
+ *
+ * @param props - Value, bounds (default 0–100, step 1), formatter, and handlers.
+ * @returns A range input plus optional value chip.
+ */
 export function StudioRange(props: {
   id?: string;
   value: number;
@@ -29,7 +39,7 @@ export function StudioRange(props: {
   showValue?: boolean;
   onInput?: (value: number) => void;
   onChange?: (value: number) => void;
-}) {
+}): JSX.Element {
   const [live, setLive] = createSignal(props.value);
   createEffect(() => setLive(props.value));
 

@@ -41,10 +41,10 @@ export const EVENT_TYPE_TVL_SPIKE = 'tvl_spike' as const;
 /** Event type for a negative TVL day-over-day drop. */
 export const EVENT_TYPE_TVL_DROP = 'tvl_drop' as const;
 
-export type TvlSpikeEventType =
-  | typeof EVENT_TYPE_TVL_SPIKE
-  | typeof EVENT_TYPE_TVL_DROP;
+/** Which synthetic TVL event a day-over-day move produced. */
+export type TvlSpikeEventType = typeof EVENT_TYPE_TVL_SPIKE | typeof EVENT_TYPE_TVL_DROP;
 
+/** Thresholds for {@link buildTvlSpikeEvents}; every value is a percent, not a ratio. */
 export interface BuildTvlSpikeEventsOpts {
   /**
    * Minimum absolute day-over-day percent change to emit an event.
@@ -65,24 +65,20 @@ export interface BuildTvlSpikeEventsOpts {
  */
 export function sortEventPoints(events: EventPoint[] | null | undefined): EventPoint[] {
   if (!Array.isArray(events) || !events.length) return [];
-  return events
-    .slice()
-    .sort((a, b) => {
-      const ta = Number(a?.time);
-      const tb = Number(b?.time);
-      if (!Number.isFinite(ta) && !Number.isFinite(tb)) return 0;
-      if (!Number.isFinite(ta)) return 1;
-      if (!Number.isFinite(tb)) return -1;
-      return ta - tb;
-    });
+  return events.slice().sort((a, b) => {
+    const ta = Number(a?.time);
+    const tb = Number(b?.time);
+    if (!Number.isFinite(ta) && !Number.isFinite(tb)) return 0;
+    if (!Number.isFinite(ta)) return 1;
+    if (!Number.isFinite(tb)) return -1;
+    return ta - tb;
+  });
 }
 
 /**
  * Keep finite-time events, coerce types, drop empties, sort by time.
  */
-export function normalizeEventPoints(
-  events: EventPoint[] | null | undefined,
-): EventPoint[] {
+export function normalizeEventPoints(events: EventPoint[] | null | undefined): EventPoint[] {
   if (!Array.isArray(events) || !events.length) return [];
   const out: EventPoint[] = [];
   for (const e of events) {
@@ -93,11 +89,7 @@ export function normalizeEventPoints(
     if (!type) continue;
     const next: EventPoint = { time, type };
     if (e.title != null && String(e.title)) next.title = String(e.title);
-    if (
-      e.severity === 'info' ||
-      e.severity === 'warn' ||
-      e.severity === 'critical'
-    ) {
+    if (e.severity === 'info' || e.severity === 'warn' || e.severity === 'critical') {
       next.severity = e.severity;
     }
     if (e.price != null && Number.isFinite(Number(e.price))) {
@@ -153,12 +145,7 @@ export function buildTvlSpikeEvents(
       : '';
 
   const sorted = points
-    .filter(
-      (p) =>
-        p &&
-        Number.isFinite(Number(p.time)) &&
-        Number.isFinite(Number(p.value)),
-    )
+    .filter((p) => p && Number.isFinite(Number(p.time)) && Number.isFinite(Number(p.value)))
     .map((p) => ({ time: Number(p.time), value: Number(p.value) }))
     .sort((a, b) => a.time - b.time);
 
@@ -187,10 +174,8 @@ export function buildTvlSpikeEvents(
     const absPct = Math.abs(pctChange);
     if (absPct < thresholdPct) continue;
 
-    const type: TvlSpikeEventType =
-      pctChange >= 0 ? EVENT_TYPE_TVL_SPIKE : EVENT_TYPE_TVL_DROP;
-    const severity: EventPoint['severity'] =
-      absPct >= criticalPct ? 'critical' : 'warn';
+    const type: TvlSpikeEventType = pctChange >= 0 ? EVENT_TYPE_TVL_SPIKE : EVENT_TYPE_TVL_DROP;
+    const severity: EventPoint['severity'] = absPct >= criticalPct ? 'critical' : 'warn';
     const pctStr = formatPct(pctChange);
     const title = label
       ? `${label} TVL ${pctStr}`
@@ -222,9 +207,7 @@ export function buildTvlSpikeEvents(
  * Human label for synthetic TVL-spike events on an attachment.
  * e.g. `"aave TVL spikes"` or `"TVL spikes"`.
  */
-export function tvlSpikeEventSourceLabel(
-  protocolOrLabel?: string | null,
-): string {
+export function tvlSpikeEventSourceLabel(protocolOrLabel?: string | null): string {
   const raw = protocolOrLabel != null ? String(protocolOrLabel).trim() : '';
   if (!raw) return 'TVL spikes';
   // Prefer short protocol id when label is "Foo TVL"

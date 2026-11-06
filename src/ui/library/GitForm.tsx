@@ -14,6 +14,14 @@ import { Icons } from '../icons';
 import { manualTokenCreateUrl } from '../../storage/git-oauth';
 import { ScField } from '../Field';
 
+/**
+ * Settings form for the Git storage provider (GitHub / GitLab). Purely
+ * controlled: every field is a prop with its own change callback, so the parent
+ * owns persistence and validation.
+ *
+ * @param props - Provider fields, OAuth device-flow state, and callbacks.
+ * @returns The Git credentials/advanced form.
+ */
 export const GitSettingsForm: Component<{
   provider: 'github' | 'gitlab';
   token: string;
@@ -45,7 +53,7 @@ export const GitSettingsForm: Component<{
   onDisconnect: () => void;
   onCancelOauth: () => void;
   onSave: () => void;
-}> = (props) => {
+}> = (props): JSX.Element => {
   const providerName = () => (props.provider === 'github' ? 'GitHub' : 'GitLab');
   return (
     <div
@@ -93,7 +101,10 @@ export const GitSettingsForm: Component<{
             </div>
           }
         >
-          <div class="flex items-center gap-2 flex-wrap text-[10px]" data-testid="axis-git-connected">
+          <div
+            class="flex items-center gap-2 flex-wrap text-[10px]"
+            data-testid="axis-git-connected"
+          >
             <span class="text-accent-2 font-semibold">
               Connected
               <Show when={props.oauthLogin || props.owner}>
@@ -119,7 +130,9 @@ export const GitSettingsForm: Component<{
             role="status"
           >
             <p class="text-[10px] text-text-dim m-0">{props.oauthHint || 'Waiting…'}</p>
-            <p class="m-0 font-mono text-[13px] text-accent tracking-widest">{props.oauthUserCode}</p>
+            <p class="m-0 font-mono text-[13px] text-accent tracking-widest">
+              {props.oauthUserCode}
+            </p>
             <Show when={props.oauthVerifyUri}>
               <a
                 class="text-[10px] text-accent underline break-all"
@@ -261,10 +274,10 @@ export const GitSettingsForm: Component<{
         <code class="font-mono">POST /api/git/oauth/device/start</code>
         ). Set env <code class="font-mono">GITHUB_OAUTH_CLIENT_ID</code> /{' '}
         <code class="font-mono">GITLAB_OAUTH_CLIENT_ID</code> on that host (public OAuth App id;
-        enable Device Flow on GitHub), or paste the client id under Advanced. Without OAuth, paste
-        a PAT instead. Repo path:{' '}
-        <code class="font-mono">{props.basePath || 'pyne-library'}/library/*.pyne</code>. Drafts stay
-        local.
+        enable Device Flow on GitHub), or paste the client id under Advanced. Without OAuth, paste a
+        PAT instead. Repo path:{' '}
+        <code class="font-mono">{props.basePath || 'pyne-library'}/library/*.pyne</code>. Drafts
+        stay local.
       </p>
     </div>
   );

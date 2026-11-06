@@ -27,16 +27,25 @@
  * @module editor/editor-intel
  */
 
-/** Timing clamps (ms) — keep idle lint snappy without mid-token noise. */
+/** Lower clamp for `preevalIdleMs` (ms). */
 export const INTEL_IDLE_MS_MIN = 200;
+/** Upper clamp for `preevalIdleMs` (ms). */
 export const INTEL_IDLE_MS_MAX = 3_000;
+/** Lower clamp for `hoverTimeMs` (ms). */
 export const INTEL_HOVER_MS_MIN = 50;
+/** Upper clamp for `hoverTimeMs` (ms). */
 export const INTEL_HOVER_MS_MAX = 1_000;
+/** Lower clamp for the remote LSP request timeouts (ms). */
 export const INTEL_TIMEOUT_MS_MIN = 200;
+/** Upper clamp for the remote LSP request timeouts (ms). */
 export const INTEL_TIMEOUT_MS_MAX = 8_000;
+/** Lower clamp for `preevalTabSwitchMs` (ms; 0 = lint immediately). */
 export const INTEL_TAB_SWITCH_MS_MIN = 0;
+/** Upper clamp for `preevalTabSwitchMs` (ms). */
 export const INTEL_TAB_SWITCH_MS_MAX = 1_000;
+/** Lower clamp for `maxRenderedOptions` (suggestion rows). */
 export const INTEL_MAX_OPTIONS_MIN = 8;
+/** Upper clamp for `maxRenderedOptions` (suggestion rows). */
 export const INTEL_MAX_OPTIONS_MAX = 128;
 
 /**
@@ -46,6 +55,7 @@ export const INTEL_MAX_OPTIONS_MAX = 128;
  */
 export const DEFAULT_PREEVAL_IDLE_MS = 1_000;
 
+/** Persisted editor intelligence bag: pre-eval, diagnostics, hover, completion, chips. */
 export type EditorIntelSettings = {
   /**
    * Persist schema revision. Written on user patches so an accidental
@@ -136,6 +146,7 @@ export type EditorIntelSettings = {
 /** Bumped when the persist schema changes. Missing/0 recovers a dead all-off bag. */
 export const EDITOR_INTEL_REV = 1;
 
+/** Factory settings: every feature on with the default timings. */
 export const DEFAULT_EDITOR_INTEL: EditorIntelSettings = {
   rev: EDITOR_INTEL_REV,
   preevalEnabled: true,
@@ -187,9 +198,9 @@ function asBool(v: unknown, fallback: boolean): boolean {
   return fallback;
 }
 
-const EDITOR_INTEL_BOOL_KEYS = (Object.keys(DEFAULT_EDITOR_INTEL) as (keyof EditorIntelSettings)[]).filter(
-  (k) => typeof DEFAULT_EDITOR_INTEL[k] === 'boolean',
-);
+const EDITOR_INTEL_BOOL_KEYS = (
+  Object.keys(DEFAULT_EDITOR_INTEL) as (keyof EditorIntelSettings)[]
+).filter((k) => typeof DEFAULT_EDITOR_INTEL[k] === 'boolean');
 
 /**
  * True when a persisted bag looks like an accidental all-off write
@@ -198,7 +209,7 @@ const EDITOR_INTEL_BOOL_KEYS = (Object.keys(DEFAULT_EDITOR_INTEL) as (keyof Edit
 export function isDeadEditorIntelBag(raw: unknown): boolean {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return false;
   const o = raw as Record<string, unknown>;
-  const rev = typeof o.rev === 'number' ? o.rev : 0;
+  const rev = typeof o['rev'] === 'number' ? o['rev'] : 0;
   if (rev >= EDITOR_INTEL_REV) return false;
   const flags = EDITOR_INTEL_BOOL_KEYS.filter((k) => typeof o[k] === 'boolean');
   if (flags.length < EDITOR_INTEL_BOOL_KEYS.length - 1) return false;
@@ -214,80 +225,86 @@ function asInt(v: unknown, fallback: number, min: number, max: number): number {
 /** Coerce a persisted / partial bag to a full {@link EditorIntelSettings}. */
 export function readEditorIntel(raw: unknown): EditorIntelSettings {
   if (isDeadEditorIntelBag(raw)) return { ...DEFAULT_EDITOR_INTEL };
-  const o = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+  const o =
+    raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
   const d = DEFAULT_EDITOR_INTEL;
   return {
-    rev: typeof o.rev === 'number' && Number.isFinite(o.rev) ? Math.trunc(o.rev) : EDITOR_INTEL_REV,
-    preevalEnabled: asBool(o.preevalEnabled, d.preevalEnabled),
-    preevalIdleMs: asInt(o.preevalIdleMs, d.preevalIdleMs, INTEL_IDLE_MS_MIN, INTEL_IDLE_MS_MAX),
+    rev:
+      typeof o['rev'] === 'number' && Number.isFinite(o['rev'])
+        ? Math.trunc(o['rev'])
+        : EDITOR_INTEL_REV,
+    preevalEnabled: asBool(o['preevalEnabled'], d.preevalEnabled),
+    preevalIdleMs: asInt(o['preevalIdleMs'], d.preevalIdleMs, INTEL_IDLE_MS_MIN, INTEL_IDLE_MS_MAX),
     preevalTabSwitchMs: asInt(
-      o.preevalTabSwitchMs,
+      o['preevalTabSwitchMs'],
       d.preevalTabSwitchMs,
       INTEL_TAB_SWITCH_MS_MIN,
       INTEL_TAB_SWITCH_MS_MAX,
     ),
-    preevalClearOnEdit: asBool(o.preevalClearOnEdit, d.preevalClearOnEdit),
-    preevalLocal: asBool(o.preevalLocal, d.preevalLocal),
-    preevalRemote: asBool(o.preevalRemote, d.preevalRemote),
-    preevalTypos: asBool(o.preevalTypos, d.preevalTypos),
-    preevalVersionWarn: asBool(o.preevalVersionWarn, d.preevalVersionWarn),
-    preevalStudyWarn: asBool(o.preevalStudyWarn, d.preevalStudyWarn),
-    preevalSecurityWarn: asBool(o.preevalSecurityWarn, d.preevalSecurityWarn),
-    preevalDuplicateDecl: asBool(o.preevalDuplicateDecl, d.preevalDuplicateDecl),
-    preevalV6Kwargs: asBool(o.preevalV6Kwargs, d.preevalV6Kwargs),
-    preevalBlockRun: asBool(o.preevalBlockRun, d.preevalBlockRun),
+    preevalClearOnEdit: asBool(o['preevalClearOnEdit'], d.preevalClearOnEdit),
+    preevalLocal: asBool(o['preevalLocal'], d.preevalLocal),
+    preevalRemote: asBool(o['preevalRemote'], d.preevalRemote),
+    preevalTypos: asBool(o['preevalTypos'], d.preevalTypos),
+    preevalVersionWarn: asBool(o['preevalVersionWarn'], d.preevalVersionWarn),
+    preevalStudyWarn: asBool(o['preevalStudyWarn'], d.preevalStudyWarn),
+    preevalSecurityWarn: asBool(o['preevalSecurityWarn'], d.preevalSecurityWarn),
+    preevalDuplicateDecl: asBool(o['preevalDuplicateDecl'], d.preevalDuplicateDecl),
+    preevalV6Kwargs: asBool(o['preevalV6Kwargs'], d.preevalV6Kwargs),
+    preevalBlockRun: asBool(o['preevalBlockRun'], d.preevalBlockRun),
 
-    diagUnderlines: asBool(o.diagUnderlines, d.diagUnderlines),
-    diagGutter: asBool(o.diagGutter, d.diagGutter),
-    diagHover: asBool(o.diagHover, d.diagHover),
-    diagErrors: asBool(o.diagErrors, d.diagErrors),
-    diagWarnings: asBool(o.diagWarnings, d.diagWarnings),
-    diagTypos: asBool(o.diagTypos, d.diagTypos),
-    diagInfo: asBool(o.diagInfo, d.diagInfo),
+    diagUnderlines: asBool(o['diagUnderlines'], d.diagUnderlines),
+    diagGutter: asBool(o['diagGutter'], d.diagGutter),
+    diagHover: asBool(o['diagHover'], d.diagHover),
+    diagErrors: asBool(o['diagErrors'], d.diagErrors),
+    diagWarnings: asBool(o['diagWarnings'], d.diagWarnings),
+    diagTypos: asBool(o['diagTypos'], d.diagTypos),
+    diagInfo: asBool(o['diagInfo'], d.diagInfo),
 
-    hoverEnabled: asBool(o.hoverEnabled, d.hoverEnabled),
-    hoverTimeMs: asInt(o.hoverTimeMs, d.hoverTimeMs, INTEL_HOVER_MS_MIN, INTEL_HOVER_MS_MAX),
-    hoverRemote: asBool(o.hoverRemote, d.hoverRemote),
-    signatureHints: asBool(o.signatureHints, d.signatureHints),
+    hoverEnabled: asBool(o['hoverEnabled'], d.hoverEnabled),
+    hoverTimeMs: asInt(o['hoverTimeMs'], d.hoverTimeMs, INTEL_HOVER_MS_MIN, INTEL_HOVER_MS_MAX),
+    hoverRemote: asBool(o['hoverRemote'], d.hoverRemote),
+    signatureHints: asBool(o['signatureHints'], d.signatureHints),
 
-    autocompleteEnabled: asBool(o.autocompleteEnabled, d.autocompleteEnabled),
-    activateOnTyping: asBool(o.activateOnTyping, d.activateOnTyping),
-    paramCompletions: asBool(o.paramCompletions, d.paramCompletions),
-    enumCompletions: asBool(o.enumCompletions, d.enumCompletions),
-    remoteCompletions: asBool(o.remoteCompletions, d.remoteCompletions),
+    autocompleteEnabled: asBool(o['autocompleteEnabled'], d.autocompleteEnabled),
+    activateOnTyping: asBool(o['activateOnTyping'], d.activateOnTyping),
+    paramCompletions: asBool(o['paramCompletions'], d.paramCompletions),
+    enumCompletions: asBool(o['enumCompletions'], d.enumCompletions),
+    remoteCompletions: asBool(o['remoteCompletions'], d.remoteCompletions),
     maxRenderedOptions: asInt(
-      o.maxRenderedOptions,
+      o['maxRenderedOptions'],
       d.maxRenderedOptions,
       INTEL_MAX_OPTIONS_MIN,
       INTEL_MAX_OPTIONS_MAX,
     ),
 
-    remoteLspEnabled: asBool(o.remoteLspEnabled, d.remoteLspEnabled),
-    hoverTimeoutMs: asInt(o.hoverTimeoutMs, d.hoverTimeoutMs, INTEL_TIMEOUT_MS_MIN, INTEL_TIMEOUT_MS_MAX),
+    remoteLspEnabled: asBool(o['remoteLspEnabled'], d.remoteLspEnabled),
+    hoverTimeoutMs: asInt(
+      o['hoverTimeoutMs'],
+      d.hoverTimeoutMs,
+      INTEL_TIMEOUT_MS_MIN,
+      INTEL_TIMEOUT_MS_MAX,
+    ),
     completionTimeoutMs: asInt(
-      o.completionTimeoutMs,
+      o['completionTimeoutMs'],
       d.completionTimeoutMs,
       INTEL_TIMEOUT_MS_MIN,
       INTEL_TIMEOUT_MS_MAX,
     ),
     diagnosticsTimeoutMs: asInt(
-      o.diagnosticsTimeoutMs,
+      o['diagnosticsTimeoutMs'],
       d.diagnosticsTimeoutMs,
       INTEL_TIMEOUT_MS_MIN,
       INTEL_TIMEOUT_MS_MAX,
     ),
 
-    colorChips: asBool(o.colorChips, d.colorChips),
-    inlineChips: asBool(o.inlineChips, d.inlineChips),
-    inlinePinGutter: asBool(o.inlinePinGutter, d.inlinePinGutter),
+    colorChips: asBool(o['colorChips'], d.colorChips),
+    inlineChips: asBool(o['inlineChips'], d.inlineChips),
+    inlinePinGutter: asBool(o['inlinePinGutter'], d.inlinePinGutter),
   };
 }
 
 /** True when a diagnostic severity is shown in the editor. */
-export function intelShowsSeverity(
-  intel: EditorIntelSettings,
-  severity: string,
-): boolean {
+export function intelShowsSeverity(intel: EditorIntelSettings, severity: string): boolean {
   const s = String(severity || '').toLowerCase();
   if (s === 'error' || s === 'fatal') return intel.diagErrors;
   if (s === 'warning') return intel.diagWarnings;

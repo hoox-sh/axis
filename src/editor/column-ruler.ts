@@ -30,10 +30,7 @@
  */
 
 import { EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view';
-import {
-  StateEffect,
-  type Extension,
-} from '@codemirror/state';
+import { StateEffect, type Extension } from '@codemirror/state';
 
 /** Recommended line length (characters) for the default guide. */
 export const DEFAULT_RULER_COLUMN = 80;
@@ -41,6 +38,7 @@ export const DEFAULT_RULER_COLUMN = 80;
 /** Subtle void-indigo dashed stroke used by the guide. */
 export const RULER_STROKE = 'rgba(147,159,255,0.25)';
 
+/** Options for {@link columnRulerExtension}. */
 export type ColumnRulerOptions = {
   /** Character column for the guide (1-based semantics: after N chars). Default 80. */
   column?: number;
@@ -140,7 +138,7 @@ class ColumnRulerPlugin {
     this.dom = document.createElement('div');
     this.dom.className = 'cm-column-ruler';
     this.dom.setAttribute('aria-hidden', 'true');
-    this.dom.dataset.column = String(this.column);
+    this.dom.dataset['column'] = String(this.column);
     // Absolute child of scroller scrolls with document content.
     view.scrollDOM.appendChild(this.dom);
     this.sync();
@@ -213,8 +211,6 @@ export function columnRulerExtension(opts: ColumnRulerOptions = {}): Extension {
   const enabled = opts.enabled;
   return [
     columnRulerTheme,
-    ViewPlugin.define(
-      (view) => new ColumnRulerPlugin(view, { column, enabled }),
-    ),
+    ViewPlugin.define((view) => new ColumnRulerPlugin(view, { column, enabled })),
   ];
 }

@@ -36,6 +36,7 @@ import {
   presetDaysForDate,
 } from './estimate';
 
+/** Host options for the backfill form: test-id prefix, lifecycle callbacks, and message sink. */
 export interface DsmComposerProps {
   /** Test-id prefix for every control (panel and page coexist in the DOM). */
   testIdPrefix?: string;
@@ -50,7 +51,11 @@ export interface DsmComposerProps {
   onNotify?: (msg: string) => void;
 }
 
-export const DsmComposer: Component<DsmComposerProps> = (props) => {
+/**
+ * Backfill composer shared by the DSM panel and the studio Data page; it only
+ * enqueues jobs — the fetch walk lives in the data-source manager.
+ */
+export const DsmComposer: Component<DsmComposerProps> = (props): JSX.Element => {
   const tid = (suffix: string) => `${props.testIdPrefix ?? 'axis-datasource'}-${suffix}`;
 
   const [symbol, setSymbol] = createSignal(store.symbol || 'BTCUSDT');

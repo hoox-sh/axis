@@ -29,6 +29,7 @@
 import { setEditorMode, setEditorOpen, setStatus } from '../store';
 import { createEmitter } from '../utils/emitter';
 
+/** Payload queued for the docked editor: source text plus a display name. */
 export type OpenScriptSourceDetail = { code: string; name: string };
 
 const openScriptEmitter = createEmitter<(detail: OpenScriptSourceDetail) => void>();

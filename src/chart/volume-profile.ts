@@ -51,14 +51,23 @@ export interface VpBar {
   volume?: number;
 }
 
+/**
+ * How bar volume is attributed to price bins: spread across `[low, high]`
+ * (`uniform`) or all at the close price (`close`).
+ */
 export type VolumeDistribution = 'uniform' | 'close';
 
+/** One horizontal profile row: a price band in quote currency and its volume. */
 export interface VolumeProfileBin {
   priceLow: number;
   priceHigh: number;
   volume: number;
 }
 
+/**
+ * Result of {@link computeVolumeProfile}.
+ * Prices (POC / VA edges) are quote-currency values; `bins` is ordered low → high.
+ */
 export interface VolumeProfileResult {
   bins: VolumeProfileBin[];
   /** Mid-price of the POC bin, or `null` when empty / no volume. */
@@ -79,6 +88,7 @@ export interface VolumeProfileResult {
   valueAreaPct: number;
 }
 
+/** Window and binning knobs; `fromIndex`/`toIndex` are inclusive bar offsets. */
 export interface VolumeProfileOptions {
   /** Inclusive start index into `bars` (default 0). */
   fromIndex?: number;
@@ -105,6 +115,11 @@ const [volumeProfileEnabled, setVolumeProfileEnabled] = createSignal(false);
 
 export { volumeProfileEnabled, setVolumeProfileEnabled };
 
+/**
+ * Flip the volume-profile overlay on the shared module signal.
+ *
+ * @returns the new enabled state, so callers can label the toggle immediately
+ */
 export function toggleVolumeProfileEnabled(): boolean {
   const next = !volumeProfileEnabled();
   setVolumeProfileEnabled(next);

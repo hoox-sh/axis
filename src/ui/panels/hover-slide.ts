@@ -78,7 +78,7 @@ export function clearPanelHoverSlideExpanded(id: PanelId): void {
  * - on + expanded → full size
  */
 export function hoverSlideLayoutSize(
-  id: PanelId,
+  _id: PanelId,
   dock: PanelDock,
   fullSize: number,
   opts: { hoverSlide: boolean; expanded: boolean },

@@ -115,10 +115,18 @@ function notifyScale(): void {
   window.dispatchEvent(new CustomEvent(CHART_SCALE_EVENT));
 }
 
+/**
+ * Right-click menu for one chart slot: hit-tests the pane under the pointer,
+ * builds entries from {@link buildChartMenu}, and dispatches ids through
+ * {@link dispatchChartMenu}.
+ *
+ * @param props.host chart host element that receives the contextmenu listener
+ * @param props.slotId layout slot whose PaneManager / drawing layer the menu targets
+ */
 export const ChartContextMenu: Component<{
   host: HTMLElement | undefined;
   slotId: string;
-}> = (props) => {
+}> = (props): JSX.Element => {
   const [open, setOpen] = createSignal<{
     x: number;
     y: number;
@@ -335,7 +343,8 @@ export const ChartContextMenu: Component<{
         setChartType: (id) => setChartType(id),
         copyPrice: () => {
           if (!alertLabel) return;
-          const done = () => setStatus('ready', `Copied ${alertLabel}`, { toast: true, source: 'chart' });
+          const done = () =>
+            setStatus('ready', `Copied ${alertLabel}`, { toast: true, source: 'chart' });
           const fail = () => setStatus('ready', alertLabel, { toast: true, source: 'chart' });
           try {
             const p = navigator.clipboard?.writeText(alertLabel);
@@ -385,15 +394,20 @@ export const ChartContextMenu: Component<{
           });
         },
         scriptTables: (id) => {
-          const inBottom = ((store.pineTablesLocation || {}) as Record<string, string>)[id] === 'bottom';
+          const inBottom =
+            ((store.pineTablesLocation || {}) as Record<string, string>)[id] === 'bottom';
           void import('../store').then(({ setPineTablesLocation, setStatus }) => {
             setPineTablesLocation(id, inBottom ? 'chart' : 'bottom');
             const s = store.scripts.find((x) => x.id === id);
             const label = s?.name?.trim() || 'Script';
-            setStatus('ready', inBottom ? `${label} tables back on chart` : `${label} tables in bottom panel`, {
-              toast: false,
-              source: 'chart',
-            });
+            setStatus(
+              'ready',
+              inBottom ? `${label} tables back on chart` : `${label} tables in bottom panel`,
+              {
+                toast: false,
+                source: 'chart',
+              },
+            );
           });
         },
         scriptSource: (id) => {
@@ -431,7 +445,10 @@ export const ChartContextMenu: Component<{
           if (!live || !d) return;
           const locked = !resolveDrawingStyle(d).locked;
           live.setSelectedId(drawingId);
-          live.updateSelected({ locked, meta: { ...(d.meta || {}), locked } }, { allowLocked: true });
+          live.updateSelected(
+            { locked, meta: { ...(d.meta || {}), locked } },
+            { allowLocked: true },
+          );
         },
         drawingHide: () => {
           if (!drawingId) return;

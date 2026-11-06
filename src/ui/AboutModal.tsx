@@ -61,7 +61,7 @@ export function isAboutModalOpen(): boolean {
 }
 
 /** Modal: versions, philosophy, and stack links. */
-export const AboutModal: Component = () => {
+export const AboutModal: Component = () : JSX.Element => {
   const close = () => setAboutOpen(false);
 
   return (

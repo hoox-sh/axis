@@ -82,6 +82,6 @@ export function unregisterDynamicStorage(id: string): boolean {
 }
 
 /** @internal Test helper — allow re-registration of built-ins. */
-export function _resetStorageRegistrationFlag() {
+export function _resetStorageRegistrationFlag(): void {
   registered = false;
 }

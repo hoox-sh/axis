@@ -16,19 +16,21 @@
 import { engineDebug, engineDebugSample } from '../../debug';
 import { classifySeqGap } from '../frames';
 
+/** Why a batch was refused: seq gap/rewind, stale generation, pane skew, plot length, throw. */
 export type ApplyAbortReason =
-  | 'gap'
-  | 'rewind'
-  | 'generation'
-  | 'pane-skew'
-  | 'plot-length'
-  | 'aborted';
+  'gap' | 'rewind' | 'generation' | 'pane-skew' | 'plot-length' | 'aborted';
 
+/**
+ * Transaction verdict: `commit` painted, `replay` was a duplicate seq (paint skipped by the
+ * caller), or the abort reason that kept the chart untouched.
+ */
 export type ApplyResult =
-  | { ok: true; action: 'commit' | 'replay' }
-  | { ok: false; reason: ApplyAbortReason };
+  { ok: true; action: 'commit' | 'replay' } | { ok: false; reason: ApplyAbortReason };
 
-/** Structural checks. Omitted fields are not tested. */
+/**
+ * Structural consistency checks run before any paint: pane tips must match the price tip, and
+ * every plot column must match the bar-time axis length. Omitted fields are not tested.
+ */
 export type ApplyCheck = {
   /** Last bar time of the price series. */
   priceTime?: number;
@@ -39,6 +41,10 @@ export type ApplyCheck = {
   plotLengths?: readonly number[];
 };
 
+/**
+ * One guarded apply: seq/generation/structural gates, then pure `steps`, then exactly one
+ * `commit`. Lightweight Charts has no rollback, so every gate runs before the paint.
+ */
 export type ApplyTransaction = {
   /** Incoming seq. `null` skips the seq gate (frames that do not carry one). */
   seq?: number | null;
@@ -164,6 +170,13 @@ export type LiveBatch = {
   onStale?: (reason: ApplyAbortReason) => void;
 };
 
+/**
+ * Runs a whole live batch (price → plots → markers → alerts) as one transaction, so a throw in
+ * `prep` skips every mutation and an aborted batch never paints a partial frame.
+ *
+ * @param input Batch phases, gates and the stale-reporting hook.
+ * @returns `ok: true` with `commit`/`replay`, or the abort reason that stopped it.
+ */
 export function commitLiveBatch(input: LiveBatch): ApplyResult {
   return runApplyTransaction({
     seq: input.seq,

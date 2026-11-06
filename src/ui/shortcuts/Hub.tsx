@@ -45,7 +45,7 @@ export {
  * / palette "Show keyboard shortcuts") beside it. Was never mounted before
  * (E1): the modal only reacted to `axis-shortcuts-open` once rendered.
  */
-export const ShortcutHub: Component<{ children?: any }> = (props) => {
+export const ShortcutHub: Component<{ children?: JSX.Element }> = (props): JSX.Element => {
   const table = createMemo(buildDispatchTable);
 
   onMount(() => {

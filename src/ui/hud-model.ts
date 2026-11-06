@@ -33,24 +33,20 @@
 import type { ConnState, SubscriptionStatus, TransportClass } from '../store/types';
 import { engineFamilyForText } from '../plugins/engine-family';
 
+/** Where calculation lives: on this machine (loopback / in-tab) or a remote host. */
 export type EngTopology = 'local' | 'remote';
+/** Runtime class implementing Pine evaluation. */
 export type RunClass = 'browser' | 'server' | 'worker';
+/** Server execution strategy shown on the MODE chip. */
 export type ExecMode = 'interpret' | 'compile' | 'auto';
+/** Transport hop shown on the PATH chip; `—` for local/unknown transports. */
 export type PathClass = 'WS' | 'REST' | '—';
 
+/** Stable ids for the status-bar HUD chips; also the key for the sticky detail panel. */
 export type HudChipId =
-  | 'live'
-  | 'tick'
-  | 'eng'
-  | 'run'
-  | 'mode'
-  | 'path'
-  | 'src'
-  | 'str'
-  | 'sto'
-  | 'feed'
-  | 'onc';
+  'live' | 'tick' | 'eng' | 'run' | 'mode' | 'path' | 'src' | 'str' | 'sto' | 'feed' | 'onc';
 
+/** Everything the HUD renders: chip axes, plugin identity, connection state, and detail copy. */
 export interface HudSnapshot {
   eng: EngTopology;
   run: RunClass;
@@ -70,6 +66,13 @@ export interface HudSnapshot {
   loading: boolean;
 }
 
+/**
+ * Coerce a stored/form value to a known exec mode.
+ *
+ * @param raw - Untrusted value from config.
+ * @param fallback - Mode to use when `raw` is not a known mode.
+ * @returns A valid {@link ExecMode}.
+ */
 export function normalizeExecMode(raw: unknown, fallback: ExecMode = 'interpret'): ExecMode {
   const s = String(raw || fallback);
   if (s === 'compile' || s === 'auto' || s === 'interpret') return s;
@@ -100,12 +103,19 @@ export function isWorkerEndpoint(endpoint: string): boolean {
   );
 }
 
+/**
+ * Map a transport class to the PATH chip text.
+ *
+ * @param t - Transport reported by telemetry/config.
+ * @returns `WS` or `REST`, `—` for local/unknown transports.
+ */
 export function transportToPath(t: TransportClass | undefined | null): PathClass {
   if (t === 'ws') return 'WS';
   if (t === 'rest') return 'REST';
   return '—';
 }
 
+/** Inputs to {@link deriveHud}: selected engine, endpoint, mode, and telemetry. */
 export interface HudInput {
   engineId: string;
   endpoint: string;
@@ -149,9 +159,7 @@ export function deriveHud(input: HudInput): HudSnapshot {
   ) {
     run = 'worker';
     eng = isLocalEndpoint(endpoint) ? 'local' : 'remote';
-    product = enginePluginId.includes('worker')
-      ? enginePluginId
-      : 'pyne-worker / edge evaluate';
+    product = enginePluginId.includes('worker') ? enginePluginId : 'pyne-worker / edge evaluate';
   } else {
     // server engine plugin (Pro API) or unknown → treat as process server
     run = 'server';
@@ -300,7 +308,9 @@ export function liveBadgeTone(opts: {
  * Chip tone for an engine-owned feed subscription (F-18). `live` is green,
  * `degraded`/`error` are amber/red, everything in-flight is neutral loading.
  */
-export function feedStatusTone(status: SubscriptionStatus): 'live' | 'load' | 'degraded' | 'err' | 'idle' {
+export function feedStatusTone(
+  status: SubscriptionStatus,
+): 'live' | 'load' | 'degraded' | 'err' | 'idle' {
   if (status === 'live') return 'live';
   if (status === 'degraded') return 'degraded';
   if (status === 'error') return 'err';

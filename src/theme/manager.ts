@@ -26,7 +26,7 @@
  * @module theme/manager
  */
 
-import type { IChartApi, ISeriesApi } from 'lightweight-charts';
+import type { IChartApi, ISeriesApi, SeriesType } from 'lightweight-charts';
 import {
   applyThemeToChart,
   applyThemeToDocument,
@@ -45,14 +45,10 @@ import {
   withPreset,
   withTokenOverride,
 } from './resolve';
-import type {
-  ApplyChartThemeOpts,
-  ChartThemeState,
-  ThemeTokenValue,
-  ThemeTokens,
-} from './types';
+import type { ApplyChartThemeOpts, ChartThemeState, ThemeTokenValue, ThemeTokens } from './types';
 import { createEmitter, createSingleton } from '../utils/emitter';
 
+/** Called after each theme change with the serialized state and resolved tokens. */
 export type ThemeListener = (state: ChartThemeState, tokens: ThemeTokens) => void;
 
 interface RegisteredChart {
@@ -61,7 +57,7 @@ interface RegisteredChart {
 }
 
 interface RegisteredSeries {
-  series: ISeriesApi<any>;
+  series: ISeriesApi<SeriesType>;
   chartType: string;
 }
 
@@ -151,7 +147,7 @@ export class ThemeManager {
    * Register main price series for live theme updates.
    * @returns unregister function
    */
-  registerPriceSeries(series: ISeriesApi<any>, chartType: string): () => void {
+  registerPriceSeries(series: ISeriesApi<SeriesType>, chartType: string): () => void {
     const id = `s${++this.seriesSeq}`;
     this.series.set(id, { series, chartType });
     applyThemeToPriceSeries(series, this.state, { chartType });
@@ -161,7 +157,7 @@ export class ThemeManager {
   }
 
   /** Update chart type for a registered series (after type switch). */
-  updateSeriesType(series: ISeriesApi<any>, chartType: string): void {
+  updateSeriesType(series: ISeriesApi<SeriesType>, chartType: string): void {
     for (const [id, reg] of this.series) {
       if (reg.series === series) {
         this.series.set(id, { series, chartType });

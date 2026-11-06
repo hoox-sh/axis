@@ -38,18 +38,21 @@
  */
 
 import { normalizeEndpointBase } from './worker-origin';
-import {
-  DEFAULT_MARKET_WORKER_BASE,
-  resolveMarketWorkerBase,
-} from './market-worker';
+import { DEFAULT_MARKET_WORKER_BASE, resolveMarketWorkerBase } from './market-worker';
 
 export { DEFAULT_MARKET_WORKER_BASE, resolveMarketWorkerBase };
 
 /** Canonical public REST origin; no browser CORS (`Access-Control-Allow-Origin`). */
 export const MEXC_REST_HOSTS = ['https://api.mexc.com'] as const;
 
+/** REST path segments served under MEXC's `/api/v3/` (and the Worker proxy). */
 export type MexcRestPath = 'klines' | 'ticker/24hr' | 'exchangeInfo';
 
+/**
+ * Request for {@link fetchMexcJson}: which endpoint, an optional pre-built query
+ * string, and the fallback routing controls. No credentials — MEXC public REST
+ * only.
+ */
 export interface MexcFetchOpts {
   /** Path under `/api/v3/` (or proxy equivalent). */
   path: MexcRestPath;
@@ -70,11 +73,7 @@ function joinUrl(base: string, path: MexcRestPath, query?: string): string {
   return `${b}/api/v3/${path}${q}`;
 }
 
-function workerProxyUrl(
-  workerBase: string,
-  path: MexcRestPath,
-  query?: string,
-): string {
+function workerProxyUrl(workerBase: string, path: MexcRestPath, query?: string): string {
   const b = workerBase.replace(/\/+$/, '');
   const q = query ? (query.startsWith('?') ? query : `?${query}`) : '';
   return `${b}/api/market/mexc/${path}${q}`;
@@ -157,7 +156,5 @@ export async function fetchMexcJson(opts: MexcFetchOpts): Promise<unknown> {
     }
   }
 
-  throw new Error(
-    `MEXC network error (${errors.slice(0, 4).join(' · ') || 'unknown'})`,
-  );
+  throw new Error(`MEXC network error (${errors.slice(0, 4).join(' · ') || 'unknown'})`);
 }

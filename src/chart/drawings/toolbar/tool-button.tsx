@@ -30,6 +30,13 @@
 
 import { type Component, type JSX, Show } from 'solid-js';
 
+/**
+ * 32×32 rail button: glyph child plus active/pressed wash.
+ *
+ * @param props.title tooltip (usually name + shortcut chord)
+ * @param props.label accessible name
+ * @param props.testId optional `data-testid` for e2e hooks
+ */
 export const ToolRailButton: Component<{
   title: string;
   label: string;
@@ -39,7 +46,7 @@ export const ToolRailButton: Component<{
   testId?: string;
   onSelect: () => void;
   children: JSX.Element;
-}> = (props) => (
+}> = (props): JSX.Element => (
   <button
     type="button"
     class="axis-draw-btn"
@@ -58,13 +65,14 @@ export const ToolRailButton: Component<{
   </button>
 );
 
+/** Small caret that opens a group flyout; stops the click from selecting the tool. */
 export const ToolCaret: Component<{
   label: string;
   title: string;
   expanded: boolean;
   down?: boolean;
   onToggle: () => void;
-}> = (props) => (
+}> = (props): JSX.Element => (
   <button
     type="button"
     class="axis-draw-caret"
@@ -92,9 +100,13 @@ export const ToolCaret: Component<{
   </button>
 );
 
-export const RailSeparator: Component = () => <div class="axis-draw-sep" aria-hidden="true" />;
+/** Hairline divider between rail groups; purely decorative. */
+export const RailSeparator: Component = (): JSX.Element => (
+  <div class="axis-draw-sep" aria-hidden="true" />
+);
 
-export const RailBadge: Component<{ text: string }> = (props) => (
+/** Small count / label badge on a rail button; renders nothing for an empty string. */
+export const RailBadge: Component<{ text: string }> = (props): JSX.Element => (
   <Show when={props.text}>
     <span class="axis-draw-badge" aria-hidden="true">
       {props.text}

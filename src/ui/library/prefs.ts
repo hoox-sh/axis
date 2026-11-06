@@ -41,10 +41,21 @@ function writeIdList(key: string, ids: readonly string[]): string[] {
   return next;
 }
 
+/**
+ * Read pinned script ids from `localStorage`.
+ *
+ * @returns Deduped non-empty ids; an empty list when storage is unavailable or holds junk.
+ */
 export function readFavoriteIds(): string[] {
   return readIdList(LIBRARY_FAVORITES_KEY);
 }
 
+/**
+ * Persist the pinned-id list after deduping.
+ *
+ * @param ids - Ids to store; non-strings and blanks are dropped.
+ * @returns The sanitized list that was written.
+ */
 export function writeFavoriteIds(ids: readonly string[]): string[] {
   return writeIdList(LIBRARY_FAVORITES_KEY, ids);
 }
@@ -58,6 +69,11 @@ export function toggleFavoriteId(id: string, current?: readonly string[]): strin
   return writeFavoriteIds(base);
 }
 
+/**
+ * Read the recently applied built-in ids, newest first.
+ *
+ * @returns Stored ids, deduped; empty when nothing has been applied yet.
+ */
 export function readRecentBuiltinIds(): string[] {
   return readIdList(LIBRARY_RECENT_KEY);
 }
@@ -68,6 +84,11 @@ export function noteRecentBuiltinId(id: string): string[] {
   return writeIdList(LIBRARY_RECENT_KEY, next);
 }
 
+/**
+ * Forget the recent-built-in strip.
+ *
+ * @returns The empty list that was written.
+ */
 export function clearRecentBuiltinIds(): string[] {
   return writeIdList(LIBRARY_RECENT_KEY, []);
 }

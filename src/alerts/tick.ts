@@ -54,7 +54,9 @@ export interface LiveBarStreamCtx {
  * price — a condition on `bar.open` / `bar.high` / `bar.low` saw the
  * previous candle.
  */
-function lastBars(pending?: { close?: number; open?: number; high?: number; low?: number; time?: number } | null): EvaluateBar[] {
+function lastBars(
+  pending?: { close?: number; open?: number; high?: number; low?: number; time?: number } | null,
+): EvaluateBar[] {
   const bars = store.bars;
   const list = Array.isArray(bars) ? bars : [];
   const slice = list.length > LAST_BARS ? list.slice(-LAST_BARS) : list;
@@ -101,8 +103,7 @@ function buildContext(
   bar?: { close?: number; open?: number; high?: number; low?: number; time?: number } | null,
 ): EvaluateContext {
   const symbol =
-    (stream?.symbol && stream.symbol.trim() ? stream.symbol.trim() : store.symbol) ||
-    'BTCUSDT';
+    (stream?.symbol && stream.symbol.trim() ? stream.symbol.trim() : store.symbol) || 'BTCUSDT';
   const drawings = drawingsForSymbol(store.drawings, symbol, { includeUntagged: true });
   const ctx: EvaluateContext = {
     symbol,
@@ -123,7 +124,10 @@ function buildContext(
  */
 export function liveBarMatchesChart(stream?: LiveBarStreamCtx): boolean {
   if (!stream) return true;
-  if (stream.symbol && normalizeSymbol(stream.symbol) !== normalizeSymbol(store.symbol || 'BTCUSDT')) {
+  if (
+    stream.symbol &&
+    normalizeSymbol(stream.symbol) !== normalizeSymbol(store.symbol || 'BTCUSDT')
+  ) {
     return false;
   }
   if (stream.interval && store.interval && String(stream.interval) !== String(store.interval)) {
@@ -134,7 +138,17 @@ export function liveBarMatchesChart(stream?: LiveBarStreamCtx): boolean {
 
 /**
  * Evaluate persisted alerts against a live last price.
- * @returns fired alerts (empty when nothing is armed)
+ *
+ * Fire-and-forget by design: callers do not get the fired alerts back — the
+ * evaluator notifies through its own channels. Returns early (without
+ * throwing) when the price is not finite, the stream does not match the chart,
+ * or no alerts are armed.
+ *
+ * @param price Latest trade price in quote currency.
+ * @param stream Live bar context (venue / symbol / interval) used to reject
+ *   alerts armed for a different chart.
+ * @param bar Optional forming bar for OHLC-based conditions.
+ * @returns Resolves when evaluation finished; carries no value.
  */
 export async function evaluateLiveAlerts(
   price: number,

@@ -95,7 +95,7 @@ export function registerBuiltins(): void {
  * Does not clear the registry; callers that `registry.clear()` should also
  * call this so the next {@link ensureBuiltins} re-registers.
  */
-export function _resetBootstrapFlag() {
+export function _resetBootstrapFlag(): void {
   done = false;
   resetCatalogFlags();
 }

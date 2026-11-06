@@ -43,22 +43,13 @@ import {
 } from './catalog';
 import { notifyOnchainEventsLoaded } from './alerts-bridge';
 import { searchDefiLlamaProtocols } from './defillama';
-import {
-  buildTvlSpikeEvents,
-  normalizeEventPoints,
-  tvlSpikeEventSourceLabel,
-} from './events';
+import { buildTvlSpikeEvents, normalizeEventPoints, tvlSpikeEventSourceLabel } from './events';
 import { downloadTextFile, seriesToCsv } from './export';
 import { resolveDefiLlamaBaseUrl } from './proxy';
 import { kickOnchainHealthProbe } from './health';
 import { instrumentCacheKey } from './keys';
 import { errMessage } from '../utils/errors';
-import type {
-  EventPoint,
-  OnchainInstrument,
-  OnchainSeriesAttachment,
-  TimePoint,
-} from './types';
+import type { EventPoint, OnchainInstrument, OnchainSeriesAttachment, TimePoint } from './types';
 
 /** Max simultaneous on-chain series on the chart. */
 export const MAX_ONCHAIN_SERIES = 8;
@@ -98,6 +89,10 @@ export interface OnchainSeriesRow extends OnchainSeriesAttachment {
   lastTvl?: number | null;
 }
 
+/**
+ * Reactive state of the on-chain manager: attached series, protocol search, and the
+ * event-marker plane, plus legacy alias fields kept equal for panel/chart readers.
+ */
 export interface OnchainManagerState {
   /** Attached chart series (Phase 1 name). */
   attachments: OnchainSeriesRow[];
@@ -166,15 +161,8 @@ function attachmentId(): string {
   return `ocs_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function sameProtocolMetric(
-  a: OnchainInstrument,
-  protocolId: string,
-  metric: string,
-): boolean {
-  return (
-    normalizeProtocolSlug(a.protocolId || '') === protocolId &&
-    (a.metric || '') === metric
-  );
+function sameProtocolMetric(a: OnchainInstrument, protocolId: string, metric: string): boolean {
+  return normalizeProtocolSlug(a.protocolId || '') === protocolId && (a.metric || '') === metric;
 }
 
 /** Write both `attachments` and `series` to the same row list. */
@@ -215,24 +203,17 @@ function toRow(
   base: OnchainSeriesAttachment,
   extras?: Partial<OnchainSeriesRow>,
 ): OnchainSeriesRow {
-  const key =
-    extras?.key ||
-    normalizeProtocolSlug(base.instrument.protocolId || '') ||
-    base.id;
+  const key = extras?.key || normalizeProtocolSlug(base.instrument.protocolId || '') || base.id;
   return {
     ...base,
     provider: extras?.provider ?? base.providerId,
     key,
-    lastTvl:
-      extras?.lastTvl !== undefined
-        ? extras.lastTvl
-        : lastTvlFromPoints(base.points),
+    lastTvl: extras?.lastTvl !== undefined ? extras.lastTvl : lastTvlFromPoints(base.points),
   };
 }
 
-export type AttachDefiLlamaArg =
-  | string
-  | { slug: string; name?: string; tvl?: number };
+/** `attachDefiLlamaTvl` input: a bare slug, or a search hit carrying its display name. */
+export type AttachDefiLlamaArg = string | { slug: string; name?: string; tvl?: number };
 
 /**
  * Fetch DefiLlama TVL for a protocol and attach (or refresh) a chart series.
@@ -293,10 +274,8 @@ export async function attachDefiLlamaTvl(
     throw new Error(msg);
   }
 
-  const pendingId =
-    existingIdx >= 0 ? state.attachments[existingIdx]!.id : attachmentId();
-  const color =
-    existingIdx >= 0 ? state.attachments[existingIdx]!.color : nextColor();
+  const pendingId = existingIdx >= 0 ? state.attachments[existingIdx]!.id : attachmentId();
+  const color = existingIdx >= 0 ? state.attachments[existingIdx]!.color : nextColor();
 
   if (existingIdx >= 0) {
     patchSeriesRow(pendingId, {
@@ -354,8 +333,7 @@ export async function attachDefiLlamaTvl(
       /* cache optional */
     }
 
-    const prevVisible =
-      existingIdx >= 0 ? state.attachments[existingIdx]!.visible : true;
+    const prevVisible = existingIdx >= 0 ? state.attachments[existingIdx]!.visible : true;
 
     const attachment = toRow(
       {
@@ -444,11 +422,7 @@ export function exportAllOnchainSeriesCsv(): void {
   }));
   const csv = seriesToCsv(payload);
   const stamp = new Date().toISOString().slice(0, 10);
-  downloadTextFile(
-    `axis-onchain-series-${stamp}.csv`,
-    csv,
-    'text/csv;charset=utf-8',
-  );
+  downloadTextFile(`axis-onchain-series-${stamp}.csv`, csv, 'text/csv;charset=utf-8');
 }
 
 /**
@@ -467,8 +441,7 @@ export function setOnchainEvents(
       s.events = normalized;
       s.eventsLoading = false;
       s.eventsError = null;
-      s.eventSourceLabel =
-        label != null && String(label).trim() ? String(label).trim() : null;
+      s.eventSourceLabel = label != null && String(label).trim() ? String(label).trim() : null;
     }),
   );
   notifyOnchainEventsLoaded(normalized, {
@@ -526,17 +499,11 @@ export async function loadTvlSpikeEventsFromAttachment(
     }
     const points = Array.isArray(row.points) ? row.points : [];
     if (points.length < 2) {
-      throw new Error(
-        `Attachment "${row.label || id}" has insufficient TVL points for spikes`,
-      );
+      throw new Error(`Attachment "${row.label || id}" has insufficient TVL points for spikes`);
     }
 
     const protocolLabel =
-      row.instrument?.symbol ||
-      row.label ||
-      row.key ||
-      row.instrument?.protocolId ||
-      '';
+      row.instrument?.symbol || row.label || row.key || row.instrument?.protocolId || '';
 
     const events = buildTvlSpikeEvents(points, {
       thresholdPct,
@@ -631,9 +598,7 @@ export function _resetOnchainManagerState(): void {
  * @internal test helper — seed attachments without network (TVL spike tests).
  * Mirrors into both `attachments` and `series`.
  */
-export function _seedOnchainAttachmentsForTests(
-  rows: OnchainSeriesRow[],
-): void {
+export function _seedOnchainAttachmentsForTests(rows: OnchainSeriesRow[]): void {
   setSeriesRows(Array.isArray(rows) ? rows : []);
 }
 

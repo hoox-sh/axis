@@ -68,6 +68,10 @@ export function _resetEngineStaleNoticeForTests(): void {
   staleLoggedSig = '';
 }
 
+/**
+ * What the staleness broker needs to log and repair one series: chart identity, the engine's
+ * newest bar, a short reason, and the engine endpoint/key/window to re-provision from.
+ */
 export interface StaleEngineSeriesNotice {
   /** Venue id (canonical, lowercase) of the chart series. */
   exchange: string;
@@ -134,13 +138,6 @@ export function engineSeriesStale(input: {
 }
 
 /**
- * Report a stale engine series and repair it in the background.
- *
- * Never throws and never blocks: the caller keeps whatever the chart already
- * holds (the fresher local series) while the engine's series is re-provisioned;
- * the next snapshot/tick paints the healed window.
- */
-/**
  * A script axis jumped while the chart did not. Ask the broker to upload the
  * local window. The in-memory session is dropped when that upload lands.
  */
@@ -158,11 +155,14 @@ export function noteEngineAxisBehindChart(engineLast: number, chartLast: number)
   axisBehindAt = now;
   const symbol = String(store.symbol || '');
   const interval = String(store.interval || '1m');
-  const exchange = String(store.exchange || 'binance').trim().toLowerCase() || 'binance';
+  const exchange =
+    String(store.exchange || 'binance')
+      .trim()
+      .toLowerCase() || 'binance';
   let endpoint = String(store.endpoint || '');
   try {
     const cfg = getActiveEngineConfig() || {};
-    endpoint = String(cfg.endpoint || endpoint);
+    endpoint = String(cfg['endpoint'] || endpoint);
   } catch {
     /* engine config is optional */
   }
@@ -180,7 +180,17 @@ export function noteEngineAxisBehindChart(engineLast: number, chartLast: number)
   }
 }
 
-export function noteChartSeriesHole(engineTimes: readonly number[], chartBars: readonly Bar[]): void {
+/**
+ * Reports a hole in the engine's bar-time axis (not just a stale tip) when the chart itself
+ * has no matching hole, so a fresh-looking series with missing minutes still gets repaired.
+ *
+ * @param engineTimes Engine bar-time axis in unix seconds, as returned with the run.
+ * @param chartBars Bars the chart currently holds, used as the baseline gap count.
+ */
+export function noteChartSeriesHole(
+  engineTimes: readonly number[],
+  chartBars: readonly Bar[],
+): void {
   const interval = String(store.interval || '1m');
   const axisGap = internalGapBars(
     engineTimes.map((time) => ({ time })),
@@ -189,13 +199,16 @@ export function noteChartSeriesHole(engineTimes: readonly number[], chartBars: r
   const chartGap = internalGapBars(chartBars, interval);
   if (axisGap < ENGINE_SERIES_GAP_BARS || axisGap <= chartGap + ENGINE_SERIES_GAP_BARS) return;
   const symbol = String(store.symbol || '');
-  const exchange = String(store.exchange || 'binance').trim().toLowerCase() || 'binance';
+  const exchange =
+    String(store.exchange || 'binance')
+      .trim()
+      .toLowerCase() || 'binance';
   let endpoint = String(store.endpoint || '');
   let apiKey = '';
   try {
     const cfg = getActiveEngineConfig() || {};
-    endpoint = String(cfg.endpoint || endpoint);
-    apiKey = String(cfg.apiKey || '');
+    endpoint = String(cfg['endpoint'] || endpoint);
+    apiKey = String(cfg['apiKey'] || '');
   } catch {
     /* engine config is optional */
   }
@@ -218,6 +231,17 @@ export function noteChartSeriesHole(engineTimes: readonly number[], chartBars: r
   });
 }
 
+/**
+ * Report a stale engine series and repair it in the background.
+ *
+ * Never throws and never blocks: the caller keeps whatever the chart already
+ * holds (the fresher local series) while the engine's series is re-provisioned;
+ * the next snapshot/tick paints the healed window. Logging and telemetry are
+ * throttled per series + reason by {@link ENGINE_STALE_LOG_MIN_MS}.
+ *
+ * @param opts Series identity, engine tip, human reason and the repair target; an empty
+ * `repair.endpoint` records the notice but skips the broker call.
+ */
 export function noteStaleEngineSeries(opts: StaleEngineSeriesNotice): void {
   let seriesKey = '';
   try {

@@ -29,12 +29,12 @@ import { createStore } from 'solid-js/store';
 
 /** Splash / settle phases for one chart generation. */
 export type ChartReadinessPhase =
-  | 'ready'
-  | 'loading-data'
-  | 'binding-engine'
-  | 'applying-scripts'
-  | 'error';
+  'ready' | 'loading-data' | 'binding-engine' | 'applying-scripts' | 'error';
 
+/**
+ * Progress snapshot for one chart generation: phase, identity, and script
+ * settle counts that the full-chart splash renders.
+ */
 export interface ChartReadinessState {
   /** Monotonic generation; matches {@link beginChartReadiness} / load race token. */
   generation: number;
@@ -128,6 +128,12 @@ export function isChartReadinessBlocking(): boolean {
   return readiness.phase !== 'ready';
 }
 
+/**
+ * Guard for async work started for a load race token.
+ *
+ * @param generation generation captured when the work started
+ * @returns true only while `generation` is non-zero and still the active one
+ */
 export function chartReadinessStillCurrent(generation: number): boolean {
   return generation > 0 && generation === readiness.generation;
 }

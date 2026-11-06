@@ -116,12 +116,12 @@ function isInstalledPlugin(x: unknown): x is InstalledPlugin {
   if (!x || typeof x !== 'object') return false;
   const o = x as Record<string, unknown>;
   return (
-    typeof o.url === 'string' &&
-    o.url.trim() !== '' &&
-    typeof o.id === 'string' &&
-    o.id.trim() !== '' &&
-    typeof o.kind === 'string' &&
-    o.kind.trim() !== ''
+    typeof o['url'] === 'string' &&
+    o['url'].trim() !== '' &&
+    typeof o['id'] === 'string' &&
+    o['id'].trim() !== '' &&
+    typeof o['kind'] === 'string' &&
+    o['kind'].trim() !== ''
   );
 }
 
@@ -211,7 +211,7 @@ function seedPyneAgentConfig(pluginId: string, href: string): void {
   // componentConfig() merges the canonical bag under the legacy bare-id bag
   // (legacy wins) — treat an endpoint in either as already configured.
   const legacy = (store.pluginsConfig?.['pyne-agent'] || {}) as Record<string, unknown>;
-  if (String(prev.endpoint || '').trim() || String(legacy.endpoint || '').trim()) return;
+  if (String(prev['endpoint'] || '').trim() || String(legacy['endpoint'] || '').trim()) return;
   let endpoint = '';
   const trimmed = href.trim();
   if (/^https?:\/\//i.test(trimmed)) {
@@ -258,6 +258,12 @@ export function migratePyneAgentPluginUrl(url: string): string {
   return href;
 }
 
+/**
+ * Persisted install list, filtered to entries that carry a non-empty url, id
+ * and kind, with whitespace trimmed.
+ *
+ * @returns Install entries in stored order (empty when nothing is installed)
+ */
 export function getInstalledPlugins(): InstalledPlugin[] {
   return readInstalled();
 }
@@ -265,9 +271,61 @@ export function getInstalledPlugins(): InstalledPlugin[] {
 function asPlugin(mod: unknown): Record<string, unknown> | null {
   if (!mod || typeof mod !== 'object') return null;
   const m = mod as Record<string, unknown>;
-  const p = (m.default || m.plugin || m) as Record<string, unknown>;
+  const p = (m['default'] || m['plugin'] || m) as Record<string, unknown>;
   if (!p || typeof p !== 'object') return null;
   return p;
+}
+
+/**
+ * Per-kind guards for URL plugins.
+ *
+ * A dynamic plugin is a plain module object, so the registry contracts cannot be
+ * proven by assignment. Each guard mirrors the field checks in
+ * {@link loadPluginFromUrl} — the same `String(...).trim()` normalisation the
+ * loader already applies to `id` / `kind`, plus the required method — so the
+ * validated object is narrowed instead of cast. Optional members (`name`,
+ * `family`, `slots`, …) keep their registry defaults.
+ */
+function isSourcePlugin(p: Record<string, unknown>): p is Record<string, unknown> & SourcePlugin {
+  return (
+    String(p['kind'] || '').trim() === 'source' &&
+    String(p['id'] || '').trim() !== '' &&
+    typeof p['fetchHistorical'] === 'function'
+  );
+}
+
+function isStreamPlugin(p: Record<string, unknown>): p is Record<string, unknown> & StreamPlugin {
+  return (
+    String(p['kind'] || '').trim() === 'stream' &&
+    String(p['id'] || '').trim() !== '' &&
+    typeof p['start'] === 'function'
+  );
+}
+
+function isEnginePlugin(p: Record<string, unknown>): p is Record<string, unknown> & EnginePlugin {
+  return (
+    String(p['kind'] || '').trim() === 'engine' &&
+    String(p['id'] || '').trim() !== '' &&
+    typeof p['run'] === 'function'
+  );
+}
+
+function isDatasetPlugin(p: Record<string, unknown>): p is Record<string, unknown> & DatasetPlugin {
+  return (
+    String(p['kind'] || '').trim() === 'dataset' &&
+    String(p['id'] || '').trim() !== '' &&
+    typeof p['fetchDataset'] === 'function'
+  );
+}
+
+function isComponentPlugin(
+  p: Record<string, unknown>,
+): p is Record<string, unknown> & ComponentPlugin {
+  return (
+    String(p['kind'] || '').trim() === 'component' &&
+    String(p['id'] || '').trim() !== '' &&
+    typeof p['mount'] === 'function'
+  );
 }
 
 /** Map legacy Vite-dev paths to production static paths under public/plugins/. */
@@ -299,7 +357,8 @@ export function assertSafePluginUrl(href: string): void {
     return;
   }
 
-  const scheme = schemeMatch[1];
+  // The regex guarantees capture group 1, so '' never reaches the checks below.
+  const scheme = schemeMatch[1] ?? '';
   if (BLOCKED_SCHEMES.has(scheme)) {
     throw new Error('Plugin URL scheme not allowed');
   }
@@ -486,6 +545,22 @@ async function importPluginModule(href: string): Promise<unknown> {
   }
 }
 
+/**
+ * Install one plugin module from a URL.
+ *
+ * Normalizes and policy-checks the URL, dynamic-imports it, validates the
+ * kind's required method **before** registering, then registers and persists
+ * the entry. Anything that fails after registration rolls the registry back,
+ * so a rejected install never leaves a half-registered plugin.
+ *
+ * @param url Plugin module URL — relative/same-origin, an allowlisted remote
+ *   host, or a JS `data:` fixture in dev
+ * @returns The persisted install entry (`url`, `id`, `name`, `kind`)
+ * @throws When the URL is empty or blocked by policy, the import fails
+ *   (CORS/network/HTML body), the module exports no plugin object, `id` or
+ *   `kind` is missing, the kind's required method is absent, or the kind is
+ *   `storage` (URL storage is not supported yet)
+ */
 export async function loadPluginFromUrl(url: string): Promise<InstalledPlugin> {
   ensureBuiltins();
   const href = migratePyneAgentPluginUrl(normalizePluginUrl(typeof url === 'string' ? url : ''));
@@ -496,27 +571,27 @@ export async function loadPluginFromUrl(url: string): Promise<InstalledPlugin> {
   const p = asPlugin(mod);
   if (!p) throw new Error('Module did not export a plugin object');
 
-  const id = String(p.id || '').trim();
-  const name = String(p.name || id).trim() || id;
-  const kind = String(p.kind || '').trim();
-  const description = p.description ? String(p.description) : '';
+  const id = String(p['id'] || '').trim();
+  const name = String(p['name'] || id).trim() || id;
+  const kind = String(p['kind'] || '').trim();
+  const description = p['description'] ? String(p['description']) : '';
 
   if (!id || !kind) throw new Error('Plugin needs id and kind');
 
   // Validate before registering so a reject never leaves a half-registered plugin
   if (kind === 'source') {
-    if (typeof p.fetchHistorical !== 'function') {
+    if (typeof p['fetchHistorical'] !== 'function') {
       throw new Error('Source plugin needs fetchHistorical()');
     }
   } else if (kind === 'stream') {
-    if (typeof p.start !== 'function') throw new Error('Stream plugin needs start()');
+    if (typeof p['start'] !== 'function') throw new Error('Stream plugin needs start()');
   } else if (kind === 'engine') {
-    if (typeof p.run !== 'function') throw new Error('Engine plugin needs run()');
+    if (typeof p['run'] !== 'function') throw new Error('Engine plugin needs run()');
   } else if (kind === 'dataset') {
-    if (typeof p.fetchDataset !== 'function')
+    if (typeof p['fetchDataset'] !== 'function')
       throw new Error('Dataset plugin needs fetchDataset()');
   } else if (kind === 'component') {
-    if (typeof p.mount !== 'function') throw new Error('Component plugin needs mount()');
+    if (typeof p['mount'] !== 'function') throw new Error('Component plugin needs mount()');
   } else if (kind === 'storage') {
     throw new Error(
       'Custom storage plugins via URL are not supported yet (use built-in local/cloud)',
@@ -528,15 +603,20 @@ export async function loadPluginFromUrl(url: string): Promise<InstalledPlugin> {
   let registered = false;
   try {
     if (kind === 'source') {
-      registerDynamicSource(p as unknown as SourcePlugin);
+      if (!isSourcePlugin(p)) throw new Error('Source plugin needs fetchHistorical()');
+      registerDynamicSource(p);
     } else if (kind === 'stream') {
-      registerDynamicStream(p as unknown as StreamPlugin);
+      if (!isStreamPlugin(p)) throw new Error('Stream plugin needs start()');
+      registerDynamicStream(p);
     } else if (kind === 'engine') {
-      registerDynamicEngine(p as unknown as EnginePlugin);
+      if (!isEnginePlugin(p)) throw new Error('Engine plugin needs run()');
+      registerDynamicEngine(p);
     } else if (kind === 'dataset') {
-      registerDynamicDataset(p as unknown as DatasetPlugin);
+      if (!isDatasetPlugin(p)) throw new Error('Dataset plugin needs fetchDataset()');
+      registerDynamicDataset(p);
     } else if (kind === 'component') {
-      const component = p as unknown as ComponentPlugin;
+      if (!isComponentPlugin(p)) throw new Error('Component plugin needs mount()');
+      const component = p;
       registry.registerComponent(component);
       seedPyneAgentConfig(id, href);
       // init is status-only. The Agent panel mounts the chat when it opens.
@@ -577,7 +657,16 @@ export async function loadPluginFromUrl(url: string): Promise<InstalledPlugin> {
   }
 }
 
-export function removePlugin(id: string, kind?: string) {
+/**
+ * Unregister an installed plugin and drop it from the persisted install list.
+ *
+ * With no `kind`, the first stored entry with that id decides the kind; an id
+ * that is not in the list is unregistered from every kind.
+ *
+ * @param id Plugin id to remove
+ * @param kind Optional kind, when the same id is installed under several
+ */
+export function removePlugin(id: string, kind?: string): void {
   const list = readInstalled();
   const entry = kind
     ? list.find((x) => x.id === id && x.kind === kind)

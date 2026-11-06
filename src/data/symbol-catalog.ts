@@ -38,9 +38,11 @@ import { fetchKrakenInstruments } from './venues/kraken';
 import { fetchOkxInstruments } from './venues/okx';
 import { getJson, setJson } from '../utils/storage';
 
+/** Venue whose instrument catalog feeds the Symbol modal (DEX and unknown sources → `generic`). */
 export type SymbolVenue =
   'binance' | 'okx' | 'bybit' | 'coinbase' | 'kraken' | 'mexc' | 'gecko' | 'generic';
 
+/** One tradeable instrument as the modal needs it: load symbol, base/quote, display label. */
 export type SymbolEntry = {
   /** AXIS load form (e.g. BTCUSDT, ETH-USD for Coinbase product-ish). */
   symbol: string;
@@ -50,6 +52,10 @@ export type SymbolEntry = {
   display: string;
 };
 
+/**
+ * Result of a catalog load. `fromCache` and `fallback` are independent: a stale
+ * cache can be served with an `error`, and fallback majors are never cached.
+ */
 export type SymbolCatalogResult = {
   venue: SymbolVenue;
   label: string;
@@ -89,6 +95,10 @@ const VENUE_LABEL: Record<SymbolVenue, string> = {
   generic: 'Popular majors',
 };
 
+/**
+ * Human label for a venue (`binance` → `Binance`); unknown ids fall back to the
+ * raw id so the modal never renders an empty heading.
+ */
 export function venueLabel(venue: SymbolVenue): string {
   return VENUE_LABEL[venue] || venue;
 }
@@ -127,7 +137,13 @@ function saveCache(id: string, symbols: SymbolEntry[]): void {
   setJson(cacheKey(id), { ts: Date.now(), symbols });
 }
 
-/** Compact pair → BASEQUOTE (AXIS binance/okx/bybit form). */
+/**
+ * Concatenate base + quote into the compact AXIS load form (`BTC` + `USDT` →
+ * `BTCUSDT`), uppercased with non-alphanumerics stripped.
+ *
+ * @param base - Base asset, e.g. `btc`.
+ * @param quote - Quote asset, e.g. `usdt`.
+ */
 export function compactPair(base: string, quote: string): string {
   return `${base}${quote}`.toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
@@ -231,10 +247,10 @@ async function fetchCcxtMarkets(exchange: string, gateway: GatewayMode): Promise
   for (const row of rows) {
     if (!row || typeof row !== 'object') continue;
     const r = row as Record<string, unknown>;
-    if (r.active === false) continue;
-    const unified = String(r.symbol || '').trim();
-    const base = String(r.base || '').trim();
-    const quote = String(r.quote || '').trim();
+    if (r['active'] === false) continue;
+    const unified = String(r['symbol'] || '').trim();
+    const base = String(r['base'] || '').trim();
+    const quote = String(r['quote'] || '').trim();
     if (unified.includes('/')) {
       const [b, q] = unified.split('/');
       out.push({

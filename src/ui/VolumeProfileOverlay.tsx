@@ -75,7 +75,7 @@ interface VpLayout {
  * Price-pane aligned volume profile strip (histogram + POC/VA summary).
  * Mounted by ChartHost when bars exist; renders only when toggle is on.
  */
-export const VolumeProfileOverlay: Component = () => {
+export const VolumeProfileOverlay: Component = () : JSX.Element => {
   const [tick, setTick] = createSignal(0);
   const [paneBox, setPaneBox] = createSignal<{
     top: number;

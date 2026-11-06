@@ -50,14 +50,9 @@ export type ChartHit = {
 
 /** Menu body. `chart` is the host when the pointer misses every pane. */
 export type ChartMenuKind =
-  | 'plot'
-  | 'price-scale'
-  | 'time-scale'
-  | 'pane'
-  | 'script'
-  | 'chart'
-  | 'drawing';
+  'plot' | 'price-scale' | 'time-scale' | 'pane' | 'script' | 'chart' | 'drawing';
 
+/** Script entry rendered in a chart menu: identity, visibility, table placement. */
 export type ChartMenuScript = {
   id: string;
   name: string;
@@ -66,6 +61,10 @@ export type ChartMenuScript = {
   tablesInBottom?: boolean;
 };
 
+/**
+ * Everything {@link buildChartMenu} needs: the hit kind plus scale flags and
+ * the drawing / script / pane the menu targets.
+ */
 export type ChartMenuContext = {
   kind: ChartMenuKind;
   paneLabel?: string;
@@ -130,7 +129,8 @@ export function classifyChartPointer(
   const inRightScale = plot.rightScale > 0 && clientX >= plotRight && clientX < hostRight;
   const inLeftScale = plot.left > 0 && clientX < plotLeft && clientX >= best.host.left;
   if (inRightScale || inLeftScale) region = 'price-scale';
-  else if (plot.timeScale > 0 && clientY >= plotBottom && clientY < hostBottom) region = 'time-scale';
+  else if (plot.timeScale > 0 && clientY >= plotBottom && clientY < hostBottom)
+    region = 'time-scale';
 
   return { paneId: best.paneId, paneType: best.paneType, region };
 }
@@ -180,7 +180,10 @@ function shotRows(): ContextMenuEntry[] {
   return [item('shot.save', 'Save screenshot'), item('shot.copy', 'Copy screenshot')];
 }
 
-function scaleRows(scale: NonNullable<ChartMenuContext['scale']>, withReset: boolean): ContextMenuEntry[] {
+function scaleRows(
+  scale: NonNullable<ChartMenuContext['scale']>,
+  withReset: boolean,
+): ContextMenuEntry[] {
   const rows: ContextMenuEntry[] = [];
   if (withReset) rows.push(item('scale.reset', 'Reset price scale'));
   rows.push(
@@ -199,9 +202,7 @@ function labelRows(scale: NonNullable<ChartMenuContext['scale']>): ContextMenuEn
 }
 
 function chartTypeRows(current: string | undefined): ContextMenuEntry[] {
-  return CHART_TYPES.map((t) =>
-    item(`type.${t.id}`, t.label, { checked: t.id === current }),
-  );
+  return CHART_TYPES.map((t) => item(`type.${t.id}`, t.label, { checked: t.id === current }));
 }
 
 function scriptRows(script: ChartMenuScript): ContextMenuEntry[] {
@@ -300,13 +301,20 @@ export function buildChartMenu(ctx: ChartMenuContext): ContextMenuEntry[] {
   if (ctx.priceLabel) {
     rows.push(sep('sep-plot-price'), ...priceRows(ctx.priceLabel));
   }
-  rows.push(sep('sep-plot-type'), ...chartTypeRows(ctx.chartType), sep('sep-plot-shot'), ...shotRows(), ...settingsRow());
+  rows.push(
+    sep('sep-plot-type'),
+    ...chartTypeRows(ctx.chartType),
+    sep('sep-plot-shot'),
+    ...shotRows(),
+    ...settingsRow(),
+  );
   return rows;
 }
 
 /** Aria label for the open menu. */
 export function chartMenuLabel(ctx: ChartMenuContext): string {
-  if (ctx.kind === 'drawing') return ctx.drawing?.label ? `${ctx.drawing.label} menu` : 'Drawing menu';
+  if (ctx.kind === 'drawing')
+    return ctx.drawing?.label ? `${ctx.drawing.label} menu` : 'Drawing menu';
   if (ctx.kind === 'script') return ctx.script?.name ? `${ctx.script.name} menu` : 'Script menu';
   if (ctx.kind === 'price-scale') return 'Price scale menu';
   if (ctx.kind === 'time-scale') return 'Time scale menu';

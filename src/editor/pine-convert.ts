@@ -165,7 +165,16 @@ const TF_IDENTS = [
   'period',
 ];
 const DOW_NAMES = ['wednesday', 'thursday', 'saturday', 'tuesday', 'monday', 'friday', 'sunday'];
-const PLOT_STYLES = ['linebr', 'stepline', 'histogram', 'columns', 'circles', 'area', 'cross', 'line'];
+const PLOT_STYLES = [
+  'linebr',
+  'stepline',
+  'histogram',
+  'columns',
+  'circles',
+  'area',
+  'cross',
+  'line',
+];
 const HLINE_STYLES = ['dashed', 'dotted', 'solid'];
 const INPUT_TYPE_TO_FN: Record<string, string> = {
   integer: 'int',
@@ -188,6 +197,7 @@ const REQUEST_ALT = REQUEST_FNS.map(escapeRe).join('|');
 const BARE_REQUEST_RE = new RegExp(`(?<![\\w.])(${REQUEST_ALT})\\s*\\(`, 'g');
 const STUDY_RE = /(?<![\w.])study\s*\(/g;
 
+/** Outcome of {@link convertPineToV6Result}: source, versions, and whether it changed. */
 export type PineConvertResult = {
   source: string;
   fromVersion: number;
@@ -195,10 +205,13 @@ export type PineConvertResult = {
   changed: boolean;
 };
 
+/** Declared `//@version=N`, or null when the header is missing/unparseable. */
 export function detectPineVersion(source: string): number | null {
   const m = VERSION_RE.exec(source);
-  if (!m) return null;
-  return Number.parseInt(m[2], 10);
+  const digits = m?.[2];
+  // VERSION_RE's (\d+) group always captures when the pattern matches.
+  if (digits === undefined) return null;
+  return Number.parseInt(digits, 10);
 }
 
 function escapeRe(s: string): string {
@@ -257,7 +270,10 @@ function mapLine(line: string, transform: (span: string) => string): string {
 
 function mapCodeSpans(source: string, transform: (span: string) => string): string {
   const endedNl = source.endsWith('\n');
-  const body = source.split('\n').map((line) => mapLine(line, transform)).join('\n');
+  const body = source
+    .split('\n')
+    .map((line) => mapLine(line, transform))
+    .join('\n');
   return endedNl && !body.endsWith('\n') ? `${body}\n` : body;
 }
 
@@ -398,7 +414,10 @@ function convertV3Span(span: string): string {
   s = s.replace(/(?<![\w.])tickerid(?![\w.(])/g, 'syminfo.tickerid');
   s = s.replace(/(?<![\w.])ticker(?![\w.])/g, 'syminfo.ticker');
   s = s.replace(/(?<![\w.])n(?![\w.])/g, 'bar_index');
-  s = s.replace(new RegExp(`\\bstyle\\s*=\\s*(${PLOT_STYLES.join('|')})\\b`, 'g'), 'style=plot.style_$1');
+  s = s.replace(
+    new RegExp(`\\bstyle\\s*=\\s*(${PLOT_STYLES.join('|')})\\b`, 'g'),
+    'style=plot.style_$1',
+  );
   s = s.replace(
     new RegExp(`\\blinestyle\\s*=\\s*(${HLINE_STYLES.join('|')})\\b`, 'g'),
     'linestyle=hline.style_$1',
@@ -513,7 +532,11 @@ function convertV4ToV5(source: string): string {
   return rewriteNamedCalls(text, 'input', (inner) => {
     const m = INPUT_TYPE_RE.exec(inner);
     if (!m) return null;
-    const fn = INPUT_TYPE_TO_FN[m[1]];
+    const type = m[1];
+    // INPUT_TYPE_RE is built from INPUT_TYPE_TO_FN's keys, so both lookups hit.
+    if (type === undefined) return null;
+    const fn = INPUT_TYPE_TO_FN[type];
+    if (fn === undefined) return null;
     let stripped = (inner.slice(0, m.index) + inner.slice(m.index + m[0].length)).trim();
     stripped = stripped.replace(/,\s*,/g, ', ').replace(/^[,\s]+|[,\s]+$/g, '');
     return `input.${fn}(${stripped})`;
@@ -546,6 +569,12 @@ export function convertPineToV6(source: string): string {
   return convertPineToV6Result(source).source;
 }
 
+/**
+ * Convert older Pine toward v6 and report what changed.
+ *
+ * @param source Full script; a missing `//@version=` is treated as v1.
+ * @returns The rewritten source, detected/declared version, and change flag.
+ */
 export function convertPineToV6Result(source: string): PineConvertResult {
   const declared = detectPineVersion(source);
   const fromVersion = declared == null ? 1 : declared;

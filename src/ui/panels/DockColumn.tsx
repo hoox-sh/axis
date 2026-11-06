@@ -52,7 +52,7 @@ const HOST: Record<Side, string> = {
  * shrinks between columns. Tablet left/right: overlay the chart (negative
  * margin, in-flow width cancelled) so the plot stays full-width.
  */
-export const DockColumn: Component<{ side: Side }> = (props) => {
+export const DockColumn: Component<{ side: Side }> = (props) : JSX.Element => {
   const ids = createMemo(() => {
     // Track full chrome map so open/dock changes re-measure the column
     void store.panelChrome;
@@ -135,7 +135,7 @@ export const DockColumn: Component<{ side: Side }> = (props) => {
 };
 
 /** Float/window portal host (panels use position:fixed). */
-export const FloatRoot: Component = () => (
+export const FloatRoot: Component = () : JSX.Element => (
   <div id={DOCK_HOST_IDS.float} class="axis-float-root" aria-hidden="true" />
 );
 
@@ -145,7 +145,7 @@ type OverlaySide = Extract<PanelDock, 'left' | 'right' | 'bottom'>;
  * Inner-edge overlay host — absolute on the chart cell so overlay panels
  * keep dock layout but do not shrink the plot.
  */
-export const ChartOverlayHost: Component<{ side: OverlaySide }> = (props) => (
+export const ChartOverlayHost: Component<{ side: OverlaySide }> = (props) : JSX.Element => (
   <div
     id={OVERLAY_HOST_IDS[props.side]}
     class={`axis-chart-overlay-host axis-chart-overlay-host-${props.side}`}

@@ -6,19 +6,30 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
 import { CapabilityBadges } from '../ui/plugin-badges';
 
-const meta: Meta = { title: 'Plugins/Badges', tags: ['autodocs'], parameters: { layout: 'padded' } };
+const meta: Meta = {
+  title: 'Plugins/Badges',
+  tags: ['autodocs'],
+  parameters: { layout: 'padded' },
+};
 export default meta;
 
+/** Badge rows for built-in vs third-party source / engine / stream plugins. */
 export const BuiltIn: StoryObj = {
   render: () => (
     <div style={{ display: 'flex', 'flex-direction': 'column', gap: '8px' }}>
       <CapabilityBadges kind="source" builtIn active capabilities={{ needsNetwork: true }} />
       <CapabilityBadges kind="engine" builtIn capabilities={{}} />
-      <CapabilityBadges kind="stream" builtIn={false} active capabilities={{ needsAuth: true, needsProxy: true }} />
+      <CapabilityBadges
+        kind="stream"
+        builtIn={false}
+        active
+        capabilities={{ needsAuth: true, needsProxy: true }}
+      />
     </div>
   ),
 };
 
+/** Single compact badge strip, as used in dense plugin lists. */
 export const Compact: StoryObj = {
   render: () => (
     <CapabilityBadges kind="source" builtIn active compact capabilities={{ needsNetwork: true }} />

@@ -47,7 +47,7 @@ export class IndentWidget extends WidgetType {
     super();
   }
 
-  eq(other: IndentWidget) {
+  override eq(other: IndentWidget) {
     return other.run === this.run;
   }
 

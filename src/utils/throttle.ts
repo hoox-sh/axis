@@ -34,6 +34,10 @@
  * @module utils/throttle
  */
 
+/**
+ * Leading-edge rate guard: `allow(key)` reports whether a call may proceed and
+ * stamps that key's window when it does.
+ */
 export interface Throttle {
   /**
    * @param key Identity of the thing being guarded. Repeat calls with the same

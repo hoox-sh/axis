@@ -31,8 +31,16 @@ import { resolveSessionPayload } from '../engines/session-delta';
 import { classifySeqGap } from './frames';
 import { v1Count } from './v1/metrics';
 
+/**
+ * Where a subscription's apply stands: nothing yet, a full snapshot requested, a full applied,
+ * or deltas only after that full.
+ */
 export type ApplyState = 'idle' | 'requesting' | 'full-applied' | 'delta-only';
 
+/**
+ * Enforces apply ordering for one subscription: deltas are refused until a full result was
+ * applied, and `shouldApplyFull` reports whether a full is still owed.
+ */
 export class Redesign2ApplyStateManager {
   private state: ApplyState = 'idle';
   private fullAppliedCount = 0;
@@ -67,6 +75,10 @@ export class Redesign2ApplyStateManager {
   }
 }
 
+/**
+ * A `full` frame's payload as the applier caches it: plot/series columns plus the `count` that
+ * identifies the session version.
+ */
 export interface DeltaApplierFull {
   plots?: Record<string, unknown[]>;
   series?: Record<string, unknown[]>;
@@ -74,6 +86,10 @@ export interface DeltaApplierFull {
   [key: string]: unknown;
 }
 
+/**
+ * A `delta` frame from `/ws/live`: `seq` for gap detection plus the tail block
+ * (`base_index` / `count` / `tail_len`) the positional splice requires.
+ */
 export interface DeltaApplierDelta {
   seq: number;
   base_index: number;
@@ -153,6 +169,10 @@ export function readTimeList(value: unknown): number[] | null {
   return out;
 }
 
+/**
+ * Result of applying a delta: the merged payload with its execution context, or a refusal
+ * telling the caller to request a fresh full snapshot (`needs-full` / `delta-before-full`).
+ */
 export type DeltaApplyOutcome =
   | {
       ok: true;
@@ -191,7 +211,7 @@ export class Redesign2DeltaApplier {
     const ackFrom = typeof delta.seqAckFrom === 'number' ? delta.seqAckFrom : undefined;
     const raw = classifySeqGap(this.appliedSeq, delta.seq);
     const gap = classifySeqGap(this.appliedSeq, delta.seq, ackFrom);
-    const cachedContext = this.cache.executionContext;
+    const cachedContext = this.cache['executionContext'];
     if (gap.kind === 'duplicate') {
       // Defensive: don't replay a stale snapshot context if delta carries fresh info
       const deltaCtx = (delta as { executionContext?: ExecutionContext }).executionContext;
@@ -208,7 +228,7 @@ export class Redesign2DeltaApplier {
       return { ok: false, reason: 'needs-full' };
     }
     const dropped = raw.kind === 'gap' ? delta.seq - this.appliedSeq - 1 : 0;
-    const cachedCount = typeof this.cache.count === 'number' ? this.cache.count : undefined;
+    const cachedCount = typeof this.cache['count'] === 'number' ? this.cache['count'] : undefined;
     const { seq: _seq, seqAckFrom: _ack, base_index, count, tail_len, forming, ...rest } = delta;
     void _seq;
     void _ack;

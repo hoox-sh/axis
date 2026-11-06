@@ -50,6 +50,10 @@ import type { Bar } from '../store/types';
 import type { StrategyEvent } from './strategy';
 import { type RunWindowAxis, looksLikeBarIndex, timeForBarIndex } from './window-axis';
 
+/**
+ * Normalization prefs: bars for price lookup, whether order telemetry is kept,
+ * the fill model, and the run axis that makes a bare `bar_index` resolvable.
+ */
 export interface NormalizeOptions {
   /** OHLCV bars for price lookup when event.ohlc is empty */
   bars?: Bar[];
@@ -172,10 +176,10 @@ function resolvePrice(raw: Record<string, unknown>, bars?: Bar[]): number | unde
   }
 
   // Explicit price — but skip 0 so we can fall through to ohlc/bars
-  const explicit = finitePrice(raw.price);
+  const explicit = finitePrice(raw['price']);
   if (explicit != null) return explicit;
 
-  const ohlc = raw.ohlc;
+  const ohlc = raw['ohlc'];
   if (Array.isArray(ohlc) && ohlc.length >= 4) {
     // Prefer close (market fill at bar close under process_orders_on_close)
     const close = finitePrice(ohlc[3]);
@@ -193,16 +197,16 @@ function resolvePrice(raw: Record<string, unknown>, bars?: Bar[]): number | unde
   }
 
   const barTime =
-    typeof raw.bar_time === 'number'
-      ? raw.bar_time
-      : typeof raw.time === 'number'
-        ? raw.time
-        : raw.bar_time != null
-          ? Number(raw.bar_time)
-          : raw.time != null
-            ? Number(raw.time)
+    typeof raw['bar_time'] === 'number'
+      ? raw['bar_time']
+      : typeof raw['time'] === 'number'
+        ? raw['time']
+        : raw['bar_time'] != null
+          ? Number(raw['bar_time'])
+          : raw['time'] != null
+            ? Number(raw['time'])
             : undefined;
-  const barIndexRaw = raw.bar_index ?? raw.barIndex;
+  const barIndexRaw = raw['bar_index'] ?? raw['barIndex'];
   const barIndex =
     typeof barIndexRaw === 'number'
       ? barIndexRaw
@@ -224,23 +228,23 @@ export function normalizeStrategyEvent(
   opts: NormalizeOptions = {},
 ): StrategyEvent {
   const r = raw as Record<string, unknown>;
-  const kind = String(r.kind ?? r.type ?? r.event ?? '').toLowerCase();
+  const kind = String(r['kind'] ?? r['type'] ?? r['event'] ?? '').toLowerCase();
   let time: number | undefined =
-    typeof r.time === 'number' && Number.isFinite(r.time)
-      ? r.time
-      : typeof r.bar_time === 'number' && Number.isFinite(r.bar_time)
-        ? r.bar_time
+    typeof r['time'] === 'number' && Number.isFinite(r['time'])
+      ? r['time']
+      : typeof r['bar_time'] === 'number' && Number.isFinite(r['bar_time'])
+        ? r['bar_time']
         : undefined;
   if (time != null) time = alignTimeToBars(time, opts.bars);
-  const dir = String(r.dir ?? r.direction ?? '').toLowerCase() || undefined;
+  const dir = String(r['dir'] ?? r['direction'] ?? '').toLowerCase() || undefined;
   const price = resolvePrice(r, opts.bars);
 
-  const fromEntry = r.from_entry ?? r.fromEntry ?? r.entry_id ?? r.entryId ?? undefined;
+  const fromEntry = r['from_entry'] ?? r['fromEntry'] ?? r['entry_id'] ?? r['entryId'] ?? undefined;
   const qty =
-    typeof r.qty === 'number' && Number.isFinite(r.qty)
-      ? r.qty
-      : r.qty != null && Number.isFinite(Number(r.qty))
-        ? Number(r.qty)
+    typeof r['qty'] === 'number' && Number.isFinite(r['qty'])
+      ? r['qty']
+      : r['qty'] != null && Number.isFinite(Number(r['qty']))
+        ? Number(r['qty'])
         : undefined;
 
   return {
@@ -251,11 +255,11 @@ export function normalizeStrategyEvent(
     dir,
     direction: dir,
     time,
-    bar_time: typeof r.bar_time === 'number' ? alignTimeToBars(r.bar_time, opts.bars) : time,
-    bar_index: typeof r.bar_index === 'number' ? r.bar_index : undefined,
+    bar_time: typeof r['bar_time'] === 'number' ? alignTimeToBars(r['bar_time'], opts.bars) : time,
+    bar_index: typeof r['bar_index'] === 'number' ? r['bar_index'] : undefined,
     price,
     qty,
-    id: r.id != null ? String(r.id) : undefined,
+    id: r['id'] != null ? String(r['id']) : undefined,
     // strategy.exit(id, from_entry) — keep entry key for pairing
     from_entry: fromEntry != null ? String(fromEntry) : undefined,
   };
@@ -276,7 +280,7 @@ export function isNoFillCloseEvent(ev: StrategyEvent | Record<string, unknown>):
     kind === 'closelong' ||
     kind === 'closeshort';
   if (!isCloseOrExit) return false;
-  const raw = (ev as Record<string, unknown>).qty;
+  const raw = (ev as Record<string, unknown>)['qty'];
   if (raw == null || raw === '') return false;
   const qty = typeof raw === 'number' ? raw : Number(raw);
   return Number.isFinite(qty) && qty <= 0;
@@ -438,6 +442,10 @@ export function applyStrategyFills(
   });
 }
 
+/**
+ * One LWC series marker for a fill: bar time, vertical position, color, arrow
+ * shape and the `Long 1` / `X 1` label.
+ */
 export interface TradeMarker {
   time: number;
   position: 'aboveBar' | 'belowBar' | 'inBar';
@@ -478,7 +486,13 @@ function timeOfEvent(ev: StrategyEvent): number | undefined {
 /** Entry id to match on exit/close: prefer from_entry / entry_id (strategy.exit). */
 export function resolveExitMatchId(ev: StrategyEvent): string {
   const r = ev as Record<string, unknown>;
-  const from = r.from_entry ?? r.fromEntry ?? r.entry_id ?? r.entryId ?? r.from_id ?? r.fromId;
+  const from =
+    r['from_entry'] ??
+    r['fromEntry'] ??
+    r['entry_id'] ??
+    r['entryId'] ??
+    r['from_id'] ??
+    r['fromId'];
   if (from != null && String(from).length) return String(from);
   if (ev.id != null && String(ev.id).length) return String(ev.id);
   return '_default';

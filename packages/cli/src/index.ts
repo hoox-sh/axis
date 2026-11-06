@@ -5,50 +5,61 @@
  * AXIS CLI — install, doctor, setup, deploy, secrets, health.
  */
 
-import { fileURLToPath } from "node:url";
-import { resolve } from "node:path";
-import { Command } from "commander";
-import { theme } from "./utils/theme.js";
-import { commanderExitCode, handleError, printWarn, type GlobalOpts } from "./utils/format.js";
-import { collectPreflight } from "./utils/preflight.js";
-import { ownPackage } from "./own-package.js";
-import { registerInstall } from "./commands/install.js";
-import { registerDoctor } from "./commands/doctor.js";
-import { registerSetup } from "./commands/setup.js";
-import { registerDeploy } from "./commands/deploy.js";
-import { registerSecrets } from "./commands/secrets.js";
-import { registerHealth } from "./commands/health.js";
-import { registerPrewarm } from "./commands/prewarm.js";
-import { registerUsage } from "./commands/usage.js";
-import { registerKeys } from "./commands/keys.js";
-import { registerDev } from "./commands/dev.js";
-import { registerWhoami } from "./commands/whoami.js";
-import { registerMcp } from "./commands/mcp.js";
+import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
+import { Command } from 'commander';
+import { theme } from './utils/theme.js';
+import { commanderExitCode, handleError, printWarn, type GlobalOpts } from './utils/format.js';
+import { collectPreflight } from './utils/preflight.js';
+import { ownPackage } from './own-package.js';
+import { registerInstall } from './commands/install.js';
+import { registerDoctor } from './commands/doctor.js';
+import { registerSetup } from './commands/setup.js';
+import { registerDeploy } from './commands/deploy.js';
+import { registerSecrets } from './commands/secrets.js';
+import { registerHealth } from './commands/health.js';
+import { registerPrewarm } from './commands/prewarm.js';
+import { registerUsage } from './commands/usage.js';
+import { registerKeys } from './commands/keys.js';
+import { registerDev } from './commands/dev.js';
+import { registerWhoami } from './commands/whoami.js';
+import { registerMcp } from './commands/mcp.js';
 
 const pkgVersion: string = ownPackage.version;
 
+/**
+ * Builds the commander program, registers every command, and parses `process.argv`.
+ *
+ * `exitOverride()` is installed before commands are registered so commander's own
+ * errors (bad flag, help, version) surface here and get mapped to an exit code
+ * instead of calling `process.exit` mid-parse. A `preAction` hook runs the local
+ * install self-check, printing warnings only — it can never block a command.
+ *
+ * @returns Resolves when the parsed command finished; calls `process.exit` on a
+ *   commander error or through {@link handleError}.
+ */
 export async function main(): Promise<void> {
   const program = new Command();
 
   program
-    .name("axis")
+    .name('axis')
     .description(
-      "AXIS CLI — install, doctor, Worker setup (D1/KV/OAuth), keys, secrets, deploy, health, MCP"
+      'AXIS CLI — install, doctor, Worker setup (D1/KV/OAuth), keys, secrets, deploy, health, MCP',
     )
     .version(pkgVersion)
-    .option("--json", "JSON output where supported")
-    .option("--quiet", "Minimal output")
-    .option("-y, --yes", "Skip confirmations")
+    .option('--json', 'JSON output where supported')
+    .option('--quiet', 'Minimal output')
+    .option('-y, --yes', 'Skip confirmations')
     .showHelpAfterError()
     .addHelpText(
-      "beforeAll",
-      theme.heading("\nAXIS CLI") +
-        theme.dim("  charting PWA · Cloudflare Worker · setup & deploy\n")
+      'beforeAll',
+      theme.heading('\nAXIS CLI') +
+        theme.dim('  charting PWA · Cloudflare Worker · setup & deploy\n'),
     )
     .addHelpText(
-      "afterAll",
+      'afterAll',
       `
-${theme.dim("Typical flow:")}
+${theme.dim('Typical flow:')}
   axis install
   axis doctor
   axis setup --prod --github-client-id Ov23li…
@@ -59,18 +70,18 @@ ${theme.dim("Typical flow:")}
   axis mcp config --key pn_…     # MCP client snippet
   # axis mcp --key pn_…          # stdio MCP proxy
 
-${theme.dim("Cloud script storage:")}
+${theme.dim('Cloud script storage:')}
   axis setup kv                 # bind API_KEYS (required when D1 is on)
   axis setup d1 --remote        # scripts + versions schema
   axis keys create              # mint pn_… for Settings
   axis keys validate --key pn_…
 
-${theme.dim("Secrets (prod):")}
+${theme.dim('Secrets (prod):')}
   axis secret put ADMIN_TOKEN
   axis secret put EXTERNAL_BACKEND
 
-${theme.dim("Docs:")} https://hoox.sh/axis/docs
-`
+${theme.dim('Docs:')} https://hoox.sh/axis/docs
+`,
     );
 
   // exitOverride before subcommand registration so commander errors from
@@ -78,7 +89,8 @@ ${theme.dim("Docs:")} https://hoox.sh/axis/docs
   program.exitOverride();
 
   registerInstall(program);
-  registerDoctor(program);  registerSetup(program);
+  registerDoctor(program);
+  registerSetup(program);
   registerDeploy(program);
   registerSecrets(program);
   registerHealth(program);
@@ -94,7 +106,7 @@ ${theme.dim("Docs:")} https://hoox.sh/axis/docs
   // --quiet / --json (machine-readable contract). Warnings only — preflight
   // must never block or fail a command. Note: commander does not bind `this`
   // usefully inside hooks — read options from the hook's first argument.
-  program.hook("preAction", (hookCommand: Command) => {
+  program.hook('preAction', (hookCommand: Command) => {
     const opts = (hookCommand?.opts?.() ?? {}) as GlobalOpts;
     const quiet = Boolean(opts.quiet || opts.json);
     void collectPreflight()

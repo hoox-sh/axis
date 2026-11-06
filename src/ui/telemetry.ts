@@ -78,7 +78,7 @@ export function classifyTransport(
     if (lower === 'server' || lower.includes('server')) {
       const cfg =
         (store.pluginsConfig?.['engine:server'] as { preferWs?: boolean } | undefined) ||
-        (store.pluginsConfig?.server as { preferWs?: boolean } | undefined);
+        (store.pluginsConfig?.['server'] as { preferWs?: boolean } | undefined);
       if (cfg?.preferWs === false) return 'rest';
       return 'ws';
     }

@@ -43,11 +43,21 @@ import {
 } from './types';
 import { krakenKeyVariants, krakenTickerPair, toUsdt, venueFetch } from './spot';
 
+/** Kraken public REST origin; the signer also targets its private paths. */
 export const KRAKEN_BASE = 'https://api.kraken.com';
 
 /** Public OHLC path. */
 export const KRAKEN_OHLC_PATH = '/0/public/OHLC';
 
+/**
+ * Build a Kraken signed GET: `API-Sign` is base64(HMAC-SHA512(path +
+ * SHA256(nonce + postdata))) keyed by the base64-decoded secret. The nonce and
+ * query become the postdata.
+ *
+ * @param input - Path, query, and vault secrets; `timestampMs` overrides the nonce.
+ * @returns Absolute URL plus `API-Key` / `API-Sign` headers.
+ * @throws DOMException when the secret is not valid base64 or Web Crypto rejects it.
+ */
 export async function signKraken(input: SignInput): Promise<SignedRequest> {
   const nonce = String(resolveTimestampMs(input));
   const params: Record<string, string | number | undefined> = {

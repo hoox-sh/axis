@@ -27,12 +27,21 @@ import { createSignal } from 'solid-js';
 
 const [chartSettingsOpen, setChartSettingsOpenSignal] = createSignal(false);
 
+/** Reactive read of the floating chart-settings panel visibility (ephemeral). */
 export { chartSettingsOpen };
 
+/**
+ * Show or hide the floating chart-settings panel.
+ *
+ * @param open - Desired visibility.
+ */
 export function setChartSettingsOpen(open: boolean): void {
   setChartSettingsOpenSignal(open);
 }
 
+/**
+ * Flip the floating chart-settings panel open/closed.
+ */
 export function toggleChartSettings(): void {
   setChartSettingsOpenSignal((prev) => !prev);
 }

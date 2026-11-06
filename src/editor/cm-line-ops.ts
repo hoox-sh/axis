@@ -170,6 +170,12 @@ function mapSelection(sel: EditorSelection, shift: number): EditorSelection {
 
 /** View wrappers — dispatch the pure specs above. */
 
+/**
+ * Apply {@link toggleLineCommentSpec} to the view.
+ *
+ * @param view Editor view whose selected lines are commented or uncommented.
+ * @returns `true` when a transaction was dispatched, `false` when there was nothing to do.
+ */
 export function toggleLineComment(view: EditorView): boolean {
   const spec = toggleLineCommentSpec(view.state);
   if (!spec) return false;
@@ -177,6 +183,7 @@ export function toggleLineComment(view: EditorView): boolean {
   return true;
 }
 
+/** Duplicate every selected line (or the current line); false when nothing changed. */
 export function duplicateLine(view: EditorView): boolean {
   const spec = duplicateLineSpec(view.state);
   if (!spec) return false;
@@ -184,6 +191,7 @@ export function duplicateLine(view: EditorView): boolean {
   return true;
 }
 
+/** Delete every selected line (or the current line); false when nothing changed. */
 export function deleteLine(view: EditorView): boolean {
   const spec = deleteLineSpec(view.state);
   if (!spec) return false;
@@ -191,6 +199,13 @@ export function deleteLine(view: EditorView): boolean {
   return true;
 }
 
+/**
+ * Move selected lines up (`-1`) or down (`1`).
+ *
+ * @param view Editor to dispatch on.
+ * @param dir `-1` up, `1` down.
+ * @returns False when the selection is already at that edge.
+ */
 export function moveLine(view: EditorView, dir: -1 | 1): boolean {
   const spec = moveLineSpec(view.state, dir);
   if (!spec) return false;

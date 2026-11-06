@@ -34,7 +34,7 @@ import { onchainManagerState } from '../onchain/manager';
 import { isPhoneViewport } from '../ui/responsive';
 
 /** Root chart area for the main app shell (replaces bare ChartHost). */
-export const ChartWorkspace: Component = () => {
+export const ChartWorkspace: Component = () : JSX.Element => {
   // Keep registry active id aligned with store (boot + external loads)
   createEffect(() => {
     const id = store.chartLayout?.activeId;

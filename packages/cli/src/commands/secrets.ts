@@ -5,12 +5,12 @@
  * axis secret — wrangler secret put / list / delete wrappers
  */
 
-import { existsSync } from "node:fs";
-import type { Command } from "commander";
-import { getPaths } from "../utils/paths.js";
-import { runWrangler } from "../utils/run.js";
-import { commentTomlVar, hasTomlVar } from "../services/wrangler-toml.js";
-import { promptLine, promptSecret } from "../utils/prompt.js";
+import { existsSync } from 'node:fs';
+import type { Command } from 'commander';
+import { getPaths } from '../utils/paths.js';
+import { runWrangler } from '../utils/run.js';
+import { commentTomlVar, hasTomlVar } from '../services/wrangler-toml.js';
+import { promptLine, promptSecret } from '../utils/prompt.js';
 import {
   CLIError,
   ExitCode,
@@ -21,23 +21,23 @@ import {
   printWarn,
   wrapAction,
   type GlobalOpts,
-} from "../utils/format.js";
+} from '../utils/format.js';
 
 /** Production-oriented secrets commonly set on the AXIS Worker. */
 export const KNOWN_SECRETS = [
-  "ADMIN_TOKEN",
-  "EXTERNAL_BACKEND",
-  "GITHUB_OAUTH_CLIENT_ID",
-  "GITLAB_OAUTH_CLIENT_ID",
+  'ADMIN_TOKEN',
+  'EXTERNAL_BACKEND',
+  'GITHUB_OAUTH_CLIENT_ID',
+  'GITLAB_OAUTH_CLIENT_ID',
 ] as const;
 
 function requireWorkerToml(): string {
   const paths = getPaths();
   if (!existsSync(paths.wranglerToml)) {
     throw new CLIError(
-      "worker/wrangler.toml missing",
+      'worker/wrangler.toml missing',
       ExitCode.NOT_FOUND,
-      "Run: axis setup worker"
+      'Run: axis setup worker',
     );
   }
   return paths.worker;
@@ -65,17 +65,17 @@ export function requiresDeployRetry(detail: string): boolean {
 async function confirmOrThrow(
   opts: GlobalOpts,
   question: string,
-  manualFix: string
+  manualFix: string,
 ): Promise<void> {
   if (opts.yes) return;
   if (process.stdin.isTTY) {
     const answer = (await promptLine(`${question} [y/N] `)).trim().toLowerCase();
-    if (answer === "y" || answer === "yes") return;
-    throw new CLIError("Aborted (no changes made)", ExitCode.ERROR, manualFix);
+    if (answer === 'y' || answer === 'yes') return;
+    throw new CLIError('Aborted (no changes made)', ExitCode.ERROR, manualFix);
   }
   printWarn(
-    "Non-interactive stdin: proceeding without confirmation. Pass --yes to silence this, or run in a TTY to confirm.",
-    opts.quiet
+    'Non-interactive stdin: proceeding without confirmation. Pass --yes to silence this, or run in a TTY to confirm.',
+    opts.quiet,
   );
 }
 
@@ -84,10 +84,7 @@ async function confirmOrThrow(
  * The deploy is a side effect — it runs only after confirmation (or --yes).
  * Returns true when a deploy ran.
  */
-export async function dropPlaintextVarForSecret(
-  opts: GlobalOpts,
-  key: string
-): Promise<boolean> {
+export async function dropPlaintextVarForSecret(opts: GlobalOpts, key: string): Promise<boolean> {
   const paths = getPaths();
   if (!existsSync(paths.wranglerToml) || !hasTomlVar(paths.wranglerToml, key)) {
     return false;
@@ -95,15 +92,15 @@ export async function dropPlaintextVarForSecret(
   await confirmOrThrow(
     opts,
     `[vars] ${key} must be commented out and deployed before 'secret put' (Cloudflare 10053). Deploy now?`,
-    `Comment ${key} out of worker/wrangler.toml, then: axis deploy worker && axis secret put ${key}`
+    `Comment ${key} out of worker/wrangler.toml, then: axis deploy worker && axis secret put ${key}`,
   );
   commentTomlVar(paths.wranglerToml, key);
   printWarn(
     `[vars] ${key} commented out — Cloudflare forbids the same name as a var and a secret (10053).`,
-    opts.quiet
+    opts.quiet,
   );
-  printInfo("Deploying Worker to drop the plaintext binding…", opts.quiet);
-  const deployed = await runWrangler(paths.worker, ["deploy"], {
+  printInfo('Deploying Worker to drop the plaintext binding…', opts.quiet);
+  const deployed = await runWrangler(paths.worker, ['deploy'], {
     inherit: !opts.quiet,
     throwOnError: false,
   });
@@ -111,59 +108,69 @@ export async function dropPlaintextVarForSecret(
     throw new CLIError(
       `Failed to drop [vars] ${key} (deploy exit ${deployed.code})`,
       ExitCode.ERROR,
-      deployed.stderr || deployed.stdout || "Comment the var in wrangler.toml, then: axis deploy worker"
+      deployed.stderr ||
+        deployed.stdout ||
+        'Comment the var in wrangler.toml, then: axis deploy worker',
     );
   }
-  printOk("Plaintext var dropped", opts.quiet);
+  printOk('Plaintext var dropped', opts.quiet);
   return true;
 }
 
-async function readSecretValue(
-  opts: GlobalOpts,
-  value?: string
-): Promise<string> {
-  if (value != null && value !== "") return value;
+async function readSecretValue(opts: GlobalOpts, value?: string): Promise<string> {
+  if (value != null && value !== '') return value;
   if (!process.stdin.isTTY) {
     const chunks: Buffer[] = [];
     for await (const c of process.stdin) chunks.push(c as Buffer);
-    return Buffer.concat(chunks).toString("utf-8").replace(/\n$/, "");
+    return Buffer.concat(chunks).toString('utf-8').replace(/\n$/, '');
   }
-  printInfo("Enter secret value (input hidden)…", opts.quiet);
-  return (await promptSecret("Secret: ")).trim();
+  printInfo('Enter secret value (input hidden)…', opts.quiet);
+  return (await promptSecret('Secret: ')).trim();
 }
 
 async function wranglerSecretPut(
   worker: string,
   key: string,
   secretValue: string,
-  opts: GlobalOpts
+  opts: GlobalOpts,
 ) {
-  const input = secretValue.endsWith("\n") ? secretValue : `${secretValue}\n`;
-  return runWrangler(worker, ["secret", "put", key], {
+  const input = secretValue.endsWith('\n') ? secretValue : `${secretValue}\n`;
+  return runWrangler(worker, ['secret', 'put', key], {
     inherit: !opts.quiet,
     throwOnError: false,
     input,
   });
 }
 
-export async function secretPut(
-  opts: GlobalOpts,
-  name: string,
-  value?: string
-): Promise<void> {
+/**
+ * Sets a Worker secret, first clearing any plaintext `[vars]` binding of the same
+ * name.
+ *
+ * Cloudflare rejects a name that is both a var and a secret (10053), so the toml
+ * entry is commented out and the Worker redeployed before `secret put` runs. If
+ * `secret put` still reports 10053 the deploy is retried once; any other failure is
+ * surfaced unchanged, because a blind redeploy would hide the real error.
+ *
+ * @param opts - Global flags; `yes` skips the confirmation prompt, `json` prints
+ *   `{ ok, name }`, `quiet` hides wrangler output.
+ * @param name - Secret name, trimmed; empty is rejected.
+ * @param value - Explicit value; when omitted the value is read from stdin (piped)
+ *   or prompted without echo.
+ * @throws {CLIError} `ExitCode.NOT_FOUND` without `worker/wrangler.toml`,
+ *   `ExitCode.INVALID_USAGE` for an empty name or empty value, `ExitCode.ERROR`
+ *   when the user declines the deploy or wrangler fails.
+ */
+export async function secretPut(opts: GlobalOpts, name: string, value?: string): Promise<void> {
   const worker = requireWorkerToml();
   const key = name.trim();
   if (!key) {
-    throw new CLIError("Secret name required", ExitCode.INVALID_USAGE);
+    throw new CLIError('Secret name required', ExitCode.INVALID_USAGE);
   }
 
   printHeader(`AXIS secret put ${key}`, opts.quiet);
   const secretValue = await readSecretValue(opts, value);
   if (!secretValue) {
-    throw new CLIError(
-      "Empty secret value (pipe a value or pass --value)",
-      ExitCode.INVALID_USAGE
-    );
+    throw new CLIError('Empty secret value (pipe a value or pass --value)', ExitCode.INVALID_USAGE);
   }
 
   await dropPlaintextVarForSecret(opts, key);
@@ -179,13 +186,14 @@ export async function secretPut(
       throw new CLIError(
         `wrangler secret put ${key} failed (exit ${put.code})`,
         ExitCode.ERROR,
-        detail.trim() || "Check wrangler auth and retry (no deploy was run)"
+        detail.trim() || 'Check wrangler auth and retry (no deploy was run)',
       );
-    }    printWarn(
-      "Cloudflare 10053: name still a plaintext var on the live Worker. Deploying to drop it, then retrying…",
-      opts.quiet
+    }
+    printWarn(
+      'Cloudflare 10053: name still a plaintext var on the live Worker. Deploying to drop it, then retrying…',
+      opts.quiet,
     );
-    const deployed = await runWrangler(worker, ["deploy"], {
+    const deployed = await runWrangler(worker, ['deploy'], {
       inherit: !opts.quiet,
       throwOnError: false,
     });
@@ -193,7 +201,7 @@ export async function secretPut(
       throw new CLIError(
         `Failed to drop remote [vars] ${key} (deploy exit ${deployed.code})`,
         ExitCode.ERROR,
-        deployed.stderr || deployed.stdout
+        deployed.stderr || deployed.stdout,
       );
     }
     put = await wranglerSecretPut(worker, key, secretValue, opts);
@@ -206,32 +214,36 @@ export async function secretPut(
       ExitCode.ERROR,
       isBindingNameInUse(detail)
         ? `Binding already a [vars] entry. Comment ${key} out of wrangler.toml, then: axis deploy worker && axis secret put ${key}`
-        : "Comment any matching [vars] key, deploy the Worker, and retry."
+        : 'Comment any matching [vars] key, deploy the Worker, and retry.',
     );
   }
 
   printOk(`Secret ${key} set`, opts.quiet);
-  if (key === "ADMIN_TOKEN") {
+  if (key === 'ADMIN_TOKEN') {
     printInfo(
-      "axis keys create cannot read Worker secrets — pass --admin-token, AXIS_ADMIN_TOKEN, or enter it when prompted.",
-      opts.quiet
+      'axis keys create cannot read Worker secrets — pass --admin-token, AXIS_ADMIN_TOKEN, or enter it when prompted.',
+      opts.quiet,
     );
   }
   if (opts.json) printJson({ ok: true, name: key });
 }
 
+/**
+ * Lists secret **names** on the deployed Worker (values are never returned).
+ *
+ * @param opts - Global flags; `json` parses wrangler's JSON and falls back to
+ *   `{ ok: true, raw }` when it is not JSON.
+ * @throws {CLIError} `ExitCode.NOT_FOUND` without `worker/wrangler.toml`, or
+ *   `ExitCode.ERROR` when wrangler cannot list.
+ */
 export async function secretList(opts: GlobalOpts): Promise<void> {
   const worker = requireWorkerToml();
-  printHeader("AXIS secrets", opts.quiet);
-  const r = await runWrangler(worker, ["secret", "list"], {
+  printHeader('AXIS secrets', opts.quiet);
+  const r = await runWrangler(worker, ['secret', 'list'], {
     throwOnError: false,
   });
   if (r.code !== 0) {
-    throw new CLIError(
-      "Failed to list secrets",
-      ExitCode.ERROR,
-      r.stderr || r.stdout
-    );
+    throw new CLIError('Failed to list secrets', ExitCode.ERROR, r.stderr || r.stdout);
   }
   if (opts.json) {
     try {
@@ -241,54 +253,66 @@ export async function secretList(opts: GlobalOpts): Promise<void> {
     }
     return;
   }
-  process.stdout.write(r.stdout || "(no secrets)\n");
-  printInfo(
-    `Common keys: ${KNOWN_SECRETS.join(", ")}`,
-    opts.quiet
-  );
+  process.stdout.write(r.stdout || '(no secrets)\n');
+  printInfo(`Common keys: ${KNOWN_SECRETS.join(', ')}`, opts.quiet);
 }
 
-export async function secretDelete(
-  opts: GlobalOpts,
-  name: string
-): Promise<void> {
+/**
+ * Deletes a Worker secret.
+ *
+ * With `--yes` the wrangler confirmation is answered on stdin; otherwise wrangler
+ * prompts on the inherited terminal.
+ *
+ * @param opts - Global flags; `yes` auto-confirms, `json` prints
+ *   `{ ok, deleted }`.
+ * @param name - Secret name, trimmed; empty is rejected.
+ * @throws {CLIError} `ExitCode.NOT_FOUND` without `worker/wrangler.toml`,
+ *   `ExitCode.INVALID_USAGE` for an empty name, or `ExitCode.ERROR` when wrangler
+ *   fails.
+ */
+export async function secretDelete(opts: GlobalOpts, name: string): Promise<void> {
   const worker = requireWorkerToml();
   const key = name.trim();
   if (!key) {
-    throw new CLIError("Secret name required", ExitCode.INVALID_USAGE);
+    throw new CLIError('Secret name required', ExitCode.INVALID_USAGE);
   }
   printHeader(`AXIS secret delete ${key}`, opts.quiet);
-  await runWrangler(worker, ["secret", "delete", key], {
+  await runWrangler(worker, ['secret', 'delete', key], {
     inherit: !opts.quiet,
-    input: opts.yes ? "y\n" : undefined,
+    input: opts.yes ? 'y\n' : undefined,
   });
   printOk(`Secret ${key} deleted`, opts.quiet);
   if (opts.json) printJson({ ok: true, deleted: key });
 }
 
+/**
+ * Registers `axis secret` (aliased `axis secrets`) with `put`, `list`, `delete`.
+ *
+ * @param program - Root commander program to attach the command group to.
+ */
 export function registerSecrets(program: Command): void {
   const secret = program
-    .command("secret")
-    .alias("secrets")
-    .description("Manage Worker secrets (wrangler secret *)");
+    .command('secret')
+    .alias('secrets')
+    .description('Manage Worker secrets (wrangler secret *)');
 
   secret
-    .command("put <name>")
-    .description("Set a secret (value via --value, stdin, or prompt)")
-    .option("--value <value>", "Secret value (prefer stdin for CI)")
+    .command('put <name>')
+    .description('Set a secret (value via --value, stdin, or prompt)')
+    .option('--value <value>', 'Secret value (prefer stdin for CI)')
     .action(async function (this: Command, name: string) {
       const o = this.optsWithGlobals() as GlobalOpts & { value?: string };
       await wrapAction((g) => secretPut(g, name, o.value)).call(this);
     });
 
   secret
-    .command("list")
-    .description("List secret names on the Worker")
+    .command('list')
+    .description('List secret names on the Worker')
     .action(wrapAction(secretList));
 
   secret
-    .command("delete <name>")
-    .description("Delete a secret")
+    .command('delete <name>')
+    .description('Delete a secret')
     .action(async function (this: Command, name: string) {
       await wrapAction((g) => secretDelete(g, name)).call(this);
     });

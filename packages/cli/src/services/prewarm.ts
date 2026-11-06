@@ -11,6 +11,13 @@
  * the PYNE base URL and never touches Worker routes.
  */
 
+/**
+ * Normalized result of a prewarm call — always returned, never thrown.
+ *
+ * Failure is reported through `ok: false` plus `error`, so callers can render a
+ * warning instead of aborting. `status` is the HTTP status when a response was
+ * received at all.
+ */
 export type PrewarmResponse = {
   ok: boolean;
   url: string;
@@ -26,13 +33,27 @@ export type PrewarmResponse = {
 };
 
 /** Local pyne Pro API default, matching the server engine's schema default. */
-export const FALLBACK_PYNE_URL = "https://pynescript.online";
+export const FALLBACK_PYNE_URL = 'https://pynescript.online';
 
+/**
+ * Resolves the PYNE Pro API base URL.
+ *
+ * Prefers `AXIS_PYNE_URL` over the hosted default and strips one trailing slash so
+ * callers can append `/compile/prewarm` directly.
+ *
+ * @returns Base URL without a trailing slash; never empty.
+ */
 export function defaultPyneUrl(): string {
   const fromEnv = process.env.AXIS_PYNE_URL?.trim();
-  return (fromEnv || FALLBACK_PYNE_URL).replace(/\/$/, "");
+  return (fromEnv || FALLBACK_PYNE_URL).replace(/\/$/, '');
 }
 
+/**
+ * Body sent to `POST /compile/prewarm`.
+ *
+ * `scripts` is truncated to the backend's 16-source cap and blank entries are
+ * dropped before the request is made.
+ */
 export type PrewarmRequest = {
   /** Pine sources to compile into the IR cache (backend caps at 16). */
   scripts?: readonly string[];
@@ -43,14 +64,30 @@ export type PrewarmRequest = {
 };
 
 function num(v: unknown): number | null {
-  return typeof v === "number" && Number.isFinite(v) ? v : null;
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
 }
 
+/**
+ * Warms a PYNE backend's compile cache by POSTing `/compile/prewarm`.
+ *
+ * Sends the key twice (`X-API-Key` and `Authorization: Bearer`) because the
+ * backend accepts either header, then maps the snake_case response into
+ * {@link PrewarmResponse}. Network, timeout, non-JSON, and HTTP errors are folded
+ * into `ok: false` with an `error` string rather than thrown.
+ *
+ * @param base - Backend base URL; a trailing slash is tolerated. Empty means "no
+ *   backend configured" and returns an error without a request.
+ * @param req - Scripts to warm (blank entries dropped, max 16), `force` to bypass
+ *   the host's warm check, `key` to override `AXIS_PYNE_API_KEY`, and `timeoutMs`
+ *   (default 120 000 ms).
+ * @returns The normalized result; `prewarmMs` is `null` when the host did not
+ *   report a finite duration.
+ */
 export async function prewarmBackend(
   base: string,
-  req: PrewarmRequest = {}
+  req: PrewarmRequest = {},
 ): Promise<PrewarmResponse> {
-  const url = `${String(base || "").replace(/\/$/, "")}/compile/prewarm`;
+  const url = `${String(base || '').replace(/\/$/, '')}/compile/prewarm`;
   const out: PrewarmResponse = {
     ok: false,
     url,
@@ -61,19 +98,19 @@ export async function prewarmBackend(
     scriptsFailed: 0,
     errors: [],
   };
-  if (!String(base || "").trim()) {
-    return { ...out, error: "No backend URL (pass --endpoint or set AXIS_PYNE_URL)" };
+  if (!String(base || '').trim()) {
+    return { ...out, error: 'No backend URL (pass --endpoint or set AXIS_PYNE_URL)' };
   }
 
   const body: Record<string, unknown> = {};
-  const scripts = (req.scripts ?? []).filter((s) => typeof s === "string" && s.trim()).slice(0, 16);
+  const scripts = (req.scripts ?? []).filter((s) => typeof s === 'string' && s.trim()).slice(0, 16);
   if (scripts.length) body.scripts = scripts;
   if (req.force) body.force = true;
 
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  const key = String(req.key || process.env.AXIS_PYNE_API_KEY || "").trim();
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const key = String(req.key || process.env.AXIS_PYNE_API_KEY || '').trim();
   if (key) {
-    headers["X-API-Key"] = key;
+    headers['X-API-Key'] = key;
     headers.Authorization = `Bearer ${key}`;
   }
 
@@ -81,7 +118,7 @@ export async function prewarmBackend(
   const timer = setTimeout(() => controller.abort(), req.timeoutMs ?? 120_000);
   try {
     const res = await fetch(url, {
-      method: "POST",
+      method: 'POST',
       headers,
       body: JSON.stringify(body),
       signal: controller.signal,
@@ -94,17 +131,17 @@ export async function prewarmBackend(
     let parsed: Record<string, unknown> | null = null;
     try {
       const j: unknown = text.trim() ? JSON.parse(text) : null;
-      if (j && typeof j === "object" && !Array.isArray(j)) parsed = j as Record<string, unknown>;
+      if (j && typeof j === 'object' && !Array.isArray(j)) parsed = j as Record<string, unknown>;
     } catch {
       return { ...out, error: `Non-JSON response from ${url}` };
     }
     if (!res.ok) {
-      const message = typeof parsed?.message === "string" ? parsed.message : "";
+      const message = typeof parsed?.message === 'string' ? parsed.message : '';
       return { ...out, error: message || `Prewarm failed (HTTP ${res.status})` };
     }
-    if (!parsed || parsed.status === "error") {
-      const message = typeof parsed?.message === "string" ? parsed.message : "";
-      return { ...out, error: message || "Backend rejected the prewarm request" };
+    if (!parsed || parsed.status === 'error') {
+      const message = typeof parsed?.message === 'string' ? parsed.message : '';
+      return { ...out, error: message || 'Backend rejected the prewarm request' };
     }
     return {
       ...out,
@@ -115,14 +152,14 @@ export async function prewarmBackend(
       scriptsOk: num(parsed.scripts_ok) ?? 0,
       scriptsFailed: num(parsed.scripts_failed) ?? 0,
       errors: Array.isArray(parsed.errors)
-        ? parsed.errors.filter((e): e is string => typeof e === "string")
+        ? parsed.errors.filter((e): e is string => typeof e === 'string')
         : [],
     };
   } catch (err) {
     const raw = err instanceof Error ? err.message : String(err);
     return {
       ...out,
-      error: /abort/i.test(raw) ? "Prewarm timed out" : raw,
+      error: /abort/i.test(raw) ? 'Prewarm timed out' : raw,
     };
   } finally {
     clearTimeout(timer);

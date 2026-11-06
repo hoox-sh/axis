@@ -31,6 +31,11 @@ import { signVenueRequest, type VenueId } from './venues';
 import type { ProviderVenue } from './provider';
 import { resolveMarketWorkerBase } from './market-worker';
 
+/**
+ * One signed GET request: which venue and path to sign, the query params to
+ * include (undefined/empty values are dropped), and the proxy controls. No keys
+ * here — they are read from the session vault.
+ */
 export type SignedFetchOpts = {
   venue: VenueId;
   path: string;

@@ -27,6 +27,7 @@ export type SlotChartApi = {
   timeScale(): unknown;
 };
 
+/** The slice of LWC pane API this host needs (height, stretch, element). */
 export type SlotPaneApi = {
   paneIndex(): number;
   setHeight(height: number): void;
@@ -55,6 +56,12 @@ export class SlotChart {
     return this.chart.timeScale();
   }
 
+  /**
+   * Bind a logical pane id to a pane index, creating a pane when needed.
+   *
+   * @param id logical pane id (`price`, `volume`, `ind_*`)
+   * @returns the pane index; the first id bound always takes index 0
+   */
   bind(id: string): number {
     const existing = this.ids.get(id);
     if (existing != null) return existing;
@@ -68,16 +75,24 @@ export class SlotChart {
     return index;
   }
 
+  /** @returns the pane index bound to `id`, or `undefined` when unbound. */
   indexOf(id: string): number | undefined {
     return this.ids.get(id);
   }
 
+  /**
+   * Set one pane's height.
+   *
+   * @param id logical pane id; unknown ids no-op
+   * @param height CSS pixels
+   */
   setHeight(id: string, height: number): void {
     const index = this.ids.get(id);
     if (index == null) return;
     this.chart.panes()[index]?.setHeight(height);
   }
 
+  /** @returns pane height in CSS px, or 0 when unbound or not yet measured. */
   getHeight(id: string): number {
     const index = this.ids.get(id);
     if (index == null) return 0;
@@ -86,12 +101,19 @@ export class SlotChart {
     return Number.isFinite(height) ? height : 0;
   }
 
+  /**
+   * Set one pane's relative stretch factor.
+   *
+   * @param id logical pane id; unknown ids no-op
+   * @param stretchFactor flex weight against the other panes
+   */
   setStretchFactor(id: string, stretchFactor: number): void {
     const index = this.ids.get(id);
     if (index == null) return;
     this.chart.panes()[index]?.setStretchFactor(stretchFactor);
   }
 
+  /** @returns the pane's DOM element, or `null` when unbound or not rendered. */
   element(id: string): HTMLElement | null {
     const index = this.ids.get(id);
     if (index == null) return null;
@@ -143,6 +165,7 @@ export class SlotChart {
     return 'pane';
   }
 
+  /** Remove the underlying chart and forget every pane binding. */
   destroy(): void {
     this.ids.clear();
     try {

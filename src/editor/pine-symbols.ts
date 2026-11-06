@@ -30,6 +30,7 @@
  * @module editor/pine-symbols
  */
 
+/** Palette section a glyph belongs to (the manager's filter chips). */
 export type PineSymbolCategory =
   | 'insert'
   | 'arrows'
@@ -43,8 +44,10 @@ export type PineSymbolCategory =
   | 'spaces'
   | 'emoji';
 
+/** Where a glyph is safe to use: editor text, chart labels, or both. */
 export type PineSymbolUse = 'editor' | 'chart' | 'both';
 
+/** One insertable glyph plus the metadata the search/filter UI needs. */
 export type PineSymbol = {
   id: string;
   /** Glyph to insert. */
@@ -58,6 +61,7 @@ export type PineSymbol = {
   notes?: string;
 };
 
+/** Category chips (id, label, hint) in display order. */
 export const PINE_SYMBOL_CATEGORIES: Array<{
   id: PineSymbolCategory;
   label: string;
@@ -258,15 +262,37 @@ export const PINE_SYMBOLS: readonly PineSymbol[] = [
   s('em-pin', '📌', 'Pin', 'emoji', { hex: 'U+1F4CC', monoSafe: false, use: 'chart' }),
 ];
 
+/**
+ * Wrap `inner` in double quotes for Pine source.
+ *
+ * @param inner Raw text (e.g. a glyph); backslashes and `"` are escaped.
+ * @returns A double-quoted Pine string literal.
+ */
 export function quotePineString(inner: string): string {
   const escaped = inner.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
   return `"${escaped}"`;
 }
 
+/**
+ * Build a ready-to-paste `plotchar` call that draws `char` below the bar.
+ *
+ * @param char Glyph to plot (quoted with {@link quotePineString}).
+ * @returns One Pine statement; the condition is the literal placeholder `cond`.
+ */
 export function plotcharSnippet(char: string): string {
   return `plotchar(cond, "mark", ${quotePineString(char)}, location.belowbar)`;
 }
 
+/**
+ * Filter the catalog by free text and optional category / monospace constraints.
+ *
+ * Matching is case-insensitive across name, id, hex code, notes, and the glyph
+ * itself; an empty query keeps everything that passes the other filters.
+ *
+ * @param query Search text from the manager input.
+ * @param opts Category (`all` = no filter) and monospace-only toggle.
+ * @returns Matching symbols in catalog order.
+ */
 export function filterPineSymbols(
   query: string,
   opts?: { category?: PineSymbolCategory | 'all'; monoOnly?: boolean },

@@ -29,6 +29,7 @@ import type { Redesign2Frame } from '../../engine/frames';
 import type { WireFrame } from '../../engine/live-wire';
 import type { LiveProxy } from '../../engine/live-ticket';
 
+/** Wall-clock budget for the worker's socket open before it is torn down and retried. */
 export const INGEST_CONNECT_TIMEOUT_MS = 5_000;
 /**
  * After sending `auth`, wait this long for `auth.ok` before retrying.
@@ -41,10 +42,16 @@ export const INGEST_CONNECT_TIMEOUT_MS = 5_000;
  * auth failure — the worker resends auth or reconnects instead of authBlock.
  */
 export const INGEST_AUTH_WAIT_MS = 5_000;
+/** Ping period on the venue socket; a missed pong closes it and triggers reconnect. */
 export const INGEST_HEARTBEAT_MS = 15_000;
+
+/** How long to wait for a pong before treating the socket as dead. */
 export const INGEST_PONG_TIMEOUT_MS = 5_000;
+
+/** Forming-tip coalescing window; folded tips are released at the end of it. */
 export const INGEST_TIP_COALESCE_MS = 16;
 
+/** Messages the main-thread host sends to the ingest worker. */
 export type HostToIngest =
   /** `authToken` rides once on connect and is never echoed back. */
   | {
@@ -57,6 +64,10 @@ export type HostToIngest =
   | { type: 'send'; frame: WireFrame }
   | { type: 'disconnect' };
 
+/**
+ * Messages the ingest worker posts back. Frames are already decoded and
+ * validated there; the host only routes them. The auth token is never echoed.
+ */
 export type IngestToHost =
   | { type: 'status'; status: 'connecting' | 'open' | 'closed' | 'error' }
   | { type: 'open'; first: boolean }

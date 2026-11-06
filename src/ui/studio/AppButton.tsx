@@ -18,12 +18,30 @@
 import { Show, createSignal, onCleanup } from 'solid-js';
 import type { JSX } from 'solid-js';
 
+/** Visual language for the button surface: soft glass, signal accent, or terminal. */
 export type ButtonDesign = 'soft' | 'signal' | 'term';
+/** Semantic color role; maps to the `axd-btn--*` tone classes. */
 export type ButtonTone = 'primary' | 'ghost' | 'danger' | 'success' | 'warning';
+/** Footprint preset; `icon` is the square cell, `md` the orb disc. */
 export type ButtonSize = 'xs' | 'sm' | 'md' | 'lg' | 'icon';
+/** Silhouette: rectangle, chip, circular orb, chamfered CTA, or underline tab. */
 export type ButtonShape = 'rect' | 'pill' | 'orb' | 'cut' | 'tab';
+/** Microfeedback phase rendered by the button; `idle` is the resting state. */
 export type FeedbackState = 'idle' | 'loading' | 'success' | 'error';
 
+/**
+ * Primary app button with the contact → process → outcome feedback contract.
+ *
+ * When `feedback`/`loading` are omitted and `onClick` returns a promise, the
+ * button drives its own `loading` → `success`/`error` state (settling back to
+ * idle after ~900 ms); a synchronous throw settles to `error`. Click events are
+ * stopped from propagating and non-submit buttons prevent the default form
+ * submit. The ripple dot is spawned at the pointer and removed after 500 ms,
+ * skipped when `noRipple` is set or reduced motion is requested.
+ *
+ * @param props - Design/tone/size/shape plus click handler and content.
+ * @returns A `<button>` with spinner, check/error glyph, optional kbd hint, and live dot.
+ */
 export function AppButton(props: {
   design?: ButtonDesign;
   tone?: ButtonTone;
@@ -52,7 +70,7 @@ export function AppButton(props: {
   class?: string;
   onClick?: (e: MouseEvent) => void | Promise<unknown>;
   children?: JSX.Element;
-}) {
+}): JSX.Element {
   const design = () => props.design ?? 'soft';
   const tone = () => props.tone ?? 'ghost';
   const shape = () => props.shape ?? 'rect';

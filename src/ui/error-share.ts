@@ -28,12 +28,7 @@
  * @module ui/error-share
  */
 
-import {
-  store,
-  setStore,
-  appendLog,
-  setStatus,
-} from '../store';
+import { store, setStore, appendLog, setStatus } from '../store';
 import type { LogEntry } from '../store/types';
 import { copyToClipboard } from './clipboard';
 import { createThrottle } from '../utils/throttle';
@@ -62,6 +57,7 @@ function formatErrorMessage(err: unknown, maxLen = 240): string {
   return `${cleaned.slice(0, Math.max(0, maxLen - 1))}…`;
 }
 
+/** Pending toast offer: what to show and the redacted payload it would export. */
 export type ErrorShareOffer = {
   id: string;
   /** Short line shown in the toast */
@@ -71,6 +67,7 @@ export type ErrorShareOffer = {
   at: number;
 };
 
+/** Serialized diagnostic bundle: error, environment, session snapshot, planes, and recent logs. */
 export type ErrorDiagnosticPayload = {
   kind: 'axis-error-diagnostic';
   version: string;
@@ -107,15 +104,13 @@ export type ErrorDiagnosticPayload = {
     pluginsConfig?: Record<string, unknown>;
   };
   planes?: Partial<
-    Record<
-      string,
-      { id?: string; state?: string; transport?: string; error?: string | null }
-    >
+    Record<string, { id?: string; state?: string; transport?: string; error?: string | null }>
   >;
   /** Last N system log lines (truncated) */
   recentLogs?: Array<{ level: string; message: string; source?: string; ts: number }>;
 };
 
+/** Options for {@link buildErrorDiagnosticPayload}: tags plus stack/log truncation limits. */
 export type BuildDiagnosticOpts = {
   source?: string;
   context?: string;
@@ -126,14 +121,14 @@ export type BuildDiagnosticOpts = {
 };
 
 /** Keys dropped from diagnostic dumps (case-insensitive). */
-const SECRET_FIELD_NAMES = new Set([
-  'apikey',
-  'secret',
-  'passphrase',
-  'password',
-  'token',
-]);
+const SECRET_FIELD_NAMES = new Set(['apikey', 'secret', 'passphrase', 'password', 'token']);
 
+/**
+ * Whether a field name is treated as a secret and dropped from diagnostics.
+ *
+ * @param key - Object key from a config/provider snapshot.
+ * @returns `true` for apiKey, secret, passphrase, password, or token (any casing).
+ */
 export function isSecretFieldName(key: string): boolean {
   return SECRET_FIELD_NAMES.has(String(key || '').toLowerCase());
 }
@@ -173,6 +168,13 @@ function cloneJson<T>(value: T): T | undefined {
 }
 
 /** Strip path/query; keep host:port only. */
+/**
+ * Reduce an endpoint to `host[:port]` so diagnostics never carry credentials or
+ * query strings.
+ *
+ * @param endpoint - Full URL or bare host.
+ * @returns Host portion, or `undefined` when the input is empty/unusable.
+ */
 export function endpointHostOnly(endpoint: string | null | undefined): string | undefined {
   if (!endpoint || typeof endpoint !== 'string') return undefined;
   const raw = endpoint.trim();
@@ -265,9 +267,7 @@ export function buildErrorDiagnosticPayload(
       engine: store.engine,
       endpointHost: endpointHostOnly(store.endpoint),
       status: store.status,
-      statusMessage: store.statusMessage
-        ? truncate(String(store.statusMessage), 160)
-        : undefined,
+      statusMessage: store.statusMessage ? truncate(String(store.statusMessage), 160) : undefined,
       theme: store.theme,
       barCount: Array.isArray(store.bars) ? store.bars.length : 0,
       scriptCount: Array.isArray(store.scripts) ? store.scripts.length : 0,
@@ -318,9 +318,7 @@ export function maybeOfferErrorShare(
   if (store.errorShareOffer) return false;
 
   const payload = buildErrorDiagnosticPayload(err, opts);
-  const summary = opts.context
-    ? `${opts.context}: ${msg}`
-    : msg;
+  const summary = opts.context ? `${opts.context}: ${msg}` : msg;
 
   const offer: ErrorShareOffer = {
     id: `errshare_${now.toString(36)}`,
@@ -356,9 +354,7 @@ function downloadJson(filename: string, text: string): void {
  * Accept the current offer: copy JSON to clipboard and download a file.
  * Clears the offer. Returns true when at least one transfer path worked.
  */
-export async function acceptErrorShareOffer(
-  offer?: ErrorShareOffer | null,
-): Promise<boolean> {
+export async function acceptErrorShareOffer(offer?: ErrorShareOffer | null): Promise<boolean> {
   const o = offer ?? (store.errorShareOffer as ErrorShareOffer | null);
   if (!o?.payload) {
     setStore('errorShareOffer', null);

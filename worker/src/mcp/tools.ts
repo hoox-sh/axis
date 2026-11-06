@@ -20,10 +20,19 @@ import {
   jsonText,
   sessionIdFromApiKey,
   type AppInvokeResponse,
+  type JsonSchema,
+  type McpPromptDef,
   type McpToolResult,
 } from './protocol';
 import { errorBody } from '../http';
 
+/**
+ * Everything a tool call needs to reach the rest of the Worker.
+ *
+ * `auth` is the caller's own context, so a proxied request runs with exactly the
+ * caller's key and partition; `executionCtx` is forwarded so proxied handlers can
+ * still use `waitUntil`.
+ */
 export interface ToolContext {
   env: Env;
   origin: string;
@@ -67,7 +76,9 @@ function headerBag(v: unknown): Record<string, string> | undefined {
 }
 
 function suffixPath(base: string, raw: string): string {
-  const s = String(raw || '').trim().replace(/^\/+/, '');
+  const s = String(raw || '')
+    .trim()
+    .replace(/^\/+/, '');
   return s ? `${base}/${s}` : base;
 }
 
@@ -105,7 +116,13 @@ async function bridgeStatus(ctx: ToolContext, session: string): Promise<ProxyRes
     return {
       ok: false,
       status: 503,
-      body: { ...errorBody('NO_MCP_BRIDGE', 'MCP_BRIDGE Durable Object is not bound. Add the binding in wrangler.toml and deploy.'), connected: 0 },
+      body: {
+        ...errorBody(
+          'NO_MCP_BRIDGE',
+          'MCP_BRIDGE Durable Object is not bound. Add the binding in wrangler.toml and deploy.',
+        ),
+        connected: 0,
+      },
       headers: {},
     };
   }
@@ -128,7 +145,8 @@ async function bridgeInvoke(
       ok: false,
       error: {
         code: 'NO_MCP_BRIDGE',
-        message: 'MCP_BRIDGE Durable Object is not bound. Add the binding in wrangler.toml and deploy.',
+        message:
+          'MCP_BRIDGE Durable Object is not bound. Add the binding in wrangler.toml and deploy.',
       },
     };
   }
@@ -154,7 +172,25 @@ function invokeResult(res: AppInvokeResponse): McpToolResult {
   return jsonText(res.result ?? null, true);
 }
 
-export async function callTool(ctx: ToolContext, name: string, argsUnknown: unknown): Promise<McpToolResult> {
+/**
+ * Dispatches one `tools/call` to its implementation.
+ *
+ * Worker-plane tools re-enter this Worker through `proxyWorkerRequest` with the
+ * caller's bearer (so auth, allowlist, and rate limits apply exactly once); app-plane
+ * tools go through the bridge to a connected PWA. Arguments arrive as untrusted JSON
+ * and are coerced per tool.
+ *
+ * @param ctx - Caller env, origin, auth, and execution context.
+ * @param name - Tool name from the catalog; unknown names yield an error result.
+ * @param argsUnknown - Raw `arguments` object from the JSON-RPC request.
+ * @returns A tool result; tool-level failures set `isError` instead of throwing. An
+ *   unexpected throw becomes a JSON-RPC internal error in the caller.
+ */
+export async function callTool(
+  ctx: ToolContext,
+  name: string,
+  argsUnknown: unknown,
+): Promise<McpToolResult> {
   const tool = findTool(name);
   if (!tool) return toolError(`Unknown tool: ${name}`);
   const args = asRecord(argsUnknown);
@@ -190,12 +226,17 @@ export async function callTool(ctx: ToolContext, name: string, argsUnknown: unkn
       if (args.ticker) body.ticker = str(args.ticker);
       if (args.timeframe) body.timeframe = str(args.timeframe);
       if (args.inputs !== undefined) body.inputs = args.inputs;
-      const res = await proxyWorkerRequest(ctx.env, ctx.origin, {
-        method: 'POST',
-        path: '/api/run',
-        body,
-        bearer: ctx.auth.key,
-      }, ctx.executionCtx);
+      const res = await proxyWorkerRequest(
+        ctx.env,
+        ctx.origin,
+        {
+          method: 'POST',
+          path: '/api/run',
+          body,
+          bearer: ctx.auth.key,
+        },
+        ctx.executionCtx,
+      );
       return fromProxy(res);
     }
     case 'axis_scripts_list': {
@@ -300,7 +341,10 @@ export async function callTool(ctx: ToolContext, name: string, argsUnknown: unkn
     case 'app_session_status': {
       const session = await sessionName(ctx, args.session);
       const res = await bridgeStatus(ctx, session);
-      return jsonText({ session, ...(typeof res.body === 'object' && res.body ? res.body : { body: res.body }) }, true);
+      return jsonText(
+        { session, ...(typeof res.body === 'object' && res.body ? res.body : { body: res.body }) },
+        true,
+      );
     }
     case 'app_capabilities': {
       const session = await sessionName(ctx, args.session);
@@ -316,7 +360,9 @@ export async function callTool(ctx: ToolContext, name: string, argsUnknown: unkn
     }
     case 'app_get': {
       const session = await sessionName(ctx, args.session);
-      const res = await bridgeInvoke(ctx, session, 'app.get', { path: str(args.path) || undefined });
+      const res = await bridgeInvoke(ctx, session, 'app.get', {
+        path: str(args.path) || undefined,
+      });
       return invokeResult(res);
     }
     case 'app_set': {
@@ -331,7 +377,17 @@ export async function callTool(ctx: ToolContext, name: string, argsUnknown: unkn
   }
 }
 
-export function listTools() {
+/**
+ * `tools/list` payload.
+ *
+ * Drops the internal `plane` field — where a tool runs is a server concern, not part
+ * of the MCP contract.
+ */
+export function listTools(): Array<{
+  name: string;
+  description: string;
+  inputSchema: JsonSchema;
+}> {
   return MCP_TOOLS.map((t) => ({
     name: t.name,
     description: t.description,
@@ -339,7 +395,13 @@ export function listTools() {
   }));
 }
 
-export function listResources() {
+/** `resources/list` payload, straight from the catalog. */
+export function listResources(): Array<{
+  uri: string;
+  name: string;
+  description: string;
+  mimeType: string;
+}> {
   return MCP_RESOURCES.map((r) => ({
     uri: r.uri,
     name: r.name,
@@ -348,7 +410,17 @@ export function listResources() {
   }));
 }
 
-export function listPrompts() {
+/**
+ * `prompts/list` payload.
+ *
+ * A prompt without declared arguments is reported with `[]` rather than omitted, so
+ * clients always see an array.
+ */
+export function listPrompts(): Array<{
+  name: string;
+  description: string;
+  arguments: NonNullable<McpPromptDef['arguments']>;
+}> {
   return MCP_PROMPTS.map((p) => ({
     name: p.name,
     description: p.description,
@@ -356,7 +428,22 @@ export function listPrompts() {
   }));
 }
 
-export async function readResource(ctx: ToolContext, uri: string): Promise<{
+/**
+ * `resources/read` payload for one catalog URI.
+ *
+ * `axis://health` re-probes `/health` with the caller's key; the other URIs are
+ * assembled locally from the catalog and the bridge session, so they work with no PWA
+ * connected. Unknown URIs are a protocol error, not an empty result.
+ *
+ * @param ctx - Caller env, origin, auth, and execution context.
+ * @param uri - Resource URI; must exist in the catalog.
+ * @returns A single text content block holding pretty-printed JSON.
+ * @throws {Error} `Unknown resource: <uri>` when the URI is not in the catalog.
+ */
+export async function readResource(
+  ctx: ToolContext,
+  uri: string,
+): Promise<{
   contents: Array<{ uri: string; mimeType: string; text: string }>;
 }> {
   const def = MCP_RESOURCES.find((r) => r.uri === uri);
@@ -390,7 +477,21 @@ export async function readResource(ctx: ToolContext, uri: string): Promise<{
   };
 }
 
-export function getPrompt(name: string, argsUnknown: unknown): {
+/**
+ * `prompts/get` payload: one user message steering the model through a workflow.
+ *
+ * The text is assembled per prompt name and interpolates only the arguments the
+ * prompt declares; anything else in `argsUnknown` is ignored.
+ *
+ * @param name - Prompt name; must exist in the catalog.
+ * @param argsUnknown - Raw `arguments` object from the JSON-RPC request.
+ * @returns The prompt description plus a single `user` text message.
+ * @throws {Error} `Unknown prompt: <name>` when the name is not in the catalog.
+ */
+export function getPrompt(
+  name: string,
+  argsUnknown: unknown,
+): {
   description: string;
   messages: Array<{ role: 'user'; content: { type: 'text'; text: string } }>;
 } {
@@ -399,22 +500,34 @@ export function getPrompt(name: string, argsUnknown: unknown): {
   const args = asRecord(argsUnknown);
   const lines: string[] = [`You are controlling AXIS via MCP tools.`, def.description, ''];
   if (name === 'run_script') {
-    lines.push('1. If a connected PWA session exists, prefer app_invoke capability editor.set then editor.run (or chart.load first).');
+    lines.push(
+      '1. If a connected PWA session exists, prefer app_invoke capability editor.set then editor.run (or chart.load first).',
+    );
     lines.push('2. Otherwise call axis_run with the script and any OHLCV you have.');
-    lines.push('3. Summarize plots, strategy trades, and errors honestly — do not invent Pine APIs.');
+    lines.push(
+      '3. Summarize plots, strategy trades, and errors honestly — do not invent Pine APIs.',
+    );
     if (args.script) lines.push('', 'Script:', '```pine', str(args.script), '```');
     if (args.symbol) lines.push(`Symbol: ${str(args.symbol)}`);
     if (args.interval) lines.push(`Interval: ${str(args.interval)}`);
   } else if (name === 'debug_last_run') {
-    lines.push('Call app_invoke with capability results.get (or app_get path lastRun). Read logs.get. Explain errors with the actual engine message.');
+    lines.push(
+      'Call app_invoke with capability results.get (or app_get path lastRun). Read logs.get. Explain errors with the actual engine message.',
+    );
   } else if (name === 'analyze_strategy') {
-    lines.push('Call app_invoke results.get / results.strategy. Report net profit, win rate, max drawdown, and trade count. Do not fabricate stats.');
+    lines.push(
+      'Call app_invoke results.get / results.strategy. Report net profit, win rate, max drawdown, and trade count. Do not fabricate stats.',
+    );
   } else if (name === 'load_symbol') {
-    lines.push(`Load ${str(args.symbol) || 'the requested symbol'} via app_invoke capability chart.load.`);
+    lines.push(
+      `Load ${str(args.symbol) || 'the requested symbol'} via app_invoke capability chart.load.`,
+    );
     if (args.interval) lines.push(`Interval: ${str(args.interval)}`);
     lines.push('Then app_get path bars.summary and confirm last close.');
   } else if (name === 'audit_workspace') {
-    lines.push('Call app_invoke workspace.export (or app.snapshot). List active source/stream/engine, open panels, applied scripts, and alerts. Flag missing API keys only as presence, never print secrets.');
+    lines.push(
+      'Call app_invoke workspace.export (or app.snapshot). List active source/stream/engine, open panels, applied scripts, and alerts. Flag missing API keys only as presence, never print secrets.',
+    );
   }
   return {
     description: def.description,

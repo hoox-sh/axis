@@ -72,7 +72,7 @@ function logsAsText(logs: LogEntry[]): string {
 }
 
 /** Classic collapsible system log strip (when System Logs pane is enabled). */
-export const SystemLogs: Component = () => {
+export const SystemLogs: Component = () : JSX.Element => {
   const [copied, setCopied] = createSignal(false);
   const [sourceFilter, setSourceFilter] = createSignal('all');
   const [levelFilter, setLevelFilter] = createSignal('all');

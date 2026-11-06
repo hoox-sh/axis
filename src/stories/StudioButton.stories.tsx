@@ -27,18 +27,22 @@ const meta: Meta<typeof StudioButton> = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+/** Solid accent fill for the primary call to action. */
 export const Primary: Story = {
   args: { variant: 'primary', children: 'Save theme' },
 };
 
+/** Secondary voice: hairline edge plus quiet tint rather than a solid fill. */
 export const Ghost: Story = {
   args: { variant: 'ghost', children: 'Cancel' },
 };
 
+/** Destructive variant used for delete / flush actions. */
 export const Danger: Story = {
   args: { variant: 'danger', children: 'Delete' },
 };
 
+/** Primary styling in the disabled state (no hover lift, muted fill). */
 export const Disabled: Story = {
   args: { variant: 'primary', disabled: true, children: 'Applied' },
 };

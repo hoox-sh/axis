@@ -28,6 +28,7 @@
 
 import { formatPriceWithDecimals } from '../chart/price-precision';
 
+/** Inputs for the tab title: symbol, painted price, previous close, and decimals. */
 export type ChartTitleInput = {
   symbol?: string | null;
   price?: number | null;
@@ -58,8 +59,7 @@ export function formatChartTitle(input: ChartTitleInput = {}): string {
   }
   const decimals = Number.isFinite(input.decimals) ? Number(input.decimals) : 2;
   const priceText = formatPriceWithDecimals(price, decimals);
-  const change =
-    input.prevClose == null ? null : signedPercent(price, Number(input.prevClose));
+  const change = input.prevClose == null ? null : signedPercent(price, Number(input.prevClose));
   const parts = [priceText];
   if (change) parts.push(change);
   if (symbol) parts.push(symbol);

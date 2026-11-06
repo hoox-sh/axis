@@ -38,6 +38,7 @@ import {
 import { assertPriceScale } from './ticks';
 import type { Axb1Frame, Axb1HeaderFields, Axb1TipFields, Axb1Unknown } from './types';
 
+/** Parsed 32-byte envelope: header fields plus a view over the payload bytes. */
 export interface Axb1Envelope {
   magic: number;
   version: number;
@@ -65,6 +66,15 @@ export function looksLikeAxb1(raw: ArrayBuffer | ArrayBufferView): boolean {
   );
 }
 
+/**
+ * Parse the envelope header and slice out the payload view.
+ *
+ * @param raw Envelope bytes (ArrayBuffer or any view onto them)
+ * @returns Header fields plus a payload view; no payload field is decoded yet
+ * @throws RangeError on truncation, magic/version mismatch, the forbidden
+ *   compressed flag, an oversized payload, or a length that disagrees with
+ *   `payload_bytes`
+ */
 export function decodeEnvelope(raw: ArrayBuffer | ArrayBufferView): Axb1Envelope {
   const bytes = asBytes(raw);
   if (bytes.byteLength < AXB1_HEADER_BYTES) throw new RangeError('AXB1 envelope truncated');
@@ -133,6 +143,16 @@ function readN<T>(n: number, read: () => T): T[] {
   return out;
 }
 
+/**
+ * Decode one envelope into a typed frame.
+ *
+ * @param raw Envelope bytes (ArrayBuffer or any view onto them)
+ * @returns The frame for a known opcode, or `Axb1Unknown` when the opcode is
+ *   unrecognized — the header is still decoded so the caller can keep the
+ *   socket up and fall back to JSON for that subscription
+ * @throws RangeError when the envelope or its payload is malformed (truncated,
+ *   bad magic/version, bad alignment, out-of-range price scale)
+ */
 export function decodeFrame(raw: ArrayBuffer | ArrayBufferView): Axb1Frame | Axb1Unknown {
   const env = decodeEnvelope(raw);
   const h = headerFrom(env);
@@ -341,6 +361,13 @@ export function bytesToHex(bytes: Uint8Array): string {
   return out;
 }
 
+/**
+ * Parse a hex string back into bytes (golden-vector round trips).
+ *
+ * @param hex Hex digits, whitespace allowed
+ * @returns The decoded bytes
+ * @throws RangeError when the cleaned string has an odd number of digits
+ */
 export function hexToBytes(hex: string): Uint8Array {
   const clean = hex.trim().replace(/\s+/g, '');
   if (clean.length % 2 !== 0) throw new RangeError('hex length');

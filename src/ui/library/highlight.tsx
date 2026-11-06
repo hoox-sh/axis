@@ -10,6 +10,13 @@
 import { For, type JSX } from 'solid-js';
 import { splitHighlight } from './format';
 
+/**
+ * Render `text` with every query term wrapped in `<mark>` for the library
+ * search hits. Splitting comes from {@link splitHighlight}.
+ *
+ * @param props - Text to render and the raw search query.
+ * @returns Alternating plain strings and `<mark>` elements.
+ */
 export function Highlight(props: { text: string; query?: string }): JSX.Element {
   return (
     <For each={splitHighlight(props.text, props.query ?? '')}>

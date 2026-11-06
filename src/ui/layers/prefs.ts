@@ -18,12 +18,18 @@ export const LAYERS_COLLAPSED_KEY = 'axis.layers.collapsed';
 /** Section ids the panel knows about. Unknown ids are ignored on read. */
 export const LAYER_SECTION_IDS = ['scripts', 'panes', 'overlays', 'onchain', 'drawings'] as const;
 
+/** Collapsible section ids the Layers panel renders. */
 export type LayerSectionId = (typeof LAYER_SECTION_IDS)[number];
 
 function isSectionId(value: unknown): value is LayerSectionId {
   return typeof value === 'string' && (LAYER_SECTION_IDS as readonly string[]).includes(value);
 }
 
+/**
+ * Read the collapsed section ids from `localStorage`.
+ *
+ * @returns Known section ids only, deduped; empty when nothing is collapsed.
+ */
 export function readCollapsedSections(): LayerSectionId[] {
   const raw = getJson<unknown>(LAYERS_COLLAPSED_KEY);
   if (!Array.isArray(raw)) return [];
@@ -34,6 +40,12 @@ export function readCollapsedSections(): LayerSectionId[] {
   return out;
 }
 
+/**
+ * Persist the collapsed-section list, dropping unknown ids.
+ *
+ * @param ids - Section ids to persist (may contain stale values).
+ * @returns The sanitized list that was written.
+ */
 export function writeCollapsedSections(ids: readonly string[]): LayerSectionId[] {
   const next: LayerSectionId[] = [];
   for (const id of ids) {

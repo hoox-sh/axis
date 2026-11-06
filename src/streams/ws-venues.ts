@@ -26,6 +26,7 @@
  * @module streams/ws-venues
  */
 
+/** Venue keys the shared WS builders know; any other value has no URL. */
 export type VenueId = 'binance' | 'okx' | 'bybit' | 'coinbase' | 'kraken' | 'mexc';
 
 // ── Symbol normalization ──────────────────────────────────────────
@@ -120,6 +121,10 @@ const MEXC_KLINE: Record<string, string> = {
 
 // ── Public API ────────────────────────────────────────────────────
 
+/**
+ * Everything needed to open a venue socket: the URL plus the message to send
+ * after open. `subscribe: null` means the URL itself carries the subscription.
+ */
 export interface VenueWsConfig {
   url: string;
   /** Subscribe message to send after WS open. null = URL-based subscription (Binance). */

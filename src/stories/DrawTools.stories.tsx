@@ -7,9 +7,14 @@ import type { Meta, StoryObj } from 'storybook-solidjs-vite';
 import { ToolCaret, ToolRailButton } from '../chart/drawings/toolbar/tool-button';
 import { Icons } from '../ui/icons';
 
-const meta: Meta = { title: 'Chart/DrawTools', tags: ['autodocs'], parameters: { layout: 'padded' } };
+const meta: Meta = {
+  title: 'Chart/DrawTools',
+  tags: ['autodocs'],
+  parameters: { layout: 'padded' },
+};
 export default meta;
 
+/** Rail column: active / pressed / disabled buttons plus a caret. */
 export const RailButtons: StoryObj = {
   render: () => (
     <div class="axis-draw-rail" style={{ width: '44px' }}>
@@ -30,6 +35,7 @@ export const RailButtons: StoryObj = {
   ),
 };
 
+/** Default, active and pressed states of one rail button side by side. */
 export const States: StoryObj = {
   render: () => (
     <div style={{ display: 'flex', gap: '8px' }}>

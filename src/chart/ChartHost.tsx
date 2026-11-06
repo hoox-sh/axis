@@ -58,10 +58,7 @@ import {
 } from '../store';
 import { loadSymbolData } from '../data/load-symbol';
 import { HooxLoader } from '../ui/HooxLoader';
-import {
-  getChartReadiness,
-  isChartReadinessBlocking,
-} from './readiness';
+import { getChartReadiness, isChartReadinessBlocking } from './readiness';
 import {
   DATA_PLANE_DOCS_URL,
   classifyDataPlaneNotice,
@@ -125,6 +122,7 @@ function barsForPaint(full: typeof store.bars) {
   return isReplayActive() ? getVisibleBars(full) : full;
 }
 
+/** Props for {@link ChartHost}: the multi-chart slot this cell renders and the series it shows. */
 export interface ChartHostProps {
   /** Multi-chart slot id (unique PaneManager host key). */
   slotId?: string;
@@ -155,7 +153,7 @@ function safePaint(
 }
 
 /** One chart cell: multi-pane LWC + optional drawing chrome when active. */
-export const ChartHost: Component<ChartHostProps> = (props) => {
+export const ChartHost: Component<ChartHostProps> = (props): JSX.Element => {
   let hostEl: HTMLElement | undefined;
   let panesEl: HTMLDivElement | undefined;
   const [contextHost, setContextHost] = createSignal<HTMLElement | undefined>(undefined);
@@ -261,9 +259,7 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     return { ...notice, loading: false };
   });
 
-  const chartInteractive = createMemo(
-    () => bars().length > 0 && !isChartReadinessBlocking(),
-  );
+  const chartInteractive = createMemo(() => bars().length > 0 && !isChartReadinessBlocking());
 
   const runNoticeAction = (action: DataPlaneActionId) => {
     const sym = props.symbol || store.symbol;
@@ -863,8 +859,7 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
               <div
                 class="axis-chart-boot-title"
                 data-tone={
-                  (isActive() && store.status === 'error') ||
-                  getChartReadiness().phase === 'error'
+                  (isActive() && store.status === 'error') || getChartReadiness().phase === 'error'
                     ? 'error'
                     : 'idle'
                 }

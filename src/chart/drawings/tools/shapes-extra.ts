@@ -14,17 +14,11 @@ import { registerToolHandler, type ToolHitCtx, type ToolViewCtx } from './regist
 import {
   clampOpacity,
   clampStrokeWidth,
-  isFinitePoint,
   sanitizePoints,
   sanitizeStrokeColor,
+  asTwoPoint,
 } from './safe';
 
-function asTwo(d: Drawing, kind?: TwoPointDrawing['kind']): TwoPointDrawing | null {
-  if (kind && d.kind !== kind) return null;
-  if (!('p1' in d) || !('p2' in d) || !d.p1 || !d.p2) return null;
-  if (!isFinitePoint(d.p1) || !isFinitePoint(d.p2)) return null;
-  return d as TwoPointDrawing;
-}
 
 type XY = { x: number; y: number };
 
@@ -33,7 +27,7 @@ function twoXY(
   toXY: (p: Point) => XY | null,
   kind?: TwoPointDrawing['kind'],
 ): { a: XY; b: XY } | null {
-  const t = asTwo(d, kind);
+  const t = asTwoPoint(d, kind);
   if (!t) return null;
   const a = toXY(t.p1);
   const b = toXY(t.p2);
@@ -41,7 +35,11 @@ function twoXY(
   return { a, b };
 }
 
-function createTwo(kind: TwoPointDrawing['kind'], points: Point[], color: string): TwoPointDrawing | null {
+function createTwo(
+  kind: TwoPointDrawing['kind'],
+  points: Point[],
+  color: string,
+): TwoPointDrawing | null {
   const pts = sanitizePoints(points);
   if (pts.length < 2) return null;
   return {
@@ -55,7 +53,10 @@ function createTwo(kind: TwoPointDrawing['kind'], points: Point[], color: string
 }
 
 /** Unit direction a→b and left-hand perpendicular (px). */
-function chordBasis(a: XY, b: XY): { dx: number; dy: number; len: number; ux: number; uy: number; px: number; py: number } {
+function chordBasis(
+  a: XY,
+  b: XY,
+): { dx: number; dy: number; len: number; ux: number; uy: number; px: number; py: number } {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
   const len = Math.hypot(dx, dy) || 1;
@@ -135,6 +136,7 @@ export function curveControls(a: XY, b: XY): { c1: XY; c2: XY } {
   };
 }
 
+/** SVG cubic-Bézier path `d` from a→b using {@link curveControls}. */
 export function curvePathD(a: XY, b: XY): string {
   const { c1, c2 } = curveControls(a, b);
   return `M ${a.x} ${a.y} C ${c1.x} ${c1.y} ${c2.x} ${c2.y} ${b.x} ${b.y}`;
@@ -147,10 +149,8 @@ export function sampleCurve(a: XY, b: XY, n = 24): XY[] {
   for (let i = 0; i <= n; i++) {
     const t = i / n;
     const u = 1 - t;
-    const x =
-      u * u * u * a.x + 3 * u * u * t * c1.x + 3 * u * t * t * c2.x + t * t * t * b.x;
-    const y =
-      u * u * u * a.y + 3 * u * u * t * c1.y + 3 * u * t * t * c2.y + t * t * t * b.y;
+    const x = u * u * u * a.x + 3 * u * u * t * c1.x + 3 * u * t * t * c2.x + t * t * t * b.x;
+    const y = u * u * u * a.y + 3 * u * u * t * c1.y + 3 * u * t * t * c2.y + t * t * t * b.y;
     out.push({ x, y });
   }
   return out;

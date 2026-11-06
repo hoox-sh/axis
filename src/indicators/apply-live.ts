@@ -50,6 +50,7 @@ import { updateIndicatorStore } from './apply-store';
 import { currentRunEpoch, formatRunError, isRunEpochCurrent } from './run-helpers';
 import type { RunOptions, RunResult } from './runner';
 
+/** Live-apply flags. Both default to `true` in {@link applyPrecomputedChart}. */
 export type ApplyLiveOpts = {
   silent?: boolean;
   liveTick?: boolean;
@@ -154,12 +155,12 @@ function asOhlcTip(
 ): { open: number; high: number; low: number; close: number; color?: string } | null {
   if (cell == null || typeof cell !== 'object') return null;
   const o = cell as Record<string, unknown>;
-  const open = asFinite(o.open);
-  const high = asFinite(o.high);
-  const low = asFinite(o.low);
-  const close = asFinite(o.close);
+  const open = asFinite(o['open']);
+  const high = asFinite(o['high']);
+  const low = asFinite(o['low']);
+  const close = asFinite(o['close']);
   if (open == null || high == null || low == null || close == null) return null;
-  const color = typeof o.color === 'string' ? o.color : undefined;
+  const color = typeof o['color'] === 'string' ? o['color'] : undefined;
   return color !== undefined ? { open, high, low, close, color } : { open, high, low, close };
 }
 
@@ -191,7 +192,8 @@ function slideTipCache(cache: LiveTipCache, bars: Bar[], raw: RunResult, t: numb
     const lastT = lastPt ? Number(lastPt.time) : Number.NaN;
     const arr = series[line.name];
     const v = Array.isArray(arr) ? asFinite(arr[arr.length - 1]) : undefined;
-    const hold = v ?? (lastPt?.value != null && Number.isFinite(lastPt.value) ? lastPt.value : undefined);
+    const hold =
+      v ?? (lastPt?.value != null && Number.isFinite(lastPt.value) ? lastPt.value : undefined);
     if (Number.isFinite(lastT) && t === lastT && lastPt) {
       if (v == null) delete lastPt.value;
       else lastPt.value = v;
@@ -312,7 +314,7 @@ export function applyPrecomputedChart(
   const buildOverlays = deps?.buildOverlayPayloads ?? buildOverlayPayloads;
   const alignSeries = deps?.alignApplySeries ?? alignApplySeries;
 
-  const execCtx = String(result.meta?.executionContext || '');
+  const execCtx = String(result.meta?.['executionContext'] || '');
   const formingTip = liveTick && execCtx === 'tip';
   const id = cacheKey(indicatorId);
 

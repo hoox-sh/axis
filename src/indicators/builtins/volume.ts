@@ -26,6 +26,10 @@
 import { COL, def, pineIndicator } from './pine';
 import type { BuiltinScript } from './types';
 
+/**
+ * Original AXIS volume studies (`category: 'volume'`): volume, OBV, VWAP and
+ * bands, TWAP, Chaikin, MFI, Klinger and the remaining flow measures.
+ */
 export const VOLUME_BUILTINS: readonly BuiltinScript[] = [
   def({
     id: 'volume',

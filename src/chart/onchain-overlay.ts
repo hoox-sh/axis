@@ -72,9 +72,15 @@ function fingerprintPoints(pts: Array<{ time: number; value: number }>): string 
   const first = pts[0];
   const last = pts[n - 1];
   const mid = pts[Math.floor(n / 2)];
+  // `n > 0` above guarantees both ends exist; the guard keeps the types total.
+  if (!first || !last) return '';
   return `${n}|${first.time}:${first.value}|${mid?.time}:${mid?.value}|${last.time}:${last.value}`;
 }
 
+/**
+ * One scalar on-chain overlay line to paint on the price pane.
+ * `points` are UTC seconds + values in quote currency; `key` is normalized to `onchain_*`.
+ */
 export type OnchainLineSpec = {
   /** Must be `onchain_*` (normalized if missing prefix). */
   key: string;

@@ -89,7 +89,7 @@ function openSettings(): void {
 }
 
 /** Command-bar MCP/session capsule with agent-activity dot. */
-export const McpHud: Component = () => {
+export const McpHud: Component = () : JSX.Element => {
   const [s, setS] = createSignal<McpBridgeState>(mcpBridgeState());
   const now = useNow();
   const unsub = onMcpBridge(setS);

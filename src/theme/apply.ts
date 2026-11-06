@@ -23,7 +23,7 @@
  * @module theme/apply
  */
 
-import { ColorType, type IChartApi, type ISeriesApi, type LineWidth } from 'lightweight-charts';
+import { ColorType, type IChartApi, type ISeriesApi, type LineWidth, type SeriesType } from 'lightweight-charts';
 import { pineColorMap } from './catalog';
 import { resolveTokens } from './resolve';
 import { syntaxPackForPreset } from './syntax-packs';
@@ -355,9 +355,9 @@ export function applyThemeToDocument(
   // Pine aliases as data attributes for tooling / pyne host bridge
   try {
     const pine = pineColorMap(tokens);
-    root.dataset.chartBgColor = pine['chart.bg_color'];
-    root.dataset.chartFgColor = pine['chart.fg_color'];
-    root.dataset.themePreset = state?.presetId || 'void-dark';
+    root.dataset['chartBgColor'] = pine['chart.bg_color'];
+    root.dataset['chartFgColor'] = pine['chart.fg_color'];
+    root.dataset['themePreset'] = state?.presetId || 'void-dark';
   } catch {
     /* ignore */
   }
@@ -577,7 +577,7 @@ export function buildBaselineSeriesOptions(tokens: ThemeTokens): Record<string, 
  * Apply theme to the main price series based on chart type.
  */
 export function applyThemeToPriceSeries(
-  series: ISeriesApi<any> | null | undefined,
+  series: ISeriesApi<SeriesType> | null | undefined,
   state: ChartThemeState | null | undefined,
   opts: ApplySeriesThemeOpts = {},
 ): void {

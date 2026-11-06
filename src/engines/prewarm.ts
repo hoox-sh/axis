@@ -41,6 +41,7 @@
 import { getActiveEngineConfig } from '../plugins/active';
 import { confirmEngineApiKeyTarget } from './catalog';
 import { combineAbortSignals } from '../utils/fetch-timeout';
+import { isRecord, readJsonUnknown } from '../utils/validate';
 
 /** Backend hard cap on `scripts` per prewarm call (`backend/app.py`). */
 export const MAX_PREWARM_SCRIPTS = 16;
@@ -48,6 +49,10 @@ export const MAX_PREWARM_SCRIPTS = 16;
 /** Numba JIT can legitimately take a while on a cold host. */
 const DEFAULT_TIMEOUT_MS = 120_000;
 
+/**
+ * Typed outcome of a `POST /compile/prewarm` call — the client never throws, so callers
+ * (Runtime button, Workers Manager, CLI) render `ok` / `error` instead of catching.
+ */
 export interface PrewarmResult {
   /** The request reached the backend and it accepted the warm pass. */
   ok: boolean;
@@ -67,6 +72,10 @@ export interface PrewarmResult {
   error: string | null;
 }
 
+/**
+ * Prewarm inputs: optional Pine sources to compile into the IR cache plus per-call
+ * endpoint/key/timeout overrides for the CLI or an explicit target.
+ */
 export interface PrewarmOptions {
   /** Sources to compile into the IR cache. Capped at {@link MAX_PREWARM_SCRIPTS}. */
   scripts?: readonly string[];
@@ -153,7 +162,7 @@ export async function prewarmAppliedScripts(
   const scripts = normalizeScripts(opts.scripts ?? (await collectAppliedScriptSources()));
   if (!scripts.length) return null;
   const cfg = getActiveEngineConfig() || {};
-  const endpoint = String(opts.endpoint ?? cfg.endpoint ?? '')
+  const endpoint = String(opts.endpoint ?? cfg['endpoint'] ?? '')
     .trim()
     .replace(/\/$/, '');
   const key = sourcesFingerprint(endpoint, scripts);
@@ -185,10 +194,10 @@ function normalizeScripts(scripts: readonly string[] | undefined): string[] {
  */
 export async function prewarmEngine(opts: PrewarmOptions = {}): Promise<PrewarmResult> {
   const cfg = getActiveEngineConfig() || {};
-  const endpoint = String(opts.endpoint ?? cfg.endpoint ?? '')
+  const endpoint = String(opts.endpoint ?? cfg['endpoint'] ?? '')
     .trim()
     .replace(/\/$/, '');
-  const apiKey = String(opts.apiKey ?? cfg.apiKey ?? '').trim();
+  const apiKey = String(opts.apiKey ?? cfg['apiKey'] ?? '').trim();
   if (!endpoint) {
     return failure('No backend endpoint — select the server engine and set a URL');
   }
@@ -203,13 +212,13 @@ export async function prewarmEngine(opts: PrewarmOptions = {}): Promise<PrewarmR
 
   const scripts = normalizeScripts(opts.scripts);
   const body: Record<string, unknown> = {};
-  if (scripts.length) body.scripts = scripts;
-  if (opts.force) body.force = true;
+  if (scripts.length) body['scripts'] = scripts;
+  if (opts.force) body['force'] = true;
 
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (apiKey) {
     headers['X-API-Key'] = apiKey;
-    headers.Authorization = `Bearer ${apiKey}`;
+    headers['Authorization'] = `Bearer ${apiKey}`;
   }
 
   try {
@@ -225,20 +234,22 @@ export async function prewarmEngine(opts: PrewarmOptions = {}): Promise<PrewarmR
     if (!res.ok) {
       return failure(`Prewarm failed (HTTP ${res.status})`);
     }
-    const raw = (await res.json()) as Record<string, unknown> | null;
-    if (!raw || typeof raw !== 'object' || raw.status === 'error') {
-      const message = typeof raw?.message === 'string' && raw.message ? raw.message : null;
+    const parsed = await readJsonUnknown(res);
+    const raw = isRecord(parsed) ? parsed : null;
+    if (!raw || raw['status'] === 'error') {
+      const message =
+        typeof raw?.['message'] === 'string' && raw['message'] ? raw['message'] : null;
       return failure(message || 'Backend rejected the prewarm request');
     }
     return {
       ok: true,
-      hasNumba: raw.has_numba === true,
-      builtinsWarmed: raw.builtins_warmed === true,
-      scriptsOk: num(raw.scripts_ok) ?? 0,
-      scriptsFailed: num(raw.scripts_failed) ?? 0,
-      prewarmMs: num(raw.prewarm_ms),
-      errors: Array.isArray(raw.errors)
-        ? raw.errors.filter((e): e is string => typeof e === 'string')
+      hasNumba: raw['has_numba'] === true,
+      builtinsWarmed: raw['builtins_warmed'] === true,
+      scriptsOk: num(raw['scripts_ok']) ?? 0,
+      scriptsFailed: num(raw['scripts_failed']) ?? 0,
+      prewarmMs: num(raw['prewarm_ms']),
+      errors: Array.isArray(raw['errors'])
+        ? raw['errors'].filter((e): e is string => typeof e === 'string')
         : [],
       error: null,
     };

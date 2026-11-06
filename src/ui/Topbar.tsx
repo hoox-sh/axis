@@ -146,7 +146,7 @@ export const Topbar: Component<{
     getDoc: () => string;
     ensureSavedForRun?: () => Promise<{ ok: boolean; doc: string }>;
   };
-}> = (props) => {
+}> = (props) : JSX.Element => {
   const sources = createMemo(() => {
     void props.catalogTick;
     return listSources();

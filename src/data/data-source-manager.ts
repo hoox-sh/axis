@@ -35,12 +35,7 @@
 
 import { createStore, produce } from 'solid-js/store';
 import type { Bar } from '../store/types';
-import {
-  chartWindowLimit,
-  HISTORY_BARS_MAX,
-  loadBars,
-  store,
-} from '../store';
+import { chartWindowLimit, HISTORY_BARS_MAX, loadBars, store } from '../store';
 import { pluginKey } from '../plugins/types';
 import type { SourcePlugin } from '../plugins/types';
 import { getManager, setDataToChart } from '../chart/manager-access';
@@ -52,20 +47,9 @@ import {
 } from './data-manager-source';
 import { normalizeHistoricalBars } from './parse-bars';
 import { exchangeForSource, normalizeLoadSymbol } from './symbol-exchange';
-import {
-  sliceBarsForLoad,
-  type BarLoadWindow,
-} from './bars-cache';
-import {
-  getDataset,
-  putDatasetBars,
-  replaceDataset,
-} from './dataset-store';
-import {
-  intervalToSec,
-  mergeGaps,
-  type BarGap,
-} from './bars-gaps';
+import { sliceBarsForLoad, type BarLoadWindow } from './bars-cache';
+import { getDataset, putDatasetBars, replaceDataset } from './dataset-store';
+import { intervalToSec, mergeGaps, type BarGap } from './bars-gaps';
 import {
   repairBars,
   validateDataset,
@@ -78,16 +62,21 @@ import { providerDatasetLock } from './provider';
 import { errMessage, isAbortError } from '../utils/errors';
 import { BoundedSet } from '../utils/bounded-map';
 
+/**
+ * Lifecycle of a DSM job: queued, running, paused by the user, or terminal
+ * (`complete` / `error` / `cancelled`). Only terminal jobs are pruned.
+ */
 export type DataSourceJobStatus =
-  | 'pending'
-  | 'running'
-  | 'paused'
-  | 'complete'
-  | 'error'
-  | 'cancelled';
+  'pending' | 'running' | 'paused' | 'complete' | 'error' | 'cancelled';
 
+/** Work phase a job is currently in, shown in the DSM panel. */
 export type DataSourceJobPhase = 'backfill' | 'validate' | 'gapfill' | 'done';
 
+/**
+ * Public snapshot of one backfill job — progress counters, coverage bounds, and
+ * the last recoverable note. The UI reads this shape; the mutable internals stay
+ * private to the manager.
+ */
 export interface DataSourceJob {
   id: string;
   sourceId: string;
@@ -120,6 +109,10 @@ export interface DataSourceJob {
   applyWhenComplete: boolean;
 }
 
+/**
+ * Enqueue options for {@link startBackfill}. Omitted fields fall back to the
+ * active store series and a 90-day lookback; an inverted range is swapped.
+ */
 export interface StartBackfillOpts {
   sourceId?: string;
   symbol?: string;
@@ -367,7 +360,11 @@ function syncJob(j: InternalJob): void {
   if (isTerminalStatus(j.status)) pruneJobList();
 }
 
-function setJobStatus(j: InternalJob, status: DataSourceJobStatus, error: string | null = null): void {
+function setJobStatus(
+  j: InternalJob,
+  status: DataSourceJobStatus,
+  error: string | null = null,
+): void {
   j.status = status;
   j.error = error;
   j.updatedAt = Date.now();
@@ -445,10 +442,7 @@ export function startBackfill(opts: StartBackfillOpts = {}): string {
     let sourceId = String(opts.sourceId || store.source || 'binance-rest');
     // DEX pool symbols (network:0x… / base58) are case-sensitive — reuse the
     // load path's normalization so backfills never corrupt the venue request.
-    let symbol = normalizeLoadSymbol(
-      String(opts.symbol ?? store.symbol ?? ''),
-      sourceId,
-    );
+    let symbol = normalizeLoadSymbol(String(opts.symbol ?? store.symbol ?? ''), sourceId);
     let interval = String(opts.interval || store.interval || '1d');
     let targetToSec =
       typeof opts.targetToSec === 'number' && Number.isFinite(opts.targetToSec)
@@ -470,11 +464,7 @@ export function startBackfill(opts: StartBackfillOpts = {}): string {
     if (sourceId === DATA_MANAGER_SOURCE_ID) {
       try {
         const sel = getDataManagerSelection();
-        if (
-          sel?.sourceId &&
-          sel.sourceId !== DATA_MANAGER_SOURCE_ID &&
-          getSource(sel.sourceId)
-        ) {
+        if (sel?.sourceId && sel.sourceId !== DATA_MANAGER_SOURCE_ID && getSource(sel.sourceId)) {
           sourceId = sel.sourceId;
           if (!String(opts.symbol ?? '').trim()) symbol = sel.symbol || symbol;
           if (!opts.interval) interval = sel.interval || interval;
@@ -741,11 +731,7 @@ async function fetchWalkPage(
   // 1m series and far too little on a monthly one.
   const slack = intervalToSec(j.interval);
   const pageBars = rawPage.filter(
-    (b) =>
-      b &&
-      Number.isFinite(b.time) &&
-      b.time >= windowFrom &&
-      b.time <= windowTo + slack,
+    (b) => b && Number.isFinite(b.time) && b.time >= windowFrom && b.time <= windowTo + slack,
   );
   if (pageBars.length) {
     try {
@@ -1018,12 +1004,9 @@ async function runJob(j: InternalJob): Promise<void> {
     if (j.venueDead) {
       j.phase = 'done';
       j.datasetComplete = false;
-      setJobStatus(
-        j,
-        'complete',
-        j.error || 'Partial: venue unavailable',
-      );
-      if (j.applyWhenComplete && j.barsFetched > 0) void applyJobToChart(j.id, null, { onlyIfCurrent: true });
+      setJobStatus(j, 'complete', j.error || 'Partial: venue unavailable');
+      if (j.applyWhenComplete && j.barsFetched > 0)
+        void applyJobToChart(j.id, null, { onlyIfCurrent: true });
       return;
     }
 
@@ -1121,7 +1104,8 @@ async function runJob(j: InternalJob): Promise<void> {
     const { report: finalReport } = validateJobBars(finalCached, j);
     j.gapsFound = finalReport.fillableGaps.length;
     j.datasetComplete = finalReport.complete;
-    j.barsFetched = finalReport.barCount || countBarsInWindow(finalCached, j.targetFromSec, j.targetToSec);
+    j.barsFetched =
+      finalReport.barCount || countBarsInWindow(finalCached, j.targetFromSec, j.targetToSec);
     j.oldestSec = finalReport.oldestSec;
     j.newestSec = finalReport.newestSec;
     j.phase = 'done';
@@ -1132,8 +1116,7 @@ async function runJob(j: InternalJob): Promise<void> {
     } else {
       const n = finalReport.fillableGaps.length;
       const sparse =
-        finalReport.expectedBars > 0 &&
-        finalReport.barCount < finalReport.expectedBars * 0.85;
+        finalReport.expectedBars > 0 && finalReport.barCount < finalReport.expectedBars * 0.85;
       const coverageNote =
         n > 0
           ? `Partial: ${n} gap${n === 1 ? '' : 's'} remain (venue may lack data)`
@@ -1143,7 +1126,8 @@ async function runJob(j: InternalJob): Promise<void> {
       const note = [coverageNote, j.error].filter(Boolean).join(' · ') || null;
       setJobStatus(j, 'complete', note);
     }
-    if (j.applyWhenComplete && j.barsFetched > 0) void applyJobToChart(j.id, null, { onlyIfCurrent: true });
+    if (j.applyWhenComplete && j.barsFetched > 0)
+      void applyJobToChart(j.id, null, { onlyIfCurrent: true });
   } catch (err: unknown) {
     if (isAbortError(err) || j.abort.signal.aborted) {
       setJobStatus(j, 'cancelled');
@@ -1156,12 +1140,9 @@ async function runJob(j: InternalJob): Promise<void> {
       /* ignore */
     }
     j.phase = 'done';
-    setJobStatus(
-      j,
-      'complete',
-      errMessage(err) || 'Partial: venue unavailable',
-    );
-    if (j.applyWhenComplete && j.barsFetched > 0) void applyJobToChart(j.id, null, { onlyIfCurrent: true });
+    setJobStatus(j, 'complete', errMessage(err) || 'Partial: venue unavailable');
+    if (j.applyWhenComplete && j.barsFetched > 0)
+      void applyJobToChart(j.id, null, { onlyIfCurrent: true });
   }
 }
 
@@ -1212,7 +1193,8 @@ async function deliverCacheOnlyJob(j: InternalJob): Promise<void> {
       : 'No cached dataset'
     : `Unknown source: ${j.sourceId}`;
   setJobStatus(j, 'complete', note);
-  if (j.applyWhenComplete && j.barsFetched > 0) void applyJobToChart(j.id, null, { onlyIfCurrent: true });
+  if (j.applyWhenComplete && j.barsFetched > 0)
+    void applyJobToChart(j.id, null, { onlyIfCurrent: true });
 }
 
 /**
@@ -1332,9 +1314,7 @@ async function applyCachedToChartInner(
   // default. The dataset keeps everything — this only bounds the paint.
   // HISTORY_BARS_MAX stays the hard safety clamp.
   const explicit =
-    loadWin?.maxBars != null &&
-    Number.isFinite(loadWin.maxBars) &&
-    loadWin.maxBars > 0
+    loadWin?.maxBars != null && Number.isFinite(loadWin.maxBars) && loadWin.maxBars > 0
       ? Math.floor(loadWin.maxBars)
       : null;
   const chartMax = explicit != null ? Math.min(explicit, HISTORY_BARS_MAX) : null;
@@ -1473,10 +1453,7 @@ export function _resetDataSourceManagerForTests(): void {
 }
 
 /** @internal test helper — wait until job is not pending/running/paused */
-export async function _waitForJob(
-  id: string,
-  timeoutMs = 10_000,
-): Promise<DataSourceJob | null> {
+export async function _waitForJob(id: string, timeoutMs = 10_000): Promise<DataSourceJob | null> {
   const t0 = Date.now();
   while (Date.now() - t0 < timeoutMs) {
     const j = managerState.jobs.find((x) => x.id === id);

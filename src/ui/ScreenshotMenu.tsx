@@ -44,7 +44,11 @@ const SCOPES: Array<{ id: ScreenshotScope; label: string; hint: string }> = [
   { id: 'workspace', label: 'Workspace', hint: 'Stacked panes + header' },
 ];
 
-export const ScreenshotMenu: Component = () => {
+/**
+ * Topbar camera menu: copy or download a PNG of the price pane, all panes, or
+ * the workspace. Scope and options persist through `saveScreenshotOptions`.
+ */
+export const ScreenshotMenu: Component = (): JSX.Element => {
   const [open, setOpen] = createSignal(false);
   const [busy, setBusy] = createSignal(false);
   const [opts, setOpts] = createSignal<ScreenshotOptions>(loadScreenshotOptions());
@@ -113,94 +117,94 @@ export const ScreenshotMenu: Component = () => {
         label="Screenshot options"
         testId="axis-screenshot-popover"
       >
-            <div class="text-[10px] uppercase tracking-wider text-text-faint font-semibold px-0.5">
-              Capture
-            </div>
-            <div class="grid grid-cols-3 gap-1">
-              <For each={SCOPES}>
-                {(s) => (
-                  <button
-                    type="button"
-                    class={`sc-btn py-1.5 text-[11px] ${
-                      opts().scope === s.id ? 'sc-btn-primary is-active' : 'sc-btn-ghost'
-                    }`}
-                    title={s.hint}
-                    data-testid={`axis-screenshot-scope-${s.id}`}
-                    onClick={() => patch({ scope: s.id })}
-                  >
-                    {s.label}
-                  </button>
-                )}
-              </For>
-            </div>
-
-            <label class="flex items-center gap-2 px-0.5 text-[11px] text-text-dim cursor-pointer">
-              <input
-                type="checkbox"
-                checked={opts().includeDrawings}
-                data-testid="axis-screenshot-drawings"
-                onChange={(e) => patch({ includeDrawings: e.currentTarget.checked })}
-              />
-              Include drawings
-            </label>
-            <label class="flex items-center gap-2 px-0.5 text-[11px] text-text-dim cursor-pointer">
-              <input
-                type="checkbox"
-                checked={opts().includeWatermark}
-                data-testid="axis-screenshot-watermark"
-                onChange={(e) => patch({ includeWatermark: e.currentTarget.checked })}
-              />
-              Watermark (symbol · time)
-            </label>
-
-            <div class="flex items-center justify-between gap-2 px-0.5">
-              <span class="text-[11px] text-text-dim">Scale</span>
-              <div class="inline-flex gap-1">
-                <button
-                  type="button"
-                  class={`sc-btn py-1 px-2 text-[11px] font-mono ${
-                    opts().scale === 1 ? 'sc-btn-primary is-active' : 'sc-btn-ghost'
-                  }`}
-                  data-testid="axis-screenshot-scale-1"
-                  onClick={() => patch({ scale: 1 })}
-                >
-                  1×
-                </button>
-                <button
-                  type="button"
-                  class={`sc-btn py-1 px-2 text-[11px] font-mono ${
-                    opts().scale === 2 ? 'sc-btn-primary is-active' : 'sc-btn-ghost'
-                  }`}
-                  data-testid="axis-screenshot-scale-2"
-                  onClick={() => patch({ scale: 2 })}
-                >
-                  2×
-                </button>
-              </div>
-            </div>
-
-            <div class="flex gap-1 pt-0.5">
+        <div class="text-[10px] uppercase tracking-wider text-text-faint font-semibold px-0.5">
+          Capture
+        </div>
+        <div class="grid grid-cols-3 gap-1">
+          <For each={SCOPES}>
+            {(s) => (
               <button
                 type="button"
-                class="sc-btn sc-btn-ghost flex-1 text-[11px]"
-                data-testid="axis-screenshot-copy"
-                disabled={busy()}
-                onClick={() => void run('copy')}
+                class={`sc-btn py-1.5 text-[11px] ${
+                  opts().scope === s.id ? 'sc-btn-primary is-active' : 'sc-btn-ghost'
+                }`}
+                title={s.hint}
+                data-testid={`axis-screenshot-scope-${s.id}`}
+                onClick={() => patch({ scope: s.id })}
               >
-                <Icons.copy size={12} />
-                Copy
+                {s.label}
               </button>
-              <button
-                type="button"
-                class="sc-btn sc-btn-primary flex-1 text-[11px]"
-                data-testid="axis-screenshot-download"
-                disabled={busy()}
-                onClick={() => void run('download')}
-              >
-                <Icons.download size={12} />
-                {busy() ? 'Saving…' : 'Download'}
-              </button>
-            </div>
+            )}
+          </For>
+        </div>
+
+        <label class="flex items-center gap-2 px-0.5 text-[11px] text-text-dim cursor-pointer">
+          <input
+            type="checkbox"
+            checked={opts().includeDrawings}
+            data-testid="axis-screenshot-drawings"
+            onChange={(e) => patch({ includeDrawings: e.currentTarget.checked })}
+          />
+          Include drawings
+        </label>
+        <label class="flex items-center gap-2 px-0.5 text-[11px] text-text-dim cursor-pointer">
+          <input
+            type="checkbox"
+            checked={opts().includeWatermark}
+            data-testid="axis-screenshot-watermark"
+            onChange={(e) => patch({ includeWatermark: e.currentTarget.checked })}
+          />
+          Watermark (symbol · time)
+        </label>
+
+        <div class="flex items-center justify-between gap-2 px-0.5">
+          <span class="text-[11px] text-text-dim">Scale</span>
+          <div class="inline-flex gap-1">
+            <button
+              type="button"
+              class={`sc-btn py-1 px-2 text-[11px] font-mono ${
+                opts().scale === 1 ? 'sc-btn-primary is-active' : 'sc-btn-ghost'
+              }`}
+              data-testid="axis-screenshot-scale-1"
+              onClick={() => patch({ scale: 1 })}
+            >
+              1×
+            </button>
+            <button
+              type="button"
+              class={`sc-btn py-1 px-2 text-[11px] font-mono ${
+                opts().scale === 2 ? 'sc-btn-primary is-active' : 'sc-btn-ghost'
+              }`}
+              data-testid="axis-screenshot-scale-2"
+              onClick={() => patch({ scale: 2 })}
+            >
+              2×
+            </button>
+          </div>
+        </div>
+
+        <div class="flex gap-1 pt-0.5">
+          <button
+            type="button"
+            class="sc-btn sc-btn-ghost flex-1 text-[11px]"
+            data-testid="axis-screenshot-copy"
+            disabled={busy()}
+            onClick={() => void run('copy')}
+          >
+            <Icons.copy size={12} />
+            Copy
+          </button>
+          <button
+            type="button"
+            class="sc-btn sc-btn-primary flex-1 text-[11px]"
+            data-testid="axis-screenshot-download"
+            disabled={busy()}
+            onClick={() => void run('download')}
+          >
+            <Icons.download size={12} />
+            {busy() ? 'Saving…' : 'Download'}
+          </button>
+        </div>
       </Popover>
     </div>
   );

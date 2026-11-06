@@ -61,7 +61,7 @@ export function formatAlertFireMessage(
 ): string {
   const custom = (message || '').trim();
   if (custom) return custom;
-  const last = alert.params?.lastMessage;
+  const last = alert.params?.['lastMessage'];
   if (typeof last === 'string' && last.trim()) return last.trim();
   const px = Number.isFinite(price) ? String(price) : '—';
   return `${alert.symbol} ${alert.kind} @ ${px}`;

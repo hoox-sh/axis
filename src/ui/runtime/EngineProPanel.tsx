@@ -15,12 +15,34 @@
 
 import { Show, createMemo, createSignal } from 'solid-js';
 import { store } from '../../store';
-import { fetchUsage, renderChartPreview, runQuickBacktest, type PreviewResult, type QuickBacktestResult, type UsageResult } from '../../engines/pro';
+import {
+  fetchUsage,
+  renderChartPreview,
+  runQuickBacktest,
+  type PreviewResult,
+  type QuickBacktestResult,
+  type UsageResult,
+} from '../../engines/pro';
 import { Icons } from '../icons';
 import { HooxLoader } from '../HooxLoader';
-import { StudioButton, StudioCode, StudioField, StudioHint, StudioSection, StudioStat } from '../studio';
+import {
+  StudioButton,
+  StudioCode,
+  StudioField,
+  StudioHint,
+  StudioSection,
+  StudioStat,
+} from '../studio';
 
-export function EngineProPanel(props: { engine: string }) {
+/**
+ * Pro tools for the active engine: usage/quota, chart preview, and quick
+ * backtest, each with its own busy state. Reads the engine's plugin config for
+ * the API key and keeps every request result local to this panel.
+ *
+ * @param props - Engine id whose Pro endpoints are called.
+ * @returns The Pro sections for the `server` engine (usage needs a key); otherwise empty markup.
+ */
+export function EngineProPanel(props: { engine: string }): JSX.Element {
   const [usage, setUsage] = createSignal<UsageResult | null>(null);
   const [usageBusy, setUsageBusy] = createSignal(false);
   const [preview, setPreview] = createSignal<PreviewResult | null>(null);
@@ -33,7 +55,7 @@ export function EngineProPanel(props: { engine: string }) {
     const cfg = (store.pluginsConfig?.[`engine:${props.engine}`] ||
       store.pluginsConfig?.[props.engine] ||
       {}) as Record<string, unknown>;
-    return String(cfg.apiKey || '').trim();
+    return String(cfg['apiKey'] || '').trim();
   });
 
   /** Newest applied script with source — the thing a user means by "this chart". */
@@ -120,9 +142,7 @@ export function EngineProPanel(props: { engine: string }) {
             {(u) => (
               <Show
                 when={u().ok}
-                fallback={
-                  <StudioCode>{u().error || 'Usage unavailable'}</StudioCode>
-                }
+                fallback={<StudioCode>{u().error || 'Usage unavailable'}</StudioCode>}
               >
                 <div class="ax-grid ax-grid--3">
                   <StudioStat label="Tier" value={u().tier || '—'} />
@@ -179,16 +199,16 @@ export function EngineProPanel(props: { engine: string }) {
                   <StudioStat
                     label="Total PnL"
                     value={
-                      typeof b().summary.total_pnl === 'number'
-                        ? String(Math.round(b().summary.total_pnl as number))
+                      typeof b().summary['total_pnl'] === 'number'
+                        ? String(Math.round(b().summary['total_pnl'] as number))
                         : '—'
                     }
                   />
                   <StudioStat
                     label="Sharpe"
                     value={
-                      typeof b().summary.sharpe_ratio === 'number'
-                        ? (b().summary.sharpe_ratio as number).toFixed(2)
+                      typeof b().summary['sharpe_ratio'] === 'number'
+                        ? (b().summary['sharpe_ratio'] as number).toFixed(2)
                         : '—'
                     }
                   />

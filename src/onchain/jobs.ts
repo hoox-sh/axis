@@ -40,13 +40,13 @@ import {
 type AttachTvlFn = typeof attachDefiLlamaTvlImpl;
 let attachTvl: AttachTvlFn = attachDefiLlamaTvlImpl;
 
-export type OnchainJobStatus =
-  | 'pending'
-  | 'running'
-  | 'complete'
-  | 'error'
-  | 'cancelled';
+/** Lifecycle of a background on-chain job; terminal states are `complete`/`error`/`cancelled`. */
+export type OnchainJobStatus = 'pending' | 'running' | 'complete' | 'error' | 'cancelled';
 
+/**
+ * Public job row for the on-chain job list. Ephemeral UI state — never
+ * persisted; `progress` is a 0–1 fraction.
+ */
 export interface OnchainJob {
   id: string;
   kind: 'refresh_tvl';
@@ -149,9 +149,7 @@ function syncJob(j: InternalJob): void {
 
 function setJobFields(
   j: InternalJob,
-  patch: Partial<
-    Pick<OnchainJob, 'status' | 'progress' | 'error' | 'label'>
-  >,
+  patch: Partial<Pick<OnchainJob, 'status' | 'progress' | 'error' | 'label'>>,
 ): void {
   if (patch.status !== undefined) j.status = patch.status;
   if (patch.progress !== undefined) j.progress = patch.progress;
@@ -192,16 +190,11 @@ function displayNameFromRow(row: OnchainSeriesRow): string {
     '';
   const stripped = raw.replace(/\s*TVL\s*$/i, '').trim();
   if (stripped) return stripped;
-  return (
-    normalizeProtocolSlug(row.instrument?.protocolId || row.key || '') ||
-    row.id
-  );
+  return normalizeProtocolSlug(row.instrument?.protocolId || row.key || '') || row.id;
 }
 
 function protocolIdFromRow(row: OnchainSeriesRow): string {
-  return normalizeProtocolSlug(
-    row.instrument?.protocolId || row.key || '',
-  );
+  return normalizeProtocolSlug(row.instrument?.protocolId || row.key || '');
 }
 
 function enqueueInternal(j: InternalJob): void {

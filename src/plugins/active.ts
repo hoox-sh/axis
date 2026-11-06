@@ -33,40 +33,50 @@
 import { store } from '../store';
 import { registry } from './registry';
 import { ensureBuiltins } from './bootstrap';
-import { pluginKey, type EnginePlugin, type SourcePlugin, type StoragePlugin, type StreamPlugin } from './types';
+import {
+  pluginKey,
+  type EnginePlugin,
+  type SourcePlugin,
+  type StoragePlugin,
+  type StreamPlugin,
+} from './types';
 import { getEngineApiKey } from '../storage/vault';
 import { engineFamilyForText } from './engine-family';
-import {
-  buildProviderSession,
-  type ProviderSession,
-} from '../data/provider';
+import { buildProviderSession, type ProviderSession } from '../data/provider';
 import { getDataManagerSelection } from '../data/data-manager-source';
 
 function pluginConfig(kind: string, id: string): Record<string, unknown> {
   const configs = store.pluginsConfig || {};
-  return (
-    configs[pluginKey(kind as 'source', id)] ||
-    configs[id] ||
-    {}
-  );
+  return configs[pluginKey(kind as 'source', id)] || configs[id] || {};
 }
 
+/** Selected source id: `activePlugins.source`, then legacy `store.source`, then `binance-rest`. */
 export function getActiveSourceId(): string {
   return store.activePlugins?.source || store.source || 'binance-rest';
 }
 
+/** Selected stream id: `activePlugins.stream`, then `store.live.streamId`, then `binance-ws`. */
 export function getActiveStreamId(): string {
   return store.activePlugins?.stream || store.live?.streamId || 'binance-ws';
 }
 
+/** Selected engine id: `activePlugins.engine`, then legacy `store.engine`, then `server`. */
 export function getActiveEngineId(): string {
   return store.activePlugins?.engine || store.engine || 'server';
 }
 
+/** Selected storage id, defaulting to the built-in `local` library. */
 export function getActiveStorageId(): string {
   return store.activePlugins?.storage || 'local';
 }
 
+/**
+ * Resolve the active source plugin, registering built-ins first. Long-tail
+ * `ccxt:<exchange>` ids are routed to the `ccxt-rest` gateway plugin.
+ *
+ * @returns The registered source plugin (falling back to `binance-rest`)
+ * @throws When neither the requested id nor the fallback is registered
+ */
 export function getActiveSource(): SourcePlugin {
   ensureBuiltins();
   let id = getActiveSourceId();
@@ -78,6 +88,13 @@ export function getActiveSource(): SourcePlugin {
   return p;
 }
 
+/**
+ * Resolve the active stream plugin, registering built-ins first. Long-tail
+ * `ccxt:<exchange>` ids are routed to the `ccxt-ws` gateway plugin.
+ *
+ * @returns The registered stream plugin (falling back to `binance-ws`)
+ * @throws When neither the requested id nor the fallback is registered
+ */
 export function getActiveStream(): StreamPlugin {
   ensureBuiltins();
   let id = getActiveStreamId();
@@ -88,6 +105,12 @@ export function getActiveStream(): StreamPlugin {
   return p;
 }
 
+/**
+ * Resolve the active engine plugin, registering built-ins first.
+ *
+ * @returns The registered engine plugin (falling back to `server`)
+ * @throws When neither the requested id nor the fallback is registered
+ */
 export function getActiveEngine(): EnginePlugin {
   ensureBuiltins();
   const id = getActiveEngineId();
@@ -126,22 +149,46 @@ export function getActiveProvider(): ProviderSession {
   });
 }
 
+/**
+ * Config bag for the active source: `pluginsConfig['source:<id>']`, then the
+ * bare id, else an empty object.
+ *
+ * @returns The stored config (never null)
+ */
 export function getActiveSourceConfig(): Record<string, unknown> {
   return pluginConfig('source', getActiveSourceId());
 }
 
+/**
+ * Config bag for the active stream: `pluginsConfig['stream:<id>']`, then the
+ * bare id, else an empty object.
+ *
+ * @returns The stored config (never null)
+ */
 export function getActiveStreamConfig(): Record<string, unknown> {
   return pluginConfig('stream', getActiveStreamId());
 }
 
+/**
+ * Effective config for the active engine.
+ *
+ * Layers, in order: the stored `pluginsConfig` bag, the engine's schema default
+ * for `mode`, and the API key restored from the session vault (the durable
+ * payload strips every `apiKey`, so a reload would otherwise drop it and
+ * key-gated calls would answer 401). The endpoint is then resolved per family:
+ * worker engines fall back to the edge default instead of a leftover Flask
+ * localhost URL, and for server engines `store.endpoint` is the field of record.
+ *
+ * @returns The merged config the engine calls should use
+ */
 export function getActiveEngineConfig(): Record<string, unknown> {
   const base = pluginConfig('engine', getActiveEngineId());
   ensureBuiltins();
   const id = getActiveEngineId();
   const engine = registry.getEngine(id);
-  const schemaMode = engine?.configSchema?.mode?.default;
+  const schemaMode = engine?.configSchema?.['mode']?.default;
   const withMode =
-    (base.mode == null || base.mode === '') && schemaMode != null
+    (base['mode'] == null || base['mode'] === '') && schemaMode != null
       ? { ...base, mode: schemaMode }
       : base;
   // The durable payload strips every `apiKey`, so read the key through the
@@ -149,7 +196,7 @@ export function getActiveEngineConfig(): Record<string, unknown> {
   // (`/data/*`, authenticated `/run`) answers 401.
   const vaultKey = getEngineApiKey(store.pluginsConfig, id);
   const withKey =
-    vaultKey && String(withMode.apiKey || '').trim() !== vaultKey
+    vaultKey && String(withMode['apiKey'] || '').trim() !== vaultKey
       ? { ...withMode, apiKey: vaultKey }
       : withMode;
 
@@ -158,7 +205,7 @@ export function getActiveEngineConfig(): Record<string, unknown> {
   if (engine?.family === 'worker') {
     try {
       // Lazy import path avoided — resolve inline to keep active.ts light
-      const fromCfg = String(withKey.endpoint || '').trim();
+      const fromCfg = String(withKey['endpoint'] || '').trim();
       const fromStore = String(store.endpoint || '').trim();
       const looksPw = (s: string) => engineFamilyForText(s) === 'worker';
       const endpoint = (
@@ -177,7 +224,7 @@ export function getActiveEngineConfig(): Record<string, unknown> {
 
   // store.endpoint is the Settings field of record — must win over a stale
   // pluginsConfig.endpoint left over from older saves / presets.
-  if (store.endpoint && (engine?.configSchema?.endpoint || engine?.family === 'server')) {
+  if (store.endpoint && (engine?.configSchema?.['endpoint'] || engine?.family === 'server')) {
     return { ...withKey, endpoint: store.endpoint };
   }
   return withKey;

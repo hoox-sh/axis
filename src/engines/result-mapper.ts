@@ -87,7 +87,7 @@ export function payloadEngineTimes(payload: unknown): unknown[] | undefined {
     const v = payload[key];
     if (Array.isArray(v) && v.length) return v as unknown[];
   }
-  const bars = payload.bars;
+  const bars = payload['bars'];
   if (Array.isArray(bars) && bars.length) {
     const times: unknown[] = [];
     for (const b of bars) {
@@ -96,7 +96,7 @@ export function payloadEngineTimes(payload: unknown): unknown[] | undefined {
         continue;
       }
       if (isRecord(b)) {
-        times.push(b.time ?? b.t ?? b.timestamp);
+        times.push(b['time'] ?? b['t'] ?? b['timestamp']);
       }
     }
     if (times.length) return times;
@@ -113,9 +113,9 @@ export function payloadEngineTimes(payload: unknown): unknown[] | undefined {
  */
 export function mapEnginePayload(payload: unknown, opts: MapEnginePayloadOptions): RunResult {
   const p = isRecord(payload) ? payload : {};
-  const meta = isRecord(p.meta) ? p.meta : {};
+  const meta = isRecord(p['meta']) ? p['meta'] : {};
 
-  const overlayRaw = p.overlay ?? meta.overlay;
+  const overlayRaw = p['overlay'] ?? meta['overlay'];
   const overlay =
     opts.overlay === 'boolean-only'
       ? typeof overlayRaw === 'boolean'
@@ -123,30 +123,30 @@ export function mapEnginePayload(payload: unknown, opts: MapEnginePayloadOptions
         : undefined
       : normalizeOverlayFlag(overlayRaw);
 
-  const scriptName = (p.script_name || meta.script_name || 'plot') as string;
+  const scriptName = (p['script_name'] || meta['script_name'] || 'plot') as string;
 
-  const profile = (p.profile ?? meta.profile) as RunResult['profile'] | undefined;
-  const logs = (p.logs ?? meta.logs) as RunResult['logs'] | undefined;
+  const profile = (p['profile'] ?? meta['profile']) as RunResult['profile'] | undefined;
+  const logs = (p['logs'] ?? meta['logs']) as RunResult['logs'] | undefined;
 
   let scriptType: string | undefined;
   if (opts.scriptType === 'payload+meta+kind') {
     scriptType =
-      (p.script_type as string | undefined) ||
-      (meta.script_type as string | undefined) ||
-      (/strategy/i.test(String(meta.kind || '')) ? 'strategy' : undefined);
+      (p['script_type'] as string | undefined) ||
+      (meta['script_type'] as string | undefined) ||
+      (/strategy/i.test(String(meta['kind'] || '')) ? 'strategy' : undefined);
   } else if (opts.scriptType === 'meta') {
-    scriptType = meta.script_type as string | undefined;
+    scriptType = meta['script_type'] as string | undefined;
   }
 
   const times = opts.engineTimes ? payloadEngineTimes(p) : undefined;
 
   return {
     status: 'success',
-    plots: (p.plots as (number | null)[]) || [],
-    series: (p.series as Record<string, PlotSample[]>) || {},
-    events: (p.events as RunResult['events']) || [],
-    drawings: (p.drawings as RunResult['drawings']) || [],
-    inputs: p.inputs,
+    plots: (p['plots'] as (number | null)[]) || [],
+    series: (p['series'] as Record<string, PlotSample[]>) || {},
+    events: (p['events'] as RunResult['events']) || [],
+    drawings: (p['drawings'] as RunResult['drawings']) || [],
+    inputs: p['inputs'],
     ...(profile ? { profile } : {}),
     ...(Array.isArray(logs) ? { logs } : {}),
     meta: {
@@ -154,19 +154,19 @@ export function mapEnginePayload(payload: unknown, opts: MapEnginePayloadOptions
       ms: opts.ms,
       transport: opts.transport,
       mode: opts.mode,
-      script_id: p.script_id as string | undefined,
-      run_id: p.run_id as string | undefined,
+      script_id: p['script_id'] as string | undefined,
+      run_id: p['run_id'] as string | undefined,
       ...(overlay !== undefined ? { overlay } : {}),
       script_name: scriptName,
       ...(times ? { engineTimes: times } : {}),
       ...(scriptType ? { script_type: scriptType } : {}),
       plot_meta:
-        (p.plot_meta as Record<string, unknown>) ||
-        (meta.plot_meta as Record<string, unknown> | undefined) ||
+        (p['plot_meta'] as Record<string, unknown>) ||
+        (meta['plot_meta'] as Record<string, unknown> | undefined) ||
         {},
-      inputs: p.inputs,
-      ...(Array.isArray(p.alerts) ? { alerts: p.alerts } : {}),
-      ...(Array.isArray(p.alert_conditions) ? { alert_conditions: p.alert_conditions } : {}),
+      inputs: p['inputs'],
+      ...(Array.isArray(p['alerts']) ? { alerts: p['alerts'] } : {}),
+      ...(Array.isArray(p['alert_conditions']) ? { alert_conditions: p['alert_conditions'] } : {}),
       ...(profile ? { profile } : {}),
       ...(Array.isArray(logs) ? { logs } : {}),
       ...(opts.batch ? { batch: true } : {}),

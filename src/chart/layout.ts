@@ -23,11 +23,7 @@
  * @module chart/layout
  */
 
-import {
-  DEFAULT_CHART_TYPE,
-  normalizeChartType,
-  type ChartType,
-} from './chart-type';
+import { DEFAULT_CHART_TYPE, normalizeChartType, type ChartType } from './chart-type';
 import type { PanelChromeMap } from '../ui/panels/types';
 import type { Pane } from '../store/types';
 
@@ -68,6 +64,10 @@ export interface SavedChartLayout {
   historyBars?: number;
 }
 
+/**
+ * Grid modes offered by the workspace layout picker, in display order.
+ * `cells` mirrors {@link slotCountForMode} and drives the glyph preview.
+ */
 export const CHART_GRID_MODES: readonly {
   id: ChartGridMode;
   label: string;
@@ -82,6 +82,12 @@ export const CHART_GRID_MODES: readonly {
   { id: '8', label: '8', hint: '4×2 chart grid', cells: 8 },
 ] as const;
 
+/**
+ * How many chart slots a grid mode occupies.
+ *
+ * @param mode grid arrangement; unknown values fall through to `1`
+ * @returns 1, 2, 4, 6 or 8 slots
+ */
 export function slotCountForMode(mode: ChartGridMode): number {
   if (mode === '8') return 8;
   if (mode === '6') return 6;
@@ -90,16 +96,28 @@ export function slotCountForMode(mode: ChartGridMode): number {
   return 1;
 }
 
+/**
+ * Type guard for grid mode strings coming from storage or URL state.
+ *
+ * @param v untrusted persisted value
+ * @returns true for the six supported mode ids
+ */
 export function isChartGridMode(v: unknown): v is ChartGridMode {
-  return (
-    v === '1' || v === '2h' || v === '2v' || v === '4' || v === '6' || v === '8'
-  );
+  return v === '1' || v === '2h' || v === '2v' || v === '4' || v === '6' || v === '8';
 }
 
 function newSlotId(): string {
   return `c_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
+/**
+ * Build a complete {@link ChartSlot}, filling gaps from `fallback` and then
+ * from the defaults (`BTCUSDT` / `15m` / `binance`).
+ *
+ * @param partial fields to keep; a missing `id` gets a fresh `c_…` id
+ * @param fallback workspace-level symbol/interval/exchange used before defaults
+ * @returns a slot whose `symbol` is upper-cased and `chartType` normalized
+ */
 export function createChartSlot(
   partial?: Partial<ChartSlot>,
   fallback?: { symbol?: string; interval?: string; exchange?: string },
@@ -220,10 +238,15 @@ export function gridClassForMode(mode: ChartGridMode): string {
   }
 }
 
-export function findSlot(
-  layout: ChartLayoutState,
-  id?: string | null,
-): ChartSlot | undefined {
+/**
+ * Look up a slot, falling back to the first slot so callers always have a
+ * target chart.
+ *
+ * @param layout current workspace layout
+ * @param id slot id to find; `null`/`undefined` selects the first slot
+ * @returns the matching slot, the first slot, or `undefined` for an empty layout
+ */
+export function findSlot(layout: ChartLayoutState, id?: string | null): ChartSlot | undefined {
   if (!id) return layout.slots[0];
   return layout.slots.find((s) => s.id === id) || layout.slots[0];
 }

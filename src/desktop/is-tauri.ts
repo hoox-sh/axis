@@ -21,7 +21,7 @@ export function isTauriShell(): boolean {
     /* ignore */
   }
   try {
-    if (import.meta.env?.TAURI_ENV_PLATFORM) return true;
+    if (import.meta.env?.['TAURI_ENV_PLATFORM']) return true;
   } catch {
     /* ignore */
   }

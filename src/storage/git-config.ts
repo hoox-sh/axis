@@ -93,33 +93,33 @@ export function resolveGitConfig(config?: Record<string, unknown>): GitConfig {
   const saved = (pc[pluginKey('storage', 'git')] || pc['git'] || {}) as Record<string, unknown>;
   const merged = { ...DEFAULT_GIT_CONFIG, ...saved, ...(config || {}) } as Record<string, unknown>;
 
-  const provider = (String(merged.provider || 'github') as GitProvider) === 'gitlab' ? 'gitlab' : 'github';
-  let apiBaseUrl = String(merged.apiBaseUrl || '').replace(/\/$/, '');
+  const provider = (String(merged['provider'] || 'github') as GitProvider) === 'gitlab' ? 'gitlab' : 'github';
+  let apiBaseUrl = String(merged['apiBaseUrl'] || '').replace(/\/$/, '');
   if (!apiBaseUrl) {
     apiBaseUrl = provider === 'gitlab' ? 'https://gitlab.com/api/v4' : 'https://api.github.com';
   }
 
-  const oauthClientId = String(merged.oauthClientId || '').trim();
+  const oauthClientId = String(merged['oauthClientId'] || '').trim();
 
   // PAT lives in the session vault when migrated; the persisted bag is only
   // a legacy fallback (stripped from future payloads). An explicitly provided
   // call-site token wins verbatim (even empty — same as the original merge);
   // otherwise vault → legacy saved bag.
   const callSiteToken =
-    config && 'token' in config ? String(config.token || '') : getGitToken(store.pluginsConfig);
+    config && 'token' in config ? String(config['token'] || '') : getGitToken(store.pluginsConfig);
 
   return {
     provider,
     apiBaseUrl,
     token: callSiteToken,
-    owner: String(merged.owner || ''),
-    repo: String(merged.repo || ''),
-    projectId: String(merged.projectId || ''),
-    branch: String(merged.branch || 'main'),
-    basePath: sanitizeBasePath(String(merged.basePath || DEFAULT_GIT_CONFIG.basePath)),
-    autoPush: merged.autoPush !== false && merged.autoPush !== 'false',
+    owner: String(merged['owner'] || ''),
+    repo: String(merged['repo'] || ''),
+    projectId: String(merged['projectId'] || ''),
+    branch: String(merged['branch'] || 'main'),
+    basePath: sanitizeBasePath(String(merged['basePath'] || DEFAULT_GIT_CONFIG.basePath)),
+    autoPush: merged['autoPush'] !== false && merged['autoPush'] !== 'false',
     commitMessageTemplate: String(
-      merged.commitMessageTemplate || DEFAULT_GIT_CONFIG.commitMessageTemplate,
+      merged['commitMessageTemplate'] || DEFAULT_GIT_CONFIG.commitMessageTemplate,
     ),
     ...(oauthClientId ? { oauthClientId } : {}),
   };

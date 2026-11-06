@@ -8,6 +8,7 @@
  * @module ui/effects/types
  */
 
+/** One numeric knob of an effect: bounds, default, unit, and the CSS variable it feeds. */
 export interface EffectParamSpec {
   id: string;
   label: string;
@@ -26,12 +27,14 @@ export interface EffectParamSpec {
 }
 
 /** Optional live sample in Settings. Classes are toggled on the sample row. */
+/** Classes the Settings page toggles on a sample row to preview an effect live. */
 export interface EffectPreviewSpec {
   sampleClass: string;
   upClass: string;
   downClass: string;
 }
 
+/** Registry entry for a tunable chrome motion: identity, default state, and params. */
 export interface EffectDef {
   id: string;
   label: string;
@@ -44,6 +47,7 @@ export interface EffectDef {
 }
 
 /** Stored override. Missing fields mean "use the registry default". */
+/** Persisted user override for one effect; absent fields fall back to {@link EffectDef}. */
 export interface EffectTune {
   enabled?: boolean;
   params?: Record<string, number>;

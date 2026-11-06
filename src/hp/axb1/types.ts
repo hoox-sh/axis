@@ -25,6 +25,7 @@
 
 import type { Axb1Opcode, Axb1StatusCode, ValueKind } from './constants';
 
+/** Envelope header decoded from the 32-byte AXB1 prefix, before any payload field. */
 export interface Axb1HeaderFields {
   seq: number;
   subIdHash: number;
@@ -36,6 +37,7 @@ export interface Axb1HeaderFields {
 /** Header decoded, payload not. The socket stays up; that sub falls back to JSON. */
 export type Axb1Unknown = Axb1HeaderFields & { unknown: true; opcode: number };
 
+/** Forming-tip columns selected by `mask`; only the flagged members are on the wire. */
 export interface Axb1TipFields {
   mask: number;
   flags: number;
@@ -47,6 +49,7 @@ export interface Axb1TipFields {
   volume?: number;
 }
 
+/** Columnar OHLCV window: parallel arrays `count` long, prices as int64 ticks at `priceScale`. */
 export interface Axb1OhlcvSnapshot {
   priceScale: number;
   count: number;
@@ -61,6 +64,7 @@ export interface Axb1OhlcvSnapshot {
   flags: number[];
 }
 
+/** One plot column: `ticks` for price-scale values, `values` for unit floats, `count` long. */
 export interface Axb1PlotColumn {
   key: string;
   kind: ValueKind;
@@ -68,6 +72,10 @@ export interface Axb1PlotColumn {
   values?: number[];
 }
 
+/**
+ * Decoded AXB1 frame, discriminated on `opcode`. Payload members are exactly
+ * the ones that opcode carries; header fields are always present.
+ */
 export type Axb1Frame =
   | (Axb1HeaderFields & { opcode: Axb1Opcode.HEARTBEAT })
   | (Axb1HeaderFields & { opcode: Axb1Opcode.UNCHANGED })

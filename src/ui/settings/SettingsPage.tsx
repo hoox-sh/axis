@@ -316,7 +316,18 @@ function TopbarToggleGrid(props: { items: TopbarToggle[]; columns?: 2 | 3 }) {
   );
 }
 
-export function SettingsPage(props: { onClose: () => void; initialTab?: SettingsTabId }) {
+/**
+ * Settings studio page: tabbed general/data/editor/theme/topbar/keyboard/
+ * notifications sections. Local signals seed from the store so edits can be
+ * validated (history-bar clamps) before they are written back.
+ *
+ * @param props - Close handler and the tab to open first (deep link / palette).
+ * @returns The settings page body rendered inside the studio shell.
+ */
+export function SettingsPage(props: {
+  onClose: () => void;
+  initialTab?: SettingsTabId;
+}): JSX.Element {
   const [chartInterval, setChartInterval] = createSignal(store.interval);
   const [historyBars, setHistoryBars] = createSignal(
     clampHistoryBars(store.historyBars ?? HISTORY_BARS_DEFAULT),

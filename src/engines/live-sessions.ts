@@ -84,7 +84,7 @@
  * @module engines/live-sessions
  */
 
-import { parseEngineJson, parseEngineJsonAsync } from './json-sanitize';
+import { parseEngineJsonAsync } from './json-sanitize';
 import { resolveSessionPayload } from './session-delta';
 import type { EngineLibrarySource } from '../plugins/types';
 import type { Bar } from '../store/types';
@@ -130,6 +130,10 @@ const KEY_MEMO_MAX = 200;
 const RUN_MODE_MEMO_MAX = 200;
 
 /** Fields that identify a session key (everything but the bars themselves). */
+/**
+ * Identity of one engine-side live session (everything but the bars): the session key is
+ * derived from these fields, so a change in any of them means a different session.
+ */
 export interface LiveSessionKeyFields {
   endpoint: string;
   script: string;
@@ -140,6 +144,10 @@ export interface LiveSessionKeyFields {
   interval: string;
 }
 
+/**
+ * One live tick through a session: the session key fields plus the Pine-ms window
+ * (`barsForPine` output) and the script instance that owns the session.
+ */
 export interface LiveSessionTickOpts extends LiveSessionKeyFields {
   apiKey?: string;
   /** Chart-window bars with Pine-ms times (i.e. `barsForPine` output). */
@@ -154,9 +162,18 @@ export interface LiveSessionTickOpts extends LiveSessionKeyFields {
   signal?: AbortSignal;
 }
 
+/**
+ * Which session path served a hit — a fresh create, a tick, an append, or the cached
+ * envelope when the window did not change.
+ */
 export type LiveSessionVia =
   'session-create' | 'session-tick' | 'session-append' | 'session-cached';
 
+/**
+ * A session-evaluated result: the raw engine payload (shaped like `/run`, mapped to
+ * `RunResult` by the caller), the path taken, the session id, and the bar-time axis the
+ * envelope was evaluated over.
+ */
 export interface LiveSessionHit {
   /** Raw engine payload (shaped like `/run` — caller maps to `RunResult`). */
   payload: unknown;
@@ -344,7 +361,7 @@ function headersFor(apiKey?: string): Record<string, string> {
   const key = String(apiKey || '').trim();
   if (key) {
     headers['X-API-Key'] = key;
-    headers.Authorization = `Bearer ${key}`;
+    headers['Authorization'] = `Bearer ${key}`;
   }
   return headers;
 }
@@ -469,13 +486,13 @@ export function invalidateLiveSessionsForSeries(
       o = null;
     }
     if (!o) continue;
-    const oSym = String(o.symbol || '')
+    const oSym = String(o['symbol'] || '')
       .toUpperCase()
       .replace(/[^A-Z0-9]/g, '');
     if (
-      String(o.endpoint || '').replace(/\/$/, '') === ep &&
+      String(o['endpoint'] || '').replace(/\/$/, '') === ep &&
       oSym === sym &&
-      String(o.interval || '') === iv
+      String(o['interval'] || '') === iv
     ) {
       dropSession(key, ep);
       dropped += 1;
@@ -495,6 +512,10 @@ export interface LiveSessionStatus {
   ttlSeconds: number | null;
 }
 
+/**
+ * Outcome of a `GET /session/{id}` probe: `ok` with the engine's status, `gone` when the
+ * engine reclaimed the session, or `unknown` when the probe could not be answered.
+ */
 export type LiveSessionStatusResult =
   { kind: 'ok'; status: LiveSessionStatus } | { kind: 'gone' } | { kind: 'unknown' };
 
@@ -531,18 +552,18 @@ export async function getSessionStatus(
       return { kind: 'unknown' };
     }
     if (!record) return { kind: 'unknown' };
-    if (record.status === 'error') {
-      return record.code === 'NO_SESSION' ? { kind: 'gone' } : { kind: 'unknown' };
+    if (record['status'] === 'error') {
+      return record['code'] === 'NO_SESSION' ? { kind: 'gone' } : { kind: 'unknown' };
     }
     const asNum = (v: unknown): number | null =>
       typeof v === 'number' && Number.isFinite(v) ? v : null;
     return {
       kind: 'ok',
       status: {
-        sessionId: typeof record.session_id === 'string' ? record.session_id : sessionId,
-        bars: asNum(record.bars),
-        idleSeconds: asNum(record.idle_seconds),
-        ttlSeconds: asNum(record.ttl_seconds),
+        sessionId: typeof record['session_id'] === 'string' ? record['session_id'] : sessionId,
+        bars: asNum(record['bars']),
+        idleSeconds: asNum(record['idle_seconds']),
+        ttlSeconds: asNum(record['ttl_seconds']),
       },
     };
   } catch {
@@ -663,8 +684,8 @@ async function createSession(
     res.payload && typeof res.payload === 'object' && !Array.isArray(res.payload)
       ? (res.payload as Record<string, unknown>)
       : null;
-  if (!res.ok || !record || record.status === 'error') {
-    const code = record?.code;
+  if (!res.ok || !record || record['status'] === 'error') {
+    const code = record?.['code'];
     if (res.status === 404 || res.status === 405 || res.status === 501) {
       // Old backend / edge / proxy without session routes — remember it.
       unsupported.add(opts.endpoint);
@@ -678,7 +699,7 @@ async function createSession(
     }
     return null;
   }
-  const sessionId = typeof record.session_id === 'string' ? record.session_id : null;
+  const sessionId = typeof record['session_id'] === 'string' ? record['session_id'] : null;
   if (!sessionId) {
     // A create we cannot address leaks a server-side session and would run the
     // full window again next tick — treat as a failure and back off.
@@ -686,8 +707,8 @@ async function createSession(
     return null;
   }
   const count =
-    typeof record.count === 'number' && Number.isFinite(record.count)
-      ? Math.floor(record.count)
+    typeof record['count'] === 'number' && Number.isFinite(record['count'])
+      ? Math.floor(record['count'])
       : opts.pineBars.length;
   clearSessionFailure(key);
   // A different script took over this chart slot — release its session.
@@ -735,9 +756,9 @@ function isSessionResult(payload: unknown, sessionId: string): payload is Record
   const rec = payload as Record<string, unknown>;
   // `/run`-shaped envelopes report failures as `{ status: 'error' }`, sometimes
   // with a 2xx status — an error body is not a result.
-  if (rec.status === 'error') return false;
+  if (rec['status'] === 'error') return false;
   // When the server echoes its session id, it must be the one we asked for.
-  if (typeof rec.session_id === 'string' && rec.session_id !== sessionId) return false;
+  if (typeof rec['session_id'] === 'string' && rec['session_id'] !== sessionId) return false;
   return true;
 }
 
@@ -750,7 +771,7 @@ async function tickSession(
   try {
     res = await postSessionOp(
       `${opts.endpoint}/session/${encodeURIComponent(st.id)}/tick`,
-      { bar: bar as unknown as Record<string, unknown> },
+      { bar },
       { apiKey: opts.apiKey, signal: opts.signal, budgetMs: SESSION_OP_BUDGET_MS },
       opts.endpoint,
     );
@@ -777,7 +798,7 @@ async function appendSession(
   try {
     res = await postSessionOp(
       `${opts.endpoint}/session/${encodeURIComponent(st.id)}/append`,
-      { bars: bars as unknown as Record<string, unknown> },
+      { bars },
       { apiKey: opts.apiKey, signal: opts.signal, budgetMs: SESSION_OP_BUDGET_MS },
       opts.endpoint,
     );

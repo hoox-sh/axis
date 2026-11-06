@@ -31,10 +31,7 @@
  */
 
 import { normalizeEndpointBase } from './worker-origin';
-import {
-  DEFAULT_MARKET_WORKER_BASE,
-  resolveMarketWorkerBase,
-} from './market-worker';
+import { DEFAULT_MARKET_WORKER_BASE, resolveMarketWorkerBase } from './market-worker';
 import { fetchSignedJson, hasSignedCreds } from './signed-fetch';
 import { asProviderMarket, type ProviderMarket } from './provider';
 
@@ -46,7 +43,9 @@ export const BINANCE_REST_HOSTS = [
   'https://data-api.binance.vision',
 ] as const;
 
+/** USDT-M perpetual futures REST origin (`/fapi/v1/…`). */
 export const BINANCE_LINEAR_REST_HOSTS = ['https://fapi.binance.com'] as const;
+/** COIN-M delivery futures REST origin (`/dapi/v1/…`). */
 export const BINANCE_INVERSE_REST_HOSTS = ['https://dapi.binance.com'] as const;
 
 function restHosts(market: ProviderMarket): readonly string[] {
@@ -61,7 +60,15 @@ function restPrefix(market: ProviderMarket): string {
   return '/api/v3/';
 }
 
-/** Live kline stream URL candidates (port 9443 is often firewalled). */
+/**
+ * Ordered kline WebSocket URL candidates for a symbol/interval, one per
+ * fallback host. Spot tries port 9443 first (often firewalled) and ends on the
+ * vision host; futures hosts are derived from the market.
+ *
+ * @param symbol - Ticker, lowercased for the stream name.
+ * @param interval - AXIS interval string (`1m`…`1w`).
+ * @param market - Spot (default), USDT-M linear, or COIN-M inverse.
+ */
 export function binanceKlineWsUrls(
   symbol: string,
   interval: string,
@@ -85,7 +92,12 @@ export function binanceKlineWsUrls(
   ];
 }
 
-/** Combined ticker multiplex URL candidates. */
+/**
+ * Combined `@ticker` multiplex URL candidates for a watchlist. Returns `[]`
+ * when no usable symbol is supplied, so callers can skip connecting.
+ *
+ * @param symbols - Tickers; each becomes a `<symbol>@ticker` stream.
+ */
 export function binanceTickerWsUrls(symbols: string[]): string[] {
   const streams = symbols
     .map((s) => `${String(s || '').toLowerCase()}@ticker`)
@@ -101,11 +113,14 @@ export function binanceTickerWsUrls(symbols: string[]): string[] {
   ];
 }
 
-export type BinanceRestPath =
-  | 'klines'
-  | 'ticker/24hr'
-  | 'exchangeInfo';
+/** REST path segments served under `/api/v3/` (or `/fapi/v1/`, `/dapi/v1/`). */
+export type BinanceRestPath = 'klines' | 'ticker/24hr' | 'exchangeInfo';
 
+/**
+ * Request for {@link fetchBinanceJson}: endpoint, pre-built query string, the
+ * fallback routing controls, and the market that selects host + path prefix.
+ * Credentials are not passed here — they come from the session vault.
+ */
 export interface BinanceFetchOpts {
   /** Path under `/api/v3/` (or proxy equivalent). */
   path: BinanceRestPath;
@@ -163,9 +178,7 @@ function queryToRecord(query?: string): Record<string, string> {
  * Fetch Binance JSON: signed (vault key) then public host + Worker proxy.
  * Throws the last error when every candidate fails.
  */
-export async function fetchBinanceJson(
-  opts: BinanceFetchOpts,
-): Promise<unknown> {
+export async function fetchBinanceJson(opts: BinanceFetchOpts): Promise<unknown> {
   const market = asProviderMarket(opts.market);
   if (
     market === 'spot' &&
@@ -239,7 +252,5 @@ export async function fetchBinanceJson(
     }
   }
 
-  throw new Error(
-    `Binance network error (${errors.slice(0, 4).join(' · ') || 'unknown'})`,
-  );
+  throw new Error(`Binance network error (${errors.slice(0, 4).join(' · ') || 'unknown'})`);
 }

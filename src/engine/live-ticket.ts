@@ -32,7 +32,9 @@
 
 import { looksLikeOnchainWorkerEndpoint, normalizeEndpointBase } from '../data/worker-origin';
 import { fetchWithTimeout } from '../utils/fetch-timeout';
+import { isRecord } from '../utils/validate';
 
+/** Ticket lifetime the Worker issues for `/api/ws/live` (seconds); reconnects mint a fresh one. */
 export const LIVE_TICKET_TTL_S = 60;
 const MINT_TIMEOUT_MS = 10_000;
 const TICKET_RE = /^[a-f0-9]{32}$/;
@@ -45,6 +47,10 @@ export type LiveProxy = {
   apiKey: string;
 };
 
+/**
+ * Live-ticket failure with a retryability verdict, so the socket client can tell a bad Worker
+ * key (stop reconnecting) from a transient 5xx (back off and retry).
+ */
 export class LiveTicketError extends Error {
   readonly retryable: boolean;
   constructor(message: string, retryable: boolean) {
@@ -54,6 +60,12 @@ export class LiveTicketError extends Error {
   }
 }
 
+/**
+ * Narrowing check for a ticket failure, used where the error crosses a `catch` boundary.
+ *
+ * @param err Value caught from a mint attempt.
+ * @returns `true` when `err` is a {@link LiveTicketError}.
+ */
 export function isLiveTicketError(err: unknown): err is LiveTicketError {
   return err instanceof LiveTicketError;
 }
@@ -96,6 +108,12 @@ export function shouldUseLiveProxy(opts: {
   return true;
 }
 
+/**
+ * The Worker proxy target for an engine, or `undefined` when the socket should go direct.
+ *
+ * @param opts Engine endpoint plus the cloud Worker endpoint and API key to mint with.
+ * @returns The proxy descriptor when {@link shouldUseLiveProxy} accepts the combination.
+ */
 export function liveProxyForEngine(opts: {
   engineEndpoint: string;
   workerEndpoint?: string;
@@ -142,6 +160,15 @@ export function workerLiveWsUrl(workerEndpoint: string, ticket?: string): string
   return u.toString();
 }
 
+/**
+ * Mints a short-lived `/api/ws/live` ticket from the Worker over REST, so the long-lived
+ * `pn_` key never appears in a WebSocket URL.
+ *
+ * @param proxy Worker origin plus the API key used as the Bearer credential.
+ * @returns The 32-hex ticket to append as `?ticket=`.
+ * @throws {LiveTicketError} `retryable: false` for a missing/rejected key or a malformed
+ * ticket body, `true` for transport errors and 5xx/408/429 responses.
+ */
 export async function mintLiveTicket(proxy: LiveProxy): Promise<string> {
   const key = String(proxy.apiKey || '').trim();
   if (!key) throw new LiveTicketError('live ticket: Worker API key missing', false);
@@ -166,13 +193,13 @@ export async function mintLiveTicket(proxy: LiveProxy): Promise<string> {
     const retryable = res.status >= 500 || res.status === 408 || res.status === 429;
     throw new LiveTicketError(`live ticket HTTP ${res.status}`, retryable);
   }
-  let body: { ticket?: unknown };
+  let body: unknown;
   try {
-    body = (await res.json()) as { ticket?: unknown };
+    body = await res.json();
   } catch {
     throw new LiveTicketError('live ticket body is not JSON', true);
   }
-  const ticket = typeof body.ticket === 'string' ? body.ticket.trim() : '';
+  const ticket = isRecord(body) && typeof body['ticket'] === 'string' ? body['ticket'].trim() : '';
   if (!TICKET_RE.test(ticket)) throw new LiveTicketError('live ticket missing', false);
   return ticket;
 }

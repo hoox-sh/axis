@@ -47,9 +47,11 @@ import { errMessage, isAbortError } from '../utils/errors';
 import { fetchWithTimeout } from '../utils/fetch-timeout';
 import { normalizeBarTime as toUnixSeconds } from '../data/parse-bars';
 
+/** Provider id for GeckoTerminal datasets and cache keys. */
 export const GECKOTERMINAL_PROVIDER_ID = 'geckoterminal';
-export const GECKOTERMINAL_DEFAULT_BASE =
-  'https://api.geckoterminal.com/api/v2';
+
+/** Public GeckoTerminal API root, used when no Worker proxy base is configured. */
+export const GECKOTERMINAL_DEFAULT_BASE = 'https://api.geckoterminal.com/api/v2';
 
 /** Default candles when callers omit `limit`. */
 const DEFAULT_OHLCV_LIMIT = 300;
@@ -235,20 +237,20 @@ export function parseGeckoOhlcvList(raw: unknown): Bar[] {
 
   if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
     const root = raw as Record<string, unknown>;
-    const data = root.data;
+    const data = root['data'];
     if (data && typeof data === 'object' && !Array.isArray(data)) {
-      const attrs = (data as Record<string, unknown>).attributes;
+      const attrs = (data as Record<string, unknown>)['attributes'];
       if (attrs && typeof attrs === 'object') {
-        list = (attrs as Record<string, unknown>).ohlcv_list;
+        list = (attrs as Record<string, unknown>)['ohlcv_list'];
       }
-    } else if (Array.isArray(root.ohlcv_list)) {
-      list = root.ohlcv_list;
+    } else if (Array.isArray(root['ohlcv_list'])) {
+      list = root['ohlcv_list'];
     } else if (
-      root.attributes &&
-      typeof root.attributes === 'object' &&
-      Array.isArray((root.attributes as Record<string, unknown>).ohlcv_list)
+      root['attributes'] &&
+      typeof root['attributes'] === 'object' &&
+      Array.isArray((root['attributes'] as Record<string, unknown>)['ohlcv_list'])
     ) {
-      list = (root.attributes as Record<string, unknown>).ohlcv_list;
+      list = (root['attributes'] as Record<string, unknown>)['ohlcv_list'];
     }
   }
 
@@ -307,9 +309,7 @@ export function resolveGeckoBeforeTimestamp(opts: {
     Number.isFinite(opts.beforeTimestamp) &&
     opts.beforeTimestamp > 0
       ? opts.beforeTimestamp
-      : typeof opts.endTime === 'number' &&
-          Number.isFinite(opts.endTime) &&
-          opts.endTime > 0
+      : typeof opts.endTime === 'number' && Number.isFinite(opts.endTime) && opts.endTime > 0
         ? opts.endTime
         : null;
   if (raw == null) return null;
@@ -400,9 +400,7 @@ export async function fetchGeckoPoolOhlcv(opts: {
   if (!res.ok) {
     const body = await res.text().catch(() => '');
     const hint = body ? ` — ${body.slice(0, 160)}` : '';
-    throw new Error(
-      `GeckoTerminal: HTTP ${res.status} for OHLCV ${network}/${poolAddress}${hint}`,
-    );
+    throw new Error(`GeckoTerminal: HTTP ${res.status} for OHLCV ${network}/${poolAddress}${hint}`);
   }
 
   let json: unknown;
@@ -431,6 +429,7 @@ export async function fetchGeckoPoolOhlcv(opts: {
   return bars;
 }
 
+/** Options for {@link searchGeckoPools}; `limit` is clamped to 50. */
 export type SearchGeckoPoolsOpts = {
   query?: string;
   network?: string;
@@ -506,9 +505,7 @@ export async function searchGeckoPools(
   try {
     json = await res.json();
   } catch (err) {
-    throw new Error(
-      `GeckoTerminal: invalid JSON for pool search: ${errMessage(err)}`,
-    );
+    throw new Error(`GeckoTerminal: invalid JSON for pool search: ${errMessage(err)}`);
   }
 
   return parseGeckoPoolSearch(json, max);
@@ -517,7 +514,7 @@ export async function searchGeckoPools(
 function parseGeckoPoolSearch(raw: unknown, limit: number): GeckoPoolSearchHit[] {
   if (!raw || typeof raw !== 'object') return [];
   const root = raw as Record<string, unknown>;
-  const data = root.data;
+  const data = root['data'];
   if (!Array.isArray(data)) return [];
 
   const out: GeckoPoolSearchHit[] = [];
@@ -525,60 +522,48 @@ function parseGeckoPoolSearch(raw: unknown, limit: number): GeckoPoolSearchHit[]
     if (!entry || typeof entry !== 'object') continue;
     const rec = entry as Record<string, unknown>;
     const attrs =
-      rec.attributes && typeof rec.attributes === 'object'
-        ? (rec.attributes as Record<string, unknown>)
+      rec['attributes'] && typeof rec['attributes'] === 'object'
+        ? (rec['attributes'] as Record<string, unknown>)
         : rec;
 
-    const address = String(
-      attrs.address ?? attrs.pool_address ?? rec.id ?? '',
-    ).trim();
+    const address = String(attrs['address'] ?? attrs['pool_address'] ?? rec['id'] ?? '').trim();
     if (!address) continue;
 
     // Network from relationships.network.data.id or attributes
     let network = '';
-    const rel = rec.relationships;
+    const rel = rec['relationships'];
     if (rel && typeof rel === 'object') {
-      const netRel = (rel as Record<string, unknown>).network;
+      const netRel = (rel as Record<string, unknown>)['network'];
       if (netRel && typeof netRel === 'object') {
-        const netData = (netRel as Record<string, unknown>).data;
+        const netData = (netRel as Record<string, unknown>)['data'];
         if (netData && typeof netData === 'object') {
-          network = String((netData as Record<string, unknown>).id || '').trim();
+          network = String((netData as Record<string, unknown>)['id'] || '').trim();
         }
       }
     }
     if (!network) {
-      network = String(
-        attrs.network ?? attrs.network_id ?? attrs.chain ?? '',
-      ).trim();
+      network = String(attrs['network'] ?? attrs['network_id'] ?? attrs['chain'] ?? '').trim();
     }
     network = mapAxisNetworkToGecko(network) || network;
 
-    const name = String(
-      attrs.name ?? attrs.pool_name ?? attrs.address ?? address,
-    ).trim();
+    const name = String(attrs['name'] ?? attrs['pool_name'] ?? attrs['address'] ?? address).trim();
 
     const symbolRaw =
-      attrs.symbol ??
-      attrs.base_token_symbol ??
-      attrs.token_symbol ??
-      attrs.name;
-    const symbol =
-      typeof symbolRaw === 'string' && symbolRaw.trim()
-        ? symbolRaw.trim()
-        : undefined;
+      attrs['symbol'] ?? attrs['base_token_symbol'] ?? attrs['token_symbol'] ?? attrs['name'];
+    const symbol = typeof symbolRaw === 'string' && symbolRaw.trim() ? symbolRaw.trim() : undefined;
 
     const priceRaw =
-      attrs.base_token_price_usd ??
-      attrs.price_usd ??
-      attrs.token_price_usd ??
-      attrs.priceUsd;
+      attrs['base_token_price_usd'] ??
+      attrs['price_usd'] ??
+      attrs['token_price_usd'] ??
+      attrs['priceUsd'];
     const priceNum = Number(priceRaw);
     const priceUsd = Number.isFinite(priceNum) ? priceNum : undefined;
 
     // id sometimes is "network_address"
-    if (!network && typeof rec.id === 'string' && rec.id.includes('_')) {
-      const idx = rec.id.indexOf('_');
-      if (idx > 0) network = mapAxisNetworkToGecko(rec.id.slice(0, idx));
+    if (!network && typeof rec['id'] === 'string' && rec['id'].includes('_')) {
+      const idx = rec['id'].indexOf('_');
+      if (idx > 0) network = mapAxisNetworkToGecko(rec['id'].slice(0, idx));
     }
 
     const hit: GeckoPoolSearchHit = {

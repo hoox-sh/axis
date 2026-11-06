@@ -27,9 +27,18 @@ const meta: Meta = {
 
 export default meta;
 
+/** VOID token swatches with their CSS variable names. */
 export const Palette: StoryObj = {
   render: () => (
-    <div style={{ display: 'grid', gap: '8px', 'grid-template-columns': 'repeat(auto-fill,minmax(180px,1fr))', width: '640px', 'max-width': '90vw' }}>
+    <div
+      style={{
+        display: 'grid',
+        gap: '8px',
+        'grid-template-columns': 'repeat(auto-fill,minmax(180px,1fr))',
+        width: '640px',
+        'max-width': '90vw',
+      }}
+    >
       <For each={TOKENS}>
         {(t) => (
           <div
@@ -43,7 +52,15 @@ export const Palette: StoryObj = {
               background: 'var(--color-bg-panel)',
             }}
           >
-            <span style={{ width: '24px', height: '24px', 'border-radius': '4px', background: t.swatch, border: '1px solid var(--color-border)' }} />
+            <span
+              style={{
+                width: '24px',
+                height: '24px',
+                'border-radius': '4px',
+                background: t.swatch,
+                border: '1px solid var(--color-border)',
+              }}
+            />
             <span style={{ display: 'flex', 'flex-direction': 'column', 'font-size': '11px' }}>
               <strong>{t.name}</strong>
               <code style={{ opacity: 0.6 }}>{t.cssVar}</code>
@@ -55,13 +72,22 @@ export const Palette: StoryObj = {
   ),
 };
 
+/** `sc-btn` variants rendered against the token palette. */
 export const Buttons: StoryObj = {
   render: () => (
     <div style={{ display: 'flex', gap: '8px', 'flex-wrap': 'wrap' }}>
-      <button class="sc-btn sc-btn-primary" type="button">Primary</button>
-      <button class="sc-btn" type="button">Default</button>
-      <button class="sc-btn sc-btn-ghost" type="button">Ghost</button>
-      <button class="sc-btn" type="button" disabled>Disabled</button>
+      <button class="sc-btn sc-btn-primary" type="button">
+        Primary
+      </button>
+      <button class="sc-btn" type="button">
+        Default
+      </button>
+      <button class="sc-btn sc-btn-ghost" type="button">
+        Ghost
+      </button>
+      <button class="sc-btn" type="button" disabled>
+        Disabled
+      </button>
     </div>
   ),
 };

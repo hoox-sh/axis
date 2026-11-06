@@ -10,16 +10,26 @@
  * because Node refuses to spawn batch files without a shell (CVE-2024-27980).
  */
 
-import { accessSync, constants, readFileSync, statSync } from "node:fs";
-import { join, posix, win32 } from "node:path";
-import { spawn } from "node:child_process";
+import { accessSync, constants, readFileSync, statSync } from 'node:fs';
+import { join, posix, win32 } from 'node:path';
+import { spawn } from 'node:child_process';
 
+/**
+ * Captured output of a finished child process.
+ *
+ * `code` is the exit status, or `1` when the process was killed by a signal and
+ * Node reports `null` — callers can always compare against `0`.
+ */
 export type RunResult = {
   code: number;
   stdout: string;
   stderr: string;
 };
 
+/**
+ * Knobs for {@link run}. Everything is optional; defaults capture output and
+ * throw on a non-zero exit so callers notice failures.
+ */
 export type RunOptions = {
   cwd?: string;
   env?: Record<string, string | undefined>;
@@ -39,9 +49,7 @@ export type ResolveDeps = {
   isExecutable?: (path: string, platform: NodeJS.Platform) => boolean;
 };
 
-function mergeEnv(
-  extra?: Record<string, string | undefined>
-): NodeJS.ProcessEnv {
+function mergeEnv(extra?: Record<string, string | undefined>): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env };
   if (!extra) return env;
   for (const [k, v] of Object.entries(extra)) {
@@ -54,7 +62,7 @@ function mergeEnv(
 function defaultIsExecutable(path: string, platform: NodeJS.Platform): boolean {
   try {
     if (!statSync(path).isFile()) return false;
-    if (platform === "win32") return true; // Windows has no X_OK bit; PATHEXT decides
+    if (platform === 'win32') return true; // Windows has no X_OK bit; PATHEXT decides
     accessSync(path, constants.X_OK);
     return true;
   } catch {
@@ -71,12 +79,12 @@ export function resolveOnPath(bin: string, deps: ResolveDeps = {}): string | nul
   const platform = deps.platform ?? process.platform;
   const env = deps.env ?? process.env;
   const isExecutable = deps.isExecutable ?? defaultIsExecutable;
-  const pathMod = platform === "win32" ? win32 : posix;
-  const isWin = platform === "win32";
+  const pathMod = platform === 'win32' ? win32 : posix;
+  const isWin = platform === 'win32';
 
   const exts = isWin
-    ? (env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD")
-        .split(";")
+    ? (env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD')
+        .split(';')
         .map((e) => e.trim())
         .filter(Boolean)
     : [];
@@ -93,14 +101,10 @@ export function resolveOnPath(bin: string, deps: ResolveDeps = {}): string | nul
 
   // On Windows never try the extensionless name: npm also writes a POSIX `sh`
   // shim named `wrangler` next to `wrangler.cmd`, which cmd cannot run.
-  const names = isWin
-    ? pathMod.extname(bin)
-      ? [bin]
-      : exts.map((e) => bin + e)
-    : [bin];
+  const names = isWin ? (pathMod.extname(bin) ? [bin] : exts.map((e) => bin + e)) : [bin];
 
-  const rawPath = env.PATH ?? env.Path ?? env.path ?? "";
-  const dirs = rawPath.split(isWin ? ";" : ":").filter(Boolean);
+  const rawPath = env.PATH ?? env.Path ?? env.path ?? '';
+  const dirs = rawPath.split(isWin ? ';' : ':').filter(Boolean);
   for (const dir of dirs) {
     for (const name of names) {
       const candidate = pathMod.join(dir, name);
@@ -118,14 +122,21 @@ export function resolveOnPath(bin: string, deps: ResolveDeps = {}): string | nul
 export function quoteCmdArg(arg: string): string {
   if (/[%"\r\n\0]/.test(arg)) {
     throw new Error(
-      `refusing argument with cmd-unsafe characters on Windows: ${JSON.stringify(arg)}`
+      `refusing argument with cmd-unsafe characters on Windows: ${JSON.stringify(arg)}`,
     );
   }
-  if (arg === "") return '""';
+  if (arg === '') return '""';
   if (/[\s&|<>^()]/.test(arg)) return `"${arg}"`;
   return arg;
 }
 
+/**
+ * Concrete `spawn` arguments derived from a command name — the Windows shim
+ * indirection resolved into a file plus argv.
+ *
+ * `windowsVerbatimArguments` must be forwarded to `spawn` verbatim; without it Node
+ * re-quotes the already-quoted `cmd.exe` line.
+ */
 export type SpawnPlan = {
   file: string;
   args: string[];
@@ -137,36 +148,45 @@ export type SpawnPlan = {
  * through cmd.exe with a pre-quoted verbatim command line; anything else is
  * spawned directly. On POSIX the command is passed through unchanged.
  */
-export function planSpawn(
-  cmd: string,
-  args: string[],
-  deps: ResolveDeps = {}
-): SpawnPlan {
+export function planSpawn(cmd: string, args: string[], deps: ResolveDeps = {}): SpawnPlan {
   const platform = deps.platform ?? process.platform;
-  if (platform !== "win32") return { file: cmd, args };
+  if (platform !== 'win32') return { file: cmd, args };
 
   const resolved = resolveOnPath(cmd, { ...deps, platform });
   if (!resolved) return { file: cmd, args }; // spawn reports ENOENT as before
 
   const ext = win32.extname(resolved).toLowerCase();
-  if (ext === ".cmd" || ext === ".bat") {
+  if (ext === '.cmd' || ext === '.bat') {
     const env = deps.env ?? process.env;
-    const line = [resolved, ...args.map(quoteCmdArg)].join(" ");
+    const line = [resolved, ...args.map(quoteCmdArg)].join(' ');
     return {
-      file: env.ComSpec || env.COMSPEC || "cmd.exe",
+      file: env.ComSpec || env.COMSPEC || 'cmd.exe',
       // /s strips exactly one outer pair of quotes around the whole line.
-      args: ["/d", "/s", "/c", `"${line}"`],
+      args: ['/d', '/s', '/c', `"${line}"`],
       windowsVerbatimArguments: true,
     };
   }
   return { file: resolved, args };
 }
 
-export async function run(
-  cmd: string,
-  args: string[],
-  opts: RunOptions = {}
-): Promise<RunResult> {
+/**
+ * Spawns a child process and resolves once it exits.
+ *
+ * Never uses a shell: Windows `.cmd`/`.bat` shims are routed through `cmd.exe` by
+ * {@link planSpawn} instead. With `inherit`, output streams live to the parent's
+ * stdio and the returned `stdout`/`stderr` are empty strings. A `timeout` sends
+ * `SIGTERM`, then `SIGKILL` 400 ms later.
+ *
+ * @param cmd - Binary name or path, resolved through PATH on Windows.
+ * @param args - Arguments; on Windows each is quoted via {@link quoteCmdArg}.
+ * @param opts - Capture/inherit mode, cwd, extra env (a key set to `undefined`
+ *   deletes it), stdin payload, timeout in ms, and throw-on-error behavior.
+ * @returns Exit code plus captured streams (empty when `inherit`).
+ * @throws {Error} `<cmd> <args> exited <code>` (with trimmed stderr or stdout
+ *   appended) when the exit is non-zero and `throwOnError` is not `false`; also
+ *   rejects with the spawn error, e.g. `ENOENT` for a missing binary.
+ */
+export async function run(cmd: string, args: string[], opts: RunOptions = {}): Promise<RunResult> {
   const throwOnError = opts.throwOnError !== false;
   const plan = planSpawn(cmd, args);
   const spawnOpts = {
@@ -180,44 +200,44 @@ export async function run(
     const code = await new Promise<number>((resolve, reject) => {
       const child = spawn(plan.file, plan.args, {
         ...spawnOpts,
-        stdio: opts.input != null ? ["pipe", "inherit", "inherit"] : "inherit",
+        stdio: opts.input != null ? ['pipe', 'inherit', 'inherit'] : 'inherit',
       });
       let killTimer: ReturnType<typeof setTimeout> | null = null;
       const timer =
         opts.timeout && opts.timeout > 0
           ? setTimeout(() => {
-              child.kill("SIGTERM");
-              killTimer = setTimeout(() => child.kill("SIGKILL"), 400);
+              child.kill('SIGTERM');
+              killTimer = setTimeout(() => child.kill('SIGKILL'), 400);
             }, opts.timeout)
           : null;
       if (opts.input != null && child.stdin) {
         child.stdin.write(opts.input);
         child.stdin.end();
       }
-      child.on("error", reject);
-      child.on("close", (c) => {
+      child.on('error', reject);
+      child.on('close', (c) => {
         if (timer) clearTimeout(timer);
         if (killTimer) clearTimeout(killTimer);
         resolve(c ?? 1);
       });
     });
     if (throwOnError && code !== 0) {
-      throw new Error(`${cmd} ${args.join(" ")} exited ${code}`);
+      throw new Error(`${cmd} ${args.join(' ')} exited ${code}`);
     }
-    return { code, stdout: "", stderr: "" };
+    return { code, stdout: '', stderr: '' };
   }
 
   const result = await new Promise<RunResult>((resolve, reject) => {
     const child = spawn(plan.file, plan.args, {
       ...spawnOpts,
-      stdio: ["pipe", "pipe", "pipe"],
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
-    let stdout = "";
-    let stderr = "";
-    child.stdout?.on("data", (d) => {
+    let stdout = '';
+    let stderr = '';
+    child.stdout?.on('data', (d) => {
       stdout += String(d);
     });
-    child.stderr?.on("data", (d) => {
+    child.stderr?.on('data', (d) => {
       stderr += String(d);
     });
     if (opts.input != null && child.stdin) {
@@ -228,12 +248,12 @@ export async function run(
     const timer =
       opts.timeout && opts.timeout > 0
         ? setTimeout(() => {
-            child.kill("SIGTERM");
-            killTimer = setTimeout(() => child.kill("SIGKILL"), 400);
+            child.kill('SIGTERM');
+            killTimer = setTimeout(() => child.kill('SIGKILL'), 400);
           }, opts.timeout)
         : null;
-    child.on("error", reject);
-    child.on("close", (code) => {
+    child.on('error', reject);
+    child.on('close', (code) => {
       if (timer) clearTimeout(timer);
       if (killTimer) clearTimeout(killTimer);
       resolve({ code: code ?? 1, stdout, stderr });
@@ -243,8 +263,7 @@ export async function run(
   if (throwOnError && result.code !== 0) {
     const detail = (result.stderr || result.stdout).trim();
     throw new Error(
-      `${cmd} ${args.join(" ")} exited ${result.code}` +
-        (detail ? `\n${detail}` : "")
+      `${cmd} ${args.join(' ')} exited ${result.code}` + (detail ? `\n${detail}` : ''),
     );
   }
   return result;
@@ -256,16 +275,16 @@ export async function run(
  */
 export async function which(bin: string): Promise<string | null> {
   if (!bin || /[/\0]/.test(bin)) return null;
-  if (typeof Bun !== "undefined" && typeof Bun.which === "function") {
+  if (typeof Bun !== 'undefined' && typeof Bun.which === 'function') {
     return Bun.which(bin) ?? null;
   }
   return resolveOnPath(bin);
 }
 
 function wranglerBin(workerDir: string): string | null {
-  const unix = join(workerDir, "node_modules", ".bin", "wrangler");
-  const win = join(workerDir, "node_modules", ".bin", "wrangler.cmd");
-  if (process.platform === "win32") {
+  const unix = join(workerDir, 'node_modules', '.bin', 'wrangler');
+  const win = join(workerDir, 'node_modules', '.bin', 'wrangler.cmd');
+  if (process.platform === 'win32') {
     if (resolveOnPath(win)) return win;
     if (resolveOnPath(unix)) return unix;
     return null;
@@ -279,37 +298,56 @@ function wranglerBin(workerDir: string): string | null {
  */
 export function wranglerPackageSpec(workerDir: string): string {
   try {
-    const pkg = JSON.parse(
-      readFileSync(join(workerDir, "package.json"), "utf-8")
-    ) as { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
-    const range = pkg.devDependencies?.wrangler ?? pkg.dependencies?.wrangler ?? "";
+    const pkg = JSON.parse(readFileSync(join(workerDir, 'package.json'), 'utf-8')) as {
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
+    const range = pkg.devDependencies?.wrangler ?? pkg.dependencies?.wrangler ?? '';
     const m = range.match(/(\d+\.\d+\.\d+)/);
     if (m) return `wrangler@${m[1]}`;
   } catch {
     /* no readable worker manifest — fall through to the unpinned spec */
   }
-  return "wrangler";
+  return 'wrangler';
 }
 
-/** Prefer local worker node_modules wrangler, then pinned bunx, then npx. */
-export async function wranglerCmd(
-  workerDir: string
-): Promise<{ cmd: string; prefix: string[] }> {
+/**
+ * Chooses how to invoke wrangler for a given worker directory.
+ *
+ * Preference order keeps the pinned version stable: local `worker/node_modules`
+ * binary, then `bunx <spec>`, then `npx --yes <spec>`, then a global `wrangler`.
+ *
+ * @param workerDir - Absolute path to `worker/`, used to find the local binary and
+ *   read its `package.json` for the version pin.
+ * @returns The executable plus any leading arguments to splice before the wrangler
+ *   args (e.g. `["wrangler@4.114.0"]` for `bunx`).
+ * @throws {Error} `wrangler not found. Run: axis install …` when no option exists.
+ */
+export async function wranglerCmd(workerDir: string): Promise<{ cmd: string; prefix: string[] }> {
   const local = wranglerBin(workerDir);
   if (local) return { cmd: local, prefix: [] };
   const spec = wranglerPackageSpec(workerDir);
-  if (await which("bunx")) return { cmd: "bunx", prefix: [spec] };
-  if (await which("npx")) return { cmd: "npx", prefix: ["--yes", spec] };
-  if (await which("wrangler")) return { cmd: "wrangler", prefix: [] };
-  throw new Error(
-    "wrangler not found. Run: axis install  (or cd worker && bun install)"
-  );
+  if (await which('bunx')) return { cmd: 'bunx', prefix: [spec] };
+  if (await which('npx')) return { cmd: 'npx', prefix: ['--yes', spec] };
+  if (await which('wrangler')) return { cmd: 'wrangler', prefix: [] };
+  throw new Error('wrangler not found. Run: axis install  (or cd worker && bun install)');
 }
 
+/**
+ * Runs a wrangler subcommand with the worker directory as cwd.
+ *
+ * @param workerDir - Absolute path to `worker/`; also the child's cwd.
+ * @param args - Wrangler arguments, e.g. `["deploy"]`.
+ * @param opts - Overrides merged over `{ cwd: workerDir }` — note a supplied `cwd`
+ *   wins, so callers can point wrangler elsewhere.
+ * @returns Exit code and captured output, per {@link run}.
+ * @throws {Error} When wrangler cannot be located (see {@link wranglerCmd}) or the
+ *   command exits non-zero with `throwOnError` enabled (the default).
+ */
 export async function runWrangler(
   workerDir: string,
   args: string[],
-  opts: RunOptions = {}
+  opts: RunOptions = {},
 ): Promise<RunResult> {
   const { cmd, prefix } = await wranglerCmd(workerDir);
   return run(cmd, [...prefix, ...args], { cwd: workerDir, ...opts });

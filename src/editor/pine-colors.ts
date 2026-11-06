@@ -48,6 +48,7 @@ export const PINE_NAMED_COLORS: Readonly<Record<string, string>> = {
   teal: '#008080',
 };
 
+/** How a color literal was written in source. */
 export type PineColorKind = 'hex' | 'named' | 'rgb' | 'new' | 'rgba';
 
 /** One color occurrence in source. */
@@ -95,15 +96,20 @@ export function alphaToTransp(alpha: number): number {
   return clampTransp(100 * (1 - clampByte(alpha) / 255));
 }
 
-export function rgbaFromChannels(
-  r: number,
-  g: number,
-  b: number,
-  a = 255,
-): RgbaColor {
+/**
+ * Clamp channels into 0–255 and build a normalized RGBA value.
+ *
+ * @param r Red 0–255.
+ * @param g Green 0–255.
+ * @param b Blue 0–255.
+ * @param a Alpha 0–255 (default 255 = opaque).
+ * @returns The clamped {@link RgbaColor}.
+ */
+export function rgbaFromChannels(r: number, g: number, b: number, a = 255): RgbaColor {
   return { r: clampByte(r), g: clampByte(g), b: clampByte(b), a: clampByte(a) };
 }
 
+/** Uppercase `#RRGGBB` from an RGB(A) value; alpha is ignored. */
 export function toHex6(c: RgbaColor | { r: number; g: number; b: number }): string {
   const r = clampByte(c.r);
   const g = clampByte(c.g);
@@ -113,6 +119,7 @@ export function toHex6(c: RgbaColor | { r: number; g: number; b: number }): stri
     .padStart(2, '0')}`.toUpperCase();
 }
 
+/** Uppercase `#RRGGBBAA` from an RGBA value. */
 export function toHex8(c: RgbaColor): string {
   return `${toHex6(c)}${clampByte(c.a).toString(16).padStart(2, '0')}`.toUpperCase();
 }
@@ -123,6 +130,12 @@ export function toCssRgba(c: RgbaColor): string {
   return `rgba(${c.r}, ${c.g}, ${c.b}, ${a})`;
 }
 
+/**
+ * Pine `color.rgb(...)` source for a color.
+ *
+ * @param c Color to render.
+ * @param withTransp Force the 4th `transp` argument even when fully opaque.
+ */
 export function toPineRgb(c: RgbaColor, withTransp = false): string {
   if (withTransp || c.a < 255) {
     return `color.rgb(${c.r}, ${c.g}, ${c.b}, ${alphaToTransp(c.a)})`;
@@ -130,6 +143,12 @@ export function toPineRgb(c: RgbaColor, withTransp = false): string {
   return `color.rgb(${c.r}, ${c.g}, ${c.b})`;
 }
 
+/**
+ * Pine `color.new(#hex, transp)`, or the bare hex when fully opaque.
+ *
+ * @param c Color to render.
+ * @param baseHex Optional existing `#rrggbb[aa]` to keep as the base.
+ */
 export function toPineNew(c: RgbaColor, baseHex?: string): string {
   const hex = (baseHex && /^#[0-9A-Fa-f]{6,8}$/.test(baseHex) ? baseHex : toHex6(c)).toUpperCase();
   const t = alphaToTransp(c.a);
@@ -157,8 +176,12 @@ export function parseHexColor(raw: string): RgbaColor | null {
   return rgbaFromChannels(r, g, b, a);
 }
 
+/** Resolve a Pine named color (`red` or `color.red`); null when unknown. */
 export function parseNamedColor(name: string): RgbaColor | null {
-  const leaf = name.replace(/^color\./i, '').toLowerCase().trim();
+  const leaf = name
+    .replace(/^color\./i, '')
+    .toLowerCase()
+    .trim();
   const hex = PINE_NAMED_COLORS[leaf];
   if (!hex) return null;
   return parseHexColor(hex);
@@ -218,6 +241,7 @@ export function parseColorInput(raw: string): RgbaColor | null {
   return null;
 }
 
+/** Every representation of one RGBA value, as shown in the picker rows. */
 export type ColorFormats = {
   hex6: string;
   hex8: string;
@@ -230,6 +254,7 @@ export type ColorFormats = {
   transp: number;
 };
 
+/** Build all picker formats; opaque exact matches also report a `color.*` name. */
 export function colorFormats(c: RgbaColor): ColorFormats {
   const transp = alphaToTransp(c.a);
   const hex6 = toHex6(c);
@@ -335,7 +360,8 @@ export function scanPineColors(source: string): PineColorHit[] {
   }
 
   // color.named
-  const namedRe = /\bcolor\.(red|green|blue|black|white|gray|grey|orange|purple|yellow|aqua|fuchsia|lime|maroon|navy|olive|silver|teal)\b/gi;
+  const namedRe =
+    /\bcolor\.(red|green|blue|black|white|gray|grey|orange|purple|yellow|aqua|fuchsia|lime|maroon|navy|olive|silver|teal)\b/gi;
   for (const m of source.matchAll(namedRe)) {
     if (commentMask[m.index]) continue;
     // Skip if this is color.new / color.rgb / color.r etc. — named list is exact
@@ -530,9 +556,7 @@ export function formatReplacement(
 }
 
 /** Map a scanned hit kind to a replacement style. */
-export function styleFromColorKind(
-  kind: PineColorKind,
-): 'hex' | 'rgb' | 'new' | 'named' {
+export function styleFromColorKind(kind: PineColorKind): 'hex' | 'rgb' | 'new' | 'named' {
   if (kind === 'named') return 'named';
   if (kind === 'rgb') return 'rgb';
   if (kind === 'new') return 'new';

@@ -30,7 +30,7 @@
 
 import type { Bar } from '../store/types';
 import type { RunOptions, RunResult } from './runner';
-import { store, EDITOR_RUN_KEY } from '../store';
+import { store } from '../store';
 // NOTE: single documented cycle — runner.ts owns these helpers and imports
 // this stage module for orchestration. All cross-uses happen inside function
 // bodies at call time (never during module evaluation), so ESM live bindings
@@ -53,6 +53,10 @@ import { splitSeriesByKind } from '../results/plot-visuals';
 import { resolveScriptDisplayName } from './run-target';
 import { appendLog } from '../store';
 
+/**
+ * The bars, input bag and strategy bag one run will use, captured before the
+ * engine call so a later store replacement cannot desync the result.
+ */
 export interface ResolvedRunContext {
   ind:
     { inputValues?: Record<string, unknown>; strategyProps?: Record<string, unknown> } | undefined;
@@ -99,6 +103,10 @@ export function resolveRunContext(
   return { ind, inputs, strategyProps, bars, chartTick };
 }
 
+/**
+ * One run's series joined onto the chart axis, plus the routing decisions
+ * (script name/type, overlay, alignment mode) the later stages need.
+ */
 export interface AlignedApplySeries {
   ohlcvTimes: number[];
   plotMeta: Record<string, PlotMetaEntry>;
@@ -171,6 +179,24 @@ export function _resetNoEngineAxisWarnForTests(): void {
   staleSkipWarned.clear();
 }
 
+/**
+ * Join a run's series onto the chart bar axis (apply stage 1).
+ *
+ * No chart or store mutation — the only side effects are Scriptlogs lines
+ * (warn-once for the no-axis cases). Session/stream runs and any run whose
+ * engine shipped a bar axis are joined by bar time; equal-length axis-less runs
+ * keep the index zip; a shorter axis-less live push is tail-extended (or
+ * head-padded when the gap is large), and a stale window is surfaced as
+ * `staleNoAxis` so the caller can skip the apply and keep the last good plots.
+ * Also resolves `overlay`, demoting an oscillator-scale series that would
+ * vanish on the price pane unless the script explicitly declared `overlay=true`.
+ *
+ * @param script - Pine source, used to resolve the script's display name
+ * @param result - the run payload to align
+ * @param bars - the exact bars the engine evaluated
+ * @param opts - silence flag, existing card name, and whether this is a live push
+ * @returns the aligned series map plus the routing decisions
+ */
 export function alignApplySeries(
   script: string,
   result: RunResult,
@@ -182,12 +208,12 @@ export function alignApplySeries(
     ...((result as { plot_meta?: Record<string, PlotMetaEntry> }).plot_meta || {}),
     ...((result.meta?.plot_meta || {}) as Record<string, PlotMetaEntry>),
   };
-  const sessionVia = String(result.meta?.sessionVia || '');
+  const sessionVia = String(result.meta?.['sessionVia'] || '');
   // Stream-backed runs (`stream-full` / `stream-delta`) evaluate a window the
   // engine owns, exactly like session-backed runs — join by bar time.
   const sessionAligned = sessionVia.includes('session') || sessionVia.startsWith('stream-');
   const chartWindowBars = ohlcvTimes.length;
-  const engineWindowBars = Number(result.meta?.windowBars);
+  const engineWindowBars = Number(result.meta?.['windowBars']);
   const engineClampedTail =
     Number.isFinite(engineWindowBars) &&
     engineWindowBars > 0 &&

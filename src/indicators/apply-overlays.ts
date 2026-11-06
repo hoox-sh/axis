@@ -40,13 +40,17 @@ import {
   lineSeriesToOverlayData,
   ohlcSeriesToBarData,
   parsePlotDisplay,
-  plotDisplayHas,
   PLOT_DISPLAY,
   type splitSeriesByKind,
   type PlotMetaEntry,
 } from '../results/plot-visuals';
 import { normalizePlotLineStyle } from './plot-prefs';
 
+/**
+ * One LWC-ready line overlay for a pane: bar points (a point with no `value`
+ * is whitespace that keeps the bar slot), resolved CSS color, and the
+ * panel/Pine style preferences the renderer applies.
+ */
 export interface OverlayLine {
   name: string;
   data: { time: number; value?: number }[];
@@ -60,6 +64,7 @@ export interface OverlayLine {
   display?: string | number | null;
 }
 
+/** One LWC bar/candle overlay built from `plotbar` / `plotcandle` series. */
 export interface OverlayOhlc {
   name: string;
   kind: 'plotbar' | 'plotcandle';
@@ -74,6 +79,11 @@ export interface OverlayOhlc {
   color?: string;
 }
 
+/**
+ * Inputs for {@link buildOverlayPayloads}: the run's series/plot meta and bar
+ * times, the alignment hints, the panel's per-plot overrides, and the
+ * epoch/owner used by the supersede gate.
+ */
 export interface OverlayBuildContext {
   epoch: number;
   silent: boolean;
@@ -103,6 +113,10 @@ export interface OverlayBuildContext {
   indicatorId?: string | null;
 }
 
+/**
+ * Either the payloads to paint, or the news that a newer editor Run won and
+ * nothing should be painted.
+ */
 export type OverlayBuildOutcome =
   | { superseded: true }
   | { superseded?: false; overlayLines: OverlayLine[]; overlayOhlc: OverlayOhlc[] };
@@ -134,6 +148,20 @@ function toLineData(
   return lineSeriesToOverlayData(ohlcvTimes, arr);
 }
 
+/**
+ * Build the line and OHLC overlay payloads for this run.
+ *
+ * Named `series` + `plot_meta` win over the legacy `plots[]` pad (which engines
+ * ship as all-null); an `hline` still applies from its price when the series is
+ * sparse. Precedence per plot is panel override → Pine declaration → palette,
+ * and the palette slot follows declaration order so hiding a plot cannot shift
+ * later colors. Plots whose `display` mask excludes the pane, or that the user
+ * hid, are dropped. Does not touch the chart; the only side effect is a
+ * Scriptlogs warning when the run has no bars.
+ *
+ * @param ctx - series/plot meta/times, alignment hints, panel overrides, epoch
+ * @returns `{ superseded: true }` once a newer editor Run owns the epoch
+ */
 export function buildOverlayPayloads(ctx: OverlayBuildContext): OverlayBuildOutcome {
   const {
     epoch,

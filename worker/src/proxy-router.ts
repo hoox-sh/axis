@@ -48,6 +48,10 @@ import {
 } from './http';
 import { allowRate } from './rate-limit';
 
+/**
+ * Everything a {@link ProxyHandler} gets: the request, its parsed URL, the resolved
+ * CORS origin, and any regex capture groups from a {@link ProxyRoute.match}.
+ */
 export interface ProxyContext {
   req: Request;
   /** Parsed `req.url`. */
@@ -58,8 +62,13 @@ export interface ProxyContext {
   params: string[];
 }
 
+/** Handles one allowlisted route; may be async. */
 export type ProxyHandler = (ctx: ProxyContext) => Response | Promise<Response>;
 
+/**
+ * One allowlisted route: exactly one matcher (`path`, `match`, or `startsWith`), an
+ * optional readable `label`, and the handler that answers it.
+ */
 export interface ProxyRoute {
   /** Literal path after the prefix, e.g. `/health`, `/llama/protocols`. */
   path?: string;
@@ -78,12 +87,17 @@ export interface ProxyRoute {
   handle: ProxyHandler;
 }
 
+/** Body for the router's 404: a `%s`-templated message plus optional extra fields. */
 export interface NotFoundBody {
   message: string;
   /** Extra fields merged into the error envelope (e.g. `hint`). */
   extra?: Record<string, unknown>;
 }
 
+/**
+ * Configuration for {@link createProxyRouter}: the claimed prefix, the CORS policy,
+ * the health body, the ordered routes, the 404 body, and an optional per-IP budget.
+ */
 export interface ProxyRouterOptions {
   /** Full path prefix claimed by this router, e.g. `/api/onchain`. */
   prefix: string;
@@ -102,6 +116,10 @@ export interface ProxyRouterOptions {
   ipLimit?: { limit: number; windowMs: number };
 }
 
+/**
+ * A built proxy prefix: `handle()` claims paths under the prefix (null otherwise) and
+ * `allowedPaths()` publishes the public surface for docs and allowlist tests.
+ */
 export interface ProxyRouter {
   /**
    * @returns `null` when `pathname` is outside this router's prefix, so the
@@ -115,6 +133,19 @@ export interface ProxyRouter {
   allowedPaths(): string[];
 }
 
+/**
+ * Builds the request handler for one allowlisted proxy prefix.
+ *
+ * `handle()` returns `null` for paths outside `prefix` so the caller can try the
+ * next handler; inside the prefix it answers `OPTIONS` with a preflight, non-`GET`
+ * with 405, an over-budget IP with 429 + `Retry-After`, `/` and `/health` from
+ * `health()`, then the first matching route in order, then a 404 whose message
+ * substitutes `%s` with the relative path.
+ *
+ * @param opts - Prefix, CORS set, health body factory, ordered routes, 404 body, and
+ *   optional per-IP budget.
+ * @returns The router; `allowedPaths()` throws if a `match` route has no `label`.
+ */
 export function createProxyRouter(opts: ProxyRouterOptions): ProxyRouter {
   const { prefix, cors, health, routes, notFound } = opts;
 
@@ -154,12 +185,9 @@ export function createProxyRouter(opts: ProxyRouterOptions): ProxyRouter {
         const ip = clientIp(req);
         if (!allowRate(`${prefix}:ip:${ip}`, opts.ipLimit.limit, opts.ipLimit.windowMs)) {
           return Promise.resolve(
-            json(
-              errorBody('RATE_LIMIT', 'Too many proxy requests'),
-              429,
-              origin,
-              { 'Retry-After': String(Math.ceil(opts.ipLimit.windowMs / 1000)) },
-            ),
+            json(errorBody('RATE_LIMIT', 'Too many proxy requests'), 429, origin, {
+              'Retry-After': String(Math.ceil(opts.ipLimit.windowMs / 1000)),
+            }),
           );
         }
       }
@@ -199,8 +227,6 @@ export function createProxyRouter(opts: ProxyRouterOptions): ProxyRouter {
 }
 
 /** Encode `body` with the router's CORS set — the common "return JSON" case. */
-export function proxyJson(
-  cors: (origin: string) => Record<string, string>,
-): JsonBuilder {
+export function proxyJson(cors: (origin: string) => Record<string, string>): JsonBuilder {
   return scopedJson(cors);
 }
