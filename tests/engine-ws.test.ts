@@ -15,6 +15,7 @@ import {
   getEngineWsClient,
   probeEngineWs,
   _resetEngineWsClients,
+  _setWsRunHeartbeatMs,
 } from '../src/engines/engine-ws';
 
 describe('endpointToRunWsUrl', () => {
@@ -106,6 +107,7 @@ describe('EngineWsClient', () => {
 
   afterEach(() => {
     _resetEngineWsClients();
+    _setWsRunHeartbeatMs(25_000);
     globalThis.WebSocket = prev;
   });
 
@@ -357,5 +359,47 @@ describe('EngineWsClient', () => {
     client.close();
     await expect(p).rejects.toThrow(/client closed/i);
     expect(client.isDead).toBe(true);
+  });
+
+  it('pings an idle open socket to keep it alive', async () => {
+    _setWsRunHeartbeatMs(10);
+    const client = getEngineWsClient('http://localhost:5002');
+    const connecting = client.ensureConnected();
+    FakeWS.instances[0]!.open();
+    await connecting;
+
+    await new Promise((r) => setTimeout(r, 40));
+    const types = FakeWS.instances[0]!.sent.map((s) => (JSON.parse(s) as { type: string }).type);
+    expect(types).toContain('ping');
+  });
+
+  it('does not ping while a run is in flight', async () => {
+    _setWsRunHeartbeatMs(10);
+    const client = getEngineWsClient('http://localhost:5002');
+    const connecting = client.ensureConnected();
+    FakeWS.instances[0]!.open();
+    await connecting;
+
+    const p = client.run({ script: '//', data: [] }, 5_000);
+    await Promise.resolve();
+    await new Promise((r) => setTimeout(r, 40));
+    const types = FakeWS.instances[0]!.sent.map((s) => (JSON.parse(s) as { type: string }).type);
+    expect(types).toContain('run');
+    expect(types).not.toContain('ping');
+    client.close();
+    await expect(p).rejects.toThrow(/client closed/i);
+  });
+
+  it('stops the heartbeat after close', async () => {
+    _setWsRunHeartbeatMs(10);
+    const client = getEngineWsClient('http://localhost:5002');
+    const connecting = client.ensureConnected();
+    FakeWS.instances[0]!.open();
+    await connecting;
+
+    client.close();
+    const before = FakeWS.instances[0]!.sent.length;
+    await new Promise((r) => setTimeout(r, 40));
+    expect(FakeWS.instances[0]!.sent.length).toBe(before);
   });
 });

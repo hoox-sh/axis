@@ -7,7 +7,7 @@ tags: [code, engines]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-03T21:03:08Z
+  at: 2026-11-06T06:39:51Z
 sources:
   - id: tree
     resource: "src/engines"
@@ -22,7 +22,7 @@ okf_lock: generated
 * `catalog.ts` — BUILTIN_ENGINES, DEFAULT_ENGINE_CAPABILITIES, DEFAULT_PYNE_WORKER_ENDPOINT, EngineHealthProbe, LOCAL_PYODIDE_INDEX, LOCAL_PYODIDE_VERSION, _resetEngineRegistrationFlag, _resetPyodideEngineState, _setCachedEngineCapabilitiesForTests, _setCachedEngineHealthForTests, callPyodideRunScript, capabilitiesFromHealth
 * `chart-data-session.ts` — _resetChartDataSessionForTests, ensureChartDataSession, getChartSessionInfo, releaseChartDataSession, tickChartDataSession
 * `data-sessions.ts` — CanonicalSeriesKey, DATA_PROVIDE_CHUNK, DATA_SESSION_RETRY_COOLDOWN_MS, DataSeriesKey, DataSeriesStatus, DataSessionCreateInput, DataSessionCreateResult, DataSessionHandle, DataSessionMiss, DataSessionRunResult, EnsureDataSessionOptions, RunDataSessionOptions
-* `engine-ws.ts` — EngineWsResult, EngineWsRunRequest, _resetEngineWsClients, endpointToRunWsUrl, getEngineWsClient, probeEngineWs
+* `engine-ws.ts` — EngineWsResult, EngineWsRunRequest, _resetEngineWsClients, _setWsRunHeartbeatMs, endpointToRunWsUrl, getEngineWsClient, probeEngineWs
 * `health.ts` — AdvertisedRunMode, CompileReadiness, DEFAULT_ENGINE_HEALTH, EngineCompileHealth, EngineFeatureHealth, EngineHealth, advertisedRunMode, compileReadiness, healthAdvertises, healthFromBody
 * `json-parse-worker.ts`
 * `json-sanitize.ts` — _resetParseEngineJsonForTests, parseEngineJson, parseEngineJsonAsync, sanitizeNonFiniteJson

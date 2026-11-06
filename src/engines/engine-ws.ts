@@ -114,6 +114,16 @@ function abortError(): Error {
 /** How long a dead client stays dead before a reconnect attempt is allowed. */
 const DEAD_COOLDOWN_MS = 45_000;
 
+/**
+ * Keepalive interval for the shared `/ws/run` socket. The Pro API answers
+ * `{type:"ping"}` with `{type:"pong"}`. The `/ws/live` stream client already
+ * heartbeats; this client never did, so an idle socket behind Cloudflare's
+ * ~100s WebSocket idle timeout got torn down and the next run fell back to
+ * REST for the dead cool-down. Ping only while open **and** idle so an active
+ * run is never interrupted. Mutable for the unit test seam.
+ */
+let WS_RUN_HEARTBEAT_MS = 25_000;
+
 class EngineWsClient {
   private url: string;
   private ws: WebSocket | null = null;
@@ -123,6 +133,8 @@ class EngineWsClient {
   /** Epoch ms until which {@link isDead} stays true after a hard failure. */
   private deadUntil = 0;
   private reqSeq = 0;
+  /** Keepalive ping timer, live only while the shared socket is open. */
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(url: string) {
     this.url = url;
@@ -152,6 +164,31 @@ class EngineWsClient {
   private markDead(): void {
     this.dead = true;
     this.deadUntil = Date.now() + DEAD_COOLDOWN_MS;
+  }
+
+  /**
+   * Keep the idle socket alive through proxies (Cloudflare's ~100s WS idle
+   * timeout). Ping only when there is no in-flight run — a run's request/reply
+   * frames already count as activity, and a ping must never interleave with an
+   * evaluation. The server's `pong` is ignored by {@link handleMessage}.
+   */
+  private startHeartbeat(): void {
+    this.stopHeartbeat();
+    this.heartbeatTimer = setInterval(() => {
+      if (!this.isOpen || this.pending.size > 0) return;
+      try {
+        this.ws?.send(JSON.stringify({ type: 'ping' }));
+      } catch {
+        /* socket closed between the check and send — the close handler cleans up */
+      }
+    }, WS_RUN_HEARTBEAT_MS);
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
   }
 
   async ensureConnected(timeoutMs = 6_000): Promise<void> {
@@ -218,6 +255,7 @@ class EngineWsClient {
         clearTimeout(timer);
         this.dead = false;
         this.deadUntil = 0;
+        this.startHeartbeat();
         resolve();
       };
 
@@ -239,6 +277,7 @@ class EngineWsClient {
         // its in-flight runs) down.
         if (!owns()) return;
         this.ws = null;
+        this.stopHeartbeat();
         // Reject all in-flight (premature or mid-run close)
         for (const [id, p] of this.pending) {
           clearTimeout(p.timer);
@@ -456,6 +495,7 @@ class EngineWsClient {
     // Permanent close (reset / teardown) — not a cool-down soft-dead.
     this.dead = true;
     this.deadUntil = Date.now() + DEAD_COOLDOWN_MS;
+    this.stopHeartbeat();
     for (const [, p] of this.pending) {
       clearTimeout(p.timer);
       p.reject(new Error('WebSocket client closed'));
@@ -531,4 +571,9 @@ export async function probeEngineWs(endpoint: string, timeoutMs = 4_000): Promis
 export function _resetEngineWsClients() {
   for (const c of clients.values()) c.close();
   clients.clear();
+}
+
+/** @internal test seam — shrink the `/ws/run` keepalive interval. */
+export function _setWsRunHeartbeatMs(ms: number) {
+  WS_RUN_HEARTBEAT_MS = ms;
 }
