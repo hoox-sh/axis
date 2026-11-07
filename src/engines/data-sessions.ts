@@ -987,14 +987,16 @@ export async function repairStaleEngineSeries(opts: {
         'axis-local',
         opts.signal,
       );
-      // Closed-market holes are already absent from the local window. Uploading
-      // them adds nothing; remember the bounds so the next tick does not retry.
-      if (holed && uploaded.added <= 0) {
-        if (gapSig) gapNoFill.set(memoKey, gapSig);
-        return { repaired: false, via: 'local', bars: 0 };
+      if (!(holed && uploaded.added <= 0)) {
+        noteSeriesProvisioned(memoKey, need, 'local');
+        return { repaired: true, via: 'local', bars: tail.length };
       }
-      noteSeriesProvisioned(memoKey, need, 'local');
-      return { repaired: true, via: 'local', bars: tail.length };
+      // The local window could not fill the hole: AXIS' own dataset has the
+      // same minutes missing, or the hole is older than the local window.
+      // Remember the bounds so the next tick does not re-upload the same
+      // window, then fall through to the engine-side fetch instead of giving
+      // up — the engine walks the venue and closes the hole itself.
+      if (gapSig) gapNoFill.set(memoKey, gapSig);
     } catch (err: unknown) {
       return {
         repaired: false,

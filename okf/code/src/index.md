@@ -11,7 +11,7 @@
 * [src/engine](engine.md) - Redesign2 engine module barrel.
 * [src/engines](engines.md) - src/engines contains batch.ts, catalog.ts, chart-data-session.ts, and 15 more files.
 * [src/hp](hp.md) - What remains of the old HP tree: the AXB1 codec and the Pine execution context.
-* [src/indicators](indicators.md) - src/indicators contains IndicatorCard.tsx, IndicatorPanel.tsx, apply-context.ts, and 16 more files.
+* [src/indicators](indicators.md) - src/indicators contains IndicatorCard.tsx, IndicatorPanel.tsx, apply-context.ts, and 17 more files.
 * [src/mcp](mcp.md) - AXIS in-app MCP host — capabilities, snapshot, Worker bridge.
 * [src/onchain](onchain.md) - Public entry for the AXIS on-chain data plane (Phase 1–3 light).
 * [src/perf](perf.md) - Minimal performance telemetry for Phase 0 measurement.
@@ -37,5 +37,5 @@
 * [data](data/) - Background Data Source Manager — multi-page OHLCV backfill to a past date.
 * [engine](engine/) - Redesign2 engine module barrel.
 * [hp](hp/) - What remains of the old HP tree: the AXB1 codec and the Pine execution context.
-* [indicators](indicators/) - src/indicators contains IndicatorCard.tsx, IndicatorPanel.tsx, apply-context.ts, and 16 more files.
+* [indicators](indicators/) - src/indicators contains IndicatorCard.tsx, IndicatorPanel.tsx, apply-context.ts, and 17 more files.
 * [ui](ui/) - src/ui contains AboutModal.tsx, AgentPanel.tsx, AlertsPanel.tsx, and 88 more files.

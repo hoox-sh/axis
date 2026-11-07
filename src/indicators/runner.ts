@@ -458,6 +458,7 @@ export {
   _resetRunEpochForTests,
 } from './run-helpers';
 import { normalizeBarTime } from '../data/parse-bars';
+import { holdForEngineHole } from './engine-hole-guard';
 
 /**
  * End interactive Run status for this epoch: ready/error when still current,
@@ -1374,6 +1375,7 @@ async function runAndApplyInner(
     resultTimes,
     chartWindowBars,
     gapTimes,
+    holeTimes,
     staleNoAxis,
   } = alignApplySeries(script, result, bars, {
     silent,
@@ -1404,6 +1406,16 @@ async function runAndApplyInner(
     ) {
       noteEngineAxisBehindChart(engineLast, chartLast);
     }
+  }
+  // Chart guard: the engine evaluated a window with minutes missing *in the
+  // middle*, so every plot it returned is `na` there. Do not deliver that to
+  // the chart — hold the last good plots while the repair runs (bounded; a
+  // hole that outlives the hold is painted with a break instead).
+  if (holdForEngineHole(indicatorId, holeTimes)) {
+    return {
+      ...result,
+      meta: { ...result.meta, skipped: 'engine-hole' },
+    };
   }
   // Line-like series only — bgcolor/plotshape handled below
   const seriesEntries = split.lines.map((e) => [e.key, e.values] as const);

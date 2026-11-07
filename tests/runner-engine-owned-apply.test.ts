@@ -39,6 +39,7 @@ import {
 import { alignApplySeries, _resetNoEngineAxisWarnForTests } from '../src/indicators/apply-context';
 import { resolvePlotFillBands } from '../src/results/plot-visuals';
 import { setManager, setDrawingLayer } from '../src/chart/manager-access';
+import { _resetEngineHoleGuardForTests } from '../src/indicators/engine-hole-guard';
 import { SAMPLE_BARS } from './fixtures/bars';
 
 const ENDPOINT = 'http://run.test:5002';
@@ -833,6 +834,52 @@ describe('engine-owned series apply', () => {
     const line = captured[captured.length - 1]!.lines[0]!;
     expect(line.data).toHaveLength(SAMPLE_BARS.length);
     expect(line.data.map((p) => p.value)).toEqual([3, 4, 5, 6, 7]);
+  });
+
+  it('holds the last good plots when the engine axis has an internal hole', async () => {
+    // The engine's own series lost minutes: the run ships an axis that skips a
+    // chart bar *between its own first and last bar*. Painting it would put a
+    // hole (or a connector) in the indicator, so the guard keeps the last good
+    // plots and lets the repair close the hole first.
+    _resetEngineHoleGuardForTests();
+    captured = [];
+    setManager({
+      getPane: (id: string) =>
+        id === 'price'
+          ? { id: 'price', type: 'price', chart: {}, series: {}, priceLines: {} }
+          : undefined,
+      syncOverlayLines: (paneId: string, lines: CapturedApply['lines']) => {
+        captured.push({ paneId, lines });
+      },
+      syncBgcolorBands: () => {},
+    } as never);
+
+    const bars = SAMPLE_BARS as readonly Bar[];
+    const engineTimes = [bars[0]!.time, bars[1]!.time, bars[3]!.time, bars[4]!.time];
+    const precomputed: RunResult = {
+      status: 'success',
+      plots: [],
+      series: { plot0: [1, 2, 4, 5] },
+      events: [],
+      meta: {
+        sessionVia: 'session-tick',
+        session_id: 's11',
+        overlay: true,
+        script_name: 'eo',
+        plot_meta: { plot0: {} },
+        engineTimes,
+      },
+    };
+    const r = await runAndApply(SCRIPT, undefined, {
+      silent: true,
+      openResults: false,
+      liveTick: true,
+      precomputedResult: precomputed,
+    });
+    expect(r.status).toBe('success');
+    expect(r.meta?.skipped).toBe('engine-hole');
+    expect(captured).toHaveLength(0);
+    expect(store.logs.some((l) => /internal hole of 1 bar/i.test(l.message))).toBe(true);
   });
 
   it('skips a shorter session series when the chart grew without an axis (idle gap)', async () => {

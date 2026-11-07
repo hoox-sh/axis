@@ -42,6 +42,7 @@ import { reportUiError } from '../ui/boot-errors';
 import type { PlotMetaEntry } from '../results/plot-visuals';
 import type { splitSeriesByKind } from '../results/plot-visuals';
 import { alignApplySeries } from './apply-context';
+import { holdForEngineHole } from './engine-hole-guard';
 import { appliedScriptStillOnChart, applyDrawings } from './apply-drawings';
 import { applyPlotsAndMarkers } from './apply-mutations';
 import { buildOverlayPayloads, type OverlayLine, type OverlayOhlc } from './apply-overlays';
@@ -466,6 +467,7 @@ export function applyPrecomputedChart(
     resultTimes,
     chartWindowBars,
     gapTimes,
+    holeTimes,
     staleNoAxis,
   } = alignSeries(script, result, barsAxis, {
     silent,
@@ -490,6 +492,12 @@ export function applyPrecomputedChart(
     ) {
       noteEngineAxisBehindChart(engineLast, chartLast);
     }
+  }
+  // Chart guard: a run evaluated over an internally holed engine window is not
+  // delivered — hold the last good plots while it repairs (bounded).
+  if (holdForEngineHole(indicatorId, holeTimes)) {
+    tipCaches.delete(id);
+    return { ...result, meta: { ...result.meta, skipped: 'engine-hole' } };
   }
   const seriesEntries = split.lines.map((e) => [e.key, e.values] as const);
 

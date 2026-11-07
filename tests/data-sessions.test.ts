@@ -1364,10 +1364,15 @@ describe('repairStaleEngineSeries', () => {
     expect(rec.calls.some((c) => c.path === '/data/series/provide')).toBe(true);
   });
 
-  it('does not re-upload a hole the local window cannot fill', async () => {
+  it('falls back to the engine fetch when the local window cannot fill a hole', async () => {
+    // AXIS' own dataset can have the same minutes missing (the chart merged
+    // venue ticks the dataset never got). The upload then adds nothing — the
+    // repair must ask the engine to walk the venue instead of giving up, which
+    // is the only path that actually closed the observed 40-bar hole.
     const localBars = freshBars(4);
     const newest = localBars[localBars.length - 1]!.time;
     let provides = 0;
+    let fetches = 0;
     const rec = recorder((c) => {
       if (isStatus(c)) {
         return jsonResponse({
@@ -1380,6 +1385,10 @@ describe('repairStaleEngineSeries', () => {
       if (c.path === '/data/series/provide') {
         provides += 1;
         return jsonResponse({ status: 'success', added: 0, updated: 4, count: 40 });
+      }
+      if (c.path === '/data/series/fetch') {
+        fetches += 1;
+        return jsonResponse({ status: 'success', fetched: 40, count: 40 });
       }
       return jsonResponse({ status: 'error' }, 500);
     });
@@ -1394,9 +1403,12 @@ describe('repairStaleEngineSeries', () => {
     };
     const first = await repairStaleEngineSeries(opts);
     const second = await repairStaleEngineSeries(opts);
-    expect(first).toEqual({ repaired: false, via: 'local', bars: 0 });
+    expect(first).toEqual({ repaired: true, via: 'fetch', bars: 0 });
+    // The same hole bounds are remembered: the second call does not re-upload
+    // or re-fetch until the series bounds move.
     expect(second).toEqual({ repaired: false, via: 'none', bars: 0 });
     expect(provides).toBe(1);
+    expect(fetches).toBe(1);
   });
 
   it('is cooldown-guarded per (endpoint, series)', async () => {

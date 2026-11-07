@@ -52,6 +52,7 @@ import {
 import type { PlotMetaEntry } from '../results/plot-visuals';
 import { splitSeriesByKind } from '../results/plot-visuals';
 import { resolveScriptDisplayName } from './run-target';
+import { engineHoleTimes } from './engine-hole-guard';
 import { appendLog } from '../store';
 
 /**
@@ -125,6 +126,12 @@ export interface AlignedApplySeries {
    * Lightweight Charts span the `na` rows with a straight connector.
    */
   gapTimes: number[];
+  /**
+   * The subset of {@link gapTimes} that sits **inside** the engine axis' own
+   * span — a genuine hole, not a shorter window. The chart guard holds the last
+   * good plots while such a run is repaired.
+   */
+  holeTimes: number[];
   /**
    * A session/stream run whose engine shipped no bar axis while its series
    * length disagrees with the chart window: a live push over a moved window
@@ -403,6 +410,7 @@ export function alignApplySeries(
     resultTimes,
     chartWindowBars,
     gapTimes: staleNoAxis ? [] : missingChartTimes(ohlcvTimes, resultTimes),
+    holeTimes: staleNoAxis ? [] : engineHoleTimes(ohlcvTimes, resultTimes),
     staleNoAxis,
   };
 }
