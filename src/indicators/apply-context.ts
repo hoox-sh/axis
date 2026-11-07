@@ -342,14 +342,18 @@ export function alignApplySeries(
       }
     }
   }
+  const split = splitSeriesByKind(seriesMap, plotMeta);
   // A session/stream run whose engine shipped **no** bar axis is tail-pinned
   // onto the chart only when the window is unchanged (see `staleNoAxis`).
-  if (sessionAligned && !resultTimes && !staleNoAxis) {
+  // An *unchanged* tick carries no series at all (the client reuses its cached
+  // result), so there is nothing to pin — warning there was noise.
+  const hasPaintableSeries =
+    split.lines.length > 0 || (Array.isArray(result.plots) && result.plots.length > 0);
+  if (sessionAligned && !resultTimes && !staleNoAxis && hasPaintableSeries) {
     warnOnceNoEngineAxis(resolveScriptDisplayName(script, undefined));
   } else if (staleNoAxis) {
     warnOnceStaleSkip(resolveScriptDisplayName(script, undefined));
   }
-  const split = splitSeriesByKind(seriesMap, plotMeta);
   if (engineClampedTail && !sessionAligned && !opts.silent) {
     appendLog(
       'info',

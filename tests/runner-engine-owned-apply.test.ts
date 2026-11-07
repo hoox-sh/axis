@@ -27,7 +27,7 @@ import { _resetStorageRegistrationFlag } from '../src/storage/catalog';
 import { _resetDataSessionMemo } from '../src/engines/data-sessions';
 import { _resetChartDataSessionForTests } from '../src/engines/chart-data-session';
 import { reconcile } from 'solid-js/store';
-import { setStore, setActivePlugin, clearLogs } from '../src/store';
+import { setStore, setActivePlugin, clearLogs, store } from '../src/store';
 import {
   runAndApply,
   _resetRunEpochForTests,
@@ -36,7 +36,7 @@ import {
   extractEngineResultTimes,
   type RunResult,
 } from '../src/indicators/runner';
-import { alignApplySeries } from '../src/indicators/apply-context';
+import { alignApplySeries, _resetNoEngineAxisWarnForTests } from '../src/indicators/apply-context';
 import { resolvePlotFillBands } from '../src/results/plot-visuals';
 import { setManager, setDrawingLayer } from '../src/chart/manager-access';
 import { SAMPLE_BARS } from './fixtures/bars';
@@ -202,6 +202,42 @@ describe('alignApplySeries engine-axis holes', () => {
     expect(aligned.resultTimes).toEqual([T(0), T(1), T(4)]);
     expect(aligned.gapTimes).toEqual([T(2), T(3)]);
     expect(aligned.seriesMap.plot0).toEqual([1, 2, null, null, 4]);
+  });
+
+  it('does not warn "no bar axis" for an unchanged session tick', () => {
+    // An unchanged tick carries no series (the client reuses its cached
+    // result) — there is nothing an axis could align, so the warn-once line
+    // used to fire on ordinary ticks and read as a real problem.
+    clearLogs();
+    _resetNoEngineAxisWarnForTests();
+    const result = {
+      status: 'success',
+      plots: [],
+      series: {},
+      meta: { sessionVia: 'session-tick', overlay: true },
+    } as unknown as RunResult;
+    const aligned = alignApplySeries('indicator("x", overlay=true)\nplot(close)', result, bars, {
+      silent: true,
+      livePush: true,
+    });
+    expect(aligned.seriesMap).toEqual({});
+    expect(store.logs.some((l) => /no bar axis/i.test(l.message))).toBe(false);
+  });
+
+  it('still warns when a session run ships values without an axis', () => {
+    clearLogs();
+    _resetNoEngineAxisWarnForTests();
+    const result = {
+      status: 'success',
+      plots: [],
+      series: { plot0: [1, 2, 3, 4, 5] },
+      meta: { sessionVia: 'session-tick', overlay: true },
+    } as unknown as RunResult;
+    alignApplySeries('indicator("x", overlay=true)\nplot(close)', result, bars, {
+      silent: true,
+      livePush: true,
+    });
+    expect(store.logs.some((l) => /no bar axis/i.test(l.message))).toBe(true);
   });
 
   it('reports no gaps when the axis covers the chart', () => {
