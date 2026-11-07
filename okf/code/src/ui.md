@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/ui"
-description: "src/ui contains AboutModal.tsx, AgentPanel.tsx, AlertsPanel.tsx, and 87 more files."
+description: "src/ui contains AboutModal.tsx, AgentPanel.tsx, AlertsPanel.tsx, and 88 more files."
 resource: "src/ui"
 tags: [code, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-04T23:38:00Z
+  at: 2026-11-07T12:59:09Z
 sources:
   - id: tree
     resource: "src/ui"
@@ -92,6 +92,7 @@ okf_lock: generated
 * `editor-problems.ts` — EDITOR_PROBLEMS_DEFAULT_HEIGHT, EDITOR_PROBLEMS_HEIGHT_KEY, EDITOR_PROBLEMS_MIN_HEIGHT, EditorProblem, clampProblemsHeight, countProblemsBySeverity, diagnosticsToProblems, formatProblemForCopy, formatProblemLine, formatProblemSource, formatProblemsListForCopy, severityRank
 * `error-share.ts` — AXIS_DIAGNOSTIC_VERSION, BuildDiagnosticOpts, ErrorDiagnosticPayload, ErrorShareOffer, _resetErrorShareThrottleForTests, acceptErrorShareOffer, buildErrorDiagnosticPayload, dismissErrorShareOffer, endpointHostOnly, exportErrorDiagnosticNow, isErrorShareEnabled, isSecretFieldName
 * `exchange-credentials-form.ts` — EMPTY_EXCHANGE_CREDENTIAL_FORM, EXCHANGE_CREDENTIAL_VENUES, EXCHANGE_CREDENTIAL_VENUE_LABELS, ExchangeCredentialFormState, ExchangeCredentialVenue, ccxtNeedsPassword, defaultExchangeCredentialVenue, exchangeVenueLabel, isExchangeCredentialVenue, normalizeCcxtExchangeId, venueNeedsPassphrase
+* `focus-search.ts` — bindSlashToSearch
 * `focus-trap.ts` — installFocusTrap, listFocusable
 * `hud-model.ts` — EngTopology, ExecMode, FeedChipView, HudChipId, HudInput, HudSnapshot, PathClass, RunClass, composeCaption, deriveHud, feedChipMeta, feedChipView
 * `icon-map.ts` — ICON_MAP, IconName, PANEL_ICON, findDuplicateIconGlyphs

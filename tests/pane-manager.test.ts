@@ -106,6 +106,60 @@ describe('PaneManager', () => {
     expect(pm.getAllPanes()).toHaveLength(1);
   });
 
+  it('setCandleData rebases a preserved viewport onto a shorter window', () => {
+    // Anchored-window reset: 6 bars drop to 4. The pre-paint range is kept by
+    // the live slide path, but the old indices now point past the new tip — the
+    // phantom right margin that made the chart look shifted left.
+    const bar = (time: number) => ({
+      time,
+      open: 1,
+      high: 2,
+      low: 0.5,
+      close: 1.5,
+      volume: 1,
+    });
+    const price = pm.createPane('price', 'price', 'Price');
+    pm.createPane('volume', 'volume', 'Volume', 60);
+    let seriesData: unknown[] = [];
+    (price.series as Record<string, unknown>)['candle'] = {
+      setData: (data: unknown[]) => {
+        seriesData = data;
+      },
+      data: () => seriesData,
+      applyOptions: () => {},
+      seriesType: () => 'Candlestick',
+    };
+    pm.setCandleData(
+      Array.from({ length: 6 }, (_, i) => bar(i * 60)),
+      'candles',
+      { fit: true },
+    );
+    const writes: Array<{ from: number; to: number }> = [];
+    const chart = price.chart as unknown as {
+      timeScale: () => Record<string, unknown>;
+    };
+    chart.timeScale = () => ({
+      fitContent: () => {},
+      subscribeVisibleLogicalRangeChange: () => {},
+      unsubscribeVisibleLogicalRangeChange: () => {},
+      getVisibleLogicalRange: () => ({ from: 0, to: 5 }),
+      setVisibleLogicalRange: (range: { from: number; to: number }) => {
+        writes.push(range);
+      },
+      setVisibleRange: () => {},
+      options: () => ({ rightOffset: 0 }),
+      timeToCoordinate: () => 10,
+      coordinateToLogical: () => 5,
+    });
+    pm.setCandleData(
+      Array.from({ length: 4 }, (_, i) => bar((i + 2) * 60)),
+      'candles',
+      { fit: false, keepRange: { from: 0, to: 5 } },
+    );
+    // Two head bars dropped and the right edge clamped onto the new tip (3).
+    expect(writes.at(-1)).toEqual({ from: -2, to: 3 });
+  });
+
   it('single layout puts volume on the price chart and keeps candles when volume goes', () => {
     const price = pm.createPane('price', 'price', 'Price');
     const volume = pm.createPane('volume', 'volume', 'Volume', 80);
@@ -1009,9 +1063,7 @@ describe('PaneManager', () => {
         applied.push(o);
       },
     } as never;
-    const kinds = (
-      pm as unknown as { overlaySeriesKinds: Map<string, string> }
-    ).overlaySeriesKinds;
+    const kinds = (pm as unknown as { overlaySeriesKinds: Map<string, string> }).overlaySeriesKinds;
 
     kinds.set('price:overlay_s1__Vol', 'histogram');
     expect(pm.setOverlayLineStyle('price', 'Vol', 'dashed')).toBe(false);

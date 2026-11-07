@@ -7,7 +7,7 @@ tags: [chart, code, drawings, tools]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:07:37Z
+  at: 2026-11-07T12:59:09Z
 sources:
   - id: tree
     resource: "src/chart/drawings/tools"
@@ -29,7 +29,7 @@ okf_lock: generated
 * `patterns-extra.ts` — priceRatio
 * `patterns.ts`
 * `registry.ts` — PointArity, ToolHandler, ToolHitCtx, ToolViewCtx, getToolHandler, listToolHandlers, registerToolHandler, toolArity, toolNeedsMultiClick
-* `safe.ts` — DRAWING_POINTS_MAX, DRAWING_TEXT_MAX, clampOpacity, clampStrokeWidth, finiteOr, isFinitePoint, safePrompt, sanitizeDrawingText, sanitizePoints, sanitizeStrokeColor
+* `safe.ts` — DRAWING_POINTS_MAX, DRAWING_TEXT_MAX, asTwoPoint, clampOpacity, clampStrokeWidth, finiteOr, isFinitePoint, isTwoPointDrawing, safePrompt, sanitizeDrawingText, sanitizePoints, sanitizeStrokeColor
 * `shapes-extra.ts` — arcPathD, curveControls, curvePathD, rotatedRectCorners, sampleArc, sampleCurve
 * `shapes.ts`
 * `text-prompt.ts` — DrawingTextPromptOptions, isDrawingTextPromptOpen, promptDrawingText

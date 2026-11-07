@@ -7,7 +7,7 @@ tags: [code, mcp, worker]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-31T09:56:15Z
+  at: 2026-11-07T12:59:09Z
 sources:
   - id: tree
     resource: "worker/src/mcp"
@@ -27,6 +27,10 @@ okf_lock: generated
 * `protocol.ts` — APP_INVOKE_TIMEOUT_MS, AppInvokeRequest, AppInvokeResponse, JSONRPC_INTERNAL, JSONRPC_INVALID_PARAMS, JSONRPC_INVALID_REQUEST, JSONRPC_METHOD_NOT_FOUND, JSONRPC_PARSE, JsonRpcError, JsonRpcId, JsonRpcRequest, JsonRpcResponse
 * `proxy.ts` — ProxyCall, ProxyResult, proxyWorkerRequest
 * `tools.ts` — ToolContext, callTool, getPrompt, listPrompts, listResources, listTools, readResource
+
+# Packages
+
+`JSON but not a request`
 
 # Depends on
 

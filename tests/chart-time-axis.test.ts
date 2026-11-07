@@ -23,10 +23,8 @@ import { describe, expect, it } from 'bun:test';
 
 import { mapBarsToVolumeData } from '../src/chart/heavy-data';
 import { mapBarsToPriceData } from '../src/chart/chart-type';
-import {
-  clampPointsToPaintedRange,
-  projectToCandleAxis,
-} from '../src/chart/series-sanitize';
+import { clampPointsToPaintedRange, projectToCandleAxis } from '../src/chart/series-sanitize';
+import { barsBefore, rebaseLogicalRange } from '../src/chart/v1/invariants';
 import { mergeEngineSnapshot, snapshotMatchesChart } from '../src/streams/stream-live';
 import type { Bar } from '../src/store/types';
 
@@ -153,11 +151,7 @@ describe('projectToCandleAxis', () => {
 
     const projected = projectToCandleAxis(rows, [100, 200, 300], (time) => ({ time }));
 
-    expect(projected).toEqual([
-      { time: 100, value: 1 },
-      { time: 200 },
-      { time: 300, value: 3 },
-    ]);
+    expect(projected).toEqual([{ time: 100, value: 1 }, { time: 200 }, { time: 300, value: 3 }]);
   });
 
   it('drops rows outside the axis', () => {
@@ -175,5 +169,55 @@ describe('projectToCandleAxis', () => {
   it('passes the rows through when there is no axis yet', () => {
     const rows = [{ time: 100, value: 1 }];
     expect(projectToCandleAxis(rows, null, (time) => ({ time }))).toBe(rows);
+  });
+});
+
+describe('barsBefore', () => {
+  it('counts bars strictly before a time', () => {
+    const times = [100, 200, 300, 400];
+    expect(barsBefore(times, 300)).toBe(2);
+    expect(barsBefore(times, 99)).toBe(0);
+    expect(barsBefore(times, 500)).toBe(4);
+    expect(barsBefore([], 100)).toBe(0);
+  });
+});
+
+describe('rebaseLogicalRange (viewport after a shorter repaint)', () => {
+  // The bug this guards: a `fit: false` repaint keeps the pre-paint logical
+  // range. When the new window is shorter (window reset, a smaller engine/DSM
+  // window) the old indices point past the new tip, so the price pane and every
+  // indicator render as if shifted left behind a huge empty right margin.
+  const prev = Array.from({ length: 5000 }, (_, i) => 1_700_000_000 + i * 60);
+  const shorter = prev.slice(1667); // head dropped: 3333 bars left
+
+  it('shifts a preserved range by the dropped head bars', () => {
+    // Viewport showing the newest 1000 bars of the old 5000-bar window.
+    const rebased = rebaseLogicalRange({ from: 4000, to: 5000 }, prev, shorter, 20);
+    // 1667 bars dropped → the same times are indices 2333..3333.
+    expect(rebased).toEqual({ from: 2333, to: 3333 });
+  });
+
+  it('clamps a range that sits past the new tip', () => {
+    // Nothing dropped, but the range was left 300 bars past the last bar.
+    const rebased = rebaseLogicalRange({ from: 5000, to: 6300 }, prev, prev, 20);
+    expect(rebased).toEqual({ from: 3719, to: 5019 });
+  });
+
+  it('leaves an unchanged window alone', () => {
+    expect(rebaseLogicalRange({ from: 100, to: 300 }, prev, prev, 20)).toEqual({
+      from: 100,
+      to: 300,
+    });
+  });
+
+  it('re-anchors a viewport whose bars were all dropped from the head', () => {
+    const rebased = rebaseLogicalRange({ from: 500, to: 700 }, prev, shorter, 20);
+    expect(rebased).toEqual({ from: -20, to: 180 });
+  });
+
+  it('returns null when it cannot rebase (caller keeps the raw range)', () => {
+    expect(rebaseLogicalRange(null, prev, prev)).toBeNull();
+    expect(rebaseLogicalRange({ from: 0, to: 100 }, prev, [], 20)).toBeNull();
+    expect(rebaseLogicalRange({ from: 5, to: 5 }, prev, prev, 20)).toBeNull();
   });
 });

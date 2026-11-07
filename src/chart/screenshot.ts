@@ -297,21 +297,193 @@ function visiblePaneIds(scope: ScreenshotScope): string[] {
     .map((p) => p.id);
 }
 
+/** Pane geometry of the one shared chart (v1 layout). */
+export type SharedChartPlan = {
+  /** CSS-px size of the chart's pane stack + time axis. */
+  width: number;
+  height: number;
+  /** Visible panes in chart order, with their CSS-px offset from the top. */
+  panes: Array<{ id: string; top: number; height: number }>;
+  timeAxis: { top: number; height: number };
+};
+
+/**
+ * Geometry when every pane is an LWC pane on **one** chart.
+ *
+ * `chart.takeScreenshot()` is chart-level, so in the v1 layout the facade of
+ * any pane returns the whole chart — capturing per pane stacked N copies of the
+ * same image (a 4-pane chart produced a 4× repeated PNG).
+ */
+function sharedChartPlan(ids: string[]): SharedChartPlan | null {
+  const mgr = getManager();
+  const plan = (mgr as { screenshotPlan?: (ids: string[]) => SharedChartPlan | null } | undefined)
+    ?.screenshotPlan;
+  if (typeof plan !== 'function') return null;
+  try {
+    return plan.call(mgr, ids);
+  } catch {
+    return null;
+  }
+}
+
+/** CSS px from an inline style value (`12.5px` → 12.5); 0 when unset. */
+function stylePx(value: string | null | undefined): number {
+  const n = Number.parseFloat(String(value ?? ''));
+  return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * Screenshot-pixel crop for one shared-chart capture.
+ *
+ * `ratio` maps CSS px (LWC pane heights) onto the screenshot canvas, so the
+ * math is DPR- and scale-independent. `panes` scope keeps the whole stack;
+ * `price` keeps the price pane and re-attaches the shared time axis below it
+ * (the axis lives once, at the bottom of the chart).
+ *
+ * @param plan pane geometry from `PaneManager.screenshotPlan`
+ * @param scope capture scope
+ * @param shotHeight captured canvas height in device px
+ * @returns crop in screenshot px (`top` is the pane-stack offset)
+ */
+export function screenshotCrop(
+  plan: SharedChartPlan,
+  scope: ScreenshotScope,
+  shotHeight: number,
+): { top: number; height: number; timeAxisTop: number; timeAxisHeight: number } | null {
+  if (!(shotHeight > 0) || !(plan.height > 0) || !plan.panes.length) return null;
+  const ratio = shotHeight / plan.height;
+  const timeAxisTop = Math.round(plan.timeAxis.top * ratio);
+  const timeAxisHeight = Math.max(0, Math.round(plan.timeAxis.height * ratio));
+  if (scope !== 'price') {
+    return { top: 0, height: shotHeight, timeAxisTop, timeAxisHeight };
+  }
+  const box = plan.panes.find((p) => p.id === 'price') ?? plan.panes[0];
+  if (!box) return null;
+  return {
+    top: Math.round(box.top * ratio),
+    height: Math.max(1, Math.round(box.height * ratio)),
+    timeAxisTop,
+    timeAxisHeight,
+  };
+}
+
+/**
+ * Composite the pane drawing SVGs onto a chart screenshot.
+ *
+ * Each layer sits in its pane's plot rect; its inline `left`/`top`/`width`/
+ * `height` are the geometry it paints at, so scaling by the screenshot ratio
+ * lands it exactly where the live chart shows it.
+ */
+async function compositeDrawings(
+  target: HTMLCanvasElement,
+  plan: SharedChartPlan,
+  ids: string[],
+  ratio: number,
+  cropTop: number,
+  priceOnly: boolean,
+): Promise<void> {
+  const ctx = target.getContext('2d');
+  if (!ctx) return;
+  for (const id of ids) {
+    if (priceOnly && id !== 'price') continue;
+    const box = plan.panes.find((p) => p.id === id);
+    if (!box) continue;
+    const svg = paneHost(id)?.querySelector?.('svg.axis-drawing-layer') as SVGSVGElement | null;
+    if (!svg) continue;
+    const w = Number(svg.getAttribute('width')) || svg.clientWidth || 0;
+    const h = Number(svg.getAttribute('height')) || svg.clientHeight || 0;
+    if (!(w > 0) || !(h > 0)) continue;
+    const overlay = await rasterizeSvg(svg, Math.round(w * ratio), Math.round(h * ratio));
+    if (!overlay) continue;
+    ctx.drawImage(
+      overlay,
+      Math.round(stylePx(svg.style.left) * ratio),
+      Math.round((box.top + stylePx(svg.style.top)) * ratio) - cropTop,
+    );
+  }
+}
+
+/**
+ * Capture the one shared chart, cropping to the price pane for that scope.
+ *
+ * @param plan pane geometry from {@link PaneManager.screenshotPlan}
+ * @param ids panes the caller asked for
+ * @param scope capture scope
+ * @param includeDrawings composite the drawing SVG layers
+ * @returns the chart canvas, or null when the chart cannot be captured
+ */
+async function captureSharedChart(
+  plan: SharedChartPlan,
+  ids: string[],
+  scope: ScreenshotScope,
+  includeDrawings: boolean,
+): Promise<HTMLCanvasElement | null> {
+  const mgr = getManager();
+  const primary = ids.map((id) => mgr?.getPane(id)).find((p) => p?.chart);
+  if (!primary?.chart || typeof primary.chart.takeScreenshot !== 'function') return null;
+  let shot: HTMLCanvasElement;
+  try {
+    shot = primary.chart.takeScreenshot();
+  } catch {
+    return null;
+  }
+  if (!shot?.width || !shot.height) return null;
+  const ratio = shot.height / Math.max(1, plan.height);
+  const crop = screenshotCrop(plan, scope, shot.height);
+
+  let out: HTMLCanvasElement = shot;
+  let cropTop = 0;
+  if (crop && scope === 'price') {
+    const cropped = makeCanvas(shot.width, crop.height + crop.timeAxisHeight);
+    const ctx = cropped?.getContext('2d');
+    if (!cropped || !ctx) return shot;
+    ctx.drawImage(shot, 0, crop.top, shot.width, crop.height, 0, 0, shot.width, crop.height);
+    if (crop.timeAxisHeight > 0) {
+      ctx.drawImage(
+        shot,
+        0,
+        crop.timeAxisTop,
+        shot.width,
+        crop.timeAxisHeight,
+        0,
+        crop.height,
+        shot.width,
+        crop.timeAxisHeight,
+      );
+    }
+    out = cropped;
+    cropTop = crop.top;
+  }
+  if (includeDrawings) {
+    await compositeDrawings(out, plan, ids, ratio, cropTop, scope === 'price');
+  }
+  return out;
+}
+
 /** Capture the active chart to a canvas using current options. */
 export async function captureScreenshot(
   opts: ScreenshotOptions = loadScreenshotOptions(),
 ): Promise<HTMLCanvasElement> {
   const ids = visiblePaneIds(opts.scope);
-  const panes: HTMLCanvasElement[] = [];
-  for (const id of ids) {
-    const c = await capturePaneCanvas(id, opts.includeDrawings);
-    if (c) panes.push(c);
+  let stacked: HTMLCanvasElement | null = null;
+  // v1 layout: every pane is an LWC pane on one chart, so one chart-level
+  // capture already contains them all. Capturing per pane stacked N copies.
+  const plan = sharedChartPlan(ids);
+  if (plan) {
+    stacked = await captureSharedChart(plan, ids, opts.scope, opts.includeDrawings);
   }
-  const first = panes[0];
-  if (!first) {
+  if (!stacked) {
+    // Legacy: one chart per pane (single-pane charts, test doubles).
+    const panes: HTMLCanvasElement[] = [];
+    for (const id of ids) {
+      const c = await capturePaneCanvas(id, opts.includeDrawings);
+      if (c) panes.push(c);
+    }
+    stacked = stackCanvases(panes, themeBg()) ?? panes[0] ?? null;
+  }
+  if (!stacked) {
     throw new Error('No chart to capture — load bars first');
   }
-  let stacked = stackCanvases(panes, themeBg()) ?? first;
   stacked = scaleCanvas(stacked, opts.scale);
   const mark = watermarkText({
     symbol: store.symbol,

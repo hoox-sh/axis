@@ -55,7 +55,7 @@ import {
 } from 'lightweight-charts';
 import { chartDebug } from '../debug';
 import { SlotChart } from './v1/chart-host';
-import { noteLogicalRangeSkew, type SyncSampleOpts } from './v1/invariants';
+import { noteLogicalRangeSkew, rebaseLogicalRange, type SyncSampleOpts } from './v1/invariants';
 import { noteLeftEdge } from './v1/left-prefetch';
 import {
   createBaseChart,
@@ -166,6 +166,16 @@ export type OverlayOhlcSpec = {
 
 /** Series key prefix for plotbar/plotcandle overlays (`overlay_ohlc_${name}`). */
 export const OVERLAY_OHLC_PREFIX = 'overlay_ohlc_';
+
+/**
+ * Readable floor for a sub-pane (volume / indicator / equity) in CSS px.
+ * LWC's own separator clamp is 30px; a pane persisted while squeezed used to
+ * stay at ~13px because the stored weight was the rendered height.
+ */
+const MIN_SUB_PANE_HEIGHT = 48;
+
+/** Share of the chart area the price pane always keeps for candles. */
+const MIN_PRICE_PANE_SHARE = 0.4;
 
 /**
  * True for series whose rows are a **script payload** clamped to the painted
@@ -1011,6 +1021,51 @@ export class PaneManager {
   }
 
   /**
+   * Candle axis **before** a full repaint, for rebasing a preserved viewport.
+   *
+   * Prefers the per-chart cached list (recorded from the painted rows and
+   * extended by the live append path) because reading it back from the series
+   * copies every bar object on every repaint. Falls back to the series when the
+   * chart has not recorded an axis yet.
+   */
+  private readCandleSeriesTimes(): number[] | null {
+    const cached = this.paintedCandleTimesList;
+    if (cached?.length) return cached;
+    const series = this.panes.get('price')?.series['candle'] as
+      { data?: () => readonly { time?: unknown }[] } | undefined;
+    if (!series || typeof series.data !== 'function') return null;
+    let rows: readonly { time?: unknown }[];
+    try {
+      rows = series.data();
+    } catch {
+      return null;
+    }
+    if (!Array.isArray(rows) || !rows.length) return null;
+    const times: number[] = [];
+    for (const row of rows) {
+      const t = Number(row?.time);
+      if (Number.isFinite(t)) times.push(t);
+    }
+    return times.length ? times : null;
+  }
+
+  /**
+   * The chart's `rightOffset` in bars — the future whitespace it reserves past
+   * the newest bar. Used to clamp a restored logical range so it can never sit
+   * further right than the chart itself allows.
+   */
+  private rightOffsetBars(chart: {
+    timeScale?: () => { options?: () => { rightOffset?: number } };
+  }): number {
+    try {
+      const offset = Number(chart.timeScale?.().options?.()?.rightOffset ?? 0);
+      return Number.isFinite(offset) && offset > 0 ? offset : 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  /**
    * Audit the painted series against the candle axis.
    *
    * The library's shared time scale is the union of every series' rows, and
@@ -1220,6 +1275,7 @@ export class PaneManager {
       resizeObserver,
     };
     this.panes.set(id, pane);
+    this.applyPaneHeights();
     this.alignRightScales();
     this.syncTimeScales();
     this.rewireCrosshair();
@@ -1379,6 +1435,7 @@ export class PaneManager {
       }
       this.alignTimeRangesFromPrice();
     }
+    this.applyPaneHeights();
     this.syncTimeScales();
     this.rewireCrosshair();
   }
@@ -1418,14 +1475,156 @@ export class PaneManager {
   }
 
   /**
+   * Apply pane heights as **pixel targets**: every sub-pane renders at the
+   * height stored in `store.panes` (clamped to a readable minimum) and the
+   * price pane fills the rest.
+   *
+   * LWC v5 distributes a chart's height by *stretch factor* — `setHeight(h)`
+   * sets that factor, so the rendered height is `h / Σh · paneArea`. The store
+   * mixes rendered pixel heights (persisted after a separator drag) with
+   * nominal defaults (140 for a new indicator pane), which breaks that basis:
+   * a price pane persisted at its rendered height (~800) dwarfs a pane created
+   * later with 140, and a pane persisted while squeezed (25) stays a sliver
+   * forever. Re-deriving every weight from the pixel targets on the same basis
+   * keeps the price pane the remainder and guarantees a readable sub-pane.
+   */
+  applyPaneHeights(): void {
+    if (!this.slot) return;
+    // A separator drag owns the weights while the pointer is down.
+    if (this.isRanging()) return;
+    const panes = this.getAllPanes().filter((p) => p.visible);
+    if (panes.length < 2) return;
+    const price = panes.find((p) => p.id === 'price') ?? panes[0];
+    if (!price) return;
+    const subs = panes.filter((p) => p !== price);
+    if (!subs.length) return;
+    const area = this.paneAreaHeight();
+    if (!(area > 0)) return;
+    let total = 0;
+    const targets = new Map<string, number>();
+    for (const pane of subs) {
+      const stored = Number(store.panes.find((row) => row.id === pane.id)?.height);
+      // Panes without a store row (the legacy equity pane) keep their current
+      // rendered height as the target.
+      const current = Number(this.slot.getHeight(pane.id));
+      const fallback = Number.isFinite(current) && current > 0 ? current : MIN_SUB_PANE_HEIGHT;
+      const target = Math.max(
+        MIN_SUB_PANE_HEIGHT,
+        Number.isFinite(stored) && stored > 0 ? stored : fallback,
+      );
+      targets.set(pane.id, target);
+      total += target;
+    }
+    // Keep at least MIN_PRICE_PANE_SHARE of the area for the candles.
+    const maxTotal = Math.max(MIN_SUB_PANE_HEIGHT * subs.length, area * (1 - MIN_PRICE_PANE_SHARE));
+    const scale = total > maxTotal ? maxTotal / total : 1;
+    for (const pane of subs) {
+      this.slot.setHeight(
+        pane.id,
+        Math.round((targets.get(pane.id) ?? MIN_SUB_PANE_HEIGHT) * scale),
+      );
+    }
+    this.slot.setHeight(price.id, Math.max(MIN_SUB_PANE_HEIGHT, Math.round(area - total * scale)));
+  }
+
+  /** Pane area in CSS px (chart height minus the time axis and separators). */
+  private paneAreaHeight(): number {
+    const height = Number(this.container?.clientHeight ?? 0);
+    if (!(height > 0)) return 0;
+    let timeAxis = 0;
+    try {
+      timeAxis = Number(this.panes.get('price')?.chart.timeScale?.().height?.() ?? 0);
+    } catch {
+      timeAxis = 0;
+    }
+    if (!Number.isFinite(timeAxis) || timeAxis < 0) timeAxis = 0;
+    const separators = Math.max(0, this.getAllPanes().filter((p) => p.visible).length - 1);
+    return Math.max(0, height - timeAxis - separators);
+  }
+
+  /**
+   * Pane geometry for a chart screenshot.
+   *
+   * In the v1 layout every logical pane is an LWC pane on **one** chart, so
+   * `chart.takeScreenshot()` returns the whole stack no matter which pane's
+   * facade calls it. The capture needs the CSS-px box of each pane (to crop the
+   * price-only scope and to place the drawing SVG overlays) — LWC reports pane
+   * heights and the time-axis height directly, so no DOM measurement is needed.
+   *
+   * @param paneIds panes the capture wants boxes for
+   * @returns geometry, or `null` when the panes are not on one shared chart
+   */
+  screenshotPlan(paneIds: readonly string[]): {
+    width: number;
+    height: number;
+    panes: Array<{ id: string; top: number; height: number }>;
+    timeAxis: { top: number; height: number };
+  } | null {
+    if (!this.slot) return null;
+    const price = this.panes.get('price') ?? this.getAllPanes()[0];
+    const chart = price?.chart as unknown as
+      | {
+          panes?: () => Array<{ getHeight?: () => number }>;
+          timeScale?: () => { height?: () => number };
+          paneSize?: () => { width?: number };
+        }
+      | undefined;
+    if (!chart || typeof chart.panes !== 'function') return null;
+    let rows: Array<{ getHeight?: () => number }>;
+    try {
+      rows = chart.panes();
+    } catch {
+      return null;
+    }
+    if (!Array.isArray(rows) || rows.length < 2) return null;
+    const heights = rows.map((row) => {
+      try {
+        const h = Number(row?.getHeight?.() ?? 0);
+        return Number.isFinite(h) && h > 0 ? h : 0;
+      } catch {
+        return 0;
+      }
+    });
+    if (!heights.some((h) => h > 0)) return null;
+    let timeAxis = 0;
+    try {
+      const h = Number(chart.timeScale?.().height?.() ?? 0);
+      if (Number.isFinite(h) && h > 0) timeAxis = h;
+    } catch {
+      timeAxis = 0;
+    }
+    let width = 0;
+    try {
+      width = Number(chart.paneSize?.().width ?? 0) || 0;
+    } catch {
+      width = 0;
+    }
+    const wanted = new Set(paneIds);
+    const panes: Array<{ id: string; top: number; height: number }> = [];
+    let top = 0;
+    for (const pane of this.getAllPanes()) {
+      const index = this.slot.indexOf(pane.id);
+      if (index == null) continue;
+      const height = heights[index] ?? 0;
+      if (wanted.has(pane.id)) panes.push({ id: pane.id, top, height });
+      top += height;
+    }
+    if (!panes.length) return null;
+    return { width, height: top + timeAxis, panes, timeAxis: { top, height: timeAxis } };
+  }
+
+  /**
    * Write LWC pane pixel heights into the store after a native separator drag.
    * Custom handles on the multi-chart rollback already call {@link resizePane}.
    */
   private persistSharedPaneHeights(): void {
     if (!this.slot) return;
     for (const pane of this.panes.values()) {
-      const height = Math.round(this.slot.getHeight(pane.id));
-      if (!Number.isFinite(height) || height <= 0) continue;
+      const raw = Math.round(this.slot.getHeight(pane.id));
+      if (!Number.isFinite(raw) || raw <= 0) continue;
+      // Never persist a squeezed sliver: the next mount would treat it as the
+      // target and the pane would stay unreadable.
+      const height = pane.id === 'price' ? raw : Math.max(MIN_SUB_PANE_HEIGHT, raw);
       const stored = store.panes.find((row) => row.id === pane.id);
       if (!stored || Math.round(stored.height) === height) continue;
       resizePane(pane.id, height);
@@ -2160,6 +2359,9 @@ export class PaneManager {
         /* ignore */
       }
     }
+    // Heights are stretch weights in LWC: re-derive them from the stored pixel
+    // targets after a resize so sub-panes keep their readable height.
+    this.applyPaneHeights();
     this.alignRightScales();
   }
 
@@ -3206,6 +3408,11 @@ export class PaneManager {
     const cleanData = filterValidCandleRows(
       data as Array<{ time?: number; open?: number; high?: number; low?: number; close?: number }>,
     );
+    // Candle axis **before** this repaint. `keepRange` is a pre-paint logical
+    // range; when this paint drops bars from the head (window reset, shorter
+    // engine/DSM window) the raw indices point past the new tip and leave a
+    // phantom empty right margin. See {@link rebaseLogicalRange}.
+    const prevCandleTimes = this.readCandleSeriesTimes();
     try {
       const nextCandleTimes = new Set<number>();
       for (const row of cleanData as Array<{ time?: unknown }>) {
@@ -3223,7 +3430,15 @@ export class PaneManager {
         lastRow: cleanData.length ? cleanData[cleanData.length - 1] : undefined,
       });
       if (pricePane.chart && keepRange) {
-        pricePane.chart.timeScale()?.setVisibleLogicalRange?.(keepRange);
+        // Restore the viewport against the NEW axis, not the old indices.
+        pricePane.chart.timeScale()?.setVisibleLogicalRange?.(
+          rebaseLogicalRange(
+            keepRange,
+            prevCandleTimes,
+            (cleanData as Array<{ time?: unknown }>).map((row) => Number(row?.time)),
+            this.rightOffsetBars(pricePane.chart),
+          ) ?? keepRange,
+        );
       }
       const times = cleanData as Array<{ time?: unknown }>;
       const firstT = times.length ? times[0]?.time : undefined;

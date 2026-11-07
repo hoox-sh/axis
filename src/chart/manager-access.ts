@@ -63,6 +63,7 @@ import { reportUiError } from '../ui/boot-errors';
 import { chartDebug } from '../debug';
 import { resolvedPrefsForTool } from './drawings/tool-settings';
 import { perfMeasureSync } from '../perf/telemetry';
+import { rebaseLogicalRange } from './v1/invariants';
 import { getThemeManager } from '../theme';
 import { drawingsForSymbol, mergeLayerDrawingsForSymbol } from './drawings/sync';
 
@@ -651,6 +652,36 @@ function writeLogicalRange(
   }
 }
 
+/** Bar times the candle series holds (for rebasing a preserved viewport). */
+function readSeriesTimes(series: unknown): number[] | null {
+  const api = series as { data?: () => readonly { time?: unknown }[] } | undefined;
+  if (!api || typeof api.data !== 'function') return null;
+  try {
+    const rows = api.data();
+    if (!Array.isArray(rows) || !rows.length) return null;
+    const times: number[] = [];
+    for (const row of rows) {
+      const t = Number(row?.time);
+      if (Number.isFinite(t)) times.push(t);
+    }
+    return times.length ? times : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Chart `rightOffset` in bars (future whitespace) for the viewport clamp. */
+function rightOffsetBars(chart: {
+  timeScale?: () => { options?: () => { rightOffset?: number } };
+}): number {
+  try {
+    const offset = Number(chart.timeScale?.().options?.()?.rightOffset ?? 0);
+    return Number.isFinite(offset) && offset > 0 ? offset : 0;
+  } catch {
+    return 0;
+  }
+}
+
 /**
  * Paint OHLCV into the price and volume panes, then refresh price-scale
  * decimals, last-value labels, and the per-symbol drawing layer.
@@ -811,6 +842,7 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}): void
             close?: number;
           }>,
         );
+        const prevCandleTimes = readSeriesTimes(pricePane.series['candle']);
         try {
           const nextCandleTimes = new Set<number>();
           for (const row of cleanData as Array<{ time?: unknown }>) {
@@ -820,7 +852,18 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}): void
           const prepare = mgr.prepareCoPaintedForCandleTimes;
           if (typeof prepare === 'function') prepare.call(mgr, nextCandleTimes);
           pricePane.series['candle'].setData(cleanData as never);
-          writeLogicalRange(pricePane.chart, keepRange);
+          const nextTimes = (cleanData as Array<{ time?: unknown }>).map((row) =>
+            Number(row?.time),
+          );
+          writeLogicalRange(
+            pricePane.chart,
+            rebaseLogicalRange(
+              keepRange,
+              prevCandleTimes,
+              nextTimes,
+              rightOffsetBars(pricePane.chart),
+            ) ?? keepRange,
+          );
           const times = data as Array<{ time?: unknown }>;
           const firstT = times.length ? times[0]?.time : undefined;
           const lastT = times.length ? times[times.length - 1]?.time : undefined;

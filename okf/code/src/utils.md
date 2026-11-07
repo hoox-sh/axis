@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/utils"
-description: "src/utils contains bounded-map.ts, emitter.ts, errors.ts, and 4 more files."
+description: "src/utils contains bounded-map.ts, emitter.ts, errors.ts, and 5 more files."
 resource: "src/utils"
 tags: [code, utils]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-04T23:38:00Z
+  at: 2026-11-07T12:59:09Z
 sources:
   - id: tree
     resource: "src/utils"
@@ -25,6 +25,11 @@ okf_lock: generated
 * `flags.ts` — FlagPair, FlagPairOptions, createFlagPair
 * `storage.ts` — getFlag, getItem, getJson, removeItem, setFlag, setItem, setJson, storageAvailable
 * `throttle.ts` — Throttle, createThrottle
+* `validate.ts` — finiteNumber, isRecord, numberField, readJsonRecord, readJsonUnknown, stringField
+
+# Packages
+
+`empty object`
 
 # Used by
 
@@ -42,6 +47,7 @@ okf_lock: generated
 * [src/mcp](/code/src/mcp.md)
 * [src/onchain](/code/src/onchain.md)
 * [src/plugins](/code/src/plugins.md)
+* [src/results](/code/src/results.md)
 * [src/sources](/code/src/sources.md)
 * [src/storage](/code/src/storage.md)
 * [src/store](/code/src/store.md)

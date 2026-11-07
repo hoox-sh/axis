@@ -99,10 +99,16 @@ function commit(page: Bar[]): void {
     setStore('rollingWindowBars', clampRollingWindowBars(merged.length));
   }
   setBarsQuiet(merged);
-  setDataToChart(merged, { fit: false, clearMarkers: false, clearScriptState: false });
-  if (range && price) {
+  // Paint exactly what the store holds: `setBarsQuiet` enforces the chart
+  // window, so a page that does not fit was already dropped from the head. The
+  // viewport shift must use the *painted* delta — shifting by the merged delta
+  // would push the range past the tip and leave a phantom right margin.
+  const view = store.bars;
+  const paintedAdded = view.length - chartBars.length;
+  setDataToChart(view, { fit: false, clearMarkers: false, clearScriptState: false });
+  if (range && price && paintedAdded !== 0) {
     try {
-      price.chart.timeScale().setVisibleLogicalRange(shiftRangeForPrepend(range, added));
+      price.chart.timeScale().setVisibleLogicalRange(shiftRangeForPrepend(range, paintedAdded));
     } catch {
       /* the page is in the store; the viewport can stay */
     }

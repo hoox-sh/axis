@@ -71,6 +71,87 @@ export function seriesPastTip(priceLast: number | null, times: readonly number[]
   return past;
 }
 
+/**
+ * Bars of an ascending time list that sit strictly before `time`.
+ *
+ * Binary search — the list is one candle axis, so this is O(log n) on every
+ * repaint. Non-finite / unsorted input falls back to a linear count.
+ *
+ * @param times ascending bar open times (unix seconds)
+ * @param time boundary; bars equal to it are **not** counted
+ * @returns count of `times[i] < time`
+ */
+export function barsBefore(times: readonly number[], time: number): number {
+  if (!times.length || !Number.isFinite(time)) return 0;
+  let lo = 0;
+  let hi = times.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    const t = Number(times[mid]);
+    if (!Number.isFinite(t)) return times.filter((x) => Number(x) < time).length;
+    if (t < time) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+/**
+ * Rebase a preserved visible logical range onto a repainted candle window.
+ *
+ * A full-window repaint (`fit: false`) keeps the pre-paint range so a live
+ * slide does not jump the viewport. But the repaint can also **drop bars from
+ * the head** (a window reset, a shorter engine/DSM window, a left-edge page
+ * that the window cap sliced away). Restoring the old indices then points at
+ * bars that no longer exist: the viewport keeps extending past the new tip and
+ * the chart is left with a phantom empty margin on the right — the price pane
+ * and every indicator appear "shifted left".
+ *
+ * Two corrections, both derived from the new axis:
+ * 1. **Head shift** — a bar's logical index drops by the number of old bars
+ *    that sat before the new first bar, so the range is shifted by the same
+ *    amount and the same *times* stay on screen.
+ * 2. **Right clamp** — the range can never sit further right than the new tip
+ *    plus the chart's own `rightOffset` (the future whitespace LWC allows).
+ *
+ * @param range preserved logical range (`null` when nothing was captured)
+ * @param prevTimes candle axis before the repaint
+ * @param nextTimes candle axis after the repaint
+ * @param rightOffset chart `rightOffset` in bars (future whitespace)
+ * @returns the corrected range, or `null` when it cannot be computed
+ */
+export function rebaseLogicalRange(
+  range: LogicalRange | null,
+  prevTimes: readonly number[] | null | undefined,
+  nextTimes: readonly number[] | null | undefined,
+  rightOffset = 0,
+): LogicalRange | null {
+  if (range == null) return null;
+  if (!finite(range.from) || !finite(range.to) || range.to <= range.from) return null;
+  const next = nextTimes ?? [];
+  if (!next.length) return null;
+  const nextFirst = Number(next[0]);
+  const removed =
+    prevTimes?.length && Number.isFinite(nextFirst) ? barsBefore(prevTimes, nextFirst) : 0;
+  let from = range.from - removed;
+  let to = range.to - removed;
+  const offset = Math.max(0, Number.isFinite(rightOffset) ? rightOffset : 0);
+  // The viewport's bars were all dropped from the head: anchor it at the new
+  // head instead of leaving the whole pane as left-edge whitespace.
+  if (to <= 0) {
+    const span = to - from;
+    from = -offset;
+    to = from + span;
+  }
+  const maxTo = next.length - 1 + offset;
+  if (to > maxTo) {
+    const span = to - from;
+    to = maxTo;
+    from = to - span;
+  }
+  if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) return null;
+  return { from, to };
+}
+
 /** How many bars the longest plot column extends past the price axis. Shorter is fine. */
 export function plotOverhang(barCount: number, lengths: readonly number[]): number {
   let over = 0;

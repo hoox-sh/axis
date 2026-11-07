@@ -7,7 +7,7 @@ tags: [cli, code, commands, packages]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-14T00:33:46Z
+  at: 2026-11-07T12:59:09Z
 sources:
   - id: tree
     resource: "packages/cli/src/commands"
@@ -33,4 +33,4 @@ okf_lock: generated
 
 # Packages
 
-`commander`, `node:fs`, `node:path`, `node:readline`
+`broke`, `commander`, `node:fs`, `node:path`, `node:readline`
