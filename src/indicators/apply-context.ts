@@ -41,6 +41,7 @@ import {
   extractEngineResultTimes,
   extendSeriesToWindow,
   getOhlcvTimesForApply,
+  missingChartTimes,
   resolveInputPrecedence,
   resolveOverlayFlag,
   resolveStrategyPrecedence,
@@ -118,6 +119,12 @@ export interface AlignedApplySeries {
   needsAlign: boolean;
   resultTimes: number[] | null;
   chartWindowBars: number;
+  /**
+   * Chart bar times the engine's axis skipped (an internal hole in the engine's
+   * own series). The chart path breaks line plots there instead of letting
+   * Lightweight Charts span the `na` rows with a straight connector.
+   */
+  gapTimes: number[];
   /**
    * A session/stream run whose engine shipped no bar axis while its series
    * length disagrees with the chart window: a live push over a moved window
@@ -391,6 +398,7 @@ export function alignApplySeries(
     needsAlign,
     resultTimes,
     chartWindowBars,
+    gapTimes: staleNoAxis ? [] : missingChartTimes(ohlcvTimes, resultTimes),
     staleNoAxis,
   };
 }

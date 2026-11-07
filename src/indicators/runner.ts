@@ -449,6 +449,7 @@ export {
   isRunEpochCurrent,
   runEpochInvalidates,
   lineDataHasSample,
+  missingChartTimes,
   normalizeEngineResult,
   normalizeSeriesMap,
   ownsRunStatus,
@@ -1372,6 +1373,7 @@ async function runAndApplyInner(
     needsAlign,
     resultTimes,
     chartWindowBars,
+    gapTimes,
     staleNoAxis,
   } = alignApplySeries(script, result, bars, {
     silent,
@@ -1511,6 +1513,7 @@ async function runAndApplyInner(
           silent,
           indicatorId,
           forceFull: opts.liveTick !== true,
+          gapTimes,
         },
         strategy: { manager, result, scriptType, silent, indicatorId, bars },
       });

@@ -82,7 +82,12 @@ import {
   PLOT_DISPLAY,
   type PlotSeriesKind,
 } from '../results/plot-visuals';
-import { LineBreakPrimitive } from './line-break-primitive';
+import {
+  LineBreakPrimitive,
+  dataHoleTimes,
+  gapAwareLineBreakPoints,
+  type LineBreakOverlayPoint,
+} from './line-break-primitive';
 import {
   mapBarUpdate,
   mapBarsToPriceData,
@@ -177,6 +182,17 @@ const MIN_SUB_PANE_HEIGHT = 48;
 /** Share of the chart area the price pane always keeps for candles. */
 const MIN_PRICE_PANE_SHARE = 0.4;
 
+/** Finite unix-second set from a loose time list (engine-axis holes). */
+function toTimeSet(times: readonly unknown[] | null | undefined): Set<number> {
+  const out = new Set<number>();
+  if (!times?.length) return out;
+  for (const t of times) {
+    const n = Number(t);
+    if (Number.isFinite(n)) out.add(n);
+  }
+  return out;
+}
+
 /**
  * True for series whose rows are a **script payload** clamped to the painted
  * candle range by the apply pipeline — the ones a slid candle window can
@@ -227,6 +243,13 @@ export type OverlayOwnerOpts = {
    * unset so only the last point is patched for performance.
    */
   forceFull?: boolean;
+  /**
+   * Chart bar times the run's engine axis skipped (an internal hole in the
+   * engine's own series). Line plots break their stroke at these times instead
+   * of letting Lightweight Charts span the `na` rows with a straight connector.
+   * Remembered per pane+series, so a tip-only live apply keeps the breaks.
+   */
+  gapTimes?: readonly number[];
 };
 
 /** Sanitize owner id for use in LWC series keys. */
@@ -718,6 +741,13 @@ export class PaneManager {
    */
   private overlayDataMeta = new Map<string, SeriesApplyMeta>();
   /**
+   * Chart bar times a run's engine axis skipped, per pane-qualified series key.
+   * Line plots break their stroke there (`LineBreakPrimitive`) instead of
+   * spanning the `na` rows with a straight connector. Remembered so a tip-only
+   * live apply keeps the breaks until a run reports a healed axis.
+   */
+  private overlayGapTimes = new Map<string, ReadonlySet<number>>();
+  /**
    * `plot.style_*br` primitives keyed by overlay series key. LWC Line/Area
    * connect through whitespace; these stroke each finite `na`-bounded run.
    */
@@ -839,6 +869,7 @@ export class PaneManager {
   private deleteOverlayMeta(paneId: string, seriesKey: string): void {
     this.overlayDataMeta.delete(`${paneId}:${seriesKey}`);
     this.overlayDataMeta.delete(seriesKey);
+    this.overlayGapTimes.delete(`${paneId}:${seriesKey}`);
   }
 
   /** Drop per-pane smart-apply meta + remembered titles for a destroyed pane. */
@@ -852,6 +883,7 @@ export class PaneManager {
     dropPrefixed(this.overlayDataMeta);
     dropPrefixed(this.overlaySeriesKinds);
     dropPrefixed(this.lastValueTitleByKey);
+    dropPrefixed(this.overlayGapTimes);
   }
 
   /** Reset per-chart Heikin-Ashi live state (full history replace / type switch). */
@@ -2563,9 +2595,13 @@ export class PaneManager {
     seriesKind: PlotSeriesKind,
     breakStyle: boolean,
     forceFull = false,
+    gapPoints: readonly LineBreakOverlayPoint[] | null = null,
   ): void {
     const mapKey = `${paneId}:${key}`;
-    if (!breakStyle || isHistogramSeriesKind(seriesKind)) {
+    // `style_*br` breaks at every `na`; a plain line only breaks at a *data*
+    // hole (script `na` keeps spanning, as the library / Pine does).
+    const points = breakStyle ? line.data : (gapPoints ?? []);
+    if (isHistogramSeriesKind(seriesKind) || !points.length) {
       this.dropLineBreak(series, paneId, key);
       return;
     }
@@ -2580,7 +2616,7 @@ export class PaneManager {
       }
     }
     prim.setPoints(
-      line.data,
+      points,
       {
         color: line.color || VOID.indigo,
         lineWidth:
@@ -3835,6 +3871,25 @@ export class PaneManager {
       const seriesNow = pane.series[key];
       const histFamily = isHistogramSeriesKind(seriesKind);
       const breakStyle = isBreakPlotStyle(line.style);
+      // Remember this run's engine-axis holes for the series (a tip-only apply
+      // passes none and keeps the previous set).
+      if (forceFull || opts?.gapTimes !== undefined) {
+        let gaps = toTimeSet(opts?.gapTimes);
+        // No engine axis to compare against: a long blank stretch in the
+        // values is still missing data, not an inactive Pine condition.
+        if (!gaps.size && forceFull) {
+          const holes = dataHoleTimes(line.data);
+          if (holes.length) gaps = toTimeSet(holes);
+        }
+        if (gaps.size) this.overlayGapTimes.set(kindKey, gaps);
+        else this.overlayGapTimes.delete(kindKey);
+      }
+      // A plain `style_line` plot breaks only where the *data* is missing, so
+      // the native connector must be hidden just like a `*br` style.
+      const gapSet = this.overlayGapTimes.get(kindKey);
+      const gapPoints =
+        !breakStyle && gapSet?.size ? gapAwareLineBreakPoints(line.data, gapSet) : null;
+      const breakStroke = breakStyle || (gapPoints?.length ?? 0) > 0;
       if (seriesNow) {
         // Tip-only path skips full toLwcLineData when length + lastTime match
         // (meta keyed per pane so same plot name on two panes never collides).
@@ -3885,7 +3940,7 @@ export class PaneManager {
                 ? Number(line.histbase)
                 : 0;
           }
-          Object.assign(opts, this.breakStyleSeriesOptions(breakStyle, seriesKind, line.color));
+          Object.assign(opts, this.breakStyleSeriesOptions(breakStroke, seriesKind, line.color));
           seriesNow.applyOptions(opts);
         } catch {
           /* ignore */
@@ -3896,8 +3951,9 @@ export class PaneManager {
           key,
           line,
           seriesKind,
-          breakStyle,
+          breakStroke,
           forceFull,
+          gapPoints,
         );
       } else {
         try {
@@ -3917,7 +3973,7 @@ export class PaneManager {
             series.applyOptions({
               lastValueVisible: labels.lastValueVisible,
               title: labels.title,
-              ...this.breakStyleSeriesOptions(breakStyle, seriesKind, c),
+              ...this.breakStyleSeriesOptions(breakStroke, seriesKind, c),
             });
             this.rememberSeriesTitle(paneId, key, line.name);
           } catch {
@@ -3945,7 +4001,16 @@ export class PaneManager {
           );
           pane.series[key] = series;
           this.overlaySeriesKinds.set(kindKey, seriesKind);
-          this.syncLineBreakPrimitive(series, paneId, key, line, seriesKind, breakStyle, forceFull);
+          this.syncLineBreakPrimitive(
+            series,
+            paneId,
+            key,
+            line,
+            seriesKind,
+            breakStroke,
+            forceFull,
+            gapPoints,
+          );
         } catch {
           /* chart may be disposed mid-apply */
         }

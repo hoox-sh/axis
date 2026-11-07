@@ -73,6 +73,11 @@ export interface ChartMutationContext {
   indicatorId: string | undefined;
   forceFull: boolean;
   /**
+   * Chart bar times the engine's axis skipped (internal hole). Line plots break
+   * their stroke there instead of spanning the `na` rows with a connector.
+   */
+  gapTimes?: readonly number[];
+  /**
    * When true, skip `setShapeMarkers` so the caller can paint shapes in the
    * same apply transaction as plots (concept §5.5 / §6.1).
    */
@@ -215,6 +220,7 @@ export function applyChartMutations(ctx: ChartMutationContext, sample?: SyncSamp
   const overlayOwner = {
     ownerId: ctx.indicatorId ?? EDITOR_RUN_KEY,
     forceFull: ctx.forceFull,
+    gapTimes: ctx.gapTimes,
   };
   ctx.manager.syncOverlayLines(ctx.paneId, ctx.overlayLines, overlayOwner);
   // plotbar / plotcandle OHLC overlays (empty list clears this owner’s OHLC)

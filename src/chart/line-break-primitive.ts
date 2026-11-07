@@ -45,6 +45,13 @@ import { colorWithAlpha } from './series-factory';
 /** One overlay sample: UTC seconds + value. Missing `value` is Pine `na` and breaks the stroke. */
 export type LineBreakOverlayPoint = { time: number; value?: number };
 
+/**
+ * Shortest internal `na` run treated as **missing data** when the run shipped no
+ * bar axis to compare against. Shorter runs are Pine conditions and keep
+ * spanning (`plot.style_line`).
+ */
+export const MIN_DATA_HOLE_BARS = 10;
+
 /** Stroke style for the primitive plus the `*br` variant flags it must emulate. */
 export type LineBreakPrimitiveOpts = {
   color: string;
@@ -128,6 +135,113 @@ function strokeSegment(
       ctx.lineTo(p.x, p.y);
     }
   }
+}
+
+/**
+ * Internal `na` runs long enough to be **missing data**, not an inactive
+ * condition.
+ *
+ * When the engine ships no bar axis there is nothing to compare the chart
+ * against, yet the series can still carry a long blank stretch (the engine's
+ * own bar series lost minutes). A short `na` run is a normal Pine condition
+ * (`cond ? value : na`) and must keep spanning; a long one is a hole and must
+ * break. Only runs **bounded by finite values on both sides** count — warmup
+ * and a not-yet-evaluated tail need no break.
+ *
+ * @param points overlay samples in candle-axis order
+ * @param minRun shortest run treated as missing data (default {@link MIN_DATA_HOLE_BARS})
+ */
+export function dataHoleTimes(
+  points: ReadonlyArray<LineBreakOverlayPoint>,
+  minRun = MIN_DATA_HOLE_BARS,
+): number[] {
+  const n = points.length;
+  if (n < minRun + 2) return [];
+  const out: number[] = [];
+  const finiteAt = (i: number): boolean => {
+    const v = Number(points[i]?.value);
+    return Number.isFinite(v);
+  };
+  let i = 0;
+  while (i < n) {
+    if (finiteAt(i)) {
+      i += 1;
+      continue;
+    }
+    let j = i;
+    while (j < n && !finiteAt(j)) j += 1;
+    if (j - i >= minRun && i > 0 && j < n) {
+      for (let k = i; k < j; k++) {
+        const t = Number(points[k]?.time);
+        if (Number.isFinite(t)) out.push(t);
+      }
+    }
+    i = j;
+  }
+  return out;
+}
+
+/**
+ * Break points for a line that must not be drawn across **missing data**.
+ *
+ * The apply pipeline emits a Pine `na` row for every chart bar the engine's own
+ * axis skipped, and Lightweight Charts spans those rows with a straight
+ * connector — a diagonal drawn through bars the script never evaluated. This
+ * turns each such gap into a real break.
+ *
+ * `plot.style_line` *does* span script-produced `na` (only `style_*br` breaks),
+ * so the `na` inside a finite run is linearly interpolated: the primitive then
+ * strokes the same straight segment the library would, without bridging a hole.
+ *
+ * @param points overlay samples in candle-axis order (whitespace = `na`)
+ * @param gapTimes chart times the engine axis skipped
+ * @returns break-aware points, or `[]` when this series has no gap to break
+ */
+export function gapAwareLineBreakPoints(
+  points: ReadonlyArray<LineBreakOverlayPoint>,
+  gapTimes: ReadonlySet<number>,
+): LineBreakOverlayPoint[] {
+  const n = points.length;
+  if (!n || !gapTimes.size) return [];
+  const gap: boolean[] = new Array(n);
+  let gaps = 0;
+  for (let i = 0; i < n; i++) {
+    const t = Number(points[i]?.time);
+    gap[i] = Number.isFinite(t) && gapTimes.has(t);
+    if (gap[i]) gaps += 1;
+  }
+  if (!gaps) return [];
+  const out: LineBreakOverlayPoint[] = new Array(n);
+  for (let i = 0; i < n; i++) {
+    const p = points[i]!;
+    const v = Number(p.value);
+    out[i] = gap[i] || !Number.isFinite(v) ? { time: p.time } : { time: p.time, value: v };
+  }
+  const finite = (p: LineBreakOverlayPoint | undefined): boolean =>
+    p != null && p.value != null && Number.isFinite(Number(p.value));
+  // Interpolate script `na` inside a finite run (never across a gap).
+  let i = 0;
+  while (i < n) {
+    if (gap[i] || finite(out[i])) {
+      i += 1;
+      continue;
+    }
+    let j = i;
+    while (j < n && !gap[j] && !finite(out[j])) j += 1;
+    const prev = i > 0 && !gap[i - 1] ? out[i - 1] : undefined;
+    const next = j < n && !gap[j] ? out[j] : undefined;
+    if (finite(prev) && finite(next)) {
+      const a = Number(prev!.value);
+      const b = Number(next!.value);
+      const span = j - (i - 1);
+      for (let k = i; k < j; k++) {
+        const w = (k - (i - 1)) / span;
+        out[k] = { time: out[k]!.time, value: a + (b - a) * w };
+      }
+    }
+    i = j;
+  }
+  return out;
 }
 
 class LineBreakRenderer implements IPrimitivePaneRenderer {

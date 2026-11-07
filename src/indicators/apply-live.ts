@@ -465,6 +465,7 @@ export function applyPrecomputedChart(
     needsAlign,
     resultTimes,
     chartWindowBars,
+    gapTimes,
     staleNoAxis,
   } = alignSeries(script, result, barsAxis, {
     silent,
@@ -561,6 +562,7 @@ export function applyPrecomputedChart(
           silent,
           indicatorId,
           forceFull: !liveTick,
+          gapTimes,
         },
         strategy: { manager, result, scriptType, silent, indicatorId, bars },
       });

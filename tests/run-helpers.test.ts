@@ -19,6 +19,7 @@ import {
   getRunStatusEpoch,
   isRunEpochCurrent,
   lineDataHasSample,
+  missingChartTimes,
   normalizeBarTime,
   normalizeEngineResult,
   normalizeEventsArray,
@@ -377,5 +378,30 @@ describe('run status ownership', () => {
     expect(getRunStatusEpoch()).toBe(e);
     releaseRunStatus();
     expect(getRunStatusEpoch()).toBeNull();
+  });
+});
+
+describe('missingChartTimes', () => {
+  it('lists chart bars the engine axis skipped', () => {
+    expect(missingChartTimes([100, 200, 300, 400, 500], [100, 200, 500])).toEqual([300, 400]);
+  });
+
+  it('is empty when the axis covers the chart', () => {
+    expect(missingChartTimes([100, 200], [100, 200, 300])).toEqual([]);
+  });
+
+  it('ignores a window that misses most of the chart', () => {
+    // A stale/foreign window is handled by the apply guards, not per-bar gaps.
+    expect(missingChartTimes([100, 200, 300, 400], [400])).toEqual([]);
+  });
+
+  it('returns nothing without an engine axis', () => {
+    expect(missingChartTimes([100, 200], null)).toEqual([]);
+    expect(missingChartTimes([100, 200], [])).toEqual([]);
+    expect(missingChartTimes([], [100])).toEqual([]);
+  });
+
+  it('drops non-finite entries on both sides', () => {
+    expect(missingChartTimes([100, Number.NaN, 300], [100, Number.NaN])).toEqual([300]);
   });
 });

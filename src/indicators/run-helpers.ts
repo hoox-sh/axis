@@ -42,6 +42,45 @@ export type NormalizedRunResult = EngineRunResult & {
   alert_conditions?: Array<Record<string, unknown>>;
 };
 
+/**
+ * Chart bar times the engine's bar axis does **not** cover.
+ *
+ * The engine can evaluate a window with an internal hole (its own bar series
+ * is missing minutes). `alignSeriesToTimes` then emits a Pine `na` for every
+ * chart bar the axis skips, and Lightweight Charts spans those `na` rows with a
+ * straight connector — a diagonal drawn through bars the script never had.
+ * Returning the missing times lets the chart path break the stroke there
+ * instead of inventing a segment.
+ *
+ * A window that misses most of the chart is a different failure (a stale or
+ * foreign window the apply already skips / tail-pins), so it is not reported as
+ * a per-bar gap.
+ *
+ * @param chartTimes candle axis (unix seconds, oldest → newest)
+ * @param engineTimes the run's own bar axis, when it shipped one
+ * @returns times present on the chart but absent from the engine axis
+ */
+export function missingChartTimes(
+  chartTimes: readonly number[],
+  engineTimes: readonly unknown[] | null | undefined,
+): number[] {
+  if (!chartTimes?.length || !engineTimes?.length) return [];
+  const have = new Set<number>();
+  for (const t of engineTimes) {
+    const n = Number(t);
+    if (Number.isFinite(n)) have.add(n);
+  }
+  if (!have.size) return [];
+  const missing: number[] = [];
+  for (const t of chartTimes) {
+    const n = Number(t);
+    if (!Number.isFinite(n)) continue;
+    if (!have.has(n)) missing.push(n);
+  }
+  if (!missing.length || missing.length > chartTimes.length * 0.5) return [];
+  return missing;
+}
+
 // ── Plot sample / time coercion ─────────────────────────────────────
 
 /**

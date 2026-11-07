@@ -175,6 +175,49 @@ describe('alignApplySeries length mismatch', () => {
   });
 });
 
+describe('alignApplySeries engine-axis holes', () => {
+  const T = (i: number) => 1_700_000_000 + i * 300;
+  const bars = Array.from({ length: 5 }, (_, i) => ({
+    time: T(i),
+    open: 1,
+    high: 1,
+    low: 1,
+    close: 1,
+    volume: 1,
+  }));
+
+  it('reports the chart bars the engine axis skipped and leaves them na', () => {
+    // The engine's own series lost minutes: the run ships an axis without
+    // T(2)/T(3). The apply emits na there (so the panes stay aligned) and the
+    // chart path needs those times to break the stroke instead of spanning it.
+    const result = {
+      status: 'success',
+      series: { plot0: [1, 2, 4] },
+      meta: { sessionVia: 'session-tick', overlay: true, engineTimes: [T(0), T(1), T(4)] },
+    } as unknown as RunResult;
+    const aligned = alignApplySeries('indicator("x", overlay=true)\nplot(close)', result, bars, {
+      silent: true,
+      livePush: true,
+    });
+    expect(aligned.resultTimes).toEqual([T(0), T(1), T(4)]);
+    expect(aligned.gapTimes).toEqual([T(2), T(3)]);
+    expect(aligned.seriesMap.plot0).toEqual([1, 2, null, null, 4]);
+  });
+
+  it('reports no gaps when the axis covers the chart', () => {
+    const result = {
+      status: 'success',
+      series: { plot0: [1, 2, 3, 4, 5] },
+      meta: { sessionVia: 'session-tick', overlay: true, engineTimes: bars.map((b) => b.time) },
+    } as unknown as RunResult;
+    const aligned = alignApplySeries('indicator("x", overlay=true)\nplot(close)', result, bars, {
+      silent: true,
+      livePush: true,
+    });
+    expect(aligned.gapTimes).toEqual([]);
+  });
+});
+
 describe('alignApplySeries staleNoAxis', () => {
   const T = (i: number) => 1_700_000_000 + i * 300;
   const bars = Array.from({ length: 5 }, (_, i) => ({

@@ -1615,3 +1615,109 @@ describe('ranging defers expensive chart paints (G2 panFrame)', () => {
     expect(internal.markersApplyDeferred).toBe(false);
   });
 });
+
+describe('overlay line breaks at engine-axis holes', () => {
+  let container: HTMLElement;
+  let pm: InstanceType<typeof PaneManager>;
+
+  beforeEach(() => {
+    container = document.createElement('div') as unknown as HTMLElement;
+    (container as { id: string }).id = 'chart-root';
+    document.body.appendChild(container as never);
+    pm = new PaneManager(container);
+  });
+
+  afterEach(() => {
+    try {
+      pm.dispose();
+    } catch {
+      /* ignore */
+    }
+    try {
+      container.remove();
+    } catch {
+      /* ignore */
+    }
+  });
+
+  const line = (data: Array<{ time: number; value?: number }>) => ({
+    name: 'stoch',
+    style: 'line',
+    data,
+  });
+
+  it('hides the native connector and attaches a break primitive at a hole', () => {
+    pm.createPane('price', 'price', 'Price');
+    const price = pm.getPane('price')!;
+    pm.syncOverlayLines(
+      'price',
+      [
+        line([
+          { time: 100, value: 1 },
+          { time: 200, value: 2 },
+          { time: 300 },
+          { time: 400, value: 4 },
+        ]),
+      ],
+      { ownerId: 's1', forceFull: true, gapTimes: [300] },
+    );
+    const series = Object.entries(price.series).find(([k]) => k.includes('stoch'))?.[1] as
+      | { _opts: Record<string, unknown>; _primitives: unknown[] }
+      | undefined;
+    expect(series).toBeTruthy();
+    // The library's line would span the hole; the primitive strokes the runs.
+    expect(series!._opts['lineVisible']).toBe(false);
+    expect(series!._primitives).toHaveLength(1);
+  });
+
+  it('restores the native line when the engine axis is healed', () => {
+    pm.createPane('price', 'price', 'Price');
+    const price = pm.getPane('price')!;
+    const spec = [
+      line([
+        { time: 100, value: 1 },
+        { time: 300 },
+        { time: 400, value: 4 },
+      ]),
+    ];
+    pm.syncOverlayLines('price', spec, { ownerId: 's1', forceFull: true, gapTimes: [300] });
+    pm.syncOverlayLines('price', spec, { ownerId: 's1', forceFull: true, gapTimes: [] });
+    const series = Object.entries(price.series).find(([k]) => k.includes('stoch'))?.[1] as
+      | { _opts: Record<string, unknown>; _primitives: unknown[] }
+      | undefined;
+    expect(series!._opts['lineVisible']).toBe(true);
+    expect(series!._primitives).toHaveLength(0);
+  });
+
+  it('breaks a long blank stretch when the run shipped no axis', () => {
+    pm.createPane('price', 'price', 'Price');
+    const price = pm.getPane('price')!;
+    const data: Array<{ time: number; value?: number }> = [
+      { time: 100, value: 1 },
+      { time: 200, value: 2 },
+    ];
+    for (let i = 0; i < 12; i++) data.push({ time: 300 + i * 100 });
+    data.push({ time: 1600, value: 5 });
+    pm.syncOverlayLines('price', [line(data)], { ownerId: 's1', forceFull: true });
+    const series = Object.entries(price.series).find(([k]) => k.includes('stoch'))?.[1] as
+      | { _opts: Record<string, unknown>; _primitives: unknown[] }
+      | undefined;
+    expect(series!._opts['lineVisible']).toBe(false);
+    expect(series!._primitives).toHaveLength(1);
+  });
+
+  it('keeps script na spanning when there is no hole (Pine style_line)', () => {
+    pm.createPane('price', 'price', 'Price');
+    const price = pm.getPane('price')!;
+    pm.syncOverlayLines(
+      'price',
+      [line([{ time: 100, value: 1 }, { time: 200 }, { time: 300, value: 3 }])],
+      { ownerId: 's1', forceFull: true },
+    );
+    const series = Object.entries(price.series).find(([k]) => k.includes('stoch'))?.[1] as
+      | { _opts: Record<string, unknown>; _primitives: unknown[] }
+      | undefined;
+    expect(series!._opts['lineVisible']).toBe(true);
+    expect(series!._primitives).toHaveLength(0);
+  });
+});
