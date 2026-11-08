@@ -34,8 +34,13 @@
 
 import { WORKER_VERSION } from './version';
 
-/** Allowed request headers, narrowest set used by on-chain / scripts routes. */
-const BASE_HEADERS = 'Content-Type, Authorization, X-Admin-Token, If-Match';
+/**
+ * Allowed request headers, narrowest set used by on-chain / scripts routes.
+ *
+ * `X-AXIS-Client` marks the PWA so its `/api/run` preflight succeeds; the value
+ * is client-controlled and is a beta convenience, never authentication.
+ */
+const BASE_HEADERS = 'Content-Type, Authorization, X-Admin-Token, If-Match, X-AXIS-Client';
 
 /** Adds signed-exchange credentials (`X-Exchange-*`) for `/api/market`. */
 const EXCHANGE_HEADERS = `${BASE_HEADERS}, X-Exchange-Key, X-Exchange-Secret, X-Exchange-Passphrase`;

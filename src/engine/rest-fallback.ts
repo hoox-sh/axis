@@ -31,6 +31,8 @@
  * @module engine/rest-fallback
  */
 
+import { engineHeaders } from '../engines/request-headers';
+
 /**
  * One REST fallback POST (used when the live socket cannot serve the request): endpoint plus
  * the JSON body the WS path would have sent.
@@ -52,7 +54,7 @@ export interface Redesign2RestRequest {
 export async function requestRedesign2RestFrame(req: Redesign2RestRequest): Promise<unknown> {
   const res = await fetch(req.endpoint, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: engineHeaders(),
     body: JSON.stringify(req.body),
     signal: req.signal,
   });
@@ -104,7 +106,10 @@ export async function requestSessionTail(
   req: Redesign2TailRequest,
 ): Promise<Redesign2TailEnvelope> {
   const url = buildSessionTailUrl(req.endpoint, req.sessionId, req.sinceCount);
-  const res = await fetch(url, { signal: req.signal });
+  const res = await fetch(url, {
+    headers: engineHeaders(undefined, false),
+    signal: req.signal,
+  });
   if (!res.ok) throw new Error(`Redesign2 session tail failed: ${res.status}`);
   const body = (await res.json()) as Partial<Redesign2TailEnvelope>;
   if (typeof body !== 'object' || body === null) {

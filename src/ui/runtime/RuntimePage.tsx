@@ -24,6 +24,7 @@ import {
   type EngineHealth,
 } from '../../engines/health';
 import { prewarmEngine, prewarmAppliedScripts } from '../../engines/prewarm';
+import { BETA_COPY } from '../../engines/request-headers';
 import { EngineProPanel } from './EngineProPanel';
 import { probeEndpoint } from '../../indicators/runner';
 import { matchCatalogForEndpoint } from '../../workers';
@@ -383,7 +384,7 @@ export function RuntimePage(props: {
                 label="Engine API key"
                 for="axis-engine-api-key"
                 testId="axis-engine-api-key-field"
-                hint="Sent as X-API-Key and Bearer on POST /run. Leave empty for open local backends."
+                hint={`${BETA_COPY} Sent as X-API-Key and Bearer on POST /run. Leave empty for open local backends.`}
               >
                 <StudioInput
                   id="axis-engine-api-key"

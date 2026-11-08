@@ -258,12 +258,27 @@ export async function handleRun(
     rawKey = extractBearer(req) || null;
     if (!gate.degraded) meterTenantUsage(env, gate, 'axis:run', { runs: 1 }, ctx);
   } else if (runAuthRequired(env)) {
-    const auth = await requireApiKey(req, env);
-    if (!auth.ok) {
-      return jsonError(auth.status, auth.code, auth.message, origin);
+    // Beta convenience: the PWA may run without an API key. `X-AXIS-Client` is
+    // client-spoofable, so the exact Origin is the stronger signal; neither is
+    // authentication — the per-IP/per-key rate limit below still applies.
+    const trusted =
+      (req.headers.get('Origin') ?? '').trim() === 'https://axis.hoox.sh' ||
+      (req.headers.get('X-AXIS-Client') ?? '').trim().toLowerCase() === 'pwa';
+    if (!trusted) {
+      const auth = await requireApiKey(req, env);
+      if (!auth.ok) {
+        return jsonError(auth.status, auth.code, auth.message, origin);
+      }
+      userId = auth.ctx.userId;
+      rawKey = auth.ctx.key;
+    } else {
+      // Trusted: skip only `requireApiKey`. Keep an optional bearer so metering
+      // and the tighter per-key bucket still work when the PWA sends one.
+      const header = req.headers.get('Authorization') ?? '';
+      if (header.startsWith('Bearer ')) {
+        rawKey = header.slice(7).trim() || null;
+      }
     }
-    userId = auth.ctx.userId;
-    rawKey = auth.ctx.key;
   } else {
     // Optional bearer for metering / tighter rate bucket when present
     const header = req.headers.get('Authorization') ?? '';

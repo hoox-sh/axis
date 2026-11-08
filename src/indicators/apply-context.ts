@@ -364,7 +364,7 @@ export function alignApplySeries(
   if (engineClampedTail && !sessionAligned && !opts.silent) {
     appendLog(
       'info',
-      `Engine bar cap: evaluated newest ${Math.round(engineWindowBars)} bars (free tier)`,
+      `Engine bar cap: evaluated newest ${Math.round(engineWindowBars)} bars`,
       'run',
     );
   }

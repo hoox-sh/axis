@@ -34,6 +34,7 @@
 
 import { getActiveEngineConfig } from '../plugins/active';
 import { confirmEngineApiKeyTarget, getCachedEngineHealth } from './catalog';
+import { engineHeaders } from './request-headers';
 
 const DEFAULT_TIMEOUT_MS = 20_000;
 
@@ -117,11 +118,7 @@ function target(
   if (apiKey && !confirmEngineApiKeyTarget(endpoint, apiKey)) {
     return 'API key withheld for unconfirmed engine origin';
   }
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (apiKey) {
-    headers['X-API-Key'] = apiKey;
-    headers['Authorization'] = `Bearer ${apiKey}`;
-  }
+  const headers = engineHeaders(apiKey);
   if (adminToken) headers['X-Admin-Token'] = adminToken;
   return { endpoint, headers };
 }

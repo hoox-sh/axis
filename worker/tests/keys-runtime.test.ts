@@ -392,6 +392,76 @@ describe('handleRun', () => {
     expect(r.status).toBe(401);
   });
 
+  it('skips API key for the trusted PWA Origin (beta convenience)', async () => {
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ status: 'success', plots: [] }), {
+        status: 200,
+      })) as typeof fetch;
+
+    const r = await handleRun(
+      new Request('http://x/api/run', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: 'https://axis.hoox.sh',
+        },
+        body: JSON.stringify({
+          script: 'plot(close)',
+          data: [{ time: 1, open: 1, high: 1, low: 1, close: 1 }],
+        }),
+      }),
+      { REQUIRE_RUN_AUTH: '1', EXTERNAL_BACKEND: 'http://flask.test' } as Env,
+      origin,
+    );
+    expect(r.status).toBe(200);
+  });
+
+  it('skips API key for X-AXIS-Client: pwa (trimmed, case-insensitive)', async () => {
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ status: 'success', plots: [] }), {
+        status: 200,
+      })) as typeof fetch;
+
+    const r = await handleRun(
+      new Request('http://x/api/run', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-AXIS-Client': '  PWA  ',
+        },
+        body: JSON.stringify({
+          script: 'plot(close)',
+          data: [{ time: 1, open: 1, high: 1, low: 1, close: 1 }],
+        }),
+      }),
+      { REQUIRE_RUN_AUTH: '1', EXTERNAL_BACKEND: 'http://flask.test' } as Env,
+      origin,
+    );
+    expect(r.status).toBe(200);
+  });
+
+  it('still requires API key for an untrusted Origin without a key', async () => {
+    const r = await handleRun(
+      new Request('http://x/api/run', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: 'https://evil.test',
+          'X-AXIS-Client': 'not-pwa',
+        },
+        body: JSON.stringify({
+          script: 'plot(close)',
+          data: [{ time: 1, open: 1, high: 1, low: 1, close: 1 }],
+        }),
+      }),
+      { REQUIRE_RUN_AUTH: '1', EXTERNAL_BACKEND: 'http://flask.test' } as Env,
+      origin,
+    );
+    expect(r.status).toBe(401);
+    const j = await r.json();
+    expect(j.code).toBe('NO_KEY');
+  });
+
   it('ALLOW_OPEN_KEYS without EXTERNAL_BACKEND still reaches NO_BACKEND', async () => {
     const r = await handleRun(
       new Request('http://x/api/run', {
@@ -450,6 +520,40 @@ describe('handleRun', () => {
         }),
         // Local demo open path so rate limit is exercised after auth gate.
         { EXTERNAL_BACKEND: 'http://flask.test', ALLOW_OPEN_KEYS: '1' } as Env,
+        origin,
+      );
+
+    let last: Response | null = null;
+    for (let i = 0; i < 35; i++) {
+      last = await mk();
+    }
+    expect(last!.status).toBe(429);
+    const j = await last!.json();
+    expect(j.code).toBe('RATE_LIMIT');
+  });
+
+  it('rate-limits trusted PWA requests after the limit', async () => {
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ status: 'success', plots: [] }), {
+        status: 200,
+      })) as typeof fetch;
+
+    const mk = () =>
+      handleRun(
+        new Request('http://x/api/run', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Origin: 'https://axis.hoox.sh',
+            'cf-connecting-ip': '203.0.113.10',
+          },
+          body: JSON.stringify({
+            script: 'plot(close)',
+            data: [{ time: 1, open: 1, high: 1, low: 1, close: 1 }],
+          }),
+        }),
+        // Auth still required — trust skips the key gate, not the rate limit.
+        { REQUIRE_RUN_AUTH: '1', EXTERNAL_BACKEND: 'http://flask.test' } as Env,
         origin,
       );
 

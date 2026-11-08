@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/engines"
-description: "src/engines contains batch.ts, catalog.ts, chart-data-session.ts, and 15 more files."
+description: "src/engines contains batch.ts, catalog.ts, chart-data-session.ts, and 16 more files."
 resource: "src/engines"
 tags: [code, engines]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-06T06:39:51Z
+  at: 2026-11-08T23:46:27Z
 sources:
   - id: tree
     resource: "src/engines"
@@ -30,6 +30,7 @@ okf_lock: generated
 * `ownership.ts` — isEngineOwnedLive
 * `prewarm.ts` — MAX_PREWARM_SCRIPTS, PrewarmOptions, PrewarmResult, _resetPrewarmMemoForTests, collectAppliedScriptSources, prewarmAppliedScripts, prewarmEngine
 * `pro.ts` — BacktestSummary, PREVIEW_MAX_BARS, PreviewOptions, PreviewResult, ProCallOptions, QuickBacktestResult, UsageResult, fetchUsage, renderChartPreview, renderIndicatorPreview, runQuickBacktest
+* `request-headers.ts` — AXIS_CLIENT_HEADER, AXIS_CLIENT_VALUE, BETA_COPY, engineHeaders
 * `result-mapper.ts` — MapEnginePayloadOptions, OverlayPolicy, ScriptTypePolicy, mapEnginePayload, normalizeOverlayFlag, payloadEngineTimes
 * `runner.ts` — DeployHostedScriptInput, HostedJob, HostedJobCronState, HostedScript, RunnerCallOptions, RunnerResult, deployHostedScript, listHostedJobs, runHostedJobNow, runnerAvailable, setHostedJobEnabled
 * `series-drive.ts` — SERIES_DRIVE_MIN_MS, SeriesDriveOptions, SeriesDriveResult, SeriesDriveTick, SeriesDriveTickFn, _resetSeriesDriveForTests, driveEngineSeries
@@ -62,6 +63,7 @@ okf_lock: generated
 * [src/streams](/code/src/streams.md)
 * [src/ui](/code/src/ui.md)
 * [src/ui/architecture](/code/src/ui/architecture.md)
+* [src/ui/library](/code/src/ui/library.md)
 * [src/ui/plugins](/code/src/ui/plugins.md)
 * [src/ui/runtime](/code/src/ui/runtime.md)
 * [src/ui/workers](/code/src/ui/workers.md)

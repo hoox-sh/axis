@@ -44,6 +44,7 @@ import { pairFormSymbol } from '../engine/market-identity';
 import { resolveSessionPayload } from './session-delta';
 import { ENGINE_SERIES_STALE_STEPS, newestBarTime, seriesBehind } from './series-freshness';
 import { combineAbortSignals } from '../utils/fetch-timeout';
+import { engineHeaders } from './request-headers';
 import { BoundedMap } from '../utils/bounded-map';
 
 /** Max bars per `POST /data/series/provide` request (contract). */
@@ -174,13 +175,7 @@ export function seriesIsStale(
 }
 
 function authHeaders(apiKey: string, json: boolean): Record<string, string> {
-  const h: Record<string, string> = {};
-  if (json) h['Content-Type'] = 'application/json';
-  if (apiKey) {
-    h['X-API-Key'] = apiKey;
-    h['Authorization'] = `Bearer ${apiKey}`;
-  }
-  return h;
+  return engineHeaders(apiKey, json);
 }
 
 interface DataCallResult {

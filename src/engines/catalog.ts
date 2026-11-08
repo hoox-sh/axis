@@ -67,6 +67,7 @@ import { healthFromBody, type EngineHealth } from './health';
 import { isAbortLike } from '../utils/errors';
 import { getJson, setJson } from '../utils/storage';
 import { combineAbortSignals } from '../utils/fetch-timeout';
+import { engineHeaders } from './request-headers';
 import { mapEnginePayload, normalizeOverlayFlag, payloadEngineTimes } from './result-mapper';
 import { engineFamilyForText } from '../plugins/engine-family';
 import {
@@ -337,6 +338,7 @@ export const serverEngine: EnginePlugin = {
       for (const path of ['/health', '/'] as const) {
         const res = await fetch(`${endpoint}${path}`, {
           method: 'GET',
+          headers: engineHeaders(undefined, false),
           signal: AbortSignal.timeout(8_000),
         });
         if (!res.ok) continue;
@@ -642,11 +644,7 @@ export const serverEngine: EnginePlugin = {
     }
 
     // ── REST only when preferWs is explicitly false ──────────────
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (apiKey) {
-      headers['X-API-Key'] = apiKey;
-      headers['Authorization'] = `Bearer ${apiKey}`;
-    }
+    const headers = engineHeaders(apiKey);
     try {
       // Never reuse a parent AbortSignal that already fired while WS was tried —
       // browsers surface that as "The operation timed out." with no REST attempt.
@@ -1302,6 +1300,7 @@ export const pyneWorkerEngine: EnginePlugin = {
     try {
       const res = await fetch(`${endpoint}/health`, {
         method: 'GET',
+        headers: engineHeaders(undefined, false),
         signal: AbortSignal.timeout(8_000),
       });
       if (!res.ok) return false;
@@ -1439,6 +1438,7 @@ export async function probeEngineHealth(
   try {
     const res = await fetch(`${base}/health`, {
       method: 'GET',
+      headers: engineHeaders(undefined, false),
       signal: AbortSignal.timeout(timeoutMs),
     });
     if (!res.ok) return null;

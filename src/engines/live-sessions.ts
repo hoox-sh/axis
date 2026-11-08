@@ -89,6 +89,7 @@ import { resolveSessionPayload } from './session-delta';
 import type { EngineLibrarySource } from '../plugins/types';
 import type { Bar } from '../store/types';
 import { combineAbortSignals } from '../utils/fetch-timeout';
+import { engineHeaders } from './request-headers';
 import { BoundedMap } from '../utils/bounded-map';
 
 /**
@@ -357,13 +358,7 @@ function hashBars(bars: Bar[], endInclusive: number): number {
 }
 
 function headersFor(apiKey?: string): Record<string, string> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  const key = String(apiKey || '').trim();
-  if (key) {
-    headers['X-API-Key'] = key;
-    headers['Authorization'] = `Bearer ${key}`;
-  }
-  return headers;
+  return engineHeaders(apiKey);
 }
 
 async function postJson(

@@ -625,14 +625,6 @@ export function WorkersPage(props: {
                           </StudioCode>
                         </StudioField>
                       </Show>
-                      <Show when={r()?.features?.['free_tier_limits'] === true}>
-                        <StudioField label="Free-tier guards">
-                          <StudioCode>
-                            enabled — unauthenticated /run is rate/bounds limited; set an API key
-                            for full runs
-                          </StudioCode>
-                        </StudioField>
-                      </Show>
                       <div class="ax-inline">
                         <StudioButton
                           variant="ghost"

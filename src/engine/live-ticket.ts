@@ -32,6 +32,7 @@
 
 import { looksLikeOnchainWorkerEndpoint, normalizeEndpointBase } from '../data/worker-origin';
 import { fetchWithTimeout } from '../utils/fetch-timeout';
+import { engineHeaders } from '../engines/request-headers';
 import { isRecord } from '../utils/validate';
 
 /** Ticket lifetime the Worker issues for `/api/ws/live` (seconds); reconnects mint a fresh one. */
@@ -178,7 +179,7 @@ export async function mintLiveTicket(proxy: LiveProxy): Promise<string> {
     res = await fetchWithTimeout(
       url,
       {
-        headers: { Authorization: `Bearer ${key}`, Accept: 'application/json' },
+        headers: { ...engineHeaders(key, false), Accept: 'application/json' },
       },
       { timeoutMs: MINT_TIMEOUT_MS },
     );

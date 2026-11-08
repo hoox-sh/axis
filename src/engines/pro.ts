@@ -35,6 +35,7 @@ import { getActiveEngineConfig } from '../plugins/active';
 import { confirmEngineApiKeyTarget } from './catalog';
 import { isAbortLike } from '../utils/errors';
 import { combineAbortSignals } from '../utils/fetch-timeout';
+import { engineHeaders } from './request-headers';
 import { isRecord, readJsonRecord } from '../utils/validate';
 
 const DEFAULT_TIMEOUT_MS = 60_000;
@@ -125,12 +126,7 @@ function resolveTarget(
   if (apiKey && !confirmEngineApiKeyTarget(endpoint, apiKey)) {
     return 'API key withheld for unconfirmed engine origin';
   }
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (apiKey) {
-    headers['X-API-Key'] = apiKey;
-    headers['Authorization'] = `Bearer ${apiKey}`;
-  }
-  return { endpoint, headers };
+  return { endpoint, headers: engineHeaders(apiKey) };
 }
 
 /** Last `PREVIEW_MAX_BARS` closes — the endpoints take a plain series. */

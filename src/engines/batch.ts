@@ -48,6 +48,7 @@ import { parseEngineJson, parseEngineJsonAsync } from './json-sanitize';
 import { mapEnginePayload, payloadEngineTimes } from './result-mapper';
 import { axisStamp, windowAxisFromBars } from '../results/window-axis';
 import { combineAbortSignals } from '../utils/fetch-timeout';
+import { engineHeaders } from './request-headers';
 
 /**
  * Engine result with the `series` / `plots` the chart-apply path requires
@@ -178,12 +179,7 @@ export async function runBatch(opts: BatchRunOptions): Promise<BatchRunOutcome |
   if (!endpoint || !scripts.length || !opts.bars?.length) return null;
   if (scripts.length > RUN_BATCH_MAX_SCRIPTS) return null;
 
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  const apiKey = String(opts.apiKey || '').trim();
-  if (apiKey) {
-    headers['X-API-Key'] = apiKey;
-    headers['Authorization'] = `Bearer ${apiKey}`;
-  }
+  const headers = engineHeaders(opts.apiKey);
 
   const pineBars = barsForPine(opts.bars as Bar[]);
   if (!pineBars.length) return null;

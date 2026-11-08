@@ -41,6 +41,7 @@
 import { getActiveEngineConfig } from '../plugins/active';
 import { confirmEngineApiKeyTarget } from './catalog';
 import { combineAbortSignals } from '../utils/fetch-timeout';
+import { engineHeaders } from './request-headers';
 import { isRecord, readJsonUnknown } from '../utils/validate';
 
 /** Backend hard cap on `scripts` per prewarm call (`backend/app.py`). */
@@ -215,11 +216,7 @@ export async function prewarmEngine(opts: PrewarmOptions = {}): Promise<PrewarmR
   if (scripts.length) body['scripts'] = scripts;
   if (opts.force) body['force'] = true;
 
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (apiKey) {
-    headers['X-API-Key'] = apiKey;
-    headers['Authorization'] = `Bearer ${apiKey}`;
-  }
+  const headers = engineHeaders(apiKey);
 
   try {
     const res = await fetch(`${endpoint}/compile/prewarm`, {
