@@ -152,6 +152,11 @@ def _patch_evaluator():
                 f"Use 'ta.<name>' for technical analysis, 'math.<name>' for math functions."
             )
             raise ValueError(msg)
+        # Wheel registers plot.style_* / color.* / strategy.* constants as
+        # non-callable values (dispatch tag 0). Return them as-is — never
+        # inspect.signature / call them (MACD plot.style_columns hit this).
+        if not callable(handler):
+            return handler
         if kwargs and _handler_accepts_kwargs(handler):
             return handler(args, kwargs)
         # Standalone functions like color_new(color, transp) expect
@@ -228,6 +233,11 @@ class CustomEvaluator:
         self._inner = NodeLiteralEvaluator(
             context=context, data_feed=data_feed, data_provider=data_provider
         )
+        # Per-bar host (this loop re-enters evaluate_script once per candle).
+        # Without bar mode, `src = input.source(close)` snapshots to a float and
+        # full-recompute ta.* sees a 1-sample series → all-null MACD/RSI plots.
+        # Matches pynescript.runtime.evaluator.RuntimeEvaluator.
+        self._inner._pine_bar_mode = True
         self.plot_outputs: list[dict] = []
         self._strategy_state = StrategyState()
         self._var_declarations = set()

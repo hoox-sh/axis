@@ -60,13 +60,19 @@ def _bars(n: int = 20) -> list[dict]:
     return out
 
 
-def _run(rt, script: str, bars: list[dict], label: str) -> int:
+def _run(rt, script: str, bars: list[dict], label: str) -> dict | None:
     raw = rt.run_script(script, bars, "interpret")
     out = json.loads(raw)
     if out.get("status") != "success":
         print(f"FAIL {label}: {out.get('error') or out}", file=sys.stderr)
-        return 1
-    return 0
+        return None
+    return out
+
+
+def _non_null(series: object) -> int:
+    if not isinstance(series, list):
+        return 0
+    return sum(1 for x in series if x is not None)
 
 
 def main() -> int:
@@ -85,11 +91,43 @@ def main() -> int:
     bars = _bars()
     sma = '//@version=5\nindicator("t")\nplot(ta.sma(close, 14))'
     stdev = '//@version=5\nindicator("t")\nplot(ta.stdev(close, 14))'
-    if _run(rt, sma, bars, "ta.sma") != 0:
+    # Non-callable plot.style_* constants must not hit inspect.signature
+    # (AXIS CustomEvaluator patch; MACD / Volume / AO use style_columns).
+    # Keep this tiny — bun test default timeout is 5s.
+    columns = (
+        '//@version=6\nindicator("cols", overlay=false)\n'
+        'plot(close, "C", style=plot.style_columns)\n'
+    )
+    # Bar-mode lock: input.source snapshots to scalars; without _pine_bar_mode
+    # incremental ta.macd never warms and every plot stays null (empty chart).
+    macd_src = (
+        '//@version=6\nindicator("MACD", overlay=false)\n'
+        'src = input.source(close, "Source")\n'
+        "[macdLine, signalLine, hist] = ta.macd(src, 12, 26, 9)\n"
+        'plot(hist, "Hist", style=plot.style_columns)\n'
+        'plot(macdLine, "MACD")\n'
+        'plot(signalLine, "Signal")\n'
+    )
+    if _run(rt, sma, bars, "ta.sma") is None:
         return 1
-    if _run(rt, stdev, bars, "ta.stdev") != 0:
+    if _run(rt, stdev, bars, "ta.stdev") is None:
         return 1
-    print("OK interpret ta.sma ta.stdev")
+    if _run(rt, columns, bars, "plot.style_columns") is None:
+        return 1
+    macd_out = _run(rt, macd_src, _bars(80), "input.source+ta.macd")
+    if macd_out is None:
+        return 1
+    series = macd_out.get("series") or {}
+    for key in ("Hist", "MACD", "Signal"):
+        nn = _non_null(series.get(key))
+        if nn <= 0:
+            print(
+                f"FAIL input.source+ta.macd: series {key!r} all-null "
+                f"(len={len(series.get(key) or [])})",
+                file=sys.stderr,
+            )
+            return 1
+    print("OK interpret ta.sma ta.stdev plot.style_columns input.source+ta.macd")
     return 0
 
 
