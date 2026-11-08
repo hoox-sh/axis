@@ -35,11 +35,7 @@ import {
 } from '../store';
 import { CHART_GRID_MODES, type ChartGridMode } from '../chart/layout';
 import { layoutCells, matchingSavedLayoutName } from '../chart/layout-glyph';
-import {
-  LAYOUT_RECIPES,
-  applyLayoutRecipe,
-  type LayoutRecipe,
-} from '../chart/layout-recipes';
+import { LAYOUT_RECIPES, applyLayoutRecipe, type LayoutRecipe } from '../chart/layout-recipes';
 import { Icons } from './icons';
 import { Popover } from './Popover';
 import { loadSymbolData } from '../data/load-symbol';
@@ -57,7 +53,7 @@ const GRID_SHORTCUT_ID: Record<ChartGridMode, ShortcutId> = {
 };
 
 /** Compact topbar control for multi-chart layouts and named snapshots. */
-export const ChartLayoutMenu: Component = () : JSX.Element => {
+export const ChartLayoutMenu: Component = (): JSX.Element => {
   const [open, setOpen] = createSignal(false);
   const [saveName, setSaveName] = createSignal('');
   let btnEl: HTMLButtonElement | undefined;
@@ -179,149 +175,149 @@ export const ChartLayoutMenu: Component = () : JSX.Element => {
         role="menu"
         label="Chart layouts"
       >
-          <div class="text-[10px] uppercase tracking-wider text-text-faint font-semibold px-0.5">
-            Workspace
-          </div>
-          <div class="grid grid-cols-2 gap-1">
-            <button
-              type="button"
-              role="menuitem"
-              class={`sc-btn py-1.5 text-[11px] ${shellKind() === 'trader' ? 'border-accent text-accent bg-accent/10' : ''}`}
-              title="Chart and status. Watchlist, editor, and logs stay closed."
-              data-testid="axis-layout-shell-trader"
-              onClick={() => {
-                applyShellLayout('trader');
-                setOpen(false);
-              }}
-            >
-              Trader
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              class={`sc-btn py-1.5 text-[11px] ${shellKind() === 'operator' ? 'border-accent text-accent bg-accent/10' : ''}`}
-              title="Watchlist, editor, and system logs around the chart."
-              data-testid="axis-layout-shell-operator"
-              onClick={() => {
-                applyShellLayout('operator');
-                setOpen(false);
-              }}
-            >
-              Operator
-            </button>
-          </div>
+        <div class="text-[10px] uppercase tracking-wider text-text-faint font-semibold px-0.5">
+          Workspace
+        </div>
+        <div class="grid grid-cols-2 gap-1">
+          <button
+            type="button"
+            role="menuitem"
+            class={`sc-btn py-1.5 text-[11px] ${shellKind() === 'trader' ? 'border-accent text-accent bg-accent/10' : ''}`}
+            title="Chart and status. Watchlist, editor, and logs stay closed."
+            data-testid="axis-layout-shell-trader"
+            onClick={() => {
+              applyShellLayout('trader');
+              setOpen(false);
+            }}
+          >
+            Trader
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            class={`sc-btn py-1.5 text-[11px] ${shellKind() === 'operator' ? 'border-accent text-accent bg-accent/10' : ''}`}
+            title="Watchlist, editor, and system logs around the chart."
+            data-testid="axis-layout-shell-operator"
+            onClick={() => {
+              applyShellLayout('operator');
+              setOpen(false);
+            }}
+          >
+            Operator
+          </button>
+        </div>
 
-          <div class="text-[10px] uppercase tracking-wider text-text-faint font-semibold px-0.5">
-            Grid
+        <div class="text-[10px] uppercase tracking-wider text-text-faint font-semibold px-0.5">
+          Grid
+        </div>
+        <div class="grid grid-cols-3 gap-1 sm:grid-cols-6">
+          <For each={[...CHART_GRID_MODES]}>
+            {(m) => (
+              <button
+                type="button"
+                role="menuitem"
+                class={`sc-btn py-2 text-[11px] font-mono ${
+                  mode() === m.id ? 'border-accent text-accent bg-accent/10' : ''
+                }`}
+                title={gridTitle(m.id, m.hint)}
+                data-testid={`axis-layout-mode-${m.id}`}
+                onClick={() => pickMode(m.id)}
+              >
+                {m.label}
+              </button>
+            )}
+          </For>
+        </div>
+        <p class="text-[10px] text-text-faint px-0.5 leading-snug">
+          Click a chart to focus it. Topbar symbol / Load / Run apply to the active chart.
+        </p>
+
+        <div class="border-t border-border-soft pt-2 mt-0.5">
+          <div class="text-[10px] uppercase tracking-wider text-text-faint font-semibold px-0.5 mb-1">
+            Recipes
           </div>
-          <div class="grid grid-cols-3 gap-1 sm:grid-cols-6">
-            <For each={[...CHART_GRID_MODES]}>
-              {(m) => (
+          <div class="flex flex-col gap-0.5">
+            <For each={[...LAYOUT_RECIPES]}>
+              {(r) => (
                 <button
                   type="button"
                   role="menuitem"
-                  class={`sc-btn py-2 text-[11px] font-mono ${
-                    mode() === m.id ? 'border-accent text-accent bg-accent/10' : ''
-                  }`}
-                  title={gridTitle(m.id, m.hint)}
-                  data-testid={`axis-layout-mode-${m.id}`}
-                  onClick={() => pickMode(m.id)}
+                  class="sc-btn sc-btn-ghost justify-start text-left text-[11px] py-1.5"
+                  title={r.hint}
+                  data-testid={`axis-layout-recipe-${r.id}`}
+                  onClick={() => pickRecipe(r)}
                 >
-                  {m.label}
+                  <span class="truncate flex-1">{r.label}</span>
+                  <span class="font-mono text-[10px] text-text-faint ml-1 flex-shrink-0">
+                    {r.mode}
+                  </span>
                 </button>
               )}
             </For>
           </div>
-          <p class="text-[10px] text-text-faint px-0.5 leading-snug">
-            Click a chart to focus it. Topbar symbol / Load / Run apply to the active chart.
-          </p>
+        </div>
 
-          <div class="border-t border-border-soft pt-2 mt-0.5">
-            <div class="text-[10px] uppercase tracking-wider text-text-faint font-semibold px-0.5 mb-1">
-              Recipes
-            </div>
-            <div class="flex flex-col gap-0.5">
-              <For each={[...LAYOUT_RECIPES]}>
-                {(r) => (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    class="sc-btn sc-btn-ghost justify-start text-left text-[11px] py-1.5"
-                    title={r.hint}
-                    data-testid={`axis-layout-recipe-${r.id}`}
-                    onClick={() => pickRecipe(r)}
-                  >
-                    <span class="truncate flex-1">{r.label}</span>
-                    <span class="font-mono text-[9px] text-text-faint ml-1 flex-shrink-0">
-                      {r.mode}
-                    </span>
-                  </button>
+        <div class="border-t border-border-soft pt-2 mt-0.5">
+          <div class="text-[10px] uppercase tracking-wider text-text-faint font-semibold px-0.5 mb-1">
+            Saved layouts
+          </div>
+          <div class="flex gap-1 mb-1.5">
+            <input
+              class="sc-input flex-1 min-w-0 text-[11px]"
+              placeholder="Name this layout…"
+              value={saveName()}
+              onInput={(e) => setSaveName(e.currentTarget.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') onSave();
+              }}
+              data-testid="axis-layout-save-name"
+            />
+            <button
+              type="button"
+              class="sc-btn sc-btn-primary px-2"
+              title="Save current grid + panel chrome"
+              data-testid="axis-layout-save"
+              onClick={onSave}
+            >
+              Save
+            </button>
+          </div>
+          <Show
+            when={saved().length > 0}
+            fallback={
+              <div class="text-[10px] text-text-faint px-0.5 py-1">No saved layouts yet.</div>
+            }
+          >
+            <ul class="max-h-[180px] overflow-y-auto flex flex-col gap-0.5">
+              <For each={saved()}>
+                {(lay) => (
+                  <li class="flex items-center gap-1 group">
+                    <button
+                      type="button"
+                      class="sc-btn sc-btn-ghost flex-1 justify-start text-left text-[11px] min-w-0"
+                      title={`Load “${lay.name}”`}
+                      onClick={() => onLoad(lay.id)}
+                    >
+                      <span class="truncate">{lay.name}</span>
+                      <span class="font-mono text-[10px] text-text-faint ml-1 flex-shrink-0">
+                        {lay.chartLayout?.mode || '1'}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      class="sc-btn sc-btn-ghost px-1 opacity-60 hover:opacity-100 hover:text-red"
+                      title="Delete layout"
+                      aria-label={`Delete ${lay.name}`}
+                      onClick={() => deleteChartLayout(lay.id)}
+                    >
+                      <Icons.x />
+                    </button>
+                  </li>
                 )}
               </For>
-            </div>
-          </div>
-
-          <div class="border-t border-border-soft pt-2 mt-0.5">
-            <div class="text-[10px] uppercase tracking-wider text-text-faint font-semibold px-0.5 mb-1">
-              Saved layouts
-            </div>
-            <div class="flex gap-1 mb-1.5">
-              <input
-                class="sc-input flex-1 min-w-0 text-[11px]"
-                placeholder="Name this layout…"
-                value={saveName()}
-                onInput={(e) => setSaveName(e.currentTarget.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') onSave();
-                }}
-                data-testid="axis-layout-save-name"
-              />
-              <button
-                type="button"
-                class="sc-btn sc-btn-primary px-2"
-                title="Save current grid + panel chrome"
-                data-testid="axis-layout-save"
-                onClick={onSave}
-              >
-                Save
-              </button>
-            </div>
-            <Show
-              when={saved().length > 0}
-              fallback={
-                <div class="text-[10px] text-text-faint px-0.5 py-1">No saved layouts yet.</div>
-              }
-            >
-              <ul class="max-h-[180px] overflow-y-auto flex flex-col gap-0.5">
-                <For each={saved()}>
-                  {(lay) => (
-                    <li class="flex items-center gap-1 group">
-                      <button
-                        type="button"
-                        class="sc-btn sc-btn-ghost flex-1 justify-start text-left text-[11px] min-w-0"
-                        title={`Load “${lay.name}”`}
-                        onClick={() => onLoad(lay.id)}
-                      >
-                        <span class="truncate">{lay.name}</span>
-                        <span class="font-mono text-[9px] text-text-faint ml-1 flex-shrink-0">
-                          {lay.chartLayout?.mode || '1'}
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        class="sc-btn sc-btn-ghost px-1 opacity-60 hover:opacity-100 hover:text-red"
-                        title="Delete layout"
-                        aria-label={`Delete ${lay.name}`}
-                        onClick={() => deleteChartLayout(lay.id)}
-                      >
-                        <Icons.x />
-                      </button>
-                    </li>
-                  )}
-                </For>
-              </ul>
-            </Show>
-          </div>
+            </ul>
+          </Show>
+        </div>
       </Popover>
     </div>
   );

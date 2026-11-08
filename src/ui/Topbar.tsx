@@ -865,7 +865,7 @@ export const Topbar: Component<{
                       new CustomEvent('axis-open-studio', { detail: { page: 'data' } }),
                     )
                   }
-                  title="Data — studio Data page: backfill jobs and cached datasets"
+                  title="Data — studio Data page: cached datasets and backfill jobs"
                   aria-label="Data"
                   data-testid="axis-btn-datasource"
                 >

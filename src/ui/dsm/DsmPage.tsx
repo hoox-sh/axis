@@ -5,12 +5,12 @@
 /**
  * Studio **Data** page — the primary Data Source Manager surface.
  *
- * Combines the two DSM planes in one full-page view: the backfill job
- * composer + job list ({@link module:ui/dsm/DsmComposer},
- * {@link module:ui/dsm/DsmJobsList}) and the cached dataset inventory
- * ({@link module:ui/dsm/DatasetsBrowser}, which renders the coverage map for
- * the selected series). The floatable panel and the cached-datasets modal
- * stay available; they reuse the same components.
+ * Combines the two DSM planes in one full-page view: the cached dataset
+ * inventory ({@link module:ui/dsm/DatasetsBrowser}, which renders the coverage
+ * map for the selected series) and the backfill job composer + job list
+ * ({@link module:ui/dsm/DsmComposer}, {@link module:ui/dsm/DsmJobsList}).
+ * Datasets is the default tab. The floatable panel and the cached-datasets
+ * modal stay available; they reuse the same components.
  *
  * @module ui/dsm/DsmPage
  */
@@ -34,13 +34,13 @@ const BAR_BYTES_EST = 48;
 type DataTab = 'jobs' | 'datasets';
 
 const DATA_TABS: readonly { id: DataTab; label: string; hint: string }[] = [
-  { id: 'jobs', label: 'Backfill jobs', hint: 'Compose and monitor background OHLCV backfill' },
   { id: 'datasets', label: 'Datasets', hint: 'Browse cached series, coverage, load, export' },
+  { id: 'jobs', label: 'Backfill jobs', hint: 'Compose and monitor background OHLCV backfill' },
 ];
 
-/** Studio Data page: backfill jobs + cached dataset inventory. */
-export const DsmPage: Component<{ onClose?: () => void }> = () : JSX.Element => {
-  const [tab, setTab] = createSignal<DataTab>('jobs');
+/** Studio Data page: cached dataset inventory + backfill jobs. */
+export const DsmPage: Component<{ onClose?: () => void }> = () => {
+  const [tab, setTab] = createSignal<DataTab>('datasets');
   const [composerOpen, setComposerOpen] = createSignal(false);
   const [datasetRows, setDatasetRows] = createSignal<BarsCacheMeta[]>([]);
 
@@ -63,40 +63,42 @@ export const DsmPage: Component<{ onClose?: () => void }> = () : JSX.Element => 
     };
   });
 
+  const openComposer = () => {
+    setTab('jobs');
+    setComposerOpen(true);
+  };
+
   return (
     <div class="ax-page-stack">
       <StudioSection
         title="Summary"
-        lead="Live counters across every backfill job and every cached dataset. Open the composer to enqueue new work; the walk never blocks the chart."
+        lead="Live counters across every cached dataset and every backfill job. Open the composer to enqueue new work; the walk never blocks the chart."
         testId="axis-data-summary"
         headerEnd={
           <AppButton
             design="soft"
-            tone={composerOpen() ? 'ghost' : 'primary'}
+            tone={composerOpen() && tab() === 'jobs' ? 'ghost' : 'primary'}
             size="sm"
             testId="axis-data-new"
             icon={<Icons.plus />}
-            title={composerOpen() ? 'Close the new-job form' : 'Start a new backfill job'}
+            title={
+              composerOpen() && tab() === 'jobs'
+                ? 'Close the new-job form'
+                : 'Start a new backfill job'
+            }
             onClick={() => {
-              setComposerOpen((v) => !v);
+              if (composerOpen() && tab() === 'jobs') {
+                setComposerOpen(false);
+                return;
+              }
+              openComposer();
             }}
           >
-            {composerOpen() ? 'Close form' : 'New job'}
+            {composerOpen() && tab() === 'jobs' ? 'Close form' : 'New job'}
           </AppButton>
         }
       >
         <div class="ax-grid ax-grid--3">
-          <StudioStat label="Active jobs" value={totals().active} testId="axis-data-stat-active" />
-          <StudioStat
-            label="Bars fetched"
-            value={totals().bars.toLocaleString()}
-            testId="axis-data-stat-bars"
-          />
-          <StudioStat
-            label="Pages fetched"
-            value={totals().pages.toLocaleString()}
-            testId="axis-data-stat-pages"
-          />
           <StudioStat
             label="Datasets cached"
             value={datasetStats().count}
@@ -111,6 +113,17 @@ export const DsmPage: Component<{ onClose?: () => void }> = () : JSX.Element => 
             label="Storage estimate"
             value={`≈${datasetStats().storage}`}
             testId="axis-data-stat-storage"
+          />
+          <StudioStat label="Active jobs" value={totals().active} testId="axis-data-stat-active" />
+          <StudioStat
+            label="Bars fetched"
+            value={totals().bars.toLocaleString()}
+            testId="axis-data-stat-bars"
+          />
+          <StudioStat
+            label="Pages fetched"
+            value={totals().pages.toLocaleString()}
+            testId="axis-data-stat-pages"
           />
         </div>
         <Show when={totals().issues > 0}>
@@ -131,6 +144,19 @@ export const DsmPage: Component<{ onClose?: () => void }> = () : JSX.Element => 
       />
 
       <div class="ax-page-canvas">
+        <Show when={tab() === 'datasets'}>
+          <StudioSection
+            title="Dataset inventory"
+            lead="Cached OHLCV series across IndexedDB and the session mirror. Select a dataset to inspect its coverage map, load a window to the chart, export CSV, or delete."
+            testId="axis-data-datasets-section"
+          >
+            <DatasetsBrowser
+              testIdPrefix="axis-data-datasets"
+              onRows={(rows) => setDatasetRows(rows)}
+            />
+          </StudioSection>
+        </Show>
+
         <Show when={tab() === 'jobs'}>
           <StudioSection
             title="Backfill jobs"
@@ -145,19 +171,6 @@ export const DsmPage: Component<{ onClose?: () => void }> = () : JSX.Element => 
               />
             </Show>
             <DsmJobsList testIdPrefix="axis-data" batch />
-          </StudioSection>
-        </Show>
-
-        <Show when={tab() === 'datasets'}>
-          <StudioSection
-            title="Dataset inventory"
-            lead="Cached OHLCV series across IndexedDB and the session mirror. Select a dataset to inspect its coverage map, load a window to the chart, export CSV, or delete."
-            testId="axis-data-datasets-section"
-          >
-            <DatasetsBrowser
-              testIdPrefix="axis-data-datasets"
-              onRows={(rows) => setDatasetRows(rows)}
-            />
           </StudioSection>
         </Show>
       </div>

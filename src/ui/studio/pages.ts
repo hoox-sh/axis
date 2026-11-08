@@ -67,7 +67,7 @@ export const STUDIO_PAGES: StudioPageMeta[] = [
     kicker: 'Data',
     title: 'Data manager',
     purpose:
-      'Background OHLCV backfill jobs and the cached dataset inventory — coverage, load, export.',
+      'Cached dataset inventory and background OHLCV backfill — coverage, load, export, jobs.',
     group: 'primary',
     testId: 'axis-data-page',
     titleId: 'axis-data-page-title',
