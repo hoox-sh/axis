@@ -107,7 +107,7 @@
 }
 .axd-kbd {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.68em;
+  font-size: max(10px, 0.68em);
   font-weight: 600;
   letter-spacing: 0.04em;
   border: 1px solid currentColor;
@@ -121,7 +121,7 @@
 .axd-btn--xs {
   min-height: 1.5rem;
   padding: 0.15rem 0.55rem;
-  font-size: 0.72rem;
+  font-size: max(10px, 0.72rem);
   gap: 0.35rem;
 }
 .axd-btn--sm {
@@ -318,7 +318,7 @@
   min-height: 1.75rem;
   padding: 0.3rem 0.65rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.68rem;
+  font-size: max(10px, 0.68rem);
   font-weight: 600;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -367,7 +367,7 @@
 }
 .axd-term.axd-btn--xs {
   min-height: 1.5rem;
-  font-size: 0.62rem;
+  font-size: max(10px, 0.62rem);
   padding: 0.15rem 0.5rem;
 }
 .axd-term::before {
@@ -446,7 +446,7 @@
   height: 1.5rem;
   min-height: 1.5rem;
   min-width: 1.5rem;
-  font-size: 0.72rem;
+  font-size: max(10px, 0.72rem);
 }
 .axd-btn.axd-shape-orb.axd-btn--sm {
   width: 2rem;

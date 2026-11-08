@@ -128,7 +128,7 @@ export const FunctionOutline: Component<FunctionOutlineProps> = (props): JSX.Ele
           <For each={groups()}>
             {(group) => (
               <div class="ax-function-outline-group mb-1">
-                <div class="px-1.5 pt-1 pb-0.5 text-[9px] uppercase tracking-wider text-text-faint font-semibold">
+                <div class="px-1.5 pt-1 pb-0.5 text-[10px] uppercase tracking-wider text-text-faint font-semibold">
                   {group.label}
                 </div>
                 <ul class="list-none m-0 p-0">
@@ -158,7 +158,7 @@ export const FunctionOutline: Component<FunctionOutlineProps> = (props): JSX.Ele
                             </span>
                             <span class="min-w-0 truncate text-text">{entryLabel(item)}</span>
                             <Show when={item.exported}>
-                              <span class="flex-shrink-0 text-[9px] text-accent/80">exp</span>
+                              <span class="flex-shrink-0 text-[10px] text-accent/80">exp</span>
                             </Show>
                             <span class="ml-auto flex-shrink-0 text-[10px] text-text-faint tabular-nums">
                               {item.line}

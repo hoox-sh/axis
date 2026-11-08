@@ -68,7 +68,7 @@
 .ax-library-kbd {
   flex-shrink: 0;
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   line-height: 1;
   padding: 3px 5px;
   border: 1px solid var(--color-border-soft);
@@ -137,7 +137,7 @@
 }
 .ax-library-tab-count {
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 500;
   line-height: 1;
   padding: 2px 4px;
@@ -159,7 +159,7 @@
   padding: 0;
   color: var(--color-accent);
   font: inherit;
-  font-size: 9.5px;
+  font-size: 10px;
   cursor: pointer;
 }
 .ax-library-other:hover {
@@ -187,7 +187,6 @@
   container-type: inline-size;
 }
 
-
 /* ── Recent strip ────────────────────────────────────────────────── */
 .ax-library-recent {
   display: flex;
@@ -200,7 +199,7 @@
   align-items: center;
   gap: 3px;
   flex-shrink: 0;
-  font-size: 8.5px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -228,7 +227,7 @@
   background: var(--color-bg-elev);
   color: var(--color-text-dim);
   font: inherit;
-  font-size: 9px;
+  font-size: 10px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -275,7 +274,7 @@
   background: transparent;
   color: var(--color-text-dim);
   font: inherit;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -307,7 +306,7 @@
 .ax-library-group-count {
   flex-shrink: 0;
   font-family: var(--font-mono);
-  font-size: 8.5px;
+  font-size: 10px;
   font-weight: 500;
   letter-spacing: 0;
   padding: 1px 4px;
@@ -419,7 +418,7 @@
 .ax-library-applied {
   flex-shrink: 0;
   font-family: var(--font-mono);
-  font-size: 8px;
+  font-size: 10px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   padding: 1px 4px;
@@ -444,7 +443,7 @@
   border: 1px solid var(--color-border-soft);
   border-radius: 4px;
   font-family: var(--font-mono);
-  font-size: 8.5px;
+  font-size: 10px;
   line-height: 1;
   letter-spacing: 0.02em;
   text-transform: uppercase;
@@ -460,14 +459,14 @@
 }
 .ax-library-updated {
   font-family: var(--font-mono);
-  font-size: 8.5px;
+  font-size: 10px;
   color: var(--color-text-faint);
   white-space: nowrap;
 }
 .ax-library-card-desc {
   color: var(--color-text-faint);
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: 10px;
   line-height: 1.35;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -480,7 +479,7 @@
 }
 .ax-library-tag {
   font-family: var(--font-mono);
-  font-size: 8px;
+  font-size: 10px;
   color: var(--color-text-faint);
   padding: 0 3px;
   border-radius: 3px;
@@ -569,7 +568,7 @@
   background: transparent;
   color: var(--color-text-dim);
   font: inherit;
-  font-size: 9px;
+  font-size: 10px;
   cursor: pointer;
   white-space: nowrap;
 }
@@ -611,7 +610,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 8.5px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -621,14 +620,14 @@
   margin: 0;
   color: var(--color-red);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
 }
 .ax-library-history-empty {
   display: flex;
   align-items: center;
   gap: 5px;
   color: var(--color-text-faint);
-  font-size: 9px;
+  font-size: 10px;
   padding: 2px 0;
 }
 .ax-library-history-list {
@@ -659,7 +658,7 @@
   align-items: center;
   gap: 5px;
   font-family: var(--font-mono);
-  font-size: 8.5px;
+  font-size: 10px;
   color: var(--color-text-faint);
 }
 .ax-library-history-sha {
@@ -673,7 +672,7 @@
 }
 .ax-library-history-msg {
   color: var(--color-text-dim);
-  font-size: 9.5px;
+  font-size: 10px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -733,7 +732,7 @@
 .ax-library-foot {
   margin: 0;
   color: var(--color-text-faint);
-  font-size: 8.5px;
+  font-size: 10px;
   line-height: 1.55;
 }
 .ax-library-foot strong {
@@ -750,7 +749,7 @@
 }
 .ax-library-storage-label {
   flex-shrink: 0;
-  font-size: 8.5px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -775,7 +774,7 @@
   gap: 5px;
   min-width: 0;
   font-family: var(--font-mono);
-  font-size: 8.5px;
+  font-size: 10px;
   color: var(--color-text-faint);
 }
 .ax-library-dot {
@@ -817,7 +816,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 8.5px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -825,7 +824,7 @@
 }
 .ax-library-save-lines {
   font-family: var(--font-mono);
-  font-size: 8.5px;
+  font-size: 10px;
   color: var(--color-text-faint);
 }
 .ax-library-save-row {
@@ -857,7 +856,7 @@
   background: transparent;
   color: var(--color-text-faint);
   font: inherit;
-  font-size: 9px;
+  font-size: 10px;
   cursor: pointer;
 }
 .ax-library-details-toggle:hover {
@@ -873,7 +872,7 @@
 .ax-library-import {
   margin: 0;
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   line-height: 1.4;
   color: var(--color-accent);
   word-break: break-all;
@@ -905,7 +904,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   color: var(--color-text-dim);
 }
 .ax-library-published-name strong {
@@ -941,7 +940,7 @@
   background: transparent;
   color: var(--color-text-faint);
   font: inherit;
-  font-size: 8.5px;
+  font-size: 10px;
   cursor: pointer;
   white-space: nowrap;
 }
@@ -971,7 +970,7 @@
   color: var(--color-text-dim);
   font: inherit;
   font-family: var(--font-mono);
-  font-size: 8.5px;
+  font-size: 10px;
   letter-spacing: 0.03em;
   text-transform: uppercase;
   cursor: pointer;
@@ -987,10 +986,9 @@
   background: color-mix(in srgb, var(--color-accent) 11%, transparent);
 }
 .ax-library-filter-count {
-  font-size: 8px;
+  font-size: 10px;
   opacity: 0.65;
 }
-
 
 /* Wide embeds (Studio → Plugins → Script Library) use two card columns. */
 @container (min-width: 700px) {

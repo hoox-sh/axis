@@ -142,7 +142,7 @@
   color: var(--color-text);
 }
 .ax-page-rail-brand span {
-  font-size: 0.72rem;
+  font-size: max(10px, 0.72rem);
   letter-spacing: 0.14em;
   font-weight: 500;
   color: var(--color-text-faint);
@@ -570,7 +570,7 @@
   min-width: 0;
 }
 .ax-saved-stat-k {
-  font-size: 0.7rem;
+  font-size: max(10px, 0.7rem);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   font-weight: 600;
@@ -744,14 +744,14 @@
 }
 .ax-field-counter {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.72rem;
+  font-size: max(10px, 0.72rem);
   line-height: 1;
   color: var(--color-text-faint);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 .ax-field-tag {
-  font-size: 0.6rem;
+  font-size: max(10px, 0.6rem);
   line-height: 1;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -1083,7 +1083,7 @@ textarea.ax-input.ax-input--mono {
 .ax-input-kbd {
   flex-shrink: 0;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.7rem;
+  font-size: max(10px, 0.7rem);
   line-height: 1;
   color: var(--color-text-faint);
   border: var(--border-w) solid var(--color-border);
@@ -1102,7 +1102,7 @@ textarea.ax-input.ax-input--mono {
   flex-shrink: 0;
   padding: 0 0.35rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.72rem;
+  font-size: max(10px, 0.72rem);
   line-height: 1;
   color: var(--color-text-faint);
   font-variant-numeric: tabular-nums;
@@ -1212,7 +1212,7 @@ textarea.ax-input.ax-input--mono {
   height: 0.75rem;
 }
 .ax-input-shell.ax-shell--compact .ax-input-kbd {
-  font-size: 0.62rem;
+  font-size: max(10px, 0.62rem);
   padding: 0.12rem 0.24rem;
 }
 .ax-select-shell.ax-shell--compact > .ax-select--bare {
@@ -1850,7 +1850,7 @@ select.ax-select:not(.ax-select--bare):focus {
   border-radius: 999px;
   color: var(--color-text-faint);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.64rem;
+  font-size: max(10px, 0.64rem);
   font-weight: 600;
   letter-spacing: 0.06em;
   line-height: 1;
@@ -2012,7 +2012,7 @@ span.ax-chip,
 .ax-chip--tag {
   min-height: 1.55rem;
   padding: 0.12rem 0.55rem;
-  font-size: 0.75rem;
+  font-size: max(10px, 0.75rem);
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -3015,7 +3015,7 @@ span.ax-json-twist {
   border: var(--border-w) solid var(--color-border);
   border-radius: 3px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.74rem;
+  font-size: max(10px, 0.74rem);
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -3414,7 +3414,7 @@ span.ax-json-twist {
   padding: 0.5rem 0.8rem;
   border-bottom: var(--border-w) solid var(--color-border);
   background: color-mix(in srgb, var(--color-bg-panel) 82%, var(--color-bg-elev));
-  font-size: 0.76rem;
+  font-size: max(10px, 0.76rem);
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--color-text-dim);
@@ -3429,7 +3429,7 @@ span.ax-json-twist {
   color: var(--color-text);
 }
 .ax-debug-live-note {
-  font-size: 0.72rem;
+  font-size: max(10px, 0.72rem);
   text-transform: none;
   letter-spacing: 0;
   color: var(--color-text-faint);
@@ -3442,7 +3442,7 @@ span.ax-json-twist {
   overflow: auto;
   overscroll-behavior: contain;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.76rem;
+  font-size: max(10px, 0.76rem);
   line-height: 1.6;
   background: var(--color-bg-base);
 }
@@ -3462,7 +3462,7 @@ span.ax-json-twist {
   white-space: nowrap;
 }
 .ax-debug-scope {
-  font-size: 0.68rem;
+  font-size: max(10px, 0.68rem);
   letter-spacing: 0.07em;
   text-transform: uppercase;
   white-space: nowrap;

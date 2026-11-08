@@ -701,7 +701,7 @@ export const IndicatorCard: Component<Props> = (props) : JSX.Element => {
                           }}
                         >
                           <span
-                            class="font-mono text-[8px] leading-none"
+                            class="font-mono text-[10px] leading-none"
                             data-testid="axis-plot-display"
                           >
                             {formatPlotDisplayCompact(displayBits)}
@@ -744,7 +744,7 @@ export const IndicatorCard: Component<Props> = (props) : JSX.Element => {
                           </For>
                           <button
                             type="button"
-                            class="px-1 py-0.5 text-[9px] text-text-faint hover:text-accent text-left"
+                            class="px-1 py-0.5 text-[10px] text-text-faint hover:text-accent text-left"
                             onClick={() => changeLineStyle(name, null)}
                             data-line-style="reset"
                             disabled={plot.linestyle == null}
@@ -780,14 +780,14 @@ export const IndicatorCard: Component<Props> = (props) : JSX.Element => {
                           />
                           <div class="flex items-center justify-between gap-2 px-1 pt-0.5 border-t border-border/40">
                             <span
-                              class="text-[8px] font-mono text-text-faint"
+                              class="text-[10px] font-mono text-text-faint"
                               title="Declared in the script"
                             >
                               Pine: {pineDisplay != null ? formatPlotDisplay(pineDisplay) : 'all'}
                             </span>
                             <button
                               type="button"
-                              class="text-[9px] text-text-faint hover:text-accent disabled:opacity-40"
+                              class="text-[10px] text-text-faint hover:text-accent disabled:opacity-40"
                               onClick={() => changeDisplay(name, null)}
                               disabled={!hasDisplayOverride(plot)}
                               data-display-action="reset"

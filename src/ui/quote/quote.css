@@ -58,7 +58,7 @@
   border-radius: 3px;
   color: var(--color-text-faint);
   font-family: var(--font-mono);
-  font-size: 7.5px;
+  font-size: 10px;
   text-transform: uppercase;
 }
 .ax-quote-spacer {
@@ -71,7 +71,7 @@
   flex-shrink: 0;
   color: var(--color-text-faint);
   font-family: var(--font-mono);
-  font-size: 7.5px;
+  font-size: 10px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -138,7 +138,7 @@
   border-radius: 999px;
   color: var(--color-text-dim);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   font-variant-numeric: tabular-nums;
 }
 .ax-quote-change.is-up {
@@ -165,14 +165,14 @@
   justify-content: space-between;
   gap: 6px;
   color: var(--color-text-faint);
-  font-size: 8px;
+  font-size: 10px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 .ax-quote-range-vals {
   color: var(--color-text-dim);
   font-family: var(--font-mono);
-  font-size: 8.5px;
+  font-size: 10px;
   letter-spacing: 0;
   text-transform: none;
   font-variant-numeric: tabular-nums;
@@ -222,7 +222,7 @@
 }
 .ax-quote-stat-label {
   color: var(--color-text-faint);
-  font-size: 7.5px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -243,7 +243,7 @@
 }
 .ax-quote-section-title {
   color: var(--color-text-faint);
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -267,7 +267,7 @@
 .ax-quote-ohlc-label {
   color: var(--color-text-faint);
   font-family: var(--font-mono);
-  font-size: 7.5px;
+  font-size: 10px;
   font-weight: 700;
 }
 .ax-quote-ohlc-value {
@@ -276,7 +276,7 @@
   white-space: nowrap;
   color: var(--color-text-dim);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -299,7 +299,7 @@
 .ax-quote-meta-label {
   flex-shrink: 0;
   color: var(--color-text-faint);
-  font-size: 9px;
+  font-size: 10px;
 }
 .ax-quote-meta-value {
   overflow: hidden;
@@ -307,7 +307,7 @@
   white-space: nowrap;
   color: var(--color-text-dim);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
 }
 
 /* ── Empty ──────────────────────────────────────────────────────── */
@@ -344,6 +344,6 @@
   margin: 0;
   max-width: 14rem;
   color: var(--color-text-faint);
-  font-size: 9.5px;
+  font-size: 10px;
   line-height: 1.45;
 }

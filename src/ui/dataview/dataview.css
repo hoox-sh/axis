@@ -44,14 +44,14 @@
   border-radius: 3px;
   color: var(--color-text-dim);
   font-family: var(--font-mono);
-  font-size: 8px;
+  font-size: 10px;
   text-transform: uppercase;
 }
 .ax-dataview-bar {
   flex-shrink: 0;
   color: var(--color-text-faint);
   font-family: var(--font-mono);
-  font-size: 8.5px;
+  font-size: 10px;
 }
 .ax-dataview-pin-chip {
   flex-shrink: 0;
@@ -60,7 +60,7 @@
   background: color-mix(in srgb, var(--color-accent) 14%, transparent);
   color: var(--color-accent);
   font-family: var(--font-mono);
-  font-size: 7.5px;
+  font-size: 10px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -121,14 +121,14 @@
   white-space: nowrap;
   color: var(--color-text-faint);
   font-family: var(--font-mono);
-  font-size: 8.5px;
+  font-size: 10px;
 }
 .ax-dataview-count {
   flex-shrink: 0;
   min-width: 12px;
   color: var(--color-text-faint);
   font-family: var(--font-mono);
-  font-size: 8px;
+  font-size: 10px;
   text-align: right;
 }
 .ax-dataview-search {
@@ -171,7 +171,7 @@
   border-radius: 3px;
   color: var(--color-text-faint);
   font-family: var(--font-mono);
-  font-size: 8px;
+  font-size: 10px;
   line-height: 1;
 }
 .ax-dataview-search-clear {
@@ -199,7 +199,7 @@
   border-radius: 4px;
   background: color-mix(in srgb, var(--color-accent) 7%, transparent);
   color: var(--color-text-dim);
-  font-size: 9.5px;
+  font-size: 10px;
 }
 
 /* ── Values ─────────────────────────────────────────────────────── */
@@ -225,7 +225,7 @@
   background: transparent;
   color: var(--color-text-dim);
   font: inherit;
-  font-size: 8.5px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -242,7 +242,7 @@
   background: color-mix(in srgb, var(--color-border-soft) 70%, transparent);
   color: var(--color-text-faint);
   font-family: var(--font-mono);
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 400;
   letter-spacing: 0;
   line-height: 1.5;
@@ -333,7 +333,7 @@
   padding: 4px 6px;
   border-left: 2px solid color-mix(in srgb, var(--color-accent) 35%, transparent);
   color: var(--color-text-faint);
-  font-size: 9px;
+  font-size: 10px;
   line-height: 1.4;
 }
 .ax-dataview-empty {
@@ -369,13 +369,13 @@
   margin: 0;
   max-width: 14rem;
   color: var(--color-text-faint);
-  font-size: 9.5px;
+  font-size: 10px;
   line-height: 1.45;
 }
 .ax-dataview-empty-btn {
   height: 24px;
   min-height: 24px;
-  font-size: 9.5px;
+  font-size: 10px;
 }
 
 @media (prefers-reduced-motion: reduce) {

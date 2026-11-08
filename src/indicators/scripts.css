@@ -26,7 +26,7 @@
 .ax-scripts-kicker {
   flex-shrink: 0;
   color: var(--color-text-dim);
-  font-size: 8.5px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -39,7 +39,7 @@
   white-space: nowrap;
   color: var(--color-text-faint);
   font-family: var(--font-mono);
-  font-size: 8.5px;
+  font-size: 10px;
   text-align: right;
 }
 .ax-scripts-icon {
@@ -54,7 +54,7 @@
   background: transparent;
   color: var(--color-text-faint);
   font: inherit;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   cursor: pointer;
   flex-shrink: 0;
@@ -79,7 +79,7 @@
   border-radius: 5px;
   background: var(--color-bg-elev);
   color: var(--color-text-faint);
-  font-size: 8.5px;
+  font-size: 10px;
 }
 .ax-scripts-help > span {
   display: inline-flex;
@@ -128,7 +128,7 @@
   border-radius: 3px;
   color: var(--color-text-faint);
   font-family: var(--font-mono);
-  font-size: 8px;
+  font-size: 10px;
   line-height: 1;
 }
 .ax-scripts-search-clear {
@@ -169,7 +169,7 @@
   color: var(--color-text-dim);
   font: inherit;
   font-family: var(--font-mono);
-  font-size: 8px;
+  font-size: 10px;
   letter-spacing: 0.03em;
   text-transform: uppercase;
   cursor: pointer;
@@ -198,7 +198,7 @@
   background: transparent;
   color: var(--color-text-dim);
   font: inherit;
-  font-size: 8.5px;
+  font-size: 10px;
   cursor: pointer;
   white-space: nowrap;
 }
@@ -226,7 +226,7 @@
   background: transparent;
   color: var(--color-text-dim);
   font: inherit;
-  font-size: 9px;
+  font-size: 10px;
   cursor: pointer;
 }
 .ax-scripts-bulk > button:hover {
@@ -277,13 +277,13 @@
   flex-shrink: 0;
   color: var(--color-text-faint);
   font-family: var(--font-mono);
-  font-size: 8px;
+  font-size: 10px;
   text-transform: uppercase;
 }
 .ax-scripts-summary {
   color: var(--color-text-faint);
   font-family: var(--font-mono);
-  font-size: 8px;
+  font-size: 10px;
   letter-spacing: 0.02em;
 }
 
@@ -388,7 +388,7 @@
   white-space: nowrap;
   color: var(--color-text-faint);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   padding-left: 11px;
 }
 .ax-scripts-card-sub-dim {
@@ -413,7 +413,7 @@
   background: transparent;
   color: var(--color-text-dim);
   font: inherit;
-  font-size: 9px;
+  font-size: 10px;
   cursor: pointer;
   white-space: nowrap;
 }
@@ -448,7 +448,7 @@
   background: transparent;
   color: var(--color-text-dim);
   font: inherit;
-  font-size: 8.5px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -472,7 +472,7 @@
   background: color-mix(in srgb, var(--color-border-soft) 65%, transparent);
   color: var(--color-text-faint);
   font-family: var(--font-mono);
-  font-size: 8px;
+  font-size: 10px;
   letter-spacing: 0;
 }
 .ax-scripts-swatches {
@@ -530,7 +530,7 @@
   white-space: nowrap;
   color: var(--color-text-dim);
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: 10px;
 }
 .ax-scripts-plot-controls {
   display: flex;
@@ -573,7 +573,7 @@
   margin: 0;
   max-width: 14rem;
   color: var(--color-text-faint);
-  font-size: 9.5px;
+  font-size: 10px;
   line-height: 1.45;
 }
 .ax-scripts-empty-actions {
@@ -584,7 +584,7 @@
 .ax-scripts-empty-btn {
   height: 24px;
   min-height: 24px;
-  font-size: 9.5px;
+  font-size: 10px;
 }
 
 @media (prefers-reduced-motion: reduce) {

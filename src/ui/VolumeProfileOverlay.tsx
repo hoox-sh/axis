@@ -75,7 +75,7 @@ interface VpLayout {
  * Price-pane aligned volume profile strip (histogram + POC/VA summary).
  * Mounted by ChartHost when bars exist; renders only when toggle is on.
  */
-export const VolumeProfileOverlay: Component = () : JSX.Element => {
+export const VolumeProfileOverlay: Component = (): JSX.Element => {
   const [tick, setTick] = createSignal(0);
   const [paneBox, setPaneBox] = createSignal<{
     top: number;
@@ -334,8 +334,8 @@ export const VolumeProfileOverlay: Component = () : JSX.Element => {
               class="absolute left-0 right-0 bottom-1 px-0.5 pointer-events-none"
               data-testid="axis-volume-profile-summary"
             >
-              <div class="bg-bg-base/90 border border-border-soft px-1 py-0.5 text-[9px] font-mono leading-tight text-text-dim">
-                <div class="text-text-faint uppercase tracking-wider text-[8px] mb-0.5">
+              <div class="bg-bg-base/90 border border-border-soft px-1 py-0.5 text-[10px] font-mono leading-tight text-text-dim">
+                <div class="text-text-faint uppercase tracking-wider text-[10px] mb-0.5">
                   VP · OHLCV est.
                 </div>
                 <div>

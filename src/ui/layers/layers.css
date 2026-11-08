@@ -61,7 +61,7 @@
   border-radius: 3px;
   color: var(--color-text-faint);
   font-family: var(--font-mono);
-  font-size: 8px;
+  font-size: 10px;
   line-height: 1;
 }
 .ax-layers-search-clear {
@@ -88,7 +88,7 @@
   padding: 0 9px 6px;
   color: var(--color-text-faint);
   font-family: var(--font-mono);
-  font-size: 8.5px;
+  font-size: 10px;
   letter-spacing: 0.02em;
 }
 .ax-layers-summary .is-warn {
@@ -105,7 +105,7 @@
   border-radius: 5px;
   background: color-mix(in srgb, var(--color-accent) 7%, transparent);
   color: var(--color-text-dim);
-  font-size: 9.5px;
+  font-size: 10px;
 }
 .ax-layers-filterbar button {
   padding: 0 4px;
@@ -114,7 +114,7 @@
   background: transparent;
   color: var(--color-accent);
   font: inherit;
-  font-size: 9.5px;
+  font-size: 10px;
   cursor: pointer;
 }
 .ax-layers-filterbar button:hover {
@@ -160,7 +160,7 @@
   background: transparent;
   color: var(--color-text-dim);
   font: inherit;
-  font-size: 8.5px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -188,7 +188,7 @@
   background: color-mix(in srgb, var(--color-border-soft) 70%, transparent);
   color: var(--color-text-faint);
   font-family: var(--font-mono);
-  font-size: 8px;
+  font-size: 10px;
   font-variant-numeric: tabular-nums;
   line-height: 1.5;
 }
@@ -304,7 +304,7 @@
   white-space: nowrap;
   color: var(--color-text-faint);
   font-family: var(--font-mono);
-  font-size: 0.78em;
+  font-size: max(10px, 0.78em);
   line-height: 1.25;
 }
 .ax-layers-row.is-hidden .ax-layers-row-label,
@@ -321,7 +321,7 @@
   border-radius: 999px;
   color: var(--color-text-faint);
   font-family: var(--font-mono);
-  font-size: 7.5px;
+  font-size: 10px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   line-height: 1.4;
@@ -378,13 +378,13 @@
   border: 1px dashed color-mix(in srgb, var(--color-border) 75%, transparent);
   border-radius: 5px;
   color: var(--color-text-faint);
-  font-size: 9.5px;
+  font-size: 10px;
   text-align: center;
 }
 .ax-layers-note {
   margin: 1px 0 0;
   color: var(--color-text-faint);
-  font-size: 8.5px;
+  font-size: 10px;
   line-height: 1.35;
 }
 
@@ -411,7 +411,7 @@
   border: 1px solid var(--color-border-soft);
   border-radius: 999px;
   color: var(--color-text-dim);
-  font-size: 8.5px;
+  font-size: 10px;
 }
 .ax-layers-tool-chip.is-active {
   border-color: color-mix(in srgb, var(--color-accent) 38%, transparent);
@@ -431,7 +431,7 @@
   background: color-mix(in srgb, var(--color-accent) 16%, transparent);
   color: var(--color-accent);
   font-family: var(--font-mono);
-  font-size: 7.5px;
+  font-size: 10px;
   text-transform: uppercase;
 }
 .ax-layers-spacer {
@@ -457,7 +457,7 @@
   background: transparent;
   color: var(--color-text-dim);
   font: inherit;
-  font-size: 9px;
+  font-size: 10px;
   cursor: pointer;
   white-space: nowrap;
 }
@@ -492,7 +492,7 @@
 }
 .ax-layers-templates-hint {
   color: var(--color-text-dim);
-  font-size: 8.5px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -528,7 +528,7 @@
   background: transparent;
   color: var(--color-text-dim);
   font: inherit;
-  font-size: 8.5px;
+  font-size: 10px;
   cursor: pointer;
 }
 .ax-layers-mini-btn:hover {

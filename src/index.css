@@ -119,6 +119,7 @@
    * At scale 1 the computed values are identical to the old fixed px. */
   --ui-scale: 1;
   --ui-font-base: 13px;
+  /* 10px is the absolute UI text floor. Clamp scaled sizes with max(10px, …). */
   --ui-gap: calc(8px * var(--ui-scale));
   --ui-gap-sm: calc(8px * var(--ui-scale));
   --ui-gap-xs: calc(4px * var(--ui-scale));
@@ -126,7 +127,7 @@
   --ui-pad-y: calc(4px * var(--ui-scale));
   --ui-control-h: calc(28px * var(--ui-scale));
   --ui-icon: 1em;
-  --ui-label: calc(11px * var(--ui-scale));
+  --ui-label: max(10px, calc(11px * var(--ui-scale)));
   --ui-title: calc(13px * var(--ui-scale));
   --ui-panel-pad: calc(12px * var(--ui-scale));
   --ui-topbar-min-h: calc(32px * var(--ui-scale));
@@ -384,7 +385,7 @@ button.sc-btn:focus-visible {
 /* Keyboard shortcut chip (Shortcuts modal + Settings → Keyboard) */
 .sc-kbd {
   font-family: var(--font-mono);
-  font-size: 0.72em;
+  font-size: max(10px, 0.72em);
   color: var(--color-text-dim);
   border: 1px solid var(--color-border-soft);
   border-radius: var(--radius-xs);
@@ -415,7 +416,7 @@ button.sc-btn:focus-visible {
 .axis-keyboard-head {
   background: var(--color-bg-elev);
   color: var(--color-text-faint);
-  font-size: 0.72em;
+  font-size: max(10px, 0.72em);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -435,7 +436,7 @@ button.sc-btn:focus-visible {
 }
 .axis-keyboard-scope {
   color: var(--color-text-faint);
-  font-size: 0.72em;
+  font-size: max(10px, 0.72em);
 }
 .axis-keyboard-chord {
   display: flex;
@@ -451,7 +452,7 @@ button.sc-btn:focus-visible {
 }
 .axis-keyboard-conflict {
   color: var(--color-yellow);
-  font-size: 0.72em;
+  font-size: max(10px, 0.72em);
 }
 .axis-keyboard-actions {
   display: flex;
@@ -806,7 +807,7 @@ button.sc-btn:focus-visible {
 }
 
 .axis-run-menu-hint {
-  font-size: 0.65rem;
+  font-size: max(10px, 0.65rem);
   color: var(--color-text-faint, var(--color-text-muted));
   line-height: 1.3;
 }
@@ -2158,7 +2159,7 @@ body.axis-ticker-dragging {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: calc(9.5px * var(--ui-scale));
+  font-size: max(10px, calc(9.5px * var(--ui-scale)));
   color: var(--color-text-faint);
   min-width: 0;
 }
@@ -2197,7 +2198,7 @@ body.axis-ticker-dragging {
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-  font-size: calc(9.5px * var(--ui-scale));
+  font-size: max(10px, calc(9.5px * var(--ui-scale)));
   min-width: 0;
 }
 
@@ -2518,7 +2519,7 @@ body.axis-ticker-dragging {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 8px;
+  font-size: 10px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-weight: 700;
   line-height: 1;
@@ -2805,7 +2806,7 @@ body.axis-ticker-dragging {
   cursor: pointer;
 }
 .axis-draw-level-label {
-  font-size: calc(9px * var(--ui-scale));
+  font-size: max(10px, calc(9px * var(--ui-scale)));
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   color: var(--color-text-faint);
 }
@@ -3092,7 +3093,7 @@ body.axis-ticker-dragging {
   border-radius: 999px;
   border: 1px solid var(--color-border);
   color: var(--color-text-faint);
-  font-size: 0.72em;
+  font-size: max(10px, 0.72em);
   font-weight: 700;
   line-height: 1;
   cursor: help;
@@ -3118,7 +3119,7 @@ body.axis-ticker-dragging {
 }
 
 .sc-hint {
-  font-size: 0.78em;
+  font-size: max(10px, 0.78em);
   color: var(--color-text-faint);
   line-height: 1.4;
   margin-top: 0.25em;
@@ -3216,7 +3217,7 @@ body.axis-ticker-dragging {
   gap: 0.35em;
 }
 .sc-chip {
-  font-size: 0.78em;
+  font-size: max(10px, 0.78em);
   padding: 0.28em 0.65em;
   border: var(--border-w-input) solid var(--color-border-soft);
   border-radius: var(--radius-chip);
@@ -3436,7 +3437,7 @@ body.axis-ticker-dragging {
 .sc-drawer .sc-label,
 .sc-drawer .sc-field > label,
 .sc-drawer label.sc-label {
-  font-size: 0.78em;
+  font-size: max(10px, 0.78em);
   letter-spacing: 0.08em;
 }
 .sc-drawer .sc-section {
@@ -3446,7 +3447,7 @@ body.axis-ticker-dragging {
   padding-bottom: 0.35em;
 }
 .sc-drawer .sc-section-title {
-  font-size: 0.72em;
+  font-size: max(10px, 0.72em);
   letter-spacing: 0.14em;
   margin: 0;
 }
@@ -4230,7 +4231,7 @@ body.axis-panel-dragging {
 }
 .axis-panel-shell.axis-panel-hover-slide.is-hover-collapsed .axis-panel-title {
   /* Side docks: vertical-ish label; bottom: still truncates */
-  font-size: 0.65em;
+  font-size: max(10px, 0.65em);
   letter-spacing: 0.04em;
   max-width: 0;
   opacity: 0;
@@ -4743,7 +4744,7 @@ body.axis-panel-dragging {
 /* Overflow menu section labels */
 .axis-panel-menu-section {
   padding: 0.4em 0.65em 0.15em;
-  font-size: 0.68em;
+  font-size: max(10px, 0.68em);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -5172,7 +5173,7 @@ body.axis-panel-dragging {
 /* ── Alerts panel ───────────────────────────────────────────────── */
 .axis-alerts-label {
   display: block;
-  font-size: 0.78em;
+  font-size: max(10px, 0.78em);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--color-text-faint);
@@ -5209,7 +5210,7 @@ body.axis-panel-dragging {
   border: 1px solid var(--color-border-soft);
   background: var(--color-bg-hover, transparent);
   color: var(--color-text-dim);
-  font-size: 0.75em;
+  font-size: max(10px, 0.75em);
   letter-spacing: 0.02em;
   padding: 0.15em 0.55em;
   cursor: pointer;
@@ -5226,7 +5227,7 @@ body.axis-panel-dragging {
 }
 .axis-alerts-kind-chip {
   display: inline-block;
-  font-size: 0.7em;
+  font-size: max(10px, 0.7em);
   font-family: var(--font-mono, ui-monospace, monospace);
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -5388,7 +5389,7 @@ body.axis-panel-dragging {
 }
 .axis-cmd-palette-kbd {
   font-family: var(--font-mono);
-  font-size: 0.72em;
+  font-size: max(10px, 0.72em);
   color: var(--color-text-faint);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xs);
@@ -5452,7 +5453,7 @@ body.axis-panel-dragging {
   text-overflow: ellipsis;
 }
 .axis-cmd-palette-item-cat {
-  font-size: 0.75em;
+  font-size: max(10px, 0.75em);
   color: var(--color-text-faint);
   letter-spacing: 0.01em;
   white-space: nowrap;
@@ -5461,7 +5462,7 @@ body.axis-panel-dragging {
 }
 .axis-cmd-palette-item-shortcut {
   font-family: var(--font-mono);
-  font-size: 0.72em;
+  font-size: max(10px, 0.72em);
   color: var(--color-text-dim);
   border: 1px solid var(--color-border-soft);
   border-radius: var(--radius-xs);
@@ -5475,7 +5476,7 @@ body.axis-panel-dragging {
   padding: 0.4em 0.75em;
   border-top: var(--border-w) solid var(--color-border);
   background: var(--color-bg-base);
-  font-size: 0.72em;
+  font-size: max(10px, 0.72em);
   color: var(--color-text-faint);
   flex-shrink: 0;
 }
@@ -5511,7 +5512,7 @@ body.axis-panel-dragging {
 }
 
 .sc-settings-section-title {
-  font-size: 0.78em;
+  font-size: max(10px, 0.78em);
   color: var(--color-text-dim);
   text-transform: uppercase;
   letter-spacing: 0.1em;
@@ -5564,7 +5565,7 @@ body.axis-panel-dragging {
   line-height: 1.3;
 }
 .sc-settings-check-hint {
-  font-size: 0.78em;
+  font-size: max(10px, 0.78em);
   color: var(--color-text-faint);
   line-height: 1.4;
 }
@@ -5630,14 +5631,14 @@ body.axis-panel-dragging {
   gap: 0.4em;
 }
 .sc-settings-field-label {
-  font-size: 0.72em;
+  font-size: max(10px, 0.72em);
   color: var(--color-text-dim);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-weight: 600;
 }
 .sc-settings-field-hint {
-  font-size: 0.78em;
+  font-size: max(10px, 0.78em);
   color: var(--color-text-faint);
   line-height: 1.4;
   margin-top: 0.15em;

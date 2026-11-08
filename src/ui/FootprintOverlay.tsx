@@ -471,7 +471,7 @@ export const FootprintOverlay: Component = (): JSX.Element => {
               </For>
             </svg>
             <div
-              class="absolute left-1 bottom-1 px-1 py-0.5 text-[8px] font-mono uppercase tracking-wider text-text-faint bg-bg-base/80 border border-border-soft pointer-events-none"
+              class="absolute left-1 bottom-1 px-1 py-0.5 text-[10px] font-mono uppercase tracking-wider text-text-faint bg-bg-base/80 border border-border-soft pointer-events-none"
               data-testid="axis-footprint-badge"
               data-rows={lay().rows}
             >

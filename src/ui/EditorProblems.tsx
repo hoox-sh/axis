@@ -241,7 +241,7 @@ export const EditorProblems: Component<EditorProblemsProps> = (props): JSX.Eleme
         </span>
         <Show when={copiedKey() === 'all'}>
           <span
-            class="text-[9px] text-accent-2 inline-flex items-center gap-0.5"
+            class="text-[10px] text-accent-2 inline-flex items-center gap-0.5"
             data-testid="axis-editor-problems-copied"
           >
             <Icons.check size={10} /> Copied
@@ -333,14 +333,14 @@ export const EditorProblems: Component<EditorProblemsProps> = (props): JSX.Eleme
                       </span>
                       <Show when={sourceLabel}>
                         <span
-                          class="text-text-faint/70 flex-shrink-0 text-[9px] lowercase tracking-wide"
+                          class="text-text-faint/70 flex-shrink-0 text-[10px] lowercase tracking-wide"
                           data-testid="axis-editor-problems-source"
                         >
                           {sourceLabel}
                         </span>
                       </Show>
                       <Show when={copiedKey() === rowKey()}>
-                        <span class="text-[9px] text-accent-2 flex-shrink-0">Copied</span>
+                        <span class="text-[10px] text-accent-2 flex-shrink-0">Copied</span>
                       </Show>
                       <span class="sr-only">{idx() + 1}</span>
                     </button>

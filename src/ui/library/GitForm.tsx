@@ -269,7 +269,7 @@ export const GitSettingsForm: Component<{
       >
         Save git settings
       </button>
-      <p class="text-[9px] text-text-faint m-0">
+      <p class="text-[10px] text-text-faint m-0">
         <strong>Connect</strong> uses OAuth device flow via the Pro API or AXIS Worker (
         <code class="font-mono">POST /api/git/oauth/device/start</code>
         ). Set env <code class="font-mono">GITHUB_OAUTH_CLIENT_ID</code> /{' '}

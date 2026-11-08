@@ -1854,7 +1854,7 @@ export const Watchlist: Component = (): JSX.Element => {
               <Show when={symbolAlertCount() > 0}>
                 <button
                   type="button"
-                  class="mt-1 w-full text-[9px] text-text-faint hover:text-accent text-left"
+                  class="mt-1 w-full text-[10px] text-text-faint hover:text-accent text-left"
                   data-testid="axis-watchlist-alert-manage"
                   onClick={() => {
                     closeAlert();

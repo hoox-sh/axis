@@ -8,6 +8,7 @@
  */
 
 import type { Component } from 'solid-js';
+import { BETA_COPY } from '../../engines/request-headers';
 import { ScField } from '../Field';
 
 /**
@@ -48,6 +49,7 @@ export const CloudSettingsForm: Component<{
         spellcheck={false}
         autocomplete="off"
       />
+      <div class="text-[10px] text-text-dim">{BETA_COPY}</div>
     </ScField>
     <div class="flex flex-wrap gap-1.5">
       <button type="button" class="sc-btn sc-btn-ghost text-[10px]" onClick={props.onGenerate}>

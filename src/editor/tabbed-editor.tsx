@@ -177,14 +177,14 @@ const TabMetaBadges = (props: { doc: string; tabName: string }) => {
       title={`Script metadata for ${props.tabName}`}
     >
       <span
-        class="text-[9px] font-semibold text-text-faint bg-bg-hover rounded px-1 py-px leading-tight"
+        class="text-[10px] font-semibold text-text-faint bg-bg-hover rounded px-1 py-px leading-tight"
         title={version() === '–' ? 'No //@version= pragma found' : `Pine Script ${version()}`}
         data-testid="axis-editor-tab-badge-version"
       >
         {version()}
       </span>
       <span
-        class="text-[9px] font-semibold text-text-faint bg-bg-hover rounded px-1 py-px leading-tight"
+        class="text-[10px] font-semibold text-text-faint bg-bg-hover rounded px-1 py-px leading-tight"
         title={
           kind() === '–'
             ? 'No strategy/indicator/library declaration found'

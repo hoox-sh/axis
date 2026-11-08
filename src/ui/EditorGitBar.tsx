@@ -203,7 +203,7 @@ export const EditorGitBar: Component<EditorGitBarProps> = (props): JSX.Element =
         </Show>
       </button>
       <span
-        class={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-mono rounded border border-border-soft max-w-[200px] truncate ${
+        class={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-mono rounded border border-border-soft max-w-[200px] truncate ${
           statusMeta().dirty ? 'text-orange border-orange/40' : 'text-text-faint'
         }`}
         title={
