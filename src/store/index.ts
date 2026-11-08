@@ -484,7 +484,7 @@ let persistQuotaExceeded = false;
 let persistWriteWarned = false;
 
 /** Default / clamp bounds for {@link AppState.historyBars}. */
-export const HISTORY_BARS_DEFAULT = 4000; // stay < 5000 free-tier engine limit
+export const HISTORY_BARS_DEFAULT = 10_000;
 /** Lowest history depth the UI will persist. */
 export const HISTORY_BARS_MIN = 50;
 /** Hard ceiling on dataset depth (a 100k-bar backfill). */
@@ -586,22 +586,24 @@ export function readCommissionModel(raw: unknown): AppState['strategyUi']['commi
  * window caps what the engine sees — and, since the chart and the engine share
  * one window, what the chart paints.
  *
- * The ceiling is {@link ROLLING_WINDOW_MAX} so the setting, the UI bounds and
- * the engine free-tier cap are the same number. Direct store writes may still
- * reach {@link HISTORY_BARS_MAX}; {@link chartWindowLimit} is the hard rail.
+ * The ceiling is {@link ROLLING_WINDOW_MAX} so the setting and the UI bounds
+ * are the same number. Direct store writes may still reach
+ * {@link HISTORY_BARS_MAX}; {@link chartWindowLimit} is the hard rail.
+ * The engine's own 413 / `max_bars` handling stays as defence for untrusted
+ * hosts — the client no longer pre-caps for a free tier.
  */
-export const ROLLING_WINDOW_DEFAULT = 4000; // stay < 5000 engine free-tier cap
+export const ROLLING_WINDOW_DEFAULT = 10_000;
 /** Smallest rolling window the settings clamp accepts. */
 export const ROLLING_WINDOW_MIN = 200;
 /** Largest base rolling window the settings clamp accepts. */
-export const ROLLING_WINDOW_MAX = 4500; // stay < 5000 engine free-tier cap
+export const ROLLING_WINDOW_MAX = 10_000;
 
 /**
  * Hard ceiling for the live anchored window. The chart may grow past the
  * user's base rolling window to keep the dataset start stable, but never past
- * the engine's free-tier `FREE_MAX_BARS` (5000).
+ * this rail (12k keeps one grow cycle above the 10k default).
  */
-export const ROLLING_WINDOW_GROWTH_MAX = 5000;
+export const ROLLING_WINDOW_GROWTH_MAX = 12_000;
 /** Below this base the old per-bar slide is cheaper than an anchored window. */
 const ROLLING_WINDOW_GROWTH_MIN_BASE = 1000;
 /** Engine-window growth is chunked so a live subscription resubscribes rarely. */
@@ -3496,7 +3498,8 @@ export function chartWindowEngineBars(): number {
  *
  * ## Reset policy at the ceiling
  *
- * The ceiling is a hard cap (engine free tier), so a reset **must** drop bars.
+ * The ceiling is the rolling-window rail ({@link ROLLING_WINDOW_GROWTH_MAX}),
+ * not an engine quota, so a reset **must** drop bars.
  * When the period boundary is still the window head, the boundary-derived
  * count equals the current length (== the ceiling) and cannot be kept: the
  * reset falls back to the base window instead of re-anchoring, because

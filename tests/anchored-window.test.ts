@@ -129,17 +129,21 @@ describe('anchored chart window', () => {
     expect(chartWindowEngineBars()).toBe(1200);
   });
 
-  it('caps growth at the engine free-tier max', () => {
+  it('caps growth at the rolling-window rail', () => {
     setStore('bars', []);
     setStore('rollingWindowBars', 4500);
     loadBars(makeBars(4500, START, STEP), 'BTCUSDT', '1m', 'binance');
     expect(chartWindowLimit()).toBe(4500);
-    expect(chartWindowCeiling()).toBe(5000);
+    expect(chartWindowCeiling()).toBe(5400); // 1.2× the base, under the 12k rail
 
     const last = tipTime();
     expect(appendBar(tick(last + STEP))).toBe('appended');
-    expect(chartWindowLimit()).toBe(5000);
+    expect(chartWindowLimit()).toBe(5400);
     expect(chartWindowEngineBars()).toBe(4600);
+
+    // The rail itself: a base near the top cannot grow past 12k.
+    setStore('rollingWindowBars', 11_000);
+    expect(chartWindowCeiling()).toBe(12_000);
   });
 
   it('anchors the load at the start of the week for intraday charts', () => {

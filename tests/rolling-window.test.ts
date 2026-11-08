@@ -66,8 +66,8 @@ describe('clampRollingWindowBars', () => {
     expect(clampRollingWindowBars('3000')).toBe(3000);
   });
 
-  it('defaults to 4,000', () => {
-    expect(ROLLING_WINDOW_DEFAULT).toBe(4000);
+  it('defaults to 10,000', () => {
+    expect(ROLLING_WINDOW_DEFAULT).toBe(10_000);
   });
 });
 
