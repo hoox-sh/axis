@@ -8,3 +8,6 @@ vendor/
 *.png
 *.ico
 bun.lockb
+
+# OpenOrchestrate generated files
+.openorchestrate/
