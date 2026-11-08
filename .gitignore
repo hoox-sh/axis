@@ -79,3 +79,8 @@ docs/images/.tmp-gif/
 # Local-only agent notes (kept locally, not on GitHub)
 .grok/
 AGENTS.md
+
+# OpenOrchestrate runtime state
+.openorchestrate/state.db
+.openorchestrate/state.db-*
+.openorchestrate/logs/
