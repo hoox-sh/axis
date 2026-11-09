@@ -25,10 +25,8 @@
  * console error the app cannot suppress — skip it. Fetch order:
  * 0. Session vault key → signed REST (Worker `/signed/klines` in the browser)
  * 1. AXIS Worker allowlisted proxy (`/api/market/binance/…`)
- * 2. On Worker 403/451/429 (CF egress geo-block), browser falls through to
- *    `data-api.binance.vision` only (`Access-Control-Allow-Origin: *`)
- * 3. Explicit `baseUrl` override that is not a public Binance host
- * 4. Direct public hosts — tests / node / `skipWorkerProxy` / `allowDirectHosts`
+ * 2. Explicit `baseUrl` override that is not a public Binance host
+ * 3. Direct public hosts — tests / node / `skipWorkerProxy` only
  *
  * @module data/binance-http
  */
@@ -43,34 +41,11 @@ import { asProviderMarket, type ProviderMarket } from './provider';
 
 export { DEFAULT_MARKET_WORKER_BASE, resolveMarketWorkerBase };
 
-/**
- * Public Binance REST hosts. Vision first: it serves CORS `*` and is the
- * browser fallback when the Worker egress is geo-blocked. `api.binance.com`
- * stays for node/tests only in the browser path.
- */
+/** Public Binance REST hosts. Browser CORS/geo often fail — Worker is first. */
 export const BINANCE_REST_HOSTS = [
-  'https://data-api.binance.vision',
   'https://api.binance.com',
+  'https://data-api.binance.vision',
 ] as const;
-
-/** Worker statuses that mean "try another path" instead of a hard client error. */
-function isWorkerGeoOrWafBlock(status: number): boolean {
-  return status === 403 || status === 451 || status === 429;
-}
-
-/**
- * Hosts the browser may `fetch` directly: vision publishes ACAO `*`.
- * `api.binance.com` still CORS-fails from many regions and must stay off.
- */
-export function isBrowserCorsSafeBinanceHost(base: string): boolean {
-  const n = normalizeEndpointBase(base);
-  if (!n) return false;
-  try {
-    return new URL(n).hostname.toLowerCase() === 'data-api.binance.vision';
-  } catch {
-    return false;
-  }
-}
 
 /** USDT-M perpetual futures REST origin (`/fapi/v1/…`). */
 export const BINANCE_LINEAR_REST_HOSTS = ['https://fapi.binance.com'] as const;
@@ -303,7 +278,6 @@ export async function fetchBinanceJson(opts: BinanceFetchOpts): Promise<unknown>
 
   const errors: string[] = [];
   const allowDirect = allowDirectBinanceHosts(opts);
-  let workerGeoBlocked = false;
 
   if (!opts.skipWorkerProxy) {
     const worker = resolveMarketWorkerBase(opts.workerBase);
@@ -315,16 +289,10 @@ export async function fetchBinanceJson(opts: BinanceFetchOpts): Promise<unknown>
         headers: { Accept: 'application/json' },
       });
       if (res.ok) return await res.json();
-      // CF Worker egress is often geo-blocked by Binance (403/451, X-Axis-Market-Upstream:
-      // all-blocked). Soft-fail so the browser can hit data-api.binance.vision next.
-      if (isWorkerGeoOrWafBlock(res.status)) {
-        workerGeoBlocked = true;
-        errors.push(`worker: HTTP ${res.status} (geo/WAF)`);
-      } else if (res.status >= 400 && res.status < 500) {
+      if (res.status >= 400 && res.status < 500) {
         throw new Error(`Binance worker: ${await workerClientError(res)}`);
-      } else {
-        errors.push(`worker: HTTP ${res.status}`);
       }
+      errors.push(`worker: HTTP ${res.status}`);
     } catch (err) {
       if (opts.signal?.aborted) throw err;
       if (err instanceof Error && err.message.startsWith('Binance worker:')) throw err;
@@ -341,14 +309,6 @@ export async function fetchBinanceJson(opts: BinanceFetchOpts): Promise<unknown>
   if (allowDirect) {
     for (const h of restHosts(market)) {
       if (!bases.includes(h)) bases.push(h);
-    }
-  } else if (workerGeoBlocked && market === 'spot') {
-    // Browser + Worker geo-block: vision only (CORS *). Never api.binance.com.
-    for (const h of BINANCE_REST_HOSTS) {
-      if (isBrowserCorsSafeBinanceHost(h) && !bases.includes(h)) bases.push(h);
-    }
-    if (!bases.length) {
-      warnSkipDirectOnce(errors.slice(0, 2).join(' · ') || 'Worker geo-block');
     }
   } else if (errors.length) {
     warnSkipDirectOnce(errors.slice(0, 2).join(' · ') || 'Worker miss');
