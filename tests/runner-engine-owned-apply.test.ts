@@ -174,6 +174,39 @@ describe('alignApplySeries length mismatch', () => {
     expect(bands[0]!.upper[5002]).toBe(upper[4999]);
     expect(bands[0]!.lower[5002]).toBe(lower[4999]);
   });
+
+  it('time-joins a window-stamped short run onto newer chart bars (no head-pad slide)', () => {
+    const T = (i: number) => 1_700_000_000 + i * 60;
+    const bars = Array.from({ length: 6 }, (_, i) => ({
+      time: T(i),
+      open: 1,
+      high: 1,
+      low: 1,
+      close: 1,
+      volume: 1,
+    }));
+    // Engine evaluated bars 0..3 (same t0 as the chart) while 2 live candles
+    // arrived. Head-padding would put v0 on bar 2 and shift every overlay value.
+    const ema = [10, 11, 12, 13];
+    const result = {
+      status: 'success',
+      series: { EMA: ema },
+      meta: {
+        overlay: true,
+        windowT0: T(0),
+        windowSpan: 60,
+        windowCount: 4,
+        windowUniform: true,
+        plot_meta: { EMA: { kind: 'plot', title: 'EMA' } },
+      },
+    } as unknown as RunResult;
+    const aligned = alignApplySeries('indicator("AXIS EMA", overlay=true)\nplot(close)', result, bars, {
+      silent: true,
+    });
+    expect(aligned.needsAlign).toBe(true);
+    expect(aligned.resultTimes).toEqual([T(0), T(1), T(2), T(3)]);
+    expect(aligned.seriesMap.EMA).toEqual([10, 11, 12, 13, 13, 13]);
+  });
 });
 
 describe('alignApplySeries engine-axis holes', () => {
@@ -511,6 +544,14 @@ describe('extractEngineResultTimes', () => {
     expect(extractEngineResultTimes({ meta: {} })).toBeNull();
     expect(extractEngineResultTimes(null)).toBeNull();
     expect(extractEngineResultTimes({ meta: { engineTimes: ['na', null] } })).toBeNull();
+  });
+
+  it('rebuilds times from a uniform windowT0 stamp when bar_times are absent', () => {
+    expect(
+      extractEngineResultTimes({
+        meta: { windowT0: 1_700_000_000, windowSpan: 60, windowCount: 4, windowUniform: true },
+      }),
+    ).toEqual([1_700_000_000, 1_700_000_060, 1_700_000_120, 1_700_000_180]);
   });
 });
 

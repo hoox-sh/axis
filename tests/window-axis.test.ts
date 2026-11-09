@@ -27,6 +27,7 @@ import {
   barIndexForTime,
   looksLikeBarIndex,
   timeForBarIndex,
+  timesFromWindowAxis,
   windowAxisFromBars,
   windowAxisFromMeta,
 } from '../src/results/window-axis';
@@ -95,6 +96,21 @@ describe('axis stamp roundtrip', () => {
     expect(windowAxisFromMeta({})).toBeNull();
     expect(windowAxisFromMeta({ windowT0: 1 })).toBeNull();
     expect(windowAxisFromMeta(null)).toBeNull();
+  });
+});
+
+describe('timesFromWindowAxis', () => {
+  it('materialises a uniform stamp', () => {
+    expect(timesFromWindowAxis({ t0: START, span: 60, count: 3, uniform: true })).toEqual([
+      START,
+      START + 60,
+      START + 120,
+    ]);
+  });
+
+  it('refuses a gappy window so apply cannot invent times', () => {
+    expect(timesFromWindowAxis({ t0: START, span: 60, count: 9, uniform: false })).toBeNull();
+    expect(timesFromWindowAxis({ t0: START, span: 0, count: 4, uniform: true })).toBeNull();
   });
 });
 

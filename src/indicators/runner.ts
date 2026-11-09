@@ -68,7 +68,12 @@ import { resolveInputSourceValues } from '../results/plot-sources';
 import { applyStrategyPropsToSource } from '../results/strategy-props';
 import { getManager, applyDebugPinsToChart } from '../chart/manager-access';
 import '../chart/series-factory';
-import { axisStamp, windowAxisFromBars } from '../results/window-axis';
+import {
+  axisStamp,
+  timesFromWindowAxis,
+  windowAxisFromBars,
+  windowAxisFromMeta,
+} from '../results/window-axis';
 import '../results/pine-color';
 import '../chart/drawing-layer';
 import '../chart/pyne-drawings';
@@ -241,9 +246,10 @@ function timesFromBars(v: unknown): number[] | null {
  *
  * Checks `meta.engineTimes` first (stamped by the engine client from the
  * payload's `times` / `bar_times` / `bars` fields or from the live-session's
- * evaluated window), then loose top-level / `meta` fields. Times may be unix
- * seconds or Pine-ms — both normalize to chart seconds. Null when the result
- * carries no usable axis (index tail-align remains the fallback).
+ * evaluated window), then loose top-level / `meta` fields, then a uniform
+ * `windowT0`/`windowSpan`/`windowCount` stamp. Times may be unix seconds or
+ * Pine-ms — both normalize to chart seconds. Null when the result carries no
+ * usable axis (index tail-align remains the fallback).
  */
 export function extractEngineResultTimes(result: unknown): number[] | null {
   if (!result || typeof result !== 'object') return null;
@@ -269,7 +275,12 @@ export function extractEngineResultTimes(result: unknown): number[] | null {
     const fromBars = timesFromBars(c);
     if (fromBars) return fromBars;
   }
-  return null;
+  // Runner-stamped uniform window (`windowT0`/`windowSpan`/`windowCount`) is
+  // the axis when the engine omitted `bar_times`. Without it a live chart that
+  // grew a few candles head-pads the short series and every overlay value
+  // slides onto a newer bar.
+  const fromStamp = timesFromWindowAxis(windowAxisFromMeta(meta));
+  return fromStamp;
 }
 
 /**

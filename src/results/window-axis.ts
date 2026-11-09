@@ -173,6 +173,34 @@ export function axisStamp(
   };
 }
 
+/** Refuse to materialise an axis larger than any chart window we will paint. */
+const TIMES_FROM_AXIS_MAX = 100_000;
+
+/**
+ * Rebuild the evaluated bar-time list from a uniform window stamp.
+ *
+ * The engine often ships `windowT0` / `windowSpan` / `windowCount` without
+ * `bar_times`. Plot apply still needs those times to join by bar instead of
+ * head-padding a short series onto a live chart that grew a few candles —
+ * head-padding shifts every overlay value onto newer bars (EMA "slides").
+ *
+ * Non-uniform windows cannot be reconstructed (`t0 + i·span` would invent
+ * times across session gaps) and return null so the caller keeps its
+ * index fallback.
+ */
+export function timesFromWindowAxis(
+  axis: RunWindowAxis | null | undefined,
+): number[] | null {
+  if (!axis || axis.count <= 0) return null;
+  const n = Math.floor(axis.count);
+  if (!Number.isFinite(n) || n < 1 || n > TIMES_FROM_AXIS_MAX) return null;
+  if (n === 1) return [axis.t0];
+  if (axis.uniform === false || !(axis.span > 0)) return null;
+  const out = new Array<number>(n);
+  for (let i = 0; i < n; i++) out[i] = axis.t0 + i * axis.span;
+  return out;
+}
+
 /**
  * Absolute bar time for an engine `bar_index` in this window.
  *

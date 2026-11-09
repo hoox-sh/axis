@@ -218,10 +218,18 @@ function padToCandleCount<T extends { time?: unknown }>(
   const out = [...kept];
   if (!candleTimes || !candleTimes.length) return out;
   if (out.length >= candleTimes.length) return out;
-  const lastT = out.length ? Number(out[out.length - 1]?.time) : Number.NEGATIVE_INFINITY;
+  const last = out.length ? out[out.length - 1] : undefined;
+  const lastT = last ? Number(last.time) : Number.NEGATIVE_INFINITY;
   for (const t of candleTimes) {
     if (out.length >= candleTimes.length) break;
-    if (t > lastT) out.push({ time: t } as T);
+    if (t > lastT) {
+      // Hold the last overlay sample onto candles the engine has not re-run
+      // yet. Blank `{ time }` rows break the LWC line, so a short series
+      // would stop N bars left of the last candle (and eat the right margin).
+      out.push(
+        last != null && Number.isFinite(lastT) ? ({ ...last, time: t } as T) : ({ time: t } as T),
+      );
+    }
   }
   return out;
 }
@@ -4084,9 +4092,19 @@ export class PaneManager {
     }
 
     if (paneId === 'price' && savedRange) {
-      // Preserve price viewport on live re-runs, then push to sub-panes
+      // Preserve price viewport on live re-runs, then push to sub-panes.
+      // Rebase against the candle axis + rightOffset so an overlay setData
+      // that briefly changed the union cannot restore a range past the tip
+      // (phantom empty right margin) or drop the reserved whitespace.
       try {
-        pane.chart.timeScale().setVisibleLogicalRange(savedRange);
+        pane.chart.timeScale().setVisibleLogicalRange(
+          rebaseLogicalRange(
+            savedRange,
+            this.paintedCandleTimesList,
+            this.paintedCandleTimesList,
+            this.rightOffsetBars(pane.chart),
+          ) ?? savedRange,
+        );
       } catch {
         /* ignore */
       }

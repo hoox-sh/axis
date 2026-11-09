@@ -170,6 +170,20 @@ describe('projectToCandleAxis', () => {
     const rows = [{ time: 100, value: 1 }];
     expect(projectToCandleAxis(rows, null, (time) => ({ time }))).toBe(rows);
   });
+
+  it('holds the last overlay value onto newer candles instead of blanking the tip', () => {
+    const rows = [
+      { time: 100, value: 10 },
+      { time: 200, value: 20 },
+    ];
+    const projected = projectToCandleAxis(rows, [100, 200, 300, 360], (time) => ({ time }));
+    expect(projected).toEqual([
+      { time: 100, value: 10 },
+      { time: 200, value: 20 },
+      { time: 300, value: 20 },
+      { time: 360, value: 20 },
+    ]);
+  });
 });
 
 describe('barsBefore', () => {

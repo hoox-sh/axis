@@ -1202,7 +1202,13 @@ describe('pruneCoPaintedSeriesToPaintedRange', () => {
           { time: 300, value: 3 },
         ],
       },
-      { key: 'bgcolor', data: [{ time: 200, value: 9 }, { time: 300 }] },
+      {
+        key: 'bgcolor',
+        data: [
+          { time: 200, value: 9 },
+          { time: 300, value: 9 },
+        ],
+      },
       { key: 'equity', data: [{ time: 300, value: 5 }] },
     ]);
     expect(compareSets).toBe(0);
