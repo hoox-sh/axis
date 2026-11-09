@@ -132,8 +132,15 @@ export function streamFullToPrecomputed(
   // Prefer the engine's own axis when it shipped one (`bar_times`), else the
   // chart window the caller evaluated over.
   const engineTimes = Array.isArray(full.bar_times) ? (full.bar_times as number[]) : null;
-  const axis = engineTimes?.length
-    ? windowAxisFromBars(engineTimes.map((time) => ({ time })))
+  const fallbackTimes =
+    !engineTimes?.length && Array.isArray(bars) && bars.length
+      ? bars
+          .map((b) => b.time)
+          .filter((t): t is number => typeof t === 'number' && Number.isFinite(t))
+      : null;
+  const axisTimes = engineTimes?.length ? engineTimes : fallbackTimes;
+  const axis = axisTimes?.length
+    ? windowAxisFromBars(axisTimes.map((time) => ({ time })))
     : windowAxisFromBars(bars ?? null);
   return {
     status: 'success',
@@ -149,6 +156,7 @@ export function streamFullToPrecomputed(
       count: full.count,
       executionContext: resolveStreamExecutionContext(full, via),
       ...(full.plot_meta ? { plot_meta: full.plot_meta } : {}),
+      ...(axisTimes?.length && !engineTimes?.length ? { engineTimes: axisTimes } : {}),
     },
   } as RunResult;
 }

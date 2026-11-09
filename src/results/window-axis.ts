@@ -202,6 +202,53 @@ export function timesFromWindowAxis(
 }
 
 /**
+ * Recover the evaluated bar times from a (possibly gappy) window stamp by
+ * taking consecutive times off the **chart** axis, never inventing `t0+i·span`.
+ *
+ * Crypto 1m windows are often non-uniform (a missing minute). Reconstructing
+ * from the stamp would return null and apply would head-pad, sliding EMA/SMA
+ * onto newer candles. The engine evaluated a contiguous slice of the chart
+ * starting at `t0`, so those chart times *are* the axis.
+ *
+ * When the live window has already dropped `t0`, `span` estimates how many
+ * head bars rolled off so the remaining values still land on the remaining
+ * times.
+ */
+export function timesFromWindowOnChart(
+  axis: RunWindowAxis | null | undefined,
+  chartTimes: readonly number[] | null | undefined,
+): number[] | null {
+  if (!axis || axis.count <= 0 || !chartTimes?.length) return null;
+  const n = Math.floor(axis.count);
+  if (!Number.isFinite(n) || n < 1 || n > TIMES_FROM_AXIS_MAX) return null;
+  const t0 = axis.t0;
+  const first = Number(chartTimes[0]);
+  if (!Number.isFinite(first)) return null;
+
+  let i0 = 0;
+  while (i0 < chartTimes.length && Number(chartTimes[i0]) < t0) i0++;
+  if (i0 >= chartTimes.length) return null;
+
+  if (Number(chartTimes[i0]) !== t0 && t0 < first && axis.span > 0) {
+    const dropped = Math.round((first - t0) / axis.span);
+    if (!Number.isFinite(dropped) || dropped < 0 || dropped >= n) return null;
+    const keep = n - dropped;
+    if (keep <= 0) return null;
+    const out = chartTimes.slice(0, keep).map(Number).filter(Number.isFinite);
+    return out.length ? out : null;
+  }
+
+  const end = Math.min(chartTimes.length, i0 + n);
+  if (end <= i0) return null;
+  const out: number[] = [];
+  for (let i = i0; i < end; i++) {
+    const t = Number(chartTimes[i]);
+    if (Number.isFinite(t)) out.push(t);
+  }
+  return out.length ? out : null;
+}
+
+/**
  * Absolute bar time for an engine `bar_index` in this window.
  *
  * @returns Unix seconds, or null when the index is outside the window or the

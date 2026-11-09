@@ -51,6 +51,7 @@ import {
 } from './runner';
 import type { PlotMetaEntry } from '../results/plot-visuals';
 import { splitSeriesByKind } from '../results/plot-visuals';
+import { timesFromWindowOnChart, windowAxisFromMeta } from '../results/window-axis';
 import { resolveScriptDisplayName } from './run-target';
 import { engineHoleTimes } from './engine-hole-guard';
 import { appendLog } from '../store';
@@ -260,17 +261,26 @@ export function alignApplySeries(
   const grossMismatch =
     lengthMismatch && seriesLen > 0 && Math.abs(seriesLen - chartWindowBars) > PIN_TOLERANCE_BARS;
   const needsAlignBase = sessionAligned || engineClampedTail || lengthMismatch;
-  // A same-length series can still cover a **different** window: a session or
-  // stream that slides independently of the chart. The index zip would then
-  // mis-plot every value, so the engine's own axis decides when the windows
-  // disagree. Only checked when the engine actually shipped an axis — the
-  // common bars-in run does not, and stays on the cheap index path.
-  const engineTimes = needsAlignBase ? null : extractEngineResultTimes(result);
+  // Always read the engine axis when it exists. A same-length series can still
+  // cover a different window (session replica, or a slide that dropped the
+  // head and appended a bar so length is unchanged). Checking only the last
+  // stamp misses a head-shifted window whose tip happens to match.
+  const engineTimes = extractEngineResultTimes(result);
+  const engineFirst = engineTimes?.length ? engineTimes[0]! : null;
   const engineLast = engineTimes?.length ? engineTimes[engineTimes.length - 1]! : null;
+  const chartFirst = ohlcvTimes.length ? ohlcvTimes[0]! : null;
   const chartLast = ohlcvTimes.length ? ohlcvTimes[ohlcvTimes.length - 1]! : null;
-  const windowMismatch = engineLast != null && chartLast != null && engineLast !== chartLast;
+  const windowMismatch =
+    (engineLast != null && chartLast != null && engineLast !== chartLast) ||
+    (engineFirst != null && chartFirst != null && engineFirst !== chartFirst);
   const needsAlign = needsAlignBase || windowMismatch;
-  const resultTimes = needsAlign ? (engineTimes ?? extractEngineResultTimes(result)) : null;
+  let resultTimes = needsAlign ? engineTimes : null;
+  // Gappy 1m windows cannot reconstruct `t0+i·span`. Recover the evaluated
+  // slice from the chart axis so apply time-joins instead of head-padding
+  // (EMA crash sliding onto newer candles, phantom right margin).
+  if (needsAlign && !resultTimes) {
+    resultTimes = timesFromWindowOnChart(windowAxisFromMeta(result.meta), ohlcvTimes);
+  }
   // A session/stream run whose engine shipped **no** bar axis cannot be
   // time-joined. On a **live push** over a *shorter* series than the chart,
   // tail-pin would misplace values (gap/slide diagonals) — skip and keep
@@ -303,17 +313,26 @@ export function alignApplySeries(
   } else if (!needsAlign) {
     seriesMap = rawSeries;
   } else if (resultTimes) {
-    seriesMap = alignSeriesMapToTimes(rawSeries, resultTimes, ohlcvTimes);
-  } else if (canTailClampLive && !engineClampedTail) {
-    // Live push, no engine axis: a 1–8 bar shortfall is the forming candle
-    // arriving during eval (venue *or* stream). Head-padding would shift every
-    // overlay value onto newer bars (Donchian "slides" vs candles). Hold the
-    // last finite value forward. A larger shortfall is a newest-N snapshot
-    // and still head-pads (`extendSeriesToWindow` switches at maxGap=8).
+    // A free-tier `windowBars` clamp is newest-N, not a prefix of t0. Time-join
+    // only when the axis length matches the series; otherwise tail-pin so the
+    // newest values stay on the newest bars.
+    if (engineClampedTail && seriesLen > 0 && resultTimes.length !== seriesLen) {
+      seriesMap = tailAlignSeriesMap(rawSeries, chartWindowBars);
+    } else {
+      seriesMap = alignSeriesMapToTimes(rawSeries, resultTimes, ohlcvTimes);
+    }
+  } else if (!engineClampedTail && lengthMismatch) {
+    // No engine axis. A bars-in /run is a prefix of the chart (candles that
+    // arrived during eval, or applyRollingWindow vs store.bars). Head-padding
+    // on that first paint slides EMA/SMA onto newer candles — the overlay is
+    // already displaced before any live tick. Hold the last value forward.
+    // Live session snapshots larger than 8 bars stay newest-N (maxGap=8).
+    const maxGap =
+      opts.livePush === true && sessionAligned ? 8 : Math.max(8, chartWindowBars);
     seriesMap = {};
     for (const [key, arr] of Object.entries(rawSeries)) {
       if (Array.isArray(arr) && arr.length < chartWindowBars) {
-        seriesMap[key] = extendSeriesToWindow(arr, chartWindowBars);
+        seriesMap[key] = extendSeriesToWindow(arr, chartWindowBars, maxGap);
       } else if (Array.isArray(arr)) {
         seriesMap[key] = tailAlignSeriesToWindow(arr, chartWindowBars);
       } else {

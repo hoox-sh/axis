@@ -52,6 +52,7 @@ describe('redesign2 apply bridge (F-16)', () => {
     expect(result.meta?.windowT0).toBe(1_700_000_000);
     expect(result.meta?.windowSpan).toBe(3_600);
     expect(result.meta?.windowCount).toBe(2);
+    expect(result.meta?.engineTimes).toEqual([1_700_000_000, 1_700_003_600]);
   });
 
   test('defaults missing plots/series/events to empty', () => {

@@ -241,6 +241,16 @@ function timesFromBars(v: unknown): number[] | null {
   return normalizeTimeList(raw);
 }
 
+/** Copy bar times from the window handed to the engine (seconds). */
+export function snapshotEvaluatedTimes(
+  bars: readonly { time?: number | null }[] | null | undefined,
+): number[] | null {
+  if (!Array.isArray(bars) || !bars.length) return null;
+  const raw: unknown[] = [];
+  for (const b of bars) raw.push(b?.time);
+  return normalizeTimeList(raw);
+}
+
 /**
  * Engine bar-time axis for a run result, when the backend shipped one.
  *
@@ -294,8 +304,12 @@ export function extractEngineResultTimes(result: unknown): number[] | null {
  * not be pinned onto an older chart bar).
  *
  * Falls back to {@link tailAlignSeriesToWindow} when there is no usable engine
- * axis, or when the axis does not describe this series 1:1 (length mismatch) —
- * the index fallback is the only option left for time-less payloads.
+ * axis, or when the axis is *shorter* than the series (cannot place the extra
+ * newest values). When the axis is *longer* than the series — a live stamp
+ * taken after candles arrived, or a reconstructed windowCount that grew —
+ * values[i] still belong on times[i] (the prefix the engine actually saw).
+ * Head-padding onto the chart tail would slide every EMA/SMA value onto a
+ * newer candle.
  */
 export function alignSeriesToTimes(
   values: unknown,
@@ -305,12 +319,13 @@ export function alignSeriesToTimes(
   const len = chartTimes.length;
   const arr = Array.isArray(values) ? values : [];
   const rt = normalizeTimeList(resultTimes);
-  if (!rt || rt.length !== arr.length) {
+  if (!rt || rt.length === 0 || rt.length < arr.length) {
     return tailAlignSeriesToWindow(arr, len);
   }
   const byTime = new Map<number, unknown>();
-  for (let i = 0; i < rt.length; i++) byTime.set(rt[i] as number, arr[i]);
-  const engineLast = rt[rt.length - 1] ?? null;
+  const paired = arr.length;
+  for (let i = 0; i < paired; i++) byTime.set(rt[i] as number, arr[i]);
+  const engineLast = (paired > 0 ? rt[paired - 1] : rt[rt.length - 1]) ?? null;
   const out: unknown[] = new Array(len);
   let hold: unknown = null;
   for (let i = 0; i < len; i++) {
@@ -997,6 +1012,14 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
     // explicit preferWs: false. Otherwise the chart window goes over /ws/run.
     const preferWs = (config as { preferWs?: boolean }).preferWs !== false;
     const restSession = engineOwned && !preferWs;
+    // Snapshot the evaluated axis *before* await. Live appends mutate
+    // `store.bars` (and this rolling slice when it is the same array) while
+    // the engine runs. Stamping after await makes windowCount longer than
+    // the series, timesFromWindowAxis rebuilds the new window, and
+    // alignSeriesToTimes used to discard that mismatch and head-pad — every
+    // EMA/SMA value slid onto a newer candle.
+    const evaluatedTimes = restSession ? null : snapshotEvaluatedTimes(windowBars);
+    const windowAxis = restSession ? null : windowAxisFromBars(windowBars);
     const rawResult = await engine.run({
       script: scriptForEngine,
       bars: restSession ? [] : windowBars,
@@ -1038,11 +1061,14 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
     // The evaluated window's axis: `bar_index` in the payload is relative to
     // *this* window, and the chart window slides on every new candle. Stamp it
     // on the result and use it to resolve index-only events at ingestion — see
-    // `results/window-axis`.
-    const windowAxis = restSession ? null : windowAxisFromBars(windowBars);
+    // `results/window-axis`. Captured before `engine.run` so live ticks cannot
+    // stretch the stamp past the series the engine actually returned.
     // Normalize first so callers always get stable series/plots shapes
     const result = normalizeEngineResult(rawResult, ms, windowAxis);
     if (windowAxis) result.meta = { ...(result.meta || {}), ...axisStamp(windowAxis) };
+    if (evaluatedTimes?.length && result.meta?.['engineTimes'] == null) {
+      result.meta = { ...(result.meta || {}), engineTimes: evaluatedTimes };
+    }
     if (
       cacheAllowed &&
       cacheKey &&

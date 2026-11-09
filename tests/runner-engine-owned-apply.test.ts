@@ -165,7 +165,9 @@ describe('alignApplySeries length mismatch', () => {
     expect(aligned.needsAlign).toBe(true);
     expect(aligned.chartWindowBars).toBe(5003);
     expect(aligned.seriesMap.Upper).toHaveLength(5003);
-    expect(aligned.seriesMap.Upper?.slice(0, 3)).toEqual([null, null, null]);
+    // Prefix hold: the three extra chart bars arrived during eval. Head-padding
+    // would put Upper[0] on bar 3 and displace the whole overlay on first paint.
+    expect(aligned.seriesMap.Upper?.slice(0, 3)).toEqual([upper[0], upper[1], upper[2]]);
     expect(aligned.seriesMap.Upper?.[5002]).toBe(upper[4999]);
     expect(aligned.seriesMap.Lower?.[5002]).toBe(lower[4999]);
     const bands = resolvePlotFillBands(aligned.seriesMap, aligned.plotMeta);
@@ -205,6 +207,69 @@ describe('alignApplySeries length mismatch', () => {
     });
     expect(aligned.needsAlign).toBe(true);
     expect(aligned.resultTimes).toEqual([T(0), T(1), T(2), T(3)]);
+    expect(aligned.seriesMap.EMA).toEqual([10, 11, 12, 13, 13, 13]);
+  });
+
+  it('time-joins a gappy window stamp onto newer chart bars (no head-pad slide)', () => {
+    const T = (i: number) => 1_700_000_000 + i * 60;
+    // One missing minute in the evaluated window (typical 1m crypto hole).
+    const bars = [0, 1, 2, 4, 5, 6].map((i) => ({
+      time: T(i),
+      open: 1,
+      high: 1,
+      low: 1,
+      close: 1,
+      volume: 1,
+    }));
+    const ema = [10, 11, 12, 13];
+    const result = {
+      status: 'success',
+      series: { EMA: ema },
+      meta: {
+        overlay: true,
+        windowT0: T(0),
+        windowSpan: 60,
+        windowCount: 4,
+        windowUniform: false,
+        plot_meta: { EMA: { kind: 'plot', title: 'EMA' } },
+      },
+    } as unknown as RunResult;
+    const aligned = alignApplySeries('indicator("AXIS EMA", overlay=true)\nplot(close)', result, bars, {
+      silent: true,
+    });
+    expect(aligned.needsAlign).toBe(true);
+    expect(aligned.resultTimes).toEqual([T(0), T(1), T(2), T(4)]);
+    // Head-padding would put 10 on T(2) and slide the crash onto newer bars.
+    expect(aligned.seriesMap.EMA).toEqual([10, 11, 12, 13, 13, 13]);
+  });
+
+  it('prefix-zips values when the reconstructed axis is longer than the series', () => {
+    const T = (i: number) => 1_700_000_000 + i * 60;
+    const bars = Array.from({ length: 6 }, (_, i) => ({
+      time: T(i),
+      open: 1,
+      high: 1,
+      low: 1,
+      close: 1,
+      volume: 1,
+    }));
+    // Stamp taken after two live candles arrived: windowCount matches the
+    // new chart, series is still the 4-bar evaluation. Prefix zip + hold.
+    const result = {
+      status: 'success',
+      series: { EMA: [10, 11, 12, 13] },
+      meta: {
+        overlay: true,
+        windowT0: T(0),
+        windowSpan: 60,
+        windowCount: 6,
+        windowUniform: true,
+        plot_meta: { EMA: { kind: 'plot', title: 'EMA' } },
+      },
+    } as unknown as RunResult;
+    const aligned = alignApplySeries('indicator("AXIS EMA", overlay=true)\nplot(close)', result, bars, {
+      silent: true,
+    });
     expect(aligned.seriesMap.EMA).toEqual([10, 11, 12, 13, 13, 13]);
   });
 });
@@ -362,7 +427,7 @@ describe('alignApplySeries staleNoAxis', () => {
     expect(aligned.seriesMap.plot0).toEqual([15, 16, 17, 18, 19]);
   });
 
-  it('keeps the tail-pin for a fresh full run without axis (values just computed)', () => {
+  it('holds a fresh full run without axis so the overlay is not already displaced', () => {
     const result = {
       status: 'success',
       series: { plot0: [1, 2, 3] },
@@ -372,7 +437,7 @@ describe('alignApplySeries staleNoAxis', () => {
       silent: true,
     });
     expect(aligned.staleNoAxis).toBe(false);
-    expect(aligned.seriesMap.plot0).toEqual([null, null, 1, 2, 3]);
+    expect(aligned.seriesMap.plot0).toEqual([1, 2, 3, 3, 3]);
   });
 
   it('does not flag an equal-length session series without axis', () => {
@@ -515,8 +580,16 @@ describe('alignSeriesToTimes', () => {
       1,
       2,
     ]);
-    // An axis that does not describe this series 1:1 cannot be joined either.
+    // An axis shorter than the series cannot place the extra newest values.
     expect(alignSeriesToTimes([1, 2, 3, 4], [T(0), T(1)], [T(0), T(1), T(2)])).toEqual([2, 3, 4]);
+  });
+
+  it('prefix-zips a short series onto a longer axis instead of head-padding', () => {
+    // Stamp grew by two live candles after eval. Head-padding would yield
+    // [null, null, 1, 2] and slide EMA onto newer bars.
+    expect(alignSeriesToTimes([1, 2], [T(0), T(1), T(2), T(3)], [T(0), T(1), T(2), T(3)])).toEqual([
+      1, 2, 2, 2,
+    ]);
   });
 
   it('keeps equal-length aligned series on their own bars', () => {

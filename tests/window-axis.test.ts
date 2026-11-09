@@ -28,6 +28,7 @@ import {
   looksLikeBarIndex,
   timeForBarIndex,
   timesFromWindowAxis,
+  timesFromWindowOnChart,
   windowAxisFromBars,
   windowAxisFromMeta,
 } from '../src/results/window-axis';
@@ -111,6 +112,29 @@ describe('timesFromWindowAxis', () => {
   it('refuses a gappy window so apply cannot invent times', () => {
     expect(timesFromWindowAxis({ t0: START, span: 60, count: 9, uniform: false })).toBeNull();
     expect(timesFromWindowAxis({ t0: START, span: 0, count: 4, uniform: true })).toBeNull();
+  });
+});
+
+describe('timesFromWindowOnChart', () => {
+  it('takes consecutive chart times from t0 even when the stamp is gappy', () => {
+    const chart = [START, START + 60, START + 180, START + 240, START + 300];
+    expect(
+      timesFromWindowOnChart({ t0: START, span: 60, count: 4, uniform: false }, chart),
+    ).toEqual([START, START + 60, START + 180, START + 240]);
+  });
+
+  it('holds the original slice when the chart grew after t0', () => {
+    const chart = [START, START + 60, START + 120, START + 180, START + 240];
+    expect(
+      timesFromWindowOnChart({ t0: START, span: 60, count: 3, uniform: false }, chart),
+    ).toEqual([START, START + 60, START + 120]);
+  });
+
+  it('drops rolled-off head bars using the median span', () => {
+    const chart = [START + 120, START + 180, START + 240, START + 300];
+    expect(
+      timesFromWindowOnChart({ t0: START, span: 60, count: 4, uniform: false }, chart),
+    ).toEqual([START + 120, START + 180]);
   });
 });
 

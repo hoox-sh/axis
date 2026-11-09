@@ -7,7 +7,7 @@ tags: [code, results]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-09T03:10:54Z
+  at: 2026-11-09T06:06:22Z
 sources:
   - id: tree
     resource: "src/results"
@@ -32,7 +32,7 @@ okf_lock: generated
 * `script-inputs.ts` — DEFAULT_SOURCE_OPTIONS, InputFormGroup, InputFormRow, PineEnumDef, PineEnumMember, ScriptInputDef, ScriptInputType, applyInputOverrides, collectImportAliases, collectPineEnumsFromSources, collectStringConsts, findLhsIdent
 * `strategy-props.ts` — COMMISSION_TYPE_OPTIONS, QTY_TYPE_OPTIONS, STRATEGY_PROP_CATALOG, StrategyPropDef, StrategyPropType, applyStrategyOverrides, applyStrategyPropsToSource, findStrategyCall, hasStrategyDeclaration, normalizeStrategyEnum, parseStrategyDeclaration, resolveStrategyProps
 * `strategy.ts` — BuildStrategyReportOptions, ClosedTrade, CommissionModel, EquityStep, PositionCloseFill, PositionFill, PositionView, StrategyEvent, StrategyStats, StrategyStatsSnapshot, StrategyWalk, StreamEventView
-* `window-axis.ts` — RunWindowAxis, WINDOW_AXIS_KEYS, axisStamp, barIndexForTime, looksLikeBarIndex, timeForBarIndex, timesFromWindowAxis, windowAxisFromBars, windowAxisFromMeta
+* `window-axis.ts` — RunWindowAxis, WINDOW_AXIS_KEYS, axisStamp, barIndexForTime, looksLikeBarIndex, timeForBarIndex, timesFromWindowAxis, timesFromWindowOnChart, windowAxisFromBars, windowAxisFromMeta
 
 # Depends on
 
