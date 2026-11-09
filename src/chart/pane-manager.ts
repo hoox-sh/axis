@@ -3255,10 +3255,8 @@ export class PaneManager {
         // Extend the painted candle window so overlay clamps keep the newest tip.
         // Extend never creates the range — full paints do — so pre-paint ticks stay a no-op.
         this.extendPaintedCandleRange(bar.time);
-        // A released script (SMA idle) never sends a delta. Hold the last
-        // overlay value onto the new candle so the line keeps covering the tip
-        // instead of stopping one bar back.
-        if (paintedTime != null) this.extendOverlayTips(paintedTime);
+        // Do not copy overlay last values onto a new candle. Idle scripts leave
+        // the tip on the last evaluated bar; a real engine delta must land next.
       }
 
       // Volume series: row lands on the candle's bar time so both series share
@@ -3276,27 +3274,12 @@ export class PaneManager {
   }
 
   /**
-   * Hold each overlay line's last value onto a newly painted candle time.
-   * Forming ticks (same lastTime) are a no-op. Engine deltas still replace
-   * the tip when they arrive; this only covers scripts that went idle.
+   * Idle overlay tip extension is intentionally a no-op. Copying lastVal onto
+   * a newer candle time paints a stale EMA and looks like a few-bar lag.
+   * Engine deltas / live tip patches must land the real tip.
    */
-  extendOverlayTips(time: number): void {
-    if (!Number.isFinite(time)) return;
-    for (const [paneId, pane] of this.panes.entries()) {
-      for (const [key, series] of Object.entries(pane.series)) {
-        if (!key.startsWith('overlay_') || key.startsWith(OVERLAY_OHLC_PREFIX)) continue;
-        const metaKey = this.overlayMetaKey(paneId, key);
-        const prev = this.overlayDataMeta.get(metaKey) ?? this.overlayDataMeta.get(key);
-        if (!prev || time <= prev.lastTime) continue;
-        const row = Number.isFinite(prev.lastVal) ? { time, value: prev.lastVal } : { time };
-        if (!safeUpdate(series, row)) continue;
-        this.overlayDataMeta.set(metaKey, {
-          len: prev.len + 1,
-          lastTime: time,
-          lastVal: prev.lastVal,
-        });
-      }
-    }
+  extendOverlayTips(_time: number): void {
+    // kept as a public no-op so older callers / tests stay type-compatible
   }
 
   /**

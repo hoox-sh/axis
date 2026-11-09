@@ -304,9 +304,9 @@ export function alignApplySeries(
     !canTailClampLive &&
     (opts.livePush === true || grossMismatch);
   // When the engine evaluated a shorter window than the chart (a new forming
-  // bar arrived after evaluation), tail-extend by holding the last value
-  // instead of head-padding with nulls — head-padding shifts every indicator
-  // value right by one position instead of extending onto the new bar.
+  // bar arrived after evaluation), keep the series as a prefix and pad the
+  // tip with null. Head-padding would slide every value onto a newer candle;
+  // hold-forward would paint a stale tip and look like a few-bar lag.
   let seriesMap: Record<string, unknown[] | (number | null)[]>;
   if (staleNoAxis) {
     seriesMap = rawSeries;
@@ -323,9 +323,8 @@ export function alignApplySeries(
     }
   } else if (!engineClampedTail && lengthMismatch) {
     // No engine axis. A bars-in /run is a prefix of the chart (candles that
-    // arrived during eval, or applyRollingWindow vs store.bars). Head-padding
-    // on that first paint slides EMA/SMA onto newer candles — the overlay is
-    // already displaced before any live tick. Hold the last value forward.
+    // arrived during eval, or applyRollingWindow vs store.bars). Keep the
+    // prefix and null the unevaluated tip — never copy the last value forward.
     // Live session snapshots larger than 8 bars stay newest-N (maxGap=8).
     const maxGap =
       opts.livePush === true && sessionAligned ? 8 : Math.max(8, chartWindowBars);

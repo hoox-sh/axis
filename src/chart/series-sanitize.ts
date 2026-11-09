@@ -120,16 +120,10 @@ export function projectToCandleAxis<T extends { time?: unknown }>(
     if (onAxis) return rows as T[];
   }
   const byTime = new Map<number, T>();
-  let lastSourceTime = Number.NEGATIVE_INFINITY;
-  let lastHold: T | null = null;
   for (const r of rows) {
     const t = Number(r == null ? undefined : r.time);
     if (!Number.isFinite(t)) continue;
     if (!byTime.has(t)) byTime.set(t, r);
-    if (t >= lastSourceTime) {
-      lastSourceTime = t;
-      lastHold = r;
-    }
   }
   const out: T[] = new Array(candleTimes.length);
   for (let i = 0; i < candleTimes.length; i++) {
@@ -139,15 +133,9 @@ export function projectToCandleAxis<T extends { time?: unknown }>(
       out[i] = hit;
       continue;
     }
-    // Live candles the engine has not re-run yet sit after the overlay's last
-    // sample. Copy the last row onto those times so the line keeps covering
-    // the tip (head-blanking would stop the stroke one-to-N bars left of the
-    // last candle). Holes *inside* the overlay window stay blank so a genuine
-    // Pine `na` still breaks the line.
-    if (lastHold != null && t > lastSourceTime) {
-      out[i] = { ...lastHold, time: t };
-      continue;
-    }
+    // Candles the engine has not evaluated stay blank. Copying the last overlay
+    // row onto newer times looks like a few-bar lag; a real delta must land the
+    // tip. Holes inside the overlay window also stay blank (Pine `na`).
     out[i] = blank(t);
   }
   return out;

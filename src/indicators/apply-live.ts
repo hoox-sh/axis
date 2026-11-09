@@ -166,9 +166,11 @@ function asOhlcTip(
 }
 
 /**
- * New candle(s) arrived. Keep overlay points attached to their bar times,
- * drop the rolled-off head, and append the latest engine value onto the new
- * tip. Index-zipping a same-length stale window would shift Donchian/SMA.
+ * New candle(s) arrived. Keep overlay points attached to their bar times and
+ * drop the rolled-off head. A real tip value from this result may land on the
+ * new bar; never copy the previous last value onto a newer time (that lag is
+ * the "few-bar leg" users reject). Index-zipping a same-length stale window
+ * would still shift Donchian/SMA.
  */
 function slideTipCache(cache: LiveTipCache, bars: Bar[], raw: RunResult, t: number): boolean {
   const series = (raw.series || {}) as Record<string, unknown[]>;
@@ -193,26 +195,26 @@ function slideTipCache(cache: LiveTipCache, bars: Bar[], raw: RunResult, t: numb
     const lastT = lastPt ? Number(lastPt.time) : Number.NaN;
     const arr = series[line.name];
     const v = Array.isArray(arr) ? asFinite(arr[arr.length - 1]) : undefined;
-    const hold =
-      v ?? (lastPt?.value != null && Number.isFinite(lastPt.value) ? lastPt.value : undefined);
     if (Number.isFinite(lastT) && t === lastT && lastPt) {
       if (v == null) delete lastPt.value;
       else lastPt.value = v;
-    } else if (!Number.isFinite(lastT) || t > lastT) {
-      const pt: { time: number; value?: number } = { time: t };
-      if (hold != null) pt.value = hold;
-      line.data.push(pt);
+    } else if ((!Number.isFinite(lastT) || t > lastT) && v != null) {
+      // Only extend when this result actually evaluated the new tip.
+      line.data.push({ time: t, value: v });
     }
   }
 
   for (const [k, arr] of Object.entries(cache.seriesMap)) {
     if (!Array.isArray(arr)) continue;
     const rawArr = series[k];
-    const tip = Array.isArray(rawArr) ? rawArr[rawArr.length - 1] : arr[arr.length - 1];
+    const tip = Array.isArray(rawArr) ? rawArr[rawArr.length - 1] : undefined;
     const missing = times.length - arr.length;
     if (missing > 0) {
-      for (let n = 0; n < missing; n++) arr.push(tip as never);
-    } else if (arr.length) {
+      for (let n = 0; n < missing; n++) {
+        // Prefer a real tip from this result; otherwise null (no hold-forward).
+        arr.push((n === missing - 1 && tip !== undefined ? tip : null) as never);
+      }
+    } else if (arr.length && tip !== undefined) {
       arr[arr.length - 1] = tip as never;
     }
     while (arr.length > times.length) arr.shift();

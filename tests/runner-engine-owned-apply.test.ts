@@ -165,16 +165,16 @@ describe('alignApplySeries length mismatch', () => {
     expect(aligned.needsAlign).toBe(true);
     expect(aligned.chartWindowBars).toBe(5003);
     expect(aligned.seriesMap.Upper).toHaveLength(5003);
-    // Prefix hold: the three extra chart bars arrived during eval. Head-padding
-    // would put Upper[0] on bar 3 and displace the whole overlay on first paint.
+    // Prefix keep + null tip: the three extra chart bars arrived during eval.
+    // Head-padding would put Upper[0] on bar 3; hold-forward would fake the tip.
     expect(aligned.seriesMap.Upper?.slice(0, 3)).toEqual([upper[0], upper[1], upper[2]]);
-    expect(aligned.seriesMap.Upper?.[5002]).toBe(upper[4999]);
-    expect(aligned.seriesMap.Lower?.[5002]).toBe(lower[4999]);
+    expect(aligned.seriesMap.Upper?.[5002]).toBeNull();
+    expect(aligned.seriesMap.Lower?.[5002]).toBeNull();
     const bands = resolvePlotFillBands(aligned.seriesMap, aligned.plotMeta);
     expect(bands).toHaveLength(1);
     expect(bands[0]!.upper).toHaveLength(5003);
-    expect(bands[0]!.upper[5002]).toBe(upper[4999]);
-    expect(bands[0]!.lower[5002]).toBe(lower[4999]);
+    expect(bands[0]!.upper[5002]).toBeNull();
+    expect(bands[0]!.lower[5002]).toBeNull();
   });
 
   it('time-joins a window-stamped short run onto newer chart bars (no head-pad slide)', () => {
@@ -207,7 +207,7 @@ describe('alignApplySeries length mismatch', () => {
     });
     expect(aligned.needsAlign).toBe(true);
     expect(aligned.resultTimes).toEqual([T(0), T(1), T(2), T(3)]);
-    expect(aligned.seriesMap.EMA).toEqual([10, 11, 12, 13, 13, 13]);
+    expect(aligned.seriesMap.EMA).toEqual([10, 11, 12, 13, null, null]);
   });
 
   it('time-joins a gappy window stamp onto newer chart bars (no head-pad slide)', () => {
@@ -239,8 +239,8 @@ describe('alignApplySeries length mismatch', () => {
     });
     expect(aligned.needsAlign).toBe(true);
     expect(aligned.resultTimes).toEqual([T(0), T(1), T(2), T(4)]);
-    // Head-padding would put 10 on T(2) and slide the crash onto newer bars.
-    expect(aligned.seriesMap.EMA).toEqual([10, 11, 12, 13, 13, 13]);
+    // Head-padding would put 10 on T(2); hold would fake T(5)/T(6).
+    expect(aligned.seriesMap.EMA).toEqual([10, 11, 12, 13, null, null]);
   });
 
   it('prefix-zips values when the reconstructed axis is longer than the series', () => {
@@ -254,7 +254,7 @@ describe('alignApplySeries length mismatch', () => {
       volume: 1,
     }));
     // Stamp taken after two live candles arrived: windowCount matches the
-    // new chart, series is still the 4-bar evaluation. Prefix zip + hold.
+    // new chart, series is still the 4-bar evaluation. Prefix zip + null tip.
     const result = {
       status: 'success',
       series: { EMA: [10, 11, 12, 13] },
@@ -270,7 +270,7 @@ describe('alignApplySeries length mismatch', () => {
     const aligned = alignApplySeries('indicator("AXIS EMA", overlay=true)\nplot(close)', result, bars, {
       silent: true,
     });
-    expect(aligned.seriesMap.EMA).toEqual([10, 11, 12, 13, 13, 13]);
+    expect(aligned.seriesMap.EMA).toEqual([10, 11, 12, 13, null, null]);
   });
 });
 
@@ -369,10 +369,10 @@ describe('alignApplySeries staleNoAxis', () => {
     ...(extra ?? {}),
   });
 
-  it('extends a small live-stream shortfall instead of head-padding (no shift)', () => {
+  it('keeps a small live-stream shortfall as a prefix (null tip, no shift)', () => {
     // Chart grew by 1–8 bars while the engine still had the previous window.
     // Head-padding [null,null,1,2,3] would slide Donchian/SMA onto newer
-    // candles. Hold the last value forward instead.
+    // candles; hold-forward would fake a few-bar lag. Keep the prefix + null.
     const result = {
       status: 'success',
       series: { plot0: [1, 2, 3] },
@@ -383,7 +383,7 @@ describe('alignApplySeries staleNoAxis', () => {
       livePush: true,
     });
     expect(aligned.staleNoAxis).toBe(false);
-    expect(aligned.seriesMap.plot0).toEqual([1, 2, 3, 3, 3]);
+    expect(aligned.seriesMap.plot0).toEqual([1, 2, 3, null, null]);
   });
 
   it('head-pads a deep live-stream snapshot (gap larger than 8 bars)', () => {
@@ -427,7 +427,7 @@ describe('alignApplySeries staleNoAxis', () => {
     expect(aligned.seriesMap.plot0).toEqual([15, 16, 17, 18, 19]);
   });
 
-  it('holds a fresh full run without axis so the overlay is not already displaced', () => {
+  it('keeps a fresh full run without axis as a prefix (null tip, no hold lag)', () => {
     const result = {
       status: 'success',
       series: { plot0: [1, 2, 3] },
@@ -437,7 +437,7 @@ describe('alignApplySeries staleNoAxis', () => {
       silent: true,
     });
     expect(aligned.staleNoAxis).toBe(false);
-    expect(aligned.seriesMap.plot0).toEqual([1, 2, 3, 3, 3]);
+    expect(aligned.seriesMap.plot0).toEqual([1, 2, 3, null, null]);
   });
 
   it('does not flag an equal-length session series without axis', () => {
@@ -465,7 +465,7 @@ describe('alignApplySeries staleNoAxis', () => {
       livePush: true,
     });
     expect(aligned.staleNoAxis).toBe(false);
-    expect(aligned.seriesMap.plot0).toEqual([1, 2, 3, 3, 3]);
+    expect(aligned.seriesMap.plot0).toEqual([1, 2, 3, null, null]);
   });
 
   it('does not flag a non-session length mismatch (free-tier clamp still tail-pins)', () => {
@@ -554,9 +554,9 @@ describe('alignSeriesToTimes', () => {
     expect(out).toEqual([1, 2, 3, 4, 5]);
   });
 
-  it('extends the last value onto chart bars newer than the engine axis', () => {
+  it('nulls chart bars newer than the engine axis (no hold-forward lag)', () => {
     const out = alignSeriesToTimes([1, 2, 3], [T(0), T(1), T(2)], [T(0), T(1), T(2), T(3), T(4)]);
-    expect(out).toEqual([1, 2, 3, 3, 3]);
+    expect(out).toEqual([1, 2, 3, null, null]);
   });
 
   it('normalizes Pine-ms engine times to chart seconds', () => {
@@ -586,9 +586,9 @@ describe('alignSeriesToTimes', () => {
 
   it('prefix-zips a short series onto a longer axis instead of head-padding', () => {
     // Stamp grew by two live candles after eval. Head-padding would yield
-    // [null, null, 1, 2] and slide EMA onto newer bars.
+    // [null, null, 1, 2] and slide EMA onto newer bars; hold would fake the tip.
     expect(alignSeriesToTimes([1, 2], [T(0), T(1), T(2), T(3)], [T(0), T(1), T(2), T(3)])).toEqual([
-      1, 2, 2, 2,
+      1, 2, null, null,
     ]);
   });
 

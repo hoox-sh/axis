@@ -308,8 +308,7 @@ export function extractEngineResultTimes(result: unknown): number[] | null {
  * newest values). When the axis is *longer* than the series — a live stamp
  * taken after candles arrived, or a reconstructed windowCount that grew —
  * values[i] still belong on times[i] (the prefix the engine actually saw).
- * Head-padding onto the chart tail would slide every EMA/SMA value onto a
- * newer candle.
+ * Never copy the last value onto newer candles: that looks like a few-bar lag.
  */
 export function alignSeriesToTimes(
   values: unknown,
@@ -325,21 +324,11 @@ export function alignSeriesToTimes(
   const byTime = new Map<number, unknown>();
   const paired = arr.length;
   for (let i = 0; i < paired; i++) byTime.set(rt[i] as number, arr[i]);
-  const engineLast = (paired > 0 ? rt[paired - 1] : rt[rt.length - 1]) ?? null;
   const out: unknown[] = new Array(len);
-  let hold: unknown = null;
   for (let i = 0; i < len; i++) {
     const t = normalizeBarTime(chartTimes[i]);
     if (t != null && byTime.has(t)) {
-      const value = byTime.get(t);
-      out[i] = value;
-      if (value != null && Number.isFinite(Number(value))) hold = value;
-      continue;
-    }
-    // Chart bars newer than the engine axis keep the last value. Head-padding
-    // would slide the whole series onto those bars; this only extends the tip.
-    if (t != null && engineLast != null && t > engineLast && hold != null) {
-      out[i] = hold;
+      out[i] = byTime.get(t);
       continue;
     }
     out[i] = null;
@@ -348,9 +337,10 @@ export function alignSeriesToTimes(
 }
 
 /**
- * A series a few bars shorter than the chart window is missing the new tip.
- * Append the last finite value. A large shortfall stays on the tail-pin
- * (the engine evaluated the newest bars, not a prefix).
+ * A series a few bars shorter than the chart window is a prefix of that
+ * window (bars that arrived during eval). Pad the tip with `null` so values
+ * stay on the bars they were computed for. A large shortfall stays on the
+ * tail-pin (the engine evaluated the newest bars, not a prefix).
  */
 export function extendSeriesToWindow(values: unknown, len: number, maxGap = 8): unknown[] {
   const arr = Array.isArray(values) ? values : [];
@@ -358,17 +348,7 @@ export function extendSeriesToWindow(values: unknown, len: number, maxGap = 8): 
   if (arr.length > len) return arr.slice(arr.length - len);
   const missing = len - arr.length;
   if (missing > maxGap) return tailAlignSeriesToWindow(arr, len);
-  let hold: unknown = null;
-  for (let i = arr.length - 1; i >= 0; i--) {
-    const value = arr[i];
-    const numeric =
-      typeof value === 'number' ? Number.isFinite(value) : value != null && value !== '';
-    if (numeric) {
-      hold = value;
-      break;
-    }
-  }
-  return [...arr, ...new Array(missing).fill(hold)];
+  return [...arr, ...new Array(missing).fill(null)];
 }
 
 /** Join every series in a `result.series` map by bar time (see {@link alignSeriesToTimes}). */

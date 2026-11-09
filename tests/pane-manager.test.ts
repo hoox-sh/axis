@@ -1265,7 +1265,7 @@ describe('live candle axis', () => {
     return { time, open: 1, high: 2, low: 0.5, close: 1.5, volume: 1 };
   }
 
-  it('holds overlay last values onto a new candle when the script is idle', () => {
+  it('does not copy overlay last values onto a new candle when the script is idle', () => {
     const price = pm.getPane('price')!;
     const updates: unknown[] = [];
     const sets: unknown[] = [];
@@ -1300,7 +1300,8 @@ describe('live candle axis', () => {
     pm.extendOverlayTips(220);
     expect(updates).toEqual([]);
     pm.appendBar(bar(280));
-    expect(updates).toEqual([{ time: 280, value: 42 }]);
+    // Idle tip-copy looked like a few-bar lag; tip stays on last evaluated bar.
+    expect(updates).toEqual([]);
   });
 
   it('does not grow the indicator axis on forming ticks, and extends it once on a new candle', () => {

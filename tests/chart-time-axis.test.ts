@@ -171,7 +171,7 @@ describe('projectToCandleAxis', () => {
     expect(projectToCandleAxis(rows, null, (time) => ({ time }))).toBe(rows);
   });
 
-  it('holds the last overlay value onto newer candles instead of blanking the tip', () => {
+  it('blanks newer candles the overlay has not evaluated (no hold-forward lag)', () => {
     const rows = [
       { time: 100, value: 10 },
       { time: 200, value: 20 },
@@ -180,8 +180,8 @@ describe('projectToCandleAxis', () => {
     expect(projected).toEqual([
       { time: 100, value: 10 },
       { time: 200, value: 20 },
-      { time: 300, value: 20 },
-      { time: 360, value: 20 },
+      { time: 300 },
+      { time: 360 },
     ]);
   });
 });

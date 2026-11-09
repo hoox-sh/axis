@@ -294,8 +294,8 @@ export function applyChartMutations(ctx: ChartMutationContext, sample?: SyncSamp
           fillBands.map((f) => ({
             name: f.name,
             times,
-            // Extend a short band onto the new tip. Tail-pinning head-pads and
-            // slides the cloud onto later bars.
+            // Keep a short band as a prefix; null the unevaluated tip. Tail-pin
+            // head-pads and slides the cloud; hold-forward paints a stale tip.
             upper: extendSeriesToWindow(f.upper, axisLen) as (number | null)[],
             lower: extendSeriesToWindow(f.lower, axisLen) as (number | null)[],
             colors: f.colors
