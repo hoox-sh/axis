@@ -60,4 +60,25 @@ test.describe('status-bar scanline', () => {
     await page.keyboard.press('Escape');
     await expect(page.getByTestId('axis-compose-menu')).toHaveCount(0);
   });
+
+  test('collapse shows compact HUD only', async ({ page }) => {
+    await page.goto('/');
+    const bar = page.getByTestId('axis-statusbar');
+    await expect(bar).toBeVisible({ timeout: 15_000 });
+    await expect(bar).toHaveAttribute('data-compact', '0');
+    await expect(page.getByTestId('axis-hud-compose')).toBeVisible();
+    await expect(page.getByTestId('axis-status-message')).toBeVisible();
+
+    await page.getByTestId('axis-statusbar-collapse').click();
+    await expect(bar).toHaveAttribute('data-compact', '1');
+    await expect(page.getByTestId('axis-hud-live')).toBeVisible();
+    await expect(page.getByTestId('axis-tick-indicator')).toBeVisible();
+    await expect(page.getByTestId('axis-hud-compose')).toHaveCount(0);
+    await expect(page.getByTestId('axis-status-message')).toHaveCount(0);
+    await expect(page.getByTestId('axis-statusbar-bars')).toHaveCount(0);
+
+    await page.getByTestId('axis-statusbar-collapse').click();
+    await expect(bar).toHaveAttribute('data-compact', '0');
+    await expect(page.getByTestId('axis-hud-compose')).toBeVisible();
+  });
 });

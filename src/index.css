@@ -1556,6 +1556,36 @@ button.sc-btn:focus-visible {
   overflow-y: hidden;
   scrollbar-width: thin;
 }
+.axis-statusbar.is-compact {
+  gap: calc(var(--ui-statusbar-gap) * 0.75);
+}
+.axis-statusbar-collapse {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: var(--ui-capsule-h);
+  height: var(--ui-capsule-h);
+  padding: 0;
+  margin-left: 2px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--color-text-faint);
+  cursor: pointer;
+  box-sizing: border-box;
+}
+.axis-statusbar-collapse:hover {
+  color: var(--color-text);
+  background: var(--color-bg-hover);
+}
+.axis-statusbar-collapse:focus-visible {
+  outline: none;
+  box-shadow: var(--ui-focus-ring-inset);
+}
+.axis-statusbar-collapse[aria-pressed='true'] {
+  color: var(--color-accent);
+}
 .axis-status-capsule {
   display: inline-flex;
   align-items: center;
@@ -1620,6 +1650,135 @@ button.axis-status-capsule {
 }
 .axis-live-dot--pulse {
   animation: axis-live-pulse 1.6s ease-out infinite;
+}
+
+/* CSS-only HUD metric glyphs (Live / Last / Compose / Diagnostics) */
+.axis-hud-metric {
+  position: relative;
+  display: inline-block;
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  box-sizing: border-box;
+}
+.axis-hud-metric--live,
+.axis-hud-metric--ready {
+  border-radius: 50%;
+  background: var(--color-text-faint);
+}
+.axis-live-btn.is-live .axis-hud-metric--live,
+.axis-hud-metric--ready {
+  background: var(--color-accent-2);
+  animation: axis-live-pulse 1.6s ease-out infinite;
+}
+.axis-live-btn.is-reconnect .axis-hud-metric--live {
+  background: var(--color-orange);
+  animation: axis-reconnect-breathe 1.6s ease-out infinite;
+}
+.axis-live-btn.is-degraded .axis-hud-metric--live {
+  background: var(--color-orange);
+}
+.axis-live-btn.is-idle .axis-hud-metric--live,
+.axis-live-btn.is-offline .axis-hud-metric--live {
+  background: var(--color-text-faint);
+  animation: none;
+}
+.axis-hud-metric--last {
+  width: 0;
+  height: 0;
+  border-left: 3.5px solid transparent;
+  border-right: 3.5px solid transparent;
+  border-bottom: 7px solid var(--color-text-faint);
+  background: transparent;
+}
+.axis-hud-chip--last.is-up .axis-hud-metric--last {
+  border-bottom-color: var(--color-accent-2);
+}
+.axis-hud-chip--last.is-down .axis-hud-metric--last {
+  border-bottom-color: transparent;
+  border-top: 7px solid var(--color-red);
+}
+.axis-hud-chip--last.is-fresh .axis-hud-metric--last {
+  animation: axis-hud-metric-nudge 0.7s ease-out 1;
+}
+.axis-hud-metric--compose {
+  width: 9px;
+  height: 8px;
+  background:
+    linear-gradient(var(--color-text-faint), var(--color-text-faint)) 0 0 / 9px 2px no-repeat,
+    linear-gradient(var(--color-text-faint), var(--color-text-faint)) 0 3px / 7px 2px no-repeat,
+    linear-gradient(var(--color-text-faint), var(--color-text-faint)) 0 6px / 5px 2px no-repeat;
+}
+.axis-status-capsule.is-active .axis-hud-metric--compose {
+  background:
+    linear-gradient(var(--color-accent), var(--color-accent)) 0 0 / 9px 2px no-repeat,
+    linear-gradient(var(--color-accent), var(--color-accent)) 0 3px / 7px 2px no-repeat,
+    linear-gradient(var(--color-accent), var(--color-accent)) 0 6px / 5px 2px no-repeat;
+}
+.axis-hud-metric--diag {
+  width: 9px;
+  height: 8px;
+  background:
+    linear-gradient(var(--color-text-faint), var(--color-text-faint)) 0 4px / 2px 4px no-repeat,
+    linear-gradient(var(--color-text-faint), var(--color-text-faint)) 3.5px 1px / 2px 7px no-repeat,
+    linear-gradient(var(--color-text-faint), var(--color-text-faint)) 7px 2.5px / 2px 5.5px no-repeat;
+}
+.axis-status-capsule.is-active .axis-hud-metric--diag {
+  background:
+    linear-gradient(var(--color-accent), var(--color-accent)) 0 4px / 2px 4px no-repeat,
+    linear-gradient(var(--color-accent), var(--color-accent)) 3.5px 1px / 2px 7px no-repeat,
+    linear-gradient(var(--color-accent), var(--color-accent)) 7px 2.5px / 2px 5.5px no-repeat;
+  animation: axis-hud-eq 1.4s ease-in-out infinite;
+}
+.axis-hud-metric--plane {
+  border-radius: 50%;
+  background: var(--color-text-faint);
+}
+.axis-status-capsule[data-hud-state='ok'] .axis-hud-metric--plane {
+  background: var(--color-accent-2);
+}
+.axis-status-capsule[data-hud-state='warn'] .axis-hud-metric--plane,
+.axis-status-capsule[data-hud-state='load'] .axis-hud-metric--plane {
+  background: var(--color-orange);
+}
+.axis-status-capsule[data-hud-state='load'] .axis-hud-metric--plane {
+  animation: axis-reconnect-breathe 1.6s ease-out infinite;
+}
+.axis-status-capsule[data-hud-state='err'] .axis-hud-metric--plane {
+  background: var(--color-red);
+}
+@keyframes axis-hud-metric-nudge {
+  0% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  40% {
+    transform: translateY(-1px);
+    opacity: 0.7;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+@keyframes axis-hud-eq {
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.25);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .axis-live-btn.is-live .axis-hud-metric--live,
+  .axis-live-btn.is-reconnect .axis-hud-metric--live,
+  .axis-hud-metric--ready,
+  .axis-hud-chip--last.is-fresh .axis-hud-metric--last,
+  .axis-status-capsule.is-active .axis-hud-metric--diag,
+  .axis-status-capsule[data-hud-state='load'] .axis-hud-metric--plane {
+    animation: none;
+  }
 }
 .axis-hud-info {
   border: 1px solid var(--color-border);

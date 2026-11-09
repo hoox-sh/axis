@@ -344,6 +344,7 @@ export function SettingsPage(props: {
   const [hudDiagnostics, setHudDiagnostics] = createSignal(
     store.telemetry?.hud?.diagnostics === true,
   );
+  createEffect(() => setHudCompact(!!store.telemetry?.hud?.compact));
   createEffect(() => setHudDiagnostics(store.telemetry?.hud?.diagnostics === true));
   const [shareOnError, setShareOnError] = createSignal(!!store.telemetry?.shareOnError);
   const [uiScale, setUiScaleLocal] = createSignal(clampUiScale(store.uiScale ?? 1));
@@ -848,9 +849,21 @@ export function SettingsPage(props: {
 
               <StudioSection
                 title="Status HUD"
-                lead="Connection strip under the chart. Diagnostics expand engine, path, and storage chips."
+                lead="Footer scanline under the chart. Compact shows Live + Last; expanded adds Compose, bars, and optional diagnostics."
               >
                 <div class="ax-toggle-grid">
+                  <StudioToggle
+                    id="axis-hud-compact"
+                    testId="axis-settings-hud-compact"
+                    checked={hudCompact()}
+                    onChange={(v) => {
+                      setHudCompact(v);
+                      setStore('telemetry', 'hud', 'compact', v);
+                      flushPersist();
+                    }}
+                    label="Compact status bar"
+                    hint="Collapse to Live + Last only. Same as the chevron on the status bar."
+                  />
                   <StudioToggle
                     id="axis-hud-diagnostics"
                     testId="axis-settings-hud-diagnostics"
@@ -861,14 +874,7 @@ export function SettingsPage(props: {
                       flushPersist();
                     }}
                     label="Connection diagnostics"
-                    hint="Show engine, path, source, stream, and storage chips."
-                  />
-                  <StudioToggle
-                    id="axis-hud-compact"
-                    checked={hudCompact()}
-                    onChange={setHudCompact}
-                    label="Compact chips"
-                    hint="When diagnostics are on, hide source / stream / storage."
+                    hint="When the bar is expanded, show engine, path, source, stream, and storage chips instead of Compose."
                   />
                   <StudioToggle
                     id="axis-share-on-error"

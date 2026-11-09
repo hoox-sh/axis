@@ -3,6 +3,7 @@
 
 /**
  * Status-bar HUD inspector: click/keyboard only. Hover never opens a container.
+ * Compact collapses to Live + Last; expanded shows the full scanline.
  */
 
 import { describe, expect, it } from 'bun:test';
@@ -62,18 +63,53 @@ describe('scanline source contract', () => {
     expect(src).toContain('Click a chip for details');
   });
 
-  it('StatusBar documents the scanline (no hover-gated HUD)', () => {
+  it('StatusBar documents the scanline (no hover-gated HUD) and collapses', () => {
     const src = read('src/ui/StatusBar.tsx');
     expect(src).toMatch(/scanline/i);
-    expect(src).toContain('There is no hover-open');
-    expect(src).toContain("data-testid=\"axis-statusbar\"");
-    expect(src).toContain("data-testid=\"axis-statusbar-bars\"");
-    expect(src).toContain("data-testid=\"axis-statusbar-dataset\"");
+    expect(src).toContain('never hover');
+    expect(src).toContain('data-testid="axis-statusbar"');
+    expect(src).toContain('data-testid="axis-statusbar-bars"');
+    expect(src).toContain('data-testid="axis-statusbar-dataset"');
+    expect(src).toContain('data-testid="axis-statusbar-collapse"');
+    expect(src).toContain("setStore('telemetry', 'hud', 'compact'");
+    expect(src).toContain('data-compact');
+  });
+
+  it('ConnectionHud compact mode is Live + Last only', () => {
+    const src = read('src/ui/ConnectionHud.tsx');
+    expect(src).toContain('hud?.compact');
+    expect(src).toContain('when={!compact()}');
+    expect(src).toContain('axis-hud-metric');
+    expect(src).toContain('metric="live"');
+    expect(src).toContain('metric="last"');
+    expect(src).toContain('kind="compose"');
+    expect(src).toContain('kind="diag"');
   });
 
   it('Popover can pin above the anchor', () => {
     const src = read('src/ui/Popover.tsx');
     expect(src).toContain("side?: 'top' | 'bottom'");
     expect(src).toContain("props.side === 'top'");
+  });
+
+  it('Settings labels match compact collapse + diagnostics', () => {
+    const src = read('src/ui/settings/SettingsPage.tsx');
+    expect(src).toContain('Compact status bar');
+    expect(src).toContain('Collapse to Live + Last only');
+    expect(src).toContain('axis-settings-hud-compact');
+    expect(src).toContain('axis-settings-hud-diagnostics');
+    expect(src).not.toContain('When diagnostics are on, hide source / stream / storage');
+  });
+
+  it('CSS metric icons respect prefers-reduced-motion', () => {
+    const css = read('src/index.css');
+    expect(css).toContain('axis-hud-metric--live');
+    expect(css).toContain('axis-hud-metric--last');
+    expect(css).toContain('axis-hud-metric--compose');
+    expect(css).toContain('axis-hud-metric--diag');
+    expect(css).toContain('axis-statusbar-collapse');
+    expect(css).toMatch(
+      /prefers-reduced-motion: reduce[\s\S]*axis-hud-metric--live[\s\S]*animation:\s*none/,
+    );
   });
 });

@@ -392,8 +392,9 @@ export interface TelemetryState {
   lastTick: TickTelemetry | null;
   /**
    * Layout prefs (persisted).
-   * `diagnostics` expands the raw ENG/RUN/PATH/SRC chips. Default off:
-   * the status row shows Live, tick, and one Compose chip.
+   * `compact` collapses the status bar to the compact HUD (Live + Last).
+   * `diagnostics` (expanded bar only) shows raw ENG/RUN/PATH/SRC chips
+   * instead of Compose. Default: expanded, diagnostics off.
    */
   hud: { compact: boolean; overlay: boolean; diagnostics: boolean };
   /**

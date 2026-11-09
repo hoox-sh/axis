@@ -22,13 +22,9 @@
  * truncated status, optional strategy PnL, rolling-window edit, dataset
  * depth, scripts/panes counts.
  *
- * Concept (replaces HUD hover-to-reveal): the footer is a scanline of live
- * readings, always visible. Hover is hostile on touch and hid the actual
- * status behind a floating container + hover-bridge. There is no hover-open
- * panel. Click or keyboard on a HUD instrument opens one inspector dialog
- * (`role="dialog"`) anchored above the rail via the shared Popover; Esc,
- * outside pointer, or a second click closes it. Details never float in on
- * pointer-enter.
+ * Collapsible: `telemetry.hud.compact` collapses the bar to the compact HUD
+ * (Live + Last + essential chips). Expanded shows the full instrument
+ * scanline. Inspectors open by click or keyboard only — never hover.
  *
  * Classic fixed footer chrome (no FloatableShell title bar). Visibility is
  * gated by panel chrome `statusbar` (topbar **Status** / command palette).
@@ -113,6 +109,14 @@ export const StatusBar: Component = () : JSX.Element => {
   const [draft, setDraft] = createSignal('');
   let inputEl: HTMLInputElement | undefined;
 
+  /** Compact HUD = collapsed bar (`telemetry.hud.compact`). */
+  const compact = () => !!store.telemetry?.hud?.compact;
+
+  const toggleCompact = () => {
+    setStore('telemetry', 'hud', 'compact', !compact());
+    persist();
+  };
+
   const beginEdit = () => {
     setDraft(String(barPlane.length));
     setEditingChart(true);
@@ -155,95 +159,135 @@ export const StatusBar: Component = () : JSX.Element => {
 
   return (
     <Show when={isPanelOpen('statusbar')}>
-      <div class="axis-statusbar flex-shrink-0" data-testid="axis-statusbar" role="status">
+      <div
+        class="axis-statusbar flex-shrink-0"
+        classList={{ 'is-compact': compact() }}
+        data-testid="axis-statusbar"
+        data-compact={compact() ? '1' : '0'}
+        role="status"
+      >
         <ConnectionHud />
 
-        <span
-          class={`flex items-center gap-1.5 min-w-0 max-w-[28vw] text-[11px] ${color()}`}
-          data-testid="axis-status-message"
-        >
-          {(store.status === 'running' || store.status === 'loading') && (
-            <HooxLoader size="xs" class="flex-shrink-0" />
-          )}
-          {store.status === 'error' && <Icons.alert class="text-red flex-shrink-0" />}
-          {store.status === 'ready' && <Icons.activity class="text-accent-2 flex-shrink-0" />}
-          <span class="truncate">{store.statusMessage}</span>
-        </span>
+        <Show when={!compact()}>
+          <span
+            class={`flex items-center gap-1.5 min-w-0 max-w-[28vw] text-[11px] ${color()}`}
+            data-testid="axis-status-message"
+          >
+            {(store.status === 'running' || store.status === 'loading') && (
+              <HooxLoader size="xs" class="flex-shrink-0" />
+            )}
+            {store.status === 'error' && <Icons.alert class="text-red flex-shrink-0" />}
+            {store.status === 'ready' && (
+              <span class="axis-hud-metric axis-hud-metric--ready" aria-hidden="true" />
+            )}
+            <span class="truncate">{store.statusMessage}</span>
+          </span>
 
-        <span class="flex-1 min-w-2" />
+          <span class="flex-1 min-w-2" />
 
-        <Show when={strategySummary()}>
-          {(stats) => (
-            <span
-              class={`text-[11px] font-mono tracking-tight tabular-nums flex-shrink-0 ${
-                stats().totalPnl >= 0 ? 'text-accent-2' : 'text-red'
-              }`}
-              title="Closed trades from last run"
+          <Show when={strategySummary()}>
+            {(stats) => (
+              <span
+                class={`text-[11px] font-mono tracking-tight tabular-nums flex-shrink-0 ${
+                  stats().totalPnl >= 0 ? 'text-accent-2' : 'text-red'
+                }`}
+                title="Closed trades from last run"
+              >
+                {stats().trades} · {formatMoney(stats().totalPnl)}
+              </span>
+            )}
+          </Show>
+
+          <span class="text-text-faint font-mono text-[11px] tracking-tight flex-shrink-0 tabular-nums inline-flex items-center gap-1">
+            <Show
+              when={editingChart()}
+              fallback={
+                <button
+                  type="button"
+                  class="hover:text-accent tabular-nums"
+                  title={`Chart bars — click to edit display count (Rolling window, ${ROLLING_WINDOW_MIN}–${ROLLING_WINDOW_MAX})`}
+                  data-testid="axis-statusbar-bars"
+                  onClick={beginEdit}
+                >
+                  {barPlane.length} bars
+                </button>
+              }
             >
-              {stats().trades} · {formatMoney(stats().totalPnl)}
-            </span>
-          )}
-        </Show>
-
-        <span class="text-text-faint font-mono text-[11px] tracking-tight flex-shrink-0 tabular-nums inline-flex items-center gap-1">
-          <Show
-            when={editingChart()}
-            fallback={
+              <input
+                ref={(el) => {
+                  inputEl = el;
+                }}
+                type="number"
+                class="sc-input h-5 w-20 px-1 py-0 text-[11px] font-mono tabular-nums"
+                min={ROLLING_WINDOW_MIN}
+                max={ROLLING_WINDOW_MAX}
+                step={100}
+                value={draft()}
+                aria-label="Chart bars to display (Rolling window)"
+                data-testid="axis-statusbar-bars-input"
+                onInput={(e) => setDraft(e.currentTarget.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    commitEdit();
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    setEditingChart(false);
+                  }
+                }}
+                onBlur={() => commitEdit()}
+              />
+            </Show>
+            <Show when={datasetBars() > 0 && datasetBars() !== barPlane.length}>
               <button
                 type="button"
                 class="hover:text-accent tabular-nums"
-                title={`Chart bars — click to edit display count (Rolling window, ${ROLLING_WINDOW_MIN}–${ROLLING_WINDOW_MAX})`}
-                data-testid="axis-statusbar-bars"
-                onClick={beginEdit}
-              >
-                {barPlane.length} bars
-              </button>
-            }
-          >
-            <input
-              ref={(el) => {
-                inputEl = el;
-              }}
-              type="number"
-              class="sc-input h-5 w-20 px-1 py-0 text-[11px] font-mono tabular-nums"
-              min={ROLLING_WINDOW_MIN}
-              max={ROLLING_WINDOW_MAX}
-              step={100}
-              value={draft()}
-              aria-label="Chart bars to display (Rolling window)"
-              data-testid="axis-statusbar-bars-input"
-              onInput={(e) => setDraft(e.currentTarget.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  commitEdit();
-                } else if (e.key === 'Escape') {
-                  e.preventDefault();
-                  setEditingChart(false);
+                title="Bars in the Data Source Manager dataset — click to open the studio Data page"
+                data-testid="axis-statusbar-dataset"
+                onClick={() =>
+                  window.dispatchEvent(
+                    new CustomEvent('axis-open-studio', { detail: { page: 'data' } }),
+                  )
                 }
-              }}
-              onBlur={() => commitEdit()}
-            />
-          </Show>
-          <Show when={datasetBars() > 0 && datasetBars() !== barPlane.length}>
-            <button
-              type="button"
-              class="hover:text-accent tabular-nums"
-              title="Bars in the Data Source Manager dataset — click to open the studio Data page"
-              data-testid="axis-statusbar-dataset"
-              onClick={() =>
-                window.dispatchEvent(
-                  new CustomEvent('axis-open-studio', { detail: { page: 'data' } }),
-                )
-              }
-            >
-              · dataset {formatBarCount(datasetBars())}
-            </button>
-          </Show>
-          <span>
-            · {store.scripts.length} scripts · {store.panes.length} panes
+              >
+                · dataset {formatBarCount(datasetBars())}
+              </button>
+            </Show>
+            <span>
+              · {store.scripts.length} scripts · {store.panes.length} panes
+            </span>
           </span>
-        </span>
+        </Show>
+
+        <Show when={compact()}>
+          <span class="flex-1 min-w-2" />
+        </Show>
+
+        <button
+          type="button"
+          class="axis-statusbar-collapse"
+          data-testid="axis-statusbar-collapse"
+          aria-pressed={compact()}
+          aria-expanded={!compact()}
+          title={
+            compact()
+              ? 'Expand status bar (full scanline)'
+              : 'Collapse status bar (Live + Last only)'
+          }
+          aria-label={
+            compact()
+              ? 'Expand status bar'
+              : 'Collapse status bar to compact HUD'
+          }
+          onClick={toggleCompact}
+        >
+          <Show
+            when={compact()}
+            fallback={<Icons.chevronDown size={12} aria-hidden="true" />}
+          >
+            <Icons.chevronUp size={12} aria-hidden="true" />
+          </Show>
+        </button>
       </div>
     </Show>
   );

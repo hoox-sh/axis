@@ -21,7 +21,8 @@
  * AXIS Connection HUD — scanline instruments (Live, Last, Compose, diagnostics).
  *
  * Derived via {@link deriveHud} from engine plugin + endpoint + telemetry.
- * Chips live in the status-bar scanline; compact mode collapses secondary chips.
+ * Chips live in the status-bar scanline. `telemetry.hud.compact` collapses the
+ * parent bar to Live + Last only; expanded shows Compose / diagnostics chips.
  * Click or keyboard opens one inspector dialog above the rail — never hover.
  *
  * | Chip | Values |
@@ -37,7 +38,6 @@ import {
   type Component,
   For,
   Show,
-  createEffect,
   createMemo,
   createSignal,
 } from 'solid-js';
@@ -150,10 +150,15 @@ function useHudInspector() {
   return { openChip, toggle, close };
 }
 
+/** CSS-only metric glyph keyed by instrument. */
+function HudMetricIcon(props: { kind: 'live' | 'last' | 'compose' | 'diag' | 'plane' }) {
+  return <span class={`axis-hud-metric axis-hud-metric--${props.kind}`} aria-hidden="true" />;
+}
+
 // ── Chips ─────────────────────────────────────────────────────────────
 
 /**
- * Single shell for every HUD chip: dot + label + value. Click/keyboard
+ * Single shell for every HUD chip: metric icon + label + value. Click/keyboard
  * opens the inspector dialog; hover never does. Visual variants travel
  * through class props (`shellClass`, `labelClass`, `valueClass`, `dotClass`)
  * so TickPulse and the Live control share this instead of re-implementing
@@ -180,6 +185,8 @@ function ChipShell(props: {
   testId?: string;
   /** Chip-specific live rows for the inspector footer. */
   meta?: string[];
+  /** CSS metric glyph; defaults to a state dot. */
+  metric?: 'live' | 'last' | 'compose' | 'diag' | 'plane';
 }) {
   const [anchor, setAnchor] = createSignal<HTMLButtonElement | undefined>();
   const dot = () => {
@@ -209,6 +216,7 @@ function ChipShell(props: {
         }`}
         data-testid={props.testId || `axis-hud-${props.id}`}
         data-hud-chip={props.id}
+        data-hud-state={props.state || 'idle'}
         title={props.title}
         aria-expanded={active()}
         aria-haspopup="dialog"
@@ -217,7 +225,12 @@ function ChipShell(props: {
           props.inspector.toggle(props.id);
         }}
       >
-        <span class={`axis-live-dot ${dot()}`} aria-hidden="true" />
+        <Show
+          when={props.metric}
+          fallback={<span class={`axis-live-dot ${dot()}`} aria-hidden="true" />}
+        >
+          {(m) => <HudMetricIcon kind={m()} />}
+        </Show>
         <span class={`axis-status-capsule-code ${props.labelClass ?? ''}`}>{props.label}</span>
         <Show when={props.value !== ''}>
           <span
@@ -278,6 +291,7 @@ function PlaneChip(props: {
               ? 'load'
               : 'idle'
       }
+      metric="plane"
       inspector={props.inspector}
       snap={props.snap}
       testId={`axis-hud-${props.id}`}
@@ -347,6 +361,7 @@ function FeedChip(props: {
             value={view().value}
             title={view().title}
             state={chipStateFor(view().tone)}
+            metric="plane"
             meta={metaOf(f())}
             inspector={props.inspector}
             snap={props.snap}
@@ -378,7 +393,7 @@ function chipStateFor(
 
 /**
  * Show optional onchain plane when present and active/error.
- * Compact: only error / connecting (tight bar). Expanded: also open/degraded.
+ * Compact bar hides optional planes; expanded shows open/degraded too.
  */
 function showOnchainPlane(
   plane: PlaneTelemetry | undefined | null,
@@ -413,8 +428,9 @@ function TickPulse(props: {
     const t = tick();
     return !!t && now() - t.at < 2000;
   };
+  const dir = () => tick()?.dir;
   const dirColor = () => {
-    const d = tick()?.dir;
+    const d = dir();
     if (d === 'up') return 'text-accent-2';
     if (d === 'down') return 'text-red';
     return 'text-text-faint';
@@ -441,10 +457,12 @@ function TickPulse(props: {
       labelClass="is-word"
       value={priceText()}
       valueClass={`tabular-nums text-right max-w-[7ch] flex-shrink-0 overflow-hidden text-ellipsis ${dirColor()}`}
-      dotClass={`${liveBadgeTone(arm()) === 'live' ? 'is-ok' : ''} ${
-        fresh() ? 'axis-live-dot--pulse' : ''
+      shellClass={`axis-hud-chip--last${fresh() ? ' is-fresh' : ''}${
+        dir() === 'up' ? ' is-up' : dir() === 'down' ? ' is-down' : ''
       }`}
+      metric="last"
       title={ageTitle()}
+      state={liveBadgeTone(arm()) === 'live' ? 'ok' : 'idle'}
       inspector={props.inspector}
       snap={props.snap}
       testId="axis-tick-indicator"
@@ -475,7 +493,7 @@ function LiveBadge(props: {
       labelClass="is-word axis-live-btn-word"
       value=""
       shellClass={`axis-live-btn ${cls()}`}
-      dotClass=""
+      metric="live"
       title={tip()}
       inspector={props.inspector}
       snap={props.snap}
@@ -506,7 +524,7 @@ function PairingWarn() {
             title={`${p().venue} ${p().market} · ${p().authMode}`}
             data-testid="axis-hud-provider"
           >
-            <span class="axis-live-dot" aria-hidden="true" />
+            <HudMetricIcon kind="plane" />
             <span class="axis-status-capsule-val max-w-[7em]">
               {p().venue}
               {p().authMode === 'authenticated' ? '·key' : ''}
@@ -573,10 +591,7 @@ function ComposeChip(props: { snap: () => HudSnapshot }) {
         aria-haspopup="dialog"
         onClick={() => setOpen((v) => !v)}
       >
-        <span
-          class={`axis-live-dot ${warn() ? 'is-warn' : snap().error ? 'is-err' : ''}`}
-          aria-hidden="true"
-        />
+        <HudMetricIcon kind="compose" />
         <span class="axis-status-capsule-code is-word">Compose</span>
         <span class="axis-status-capsule-val">{composeCaption(snap())}</span>
       </button>
@@ -648,13 +663,9 @@ export const ConnectionHud: Component = () : JSX.Element => {
   const snap = useHudSnapshot();
   const inspector = useHudInspector();
   const tel = () => store.telemetry;
-  const compact = () => tel()?.hud?.compact;
+  /** Compact = collapsed bar: Live + Last only. */
+  const compact = () => !!tel()?.hud?.compact;
   const diagnostics = () => tel()?.hud?.diagnostics === true;
-
-  // Persist compact preference already exists; ensure hud object present
-  createEffect(() => {
-    void store.telemetry?.hud?.compact;
-  });
 
   const engState = () => {
     const s = snap();
@@ -667,96 +678,103 @@ export const ConnectionHud: Component = () : JSX.Element => {
 
   return (
     <div
-      class="flex items-center gap-1 flex-nowrap min-w-0 flex-shrink-0 overflow-hidden"
+      class="axis-connection-hud flex items-center gap-1 flex-nowrap min-w-0 flex-shrink-0 overflow-hidden"
+      classList={{ 'is-compact': compact() }}
       data-testid="axis-connection-hud"
+      data-compact={compact() ? '1' : '0'}
       role="status"
       aria-label="Connection status"
     >
       <LiveBadge inspector={inspector} snap={snap} />
       <TickPulse inspector={inspector} snap={snap} />
 
-      <button
-        type="button"
-        class={`axis-status-capsule text-text-faint cursor-pointer ${diagnostics() ? 'is-active' : ''}`}
-        title={
-          diagnostics()
-            ? 'Hide connection diagnostics'
-            : 'Show connection diagnostics (engine, source, stream, storage)'
-        }
-        aria-pressed={diagnostics()}
-        data-testid="axis-hud-diagnostics"
-        onClick={() => {
-          setStore('telemetry', 'hud', 'diagnostics', !diagnostics());
-          persist();
-        }}
-      >
-        <span class="axis-status-capsule-code is-word">
-          {diagnostics() ? 'Hide' : 'Diagnostics'}
-        </span>
-      </button>
+      <Show when={!compact()}>
+        <button
+          type="button"
+          class={`axis-status-capsule text-text-faint cursor-pointer ${diagnostics() ? 'is-active' : ''}`}
+          title={
+            diagnostics()
+              ? 'Hide connection diagnostics'
+              : 'Show connection diagnostics (engine, path, source, stream, storage)'
+          }
+          aria-pressed={diagnostics()}
+          data-testid="axis-hud-diagnostics"
+          onClick={() => {
+            setStore('telemetry', 'hud', 'diagnostics', !diagnostics());
+            persist();
+          }}
+        >
+          <HudMetricIcon kind="diag" />
+          <span class="axis-status-capsule-code is-word">
+            {diagnostics() ? 'Hide' : 'Diagnostics'}
+          </span>
+        </button>
 
-      <Show
-        when={diagnostics()}
-        fallback={
-          <>
-            <ComposeChip snap={snap} />
-            <Show when={showOnchainPlane(tel()?.onchain, true)}>
-              <Show when={tel()?.onchain}>
-                {(o) => (
-                  <PlaneChip
-                    label="Chain"
-                    plane={o()}
-                    id="onc"
-                    inspector={inspector}
-                    snap={snap}
-                  />
-                )}
+        <Show
+          when={diagnostics()}
+          fallback={
+            <>
+              <ComposeChip snap={snap} />
+              <Show when={showOnchainPlane(tel()?.onchain, false)}>
+                <Show when={tel()?.onchain}>
+                  {(o) => (
+                    <PlaneChip
+                      label="Chain"
+                      plane={o()}
+                      id="onc"
+                      inspector={inspector}
+                      snap={snap}
+                    />
+                  )}
+                </Show>
               </Show>
-            </Show>
-          </>
-        }
-      >
-        {/* Raw diagnostics — abbreviations stay in this mode only. */}
-        <ChipShell
-          id="eng"
-          label="eng"
-          value={snap().eng}
-          state={engState()}
-          inspector={inspector}
-          snap={snap}
-          testId="axis-hud-eng"
-        />
-        <ChipShell
-          id="run"
-          label="run"
-          value={snap().loading ? 'loading…' : snap().run}
-          state={snap().loading ? 'load' : engState()}
-          inspector={inspector}
-          snap={snap}
-          testId="axis-hud-run"
-        />
-        <ChipShell
-          id="mode"
-          label="mode"
-          value={snap().mode}
-          state={engState()}
-          extra={formatLatency(snap().latencyMs)}
-          inspector={inspector}
-          snap={snap}
-          testId="axis-engine-chip"
-        />
-        <Show when={snap().showPath}>
+            </>
+          }
+        >
+          {/* Raw diagnostics — abbreviations stay in this mode only. */}
           <ChipShell
-            id="path"
-            label="path"
-            value={snap().path}
-            state={snap().path === 'WS' ? 'ok' : 'idle'}
+            id="eng"
+            label="eng"
+            value={snap().eng}
+            state={engState()}
+            metric="plane"
             inspector={inspector}
             snap={snap}
-            testId="axis-hud-path"
+            testId="axis-hud-eng"
           />
-        </Show>
-        <Show when={!compact()}>
+          <ChipShell
+            id="run"
+            label="run"
+            value={snap().loading ? 'loading…' : snap().run}
+            state={snap().loading ? 'load' : engState()}
+            metric="plane"
+            inspector={inspector}
+            snap={snap}
+            testId="axis-hud-run"
+          />
+          <ChipShell
+            id="mode"
+            label="mode"
+            value={snap().mode}
+            state={engState()}
+            metric="plane"
+            extra={formatLatency(snap().latencyMs)}
+            inspector={inspector}
+            snap={snap}
+            testId="axis-engine-chip"
+          />
+          <Show when={snap().showPath}>
+            <ChipShell
+              id="path"
+              label="path"
+              value={snap().path}
+              state={snap().path === 'WS' ? 'ok' : 'idle'}
+              metric="plane"
+              inspector={inspector}
+              snap={snap}
+              testId="axis-hud-path"
+            />
+          </Show>
           <Show when={tel()?.source}>
             {(p) => (
               <PlaneChip label="src" plane={p()} id="src" inspector={inspector} snap={snap} />
@@ -774,18 +792,18 @@ export const ConnectionHud: Component = () : JSX.Element => {
           </Show>
           <FeedChip inspector={inspector} snap={snap} />
           <PairingWarn />
-        </Show>
-        <Show when={showOnchainPlane(tel()?.onchain, compact())}>
-          <Show when={tel()?.onchain}>
-            {(o) => (
-              <PlaneChip
-                label="onc"
-                plane={o()}
-                id="onc"
-                inspector={inspector}
-                snap={snap}
-              />
-            )}
+          <Show when={showOnchainPlane(tel()?.onchain, false)}>
+            <Show when={tel()?.onchain}>
+              {(o) => (
+                <PlaneChip
+                  label="onc"
+                  plane={o()}
+                  id="onc"
+                  inspector={inspector}
+                  snap={snap}
+                />
+              )}
+            </Show>
           </Show>
         </Show>
       </Show>
