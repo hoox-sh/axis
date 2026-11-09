@@ -201,11 +201,13 @@ const GAP_RESYNC_BACKOFF_MS = [0, 500, 1_500, 4_000, 10_000] as const;
  */
 const AXIS_RESUB_ESCALATE_AFTER = 2;
 /**
- * When the merged script cache tip lags the live chart by more than this many
- * bars, re-paint of the frozen cache looks "live" while the indicator stalls.
- * Force a fresh subscribe (backoff via {@link StreamLiveWire.requestFreshSnapshot}).
+ * When the merged script cache tip lags the last *closed* chart bar by more
+ * than this many bars, re-paint of the frozen cache looks "live" while the
+ * indicator stalls. Force a fresh subscribe (backoff via
+ * {@link StreamLiveWire.requestFreshSnapshot}). Forming-bar lag alone must not
+ * trip this — that left a second script flickering `degraded` every tick.
  */
-const SCRIPT_TIP_LAG_BARS = 3;
+const SCRIPT_TIP_LAG_BARS = 5;
 /**
  * After the tab is shown, fold the queued burst into one decision.
  * A hidden tab must not replay every tick it missed.
@@ -395,8 +397,28 @@ function chartStepSec(bars: readonly Bar[]): number {
 }
 
 /**
- * How far the merged script cache tip trails the chart tip (seconds), or null
- * when either axis is missing so we cannot decide.
+ * Last closed chart bar time. The forming tip is often one step ahead of the
+ * engine window; comparing against it made every live script look 1–3 bars
+ * stale and thrashed tip-lag recovery into `degraded`.
+ */
+function chartClosedTipTime(bars: readonly Bar[]): number | null {
+  if (!bars.length) return null;
+  const last = bars[bars.length - 1];
+  if (!last || !Number.isFinite(last.time)) return null;
+  const step = chartStepSec(bars);
+  const nowSec = Math.floor(Date.now() / 1000);
+  const wallSlot = step > 0 ? nowSec - (nowSec % step) : last.time;
+  // Tip is the current (forming) slot — use the previous closed bar when present.
+  if (bars.length >= 2 && last.time >= wallSlot) {
+    const prev = bars[bars.length - 2];
+    if (prev && Number.isFinite(prev.time)) return prev.time as number;
+  }
+  return last.time as number;
+}
+
+/**
+ * How far the merged script cache tip trails the last closed chart bar
+ * (seconds), or null when either axis is missing so we cannot decide.
  */
 function scriptCacheTipLagSec(
   cached: Record<string, unknown> | null | undefined,
@@ -405,9 +427,9 @@ function scriptCacheTipLagSec(
   const times = readTimeList(cached?.['bar_times'] ?? cached?.['times']);
   if (!times?.length || !chartBars.length) return null;
   const cacheLast = times[times.length - 1];
-  const chartLast = chartBars[chartBars.length - 1]?.time;
-  if (!Number.isFinite(cacheLast) || !Number.isFinite(chartLast)) return null;
-  return (chartLast as number) - (cacheLast as number);
+  const chartLast = chartClosedTipTime(chartBars);
+  if (!Number.isFinite(cacheLast) || chartLast == null) return null;
+  return chartLast - (cacheLast as number);
 }
 
 /**
@@ -1188,7 +1210,7 @@ export class StreamLiveWire {
     // engine stops advancing bar_times, that re-paint looks "live" (scriptStatus
     // stays live, wire.script.paint keeps firing) while the indicator tip freezes
     // dozens of bars behind the chart — only indicators.run recovered it. Detect
-    // the lag and ask for a fresh full (same backoff as gap recovery).
+    // real closed-bar lag and ask for a soft fresh full (no degraded chip).
     const chartBars = this.barsForScript(input.bars);
     const lagSec = scriptCacheTipLagSec(cached, chartBars);
     const step = chartStepSec(chartBars);
@@ -1201,9 +1223,9 @@ export class StreamLiveWire {
         stepSec: step,
         thresholdBars: SCRIPT_TIP_LAG_BARS,
         cacheLast: times?.length ? times[times.length - 1] : null,
-        chartLast: chartBars[chartBars.length - 1]?.time ?? null,
+        chartLast: chartClosedTipTime(chartBars),
       });
-      this.requestFreshSnapshot(input.subId, 'script tip lag — resubscribing');
+      this.requestFreshSnapshot(input.subId, 'script tip lag — resubscribing', { soft: true });
     }
     await this.applyScriptPush(input.subId, cached, 'stream-delta');
     return {
@@ -1925,18 +1947,30 @@ export class StreamLiveWire {
    * After a seq gap: hold deltas, ask once (with backoff) for a fresh full via
    * unsubscribe+subscribe. Resume-loop thrash left scripts degraded forever when
    * tip coalesce / UNCHANGED acks kept looking like holes.
+   *
+   * `soft: true` (script tip-lag) keeps the chip on `connecting` instead of
+   * `degraded`, and skips status/resync side effects while backoff is armed so
+   * a second live script is not flicked degraded on every venue tick.
    */
-  private requestFreshSnapshot(subId: string, message: string): void {
-    this.holdUntilFull.add(subId);
-    this.handlers.onStatus(subId, 'degraded', { message });
-    v1Count('resync');
-
+  private requestFreshSnapshot(
+    subId: string,
+    message: string,
+    opts?: { soft?: boolean },
+  ): void {
+    const soft = opts?.soft === true;
     const now = Date.now();
     const attempts = this.gapResyncAttempts.get(subId) ?? 0;
     const lastAt = this.gapResyncAt.get(subId) ?? 0;
     const backoff =
       GAP_RESYNC_BACKOFF_MS[Math.min(attempts, GAP_RESYNC_BACKOFF_MS.length - 1)] ?? 10_000;
-    if (attempts > 0 && now - lastAt < backoff) return;
+    if (attempts > 0 && now - lastAt < backoff) {
+      this.holdUntilFull.add(subId);
+      return;
+    }
+
+    this.holdUntilFull.add(subId);
+    this.handlers.onStatus(subId, soft ? 'connecting' : 'degraded', { message });
+    v1Count('resync');
 
     this.gapResyncAt.set(subId, now);
     this.gapResyncAttempts.set(subId, attempts + 1);

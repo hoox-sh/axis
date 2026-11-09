@@ -451,8 +451,8 @@ describe('redesign2 live-wire (F-19)', () => {
     await first;
     expect(h.sent.filter((s) => s.kind === 'subscribe:script')).toHaveLength(1);
 
-    // Chart advanced 5 minutes; cache still ends at t0 → tip lag > 3 bars.
-    const ahead: Bar[] = Array.from({ length: 6 }, (_, i) => ({
+    // Chart advanced 7 closed minutes; cache still ends at t0 → tip lag > 5 bars.
+    const ahead: Bar[] = Array.from({ length: 8 }, (_, i) => ({
       time: t0 + i * 60,
       open: 1,
       high: 1,
@@ -470,7 +470,9 @@ describe('redesign2 live-wire (F-19)', () => {
     expect(r2.status).toBe('success');
     expect(h.unsubscribed).toContain('s-lag');
     expect(h.sent.filter((s) => s.kind === 'subscribe:script').length).toBeGreaterThanOrEqual(2);
-    expect(h.statuses.some((s) => s.sub === 's-lag' && s.status === 'degraded')).toBe(true);
+    // Soft tip-lag recovery uses connecting — not degraded (second script chip).
+    expect(h.statuses.some((s) => s.sub === 's-lag' && s.status === 'connecting')).toBe(true);
+    expect(h.statuses.some((s) => s.sub === 's-lag' && s.status === 'degraded')).toBe(false);
     expect(h.applied.at(-1)).toEqual({ via: 'stream-delta' });
     setStore('bars', []);
   });
