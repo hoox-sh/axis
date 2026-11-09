@@ -302,6 +302,8 @@ export function applyChartMutations(ctx: ChartMutationContext, sample?: SyncSamp
               ? (extendSeriesToWindow(f.colors, axisLen) as (string | null)[])
               : f.colors,
             color: f.color,
+            plot1: f.plot1,
+            plot2: f.plot2,
           })),
           ctx.indicatorId ?? EDITOR_RUN_KEY,
         );

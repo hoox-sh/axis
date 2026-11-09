@@ -3,12 +3,51 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
+import './setup';
 import { describe, expect, it } from 'bun:test';
 import {
+  DrawingLayer,
   fillBandRunBounds,
   linefillQuadCorners,
   plotFillsSignature,
 } from '../src/chart/drawing-layer';
+
+/** Minimal SVG + window stubs DrawingLayer needs (same idea as drawings-trend-place). */
+function ensureSvgDom() {
+  const doc = document as unknown as {
+    createElementNS?: (ns: string, name: string) => ReturnType<typeof document.createElement>;
+  };
+  if (typeof doc.createElementNS !== 'function') {
+    doc.createElementNS = (_ns: string, name: string) => {
+      const el = document.createElement(name) as HTMLElement & {
+        replaceChildren?: (...nodes: unknown[]) => void;
+        appendChild: (c: unknown) => unknown;
+      };
+      const kids: unknown[] = [];
+      Object.defineProperty(el, 'childNodes', { get: () => kids, configurable: true });
+      el.appendChild = (c: unknown) => {
+        kids.push(c);
+        return c;
+      };
+      el.replaceChildren = (...nodes: unknown[]) => {
+        kids.length = 0;
+        kids.push(...nodes);
+      };
+      return el as unknown as ReturnType<typeof document.createElement>;
+    };
+  }
+  const w = globalThis as unknown as {
+    window?: { addEventListener?: () => void; removeEventListener?: () => void };
+    addEventListener?: () => void;
+    removeEventListener?: () => void;
+  };
+  const noop = { addEventListener: () => {}, removeEventListener: () => {} };
+  if (!w.window?.addEventListener) w.window = { ...(w.window || {}), ...noop };
+  if (!w.addEventListener) {
+    w.addEventListener = noop.addEventListener;
+    w.removeEventListener = noop.removeEventListener;
+  }
+}
 
 describe('plotFillsSignature', () => {
   it('is empty for no fills', () => {
@@ -51,6 +90,51 @@ describe('plotFillsSignature', () => {
     const a = plotFillsSignature([{ ...base, colors: ['green', 'green', 'green'] }]);
     const b = plotFillsSignature([{ ...base, colors: ['green', 'green', 'red'] }]);
     expect(a).not.toBe(b);
+  });
+});
+
+describe('setPlotFillEdgeVisible', () => {
+  it('hides owned SVG bands when an edge plot is eyed off', () => {
+    ensureSvgDom();
+    const host = document.createElement('div');
+    const chart = {
+      timeScale: () => ({
+        subscribeVisibleLogicalRangeChange: () => {},
+        unsubscribeVisibleLogicalRangeChange: () => {},
+        timeToCoordinate: () => 0,
+        coordinateToTime: () => 0,
+        logicalToCoordinate: () => 0,
+        coordinateToLogical: () => 0,
+        width: () => 100,
+        options: () => ({ rightOffset: 0 }),
+        applyOptions: () => {},
+      }),
+      chartElement: () => host,
+    };
+    const series = {
+      priceToCoordinate: () => 0,
+      coordinateToPrice: () => 0,
+    };
+    const layer = new DrawingLayer(host, chart as never, series as never);
+    layer.setPlotFills(
+      [
+        {
+          name: 'Band',
+          times: [1, 2, 3],
+          upper: [10, 11, 12],
+          lower: [1, 2, 3],
+          color: 'rgba(0,0,0,0.2)',
+          plot1: 'Upper',
+          plot2: 'Lower',
+        },
+      ],
+      'don-1',
+    );
+    expect((layer as unknown as { plotFills: unknown[] }).plotFills.length).toBe(1);
+    layer.setPlotFillEdgeVisible('don-1', 'Upper', false);
+    expect((layer as unknown as { plotFills: unknown[] }).plotFills.length).toBe(0);
+    layer.setPlotFillEdgeVisible('don-1', 'Upper', true);
+    expect((layer as unknown as { plotFills: unknown[] }).plotFills.length).toBe(1);
   });
 });
 

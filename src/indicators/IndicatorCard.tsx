@@ -52,7 +52,7 @@ import {
   persist,
   setStatus,
 } from '../store';
-import { getManager } from '../chart/manager-access';
+import { getActiveDrawingLayer, getDrawingLayer, getManager } from '../chart/manager-access';
 import { toggleScriptChartVisible } from './visibility';
 import { PLOT_PALETTE } from '../chart/series-factory';
 import {
@@ -310,9 +310,10 @@ export const IndicatorCard: Component<Props> = (props) : JSX.Element => {
     setEditingColor(null);
     const manager = getManager();
     if (!manager) return;
-    const applied = manager.setOverlayLineColor(props.indicator.paneId, plotName, color);
+    const owner = props.indicator.id;
+    const applied = manager.setOverlayLineColor(props.indicator.paneId, plotName, color, owner);
     if (!applied && props.indicator.paneId !== 'price') {
-      manager.setOverlayLineColor('price', plotName, color);
+      manager.setOverlayLineColor('price', plotName, color, owner);
     }
   };
 
@@ -320,7 +321,11 @@ export const IndicatorCard: Component<Props> = (props) : JSX.Element => {
     setIndicatorPlotWidth(props.indicator.id, plotName, width);
     const manager = getManager();
     if (!manager) return;
-    manager.setOverlayLineWidth(props.indicator.paneId, plotName, width);
+    const owner = props.indicator.id;
+    const applied = manager.setOverlayLineWidth(props.indicator.paneId, plotName, width, owner);
+    if (!applied && props.indicator.paneId !== 'price') {
+      manager.setOverlayLineWidth('price', plotName, width, owner);
+    }
   };
 
   const changeLineStyle = (plotName: string, style: PlotLineStyle | null) => {
@@ -328,7 +333,16 @@ export const IndicatorCard: Component<Props> = (props) : JSX.Element => {
     setPlotStylePopover(null);
     const manager = getManager();
     if (!manager) return;
-    manager.setOverlayLineStyle?.(props.indicator.paneId, plotName, style);
+    const owner = props.indicator.id;
+    const applied = manager.setOverlayLineStyle?.(
+      props.indicator.paneId,
+      plotName,
+      style,
+      owner,
+    );
+    if (!applied && props.indicator.paneId !== 'price') {
+      manager.setOverlayLineStyle?.('price', plotName, style, owner);
+    }
   };
 
   const changeDisplay = (plotName: string, next: number | null) => {
@@ -339,13 +353,19 @@ export const IndicatorCard: Component<Props> = (props) : JSX.Element => {
     // The popover only opens for a rendered series, so `plot` exists; passing
     // `undefined` through keeps the fallback path total for a stale name.
     const base = plot ? { ...plot, display: undefined } : undefined;
-    manager.setOverlayLineDisplay?.(
+    const owner = props.indicator.id;
+    const display = next != null ? next : effectivePlotDisplay(base);
+    const visible = plot?.visible !== false;
+    const applied = manager.setOverlayLineDisplay?.(
       props.indicator.paneId,
       plotName,
-      next != null ? next : effectivePlotDisplay(base),
-      undefined,
-      plot?.visible !== false,
+      display,
+      owner,
+      visible,
     );
+    if (!applied && props.indicator.paneId !== 'price') {
+      manager.setOverlayLineDisplay?.('price', plotName, display, owner, visible);
+    }
   };
 
   const toggleDisplayTarget = (plotName: string, bit: number) => {
@@ -357,7 +377,23 @@ export const IndicatorCard: Component<Props> = (props) : JSX.Element => {
     setIndicatorPlotVisible(props.indicator.id, plotName, visible);
     const manager = getManager();
     if (!manager) return;
-    manager.setOverlayLineVisible?.(props.indicator.paneId, plotName, visible);
+    const owner = props.indicator.id;
+    const applied = manager.setOverlayLineVisible?.(
+      props.indicator.paneId,
+      plotName,
+      visible,
+      owner,
+    );
+    if (!applied && props.indicator.paneId !== 'price') {
+      manager.setOverlayLineVisible?.('price', plotName, visible, owner);
+    }
+    // Channel fills are SVG bands keyed by edge plot titles — hide with the eye.
+    try {
+      const layer = getActiveDrawingLayer() ?? getDrawingLayer();
+      layer?.setPlotFillEdgeVisible?.(owner, plotName, visible);
+    } catch {
+      /* drawing layer optional */
+    }
   };
 
   // Color popover — dismiss on outside click (registered while open).

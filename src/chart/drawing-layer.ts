@@ -207,6 +207,8 @@ export class DrawingLayer {
     lower: (number | null)[];
     colors: (string | null)[];
     color: string;
+    plot1?: string;
+    plot2?: string;
   }> = [];
   private plotFillsByOwner = new Map<
     string,
@@ -217,8 +219,12 @@ export class DrawingLayer {
       lower: (number | null)[];
       colors: (string | null)[];
       color: string;
+      plot1?: string;
+      plot2?: string;
     }>
   >();
+  /** Eyed-off fill edge titles per script owner (Upper/Lower for Donchian). */
+  private hiddenFillEdgesByOwner = new Map<string, Set<string>>();
   private selectedId: string | null = null;
   /** In-progress multi-click placement (1/2/3/n anchors). */
   private draft: { tool: DrawingToolId; points: Point[] } | null = null;
@@ -598,6 +604,8 @@ export class DrawingLayer {
       lower: (number | null)[];
       colors?: (string | null)[];
       color?: string;
+      plot1?: string;
+      plot2?: string;
     }>,
     ownerId?: string,
   ) {
@@ -608,6 +616,8 @@ export class DrawingLayer {
       lower: f.lower,
       colors: f.colors || [],
       color: f.color || 'rgba(255, 82, 82, 0.2)',
+      ...(f.plot1 ? { plot1: f.plot1 } : {}),
+      ...(f.plot2 ? { plot2: f.plot2 } : {}),
     }));
     const owner = ownerId && String(ownerId).trim();
     if (owner) {
@@ -625,15 +635,36 @@ export class DrawingLayer {
     this.redrawFills();
   }
 
+  /**
+   * Scripts-panel eye on a fill edge (Upper/Lower). Hides SVG bands that use
+   * that plot title as `plot1` or `plot2` for this owner.
+   */
+  setPlotFillEdgeVisible(ownerId: string, plotName: string, visible: boolean): void {
+    const owner = String(ownerId || '').trim();
+    const edge = String(plotName || '').trim();
+    if (!owner || !edge) return;
+    let hidden = this.hiddenFillEdgesByOwner.get(owner);
+    if (!hidden) {
+      hidden = new Set();
+      this.hiddenFillEdgesByOwner.set(owner, hidden);
+    }
+    if (visible) hidden.delete(edge);
+    else hidden.add(edge);
+    if (!hidden.size) this.hiddenFillEdgesByOwner.delete(owner);
+    this.rebuildOwnedPlotFills();
+  }
+
   clearPlotFills(ownerId?: string) {
     const owner = ownerId && String(ownerId).trim();
     if (owner) {
-      if (!this.plotFillsByOwner.has(owner)) return;
+      if (!this.plotFillsByOwner.has(owner) && !this.hiddenFillEdgesByOwner.has(owner)) return;
       this.plotFillsByOwner.delete(owner);
+      this.hiddenFillEdgesByOwner.delete(owner);
       this.rebuildOwnedPlotFills();
       return;
     }
     this.plotFillsByOwner.clear();
+    this.hiddenFillEdgesByOwner.clear();
     if (!this.plotFills.length && this.lastFillSig === '') return;
     this.plotFills = [];
     this.lastFillSig = '';
@@ -648,9 +679,15 @@ export class DrawingLayer {
       lower: (number | null)[];
       colors: (string | null)[];
       color: string;
+      plot1?: string;
+      plot2?: string;
     }> = [];
-    for (const list of this.plotFillsByOwner.values()) {
-      for (const f of list) next.push(f);
+    for (const [owner, list] of this.plotFillsByOwner.entries()) {
+      const hidden = this.hiddenFillEdgesByOwner.get(owner);
+      for (const f of list) {
+        if (hidden?.has(f.plot1 || '') || hidden?.has(f.plot2 || '')) continue;
+        next.push(f);
+      }
     }
     const sig = plotFillsSignature(next);
     if (sig === this.lastFillSig) return;
