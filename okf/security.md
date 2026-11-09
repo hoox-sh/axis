@@ -28,3 +28,8 @@ When rules conflict, Ask-first wins.
 
 Never commit API keys, tokens, or credentials. Use environment variables.
 `oo doctor` scans generated files for common key patterns.
+
+## Related
+
+- [Architecture](/architecture.md)
+- [Development](/development.md)

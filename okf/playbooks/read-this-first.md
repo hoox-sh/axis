@@ -20,6 +20,14 @@ This directory is an [Open Knowledge Format](https://github.com/GoogleCloudPlatf
 
 Start at [the root index](/index.md). Open the section you need. Read that concept. Follow `# Depends on`, `# Used by`, and `# Nested` before opening source files. A question about one module should cost the index plus a concept, not a search across `src/`.
 
+# Team guides
+
+Root-level curated notes for the OpenOrchestrate seats:
+
+* [Architecture](/architecture.md) — project shape and the team.
+* [Development](/development.md) — setup, checks, and hooks.
+* [Security](/security.md) — permission model, gates, and secrets.
+
 # Commands
 
 * `bun run okf:query chart drawings` finds concepts by path segment, title, description, and file name. A term is a whole segment, so `ui` ranks `src/ui` and does not match `builtins`. A file such as `drawings.ts` ranks the directory concept that lists it.
