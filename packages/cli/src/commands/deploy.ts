@@ -34,12 +34,14 @@ const PAGES_PROJECT = 'axis';
 
 /** `git rev-parse HEAD` in `cwd`, or empty when git is missing. */
 export function gitHeadSha(cwd: string): string {
-  const r = spawnSync('git', ['-C', cwd, 'rev-parse', 'HEAD'], {
+  const r = spawnSync('git', ['rev-parse', 'HEAD'], {
+    cwd,
     encoding: 'utf8',
     timeout: 10_000,
   });
   if (r.status !== 0) return '';
-  return String(r.stdout ?? '').trim();
+  const v = String(r.stdout ?? '').trim();
+  return /^[0-9a-f]{7,40}$/i.test(v) ? v : '';
 }
 
 /**
@@ -119,7 +121,9 @@ export async function deployWorker(
 
   const gitSha = gitHeadSha(paths.root);
   if (gitSha) {
-    printInfo(`Worker git SHA ${gitSha.slice(0, 12)}`, opts.quiet);
+    printInfo(`Worker git SHA ${gitSha}`, opts.quiet);
+  } else {
+    printWarn(`Worker git SHA missing (git rev-parse HEAD failed in ${paths.root})`, opts.quiet);
   }
 
   // Always capture so a failure never re-invokes deploy, and so we can parse the URL.
