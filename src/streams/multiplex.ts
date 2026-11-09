@@ -78,8 +78,6 @@ import { isLivePaintAllowed } from '../chart/readiness';
 import {
   streamEvalScript,
   streamRouteActive,
-  streamSeriesTick,
-  streamDriveSeries,
   streamStop,
   StreamFallbackError,
   mergeEngineSnapshot,
@@ -143,17 +141,6 @@ let rerunInFlight = false;
  * re-run again next tick.
  */
 let enginePaintChain: Promise<unknown> = Promise.resolve();
-
-/**
- * In-flight engine-series drive on the stream path.
- *
- * The stream plane replicates the engine's series, so the engine's own store
- * has to keep moving with the venue — otherwise the script sessions that
- * evaluate over it freeze and their values get tail-aligned onto the chart's
- * tail (displaced by the freeze gap). The re-run awaits this promise so the
- * indicators are evaluated against the freshly driven series.
- */
-let pendingSeriesDrive: Promise<void> | null = null;
 
 /**
  * Live internal-gap repair. Venue ticks only append the tip — a reconnect that
@@ -691,39 +678,13 @@ export function startLive(
         if (jumped && isCurrent()) void repairLiveInternalGaps(epoch);
         if (shouldRerun && isCurrent()) scheduleRerun();
       };
-      // Stream path (F-19): paint the venue first so LWC never waits on the
-      // engine. Same-slot forming updates go through appendBar (path-set).
-      // Engine work is fire-and-forget; a later snapshot may replace the
-      // window with closed bars, so re-apply the forming tip after it lands.
+      // Stream path (F-19): venue owns candles. Paint Binance/MEXC first;
+      // `appendVenueBars` already scheduleRerun → streamEvalScript for
+      // indicator full/delta on PYNE. Do **not** ensureSeries / REST-drive the
+      // engine OHLCV replica — that pulled full history + forming bars from
+      // pynescript.online on every tick while the chart already had venue data.
       if (streamRouteActive()) {
         appendVenueBars(ordered);
-        // The stream plane paints the engine's series replica, so the engine's
-        // own store must keep moving with the venue. Nothing else drives it
-        // here: the engine-owned branch below (which ticks the chart data
-        // session) is unreachable once the stream route is active.
-        const drive = streamDriveSeries(newestBarTime(ordered));
-        pendingSeriesDrive = drive;
-        void drive.finally(() => {
-          if (pendingSeriesDrive === drive) pendingSeriesDrive = null;
-        });
-        streamSeriesTick(newestBarTime(ordered)).then(
-          (changed) => {
-            if (!isCurrent()) return;
-            const tip = ordered[ordered.length - 1];
-            if (tip) {
-              try {
-                appendLiveBar(tip);
-              } catch {
-                /* forming tip re-apply is best-effort */
-              }
-            }
-            if (changed) scheduleRerun();
-          },
-          (e) => {
-            if (e instanceof StreamFallbackError) return;
-            throw e;
-          },
-        );
         return;
       }
       // Engine-owned live mode: the venue WS is only a trigger. Advance the
@@ -1324,22 +1285,8 @@ function scheduleRerun(opts?: { immediate?: boolean }) {
         return;
       }
     }
-    // Stream path: the engine's series replica is advanced by a drive that
-    // runs alongside the venue paint. Wait for it so the scripts evaluate
-    // against the freshly driven series — evaluating against a frozen one is
-    // what left the indicators displaced from the candles.
-    if (pendingSeriesDrive) {
-      try {
-        await pendingSeriesDrive;
-      } catch {
-        /* a failed drive still leaves the last good series for evaluation */
-      }
-      if (liveEpoch !== epochAtSchedule || !store.live.active) return;
-      if (rerunInFlight) {
-        if (!store.live.needsRerun) setStore('live', 'needsRerun', true);
-        return;
-      }
-    }
+    // Scripts evaluate over venue `store.bars` (streamEvalScript). No PYNE
+    // OHLCV series drive to await — venue multiplex owns candle paint.
     rerunInFlight = true;
     rerunAttemptCount += 1;
     setStore('live', 'needsRerun', false);

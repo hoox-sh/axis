@@ -672,28 +672,17 @@ export function scriptHistoryBars(): number {
 /**
  * Drive the engine's own series forward on the stream path.
  *
- * The stream plane **replicates** the engine's series: the wire carries
- * `subscribe` / `resume` / `repair` / `ping` and has no client-side tick, so
- * the engine's own per-tick scheduler is the only thing that can move the
- * series the chart and every script session read.
- *
- * When that scheduler stalls — observed live on a 1m series, the engine's
- * `newest` frozen three bars behind the venue for minutes — the script
- * sessions that evaluate over that series freeze with it. The chart keeps
- * advancing (it is painted from the venue), but the indicators keep the values
- * of the frozen window, and the apply path tail-aligns them onto the chart's
- * tail: the indicators end up **displaced by the freeze gap**, growing with
- * every new bar, and the newest bars carry no indicator value at all.
- *
- * `series-drive` is the missing drive — a throttled chart-session tick that
- * asks the engine to fetch and append its own bars. It stays engine-owned
- * (the engine still owns the series and its upstream) and the staleness
- * report + repair broker stays the backstop for engines that cannot be
- * driven.
+ * Venue-first live no longer replicates OHLCV into PYNE on every tick (that
+ * streamed full history + forming bars from pynescript.online while the chart
+ * already had venue candles). Scripts evaluate over `store.bars` via
+ * {@link streamEvalScript}. This drive remains for freeze-recovery / MCP when
+ * the venue stream route is **not** owning candle paint.
  *
  * @param marketNow newest venue trigger bar time (unix sec) the caller flushed.
  */
 export async function streamDriveSeries(marketNow = 0): Promise<void> {
+  // Venue multiplex owns candles — do not REST-tick /ws series into PYNE.
+  if (streamRouteActive()) return;
   const cfg = getActiveEngineConfig() || {};
   const endpoint = String(cfg['endpoint'] || '').trim();
   const apiKey = String(cfg['apiKey'] || '').trim();
@@ -743,16 +732,21 @@ export async function streamDriveSeries(marketNow = 0): Promise<void> {
 }
 
 /**
- * Venue tick on the stream path: ensure the series subscription (first
- * snapshot paints; later ticks are subscribe-once and leave the venue-painted
- * forming tip alone), then report whether the caller should re-run scripts.
+ * Optional engine series ensure (MCP / non-venue recovery).
  *
- * `marketNow` is the newest venue trigger time the caller just flushed: it is
- * the venue's own clock, so a frozen engine (series stuck while the venue keeps
- * trading) is detectable. Omit it on non-venue-driven calls (the guard then
- * only refuses to back-date the chart).
+ * Venue-first live does **not** call this from the multiplex tick: candles
+ * come from the venue socket; PYNE only gets script subscribe full/delta.
+ * When the stream route already owns candle paint, return without
+ * `ensureSeries` so pynescript.online is not asked for a full OHLCV replica.
+ *
+ * `marketNow` is the newest venue trigger time the caller just flushed.
  */
 export async function streamSeriesTick(marketNow = 0): Promise<boolean> {
+  // Venue owns candles — skip PYNE series subscribe/full/delta for OHLCV.
+  if (streamRouteActive() && store.bars.length) {
+    setFeedStatus(chartSeriesKey(), 'live');
+    return false;
+  }
   const token = String(getActiveEngineConfig()?.['apiKey'] || '').trim();
   if (!token) throw new StreamFallbackError('no-auth', 'engine API key missing');
   const w = await getWire();
@@ -766,12 +760,6 @@ export async function streamSeriesTick(marketNow = 0): Promise<boolean> {
       return false;
     }
     if (!engineSeriesPaintable(bars, marketNow)) return false;
-    // Venue stream already painted DSM/REST + live tips. Do not setData a
-    // 5k engine snapshot over that (gaps + hitch). Scripts still subscribe.
-    if (streamRouteActive() && store.bars.length) {
-      setFeedStatus(chartSeriesKey(), 'live');
-      return toBarTime(bars) !== before;
-    }
     // The tail snapshot is merged into the chart's window — it must not
     // shrink a longer REST/DSM window (that replace threw the freshly loaded
     // dataset away).

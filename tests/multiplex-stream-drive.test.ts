@@ -4,16 +4,9 @@
  */
 
 /**
- * Stream-path engine-series drive.
- *
- * The stream plane **replicates** the engine's series — the wire has no
- * client-side tick — so the engine's own store only moves when something asks
- * it to. On the engine-owned path the chart data session is ticked on every
- * venue flush, but the stream branch returns before that branch, so nothing
- * drove the engine there: its series froze a few bars behind the venue, the
- * script sessions that evaluate over it froze with it, and the apply path
- * tail-aligned the stale values onto the chart's tail — indicators displaced
- * by the freeze gap, growing with every new bar.
+ * Stream-path venue-first: candles from the venue; PYNE only script full/delta.
+ * Multiplex must **not** REST-tick / ensureSeries OHLCV into pynescript.online
+ * on every venue bar (that was the full-history stream replica).
  */
 
 import './setup';
@@ -107,10 +100,8 @@ afterEach(() => {
   restoreFetch = null;
 });
 
-describe('stream-path engine-series drive', () => {
-  it('REST-drives the chart data session when /ws/live has no series sub yet', async () => {
-    // Freeze recovery: no open series subscription → REST tick is allowed.
-    // Happy path (open + subscribed) skips REST — see streamDriveSeries.
+describe('stream-path venue-first (no PYNE OHLCV replica)', () => {
+  it('does not REST-tick /data/session on venue bars when live_stream is on', async () => {
     const last = SAMPLE_BARS[SAMPLE_BARS.length - 1]!;
     restoreFetch = mockFetch(async (input, init) => {
       const url = new URL(String(input));
@@ -129,7 +120,7 @@ describe('stream-path engine-series drive', () => {
         sessionCalls += 1;
         return jsonResponse({ status: 'success', session_id: 'drive1', cache: 'hit' });
       }
-      if (method === 'POST' && url.pathname === '/data/session/drive1/tick') {
+      if (method === 'POST' && url.pathname.startsWith('/data/session/') && url.pathname.endsWith('/tick')) {
         tickCalls += 1;
         return jsonResponse({
           status: 'success',
@@ -165,8 +156,9 @@ describe('stream-path engine-series drive', () => {
 
     startLive('stream-drive', 'BTCUSDT', '1h');
 
-    const driven = await waitFor(() => tickCalls > 0, 5000);
-    expect(driven).toBe(true);
-    expect(sessionCalls).toBeGreaterThan(0);
+    // Give the venue tick time to flush; PYNE session must stay quiet.
+    await waitFor(() => tickCalls > 0 || sessionCalls > 0, 400);
+    expect(tickCalls).toBe(0);
+    expect(sessionCalls).toBe(0);
   });
 });
