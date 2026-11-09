@@ -8,6 +8,7 @@ import {
   _clearApplyBridgeCachesForTests,
   applyStreamDelta,
   applyStreamPayload,
+  mergeStreamPlotMeta,
   resolveStreamExecutionContext,
   streamFullToPrecomputed,
 } from '../../src/engine/apply-bridge';
@@ -106,6 +107,23 @@ describe('redesign2 apply bridge (F-16)', () => {
         'stream-full',
       ),
     ).toBe('snapshot');
+  });
+
+  test('mergeStreamPlotMeta keeps fill entries dropped by a tip frame', () => {
+    const previous = {
+      Upper: { kind: 'plot', title: 'Upper' },
+      Lower: { kind: 'plot', title: 'Lower' },
+      Mid: { kind: 'plot', title: 'Mid' },
+      Band: { kind: 'fill', plot1: 'Upper', plot2: 'Lower', color: '#22d3ee' },
+    };
+    const incoming = {
+      Upper: { kind: 'plot', title: 'Upper' },
+      Lower: { kind: 'plot', title: 'Lower' },
+      Mid: { kind: 'plot', title: 'Mid' },
+    };
+    const merged = mergeStreamPlotMeta(incoming, previous);
+    expect(merged?.Band).toEqual(previous.Band);
+    expect(merged?.Upper).toEqual(incoming.Upper);
   });
 
   test('applyStreamPayload forwards precomputed + bars + liveTick without re-running', async () => {

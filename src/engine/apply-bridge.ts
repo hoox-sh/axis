@@ -142,6 +142,11 @@ export function streamFullToPrecomputed(
   const axis = axisTimes?.length
     ? windowAxisFromBars(axisTimes.map((time) => ({ time })))
     : windowAxisFromBars(bars ?? null);
+  const incomingMeta =
+    full.plot_meta ??
+    (full.meta && typeof full.meta === 'object'
+      ? (full.meta as { plot_meta?: Record<string, unknown> }).plot_meta
+      : undefined);
   return {
     status: 'success',
     plots,
@@ -155,7 +160,7 @@ export function streamFullToPrecomputed(
       sessionVia: via,
       count: full.count,
       executionContext: resolveStreamExecutionContext(full, via),
-      ...(full.plot_meta ? { plot_meta: full.plot_meta } : {}),
+      ...(incomingMeta ? { plot_meta: incomingMeta } : {}),
       ...(axisTimes?.length && !engineTimes?.length ? { engineTimes: axisTimes } : {}),
     },
   } as RunResult;
@@ -177,6 +182,13 @@ export function applyStreamDelta(
   });
   if (prevInputs && !precomputedResult.meta?.inputs) {
     precomputedResult.meta = { ...(precomputedResult.meta ?? {}), inputs: prevInputs };
+  }
+  const mergedPlotMeta = mergeStreamPlotMeta(
+    precomputedResult.meta?.['plot_meta'] as Record<string, unknown> | undefined,
+    previousRunPlotMeta(input.indicatorId, { refresh: ctx !== 'tip' }),
+  );
+  if (mergedPlotMeta) {
+    precomputedResult.meta = { ...(precomputedResult.meta ?? {}), plot_meta: mergedPlotMeta };
   }
   const applyChart = deps?.applyChart ?? applyPrecomputedChart;
   return applyChart(input.script, input.indicatorId, precomputedResult as never, input.bars, {
@@ -213,6 +225,13 @@ export async function applyStreamPayload(
   if (prevInputs && !precomputedResult.meta?.inputs) {
     precomputedResult.meta = { ...(precomputedResult.meta ?? {}), inputs: prevInputs };
   }
+  const mergedPlotMeta = mergeStreamPlotMeta(
+    precomputedResult.meta?.['plot_meta'] as Record<string, unknown> | undefined,
+    previousRunPlotMeta(input.indicatorId, { refresh: input.via === 'stream-full' }),
+  );
+  if (mergedPlotMeta) {
+    precomputedResult.meta = { ...(precomputedResult.meta ?? {}), plot_meta: mergedPlotMeta };
+  }
   const run: RunAndApplyFn =
     deps?.runAndApply ?? (await import('../indicators/runner')).runAndApply;
   return await run(input.script, input.indicatorId, {
@@ -228,10 +247,33 @@ export async function applyStreamPayload(
 
 /** Per-script input descriptors — refreshed on snapshot / non-tip deltas. */
 const runInputsCache = new Map<string, unknown[]>();
+/** Per-script plot_meta — keep fill() entries across tip frames that omit them. */
+const runPlotMetaCache = new Map<string, Record<string, unknown>>();
 
-/** @internal test helper — drop cached input descriptors. */
+/** @internal test helper — drop cached input / plot_meta descriptors. */
 export function _clearApplyBridgeCachesForTests(): void {
   runInputsCache.clear();
+  runPlotMetaCache.clear();
+}
+
+/**
+ * Union stream plot_meta with the last known run. Live tip/full frames often
+ * drop `kind: fill` entries while Upper/Lower series remain — without this
+ * merge, apply clears the SVG band and Donchian fills vanish after the tip.
+ */
+export function mergeStreamPlotMeta(
+  incoming: Record<string, unknown> | undefined,
+  previous: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!previous || !Object.keys(previous).length) return incoming;
+  if (!incoming || !Object.keys(incoming).length) return { ...previous };
+  const out: Record<string, unknown> = { ...previous, ...incoming };
+  for (const [key, value] of Object.entries(previous)) {
+    if (key in incoming || !value || typeof value !== 'object') continue;
+    const kind = String((value as { kind?: unknown }).kind || '').toLowerCase();
+    if (kind === 'fill') out[key] = value;
+  }
+  return out;
 }
 
 /** Input descriptors of a script's last stored run (empty when unknown). */
@@ -255,6 +297,37 @@ function previousRunInputs(
       return inputs;
     }
     runInputsCache.delete(indicatorId);
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** plot_meta of a script's last stored run (fill edges survive tip frames). */
+function previousRunPlotMeta(
+  indicatorId: string | undefined,
+  opts?: { refresh?: boolean },
+): Record<string, unknown> | undefined {
+  if (!indicatorId) return undefined;
+  if (!opts?.refresh) {
+    const cached = runPlotMetaCache.get(indicatorId);
+    if (cached) return cached;
+  }
+  try {
+    const results = (store.runResults ?? {}) as Record<
+      string,
+      {
+        meta?: { plot_meta?: Record<string, unknown> };
+        plot_meta?: Record<string, unknown>;
+      } | undefined
+    >;
+    const entry = results[indicatorId];
+    const meta = entry?.meta?.plot_meta ?? entry?.plot_meta;
+    if (meta && typeof meta === 'object' && Object.keys(meta).length) {
+      runPlotMetaCache.set(indicatorId, meta);
+      return meta;
+    }
+    runPlotMetaCache.delete(indicatorId);
     return undefined;
   } catch {
     return undefined;

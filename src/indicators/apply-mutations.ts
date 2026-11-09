@@ -312,7 +312,10 @@ export function applyChartMutations(ctx: ChartMutationContext, sample?: SyncSamp
             'plot',
           );
         }
-      } else {
+      } else if (!ctx.silent) {
+        // Live/silent stream frames often omit fill plot_meta; clearing here
+        // erased Donchian (and other channel) bands after the first tip paint.
+        // Non-silent runs still clear so a script that dropped fill() updates.
         layer.clearPlotFills?.(ctx.indicatorId ?? EDITOR_RUN_KEY);
       }
     }
