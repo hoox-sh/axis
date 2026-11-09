@@ -20,13 +20,14 @@
 /**
  * Resilient Binance public REST helpers for the AXIS PWA.
  *
- * Browser → venue is flaky (geo blocks, corporate firewalls, extensions).
- * A doomed `fetch('https://api.binance.com/…')` from the page is a CORS
- * console error the app cannot suppress — skip it. Fetch order:
- * 0. Session vault key → signed REST (Worker `/signed/klines` in the browser)
- * 1. AXIS Worker allowlisted proxy (`/api/market/binance/…`)
- * 2. Explicit `baseUrl` override that is not a public Binance host
- * 3. Direct public hosts — tests / node / `skipWorkerProxy` only
+ * Fetch order:
+ * 0. Session vault key → signed REST (Worker `/signed/klines` when needed)
+ * 1. **Browser public REST:** venue-direct only — `data-api.binance.vision`
+ *    first (`Access-Control-Allow-Origin: *`). No Worker market proxy (CF
+ *    egress is geo-blocked; CORS noise is pointless). Skip `api.binance.com`
+ *    in the browser (CORS/geo console spam).
+ * 2. **Node / tests:** Worker proxy, then public hosts.
+ * 3. Explicit `baseUrl` override that is not a public Binance host
  *
  * @module data/binance-http
  */
@@ -41,11 +42,25 @@ import { asProviderMarket, type ProviderMarket } from './provider';
 
 export { DEFAULT_MARKET_WORKER_BASE, resolveMarketWorkerBase };
 
-/** Public Binance REST hosts. Browser CORS/geo often fail — Worker is first. */
+/**
+ * Public Binance REST hosts. Vision first (browser CORS `*`);
+ * `api.binance.com` stays for node/tests only in the browser path.
+ */
 export const BINANCE_REST_HOSTS = [
-  'https://api.binance.com',
   'https://data-api.binance.vision',
+  'https://api.binance.com',
 ] as const;
+
+/** Hosts the browser may `fetch` directly for public spot REST. */
+export function isBrowserCorsSafeBinanceHost(base: string): boolean {
+  const n = normalizeEndpointBase(base);
+  if (!n) return false;
+  try {
+    return new URL(n).hostname.toLowerCase() === 'data-api.binance.vision';
+  } catch {
+    return false;
+  }
+}
 
 /** USDT-M perpetual futures REST origin (`/fapi/v1/…`). */
 export const BINANCE_LINEAR_REST_HOSTS = ['https://fapi.binance.com'] as const;
@@ -247,9 +262,9 @@ function allowDirectBinanceHosts(opts: BinanceFetchOpts): boolean {
 }
 
 /**
- * Fetch Binance JSON: Worker proxy first (CORS-safe in the browser), then
- * direct public hosts only when the environment can CORS. Throws the last
- * error when every candidate fails.
+ * Fetch Binance JSON. In the browser, public REST goes venue-direct (vision)
+ * and never through the Worker market proxy. Node/tests may still use Worker.
+ * Throws the last error when every candidate fails.
  */
 export async function fetchBinanceJson(opts: BinanceFetchOpts): Promise<unknown> {
   const market = asProviderMarket(opts.market);
@@ -277,9 +292,13 @@ export async function fetchBinanceJson(opts: BinanceFetchOpts): Promise<unknown>
   }
 
   const errors: string[] = [];
-  const allowDirect = allowDirectBinanceHosts(opts);
+  const inBrowser = browserBlocksDirectCexRest();
+  // Public market data: venue first. Worker CF egress is geo-blocked and is
+  // not part of the live price path the product wants.
+  const useWorker = !opts.skipWorkerProxy && !inBrowser;
+  const allowDirect = allowDirectBinanceHosts(opts) || inBrowser;
 
-  if (!opts.skipWorkerProxy) {
+  if (useWorker) {
     const worker = resolveMarketWorkerBase(opts.workerBase);
     const url = workerProxyUrl(worker, opts.path, opts.query, market);
     try {
@@ -304,10 +323,13 @@ export async function fetchBinanceJson(opts: BinanceFetchOpts): Promise<unknown>
   const bases: string[] = [];
   const preferred = market === 'spot' ? normalizeEndpointBase(opts.baseUrl) : '';
   if (preferred && (allowDirect || !isPublicBinanceRestOrigin(preferred))) {
-    bases.push(preferred);
+    if (!inBrowser || !isPublicBinanceRestOrigin(preferred) || isBrowserCorsSafeBinanceHost(preferred)) {
+      bases.push(preferred);
+    }
   }
   if (allowDirect) {
     for (const h of restHosts(market)) {
+      if (inBrowser && market === 'spot' && !isBrowserCorsSafeBinanceHost(h)) continue;
       if (!bases.includes(h)) bases.push(h);
     }
   } else if (errors.length) {

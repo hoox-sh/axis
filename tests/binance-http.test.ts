@@ -10,6 +10,7 @@ import {
   binanceKlineWsUrls,
   binanceTickerWsUrls,
   fetchBinanceJson,
+  isBrowserCorsSafeBinanceHost,
   isPublicBinanceRestOrigin,
 } from '../src/data/binance-http';
 import { browserBlocksDirectCexRest } from '../src/data/worker-origin';
@@ -48,11 +49,11 @@ describe('binanceTickerWsUrls', () => {
 });
 
 describe('fetchBinanceJson', () => {
-  it('returns first successful host', async () => {
+  it('returns first successful host (vision first)', async () => {
     const seen: string[] = [];
     restoreFetch = mockFetch(async (input) => {
       seen.push(String(input));
-      if (String(input).includes('api.binance.com')) {
+      if (String(input).includes('data-api.binance.vision')) {
         return jsonResponse([[1, '1', '2', '0.5', '1.5', '10']]);
       }
       throw new Error('should not reach');
@@ -64,6 +65,7 @@ describe('fetchBinanceJson', () => {
     });
     expect(Array.isArray(data)).toBe(true);
     expect(seen[0]).toContain(BINANCE_REST_HOSTS[0]);
+    expect(BINANCE_REST_HOSTS[0]).toContain('data-api.binance.vision');
   });
 
   it('hits fapi for linear klines', async () => {
@@ -95,7 +97,7 @@ describe('fetchBinanceJson', () => {
     ).rejects.toThrow(/Binance network error/);
   });
 
-  it('hits Worker proxy first', async () => {
+  it('hits Worker proxy first outside a real browser', async () => {
     const seen: string[] = [];
     restoreFetch = mockFetch(async (input) => {
       seen.push(String(input));
@@ -113,7 +115,7 @@ describe('fetchBinanceJson', () => {
     expect(seen.some((u) => u.includes('api.binance.com'))).toBe(false);
   });
 
-  it('Worker 400 does not call api.binance.com', async () => {
+  it('Worker 400 does not call api.binance.com outside a real browser', async () => {
     const seen: string[] = [];
     restoreFetch = mockFetch(async (input) => {
       seen.push(String(input));
@@ -132,6 +134,7 @@ describe('fetchBinanceJson', () => {
       }),
     ).rejects.toThrow(/geo blocked/);
     expect(seen.some((u) => u.includes('api.binance.com'))).toBe(false);
+    expect(seen.some((u) => u.includes('data-api.binance.vision'))).toBe(false);
   });
 
   it('Worker 5xx falls through to direct host outside a real browser', async () => {
@@ -142,7 +145,7 @@ describe('fetchBinanceJson', () => {
       if (url.includes('/api/market/binance/')) {
         return jsonResponse({ status: 'error', message: 'down' }, 502);
       }
-      if (url.includes('api.binance.com')) return jsonResponse(klineRow);
+      if (url.includes('data-api.binance.vision')) return jsonResponse(klineRow);
       throw new Error(`unexpected ${url}`);
     });
     const data = await fetchBinanceJson({
@@ -151,50 +154,42 @@ describe('fetchBinanceJson', () => {
     });
     expect(Array.isArray(data)).toBe(true);
     expect(seen.some((u) => u.includes('/api/market/binance/'))).toBe(true);
-    expect(seen.some((u) => u.includes('api.binance.com'))).toBe(true);
+    expect(seen.some((u) => u.includes('data-api.binance.vision'))).toBe(true);
   });
 
-  it('real browser does not fetch api.binance.com after Worker 5xx (CORS)', async () => {
+  it('real browser uses vision only — never Worker, never api.binance.com', async () => {
     const prev = (globalThis as { document?: unknown }).document;
     (globalThis as { document: { nodeType: number } }).document = { nodeType: 9 };
     const seen: string[] = [];
-    const warns: string[] = [];
-    const origWarn = console.warn;
-    console.warn = (...args: unknown[]) => {
-      warns.push(args.map(String).join(' '));
-    };
     restoreFetch = mockFetch(async (input) => {
-      seen.push(String(input));
-      if (String(input).includes('/api/market/binance/')) {
-        return jsonResponse({ status: 'error', message: 'down' }, 502);
+      const url = String(input);
+      seen.push(url);
+      if (url.includes('/api/market/binance/')) {
+        throw new Error('should not hit Worker in browser');
       }
-      return jsonResponse(klineRow);
+      if (url.includes('api.binance.com')) {
+        throw new Error('should not hit api.binance.com in browser');
+      }
+      if (url.includes('data-api.binance.vision')) return jsonResponse(klineRow);
+      throw new Error(`unexpected ${url}`);
     });
     try {
       expect(browserBlocksDirectCexRest()).toBe(true);
-      await expect(
-        fetchBinanceJson({
-          path: 'klines',
-          query: 'symbol=BTCUSDT&interval=1d',
-        }),
-      ).rejects.toThrow(/Binance network error/);
-      await expect(
-        fetchBinanceJson({
-          path: 'klines',
-          query: 'symbol=BTCUSDT&interval=1d',
-        }),
-      ).rejects.toThrow(/Binance network error/);
+      const data = await fetchBinanceJson({
+        path: 'klines',
+        query: 'symbol=BTCUSDT&interval=1d',
+      });
+      expect(Array.isArray(data)).toBe(true);
     } finally {
-      console.warn = origWarn;
       if (prev === undefined) {
         delete (globalThis as { document?: unknown }).document;
       } else {
         (globalThis as { document: unknown }).document = prev;
       }
     }
+    expect(seen.some((u) => u.includes('/api/market/binance/'))).toBe(false);
     expect(seen.some((u) => u.includes('api.binance.com'))).toBe(false);
-    expect(seen.every((u) => u.includes('/api/market/binance/'))).toBe(true);
-    expect(warns.filter((w) => w.includes('Skipping direct api.binance.com')).length).toBe(1);
+    expect(seen.some((u) => u.includes('data-api.binance.vision'))).toBe(true);
   });
 });
 
@@ -204,5 +199,10 @@ describe('isPublicBinanceRestOrigin', () => {
     expect(isPublicBinanceRestOrigin('https://data-api.binance.vision/')).toBe(true);
     expect(isPublicBinanceRestOrigin('https://fapi.binance.com')).toBe(true);
     expect(isPublicBinanceRestOrigin('https://proxy.example/binance')).toBe(false);
+  });
+
+  it('marks vision as browser-CORS-safe', () => {
+    expect(isBrowserCorsSafeBinanceHost('https://data-api.binance.vision')).toBe(true);
+    expect(isBrowserCorsSafeBinanceHost('https://api.binance.com')).toBe(false);
   });
 });
