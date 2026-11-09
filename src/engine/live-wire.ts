@@ -373,10 +373,80 @@ function scriptFullForApplier(
   };
 }
 
-/** Same payload without a time axis, so a value delta can merge after an axis splice failed. */
-function withoutTimeAxis(full: Record<string, unknown>): Record<string, unknown> {
-  const { bar_times: _barTimes, times: _times, ...rest } = full;
-  return rest;
+/** Tail-trim or left-pad a column to `len` (pad with null). */
+function fitColumnToLen(col: unknown, len: number): unknown[] {
+  if (!Array.isArray(col)) return Array.from({ length: len }, () => null);
+  if (col.length === len) return col.slice();
+  if (col.length > len) return col.slice(col.length - len);
+  const pad = Array.from({ length: len - col.length }, () => null);
+  return pad.concat(col);
+}
+
+/**
+ * Fit plot/series columns to the chart window length and stamp `bar_times`.
+ * Used when the engine session is longer/shorter than the subscribe window so
+ * we can paint instead of stripping the axis (which locked later deltas into
+ * "delta rejected" forever).
+ */
+function fitFullToChartWindow(
+  full: Record<string, unknown>,
+  windowBars: readonly Bar[],
+): Record<string, unknown> {
+  const len = windowBars.length;
+  const times = windowBars.map((b) => b.time);
+  const out: Record<string, unknown> = { ...full, count: len, bar_times: times };
+  delete out['times'];
+  const series = full['series'];
+  if (series && typeof series === 'object' && !Array.isArray(series)) {
+    const next: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(series as Record<string, unknown>)) {
+      next[k] = fitColumnToLen(v, len);
+    }
+    out['series'] = next;
+  }
+  const plots = full['plots'];
+  if (Array.isArray(plots)) {
+    out['plots'] = plots.map((col) => fitColumnToLen(col, len));
+  } else if (plots && typeof plots === 'object') {
+    const next: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(plots as Record<string, unknown>)) {
+      next[k] = fitColumnToLen(v, len);
+    }
+    out['plots'] = next;
+  }
+  return out;
+}
+
+/** Overlay tip values from a delta onto a full's series/plots (last cell). */
+function overlayDeltaTip(full: Record<string, unknown>, delta: Record<string, unknown>): void {
+  const patchCol = (dst: unknown, src: unknown): unknown => {
+    if (!Array.isArray(dst) || !dst.length) return dst;
+    if (!Array.isArray(src) || !src.length) return dst;
+    const copy = dst.slice();
+    copy[copy.length - 1] = src[src.length - 1];
+    return copy;
+  };
+  const dSeries = delta['series'];
+  const fSeries = full['series'];
+  if (
+    dSeries &&
+    typeof dSeries === 'object' &&
+    !Array.isArray(dSeries) &&
+    fSeries &&
+    typeof fSeries === 'object' &&
+    !Array.isArray(fSeries)
+  ) {
+    const next: Record<string, unknown> = { ...(fSeries as Record<string, unknown>) };
+    for (const [k, v] of Object.entries(dSeries as Record<string, unknown>)) {
+      if (k in next) next[k] = patchCol(next[k], v);
+    }
+    full['series'] = next;
+  }
+  const dPlots = delta['plots'];
+  const fPlots = full['plots'];
+  if (Array.isArray(dPlots) && Array.isArray(fPlots)) {
+    full['plots'] = fPlots.map((col, i) => patchCol(col, dPlots[i]));
+  }
 }
 
 /** Chart step in seconds from store interval, else the last two bar times. */
@@ -1805,22 +1875,31 @@ export class StreamLiveWire {
         this.requestFreshSnapshot(subId, 'delta gap — resubscribing');
         return;
       }
+      // Chart-window realign (Donchian etc.): engine sessions often ship a
+      // longer axis than the subscribe window. The old salvage stripped
+      // bar_times from the cache, so every later delta fell through to
+      // "delta rejected" and stormed soft fresh-subscribe. Fit columns to
+      // the chart window, stamp bar_times, overlay the tip, and paint.
+      const windowBars = this.scriptCtx.get(subId)?.bars;
       const cached = applier.cached;
-      if (cached && (cached['bar_times'] != null || cached['times'] != null)) {
+      if (cached && windowBars?.length) {
+        const fitted = fitFullToChartWindow(cached, windowBars);
+        overlayDeltaTip(fitted, delta);
+        if (typeof frame.seq === 'number') fitted['seq'] = frame.seq;
         applier.applyFull(
-          withoutTimeAxis(cached) as {
+          fitted as {
             plots?: Record<string, unknown[]>;
             series?: Record<string, unknown[]>;
             count: number;
             seq?: number;
           },
         );
-        const { times: _drop, ...valuesOnly } = delta;
-        out = applier.applyDelta(valuesOnly);
-        if (out.ok && this.mergedFullLacksAxisForChart(subId, out.full)) {
-          this.requestAxisResub(subId);
-          return;
-        }
+        out = {
+          ok: true,
+          full: { ...(applier.cached ?? fitted) },
+          replayed: false,
+          executionContext: 'tip',
+        };
       }
     }
     if (!out.ok) {
@@ -1849,33 +1928,6 @@ export class StreamLiveWire {
         this.requestAxisResub(subId, `apply aborted — ${reason}`);
       },
     });
-  }
-
-  /**
-   * True when a merged script `full` carries no bar-time axis and its window
-   * disagrees with the subscribed window — painting it would index-zip stale
-   * values onto the wrong bars (the runner skips it as `staleNoAxis`). The
-   * caller resubscribes for a real full instead. Compared against the
-   * subscription window (not the live store) so the verdict is stable while
-   * the chart slides; a residual store-window drift at paint time is still
-   * guarded downstream.
-   */
-  private mergedFullLacksAxisForChart(subId: string, full: Record<string, unknown>): boolean {
-    const times = readTimeList(full['bar_times']) ?? readTimeList(full['times']);
-    if (times?.length) return false;
-    const windowLen = this.scriptCtx.get(subId)?.bars.length ?? 0;
-    const count = Number((full as { count?: unknown }).count);
-    let fullLen = Number.isFinite(count) && count > 0 ? count : 0;
-    if (!fullLen) {
-      const series = (full as { series?: unknown }).series;
-      if (series && typeof series === 'object' && !Array.isArray(series)) {
-        for (const arr of Object.values(series as Record<string, unknown>)) {
-          if (Array.isArray(arr)) fullLen = Math.max(fullLen, arr.length);
-        }
-      }
-    }
-    if (!windowLen || !fullLen) return false;
-    return fullLen !== windowLen;
   }
 
   /**
