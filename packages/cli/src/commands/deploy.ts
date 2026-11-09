@@ -6,7 +6,8 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { Command } from 'commander';
 import { getPaths } from '../utils/paths.js';
 import { run, runWrangler } from '../utils/run.js';
@@ -31,6 +32,15 @@ import {
 } from '../utils/format.js';
 
 const PAGES_PROJECT = 'axis';
+const SHA_RE = /^[0-9a-f]{7,40}$/i;
+
+/** Hex git SHA, or empty. */
+export function normalizeGitSha(raw: unknown): string {
+  const v = String(raw ?? '')
+    .trim()
+    .toLowerCase();
+  return SHA_RE.test(v) ? v : '';
+}
 
 /** `git rev-parse HEAD` in `cwd`, or empty when git is missing. */
 export function gitHeadSha(cwd: string): string {
@@ -40,18 +50,73 @@ export function gitHeadSha(cwd: string): string {
     timeout: 10_000,
   });
   if (r.status !== 0) return '';
-  const v = String(r.stdout ?? '').trim();
-  return /^[0-9a-f]{7,40}$/i.test(v) ? v : '';
+  return normalizeGitSha(r.stdout);
 }
 
 /**
  * wrangler `--define WORKER_GIT_SHA:"<sha>"` so `/health` can prove the
  * deployed isolate matches a commit. Empty SHA → no define (local tests).
+ * The value MUST be a quoted JS string: unquoted hex is an identifier and
+ * `typeof WORKER_GIT_SHA === "string"` is then false.
  */
 export function wranglerGitDefine(sha: string): string[] {
-  const v = String(sha ?? '').trim();
-  if (!/^[0-9a-f]{7,40}$/i.test(v)) return [];
+  const v = normalizeGitSha(sha);
+  if (!v) return [];
   return ['--define', `WORKER_GIT_SHA:${JSON.stringify(v)}`];
+}
+
+/**
+ * wrangler `--var GIT_SHA:<sha>` runtime binding. Vars are always strings, so
+ * this survives when the esbuild `--define` substitution does not.
+ */
+export function wranglerGitVar(sha: string): string[] {
+  const v = normalizeGitSha(sha);
+  if (!v) return [];
+  return ['--var', `GIT_SHA:${v}`];
+}
+
+/** Compile-time define + runtime var for one SHA. */
+export function wranglerGitFlags(sha: string): string[] {
+  return [...wranglerGitDefine(sha), ...wranglerGitVar(sha)];
+}
+
+/** `git` field from Worker `/health` JSON. */
+export function healthGitSha(body: unknown): string {
+  if (!body || typeof body !== 'object') return '';
+  return normalizeGitSha((body as { git?: unknown }).git);
+}
+
+/** `version` + `git` from a Vite `dist/version.json`. */
+export function readDistIdentity(distDir: string): { version: string; git: string } {
+  const raw = readFileSync(join(distDir, 'version.json'), 'utf8');
+  const body = JSON.parse(raw) as { version?: unknown; git?: unknown };
+  return {
+    version: String(body.version ?? '').trim(),
+    git: normalizeGitSha(body.git),
+  };
+}
+
+/**
+ * Deploy identity proof: live (or dist) SHA must equal `git rev-parse HEAD`.
+ * Empty expected SHA means git is unavailable — refuse to call this a match.
+ */
+export function assertGitProof(surface: string, expected: string, actual: string): void {
+  const exp = normalizeGitSha(expected);
+  const got = normalizeGitSha(actual);
+  if (!exp) {
+    throw new CLIError(
+      `${surface}: local git SHA missing (git rev-parse HEAD failed)`,
+      ExitCode.ERROR,
+      'Run from an AXIS git checkout so deploy identity can be proven.',
+    );
+  }
+  if (got !== exp) {
+    throw new CLIError(
+      `${surface} git mismatch: live ${got || '(empty)'} vs HEAD ${exp}`,
+      ExitCode.ERROR,
+      'Identity is VERSION + git SHA. Worker: wrangler --define WORKER_GIT_SHA and --var GIT_SHA. Pages: dist/version.json from scripts/git-stamp.mjs.',
+    );
+  }
 }
 
 /** Last workers.dev URL printed by `wrangler deploy`. */
@@ -120,14 +185,17 @@ export async function deployWorker(
   printInfo('wrangler deploy…', opts.quiet);
 
   const gitSha = gitHeadSha(paths.root);
-  if (gitSha) {
-    printInfo(`Worker git SHA ${gitSha}`, opts.quiet);
-  } else {
-    printWarn(`Worker git SHA missing (git rev-parse HEAD failed in ${paths.root})`, opts.quiet);
+  if (!gitSha) {
+    throw new CLIError(
+      `git rev-parse HEAD failed in ${paths.root}`,
+      ExitCode.ERROR,
+      'Refusing to deploy a Worker without a commit SHA proof.',
+    );
   }
+  printInfo(`Worker git SHA ${gitSha}`, opts.quiet);
 
   // Always capture so a failure never re-invokes deploy, and so we can parse the URL.
-  const result = await runWrangler(paths.worker, ['deploy', ...wranglerGitDefine(gitSha)], {
+  const result = await runWrangler(paths.worker, ['deploy', ...wranglerGitFlags(gitSha)], {
     inherit: false,
     throwOnError: false,
   });
@@ -150,6 +218,8 @@ export async function deployWorker(
 
   if (!flags.skipHealth) {
     const health = await probeHealth(deployedUrl);
+    const reported = healthGitSha(health.body);
+    printInfo(`Health git ${reported || '(empty)'}`, opts.quiet);
     if (health.ok) {
       printOk(`Health OK: ${health.url}`, opts.quiet);
       const feats = healthFeatures(health.body);
@@ -166,6 +236,7 @@ export async function deployWorker(
         opts.quiet,
       );
     }
+    assertGitProof('Worker /health', gitSha, reported);
   }
 
   printOk('Worker deployed', opts.quiet);
@@ -200,6 +271,23 @@ export async function deployPages(opts: GlobalOpts): Promise<void> {
   if (!existsSync(paths.dist)) {
     throw new CLIError('dist/ missing after build', ExitCode.ERROR);
   }
+
+  const gitSha = gitHeadSha(paths.root);
+  let distIdentity: { version: string; git: string };
+  try {
+    distIdentity = readDistIdentity(paths.dist);
+  } catch (e) {
+    throw new CLIError(
+      'dist/version.json missing or invalid after build',
+      ExitCode.ERROR,
+      e instanceof Error ? e.message : String(e),
+    );
+  }
+  printInfo(
+    `Pages identity ${distIdentity.version}+${distIdentity.git || '(no git)'}`,
+    opts.quiet,
+  );
+  assertGitProof('dist/version.json', gitSha, distIdentity.git);
 
   printInfo(`wrangler pages deploy → ${PAGES_PROJECT}…`, opts.quiet);
   // Single attempt. runWrangler resolves the local worker wrangler first and

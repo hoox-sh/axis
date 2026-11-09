@@ -7,7 +7,7 @@ tags: [code, scripts]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-09T05:20:23Z
+  at: 2026-11-09T05:32:13Z
 sources:
   - id: tree
     resource: "scripts"
@@ -29,7 +29,7 @@ okf_lock: generated
 * `perf-audit.mjs`
 * `record-hp-fixtures.py` — main, run
 * `rewrite_wheel_distinfo.py` — Entry, main, rewrite_wheel, want_dist_info
-* `sync-versions.mjs` — APP_VERSION, BAKED_APP_VERSION, WORKER_VERSION, appIdentity, appVersion, gitSha, workerGitSha
+* `sync-versions.mjs` — APP_VERSION, BAKED_APP_VERSION, WORKER_VERSION, appIdentity, appVersion, gitSha, normalizeGitSha, workerGitSha
 
 # Other files
 

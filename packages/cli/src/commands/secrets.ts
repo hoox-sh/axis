@@ -9,7 +9,7 @@ import { existsSync } from 'node:fs';
 import type { Command } from 'commander';
 import { getPaths } from '../utils/paths.js';
 import { runWrangler } from '../utils/run.js';
-import { gitHeadSha, wranglerGitDefine } from './deploy.js';
+import { gitHeadSha, wranglerGitFlags } from './deploy.js';
 import { commentTomlVar, hasTomlVar } from '../services/wrangler-toml.js';
 import { promptLine, promptSecret } from '../utils/prompt.js';
 import {
@@ -103,7 +103,7 @@ export async function dropPlaintextVarForSecret(opts: GlobalOpts, key: string): 
   printInfo('Deploying Worker to drop the plaintext binding…', opts.quiet);
   const deployed = await runWrangler(
     paths.worker,
-    ['deploy', ...wranglerGitDefine(gitHeadSha(paths.root))],
+    ['deploy', ...wranglerGitFlags(gitHeadSha(paths.root))],
     {
       inherit: !opts.quiet,
       throwOnError: false,
@@ -200,7 +200,7 @@ export async function secretPut(opts: GlobalOpts, name: string, value?: string):
     );
     const deployed = await runWrangler(
       worker,
-      ['deploy', ...wranglerGitDefine(gitHeadSha(getPaths().root))],
+      ['deploy', ...wranglerGitFlags(gitHeadSha(getPaths().root))],
       {
         inherit: !opts.quiet,
         throwOnError: false,

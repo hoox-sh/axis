@@ -116,6 +116,7 @@ export async function healthBody(env: Env, deep = false): Promise<unknown> {
   return buildHealthBody(
     { db: !!env.DB, keys: !!env.API_KEYS, mcpBridge: !!env.MCP_BRIDGE },
     report,
+    env.GIT_SHA,
   );
 }
 

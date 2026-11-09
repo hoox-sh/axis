@@ -649,7 +649,11 @@ export type DeepHealth = { deep: true; report: Record<string, { ok: boolean; det
  * `market` / `onchain` stay route-registration flags unless a deep probe ran;
  * `upstream` then carries the live verdict so a dead proxy can never read green.
  */
-export function buildHealthBody(flags: HealthFlags, deep?: DeepHealth): unknown {
+export function buildHealthBody(
+  flags: HealthFlags,
+  deep?: DeepHealth,
+  git?: unknown,
+): unknown {
   const features: Record<string, boolean> = {
     scripts: true,
     d1: flags.db,
@@ -671,7 +675,7 @@ export function buildHealthBody(flags: HealthFlags, deep?: DeepHealth): unknown 
     status: degraded ? 'degraded' : 'healthy',
     service: 'worker-axis',
     version: WORKER_VERSION,
-    git: workerGitSha(),
+    git: workerGitSha(git),
     timestamp: Date.now(),
     features,
     ...(deep ? { upstream: deep.report } : {}),

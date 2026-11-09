@@ -124,6 +124,11 @@ export interface Env {
   /** Public GitLab OAuth application id (device grant). */
   GITLAB_OAUTH_CLIENT_ID?: string;
   /**
+   * Git commit this isolate was deployed from (`wrangler --var GIT_SHA:<sha>`).
+   * Surfaced on `/health.git` when the compile-time `WORKER_GIT_SHA` define is empty.
+   */
+  GIT_SHA?: string;
+  /**
    * Console base URL for live `hx_live_…` tenant verify + usage flush
    * (e.g. `https://console.hoox.sh`). Unset = self-host: tenant verify is
    * unavailable and tenant keys fall back to the legacy path (degraded) or

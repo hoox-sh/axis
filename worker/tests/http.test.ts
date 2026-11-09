@@ -203,6 +203,16 @@ describe('buildHealthBody', () => {
     const features = body.features as Record<string, unknown>;
     expect(features).toMatchObject({ scripts: true, d1: true, keys: false, mcpBridge: true });
   });
+
+  it('surfaces a runtime GIT_SHA on git', () => {
+    const sha = '0123456789abcdef0123456789abcdef01234567';
+    const body = buildHealthBody(
+      { db: true, keys: true, mcpBridge: false },
+      undefined,
+      sha,
+    ) as Record<string, unknown>;
+    expect(body.git).toBe(sha);
+  });
 });
 
 describe('scopedJson', () => {

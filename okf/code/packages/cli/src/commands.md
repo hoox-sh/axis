@@ -7,7 +7,7 @@ tags: [cli, code, commands, packages]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-09T05:20:23Z
+  at: 2026-11-09T05:32:13Z
 sources:
   - id: tree
     resource: "packages/cli/src/commands"
@@ -18,7 +18,7 @@ okf_lock: generated
 
 # Files
 
-* `deploy.ts` — deployAll, deployPages, deployWorker, gitHeadSha, parseDeployedWorkerUrl, registerDeploy, wranglerGitDefine
+* `deploy.ts` — assertGitProof, deployAll, deployPages, deployWorker, gitHeadSha, healthGitSha, normalizeGitSha, parseDeployedWorkerUrl, readDistIdentity, registerDeploy, wranglerGitDefine, wranglerGitFlags
 * `dev.ts` — registerDev
 * `doctor.ts` — DoctorCheck, collectDoctorChecks, registerDoctor, runDoctor
 * `health.ts` — registerHealth, runHealth

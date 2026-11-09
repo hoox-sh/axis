@@ -7,7 +7,7 @@ tags: [code, worker]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-09T05:20:23Z
+  at: 2026-11-09T05:32:13Z
 sources:
   - id: tree
     resource: "worker/src"
@@ -38,7 +38,7 @@ okf_lock: generated
 * `runtime.ts` — _resetRunRateLimitForTests, handleRun
 * `scripts.ts` — ScriptMeta, ScriptRow, ScriptVersionRow, _clearMemScripts, handleScripts
 * `tenant.ts` — BILLING_UPGRADE_URL, FlushUsageOpts, QueueTenantUsageInput, TenantAllow, TenantDeny, TenantGate, TenantHttpError, TenantScope, TenantUsageEvent, TenantUsageUnits, USAGE_BATCH_MAX, USAGE_FLUSH_TIMEOUT_MS
-* `version.ts` — WORKER_VERSION, workerGitSha
+* `version.ts` — WORKER_VERSION, normalizeGitSha, workerGitSha
 
 # Packages
 
