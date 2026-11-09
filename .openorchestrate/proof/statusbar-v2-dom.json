@@ -1,0 +1,24 @@
+{
+  "classic": {
+    "compact": "1",
+    "mode": "classic",
+    "hasCompose": true,
+    "hasPerf": false,
+    "hasMsg": true,
+    "hasBars": true,
+    "hasDiag": true,
+    "text": "LiveLast—DiagnosticsComposeServerVenue unreachable.0 bars· 0 scripts · 2 panes"
+  },
+  "expanded": {
+    "compact": "0",
+    "mode": "perf",
+    "hasCompose": false,
+    "hasPerf": true,
+    "hasMsg": false,
+    "hasBars": false,
+    "run": "Run—",
+    "paint": "Paint—",
+    "path": "PathWS",
+    "text": "LiveLast—Run—Paint—PathWSEngidleSrcerrorStridleStoidle"
+  }
+}
