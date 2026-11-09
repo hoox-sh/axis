@@ -7,7 +7,7 @@ tags: [code, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-09T05:20:23Z
+  at: 2026-11-09T10:53:23Z
 sources:
   - id: tree
     resource: "src/ui"
@@ -107,7 +107,7 @@ okf_lock: generated
 * `responsive.ts` — PHONE_MAX_WIDTH, TABLET_MAX_WIDTH, ViewportMode, isDesktopViewport, isPhoneViewport, isTabletSideDockOverlay, isTabletViewport, isTouchPointer, pointerCoarse, viewport
 * `sr-announce.ts` — announce, announceError
 * `symbol-picks.ts` — SYMBOL_FAVORITE_LIMIT, SYMBOL_PICKS_KEY, SYMBOL_RECENT_LIMIT, SymbolPicks, emptySymbolPicks, loadSymbolPicks, normalizePickSymbol, rememberSymbol, saveSymbolPicks, symbolPicksScope, toggleFavorite, visibleSymbolPicks
-* `telemetry.ts` — classifyTransport, connDotClass, formatLatency, formatTickAge, idlePlane, pushSample, transportLabel
+* `telemetry.ts` — classifyTransport, connDotClass, formatLatency, formatTickAge, idlePlane, latencySampleStats, pushSample, transportLabel
 * `ui-scale.ts` — UI_SCALE_PRESETS, formatUiScalePct
 * `use-event-listener.ts` — attachEventListener, useEventListener
 * `watchlist-row.ts` — bigPriceSizeClass, formatCompactVolume, rangePercent

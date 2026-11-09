@@ -18,12 +18,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * AXIS Connection HUD — scanline instruments (Live, Last, Compose, diagnostics).
+ * AXIS Connection HUD — scanline instruments (Live, Last, Compose, diagnostics)
+ * plus an expanded measured-metrics mode.
  *
  * Derived via {@link deriveHud} from engine plugin + endpoint + telemetry.
- * Chips live in the status-bar scanline. `telemetry.hud.compact` collapses the
- * parent bar to Live + Last only; expanded shows Compose / diagnostics chips.
- * Click or keyboard opens one inspector dialog above the rail — never hover.
+ * Chips live in the status-bar scanline. `telemetry.hud.compact` (default) is
+ * the classic scanline (Live, Last, Diagnostics, Compose / eng path chips).
+ * Expanded (`compact` false) shows measured run / paint latency, network path,
+ * and plane states. Click or keyboard opens one inspector dialog above the
+ * rail — never hover.
  *
  * | Chip | Values |
  * |------|--------|
@@ -38,15 +41,21 @@ import {
   type Component,
   For,
   Show,
+  createEffect,
   createMemo,
   createSignal,
+  onCleanup,
 } from 'solid-js';
 import { store, setStore, persist, setActivePlugin, setDataSourcePanelOpen } from '../store';
 import { Popover } from './Popover';
 import type { FeedSubscription } from '../store/types';
 import { useNow } from './clock';
 import type { PlaneTelemetry } from '../store/types';
-import { formatLatency, formatTickAge } from './telemetry';
+import { formatLatency, formatTickAge, latencySampleStats } from './telemetry';
+import {
+  paintLatencyStats,
+  type PaintLatencyStats,
+} from '../chart/paint-latency';
 import {
   composeCaption,
   deriveHud,
@@ -393,17 +402,186 @@ function chipStateFor(
 
 /**
  * Show optional onchain plane when present and active/error.
- * Compact bar hides optional planes; expanded shows open/degraded too.
+ * Classic scanline also shows open/degraded; idle/closed stay hidden.
  */
 function showOnchainPlane(
   plane: PlaneTelemetry | undefined | null,
-  compact: boolean,
+  includeQuiet: boolean,
 ): boolean {
   if (!plane) return false;
   const st = plane.state;
   if (st === 'error' || st === 'connecting') return true;
-  if (st === 'open' || st === 'degraded') return !compact;
+  if (st === 'open' || st === 'degraded') return includeQuiet;
   return false;
+}
+
+/** Read-only metric capsule for the expanded perf scanline. */
+function PerfCapsule(props: {
+  label: string;
+  value: string;
+  title?: string;
+  testId?: string;
+  state?: 'idle' | 'ok' | 'warn' | 'err' | 'load';
+}) {
+  return (
+    <span
+      class="axis-status-capsule"
+      data-testid={props.testId}
+      data-hud-state={props.state || 'idle'}
+      title={props.title}
+    >
+      <HudMetricIcon kind="diag" />
+      <span class="axis-status-capsule-code is-word">{props.label}</span>
+      <span class="axis-status-capsule-val tabular-nums">{props.value}</span>
+    </span>
+  );
+}
+
+function planeChipState(
+  st: PlaneTelemetry['state'] | undefined,
+): 'idle' | 'ok' | 'warn' | 'err' | 'load' {
+  if (st === 'error') return 'err';
+  if (st === 'open') return 'ok';
+  if (st === 'connecting' || st === 'degraded') return 'load';
+  return 'idle';
+}
+
+/** Poll paint-latency module stats while the expanded metrics row is open. */
+function usePaintLatency(active: () => boolean): () => PaintLatencyStats {
+  const [stats, setStats] = createSignal(paintLatencyStats());
+  createEffect(() => {
+    if (!active()) return;
+    setStats(paintLatencyStats());
+    const id = globalThis.setInterval(() => setStats(paintLatencyStats()), 500);
+    onCleanup(() => globalThis.clearInterval(id));
+  });
+  return stats;
+}
+
+/**
+ * Expanded status-bar instruments: measured run / paint latency, network path,
+ * and honest plane states. Never invents numbers — empty samples render `—`.
+ */
+function PerfMetrics(props: {
+  snap: () => HudSnapshot;
+  inspector: ReturnType<typeof useHudInspector>;
+}) {
+  const paint = usePaintLatency(() => true);
+  const runStats = createMemo(() =>
+    latencySampleStats(store.telemetry?.runLatencySamples || []),
+  );
+  const runValue = () => {
+    const last = store.lastRunMs ?? runStats().last ?? props.snap().latencyMs;
+    const p50 = runStats().p50;
+    if (last == null && p50 == null) return '—';
+    if (p50 != null && runStats().n > 1) {
+      return `${formatLatency(last)} · p50 ${formatLatency(p50)}`;
+    }
+    return formatLatency(last);
+  };
+  const paintValue = () => {
+    const s = paint();
+    if (!s.n || s.p50 == null) return '—';
+    const p95 = s.p95 != null ? formatLatency(s.p95) : '—';
+    const worst = s.max != null ? formatLatency(s.max) : '—';
+    return `${formatLatency(s.p50)} / ${p95} / ${worst}`;
+  };
+  const paintTitle = () => {
+    const s = paint();
+    if (!s.n) return 'Tick → paint latency — no samples yet';
+    return `Tick → paint · n=${s.n} · p50 / p95 / worst${
+      s.suspended ? ` · ${s.suspended} suspended` : ''
+    }`;
+  };
+  const pathValue = () => (props.snap().showPath ? props.snap().path : 'in tab');
+  const engPlane = () => store.telemetry?.engine;
+  const src = () => store.telemetry?.source;
+  const str = () => store.telemetry?.stream;
+  const sto = () => store.telemetry?.storage;
+
+  return (
+    <div
+      class="axis-hud-perf flex items-center gap-1 flex-nowrap min-w-0"
+      data-testid="axis-hud-perf"
+    >
+      <PerfCapsule
+        label="Run"
+        value={runValue()}
+        title={
+          runStats().n
+            ? `Run latency · n=${runStats().n} · last ${formatLatency(runStats().last)} · p50 ${formatLatency(runStats().p50)} · p95 ${formatLatency(runStats().p95)}`
+            : 'Run latency — waiting for a script run'
+        }
+        testId="axis-hud-perf-run"
+        state={runStats().n || store.lastRunMs != null ? 'ok' : 'idle'}
+      />
+      <PerfCapsule
+        label="Paint"
+        value={paintValue()}
+        title={paintTitle()}
+        testId="axis-hud-perf-paint"
+        state={paint().n ? 'ok' : 'idle'}
+      />
+      <PerfCapsule
+        label="Path"
+        value={pathValue()}
+        title={
+          props.snap().showPath
+            ? `Network path · ${props.snap().path}`
+            : 'In-tab engine (no remote hop)'
+        }
+        testId="axis-hud-perf-path"
+        state={props.snap().path === 'WS' ? 'ok' : 'idle'}
+      />
+      <Show when={engPlane()}>
+        {(p) => (
+          <PerfCapsule
+            label="Eng"
+            value={`${p().state}${
+              p().latencyMs != null ? ` · ${formatLatency(p().latencyMs)}` : ''
+            }`}
+            title={`Engine plane · ${p().id} · ${p().transport}`}
+            testId="axis-hud-perf-eng"
+            state={planeChipState(p().state)}
+          />
+        )}
+      </Show>
+      <Show when={src()}>
+        {(p) => (
+          <PerfCapsule
+            label="Src"
+            value={p().state}
+            title={`Source · ${p().name || p().id}`}
+            testId="axis-hud-perf-src"
+            state={planeChipState(p().state)}
+          />
+        )}
+      </Show>
+      <Show when={str()}>
+        {(p) => (
+          <PerfCapsule
+            label="Str"
+            value={p().state}
+            title={`Stream · ${p().name || p().id}`}
+            testId="axis-hud-perf-str"
+            state={planeChipState(p().state)}
+          />
+        )}
+      </Show>
+      <Show when={sto()}>
+        {(p) => (
+          <PerfCapsule
+            label="Sto"
+            value={p().state}
+            title={`Storage · ${p().name || p().id}`}
+            testId="axis-hud-perf-sto"
+            state={planeChipState(p().state)}
+          />
+        )}
+      </Show>
+      <FeedChip inspector={props.inspector} snap={props.snap} />
+    </div>
+  );
 }
 
 function TickPulse(props: {
@@ -663,7 +841,7 @@ export const ConnectionHud: Component = () : JSX.Element => {
   const snap = useHudSnapshot();
   const inspector = useHudInspector();
   const tel = () => store.telemetry;
-  /** Compact = collapsed bar: Live + Last only. */
+  /** Compact = classic scanline; expanded (!compact) = measured metrics. */
   const compact = () => !!tel()?.hud?.compact;
   const diagnostics = () => tel()?.hud?.diagnostics === true;
 
@@ -682,13 +860,14 @@ export const ConnectionHud: Component = () : JSX.Element => {
       classList={{ 'is-compact': compact() }}
       data-testid="axis-connection-hud"
       data-compact={compact() ? '1' : '0'}
+      data-mode={compact() ? 'classic' : 'perf'}
       role="status"
       aria-label="Connection status"
     >
       <LiveBadge inspector={inspector} snap={snap} />
       <TickPulse inspector={inspector} snap={snap} />
 
-      <Show when={!compact()}>
+      <Show when={compact()}>
         <button
           type="button"
           class={`axis-status-capsule text-text-faint cursor-pointer ${diagnostics() ? 'is-active' : ''}`}
@@ -715,7 +894,7 @@ export const ConnectionHud: Component = () : JSX.Element => {
           fallback={
             <>
               <ComposeChip snap={snap} />
-              <Show when={showOnchainPlane(tel()?.onchain, false)}>
+              <Show when={showOnchainPlane(tel()?.onchain, true)}>
                 <Show when={tel()?.onchain}>
                   {(o) => (
                     <PlaneChip
@@ -792,7 +971,7 @@ export const ConnectionHud: Component = () : JSX.Element => {
           </Show>
           <FeedChip inspector={inspector} snap={snap} />
           <PairingWarn />
-          <Show when={showOnchainPlane(tel()?.onchain, false)}>
+          <Show when={showOnchainPlane(tel()?.onchain, true)}>
             <Show when={tel()?.onchain}>
               {(o) => (
                 <PlaneChip
@@ -806,6 +985,10 @@ export const ConnectionHud: Component = () : JSX.Element => {
             </Show>
           </Show>
         </Show>
+      </Show>
+
+      <Show when={!compact()}>
+        <PerfMetrics snap={snap} inspector={inspector} />
       </Show>
     </div>
   );

@@ -22,9 +22,10 @@
  * truncated status, optional strategy PnL, rolling-window edit, dataset
  * depth, scripts/panes counts.
  *
- * Collapsible: `telemetry.hud.compact` collapses the bar to the compact HUD
- * (Live + Last + essential chips). Expanded shows the full instrument
- * scanline. Inspectors open by click or keyboard only — never hover.
+ * Collapsible: `telemetry.hud.compact` (default) is the classic scanline.
+ * Expanded (`compact` false) swaps the classic instruments for measured
+ * latency / network / app perf chips. Inspectors open by click or keyboard
+ * only — never hover.
  *
  * Classic fixed footer chrome (no FloatableShell title bar). Visibility is
  * gated by panel chrome `statusbar` (topbar **Status** / command palette).
@@ -109,7 +110,7 @@ export const StatusBar: Component = () : JSX.Element => {
   const [draft, setDraft] = createSignal('');
   let inputEl: HTMLInputElement | undefined;
 
-  /** Compact HUD = collapsed bar (`telemetry.hud.compact`). */
+  /** Compact = classic scanline; expanded = measured metrics. */
   const compact = () => !!store.telemetry?.hud?.compact;
 
   const toggleCompact = () => {
@@ -168,7 +169,7 @@ export const StatusBar: Component = () : JSX.Element => {
       >
         <ConnectionHud />
 
-        <Show when={!compact()}>
+        <Show when={compact()}>
           <span
             class={`flex items-center gap-1.5 min-w-0 max-w-[28vw] text-[11px] ${color()}`}
             data-testid="axis-status-message"
@@ -259,7 +260,7 @@ export const StatusBar: Component = () : JSX.Element => {
           </span>
         </Show>
 
-        <Show when={compact()}>
+        <Show when={!compact()}>
           <span class="flex-1 min-w-2" />
         </Show>
 
@@ -271,13 +272,13 @@ export const StatusBar: Component = () : JSX.Element => {
           aria-expanded={!compact()}
           title={
             compact()
-              ? 'Expand status bar (full scanline)'
-              : 'Collapse status bar (Live + Last only)'
+              ? 'Expand status bar (latency / network / app perf)'
+              : 'Collapse status bar (classic scanline)'
           }
           aria-label={
             compact()
-              ? 'Expand status bar'
-              : 'Collapse status bar to compact HUD'
+              ? 'Expand status bar to performance metrics'
+              : 'Collapse status bar to classic scanline'
           }
           onClick={toggleCompact}
         >

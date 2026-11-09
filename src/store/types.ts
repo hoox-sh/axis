@@ -392,9 +392,10 @@ export interface TelemetryState {
   lastTick: TickTelemetry | null;
   /**
    * Layout prefs (persisted).
-   * `compact` collapses the status bar to the compact HUD (Live + Last).
-   * `diagnostics` (expanded bar only) shows raw ENG/RUN/PATH/SRC chips
-   * instead of Compose. Default: expanded, diagnostics off.
+   * `compact` (default true) = classic scanline (Live, Last, Compose, bars).
+   * `compact` false = expanded measured latency / network / app perf.
+   * `diagnostics` (classic only) shows raw ENG/RUN/PATH/SRC chips
+   * instead of Compose.
    */
   hud: { compact: boolean; overlay: boolean; diagnostics: boolean };
   /**

@@ -150,3 +150,26 @@ export function pushSample(samples: number[], ms: number): number[] {
   next.push(ms);
   return next;
 }
+
+/** Rolling stats for HUD run-latency samples (ms). Empty → all null. */
+export function latencySampleStats(samples: readonly number[]): {
+  n: number;
+  last: number | null;
+  p50: number | null;
+  p95: number | null;
+  max: number | null;
+} {
+  if (!samples.length) return { n: 0, last: null, p50: null, p95: null, max: null };
+  const sorted = [...samples].sort((a, b) => a - b);
+  const at = (p: number) => {
+    const idx = Math.min(sorted.length - 1, Math.max(0, Math.ceil(p * sorted.length) - 1));
+    return Math.round(sorted[idx] ?? 0);
+  };
+  return {
+    n: samples.length,
+    last: Math.round(samples[samples.length - 1] ?? 0),
+    p50: at(0.5),
+    p95: at(0.95),
+    max: Math.round(sorted[sorted.length - 1] ?? 0),
+  };
+}

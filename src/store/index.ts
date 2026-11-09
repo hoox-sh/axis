@@ -853,7 +853,7 @@ export const DEFAULTS: AppState = {
     // onchain?: optional 5th plane — created by health probe; never in DEFAULTS/hydrate
     runLatencySamples: [],
     lastTick: null,
-    hud: { compact: false, overlay: false, diagnostics: false },
+    hud: { compact: true, overlay: false, diagnostics: false },
     // Privacy: never prompt to share error data unless the user opts in
     shareOnError: false,
   },
@@ -1234,7 +1234,7 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
         runLatencySamples: [],
         lastTick: null,
         hud: {
-          compact: false,
+          compact: true,
           overlay: false,
           diagnostics: false,
           ...(bag.telemetry &&
@@ -1946,7 +1946,7 @@ function seedStoreState(overlay: Partial<AppState> | null | undefined): AppState
       storage: idlePlane('local', 'Local', 'local'),
       runLatencySamples: [],
       lastTick: null,
-      hud: { compact: false, overlay: false, diagnostics: false },
+      hud: { compact: true, overlay: false, diagnostics: false },
       shareOnError: false,
     },
     errorShareOffer: null,
@@ -4787,7 +4787,7 @@ export function resetUiLayout(): void {
   // Leave browser fullscreen alone (user OS gesture); clear chart-only chrome hide
   setStore('presentation', 'chartOnly', false);
 
-  setStore('telemetry', 'hud', 'compact', false);
+  setStore('telemetry', 'hud', 'compact', true);
   setStore('telemetry', 'hud', 'overlay', false);
   setStore('telemetry', 'hud', 'diagnostics', false);
 
