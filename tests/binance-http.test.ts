@@ -10,6 +10,7 @@ import {
   binanceKlineWsUrls,
   binanceTickerWsUrls,
   fetchBinanceJson,
+  isBrowserCorsSafeBinanceHost,
   isPublicBinanceRestOrigin,
 } from '../src/data/binance-http';
 import { browserBlocksDirectCexRest } from '../src/data/worker-origin';
@@ -48,11 +49,11 @@ describe('binanceTickerWsUrls', () => {
 });
 
 describe('fetchBinanceJson', () => {
-  it('returns first successful host', async () => {
+  it('returns first successful host (vision first)', async () => {
     const seen: string[] = [];
     restoreFetch = mockFetch(async (input) => {
       seen.push(String(input));
-      if (String(input).includes('api.binance.com')) {
+      if (String(input).includes('data-api.binance.vision')) {
         return jsonResponse([[1, '1', '2', '0.5', '1.5', '10']]);
       }
       throw new Error('should not reach');
@@ -64,6 +65,7 @@ describe('fetchBinanceJson', () => {
     });
     expect(Array.isArray(data)).toBe(true);
     expect(seen[0]).toContain(BINANCE_REST_HOSTS[0]);
+    expect(BINANCE_REST_HOSTS[0]).toContain('data-api.binance.vision');
   });
 
   it('hits fapi for linear klines', async () => {
@@ -113,7 +115,29 @@ describe('fetchBinanceJson', () => {
     expect(seen.some((u) => u.includes('api.binance.com'))).toBe(false);
   });
 
-  it('Worker 400 does not call api.binance.com', async () => {
+  it('Worker 400 (bad request) stays hard and skips direct hosts', async () => {
+    const seen: string[] = [];
+    restoreFetch = mockFetch(async (input) => {
+      seen.push(String(input));
+      if (String(input).includes('/api/market/binance/')) {
+        return jsonResponse(
+          { status: 'error', code: 'BAD_QUERY', message: 'bad symbol' },
+          400,
+        );
+      }
+      return jsonResponse(klineRow);
+    });
+    await expect(
+      fetchBinanceJson({
+        path: 'klines',
+        query: 'symbol=BAD',
+      }),
+    ).rejects.toThrow(/bad symbol/);
+    expect(seen.some((u) => u.includes('api.binance.com'))).toBe(false);
+    expect(seen.some((u) => u.includes('data-api.binance.vision'))).toBe(false);
+  });
+
+  it('Worker 451 falls through to vision outside a real browser', async () => {
     const seen: string[] = [];
     restoreFetch = mockFetch(async (input) => {
       seen.push(String(input));
@@ -123,15 +147,16 @@ describe('fetchBinanceJson', () => {
           451,
         );
       }
-      return jsonResponse(klineRow);
+      if (String(input).includes('data-api.binance.vision')) return jsonResponse(klineRow);
+      throw new Error(`unexpected ${input}`);
     });
-    await expect(
-      fetchBinanceJson({
-        path: 'klines',
-        query: 'symbol=BTCUSDT&interval=1d',
-      }),
-    ).rejects.toThrow(/geo blocked/);
-    expect(seen.some((u) => u.includes('api.binance.com'))).toBe(false);
+    const data = await fetchBinanceJson({
+      path: 'klines',
+      query: 'symbol=BTCUSDT&interval=1d',
+    });
+    expect(Array.isArray(data)).toBe(true);
+    expect(seen.some((u) => u.includes('/api/market/binance/'))).toBe(true);
+    expect(seen.some((u) => u.includes('data-api.binance.vision'))).toBe(true);
   });
 
   it('Worker 5xx falls through to direct host outside a real browser', async () => {
@@ -142,7 +167,7 @@ describe('fetchBinanceJson', () => {
       if (url.includes('/api/market/binance/')) {
         return jsonResponse({ status: 'error', message: 'down' }, 502);
       }
-      if (url.includes('api.binance.com')) return jsonResponse(klineRow);
+      if (url.includes('data-api.binance.vision')) return jsonResponse(klineRow);
       throw new Error(`unexpected ${url}`);
     });
     const data = await fetchBinanceJson({
@@ -151,7 +176,7 @@ describe('fetchBinanceJson', () => {
     });
     expect(Array.isArray(data)).toBe(true);
     expect(seen.some((u) => u.includes('/api/market/binance/'))).toBe(true);
-    expect(seen.some((u) => u.includes('api.binance.com'))).toBe(true);
+    expect(seen.some((u) => u.includes('data-api.binance.vision'))).toBe(true);
   });
 
   it('real browser does not fetch api.binance.com after Worker 5xx (CORS)', async () => {
@@ -196,6 +221,41 @@ describe('fetchBinanceJson', () => {
     expect(seen.every((u) => u.includes('/api/market/binance/'))).toBe(true);
     expect(warns.filter((w) => w.includes('Skipping direct api.binance.com')).length).toBe(1);
   });
+
+  it('real browser falls through Worker 403 to data-api.binance.vision only', async () => {
+    const prev = (globalThis as { document?: unknown }).document;
+    (globalThis as { document: { nodeType: number } }).document = { nodeType: 9 };
+    const seen: string[] = [];
+    restoreFetch = mockFetch(async (input) => {
+      const url = String(input);
+      seen.push(url);
+      if (url.includes('/api/market/binance/')) {
+        return new Response('<html>blocked</html>', {
+          status: 403,
+          headers: { 'Content-Type': 'text/html', 'X-Axis-Market-Upstream': 'all-blocked' },
+        });
+      }
+      if (url.includes('data-api.binance.vision')) return jsonResponse(klineRow);
+      throw new Error(`unexpected ${url}`);
+    });
+    try {
+      expect(browserBlocksDirectCexRest()).toBe(true);
+      const data = await fetchBinanceJson({
+        path: 'klines',
+        query: 'symbol=BTCUSDT&interval=1m&limit=5',
+      });
+      expect(Array.isArray(data)).toBe(true);
+    } finally {
+      if (prev === undefined) {
+        delete (globalThis as { document?: unknown }).document;
+      } else {
+        (globalThis as { document: unknown }).document = prev;
+      }
+    }
+    expect(seen.some((u) => u.includes('/api/market/binance/'))).toBe(true);
+    expect(seen.some((u) => u.includes('data-api.binance.vision'))).toBe(true);
+    expect(seen.some((u) => u.includes('api.binance.com'))).toBe(false);
+  });
 });
 
 describe('isPublicBinanceRestOrigin', () => {
@@ -204,5 +264,10 @@ describe('isPublicBinanceRestOrigin', () => {
     expect(isPublicBinanceRestOrigin('https://data-api.binance.vision/')).toBe(true);
     expect(isPublicBinanceRestOrigin('https://fapi.binance.com')).toBe(true);
     expect(isPublicBinanceRestOrigin('https://proxy.example/binance')).toBe(false);
+  });
+
+  it('marks vision as browser-CORS-safe', () => {
+    expect(isBrowserCorsSafeBinanceHost('https://data-api.binance.vision')).toBe(true);
+    expect(isBrowserCorsSafeBinanceHost('https://api.binance.com')).toBe(false);
   });
 });
