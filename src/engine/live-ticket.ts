@@ -41,6 +41,8 @@ const MINT_TIMEOUT_MS = 10_000;
 const TICKET_RE = /^[a-f0-9]{32}$/;
 /** Same shape as MCP bridge / Worker `pn_` keys. */
 const WORKER_API_KEY_RE = /^pn_[a-f0-9]{48}$/;
+/** Coalesce concurrent mints for the same Worker+key (boot used to fire two GETs). */
+const mintInflight = new Map<string, Promise<string>>();
 
 /** Cloud Worker origin + AXIS API key used only to mint a live ticket. */
 export type LiveProxy = {
@@ -170,7 +172,7 @@ export function workerLiveWsUrl(workerEndpoint: string, ticket?: string): string
  * @throws {LiveTicketError} `retryable: false` for a missing/rejected key or a malformed
  * ticket body, `true` for transport errors and 5xx/408/429 responses.
  */
-export async function mintLiveTicket(proxy: LiveProxy): Promise<string> {
+async function mintLiveTicketOnce(proxy: LiveProxy): Promise<string> {
   const key = String(proxy.apiKey || '').trim();
   if (!key) throw new LiveTicketError('live ticket: Worker API key missing', false);
   const url = `${workerLiveHttpUrl(proxy.endpoint)}?issue=ticket`;
@@ -203,4 +205,22 @@ export async function mintLiveTicket(proxy: LiveProxy): Promise<string> {
   const ticket = isRecord(body) && typeof body['ticket'] === 'string' ? body['ticket'].trim() : '';
   if (!TICKET_RE.test(ticket)) throw new LiveTicketError('live ticket missing', false);
   return ticket;
+}
+
+export async function mintLiveTicket(proxy: LiveProxy): Promise<string> {
+  const key = String(proxy.apiKey || '').trim();
+  if (!key) throw new LiveTicketError('live ticket: Worker API key missing', false);
+  const cacheKey = `${normalizeEndpointBase(proxy.endpoint)}\0${key}`;
+  const existing = mintInflight.get(cacheKey);
+  if (existing) return existing;
+  const pending = mintLiveTicketOnce(proxy).finally(() => {
+    if (mintInflight.get(cacheKey) === pending) mintInflight.delete(cacheKey);
+  });
+  mintInflight.set(cacheKey, pending);
+  return pending;
+}
+
+/** @internal test helper — drop in-flight mint coalescing. */
+export function _clearLiveTicketMintInflightForTests(): void {
+  mintInflight.clear();
 }

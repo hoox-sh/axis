@@ -467,6 +467,8 @@ export class StreamLiveWire {
   private readonly axisResubPending = new Set<string>();
   /** Consecutive axis-resub attempts since the last committed delta/full. */
   private readonly axisResubAttempts = new Map<string, number>();
+  /** Last axis-resub network action (ms) — gates status/resync side effects. */
+  private readonly axisResubAt = new Map<string, number>();
   /** Seq gap: drop deltas until the next full. Axis repair does not use this. */
   private readonly holdUntilFull = new Set<string>();
   /**
@@ -1876,17 +1878,33 @@ export class StreamLiveWire {
     return fullLen !== windowLen;
   }
 
-  /** Degraded + one resub per snapshot for an unpaintable merge (no paint). */
+  /**
+   * Soft recovery for an unpaintable merge (no paint). Donchian-style scripts
+   * often land with engine `bar_times` longer than the chart window; without
+   * backoff every delta marked `degraded` and escalated to fresh subscribe
+   * (`resync` climbing tens per minute while chips flickered).
+   */
   private requestAxisResub(subId: string, message = 'axis mismatch — resubscribing'): void {
-    this.handlers.onStatus(subId, 'degraded', { message });
-    const attempts = (this.axisResubAttempts.get(subId) ?? 0) + 1;
-    this.axisResubAttempts.set(subId, attempts);
+    const now = Date.now();
+    const attempts = this.axisResubAttempts.get(subId) ?? 0;
+    const lastAt = this.axisResubAt.get(subId) ?? 0;
+    const backoff =
+      GAP_RESYNC_BACKOFF_MS[Math.min(attempts, GAP_RESYNC_BACKOFF_MS.length - 1)] ?? 10_000;
+    if (attempts > 0 && now - lastAt < backoff) return;
+
+    this.axisResubAt.set(subId, now);
+    const next = attempts + 1;
+    this.axisResubAttempts.set(subId, next);
+    // Soft chip — same idea as tip-lag recovery (not a hard feed failure).
+    this.handlers.onStatus(subId, 'connecting', { message });
+
     // Resume returns the same pooled engine session. If that session keeps
     // producing a full the applier cannot splice, replace it with a fresh
     // subscribe (new session) instead of looping on 12k-point snapshots.
-    if (attempts > AXIS_RESUB_ESCALATE_AFTER) {
+    if (next > AXIS_RESUB_ESCALATE_AFTER) {
       this.axisResubAttempts.delete(subId);
-      this.requestFreshSnapshot(subId, 'axis mismatch — fresh subscribe');
+      this.axisResubAt.delete(subId);
+      this.requestFreshSnapshot(subId, 'axis mismatch — fresh subscribe', { soft: true });
       return;
     }
     if (this.axisResubPending.has(subId)) return;
@@ -1901,7 +1919,7 @@ export class StreamLiveWire {
         this.resumePayload(subId, this.appliedSeq.get(subId) ?? 0),
       );
     } catch {
-      /* resume is best-effort; HUD already shows degraded */
+      /* resume is best-effort; HUD already shows connecting */
     }
   }
 
@@ -2029,6 +2047,7 @@ export class StreamLiveWire {
   private dropScriptLocal(subId: string): void {
     this.axisResubPending.delete(subId);
     this.axisResubAttempts.delete(subId);
+    this.axisResubAt.delete(subId);
     this.holdUntilFull.delete(subId);
     this.pendingScriptSubscribe.delete(subId);
     this.clearGapResync(subId);
@@ -2046,6 +2065,7 @@ export class StreamLiveWire {
   release(subId: string): void {
     this.axisResubPending.delete(subId);
     this.axisResubAttempts.delete(subId);
+    this.axisResubAt.delete(subId);
     this.holdUntilFull.delete(subId);
     this.pendingScriptSubscribe.delete(subId);
     this.clearGapResync(subId);
@@ -2133,6 +2153,7 @@ export class StreamLiveWire {
     this.holdUntilFull.clear();
     this.axisResubPending.clear();
     this.axisResubAttempts.clear();
+    this.axisResubAt.clear();
     this.gapResyncAt.clear();
     this.gapResyncAttempts.clear();
     this.cancelSeriesScriptKick();
@@ -2166,6 +2187,7 @@ export class StreamLiveWire {
     this.holdUntilFull.clear();
     this.axisResubPending.clear();
     this.axisResubAttempts.clear();
+    this.axisResubAt.clear();
     this.gapResyncAt.clear();
     this.gapResyncAttempts.clear();
     this.inboxOverflowPending.clear();

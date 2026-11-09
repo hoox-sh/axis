@@ -6,6 +6,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import {
   LiveTicketError,
+  _clearLiveTicketMintInflightForTests,
   liveProxyForEngine,
   liveTicketRetryable,
   mintLiveTicket,
@@ -20,6 +21,7 @@ const realFetch = globalThis.fetch;
 
 afterEach(() => {
   globalThis.fetch = realFetch;
+  _clearLiveTicketMintInflightForTests();
 });
 
 function json(body: unknown, status = 200): Response {
@@ -155,5 +157,19 @@ describe('mintLiveTicket', () => {
     await expect(
       mintLiveTicket({ endpoint: 'https://worker.axis.hoox.sh', apiKey: KEY }),
     ).rejects.toThrow(/missing/i);
+  });
+
+  test('coalesces concurrent mints for the same Worker+key into one GET', async () => {
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls += 1;
+      await new Promise((r) => setTimeout(r, 30));
+      return json({ status: 'success', ticket: TICKET, expiresIn: 60 });
+    }) as typeof fetch;
+    const proxy = { endpoint: 'https://worker.axis.hoox.sh', apiKey: KEY };
+    const [a, b] = await Promise.all([mintLiveTicket(proxy), mintLiveTicket(proxy)]);
+    expect(a).toBe(TICKET);
+    expect(b).toBe(TICKET);
+    expect(calls).toBe(1);
   });
 });

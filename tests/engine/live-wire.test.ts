@@ -1342,60 +1342,71 @@ describe('live-wire P1 series + study push', () => {
 
   test('repeated unpaintable fulls escalate from resume to a fresh subscribe', async () => {
     const h = makeHarness();
-    const first = h.wire.evalScript({
-      subId: 's-1',
-      script: 'indicator() {}',
-      meta: {},
-      bars: BARS,
-    });
-    await tick();
-    await tick();
-    h.emit({
-      type: 'full',
-      id: 's-1',
-      sessionId: 'ses',
-      seq: 5,
-      payload: { count: 1, plots: [[1]], series: { a: [1] } },
-    });
-    await first;
-    const subsBefore = h.sent.filter((s) => s.kind === 'subscribe:script').length;
-    // Continuous seq, but base_index 5 cannot splice onto a 1-bar cache.
-    const badDelta = (seq: number) => ({
-      type: 'delta',
-      id: 's-1',
-      sessionId: 'ses',
-      seq,
-      payload: { base_index: 5, count: 6, tail_len: 1, plots: [[9]], series: { a: [9] } },
-    });
-    h.emit(badDelta(6));
-    await tick();
-    expect(h.resumes).toHaveLength(1);
-    // Resume answers with the same stale session — still unpaintable.
-    h.emit({
-      type: 'full',
-      id: 's-1',
-      sessionId: 'ses',
-      seq: 7,
-      payload: { count: 1, plots: [[1]], series: { a: [1] } },
-    });
-    await tick();
-    h.emit(badDelta(8));
-    await tick();
-    expect(h.resumes).toHaveLength(2);
-    h.emit({
-      type: 'full',
-      id: 's-1',
-      sessionId: 'ses',
-      seq: 9,
-      payload: { count: 1, plots: [[1]], series: { a: [1] } },
-    });
-    await tick();
-    h.emit(badDelta(10));
-    await tick();
-    // Third failure replaces resume with unsubscribe + fresh subscribe.
-    expect(h.unsubscribed).toEqual(['s-1']);
-    expect(h.sent.filter((s) => s.kind === 'subscribe:script')).toHaveLength(subsBefore + 1);
-    expect(h.statuses.map((s) => s.status)).toContain('degraded');
+    let now = 1_700_000_000_000;
+    const realNow = Date.now;
+    Date.now = () => now;
+    try {
+      const first = h.wire.evalScript({
+        subId: 's-1',
+        script: 'indicator() {}',
+        meta: {},
+        bars: BARS,
+      });
+      await tick();
+      await tick();
+      h.emit({
+        type: 'full',
+        id: 's-1',
+        sessionId: 'ses',
+        seq: 5,
+        payload: { count: 1, plots: [[1]], series: { a: [1] } },
+      });
+      await first;
+      const subsBefore = h.sent.filter((s) => s.kind === 'subscribe:script').length;
+      // Continuous seq, but base_index 5 cannot splice onto a 1-bar cache.
+      const badDelta = (seq: number) => ({
+        type: 'delta',
+        id: 's-1',
+        sessionId: 'ses',
+        seq,
+        payload: { base_index: 5, count: 6, tail_len: 1, plots: [[9]], series: { a: [9] } },
+      });
+      h.emit(badDelta(6));
+      await tick();
+      expect(h.resumes).toHaveLength(1);
+      // Resume answers with the same stale session — still unpaintable.
+      h.emit({
+        type: 'full',
+        id: 's-1',
+        sessionId: 'ses',
+        seq: 7,
+        payload: { count: 1, plots: [[1]], series: { a: [1] } },
+      });
+      await tick();
+      // Past the 500ms axis-resub backoff so the second resume is allowed.
+      now += 600;
+      h.emit(badDelta(8));
+      await tick();
+      expect(h.resumes).toHaveLength(2);
+      h.emit({
+        type: 'full',
+        id: 's-1',
+        sessionId: 'ses',
+        seq: 9,
+        payload: { count: 1, plots: [[1]], series: { a: [1] } },
+      });
+      await tick();
+      now += 1_600;
+      h.emit(badDelta(10));
+      await tick();
+      // Third failure replaces resume with unsubscribe + soft fresh subscribe.
+      expect(h.unsubscribed).toEqual(['s-1']);
+      expect(h.sent.filter((s) => s.kind === 'subscribe:script')).toHaveLength(subsBefore + 1);
+      expect(h.statuses.map((s) => s.status)).toContain('connecting');
+      expect(h.statuses.map((s) => s.status)).not.toContain('degraded');
+    } finally {
+      Date.now = realNow;
+    }
   });
 
   test('a mid-stream snapshot replaces a pending forming tip as one generation', async () => {
@@ -2267,7 +2278,9 @@ describe('live-wire P1 series + study push', () => {
       });
       await tick();
       expect(h.applied).toEqual([{ via: 'stream-full' }]);
-      expect(h.statuses.map((st) => st.status)).toContain('degraded');
+      // Soft axis recovery uses connecting (not degraded chip flicker).
+      expect(h.statuses.map((st) => st.status)).toContain('connecting');
+      expect(h.statuses.map((st) => st.status)).not.toContain('degraded');
       expect(h.resumes).toHaveLength(1);
       expect(h.resumes[0]).toMatchObject({ id: 's-1' });
       // The next consistent delta merges against the axis-less cache and
