@@ -7,7 +7,7 @@ tags: [code, worker]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-09T05:32:13Z
+  at: 2026-11-09T16:28:30Z
 sources:
   - id: tree
     resource: "worker/src"
@@ -27,7 +27,7 @@ okf_lock: generated
 * `index.ts` — Env, McpBridgeDO, SessionDO, pickOrigin
 * `keys.ts` — handleKeys
 * `live-metrics.ts` — LiveMetric, RelayClosedBy, RelayStats, emitLiveMetric, frameBytes
-* `live-proxy.ts` — LIVE_TICKET_TTL_S, _resetLiveTicketsForTests, engineLiveWsUrl, handleLiveProxy, relayFrame
+* `live-proxy.ts` — LIVE_TICKET_TTL_S, _resetLiveTicketsForTests, engineLiveWsUrl, handleLiveProxy, openUpstreamLiveWs, relayFrame, upstreamLiveFetchUrl
 * `market.ts` — _resetMarketCacheForTests, handleMarket, marketAllowlist
 * `onchain.ts` — LLAMA_PROTOCOLS_RATE_LIMIT, LLAMA_PROTOCOLS_RATE_WINDOW_MS, LLAMA_PROTOCOLS_RESPONSE_MAX_BYTES, LLAMA_PROTOCOLS_UPSTREAM_MAX_BYTES, ONCHAIN_IP_LIMIT, ONCHAIN_IP_WINDOW_MS, ONCHAIN_UPSTREAM_MAX_BYTES, _resetOnchainCacheForTests, handleOnchain, onchainAllowlist, slimLlamaProtocols
 * `proxy-plane.ts` — CacheEntry, CacheEviction, ProxyPlane, ProxyPlaneOptions, createProxyPlane

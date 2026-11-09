@@ -16,6 +16,7 @@ import {
   engineLiveWsUrl,
   handleLiveProxy,
   relayFrame,
+  upstreamLiveFetchUrl,
 } from '../src/live-proxy';
 import type { Env } from '../src/index';
 
@@ -108,6 +109,17 @@ describe('engineLiveWsUrl', () => {
   });
 });
 
+describe('upstreamLiveFetchUrl', () => {
+  it('maps wss/ws to https/http for fetch Upgrade', () => {
+    expect(upstreamLiveFetchUrl('wss://pyne.example/ws/live')).toBe(
+      'https://pyne.example/ws/live',
+    );
+    expect(upstreamLiveFetchUrl('ws://127.0.0.1:5002/ws/live')).toBe(
+      'http://127.0.0.1:5002/ws/live',
+    );
+  });
+});
+
 describe('relayFrame', () => {
   it('passes text through unchanged', () => {
     const frame = JSON.stringify({ type: 'auth', payload: { token: 'x' } });
@@ -183,9 +195,10 @@ describe('live relay keeps binary frames binary', () => {
 
   const g = globalThis as Record<string, unknown>;
   const savedPair = g.WebSocketPair;
-  const savedWebSocket = g.WebSocket;
+  const savedFetch = g.fetch;
   let pair: [FakeSocket, FakeSocket] | null = null;
   let upstreamSocket: FakeSocket | null = null;
+  let refuseUpstream = false;
 
   class FakeWebSocketPair {
     0: FakeSocket;
@@ -197,7 +210,7 @@ describe('live relay keeps binary frames binary', () => {
     }
   }
   class FakeUpstream extends FakeSocket {
-    constructor(readonly url: string) {
+    constructor() {
       super();
       upstreamSocket = this;
     }
@@ -205,14 +218,27 @@ describe('live relay keeps binary frames binary', () => {
 
   beforeAll(() => {
     g.WebSocketPair = FakeWebSocketPair;
-    g.WebSocket = FakeUpstream;
+    g.fetch = async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (!url.includes('/ws/live')) {
+        return new Response('not found', { status: 404 });
+      }
+      if (refuseUpstream) {
+        return new Response('no upgrade', { status: 400 });
+      }
+      const up = new FakeUpstream();
+      return { status: 101, webSocket: up } as unknown as Response;
+    };
   });
   afterAll(() => {
     g.WebSocketPair = savedPair;
-    g.WebSocket = savedWebSocket;
+    g.fetch = savedFetch;
   });
 
   async function connect(): Promise<{ client: FakeSocket; srv: FakeSocket; up: FakeSocket }> {
+    refuseUpstream = false;
+    pair = null;
+    upstreamSocket = null;
     _resetLiveTicketsForTests();
     const issued = await handleLiveProxy(
       req('/api/ws/live?issue=ticket', { Authorization: `Bearer ${KEY}` }),
@@ -234,6 +260,29 @@ describe('live relay keeps binary frames binary', () => {
     return { client: pair[0], srv: pair[1], up: upstreamSocket };
   }
 
+  it('fails closed with 502 when upstream refuses Upgrade', async () => {
+    refuseUpstream = true;
+    pair = null;
+    upstreamSocket = null;
+    _resetLiveTicketsForTests();
+    const issued = await handleLiveProxy(
+      req('/api/ws/live?issue=ticket', { Authorization: `Bearer ${KEY}` }),
+      {} as Env,
+      origin,
+      '/api/ws/live',
+    );
+    const { ticket } = (await issued!.json()) as { ticket: string };
+    const res = await handleLiveProxy(
+      req(`/api/ws/live?ticket=${ticket}`, { Upgrade: 'websocket' }),
+      { EXTERNAL_BACKEND: 'http://engine.internal:5002' } as unknown as Env,
+      origin,
+      '/api/ws/live',
+    );
+    expect(res!.status).toBe(502);
+    expect(((await res!.json()) as { code: string }).code).toBe('UPSTREAM_WS');
+    refuseUpstream = false;
+  });
+
   async function waitForSent(sock: { sent: unknown[] }, n: number): Promise<void> {
     for (let i = 0; i < 30; i++) {
       if (sock.sent.length >= n) return;
@@ -242,17 +291,14 @@ describe('live relay keeps binary frames binary', () => {
     throw new Error(`relay did not forward ${n} frame(s) (have ${sock.sent.length})`);
   }
 
-  it('buffers client→engine frames until the upstream socket is open', async () => {
+  it('marks upstream open after fetch Upgrade and relays auth immediately', async () => {
     const { srv, up } = await connect();
 
-    // Browser onopen can send auth before the engine socket is ready.
-    srv.emit('message', '{"type":"auth","payload":{"token":"pyne-key"}}');
-    expect(up.sent).toHaveLength(0);
-
-    up.emit('open', undefined);
+    // fetch+Upgrade accepts before returning 101 — no deferred open wait.
     expect(srv.sent[0]).toBe(
       JSON.stringify({ type: 'status', payload: { code: 'live-relay', message: 'connected' } }),
     );
+    srv.emit('message', '{"type":"auth","payload":{"token":"pyne-key"}}');
     expect(up.sent[0]).toBe('{"type":"auth","payload":{"token":"pyne-key"}}');
   });
 
@@ -260,7 +306,6 @@ describe('live relay keeps binary frames binary', () => {
     const { srv, up } = await connect();
 
     // The pair's server end reaches the browser, so engine→client frames land on srv.send.
-    up.emit('open', undefined);
     expect(srv.sent[0]).toBe(
       JSON.stringify({ type: 'status', payload: { code: 'live-relay', message: 'connected' } }),
     );
@@ -402,7 +447,7 @@ describe('live relay keeps binary frames binary', () => {
     try {
       const { srv, up } = await connect();
       up.emit('message', '{"type":"pong"}');
-      expect(srv.sent[0]).toBe('{"type":"pong"}');
+      expect(srv.sent[1]).toBe('{"type":"pong"}');
       expect(() => relayFrame({ nope: true })).toThrow(/unsupported/);
     } finally {
       delete (FakeSocket.prototype as { binaryType?: string }).binaryType;

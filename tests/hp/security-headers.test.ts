@@ -23,7 +23,7 @@ function read(rel: string): string {
   return readFileSync(join(root, rel), 'utf8');
 }
 
-/** Parse Cloudflare Pages `_headers` path blocks. */
+/** Parse Cloudflare Pages `_headers` path blocks (incl. `! Header` detach). */
 function parsePagesHeaders(source: string): Map<string, Record<string, string>> {
   const blocks = new Map<string, Record<string, string>>();
   let path = '';
@@ -34,6 +34,11 @@ function parsePagesHeaders(source: string): Map<string, Record<string, string>> 
   for (const raw of source.split('\n')) {
     const line = raw.trim();
     if (!line || line.startsWith('#')) continue;
+    // Detach form: "! Cache-Control" (no colon) — record presence for asserts.
+    if (line.startsWith('! ')) {
+      headers[`! ${line.slice(2).trim()}`] = '';
+      continue;
+    }
     if (!line.includes(':')) {
       flush();
       path = line;
@@ -70,14 +75,17 @@ describe('Pages / nginx / Worker security + cache headers', () => {
 
     expect(html?.['Cache-Control']).toBe(HTML_CACHE_CONTROL);
     expect(assets?.['Cache-Control']).toBe(ASSET_CACHE_CONTROL);
+    // Pages joins every matching rule — /assets/* must detach Cache-Control
+    // and must not re-declare security headers (live HSTS parse failures).
+    expect(Object.prototype.hasOwnProperty.call(assets, '! Cache-Control')).toBe(true);
+    expect(assets?.['Strict-Transport-Security']).toBeUndefined();
+    expect(assets?.['Content-Security-Policy']).toBeUndefined();
 
-    for (const block of [html, assets]) {
-      expect(block?.['Strict-Transport-Security']).toBe(HSTS_VALUE);
-      expect(block?.['Permissions-Policy']).toBe(PERMISSIONS_POLICY);
-      expect(block?.['Content-Security-Policy']).toBe(PAGES_CSP_VALUE);
-      expect(connectSrcIsAllowlisted(block?.['Content-Security-Policy'] || '')).toBe(true);
-      expect(block?.['Content-Security-Policy']).toContain("'wasm-unsafe-eval'");
-    }
+    expect(html?.['Strict-Transport-Security']).toBe(HSTS_VALUE);
+    expect(html?.['Permissions-Policy']).toBe(PERMISSIONS_POLICY);
+    expect(html?.['Content-Security-Policy']).toBe(PAGES_CSP_VALUE);
+    expect(connectSrcIsAllowlisted(html?.['Content-Security-Policy'] || '')).toBe(true);
+    expect(html?.['Content-Security-Policy']).toContain("'wasm-unsafe-eval'");
 
     const file = read('public/_headers');
     expect(file).toContain('static.cloudflareinsights.com');

@@ -110,6 +110,42 @@ export function engineLiveWsUrl(externalBackend: string): string | null {
   return u.toString();
 }
 
+/** `wss://` / `ws://` → `https://` / `http://` for Workers `fetch` Upgrade. */
+export function upstreamLiveFetchUrl(wsUrl: string): string {
+  const u = new URL(wsUrl);
+  u.protocol = u.protocol === 'wss:' ? 'https:' : 'http:';
+  return u.toString();
+}
+
+type AcceptableWs = WebSocket & {
+  accept: (opts?: { allowHalfOpen?: boolean }) => void;
+};
+
+/**
+ * Open the engine live socket via `fetch` + `Upgrade: websocket`.
+ *
+ * Prefer this over `new WebSocket(url)` so the relay can `accept({ allowHalfOpen: true })`
+ * (required for clean proxy close coordination on newer workerd). Fail closed when the
+ * peer refuses the upgrade — returning 101 to the browser while upstream is dead made
+ * Firefox report “can't establish a connection”.
+ */
+export async function openUpstreamLiveWs(wsUrl: string): Promise<WebSocket> {
+  const res = await fetch(upstreamLiveFetchUrl(wsUrl), {
+    headers: { Upgrade: 'websocket' },
+  });
+  const ws = res.webSocket as AcceptableWs | null;
+  if (!ws) {
+    throw new Error(`upstream refused websocket upgrade (HTTP ${res.status})`);
+  }
+  preferArrayBuffer(ws);
+  try {
+    ws.accept({ allowHalfOpen: true });
+  } catch {
+    ws.accept();
+  }
+  return ws;
+}
+
 async function authedUserId(req: Request, env: Env, url: URL): Promise<string | null> {
   const ticket = (url.searchParams.get('ticket') || '').trim();
   if (ticket) return consumeTicket(env, ticket);
@@ -284,13 +320,6 @@ export async function handleLiveProxy(
     });
   }
 
-  const pair = new WebSocketPair();
-  const [client, server] = [pair[0], pair[1]];
-  const srv = server as WebSocket;
-  // Before accept(): compat dates ≥ 2026-03-17 otherwise deliver Blob.
-  preferArrayBuffer(srv);
-  srv.accept();
-
   const stats = new RelayStats();
   try {
     stats.upstreamHost = new URL(upstreamUrl).host;
@@ -298,46 +327,63 @@ export async function handleLiveProxy(
     /* never log a malformed origin */
   }
 
-  let upstream: WebSocket | null = null;
   const tUpstreamConnect = Date.now();
+  let up: WebSocket;
   try {
-    upstream = new WebSocket(upstreamUrl);
-    preferArrayBuffer(upstream);
-  } catch {
-    stats.finalize('upstream');
-    try {
-      (server as WebSocket).close(1011, 'upstream unavailable');
-    } catch {
-      /* ignore */
-    }
-    return new Response(null, { status: 101, webSocket: client });
-  }
-  const up = upstream as WebSocket;
-  // The browser `onopen` can fire (and send `auth`) before the upstream
-  // engine socket is open. Buffer client→engine frames until then so the
-  // first auth is not silently dropped (subscribe would then see UNAUTHORIZED).
-  let upstreamOpen = false;
-  const pendingToUpstream: unknown[] = [];
-  const PENDING_TO_UP_CAP = 32;
-  up.addEventListener('open', () => {
-    stats.upstreamConnectMs = Date.now() - tUpstreamConnect;
+    up = await openUpstreamLiveWs(upstreamUrl);
+  } catch (err) {
     emitLiveMetric({
       type: 'live_relay_upstream_open',
-      connect_ms: stats.upstreamConnectMs,
+      connect_ms: Date.now() - tUpstreamConnect,
       upstream_host: stats.upstreamHost,
+      error: err instanceof Error ? err.message : String(err),
     });
-    upstreamOpen = true;
+    return errorResponse(
+      'UPSTREAM_WS',
+      'engine /ws/live upgrade failed — check EXTERNAL_BACKEND',
+      { status: 502, origin, cors: CORS },
+    );
+  }
+  stats.upstreamConnectMs = Date.now() - tUpstreamConnect;
+  emitLiveMetric({
+    type: 'live_relay_upstream_open',
+    connect_ms: stats.upstreamConnectMs,
+    upstream_host: stats.upstreamHost,
+  });
+
+  const pair = new WebSocketPair();
+  const [client, server] = [pair[0], pair[1]];
+  const srv = server as AcceptableWs;
+  // Before accept(): compat dates ≥ 2026-03-17 otherwise deliver Blob.
+  preferArrayBuffer(srv);
+  try {
+    srv.accept({ allowHalfOpen: true });
+  } catch {
+    srv.accept();
+  }
+
+  // fetch-Upgrade sockets are already connected after accept(); still honor a
+  // late `open` from mocks / runtimes that emit it, and buffer until then.
+  let upstreamOpen = true;
+  const pendingToUpstream: unknown[] = [];
+  const PENDING_TO_UP_CAP = 32;
+  const flushPending = () => {
+    if (!upstreamOpen) return;
     for (const data of pendingToUpstream) {
       relayIncoming(up, data);
     }
     pendingToUpstream.length = 0;
-    try {
-      srv.send(
-        JSON.stringify({ type: 'status', payload: { code: 'live-relay', message: 'connected' } }),
-      );
-    } catch {
-      /* ignore */
-    }
+  };
+  try {
+    srv.send(
+      JSON.stringify({ type: 'status', payload: { code: 'live-relay', message: 'connected' } }),
+    );
+  } catch {
+    /* ignore */
+  }
+  up.addEventListener('open', () => {
+    upstreamOpen = true;
+    flushPending();
   });
   up.addEventListener('message', (ev) => {
     stats.noteFrame('down', ev.data);

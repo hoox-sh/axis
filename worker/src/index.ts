@@ -502,7 +502,11 @@ export default {
     const url = new URL(req.url);
 
     try {
-      return withSecurityHeaders(await dispatch(req, env, ctx, origin, url));
+      const res = await dispatch(req, env, ctx, origin, url);
+      // Do not stamp HSTS/nosniff on 101 upgrades — mutating Headers on a
+      // WebSocket response is unnecessary and has broken some edge clients.
+      if (res.webSocket) return res;
+      return withSecurityHeaders(res);
     } catch (err) {
       // Never reflect internal failure detail to the caller (A8) — the shared
       // handler logs server-side and returns a generic envelope.
