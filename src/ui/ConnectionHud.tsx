@@ -46,7 +46,7 @@ import {
   createSignal,
   onCleanup,
 } from 'solid-js';
-import { store, setStore, persist, setActivePlugin, setDataSourcePanelOpen } from '../store';
+import { store, setActivePlugin, setDataSourcePanelOpen } from '../store';
 import { Popover } from './Popover';
 import type { FeedSubscription } from '../store/types';
 import { useNow } from './clock';
@@ -415,6 +415,30 @@ function showOnchainPlane(
   return false;
 }
 
+/** Little 3-segment meter for latency / network / app health on expanded row. */
+function PerfMeter(props: { level: 0 | 1 | 2 | 3; kind: 'latency' | 'network' | 'app' }) {
+  return (
+    <span
+      class={`axis-hud-meter axis-hud-meter--${props.kind}`}
+      data-level={props.level}
+      aria-hidden="true"
+    >
+      <span class="axis-hud-meter-seg" data-on={props.level >= 1 ? '1' : '0'} />
+      <span class="axis-hud-meter-seg" data-on={props.level >= 2 ? '1' : '0'} />
+      <span class="axis-hud-meter-seg" data-on={props.level >= 3 ? '1' : '0'} />
+    </span>
+  );
+}
+
+/** Map a latency ms value onto a 0–3 meter (lower is better). */
+function latencyMeterLevel(ms: number | null | undefined): 0 | 1 | 2 | 3 {
+  if (ms == null || !Number.isFinite(ms)) return 0;
+  if (ms <= 40) return 3;
+  if (ms <= 120) return 2;
+  if (ms <= 400) return 1;
+  return 1;
+}
+
 /** Read-only metric capsule for the expanded perf scanline. */
 function PerfCapsule(props: {
   label: string;
@@ -422,15 +446,18 @@ function PerfCapsule(props: {
   title?: string;
   testId?: string;
   state?: 'idle' | 'ok' | 'warn' | 'err' | 'load';
+  meter?: { level: 0 | 1 | 2 | 3; kind: 'latency' | 'network' | 'app' };
 }) {
   return (
     <span
-      class="axis-status-capsule"
+      class="axis-status-capsule axis-hud-perf-cap"
       data-testid={props.testId}
       data-hud-state={props.state || 'idle'}
       title={props.title}
     >
-      <HudMetricIcon kind="diag" />
+      <Show when={props.meter} fallback={<HudMetricIcon kind="diag" />}>
+        {(m) => <PerfMeter level={m().level} kind={m().kind} />}
+      </Show>
       <span class="axis-status-capsule-code is-word">{props.label}</span>
       <span class="axis-status-capsule-val tabular-nums">{props.value}</span>
     </span>
@@ -460,7 +487,7 @@ function usePaintLatency(active: () => boolean): () => PaintLatencyStats {
 
 /**
  * Expanded status-bar instruments: measured run / paint latency, network path,
- * and honest plane states. Never invents numbers — empty samples render `—`.
+ * and app plane states — each with a little meter. Never invents numbers.
  */
 function PerfMetrics(props: {
   snap: () => HudSnapshot;
@@ -470,8 +497,9 @@ function PerfMetrics(props: {
   const runStats = createMemo(() =>
     latencySampleStats(store.telemetry?.runLatencySamples || []),
   );
+  const runLast = () => store.lastRunMs ?? runStats().last ?? props.snap().latencyMs;
   const runValue = () => {
-    const last = store.lastRunMs ?? runStats().last ?? props.snap().latencyMs;
+    const last = runLast();
     const p50 = runStats().p50;
     if (last == null && p50 == null) return '—';
     if (p50 != null && runStats().n > 1) {
@@ -494,91 +522,114 @@ function PerfMetrics(props: {
     }`;
   };
   const pathValue = () => (props.snap().showPath ? props.snap().path : 'in tab');
+  const pathLevel = (): 0 | 1 | 2 | 3 => {
+    if (!props.snap().showPath) return 2;
+    return props.snap().path === 'WS' ? 3 : 2;
+  };
   const engPlane = () => store.telemetry?.engine;
   const src = () => store.telemetry?.source;
   const str = () => store.telemetry?.stream;
   const sto = () => store.telemetry?.storage;
+  const planeLevel = (st: PlaneTelemetry['state'] | undefined): 0 | 1 | 2 | 3 => {
+    if (st === 'open') return 3;
+    if (st === 'connecting' || st === 'degraded') return 2;
+    if (st === 'error') return 1;
+    return 0;
+  };
 
   return (
     <div
       class="axis-hud-perf flex items-center gap-1 flex-nowrap min-w-0"
       data-testid="axis-hud-perf"
     >
-      <PerfCapsule
-        label="Run"
-        value={runValue()}
-        title={
-          runStats().n
-            ? `Run latency · n=${runStats().n} · last ${formatLatency(runStats().last)} · p50 ${formatLatency(runStats().p50)} · p95 ${formatLatency(runStats().p95)}`
-            : 'Run latency — waiting for a script run'
-        }
-        testId="axis-hud-perf-run"
-        state={runStats().n || store.lastRunMs != null ? 'ok' : 'idle'}
-      />
-      <PerfCapsule
-        label="Paint"
-        value={paintValue()}
-        title={paintTitle()}
-        testId="axis-hud-perf-paint"
-        state={paint().n ? 'ok' : 'idle'}
-      />
-      <PerfCapsule
-        label="Path"
-        value={pathValue()}
-        title={
-          props.snap().showPath
-            ? `Network path · ${props.snap().path}`
-            : 'In-tab engine (no remote hop)'
-        }
-        testId="axis-hud-perf-path"
-        state={props.snap().path === 'WS' ? 'ok' : 'idle'}
-      />
-      <Show when={engPlane()}>
-        {(p) => (
-          <PerfCapsule
-            label="Eng"
-            value={`${p().state}${
-              p().latencyMs != null ? ` · ${formatLatency(p().latencyMs)}` : ''
-            }`}
-            title={`Engine plane · ${p().id} · ${p().transport}`}
-            testId="axis-hud-perf-eng"
-            state={planeChipState(p().state)}
-          />
-        )}
-      </Show>
-      <Show when={src()}>
-        {(p) => (
-          <PerfCapsule
-            label="Src"
-            value={p().state}
-            title={`Source · ${p().name || p().id}`}
-            testId="axis-hud-perf-src"
-            state={planeChipState(p().state)}
-          />
-        )}
-      </Show>
-      <Show when={str()}>
-        {(p) => (
-          <PerfCapsule
-            label="Str"
-            value={p().state}
-            title={`Stream · ${p().name || p().id}`}
-            testId="axis-hud-perf-str"
-            state={planeChipState(p().state)}
-          />
-        )}
-      </Show>
-      <Show when={sto()}>
-        {(p) => (
-          <PerfCapsule
-            label="Sto"
-            value={p().state}
-            title={`Storage · ${p().name || p().id}`}
-            testId="axis-hud-perf-sto"
-            state={planeChipState(p().state)}
-          />
-        )}
-      </Show>
+      <span class="axis-hud-perf-group" data-testid="axis-hud-perf-latency" title="Latency">
+        <PerfCapsule
+          label="Run"
+          value={runValue()}
+          title={
+            runStats().n
+              ? `Run latency · n=${runStats().n} · last ${formatLatency(runStats().last)} · p50 ${formatLatency(runStats().p50)} · p95 ${formatLatency(runStats().p95)}`
+              : 'Run latency — waiting for a script run'
+          }
+          testId="axis-hud-perf-run"
+          state={runStats().n || store.lastRunMs != null ? 'ok' : 'idle'}
+          meter={{ level: latencyMeterLevel(runLast()), kind: 'latency' }}
+        />
+        <PerfCapsule
+          label="Paint"
+          value={paintValue()}
+          title={paintTitle()}
+          testId="axis-hud-perf-paint"
+          state={paint().n ? 'ok' : 'idle'}
+          meter={{ level: latencyMeterLevel(paint().p50), kind: 'latency' }}
+        />
+      </span>
+      <span class="axis-hud-perf-group" data-testid="axis-hud-perf-network" title="Network">
+        <PerfCapsule
+          label="Path"
+          value={pathValue()}
+          title={
+            props.snap().showPath
+              ? `Network path · ${props.snap().path}`
+              : 'In-tab engine (no remote hop)'
+          }
+          testId="axis-hud-perf-path"
+          state={props.snap().path === 'WS' ? 'ok' : 'idle'}
+          meter={{ level: pathLevel(), kind: 'network' }}
+        />
+        <Show when={str()}>
+          {(p) => (
+            <PerfCapsule
+              label="Str"
+              value={p().state}
+              title={`Stream · ${p().name || p().id}`}
+              testId="axis-hud-perf-str"
+              state={planeChipState(p().state)}
+              meter={{ level: planeLevel(p().state), kind: 'network' }}
+            />
+          )}
+        </Show>
+      </span>
+      <span class="axis-hud-perf-group" data-testid="axis-hud-perf-app" title="App">
+        <Show when={engPlane()}>
+          {(p) => (
+            <PerfCapsule
+              label="Eng"
+              value={`${p().state}${
+                p().latencyMs != null ? ` · ${formatLatency(p().latencyMs)}` : ''
+              }`}
+              title={`Engine plane · ${p().id} · ${p().transport}`}
+              testId="axis-hud-perf-eng"
+              state={planeChipState(p().state)}
+              meter={{ level: planeLevel(p().state), kind: 'app' }}
+            />
+          )}
+        </Show>
+        <Show when={src()}>
+          {(p) => (
+            <PerfCapsule
+              label="Src"
+              value={p().state}
+              title={`Source · ${p().name || p().id}`}
+              testId="axis-hud-perf-src"
+              state={planeChipState(p().state)}
+              meter={{ level: planeLevel(p().state), kind: 'app' }}
+            />
+          )}
+        </Show>
+        <Show when={sto()}>
+          {(p) => (
+            <PerfCapsule
+              label="Sto"
+              value={p().state}
+              title={`Storage · ${p().name || p().id}`}
+              testId="axis-hud-perf-sto"
+              state={planeChipState(p().state)}
+              meter={{ level: planeLevel(p().state), kind: 'app' }}
+            />
+          )}
+        </Show>
+      </span>
       <FeedChip inspector={props.inspector} snap={props.snap} />
     </div>
   );
@@ -841,7 +892,7 @@ export const ConnectionHud: Component = () : JSX.Element => {
   const snap = useHudSnapshot();
   const inspector = useHudInspector();
   const tel = () => store.telemetry;
-  /** Compact = classic scanline; expanded (!compact) = measured metrics. */
+  /** Compact = Live/Last/Compose chips; expanded = measured perf meters. */
   const compact = () => !!tel()?.hud?.compact;
   const diagnostics = () => tel()?.hud?.diagnostics === true;
 
@@ -860,7 +911,7 @@ export const ConnectionHud: Component = () : JSX.Element => {
       classList={{ 'is-compact': compact() }}
       data-testid="axis-connection-hud"
       data-compact={compact() ? '1' : '0'}
-      data-mode={compact() ? 'classic' : 'perf'}
+      data-mode={compact() ? 'chips' : 'perf'}
       role="status"
       aria-label="Connection status"
     >
@@ -868,27 +919,7 @@ export const ConnectionHud: Component = () : JSX.Element => {
       <TickPulse inspector={inspector} snap={snap} />
 
       <Show when={compact()}>
-        <button
-          type="button"
-          class={`axis-status-capsule text-text-faint cursor-pointer ${diagnostics() ? 'is-active' : ''}`}
-          title={
-            diagnostics()
-              ? 'Hide connection diagnostics'
-              : 'Show connection diagnostics (engine, path, source, stream, storage)'
-          }
-          aria-pressed={diagnostics()}
-          data-testid="axis-hud-diagnostics"
-          onClick={() => {
-            setStore('telemetry', 'hud', 'diagnostics', !diagnostics());
-            persist();
-          }}
-        >
-          <HudMetricIcon kind="diag" />
-          <span class="axis-status-capsule-code is-word">
-            {diagnostics() ? 'Hide' : 'Diagnostics'}
-          </span>
-        </button>
-
+        {/* Fine chips — Diagnostics density is Settings-gated (no Diagnostics button). */}
         <Show
           when={diagnostics()}
           fallback={
@@ -907,10 +938,10 @@ export const ConnectionHud: Component = () : JSX.Element => {
                   )}
                 </Show>
               </Show>
+              <PairingWarn />
             </>
           }
         >
-          {/* Raw diagnostics — abbreviations stay in this mode only. */}
           <ChipShell
             id="eng"
             label="eng"
@@ -971,19 +1002,6 @@ export const ConnectionHud: Component = () : JSX.Element => {
           </Show>
           <FeedChip inspector={inspector} snap={snap} />
           <PairingWarn />
-          <Show when={showOnchainPlane(tel()?.onchain, true)}>
-            <Show when={tel()?.onchain}>
-              {(o) => (
-                <PlaneChip
-                  label="onc"
-                  plane={o()}
-                  id="onc"
-                  inspector={inspector}
-                  snap={snap}
-                />
-              )}
-            </Show>
-          </Show>
         </Show>
       </Show>
 

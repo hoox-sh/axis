@@ -18,21 +18,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Bottom instrument **scanline** — Live + last + compose/diagnostics HUD,
- * truncated status, optional strategy PnL, rolling-window edit, dataset
- * depth, scripts/panes counts.
+ * Bottom instrument **scanline**.
  *
- * Collapsible: `telemetry.hud.compact` (default) is the classic scanline.
- * Expanded (`compact` false) swaps the classic instruments for measured
- * latency / network / app perf chips. Inspectors open by click or keyboard
- * only — never hover.
+ * Collapsed (`telemetry.hud.compact`, default): fine-tuned Live / Last /
+ * Compose chips on the left; chart bars · Dataset · Script / Pane counts on
+ * the right. Expanded: deeper latency / network / app performance meters.
+ * Inspectors open by click or keyboard only — never hover.
  *
- * Classic fixed footer chrome (no FloatableShell title bar). Visibility is
- * gated by panel chrome `statusbar` (topbar **Status** / command palette).
- *
- * Bar readouts: left is the chart window (click to edit the Rolling window
- * display count); right is the DSM dataset depth (click opens the Dataset
- * manager modal, not the DSM panel).
+ * Visibility is gated by panel chrome `statusbar`.
  *
  * @module ui/StatusBar
  */
@@ -110,12 +103,21 @@ export const StatusBar: Component = () : JSX.Element => {
   const [draft, setDraft] = createSignal('');
   let inputEl: HTMLInputElement | undefined;
 
-  /** Compact = classic scanline; expanded = measured metrics. */
+  /** Compact = chips + counts; expanded = latency / network / app perf. */
   const compact = () => !!store.telemetry?.hud?.compact;
 
   const toggleCompact = () => {
     setStore('telemetry', 'hud', 'compact', !compact());
     persist();
+  };
+
+  const scriptLabel = () => {
+    const n = store.scripts.length;
+    return `${n} Script${n === 1 ? '' : 's'}`;
+  };
+  const paneLabel = () => {
+    const n = store.panes.length;
+    return `${n} Pane${n === 1 ? '' : 's'}`;
   };
 
   const beginEdit = () => {
@@ -169,22 +171,22 @@ export const StatusBar: Component = () : JSX.Element => {
       >
         <ConnectionHud />
 
-        <Show when={compact()}>
-          <span
-            class={`flex items-center gap-1.5 min-w-0 max-w-[28vw] text-[11px] ${color()}`}
-            data-testid="axis-status-message"
-          >
-            {(store.status === 'running' || store.status === 'loading') && (
-              <HooxLoader size="xs" class="flex-shrink-0" />
-            )}
-            {store.status === 'error' && <Icons.alert class="text-red flex-shrink-0" />}
-            {store.status === 'ready' && (
-              <span class="axis-hud-metric axis-hud-metric--ready" aria-hidden="true" />
-            )}
-            <span class="truncate">{store.statusMessage}</span>
-          </span>
+        <span class="flex-1 min-w-2" />
 
-          <span class="flex-1 min-w-2" />
+        {/* Collapsed right rail: fine counts. Expanded keeps strategy PnL only. */}
+        <Show when={compact()}>
+          <Show when={store.status === 'error' || store.status === 'loading' || store.status === 'running'}>
+            <span
+              class={`flex items-center gap-1 min-w-0 max-w-[18vw] text-[11px] ${color()}`}
+              data-testid="axis-status-message"
+            >
+              {(store.status === 'running' || store.status === 'loading') && (
+                <HooxLoader size="xs" class="flex-shrink-0" />
+              )}
+              {store.status === 'error' && <Icons.alert class="text-red flex-shrink-0" />}
+              <span class="truncate">{store.statusMessage}</span>
+            </span>
+          </Show>
 
           <Show when={strategySummary()}>
             {(stats) => (
@@ -199,18 +201,21 @@ export const StatusBar: Component = () : JSX.Element => {
             )}
           </Show>
 
-          <span class="text-text-faint font-mono text-[11px] tracking-tight flex-shrink-0 tabular-nums inline-flex items-center gap-1">
+          <span
+            class="axis-statusbar-counts text-text-faint font-mono text-[11px] tracking-tight flex-shrink-0 tabular-nums inline-flex items-center gap-1.5"
+            data-testid="axis-statusbar-counts"
+          >
             <Show
               when={editingChart()}
               fallback={
                 <button
                   type="button"
-                  class="hover:text-accent tabular-nums"
+                  class="axis-statusbar-count hover:text-accent tabular-nums"
                   title={`Chart bars — click to edit display count (Rolling window, ${ROLLING_WINDOW_MIN}–${ROLLING_WINDOW_MAX})`}
                   data-testid="axis-statusbar-bars"
                   onClick={beginEdit}
                 >
-                  {barPlane.length} bars
+                  {barPlane.length.toLocaleString('en-US')} bars
                 </button>
               }
             >
@@ -239,29 +244,48 @@ export const StatusBar: Component = () : JSX.Element => {
                 onBlur={() => commitEdit()}
               />
             </Show>
-            <Show when={datasetBars() > 0 && datasetBars() !== barPlane.length}>
-              <button
-                type="button"
-                class="hover:text-accent tabular-nums"
-                title="Bars in the Data Source Manager dataset — click to open the studio Data page"
-                data-testid="axis-statusbar-dataset"
-                onClick={() =>
-                  window.dispatchEvent(
-                    new CustomEvent('axis-open-studio', { detail: { page: 'data' } }),
-                  )
-                }
-              >
-                · dataset {formatBarCount(datasetBars())}
-              </button>
-            </Show>
-            <span>
-              · {store.scripts.length} scripts · {store.panes.length} panes
+            <span class="axis-statusbar-count-sep" aria-hidden="true">
+              ·
+            </span>
+            <button
+              type="button"
+              class="axis-statusbar-count hover:text-accent tabular-nums"
+              title="Bars in the Data Source Manager dataset — click to open the studio Data page"
+              data-testid="axis-statusbar-dataset"
+              onClick={() =>
+                window.dispatchEvent(
+                  new CustomEvent('axis-open-studio', { detail: { page: 'data' } }),
+                )
+              }
+            >
+              {formatBarCount(Math.max(datasetBars(), barPlane.length))} Dataset
+            </button>
+            <span class="axis-statusbar-count-sep" aria-hidden="true">
+              ·
+            </span>
+            <span class="axis-statusbar-count" data-testid="axis-statusbar-scripts">
+              {scriptLabel()}
+            </span>
+            <span class="axis-statusbar-count-sep" aria-hidden="true">
+              /
+            </span>
+            <span class="axis-statusbar-count" data-testid="axis-statusbar-panes">
+              {paneLabel()}
             </span>
           </span>
         </Show>
 
-        <Show when={!compact()}>
-          <span class="flex-1 min-w-2" />
+        <Show when={!compact() && strategySummary()}>
+          {(stats) => (
+            <span
+              class={`text-[11px] font-mono tracking-tight tabular-nums flex-shrink-0 ${
+                stats().totalPnl >= 0 ? 'text-accent-2' : 'text-red'
+              }`}
+              title="Closed trades from last run"
+            >
+              {stats().trades} · {formatMoney(stats().totalPnl)}
+            </span>
+          )}
         </Show>
 
         <button
@@ -272,13 +296,13 @@ export const StatusBar: Component = () : JSX.Element => {
           aria-expanded={!compact()}
           title={
             compact()
-              ? 'Expand status bar (latency / network / app perf)'
-              : 'Collapse status bar (classic scanline)'
+              ? 'Expand status bar (latency · network · app performance)'
+              : 'Collapse status bar (chips + counts)'
           }
           aria-label={
             compact()
               ? 'Expand status bar to performance metrics'
-              : 'Collapse status bar to classic scanline'
+              : 'Collapse status bar to chips and counts'
           }
           onClick={toggleCompact}
         >

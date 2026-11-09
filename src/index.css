@@ -1559,6 +1559,70 @@ button.sc-btn:focus-visible {
 .axis-statusbar.is-compact {
   gap: calc(var(--ui-statusbar-gap) * 0.75);
 }
+.axis-statusbar-counts {
+  gap: 0.35rem;
+}
+.axis-statusbar-count {
+  color: inherit;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  cursor: default;
+}
+button.axis-statusbar-count {
+  cursor: pointer;
+}
+.axis-statusbar-count-sep {
+  opacity: 0.55;
+  user-select: none;
+}
+.axis-hud-perf-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.axis-hud-perf-group + .axis-hud-perf-group {
+  margin-left: 2px;
+  padding-left: 6px;
+  border-left: 1px solid var(--color-border-soft);
+}
+.axis-hud-meter {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 10px;
+  flex-shrink: 0;
+}
+.axis-hud-meter-seg {
+  display: block;
+  width: 3px;
+  border-radius: 1px;
+  background: var(--color-border);
+  opacity: 0.45;
+}
+.axis-hud-meter-seg:nth-child(1) {
+  height: 4px;
+}
+.axis-hud-meter-seg:nth-child(2) {
+  height: 7px;
+}
+.axis-hud-meter-seg:nth-child(3) {
+  height: 10px;
+}
+.axis-hud-meter-seg[data-on='1'] {
+  opacity: 1;
+}
+.axis-hud-meter--latency .axis-hud-meter-seg[data-on='1'] {
+  background: var(--color-accent);
+}
+.axis-hud-meter--network .axis-hud-meter-seg[data-on='1'] {
+  background: var(--color-accent-2);
+}
+.axis-hud-meter--app .axis-hud-meter-seg[data-on='1'] {
+  background: var(--color-orange, #d97706);
+}
 .axis-statusbar-collapse {
   display: inline-flex;
   align-items: center;

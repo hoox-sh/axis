@@ -3,7 +3,7 @@
 
 /**
  * Status-bar HUD inspector: click/keyboard only. Hover never opens a container.
- * Compact = classic scanline; expanded = measured latency / network / app perf.
+ * Compact = Live/Last/Compose + bars/Dataset/Script/Pane; expanded = perf meters.
  */
 
 import { describe, expect, it } from 'bun:test';
@@ -85,34 +85,38 @@ describe('scanline source contract', () => {
     expect(src).toContain('Click a chip for details');
   });
 
-  it('StatusBar documents the classic scanline and collapse control', () => {
+  it('StatusBar collapsed shows fine counts and collapse control', () => {
     const src = read('src/ui/StatusBar.tsx');
     expect(src).toMatch(/scanline/i);
     expect(src).toContain('never hover');
     expect(src).toContain('data-testid="axis-statusbar"');
     expect(src).toContain('data-testid="axis-statusbar-bars"');
     expect(src).toContain('data-testid="axis-statusbar-dataset"');
+    expect(src).toContain('data-testid="axis-statusbar-counts"');
     expect(src).toContain('data-testid="axis-statusbar-collapse"');
     expect(src).toContain("setStore('telemetry', 'hud', 'compact'");
     expect(src).toContain('data-compact');
-    expect(src).toContain('classic scanline');
+    expect(src).toContain('Dataset');
     expect(src).toContain('when={compact()}');
   });
 
-  it('ConnectionHud compact is classic scanline; expanded is measured perf', () => {
+  it('ConnectionHud compact is fine chips; expanded is measured perf meters', () => {
     const src = read('src/ui/ConnectionHud.tsx');
     expect(src).toContain('hud?.compact');
     expect(src).toContain('when={compact()}');
     expect(src).toContain('when={!compact()}');
     expect(src).toContain('axis-hud-perf');
+    expect(src).toContain('axis-hud-perf-latency');
+    expect(src).toContain('axis-hud-perf-network');
+    expect(src).toContain('axis-hud-perf-app');
+    expect(src).toContain('PerfMeter');
     expect(src).toContain('paintLatencyStats');
     expect(src).toContain('latencySampleStats');
     expect(src).toContain('axis-hud-metric');
     expect(src).toContain('metric="live"');
     expect(src).toContain('metric="last"');
     expect(src).toContain('kind="compose"');
-    expect(src).toContain('kind="diag"');
-    expect(src).not.toContain('Live + Last only');
+    expect(src).not.toContain('data-testid="axis-hud-diagnostics"');
   });
 
   it('Popover can pin above the anchor', () => {
@@ -121,30 +125,31 @@ describe('scanline source contract', () => {
     expect(src).toContain("props.side === 'top'");
   });
 
-  it('Settings labels match classic compact + diagnostics', () => {
+  it('Settings labels match chips+counts compact + diagnostics', () => {
     const src = read('src/ui/settings/SettingsPage.tsx');
     expect(src).toContain('Compact status bar');
-    expect(src).toContain('Classic scanline (Live, Last, Compose, bars)');
+    expect(src).toContain('Chips on the left, bars · Dataset · Script / Pane on the right');
     expect(src).toContain('axis-settings-hud-compact');
     expect(src).toContain('axis-settings-hud-diagnostics');
-    expect(src).toContain('On the classic scanline');
+    expect(src).toContain('When compact, replace Compose');
     expect(src).not.toContain('Collapse to Live + Last only');
-    expect(src).not.toContain('When the bar is expanded, show engine');
+    expect(src).not.toContain('Classic scanline (Live, Last, Compose, bars)');
   });
 
-  it('CSS metric icons respect prefers-reduced-motion', () => {
+  it('CSS metric icons and perf meters respect prefers-reduced-motion', () => {
     const css = read('src/index.css');
     expect(css).toContain('axis-hud-metric--live');
     expect(css).toContain('axis-hud-metric--last');
     expect(css).toContain('axis-hud-metric--compose');
-    expect(css).toContain('axis-hud-metric--diag');
+    expect(css).toContain('axis-hud-meter');
     expect(css).toContain('axis-statusbar-collapse');
+    expect(css).toContain('axis-statusbar-counts');
     expect(css).toMatch(
       /prefers-reduced-motion: reduce[\s\S]*axis-hud-metric--live[\s\S]*animation:\s*none/,
     );
   });
 
-  it('store defaults compact to classic scanline', () => {
+  it('store defaults compact to chips + counts', () => {
     const src = read('src/store/index.ts');
     expect(src).toContain('hud: { compact: true, overlay: false, diagnostics: false }');
     expect(src).not.toContain('hud: { compact: false, overlay: false, diagnostics: false }');

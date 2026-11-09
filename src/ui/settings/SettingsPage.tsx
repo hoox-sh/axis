@@ -849,7 +849,7 @@ export function SettingsPage(props: {
 
               <StudioSection
                 title="Status HUD"
-                lead="Footer scanline under the chart. Compact is the classic scanline; expanded shows measured latency, network, and app performance."
+                lead="Footer under the chart. Compact = Live/Last/Compose chips + bars/Dataset/Script/Pane counts. Expanded = latency · network · app meters."
               >
                 <div class="ax-toggle-grid">
                   <StudioToggle
@@ -862,7 +862,7 @@ export function SettingsPage(props: {
                       flushPersist();
                     }}
                     label="Compact status bar"
-                    hint="Classic scanline (Live, Last, Compose, bars). Same as the chevron on the status bar."
+                    hint="Chips on the left, bars · Dataset · Script / Pane on the right. Same as the footer chevron."
                   />
                   <StudioToggle
                     id="axis-hud-diagnostics"
@@ -874,7 +874,7 @@ export function SettingsPage(props: {
                       flushPersist();
                     }}
                     label="Connection diagnostics"
-                    hint="On the classic scanline, show engine, path, source, stream, and storage chips instead of Compose."
+                    hint="When compact, replace Compose with engine/path/source/stream/storage chips."
                   />
                   <StudioToggle
                     id="axis-share-on-error"

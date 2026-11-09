@@ -4,8 +4,8 @@
  */
 
 /**
- * Status-bar scanline: HUD inspector opens on click, never on hover.
- * Compact = classic scanline; expanded = measured perf metrics.
+ * Status-bar: HUD inspector opens on click, never on hover.
+ * Compact = Live/Last/Compose + bars/Dataset/Script/Pane; expanded = perf meters.
  */
 import { test, expect } from '@playwright/test';
 import { seedAxisStore, stubAppNetwork } from './charts';
@@ -19,7 +19,6 @@ test.describe('status-bar scanline', () => {
       events: [],
       meta: { script_name: 'statusbar', overlay: true, ms: 8 },
     });
-    // Pin classic scanline + open footer so boot races / stale bags cannot hide it.
     await seedAxisStore(page, {
       telemetry: { hud: { compact: true, overlay: false, diagnostics: false } },
       panelChrome: { statusbar: { open: true } },
@@ -31,10 +30,10 @@ test.describe('status-bar scanline', () => {
     const bar = page.getByTestId('axis-statusbar');
     await expect(bar).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId('axis-connection-hud')).toBeVisible();
-    // Default / seeded = classic scanline
     await expect(bar).toHaveAttribute('data-compact', '1');
-    await expect(page.getByTestId('axis-status-message')).toBeVisible();
+    await expect(page.getByTestId('axis-statusbar-counts')).toBeVisible();
     await expect(page.getByTestId('axis-statusbar-bars')).toBeVisible();
+    await expect(page.getByTestId('axis-statusbar-dataset')).toBeVisible();
 
     const live = page.getByTestId('axis-hud-live');
     await expect(live).toBeVisible();
@@ -55,7 +54,7 @@ test.describe('status-bar scanline', () => {
     await expect(page.getByTestId('axis-hud-info')).toHaveCount(0);
   });
 
-  test('Compose inspector is click-open on classic scanline', async ({ page }) => {
+  test('Compose inspector is click-open on compact chips', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByTestId('axis-statusbar')).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId('axis-statusbar')).toHaveAttribute('data-compact', '1');
@@ -70,14 +69,14 @@ test.describe('status-bar scanline', () => {
     await expect(page.getByTestId('axis-compose-menu')).toHaveCount(0);
   });
 
-  test('expand shows measured perf; collapse restores classic scanline', async ({ page }) => {
+  test('expand shows perf meters; collapse restores chips + counts', async ({ page }) => {
     await page.goto('/');
     const bar = page.getByTestId('axis-statusbar');
     await expect(bar).toBeVisible({ timeout: 30_000 });
     await expect(bar).toHaveAttribute('data-compact', '1');
     await expect(page.getByTestId('axis-hud-compose')).toBeVisible();
-    await expect(page.getByTestId('axis-hud-diagnostics')).toBeVisible();
-    await expect(page.getByTestId('axis-status-message')).toBeVisible();
+    await expect(page.getByTestId('axis-hud-diagnostics')).toHaveCount(0);
+    await expect(page.getByTestId('axis-statusbar-counts')).toBeVisible();
     await expect(page.getByTestId('axis-statusbar-bars')).toBeVisible();
     await expect(page.getByTestId('axis-hud-perf')).toHaveCount(0);
 
@@ -86,17 +85,19 @@ test.describe('status-bar scanline', () => {
     await expect(page.getByTestId('axis-hud-live')).toBeVisible();
     await expect(page.getByTestId('axis-tick-indicator')).toBeVisible();
     await expect(page.getByTestId('axis-hud-perf')).toBeVisible();
+    await expect(page.getByTestId('axis-hud-perf-latency')).toBeVisible();
+    await expect(page.getByTestId('axis-hud-perf-network')).toBeVisible();
+    await expect(page.getByTestId('axis-hud-perf-app')).toBeVisible();
     await expect(page.getByTestId('axis-hud-perf-run')).toBeVisible();
     await expect(page.getByTestId('axis-hud-perf-paint')).toBeVisible();
     await expect(page.getByTestId('axis-hud-perf-path')).toBeVisible();
     await expect(page.getByTestId('axis-hud-compose')).toHaveCount(0);
-    await expect(page.getByTestId('axis-status-message')).toHaveCount(0);
-    await expect(page.getByTestId('axis-statusbar-bars')).toHaveCount(0);
+    await expect(page.getByTestId('axis-statusbar-counts')).toHaveCount(0);
 
     await page.getByTestId('axis-statusbar-collapse').click();
     await expect(bar).toHaveAttribute('data-compact', '1');
     await expect(page.getByTestId('axis-hud-compose')).toBeVisible();
-    await expect(page.getByTestId('axis-status-message')).toBeVisible();
+    await expect(page.getByTestId('axis-statusbar-counts')).toBeVisible();
     await expect(page.getByTestId('axis-hud-perf')).toHaveCount(0);
   });
 });
