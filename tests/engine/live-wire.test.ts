@@ -80,6 +80,7 @@ function makeHarness(opts?: { delayDelta?: boolean; syncApply?: boolean }) {
     onCloseVerified: (time, _result, ohlcv) => closes.push({ time, ohlcv }),
   };
   const applied: Array<{ via: string }> = [];
+  const appliedCounts: number[] = [];
   const applyOrder: string[] = [];
   const applyFn = (
     _script: string,
@@ -90,6 +91,7 @@ function makeHarness(opts?: { delayDelta?: boolean; syncApply?: boolean }) {
     const done = (): RunResult => {
       applyOrder.push(`plots:${via}`);
       applied.push({ via });
+      appliedCounts.push(Number(_full.count));
       return { status: 'success', plots: [], series: {}, events: [], meta: {} };
     };
     if (opts?.syncApply) return done();
@@ -114,6 +116,7 @@ function makeHarness(opts?: { delayDelta?: boolean; syncApply?: boolean }) {
     sent,
     statuses,
     applied,
+    appliedCounts,
     applyOrder,
     emit,
     emitBatch,
@@ -419,6 +422,57 @@ describe('redesign2 live-wire (F-19)', () => {
     expect(r2.status).toBe('success');
     expect(h.applied).toEqual([{ via: 'stream-full' }, { via: 'stream-delta' }]);
     expect(h.sent.filter((s) => s.kind === 'subscribe:script').length).toBe(1);
+  });
+
+  test('evalScript resubscribes when the script cache tip lags the chart', async () => {
+    setStore('interval', '1m');
+    const h = makeHarness();
+    const t0 = 1_700_000_000;
+    const snapBars: Bar[] = [{ time: t0, open: 1, high: 1, low: 1, close: 1, volume: 1 }];
+    const first = h.wire.evalScript({
+      subId: 's-lag',
+      script: 'indicator() {}',
+      meta: {},
+      bars: snapBars,
+    });
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: 's-lag',
+      seq: 1,
+      payload: {
+        count: 1,
+        plots: [[10]],
+        series: { RSI: [10] },
+        bar_times: [t0],
+      },
+    });
+    await first;
+    expect(h.sent.filter((s) => s.kind === 'subscribe:script')).toHaveLength(1);
+
+    // Chart advanced 5 minutes; cache still ends at t0 → tip lag > 3 bars.
+    const ahead: Bar[] = Array.from({ length: 6 }, (_, i) => ({
+      time: t0 + i * 60,
+      open: 1,
+      high: 1,
+      low: 1,
+      close: 1,
+      volume: 1,
+    }));
+    setStore('bars', ahead);
+    const r2 = (await h.wire.evalScript({
+      subId: 's-lag',
+      script: 'indicator() {}',
+      meta: {},
+      bars: ahead,
+    })) as RunResult;
+    expect(r2.status).toBe('success');
+    expect(h.unsubscribed).toContain('s-lag');
+    expect(h.sent.filter((s) => s.kind === 'subscribe:script').length).toBeGreaterThanOrEqual(2);
+    expect(h.statuses.some((s) => s.sub === 's-lag' && s.status === 'degraded')).toBe(true);
+    expect(h.applied.at(-1)).toEqual({ via: 'stream-delta' });
+    setStore('bars', []);
   });
 
   test('cooldown forces fallback after a failure', async () => {
@@ -1137,6 +1191,209 @@ describe('live-wire P1 series + study push', () => {
     expect(h.applied).toEqual([{ via: 'stream-full' }, { via: 'stream-delta' }]);
     expect(h.sent.filter((s) => s.kind === 'subscribe:script').length).toBe(1);
     expect(h.wire.snapshotState().subs[0]?.seq).toBe(6);
+  });
+
+  test('a script full whose columns outrun its declared count still merges the next delta', async () => {
+    const h = makeHarness();
+    const first = h.wire.evalScript({
+      subId: 's-1',
+      script: 'indicator() {}',
+      meta: {},
+      bars: BARS,
+    });
+    await tick();
+    await tick();
+    // A pooled engine session is longer than the requested history_bars:
+    // declared count 2, three plot columns.
+    h.emit({
+      type: 'full',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 5,
+      payload: { count: 2, series: { a: [1, 2, 3] }, bar_times: [1, 2, 3] },
+    });
+    await first;
+    const subsBefore = h.sent.filter((s) => s.kind === 'subscribe:script').length;
+    // The worker cursor follows the columns, so the tip is numbered 3 not 1.
+    h.emit({
+      type: 'delta',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 6,
+      payload: { base_index: 2, count: 3, tail_len: 1, series: { a: [9] } },
+    });
+    await tick();
+    await tick();
+    expect(h.applied).toEqual([{ via: 'stream-full' }, { via: 'stream-delta' }]);
+    expect(h.sent.filter((s) => s.kind === 'subscribe:script')).toHaveLength(subsBefore);
+    expect(h.resumes).toEqual([]);
+    expect(h.wire.snapshotState().subs[0]?.seq).toBe(6);
+  });
+
+  test('declared count 10100 with 10022 evaluated columns splices at 10022 without resubscribing', async () => {
+    const h = makeHarness();
+    const first = h.wire.evalScript({
+      subId: 's-1',
+      script: 'indicator() {}',
+      meta: { history_bars: 10100 },
+      bars: BARS,
+    });
+    await tick();
+    await tick();
+    const columns = 10022;
+    const values = Array.from({ length: columns }, (_, i) => i);
+    const times = Array.from({ length: columns }, (_, i) => 1000 + i * 60);
+    // Captured `/ws/live` shape: the session window is 10100, the evaluated
+    // plot columns and bar_times are 10022.
+    h.emit({
+      type: 'full',
+      id: 's-1',
+      sessionId: 'live_6',
+      seq: 1,
+      payload: {
+        seriesKey: 'binance|spot|BTC/USDT|1m',
+        count: 10100,
+        closed_upto: times[times.length - 1],
+        series: { RSI: values, Overbought: values, Oversold: values },
+        bar_times: times,
+      },
+    });
+    await first;
+    // The applier caches the evaluated column count, not the declared count.
+    expect(h.appliedCounts).toEqual([columns]);
+    const subsBefore = h.sent.filter((s) => s.kind === 'subscribe:script').length;
+    h.emit({
+      type: 'delta',
+      id: 's-1',
+      sessionId: 'live_6',
+      seq: 2,
+      payload: {
+        base_index: columns - 1,
+        count: columns,
+        tail_len: 1,
+        forming: true,
+        series: { RSI: [42], Overbought: [70], Oversold: [30] },
+      },
+    });
+    await tick();
+    await tick();
+    expect(h.applied).toEqual([{ via: 'stream-full' }, { via: 'stream-delta' }]);
+    expect(h.appliedCounts).toEqual([columns, columns]);
+    expect(h.resumes).toEqual([]);
+    expect(h.unsubscribed).toEqual([]);
+    expect(h.sent.filter((s) => s.kind === 'subscribe:script')).toHaveLength(subsBefore);
+    expect(h.wire.snapshotState().subs[0]?.seq).toBe(2);
+  });
+
+  test('a delta without a seq applies positionally and does not loop on fulls', async () => {
+    const h = makeHarness();
+    const first = h.wire.evalScript({
+      subId: 's-1',
+      script: 'indicator() {}',
+      meta: {},
+      bars: BARS,
+    });
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 5,
+      payload: { count: 1, plots: [[1]], series: { a: [1] } },
+    });
+    await first;
+    const subsBefore = h.sent.filter((s) => s.kind === 'subscribe:script').length;
+    // A relay stripped seq: the positional block still matches the cache.
+    h.emit({
+      type: 'delta',
+      id: 's-1',
+      sessionId: 'ses',
+      payload: { base_index: 0, count: 1, tail_len: 1, plots: [[2]], series: { a: [2] } },
+    });
+    await tick();
+    await tick();
+    expect(h.applied).toEqual([{ via: 'stream-full' }, { via: 'stream-delta' }]);
+    expect(h.resumes).toEqual([]);
+    expect(h.unsubscribed).toEqual([]);
+    expect(h.sent.filter((s) => s.kind === 'subscribe:script')).toHaveLength(subsBefore);
+    // The next sequenced frame may look like a gap; the positional chain was
+    // validated, so it must paint rather than resubscribe.
+    h.emit({
+      type: 'delta',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 9,
+      payload: { base_index: 0, count: 1, tail_len: 1, plots: [[3]], series: { a: [3] } },
+    });
+    await tick();
+    await tick();
+    expect(h.applied).toEqual([
+      { via: 'stream-full' },
+      { via: 'stream-delta' },
+      { via: 'stream-delta' },
+    ]);
+    expect(h.resumes).toEqual([]);
+    expect(h.sent.filter((s) => s.kind === 'subscribe:script')).toHaveLength(subsBefore);
+    expect(h.wire.snapshotState().subs[0]?.seq).toBe(9);
+  });
+
+  test('repeated unpaintable fulls escalate from resume to a fresh subscribe', async () => {
+    const h = makeHarness();
+    const first = h.wire.evalScript({
+      subId: 's-1',
+      script: 'indicator() {}',
+      meta: {},
+      bars: BARS,
+    });
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 5,
+      payload: { count: 1, plots: [[1]], series: { a: [1] } },
+    });
+    await first;
+    const subsBefore = h.sent.filter((s) => s.kind === 'subscribe:script').length;
+    // Continuous seq, but base_index 5 cannot splice onto a 1-bar cache.
+    const badDelta = (seq: number) => ({
+      type: 'delta',
+      id: 's-1',
+      sessionId: 'ses',
+      seq,
+      payload: { base_index: 5, count: 6, tail_len: 1, plots: [[9]], series: { a: [9] } },
+    });
+    h.emit(badDelta(6));
+    await tick();
+    expect(h.resumes).toHaveLength(1);
+    // Resume answers with the same stale session — still unpaintable.
+    h.emit({
+      type: 'full',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 7,
+      payload: { count: 1, plots: [[1]], series: { a: [1] } },
+    });
+    await tick();
+    h.emit(badDelta(8));
+    await tick();
+    expect(h.resumes).toHaveLength(2);
+    h.emit({
+      type: 'full',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 9,
+      payload: { count: 1, plots: [[1]], series: { a: [1] } },
+    });
+    await tick();
+    h.emit(badDelta(10));
+    await tick();
+    // Third failure replaces resume with unsubscribe + fresh subscribe.
+    expect(h.unsubscribed).toEqual(['s-1']);
+    expect(h.sent.filter((s) => s.kind === 'subscribe:script')).toHaveLength(subsBefore + 1);
+    expect(h.statuses.map((s) => s.status)).toContain('degraded');
   });
 
   test('a mid-stream snapshot replaces a pending forming tip as one generation', async () => {

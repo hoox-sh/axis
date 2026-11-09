@@ -158,6 +158,110 @@ describe('decodeInbound JSON', () => {
   });
 });
 
+describe('JSON frames keep the AXB1 cursor in sync', () => {
+  const SCRIPT = 'id_script_cursor';
+
+  function plotTip(table: IngestCursorTable, seq: number): Redesign2Frame {
+    const out = decodeInbound(
+      encodeFrame({
+        opcode: Axb1Opcode.PLOT_TIP,
+        seq,
+        subIdHash: fnv1a32(SCRIPT),
+        sessionHash: fnv1a32('ses-1'),
+        tsMs: 0n,
+        plots: [{ keyHash: 1, kind: ValueKind.UnitFloat64, value: 9 }],
+      }),
+      table,
+    );
+    if (!(out.ok && out.kind === 'frames')) throw new Error('expected frames');
+    return out.frames[0]!;
+  }
+
+  test('a JSON script full advances the cursor to the column count', () => {
+    const table = new IngestCursorTable();
+    const full = JSON.stringify({
+      type: 'full',
+      id: SCRIPT,
+      sessionId: 'ses-1',
+      seq: 1,
+      payload: {
+        seriesKey: SCRIPT,
+        // Requested history, shorter than the pooled engine session's columns.
+        count: 2,
+        closed_upto: 0,
+        series: { a: [1, 2, 3] },
+        bar_times: [60, 120, 180],
+      },
+    });
+    expect(decodeInbound(full, table).ok).toBe(true);
+    const payload = plotTip(table, 2).payload as {
+      base_index: number;
+      count: number;
+      tail_len: number;
+    };
+    expect(payload).toMatchObject({ base_index: 2, count: 3, tail_len: 1 });
+  });
+
+  test('a JSON delta advances the cursor for the next binary tip', () => {
+    const table = new IngestCursorTable();
+    const full = JSON.stringify({
+      type: 'full',
+      id: SCRIPT,
+      sessionId: 'ses-1',
+      seq: 1,
+      payload: { seriesKey: SCRIPT, count: 3, closed_upto: 0, series: { a: [1, 2, 3] } },
+    });
+    expect(decodeInbound(full, table).ok).toBe(true);
+    const delta = JSON.stringify({
+      type: 'delta',
+      id: SCRIPT,
+      sessionId: 'ses-1',
+      seq: 2,
+      payload: { base_index: 3, count: 4, tail_len: 1, closed_upto: 0, series: { a: [4] } },
+    });
+    expect(decodeInbound(delta, table).ok).toBe(true);
+    const payload = plotTip(table, 3).payload as { base_index: number; count: number };
+    expect(payload).toMatchObject({ base_index: 3, count: 4 });
+  });
+
+  test('a JSON series full advances the OHLCV cursor from its bars', () => {
+    const table = new IngestCursorTable();
+    const full = JSON.stringify({
+      type: 'full',
+      id: SUB,
+      sessionId: 'ses-1',
+      seq: 1,
+      payload: {
+        seriesKey: SUB,
+        count: 2,
+        closed_upto: 0,
+        bars: [
+          { time: 60, open: 1, high: 1, low: 1, close: 1, volume: 1 },
+          { time: 120, open: 2, high: 2, low: 2, close: 2, volume: 1 },
+        ],
+      },
+    });
+    expect(decodeInbound(full, table).ok).toBe(true);
+    const out = decodeInbound(
+      encodeFrame({
+        opcode: Axb1Opcode.TIP_UPDATE,
+        seq: 2,
+        subIdHash: fnv1a32(SUB),
+        sessionHash: fnv1a32('ses-1'),
+        tsMs: 0n,
+        mask: TipMask.CLOSE | TipMask.TIME,
+        flags: 0,
+        close: 300000000n,
+        timeS: 120,
+      }),
+      table,
+    );
+    if (!(out.ok && out.kind === 'frames')) throw new Error('expected frames');
+    const payload = out.frames[0]!.payload as { base_index: number; count: number };
+    expect(payload).toMatchObject({ base_index: 1, count: 2 });
+  });
+});
+
 describe('decodeInbound AXB1', () => {
   test('an unknown opcode names the sub and stays a successful decode', () => {
     const table = tableWithSub();

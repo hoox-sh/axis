@@ -39,6 +39,7 @@
 import type { RunResult } from '../plugins/types';
 import { store } from '../store';
 import type { Bar } from '../store/types';
+import { intervalToSec } from '../data/bars-gaps';
 import { sanitizeStreamBar } from '../data/parse-bars';
 import { engineDebug, engineDebugSample } from '../debug';
 
@@ -193,6 +194,18 @@ const AUTH_SUBSCRIBE_RETRY_MS = 150;
  * Backoff grows so a wedged sub cannot hammer `/ws/live` every tip.
  */
 const GAP_RESYNC_BACKOFF_MS = [0, 500, 1_500, 4_000, 10_000] as const;
+/**
+ * Consecutive axis resubs before replacing resume with a fresh subscribe.
+ * Resume returns the same pooled engine session; when that session's count
+ * cannot be spliced, only a new subscribe can move it.
+ */
+const AXIS_RESUB_ESCALATE_AFTER = 2;
+/**
+ * When the merged script cache tip lags the live chart by more than this many
+ * bars, re-paint of the frozen cache looks "live" while the indicator stalls.
+ * Force a fresh subscribe (backoff via {@link StreamLiveWire.requestFreshSnapshot}).
+ */
+const SCRIPT_TIP_LAG_BARS = 3;
 /**
  * After the tab is shown, fold the queued burst into one decision.
  * A hidden tab must not replay every tick it missed.
@@ -364,6 +377,39 @@ function withoutTimeAxis(full: Record<string, unknown>): Record<string, unknown>
   return rest;
 }
 
+/** Chart step in seconds from store interval, else the last two bar times. */
+function chartStepSec(bars: readonly Bar[]): number {
+  const iv = String(store.interval || '').trim();
+  if (iv) {
+    const n = intervalToSec(iv);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  if (bars.length >= 2) {
+    const a = bars[bars.length - 2]?.time;
+    const b = bars[bars.length - 1]?.time;
+    if (Number.isFinite(a) && Number.isFinite(b) && (b as number) > (a as number)) {
+      return (b as number) - (a as number);
+    }
+  }
+  return 60;
+}
+
+/**
+ * How far the merged script cache tip trails the chart tip (seconds), or null
+ * when either axis is missing so we cannot decide.
+ */
+function scriptCacheTipLagSec(
+  cached: Record<string, unknown> | null | undefined,
+  chartBars: readonly Bar[],
+): number | null {
+  const times = readTimeList(cached?.['bar_times'] ?? cached?.['times']);
+  if (!times?.length || !chartBars.length) return null;
+  const cacheLast = times[times.length - 1];
+  const chartLast = chartBars[chartBars.length - 1]?.time;
+  if (!Number.isFinite(cacheLast) || !Number.isFinite(chartLast)) return null;
+  return (chartLast as number) - (cacheLast as number);
+}
+
 /**
  * Orchestrates the live plane over a {@link WireClient}: subscribes series and scripts,
  * resumes after reconnect, resyncs on `seq` gaps, folds ticks while the tab is hidden, and
@@ -397,6 +443,8 @@ export class StreamLiveWire {
   private readonly scriptInputSig = new Map<string, string>();
   /** Subs with an outstanding axis-resubscribe (one resub per full snapshot). */
   private readonly axisResubPending = new Set<string>();
+  /** Consecutive axis-resub attempts since the last committed delta/full. */
+  private readonly axisResubAttempts = new Map<string, number>();
   /** Seq gap: drop deltas until the next full. Axis repair does not use this. */
   private readonly holdUntilFull = new Set<string>();
   /**
@@ -1136,6 +1184,27 @@ export class StreamLiveWire {
     if (!cached) {
       throw new StreamFallbackError('no-state', 'script has no merged state yet');
     }
+    // Venue ticks keep calling evalScript with the merged cache. When the
+    // engine stops advancing bar_times, that re-paint looks "live" (scriptStatus
+    // stays live, wire.script.paint keeps firing) while the indicator tip freezes
+    // dozens of bars behind the chart — only indicators.run recovered it. Detect
+    // the lag and ask for a fresh full (same backoff as gap recovery).
+    const chartBars = this.barsForScript(input.bars);
+    const lagSec = scriptCacheTipLagSec(cached, chartBars);
+    const step = chartStepSec(chartBars);
+    if (lagSec != null && step > 0 && lagSec > step * SCRIPT_TIP_LAG_BARS) {
+      const times = readTimeList(cached['bar_times'] ?? cached['times']);
+      engineDebug('wire.script.tipLag', {
+        subId: input.subId,
+        indicatorId: input.indicatorId ?? null,
+        lagSec,
+        stepSec: step,
+        thresholdBars: SCRIPT_TIP_LAG_BARS,
+        cacheLast: times?.length ? times[times.length - 1] : null,
+        chartLast: chartBars[chartBars.length - 1]?.time ?? null,
+      });
+      this.requestFreshSnapshot(input.subId, 'script tip lag — resubscribing');
+    }
     await this.applyScriptPush(input.subId, cached, 'stream-delta');
     return {
       status: 'success',
@@ -1674,10 +1743,13 @@ export class StreamLiveWire {
     // seq and refuse to paint it; the next delta is continuous with that
     // cursor and must still be allowed to paint.
     const acceptedSeq = applier.lastSeq;
+    const hasSeq = typeof frame.seq === 'number' && Number.isFinite(frame.seq);
     const seqAckFrom =
       typeof payload['seqAckFrom'] === 'number' ? payload['seqAckFrom'] : undefined;
     const delta = {
-      seq: typeof frame.seq === 'number' ? frame.seq : -1,
+      // Do not invent a seq: a relay that strips it would otherwise look like
+      // a rewind on every frame and force a full snapshot each tick.
+      ...(hasSeq ? { seq: frame.seq } : {}),
       base_index: baseIndex,
       count,
       tail_len: tailLen,
@@ -1701,9 +1773,11 @@ export class StreamLiveWire {
     //   last good plots), so resubscribe for a real full instead of holding
     //   a frozen pane on every tick.
     if (!out.ok && out.reason === 'needs-full') {
-      const incomingSeq = typeof frame.seq === 'number' ? frame.seq : -1;
+      // Only a real seq relationship may force a fresh subscribe. With no seq
+      // the applier already validated the positional splice; a refusal there
+      // is an axis/count mismatch, not missed frames, and must not loop.
       // seqAckFrom makes a coalesced hole continuous — do not thrash resync.
-      if (classifySeqGap(applier.lastSeq, incomingSeq, seqAckFrom).kind !== 'continuous') {
+      if (hasSeq && classifySeqGap(applier.lastSeq, frame.seq!, seqAckFrom).kind !== 'continuous') {
         this.requestFreshSnapshot(subId, 'delta gap — resubscribing');
         return;
       }
@@ -1730,13 +1804,20 @@ export class StreamLiveWire {
       return;
     }
     // One commit for this delta. A gap or a thrown step never paints.
-    const seq = typeof frame.seq === 'number' ? frame.seq : null;
+    const seq = hasSeq ? frame.seq! : null;
     runApplyTransaction({
       seq,
-      lastSeq: acceptedSeq,
+      // The applier already validated the seq relationship (including a
+      // tolerated gap after an unsequenced frame). Re-checking against the
+      // pre-apply cursor would reject a delta the splice just accepted.
+      lastSeq: hasSeq ? frame.seq! - 1 : acceptedSeq,
       ...(seqAckFrom != null ? { seqAckFrom } : {}),
       commit: () => {
-        if (typeof frame.seq === 'number') this.appliedSeq.set(subId, frame.seq);
+        if (hasSeq) this.appliedSeq.set(subId, frame.seq!);
+        // A committed delta proves the axis is usable again. A recovery full
+        // alone does not: the next delta is what decides, so the escalation
+        // counter must survive the full that answered a resume.
+        this.axisResubAttempts.delete(subId);
         this.handlers.onStatus(subId, 'live');
         if (!out.replayed) this.applyScriptPush(subId, out.full, 'stream-delta');
       },
@@ -1776,6 +1857,16 @@ export class StreamLiveWire {
   /** Degraded + one resub per snapshot for an unpaintable merge (no paint). */
   private requestAxisResub(subId: string, message = 'axis mismatch — resubscribing'): void {
     this.handlers.onStatus(subId, 'degraded', { message });
+    const attempts = (this.axisResubAttempts.get(subId) ?? 0) + 1;
+    this.axisResubAttempts.set(subId, attempts);
+    // Resume returns the same pooled engine session. If that session keeps
+    // producing a full the applier cannot splice, replace it with a fresh
+    // subscribe (new session) instead of looping on 12k-point snapshots.
+    if (attempts > AXIS_RESUB_ESCALATE_AFTER) {
+      this.axisResubAttempts.delete(subId);
+      this.requestFreshSnapshot(subId, 'axis mismatch — fresh subscribe');
+      return;
+    }
     if (this.axisResubPending.has(subId)) return;
     this.axisResubPending.add(subId);
     const ctx = this.scriptCtx.get(subId);
@@ -1903,6 +1994,7 @@ export class StreamLiveWire {
   /** Clear script wire state without unsubscribing (server already released). */
   private dropScriptLocal(subId: string): void {
     this.axisResubPending.delete(subId);
+    this.axisResubAttempts.delete(subId);
     this.holdUntilFull.delete(subId);
     this.pendingScriptSubscribe.delete(subId);
     this.clearGapResync(subId);
@@ -1919,6 +2011,7 @@ export class StreamLiveWire {
 
   release(subId: string): void {
     this.axisResubPending.delete(subId);
+    this.axisResubAttempts.delete(subId);
     this.holdUntilFull.delete(subId);
     this.pendingScriptSubscribe.delete(subId);
     this.clearGapResync(subId);
@@ -2005,6 +2098,7 @@ export class StreamLiveWire {
     this.paintTail.clear();
     this.holdUntilFull.clear();
     this.axisResubPending.clear();
+    this.axisResubAttempts.clear();
     this.gapResyncAt.clear();
     this.gapResyncAttempts.clear();
     this.cancelSeriesScriptKick();
@@ -2037,6 +2131,7 @@ export class StreamLiveWire {
     this.paintTail.clear();
     this.holdUntilFull.clear();
     this.axisResubPending.clear();
+    this.axisResubAttempts.clear();
     this.gapResyncAt.clear();
     this.gapResyncAttempts.clear();
     this.inboxOverflowPending.clear();

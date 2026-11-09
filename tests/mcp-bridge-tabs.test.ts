@@ -194,6 +194,32 @@ describe('MCP bridge tab count', () => {
     expect(mcpLines.some((m) => m.includes('bridge open'))).toBe(true);
     expect(mcpLines.some((m) => m.includes('drawings.list → ok'))).toBe(true);
   });
+
+  it('retries ticket mint after AbortError and still opens', async () => {
+    clearLogs();
+    writeStoredCloudConfig('https://worker.axis.hoox.sh', `pn_${'c'.repeat(48)}`);
+    stubWebSocket();
+    let ticketCalls = 0;
+    stubFetch((url) => {
+      if (url.includes('issue=ticket')) {
+        ticketCalls += 1;
+        if (ticketCalls === 1) {
+          const err = new Error('The operation was aborted');
+          err.name = 'AbortError';
+          throw err;
+        }
+        return json({ status: 'ok', ticket: TICKET, expiresIn: 30 });
+      }
+      return json({ status: 'ok', connected: 1 });
+    });
+    await connectMcpBridge();
+    expect(ticketCalls).toBeGreaterThanOrEqual(2);
+    expect(sockets.length).toBe(1);
+    sock().fire('open');
+    expect(mcpBridgeState().status).toBe('open');
+    const mcpLines = store.logs.filter((l) => l.source === 'mcp').map((l) => l.message);
+    expect(mcpLines.some((m) => /ticket failed/i.test(m))).toBe(false);
+  });
 });
 
 describe('MCP bridge key rotation', () => {

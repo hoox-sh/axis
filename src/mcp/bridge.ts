@@ -12,6 +12,7 @@
 
 import { resolveCloudConfig } from '../storage/cloud-config';
 import { appendLog, store } from '../store';
+import { isAbortError } from '../utils/errors';
 import { fetchWithTimeout } from '../utils/fetch-timeout';
 import { createEmitter } from '../utils/emitter';
 import { invokeCapability } from './dispatch';
@@ -66,6 +67,9 @@ const WORKER_API_KEY_RE = /^pn_[a-f0-9]{48}$/;
 const MCP_CONNECT_PREF_KEY = 'pynescript.axis.mcp.v1';
 const ROTATE_DEBOUNCE_MS = 300;
 const BACKOFF_CEILING_ATTEMPT = 5;
+/** Ticket mint retries when the browser aborts the fetch (reload / tab teardown). */
+const TICKET_ABORT_RETRIES = 2;
+const TICKET_ABORT_RETRY_MS = 250;
 
 /**
  * Shape check on a pasted Worker key before the bridge mints a ticket, so a truncated paste
@@ -303,7 +307,7 @@ function idleNoKey(): void {
   emit();
 }
 
-async function mintBridgeTicket(cfg: { endpoint: string; apiKey: string }): Promise<string> {
+async function mintBridgeTicketOnce(cfg: { endpoint: string; apiKey: string }): Promise<string> {
   const res = await fetchWithTimeout(
     `${cfg.endpoint.replace(/\/$/, '')}/api/mcp/bridge?issue=ticket`,
     {
@@ -318,6 +322,24 @@ async function mintBridgeTicket(cfg: { endpoint: string; apiKey: string }): Prom
   const ticket = typeof body.ticket === 'string' ? body.ticket.trim() : '';
   if (!ticket) throw new Error('bridge ticket missing');
   return ticket;
+}
+
+/**
+ * Mint a one-shot bridge ticket. Browser aborts during reload/HMR are retried a
+ * couple of times so Settings does not flash "ticket failed" on a transient abort.
+ */
+async function mintBridgeTicket(cfg: { endpoint: string; apiKey: string }): Promise<string> {
+  let lastErr: unknown;
+  for (let i = 0; i <= TICKET_ABORT_RETRIES; i++) {
+    try {
+      return await mintBridgeTicketOnce(cfg);
+    } catch (err) {
+      lastErr = err;
+      if (!isAbortError(err) || i >= TICKET_ABORT_RETRIES) throw err;
+      await new Promise((r) => setTimeout(r, TICKET_ABORT_RETRY_MS));
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
 }
 
 /**
@@ -459,6 +481,7 @@ export async function connectMcpBridge(): Promise<void> {
     if (stopped || gen !== connectGen) return;
     stopTabsPoll();
     const message = err instanceof Error ? err.message : String(err);
+    const aborted = isAbortError(err);
     state = {
       status: 'error',
       session,
@@ -470,7 +493,14 @@ export async function connectMcpBridge(): Promise<void> {
       lastCapability: state.lastCapability,
     };
     emit();
-    logReconnect('error', `MCP bridge ticket failed — ${message} — reconnecting`);
+    // Reload / tab teardown aborts the mint fetch; treat as a soft reconnect
+    // so the HUD does not look like a hard freeze/failure.
+    logReconnect(
+      aborted ? 'warn' : 'error',
+      aborted
+        ? `MCP bridge ticket aborted — reconnecting`
+        : `MCP bridge ticket failed — ${message} — reconnecting`,
+    );
     scheduleReconnect();
   }
 }

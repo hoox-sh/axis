@@ -76,6 +76,73 @@ type SubCursor = {
   lastBar: CursorBar | null;
 };
 
+function finiteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+/** Largest plot/series column length in a full payload (0 when none). */
+function columnCount(payload: Record<string, unknown>): number {
+  let n = 0;
+  const series = payload['series'];
+  if (isRecord(series)) {
+    for (const values of Object.values(series)) {
+      if (Array.isArray(values) && values.length > n) n = values.length;
+    }
+  }
+  const plots = payload['plots'];
+  if (Array.isArray(plots)) {
+    for (const column of plots) {
+      if (Array.isArray(column) && column.length > n) n = column.length;
+    }
+  }
+  return n;
+}
+
+/**
+ * Bar count a full frame really carries.
+ *
+ * A pooled engine session can be longer than the `history_bars` a subscribe
+ * asked for, so `payload.count` can disagree with the columns. Live deltas are
+ * numbered from the session, not from the request: the AXB1 cursor must follow
+ * the payload's real length, or the next tip is reconstructed at the wrong
+ * index and the applier rejects every delta as `needs-full`.
+ */
+function fullBarCount(payload: Record<string, unknown>): number | null {
+  const bars = payload['bars'];
+  if (Array.isArray(bars) && bars.length > 0) return bars.length;
+  const columns = columnCount(payload);
+  if (columns > 0) return columns;
+  const declared = finiteNumber(payload['count']);
+  return declared != null && declared > 0 ? declared : null;
+}
+
+function barFromJson(raw: unknown): CursorBar | null {
+  if (!isRecord(raw)) return null;
+  const time = finiteNumber(raw['time']);
+  const open = finiteNumber(raw['open']);
+  const high = finiteNumber(raw['high']);
+  const low = finiteNumber(raw['low']);
+  const close = finiteNumber(raw['close']);
+  const volume = finiteNumber(raw['volume']);
+  if (
+    time == null ||
+    open == null ||
+    high == null ||
+    low == null ||
+    close == null ||
+    volume == null
+  ) {
+    return null;
+  }
+  return { time, open, high, low, close, volume, closed: raw['closed'] === true };
+}
+
+function lastJsonBar(payload: Record<string, unknown>): CursorBar | null {
+  const bars = payload['bars'];
+  if (Array.isArray(bars) && bars.length) return barFromJson(bars[bars.length - 1]);
+  return null;
+}
+
 /** Subscription / session hashes plus per-sub OHLCV cursor for AXB1 tips. */
 export class IngestCursorTable {
   private readonly subIds = new Map<number, string>();
@@ -95,8 +162,59 @@ export class IngestCursorTable {
     if (frame.sessionId) this.rememberSession(frame.sessionId);
   }
 
+  /**
+   * Remember ids and advance the OHLCV/plot cursor from a JSON frame.
+   *
+   * AXB1 tips (`TIP_UPDATE` / `PLOT_TIP` / `APPEND_BAR`) carry no count of
+   * their own — the decoder numbers them from this cursor. A JSON full is the
+   * normal fallback when the engine cannot encode a snapshot losslessly (for
+   * example a pooled session whose columns are longer than the requested
+   * `history_bars`). Without this sync the next binary tip keeps the old
+   * count, the applier's positional splice rejects it, and the live wire
+   * resubscribes for a full snapshot on every tick.
+   */
   rememberInbound(frame: WireFrame): void {
     this.rememberOutbound(frame);
+    const id = frame.id;
+    if (!id) return;
+    const payload = isRecord(frame.payload) ? frame.payload : {};
+    const prev = this.cursors.get(id);
+    if (frame.type === 'full') {
+      const count = fullBarCount(payload);
+      if (count == null) return;
+      this.cursors.set(id, {
+        count,
+        closedUpto: finiteNumber(payload['closed_upto']) ?? prev?.closedUpto ?? 0,
+        sessionId: frame.sessionId ?? prev?.sessionId ?? '',
+        priceScale: prev?.priceScale ?? PRICE_SCALE_DEFAULT,
+        lastBar: lastJsonBar(payload) ?? prev?.lastBar ?? null,
+      });
+      return;
+    }
+    if (frame.type === 'delta') {
+      const count = finiteNumber(payload['count']);
+      if (count == null || count < 1) return;
+      this.cursors.set(id, {
+        count,
+        closedUpto: finiteNumber(payload['closed_upto']) ?? prev?.closedUpto ?? 0,
+        sessionId: frame.sessionId ?? prev?.sessionId ?? '',
+        priceScale: prev?.priceScale ?? PRICE_SCALE_DEFAULT,
+        lastBar: lastJsonBar(payload) ?? prev?.lastBar ?? null,
+      });
+      return;
+    }
+    if (frame.type === 'close') {
+      const ohlcv = isRecord(payload['ohlcv']) ? payload['ohlcv'] : {};
+      const bar = barFromJson({ ...ohlcv, time: payload['time'], closed: true });
+      if (!bar) return;
+      this.cursors.set(id, {
+        count: prev?.count ?? 1,
+        closedUpto: prev?.closedUpto ?? 0,
+        sessionId: frame.sessionId ?? prev?.sessionId ?? '',
+        priceScale: prev?.priceScale ?? PRICE_SCALE_DEFAULT,
+        lastBar: bar,
+      });
+    }
   }
 
   resolveSubId(hash: number): string {

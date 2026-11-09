@@ -91,7 +91,12 @@ export interface DeltaApplierFull {
  * (`base_index` / `count` / `tail_len`) the positional splice requires.
  */
 export interface DeltaApplierDelta {
-  seq: number;
+  /**
+   * Frame sequence. Optional because a relay may strip it: the positional
+   * splice below is still validated, so a missing seq degrades gap detection
+   * instead of forcing a full snapshot on every tick.
+   */
+  seq?: number;
   base_index: number;
   count: number;
   tail_len: number;
@@ -196,23 +201,27 @@ export class Redesign2DeltaApplier {
   private readonly states = new Redesign2ApplyStateManager();
   private cache: Record<string, unknown> | null = null;
   private appliedSeq = 0;
+  /** A prior delta had no seq; the next sequenced frame may look like a gap. */
+  private seqUnknown = false;
 
   applyFull(full: DeltaApplierFull & { seq?: number }): Record<string, unknown> {
     this.states.requestFull();
     const stored = { ...full, executionContext: 'snapshot' as const };
     this.cache = stored;
     if (typeof full.seq === 'number') this.appliedSeq = full.seq;
+    this.seqUnknown = false;
     this.states.markFullApplied();
     return stored;
   }
 
   applyDelta(delta: DeltaApplierDelta): DeltaApplyOutcome {
     if (!this.cache) return { ok: false, reason: 'delta-before-full' };
+    const hasSeq = typeof delta.seq === 'number' && Number.isFinite(delta.seq);
     const ackFrom = typeof delta.seqAckFrom === 'number' ? delta.seqAckFrom : undefined;
-    const raw = classifySeqGap(this.appliedSeq, delta.seq);
-    const gap = classifySeqGap(this.appliedSeq, delta.seq, ackFrom);
+    const raw = hasSeq ? classifySeqGap(this.appliedSeq, delta.seq!) : null;
+    const gap = hasSeq ? classifySeqGap(this.appliedSeq, delta.seq!, ackFrom) : null;
     const cachedContext = this.cache['executionContext'];
-    if (gap.kind === 'duplicate') {
+    if (gap?.kind === 'duplicate') {
       // Defensive: don't replay a stale snapshot context if delta carries fresh info
       const deltaCtx = (delta as { executionContext?: ExecutionContext }).executionContext;
       const executionContext: ExecutionContext =
@@ -223,11 +232,18 @@ export class Redesign2DeltaApplier {
             : 'snapshot';
       return { ok: true, full: { ...this.cache }, replayed: true, executionContext };
     }
-    if (gap.kind !== 'continuous') {
-      if (raw.kind === 'gap') v1Count('seqGap');
-      return { ok: false, reason: 'needs-full' };
+    if (gap && gap.kind !== 'continuous') {
+      // A missing seq cannot prove a hole. The positional splice below still
+      // validates count/base_index, so tolerate the next sequenced frame after
+      // an unsequenced one (the frames in between were applied positionally).
+      // A real rewind is never tolerated.
+      const tolerated = this.seqUnknown && gap.kind === 'gap';
+      if (!tolerated) {
+        if (raw?.kind === 'gap') v1Count('seqGap');
+        return { ok: false, reason: 'needs-full' };
+      }
     }
-    const dropped = raw.kind === 'gap' ? delta.seq - this.appliedSeq - 1 : 0;
+    const dropped = raw?.kind === 'gap' ? delta.seq! - this.appliedSeq - 1 : 0;
     const cachedCount = typeof this.cache['count'] === 'number' ? this.cache['count'] : undefined;
     const { seq: _seq, seqAckFrom: _ack, base_index, count, tail_len, forming, ...rest } = delta;
     void _seq;
@@ -242,7 +258,12 @@ export class Redesign2DeltaApplier {
     if (!merged) return { ok: false, reason: 'needs-full' };
     const stored = { ...merged, executionContext, forming: forming === true };
     this.cache = stored;
-    this.appliedSeq = delta.seq;
+    if (hasSeq) {
+      this.appliedSeq = delta.seq!;
+      this.seqUnknown = false;
+    } else {
+      this.seqUnknown = true;
+    }
     if (dropped > 0) v1Count('droppedTip', dropped);
     this.states.markDeltaApplied();
     return { ok: true, full: { ...stored }, replayed: false, executionContext };
@@ -266,5 +287,6 @@ export class Redesign2DeltaApplier {
     this.states.reset();
     this.cache = null;
     this.appliedSeq = 0;
+    this.seqUnknown = false;
   }
 }
