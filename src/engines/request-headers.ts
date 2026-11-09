@@ -3,26 +3,32 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Shared client identity for every HTTP request the PWA makes to a PYNE
- * engine (local Pro API, AXIS Worker `/api/run`, pyne-worker).
+ * Shared engine `fetch` headers for the PWA (local Pro API, AXIS Worker
+ * `/api/run`, pyne-worker).
  *
- * Browser WebSockets cannot set request headers, so this only covers `fetch`.
- * The backend trusts the PWA WebSocket via its `Origin`
- * (`https://axis.hoox.sh`) instead.
+ * Do **not** attach {@link AXIS_CLIENT_HEADER} here. It is a non-CORS-safelisted
+ * header, so every GET `/health` would preflight, and a cached OPTIONS
+ * (`Access-Control-Max-Age: 86400`) from before the engine listed it in
+ * `Access-Control-Allow-Headers` blocks `/run`, `/session`, and `/health` for
+ * a day. Production PWA trust is `Origin: https://axis.hoox.sh` on the Worker
+ * and the Pro API. The IDE may still send the header on its own.
+ *
+ * Browser WebSockets cannot set request headers; backends trust the PWA
+ * socket via that same Origin.
  *
  * @module engines/request-headers
  */
 
-/** Header that marks a request as coming from the first-party PWA. */
+/** Header an IDE / preview client may send; the PWA does not (see {@link engineHeaders}). */
 export const AXIS_CLIENT_HEADER = 'X-AXIS-Client';
-/** Value for {@link AXIS_CLIENT_HEADER}. */
+/** Value for {@link AXIS_CLIENT_HEADER} when a non-PWA client opts in. */
 export const AXIS_CLIENT_VALUE = 'pwa';
 /** Single source of truth for the open-beta notice shown in API-key inputs. */
 export const BETA_COPY = 'Open beta — free while in beta. No API key needed.';
 
 /**
- * Build engine request headers: JSON content type (optional), the PWA client
- * marker, and the API key as both `X-API-Key` and `Authorization: Bearer`.
+ * Build engine request headers: JSON content type (optional) and the API key
+ * as both `X-API-Key` and `Authorization: Bearer`.
  *
  * @param apiKey - Engine / Worker key; omitted or empty means anonymous.
  * @param json - Set `false` for GET/health probes that send no body.
@@ -31,7 +37,6 @@ export const BETA_COPY = 'Open beta — free while in beta. No API key needed.';
 export function engineHeaders(apiKey?: string, json = true): Record<string, string> {
   const headers: Record<string, string> = {};
   if (json) headers['Content-Type'] = 'application/json';
-  headers[AXIS_CLIENT_HEADER] = AXIS_CLIENT_VALUE;
   const key = String(apiKey ?? '').trim();
   if (key) {
     headers['X-API-Key'] = key;

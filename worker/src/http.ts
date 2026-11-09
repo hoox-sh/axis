@@ -37,8 +37,10 @@ import { WORKER_VERSION } from './version';
 /**
  * Allowed request headers, narrowest set used by on-chain / scripts routes.
  *
- * `X-AXIS-Client` marks the PWA so its `/api/run` preflight succeeds; the value
- * is client-controlled and is a beta convenience, never authentication.
+ * `X-AXIS-Client` is optional (IDE / preview). The PWA relies on `Origin`
+ * instead so GET `/health` stays a simple request. Keep the name on the
+ * allow-list so clients that do send it pass preflight. The value is
+ * client-controlled and is a beta convenience, never authentication.
  */
 const BASE_HEADERS = 'Content-Type, Authorization, X-Admin-Token, If-Match, X-AXIS-Client';
 
