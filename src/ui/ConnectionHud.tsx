@@ -18,10 +18,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * AXIS Connection HUD — ENG / RUN / MODE / PATH (+ SRC STR STO · ONC).
+ * AXIS Connection HUD — scanline instruments (Live, Last, Compose, diagnostics).
  *
  * Derived via {@link deriveHud} from engine plugin + endpoint + telemetry.
- * Chips live in the status bar; compact mode collapses secondary chips.
+ * Chips live in the status-bar scanline; compact mode collapses secondary chips.
+ * Click or keyboard opens one inspector dialog above the rail — never hover.
  *
  * | Chip | Values |
  * |------|--------|
@@ -30,8 +31,6 @@
  * | MODE | interpret \| compile \| auto |
  * | PATH | WS \| REST (hidden for browser-local) |
  * | ONC  | on-chain proxy (only when probed / error / active) |
- *
- * Sticky info: hover opens panel; click pin (or chip) keeps it until Esc / outside.
  */
 
 import {
@@ -41,11 +40,9 @@ import {
   createEffect,
   createMemo,
   createSignal,
-  onCleanup,
-  onMount,
 } from 'solid-js';
-import { useEventListener } from './use-event-listener';
 import { store, setStore, persist, setActivePlugin, setDataSourcePanelOpen } from '../store';
+import { Popover } from './Popover';
 import type { FeedSubscription } from '../store/types';
 import { useNow } from './clock';
 import type { PlaneTelemetry } from '../store/types';
@@ -56,12 +53,17 @@ import {
   feedChipMeta,
   feedChipView,
   hudChipHelp,
+  lastTickForSymbol,
   liveBadgeTone,
   liveBadgeWord,
   liveIndicatorTitle,
+  reduceHudInspector,
   type HudChipId,
   type HudSnapshot,
 } from './hud-model';
+import { readLiveArm } from './live-arm';
+import { displayedLastPrice } from './extras/quote';
+import { barPlane } from '../stores/bars';
 import { defaultStreamForSource } from '../streams/catalog';
 import { getActiveEngineConfig } from '../plugins/active';
 import { currentSeriesKey } from '../engine/market-identity';
@@ -86,69 +88,31 @@ function useHudSnapshot(): () => HudSnapshot {
   });
 }
 
-// ── Sticky info panel ─────────────────────────────────────────────────
+// ── Click inspector (never hover) ─────────────────────────────────────
 
-/** Fixed-position dialog placement anchored to a chip (shared by the info panel and the compose menu). */
-function dialogPos(anchor: HTMLElement | null | undefined, width: number) {
-  if (!anchor || typeof anchor.getBoundingClientRect !== 'function') {
-    return { left: 8, bottom: 32 };
-  }
-  const r = anchor.getBoundingClientRect();
-  const left = Math.max(8, Math.min(r.left, window.innerWidth - width - 8));
-  const bottom = Math.max(8, window.innerHeight - r.top + 6);
-  return { left, bottom };
-}
-
-function HudInfoPanel(props: {
+function HudInspectorPanel(props: {
   chip: HudChipId;
   snap: HudSnapshot;
-  pinned: boolean;
   onClose: () => void;
-  onTogglePin: () => void;
-  /** Anchor element for fixed placement (avoids status-bar overflow clip). */
-  anchor: HTMLElement | null | undefined;
   /** Chip-specific live rows (status, progress, tier) — the only per-chip facts here. */
   meta?: string[];
 }) {
   const help = () => hudChipHelp(props.chip, props.snap);
-  const pos = createMemo(() => dialogPos(props.anchor, 328));
   return (
-    <div
-      class="axis-hud-info fixed z-[300] w-[min(320px,calc(100vw-24px))] text-left"
-      style={{ left: `${pos().left}px`, bottom: `${pos().bottom}px` }}
-      data-testid="axis-hud-info"
-      role="dialog"
-      aria-label={help().title}
-    >
+    <>
       <div class="flex items-start justify-between gap-2 mb-1.5">
         <div class="text-[11px] font-medium text-text tracking-tight">{help().title}</div>
-        <div class="flex items-center gap-1 flex-shrink-0">
-          <button
-            type="button"
-            class={`sc-btn sc-btn-ghost px-1.5 py-0 text-[10px] font-mono ${
-              props.pinned ? 'text-accent' : 'text-text-faint'
-            }`}
-            title={props.pinned ? 'Unpin (auto-hide on leave)' : 'Pin open'}
-            data-testid="axis-hud-pin"
-            onClick={(e) => {
-              e.stopPropagation();
-              props.onTogglePin();
-            }}
-          >
-            {props.pinned ? 'pinned' : 'pin'}
-          </button>
-          <button
-            type="button"
-            class="sc-btn sc-btn-ghost px-1.5 py-0 text-[10px] text-text-faint"
-            aria-label="Close"
-            onClick={(e) => {
-              e.stopPropagation();
-              props.onClose();
-            }}
-          >
-            ×
-          </button>
-        </div>
+        <button
+          type="button"
+          class="sc-btn sc-btn-ghost px-1.5 py-0 text-[10px] text-text-faint"
+          aria-label="Close"
+          onClick={(e) => {
+            e.stopPropagation();
+            props.onClose();
+          }}
+        >
+          ×
+        </button>
       </div>
       <p class="text-[11px] text-text-dim font-mono whitespace-pre-wrap leading-relaxed">
         {help().body}
@@ -170,61 +134,30 @@ function HudInfoPanel(props: {
           <span class="col-span-2 text-red truncate">{props.snap.error}</span>
         </Show>
       </div>
-      <p class="mt-1.5 text-[10px] text-text-faint">
-        Hover for info · pin to keep · Esc closes
-      </p>
-    </div>
+      <p class="mt-1.5 text-[10px] text-text-faint">Click a chip for details · Esc closes</p>
+    </>
   );
 }
 
-function useStickyInfo() {
+function useHudInspector() {
   const [openChip, setOpenChip] = createSignal<HudChipId | null>(null);
-  const [pinned, setPinned] = createSignal(false);
-  let leaveTimer: ReturnType<typeof setTimeout> | null = null;
-
-  const clearLeave = () => {
-    if (leaveTimer) {
-      clearTimeout(leaveTimer);
-      leaveTimer = null;
-    }
+  const toggle = (id: HudChipId) => {
+    setOpenChip((cur) => reduceHudInspector(cur, { type: 'toggle', id }));
   };
-
-  const open = (id: HudChipId) => {
-    clearLeave();
-    setOpenChip(id);
-  };
-
-  const scheduleClose = () => {
-    if (pinned()) return;
-    clearLeave();
-    leaveTimer = setTimeout(() => setOpenChip(null), 220);
-  };
-
   const close = () => {
-    clearLeave();
-    setPinned(false);
-    setOpenChip(null);
+    setOpenChip((cur) => reduceHudInspector(cur, { type: 'close' }));
   };
-
-  const togglePin = () => {
-    setPinned((p) => !p);
-  };
-
-  useEventListener<KeyboardEvent>(window, 'keydown', (e) => {
-    if (e.key === 'Escape') close();
-  });
-
-  return { openChip, pinned, open, scheduleClose, close, togglePin, clearLeave };
+  return { openChip, toggle, close };
 }
 
 // ── Chips ─────────────────────────────────────────────────────────────
 
 /**
- * Single shell for every HUD chip: dot + label + value, hover/click/keyboard
- * open the same sticky info panel. Visual variants travel through class props
- * (`shellClass`, `labelClass`, `valueClass`, `dotClass`) so TickPulse and the
- * Live control share this instead of re-implementing the wiring. Truncated
- * values get their full text via `title`.
+ * Single shell for every HUD chip: dot + label + value. Click/keyboard
+ * opens the inspector dialog; hover never does. Visual variants travel
+ * through class props (`shellClass`, `labelClass`, `valueClass`, `dotClass`)
+ * so TickPulse and the Live control share this instead of re-implementing
+ * the wiring. Truncated values get their full text via `title`.
  */
 function ChipShell(props: {
   id: HudChipId;
@@ -241,14 +174,14 @@ function ChipShell(props: {
   dotClass?: string;
   /** Full text for truncated values (native tooltip). */
   title?: string;
-  sticky: ReturnType<typeof useStickyInfo>;
+  inspector: ReturnType<typeof useHudInspector>;
   snap: () => HudSnapshot;
   extra?: string;
   testId?: string;
-  /** Chip-specific live rows for the info panel footer. */
+  /** Chip-specific live rows for the inspector footer. */
   meta?: string[];
 }) {
-  let anchor: HTMLSpanElement | undefined;
+  const [anchor, setAnchor] = createSignal<HTMLButtonElement | undefined>();
   const dot = () => {
     if (props.dotClass !== undefined) return props.dotClass;
     switch (props.state) {
@@ -264,74 +197,62 @@ function ChipShell(props: {
         return '';
     }
   };
-  const active = () => props.sticky.openChip() === props.id;
-
-  /** Open/pin/close the sticky info — shared by pointer click and keyboard. */
-  const activate = (e: MouseEvent | KeyboardEvent) => {
-    e.stopPropagation();
-    if (active() && props.sticky.pinned()) {
-      props.sticky.close();
-    } else {
-      props.sticky.open(props.id);
-      if (!props.sticky.pinned()) props.sticky.togglePin();
-    }
-  };
+  const active = () => props.inspector.openChip() === props.id;
 
   return (
-    // biome-ignore lint/a11y/useSemanticElements: chip hosts the info panel's pin/close buttons; a real <button> would nest buttons (invalid HTML)
-    <span
-      ref={(el) => {
-        anchor = el;
-      }}
-      class={`axis-status-capsule relative ${props.shellClass ?? ''} ${
-        active() ? 'is-active' : ''
-      }`}
-      data-testid={props.testId || `axis-hud-${props.id}`}
-      data-hud-chip={props.id}
-      role="button"
-      tabIndex={0}
-      title={props.title}
-      onMouseEnter={() => props.sticky.open(props.id)}
-      onMouseLeave={() => props.sticky.scheduleClose()}
-      onClick={activate}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') activate(e);
-      }}
-    >
-      <span class={`axis-live-dot ${dot()}`} aria-hidden="true" />
-      <span class={`axis-status-capsule-code ${props.labelClass ?? ''}`}>{props.label}</span>
-      <Show when={props.value !== ''}>
-        <span
-          class={`axis-status-capsule-val ${
-            props.state === 'load' ? 'text-orange' : ''
-          } ${props.valueClass ?? ''}`}
-        >
-          {props.value}
-        </span>
-      </Show>
-      <Show when={props.extra}>
-        <span class="text-[10px] font-mono text-text-faint tabular-nums flex-shrink-0">
-          {props.extra}
-        </span>
-      </Show>
-      <Show when={active()}>
-        {/* biome-ignore lint/a11y/noStaticElementInteractions: hover bridge keeps the info panel open while the pointer moves onto it; pointer-only affordance */}
-        <div
-          onMouseEnter={() => props.sticky.clearLeave()}
-          onMouseLeave={() => props.sticky.scheduleClose()}
-        >
-          <HudInfoPanel
-            chip={props.id}
-            snap={props.snap()}
-            pinned={props.sticky.pinned()}
-            anchor={anchor}
-            meta={props.meta}
-            onClose={() => props.sticky.close()}
-            onTogglePin={() => props.sticky.togglePin()}
-          />
-        </div>
-      </Show>
-    </span>
+    <>
+      <button
+        ref={setAnchor}
+        type="button"
+        class={`axis-status-capsule relative ${props.shellClass ?? ''} ${
+          active() ? 'is-active' : ''
+        }`}
+        data-testid={props.testId || `axis-hud-${props.id}`}
+        data-hud-chip={props.id}
+        title={props.title}
+        aria-expanded={active()}
+        aria-haspopup="dialog"
+        onClick={(e) => {
+          e.stopPropagation();
+          props.inspector.toggle(props.id);
+        }}
+      >
+        <span class={`axis-live-dot ${dot()}`} aria-hidden="true" />
+        <span class={`axis-status-capsule-code ${props.labelClass ?? ''}`}>{props.label}</span>
+        <Show when={props.value !== ''}>
+          <span
+            class={`axis-status-capsule-val ${
+              props.state === 'load' ? 'text-orange' : ''
+            } ${props.valueClass ?? ''}`}
+          >
+            {props.value}
+          </span>
+        </Show>
+        <Show when={props.extra}>
+          <span class="text-[10px] font-mono text-text-faint tabular-nums flex-shrink-0">
+            {props.extra}
+          </span>
+        </Show>
+      </button>
+      <Popover
+        open={active()}
+        anchor={anchor()}
+        onClose={() => props.inspector.close()}
+        width={328}
+        side="top"
+        role="dialog"
+        label={hudChipHelp(props.id, props.snap()).title}
+        testId={active() ? 'axis-hud-info' : undefined}
+        class="axis-hud-info w-[min(320px,calc(100vw-24px))] text-left"
+      >
+        <HudInspectorPanel
+          chip={props.id}
+          snap={props.snap()}
+          meta={props.meta}
+          onClose={() => props.inspector.close()}
+        />
+      </Popover>
+    </>
   );
 }
 
@@ -339,7 +260,7 @@ function PlaneChip(props: {
   label: string;
   plane: PlaneTelemetry;
   id: HudChipId;
-  sticky: ReturnType<typeof useStickyInfo>;
+  inspector: ReturnType<typeof useHudInspector>;
   snap: () => HudSnapshot;
 }) {
   const t = () => props.plane;
@@ -357,7 +278,7 @@ function PlaneChip(props: {
               ? 'load'
               : 'idle'
       }
-      sticky={props.sticky}
+      inspector={props.inspector}
       snap={props.snap}
       testId={`axis-hud-${props.id}`}
     />
@@ -372,11 +293,11 @@ function PlaneChip(props: {
  * The chip answers *where the data comes from* and *how fresh it is*: a live
  * feed reads `live` (or `live·unverified` when only the engine's own copy
  * confirmed the close), and a feed that never came up keeps its state word
- * plus the time it has been stuck. The opened panel lists the facts behind
- * it — state, freshness, verification tier, engine hop and series identity.
+ * plus the time it has been stuck. The click inspector lists the facts
+ * behind it — state, freshness, verification tier, engine hop and series.
  */
 function FeedChip(props: {
-  sticky: ReturnType<typeof useStickyInfo>;
+  inspector: ReturnType<typeof useHudInspector>;
   snap: () => HudSnapshot;
 }) {
   const now = useNow();
@@ -427,7 +348,7 @@ function FeedChip(props: {
             title={view().title}
             state={chipStateFor(view().tone)}
             meta={metaOf(f())}
-            sticky={props.sticky}
+            inspector={props.inspector}
             snap={props.snap}
             testId="axis-hud-feed"
           />
@@ -471,11 +392,23 @@ function showOnchainPlane(
 }
 
 function TickPulse(props: {
-  sticky: ReturnType<typeof useStickyInfo>;
+  inspector: ReturnType<typeof useHudInspector>;
   snap: () => HudSnapshot;
 }) {
-  const tick = () => store.telemetry?.lastTick;
+  const tick = () => lastTickForSymbol(store.telemetry?.lastTick, store.symbol);
   const now = useNow();
+  const lastPrice = () => {
+    const t = tick();
+    const tickPrice = t && Number.isFinite(t.price) ? t.price : NaN;
+    const barOk = !barPlane.symbol || barPlane.symbol === store.symbol;
+    const tip = barOk ? barPlane.tip : null;
+    const last = tip?.close ?? (barOk && barPlane.length ? barPlane.bars[barPlane.length - 1]?.close : NaN);
+    return displayedLastPrice({
+      tickPrice,
+      barClose: Number.isFinite(last) ? (last as number) : NaN,
+      streamState: store.telemetry?.stream?.state,
+    });
+  };
   const fresh = () => {
     const t = tick();
     return !!t && now() - t.at < 2000;
@@ -487,17 +420,20 @@ function TickPulse(props: {
     return 'text-text-faint';
   };
   const priceText = () => {
-    const t = tick();
-    if (!t) return '—';
-    return t.price.toLocaleString(undefined, {
+    const p = lastPrice();
+    if (!Number.isFinite(p)) return '—';
+    return p.toLocaleString(undefined, {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
   };
   const ageTitle = () => {
     const t = tick();
-    return t ? `${priceText()} · ${formatTickAge(t.at, now())}` : undefined;
+    const p = priceText();
+    if (p === '—') return 'Last — waiting for this symbol';
+    return t ? `${p} · ${formatTickAge(t.at, now())}` : `${p} · last close`;
   };
+  const arm = () => readLiveArm(now());
   return (
     <ChipShell
       id="tick"
@@ -505,11 +441,11 @@ function TickPulse(props: {
       labelClass="is-word"
       value={priceText()}
       valueClass={`tabular-nums text-right max-w-[7ch] flex-shrink-0 overflow-hidden text-ellipsis ${dirColor()}`}
-      dotClass={`${store.live.active && store.stream.status === 'connected' ? 'is-ok' : ''} ${
+      dotClass={`${liveBadgeTone(arm()) === 'live' ? 'is-ok' : ''} ${
         fresh() ? 'axis-live-dot--pulse' : ''
       }`}
       title={ageTitle()}
-      sticky={props.sticky}
+      inspector={props.inspector}
       snap={props.snap}
       testId="axis-tick-indicator"
     />
@@ -517,25 +453,18 @@ function TickPulse(props: {
 }
 
 function LiveBadge(props: {
-  sticky: ReturnType<typeof useStickyInfo>;
+  inspector: ReturnType<typeof useHudInspector>;
   snap: () => HudSnapshot;
 }) {
-  const st = () => store.stream.status;
-  const tone = () => liveBadgeTone({ liveActive: store.live.active, streamStatus: st() });
+  const arm = () => readLiveArm();
+  const tone = () => liveBadgeTone(arm());
   const label = () => liveBadgeWord(tone());
-  const tip = () =>
-    liveIndicatorTitle({
-      liveActive: store.live.active,
-      streamStatus: st(),
-      detail: store.telemetry?.stream?.detail,
-      lastEventAt: store.telemetry?.stream?.lastEventAt,
-      now: Date.now(),
-      startHint: 'Live stream is off',
-    });
+  const tip = () => liveIndicatorTitle({ ...arm(), startHint: 'Live stream is off' });
   const cls = () => {
     const t = tone();
     if (t === 'live') return 'is-live';
     if (t === 'reconnect') return 'is-reconnect';
+    if (t === 'degraded' || t === 'rest') return 'is-degraded';
     if (t === 'offline') return 'is-offline';
     return 'is-idle';
   };
@@ -548,7 +477,7 @@ function LiveBadge(props: {
       shellClass={`axis-live-btn ${cls()}`}
       dotClass=""
       title={tip()}
-      sticky={props.sticky}
+      inspector={props.inspector}
       snap={props.snap}
       testId="axis-hud-live"
     />
@@ -604,36 +533,12 @@ function PairingWarn() {
   );
 }
 
-/** One chip for source × stream × engine × storage. Click opens Data or Studio. */
+/** One chip for source × stream × engine × storage. Click opens the compose inspector. */
 function ComposeChip(props: { snap: () => HudSnapshot }) {
   const [open, setOpen] = createSignal(false);
-  let btn: HTMLButtonElement | undefined;
-  const [pos, setPos] = createSignal({ left: 8, bottom: 36 });
-
-  const place = () => {
-    setPos(dialogPos(btn, 252));
-  };
+  const [btn, setBtn] = createSignal<HTMLButtonElement | undefined>();
 
   const close = () => setOpen(false);
-
-  onMount(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close();
-    };
-    const onPtr = (e: PointerEvent) => {
-      if (!open()) return;
-      const t = e.target as Node | null;
-      if (btn?.contains(t)) return;
-      if (t && (t as HTMLElement).closest?.('[data-testid="axis-compose-menu"]')) return;
-      close();
-    };
-    window.addEventListener('keydown', onKey);
-    window.addEventListener('pointerdown', onPtr, true);
-    onCleanup(() => {
-      window.removeEventListener('keydown', onKey);
-      window.removeEventListener('pointerdown', onPtr, true);
-    });
-  });
 
   const snap = () => props.snap();
   const src = () => store.telemetry?.source;
@@ -659,20 +564,14 @@ function ComposeChip(props: { snap: () => HudSnapshot }) {
   return (
     <>
       <button
-        ref={btn}
+        ref={setBtn}
         type="button"
         class={`axis-status-capsule ${open() ? 'is-active' : ''}`}
         data-testid="axis-hud-compose"
         title="Source, stream, engine, and storage. Open Data or Studio."
         aria-expanded={open()}
         aria-haspopup="dialog"
-        onClick={() => {
-          setOpen((v) => {
-            const next = !v;
-            if (next) place();
-            return next;
-          });
-        }}
+        onClick={() => setOpen((v) => !v)}
       >
         <span
           class={`axis-live-dot ${warn() ? 'is-warn' : snap().error ? 'is-err' : ''}`}
@@ -681,71 +580,73 @@ function ComposeChip(props: { snap: () => HudSnapshot }) {
         <span class="axis-status-capsule-code is-word">Compose</span>
         <span class="axis-status-capsule-val">{composeCaption(snap())}</span>
       </button>
-      <Show when={open()}>
-        <div
-          class="axis-hud-info fixed z-[300] w-[min(280px,calc(100vw-24px))] text-left"
-          style={{ left: `${pos().left}px`, bottom: `${pos().bottom}px` }}
-          data-testid="axis-compose-menu"
-          role="dialog"
-          aria-label="Compose"
-        >
-          <div class="text-[11px] font-medium text-text mb-1.5">Compose</div>
-          <div class="grid grid-cols-[5.5rem_1fr] gap-x-2 gap-y-0.5 text-[11px] font-mono">
-            <span class="text-text-faint">Engine</span>
-            <span class="truncate text-text-dim" title={snap().product}>
-              {composeCaption(snap())} · {snap().eng}
-            </span>
-            <span class="text-text-faint">Run</span>
-            <span class="truncate text-text-dim">{snap().mode}</span>
-            <span class="text-text-faint">Path</span>
-            <span class="text-text-dim">{snap().showPath ? snap().path : 'in tab'}</span>
-            <span class="text-text-faint">Source</span>
-            <span class="truncate text-text-dim" title={src()?.id}>
-              {src()?.name || src()?.id || '—'}
-            </span>
-            <span class="text-text-faint">Stream</span>
-            <span class="truncate text-text-dim" title={str()?.id}>
-              {str()?.name || str()?.id || '—'}
-            </span>
-            <span class="text-text-faint">Storage</span>
-            <span class="truncate text-text-dim" title={sto()?.id}>
-              {sto()?.name || sto()?.id || '—'}
-            </span>
-          </div>
-          <Show when={warn()}>
-            <p class="mt-1.5 text-[10px] text-orange">{warn()}</p>
-          </Show>
-          <Show when={snap().error}>
-            <p class="mt-1.5 text-[10px] text-red truncate">{snap().error}</p>
-          </Show>
-          <div class="mt-2 flex gap-1">
-            <button
-              type="button"
-              class="sc-btn sc-btn-ghost flex-1 text-[11px]"
-              data-testid="axis-compose-data"
-              onClick={openData}
-            >
-              Data
-            </button>
-            <button
-              type="button"
-              class="sc-btn sc-btn-ghost flex-1 text-[11px]"
-              data-testid="axis-compose-studio"
-              onClick={openStudio}
-            >
-              Studio
-            </button>
-          </div>
+      <Popover
+        open={open()}
+        anchor={btn()}
+        onClose={close}
+        width={280}
+        side="top"
+        role="dialog"
+        label="Compose"
+        testId="axis-compose-menu"
+        class="axis-hud-info w-[min(280px,calc(100vw-24px))] text-left"
+      >
+        <div class="text-[11px] font-medium text-text mb-1.5">Compose</div>
+        <div class="grid grid-cols-[5.5rem_1fr] gap-x-2 gap-y-0.5 text-[11px] font-mono">
+          <span class="text-text-faint">Engine</span>
+          <span class="truncate text-text-dim" title={snap().product}>
+            {composeCaption(snap())} · {snap().eng}
+          </span>
+          <span class="text-text-faint">Run</span>
+          <span class="truncate text-text-dim">{snap().mode}</span>
+          <span class="text-text-faint">Path</span>
+          <span class="text-text-dim">{snap().showPath ? snap().path : 'in tab'}</span>
+          <span class="text-text-faint">Source</span>
+          <span class="truncate text-text-dim" title={src()?.id}>
+            {src()?.name || src()?.id || '—'}
+          </span>
+          <span class="text-text-faint">Stream</span>
+          <span class="truncate text-text-dim" title={str()?.id}>
+            {str()?.name || str()?.id || '—'}
+          </span>
+          <span class="text-text-faint">Storage</span>
+          <span class="truncate text-text-dim" title={sto()?.id}>
+            {sto()?.name || sto()?.id || '—'}
+          </span>
         </div>
-      </Show>
+        <Show when={warn()}>
+          <p class="mt-1.5 text-[10px] text-orange">{warn()}</p>
+        </Show>
+        <Show when={snap().error}>
+          <p class="mt-1.5 text-[10px] text-red truncate">{snap().error}</p>
+        </Show>
+        <div class="mt-2 flex gap-1">
+          <button
+            type="button"
+            class="sc-btn sc-btn-ghost flex-1 text-[11px]"
+            data-testid="axis-compose-data"
+            onClick={openData}
+          >
+            Data
+          </button>
+          <button
+            type="button"
+            class="sc-btn sc-btn-ghost flex-1 text-[11px]"
+            data-testid="axis-compose-studio"
+            onClick={openStudio}
+          >
+            Studio
+          </button>
+        </div>
+      </Popover>
     </>
   );
 }
 
-/** Status-bar connection chips + sticky detail panel. */
+/** Status-bar scanline chips + click inspector (never hover). */
 export const ConnectionHud: Component = () : JSX.Element => {
   const snap = useHudSnapshot();
-  const sticky = useStickyInfo();
+  const inspector = useHudInspector();
   const tel = () => store.telemetry;
   const compact = () => tel()?.hud?.compact;
   const diagnostics = () => tel()?.hud?.diagnostics === true;
@@ -771,8 +672,8 @@ export const ConnectionHud: Component = () : JSX.Element => {
       role="status"
       aria-label="Connection status"
     >
-      <LiveBadge sticky={sticky} snap={snap} />
-      <TickPulse sticky={sticky} snap={snap} />
+      <LiveBadge inspector={inspector} snap={snap} />
+      <TickPulse inspector={inspector} snap={snap} />
 
       <button
         type="button"
@@ -806,7 +707,7 @@ export const ConnectionHud: Component = () : JSX.Element => {
                     label="Chain"
                     plane={o()}
                     id="onc"
-                    sticky={sticky}
+                    inspector={inspector}
                     snap={snap}
                   />
                 )}
@@ -821,7 +722,7 @@ export const ConnectionHud: Component = () : JSX.Element => {
           label="eng"
           value={snap().eng}
           state={engState()}
-          sticky={sticky}
+          inspector={inspector}
           snap={snap}
           testId="axis-hud-eng"
         />
@@ -830,7 +731,7 @@ export const ConnectionHud: Component = () : JSX.Element => {
           label="run"
           value={snap().loading ? 'loading…' : snap().run}
           state={snap().loading ? 'load' : engState()}
-          sticky={sticky}
+          inspector={inspector}
           snap={snap}
           testId="axis-hud-run"
         />
@@ -840,7 +741,7 @@ export const ConnectionHud: Component = () : JSX.Element => {
           value={snap().mode}
           state={engState()}
           extra={formatLatency(snap().latencyMs)}
-          sticky={sticky}
+          inspector={inspector}
           snap={snap}
           testId="axis-engine-chip"
         />
@@ -850,7 +751,7 @@ export const ConnectionHud: Component = () : JSX.Element => {
             label="path"
             value={snap().path}
             state={snap().path === 'WS' ? 'ok' : 'idle'}
-            sticky={sticky}
+            inspector={inspector}
             snap={snap}
             testId="axis-hud-path"
           />
@@ -858,20 +759,20 @@ export const ConnectionHud: Component = () : JSX.Element => {
         <Show when={!compact()}>
           <Show when={tel()?.source}>
             {(p) => (
-              <PlaneChip label="src" plane={p()} id="src" sticky={sticky} snap={snap} />
+              <PlaneChip label="src" plane={p()} id="src" inspector={inspector} snap={snap} />
             )}
           </Show>
           <Show when={tel()?.stream}>
             {(p) => (
-              <PlaneChip label="str" plane={p()} id="str" sticky={sticky} snap={snap} />
+              <PlaneChip label="str" plane={p()} id="str" inspector={inspector} snap={snap} />
             )}
           </Show>
           <Show when={tel()?.storage}>
             {(p) => (
-              <PlaneChip label="sto" plane={p()} id="sto" sticky={sticky} snap={snap} />
+              <PlaneChip label="sto" plane={p()} id="sto" inspector={inspector} snap={snap} />
             )}
           </Show>
-          <FeedChip sticky={sticky} snap={snap} />
+          <FeedChip inspector={inspector} snap={snap} />
           <PairingWarn />
         </Show>
         <Show when={showOnchainPlane(tel()?.onchain, compact())}>
@@ -881,7 +782,7 @@ export const ConnectionHud: Component = () : JSX.Element => {
                 label="onc"
                 plane={o()}
                 id="onc"
-                sticky={sticky}
+                inspector={inspector}
                 snap={snap}
               />
             )}

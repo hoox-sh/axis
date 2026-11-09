@@ -97,6 +97,7 @@ import { seriesSeriesKey } from '../onchain/keys';
 import { PLOT_PALETTE, RIGHT_PRICE_SCALE_WIDTH } from './series-factory';
 
 import { reportUiError } from '../ui/boot-errors';
+import { FirstRunHint } from '../ui/FirstRunHint';
 import { pinChartSlot, unpinChartSlot } from '../streams/stream-live';
 
 export {
@@ -848,6 +849,9 @@ export const ChartHost: Component<ChartHostProps> = (props): JSX.Element => {
       </Show>
       <Show when={isActive() && chartInteractive()}>
         <PyneTableHud />
+      </Show>
+      <Show when={isActive() && chartInteractive() && !store.presentation?.chartOnly}>
+        <FirstRunHint />
       </Show>
       <Show when={bootHint()}>
         {(hint) => (

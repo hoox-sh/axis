@@ -12,3 +12,13 @@
 
 /** Deployed worker version (repo-root VERSION at sync time). */
 export const WORKER_VERSION: string = '2.28.0';
+
+/**
+ * Git SHA baked by `wrangler deploy --define WORKER_GIT_SHA:"<sha>"`.
+ * Empty in unit tests (the identifier is undeclared).
+ */
+declare const WORKER_GIT_SHA: string | undefined;
+
+export function workerGitSha(): string {
+  return typeof WORKER_GIT_SHA === 'string' ? WORKER_GIT_SHA : '';
+}

@@ -7,7 +7,7 @@ tags: [code, hp, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-25T22:20:51Z
+  at: 2026-11-09T05:20:23Z
 sources:
   - id: tree
     resource: "tests/hp"
@@ -24,6 +24,7 @@ okf_lock: generated
 * `ingest-core.test.ts`
 * `ingest-host.test.ts`
 * `isolation-headers.test.ts`
+* `security-headers.test.ts`
 * `ticks-precision.test.ts`
 
 # Other files

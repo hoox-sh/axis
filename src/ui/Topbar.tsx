@@ -101,6 +101,7 @@ import {
 } from '../data/venue-picker';
 import { toggleBrowserFullscreen, toggleChartOnlyMode } from './presentation';
 import { liveBadgeTone, liveBadgeWord, liveIndicatorTitle } from './hud-model';
+import { readLiveArm } from './live-arm';
 import { shortcutTitle } from './shortcuts/title';
 import { engineFamilyForText } from '../plugins/engine-family';
 
@@ -699,24 +700,19 @@ export const Topbar: Component<{
 
               <button
                 type="button"
-                class={`axis-live-btn ${
-                  !store.live.active
-                    ? 'is-idle'
-                    : store.stream.status === 'connected'
-                      ? 'is-live'
-                      : store.stream.status === 'connecting'
-                        ? 'is-reconnect'
-                        : 'is-offline'
-                }`}
+                class={`axis-live-btn ${(() => {
+                  const t = liveBadgeTone(readLiveArm());
+                  if (t === 'live') return 'is-live';
+                  if (t === 'reconnect') return 'is-reconnect';
+                  if (t === 'degraded' || t === 'rest') return 'is-degraded';
+                  if (t === 'offline') return 'is-offline';
+                  return 'is-idle';
+                })()}`}
                 onClick={toggleLive}
                 data-testid="axis-btn-live"
                 aria-pressed={store.live.active}
                 title={liveIndicatorTitle({
-                  liveActive: store.live.active,
-                  streamStatus: store.stream.status,
-                  detail: store.telemetry?.stream?.detail,
-                  lastEventAt: store.telemetry?.stream?.lastEventAt,
-                  now: Date.now(),
+                  ...readLiveArm(),
                   startHint: `Start live stream (${
                     streams().find((s) => s.id === defaultStreamForSource(store.source))?.name ||
                     defaultStreamForSource(store.source)
@@ -725,12 +721,7 @@ export const Topbar: Component<{
               >
                 <span class="axis-live-dot" aria-hidden="true" />
                 <span class="axis-tb-btn-label">
-                  {liveBadgeWord(
-                    liveBadgeTone({
-                      liveActive: store.live.active,
-                      streamStatus: store.stream.status,
-                    }),
-                  )}
+                  {liveBadgeWord(liveBadgeTone(readLiveArm()))}
                 </span>
               </button>
 

@@ -29,6 +29,7 @@ import { useNow } from '../clock';
 import { store } from '../../store';
 import { barPlane } from '../../stores/bars';
 import { displayedLastPrice } from './quote';
+import { lastTickForSymbol } from '../hud-model';
 import { trendOverTicks } from './trend';
 import { formatExtraPrice } from './format';
 import {
@@ -47,13 +48,8 @@ export const CurrentPriceCard: Component = () : JSX.Element => {
    * symbol — e.g. symbol switch before the first new tick arrives).
    */
   const livePrice = () => {
-    const tick = store.telemetry?.lastTick;
-    const tickPrice =
-      tick &&
-      (tick.symbol === undefined || tick.symbol === store.symbol) &&
-      Number.isFinite(tick.price)
-        ? (tick.price as number)
-        : NaN;
+    const tick = lastTickForSymbol(store.telemetry?.lastTick, store.symbol);
+    const tickPrice = tick && Number.isFinite(tick.price) ? (tick.price as number) : NaN;
     const tip = barPlane.tip;
     const last = tip?.close ?? (barPlane.length ? barPlane.bars[barPlane.length - 1]?.close : NaN);
     return displayedLastPrice({

@@ -3,16 +3,34 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { defineConfig } from 'vite';
 import solid from 'vite-plugin-solid';
 import tailwindcss from '@tailwindcss/vite';
 import { HP_ISOLATION_HEADERS } from './src/hp/isolation-headers';
+import { readGitStamp, versionJsonBody } from './scripts/git-stamp.mjs';
 
 const host = process.env.TAURI_DEV_HOST;
 
+function axisGitStampPlugin(stamp: ReturnType<typeof readGitStamp>) {
+  return {
+    name: 'axis-git-stamp',
+    closeBundle() {
+      const dir = join(process.cwd(), 'dist');
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, 'version.json'), `${JSON.stringify(versionJsonBody(stamp), null, 2)}\n`);
+    },
+  };
+}
+
 // https://v2.tauri.app/start/frontend/vite/
-export default defineConfig({
-  plugins: [solid(), tailwindcss()],
+export default defineConfig(async () => {
+  const stamp = readGitStamp();
+  if (stamp.git) process.env.VITE_GIT_SHA = stamp.git;
+  if (stamp.version) process.env.VITE_APP_VERSION = stamp.version;
+  return {
+  plugins: [solid(), tailwindcss(), axisGitStampPlugin(stamp)],
   // Prevent Vite from wiping the terminal when the Rust compiler prints errors.
   clearScreen: false,
   build: {
@@ -94,4 +112,5 @@ export default defineConfig({
   preview: {
     headers: { ...HP_ISOLATION_HEADERS },
   },
+};
 });

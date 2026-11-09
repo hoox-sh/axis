@@ -85,3 +85,14 @@ export function looksLikeOnchainWorkerEndpoint(
   }
   return false;
 }
+
+/**
+ * True in a real browser document (not the AXIS unit-test stub).
+ * Direct `api.binance.com` / similar CEX REST from the page CORS-fails and
+ * spams the console; the AXIS Worker market proxy is the public path.
+ */
+export function browserBlocksDirectCexRest(): boolean {
+  if (typeof document === 'undefined') return false;
+  if ((document as { __axisStub?: boolean }).__axisStub) return false;
+  return true;
+}

@@ -26,7 +26,7 @@
 * [src/streams](streams.md) - src/streams contains catalog.ts, multiplex.ts, reconnect-ws.ts, and 3 more files.
 * [src/sw](sw.md) - Pure service-worker strategy helpers (unit-testable).
 * [src/theme](theme.md) - AXIS Theme Manager — public API.
-* [src/ui](ui.md) - src/ui contains AboutModal.tsx, AgentPanel.tsx, AlertsPanel.tsx, and 88 more files.
+* [src/ui](ui.md) - src/ui contains AboutModal.tsx, AgentPanel.tsx, AlertsPanel.tsx, and 91 more files.
 * [src/update](update.md) - App update manager — polls the deployed /version.json and surfaces new releases as a banner + notification with a hard-reload action.
 * [src/utils](utils.md) - src/utils contains bounded-map.ts, emitter.ts, errors.ts, and 5 more files.
 * [src/workers](workers.md) - AXIS workers catalog + health probes (Workers Manager).
@@ -38,4 +38,4 @@
 * [engine](engine/) - Redesign2 engine module barrel.
 * [hp](hp/) - What remains of the old HP tree: the AXB1 codec and the Pine execution context.
 * [indicators](indicators/) - src/indicators contains IndicatorCard.tsx, IndicatorPanel.tsx, apply-context.ts, and 17 more files.
-* [ui](ui/) - src/ui contains AboutModal.tsx, AgentPanel.tsx, AlertsPanel.tsx, and 88 more files.
+* [ui](ui/) - src/ui contains AboutModal.tsx, AgentPanel.tsx, AlertsPanel.tsx, and 91 more files.

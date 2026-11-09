@@ -106,6 +106,17 @@ function contrastRatio(fg: RGB, bg: RGB): number {
   return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
 }
 
+/** WCAG AA body-text floor for chrome labels, faint copy, and accent-as-text. */
+export const TEXT_CONTRAST_MIN = 4.5;
+
+/** Contrast of two parseable hex colors, or null when either is color-mix/var. */
+export function contrastRatioHex(fg: string, bg: string): number | null {
+  const a = toRgb(fg);
+  const b = toRgb(bg);
+  if (!a || !b) return null;
+  return contrastRatio(a, b);
+}
+
 /**
  * Mix `color` toward `text` (numeric sRGB interpolation) until it reaches
  * `min` contrast against `bg`. Returns the original value when unparseable
@@ -200,7 +211,7 @@ export function buildChromeCssVars(
   const elev = tok(tokens, 'chart.elev', base === 'light' ? '#E2E4EC' : '#0C0E14');
   const fg = tok(tokens, 'chart.fg_color', base === 'light' ? '#1A1D26' : '#EEEEEE');
   const scaleBorder = tok(tokens, 'scale.border', base === 'light' ? '#C5CAD6' : '#1C2230');
-  const accent = tok(tokens, 'ui.accent', base === 'light' ? '#5A6AD4' : '#939FFF');
+  const accentRaw = tok(tokens, 'ui.accent', base === 'light' ? '#4A59C4' : '#939FFF');
   const up = tok(tokens, 'ui.up', tok(tokens, 'bar.up.color', '#3DDC97'));
   const down = tok(tokens, 'ui.down', tok(tokens, 'bar.down.color', '#F07178'));
   const edges = resolveChromeBorder({
@@ -208,7 +219,7 @@ export function buildChromeCssVars(
     panel,
     bg,
     fg,
-    accent,
+    accent: accentRaw,
   });
 
   // Primary body text: prefer slightly brighter than chart.fg for dark chrome
@@ -219,7 +230,12 @@ export function buildChromeCssVars(
 
   // Secondary labels: presets drive these via `scale.text`; enforce a contrast
   // floor so subdued presets (Graphite / mono) stay legible in the app chrome.
-  const dim = ensureContrast(tok(tokens, 'scale.text', base === 'light' ? '#5C6575' : '#9D9EA3'), bg, text, 4);
+  const dim = ensureContrast(
+    tok(tokens, 'scale.text', base === 'light' ? '#5C6575' : '#9D9EA3'),
+    bg,
+    text,
+    TEXT_CONTRAST_MIN,
+  );
   // Faint labels: mix *away from* the surface (darken on light, lighten on
   // dark) — the old single-direction mix washed light themes out further.
   const faintRaw = (() => {
@@ -229,7 +245,18 @@ export function buildChromeCssVars(
     if (!d || !b || !t) return `color-mix(in srgb, ${dim} 70%, ${bg} 30%)`;
     return rgbToCss(mixRgb(d, base === 'light' ? t : b, 0.3));
   })();
-  const faint = ensureContrast(faintRaw, base === 'light' ? bg : panel, text, 3.2);
+  const faint = ensureContrast(
+    ensureContrast(faintRaw, bg, text, TEXT_CONTRAST_MIN),
+    panel,
+    text,
+    TEXT_CONTRAST_MIN,
+  );
+  const accent = ensureContrast(
+    ensureContrast(accentRaw, bg, text, TEXT_CONTRAST_MIN),
+    panel,
+    text,
+    TEXT_CONTRAST_MIN,
+  );
 
   const mixBlack = base === 'light' ? '#030304' : '#000000';
   const mixWhite = base === 'light' ? '#ffffff' : '#ffffff';
@@ -290,6 +317,7 @@ export function buildChromeCssVars(
 
     // Focus / shadows track theme depth
     '--ui-focus-ring': `0 0 0 1px color-mix(in srgb, ${accent} 40%, transparent)`,
+    '--ui-focus-ring-inset': `inset 0 0 0 1px color-mix(in srgb, ${accent} 70%, transparent)`,
     '--ui-shadow-panel':
       base === 'light'
         ? '0 8px 28px rgba(20, 18, 40, 0.12)'

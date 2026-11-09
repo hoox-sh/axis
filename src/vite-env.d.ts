@@ -26,6 +26,7 @@ interface ImportMetaEnv {
   readonly VITE_DEBUG?: string;
   readonly VITE_MAINTENANCE_MODE?: string;
   readonly VITE_APP_VERSION?: string;
+  readonly VITE_GIT_SHA?: string;
   readonly VITE_PYNE_API?: string;
   readonly VITE_ALLOW_REMOTE_PLUGINS?: string;
   readonly VITE_PLUGIN_REMOTE_ALLOW?: string;

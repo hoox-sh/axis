@@ -131,13 +131,13 @@ export const EditorApp: Component = () : JSX.Element => {
           {isRunBusy() ? '▶ Running…' : runBlocked() ? '▶ Fix errors' : '▶ Add'}
         </button>
       </div>
-      <div class="flex-1 min-h-0 overflow-hidden">
+      <main id="axis-main" class="flex-1 min-h-0 overflow-hidden" tabindex="-1">
         <EditorPane
           standalone
           editorRef={editorRef}
           onRun={(doc) => void onRun(doc)}
         />
-      </div>
+      </main>
     </div>
   );
 };

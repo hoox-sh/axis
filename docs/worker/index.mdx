@@ -89,7 +89,7 @@ Allowlisted **GET** only (public, no API key). Other `/api/onchain/*` paths retu
 | Worker path | Upstream | Cache TTL |
 | --- | --- | --- |
 | `/api/onchain/health` | local (providers + cache size) | — |
-| `/api/onchain/llama/protocols` | `https://api.llama.fi/protocols` | ~10 min |
+| `/api/onchain/llama/protocols` | `https://api.llama.fi/protocols` (slimmed `{slug,name,tvl,category}`, 1 MiB / 10 per IP per min) | ~10 min |
 | `/api/onchain/llama/protocol/:slug` | `https://api.llama.fi/protocol/:slug` | ~2 min |
 | `/api/onchain/gecko/networks/:network/pools/:address/ohlcv/:timeframe` | `https://api.geckoterminal.com/api/v2/networks/.../ohlcv/...` | ~60 s |
 | `/api/onchain/gecko/search/pools` | `https://api.geckoterminal.com/api/v2/search/pools` | ~120 s |
@@ -97,7 +97,7 @@ Allowlisted **GET** only (public, no API key). Other `/api/onchain/*` paths retu
 Gecko validation: `network` `^[a-z0-9_]+$`; `address` EVM `0x`+40 hex **or** Solana-style base58 32–48; `timeframe` `day` \| `hour` \| `minute`.  
 OHLCV query pass-through: `aggregate`, `limit`, `currency`, `before_timestamp`. Search: `query`, `network`, `page`, `include`.
 
-Responses may include `X-Axis-Onchain-Cache: HIT|MISS`. Product guide: [On-Chain data](/axis/docs/enduser/guides/on-chain).
+Responses may include `X-Axis-Onchain-Cache: HIT|MISS`. `/api/onchain/health` is unmetered public JSON; other on-chain GETs are 120/min per IP; `llama/protocols` is 10/min per IP with a 1 MiB slimmed body. Product guide: [On-Chain data](/axis/docs/enduser/guides/on-chain).
 
 Entry: `worker/src/index.ts`.
 

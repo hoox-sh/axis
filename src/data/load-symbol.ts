@@ -296,11 +296,11 @@ export async function loadSymbolData(
   if (isEngineOwnedLive()) {
     const cfg = getActiveEngineConfig() || {};
     const endpoint = String(cfg['endpoint'] || '');
-    const apiKey = String(cfg['apiKey'] || '');
-    // No engine endpoint configured (e.g. a local-only engine plugin): skip
-    // the engine read and fall through to the venue fetch below instead of
-    // paying a failed relative-URL fetch on every load.
-    if (endpoint) {
+    const apiKey = String(cfg['apiKey'] || '').trim();
+    // No engine endpoint / no key: skip the engine read. Guest first-visit
+    // `GET /data/series/bars` without a key is a 401 console storm; the
+    // public chart stays on venue REST + Worker proxy (not auth-gated).
+    if (endpoint && apiKey) {
       try {
         // The engine read uses the same window the chart holds — one number
         // for both, so the chart can never show more bars than the engine

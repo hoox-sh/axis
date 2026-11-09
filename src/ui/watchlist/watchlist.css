@@ -360,7 +360,8 @@
   cursor: pointer;
 }
 .axis-wl-move-select:focus-visible {
-  outline: none;
+  outline: 2px solid color-mix(in srgb, var(--color-accent) 70%, transparent);
+  outline-offset: 0;
   border-color: var(--color-accent);
 }
 .axis-wl-sym-actions {

@@ -37,6 +37,7 @@
 import { getManager, setDataToChart } from '../chart/manager-access';
 import { FALLBACK_MAJORS } from '../data/symbol-catalog';
 import { intervalToSec } from '../data/bars-gaps';
+import { browserBlocksDirectCexRest } from '../data/worker-origin';
 import { applyStreamDelta, applyStreamPayload } from '../engine/apply-bridge';
 import { noteLiveBarForAlerts } from '../alerts/tick';
 import { Redesign2BarCloseVerifier, compareClosedOhlcv } from '../engine/bar-close-verify';
@@ -920,20 +921,23 @@ export async function verifyClosedBar(
     if (![o, h, l, c, v].every(Number.isFinite)) return null;
     return { open: o, high: h, low: l, close: c, volume: v };
   };
-  // Tier 1 — direct venue REST (no proxy involved).
-  try {
-    const row = readRow(
-      await fetchKlines({
-        path: 'klines',
-        query,
-        skipSigned: true,
-        skipWorkerProxy: true,
-        signal: input.signal,
-      }),
-    );
-    if (row) return { result: compareClosedOhlcv(input.engineOhlcv, row), verified: 'venue' };
-  } catch {
-    /* fall through */
+  // Tier 1 — direct venue REST (no proxy). Skip in the real browser: that
+  // fetch is a CORS console error and the Worker proxy is the public path.
+  if (!browserBlocksDirectCexRest()) {
+    try {
+      const row = readRow(
+        await fetchKlines({
+          path: 'klines',
+          query,
+          skipSigned: true,
+          skipWorkerProxy: true,
+          signal: input.signal,
+        }),
+      );
+      if (row) return { result: compareClosedOhlcv(input.engineOhlcv, row), verified: 'venue' };
+    } catch {
+      /* fall through */
+    }
   }
   // Tier 2 — Worker market proxy.
   try {

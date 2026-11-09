@@ -49,7 +49,7 @@
   /* Text */
   --color-text: #e8eaee;
   --color-text-dim: #9aa3b2;
-  --color-text-faint: #6b7382;
+  --color-text-faint: #737b8a;
   /* `text-muted` utility (used across ui/*): secondary copy, same as text-dim.
      Resolves on <html> so [data-theme=light] overrides flow through. */
   --color-muted: var(--color-text-dim);
@@ -132,6 +132,9 @@
   --ui-panel-pad: calc(12px * var(--ui-scale));
   --ui-topbar-min-h: calc(32px * var(--ui-scale));
   --ui-statusbar-min-h: calc(26px * var(--ui-scale));
+  --ui-statusbar-gap: calc(8px * var(--ui-scale));
+  --ui-statusbar-pad-x: calc(8px * var(--ui-scale));
+  --ui-capsule-h: calc(18px * var(--ui-scale));
   --ui-shadow-panel: 0 8px 28px rgba(0, 0, 0, 0.48);
   --ui-shadow-dialog: 0 20px 56px rgba(0, 0, 0, 0.62);
   /*
@@ -150,8 +153,14 @@
   --ui-dialog-footer-pad-x: 1.15em;
   --ui-dialog-footer-gap: 0.6em;
   --ui-dialog-section-gap: 1.15em;
-  /* Keyboard focus — thin, no outer halo (inputs use border only) */
+  /* Keyboard focus — thin, no outer halo (inputs use border only).
+   * Inset ring is for selected chips / capsules so idle vs on never swaps
+   * a 0↔1px border (footprint-stable). Press is 1px translate, not scale. */
   --ui-focus-ring: 0 0 0 1px color-mix(in oklch, #8b9cff 40%, transparent);
+  --ui-focus-ring-inset: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 70%, transparent);
+  --ui-press-y: 1px;
+  --ui-disabled-opacity: 0.5;
+  --ui-busy-opacity: 0.78;
   /* Motion scale — callers read these so one query can disable animation. */
   --ui-motion-duration-fast: 120ms;
   --ui-motion-duration-base: 200ms;
@@ -204,6 +213,32 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* First tab stop — off-canvas until focused (SSR + client). */
+.axis-skip-link {
+  position: absolute;
+  left: 0.75rem;
+  top: 0.75rem;
+  z-index: 10000;
+  padding: 0.45em 0.8em;
+  background: var(--color-bg-elev);
+  color: var(--color-text);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-input);
+  font-size: max(10px, 0.85em);
+  font-weight: 600;
+  text-decoration: none;
+  transform: translateY(-180%);
+}
+.axis-skip-link:focus,
+.axis-skip-link:focus-visible {
+  transform: translateY(0);
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+#axis-main:focus {
+  outline: none;
+}
+
 /* Light theme — soft lift of the same void system */
 [data-theme='light'] {
   --color-void: #f3f4f8;
@@ -215,17 +250,17 @@ body {
   --color-border-soft: #d4d8e2;
   --color-text: #1a1d26;
   --color-text-dim: #5c6575;
-  --color-text-faint: #6b7382;
-  --color-border-focus: color-mix(in oklch, #5a6ad4 55%, transparent);
-  --color-accent: #5a6ad4;
-  --color-accent-hover: #4a5ac4;
+  --color-text-faint: #636b7a;
+  --color-border-focus: color-mix(in oklch, #4a59c4 55%, transparent);
+  --color-accent: #4a59c4;
+  --color-accent-hover: #3f4eb8;
   --color-accent-2: #1aa36a;
   --color-green: #1aa36a;
   --color-accent-3: #c4922a;
   --color-orange: #c4922a;
   --color-yellow: #c4922a;
   --color-red: #c44750;
-  --color-purple: #5a6ad4;
+  --color-purple: #4a59c4;
   --color-cyan: #0e8aaa;
   --color-editor-builtin: #0e8aaa;
   --color-editor-lib: #7c3aed;
@@ -250,6 +285,14 @@ body {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+  .sc-btn:active,
+  .sc-chip:active,
+  .axis-live-btn:active,
+  .axis-module:active,
+  .axis-module-util:active,
+  button.axis-status-capsule:active {
+    transform: none;
   }
 }
 
@@ -308,24 +351,39 @@ textarea {
 .sc-input:focus,
 .sc-input:focus-visible {
   border-color: var(--color-accent);
-  box-shadow: none;
+  box-shadow: var(--ui-focus-ring-inset);
   outline: none;
 }
+.sc-input:disabled,
+.sc-input[aria-disabled='true'] {
+  opacity: var(--ui-disabled-opacity);
+  cursor: not-allowed;
+}
+.sc-input:disabled:focus,
+.sc-input:disabled:focus-visible,
+.sc-input[aria-disabled='true']:focus,
+.sc-input[aria-disabled='true']:focus-visible {
+  border-color: var(--color-border);
+  box-shadow: none;
+}
+.sc-input[aria-busy='true'] {
+  cursor: wait;
+  opacity: var(--ui-busy-opacity);
+}
 
-/* Keyboard focus for buttons — accent border only, no outer glow.
-   Icon-only ghost buttons with a transparent resting border get an outline
-   ring instead, so focus stays visible on every chrome surface. */
+/* Keyboard focus for buttons — inset ring + in-box outline (offset -1px)
+   so the ring never shifts layout. Ghosts with a transparent rest border
+   still show the in-box outline. */
 .sc-btn:focus-visible {
   border-color: var(--color-accent);
-  box-shadow: none;
+  box-shadow: var(--ui-focus-ring-inset);
   outline: 1px solid color-mix(in srgb, var(--color-accent) 60%, transparent);
-  outline-offset: 0;
+  outline-offset: -1px;
 }
 
 select.sc-input:focus-visible,
 button.sc-btn:focus-visible {
   border-color: var(--color-accent);
-  box-shadow: none;
 }
 
 .sc-btn {
@@ -350,9 +408,18 @@ button.sc-btn:focus-visible {
 .sc-btn:hover {
   background-color: var(--color-bg-hover);
 }
-.sc-btn:disabled {
-  opacity: 0.5;
+.sc-btn:active:not(:disabled, [aria-disabled='true'], [aria-busy='true'], .is-loading) {
+  transform: translateY(var(--ui-press-y));
+}
+.sc-btn:disabled,
+.sc-btn[aria-disabled='true'] {
+  opacity: var(--ui-disabled-opacity);
   cursor: not-allowed;
+}
+.sc-btn[aria-busy='true'],
+.sc-btn.is-loading {
+  cursor: wait;
+  opacity: var(--ui-busy-opacity);
 }
 
 .sc-btn-primary {
@@ -719,7 +786,7 @@ button.sc-btn:focus-visible {
   line-height: inherit;
 }
 
-@media (max-width: 639px) {
+@media (max-width: 900px) {
   [data-testid='axis-topbar'] .axis-tb-brand-sub {
     display: none;
   }
@@ -920,6 +987,14 @@ button.sc-btn:focus-visible {
   background: var(--color-orange);
   animation: axis-reconnect-breathe 1.6s ease-out infinite;
 }
+.axis-live-btn.is-degraded,
+.axis-live-btn.is-degraded[aria-pressed='true'] {
+  color: var(--color-orange);
+  font-weight: 500;
+}
+.axis-live-btn.is-degraded .axis-live-dot {
+  background: var(--color-orange);
+}
 .axis-live-btn.is-idle .axis-live-dot,
 .axis-live-btn.is-offline .axis-live-dot {
   background: var(--color-text-faint);
@@ -957,6 +1032,7 @@ button.sc-btn:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .axis-live-btn.is-live .axis-live-dot,
   .axis-live-btn.is-reconnect .axis-live-dot,
+  .axis-live-btn.is-degraded .axis-live-dot,
   .axis-live-dot--reconnect,
   .axis-live-dot--pulse,
   .axis-keyboard-recording {
@@ -1117,7 +1193,7 @@ button.sc-btn:focus-visible {
 .sc-btn.is-loading,
 .sc-btn[aria-busy='true'] {
   cursor: wait;
-  opacity: 0.78;
+  opacity: var(--ui-busy-opacity);
   color: var(--color-text-dim);
   border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-border-soft));
   background: color-mix(in srgb, var(--color-accent) 8%, var(--color-bg-elev));
@@ -1125,7 +1201,7 @@ button.sc-btn:focus-visible {
 
 .sc-btn.is-loading:disabled,
 .sc-btn[aria-busy='true']:disabled {
-  opacity: 0.78;
+  opacity: var(--ui-busy-opacity);
 }
 
 /* Integrated-label topbar fields — floating label on the border */
@@ -1170,6 +1246,8 @@ button.sc-btn:focus-visible {
 
 .axis-tb-field:focus-within {
   border-color: var(--color-accent);
+  outline: 2px solid color-mix(in srgb, var(--color-accent) 70%, transparent);
+  outline-offset: 0;
 }
 
 .axis-tb-field:focus-within .axis-tb-field-label {
@@ -1304,7 +1382,10 @@ button.sc-btn:focus-visible {
 .axis-tb-field-trailing-btn:focus-visible {
   color: var(--color-accent);
   background: color-mix(in srgb, var(--color-accent) 12%, transparent);
-  outline: none;
+}
+.axis-tb-field-trailing-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-accent) 70%, transparent);
+  outline-offset: 0;
 }
 
 [data-testid='axis-topbar'] [data-testid='axis-btn-studio'].axis-tb-studio {
@@ -1318,16 +1399,28 @@ button.sc-btn:focus-visible {
   border-color: color-mix(in srgb, var(--color-accent) 50%, var(--color-border));
 }
 
-/* Less-critical button captions: hide below sm (icons remain) */
-@media (max-width: 639px) {
+/* ~800px: wrap instead of clipping; hide secondary captions; keep Run labeled */
+@media (max-width: 900px) {
+  .axis-command-bar,
+  .axis-module-bar {
+    flex-wrap: wrap;
+    overflow-x: visible;
+    overflow-y: visible;
+    height: auto;
+    min-height: var(--ui-topbar-min-h);
+    row-gap: 6px;
+  }
+
+  .axis-module-bar {
+    min-height: 28px;
+  }
+
   [data-testid='axis-topbar'] .axis-tb-btn-label {
     display: none;
   }
 
-  .axis-command-bar,
-  .axis-module-bar {
-    padding-inline: 8px;
-    gap: 8px;
+  [data-testid='axis-topbar'] .axis-run-main .axis-tb-btn-label {
+    display: inline;
   }
 
   [data-testid='axis-topbar'] .axis-tb-group,
@@ -1337,6 +1430,20 @@ button.sc-btn:focus-visible {
 
   [data-testid='axis-topbar'] .axis-tb-field {
     min-width: 3.75em;
+  }
+
+  .axis-command-trailing,
+  .axis-module-trailing {
+    margin-left: 0;
+  }
+}
+
+/* Less-critical button captions: tighter padding on very small screens */
+@media (max-width: 639px) {
+  .axis-command-bar,
+  .axis-module-bar {
+    padding-inline: 8px;
+    gap: 8px;
   }
 }
 
@@ -1431,16 +1538,16 @@ button.sc-btn:focus-visible {
   background: color-mix(in srgb, var(--color-accent) 10%, transparent);
 }
 
-/* Status strip + HUD capsules */
+/* Status scanline + HUD capsules (click inspector, never hover-open) */
 .axis-statusbar {
   display: flex;
   align-items: center;
   flex-wrap: nowrap;
-  gap: 8px;
+  gap: var(--ui-statusbar-gap);
   height: var(--ui-statusbar-min-h);
   min-height: var(--ui-statusbar-min-h);
   max-height: var(--ui-statusbar-min-h);
-  padding: 0 8px;
+  padding: 0 var(--ui-statusbar-pad-x);
   background: var(--color-bg-panel);
   border-top: 1px solid var(--color-border);
   font-size: calc(11.5px * var(--ui-scale));
@@ -1453,16 +1560,16 @@ button.sc-btn:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 18px;
-  min-height: 18px;
-  max-height: 18px;
+  height: var(--ui-capsule-h);
+  min-height: var(--ui-capsule-h);
+  max-height: var(--ui-capsule-h);
   padding: 0 6px;
   border-radius: var(--radius-chip);
   background: var(--color-bg-elev);
   border: 1px solid var(--color-border);
   color: var(--color-text);
   font-family: var(--font-mono);
-  font-size: calc(10px * var(--ui-scale));
+  font-size: max(10px, calc(10px * var(--ui-scale)));
   font-weight: 500;
   line-height: 1;
   letter-spacing: 0.02em;
@@ -1473,12 +1580,12 @@ button.sc-btn:focus-visible {
 }
 .axis-status-capsule:focus-visible {
   outline: none;
-  box-shadow: inset 0 0 0 1px var(--color-accent);
+  box-shadow: var(--ui-focus-ring-inset);
 }
 .axis-status-capsule.is-active {
   /* Inset ring: zero footprint change (border-color swaps alter the visible
      footprint next to borderless siblings). */
-  box-shadow: inset 0 0 0 1px var(--color-accent);
+  box-shadow: var(--ui-focus-ring-inset);
 }
 .axis-status-capsule-code.is-word {
   text-transform: none;
@@ -1502,10 +1609,10 @@ button.axis-status-capsule {
   font: inherit;
 }
 .axis-status-capsule.axis-live-btn {
-  height: 18px;
-  min-height: 18px;
+  height: var(--ui-capsule-h);
+  min-height: var(--ui-capsule-h);
   padding: 0 6px;
-  font-size: calc(10px * var(--ui-scale));
+  font-size: max(10px, calc(10px * var(--ui-scale)));
   font-family: var(--font-mono);
 }
 .axis-live-dot--reconnect {
@@ -1876,7 +1983,7 @@ body.axis-ticker-dragging {
   color: var(--color-red);
 }
 .axis-extra-trend-flat {
-  color: var(--color-text-faint, #6b7382);
+  color: var(--color-text-faint, #737b8a);
 }
 .axis-extra-n {
   font-size: calc(10px * var(--ui-scale));
@@ -2590,6 +2697,7 @@ body.axis-ticker-dragging {
 .axis-draw-flyout-item:focus-visible {
   outline: none;
   border-color: var(--color-accent);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--color-accent) 55%, transparent);
 }
 .axis-draw-flyout-item.is-active,
 .axis-draw-flyout-item[aria-checked='true'] {
@@ -2985,6 +3093,65 @@ body.axis-ticker-dragging {
   color: color-mix(in srgb, var(--color-text-faint) 82%, transparent);
   line-height: 1.45;
 }
+/* Empty-chart first-run chip — not a splash, not a tour. */
+.axis-first-run {
+  position: absolute;
+  left: 50%;
+  bottom: 28px;
+  z-index: 12;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(36rem, calc(100% - 24px));
+  padding: 8px 10px 8px 12px;
+  background: color-mix(in srgb, var(--color-bg-elev) 92%, transparent);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-input);
+  box-shadow: var(--ui-shadow-panel);
+  pointer-events: auto;
+}
+.axis-first-run-copy {
+  margin: 0;
+  font-size: calc(12px * var(--ui-scale));
+  line-height: 1.35;
+  color: var(--color-text);
+}
+.axis-first-run-copy strong {
+  font-weight: 650;
+  color: var(--color-accent);
+}
+.axis-first-run-run {
+  flex-shrink: 0;
+  min-height: 24px;
+  padding: 0 8px;
+  gap: 4px;
+}
+.axis-first-run-dismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--color-text-faint);
+  cursor: pointer;
+}
+.axis-first-run-dismiss:hover,
+.axis-first-run-dismiss:focus-visible {
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-text) 8%, transparent);
+}
+.axis-first-run-dismiss:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-accent) 70%, transparent);
+  outline-offset: 0;
+}
+
 .axis-mcp-cta {
   pointer-events: auto;
   margin-top: 4px;
@@ -3203,7 +3370,8 @@ body.axis-ticker-dragging {
 }
 .sc-range:focus-visible {
   box-shadow: none;
-  outline: none;
+  outline: 2px solid color-mix(in srgb, var(--color-accent) 70%, transparent);
+  outline-offset: 2px;
 }
 .sc-range:focus-visible::-webkit-slider-thumb {
   /* thin accent edge only — no outer halo */
@@ -3218,6 +3386,7 @@ body.axis-ticker-dragging {
 }
 .sc-chip {
   font-size: max(10px, 0.78em);
+  font-weight: 500;
   padding: 0.28em 0.65em;
   border: var(--border-w-input) solid var(--color-border-soft);
   border-radius: var(--radius-chip);
@@ -3227,18 +3396,32 @@ body.axis-ticker-dragging {
   font-family: inherit;
   line-height: 1.3;
   box-shadow: none;
+  box-sizing: border-box;
 }
-.sc-chip:hover {
+.sc-chip:hover:not(:disabled, [aria-disabled='true']) {
   border-color: var(--color-border);
   color: var(--color-text);
   background: var(--color-bg-hover);
 }
+.sc-chip:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--color-accent) 60%, transparent);
+  outline-offset: -1px;
+  box-shadow: var(--ui-focus-ring-inset);
+}
+.sc-chip:active:not(:disabled, [aria-disabled='true']) {
+  transform: translateY(var(--ui-press-y));
+}
+.sc-chip:disabled,
+.sc-chip[aria-disabled='true'] {
+  opacity: var(--ui-disabled-opacity);
+  cursor: not-allowed;
+}
 .sc-chip[aria-pressed='true'],
 .sc-chip.is-active {
-  border-color: var(--color-accent);
+  /* Inset ring, not a border-color swap — idle/on keep the same 1px edge. */
   color: var(--color-accent);
   background: color-mix(in srgb, var(--color-accent) 14%, var(--color-bg-elev));
-  font-weight: 600;
+  box-shadow: var(--ui-focus-ring-inset);
 }
 
 /* ── Popover shell (non-modal menus) ────────────────────────────────
@@ -4438,7 +4621,10 @@ body.axis-panel-dragging {
 .axis-context-item:focus-visible {
   background: var(--color-bg-hover);
   color: var(--color-text);
+}
+.axis-context-item:focus-visible {
   outline: none;
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--color-accent) 55%, transparent);
 }
 .axis-context-item:disabled {
   opacity: 0.45;
@@ -4456,6 +4642,9 @@ body.axis-panel-dragging {
 .axis-context-item.is-danger:focus-visible {
   background: color-mix(in srgb, var(--color-red) 14%, transparent);
   color: var(--color-red);
+}
+.axis-context-item.is-danger:focus-visible {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--color-red) 55%, transparent);
 }
 .axis-context-sep {
   height: 1px;
@@ -4641,7 +4830,9 @@ body.axis-panel-dragging {
   outline: none;
 }
 .axis-color-swatch:focus-within {
-  border-color: var(--color-border-focus);
+  border-color: var(--color-accent);
+  outline: 2px solid color-mix(in srgb, var(--color-accent) 70%, transparent);
+  outline-offset: 1px;
 }
 .axis-color-format {
   display: grid;
@@ -4667,7 +4858,10 @@ body.axis-panel-dragging {
 .axis-color-format:focus-visible {
   border-color: var(--color-border-soft);
   background: var(--color-bg-elev);
-  outline: none;
+}
+.axis-color-format:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-accent) 70%, transparent);
+  outline-offset: 0;
 }
 
 /* Language Feature Bar — chip row above the editor status strip */
@@ -5384,6 +5578,10 @@ body.axis-panel-dragging {
   font-family: inherit;
   padding: 0.25em 0;
 }
+.axis-cmd-palette-input:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-accent) 70%, transparent);
+  outline-offset: 2px;
+}
 .axis-cmd-palette-input::placeholder {
   color: var(--color-text-faint);
 }
@@ -5970,15 +6168,11 @@ body.axis-panel-dragging {
   padding: 0 8px;
 }
 
-/* ── Tablet (768–1023px): keep desktop chrome, let the topbar scroll ── */
+/* ── Tablet (768–1023px): keep desktop chrome; wrap, do not clip ── */
 @media (max-width: 1023px) {
   header[data-testid='axis-topbar'] {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-  header[data-testid='axis-topbar']::-webkit-scrollbar {
-    display: none;
+    overflow-x: visible;
+    overflow-y: visible;
   }
 }
 

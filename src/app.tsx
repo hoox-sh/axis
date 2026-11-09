@@ -520,7 +520,12 @@ export const App: Component = () : JSX.Element => {
       </Show>
 
       {/* Main workspace: dock columns claim flex space; chart fills the middle */}
-      <div class="flex-1 flex min-h-0 min-w-0 overflow-hidden" data-axis-workspace>
+      <main
+        id="axis-main"
+        class="flex-1 flex min-h-0 min-w-0 overflow-hidden"
+        data-axis-workspace
+        tabindex="-1"
+      >
         {/* Left dock column — panels portal in and stack vertically */}
         <DockColumn side="left" />
 
@@ -571,7 +576,7 @@ export const App: Component = () : JSX.Element => {
 
         {/* Right dock column — editor / indicators / etc. stack */}
         <DockColumn side="right" />
-      </div>
+      </main>
 
       {/* Bottom dock — results / logs / scriptlogs stack one below the other */}
       <DockColumn side="bottom" />

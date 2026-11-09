@@ -85,7 +85,7 @@ const server = Bun.serve({
         "Content-Type": contentType(filePath),
         "Cache-Control": pathname.startsWith("/assets/")
           ? "public, max-age=31536000, immutable"
-          : "no-cache",
+          : "public, max-age=0, must-revalidate",
         ...CORS_HEADERS,
         ...HP_ISOLATION_HEADERS,
       },

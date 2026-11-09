@@ -53,6 +53,8 @@ import {
   pineHostColors,
   isLoudBorder,
   resolveChromeBorder,
+  TEXT_CONTRAST_MIN,
+  contrastRatioHex,
   syntaxPackForPreset,
   BUILTIN_BAR_THEMES,
   builtinBarThemeId,
@@ -633,6 +635,55 @@ describe('community shortlist', () => {
       const border = String(p.tokens['scale.border']);
       const accent = String(p.tokens['ui.accent']);
       expect(isLoudBorder(border, accent)).toBe(false);
+    }
+  });
+});
+
+describe('chrome text contrast floors', () => {
+  it('faint and accent meet 4.5:1 on void dark and void light bases', () => {
+    const dark = buildChromeCssVars(catalogDefaults(), 'dark');
+    const light = buildChromeCssVars(getPreset('void-light').tokens, 'light');
+
+    for (const chrome of [dark, light]) {
+      const bg = chrome['--color-bg-base']!;
+      const panel = chrome['--color-bg-panel']!;
+      const faint = chrome['--color-text-faint']!;
+      const accent = chrome['--color-accent']!;
+      const dim = chrome['--color-text-dim']!;
+      for (const [name, fg, surface] of [
+        ['faint/base', faint, bg],
+        ['faint/panel', faint, panel],
+        ['accent/base', accent, bg],
+        ['dim/base', dim, bg],
+      ] as const) {
+        const ratio = contrastRatioHex(fg, surface);
+        expect(ratio, `${name} ${fg} on ${surface}`).not.toBeNull();
+        expect(ratio!, `${name} ${fg} on ${surface} = ${ratio}`).toBeGreaterThanOrEqual(
+          TEXT_CONTRAST_MIN,
+        );
+      }
+    }
+  });
+
+  it('every preset chrome faint + accent clears 4.5:1 on its base surface', () => {
+    for (const preset of THEME_PRESETS) {
+      const chrome = buildChromeCssVars(preset.tokens, preset.base);
+      const bg = chrome['--color-bg-base']!;
+      const panel = chrome['--color-bg-panel']!;
+      const faint = chrome['--color-text-faint']!;
+      const accent = chrome['--color-accent']!;
+      for (const [name, fg, surface] of [
+        ['faint/bg', faint, bg],
+        ['faint/panel', faint, panel],
+        ['accent/bg', accent, bg],
+        ['accent/panel', accent, panel],
+      ] as const) {
+        const ratio = contrastRatioHex(fg, surface);
+        expect(ratio).not.toBeNull();
+        if (ratio! < TEXT_CONTRAST_MIN) {
+          throw new Error(`${preset.id} ${name} ${fg} on ${surface} = ${ratio}`);
+        }
+      }
     }
   });
 });

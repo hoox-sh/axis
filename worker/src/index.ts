@@ -73,6 +73,7 @@ import {
   notFoundResponse,
   preflight,
   scopedJson,
+  withSecurityHeaders,
   type JsonBuilder,
 } from './http';
 import { BRIDGE_ROUTE, ROUTES, matchRoute } from './routes';
@@ -490,17 +491,19 @@ export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const origin = pickOrigin(req, env);
     if (req.method === 'OPTIONS') {
-      return preflight(CORS_HEADERS, origin);
+      return withSecurityHeaders(preflight(CORS_HEADERS, origin));
     }
 
     const url = new URL(req.url);
 
     try {
-      return await dispatch(req, env, ctx, origin, url);
+      return withSecurityHeaders(await dispatch(req, env, ctx, origin, url));
     } catch (err) {
       // Never reflect internal failure detail to the caller (A8) — the shared
       // handler logs server-side and returns a generic envelope.
-      return handleError(err, { path: url.pathname, origin, cors: CORS_HEADERS });
+      return withSecurityHeaders(
+        handleError(err, { path: url.pathname, origin, cors: CORS_HEADERS }),
+      );
     }
   },
 } satisfies ExportedHandler<Env>;

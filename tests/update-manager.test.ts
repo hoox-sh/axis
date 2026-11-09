@@ -14,6 +14,7 @@ import {
   _resetUpdateManagerForTests,
   buildHardReloadUrl,
   checkForUpdates,
+  deployedIdentity,
   dismissUpdate,
   getUpdateState,
   appUpdateConfirmMessage,
@@ -22,6 +23,7 @@ import {
   isNewerVersion,
   markUpdateAvailable,
   normalizeVersion,
+  runningIdentity,
   setWaitingWorkerActivate,
   softReload,
   startUpdatePolling,
@@ -48,6 +50,18 @@ function fetchJson(body: unknown, ok = true) {
 beforeEach(() => {
   _resetUpdateManagerForTests();
   _resetCloseGuardForTests();
+});
+
+describe('runningIdentity / deployedIdentity', () => {
+  it('joins version and git when both are present', () => {
+    expect(runningIdentity('2.28.0', 'abc1234def56xxxx')).toBe('2.28.0+abc1234def56xxxx');
+    expect(deployedIdentity({ version: '2.28.0', git: 'abc1234' })).toBe('2.28.0+abc1234');
+  });
+
+  it('falls back to semver when git is missing (legacy version.json)', () => {
+    expect(runningIdentity('2.28.0', '')).toBe('2.28.0');
+    expect(deployedIdentity({ version: '2.28.0', buildTime: 'x' })).toBe('2.28.0');
+  });
 });
 
 describe('normalizeVersion / isNewerVersion', () => {
@@ -141,6 +155,32 @@ describe('checkForUpdates', () => {
     });
     expect(info).toBeNull();
     expect(getUpdateState().status).toBe('current');
+  });
+
+  it('banners a same-semver deploy when the git SHA changes', async () => {
+    const running = `${RUNNING}+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb`;
+    const info = await checkForUpdates({
+      fetchImpl: fetchJson({
+        version: RUNNING,
+        git: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      }),
+      runningVersion: running,
+      hooks: { canNotify: () => false },
+    });
+    expect(info?.currentVersion).toBe(running);
+    expect(info?.latestVersion).toBe(`${RUNNING}+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`);
+    expect(getUpdateState().status).toBe('update-available');
+  });
+
+  it('stays quiet when version+git match', async () => {
+    const sha = 'cccccccccccccccccccccccccccccccccccccccc';
+    const identity = `${RUNNING}+${sha}`;
+    const info = await checkForUpdates({
+      fetchImpl: fetchJson({ version: RUNNING, git: sha }),
+      runningVersion: identity,
+      hooks: { canNotify: () => false },
+    });
+    expect(info).toBeNull();
   });
 
   it('never throws on offline / 404 / malformed payloads', async () => {

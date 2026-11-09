@@ -38,7 +38,8 @@
  *
  * Keep every static host in lockstep: `public/_headers`, nginx, Vite
  * `server.headers` / `preview.headers`, `axis-pwa-server.ts`,
- * `axis_pwa_server.py`, and the SW offline shell.
+ * `axis_pwa_server.py`, and the SW offline shell. Cache / HSTS / CSP
+ * `connect-src` live in `src/hp/security-headers.ts`.
  *
  * @module hp/isolation-headers
  */

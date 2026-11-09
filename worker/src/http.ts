@@ -32,7 +32,7 @@
  * @module worker/http
  */
 
-import { WORKER_VERSION } from './version';
+import { WORKER_VERSION, workerGitSha } from './version';
 
 /**
  * Allowed request headers, narrowest set used by on-chain / scripts routes.
@@ -139,6 +139,34 @@ export interface JsonOptions {
   cors?: ((origin: string) => Record<string, string>) | undefined;
   /** Merged last so callers can add or override headers. */
   headers?: Record<string, string> | undefined;
+}
+
+/**
+ * HSTS for Worker JSON / preflight (custom domain `worker.axis.hoox.sh`).
+ * 180 days; no `preload`. Lockstep with Pages `public/_headers`.
+ */
+export const HSTS_VALUE = 'max-age=15552000; includeSubDomains';
+
+/** Same values as Pages / nginx — Worker JSON is not a document, so no CSP. */
+export const NOSNIFF = 'nosniff';
+export const XFO_DENY = 'DENY';
+export const REFERRER_POLICY = 'strict-origin-when-cross-origin';
+
+/**
+ * Stamp security headers on a Worker `Response` without rebuilding it
+ * (keeps 101 upgrades). HSTS + nosniff + frame deny + referrer; no CSP
+ * (document policy — would not apply to JSON and must not fight CORS).
+ */
+export function withSecurityHeaders(res: Response): Response {
+  try {
+    res.headers.set('Strict-Transport-Security', HSTS_VALUE);
+    res.headers.set('X-Content-Type-Options', NOSNIFF);
+    res.headers.set('X-Frame-Options', XFO_DENY);
+    res.headers.set('Referrer-Policy', REFERRER_POLICY);
+  } catch {
+    /* immutable Headers / some 101 upgrades */
+  }
+  return res;
 }
 
 /** `Response` with a JSON body, optional CORS, optional extra headers. */
@@ -362,7 +390,7 @@ export async function readCappedText(
  * ------------------------------------------------------------------------- */
 
 /** Why an upstream call failed. Safe to hand back to a client. */
-export type UpstreamReason = 'network' | 'timeout' | 'redirect';
+export type UpstreamReason = 'network' | 'timeout' | 'redirect' | 'too-large';
 
 /**
  * Buffered upstream reply, as returned by {@link fetchUpstreamJson}.
@@ -381,7 +409,11 @@ const REASON_TEXT: Record<UpstreamReason, string> = {
   network: 'upstream unreachable',
   timeout: 'upstream timed out',
   redirect: 'upstream redirect refused',
+  'too-large': 'upstream response too large',
 };
+
+/** Default fail-closed body cap for proxied upstream GET (4 MiB). */
+export const UPSTREAM_MAX_BYTES = 4 * 1024 * 1024;
 
 /** Error thrown by {@link fetchUpstreamJson}; `reason` is the only safe field. */
 export class UpstreamError extends Error {
@@ -430,24 +462,89 @@ export interface UpstreamFetchOptions {
    * still ~9 MB, which must never be fetched just to answer "is this peer up?".
    */
   method?: 'GET' | 'HEAD';
+  /**
+   * Fail closed if `Content-Length` or the buffered body exceeds this many
+   * bytes. Default {@link UPSTREAM_MAX_BYTES}. `HEAD` never buffers a body.
+   */
+  maxBytes?: number;
 }
 
-/** Read `res`, or release the connection instead of buffering a huge body. */
-async function drain(res: Response, method: 'GET' | 'HEAD' | undefined): Promise<string> {
-  if (method !== 'HEAD') return res.text();
+/** Drop the unread body so a too-large peer does not pin the isolate. */
+async function cancelBody(res: Response): Promise<void> {
   try {
     await res.body?.cancel();
   } catch {
     /* already consumed or closed */
   }
-  return '';
+}
+
+/** Read `res` up to `maxBytes`, or release the connection on HEAD. */
+async function drain(
+  res: Response,
+  method: 'GET' | 'HEAD' | undefined,
+  maxBytes: number,
+): Promise<string> {
+  if (method === 'HEAD') {
+    await cancelBody(res);
+    return '';
+  }
+  const cl = res.headers.get('content-length');
+  if (cl !== null && cl !== '') {
+    const n = Number(cl);
+    if (Number.isFinite(n) && n > maxBytes) {
+      await cancelBody(res);
+      throw new UpstreamError('too-large');
+    }
+  }
+  const body = res.body;
+  if (!body) {
+    const text = await res.text();
+    if (new TextEncoder().encode(text).byteLength > maxBytes) {
+      throw new UpstreamError('too-large');
+    }
+    return text;
+  }
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value?.byteLength) continue;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        try {
+          await reader.cancel();
+        } catch {
+          /* already cancelled */
+        }
+        throw new UpstreamError('too-large');
+      }
+      chunks.push(value);
+    }
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {
+      /* already released */
+    }
+  }
+  const buf = new Uint8Array(total);
+  let off = 0;
+  for (const chunk of chunks) {
+    buf.set(chunk, off);
+    off += chunk.byteLength;
+  }
+  return new TextDecoder().decode(buf);
 }
 
 /**
  * GET a fixed allowlisted upstream URL and buffer its body.
  *
  * Never follows redirects (A10), caps the time to headers *and* body
- * (A10 — a stalled sender must not pin the isolate), and throws
+ * (A10 — a stalled sender must not pin the isolate), fail-closes on a body
+ * over {@link UpstreamFetchOptions.maxBytes}, and throws
  * {@link UpstreamError} rather than leaking runtime text.
  */
 export async function fetchUpstreamJson(
@@ -457,6 +554,7 @@ export async function fetchUpstreamJson(
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs);
   const method = opts.method ?? 'GET';
+  const maxBytes = opts.maxBytes ?? UPSTREAM_MAX_BYTES;
   try {
     const res = await fetch(url, {
       method,
@@ -466,7 +564,7 @@ export async function fetchUpstreamJson(
     });
     assertNoRedirect(res);
     // Body read stays inside the abort window (A10).
-    const text = await drain(res, method);
+    const text = await drain(res, method, maxBytes);
     return {
       status: res.status,
       text,
@@ -573,6 +671,7 @@ export function buildHealthBody(flags: HealthFlags, deep?: DeepHealth): unknown 
     status: degraded ? 'degraded' : 'healthy',
     service: 'worker-axis',
     version: WORKER_VERSION,
+    git: workerGitSha(),
     timestamp: Date.now(),
     features,
     ...(deep ? { upstream: deep.report } : {}),

@@ -18,12 +18,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Split Add control for the topbar and editor header.
+ * Split run / add-instance control for the topbar and editor header.
  *
- * - **Add** when the editor script is not on the chart
- * - **Add** when a matching instance exists (replaces it — same as former Re-run)
- * - Chevron menu → **Add another instance** (when a copy is already on the chart)
- *   and **Add built-in script…** (catalog picker)
+ * - Editor primary is always **Run** (never a bare “Add”).
+ * - Topbar primary is **Add to chart** on first apply, **Run** when a matching
+ *   instance already exists (replaces it).
+ * - Chevron menu → **Add another instance** / **Add built-in script…**
  */
 
 import { type Component, Show, createMemo, createSignal } from 'solid-js';
@@ -81,20 +81,25 @@ export const RunSplitButton: Component<{
   const label = createMemo(() => {
     if (isRunning()) return 'Running…';
     if (runBlocked()) return 'Fix errors';
-    return 'Add';
+    if (props.compact) return 'Run';
+    return hasInstance() ? 'Run' : 'Add to chart';
   });
 
   const title = createMemo(() => {
     if (isRunning()) return 'Running…';
-    if (runBlocked()) return 'Fix script errors in the editor before adding';
+    if (runBlocked()) return 'Fix script errors in the editor before running';
     if (hasInstance()) {
       const n = instanceCount();
       return n > 1
-        ? `Add replaces the focused instance (${n} on chart). Use ▾ to add another.`
-        : 'Add replaces the script already on the chart. Use ▾ to add another instance.';
+        ? `Run replaces the focused instance (${n} on chart). Use ▾ to add another.`
+        : 'Run replaces the script already on the chart. Use ▾ to add another instance.';
     }
-    return 'Add script to the chart (or use detached editor)';
+    return props.compact
+      ? 'Run this script onto the chart'
+      : 'Add this script to the chart (or use the editor Run)';
   });
+
+  const showPlay = () => isRunning() || runBlocked() || !!props.compact || hasInstance();
 
   const ids = () =>
     props.compact
@@ -171,9 +176,9 @@ export const RunSplitButton: Component<{
       >
         {props.compact ? (
           <span class="axis-editor-tool-icon" aria-hidden="true">
-            {isRunning() || runBlocked() ? <Icons.play size={14} /> : <Icons.plus size={14} />}
+            {showPlay() ? <Icons.play size={14} /> : <Icons.plus size={14} />}
           </span>
-        ) : isRunning() || runBlocked() ? (
+        ) : showPlay() ? (
           <Icons.play />
         ) : (
           <Icons.plus />
@@ -191,7 +196,7 @@ export const RunSplitButton: Component<{
           } ${menuOpen() ? 'is-active' : ''}`}
           aria-haspopup="menu"
           aria-expanded={menuOpen()}
-          aria-label="More add options"
+          aria-label="Add instance or built-in"
           title="Add a built-in script, or another instance of this one"
           data-testid={ids().caret}
           disabled={caretDisabled()}

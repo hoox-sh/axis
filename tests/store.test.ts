@@ -408,6 +408,34 @@ describe('telemetry', () => {
     expect(store.telemetry.engine.latencyMs).toBe(55);
     expect(store.telemetry.runLatencySamples.at(-1)).toBe(55);
   });
+
+  it('drops a noteTick for a different symbol', () => {
+    setStore('symbol', 'BTCUSDT');
+    noteTick(75128, 1, 'BTCUSDT');
+    expect(store.telemetry.lastTick?.price).toBe(75128);
+    noteTick(3000, 2, 'ETHUSDT');
+    expect(store.telemetry.lastTick?.price).toBe(75128);
+    expect(store.telemetry.lastTick?.symbol).toBe('BTCUSDT');
+  });
+
+  it('loadBars on a new symbol clears lastTick', () => {
+    setStore('symbol', 'BTCUSDT');
+    noteTick(75128, 1, 'BTCUSDT');
+    expect(store.telemetry.lastTick?.price).toBe(75128);
+    loadBars(sampleBars(), 'ETHUSDT', '1h', 'binance');
+    expect(store.symbol).toBe('ETHUSDT');
+    expect(store.telemetry.lastTick).toBeNull();
+  });
+
+  it('loadBars on a new interval clears lastTick', () => {
+    setStore('symbol', 'BTCUSDT');
+    setStore('interval', '1m');
+    noteTick(75128, 1, 'BTCUSDT');
+    expect(store.telemetry.lastTick?.price).toBe(75128);
+    loadBars(sampleBars(), 'BTCUSDT', '1h', 'binance');
+    expect(store.interval).toBe('1h');
+    expect(store.telemetry.lastTick).toBeNull();
+  });
 });
 
 describe('bars and indicators', () => {

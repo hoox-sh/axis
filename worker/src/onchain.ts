@@ -39,13 +39,16 @@
 import type { Env } from './index';
 import {
   READ_CORS,
+  clientIp,
   errorBody,
   fetchUpstreamJson,
   scopedJson,
   upstreamDetail,
+  upstreamReason,
   type JsonBuilder,
-  type UpstreamResult,
+  type UpstreamReason,
 } from './http';
+import { allowRate } from './rate-limit';
 import { createProxyRouter } from './proxy-router';
 import { createProxyPlane } from './proxy-plane';
 
@@ -72,6 +75,26 @@ const PROTOCOL_TTL_MS = 2 * 60 * 1000;
 const GECKO_OHLCV_TTL_MS = 60 * 1000;
 const GECKO_SEARCH_TTL_MS = 120 * 1000;
 const UPSTREAM_TIMEOUT_MS = 25_000;
+
+/** Shared per-IP window for gecko + per-protocol TVL (health is unmetered). */
+export const ONCHAIN_IP_LIMIT = 120;
+export const ONCHAIN_IP_WINDOW_MS = 60_000;
+
+/**
+ * Dedicated budget for the DefiLlama protocols list. Ten full list fetches
+ * per IP per minute; advertised on the response (`RateLimit-Limit`).
+ */
+export const LLAMA_PROTOCOLS_RATE_LIMIT = 10;
+export const LLAMA_PROTOCOLS_RATE_WINDOW_MS = 60_000;
+
+/** Guest-facing slim list cap — never emit the raw ~9.5 MB dump. */
+export const LLAMA_PROTOCOLS_RESPONSE_MAX_BYTES = 1 * 1024 * 1024;
+
+/** Upstream read budget so we can slim once; still fail-closed. */
+export const LLAMA_PROTOCOLS_UPSTREAM_MAX_BYTES = 16 * 1024 * 1024;
+
+/** Default on-chain upstream body cap (gecko / per-protocol TVL). */
+export const ONCHAIN_UPSTREAM_MAX_BYTES = 8 * 1024 * 1024;
 
 const GECKO_OHLCV_QUERY_KEYS = [
   'aggregate',
@@ -101,6 +124,7 @@ const plane = createProxyPlane({
     fetchUpstreamJson(url, {
       timeoutMs: UPSTREAM_TIMEOUT_MS,
       headers: { 'User-Agent': 'axis-worker-onchain/1.0' },
+      maxBytes: ONCHAIN_UPSTREAM_MAX_BYTES,
     }),
   json: (body, status, origin, headers) => json(body, status, origin, headers),
 });
@@ -132,7 +156,74 @@ function isValidGeckoAddress(address: string): boolean {
 
 type UpstreamOutcome =
   | { kind: 'response'; status: number; ok: boolean; text: string; contentType: string }
-  | { kind: 'network-error'; message: string };
+  | { kind: 'network-error'; message: string; reason: UpstreamReason };
+
+function tooLargeResponse(origin: string): Response {
+  return json(
+    errorBody('PAYLOAD_TOO_LARGE', 'Upstream response exceeds size cap'),
+    413,
+    origin,
+  );
+}
+
+function llamaProtocolsRateHeaders(): Record<string, string> {
+  return {
+    'RateLimit-Limit': String(LLAMA_PROTOCOLS_RATE_LIMIT),
+    'RateLimit-Policy': `${LLAMA_PROTOCOLS_RATE_LIMIT};w=${LLAMA_PROTOCOLS_RATE_WINDOW_MS / 1000}`,
+  };
+}
+
+interface LlamaProtocolSummary {
+  slug: string;
+  name: string;
+  tvl?: number;
+  category?: string;
+}
+
+/** Shrink DefiLlama `/protocols` to the search fields the PWA actually uses. */
+export function slimLlamaProtocols(raw: string, maxBytes: number): string | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(parsed)) return null;
+  const rows: LlamaProtocolSummary[] = [];
+  for (const entry of parsed) {
+    if (!entry || typeof entry !== 'object') continue;
+    const rec = entry as Record<string, unknown>;
+    const slugRaw = typeof rec['slug'] === 'string' ? rec['slug'] : typeof rec['name'] === 'string' ? rec['name'] : '';
+    const slug = slugRaw.trim().toLowerCase();
+    if (!slug || slug.length > 128 || !SLUG_RE.test(slug)) continue;
+    const name = typeof rec['name'] === 'string' && rec['name'].trim() ? rec['name'].trim() : slug;
+    const tvl = Number(rec['tvl']);
+    const row: LlamaProtocolSummary = { slug, name };
+    if (Number.isFinite(tvl)) row.tvl = tvl;
+    if (typeof rec['category'] === 'string' && rec['category'].length > 0 && rec['category'].length <= 64) {
+      row.category = rec['category'];
+    }
+    rows.push(row);
+  }
+  rows.sort((a, b) => (b.tvl || 0) - (a.tvl || 0));
+  return fitJsonBytes(rows, maxBytes);
+}
+
+function fitJsonBytes(rows: LlamaProtocolSummary[], maxBytes: number): string {
+  const encode = (value: LlamaProtocolSummary[]) => JSON.stringify(value);
+  let n = rows.length;
+  let text = encode(rows);
+  let bytes = new TextEncoder().encode(text).byteLength;
+  if (bytes <= maxBytes) return text;
+  while (n > 0 && bytes > maxBytes) {
+    const ratio = maxBytes / bytes;
+    const next = Math.max(0, Math.min(n - 1, Math.floor(n * ratio * 0.95)));
+    n = next;
+    text = encode(rows.slice(0, n));
+    bytes = new TextEncoder().encode(text).byteLength;
+  }
+  return n > 0 ? text : '[]';
+}
 
 /** Keep cache keys bounded: client-controlled values are truncated (A5). */
 function keyPart(s: string): string {
@@ -162,11 +253,12 @@ async function proxyUpstream(
       };
     } catch (err) {
       // Client-safe phrase only — raw runtime text never leaves the isolate.
-      return { kind: 'network-error', message: upstreamDetail(err) };
+      return { kind: 'network-error', message: upstreamDetail(err), reason: upstreamReason(err) };
     }
   });
 
   if (up.kind === 'network-error') {
+    if (up.reason === 'too-large') return tooLargeResponse(origin);
     return json(
       errorBody('UPSTREAM_NETWORK', `${providerLabel} upstream unreachable: ${up.message}`),
       502,
@@ -194,6 +286,95 @@ async function proxyUpstream(
   });
 }
 
+async function proxyLlamaProtocols(req: Request, origin: string): Promise<Response> {
+  const ip = clientIp(req);
+  const rateHeaders = llamaProtocolsRateHeaders();
+  if (!allowRate(`onchain:llama-protocols:${ip}`, LLAMA_PROTOCOLS_RATE_LIMIT, LLAMA_PROTOCOLS_RATE_WINDOW_MS)) {
+    return json(errorBody('RATE_LIMIT', 'Too many DefiLlama protocol-list requests'), 429, origin, {
+      'Retry-After': String(Math.ceil(LLAMA_PROTOCOLS_RATE_WINDOW_MS / 1000)),
+      ...rateHeaders,
+    });
+  }
+
+  const cacheKey = 'llama:protocols:slim';
+  const hit = plane.get(cacheKey);
+  if (hit) {
+    const cached = plane.cachedResponse(hit, origin, 'HIT');
+    for (const [k, v] of Object.entries(rateHeaders)) cached.headers.set(k, v);
+    return cached;
+  }
+
+  const up = await plane.coalesce(cacheKey, async (): Promise<UpstreamOutcome> => {
+    try {
+      const fetched = await fetchUpstreamJson(`${LLAMA_UPSTREAM}/protocols`, {
+        timeoutMs: UPSTREAM_TIMEOUT_MS,
+        headers: { 'User-Agent': 'axis-worker-onchain/1.0' },
+        maxBytes: LLAMA_PROTOCOLS_UPSTREAM_MAX_BYTES,
+      });
+      if (fetched.status === 404) {
+        return {
+          kind: 'response',
+          status: 404,
+          ok: false,
+          text: fetched.text,
+          contentType: fetched.contentType,
+        };
+      }
+      if (!(fetched.status >= 200 && fetched.status < 300)) {
+        return {
+          kind: 'response',
+          status: fetched.status,
+          ok: false,
+          text: fetched.text,
+          contentType: fetched.contentType,
+        };
+      }
+      const slim = slimLlamaProtocols(fetched.text, LLAMA_PROTOCOLS_RESPONSE_MAX_BYTES);
+      if (slim === null) {
+        return { kind: 'network-error', message: 'upstream unreachable', reason: 'network' };
+      }
+      return {
+        kind: 'response',
+        status: 200,
+        ok: true,
+        text: slim,
+        contentType: 'application/json',
+      };
+    } catch (err) {
+      return { kind: 'network-error', message: upstreamDetail(err), reason: upstreamReason(err) };
+    }
+  });
+
+  if (up.kind === 'network-error') {
+    if (up.reason === 'too-large') return tooLargeResponse(origin);
+    return json(
+      errorBody('UPSTREAM_NETWORK', `DefiLlama upstream unreachable: ${up.message}`),
+      502,
+      origin,
+      rateHeaders,
+    );
+  }
+
+  if (up.ok || up.status === 404) {
+    plane.put(cacheKey, {
+      body: up.text,
+      status: up.status,
+      contentType: up.contentType,
+      expiresAt: Date.now() + PROTOCOLS_TTL_MS,
+    });
+  }
+
+  return new Response(up.text, {
+    status: up.status,
+    headers: {
+      'Content-Type': up.contentType,
+      'X-Axis-Onchain-Cache': 'MISS',
+      ...READ_CORS(origin),
+      ...rateHeaders,
+    },
+  });
+}
+
 function decodePathSegment(raw: string): string {
   let s = raw;
   try {
@@ -212,7 +393,8 @@ const ROUTER = createProxyRouter({
   prefix: '/api/onchain',
   cors: READ_CORS,
   // Public, unauthenticated — per-IP window is the only abuse backstop (A5).
-  ipLimit: { limit: 120, windowMs: 60_000 },
+  // Health JSON stays unmetered; llama/protocols has its own tighter bucket.
+  ipLimit: { limit: ONCHAIN_IP_LIMIT, windowMs: ONCHAIN_IP_WINDOW_MS, skipHealth: true },
   health: () => ({
     status: 'healthy',
     service: 'axis-onchain',
@@ -238,8 +420,7 @@ const ROUTER = createProxyRouter({
   routes: [
     {
       path: '/llama/protocols',
-      handle: ({ origin }) =>
-        proxyUpstream('llama:protocols', `${LLAMA_UPSTREAM}/protocols`, origin, PROTOCOLS_TTL_MS, 'DefiLlama'),
+      handle: ({ req, origin }) => proxyLlamaProtocols(req, origin),
     },
     {
       match: /^\/llama\/protocol\/([^/]+)\/?$/,

@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "tests"
-description: "tests contains alerts-engine.test.ts, alerts-form.test.ts, alerts-format.test.ts, and 352 more files."
+description: "tests contains a11y-chrome.test.ts, alerts-engine.test.ts, alerts-form.test.ts, and 356 more files."
 resource: "tests"
 tags: [code, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-09T01:39:50Z
+  at: 2026-11-09T05:20:23Z
 sources:
   - id: tree
     resource: "tests"
@@ -18,6 +18,7 @@ okf_lock: generated
 
 # Files
 
+* `a11y-chrome.test.ts`
 * `alerts-engine.test.ts`
 * `alerts-form.test.ts`
 * `alerts-format.test.ts`
@@ -148,14 +149,17 @@ okf_lock: generated
 * `extras-ticker.test.ts`
 * `extras-timebadge.test.ts`
 * `extras-trend.test.ts`
+* `first-run.test.ts`
 * `focus-trap.test.ts`
 * `footprint.test.ts`
 * `function-outline.test.ts` — Point
 * `git-config-safety.test.ts`
 * `git-oauth-client.test.ts`
 * `git-oauth.test.ts`
+* `git-stamp.test.ts`
 * `heavy-data.test.ts`
 * `hoox-logo.test.ts`
+* `hud-inspector.test.ts`
 * `hud-model.test.ts`
 * `hydrate-slots.test.ts`
 * `icons-map.test.ts`
@@ -380,6 +384,7 @@ okf_lock: generated
 
 # Depends on
 
+* [scripts](/code/scripts.md)
 * [src](/code/src.md)
 * [src/alerts](/code/src/alerts.md)
 * [src/api](/code/src/api.md)

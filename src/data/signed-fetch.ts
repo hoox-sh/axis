@@ -30,6 +30,7 @@ import { getCredentialForVenue } from './credentials';
 import { signVenueRequest, type VenueId } from './venues';
 import type { ProviderVenue } from './provider';
 import { resolveMarketWorkerBase } from './market-worker';
+import { browserBlocksDirectCexRest } from './worker-origin';
 
 /**
  * One signed GET request: which venue and path to sign, the query params to
@@ -77,7 +78,8 @@ export function hasSignedCreds(venue: VenueId): boolean {
 
 /**
  * Signed GET JSON. Throws if no credentials or every path fails.
- * Binance: direct HMAC then AXIS Worker `/api/market/binance/signed/klines`.
+ * Binance: AXIS Worker `/api/market/binance/signed/klines` in the browser
+ * (direct HMAC CORS-fails); tests / node keep HMAC then Worker.
  */
 export async function fetchSignedJson(opts: SignedFetchOpts): Promise<unknown> {
   const cred = getCredentialForVenue(venueForId(opts.venue));
@@ -94,27 +96,32 @@ export async function fetchSignedJson(opts: SignedFetchOpts): Promise<unknown> {
     passphrase: cred.passphrase,
   });
 
-  try {
-    const res = await fetch(signed.url, {
-      cache: 'no-store',
-      signal: opts.signal,
-      headers: { Accept: 'application/json', ...signed.headers },
-    });
-    if (res.ok) return await res.json();
-    if (res.status === 401 || res.status === 403) {
-      throw new Error(`${opts.venue}: signed HTTP ${res.status}`);
-    }
-  } catch (err) {
-    if (opts.signal?.aborted) throw err;
-    if (err instanceof Error && /signed HTTP 401|signed HTTP 403/.test(err.message)) throw err;
-    // CORS / network — try Worker for Binance klines
-  }
-
-  if (
+  const workerKlines =
     opts.venue === 'binance' &&
     !opts.skipWorkerProxy &&
-    (opts.path === '/api/v3/klines' || opts.path.endsWith('/klines'))
-  ) {
+    (opts.path === '/api/v3/klines' || opts.path.endsWith('/klines'));
+  // Browser CORS cannot read api.binance.com — skip the doomed HMAC hop.
+  const skipDirect = browserBlocksDirectCexRest() && workerKlines;
+
+  if (!skipDirect) {
+    try {
+      const res = await fetch(signed.url, {
+        cache: 'no-store',
+        signal: opts.signal,
+        headers: { Accept: 'application/json', ...signed.headers },
+      });
+      if (res.ok) return await res.json();
+      if (res.status === 401 || res.status === 403) {
+        throw new Error(`${opts.venue}: signed HTTP ${res.status}`);
+      }
+    } catch (err) {
+      if (opts.signal?.aborted) throw err;
+      if (err instanceof Error && /signed HTTP 401|signed HTTP 403/.test(err.message)) throw err;
+      // CORS / network — try Worker for Binance klines
+    }
+  }
+
+  if (workerKlines) {
     const worker = resolveMarketWorkerBase(opts.workerBase);
     const q = queryString(opts.query);
     const url = `${worker.replace(/\/+$/, '')}/api/market/binance/signed/klines${q ? `?${q}` : ''}`;

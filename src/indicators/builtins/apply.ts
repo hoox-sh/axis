@@ -23,7 +23,7 @@
  * @module indicators/builtins/apply
  */
 
-import { setIndicatorPanelOpen, setStatus } from '../../store';
+import { setStatus } from '../../store';
 import { runAndApply, type RunOptions, type RunResult } from '../runner';
 import { getBuiltinScript } from './catalog';
 
@@ -35,7 +35,8 @@ export type ApplyBuiltinResult = RunResult & { builtinId: string };
 
 /**
  * Run a catalog script onto the chart as a **new** applied instance.
- * Opens the Scripts panel so the new card is visible.
+ * Does not auto-open Scripts — the plot lands on the chart; the panel is
+ * a manager, not a confirmation.
  */
 export async function applyBuiltinScript(
   id: string,
@@ -54,7 +55,6 @@ export async function applyBuiltinScript(
       error: msg,
     };
   }
-  setIndicatorPanelOpen(true);
   const result = await runAndApply(script.code, undefined, {
     openResults: false,
     skipEditorDraft: true,

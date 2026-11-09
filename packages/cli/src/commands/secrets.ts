@@ -9,6 +9,7 @@ import { existsSync } from 'node:fs';
 import type { Command } from 'commander';
 import { getPaths } from '../utils/paths.js';
 import { runWrangler } from '../utils/run.js';
+import { gitHeadSha, wranglerGitDefine } from './deploy.js';
 import { commentTomlVar, hasTomlVar } from '../services/wrangler-toml.js';
 import { promptLine, promptSecret } from '../utils/prompt.js';
 import {
@@ -100,10 +101,14 @@ export async function dropPlaintextVarForSecret(opts: GlobalOpts, key: string): 
     opts.quiet,
   );
   printInfo('Deploying Worker to drop the plaintext binding…', opts.quiet);
-  const deployed = await runWrangler(paths.worker, ['deploy'], {
-    inherit: !opts.quiet,
-    throwOnError: false,
-  });
+  const deployed = await runWrangler(
+    paths.worker,
+    ['deploy', ...wranglerGitDefine(gitHeadSha(paths.root))],
+    {
+      inherit: !opts.quiet,
+      throwOnError: false,
+    },
+  );
   if (deployed.code !== 0) {
     throw new CLIError(
       `Failed to drop [vars] ${key} (deploy exit ${deployed.code})`,
@@ -193,10 +198,14 @@ export async function secretPut(opts: GlobalOpts, name: string, value?: string):
       'Cloudflare 10053: name still a plaintext var on the live Worker. Deploying to drop it, then retrying…',
       opts.quiet,
     );
-    const deployed = await runWrangler(worker, ['deploy'], {
-      inherit: !opts.quiet,
-      throwOnError: false,
-    });
+    const deployed = await runWrangler(
+      worker,
+      ['deploy', ...wranglerGitDefine(gitHeadSha(getPaths().root))],
+      {
+        inherit: !opts.quiet,
+        throwOnError: false,
+      },
+    );
     if (deployed.code !== 0) {
       throw new CLIError(
         `Failed to drop remote [vars] ${key} (deploy exit ${deployed.code})`,

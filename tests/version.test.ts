@@ -12,8 +12,8 @@ import './setup';
 import { describe, expect, it } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { APP_VERSION, BAKED_APP_VERSION } from '../src/version';
-import { WORKER_VERSION } from '../worker/src/version';
+import { APP_VERSION, BAKED_APP_VERSION, appIdentity, gitSha } from '../src/version';
+import { WORKER_VERSION, workerGitSha } from '../worker/src/version';
 
 const ROOT = join(import.meta.dir, '..');
 const VERSION = readFileSync(join(ROOT, 'VERSION'), 'utf8').trim();
@@ -37,6 +37,14 @@ describe('VERSION single source of truth', () => {
       version: string;
     };
     expect(served.version).toBe(VERSION);
+    expect('git' in served).toBe(false);
+  });
+
+  it('keeps gitSha empty in unit tests (baked at Vite / wrangler time)', () => {
+    expect(gitSha()).toBe('');
+    expect(appIdentity()).toBe(VERSION);
+    expect(appIdentity('1.2.3', 'abcdef0123456789')).toBe('1.2.3+abcdef012345');
+    expect(workerGitSha()).toBe('');
   });
 
   it('matches the release-stamped manifests', () => {

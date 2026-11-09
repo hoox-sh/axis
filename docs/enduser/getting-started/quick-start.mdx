@@ -19,12 +19,12 @@
 
 ---
 title: "Quick start"
-description: "First historical load, first Pine Run, live stream, and reading the Results drawer in AXIS."
+description: "First-run candles, Add to chart / Run, live stream, and reading the Results drawer in AXIS."
 ---
 
 # Quick start
 
-Fifteen-minute path from empty AXIS to plots, strategy stats, and optional live updates.
+Fifteen-minute path from a first visit to plots, strategy stats, and optional live updates.
 
 AXIS is a charting app you run in the browser (or install as a PWA / desktop app). You pick **where candles come from**, **whether they keep updating**, **who runs your Pine Script™**, and **where scripts are saved**. The status bar uses short chips for those four planes:
 
@@ -38,9 +38,9 @@ AXIS is a charting app you run in the browser (or install as a PWA / desktop app
 ## Abstract
 
 1. Ensure AXIS is running ([Installation](/axis/docs/enduser/getting-started/installation)).
-2. Load bars for a symbol.
-3. Paste or write a minimal indicator / strategy.
-4. **Run** → inspect chart overlays + Results.
+2. Default-symbol candles paint on boot (no Load click). An empty chart with bars and 0 scripts shows a **Run** chip (default RSI / editor buffer).
+3. Paste or write a minimal indicator / strategy, or keep the prefilled editor script.
+4. Editor **Run**, or topbar **Add to chart** on first apply (**Run** when that script is already on the chart) → inspect overlays + Results.
 5. Optionally enable **Live**.
 
 ## Conceptual model
@@ -53,10 +53,10 @@ sequenceDiagram
   participant E as Engine
   participant C as Chart
   participant R as Results
-  U->>T: Load
+  U->>T: boot / watchlist
   T->>S: fetchHistorical
   S-->>C: bars
-  U->>T: Run
+  U->>T: Add to chart / Run
   T->>E: run(script, bars)
   E-->>C: plots / markers / drawings
   E-->>R: lastRun payload
@@ -64,7 +64,9 @@ sequenceDiagram
 
 ## Interface surface
 
-### 1. Load history
+### 1. History on the chart
+
+Boot fetches the default symbol for the active source. First-run does **not** wait on a Load click.
 
 Topbar fields that matter:
 
@@ -74,13 +76,13 @@ Topbar fields that matter:
 | Interval | `1d` | Watchlist + chart share interval vocabulary |
 | Source | `binance-rest` | Or mock / CSV |
 | Stream | `binance-ws` | Paused until Live |
-| Engine | `server` or `pyodide` | Settings for endpoint |
+| Engine | `server` or `pyodide` | Studio → Settings / Runtime for endpoint |
 
-Click **Load** (or pick a watchlist row). Status bar should move through loading → ready with bar count context.
+Pick a watchlist row to switch the symbol. Status bar should move through loading → ready with bar count context. Topbar **Load** (download icon) is a one-shot refetch when you already have a symbol — not the first-run step.
 
-<img src="/images/app/load-ready.png" alt="AXIS after Load: BTCUSDT candles, volume, and RSI pane" />
+<img src="/images/app/load-ready.png" alt="AXIS after boot: BTCUSDT candles, volume, and RSI pane" />
 
-<img src="/images/gifs/load-and-run.gif" alt="Load history then Run an RSI script" />
+<img src="/images/gifs/load-and-run.gif" alt="Default candles then Run an RSI script" />
 
 **CSV path:** Source = **CSV upload** → pick file when prompted → bars inject via upload store.
 
@@ -111,9 +113,11 @@ if ta.crossunder(ta.sma(close, 10), ta.sma(close, 30))
 
 Language semantics: [PYNE runtime](/pyne/docs/runtime).
 
-### 3. Run
+### 3. Run / Add to chart
 
-**Run** (topbar or editor). Pipeline:
+Editor primary is always **Run**. Topbar primary is **Add to chart** on first apply and **Run** when that script already has an instance on the chart (caret: **Add instance or built-in**). Empty chart with candles and 0 scripts also shows a one-shot **Run** chip.
+
+Pipeline:
 
 1. Active engine `run({ script, bars, config })`
 2. `lastRun` stored in memory (not fully persisted)
@@ -171,7 +175,7 @@ Manager → **Script Library** → name → Save. Backend is active storage (`lo
 | Engine | pyodide |
 | Storage | local |
 
-Load → Run smoke indicator → toggle Live. No Flask required.
+Wait for candles → **Add to chart** / **Run** smoke indicator → toggle Live. No Flask required.
 
 ## Worked example: desk + Flask
 

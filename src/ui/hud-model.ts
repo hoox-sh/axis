@@ -26,7 +26,7 @@
  * - MODE interpret | compile | auto
  * - PATH WS | REST | —       — hop for remote/server/worker runs only
  *
- * Product names (pyne, pyodide, pyne-worker) live in sticky-info detail, not chip text.
+ * Product names (pyne, pyodide, pyne-worker) live in the click inspector, not chip text.
  * UI: `ConnectionHud.tsx`. No Solid dependency.
  */
 
@@ -42,7 +42,7 @@ export type ExecMode = 'interpret' | 'compile' | 'auto';
 /** Transport hop shown on the PATH chip; `—` for local/unknown transports. */
 export type PathClass = 'WS' | 'REST' | '—';
 
-/** Stable ids for the status-bar HUD chips; also the key for the sticky detail panel. */
+/** Stable ids for the status-bar HUD chips; also the key for the click inspector. */
 export type HudChipId =
   'live' | 'tick' | 'eng' | 'run' | 'mode' | 'path' | 'src' | 'str' | 'sto' | 'feed' | 'onc';
 
@@ -54,7 +54,7 @@ export interface HudSnapshot {
   path: PathClass;
   /** True when PATH chip should render (not browser-local). */
   showPath: boolean;
-  /** Plugin / product ids for sticky panel */
+  /** Plugin / product ids for the click inspector */
   enginePluginId: string;
   product: string;
   endpoint: string;
@@ -227,34 +227,87 @@ function openStreamDelayLabel(opts: {
   return `delayed ${Math.floor(ageMs / 1000)}s`;
 }
 
-/**
- * HUD Live chip copy.
- * The visible word stays “Live” while the socket reconnects — tone carries
- * the state. “Offline” is only the armed-but-down failure label.
- * “OFF” / “LIVE” remain the machine labels for tests and tone mapping.
- * An open socket names `delayed Ns` on this label when the last event is
- * at least 3s behind the caller’s `now`. Reconnecting does not.
- */
-export function liveBadgeLabel(opts: {
+/** Inputs that decide the Live chip — venue socket, engine wire, and feed path. */
+export interface LiveArmInput {
   liveActive: boolean;
   streamStatus: string;
+  /** `telemetry.stream.state` (`open` / `degraded` / …). */
+  streamState?: string | null;
+  /** `telemetry.stream.transport`. */
+  transport?: string | null;
+  /**
+   * Engine `/ws/live` snapshot. `false` means the wire is not open.
+   * Omitted when the caller has no wire (venue-only path).
+   */
+  wireOpen?: boolean | null;
+  /** True when the engine stream route owns this live session. */
+  streamRouteActive?: boolean;
+  /** Worst series-feed / script status (`live` / `degraded` / `error` / …). */
+  feedStatus?: string | null;
   /** Last bar or tick wall time. Missing → never claim delayed. */
   lastEventAt?: number | null;
   /** Caller clock. Missing → never claim delayed. */
   now?: number | null;
-}): string {
-  if (!opts.liveActive) return 'OFF';
-  if (opts.streamStatus === 'connecting') return 'Live';
-  if (opts.streamStatus === 'connected') {
-    const delay = openStreamDelayLabel(opts);
-    return delay ? `LIVE · ${delay}` : 'LIVE';
+  /** Stream plane detail (reconnect attempt / backoff). */
+  detail?: string | null;
+}
+
+/**
+ * Pick the noisiest engine-feed / script status. Error beats degraded,
+ * degraded beats in-flight, in-flight beats live. Empty → null.
+ */
+export function worstFeedStatus(
+  statuses: ReadonlyArray<string | null | undefined>,
+): string | null {
+  const s = statuses.filter((x): x is string => typeof x === 'string' && x.length > 0);
+  if (!s.length) return null;
+  if (s.some((x) => x === 'error')) return 'error';
+  if (s.some((x) => x === 'degraded')) return 'degraded';
+  if (s.some((x) => x === 'connecting' || x === 'datafeed-loading' || x === 'calculating')) {
+    return 'connecting';
   }
-  return 'Offline';
+  if (s.some((x) => x === 'live')) return 'live';
+  return s[0] ?? null;
+}
+
+function armIsConnecting(opts: LiveArmInput): boolean {
+  return opts.streamStatus === 'connecting' || opts.streamState === 'connecting';
+}
+
+function armIsDegraded(opts: LiveArmInput): boolean {
+  if (opts.feedStatus === 'degraded' || opts.streamState === 'degraded') return true;
+  if (opts.wireOpen === false && !armIsConnecting(opts)) return true;
+  return false;
+}
+
+/**
+ * HUD Live chip copy.
+ * The visible word stays “Live” while the socket reconnects — tone carries
+ * the state. “Offline” is the armed-but-down failure label. “Degraded” /
+ * “REST” match the script-card stream arm when the wire is not actually
+ * open. “OFF” / “LIVE” remain the machine labels for tests and tone mapping.
+ * An open socket names `delayed Ns` on this label when the last event is
+ * at least 3s behind the caller’s `now`. Reconnecting does not.
+ */
+export function liveBadgeLabel(opts: LiveArmInput): string {
+  const tone = liveBadgeTone(opts);
+  if (tone === 'off') return 'OFF';
+  if (tone === 'reconnect') return 'Live';
+  if (tone === 'degraded') return 'Degraded';
+  if (tone === 'rest') return 'REST';
+  if (tone === 'offline') return 'Offline';
+  const delay = openStreamDelayLabel(opts);
+  return delay ? `LIVE · ${delay}` : 'LIVE';
 }
 
 /** Visible word on the Live control. Reconnecting keeps the word Live. */
-export function liveBadgeWord(tone: ReturnType<typeof liveBadgeTone>): 'Live' | 'Offline' {
-  return tone === 'offline' ? 'Offline' : 'Live';
+export function liveBadgeWord(
+  tone: ReturnType<typeof liveBadgeTone>,
+): 'Live' | 'Offline' | 'Degraded' | 'REST' {
+  if (tone === 'offline') return 'Offline';
+  if (tone === 'degraded') return 'Degraded';
+  if (tone === 'rest') return 'REST';
+  return 'Live';
 }
 
 /**
@@ -263,23 +316,22 @@ export function liveBadgeWord(tone: ReturnType<typeof liveBadgeTone>): 'Live' | 
  * An open socket with no event for ≥3s adds `delayed Ns`. Reconnecting keeps
  * its own text even if the last event is old. `now` is caller-supplied.
  */
-export function liveIndicatorTitle(opts: {
-  liveActive: boolean;
-  streamStatus: string;
-  detail?: string | null;
-  startHint?: string;
-  /** Last bar or tick wall time. Missing → never claim delayed. */
-  lastEventAt?: number | null;
-  /** Caller clock. Missing → never claim delayed. */
-  now?: number | null;
-}): string {
+export function liveIndicatorTitle(
+  opts: LiveArmInput & { startHint?: string },
+): string {
   if (!opts.liveActive) return opts.startHint || 'Start live stream';
-  if (opts.streamStatus === 'connecting') {
+  const tone = liveBadgeTone(opts);
+  if (tone === 'reconnect' || (opts.streamStatus === 'connecting' && tone !== 'degraded')) {
     const d = String(opts.detail || '').trim();
     const extra = d && d.toLowerCase() !== 'reconnecting' ? ` · ${d}` : '';
     return `Reconnecting${extra} — click to stop`;
   }
-  if (opts.streamStatus === 'connected') {
+  if (tone === 'degraded') {
+    const d = String(opts.detail || opts.feedStatus || '').trim();
+    return d && d !== 'degraded' ? `Degraded · ${d} — click to stop` : 'Degraded — click to stop';
+  }
+  if (tone === 'rest') return 'REST — click to stop';
+  if (tone === 'live') {
     const delay = openStreamDelayLabel(opts);
     return delay ? `Live · ${delay} — click to stop` : 'Live — click to stop';
   }
@@ -293,15 +345,42 @@ export function composeCaption(snap: Pick<HudSnapshot, 'run'>): string {
   return 'Server';
 }
 
-/** Visual state for the HUD Live chip (success only when receiving). */
-export function liveBadgeTone(opts: {
-  liveActive: boolean;
-  streamStatus: string;
-}): 'off' | 'live' | 'reconnect' | 'offline' {
+/**
+ * Visual state for the HUD Live chip.
+ * `live` only when the arm is actually open — not when scripts/feed are
+ * degraded, the engine wire is closed, or the path is REST poll.
+ */
+export function liveBadgeTone(
+  opts: LiveArmInput,
+): 'off' | 'live' | 'reconnect' | 'offline' | 'degraded' | 'rest' {
   if (!opts.liveActive) return 'off';
-  if (opts.streamStatus === 'connected') return 'live';
-  if (opts.streamStatus === 'connecting') return 'reconnect';
+  // Reconnect wins over a degraded plane so the word stays Live while retrying.
+  if (armIsConnecting(opts) && opts.feedStatus !== 'degraded' && opts.feedStatus !== 'error') {
+    return 'reconnect';
+  }
+  if (opts.feedStatus === 'error') return 'offline';
+  if (armIsDegraded(opts)) return 'degraded';
+  if (opts.transport === 'rest') return 'rest';
+  if (opts.streamStatus === 'connected') {
+    if (opts.streamRouteActive && opts.wireOpen === false) return 'degraded';
+    return 'live';
+  }
   return 'offline';
+}
+
+/**
+ * Last-tick snapshot scoped to the chart instrument.
+ * A tick stamped for another symbol is dropped so the footer cannot keep
+ * the previous pair's price after a symbol/interval switch. Legacy ticks
+ * with no `symbol` still match (callers clear `lastTick` on loadBars).
+ */
+export function lastTickForSymbol<T extends { symbol?: string }>(
+  tick: T | null | undefined,
+  symbol: string,
+): T | null {
+  if (!tick) return null;
+  if (tick.symbol != null && tick.symbol !== symbol) return null;
+  return tick;
 }
 
 /**
@@ -435,7 +514,7 @@ export function feedChipView(opts: {
 }
 
 /**
- * Info-panel rows for the feed chip — the facts that explain the chip:
+ * Inspector rows for the feed chip — the facts that explain the chip:
  * state, freshness, verification tier, progress, the engine hop and the
  * series identity.
  */
@@ -471,7 +550,30 @@ export function feedChipMeta(opts: {
   return rows;
 }
 
-/** Sticky-panel title/body copy for a chip given the current snapshot. */
+/**
+ * Which HUD inspector is open. Hover is not an event — the scanline never
+ * opens a container on pointer-enter. Click/keyboard toggles; Esc/outside close.
+ */
+export type HudInspectorEvent =
+  | { type: 'toggle'; id: HudChipId }
+  | { type: 'close' };
+
+/**
+ * Reduce the open inspector chip.
+ *
+ * @param current - Chip whose inspector is open, or `null`.
+ * @param event - Toggle the same chip closed, switch chips, or close.
+ * @returns The next open chip id.
+ */
+export function reduceHudInspector(
+  current: HudChipId | null,
+  event: HudInspectorEvent,
+): HudChipId | null {
+  if (event.type === 'close') return null;
+  return current === event.id ? null : event.id;
+}
+
+/** Inspector title/body copy for a chip given the current snapshot. */
 export function hudChipHelp(id: HudChipId, snap: HudSnapshot): { title: string; body: string } {
   switch (id) {
     case 'eng':
@@ -521,12 +623,12 @@ export function hudChipHelp(id: HudChipId, snap: HudSnapshot): { title: string; 
     case 'tick':
       return {
         title: 'tick — market pulse',
-        body: 'Last live price from the **stream** (market data). Not the calculation engine.',
+        body: 'Last live price from the **stream** (market data) for the **current** symbol. A previous pair’s tick is dropped on switch. Not the calculation engine.',
       };
     case 'live':
       return {
         title: 'LIVE — stream arm',
-        body: 'Whether the live market stream is armed. The label stays Live; the dot turns amber while reconnecting and the tooltip shows attempt and backoff. Offline only after the socket gives up. Independent of engine, runtime, and path.',
+        body: 'Whether the live market stream is actually open. Live only while the venue socket (and the engine wire, when that route is on) is open. Degraded / REST / Offline match the script-card stream arm — never Live over a closed wire. The word stays Live while reconnecting; the dot turns amber and the tooltip shows attempt and backoff.',
       };
     case 'src':
       return {

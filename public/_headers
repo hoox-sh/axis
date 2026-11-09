@@ -1,18 +1,42 @@
 # Copyright (C) 2024-2026 jango_blockchained
 # SPDX-License-Identifier: AGPL-3.0-only
 #
-# Cloudflare Pages headers — mirror of docker/nginx.conf + server.ts baseline.
+# Cloudflare Pages headers — mirror of docker/nginx.conf + src/hp/security-headers.ts.
 # Pages reads this from the publish directory (dist/) after `vite build`.
 #
 # The script-src nonce is a documented Cloudflare interop hook: when the zone's
 # JavaScript Detections injects its bootstrap inline script, CF copies the nonce
 # from our CSP header onto it so it passes. Keep until JSD is actually off.
+#
+# Cloudflare Web Analytics (static.cloudflareinsights.com/beacon.min.js) is
+# injected at the edge on axis.hoox.sh when Insights is on, not on *.pages.dev.
+# Enforced script-src stays 'self' + wasm-unsafe-eval + pyne-agent-worker; the
+# beacon console CSP error is expected unless Insights is disabled in the zone.
+# Do not add the Insights host here — that would hide pages.dev vs custom-domain
+# drift.
+#
+# Path rules replace, they do not merge: repeat security headers on /assets/*.
 
 /*
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   X-Frame-Options: DENY
-  Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; script-src 'self' 'nonce-VwY65J9HsSZUqkEll3A' 'wasm-unsafe-eval' https://pyne-agent-worker.cryptolinx.workers.dev; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https: wss: http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*; worker-src 'self' blob:; child-src 'self' blob:; manifest-src 'self'
+  Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; script-src 'self' 'nonce-VwY65J9HsSZUqkEll3A' 'wasm-unsafe-eval' https://pyne-agent-worker.cryptolinx.workers.dev; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' blob: http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:* https://axis.hoox.sh https://worker.axis.hoox.sh wss://worker.axis.hoox.sh https://pynescript.online wss://pynescript.online https://pynescript-axis.pages.dev https://*.pynescript-axis.pages.dev https://axis.pages.dev https://*.axis.pages.dev https://pyne-worker.cryptolinx.workers.dev wss://pyne-worker.cryptolinx.workers.dev https://pyne-agent-worker.cryptolinx.workers.dev https://api.binance.com https://data-api.binance.vision https://fapi.binance.com https://dapi.binance.com wss://stream.binance.com wss://stream.binance.com:9443 wss://data-stream.binance.vision wss://fstream.binance.com wss://dstream.binance.com https://api.mexc.com wss://wbs.mexc.com wss://wbs-api.mexc.com https://www.okx.com wss://ws.okx.com:8443 https://api.bybit.com wss://stream.bybit.com https://api.exchange.coinbase.com wss://advanced-trade-ws.coinbase.com wss://ws-feed.exchange.coinbase.com https://api.kraken.com wss://ws.kraken.com https://api.llama.fi https://api.geckoterminal.com https://api.coingecko.com https://api.github.com https://gitlab.com; worker-src 'self' blob:; child-src 'self' blob:; manifest-src 'self'
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
+  Strict-Transport-Security: max-age=15552000; includeSubDomains
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Embedder-Policy: credentialless
   Cross-Origin-Resource-Policy: same-origin
+  Cache-Control: public, max-age=0, must-revalidate
+
+/assets/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: DENY
+  Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; script-src 'self' 'nonce-VwY65J9HsSZUqkEll3A' 'wasm-unsafe-eval' https://pyne-agent-worker.cryptolinx.workers.dev; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' blob: http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:* https://axis.hoox.sh https://worker.axis.hoox.sh wss://worker.axis.hoox.sh https://pynescript.online wss://pynescript.online https://pynescript-axis.pages.dev https://*.pynescript-axis.pages.dev https://axis.pages.dev https://*.axis.pages.dev https://pyne-worker.cryptolinx.workers.dev wss://pyne-worker.cryptolinx.workers.dev https://pyne-agent-worker.cryptolinx.workers.dev https://api.binance.com https://data-api.binance.vision https://fapi.binance.com https://dapi.binance.com wss://stream.binance.com wss://stream.binance.com:9443 wss://data-stream.binance.vision wss://fstream.binance.com wss://dstream.binance.com https://api.mexc.com wss://wbs.mexc.com wss://wbs-api.mexc.com https://www.okx.com wss://ws.okx.com:8443 https://api.bybit.com wss://stream.bybit.com https://api.exchange.coinbase.com wss://advanced-trade-ws.coinbase.com wss://ws-feed.exchange.coinbase.com https://api.kraken.com wss://ws.kraken.com https://api.llama.fi https://api.geckoterminal.com https://api.coingecko.com https://api.github.com https://gitlab.com; worker-src 'self' blob:; child-src 'self' blob:; manifest-src 'self'
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
+  Strict-Transport-Security: max-age=15552000; includeSubDomains
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: credentialless
+  Cross-Origin-Resource-Policy: same-origin
+  Cache-Control: public, max-age=31536000, immutable

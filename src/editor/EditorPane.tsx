@@ -377,7 +377,7 @@ export const EditorPane: Component<Props> = (props) : JSX.Element => {
 
   /**
    * Primary strip (left → right): Run · Library · | · Logs · Profiler
-   * Labels always visible (icon + text). Secondary tools in overflow menu.
+   * Labels always visible (icon + text). Editor Run is never a bare “Add”.
    */
   const editorTools = (
     <div

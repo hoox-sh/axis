@@ -111,6 +111,8 @@ export {
   quietEdgeColor,
   isLoudBorder,
   resolveChromeBorder,
+  TEXT_CONTRAST_MIN,
+  contrastRatioHex,
 } from './apply';
 
 export {

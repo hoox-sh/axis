@@ -7,7 +7,7 @@ tags: [code, editor]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-31T22:59:45Z
+  at: 2026-11-09T05:20:23Z
 sources:
   - id: tree
     resource: "src/editor"
@@ -31,6 +31,7 @@ okf_lock: generated
 * `code-folding.ts` — PINE_INDENT_WIDTH, codeFoldingExtension, foldMarker, foldPlaceholder, indentColumn, pineFoldRange, pineIndentFoldService
 * `color-chips.ts` — buildColorChipDecorations, colorChipsExtension, colorChipsTheme
 * `column-ruler.ts` — ColumnRulerOptions, DEFAULT_RULER_COLUMN, RULER_STROKE, columnRulerExtension, measureRulerLeft, normalizeRulerColumn, refreshColumnRuler, refreshColumnRulerEffect, rulerOffsetFromContent
+* `default-script.ts` — DEFAULT_EDITOR_SCRIPT
 * `diagnostics.ts` — DiagnosticSeverity, EditorDiagnostic, applyDiagnostics, combineEditorDiagnostics, countDiagnostics, diagnosticsExtension, diagnosticsFromLastRun, diagnosticsStateField, diagnosticsTheme, formatDiagnosticCount, jumpToDiagnostic, jumpToFirstDiagnostic
 * `doc-stats.ts` — countDocStats, cursorLineCol
 * `editor-bridge.ts` — BridgeMessage, EDITOR_CHANNEL, bridgePublish, bridgeSubscribe, isEditorView, openEditorWindow, readSharedDoc, writeSharedDoc

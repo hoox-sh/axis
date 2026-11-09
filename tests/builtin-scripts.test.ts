@@ -28,7 +28,15 @@ import { _resetSourceRegistrationFlag } from '../src/sources/catalog';
 import { _resetStreamRegistrationFlag } from '../src/streams/catalog';
 import { _resetEngineRegistrationFlag } from '../src/engines/catalog';
 import { _resetStorageRegistrationFlag } from '../src/storage/catalog';
-import { clearLogs, setActivePlugin, setEditorInputValues, setStore, store } from '../src/store';
+import {
+  clearLogs,
+  isPanelOpen,
+  setActivePlugin,
+  setEditorInputValues,
+  setIndicatorPanelOpen,
+  setStore,
+  store,
+} from '../src/store';
 import { SAMPLE_BARS } from './fixtures/bars';
 import { setManager } from '../src/chart/manager-access';
 
@@ -199,6 +207,7 @@ describe('applyBuiltinScript skips editor draft', () => {
     setStore('pluginsConfig', { 'engine:server': { preferWs: false } });
     setStore('scripts', []);
     setStore('resultsPanel', { open: false, height: 220 });
+    setIndicatorPanelOpen(false);
     setActivePlugin('engine', 'server');
     setEditorInputValues({ Length: 99, len: 99 });
     setManager({
@@ -235,6 +244,14 @@ describe('applyBuiltinScript skips editor draft', () => {
     expect(r.status).toBe('success');
     expect(store.scripts.length).toBe(1);
     expect(store.scripts[0]?.inputValues).toBeUndefined();
+  });
+
+  it('does not auto-open Scripts when the plot lands', async () => {
+    expect(isPanelOpen('indicators')).toBe(false);
+    const r = await applyBuiltinScript('sma');
+    expect(r.status).toBe('success');
+    expect(store.scripts.length).toBe(1);
+    expect(isPanelOpen('indicators')).toBe(false);
   });
 });
 

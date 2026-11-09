@@ -50,6 +50,12 @@ describe('/health shallow (default)', () => {
     try {
       const res = await call('/health');
       expect(res.status).toBe(200);
+      expect(res.headers.get('Strict-Transport-Security')).toBe(
+        'max-age=15552000; includeSubDomains',
+      );
+      expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
+      expect(res.headers.get('X-Frame-Options')).toBe('DENY');
+      expect(res.headers.get('Referrer-Policy')).toBe('strict-origin-when-cross-origin');
       const body = (await res.json()) as {
         status: string;
         features: Record<string, boolean>;

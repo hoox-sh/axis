@@ -73,7 +73,8 @@ import { activeMobileSheet, closeAllMobileSheets, openMobileSheet } from '../pan
 import { SymbolModal } from '../SymbolModal';
 import { openAboutModal } from '../AboutModal';
 import type { StudioPageId } from '../studio';
-import { liveBadgeTone, liveIndicatorTitle } from '../hud-model';
+import { liveBadgeTone, liveBadgeWord, liveIndicatorTitle } from '../hud-model';
+import { readLiveArm } from '../live-arm';
 import { requestMcpConnect } from '../../mcp/host';
 import { mcpBridgeState, onMcpBridge } from '../../mcp/bridge';
 import { mcpNeedsConnect } from '../McpConnectCta';
@@ -220,6 +221,7 @@ export const MobileHeader: Component<MobileChromeProps> = (_props): JSX.Element 
       decimals: resolvePriceDecimals(store.priceScaleDecimals, { symbol: store.symbol, bars }),
     });
   });
+  const liveTone = () => liveBadgeTone(readLiveArm());
 
   return (
     <>
@@ -284,39 +286,27 @@ export const MobileHeader: Component<MobileChromeProps> = (_props): JSX.Element 
           type="button"
           class="axis-live-btn h-7 px-1.5"
           classList={{
-            'is-idle': !store.live.active,
-            'is-live': store.live.active && store.stream.status === 'connected',
-            'is-reconnect': store.live.active && store.stream.status === 'connecting',
-            'is-offline':
-              store.live.active &&
-              store.stream.status !== 'connected' &&
-              store.stream.status !== 'connecting',
+            'is-idle': liveTone() === 'off',
+            'is-live': liveTone() === 'live',
+            'is-reconnect': liveTone() === 'reconnect',
+            'is-degraded': liveTone() === 'degraded' || liveTone() === 'rest',
+            'is-offline': liveTone() === 'offline',
           }}
           data-testid="axis-mobile-live"
-          title={liveIndicatorTitle({
-            liveActive: store.live.active,
-            streamStatus: store.stream.status,
-            detail: store.telemetry?.stream?.detail,
-            lastEventAt: store.telemetry?.stream?.lastEventAt,
-            now: Date.now(),
-            startHint: 'Start live',
-          })}
+          title={liveIndicatorTitle({ ...readLiveArm(), startHint: 'Start live' })}
           aria-pressed={store.live.active}
-          data-live-tone={liveBadgeTone({
-            liveActive: store.live.active,
-            streamStatus: store.stream.status,
-          })}
+          data-live-tone={liveTone()}
           onClick={toggleLive}
         >
           <span
             class="axis-live-dot"
             classList={{
-              'axis-live-dot--pulse': store.live.active && store.stream.status === 'connected',
-              'axis-live-dot--reconnect': store.live.active && store.stream.status === 'connecting',
+              'axis-live-dot--pulse': liveTone() === 'live',
+              'axis-live-dot--reconnect': liveTone() === 'reconnect',
             }}
             aria-hidden="true"
           />
-          <span>Live</span>
+          <span>{liveBadgeWord(liveTone())}</span>
         </button>
         <select
           class="axis-mvenue max-w-[5.5rem]"
@@ -551,7 +541,7 @@ export const MobileOverlays: Component<MobileChromeProps> = (props): JSX.Element
               onClick={() => runScript(props.editorRef)}
             >
               <Icons.play size={16} />
-              <span>Add script</span>
+              <span>Run script</span>
             </button>
             <button
               type="button"

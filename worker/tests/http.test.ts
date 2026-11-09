@@ -25,9 +25,13 @@
 import { describe, expect, it } from 'bun:test';
 import {
   API_CORS,
+  HSTS_VALUE,
   MARKET_CORS,
+  NOSNIFF,
   READ_CORS,
+  REFERRER_POLICY,
   WRITE_CORS,
+  XFO_DENY,
   buildHealthBody,
   clientIp,
   corsHeaders,
@@ -39,6 +43,7 @@ import {
   preflight,
   readCappedJson,
   scopedJson,
+  withSecurityHeaders,
 } from '../src/http';
 
 describe('corsHeaders', () => {
@@ -146,6 +151,19 @@ describe('preflight', () => {
   });
 });
 
+describe('withSecurityHeaders', () => {
+  it('stamps HSTS without preload plus nosniff / XFO / referrer on JSON', () => {
+    expect(HSTS_VALUE).toBe('max-age=15552000; includeSubDomains');
+    expect(HSTS_VALUE.includes('preload')).toBe(false);
+    const res = withSecurityHeaders(jsonResponse({ ok: true }));
+    expect(res.headers.get('Strict-Transport-Security')).toBe(HSTS_VALUE);
+    expect(res.headers.get('X-Content-Type-Options')).toBe(NOSNIFF);
+    expect(res.headers.get('X-Frame-Options')).toBe(XFO_DENY);
+    expect(res.headers.get('Referrer-Policy')).toBe(REFERRER_POLICY);
+    expect(res.headers.get('Content-Type')).toBe('application/json');
+  });
+});
+
 describe('readCappedJson', () => {
   const post = (body: string, headers: Record<string, string> = {}) =>
     new Request('https://a.test/api/run', {
@@ -180,6 +198,8 @@ describe('buildHealthBody', () => {
     const body = buildHealthBody({ db: true, keys: false, mcpBridge: true }) as Record<string, unknown>;
     expect(body.status).toBe('healthy');
     expect(body.service).toBe('worker-axis');
+    expect(body.version).toBeTruthy();
+    expect(body.git).toBe('');
     const features = body.features as Record<string, unknown>;
     expect(features).toMatchObject({ scripts: true, d1: true, keys: false, mcpBridge: true });
   });

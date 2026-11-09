@@ -95,6 +95,8 @@ Topbar **Type** select (persisted). Implementation: `chart/chart-type.ts` + `cre
 
 Series still live under pane key `candle` so markers, hlines, and the drawing layer keep a stable host. Changing type swaps the LWC series and rebinds data without a full history reload.
 
+The price-scale **gear** (and chart context menu) opens **Chart type & scale**: type, interval, log / auto scale, last-value / plot-name / price-scale labels. That panel is not app-wide Settings. Chrome, live stream, MCP, keys, editor, and theme live under **Studio → Settings** (or ⌘K **Open Settings**) — see [Manager and settings](/axis/docs/enduser/guides/manager-and-settings).
+
 ### Empty / status overlay
 
 When `bars.length === 0`, ChartHost shows contextual title/sub from `store.status` (loading, error, running, or “Load data to begin”).

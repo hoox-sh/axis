@@ -105,14 +105,17 @@ Paste the returned IDs into your local `wrangler.toml` (from the example).
 | `/api/market/mexc/klines` | GET | Allowlisted MEXC klines proxy (native intervals; `1h`→`60m`) |
 | `/api/market/mexc/ticker/24hr` | GET | Allowlisted MEXC 24hr ticker (`symbol=` optional; else full book) |
 | `/api/market/mexc/exchangeInfo` | GET | Allowlisted MEXC exchangeInfo proxy |
-| `/api/onchain/llama/protocols` | GET | DefiLlama protocols (allowlisted) |
+| `/api/onchain/llama/protocols` | GET | DefiLlama protocol search list (slimmed, 10/min/IP, 1 MiB cap) |
 | `/api/onchain/llama/protocol/:slug` | GET | DefiLlama protocol TVL history |
 | `/api/onchain/gecko/networks/:net/pools/:addr/ohlcv/:tf` | GET | GeckoTerminal pool OHLCV |
 | `/api/onchain/gecko/search/pools` | GET | GeckoTerminal pool search |
 
 **On-chain proxy** is public (no API key), allowlisted only — not an open reverse proxy.
 The PWA uses `{endpoint}/api/onchain/llama` and `…/gecko` by default when `store.endpoint`
-points at this Worker (CORS-safe DefiLlama / GeckoTerminal).
+points at this Worker (CORS-safe DefiLlama / GeckoTerminal). `/api/onchain/health` is a
+small unmetered JSON. Data routes are 120 GET/min per IP; `GET /api/onchain/llama/protocols`
+is 10/min per IP, slims the ~9.5 MB DefiLlama dump to `{slug,name,tvl,category}` (1 MiB
+guest cap), and advertises `RateLimit-Limit`. Oversize upstream bodies return 413.
 
 **Script library auth:** `Authorization: Bearer <api_key>` (same Pro keys as `/api/keys`).
 Scripts are partitioned by a hash of the key. Without D1, an in-memory store is used

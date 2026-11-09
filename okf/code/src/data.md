@@ -7,7 +7,7 @@ tags: [code, data]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-07T12:59:09Z
+  at: 2026-11-09T05:20:23Z
 sources:
   - id: tree
     resource: "src/data"
@@ -21,7 +21,7 @@ okf_lock: generated
 * `background-catchup.ts` — BACKGROUND_CATCHUP_THROTTLE_MS, TrailingGap, _resetBackgroundCatchupForTests, _resetBackgroundCatchupListenersForTests, _setBackgroundCatchupLastRepairForTests, detectTrailingGap, repairChartGapsAfterBackground, startBackgroundCatchup
 * `bars-cache.ts` — BARS_CACHE_MAX, BARS_CACHE_MAX_SERIES, BarLoadWindow, BarsCacheMeta, BarsCacheRecord, BarsKeyLock, _resetBarsCacheForTests, barsCacheKey, clearAllCachedBars, clearCachedBars, countBarsForLoad, flushPendingIdbPuts
 * `bars-gaps.ts` — BarGap, CoverageReport, CoverageSegment, alignDown, buildCoverageMap, expectedBarsInSpan, findBarGaps, intervalToSec, mergeGaps, validateBarCoverage
-* `binance-http.ts` — BINANCE_INVERSE_REST_HOSTS, BINANCE_LINEAR_REST_HOSTS, BINANCE_REST_HOSTS, BinanceFetchOpts, BinanceRestPath, DEFAULT_MARKET_WORKER_BASE, binanceKlineWsUrls, binanceTickerWsUrls, fetchBinanceJson, resolveMarketWorkerBase
+* `binance-http.ts` — BINANCE_INVERSE_REST_HOSTS, BINANCE_LINEAR_REST_HOSTS, BINANCE_REST_HOSTS, BinanceFetchOpts, BinanceRestPath, DEFAULT_MARKET_WORKER_BASE, _resetBinanceHttpWarnForTests, binanceKlineWsUrls, binanceTickerWsUrls, fetchBinanceJson, isPublicBinanceRestOrigin, resolveMarketWorkerBase
 * `ccxt-session.ts` — bindCcxtSession, unbindCcxtSession
 * `credentials.ts` — CREDENTIALS_MEMORY_ONLY, CredentialMeta, ExchangeCredential, activeCcxtExchange, activeCcxtGateway, ccxtCredentialId, clearCredentials, deleteCredential, getCcxtCredential, getCredential, getCredentialForVenue, hasCcxtCredential
 * `data-manager-source.ts` — DATA_MANAGER_SOURCE_ID, DataManagerSelection, ResolvedCacheSeries, clearDataManagerSelection, dataManagerCacheKey, dataManagerLabel, getDataManagerSelection, resolveDataManagerBars, resolveDataManagerVenueSource, setDataManagerSelection
@@ -48,7 +48,7 @@ okf_lock: generated
 * `watchlist-daily.ts` — KlineTuple, _resetDailyCloseCacheForTests, dailyCloseDayKey, dailyCloseSourceKey, fetchDailyCloses, previousDailyCloseFromKlines, sourceSupportsDailyClose
 * `watchlist-live.ts` — QuoteMuxHandle, QuoteMuxStatus, QuoteUpdate, StartWatchlistQuotesOpts, parseBinanceTickerMessage, startWatchlistQuotes
 * `watchlist-tickers.ts` — WATCHLIST_INTERVALS, WATCHLIST_REFRESH_OPTIONS, WatchTicker, coinbaseProduct, fetchWatchlistTickers, okxInst, resolveQuoteSourceId, sourceSupportsRestPoll, toUsdt
-* `worker-origin.ts` — DEFAULT_AXIS_WORKER_BASE, looksLikeOnchainWorkerEndpoint, normalizeEndpointBase
+* `worker-origin.ts` — DEFAULT_AXIS_WORKER_BASE, browserBlocksDirectCexRest, looksLikeOnchainWorkerEndpoint, normalizeEndpointBase
 
 # Packages
 

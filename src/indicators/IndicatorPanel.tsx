@@ -476,7 +476,7 @@ export const IndicatorPanel: Component = () : JSX.Element => {
                   </span>
                   <p class="ax-scripts-empty-title">No scripts yet</p>
                   <p class="ax-scripts-empty-sub">
-                    Add a first-party built-in, or run Pine from the editor.
+                    Run the editor script, or add a built-in from the catalog.
                   </p>
                   <div class="ax-scripts-empty-actions">
                     <button

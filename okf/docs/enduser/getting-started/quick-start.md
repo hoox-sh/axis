@@ -1,13 +1,13 @@
 ---
 type: "Document"
 title: "Quick start"
-description: "First historical load, first Pine Run, live stream, and reading the Results drawer in AXIS."
+description: "First-run candles, Add to chart / Run, live stream, and reading the Results drawer in AXIS."
 resource: "docs/enduser/getting-started/quick-start.mdx"
 tags: [doc, docs, enduser, getting-started]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:02:55Z
+  at: 2026-11-09T05:20:23Z
 sources:
   - id: tree
     resource: "docs/enduser/getting-started/quick-start.mdx"
@@ -25,9 +25,9 @@ Repo path `docs/enduser/getting-started/quick-start.mdx`.
 * Abstract
 * Conceptual model
 * Interface surface
-  * 1. Load history
+  * 1. History on the chart
   * 2. Minimal script
-  * 3. Run
+  * 3. Run / Add to chart
   * 4. Read Results
   * 5. Live (optional)
   * 6. Save a script (optional)

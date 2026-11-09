@@ -2,8 +2,9 @@
  * Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
  * SPDX-License-Identifier: AGPL-3.0-only
  *
- * Empty store state — capsules render dashes/offline until a session seeds
- * symbols, engine status, and connection health.
+ * Empty store state — scanline capsules render dashes/offline until a session
+ * seeds symbols, engine status, and connection health. Click a chip for the
+ * inspector; hover does not open it.
  */
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
 import { StatusBar } from '../ui/StatusBar';

@@ -82,7 +82,7 @@ export function deriveSyntaxPack(
   tokens: ThemeTokens,
   base: 'dark' | 'light',
 ): SyntaxPack {
-  const accent = tok(tokens, 'ui.accent', base === 'light' ? '#5A6AD4' : '#939FFF');
+  const accent = tok(tokens, 'ui.accent', base === 'light' ? '#4A59C4' : '#939FFF');
   const up = tok(tokens, 'ui.up', tok(tokens, 'bar.up.color', '#3DDC97'));
   const down = tok(tokens, 'ui.down', tok(tokens, 'bar.down.color', '#F07178'));
   return {

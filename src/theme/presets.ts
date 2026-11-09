@@ -94,7 +94,7 @@ export const PRESET_VOID_LIGHT: ThemePreset = {
     'baseline.top_fill2': 'rgba(46, 158, 88, 0.03)',
     'baseline.bottom_fill1': 'rgba(196, 69, 56, 0.03)',
     'baseline.bottom_fill2': 'rgba(196, 69, 56, 0.20)',
-    'ui.accent': '#5a6ad4',
+    'ui.accent': '#4a59c4',
     'ui.up': '#2e9e58',
     'ui.down': '#c44538',
   }),

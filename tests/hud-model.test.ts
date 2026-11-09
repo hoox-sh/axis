@@ -18,10 +18,12 @@ import {
   isLocalEndpoint,
   isWorkerEndpoint,
   composeCaption,
+  lastTickForSymbol,
   liveBadgeLabel,
   liveBadgeTone,
   liveBadgeWord,
   liveIndicatorTitle,
+  worstFeedStatus,
   normalizeExecMode,
   transportToPath,
 } from '../src/ui/hud-model';
@@ -132,6 +134,88 @@ describe('liveBadgeLabel / liveBadgeTone', () => {
     ).toBe('Reconnecting · attempt 1/8 in 1000ms — click to stop');
   });
 
+  it('is not Live when the engine wire is closed', () => {
+    const closed = liveBadgeTone({
+      liveActive: true,
+      streamStatus: 'connected',
+      wireOpen: false,
+    });
+    expect(closed).toBe('degraded');
+    expect(liveBadgeWord(closed)).toBe('Degraded');
+    expect(liveBadgeWord(closed)).not.toBe('Live');
+    expect(
+      liveBadgeLabel({ liveActive: true, streamStatus: 'connected', wireOpen: false }),
+    ).toBe('Degraded');
+  });
+
+  it('is not Live when the stream or script path is degraded', () => {
+    expect(
+      liveBadgeTone({
+        liveActive: true,
+        streamStatus: 'connected',
+        streamState: 'degraded',
+      }),
+    ).toBe('degraded');
+    expect(
+      liveBadgeWord(
+        liveBadgeTone({
+          liveActive: true,
+          streamStatus: 'connected',
+          feedStatus: 'degraded',
+        }),
+      ),
+    ).toBe('Degraded');
+    expect(
+      liveBadgeLabel({
+        liveActive: true,
+        streamStatus: 'connected',
+        feedStatus: 'degraded',
+      }),
+    ).toBe('Degraded');
+    expect(
+      liveIndicatorTitle({
+        liveActive: true,
+        streamStatus: 'connected',
+        feedStatus: 'degraded',
+        detail: 'websocket · no-auth',
+      }),
+    ).toBe('Degraded · websocket · no-auth — click to stop');
+  });
+
+  it('names REST when the live path is REST poll, not a live wire', () => {
+    expect(
+      liveBadgeTone({
+        liveActive: true,
+        streamStatus: 'connected',
+        transport: 'rest',
+      }),
+    ).toBe('rest');
+    expect(
+      liveBadgeWord(
+        liveBadgeTone({ liveActive: true, streamStatus: 'connected', transport: 'rest' }),
+      ),
+    ).toBe('REST');
+  });
+
+  it('keeps Live while reconnecting even if the plane is marked degraded', () => {
+    expect(
+      liveBadgeTone({
+        liveActive: true,
+        streamStatus: 'connecting',
+        streamState: 'degraded',
+      }),
+    ).toBe('reconnect');
+    expect(
+      liveBadgeWord(
+        liveBadgeTone({
+          liveActive: true,
+          streamStatus: 'connecting',
+          streamState: 'degraded',
+        }),
+      ),
+    ).toBe('Live');
+  });
+
   it('does not claim delayed when the socket is not open', () => {
     expect(
       liveBadgeLabel({
@@ -149,6 +233,27 @@ describe('liveBadgeLabel / liveBadgeTone', () => {
         now: 9_000,
       }),
     ).toBe('Offline — click to stop');
+  });
+});
+
+describe('lastTickForSymbol', () => {
+  it('drops a last tick from the previous symbol', () => {
+    expect(lastTickForSymbol({ price: 75128, symbol: 'BTCUSDT' }, 'ETHUSDT')).toBeNull();
+    expect(lastTickForSymbol({ price: 3000, symbol: 'ETHUSDT' }, 'ETHUSDT')?.price).toBe(3000);
+    expect(lastTickForSymbol(null, 'ETHUSDT')).toBeNull();
+  });
+
+  it('keeps a legacy tick with no symbol stamp', () => {
+    expect(lastTickForSymbol({ price: 1 }, 'BTCUSDT')?.price).toBe(1);
+  });
+});
+
+describe('worstFeedStatus', () => {
+  it('picks error then degraded over live', () => {
+    expect(worstFeedStatus(['live', 'degraded'])).toBe('degraded');
+    expect(worstFeedStatus(['live', 'error', 'degraded'])).toBe('error');
+    expect(worstFeedStatus(['live'])).toBe('live');
+    expect(worstFeedStatus([])).toBeNull();
   });
 });
 

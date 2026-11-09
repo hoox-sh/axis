@@ -7,7 +7,7 @@ tags: [code, theme]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-03T12:55:14Z
+  at: 2026-11-09T05:20:23Z
 sources:
   - id: tree
     resource: "src/theme"
@@ -18,7 +18,7 @@ okf_lock: generated
 
 # Files
 
-* `apply.ts` — applyThemeToChart, applyThemeToDocument, applyThemeToPriceSeries, buildAreaSeriesOptions, buildBarSeriesOptions, buildBaselineSeriesOptions, buildCandleSeriesOptions, buildChartOptionsFromTokens, buildChromeCssVars, buildLineSeriesOptions, isLoudBorder, pineHostColors
+* `apply.ts` — TEXT_CONTRAST_MIN, applyThemeToChart, applyThemeToDocument, applyThemeToPriceSeries, buildAreaSeriesOptions, buildBarSeriesOptions, buildBaselineSeriesOptions, buildCandleSeriesOptions, buildChartOptionsFromTokens, buildChromeCssVars, buildLineSeriesOptions, contrastRatioHex
 * `bar-packs.ts` — BUILTIN_BAR_THEMES, builtinBarThemeId, getBuiltinBarTheme, isBuiltinBarThemeId, resolveBarColorTheme
 * `catalog.ts` — THEME_GROUPS, THEME_TOKEN_DEFS, TOKEN_ALIASES, canonicalTokenKey, catalogDefaults, getTokenDef, pineColorMap, tokensForGroup
 * `community-presets.ts` — COMMUNITY_PRESETS, PRESET_AYU_DARK, PRESET_AYU_LIGHT, PRESET_AYU_MIRAGE, PRESET_NORD, PRESET_ONE_DARK, PRESET_ROSE_PINE, PRESET_ROSE_PINE_MOON, PRESET_TOKYO_NIGHT, PRESET_TOKYO_NIGHT_STORM

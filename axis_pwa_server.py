@@ -20,7 +20,7 @@ class Handler(SimpleHTTPRequestHandler):
         if self.path.startswith("/assets/"):
             self.send_header("Cache-Control", "public, max-age=31536000, immutable")
         else:
-            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Cache-Control", "public, max-age=0, must-revalidate")
         # HP PR 2 — popup-safe isolation pair (lockstep with src/hp/isolation-headers.ts)
         self.send_header("Cross-Origin-Opener-Policy", "same-origin")
         self.send_header("Cross-Origin-Embedder-Policy", "credentialless")

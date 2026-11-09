@@ -33,3 +33,26 @@ export function appVersion(): string {
 
 /** Current app version (evaluated once at module load). */
 export const APP_VERSION: string = appVersion();
+
+/**
+ * Git SHA of the build (Vite `VITE_GIT_SHA`). Empty in unit tests / unsynced
+ * trees. Deployed identity is version + git in dist/version.json.
+ */
+export function gitSha(): string {
+  try {
+    const stamped = (import.meta as ImportMeta & { env?: ImportMetaEnv }).env?.['VITE_GIT_SHA'];
+    const v = String(stamped || '').trim();
+    if (v) return v;
+  } catch {
+    /* bun tests */
+  }
+  return '';
+}
+
+/** `2.28.0+abc1234def56` when a SHA is baked, else the semver. */
+export function appIdentity(version: string = APP_VERSION, sha: string = gitSha()): string {
+  const v = String(version || '').trim();
+  const g = String(sha || '').trim();
+  if (v && g) return `${v}+${g.slice(0, 12)}`;
+  return v;
+}

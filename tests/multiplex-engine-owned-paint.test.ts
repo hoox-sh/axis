@@ -37,6 +37,7 @@ import {
 } from '../src/streams/multiplex';
 import { SAMPLE_BARS } from './fixtures/bars';
 import type { Bar } from '../src/store/types';
+import { setEngineApiKey } from '../src/storage/vault';
 
 const ENDPOINT = 'http://pro.test';
 
@@ -69,7 +70,8 @@ beforeEach(() => {
   );
   setStore('endpoint', ENDPOINT);
   // These tests mock the REST data-session routes; WS-first would bypass them.
-  setStore('pluginsConfig', { 'engine:server': { preferWs: false } });
+  setStore('pluginsConfig', { 'engine:server': { preferWs: false, apiKey: 'test-key' } });
+  setEngineApiKey('server', 'test-key');
   setStore('source', 'binance-rest');
   setStore('symbol', 'BTCUSDT');
   setStore('interval', '1h');
@@ -96,6 +98,7 @@ afterEach(() => {
   stopLive();
   _resetMultiplexForTests();
   _setCachedEngineCapabilitiesForTests(null);
+  setEngineApiKey('server', '');
   restoreFetch?.();
   restoreFetch = null;
 });
@@ -777,6 +780,49 @@ describe('engine-owned live paint', () => {
     expect(store.live.needsRerun).toBe(false);
     const repaired = await waitFor(() => calls.length > 0, 2000);
     expect(repaired).toBe(true);
+  });
+
+  it('does not GET /data/series/bars without an engine API key', async () => {
+    setEngineApiKey('server', '');
+    setStore('pluginsConfig', { 'engine:server': { preferWs: false } });
+    const last = SAMPLE_BARS[SAMPLE_BARS.length - 1]!;
+    let barsGets = 0;
+    restoreFetch = mockFetch(async (input, init) => {
+      const url = new URL(String(input));
+      const method = String(init?.method || 'GET').toUpperCase();
+      if (method === 'GET' && url.pathname === '/data/series/bars') {
+        barsGets += 1;
+        return jsonResponse({ status: 'success', bars: SAMPLE_BARS }, 401);
+      }
+      return jsonResponse({ status: 'error', code: 'NOT_FOUND' }, 404);
+    });
+    registerDynamicStream({
+      id: 'eo-guest-stream',
+      name: 'EO guest',
+      kind: 'stream',
+      start({ onBar, onStatus }) {
+        onStatus({ state: 'open' });
+        const t = setTimeout(
+          () =>
+            onBar({
+              time: last.time + 3600,
+              open: last.close,
+              high: last.close + 1,
+              low: last.close - 1,
+              close: last.close + 1,
+              volume: last.volume,
+            }),
+          10,
+        );
+        return () => clearTimeout(t);
+      },
+    });
+    startLive('eo-guest-stream', 'BTCUSDT', '1h');
+    await new Promise((r) => setTimeout(r, 60));
+    await _awaitEnginePaintForTests();
+    expect(barsGets).toBe(0);
+    // Venue paint still advances the chart (honest degraded, not a fake Live engine).
+    expect(store.bars[store.bars.length - 1]?.time).toBe(last.time + 3600);
   });
 });
 

@@ -75,7 +75,7 @@ void registerAxisServiceWorker({
       // Banner stays VERSION-gated on purpose — bump VERSION to prompt.
       try {
         console.info(
-          '[axis] service worker update waiting; version.json unchanged — bump VERSION to surface the update banner',
+          '[axis] service worker update waiting; version.json identity unchanged — a same-SHA deploy will not banner',
         );
       } catch {
         /* logging must never break the update flow */

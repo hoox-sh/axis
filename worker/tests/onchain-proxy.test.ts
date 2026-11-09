@@ -8,7 +8,15 @@
  */
 
 import { describe, expect, it, beforeEach, afterEach, mock } from 'bun:test';
-import { handleOnchain, _resetOnchainCacheForTests } from '../src/onchain';
+import {
+  handleOnchain,
+  slimLlamaProtocols,
+  LLAMA_PROTOCOLS_RATE_LIMIT,
+  LLAMA_PROTOCOLS_RESPONSE_MAX_BYTES,
+  ONCHAIN_IP_LIMIT,
+  ONCHAIN_UPSTREAM_MAX_BYTES,
+  _resetOnchainCacheForTests,
+} from '../src/onchain';
 import { _resetRateLimitsForTests } from '../src/rate-limit';
 import type { Env } from '../src/index';
 
@@ -102,6 +110,7 @@ describe('handleOnchain llama proxy', () => {
       );
       expect(r1!.status).toBe(200);
       expect(r1!.headers.get('X-Axis-Onchain-Cache')).toBe('MISS');
+      expect(r1!.headers.get('RateLimit-Limit')).toBe(String(LLAMA_PROTOCOLS_RATE_LIMIT));
       const j1 = (await r1!.json()) as Array<{ slug: string }>;
       expect(j1[0]?.slug).toBe('aave');
 
@@ -325,6 +334,92 @@ describe('handleOnchain gecko proxy', () => {
   });
 });
 
+describe('handleOnchain llama protocols size cap', () => {
+  it('slims a fat DefiLlama dump so a guest never receives multi-MB JSON', async () => {
+    const originalFetch = globalThis.fetch;
+    const fat = [
+      {
+        slug: 'aave',
+        name: 'Aave',
+        tvl: 5,
+        category: 'Lending',
+        chainTvls: { Ethereum: 1, Polygon: 1 },
+        tokens: { AAVE: 'x'.repeat(4000) },
+      },
+      {
+        slug: 'uniswap',
+        name: 'Uniswap',
+        tvl: 9,
+        extra: { history: 'y'.repeat(4000) },
+      },
+    ];
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify(fat), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })) as typeof fetch;
+    try {
+      const res = await handleOnchain(
+        req('/api/onchain/llama/protocols'),
+        env,
+        origin,
+        '/api/onchain/llama/protocols',
+      );
+      expect(res!.status).toBe(200);
+      const body = (await res!.json()) as Array<Record<string, unknown>>;
+      expect(body).toHaveLength(2);
+      expect(body[0]?.slug).toBe('uniswap');
+      expect(body[0]?.tvl).toBe(9);
+      expect(body[0]?.tokens).toBeUndefined();
+      expect(body[0]?.extra).toBeUndefined();
+      expect(body[0]?.chainTvls).toBeUndefined();
+      expect(body[1]?.slug).toBe('aave');
+      expect(body[1]?.category).toBe('Lending');
+      const bytes = new TextEncoder().encode(JSON.stringify(body)).byteLength;
+      expect(bytes).toBeLessThan(LLAMA_PROTOCOLS_RESPONSE_MAX_BYTES);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('truncates a slim list that still exceeds the guest byte cap', () => {
+    const rows = Array.from({ length: 80_000 }, (_, i) => ({
+      slug: `p${i}`,
+      name: `Protocol ${i}`,
+      tvl: 80_000 - i,
+      category: 'Dexes',
+    }));
+    const slim = slimLlamaProtocols(JSON.stringify(rows), 8_192);
+    expect(slim).not.toBeNull();
+    const bytes = new TextEncoder().encode(slim!).byteLength;
+    expect(bytes).toBeLessThanOrEqual(8_192);
+    const parsed = JSON.parse(slim!) as Array<{ slug: string }>;
+    expect(parsed.length).toBeGreaterThan(0);
+    expect(parsed.length).toBeLessThan(rows.length);
+    expect(parsed[0]?.slug).toBe('p0');
+  });
+
+  it('rejects an over-cap gecko body with 413 PAYLOAD_TOO_LARGE', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response('{"data":true}', {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': String(ONCHAIN_UPSTREAM_MAX_BYTES + 1),
+        },
+      })) as typeof fetch;
+    const path = `/api/onchain/gecko/networks/eth/pools/${WETH_USDC_POOL}/ohlcv/hour`;
+    try {
+      const res = await handleOnchain(req(path), env, origin, path);
+      expect(res!.status).toBe(413);
+      expect((await res!.json()).code).toBe('PAYLOAD_TOO_LARGE');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
 describe('handleOnchain abuse controls (A5)', () => {
   it('coalesces concurrent identical fetches into one upstream call', async () => {
     let calls = 0;
@@ -356,18 +451,54 @@ describe('handleOnchain abuse controls (A5)', () => {
     }
   });
 
-  it('rate-limits per IP after the shared window (A5)', async () => {
+  it('leaves on-chain health unmetered', async () => {
+    let last: Response | null = null;
+    for (let i = 0; i < ONCHAIN_IP_LIMIT + 5; i++) {
+      last = await handleOnchain(req('/api/onchain/health'), env, origin, '/api/onchain/health');
+    }
+    expect(last!.status).toBe(200);
+    expect((await last!.json()).status).toBe('healthy');
+  });
+
+  it('rate-limits llama/protocols per IP and advertises the limit', async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (async () =>
-      new Response(JSON.stringify([]), {
+      new Response(JSON.stringify([{ slug: 'aave', name: 'Aave', tvl: 1 }]), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       })) as typeof fetch;
     try {
       let last: Response | null = null;
-      for (let i = 0; i < 121; i++) {
+      for (let i = 0; i < LLAMA_PROTOCOLS_RATE_LIMIT + 1; i++) {
+        last = await handleOnchain(
+          req('/api/onchain/llama/protocols'),
+          env,
+          origin,
+          '/api/onchain/llama/protocols',
+        );
+      }
+      expect(last!.status).toBe(429);
+      expect(last!.headers.get('Retry-After')).toBe('60');
+      expect(last!.headers.get('RateLimit-Limit')).toBe(String(LLAMA_PROTOCOLS_RATE_LIMIT));
+      expect((await last!.json()).code).toBe('RATE_LIMIT');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('rate-limits other on-chain data routes after the shared window', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ data: { attributes: { ohlcv_list: [] } } }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })) as typeof fetch;
+    const path = `/api/onchain/gecko/networks/eth/pools/${WETH_USDC_POOL}/ohlcv/hour`;
+    try {
+      let last: Response | null = null;
+      for (let i = 0; i < ONCHAIN_IP_LIMIT + 1; i++) {
         _resetOnchainCacheForTests();
-        last = await handleOnchain(req('/api/onchain/health'), env, origin, '/api/onchain/health');
+        last = await handleOnchain(req(path), env, origin, path);
       }
       expect(last!.status).toBe(429);
       expect((await last!.json()).code).toBe('RATE_LIMIT');

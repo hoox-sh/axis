@@ -7,7 +7,7 @@ tags: [code]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-04T22:58:58Z
+  at: 2026-11-09T05:20:23Z
 sources:
   - id: tree
     resource: "src"
@@ -23,7 +23,7 @@ okf_lock: generated
 * `debug.ts` — AXIS_DEBUG_ENV_ALIAS, AXIS_DEBUG_ENV_KEY, AXIS_DEBUG_LOG_FILES, AXIS_DEBUG_LOG_FILE_BYTES, AXIS_DEBUG_LOG_PREFIX, AXIS_DEBUG_STORAGE_KEY, AXIS_DEBUG_TICK_SAMPLE_MS, AxisDebugData, AxisDebugScope, AxisDebugSource, announceAxisDebug, axisDebug
 * `index.tsx`
 * `maintenance.ts` — isMaintenanceMode
-* `version.ts` — APP_VERSION, BAKED_APP_VERSION, appVersion
+* `version.ts` — APP_VERSION, BAKED_APP_VERSION, appIdentity, appVersion, gitSha
 * `vite-env.d.ts`
 
 # Other files

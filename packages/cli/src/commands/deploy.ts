@@ -5,6 +5,7 @@
  * axis deploy — Worker and/or Cloudflare Pages
  */
 
+import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import type { Command } from 'commander';
 import { getPaths } from '../utils/paths.js';
@@ -30,6 +31,26 @@ import {
 } from '../utils/format.js';
 
 const PAGES_PROJECT = 'axis';
+
+/** `git rev-parse HEAD` in `cwd`, or empty when git is missing. */
+export function gitHeadSha(cwd: string): string {
+  const r = spawnSync('git', ['-C', cwd, 'rev-parse', 'HEAD'], {
+    encoding: 'utf8',
+    timeout: 10_000,
+  });
+  if (r.status !== 0) return '';
+  return String(r.stdout ?? '').trim();
+}
+
+/**
+ * wrangler `--define WORKER_GIT_SHA:"<sha>"` so `/health` can prove the
+ * deployed isolate matches a commit. Empty SHA → no define (local tests).
+ */
+export function wranglerGitDefine(sha: string): string[] {
+  const v = String(sha ?? '').trim();
+  if (!/^[0-9a-f]{7,40}$/i.test(v)) return [];
+  return ['--define', `WORKER_GIT_SHA:${JSON.stringify(v)}`];
+}
 
 /** Last workers.dev URL printed by `wrangler deploy`. */
 export function parseDeployedWorkerUrl(output: string): string | undefined {
@@ -96,8 +117,13 @@ export async function deployWorker(
 
   printInfo('wrangler deploy…', opts.quiet);
 
+  const gitSha = gitHeadSha(paths.root);
+  if (gitSha) {
+    printInfo(`Worker git SHA ${gitSha.slice(0, 12)}`, opts.quiet);
+  }
+
   // Always capture so a failure never re-invokes deploy, and so we can parse the URL.
-  const result = await runWrangler(paths.worker, ['deploy'], {
+  const result = await runWrangler(paths.worker, ['deploy', ...wranglerGitDefine(gitSha)], {
     inherit: false,
     throwOnError: false,
   });

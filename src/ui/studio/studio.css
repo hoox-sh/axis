@@ -638,7 +638,7 @@
   border-color: var(--color-border);
 }
 .ax-btn:active:not(:disabled) {
-  transform: scale(0.98);
+  transform: translateY(var(--ui-press-y, 1px));
 }
 .ax-btn:focus-visible {
   outline: none;
@@ -1544,7 +1544,8 @@ select.ax-select:not(.ax-select--bare):focus {
   height: 1.5rem;
 }
 .ax-range:focus-visible {
-  outline: none;
+  outline: 2px solid color-mix(in srgb, var(--color-accent) 70%, transparent);
+  outline-offset: 2px;
 }
 
 /* ── Range shell (StudioRange) ────────────────────────────────── */
@@ -1915,7 +1916,10 @@ button.ax-card:focus-visible {
   border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-border));
   background: color-mix(in srgb, var(--color-bg-hover) 50%, var(--color-bg-panel));
   box-shadow: var(--ax-shadow-card);
-  outline: none;
+}
+button.ax-card:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-accent) 70%, transparent);
+  outline-offset: 1px;
 }
 button.ax-card:active {
   transform: scale(0.995);
@@ -2024,13 +2028,12 @@ span.ax-chip,
   color: var(--color-text);
   border-color: var(--color-border);
   background: var(--color-bg-hover);
-  outline: none;
 }
 .ax-chip:active:not(:disabled) {
-  transform: scale(0.97);
+  transform: translateY(var(--ui-press-y, 1px));
 }
 .ax-chip:focus-visible {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 20%, transparent);
+  box-shadow: var(--ui-focus-ring-inset, inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 70%, transparent));
 }
 .ax-chip:disabled,
 .ax-chip.is-disabled {
@@ -2040,10 +2043,11 @@ span.ax-chip,
 .ax-chip.is-on,
 .ax-chip[aria-pressed='true'],
 .ax-chip[aria-selected='true'] {
-  border-color: var(--color-accent);
+  border-color: var(--color-border);
   color: var(--color-accent);
   background: color-mix(in srgb, var(--color-accent) 12%, transparent);
   font-weight: 600;
+  box-shadow: var(--ui-focus-ring-inset, inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 70%, transparent));
 }
 .ax-chip.is-on:hover:not(:disabled),
 .ax-chip[aria-pressed='true']:hover:not(:disabled) {
@@ -2240,7 +2244,10 @@ span.ax-chip,
 .ax-json-twist:focus-visible {
   color: var(--color-text);
   background: color-mix(in srgb, var(--color-bg-hover) 80%, transparent);
-  outline: none;
+}
+.ax-json-twist:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-accent) 70%, transparent);
+  outline-offset: 0;
 }
 span.ax-json-twist {
   cursor: default;
@@ -2311,7 +2318,10 @@ span.ax-json-twist {
 .ax-json-more:hover,
 .ax-json-more:focus-visible {
   color: var(--color-text);
-  outline: none;
+}
+.ax-json-more:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-accent) 70%, transparent);
+  outline-offset: 1px;
 }
 @media (prefers-reduced-motion: reduce) {
   .ax-json-twist svg {
@@ -2364,7 +2374,6 @@ span.ax-json-twist {
 .ax-tab:hover,
 .ax-tab:focus-visible {
   color: var(--color-text);
-  outline: none;
 }
 .ax-tab:hover:not([aria-selected='true']) {
   background: color-mix(in srgb, var(--color-bg-hover) 70%, transparent);
@@ -2546,7 +2555,10 @@ span.ax-json-twist {
 .ax-wire-preset:hover,
 .ax-wire-preset:focus-visible {
   background: var(--color-bg-hover);
+}
+.ax-wire-preset:focus-visible {
   outline: none;
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--color-accent) 55%, transparent);
 }
 .ax-wire-preset.is-base {
   background: color-mix(in srgb, var(--color-bg-hover) 70%, transparent);
@@ -2881,7 +2893,8 @@ span.ax-json-twist {
 .ax-results-script select:focus,
 .ax-results-script select:focus-visible,
 .ax-results-script .ax-select:focus-visible {
-  outline: none;
+  outline: 2px solid color-mix(in srgb, var(--color-accent) 70%, transparent);
+  outline-offset: 0;
   border-color: var(--color-accent);
 }
 

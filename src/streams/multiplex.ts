@@ -729,10 +729,14 @@ export function startLive(
       // Engine-owned live mode: the venue WS is only a trigger. Advance the
       // engine's store, paint the engine's bars (so candles and indicators
       // align), then rerun indicators — each ticks its own engine session.
+      // No API key → keep venue paint. `/data/series/bars` would 401.
       if (isEngineOwnedLive()) {
-        if (!isLivePaintAllowed()) return;
-        paintEngineOwned(ordered);
-        return;
+        const engineKey = String((getActiveEngineConfig() || {})['apiKey'] || '').trim();
+        if (engineKey) {
+          if (!isLivePaintAllowed()) return;
+          paintEngineOwned(ordered);
+          return;
+        }
       }
       appendVenueBars(ordered);
     } catch {
@@ -762,8 +766,8 @@ export function startLive(
     }
     const cfg = getActiveEngineConfig() || {};
     const endpoint = String(cfg['endpoint'] || '');
-    const apiKey = String(cfg['apiKey'] || '');
-    if (!endpoint) return;
+    const apiKey = String(cfg['apiKey'] || '').trim();
+    if (!endpoint || !apiKey) return;
     const key = { exchange: exchangeForSource(store.source), symbol: sym, interval: iv };
     const limit = chartWindowLimit();
     // Venue `closed` flags for bar-close rerun gating (engine bars carry no

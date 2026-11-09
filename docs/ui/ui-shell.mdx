@@ -34,7 +34,7 @@ The shell is the non-canvas chrome: navigation of axes, market selection, modals
 
 | Component | Path | Role |
 | --- | --- | --- |
-| Topbar | `ui/Topbar.tsx` | Axes pickers, Load/Run/Live, theme, modals |
+| Topbar | `ui/Topbar.tsx` | Axes pickers, Add to chart / Run, Live, theme, modals |
 | Watchlist | `ui/Watchlist.tsx` | Symbols, quotes, folders, click-to-load |
 | StatusBar | `ui/StatusBar.tsx` | Status, engine/storage badges, trade snippet |
 | StudioHost | `ui/studio/StudioHost.tsx` | Full-page Runtime / Wire / Settings / Workers / Plugins / Debug |
@@ -214,6 +214,7 @@ Single row:
   - Tick pulse (fixed-width price + age)
   - **Compose** chip — engine, source, stream, and storage. Opens Data or Studio.
   - **Diagnostics** expands the raw eng / run / mode / path / src / str / sto chips. The preference persists (`telemetry.hud.diagnostics`).
+  - Click (or keyboard) a HUD chip for the inspector dialog above the rail. Hover does not open it. Esc or a second click closes.
 - **Right** — `status` / `statusMessage`, strategy snippet, bar / scripts / pane counts
 
 Connect MCP is a command-palette and mobile More action, not a status-bar chip.

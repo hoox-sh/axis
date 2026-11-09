@@ -113,7 +113,12 @@ export interface ProxyRouterOptions {
    * Per-IP abuse budget for every route behind this prefix (A5). The public
    * proxies have no auth, so a shared per-IP window is the only backstop.
    */
-  ipLimit?: { limit: number; windowMs: number };
+  ipLimit?: {
+    limit: number;
+    windowMs: number;
+    /** When true, `/` and `/health` do not consume the budget. */
+    skipHealth?: boolean;
+  };
 }
 
 /**
@@ -180,6 +185,11 @@ export function createProxyRouter(opts: ProxyRouterOptions): ProxyRouter {
       if (req.method !== 'GET') return Promise.resolve(methodNotAllowed('GET', { origin, cors }));
 
       const json = proxyJson(cors);
+      const isHealth = rel === '/' || rel === '/health';
+
+      if (isHealth && opts.ipLimit?.skipHealth) {
+        return Promise.resolve(json(health(), 200, origin));
+      }
 
       if (opts.ipLimit) {
         const ip = clientIp(req);
@@ -192,7 +202,7 @@ export function createProxyRouter(opts: ProxyRouterOptions): ProxyRouter {
         }
       }
 
-      if (rel === '/' || rel === '/health') return Promise.resolve(json(health(), 200, origin));
+      if (isHealth) return Promise.resolve(json(health(), 200, origin));
 
       for (const route of routes) {
         const params = matches(route, rel);

@@ -456,7 +456,7 @@ Interface surface
 | Path | Implementation | Notes |
 | --- | --- | --- |
 | Engine server | src/engines/catalog.ts | Prefer WS ws(s)://{endpoint}/ws/run (preferWs default true), else POST {endpoint}/run?mode= with { script, data, mode, inputs?, profiler?, libraries? }. Modes interpret \| compile \| auto. Timeout scales with bar count (45–180s). Default endpoint http://localhost:5002. Live sessions (Pro API 0.6.9+, interpret only): genuine live ticks (EngineOpts.liveTick) go through src/engines/live-sessions.ts — POST /session, /tick (O(1)), /append (O(delta)) — with silent fallback to the full run on any miss. Only engaged for interpret runs: the configured mode must be interpret, or the backend must have reported interpret for the last full run of the same script (auto). Scripts whose inputs hold expanded input.source series stay on /run — a session freezes its inputs at create. |
-| Engine pyodide | same file | Self-hosted Pyodide 0.29.5 (/pyodide/v0.29.5/, Python 3.13), wheels /vendor/pynescript-0.6.12-py3-none-any.whl + antlr4_python3_runtime-4.13.2, runtime /pyodide/pynescript_runtime.py. Numba is not in Wasm; compile / auto is object-mode. Cold load ~20–30s. |
+| Engine pyodide | same file | Self-hosted Pyodide 0.29.5 (/pyodide/v0.29.5/, Python 3.13), wheels /vendor/pynescript-0.6.29-py3-none-any.whl + antlr4_python3_runtime-4.13.2, runtime /pyodide/pynescript_runtime.py. Numba is not in Wasm; compile / auto is object-mode. Cold load ~20–30s. |
 | AXIS Worker /api/run | worker/src/runtime.ts | PYODIDE_IN_WORKER=enabled scaffold; else proxy EXTERNAL_BACKEND/run; else 503 NO_BACKEND. Caps: 512 KiB script, 50k bars, 30 req/min/IP, 60s upstream. |
 | Engine pyne-worker | src/engines/catalog.ts | Built-in (builtIn: true). POST /run to the HOOX edge worker. Default origin https://pyne-worker.cryptolinx.workers.dev. Distinct from engine server and from the AXIS Worker (worker-axis). |
 | PyneTS | — | TypeScript library. PYNE docs. Not referenced in AXIS source. |
@@ -474,7 +474,7 @@ Invariants & edge cases
 1. AXIS ≠ engine (ADR-002). The shell never embeds a closed interpreter.
 2. AXIS ≠ execution. Strategy events on the Results panel are not HOOX orders. See AXIS and HOOX.
 3. No none stream plugin in src/streams/catalog.ts. Pausing live data is stopLive(), not a plugin id.
-4. The vendored wheel is pynescript-0.6.12-py3-none-any.whl, built from the sister pyne repo with scripts/sync-pyne-wheel.sh. That script also prints a warning if the hard-coded path in src/engines/catalog.ts drifts from the wheel filename — update it when the version changes.
+4. The vendored wheel is pynescript-0.6.29-py3-none-any.whl, built from the sister pyne repo with scripts/sync-pyne-wheel.sh. That script also prints a warning if the hard-coded path in src/engines/catalog.ts drifts from the wheel filename — update it when the version changes.
 5. CORS: Worker allows localhost, .hoox.sh, .pynescript.online, .axis.pages.dev (plus legacy .pynescript-axis.pages.dev) only.
 6. A live tick never changes evaluation semantics. Live sessions (src/engines/live-sessions.ts) always evaluate in interpret, so the O(delta) path engages only for a run the backend itself resolved to interpret (the client records the mode each full run reports), and a session freezes its inputs at create — scripts whose inputs hold expanded input.source series stay on POST /run. Any miss falls back to the full run, and a response that is not a /run-shaped result is a miss, never an empty success.
 Worked examples
@@ -2641,13 +2641,14 @@ AXIS is a charting app you run in the browser (or install as a PWA / desktop app
 | STO | Storage — where scripts live (this browser, cloud, or git) |
 Abstract
 1. Ensure AXIS is running (Installation).
-2. Load bars for a symbol.
-3. Paste or write a minimal indicator / strategy.
-4. Run → inspect chart overlays + Results.
+2. Default-symbol candles paint on boot (no Load click). An empty chart with bars and 0 scripts shows a Run chip (default RSI / editor buffer).
+3. Paste or write a minimal indicator / strategy, or keep the prefilled editor script.
+4. Editor Run, or topbar Add to chart on first apply (Run when that script is already on the chart) → inspect overlays + Results.
 5. Optionally enable Live.
 Conceptual model
 Interface surface
-1. Load history
+1. History on the chart
+Boot fetches the default symbol for the active source. First-run does not wait on a Load click.
 Topbar fields that matter:
 | Control | Default-ish | Notes |
 | --- | --- | --- |
@@ -2656,7 +2657,7 @@ Topbar fields that matter:
 | Source | binance-rest | Or mock / CSV |
 | Stream | binance-ws | Paused until Live |
 | Engine | server or pyodide | Settings for endpoint |
-Click Load (or pick a watchlist row). Status bar should move through loading → ready with bar count context.
+Pick a watchlist row to switch the symbol. Status bar should move through loading → ready with bar count context. Topbar Load (download icon) is a one-shot refetch when you already have a symbol — not the first-run step.
 CSV path: Source = CSV upload → pick file when prompted → bars inject via upload store.
 Deep history: for multi-page backfill to a past date (background, with gap validation), open the Data panel — see Data Source Manager.
 2. Minimal script
@@ -4598,13 +4599,14 @@ title: "AXIS Documentation"
 description: "Open charting PWA — orthogonal sources, streams, engines, and storage. Own the axes; swap the engine."
 ---
 AXIS Documentation
-AXIS is an installable charting PWA (v2.24.5, package.json / VERSION) that treats price, time, and calculation as separable axes. Release history is CHANGELOG.md (online changelog). Sources load history. Streams advance the present. Engines evaluate Pine Script™ via PYNE. Storage keeps your script library. Compose any lawful combination without a proprietary charting host.
+AXIS is an installable charting PWA (v2.28.0, VERSION / package.json) that treats price, time, and calculation as separable axes. Release history is CHANGELOG.md (online changelog). Sources load history. Streams advance the present. Engines evaluate Pine Script™ via PYNE. Storage keeps your script library. Compose any lawful combination without a proprietary charting host.
+Names: AXIS is the chart PWA · PYNE is the Pine Script™ language and runtime · HOOX is the product mesh · Cloudflare Worker service is worker-axis (https://worker.axis.hoox.sh); pynescript-axis is the retired Pages/Worker project id (CORS/preview alias only). See the glossary.
 Pine Script™ and TradingView® are trademarks of TradingView®, Inc. Cloudflare® is a registered trademark of Cloudflare®, Inc. This project is independent and not affiliated with or endorsed by TradingView®, Inc. or Cloudflare®, Inc.
 What's new
-The current 2.24.5 build — full detail in the changelog:
-Agents can read and drive the live plane over MCP — eight new app_invoke capabilities: chart.lag (the "why is the chart a bar behind?" ledger with live / one-bar-behind / behind verdicts), chart.bars (bounded OHLCV windows plus a gap map and forming-bar flag), engine.get / engine.series / engine.tick / engine.repair, and stream.get / stream.reset. Every engine call reuses the active endpoint and key in-tab — the key never leaves the browser and is reported as hasApiKey only. See MCP (agents).
-Engine-owned live stops lagging — the venue's forming tip survives every engine repaint (no bar chopped off the tail), a frozen engine series is repaired instead of back-dating the chart, a superseded engine socket can no longer tear down the connection, and the stream plane now drives the engine's series itself (10s cadence, new venue bars immediately). See engine-owned data plane.
-The browser engine runs the PYNE 0.6.12 wheel — the same release as the Pro API, including the chart.point.copy argument fix, numeric multi-return UDFs, and interpret/compile fill() parity. See engine plugins.
+The current 2.28.0 build — full detail in the changelog:
+The in-browser engine vendors PYNE 0.6.29 — wheel pynescript-0.6.29-py3-none-any.whl (vendor/ and public/vendor/, path in src/engines/catalog.ts). That is what AXIS ships; PyPI may be ahead. Self-hosted Pyodide stays 0.29.5. See engine plugins.
+Results overlay, watchlist, and plot chrome — Events filter/search, plot min/max/Δ%, saved-run management; watchlist big-price view + 24h range; Scripts panel line type and Pine display.* targets. See strategy and results.
+Larger grids and footprint — layouts 6 (3×2) and 8 (4×2); Layers → Footprint paints per-candle buy/sell cells from the OHLCV estimate. See charting.
 Abstract
 AXIS is a charting PWA, not a language rewrite. Language fidelity lives in PYNE. The PWA contributes:
 1. A unified plugin registry (source | stream | engine | storage | dataset | component)
@@ -5142,7 +5144,7 @@ Config
 Boot pipeline (_ensure)
 1. Prefetch assets (prefetchPyodideAssets) — wasm, stdlib zip, micropip wheels.
 2. loadPyodide({ indexURL }).
-3. micropip.install same-origin /vendor/pynescript-0.6.12-py3-none-any.whl and the antlr4 4.13.2 wheel.
+3. micropip.install same-origin /vendor/pynescript-0.6.29-py3-none-any.whl and the antlr4 4.13.2 wheel.
 4. Fetch /pyodide/pynescript_runtime.py and runPythonAsync it.
 Refreshing the pyne wheel (after pyne compiler/runtime changes):
 `bash

@@ -128,6 +128,58 @@ describe('fetchUpstreamJson redirect handling', () => {
   });
 });
 
+describe('fetchUpstreamJson size cap', () => {
+  it('rejects Content-Length over the cap without buffering', async () => {
+    const original = globalThis.fetch;
+    let cancelled = false;
+    globalThis.fetch = (async () => {
+      const stream = new ReadableStream({
+        start() {
+          /* hang until cancel */
+        },
+        cancel() {
+          cancelled = true;
+        },
+      });
+      return new Response(stream, {
+        status: 200,
+        headers: { 'Content-Length': '4096', 'Content-Type': 'application/json' },
+      });
+    }) as typeof fetch;
+    try {
+      const err = await fetchUpstreamJson('https://example.test/protocols', {
+        timeoutMs: 1000,
+        maxBytes: 1024,
+      }).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(UpstreamError);
+      expect((err as UpstreamError).reason).toBe('too-large');
+      expect(cancelled).toBe(true);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  it('rejects a streamed body that exceeds the cap', async () => {
+    const original = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response('x'.repeat(2048), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })) as typeof fetch;
+    try {
+      const err = await fetchUpstreamJson('https://example.test/protocols', {
+        timeoutMs: 1000,
+        maxBytes: 512,
+      }).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(UpstreamError);
+      expect((err as UpstreamError).reason).toBe('too-large');
+      expect(upstreamDetail(err)).toContain('too large');
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+});
+
 describe('client-safe error text', () => {
   it('never returns raw runtime or undici messages', () => {
     const leaky = new TypeError(

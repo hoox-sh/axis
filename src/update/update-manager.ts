@@ -22,8 +22,8 @@
  * releases as a banner + notification with a hard-reload action.
  *
  * Sources of "a new version is deployed":
- * - `checkForUpdates()` — compares the running {@link APP_VERSION} against
- *   the served `/version.json`. Started automatically via
+ * - `checkForUpdates()` — compares the running identity (`VERSION` + git SHA)
+ *   against the served `/version.json`. Started automatically via
  *   {@link startUpdatePolling} (interval + focus/visibility/online triggers).
  * - `markUpdateAvailable()` — called when the service worker reports a
  *   waiting update (`register-sw` `onUpdateAvailable` hook).
@@ -36,7 +36,7 @@
  */
 
 import { createSignal } from 'solid-js';
-import { APP_VERSION } from '../version';
+import { APP_VERSION, gitSha } from '../version';
 import { announce } from '../ui/sr-announce';
 import { setCloseGuardEnabled } from '../pwa/close-guard';
 import { createThrottle } from '../utils/throttle';
@@ -99,8 +99,29 @@ export function normalizeVersion(raw: unknown): string {
   return String(raw ?? '').trim();
 }
 
-/** True when the deployed version differs from the running one. */
-export function isNewerVersion(deployed: unknown, running: string = APP_VERSION): boolean {
+/** Running identity: `2.28.0+abc1234def56` when a SHA is baked, else semver. */
+export function runningIdentity(version: string = APP_VERSION, sha: string = gitSha()): string {
+  const v = normalizeVersion(version);
+  const g = normalizeVersion(sha);
+  if (v && g) return `${v}+${g}`;
+  return v;
+}
+
+/**
+ * Deployed identity from `/version.json`. Uses `version`+`git` when the
+ * served file carries a SHA (post git-stamp builds); falls back to semver
+ * for older deploys.
+ */
+export function deployedIdentity(body: Record<string, unknown> | null | undefined): string {
+  if (!body) return '';
+  const version = normalizeVersion(body['version']);
+  const git = normalizeVersion(body['git']);
+  if (version && git) return `${version}+${git}`;
+  return version;
+}
+
+/** True when the deployed identity differs from the running one. */
+export function isNewerVersion(deployed: unknown, running: string = runningIdentity()): boolean {
   const next = normalizeVersion(deployed);
   if (!next) return false;
   return next !== normalizeVersion(running);
@@ -127,23 +148,26 @@ function defaultBase(): string {
 }
 
 /**
- * Shape of the served `/version.json`. Both fields are untrusted: the reader
- * normalizes `version` to a trimmed string and ignores `buildTime`.
+ * Shape of the served `/version.json`. Fields are untrusted: the reader
+ * normalizes `version` / `git` to trimmed strings and ignores the rest.
  */
 export interface VersionJson {
   version?: unknown;
+  git?: unknown;
+  gitShort?: unknown;
+  dirty?: unknown;
   buildTime?: unknown;
 }
 
-async function fetchDeployedVersion(
+async function fetchDeployedIdentity(
   fetchImpl: typeof fetch = fetch,
   url: string = versionJsonUrl(),
 ): Promise<string | null> {
   const res = await fetchImpl(url, { cache: 'no-store' });
   if (!res.ok) return null;
   const body = await readJsonRecord(res);
-  const v = normalizeVersion(body['version']);
-  return v || null;
+  const identity = deployedIdentity(body);
+  return identity || null;
 }
 
 /** Optional side channels fired when an update is detected. */
@@ -202,7 +226,7 @@ export function markUpdateAvailable(
   latestVersion: string,
   source: UpdateSource = 'manual',
   hooks: UpdateNotifyHooks = {},
-  runningVersion: string = APP_VERSION,
+  runningVersion: string = runningIdentity(),
 ): UpdateInfo | null {
   const next = normalizeVersion(latestVersion);
   const running = normalizeVersion(runningVersion);
@@ -256,10 +280,10 @@ export interface CheckForUpdatesOptions {
 export async function checkForUpdates(
   opts: CheckForUpdatesOptions = {},
 ): Promise<UpdateInfo | null> {
-  const running = normalizeVersion(opts.runningVersion ?? APP_VERSION);
+  const running = normalizeVersion(opts.runningVersion ?? runningIdentity());
   let deployed: string | null = null;
   try {
-    deployed = await fetchDeployedVersion(opts.fetchImpl ?? fetch, opts.url ?? versionJsonUrl());
+    deployed = await fetchDeployedIdentity(opts.fetchImpl ?? fetch, opts.url ?? versionJsonUrl());
   } catch {
     return null;
   }

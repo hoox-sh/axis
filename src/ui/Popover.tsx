@@ -50,6 +50,11 @@ export interface PopoverProps {
    * can sit low on a short viewport — without the flip it runs off-screen.
    */
   flip?: boolean;
+  /**
+   * Preferred side of the anchor. `top` pins the panel above (status-bar
+   * inspector). Default `bottom`. Combined with `flip` to stay on-screen.
+   */
+  side?: 'top' | 'bottom';
   /** The popover content. */
   children: JSX.Element;
 }
@@ -87,23 +92,36 @@ function PopoverShell(props: PopoverProps) {
       window.innerWidth - 2 * MARGIN,
     );
     const left = Math.max(MARGIN, Math.min(r.right - width, window.innerWidth - width - MARGIN));
-    let top = r.bottom + OFFSET;
-    if (props.flip) {
-      // Flip above the anchor when the panel would run off the bottom.
-      const panelH = panelEl?.offsetHeight ?? 0;
-      const below = window.innerHeight - r.bottom - OFFSET - MARGIN;
-      if (panelH > 0 && below < panelH && r.top - OFFSET - panelH >= MARGIN) {
-        top = r.top - OFFSET - panelH;
+    const panelH = panelEl?.offsetHeight ?? 0;
+    const above = r.top - OFFSET - panelH;
+    const below = r.bottom + OFFSET;
+    let top: number;
+    if (props.side === 'top') {
+      top = panelH > 0 ? above : r.top - OFFSET;
+      if (props.flip && top < MARGIN && below + panelH <= window.innerHeight - MARGIN) {
+        top = below;
+      } else if (top < MARGIN) {
+        top = MARGIN;
+      }
+    } else {
+      top = below;
+      if (props.flip) {
+        const roomBelow = window.innerHeight - r.bottom - OFFSET - MARGIN;
+        if (panelH > 0 && roomBelow < panelH && above >= MARGIN) {
+          top = above;
+        }
       }
     }
     setPos({ top, left });
   };
 
   // Place once mounted (the panel must exist to measure its height) and
-  // re-place whenever the viewport moves.
+  // re-place whenever the viewport moves. A rAF pass catches side=top after
+  // the first layout so the panel sits fully above the status bar.
   createEffect(() => {
     if (!props.open) return;
     place();
+    const raf = requestAnimationFrame(place);
     const onReposition = () => place();
     window.addEventListener('resize', onReposition);
     window.addEventListener('scroll', onReposition, true);
@@ -112,6 +130,7 @@ function PopoverShell(props: PopoverProps) {
       onDismiss: props.onClose,
     });
     onCleanup(() => {
+      cancelAnimationFrame(raf);
       window.removeEventListener('resize', onReposition);
       window.removeEventListener('scroll', onReposition, true);
       disposeDismiss();
@@ -127,6 +146,7 @@ function PopoverShell(props: PopoverProps) {
         style={{ top: `${pos().top}px`, left: `${pos().left}px` }}
         role={props.role ?? 'dialog'}
         aria-label={props.label}
+        aria-modal={props.role === 'menu' ? undefined : true}
         data-testid={props.testId}
       >
         {props.children}

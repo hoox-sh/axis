@@ -21,23 +21,27 @@
  * Resilient Binance public REST helpers for the AXIS PWA.
  *
  * Browser → venue is flaky (geo blocks, corporate firewalls, extensions).
- * Fetch order:
- * 0. Session vault key → signed REST (direct HMAC, then Worker `/signed/klines`)
- * 1. Explicit `baseUrl` override (source config)
- * 2. Direct public hosts (`api.binance.com`, then `data-api.binance.vision`)
- * 3. AXIS Worker allowlisted proxy (`/api/market/binance/…`)
+ * A doomed `fetch('https://api.binance.com/…')` from the page is a CORS
+ * console error the app cannot suppress — skip it. Fetch order:
+ * 0. Session vault key → signed REST (Worker `/signed/klines` in the browser)
+ * 1. AXIS Worker allowlisted proxy (`/api/market/binance/…`)
+ * 2. Explicit `baseUrl` override that is not a public Binance host
+ * 3. Direct public hosts — tests / node / `skipWorkerProxy` only
  *
  * @module data/binance-http
  */
 
-import { normalizeEndpointBase } from './worker-origin';
+import {
+  browserBlocksDirectCexRest,
+  normalizeEndpointBase,
+} from './worker-origin';
 import { DEFAULT_MARKET_WORKER_BASE, resolveMarketWorkerBase } from './market-worker';
 import { fetchSignedJson, hasSignedCreds } from './signed-fetch';
 import { asProviderMarket, type ProviderMarket } from './provider';
 
 export { DEFAULT_MARKET_WORKER_BASE, resolveMarketWorkerBase };
 
-/** Public Binance REST hosts (CORS `*`). Vision first for some restricted networks. */
+/** Public Binance REST hosts. Browser CORS/geo often fail — Worker is first. */
 export const BINANCE_REST_HOSTS = [
   'https://api.binance.com',
   'https://data-api.binance.vision',
@@ -133,10 +137,73 @@ export interface BinanceFetchOpts {
   signal?: AbortSignal;
   /** Skip Worker proxy (tests / offline lab). Default false. */
   skipWorkerProxy?: boolean;
+  /**
+   * Hit public Binance REST hosts even in the browser. Default false — a
+   * doomed `api.binance.com` fetch is a CORS console error we cannot suppress.
+   * `skipWorkerProxy` implies this (tests / offline lab).
+   */
+  allowDirectHosts?: boolean;
   /** Skip vault HMAC (tests). Default false. */
   skipSigned?: boolean;
   /** Spot (default), USDT-M linear, or COIN-M inverse. */
   market?: ProviderMarket | string;
+}
+
+/** Public Binance REST origins the browser must not `fetch` (CORS / geo). */
+export function isPublicBinanceRestOrigin(base: string): boolean {
+  const n = normalizeEndpointBase(base);
+  if (!n) return false;
+  const hosts = new Set<string>([
+    ...BINANCE_REST_HOSTS,
+    ...BINANCE_LINEAR_REST_HOSTS,
+    ...BINANCE_INVERSE_REST_HOSTS,
+  ]);
+  if (hosts.has(n)) return true;
+  try {
+    const host = new URL(n).hostname.toLowerCase();
+    if (
+      host === 'api.binance.com' ||
+      host === 'data-api.binance.vision' ||
+      host === 'fapi.binance.com' ||
+      host === 'dapi.binance.com'
+    ) {
+      return true;
+    }
+  } catch {
+    /* ignore */
+  }
+  return false;
+}
+
+let warnedSkipDirect = false;
+
+/** Test hook: re-arm the skip-direct console.warn. */
+export function _resetBinanceHttpWarnForTests(): void {
+  warnedSkipDirect = false;
+}
+
+function warnSkipDirectOnce(detail: string): void {
+  if (warnedSkipDirect) return;
+  warnedSkipDirect = true;
+  console.warn(
+    `[binance-http] Skipping direct api.binance.com (browser CORS/geo). ${detail}`,
+  );
+}
+
+async function workerClientError(res: Response): Promise<string> {
+  try {
+    const body: unknown = await res.json();
+    if (body && typeof body === 'object') {
+      const rec = body as { message?: unknown; code?: unknown };
+      const msg = String(rec.message || '').trim();
+      const code = String(rec.code || '').trim();
+      if (msg && code) return `${msg} (${code})`;
+      if (msg) return msg;
+    }
+  } catch {
+    /* non-JSON */
+  }
+  return `HTTP ${res.status}`;
 }
 
 function joinUrl(
@@ -174,9 +241,15 @@ function queryToRecord(query?: string): Record<string, string> {
   return out;
 }
 
+function allowDirectBinanceHosts(opts: BinanceFetchOpts): boolean {
+  if (opts.skipWorkerProxy || opts.allowDirectHosts) return true;
+  return !browserBlocksDirectCexRest();
+}
+
 /**
- * Fetch Binance JSON: signed (vault key) then public host + Worker proxy.
- * Throws the last error when every candidate fails.
+ * Fetch Binance JSON: Worker proxy first (CORS-safe in the browser), then
+ * direct public hosts only when the environment can CORS. Throws the last
+ * error when every candidate fails.
  */
 export async function fetchBinanceJson(opts: BinanceFetchOpts): Promise<unknown> {
   const market = asProviderMarket(opts.market);
@@ -203,14 +276,44 @@ export async function fetchBinanceJson(opts: BinanceFetchOpts): Promise<unknown>
     }
   }
 
-  const bases: string[] = [];
-  const preferred = market === 'spot' ? normalizeEndpointBase(opts.baseUrl) : '';
-  if (preferred) bases.push(preferred);
-  for (const h of restHosts(market)) {
-    if (!bases.includes(h)) bases.push(h);
+  const errors: string[] = [];
+  const allowDirect = allowDirectBinanceHosts(opts);
+
+  if (!opts.skipWorkerProxy) {
+    const worker = resolveMarketWorkerBase(opts.workerBase);
+    const url = workerProxyUrl(worker, opts.path, opts.query, market);
+    try {
+      const res = await fetch(url, {
+        cache: 'no-store',
+        signal: opts.signal,
+        headers: { Accept: 'application/json' },
+      });
+      if (res.ok) return await res.json();
+      if (res.status >= 400 && res.status < 500) {
+        throw new Error(`Binance worker: ${await workerClientError(res)}`);
+      }
+      errors.push(`worker: HTTP ${res.status}`);
+    } catch (err) {
+      if (opts.signal?.aborted) throw err;
+      if (err instanceof Error && err.message.startsWith('Binance worker:')) throw err;
+      const msg = err instanceof Error ? err.message : String(err);
+      errors.push(`worker: ${msg}`);
+    }
   }
 
-  const errors: string[] = [];
+  const bases: string[] = [];
+  const preferred = market === 'spot' ? normalizeEndpointBase(opts.baseUrl) : '';
+  if (preferred && (allowDirect || !isPublicBinanceRestOrigin(preferred))) {
+    bases.push(preferred);
+  }
+  if (allowDirect) {
+    for (const h of restHosts(market)) {
+      if (!bases.includes(h)) bases.push(h);
+    }
+  } else if (errors.length) {
+    warnSkipDirectOnce(errors.slice(0, 2).join(' · ') || 'Worker miss');
+  }
+
   for (const base of bases) {
     const url = joinUrl(base, opts.path, opts.query, market);
     try {
@@ -228,27 +331,6 @@ export async function fetchBinanceJson(opts: BinanceFetchOpts): Promise<unknown>
       if (opts.signal?.aborted) throw err;
       const msg = err instanceof Error ? err.message : String(err);
       errors.push(`${base}: ${msg}`);
-    }
-  }
-
-  if (!opts.skipWorkerProxy) {
-    const worker = resolveMarketWorkerBase(opts.workerBase);
-    const url = workerProxyUrl(worker, opts.path, opts.query, market);
-    try {
-      const res = await fetch(url, {
-        cache: 'no-store',
-        signal: opts.signal,
-        headers: { Accept: 'application/json' },
-      });
-      if (!res.ok) {
-        errors.push(`worker: HTTP ${res.status}`);
-      } else {
-        return await res.json();
-      }
-    } catch (err) {
-      if (opts.signal?.aborted) throw err;
-      const msg = err instanceof Error ? err.message : String(err);
-      errors.push(`worker: ${msg}`);
     }
   }
 

@@ -93,6 +93,7 @@ import { announce } from '../ui/sr-announce';
 import { registerCloseGuardPredicate } from '../pwa/close-guard';
 import { detectPineVersion, detectScriptKind, scriptKindShort } from '../indicators/script-meta';
 import { DRAWING_BUILTINS } from '../indicators/builtins/drawings';
+import { DEFAULT_EDITOR_SCRIPT } from './default-script';
 
 export { countDocStats, cursorLineCol } from './doc-stats';
 
@@ -108,14 +109,7 @@ interface Tab {
 
 const DEMOS: Record<string, string> = {
   // Oscillators must use overlay=false — on the price pane RSI (0–100) is invisible.
-  'rsi-overlay': `//@version=6
-indicator("RSI", overlay = false)
-len = input.int(14, "Length", minval = 1)
-rsi = ta.rsi(close, len)
-plot(rsi, "RSI", color = color.purple)
-hline(70, "Overbought", color = color.red)
-hline(30, "Oversold", color = color.green)
-`,
+  'rsi-overlay': DEFAULT_EDITOR_SCRIPT,
   macd: `//@version=6
 indicator("MACD", overlay=false)
 fastLen   = input.int(12, "Fast Length")

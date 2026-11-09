@@ -7,7 +7,7 @@ tags: [code, worker]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-07T12:59:09Z
+  at: 2026-11-09T05:20:23Z
 sources:
   - id: tree
     resource: "worker/src"
@@ -23,13 +23,13 @@ okf_lock: generated
 * `git-memfs.ts` — MemoryFS
 * `git-oauth.ts` — GitOAuthEnv, GitOAuthProvider, handleGitOAuth
 * `hash.ts` — partitionIdFromKey, sha256Hex
-* `http.ts` — API_CORS, CorsOptions, DeepHealth, ErrorBody, ErrorResponseOptions, HandleErrorOptions, HealthFlags, JsonBuilder, JsonOptions, MARKET_CORS, MCP_CORS, ORIGIN_ONLY
+* `http.ts` — API_CORS, CorsOptions, DeepHealth, ErrorBody, ErrorResponseOptions, HSTS_VALUE, HandleErrorOptions, HealthFlags, JsonBuilder, JsonOptions, MARKET_CORS, MCP_CORS
 * `index.ts` — Env, McpBridgeDO, SessionDO, pickOrigin
 * `keys.ts` — handleKeys
 * `live-metrics.ts` — LiveMetric, RelayClosedBy, RelayStats, emitLiveMetric, frameBytes
 * `live-proxy.ts` — LIVE_TICKET_TTL_S, _resetLiveTicketsForTests, engineLiveWsUrl, handleLiveProxy, relayFrame
 * `market.ts` — _resetMarketCacheForTests, handleMarket, marketAllowlist
-* `onchain.ts` — _resetOnchainCacheForTests, handleOnchain, onchainAllowlist
+* `onchain.ts` — LLAMA_PROTOCOLS_RATE_LIMIT, LLAMA_PROTOCOLS_RATE_WINDOW_MS, LLAMA_PROTOCOLS_RESPONSE_MAX_BYTES, LLAMA_PROTOCOLS_UPSTREAM_MAX_BYTES, ONCHAIN_IP_LIMIT, ONCHAIN_IP_WINDOW_MS, ONCHAIN_UPSTREAM_MAX_BYTES, _resetOnchainCacheForTests, handleOnchain, onchainAllowlist, slimLlamaProtocols
 * `proxy-plane.ts` — CacheEntry, CacheEviction, ProxyPlane, ProxyPlaneOptions, createProxyPlane
 * `proxy-router.ts` — NotFoundBody, ProxyContext, ProxyHandler, ProxyRoute, ProxyRouter, ProxyRouterOptions, createProxyRouter, proxyJson
 * `pyodide_runtime.ts` — tryRunInWorker
@@ -38,7 +38,7 @@ okf_lock: generated
 * `runtime.ts` — _resetRunRateLimitForTests, handleRun
 * `scripts.ts` — ScriptMeta, ScriptRow, ScriptVersionRow, _clearMemScripts, handleScripts
 * `tenant.ts` — BILLING_UPGRADE_URL, FlushUsageOpts, QueueTenantUsageInput, TenantAllow, TenantDeny, TenantGate, TenantHttpError, TenantScope, TenantUsageEvent, TenantUsageUnits, USAGE_BATCH_MAX, USAGE_FLUSH_TIMEOUT_MS
-* `version.ts` — WORKER_VERSION
+* `version.ts` — WORKER_VERSION, workerGitSha
 
 # Packages
 

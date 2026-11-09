@@ -14,9 +14,10 @@
  * - src-tauri/tauri.conf.json
  * - src-tauri/Cargo.toml (top-level `version = "…"`)
  * - src-tauri/Cargo.lock (`axis` stanza)
- * - public/version.json (served at `/version.json`; polled by the update manager)
- * - src/version.ts (generated `APP_VERSION` for the app shell)
- * - worker/src/version.ts (generated `WORKER_VERSION` for `/health`)
+ * - public/version.json (semver + last-bump buildTime; git SHA is stamped into
+ *   dist/version.json at Vite build so local builds do not dirty git)
+ * - src/version.ts (generated `APP_VERSION` / `gitSha()` for the app shell)
+ * - worker/src/version.ts (generated `WORKER_VERSION` / `workerGitSha()` for `/health`)
  * - Dockerfile (`ARG VERSION=x.y.z` only — not BUN_VERSION / PYTHON_VERSION)
  * - docker-compose.yml (`${VERSION:-x.y.z}` build args + AXIS_VERSION env)
  * - docker-bake.hcl (`variable "VERSION" { default = "x.y.z" }`)
@@ -121,6 +122,29 @@ export function appVersion(): string {
 
 /** Current app version (evaluated once at module load). */
 export const APP_VERSION: string = appVersion();
+
+/**
+ * Git SHA of the build (Vite \`VITE_GIT_SHA\`). Empty in unit tests / unsynced
+ * trees. Deployed identity is version + git in dist/version.json.
+ */
+export function gitSha(): string {
+  try {
+    const stamped = (import.meta as ImportMeta & { env?: ImportMetaEnv }).env?.['VITE_GIT_SHA'];
+    const v = String(stamped || '').trim();
+    if (v) return v;
+  } catch {
+    /* bun tests */
+  }
+  return '';
+}
+
+/** \`2.28.0+abc1234def56\` when a SHA is baked, else the semver. */
+export function appIdentity(version: string = APP_VERSION, sha: string = gitSha()): string {
+  const v = String(version || '').trim();
+  const g = String(sha || '').trim();
+  if (v && g) return \`\${v}+\${g.slice(0, 12)}\`;
+  return v;
+}
 `;
 }
 
@@ -136,6 +160,16 @@ function workerVersionModule(version) {
 
 /** Deployed worker version (repo-root VERSION at sync time). */
 export const WORKER_VERSION: string = '${version}';
+
+/**
+ * Git SHA baked by \`wrangler deploy --define WORKER_GIT_SHA:"<sha>"\`.
+ * Empty in unit tests (the identifier is undeclared).
+ */
+declare const WORKER_GIT_SHA: string | undefined;
+
+export function workerGitSha(): string {
+  return typeof WORKER_GIT_SHA === 'string' ? WORKER_GIT_SHA : '';
+}
 `;
 }
 
@@ -183,9 +217,9 @@ await stamp('src-tauri/tauri.conf.json', async () => String((await readJson('src
   }
 }
 
-// public/version.json (served statically; update manager polls `version` only).
-// buildTime records the last version bump, not the last build — it only
-// refreshes on version drift so `bun run build` doesn't dirty git every run.
+// public/version.json stays semver-only. Vite overwrites dist/version.json
+// with git SHA + buildTime at closeBundle so `bun run build` does not dirty git.
+// The update manager compares version+git from the served dist file.
 {
   let current = null;
   try {

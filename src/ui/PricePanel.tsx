@@ -36,6 +36,7 @@ import { Icons } from './icons';
 import { copyToClipboard } from './clipboard';
 import { formatExtraPrice } from './extras/format';
 import { displayedLastPrice } from './extras/quote';
+import { lastTickForSymbol } from './hud-model';
 import { fetchWatchlistTickers } from '../data/watchlist-tickers';
 
 /** Float-only price panel (big last price + 24h change). */
@@ -69,16 +70,11 @@ export const PricePanel: Component = () : JSX.Element => {
   });
 
   const price = () => {
-    const tick = store.telemetry?.lastTick;
+    const tick = lastTickForSymbol(store.telemetry?.lastTick, store.symbol);
     // Prefer the narrow plane tip — it updates on every live tick without
     // pulling the full store.bars array into the reactive graph.
     const tip = barPlane.tip;
-    const tickPrice =
-      tick &&
-      (tick.symbol === undefined || tick.symbol === store.symbol) &&
-      Number.isFinite(tick.price)
-        ? (tick.price as number)
-        : NaN;
+    const tickPrice = tick && Number.isFinite(tick.price) ? (tick.price as number) : NaN;
     const last = tip?.close ?? (barPlane.length ? barPlane.bars[barPlane.length - 1]?.close : NaN);
     return displayedLastPrice({
       tickPrice,

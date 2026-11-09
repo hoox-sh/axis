@@ -18,8 +18,17 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Bottom 26px instrument strip — Live + HUD capsules + truncated status +
- * optional strategy PnL from `store.lastRun`.
+ * Bottom instrument **scanline** — Live + last + compose/diagnostics HUD,
+ * truncated status, optional strategy PnL, rolling-window edit, dataset
+ * depth, scripts/panes counts.
+ *
+ * Concept (replaces HUD hover-to-reveal): the footer is a scanline of live
+ * readings, always visible. Hover is hostile on touch and hid the actual
+ * status behind a floating container + hover-bridge. There is no hover-open
+ * panel. Click or keyboard on a HUD instrument opens one inspector dialog
+ * (`role="dialog"`) anchored above the rail via the shared Popover; Esc,
+ * outside pointer, or a second click closes it. Details never float in on
+ * pointer-enter.
  *
  * Classic fixed footer chrome (no FloatableShell title bar). Visibility is
  * gated by panel chrome `statusbar` (topbar **Status** / command palette).

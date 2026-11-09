@@ -10,7 +10,7 @@
  */
 
 import '../setup';
-import { describe, expect, it, beforeEach } from 'bun:test';
+import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
 import { registry } from '../../src/plugins/registry';
 import { ensureBuiltins, _resetBootstrapFlag } from '../../src/plugins/bootstrap';
 import { _resetSourceRegistrationFlag, registerDynamicSource } from '../../src/sources/catalog';
@@ -23,11 +23,17 @@ import {
   clearLogs,
   clampHistoryBars,
   HISTORY_BARS_MIN,
+  setActivePlugin,
 } from '../../src/store';
 import {
   loadSymbolData,
   _resetLoadGeneration,
 } from '../../src/data/load-symbol';
+import {
+  _setCachedEngineCapabilitiesForTests,
+  DEFAULT_ENGINE_CAPABILITIES,
+} from '../../src/engines/catalog';
+import { mockFetch, jsonResponse } from '../helpers/mock-fetch';
 import {
   putCachedBars,
   _resetBarsCacheForTests,
@@ -70,6 +76,11 @@ beforeEach(async () => {
     preferAfterLoad: false,
     rerunOn: 'every-tick',
   });
+  _setCachedEngineCapabilitiesForTests(null);
+});
+
+afterEach(() => {
+  _setCachedEngineCapabilitiesForTests(null);
 });
 
 function dynSource(
@@ -94,6 +105,31 @@ describe('loadSymbolData', () => {
     expect(store.exchange).toBe('mock');
     expect(store.status).toBe('ready');
     expect(store.telemetry.source.state).toBe('open');
+  });
+
+  it('does not GET /data/series/bars without an engine API key', async () => {
+    setActivePlugin('engine', 'server');
+    setStore('endpoint', 'https://engine.test');
+    setStore('pluginsConfig', { 'engine:server': { preferWs: false } });
+    _setCachedEngineCapabilitiesForTests({
+      ...DEFAULT_ENGINE_CAPABILITIES,
+      liveModes: ['every-tick', 'bar-close'],
+      ownsData: true,
+      dataSession: true,
+    });
+    const seen: string[] = [];
+    const restore = mockFetch(async (input) => {
+      seen.push(String(input));
+      return jsonResponse({ status: 'error', message: 'Unauthorized' }, 401);
+    });
+    try {
+      const ok = await loadSymbolData('ETHUSDT', '1h', 'mock-walk');
+      expect(ok).toBe(true);
+      expect(store.bars.length).toBeGreaterThan(0);
+      expect(seen.some((u) => u.includes('/data/series/bars'))).toBe(false);
+    } finally {
+      restore();
+    }
   });
 
   it('returns false for unknown source and sets error status', async () => {

@@ -1,0 +1,12 @@
+# Copyright (C) 2024-2026 jango_blockchained
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+# AXIS PWA (https://axis.hoox.sh). Docs live at https://hoox.sh/axis/docs.
+
+User-agent: *
+Allow: /
+Disallow: /pyodide/
+Disallow: /vendor/
+Disallow: /plugins/
+
+Sitemap: https://axis.hoox.sh/sitemap.xml

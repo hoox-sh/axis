@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Copyright (C) 2024-2026 jango_blockchained
+  SPDX-License-Identifier: AGPL-3.0-only
+
+  PWA origin only. Product docs are hosted at https://hoox.sh/axis/docs
+  (Mintlify), not this Pages project — they are not listed here.
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://axis.hoox.sh/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>

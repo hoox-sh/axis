@@ -69,4 +69,15 @@ describe('shared popover shell', () => {
     expect(src).toContain("addEventListener('resize'");
     expect(src).toContain("addEventListener('scroll'");
   });
+
+  it('can pin above the anchor for the status-bar inspector', () => {
+    const src = read('src/ui/Popover.tsx');
+    expect(src).toContain("side?: 'top' | 'bottom'");
+    expect(src).toContain("props.side === 'top'");
+  });
+
+  it('dialog popovers are modal so app.escape does not swallow Esc', () => {
+    const src = read('src/ui/Popover.tsx');
+    expect(src).toContain("aria-modal={props.role === 'menu' ? undefined : true}");
+  });
 });

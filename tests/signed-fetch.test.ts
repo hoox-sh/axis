@@ -119,6 +119,35 @@ describe('signed-fetch', () => {
     }
   });
 
+  it('skips doomed direct HMAC in a real browser', async () => {
+    putCredential({ venue: 'binance', apiKey: 'mk', secret: 's3cret' });
+    const prev = (globalThis as { document?: unknown }).document;
+    (globalThis as { document: { nodeType: number } }).document = { nodeType: 9 };
+    const seen: string[] = [];
+    const restore = mockFetch(async (input) => {
+      seen.push(String(input));
+      return jsonResponse([[1_700_000_000_000, '1', '2', '0.5', '1.5', '10']]);
+    });
+    try {
+      const data = await fetchSignedJson({
+        venue: 'binance',
+        path: '/api/v3/klines',
+        query: { symbol: 'BTCUSDT', interval: '1d', limit: 2 },
+      });
+      expect(Array.isArray(data)).toBe(true);
+      expect(seen).toHaveLength(1);
+      expect(seen[0]).toContain('/api/market/binance/signed/klines');
+      expect(seen[0]).not.toContain('api.binance.com');
+    } finally {
+      restore();
+      if (prev === undefined) {
+        delete (globalThis as { document?: unknown }).document;
+      } else {
+        (globalThis as { document: unknown }).document = prev;
+      }
+    }
+  });
+
   it('falls back to worker proxy for binance klines after CORS failure', async () => {
     putCredential({ venue: 'binance', apiKey: 'mk', secret: 's3cret' });
     let calls = 0;

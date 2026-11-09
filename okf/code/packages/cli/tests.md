@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "packages/cli/tests"
-description: "packages/cli/tests contains cli-entry.test.ts, doctor.test.ts, health.test.ts, and 11 more files."
+description: "packages/cli/tests contains cli-entry.test.ts, deploy.test.ts, doctor.test.ts, and 12 more files."
 resource: "packages/cli/tests"
 tags: [cli, code, packages, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-14T00:33:46Z
+  at: 2026-11-09T05:20:23Z
 sources:
   - id: tree
     resource: "packages/cli/tests"
@@ -19,6 +19,7 @@ okf_lock: generated
 # Files
 
 * `cli-entry.test.ts`
+* `deploy.test.ts`
 * `doctor.test.ts`
 * `health.test.ts`
 * `keys.test.ts`

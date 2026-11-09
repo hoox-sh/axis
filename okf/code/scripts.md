@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "scripts"
-description: "scripts contains audit-graph.py, capture-fix.ts, capture-screenshots.ts, and 8 more files."
+description: "scripts contains audit-graph.py, capture-fix.ts, capture-screenshots.ts, and 9 more files."
 resource: "scripts"
 tags: [code, scripts]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-08T02:28:25Z
+  at: 2026-11-09T05:20:23Z
 sources:
   - id: tree
     resource: "scripts"
@@ -25,10 +25,11 @@ okf_lock: generated
 * `check-versions.mjs` — $
 * `generate-axb1-vectors.ts`
 * `generate-changelog.py` — classify, extract_preamble, extract_version_section, format_github_release_notes, git, load_commits, main, normalize_version, render_type_groups
+* `git-stamp.mjs` — ROOT, readGitStamp, versionJsonBody
 * `perf-audit.mjs`
 * `record-hp-fixtures.py` — main, run
 * `rewrite_wheel_distinfo.py` — Entry, main, rewrite_wheel, want_dist_info
-* `sync-versions.mjs` — APP_VERSION, BAKED_APP_VERSION, WORKER_VERSION, appVersion
+* `sync-versions.mjs` — APP_VERSION, BAKED_APP_VERSION, WORKER_VERSION, appIdentity, appVersion, gitSha, workerGitSha
 
 # Other files
 
@@ -47,6 +48,10 @@ okf_lock: generated
 
 * [src/hp/axb1](/code/src/hp/axb1.md)
 * [tests/bench](/code/tests/bench.md)
+
+# Used by
+
+* [tests](/code/tests.md)
 
 # Nested
 

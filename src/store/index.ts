@@ -3610,6 +3610,8 @@ export function loadBars(bars: Bar[], symbol: string, interval: string, exchange
   // The chart window is enforced here, at the mutation boundary: no caller may
   // push the chart past the current anchored window, however it got its bars.
   const view = sliceToChartWindow(bars);
+  const instrumentChanged =
+    store.symbol !== symbol || store.interval !== interval || store.exchange !== exchange;
   // One reactive flush for Topbar + ChartHost + StatusBar (not 5 micro-updates)
   batch(() => {
     setStore('bars', view);
@@ -3619,6 +3621,12 @@ export function loadBars(bars: Bar[], symbol: string, interval: string, exchange
     setStore('symbol', symbol);
     setStore('interval', interval);
     setStore('exchange', exchange);
+    // Drop the previous instrument's last tick so the footer cannot keep
+    // BTC's price after a switch to ETH (or a TF / venue change).
+    if (instrumentChanged) {
+      frameTick = null;
+      setStore('telemetry', 'lastTick', null);
+    }
     // Mirror into active multi-chart slot + runtime bar cache
     const slotId = getActiveSlotId() || store.chartLayout?.activeId;
     if (slotId) {
@@ -4305,7 +4313,7 @@ function flushLiveFrame(): void {
     setStore('bars', tip, { ...(unwrap(store.bars[tip]) as Bar) });
     setBarPlaneTip(unwrap(store.bars[tip]) as Bar);
   }
-  if (tick) {
+  if (tick && (tick.symbol == null || tick.symbol === store.symbol)) {
     setStore('telemetry', 'lastTick', tick);
     setTelemetryPlane('stream', { lastEventAt: tick.at });
   }
@@ -4313,6 +4321,8 @@ function flushLiveFrame(): void {
 
 /** Record last live tick price/time and bump stream `lastEventAt`. */
 export function noteTick(price: number, time: number, symbol: string = store.symbol): void {
+  // A tick for a previous pair must not overwrite the current Last.
+  if (symbol !== store.symbol) return;
   const prevTick = frameTick ?? store.telemetry?.lastTick;
   // Direction is only meaningful within the same symbol stream.
   let dir: 'up' | 'down' | 'flat' = 'flat';
