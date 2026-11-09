@@ -3,8 +3,9 @@
  * Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
  * SPDX-License-Identifier: AGPL-3.0-only
  *
- * AXIS CLI binary. Prefers dist/ (Node-compatible). Falls back to src/ when
- * running under Bun in a git checkout without a prior build.
+ * AXIS CLI binary. Under Bun in a git checkout, load src/ so deploy stamps
+ * the current commit (a stale dist/ previously skipped Worker git SHA).
+ * Node and `AXIS_CLI_DIST=1` load dist/. `AXIS_CLI_SRC=1` forces src/ (Bun).
  */
 import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -15,15 +16,18 @@ const distEntry = resolve(here, "..", "dist", "index.js");
 const srcEntry = resolve(here, "..", "src", "index.ts");
 const isBun = typeof Bun !== "undefined";
 const forceSrc = process.env.AXIS_CLI_SRC === "1";
+const forceDist = process.env.AXIS_CLI_DIST === "1";
 
 const entry =
   forceSrc && isBun && existsSync(srcEntry)
     ? srcEntry
-    : existsSync(distEntry)
+    : forceDist && existsSync(distEntry)
       ? distEntry
       : isBun && existsSync(srcEntry)
         ? srcEntry
-        : null;
+        : existsSync(distEntry)
+          ? distEntry
+          : null;
 
 if (!entry) {
   process.stderr.write(

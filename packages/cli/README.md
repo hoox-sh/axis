@@ -99,7 +99,8 @@ Env overrides:
 | `AXIS_ADMIN_TOKEN` | Admin token for `axis keys create` |
 | `AXIS_API_KEY` | Default key for `axis keys validate` / `health --scripts --key` / `axis mcp` |
 | `CLOUDFLARE_API_TOKEN` | Wrangler auth (non-interactive) |
-| `AXIS_CLI_SRC=1` | Force bin to load `src/` over `dist/` (Bun only) |
+| `AXIS_CLI_SRC=1` | Force bin to load `src/` (Bun only) |
+| `AXIS_CLI_DIST=1` | Force bin to load `dist/` even under Bun |
 
 ## MCP
 

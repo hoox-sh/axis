@@ -68,4 +68,14 @@ describe("axis bin", () => {
     expect(r.code).toBe(0);
     expect(r.stdout.trim()).toMatch(/^\d+\.\d+\.\d+$/);
   });
+
+  test("bun loads src/ by default so a stale dist cannot skip git stamps", async () => {
+    const r = await run("bun", [bin, "--version"], {
+      throwOnError: false,
+      cwd: join(here, ".."),
+      env: { ...process.env, AXIS_CLI_SRC: undefined, AXIS_CLI_DIST: undefined },
+    });
+    expect(r.code).toBe(0);
+    expect(r.stdout.trim()).toMatch(/^\d+\.\d+\.\d+$/);
+  });
 });
