@@ -204,6 +204,20 @@ const [plotDisplayPopover, setPlotDisplayPopover] = createSignal<{
   plot: string;
 } | null>(null);
 
+/** Plot-list expand state by script id — same remount survival as the popovers. */
+const plotsOpenByScriptId = new Map<string, boolean>();
+
+function readPlotsOpen(id: string, plotCount: number): boolean {
+  const saved = plotsOpenByScriptId.get(id);
+  if (saved !== undefined) return saved;
+  // Small studies start expanded; longer lists start compact.
+  return plotCount <= 2;
+}
+
+function writePlotsOpen(id: string, open: boolean): void {
+  plotsOpenByScriptId.set(id, open);
+}
+
 /** Card for one entry in `store.scripts`. */
 export const IndicatorCard: Component<Props> = (props) : JSX.Element => {
   const [editingColor, setEditingColor] = createSignal<string | null>(null);
@@ -223,10 +237,21 @@ export const IndicatorCard: Component<Props> = (props) : JSX.Element => {
   const streamStatus = createMemo(() => store.live.scriptStatus?.[props.indicator.id]);
   const plotCount = createMemo(() => Object.keys(props.indicator.plots || {}).length);
   const [moreOpen, setMoreOpen] = createSignal(false);
-  /** Controls stay open for small studies; long plot lists start compact. */
+  /**
+   * Plot list open state. Stored by script id so it survives card remounts —
+   * live ticks replace `store.scripts` object identity and Solid `<For>`
+   * recreates the card, which used to snap the section shut every tick.
+   */
   const [plotsOpen, setPlotsOpen] = createSignal(
-    Object.keys(props.indicator.plots || {}).length <= 2,
+    readPlotsOpen(props.indicator.id, Object.keys(props.indicator.plots || {}).length),
   );
+  const togglePlotsOpen = () => {
+    setPlotsOpen((v) => {
+      const next = !v;
+      writePlotsOpen(props.indicator.id, next);
+      return next;
+    });
+  };
 
   const kindTitle = () => {
     switch (kind()) {
@@ -616,7 +641,7 @@ export const IndicatorCard: Component<Props> = (props) : JSX.Element => {
             class="ax-scripts-plots-head"
             aria-expanded={plotsOpen()}
             title={plotsOpen() ? 'Collapse plot controls' : 'Expand plot controls'}
-            onClick={() => setPlotsOpen((v) => !v)}
+            onClick={togglePlotsOpen}
             data-testid="axis-plots-toggle"
           >
             <Icons.chevronDown
@@ -646,19 +671,17 @@ export const IndicatorCard: Component<Props> = (props) : JSX.Element => {
                   const pineDisplay = pinePlotDisplay(plot);
                   return (
                     <div class="ax-scripts-plot-row">
-                      <div class="ax-scripts-plot-top">
-                        <button
-                          type="button"
-                          class="ax-scripts-plot-swatch"
-                          style={{ background: plotColor }}
-                          title={`Color for "${name}"`}
-                          data-color-trigger={props.indicator.id}
-                          onClick={() => setEditingColor(editingColor() === name ? null : name)}
-                        />
-                        <span class="ax-scripts-plot-name" title={name}>
-                          {name}
-                        </span>
-                      </div>
+                      <button
+                        type="button"
+                        class="ax-scripts-plot-swatch"
+                        style={{ background: plotColor }}
+                        title={`Color for "${name}"`}
+                        data-color-trigger={props.indicator.id}
+                        onClick={() => setEditingColor(editingColor() === name ? null : name)}
+                      />
+                      <span class="ax-scripts-plot-name" title={name}>
+                        {name}
+                      </span>
                       <div class="ax-scripts-plot-controls">
                         {/* Width buttons */}
                         <div class="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-text-faint hover:text-text border border-transparent hover:border-border/60 rounded-[var(--radius-chip)]">

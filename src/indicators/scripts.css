@@ -496,19 +496,15 @@
 .ax-scripts-plot-row {
   position: relative;
   display: flex;
-  flex-direction: column;
-  gap: 1px;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
   padding: 2px 3px;
   border-radius: 4px;
+  min-width: 0;
 }
 .ax-scripts-plot-row:hover {
   background: color-mix(in srgb, var(--color-text) 3%, transparent);
-}
-.ax-scripts-plot-top {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  min-width: 0;
 }
 .ax-scripts-plot-swatch {
   flex-shrink: 0;
@@ -523,7 +519,7 @@
   border-color: var(--color-accent);
 }
 .ax-scripts-plot-name {
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -535,8 +531,9 @@
 .ax-scripts-plot-controls {
   display: flex;
   align-items: center;
-  gap: 3px;
-  padding-left: 14px;
+  gap: 2px;
+  flex-shrink: 0;
+  margin-left: auto;
   color: var(--color-text-faint);
 }
 
