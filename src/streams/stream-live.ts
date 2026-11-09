@@ -561,6 +561,29 @@ export function getStreamWire(): Promise<StreamLiveWire> {
 }
 
 /**
+ * Drop one script subscription from the live wire.
+ *
+ * Detach used to clear chart overlays but leave `/ws/live` subscribed — the
+ * orphaned sub kept painting Upper/Lower after a replacement Donchian (or
+ * Strat) was added, so the channel showed doubled lines. Best-effort; never
+ * throws.
+ */
+export function streamReleaseScript(subId: string): void {
+  const id = String(subId || '').trim();
+  if (!id || !wire) return;
+  try {
+    wire.release(id);
+  } catch {
+    /* socket may already be gone */
+  }
+}
+
+/** @internal test helper — install/clear the primary wire without opening a socket. */
+export function _setPrimaryWireForTests(next: StreamLiveWire | null): void {
+  wire = next;
+}
+
+/**
  * Diagnostic view of the engine socket for MCP `stream.get`.
  *
  * `null` when nothing has subscribed yet — the wire is built lazily on the

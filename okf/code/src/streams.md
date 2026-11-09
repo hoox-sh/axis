@@ -7,7 +7,7 @@ tags: [code, streams]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-04T22:58:58Z
+  at: 2026-11-09T20:37:15Z
 sources:
   - id: tree
     resource: "src/streams"
@@ -22,7 +22,7 @@ okf_lock: generated
 * `multiplex.ts` — ENGINE_OWNED_APPEND_CAP, ENGINE_OWNED_TICK_MIN_MS, EngineOwnedPaintDiff, HEAVY_LIVE_RERUN_BARS, LIVE_RERUN_MAX_CONCURRENT, SCRIPT_STREAM_RETRY_MS, ScriptStreamRetryState, StopLiveOpts, StopLiveReason, StreamPlugin, _awaitEnginePaintForTests, _getLiveEpochForTests
 * `reconnect-ws.ts` — RECONNECT_DEFAULTS, ReconnectableWsOpts, WsStatus, nextBackoffMs, openReconnectableWs
 * `slot-live-mux.ts` — SLOT_LIVE_MUX_CAP, _resetSlotLiveMuxForTests, _slotLiveMuxSnapshotForTests, stopSlotLiveMux, syncSlotLiveMux
-* `stream-live.ts` — StreamFallbackError, VerifyClosedBarInput, VerifyClosedBarOutcome, VerifyStrength, acquireSlotWire, forgetChartSlotPins, getStreamWire, mergeEngineSnapshot, pinChartSlot, releaseSlotWire, resetStreamWire, scriptHistoryBars
+* `stream-live.ts` — StreamFallbackError, VerifyClosedBarInput, VerifyClosedBarOutcome, VerifyStrength, _setPrimaryWireForTests, acquireSlotWire, forgetChartSlotPins, getStreamWire, mergeEngineSnapshot, pinChartSlot, releaseSlotWire, resetStreamWire
 * `ws-venues.ts` — VENUE_WS_HOSTS, VenueId, VenueWsConfig, buildVenueWs
 
 # Depends on

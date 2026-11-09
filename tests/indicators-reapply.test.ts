@@ -309,6 +309,44 @@ describe('detachIndicatorFromChart', () => {
     expect(store.scripts.some((s) => s.id === id)).toBe(false);
   });
 
+  it('releases the live-wire script sub when detaching (no orphan Upper)', async () => {
+    const { StreamLiveWire } = await import('../src/engine/live-wire');
+    const { _setPrimaryWireForTests } = await import('../src/streams/stream-live');
+    const unsubscribed: string[] = [];
+    const client = {
+      isOpen: true,
+      onFrame: undefined as ((frame: unknown) => void) | undefined,
+      async connect() {},
+      disconnect() {},
+      subscribe() {},
+      resumeSubscription() {},
+      unsubscribe(id: string) {
+        unsubscribed.push(id);
+      },
+      awaitFrame() {
+        return new Promise(() => {});
+      },
+      addReconnectHandler() {
+        return () => {};
+      },
+    };
+    const wire = new StreamLiveWire(client as never, {
+      onStatus() {},
+      onSeriesFull() {},
+      onSeriesDelta() {},
+      onCloseVerified() {},
+    });
+    _setPrimaryWireForTests(wire);
+    try {
+      const id = addIndicator('DC', 'indicator("DC", overlay=true)\nplot(1, "Upper")', 'price', {});
+      detachIndicatorFromChart(id);
+      expect(unsubscribed).toContain(id);
+      expect(store.scripts.some((s) => s.id === id)).toBe(false);
+    } finally {
+      _setPrimaryWireForTests(null);
+    }
+  });
+
   it('owner prefix helpers stay stable for multi-script panes', () => {
     const id = 'id_abc';
     expect(sanitizeOverlayOwnerId(id)).toBeTruthy();

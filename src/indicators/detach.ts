@@ -37,6 +37,7 @@ import {
   getDrawingLayer,
   getActiveDrawingLayer,
 } from '../chart/manager-access';
+import { streamReleaseScript } from '../streams/stream-live';
 import { clearScriptChartOverlays } from './visibility';
 
 /**
@@ -45,6 +46,12 @@ import { clearScriptChartOverlays } from './visibility';
  */
 export function detachIndicatorFromChart(id: string): void {
   if (!id) return;
+  // Stop `/ws/live` first so a late delta cannot re-paint overlays we clear.
+  try {
+    streamReleaseScript(id);
+  } catch {
+    /* wire optional */
+  }
   const script = store.scripts.find((s) => s.id === id);
   if (!script) {
     // Still try store cleanup (series cache / runResults)
