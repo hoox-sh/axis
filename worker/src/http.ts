@@ -37,12 +37,16 @@ import { WORKER_VERSION, workerGitSha } from './version';
 /**
  * Allowed request headers, narrowest set used by on-chain / scripts routes.
  *
+ * `X-API-Key` must stay listed — `engineHeaders()` pairs it with
+ * `Authorization` for keyed fetches; omitting it fails preflight.
+ *
  * `X-AXIS-Client` is optional (IDE / preview). The PWA relies on `Origin`
  * instead so GET `/health` stays a simple request. Keep the name on the
  * allow-list so clients that do send it pass preflight. The value is
  * client-controlled and is a beta convenience, never authentication.
  */
-const BASE_HEADERS = 'Content-Type, Authorization, X-Admin-Token, If-Match, X-AXIS-Client';
+const BASE_HEADERS =
+  'Content-Type, Authorization, X-API-Key, X-Admin-Token, If-Match, X-AXIS-Client';
 
 /** Adds signed-exchange credentials (`X-Exchange-*`) for `/api/market`. */
 const EXCHANGE_HEADERS = `${BASE_HEADERS}, X-Exchange-Key, X-Exchange-Secret, X-Exchange-Passphrase`;
@@ -108,7 +112,7 @@ export const WRITE_CORS = (origin: string): Record<string, string> =>
 
 /** MCP transport headers: `GET`/`POST`/`DELETE` per Streamable HTTP, plus session ids. */
 const MCP_HEADERS =
-  'Content-Type, Authorization, MCP-Protocol-Version, MCP-Session-Id, Last-Event-ID, X-Admin-Token';
+  'Content-Type, Authorization, X-API-Key, MCP-Protocol-Version, MCP-Session-Id, Last-Event-ID, X-Admin-Token';
 
 /** Streamable-HTTP MCP transport CORS. */
 export const MCP_CORS = (origin: string): Record<string, string> => ({

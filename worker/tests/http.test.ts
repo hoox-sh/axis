@@ -51,7 +51,8 @@ describe('corsHeaders', () => {
     expect(corsHeaders('https://a.test')).toEqual({
       'Access-Control-Allow-Origin': 'https://a.test',
       'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Admin-Token, If-Match, X-AXIS-Client',
+      'Access-Control-Allow-Headers':
+        'Content-Type, Authorization, X-API-Key, X-Admin-Token, If-Match, X-AXIS-Client',
       'Access-Control-Max-Age': '86400',
       Vary: 'Origin',
     });
@@ -67,7 +68,8 @@ describe('corsHeaders', () => {
     expect(READ_CORS('https://a.test')).toEqual({
       'Access-Control-Allow-Origin': 'https://a.test',
       'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Admin-Token, If-Match, X-AXIS-Client',
+      'Access-Control-Allow-Headers':
+        'Content-Type, Authorization, X-API-Key, X-Admin-Token, If-Match, X-AXIS-Client',
       'Access-Control-Max-Age': '86400',
       Vary: 'Origin',
     });
@@ -77,22 +79,28 @@ describe('corsHeaders', () => {
     const h = MARKET_CORS('https://a.test');
     expect(h['Access-Control-Allow-Methods']).toBe('GET, OPTIONS');
     expect(h['Access-Control-Allow-Headers']).toBe(
-      'Content-Type, Authorization, X-Admin-Token, If-Match, X-AXIS-Client, X-Exchange-Key, X-Exchange-Secret, X-Exchange-Passphrase',
+      'Content-Type, Authorization, X-API-Key, X-Admin-Token, If-Match, X-AXIS-Client, X-Exchange-Key, X-Exchange-Secret, X-Exchange-Passphrase',
     );
   });
 
   it('WRITE_CORS uses mutating methods without exchange headers', () => {
     const h = WRITE_CORS('https://a.test');
     expect(h['Access-Control-Allow-Methods']).toBe('GET, POST, PUT, DELETE, OPTIONS');
-    expect(h['Access-Control-Allow-Headers']).toBe('Content-Type, Authorization, X-Admin-Token, If-Match, X-AXIS-Client');
+    expect(h['Access-Control-Allow-Headers']).toBe(
+      'Content-Type, Authorization, X-API-Key, X-Admin-Token, If-Match, X-AXIS-Client',
+    );
   });
 
-  it('API_CORS includes the MCP replay headers', () => {
+  it('API_CORS includes X-API-Key and the MCP replay headers', () => {
     const h = API_CORS('https://a.test');
     expect(h['Access-Control-Allow-Methods']).toBe('GET, POST, PUT, DELETE, OPTIONS');
     expect(h['Access-Control-Allow-Headers']).toBe(
-      'Content-Type, Authorization, X-Admin-Token, If-Match, X-AXIS-Client, X-Exchange-Key, X-Exchange-Secret, X-Exchange-Passphrase, MCP-Protocol-Version, MCP-Session-Id, Last-Event-ID',
+      'Content-Type, Authorization, X-API-Key, X-Admin-Token, If-Match, X-AXIS-Client, X-Exchange-Key, X-Exchange-Secret, X-Exchange-Passphrase, MCP-Protocol-Version, MCP-Session-Id, Last-Event-ID',
     );
+    // Live ticket mint preflight: Access-Control-Request-Headers: authorization,x-api-key
+    const allow = (h['Access-Control-Allow-Headers'] || '').toLowerCase();
+    expect(allow.includes('authorization')).toBe(true);
+    expect(allow.includes('x-api-key')).toBe(true);
   });
 });
 
