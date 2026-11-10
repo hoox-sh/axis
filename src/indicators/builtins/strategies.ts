@@ -75,11 +75,13 @@ plot(slow, "Slow", color=${COL.amber})`,
 slowLen = input.int(26, "Slow")
 sigLen = input.int(9, "Signal")
 [macdLine, signalLine, hist] = ta.macd(close, fastLen, slowLen, sigLen)
+// hist is intentionally not plotted. On an overlay strategy it stretches
+// the price scale and flattens the candles. Use AXIS MACD for the pane.
 if ta.crossover(macdLine, signalLine)
     strategy.entry("Long", strategy.long)
 if ta.crossunder(macdLine, signalLine)
     strategy.close("Long")
-plot(hist, "Hist", display=display.data_window)`,
+`,
     ),
   }),
   def({

@@ -27,4 +27,22 @@ describe('pynescript_runtime interpret', () => {
     }
     expect(out).toMatch(/^OK /);
   });
+
+  it('emits strategy fills and keeps data_window plots off the pane', () => {
+    const proc = Bun.spawnSync(['python3', 'tests/pynescript-strategy-events.py'], {
+      cwd: `${import.meta.dir}/..`,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    const err = new TextDecoder().decode(proc.stderr);
+    const out = new TextDecoder().decode(proc.stdout);
+    if (proc.exitCode !== 0) {
+      const msg = err || out;
+      if (/ModuleNotFoundError: No module named '(numpy|antlr4|pynescript)'/.test(msg)) {
+        return;
+      }
+      throw new Error(`strategy runtime failed:\n${msg}`);
+    }
+    expect(out).toMatch(/^OK /);
+  });
 });

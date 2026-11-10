@@ -87,6 +87,7 @@ describe('BUILTIN_SCRIPTS catalog', () => {
     expect(getBuiltinScript('rsi')?.shorttitle).toBe('RSI');
     expect(getBuiltinScript('sma')?.kind).toBe('indicator');
     expect(getBuiltinScript('strat-macd')?.kind).toBe('strategy');
+    expect(getBuiltinScript('strat-macd')?.code).not.toMatch(/plot\s*\(\s*hist/);
     expect(getBuiltinScript('nope')).toBeUndefined();
   });
 

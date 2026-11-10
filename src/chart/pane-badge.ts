@@ -272,9 +272,7 @@ export function mountPaneBadge(
           'Remove script',
           'trash',
           () => {
-            if (confirm(`Remove “${script.name}” from the chart?`)) {
-              removeScript(script.id, paneId);
-            }
+            removeScript(script.id, paneId);
           },
           `axis-pane-remove-${script.id}`,
         ),

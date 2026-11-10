@@ -448,7 +448,12 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props): J
     setApplyingBuiltin(b.id);
     setError('');
     try {
-      await applyBuiltinScript(b.id);
+      const applied = await applyBuiltinScript(b.id);
+      if (applied.status === 'error') {
+        const msg = applied.error || `Could not apply "${b.title}"`;
+        setError(msg);
+        return;
+      }
       setRecentIds(noteRecentBuiltinId(b.id));
       setStatus('ready', `Applied built-in "${b.title}"`);
       announce(`Applied ${b.title}`);

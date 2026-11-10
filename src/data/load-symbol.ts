@@ -212,6 +212,10 @@ export async function loadSymbolData(
 ): Promise<boolean> {
   // DEX pool symbols (network:0x… / base58) are case-sensitive — do not force upper.
   const srcId = String(sourceId || store.source || '');
+  // Claim this load before any await. The progressive-repaint import used to
+  // yield first, so a symbol change and an interval change in the same moment
+  // could finish in the wrong order and the chart kept the old symbol.
+  const gen = ++loadGeneration;
   const sym = normalizeLoadSymbol(symbol, srcId);
   const iv = String(interval || store.interval || '1d');
 
@@ -220,13 +224,12 @@ export async function loadSymbolData(
   // overwrite the new series.
   try {
     const { stopProgressiveRepaint } = await import('./dsm-orchestrator');
+    if (gen !== loadGeneration) return false;
     stopProgressiveRepaint();
   } catch {
     /* repaint stop is best-effort */
   }
-
-  // Claim this load as the newest; abort prior network + ignore stale completions.
-  const gen = ++loadGeneration;
+  if (gen !== loadGeneration) return false;
   beginChartReadiness(gen, { symbol: sym, interval: iv, source: srcId });
   try {
     loadAbort?.abort();

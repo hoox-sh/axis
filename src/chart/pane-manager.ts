@@ -1621,31 +1621,37 @@ export class PaneManager {
     if (!subs.length) return;
     const area = this.paneAreaHeight();
     if (!(area > 0)) return;
-    let total = 0;
+    const slot = this.slot;
     const targets = new Map<string, number>();
     for (const pane of subs) {
       const stored = Number(store.panes.find((row) => row.id === pane.id)?.height);
       // Panes without a store row (the legacy equity pane) keep their current
       // rendered height as the target.
-      const current = Number(this.slot.getHeight(pane.id));
+      const current = Number(slot.getHeight(pane.id));
       const fallback = Number.isFinite(current) && current > 0 ? current : MIN_SUB_PANE_HEIGHT;
       const target = Math.max(
         MIN_SUB_PANE_HEIGHT,
         Number.isFinite(stored) && stored > 0 ? stored : fallback,
       );
       targets.set(pane.id, target);
-      total += target;
     }
-    // Keep at least MIN_PRICE_PANE_SHARE of the area for the candles.
-    const maxTotal = Math.max(MIN_SUB_PANE_HEIGHT * subs.length, area * (1 - MIN_PRICE_PANE_SHARE));
-    const scale = total > maxTotal ? maxTotal / total : 1;
-    for (const pane of subs) {
-      this.slot.setHeight(
-        pane.id,
-        Math.round((targets.get(pane.id) ?? MIN_SUB_PANE_HEIGHT) * scale),
-      );
+    // Keep at least MIN_PRICE_PANE_SHARE of the area for the candles, but never
+    // scale a sub-pane below the readable floor. A large volume target used to
+    // shrink RSI/MACD to ~25px, and the MACD price-scale labels overlapped.
+    const floorSum = MIN_SUB_PANE_HEIGHT * subs.length;
+    const maxTotal = Math.max(floorSum, area * (1 - MIN_PRICE_PANE_SHARE));
+    const flexible = subs.map((pane) =>
+      Math.max(0, (targets.get(pane.id) ?? MIN_SUB_PANE_HEIGHT) - MIN_SUB_PANE_HEIGHT),
+    );
+    const flexSum = flexible.reduce((sum, n) => sum + n, 0);
+    const budget = Math.max(0, Math.min(flexSum, maxTotal - floorSum));
+    for (let i = 0; i < subs.length; i++) {
+      const pane = subs[i]!;
+      const extra = flexSum > 0 ? Math.round((budget * flexible[i]!) / flexSum) : 0;
+      slot.setHeight(pane.id, MIN_SUB_PANE_HEIGHT + extra);
     }
-    this.slot.setHeight(price.id, Math.max(MIN_SUB_PANE_HEIGHT, Math.round(area - total * scale)));
+    const used = subs.reduce((sum, pane) => sum + Number(slot.getHeight(pane.id) || 0), 0);
+    slot.setHeight(price.id, Math.max(MIN_SUB_PANE_HEIGHT, Math.round(area - used)));
   }
 
   /** Pane area in CSS px (chart height minus the time axis and separators). */
@@ -3369,8 +3375,10 @@ export class PaneManager {
         // Extend the painted candle window so overlay clamps keep the newest tip.
         // Extend never creates the range — full paints do — so pre-paint ticks stay a no-op.
         this.extendPaintedCandleRange(bar.time);
-        // Do not copy overlay last values onto a new candle. Idle scripts leave
-        // the tip on the last evaluated bar; a real engine delta must land next.
+        // Hold the last indicator value onto a brand-new candle so the line
+        // does not stop one bar short until the script re-runs. A forming
+        // tick of a bar we already extended is a no-op (last time matches).
+        if (paintedTime != null) this.extendOverlayTips(paintedTime);
       }
 
       // Volume series: row lands on the candle's bar time so both series share
@@ -3388,12 +3396,44 @@ export class PaneManager {
   }
 
   /**
-   * Idle overlay tip extension is intentionally a no-op. Copying lastVal onto
-   * a newer candle time paints a stale EMA and looks like a few-bar lag.
-   * Engine deltas / live tip patches must land the real tip.
+   * Hold each script series' last value onto a newer candle time.
+   *
+   * A closed bar paints before the script re-runs. Leaving the series on the
+   * previous bar makes every indicator look one bar short. One update at the
+   * new time bridges that gap; the engine result replaces it.
    */
-  extendOverlayTips(_time: number): void {
-    // kept as a public no-op so older callers / tests stay type-compatible
+  extendOverlayTips(time: number): void {
+    if (!Number.isFinite(time)) return;
+    for (const pane of this.panes.values()) {
+      for (const key of Object.keys(pane.series)) {
+        if (!isScriptCoPaintedKey(key)) continue;
+        const series = pane.series[key] as
+          | {
+              data?: () => readonly { time?: unknown; value?: unknown }[];
+              update?: (point: { time: UTCTimestamp; value: number }) => void;
+            }
+          | undefined;
+        if (!series || typeof series.data !== 'function' || typeof series.update !== 'function') {
+          continue;
+        }
+        let rows: readonly { time?: unknown; value?: unknown }[];
+        try {
+          rows = series.data();
+        } catch {
+          continue;
+        }
+        if (!rows?.length) continue;
+        const last = rows[rows.length - 1];
+        const lastT = Number(last?.time);
+        const value = Number(last?.value);
+        if (!Number.isFinite(lastT) || lastT >= time || !Number.isFinite(value)) continue;
+        try {
+          series.update({ time: time as UTCTimestamp, value });
+        } catch {
+          /* a series that cannot take a tip update keeps its last bar */
+        }
+      }
+    }
   }
 
   /**

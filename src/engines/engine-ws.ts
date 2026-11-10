@@ -353,7 +353,9 @@ class EngineWsClient {
           pend.resolve({
             status: 'error',
             error: String(rec['message'] || rec['error'] || 'Engine error'),
+            message: rec['message'] != null ? String(rec['message']) : undefined,
             code: rec['code'] as string | undefined,
+            max_bars: rec['max_bars'],
             transport: 'ws',
           });
           return;

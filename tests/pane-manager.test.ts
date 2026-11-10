@@ -1342,19 +1342,24 @@ describe('live candle axis', () => {
     return { time, open: 1, high: 2, low: 0.5, close: 1.5, volume: 1 };
   }
 
-  it('does not copy overlay last values onto a new candle when the script is idle', () => {
+  it('holds the last indicator value onto a new candle until the script re-runs', () => {
     const price = pm.getPane('price')!;
     const updates: unknown[] = [];
     const sets: unknown[] = [];
+    let rows: { time: number; value: number }[] = [];
     price.series['overlay_sma__SMA'] = {
-      update: (p: unknown) => {
+      update: (p: { time: number; value: number }) => {
         updates.push(p);
+        const idx = rows.findIndex((row) => row.time === p.time);
+        if (idx >= 0) rows[idx] = p;
+        else rows.push(p);
       },
-      setData: (d: unknown) => {
+      setData: (d: { time: number; value: number }[]) => {
         sets.push(d);
+        rows = d.map((row) => ({ ...row }));
       },
       applyOptions: () => {},
-      data: () => [],
+      data: () => rows,
     } as never;
     pm.notePaintedCandleRange(100, 220, [100, 160, 220]);
     pm.syncOverlayLines(
@@ -1377,8 +1382,7 @@ describe('live candle axis', () => {
     pm.extendOverlayTips(220);
     expect(updates).toEqual([]);
     pm.appendBar(bar(280));
-    // Idle tip-copy looked like a few-bar lag; tip stays on last evaluated bar.
-    expect(updates).toEqual([]);
+    expect(updates).toEqual([{ time: 280, value: 42 }]);
   });
 
   it('does not grow the indicator axis on forming ticks, and extends it once on a new candle', () => {
