@@ -43,7 +43,12 @@ import { intervalToSec } from '../data/bars-gaps';
 import { sanitizeStreamBar } from '../data/parse-bars';
 import { engineDebug, engineDebugSample } from '../debug';
 
-import { readTimeList, scriptDeltaTimeTail, Redesign2DeltaApplier } from './client-apply';
+import {
+  readTimeList,
+  scriptDeltaTimeTail,
+  Redesign2DeltaApplier,
+  type DeltaApplierFull,
+} from './client-apply';
 import { classifySeqGap } from './frames';
 import { v1Count } from './v1/metrics';
 import { commitLiveBatch, runApplyTransaction } from './v1/apply-transaction';
@@ -194,6 +199,11 @@ const AUTH_SUBSCRIBE_RETRY_MS = 150;
  * Backoff grows so a wedged sub cannot hammer `/ws/live` every tip.
  */
 const GAP_RESYNC_BACKOFF_MS = [0, 500, 1_500, 4_000, 10_000] as const;
+
+function gapBackoffMs(attempts: number): number {
+  return GAP_RESYNC_BACKOFF_MS[Math.min(attempts, GAP_RESYNC_BACKOFF_MS.length - 1)] ?? 10_000;
+}
+
 /**
  * Consecutive axis resubs before replacing resume with a fresh subscribe.
  * Resume returns the same pooled engine session; when that session's count
@@ -298,7 +308,7 @@ function seriesTipTime(frame: WireFrame | undefined): number | null {
 }
 
 function isFormingSeriesTip(frame: WireFrame | undefined): boolean {
-  if (!frame || frame.type !== 'delta') return false;
+  if (frame?.type !== 'delta') return false;
   const payload = frame.payload as { forming?: unknown } | undefined;
   return payload?.forming === true;
 }
@@ -376,10 +386,22 @@ function scriptFullForApplier(
 /** Tail-trim or left-pad a column to `len` (pad with null). */
 function fitColumnToLen(col: unknown, len: number): unknown[] {
   if (!Array.isArray(col)) return Array.from({ length: len }, () => null);
-  if (col.length === len) return col.slice();
+  // Same length: keep the ref — callers that mutate tip cells copy first.
+  if (col.length === len) return col as unknown[];
   if (col.length > len) return col.slice(col.length - len);
   const pad = Array.from({ length: len - col.length }, () => null);
   return pad.concat(col);
+}
+
+/** True when the applier cache already matches the chart window (no column copy). */
+function scriptCacheWindowAligned(
+  cached: Record<string, unknown> | null | undefined,
+  windowBars: readonly Bar[],
+): boolean {
+  if (!cached || !windowBars.length) return false;
+  if (Number(cached['count']) !== windowBars.length) return false;
+  const times = readTimeList(cached['bar_times'] ?? cached['times']);
+  return !!times && times.length === windowBars.length;
 }
 
 /**
@@ -391,14 +413,16 @@ function fitColumnToLen(col: unknown, len: number): unknown[] {
 function fitFullToChartWindow(
   full: Record<string, unknown>,
   windowBars: readonly Bar[],
-): Record<string, unknown> {
+): DeltaApplierFull {
   const len = windowBars.length;
   const times = windowBars.map((b) => b.time);
+  // Built as a plain record so array-shaped `plots` (engine legacy) can stay;
+  // the applier accepts either column form.
   const out: Record<string, unknown> = { ...full, count: len, bar_times: times };
   delete out['times'];
   const series = full['series'];
   if (series && typeof series === 'object' && !Array.isArray(series)) {
-    const next: Record<string, unknown> = {};
+    const next: Record<string, unknown[]> = {};
     for (const [k, v] of Object.entries(series as Record<string, unknown>)) {
       next[k] = fitColumnToLen(v, len);
     }
@@ -408,13 +432,38 @@ function fitFullToChartWindow(
   if (Array.isArray(plots)) {
     out['plots'] = plots.map((col) => fitColumnToLen(col, len));
   } else if (plots && typeof plots === 'object') {
-    const next: Record<string, unknown> = {};
+    const next: Record<string, unknown[]> = {};
     for (const [k, v] of Object.entries(plots as Record<string, unknown>)) {
       next[k] = fitColumnToLen(v, len);
     }
     out['plots'] = next;
   }
-  return out;
+  return out as DeltaApplierFull;
+}
+
+/**
+ * Realign (or tip-overlay) an unmergeable continuous delta onto the chart window.
+ * First mismatch copies columns; later tips only patch the last cell when the
+ * cache is already window-sized — Donchian-style storms used to re-copy ~5k
+ * rows every venue tick.
+ */
+function realignScriptDeltaToWindow(
+  cached: Record<string, unknown>,
+  windowBars: readonly Bar[],
+  delta: Record<string, unknown>,
+  seq?: number,
+): DeltaApplierFull {
+  const fitted = scriptCacheWindowAligned(cached, windowBars)
+    ? ({ ...cached } as DeltaApplierFull)
+    : fitFullToChartWindow(cached, windowBars);
+  overlayDeltaTip(fitted, delta);
+  if (typeof seq === 'number') fitted['seq'] = seq;
+  return fitted;
+}
+
+/** Empty success shell for stream eval paths that paint via applyScriptPush. */
+function emptyStreamResult(): RunResult {
+  return { status: 'success', plots: [], series: {}, events: [], meta: {} };
 }
 
 /** Overlay tip values from a delta onto a full's series/plots (last cell). */
@@ -710,18 +759,53 @@ export class StreamLiveWire {
     v1Count('resync');
     this.holdUntilFull.add(subId);
     this.handlers.onStatus(subId, 'degraded', { message: 'resyncing' });
-    const bars = this.seriesBars.get(subId) ?? this.scriptCtx.get(subId)?.bars ?? [];
-    const seq = this.appliedSeq.get(subId) ?? 0;
+    this.tryResume(subId, { closedUpto: this.appliedClosedUpto.get(subId) });
+  }
+
+  /**
+   * Best-effort resume. Bars default to series snapshot, else script window.
+   * Never throws — the socket may still be opening.
+   */
+  private tryResume(
+    subId: string,
+    opts?: { bars?: readonly Bar[]; seq?: number; closedUpto?: number },
+  ): void {
+    const bars = opts?.bars ?? this.seriesBars.get(subId) ?? this.scriptCtx.get(subId)?.bars ?? [];
+    const seq = opts?.seq ?? this.appliedSeq.get(subId) ?? 0;
     try {
       this.client.resumeSubscription(
         subId,
         bars.length,
         this.lastBarTime(bars),
-        this.resumePayload(subId, seq, this.appliedClosedUpto.get(subId)),
+        this.resumePayload(subId, seq, opts?.closedUpto),
       );
     } catch {
       /* socket may still be coming up */
     }
+  }
+
+  /** True while a prior gap/resync attempt is still inside its backoff window. */
+  private gapBackoffArmed(
+    subId: string,
+    atMap: Map<string, number>,
+    attemptsMap: Map<string, number>,
+  ): boolean {
+    const attempts = attemptsMap.get(subId) ?? 0;
+    if (attempts <= 0) return false;
+    const lastAt = atMap.get(subId) ?? 0;
+    return Date.now() - lastAt < gapBackoffMs(attempts);
+  }
+
+  /** Record a gap/resync attempt; returns the new attempt count. */
+  private markGapAttempt(
+    subId: string,
+    atMap: Map<string, number>,
+    attemptsMap: Map<string, number>,
+  ): number {
+    const next = (attemptsMap.get(subId) ?? 0) + 1;
+    atMap.set(subId, Date.now());
+    attemptsMap.set(subId, next);
+    return next;
   }
 
   private clearHidden(): void {
@@ -815,18 +899,7 @@ export class StreamLiveWire {
     this.jsonSubs.add(subId);
     v1Count('jsonFallback');
     this.handlers.onStatus(subId, 'degraded', { message: 'replay unavailable — JSON' });
-    const bars = this.seriesBars.get(subId) ?? this.scriptCtx.get(subId)?.bars ?? [];
-    const seq = this.appliedSeq.get(subId) ?? 0;
-    try {
-      this.client.resumeSubscription(
-        subId,
-        bars.length,
-        this.lastBarTime(bars),
-        this.resumePayload(subId, seq),
-      );
-    } catch {
-      /* the socket may still be opening */
-    }
+    this.tryResume(subId);
   }
 
   /** One unknown opcode: that sub resumes in JSON. The socket is not closed. */
@@ -835,18 +908,7 @@ export class StreamLiveWire {
     this.jsonSubs.add(subId);
     v1Count('jsonFallback');
     this.handlers.onStatus(subId, 'degraded', { message: 'unknown opcode — JSON' });
-    const bars = this.seriesBars.get(subId) ?? this.scriptCtx.get(subId)?.bars ?? [];
-    const seq = this.appliedSeq.get(subId) ?? 0;
-    try {
-      this.client.resumeSubscription(
-        subId,
-        bars.length,
-        this.lastBarTime(bars),
-        this.resumePayload(subId, seq, this.appliedClosedUpto.get(subId)),
-      );
-    } catch {
-      /* keep the socket */
-    }
+    this.tryResume(subId, { closedUpto: this.appliedClosedUpto.get(subId) });
   }
 
   /** Every inbound frame lands in the inbox AND the router — neither path
@@ -992,29 +1054,12 @@ export class StreamLiveWire {
    */
   private forceInboxSnapshot(subId: string): void {
     if (this.inboxNeeded(subId)) return;
-    const now = Date.now();
-    const attempts = this.inboxOverflowAttempts.get(subId) ?? 0;
-    const lastAt = this.inboxOverflowAt.get(subId) ?? 0;
-    const backoff =
-      GAP_RESYNC_BACKOFF_MS[Math.min(attempts, GAP_RESYNC_BACKOFF_MS.length - 1)] ?? 10_000;
-    if (attempts > 0 && now - lastAt < backoff) return;
+    if (this.gapBackoffArmed(subId, this.inboxOverflowAt, this.inboxOverflowAttempts)) return;
     this.inboxOverflowPending.add(subId);
     this.holdUntilFull.add(subId);
-    this.inboxOverflowAt.set(subId, now);
-    this.inboxOverflowAttempts.set(subId, attempts + 1);
+    this.markGapAttempt(subId, this.inboxOverflowAt, this.inboxOverflowAttempts);
     this.handlers.onStatus(subId, 'degraded', { message: 'inbox full — resyncing' });
-    const bars = this.seriesBars.get(subId) ?? this.scriptCtx.get(subId)?.bars ?? [];
-    const seq = this.appliedSeq.get(subId) ?? 0;
-    try {
-      this.client.resumeSubscription(
-        subId,
-        bars.length,
-        this.lastBarTime(bars),
-        this.resumePayload(subId, seq),
-      );
-    } catch {
-      /* the socket may still be opening */
-    }
+    this.tryResume(subId);
   }
 
   /** Resume / overflow / axis-resub fulls may restart seq at 1. */
@@ -1042,9 +1087,7 @@ export class StreamLiveWire {
   }
 
   private isDroppableTip(frame: WireFrame): boolean {
-    if (frame.type !== 'delta') return false;
-    const payload = frame.payload as { forming?: unknown } | undefined;
-    return payload?.forming === true;
+    return isFormingSeriesTip(frame);
   }
 
   /** True once this series sub has a snapshot (subscribe-once). */
@@ -1261,13 +1304,7 @@ export class StreamLiveWire {
         throw new StreamFallbackError('no-state', 'script snapshot produced no state');
       }
       await this.applyScriptPush(input.subId, cached, 'stream-full');
-      return {
-        status: 'success',
-        plots: [],
-        series: {},
-        events: [],
-        meta: {},
-      };
+      return emptyStreamResult();
     }
     // Still waiting on a gap snapshot: retry fresh subscribe under backoff so a
     // wedged sub cannot sit on holdUntilFull forever between venue ticks.
@@ -1300,13 +1337,7 @@ export class StreamLiveWire {
       this.requestFreshSnapshot(input.subId, 'script tip lag — resubscribing', { soft: true });
     }
     await this.applyScriptPush(input.subId, cached, 'stream-delta');
-    return {
-      status: 'success',
-      plots: [],
-      series: {},
-      events: [],
-      meta: {},
-    };
+    return emptyStreamResult();
   }
 
   /** Route an inbound frame to appliers + handlers. Never throws. */
@@ -1518,7 +1549,7 @@ export class StreamLiveWire {
     }
   }
 
-  private lastBarTime(bars: Bar[]): number {
+  private lastBarTime(bars: readonly Bar[]): number {
     if (!bars.length) return 0;
     const t = bars[bars.length - 1]?.time;
     return typeof t === 'number' && Number.isFinite(t) ? t : 0;
@@ -1532,17 +1563,7 @@ export class StreamLiveWire {
       // PYNE resume emits a full that may restart seq at 1 — hold until it
       // lands so the rewind gate cannot drop it (series sub frozen at 11211).
       this.holdUntilFull.add(subId);
-      const bars = this.seriesBars.get(subId) ?? this.scriptCtx.get(subId)?.bars ?? [];
-      try {
-        this.client.resumeSubscription(
-          subId,
-          bars.length,
-          this.lastBarTime(bars),
-          this.resumePayload(subId, seq),
-        );
-      } catch {
-        /* socket may still be coming up */
-      }
+      this.tryResume(subId, { seq });
     }
   }
 
@@ -1878,22 +1899,18 @@ export class StreamLiveWire {
       // Chart-window realign (Donchian etc.): engine sessions often ship a
       // longer axis than the subscribe window. The old salvage stripped
       // bar_times from the cache, so every later delta fell through to
-      // "delta rejected" and stormed soft fresh-subscribe. Fit columns to
-      // the chart window, stamp bar_times, overlay the tip, and paint.
+      // "delta rejected" and stormed soft fresh-subscribe. Fit once, then
+      // tip-overlay only while the cache stays window-aligned.
       const windowBars = this.scriptCtx.get(subId)?.bars;
       const cached = applier.cached;
       if (cached && windowBars?.length) {
-        const fitted = fitFullToChartWindow(cached, windowBars);
-        overlayDeltaTip(fitted, delta);
-        if (typeof frame.seq === 'number') fitted['seq'] = frame.seq;
-        applier.applyFull(
-          fitted as {
-            plots?: Record<string, unknown[]>;
-            series?: Record<string, unknown[]>;
-            count: number;
-            seq?: number;
-          },
+        const fitted = realignScriptDeltaToWindow(
+          cached,
+          windowBars,
+          delta,
+          typeof frame.seq === 'number' ? frame.seq : undefined,
         );
+        applier.applyFull(fitted);
         out = {
           ok: true,
           full: { ...(applier.cached ?? fitted) },
@@ -1937,16 +1954,9 @@ export class StreamLiveWire {
    * (`resync` climbing tens per minute while chips flickered).
    */
   private requestAxisResub(subId: string, message = 'axis mismatch — resubscribing'): void {
-    const now = Date.now();
-    const attempts = this.axisResubAttempts.get(subId) ?? 0;
-    const lastAt = this.axisResubAt.get(subId) ?? 0;
-    const backoff =
-      GAP_RESYNC_BACKOFF_MS[Math.min(attempts, GAP_RESYNC_BACKOFF_MS.length - 1)] ?? 10_000;
-    if (attempts > 0 && now - lastAt < backoff) return;
+    if (this.gapBackoffArmed(subId, this.axisResubAt, this.axisResubAttempts)) return;
 
-    this.axisResubAt.set(subId, now);
-    const next = attempts + 1;
-    this.axisResubAttempts.set(subId, next);
+    const next = this.markGapAttempt(subId, this.axisResubAt, this.axisResubAttempts);
     // Soft chip — same idea as tip-lag recovery (not a hard feed failure).
     this.handlers.onStatus(subId, 'connecting', { message });
 
@@ -1961,18 +1971,7 @@ export class StreamLiveWire {
     }
     if (this.axisResubPending.has(subId)) return;
     this.axisResubPending.add(subId);
-    const ctx = this.scriptCtx.get(subId);
-    const bars = ctx?.bars ?? [];
-    try {
-      this.client.resumeSubscription(
-        subId,
-        bars.length,
-        this.lastBarTime(bars),
-        this.resumePayload(subId, this.appliedSeq.get(subId) ?? 0),
-      );
-    } catch {
-      /* resume is best-effort; HUD already shows connecting */
-    }
+    this.tryResume(subId, { bars: this.scriptCtx.get(subId)?.bars ?? [] });
   }
 
   private clearGapResync(subId: string): void {
@@ -1991,26 +1990,12 @@ export class StreamLiveWire {
   private requestSeriesGapRecover(subId: string): void {
     this.holdUntilFull.add(subId);
     this.handlers.onStatus(subId, 'degraded', { message: 'delta gap — resyncing' });
-    const now = Date.now();
-    const attempts = this.gapResyncAttempts.get(subId) ?? 0;
-    const lastAt = this.gapResyncAt.get(subId) ?? 0;
-    const backoff =
-      GAP_RESYNC_BACKOFF_MS[Math.min(attempts, GAP_RESYNC_BACKOFF_MS.length - 1)] ?? 10_000;
-    if (attempts > 0 && now - lastAt < backoff) return;
-    this.gapResyncAt.set(subId, now);
-    this.gapResyncAttempts.set(subId, attempts + 1);
-    const bars = this.seriesBars.get(subId) ?? [];
-    const seq = this.appliedSeq.get(subId) ?? 0;
-    try {
-      this.client.resumeSubscription(
-        subId,
-        bars.length,
-        this.lastBarTime(bars),
-        this.resumePayload(subId, seq, this.appliedClosedUpto.get(subId)),
-      );
-    } catch {
-      /* socket may still be coming up */
-    }
+    if (this.gapBackoffArmed(subId, this.gapResyncAt, this.gapResyncAttempts)) return;
+    this.markGapAttempt(subId, this.gapResyncAt, this.gapResyncAttempts);
+    this.tryResume(subId, {
+      bars: this.seriesBars.get(subId) ?? [],
+      closedUpto: this.appliedClosedUpto.get(subId),
+    });
   }
 
   /**
@@ -2028,12 +2013,7 @@ export class StreamLiveWire {
     opts?: { soft?: boolean },
   ): void {
     const soft = opts?.soft === true;
-    const now = Date.now();
-    const attempts = this.gapResyncAttempts.get(subId) ?? 0;
-    const lastAt = this.gapResyncAt.get(subId) ?? 0;
-    const backoff =
-      GAP_RESYNC_BACKOFF_MS[Math.min(attempts, GAP_RESYNC_BACKOFF_MS.length - 1)] ?? 10_000;
-    if (attempts > 0 && now - lastAt < backoff) {
+    if (this.gapBackoffArmed(subId, this.gapResyncAt, this.gapResyncAttempts)) {
       this.holdUntilFull.add(subId);
       return;
     }
@@ -2041,9 +2021,7 @@ export class StreamLiveWire {
     this.holdUntilFull.add(subId);
     this.handlers.onStatus(subId, soft ? 'connecting' : 'degraded', { message });
     v1Count('resync');
-
-    this.gapResyncAt.set(subId, now);
-    this.gapResyncAttempts.set(subId, attempts + 1);
+    this.markGapAttempt(subId, this.gapResyncAt, this.gapResyncAttempts);
 
     // Fresh subscribe often restarts seq at 1 — drop appliedSeq so wasLive is
     // false and the rewind gate cannot reject it. Keep the applier cache so
@@ -2082,17 +2060,7 @@ export class StreamLiveWire {
       return;
     }
 
-    const bars = this.seriesBars.get(subId) ?? [];
-    try {
-      this.client.resumeSubscription(
-        subId,
-        bars.length,
-        this.lastBarTime(bars),
-        this.resumePayload(subId, 0),
-      );
-    } catch {
-      /* best-effort */
-    }
+    this.tryResume(subId, { bars: this.seriesBars.get(subId) ?? [], seq: 0 });
   }
 
   /** Clear script wire state without unsubscribing (server already released). */
@@ -2115,24 +2083,10 @@ export class StreamLiveWire {
   }
 
   release(subId: string): void {
-    this.axisResubPending.delete(subId);
-    this.axisResubAttempts.delete(subId);
-    this.axisResubAt.delete(subId);
-    this.holdUntilFull.delete(subId);
-    this.pendingScriptSubscribe.delete(subId);
-    this.clearGapResync(subId);
-    this.appliers.delete(subId);
-    this.appliedSeq.delete(subId);
-    this.jsonSubs.delete(subId);
+    this.dropScriptLocal(subId);
     this.seriesBars.delete(subId);
     this.seriesSubMeta.delete(subId);
     this.seriesInflight.delete(subId);
-    this.scriptCtx.delete(subId);
-    this.scriptInputSig.delete(subId);
-    this.scriptDepth.delete(subId);
-    this.paintLatest.delete(subId);
-    this.paintTail.delete(subId);
-    this.inbox.delete(subId);
     try {
       this.client.unsubscribe(subId);
     } catch {
@@ -2180,6 +2134,30 @@ export class StreamLiveWire {
    * point: a key/endpoint change or a wedged reconnect loop gets a clean start.
    * Never throws.
    */
+  /** Drop every per-sub map shared by `reset` and `disconnect`. */
+  private clearSubscriptionState(): void {
+    this.appliers.clear();
+    this.appliedSeq.clear();
+    this.seriesBars.clear();
+    this.seriesSubMeta.clear();
+    this.seriesInflight.clear();
+    this.scriptCtx.clear();
+    this.scriptInputSig.clear();
+    this.scriptDepth.clear();
+    this.paintLatest.clear();
+    this.paintTail.clear();
+    this.holdUntilFull.clear();
+    this.axisResubPending.clear();
+    this.axisResubAttempts.clear();
+    this.axisResubAt.clear();
+    this.gapResyncAt.clear();
+    this.gapResyncAttempts.clear();
+    this.inboxOverflowPending.clear();
+    this.inboxOverflowAt.clear();
+    this.inboxOverflowAttempts.clear();
+    this.cancelSeriesScriptKick();
+  }
+
   reset(): { unsubscribed: number; wasOpen: boolean; cooledDown: boolean } {
     let unsubscribed = 0;
     for (const subId of this.appliedSeq.keys()) {
@@ -2192,28 +2170,9 @@ export class StreamLiveWire {
     }
     const wasOpen = this.client.isOpen;
     const cooledDown = this.cooledDown;
-    this.appliers.clear();
-    this.appliedSeq.clear();
-    this.seriesBars.clear();
-    this.seriesSubMeta.clear();
-    this.seriesInflight.clear();
-    this.scriptCtx.clear();
-    this.scriptInputSig.clear();
-    this.scriptDepth.clear();
-    this.paintLatest.clear();
-    this.paintTail.clear();
-    this.holdUntilFull.clear();
-    this.axisResubPending.clear();
-    this.axisResubAttempts.clear();
-    this.axisResubAt.clear();
-    this.gapResyncAt.clear();
-    this.gapResyncAttempts.clear();
-    this.cancelSeriesScriptKick();
+    this.clearSubscriptionState();
     this.inbox.clear();
     this.inboxWaiters.clear();
-    this.inboxOverflowPending.clear();
-    this.inboxOverflowAt.clear();
-    this.inboxOverflowAttempts.clear();
     this.failures = 0;
     this.coolUntil = 0;
     this.clearHidden();
@@ -2226,26 +2185,7 @@ export class StreamLiveWire {
   }
 
   disconnect(): void {
-    this.appliers.clear();
-    this.appliedSeq.clear();
-    this.seriesBars.clear();
-    this.seriesSubMeta.clear();
-    this.seriesInflight.clear();
-    this.scriptCtx.clear();
-    this.scriptInputSig.clear();
-    this.scriptDepth.clear();
-    this.paintLatest.clear();
-    this.paintTail.clear();
-    this.holdUntilFull.clear();
-    this.axisResubPending.clear();
-    this.axisResubAttempts.clear();
-    this.axisResubAt.clear();
-    this.gapResyncAt.clear();
-    this.gapResyncAttempts.clear();
-    this.inboxOverflowPending.clear();
-    this.inboxOverflowAt.clear();
-    this.inboxOverflowAttempts.clear();
-    this.cancelSeriesScriptKick();
+    this.clearSubscriptionState();
     this.clearHidden();
     try {
       this.client.disconnect();

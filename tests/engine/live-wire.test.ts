@@ -81,6 +81,8 @@ function makeHarness(opts?: { delayDelta?: boolean; syncApply?: boolean }) {
   };
   const applied: Array<{ via: string }> = [];
   const appliedCounts: number[] = [];
+  /** Last cell of series.a / Upper when present — pins tip-overlay realign. */
+  const appliedTips: Array<number | null> = [];
   const applyOrder: string[] = [];
   const applyFn = (
     _script: string,
@@ -92,6 +94,11 @@ function makeHarness(opts?: { delayDelta?: boolean; syncApply?: boolean }) {
       applyOrder.push(`plots:${via}`);
       applied.push({ via });
       appliedCounts.push(Number(_full.count));
+      const series = _full['series'] as Record<string, unknown> | undefined;
+      const col = series?.['a'] ?? series?.['Upper'];
+      const last =
+        Array.isArray(col) && col.length > 0 ? Number(col[col.length - 1]) : Number.NaN;
+      appliedTips.push(Number.isFinite(last) ? last : null);
       return { status: 'success', plots: [], series: {}, events: [], meta: {} };
     };
     if (opts?.syncApply) return done();
@@ -117,6 +124,7 @@ function makeHarness(opts?: { delayDelta?: boolean; syncApply?: boolean }) {
     statuses,
     applied,
     appliedCounts,
+    appliedTips,
     applyOrder,
     emit,
     emitBatch,
@@ -1382,10 +1390,13 @@ describe('live-wire P1 series + study push', () => {
     h.emit(badDelta(8, 11));
     await tick();
     // Still no resume / resubscribe storm — chart-window realign paints.
+    // Later tips must overlay the last cell (aligned fast path) without a
+    // resume storm — regression guard for the tip-path perf fix.
     expect(h.resumes).toHaveLength(0);
     expect(h.unsubscribed).toEqual([]);
     expect(h.sent.filter((s) => s.kind === 'subscribe:script')).toHaveLength(subsBefore);
     expect(h.applied.filter((a) => a.via === 'stream-delta')).toHaveLength(3);
+    expect(h.appliedTips.slice(-3)).toEqual([9, 10, 11]);
     expect(h.statuses.at(-1)?.status).toBe('live');
   });
 

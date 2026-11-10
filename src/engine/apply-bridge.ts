@@ -177,19 +177,7 @@ export function applyStreamDelta(
   const precomputedResult = streamFullToPrecomputed(input.full, input.via, input.bars);
   // Tip deltas reuse the cached descriptors; avoid a store walk every tick.
   const ctx = precomputedResult.meta?.['executionContext'];
-  const prevInputs = previousRunInputs(input.indicatorId, {
-    refresh: ctx !== 'tip',
-  });
-  if (prevInputs && !precomputedResult.meta?.inputs) {
-    precomputedResult.meta = { ...(precomputedResult.meta ?? {}), inputs: prevInputs };
-  }
-  const mergedPlotMeta = mergeStreamPlotMeta(
-    precomputedResult.meta?.['plot_meta'] as Record<string, unknown> | undefined,
-    previousRunPlotMeta(input.indicatorId, { refresh: ctx !== 'tip' }),
-  );
-  if (mergedPlotMeta) {
-    precomputedResult.meta = { ...(precomputedResult.meta ?? {}), plot_meta: mergedPlotMeta };
-  }
+  enrichPrecomputedFromPreviousRun(precomputedResult, input.indicatorId, ctx !== 'tip');
   const applyChart = deps?.applyChart ?? applyPrecomputedChart;
   return applyChart(input.script, input.indicatorId, precomputedResult as never, input.bars, {
     silent: input.silent ?? true,
@@ -216,22 +204,13 @@ export async function applyStreamPayload(
   });
   const precomputedResult = streamFullToPrecomputed(input.full, input.via, input.bars);
   // The socket payload carries the values, not the run's metadata. Keep the
-  // input descriptors of the script's last full run: the Results panel and
-  // the Script Settings modal read them from the run (the socket payload has
-  // none, so a live apply would empty the script's input list).
-  const prevInputs = previousRunInputs(input.indicatorId, {
-    refresh: input.via === 'stream-full',
-  });
-  if (prevInputs && !precomputedResult.meta?.inputs) {
-    precomputedResult.meta = { ...(precomputedResult.meta ?? {}), inputs: prevInputs };
-  }
-  const mergedPlotMeta = mergeStreamPlotMeta(
-    precomputedResult.meta?.['plot_meta'] as Record<string, unknown> | undefined,
-    previousRunPlotMeta(input.indicatorId, { refresh: input.via === 'stream-full' }),
+  // input descriptors / fill plot_meta of the script's last full run so a live
+  // tip cannot empty Results inputs or wipe Donchian SVG bands.
+  enrichPrecomputedFromPreviousRun(
+    precomputedResult,
+    input.indicatorId,
+    input.via === 'stream-full',
   );
-  if (mergedPlotMeta) {
-    precomputedResult.meta = { ...(precomputedResult.meta ?? {}), plot_meta: mergedPlotMeta };
-  }
   const run: RunAndApplyFn =
     deps?.runAndApply ?? (await import('../indicators/runner')).runAndApply;
   return await run(input.script, input.indicatorId, {
@@ -274,6 +253,25 @@ export function mergeStreamPlotMeta(
     if (kind === 'fill') out[key] = value;
   }
   return out;
+}
+
+/** Preserve last-run inputs and fill plot_meta across stream applies. */
+function enrichPrecomputedFromPreviousRun(
+  precomputedResult: RunResult,
+  indicatorId: string | undefined,
+  refresh: boolean,
+): void {
+  const prevInputs = previousRunInputs(indicatorId, { refresh });
+  if (prevInputs && !precomputedResult.meta?.inputs) {
+    precomputedResult.meta = { ...(precomputedResult.meta ?? {}), inputs: prevInputs };
+  }
+  const mergedPlotMeta = mergeStreamPlotMeta(
+    precomputedResult.meta?.['plot_meta'] as Record<string, unknown> | undefined,
+    previousRunPlotMeta(indicatorId, { refresh }),
+  );
+  if (mergedPlotMeta) {
+    precomputedResult.meta = { ...(precomputedResult.meta ?? {}), plot_meta: mergedPlotMeta };
+  }
 }
 
 /** Input descriptors of a script's last stored run (empty when unknown). */
