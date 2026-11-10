@@ -1,0 +1,20 @@
+HTTP/2 200 
+date: Mon, 09 Nov 2026 12:36:44 GMT
+content-type: application/json
+content-length: 245
+access-control-allow-origin: https://axis.hoox.sh
+strict-transport-security: max-age=15552000; includeSubDomains
+vary: Origin, accept-encoding
+access-control-allow-headers: Content-Type, Authorization, X-Admin-Token, If-Match, X-AXIS-Client, X-Exchange-Key, X-Exchange-Secret, X-Exchange-Passphrase, MCP-Protocol-Version, MCP-Session-Id, Last-Event-ID
+access-control-allow-methods: GET, POST, PUT, DELETE, OPTIONS
+access-control-max-age: 86400
+referrer-policy: strict-origin-when-cross-origin
+x-content-type-options: nosniff
+x-frame-options: DENY
+speculation-rules: "/cdn-cgi/speculation"
+report-to: {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=AP5MJJlmgyZ5fhpexQaRHPJ5iR5HFDO%2FQrsgQbBoRrCGMe9qp2RLQt1TfBNqLzm0Xa7%2BAwgZ%2BUS66l%2FarMy4VEMHcD9yXnuPv6lTBa0%2FqeCMa18vtCDlF2104aKoWwx8RbcHGlFOfmq9SEMwxFxTX9w%3D"}]}
+nel: {"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}
+server: cloudflare
+cf-ray: a57cdd603d9ad296-FRA
+alt-svc: h3=":443"; ma=86400
+

@@ -3,7 +3,7 @@
   "project": {
     "id": "axis",
     "name": "axis",
-    "description": "AXIS \u2014 open charting PWA: CEX OHLCV, drawings, on-chain overlays, and Pine Script\u2122 via PYNE (local API, Cloudflare Worker, or Pyodide). Part of HOOX: hoox.sh/axis",
+    "description": "AXIS — open charting PWA: CEX OHLCV, drawings, on-chain overlays, and Pine Script™ via PYNE (local API, Cloudflare Worker, or Pyodide). Part of HOOX: hoox.sh/axis",
     "kind": "project",
     "languages": [
       "TypeScript",
@@ -115,7 +115,7 @@
         "job": "Audit the codebase: dead code, load time, bundle size, failing checks. Open small PRs with proof. Never merge.",
         "file": "routines/nightly-audit.md",
         "enabled": true,
-        "silentOnNoChange": false
+        "silentOnNoChange": true
       }
     ]
   },
@@ -171,7 +171,13 @@
     "includeSecrets": false
   },
   "optionalSkills": {
-    "enabledPacks": []
+    "enabledPacks": [
+      "catalog/addyosmani-agent-skills",
+      "catalog/cloudflare-security-audit",
+      "catalog/google-elephant-goldfish",
+      "catalog/kepano-obsidian-skills",
+      "catalog/mattpocock-skills"
+    ]
   },
   "setup": {
     "createdAt": "2026-11-07T18:35:59.961Z",

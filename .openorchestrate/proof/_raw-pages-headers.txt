@@ -1,0 +1,22 @@
+HTTP/2 200 
+date: Mon, 09 Nov 2026 12:36:44 GMT
+content-type: text/html; charset=utf-8
+x-frame-options: DENY
+report-to: {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=kQyhZHsN26BuNApt6SC3rZXhw6gZcEzc9RNvD3PKt8urgUjj2qbZl%2B%2FpQ%2BstzcbngbjyTDyH8tTH7L%2F0lc2L6c%2BOakMOzLweWf4pwLBpXKmlW1LJfkS4UwJ%2FsB3HFaXgs4mbyC7Jj1x5qNc%3D"}]}
+nel: {"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}
+access-control-allow-origin: *
+cache-control: public, max-age=0, must-revalidate
+strict-transport-security: max-age=15552000; includeSubDomains
+content-security-policy: default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; script-src 'self' 'nonce-VwY65J9HsSZUqkEll3A' 'wasm-unsafe-eval' https://pyne-agent-worker.cryptolinx.workers.dev; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' blob: http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:* https://axis.hoox.sh https://worker.axis.hoox.sh wss://worker.axis.hoox.sh https://pynescript.online wss://pynescript.online https://pynescript-axis.pages.dev https://*.pynescript-axis.pages.dev https://axis.pages.dev https://*.axis.pages.dev https://pyne-worker.cryptolinx.workers.dev wss://pyne-worker.cryptolinx.workers.dev https://pyne-agent-worker.cryptolinx.workers.dev https://api.binance.com https://data-api.binance.vision https://fapi.binance.com https://dapi.binance.com wss://stream.binance.com wss://stream.binance.com:9443 wss://data-stream.binance.vision wss://fstream.binance.com wss://dstream.binance.com https://api.mexc.com wss://wbs.mexc.com wss://wbs-api.mexc.com https://www.okx.com wss://ws.okx.com:8443 https://api.bybit.com wss://stream.bybit.com https://api.exchange.coinbase.com wss://advanced-trade-ws.coinbase.com wss://ws-feed.exchange.coinbase.com https://api.kraken.com wss://ws.kraken.com https://api.llama.fi https://api.geckoterminal.com https://api.coingecko.com https://api.github.com https://gitlab.com; worker-src 'self' blob:; child-src 'self' blob:; manifest-src 'self'
+cross-origin-embedder-policy: credentialless
+cross-origin-opener-policy: same-origin
+cross-origin-resource-policy: same-origin
+permissions-policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
+referrer-policy: strict-origin-when-cross-origin
+x-content-type-options: nosniff
+speculation-rules: "/cdn-cgi/speculation"
+server: cloudflare
+cf-cache-status: DYNAMIC
+cf-ray: a57cdd5eec54dbb1-FRA
+alt-svc: h3=":443"; ma=86400
+
