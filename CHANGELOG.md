@@ -1,6 +1,3 @@
-- **PWA engine `fetch` no longer sends `X-AXIS-Client`.** That custom header forced a CORS preflight on every `/health`, `/run`, and `/session` call. Firefox caches a successful OPTIONS for 24h (`Access-Control-Max-Age: 86400`); if the cached allow-list omitted the header, Pine eval failed with “Cannot reach the Pine engine” and a CORS storm. Trust stays `Origin: https://axis.hoox.sh` on the Worker and Pro API; `engineHeaders()` still sends JSON + optional bearer. Pinned by `tests/engine-request-headers.test.ts`.
-- **AXIS Worker `/run` accepts the first-party PWA without an API key during open beta.** Exact `Origin: https://axis.hoox.sh` (or `X-AXIS-Client: pwa` from IDE/preview) skips `requireApiKey` while per-IP / optional per-key rate limits still apply; other clients still need a key when auth is required. Pinned by `worker/tests/keys-runtime.test.ts`.
-- **Chart rolling-window defaults are 10,000 bars (growth rail 12,000).** The client no longer pre-caps history for a free-tier engine limit; the engine's own 413 / `max_bars` handling stays as defence. Anchored-window and rolling-window tests updated.
 # Changelog
 
 All notable changes to **AXIS** (`hoox-sh/axis`) are documented in this file.
@@ -12,13 +9,31 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-11-04 · 959 commits · git describe-tag: `v2.27.0` · shipped `package.json` version: **2.28.0** (2.27.0 is not the latest release)_
+_Generated/updated: 2026-11-10 · 1026 commits · describe-tag: `v2.28.0`_
 
 ---
 
 ## [Unreleased]
 
-Shipped package version is **2.28.0**. The git describe tag `v2.27.0` is the last annotated tag, not the latest product line.
+_Add release notes here before tagging._
+
+## [2.28.1] — 2026-11-10
+
+Honest-review and live-test bug-fix batch ([#5](https://github.com/hoox-sh/axis/pull/5)). The notes under Security, Added, Changed, and the later Fixed list are the changes collected on `main` since 2.28.0 and ship in this tag.
+
+### Fixed
+
+- **Data stream host order.** The browser tries the Binance vision socket before hosts that fail in the page, and futures REST goes through the Worker instead of a CORS-blocked direct hop.
+- **Live chip.** Live follows an open venue stream. A script feed or an unused engine wire no longer paints Degraded over a ledger that says open. Footer Last blanks as soon as the symbol changes, so the previous close cannot linger.
+- **800px layout.** Below about 1100px the topbar wraps and scrolls leftovers instead of clipping. At about 800px the side docks overlay the chart so the editor does not squeeze the plot, and the first-run hint sits on the open side of that overlay. Stream toasts sit above the status bar. Drawing tools show their names on hover, focus, and when active.
+- **Viewport and idle resume.** A fresh load shows the last 160 bars plus a 16-bar margin instead of fitting the whole history. Resume no longer keeps a 500-bar right offset that parks candles on the left while overlays span the empty future. Repaint trims that overhang, and the chart keeps one strategy label per bar.
+- **Server bar-cap fallback.** A guest window that fails the free-tier bar cap retries the newest allowed bars on the socket and on REST. The library logs Applied only when the run succeeds.
+- **Strategies return events.** Strategy fills are no longer drained from an empty broker, so the run returns its events.
+- **MACD Strat price scale.** The MACD histogram is no longer painted on the price scale.
+- **Pane heights.** Crowded panes use stretch weights instead of one-at-a-time `setHeight`, which was pinning indicators at about 30px.
+- **Trash icon.** The chart trash control no longer cancels its own click. Releasing the button removes the script from the store, so the badge, the script list, and the footer count stay in agreement.
+- **Edge worker auth headers and no `/session`.** The Edge worker no longer receives a tenant key or a `/session` call it does not have.
+- **Accessibility, docs, and headers.** The skip target shows a focus ring. Drawing handles, the page rail, and color swatches keep a visible ring when the outline is cleared. The first HTML paint includes a header, an `h1`, and a nav, hidden once the client shell mounts. Quick Start says **Run** and **Reload chart**. Unknown Worker origins no longer get a default `Access-Control-Allow-Origin`. Worker JSON sends a document-none CSP and `Permissions-Policy`. The Pages CSP allowlists the Cloudflare Insights beacon, `security.txt` is published, and `/mcp` proxies to the Worker. Production builds drop `console.debug` and `console.info`. Self-hosted static servers no longer send `Access-Control-Allow-Origin: *`.
 
 ### Security
 
@@ -42,6 +57,8 @@ Shipped package version is **2.28.0**. The git describe tag `v2.27.0` is the las
 
 ### Fixed
 
+- **AXIS Worker `/run` accepts the first-party PWA without an API key during open beta.** Exact `Origin: https://axis.hoox.sh` (or `X-AXIS-Client: pwa` from IDE/preview) skips `requireApiKey` while per-IP / optional per-key rate limits still apply; other clients still need a key when auth is required. Pinned by `worker/tests/keys-runtime.test.ts`.
+- **Chart rolling-window defaults are 10,000 bars (growth rail 12,000).** The client no longer pre-caps history for a free-tier engine limit; the engine's own 413 / `max_bars` handling stays as defence. Anchored-window and rolling-window tests updated.
 - **Scripts plot section stays open across live ticks; plot rows are one line.** Expanding Plots closed again every tick because Solid `<For>` remounted cards when script object identity changed. Open state is now remembered by script id (like the style popover). Color swatch, name, and controls sit on a single row. Pinned by Scripts panel UX.
 - **Scripts panel plot controls pass the script owner id (and hide channel fills).** Eye / style / width / color / display toggles called pane-manager without `ownerId`, so owner-scoped overlays (Donchian Upper/Lower/Mid) often no-oped; SVG fills ignored the eye entirely. Controls now pass `indicator.id`, and eyed-off fill edges hide the matching SVG band. Pinned by `tests/plot-fills-signature.test.ts`.
 - **Donchian axis mismatch paints via chart-window realign instead of resub storm.** Continuous unmergeable deltas used to strip `bar_times` from the applier cache, so later tips fell through to `delta rejected` and soft-fresh-subscribe forever (`resync` ~18/min). Live-wire now fits series to the subscribe window, stamps chart `bar_times`, overlays the tip, and paints — no resume loop. Concurrent `/api/ws/live?issue=ticket` mints for the same Worker+key still coalesce into one GET. Pinned by `tests/engine/live-wire.test.ts` and `tests/engine/live-ticket.test.ts`.
@@ -2425,12 +2442,33 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-11 (79 commits)
+### 2026-11 (146 commits)
 
 #### Features
 
+- `ff46d85d` (2026-11-09) — feat(pwa): stamp deploy identity from git SHA
+- `a69c0162` (2026-11-09) — feat(ui): open Data on Datasets and tidy layout menu
+- `ed3e7eac` (2026-11-09) — feat(engines): mark PWA engine fetch and allow beta Worker /run
+- `7cb3e7b9` (2026-11-06) — feat(engine): make axb1-full the default live encoding
+- `966e5579` (2026-11-05) — feat(engine): optional all-data AXB1 via `axb1-full` + APPEND_BARS opcode
+- `42cec2d2` (2026-11-05) — feat(strategy): commission model on the results report
+- `5f24d9c3` (2026-11-05) — feat(results): event filters, plot stats, and saved-run management
+- `3da5d0a9` (2026-11-05) — feat(inputs): search, collapsible groups, and modified-state chrome in Script Settings
+- `eda2546e` (2026-11-04) — feat(ui): DSM studio page, plugins/settings rework, chrome contrast + scale
+- `7588a962` (2026-11-04) — feat(quote): hero price, 24h range bar, and OHLC tiles
+- `de80ca40` (2026-11-04) — feat(onchain): mode counts, data-path chip, and richer rows
+- `6adcee64` (2026-11-04) — feat(datasource): collapsible composer, presets, and job polish
+- `6a420b88` (2026-11-04) — feat(dataview): pin/step inspection, value search, and copy
+- `0748df0c` (2026-11-04) — feat(alerts): collapsible composer, search, edit, and bulk actions
+- `54fa2f87` (2026-11-04) — feat(layers): unified search, collapsible sections, drawing management
+- `a5cce753` (2026-11-04) — feat(scripts): search, filters, bulk actions, and card management
+- `7930e333` (2026-11-04) — feat(watchlist): folders, list actions, and symbol management
+- `4e057d3c` (2026-11-04) — feat(library): rebuild the Script Library panel around a 300px column
+- `fc5f2ace` (2026-11-04) — feat(debug): enable chart/engine logs from the UI + Studio Debug page
 - `afb8de3a` (2026-11-04) — feat(live): anchor the window at TradingView period boundaries
 - `3a23406b` (2026-11-04) — feat(live): anchor chart window and chunk engine depth
 - `dabf463e` (2026-11-04) — feat(studio): smart input system v2 with Storybook examples
@@ -2477,6 +2515,38 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `10d309bb` (2026-11-10) — Fix honest-review and live-test findings (#5)
+- `2a48a601` (2026-11-09) — fix(okf): link team guides so okf:check is strict-clean
+- `66d65b12` (2026-11-09) — fix(ui): keep Scripts plots open across ticks; one-line plot rows
+- `1bd5cc62` (2026-11-09) — fix(ui): pass ownerId to script plot controls; eye hides fills
+- `a7a85aab` (2026-11-09) — fix(engine): realign script deltas to chart window instead of stripping axis
+- `d21c8879` (2026-11-09) — fix(engine): soft-backoff axis mismatch; coalesce live ticket mints
+- `848b22b2` (2026-11-09) — fix(stream): release live-wire sub on script detach
+- `f989fb14` (2026-11-09) — fix(engine): keep channel fill bands across silent live tips
+- `1a0ee079` (2026-11-09) — fix(engine): soft tip-lag recovery so a second script stays live
+- `2f22e7c5` (2026-11-09) — fix(engine): recover frozen live script tip; harden MCP bridge mint
+- `2a45779a` (2026-11-09) — fix(worker): fail-closed live WS; unstack Pages asset HSTS
+- `6d99300a` (2026-11-09) — fix(worker): allow X-API-Key on CORS preflight
+- `127e9ec0` (2026-11-09) — fix(data): browser Binance REST goes venue-direct, skips Worker
+- `65b82fe1` (2026-11-09) — fix(statusbar): chips + counts when closed; perf meters when open
+- `5181e5e1` (2026-11-09) — fix(statusbar): classic scanline when compact; measured perf when expanded
+- `8134efc1` (2026-11-09) — fix(streams): venue-first candles; PYNE scripts only
+- `51aceb6f` (2026-11-09) — fix(data): fall through Worker Binance geo-block to vision
+- `184aedf5` (2026-11-09) — fix(chart): stop hold-forward overlay tip lag
+- `57a63893` (2026-11-09) — fix(chart): keep overlay EMA on candle times from first paint
+- `7aebf4a2` (2026-11-09) — fix(cli): load src under Bun so Worker git SHA actually deploys
+- `cd1504e1` (2026-11-09) — fix(pwa): prove Worker git SHA via --var and fail deploy on mismatch
+- `0c396979` (2026-11-09) — fix(pwa): stamp Worker git SHA and load git-stamp without a shebang
+- `26f8c422` (2026-11-09) — fix(chart): time-join overlays when bar_times are missing
+- `318cca25` (2026-11-09) — fix(engines): drop X-AXIS-Client from PWA fetch
+- `cd03308d` (2026-11-09) — fix(chart): raise rolling-window defaults to 10k bars
+- `b1941f92` (2026-11-09) — fix(theme): roll back window/panel border contrast; keep control chrome
+- `f4a8cac3` (2026-11-09) — fix(pyodide): enable bar mode so input.source plots paint
+- `c68d1fcc` (2026-11-07) — fix(chart): guard holds the last good plots for a holed engine window
+- `a90ca6f4` (2026-11-07) — fix(indicators): no "bar axis" warning for an unchanged session tick
+- `c132a604` (2026-11-07) — fix(chart): break indicator lines at engine-axis holes instead of spanning
+- `237686d1` (2026-11-07) — fix(chart): one capture per shared chart, stable viewport, readable panes
+- `fed92f4c` (2026-11-06) — fix(engine): keepalive heartbeat for the shared /ws/run socket
 - `f99769b6` (2026-11-04) — fix(engines): keep known-good capabilities when /health fails
 - `9b7afec9` (2026-11-04) — fix(ui): fire StudioInput stepper callbacks once
 - `7bcd8781` (2026-11-04) — fix(indicators): invalidate the run cache on live appends
@@ -2503,15 +2573,36 @@ Security and performance release from the multi-agent **harden-perf** audit
 - `e0a6ed44` (2026-11-01) — fix(indicators): never supersede catalog adds on live ticks
 - `ee2f4f64` (2026-11-01) — fix(chart): keep overlay SMA/Donchian aligned on live ticks
 
+#### Refactors
+
+- `fc98e001` (2026-11-09) — refactor(statusbar): collapsible compact HUD, CSS metrics, click-only inspectors
+- `bf6554a1` (2026-11-06) — refactor: engineering hardening pass + live-relay instrumentation
+
 #### Documentation
 
+- `9b9230ca` (2026-11-09) — docs(oo): command proofs require --expect; --run is seat-guarded
 - `4edddbcd` (2026-11-04) — docs(changelog): review remediation for 1774feef..afb8de3a
 - `82e87c02` (2026-11-02) — docs(changelog): note drawing chords, on-chain legend, mobile price, and close tone
 - `faf8c884` (2026-11-02) — docs(changelog): note the layout, alert, equity, and editor polish
 - `482c9c98` (2026-11-02) — docs(changelog): note Results/Strategy panels and library TreeViews
 
+#### Tests
+
+- `bedf1ddb` (2026-11-05) — test(mini-panels): cover the Time and Price float panels
+
 #### Chores
 
+- `fb83c03b` (2026-11-10) — chore(oo): apply board identity projection and config normalization
+- `c6b47dd7` (2026-11-10) — chore(oo): commit agency config and live-header proof artifacts
+- `2de96659` (2026-11-10) — chore(board): unblock P0 live-lag card — pynescript fix shipped and live
+- `5731d982` (2026-11-09) — chore(oo): mark status bar v2 Done after Checker PASS
+- `d56ca5b6` (2026-11-09) — chore(oo): status bar v2 Ready for Review with proof
+- `cf5132df` (2026-11-09) — chore(oo): status-bar refactor card Ready for Review
+- `ee590b0c` (2026-11-09) — chore(oo): keep optional skill catalog default-off
+- `616b4b0d` (2026-11-09) — chore(oo): enable nightly-audit at 03:00 and close L7 playbook gaps
+- `3c1af7c9` (2026-11-09) — chore(oo): add Grok seat agents and ownership stub
+- `03ad507b` (2026-11-08) — chore(oo): adopt OpenOrchestrate scaffolding
+- `4874d1cf` (2026-11-08) — chore(oo): adopt OpenOrchestrate scaffolding
 - `a5c9c4b5` (2026-11-04) — chore: extract AXIS IDE to hoox-sh/axis-ide-vsce
 - `c16dbacd` (2026-11-01) — chore(deps): pyodide PYNE wheel 0.6.29 + builtins sync
 - `d6a3f09d` (2026-11-01) — chore(release): AXIS 2.27.0
@@ -2520,6 +2611,10 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 - `a6b9f6af` (2026-11-02) — style(ui): align the equity curve with market color tokens
 - `7ec70034` (2026-11-02) — style(ui): calm shell hairlines and semantic market colors
+
+#### Reverts
+
+- `540fdb3b` (2026-11-09) — Revert "fix(data): fall through Worker Binance geo-block to vision"
 
 #### Other
 

@@ -11,7 +11,7 @@
  */
 
 /** Deployed worker version (repo-root VERSION at sync time). */
-export const WORKER_VERSION: string = '2.28.0';
+export const WORKER_VERSION: string = '2.28.1';
 
 /**
  * Git SHA baked by `wrangler deploy --define WORKER_GIT_SHA:"<sha>"`.
