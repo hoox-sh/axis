@@ -97,19 +97,19 @@ describe('Run vs Add copy', () => {
 });
 
 describe('~800px topbar wrap', () => {
-  it('wraps command and module bars at 900px and keeps the Run label', () => {
+  it('wraps command and module bars below 1100px and keeps the Run label', () => {
     const css = read('src/index.css');
-    expect(css).toContain('@media (max-width: 900px)');
-    const start = css.indexOf('/* ~800px: wrap instead of clipping');
+    expect(css).toContain('@media (max-width: 1100px)');
+    const start = css.indexOf('/* ~800px: wrap groups');
     expect(start).toBeGreaterThanOrEqual(0);
     const block = css.slice(start, css.indexOf('@media (max-width: 639px)', start));
     expect(block).toContain('flex-wrap: wrap');
-    expect(block).toContain('overflow-x: visible');
+    expect(block).toContain('overflow-x: auto');
     expect(block).toContain('.axis-run-main .axis-tb-btn-label');
     expect(block).toContain('display: inline');
-    const tabletStart = css.indexOf('/* ── Tablet (768–1023px)');
-    const tablet = css.slice(tabletStart, css.indexOf('/* ── Phone dialogs', tabletStart));
-    expect(tablet).toContain('overflow-x: visible');
-    expect(tablet).not.toContain('overflow-x: auto');
+    const narrowStart = css.indexOf('/* ── Narrow (≤1100px');
+    const narrow = css.slice(narrowStart, css.indexOf('/* ── Phone dialogs', narrowStart));
+    expect(narrow).toContain('position: absolute');
+    expect(narrow).toContain('axis-toasts');
   });
 });

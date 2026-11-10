@@ -62,6 +62,7 @@ export const ToolRailButton: Component<{
     onClick={props.onSelect}
   >
     {props.children}
+    <span class="axis-draw-btn-label">{props.label}</span>
   </button>
 );
 
