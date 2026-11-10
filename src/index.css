@@ -6486,6 +6486,14 @@ body.axis-panel-dragging {
     right: 0;
   }
 
+  /* The first-run hint stays on the open chart, left of an overlay editor. */
+  .axis-first-run {
+    left: 12px;
+    right: auto;
+    transform: none;
+    max-width: min(18rem, 46vw);
+  }
+
   /* Stream / status cards sit above the status bar, not over the plot. */
   [data-testid='axis-toasts'] {
     top: auto;
