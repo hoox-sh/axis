@@ -7,7 +7,7 @@ tags: [code, results]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-10T13:15:13Z
+  at: 2026-11-10T16:04:50Z
 sources:
   - id: tree
     resource: "src/results"
@@ -20,7 +20,7 @@ okf_lock: generated
 
 * `dataview.ts` — BuildDataViewOpts, DataViewOnchainSeries, DataViewPlotMeta, DataViewRow, DataViewTimePoint, barIndexAtTime, buildDataViewRows, buildDrawingDataViewRows, buildOnchainDataViewRows, fmtUsdCompact, isTimeOnLineKind, linePriceAtTime
 * `debug-pins.ts` — DebugPin, DebugPinSource, PinsFromDebugOptions, countDebugPins, debugPinsToMarkers, normalizePinTime, parseBarIndexFromText, parseTimeFromText, pinsFromDebugEntries, pinsFromLastRun, resolveDebugPinTarget
-* `events.ts` — EventsToMarkersOptions, MAX_TRADE_MARKER_LABELS, NormalizeOptions, StrategyFillMode, TradeMarker, alignTimeToBars, applyStrategyFills, buildEquityCurve, eventsToMarkers, formatTradeQty, isNoFillCloseEvent, normalizeStrategyEvent
+* `events.ts` — EventsToMarkersOptions, MAX_TRADE_MARKER_LABELS, NormalizeOptions, StrategyFillMode, TradeMarker, alignTimeToBars, applyStrategyFills, barIndexAtExactTime, buildEquityCurve, eventsToMarkers, formatTradeQty, isNoFillCloseEvent
 * `inline-debug.ts` — InlineDebugAnnotation, InlineDebugLevel, collapseAnnotationsByLine, collectInlineDebugAnnotations, filterPinableAnnotations, isPinableAnnotation, parseSourceLine
 * `overlay.ts` — EventDirFilter, EventFilterOptions, SAVED_SORTS, SavedSort, SeriesSummary, countEvents, eventDir, eventSearchText, filterEvents, isCloseEvent, savedRunSearchText, sortSavedRuns
 * `pine-color.ts` — resolvePineColor

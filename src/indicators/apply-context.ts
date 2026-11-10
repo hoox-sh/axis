@@ -53,6 +53,7 @@ import type { PlotMetaEntry } from '../results/plot-visuals';
 import { splitSeriesByKind } from '../results/plot-visuals';
 import { timesFromWindowOnChart, windowAxisFromMeta } from '../results/window-axis';
 import { resolveScriptDisplayName } from './run-target';
+import { detectDeclaredOverlay, detectScriptKind } from './script-meta';
 import { engineHoleTimes } from './engine-hole-guard';
 import { appendLog } from '../store';
 
@@ -391,15 +392,30 @@ export function alignApplySeries(
   const seriesEntries = split.lines.map((e) => [e.key, e.values] as const);
 
   // Pine: indicator defaults overlay=false; strategy defaults overlay=true.
-  // Explicit false must never be coerced to true.
+  // The script source wins over an engine that omits the flag (the server
+  // WebSocket mapper used to drop `script_type`, and a blank type defaults to
+  // the price pane). Explicit `overlay=false` in source is never coerced to
+  // true, including when the series is still empty (guest 5000-bar cap retry).
   const overlayFlag = result.meta?.overlay as unknown;
-  const overlayExplicitTrue = overlayFlag === true || overlayFlag === 1 || overlayFlag === 'true';
-  let overlay = resolveOverlayFlag(overlayFlag, scriptTypeOf(result));
+  const declared = detectDeclaredOverlay(script);
+  const engineType = scriptTypeOf(result);
+  const sourceKind = detectScriptKind(script);
+  const routedType = engineType || (sourceKind !== 'unknown' ? sourceKind : '');
+  let overlay = declared == null ? resolveOverlayFlag(overlayFlag, routedType) : declared;
+  const overlayExplicitTrue =
+    declared === true ||
+    (declared == null &&
+      (overlayFlag === true || overlayFlag === 1 || overlayFlag === 'true'));
 
   // Oscillator-scale plots (RSI, MACD, …) on the price pane are effectively
   // invisible (values ~0–100 vs BTC price). Auto-demote to a sub-pane UNLESS
   // the script explicitly asked for overlay=true (respect the author's intent).
-  if (overlay && !overlayExplicitTrue && seriesWouldHideOnPrice(seriesEntries, bars)) {
+  // Plots-only payloads (no line series yet) still count — that is the shape
+  // a capped server run returns before series keys are filled.
+  const hideProbe: ReadonlyArray<readonly [string, unknown[]]> = seriesEntries.length
+    ? seriesEntries
+    : [['plot', Array.isArray(result.plots) ? result.plots : []]];
+  if (overlay && !overlayExplicitTrue && seriesWouldHideOnPrice(hideProbe, bars)) {
     overlay = false;
     if (!opts.silent) {
       appendLog(

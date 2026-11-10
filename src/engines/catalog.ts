@@ -62,7 +62,7 @@ import { store, setTelemetryPlane, setTelemetryState, setStatus, appendLog } fro
 import { registry } from '../plugins/registry';
 import { scriptHasPineAlertCalls } from '../alerts/pine';
 import { parseEngineJson, parseEngineJsonAsync } from './json-sanitize';
-import { freeTierMaxBars } from './free-tier';
+import { barsWithinGuestCap, freeTierMaxBars, rememberGuestBarCap } from './free-tier';
 import { normalizeEngineResult } from '../indicators/run-helpers';
 import { healthFromBody, type EngineHealth } from './health';
 import { isAbortLike } from '../utils/errors';
@@ -429,7 +429,17 @@ export const serverEngine: EnginePlugin = {
       (v) => v !== null && typeof v === 'object',
     );
     // Chart bars are unix seconds. Pine `time` / hour() / session clocks are ms.
-    const pineBars = barsForPine(bars);
+    // A guest that already hit the free-tier cap sends that window first
+    // instead of uploading the full history and retrying.
+    const capped = barsWithinGuestCap(endpoint, barsForPine(bars), !!apiKey);
+    const pineBars = capped.bars;
+    const guestCapApplied = capped.cap;
+    const stampGuestCap = <T extends RunResult>(result: T): T => {
+      if (guestCapApplied > 0 && !(Number(result.meta?.['windowBars']) > 0)) {
+        result.meta = { ...result.meta, windowBars: guestCapApplied };
+      }
+      return result;
+    };
     // Key for the resolved-run-mode memo. Defined before the data-session
     // branch so engine-owned runs record it too — the live-session fast path
     // gates on this memo, and a data-session evaluation is still a full run
@@ -582,8 +592,9 @@ export const serverEngine: EnginePlugin = {
           let wsPayload = wsResult;
           // Guest hosts refuse the whole window (WS has no HTTP 413). Retry
           // once with the newest allowed bars instead of failing the run.
-          if (wsResult.status === 'error') {
+            if (wsResult.status === 'error') {
             const cap = freeTierMaxBars(wsResult);
+            if (cap > 0) rememberGuestBarCap(endpoint, cap);
             if (cap > 0 && cap < pineBars.length && !signal?.aborted) {
               const retry = await client.run(
                 {
@@ -607,8 +618,9 @@ export const serverEngine: EnginePlugin = {
                   engineTimes: true,
                 });
                 mapped.meta = { ...mapped.meta, windowBars: cap };
+                rememberGuestBarCap(endpoint, cap);
                 await rememberResolvedRunMode(modeFields, retry.mode || mode);
-                return mapped;
+                return stampGuestCap(mapped);
               }
               wsPayload = retry;
             }
@@ -622,7 +634,7 @@ export const serverEngine: EnginePlugin = {
             } satisfies RunResult;
           }
           await rememberResolvedRunMode(modeFields, wsResult.mode || mode);
-          return mapEnginePayload(wsResult, {
+          return stampGuestCap(mapEnginePayload(wsResult, {
             transport: 'ws',
             ms,
             // The WS path resolves the run mode server-side; the requested
@@ -634,7 +646,7 @@ export const serverEngine: EnginePlugin = {
             // time-join instead of tail-pinning (hp2 follow-up to the SOLUSDT
             // desync — WS runs never carried the axis).
             engineTimes: true,
-          });
+          }));
         }
       } catch (err) {
         // A user cancel must end the run here — falling through to REST would
@@ -739,6 +751,7 @@ export const serverEngine: EnginePlugin = {
         } catch {
           /* message-only body */
         }
+        if (maxBars > 0) rememberGuestBarCap(endpoint, maxBars);
         if (maxBars > 0 && maxBars < pineBars.length) {
           clampedBars = maxBars;
           res = await fetch(`${endpoint}/run?mode=${encodeURIComponent(restMode)}`, {
@@ -815,7 +828,7 @@ export const serverEngine: EnginePlugin = {
         // tail-aligns series to the chart window when this is set.
         mapped.meta = { ...mapped.meta, windowBars: clampedBars };
       }
-      return mapped;
+      return stampGuestCap(mapped);
     } catch (err: unknown) {
       const raw = err instanceof Error ? err.message : String(err);
       const aborted = isAbortLike(err) || signal?.aborted;
@@ -884,6 +897,8 @@ function pyodidePluginConfig(): Record<string, unknown> {
  * Prefetch core Pyodide assets into the HTTP cache (wasm + stdlib are heavy).
  * Safe to call on idle; no-op outside the browser.
  */
+const prefetchedPyodideUrls = new Set<string>();
+
 export function prefetchPyodideAssets(indexUrl?: string): void {
   // Best-effort warm-up: a DOM without <head> (partial test doubles) must not
   // fail the load that follows.
@@ -900,7 +915,11 @@ export function prefetchPyodideAssets(indexUrl?: string): void {
   ];
   for (const f of files) {
     const href = `${base}${f}`;
-    if (document.querySelector(`link[data-axis-pyodide="${f}"]`)) continue;
+    if (prefetchedPyodideUrls.has(href)) continue;
+    if (document.querySelector(`link[data-axis-pyodide="${f}"]`)) {
+      prefetchedPyodideUrls.add(href);
+      continue;
+    }
     const link = document.createElement('link');
     link.rel = f.endsWith('.js') ? 'modulepreload' : 'prefetch';
     link.href = href;
@@ -908,8 +927,10 @@ export function prefetchPyodideAssets(indexUrl?: string): void {
     link.crossOrigin = 'anonymous';
     link.dataset['axisPyodide'] = f;
     document.head.appendChild(link);
+    prefetchedPyodideUrls.add(href);
   }
-  // Also warm vendor wheels + runtime (same-origin)
+  // Also warm vendor wheels + runtime (same-origin). Once per URL — a repeat
+  // fetch on every Pyodide run re-downloaded the wheels.
   if (typeof location !== 'undefined') {
     const origin = location.origin;
     for (const path of [
@@ -917,7 +938,12 @@ export function prefetchPyodideAssets(indexUrl?: string): void {
       '/vendor/antlr4_python3_runtime-4.13.2-py3-none-any.whl',
       '/pyodide/pynescript_runtime.py',
     ]) {
-      void fetch(`${origin}${path}`, { method: 'GET', credentials: 'same-origin' }).catch(() => {});
+      const url = `${origin}${path}`;
+      if (prefetchedPyodideUrls.has(url)) continue;
+      prefetchedPyodideUrls.add(url);
+      void fetch(url, { method: 'GET', credentials: 'same-origin' }).catch(() => {
+        prefetchedPyodideUrls.delete(url);
+      });
     }
   }
 }
@@ -1100,7 +1126,8 @@ export const pyodideEngine: EnginePlugin & {
       // Worker path: the client owns the load promise (shared by concurrent
       // callers) and respawns after a crash, so nothing is memoised in
       // `_loadPromise` here — a stale resolved promise would wedge the engine.
-      prefetchPyodideAssets(indexUrl);
+      // Prefetch once. Calling it on every run re-fetched the vendor wheels.
+      if (!isPyodideWorkerLoaded()) prefetchPyodideAssets(indexUrl);
       try {
         const info = await loadPyodideWorker({ indexUrl, origin });
         this._failure = null;
@@ -1420,15 +1447,20 @@ export function getCachedEngineCapabilities(): EngineCapabilities {
  * Effective live re-run cadence for the selected engine.
  *
  * `store.live.rerunOn` is the user's stored preference — Settings owns it, and
- * capability resolution never rewrites it. `bar-close` is honoured only when
- * the user explicitly chose it; otherwise re-runs run on every tick so strategy
- * entries/exits and indicator plots update immediately on each new bar, not
- * only when the venue marks the candle closed.
+ * this function never writes it back. `bar-close` is kept when the user chose
+ * it. `every-tick` is kept when capabilities are still unknown or the engine
+ * advertised `every-tick`. An engine that positively advertised its modes
+ * without `every-tick` (Pyodide, the edge worker, a server health body that
+ * only lists bar close) evaluates on bar close: a full 10k-bar re-run on every
+ * price print is what made the page unresponsive.
  */
 export function liveRerunModeForEngine(
   stored: 'every-tick' | 'bar-close' | string | undefined,
 ): 'every-tick' | 'bar-close' {
-  return stored === 'bar-close' ? 'bar-close' : 'every-tick';
+  if (stored === 'bar-close') return 'bar-close';
+  const caps = cachedEngineCapabilities;
+  if (!caps) return 'every-tick';
+  return caps.liveModes.includes('every-tick') ? 'every-tick' : 'bar-close';
 }
 
 /**

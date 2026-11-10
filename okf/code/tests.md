@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "tests"
-description: "tests contains a11y-chrome.test.ts, alerts-engine.test.ts, alerts-form.test.ts, and 359 more files."
+description: "tests contains a11y-chrome.test.ts, alerts-engine.test.ts, alerts-form.test.ts, and 362 more files."
 resource: "tests"
 tags: [code, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-10T13:52:12Z
+  at: 2026-11-10T17:13:31Z
 sources:
   - id: tree
     resource: "tests"
@@ -34,6 +34,7 @@ okf_lock: generated
 * `axis-debug-log.test.ts`
 * `axis-debug.test.ts`
 * `background-catchup.test.ts`
+* `bar-index-perf.test.ts`
 * `bar-replay.test.ts`
 * `bars-cache-coverage.test.ts`
 * `bars-cache.test.ts`
@@ -178,6 +179,7 @@ okf_lock: generated
 * `line-break-primitive.test.ts`
 * `live-append.test.ts`
 * `live-caps-warm.test.ts`
+* `live-followup.test.ts`
 * `logs-layout.test.ts`
 * `maintenance-mode.test.ts`
 * `manager-access.test.ts`
@@ -268,6 +270,7 @@ okf_lock: generated
 * `results-coverage.test.ts`
 * `results-overlay.test.ts`
 * `rolling-window.test.ts`
+* `rsi-on-price.test.ts`
 * `run-cache.test.ts`
 * `run-helpers.test.ts`
 * `run-results-focus.test.ts`

@@ -109,6 +109,55 @@ export function alignTimeToBars(t: number, bars?: Bar[]): number {
   return t;
 }
 
+/**
+ * Exact time → index for one bar array.
+ *
+ * Built once per array version (length + tip time) and reused by every fill
+ * lookup. A linear `findIndex` over 10k bars, repeated per fill and per
+ * consumer, blocked the main thread for seconds on strategy apply.
+ */
+type BarTimeIndex = { length: number; tip: number; at: Map<number, number> };
+const barTimeIndexes = new WeakMap<object, BarTimeIndex>();
+
+/** First exact time match, or -1. O(1) after one O(n) index of this array. */
+export function barIndexAtExactTime(bars: readonly { time: number }[], time: number): number {
+  if (!bars.length || !Number.isFinite(time)) return -1;
+  const key = bars as object;
+  const tip = bars[bars.length - 1]!.time;
+  let idx = barTimeIndexes.get(key);
+  if (!idx || idx.length !== bars.length || idx.tip !== tip) {
+    const at = new Map<number, number>();
+    for (let i = 0; i < bars.length; i++) {
+      const t = bars[i]!.time;
+      if (!at.has(t)) at.set(t, i);
+    }
+    idx = { length: bars.length, tip, at };
+    barTimeIndexes.set(key, idx);
+  }
+  const hit = idx.at.get(time);
+  return hit == null ? -1 : hit;
+}
+
+/** Nearest index in a time-sorted series. O(log n). */
+function nearestSortedBarIndex(bars: readonly { time: number }[], time: number): number {
+  const n = bars.length;
+  if (n === 1) return 0;
+  let lo = 0;
+  let hi = n - 1;
+  if (time <= bars[0]!.time) return 0;
+  if (time >= bars[hi]!.time) return hi;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const t = bars[mid]!.time;
+    if (t === time) return mid;
+    if (t < time) lo = mid + 1;
+    else hi = mid - 1;
+  }
+  const a = Math.max(0, hi);
+  const c = Math.min(n - 1, lo);
+  return Math.abs(bars[a]!.time - time) <= Math.abs(bars[c]!.time - time) ? a : c;
+}
+
 function barCloseAt(
   bars: Bar[] | undefined,
   barTime: number | undefined,
@@ -121,7 +170,8 @@ function barCloseAt(
   // current series. An exact time match therefore wins over the index.
   if (barTime != null && Number.isFinite(barTime) && barTime !== 0) {
     const aligned = alignTimeToBars(barTime, bars);
-    const byTime = bars.find((b) => b.time === aligned);
+    const at = barIndexAtExactTime(bars, aligned);
+    const byTime = at >= 0 ? bars[at] : undefined;
     if (byTime && Number.isFinite(byTime.close)) return byTime.close;
   }
   // No usable time — the index is the only anchor left.
@@ -132,14 +182,19 @@ function barCloseAt(
   // bar_time 0 is a missing/placeholder — do not snap every event to the first bar
   if (barTime != null && Number.isFinite(barTime) && barTime !== 0) {
     const aligned = alignTimeToBars(barTime, bars);
-    // nearest bar within 2× median span
+    const sorted = bars.length < 2 || bars[0]!.time <= bars[bars.length - 1]!.time;
     let best: Bar | undefined;
     let bestD = Infinity;
-    for (const b of bars) {
-      const d = Math.abs(b.time - aligned);
-      if (d < bestD) {
-        bestD = d;
-        best = b;
+    if (sorted) {
+      best = bars[nearestSortedBarIndex(bars, aligned)];
+      bestD = best ? Math.abs(best.time - aligned) : Infinity;
+    } else {
+      for (const b of bars) {
+        const d = Math.abs(b.time - aligned);
+        if (d < bestD) {
+          bestD = d;
+          best = b;
+        }
       }
     }
     if (best && bestD < Math.abs(sampleSpan(bars)) * 2 && Number.isFinite(best.close)) {
@@ -337,13 +392,13 @@ export function signalBarIndex(
   const t = timeOfEvent(ev);
   if (t != null && Number.isFinite(t) && t !== 0) {
     const aligned = alignTimeToBars(t, bars);
-    const exact = bars.findIndex((b) => b.time === aligned);
+    const exact = barIndexAtExactTime(bars, aligned);
     if (exact >= 0) return exact;
   }
   // Window-relative index → absolute time → current array position.
   const axisTime = timeForBarIndex(axis, ev.bar_index);
   if (axisTime != null) {
-    const exact = bars.findIndex((b) => b.time === axisTime);
+    const exact = barIndexAtExactTime(bars, axisTime);
     if (exact >= 0) return exact;
   }
   // With a stamped axis, a valid window index that is not in the current
@@ -360,15 +415,21 @@ export function signalBarIndex(
   }
   if (t == null || !Number.isFinite(t)) return null;
   const aligned = alignTimeToBars(t, bars);
-  const exact = bars.findIndex((b) => b.time === aligned);
+  const exact = barIndexAtExactTime(bars, aligned);
   if (exact >= 0) return exact;
+  const sorted = bars.length < 2 || bars[0]!.time <= bars[bars.length - 1]!.time;
   let best = 0;
   let bestD = Infinity;
-  for (let i = 0; i < bars.length; i++) {
-    const d = Math.abs(bars[i]!.time - aligned);
-    if (d < bestD) {
-      bestD = d;
-      best = i;
+  if (sorted) {
+    best = nearestSortedBarIndex(bars, aligned);
+    bestD = Math.abs(bars[best]!.time - aligned);
+  } else {
+    for (let i = 0; i < bars.length; i++) {
+      const d = Math.abs(bars[i]!.time - aligned);
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
     }
   }
   const span = Math.abs(sampleSpan(bars));

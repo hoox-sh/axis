@@ -42,6 +42,7 @@
 import { batch } from 'solid-js';
 import { createStore, reconcile, unwrap } from 'solid-js/store';
 import { scheduleLiveFrame } from './live-frame';
+import { shouldMarkNeedsRerun } from '../chart/live-guards';
 import { intervalToSec } from '../data/bars-gaps';
 import type {
   AccountTier,
@@ -3612,6 +3613,7 @@ export function loadBars(bars: Bar[], symbol: string, interval: string, exchange
   const view = sliceToChartWindow(bars);
   const instrumentChanged =
     store.symbol !== symbol || store.interval !== interval || store.exchange !== exchange;
+  const marketChanged = store.symbol !== symbol || store.interval !== interval;
   // commitSymbol writes store.symbol before history arrives. Compare the bar
   // plane too, or the previous pair's last tick survives the batch.
   const seriesChanged =
@@ -3632,6 +3634,11 @@ export function loadBars(bars: Bar[], symbol: string, interval: string, exchange
       frameTick = null;
       setStore('telemetry', 'lastTick', null);
     }
+    // Previous symbol's plot cache must not stay on the new chart's badges.
+    if (marketChanged) {
+      indicatorSeriesMarket = null;
+      setStore('indicatorSeries', reconcile({}));
+    }
     // Mirror into active multi-chart slot + runtime bar cache
     const slotId = getActiveSlotId() || store.chartLayout?.activeId;
     if (slotId) {
@@ -3645,6 +3652,13 @@ export function loadBars(bars: Bar[], symbol: string, interval: string, exchange
     }
   });
   persist();
+  if (marketChanged) {
+    queueMicrotask(() => {
+      void import('../chart/pane-badge')
+        .then((m) => m.refreshAllPaneBadges())
+        .catch(() => {});
+    });
+  }
   return view;
 }
 
@@ -3753,9 +3767,28 @@ export function removeIndicator(id: string): void {
   persist();
 }
 
+/** Symbol/interval the cached plot samples were computed for. */
+let indicatorSeriesMarket: { symbol: string; interval: string } | null = null;
+
+/** True when cached plot samples belong to the chart on screen. */
+export function indicatorSeriesMatchesChart(
+  market: { symbol: string; interval: string } | null = indicatorSeriesMarket,
+): boolean {
+  if (!market) return false;
+  return market.symbol === store.symbol && market.interval === store.interval;
+}
+
+export function clearIndicatorSeries(): void {
+  indicatorSeriesMarket = null;
+  setStore('indicatorSeries', reconcile({}));
+}
+
 /**
  * Cache last plot series for an applied indicator (cross-indicator sources).
  * Ephemeral — not written to localStorage.
+ *
+ * `market` is the symbol/interval the run started on. A late apply after a
+ * switch must not write the previous instrument's values onto the new badges.
  */
 export function setIndicatorSeries(
   id: string,
@@ -3766,7 +3799,20 @@ export function setIndicatorSeries(
     /** Bar times the cached series is aligned to (see the cache type). */
     times?: number[];
   },
+  market?: { symbol: string; interval: string },
 ): void {
+  const symbol = market?.symbol ?? String(store.symbol || '');
+  const interval = market?.interval ?? String(store.interval || '');
+  if (symbol !== store.symbol || interval !== store.interval) return;
+  if (!payload.series || Object.keys(payload.series).length === 0) {
+    setStore('indicatorSeries', (cache) => {
+      const next = { ...cache };
+      delete next[id];
+      return next;
+    });
+    return;
+  }
+  indicatorSeriesMarket = { symbol, interval };
   setStore('indicatorSeries', id, {
     name: payload.name,
     series: payload.series,
@@ -4008,6 +4054,25 @@ export type BarAppendResult = 'ignored' | 'updated' | 'appended' | 'slid';
  * and GC stay cheap on 10k–100k histories. Full array replace only when the
  * chart window slides (the head is dropped) or the series is empty.
  */
+let readLiveRerunMode: () => 'every-tick' | 'bar-close' = () =>
+  store.live?.rerunOn === 'bar-close' ? 'bar-close' : 'every-tick';
+
+/** Multiplex installs the real cadence (engine caps + guest stream). */
+export function setLiveRerunModeReader(fn: () => 'every-tick' | 'bar-close'): void {
+  readLiveRerunMode = fn;
+}
+
+function markNeedsRerun(formingUpdate: boolean, closed: boolean): void {
+  let mode: 'every-tick' | 'bar-close' = 'every-tick';
+  try {
+    mode = readLiveRerunMode();
+  } catch {
+    mode = 'every-tick';
+  }
+  if (!shouldMarkNeedsRerun({ mode, formingUpdate, closed })) return;
+  if (!store.live.needsRerun) setStore('live', 'needsRerun', true);
+}
+
 export function appendBar(bar: Bar, via?: 'worker' | 'venue'): BarAppendResult {
   if (!bar || !Number.isFinite(bar.time)) {
     chartDebug('appendBar', {
@@ -4118,10 +4183,9 @@ export function appendBar(bar: Bar, via?: 'worker' | 'venue'): BarAppendResult {
       if (store.live.lastBarTime !== bar.time) {
         setStore('live', 'lastBarTime', bar.time);
       }
-      // Dirtiness for live re-run scheduler — only set when not already true
-      if (!store.live.needsRerun) {
-        setStore('live', 'needsRerun', true);
-      }
+      // A forming tick must not dirty bar-close engines. A close flag on this
+      // same bar still does — that is the candle close.
+      markNeedsRerun(true, bar.closed === true);
       chartDebugSample(
         'appendBar',
         {
@@ -4212,10 +4276,8 @@ export function appendBar(bar: Bar, via?: 'worker' | 'venue'): BarAppendResult {
   if (store.live.lastBarTime !== bar.time) {
     setStore('live', 'lastBarTime', bar.time);
   }
-  // Dirtiness for live re-run scheduler — only set when not already true
-  if (!store.live.needsRerun) {
-    setStore('live', 'needsRerun', true);
-  }
+  // New candle (the previous tip just closed).
+  markNeedsRerun(false, bar.closed === true);
   const verdict: BarAppendResult = slide ? 'slid' : 'appended';
   chartDebugSample(
     'appendBar',

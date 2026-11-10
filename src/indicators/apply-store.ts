@@ -40,6 +40,7 @@ import {
   EDITOR_RUN_KEY,
 } from '../store';
 import { getManager, getDrawingLayer, ensureScriptPaneLayer } from '../chart/manager-access';
+import { refreshPaneBadge } from '../chart/pane-badge';
 import { getActiveDrawingLayer } from '../chart/drawing-layer';
 import {
   bgcolorSeriesToHistogramData,
@@ -87,6 +88,8 @@ export interface StoreUpdateContext {
   seriesEntries: ReadonlyArray<readonly [string, unknown[]]>;
   scriptName: string;
   bars: Bar[];
+  /** Symbol/interval this run started on. A switch drops the write. */
+  market?: { symbol: string; interval: string };
 }
 
 // NOTE: single documented cycle — runner.ts owns `nonemptyBag` /
@@ -266,12 +269,16 @@ export function updateIndicatorStore(ctx: StoreUpdateContext): boolean {
         /* chart may be disposed */
       }
       if (Object.keys(seriesForCache).length) {
-        setIndicatorSeries(newId, {
-          name: ctx.scriptName,
-          series: seriesForCache,
-          titles: titlesForCache,
-          times: timesForCache,
-        });
+        setIndicatorSeries(
+          newId,
+          {
+            name: ctx.scriptName,
+            series: seriesForCache,
+            titles: titlesForCache,
+            times: timesForCache,
+          },
+          ctx.market,
+        );
       }
     } else {
       // Re-run replace: refresh source / name / pane. Explicit panel picks
@@ -333,13 +340,22 @@ export function updateIndicatorStore(ctx: StoreUpdateContext): boolean {
           : {}),
       });
       if (Object.keys(seriesForCache).length) {
-        setIndicatorSeries(ctx.indicatorId, {
-          name: ctx.scriptName,
-          series: seriesForCache,
-          titles: titlesForCache,
-          times: timesForCache,
-        });
+        setIndicatorSeries(
+          ctx.indicatorId,
+          {
+            name: ctx.scriptName,
+            series: seriesForCache,
+            titles: titlesForCache,
+            times: timesForCache,
+          },
+          ctx.market,
+        );
       }
+    }
+    try {
+      refreshPaneBadge(ctx.paneId);
+    } catch {
+      /* badge host may not be in the document yet */
     }
   } catch (e: unknown) {
     reportUiError(e, {
