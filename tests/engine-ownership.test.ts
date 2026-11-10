@@ -94,15 +94,15 @@ describe('liveRerunModeForEngine', () => {
     expect(liveRerunModeForEngine(undefined)).toBe('every-tick');
   });
 
-  it('honors the stored every-tick even when the engine lacks it', () => {
-    // The user's preference wins. Downgrading to bar-close because the engine
-    // probe did not advertise every-tick delays every strategy entry/exit and
-    // indicator plot by a whole candle — the chart must not wait for a close.
+  it('uses bar-close when the engine positively advertised no every-tick', () => {
+    // Pyodide and the edge worker only list bar-close. A stored every-tick
+    // preference must not full-eval 10k bars on every price print. The stored
+    // value itself is not rewritten.
     _setCachedEngineCapabilitiesForTests({
       ...DEFAULT_ENGINE_CAPABILITIES,
       liveModes: ['bar-close'],
     });
-    expect(liveRerunModeForEngine('every-tick')).toBe('every-tick');
+    expect(liveRerunModeForEngine('every-tick')).toBe('bar-close');
 
     _setCachedEngineCapabilitiesForTests(PRO_CAPS);
     expect(liveRerunModeForEngine('every-tick')).toBe('every-tick');

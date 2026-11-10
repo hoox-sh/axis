@@ -55,8 +55,8 @@ export interface PaneSetupContext {
  * `ind_<scriptId>` sub-pane (a re-run keeps the one it already has), the legacy
  * shared `indicator` pane is migrated off and destroyed once unused, and empty
  * orphan panes are dropped together with their manager pane, script layer and
- * store row. A chart disposed mid-apply is reported through `reportUiError` and
- * falls back to `price` when that pane still exists.
+ * store row. A chart disposed mid-apply is reported through `reportUiError`.
+ * A non-overlay script keeps its own pane id and is not retargeted onto price.
  *
  * @param ctx - overlay flag, existing script, script id/name, manager, store lists
  * @returns the pane id to paint on — `price` for overlay scripts
@@ -165,13 +165,15 @@ export function ensureApplyPane(ctx: PaneSetupContext): string {
         }
       }
     } catch (e: unknown) {
-      // Chart disposed / host unmounted mid-apply — fall back to price if present
+      // Chart disposed / host unmounted mid-apply. Do not paint an oscillator
+      // on the price pane — that fallback is what put RSI on the candles when
+      // createPane threw (remount, disposed host, 5000-bar apply racing a
+      // symbol switch). The caller skips the paint when this pane is missing.
       reportUiError(e, {
         source: 'run',
         context: 'Indicator pane setup failed',
         status: false,
       });
-      paneId = ctx.manager.getPane('price') ? 'price' : paneId;
     }
   } else if (existing?.paneId && existing.paneId !== 'price' && existing.paneId !== 'volume') {
     // Was a sub-pane script, now true ctx.overlay — clear stale series on old pane

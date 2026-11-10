@@ -323,6 +323,27 @@ export const ResultsModal: Component = () : JSX.Element => {
     }),
   );
 
+  // A full strategy on 10k bars can carry tens of thousands of events. Rendering
+  // every row mounted ~35k DOM nodes and froze the page when Results auto-opened.
+  const EVENT_PAGE = 400;
+  const [eventPages, setEventPages] = createSignal(1);
+  createEffect(() => {
+    eventQuery();
+    eventDir();
+    eventSide();
+    result()?.meta?.run_id;
+    setEventPages(1);
+  });
+  const renderedEvents = createMemo(() => {
+    const all = visibleEvents();
+    const cap = eventPages() * EVENT_PAGE;
+    if (all.length <= cap) return all;
+    return all.slice(all.length - cap);
+  });
+  const hiddenEventCount = createMemo(() =>
+    Math.max(0, visibleEvents().length - renderedEvents().length),
+  );
+
   const eventFiltersActive = () =>
     Boolean(eventQuery().trim()) || eventDir() !== 'all' || eventSide() !== 'all';
 
@@ -922,8 +943,18 @@ export const ResultsModal: Component = () : JSX.Element => {
                               </div>
                             }
                           >
+                            <Show when={hiddenEventCount() > 0}>
+                              <button
+                                type="button"
+                                class="ax-results-chip"
+                                data-testid="axis-events-show-earlier"
+                                onClick={() => setEventPages((n) => n + 1)}
+                              >
+                                Show {Math.min(EVENT_PAGE, hiddenEventCount())} earlier events
+                              </button>
+                            </Show>
                             <ul class="ax-list ax-event-list" data-testid="axis-events-stream">
-                              <For each={visibleEvents()}>
+                              <For each={renderedEvents()}>
                                 {(ev) => {
                                   const kind = String(ev.type || ev.event || ev.kind || '?');
                                   const dir = String(ev.dir || ev.direction || '');
@@ -1012,7 +1043,11 @@ export const ResultsModal: Component = () : JSX.Element => {
                         {/* Open ⇄ Close — per-position two-column grid */}
                         <Show when={eventsView() === 'positions'}>
                           <div class="ax-pos-grid" data-testid="axis-events-positions">
-                            <For each={positionData()?.positions ?? []}>
+                            <For
+                              each={(positionData()?.positions ?? []).slice(
+                                -eventPages() * EVENT_PAGE,
+                              )}
+                            >
                               {(p: PositionView) => (
                                 <div
                                   class={`ax-pos-row is-${p.dir}${p.status === 'open' ? ' is-open' : ''}`}

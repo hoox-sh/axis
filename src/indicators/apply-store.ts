@@ -40,6 +40,7 @@ import {
   EDITOR_RUN_KEY,
 } from '../store';
 import { getManager, getDrawingLayer, ensureScriptPaneLayer } from '../chart/manager-access';
+import { refreshPaneBadge } from '../chart/pane-badge';
 import { getActiveDrawingLayer } from '../chart/drawing-layer';
 import {
   bgcolorSeriesToHistogramData,
@@ -340,6 +341,11 @@ export function updateIndicatorStore(ctx: StoreUpdateContext): boolean {
           times: timesForCache,
         });
       }
+    }
+    try {
+      refreshPaneBadge(ctx.paneId);
+    } catch {
+      /* badge host may not be in the document yet */
     }
   } catch (e: unknown) {
     reportUiError(e, {

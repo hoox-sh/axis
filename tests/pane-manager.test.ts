@@ -1342,7 +1342,7 @@ describe('live candle axis', () => {
     return { time, open: 1, high: 2, low: 0.5, close: 1.5, volume: 1 };
   }
 
-  it('holds the last indicator value onto a new candle until the script re-runs', () => {
+  it('does not copy the last indicator value onto a candle the script has not evaluated', () => {
     const price = pm.getPane('price')!;
     const updates: unknown[] = [];
     const sets: unknown[] = [];
@@ -1382,7 +1382,7 @@ describe('live candle axis', () => {
     pm.extendOverlayTips(220);
     expect(updates).toEqual([]);
     pm.appendBar(bar(280));
-    expect(updates).toEqual([{ time: 280, value: 42 }]);
+    expect(updates).toEqual([]);
   });
 
   it('does not grow the indicator axis on forming ticks, and extends it once on a new candle', () => {

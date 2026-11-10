@@ -120,6 +120,14 @@ describe('mapEnginePayload', () => {
     expect(batch.meta?.script_type).toBeUndefined();
   });
 
+  it('reads a top-level script_type on the WS meta policy', () => {
+    const ws = mapEnginePayload(
+      { ...payload, script_type: 'indicator' },
+      { transport: 'ws', ms: 1, scriptType: 'meta' },
+    );
+    expect(ws.meta?.script_type).toBe('indicator');
+  });
+
   it('reads an explicit script_type from the payload', () => {
     const r = mapEnginePayload(
       { ...payload, script_type: 'indicator' },

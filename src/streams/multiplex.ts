@@ -99,20 +99,56 @@ export type { StreamPlugin };
 export { listStreams, defaultStreamForSource };
 
 /**
- * When history is this large, live `every-tick` re-runs are treated as
- * `bar-close` so we do not re-serialize full OHLCV for the engine every open-bar tick.
- * User-selected `bar-close` is unchanged. Aligns with {@link HEAVY_BARS_THRESHOLD}.
+ * When history is this large, a full-window re-run (no authenticated stream
+ * socket) is treated as `bar-close`. An authenticated `/ws/live` delta stays
+ * on every tick. Aligns with {@link HEAVY_BARS_THRESHOLD}.
  */
 export const HEAVY_LIVE_RERUN_BARS = HEAVY_BARS_THRESHOLD;
 
-/** Effective live re-run mode. Honors the user's `rerunOn` preference:
- * `every-tick` re-runs indicators on each bar update; `bar-close` only when
- * the venue marks the candle closed (or bar time advances).
+/**
+ * Effective live re-run mode.
+ *
+ * `bar-close` is kept. `every-tick` is kept for a short history and for an
+ * authenticated stream (deltas, not a full 10k POST). A heavy chart with no
+ * stream key downgrades to bar close so guest and edge runs do not re-encode
+ * the whole window on every price print.
  */
 export function effectiveLiveRerunMode(
   mode: 'every-tick' | 'bar-close' | undefined,
+  opts?: { barCount?: number; streamAuthenticated?: boolean },
 ): 'every-tick' | 'bar-close' {
-  return mode ?? 'every-tick';
+  const resolved = mode ?? 'every-tick';
+  if (resolved === 'bar-close') return 'bar-close';
+  if (opts?.streamAuthenticated) return 'every-tick';
+  const n = opts?.barCount ?? 0;
+  if (n >= HEAVY_LIVE_RERUN_BARS) return 'bar-close';
+  return 'every-tick';
+}
+
+function engineApiKey(): string {
+  return String((getActiveEngineConfig() || {})['apiKey'] || '').trim();
+}
+
+/**
+ * Guest charts advertise `live_stream` from `/health` but have no engine key.
+ * `streamEvalScript` then throws `no-auth` every cycle and the multiplex used
+ * to stop there, so plots never moved. Those scripts take the calculator path
+ * (`runAndApply`: server guest `/run` or in-browser Pyodide).
+ */
+export function guestStreamNeedsCalculator(
+  hasKey: boolean,
+  err?: { reason?: string } | null,
+): boolean {
+  if (!hasKey) return true;
+  return err?.reason === 'no-auth';
+}
+
+/** Cadence for the bar that just landed, including engine caps and guest stream auth. */
+function liveRerunDecision(): 'every-tick' | 'bar-close' {
+  return effectiveLiveRerunMode(liveRerunModeForEngine(store.live.rerunOn), {
+    barCount: store.bars?.length ?? 0,
+    streamAuthenticated: streamRouteActive() && engineApiKey().length > 0,
+  });
 }
 
 /** How the live session ended (affects telemetry wipe). */
@@ -670,7 +706,7 @@ export function startLive(
           // Heavy histories: throttle every-tick → bar-close to avoid full engine re-encode.
           // An engine that advertises bar close only also falls back here — the
           // stored preference itself is never rewritten.
-          const mode = effectiveLiveRerunMode(liveRerunModeForEngine(store.live.rerunOn));
+          const mode = liveRerunDecision();
           if (mode === 'every-tick' || bar.closed || timeAdvanced) {
             shouldRerun = true;
           }
@@ -755,7 +791,7 @@ export function startLive(
     };
     // Effective re-run mode. Delta ticks make per-tick updates cheap even on
     // heavy histories, so every-tick is honored regardless of bar count.
-    const rerunMode = effectiveLiveRerunMode(liveRerunModeForEngine(store.live.rerunOn));
+    const rerunMode = liveRerunDecision();
     // Throttle: the engine tick alone costs ~3s server-side, so ticking per
     // venue flush never idles. Within the same forming bar and inside the
     // minimum gap, paint the venue tip locally and skip the round trip — the
@@ -832,7 +868,7 @@ export function startLive(
                 const prevLastSeen = lastSeenBarTime;
                 lastSeenBarTime = Math.max(lastSeenBarTime, tip.time);
                 if (!isCurrent()) return { painted: 'append', shouldRerun: false };
-                const mode = effectiveLiveRerunMode(liveRerunModeForEngine(store.live.rerunOn));
+                const mode = liveRerunDecision();
                 const timeAdvanced = tip.time > prevLastSeen;
                 return {
                   painted: 'append',
@@ -930,7 +966,7 @@ export function startLive(
         // Heavy histories throttle every-tick → bar-close; an engine that
         // advertises bar close only also falls back here — the stored
         // preference itself is never rewritten.
-        const mode = effectiveLiveRerunMode(liveRerunModeForEngine(store.live.rerunOn));
+        const mode = liveRerunDecision();
         const tipTime = proBars[proBars.length - 1]!.time;
         const timeAdvanced = tipTime > prevLastSeen;
         const shouldRerun = mode === 'every-tick' ? true : timeAdvanced || venueClosed;
@@ -1321,12 +1357,28 @@ function scheduleRerun(opts?: { immediate?: boolean }) {
             return;
           }
           try {
+            const runCalculator = () =>
+              runAndApply(ind.code, ind.id, {
+                silent: true,
+                openResults: false,
+                inputs: ind.inputValues,
+                strategyProps: ind.strategyProps,
+                liveTick: true,
+                epoch: batch,
+              });
             if (streamRouteActive()) {
-              // Stream owns the script — never REST full-window fallback.
+              // No engine key: /ws/live cannot evaluate. Fall through to a
+              // normal re-run so guest RSI/MACD/SMA follow the candles.
+              if (guestStreamNeedsCalculator(engineApiKey().length > 0, null)) {
+                await runCalculator();
+                return;
+              }
+              // Stream owns the script when the key is present.
               // After StreamFallbackError, wait out exponential backoff before
               // the next subscribe/eval so a broken script cannot hammer /ws/live.
               // idle/released (PYNE unsubscribe ack) always re-attempts: the sub
               // is gone and backoff must not leave the overlay blank.
+              // `no-auth` is not a dead socket — the calculator path still runs.
               if (!shouldEvalScriptStream(ind.id)) return;
               if (isScriptStreamReleased(ind.id)) clearScriptStreamRetry(ind.id);
               try {
@@ -1334,19 +1386,16 @@ function scheduleRerun(opts?: { immediate?: boolean }) {
                 clearScriptStreamRetry(ind.id);
               } catch (e) {
                 if (!(e instanceof StreamFallbackError)) throw e;
+                if (guestStreamNeedsCalculator(true, e)) {
+                  await runCalculator();
+                  return;
+                }
                 const noted = noteScriptStreamFallback(ind.id, e.reason || e.message);
                 setScriptStatus(ind.id, 'degraded', noted.message);
               }
               return;
             }
-            await runAndApply(ind.code, ind.id, {
-              silent: true,
-              openResults: false,
-              inputs: ind.inputValues,
-              strategyProps: ind.strategyProps,
-              liveTick: true,
-              epoch: batch,
-            });
+            await runCalculator();
           } catch {
             // runAndApply never rejects (last-resort fence); belt-and-braces
             // so one script cannot fail the whole live cycle.

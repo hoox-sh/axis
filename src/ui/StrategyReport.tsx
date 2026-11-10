@@ -22,7 +22,7 @@
  * CSV export. Fed by {@link buildStrategyReport} from `store.lastRun` events.
  */
 
-import { type Component, For, Show } from 'solid-js';
+import { type Component, For, Show, createMemo, createSignal } from 'solid-js';
 import {
   buildCumulativeEquity,
   formatMoney,
@@ -83,8 +83,18 @@ export type StrategyReportProps = {
 };
 
 /** Polished strategy tester panel for the Results Strategy tab. */
+const TRADE_PAGE = 300;
+
 export const StrategyReport: Component<StrategyReportProps> = (props): JSX.Element => {
   const hasTrades = () => props.trades.length > 0;
+  const [tradePages, setTradePages] = createSignal(1);
+  const shownTrades = createMemo(() => {
+    const all = props.trades;
+    const cap = tradePages() * TRADE_PAGE;
+    if (all.length <= cap) return all;
+    return all.slice(all.length - cap);
+  });
+  const hiddenTrades = () => Math.max(0, props.trades.length - shownTrades().length);
 
   const finalEquity = () => {
     const steps = buildCumulativeEquity(props.trades);
@@ -303,6 +313,16 @@ export const StrategyReport: Component<StrategyReportProps> = (props): JSX.Eleme
             </div>
 
             <div class="ax-table-wrap" data-testid="axis-strategy-trades">
+              <Show when={hiddenTrades() > 0}>
+                <button
+                  type="button"
+                  class="ax-btn ax-btn--ghost"
+                  data-testid="axis-strategy-show-earlier"
+                  onClick={() => setTradePages((n) => n + 1)}
+                >
+                  Show {Math.min(TRADE_PAGE, hiddenTrades())} earlier trades
+                </button>
+              </Show>
               <table class="ax-table ax-table--jump">
                 <thead>
                   <tr>
@@ -320,7 +340,7 @@ export const StrategyReport: Component<StrategyReportProps> = (props): JSX.Eleme
                   </tr>
                 </thead>
                 <tbody>
-                  <For each={props.trades}>
+                  <For each={shownTrades()}>
                     {(t) => (
                       <tr
                         title={

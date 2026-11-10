@@ -175,7 +175,14 @@ export const StatusBar: Component = () : JSX.Element => {
 
         {/* Collapsed right rail: fine counts. Expanded keeps strategy PnL only. */}
         <Show when={compact()}>
-          <Show when={store.status === 'error' || store.status === 'loading' || store.status === 'running'}>
+          <Show
+            when={
+              store.status === 'error' ||
+              store.status === 'loading' ||
+              store.status === 'running' ||
+              (store.status === 'ready' && !!store.statusMessage)
+            }
+          >
             <span
               class={`flex items-center gap-1 min-w-0 max-w-[18vw] text-[11px] ${color()}`}
               data-testid="axis-status-message"

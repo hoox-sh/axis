@@ -101,6 +101,33 @@ function scriptsOnPane(paneId: string) {
   return store.scripts.filter((s) => s.paneId === paneId);
 }
 
+function formatLiveNumber(v: number): string {
+  const abs = Math.abs(v);
+  if (abs >= 1000) return v.toFixed(2);
+  if (abs >= 1) return v.toFixed(2);
+  return v.toFixed(4);
+}
+
+/** Last finite samples for the badge, up to three plots. */
+function scriptLiveValues(scriptId: string): string | null {
+  const series = store.indicatorSeries?.[scriptId]?.series;
+  if (!series) return null;
+  const parts: string[] = [];
+  for (const key of Object.keys(series)) {
+    if (parts.length >= 3) break;
+    const arr = series[key];
+    if (!Array.isArray(arr)) continue;
+    for (let i = arr.length - 1; i >= 0 && i >= arr.length - 16; i--) {
+      const v = arr[i];
+      if (typeof v === 'number' && Number.isFinite(v)) {
+        parts.push(formatLiveNumber(v));
+        break;
+      }
+    }
+  }
+  return parts.length ? parts.join('  ') : null;
+}
+
 function reRunScript(id: string, code: string) {
   // Dynamic import avoids circular load (runner → pane-manager → badge → runner)
   void import('../indicators/runner').then(({ runAndApply }) => {
@@ -229,6 +256,14 @@ export function mountPaneBadge(
       name.textContent = script.name || label;
       name.title = script.name || label;
       chip.appendChild(name);
+      const live = scriptLiveValues(script.id);
+      if (live) {
+        const value = document.createElement('span');
+        value.className = 'axis-pane-badge-value';
+        value.textContent = live;
+        value.title = 'Last computed value';
+        chip.appendChild(value);
+      }
 
       chip.appendChild(
         btn(
@@ -296,20 +331,43 @@ export function mountPaneBadge(
   return root;
 }
 
+function hostIsHiddenPlaceholder(el: HTMLElement): boolean {
+  if (el.dataset?.['axisPaneChromePending'] === '1') return true;
+  try {
+    if (el.style?.display === 'none') return true;
+  } catch {
+    /* style optional */
+  }
+  return false;
+}
+
 function findPaneHost(paneId: string): HTMLElement | null {
-  if (typeof document === 'undefined' || typeof document.querySelector !== 'function') {
-    return null;
+  if (typeof document === 'undefined') return null;
+  if (typeof document.querySelectorAll !== 'function') {
+    if (typeof document.querySelector !== 'function') return null;
+    try {
+      const esc =
+        typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
+          ? CSS.escape(paneId)
+          : paneId.replace(/"/g, '\\"');
+      return document.querySelector(`[data-axis-pane-chrome="${esc}"]`) as HTMLElement | null;
+    } catch {
+      return null;
+    }
   }
   try {
     const esc =
       typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
         ? CSS.escape(paneId)
         : paneId.replace(/"/g, '\\"');
-    const chrome = document.querySelector(
-      `[data-axis-pane-chrome="${esc}"]`,
-    ) as HTMLElement | null;
-    if (chrome) return chrome;
-    return document.querySelector(`[data-pane-id="${esc}"]`) as HTMLElement | null;
+    const chrome = Array.from(
+      document.querySelectorAll(`[data-axis-pane-chrome="${esc}"]`),
+    ) as HTMLElement[];
+    const visible = chrome.find((el) => !hostIsHiddenPlaceholder(el));
+    if (visible) return visible;
+    if (chrome.length && chrome.every(hostIsHiddenPlaceholder)) return null;
+    const panes = Array.from(document.querySelectorAll(`[data-pane-id="${esc}"]`)) as HTMLElement[];
+    return panes.find((el) => !hostIsHiddenPlaceholder(el)) ?? null;
   } catch {
     return null;
   }

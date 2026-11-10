@@ -135,7 +135,13 @@ export function mapEnginePayload(payload: unknown, opts: MapEnginePayloadOptions
       (meta['script_type'] as string | undefined) ||
       (/strategy/i.test(String(meta['kind'] || '')) ? 'strategy' : undefined);
   } else if (opts.scriptType === 'meta') {
-    scriptType = meta['script_type'] as string | undefined;
+    // WS payloads often put `script_type` next to `overlay` at the top level.
+    // Reading only `meta` dropped it, and a missing type plus a missing
+    // overlay flag routed indicators onto the price pane.
+    const top = p['script_type'];
+    scriptType =
+      (typeof meta['script_type'] === 'string' ? meta['script_type'] : undefined) ||
+      (typeof top === 'string' ? top : undefined);
   }
 
   const times = opts.engineTimes ? payloadEngineTimes(p) : undefined;

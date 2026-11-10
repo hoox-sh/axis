@@ -1327,6 +1327,14 @@ export class PaneManager {
    * no-op so destroying an indicator cannot remove the candles.
    */
   private createSharedPane(id: string, type: string, label: string, height?: number): ManagedPane {
+    const already = this.panes.get(id);
+    if (already) return already;
+    // Pane 0 is the candle pane. Creating an indicator while the chart is
+    // gone (symbol switch, layout remount) must not bind that indicator at
+    // index 0 or its series draw on the price chart.
+    if (!this.slot && id !== 'price' && !this.panes.has('price')) {
+      this.createSharedPane('price', 'price', 'Price');
+    }
     const div = document.createElement('div');
     div.id = this.paneDomId(id);
     div.className = 'relative';
@@ -1439,13 +1447,48 @@ export class PaneManager {
     type: string,
     label: string,
   ): void {
-    const row = this.slot?.element(id);
-    const host = row ? panePlotHost(row) : fallback;
-    if (host.dataset) {
-      host.dataset['axisPaneChrome'] = id;
-      host.dataset['paneType'] = type;
+    const stamp = (host: HTMLElement) => {
+      if (host !== fallback && fallback.dataset) {
+        if (fallback.dataset['axisPaneChrome'] === id) delete fallback.dataset['axisPaneChrome'];
+        delete fallback.dataset['axisPaneChromePending'];
+      }
+      if (host.dataset) {
+        host.dataset['axisPaneChrome'] = id;
+        host.dataset['paneType'] = type;
+        delete host.dataset['axisPaneChromePending'];
+      }
+      mountPaneBadge(host, id, type, label);
+    };
+    const rowNow = this.slot?.element(id);
+    if (rowNow) {
+      stamp(panePlotHost(rowNow));
+      return;
     }
-    mountPaneBadge(host, id, type, label);
+    // Lightweight Charts often returns null from getHTMLElement() in the same
+    // turn as addPane. Mounting on the hidden placeholder then sticks:
+    // findPaneHost keeps returning that 0-height node. Wait for the real row.
+    if (fallback.dataset) {
+      fallback.dataset['axisPaneChromePending'] = '1';
+      if (fallback.dataset['axisPaneChrome'] === id) delete fallback.dataset['axisPaneChrome'];
+    }
+    let attempts = 0;
+    const retry = () => {
+      if (!this.panes.has(id) && attempts > 0) return;
+      const live = this.slot?.element(id);
+      if (live) {
+        stamp(panePlotHost(live));
+        return;
+      }
+      attempts += 1;
+      if (attempts > 12) {
+        stamp(fallback);
+        return;
+      }
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(retry);
+      else setTimeout(retry, 16);
+    };
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(retry);
+    else retry();
   }
 
   /**
@@ -3361,9 +3404,9 @@ export class PaneManager {
         // Extend the painted candle window so overlay clamps keep the newest tip.
         // Extend never creates the range — full paints do — so pre-paint ticks stay a no-op.
         this.extendPaintedCandleRange(bar.time);
-        // Hold the last indicator value onto a brand-new candle so the line
-        // does not stop one bar short until the script re-runs. A forming
-        // tick of a bar we already extended is a no-op (last time matches).
+        // Do not copy the previous value onto the new candle. A failed re-run
+        // (guest stream with no API key) used that copy as a frozen "live"
+        // value, and series.data() duplicated the whole window every tick.
         if (paintedTime != null) this.extendOverlayTips(paintedTime);
       }
 
@@ -3382,44 +3425,15 @@ export class PaneManager {
   }
 
   /**
-   * Hold each script series' last value onto a newer candle time.
+   * Previously copied each script series' last value onto a newer candle.
    *
-   * A closed bar paints before the script re-runs. Leaving the series on the
-   * previous bar makes every indicator look one bar short. One update at the
-   * new time bridges that gap; the engine result replaces it.
+   * That read `series.data()` (a full copy of the window) on every tick and
+   * held a stale number forward when the engine never returned a new point.
+   * The next real evaluation paints the tip; until then the line stops on
+   * the last computed bar.
    */
-  extendOverlayTips(time: number): void {
-    if (!Number.isFinite(time)) return;
-    for (const pane of this.panes.values()) {
-      for (const key of Object.keys(pane.series)) {
-        if (!isScriptCoPaintedKey(key)) continue;
-        const series = pane.series[key] as
-          | {
-              data?: () => readonly { time?: unknown; value?: unknown }[];
-              update?: (point: { time: UTCTimestamp; value: number }) => void;
-            }
-          | undefined;
-        if (!series || typeof series.data !== 'function' || typeof series.update !== 'function') {
-          continue;
-        }
-        let rows: readonly { time?: unknown; value?: unknown }[];
-        try {
-          rows = series.data();
-        } catch {
-          continue;
-        }
-        if (!rows?.length) continue;
-        const last = rows[rows.length - 1];
-        const lastT = Number(last?.time);
-        const value = Number(last?.value);
-        if (!Number.isFinite(lastT) || lastT >= time || !Number.isFinite(value)) continue;
-        try {
-          series.update({ time: time as UTCTimestamp, value });
-        } catch {
-          /* a series that cannot take a tip update keeps its last bar */
-        }
-      }
-    }
+  extendOverlayTips(_time: number): void {
+    /* no hold-forward */
   }
 
   /**

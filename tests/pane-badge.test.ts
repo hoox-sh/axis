@@ -10,7 +10,7 @@
 import './setup';
 import { describe, expect, it, beforeEach } from 'bun:test';
 import { mountPaneBadge, panePlotHost } from '../src/chart/pane-badge';
-import { setStore, addIndicator, removeIndicator, store } from '../src/store';
+import { setStore, addIndicator, removeIndicator, setIndicatorSeries, store } from '../src/store';
 import { paneStretchWeights } from '../src/chart/pane-manager';
 
 /** Tiny DOM tree that supports the methods mountPaneBadge uses. */
@@ -242,6 +242,21 @@ describe('mountPaneBadge', () => {
         `axis-pane-remove-${id}`,
       ]);
       expect(store.scripts.some((s) => s.id === id)).toBe(true);
+    } finally {
+      restore();
+      removeIndicator(id);
+    }
+  });
+
+  it('shows the last computed value on the script chip', () => {
+    const id = addIndicator('RSI', 'plot(close)', 'indicator', { plot: { color: '#fff' } });
+    setIndicatorSeries(id, { name: 'RSI', series: { RSI: [40, 55.5] } });
+    const { host, restore } = makeHost();
+    try {
+      mountPaneBadge(host, 'indicator', 'indicator', 'RSI');
+      const values = host.querySelectorAll('.axis-pane-badge-value');
+      expect(values.length).toBe(1);
+      expect(values[0]?.textContent).toBe('55.50');
     } finally {
       restore();
       removeIndicator(id);

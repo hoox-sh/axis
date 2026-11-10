@@ -396,10 +396,10 @@ export const ChartHost: Component<ChartHostProps> = (props): JSX.Element => {
     window.addEventListener('resize', onWin);
     window.addEventListener('axis-chart-reflow', onWin);
 
-    // Poll the imperative ranging flag at a low cadence and expose it as a
-    // reactive signal. Overlay effects can then suppress full rewrites during
-    // pan/zoom and flush the latest state once the gesture ends.
-    const rangingTimer = setInterval(() => {
+    // Mirror the imperative ranging flag into a signal on the gesture itself.
+    // A 100ms poll on every slot was ~10 wakes/s while idle. Pointer events
+    // cover pan/zoom; a 1s safety net catches a flag set outside the host.
+    const syncRanging = () => {
       if (!localManager) return;
       try {
         const next = localManager.isRanging();
@@ -407,12 +407,19 @@ export const ChartHost: Component<ChartHostProps> = (props): JSX.Element => {
       } catch {
         /* ignore */
       }
-    }, 100);
+    };
+    hostEl?.addEventListener('pointerdown', syncRanging);
+    hostEl?.addEventListener('pointerup', syncRanging);
+    hostEl?.addEventListener('pointercancel', syncRanging);
+    const rangingTimer = setInterval(syncRanging, 1000);
 
     onCleanup(() => {
       ro?.disconnect();
       window.removeEventListener('resize', onWin);
       window.removeEventListener('axis-chart-reflow', onWin);
+      hostEl?.removeEventListener('pointerdown', syncRanging);
+      hostEl?.removeEventListener('pointerup', syncRanging);
+      hostEl?.removeEventListener('pointercancel', syncRanging);
       clearInterval(rangingTimer);
       setIsRanging(false);
     });

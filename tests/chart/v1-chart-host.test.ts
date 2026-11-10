@@ -88,6 +88,38 @@ describe('SlotChart', () => {
     expect(chart.remove).toHaveBeenCalledTimes(1);
   });
 
+  test('an indicator bound first does not take pane 0', () => {
+    const chart = fakeChart();
+    const slot = new SlotChart(chart);
+    expect(slot.bind('rsi')).toBe(1);
+    expect(slot.indexOf('price')).toBe(0);
+    expect(slot.indexOf('rsi')).toBe(1);
+    slot.facade('rsi').addSeries('Line' as never, {});
+    expect(chart.addSeries.mock.calls.map((call) => call[2])).toEqual([1]);
+  });
+
+  test('facade reads the pane index after a removal instead of a captured one', () => {
+    const chart = fakeChart();
+    const slot = new SlotChart(chart);
+    slot.bind('price');
+    slot.bind('volume');
+    slot.bind('rsi');
+    const rsi = slot.facade('rsi');
+    expect(slot.release('volume')).toBe('pane');
+    expect(slot.indexOf('rsi')).toBe(1);
+    rsi.addSeries('Line' as never, {});
+    expect(chart.addSeries.mock.calls.at(-1)?.[2]).toBe(1);
+  });
+
+  test('an unbound facade does not paint on pane 0', () => {
+    const chart = fakeChart();
+    const slot = new SlotChart(chart);
+    slot.bind('price');
+    const ghost = slot.facade('missing');
+    expect(ghost.addSeries('Line' as never, {})).toBeUndefined();
+    expect(chart.addSeries).not.toHaveBeenCalled();
+  });
+
   test('setHeight, getHeight, and setStretchFactor address the pane index', () => {
     const chart = fakeChart();
     const slot = new SlotChart(chart);

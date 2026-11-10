@@ -66,6 +66,16 @@ export class SlotChart {
     const existing = this.ids.get(id);
     if (existing != null) return existing;
     if (this.ids.size === 0) {
+      // Pane 0 is the candle pane. An indicator that binds first (remount
+      // racing price creation) must not own it — RSI would draw on the price
+      // chart and the later price series would share that pane.
+      if (id !== 'price') {
+        this.ids.set('price', 0);
+        const created = this.chart.addPane(true);
+        const index = created.paneIndex();
+        this.ids.set(id, index);
+        return index;
+      }
       this.ids.set(id, 0);
       return 0;
     }
@@ -120,19 +130,40 @@ export class SlotChart {
     return this.chart.panes()[index]?.getHTMLElement() ?? null;
   }
 
-  /** Chart view fixed to this pane's index. */
+  /**
+   * Chart view for this pane.
+   *
+   * The index is read when `addSeries` / `priceScale` run, not when the
+   * facade is created. `release` shifts later panes down; a captured index
+   * kept painting the removed slot, and an out-of-range index landed on
+   * pane 0 (the price chart). An unbound id does not fall back to 0.
+   */
   facade(id: string): IChartApi {
-    const index = this.ids.get(id) ?? 0;
     const chart = this.chart;
+    const ids = this.ids;
+    const resolve = (explicit: number | undefined): number | undefined => {
+      if (explicit != null) return explicit;
+      const index = ids.get(id);
+      if (index == null) return undefined;
+      const panes = chart.panes();
+      if (index < 0 || index >= panes.length) return undefined;
+      return index;
+    };
     return new Proxy(chart as object, {
       get(target, prop, receiver) {
         if (prop === 'addSeries') {
-          return (definition: unknown, options?: unknown, paneIndex?: number) =>
-            chart.addSeries(definition, options, paneIndex ?? index);
+          return (definition: unknown, options?: unknown, paneIndex?: number) => {
+            const index = resolve(paneIndex);
+            if (index == null) return undefined;
+            return chart.addSeries(definition, options, index);
+          };
         }
         if (prop === 'priceScale') {
-          return (scaleId: string, paneIndex?: number) =>
-            chart.priceScale(scaleId, paneIndex ?? index);
+          return (scaleId: string, paneIndex?: number) => {
+            const index = resolve(paneIndex);
+            if (index == null) return undefined;
+            return chart.priceScale(scaleId, paneIndex ?? index);
+          };
         }
         if (prop === 'remove') return () => {};
         const value = Reflect.get(target, prop, receiver);

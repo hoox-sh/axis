@@ -5625,6 +5625,14 @@ body.axis-panel-dragging {
   letter-spacing: 0.02em;
   font-weight: 600;
 }
+.axis-pane-badge-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: calc(11px * var(--ui-scale));
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text, #e7e8ee);
+  padding-right: 4px;
+  user-select: none;
+}
 .axis-pane-badge-btn {
   display: inline-flex;
   align-items: center;
