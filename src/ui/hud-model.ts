@@ -274,10 +274,11 @@ function armIsConnecting(opts: LiveArmInput): boolean {
   return opts.streamStatus === 'connecting' || opts.streamState === 'connecting';
 }
 
-function armIsDegraded(opts: LiveArmInput): boolean {
-  if (opts.feedStatus === 'degraded' || opts.streamState === 'degraded') return true;
-  if (opts.wireOpen === false && !armIsConnecting(opts)) return true;
-  return false;
+function venueStreamOpen(opts: LiveArmInput): boolean {
+  if (opts.streamState === 'degraded' || opts.streamState === 'closed' || opts.streamState === 'error') {
+    return false;
+  }
+  return opts.streamStatus === 'connected' || opts.streamState === 'open';
 }
 
 /**
@@ -347,24 +348,29 @@ export function composeCaption(snap: Pick<HudSnapshot, 'run'>): string {
 
 /**
  * Visual state for the HUD Live chip.
- * `live` only when the arm is actually open — not when scripts/feed are
- * degraded, the engine wire is closed, or the path is REST poll.
+ * `live` when the venue stream ledger is open. A degraded script feed or a
+ * closed engine wire does not override that — the script card and Eng chip
+ * own those signals. REST poll and a degraded/closed stream plane still do.
  */
 export function liveBadgeTone(
   opts: LiveArmInput,
 ): 'off' | 'live' | 'reconnect' | 'offline' | 'degraded' | 'rest' {
   if (!opts.liveActive) return 'off';
   // Reconnect wins over a degraded plane so the word stays Live while retrying.
-  if (armIsConnecting(opts) && opts.feedStatus !== 'degraded' && opts.feedStatus !== 'error') {
+  if (armIsConnecting(opts) && opts.feedStatus !== 'error') {
     return 'reconnect';
   }
-  if (opts.feedStatus === 'error') return 'offline';
-  if (armIsDegraded(opts)) return 'degraded';
-  if (opts.transport === 'rest') return 'rest';
-  if (opts.streamStatus === 'connected') {
-    if (opts.streamRouteActive && opts.wireOpen === false) return 'degraded';
+  if (opts.feedStatus === 'error' || opts.streamStatus === 'error' || opts.streamState === 'error') {
+    return 'offline';
+  }
+  // The status ledger logs the venue socket. An open stream is Live even when
+  // a script feed or an unused engine wire is down — those have their own chips.
+  if (venueStreamOpen(opts)) {
+    if (opts.transport === 'rest') return 'rest';
     return 'live';
   }
+  if (opts.streamState === 'degraded' || opts.feedStatus === 'degraded') return 'degraded';
+  if (opts.streamRouteActive && opts.wireOpen === false) return 'degraded';
   return 'offline';
 }
 
@@ -381,6 +387,16 @@ export function lastTickForSymbol<T extends { symbol?: string }>(
   if (!tick) return null;
   if (tick.symbol != null && tick.symbol !== symbol) return null;
   return tick;
+}
+
+/**
+ * Bar close for the footer only when the bar plane is stamped for this symbol.
+ * An empty stamp is not a match — that was the window where the previous
+ * pair's close stayed on screen after the symbol field changed.
+ */
+export function closeForChartSymbol(barSymbol: string, chartSymbol: string, close: number): number {
+  if (!chartSymbol || !barSymbol || barSymbol !== chartSymbol) return NaN;
+  return Number.isFinite(close) ? close : NaN;
 }
 
 /**

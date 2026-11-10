@@ -192,11 +192,12 @@ export const App: Component = () : JSX.Element => {
   };
   createEffect(() => {
     const bars = barPlane.bars;
-    const tip = barPlane.tip;
-    const n = bars.length;
+    const symbol = store.symbol;
+    const same = !!symbol && barPlane.symbol === symbol;
+    const tip = same ? barPlane.tip : null;
+    const n = same ? bars.length : 0;
     const last = tip?.close != null ? tip : n > 0 ? bars[n - 1] : undefined;
     const prev = n > 1 ? bars[n - 2] : undefined;
-    const symbol = store.symbol;
     const nextTitle = formatChartTitle({
       symbol,
       price: last?.close,

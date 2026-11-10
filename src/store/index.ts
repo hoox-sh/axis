@@ -3612,6 +3612,11 @@ export function loadBars(bars: Bar[], symbol: string, interval: string, exchange
   const view = sliceToChartWindow(bars);
   const instrumentChanged =
     store.symbol !== symbol || store.interval !== interval || store.exchange !== exchange;
+  // commitSymbol writes store.symbol before history arrives. Compare the bar
+  // plane too, or the previous pair's last tick survives the batch.
+  const seriesChanged =
+    (!!barPlane.symbol && barPlane.symbol !== symbol) ||
+    (!!barPlane.interval && barPlane.interval !== interval);
   // One reactive flush for Topbar + ChartHost + StatusBar (not 5 micro-updates)
   batch(() => {
     setStore('bars', view);
@@ -3623,7 +3628,7 @@ export function loadBars(bars: Bar[], symbol: string, interval: string, exchange
     setStore('exchange', exchange);
     // Drop the previous instrument's last tick so the footer cannot keep
     // BTC's price after a switch to ETH (or a TF / venue change).
-    if (instrumentChanged) {
+    if (instrumentChanged || seriesChanged) {
       frameTick = null;
       setStore('telemetry', 'lastTick', null);
     }
@@ -4317,6 +4322,12 @@ function flushLiveFrame(): void {
     setStore('telemetry', 'lastTick', tick);
     setTelemetryPlane('stream', { lastEventAt: tick.at });
   }
+}
+
+/** Drop the footer price immediately (symbol / interval switch, before history). */
+export function clearLastTick(): void {
+  frameTick = null;
+  if (store.telemetry?.lastTick) setStore('telemetry', 'lastTick', null);
 }
 
 /** Record last live tick price/time and bump stream `lastEventAt`. */

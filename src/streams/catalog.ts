@@ -105,7 +105,7 @@ export const binanceStream: StreamPlugin = {
   kind: 'stream',
   builtIn: true,
   description:
-    'Real-time klines via stream.binance.com (auto-reconnect; rotates :9443 → :443 → data-stream).',
+    'Real-time klines via data-stream.binance.vision (auto-reconnect; falls back to stream.binance.com).',
   capabilities: {
     needsNetwork: true,
     transport: 'ws',

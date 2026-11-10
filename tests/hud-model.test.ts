@@ -18,6 +18,7 @@ import {
   isLocalEndpoint,
   isWorkerEndpoint,
   composeCaption,
+  closeForChartSymbol,
   lastTickForSymbol,
   liveBadgeLabel,
   liveBadgeTone,
@@ -134,34 +135,51 @@ describe('liveBadgeLabel / liveBadgeTone', () => {
     ).toBe('Reconnecting · attempt 1/8 in 1000ms — click to stop');
   });
 
-  it('is not Live when the engine wire is closed', () => {
-    const closed = liveBadgeTone({
+  it('stays Live when the venue stream is open even if the engine wire is closed', () => {
+    const open = liveBadgeTone({
       liveActive: true,
       streamStatus: 'connected',
+      streamState: 'open',
       wireOpen: false,
     });
-    expect(closed).toBe('degraded');
-    expect(liveBadgeWord(closed)).toBe('Degraded');
-    expect(liveBadgeWord(closed)).not.toBe('Live');
+    expect(open).toBe('live');
+    expect(liveBadgeWord(open)).toBe('Live');
     expect(
-      liveBadgeLabel({ liveActive: true, streamStatus: 'connected', wireOpen: false }),
-    ).toBe('Degraded');
+      liveBadgeLabel({
+        liveActive: true,
+        streamStatus: 'connected',
+        streamState: 'open',
+        wireOpen: false,
+      }),
+    ).toBe('LIVE');
   });
 
-  it('is not Live when the stream or script path is degraded', () => {
+  it('is Degraded when the stream route wire is closed and the venue stream is not open', () => {
+    expect(
+      liveBadgeTone({
+        liveActive: true,
+        streamStatus: 'disconnected',
+        streamRouteActive: true,
+        wireOpen: false,
+      }),
+    ).toBe('degraded');
+  });
+
+  it('follows the stream ledger: open stays Live, a degraded stream plane does not', () => {
     expect(
       liveBadgeTone({
         liveActive: true,
         streamStatus: 'connected',
-        streamState: 'degraded',
+        streamState: 'open',
+        feedStatus: 'degraded',
       }),
-    ).toBe('degraded');
+    ).toBe('live');
     expect(
       liveBadgeWord(
         liveBadgeTone({
           liveActive: true,
           streamStatus: 'connected',
-          feedStatus: 'degraded',
+          streamState: 'degraded',
         }),
       ),
     ).toBe('Degraded');
@@ -169,6 +187,7 @@ describe('liveBadgeLabel / liveBadgeTone', () => {
       liveBadgeLabel({
         liveActive: true,
         streamStatus: 'connected',
+        streamState: 'degraded',
         feedStatus: 'degraded',
       }),
     ).toBe('Degraded');
@@ -176,6 +195,7 @@ describe('liveBadgeLabel / liveBadgeTone', () => {
       liveIndicatorTitle({
         liveActive: true,
         streamStatus: 'connected',
+        streamState: 'degraded',
         feedStatus: 'degraded',
         detail: 'websocket · no-auth',
       }),
@@ -233,6 +253,14 @@ describe('liveBadgeLabel / liveBadgeTone', () => {
         now: 9_000,
       }),
     ).toBe('Offline — click to stop');
+  });
+});
+
+describe('closeForChartSymbol', () => {
+  it('drops a close that belongs to another symbol, including an unstamped plane', () => {
+    expect(closeForChartSymbol('BTCUSDT', 'ETHUSDT', 75128)).toBeNaN();
+    expect(closeForChartSymbol('', 'ETHUSDT', 75128)).toBeNaN();
+    expect(closeForChartSymbol('ETHUSDT', 'ETHUSDT', 2093.29)).toBe(2093.29);
   });
 });
 

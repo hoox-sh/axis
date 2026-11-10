@@ -30,6 +30,7 @@
 
 import { type Component, For, Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import {
+  clearLastTick,
   store,
   setStore,
   setStatus,
@@ -297,6 +298,7 @@ export const Topbar: Component<{
   const commitSymbol = (raw: string, forceLoad: boolean) => {
     const next = raw.toUpperCase().trim();
     if (!next) return;
+    if (next !== store.symbol) clearLastTick();
     setStore('symbol', next);
     const aid = store.chartLayout?.activeId;
     if (aid) updateChartSlot(aid, { symbol: next });

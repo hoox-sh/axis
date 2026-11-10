@@ -7,7 +7,7 @@ tags: [code, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-09T10:53:23Z
+  at: 2026-11-10T12:13:11Z
 sources:
   - id: tree
     resource: "src/ui"
@@ -96,7 +96,7 @@ okf_lock: generated
 * `first-run.ts` — FIRST_RUN_HINT_KEY, dismissFirstRunHint, editorRunnableSource, firstRunScriptLabel, isFirstRunHintDismissed, shouldShowFirstRunHint, triggerEditorRun
 * `focus-search.ts` — bindSlashToSearch
 * `focus-trap.ts` — installFocusTrap, listFocusable
-* `hud-model.ts` — EngTopology, ExecMode, FeedChipView, HudChipId, HudInput, HudInspectorEvent, HudSnapshot, LiveArmInput, PathClass, RunClass, composeCaption, deriveHud
+* `hud-model.ts` — EngTopology, ExecMode, FeedChipView, HudChipId, HudInput, HudInspectorEvent, HudSnapshot, LiveArmInput, PathClass, RunClass, closeForChartSymbol, composeCaption
 * `icon-map.ts` — ICON_MAP, IconName, PANEL_ICON, findDuplicateIconGlyphs
 * `icons.tsx` — ICON_MAP, IconLabel, IconProps, Icons, PANEL_ICON, findDuplicateIconGlyphs
 * `live-arm.ts` — readLiveArm

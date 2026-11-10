@@ -1015,7 +1015,10 @@ export function startLive(
               error: null,
             });
             // Routine opens stay in the log. Toast only after a long outage.
-            appendLog('ok', `Stream open${s.detail ? ` · ${s.detail}` : ''}`, 'stream', {
+            // The URL stays on the stream plane (ledger). A toast with the raw
+            // socket URL covers the chart; only a long outage is worth a card,
+            // and that card does not repeat the endpoint.
+            appendLog('ok', recovered ? 'Live data is back' : 'Stream open', 'stream', {
               toast: recovered,
             });
             if (recovered) {
