@@ -12,11 +12,13 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-11-04 · 959 commits · describe-tag: `v2.27.0`_
+_Generated/updated: 2026-11-04 · 959 commits · git describe-tag: `v2.27.0` · shipped `package.json` version: **2.28.0** (2.27.0 is not the latest release)_
 
 ---
 
 ## [Unreleased]
+
+Shipped package version is **2.28.0**. The git describe tag `v2.27.0` is the last annotated tag, not the latest product line.
 
 ### Security
 
@@ -30,6 +32,7 @@ _Generated/updated: 2026-11-04 · 959 commits · describe-tag: `v2.27.0`_
 
 ### Changed
 
+- **Quick Start matches the buttons.** Docs say **Run** (editor and topbar) and **Reload chart** (the history refetch). There is no **Add to chart** or **Topbar Load** control.
 - **Browser public Binance REST skips the Worker.** The PWA fetches `data-api.binance.vision` directly (`Access-Control-Allow-Origin: *`) for klines/ticker — no `/api/market/binance/…` hop (CF egress is geo-blocked). `api.binance.com` stays off the browser path (CORS spam). Signed/HMAC still uses Worker. Node/tests keep Worker-first. Pinned by `tests/binance-http.test.ts`.
 - **Status bar layout:** collapsed = Live / Last / Compose chips + `bars · Dataset · Script / Pane` counts; expanded = latency · network · app groups with little meters (Run/Paint/Path + planes). Diagnostics is Settings-only (no Diagnostics button on the rail). Pinned by `tests/hud-inspector.test.ts` and `e2e/statusbar.spec.ts`.
 - **Deploy identity is VERSION + git SHA, proven on deploy.** `VERSION` stays the semver SSOT (`bun run sync:versions`). `public/version.json` stays semver-only so local builds do not dirty git. Vite writes `dist/version.json` `{version, git, gitShort, dirty, buildTime}` from `git rev-parse HEAD` (or `CF_PAGES_COMMIT_SHA` / `GITHUB_SHA`). The PWA update banner compares that identity, so a same-semver Pages deploy still prompts. Worker `/health.git` is the same SHA: `wrangler --define WORKER_GIT_SHA:"<sha>"` plus `--var GIT_SHA:<sha>` (`env.GIT_SHA` fallback). `axis deploy worker` / `pages` fail if live `/health.git` or `dist/version.json.git` ≠ `git rev-parse HEAD`. Bun `axis` loads `src/` so a stale `packages/cli/dist` cannot skip the stamp. Pinned by `tests/git-stamp.test.ts`, `tests/update-manager.test.ts`, `tests/version.test.ts`, `worker/tests/http.test.ts`, and `packages/cli/tests/deploy.test.ts`.

@@ -19,7 +19,7 @@
 
 ---
 title: "Quick start"
-description: "First-run candles, Add to chart / Run, live stream, and reading the Results drawer in AXIS."
+description: "First-run candles, Run, live stream, and reading the Results drawer in AXIS."
 ---
 
 # Quick start
@@ -38,9 +38,9 @@ AXIS is a charting app you run in the browser (or install as a PWA / desktop app
 ## Abstract
 
 1. Ensure AXIS is running ([Installation](/axis/docs/enduser/getting-started/installation)).
-2. Default-symbol candles paint on boot (no Load click). An empty chart with bars and 0 scripts shows a **Run** chip (default RSI / editor buffer).
+2. Default-symbol candles paint on boot (no Reload click). An empty chart shows a hint: edit a script, then press **Run**.
 3. Paste or write a minimal indicator / strategy, or keep the prefilled editor script.
-4. Editor **Run**, or topbar **Add to chart** on first apply (**Run** when that script is already on the chart) → inspect overlays + Results.
+4. Press **Run** (editor or topbar) → inspect overlays + Results. The caret is **Add instance or built-in**.
 5. Optionally enable **Live**.
 
 ## Conceptual model
@@ -56,7 +56,7 @@ sequenceDiagram
   U->>T: boot / watchlist
   T->>S: fetchHistorical
   S-->>C: bars
-  U->>T: Add to chart / Run
+  U->>T: Run
   T->>E: run(script, bars)
   E-->>C: plots / markers / drawings
   E-->>R: lastRun payload
@@ -66,7 +66,7 @@ sequenceDiagram
 
 ### 1. History on the chart
 
-Boot fetches the default symbol for the active source. First-run does **not** wait on a Load click.
+Boot fetches the default symbol for the active source. First-run does **not** wait on **Reload chart**.
 
 Topbar fields that matter:
 
@@ -78,7 +78,7 @@ Topbar fields that matter:
 | Stream | `binance-ws` | Paused until Live |
 | Engine | `server` or `pyodide` | Studio → Settings / Runtime for endpoint |
 
-Pick a watchlist row to switch the symbol. Status bar should move through loading → ready with bar count context. Topbar **Load** (download icon) is a one-shot refetch when you already have a symbol — not the first-run step.
+Pick a watchlist row to switch the symbol. Status bar should move through loading → ready with bar count context. Topbar **Reload chart** (download icon, visible label **Reload**) is a one-shot refetch when you already have a symbol — not the first-run step.
 
 <img src="/images/app/load-ready.png" alt="AXIS after boot: BTCUSDT candles, volume, and RSI pane" />
 
@@ -113,9 +113,9 @@ if ta.crossunder(ta.sma(close, 10), ta.sma(close, 30))
 
 Language semantics: [PYNE runtime](/pyne/docs/runtime).
 
-### 3. Run / Add to chart
+### 3. Run
 
-Editor primary is always **Run**. Topbar primary is **Add to chart** on first apply and **Run** when that script already has an instance on the chart (caret: **Add instance or built-in**). Empty chart with candles and 0 scripts also shows a one-shot **Run** chip.
+Editor and topbar primary are **Run**. The first Run adds the script; a later Run replaces the instance already on the chart (caret: **Add instance or built-in**). An empty chart also shows a one-shot hint: edit a script, then press **Run**.
 
 Pipeline:
 
@@ -175,7 +175,7 @@ Manager → **Script Library** → name → Save. Backend is active storage (`lo
 | Engine | pyodide |
 | Storage | local |
 
-Wait for candles → **Add to chart** / **Run** smoke indicator → toggle Live. No Flask required.
+Wait for candles → **Run** the smoke indicator → toggle Live. No Flask required.
 
 ## Worked example: desk + Flask
 

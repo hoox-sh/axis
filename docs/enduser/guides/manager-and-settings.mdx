@@ -221,7 +221,7 @@ The Connection HUD engine chip shows the selected mode. Save persists via Solid 
 ## Invariants
 
 1. Settings never write script bodies—only layout/config.
-2. Catalog **Use** does not auto-Run; **Add to chart** / **Run** remain explicit.
+2. Catalog **Use** does not auto-Run; **Run** stays explicit.
 3. Source change may re-default stream (`defaultStreamForSource`).
 4. API keys for cloud/git belong in `pluginsConfig`, not in git-committed defaults.
 
@@ -236,7 +236,7 @@ The Connection HUD engine chip shows the selected mode. Save persists via Solid 
 **Install example source**
 
 1. Manager → Install from URL → `.../plugins/example-coingecko-source.js` (served origin)
-2. Catalog → Source appears → Use → boot or watchlist paints bars; **Add to chart** / **Run** for scripts
+2. Catalog → Source appears → Use → boot or watchlist paints bars; **Run** for scripts
 
 ## Failure modes
 

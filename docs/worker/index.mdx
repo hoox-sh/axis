@@ -97,7 +97,9 @@ Allowlisted **GET** only (public, no API key). Other `/api/onchain/*` paths retu
 Gecko validation: `network` `^[a-z0-9_]+$`; `address` EVM `0x`+40 hex **or** Solana-style base58 32–48; `timeframe` `day` \| `hour` \| `minute`.  
 OHLCV query pass-through: `aggregate`, `limit`, `currency`, `before_timestamp`. Search: `query`, `network`, `page`, `include`.
 
-Responses may include `X-Axis-Onchain-Cache: HIT|MISS`. `/api/onchain/health` is unmetered public JSON; other on-chain GETs are 120/min per IP; `llama/protocols` is 10/min per IP with a 1 MiB slimmed body. Product guide: [On-Chain data](/axis/docs/enduser/guides/on-chain).
+Responses may include `X-Axis-Onchain-Cache: HIT|MISS`. `/api/onchain/health` is unmetered public JSON; other on-chain GETs are 120/min per IP; `llama/protocols` is 10/min per IP with a 1 MiB slimmed body.
+
+**`GET /api/onchain/llama/protocols` stays unauthenticated on purpose.** The on-chain panel is a guest feature (no API key). Auth-gating it would break that panel. The controls are the 10/min rate limit, the slim `{slug,name,tvl,category}` rows, and the 1 MiB cap — not a key. Product guide: [On-Chain data](/axis/docs/enduser/guides/on-chain).
 
 Entry: `worker/src/index.ts`.
 
