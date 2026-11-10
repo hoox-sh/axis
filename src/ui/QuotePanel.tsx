@@ -52,7 +52,7 @@ import {
   type QuoteInput,
 } from './extras/quote';
 import { formatExtraPrice } from './extras/format';
-import { lastTickForSymbol } from './hud-model';
+import { closeForChartSymbol, lastTickForSymbol } from './hud-model';
 
 /** Full quote sheet dock panel for the current symbol. */
 export const QuotePanel: Component = () : JSX.Element => {
@@ -64,7 +64,7 @@ export const QuotePanel: Component = () : JSX.Element => {
   createEffect(() => {
     const sym = store.symbol;
     const src = store.source;
-    if (!sym) return;
+    if (!sym || !isPanelOpen('quote')) return;
     let cancelled = false;
     onCleanup(() => {
       cancelled = true;
@@ -93,11 +93,16 @@ export const QuotePanel: Component = () : JSX.Element => {
     void store.symbol;
     void store.interval;
     const tick = lastTickForSymbol(store.telemetry?.lastTick, store.symbol);
-    const bars = barPlane.bars;
-    const tip = barPlane.tip;
+    const same = barPlane.symbol === store.symbol;
+    const bars = same ? barPlane.bars : [];
+    const tip = same ? barPlane.tip : null;
     const last = tip ?? (bars.length ? bars[bars.length - 1] : null);
     const tickPrice = tick && Number.isFinite(tick.price) ? (tick.price as number) : NaN;
-    const barClose = last && Number.isFinite(last.close) ? (last.close as number) : NaN;
+    const barClose = closeForChartSymbol(
+      barPlane.symbol,
+      store.symbol,
+      last && Number.isFinite(last.close) ? (last.close as number) : NaN,
+    );
     const streamState = store.telemetry?.stream?.state;
     const price = displayedLastPrice({ tickPrice, barClose, streamState });
     const showTick = streamState == null || streamState === 'open';

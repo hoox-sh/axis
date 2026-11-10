@@ -88,7 +88,7 @@ describe('startWatchlistQuotes', () => {
     await new Promise((r) => setTimeout(r, 20));
     expect(MockWebSocket.instances.length).toBeGreaterThanOrEqual(1);
     const ws = MockWebSocket.instances[0]!;
-    expect(ws.url).toContain('stream.binance.com');
+    expect(ws.url).toContain('data-stream.binance.vision');
     expect(ws.url).toContain('btcusdt@ticker');
     expect(ws.url).toContain('ethusdt@ticker');
 

@@ -7,7 +7,7 @@ tags: [doc, docs, enduser, guides]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-19T23:09:19Z
+  at: 2026-11-10T12:15:43Z
 sources:
   - id: tree
     resource: "docs/enduser/guides/data-source-manager.mdx"
@@ -28,7 +28,7 @@ Repo path `docs/enduser/guides/data-source-manager.mdx`.
   * Deleting datasets
 * Phases
 * Job fields (UI)
-* Relation to Topbar Load
+* Relation to Reload chart
 * Internals
   * bars-cache performance (2.0.1+)
 * Limits & safety

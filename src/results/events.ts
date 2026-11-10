@@ -454,6 +454,34 @@ export interface TradeMarker {
   text: string;
 }
 
+/**
+ * How many strategy markers keep their text. Older fills stay as shapes so a
+ * long backtest does not stack "Long 0.12" into an unreadable band.
+ */
+export const MAX_TRADE_MARKER_LABELS = 24;
+
+/**
+ * One text label per bar, and only the latest `maxLabels` of those.
+ * Same-bar markers stay (LWC stacks them); the extra text is what piles up.
+ */
+export function thinTradeMarkerLabels(
+  markers: readonly TradeMarker[],
+  maxLabels = MAX_TRADE_MARKER_LABELS,
+): TradeMarker[] {
+  if (markers.length === 0) return [];
+  const lastLabeled = new Map<number, number>();
+  markers.forEach((m, i) => {
+    if (m.text) lastLabeled.set(m.time, i);
+  });
+  const labeled = [...lastLabeled.values()].sort((a, b) => a - b);
+  const keep = new Set(labeled.slice(-Math.max(0, maxLabels)));
+  return markers.map((m, i) => {
+    if (!m.text) return m;
+    if (lastLabeled.get(m.time) !== i || !keep.has(i)) return { ...m, text: '' };
+    return m;
+  });
+}
+
 const COLOR = {
   longEntry: '#5ecf8a',
   shortEntry: '#e8a03a',
@@ -694,10 +722,13 @@ export function eventsToMarkers(
     // pending order / cancel skipped for chart noise
   }
 
-  // Keep all markers (incl. same-bar entry+exit); sort ascending for LWC
-  return markers.sort(
-    (a, b) =>
-      a.time - b.time || a.position.localeCompare(b.position) || a.text.localeCompare(b.text),
+  // Keep all markers (incl. same-bar entry+exit); sort ascending for LWC.
+  // Text is thinned so a dense backtest cannot stack labels into a band.
+  return thinTradeMarkerLabels(
+    markers.sort(
+      (a, b) =>
+        a.time - b.time || a.position.localeCompare(b.position) || a.text.localeCompare(b.text),
+    ),
   );
 }
 

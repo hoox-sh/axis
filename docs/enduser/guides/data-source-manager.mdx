@@ -30,7 +30,7 @@ Deep history accumulation for a **symbol + source + timeframe**, down to a **pas
 
 | Piece | Role |
 | --- | --- |
-| Topbar **Load** | One venue page (or `historyBars`) straight onto the chart |
+| Topbar **Reload chart** | One venue page (or `historyBars`) straight onto the chart |
 | **Data Sources** panel | Queue backfill jobs, watch progress, load cache onto chart |
 | Walk-back pages | Multi-page REST with `endTime` only (avoids start+end one-page traps) |
 | Validate + gap-fill | After backfill, check density and re-download holes |
@@ -98,16 +98,16 @@ painted on the chart stay until the symbol is reloaded.
 | Gaps | Detected holes · how many fill attempts landed bars |
 | Coverage | full / partial / in progress |
 
-## Relation to Topbar Load
+## Relation to Reload chart
 
-| | Topbar **Load** | Data Source Manager |
+| | Topbar **Reload chart** | Data Source Manager |
 | --- | --- | --- |
 | Blocks UI | Yes (status loading) | No (background jobs) |
 | Depth | Single page / `historyBars` | Multi-page to past date |
 | Chart | Always paints | Only on **Load to chart** or apply-when-complete |
 | Cache | Ephemeral `store.bars` | Durable IDB `bars-cache` |
 
-Use Load for desk-speed symbol switches; use the manager when you need years of 1m/1h/1d history for research.
+Use **Reload chart** for desk-speed symbol switches; use the manager when you need years of 1m/1h/1d history for research.
 
 ## Internals
 

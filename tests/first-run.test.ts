@@ -31,16 +31,16 @@ afterEach(() => {
 });
 
 describe('shouldShowFirstRunHint', () => {
-  it('shows when candles are up, no scripts, and not dismissed', () => {
+  it('shows with no scripts even before candles arrive', () => {
     expect(
       shouldShowFirstRunHint({ barCount: 200, scriptCount: 0, dismissed: false }),
     ).toBe(true);
-  });
-
-  it('hides with no bars, existing scripts, or dismiss', () => {
     expect(
       shouldShowFirstRunHint({ barCount: 0, scriptCount: 0, dismissed: false }),
-    ).toBe(false);
+    ).toBe(true);
+  });
+
+  it('hides with existing scripts or dismiss', () => {
     expect(
       shouldShowFirstRunHint({ barCount: 200, scriptCount: 1, dismissed: false }),
     ).toBe(false);
@@ -74,11 +74,11 @@ describe('first-run dismiss flag', () => {
 });
 
 describe('Run vs Add copy', () => {
-  it('editor primary is Run; topbar first-apply is Add to chart; caret is add-instance', () => {
+  it('editor and topbar primary are Run; caret is add-instance', () => {
     const src = read('src/ui/RunSplitButton.tsx');
     expect(src).not.toMatch(/return 'Add';/);
-    expect(src).toContain("if (props.compact) return 'Run'");
-    expect(src).toContain("return hasInstance() ? 'Run' : 'Add to chart'");
+    expect(src).not.toContain('Add to chart');
+    expect(src).toContain("return 'Run'");
     expect(src).toContain('aria-label="Add instance or built-in"');
     expect(src).not.toContain('More add options');
     expect(src).toContain('Add another instance');
@@ -92,24 +92,25 @@ describe('Run vs Add copy', () => {
     const hint = read('src/ui/FirstRunHint.tsx');
     expect(hint).toContain('data-testid="axis-first-run"');
     expect(hint).toContain('data-testid="axis-first-run-run"');
+    expect(hint).toContain('Edit a script, then press');
     expect(hint).toContain('Run');
   });
 });
 
 describe('~800px topbar wrap', () => {
-  it('wraps command and module bars at 900px and keeps the Run label', () => {
+  it('wraps command and module bars below 1100px and keeps the Run label', () => {
     const css = read('src/index.css');
-    expect(css).toContain('@media (max-width: 900px)');
-    const start = css.indexOf('/* ~800px: wrap instead of clipping');
+    expect(css).toContain('@media (max-width: 1100px)');
+    const start = css.indexOf('/* ~800px: wrap groups');
     expect(start).toBeGreaterThanOrEqual(0);
     const block = css.slice(start, css.indexOf('@media (max-width: 639px)', start));
     expect(block).toContain('flex-wrap: wrap');
-    expect(block).toContain('overflow-x: visible');
+    expect(block).toContain('overflow-x: auto');
     expect(block).toContain('.axis-run-main .axis-tb-btn-label');
     expect(block).toContain('display: inline');
-    const tabletStart = css.indexOf('/* ── Tablet (768–1023px)');
-    const tablet = css.slice(tabletStart, css.indexOf('/* ── Phone dialogs', tabletStart));
-    expect(tablet).toContain('overflow-x: visible');
-    expect(tablet).not.toContain('overflow-x: auto');
+    const narrowStart = css.indexOf('/* ── Narrow (≤1100px');
+    const narrow = css.slice(narrowStart, css.indexOf('/* ── Phone dialogs', narrowStart));
+    expect(narrow).toContain('position: absolute');
+    expect(narrow).toContain('axis-toasts');
   });
 });

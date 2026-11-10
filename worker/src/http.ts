@@ -78,10 +78,10 @@ export interface CorsOptions {
 /** `Access-Control-*` header set for a resolved origin. */
 export function corsHeaders(origin: string, opts: CorsOptions = {}): Record<string, string> {
   const headers: Record<string, string> = {
-    'Access-Control-Allow-Origin': origin,
     'Access-Control-Allow-Methods': opts.methods ?? READ_METHODS,
     'Access-Control-Allow-Headers': opts.allowHeaders ?? BASE_HEADERS,
   };
+  if (origin) headers['Access-Control-Allow-Origin'] = origin;
   if (opts.maxAge !== 0) headers['Access-Control-Max-Age'] = String(opts.maxAge ?? 86_400);
   if (opts.vary !== false) headers.Vary = 'Origin';
   return headers;
@@ -94,10 +94,11 @@ export function corsHeaders(origin: string, opts: CorsOptions = {}): Record<stri
  * (`/api/run`, `/api/keys`) and the extra headers would only be noise.
  * Carries `Vary: Origin` because the ACAO value depends on the request Origin.
  */
-export const ORIGIN_ONLY = (origin: string): Record<string, string> => ({
-  'Access-Control-Allow-Origin': origin,
-  Vary: 'Origin',
-});
+export const ORIGIN_ONLY = (origin: string): Record<string, string> => {
+  const headers: Record<string, string> = { Vary: 'Origin' };
+  if (origin) headers['Access-Control-Allow-Origin'] = origin;
+  return headers;
+};
 
 /** On-chain proxy CORS: read-only methods, no exchange or MCP headers. */
 export const READ_CORS = (origin: string): Record<string, string> => corsHeaders(origin);
@@ -151,15 +152,25 @@ export interface JsonOptions {
  */
 export const HSTS_VALUE = 'max-age=15552000; includeSubDomains';
 
-/** Same values as Pages / nginx — Worker JSON is not a document, so no CSP. */
+/** Same values as Pages / nginx. */
 export const NOSNIFF = 'nosniff';
 export const XFO_DENY = 'DENY';
 export const REFERRER_POLICY = 'strict-origin-when-cross-origin';
 
 /**
+ * JSON/API CSP. `default-src 'none'` does not affect CORS; it stops a JSON
+ * response from being framed or treated as a document.
+ */
+export const WORKER_CSP = "default-src 'none'; base-uri 'none'; frame-ancestors 'none'";
+
+/** Same feature lock as the Pages app. */
+export const WORKER_PERMISSIONS_POLICY =
+  'camera=(), microphone=(), geolocation=(), payment=(), usb=()';
+
+/**
  * Stamp security headers on a Worker `Response` without rebuilding it
- * (keeps 101 upgrades). HSTS + nosniff + frame deny + referrer; no CSP
- * (document policy — would not apply to JSON and must not fight CORS).
+ * (keeps 101 upgrades). HSTS + nosniff + frame deny + referrer + a JSON CSP
+ * and Permissions-Policy.
  */
 export function withSecurityHeaders(res: Response): Response {
   try {
@@ -167,6 +178,8 @@ export function withSecurityHeaders(res: Response): Response {
     res.headers.set('X-Content-Type-Options', NOSNIFF);
     res.headers.set('X-Frame-Options', XFO_DENY);
     res.headers.set('Referrer-Policy', REFERRER_POLICY);
+    res.headers.set('Content-Security-Policy', WORKER_CSP);
+    res.headers.set('Permissions-Policy', WORKER_PERMISSIONS_POLICY);
   } catch {
     /* immutable Headers / some 101 upgrades */
   }

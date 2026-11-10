@@ -571,8 +571,9 @@ export function labelBubbleLayout(
  * True when Pine script paint should snap this kind to the last bar.
  *
  * No kind is pinned. Lines, boxes, polylines, linefills, and labels may sit
- * up to {@link DRAWING_FUTURE_BARS} (500) past the last candle. Paint grows
- * the right margin so that future point stays on the time scale.
+ * up to {@link DRAWING_FUTURE_BARS} (500) past the last candle. The visible
+ * right margin stays at the chart default so that future point does not
+ * stretch the time scale.
  */
 export function scriptPaintClampsToLastBar(
   _type: ScriptDrawing['type'] | string | null | undefined,

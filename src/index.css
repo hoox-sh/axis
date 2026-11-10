@@ -235,8 +235,32 @@ body {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
-#axis-main:focus {
-  outline: none;
+#axis-main:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+/* SSR landmarks (header / h1 / nav) hide once the client shell mounts. */
+.axis-ssr-chrome {
+  margin: 0;
+  padding: 0.75rem 1rem 0;
+  font-family: system-ui, sans-serif;
+  color: #e8eaee;
+  background: #07080c;
+}
+.axis-ssr-chrome h1 {
+  margin: 0 0 0.25rem;
+  font-size: 1.25rem;
+  line-height: 1.2;
+}
+.axis-ssr-chrome p,
+.axis-ssr-chrome a {
+  margin: 0;
+  color: #9aa3b2;
+  font-size: 0.9rem;
+}
+body:has([data-axis-app]) .axis-ssr-chrome {
+  display: none;
 }
 
 /* Light theme — soft lift of the same void system */
@@ -1399,12 +1423,13 @@ button.sc-btn:focus-visible {
   border-color: color-mix(in srgb, var(--color-accent) 50%, var(--color-border));
 }
 
-/* ~800px: wrap instead of clipping; hide secondary captions; keep Run labeled */
-@media (max-width: 900px) {
+/* ~800px: wrap groups so a single nowrap cluster cannot run off the window.
+   Scroll leftover overflow; `overflow: visible` was clipped by the shell. */
+@media (max-width: 1100px) {
   .axis-command-bar,
   .axis-module-bar {
     flex-wrap: wrap;
-    overflow-x: visible;
+    overflow-x: auto;
     overflow-y: visible;
     height: auto;
     min-height: var(--ui-topbar-min-h);
@@ -1415,26 +1440,35 @@ button.sc-btn:focus-visible {
     min-height: 28px;
   }
 
-  [data-testid='axis-topbar'] .axis-tb-btn-label {
-    display: none;
-  }
-
-  [data-testid='axis-topbar'] .axis-run-main .axis-tb-btn-label {
-    display: inline;
-  }
-
   [data-testid='axis-topbar'] .axis-tb-group,
   [data-testid='axis-topbar'] [data-tb-group] {
+    flex-wrap: wrap;
+    flex-shrink: 1;
     gap: 4px;
+    max-width: 100%;
   }
 
   [data-testid='axis-topbar'] .axis-tb-field {
     min-width: 3.75em;
   }
 
+  .axis-command-bar .axis-tb-group[data-tb-group='system'] {
+    margin-left: 0;
+  }
+
   .axis-command-trailing,
   .axis-module-trailing {
     margin-left: 0;
+  }
+}
+
+@media (max-width: 900px) {
+  [data-testid='axis-topbar'] .axis-tb-btn-label {
+    display: none;
+  }
+
+  [data-testid='axis-topbar'] .axis-run-main .axis-tb-btn-label {
+    display: inline;
   }
 }
 
@@ -2628,6 +2662,8 @@ body.axis-ticker-dragging {
 }
 .axis-draw-handle:focus-visible,
 .axis-draw-style-handle:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
   box-shadow: inset 0 0 0 1px var(--color-accent);
 }
 .axis-draw-handle:active,
@@ -2755,6 +2791,34 @@ body.axis-ticker-dragging {
     background 120ms ease,
     color 120ms ease,
     border-color 120ms ease;
+}
+.axis-draw-btn-label {
+  position: absolute;
+  left: calc(100% + 6px);
+  top: 50%;
+  transform: translateY(-50%);
+  display: none;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1.2;
+  font-weight: 600;
+  color: var(--color-text);
+  background: var(--color-bg-elev);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 2px 6px;
+  z-index: 6;
+  pointer-events: none;
+}
+.axis-draw-shell[data-dock='top'] .axis-draw-btn-label {
+  left: 50%;
+  top: calc(100% + 4px);
+  transform: translateX(-50%);
+}
+.axis-draw-btn:hover .axis-draw-btn-label,
+.axis-draw-btn:focus-visible .axis-draw-btn-label,
+.axis-draw-btn.is-active .axis-draw-btn-label {
+  display: inline;
 }
 .axis-draw-btn svg,
 .axis-draw-glyph {
@@ -3320,7 +3384,7 @@ body.axis-ticker-dragging {
 .axis-first-run {
   position: absolute;
   left: 50%;
-  bottom: 28px;
+  top: 12px;
   z-index: 12;
   transform: translateX(-50%);
   display: flex;
@@ -6391,11 +6455,54 @@ body.axis-panel-dragging {
   padding: 0 8px;
 }
 
-/* ── Tablet (768–1023px): keep desktop chrome; wrap, do not clip ── */
-@media (max-width: 1023px) {
+/* ── Narrow (≤1100px, including ~800px): chart keeps the width.
+   Side docks overlay instead of squeezing the plot. Phone sheets still
+   collapse the column (`.is-mobile-collapsed`). ── */
+@media (max-width: 1100px) {
   header[data-testid='axis-topbar'] {
-    overflow-x: visible;
+    overflow-x: auto;
     overflow-y: visible;
+  }
+
+  [data-axis-workspace] {
+    position: relative;
+  }
+
+  .axis-dock-col-left:not(.is-empty):not(.is-mobile-collapsed),
+  .axis-dock-col-right:not(.is-empty):not(.is-mobile-collapsed) {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 25;
+    max-width: min(100%, 26rem);
+    height: auto;
+  }
+
+  .axis-dock-col-left:not(.is-empty):not(.is-mobile-collapsed) {
+    left: 0;
+  }
+
+  .axis-dock-col-right:not(.is-empty):not(.is-mobile-collapsed) {
+    right: 0;
+  }
+
+  /* The first-run hint stays on the open chart, left of an overlay editor. */
+  .axis-first-run {
+    left: 12px;
+    right: auto;
+    transform: none;
+    max-width: min(18rem, 46vw);
+  }
+
+  /* Stream / status cards sit above the status bar, not over the plot. */
+  [data-testid='axis-toasts'] {
+    top: auto;
+    right: 8px;
+    bottom: calc(2.6rem + env(safe-area-inset-bottom, 0px));
+    left: auto;
+    max-width: min(18rem, calc(100vw - 16px));
+    max-height: 28vh;
+    overflow: auto;
   }
 }
 

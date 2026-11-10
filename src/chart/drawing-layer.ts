@@ -1119,14 +1119,16 @@ export class DrawingLayer {
   }
 
   /**
-   * Grow LWC right whitespace so future logical indices stay mappable
-   * (up to {@link DRAWING_FUTURE_BARS}).
+   * Grow LWC right whitespace so a future logical index just past the last
+   * bar stays mappable. Never past {@link DRAWING_RIGHT_OFFSET_DEFAULT} —
+   * opening the margin to {@link DRAWING_FUTURE_BARS} leaves hundreds of
+   * empty bars and the candles sit on the left of the time scale.
    */
   private ensureRightOffsetForLogical(logical: number, barCount: number) {
     if (!Number.isFinite(logical) || barCount <= 0) return;
     const lastIdx = barCount - 1;
     if (logical <= lastIdx) return;
-    const need = Math.min(DRAWING_FUTURE_BARS, Math.ceil(logical - lastIdx) + 2);
+    const need = Math.min(DRAWING_RIGHT_OFFSET_DEFAULT, Math.ceil(logical - lastIdx) + 2);
     try {
       const cur = this.chart.timeScale().options().rightOffset ?? 0;
       if (need > cur) {
@@ -1202,8 +1204,8 @@ export class DrawingLayer {
    * extrapolate via logical index. Compile-mode `bar_index` falls back last.
    *
    * User drawings and Pine script drawings may sit up to
-   * {@link DRAWING_FUTURE_BARS} (500) past the series end. Script paint grows
-   * the right margin so a future anchor stays mappable.
+   * {@link DRAWING_FUTURE_BARS} (500) past the series end. The visible right
+   * margin stays at {@link DRAWING_RIGHT_OFFSET_DEFAULT}.
    */
   private toXY(
     p: Point,
@@ -2110,7 +2112,8 @@ export class DrawingLayer {
 
   /**
    * Script (Pine) paint. Future anchors extrapolate up to
-   * {@link DRAWING_FUTURE_BARS} (500) and grow the right margin to match.
+   * {@link DRAWING_FUTURE_BARS} (500). The visible margin stays at
+   * {@link DRAWING_RIGHT_OFFSET_DEFAULT}.
    */
   private toXYScript(p: Point, type?: ScriptDrawing['type']): { x: number; y: number } | null {
     return this.toXY(p, {

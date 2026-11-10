@@ -62,6 +62,7 @@ import {
   feedChipMeta,
   feedChipView,
   hudChipHelp,
+  closeForChartSymbol,
   lastTickForSymbol,
   liveBadgeTone,
   liveBadgeWord,
@@ -644,12 +645,15 @@ function TickPulse(props: {
   const lastPrice = () => {
     const t = tick();
     const tickPrice = t && Number.isFinite(t.price) ? t.price : NaN;
-    const barOk = !barPlane.symbol || barPlane.symbol === store.symbol;
-    const tip = barOk ? barPlane.tip : null;
-    const last = tip?.close ?? (barOk && barPlane.length ? barPlane.bars[barPlane.length - 1]?.close : NaN);
+    const tip = barPlane.symbol === store.symbol ? barPlane.tip : null;
+    const raw =
+      tip?.close ??
+      (barPlane.symbol === store.symbol && barPlane.length
+        ? barPlane.bars[barPlane.length - 1]?.close
+        : NaN);
     return displayedLastPrice({
       tickPrice,
-      barClose: Number.isFinite(last) ? (last as number) : NaN,
+      barClose: closeForChartSymbol(barPlane.symbol, store.symbol, Number(raw)),
       streamState: store.telemetry?.stream?.state,
     });
   };

@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "tests"
-description: "tests contains a11y-chrome.test.ts, alerts-engine.test.ts, alerts-form.test.ts, and 356 more files."
+description: "tests contains a11y-chrome.test.ts, alerts-engine.test.ts, alerts-form.test.ts, and 359 more files."
 resource: "tests"
 tags: [code, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-09T05:20:23Z
+  at: 2026-11-10T13:52:12Z
 sources:
   - id: tree
     resource: "tests"
@@ -53,6 +53,7 @@ okf_lock: generated
 * `chart-series-sanitize.test.ts`
 * `chart-time-axis.test.ts`
 * `chart-type.test.ts`
+* `chart-viewport.test.ts`
 * `chart.test.ts`
 * `clipboard.test.ts`
 * `close-guard.test.ts`
@@ -152,6 +153,7 @@ okf_lock: generated
 * `first-run.test.ts`
 * `focus-trap.test.ts`
 * `footprint.test.ts`
+* `free-tier.test.ts`
 * `function-outline.test.ts` — Point
 * `git-config-safety.test.ts`
 * `git-oauth-client.test.ts`
@@ -257,6 +259,7 @@ okf_lock: generated
 * `pynescript-compile-alerts.py` — load_runtime, main
 * `pynescript-interpret-ta.py` — load_runtime, main
 * `pynescript-runtime.test.ts`
+* `pynescript-strategy-events.py` — load_runtime, main
 * `pyodide-bridge.test.ts`
 * `pyodide-worker.test.ts`
 * `reconnect-ws.test.ts`

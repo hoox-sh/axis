@@ -30,6 +30,7 @@
 
 import { type Component, For, Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import {
+  clearLastTick,
   store,
   setStore,
   setStatus,
@@ -109,7 +110,7 @@ const INTERVALS = [...WATCHLIST_INTERVALS];
 
 const ENGINE_SWITCH = [
   { id: 'server', title: 'Server-Side' },
-  { id: 'pyne-worker', title: 'pyne-worker (edge)' },
+  { id: 'pyne-worker', title: 'Edge worker — PYNE on Cloudflare (pyne-worker)' },
   { id: 'pyodide', title: 'Client-Side (Pyodide)' },
 ] as const;
 
@@ -297,6 +298,7 @@ export const Topbar: Component<{
   const commitSymbol = (raw: string, forceLoad: boolean) => {
     const next = raw.toUpperCase().trim();
     if (!next) return;
+    if (next !== store.symbol) clearLastTick();
     setStore('symbol', next);
     const aid = store.chartLayout?.activeId;
     if (aid) updateChartSlot(aid, { symbol: next });
@@ -588,7 +590,7 @@ export const Topbar: Component<{
                 }
               >
                 {loading() ? <HooxLoader size="xs" /> : <Icons.download />}
-                <span class="axis-tb-btn-label">{loading() ? 'Loading…' : 'Load'}</span>
+                <span class="axis-tb-btn-label">{loading() ? 'Loading…' : 'Reload'}</span>
               </button>
             </Show>
           </div>

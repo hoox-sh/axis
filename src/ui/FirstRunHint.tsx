@@ -81,7 +81,7 @@ export const FirstRunHint: Component = () => {
     <Show when={visible()}>
       <div class="axis-first-run" data-testid="axis-first-run" role="status">
         <p class="axis-first-run-copy">
-          Chart has no scripts. Run <strong>{label()}</strong> from the editor to add it.
+          Edit a script, then press <strong>Run</strong> to add {label()} to the chart.
         </p>
         <button
           type="button"

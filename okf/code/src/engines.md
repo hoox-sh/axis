@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/engines"
-description: "src/engines contains batch.ts, catalog.ts, chart-data-session.ts, and 16 more files."
+description: "src/engines contains batch.ts, catalog.ts, chart-data-session.ts, and 17 more files."
 resource: "src/engines"
 tags: [code, engines]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-08T23:46:27Z
+  at: 2026-11-10T14:34:37Z
 sources:
   - id: tree
     resource: "src/engines"
@@ -23,6 +23,7 @@ okf_lock: generated
 * `chart-data-session.ts` — _resetChartDataSessionForTests, ensureChartDataSession, getChartSessionInfo, releaseChartDataSession, tickChartDataSession
 * `data-sessions.ts` — CanonicalSeriesKey, DATA_PROVIDE_CHUNK, DATA_SESSION_RETRY_COOLDOWN_MS, DataSeriesKey, DataSeriesStatus, DataSessionCreateInput, DataSessionCreateResult, DataSessionHandle, DataSessionMiss, DataSessionRunResult, EnsureDataSessionOptions, RunDataSessionOptions
 * `engine-ws.ts` — EngineWsResult, EngineWsRunRequest, _resetEngineWsClients, _setWsRunHeartbeatMs, endpointToRunWsUrl, getEngineWsClient, probeEngineWs
+* `free-tier.ts` — GUEST_ENGINE_BAR_CAP, freeTierMaxBars
 * `health.ts` — AdvertisedRunMode, CompileReadiness, DEFAULT_ENGINE_HEALTH, EngineCompileHealth, EngineFeatureHealth, EngineHealth, advertisedRunMode, compileReadiness, healthAdvertises, healthFromBody
 * `json-parse-worker.ts`
 * `json-sanitize.ts` — _resetParseEngineJsonForTests, parseEngineJson, parseEngineJsonAsync, sanitizeNonFiniteJson
@@ -30,7 +31,7 @@ okf_lock: generated
 * `ownership.ts` — isEngineOwnedLive
 * `prewarm.ts` — MAX_PREWARM_SCRIPTS, PrewarmOptions, PrewarmResult, _resetPrewarmMemoForTests, collectAppliedScriptSources, prewarmAppliedScripts, prewarmEngine
 * `pro.ts` — BacktestSummary, PREVIEW_MAX_BARS, PreviewOptions, PreviewResult, ProCallOptions, QuickBacktestResult, UsageResult, fetchUsage, renderChartPreview, renderIndicatorPreview, runQuickBacktest
-* `request-headers.ts` — AXIS_CLIENT_HEADER, AXIS_CLIENT_VALUE, BETA_COPY, engineHeaders
+* `request-headers.ts` — AXIS_CLIENT_HEADER, AXIS_CLIENT_VALUE, BETA_COPY, engineApiKeyForRequest, engineHeaders
 * `result-mapper.ts` — MapEnginePayloadOptions, OverlayPolicy, ScriptTypePolicy, mapEnginePayload, normalizeOverlayFlag, payloadEngineTimes
 * `runner.ts` — DeployHostedScriptInput, HostedJob, HostedJobCronState, HostedScript, RunnerCallOptions, RunnerResult, deployHostedScript, listHostedJobs, runHostedJobNow, runnerAvailable, setHostedJobEnabled
 * `series-drive.ts` — SERIES_DRIVE_MIN_MS, SeriesDriveOptions, SeriesDriveResult, SeriesDriveTick, SeriesDriveTickFn, _resetSeriesDriveForTests, driveEngineSeries

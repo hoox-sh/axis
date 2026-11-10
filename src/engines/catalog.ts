@@ -62,12 +62,13 @@ import { store, setTelemetryPlane, setTelemetryState, setStatus, appendLog } fro
 import { registry } from '../plugins/registry';
 import { scriptHasPineAlertCalls } from '../alerts/pine';
 import { parseEngineJson, parseEngineJsonAsync } from './json-sanitize';
+import { freeTierMaxBars } from './free-tier';
 import { normalizeEngineResult } from '../indicators/run-helpers';
 import { healthFromBody, type EngineHealth } from './health';
 import { isAbortLike } from '../utils/errors';
 import { getJson, setJson } from '../utils/storage';
 import { combineAbortSignals } from '../utils/fetch-timeout';
-import { engineHeaders } from './request-headers';
+import { engineApiKeyForRequest, engineHeaders } from './request-headers';
 import { mapEnginePayload, normalizeOverlayFlag, payloadEngineTimes } from './result-mapper';
 import { engineFamilyForText } from '../plugins/engine-family';
 import {
@@ -401,7 +402,7 @@ export const serverEngine: EnginePlugin = {
     const profilerOn = cfg['profiler'] === true;
     const mode = resolveServerRunMode(modeRaw, script, profilerOn);
     const preferWs = cfg['preferWs'] !== false;
-    const apiKey = String(cfg['apiKey'] || '').trim();
+    const apiKey = engineApiKeyForRequest(cfg['apiKey'], endpoint);
     const t0 = performance.now();
     // B6: never send the key to a fresh cross-origin backend without consent.
     if (!confirmEngineApiKeyTarget(endpoint, apiKey)) {
@@ -578,13 +579,45 @@ export const serverEngine: EnginePlugin = {
             signal,
           );
           const ms = performance.now() - t0;
+          let wsPayload = wsResult;
+          // Guest hosts refuse the whole window (WS has no HTTP 413). Retry
+          // once with the newest allowed bars instead of failing the run.
           if (wsResult.status === 'error') {
+            const cap = freeTierMaxBars(wsResult);
+            if (cap > 0 && cap < pineBars.length && !signal?.aborted) {
+              const retry = await client.run(
+                {
+                  script,
+                  data: pineBars.slice(-cap) as unknown[],
+                  mode,
+                  symbol: typeof store.symbol === 'string' && store.symbol ? store.symbol : 'CHART',
+                  ...(inputOverrides ? { inputs: inputOverrides } : {}),
+                  ...(profilerOn ? { profiler: true } : {}),
+                  ...(libraries?.length ? { libraries } : {}),
+                },
+                wsBudget,
+                signal,
+              );
+              if (retry.status !== 'error') {
+                const mapped = mapEnginePayload(retry, {
+                  transport: 'ws',
+                  ms: performance.now() - t0,
+                  mode: (retry.mode || mode) as string,
+                  scriptType: 'meta',
+                  engineTimes: true,
+                });
+                mapped.meta = { ...mapped.meta, windowBars: cap };
+                await rememberResolvedRunMode(modeFields, retry.mode || mode);
+                return mapped;
+              }
+              wsPayload = retry;
+            }
             return {
               status: 'error',
               plots: [],
               events: [],
               series: {},
-              error: wsResult.error || wsResult.message || 'WS engine error',
+              error: wsPayload.error || wsPayload.message || 'WS engine error',
               meta: { ms, transport: 'ws' },
             } satisfies RunResult;
           }
@@ -683,26 +716,28 @@ export const serverEngine: EnginePlugin = {
         body: JSON.stringify(restBody),
         signal: restSignal,
       });
+      // A stale key 401s before pyne-worker's guest path. Retry once with no
+      // key so the run still succeeds and the next call does not send it.
+      if (res.status === 401 && apiKey) {
+        res = await fetch(`${endpoint}/run?mode=${encodeURIComponent(restMode)}`, {
+          method: 'POST',
+          headers: engineHeaders(undefined, true, endpoint),
+          body: JSON.stringify(restBody),
+          signal: makeRestSignal(),
+        });
+      }
       // Free-tier bar cap (PYNE `FREE_MAX_BARS`, e.g. 5000): the host refuses
-      // the whole window with 413 + `max_bars`. Retry once with the newest
-      // `max_bars` bars and mark the result, so the apply path can tail-align
-      // the series to the chart window instead of failing every run.
+      // the whole window (413, or another error status with the same message).
+      // Retry once with the newest allowed bars and mark the result, so the
+      // apply path can tail-align the series instead of failing every run.
       let clampedBars = 0;
-      if (res.status === 413) {
+      if (!res.ok) {
         const peek = await res.clone().text();
-        let maxBars = 0;
+        let maxBars = freeTierMaxBars(peek);
         try {
-          const body = parseEngineJson(peek);
-          if (body && typeof body === 'object' && !Array.isArray(body)) {
-            const n = Number((body as { max_bars?: unknown }).max_bars);
-            if (Number.isFinite(n) && n > 0) maxBars = Math.floor(n);
-          }
+          maxBars = freeTierMaxBars(parseEngineJson(peek)) || maxBars;
         } catch {
           /* message-only body */
-        }
-        if (!maxBars) {
-          const m = peek.match(/free-tier limit \((\d+)\s*bars\)/i);
-          if (m) maxBars = Number(m[1]);
         }
         if (maxBars > 0 && maxBars < pineBars.length) {
           clampedBars = maxBars;

@@ -64,6 +64,12 @@ import { chartDebug } from '../debug';
 import { resolvedPrefsForTool } from './drawings/tool-settings';
 import { perfMeasureSync } from '../perf/telemetry';
 import { rebaseLogicalRange } from './v1/invariants';
+import {
+  CHART_RIGHT_OFFSET,
+  capChartRightOffset,
+  showRecentLogicalRange,
+  trimFutureOverhang,
+} from './viewport';
 import { getThemeManager } from '../theme';
 import { drawingsForSymbol, mergeLayerDrawingsForSymbol } from './drawings/sync';
 
@@ -670,18 +676,6 @@ function readSeriesTimes(series: unknown): number[] | null {
   }
 }
 
-/** Chart `rightOffset` in bars (future whitespace) for the viewport clamp. */
-function rightOffsetBars(chart: {
-  timeScale?: () => { options?: () => { rightOffset?: number } };
-}): number {
-  try {
-    const offset = Number(chart.timeScale?.().options?.()?.rightOffset ?? 0);
-    return Number.isFinite(offset) && offset > 0 ? offset : 0;
-  } catch {
-    return 0;
-  }
-}
-
 /**
  * Paint OHLCV into the price and volume panes, then refresh price-scale
  * decimals, last-value labels, and the per-symbol drawing layer.
@@ -801,7 +795,7 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}): void
           const runFit = () => {
             try {
               if (typeof mgr.afterDataReload === 'function') mgr.afterDataReload();
-              else pricePane?.chart.timeScale().fitContent();
+              else if (pricePane?.chart) showRecentLogicalRange(pricePane.chart, n);
             } catch {
               /* fit optional */
             }
@@ -855,15 +849,19 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}): void
           const nextTimes = (cleanData as Array<{ time?: unknown }>).map((row) =>
             Number(row?.time),
           );
-          writeLogicalRange(
-            pricePane.chart,
-            rebaseLogicalRange(
-              keepRange,
-              prevCandleTimes,
-              nextTimes,
-              rightOffsetBars(pricePane.chart),
-            ) ?? keepRange,
-          );
+          capChartRightOffset(pricePane.chart);
+          if (keepRange) {
+            const trimmed =
+              trimFutureOverhang(keepRange, prevCandleTimes?.length ?? nextTimes.length) ??
+              keepRange;
+            writeLogicalRange(
+              pricePane.chart,
+              rebaseLogicalRange(trimmed, prevCandleTimes, nextTimes, CHART_RIGHT_OFFSET) ??
+                trimmed,
+            );
+          } else if (!fit) {
+            showRecentLogicalRange(pricePane.chart, cleanData.length);
+          }
           const times = data as Array<{ time?: unknown }>;
           const firstT = times.length ? times[0]?.time : undefined;
           const lastT = times.length ? times[times.length - 1]?.time : undefined;
@@ -940,7 +938,7 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}): void
               if (typeof mgr.afterDataReload === 'function') {
                 mgr.afterDataReload();
               } else {
-                pricePane.chart.timeScale().fitContent();
+                showRecentLogicalRange(pricePane.chart, cleanData.length);
               }
             } catch {
               /* fit optional */

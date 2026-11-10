@@ -46,6 +46,25 @@ function pineBars(n: number, startMs = 1_700_000_000_000, stepMs = 86_400_000): 
   return out;
 }
 
+it('does not call /session on pyne-worker', async () => {
+  let calls = 0;
+  const prev = globalThis.fetch;
+  globalThis.fetch = (async () => {
+    calls += 1;
+    return new Response('{"error":"Not found"}', { status: 404 });
+  }) as typeof fetch;
+  try {
+    const hit = await tryLiveSessionTick({
+      ...opts(pineBars(4)),
+      endpoint: 'https://pyne-worker.cryptolinx.workers.dev',
+    });
+    expect(hit).toBeNull();
+    expect(calls).toBe(0);
+  } finally {
+    globalThis.fetch = prev;
+  }
+});
+
 function opts(bars: Bar[], script = SCRIPT): LiveSessionTickOpts {
   return {
     endpoint: ENDPOINT,

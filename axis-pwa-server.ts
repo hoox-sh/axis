@@ -10,8 +10,8 @@ const ROOT = resolve(import.meta.dir, "dist");
 const PORT = Number(process.env.PORT || 8081);
 const HOST = process.env.HOST || "0.0.0.0";
 
+// Same-origin static host. Do not send Access-Control-Allow-Origin: *.
 const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };

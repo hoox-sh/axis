@@ -13,6 +13,8 @@ import { buildStrategyReport } from '../src/results/strategy.ts';
 import {
   normalizeStrategyEvents,
   eventsToMarkers,
+  thinTradeMarkerLabels,
+  MAX_TRADE_MARKER_LABELS,
   buildEquityCurve,
   isNoFillCloseEvent,
   formatTradeQty,
@@ -322,6 +324,44 @@ describe('eventsToMarkers', () => {
     expect(markers).toHaveLength(2);
     expect(markers.map((m) => m.shape).sort()).toEqual(['arrowDown', 'arrowUp']);
     expect(markers[0].time).toBe(markers[1].time);
+    const labeled = markers.filter((m) => m.text);
+    expect(labeled).toHaveLength(1);
+  });
+
+  it('caps strategy labels so a dense backtest cannot stack text', () => {
+    const raw = [];
+    for (let i = 0; i < 40; i++) {
+      raw.push({
+        kind: 'entry',
+        id: `L${i}`,
+        direction: 'long',
+        qty: 0.12,
+        bar_time: 1_000 + i * 60,
+        ohlc: [1, 1, 1, 100],
+      });
+      raw.push({
+        kind: 'close',
+        id: `L${i}`,
+        qty: 0.12,
+        bar_time: 1_000 + i * 60,
+        ohlc: [1, 1, 1, 101],
+      });
+    }
+    const markers = eventsToMarkers(normalizeStrategyEvents(raw), ARROW_ONLY);
+    const labeled = markers.filter((m) => m.text);
+    expect(labeled.length).toBe(MAX_TRADE_MARKER_LABELS);
+    expect(new Set(labeled.map((m) => m.time)).size).toBe(labeled.length);
+    expect(markers.length).toBeGreaterThan(labeled.length);
+    const thinned = thinTradeMarkerLabels(
+      [
+        { time: 1, position: 'belowBar', color: '#0f0', shape: 'arrowUp', text: 'Long 1' },
+        { time: 1, position: 'aboveBar', color: '#f00', shape: 'arrowDown', text: 'Exit 1' },
+        { time: 2, position: 'belowBar', color: '#0f0', shape: 'arrowUp', text: 'Long 2' },
+      ],
+      1,
+    );
+    expect(thinned.filter((m) => m.text).map((m) => m.text)).toEqual(['Long 2']);
+    expect(thinned).toHaveLength(3);
   });
 
   it('skips pending order events when includeOrders false', () => {

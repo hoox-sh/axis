@@ -53,6 +53,7 @@ import {
   type PlotSeriesKind,
 } from '../results/plot-visuals';
 import type { ChartType } from './chart-type';
+import { CHART_RIGHT_OFFSET } from './viewport';
 import {
   getThemeManager,
   resolveTokens,
@@ -341,9 +342,10 @@ export function createBaseChart(
       timeVisible: true,
       secondsVisible: false,
       ticksVisible: true,
-      // Empty right margin so trendlines / drawings can start past the last bar.
-      // Drawing layer may grow this up to DRAWING_FUTURE_BARS (500) while placing.
-      rightOffset: 20,
+      // Empty right margin so a drawing can start just past the last bar.
+      // Kept at CHART_RIGHT_OFFSET — a 500-bar future margin stretches the
+      // time scale and leaves the candles on the left after a resume.
+      rightOffset: CHART_RIGHT_OFFSET,
       // Auto-scroll when a live bar is appended so new candles stay in view
       shiftVisibleRangeOnNewBar: true,
       allowShiftVisibleRangeOnWhitespaceReplacement: false,

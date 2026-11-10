@@ -36,7 +36,7 @@ import { Icons } from './icons';
 import { copyToClipboard } from './clipboard';
 import { formatExtraPrice } from './extras/format';
 import { displayedLastPrice } from './extras/quote';
-import { lastTickForSymbol } from './hud-model';
+import { closeForChartSymbol, lastTickForSymbol } from './hud-model';
 import { fetchWatchlistTickers } from '../data/watchlist-tickers';
 
 /** Float-only price panel (big last price + 24h change). */
@@ -49,7 +49,7 @@ export const PricePanel: Component = () : JSX.Element => {
   createEffect(() => {
     const sym = store.symbol;
     const src = store.source;
-    if (!sym) return;
+    if (!sym || !isPanelOpen('price')) return;
     let cancelled = false;
     onCleanup(() => {
       cancelled = true;
@@ -73,12 +73,14 @@ export const PricePanel: Component = () : JSX.Element => {
     const tick = lastTickForSymbol(store.telemetry?.lastTick, store.symbol);
     // Prefer the narrow plane tip — it updates on every live tick without
     // pulling the full store.bars array into the reactive graph.
-    const tip = barPlane.tip;
+    const raw =
+      barPlane.symbol === store.symbol
+        ? (barPlane.tip?.close ?? (barPlane.length ? barPlane.bars[barPlane.length - 1]?.close : NaN))
+        : NaN;
     const tickPrice = tick && Number.isFinite(tick.price) ? (tick.price as number) : NaN;
-    const last = tip?.close ?? (barPlane.length ? barPlane.bars[barPlane.length - 1]?.close : NaN);
     return displayedLastPrice({
       tickPrice,
-      barClose: Number.isFinite(last) ? (last as number) : NaN,
+      barClose: closeForChartSymbol(barPlane.symbol, store.symbol, Number(raw)),
       streamState: store.telemetry?.stream?.state,
     });
   };

@@ -169,8 +169,8 @@ const PRODUCT_ORIGIN_RE =
  * Local-dev Origins are echoed only when no explicit `ALLOWED_ORIGIN` is
  * configured (local `wrangler dev`) or when listed in it — an explicitly
  * configured production allowlist is never bypassed by a localhost Origin
- * (A19). Known product Origins are echoed; otherwise fall back to
- * `env.ALLOWED_ORIGIN` or the production default.
+ * (A19). Known product Origins are echoed. An unknown or missing Origin
+ * returns `''` so the response omits `Access-Control-Allow-Origin`.
  * Exported for unit tests (`worker/tests/cors-origin.test.ts`).
  */
 export function pickOrigin(req: Request, env: Env): string {
@@ -195,7 +195,7 @@ export function pickOrigin(req: Request, env: Env): string {
   if (reqOrigin && allowed.includes(reqOrigin)) {
     return reqOrigin;
   }
-  return allowed[0] || 'https://pynescript.online';
+  return '';
 }
 
 /** JSON body + CORS headers shared by all non-stream routes. */

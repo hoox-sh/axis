@@ -29,7 +29,8 @@ describe('binanceKlineWsUrls', () => {
   it('rotates hosts and ports', () => {
     const urls = binanceKlineWsUrls('BTCUSDT', '1d');
     expect(urls.length).toBeGreaterThanOrEqual(3);
-    expect(urls[0]).toContain('stream.binance.com:9443');
+    expect(urls[0]).toContain('data-stream.binance.vision');
+    expect(urls[urls.length - 1]).toContain('stream.binance.com:9443');
     expect(urls.some((u) => u.includes(':443') || u.endsWith('/ws/btcusdt@kline_1d'))).toBe(true);
     expect(urls.some((u) => u.includes('data-stream.binance.vision'))).toBe(true);
   });
@@ -43,6 +44,7 @@ describe('binanceKlineWsUrls', () => {
 describe('binanceTickerWsUrls', () => {
   it('builds combined stream path', () => {
     const urls = binanceTickerWsUrls(['BTCUSDT', 'ETHUSDT']);
+    expect(urls[0]).toContain('data-stream.binance.vision');
     expect(urls[0]).toContain('btcusdt@ticker');
     expect(urls[0]).toContain('ethusdt@ticker');
   });

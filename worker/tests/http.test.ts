@@ -168,6 +168,10 @@ describe('withSecurityHeaders', () => {
     expect(res.headers.get('X-Content-Type-Options')).toBe(NOSNIFF);
     expect(res.headers.get('X-Frame-Options')).toBe(XFO_DENY);
     expect(res.headers.get('Referrer-Policy')).toBe(REFERRER_POLICY);
+    expect(res.headers.get('Content-Security-Policy')).toBe(
+      "default-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+    );
+    expect(res.headers.get('Permissions-Policy')).toContain('camera=()');
     expect(res.headers.get('Content-Type')).toBe('application/json');
   });
 });

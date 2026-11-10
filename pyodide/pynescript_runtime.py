@@ -300,11 +300,29 @@ class CustomEvaluator:
         self._var_declarations = set()
 
     def reset_events(self):
-        self._strategy_state._events = []
+        # strategy.entry records on the inner evaluator's broker. The wrapper
+        # owns a second StrategyState that those calls never touch.
+        state = _strategy_broker(self)
+        if state is not None and hasattr(state, "_events"):
+            state._events = []
 
 
 # Per-bar index tracker used by the plot-capture closure
 _PLOT_BAR_INDEX = [0]
+
+
+def _strategy_broker(evaluator):
+    """Strategy state the interpreter fills.
+
+    ``CustomEvaluator`` wraps ``NodeLiteralEvaluator``. ``strategy.entry``
+    writes the inner broker. The wrapper's own ``StrategyState`` stays empty,
+    so draining it reports "broker never filled" on every strategy.
+    """
+    inner = getattr(evaluator, "_inner", None)
+    state = getattr(inner, "_strategy_state", None) if inner is not None else None
+    if state is not None:
+        return state
+    return getattr(evaluator, "_strategy_state", None)
 
 
 # --- Helpers for the run loop ---------------------------------------------
@@ -465,8 +483,10 @@ def _run_interpret(
             p["time"] = bar.get("time", 0)
         all_plots.extend(evaluator.plot_outputs)
 
-        # Drain strategy events
-        for ev in evaluator._strategy_state.drain_events():
+        # Drain strategy events from the evaluator that actually filled them.
+        broker = _strategy_broker(evaluator)
+        drained = broker.drain_events() if broker is not None and hasattr(broker, "drain_events") else []
+        for ev in drained:
             d = ev.to_dict() if hasattr(ev, "to_dict") else {"type": str(ev)}
             d.setdefault("time", bar.get("time", 0))
             d.setdefault("price", bar.get("close", 0.0))
@@ -476,11 +496,17 @@ def _run_interpret(
 
     # Build plot series aligned with bars
     series: dict[str, list] = {}
+    plot_style: dict[str, dict] = {}
     for p in all_plots:
         # Group by name (defaults to "plot")
         kwargs = p.get("kwargs") or {}
         name = str(kwargs.get("title") or kwargs.get("name") or "plot")
         arr = series.setdefault(name, [None] * len(bars))
+        style = plot_style.setdefault(name, {})
+        if kwargs.get("display") is not None and "display" not in style:
+            style["display"] = kwargs.get("display")
+        if kwargs.get("style") is not None and "style" not in style:
+            style["style"] = str(kwargs.get("style"))
         bi = p.get("bar_index", -1)
         if 0 <= bi < len(bars):
             v = p.get("value")
@@ -583,6 +609,10 @@ def _run_interpret(
                     _entry["color"] = str(_d["color"])
             if _entry:
                 _plot_meta[_title] = _entry
+    for _name, _style in plot_style.items():
+        if not _style:
+            continue
+        _plot_meta.setdefault(_name, {}).update(_style)
 
     meta: dict = {
         "mode": "interpret",

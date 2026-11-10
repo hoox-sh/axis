@@ -89,7 +89,7 @@ describe('pane / engine / run', () => {
   test('liveRerunTitle', () => {
     expect(liveRerunTitle(false, 'every-tick')).toMatch(/Live is off/i);
     expect(liveRerunTitle(true, 'bar-close')).toMatch(/bar close/i);
-    expect(liveRerunTitle(true, 'every-tick')).toMatch(/every tick/i);
+    expect(liveRerunTitle(true, 'every-tick')).toMatch(/price update/i);
     expect(liveRerunTitle(true, 'every-tick', true)).toMatch(/Click/i);
   });
 

@@ -103,11 +103,14 @@ export function binanceKlineWsUrls(
   if (m === 'inverse') {
     return [`wss://dstream.binance.com${path}`, `wss://dstream.binance.com:443${path}`];
   }
+  // Vision first. The stream.binance.com hosts (443, default, then :9443)
+  // are often firewalled or geo-blocked, and each failed constructor is a
+  // console error the page cannot suppress. Fall back only after vision closes.
   return [
-    `wss://stream.binance.com:9443${path}`,
+    `wss://data-stream.binance.vision${path}`,
     `wss://stream.binance.com:443${path}`,
     `wss://stream.binance.com${path}`,
-    `wss://data-stream.binance.vision${path}`,
+    `wss://stream.binance.com:9443${path}`,
   ];
 }
 
@@ -125,10 +128,10 @@ export function binanceTickerWsUrls(symbols: string[]): string[] {
   if (!streams) return [];
   const path = `/stream?streams=${streams}`;
   return [
-    `wss://stream.binance.com:9443${path}`,
+    `wss://data-stream.binance.vision${path}`,
     `wss://stream.binance.com:443${path}`,
     `wss://stream.binance.com${path}`,
-    `wss://data-stream.binance.vision${path}`,
+    `wss://stream.binance.com:9443${path}`,
   ];
 }
 
@@ -293,10 +296,10 @@ export async function fetchBinanceJson(opts: BinanceFetchOpts): Promise<unknown>
 
   const errors: string[] = [];
   const inBrowser = browserBlocksDirectCexRest();
-  // Public market data: venue first. Worker CF egress is geo-blocked and is
-  // not part of the live price path the product wants.
-  const useWorker = !opts.skipWorkerProxy && !inBrowser;
-  const allowDirect = allowDirectBinanceHosts(opts) || inBrowser;
+  // Spot: venue-direct vision (Worker CF egress is geo-blocked). Futures REST
+  // hosts do not send browser CORS, so the Worker proxy is the only quiet path.
+  const useWorker = !opts.skipWorkerProxy && (!inBrowser || market !== 'spot');
+  const allowDirect = (allowDirectBinanceHosts(opts) || inBrowser) && !(inBrowser && market !== 'spot');
 
   if (useWorker) {
     const worker = resolveMarketWorkerBase(opts.workerBase);

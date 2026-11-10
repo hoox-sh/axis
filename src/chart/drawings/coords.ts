@@ -35,15 +35,17 @@
  */
 
 import type { IChartApi, ISeriesApi, UTCTimestamp, SeriesType } from 'lightweight-charts';
+import { CHART_RIGHT_OFFSET } from '../viewport';
 
 /**
- * Max bars past the last OHLCV bar for interactive drawings (place + paint).
- * Matches chart right-offset headroom for empty future whitespace.
+ * Max bars past the last OHLCV bar for coordinate extrapolation (place + paint).
+ * The visible right margin stays at {@link DRAWING_RIGHT_OFFSET_DEFAULT}; this
+ * horizon is only how far a future anchor can be converted to a time.
  */
 export const DRAWING_FUTURE_BARS = 500;
 
 /** Default right-margin bars on the price pane (breathing room to start a draw). */
-export const DRAWING_RIGHT_OFFSET_DEFAULT = 20;
+export const DRAWING_RIGHT_OFFSET_DEFAULT = CHART_RIGHT_OFFSET;
 
 /** Minimal bar shape for period / logical ↔ time math. */
 export interface TimeBarLike {
