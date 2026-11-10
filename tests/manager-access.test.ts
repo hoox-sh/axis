@@ -11,6 +11,7 @@
 import './setup';
 import { describe, expect, it, beforeAll, beforeEach } from 'bun:test';
 import { installLightweightChartsMock } from './helpers/mock-lwc';
+import { CHART_RIGHT_OFFSET } from '../src/chart/viewport';
 
 beforeAll(() => {
   installLightweightChartsMock();
@@ -265,8 +266,9 @@ describe('manager-access', () => {
       ],
       { fit: false, clearMarkers: false, clearScriptState: false },
     );
-    // Span preserved (30 bars) and the right edge lands on the new tip.
-    expect(range.to).toBe(1);
+    // Span preserved (30 bars). The right edge stops at the new tip plus the
+    // small default margin, not the old 500-bar future.
+    expect(range.to).toBe(1 + CHART_RIGHT_OFFSET);
     expect(range.to - range.from).toBe(30);
   });
 

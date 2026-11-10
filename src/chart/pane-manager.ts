@@ -127,6 +127,13 @@ import {
   type PaintedCandleRange,
 } from './series-sanitize';
 import { getThemeManager } from '../theme';
+import {
+  CHART_RIGHT_OFFSET,
+  capChartRightOffset,
+  recentLogicalRange,
+  showRecentLogicalRange,
+  trimFutureOverhang,
+} from './viewport';
 
 /**
  * One plot sample. Omit `value` (or leave undefined) for LWC whitespace so the
@@ -1094,15 +1101,89 @@ export class PaneManager {
    * the newest bar. Used to clamp a restored logical range so it can never sit
    * further right than the chart itself allows.
    */
-  private rightOffsetBars(chart: {
-    timeScale?: () => { options?: () => { rightOffset?: number } };
-  }): number {
-    try {
-      const offset = Number(chart.timeScale?.().options?.()?.rightOffset ?? 0);
-      return Number.isFinite(offset) && offset > 0 ? offset : 0;
-    } catch {
-      return 0;
+  /** Markers outside the candle span pile on the first or last bar. */
+  private markerInsideCandleSpan(time: number): boolean {
+    if (!Number.isFinite(time)) return false;
+    const range = this.paintedCandleRange;
+    if (!range) return true;
+    return time >= range.first && time <= range.last;
+  }
+
+  /**
+   * After a shorter candle paint, drop strategy and shape markers that now
+   * sit outside the candle span so they cannot stack on the edge bar.
+   */
+  private retainMarkersOnCandleAxis(): void {
+    const range = this.paintedCandleRange;
+    if (!range) return;
+    let changed = false;
+    for (const [owner, list] of this.tradeMarkersByOwner) {
+      const next = list.filter((m) => this.markerInsideCandleSpan(Number(m.time)));
+      if (next.length === list.length) continue;
+      changed = true;
+      if (next.length) this.tradeMarkersByOwner.set(owner, next);
+      else this.tradeMarkersByOwner.delete(owner);
     }
+    for (const [owner, list] of this.shapeMarkersByOwner) {
+      const next = list.filter((m) => this.markerInsideCandleSpan(Number(m.time)));
+      if (next.length === list.length) continue;
+      changed = true;
+      if (next.length) this.shapeMarkersByOwner.set(owner, next);
+      else {
+        this.shapeMarkersByOwner.delete(owner);
+        this.shapePaneByOwner.delete(owner);
+      }
+    }
+    if (!changed) return;
+    this.rebuildTradeMarkerList();
+    this.rebuildShapeMarkerList();
+    this.applyMarkersOrDefer();
+  }
+
+  /**
+   * Volume and script series that still hold a time the candles do not have
+   * extend the shared time scale past the candles. Drop those rows.
+   */
+  private dropRowsOutsideCandleTimes(): void {
+    const allowed = this.candleTimeSet();
+    if (!allowed || allowed.size === 0) return;
+    for (const pane of this.panes.values()) {
+      for (const key of Object.keys(pane.series)) {
+        if (key === 'candle') continue;
+        if (key !== 'volume' && !isScriptCoPaintedKey(key)) continue;
+        const series = pane.series[key] as
+          | {
+              data?: () => readonly { time?: unknown }[];
+              setData?: (rows: unknown) => void;
+            }
+          | undefined;
+        if (!series || typeof series.data !== 'function' || typeof series.setData !== 'function') {
+          continue;
+        }
+        let rows: readonly { time?: unknown }[];
+        try {
+          rows = series.data();
+        } catch {
+          continue;
+        }
+        if (!rows?.length) continue;
+        const kept = rows.filter((row) => {
+          const t = Number(row?.time);
+          return Number.isFinite(t) && allowed.has(t);
+        });
+        if (kept.length === rows.length) continue;
+        const next =
+          key === 'volume' || key.startsWith(OVERLAY_OHLC_PREFIX)
+            ? kept
+            : padToCandleCount(kept, this.paintedCandleTimes());
+        try {
+          series.setData(next);
+        } catch {
+          /* a series that cannot shrink stays; the next paint retries */
+        }
+      }
+    }
+    this.retainMarkersOnCandleAxis();
   }
 
   /**
@@ -1772,7 +1853,8 @@ export class PaneManager {
    */
   setTradeMarkers(markers: TradeMarker[], ownerId?: string | null, opts?: { merge?: boolean }) {
     const owner = (ownerId && String(ownerId).trim()) || '__global__';
-    const list = markers.map((m, i) => ({
+    const visible = markers.filter((m) => this.markerInsideCandleSpan(m.time));
+    const list = visible.map((m, i) => ({
       time: m.time as UTCTimestamp,
       position: m.position,
       color: m.color,
@@ -1807,7 +1889,8 @@ export class PaneManager {
     paneId?: string | null,
   ) {
     const owner = (ownerId && String(ownerId).trim()) || '__global__';
-    const list = markers.map((m, i) => {
+    const visible = markers.filter((m) => this.markerInsideCandleSpan(Number(m.time)));
+    const list = visible.map((m, i) => {
       // The incoming id is plot-scoped (`<plotKey>_<index>`), so two scripts
       // that plot a series with the same name produced the same id — the
       // price-pane merge (keyed by id) then kept only one owner's markers and
@@ -2369,6 +2452,33 @@ export class PaneManager {
     }
     // Sub-panes must inherit the fitted range (they do not fit independently)
     this.alignTimeRangesFromPrice();
+  }
+
+  /**
+   * Fresh-load viewport: the last {@link DEFAULT_VISIBLE_BARS} candles at the
+   * right edge, plus {@link CHART_RIGHT_OFFSET} empty bars. Explicit "fit"
+   * still uses {@link fitContent}.
+   */
+  showRecentBars(barCount?: number): void {
+    const price = this.panes.get('price');
+    const chart = price?.chart;
+    if (!chart) return;
+    let n = barCount;
+    if (n == null) {
+      try {
+        const rows = price?.series['candle']?.data?.() as unknown[] | undefined;
+        n = Array.isArray(rows) ? rows.length : (store.bars?.length ?? 0);
+      } catch {
+        n = store.bars?.length ?? 0;
+      }
+    }
+    showRecentLogicalRange(chart, n ?? 0);
+    this.alignTimeRangesFromPrice();
+  }
+
+  /** Snap a stuck future margin back to {@link CHART_RIGHT_OFFSET}. */
+  capRightOffset(chart?: { timeScale?: () => { options?: () => { rightOffset?: number } } }): void {
+    capChartRightOffset(chart ?? this.panes.get('price')?.chart ?? {});
   }
 
   /**
@@ -3065,10 +3175,14 @@ export class PaneManager {
       range.to > range.from &&
       range.to >= 0 &&
       range.from <= n - 1;
-    if (overlaps) return;
-    const span = Math.min(n, 150);
+    this.capRightOffset(price.chart);
     try {
-      price.chart.timeScale().setVisibleLogicalRange({ from: n - span, to: n + 5 });
+      if (!overlaps) {
+        price.chart.timeScale().setVisibleLogicalRange(recentLogicalRange(n));
+      } else if (range && range.to > n - 1 + CHART_RIGHT_OFFSET) {
+        const trimmed = trimFutureOverhang(range, n, CHART_RIGHT_OFFSET);
+        if (trimmed) price.chart.timeScale().setVisibleLogicalRange(trimmed);
+      }
     } catch {
       /* mock time scales may not implement the setter */
     }
@@ -3077,7 +3191,7 @@ export class PaneManager {
 
   /**
    * After a full history replace (symbol / interval load): resize panes, re-enable
-   * auto-scale, fit time range, keep current log mode.
+   * auto-scale, show the newest bars, keep current log mode.
    * A zoom or scroll already in progress keeps its range — fitting over that
    * gesture is what blanks the candles until the next bar.
    */
@@ -3086,7 +3200,7 @@ export class PaneManager {
       this.resizeAll();
       this.applyPriceScaleOptions({ autoScale: true });
       if (this.userIsRanging()) this.repairVisibleRange();
-      else this.fitContent();
+      else this.showRecentBars();
       this.alignTimeRangesFromPrice();
     };
     // One layout pass first (sync) so paint is visible immediately
@@ -3440,6 +3554,7 @@ export class PaneManager {
     // engine/DSM window) the raw indices point past the new tip and leave a
     // phantom empty right margin. See {@link rebaseLogicalRange}.
     const prevCandleTimes = this.readCandleSeriesTimes();
+    if (pricePane.chart) this.capRightOffset(pricePane.chart);
     try {
       const nextCandleTimes = new Set<number>();
       for (const row of cleanData as Array<{ time?: unknown }>) {
@@ -3458,14 +3573,18 @@ export class PaneManager {
       });
       if (pricePane.chart && keepRange) {
         // Restore the viewport against the NEW axis, not the old indices.
-        pricePane.chart.timeScale()?.setVisibleLogicalRange?.(
-          rebaseLogicalRange(
-            keepRange,
-            prevCandleTimes,
-            (cleanData as Array<{ time?: unknown }>).map((row) => Number(row?.time)),
-            this.rightOffsetBars(pricePane.chart),
-          ) ?? keepRange,
+        // Trim a stuck future margin first so rebase does not preserve a
+        // 500-bar empty tail by shifting the left edge off the candles.
+        const nextTimes = (cleanData as Array<{ time?: unknown }>).map((row) =>
+          Number(row?.time),
         );
+        const trimmed =
+          trimFutureOverhang(keepRange, prevCandleTimes?.length ?? nextTimes.length) ?? keepRange;
+        pricePane.chart.timeScale()?.setVisibleLogicalRange?.(
+          rebaseLogicalRange(trimmed, prevCandleTimes, nextTimes, CHART_RIGHT_OFFSET) ?? trimmed,
+        );
+      } else if (!fit) {
+        this.showRecentBars(cleanData.length);
       }
       const times = cleanData as Array<{ time?: unknown }>;
       const firstT = times.length ? times[0]?.time : undefined;
@@ -3483,6 +3602,7 @@ export class PaneManager {
           notePaintedCandleRange(firstT, lastT);
         }
       }
+      this.dropRowsOutsideCandleTimes();
     } catch (err: unknown) {
       const inner = err instanceof Error ? err.message : String(err);
       let seriesType = '?';
@@ -3549,7 +3669,7 @@ export class PaneManager {
           if (typeof this.afterDataReload === 'function') {
             this.afterDataReload();
           } else {
-            pricePane.chart.timeScale().fitContent();
+            this.showRecentBars(cleanData.length);
           }
         } catch {
           /* fit optional */
@@ -3577,6 +3697,7 @@ export class PaneManager {
       const inner = err instanceof Error ? err.message : String(err);
       throw new Error(`volume setData failed: ${inner} (rows=${volData.length})`, { cause: err });
     }
+    this.dropRowsOutsideCandleTimes();
     try {
       volPane.series['volume'].applyOptions({
         lastValueVisible: store.lastValueLabelsVisible !== false,
@@ -4080,13 +4201,16 @@ export class PaneManager {
       // that briefly changed the union cannot restore a range past the tip
       // (phantom empty right margin) or drop the reserved whitespace.
       try {
+        this.capRightOffset(pane.chart);
+        const axisLen = this.paintedCandleTimesList?.length ?? 0;
+        const trimmed = trimFutureOverhang(savedRange, axisLen) ?? savedRange;
         pane.chart.timeScale().setVisibleLogicalRange(
           rebaseLogicalRange(
-            savedRange,
+            trimmed,
             this.paintedCandleTimesList,
             this.paintedCandleTimesList,
-            this.rightOffsetBars(pane.chart),
-          ) ?? savedRange,
+            CHART_RIGHT_OFFSET,
+          ) ?? trimmed,
         );
       } catch {
         /* ignore */
@@ -4115,19 +4239,15 @@ export class PaneManager {
       } catch {
         /* ignore */
       }
-      // If price range could not be copied yet, fit this pane so lines appear
+      // A sub-pane fitContent walks that pane's own times, which can be longer
+      // than the candles and stretch the scale. Show the recent price bars
+      // instead, and let the shared scale follow.
       if (paneId !== 'price') {
         try {
           const pr = this.panes.get('price')?.chart.timeScale().getVisibleLogicalRange();
-          if (!pr) {
-            pane.chart.timeScale().fitContent();
-          }
+          if (!pr) this.showRecentBars();
         } catch {
-          try {
-            pane.chart.timeScale().fitContent();
-          } catch {
-            /* ignore */
-          }
+          /* ignore */
         }
       }
     }

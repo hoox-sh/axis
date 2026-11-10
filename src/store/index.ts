@@ -4187,7 +4187,7 @@ export function appendBar(bar: Bar, via?: 'worker' | 'venue'): BarAppendResult {
     setStore('bars', next);
     setBarPlaneFull(next, { bumpGen: true });
     // Do NOT bump chartDataGen on a live slide: ChartHost's chartDataGen
-    // effect responds with fit:true → fitContent(), which resets zoom/position
+    // effect responds with fit:true → the recent-bar viewport, which resets zoom/position
     // on every new candle. appendLiveBar already paints the slide with
     // fit:false via scheduleSlideReplace, so ChartHost does not need to
     // repaint here. chartDataGen stays for full loads (loadBars) only.

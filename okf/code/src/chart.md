@@ -7,7 +7,7 @@ tags: [chart, code]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-07T14:39:45Z
+  at: 2026-11-10T13:15:13Z
 sources:
   - id: tree
     resource: "src/chart"
@@ -59,6 +59,7 @@ okf_lock: generated
 * `series-factory.ts` — PANE_RESIZE_LAYOUT, PLOT_PALETTE, RIGHT_PRICE_SCALE_WIDTH, SERIES_STACK_BGCOLOR, SERIES_STACK_OVERLAY, SERIES_STACK_PRICE, TV, VOID, colorWithAlpha, createAreaSeries, createBarSeries, createBaseChart
 * `series-sanitize.ts` — PaintedCandleRange, clampPointsToPaintedRange, extendPaintedRange, filterValidCandleRows, looksLikeOhlcData, notePaintedCandleRange, projectToCandleAxis, rangeFromSeriesData, resetPaintedCandleRangeForTests
 * `slot-live-append.ts` — appendSlotLiveBar, applyBarToSeries
+* `viewport.ts` — CHART_RIGHT_OFFSET, DEFAULT_VISIBLE_BARS, LogicalSpan, capChartRightOffset, recentLogicalRange, showRecentLogicalRange, trimFutureOverhang
 * `volume-profile.ts` — DEFAULT_VALUE_AREA_PCT, DEFAULT_VP_ROWS, VolumeDistribution, VolumeProfileBin, VolumeProfileOptions, VolumeProfileResult, VpBar, computeVolumeProfile, expandValueArea, formatVpPrice, formatVpVolume, priceToBinIndex
 
 # Packages

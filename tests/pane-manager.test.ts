@@ -160,6 +160,83 @@ describe('PaneManager', () => {
     expect(writes.at(-1)).toEqual({ from: -2, to: 3 });
   });
 
+  it('resume drops a 500-bar future margin and overlay times the candles lack', () => {
+    const bar = (time: number) => ({
+      time,
+      open: 1,
+      high: 2,
+      low: 0.5,
+      close: 1.5,
+      volume: 1,
+    });
+    const price = pm.createPane('price', 'price', 'Price');
+    const volume = pm.createPane('volume', 'volume', 'Volume', 60);
+    let candles: Array<{ time?: number }> = [{ time: 60 }, { time: 120 }, { time: 180 }, { time: 240 }];
+    let overlay = [
+      { time: 60, value: 1 },
+      { time: 120, value: 2 },
+      { time: 9_999, value: 9 },
+    ];
+    let vol = [
+      { time: 60, value: 1 },
+      { time: 120, value: 2 },
+      { time: 9_999, value: 3 },
+    ];
+    let offset = 500;
+    const writes: Array<{ from: number; to: number }> = [];
+    (price.series as Record<string, unknown>)['candle'] = {
+      setData: (data: Array<{ time?: number }>) => {
+        candles = data;
+      },
+      data: () => candles,
+      applyOptions: () => {},
+      seriesType: () => 'Candlestick',
+    };
+    (price.series as Record<string, unknown>)['overlay_band'] = {
+      data: () => overlay,
+      setData: (data: typeof overlay) => {
+        overlay = data;
+      },
+    };
+    (volume.series as Record<string, unknown>)['volume'] = {
+      data: () => vol,
+      setData: (data: typeof vol) => {
+        vol = data;
+      },
+      applyOptions: () => {},
+    };
+    pm.notePaintedCandleRange(60, 240, [60, 120, 180, 240]);
+    const chart = price.chart as unknown as { timeScale: () => Record<string, unknown> };
+    chart.timeScale = () => ({
+      fitContent: () => {
+        throw new Error('resume must not fitContent');
+      },
+      options: () => ({ rightOffset: offset }),
+      applyOptions: (opts: { rightOffset?: number }) => {
+        if (opts.rightOffset != null) offset = opts.rightOffset;
+      },
+      getVisibleLogicalRange: () => ({ from: 0, to: 503 }),
+      setVisibleLogicalRange: (range: { from: number; to: number }) => {
+        writes.push(range);
+      },
+      subscribeVisibleLogicalRangeChange: () => {},
+      unsubscribeVisibleLogicalRangeChange: () => {},
+    });
+    pm.setCandleData(
+      [bar(120), bar(180), bar(240)],
+      'candles',
+      { fit: false, keepRange: { from: 0, to: 503 } },
+    );
+    expect(offset).toBe(16);
+    const restored = writes.at(-1);
+    expect(restored).toBeTruthy();
+    expect(restored!.to).toBeLessThanOrEqual(2 + 16);
+    expect(restored!.from).toBeGreaterThanOrEqual(-1);
+    expect(overlay.map((row) => row.time)).toEqual([120, 180, 240]);
+    pm.setVolumeData([bar(120), bar(180), bar(240)], { up: '#0f0', down: '#f00' });
+    expect(vol.map((row) => row.time)).toEqual([120, 180, 240]);
+  });
+
   it('single layout puts volume on the price chart and keeps candles when volume goes', () => {
     const price = pm.createPane('price', 'price', 'Price');
     const volume = pm.createPane('volume', 'volume', 'Volume', 80);
@@ -1371,26 +1448,32 @@ describe('load paint while the user is zooming', () => {
     expect(vol.map((row) => row.time)).toEqual([2]);
   });
 
-  it('does not fit the time scale while a zoom gesture is down', () => {
+  it('opens on the recent bars and does not refit while a zoom gesture is down', () => {
     const price = pm.createPane('price', 'price', 'Price');
     let fits = 0;
+    let ranges = 0;
     const ts = {
       fitContent: () => {
         fits += 1;
       },
       getVisibleLogicalRange: () => ({ from: 0, to: 10 }),
-      setVisibleLogicalRange: () => {},
+      setVisibleLogicalRange: () => {
+        ranges += 1;
+      },
       subscribeVisibleLogicalRangeChange: () => {},
       unsubscribeVisibleLogicalRangeChange: () => {},
     };
     (price.chart as { timeScale: () => typeof ts }).timeScale = () => ts;
     pm.afterDataReload();
-    expect(fits).toBeGreaterThan(0);
+    expect(fits).toBe(0);
+    expect(ranges).toBeGreaterThan(0);
     const div = document.getElementById(pm.paneDomId('price'));
     div?.dispatchEvent(new Event('pointerdown'));
     fits = 0;
+    ranges = 0;
     pm.afterDataReload();
     expect(fits).toBe(0);
+    expect(ranges).toBe(0);
     div?.dispatchEvent(new Event('pointerup'));
   });
 });
