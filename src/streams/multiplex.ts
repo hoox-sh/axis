@@ -60,6 +60,7 @@ import {
   setTelemetryState,
   setScriptStatus,
   sliceToChartWindow,
+  setLiveRerunModeReader,
 } from '../store';
 import { setDataToChart } from '../chart/manager-access';
 import { appendLiveBar } from '../chart/live-append';
@@ -93,6 +94,7 @@ import { sanitizeBar } from '../data/parse-bars';
 import { pluginKey } from '../plugins/types';
 import { classifyTransport } from '../ui/telemetry';
 import { HEAVY_BARS_THRESHOLD } from '../chart/heavy-data';
+import { rerunHoldoffMs } from '../chart/live-guards';
 import { noteLiveBarForAlerts } from '../alerts/tick';
 
 export type { StreamPlugin };
@@ -150,6 +152,12 @@ function liveRerunDecision(): 'every-tick' | 'bar-close' {
     streamAuthenticated: streamRouteActive() && engineApiKey().length > 0,
   });
 }
+
+setLiveRerunModeReader(() => liveRerunDecision());
+
+/** Last bar-close re-run, so the next one cannot start in the same breath. */
+let lastBarCloseRunMs = 0;
+let lastBarCloseRunEndedAt = 0;
 
 /** How the live session ended (affects telemetry wipe). */
 /** Why a live session ended; `error` keeps error telemetry, `restart` stays silent. */
@@ -1289,7 +1297,14 @@ function scheduleRerun(opts?: { immediate?: boolean }) {
   // Adaptive debounce: heavier histories need longer quiet windows. Live-start
   // on the stream path passes immediate so every visible script subscribes now.
   const barN = store.bars?.length ?? 0;
-  const debounceMs = opts?.immediate ? 0 : barN >= 10_000 ? 900 : barN >= 2_500 ? 600 : 400;
+  const adaptive = opts?.immediate ? 0 : barN >= 10_000 ? 900 : barN >= 2_500 ? 600 : 400;
+  const holdoff = rerunHoldoffMs(
+    liveRerunDecision(),
+    lastBarCloseRunMs,
+    Date.now() - lastBarCloseRunEndedAt,
+  );
+  const debounceMs = Math.max(adaptive, holdoff);
+  const cycleMode = liveRerunDecision();
   rerunTimer = setTimeout(async () => {
     rerunTimer = null;
     if (liveEpoch !== epochAtSchedule || !store.live.active) return;
@@ -1328,6 +1343,7 @@ function scheduleRerun(opts?: { immediate?: boolean }) {
     // OHLCV series drive to await — venue multiplex owns candle paint.
     rerunInFlight = true;
     rerunAttemptCount += 1;
+    const cycleStarted = performance.now();
     setStore('live', 'needsRerun', false);
     try {
       // One shared epoch for the cycle so concurrent members do not
@@ -1406,8 +1422,14 @@ function scheduleRerun(opts?: { immediate?: boolean }) {
       // A stale cycle (session stopped / restarted mid-run) must not clear the gate
       // that a newer session's cycle now holds — stopLive already released it.
       if (liveEpoch === epochAtSchedule) {
+        if (cycleMode === 'bar-close') {
+          lastBarCloseRunMs = Math.max(0, performance.now() - cycleStarted);
+          lastBarCloseRunEndedAt = Date.now();
+        }
         rerunInFlight = false;
-        // If more ticks arrived or interactive deferred us, schedule again
+        // Forming ticks no longer set needsRerun on bar-close engines, so this
+        // only re-arms when a candle closed during the run — and not before
+        // the run's own duration has elapsed.
         if (store.live.active && store.live.needsRerun && !isInteractiveRunInFlight()) {
           scheduleRerun();
         }

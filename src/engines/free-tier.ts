@@ -9,6 +9,45 @@
  */
 export const GUEST_ENGINE_BAR_CAP = 5_000;
 
+const guestBarCapByEndpoint = new Map<string, number>();
+
+function guestCapKey(endpoint: string): string {
+  return String(endpoint || '').trim().replace(/\/$/, '');
+}
+
+/** Remember a free-tier refusal so the next run sends the capped window first. */
+export function rememberGuestBarCap(endpoint: string, cap: number): void {
+  const key = guestCapKey(endpoint);
+  if (!key || !(cap > 0)) return;
+  const prev = guestBarCapByEndpoint.get(key);
+  if (prev == null || cap < prev) guestBarCapByEndpoint.set(key, Math.floor(cap));
+}
+
+/** Last learned guest cap for this endpoint, or 0 when none. */
+export function rememberedGuestBarCap(endpoint: string): number {
+  return guestBarCapByEndpoint.get(guestCapKey(endpoint)) ?? 0;
+}
+
+/**
+ * Newest `cap` bars when this guest endpoint has already been refused.
+ * A key means the host may accept the full window, so the cap is not applied.
+ */
+export function barsWithinGuestCap<T>(
+  endpoint: string,
+  bars: readonly T[],
+  hasKey: boolean,
+): { bars: T[]; cap: number } {
+  if (hasKey) return { bars: bars as T[], cap: 0 };
+  const cap = rememberedGuestBarCap(endpoint);
+  if (cap > 0 && bars.length > cap) return { bars: bars.slice(-cap), cap };
+  return { bars: bars as T[], cap: 0 };
+}
+
+/** @internal */
+export function _resetGuestBarCapForTests(): void {
+  guestBarCapByEndpoint.clear();
+}
+
 /**
  * Bar cap from a free-tier refusal.
  *

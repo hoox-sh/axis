@@ -7,7 +7,7 @@ tags: [code, engines]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-10T14:34:37Z
+  at: 2026-11-10T17:13:31Z
 sources:
   - id: tree
     resource: "src/engines"
@@ -23,7 +23,7 @@ okf_lock: generated
 * `chart-data-session.ts` — _resetChartDataSessionForTests, ensureChartDataSession, getChartSessionInfo, releaseChartDataSession, tickChartDataSession
 * `data-sessions.ts` — CanonicalSeriesKey, DATA_PROVIDE_CHUNK, DATA_SESSION_RETRY_COOLDOWN_MS, DataSeriesKey, DataSeriesStatus, DataSessionCreateInput, DataSessionCreateResult, DataSessionHandle, DataSessionMiss, DataSessionRunResult, EnsureDataSessionOptions, RunDataSessionOptions
 * `engine-ws.ts` — EngineWsResult, EngineWsRunRequest, _resetEngineWsClients, _setWsRunHeartbeatMs, endpointToRunWsUrl, getEngineWsClient, probeEngineWs
-* `free-tier.ts` — GUEST_ENGINE_BAR_CAP, freeTierMaxBars
+* `free-tier.ts` — GUEST_ENGINE_BAR_CAP, _resetGuestBarCapForTests, barsWithinGuestCap, freeTierMaxBars, rememberGuestBarCap, rememberedGuestBarCap
 * `health.ts` — AdvertisedRunMode, CompileReadiness, DEFAULT_ENGINE_HEALTH, EngineCompileHealth, EngineFeatureHealth, EngineHealth, advertisedRunMode, compileReadiness, healthAdvertises, healthFromBody
 * `json-parse-worker.ts`
 * `json-sanitize.ts` — _resetParseEngineJsonForTests, parseEngineJson, parseEngineJsonAsync, sanitizeNonFiniteJson

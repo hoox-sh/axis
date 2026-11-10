@@ -1297,6 +1297,7 @@ async function runAndApplyInner(
   openResults: boolean,
 ): Promise<RunResult> {
   const { inputs, strategyProps, bars, chartTick } = resolveRunContext(script, indicatorId, opts);
+  const runMarket = { symbol: String(store.symbol || ''), interval: String(store.interval || '') };
   // Pass epoch so nested runScript can skip status/telemetry if superseded mid-flight
   const raw = opts.precomputedResult
     ? opts.precomputedResult
@@ -1585,6 +1586,7 @@ async function runAndApplyInner(
       seriesEntries,
       scriptName,
       bars,
+      market: runMarket,
     })
   ) {
     return {

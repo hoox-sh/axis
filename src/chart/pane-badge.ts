@@ -37,11 +37,16 @@
  */
 
 import {
+  indicatorSeriesMatchesChart,
   openScriptSettings,
   setPaneVisible,
   setPineTablesLocation,
   store,
 } from '../store';
+import { liveRerunModeForEngine } from '../engines/catalog';
+import { getActiveEngineConfig } from '../plugins/active';
+import { HEAVY_BARS_THRESHOLD } from './heavy-data';
+import { badgeValueText, formatBadgeVolume } from './live-guards';
 import { openScriptSourceInEditor } from '../editor/open-script-source';
 import { getManager } from './manager-access';
 
@@ -108,10 +113,17 @@ function formatLiveNumber(v: number): string {
   return v.toFixed(4);
 }
 
-/** Last finite samples for the badge, up to three plots. */
+function valuesAtLastClose(): boolean {
+  if (liveRerunModeForEngine(store.live.rerunOn) === 'bar-close') return true;
+  const key = String((getActiveEngineConfig() || {})['apiKey'] || '').trim();
+  return !key && (store.bars?.length ?? 0) >= HEAVY_BARS_THRESHOLD;
+}
+
+/** Last finite samples for the badge, up to three plots. Empty when the cache is another symbol. */
 function scriptLiveValues(scriptId: string): string | null {
   const series = store.indicatorSeries?.[scriptId]?.series;
-  if (!series) return null;
+  const hasSeries = !!series && Object.keys(series).length > 0;
+  if (!hasSeries || !series) return null;
   const parts: string[] = [];
   for (const key of Object.keys(series)) {
     if (parts.length >= 3) break;
@@ -125,7 +137,18 @@ function scriptLiveValues(scriptId: string): string | null {
       }
     }
   }
-  return parts.length ? parts.join('  ') : null;
+  return badgeValueText({
+    values: parts.length ? parts.join('  ') : null,
+    marketMatch: indicatorSeriesMatchesChart(),
+    atLastClose: valuesAtLastClose(),
+  });
+}
+
+function volumeBadgeText(): string | null {
+  const bars = store.bars;
+  if (!bars?.length) return null;
+  const vol = bars[bars.length - 1]?.volume;
+  return formatBadgeVolume(typeof vol === 'number' ? vol : null);
 }
 
 function reRunScript(id: string, code: string) {
@@ -233,6 +256,16 @@ export function mountPaneBadge(
     name.className = 'axis-pane-badge-name';
     name.textContent = label;
     chip.appendChild(name);
+    if (paneType === 'volume' || paneId === 'volume') {
+      const volText = volumeBadgeText();
+      if (volText) {
+        const value = document.createElement('span');
+        value.className = 'axis-pane-badge-value';
+        value.textContent = volText;
+        value.title = 'Last bar volume';
+        chip.appendChild(value);
+      }
+    }
     if (paneType === 'volume' || paneType === 'equity') {
       chip.appendChild(
         btn('Hide pane', 'hide', () => hidePane(paneId), `axis-pane-hide-${paneId}`),
