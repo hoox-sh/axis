@@ -27,6 +27,12 @@ describe('skip-link and main landmark', () => {
     expect(skipAt).toBeGreaterThan(0);
     expect(skipAt).toBeLessThan(appAt);
     expect(html).toContain('<noscript>');
+    expect(html).toContain('<h1>AXIS</h1>');
+    expect(html).toContain('<header');
+    expect(html).toContain('<nav');
+    const headerAt = html.indexOf('<header');
+    expect(headerAt).toBeGreaterThan(0);
+    expect(headerAt).toBeLessThan(appAt);
   });
 
   it('App workspace and editor popout expose #axis-main', () => {

@@ -201,6 +201,8 @@
   outline: none;
 }
 .ax-page-rail-item:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 45%, transparent);
 }
 .ax-page-rail-item.is-on {
@@ -1821,6 +1823,9 @@ select.ax-select:not(.ax-select--bare):focus {
   border: 0;
   opacity: 0;
   cursor: pointer;
+}
+.ax-color-input-swatch:focus-within {
+  box-shadow: 0 0 0 2px var(--color-accent);
 }
 .ax-color-input-swatch input[type='color']:focus-visible {
   outline: none;
