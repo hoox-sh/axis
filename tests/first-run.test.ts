@@ -31,16 +31,16 @@ afterEach(() => {
 });
 
 describe('shouldShowFirstRunHint', () => {
-  it('shows when candles are up, no scripts, and not dismissed', () => {
+  it('shows with no scripts even before candles arrive', () => {
     expect(
       shouldShowFirstRunHint({ barCount: 200, scriptCount: 0, dismissed: false }),
     ).toBe(true);
-  });
-
-  it('hides with no bars, existing scripts, or dismiss', () => {
     expect(
       shouldShowFirstRunHint({ barCount: 0, scriptCount: 0, dismissed: false }),
-    ).toBe(false);
+    ).toBe(true);
+  });
+
+  it('hides with existing scripts or dismiss', () => {
     expect(
       shouldShowFirstRunHint({ barCount: 200, scriptCount: 1, dismissed: false }),
     ).toBe(false);
@@ -74,11 +74,11 @@ describe('first-run dismiss flag', () => {
 });
 
 describe('Run vs Add copy', () => {
-  it('editor primary is Run; topbar first-apply is Add to chart; caret is add-instance', () => {
+  it('editor and topbar primary are Run; caret is add-instance', () => {
     const src = read('src/ui/RunSplitButton.tsx');
     expect(src).not.toMatch(/return 'Add';/);
-    expect(src).toContain("if (props.compact) return 'Run'");
-    expect(src).toContain("return hasInstance() ? 'Run' : 'Add to chart'");
+    expect(src).not.toContain('Add to chart');
+    expect(src).toContain("return 'Run'");
     expect(src).toContain('aria-label="Add instance or built-in"');
     expect(src).not.toContain('More add options');
     expect(src).toContain('Add another instance');
@@ -92,6 +92,7 @@ describe('Run vs Add copy', () => {
     const hint = read('src/ui/FirstRunHint.tsx');
     expect(hint).toContain('data-testid="axis-first-run"');
     expect(hint).toContain('data-testid="axis-first-run-run"');
+    expect(hint).toContain('Edit a script, then press');
     expect(hint).toContain('Run');
   });
 });

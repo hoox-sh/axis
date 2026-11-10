@@ -28,16 +28,17 @@ export function editorRunnableSource(opts: {
 }
 
 /**
- * Show the chart hint when candles are up, no scripts are applied, and the
- * user has not dismissed it. The editor is prefilled; the chart is not.
+ * Show the chart hint when no scripts are applied and the user has not
+ * dismissed it. Candles are not required — a new visitor should see the
+ * next step before the first fetch finishes. The editor is prefilled.
  */
 export function shouldShowFirstRunHint(opts: {
   barCount: number;
   scriptCount: number;
   dismissed: boolean;
 }): boolean {
+  void opts.barCount;
   if (opts.dismissed) return false;
-  if (opts.barCount <= 0) return false;
   if (opts.scriptCount > 0) return false;
   return true;
 }

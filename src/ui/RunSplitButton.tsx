@@ -20,9 +20,8 @@
 /**
  * Split run / add-instance control for the topbar and editor header.
  *
- * - Editor primary is always **Run** (never a bare “Add”).
- * - Topbar primary is **Add to chart** on first apply, **Run** when a matching
- *   instance already exists (replaces it).
+ * - Editor and topbar primary are always **Run**.
+ * - First apply adds the script; a later Run replaces the instance on the chart.
  * - Chevron menu → **Add another instance** / **Add built-in script…**
  */
 
@@ -81,8 +80,7 @@ export const RunSplitButton: Component<{
   const label = createMemo(() => {
     if (isRunning()) return 'Running…';
     if (runBlocked()) return 'Fix errors';
-    if (props.compact) return 'Run';
-    return hasInstance() ? 'Run' : 'Add to chart';
+    return 'Run';
   });
 
   const title = createMemo(() => {
@@ -94,9 +92,7 @@ export const RunSplitButton: Component<{
         ? `Run replaces the focused instance (${n} on chart). Use ▾ to add another.`
         : 'Run replaces the script already on the chart. Use ▾ to add another instance.';
     }
-    return props.compact
-      ? 'Run this script onto the chart'
-      : 'Add this script to the chart (or use the editor Run)';
+    return 'Run adds this script to the chart';
   });
 
   const showPlay = () => isRunning() || runBlocked() || !!props.compact || hasInstance();

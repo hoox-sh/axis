@@ -841,7 +841,7 @@ export function SettingsPage(props: {
                     icon={<Icons.zap />}
                     onChange={(v) => setRerunOn(v === 'bar-close' ? 'bar-close' : 'every-tick')}
                   >
-                    <option value="every-tick">Every tick (responsive)</option>
+                    <option value="every-tick">Each price update</option>
                     <option value="bar-close">Bar close only (lighter)</option>
                   </StudioSelect>
                 </StudioField>

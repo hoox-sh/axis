@@ -243,7 +243,7 @@ export const IndicatorPanel: Component = () : JSX.Element => {
       };
     }
     return {
-      label: 'Every tick',
+      label: 'Each update',
       title: liveRerunTitle(true, 'every-tick', true),
       active: true,
     };

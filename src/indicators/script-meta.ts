@@ -257,14 +257,14 @@ export function liveRerunTitle(
     base =
       rerunOn === 'bar-close'
         ? 'Live is off · policy: bar close (when Live is enabled, re-run only on closed bars)'
-        : 'Live is off · policy: every tick (when Live is enabled, re-run on each update)';
+        : 'Live is off · policy: each price update (re-run whenever the live price moves)';
   } else if (rerunOn === 'bar-close') {
-    base = 'Live re-run on bar close only (venue closed flag or bar time advance) — not every tick';
+    base = 'Live re-run on bar close (when the candle closes) — not on every price update';
   } else {
-    base = 'Live re-run on every tick / bar update (can be heavy)';
+    base = 'Live re-run on each price update (can be heavy)';
   }
   if (interactive) {
-    base += rerunOn === 'bar-close' ? ' · Click → every tick' : ' · Click → bar close only';
+    base += rerunOn === 'bar-close' ? ' · Click → each price update' : ' · Click → bar close only';
   }
   return base;
 }
