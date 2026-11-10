@@ -89,7 +89,8 @@ describe('Pages / nginx / Worker security + cache headers', () => {
 
     const file = read('public/_headers');
     expect(file).toContain('static.cloudflareinsights.com');
-    expect(file).toContain('pages.dev vs custom-domain');
+    expect(file).toContain('https://cloudflareinsights.com');
+    expect(PAGES_CSP_VALUE).toContain('https://static.cloudflareinsights.com');
     expect(file.includes('preload')).toBe(false);
   });
 
@@ -134,5 +135,17 @@ describe('Pages / nginx / Worker security + cache headers', () => {
     expect(http).toContain('DENY');
     expect(http).toContain('Referrer-Policy');
     expect(http).toContain('strict-origin-when-cross-origin');
+    expect(http).toContain('Content-Security-Policy');
+    expect(http).toContain("default-src 'none'");
+    expect(http).toContain('Permissions-Policy');
+  });
+
+  test('security.txt and same-origin /mcp proxy exist', () => {
+    const security = read('public/.well-known/security.txt');
+    expect(security).toContain('Contact: https://github.com/hoox-sh/axis/security');
+    expect(security).toContain('Canonical: https://axis.hoox.sh/.well-known/security.txt');
+    const mcp = read('functions/mcp.ts');
+    expect(mcp).toContain('https://worker.axis.hoox.sh');
+    expect(mcp).toContain('onRequest');
   });
 });

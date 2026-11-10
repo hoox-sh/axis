@@ -5,8 +5,8 @@
 
 /**
  * CORS origin selection (`pickOrigin` in `src/index.ts`).
- * Localhost + known product Origins are echoed; arbitrary Origins fall back
- * to ALLOWED_ORIGIN (never open reflection of unknown sites).
+ * Localhost + known product Origins are echoed. Arbitrary Origins omit
+ * Access-Control-Allow-Origin (empty string) instead of a default host.
  */
 
 import { describe, expect, it } from 'bun:test';
@@ -29,13 +29,13 @@ describe('pickOrigin', () => {
   });
 
   it('does not bypass an explicit ALLOWED_ORIGIN with localhost (A19)', () => {
-    expect(pickOrigin(req('http://localhost:3000'), env)).toBe('https://app.example.com');
+    expect(pickOrigin(req('http://localhost:3000'), env)).toBe('');
   });
 
   it('echoes localhost when explicitly listed in ALLOWED_ORIGIN', () => {
     const listed = { ALLOWED_ORIGIN: 'https://app.example.com,http://localhost:3000' };
     expect(pickOrigin(req('http://localhost:3000'), listed)).toBe('http://localhost:3000');
-    expect(pickOrigin(req('http://localhost:8081'), listed)).toBe('https://app.example.com');
+    expect(pickOrigin(req('http://localhost:8081'), listed)).toBe('');
   });
 
   it('echoes product AXIS / HOOX / project-scoped Pages origins', () => {
@@ -58,30 +58,28 @@ describe('pickOrigin', () => {
   });
 
   it('does NOT echo the retired pynescript.ai product host', () => {
-    // pynescript.ai was retired in favor of pynescript.online. PRODUCT_ORIGIN_RE
-    // no longer matches it; the request falls back to the configured ALLOWED_ORIGIN
-    // (or the production default), which is pynescript.online.
-    expect(pickOrigin(req('https://pynescript.ai'), env)).toBe('https://app.example.com');
-    expect(pickOrigin(req('https://app.pynescript.ai'), env)).toBe('https://app.example.com');
+    // pynescript.ai was retired. It is not echoed and does not get a default ACAO.
+    expect(pickOrigin(req('https://pynescript.ai'), env)).toBe('');
+    expect(pickOrigin(req('https://app.pynescript.ai'), env)).toBe('');
   });
 
   it('does not echo arbitrary *.pages.dev hosts', () => {
-    expect(pickOrigin(req('https://evil.pages.dev'), env)).toBe('https://app.example.com');
-    expect(pickOrigin(req('https://attacker-app.pages.dev'), env)).toBe('https://app.example.com');
+    expect(pickOrigin(req('https://evil.pages.dev'), env)).toBe('');
+    expect(pickOrigin(req('https://attacker-app.pages.dev'), env)).toBe('');
   });
 
   it('does not treat 0.0.0.0 as local-dev', () => {
-    expect(pickOrigin(req('http://0.0.0.0:8081'), env)).toBe('https://app.example.com');
+    expect(pickOrigin(req('http://0.0.0.0:8081'), env)).toBe('');
   });
 
-  it('falls back to ALLOWED_ORIGIN for unknown hosts', () => {
-    expect(pickOrigin(req('https://evil.example'), env)).toBe('https://app.example.com');
-    expect(pickOrigin(req(), env)).toBe('https://app.example.com');
+  it('omits an allow-origin for unknown or missing hosts', () => {
+    expect(pickOrigin(req('https://evil.example'), env)).toBe('');
+    expect(pickOrigin(req(), env)).toBe('');
   });
 
   it('honors comma-separated ALLOWED_ORIGIN list', () => {
     const multi = { ALLOWED_ORIGIN: 'https://a.example,https://b.example' };
     expect(pickOrigin(req('https://b.example'), multi)).toBe('https://b.example');
-    expect(pickOrigin(req('https://evil.example'), multi)).toBe('https://a.example');
+    expect(pickOrigin(req('https://evil.example'), multi)).toBe('');
   });
 });

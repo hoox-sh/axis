@@ -25,12 +25,17 @@ function axisGitStampPlugin(stamp: ReturnType<typeof readGitStamp>) {
 }
 
 // https://v2.tauri.app/start/frontend/vite/
-export default defineConfig(async () => {
+export default defineConfig(async ({ mode }) => {
   const stamp = readGitStamp();
   if (stamp.git) process.env.VITE_GIT_SHA = stamp.git;
   if (stamp.version) process.env.VITE_APP_VERSION = stamp.version;
   return {
   plugins: [solid(), tailwindcss(), axisGitStampPlugin(stamp)],
+  // Production bundles drop unused console.debug / console.info.
+  // Bun unit tests and `vite dev` still execute the calls.
+  esbuild: {
+    pure: mode === 'production' ? ['console.debug', 'console.info'] : [],
+  },
   // Prevent Vite from wiping the terminal when the Rust compiler prints errors.
   clearScreen: false,
   build: {

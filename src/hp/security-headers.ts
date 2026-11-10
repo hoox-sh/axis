@@ -26,10 +26,9 @@
  *
  * Cloudflare Insights (`static.cloudflareinsights.com/beacon.min.js`) is
  * injected at the edge on `axis.hoox.sh` when Web Analytics is on, not on
- * `*.pages.dev`. Enforced `script-src` stays `'self'` + wasm + pyne-agent;
- * the beacon console CSP error is expected unless Insights is disabled in
- * the zone. Do not add the Insights host here — that would hide pages.dev
- * vs custom-domain drift.
+ * `*.pages.dev`. `script-src` and `connect-src` allow that host so the
+ * beacon does not throw a CSP error on the custom domain. pages.dev does
+ * not inject it, so the extra host is unused there.
  *
  * @module hp/security-headers
  */
@@ -104,13 +103,15 @@ export const CSP_CONNECT_SRC_HOSTS = [
   'https://api.coingecko.com',
   'https://api.github.com',
   'https://gitlab.com',
+  'https://static.cloudflareinsights.com',
+  'https://cloudflareinsights.com',
 ] as const;
 
 /** Space-joined `connect-src` source list. */
 export const CSP_CONNECT_SRC = CSP_CONNECT_SRC_HOSTS.join(' ');
 
 const CSP_SCRIPT_SRC_CORE =
-  "'self' 'wasm-unsafe-eval' https://pyne-agent-worker.cryptolinx.workers.dev";
+  "'self' 'wasm-unsafe-eval' https://pyne-agent-worker.cryptolinx.workers.dev https://static.cloudflareinsights.com";
 
 function buildCsp(scriptSrc: string): string {
   return [
@@ -134,7 +135,7 @@ export const CSP_VALUE = buildCsp(CSP_SCRIPT_SRC_CORE);
 
 /** Cloudflare Pages CSP — nonce is a CF JavaScript Detections interop hook. */
 export const PAGES_CSP_VALUE = buildCsp(
-  `'self' 'nonce-${PAGES_SCRIPT_NONCE}' 'wasm-unsafe-eval' https://pyne-agent-worker.cryptolinx.workers.dev`,
+  `'self' 'nonce-${PAGES_SCRIPT_NONCE}' 'wasm-unsafe-eval' https://pyne-agent-worker.cryptolinx.workers.dev https://static.cloudflareinsights.com`,
 );
 
 /** True when a CSP `connect-src` list has no scheme-wide `https:` / `wss:`. */
