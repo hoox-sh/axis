@@ -115,7 +115,7 @@ function formatLiveNumber(v: number): string {
 
 function valuesAtLastClose(): boolean {
   if (liveRerunModeForEngine(store.live.rerunOn) === 'bar-close') return true;
-  const key = String((getActiveEngineConfig() || {})['apiKey'] || '').trim();
+  const key = String(getActiveEngineConfig()?.['apiKey'] || '').trim();
   return !key && (store.bars?.length ?? 0) >= HEAVY_BARS_THRESHOLD;
 }
 

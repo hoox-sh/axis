@@ -435,7 +435,7 @@ export const serverEngine: EnginePlugin = {
     const pineBars = capped.bars;
     const guestCapApplied = capped.cap;
     const stampGuestCap = <T extends RunResult>(result: T): T => {
-      if (guestCapApplied > 0 && !(Number(result.meta?.windowBars) > 0)) {
+      if (guestCapApplied > 0 && !(Number(result.meta?.['windowBars']) > 0)) {
         result.meta = { ...result.meta, windowBars: guestCapApplied };
       }
       return result;
